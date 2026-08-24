@@ -25,4 +25,13 @@ export class MessagesController {
   ) {
     return this.messages.search(channelId, user.sub, q ?? "");
   }
+
+  @Get(":messageId/thread")
+  thread(
+    @CurrentUser() user: JwtPayload,
+    @Param("channelId") channelId: string,
+    @Param("messageId") messageId: string,
+  ) {
+    return this.messages.thread(channelId, user.sub, messageId);
+  }
 }

@@ -12,6 +12,7 @@ export default function MessageItem({
   onEdit,
   onDelete,
   onToggleReaction,
+  onOpenThread,
 }: {
   message: Message;
   currentUserId?: string;
@@ -19,6 +20,8 @@ export default function MessageItem({
   onEdit: (id: string, content: string) => void;
   onDelete: (id: string) => void;
   onToggleReaction: (id: string, emoji: string) => void;
+  /** ausente dentro do painel de thread (não se responde a uma resposta). */
+  onOpenThread?: (message: Message) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.content);
@@ -61,6 +64,16 @@ export default function MessageItem({
         <div className="text-neutral-200">{message.content}</div>
       )}
 
+      {/* link para a thread (só em mensagens raiz com respostas) */}
+      {onOpenThread && message.replyCount > 0 && (
+        <button
+          onClick={() => onOpenThread(message)}
+          className="mt-1 text-xs font-medium text-accent hover:underline"
+        >
+          💬 {message.replyCount} {message.replyCount === 1 ? "resposta" : "respostas"}
+        </button>
+      )}
+
       {/* reações */}
       {message.reactions.length > 0 && (
         <div className="mt-1 flex flex-wrap gap-1">
@@ -93,6 +106,15 @@ export default function MessageItem({
         >
           😊
         </button>
+        {onOpenThread && (
+          <button
+            onClick={() => onOpenThread(message)}
+            title="Responder na thread"
+            className="px-1 text-sm hover:brightness-125"
+          >
+            💬
+          </button>
+        )}
         {isOwn && (
           <button
             onClick={() => {

@@ -39,6 +39,11 @@ export default function AppPage() {
   const [hasMore, setHasMore] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Message[] | null>(null);
+  const [threadParentId, setThreadParentId] = useState<string | null>(null);
+  const [threadMessages, setThreadMessages] = useState<Message[]>([]);
+  const [threadDraft, setThreadDraft] = useState("");
+  const threadParentIdRef = useRef<string | null>(null);
+  const threadBottomRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const loadingMoreRef = useRef(false);
@@ -97,6 +102,7 @@ export default function AppPage() {
     setActiveChannel(c);
     setSearchResults(null);
     setSearchQuery("");
+    closeThread();
     const history = await api.history(c.id);
     setMessages(history);
     setHasMore(history.length >= 50);
@@ -115,6 +121,19 @@ export default function AppPage() {
     const socket = getSocket();
     const onNew = (m: Message) => {
       if (m.channelId !== activeChannel?.id) return;
+      if (m.parentId) {
+        // resposta: incrementa o contador da raiz e alimenta a thread aberta;
+        // não entra na timeline principal
+        setMessages((prev) =>
+          prev.map((x) =>
+            x.id === m.parentId ? { ...x, replyCount: x.replyCount + 1 } : x,
+          ),
+        );
+        if (threadParentIdRef.current === m.parentId) {
+          setThreadMessages((prev) => [...prev, m]);
+        }
+        return;
+      }
       setMessages((prev) => [...prev, m]);
       // notificação nativa (desktop) / do browser quando a janela não está
       // em foco e a mensagem é de outra pessoa
@@ -128,9 +147,21 @@ export default function AppPage() {
     };
     const onUpdated = (m: Message) => {
       setMessages((prev) => prev.map((x) => (x.id === m.id ? m : x)));
+      setThreadMessages((prev) => prev.map((x) => (x.id === m.id ? m : x)));
     };
     const onDeleted = (d: MessageDeletedEvent) => {
-      setMessages((prev) => prev.filter((x) => x.id !== d.messageId));
+      setMessages((prev) =>
+        prev
+          .filter((x) => x.id !== d.messageId)
+          .map((x) =>
+            d.parentId && x.id === d.parentId
+              ? { ...x, replyCount: Math.max(0, x.replyCount - 1) }
+              : x,
+          ),
+      );
+      setThreadMessages((prev) => prev.filter((x) => x.id !== d.messageId));
+      // a raiz da thread aberta foi apagada → fecha o painel
+      if (threadParentIdRef.current === d.messageId) closeThread();
     };
     socket.on(WS_EVENTS.MESSAGE_NEW, onNew);
     socket.on(WS_EVENTS.MESSAGE_UPDATED, onUpdated);
@@ -188,6 +219,16 @@ export default function AppPage() {
   useEffect(() => {
     activeGuildRef.current = activeGuild;
   }, [activeGuild]);
+
+  // idem para a thread aberta (usado nos handlers de socket)
+  useEffect(() => {
+    threadParentIdRef.current = threadParentId;
+  }, [threadParentId]);
+
+  // rola a thread para o fim quando chegam respostas
+  useEffect(() => {
+    threadBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [threadMessages]);
 
   // fui expulso/banido de um servidor: some da lista e limpa a área se estava aberto
   useEffect(() => {
@@ -265,12 +306,44 @@ export default function AppPage() {
   }
 
   function toggleReaction(id: string, emoji: string) {
-    const group = messages.find((m) => m.id === id)?.reactions.find((r) => r.emoji === emoji);
+    const pool = [...messages, ...threadMessages];
+    const group = pool.find((m) => m.id === id)?.reactions.find((r) => r.emoji === emoji);
     const mine = group?.userIds.includes(user?.id ?? "");
     getSocket().emit(mine ? WS_EVENTS.REACTION_REMOVE : WS_EVENTS.REACTION_ADD, {
       messageId: id,
       emoji,
     });
+  }
+
+  // ── threads ──────────────────────────────────────────────────
+  async function openThread(m: Message) {
+    if (!activeChannel) return;
+    setThreadParentId(m.id);
+    threadParentIdRef.current = m.id;
+    try {
+      setThreadMessages(await api.thread(activeChannel.id, m.id));
+    } catch {
+      setThreadMessages([]);
+    }
+  }
+
+  function closeThread() {
+    setThreadParentId(null);
+    threadParentIdRef.current = null;
+    setThreadMessages([]);
+    setThreadDraft("");
+  }
+
+  function sendThreadReply(e: React.FormEvent) {
+    e.preventDefault();
+    const t = threadDraft.trim();
+    if (!t || !activeChannel || !threadParentId) return;
+    getSocket().emit(WS_EVENTS.MESSAGE_CREATE, {
+      channelId: activeChannel.id,
+      content: t,
+      parentId: threadParentId,
+    });
+    setThreadDraft("");
   }
 
   async function createGuild() {
@@ -622,6 +695,7 @@ export default function AppPage() {
                   onEdit={editMessage}
                   onDelete={deleteMessage}
                   onToggleReaction={toggleReaction}
+                  onOpenThread={openThread}
                 />
               ))}
               <div ref={bottomRef} />
@@ -640,16 +714,63 @@ export default function AppPage() {
         )}
       </main>
 
-      {/* coluna de membros (só no chat de texto) */}
-      {!voiceChannel && activeChannel && (
-        <MemberList
-          members={members}
-          currentUserId={user?.id}
-          canModerate={canModerate}
-          onKick={kickMember}
-          onBan={banMember}
-          onOpenDM={openDMWith}
-        />
+      {/* coluna da direita: thread aberta OU lista de membros (só no chat de texto) */}
+      {!voiceChannel && activeChannel && threadParentId ? (
+        <aside className="flex w-[22rem] flex-col border-l border-black/20 bg-panel">
+          <div className="flex items-center justify-between border-b border-black/20 px-4 py-3">
+            <span className="font-semibold">Thread</span>
+            <button
+              onClick={closeThread}
+              className="text-neutral-400 hover:text-white"
+              title="Fechar thread"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-2 py-3">
+            {threadMessages.map((m, i) => (
+              <div key={m.id}>
+                <MessageItem
+                  message={m}
+                  currentUserId={user?.id}
+                  canModerate={canModerate}
+                  onEdit={editMessage}
+                  onDelete={deleteMessage}
+                  onToggleReaction={toggleReaction}
+                />
+                {i === 0 && (
+                  <div className="my-2 flex items-center gap-2 px-2 text-xs text-neutral-500">
+                    <span className="h-px flex-1 bg-black/20" />
+                    {threadMessages.length - 1}{" "}
+                    {threadMessages.length - 1 === 1 ? "resposta" : "respostas"}
+                    <span className="h-px flex-1 bg-black/20" />
+                  </div>
+                )}
+              </div>
+            ))}
+            <div ref={threadBottomRef} />
+          </div>
+          <form onSubmit={sendThreadReply} className="px-3 pb-4">
+            <input
+              value={threadDraft}
+              onChange={(e) => setThreadDraft(e.target.value)}
+              placeholder="Responder na thread…"
+              className="w-full rounded bg-rail px-3 py-2 text-sm outline-none"
+            />
+          </form>
+        </aside>
+      ) : (
+        !voiceChannel &&
+        activeChannel && (
+          <MemberList
+            members={members}
+            currentUserId={user?.id}
+            canModerate={canModerate}
+            onKick={kickMember}
+            onBan={banMember}
+            onOpenDM={openDMWith}
+          />
+        )
       )}
         </>
       )}

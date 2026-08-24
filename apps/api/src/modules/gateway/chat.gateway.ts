@@ -136,6 +136,7 @@ export class ChatGateway
         body.channelId,
         user.id,
         body.content.trim().slice(0, 2000),
+        body.parentId,
       );
       this.server.to(this.room(body.channelId)).emit(WS_EVENTS.MESSAGE_NEW, message);
     } catch (e) {
@@ -170,10 +171,10 @@ export class ChatGateway
     const user = client.data.user as SocketUser | undefined;
     if (!user || !body?.messageId) return;
     try {
-      const { channelId } = await this.messages.remove(body.messageId, user.id);
+      const { channelId, parentId } = await this.messages.remove(body.messageId, user.id);
       this.server
         .to(this.room(channelId))
-        .emit(WS_EVENTS.MESSAGE_DELETED, { messageId: body.messageId, channelId });
+        .emit(WS_EVENTS.MESSAGE_DELETED, { messageId: body.messageId, channelId, parentId });
     } catch (e) {
       this.emitError(client, e);
     }

@@ -84,6 +84,8 @@ export const api = {
     ),
   searchMessages: (channelId: string, q: string) =>
     request<any[]>(`/channels/${channelId}/messages/search?q=${encodeURIComponent(q)}`),
+  thread: (channelId: string, messageId: string) =>
+    request<any[]>(`/channels/${channelId}/messages/${messageId}/thread`),
 
   voiceToken: (channelId: string) =>
     request<{ token: string; url: string; room: string }>(

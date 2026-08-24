@@ -64,6 +64,10 @@ export interface Message {
   createdAt: string;
   editedAt: string | null;
   reactions: ReactionGroup[];
+  /** null = mensagem raiz; preenchido = resposta dentro de uma thread. */
+  parentId: string | null;
+  /** nº de respostas (só relevante em mensagens raiz). */
+  replyCount: number;
 }
 
 export interface GuildMemberView {
@@ -129,6 +133,8 @@ export const WS_EVENTS = {
 export interface MessageCreatePayload {
   channelId: string;
   content: string;
+  /** quando presente, cria a mensagem como resposta na thread desse id. */
+  parentId?: string;
 }
 
 export interface MessageEditPayload {
@@ -148,6 +154,8 @@ export interface ReactionPayload {
 export interface MessageDeletedEvent {
   messageId: string;
   channelId: string;
+  /** id da mensagem raiz, se a apagada era uma resposta de thread. */
+  parentId: string | null;
 }
 
 export interface TypingPayload {

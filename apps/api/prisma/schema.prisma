@@ -126,6 +126,7 @@ model Message {
   channelId String
   authorId  String
   content   String
+  parentId  String?
   createdAt DateTime  @default(now())
   editedAt  DateTime?
 
@@ -133,7 +134,12 @@ model Message {
   author    User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
   reactions Reaction[]
 
-  @@index([channelId, createdAt])
+  // thread: uma mensagem-raiz (parentId null) agrupa respostas
+  parent  Message?  @relation("MessageThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Message[] @relation("MessageThread")
+
+  @@index([channelId, parentId, createdAt])
+  @@index([parentId])
 }
 
 model Reaction {
