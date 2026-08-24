@@ -7,6 +7,7 @@ import {
   type Message,
   type GuildMemberView,
   type MessageDeletedEvent,
+  type PresenceUpdatePayload,
 } from "@newdisc/shared";
 import { api } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
@@ -115,6 +116,22 @@ export default function AppPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // presença em tempo real: atualiza o status na lista de membros
+  useEffect(() => {
+    const socket = getSocket();
+    const onPresence = ({ userId, status }: PresenceUpdatePayload) => {
+      setMembers((prev) =>
+        prev.map((m) =>
+          m.user.id === userId ? { ...m, user: { ...m.user, status } } : m,
+        ),
+      );
+    };
+    socket.on(WS_EVENTS.PRESENCE_UPDATE, onPresence);
+    return () => {
+      socket.off(WS_EVENTS.PRESENCE_UPDATE, onPresence);
+    };
+  }, []);
 
   function send(e: React.FormEvent) {
     e.preventDefault();

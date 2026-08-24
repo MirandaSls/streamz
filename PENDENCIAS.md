@@ -58,11 +58,10 @@ Ordem sugerida dos próximos blocos de features:
       cursor no scroll — o backend já suporta `?cursor=`).
 - [ ] **Threads, stickers, emojis animados** (cortes conscientes do MVP).
 
-### Lacunas conhecidas do bloco atual (mensagens ricas + membros)
-- [ ] **Presença em tempo real**: o `status` do usuário é setado como ONLINE no
-      registro/login, mas não muda ao conectar/desconectar o WebSocket. A coluna
-      de membros mostra o último status salvo — falta emitir `presence.update` no
-      `handleConnection`/`handleDisconnect` do gateway.
+### Lacunas conhecidas
+- [x] ~~**Presença em tempo real**~~ — implementado: o gateway conta conexões por
+      usuário e emite `presence.update` (ONLINE/OFFLINE) no connect/disconnect,
+      atualizando o DB e a lista de membros ao vivo. Verificado com 2 usuários.
 - [ ] **Permissões granulares**: só existe OWNER/ADMIN/MEMBER; sem overrides por
       canal (corte consciente).
 

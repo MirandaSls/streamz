@@ -117,6 +117,11 @@ export interface TypingPayload {
   channelId: string;
 }
 
+export interface PresenceUpdatePayload {
+  userId: string;
+  status: UserStatus;
+}
+
 // ── Voz (LiveKit) ────────────────────────────────────────────
 export interface VoiceTokenResponse {
   token: string;

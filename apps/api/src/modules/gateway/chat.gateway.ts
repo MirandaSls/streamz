@@ -18,6 +18,7 @@ import type {
   TypingPayload,
 } from "@newdisc/shared";
 import { MessagesService } from "../messages/messages.service";
+import { PrismaService } from "../../prisma/prisma.service";
 
 interface SocketUser {
   id: string;
@@ -31,9 +32,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server!: Server;
 
+  /** userId → nº de conexões abertas (suporta múltiplas abas/dispositivos). */
+  private readonly online = new Map<string, number>();
+
   constructor(
     private readonly jwt: JwtService,
     private readonly messages: MessagesService,
+    private readonly prisma: PrismaService,
   ) {}
 
   /** Autentica pelo token passado no handshake: auth.token ou ?token= */
@@ -47,13 +52,40 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         { secret: process.env.JWT_SECRET },
       );
       client.data.user = { id: payload.sub, username: payload.username } satisfies SocketUser;
+      await this.markOnline(payload.sub);
     } catch {
       client.disconnect(true);
     }
   }
 
-  handleDisconnect(_client: Socket) {
-    // presença simplificada no MVP; hook para broadcast de saída aqui
+  handleDisconnect(client: Socket) {
+    const user = client.data.user as SocketUser | undefined;
+    if (user) void this.markOffline(user.id);
+  }
+
+  /** Primeira conexão do usuário → ONLINE + broadcast. */
+  private async markOnline(userId: string) {
+    const next = (this.online.get(userId) ?? 0) + 1;
+    this.online.set(userId, next);
+    if (next === 1) {
+      await this.setStatus(userId, "ONLINE");
+    }
+  }
+
+  /** Última conexão fechada → OFFLINE + broadcast. */
+  private async markOffline(userId: string) {
+    const next = (this.online.get(userId) ?? 1) - 1;
+    if (next <= 0) {
+      this.online.delete(userId);
+      await this.setStatus(userId, "OFFLINE");
+    } else {
+      this.online.set(userId, next);
+    }
+  }
+
+  private async setStatus(userId: string, status: "ONLINE" | "OFFLINE") {
+    await this.prisma.user.update({ where: { id: userId }, data: { status } }).catch(() => {});
+    this.server.emit(WS_EVENTS.PRESENCE_UPDATE, { userId, status });
   }
 
   @SubscribeMessage(WS_EVENTS.CHANNEL_JOIN)
