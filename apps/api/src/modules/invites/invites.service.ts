@@ -7,6 +7,7 @@ import {
 import { randomBytes } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
+import { isUniqueViolation } from "../../common/prisma-errors";
 import type { InviteInfo, InvitePreview } from "@newdisc/shared";
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -31,21 +32,21 @@ export class InvitesService {
         ? new Date(Date.now() + opts.expiresInHours * 3600 * 1000)
         : null;
 
-    // gera um código único (tenta algumas vezes em caso de colisão)
+    const maxUses = opts?.maxUses && opts.maxUses > 0 ? opts.maxUses : null;
+
+    // Tenta criar direto; em caso de colisão no code (@unique → P2002) gera
+    // outro. Evita o findUnique-then-create, que tem corrida entre a checagem
+    // e a inserção.
     for (let attempt = 0; attempt < 5; attempt++) {
-      const code = this.genCode();
-      const exists = await this.prisma.invite.findUnique({ where: { code } });
-      if (exists) continue;
-      const invite = await this.prisma.invite.create({
-        data: {
-          code,
-          guildId,
-          creatorId: userId,
-          maxUses: opts?.maxUses && opts.maxUses > 0 ? opts.maxUses : null,
-          expiresAt,
-        },
-      });
-      return this.toInfo(invite);
+      try {
+        const invite = await this.prisma.invite.create({
+          data: { code: this.genCode(), guildId, creatorId: userId, maxUses, expiresAt },
+        });
+        return this.toInfo(invite);
+      } catch (e) {
+        if (isUniqueViolation(e)) continue;
+        throw e;
+      }
     }
     throw new BadRequestException("Não foi possível gerar um código de convite");
   }
@@ -79,28 +80,51 @@ export class InvitesService {
     });
     if (!invite) throw new NotFoundException("Convite inválido");
 
+    // rejeição rápida (expirado / limite já atingido); o limite ainda é
+    // reforçado atomicamente na transação abaixo, à prova de corrida
     const { valid, reason } = this.checkValidity(invite);
-    if (!valid) throw new BadRequestException(reason ?? "Convite expirado");
+    if (!valid) throw new BadRequestException(reason ?? "Convite inválido");
 
     if (await this.guilds.isBanned(invite.guildId, userId)) {
       throw new ForbiddenException("Você foi banido deste servidor");
     }
 
+    // Idempotência: quem já é membro não consome outro uso.
     const already = await this.prisma.guildMember.findUnique({
       where: { userId_guildId: { userId, guildId: invite.guildId } },
     });
+    if (already) return invite.guild;
 
-    if (!already) {
-      await this.prisma.$transaction([
-        this.prisma.guildMember.create({
+    await this.prisma.$transaction(async (tx) => {
+      // 1. cria a associação. Se dois pedidos do mesmo usuário correm juntos, o
+      //    segundo bate no unique (userId_guildId) e sai sem consumir uso.
+      try {
+        await tx.guildMember.create({
           data: { userId, guildId: invite.guildId, role: "MEMBER" },
-        }),
-        this.prisma.invite.update({
+        });
+      } catch (e) {
+        if (isUniqueViolation(e)) return; // já virou membro numa corrida
+        throw e;
+      }
+
+      // 2. consome um uso de forma atômica, respeitando maxUses. O where com
+      //    `uses < maxUses` fecha a corrida TOCTOU: se o limite já foi atingido,
+      //    count === 0 e o throw desfaz o guildMember.create acima (rollback).
+      if (invite.maxUses !== null) {
+        const res = await tx.invite.updateMany({
+          where: { id: invite.id, uses: { lt: invite.maxUses } },
+          data: { uses: { increment: 1 } },
+        });
+        if (res.count === 0) {
+          throw new BadRequestException("Convite atingiu o limite de usos");
+        }
+      } else {
+        await tx.invite.update({
           where: { id: invite.id },
           data: { uses: { increment: 1 } },
-        }),
-      ]);
-    }
+        });
+      }
+    });
 
     return invite.guild;
   }
@@ -136,9 +160,16 @@ export class InvitesService {
   }
 
   private genCode(len = 8): string {
-    const bytes = randomBytes(len);
+    // Rejection sampling: descarta bytes na "cauda" que não formam um múltiplo
+    // completo do alfabeto, evitando o viés de módulo (256 % 36 !== 0).
+    const limit = 256 - (256 % ALPHABET.length);
     let out = "";
-    for (let i = 0; i < len; i++) out += ALPHABET[bytes[i] % ALPHABET.length];
+    while (out.length < len) {
+      const bytes = randomBytes(len);
+      for (let i = 0; i < bytes.length && out.length < len; i++) {
+        if (bytes[i] < limit) out += ALPHABET[bytes[i] % ALPHABET.length];
+      }
+    }
     return out;
   }
 }

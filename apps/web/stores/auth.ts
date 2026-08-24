@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { AuthTokens, PublicUser } from "@newdisc/shared";
+import { api } from "@/lib/api";
 
 interface AuthState {
   user: PublicUser | null;
@@ -25,6 +26,9 @@ export const useAuth = create<AuthState>((set) => ({
   },
 
   logout: () => {
+    // revoga o refresh token no servidor (best-effort) antes de limpar a sessão
+    const refreshToken = localStorage.getItem("refreshToken");
+    if (refreshToken) api.logout(refreshToken).catch(() => {});
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
     localStorage.removeItem("user");

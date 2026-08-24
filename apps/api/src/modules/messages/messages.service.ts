@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
+import { GuildsService } from "../guilds/guilds.service";
 import type { Message as MessageDTO, ReactionGroup } from "@newdisc/shared";
 
 const MESSAGE_INCLUDE = {
@@ -13,11 +14,14 @@ const MESSAGE_INCLUDE = {
 
 @Injectable()
 export class MessagesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly guilds: GuildsService,
+  ) {}
 
   async create(channelId: string, authorId: string, content: string): Promise<MessageDTO> {
-    const channel = await this.prisma.channel.findUnique({ where: { id: channelId } });
-    if (!channel) throw new NotFoundException("Canal não encontrado");
+    // valida existência do canal + associação do autor ao servidor
+    await this.guilds.assertChannelMember(authorId, channelId);
 
     const msg = await this.prisma.message.create({
       data: { channelId, authorId, content },
@@ -27,7 +31,13 @@ export class MessagesService {
   }
 
   /** Histórico paginado por cursor (mais recentes primeiro), devolvido em ordem cronológica. */
-  async history(channelId: string, cursor?: string, take = 50): Promise<MessageDTO[]> {
+  async history(
+    channelId: string,
+    userId: string,
+    cursor?: string,
+    take = 50,
+  ): Promise<MessageDTO[]> {
+    await this.guilds.assertChannelMember(userId, channelId);
     const rows = await this.prisma.message.findMany({
       where: { channelId },
       include: MESSAGE_INCLUDE,
@@ -39,7 +49,13 @@ export class MessagesService {
   }
 
   /** Busca por conteúdo dentro de um canal (mais recentes primeiro). */
-  async search(channelId: string, query: string, take = 30): Promise<MessageDTO[]> {
+  async search(
+    channelId: string,
+    userId: string,
+    query: string,
+    take = 30,
+  ): Promise<MessageDTO[]> {
+    await this.guilds.assertChannelMember(userId, channelId);
     const q = query.trim();
     if (!q) return [];
     const rows = await this.prisma.message.findMany({
@@ -51,10 +67,11 @@ export class MessagesService {
     return rows.map((m) => this.toDTO(m));
   }
 
-  /** Edição: só o autor pode editar o próprio conteúdo. */
+  /** Edição: só o autor (e ainda membro do servidor) pode editar. */
   async edit(messageId: string, userId: string, content: string): Promise<MessageDTO> {
     const msg = await this.prisma.message.findUnique({ where: { id: messageId } });
     if (!msg) throw new NotFoundException("Mensagem não encontrada");
+    await this.guilds.assertChannelMember(userId, msg.channelId);
     if (msg.authorId !== userId) throw new ForbiddenException("Você só pode editar suas mensagens");
 
     const updated = await this.prisma.message.update({
@@ -88,6 +105,7 @@ export class MessagesService {
   async addReaction(messageId: string, userId: string, emoji: string): Promise<MessageDTO> {
     const msg = await this.prisma.message.findUnique({ where: { id: messageId } });
     if (!msg) throw new NotFoundException("Mensagem não encontrada");
+    await this.guilds.assertChannelMember(userId, msg.channelId);
     await this.prisma.reaction.upsert({
       where: { messageId_userId_emoji: { messageId, userId, emoji } },
       create: { messageId, userId, emoji },
@@ -97,6 +115,9 @@ export class MessagesService {
   }
 
   async removeReaction(messageId: string, userId: string, emoji: string): Promise<MessageDTO> {
+    const msg = await this.prisma.message.findUnique({ where: { id: messageId } });
+    if (!msg) throw new NotFoundException("Mensagem não encontrada");
+    await this.guilds.assertChannelMember(userId, msg.channelId);
     await this.prisma.reaction
       .delete({ where: { messageId_userId_emoji: { messageId, userId, emoji } } })
       .catch(() => undefined); // idempotente: já não existia

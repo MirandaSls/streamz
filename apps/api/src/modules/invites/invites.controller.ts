@@ -16,11 +16,11 @@ class CreateInviteDto {
   expiresInHours?: number;
 }
 
-@UseGuards(JwtGuard)
 @Controller()
 export class InvitesController {
   constructor(private readonly invites: InvitesService) {}
 
+  @UseGuards(JwtGuard)
   @Post("guilds/:guildId/invites")
   create(
     @CurrentUser() user: JwtPayload,
@@ -30,11 +30,13 @@ export class InvitesController {
     return this.invites.create(user.sub, guildId, dto);
   }
 
+  /** Prévia pública: a tela de "entrar no servidor" abre sem estar logado. */
   @Get("invites/:code")
   preview(@Param("code") code: string) {
     return this.invites.preview(code);
   }
 
+  @UseGuards(JwtGuard)
   @Post("invites/:code/redeem")
   redeem(@CurrentUser() user: JwtPayload, @Param("code") code: string) {
     return this.invites.redeem(user.sub, code);

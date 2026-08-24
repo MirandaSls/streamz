@@ -21,6 +21,7 @@ import type {
 import { MessagesService } from "../messages/messages.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { DMsService } from "../dms/dms.service";
+import { GuildsService } from "../guilds/guilds.service";
 
 interface SocketUser {
   id: string;
@@ -42,6 +43,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly messages: MessagesService,
     private readonly prisma: PrismaService,
     private readonly dms: DMsService,
+    private readonly guilds: GuildsService,
   ) {}
 
   /** Autentica pelo token passado no handshake: auth.token ou ?token= */
@@ -93,8 +95,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage(WS_EVENTS.CHANNEL_JOIN)
-  onJoin(@ConnectedSocket() client: Socket, @MessageBody() channelId: string) {
-    client.join(this.room(channelId));
+  async onJoin(@ConnectedSocket() client: Socket, @MessageBody() channelId: string) {
+    const user = client.data.user as SocketUser | undefined;
+    if (!user || !channelId) return;
+    try {
+      // só entra na sala (e passa a receber mensagens ao vivo) se for membro
+      await this.guilds.assertChannelMember(user.id, channelId);
+      client.join(this.room(channelId));
+    } catch (e) {
+      this.emitError(client, e);
+    }
   }
 
   @SubscribeMessage(WS_EVENTS.CHANNEL_LEAVE)
@@ -110,12 +120,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const user = client.data.user as SocketUser | undefined;
     if (!user || !body?.content?.trim()) return;
 
-    const message = await this.messages.create(
-      body.channelId,
-      user.id,
-      body.content.trim().slice(0, 2000),
-    );
-    this.server.to(this.room(body.channelId)).emit(WS_EVENTS.MESSAGE_NEW, message);
+    try {
+      // create() valida a associação do autor ao servidor do canal
+      const message = await this.messages.create(
+        body.channelId,
+        user.id,
+        body.content.trim().slice(0, 2000),
+      );
+      this.server.to(this.room(body.channelId)).emit(WS_EVENTS.MESSAGE_NEW, message);
+    } catch (e) {
+      this.emitError(client, e);
+    }
   }
 
   @SubscribeMessage(WS_EVENTS.MESSAGE_EDIT)

@@ -62,19 +62,25 @@ export class GuildsService {
     return member;
   }
 
-  /** Entra num servidor via id (convite simplificado para o MVP). */
-  async join(userId: string, guildId: string) {
-    const guild = await this.prisma.guild.findUnique({ where: { id: guildId } });
-    if (!guild) throw new NotFoundException("Servidor não encontrado");
-    if (await this.isBanned(guildId, userId)) {
-      throw new ForbiddenException("Você foi banido deste servidor");
-    }
-    await this.prisma.guildMember.upsert({
-      where: { userId_guildId: { userId, guildId } },
-      create: { userId, guildId, role: "MEMBER" },
-      update: {},
+  /**
+   * Autorização por canal: garante que o usuário é membro do servidor dono do
+   * canal. Ponto único usado por mensagens (HTTP e WebSocket) e voz para não
+   * repetir a checagem endpoint a endpoint.
+   */
+  async assertChannelMember(userId: string, channelId: string) {
+    // Caminho feliz: uma única consulta (membership via o servidor dono do canal).
+    const member = await this.prisma.guildMember.findFirst({
+      where: { userId, guild: { channels: { some: { id: channelId } } } },
     });
-    return guild;
+    if (member) return member;
+
+    // Caminho de erro: distingue canal inexistente de não-membro.
+    const channel = await this.prisma.channel.findUnique({
+      where: { id: channelId },
+      select: { id: true },
+    });
+    if (!channel) throw new NotFoundException("Canal não encontrado");
+    throw new ForbiddenException("Você não é membro deste servidor");
   }
 
   // ── moderação ──────────────────────────────────────────────

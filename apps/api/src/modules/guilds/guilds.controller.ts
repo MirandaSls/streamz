@@ -58,11 +58,6 @@ export class GuildsController {
     return this.guilds.listMembers(user.sub, id);
   }
 
-  @Post(":id/join")
-  join(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
-    return this.guilds.join(user.sub, id);
-  }
-
   @Post(":id/kick")
   kick(
     @CurrentUser() user: JwtPayload,

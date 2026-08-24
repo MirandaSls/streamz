@@ -23,6 +23,11 @@ export class AuthController {
     return this.auth.refresh(dto.refreshToken);
   }
 
+  @Post("logout")
+  logout(@Body() dto: RefreshDto) {
+    return this.auth.logout(dto.refreshToken);
+  }
+
   @UseGuards(JwtGuard)
   @Get("me")
   me(@CurrentUser() user: JwtPayload) {

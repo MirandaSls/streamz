@@ -1,6 +1,7 @@
 import { Controller, Get, Param, Query, UseGuards } from "@nestjs/common";
 import { MessagesService } from "./messages.service";
-import { JwtGuard } from "../../common/jwt.guard";
+import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
+import { CurrentUser } from "../../common/current-user.decorator";
 
 @UseGuards(JwtGuard)
 @Controller("channels/:channelId/messages")
@@ -9,17 +10,19 @@ export class MessagesController {
 
   @Get()
   history(
+    @CurrentUser() user: JwtPayload,
     @Param("channelId") channelId: string,
     @Query("cursor") cursor?: string,
   ) {
-    return this.messages.history(channelId, cursor);
+    return this.messages.history(channelId, user.sub, cursor);
   }
 
   @Get("search")
   search(
+    @CurrentUser() user: JwtPayload,
     @Param("channelId") channelId: string,
     @Query("q") q: string,
   ) {
-    return this.messages.search(channelId, q ?? "");
+    return this.messages.search(channelId, user.sub, q ?? "");
   }
 }

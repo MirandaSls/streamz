@@ -37,6 +37,12 @@ export const api = {
       body: JSON.stringify({ username, password }),
     }),
 
+  logout: (refreshToken: string) =>
+    request<{ ok: true }>("/auth/logout", {
+      method: "POST",
+      body: JSON.stringify({ refreshToken }),
+    }),
+
   listGuilds: () => request<any[]>("/guilds"),
   createGuild: (name: string) =>
     request<any>("/guilds", { method: "POST", body: JSON.stringify({ name }) }),

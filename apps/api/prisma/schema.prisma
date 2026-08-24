@@ -19,15 +19,32 @@ model User {
   status       String   @default("OFFLINE") // ONLINE | IDLE | DND | OFFLINE
   createdAt    DateTime @default(now())
 
-  ownedGuilds Guild[]       @relation("GuildOwner")
-  memberships GuildMember[]
-  messages    Message[]
-  reactions   Reaction[]
-  invites     Invite[]      @relation("InviteCreator")
-  bans        Ban[]         @relation("BannedUser")
-  dmChannelsA DMChannel[]   @relation("DMUserA")
-  dmChannelsB DMChannel[]   @relation("DMUserB")
-  dmMessages  DMMessage[]   @relation("DMAuthor")
+  ownedGuilds   Guild[]        @relation("GuildOwner")
+  memberships   GuildMember[]
+  messages      Message[]
+  reactions     Reaction[]
+  invites       Invite[]       @relation("InviteCreator")
+  bans          Ban[]          @relation("BannedUser")
+  dmChannelsA   DMChannel[]    @relation("DMUserA")
+  dmChannelsB   DMChannel[]    @relation("DMUserB")
+  dmMessages    DMMessage[]    @relation("DMAuthor")
+  refreshTokens RefreshToken[]
+}
+
+// Um registro por refresh token emitido. Rotação: a cada /auth/refresh o token
+// apresentado é marcado como revogado e um novo é emitido. Logout revoga.
+// Guardamos só o hash do jti — nunca o token em si.
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Guild {

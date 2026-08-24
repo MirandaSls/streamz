@@ -42,6 +42,7 @@ export default function AppPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const loadingMoreRef = useRef(false);
   const prependingRef = useRef(false);
+  const joinedChannelRef = useRef<string | null>(null);
 
   // DMs
   const [dmMode, setDmMode] = useState(false);
@@ -98,16 +99,21 @@ export default function AppPage() {
     setMessages(history);
     setHasMore(history.length >= 50);
     const socket = getSocket();
+    // sai da sala do canal anterior antes de entrar no novo, para não continuar
+    // recebendo (e notificando) mensagens de canais que não estão mais abertos
+    if (joinedChannelRef.current && joinedChannelRef.current !== c.id) {
+      socket.emit(WS_EVENTS.CHANNEL_LEAVE, joinedChannelRef.current);
+    }
     socket.emit(WS_EVENTS.CHANNEL_JOIN, c.id);
+    joinedChannelRef.current = c.id;
   }, []);
 
   // recebe mensagens novas em tempo real
   useEffect(() => {
     const socket = getSocket();
     const onNew = (m: Message) => {
-      setMessages((prev) =>
-        m.channelId === activeChannel?.id ? [...prev, m] : prev,
-      );
+      if (m.channelId !== activeChannel?.id) return;
+      setMessages((prev) => [...prev, m]);
       // notificação nativa (desktop) / do browser quando a janela não está
       // em foco e a mensagem é de outra pessoa
       if (
@@ -115,7 +121,7 @@ export default function AppPage() {
         typeof document !== "undefined" &&
         document.visibilityState !== "visible"
       ) {
-        notify(`#${activeChannel?.name ?? "canal"}`, `${m.author.username}: ${m.content}`);
+        notify(`#${activeChannel.name}`, `${m.author.username}: ${m.content}`);
       }
     };
     const onUpdated = (m: Message) => {
