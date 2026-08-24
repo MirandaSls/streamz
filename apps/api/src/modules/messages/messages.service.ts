@@ -27,8 +27,8 @@ export class MessagesService {
     content: string,
     parentId?: string,
   ): Promise<MessageDTO> {
-    // valida existência do canal + associação do autor ao servidor
-    await this.guilds.assertChannelMember(authorId, channelId);
+    // valida canal + associação + permissão de postar (privado/somente-leitura)
+    await this.guilds.assertCanPostChannel(authorId, channelId);
 
     if (parentId) {
       // resposta: o pai precisa existir, ser do mesmo canal e ser uma raiz
@@ -61,7 +61,7 @@ export class MessagesService {
     cursor?: string,
     take = 50,
   ): Promise<MessageDTO[]> {
-    await this.guilds.assertChannelMember(userId, channelId);
+    await this.guilds.assertCanViewChannel(userId, channelId);
     const rows = await this.prisma.message.findMany({
       where: { channelId, parentId: null },
       include: MESSAGE_INCLUDE,
@@ -74,7 +74,7 @@ export class MessagesService {
 
   /** Uma thread: a mensagem-raiz seguida das respostas em ordem cronológica. */
   async thread(channelId: string, userId: string, parentId: string): Promise<MessageDTO[]> {
-    await this.guilds.assertChannelMember(userId, channelId);
+    await this.guilds.assertCanViewChannel(userId, channelId);
     const parent = await this.prisma.message.findUnique({
       where: { id: parentId },
       include: MESSAGE_INCLUDE,
@@ -97,7 +97,7 @@ export class MessagesService {
     query: string,
     take = 30,
   ): Promise<MessageDTO[]> {
-    await this.guilds.assertChannelMember(userId, channelId);
+    await this.guilds.assertCanViewChannel(userId, channelId);
     const q = query.trim();
     if (!q) return [];
     const rows = await this.prisma.message.findMany({
@@ -113,7 +113,7 @@ export class MessagesService {
   async edit(messageId: string, userId: string, content: string): Promise<MessageDTO> {
     const msg = await this.prisma.message.findUnique({ where: { id: messageId } });
     if (!msg) throw new NotFoundException("Mensagem não encontrada");
-    await this.guilds.assertChannelMember(userId, msg.channelId);
+    await this.guilds.assertCanViewChannel(userId, msg.channelId);
     if (msg.authorId !== userId) throw new ForbiddenException("Você só pode editar suas mensagens");
 
     const updated = await this.prisma.message.update({
@@ -151,7 +151,7 @@ export class MessagesService {
   async addReaction(messageId: string, userId: string, emoji: string): Promise<MessageDTO> {
     const msg = await this.prisma.message.findUnique({ where: { id: messageId } });
     if (!msg) throw new NotFoundException("Mensagem não encontrada");
-    await this.guilds.assertChannelMember(userId, msg.channelId);
+    await this.guilds.assertCanViewChannel(userId, msg.channelId);
     await this.prisma.reaction.upsert({
       where: { messageId_userId_emoji: { messageId, userId, emoji } },
       create: { messageId, userId, emoji },
@@ -163,7 +163,7 @@ export class MessagesService {
   async removeReaction(messageId: string, userId: string, emoji: string): Promise<MessageDTO> {
     const msg = await this.prisma.message.findUnique({ where: { id: messageId } });
     if (!msg) throw new NotFoundException("Mensagem não encontrada");
-    await this.guilds.assertChannelMember(userId, msg.channelId);
+    await this.guilds.assertCanViewChannel(userId, msg.channelId);
     await this.prisma.reaction
       .delete({ where: { messageId_userId_emoji: { messageId, userId, emoji } } })
       .catch(() => undefined); // idempotente: já não existia

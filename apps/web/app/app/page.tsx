@@ -22,7 +22,13 @@ import MemberList from "@/components/MemberList";
 import { notify } from "@/lib/desktop";
 
 type Guild = { id: string; name: string };
-type Channel = { id: string; name: string; type: "TEXT" | "VOICE" };
+type Channel = {
+  id: string;
+  name: string;
+  type: "TEXT" | "VOICE";
+  private: boolean;
+  readOnly: boolean;
+};
 
 export default function AppPage() {
   const router = useRouter();
@@ -37,6 +43,18 @@ export default function AppPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [inviteCode, setInviteCode] = useState<string | null>(null);
+
+  // criação de canal
+  const [channelModal, setChannelModal] = useState(false);
+  const [chName, setChName] = useState("");
+  const [chType, setChType] = useState<"TEXT" | "VOICE">("TEXT");
+  const [chPrivate, setChPrivate] = useState(false);
+  const [chReadOnly, setChReadOnly] = useState(false);
+  const [chPicks, setChPicks] = useState<Set<string>>(new Set());
+
+  // gerenciar acesso de canal privado
+  const [accessModal, setAccessModal] = useState<Channel | null>(null);
+  const [accessAllowed, setAccessAllowed] = useState<Set<string>>(new Set());
   const [hasMore, setHasMore] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Message[] | null>(null);
@@ -369,12 +387,56 @@ export default function AppPage() {
     selectGuild(g);
   }
 
-  async function createChannel() {
+  function openChannelModal() {
     if (!activeGuild) return;
-    const name = prompt("Nome do canal?");
-    if (!name) return;
-    const c = await api.createChannel(activeGuild.id, name, "TEXT");
-    setChannels((prev) => [...prev, c]);
+    setChName("");
+    setChType("TEXT");
+    setChPrivate(false);
+    setChReadOnly(false);
+    setChPicks(new Set());
+    setChannelModal(true);
+  }
+
+  async function submitChannel() {
+    if (!activeGuild || !chName.trim()) return;
+    try {
+      const c = await api.createChannel(activeGuild.id, chName.trim(), chType, {
+        isPrivate: chPrivate,
+        readOnly: chReadOnly,
+        memberIds: chPrivate ? Array.from(chPicks) : undefined,
+      });
+      setChannels((prev) => [...prev, c]);
+      setChannelModal(false);
+    } catch (e) {
+      alert((e as Error).message);
+    }
+  }
+
+  async function openAccess(c: Channel) {
+    if (!activeGuild) return;
+    setAccessModal(c);
+    try {
+      const rows = await api.channelMembers(activeGuild.id, c.id);
+      setAccessAllowed(new Set(rows.map((r) => r.user.id)));
+    } catch {
+      setAccessAllowed(new Set());
+    }
+  }
+
+  async function toggleAccess(userId: string) {
+    if (!activeGuild || !accessModal) return;
+    const has = accessAllowed.has(userId);
+    try {
+      if (has) await api.removeChannelMember(activeGuild.id, accessModal.id, userId);
+      else await api.addChannelMember(activeGuild.id, accessModal.id, userId);
+      setAccessAllowed((prev) => {
+        const next = new Set(prev);
+        has ? next.delete(userId) : next.add(userId);
+        return next;
+      });
+    } catch (e) {
+      alert((e as Error).message);
+    }
   }
 
   async function createInvite() {
@@ -634,7 +696,7 @@ export default function AppPage() {
                 🔗
               </button>
               <button
-                onClick={createChannel}
+                onClick={openChannelModal}
                 className="text-lg text-neutral-400 hover:text-white"
                 title="Novo canal"
               >
@@ -645,18 +707,34 @@ export default function AppPage() {
         </div>
         <div className="flex-1 overflow-y-auto p-2">
           {channels.map((c) => (
-            <button
+            <div
               key={c.id}
-              onClick={() => selectChannel(c)}
-              className={`flex w-full items-center gap-1 rounded px-2 py-1 text-left text-sm ${
+              className={`group flex items-center gap-1 rounded px-2 py-1 text-sm ${
                 (c.type === "VOICE" ? voiceChannel?.id : activeChannel?.id) === c.id
                   ? "bg-black/30 text-white"
                   : "text-neutral-400"
               }`}
             >
-              <span className="text-neutral-500">{c.type === "VOICE" ? "🔊" : "#"}</span>
-              {c.name}
-            </button>
+              <button
+                onClick={() => selectChannel(c)}
+                className="flex min-w-0 flex-1 items-center gap-1 text-left"
+              >
+                <span className="text-neutral-500">
+                  {c.private ? "🔒" : c.type === "VOICE" ? "🔊" : "#"}
+                </span>
+                <span className="truncate">{c.name}</span>
+                {c.readOnly && <span title="Somente leitura">📢</span>}
+              </button>
+              {c.private && canModerate && (
+                <button
+                  onClick={() => openAccess(c)}
+                  title="Gerenciar acesso"
+                  className="hidden text-xs text-neutral-400 hover:text-white group-hover:block"
+                >
+                  ⚙️
+                </button>
+              )}
+            </div>
           ))}
         </div>
         <div className="flex items-center justify-between border-t border-black/20 px-3 py-2 text-sm">
@@ -754,16 +832,21 @@ export default function AppPage() {
               ))}
               <div ref={bottomRef} />
             </div>
-            {activeChannel && (
-              <form onSubmit={send} className="px-4 pb-4">
-                <input
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  placeholder={`Conversar em #${activeChannel.name}`}
-                  className="w-full rounded bg-panel px-4 py-3 text-sm outline-none"
-                />
-              </form>
-            )}
+            {activeChannel &&
+              (activeChannel.readOnly && !canModerate ? (
+                <div className="px-4 pb-4 text-center text-sm text-neutral-500">
+                  📢 Canal somente leitura
+                </div>
+              ) : (
+                <form onSubmit={send} className="px-4 pb-4">
+                  <input
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    placeholder={`Conversar em #${activeChannel.name}`}
+                    className="w-full rounded bg-panel px-4 py-3 text-sm outline-none"
+                  />
+                </form>
+              ))}
           </>
         )}
       </main>
@@ -924,6 +1007,158 @@ export default function AppPage() {
                 Cancelar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* modal de criação de canal */}
+      {channelModal && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/60"
+          onClick={() => setChannelModal(false)}
+        >
+          <div
+            className="w-[400px] rounded-lg bg-panel p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="mb-3 text-lg font-bold text-white">Novo canal</h2>
+            <input
+              autoFocus
+              value={chName}
+              onChange={(e) => setChName(e.target.value)}
+              placeholder="Nome do canal"
+              className="mb-3 w-full rounded bg-rail px-3 py-2 text-sm outline-none"
+            />
+            <div className="mb-3 flex gap-2">
+              {(["TEXT", "VOICE"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setChType(t)}
+                  className={`flex-1 rounded py-2 text-sm ${
+                    chType === t ? "bg-accent text-white" : "bg-rail text-neutral-300"
+                  }`}
+                >
+                  {t === "TEXT" ? "# Texto" : "🔊 Voz"}
+                </button>
+              ))}
+            </div>
+            {canModerate && (
+              <div className="mb-3 space-y-2 text-sm text-neutral-300">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={chPrivate}
+                    onChange={(e) => setChPrivate(e.target.checked)}
+                  />
+                  🔒 Privado (só a allowlist e moderadores)
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={chReadOnly}
+                    onChange={(e) => setChReadOnly(e.target.checked)}
+                  />
+                  📢 Somente leitura (só moderadores postam)
+                </label>
+              </div>
+            )}
+            {chPrivate && (
+              <div className="mb-4 max-h-40 overflow-y-auto rounded bg-rail/50">
+                {members.filter((m) => m.role === "MEMBER").length === 0 ? (
+                  <p className="px-3 py-2 text-xs text-neutral-500">
+                    Sem membros comuns para liberar. Moderadores já têm acesso.
+                  </p>
+                ) : (
+                  members
+                    .filter((m) => m.role === "MEMBER")
+                    .map((m) => (
+                      <label
+                        key={m.user.id}
+                        className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-black/20"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={chPicks.has(m.user.id)}
+                          onChange={() =>
+                            setChPicks((prev) => {
+                              const next = new Set(prev);
+                              next.has(m.user.id)
+                                ? next.delete(m.user.id)
+                                : next.add(m.user.id);
+                              return next;
+                            })
+                          }
+                        />
+                        {m.user.username}
+                      </label>
+                    ))
+                )}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={submitChannel}
+                disabled={!chName.trim()}
+                className="flex-1 rounded bg-accent py-2 text-sm font-medium text-white disabled:opacity-40"
+              >
+                Criar canal
+              </button>
+              <button
+                onClick={() => setChannelModal(false)}
+                className="rounded bg-rail px-4 py-2 text-sm text-neutral-300 hover:text-white"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* modal de gerenciar acesso de canal privado */}
+      {accessModal && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/60"
+          onClick={() => setAccessModal(null)}
+        >
+          <div
+            className="w-[380px] rounded-lg bg-panel p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="mb-1 text-lg font-bold text-white">
+              Acesso · 🔒 {accessModal.name}
+            </h2>
+            <p className="mb-3 text-sm text-neutral-400">
+              Moderadores sempre têm acesso. Marque os membros liberados.
+            </p>
+            <div className="mb-4 max-h-56 overflow-y-auto rounded bg-rail/50">
+              {members.filter((m) => m.role === "MEMBER").length === 0 ? (
+                <p className="px-3 py-3 text-sm text-neutral-500">
+                  Nenhum membro comum neste servidor.
+                </p>
+              ) : (
+                members
+                  .filter((m) => m.role === "MEMBER")
+                  .map((m) => (
+                    <label
+                      key={m.user.id}
+                      className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-black/20"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={accessAllowed.has(m.user.id)}
+                        onChange={() => toggleAccess(m.user.id)}
+                      />
+                      {m.user.username}
+                    </label>
+                  ))
+              )}
+            </div>
+            <button
+              onClick={() => setAccessModal(null)}
+              className="w-full rounded bg-rail py-2 text-sm text-neutral-300 hover:text-white"
+            >
+              Fechar
+            </button>
           </div>
         </div>
       )}

@@ -48,6 +48,8 @@ export interface Channel {
   name: string;
   type: ChannelType;
   position: number;
+  private: boolean;
+  readOnly: boolean;
 }
 
 export interface ReactionGroup {

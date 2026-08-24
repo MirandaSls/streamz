@@ -28,6 +28,7 @@ model User {
   dmParticipations DMParticipant[]
   dmMessages       DMMessage[]     @relation("DMAuthor")
   refreshTokens    RefreshToken[]
+  channelAccess    ChannelMember[]
 }
 
 // Um registro por refresh token emitido. Rotação: a cada /auth/refresh o token
@@ -108,16 +109,32 @@ model GuildMember {
 }
 
 model Channel {
-  id       String @id @default(cuid())
+  id       String  @id @default(cuid())
   guildId  String
   name     String
-  type     String @default("TEXT") // TEXT | VOICE
-  position Int    @default(0)
+  type     String  @default("TEXT") // TEXT | VOICE
+  position Int     @default(0)
+  private  Boolean @default(false) // só OWNER/ADMIN e a allowlist enxergam
+  readOnly Boolean @default(false) // só OWNER/ADMIN postam; todos leem
 
-  guild    Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  guild    Guild           @relation(fields: [guildId], references: [id], onDelete: Cascade)
   messages Message[]
+  allowed  ChannelMember[] // allowlist para canais privados
 
   @@index([guildId])
+}
+
+// Membros liberados num canal privado (além de OWNER/ADMIN, sempre com acesso).
+model ChannelMember {
+  id        String @id @default(cuid())
+  channelId String
+  userId    String
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, userId])
+  @@index([userId])
 }
 
 model Message {

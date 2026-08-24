@@ -109,8 +109,8 @@ export class ChatGateway
     const user = client.data.user as SocketUser | undefined;
     if (!user || !channelId) return;
     try {
-      // só entra na sala (e passa a receber mensagens ao vivo) se for membro
-      await this.guilds.assertChannelMember(user.id, channelId);
+      // só entra na sala (e recebe mensagens ao vivo) se puder ver o canal
+      await this.guilds.assertCanViewChannel(user.id, channelId);
       client.join(this.room(channelId));
     } catch (e) {
       this.emitError(client, e);

@@ -37,7 +37,17 @@ export class GuildsService {
       include: { channels: { orderBy: { position: "asc" } } },
     });
     if (!guild) throw new NotFoundException("Servidor não encontrado");
-    await this.assertMember(userId, guildId);
+    const member = await this.assertMember(userId, guildId);
+
+    // OWNER/ADMIN veem tudo; MEMBER não vê canais privados fora da sua allowlist
+    if (!this.isPrivileged(member.role)) {
+      const allowed = await this.prisma.channelMember.findMany({
+        where: { userId, channel: { guildId } },
+        select: { channelId: true },
+      });
+      const allowedSet = new Set(allowed.map((a) => a.channelId));
+      guild.channels = guild.channels.filter((c) => !c.private || allowedSet.has(c.id));
+    }
     return guild;
   }
 
@@ -86,6 +96,47 @@ export class GuildsService {
     });
     if (!channel) throw new NotFoundException("Canal não encontrado");
     throw new ForbiddenException("Você não é membro deste servidor");
+  }
+
+  // ── autorização por canal (privado / somente-leitura) ──────────
+
+  /**
+   * Pode ver/entrar no canal: membro do servidor e, se o canal for privado,
+   * OWNER/ADMIN ou constar na allowlist. Devolve canal + papel do membro.
+   */
+  async assertCanViewChannel(userId: string, channelId: string) {
+    const channel = await this.prisma.channel.findUnique({
+      where: { id: channelId },
+      select: { id: true, guildId: true, private: true, readOnly: true },
+    });
+    if (!channel) throw new NotFoundException("Canal não encontrado");
+    const member = await this.assertMember(userId, channel.guildId);
+
+    if (channel.private && !this.isPrivileged(member.role)) {
+      const allowed = await this.prisma.channelMember.findUnique({
+        where: { channelId_userId: { channelId, userId } },
+      });
+      if (!allowed) throw new ForbiddenException("Canal privado");
+    }
+    return { channel, member };
+  }
+
+  /** Pode postar: view + se o canal for somente-leitura, precisa ser OWNER/ADMIN. */
+  async assertCanPostChannel(userId: string, channelId: string) {
+    const { channel, member } = await this.assertCanViewChannel(userId, channelId);
+    if (channel.readOnly && !this.isPrivileged(member.role)) {
+      throw new ForbiddenException("Canal somente-leitura");
+    }
+    return { channel, member };
+  }
+
+  private isPrivileged(role: string): boolean {
+    return role === "OWNER" || role === "ADMIN";
+  }
+
+  /** Público: exige papel de moderação (OWNER/ADMIN) no servidor. */
+  async assertModerator(userId: string, guildId: string) {
+    return this.assertCanModerate(userId, guildId);
   }
 
   // ── moderação ──────────────────────────────────────────────

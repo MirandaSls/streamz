@@ -1,5 +1,20 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
-import { IsIn, IsString, Length } from "class-validator";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  UseGuards,
+} from "@nestjs/common";
+import {
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsString,
+  Length,
+} from "class-validator";
 import { ChannelsService } from "./channels.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";
@@ -12,6 +27,24 @@ class CreateChannelDto {
 
   @IsIn(["TEXT", "VOICE"])
   type!: ChannelType;
+
+  @IsOptional()
+  @IsBoolean()
+  isPrivate?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  readOnly?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  memberIds?: string[];
+}
+
+class ChannelMemberDto {
+  @IsString()
+  userId!: string;
 }
 
 @UseGuards(JwtGuard)
@@ -25,11 +58,44 @@ export class ChannelsController {
     @Param("guildId") guildId: string,
     @Body() dto: CreateChannelDto,
   ) {
-    return this.channels.create(user.sub, guildId, dto.name, dto.type);
+    return this.channels.create(user.sub, guildId, dto.name, dto.type, {
+      isPrivate: dto.isPrivate,
+      readOnly: dto.readOnly,
+      memberIds: dto.memberIds,
+    });
   }
 
   @Get()
   list(@CurrentUser() user: JwtPayload, @Param("guildId") guildId: string) {
     return this.channels.listForGuild(user.sub, guildId);
+  }
+
+  @Get(":channelId/members")
+  members(
+    @CurrentUser() user: JwtPayload,
+    @Param("guildId") guildId: string,
+    @Param("channelId") channelId: string,
+  ) {
+    return this.channels.listMembers(user.sub, guildId, channelId);
+  }
+
+  @Post(":channelId/members")
+  addMember(
+    @CurrentUser() user: JwtPayload,
+    @Param("guildId") guildId: string,
+    @Param("channelId") channelId: string,
+    @Body() dto: ChannelMemberDto,
+  ) {
+    return this.channels.addMember(user.sub, guildId, channelId, dto.userId);
+  }
+
+  @Delete(":channelId/members/:userId")
+  removeMember(
+    @CurrentUser() user: JwtPayload,
+    @Param("guildId") guildId: string,
+    @Param("channelId") channelId: string,
+    @Param("userId") userId: string,
+  ) {
+    return this.channels.removeMember(user.sub, guildId, channelId, userId);
   }
 }

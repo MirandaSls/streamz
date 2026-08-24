@@ -77,10 +77,26 @@ export const api = {
       body: JSON.stringify({ userId, reason }),
     }),
 
-  createChannel: (guildId: string, name: string, type: "TEXT" | "VOICE") =>
+  createChannel: (
+    guildId: string,
+    name: string,
+    type: "TEXT" | "VOICE",
+    opts?: { isPrivate?: boolean; readOnly?: boolean; memberIds?: string[] },
+  ) =>
     request<any>(`/guilds/${guildId}/channels`, {
       method: "POST",
-      body: JSON.stringify({ name, type }),
+      body: JSON.stringify({ name, type, ...opts }),
+    }),
+  channelMembers: (guildId: string, channelId: string) =>
+    request<any[]>(`/guilds/${guildId}/channels/${channelId}/members`),
+  addChannelMember: (guildId: string, channelId: string, userId: string) =>
+    request<any>(`/guilds/${guildId}/channels/${channelId}/members`, {
+      method: "POST",
+      body: JSON.stringify({ userId }),
+    }),
+  removeChannelMember: (guildId: string, channelId: string, userId: string) =>
+    request<any>(`/guilds/${guildId}/channels/${channelId}/members/${userId}`, {
+      method: "DELETE",
     }),
 
   history: (channelId: string, cursor?: string) =>
