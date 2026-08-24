@@ -1,0 +1,23 @@
+{
+  "name": "newdisc",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Clone do Discord — monolito NestJS + Next.js + Tauri (MVP)",
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "db:up": "docker compose up -d",
+    "db:migrate": "pnpm --filter @newdisc/api prisma migrate dev",
+    "db:studio": "pnpm --filter @newdisc/api prisma studio"
+  },
+  "devDependencies": {
+    "turbo": "^2.1.0",
+    "typescript": "^5.5.4"
+  }
+}

@@ -1,0 +1,80 @@
+// Prisma schema — NewDisc (MVP)
+// DEV: SQLite (sem infra externa). PROD: trocar provider para "postgresql"
+// e reintroduzir os enums. Ver PENDENCIAS.md. Os valores válidos de status/
+// type/role vivem como union types em packages/shared.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  avatarUrl    String?
+  status       String   @default("OFFLINE") // ONLINE | IDLE | DND | OFFLINE
+  createdAt    DateTime @default(now())
+
+  ownedGuilds Guild[]       @relation("GuildOwner")
+  memberships GuildMember[]
+  messages    Message[]
+}
+
+model Guild {
+  id      String  @id @default(cuid())
+  name    String
+  iconUrl String?
+  ownerId String
+  owner   User    @relation("GuildOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  members  GuildMember[]
+  channels Channel[]
+}
+
+model GuildMember {
+  id      String @id @default(cuid())
+  userId  String
+  guildId String
+  role    String @default("MEMBER") // OWNER | ADMIN | MEMBER
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  joinedAt DateTime @default(now())
+
+  @@unique([userId, guildId])
+  @@index([guildId])
+}
+
+model Channel {
+  id       String @id @default(cuid())
+  guildId  String
+  name     String
+  type     String @default("TEXT") // TEXT | VOICE
+  position Int    @default(0)
+
+  guild    Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@index([guildId])
+}
+
+model Message {
+  id        String    @id @default(cuid())
+  channelId String
+  authorId  String
+  content   String
+  createdAt DateTime  @default(now())
+  editedAt  DateTime?
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author  User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([channelId, createdAt])
+}

@@ -1,0 +1,22 @@
+[package]
+name = "newdisc-desktop"
+version = "0.0.1"
+description = "NewDisc desktop app"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# `tray-icon` habilita a API de bandeja (tauri::tray::TrayIconBuilder).
+# `image-png` permite carregar/usar ícones PNG (usado pelo tray e por Image).
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Plugins do Tauri 2 (a API v2 separou notificação/updater em crates próprias).
+tauri-plugin-notification = "2"
+tauri-plugin-updater = "2"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
