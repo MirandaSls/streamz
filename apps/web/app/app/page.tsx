@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   WS_EVENTS,
@@ -11,6 +11,7 @@ import {
   type DMChannelView,
   type DirectMessage,
   type GuildRemovedEvent,
+  type PublicUser,
 } from "@newdisc/shared";
 import { api } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
@@ -58,6 +59,20 @@ export default function AppPage() {
   const [dmMessages, setDmMessages] = useState<DirectMessage[]>([]);
   const [dmDraft, setDmDraft] = useState("");
   const dmBottomRef = useRef<HTMLDivElement>(null);
+
+  // criação de grupo de DM
+  const [groupModal, setGroupModal] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [groupPicks, setGroupPicks] = useState<Set<string>>(new Set());
+  // contatos = usuários das suas DMs 1-a-1 (sem endpoint de busca no MVP)
+  const dmContacts = useMemo(() => {
+    const map = new Map<string, PublicUser>();
+    for (const d of dmChannels) {
+      if (d.isGroup) continue;
+      for (const u of d.others) map.set(u.id, u);
+    }
+    return Array.from(map.values());
+  }, [dmChannels]);
 
   const canModerate = members.some(
     (m) => m.user.id === user?.id && (m.role === "OWNER" || m.role === "ADMIN"),
@@ -405,6 +420,37 @@ export default function AppPage() {
   }
 
   // ── DMs ──────────────────────────────────────────────────────
+  function dmTitle(d: DMChannelView): string {
+    if (d.isGroup) return d.name || d.others.map((u) => u.username).join(", ") || "Grupo";
+    return d.others[0]?.username ?? "Conversa";
+  }
+
+  function toggleGroupPick(userId: string) {
+    setGroupPicks((prev) => {
+      const next = new Set(prev);
+      next.has(userId) ? next.delete(userId) : next.add(userId);
+      return next;
+    });
+  }
+
+  async function submitGroup() {
+    const ids = Array.from(groupPicks);
+    if (ids.length < 2) {
+      alert("Escolha ao menos 2 contatos para formar um grupo.");
+      return;
+    }
+    try {
+      const dm = await api.createGroupDM(ids, groupName.trim() || undefined);
+      setDmChannels((prev) => [dm, ...prev]);
+      setGroupModal(false);
+      setGroupName("");
+      setGroupPicks(new Set());
+      selectDM(dm);
+    } catch (e) {
+      alert((e as Error).message);
+    }
+  }
+
   async function openDMs() {
     setDmMode(true);
     setVoiceChannel(null);
@@ -492,8 +538,15 @@ export default function AppPage() {
         <>
           {/* lista de DMs */}
           <aside className="flex w-60 flex-col bg-panel">
-            <div className="border-b border-black/20 px-4 py-3 font-semibold">
+            <div className="flex items-center justify-between border-b border-black/20 px-4 py-3 font-semibold">
               Mensagens diretas
+              <button
+                onClick={() => setGroupModal(true)}
+                title="Criar grupo"
+                className="text-lg text-neutral-400 hover:text-white"
+              >
+                ＋
+              </button>
             </div>
             <div className="flex-1 overflow-y-auto p-2">
               {dmChannels.length === 0 && (
@@ -509,10 +562,10 @@ export default function AppPage() {
                     activeDM?.id === d.id ? "bg-black/30 text-white" : "text-neutral-400"
                   }`}
                 >
-                  <span className="grid h-7 w-7 place-items-center rounded-full bg-rail text-xs font-bold text-neutral-200">
-                    {d.other.username.slice(0, 2).toUpperCase()}
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-rail text-xs font-bold text-neutral-200">
+                    {d.isGroup ? "👥" : dmTitle(d).slice(0, 2).toUpperCase()}
                   </span>
-                  {d.other.username}
+                  <span className="truncate">{dmTitle(d)}</span>
                 </button>
               ))}
             </div>
@@ -534,7 +587,8 @@ export default function AppPage() {
             {activeDM ? (
               <>
                 <header className="border-b border-black/20 px-4 py-3 font-semibold">
-                  @ {activeDM.other.username}
+                  {activeDM.isGroup ? "👥 " : "@ "}
+                  {dmTitle(activeDM)}
                 </header>
                 <div className="flex-1 overflow-y-auto px-4 py-3">
                   {dmMessages.map((m) => (
@@ -552,7 +606,7 @@ export default function AppPage() {
                   <input
                     value={dmDraft}
                     onChange={(e) => setDmDraft(e.target.value)}
-                    placeholder={`Conversar com ${activeDM.other.username}`}
+                    placeholder={`Conversar em ${dmTitle(activeDM)}`}
                     className="w-full rounded bg-panel px-4 py-3 text-sm outline-none"
                   />
                 </form>
@@ -806,6 +860,70 @@ export default function AppPage() {
             >
               Fechar
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* modal de criação de grupo de DM */}
+      {groupModal && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/60"
+          onClick={() => setGroupModal(false)}
+        >
+          <div
+            className="w-[380px] rounded-lg bg-panel p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="mb-1 text-lg font-bold text-white">Novo grupo</h2>
+            <p className="mb-3 text-sm text-neutral-400">
+              Escolha 2 ou mais contatos das suas conversas.
+            </p>
+            <input
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+              placeholder="Nome do grupo (opcional)"
+              className="mb-3 w-full rounded bg-rail px-3 py-2 text-sm outline-none"
+            />
+            <div className="mb-4 max-h-56 overflow-y-auto rounded bg-rail/50">
+              {dmContacts.length === 0 ? (
+                <p className="px-3 py-3 text-sm text-neutral-500">
+                  Você ainda não tem contatos. Abra uma DM 1-a-1 primeiro (💬 na
+                  lista de membros).
+                </p>
+              ) : (
+                dmContacts.map((u) => (
+                  <label
+                    key={u.id}
+                    className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-black/20"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={groupPicks.has(u.id)}
+                      onChange={() => toggleGroupPick(u.id)}
+                    />
+                    <span className="grid h-6 w-6 place-items-center rounded-full bg-rail text-[10px] font-bold text-neutral-200">
+                      {u.username.slice(0, 2).toUpperCase()}
+                    </span>
+                    {u.username}
+                  </label>
+                ))
+              )}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={submitGroup}
+                disabled={groupPicks.size < 2}
+                className="flex-1 rounded bg-accent py-2 text-sm font-medium text-white disabled:opacity-40"
+              >
+                Criar grupo
+              </button>
+              <button
+                onClick={() => setGroupModal(false)}
+                className="rounded bg-rail px-4 py-2 text-sm text-neutral-300 hover:text-white"
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -60,6 +60,11 @@ export const api = {
 
   openDM: (userId: string) =>
     request<any>(`/dms`, { method: "POST", body: JSON.stringify({ userId }) }),
+  createGroupDM: (userIds: string[], name?: string) =>
+    request<any>(`/dms/group`, {
+      method: "POST",
+      body: JSON.stringify({ userIds, name }),
+    }),
   listDMs: () => request<any[]>(`/dms`),
   dmHistory: (dmChannelId: string, cursor?: string) =>
     request<any[]>(`/dms/${dmChannelId}/messages${cursor ? `?cursor=${cursor}` : ""}`),

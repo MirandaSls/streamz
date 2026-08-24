@@ -92,7 +92,11 @@ export interface InvitePreview {
 
 export interface DMChannelView {
   id: string;
-  other: PublicUser;
+  isGroup: boolean;
+  /** nome do grupo (null em DMs 1-a-1). */
+  name: string | null;
+  /** participantes exceto o próprio usuário. */
+  others: PublicUser[];
 }
 
 export interface DirectMessage {

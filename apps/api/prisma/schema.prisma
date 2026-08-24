@@ -25,10 +25,9 @@ model User {
   reactions     Reaction[]
   invites       Invite[]       @relation("InviteCreator")
   bans          Ban[]          @relation("BannedUser")
-  dmChannelsA   DMChannel[]    @relation("DMUserA")
-  dmChannelsB   DMChannel[]    @relation("DMUserB")
-  dmMessages    DMMessage[]    @relation("DMAuthor")
-  refreshTokens RefreshToken[]
+  dmParticipations DMParticipant[]
+  dmMessages       DMMessage[]     @relation("DMAuthor")
+  refreshTokens    RefreshToken[]
 }
 
 // Um registro por refresh token emitido. Rotação: a cada /auth/refresh o token
@@ -157,15 +156,28 @@ model Reaction {
 
 model DMChannel {
   id        String   @id @default(cuid())
-  userAId   String
-  userBId   String
+  isGroup   Boolean  @default(false)
+  name      String? // nome opcional do grupo
+  ownerId   String? // criador do grupo
+  // chave canônica do par "a:b" (ids ordenados) só em DMs 1-a-1; null em grupos.
+  // Garante 1 canal por dupla via upsert atômico; NULLs múltiplos são permitidos.
+  pairKey   String?  @unique
   createdAt DateTime @default(now())
 
-  userA    User        @relation("DMUserA", fields: [userAId], references: [id], onDelete: Cascade)
-  userB    User        @relation("DMUserB", fields: [userBId], references: [id], onDelete: Cascade)
-  messages DMMessage[]
+  participants DMParticipant[]
+  messages     DMMessage[]
+}
 
-  @@unique([userAId, userBId])
+model DMParticipant {
+  id          String @id @default(cuid())
+  dmChannelId String
+  userId      String
+
+  channel DMChannel @relation(fields: [dmChannelId], references: [id], onDelete: Cascade)
+  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([dmChannelId, userId])
+  @@index([userId])
 }
 
 model DMMessage {
