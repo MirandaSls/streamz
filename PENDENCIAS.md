@@ -17,7 +17,10 @@ depender de infra. Antes de produção, migrar para Postgres:
   - **Docker Desktop**: instalar de
     [docker.com](https://www.docker.com/products/docker-desktop/), reiniciar o
     terminal, então `pnpm db:up`.
-- [ ] `pnpm db:migrate` para gerar as migrations de verdade (Postgres).
+- [ ] `pnpm db:migrate` para gerar as migrations de verdade (Postgres). O schema
+      evoluiu por `db push` no dev (SQLite) e ainda **não tem migrations**:
+      `RefreshToken`, `DMParticipant`, `ChannelMember`, `Message.parentId` e as
+      flags `Channel.private/readOnly` entram todas na primeira migration.
 
 > Nota: enquanto estivermos em SQLite, os enums viram texto no banco, mas os
 > valores válidos continuam garantidos pelos union types em `packages/shared` e
@@ -51,30 +54,42 @@ Ordem sugerida dos próximos blocos de features:
       ou MinIO local); precisa do endpoint de upload + URL pré-assinada.
 - [x] ~~**Convites de verdade**~~ — feito: modelo `Invite` (código, expiração,
       limite de usos), endpoints criar/preview/redeem, UI de criar convite e
-      entrar por código. Verificado ponta a ponta. (O `POST /guilds/:id/join`
-      antigo continua existindo; pode ser removido depois.)
-- [x] ~~**Moderação**~~ — feito: kick, ban (bloqueia reentrada por join e por
-      convite), unban e lista de bans, com hierarquia de papéis; UI de expulsar/
-      banir no hover da lista de membros. Verificado ponta a ponta.
-      _Gap menor:_ o usuário expulso/banido só some da tela dele ao recarregar
-      (falta um evento WS de "removido do servidor").
+      entrar por código. Verificado ponta a ponta. O `POST /guilds/:id/join`
+      antigo foi **removido** (furava os convites).
+- [x] ~~**Moderação**~~ — feito: kick, ban (bloqueia reentrada por convite),
+      unban e lista de bans, com hierarquia de papéis; UI de expulsar/banir no
+      hover da lista de membros. Verificado ponta a ponta. O usuário expulso/
+      banido agora **sai da tela em tempo real** (evento WS `guild.removed`).
 - [x] ~~**DMs 1-a-1**~~ — feito: canal de DM canonicalizado por dupla, lista,
       histórico e envio em tempo real (salas por usuário no gateway); UI com
       botão ✉️ no rail e 💬 na lista de membros. Verificado ponta a ponta.
-- [ ] **Grupos de DM** (3+ pessoas) — fica para depois.
+- [x] ~~**Grupos de DM** (3+ pessoas)~~ — feito: modelo baseado em
+      participantes (`DMParticipant`), `POST /dms/group`, título/avatar por
+      conversa e modal de criar grupo a partir dos contatos. _Typecheck ok;
+      falta validar ponta a ponta._
 - [x] ~~**Busca de mensagens** e **carregar histórico antigo**~~ — feito: busca
       por conteúdo no canal + scroll infinito (paginação por cursor, preservando
       a posição de rolagem). Verificado com 120 mensagens (50+50+20) e busca.
-- [ ] **Threads, stickers, emojis animados** (cortes conscientes do MVP).
+- [x] ~~**Threads**~~ — feito: `Message.parentId`, timeline mostra só raízes,
+      `GET .../:messageId/thread`, contador de respostas e painel lateral de
+      thread com envio em tempo real. _Typecheck ok; falta validar ponta a ponta._
+- [ ] **Stickers, emojis animados** (dependem de storage de assets — ver Anexos).
 
 ### Lacunas conhecidas
 - [x] ~~**Presença em tempo real**~~ — implementado: o gateway conta conexões por
       usuário e emite `presence.update` (ONLINE/OFFLINE) no connect/disconnect,
       atualizando o DB e a lista de membros ao vivo. Verificado com 2 usuários.
-- [ ] **Permissões granulares**: só existe OWNER/ADMIN/MEMBER; sem overrides por
-      canal (corte consciente).
+- [x] ~~**Permissões de canal**~~ — feito o essencial: canais **privados**
+      (allowlist `ChannelMember` além de OWNER/ADMIN) e **somente-leitura** (só
+      moderação posta), com autorização central (`assertCanView/PostChannel`),
+      lista de canais escondendo privados e UI de criar/gerenciar acesso.
+      _Ainda um corte:_ não há matriz de overrides por papel/permissão fina
+      (ex.: silenciar, gerenciar mensagens) — só os dois modos acima.
 
 ---
-_Status atual: backend rodando em SQLite; chat de texto com editar/apagar/reagir
-e lista de membros verificados ponta a ponta. Falta o banco de produção
-(Postgres), credenciais do LiveKit e o Rust para o build desktop._
+_Status atual: backend rodando em SQLite; chat de texto (editar/apagar/reagir),
+threads, DMs 1-a-1 e em grupo, moderação em tempo real e canais privados/somente-
+leitura implementados (features novas com typecheck ok, faltando validação ponta
+a ponta com o servidor rodando). Falta o banco de produção (Postgres) — e a
+primeira migration, já que o schema evoluiu por `db push` —, credenciais do
+LiveKit e o Rust para o build desktop._
