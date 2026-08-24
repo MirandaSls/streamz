@@ -33,7 +33,13 @@ export default function AppPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Message[] | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const loadingMoreRef = useRef(false);
+  const prependingRef = useRef(false);
 
   const canModerate = members.some(
     (m) => m.user.id === user?.id && (m.role === "OWNER" || m.role === "ADMIN"),
@@ -75,8 +81,11 @@ export default function AppPage() {
     // canal de texto: sai da call e volta pro fluxo de chat normal
     setVoiceChannel(null);
     setActiveChannel(c);
+    setSearchResults(null);
+    setSearchQuery("");
     const history = await api.history(c.id);
     setMessages(history);
+    setHasMore(history.length >= 50);
     const socket = getSocket();
     socket.emit(WS_EVENTS.CHANNEL_JOIN, c.id);
   }, []);
@@ -115,8 +124,46 @@ export default function AppPage() {
   }, [activeChannel, user]);
 
   useEffect(() => {
+    // não rola pro fim quando estamos adicionando histórico antigo no topo
+    if (prependingRef.current) return;
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // carrega histórico mais antigo ao chegar no topo
+  async function loadOlder() {
+    if (loadingMoreRef.current || !hasMore || !activeChannel || messages.length === 0) return;
+    loadingMoreRef.current = true;
+    const el = scrollRef.current;
+    const prevHeight = el?.scrollHeight ?? 0;
+    try {
+      const older = await api.history(activeChannel.id, messages[0].id);
+      if (older.length > 0) {
+        prependingRef.current = true;
+        setMessages((prev) => [...older, ...prev]);
+        requestAnimationFrame(() => {
+          if (el) el.scrollTop = el.scrollHeight - prevHeight;
+          prependingRef.current = false;
+        });
+      }
+      if (older.length < 50) setHasMore(false);
+    } finally {
+      loadingMoreRef.current = false;
+    }
+  }
+
+  async function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!activeChannel || !searchQuery.trim()) {
+      setSearchResults(null);
+      return;
+    }
+    try {
+      const results = await api.searchMessages(activeChannel.id, searchQuery.trim());
+      setSearchResults(results);
+    } catch (err) {
+      alert((err as Error).message);
+    }
+  }
 
   // presença em tempo real: atualiza o status na lista de membros
   useEffect(() => {
@@ -311,10 +358,68 @@ export default function AppPage() {
           />
         ) : (
           <>
-            <header className="border-b border-black/20 px-4 py-3 font-semibold">
-              {activeChannel ? `# ${activeChannel.name}` : "Escolha um canal"}
+            <header className="flex items-center justify-between gap-3 border-b border-black/20 px-4 py-3">
+              <span className="font-semibold">
+                {activeChannel ? `# ${activeChannel.name}` : "Escolha um canal"}
+              </span>
+              {activeChannel && (
+                <form onSubmit={handleSearch}>
+                  <input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Buscar mensagens…"
+                    className="w-52 rounded bg-rail px-3 py-1 text-sm outline-none"
+                  />
+                </form>
+              )}
             </header>
-            <div className="flex-1 overflow-y-auto px-4 py-3">
+
+            {searchResults !== null && (
+              <div className="border-b border-black/20 bg-panel px-4 py-2">
+                <div className="mb-1 flex items-center justify-between text-xs text-neutral-400">
+                  <span>
+                    {searchResults.length} resultado(s) para “{searchQuery}”
+                  </span>
+                  <button
+                    onClick={() => {
+                      setSearchResults(null);
+                      setSearchQuery("");
+                    }}
+                    className="hover:text-white"
+                  >
+                    fechar
+                  </button>
+                </div>
+                <div className="max-h-56 overflow-y-auto">
+                  {searchResults.length === 0 ? (
+                    <div className="py-2 text-sm text-neutral-500">Nada encontrado.</div>
+                  ) : (
+                    searchResults.map((m) => (
+                      <div key={m.id} className="border-b border-black/10 py-1.5 text-sm">
+                        <span className="font-semibold text-white">{m.author.username}</span>{" "}
+                        <span className="text-xs text-neutral-500">
+                          {new Date(m.createdAt).toLocaleString()}
+                        </span>
+                        <div className="text-neutral-300">{m.content}</div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div
+              ref={scrollRef}
+              onScroll={(e) => {
+                if (e.currentTarget.scrollTop < 80) loadOlder();
+              }}
+              className="flex-1 overflow-y-auto px-4 py-3"
+            >
+              {!hasMore && messages.length > 0 && (
+                <div className="mb-2 text-center text-xs text-neutral-600">
+                  — início da conversa —
+                </div>
+              )}
               {messages.map((m) => (
                 <MessageItem
                   key={m.id}

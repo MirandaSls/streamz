@@ -14,4 +14,12 @@ export class MessagesController {
   ) {
     return this.messages.history(channelId, cursor);
   }
+
+  @Get("search")
+  search(
+    @Param("channelId") channelId: string,
+    @Query("q") q: string,
+  ) {
+    return this.messages.search(channelId, q ?? "");
+  }
 }

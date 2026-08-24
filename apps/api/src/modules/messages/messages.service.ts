@@ -38,6 +38,19 @@ export class MessagesService {
     return rows.map((m) => this.toDTO(m)).reverse();
   }
 
+  /** Busca por conteúdo dentro de um canal (mais recentes primeiro). */
+  async search(channelId: string, query: string, take = 30): Promise<MessageDTO[]> {
+    const q = query.trim();
+    if (!q) return [];
+    const rows = await this.prisma.message.findMany({
+      where: { channelId, content: { contains: q } },
+      include: MESSAGE_INCLUDE,
+      orderBy: { createdAt: "desc" },
+      take,
+    });
+    return rows.map((m) => this.toDTO(m));
+  }
+
   /** Edição: só o autor pode editar o próprio conteúdo. */
   async edit(messageId: string, userId: string, content: string): Promise<MessageDTO> {
     const msg = await this.prisma.message.findUnique({ where: { id: messageId } });

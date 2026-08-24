@@ -59,8 +59,9 @@ Ordem sugerida dos próximos blocos de features:
       _Gap menor:_ o usuário expulso/banido só some da tela dele ao recarregar
       (falta um evento WS de "removido do servidor").
 - [ ] **DMs e grupos de DM** — mensagens diretas 1-a-1.
-- [ ] **Busca de mensagens** e **carregar histórico antigo** (paginação por
-      cursor no scroll — o backend já suporta `?cursor=`).
+- [x] ~~**Busca de mensagens** e **carregar histórico antigo**~~ — feito: busca
+      por conteúdo no canal + scroll infinito (paginação por cursor, preservando
+      a posição de rolagem). Verificado com 120 mensagens (50+50+20) e busca.
 - [ ] **Threads, stickers, emojis animados** (cortes conscientes do MVP).
 
 ### Lacunas conhecidas

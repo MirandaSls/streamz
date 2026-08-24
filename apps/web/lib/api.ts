@@ -66,8 +66,12 @@ export const api = {
       body: JSON.stringify({ name, type }),
     }),
 
-  history: (channelId: string) =>
-    request<any[]>(`/channels/${channelId}/messages`),
+  history: (channelId: string, cursor?: string) =>
+    request<any[]>(
+      `/channels/${channelId}/messages${cursor ? `?cursor=${cursor}` : ""}`,
+    ),
+  searchMessages: (channelId: string, q: string) =>
+    request<any[]>(`/channels/${channelId}/messages/search?q=${encodeURIComponent(q)}`),
 
   voiceToken: (channelId: string) =>
     request<{ token: string; url: string; room: string }>(
