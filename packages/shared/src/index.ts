@@ -71,6 +71,21 @@ export interface GuildMemberView {
   role: MemberRole;
 }
 
+export interface InviteInfo {
+  code: string;
+  guildId: string;
+  uses: number;
+  maxUses: number | null;
+  expiresAt: string | null;
+}
+
+export interface InvitePreview {
+  code: string;
+  guild: { id: string; name: string; iconUrl: string | null };
+  valid: boolean;
+  reason?: string;
+}
+
 // ── Eventos do WebSocket (Socket.IO) ─────────────────────────
 export const WS_EVENTS = {
   // cliente → servidor

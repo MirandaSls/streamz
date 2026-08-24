@@ -23,6 +23,7 @@ model User {
   memberships GuildMember[]
   messages    Message[]
   reactions   Reaction[]
+  invites     Invite[]      @relation("InviteCreator")
 }
 
 model Guild {
@@ -36,6 +37,23 @@ model Guild {
 
   members  GuildMember[]
   channels Channel[]
+  invites  Invite[]
+}
+
+model Invite {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  guildId   String
+  creatorId String
+  uses      Int       @default(0)
+  maxUses   Int?
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+
+  guild   Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  creator User  @relation("InviteCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@index([guildId])
 }
 
 model GuildMember {

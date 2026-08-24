@@ -43,6 +43,15 @@ export const api = {
   getGuild: (id: string) => request<any>(`/guilds/${id}`),
   members: (guildId: string) => request<any[]>(`/guilds/${guildId}/members`),
 
+  createInvite: (guildId: string, opts?: { maxUses?: number; expiresInHours?: number }) =>
+    request<{ code: string; guildId: string }>(`/guilds/${guildId}/invites`, {
+      method: "POST",
+      body: JSON.stringify(opts ?? {}),
+    }),
+  previewInvite: (code: string) => request<any>(`/invites/${code}`),
+  redeemInvite: (code: string) =>
+    request<{ id: string; name: string }>(`/invites/${code}/redeem`, { method: "POST" }),
+
   createChannel: (guildId: string, name: string, type: "TEXT" | "VOICE") =>
     request<any>(`/guilds/${guildId}/channels`, {
       method: "POST",

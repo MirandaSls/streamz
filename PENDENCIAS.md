@@ -49,8 +49,10 @@ Ordem sugerida dos próximos blocos de features:
 
 - [ ] **Anexos/imagens nas mensagens** — depende do armazenamento (Cloudflare R2
       ou MinIO local); precisa do endpoint de upload + URL pré-assinada.
-- [ ] **Convites de verdade** — modelo `Invite` (código, expiração, limite de
-      usos) no lugar do "entrar pelo id do servidor" atual.
+- [x] ~~**Convites de verdade**~~ — feito: modelo `Invite` (código, expiração,
+      limite de usos), endpoints criar/preview/redeem, UI de criar convite e
+      entrar por código. Verificado ponta a ponta. (O `POST /guilds/:id/join`
+      antigo continua existindo; pode ser removido depois.)
 - [ ] **Moderação** — UI de kick/ban (o backend de remover já checa OWNER/ADMIN);
       falta banir de fato (bloquear reentrada) e a tela.
 - [ ] **DMs e grupos de DM** — mensagens diretas 1-a-1.

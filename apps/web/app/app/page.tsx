@@ -32,6 +32,7 @@ export default function AppPage() {
   const [members, setMembers] = useState<GuildMemberView[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const canModerate = members.some(
@@ -178,6 +179,28 @@ export default function AppPage() {
     setChannels((prev) => [...prev, c]);
   }
 
+  async function createInvite() {
+    if (!activeGuild) return;
+    try {
+      const inv = await api.createInvite(activeGuild.id);
+      setInviteCode(inv.code);
+    } catch (e) {
+      alert((e as Error).message);
+    }
+  }
+
+  async function joinByCode() {
+    const code = prompt("Cole o código do convite:");
+    if (!code) return;
+    try {
+      const g = await api.redeemInvite(code.trim());
+      setGuilds((prev) => (prev.some((x) => x.id === g.id) ? prev : [...prev, g]));
+      selectGuild(g);
+    } catch (e) {
+      alert((e as Error).message);
+    }
+  }
+
   return (
     <div className="flex h-screen">
       {/* rail de servidores */}
@@ -201,6 +224,13 @@ export default function AppPage() {
         >
           +
         </button>
+        <button
+          onClick={joinByCode}
+          className="grid h-12 w-12 place-items-center rounded-2xl bg-panel text-lg text-neutral-300 hover:text-white"
+          title="Entrar com convite"
+        >
+          ⤵
+        </button>
       </nav>
 
       {/* lista de canais */}
@@ -208,9 +238,22 @@ export default function AppPage() {
         <div className="flex items-center justify-between border-b border-black/20 px-4 py-3 font-semibold">
           {activeGuild?.name ?? "Selecione um servidor"}
           {activeGuild && (
-            <button onClick={createChannel} className="text-lg text-neutral-400" title="Novo canal">
-              +
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={createInvite}
+                className="text-base text-neutral-400 hover:text-white"
+                title="Criar convite"
+              >
+                🔗
+              </button>
+              <button
+                onClick={createChannel}
+                className="text-lg text-neutral-400 hover:text-white"
+                title="Novo canal"
+              >
+                +
+              </button>
+            </div>
           )}
         </div>
         <div className="flex-1 overflow-y-auto p-2">
@@ -281,6 +324,41 @@ export default function AppPage() {
 
       {/* coluna de membros (só no chat de texto) */}
       {!voiceChannel && activeChannel && <MemberList members={members} />}
+
+      {/* modal de convite criado */}
+      {inviteCode && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/60"
+          onClick={() => setInviteCode(null)}
+        >
+          <div
+            className="w-[360px] rounded-lg bg-panel p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="mb-1 text-lg font-bold text-white">Convite criado</h2>
+            <p className="mb-3 text-sm text-neutral-400">
+              Compartilhe este código para entrarem no servidor:
+            </p>
+            <div className="mb-4 flex items-center gap-2">
+              <code className="flex-1 rounded bg-rail px-3 py-2 font-mono text-sm text-accent">
+                {inviteCode}
+              </code>
+              <button
+                onClick={() => navigator.clipboard?.writeText(inviteCode)}
+                className="rounded bg-accent px-3 py-2 text-sm font-medium text-white"
+              >
+                Copiar
+              </button>
+            </div>
+            <button
+              onClick={() => setInviteCode(null)}
+              className="w-full rounded bg-rail py-2 text-sm text-neutral-300 hover:text-white"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
