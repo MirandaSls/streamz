@@ -201,6 +201,26 @@ export default function AppPage() {
     }
   }
 
+  async function kickMember(userId: string) {
+    if (!activeGuild || !confirm("Expulsar este membro?")) return;
+    try {
+      await api.kickMember(activeGuild.id, userId);
+      setMembers((prev) => prev.filter((m) => m.user.id !== userId));
+    } catch (e) {
+      alert((e as Error).message);
+    }
+  }
+
+  async function banMember(userId: string) {
+    if (!activeGuild || !confirm("Banir este membro? Ele não poderá voltar.")) return;
+    try {
+      await api.banMember(activeGuild.id, userId);
+      setMembers((prev) => prev.filter((m) => m.user.id !== userId));
+    } catch (e) {
+      alert((e as Error).message);
+    }
+  }
+
   return (
     <div className="flex h-screen">
       {/* rail de servidores */}
@@ -323,7 +343,15 @@ export default function AppPage() {
       </main>
 
       {/* coluna de membros (só no chat de texto) */}
-      {!voiceChannel && activeChannel && <MemberList members={members} />}
+      {!voiceChannel && activeChannel && (
+        <MemberList
+          members={members}
+          currentUserId={user?.id}
+          canModerate={canModerate}
+          onKick={kickMember}
+          onBan={banMember}
+        />
+      )}
 
       {/* modal de convite criado */}
       {inviteCode && (

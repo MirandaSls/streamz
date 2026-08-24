@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -80,6 +81,10 @@ export class InvitesService {
 
     const { valid, reason } = this.checkValidity(invite);
     if (!valid) throw new BadRequestException(reason ?? "Convite expirado");
+
+    if (await this.guilds.isBanned(invite.guildId, userId)) {
+      throw new ForbiddenException("Você foi banido deste servidor");
+    }
 
     const already = await this.prisma.guildMember.findUnique({
       where: { userId_guildId: { userId, guildId: invite.guildId } },

@@ -53,8 +53,11 @@ Ordem sugerida dos próximos blocos de features:
       limite de usos), endpoints criar/preview/redeem, UI de criar convite e
       entrar por código. Verificado ponta a ponta. (O `POST /guilds/:id/join`
       antigo continua existindo; pode ser removido depois.)
-- [ ] **Moderação** — UI de kick/ban (o backend de remover já checa OWNER/ADMIN);
-      falta banir de fato (bloquear reentrada) e a tela.
+- [x] ~~**Moderação**~~ — feito: kick, ban (bloqueia reentrada por join e por
+      convite), unban e lista de bans, com hierarquia de papéis; UI de expulsar/
+      banir no hover da lista de membros. Verificado ponta a ponta.
+      _Gap menor:_ o usuário expulso/banido só some da tela dele ao recarregar
+      (falta um evento WS de "removido do servidor").
 - [ ] **DMs e grupos de DM** — mensagens diretas 1-a-1.
 - [ ] **Busca de mensagens** e **carregar histórico antigo** (paginação por
       cursor no scroll — o backend já suporta `?cursor=`).

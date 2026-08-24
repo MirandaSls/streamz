@@ -1,5 +1,13 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
-import { IsString, Length } from "class-validator";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  UseGuards,
+} from "@nestjs/common";
+import { IsOptional, IsString, Length } from "class-validator";
 import { GuildsService } from "./guilds.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";
@@ -8,6 +16,21 @@ class CreateGuildDto {
   @IsString()
   @Length(2, 64)
   name!: string;
+}
+
+class KickDto {
+  @IsString()
+  userId!: string;
+}
+
+class BanDto {
+  @IsString()
+  userId!: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 200)
+  reason?: string;
 }
 
 @UseGuards(JwtGuard)
@@ -38,5 +61,37 @@ export class GuildsController {
   @Post(":id/join")
   join(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
     return this.guilds.join(user.sub, id);
+  }
+
+  @Post(":id/kick")
+  kick(
+    @CurrentUser() user: JwtPayload,
+    @Param("id") id: string,
+    @Body() dto: KickDto,
+  ) {
+    return this.guilds.kick(user.sub, id, dto.userId);
+  }
+
+  @Post(":id/ban")
+  ban(
+    @CurrentUser() user: JwtPayload,
+    @Param("id") id: string,
+    @Body() dto: BanDto,
+  ) {
+    return this.guilds.ban(user.sub, id, dto.userId, dto.reason);
+  }
+
+  @Get(":id/bans")
+  bans(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
+    return this.guilds.listBans(user.sub, id);
+  }
+
+  @Delete(":id/bans/:userId")
+  unban(
+    @CurrentUser() user: JwtPayload,
+    @Param("id") id: string,
+    @Param("userId") userId: string,
+  ) {
+    return this.guilds.unban(user.sub, id, userId);
   }
 }

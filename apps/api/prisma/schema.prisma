@@ -24,6 +24,7 @@ model User {
   messages    Message[]
   reactions   Reaction[]
   invites     Invite[]      @relation("InviteCreator")
+  bans        Ban[]         @relation("BannedUser")
 }
 
 model Guild {
@@ -38,6 +39,22 @@ model Guild {
   members  GuildMember[]
   channels Channel[]
   invites  Invite[]
+  bans     Ban[]
+}
+
+model Ban {
+  id         String   @id @default(cuid())
+  guildId    String
+  userId     String
+  bannedById String
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  user  User  @relation("BannedUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, userId])
+  @@index([guildId])
 }
 
 model Invite {

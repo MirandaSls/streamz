@@ -66,11 +66,103 @@ export class GuildsService {
   async join(userId: string, guildId: string) {
     const guild = await this.prisma.guild.findUnique({ where: { id: guildId } });
     if (!guild) throw new NotFoundException("Servidor não encontrado");
+    if (await this.isBanned(guildId, userId)) {
+      throw new ForbiddenException("Você foi banido deste servidor");
+    }
     await this.prisma.guildMember.upsert({
       where: { userId_guildId: { userId, guildId } },
       create: { userId, guildId, role: "MEMBER" },
       update: {},
     });
     return guild;
+  }
+
+  // ── moderação ──────────────────────────────────────────────
+  async isBanned(guildId: string, userId: string): Promise<boolean> {
+    const ban = await this.prisma.ban.findUnique({
+      where: { guildId_userId: { guildId, userId } },
+    });
+    return !!ban;
+  }
+
+  /** Expulsa um membro (pode voltar por convite). */
+  async kick(actorId: string, guildId: string, targetUserId: string) {
+    await this.assertCanActOn(actorId, guildId, targetUserId);
+    await this.prisma.guildMember.delete({
+      where: { userId_guildId: { userId: targetUserId, guildId } },
+    });
+    return { kicked: targetUserId };
+  }
+
+  /** Bane um membro: remove e bloqueia reentrada. */
+  async ban(actorId: string, guildId: string, targetUserId: string, reason?: string) {
+    await this.assertCanActOn(actorId, guildId, targetUserId);
+    await this.prisma.$transaction([
+      this.prisma.guildMember.deleteMany({
+        where: { userId: targetUserId, guildId },
+      }),
+      this.prisma.ban.upsert({
+        where: { guildId_userId: { guildId, userId: targetUserId } },
+        create: { guildId, userId: targetUserId, bannedById: actorId, reason },
+        update: { reason, bannedById: actorId },
+      }),
+    ]);
+    return { banned: targetUserId };
+  }
+
+  async unban(actorId: string, guildId: string, targetUserId: string) {
+    await this.assertCanModerate(actorId, guildId);
+    await this.prisma.ban
+      .delete({ where: { guildId_userId: { guildId, userId: targetUserId } } })
+      .catch(() => undefined);
+    return { unbanned: targetUserId };
+  }
+
+  async listBans(actorId: string, guildId: string) {
+    await this.assertCanModerate(actorId, guildId);
+    const bans = await this.prisma.ban.findMany({
+      where: { guildId },
+      include: { user: true },
+      orderBy: { createdAt: "desc" },
+    });
+    return bans.map((b) => ({
+      reason: b.reason,
+      createdAt: b.createdAt.toISOString(),
+      user: {
+        id: b.user.id,
+        username: b.user.username,
+        avatarUrl: b.user.avatarUrl,
+        status: b.user.status,
+      },
+    }));
+  }
+
+  /** O ator precisa ser OWNER ou ADMIN do servidor. */
+  private async assertCanModerate(actorId: string, guildId: string) {
+    const actor = await this.assertMember(actorId, guildId);
+    if (actor.role !== "OWNER" && actor.role !== "ADMIN") {
+      throw new ForbiddenException("Sem permissão de moderação");
+    }
+    return actor;
+  }
+
+  /** Valida hierarquia: ator só age sobre alguém de cargo estritamente inferior. */
+  private async assertCanActOn(actorId: string, guildId: string, targetUserId: string) {
+    if (actorId === targetUserId) {
+      throw new ForbiddenException("Você não pode moderar a si mesmo");
+    }
+    const actor = await this.assertCanModerate(actorId, guildId);
+    const target = await this.prisma.guildMember.findUnique({
+      where: { userId_guildId: { userId: targetUserId, guildId } },
+    });
+    if (!target) throw new NotFoundException("Membro não encontrado");
+    if (this.rank(actor.role) <= this.rank(target.role)) {
+      throw new ForbiddenException("Você não pode moderar alguém de cargo igual ou superior");
+    }
+    return { actor, target };
+  }
+
+  private rank(role: string): number {
+    return role === "OWNER" ? 3 : role === "ADMIN" ? 2 : 1;
   }
 }

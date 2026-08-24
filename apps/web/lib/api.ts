@@ -52,6 +52,14 @@ export const api = {
   redeemInvite: (code: string) =>
     request<{ id: string; name: string }>(`/invites/${code}/redeem`, { method: "POST" }),
 
+  kickMember: (guildId: string, userId: string) =>
+    request<any>(`/guilds/${guildId}/kick`, { method: "POST", body: JSON.stringify({ userId }) }),
+  banMember: (guildId: string, userId: string, reason?: string) =>
+    request<any>(`/guilds/${guildId}/ban`, {
+      method: "POST",
+      body: JSON.stringify({ userId, reason }),
+    }),
+
   createChannel: (guildId: string, name: string, type: "TEXT" | "VOICE") =>
     request<any>(`/guilds/${guildId}/channels`, {
       method: "POST",
