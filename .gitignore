@@ -38,3 +38,6 @@ Thumbs.db
 # JS emitido por engano dentro de src/
 packages/shared/src/*.js
 packages/shared/src/*.js.map
+
+# Next auto-gerado
+apps/web/next-env.d.ts

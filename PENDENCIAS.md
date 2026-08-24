@@ -58,7 +58,10 @@ Ordem sugerida dos próximos blocos de features:
       banir no hover da lista de membros. Verificado ponta a ponta.
       _Gap menor:_ o usuário expulso/banido só some da tela dele ao recarregar
       (falta um evento WS de "removido do servidor").
-- [ ] **DMs e grupos de DM** — mensagens diretas 1-a-1.
+- [x] ~~**DMs 1-a-1**~~ — feito: canal de DM canonicalizado por dupla, lista,
+      histórico e envio em tempo real (salas por usuário no gateway); UI com
+      botão ✉️ no rail e 💬 na lista de membros. Verificado ponta a ponta.
+- [ ] **Grupos de DM** (3+ pessoas) — fica para depois.
 - [x] ~~**Busca de mensagens** e **carregar histórico antigo**~~ — feito: busca
       por conteúdo no canal + scroll infinito (paginação por cursor, preservando
       a posição de rolagem). Verificado com 120 mensagens (50+50+20) e busca.

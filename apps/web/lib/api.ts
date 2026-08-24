@@ -52,6 +52,12 @@ export const api = {
   redeemInvite: (code: string) =>
     request<{ id: string; name: string }>(`/invites/${code}/redeem`, { method: "POST" }),
 
+  openDM: (userId: string) =>
+    request<any>(`/dms`, { method: "POST", body: JSON.stringify({ userId }) }),
+  listDMs: () => request<any[]>(`/dms`),
+  dmHistory: (dmChannelId: string, cursor?: string) =>
+    request<any[]>(`/dms/${dmChannelId}/messages${cursor ? `?cursor=${cursor}` : ""}`),
+
   kickMember: (guildId: string, userId: string) =>
     request<any>(`/guilds/${guildId}/kick`, { method: "POST", body: JSON.stringify({ userId }) }),
   banMember: (guildId: string, userId: string, reason?: string) =>

@@ -7,6 +7,7 @@ import { GuildsModule } from "./modules/guilds/guilds.module";
 import { ChannelsModule } from "./modules/channels/channels.module";
 import { MessagesModule } from "./modules/messages/messages.module";
 import { InvitesModule } from "./modules/invites/invites.module";
+import { DMsModule } from "./modules/dms/dms.module";
 import { GatewayModule } from "./modules/gateway/gateway.module";
 import { VoiceModule } from "./modules/voice/voice.module";
 import { HealthController } from "./health.controller";
@@ -21,6 +22,7 @@ import { HealthController } from "./health.controller";
     ChannelsModule,
     MessagesModule,
     InvitesModule,
+    DMsModule,
     GatewayModule,
     VoiceModule,
   ],

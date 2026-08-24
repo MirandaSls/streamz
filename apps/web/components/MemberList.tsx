@@ -21,12 +21,14 @@ export default function MemberList({
   canModerate,
   onKick,
   onBan,
+  onOpenDM,
 }: {
   members: GuildMemberView[];
   currentUserId?: string;
   canModerate?: boolean;
   onKick?: (userId: string) => void;
   onBan?: (userId: string) => void;
+  onOpenDM?: (userId: string) => void;
 }) {
   return (
     <aside className="flex w-56 flex-col bg-panel">
@@ -56,24 +58,35 @@ export default function MemberList({
                   <div className="text-[10px] uppercase text-accent">{ROLE_LABEL[m.role]}</div>
                 )}
               </div>
-              {actionable && (
-                <div className="hidden gap-1 group-hover:flex">
+              <div className="hidden gap-1 group-hover:flex">
+                {onOpenDM && m.user.id !== currentUserId && (
                   <button
-                    onClick={() => onKick?.(m.user.id)}
-                    title="Expulsar"
+                    onClick={() => onOpenDM(m.user.id)}
+                    title="Mensagem direta"
                     className="text-sm hover:brightness-125"
                   >
-                    👢
+                    💬
                   </button>
-                  <button
-                    onClick={() => onBan?.(m.user.id)}
-                    title="Banir"
-                    className="text-sm hover:brightness-125"
-                  >
-                    🔨
-                  </button>
-                </div>
-              )}
+                )}
+                {actionable && (
+                  <>
+                    <button
+                      onClick={() => onKick?.(m.user.id)}
+                      title="Expulsar"
+                      className="text-sm hover:brightness-125"
+                    >
+                      👢
+                    </button>
+                    <button
+                      onClick={() => onBan?.(m.user.id)}
+                      title="Banir"
+                      className="text-sm hover:brightness-125"
+                    >
+                      🔨
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           );
         })}

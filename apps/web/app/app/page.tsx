@@ -8,6 +8,8 @@ import {
   type GuildMemberView,
   type MessageDeletedEvent,
   type PresenceUpdatePayload,
+  type DMChannelView,
+  type DirectMessage,
 } from "@newdisc/shared";
 import { api } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
@@ -41,6 +43,14 @@ export default function AppPage() {
   const loadingMoreRef = useRef(false);
   const prependingRef = useRef(false);
 
+  // DMs
+  const [dmMode, setDmMode] = useState(false);
+  const [dmChannels, setDmChannels] = useState<DMChannelView[]>([]);
+  const [activeDM, setActiveDM] = useState<DMChannelView | null>(null);
+  const [dmMessages, setDmMessages] = useState<DirectMessage[]>([]);
+  const [dmDraft, setDmDraft] = useState("");
+  const dmBottomRef = useRef<HTMLDivElement>(null);
+
   const canModerate = members.some(
     (m) => m.user.id === user?.id && (m.role === "OWNER" || m.role === "ADMIN"),
   );
@@ -63,6 +73,7 @@ export default function AppPage() {
   }, []);
 
   const selectGuild = useCallback(async (g: Guild) => {
+    setDmMode(false);
     setActiveGuild(g);
     const full = await api.getGuild(g.id);
     setChannels(full.channels ?? []);
@@ -181,6 +192,24 @@ export default function AppPage() {
     };
   }, []);
 
+  // mensagens diretas em tempo real
+  useEffect(() => {
+    const socket = getSocket();
+    const onDM = (m: DirectMessage) => {
+      if (m.dmChannelId === activeDM?.id) {
+        setDmMessages((prev) => [...prev, m]);
+      }
+    };
+    socket.on(WS_EVENTS.DM_NEW, onDM);
+    return () => {
+      socket.off(WS_EVENTS.DM_NEW, onDM);
+    };
+  }, [activeDM]);
+
+  useEffect(() => {
+    dmBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [dmMessages]);
+
   function send(e: React.FormEvent) {
     e.preventDefault();
     if (!draft.trim() || !activeChannel) return;
@@ -268,17 +297,69 @@ export default function AppPage() {
     }
   }
 
+  // ── DMs ──────────────────────────────────────────────────────
+  async function openDMs() {
+    setDmMode(true);
+    setVoiceChannel(null);
+    try {
+      setDmChannels(await api.listDMs());
+    } catch {
+      /* ignora */
+    }
+  }
+
+  async function openDMWith(userId: string) {
+    try {
+      const dm = await api.openDM(userId);
+      setDmMode(true);
+      setVoiceChannel(null);
+      setDmChannels((prev) => (prev.some((d) => d.id === dm.id) ? prev : [dm, ...prev]));
+      selectDM(dm);
+    } catch (e) {
+      alert((e as Error).message);
+    }
+  }
+
+  async function selectDM(dm: DMChannelView) {
+    setActiveDM(dm);
+    try {
+      setDmMessages(await api.dmHistory(dm.id));
+    } catch {
+      setDmMessages([]);
+    }
+  }
+
+  function sendDM(e: React.FormEvent) {
+    e.preventDefault();
+    if (!dmDraft.trim() || !activeDM) return;
+    getSocket().emit(WS_EVENTS.DM_CREATE, {
+      dmChannelId: activeDM.id,
+      content: dmDraft.trim(),
+    });
+    setDmDraft("");
+  }
+
   return (
     <div className="flex h-screen">
       {/* rail de servidores */}
       <nav className="flex w-[72px] flex-col items-center gap-2 bg-rail py-3">
+        <button
+          onClick={openDMs}
+          title="Mensagens diretas"
+          className={`grid h-12 w-12 place-items-center rounded-2xl text-xl transition ${
+            dmMode ? "bg-accent text-white" : "bg-panel text-neutral-200"
+          }`}
+        >
+          ✉️
+        </button>
+        <div className="my-1 h-px w-8 bg-black/30" />
         {guilds.map((g) => (
           <button
             key={g.id}
             onClick={() => selectGuild(g)}
             title={g.name}
             className={`grid h-12 w-12 place-items-center rounded-2xl text-sm font-bold transition ${
-              activeGuild?.id === g.id ? "bg-accent text-white" : "bg-panel text-neutral-200"
+              !dmMode && activeGuild?.id === g.id ? "bg-accent text-white" : "bg-panel text-neutral-200"
             }`}
           >
             {g.name.slice(0, 2).toUpperCase()}
@@ -300,6 +381,84 @@ export default function AppPage() {
         </button>
       </nav>
 
+      {dmMode ? (
+        <>
+          {/* lista de DMs */}
+          <aside className="flex w-60 flex-col bg-panel">
+            <div className="border-b border-black/20 px-4 py-3 font-semibold">
+              Mensagens diretas
+            </div>
+            <div className="flex-1 overflow-y-auto p-2">
+              {dmChannels.length === 0 && (
+                <p className="px-2 py-1 text-sm text-neutral-500">
+                  Nenhuma conversa. Abra uma pelo 💬 na lista de membros de um servidor.
+                </p>
+              )}
+              {dmChannels.map((d) => (
+                <button
+                  key={d.id}
+                  onClick={() => selectDM(d)}
+                  className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm ${
+                    activeDM?.id === d.id ? "bg-black/30 text-white" : "text-neutral-400"
+                  }`}
+                >
+                  <span className="grid h-7 w-7 place-items-center rounded-full bg-rail text-xs font-bold text-neutral-200">
+                    {d.other.username.slice(0, 2).toUpperCase()}
+                  </span>
+                  {d.other.username}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center justify-between border-t border-black/20 px-3 py-2 text-sm">
+              <span className="truncate">{user?.username}</span>
+              <button
+                onClick={() => {
+                  logout();
+                  router.replace("/login");
+                }}
+                className="text-neutral-400"
+              >
+                sair
+              </button>
+            </div>
+          </aside>
+
+          <main className="flex flex-1 flex-col bg-chat">
+            {activeDM ? (
+              <>
+                <header className="border-b border-black/20 px-4 py-3 font-semibold">
+                  @ {activeDM.other.username}
+                </header>
+                <div className="flex-1 overflow-y-auto px-4 py-3">
+                  {dmMessages.map((m) => (
+                    <div key={m.id} className="mb-2">
+                      <span className="mr-2 font-semibold text-white">{m.author.username}</span>
+                      <span className="text-xs text-neutral-500">
+                        {new Date(m.createdAt).toLocaleTimeString()}
+                      </span>
+                      <div className="text-neutral-200">{m.content}</div>
+                    </div>
+                  ))}
+                  <div ref={dmBottomRef} />
+                </div>
+                <form onSubmit={sendDM} className="px-4 pb-4">
+                  <input
+                    value={dmDraft}
+                    onChange={(e) => setDmDraft(e.target.value)}
+                    placeholder={`Conversar com ${activeDM.other.username}`}
+                    className="w-full rounded bg-panel px-4 py-3 text-sm outline-none"
+                  />
+                </form>
+              </>
+            ) : (
+              <div className="grid flex-1 place-items-center text-neutral-500">
+                Selecione uma conversa
+              </div>
+            )}
+          </main>
+        </>
+      ) : (
+        <>
       {/* lista de canais */}
       <aside className="flex w-60 flex-col bg-panel">
         <div className="flex items-center justify-between border-b border-black/20 px-4 py-3 font-semibold">
@@ -455,7 +614,10 @@ export default function AppPage() {
           canModerate={canModerate}
           onKick={kickMember}
           onBan={banMember}
+          onOpenDM={openDMWith}
         />
+      )}
+        </>
       )}
 
       {/* modal de convite criado */}

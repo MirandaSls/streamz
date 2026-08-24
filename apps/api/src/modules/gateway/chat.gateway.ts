@@ -16,9 +16,11 @@ import type {
   MessageDeletePayload,
   ReactionPayload,
   TypingPayload,
+  DMCreatePayload,
 } from "@newdisc/shared";
 import { MessagesService } from "../messages/messages.service";
 import { PrismaService } from "../../prisma/prisma.service";
+import { DMsService } from "../dms/dms.service";
 
 interface SocketUser {
   id: string;
@@ -39,6 +41,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly jwt: JwtService,
     private readonly messages: MessagesService,
     private readonly prisma: PrismaService,
+    private readonly dms: DMsService,
   ) {}
 
   /** Autentica pelo token passado no handshake: auth.token ou ?token= */
@@ -52,6 +55,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         { secret: process.env.JWT_SECRET },
       );
       client.data.user = { id: payload.sub, username: payload.username } satisfies SocketUser;
+      client.join(`user:${payload.sub}`); // sala pessoal para DMs
       await this.markOnline(payload.sub);
     } catch {
       client.disconnect(true);
@@ -175,6 +179,27 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     try {
       const message = await this.messages.removeReaction(body.messageId, user.id, body.emoji);
       this.server.to(this.room(message.channelId)).emit(WS_EVENTS.MESSAGE_UPDATED, message);
+    } catch (e) {
+      this.emitError(client, e);
+    }
+  }
+
+  @SubscribeMessage(WS_EVENTS.DM_CREATE)
+  async onDM(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: DMCreatePayload,
+  ) {
+    const user = client.data.user as SocketUser | undefined;
+    if (!user || !body?.dmChannelId || !body?.content?.trim()) return;
+    try {
+      const { message, participants } = await this.dms.createMessage(
+        user.id,
+        body.dmChannelId,
+        body.content.trim().slice(0, 2000),
+      );
+      for (const uid of participants) {
+        this.server.to(`user:${uid}`).emit(WS_EVENTS.DM_NEW, message);
+      }
     } catch (e) {
       this.emitError(client, e);
     }

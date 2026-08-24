@@ -86,6 +86,25 @@ export interface InvitePreview {
   reason?: string;
 }
 
+export interface DMChannelView {
+  id: string;
+  other: PublicUser;
+}
+
+export interface DirectMessage {
+  id: string;
+  dmChannelId: string;
+  author: PublicUser;
+  content: string;
+  createdAt: string;
+  editedAt: string | null;
+}
+
+export interface DMCreatePayload {
+  dmChannelId: string;
+  content: string;
+}
+
 // ── Eventos do WebSocket (Socket.IO) ─────────────────────────
 export const WS_EVENTS = {
   // cliente → servidor
@@ -97,11 +116,13 @@ export const WS_EVENTS = {
   TYPING: "typing",
   CHANNEL_JOIN: "channel.join",
   CHANNEL_LEAVE: "channel.leave",
+  DM_CREATE: "dm.create",
   // servidor → cliente
   MESSAGE_NEW: "message.new",
   MESSAGE_UPDATED: "message.updated",
   MESSAGE_DELETED: "message.deleted",
   PRESENCE_UPDATE: "presence.update",
+  DM_NEW: "dm.new",
 } as const;
 
 export interface MessageCreatePayload {
