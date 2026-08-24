@@ -1,0 +1,27 @@
+import { Injectable } from "@nestjs/common";
+import type { Server } from "socket.io";
+
+/**
+ * Ponte fina para emitir eventos WebSocket de fora do gateway (ex.: serviços
+ * HTTP como moderação). O gateway registra o `Server` no boot via `bind()`;
+ * quem precisar emitir injeta este serviço. Evita a dependência circular que
+ * surgiria se um serviço importasse o próprio ChatGateway.
+ */
+@Injectable()
+export class RealtimeService {
+  private server?: Server;
+
+  bind(server: Server) {
+    this.server = server;
+  }
+
+  /** Emite para a sala pessoal do usuário (`user:<id>`). */
+  emitToUser(userId: string, event: string, payload: unknown) {
+    this.server?.to(`user:${userId}`).emit(event, payload);
+  }
+
+  /** Emite para a sala de um canal (`channel:<id>`). */
+  emitToChannel(channelId: string, event: string, payload: unknown) {
+    this.server?.to(`channel:${channelId}`).emit(event, payload);
+  }
+}

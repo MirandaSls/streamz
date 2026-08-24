@@ -123,6 +123,7 @@ export const WS_EVENTS = {
   MESSAGE_DELETED: "message.deleted",
   PRESENCE_UPDATE: "presence.update",
   DM_NEW: "dm.new",
+  GUILD_REMOVED: "guild.removed",
 } as const;
 
 export interface MessageCreatePayload {
@@ -156,6 +157,12 @@ export interface TypingPayload {
 export interface PresenceUpdatePayload {
   userId: string;
   status: UserStatus;
+}
+
+/** Emitido ao usuário que foi expulso/banido de um servidor. */
+export interface GuildRemovedEvent {
+  guildId: string;
+  reason: "kicked" | "banned";
 }
 
 // ── Voz (LiveKit) ────────────────────────────────────────────

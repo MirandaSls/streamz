@@ -3,6 +3,7 @@ import {
   MessageBody,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
@@ -22,6 +23,7 @@ import { MessagesService } from "../messages/messages.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { DMsService } from "../dms/dms.service";
 import { GuildsService } from "../guilds/guilds.service";
+import { RealtimeService } from "../realtime/realtime.service";
 
 interface SocketUser {
   id: string;
@@ -31,7 +33,9 @@ interface SocketUser {
 @WebSocketGateway({
   cors: { origin: process.env.CORS_ORIGIN?.split(",") ?? "*", credentials: true },
 })
-export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class ChatGateway
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server!: Server;
 
@@ -44,7 +48,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly prisma: PrismaService,
     private readonly dms: DMsService,
     private readonly guilds: GuildsService,
+    private readonly realtime: RealtimeService,
   ) {}
+
+  /** Registra o Server para que serviços HTTP possam emitir eventos WS. */
+  afterInit(server: Server) {
+    this.realtime.bind(server);
+  }
 
   /** Autentica pelo token passado no handshake: auth.token ou ?token= */
   async handleConnection(client: Socket) {

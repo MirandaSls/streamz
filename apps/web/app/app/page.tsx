@@ -10,6 +10,7 @@ import {
   type PresenceUpdatePayload,
   type DMChannelView,
   type DirectMessage,
+  type GuildRemovedEvent,
 } from "@newdisc/shared";
 import { api } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
@@ -43,6 +44,7 @@ export default function AppPage() {
   const loadingMoreRef = useRef(false);
   const prependingRef = useRef(false);
   const joinedChannelRef = useRef<string | null>(null);
+  const activeGuildRef = useRef<Guild | null>(null);
 
   // DMs
   const [dmMode, setDmMode] = useState(false);
@@ -181,6 +183,32 @@ export default function AppPage() {
       alert((err as Error).message);
     }
   }
+
+  // mantém o servidor ativo acessível dentro de listeners sem re-registrar
+  useEffect(() => {
+    activeGuildRef.current = activeGuild;
+  }, [activeGuild]);
+
+  // fui expulso/banido de um servidor: some da lista e limpa a área se estava aberto
+  useEffect(() => {
+    const socket = getSocket();
+    const onRemoved = ({ guildId }: GuildRemovedEvent) => {
+      setGuilds((prev) => prev.filter((g) => g.id !== guildId));
+      if (activeGuildRef.current?.id === guildId) {
+        setActiveGuild(null);
+        setChannels([]);
+        setActiveChannel(null);
+        setMembers([]);
+        setMessages([]);
+        setVoiceChannel(null);
+        joinedChannelRef.current = null;
+      }
+    };
+    socket.on(WS_EVENTS.GUILD_REMOVED, onRemoved);
+    return () => {
+      socket.off(WS_EVENTS.GUILD_REMOVED, onRemoved);
+    };
+  }, []);
 
   // presença em tempo real: atualiza o status na lista de membros
   useEffect(() => {

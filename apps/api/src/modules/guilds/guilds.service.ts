@@ -1,9 +1,14 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { WS_EVENTS } from "@newdisc/shared";
 import { PrismaService } from "../../prisma/prisma.service";
+import { RealtimeService } from "../realtime/realtime.service";
 
 @Injectable()
 export class GuildsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly realtime: RealtimeService,
+  ) {}
 
   /** Cria o servidor, registra o dono como membro OWNER e um canal #geral. */
   async create(ownerId: string, name: string) {
@@ -97,6 +102,10 @@ export class GuildsService {
     await this.prisma.guildMember.delete({
       where: { userId_guildId: { userId: targetUserId, guildId } },
     });
+    this.realtime.emitToUser(targetUserId, WS_EVENTS.GUILD_REMOVED, {
+      guildId,
+      reason: "kicked",
+    });
     return { kicked: targetUserId };
   }
 
@@ -113,6 +122,10 @@ export class GuildsService {
         update: { reason, bannedById: actorId },
       }),
     ]);
+    this.realtime.emitToUser(targetUserId, WS_EVENTS.GUILD_REMOVED, {
+      guildId,
+      reason: "banned",
+    });
     return { banned: targetUserId };
   }
 
