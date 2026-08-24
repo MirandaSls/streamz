@@ -12,6 +12,9 @@ import { Server, Socket } from "socket.io";
 import { WS_EVENTS } from "@newdisc/shared";
 import type {
   MessageCreatePayload,
+  MessageEditPayload,
+  MessageDeletePayload,
+  ReactionPayload,
   TypingPayload,
 } from "@newdisc/shared";
 import { MessagesService } from "../messages/messages.service";
@@ -77,6 +80,77 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       body.content.trim().slice(0, 2000),
     );
     this.server.to(this.room(body.channelId)).emit(WS_EVENTS.MESSAGE_NEW, message);
+  }
+
+  @SubscribeMessage(WS_EVENTS.MESSAGE_EDIT)
+  async onEdit(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: MessageEditPayload,
+  ) {
+    const user = client.data.user as SocketUser | undefined;
+    if (!user || !body?.content?.trim()) return;
+    try {
+      const message = await this.messages.edit(
+        body.messageId,
+        user.id,
+        body.content.trim().slice(0, 2000),
+      );
+      this.server.to(this.room(message.channelId)).emit(WS_EVENTS.MESSAGE_UPDATED, message);
+    } catch (e) {
+      this.emitError(client, e);
+    }
+  }
+
+  @SubscribeMessage(WS_EVENTS.MESSAGE_DELETE)
+  async onDelete(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: MessageDeletePayload,
+  ) {
+    const user = client.data.user as SocketUser | undefined;
+    if (!user || !body?.messageId) return;
+    try {
+      const { channelId } = await this.messages.remove(body.messageId, user.id);
+      this.server
+        .to(this.room(channelId))
+        .emit(WS_EVENTS.MESSAGE_DELETED, { messageId: body.messageId, channelId });
+    } catch (e) {
+      this.emitError(client, e);
+    }
+  }
+
+  @SubscribeMessage(WS_EVENTS.REACTION_ADD)
+  async onReactionAdd(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: ReactionPayload,
+  ) {
+    const user = client.data.user as SocketUser | undefined;
+    if (!user || !body?.messageId || !body?.emoji) return;
+    try {
+      const message = await this.messages.addReaction(body.messageId, user.id, body.emoji);
+      this.server.to(this.room(message.channelId)).emit(WS_EVENTS.MESSAGE_UPDATED, message);
+    } catch (e) {
+      this.emitError(client, e);
+    }
+  }
+
+  @SubscribeMessage(WS_EVENTS.REACTION_REMOVE)
+  async onReactionRemove(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: ReactionPayload,
+  ) {
+    const user = client.data.user as SocketUser | undefined;
+    if (!user || !body?.messageId || !body?.emoji) return;
+    try {
+      const message = await this.messages.removeReaction(body.messageId, user.id, body.emoji);
+      this.server.to(this.room(message.channelId)).emit(WS_EVENTS.MESSAGE_UPDATED, message);
+    } catch (e) {
+      this.emitError(client, e);
+    }
+  }
+
+  private emitError(client: Socket, e: unknown) {
+    const message = e instanceof Error ? e.message : "Erro";
+    client.emit("ws.error", { message });
   }
 
   @SubscribeMessage(WS_EVENTS.TYPING)

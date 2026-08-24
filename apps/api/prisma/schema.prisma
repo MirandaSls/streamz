@@ -22,6 +22,7 @@ model User {
   ownedGuilds Guild[]       @relation("GuildOwner")
   memberships GuildMember[]
   messages    Message[]
+  reactions   Reaction[]
 }
 
 model Guild {
@@ -73,8 +74,22 @@ model Message {
   createdAt DateTime  @default(now())
   editedAt  DateTime?
 
-  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  author  User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  channel   Channel    @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author    User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  reactions Reaction[]
 
   @@index([channelId, createdAt])
+}
+
+model Reaction {
+  id        String @id @default(cuid())
+  messageId String
+  userId    String
+  emoji     String
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
 }

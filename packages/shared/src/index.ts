@@ -50,6 +50,12 @@ export interface Channel {
   position: number;
 }
 
+export interface ReactionGroup {
+  emoji: string;
+  count: number;
+  userIds: string[];
+}
+
 export interface Message {
   id: string;
   channelId: string;
@@ -57,21 +63,54 @@ export interface Message {
   content: string;
   createdAt: string;
   editedAt: string | null;
+  reactions: ReactionGroup[];
+}
+
+export interface GuildMemberView {
+  user: PublicUser;
+  role: MemberRole;
 }
 
 // ── Eventos do WebSocket (Socket.IO) ─────────────────────────
 export const WS_EVENTS = {
+  // cliente → servidor
   MESSAGE_CREATE: "message.create",
-  MESSAGE_NEW: "message.new",
+  MESSAGE_EDIT: "message.edit",
+  MESSAGE_DELETE: "message.delete",
+  REACTION_ADD: "reaction.add",
+  REACTION_REMOVE: "reaction.remove",
   TYPING: "typing",
-  PRESENCE_UPDATE: "presence.update",
   CHANNEL_JOIN: "channel.join",
   CHANNEL_LEAVE: "channel.leave",
+  // servidor → cliente
+  MESSAGE_NEW: "message.new",
+  MESSAGE_UPDATED: "message.updated",
+  MESSAGE_DELETED: "message.deleted",
+  PRESENCE_UPDATE: "presence.update",
 } as const;
 
 export interface MessageCreatePayload {
   channelId: string;
   content: string;
+}
+
+export interface MessageEditPayload {
+  messageId: string;
+  content: string;
+}
+
+export interface MessageDeletePayload {
+  messageId: string;
+}
+
+export interface ReactionPayload {
+  messageId: string;
+  emoji: string;
+}
+
+export interface MessageDeletedEvent {
+  messageId: string;
+  channelId: string;
 }
 
 export interface TypingPayload {

@@ -44,6 +44,29 @@ depender de infra. Antes de produção, migrar para Postgres:
 - [ ] Migrar a mídia de LiveKit Cloud para **self-host** (call sem limite de
       tempo) quando o MVP estiver validado.
 
+## 6. Backlog de escopo (próximos blocos)
+Ordem sugerida dos próximos blocos de features:
+
+- [ ] **Anexos/imagens nas mensagens** — depende do armazenamento (Cloudflare R2
+      ou MinIO local); precisa do endpoint de upload + URL pré-assinada.
+- [ ] **Convites de verdade** — modelo `Invite` (código, expiração, limite de
+      usos) no lugar do "entrar pelo id do servidor" atual.
+- [ ] **Moderação** — UI de kick/ban (o backend de remover já checa OWNER/ADMIN);
+      falta banir de fato (bloquear reentrada) e a tela.
+- [ ] **DMs e grupos de DM** — mensagens diretas 1-a-1.
+- [ ] **Busca de mensagens** e **carregar histórico antigo** (paginação por
+      cursor no scroll — o backend já suporta `?cursor=`).
+- [ ] **Threads, stickers, emojis animados** (cortes conscientes do MVP).
+
+### Lacunas conhecidas do bloco atual (mensagens ricas + membros)
+- [ ] **Presença em tempo real**: o `status` do usuário é setado como ONLINE no
+      registro/login, mas não muda ao conectar/desconectar o WebSocket. A coluna
+      de membros mostra o último status salvo — falta emitir `presence.update` no
+      `handleConnection`/`handleDisconnect` do gateway.
+- [ ] **Permissões granulares**: só existe OWNER/ADMIN/MEMBER; sem overrides por
+      canal (corte consciente).
+
 ---
-_Status atual: `pnpm install` já rodou com sucesso. Falta apenas o banco para
-subir a API._
+_Status atual: backend rodando em SQLite; chat de texto com editar/apagar/reagir
+e lista de membros verificados ponta a ponta. Falta o banco de produção
+(Postgres), credenciais do LiveKit e o Rust para o build desktop._

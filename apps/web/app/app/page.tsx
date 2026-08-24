@@ -2,11 +2,18 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { WS_EVENTS, type Message } from "@newdisc/shared";
+import {
+  WS_EVENTS,
+  type Message,
+  type GuildMemberView,
+  type MessageDeletedEvent,
+} from "@newdisc/shared";
 import { api } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
 import { useAuth } from "@/stores/auth";
 import VoicePanel from "@/components/VoicePanel";
+import MessageItem from "@/components/MessageItem";
+import MemberList from "@/components/MemberList";
 import { notify } from "@/lib/desktop";
 
 type Guild = { id: string; name: string };
@@ -21,9 +28,14 @@ export default function AppPage() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
   const [voiceChannel, setVoiceChannel] = useState<Channel | null>(null);
+  const [members, setMembers] = useState<GuildMemberView[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  const canModerate = members.some(
+    (m) => m.user.id === user?.id && (m.role === "OWNER" || m.role === "ADMIN"),
+  );
 
   // sessão
   useEffect(() => loadFromStorage(), [loadFromStorage]);
@@ -46,6 +58,7 @@ export default function AppPage() {
     setActiveGuild(g);
     const full = await api.getGuild(g.id);
     setChannels(full.channels ?? []);
+    api.members(g.id).then(setMembers).catch(() => setMembers([]));
     const firstText = (full.channels ?? []).find((c: Channel) => c.type === "TEXT");
     if (firstText) selectChannel(firstText);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -83,9 +96,19 @@ export default function AppPage() {
         notify(`#${activeChannel?.name ?? "canal"}`, `${m.author.username}: ${m.content}`);
       }
     };
+    const onUpdated = (m: Message) => {
+      setMessages((prev) => prev.map((x) => (x.id === m.id ? m : x)));
+    };
+    const onDeleted = (d: MessageDeletedEvent) => {
+      setMessages((prev) => prev.filter((x) => x.id !== d.messageId));
+    };
     socket.on(WS_EVENTS.MESSAGE_NEW, onNew);
+    socket.on(WS_EVENTS.MESSAGE_UPDATED, onUpdated);
+    socket.on(WS_EVENTS.MESSAGE_DELETED, onDeleted);
     return () => {
       socket.off(WS_EVENTS.MESSAGE_NEW, onNew);
+      socket.off(WS_EVENTS.MESSAGE_UPDATED, onUpdated);
+      socket.off(WS_EVENTS.MESSAGE_DELETED, onDeleted);
     };
   }, [activeChannel, user]);
 
@@ -101,6 +124,25 @@ export default function AppPage() {
       content: draft.trim(),
     });
     setDraft("");
+  }
+
+  function editMessage(id: string, content: string) {
+    getSocket().emit(WS_EVENTS.MESSAGE_EDIT, { messageId: id, content });
+  }
+
+  function deleteMessage(id: string) {
+    if (confirm("Apagar esta mensagem?")) {
+      getSocket().emit(WS_EVENTS.MESSAGE_DELETE, { messageId: id });
+    }
+  }
+
+  function toggleReaction(id: string, emoji: string) {
+    const group = messages.find((m) => m.id === id)?.reactions.find((r) => r.emoji === emoji);
+    const mine = group?.userIds.includes(user?.id ?? "");
+    getSocket().emit(mine ? WS_EVENTS.REACTION_REMOVE : WS_EVENTS.REACTION_ADD, {
+      messageId: id,
+      emoji,
+    });
   }
 
   async function createGuild() {
@@ -194,13 +236,15 @@ export default function AppPage() {
             </header>
             <div className="flex-1 overflow-y-auto px-4 py-3">
               {messages.map((m) => (
-                <div key={m.id} className="mb-2">
-                  <span className="mr-2 font-semibold text-white">{m.author.username}</span>
-                  <span className="text-xs text-neutral-500">
-                    {new Date(m.createdAt).toLocaleTimeString()}
-                  </span>
-                  <div className="text-neutral-200">{m.content}</div>
-                </div>
+                <MessageItem
+                  key={m.id}
+                  message={m}
+                  currentUserId={user?.id}
+                  canModerate={canModerate}
+                  onEdit={editMessage}
+                  onDelete={deleteMessage}
+                  onToggleReaction={toggleReaction}
+                />
               ))}
               <div ref={bottomRef} />
             </div>
@@ -217,6 +261,9 @@ export default function AppPage() {
           </>
         )}
       </main>
+
+      {/* coluna de membros (só no chat de texto) */}
+      {!voiceChannel && activeChannel && <MemberList members={members} />}
     </div>
   );
 }

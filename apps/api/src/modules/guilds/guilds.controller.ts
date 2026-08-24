@@ -30,6 +30,11 @@ export class GuildsController {
     return this.guilds.getWithChannels(user.sub, id);
   }
 
+  @Get(":id/members")
+  members(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
+    return this.guilds.listMembers(user.sub, id);
+  }
+
   @Post(":id/join")
   join(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
     return this.guilds.join(user.sub, id);

@@ -36,6 +36,24 @@ export class GuildsService {
     return guild;
   }
 
+  async listMembers(userId: string, guildId: string) {
+    await this.assertMember(userId, guildId);
+    const members = await this.prisma.guildMember.findMany({
+      where: { guildId },
+      include: { user: true },
+      orderBy: { joinedAt: "asc" },
+    });
+    return members.map((m) => ({
+      role: m.role,
+      user: {
+        id: m.user.id,
+        username: m.user.username,
+        avatarUrl: m.user.avatarUrl,
+        status: m.user.status,
+      },
+    }));
+  }
+
   async assertMember(userId: string, guildId: string) {
     const member = await this.prisma.guildMember.findUnique({
       where: { userId_guildId: { userId, guildId } },

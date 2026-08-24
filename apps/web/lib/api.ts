@@ -41,6 +41,7 @@ export const api = {
   createGuild: (name: string) =>
     request<any>("/guilds", { method: "POST", body: JSON.stringify({ name }) }),
   getGuild: (id: string) => request<any>(`/guilds/${id}`),
+  members: (guildId: string) => request<any[]>(`/guilds/${guildId}/members`),
 
   createChannel: (guildId: string, name: string, type: "TEXT" | "VOICE") =>
     request<any>(`/guilds/${guildId}/channels`, {
