@@ -1,6 +1,9 @@
 import { create } from "zustand";
+import { isTextChannel } from "@newdisc/shared";
 import type { Channel, GuildChannelType, GuildMemberView } from "@newdisc/shared";
 import { api } from "@/lib/api";
+import { applyPositions, moveCategory, moveChannel } from "@/stores/channel-order";
+import { useCategories } from "@/stores/categories";
 import { errorMessage, leaveChannel } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
 import { useMessages } from "@/stores/messages";
@@ -20,6 +23,19 @@ export interface CreateChannelInput {
   isPrivate: boolean;
   readOnly: boolean;
   memberIds: string[];
+  /** categoria em que o canal nasce (null = solto, no topo da lista). */
+  categoryId?: string | null;
+}
+
+/** Campos que o modal de configurações do canal salva. */
+export interface UpdateChannelInput {
+  name?: string;
+  topic?: string | null;
+  slowmodeSeconds?: number;
+  nsfw?: boolean;
+  readOnly?: boolean;
+  isPrivate?: boolean;
+  categoryId?: string | null;
 }
 
 interface ChannelsState {
@@ -41,6 +57,16 @@ interface ChannelsState {
   create: (guildId: string, input: CreateChannelInput) => Promise<boolean>;
   rename: (channel: Channel) => Promise<void>;
   remove: (channel: Channel) => Promise<void>;
+  /** Salva as configurações do canal (nome, tópico, modo lento, NSFW…). */
+  update: (channelId: string, patch: UpdateChannelInput) => Promise<boolean>;
+
+  /** Solta um canal na posição `index` de uma categoria (null = sem categoria). */
+  dropChannel: (channelId: string, categoryId: string | null, index: number) => Promise<void>;
+  /** Solta uma categoria na posição `index` da lista de categorias. */
+  dropCategory: (categoryId: string, index: number) => Promise<void>;
+
+  /** Marca todos os canais visíveis do servidor como lidos. */
+  markGuildRead: (guildId: string) => Promise<void>;
 
   /** Marca o canal como lido (na API e localmente). */
   markRead: (channelId: string) => Promise<void>;
@@ -80,7 +106,10 @@ export const useChannels = create<ChannelsState>((set, get) => {
         if (seq !== loadSeq) return; // trocaram de servidor no meio do fetch
         const channels = guild.channels ?? [];
         set({ channels, loading: false });
-        const firstText = channels.find((c) => c.type === "TEXT");
+        // as categorias vêm de outra rota: carregar aqui mantém os dois lados
+        // da barra lateral sempre do mesmo servidor
+        void useCategories.getState().loadForGuild(guildId);
+        const firstText = channels.find((c) => isTextChannel(c));
         if (firstText) get().select(firstText);
       } catch (e) {
         if (seq !== loadSeq) return;
@@ -101,6 +130,7 @@ export const useChannels = create<ChannelsState>((set, get) => {
         loading: false,
         access: { channelId: null, allowed: [], loading: false },
       });
+      useCategories.getState().clear();
       useMessages.getState().closeChannel();
     },
 
@@ -125,6 +155,7 @@ export const useChannels = create<ChannelsState>((set, get) => {
           isPrivate: input.isPrivate,
           readOnly: input.readOnly,
           memberIds: input.isPrivate ? input.memberIds : undefined,
+          categoryId: input.categoryId ?? null,
         });
         get().handleCreated(channel);
         ui.toast(`Canal ${channel.name ?? name} criado`);
@@ -168,6 +199,70 @@ export const useChannels = create<ChannelsState>((set, get) => {
         get().handleDeleted(channel.id);
       } catch (e) {
         ui.toast(errorMessage(e, "Não foi possível apagar"), "error");
+      }
+    },
+
+    update: async (channelId, patch) => {
+      const guildId = get().guildId;
+      if (!guildId) return false;
+      try {
+        get().handleUpdated(await api.updateChannel(guildId, channelId, patch));
+        return true;
+      } catch (e) {
+        ui.toast(errorMessage(e, "Não foi possível salvar o canal"), "error");
+        return false;
+      }
+    },
+
+    dropChannel: async (channelId, categoryId, index) => {
+      const guildId = get().guildId;
+      if (!guildId) return;
+      const categories = useCategories.getState().categories;
+      const positions = moveChannel(get().channels, categories, channelId, categoryId, index);
+      if (positions.length === 0) return;
+      const antes = get().channels;
+      // aplica na hora: esperar o channel.updated faria o canal voltar ao lugar
+      // antigo por um quadro, que é exatamente o que arrastar não pode fazer
+      set({ channels: applyPositions(antes, positions) });
+      try {
+        await api.reorderChannels(guildId, { channels: positions });
+      } catch (e) {
+        set({ channels: antes });
+        ui.toast(errorMessage(e, "Não foi possível reordenar"), "error");
+      }
+    },
+
+    dropCategory: async (categoryId, index) => {
+      const guildId = get().guildId;
+      if (!guildId) return;
+      const categorias = useCategories.getState();
+      const positions = moveCategory(categorias.categories, categoryId, index);
+      if (positions.length === 0) return;
+      const antes = categorias.categories;
+      const mapa = new Map(positions.map((p) => [p.id, p.position]));
+      for (const c of antes) {
+        const pos = mapa.get(c.id);
+        if (pos !== undefined) categorias.handleUpdated({ ...c, position: pos });
+      }
+      try {
+        await api.reorderChannels(guildId, { categories: positions });
+      } catch (e) {
+        for (const c of antes) categorias.handleUpdated(c);
+        ui.toast(errorMessage(e, "Não foi possível reordenar"), "error");
+      }
+    },
+
+    markGuildRead: async (guildId) => {
+      const agora = new Date().toISOString();
+      const antes = get().channels;
+      set({
+        channels: antes.map((c) => ({ ...c, lastReadAt: agora, mentionCount: 0 })),
+      });
+      try {
+        await api.markGuildRead(guildId);
+      } catch (e) {
+        set({ channels: antes });
+        ui.toast(errorMessage(e, "Não foi possível marcar como lido"), "error");
       }
     },
 
@@ -223,7 +318,7 @@ export const useChannels = create<ChannelsState>((set, get) => {
       if (s.activeChannelId === channelId) {
         leaveChannel(channelId);
         useMessages.getState().closeChannel();
-        const next = restantes.find((c) => c.type === "TEXT");
+        const next = restantes.find((c) => isTextChannel(c));
         if (next) get().select(next);
         else set({ activeChannelId: null });
       }

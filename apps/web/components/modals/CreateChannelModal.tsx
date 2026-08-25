@@ -6,11 +6,27 @@ import type { GuildChannelType } from "@newdisc/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { useAuth } from "@/stores/auth";
 import { useCanModerate, useGuilds } from "@/stores/guilds";
+import { useCategories } from "@/stores/categories";
 import { useChannels } from "@/stores/channels";
 import { useUI } from "@/stores/ui";
 
-/** Criação de canal: nome, tipo e — para moderadores — privado/somente-leitura. */
-export default function CreateChannelModal() {
+/** Rótulo e ícone de cada tipo de canal criável dentro de um servidor. */
+const TIPOS: { valor: GuildChannelType; rotulo: string; icone: typeof Hash }[] = [
+  { valor: "TEXT", rotulo: "Texto", icone: Hash },
+  { valor: "VOICE", rotulo: "Voz", icone: Volume2 },
+  { valor: "ANNOUNCEMENT", rotulo: "Anúncios", icone: Megaphone },
+];
+
+/**
+ * Criação de canal: nome, tipo, categoria e — para moderadores — privado /
+ * somente-leitura. `categoryId` vem preenchido quando o "+" clicado foi o de
+ * uma categoria, como no Discord.
+ */
+export default function CreateChannelModal({
+  categoryId = null,
+}: {
+  categoryId?: string | null;
+}) {
   const closeModal = useUI((s) => s.closeModal);
   const guildId = useGuilds((s) => s.activeGuildId);
   const members = useGuilds((s) => s.members);
@@ -23,14 +39,23 @@ export default function CreateChannelModal() {
   const [isPrivate, setPrivate] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
   const [picks, setPicks] = useState<string[]>([]);
+  const [categoria, setCategoria] = useState<string | null>(categoryId);
   const [saving, setSaving] = useState(false);
 
+  const categories = useCategories((s) => s.categories);
   const plainMembers = members.filter((m) => m.role === "MEMBER");
 
   async function submit() {
     if (!guildId || !name.trim() || saving) return;
     setSaving(true);
-    const ok = await create(guildId, { name, type, isPrivate, readOnly, memberIds: picks });
+    const ok = await create(guildId, {
+      name,
+      type,
+      isPrivate,
+      readOnly,
+      memberIds: picks,
+      categoryId: categoria,
+    });
     setSaving(false);
     if (ok) closeModal();
   }
@@ -70,23 +95,46 @@ export default function CreateChannelModal() {
       />
 
       <div className="mb-3 flex gap-2" role="group" aria-label="Tipo do canal">
-        {(["TEXT", "VOICE"] as const).map((option) => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => setType(option)}
-            aria-pressed={type === option}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-[3px] py-2 text-sm font-medium transition ${
-              type === option ? "bg-accent text-white" : "bg-rail text-txt-normal hover:bg-hov"
-            }`}
-          >
-            {option === "TEXT" ? <Hash size={18} aria-hidden="true" /> : <Volume2 size={18} aria-hidden="true" />}
-            {option === "TEXT" ? "Texto" : "Voz"}
-          </button>
-        ))}
+        {TIPOS.filter((t) => t.valor !== "ANNOUNCEMENT" || canModerate).map((option) => {
+          const Icone = option.icone;
+          return (
+            <button
+              key={option.valor}
+              type="button"
+              onClick={() => setType(option.valor)}
+              aria-pressed={type === option.valor}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-[3px] py-2 text-sm font-medium transition ${
+                type === option.valor ? "bg-accent text-white" : "bg-rail text-txt-normal hover:bg-hov"
+              }`}
+            >
+              <Icone size={18} aria-hidden="true" />
+              {option.rotulo}
+            </button>
+          );
+        })}
       </div>
 
-      {canModerate && (
+      {categories.length > 0 && (
+        <label className="mb-3 block">
+          <span className="mb-1 block text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
+            Categoria
+          </span>
+          <select
+            value={categoria ?? ""}
+            onChange={(e) => setCategoria(e.target.value || null)}
+            className="w-full rounded bg-rail px-3 py-2 text-sm text-txt-normal outline-none"
+          >
+            <option value="">Sem categoria</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      {canModerate && type !== "ANNOUNCEMENT" && (
         <div className="mb-3 space-y-2 text-sm text-txt-normal">
           <label className="flex items-center gap-2">
             <input
@@ -107,6 +155,12 @@ export default function CreateChannelModal() {
             Somente leitura (só moderadores postam)
           </label>
         </div>
+      )}
+
+      {type === "ANNOUNCEMENT" && (
+        <p className="mb-3 rounded bg-rail/50 px-3 py-2 text-xs text-txt-muted">
+          Canal de anúncios: todos leem, só a moderação publica.
+        </p>
       )}
 
       {isPrivate && (

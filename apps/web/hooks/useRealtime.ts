@@ -15,11 +15,16 @@ import {
   type MessageDeletedEvent,
   type PresenceUpdatePayload,
   type PublicUser,
+  type Category,
+  type CategoryDeletedEvent,
+  type VoiceStateEvent,
 } from "@newdisc/shared";
 import { notify } from "@/lib/desktop";
 import { useAuth } from "@/stores/auth";
 import { on, onReconnect, rejoinChannel } from "@/stores/socket-adapter";
+import { useCategories } from "@/stores/categories";
 import { useChannels } from "@/stores/channels";
+import { useVoiceStates } from "@/stores/voiceStates";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useGuilds } from "@/stores/guilds";
 import { useMessages } from "@/stores/messages";
@@ -124,11 +129,30 @@ export function useRealtime(currentUserId?: string): void {
         ui.toast(payload?.message || "Não foi possível concluir a ação", "error");
       }),
 
+      // ── b-canais: categorias e estados de voz ──
+      on<Category>(WS_EVENTS.CATEGORY_CREATED, (category) => {
+        useCategories.getState().handleCreated(category);
+      }),
+      on<Category>(WS_EVENTS.CATEGORY_UPDATED, (category) => {
+        useCategories.getState().handleUpdated(category);
+      }),
+      on<CategoryDeletedEvent>(WS_EVENTS.CATEGORY_DELETED, ({ categoryId }) => {
+        useCategories.getState().handleDeleted(categoryId);
+      }),
+      on<VoiceStateEvent>(WS_EVENTS.VOICE_STATE, (event) => {
+        useVoiceStates.getState().apply(event);
+      }),
+
       onReconnect(() => {
         rejoinChannel();
         void useMessages.getState().resyncActive();
         void useGuilds.getState().load();
         void useDMs.getState().refreshList();
+        // quem estava na voz pode ter entrado/saído durante a queda: o servidor
+        // reemite o estado, então zerar evita listar gente que já não está lá
+        useVoiceStates.getState().clear();
+        const guildId = useCategories.getState().guildId;
+        if (guildId) void useCategories.getState().loadForGuild(guildId);
       }),
     ];
 

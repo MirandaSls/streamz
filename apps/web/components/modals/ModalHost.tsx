@@ -1,6 +1,8 @@
 "use client";
 
 import ChannelAccessModal from "@/components/modals/ChannelAccessModal";
+import ChannelSettingsModal from "@/components/modals/ChannelSettingsModal";
+import ChannelTopicModal from "@/components/modals/ChannelTopicModal";
 import ConfirmDialog from "@/components/modals/ConfirmDialog";
 import CreateChannelModal from "@/components/modals/CreateChannelModal";
 import CreateGroupDMModal from "@/components/modals/CreateGroupDMModal";
@@ -28,7 +30,7 @@ export default function ModalHost() {
     case "prompt":
       return <PromptDialog modal={modal} />;
     case "createChannel":
-      return <CreateChannelModal />;
+      return <CreateChannelModal categoryId={modal.categoryId ?? null} />;
     case "channelAccess":
       return <ChannelAccessModal channelId={modal.channelId} />;
     case "invite":
@@ -41,5 +43,10 @@ export default function ModalHost() {
       return <InvitesModal guildId={modal.guildId} />;
     case "image":
       return <ImageModal url={modal.url} alt={modal.alt} />;
+    // ── b-canais ──
+    case "channelSettings":
+      return <ChannelSettingsModal channelId={modal.channelId} tab={modal.tab} />;
+    case "channelTopic":
+      return <ChannelTopicModal channelId={modal.channelId} />;
   }
 }

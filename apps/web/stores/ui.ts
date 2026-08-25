@@ -19,7 +19,7 @@ export interface Toast {
 }
 
 export type Modal =
-  | { kind: "createChannel" }
+  | { kind: "createChannel"; categoryId?: string | null }
   | { kind: "channelAccess"; channelId: string }
   | { kind: "invite"; code: string }
   | { kind: "createGroupDM" }
@@ -42,7 +42,10 @@ export type Modal =
       initial: string;
       confirmLabel: string;
       resolve: (value: string | null) => void;
-    };
+    }
+  // ── b-canais ──
+  | { kind: "channelSettings"; channelId: string; tab?: "geral" | "permissoes" }
+  | { kind: "channelTopic"; channelId: string };
 
 /** Um item de menu de contexto; `separator` desenha a linha entre grupos. */
 export type MenuItem =
