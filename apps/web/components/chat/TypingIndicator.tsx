@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
+import { displayNameOf } from "@newdisc/shared";
 import { useAuth } from "@/stores/auth";
+import { useGuilds } from "@/stores/guilds";
 import { typersOf, useTyping } from "@/stores/typing";
 
 function frase(nomes: string[]): React.ReactNode {
@@ -25,7 +27,12 @@ export default function TypingIndicator({ channelId }: { channelId: string }) {
   const me = useAuth((s) => s.user);
   const byChannel = useTyping((s) => s.byChannel);
   const prune = useTyping((s) => s.prune);
-  const nomes = typersOf(byChannel, channelId, me?.id);
+  const members = useGuilds((s) => s.members);
+  // o evento só traz o username; o nome de exibição vem da lista de membros
+  const nomes = typersOf(byChannel, channelId, me?.id).map((username) => {
+    const m = members.find((x) => x.user.username === username);
+    return m ? displayNameOf(m.user) : username;
+  });
 
   // avisos vencem sozinhos: varre a cada segundo enquanto houver algum
   useEffect(() => {

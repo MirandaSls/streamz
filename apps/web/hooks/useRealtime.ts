@@ -3,13 +3,19 @@
 import { useEffect } from "react";
 import {
   WS_EVENTS,
+  displayNameOf,
+  mentionsUser,
+  type Channel,
+  type ChannelDeletedEvent,
   type GuildRemovedEvent,
-  type PublicUser,
+  type MemberUpdatedEvent,
   type Message,
   type MessageDeletedEvent,
   type PresenceUpdatePayload,
+  type PublicUser,
 } from "@newdisc/shared";
 import { notify } from "@/lib/desktop";
+import { useAuth } from "@/stores/auth";
 import { on, onReconnect, rejoinChannel } from "@/stores/socket-adapter";
 import { useChannels } from "@/stores/channels";
 import { dmTitle, useDMs } from "@/stores/dms";
@@ -22,28 +28,24 @@ import { ui } from "@/stores/ui";
 /**
  * Único ponto de assinatura dos eventos do gateway.
  *
- * Antes cada `useEffect` da tela registrava o seu listener e se re-registrava a
- * cada mudança de canal/DM — o que abria janelas em que um evento chegava sem
- * ninguém escutando (ou com uma closure velha). Aqui os listeners entram uma vez
- * e apenas repassam para a store dona do assunto, que lê o estado na hora.
+ * Os listeners entram uma vez e apenas repassam para a store dona do assunto,
+ * que lê o estado na hora — sem closure velha nem janela sem ouvinte.
  *
- * Também é aqui que tratamos a reconexão: o servidor esquece as salas quando a
- * conexão cai, então reentramos na sala do canal e recarregamos o histórico —
- * sem isso o que chegou durante a queda ficaria faltando para sempre.
+ * O socket está em todas as salas que o usuário pode ver (o gateway faz isso
+ * no connect), então `message.new` chega para qualquer canal: o do servidor
+ * aberto, os dos outros servidores (rail) e as conversas. Cada um atualiza
+ * seu "não lido"; o canal na tela, com a janela visível, é marcado como lido.
  *
- * Conversa direta é canal (ADR-0001): `message.new` serve para as duas coisas.
- * Se a mensagem é de um canal que a tela não conhece, é uma conversa que alguém
- * acabou de abrir com o usuário — recarregamos a lista de DMs para ela aparecer.
+ * Reconexão: o servidor esquece as salas quando a conexão cai, então
+ * recarregamos o histórico do canal ativo e as listas — sem isso o que chegou
+ * durante a queda ficaria faltando.
  */
 export function useRealtime(currentUserId?: string): void {
   useEffect(() => {
     const unsubscribe = [
       on<Message>(WS_EVENTS.MESSAGE_NEW, (message) => {
         useMessages.getState().handleNew(message);
-        if (isUnknownChannel(message.channelId) && message.author.id !== currentUserId) {
-          void useDMs.getState().refreshList();
-        }
-        notifyIfAway(message, currentUserId);
+        onMessageArrived(message, currentUserId);
       }),
 
       on<Message>(WS_EVENTS.MESSAGE_UPDATED, (message) => {
@@ -56,6 +58,14 @@ export function useRealtime(currentUserId?: string): void {
 
       on<PresenceUpdatePayload>(WS_EVENTS.PRESENCE_UPDATE, ({ userId, status }) => {
         usePresence.getState().apply(userId, status);
+        const me = useAuth.getState().user;
+        if (me && me.id === userId) useAuth.getState().setUser({ ...me, status });
+      }),
+
+      on<PublicUser>(WS_EVENTS.USER_UPDATED, (user) => {
+        usePresence.getState().applyProfile(user);
+        const me = useAuth.getState().user;
+        if (me && me.id === user.id) useAuth.getState().setUser(user);
       }),
 
       on<{ channelId: string; user: Pick<PublicUser, "id" | "username"> }>(
@@ -65,23 +75,51 @@ export function useRealtime(currentUserId?: string): void {
         },
       ),
 
+      on<Channel>(WS_EVENTS.CHANNEL_CREATED, (channel) => {
+        if (channel.guildId) useChannels.getState().handleCreated(channel);
+        else void useDMs.getState().refreshList();
+      }),
+      on<Channel>(WS_EVENTS.CHANNEL_UPDATED, (channel) => {
+        if (channel.guildId) useChannels.getState().handleUpdated(channel);
+        else void useDMs.getState().refreshList();
+      }),
+      on<ChannelDeletedEvent>(WS_EVENTS.CHANNEL_DELETED, ({ channelId, guildId }) => {
+        if (guildId) useChannels.getState().handleDeleted(channelId);
+        else useDMs.getState().handleDeleted(channelId);
+      }),
+
+      on<MemberUpdatedEvent>(WS_EVENTS.MEMBER_UPDATED, ({ guildId, userId, role }) => {
+        useGuilds.getState().handleMemberUpdated(guildId, userId, role);
+        if (userId === currentUserId) {
+          ui.toast(role === "ADMIN" ? "Você agora é administrador." : "Você deixou de ser administrador.");
+          // o que eu enxergo pode ter mudado (canais privados)
+          if (useGuilds.getState().activeGuildId === guildId) {
+            void useChannels.getState().loadForGuild(guildId);
+          }
+        }
+      }),
+
       on<GuildRemovedEvent>(WS_EVENTS.GUILD_REMOVED, ({ guildId, reason }) => {
         useGuilds.getState().handleRemoved(guildId);
-        ui.toast(
-          reason === "banned" ? "Você foi banido do servidor." : "Você foi removido do servidor.",
-          "error",
-        );
+        const texto = {
+          banned: "Você foi banido do servidor.",
+          kicked: "Você foi removido do servidor.",
+          deleted: "O servidor foi apagado.",
+          left: null,
+        }[reason];
+        if (texto) ui.toast(texto, "error");
       }),
 
       // erros de escrita voltam por um canal só do gateway (`emitError`)
-      on<{ message?: string }>("ws.error", (payload) => {
+      on<{ message?: string }>(WS_EVENTS.ERROR, (payload) => {
         ui.toast(payload?.message || "Não foi possível concluir a ação", "error");
       }),
 
       onReconnect(() => {
         rejoinChannel();
-        // cobre canal de servidor e conversa: o ativo é um só, em useMessages
         void useMessages.getState().resyncActive();
+        void useGuilds.getState().load();
+        void useDMs.getState().refreshList();
       }),
     ];
 
@@ -91,12 +129,36 @@ export function useRealtime(currentUserId?: string): void {
   }, [currentUserId]);
 }
 
-/** Canal que não está nem no servidor aberto nem na lista de conversas. */
-function isUnknownChannel(channelId: string): boolean {
-  return (
-    !useChannels.getState().channels.some((c) => c.id === channelId) &&
-    !useDMs.getState().channels.some((d) => d.id === channelId)
-  );
+/** Não lido, menções, "subir a conversa" e notificação — para uma mensagem que chegou. */
+function onMessageArrived(message: Message, currentUserId?: string) {
+  const me = useAuth.getState().user;
+  const mine = message.author.id === currentUserId;
+  const mention = !mine && !!me && mentionsUser(message.content, me.username);
+  const activeChannelId = useMessages.getState().activeChannelId;
+  const visivel = typeof document !== "undefined" && document.visibilityState === "visible";
+  const naTela = message.channelId === activeChannelId && visivel;
+
+  if (message.guildId) {
+    const channels = useChannels.getState();
+    if (channels.guildId === message.guildId) {
+      channels.bumpUnread(message.channelId, message.createdAt, mention);
+      if (naTela) void channels.markRead(message.channelId);
+      useGuilds.getState().syncFromChannels(message.guildId);
+    } else if (!mine) {
+      useGuilds.getState().bumpUnread(message.guildId, mention);
+    }
+  } else {
+    const dms = useDMs.getState();
+    if (dms.channels.some((d) => d.id === message.channelId)) {
+      dms.bumpUnread(message.channelId, message.createdAt, mention);
+      if (naTela) void dms.markRead(message.channelId);
+    } else if (!mine) {
+      // alguém abriu uma conversa comigo agora
+      void dms.refreshList();
+    }
+  }
+
+  if (!mine && !naTela) notifyIfAway(message, mention);
 }
 
 /** Título para a notificação: `#canal` no servidor, nome da conversa em DM. */
@@ -107,9 +169,11 @@ function channelTitle(channelId: string): string {
   return `#${channel?.name ?? "canal"}`;
 }
 
-/** Notifica só o que o usuário perderia: mensagem de outro com a janela fora. */
-function notifyIfAway(message: Message, currentUserId?: string) {
-  if (message.author.id === currentUserId) return;
-  if (typeof document === "undefined" || document.visibilityState === "visible") return;
-  void notify(channelTitle(message.channelId), `${message.author.username}: ${message.content}`);
+/** Notifica só o que o usuário perderia: mensagem de outro, fora da tela. */
+function notifyIfAway(message: Message, mention: boolean) {
+  if (typeof document === "undefined") return;
+  // dentro do app, só menção e DM avisam; com a janela escondida, tudo avisa
+  const escondida = document.visibilityState !== "visible";
+  if (!escondida && !mention && message.guildId) return;
+  void notify(channelTitle(message.channelId), `${displayNameOf(message.author)}: ${message.content}`);
 }

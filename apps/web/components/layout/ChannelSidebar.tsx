@@ -5,20 +5,24 @@ import {
   ChevronDown,
   ChevronRight,
   Hash,
+  Link2,
   Lock,
+  LogOut,
   Megaphone,
+  Pencil,
   Plus,
   Settings,
+  Trash2,
   UserPlus,
   Volume2,
 } from "lucide-react";
-import type { Channel } from "@newdisc/shared";
+import { isUnread, type Channel } from "@newdisc/shared";
 import UserFooter from "@/components/layout/UserFooter";
 import Tooltip from "@/components/ui/Tooltip";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
-import { useCanModerate, useGuilds } from "@/stores/guilds";
-import { ui, useUI } from "@/stores/ui";
+import { useCanModerate, useGuilds, useIsOwner } from "@/stores/guilds";
+import { ui, useUI, type MenuItem } from "@/stores/ui";
 
 /** Ícone do canal: voz, anúncio (somente leitura), privado ou texto. */
 function ChannelIcon({ channel }: { channel: Channel }) {
@@ -88,14 +92,19 @@ export default function ChannelSidebar() {
 
   const guild = useGuilds((s) => s.guilds.find((g) => g.id === s.activeGuildId) ?? null);
   const createInvite = useGuilds((s) => s.createInvite);
+  const leaveGuild = useGuilds((s) => s.leave);
+  const removeGuild = useGuilds((s) => s.remove);
   const user = useAuth((s) => s.user);
   const canModerate = useCanModerate(user?.id);
+  const isOwner = useIsOwner(user?.id);
 
   const channels = useChannels((s) => s.channels);
   const loading = useChannels((s) => s.loading);
   const activeChannelId = useChannels((s) => s.activeChannelId);
   const voiceChannelId = useChannels((s) => s.voiceChannelId);
   const select = useChannels((s) => s.select);
+  const rename = useChannels((s) => s.rename);
+  const removeChannel = useChannels((s) => s.remove);
   const openModal = useUI((s) => s.openModal);
 
   const text = channels.filter((c) => c.type !== "VOICE");
@@ -103,13 +112,40 @@ export default function ChannelSidebar() {
 
   /** Menu do cabeçalho do servidor (o chevron do Discord). */
   function openGuildMenu(e: MouseEvent<HTMLButtonElement>) {
+    if (!guild) return;
     const r = e.currentTarget.getBoundingClientRect();
-    ui.openContextMenu(r.left + 10, r.bottom + 4, [
+    const items: MenuItem[] = [
       { label: "Convidar pessoas", icon: <UserPlus size={18} />, onSelect: () => void createInvite() },
       { label: "Criar canal", icon: <Plus size={18} />, onSelect: () => openModal({ kind: "createChannel" }) },
-      { separator: true },
-      { label: "Configurações do servidor", icon: <Settings size={18} />, disabled: true, onSelect: () => undefined },
-    ]);
+    ];
+    if (canModerate) {
+      items.push({ label: "Convites", icon: <Link2 size={18} />, onSelect: () => openModal({ kind: "invites", guildId: guild.id }) });
+    }
+    items.push({ separator: true });
+    if (isOwner) {
+      items.push({ label: "Apagar servidor", icon: <Trash2 size={18} />, danger: true, onSelect: () => void removeGuild(guild.id) });
+    } else {
+      items.push({ label: "Sair do servidor", icon: <LogOut size={18} />, danger: true, onSelect: () => void leaveGuild(guild.id) });
+    }
+    ui.openContextMenu(r.left + 10, r.bottom + 4, items);
+  }
+
+  /** Botão direito num canal: renomear/apagar para moderação. */
+  function openChannelMenu(e: MouseEvent, channel: Channel) {
+    e.preventDefault();
+    const items: MenuItem[] = [
+      { label: "Marcar como lido", onSelect: () => void useChannels.getState().markRead(channel.id) },
+      { label: "Copiar ID do canal", onSelect: () => void navigator.clipboard?.writeText(channel.id) },
+    ];
+    if (canModerate) {
+      items.push({ separator: true });
+      items.push({ label: "Renomear canal", icon: <Pencil size={18} />, onSelect: () => void rename(channel) });
+      if (channel.private) {
+        items.push({ label: "Gerenciar acesso", icon: <Settings size={18} />, onSelect: () => openModal({ kind: "channelAccess", channelId: channel.id }) });
+      }
+      items.push({ label: "Apagar canal", icon: <Trash2 size={18} />, danger: true, onSelect: () => void removeChannel(channel) });
+    }
+    ui.openContextMenu(e.clientX, e.clientY, items);
   }
 
   /**
@@ -136,24 +172,42 @@ export default function ChannelSidebar() {
   function renderChannel(channel: Channel) {
     const active = (channel.type === "VOICE" ? voiceChannelId : activeChannelId) === channel.id;
     const name = channel.name ?? "canal";
+    const unread = !active && channel.type !== "VOICE" && isUnread(channel);
     return (
       <div
         key={channel.id}
         role="listitem"
-        className={`group mx-2 flex h-8 items-center rounded-[4px] pl-2 pr-1 ${
-          active ? "bg-sel text-txt-primary" : "text-txt-faint hover:bg-hov hover:text-txt-normal"
+        onContextMenu={(e) => openChannelMenu(e, channel)}
+        className={`group relative mx-2 flex h-8 items-center rounded-[4px] pl-2 pr-1 ${
+          active
+            ? "bg-sel text-txt-primary"
+            : unread
+              ? "text-txt-primary hover:bg-hov"
+              : "text-txt-faint hover:bg-hov hover:text-txt-normal"
         }`}
       >
+        {unread && (
+          // ponto branco na margem esquerda, como o Discord marca canal não lido
+          <span aria-hidden="true" className="absolute -left-2 top-1/2 h-2 w-1 -translate-y-1/2 rounded-r-full bg-white" />
+        )}
         <button
           type="button"
           data-channel-button
           onClick={() => select(channel)}
           aria-current={active ? "true" : undefined}
-          className="flex h-full min-w-0 flex-1 items-center gap-1.5 text-left font-medium"
+          className={`flex h-full min-w-0 flex-1 items-center gap-1.5 text-left ${unread ? "font-semibold" : "font-medium"}`}
         >
           <ChannelIcon channel={channel} />
           <span className="truncate">{name}</span>
         </button>
+        {channel.mentionCount > 0 && !active && (
+          <span
+            aria-label={`${channel.mentionCount} menções`}
+            className="grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[11px] font-bold leading-none text-white"
+          >
+            {channel.mentionCount}
+          </span>
+        )}
         {channel.private && canModerate && (
           <Tooltip label="Gerenciar acesso">
             <button
@@ -174,7 +228,7 @@ export default function ChannelSidebar() {
     <aside className="flex w-60 shrink-0 flex-col bg-panel">
       <button
         type="button"
-        onClick={guild ? openGuildMenu : undefined}
+        onClick={openGuildMenu}
         disabled={!guild}
         aria-haspopup="menu"
         className="flex h-12 shrink-0 items-center justify-between px-4 font-semibold text-txt-primary shadow-header transition hover:bg-hov disabled:cursor-default disabled:hover:bg-transparent"

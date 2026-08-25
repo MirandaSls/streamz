@@ -1,6 +1,7 @@
 "use client";
 
 import { Headphones, HeadphoneOff, Mic, MicOff, Settings } from "lucide-react";
+import { displayNameOf } from "@newdisc/shared";
 import Avatar, { STATUS_LABEL } from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
 import { useAuth } from "@/stores/auth";
@@ -65,7 +66,7 @@ export default function UserFooter() {
         <Avatar user={user} size="md" status={status} surface="border-footer" />
         <span className="min-w-0">
           <span className="block truncate text-sm font-semibold leading-[18px] text-txt-primary">
-            {user.username}
+            {displayNameOf(user)}
           </span>
           <span className="block truncate text-xs leading-[13px] text-txt-muted">
             {STATUS_LABEL[status]}

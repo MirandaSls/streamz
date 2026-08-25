@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import {
+  displayNameOf,
   isDirectChannel,
   isGroupChannel,
   type DMChannelView,
@@ -17,8 +18,8 @@ import { useMessages } from "@/stores/messages";
  * Desde a ADR-0001 uma conversa é um canal como outro qualquer — histórico,
  * envio, reação, anexo e thread vivem em `useMessages`, e a entrega ao vivo vem
  * pela sala `channel:<id>` (o gateway põe o socket nas salas de todas as
- * conversas no connect). Esta store só sabe *quais* conversas existem e qual
- * está na tela; abrir uma delas é `useMessages.open(id)`.
+ * conversas no connect). Esta store só sabe *quais* conversas existem, qual
+ * está na tela e o "não lido" de cada uma.
  */
 
 interface DMsState {
@@ -34,6 +35,9 @@ interface DMsState {
   openWith: (userId: string) => Promise<void>;
   createGroup: (userIds: string[], name?: string) => Promise<boolean>;
   leaveGroup: (channelId: string) => Promise<void>;
+  markRead: (channelId: string) => Promise<void>;
+  bumpUnread: (channelId: string, at: string, mention: boolean) => void;
+  handleDeleted: (channelId: string) => void;
   clear: () => void;
 }
 
@@ -57,6 +61,10 @@ export const useDMs = create<DMsState>((set, get) => {
     }
   }
 
+  function patchDM(channelId: string, fn: (d: DMChannelView) => DMChannelView) {
+    set((s) => ({ channels: s.channels.map((d) => (d.id === channelId ? fn(d) : d)) }));
+  }
+
   /** Mostra a conversa na área principal e abre o canal dela. */
   function show(dm: DMChannelView) {
     ui.setView("dm");
@@ -66,6 +74,7 @@ export const useDMs = create<DMsState>((set, get) => {
     // sticky: a sala de uma conversa nunca é abandonada ao trocar de canal —
     // é assim que a DM continua chegando enquanto se navega pelo servidor
     void useMessages.getState().open(dm.id, { sticky: true });
+    void get().markRead(dm.id);
   }
 
   return {
@@ -123,15 +132,42 @@ export const useDMs = create<DMsState>((set, get) => {
       if (!ok) return;
       try {
         await api.leaveGroupDM(channelId);
-        set((s) => ({
-          channels: s.channels.filter((d) => d.id !== channelId),
-          activeId: s.activeId === channelId ? null : s.activeId,
-        }));
-        if (useMessages.getState().activeChannelId === channelId) {
-          useMessages.getState().closeChannel();
-        }
+        get().handleDeleted(channelId);
       } catch (e) {
         ui.toast(errorMessage(e, "Não foi possível sair do grupo"), "error");
+      }
+    },
+
+    markRead: async (channelId) => {
+      const d = get().channels.find((x) => x.id === channelId);
+      if (!d) return;
+      const jaLido = d.lastReadAt && d.lastMessageAt && d.lastReadAt >= d.lastMessageAt;
+      if (jaLido && d.mentionCount === 0) return;
+      const now = new Date().toISOString();
+      patchDM(channelId, (x) => ({ ...x, lastReadAt: now, mentionCount: 0 }));
+      try {
+        await api.markRead(channelId);
+      } catch {
+        // o próximo reload da lista traz o valor do servidor
+      }
+    },
+
+    bumpUnread: (channelId, at, mention) =>
+      set((s) => {
+        const d = s.channels.find((x) => x.id === channelId);
+        if (!d) return s;
+        const next = { ...d, lastMessageAt: at, mentionCount: d.mentionCount + (mention ? 1 : 0) };
+        // conversa com mensagem nova sobe para o topo, como no Discord
+        return { channels: [next, ...s.channels.filter((x) => x.id !== channelId)] };
+      }),
+
+    handleDeleted: (channelId) => {
+      set((s) => ({
+        channels: s.channels.filter((d) => d.id !== channelId),
+        activeId: s.activeId === channelId ? null : s.activeId,
+      }));
+      if (useMessages.getState().activeChannelId === channelId) {
+        useMessages.getState().closeChannel();
       }
     },
 
@@ -150,15 +186,14 @@ export function useActiveDM(): DMChannelView | null {
 /** Nome de exibição de uma conversa (grupo tem nome; 1-a-1 usa o outro). */
 export function dmTitle(dm: DMChannelView): string {
   if (isGroupChannel(dm)) {
-    return dm.name || dm.others.map((u) => u.username).join(", ") || "Grupo";
+    return dm.name || dm.others.map(displayNameOf).join(", ") || "Grupo";
   }
-  return dm.others[0]?.username ?? "Conversa";
+  return dm.others[0] ? displayNameOf(dm.others[0]) : "Conversa";
 }
 
 /**
- * Contatos disponíveis para montar um grupo: os usuários com quem já existe uma
- * DM 1-a-1. O MVP não tem endpoint de busca de usuários — é o que dá para
- * oferecer sem inventar rota nova.
+ * Contatos já conhecidos (com quem existe DM 1-a-1) — sugestão inicial do
+ * grupo; a busca por nome (`api.searchUsers`) completa o resto.
  */
 export function contactsFromDMs(channels: DMChannelView[]): PublicUser[] {
   const byId = new Map<string, PublicUser>();

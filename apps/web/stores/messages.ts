@@ -84,6 +84,8 @@ function newNonce(): string {
 
 export interface SendInput {
   channelId: string;
+  /** servidor do canal (null em DM) — só para a mensagem otimista ficar completa. */
+  guildId?: string | null;
   author: PublicUser;
   content: string;
   attachments?: Attachment[];
@@ -292,7 +294,7 @@ export const useMessages = create<MessagesState>((set, get) => {
       }
     },
 
-    send: ({ channelId, author, content, attachments, parentId }) => {
+    send: ({ channelId, guildId, author, content, attachments, parentId }) => {
       const text = content.trim().slice(0, MAX_MESSAGE_LENGTH);
       const list = attachments ?? [];
       if (!text && list.length === 0) return;
@@ -300,6 +302,7 @@ export const useMessages = create<MessagesState>((set, get) => {
       const optimistic = optimisticMessage({
         nonce,
         channelId,
+        guildId,
         author,
         content: text,
         attachments: list,

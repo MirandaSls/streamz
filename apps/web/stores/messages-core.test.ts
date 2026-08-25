@@ -17,6 +17,7 @@ import {
 const author: PublicUser = {
   id: "u1",
   username: "arthur",
+  displayName: null,
   avatarUrl: null,
   status: "ONLINE",
 };
@@ -25,6 +26,7 @@ function message(id: string, extra: Partial<Message> = {}): Message {
   return {
     id,
     channelId: "c1",
+    guildId: null,
     author,
     content: `msg ${id}`,
     createdAt: "2026-08-25T12:00:00.000Z",

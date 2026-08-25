@@ -1,10 +1,20 @@
 import type {
   Attachment,
   AuthTokens,
+  Channel,
   DMChannelView,
   DMLeaveResult,
+  Guild,
   GuildChannelType,
+  GuildMemberView,
+  GuildWithChannels,
+  InviteInfo,
+  InvitePreview,
+  LinkEmbed,
+  MemberRole,
+  Message,
   PublicUser,
+  UserStatus,
 } from "@newdisc/shared";
 import { API_URL } from "./config";
 import { ApiError } from "./api-error";
@@ -62,98 +72,102 @@ async function comoApiError(res: Response): Promise<ApiError> {
   return new ApiError(res.status, message);
 }
 
+const json = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
+const patch = (body: unknown): RequestInit => ({ method: "PATCH", body: JSON.stringify(body) });
+
 export const api = {
+  // ── auth ──
   register: (username: string, password: string) =>
-    request<{ user: PublicUser; tokens: AuthTokens }>("/auth/register", {
-      method: "POST",
-      body: JSON.stringify({ username, password }),
-    }),
-
+    request<{ user: PublicUser; tokens: AuthTokens }>("/auth/register", json({ username, password })),
   login: (username: string, password: string) =>
-    request<{ user: PublicUser; tokens: AuthTokens }>("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ username, password }),
-    }),
+    request<{ user: PublicUser; tokens: AuthTokens }>("/auth/login", json({ username, password })),
+  logout: (refreshToken: string) => request<{ ok: true }>("/auth/logout", json({ refreshToken })),
 
-  logout: (refreshToken: string) =>
-    request<{ ok: true }>("/auth/logout", {
-      method: "POST",
-      body: JSON.stringify({ refreshToken }),
-    }),
+  // ── eu / usuários ──
+  me: () => request<PublicUser>("/users/me"),
+  updateProfile: (displayName: string | null) =>
+    request<PublicUser>("/users/me", patch({ displayName })),
+  updateStatus: (manualStatus: UserStatus | null) =>
+    request<PublicUser>("/users/me/status", patch({ manualStatus })),
+  updateAvatar: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<PublicUser>("/users/me/avatar", { method: "POST", body: form });
+  },
+  searchUsers: (q: string) => request<PublicUser[]>(`/users/search?q=${encodeURIComponent(q)}`),
 
-  listGuilds: () => request<any[]>("/guilds"),
-  createGuild: (name: string) =>
-    request<any>("/guilds", { method: "POST", body: JSON.stringify({ name }) }),
-  getGuild: (id: string) => request<any>(`/guilds/${id}`),
-  members: (guildId: string) => request<any[]>(`/guilds/${guildId}/members`),
+  // ── servidores ──
+  listGuilds: () => request<Guild[]>("/guilds"),
+  createGuild: (name: string) => request<GuildWithChannels>("/guilds", json({ name })),
+  getGuild: (id: string) => request<GuildWithChannels>(`/guilds/${id}`),
+  leaveGuild: (id: string) => request<{ left: string }>(`/guilds/${id}/leave`, { method: "POST" }),
+  deleteGuild: (id: string) => request<{ deleted: string }>(`/guilds/${id}`, { method: "DELETE" }),
+  members: (guildId: string) => request<GuildMemberView[]>(`/guilds/${guildId}/members`),
+  setRole: (guildId: string, userId: string, role: Extract<MemberRole, "ADMIN" | "MEMBER">) =>
+    request<{ userId: string; role: MemberRole }>(`/guilds/${guildId}/members/${userId}/role`, patch({ role })),
+  kickMember: (guildId: string, userId: string) =>
+    request<{ kicked: string }>(`/guilds/${guildId}/kick`, json({ userId })),
+  banMember: (guildId: string, userId: string, reason?: string) =>
+    request<{ banned: string }>(`/guilds/${guildId}/ban`, json({ userId, reason })),
 
+  // ── convites ──
   createInvite: (guildId: string, opts?: { maxUses?: number; expiresInHours?: number }) =>
-    request<{ code: string; guildId: string }>(`/guilds/${guildId}/invites`, {
-      method: "POST",
-      body: JSON.stringify(opts ?? {}),
-    }),
-  previewInvite: (code: string) => request<any>(`/invites/${code}`),
+    request<InviteInfo>(`/guilds/${guildId}/invites`, json(opts ?? {})),
+  listInvites: (guildId: string) =>
+    request<(InviteInfo & { creatorId: string })[]>(`/guilds/${guildId}/invites`),
+  revokeInvite: (guildId: string, code: string) =>
+    request<{ revoked: string }>(`/guilds/${guildId}/invites/${code}`, { method: "DELETE" }),
+  previewInvite: (code: string) => request<InvitePreview>(`/invites/${code}`),
   redeemInvite: (code: string) =>
     request<{ id: string; name: string }>(`/invites/${code}/redeem`, { method: "POST" }),
 
-  // Conversas diretas são canais (ADR-0001): histórico, busca e thread usam
-  // `history`/`searchMessages`/`thread` abaixo com o id da conversa.
-  openDM: (userId: string) =>
-    request<DMChannelView>(`/dms`, { method: "POST", body: JSON.stringify({ userId }) }),
-  createGroupDM: (userIds: string[], name?: string) =>
-    request<DMChannelView>(`/dms/group`, {
-      method: "POST",
-      body: JSON.stringify({ userIds, name }),
-    }),
-  listDMs: () => request<DMChannelView[]>(`/dms`),
-  getDM: (channelId: string) => request<DMChannelView>(`/dms/${channelId}`),
-  leaveGroupDM: (channelId: string) =>
-    request<DMLeaveResult>(`/dms/${channelId}/leave`, { method: "POST" }),
-
-  kickMember: (guildId: string, userId: string) =>
-    request<any>(`/guilds/${guildId}/kick`, { method: "POST", body: JSON.stringify({ userId }) }),
-  banMember: (guildId: string, userId: string, reason?: string) =>
-    request<any>(`/guilds/${guildId}/ban`, {
-      method: "POST",
-      body: JSON.stringify({ userId, reason }),
-    }),
-
+  // ── canais de servidor ──
   createChannel: (
     guildId: string,
     name: string,
     type: GuildChannelType,
     opts?: { isPrivate?: boolean; readOnly?: boolean; memberIds?: string[] },
-  ) =>
-    request<any>(`/guilds/${guildId}/channels`, {
-      method: "POST",
-      body: JSON.stringify({ name, type, ...opts }),
-    }),
+  ) => request<Channel>(`/guilds/${guildId}/channels`, json({ name, type, ...opts })),
+  updateChannel: (guildId: string, channelId: string, body: { name?: string; readOnly?: boolean }) =>
+    request<Channel>(`/guilds/${guildId}/channels/${channelId}`, patch(body)),
+  deleteChannel: (guildId: string, channelId: string) =>
+    request<{ deleted: string }>(`/guilds/${guildId}/channels/${channelId}`, { method: "DELETE" }),
   channelMembers: (guildId: string, channelId: string) =>
-    request<any[]>(`/guilds/${guildId}/channels/${channelId}/members`),
+    request<{ user: PublicUser }[]>(`/guilds/${guildId}/channels/${channelId}/members`),
   addChannelMember: (guildId: string, channelId: string, userId: string) =>
-    request<any>(`/guilds/${guildId}/channels/${channelId}/members`, {
-      method: "POST",
-      body: JSON.stringify({ userId }),
-    }),
+    request<{ added: string }>(`/guilds/${guildId}/channels/${channelId}/members`, json({ userId })),
   removeChannelMember: (guildId: string, channelId: string, userId: string) =>
-    request<any>(`/guilds/${guildId}/channels/${channelId}/members/${userId}`, {
+    request<{ removed: string }>(`/guilds/${guildId}/channels/${channelId}/members/${userId}`, {
       method: "DELETE",
     }),
 
-  history: (channelId: string, cursor?: string) =>
-    request<any[]>(
-      `/channels/${channelId}/messages${cursor ? `?cursor=${cursor}` : ""}`,
-    ),
-  searchMessages: (channelId: string, q: string) =>
-    request<any[]>(`/channels/${channelId}/messages/search?q=${encodeURIComponent(q)}`),
-  thread: (channelId: string, messageId: string) =>
-    request<any[]>(`/channels/${channelId}/messages/${messageId}/thread`),
+  // ── conversas diretas (canais sem servidor — ADR-0001) ──
+  openDM: (userId: string) => request<DMChannelView>(`/dms`, json({ userId })),
+  createGroupDM: (userIds: string[], name?: string) =>
+    request<DMChannelView>(`/dms/group`, json({ userIds, name })),
+  listDMs: () => request<DMChannelView[]>(`/dms`),
+  getDM: (channelId: string) => request<DMChannelView>(`/dms/${channelId}`),
+  leaveGroupDM: (channelId: string) =>
+    request<DMLeaveResult>(`/dms/${channelId}/leave`, { method: "POST" }),
 
+  // ── mensagens (qualquer canal) ──
+  history: (channelId: string, cursor?: string) =>
+    request<Message[]>(`/channels/${channelId}/messages${cursor ? `?cursor=${cursor}` : ""}`),
+  searchMessages: (channelId: string, q: string) =>
+    request<Message[]>(`/channels/${channelId}/messages/search?q=${encodeURIComponent(q)}`),
+  thread: (channelId: string, messageId: string) =>
+    request<Message[]>(`/channels/${channelId}/messages/${messageId}/thread`),
+  markRead: (channelId: string) =>
+    request<{ channelId: string; lastReadAt: string }>(`/channels/${channelId}/read`, { method: "POST" }),
+
+  // ── embeds ──
+  embed: (url: string) => request<LinkEmbed | null>(`/embeds?url=${encodeURIComponent(url)}`),
+
+  // ── voz ──
   voiceToken: (channelId: string) =>
-    request<{ token: string; url: string; room: string }>(
-      `/voice/channels/${channelId}/token`,
-      { method: "POST" },
-    ),
+    request<{ token: string; url: string; room: string }>(`/voice/channels/${channelId}/token`, {
+      method: "POST",
+    }),
 
   /** Envia um arquivo e devolve o anexo (a vincular numa mensagem no envio). */
   uploadFile: (file: File): Promise<Attachment> => {

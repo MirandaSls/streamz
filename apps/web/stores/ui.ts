@@ -24,6 +24,7 @@ export type Modal =
   | { kind: "invite"; code: string }
   | { kind: "createGroupDM" }
   | { kind: "settings" }
+  | { kind: "invites"; guildId: string }
   | { kind: "image"; url: string; alt: string }
   | {
       kind: "confirm";

@@ -106,7 +106,7 @@ export default function ChatView() {
             placeholder={`Conversar em #${name}`}
             ariaLabel={`Mensagem para #${name}`}
             onSend={(content, attachments) =>
-              send({ channelId: channel.id, author: user, content, attachments })
+              send({ channelId: channel.id, guildId: channel.guildId, author: user, content, attachments })
             }
           />
         )

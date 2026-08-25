@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type MouseEvent } from "react";
+import { useMemo, useState, type MouseEvent } from "react";
 import {
   Copy,
   FileText,
@@ -11,12 +11,17 @@ import {
   Trash2,
 } from "lucide-react";
 import type { Attachment, Message } from "@newdisc/shared";
-import { isImageAttachment } from "@newdisc/shared";
+import { displayNameOf, extractFirstUrl, isImageAttachment } from "@newdisc/shared";
+import LinkEmbedCard, { useLinkEmbed } from "@/components/chat/LinkEmbedCard";
 import Avatar from "@/components/ui/Avatar";
 import EmojiPicker from "@/components/ui/EmojiPicker";
 import Tooltip from "@/components/ui/Tooltip";
 import { hora, horaCompleta } from "@/lib/format";
+import { Markdown } from "@/lib/markdown";
+import { useAuth } from "@/stores/auth";
+import { useGuilds } from "@/stores/guilds";
 import type { ChatMessage } from "@/stores/messages-core";
+import { useLiveUser } from "@/stores/presence";
 import { anchorOf, ui, type MenuItem } from "@/stores/ui";
 
 function formatBytes(n: number): string {
@@ -98,9 +103,9 @@ function ActionButton({
 
 /**
  * Uma mensagem, no leiaute do Discord: avatar de 40px à esquerda, nome e hora na
- * primeira linha, corpo abaixo. Quando `grouped`, é a continuação da anterior
- * (mesmo autor, poucos minutos) e só mostra o corpo, com a hora na margem ao
- * passar o mouse.
+ * primeira linha, corpo (markdown, menções, prévia de link) abaixo. Quando
+ * `grouped`, é a continuação da anterior (mesmo autor, poucos minutos) e só
+ * mostra o corpo, com a hora na margem ao passar o mouse.
  */
 export default function MessageItem({
   message,
@@ -132,11 +137,22 @@ export default function MessageItem({
   const [draft, setDraft] = useState(message.content);
   const [picking, setPicking] = useState(false);
 
+  const author = useLiveUser(message.author);
+  const me = useAuth((s) => s.user);
+  const members = useGuilds((s) => s.members);
+  // @usuario → nome de exibição, para as menções mostrarem o nome como o Discord
+  const displayNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const m of members) map[m.user.username.toLowerCase()] = displayNameOf(m.user);
+    return map;
+  }, [members]);
+
   const isOwn = message.author.id === currentUserId;
   // sem confirmação do servidor a mensagem ainda não tem id real: editar,
   // apagar ou reagir não teriam a que se referir
   const unconfirmed = Boolean(message.pending || message.failed);
   const canDelete = isOwn || Boolean(canModerate);
+  const embed = useLinkEmbed(unconfirmed ? null : extractFirstUrl(message.content));
 
   function submitEdit() {
     const t = draft.trim();
@@ -150,7 +166,7 @@ export default function MessageItem({
   }
 
   function openProfile(e: MouseEvent<HTMLElement>) {
-    ui.openProfile(message.author, anchorOf(e.currentTarget));
+    ui.openProfile(author, anchorOf(e.currentTarget));
   }
 
   function openMenu(e: MouseEvent) {
@@ -190,12 +206,14 @@ export default function MessageItem({
     ui.openContextMenu(e.clientX, e.clientY, items);
   }
 
+  const mentionsMe = !!me && new RegExp(`(^|[^\\w.])@${me.username}(?![\\w.-])`, "i").test(message.content);
+
   return (
     <div
       onContextMenu={openMenu}
-      className={`group relative flex gap-4 py-0.5 pl-[72px] pr-12 hover:bg-msghov ${
-        grouped ? "" : "mt-[17px]"
-      } ${message.pending ? "opacity-60" : ""}`}
+      className={`group relative flex gap-4 py-0.5 pl-[72px] pr-12 ${
+        mentionsMe ? "border-l-2 border-yellow bg-yellow/10 hover:bg-yellow/15" : "hover:bg-msghov"
+      } ${grouped ? "" : "mt-[17px]"} ${message.pending ? "opacity-60" : ""}`}
     >
       {grouped ? (
         // hora na margem, só no hover — como o Discord faz com mensagens agrupadas
@@ -206,10 +224,10 @@ export default function MessageItem({
         <button
           type="button"
           onClick={openProfile}
-          aria-label={`Perfil de ${message.author.username}`}
+          aria-label={`Perfil de ${displayNameOf(author)}`}
           className="absolute left-4 top-0.5 rounded-full transition hover:brightness-110"
         >
-          <Avatar user={message.author} size="lg" />
+          <Avatar user={author} size="lg" />
         </button>
       )}
 
@@ -221,11 +239,9 @@ export default function MessageItem({
               onClick={openProfile}
               className="font-medium text-txt-primary hover:underline"
             >
-              {message.author.username}
+              {displayNameOf(author)}
             </button>
-            <span className="ml-1 text-xs text-txt-muted">
-              {horaCompleta(message.createdAt)}
-            </span>
+            <span className="ml-1 text-xs text-txt-muted">{horaCompleta(message.createdAt)}</span>
             {message.pending && <span className="text-xs italic text-txt-muted">enviando…</span>}
           </div>
         )}
@@ -266,8 +282,8 @@ export default function MessageItem({
           </form>
         ) : (
           message.content && (
-            <div className="whitespace-pre-wrap break-words text-txt-normal">
-              {message.content}
+            <div className="break-words text-txt-normal">
+              <Markdown text={message.content} meUsername={me?.username} displayNames={displayNames} />
               {message.editedAt && (
                 <span className="ml-1 text-[10px] text-txt-muted" title={horaCompleta(message.editedAt)}>
                   (editado)
@@ -278,6 +294,7 @@ export default function MessageItem({
         )}
 
         <AttachmentView attachments={message.attachments} />
+        {embed && <LinkEmbedCard embed={embed} />}
 
         {onOpenThread && message.replyCount > 0 && (
           <button

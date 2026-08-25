@@ -1,14 +1,14 @@
 "use client";
 
 import type { MouseEvent } from "react";
-import { Crown, Gavel, MessageSquare, UserX } from "lucide-react";
-import type { GuildMemberView } from "@newdisc/shared";
+import { Crown, Gavel, MessageSquare, ShieldCheck, ShieldOff, UserX } from "lucide-react";
+import { displayNameOf, type GuildMemberView } from "@newdisc/shared";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
 import { useAuth } from "@/stores/auth";
 import { useDMs } from "@/stores/dms";
-import { useCanModerate, useGuilds } from "@/stores/guilds";
-import { resolveStatus, usePresence } from "@/stores/presence";
+import { useCanModerate, useGuilds, useIsOwner } from "@/stores/guilds";
+import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
 import { anchorOf, ui, type MenuItem } from "@/stores/ui";
 
 /** Título de seção da lista ("ONLINE — 3"). */
@@ -22,22 +22,29 @@ function Section({ label, count }: { label: string; count: number }) {
 
 /**
  * Coluna 4: membros do servidor, separados em online e offline como no
- * Discord, com coroa para o dono e as ações de moderação no hover e no menu de
- * contexto. Clicar num membro abre o cartão de perfil.
+ * Discord, com coroa para o dono, escudo para admin, e as ações de moderação
+ * (expulsar, banir, promover/rebaixar) no hover e no menu de contexto.
+ * Clicar num membro abre o cartão de perfil.
  */
 export default function MemberList() {
   const user = useAuth((s) => s.user);
   const members = useGuilds((s) => s.members);
   const kick = useGuilds((s) => s.kick);
   const ban = useGuilds((s) => s.ban);
+  const setRole = useGuilds((s) => s.setRole);
   const canModerate = useCanModerate(user?.id);
+  const isOwner = useIsOwner(user?.id);
   const openWith = useDMs((s) => s.openWith);
-  // o status ao vivo vem da store de presença; `m.user.status` é só o do REST
+  // o status/perfil ao vivo vem da store de presença; a lista é só o do REST
   const statuses = usePresence((s) => s.statuses);
+  const profiles = usePresence((s) => s.profiles);
 
-  const withStatus = members.map((m) => ({ m, status: resolveStatus(statuses, m.user) }));
-  const online = withStatus.filter((x) => x.status !== "OFFLINE");
-  const offline = withStatus.filter((x) => x.status === "OFFLINE");
+  const live = members.map((m) => {
+    const u = resolveUser(profiles, m.user);
+    return { m: { ...m, user: u }, status: resolveStatus(statuses, u) };
+  });
+  const online = live.filter((x) => x.status !== "OFFLINE");
+  const offline = live.filter((x) => x.status === "OFFLINE");
 
   function openMenu(e: MouseEvent, m: GuildMemberView) {
     e.preventDefault();
@@ -52,6 +59,14 @@ export default function MemberList() {
     if (!isMe) {
       items.push({ label: "Mensagem", icon: <MessageSquare size={18} />, onSelect: () => void openWith(m.user.id) });
     }
+    if (isOwner && !isMe && m.role !== "OWNER") {
+      items.push({ separator: true });
+      if (m.role === "ADMIN") {
+        items.push({ label: "Remover administrador", icon: <ShieldOff size={18} />, onSelect: () => void setRole(m.user.id, "MEMBER") });
+      } else {
+        items.push({ label: "Tornar administrador", icon: <ShieldCheck size={18} />, onSelect: () => void setRole(m.user.id, "ADMIN") });
+      }
+    }
     if (actionable) {
       items.push({ separator: true });
       items.push({ label: "Expulsar", icon: <UserX size={18} />, danger: true, onSelect: () => void kick(m.user.id) });
@@ -64,6 +79,7 @@ export default function MemberList() {
     const isMe = m.user.id === user?.id;
     const actionable = canModerate && !isMe && m.role !== "OWNER";
     const offline = status === "OFFLINE";
+    const nome = displayNameOf(m.user);
     return (
       <div
         key={m.user.id}
@@ -76,7 +92,7 @@ export default function MemberList() {
         <button
           type="button"
           onClick={(e) => ui.openProfile(m.user, anchorOf(e.currentTarget))}
-          aria-label={`Perfil de ${m.user.username}`}
+          aria-label={`Perfil de ${nome}`}
           className="flex min-w-0 flex-1 items-center gap-3 text-left"
         >
           <Avatar user={m.user} size="md" status={status} surface="border-panel" />
@@ -86,11 +102,16 @@ export default function MemberList() {
                 m.role === "OWNER" || m.role === "ADMIN" ? "text-txt-primary" : "text-txt-faint group-hover:text-txt-normal"
               }`}
             >
-              {m.user.username}
+              {nome}
             </span>
             {m.role === "OWNER" && (
               <Tooltip label="Dono do servidor">
                 <Crown size={14} className="shrink-0 text-yellow" aria-label="Dono do servidor" />
+              </Tooltip>
+            )}
+            {m.role === "ADMIN" && (
+              <Tooltip label="Administrador">
+                <ShieldCheck size={14} className="shrink-0 text-accent" aria-label="Administrador" />
               </Tooltip>
             )}
           </span>
@@ -102,7 +123,7 @@ export default function MemberList() {
               <button
                 type="button"
                 onClick={() => void openWith(m.user.id)}
-                aria-label={`Abrir conversa com ${m.user.username}`}
+                aria-label={`Abrir conversa com ${nome}`}
                 className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-txt-primary"
               >
                 <MessageSquare size={16} />
@@ -115,7 +136,7 @@ export default function MemberList() {
                 <button
                   type="button"
                   onClick={() => void kick(m.user.id)}
-                  aria-label={`Expulsar ${m.user.username}`}
+                  aria-label={`Expulsar ${nome}`}
                   className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red"
                 >
                   <UserX size={16} />
@@ -125,7 +146,7 @@ export default function MemberList() {
                 <button
                   type="button"
                   onClick={() => void ban(m.user.id)}
-                  aria-label={`Banir ${m.user.username}`}
+                  aria-label={`Banir ${nome}`}
                   className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red"
                 >
                   <Gavel size={16} />

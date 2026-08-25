@@ -44,3 +44,6 @@ packages/shared/src/*.js.map
 
 # Next auto-gerado
 apps/web/next-env.d.ts
+
+# Postgres embutido (pnpm db:embedded)
+.pgdata/

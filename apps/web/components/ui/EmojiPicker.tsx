@@ -1,15 +1,12 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import Picker, { EmojiStyle, Theme } from "emoji-picker-react";
 
-/** Emojis mais usados no Discord, em grade — o MVP não tem o seletor completo. */
-export const EMOJIS = [
-  "👍", "❤️", "😂", "🔥", "🎉", "😢", "😮", "🙏",
-  "👏", "💯", "🤔", "👀", "😍", "🥳", "😎", "🤝",
-  "✅", "❌", "⭐", "🚀", "💀", "🫡", "🤣", "😭",
-];
-
-/** Grade de emojis num popover escuro; fecha com Esc ou clique fora. */
+/**
+ * Seletor de emoji completo (busca, categorias, tons de pele), no tema escuro —
+ * o mesmo papel do seletor do Discord. Fecha com Esc ou clique fora.
+ */
 export default function EmojiPicker({
   onPick,
   onClose,
@@ -28,7 +25,6 @@ export default function EmojiPicker({
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("mousedown", onDown);
-    ref.current?.querySelector<HTMLButtonElement>("button")?.focus();
     return () => {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("mousedown", onDown);
@@ -40,22 +36,31 @@ export default function EmojiPicker({
       ref={ref}
       role="dialog"
       aria-label="Escolher emoji"
-      className={`z-[70] w-[264px] rounded-lg bg-panel p-2 shadow-high ${className}`}
+      className={`z-[70] overflow-hidden rounded-lg shadow-high ${className}`}
     >
-      <div className="mb-1 px-1 text-xs font-bold uppercase text-txt-muted">Frequentes</div>
-      <div className="grid grid-cols-8 gap-0.5">
-        {EMOJIS.map((e) => (
-          <button
-            key={e}
-            type="button"
-            aria-label={`Emoji ${e}`}
-            onClick={() => onPick(e)}
-            className="grid h-8 w-8 place-items-center rounded text-xl transition hover:bg-hov"
-          >
-            {e}
-          </button>
-        ))}
-      </div>
+      <Picker
+        onEmojiClick={(e) => onPick(e.emoji)}
+        theme={Theme.DARK}
+        emojiStyle={EmojiStyle.NATIVE}
+        lazyLoadEmojis
+        skinTonesDisabled={false}
+        searchPlaceholder="Buscar emoji"
+        previewConfig={{ showPreview: false }}
+        width={352}
+        height={420}
+        style={
+          {
+            "--epr-bg-color": "#2b2d31",
+            "--epr-category-label-bg-color": "#2b2d31",
+            "--epr-search-input-bg-color": "#1e1f22",
+            "--epr-picker-border-color": "#1e1f22",
+            "--epr-hover-bg-color": "#35373c",
+            "--epr-text-color": "#dbdee1",
+            "--epr-search-input-text-color": "#dbdee1",
+            "--epr-category-icon-active-color": "#5865f2",
+          } as React.CSSProperties
+        }
+      />
     </div>
   );
 }

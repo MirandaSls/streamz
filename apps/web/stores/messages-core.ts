@@ -41,6 +41,7 @@ export function trim(items: ChatMessage[], limit = RETENTION_LIMIT): ChatMessage
 export function optimisticMessage(input: {
   nonce: string;
   channelId: string;
+  guildId?: string | null;
   author: PublicUser;
   content: string;
   attachments?: Attachment[];
@@ -49,6 +50,7 @@ export function optimisticMessage(input: {
   return {
     id: `pending:${input.nonce}`,
     channelId: input.channelId,
+    guildId: input.guildId ?? null,
     author: input.author,
     content: input.content,
     createdAt: new Date().toISOString(),

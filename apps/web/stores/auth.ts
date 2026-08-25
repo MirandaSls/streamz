@@ -9,6 +9,8 @@ const CHAVE_USUARIO = "user";
 interface AuthState {
   user: PublicUser | null;
   setSession: (user: PublicUser, tokens: AuthTokens) => void;
+  /** Atualiza o próprio perfil (nome, avatar, status) sem mexer nos tokens. */
+  setUser: (user: PublicUser) => void;
   loadFromStorage: () => void;
   logout: () => void;
 }
@@ -21,6 +23,11 @@ export const useAuth = create<AuthState>((set) => ({
     // a nova sessão herdaria a conexão do usuário anterior na mesma aba
     disconnectSocket();
     salvarTokens(tokens);
+    localStorage.setItem(CHAVE_USUARIO, JSON.stringify(user));
+    set({ user });
+  },
+
+  setUser: (user) => {
     localStorage.setItem(CHAVE_USUARIO, JSON.stringify(user));
     set({ user });
   },

@@ -17,19 +17,37 @@ function acronym(name: string): string {
     .toUpperCase();
 }
 
+/** Badge vermelho de contagem (menções), no canto do ícone. */
+function Badge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      aria-label={`${count} ${count === 1 ? "menção" : "menções"}`}
+      className="absolute -bottom-1 -right-1 grid h-[18px] min-w-[18px] place-items-center rounded-full border-[3px] border-rail bg-red px-1 text-[11px] font-bold leading-none text-white"
+    >
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
 /**
  * Um item do rail: círculo que vira quadrado arredondado no hover/ativo, com a
- * "pílula" branca à esquerda (curta no hover, alta quando ativo) e o tooltip.
+ * "pílula" branca à esquerda (ponto se há não lido, curta no hover, alta
+ * quando ativo) e o tooltip.
  */
 function RailItem({
   label,
   active = false,
+  unread = false,
+  mentions = 0,
   green = false,
   onClick,
   children,
 }: {
   label: string;
   active?: boolean;
+  unread?: boolean;
+  mentions?: number;
   green?: boolean;
   onClick: () => void;
   children: React.ReactNode;
@@ -39,16 +57,16 @@ function RailItem({
       <span
         aria-hidden="true"
         className={`absolute left-0 top-1/2 w-2 -translate-y-1/2 rounded-r-full bg-white transition-all duration-200 ${
-          active ? "h-10" : "h-0 group-hover:h-5"
+          active ? "h-10" : unread ? "h-2 group-hover:h-5" : "h-0 group-hover:h-5"
         }`}
       />
       <Tooltip label={label} side="right">
         <button
           type="button"
           onClick={onClick}
-          aria-label={label}
+          aria-label={unread && !active ? `${label} (não lido)` : label}
           aria-current={active ? "page" : undefined}
-          className={`grid h-12 w-12 place-items-center text-[15px] font-semibold transition-all duration-200 ${
+          className={`relative grid h-12 w-12 place-items-center text-[15px] font-semibold transition-all duration-200 ${
             active
               ? "rounded-2xl bg-accent text-white"
               : green
@@ -57,6 +75,7 @@ function RailItem({
           }`}
         >
           {children}
+          <Badge count={mentions} />
         </button>
       </Tooltip>
     </div>
@@ -80,14 +99,24 @@ export default function GuildRail() {
   const create = useGuilds((s) => s.create);
   const joinByCode = useGuilds((s) => s.joinByCode);
   const openDMs = useDMs((s) => s.openList);
+  const dms = useDMs((s) => s.channels);
   const view = useUI((s) => s.view);
+
+  const dmUnread = dms.some((d) => d.lastMessageAt && (!d.lastReadAt || d.lastMessageAt > d.lastReadAt));
+  const dmMentions = dms.reduce((n, d) => n + d.mentionCount, 0);
 
   return (
     <nav
       aria-label="Servidores"
       className="flex w-[72px] shrink-0 flex-col items-center gap-2 overflow-y-auto bg-rail pt-3 pb-2"
     >
-      <RailItem label="Mensagens diretas" active={view === "dm"} onClick={() => void openDMs()}>
+      <RailItem
+        label="Mensagens diretas"
+        active={view === "dm"}
+        unread={dmUnread}
+        mentions={dmMentions}
+        onClick={() => void openDMs()}
+      >
         <Logo />
       </RailItem>
 
@@ -98,6 +127,8 @@ export default function GuildRail() {
           key={guild.id}
           label={guild.name}
           active={view === "guild" && activeGuildId === guild.id}
+          unread={guild.unread}
+          mentions={guild.mentionCount}
           onClick={() => select(guild)}
         >
           {acronym(guild.name)}
