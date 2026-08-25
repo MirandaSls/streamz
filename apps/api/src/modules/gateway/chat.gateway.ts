@@ -22,6 +22,12 @@ import {
   typingSchema,
 } from "@newdisc/shared";
 import type { WsErrorEvent } from "@newdisc/shared";
+import {
+  newBucket,
+  takeToken,
+  type BucketLimit,
+  type BucketState,
+} from "./rate-limit";
 import { MessagesService } from "../messages/messages.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { DMsService } from "../dms/dms.service";
@@ -32,6 +38,17 @@ interface SocketUser {
   id: string;
   username: string;
 }
+
+/**
+ * Tetos por socket dos comandos que geram escrita ou broadcast. `capacity` é a
+ * rajada tolerada (colar uma sequência rápida de mensagens) e `refillPerSecond`
+ * a taxa sustentada. Ver rate-limit.ts: é limite single-process.
+ */
+const WS_LIMITS: Record<string, BucketLimit> = {
+  [WS_EVENTS.MESSAGE_CREATE]: { capacity: 10, refillPerSecond: 1 },
+  [WS_EVENTS.DM_CREATE]: { capacity: 10, refillPerSecond: 1 },
+  [WS_EVENTS.TYPING]: { capacity: 8, refillPerSecond: 2 },
+};
 
 @WebSocketGateway({
   cors: { origin: process.env.CORS_ORIGIN?.split(",") ?? "*", credentials: true },
@@ -131,6 +148,7 @@ export class ChatGateway
   @SubscribeMessage(WS_EVENTS.MESSAGE_CREATE)
   async onMessage(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
     const user = this.userOf(client);
+    if (!this.allow(client, WS_EVENTS.MESSAGE_CREATE)) return;
     const payload = this.parse(client, messageCreateSchema, body);
     if (!user || !payload) return;
 
@@ -220,6 +238,7 @@ export class ChatGateway
   @SubscribeMessage(WS_EVENTS.DM_CREATE)
   async onDM(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
     const user = this.userOf(client);
+    if (!this.allow(client, WS_EVENTS.DM_CREATE)) return;
     const payload = this.parse(client, dmCreateSchema, body);
     if (!user || !payload) return;
     try {
@@ -238,6 +257,22 @@ export class ChatGateway
 
   private userOf(client: Socket): SocketUser | undefined {
     return client.data.user as SocketUser | undefined;
+  }
+
+  /**
+   * Consome um token do balde daquele comando. Os baldes ficam no próprio
+   * socket, então somem junto com a conexão — não há mapa global a limpar.
+   */
+  private allow(client: Socket, event: keyof typeof WS_LIMITS): boolean {
+    const limit = WS_LIMITS[event];
+    const buckets = (client.data.buckets ??= {} as Record<string, BucketState>);
+    const now = Date.now();
+    const state = (buckets[event] ??= newBucket(limit, now));
+    if (takeToken(state, limit, now)) return true;
+    client.emit(WS_EVENTS.ERROR, {
+      message: "Devagar: muitos comandos seguidos",
+    } satisfies WsErrorEvent);
+    return false;
   }
 
   /**
@@ -264,6 +299,7 @@ export class ChatGateway
   @SubscribeMessage(WS_EVENTS.TYPING)
   onTyping(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
     const user = this.userOf(client);
+    if (!this.allow(client, WS_EVENTS.TYPING)) return;
     const payload = this.parse(client, typingSchema, body);
     if (!user || !payload) return;
 

@@ -1,5 +1,7 @@
 import { Module } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
 import { ConfigModule } from "@nestjs/config";
+import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { PrismaModule } from "./prisma/prisma.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { UsersModule } from "./modules/users/users.module";
@@ -13,10 +15,12 @@ import { VoiceModule } from "./modules/voice/voice.module";
 import { StorageModule } from "./modules/storage/storage.module";
 import { UploadsModule } from "./modules/uploads/uploads.module";
 import { HealthController } from "./health.controller";
+import { DEFAULT_THROTTLE } from "./common/throttle";
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: ["../../.env", ".env"] }),
+    ThrottlerModule.forRoot([DEFAULT_THROTTLE]),
     PrismaModule,
     AuthModule,
     UsersModule,
@@ -31,5 +35,7 @@ import { HealthController } from "./health.controller";
     UploadsModule,
   ],
   controllers: [HealthController],
+  // guard global: o teto padrão vale para toda rota; ver common/throttle.ts
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

@@ -11,12 +11,14 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import { SkipThrottle } from "@nestjs/throttler";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { MAX_ATTACHMENT_SIZE } from "@newdisc/shared";
 import { UploadsService } from "./uploads.service";
 import { StorageService } from "../storage/storage.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";
+import { UPLOAD_THROTTLE } from "../../common/throttle";
 
 @Controller("uploads")
 export class UploadsController {
@@ -27,6 +29,7 @@ export class UploadsController {
 
   /** Envia um arquivo e devolve o anexo (ainda não vinculado a mensagem). */
   @Post()
+  @UPLOAD_THROTTLE
   @UseGuards(JwtGuard)
   @UseInterceptors(
     FileInterceptor("file", { limits: { fileSize: MAX_ATTACHMENT_SIZE } }),
@@ -48,6 +51,9 @@ export class UploadsController {
    * manda header algum — a autorização é feita no service, que aceita as duas
    * formas de prova.
    */
+  // uma tela de canal pode pedir dezenas de imagens de uma vez; o teto global
+  // por IP não faz sentido aqui — a autorização é que protege esta rota
+  @SkipThrottle()
   @Get("file/:id")
   async serve(
     @Param("id") id: string,
