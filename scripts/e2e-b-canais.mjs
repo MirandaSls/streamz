@@ -82,7 +82,7 @@ try {
   await ana.waitForSelector('input[aria-label="Nome do canal"]');
   await ana.fill('input[aria-label="Nome do canal"]', "avisos");
   await ana.getByRole("button", { name: "Anúncios" }).click();
-  await ana.getByRole("button", { name: "Criar canal" }).click();
+  await ana.getByRole("button", { name: "Criar canal", exact: true }).click();
   await ana.waitForTimeout(1200);
   await shot(ana, "canal-anuncios-na-categoria");
   conferir(await ana.isVisible("text=avisos"), "canal de anúncios criado dentro da categoria");
@@ -90,7 +90,7 @@ try {
   // ── 3. arrastar #geral para dentro da categoria ─────────────
   await ana.dragAndDrop(
     '[data-channel-button]:has-text("geral")',
-    'button[aria-label="Criar canal em Assuntos gerais"]',
+    'button[aria-expanded]:has-text("Assuntos gerais")',
   );
   await ana.waitForTimeout(1200);
   await shot(ana, "canal-movido");
@@ -101,7 +101,7 @@ try {
   await ana.fill('[role="dialog"] textarea', "Tudo que interessa ao time de produto.");
   await ana.selectOption('[role="dialog"] select', "5");
   await shot(ana, "configuracoes-do-canal");
-  await ana.getByRole("button", { name: "Salvar" }).click();
+  await ana.getByRole("button", { name: "Salvar", exact: true }).click();
   await ana.waitForTimeout(1200);
   await shot(ana, "topico-no-cabecalho");
   conferir(
