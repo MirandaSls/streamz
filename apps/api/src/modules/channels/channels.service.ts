@@ -2,7 +2,8 @@ import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/commo
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { RealtimeService } from "../realtime/realtime.service";
-import type { ChannelType } from "@newdisc/shared";
+import type { Channel, ChannelType } from "@newdisc/shared";
+import { toChannelDTO } from "../../common/dto";
 
 interface CreateChannelOpts {
   isPrivate?: boolean;
@@ -25,13 +26,13 @@ export class ChannelsService {
     name: string,
     type: ChannelType,
     opts: CreateChannelOpts = {},
-  ) {
+  ): Promise<Channel> {
     const isPrivate = !!opts.isPrivate;
     const readOnly = !!opts.readOnly;
 
     // criar canal privado/somente-leitura exige moderação; canal comum, só ser membro
     if (isPrivate || readOnly) {
-      await this.guilds.assertModerator(userId, guildId);
+      await this.guilds.assertCanModerate(userId, guildId);
     } else {
       await this.guilds.assertMember(userId, guildId);
     }
@@ -44,29 +45,33 @@ export class ChannelsService {
     if (isPrivate && opts.memberIds?.length) {
       await this.grantAccess(guildId, channel.id, opts.memberIds);
     }
-    return channel;
+    return toChannelDTO(channel);
   }
 
-  async listForGuild(userId: string, guildId: string) {
+  async listForGuild(userId: string, guildId: string): Promise<Channel[]> {
     const member = await this.guilds.assertMember(userId, guildId);
     const channels = await this.prisma.channel.findMany({
       where: { guildId },
       orderBy: { position: "asc" },
     });
-    if (member.role === "OWNER" || member.role === "ADMIN") return channels;
+    if (member.role === "OWNER" || member.role === "ADMIN") {
+      return channels.map(toChannelDTO);
+    }
 
     const allowed = await this.prisma.channelMember.findMany({
       where: { userId, channel: { guildId } },
       select: { channelId: true },
     });
     const allowedSet = new Set(allowed.map((a) => a.channelId));
-    return channels.filter((c) => !c.private || allowedSet.has(c.id));
+    return channels
+      .filter((c) => !c.private || allowedSet.has(c.id))
+      .map(toChannelDTO);
   }
 
   // ── allowlist de canal privado (só moderação) ──────────────────
 
   async listMembers(actorId: string, guildId: string, channelId: string) {
-    await this.guilds.assertModerator(actorId, guildId);
+    await this.guilds.assertCanModerate(actorId, guildId);
     await this.assertChannelInGuild(channelId, guildId);
     const rows = await this.prisma.channelMember.findMany({
       where: { channelId },
@@ -83,14 +88,14 @@ export class ChannelsService {
   }
 
   async addMember(actorId: string, guildId: string, channelId: string, targetUserId: string) {
-    await this.guilds.assertModerator(actorId, guildId);
+    await this.guilds.assertCanModerate(actorId, guildId);
     await this.assertChannelInGuild(channelId, guildId);
     await this.grantAccess(guildId, channelId, [targetUserId]);
     return { added: targetUserId };
   }
 
   async removeMember(actorId: string, guildId: string, channelId: string, targetUserId: string) {
-    await this.guilds.assertModerator(actorId, guildId);
+    await this.guilds.assertCanModerate(actorId, guildId);
     await this.assertChannelInGuild(channelId, guildId);
     await this.prisma.channelMember
       .delete({ where: { channelId_userId: { channelId, userId: targetUserId } } })

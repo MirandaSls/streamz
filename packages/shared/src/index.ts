@@ -52,6 +52,11 @@ export interface Channel {
   readOnly: boolean;
 }
 
+/** Servidor com os canais que o usuário pode ver (GET /guilds/:id, POST /guilds). */
+export interface GuildWithChannels extends Guild {
+  channels: Channel[];
+}
+
 export interface ReactionGroup {
   emoji: string;
   count: number;
