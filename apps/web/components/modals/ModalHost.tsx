@@ -37,7 +37,7 @@ export default function ModalHost() {
     case "createGroupDM":
       return <CreateGroupDMModal />;
     case "settings":
-      return <SettingsModal />;
+      return <SettingsModal tab={modal.tab} />;
     case "invites":
       return <InvitesModal guildId={modal.guildId} />;
     case "image":
