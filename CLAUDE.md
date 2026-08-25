@@ -118,6 +118,9 @@ de anexo é derivada na hora pelo `StorageService.publicUrl` — o banco guarda 
   pelo cliente (evita servir HTML/SVG como executável).
 - Sem base pública de bucket, a leitura sai por proxy da API
   (`GET /uploads/file/:id`) com `X-Content-Type-Options: nosniff`.
+- Anexo que nunca virou mensagem (e refresh token velho) é apagado pela faxina
+  diária do `modules/maintenance` — o `@nestjs/schedule` roda **por processo**,
+  então com mais de uma instância da API o job repete.
 
 ## O que NÃO presumir
 

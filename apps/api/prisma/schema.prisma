@@ -184,8 +184,9 @@ model Message {
 }
 
 // Arquivo enviado ao storage (R2). Criado no upload (messageId null) e
-// vinculado a uma mensagem no envio. Órfãos (nunca vinculados) podem ser
-// limpos por um job futuro. O objeto no bucket vive na chave `key`.
+// vinculado a uma mensagem no envio. Órfãos (nunca vinculados) são apagados
+// pela faxina diária do MaintenanceService, no bucket e aqui. O objeto no
+// bucket vive na chave `key`.
 model Attachment {
   id          String   @id @default(cuid())
   messageId   String?
