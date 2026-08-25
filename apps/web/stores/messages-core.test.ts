@@ -20,6 +20,8 @@ const author: PublicUser = {
   displayName: null,
   avatarUrl: null,
   status: "ONLINE",
+  customStatusText: null,
+  customStatusEmoji: null,
 };
 
 function message(id: string, extra: Partial<Message> = {}): Message {
@@ -35,6 +37,7 @@ function message(id: string, extra: Partial<Message> = {}): Message {
     parentId: null,
     replyCount: 0,
     attachments: [],
+    type: "DEFAULT",
     ...extra,
   };
 }
