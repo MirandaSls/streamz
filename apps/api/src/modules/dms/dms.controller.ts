@@ -1,5 +1,14 @@
 import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
-import { ArrayNotEmpty, IsArray, IsOptional, IsString, Length } from "class-validator";
+import {
+  ArrayMaxSize,
+  ArrayNotEmpty,
+  ArrayUnique,
+  IsArray,
+  IsOptional,
+  IsString,
+  Length,
+} from "class-validator";
+import { MAX_DM_GROUP_INVITEES } from "@newdisc/shared";
 import { DMsService } from "./dms.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";
@@ -12,6 +21,10 @@ class OpenDMDto {
 class CreateGroupDto {
   @IsArray()
   @ArrayNotEmpty()
+  @ArrayUnique()
+  @ArrayMaxSize(MAX_DM_GROUP_INVITEES, {
+    message: `Um grupo aceita no máximo ${MAX_DM_GROUP_INVITEES} convidados`,
+  })
   @IsString({ each: true })
   userIds!: string[];
 
@@ -39,6 +52,12 @@ export class DMsController {
   @Get()
   list(@CurrentUser() user: JwtPayload) {
     return this.dms.list(user.sub);
+  }
+
+  /** Sai de um grupo de DM. Em conversa 1-a-1 não faz sentido: responde 400. */
+  @Post(":id/leave")
+  leave(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
+    return this.dms.leaveGroup(user.sub, id);
   }
 
   @Get(":id/messages")

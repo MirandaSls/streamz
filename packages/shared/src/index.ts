@@ -132,6 +132,16 @@ export interface DMChannelView {
   others: PublicUser[];
 }
 
+/** Máximo de convidados num grupo de DM, além de quem cria. */
+export const MAX_DM_GROUP_INVITEES = 10;
+
+/** Resultado de sair de um grupo de DM. */
+export interface DMLeaveResult {
+  dmChannelId: string;
+  /** true quando o grupo ficou sem ninguém e a conversa foi apagada. */
+  deleted: boolean;
+}
+
 export interface DirectMessage {
   id: string;
   dmChannelId: string;

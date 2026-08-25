@@ -1,6 +1,11 @@
 import { BadRequestException, Injectable, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
-import type { DMChannelView, DirectMessage, PublicUser } from "@newdisc/shared";
+import type {
+  DMChannelView,
+  DMLeaveResult,
+  DirectMessage,
+  PublicUser,
+} from "@newdisc/shared";
 
 type ParticipantWithUser = {
   userId: string;
@@ -63,6 +68,47 @@ export class DMsService {
       include: WITH_PARTICIPANTS,
     });
     return this.toView(channel, meId);
+  }
+
+  /**
+   * Sai de um grupo de DM. O último a sair leva o grupo junto (as mensagens vão
+   * em cascata) — não faz sentido manter conversa sem ninguém dentro. Se quem
+   * sai era o dono, a posse passa a outro participante para o grupo não ficar
+   * com `ownerId` apontando para fora.
+   */
+  async leaveGroup(meId: string, dmChannelId: string): Promise<DMLeaveResult> {
+    const channel = await this.prisma.dMChannel.findUnique({
+      where: { id: dmChannelId },
+      include: { participants: { select: { userId: true } } },
+    });
+    if (!channel) throw new NotFoundException("Conversa não encontrada");
+    if (!channel.participants.some((p) => p.userId === meId)) {
+      throw new ForbiddenException("Você não participa desta conversa");
+    }
+    if (!channel.isGroup) {
+      throw new BadRequestException("Não é possível sair de uma conversa 1-a-1");
+    }
+
+    const restantes = channel.participants.filter((p) => p.userId !== meId);
+    if (restantes.length === 0) {
+      await this.prisma.dMChannel.delete({ where: { id: dmChannelId } });
+      return { dmChannelId, deleted: true };
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.dMParticipant.delete({
+        where: { dmChannelId_userId: { dmChannelId, userId: meId } },
+      }),
+      ...(channel.ownerId === meId
+        ? [
+            this.prisma.dMChannel.update({
+              where: { id: dmChannelId },
+              data: { ownerId: restantes[0].userId },
+            }),
+          ]
+        : []),
+    ]);
+    return { dmChannelId, deleted: false };
   }
 
   /** Lista as conversas (1-a-1 e grupos) das quais o usuário participa. */
