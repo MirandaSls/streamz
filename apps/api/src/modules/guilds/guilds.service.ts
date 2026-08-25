@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { WS_EVENTS } from "@newdisc/shared";
+import type { ChannelType } from "@newdisc/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { RealtimeService } from "../realtime/realtime.service";
 
@@ -107,7 +108,8 @@ export class GuildsService {
   async assertCanViewChannel(userId: string, channelId: string) {
     const channel = await this.prisma.channel.findUnique({
       where: { id: channelId },
-      select: { id: true, guildId: true, private: true, readOnly: true },
+      // `type` sai como String (enum vira String no SQLite) — ver CLAUDE.md
+      select: { id: true, guildId: true, type: true, private: true, readOnly: true },
     });
     if (!channel) throw new NotFoundException("Canal não encontrado");
     const member = await this.assertMember(userId, channel.guildId);
@@ -118,7 +120,7 @@ export class GuildsService {
       });
       if (!allowed) throw new ForbiddenException("Canal privado");
     }
-    return { channel, member };
+    return { channel: { ...channel, type: channel.type as ChannelType }, member };
   }
 
   /** Pode postar: view + se o canal for somente-leitura, precisa ser OWNER/ADMIN. */

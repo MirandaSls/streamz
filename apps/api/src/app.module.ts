@@ -16,10 +16,15 @@ import { StorageModule } from "./modules/storage/storage.module";
 import { UploadsModule } from "./modules/uploads/uploads.module";
 import { HealthController } from "./health.controller";
 import { DEFAULT_THROTTLE } from "./common/throttle";
+import { validateEnv } from "./common/env";
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, envFilePath: ["../../.env", ".env"] }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: ["../../.env", ".env"],
+      validate: validateEnv,
+    }),
     ThrottlerModule.forRoot([DEFAULT_THROTTLE]),
     PrismaModule,
     AuthModule,
