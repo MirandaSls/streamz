@@ -69,3 +69,18 @@ export function continuaAnterior(
   const delta = new Date(atual.createdAt).getTime() - new Date(anterior.createdAt).getTime();
   return delta >= 0 && delta < JANELA_AGRUPAMENTO_MS;
 }
+
+// ── a-mensagens ──
+const DATA_COMPLETA = new Intl.DateTimeFormat("pt-BR", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+/** "quinta-feira, 25 de agosto de 2026 14:03" — o tooltip da hora da mensagem. */
+export function dataCompleta(iso: string): string {
+  return DATA_COMPLETA.format(new Date(iso));
+}

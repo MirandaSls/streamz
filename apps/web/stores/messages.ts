@@ -1,9 +1,11 @@
 import { create } from "zustand";
 import {
   WS_EVENTS,
+  replySnippet,
   type Attachment,
   type Message,
   type MessageDeletedEvent,
+  type MessageReplyRef,
   type PublicUser,
 } from "@newdisc/shared";
 import { api } from "@/lib/api";
@@ -35,6 +37,8 @@ const PAGE_SIZE = 50;
 const ACK_TIMEOUT_MS = 10_000;
 /** Canais cujo histórico fica em memória depois de fechados (LRU simples). */
 const CACHED_CHANNELS = 5;
+/** Por quanto tempo a mensagem alcançada por um "ir para" fica destacada. */
+const HIGHLIGHT_MS = 2000;
 
 export interface ChannelSlice {
   items: ChatMessage[];
@@ -72,9 +76,25 @@ interface OutboxEntry {
   content: string;
   attachmentIds: string[];
   parentId?: string;
+  /** id da mensagem citada (reply) e se ela menciona o autor original. */
+  replyToId?: string;
+  replyMention?: boolean;
 }
 const outbox = new Map<string, OutboxEntry>();
 const ackTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** Timer do destaque do "ir para": um só, o último jump manda. */
+let highlightTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Referência curta de uma mensagem citada, no formato que a API devolve. */
+function referenciaDe(m: Message): MessageReplyRef {
+  return {
+    id: m.id,
+    author: m.author,
+    content: replySnippet(m.content),
+    hasAttachments: m.attachments.length > 0,
+  };
+}
 
 function newNonce(): string {
   const c = typeof crypto !== "undefined" ? crypto : undefined;
@@ -106,6 +126,15 @@ interface MessagesState {
   searchQuery: string;
   searchResults: Message[] | null;
   searching: boolean;
+  /** onde a busca corre: só no canal aberto ou no servidor inteiro. */
+  searchScope: "channel" | "guild";
+
+  /** mensagem sendo respondida (barra acima do composer). */
+  replyTarget: { channelId: string; message: Message } | null;
+  /** "@ ligado": a resposta menciona o autor da original (padrão do Discord). */
+  replyMention: boolean;
+  /** mensagem alcançada por um "ir para" — fica destacada por 2 s. */
+  highlightId: string | null;
 
   /** `sticky`: a sala não é abandonada ao trocar de canal (conversas diretas). */
   open: (channelId: string, opts?: { sticky?: boolean }) => Promise<void>;
@@ -121,12 +150,22 @@ interface MessagesState {
   remove: (messageId: string) => Promise<void>;
   toggleReaction: (messageId: string, emoji: string, userId?: string) => void;
 
-  openThread: (channelId: string, parent: Message) => Promise<void>;
+  /** `parent` só precisa do id: a lista de threads não tem a mensagem em mãos. */
+  openThread: (channelId: string, parent: Pick<Message, "id">) => Promise<void>;
   closeThread: () => void;
 
   setSearchQuery: (query: string) => void;
-  runSearch: (channelId: string) => Promise<void>;
+  /** busca no servidor quando há `guildId`; senão, só na conversa. */
+  runSearch: (target: { channelId: string; guildId: string | null }) => Promise<void>;
   clearSearch: () => void;
+
+  startReply: (message: Message) => void;
+  cancelReply: () => void;
+  toggleReplyMention: () => void;
+
+  /** Carrega a janela em volta da mensagem, rola até ela e destaca. */
+  jumpTo: (channelId: string, messageId: string) => Promise<void>;
+  clearHighlight: () => void;
 
   handleNew: (message: Message) => void;
   handleUpdated: (message: Message) => void;
@@ -200,6 +239,9 @@ export const useMessages = create<MessagesState>((set, get) => {
       nonce,
       ...(entry.parentId ? { parentId: entry.parentId } : {}),
       ...(entry.attachmentIds.length ? { attachmentIds: entry.attachmentIds } : {}),
+      ...(entry.replyToId
+        ? { replyToId: entry.replyToId, replyMention: entry.replyMention ?? true }
+        : {}),
     });
     armAck(nonce, entry.channelId, entry.parentId);
   }
@@ -234,6 +276,10 @@ export const useMessages = create<MessagesState>((set, get) => {
     searchQuery: "",
     searchResults: null,
     searching: false,
+    searchScope: "channel",
+    replyTarget: null,
+    replyMention: true,
+    highlightId: null,
 
     open: async (channelId, opts = {}) => {
       if (get().activeChannelId === channelId) {
@@ -248,6 +294,9 @@ export const useMessages = create<MessagesState>((set, get) => {
         searchQuery: "",
         searchResults: null,
         searching: false,
+        // responder é por canal: a barra não pode sobreviver à troca
+        replyTarget: null,
+        highlightId: null,
       });
       touchChannel(channelId);
       joinChannel(channelId, opts);
@@ -261,6 +310,8 @@ export const useMessages = create<MessagesState>((set, get) => {
         threadItems: [],
         searchQuery: "",
         searchResults: null,
+        replyTarget: null,
+        highlightId: null,
       });
     },
 
@@ -299,6 +350,10 @@ export const useMessages = create<MessagesState>((set, get) => {
       const list = attachments ?? [];
       if (!text && list.length === 0) return;
       const nonce = newNonce();
+      // a barra "Respondendo a X" só vale para o canal em que foi aberta
+      const alvo = get().replyTarget;
+      const respondendo = alvo && alvo.channelId === channelId && !parentId ? alvo.message : null;
+      const replyMention = get().replyMention;
       const optimistic = optimisticMessage({
         nonce,
         channelId,
@@ -307,6 +362,8 @@ export const useMessages = create<MessagesState>((set, get) => {
         content: text,
         attachments: list,
         parentId,
+        replyTo: respondendo ? referenciaDe(respondendo) : null,
+        replyMention: respondendo ? replyMention : false,
       });
       if (parentId) {
         set((s) => ({ threadItems: [...s.threadItems, optimistic] }));
@@ -320,9 +377,11 @@ export const useMessages = create<MessagesState>((set, get) => {
         content: text,
         attachmentIds: list.map((a) => a.id),
         parentId,
+        ...(respondendo ? { replyToId: respondendo.id, replyMention } : {}),
       };
       outbox.set(nonce, entry);
       emitCreate(nonce, entry);
+      if (respondendo) set({ replyTarget: null, replyMention: true });
     },
 
     retry: (nonce) => {
@@ -401,26 +460,72 @@ export const useMessages = create<MessagesState>((set, get) => {
 
     setSearchQuery: (searchQuery) => set({ searchQuery }),
 
-    runSearch: async (channelId) => {
+    runSearch: async ({ channelId, guildId }) => {
       const query = get().searchQuery.trim();
       if (!query) {
         set({ searchResults: null });
         return;
       }
-      const seq = nextSeq(`search:${channelId}`);
-      set({ searching: true });
+      // no servidor a busca corre no servidor inteiro (como no Discord); numa
+      // conversa direta não há servidor, então ela corre só no canal
+      const escopo = guildId ? "guild" : "channel";
+      const chave = `search:${guildId ?? channelId}`;
+      const seq = nextSeq(chave);
+      set({ searching: true, searchScope: escopo });
       try {
-        const results = (await api.searchMessages(channelId, query)) as Message[];
-        if (!isCurrent(`search:${channelId}`, seq)) return;
+        const results = (await (guildId
+          ? api.searchGuild(guildId, query)
+          : api.searchMessages(channelId, query))) as Message[];
+        if (!isCurrent(chave, seq)) return;
         set({ searchResults: results, searching: false });
       } catch (e) {
-        if (!isCurrent(`search:${channelId}`, seq)) return;
+        if (!isCurrent(chave, seq)) return;
         set({ searching: false });
         ui.toast(errorMessage(e, "A busca falhou"), "error");
       }
     },
 
     clearSearch: () => set({ searchQuery: "", searchResults: null, searching: false }),
+
+    startReply: (message) =>
+      set({ replyTarget: { channelId: message.channelId, message }, replyMention: true }),
+
+    cancelReply: () => set({ replyTarget: null }),
+
+    toggleReplyMention: () => set((s) => ({ replyMention: !s.replyMention })),
+
+    jumpTo: async (channelId, messageId) => {
+      const naTela = get().byChannel[channelId]?.items.some((m) => m.id === messageId);
+      if (!naTela) {
+        touchChannel(channelId);
+        const seq = nextSeq(channelId);
+        patchSlice(channelId, { loading: true });
+        try {
+          const janela = (await api.around(channelId, messageId)) as Message[];
+          if (!isCurrent(channelId, seq)) return;
+          patchSlice(channelId, {
+            items: janela as ChatMessage[],
+            // a janela é um recorte no meio do histórico: sempre há o que
+            // carregar para trás
+            hasMore: true,
+            loading: false,
+            loadingOlder: false,
+          });
+        } catch (e) {
+          if (isCurrent(channelId, seq)) patchSlice(channelId, { loading: false });
+          ui.toast(errorMessage(e, "Não foi possível abrir a mensagem"), "error");
+          return;
+        }
+      }
+      set({ highlightId: messageId });
+      if (highlightTimer) clearTimeout(highlightTimer);
+      highlightTimer = setTimeout(() => {
+        highlightTimer = null;
+        set((s) => (s.highlightId === messageId ? { highlightId: null } : s));
+      }, HIGHLIGHT_MS);
+    },
+
+    clearHighlight: () => set({ highlightId: null }),
 
     handleNew: (message) => {
       clearAck(message.nonce);
@@ -469,6 +574,9 @@ export const useMessages = create<MessagesState>((set, get) => {
         searchQuery: "",
         searchResults: null,
         searching: false,
+        replyTarget: null,
+        replyMention: true,
+        highlightId: null,
       });
     },
   };

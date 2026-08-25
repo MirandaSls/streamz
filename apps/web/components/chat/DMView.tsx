@@ -5,7 +5,9 @@ import { isGroupChannel } from "@newdisc/shared";
 import Composer from "@/components/chat/Composer";
 import HeaderBar, { HeaderIcon } from "@/components/chat/HeaderBar";
 import MessageList from "@/components/chat/MessageList";
-import SearchPanel from "@/components/chat/SearchPanel";
+import PinsPopover from "@/components/chat/PinsPopover";
+import ReplyBar from "@/components/chat/ReplyBar";
+import ThreadsPopover from "@/components/chat/ThreadsPopover";
 import TypingIndicator from "@/components/chat/TypingIndicator";
 import Avatar from "@/components/ui/Avatar";
 import { useAuth } from "@/stores/auth";
@@ -25,8 +27,10 @@ export default function DMView() {
   const slice = useActiveSlice();
   const statuses = usePresence((s) => s.statuses);
 
+  const searchQuery = useMessages((s) => s.searchQuery);
   const setSearchQuery = useMessages((s) => s.setSearchQuery);
   const runSearch = useMessages((s) => s.runSearch);
+  const highlightId = useMessages((s) => s.highlightId);
   const loadOlder = useMessages((s) => s.loadOlder);
   const send = useMessages((s) => s.send);
   const edit = useMessages((s) => s.edit);
@@ -62,12 +66,19 @@ export default function DMView() {
         }
         title={title}
         searchLabel={`Buscar mensagens em ${title}`}
+        searchValue={searchQuery}
         onSearch={(q) => {
           setSearchQuery(q);
-          void runSearch(active.id);
+          // conversa não tem servidor: a busca corre só neste canal
+          void runSearch({ channelId: active.id, guildId: null });
         }}
+        pins={
+          // em conversa direta não há moderação: qualquer participante fixa
+          <PinsPopover channelId={active.id} guildId={null} canPin />
+        }
         tools={
           <>
+            <ThreadsPopover channelId={active.id} canManage={false} />
             <HeaderIcon label="Iniciar chamada de voz" disabled>
               <Phone size={24} />
             </HeaderIcon>
@@ -77,8 +88,6 @@ export default function DMView() {
           </>
         }
       />
-
-      <SearchPanel />
 
       <MessageList
         // remonta a cada conversa para zerar a rolagem e os marcadores de posição
@@ -96,6 +105,7 @@ export default function DMView() {
         onOpenThread={(message) => void openThread(active.id, message)}
         onRetry={retry}
         onDiscard={discard}
+        scrollToId={highlightId}
         emptyText="Nenhuma mensagem ainda. Diga um oi."
         welcome={{
           icon: other ? <Avatar user={other} size="xl" /> : <Users size={42} />,
@@ -107,16 +117,19 @@ export default function DMView() {
       />
 
       {user && (
-        <Composer
-          key={`composer-${active.id}`}
-          channelId={active.id}
-          allowAttachments
-          placeholder={`Conversar em ${group ? title : `@${title}`}`}
-          ariaLabel={`Mensagem para ${title}`}
-          onSend={(content, attachments) =>
-            send({ channelId: active.id, author: user, content, attachments })
-          }
-        />
+        <>
+          <ReplyBar channelId={active.id} />
+          <Composer
+            key={`composer-${active.id}`}
+            channelId={active.id}
+            allowAttachments
+            placeholder={`Conversar em ${group ? title : `@${title}`}`}
+            ariaLabel={`Mensagem para ${title}`}
+            onSend={(content, attachments) =>
+              send({ channelId: active.id, author: user, content, attachments })
+            }
+          />
+        </>
       )}
       <TypingIndicator channelId={active.id} />
     </main>

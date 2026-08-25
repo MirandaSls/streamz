@@ -6,6 +6,7 @@ import MemberList from "@/components/MemberList";
 import VoicePanel from "@/components/VoicePanel";
 import ChatView from "@/components/chat/ChatView";
 import DMView from "@/components/chat/DMView";
+import SearchPanel from "@/components/chat/SearchPanel";
 import ThreadPanel from "@/components/chat/ThreadPanel";
 import ChannelSidebar from "@/components/layout/ChannelSidebar";
 import DMList from "@/components/layout/DMList";
@@ -40,6 +41,8 @@ export default function AppPage() {
   const voiceChannel = useVoiceChannel();
   const leaveVoice = useChannels((s) => s.leaveVoice);
   const threadParentId = useMessages((s) => s.threadParentId);
+  // a busca ocupa a coluna 4 (como no Discord) e tem prioridade sobre thread e membros
+  const buscaAberta = useMessages((s) => s.searchResults !== null || s.searching);
 
   useRealtime(user?.id);
 
@@ -59,8 +62,9 @@ export default function AppPage() {
         <>
           <DMList />
           <DMView />
+          {activeDM && buscaAberta && <SearchPanel guildId={null} />}
           {/* thread funciona em DM como em qualquer canal (ADR-0001) */}
-          {activeDM && threadParentId && <ThreadPanel channelId={activeDM.id} />}
+          {activeDM && !buscaAberta && threadParentId && <ThreadPanel channelId={activeDM.id} />}
         </>
       ) : (
         <>
@@ -80,10 +84,16 @@ export default function AppPage() {
             <ChatView />
           )}
 
-          {/* coluna 4: thread aberta OU lista de membros — nunca as duas */}
+          {/* coluna 4: busca, thread aberta OU lista de membros — nunca duas */}
           {!voiceChannel &&
             activeChannel &&
-            (threadParentId ? <ThreadPanel channelId={activeChannel.id} /> : membersOpen && <MemberList />)}
+            (buscaAberta ? (
+              <SearchPanel guildId={activeChannel.guildId} />
+            ) : threadParentId ? (
+              <ThreadPanel channelId={activeChannel.id} />
+            ) : (
+              membersOpen && <MemberList />
+            ))}
         </>
       )}
 

@@ -1,10 +1,12 @@
 "use client";
 
-import { Hash, Lock, Megaphone, MessagesSquare, Users } from "lucide-react";
+import { Hash, Lock, Megaphone, Users } from "lucide-react";
 import Composer from "@/components/chat/Composer";
 import HeaderBar, { HeaderIcon } from "@/components/chat/HeaderBar";
 import MessageList from "@/components/chat/MessageList";
-import SearchPanel from "@/components/chat/SearchPanel";
+import PinsPopover from "@/components/chat/PinsPopover";
+import ReplyBar from "@/components/chat/ReplyBar";
+import ThreadsPopover from "@/components/chat/ThreadsPopover";
 import TypingIndicator from "@/components/chat/TypingIndicator";
 import { useAuth } from "@/stores/auth";
 import { useActiveChannel } from "@/stores/channels";
@@ -12,7 +14,7 @@ import { useCanModerate } from "@/stores/guilds";
 import { useActiveSlice, useMessages } from "@/stores/messages";
 import { useUI } from "@/stores/ui";
 
-/** Coluna 3 no modo servidor: cabeçalho, busca, timeline e composer. */
+/** Coluna 3 no modo servidor: cabeçalho, timeline e composer. */
 export default function ChatView() {
   const user = useAuth((s) => s.user);
   const channel = useActiveChannel();
@@ -21,8 +23,10 @@ export default function ChatView() {
   const membersOpen = useUI((s) => s.membersOpen);
   const toggleMembers = useUI((s) => s.toggleMembers);
 
+  const searchQuery = useMessages((s) => s.searchQuery);
   const setSearchQuery = useMessages((s) => s.setSearchQuery);
   const runSearch = useMessages((s) => s.runSearch);
+  const highlightId = useMessages((s) => s.highlightId);
   const loadOlder = useMessages((s) => s.loadOlder);
   const send = useMessages((s) => s.send);
   const edit = useMessages((s) => s.edit);
@@ -51,23 +55,24 @@ export default function ChatView() {
         icon={<Icon size={24} />}
         title={name}
         searchLabel={`Buscar mensagens em ${name}`}
+        searchValue={searchQuery}
         onSearch={(q) => {
           setSearchQuery(q);
-          void runSearch(channel.id);
+          // no servidor a busca é do servidor inteiro, com `in:#canal` filtrando
+          void runSearch({ channelId: channel.id, guildId: channel.guildId });
         }}
+        pins={
+          <PinsPopover channelId={channel.id} guildId={channel.guildId} canPin={canModerate} />
+        }
         tools={
           <>
-            <HeaderIcon label="Threads" disabled>
-              <MessagesSquare size={24} />
-            </HeaderIcon>
+            <ThreadsPopover channelId={channel.id} canManage={canModerate} />
             <HeaderIcon label={membersOpen ? "Ocultar lista de membros" : "Mostrar lista de membros"} active={membersOpen} onClick={toggleMembers}>
               <Users size={24} />
             </HeaderIcon>
           </>
         }
       />
-
-      <SearchPanel />
 
       <MessageList
         // remonta a cada canal para zerar a rolagem e os marcadores de posição
@@ -85,6 +90,7 @@ export default function ChatView() {
         onOpenThread={(message) => void openThread(channel.id, message)}
         onRetry={retry}
         onDiscard={discard}
+        scrollToId={highlightId}
         emptyText="Nenhuma mensagem ainda. Diga um oi."
         welcome={{
           icon: <Icon size={42} />,
@@ -99,16 +105,19 @@ export default function ChatView() {
         </p>
       ) : (
         user && (
-          <Composer
-            key={`composer-${channel.id}`}
-            channelId={channel.id}
-            allowAttachments
-            placeholder={`Conversar em #${name}`}
-            ariaLabel={`Mensagem para #${name}`}
-            onSend={(content, attachments) =>
-              send({ channelId: channel.id, guildId: channel.guildId, author: user, content, attachments })
-            }
-          />
+          <>
+            <ReplyBar channelId={channel.id} />
+            <Composer
+              key={`composer-${channel.id}`}
+              channelId={channel.id}
+              allowAttachments
+              placeholder={`Conversar em #${name}`}
+              ariaLabel={`Mensagem para #${name}`}
+              onSend={(content, attachments) =>
+                send({ channelId: channel.id, guildId: channel.guildId, author: user, content, attachments })
+              }
+            />
+          </>
         )
       )}
       <TypingIndicator channelId={channel.id} />

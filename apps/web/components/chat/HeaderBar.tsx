@@ -1,55 +1,27 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Bell, HelpCircle, Inbox, Pin, Search } from "lucide-react";
-import Tooltip from "@/components/ui/Tooltip";
+import { Bell, HelpCircle, Search } from "lucide-react";
+import HeaderIcon from "@/components/chat/HeaderIcon";
+import InboxPopover from "@/components/chat/InboxPopover";
 
-/** Botão de ícone da toolbar do cabeçalho (24px, hover claro, ativo branco). */
-export function HeaderIcon({
-  label,
-  onClick,
-  active = false,
-  disabled = false,
-  children,
-}: {
-  label: string;
-  onClick?: () => void;
-  active?: boolean;
-  disabled?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <Tooltip label={disabled ? `${label} (em breve)` : label} side="bottom">
-      <button
-        type="button"
-        onClick={disabled ? undefined : onClick}
-        aria-label={label}
-        aria-disabled={disabled}
-        aria-pressed={active || undefined}
-        className={`grid h-6 w-6 place-items-center transition ${
-          disabled
-            ? "cursor-not-allowed text-txt-secondary opacity-50"
-            : active
-              ? "text-txt-primary"
-              : "text-txt-secondary hover:text-txt-primary"
-        }`}
-      >
-        {children}
-      </button>
-    </Tooltip>
-  );
-}
+export { default as HeaderIcon } from "@/components/chat/HeaderIcon";
 
 /**
  * Cabeçalho de 48px da área principal: ícone + nome à esquerda, toolbar à
  * direita (com a busca que se expande ao focar), como no Discord.
+ *
+ * A caixa de entrada é do app, não do canal, então mora aqui mesmo; as fixadas
+ * dependem do canal e entram por `pins`.
  */
 export default function HeaderBar({
   icon,
   title,
   subtitle,
   tools,
+  pins,
   searchLabel,
+  searchValue,
   onSearch,
 }: {
   icon: ReactNode;
@@ -57,10 +29,14 @@ export default function HeaderBar({
   subtitle?: ReactNode;
   /** botões antes da busca (variam entre canal e DM). */
   tools?: ReactNode;
+  /** botão de mensagens fixadas do canal aberto. */
+  pins?: ReactNode;
   searchLabel: string;
+  /** consulta em vigor — mantém o campo preenchido ao reabrir a busca. */
+  searchValue?: string;
   onSearch: (query: string) => void;
 }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(searchValue ?? "");
 
   return (
     <header className="relative z-10 flex h-12 shrink-0 items-center gap-2 px-4 shadow-header">
@@ -77,9 +53,7 @@ export default function HeaderBar({
 
       <div className="ml-auto flex items-center gap-4">
         {tools}
-        <HeaderIcon label="Mensagens fixadas" disabled>
-          <Pin size={24} />
-        </HeaderIcon>
+        {pins}
         <HeaderIcon label="Configurações de notificação" disabled>
           <Bell size={24} />
         </HeaderIcon>
@@ -96,6 +70,7 @@ export default function HeaderBar({
             type="search"
             aria-label={searchLabel}
             placeholder="Buscar"
+            title="Filtros: from:@usuário in:#canal has:link|image|file before:AAAA-MM-DD after:AAAA-MM-DD mentions:@usuário"
             className="h-6 w-36 rounded-[4px] bg-rail pl-1.5 pr-6 text-sm text-txt-normal outline-none transition-all placeholder:text-txt-muted focus:w-60"
           />
           <Search
@@ -104,9 +79,7 @@ export default function HeaderBar({
             className="pointer-events-none absolute right-1.5 top-1 text-txt-muted"
           />
         </form>
-        <HeaderIcon label="Caixa de entrada" disabled>
-          <Inbox size={24} />
-        </HeaderIcon>
+        <InboxPopover />
         <HeaderIcon label="Ajuda" disabled>
           <HelpCircle size={24} />
         </HeaderIcon>

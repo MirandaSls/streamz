@@ -8,12 +8,16 @@ import type {
   GuildChannelType,
   GuildMemberView,
   GuildWithChannels,
+  InboxMention,
+  InboxUnreadGroup,
   InviteInfo,
   InvitePreview,
   LinkEmbed,
   MemberRole,
   Message,
+  PinnedMessage,
   PublicUser,
+  ThreadView,
   UserStatus,
 } from "@newdisc/shared";
 import { API_URL } from "./config";
@@ -168,6 +172,34 @@ export const api = {
     request<{ token: string; url: string; room: string }>(`/voice/channels/${channelId}/token`, {
       method: "POST",
     }),
+
+  // ── a-mensagens ──
+  /** Janela de mensagens em volta de uma (o "ir para a mensagem"). */
+  around: (channelId: string, messageId: string) =>
+    request<Message[]>(`/channels/${channelId}/messages/around/${messageId}`),
+  /** Busca no servidor inteiro, com os mesmos filtros da busca do canal. */
+  searchGuild: (guildId: string, q: string) =>
+    request<Message[]>(`/guilds/${guildId}/messages/search?q=${encodeURIComponent(q)}`),
+
+  pins: (channelId: string) => request<PinnedMessage[]>(`/channels/${channelId}/pins`),
+  pinMessage: (channelId: string, messageId: string) =>
+    request<PinnedMessage>(`/channels/${channelId}/pins/${messageId}`, { method: "POST" }),
+  unpinMessage: (channelId: string, messageId: string) =>
+    request<{ messageId: string }>(`/channels/${channelId}/pins/${messageId}`, { method: "DELETE" }),
+
+  threads: (channelId: string, archived?: boolean) =>
+    request<ThreadView[]>(
+      `/channels/${channelId}/threads${archived === undefined ? "" : `?archived=${archived}`}`,
+    ),
+  createThread: (channelId: string, messageId: string, name: string) =>
+    request<ThreadView>(`/channels/${channelId}/threads`, json({ messageId, name })),
+  updateThread: (channelId: string, threadId: string, body: { name?: string; archived?: boolean }) =>
+    request<ThreadView>(`/channels/${channelId}/threads/${threadId}`, patch(body)),
+
+  inboxMentions: (limit?: number) =>
+    request<InboxMention[]>(`/me/mentions${limit ? `?limit=${limit}` : ""}`),
+  inboxUnread: () => request<InboxUnreadGroup[]>("/me/unread"),
+  markAllRead: () => request<{ channels: number }>("/me/read-all", { method: "POST" }),
 
   /** Envia um arquivo e devolve o anexo (a vincular numa mensagem no envio). */
   uploadFile: (file: File): Promise<Attachment> => {

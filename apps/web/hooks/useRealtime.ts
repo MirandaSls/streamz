@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import {
   WS_EVENTS,
   displayNameOf,
-  mentionsUser,
+  mentionsMe,
   type Channel,
   type ChannelDeletedEvent,
   type GuildRemovedEvent,
@@ -13,8 +13,11 @@ import {
   type MemberUpdatedEvent,
   type Message,
   type MessageDeletedEvent,
+  type MessagePinnedEvent,
+  type MessageUnpinnedEvent,
   type PresenceUpdatePayload,
   type PublicUser,
+  type ThreadUpdatedEvent,
 } from "@newdisc/shared";
 import { notify } from "@/lib/desktop";
 import { useAuth } from "@/stores/auth";
@@ -23,6 +26,8 @@ import { useChannels } from "@/stores/channels";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useGuilds } from "@/stores/guilds";
 import { useMessages } from "@/stores/messages";
+import { usePins } from "@/stores/messages-pins";
+import { useThreads } from "@/stores/messages-threads";
 import { usePresence } from "@/stores/presence";
 import { useTyping } from "@/stores/typing";
 import { ui } from "@/stores/ui";
@@ -124,6 +129,17 @@ export function useRealtime(currentUserId?: string): void {
         ui.toast(payload?.message || "Não foi possível concluir a ação", "error");
       }),
 
+      // ── a-mensagens ──
+      on<MessagePinnedEvent>(WS_EVENTS.MESSAGE_PINNED, (event) => {
+        usePins.getState().handlePinned(event);
+      }),
+      on<MessageUnpinnedEvent>(WS_EVENTS.MESSAGE_UNPINNED, (event) => {
+        usePins.getState().handleUnpinned(event);
+      }),
+      on<ThreadUpdatedEvent>(WS_EVENTS.THREAD_UPDATED, (event) => {
+        useThreads.getState().handleUpdated(event);
+      }),
+
       onReconnect(() => {
         rejoinChannel();
         void useMessages.getState().resyncActive();
@@ -142,7 +158,8 @@ export function useRealtime(currentUserId?: string): void {
 function onMessageArrived(message: Message, currentUserId?: string) {
   const me = useAuth.getState().user;
   const mine = message.author.id === currentUserId;
-  const mention = !mine && !!me && mentionsUser(message.content, me.username);
+  // menção = `@usuario` no texto ou resposta a mim com o "@ ligado" (Discord)
+  const mention = !mine && !!me && mentionsMe(message, me);
   const activeChannelId = useMessages.getState().activeChannelId;
   const visivel = typeof document !== "undefined" && document.visibilityState === "visible";
   const naTela = message.channelId === activeChannelId && visivel;

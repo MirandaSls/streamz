@@ -35,6 +35,11 @@ function message(id: string, extra: Partial<Message> = {}): Message {
     parentId: null,
     replyCount: 0,
     attachments: [],
+    type: "DEFAULT",
+    replyTo: null,
+    replyMention: false,
+    thread: null,
+    pinned: false,
     ...extra,
   };
 }
