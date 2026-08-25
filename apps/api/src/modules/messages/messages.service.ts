@@ -8,9 +8,11 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { StorageService } from "../storage/storage.service";
 import type { Attachment, Message as MessageDTO, ReactionGroup } from "@newdisc/shared";
-import { MAX_ATTACHMENTS_PER_MESSAGE } from "@newdisc/shared";
+import { MAX_ATTACHMENTS_PER_MESSAGE, parseCustomEmoji } from "@newdisc/shared";
 import { toPublicUser, type PublicUserRow } from "../../common/dto";
 import { toStickerDTO, type StickerRow } from "../emojis/dto";
+import { EmojisService } from "../emojis/emojis.service";
+import { StickersService } from "../emojis/stickers.service";
 
 const MESSAGE_INCLUDE = {
   author: true,
@@ -28,6 +30,9 @@ export class MessagesService {
     private readonly prisma: PrismaService,
     private readonly guilds: GuildsService,
     private readonly storage: StorageService,
+    // g-emojis-midia: figurinha da mensagem e emoji personalizado de reação
+    private readonly stickers: StickersService,
+    private readonly emojis: EmojisService,
   ) {}
 
   async create(
@@ -36,6 +41,7 @@ export class MessagesService {
     content: string,
     parentId?: string,
     attachmentIds?: string[],
+    stickerId?: string,
   ): Promise<MessageDTO> {
     // valida canal + associação + permissão de postar (privado/somente-leitura)
     await this.guilds.assertCanPostChannel(authorId, channelId);
@@ -54,8 +60,17 @@ export class MessagesService {
       }
     }
 
+    // figurinha: precisa existir e ser de um servidor do autor (g-emojis-midia)
+    if (stickerId) await this.stickers.assertPodeUsar(authorId, stickerId);
+
     const msg = await this.prisma.message.create({
-      data: { channelId, authorId, content, parentId: parentId ?? null },
+      data: {
+        channelId,
+        authorId,
+        content,
+        parentId: parentId ?? null,
+        stickerId: stickerId ?? null,
+      },
       include: MESSAGE_INCLUDE,
     });
 
@@ -175,6 +190,10 @@ export class MessagesService {
     const msg = await this.prisma.message.findUnique({ where: { id: messageId } });
     if (!msg) throw new NotFoundException("Mensagem não encontrada");
     await this.guilds.assertCanViewChannel(userId, msg.channelId);
+    // `<:nome:id>`: só reage com emoji personalizado quem é membro do servidor
+    // dono dele — a reação vai para todo mundo que lê o canal (g-emojis-midia)
+    const custom = parseCustomEmoji(emoji);
+    if (custom) await this.emojis.assertPodeUsar(userId, custom.id);
     await this.prisma.reaction.upsert({
       where: { messageId_userId_emoji: { messageId, userId, emoji } },
       create: { messageId, userId, emoji },
@@ -190,6 +209,30 @@ export class MessagesService {
     await this.prisma.reaction
       .delete({ where: { messageId_userId_emoji: { messageId, userId, emoji } } })
       .catch(() => undefined); // idempotente: já não existia
+    return this.getDTO(messageId);
+  }
+
+  /**
+   * Liga/desliga a prévia de link da mensagem ("remover prévia" do menu). Só o
+   * autor ou quem modera o canal — é conteúdo da mensagem de outra pessoa
+   * (g-emojis-midia).
+   */
+  async setSuppressEmbeds(
+    messageId: string,
+    userId: string,
+    suppress: boolean,
+  ): Promise<MessageDTO> {
+    const msg = await this.prisma.message.findUnique({ where: { id: messageId } });
+    if (!msg) throw new NotFoundException("Mensagem não encontrada");
+    await this.guilds.assertCanViewChannel(userId, msg.channelId);
+    if (msg.authorId !== userId) {
+      const canModerate = await this.guilds.canModerateChannel(userId, msg.channelId);
+      if (!canModerate) throw new ForbiddenException("Sem permissão para alterar esta mensagem");
+    }
+    await this.prisma.message.update({
+      where: { id: messageId },
+      data: { suppressEmbeds: suppress },
+    });
     return this.getDTO(messageId);
   }
 

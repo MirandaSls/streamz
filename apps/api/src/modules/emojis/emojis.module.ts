@@ -17,7 +17,7 @@ import { StorageModule } from "../storage/storage.module";
   imports: [AuthModule, GuildsModule, RealtimeModule, StorageModule],
   controllers: [EmojisController, StickersController],
   providers: [EmojisService, StickersService],
-  // StickersService: o envio de mensagem valida a figurinha antes de vincular
-  exports: [StickersService],
+  // o envio de mensagem valida figurinha e emoji de reação antes de gravar
+  exports: [StickersService, EmojisService],
 })
 export class EmojisModule {}

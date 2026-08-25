@@ -181,6 +181,18 @@ export class EmojisService {
     return { body: await this.storage.get(row.key), contentType: row.contentType };
   }
 
+  /**
+   * O emoji que uma reação pode usar: precisa existir e o autor precisa ser
+   * membro do servidor dono dele. Sem isso, um id vazado deixaria reagir com o
+   * emoji de um servidor fechado — a reação carrega `<:nome:id>` para todo mundo.
+   */
+  async assertPodeUsar(userId: string, emojiId: string) {
+    const row = await this.prisma.customEmoji.findUnique({ where: { id: emojiId } });
+    if (!row) throw new NotFoundException("Emoji não encontrado");
+    await this.guilds.assertMember(userId, row.guildId);
+    return row;
+  }
+
   /** Lista crua de um servidor, sem checar associação (uso interno). */
   private async doGuild(guildId: string): Promise<CustomEmoji[]> {
     const rows = await this.prisma.customEmoji.findMany({
