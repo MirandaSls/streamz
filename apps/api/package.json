@@ -8,6 +8,7 @@
     "start": "node dist/main.js",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "prisma": "prisma"
   },
   "dependencies": {
@@ -36,6 +37,7 @@
     "@nestjs/cli": "^10.4.4",
     "@types/node": "^20.14.0",
     "prisma": "^5.19.1",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.11"
   }
 }
