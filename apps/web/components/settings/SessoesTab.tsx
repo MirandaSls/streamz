@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Laptop, LogOut, Smartphone } from "lucide-react";
 import type { SessionInfo } from "@newdisc/shared";
-import { EmBreve, Section } from "@/components/settings/controls";
+import { EmBreve } from "@/components/settings/controls";
 import { api } from "@/lib/api";
 import { isApiError } from "@/lib/api-error";
 import { useT } from "@/lib/i18n";
@@ -65,17 +65,13 @@ export default function SessoesTab() {
   }
 
   if (indisponivel) {
-    return (
-      <Section title={t("aba.sessoes")}>
-        <EmBreve>{t("sessoes.indisponivel")}</EmBreve>
-      </Section>
-    );
+    return <EmBreve>{t("sessoes.indisponivel")}</EmBreve>;
   }
 
   const outras = (sessoes ?? []).filter((s) => !s.current);
 
   return (
-    <Section title={t("aba.sessoes")}>
+    <>
       <p className="mb-3 text-sm text-txt-muted">{t("sessoes.intro")}</p>
 
       {carregando && <p className="text-sm text-txt-muted">Carregando…</p>}
@@ -131,7 +127,7 @@ export default function SessoesTab() {
           {t("sessoes.encerrarTudo")}
         </button>
       )}
-    </Section>
+    </>
   );
 }
 

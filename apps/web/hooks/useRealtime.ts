@@ -51,6 +51,12 @@ export function useRealtime(currentUserId?: string): void {
   useEffect(() => {
     // ── e-configuracoes ── sem elas, tudo notifica (o padrão do contrato)
     void useNotifications.getState().load();
+    // Carga inicial das listas. Elas só eram refeitas na *re*conexão do socket,
+    // então recarregar a página (ou abrir um link direto) deixava o rail vazio:
+    // a lista só existia para quem tinha criado/entrado no servidor na mesma
+    // sessão. Fora do escopo do agente E, mas é o que faz o deep link funcionar.
+    if (useGuilds.getState().guilds.length === 0) void useGuilds.getState().load();
+    if (useDMs.getState().channels.length === 0) void useDMs.getState().refreshList();
 
     const unsubscribe = [
       on<Message>(WS_EVENTS.MESSAGE_NEW, (message) => {

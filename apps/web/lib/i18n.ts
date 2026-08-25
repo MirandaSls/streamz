@@ -48,6 +48,7 @@ const PT_BR = {
   "aparencia.zoom": "Zoom do app",
   "aparencia.zoomAjuda": "Também dá para usar Ctrl + = e Ctrl + −.",
   "aparencia.previa": "Prévia",
+  "aparencia.mensagens": "Mensagens",
 
   // ── acessibilidade ──
   "acess.reduzirMovimento": "Reduzir movimento",
@@ -77,6 +78,7 @@ const PT_BR = {
   "voz.desligarCamera": "Desligar câmera",
   "voz.semPermissao": "Sem permissão de mídia. Autorize o microfone/câmera no navegador.",
   "voz.padraoSistema": "Padrão do sistema",
+  "voz.dispositivos": "Dispositivos",
 
   // ── notificações ──
   "notif.desktop": "Notificações da área de trabalho",
@@ -97,6 +99,7 @@ const PT_BR = {
   "notif.ateReativar": "Até eu reativar",
   "notif.silenciadoAte": "Silenciado até",
   "notif.tocarSom": "Tocar som",
+  "notif.esteDispositivo": "Neste dispositivo",
 
   // ── teclado ──
   "teclado.intro": "Os atalhos abaixo valem em qualquer tela do app.",
@@ -173,6 +176,7 @@ const EN_US: Dicionario = {
   "aparencia.zoom": "App zoom",
   "aparencia.zoomAjuda": "You can also use Ctrl + = and Ctrl + −.",
   "aparencia.previa": "Preview",
+  "aparencia.mensagens": "Messages",
 
   "acess.reduzirMovimento": "Reduce motion",
   "acess.reduzirMovimentoAjuda": "Turns off interface transitions and animations.",
@@ -200,6 +204,7 @@ const EN_US: Dicionario = {
   "voz.desligarCamera": "Turn off camera",
   "voz.semPermissao": "No media permission. Allow the microphone/camera in your browser.",
   "voz.padraoSistema": "System default",
+  "voz.dispositivos": "Devices",
 
   "notif.desktop": "Desktop notifications",
   "notif.som": "Notification sound",
@@ -219,6 +224,7 @@ const EN_US: Dicionario = {
   "notif.ateReativar": "Until I turn it back on",
   "notif.silenciadoAte": "Muted until",
   "notif.tocarSom": "Play sound",
+  "notif.esteDispositivo": "On this device",
 
   "teclado.intro": "These shortcuts work anywhere in the app.",
   "atalho.quickSwitcher": "Open quick switcher",

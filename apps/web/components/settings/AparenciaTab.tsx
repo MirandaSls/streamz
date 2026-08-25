@@ -22,6 +22,7 @@ export default function AparenciaTab() {
       <Section title={t("aparencia.tema")}>
         <RadioCards
           legend={t("aparencia.tema")}
+          legendaOculta
           value={s.theme}
           onChange={() => undefined}
           options={[
@@ -33,7 +34,7 @@ export default function AparenciaTab() {
         />
       </Section>
 
-      <Section title={t("aba.aparencia")}>
+      <Section title={t("aparencia.mensagens")}>
         <Slider
           label={t("aparencia.escalaFonte")}
           value={s.fontScale}

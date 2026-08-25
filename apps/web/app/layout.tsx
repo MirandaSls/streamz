@@ -25,7 +25,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR" className={fonteSans.variable}>
+    // ── e-configuracoes ── `stores/settings` escreve style/class/lang no <html>
+    // antes da hidratação (a preferência tem de valer no primeiro quadro), e é
+    // exatamente a divergência que o React reclamaria aqui.
+    <html lang="pt-BR" className={fonteSans.variable} suppressHydrationWarning>
       <body className="font-sans">{children}</body>
     </html>
   );

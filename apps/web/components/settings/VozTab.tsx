@@ -128,7 +128,7 @@ export default function VozTab() {
 
   return (
     <>
-      <Section title={t("aba.voz")}>
+      <Section title={t("voz.dispositivos")}>
         <Select
           label={t("voz.entrada")}
           value={devices.inputId ?? ""}
@@ -164,6 +164,7 @@ export default function VozTab() {
       <Section title={t("voz.modo")}>
         <RadioCards<VoiceMode>
           legend={t("voz.modo")}
+          legendaOculta
           value={s.voiceMode}
           onChange={(voiceMode) => s.set({ voiceMode })}
           options={[

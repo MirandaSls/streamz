@@ -48,17 +48,55 @@ export function Row({
   );
 }
 
-/** Interruptor do Discord: trilho de 40px com a bolinha branca. */
+/** Só o trilho de 40px com a bolinha branca (o interruptor do Discord). */
+export function Switch({
+  id,
+  checked,
+  onChange,
+  label,
+}: {
+  id?: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  /** usado quando o interruptor não está ligado a um `<label>` por `id`. */
+  label?: string;
+}) {
+  return (
+    <button
+      id={id}
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => onChange(!checked)}
+      className={`relative h-6 w-10 shrink-0 rounded-full transition ${
+        checked ? "bg-green" : "bg-[#72767d]"
+      }`}
+    >
+      <span
+        aria-hidden="true"
+        className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-all ${
+          checked ? "left-5" : "left-1"
+        }`}
+      />
+    </button>
+  );
+}
+
+/** Linha completa: rótulo, descrição e interruptor. */
 export function Toggle({
   checked,
   onChange,
   label,
   hint,
+  extra,
 }: {
   checked: boolean;
   onChange: (value: boolean) => void;
   label: ReactNode;
   hint?: ReactNode;
+  /** botão auxiliar à direita do interruptor (ex.: ouvir o som). */
+  extra?: ReactNode;
 }) {
   const id = useId();
   return (
@@ -67,23 +105,10 @@ export function Toggle({
       hint={hint}
       htmlFor={id}
       control={
-        <button
-          id={id}
-          type="button"
-          role="switch"
-          aria-checked={checked}
-          onClick={() => onChange(!checked)}
-          className={`relative h-6 w-10 shrink-0 rounded-full transition ${
-            checked ? "bg-green" : "bg-[#72767d]"
-          }`}
-        >
-          <span
-            aria-hidden="true"
-            className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-all ${
-              checked ? "left-5" : "left-1"
-            }`}
-          />
-        </button>
+        <div className="flex items-center gap-2">
+          <Switch id={id} checked={checked} onChange={onChange} />
+          {extra}
+        </div>
       }
     />
   );
@@ -145,12 +170,16 @@ export interface Opcao<T extends string> {
 /** Escolha única em cartões (tema, modo de voz, idioma). */
 export function RadioCards<T extends string>({
   legend,
+  legendaOculta = false,
   value,
   options,
   onChange,
   columns = 2,
 }: {
   legend: string;
+  /** some da tela quando o título da seção já diz a mesma coisa — o leitor de
+   *  tela continua ouvindo, que é o que o `fieldset` precisa. */
+  legendaOculta?: boolean;
   value: T;
   options: Opcao<T>[];
   onChange: (value: T) => void;
@@ -158,7 +187,11 @@ export function RadioCards<T extends string>({
 }) {
   return (
     <fieldset className="border-b border-[#3f4147] py-3 last:border-b-0">
-      <legend className="mb-2 text-sm font-medium text-txt-primary">{legend}</legend>
+      <legend
+        className={legendaOculta ? "sr-only" : "mb-2 text-sm font-medium text-txt-primary"}
+      >
+        {legend}
+      </legend>
       <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
         {options.map((opcao) => {
           const ativo = opcao.value === value;

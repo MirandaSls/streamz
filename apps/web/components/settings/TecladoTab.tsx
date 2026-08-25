@@ -1,6 +1,5 @@
 "use client";
 
-import { Section } from "@/components/settings/controls";
 import { useT, type ChaveDeTexto } from "@/lib/i18n";
 import { SHORTCUTS, formatShortcut } from "@/lib/shortcuts";
 
@@ -15,7 +14,7 @@ export default function TecladoTab() {
   const t = useT();
 
   return (
-    <Section title={t("aba.teclado")}>
+    <>
       <p className="mb-3 text-sm text-txt-muted">{t("teclado.intro")}</p>
       <dl>
         {SHORTCUTS.map((spec) => (
@@ -37,6 +36,6 @@ export default function TecladoTab() {
           </div>
         ))}
       </dl>
-    </Section>
+    </>
   );
 }

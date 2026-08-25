@@ -1,6 +1,6 @@
 "use client";
 
-import { RadioCards, Section } from "@/components/settings/controls";
+import { RadioCards } from "@/components/settings/controls";
 import { LOCALES, NOMES_DE_IDIOMA, useT } from "@/lib/i18n";
 import { useSettings, type Locale } from "@/stores/settings";
 
@@ -14,7 +14,7 @@ export default function IdiomaTab() {
   const set = useSettings((s) => s.set);
 
   return (
-    <Section title={t("aba.idioma")}>
+    <>
       <RadioCards<Locale>
         legend={t("idioma.escolha")}
         value={locale}
@@ -22,6 +22,6 @@ export default function IdiomaTab() {
         options={LOCALES.map((l) => ({ value: l, label: NOMES_DE_IDIOMA[l] }))}
       />
       <p className="pt-3 text-xs text-txt-muted">{t("idioma.ajuda")}</p>
-    </Section>
+    </>
   );
 }

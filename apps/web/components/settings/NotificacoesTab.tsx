@@ -30,29 +30,27 @@ export default function NotificacoesTab() {
 
   return (
     <>
-      <Section title={t("aba.notificacoes")}>
+      <Section title={t("notif.esteDispositivo")}>
         <Toggle
           label={t("notif.desktop")}
           checked={s.desktopNotifications}
           onChange={(desktopNotifications) => s.set({ desktopNotifications })}
         />
-        <div className="flex items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <Toggle
-              label={t("notif.som")}
-              checked={s.notificationSound}
-              onChange={(notificationSound) => s.set({ notificationSound })}
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => tocarSomDeNotificacao(s.outputVolume / 100)}
-            aria-label={t("notif.tocarSom")}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-[4px] text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
-          >
-            <Volume2 size={18} />
-          </button>
-        </div>
+        <Toggle
+          label={t("notif.som")}
+          checked={s.notificationSound}
+          onChange={(notificationSound) => s.set({ notificationSound })}
+          extra={
+            <button
+              type="button"
+              onClick={() => tocarSomDeNotificacao(s.outputVolume / 100)}
+              aria-label={t("notif.tocarSom")}
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-[4px] text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
+            >
+              <Volume2 size={18} />
+            </button>
+          }
+        />
         <Toggle
           label={t("notif.badge")}
           checked={s.badgeCount}
@@ -69,6 +67,7 @@ export default function NotificacoesTab() {
       <Section title={t("notif.padrao")}>
         <RadioCards<NotificationLevel>
           legend={t("notif.padrao")}
+          legendaOculta
           columns={3}
           value={global?.level ?? "ALL"}
           onChange={(level) => void setGlobalLevel(level)}
