@@ -258,6 +258,18 @@ export const WS_EVENTS = {
   MEMBER_JOINED: "member.joined",
   MEMBER_LEFT: "member.left",
   USER_UPDATED: "user.updated",
+  // ── f-voz ──
+  // cliente → servidor
+  VOICE_JOIN: "voice.join",
+  VOICE_LEAVE: "voice.leave",
+  VOICE_UPDATE: "voice.update",
+  CALL_ACCEPT: "call.accept",
+  CALL_DECLINE: "call.decline",
+  CALL_END: "call.end",
+  // servidor → cliente
+  VOICE_STATE: "voice.state",
+  CALL_RING: "call.ring",
+  CALL_ENDED: "call.ended",
 } as const;
 
 /** Teto de caracteres de uma mensagem (canal ou DM). */
@@ -401,4 +413,101 @@ export interface VoiceTokenResponse {
   token: string;
   url: string;
   room: string;
+}
+
+// ── f-voz ────────────────────────────────────────────────────
+/**
+ * Estado de voz de um usuário num canal, do jeito que o gateway transmite.
+ *
+ * Vale tanto para canal de voz de servidor (`guildId` preenchido) quanto para
+ * chamada em conversa direta (`guildId` null) — a "sala" é sempre um canal, na
+ * mesma linha da ADR-0001. `connected: false` é a saída: o cliente remove o
+ * participante em vez de manter um estado zumbi.
+ */
+export interface VoiceStateEvent {
+  channelId: string;
+  guildId: string | null;
+  user: PublicUser;
+  connected: boolean;
+  muted: boolean;
+  deafened: boolean;
+  video: boolean;
+  screen: boolean;
+}
+
+/** Flags que o próprio usuário controla e transmite (`voice.update`). */
+export type VoiceFlags = Pick<VoiceStateEvent, "muted" | "deafened" | "video" | "screen">;
+
+export const VOICE_FLAGS_PADRAO: VoiceFlags = {
+  muted: false,
+  deafened: false,
+  video: false,
+  screen: false,
+};
+
+/** Tempo que uma chamada em DM toca antes de desistir sozinha. */
+export const CALL_RING_TIMEOUT_MS = 30_000;
+
+/** Folga entre soltar a tecla de push-to-talk e o microfone fechar de novo. */
+export const PTT_RELEASE_MS = 200;
+
+/** Presets de qualidade do compartilhamento de tela (o seletor do botão). */
+export type ScreenQuality = "720p30" | "1080p30" | "1080p60";
+
+export interface ScreenQualityPreset {
+  label: string;
+  width: number;
+  height: number;
+  frameRate: number;
+}
+
+export const SCREEN_QUALITY: Record<ScreenQuality, ScreenQualityPreset> = {
+  "720p30": { label: "720p · 30 fps", width: 1280, height: 720, frameRate: 30 },
+  "1080p30": { label: "1080p · 30 fps", width: 1920, height: 1080, frameRate: 30 },
+  "1080p60": { label: "1080p · 60 fps", width: 1920, height: 1080, frameRate: 60 },
+};
+
+/** Quem está numa chamada e o token de mídia, quando o LiveKit está configurado. */
+export interface CallStartResponse {
+  channelId: string;
+  /** null quando o LiveKit não está configurado: a chamada toca, mas não conecta mídia. */
+  voice: VoiceTokenResponse | null;
+  /** estado de voz de quem já está na sala (inclusive quem acabou de entrar). */
+  states: VoiceStateEvent[];
+  /** participantes para quem o `call.ring` foi emitido. */
+  ringing: PublicUser[];
+}
+
+/** Alguém está chamando numa conversa direta. */
+export interface CallRingEvent {
+  channelId: string;
+  from: PublicUser;
+}
+
+/** Fim de uma chamada em DM, do ponto de vista de quem recebe o aviso. */
+export interface CallEndedEvent {
+  channelId: string;
+  /** quem encerrou/recusou (null = a chamada expirou sem resposta). */
+  by: PublicUser | null;
+  reason: "declined" | "ended" | "timeout";
+}
+
+export const voiceJoinSchema = z.object({ channelId: idSchema });
+export type VoiceJoinPayload = z.infer<typeof voiceJoinSchema>;
+
+export const voiceUpdateSchema = z.object({
+  muted: z.boolean(),
+  deafened: z.boolean(),
+  video: z.boolean(),
+  screen: z.boolean(),
+});
+export type VoiceUpdatePayload = z.infer<typeof voiceUpdateSchema>;
+
+/** `call.decline` / `call.end`: só o canal da conversa. */
+export const callSchema = z.object({ channelId: idSchema });
+export type CallPayload = z.infer<typeof callSchema>;
+
+/** true se o canal é uma sala de voz possível (canal de voz ou conversa direta). */
+export function isVoiceCapable(c: Pick<Channel, "type">): boolean {
+  return c.type === "VOICE" || isDirectChannel(c);
 }
