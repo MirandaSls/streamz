@@ -180,6 +180,25 @@ export function matchesShortcut(event: TeclaPressionada, combo: string): boolean
   return true;
 }
 
+/**
+ * Combinação textual a partir de um evento — o caminho inverso do parser, para
+ * gravar um atalho que o usuário acabou de apertar (a tecla do apertar-para-
+ * falar). Devolve null enquanto só há modificador pressionado: "Ctrl" sozinho
+ * não é atalho, e sem isso a captura terminaria no primeiro Shift.
+ */
+export function shortcutFromEvent(event: TeclaPressionada): string | null {
+  const key = normalizeKey(event.key);
+  if (key in MODIFICADORES) return null;
+  const partes: string[] = [];
+  if (event.ctrlKey) partes.push("Ctrl");
+  if (event.altKey) partes.push("Alt");
+  if (event.shiftKey) partes.push("Shift");
+  if (event.metaKey) partes.push("Meta");
+  // letra em maiúscula só por leitura ("Ctrl+Shift+M"); o parser normaliza
+  partes.push(key === " " ? "Space" : key.length === 1 ? key.toUpperCase() : key);
+  return partes.join("+");
+}
+
 /** Primeira ação cujo atalho casa com o evento (null quando nenhuma casa). */
 export function actionForEvent(
   event: TeclaPressionada,

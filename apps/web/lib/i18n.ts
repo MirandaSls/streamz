@@ -79,6 +79,8 @@ const PT_BR = {
   "voz.semPermissao": "Sem permissão de mídia. Autorize o microfone/câmera no navegador.",
   "voz.padraoSistema": "Padrão do sistema",
   "voz.dispositivos": "Dispositivos",
+  "voz.gravarTecla": "Gravar atalho",
+  "voz.apertePara": "Aperte a combinação…",
 
   // ── notificações ──
   "notif.desktop": "Notificações da área de trabalho",
@@ -205,6 +207,8 @@ const EN_US: Dicionario = {
   "voz.semPermissao": "No media permission. Allow the microphone/camera in your browser.",
   "voz.padraoSistema": "System default",
   "voz.dispositivos": "Devices",
+  "voz.gravarTecla": "Record shortcut",
+  "voz.apertePara": "Press the combination…",
 
   "notif.desktop": "Desktop notifications",
   "notif.som": "Notification sound",

@@ -6,6 +6,7 @@ import {
   matchesShortcut,
   normalizeKey,
   parseShortcut,
+  shortcutFromEvent,
 } from "@/lib/shortcuts";
 
 /** Evento de teclado mínimo, com todos os modificadores desligados. */
@@ -124,6 +125,24 @@ describe("SHORTCUTS", () => {
         vistos.add(chave);
       }
     }
+  });
+});
+
+describe("shortcutFromEvent", () => {
+  it("grava a combinação apertada", () => {
+    expect(shortcutFromEvent(tecla("M", { ctrl: true, shift: true }))).toBe("Ctrl+Shift+M");
+    expect(shortcutFromEvent(tecla(" ", { ctrl: true }))).toBe("Ctrl+Space");
+  });
+
+  it("ignora modificador sozinho", () => {
+    expect(shortcutFromEvent(tecla("Control", { ctrl: true }))).toBeNull();
+    expect(shortcutFromEvent(tecla("Shift", { shift: true }))).toBeNull();
+  });
+
+  it("volta a casar com o próprio evento", () => {
+    const evento = tecla("F", { alt: true });
+    const combo = shortcutFromEvent(evento)!;
+    expect(matchesShortcut(evento, combo)).toBe(true);
   });
 });
 

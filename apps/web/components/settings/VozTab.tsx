@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Mic, Video } from "lucide-react";
 import { RadioCards, Section, Select, Slider } from "@/components/settings/controls";
 import { useT } from "@/lib/i18n";
-import { formatShortcut } from "@/lib/shortcuts";
+import { formatShortcut, shortcutFromEvent } from "@/lib/shortcuts";
 import { useSettings, type VoiceMode } from "@/stores/settings";
 import { useVoiceDevices } from "@/stores/voiceDevices";
 
@@ -28,6 +28,7 @@ export default function VozTab() {
   const [nivel, setNivel] = useState(0);
   const [testando, setTestando] = useState(false);
   const [camera, setCamera] = useState(false);
+  const [gravandoTecla, setGravandoTecla] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const micStream = useRef<MediaStream | null>(null);
@@ -56,6 +57,26 @@ export default function VozTab() {
     if (videoRef.current) videoRef.current.srcObject = null;
     setCamera(false);
   }, []);
+
+  // gravar a tecla do apertar-para-falar: o listener vive só enquanto a captura
+  // está ligada, em captura, para pegar a combinação antes de qualquer atalho
+  useEffect(() => {
+    if (!gravandoTecla) return;
+    function onKeyDown(event: KeyboardEvent) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === "Escape") {
+        setGravandoTecla(false);
+        return;
+      }
+      const combo = shortcutFromEvent(event);
+      if (!combo) return; // só modificador ainda: continua esperando
+      useSettings.getState().set({ pushToTalkKey: combo });
+      setGravandoTecla(false);
+    }
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [gravandoTecla]);
 
   // sair da aba (ou do modal) tem de fechar microfone e câmera
   useEffect(() => () => {
@@ -173,12 +194,20 @@ export default function VozTab() {
           ]}
         />
         {s.voiceMode === "ptt" && (
-          <p className="py-3 text-sm text-txt-muted">
-            {t("voz.pttTecla")}:{" "}
+          <div className="flex items-center gap-3 py-3 text-sm text-txt-muted">
+            <span>{t("voz.pttTecla")}:</span>
             <kbd className="rounded-[3px] bg-rail px-1.5 py-0.5 font-mono text-xs text-txt-normal">
-              {formatShortcut(s.pushToTalkKey)}
+              {gravandoTecla ? t("voz.apertePara") : formatShortcut(s.pushToTalkKey)}
             </kbd>
-          </p>
+            <button
+              type="button"
+              onClick={() => setGravandoTecla((g) => !g)}
+              aria-pressed={gravandoTecla}
+              className="h-8 rounded-[3px] bg-[#4e5058] px-2.5 text-xs font-medium text-txt-normal hover:bg-[#6d6f78]"
+            >
+              {t("voz.gravarTecla")}
+            </button>
+          </div>
         )}
       </Section>
 
