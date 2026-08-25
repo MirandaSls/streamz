@@ -68,7 +68,7 @@ Duas formas de rodar — escolha uma:
 
 ## 3. Rust / cargo (bloqueia o build do desktop — Dia 5)
 - [x] ~~Instalar via [rustup.rs](https://rustup.rs)~~ — feito em 2026-08-25
-      (cargo 1.98). O `cargo` fica em `%USERPROFILE%\.cargoin`; se um terminal
+      (cargo 1.98). O `cargo` fica em `%USERPROFILE%\.cargo\bin`; se um terminal
       antigo não achar, reabra.
 - [x] ~~Gerar os ícones do app~~ — feito a partir de `apps/desktop/logo.svg`
       (balão do rail sobre o blurple). Para trocar o logo, edite o SVG e rode
