@@ -510,16 +510,21 @@ export default function Composer({
               <div key={a.id} className="relative h-[184px] w-[184px] rounded-lg bg-panel p-2">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={a.url} alt={a.filename} className="h-full w-full rounded object-contain" />
-                <Tooltip label="Remover">
-                  <button
-                    type="button"
-                    onClick={() => setProntos((prev) => prev.filter((x) => x.id !== a.id))}
-                    aria-label={`Remover ${a.filename}`}
-                    className="absolute -right-2 -top-2 grid h-8 w-8 place-items-center rounded bg-panel text-red shadow-high hover:bg-hov"
-                  >
-                    <X size={18} />
-                  </button>
-                </Tooltip>
+                {/* quem sai do fluxo é este span: o wrapper do Tooltip já é
+                    `relative`, então nem o botão de dentro nem a classe dele
+                    conseguiriam se posicionar no canto do cartão */}
+                <span className="absolute -right-2 -top-2">
+                  <Tooltip label="Remover">
+                    <button
+                      type="button"
+                      onClick={() => setProntos((prev) => prev.filter((x) => x.id !== a.id))}
+                      aria-label={`Remover ${a.filename}`}
+                      className="grid h-8 w-8 place-items-center rounded bg-panel text-red shadow-high hover:bg-hov"
+                    >
+                      <X size={18} />
+                    </button>
+                  </Tooltip>
+                </span>
               </div>
             ))}
           </div>
@@ -702,9 +707,9 @@ function PreviaAnexo({
       >
         {anexo.nome}
       </button>
-      <div className="flex items-center justify-between text-xs text-txt-muted">
-        <span>{formatBytes(anexo.file.size)}</span>
-        <label className="flex cursor-pointer items-center gap-1">
+      <div className="flex items-center justify-between gap-1 text-[11px] text-txt-muted">
+        <span className="truncate">{formatBytes(anexo.file.size)}</span>
+        <label className="flex shrink-0 cursor-pointer items-center gap-1">
           <input
             type="checkbox"
             checked={anexo.spoiler}
@@ -728,16 +733,18 @@ function PreviaAnexo({
         </div>
       )}
 
-      <Tooltip label="Remover anexo">
-        <button
-          type="button"
-          onClick={onRemover}
-          aria-label={`Remover ${anexo.nome}`}
-          className="absolute -right-2 -top-2 grid h-8 w-8 place-items-center rounded bg-panel text-red shadow-high hover:bg-hov"
-        >
-          <X size={18} />
-        </button>
-      </Tooltip>
+      <span className="absolute -right-2 -top-2">
+        <Tooltip label="Remover anexo">
+          <button
+            type="button"
+            onClick={onRemover}
+            aria-label={`Remover ${anexo.nome}`}
+            className="grid h-8 w-8 place-items-center rounded bg-panel text-red shadow-high hover:bg-hov"
+          >
+            <X size={18} />
+          </button>
+        </Tooltip>
+      </span>
     </div>
   );
 }

@@ -20,6 +20,7 @@ import { useAuth } from "@/stores/auth";
 import { useActiveChannel, useChannels, useVoiceChannel } from "@/stores/channels";
 import { useActiveDM } from "@/stores/dms";
 import { useEmojis } from "@/stores/emojis";
+import { useGuilds } from "@/stores/guilds";
 import { useMessages } from "@/stores/messages";
 import { useUI } from "@/stores/ui";
 
@@ -48,10 +49,15 @@ export default function AppPage() {
 
   // sessão
   useEffect(() => loadFromStorage(), [loadFromStorage]);
-  // emojis e figurinhas de todos os meus servidores, uma vez por sessão
-  // (depois disso quem atualiza é `emoji.updated`/`sticker.updated`)
+  // Carga inicial ao entrar no app. A lista de servidores só era buscada no
+  // `onReconnect` — que, por desenho, não dispara na primeira conexão —, então
+  // abrir/recarregar o app deixava o rail vazio até o socket cair e voltar.
+  // Emojis e figurinhas vêm junto; depois quem os atualiza é
+  // `emoji.updated`/`sticker.updated`.
   useEffect(() => {
-    if (user) void useEmojis.getState().load();
+    if (!user) return;
+    void useGuilds.getState().load();
+    void useEmojis.getState().load();
   }, [user]);
   useEffect(() => {
     if (!user && typeof window !== "undefined" && !localStorage.getItem("user")) {
