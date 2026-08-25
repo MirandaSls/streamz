@@ -15,6 +15,10 @@ import { VoiceModule } from "./modules/voice/voice.module";
 import { StorageModule } from "./modules/storage/storage.module";
 import { UploadsModule } from "./modules/uploads/uploads.module";
 import { MaintenanceModule } from "./modules/maintenance/maintenance.module";
+import { ReadStateModule } from "./modules/read-state/read-state.module";
+import { EmbedsModule } from "./modules/embeds/embeds.module";
+import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis";
+import { redisClient } from "./modules/realtime/redis";
 import { HealthController } from "./health.controller";
 import { DEFAULT_THROTTLE } from "./common/throttle";
 import { validateEnv } from "./common/env";
@@ -26,7 +30,16 @@ import { validateEnv } from "./common/env";
       envFilePath: ["../../.env", ".env"],
       validate: validateEnv,
     }),
-    ThrottlerModule.forRoot([DEFAULT_THROTTLE]),
+    // com REDIS_URL o teto por IP vale para todas as instâncias; sem, por processo
+    ThrottlerModule.forRootAsync({
+      useFactory: () => {
+        const redis = redisClient();
+        return {
+          throttlers: [DEFAULT_THROTTLE],
+          ...(redis ? { storage: new ThrottlerStorageRedisService(redis) } : {}),
+        };
+      },
+    }),
     PrismaModule,
     AuthModule,
     UsersModule,
@@ -40,6 +53,8 @@ import { validateEnv } from "./common/env";
     StorageModule,
     UploadsModule,
     MaintenanceModule,
+    ReadStateModule,
+    EmbedsModule,
   ],
   controllers: [HealthController],
   // guard global: o teto padrão vale para toda rota; ver common/throttle.ts

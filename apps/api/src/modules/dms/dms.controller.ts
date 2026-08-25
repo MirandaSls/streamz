@@ -51,7 +51,7 @@ export class DMsController {
 
   @Get()
   list(@CurrentUser() user: JwtPayload) {
-    return this.dms.list(user.sub);
+    return this.dms.list(user.sub, user.username);
   }
 
   /** Uma conversa específica, na visão de quem pede. */

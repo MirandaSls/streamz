@@ -1,4 +1,9 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { WS_EVENTS } from "@newdisc/shared";
 import type {
   ChannelType,
@@ -6,11 +11,11 @@ import type {
   GuildMemberView,
   GuildWithChannels,
   MemberRole,
-  UserStatus,
 } from "@newdisc/shared";
-import { toChannelDTO, toGuildDTO } from "../../common/dto";
+import { toChannelDTO, toGuildDTO, toPublicUser } from "../../common/dto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { RealtimeService } from "../realtime/realtime.service";
+import { ReadStateService } from "../read-state/read-state.service";
 
 /** O que `assertCanViewChannel` seleciona do canal — o suficiente para decidir. */
 export interface ChannelAccessRow {
@@ -30,11 +35,15 @@ export type ChannelAccess =
   | { tipo: "guild"; channel: ChannelAccessRow; member: { role: MemberRole } }
   | { tipo: "dm"; channel: ChannelAccessRow };
 
+/** O mínimo de um canal para decidir quem o enxerga. */
+type ChannelRow = { id: string; guildId: string | null; private: boolean };
+
 @Injectable()
 export class GuildsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeService,
+    private readonly readState: ReadStateService,
   ) {}
 
   /** Cria o servidor, registra o dono como membro OWNER e um canal #geral. */
@@ -48,37 +57,54 @@ export class GuildsService {
       },
       include: { channels: true },
     });
-    return { ...toGuildDTO(guild), channels: guild.channels.map(toChannelDTO) };
+    this.realtime.joinGuildRoom(ownerId, guild.id);
+    for (const c of guild.channels) this.realtime.joinChannelRooms([ownerId], c.id);
+    return { ...toGuildDTO(guild), channels: guild.channels.map((c) => toChannelDTO(c)) };
   }
 
-  /** Servidores em que o usuário é membro. */
-  async listForUser(userId: string): Promise<Guild[]> {
+  /** Servidores em que o usuário é membro, com "há novidade?" e menções. */
+  async listForUser(userId: string, username: string): Promise<Guild[]> {
     const guilds = await this.prisma.guild.findMany({
       where: { members: { some: { userId } } },
       orderBy: { createdAt: "asc" },
     });
-    return guilds.map(toGuildDTO);
+    const visible = await this.visibleChannelsForUser(userId);
+    const summaries = await this.readState.summaries(
+      userId,
+      username,
+      visible.map((c) => c.id),
+    );
+    return guilds.map((g) => {
+      const mine = visible
+        .filter((c) => c.guildId === g.id)
+        .map((c) => summaries.get(c.id))
+        .filter((s): s is NonNullable<typeof s> => !!s);
+      return toGuildDTO(g, ReadStateService.aggregate(mine));
+    });
   }
 
-  async getWithChannels(userId: string, guildId: string): Promise<GuildWithChannels> {
+  async getWithChannels(
+    userId: string,
+    guildId: string,
+    username: string,
+  ): Promise<GuildWithChannels> {
     const guild = await this.prisma.guild.findUnique({
       where: { id: guildId },
       include: { channels: { orderBy: { position: "asc" } } },
     });
     if (!guild) throw new NotFoundException("Servidor não encontrado");
     const member = await this.assertMember(userId, guildId);
-
-    // OWNER/ADMIN veem tudo; MEMBER não vê canais privados fora da sua allowlist
-    let channels = guild.channels;
-    if (!this.isPrivileged(member.role)) {
-      const allowed = await this.prisma.channelMember.findMany({
-        where: { userId, channel: { guildId } },
-        select: { channelId: true },
-      });
-      const allowedSet = new Set(allowed.map((a) => a.channelId));
-      channels = channels.filter((c) => !c.private || allowedSet.has(c.id));
-    }
-    return { ...toGuildDTO(guild), channels: channels.map(toChannelDTO) };
+    const channels = await this.filterVisible(userId, member.role, guild.channels);
+    const summaries = await this.readState.summaries(
+      userId,
+      username,
+      channels.map((c) => c.id),
+    );
+    const dtos = channels.map((c) => toChannelDTO(c, summaries.get(c.id)));
+    return {
+      ...toGuildDTO(guild, ReadStateService.aggregate(summaries.values())),
+      channels: dtos,
+    };
   }
 
   async listMembers(userId: string, guildId: string): Promise<GuildMemberView[]> {
@@ -88,15 +114,7 @@ export class GuildsService {
       include: { user: true },
       orderBy: { joinedAt: "asc" },
     });
-    return members.map((m) => ({
-      role: m.role as MemberRole,
-      user: {
-        id: m.user.id,
-        username: m.user.username,
-        avatarUrl: m.user.avatarUrl,
-        status: m.user.status as UserStatus,
-      },
-    }));
+    return members.map((m) => ({ role: m.role, user: toPublicUser(m.user) }));
   }
 
   async assertMember(userId: string, guildId: string) {
@@ -107,7 +125,79 @@ export class GuildsService {
     return member;
   }
 
-  // ── autorização por canal (privado / somente-leitura) ──────────
+  // ── visibilidade de canais ─────────────────────────────────
+
+  /** Dos canais de um servidor, os que este membro enxerga. */
+  private async filterVisible<T extends ChannelRow>(
+    userId: string,
+    role: MemberRole,
+    channels: T[],
+  ): Promise<T[]> {
+    if (this.isPrivileged(role)) return channels;
+    const privados = channels.filter((c) => c.private);
+    if (privados.length === 0) return channels;
+    const allowed = await this.prisma.channelMember.findMany({
+      where: { userId, channelId: { in: privados.map((c) => c.id) } },
+      select: { channelId: true },
+    });
+    const allowedSet = new Set(allowed.map((a) => a.channelId));
+    return channels.filter((c) => !c.private || allowedSet.has(c.id));
+  }
+
+  /**
+   * Todos os canais que o usuário pode ver, em todos os servidores dele, mais
+   * as conversas diretas. É o que o gateway usa para pôr o socket nas salas no
+   * connect — e o que alimenta o "não lido" do rail.
+   */
+  async visibleChannelsForUser(userId: string): Promise<ChannelRow[]> {
+    const memberships = await this.prisma.guildMember.findMany({
+      where: { userId },
+      select: {
+        role: true,
+        guild: { select: { channels: { select: { id: true, guildId: true, private: true } } } },
+      },
+    });
+    const out: ChannelRow[] = [];
+    for (const m of memberships) {
+      out.push(...(await this.filterVisible(userId, m.role, m.guild.channels)));
+    }
+    const dms = await this.prisma.channel.findMany({
+      where: { guildId: null, members: { some: { userId } } },
+      select: { id: true, guildId: true, private: true },
+    });
+    return [...out, ...dms];
+  }
+
+  /** Ids dos usuários que enxergam um canal (para emitir eventos de estrutura). */
+  async viewersOfChannel(channel: ChannelRow): Promise<string[]> {
+    if (!channel.guildId) {
+      const members = await this.prisma.channelMember.findMany({
+        where: { channelId: channel.id },
+        select: { userId: true },
+      });
+      return members.map((m) => m.userId);
+    }
+    if (!channel.private) {
+      const members = await this.prisma.guildMember.findMany({
+        where: { guildId: channel.guildId },
+        select: { userId: true },
+      });
+      return members.map((m) => m.userId);
+    }
+    const [mods, allowed] = await Promise.all([
+      this.prisma.guildMember.findMany({
+        where: { guildId: channel.guildId, role: { in: ["OWNER", "ADMIN"] } },
+        select: { userId: true },
+      }),
+      this.prisma.channelMember.findMany({
+        where: { channelId: channel.id },
+        select: { userId: true },
+      }),
+    ]);
+    return Array.from(new Set([...mods, ...allowed].map((m) => m.userId)));
+  }
+
+  // ── autorização por canal ──────────────────────────────────
 
   /**
    * Pode ver/entrar no canal. Ponto único de autorização por canal, para
@@ -165,6 +255,79 @@ export class GuildsService {
 
   private isPrivileged(role: MemberRole): boolean {
     return role === "OWNER" || role === "ADMIN";
+  }
+
+  // ── ciclo de vida do servidor ──────────────────────────────
+
+  /** Sai do servidor. O dono não sai — apaga (transferência de posse não existe no MVP). */
+  async leave(userId: string, guildId: string) {
+    const member = await this.assertMember(userId, guildId);
+    if (member.role === "OWNER") {
+      throw new BadRequestException("O dono não pode sair do servidor — apague-o");
+    }
+    await this.prisma.guildMember.delete({ where: { userId_guildId: { userId, guildId } } });
+    await this.detachFromGuildRooms(guildId, userId);
+    // outras abas do próprio usuário também precisam ver o servidor sumir
+    this.realtime.emitToUser(userId, WS_EVENTS.GUILD_REMOVED, { guildId, reason: "left" });
+    return { left: guildId };
+  }
+
+  /** Apaga o servidor (só o dono). Canais, mensagens e convites vão em cascata. */
+  async remove(userId: string, guildId: string) {
+    const guild = await this.prisma.guild.findUnique({ where: { id: guildId } });
+    if (!guild) throw new NotFoundException("Servidor não encontrado");
+    if (guild.ownerId !== userId) throw new ForbiddenException("Só o dono apaga o servidor");
+    const members = await this.prisma.guildMember.findMany({
+      where: { guildId },
+      select: { userId: true },
+    });
+    await this.prisma.guild.delete({ where: { id: guildId } });
+    const ids = members.map((m) => m.userId);
+    this.realtime.emitToUsers(ids, WS_EVENTS.GUILD_REMOVED, { guildId, reason: "deleted" });
+    for (const id of ids) this.realtime.leaveGuildRoom(id, guildId);
+    return { deleted: guildId };
+  }
+
+  /** Promove a ADMIN ou rebaixa a MEMBER. Só o dono; o dono não muda de papel. */
+  async setRole(actorId: string, guildId: string, targetUserId: string, role: MemberRole) {
+    const guild = await this.prisma.guild.findUnique({ where: { id: guildId } });
+    if (!guild) throw new NotFoundException("Servidor não encontrado");
+    if (guild.ownerId !== actorId) throw new ForbiddenException("Só o dono altera papéis");
+    if (role === "OWNER" || targetUserId === actorId) {
+      throw new BadRequestException("O papel de dono não é transferível por aqui");
+    }
+    const target = await this.prisma.guildMember.findUnique({
+      where: { userId_guildId: { userId: targetUserId, guildId } },
+    });
+    if (!target) throw new NotFoundException("Membro não encontrado");
+    await this.prisma.guildMember.update({
+      where: { userId_guildId: { userId: targetUserId, guildId } },
+      data: { role },
+    });
+    this.realtime.emitToGuild(guildId, WS_EVENTS.MEMBER_UPDATED, {
+      guildId,
+      userId: targetUserId,
+      role,
+    });
+    // virou/deixou de ser moderação: entra/sai das salas dos canais privados
+    const privados = await this.prisma.channel.findMany({
+      where: { guildId, private: true },
+      select: { id: true },
+    });
+    if (role === "ADMIN") {
+      for (const c of privados) this.realtime.joinChannelRooms([targetUserId], c.id);
+    } else {
+      const allowed = await this.prisma.channelMember.findMany({
+        where: { userId: targetUserId, channelId: { in: privados.map((c) => c.id) } },
+        select: { channelId: true },
+      });
+      const keep = new Set(allowed.map((a) => a.channelId));
+      this.realtime.leaveChannelRooms(
+        targetUserId,
+        privados.map((c) => c.id).filter((id) => !keep.has(id)),
+      );
+    }
+    return { userId: targetUserId, role };
   }
 
   // ── moderação ──────────────────────────────────────────────
@@ -228,22 +391,18 @@ export class GuildsService {
     return bans.map((b) => ({
       reason: b.reason,
       createdAt: b.createdAt.toISOString(),
-      user: {
-        id: b.user.id,
-        username: b.user.username,
-        avatarUrl: b.user.avatarUrl,
-        status: b.user.status as UserStatus,
-      },
+      user: toPublicUser(b.user),
     }));
   }
 
-  /** Tira os sockets do ex-membro das salas de todos os canais do servidor. */
+  /** Tira os sockets do ex-membro das salas do servidor e de todos os canais dele. */
   private async detachFromGuildRooms(guildId: string, userId: string) {
     const channels = await this.prisma.channel.findMany({
       where: { guildId },
       select: { id: true },
     });
     this.realtime.leaveChannelRooms(userId, channels.map((c) => c.id));
+    this.realtime.leaveGuildRoom(userId, guildId);
   }
 
   /** O ator precisa ser OWNER ou ADMIN do servidor. */

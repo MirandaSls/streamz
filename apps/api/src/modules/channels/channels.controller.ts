@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   UseGuards,
 } from "@nestjs/common";
@@ -43,6 +44,17 @@ class CreateChannelDto {
   memberIds?: string[];
 }
 
+class UpdateChannelDto {
+  @IsOptional()
+  @IsString()
+  @Length(1, 64)
+  name?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  readOnly?: boolean;
+}
+
 class ChannelMemberDto {
   @IsString()
   userId!: string;
@@ -69,6 +81,25 @@ export class ChannelsController {
   @Get()
   list(@CurrentUser() user: JwtPayload, @Param("guildId") guildId: string) {
     return this.channels.listForGuild(user.sub, guildId);
+  }
+
+  @Patch(":channelId")
+  update(
+    @CurrentUser() user: JwtPayload,
+    @Param("guildId") guildId: string,
+    @Param("channelId") channelId: string,
+    @Body() dto: UpdateChannelDto,
+  ) {
+    return this.channels.update(user.sub, guildId, channelId, dto);
+  }
+
+  @Delete(":channelId")
+  remove(
+    @CurrentUser() user: JwtPayload,
+    @Param("guildId") guildId: string,
+    @Param("channelId") channelId: string,
+  ) {
+    return this.channels.remove(user.sub, guildId, channelId);
   }
 
   @Get(":channelId/members")

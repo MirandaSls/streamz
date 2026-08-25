@@ -38,8 +38,28 @@ export type MemberRole = "OWNER" | "ADMIN" | "MEMBER";
 export interface PublicUser {
   id: string;
   username: string;
+  /** nome de exibição escolhido pelo usuário; null = mostrar o username. */
+  displayName: string | null;
   avatarUrl: string | null;
   status: UserStatus;
+}
+
+/** Nome a mostrar na tela: displayName, senão username. */
+export function displayNameOf(u: Pick<PublicUser, "username" | "displayName">): string {
+  return u.displayName?.trim() || u.username;
+}
+
+export const MAX_DISPLAY_NAME = 32;
+export const MAX_AVATAR_SIZE = 4 * 1024 * 1024; // 4 MB
+
+/** Campos editáveis do próprio perfil (PATCH /users/me). */
+export interface ProfileUpdate {
+  displayName?: string | null;
+}
+
+/** Status escolhido pelo usuário (PATCH /users/me/status). null = automático. */
+export interface StatusUpdate {
+  manualStatus: UserStatus | null;
 }
 
 export interface Guild {
@@ -47,6 +67,10 @@ export interface Guild {
   name: string;
   iconUrl: string | null;
   ownerId: string;
+  /** há mensagem nova em algum canal visível (por espectador). */
+  unread: boolean;
+  /** menções a mim não lidas, somadas nos canais visíveis (por espectador). */
+  mentionCount: number;
 }
 
 export interface Channel {
@@ -59,6 +83,40 @@ export interface Channel {
   position: number;
   private: boolean;
   readOnly: boolean;
+  /** quando chegou a última mensagem (null = canal vazio). */
+  lastMessageAt: string | null;
+  /** até onde eu li (null = nunca abri). Por espectador. */
+  lastReadAt: string | null;
+  /** menções a mim depois de lastReadAt. Por espectador. */
+  mentionCount: number;
+}
+
+/** Não lido = existe mensagem depois do que eu li (ou nunca li e há mensagem). */
+export function isUnread(c: Pick<Channel, "lastMessageAt" | "lastReadAt">): boolean {
+  if (!c.lastMessageAt) return false;
+  if (!c.lastReadAt) return true;
+  return new Date(c.lastMessageAt).getTime() > new Date(c.lastReadAt).getTime();
+}
+
+/** true se o texto menciona `@username` (limite de palavra dos dois lados). */
+export function mentionsUser(content: string, username: string): boolean {
+  const esc = username.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^\\w.])@${esc}(?![\\w.-])`, "i").test(content);
+}
+
+/** Primeira URL http(s) do texto — a que vira embed. */
+export function extractFirstUrl(content: string): string | null {
+  const m = content.match(/https?:\/\/[^\s<>"')\]]+/i);
+  return m ? m[0] : null;
+}
+
+/** Prévia de link (Open Graph) que a API monta para a primeira URL da mensagem. */
+export interface LinkEmbed {
+  url: string;
+  siteName: string | null;
+  title: string | null;
+  description: string | null;
+  image: string | null;
 }
 
 /** Servidor com os canais que o usuário pode ver (GET /guilds/:id, POST /guilds). */
@@ -104,6 +162,8 @@ export function isImageAttachment(a: Pick<Attachment, "contentType">): boolean {
 export interface Message {
   id: string;
   channelId: string;
+  /** servidor do canal (null em conversa direta) — o rail usa para "não lido". */
+  guildId: string | null;
   author: PublicUser;
   content: string;
   createdAt: string;
@@ -191,6 +251,11 @@ export const WS_EVENTS = {
   MESSAGE_DELETED: "message.deleted",
   PRESENCE_UPDATE: "presence.update",
   GUILD_REMOVED: "guild.removed",
+  CHANNEL_CREATED: "channel.created",
+  CHANNEL_UPDATED: "channel.updated",
+  CHANNEL_DELETED: "channel.deleted",
+  MEMBER_UPDATED: "member.updated",
+  USER_UPDATED: "user.updated",
 } as const;
 
 /** Teto de caracteres de uma mensagem (canal ou DM). */
@@ -298,10 +363,23 @@ export interface PresenceUpdatePayload {
   status: UserStatus;
 }
 
-/** Emitido ao usuário que foi expulso/banido de um servidor. */
+/** Emitido ao usuário que saiu/perdeu acesso a um servidor. */
 export interface GuildRemovedEvent {
   guildId: string;
-  reason: "kicked" | "banned";
+  reason: "kicked" | "banned" | "left" | "deleted";
+}
+
+/** Canal apagado (guildId null = conversa direta). */
+export interface ChannelDeletedEvent {
+  channelId: string;
+  guildId: string | null;
+}
+
+/** Papel de um membro mudou. */
+export interface MemberUpdatedEvent {
+  guildId: string;
+  userId: string;
+  role: MemberRole;
 }
 
 // ── Voz (LiveKit) ────────────────────────────────────────────

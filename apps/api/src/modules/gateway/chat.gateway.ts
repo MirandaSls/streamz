@@ -8,9 +8,10 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from "@nestjs/websockets";
-import { HttpException, Logger } from "@nestjs/common";
+import { HttpException, Logger, type OnModuleInit } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Server, Socket } from "socket.io";
+import { createAdapter } from "@socket.io/redis-adapter";
 import {
   WS_EVENTS,
   channelIdSchema,
@@ -21,17 +22,19 @@ import {
   reactionSchema,
   typingSchema,
 } from "@newdisc/shared";
-import type { WsErrorEvent } from "@newdisc/shared";
+import type { UserStatus, WsErrorEvent } from "@newdisc/shared";
 import {
   newBucket,
   takeToken,
   type BucketLimit,
   type BucketState,
 } from "./rate-limit";
+import { MemoryPresenceStore, RedisPresenceStore, type PresenceStore } from "./presence.store";
 import { MessagesService } from "../messages/messages.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { RealtimeService } from "../realtime/realtime.service";
+import { redisClient, redisSubscriber } from "../realtime/redis";
 import { CORS_OPTIONS } from "../../common/cors";
 
 interface SocketUser {
@@ -42,7 +45,8 @@ interface SocketUser {
 /**
  * Tetos por socket dos comandos que geram escrita ou broadcast. `capacity` é a
  * rajada tolerada (colar uma sequência rápida de mensagens) e `refillPerSecond`
- * a taxa sustentada. Ver rate-limit.ts: é limite single-process.
+ * a taxa sustentada. O balde vive no socket — e um socket vive numa instância
+ * só —, então este limite é correto mesmo com várias instâncias.
  */
 const WS_LIMITS: Record<string, BucketLimit> = {
   [WS_EVENTS.MESSAGE_CREATE]: { capacity: 10, refillPerSecond: 1 },
@@ -51,15 +55,18 @@ const WS_LIMITS: Record<string, BucketLimit> = {
 
 @WebSocketGateway({ cors: CORS_OPTIONS })
 export class ChatGateway
-  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, OnModuleInit
 {
   @WebSocketServer()
   server!: Server;
 
   private readonly logger = new Logger(ChatGateway.name);
 
-  /** userId → nº de conexões abertas (suporta múltiplas abas/dispositivos). */
-  private readonly online = new Map<string, number>();
+  /** Conexões por usuário: em memória ou no Redis (várias instâncias). */
+  private readonly presence: PresenceStore = (() => {
+    const redis = redisClient();
+    return redis ? new RedisPresenceStore(redis) : new MemoryPresenceStore();
+  })();
 
   constructor(
     private readonly jwt: JwtService,
@@ -69,8 +76,31 @@ export class ChatGateway
     private readonly realtime: RealtimeService,
   ) {}
 
-  /** Registra o Server para que serviços HTTP possam emitir eventos WS. */
+  /**
+   * Presença não sobrevive a uma queda: se a API cair, quem estava ONLINE
+   * ficaria ONLINE no banco até reconectar. No boot, sem nenhuma conexão viva
+   * registrada (nenhuma outra instância), zera todo mundo para OFFLINE.
+   */
+  async onModuleInit() {
+    if (await this.presence.isEmpty()) {
+      const r = await this.prisma.user.updateMany({
+        where: { status: { not: "OFFLINE" } },
+        data: { status: "OFFLINE" },
+      });
+      if (r.count > 0) {
+        this.logger.log(`Presença zerada no boot: ${r.count} usuário(s) → OFFLINE`);
+      }
+    }
+  }
+
+  /** Registra o Server (e o adapter Redis, se houver) para os serviços HTTP emitirem. */
   afterInit(server: Server) {
+    const pub = redisClient();
+    if (pub) {
+      const sub = redisSubscriber()!;
+      server.adapter(createAdapter(pub, sub));
+      this.logger.log("Socket.IO com adapter Redis (várias instâncias)");
+    }
     this.realtime.bind(server);
   }
 
@@ -87,15 +117,19 @@ export class ChatGateway
       client.data.user = { id: payload.sub, username: payload.username } satisfies SocketUser;
       // sala pessoal: eventos de usuário (guild.removed) e alvo de socketsJoin/Leave
       client.join(`user:${payload.sub}`);
-      // Conversas diretas entregam pela sala do canal, como qualquer canal. Mas
-      // ninguém "abre" uma DM antes de receber a primeira mensagem dela — então
-      // o socket entra nas salas de todas as conversas do usuário já no connect
-      // (uma query, sobre o índice de ChannelMember.userId).
-      const conversas = await this.prisma.channelMember.findMany({
-        where: { userId: payload.sub, channel: { guildId: null } },
-        select: { channelId: true },
-      });
-      for (const c of conversas) client.join(this.room(c.channelId));
+      // Entra já no connect em tudo que pode ver: os canais de todos os seus
+      // servidores (para "não lido" e notificação de canal fechado), as
+      // conversas diretas e a sala de cada servidor (eventos de estrutura).
+      // O CHANNEL_JOIN do cliente vira idempotente.
+      const [canais, guilds] = await Promise.all([
+        this.guilds.visibleChannelsForUser(payload.sub),
+        this.prisma.guildMember.findMany({
+          where: { userId: payload.sub },
+          select: { guildId: true },
+        }),
+      ]);
+      client.join(canais.map((c) => this.room(c.id)));
+      client.join(guilds.map((g) => `guild:${g.guildId}`));
       await this.markOnline(payload.sub);
     } catch {
       client.disconnect(true);
@@ -107,27 +141,25 @@ export class ChatGateway
     if (user) void this.markOffline(user.id);
   }
 
-  /** Primeira conexão do usuário → ONLINE + broadcast. */
+  /** Primeira conexão do usuário → status escolhido (ou ONLINE) + broadcast. */
   private async markOnline(userId: string) {
-    const next = (this.online.get(userId) ?? 0) + 1;
-    this.online.set(userId, next);
-    if (next === 1) {
-      await this.setStatus(userId, "ONLINE");
+    const total = await this.presence.connect(userId);
+    if (total === 1) {
+      const u = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { manualStatus: true },
+      });
+      await this.setStatus(userId, u?.manualStatus ?? "ONLINE");
     }
   }
 
   /** Última conexão fechada → OFFLINE + broadcast. */
   private async markOffline(userId: string) {
-    const next = (this.online.get(userId) ?? 1) - 1;
-    if (next <= 0) {
-      this.online.delete(userId);
-      await this.setStatus(userId, "OFFLINE");
-    } else {
-      this.online.set(userId, next);
-    }
+    const total = await this.presence.disconnect(userId);
+    if (total === 0) await this.setStatus(userId, "OFFLINE");
   }
 
-  private async setStatus(userId: string, status: "ONLINE" | "OFFLINE") {
+  private async setStatus(userId: string, status: UserStatus) {
     await this.prisma.user.update({ where: { id: userId }, data: { status } }).catch(() => {});
     this.server.emit(WS_EVENTS.PRESENCE_UPDATE, { userId, status });
   }
@@ -316,9 +348,9 @@ export class ChatGateway
     if (!user || !payload) return;
 
     // Autorização sem ida ao banco: só está na sala `channel:<id>` quem passou
-    // por assertCanViewChannel no channel.join — e kick/ban/remoção da
-    // allowlist tiram o socket da sala (RealtimeService). "typing" é evento de
-    // alta frequência; um assert por tecla não se paga.
+    // por assertCanViewChannel (no connect ou no channel.join) — e kick/ban/
+    // remoção da allowlist tiram o socket da sala (RealtimeService). "typing"
+    // é evento de alta frequência; um assert por tecla não se paga.
     const room = this.room(payload.channelId);
     if (!client.rooms.has(room)) return;
 

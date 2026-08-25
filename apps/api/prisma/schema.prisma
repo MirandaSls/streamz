@@ -42,8 +42,16 @@ model User {
   id           String     @id @default(cuid())
   username     String     @unique
   passwordHash String
+  // nome de exibição (o Discord separa "display name" de "username")
+  displayName  String?
   avatarUrl    String?
+  // chave do objeto do avatar no storage; a URL pública é derivada na hora
+  avatarKey    String?
+  // presença efetiva, mantida pelo gateway (ONLINE/OFFLINE conforme conexões)
   status       UserStatus @default(OFFLINE)
+  // status escolhido pelo usuário (Ausente, Não perturbe, Invisível=OFFLINE);
+  // null = automático. Só vale enquanto ele está conectado.
+  manualStatus UserStatus?
   createdAt    DateTime   @default(now())
 
   ownedGuilds      Guild[]         @relation("GuildOwner")
@@ -56,6 +64,23 @@ model User {
   refreshTokens    RefreshToken[]
   channelAccess    ChannelMember[]
   attachments      Attachment[]    @relation("AttachmentUploader")
+  readStates       ReadState[]
+}
+
+// Até onde cada usuário leu cada canal. É o que decide "não lido" e o badge
+// de menções: mensagem com createdAt > lastReadAt (e que não é do próprio
+// usuário) conta como nova. Sem linha = nunca abriu o canal.
+model ReadState {
+  id         String   @id @default(cuid())
+  userId     String
+  channelId  String
+  lastReadAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, channelId])
+  @@index([channelId])
 }
 
 // Um registro por refresh token emitido. Rotação: a cada /auth/refresh o token
@@ -158,8 +183,9 @@ model Channel {
 
   guild    Guild?          @relation(fields: [guildId], references: [id], onDelete: Cascade)
   owner    User?           @relation("ChannelOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  messages Message[]
-  members  ChannelMember[]
+  messages   Message[]
+  members    ChannelMember[]
+  readStates ReadState[]
 
   @@index([guildId])
 }

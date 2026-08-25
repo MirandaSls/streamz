@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Post, UseGuards } from "@nestjs/common";
 import { IsInt, IsOptional, Min } from "class-validator";
 import { InvitesService } from "./invites.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
@@ -33,6 +33,22 @@ export class InvitesController {
     @Body() dto: CreateInviteDto,
   ) {
     return this.invites.create(user.sub, guildId, dto);
+  }
+
+  @UseGuards(JwtGuard)
+  @Get("guilds/:guildId/invites")
+  list(@CurrentUser() user: JwtPayload, @Param("guildId") guildId: string) {
+    return this.invites.list(user.sub, guildId);
+  }
+
+  @UseGuards(JwtGuard)
+  @Delete("guilds/:guildId/invites/:code")
+  revoke(
+    @CurrentUser() user: JwtPayload,
+    @Param("guildId") guildId: string,
+    @Param("code") code: string,
+  ) {
+    return this.invites.revoke(user.sub, guildId, code);
   }
 
   /** Prévia pública: a tela de "entrar no servidor" abre sem estar logado. */

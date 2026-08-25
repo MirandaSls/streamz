@@ -7,13 +7,15 @@ import {
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { StorageService } from "../storage/storage.service";
-import type { Attachment, Message as MessageDTO, ReactionGroup, UserStatus } from "@newdisc/shared";
+import type { Attachment, Message as MessageDTO, ReactionGroup } from "@newdisc/shared";
 import { MAX_ATTACHMENTS_PER_MESSAGE } from "@newdisc/shared";
+import { toPublicUser, type PublicUserRow } from "../../common/dto";
 
 const MESSAGE_INCLUDE = {
   author: true,
   reactions: true,
   attachments: true,
+  channel: { select: { guildId: true } },
   _count: { select: { replies: true } },
 } as const;
 
@@ -205,11 +207,12 @@ export class MessagesService {
   private async toDTO(m: {
     id: string;
     channelId: string;
+    channel: { guildId: string | null };
     content: string;
     parentId: string | null;
     createdAt: Date;
     editedAt: Date | null;
-    author: { id: string; username: string; avatarUrl: string | null; status: UserStatus };
+    author: PublicUserRow;
     reactions: { emoji: string; userId: string }[];
     attachments: {
       id: string;
@@ -225,17 +228,13 @@ export class MessagesService {
     return {
       id: m.id,
       channelId: m.channelId,
+      guildId: m.channel.guildId,
       content: m.content,
       parentId: m.parentId,
       replyCount: m._count.replies,
       createdAt: m.createdAt.toISOString(),
       editedAt: m.editedAt ? m.editedAt.toISOString() : null,
-      author: {
-        id: m.author.id,
-        username: m.author.username,
-        avatarUrl: m.author.avatarUrl,
-        status: m.author.status,
-      },
+      author: toPublicUser(m.author),
       reactions: this.groupReactions(m.reactions),
       attachments: await Promise.all(m.attachments.map((a) => this.toAttachmentDTO(a))),
     };

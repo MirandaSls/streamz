@@ -1,9 +1,15 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import { WS_EVENTS } from "@newdisc/shared";
+import type { Channel, GuildChannelType } from "@newdisc/shared";
+import { toChannelDTO, toPublicUser } from "../../common/dto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { RealtimeService } from "../realtime/realtime.service";
-import type { Channel, GuildChannelType } from "@newdisc/shared";
-import { toChannelDTO } from "../../common/dto";
 
 interface CreateChannelOpts {
   isPrivate?: boolean;
@@ -45,7 +51,12 @@ export class ChannelsService {
     if (isPrivate && opts.memberIds?.length) {
       await this.grantAccess(guildId, channel.id, opts.memberIds);
     }
-    return toChannelDTO(channel);
+    const dto = toChannelDTO(channel);
+    // quem enxerga o canal entra na sala agora e vê o canal aparecer na lista
+    const viewers = await this.guilds.viewersOfChannel(channel);
+    this.realtime.joinChannelRooms(viewers, channel.id);
+    this.realtime.emitToUsers(viewers, WS_EVENTS.CHANNEL_CREATED, dto);
+    return dto;
   }
 
   async listForGuild(userId: string, guildId: string): Promise<Channel[]> {
@@ -55,7 +66,7 @@ export class ChannelsService {
       orderBy: { position: "asc" },
     });
     if (member.role === "OWNER" || member.role === "ADMIN") {
-      return channels.map(toChannelDTO);
+      return channels.map((c) => toChannelDTO(c));
     }
 
     const allowed = await this.prisma.channelMember.findMany({
@@ -65,7 +76,44 @@ export class ChannelsService {
     const allowedSet = new Set(allowed.map((a) => a.channelId));
     return channels
       .filter((c) => !c.private || allowedSet.has(c.id))
-      .map(toChannelDTO);
+      .map((c) => toChannelDTO(c));
+  }
+
+  /** Renomeia (e/ou muda somente-leitura). Só moderação. */
+  async update(
+    actorId: string,
+    guildId: string,
+    channelId: string,
+    patch: { name?: string; readOnly?: boolean },
+  ): Promise<Channel> {
+    await this.guilds.assertCanModerate(actorId, guildId);
+    await this.assertChannelInGuild(channelId, guildId);
+    const name = patch.name?.trim();
+    if (patch.name !== undefined && !name) throw new BadRequestException("Nome vazio");
+    const channel = await this.prisma.channel.update({
+      where: { id: channelId },
+      data: { ...(name ? { name } : {}), ...(patch.readOnly !== undefined ? { readOnly: patch.readOnly } : {}) },
+    });
+    const dto = toChannelDTO(channel);
+    this.realtime.emitToUsers(await this.guilds.viewersOfChannel(channel), WS_EVENTS.CHANNEL_UPDATED, dto);
+    return dto;
+  }
+
+  /** Apaga o canal e suas mensagens. Só moderação; o último canal de texto fica. */
+  async remove(actorId: string, guildId: string, channelId: string) {
+    await this.guilds.assertCanModerate(actorId, guildId);
+    await this.assertChannelInGuild(channelId, guildId);
+    const channel = await this.prisma.channel.findUnique({ where: { id: channelId } });
+    if (!channel) throw new NotFoundException("Canal não encontrado");
+    if (channel.type === "TEXT") {
+      const restantes = await this.prisma.channel.count({ where: { guildId, type: "TEXT" } });
+      if (restantes <= 1) throw new BadRequestException("O servidor precisa de ao menos um canal de texto");
+    }
+    const viewers = await this.guilds.viewersOfChannel(channel);
+    await this.prisma.channel.delete({ where: { id: channelId } });
+    this.realtime.emitToUsers(viewers, WS_EVENTS.CHANNEL_DELETED, { channelId, guildId });
+    this.realtime.closeChannelRoom(channelId);
+    return { deleted: channelId };
   }
 
   // ── allowlist de canal privado (só moderação) ──────────────────
@@ -77,14 +125,7 @@ export class ChannelsService {
       where: { channelId },
       include: { user: true },
     });
-    return rows.map((r) => ({
-      user: {
-        id: r.user.id,
-        username: r.user.username,
-        avatarUrl: r.user.avatarUrl,
-        status: r.user.status,
-      },
-    }));
+    return rows.map((r) => ({ user: toPublicUser(r.user) }));
   }
 
   async addMember(actorId: string, guildId: string, channelId: string, targetUserId: string) {
@@ -102,6 +143,7 @@ export class ChannelsService {
       .catch(() => undefined); // idempotente
     // corta a sala ao vivo: sem isso ele seguiria recebendo o canal privado
     this.realtime.leaveChannelRooms(targetUserId, [channelId]);
+    this.realtime.emitToUser(targetUserId, WS_EVENTS.CHANNEL_DELETED, { channelId, guildId });
     return { removed: targetUserId };
   }
 
@@ -121,6 +163,13 @@ export class ChannelsService {
         }),
       ),
     );
+    // quem acabou de ganhar acesso passa a ver o canal e a receber ao vivo
+    const channel = await this.prisma.channel.findUnique({ where: { id: channelId } });
+    if (channel) {
+      const ids2 = members.map((m) => m.userId);
+      this.realtime.joinChannelRooms(ids2, channelId);
+      this.realtime.emitToUsers(ids2, WS_EVENTS.CHANNEL_CREATED, toChannelDTO(channel));
+    }
   }
 
   private async assertChannelInGuild(channelId: string, guildId: string) {

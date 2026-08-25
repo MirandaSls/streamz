@@ -7,9 +7,10 @@ import { z } from "zod";
  * passava a aceitar/assinar com `undefined` e o problema só aparecia como
  * comportamento estranho de autenticação em produção. Aqui o processo nem sobe.
  *
- * Só entram aqui as variáveis **obrigatórias**. As opcionais (LiveKit, R2)
- * seguem checadas em tempo de execução pelos respectivos `isConfigured()`, que
- * respondem 503 — o app roda sem elas de propósito (ver PENDENCIAS.md).
+ * Só entram aqui as variáveis **obrigatórias**. As opcionais (LiveKit, R2,
+ * REDIS_URL) seguem checadas em tempo de execução — o app roda sem elas de
+ * propósito (ver PENDENCIAS.md); sem Redis, presença e broadcast ficam
+ * single-process.
  */
 const envSchema = z
   .object({

@@ -7,6 +7,7 @@ import {
 import { randomBytes } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
+import { RealtimeService } from "../realtime/realtime.service";
 import { isUniqueViolation } from "../../common/prisma-errors";
 import type { InviteInfo, InvitePreview } from "@newdisc/shared";
 
@@ -17,6 +18,7 @@ export class InvitesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly guilds: GuildsService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   /** Cria um convite. Só membros do servidor podem convidar. */
@@ -49,6 +51,25 @@ export class InvitesService {
       }
     }
     throw new BadRequestException("Não foi possível gerar um código de convite");
+  }
+
+  /** Convites do servidor (só moderação vê a lista inteira). */
+  async list(userId: string, guildId: string): Promise<(InviteInfo & { creatorId: string })[]> {
+    await this.guilds.assertCanModerate(userId, guildId);
+    const rows = await this.prisma.invite.findMany({
+      where: { guildId },
+      orderBy: { createdAt: "desc" },
+    });
+    return rows.map((i) => ({ ...this.toInfo(i), creatorId: i.creatorId }));
+  }
+
+  /** Revoga um convite: quem criou, ou a moderação. */
+  async revoke(userId: string, guildId: string, code: string) {
+    const invite = await this.prisma.invite.findUnique({ where: { code } });
+    if (!invite || invite.guildId !== guildId) throw new NotFoundException("Convite não encontrado");
+    if (invite.creatorId !== userId) await this.guilds.assertCanModerate(userId, guildId);
+    await this.prisma.invite.delete({ where: { code } });
+    return { revoked: code };
   }
 
   /** Prévia pública do convite (para a tela de "entrar no servidor"). */
@@ -126,6 +147,13 @@ export class InvitesService {
       }
     });
 
+    // sockets já abertos passam a receber o servidor novo sem reconectar
+    this.realtime.joinGuildRoom(userId, invite.guildId);
+    const publicos = await this.prisma.channel.findMany({
+      where: { guildId: invite.guildId, private: false },
+      select: { id: true },
+    });
+    for (const c of publicos) this.realtime.joinChannelRooms([userId], c.id);
     return invite.guild;
   }
 

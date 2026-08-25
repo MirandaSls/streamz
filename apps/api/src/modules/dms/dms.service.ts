@@ -4,10 +4,16 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import type { DMChannelView, DMLeaveResult, PublicUser, UserStatus } from "@newdisc/shared";
-import { toChannelDTO } from "../../common/dto";
+import type { DMChannelView, DMLeaveResult } from "@newdisc/shared";
+import {
+  toChannelDTO,
+  toPublicUser,
+  type ChannelReadSummary,
+  type PublicUserRow,
+} from "../../common/dto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { RealtimeService } from "../realtime/realtime.service";
+import { ReadStateService } from "../read-state/read-state.service";
 
 /**
  * Conversas diretas (DM 1-a-1 e grupos).
@@ -19,10 +25,7 @@ import { RealtimeService } from "../realtime/realtime.service";
  * (`MessagesService`), e a autorização é `GuildsService.assertCanViewChannel`.
  */
 
-type MemberWithUser = {
-  userId: string;
-  user: { id: string; username: string; avatarUrl: string | null; status: UserStatus };
-};
+type MemberWithUser = { userId: string; user: PublicUserRow };
 
 const WITH_MEMBERS = {
   members: { include: { user: true } },
@@ -33,6 +36,7 @@ export class DMsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeService,
+    private readonly readState: ReadStateService,
   ) {}
 
   /** Abre (ou reaproveita) a conversa 1-a-1 entre dois usuários. */
@@ -128,14 +132,24 @@ export class DMsService {
     return { channelId, deleted: false };
   }
 
-  /** Lista as conversas (1-a-1 e grupos) das quais o usuário participa. */
-  async list(meId: string): Promise<DMChannelView[]> {
+  /**
+   * Lista as conversas (1-a-1 e grupos) das quais o usuário participa, com o
+   * resumo de leitura, ordenadas pela última mensagem (como a coluna do Discord).
+   */
+  async list(meId: string, username: string): Promise<DMChannelView[]> {
     const channels = await this.prisma.channel.findMany({
       where: { guildId: null, members: { some: { userId: meId } } },
       include: WITH_MEMBERS,
       orderBy: { createdAt: "desc" },
     });
-    return channels.map((c) => this.toView(c, meId));
+    const summaries = await this.readState.summaries(
+      meId,
+      username,
+      channels.map((c) => c.id),
+    );
+    return channels
+      .map((c) => this.toView(c, meId, summaries.get(c.id)))
+      .sort((a, b) => (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? ""));
   }
 
   /** Uma conversa específica, na visão de quem pede (404 se não participa). */
@@ -156,14 +170,11 @@ export class DMsService {
   private toView(
     channel: Parameters<typeof toChannelDTO>[0] & { members: MemberWithUser[] },
     meId: string,
+    summary?: ChannelReadSummary,
   ): DMChannelView {
     const others = channel.members
       .filter((p) => p.userId !== meId)
-      .map((p) => this.toPublic(p.user));
-    return { ...toChannelDTO(channel), others };
-  }
-
-  private toPublic(u: MemberWithUser["user"]): PublicUser {
-    return { id: u.id, username: u.username, avatarUrl: u.avatarUrl, status: u.status };
+      .map((p) => toPublicUser(p.user));
+    return { ...toChannelDTO(channel, summary), others };
   }
 }

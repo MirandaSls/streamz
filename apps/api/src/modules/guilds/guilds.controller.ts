@@ -4,10 +4,12 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   UseGuards,
 } from "@nestjs/common";
-import { IsOptional, IsString, Length } from "class-validator";
+import { IsIn, IsOptional, IsString, Length } from "class-validator";
+import type { MemberRole } from "@newdisc/shared";
 import { GuildsService } from "./guilds.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";
@@ -33,6 +35,12 @@ class BanDto {
   reason?: string;
 }
 
+class RoleDto {
+  // OWNER não é atribuível por aqui — não existe transferência de posse no MVP
+  @IsIn(["ADMIN", "MEMBER"])
+  role!: Extract<MemberRole, "ADMIN" | "MEMBER">;
+}
+
 @UseGuards(JwtGuard)
 @Controller("guilds")
 export class GuildsController {
@@ -45,17 +53,40 @@ export class GuildsController {
 
   @Get()
   list(@CurrentUser() user: JwtPayload) {
-    return this.guilds.listForUser(user.sub);
+    return this.guilds.listForUser(user.sub, user.username);
   }
 
   @Get(":id")
   get(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
-    return this.guilds.getWithChannels(user.sub, id);
+    return this.guilds.getWithChannels(user.sub, id, user.username);
+  }
+
+  /** Sair do servidor (o dono não sai — apaga). */
+  @Post(":id/leave")
+  leave(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
+    return this.guilds.leave(user.sub, id);
+  }
+
+  /** Apagar o servidor (só o dono). */
+  @Delete(":id")
+  remove(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
+    return this.guilds.remove(user.sub, id);
   }
 
   @Get(":id/members")
   members(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
     return this.guilds.listMembers(user.sub, id);
+  }
+
+  /** Promover a ADMIN / rebaixar a MEMBER (só o dono). */
+  @Patch(":id/members/:userId/role")
+  setRole(
+    @CurrentUser() user: JwtPayload,
+    @Param("id") id: string,
+    @Param("userId") userId: string,
+    @Body() dto: RoleDto,
+  ) {
+    return this.guilds.setRole(user.sub, id, userId, dto.role);
   }
 
   @Post(":id/kick")
