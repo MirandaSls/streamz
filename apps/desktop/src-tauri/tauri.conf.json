@@ -10,7 +10,7 @@
     "frontendDist": "../../web/out"
   },
   "app": {
-    "withGlobalTauri": true,
+    "withGlobalTauri": false,
     "windows": [
       {
         "label": "main",
@@ -23,7 +23,20 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": {
+        "default-src": "'self'",
+        "base-uri": "'self'",
+        "object-src": "'none'",
+        "frame-src": "'none'",
+        "form-action": "'none'",
+        "script-src": "'self' 'unsafe-inline'",
+        "style-src": "'self' 'unsafe-inline'",
+        "font-src": "'self' data:",
+        "img-src": "'self' data: blob: http://localhost:3333",
+        "media-src": "'self' data: blob: mediastream:",
+        "worker-src": "'self' blob:",
+        "connect-src": "'self' ipc: http://ipc.localhost http://localhost:3333 ws://localhost:3333 ws://localhost:7880 https://*.livekit.cloud wss://*.livekit.cloud"
+      }
     }
   },
   "bundle": {
@@ -45,15 +58,5 @@
       }
     }
   },
-  "plugins": {
-    "updater": {
-      "endpoints": [
-        "https://releases.newdisc.dev/updater/{{target}}/{{arch}}/{{current_version}}"
-      ],
-      "pubkey": "COLOQUE_AQUI_A_CHAVE_PUBLICA__gerada_com_'pnpm --filter @newdisc/desktop tauri signer generate'",
-      "windows": {
-        "installMode": "passive"
-      }
-    }
-  }
+  "plugins": {}
 }

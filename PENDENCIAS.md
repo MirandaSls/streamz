@@ -49,10 +49,17 @@ O código de voz é **agnóstico de provedor** (só usa `LIVEKIT_URL/KEY/SECRET`
 Duas formas de rodar — escolha uma:
 
 **Opção A — Self-host via Docker (preparado):**
-- [x] Serviço `livekit` no `docker-compose.yml` (profile `livekit`) + config em
-      `livekit.yaml` + scripts `pnpm livekit:up` / `livekit:down`.
-- [ ] Trocar o `keys:` do `livekit.yaml` e o `LIVEKIT_API_SECRET` do `.env` por um
-      secret aleatório (>= 32 chars) — os dois precisam **bater**.
+- [x] Serviço `livekit` no `docker-compose.yml` (profile `livekit`) + modelo de
+      config em `livekit.example.yaml` + scripts `pnpm livekit:up` / `livekit:down`.
+- [ ] Criar o `livekit.yaml` **local** (ele é ignorado pelo git porque carrega o
+      secret real; o docker-compose monta esse caminho):
+
+      cp livekit.example.yaml livekit.yaml
+      openssl rand -hex 32          # gere o secret
+
+      Cole o valor gerado nos **dois** lugares — `keys: devkey: <secret>` no
+      `livekit.yaml` e `LIVEKIT_API_SECRET` no `.env`. Eles precisam **bater**,
+      senão o token de acesso é rejeitado pelo servidor.
 - [ ] `pnpm livekit:up` e usar no `.env` (Opção A): `LIVEKIT_URL=ws://localhost:7880`,
       `NEXT_PUBLIC_LIVEKIT_URL=ws://localhost:7880`, `LIVEKIT_API_KEY=devkey`.
 
@@ -67,11 +74,29 @@ Duas formas de rodar — escolha uma:
 - [ ] Gerar os ícones do app:
       `pnpm --filter @newdisc/desktop tauri icon caminho/logo.png`
 
+**Empacotamento resolvido:** o desktop embute a web como **HTML estático**
+(`frontendDist: ../../web/out`). O `output: "export"` do Next não está mais
+comentado — ele liga por ambiente (`TAURI_ENV_*`, que o Tauri injeta no
+`beforeBuildCommand`, ou `NEXT_OUTPUT=export` na mão), então o build web normal
+(`next start`) continua funcionando. Motivo da escolha e alternativa descartada
+(carregar URL remota): `apps/desktop/README.md`.
+
 ## 4. Segredos do `.env`
 - [ ] Trocar `JWT_SECRET` e `JWT_REFRESH_SECRET` por strings aleatórias longas
       (ex.: `openssl rand -hex 32`).
 
 ## 5. Mais adiante (pós-MVP)
+- [ ] **Auto-update do desktop** — o `tauri-plugin-updater` foi **desligado**
+      (estava apontando para `releases.newdisc.dev`, que não existe, com `pubkey`
+      placeholder; assim ele só gera erro em runtime). Para religar:
+  - [ ] Gerar o par de chaves e guardar a privada **fora do repo**:
+        `pnpm --filter @newdisc/desktop tauri signer generate -w ~/.tauri/newdisc.key`
+  - [ ] Publicar um endpoint real de releases
+        (`/updater/{{target}}/{{arch}}/{{current_version}}`) servindo o JSON de
+        update assinado.
+  - [ ] Reativar plugin + capability + `plugins.updater` + `createUpdaterArtifacts`
+        e assinar o build com `TAURI_SIGNING_PRIVATE_KEY` — passo a passo em
+        `apps/desktop/README.md` (seção "Auto-update").
 - [ ] Assinatura de código do instalador Windows (Azure Trusted Signing) — remove
       o alerta do SmartScreen ao enviar o `.exe`.
 - [ ] Migrar a mídia de LiveKit Cloud para **self-host** (call sem limite de

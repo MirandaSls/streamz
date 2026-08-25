@@ -1,6 +1,7 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
+  "globalEnv": ["NODE_ENV"],
   "tasks": {
     "dev": {
       "cache": false,
@@ -8,7 +9,30 @@
     },
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**", "!.next/cache/**", "src-tauri/target/**"]
+      // Sem declarar env, o cache do turbo é cego a elas: um build feito com
+      // NEXT_PUBLIC_API_URL de produção seria reaproveitado no dev (e vice-versa),
+      // já que o Next embute essas variáveis no bundle. NEXT_OUTPUT/TAURI_ENV_*
+      // mudam até o formato da saída (.next vs out/) — ver apps/web/next.config.mjs.
+      "env": [
+        "NEXT_PUBLIC_*",
+        "NEXT_OUTPUT",
+        "TAURI_ENV_*",
+        "TAURI_PLATFORM",
+        "DATABASE_URL",
+        "JWT_*",
+        "LIVEKIT_*",
+        "R2_*",
+        "CORS_ORIGIN",
+        "API_PORT",
+        "API_PUBLIC_URL"
+      ],
+      "outputs": [
+        "dist/**",
+        ".next/**",
+        "!.next/cache/**",
+        "out/**",
+        "src-tauri/target/**"
+      ]
     },
     "lint": {},
     "typecheck": {

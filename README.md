@@ -61,9 +61,11 @@ pnpm --filter @newdisc/desktop dev
 
 # build do instalador (Windows: .exe/.msi)
 #   antes: gere os ícones (ver apps/desktop/src-tauri/icons/README.md)
-#   e habilite `output: "export"` em apps/web/next.config.mjs
 pnpm --filter @newdisc/desktop build
 ```
+
+O build embute a web como HTML estático: o Next liga `output: "export"` sozinho
+quando roda dentro do Tauri. Detalhes e alternativas: `apps/desktop/README.md`.
 
 ### Recursos nativos
 
@@ -75,33 +77,27 @@ pnpm --filter @newdisc/desktop build
 - **Notificações nativas:** plugin `tauri-plugin-notification` registrado no
   `main.rs`, com permissão `notification:default` em
   `src-tauri/capabilities/default.json`. O lado web usa a ponte isolada
-  `apps/web/lib/desktop.ts` (`notify(title, body)`): dentro do Tauri usa a
-  notificação nativa; no navegador, cai para a Notification API do browser. Para
-  ligar, chame `notify(...)` ao receber `message.new` (instruções no topo do
-  arquivo). A ponte depende de `withGlobalTauri: true` (já ligado em
-  `tauri.conf.json`), que expõe `window.__TAURI__` — sem dependência npm nova.
+  `apps/web/lib/desktop.ts` — `notify({ title, body, onClick })`: dentro do Tauri
+  usa a notificação nativa, no navegador cai para a Notification API, e o clique
+  foca a janela antes de rodar o `onClick`. Os módulos `@tauri-apps/*` entram por
+  `import()` dinâmico, então `withGlobalTauri` fica **desligado** (nada de
+  `window.__TAURI__` exposto ao conteúdo da página).
+- **CSP:** política explícita em `app.security.csp` (antes era `null`). Os hosts
+  padrão são os do dev; para outro ambiente, ver `apps/desktop/README.md`.
 
-### Auto-update (esboçado — sem servidor ainda)
+### Auto-update — desligado
 
-O `tauri-plugin-updater` já está **registrado** no `main.rs` e **configurado**
-em `tauri.conf.json` (`plugins.updater`) com um endpoint *placeholder* e um
-campo `pubkey` a preencher. Como JSON não aceita comentários, os valores levam
-nomes autoexplicativos (`releases.newdisc.dev/...`, `COLOQUE_AQUI_A_CHAVE...`).
-Ainda **não há servidor real** — para ativar de verdade:
-
-1. Gere o par de chaves de assinatura:
-   `pnpm --filter @newdisc/desktop tauri signer generate`.
-2. Cole a **chave pública** em `plugins.updater.pubkey` no `tauri.conf.json`.
-3. Aponte `plugins.updater.endpoints` para o servidor/CDN real de releases.
-4. Troque `bundle.createUpdaterArtifacts` para `true` e assine o build exportando
-   `TAURI_SIGNING_PRIVATE_KEY` (e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`) no build.
+O `tauri-plugin-updater` **não** está registrado: não há par de chaves de
+assinatura nem servidor de releases, e um updater apontando para um endpoint
+inexistente só produz erro em runtime. O passo a passo para religar está em
+`apps/desktop/README.md` (seção *Auto-update*) e em `PENDENCIAS.md` §5.
 
 ### Permissões (capabilities)
 
 Tauri 2 exige capabilities explícitas: ver `src-tauri/capabilities/default.json`
-(janela principal + `notification:default` + `updater:default` + permissões de
-janela usadas pelo tray). O Tauri carrega automaticamente todos os arquivos da
-pasta `capabilities/`.
+(janela principal + `notification:default` + permissões de janela usadas pelo
+tray). O Tauri carrega automaticamente todos os arquivos da pasta
+`capabilities/`.
 
 ## Roadmap (sprint de 5 dias)
 

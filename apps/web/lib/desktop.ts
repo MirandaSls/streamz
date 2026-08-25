@@ -1,48 +1,51 @@
 /**
  * Ponte de notificações web ↔ desktop (Tauri 2).
  *
- * Helper ISOLADO: detecta se a web está rodando dentro do app Tauri e, em caso
- * afirmativo, usa a API de notificação nativa do Tauri; fora do Tauri (navegador
- * normal), cai para a Notification API do browser.
- *
- * COMO PLUGAR (sem editar este arquivo):
- *   No handler do evento de mensagem em tempo real — hoje em `apps/web/lib/socket.ts`
- *   / na tela do chat (`apps/web/app/app/page.tsx`) — ao receber `message.new`,
- *   chame:
+ * >>> PARA O AGENTE C (tela de chat) <<<
+ * Hoje só o **canal ativo** notifica (`app/app/page.tsx`). Esta API já está
+ * pronta para o resto: chame `notify(...)` também para **DMs** e para **canais
+ * não ativos** — inclusive quando a mensagem chega por `dm.new`/`message.new`
+ * de um canal que não é o aberto. O `onClick` existe justamente para levar o
+ * usuário até lá:
  *
  *     import { notify } from "@/lib/desktop";
- *     socket.on("message.new", (msg) => {
- *       // ...renderiza a mensagem...
- *       // notifica só quando a janela não está focada e não é mensagem própria:
- *       if (document.visibilityState !== "visible") {
- *         notify(`#${msg.channelName ?? "canal"}`, `${msg.author}: ${msg.content}`);
- *       }
+ *
+ *     notify({
+ *       title: `#${canal.name}`,
+ *       body: `${msg.author.username}: ${msg.content}`,
+ *       onClick: () => selecionarCanal(canal.id), // a janela já é focada aqui
  *     });
  *
- * Pré-requisitos do lado desktop (já configurados em apps/desktop):
- *   - `withGlobalTauri: true` em tauri.conf.json → expõe `window.__TAURI__`.
- *   - plugin `tauri-plugin-notification` registrado no main.rs.
- *   - permissão `notification:default` em capabilities/default.json.
+ * Regra de bom senso do chamador (não é feita aqui): não notificar mensagem
+ * própria, e notificar o canal ativo só quando a janela não está visível
+ * (`document.visibilityState !== "visible"`).
  *
- * Nenhuma dependência npm nova é necessária: usamos a ponte global
- * `window.__TAURI__` em vez de importar `@tauri-apps/plugin-notification`.
+ * Comportamento:
+ *   - Dentro do Tauri: notificação nativa via `@tauri-apps/plugin-notification`;
+ *     o clique foca a janela (`getCurrentWindow().setFocus()`) e roda `onClick`.
+ *   - No navegador: Notification API; o clique foca a aba e roda `onClick`.
+ *   - Sem suporte / permissão negada: **no-op**. Nunca lança — notificação é
+ *     best-effort e não pode quebrar o fluxo de mensagens.
+ *
+ * A permissão é pedida **uma vez** por sessão (o resultado fica memoizado); se o
+ * usuário negar, as chamadas seguintes saem em silêncio sem novo prompt.
+ *
+ * Os módulos do Tauri entram por `import()` dinâmico: fora do app desktop eles
+ * nunca são carregados, e o bundle do browser não paga por eles.
+ * (`withGlobalTauri` está desligado — não existe mais `window.__TAURI__`.)
  */
 
-/** Formato mínimo da ponte global do Tauri que consumimos aqui. */
-type TauriNotificationBridge = {
-  isPermissionGranted: () => Promise<boolean>;
-  requestPermission: () => Promise<"granted" | "denied" | "default">;
-  sendNotification: (options: { title: string; body?: string } | string) => void;
-};
-
-type TauriGlobal = {
-  notification?: TauriNotificationBridge;
+export type NotificacaoOptions = {
+  title: string;
+  body?: string;
+  /** Roda no clique da notificação, depois de focar a janela. */
+  onClick?: () => void;
 };
 
 declare global {
   interface Window {
-    __TAURI__?: TauriGlobal;
-    // Presente em builds do Tauri 2 mesmo sem withGlobalTauri; útil p/ detecção.
+    /** Injetado pelo runtime do Tauri 2 em qualquer webview do app. */
+    isTauri?: boolean;
     __TAURI_INTERNALS__?: unknown;
   }
 }
@@ -51,53 +54,140 @@ declare global {
 export function isTauri(): boolean {
   return (
     typeof window !== "undefined" &&
-    (typeof window.__TAURI__ !== "undefined" ||
-      typeof window.__TAURI_INTERNALS__ !== "undefined")
+    (window.isTauri === true || typeof window.__TAURI_INTERNALS__ !== "undefined")
   );
 }
 
 /**
  * Dispara uma notificação nativa.
- * - Dentro do Tauri: usa o plugin de notificação (pede permissão se preciso).
- * - No browser: usa a Notification API (pede permissão se preciso).
- * Nunca lança: qualquer falha é silenciada (é um "nice to have").
+ * Aceita `notify({ title, body, onClick })` ou a forma curta `notify(title, body)`.
  */
-export async function notify(title: string, body?: string): Promise<void> {
+export async function notify(options: NotificacaoOptions): Promise<void>;
+export async function notify(title: string, body?: string): Promise<void>;
+export async function notify(
+  entrada: NotificacaoOptions | string,
+  body?: string,
+): Promise<void> {
+  const options: NotificacaoOptions =
+    typeof entrada === "string" ? { title: entrada, body } : entrada;
   try {
     if (isTauri()) {
-      await notifyViaTauri(title, body);
+      await notificarViaTauri(options);
       return;
     }
-    await notifyViaBrowser(title, body);
+    await notificarViaBrowser(options);
   } catch {
-    // Notificação é best-effort — nunca deve quebrar o fluxo de mensagens.
+    // Best-effort: qualquer falha (permissão, plugin ausente, SSR) é silenciada.
   }
 }
 
-async function notifyViaTauri(title: string, body?: string): Promise<void> {
-  const bridge = window.__TAURI__?.notification;
-  if (!bridge) {
-    // withGlobalTauri desligado ou plugin ausente → tenta o fallback do browser.
-    await notifyViaBrowser(title, body);
-    return;
-  }
-  let granted = await bridge.isPermissionGranted();
-  if (!granted) {
-    granted = (await bridge.requestPermission()) === "granted";
-  }
-  if (granted) {
-    bridge.sendNotification({ title, body });
+/**
+ * Traz a janela do app para frente. No Tauri desfaz o minimizado — o app some
+ * para a bandeja ao fechar, então `show()` antes de `setFocus()` é obrigatório.
+ * No navegador, `window.focus()` (que o browser pode ignorar).
+ */
+export async function focarJanela(): Promise<void> {
+  try {
+    if (isTauri()) {
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      const janela = getCurrentWindow();
+      await janela.show();
+      await janela.unminimize();
+      await janela.setFocus();
+      return;
+    }
+    if (typeof window !== "undefined") window.focus();
+  } catch {
+    // Idem: focar é conveniência, não pode derrubar o clique.
   }
 }
 
-async function notifyViaBrowser(title: string, body?: string): Promise<void> {
+// ── Tauri ──────────────────────────────────────────────────────────────────
+
+/** Handlers de clique pendentes, indexados pelo id da notificação. */
+const cliquesPendentes = new Map<number, () => void>();
+/** Ids do Tauri precisam ser inteiros de 32 bits; um contador basta. */
+let proximoId = 1;
+/** `onAction` é registrado uma única vez, na primeira notificação com onClick. */
+let ouvinteDeCliqueRegistrado = false;
+
+async function notificarViaTauri(options: NotificacaoOptions): Promise<void> {
+  const plugin = await import("@tauri-apps/plugin-notification");
+  const permitido = await garantirPermissao(
+    () => plugin.isPermissionGranted(),
+    async () => (await plugin.requestPermission()) === "granted",
+  );
+  if (!permitido) return;
+
+  const id = proximoId++;
+  if (options.onClick) {
+    cliquesPendentes.set(id, options.onClick);
+    await registrarOuvinteDeClique(plugin);
+  }
+  plugin.sendNotification({ id, title: options.title, body: options.body });
+}
+
+async function registrarOuvinteDeClique(
+  plugin: typeof import("@tauri-apps/plugin-notification"),
+): Promise<void> {
+  if (ouvinteDeCliqueRegistrado) return;
+  ouvinteDeCliqueRegistrado = true;
+  try {
+    await plugin.onAction((notificacao) => {
+      const handler =
+        typeof notificacao.id === "number"
+          ? cliquesPendentes.get(notificacao.id)
+          : undefined;
+      if (notificacao.id !== undefined) cliquesPendentes.delete(notificacao.id);
+      void focarJanela();
+      handler?.();
+    });
+  } catch {
+    // Nem toda plataforma entrega o evento de clique; a notificação em si
+    // continua funcionando, só o onClick fica inerte.
+    ouvinteDeCliqueRegistrado = false;
+  }
+}
+
+// ── Browser ────────────────────────────────────────────────────────────────
+
+async function notificarViaBrowser(options: NotificacaoOptions): Promise<void> {
   if (typeof window === "undefined" || !("Notification" in window)) return;
-  let permission = Notification.permission;
-  if (permission === "default") {
-    permission = await Notification.requestPermission();
+  const permitido = await garantirPermissao(
+    async () => Notification.permission === "granted",
+    async () => (await Notification.requestPermission()) === "granted",
+  );
+  if (!permitido) return;
+
+  const notificacao = new Notification(
+    options.title,
+    options.body ? { body: options.body } : undefined,
+  );
+  notificacao.onclick = () => {
+    void focarJanela();
+    options.onClick?.();
+    notificacao.close();
+  };
+}
+
+// ── Permissão (pedida uma vez) ─────────────────────────────────────────────
+
+let permissao: Promise<boolean> | null = null;
+
+/**
+ * Memoiza a negociação de permissão: a primeira chamada consulta e, se preciso,
+ * pede; as seguintes reaproveitam o resultado. Sem isso, cada mensagem nova
+ * dispararia um prompt.
+ */
+function garantirPermissao(
+  jaConcedida: () => Promise<boolean>,
+  pedir: () => Promise<boolean>,
+): Promise<boolean> {
+  if (!permissao) {
+    permissao = (async () => {
+      if (await jaConcedida()) return true;
+      return pedir();
+    })().catch(() => false);
   }
-  if (permission === "granted") {
-    // eslint-disable-next-line no-new
-    new Notification(title, body ? { body } : undefined);
-  }
+  return permissao;
 }

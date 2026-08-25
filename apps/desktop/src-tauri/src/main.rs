@@ -11,9 +11,10 @@ fn main() {
     tauri::Builder::default()
         // Notificações nativas (Tauri 2 → crate própria).
         .plugin(tauri_plugin_notification::init())
-        // Auto-update — endpoint/pubkey são configurados em tauri.conf.json
-        // (`plugins.updater`). Sem servidor real ainda: ver README (seção desktop).
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        // O auto-update está DESLIGADO de propósito: não existe par de chaves de
+        // assinatura nem servidor de releases. Um updater apontando para um
+        // endpoint inexistente com pubkey placeholder só produz erro em runtime.
+        // Como religar: apps/desktop/README.md (seção "Auto-update").
         .setup(|app| {
             // --- System tray (bandeja) ---------------------------------------
             // Menu de contexto: "Abrir NewDisc" e "Sair".
@@ -21,9 +22,7 @@ fn main() {
             let sair = MenuItem::with_id(app, "sair", "Sair", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&abrir, &sair])?;
 
-            TrayIconBuilder::with_id("newdisc-tray")
-                // Reaproveita o ícone da janela já embutido no bundle.
-                .icon(app.default_window_icon().unwrap().clone())
+            let mut tray = TrayIconBuilder::with_id("newdisc-tray")
                 .tooltip("NewDisc")
                 .menu(&menu)
                 // No Windows o menu deve abrir só com o botão direito; o esquerdo
@@ -43,8 +42,17 @@ fn main() {
                     {
                         mostrar_janela(tray.app_handle());
                     }
-                })
-                .build(app)?;
+                });
+
+            // O ícone da janela só existe se os PNGs de `bundle.icon` tiverem
+            // sido gerados (ver src-tauri/icons/README.md). Sem eles o antigo
+            // `.unwrap()` derrubava o app no boot; agora a bandeja sobe sem
+            // ícone — degradada, mas funcional.
+            if let Some(icone) = app.default_window_icon() {
+                tray = tray.icon(icone.clone());
+            }
+
+            tray.build(app)?;
 
             Ok(())
         })
