@@ -153,6 +153,7 @@ export class GuildsService {
     await this.prisma.guildMember.delete({
       where: { userId_guildId: { userId: targetUserId, guildId } },
     });
+    await this.detachFromGuildRooms(guildId, targetUserId);
     this.realtime.emitToUser(targetUserId, WS_EVENTS.GUILD_REMOVED, {
       guildId,
       reason: "kicked",
@@ -173,6 +174,7 @@ export class GuildsService {
         update: { reason, bannedById: actorId },
       }),
     ]);
+    await this.detachFromGuildRooms(guildId, targetUserId);
     this.realtime.emitToUser(targetUserId, WS_EVENTS.GUILD_REMOVED, {
       guildId,
       reason: "banned",
@@ -205,6 +207,15 @@ export class GuildsService {
         status: b.user.status,
       },
     }));
+  }
+
+  /** Tira os sockets do ex-membro das salas de todos os canais do servidor. */
+  private async detachFromGuildRooms(guildId: string, userId: string) {
+    const channels = await this.prisma.channel.findMany({
+      where: { guildId },
+      select: { id: true },
+    });
+    this.realtime.leaveChannelRooms(userId, channels.map((c) => c.id));
   }
 
   /** O ator precisa ser OWNER ou ADMIN do servidor. */

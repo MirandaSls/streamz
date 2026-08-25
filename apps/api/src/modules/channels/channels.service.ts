@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
+import { RealtimeService } from "../realtime/realtime.service";
 import type { ChannelType } from "@newdisc/shared";
 
 interface CreateChannelOpts {
@@ -15,6 +16,7 @@ export class ChannelsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly guilds: GuildsService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   async create(
@@ -93,6 +95,8 @@ export class ChannelsService {
     await this.prisma.channelMember
       .delete({ where: { channelId_userId: { channelId, userId: targetUserId } } })
       .catch(() => undefined); // idempotente
+    // corta a sala ao vivo: sem isso ele seguiria recebendo o canal privado
+    this.realtime.leaveChannelRooms(targetUserId, [channelId]);
     return { removed: targetUserId };
   }
 
