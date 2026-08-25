@@ -1,5 +1,18 @@
 import type { ChannelType as PrismaChannelType, MemberRole as PrismaMemberRole, UserStatus as PrismaUserStatus } from "@prisma/client";
 import type { ChannelType, MemberRole, UserStatus } from "@newdisc/shared";
+// ── h-moderacao ──
+import type {
+  AuditAction as PrismaAuditAction,
+  AuditTargetType as PrismaAuditTargetType,
+  MessageSystemType as PrismaMessageSystemType,
+  ReportReason as PrismaReportReason,
+} from "@prisma/client";
+import type {
+  AuditAction,
+  AuditTargetType,
+  MessageSystemType,
+  ReportReason,
+} from "@newdisc/shared";
 
 /**
  * Ponte única entre os enums do Postgres (gerados pelo Prisma) e as union types
@@ -18,3 +31,9 @@ type Trava<_T extends true> = never;
 type _TravaUserStatus = Trava<Equivalentes<PrismaUserStatus, UserStatus>>;
 type _TravaChannelType = Trava<Equivalentes<PrismaChannelType, ChannelType>>;
 type _TravaMemberRole = Trava<Equivalentes<PrismaMemberRole, MemberRole>>;
+
+// ── h-moderacao ──
+type _TravaAuditAction = Trava<Equivalentes<PrismaAuditAction, AuditAction>>;
+type _TravaAuditTargetType = Trava<Equivalentes<PrismaAuditTargetType, AuditTargetType>>;
+type _TravaMessageSystemType = Trava<Equivalentes<PrismaMessageSystemType, MessageSystemType>>;
+type _TravaReportReason = Trava<Equivalentes<PrismaReportReason, ReportReason>>;

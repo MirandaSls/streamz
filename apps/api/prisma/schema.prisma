@@ -39,8 +39,8 @@ enum MemberRole {
 }
 
 model User {
-  id           String     @id @default(cuid())
-  username     String     @unique
+  id           String      @id @default(cuid())
+  username     String      @unique
   passwordHash String
   // nome de exibição (o Discord separa "display name" de "username")
   displayName  String?
@@ -48,23 +48,29 @@ model User {
   // chave do objeto do avatar no storage; a URL pública é derivada na hora
   avatarKey    String?
   // presença efetiva, mantida pelo gateway (ONLINE/OFFLINE conforme conexões)
-  status       UserStatus @default(OFFLINE)
+  status       UserStatus  @default(OFFLINE)
   // status escolhido pelo usuário (Ausente, Não perturbe, Invisível=OFFLINE);
   // null = automático. Só vale enquanto ele está conectado.
   manualStatus UserStatus?
-  createdAt    DateTime   @default(now())
+  createdAt    DateTime    @default(now())
 
-  ownedGuilds      Guild[]         @relation("GuildOwner")
-  memberships      GuildMember[]
-  messages         Message[]
-  reactions        Reaction[]
-  invites          Invite[]        @relation("InviteCreator")
-  bans             Ban[]           @relation("BannedUser")
-  ownedChannels    Channel[]       @relation("ChannelOwner")
-  refreshTokens    RefreshToken[]
-  channelAccess    ChannelMember[]
-  attachments      Attachment[]    @relation("AttachmentUploader")
-  readStates       ReadState[]
+  ownedGuilds   Guild[]         @relation("GuildOwner")
+  memberships   GuildMember[]
+  messages      Message[]
+  reactions     Reaction[]
+  invites       Invite[]        @relation("InviteCreator")
+  bans          Ban[]           @relation("BannedUser")
+  ownedChannels Channel[]       @relation("ChannelOwner")
+  refreshTokens RefreshToken[]
+  channelAccess ChannelMember[]
+  attachments   Attachment[]    @relation("AttachmentUploader")
+  readStates    ReadState[]
+
+  // ── h-moderacao ──
+  auditLogs       AuditLog[] @relation("AuditActor")
+  pollVotes       PollVote[]
+  reportsMade     Report[]   @relation("ReportReporter")
+  reportsResolved Report[]   @relation("ReportResolver")
 }
 
 // Até onde cada usuário leu cada canal. É o que decide "não lido" e o badge
@@ -112,6 +118,20 @@ model Guild {
   channels Channel[]
   invites  Invite[]
   bans     Ban[]
+
+  // ── h-moderacao ──
+  // Canal onde entram as mensagens "X entrou no servidor"; null = desligado.
+  systemChannelId    String?
+  // Canal de regras. Quando existe, postar exige aceite (GuildMember.acceptedRulesAt).
+  rulesChannelId     String?
+  welcomeDescription String?
+  // Canais em destaque da tela de boas-vindas, na ordem escolhida.
+  welcomeChannelIds  String[]   @default([])
+  // Aparece em "Descobrir" (GET /discover).
+  discoverable       Boolean    @default(false)
+  description        String?
+  auditLogs          AuditLog[]
+  reports            Report[]
 }
 
 model Ban {
@@ -142,6 +162,13 @@ model Invite {
   guild   Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
   creator User  @relation("InviteCreator", fields: [creatorId], references: [id], onDelete: Cascade)
 
+  // ── h-moderacao ──
+  // Convite temporário: o convidado sai do servidor ao desconectar.
+  temporary Boolean  @default(false)
+  // Canal para onde o convite leva; null = canal de sistema ou o primeiro.
+  channelId String?
+  channel   Channel? @relation("InviteChannel", fields: [channelId], references: [id], onDelete: SetNull)
+
   @@index([guildId])
 }
 
@@ -155,6 +182,14 @@ model GuildMember {
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
   joinedAt DateTime @default(now())
+
+  // ── h-moderacao ──
+  // Fim do castigo. Data no passado = sem castigo (o histórico não é apagado).
+  timeoutUntil    DateTime?
+  // Quando aceitou as regras do servidor; null = ainda não aceitou.
+  acceptedRulesAt DateTime?
+  // Quando viu a tela de boas-vindas; null = mostrar ao abrir o servidor.
+  welcomeSeenAt   DateTime?
 
   @@unique([userId, guildId])
   @@index([guildId])
@@ -181,11 +216,15 @@ model Channel {
   pairKey   String?     @unique
   createdAt DateTime    @default(now())
 
-  guild    Guild?          @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  owner    User?           @relation("ChannelOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  guild      Guild?          @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  owner      User?           @relation("ChannelOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   messages   Message[]
   members    ChannelMember[]
   readStates ReadState[]
+
+  // ── h-moderacao ──
+  channelInvites Invite[] @relation("InviteChannel")
+  reports        Report[]
 
   @@index([guildId])
 }
@@ -225,6 +264,13 @@ model Message {
   parent  Message?  @relation("MessageThread", fields: [parentId], references: [id], onDelete: Cascade)
   replies Message[] @relation("MessageThread")
 
+  // ── h-moderacao ──
+  // Mensagem escrita pelo próprio servidor (entrada no servidor, aviso da
+  // moderação na DM). null = mensagem comum, de gente.
+  systemType MessageSystemType?
+  poll       Poll?
+  reports    Report[]
+
   @@index([channelId, parentId, createdAt])
   @@index([parentId])
 }
@@ -263,4 +309,152 @@ model Reaction {
 
   @@unique([messageId, userId, emoji])
   @@index([messageId])
+}
+
+// ── h-moderacao ──────────────────────────────────────────
+
+// Tipo de mensagem escrita pelo servidor. Espelha `MessageSystemType` de
+// `@newdisc/shared` (equivalência travada em common/enums.ts).
+enum MessageSystemType {
+  SYSTEM_JOIN
+  SYSTEM_MOD_NOTICE
+}
+
+// Ações que entram no registro de auditoria. Espelha `AuditAction` de
+// `@newdisc/shared`.
+enum AuditAction {
+  MEMBER_KICK
+  MEMBER_BAN
+  MEMBER_UNBAN
+  MEMBER_TIMEOUT
+  MEMBER_TIMEOUT_REMOVE
+  MEMBER_ROLE_UPDATE
+  CHANNEL_CREATE
+  CHANNEL_UPDATE
+  CHANNEL_DELETE
+  ROLE_CREATE
+  ROLE_UPDATE
+  ROLE_DELETE
+  INVITE_CREATE
+  INVITE_REVOKE
+  MESSAGE_DELETE
+  MESSAGE_BULK_DELETE
+  GUILD_UPDATE
+  EMOJI_CREATE
+  STICKER_CREATE
+}
+
+enum AuditTargetType {
+  USER
+  CHANNEL
+  ROLE
+  INVITE
+  MESSAGE
+  GUILD
+  EMOJI
+  STICKER
+}
+
+enum ReportReason {
+  SPAM
+  HARASSMENT
+  HATE
+  VIOLENCE
+  NSFW
+  SELF_HARM
+  OTHER
+}
+
+// Registro de auditoria do servidor: quem fez o quê, com quem e por quê.
+//
+// O alvo é guardado por id **e** por nome (`targetName`), de propósito: canal
+// apagado, convite revogado e conta removida deixam de existir, e o registro
+// precisa continuar dizendo sobre o que ele fala. Por isso também não há chave
+// estrangeira para o alvo — só para o servidor e para o ator.
+model AuditLog {
+  id         String           @id @default(cuid())
+  guildId    String
+  // null quando a conta do moderador foi apagada — o registro sobrevive.
+  actorId    String?
+  action     AuditAction
+  targetId   String?
+  targetType AuditTargetType?
+  targetName String?
+  // lista de { field, before, after } serializada; [] quando não se aplica.
+  changes    Json             @default("[]")
+  reason     String?
+  createdAt  DateTime         @default(now())
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  // a listagem é sempre "deste servidor, mais recentes primeiro"
+  @@index([guildId, createdAt])
+  @@index([guildId, action, createdAt])
+  @@index([guildId, actorId, createdAt])
+}
+
+// Enquete: uma face de uma mensagem (1-a-1), não uma mensagem à parte. Assim
+// ela herda canal, autor, permissão e histórico sem nenhum caminho novo.
+model Poll {
+  id        String    @id @default(cuid())
+  messageId String    @unique
+  question  String
+  // texto das opções, na ordem; o voto referencia o índice.
+  options   String[]
+  multi     Boolean   @default(false)
+  expiresAt DateTime?
+  closedAt  DateTime?
+  createdAt DateTime  @default(now())
+
+  message Message    @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  votes   PollVote[]
+}
+
+model PollVote {
+  id          String   @id @default(cuid())
+  pollId      String
+  userId      String
+  optionIndex Int
+  createdAt   DateTime @default(now())
+
+  poll Poll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // um voto por opção por pessoa; sem `multi` o service ainda garante um só
+  @@unique([pollId, userId, optionIndex])
+  @@index([pollId])
+}
+
+// Denúncia de mensagem, visível à moderação do servidor.
+//
+// `messageContent` é a cópia do texto no momento da denúncia: a mensagem pode
+// ser apagada (inclusive *por causa* da denúncia) e o moderador ainda precisa
+// ver o que foi denunciado.
+model Report {
+  id             String       @id @default(cuid())
+  guildId        String
+  channelId      String
+  messageId      String?
+  messageContent String?
+  reporterId     String?
+  // autor da mensagem denunciada, para agrupar por pessoa (sem FK: a conta
+  // pode sumir e a denúncia continua valendo).
+  targetId       String?
+  reason         ReportReason
+  details        String?
+  resolved       Boolean      @default(false)
+  resolvedById   String?
+  resolvedAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  guild      Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  channel    Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  message    Message? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  reporter   User?    @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: SetNull)
+  resolvedBy User?    @relation("ReportResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  // uma pessoa não denuncia a mesma mensagem duas vezes
+  @@unique([messageId, reporterId])
+  @@index([guildId, resolved, createdAt])
 }
