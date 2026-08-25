@@ -81,3 +81,36 @@ body {
 .typing-dot:nth-child(3) {
   animation-delay: 0.4s;
 }
+
+/* ── e-configuracoes: preferências de aparência e acessibilidade ──────────
+ * Os valores vêm de `stores/settings`, que escreve as variáveis e as classes
+ * no `<html>`. Aqui fica só como cada uma se traduz em pixel.
+ */
+
+/*
+ * Zoom do app (Ctrl+= / Ctrl+-). A altura do corpo é dividida pelo fator para
+ * que, depois da escala, o conteúdo continue medindo exatamente a janela — sem
+ * isso, qualquer zoom acima de 100% criaria uma barra de rolagem vertical.
+ */
+body {
+  zoom: var(--zoom, 1);
+  height: calc(100% / var(--zoom, 1));
+}
+
+/* Saturação das cores. No elemento raiz o filtro não vira bloco de contenção,
+ * então modais e menus `position: fixed` continuam ancorados na janela. */
+html.cores-ajustadas {
+  filter: saturate(var(--saturacao, 1));
+}
+
+/* Reduzir movimento: nada de transição nem animação em lugar nenhum. */
+html.reduzir-movimento *,
+html.reduzir-movimento *::before,
+html.reduzir-movimento *::after {
+  animation-duration: 0.001ms !important;
+  animation-delay: 0ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  transition-delay: 0ms !important;
+  scroll-behavior: auto !important;
+}
