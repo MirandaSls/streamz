@@ -35,6 +35,8 @@ function message(id: string, extra: Partial<Message> = {}): Message {
     parentId: null,
     replyCount: 0,
     attachments: [],
+    sticker: null,
+    suppressEmbeds: false,
     ...extra,
   };
 }

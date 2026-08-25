@@ -98,10 +98,17 @@ export function isUnread(c: Pick<Channel, "lastMessageAt" | "lastReadAt">): bool
   return new Date(c.lastMessageAt).getTime() > new Date(c.lastReadAt).getTime();
 }
 
-/** true se o texto menciona `@username` (limite de palavra dos dois lados). */
+/**
+ * true se o texto menciona `@username` (limite de palavra dos dois lados) ou
+ * atinge todo mundo com `@everyone`/`@here` — que também é menção a mim, senão
+ * o aviso do Discord que mais importa seria o único a não contar. Quem não tem
+ * permissão para mencionar todos não chega a enviar a menção: o cliente manda
+ * texto puro (ver `mentionsEveryone`, na seção g-emojis-midia).
+ */
 export function mentionsUser(content: string, username: string): boolean {
   const esc = username.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(^|[^\\w.])@${esc}(?![\\w.-])`, "i").test(content);
+  if (new RegExp(`(^|[^\\w.])@${esc}(?![\\w.-])`, "i").test(content)) return true;
+  return mentionsEveryone(content);
 }
 
 /** Primeira URL http(s) do texto — a que vira embed. */
@@ -175,6 +182,10 @@ export interface Message {
   replyCount: number;
   /** anexos vinculados (imagens/arquivos). */
   attachments: Attachment[];
+  /** figurinha enviada no lugar do texto (g-emojis-midia); null quando não há. */
+  sticker: Sticker | null;
+  /** autor/moderação removeu a prévia de link desta mensagem (g-emojis-midia). */
+  suppressEmbeds: boolean;
   /**
    * Eco do nonce que o cliente mandou no `message.create`. Só aparece no evento
    * `message.new`; nunca é persistido nem volta no histórico REST. Serve para o
@@ -258,6 +269,13 @@ export const WS_EVENTS = {
   MEMBER_JOINED: "member.joined",
   MEMBER_LEFT: "member.left",
   USER_UPDATED: "user.updated",
+  // ── g-emojis-midia ──
+  /** cliente → servidor: liga/desliga a prévia de link de uma mensagem. */
+  MESSAGE_SUPPRESS_EMBEDS: "message.suppressEmbeds",
+  /** servidor → cliente: a lista de emojis personalizados do servidor mudou. */
+  EMOJI_UPDATED: "emoji.updated",
+  /** servidor → cliente: a lista de figurinhas do servidor mudou. */
+  STICKER_UPDATED: "sticker.updated",
 } as const;
 
 /** Teto de caracteres de uma mensagem (canal ou DM). */
@@ -295,11 +313,14 @@ export const messageCreateSchema = z
      * em `message.new` para que o autor substitua a mensagem otimista pela real.
      */
     nonce: z.string().max(64).optional(),
+    /** figurinha a enviar; sozinha já é mensagem (g-emojis-midia). */
+    stickerId: idSchema.optional(),
   })
-  // uma mensagem vazia sem anexo não é mensagem
-  .refine((m) => m.content.trim().length > 0 || (m.attachmentIds?.length ?? 0) > 0, {
-    message: "Mensagem vazia",
-  });
+  // uma mensagem vazia sem anexo nem figurinha não é mensagem
+  .refine(
+    (m) => m.content.trim().length > 0 || (m.attachmentIds?.length ?? 0) > 0 || !!m.stickerId,
+    { message: "Mensagem vazia" },
+  );
 export type MessageCreatePayload = z.infer<typeof messageCreateSchema>;
 
 export const messageEditSchema = z.object({
@@ -401,4 +422,289 @@ export interface VoiceTokenResponse {
   token: string;
   url: string;
   room: string;
+}
+
+// ── g-emojis-midia ───────────────────────────────────────────
+// Emojis personalizados, figurinhas, GIFs e o que o composer precisa saber.
+
+/** Tamanho máximo do arquivo de um emoji personalizado (bytes). */
+export const MAX_CUSTOM_EMOJI_SIZE = 256 * 1024; // 256 KB
+/** Lado máximo (px) da imagem de um emoji personalizado. */
+export const MAX_CUSTOM_EMOJI_DIMENSION = 128;
+/** Tamanho máximo do arquivo de uma figurinha (bytes). */
+export const MAX_STICKER_SIZE = 512 * 1024; // 512 KB
+/** Lado máximo (px) da imagem de uma figurinha. */
+export const MAX_STICKER_DIMENSION = 320;
+/** Emojis personalizados por servidor. */
+export const MAX_EMOJIS_PER_GUILD = 50;
+/** Figurinhas por servidor. */
+export const MAX_STICKERS_PER_GUILD = 25;
+
+/**
+ * Nome de emoji/figurinha: o que cabe entre os dois-pontos de `:nome:`. Sem
+ * maiúscula, acento nem espaço, como no Discord — o nome é chave de busca do
+ * autocomplete e precisa ser digitável direto no composer.
+ */
+export const emojiNameSchema = z
+  .string({ required_error: "obrigatório", invalid_type_error: "deve ser texto" })
+  .min(2, "Nome curto demais")
+  .max(32, "Nome longo demais")
+  .regex(/^[a-z0-9_]+$/, "Use só letras minúsculas, números e _");
+
+export interface CustomEmoji {
+  id: string;
+  guildId: string;
+  /** nome sem os dois-pontos (`festa`), único dentro do servidor. */
+  name: string;
+  /** GIF animado — o picker sinaliza; o render usa `<img>` nos dois casos. */
+  animated: boolean;
+  /** URL da imagem (`GET /emojis/:id/image`). */
+  url: string;
+  createdById: string;
+}
+
+/** Emojis de um servidor, do jeito que o seletor agrupa. */
+export interface GuildEmojis {
+  guildId: string;
+  guildName: string;
+  guildIconUrl: string | null;
+  emojis: CustomEmoji[];
+}
+
+export interface Sticker {
+  id: string;
+  guildId: string;
+  name: string;
+  /** palavras-chave separadas por espaço, para a busca do seletor. */
+  tags: string;
+  /** URL da imagem (`GET /stickers/:id/image`). */
+  url: string;
+  createdById: string;
+}
+
+/** Figurinhas de um servidor, do jeito que o seletor agrupa. */
+export interface GuildStickers {
+  guildId: string;
+  guildName: string;
+  guildIconUrl: string | null;
+  stickers: Sticker[];
+}
+
+/**
+ * Forma interna de um emoji personalizado no texto da mensagem e no campo
+ * `emoji` de uma reação: `<:nome:id>`. O usuário digita `:nome:` e o cliente
+ * troca pela forma interna antes de enviar — assim o emoji continua resolvendo
+ * depois de renomeado, e some de vez quando é apagado (o id é o que manda).
+ */
+export const CUSTOM_EMOJI_RE = /<:([a-z0-9_]{2,32}):([A-Za-z0-9_-]{1,64})>/;
+/** Idem, global — para varrer um texto inteiro. */
+export const CUSTOM_EMOJI_RE_G = new RegExp(CUSTOM_EMOJI_RE.source, "g");
+
+/** Monta a forma interna `<:nome:id>`. */
+export function formatCustomEmoji(name: string, id: string): string {
+  return `<:${name}:${id}>`;
+}
+
+/** Lê `<:nome:id>`; devolve null se o texto não for exatamente um token. */
+export function parseCustomEmoji(token: string): { name: string; id: string } | null {
+  const m = token.match(new RegExp(`^${CUSTOM_EMOJI_RE.source}$`));
+  return m ? { name: m[1], id: m[2] } : null;
+}
+
+/** true quando o texto inteiro é um emoji personalizado (usado em reação). */
+export function isCustomEmoji(token: string): boolean {
+  return parseCustomEmoji(token) !== null;
+}
+
+/**
+ * `message.suppressEmbeds`: liga/desliga a prévia de link de uma mensagem.
+ * Como toda escrita de mensagem, vai pelo gateway e volta em `message.updated`.
+ */
+export const suppressEmbedsSchema = z.object({
+  messageId: idSchema,
+  suppress: z.boolean({ required_error: "obrigatório" }),
+});
+export type SuppressEmbedsPayload = z.infer<typeof suppressEmbedsSchema>;
+
+/** Evento de estrutura: a lista de emojis do servidor mudou. */
+export interface EmojiUpdatedEvent {
+  guildId: string;
+  emojis: CustomEmoji[];
+}
+
+/** Evento de estrutura: a lista de figurinhas do servidor mudou. */
+export interface StickerUpdatedEvent {
+  guildId: string;
+  stickers: Sticker[];
+}
+
+// ── Menções a todos (@everyone / @here) ──────────────────────
+/** Menções que atingem mais de uma pessoa; só valem com permissão. */
+export const MENCOES_GLOBAIS = ["everyone", "here"] as const;
+export type MencaoGlobal = (typeof MENCOES_GLOBAIS)[number];
+
+/** true se o texto contém `@everyone` ou `@here` (limite de palavra). */
+export function mentionsEveryone(content: string): boolean {
+  return /(^|[^\w.])@(everyone|here)(?![\w.-])/i.test(content);
+}
+
+// ── GIFs (Tenor v2) ──────────────────────────────────────────
+/** Um GIF do provedor de busca, reduzido ao que a interface usa. */
+export interface GifResult {
+  id: string;
+  /** URL do GIF em tamanho de envio. */
+  url: string;
+  /** URL da miniatura do grid do seletor. */
+  previewUrl: string;
+  description: string;
+  width: number;
+  height: number;
+}
+
+/** Categoria sugerida enquanto ainda não se buscou nada. */
+export interface GifCategory {
+  name: string;
+  previewUrl: string;
+  /** termo que o clique joga na busca. */
+  searchTerm: string;
+}
+
+/**
+ * Resposta das rotas de GIF. `configured: false` quando falta `TENOR_API_KEY` —
+ * a interface mostra "GIFs não configurados" em vez de um erro, espelhando o
+ * tratamento de credencial ausente do LiveKit e do R2.
+ */
+export interface GifSearchResponse {
+  configured: boolean;
+  results: GifResult[];
+}
+
+export interface GifCategoriesResponse {
+  configured: boolean;
+  categories: GifCategory[];
+}
+
+/** Corpo de `POST /uploads/external`: anexo por URL (GIF do provedor). */
+export const externalAttachmentSchema = z.object({
+  url: z.string().url("URL inválida").max(1024),
+  filename: z.string().min(1).max(200),
+  width: z.number().int().positive().max(10000).optional(),
+  height: z.number().int().positive().max(10000).optional(),
+});
+export type ExternalAttachmentInput = z.infer<typeof externalAttachmentSchema>;
+
+// ── Comandos de barra (`/`) ──────────────────────────────────
+/** O que um comando `/` faz com o texto que o segue. */
+export type ComandoBarraTipo =
+  /** acrescenta um sufixo fixo ao texto (/shrug, /tableflip, /unflip) */
+  | "texto"
+  /** envia como ação, em itálico (/me) */
+  | "acao"
+  /** envolve tudo em ||spoiler|| (/spoiler) */
+  | "spoiler"
+  /** abre o seletor de GIF já com o termo digitado (/giphy) */
+  | "gif"
+  /** muda o apelido no servidor (/nick) — depende do agente de cargos */
+  | "apelido";
+
+export interface ComandoBarra {
+  nome: string;
+  descricao: string;
+  tipo: ComandoBarraTipo;
+  /** rótulo do argumento no autocomplete ("mensagem", "termo"…). */
+  argumento?: string;
+}
+
+/** Comandos do composer, na ordem em que o autocomplete os mostra. */
+export const COMANDOS_BARRA: readonly ComandoBarra[] = [
+  { nome: "shrug", descricao: "Acrescenta ¯\\_(ツ)_/¯ à mensagem", tipo: "texto", argumento: "mensagem" },
+  { nome: "tableflip", descricao: "Acrescenta (╯°□°)╯︵ ┻━┻ à mensagem", tipo: "texto", argumento: "mensagem" },
+  { nome: "unflip", descricao: "Acrescenta ┬─┬ ノ( ゜-゜ノ) à mensagem", tipo: "texto", argumento: "mensagem" },
+  { nome: "me", descricao: "Envia a mensagem como ação, em itálico", tipo: "acao", argumento: "mensagem" },
+  { nome: "spoiler", descricao: "Marca a mensagem inteira como spoiler", tipo: "spoiler", argumento: "mensagem" },
+  { nome: "giphy", descricao: "Procura um GIF para enviar", tipo: "gif", argumento: "termo" },
+  { nome: "nick", descricao: "Muda seu apelido neste servidor", tipo: "apelido", argumento: "apelido" },
+];
+
+/** Sufixo de cada comando que só acrescenta texto. */
+export const SUFIXOS_COMANDO: Record<string, string> = {
+  shrug: "¯\\_(ツ)_/¯",
+  tableflip: "(╯°□°)╯︵ ┻━┻",
+  unflip: "┬─┬ ノ( ゜-゜ノ)",
+};
+
+/** Prefixo que marca um anexo como spoiler (o Discord usa o mesmo). */
+export const SPOILER_PREFIX = "SPOILER_";
+
+/** true se o anexo deve entrar borrado (nome começa com `SPOILER_`). */
+export function isSpoilerAttachment(a: Pick<Attachment, "filename">): boolean {
+  return a.filename.startsWith(SPOILER_PREFIX);
+}
+
+/** Nome do anexo sem o prefixo de spoiler, para mostrar na tela. */
+export function attachmentDisplayName(a: Pick<Attachment, "filename">): string {
+  return isSpoilerAttachment(a) ? a.filename.slice(SPOILER_PREFIX.length) : a.filename;
+}
+
+// ── Classificação de mídia (o que o cliente sabe tocar/mostrar) ──
+export function isVideoAttachment(a: Pick<Attachment, "contentType">): boolean {
+  return a.contentType.startsWith("video/");
+}
+
+export function isAudioAttachment(a: Pick<Attachment, "contentType">): boolean {
+  return a.contentType.startsWith("audio/");
+}
+
+export function isPdfAttachment(a: Pick<Attachment, "contentType">): boolean {
+  return a.contentType === "application/pdf";
+}
+
+/**
+ * Quebra uma URL http(s) em host, caminho e query, sem `URL` — o contrato é
+ * compilado com `lib: ES2022` (sem DOM), onde `URL` não existe como tipo, e
+ * este pacote roda nos dois lados. Devolve null se não for http(s).
+ */
+function partesDaUrl(url: string): { host: string; path: string; query: string } | null {
+  const m = url.match(/^https?:\/\/([^/?#]+)([^?#]*)(?:\?([^#]*))?/i);
+  if (!m) return null;
+  // fora o host, tudo é comparado como veio; só o host é normalizado
+  return {
+    host: m[1].toLowerCase().replace(/:\d+$/, "").replace(/^www\./, ""),
+    path: m[2] || "/",
+    query: m[3] ?? "",
+  };
+}
+
+/** Valor de um parâmetro da query, ou string vazia. */
+function paramDaQuery(query: string, nome: string): string {
+  for (const par of query.split("&")) {
+    const i = par.indexOf("=");
+    if (i > 0 && decodeURIComponent(par.slice(0, i)) === nome) {
+      return decodeURIComponent(par.slice(i + 1));
+    }
+  }
+  return "";
+}
+
+/**
+ * Id do vídeo do YouTube numa URL, ou null. É o que troca o card de prévia pelo
+ * player embutido — o Discord toca o vídeo dentro da própria mensagem.
+ */
+export function youtubeVideoId(url: string): string | null {
+  const u = partesDaUrl(url);
+  if (!u) return null;
+  const valido = (id: string) => (/^[A-Za-z0-9_-]{11}$/.test(id) ? id : null);
+  if (u.host === "youtu.be") return valido(u.path.slice(1));
+  if (u.host !== "youtube.com" && u.host !== "m.youtube.com" && u.host !== "music.youtube.com") {
+    return null;
+  }
+  if (u.path === "/watch") return valido(paramDaQuery(u.query, "v"));
+  const m = u.path.match(/^\/(?:embed|shorts|live)\/([A-Za-z0-9_-]{11})$/);
+  return m ? m[1] : null;
+}
+
+/** true se a URL aponta direto para uma imagem (vira anexo visual, não card). */
+export function isDirectImageUrl(url: string): boolean {
+  const u = partesDaUrl(url);
+  return !!u && /\.(png|jpe?g|gif|webp|avif)$/i.test(u.path);
 }

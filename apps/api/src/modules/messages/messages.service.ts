@@ -10,11 +10,14 @@ import { StorageService } from "../storage/storage.service";
 import type { Attachment, Message as MessageDTO, ReactionGroup } from "@newdisc/shared";
 import { MAX_ATTACHMENTS_PER_MESSAGE } from "@newdisc/shared";
 import { toPublicUser, type PublicUserRow } from "../../common/dto";
+import { toStickerDTO, type StickerRow } from "../emojis/dto";
 
 const MESSAGE_INCLUDE = {
   author: true,
   reactions: true,
   attachments: true,
+  // g-emojis-midia: figurinha enviada no lugar do texto
+  sticker: true,
   channel: { select: { guildId: true } },
   _count: { select: { replies: true } },
 } as const;
@@ -224,6 +227,8 @@ export class MessagesService {
       height: number | null;
     }[];
     _count: { replies: number };
+    sticker: StickerRow | null;
+    suppressEmbeds: boolean;
   }): Promise<MessageDTO> {
     return {
       id: m.id,
@@ -237,6 +242,8 @@ export class MessagesService {
       author: toPublicUser(m.author),
       reactions: this.groupReactions(m.reactions),
       attachments: await Promise.all(m.attachments.map((a) => this.toAttachmentDTO(a))),
+      sticker: m.sticker ? toStickerDTO(m.sticker) : null,
+      suppressEmbeds: m.suppressEmbeds,
     };
   }
 

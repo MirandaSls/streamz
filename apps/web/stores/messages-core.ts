@@ -1,5 +1,5 @@
 import { MAX_MESSAGE_LENGTH } from "@newdisc/shared";
-import type { Attachment, Message, PublicUser } from "@newdisc/shared";
+import type { Attachment, Message, PublicUser, Sticker } from "@newdisc/shared";
 
 /**
  * Regras puras da timeline de um canal — sem React, sem socket, sem fetch.
@@ -46,6 +46,8 @@ export function optimisticMessage(input: {
   content: string;
   attachments?: Attachment[];
   parentId?: string | null;
+  /** figurinha enviada no lugar do texto (g-emojis-midia). */
+  sticker?: Sticker | null;
 }): ChatMessage {
   return {
     id: `pending:${input.nonce}`,
@@ -59,6 +61,8 @@ export function optimisticMessage(input: {
     parentId: input.parentId ?? null,
     replyCount: 0,
     attachments: input.attachments ?? [],
+    sticker: input.sticker ?? null,
+    suppressEmbeds: false,
     nonce: input.nonce,
     pending: true,
   };

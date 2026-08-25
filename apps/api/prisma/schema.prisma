@@ -65,6 +65,8 @@ model User {
   channelAccess    ChannelMember[]
   attachments      Attachment[]    @relation("AttachmentUploader")
   readStates       ReadState[]
+  customEmojis     CustomEmoji[]   @relation("EmojiCreator")
+  createdStickers  Sticker[]       @relation("StickerCreator")
 }
 
 // Até onde cada usuário leu cada canal. É o que decide "não lido" e o badge
@@ -112,6 +114,8 @@ model Guild {
   channels Channel[]
   invites  Invite[]
   bans     Ban[]
+  customEmojis CustomEmoji[] @relation("GuildEmojis")
+  stickers     Sticker[]     @relation("GuildStickers")
 }
 
 model Ban {
@@ -227,6 +231,10 @@ model Message {
 
   @@index([channelId, parentId, createdAt])
   @@index([parentId])
+  // g-emojis-midia: mensagem só de figurinha e "remover prévia" do link
+  stickerId      String?
+  suppressEmbeds Boolean  @default(false)
+  sticker        Sticker? @relation(fields: [stickerId], references: [id], onDelete: SetNull)
 }
 
 // Arquivo enviado ao storage (R2). Criado no upload (messageId null) e
@@ -250,6 +258,9 @@ model Attachment {
 
   @@index([messageId])
   @@index([uploaderId])
+  // g-emojis-midia: GIF enviado por URL do provedor — sem objeto no bucket.
+  // `key` continua obrigatória e única; nesse caso é um marcador sintético.
+  externalUrl String?
 }
 
 model Reaction {
@@ -263,4 +274,52 @@ model Reaction {
 
   @@unique([messageId, userId, emoji])
   @@index([messageId])
+}
+
+// ── g-emojis-midia ──────────────────────────────────────────
+// Emoji personalizado de um servidor. O arquivo vive no storage (chave `key`);
+// a leitura é pela rota `GET /emojis/:id/image`, que serve os bytes — emoji
+// aparece em mensagem de qualquer canal, inclusive para quem já não vê o
+// servidor de origem, então não faz sentido amarrar a URL à autorização do
+// canal (é o mesmo que o Discord faz com o CDN de emoji).
+model CustomEmoji {
+  id          String   @id @default(cuid())
+  guildId     String
+  // sem os dois-pontos: `festa` em `:festa:`. Único dentro do servidor.
+  name        String
+  key         String   @unique
+  contentType String
+  size        Int
+  // GIF: o seletor sinaliza e o render não precisa fazer nada diferente
+  animated    Boolean  @default(false)
+  createdById String
+  createdAt   DateTime @default(now())
+
+  guild     Guild @relation("GuildEmojis", fields: [guildId], references: [id], onDelete: Cascade)
+  createdBy User  @relation("EmojiCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, name])
+  @@index([guildId])
+}
+
+// Figurinha de um servidor — imagem grande enviada no lugar do texto. Mesma
+// mecânica de storage do emoji; `tags` são as palavras que a busca do seletor
+// consulta além do nome.
+model Sticker {
+  id          String   @id @default(cuid())
+  guildId     String
+  name        String
+  tags        String   @default("")
+  key         String   @unique
+  contentType String
+  size        Int
+  createdById String
+  createdAt   DateTime @default(now())
+
+  guild     Guild     @relation("GuildStickers", fields: [guildId], references: [id], onDelete: Cascade)
+  createdBy User      @relation("StickerCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  messages  Message[]
+
+  @@unique([guildId, name])
+  @@index([guildId])
 }
