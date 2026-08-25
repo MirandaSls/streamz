@@ -14,15 +14,24 @@ export interface PublicUserRow {
   displayName: string | null;
   avatarUrl: string | null;
   status: UserStatus;
+  // ── d-social ── status personalizado (opcional na linha: nem toda query o traz)
+  customStatusText?: string | null;
+  customStatusEmoji?: string | null;
+  customStatusExpiresAt?: Date | null;
 }
 
-export function toPublicUser(u: PublicUserRow): PublicUser {
+export function toPublicUser(u: PublicUserRow, agora = new Date()): PublicUser {
+  // status personalizado vencido é o mesmo que ausente: a faxina diária limpa a
+  // coluna, mas a leitura não pode depender da hora em que o job rodou.
+  const vencido = !!u.customStatusExpiresAt && u.customStatusExpiresAt.getTime() <= agora.getTime();
   return {
     id: u.id,
     username: u.username,
     displayName: u.displayName,
     avatarUrl: u.avatarUrl,
     status: u.status,
+    customStatusText: vencido ? null : (u.customStatusText ?? null),
+    customStatusEmoji: vencido ? null : (u.customStatusEmoji ?? null),
   };
 }
 

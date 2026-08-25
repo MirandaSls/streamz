@@ -35,9 +35,26 @@ export class MaintenanceService {
     const agora = new Date();
     const tokens = await this.limparRefreshTokens(agora);
     const anexos = await this.limparAnexosOrfaos(agora);
-    if (tokens || anexos) {
-      this.logger.log(`Faxina: ${tokens} refresh token(s) e ${anexos} anexo(s) órfão(s) removidos`);
+    const status = await this.limparStatusPersonalizados(agora);
+    if (tokens || anexos || status) {
+      this.logger.log(
+        `Faxina: ${tokens} refresh token(s), ${anexos} anexo(s) órfão(s) e ` +
+          `${status} status personalizado(s) vencido(s) removidos`,
+      );
     }
+  }
+
+  // ── d-social ──
+  /**
+   * Zera os status personalizados vencidos. A leitura já trata vencido como
+   * ausente (`toPublicUser`), então isto é higiene da tabela — não correção.
+   */
+  async limparStatusPersonalizados(agora: Date): Promise<number> {
+    const { count } = await this.prisma.user.updateMany({
+      where: { customStatusExpiresAt: { lt: agora } },
+      data: { customStatusText: null, customStatusEmoji: null, customStatusExpiresAt: null },
+    });
+    return count;
   }
 
   /**

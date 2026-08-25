@@ -7,7 +7,12 @@ import {
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { StorageService } from "../storage/storage.service";
-import type { Attachment, Message as MessageDTO, ReactionGroup } from "@newdisc/shared";
+import type {
+  Attachment,
+  Message as MessageDTO,
+  MessageType,
+  ReactionGroup,
+} from "@newdisc/shared";
 import { MAX_ATTACHMENTS_PER_MESSAGE } from "@newdisc/shared";
 import { toPublicUser, type PublicUserRow } from "../../common/dto";
 
@@ -212,6 +217,8 @@ export class MessagesService {
     parentId: string | null;
     createdAt: Date;
     editedAt: Date | null;
+    // ── d-social ── DEFAULT ou uma das SYSTEM_* (eventos de grupo de DM)
+    type: MessageType;
     author: PublicUserRow;
     reactions: { emoji: string; userId: string }[];
     attachments: {
@@ -235,6 +242,7 @@ export class MessagesService {
       createdAt: m.createdAt.toISOString(),
       editedAt: m.editedAt ? m.editedAt.toISOString() : null,
       author: toPublicUser(m.author),
+      type: m.type,
       reactions: this.groupReactions(m.reactions),
       attachments: await Promise.all(m.attachments.map((a) => this.toAttachmentDTO(a))),
     };

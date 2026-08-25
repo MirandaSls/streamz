@@ -39,32 +39,53 @@ enum MemberRole {
 }
 
 model User {
-  id           String     @id @default(cuid())
-  username     String     @unique
-  passwordHash String
+  id                    String      @id @default(cuid())
+  username              String      @unique
+  passwordHash          String
   // nome de exibição (o Discord separa "display name" de "username")
-  displayName  String?
-  avatarUrl    String?
+  displayName           String?
+  avatarUrl             String?
   // chave do objeto do avatar no storage; a URL pública é derivada na hora
-  avatarKey    String?
+  avatarKey             String?
   // presença efetiva, mantida pelo gateway (ONLINE/OFFLINE conforme conexões)
-  status       UserStatus @default(OFFLINE)
+  status                UserStatus  @default(OFFLINE)
   // status escolhido pelo usuário (Ausente, Não perturbe, Invisível=OFFLINE);
   // null = automático. Só vale enquanto ele está conectado.
-  manualStatus UserStatus?
-  createdAt    DateTime   @default(now())
+  manualStatus          UserStatus?
+  createdAt             DateTime    @default(now())
+  // ── d-social ──
+  // Status personalizado: texto + emoji + quando deixa de valer (null = nunca).
+  // A faxina do MaintenanceService zera os vencidos; a leitura também trata o
+  // vencido como ausente, para não depender do horário do job.
+  customStatusText      String?
+  customStatusEmoji     String?
+  customStatusExpiresAt DateTime?
+  // Perfil rico: "sobre mim", pronomes e a faixa do cartão (cor ou imagem).
+  aboutMe               String?
+  pronouns              String?
+  bannerColor           String?
+  bannerKey             String?
+  // Última desconexão — "visto por último" no perfil. O gateway grava no
+  // disconnect; enquanto o usuário está online o valor é o da sessão anterior.
+  lastSeenAt            DateTime?
 
-  ownedGuilds      Guild[]         @relation("GuildOwner")
-  memberships      GuildMember[]
-  messages         Message[]
-  reactions        Reaction[]
-  invites          Invite[]        @relation("InviteCreator")
-  bans             Ban[]           @relation("BannedUser")
-  ownedChannels    Channel[]       @relation("ChannelOwner")
-  refreshTokens    RefreshToken[]
-  channelAccess    ChannelMember[]
-  attachments      Attachment[]    @relation("AttachmentUploader")
-  readStates       ReadState[]
+  ownedGuilds         Guild[]         @relation("GuildOwner")
+  memberships         GuildMember[]
+  messages            Message[]
+  reactions           Reaction[]
+  invites             Invite[]        @relation("InviteCreator")
+  bans                Ban[]           @relation("BannedUser")
+  ownedChannels       Channel[]       @relation("ChannelOwner")
+  refreshTokens       RefreshToken[]
+  channelAccess       ChannelMember[]
+  attachments         Attachment[]    @relation("AttachmentUploader")
+  readStates          ReadState[]
+  // ── d-social ──
+  friendshipsSent     Friendship[]    @relation("FriendshipRequester")
+  friendshipsReceived Friendship[]    @relation("FriendshipAddressee")
+  blocksMade          Block[]         @relation("Blocker")
+  blocksReceived      Block[]         @relation("Blocked")
+  hiddenChannels      DMHidden[]
 }
 
 // Até onde cada usuário leu cada canal. É o que decide "não lido" e o badge
@@ -180,12 +201,16 @@ model Channel {
   // dupla via upsert atômico. NULLs múltiplos são permitidos no Postgres.
   pairKey   String?     @unique
   createdAt DateTime    @default(now())
+  // ── d-social ── chave do ícone do grupo no storage (null em DM 1-a-1)
+  iconKey   String?
 
-  guild    Guild?          @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  owner    User?           @relation("ChannelOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  guild      Guild?          @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  owner      User?           @relation("ChannelOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   messages   Message[]
   members    ChannelMember[]
   readStates ReadState[]
+  // ── d-social ──
+  hiddenBy   DMHidden[]
 
   @@index([guildId])
 }
@@ -208,13 +233,15 @@ model ChannelMember {
 }
 
 model Message {
-  id        String    @id @default(cuid())
+  id        String      @id @default(cuid())
   channelId String
   authorId  String
   content   String
   parentId  String?
-  createdAt DateTime  @default(now())
+  createdAt DateTime    @default(now())
   editedAt  DateTime?
+  // ── d-social ── DEFAULT = escrita por alguém; SYSTEM_* = evento do grupo de DM
+  type      MessageType @default(DEFAULT)
 
   channel     Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
   author      User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
@@ -263,4 +290,74 @@ model Reaction {
 
   @@unique([messageId, userId, emoji])
   @@index([messageId])
+}
+
+// ── d-social ──────────────────────────────────────────────────
+
+// Tipo de mensagem. As SYSTEM_* são eventos do grupo de DM (entrou, saiu,
+// renomeou) renderizados como uma linha discreta, sem avatar nem ações; o
+// autor é quem fez a ação e o `content` guarda o alvo ou o valor novo.
+enum MessageType {
+  DEFAULT
+  SYSTEM_MEMBER_ADDED
+  SYSTEM_MEMBER_REMOVED
+  SYSTEM_MEMBER_LEFT
+  SYSTEM_GROUP_RENAMED
+  SYSTEM_GROUP_ICON
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+}
+
+// Amizade e pedido de amizade na mesma linha: PENDING é o pedido de
+// `requester` para `addressee`, ACCEPTED é a amizade (que não tem direção).
+// Uma linha só evita o estado impossível "A é amigo de B mas B não é de A".
+// A unicidade do par é garantida por `pairKey` ("menor:maior"), porque o
+// @@unique([requesterId, addresseeId]) sozinho deixaria os dois lados pedirem.
+model Friendship {
+  id          String           @id @default(cuid())
+  requesterId String
+  addresseeId String
+  status      FriendshipStatus @default(PENDING)
+  pairKey     String           @unique
+  createdAt   DateTime         @default(now())
+  acceptedAt  DateTime?
+
+  requester User @relation("FriendshipRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee User @relation("FriendshipAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@index([requesterId])
+  @@index([addresseeId])
+}
+
+// Bloqueio: direcional (A bloqueia B sem que B saiba). Bloquear derruba a
+// amizade e o pedido pendente; o bloqueado não abre DM nem manda pedido.
+model Block {
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker User @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+// Conversa "fechada" por um usuário: some da lista dele até chegar mensagem
+// nova. Guardar o instante (e não um booleano) é o que faz a conversa
+// reaparecer sozinha — a lista compara `hiddenAt` com a última mensagem, sem
+// depender de ninguém apagar a linha no envio.
+model DMHidden {
+  userId    String
+  channelId String
+  hiddenAt  DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@id([userId, channelId])
+  @@index([channelId])
 }
