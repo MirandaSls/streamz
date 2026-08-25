@@ -39,6 +39,8 @@ interface GuildsState {
   /** Recalcula o resumo do servidor a partir dos canais carregados. */
   syncFromChannels: (guildId: string) => void;
   handleMemberUpdated: (guildId: string, userId: string, role: MemberRole) => void;
+  handleMemberJoined: (guildId: string, member: GuildMemberView) => void;
+  handleMemberLeft: (guildId: string, userId: string) => void;
   /** Fui expulso/banido, saí ou o servidor foi apagado: some da lista, a tela se limpa. */
   handleRemoved: (guildId: string) => void;
 }
@@ -247,6 +249,21 @@ export const useGuilds = create<GuildsState>((set, get) => {
       set((s) => ({
         members: s.members.map((m) => (m.user.id === userId ? { ...m, role } : m)),
       }));
+    },
+
+    handleMemberJoined: (guildId, member) => {
+      if (get().activeGuildId !== guildId) return;
+      set((s) =>
+        s.members.some((m) => m.user.id === member.user.id)
+          ? s
+          : { members: [...s.members, member] },
+      );
+      usePresence.getState().seed([member.user]);
+    },
+
+    handleMemberLeft: (guildId, userId) => {
+      if (get().activeGuildId !== guildId) return;
+      set((s) => ({ members: s.members.filter((m) => m.user.id !== userId) }));
     },
 
     handleRemoved: (guildId) => {

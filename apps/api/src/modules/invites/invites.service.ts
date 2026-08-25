@@ -9,7 +9,9 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { RealtimeService } from "../realtime/realtime.service";
 import { isUniqueViolation } from "../../common/prisma-errors";
+import { WS_EVENTS } from "@newdisc/shared";
 import type { InviteInfo, InvitePreview } from "@newdisc/shared";
+import { toPublicUser } from "../../common/dto";
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 
@@ -147,6 +149,14 @@ export class InvitesService {
       }
     });
 
+    // quem já está no servidor vê o membro novo aparecer na lista
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (user) {
+      this.realtime.emitToGuild(invite.guildId, WS_EVENTS.MEMBER_JOINED, {
+        guildId: invite.guildId,
+        member: { role: "MEMBER", user: toPublicUser(user) },
+      });
+    }
     // sockets já abertos passam a receber o servidor novo sem reconectar
     this.realtime.joinGuildRoom(userId, invite.guildId);
     const publicos = await this.prisma.channel.findMany({

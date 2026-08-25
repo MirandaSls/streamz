@@ -71,7 +71,7 @@ export default function ChatView() {
 
       <MessageList
         // remonta a cada canal para zerar a rolagem e os marcadores de posição
-        key={channel.id}
+        key={`lista-${channel.id}`}
         items={slice.items}
         hasMore={slice.hasMore}
         loading={slice.loading}
@@ -100,7 +100,7 @@ export default function ChatView() {
       ) : (
         user && (
           <Composer
-            key={channel.id}
+            key={`composer-${channel.id}`}
             channelId={channel.id}
             allowAttachments
             placeholder={`Conversar em #${name}`}

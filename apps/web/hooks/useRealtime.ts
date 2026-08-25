@@ -8,6 +8,8 @@ import {
   type Channel,
   type ChannelDeletedEvent,
   type GuildRemovedEvent,
+  type MemberJoinedEvent,
+  type MemberLeftEvent,
   type MemberUpdatedEvent,
   type Message,
   type MessageDeletedEvent,
@@ -86,6 +88,13 @@ export function useRealtime(currentUserId?: string): void {
       on<ChannelDeletedEvent>(WS_EVENTS.CHANNEL_DELETED, ({ channelId, guildId }) => {
         if (guildId) useChannels.getState().handleDeleted(channelId);
         else useDMs.getState().handleDeleted(channelId);
+      }),
+
+      on<MemberJoinedEvent>(WS_EVENTS.MEMBER_JOINED, ({ guildId, member }) => {
+        useGuilds.getState().handleMemberJoined(guildId, member);
+      }),
+      on<MemberLeftEvent>(WS_EVENTS.MEMBER_LEFT, ({ guildId, userId }) => {
+        useGuilds.getState().handleMemberLeft(guildId, userId);
       }),
 
       on<MemberUpdatedEvent>(WS_EVENTS.MEMBER_UPDATED, ({ guildId, userId, role }) => {

@@ -45,7 +45,7 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
       </div>
 
       <MessageList
-        key={parentId}
+        key={`lista-${parentId}`}
         items={items}
         hasMore={false}
         loading={loading}
@@ -70,7 +70,7 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
       {user && (
         <div className="pb-4">
           <Composer
-            key={parentId}
+            key={`composer-${parentId}`}
             channelId={channelId}
             compact
             placeholder="Responder na thread…"

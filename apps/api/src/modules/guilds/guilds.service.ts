@@ -267,6 +267,7 @@ export class GuildsService {
     }
     await this.prisma.guildMember.delete({ where: { userId_guildId: { userId, guildId } } });
     await this.detachFromGuildRooms(guildId, userId);
+    this.realtime.emitToGuild(guildId, WS_EVENTS.MEMBER_LEFT, { guildId, userId });
     // outras abas do próprio usuário também precisam ver o servidor sumir
     this.realtime.emitToUser(userId, WS_EVENTS.GUILD_REMOVED, { guildId, reason: "left" });
     return { left: guildId };
@@ -345,6 +346,7 @@ export class GuildsService {
       where: { userId_guildId: { userId: targetUserId, guildId } },
     });
     await this.detachFromGuildRooms(guildId, targetUserId);
+    this.realtime.emitToGuild(guildId, WS_EVENTS.MEMBER_LEFT, { guildId, userId: targetUserId });
     this.realtime.emitToUser(targetUserId, WS_EVENTS.GUILD_REMOVED, {
       guildId,
       reason: "kicked",
@@ -366,6 +368,7 @@ export class GuildsService {
       }),
     ]);
     await this.detachFromGuildRooms(guildId, targetUserId);
+    this.realtime.emitToGuild(guildId, WS_EVENTS.MEMBER_LEFT, { guildId, userId: targetUserId });
     this.realtime.emitToUser(targetUserId, WS_EVENTS.GUILD_REMOVED, {
       guildId,
       reason: "banned",

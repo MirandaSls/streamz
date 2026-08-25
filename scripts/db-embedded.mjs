@@ -20,6 +20,10 @@ const pg = new EmbeddedPostgres({
   password: process.env.POSTGRES_PASSWORD ?? "newdisc",
   port: Number(process.env.POSTGRES_PORT ?? 5432),
   persistent: true,
+  // UTF-8 explícito: no Windows o initdb herda WIN1252 do sistema, e aí emoji
+  // numa mensagem falha com "no equivalent in encoding WIN1252". A imagem do
+  // docker-compose já é UTF-8 — aqui precisa ser dito.
+  initdbFlags: ["--encoding=UTF8", "--locale=C", "--lc-messages=C"],
 });
 
 const novo = !existsSync(resolve(dir, "PG_VERSION"));

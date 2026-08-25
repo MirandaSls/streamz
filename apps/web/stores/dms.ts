@@ -88,7 +88,9 @@ export const useDMs = create<DMsState>((set, get) => {
       const active = get().activeId;
       // voltar para a conversa que já estava aberta não refaz o histórico
       if (active) void useMessages.getState().open(active, { sticky: true });
-      await fetchList();
+      const channels = await fetchList();
+      // sem conversa aberta, entra na mais recente — como o Discord faz
+      if (!get().activeId && channels?.[0]) show(channels[0]);
     },
 
     refreshList: async () => {

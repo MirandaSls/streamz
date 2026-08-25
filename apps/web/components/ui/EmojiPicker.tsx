@@ -1,7 +1,20 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import Picker, { EmojiStyle, Theme } from "emoji-picker-react";
+import Picker, { Categories, EmojiStyle, Theme } from "emoji-picker-react";
+
+/** Nomes das categorias em pt-BR (a biblioteca vem em inglês). */
+const CATEGORIAS = [
+  { category: Categories.SUGGESTED, name: "Recentes" },
+  { category: Categories.SMILEYS_PEOPLE, name: "Pessoas" },
+  { category: Categories.ANIMALS_NATURE, name: "Natureza" },
+  { category: Categories.FOOD_DRINK, name: "Comida" },
+  { category: Categories.TRAVEL_PLACES, name: "Viagem" },
+  { category: Categories.ACTIVITIES, name: "Atividades" },
+  { category: Categories.OBJECTS, name: "Objetos" },
+  { category: Categories.SYMBOLS, name: "Símbolos" },
+  { category: Categories.FLAGS, name: "Bandeiras" },
+];
 
 /**
  * Seletor de emoji completo (busca, categorias, tons de pele), no tema escuro —
@@ -45,6 +58,7 @@ export default function EmojiPicker({
         lazyLoadEmojis
         skinTonesDisabled={false}
         searchPlaceholder="Buscar emoji"
+        categories={CATEGORIAS}
         previewConfig={{ showPreview: false }}
         width={352}
         height={420}

@@ -255,6 +255,8 @@ export const WS_EVENTS = {
   CHANNEL_UPDATED: "channel.updated",
   CHANNEL_DELETED: "channel.deleted",
   MEMBER_UPDATED: "member.updated",
+  MEMBER_JOINED: "member.joined",
+  MEMBER_LEFT: "member.left",
   USER_UPDATED: "user.updated",
 } as const;
 
@@ -380,6 +382,18 @@ export interface MemberUpdatedEvent {
   guildId: string;
   userId: string;
   role: MemberRole;
+}
+
+/** Alguém entrou no servidor (convite). */
+export interface MemberJoinedEvent {
+  guildId: string;
+  member: GuildMemberView;
+}
+
+/** Alguém saiu do servidor (saiu, foi expulso ou banido). */
+export interface MemberLeftEvent {
+  guildId: string;
+  userId: string;
 }
 
 // ── Voz (LiveKit) ────────────────────────────────────────────

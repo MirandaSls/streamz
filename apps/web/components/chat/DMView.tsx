@@ -82,7 +82,7 @@ export default function DMView() {
 
       <MessageList
         // remonta a cada conversa para zerar a rolagem e os marcadores de posição
-        key={active.id}
+        key={`lista-${active.id}`}
         items={slice.items}
         hasMore={slice.hasMore}
         loading={slice.loading}
@@ -108,7 +108,7 @@ export default function DMView() {
 
       {user && (
         <Composer
-          key={active.id}
+          key={`composer-${active.id}`}
           channelId={active.id}
           allowAttachments
           placeholder={`Conversar em ${group ? title : `@${title}`}`}
