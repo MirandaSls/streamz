@@ -16,7 +16,7 @@ import {
   MAX_ATTACHMENTS_PER_MESSAGE,
 } from "@newdisc/shared";
 import { api } from "@/lib/api";
-import { getSocket } from "@/lib/socket";
+import { getSocket, joinChannel, leaveChannel } from "@/lib/socket";
 import { useAuth } from "@/stores/auth";
 import VoicePanel from "@/components/VoicePanel";
 import MessageItem from "@/components/MessageItem";
@@ -149,13 +149,13 @@ export default function AppPage() {
     const history = await api.history(c.id);
     setMessages(history);
     setHasMore(history.length >= 50);
-    const socket = getSocket();
     // sai da sala do canal anterior antes de entrar no novo, para não continuar
     // recebendo (e notificando) mensagens de canais que não estão mais abertos
     if (joinedChannelRef.current && joinedChannelRef.current !== c.id) {
-      socket.emit(WS_EVENTS.CHANNEL_LEAVE, joinedChannelRef.current);
+      leaveChannel(joinedChannelRef.current);
     }
-    socket.emit(WS_EVENTS.CHANNEL_JOIN, c.id);
+    // helper do socket: registra a sala para reentrar sozinho após reconexão
+    joinChannel(c.id);
     joinedChannelRef.current = c.id;
   }, []);
 
