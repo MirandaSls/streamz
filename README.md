@@ -77,11 +77,13 @@ quando roda dentro do Tauri. Detalhes e alternativas: `apps/desktop/README.md`.
 - **Notificações nativas:** plugin `tauri-plugin-notification` registrado no
   `main.rs`, com permissão `notification:default` em
   `src-tauri/capabilities/default.json`. O lado web usa a ponte isolada
-  `apps/web/lib/desktop.ts` (`notify(title, body)`): dentro do Tauri usa a
-  notificação nativa; no navegador, cai para a Notification API do browser. Para
-  ligar, chame `notify(...)` ao receber `message.new` (instruções no topo do
-  arquivo). A ponte depende de `withGlobalTauri: true` (já ligado em
-  `tauri.conf.json`), que expõe `window.__TAURI__` — sem dependência npm nova.
+  `apps/web/lib/desktop.ts` — `notify({ title, body, onClick })`: dentro do Tauri
+  usa a notificação nativa, no navegador cai para a Notification API, e o clique
+  foca a janela antes de rodar o `onClick`. Os módulos `@tauri-apps/*` entram por
+  `import()` dinâmico, então `withGlobalTauri` fica **desligado** (nada de
+  `window.__TAURI__` exposto ao conteúdo da página).
+- **CSP:** política explícita em `app.security.csp` (antes era `null`). Os hosts
+  padrão são os do dev; para outro ambiente, ver `apps/desktop/README.md`.
 
 ### Auto-update — desligado
 

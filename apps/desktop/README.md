@@ -45,6 +45,67 @@ No export, `trailingSlash: true` faz o Next emitir `out/app/index.html` em vez d
 `out/app.html` — o protocolo de asset do Tauri resolve diretório → `index.html`,
 então recarregar a janela numa rota interna continua funcionando.
 
+## CSP e `withGlobalTauri`
+
+`app.security.csp` era `null` — ou seja, **sem CSP nenhuma**: qualquer conteúdo
+injetado na webview podia carregar script de qualquer origem e falar com qualquer
+host. Agora há uma política explícita, por diretiva, em `tauri.conf.json`.
+
+O que cada abertura paga:
+
+| Diretiva | Valor | Por quê |
+|---|---|---|
+| `default-src` | `'self'` | tudo o que não estiver listado abaixo é negado |
+| `script-src` | `'self' 'unsafe-inline'` | o export do Next embute o payload de hidratação em `<script>` inline. O Tauri calcula os hashes desses inlines no build e os injeta na política; quando isso acontece o `'unsafe-inline'` é ignorado pelo browser (hash tem precedência) e ele fica só como rede de segurança |
+| `style-src` | `'self' 'unsafe-inline'` | React/LiveKit aplicam estilo inline em elementos |
+| `img-src` | `'self' data: blob:` + API | avatares e anexos vêm do proxy da API (`API_PUBLIC_URL`); `blob:`/`data:` cobrem preview local de upload |
+| `media-src` | `'self' data: blob: mediastream:` | áudio/vídeo do LiveKit chegam como `MediaStream`/`blob:` |
+| `connect-src` | `'self' ipc: http://ipc.localhost` + API + WS + LiveKit | `ipc:`/`http://ipc.localhost` é o canal de IPC do Tauri 2 (sem isso nenhum comando nativo funciona); o resto é REST + Socket.IO + sinalização do LiveKit |
+| `worker-src` | `'self' blob:` | o LiveKit cria workers a partir de `blob:` |
+| `frame-src`, `object-src`, `form-action` | `'none'` | o app não embute iframe, plugin nem submete formulário nativo |
+
+### Como parametrizar por ambiente
+
+Os valores versionados são os do **dev** (`.env.example`): API em
+`http://localhost:3333`, LiveKit self-host em `ws://localhost:7880` e LiveKit
+Cloud em `*.livekit.cloud`. Quando `NEXT_PUBLIC_API_URL`,
+`NEXT_PUBLIC_LIVEKIT_URL` ou `R2_PUBLIC_BASE_URL` apontarem para outro host, a
+CSP precisa listar esse host — CSP não lê variável de ambiente.
+
+Como `tauri.conf.json` é estático, sobrescreva no build com `--config`, que aceita
+um caminho de arquivo e faz **merge** sobre a config base. Guarde um arquivo por
+ambiente ao lado do `tauri.conf.json` — ex. `src-tauri/tauri.prod.conf.json`:
+
+```json
+{
+  "app": {
+    "security": {
+      "csp": {
+        "connect-src": "'self' ipc: http://ipc.localhost https://api.newdisc.dev wss://api.newdisc.dev https://newdisc.livekit.cloud wss://newdisc.livekit.cloud",
+        "img-src": "'self' data: blob: https://api.newdisc.dev https://cdn.newdisc.dev"
+      }
+    }
+  }
+}
+```
+
+```bash
+pnpm --filter @newdisc/desktop tauri build --config tauri.prod.conf.json
+```
+
+O merge é **por diretiva**: só as diretivas listadas mudam, mas cada uma que
+aparecer substitui a original inteira — repita os valores que ainda valem
+(`'self'`, `ipc:`, …).
+
+### `withGlobalTauri: false`
+
+Estava `true` só para o `apps/web/lib/desktop.ts` alcançar
+`window.__TAURI__.notification`. Expor a ponte global inteira no `window` para
+usar uma função é superfície de ataque desnecessária: qualquer script injetado
+(um XSS numa mensagem, por exemplo) herdaria o mesmo acesso. O `desktop.ts` agora
+importa `@tauri-apps/api` / `@tauri-apps/plugin-notification` — o que passa pelo
+IPC continua limitado pelas capabilities em `capabilities/default.json`.
+
 ## Auto-update — desligado de propósito
 
 O `tauri-plugin-updater` **não** está registrado. Ele estava ativo apontando para

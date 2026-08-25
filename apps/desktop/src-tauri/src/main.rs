@@ -22,9 +22,7 @@ fn main() {
             let sair = MenuItem::with_id(app, "sair", "Sair", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&abrir, &sair])?;
 
-            TrayIconBuilder::with_id("newdisc-tray")
-                // Reaproveita o ícone da janela já embutido no bundle.
-                .icon(app.default_window_icon().unwrap().clone())
+            let mut tray = TrayIconBuilder::with_id("newdisc-tray")
                 .tooltip("NewDisc")
                 .menu(&menu)
                 // No Windows o menu deve abrir só com o botão direito; o esquerdo
@@ -44,8 +42,17 @@ fn main() {
                     {
                         mostrar_janela(tray.app_handle());
                     }
-                })
-                .build(app)?;
+                });
+
+            // O ícone da janela só existe se os PNGs de `bundle.icon` tiverem
+            // sido gerados (ver src-tauri/icons/README.md). Sem eles o antigo
+            // `.unwrap()` derrubava o app no boot; agora a bandeja sobe sem
+            // ícone — degradada, mas funcional.
+            if let Some(icone) = app.default_window_icon() {
+                tray = tray.icon(icone.clone());
+            }
+
+            tray.build(app)?;
 
             Ok(())
         })
