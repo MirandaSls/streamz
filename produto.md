@@ -44,6 +44,9 @@ modera sua comunidade.
   emissão faz rollback do revoke.
 - **Logout:** revoga o refresh. Logout com token já inválido responde sucesso
   mesmo assim (idempotente).
+- **Limite de tentativas:** login, refresh e registro têm teto por IP (o registro
+  é o mais apertado, por hora), assim como upload e convites. Estourar responde
+  `429`. É contenção de abuso, não cota de uso.
 - **[corte MVP]** Não há editar perfil, avatar ou definir status manualmente.
 
 ## Servidores e membros
@@ -64,7 +67,9 @@ modera sua comunidade.
   usuário/servidor.
 - **Desbanir (unban):** remove o registro de ban (idempotente).
 - **Tempo real:** quem é expulso/banido **sai da tela na hora** (evento
-  `guild.removed`), sem precisar recarregar.
+  `guild.removed`) e o acesso ao vivo é cortado junto — a conexão é retirada das
+  salas dos canais do servidor, então não chega mais mensagem nenhuma nem com a
+  aba aberta. Vale igual para quem perde acesso a um canal privado.
 
 ## Canais
 
@@ -83,8 +88,15 @@ modera sua comunidade.
 ## Mensagens
 
 - **Enviar:** requer poder postar no canal. Precisa de **texto OU ao menos um
-  anexo** — mensagem totalmente vazia é ignorada. Conteúdo é **truncado em 2000
-  caracteres**.
+  anexo** — mensagem totalmente vazia é recusada. Acima de **2000 caracteres** a
+  mensagem é **recusada, não truncada**: o cliente recebe `ws.error` e sabe que
+  nada foi enviado.
+- **Validação:** todo comando do WebSocket é validado contra um schema do
+  contrato compartilhado antes de tocar o banco. Payload malformado volta como
+  `ws.error` com a razão; erro interno nunca vaza detalhe do servidor.
+- **Limite de ritmo:** cada conexão tem um teto de comandos por segundo
+  (mensagem, DM e "digitando"), com rajada tolerada. Estourar devolve
+  `ws.error`, não desconecta.
 - **Editar:** **só o autor** edita a própria mensagem (nem a moderação edita
   mensagem alheia). Marca "(editado)".
 - **Apagar:** o **autor ou a moderação** (OWNER/ADMIN). Apagar uma mensagem-raiz
@@ -111,6 +123,13 @@ modera sua comunidade.
 - **Vínculo seguro:** o arquivo é enviado antes (fica "solto") e só é amarrado à
   mensagem no envio — e **apenas anexos do próprio autor, ainda não usados**.
   Ninguém anexa arquivo alheio.
+- **Leitura autorizada, URL com validade:** não existe URL pública permanente de
+  anexo. A API devolve uma **URL assinada do storage que expira em 1 h**; quem
+  recarrega a mensagem recebe uma nova. Quando não há como assinar, a leitura sai
+  pelo **proxy da API**, que exige token — ou o token curto embutido na URL, ou o
+  do usuário, e aí a permissão é reavaliada pelo canal da mensagem (anexo ainda
+  solto só o próprio autor lê). Antes bastava conhecer o id para baixar anexo de
+  canal privado.
 - **Storage opcional no dev:** sem credenciais de storage (R2), o upload responde
   um erro claro (`503`) e o resto do app segue funcionando.
 - **[corte MVP]** Limpeza de anexos órfãos (enviados e nunca vinculados) é job
@@ -135,21 +154,26 @@ modera sua comunidade.
 
 - **1-a-1:** um único canal por dupla, garantido por uma chave canônica (abrir a
   mesma conversa duas vezes devolve o mesmo canal). Não se abre DM consigo mesmo.
-- **Grupo:** **mínimo 3 participantes** (contando o criador); todos precisam
-  existir. O criador é o dono; nome do grupo é opcional.
+- **Grupo:** **mínimo 3 participantes** e no máximo **10 convidados além do
+  criador**, sem repetição; todos precisam existir. O criador é o dono; nome do
+  grupo é opcional.
+- **Sair do grupo:** qualquer participante sai quando quiser. Se quem sai era o
+  dono, a posse passa a outro; o último a sair leva o grupo (e as mensagens)
+  junto. Conversa 1-a-1 não tem "sair".
 - **Entrega:** ao enviar, todos os participantes (inclusive o autor) recebem em
-  tempo real, em qualquer aba/dispositivo. Conteúdo truncado em 2000 chars.
-- **[corte MVP]** Não há adicionar/remover participante, renomear grupo, nem sair
-  de um grupo depois de criado.
+  tempo real, em qualquer aba/dispositivo. Mesmo teto de 2000 caracteres das
+  mensagens de canal, com a mesma recusa em vez de truncar.
+- **[corte MVP]** Não há adicionar/remover participante nem renomear grupo.
 
 ## Voz / vídeo / tela
 
 - **Entrar:** quem pode **ver** o canal recebe um token do LiveKit (válido 1h) com
   permissão de publicar e receber áudio/vídeo. A sala é isolada por canal.
-- **[corte MVP]** O token não checa se o canal é de fato do tipo VOICE nem se é
-  somente-leitura — qualquer canal visível gera token. E, diferente do storage, a
-  ausência de credenciais do LiveKit não é tratada de forma graciosa (falha como
-  erro de servidor).
+- **Canal precisa ser de voz:** pedir token para um canal de texto responde
+  `400`. Sem credenciais do LiveKit a rota responde `503` claro, no mesmo espírito
+  do storage — voz é opcional no dev.
+- **[corte MVP]** O token ignora o modo somente-leitura: quem vê o canal de voz
+  fala nele.
 
 ## Presença
 
@@ -170,6 +194,10 @@ modera sua comunidade.
   de acesso acontece num lugar só.
 - **Anexos e voz são opcionais** e degradam sozinhos quando não configurados, para
   não travar o desenvolvimento local.
+- **Nada é servido só pelo id.** Anexo, canal privado e sala de tempo real exigem
+  autorização a cada leitura; um id vazado não vira acesso.
+- **Limites são recusa explícita, nunca truncamento silencioso.** O cliente
+  sempre sabe que a ação não passou.
 - **Papéis mínimos, sem matriz de permissões fina.** Só os dois modos de canal
   (privado, somente-leitura) e a hierarquia OWNER/ADMIN/MEMBER — sem overrides por
   permissão (silenciar, gerenciar mensagens, etc.).
