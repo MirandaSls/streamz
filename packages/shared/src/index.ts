@@ -63,6 +63,12 @@ export interface ReactionGroup {
 export const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024; // 25 MB
 /** Máximo de anexos por mensagem. */
 export const MAX_ATTACHMENTS_PER_MESSAGE = 10;
+/**
+ * Validade (segundos) da URL de leitura de um anexo. A API devolve URL assinada
+ * do R2 (ou do seu próprio proxy) que expira — não há URL pública permanente.
+ * O cliente deve rebuscar a mensagem se a URL vencer.
+ */
+export const ATTACHMENT_URL_TTL_SECONDS = 60 * 60; // 1 h
 
 export interface Attachment {
   id: string;
