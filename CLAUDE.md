@@ -38,6 +38,7 @@ docs/adr/    # decisões arquiteturais datadas (o *porquê*; ver docs/adr/README
 ```bash
 pnpm dev                 # api + web juntos
 pnpm --filter @newdisc/api dev
+pnpm --filter @newdisc/shared build             # OBRIGATÓRIO após mexer em packages/shared (ver abaixo)
 pnpm --filter @newdisc/api exec tsc --noEmit    # typecheck (sempre antes de commit)
 pnpm --filter @newdisc/api exec prisma generate # após mexer no schema.prisma
 pnpm db:up               # sobe o Postgres do docker-compose (só 127.0.0.1)
@@ -45,9 +46,16 @@ pnpm db:migrate          # cria/aplica migration a partir do schema (dev)
 pnpm db:deploy           # aplica as migrations existentes (prod/CI)
 ```
 
-Não há suite de testes automatizados no MVP. **Verificação = typecheck limpo nos
-três pacotes** (`api`, `web`, `shared`) + validação manual ponta a ponta quando o
-servidor puder rodar.
+Testes unitários (vitest) cobrem só lógica pura (`pnpm --filter @newdisc/api test`,
+`pnpm --filter @newdisc/web test`). **Verificação = typecheck limpo nos três
+pacotes** (`api`, `web`, `shared`) + testes passando + validação manual ponta a
+ponta quando o servidor puder rodar.
+
+> **`@newdisc/shared` é consumido pelo `dist/` compilado**, não pelo `src/`. Depois
+> de qualquer mudança em `packages/shared`, rode `pnpm --filter @newdisc/shared
+> build` **antes** do typecheck da api/web — sem isso o `tsc` deles enxerga o
+> contrato antigo e mente (passa com tipo que não existe mais, ou falha com
+> "no exported member" para algo que você acabou de exportar).
 
 ## Convenções
 
