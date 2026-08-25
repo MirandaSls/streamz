@@ -67,9 +67,14 @@ Duas formas de rodar — escolha uma:
       `NEXT_PUBLIC_LIVEKIT_URL`).
 
 ## 3. Rust / cargo (bloqueia o build do desktop — Dia 5)
-- [ ] Instalar via [rustup.rs](https://rustup.rs). Necessário para o Tauri.
-- [ ] Gerar os ícones do app:
-      `pnpm --filter @newdisc/desktop tauri icon caminho/logo.png`
+- [x] ~~Instalar via [rustup.rs](https://rustup.rs)~~ — feito em 2026-08-25
+      (cargo 1.98). O `cargo` fica em `%USERPROFILE%\.cargoin`; se um terminal
+      antigo não achar, reabra.
+- [x] ~~Gerar os ícones do app~~ — feito a partir de `apps/desktop/logo.svg`
+      (balão do rail sobre o blurple). Para trocar o logo, edite o SVG e rode
+      `pnpm --filter @newdisc/desktop tauri icon logo.svg`.
+- [ ] `pnpm --filter @newdisc/desktop tauri build` — gera o instalador em
+      `apps/desktop/src-tauri/target/release/bundle/`.
 
 **Empacotamento resolvido:** o desktop embute a web como **HTML estático**
 (`frontendDist: ../../web/out`). O `output: "export"` do Next não está mais
