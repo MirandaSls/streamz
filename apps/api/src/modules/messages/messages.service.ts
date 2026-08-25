@@ -7,10 +7,11 @@ import {
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { StorageService } from "../storage/storage.service";
-import type { Attachment, Message as MessageDTO, ReactionGroup } from "@newdisc/shared";
+import type { Message as MessageDTO, ReactionGroup } from "@newdisc/shared";
 import { MAX_ATTACHMENTS_PER_MESSAGE, parseCustomEmoji } from "@newdisc/shared";
 import { toPublicUser, type PublicUserRow } from "../../common/dto";
 import { toStickerDTO, type StickerRow } from "../emojis/dto";
+import { toAttachmentDTO, type AttachmentRow } from "../uploads/attachment-dto";
 import { EmojisService } from "../emojis/emojis.service";
 import { StickersService } from "../emojis/stickers.service";
 
@@ -260,15 +261,7 @@ export class MessagesService {
     editedAt: Date | null;
     author: PublicUserRow;
     reactions: { emoji: string; userId: string }[];
-    attachments: {
-      id: string;
-      key: string;
-      filename: string;
-      contentType: string;
-      size: number;
-      width: number | null;
-      height: number | null;
-    }[];
+    attachments: AttachmentRow[];
     _count: { replies: number };
     sticker: StickerRow | null;
     suppressEmbeds: boolean;
@@ -284,31 +277,14 @@ export class MessagesService {
       editedAt: m.editedAt ? m.editedAt.toISOString() : null,
       author: toPublicUser(m.author),
       reactions: this.groupReactions(m.reactions),
-      attachments: await Promise.all(m.attachments.map((a) => this.toAttachmentDTO(a))),
+      attachments: await Promise.all(
+        m.attachments.map((a) => toAttachmentDTO(this.storage, a)),
+      ),
       sticker: m.sticker ? toStickerDTO(m.sticker) : null,
       suppressEmbeds: m.suppressEmbeds,
     };
   }
 
-  private async toAttachmentDTO(a: {
-    id: string;
-    key: string;
-    filename: string;
-    contentType: string;
-    size: number;
-    width: number | null;
-    height: number | null;
-  }): Promise<Attachment> {
-    return {
-      id: a.id,
-      url: await this.storage.attachmentUrl(a.id, a.key),
-      filename: a.filename,
-      contentType: a.contentType,
-      size: a.size,
-      width: a.width,
-      height: a.height,
-    };
-  }
 
   private groupReactions(rows: { emoji: string; userId: string }[]): ReactionGroup[] {
     const map = new Map<string, ReactionGroup>();
