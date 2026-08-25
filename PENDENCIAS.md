@@ -74,6 +74,13 @@ Duas formas de rodar — escolha uma:
 - [ ] Gerar os ícones do app:
       `pnpm --filter @newdisc/desktop tauri icon caminho/logo.png`
 
+**Empacotamento resolvido:** o desktop embute a web como **HTML estático**
+(`frontendDist: ../../web/out`). O `output: "export"` do Next não está mais
+comentado — ele liga por ambiente (`TAURI_ENV_*`, que o Tauri injeta no
+`beforeBuildCommand`, ou `NEXT_OUTPUT=export` na mão), então o build web normal
+(`next start`) continua funcionando. Motivo da escolha e alternativa descartada
+(carregar URL remota): `apps/desktop/README.md`.
+
 ## 4. Segredos do `.env`
 - [ ] Trocar `JWT_SECRET` e `JWT_REFRESH_SECRET` por strings aleatórias longas
       (ex.: `openssl rand -hex 32`).

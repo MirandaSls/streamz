@@ -61,9 +61,11 @@ pnpm --filter @newdisc/desktop dev
 
 # build do instalador (Windows: .exe/.msi)
 #   antes: gere os ícones (ver apps/desktop/src-tauri/icons/README.md)
-#   e habilite `output: "export"` em apps/web/next.config.mjs
 pnpm --filter @newdisc/desktop build
 ```
+
+O build embute a web como HTML estático: o Next liga `output: "export"` sozinho
+quando roda dentro do Tauri. Detalhes e alternativas: `apps/desktop/README.md`.
 
 ### Recursos nativos
 
