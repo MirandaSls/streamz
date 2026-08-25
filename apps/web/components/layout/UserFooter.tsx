@@ -4,6 +4,7 @@ import { Headphones, HeadphoneOff, Mic, MicOff, Settings } from "lucide-react";
 import { displayNameOf } from "@newdisc/shared";
 import Avatar, { STATUS_LABEL } from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
+import VoiceConnectedBar from "@/components/voice/VoiceConnectedBar";
 import { useAuth } from "@/stores/auth";
 import { resolveStatus, usePresence } from "@/stores/presence";
 import { anchorOf, useUI } from "@/stores/ui";
@@ -56,37 +57,41 @@ export default function UserFooter() {
   const status = resolveStatus(statuses, user);
 
   return (
-    <div className="flex h-[52px] shrink-0 items-center gap-1 bg-footer px-2">
-      <button
-        type="button"
-        onClick={(e) => openProfile(user, anchorOf(e.currentTarget))}
-        aria-label="Meu perfil"
-        className="flex min-w-0 flex-1 items-center gap-2 rounded-[4px] py-1 pl-0.5 pr-2 text-left transition hover:bg-hov"
-      >
-        <Avatar user={user} size="md" status={status} surface="border-footer" />
-        <span className="min-w-0">
-          <span className="block truncate text-sm font-semibold leading-[18px] text-txt-primary">
-            {displayNameOf(user)}
+    <>
+      {/* f-voz: a barra da call fica colada acima do painel, como no Discord */}
+      <VoiceConnectedBar />
+      <div className="flex h-[52px] shrink-0 items-center gap-1 bg-footer px-2">
+        <button
+          type="button"
+          onClick={(e) => openProfile(user, anchorOf(e.currentTarget))}
+          aria-label="Meu perfil"
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-[4px] py-1 pl-0.5 pr-2 text-left transition hover:bg-hov"
+        >
+          <Avatar user={user} size="md" status={status} surface="border-footer" />
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-semibold leading-[18px] text-txt-primary">
+              {displayNameOf(user)}
+            </span>
+            <span className="block truncate text-xs leading-[13px] text-txt-muted">
+              {STATUS_LABEL[status]}
+            </span>
           </span>
-          <span className="block truncate text-xs leading-[13px] text-txt-muted">
-            {STATUS_LABEL[status]}
-          </span>
-        </span>
-      </button>
+        </button>
 
-      <FooterButton label={muted ? "Desativar mudo" : "Silenciar"} off={muted} onClick={toggleMute}>
-        {muted ? <MicOff size={20} /> : <Mic size={20} />}
-      </FooterButton>
-      <FooterButton
-        label={deafened ? "Reativar áudio" : "Desativar áudio"}
-        off={deafened}
-        onClick={toggleDeafen}
-      >
-        {deafened ? <HeadphoneOff size={20} /> : <Headphones size={20} />}
-      </FooterButton>
-      <FooterButton label="Configurações do usuário" onClick={() => openModal({ kind: "settings" })}>
-        <Settings size={20} />
-      </FooterButton>
-    </div>
+        <FooterButton label={muted ? "Desativar mudo" : "Silenciar"} off={muted} onClick={toggleMute}>
+          {muted ? <MicOff size={20} /> : <Mic size={20} />}
+        </FooterButton>
+        <FooterButton
+          label={deafened ? "Reativar áudio" : "Desativar áudio"}
+          off={deafened}
+          onClick={toggleDeafen}
+        >
+          {deafened ? <HeadphoneOff size={20} /> : <Headphones size={20} />}
+        </FooterButton>
+        <FooterButton label="Configurações do usuário" onClick={() => openModal({ kind: "settings" })}>
+          <Settings size={20} />
+        </FooterButton>
+      </div>
+    </>
   );
 }

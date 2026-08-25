@@ -1,482 +1,91 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Headphones, Mic, MicOff, MonitorUp, PhoneOff, Video, VideoOff, Volume2 } from "lucide-react";
-import {
-  Room,
-  RoomEvent,
-  Track,
-  type Participant,
-  type TrackPublication,
-} from "livekit-client";
-import "@livekit/components-styles";
-import { api } from "@/lib/api";
-import { useVoicePrefs } from "@/stores/voicePrefs";
+import { useEffect } from "react";
+import { AlertTriangle, Users, Volume2 } from "lucide-react";
+import type { Channel } from "@newdisc/shared";
+import VoiceControls from "@/components/voice/VoiceControls";
+import VoiceGrid from "@/components/voice/VoiceGrid";
+import { useVoice } from "@/stores/voice";
 
 /**
- * Painel de voz/vídeo/tela de um canal de VOZ, sobre o LiveKit.
+ * Painel de voz/vídeo/tela de um canal de VOZ (coluna 3).
  *
- * Usa a API direta do `livekit-client` (em vez do <LiveKitRoom> de
- * @livekit/components-react) para ter um ponto único de try/catch em torno da
- * conexão — o que permite tratar com clareza o caso das credenciais do LiveKit
- * ausentes/inválidas (env vars ainda placeholders, ver PENDENCIAS.md).
+ * Aqui não há conexão nenhuma: quem conecta, guarda estado e fala com o
+ * LiveKit é a store `stores/voice.ts`. Este componente só monta a tela em cima
+ * do que ela expõe — o que permite ao painel ser fechado (trocar de canal de
+ * texto) sem derrubar a call, que é como o Discord se comporta.
  *
- * O componente deve ser montado com `key={channelId}` para reiniciar a conexão
- * ao trocar de canal.
+ * Deve ser montado com `key={channelId}` para reiniciar a conexão ao trocar.
  */
-
-type Status = "connecting" | "connected" | "idle" | "error";
-
-const LIVEKIT_HINT =
-  "Configure o LiveKit Cloud (ver PENDENCIAS.md) para habilitar a voz.";
-
 export default function VoicePanel({
-  channelId,
-  channelName,
+  channel,
   onLeave,
 }: {
-  channelId: string;
-  channelName: string;
+  channel: Pick<Channel, "id" | "guildId" | "name" | "type">;
   onLeave?: () => void;
 }) {
-  const roomRef = useRef<Room | null>(null);
-  const startedRef = useRef(false);
+  const status = useVoice((s) => s.status);
+  const erro = useVoice((s) => s.erro);
+  const conectadoEm = useVoice((s) => s.channelId);
+  const telaCheia = useVoice((s) => s.telaCheia);
+  const connect = useVoice((s) => s.connect);
+  const disconnect = useVoice((s) => s.disconnect);
+  const quantos = useVoice((s) => s.statesOf(channel.id).length);
 
-  const [status, setStatus] = useState<Status>("connecting");
-  const [error, setError] = useState<string | null>(null);
-  const [speakers, setSpeakers] = useState<Set<string>>(new Set());
-
-  // microfone e áudio seguem os botões do rodapé (useVoicePrefs) — a fonte de
-  // verdade é uma só para a call e para o painel do usuário
-  const muted = useVoicePrefs((s) => s.muted);
-  const deafened = useVoicePrefs((s) => s.deafened);
-  const toggleMute = useVoicePrefs((s) => s.toggleMute);
-  // estado local dos dispositivos (otimista; sincronizado por eventos)
-  const [micOn, setMicOn] = useState(!muted);
-  const [camOn, setCamOn] = useState(false);
-  const [screenOn, setScreenOn] = useState(false);
-
-  // "tick" para re-render quando o SDK emite mudanças de participantes/tracks
-  const [, setTick] = useState(0);
-  const rerender = useCallback(() => setTick((t) => t + 1), []);
-
-  const cleanup = useCallback(() => {
-    const room = roomRef.current;
-    if (room) {
-      room.removeAllListeners();
-      room.disconnect().catch(() => {});
-      roomRef.current = null;
-    }
-    setSpeakers(new Set());
-    setCamOn(false);
-    setScreenOn(false);
-  }, []);
-
-  const connect = useCallback(async () => {
-    if (roomRef.current) return; // já conectado/conectando
-    setStatus("connecting");
-    setError(null);
-
-    // 1) token da nossa API
-    let creds: { token: string; url: string; room: string };
-    try {
-      creds = await api.voiceToken(channelId);
-    } catch {
-      setStatus("error");
-      setError(`Não foi possível obter o token de voz. ${LIVEKIT_HINT}`);
-      return;
-    }
-
-    // 2) credenciais válidas? (env vars ainda podem ser placeholders)
-    if (!creds?.token || !creds?.url || !/^wss?:\/\//i.test(creds.url)) {
-      setStatus("error");
-      setError(`Credenciais do LiveKit ausentes ou inválidas. ${LIVEKIT_HINT}`);
-      return;
-    }
-
-    // 3) conecta na sala
-    const room = new Room({ adaptiveStream: true, dynacast: true });
-    roomRef.current = room;
-
-    room
-      .on(RoomEvent.ParticipantConnected, rerender)
-      .on(RoomEvent.ParticipantDisconnected, rerender)
-      .on(RoomEvent.TrackSubscribed, rerender)
-      .on(RoomEvent.TrackUnsubscribed, rerender)
-      .on(RoomEvent.LocalTrackPublished, rerender)
-      .on(RoomEvent.LocalTrackUnpublished, rerender)
-      .on(RoomEvent.TrackMuted, rerender)
-      .on(RoomEvent.TrackUnmuted, rerender)
-      .on(RoomEvent.ActiveSpeakersChanged, (spk: Participant[]) => {
-        setSpeakers(new Set(spk.map((p) => p.identity)));
-      })
-      .on(RoomEvent.Disconnected, () => {
-        cleanup();
-        setStatus("idle");
-      });
-
-    try {
-      await room.connect(creds.url, creds.token);
-      // microfone segue a preferência do rodapé (mudo continua mudo)
-      const ligar = !useVoicePrefs.getState().muted;
-      try {
-        await room.localParticipant.setMicrophoneEnabled(ligar);
-        setMicOn(ligar);
-      } catch {
-        setMicOn(false);
-      }
-      setStatus("connected");
-      rerender();
-    } catch {
-      cleanup();
-      setStatus("error");
-      setError(`Não foi possível conectar ao servidor de voz. ${LIVEKIT_HINT}`);
-    }
-  }, [channelId, cleanup, rerender]);
-
-  // conecta automaticamente ao montar (ao clicar no canal de voz)
+  // entra na sala ao abrir o canal; sair é ação explícita (botão vermelho)
   useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
-    connect();
-    return () => cleanup();
-  }, [connect, cleanup]);
+    if (useVoice.getState().channelId !== channel.id) void connect(channel);
+    // `channel` é reconstruído a cada render pela página; o id é o que importa
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channel.id, connect]);
 
-  const leave = useCallback(() => {
-    cleanup();
-    setStatus("idle");
+  async function sair() {
+    await disconnect();
     onLeave?.();
-  }, [cleanup, onLeave]);
+  }
 
-  // o botão de mudo do rodapé vale dentro da call: reflete a troca no SDK
-  useEffect(() => {
-    const lp = roomRef.current?.localParticipant;
-    if (!lp || status !== "connected") return;
-    lp.setMicrophoneEnabled(!muted)
-      .then(() => setMicOn(!muted))
-      .catch(() => setMicOn(false));
-  }, [muted, status]);
-
-  const toggleMic = useCallback(async () => {
-    const lp = roomRef.current?.localParticipant;
-    if (!lp) return;
-    // troca a preferência global; o efeito acima aplica no SDK
-    toggleMute();
-    const next = !lp.isMicrophoneEnabled;
-    try {
-      await lp.setMicrophoneEnabled(next);
-      setMicOn(next);
-    } catch {
-      /* permissão negada — mantém estado anterior */
-    }
-    rerender();
-  }, [rerender, toggleMute]);
-
-  const toggleCam = useCallback(async () => {
-    const lp = roomRef.current?.localParticipant;
-    if (!lp) return;
-    const next = !lp.isCameraEnabled;
-    try {
-      await lp.setCameraEnabled(next);
-      setCamOn(next);
-    } catch {
-      setCamOn(false);
-    }
-    rerender();
-  }, [rerender]);
-
-  const toggleScreen = useCallback(async () => {
-    const lp = roomRef.current?.localParticipant;
-    if (!lp) return;
-    const next = !lp.isScreenShareEnabled;
-    try {
-      await lp.setScreenShareEnabled(next, { audio: true });
-      setScreenOn(next);
-    } catch {
-      // usuário cancelou o seletor de tela, ou navegador sem suporte
-      setScreenOn(false);
-    }
-    rerender();
-  }, [rerender]);
-
-  const room = roomRef.current;
-  const participants: Participant[] =
-    status === "connected" && room
-      ? [room.localParticipant, ...room.remoteParticipants.values()]
-      : [];
+  const conectado = conectadoEm === channel.id && status === "connected";
 
   return (
-    <div className="flex h-full flex-col bg-chat">
+    <div
+      className={`flex flex-col bg-chat ${telaCheia ? "fixed inset-0 z-40" : "h-full"}`}
+      data-voice-panel={channel.id}
+    >
       <header className="flex h-12 shrink-0 items-center justify-between px-4 shadow-header">
         <span className="flex items-center gap-2 font-semibold text-txt-primary">
           <Volume2 size={24} className="text-txt-muted" aria-hidden="true" />
-          {channelName}
+          {channel.name ?? "voz"}
         </span>
-        <span className="text-xs text-txt-muted">
-          {status === "connected"
-            ? `${participants.length} na call`
-            : status === "connecting"
-              ? "Conectando…"
-              : status === "error"
-                ? "Erro de conexão"
-                : "Desconectado"}
+        <span className="flex items-center gap-1.5 text-xs text-txt-muted">
+          <Users size={14} aria-hidden="true" />
+          {status === "connecting" ? "Conectando…" : `${quantos} na sala`}
         </span>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-4">
-        {status === "connecting" && (
+      {erro && (
+        <p
+          role="status"
+          className="flex shrink-0 items-center gap-2 bg-panel px-4 py-2 text-sm text-txt-muted"
+        >
+          <AlertTriangle size={16} className="shrink-0 text-yellow" aria-hidden="true" />
+          {erro}
+        </p>
+      )}
+
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        {status === "connecting" ? (
           <div className="grid h-full place-items-center text-txt-muted">
             <div className="flex flex-col items-center gap-3">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#4e5058] border-t-accent" />
-              <p>Entrando na call de voz…</p>
+              <p>Entrando na sala…</p>
             </div>
           </div>
-        )}
-
-        {status === "error" && (
-          <div className="grid h-full place-items-center">
-            <div className="max-w-sm rounded-lg bg-panel p-6 text-center">
-              <Headphones size={32} className="mx-auto mb-2 text-txt-muted" aria-hidden="true" />
-              <p className="mb-4 text-sm text-txt-normal">{error}</p>
-              <button
-                onClick={connect}
-                className="rounded bg-accent px-4 py-2 text-sm font-medium text-white transition hover:brightness-110"
-              >
-                Tentar novamente
-              </button>
-            </div>
-          </div>
-        )}
-
-        {status === "idle" && (
-          <div className="grid h-full place-items-center">
-            <div className="flex flex-col items-center gap-3 text-txt-muted">
-              <p>Você saiu da call.</p>
-              <button
-                onClick={connect}
-                className="rounded bg-accent px-4 py-2 text-sm font-medium text-white transition hover:brightness-110"
-              >
-                Entrar na call
-              </button>
-            </div>
-          </div>
-        )}
-
-        {status === "connected" && (
-          <>
-            {participants.length === 0 ? (
-              <p className="text-sm text-txt-muted">Ninguém na call ainda.</p>
-            ) : (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {participants.flatMap((p) => {
-                  const isLocal = p.identity === room!.localParticipant.identity;
-                  const speaking = speakers.has(p.identity) || p.isSpeaking;
-                  const videos = videoPublications(p);
-
-                  if (videos.length === 0) {
-                    return [
-                      <AvatarTile
-                        key={p.identity}
-                        participant={p}
-                        isLocal={isLocal}
-                        speaking={speaking}
-                      />,
-                    ];
-                  }
-                  return videos.map((pub) => (
-                    <VideoTile
-                      key={`${p.identity}:${pub.trackSid}`}
-                      publication={pub}
-                      participant={p}
-                      isLocal={isLocal}
-                      speaking={speaking}
-                    />
-                  ));
-                })}
-              </div>
-            )}
-
-            {/* áudio remoto (renderizado oculto para tocar o som) */}
-            {participants.map((p) =>
-              p.identity === room!.localParticipant.identity
-                ? null
-                : audioPublications(p).map((pub) => (
-                    <AudioSink key={`${p.identity}:${pub.trackSid}`} publication={pub} muted={deafened} />
-                  )),
-            )}
-          </>
+        ) : (
+          <VoiceGrid channelId={channel.id} />
         )}
       </div>
 
-      {status === "connected" && (
-        <div className="flex items-center justify-center gap-3 border-t border-black/20 px-4 py-3">
-          <ControlButton
-            active={micOn}
-            onClick={toggleMic}
-            title={micOn ? "Mutar microfone" : "Desmutar microfone"}
-          >
-            {micOn ? <Mic size={20} /> : <MicOff size={20} />}
-          </ControlButton>
-          <ControlButton
-            active={camOn}
-            onClick={toggleCam}
-            title={camOn ? "Desligar câmera" : "Ligar câmera"}
-          >
-            {camOn ? <Video size={20} /> : <VideoOff size={20} />}
-          </ControlButton>
-          <ControlButton
-            active={screenOn}
-            onClick={toggleScreen}
-            title={screenOn ? "Parar compartilhamento" : "Compartilhar tela"}
-          >
-            <MonitorUp size={20} />
-          </ControlButton>
-          <button
-            onClick={leave}
-            title="Desconectar"
-            aria-label="Desconectar"
-            className="grid h-14 w-14 place-items-center rounded-full bg-red text-white transition hover:bg-red-hover"
-          >
-            <PhoneOff size={22} />
-          </button>
-        </div>
-      )}
+      {conectado && <VoiceControls onLeave={() => void sair()} />}
     </div>
   );
-}
-
-// ── helpers ──────────────────────────────────────────────────
-
-function videoPublications(p: Participant): TrackPublication[] {
-  return Array.from(p.trackPublications.values()).filter(
-    (pub) => pub.kind === Track.Kind.Video && !!pub.track && !pub.isMuted,
-  );
-}
-
-function audioPublications(p: Participant): TrackPublication[] {
-  return Array.from(p.trackPublications.values()).filter(
-    (pub) => pub.kind === Track.Kind.Audio && !!pub.track && !pub.isMuted,
-  );
-}
-
-function displayName(p: Participant, isLocal: boolean): string {
-  const base = p.name || p.identity;
-  return isLocal ? `${base} (você)` : base;
-}
-
-// ── sub-componentes ──────────────────────────────────────────
-
-function ControlButton({
-  active,
-  onClick,
-  title,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      title={title}
-      aria-pressed={active}
-      className={`grid h-14 w-14 place-items-center rounded-full transition ${
-        active ? "bg-[#4e5058] text-white hover:bg-[#6d6f78]" : "bg-white text-black hover:bg-[#e3e5e8]"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function VideoTile({
-  publication,
-  participant,
-  isLocal,
-  speaking,
-}: {
-  publication: TrackPublication;
-  participant: Participant;
-  isLocal: boolean;
-  speaking: boolean;
-}) {
-  const ref = useRef<HTMLVideoElement>(null);
-  const track = publication.track;
-  const isScreen = publication.source === Track.Source.ScreenShare;
-
-  useEffect(() => {
-    const el = ref.current;
-    if (el && track) track.attach(el);
-    return () => {
-      if (el && track) track.detach(el);
-    };
-  }, [track]);
-
-  return (
-    <div
-      className={`relative aspect-video overflow-hidden rounded-lg bg-black ${
-        speaking ? "ring-2 ring-green-400" : "ring-1 ring-black/30"
-      }`}
-    >
-      <video
-        ref={ref}
-        autoPlay
-        playsInline
-        muted
-        className={`h-full w-full object-cover ${
-          isLocal && !isScreen ? "-scale-x-100" : ""
-        }`}
-      />
-      <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-xs text-white">
-        {displayName(participant, isLocal)}
-        {isScreen ? " · tela" : ""}
-        {!participant.isMicrophoneEnabled && !isScreen ? " (mudo)" : ""}
-      </span>
-    </div>
-  );
-}
-
-function AvatarTile({
-  participant,
-  isLocal,
-  speaking,
-}: {
-  participant: Participant;
-  isLocal: boolean;
-  speaking: boolean;
-}) {
-  const name = participant.name || participant.identity;
-  return (
-    <div
-      className={`relative flex aspect-video flex-col items-center justify-center gap-2 rounded-lg bg-panel ${
-        speaking ? "ring-2 ring-green-400" : "ring-1 ring-black/30"
-      }`}
-    >
-      <div className="grid h-16 w-16 place-items-center rounded-full bg-rail text-xl font-bold text-txt-normal">
-        {name.slice(0, 2).toUpperCase()}
-      </div>
-      <span className="rounded bg-black/40 px-1.5 py-0.5 text-xs text-white">
-        {displayName(participant, isLocal)}
-        {!participant.isMicrophoneEnabled ? " (mudo)" : ""}
-      </span>
-    </div>
-  );
-}
-
-function AudioSink({ publication, muted = false }: { publication: TrackPublication; muted?: boolean }) {
-  const ref = useRef<HTMLAudioElement>(null);
-  const track = publication.track;
-
-  useEffect(() => {
-    const el = ref.current;
-    if (el && track) track.attach(el);
-    return () => {
-      if (el && track) track.detach(el);
-    };
-  }, [track]);
-
-  // `muted` é o "desativar áudio" do rodapé: a faixa continua assinada, só não toca
-  return <audio ref={ref} autoPlay muted={muted} />;
 }

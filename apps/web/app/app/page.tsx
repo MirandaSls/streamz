@@ -14,6 +14,7 @@ import ModalHost from "@/components/modals/ModalHost";
 import ContextMenuHost from "@/components/ui/ContextMenu";
 import ProfilePopoverHost from "@/components/ui/ProfilePopover";
 import Toasts from "@/components/ui/Toasts";
+import VoiceLayer from "@/components/voice/VoiceLayer";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/stores/auth";
 import { useActiveChannel, useChannels, useVoiceChannel } from "@/stores/channels";
@@ -71,8 +72,7 @@ export default function AppPage() {
               <VoicePanel
                 // remontar por canal reinicia a conexão com a sala certa
                 key={voiceChannel.id}
-                channelId={voiceChannel.id}
-                channelName={voiceChannel.name ?? "voz"}
+                channel={voiceChannel}
                 onLeave={leaveVoice}
               />
             </main>
@@ -87,6 +87,7 @@ export default function AppPage() {
         </>
       )}
 
+      <VoiceLayer />
       <ModalHost />
       <ContextMenuHost />
       <ProfilePopoverHost />
