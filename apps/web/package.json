@@ -11,10 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@livekit/components-react": "^2.6.9",
     "@livekit/components-styles": "^1.1.4",
     "@newdisc/shared": "workspace:*",
-    "@tanstack/react-query": "^5.55.4",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-notification": "^2",
     "livekit-client": "^2.6.1",
@@ -32,6 +30,6 @@
     "postcss": "^8.4.45",
     "tailwindcss": "^3.4.10",
     "typescript": "^5.5.4",
-    "vitest": "^2.1.0"
+    "vitest": "^4.1.11"
   }
 }

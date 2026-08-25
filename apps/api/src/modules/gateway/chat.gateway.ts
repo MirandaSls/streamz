@@ -163,7 +163,11 @@ export class ChatGateway
         payload.parentId,
         payload.attachmentIds ?? [],
       );
-      this.server.to(this.room(payload.channelId)).emit(WS_EVENTS.MESSAGE_NEW, message);
+      // eco do nonce: o autor usa para trocar a mensagem otimista pela real.
+      // Não é persistido — só viaja de volta neste evento.
+      this.server
+        .to(this.room(payload.channelId))
+        .emit(WS_EVENTS.MESSAGE_NEW, payload.nonce ? { ...message, nonce: payload.nonce } : message);
     } catch (e) {
       this.emitError(client, e);
     }

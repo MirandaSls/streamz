@@ -17,3 +17,14 @@ body {
   color: #f2f3f5;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
+
+/*
+ * Foco sempre visível. O app é navegável por teclado (setas nos canais, Tab nos
+ * modais, ações da mensagem no group-focus-within) e o anel padrão do browser
+ * praticamente some sobre o tema escuro.
+ */
+:focus-visible {
+  outline: 2px solid #5865f2;
+  outline-offset: 2px;
+  border-radius: 2px;
+}

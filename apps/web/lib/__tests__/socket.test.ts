@@ -49,6 +49,9 @@ const juntadas = () =>
   dublê.emissoes.filter((e) => e.evento === WS_EVENTS.CHANNEL_JOIN).map((e) => e.carga);
 
 beforeEach(() => {
+  // o mock de `../session` sobrevive ao resetModules: limpar tudo evita que a
+  // renovação chamada num teste anterior vaze para o seguinte
+  vi.clearAllMocks();
   dublê.handlers.clear();
   dublê.emissoes.length = 0;
   dublê.socket.connected = false;

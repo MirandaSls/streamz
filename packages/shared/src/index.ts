@@ -106,6 +106,12 @@ export interface Message {
   replyCount: number;
   /** anexos vinculados (imagens/arquivos). */
   attachments: Attachment[];
+  /**
+   * Eco do nonce que o cliente mandou no `message.create`. Só aparece no evento
+   * `message.new`; nunca é persistido nem volta no histórico REST. Serve para o
+   * autor casar a mensagem real com a versão otimista que já está na tela.
+   */
+  nonce?: string;
 }
 
 export interface GuildMemberView {
@@ -208,6 +214,11 @@ export const messageCreateSchema = z
       .array(idSchema)
       .max(MAX_ATTACHMENTS_PER_MESSAGE, `Máximo de ${MAX_ATTACHMENTS_PER_MESSAGE} anexos`)
       .optional(),
+    /**
+     * Identificador efêmero gerado pelo cliente. O servidor devolve o mesmo valor
+     * em `message.new` para que o autor substitua a mensagem otimista pela real.
+     */
+    nonce: z.string().max(64).optional(),
   })
   // uma mensagem vazia sem anexo não é mensagem
   .refine((m) => m.content.trim().length > 0 || (m.attachmentIds?.length ?? 0) > 0, {
