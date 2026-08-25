@@ -1,27 +1,58 @@
 import type { Attachment, AuthTokens, PublicUser } from "@newdisc/shared";
+import { API_URL } from "./config";
+import { ApiError } from "./api-error";
+import { getAccessToken, renovarTokens } from "./session";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3333";
+export { ApiError, isApiError } from "./api-error";
 
-function authHeader(): Record<string, string> {
-  if (typeof window === "undefined") return {};
-  const token = localStorage.getItem("accessToken");
+/** Rotas que não devem disparar refresh: um 401 nelas é credencial errada. */
+const ROTAS_SEM_REFRESH = ["/auth/login", "/auth/register", "/auth/refresh", "/auth/logout"];
+
+function cabecalhoAuth(token: string | null): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}/api${path}`, {
+async function enviar(path: string, init: RequestInit | undefined, token: string | null) {
+  return fetch(`${API_URL}/api${path}`, {
     ...init,
     headers: {
-      "Content-Type": "application/json",
-      ...authHeader(),
+      // FormData define o próprio Content-Type (com boundary) — não sobrescreve
+      ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+      ...cabecalhoAuth(token),
       ...(init?.headers ?? {}),
     },
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message ?? `Erro ${res.status}`);
+}
+
+/**
+ * Faz a requisição autenticada e, em 401, renova o token uma única vez antes de
+ * repetir. O refresh é single-flight (`session.ts`): várias requisições que
+ * caem em 401 ao mesmo tempo esperam a mesma renovação em vez de rotacionar o
+ * refresh token em paralelo e derrubar a sessão.
+ */
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let res = await enviar(path, init, await getAccessToken());
+
+  if (res.status === 401 && !ROTAS_SEM_REFRESH.some((r) => path.startsWith(r))) {
+    const tokens = await renovarTokens().catch(() => null);
+    // refresh recusado já encerrou a sessão e redirecionou (session.ts)
+    if (tokens) res = await enviar(path, init, tokens.accessToken);
   }
+
+  if (!res.ok) throw await comoApiError(res);
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
+}
+
+/** Mensagem da API quando houver; senão, algo legível com o status. */
+async function comoApiError(res: Response): Promise<ApiError> {
+  const body = (await res.json().catch(() => ({}))) as { message?: unknown };
+  const message =
+    typeof body.message === "string"
+      ? body.message
+      : Array.isArray(body.message) && typeof body.message[0] === "string"
+        ? body.message[0]
+        : `Erro ${res.status}`;
+  return new ApiError(res.status, message);
 }
 
 export const api = {
@@ -115,19 +146,9 @@ export const api = {
     ),
 
   /** Envia um arquivo e devolve o anexo (a vincular numa mensagem no envio). */
-  uploadFile: async (file: File): Promise<Attachment> => {
+  uploadFile: (file: File): Promise<Attachment> => {
     const form = new FormData();
     form.append("file", file);
-    // sem Content-Type manual: o browser define o boundary do multipart
-    const res = await fetch(`${API_URL}/api/uploads`, {
-      method: "POST",
-      headers: { ...authHeader() },
-      body: form,
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message ?? `Erro ${res.status}`);
-    }
-    return (await res.json()) as Attachment;
+    return request<Attachment>("/uploads", { method: "POST", body: form });
   },
 };
