@@ -1,30 +1,53 @@
-// Prisma schema — NewDisc (MVP)
-// DEV: SQLite (sem infra externa). PROD: trocar provider para "postgresql"
-// e reintroduzir os enums. Ver PENDENCIAS.md. Os valores válidos de status/
-// type/role vivem como union types em packages/shared.
+// Prisma schema — NewDisc
+//
+// Banco único: **PostgreSQL**, em dev e em produção. Não há mais variante
+// SQLite — os enums (`UserStatus`, `ChannelType`, `MemberRole`) são garantidos
+// pelo banco, e `packages/shared` expõe as mesmas unions para o contrato.
+//
+// Fluxo: `pnpm db:up` (Postgres do docker-compose) → `pnpm db:migrate`
+// (migrate dev, cria/aplica migration) ou `pnpm db:deploy` em produção.
+// `prisma db push` NÃO é o fluxo: toda mudança de modelo vira migration.
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
+enum UserStatus {
+  ONLINE
+  IDLE
+  DND
+  OFFLINE
+}
+
+enum ChannelType {
+  TEXT
+  VOICE
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
 model User {
-  id           String   @id @default(cuid())
-  username     String   @unique
+  id           String     @id @default(cuid())
+  username     String     @unique
   passwordHash String
   avatarUrl    String?
-  status       String   @default("OFFLINE") // ONLINE | IDLE | DND | OFFLINE
-  createdAt    DateTime @default(now())
+  status       UserStatus @default(OFFLINE)
+  createdAt    DateTime   @default(now())
 
-  ownedGuilds   Guild[]        @relation("GuildOwner")
-  memberships   GuildMember[]
-  messages      Message[]
-  reactions     Reaction[]
-  invites       Invite[]       @relation("InviteCreator")
-  bans          Ban[]          @relation("BannedUser")
+  ownedGuilds      Guild[]         @relation("GuildOwner")
+  memberships      GuildMember[]
+  messages         Message[]
+  reactions        Reaction[]
+  invites          Invite[]        @relation("InviteCreator")
+  bans             Ban[]           @relation("BannedUser")
   dmParticipations DMParticipant[]
   dmMessages       DMMessage[]     @relation("DMAuthor")
   refreshTokens    RefreshToken[]
@@ -95,10 +118,10 @@ model Invite {
 }
 
 model GuildMember {
-  id      String @id @default(cuid())
+  id      String     @id @default(cuid())
   userId  String
   guildId String
-  role    String @default("MEMBER") // OWNER | ADMIN | MEMBER
+  role    MemberRole @default(MEMBER)
 
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
@@ -110,13 +133,13 @@ model GuildMember {
 }
 
 model Channel {
-  id       String  @id @default(cuid())
+  id       String      @id @default(cuid())
   guildId  String
   name     String
-  type     String  @default("TEXT") // TEXT | VOICE
-  position Int     @default(0)
-  private  Boolean @default(false) // só OWNER/ADMIN e a allowlist enxergam
-  readOnly Boolean @default(false) // só OWNER/ADMIN postam; todos leem
+  type     ChannelType @default(TEXT)
+  position Int         @default(0)
+  private  Boolean     @default(false) // só OWNER/ADMIN e a allowlist enxergam
+  readOnly Boolean     @default(false) // só OWNER/ADMIN postam; todos leem
 
   guild    Guild           @relation(fields: [guildId], references: [id], onDelete: Cascade)
   messages Message[]
