@@ -4,34 +4,30 @@ Coisas que **você precisa instalar/configurar** para rodar o projeto de ponta a
 ponta. Nada disso bloqueia escrever código — bloqueia apenas *executar*. Marque
 conforme resolver.
 
-## 1. Migrar de SQLite para Postgres — prioridade alta
-**Agora estamos em SQLite** (`apps/api/prisma/dev.db`) só para desenvolver sem
-depender de infra. O caminho para Postgres já está **preparado** (sem quebrar o
-dev SQLite atual):
+## 1. Postgres — subir o banco (única coisa que falta)
+O projeto roda **só em Postgres**, em dev e em prod: um `schema.prisma`, os enums
+no banco e migrations versionadas. Não há mais SQLite nem `db push`. O que falta
+é ter um Postgres de pé.
 
-- [x] Schema Postgres pronto em **`apps/api/prisma/schema.postgres.prisma`** —
-      cópia do schema com `provider = "postgresql"` e os **enums** reintroduzidos
-      (`UserStatus`, `ChannelType`, `MemberRole`). Validado (`prisma validate`).
-- [x] **Primeira migration** gerada em `apps/api/prisma/migrations/` (offline, via
-      `migrate diff`) — cobre todas as tabelas atuais, incl. `RefreshToken`,
-      `DMParticipant`, `ChannelMember`, `Message.parentId`, `Attachment` e as
-      flags `Channel.private/readOnly`.
-- [ ] Provisionar o Postgres — escolha um:
-  - **Gerenciado (recomendado)**: banco grátis em [neon.tech](https://neon.tech)
-    ou [supabase.com](https://supabase.com); colar a URL em `DATABASE_URL`.
-  - **Docker Desktop**: `pnpm db:up` (sobe só o Postgres). `DATABASE_URL=`
-    `postgresql://newdisc:newdisc@localhost:5432/newdisc?schema=public`.
-- [ ] Aplicar a migration: **`pnpm db:pg:deploy`** (`migrate deploy` usando o
-      `schema.postgres.prisma`).
-- [ ] Tornar o Postgres o schema ativo: copie `schema.postgres.prisma` sobre
-      `schema.prisma` (ou aponte `--schema`) e `prisma generate`.
+- [x] `schema.prisma` é o Postgres (`provider = "postgresql"`, enums
+      `UserStatus`, `ChannelType`, `MemberRole`). A variante
+      `schema.postgres.prisma` foi apagada.
+- [x] **Migration inicial** em `apps/api/prisma/migrations/20260825000000_init/`
+      — confere com o schema atual (`prisma migrate diff --from-empty`).
+- [ ] Subir o banco — escolha um:
+  - **Docker Desktop**: `pnpm db:up` (sobe só o Postgres, exposto apenas em
+      `127.0.0.1:5432`). `DATABASE_URL=`
+      `postgresql://newdisc:newdisc@localhost:5432/newdisc?schema=public`.
+      Credenciais diferentes: exporte `POSTGRES_USER`/`POSTGRES_PASSWORD`/
+      `POSTGRES_DB` antes do compose e reflita na `DATABASE_URL`.
+  - **Gerenciado**: banco grátis em [neon.tech](https://neon.tech) ou
+      [supabase.com](https://supabase.com); colar a URL em `DATABASE_URL`.
+- [ ] Aplicar o schema: **`pnpm db:migrate`** em dev (gera e aplica migrations),
+      **`pnpm db:deploy`** em prod/CI (só aplica o que já existe).
 
-> **Sincronia dos schemas:** enquanto os dois arquivos coexistirem, toda mudança
-> de modelo feita no `schema.prisma` (SQLite, dev) precisa ser refletida no
-> `schema.postgres.prisma`. Ao adotar o Postgres de vez, apague o SQLite.
->
-> Nota: em SQLite os enums viram texto no banco, mas os valores válidos seguem
-> garantidos pelos union types em `packages/shared` e pela validação nos DTOs.
+> **Ao mudar um modelo:** edite o `schema.prisma` e rode `pnpm db:migrate`. Toda
+> mudança vira migration versionada — `prisma db push` não faz parte do fluxo,
+> porque deixa o banco fora de sincronia com o histórico sem deixar rastro.
 
 ## 1b. Cloudflare R2 (bloqueia os anexos)
 O código de anexos está pronto (upload, storage, render); falta só a credencial
@@ -121,9 +117,8 @@ Ordem sugerida dos próximos blocos de features:
       (ex.: silenciar, gerenciar mensagens) — só os dois modos acima.
 
 ---
-_Status atual: backend rodando em SQLite; chat de texto (editar/apagar/reagir),
-threads, DMs 1-a-1 e em grupo, moderação em tempo real e canais privados/somente-
+_Status atual: backend em Postgres (schema único + migration inicial; falta só
+subir o banco); chat de texto (editar/apagar/reagir), threads, DMs 1-a-1 e em grupo, moderação em tempo real e canais privados/somente-
 leitura implementados (features novas com typecheck ok, faltando validação ponta
-a ponta com o servidor rodando). Falta o banco de produção (Postgres) — e a
-primeira migration, já que o schema evoluiu por `db push` —, credenciais do
+a ponta com o servidor rodando). Falta provisionar o Postgres, credenciais do
 LiveKit e o Rust para o build desktop._

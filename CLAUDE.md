@@ -13,7 +13,7 @@ de ambiente vive em `PENDENCIAS.md`; convenções visuais em `design.md`.
 |---------|------------|
 | Cliente | Next.js (App Router), React, Tailwind, Zustand, Socket.IO client |
 | Backend | NestJS (REST + WebSocket via Socket.IO), Prisma |
-| Banco   | SQLite no **dev**, PostgreSQL em **prod** (ver "Camada de dados") |
+| Banco   | PostgreSQL (dev e prod, ver "Camada de dados") |
 | Storage | Cloudflare R2 (cliente S3), opcional — anexos |
 | Mídia   | LiveKit (Cloud no MVP) |
 | Desktop | Tauri 2 |
@@ -39,7 +39,9 @@ pnpm dev                 # api + web juntos
 pnpm --filter @newdisc/api dev
 pnpm --filter @newdisc/api exec tsc --noEmit    # typecheck (sempre antes de commit)
 pnpm --filter @newdisc/api exec prisma generate # após mexer no schema.prisma
-pnpm --filter @newdisc/api exec prisma db push  # dev: aplica schema ao SQLite
+pnpm db:up               # sobe o Postgres do docker-compose (só 127.0.0.1)
+pnpm db:migrate          # cria/aplica migration a partir do schema (dev)
+pnpm db:deploy           # aplica as migrations existentes (prod/CI)
 ```
 
 Não há suite de testes automatizados no MVP. **Verificação = typecheck limpo nos
@@ -87,17 +89,22 @@ não linhas do Prisma. A conversão fica em métodos `toDTO`/`toAttachmentDTO`. 
 de anexo é derivada na hora pelo `StorageService.publicUrl` — o banco guarda só a
 `key` do objeto.
 
-## Camada de dados — atenção (dev ≠ prod)
+## Camada de dados — Postgres, um schema só
 
-- **Dev roda em SQLite** (`apps/api/prisma/dev.db`), sem infra externa. O schema
-  evoluiu por `prisma db push` e **ainda não tem migrations**.
-- **Enums viram `String`** no schema por causa do SQLite (`status`, `type`,
-  `role`). Os valores válidos são garantidos pelos union types em
-  `@newdisc/shared` e pela validação nos DTOs — não pelo banco. Ao ler/escrever
-  esses campos, trate como a union type, não como string livre.
-- **Migração para Postgres é pendência conhecida** (ver `PENDENCIAS.md` §1):
-  trocar `provider`, reintroduzir os enums e gerar a **primeira migration**. Não
-  presuma que migrations existem.
+- **Postgres em dev e em prod**, mesmo `apps/api/prisma/schema.prisma`. Em dev
+  ele vem do `docker-compose` (`pnpm db:up`). Não existe mais variante SQLite
+  nem `schema.postgres.prisma` — se você achar referência a isso, é doc velha.
+- **Migrations são o fluxo**: mudou o schema → `pnpm db:migrate` gera a migration
+  em `prisma/migrations/` e a aplica. **Não use `prisma db push`** (ele diverge o
+  banco das migrations sem deixar rastro).
+- **Enums são do banco** (`UserStatus`, `ChannelType`, `MemberRole`). O Prisma
+  gera exatamente os mesmos literais das union types de `@newdisc/shared`, então
+  o DTO é atribuição direta — **não precisa de `as`**. A equivalência entre os
+  dois lados fica travada em tempo de compilação em `common/enums.ts`; adicionar
+  um valor só de um lado quebra o typecheck lá, e em nenhum outro lugar.
+- **Cuidado com semântica de Postgres em query**: `contains` é sensível a caixa
+  (busca de mensagem usa `mode: "insensitive"`), ordenação depende do collation
+  e `NULL` ordena por último em `ASC`. O que "funcionava" em SQLite não é prova.
 
 ## Storage / anexos (R2)
 
@@ -114,7 +121,7 @@ de anexo é derivada na hora pelo `StorageService.publicUrl` — o banco guarda 
 
 ## O que NÃO presumir
 
-- Que existe Postgres/migrations rodando — o dev é SQLite + `db push`.
+- Que dá para evoluir o schema com `db push` — toda mudança vira migration.
 - Que R2/LiveKit estão configurados — dependem de credenciais em `.env`.
 - Que mensagens vão por REST — vão por WS.
 - Que dá para redeclarar um tipo de payload localmente — ele mora em `shared`.
