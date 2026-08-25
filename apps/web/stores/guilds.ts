@@ -74,8 +74,9 @@ export const useGuilds = create<GuildsState>((set, get) => {
     },
 
     select: (guild) => {
-      if (get().activeGuildId === guild.id && ui.view() === "guild") return;
       ui.setView("guild");
+      // voltar do modo DM para o servidor que já estava aberto não refaz fetch
+      if (get().activeGuildId === guild.id) return;
       set({ activeGuildId: guild.id });
       void loadMembers(guild.id);
       void useChannels.getState().loadForGuild(guild.id);
