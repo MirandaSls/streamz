@@ -25,7 +25,9 @@ const outDir = resolve(
 );
 mkdirSync(outDir, { recursive: true });
 const WEB = process.env.WEB_URL ?? "http://localhost:3106";
-const sufixo = Date.now().toString(36).slice(-5);
+// E2E_SUFIXO fixa as contas do passeio: com ele a rodada seguinte reaproveita
+// os mesmos usuarios (o registro so aceita 5 contas por hora).
+const sufixo = process.env.E2E_SUFIXO ?? Date.now().toString(36).slice(-5);
 const ANA = { user: `ana${sufixo}`, pass: "senha123" };
 const BETO = { user: `beto${sufixo}`, pass: "senha123" };
 
@@ -58,6 +60,10 @@ function observar(page, nome) {
   page.on("response", (r) => r.status() >= 400 && console.log(`[${nome} http ${r.status()}]`, r.url()));
 }
 
+/**
+ * Registra (ou entra, quando o registro bate no teto de 5/hora do throttler).
+ * Rodar o passeio varias vezes seguidas e o caso normal ao desenvolver.
+ */
 async function registrar(ctx, { user, pass }) {
   const page = await ctx.newPage();
   observar(page, user);
@@ -65,7 +71,15 @@ async function registrar(ctx, { user, pass }) {
   await page.fill("#username", user);
   await page.fill("#password", pass);
   await page.click('button[type="submit"]');
-  await page.waitForURL("**/app", { timeout: 30_000 });
+  try {
+    await page.waitForURL("**/app", { timeout: 15_000 });
+  } catch {
+    await page.goto(`${WEB}/login`);
+    await page.fill("#username", user);
+    await page.fill("#password", pass);
+    await page.click('button[type="submit"]');
+    await page.waitForURL("**/app", { timeout: 20_000 });
+  }
   await page.waitForTimeout(1500);
   return page;
 }
@@ -106,6 +120,17 @@ try {
   await conferir("Ana aparece na lista da sala, na barra lateral", async () => {
     await ana.waitForSelector("[data-voice-member]", { timeout: 5_000 });
   });
+
+  // os ajustes de voz (a mesma aba "Voz e vídeo") abrem de dentro da call
+  await ana.click('button[aria-label="Ajustes de voz"]');
+  await ana.waitForTimeout(800);
+  await shot(ana, "ajustes-de-voz");
+  await conferir("os ajustes de voz listam dispositivos e push-to-talk", async () => {
+    await ana.waitForSelector('[role="dialog"] select[disabled], [role="dialog"] select', { timeout: 5_000 });
+    await ana.waitForSelector('[aria-label="Definir a tecla de push-to-talk"]', { timeout: 5_000 });
+  });
+  await ana.keyboard.press("Escape");
+  await ana.waitForTimeout(400);
 
   // convite para o Beto
   await ana.click('button[aria-haspopup="menu"]');
@@ -202,6 +227,10 @@ try {
   await beto.click('[data-call-banner] button:has-text("Desligar")');
   await beto.waitForTimeout(1500);
   await shot(beto, "beto-desligou");
+} catch (e) {
+  // um passo do roteiro que estourou não pode virar "passeio completo": é uma
+  // falha como outra qualquer, só que interrompe o resto
+  falhas.push(`o roteiro parou: ${e.message.split("\n")[0]}`);
 } finally {
   await browser.close();
   console.log(falhas.length === 0 ? "\n✅ passeio completo" : `\n❌ falhas: ${falhas.join(" · ")}`);

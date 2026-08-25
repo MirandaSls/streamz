@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   Headphones,
   HeadphoneOff,
@@ -8,6 +9,7 @@ import {
   MicOff,
   Minimize,
   PhoneOff,
+  Settings,
   Video,
   VideoOff,
 } from "lucide-react";
@@ -15,6 +17,8 @@ import Tooltip from "@/components/ui/Tooltip";
 import { useVoice } from "@/stores/voice";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 import ScreenShareButton from "@/components/voice/ScreenShareButton";
+import VoiceSettingsPanel from "@/components/voice/VoiceSettingsPanel";
+import Dialog from "@/components/modals/Dialog";
 
 /**
  * Botão redondo da barra de controles (o padrão do Discord: 48px).
@@ -59,6 +63,7 @@ function Controle({
 
 /** Barra de controles do painel de voz: microfone, áudio, câmera, tela, sair. */
 export default function VoiceControls({ onLeave }: { onLeave: () => void }) {
+  const [ajustes, setAjustes] = useState(false);
   const muted = useVoicePrefs((s) => s.muted);
   const deafened = useVoicePrefs((s) => s.deafened);
   const toggleMute = useVoicePrefs((s) => s.toggleMute);
@@ -103,9 +108,20 @@ export default function VoiceControls({ onLeave }: { onLeave: () => void }) {
       >
         {telaCheia ? <Minimize size={20} /> : <Maximize size={20} />}
       </Controle>
+      <Controle label="Ajustes de voz" onClick={() => setAjustes(true)}>
+        <Settings size={20} />
+      </Controle>
       <Controle label="Desconectar" tom="perigo" onClick={onLeave}>
         <PhoneOff size={20} />
       </Controle>
+
+      {/* o mesmo painel da aba "Voz e vídeo": trocar de microfone no meio da
+          call não pode exigir uma volta pelas configurações */}
+      {ajustes && (
+        <Dialog title="Voz e vídeo" onClose={() => setAjustes(false)} className="w-[420px]">
+          <VoiceSettingsPanel />
+        </Dialog>
+      )}
     </div>
   );
 }

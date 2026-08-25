@@ -540,6 +540,23 @@ export function usuarioDaIdentidade(channelId: string, identity: string): Public
   return estados.find((e) => e.user.id === identity)?.user ?? null;
 }
 
+// Trocar de microfone/saída nas configurações vale **na hora**, sem sair da
+// call: o SDK republica a faixa com o novo dispositivo. A câmera é a exceção —
+// ela só troca no próximo `setCameraEnabled`, porque republicar vídeo no meio
+// de uma frase pisca a imagem para todo mundo.
+if (typeof window !== "undefined") {
+  let anteriores = "";
+  useVoiceDevicesStore.subscribe((devices) => {
+    const chave = `${devices.inputId}|${devices.outputId}`;
+    if (chave === anteriores) return;
+    anteriores = chave;
+    const room = sala;
+    if (!room) return;
+    if (devices.inputId) void room.switchActiveDevice("audioinput", devices.inputId).catch(() => {});
+    if (devices.outputId) void room.switchActiveDevice("audiooutput", devices.outputId).catch(() => {});
+  });
+}
+
 // Mudo/surdo do rodapé e push-to-talk valem dentro da call: qualquer troca é
 // reenviada ao gateway e aplicada no SDK. A assinatura fica aqui (e não num
 // componente) para valer mesmo com o painel de voz fechado.
