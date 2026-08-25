@@ -258,6 +258,9 @@ export const WS_EVENTS = {
   MEMBER_JOINED: "member.joined",
   MEMBER_LEFT: "member.left",
   USER_UPDATED: "user.updated",
+  // ── e-configuracoes ──
+  /** preferência de notificação mudou (outra aba/dispositivo do mesmo usuário) */
+  NOTIFICATION_UPDATED: "notification.updated",
 } as const;
 
 /** Teto de caracteres de uma mensagem (canal ou DM). */
@@ -401,4 +404,108 @@ export interface VoiceTokenResponse {
   token: string;
   url: string;
   room: string;
+}
+
+// ── e-configuracoes ──────────────────────────────────────────
+
+/** Quanto um escopo (canal, servidor ou o padrão global) notifica. */
+export type NotificationLevel = "ALL" | "MENTIONS" | "NONE";
+export const NOTIFICATION_LEVELS: readonly NotificationLevel[] = ["ALL", "MENTIONS", "NONE"];
+
+/**
+ * Escopo canônico de uma preferência de notificação.
+ *
+ * É uma string ("global" | "guild:<id>" | "channel:<id>") e não um par de
+ * colunas nuláveis porque no Postgres dois NULLs são distintos: um índice único
+ * sobre (userId, guildId, channelId) deixaria passar duplicata do mesmo escopo.
+ */
+export type NotificationScope = string;
+export const GLOBAL_NOTIFICATION_SCOPE = "global";
+export function guildNotificationScope(guildId: string): NotificationScope {
+  return `guild:${guildId}`;
+}
+export function channelNotificationScope(channelId: string): NotificationScope {
+  return `channel:${channelId}`;
+}
+
+/**
+ * Preferência de notificação de um escopo. `muted` é independente de `level`
+ * (como no Discord): silenciar não apaga a escolha "só menções" por baixo.
+ * `mutedUntil` null com `muted` true = silenciado "até eu reativar".
+ */
+export interface NotificationSetting {
+  scope: NotificationScope;
+  /** preenchido quando o escopo é um servidor. */
+  guildId: string | null;
+  /** preenchido quando o escopo é um canal (de servidor ou conversa). */
+  channelId: string | null;
+  level: NotificationLevel;
+  muted: boolean;
+  mutedUntil: string | null;
+}
+
+/** Durações do "silenciar por…" (minutos). `null` = até eu reativar. */
+export const MUTE_PRESETS_MINUTES: readonly number[] = [15, 60, 8 * 60, 24 * 60];
+
+/** true se o escopo está silenciado no instante `now`. */
+export function isMuted(
+  setting: Pick<NotificationSetting, "muted" | "mutedUntil"> | null | undefined,
+  now: number = Date.now(),
+): boolean {
+  if (!setting?.muted) return false;
+  if (!setting.mutedUntil) return true; // até eu reativar
+  return new Date(setting.mutedUntil).getTime() > now;
+}
+
+/**
+ * Nível efetivo de um canal: o mais específico ganha (canal > servidor >
+ * padrão global) e qualquer escopo silenciado zera tudo — silenciar o servidor
+ * cala os canais dele, como no Discord.
+ */
+export function effectiveNotificationLevel(
+  channel: NotificationSetting | null | undefined,
+  guild: NotificationSetting | null | undefined,
+  global: NotificationSetting | null | undefined,
+  now: number = Date.now(),
+): NotificationLevel {
+  if (isMuted(channel, now) || isMuted(guild, now)) return "NONE";
+  return channel?.level ?? guild?.level ?? global?.level ?? "ALL";
+}
+
+/** Decide se uma mensagem que chegou deve virar notificação. */
+export function shouldNotifyMessage(
+  level: NotificationLevel,
+  mention: boolean,
+  doNotDisturb = false,
+): boolean {
+  if (doNotDisturb || level === "NONE") return false;
+  return level === "ALL" || mention;
+}
+
+/** Corpo do `PATCH /me/notifications`. */
+export const notificationSettingSchema = z
+  .object({
+    guildId: idSchema.nullish(),
+    channelId: idSchema.nullish(),
+    level: z.enum(["ALL", "MENTIONS", "NONE"]).optional(),
+    muted: z.boolean().optional(),
+    /** ISO; null limpa a expiração (silêncio "até eu reativar"). */
+    mutedUntil: z.string().datetime().nullish(),
+  })
+  .refine((s) => !(s.guildId && s.channelId), {
+    message: "Informe guildId ou channelId, nunca os dois",
+  })
+  .refine((s) => s.level !== undefined || s.muted !== undefined || s.mutedUntil !== undefined, {
+    message: "Nada a alterar",
+  });
+export type NotificationSettingUpdate = z.infer<typeof notificationSettingSchema>;
+
+/** Sessão ativa do usuário (contrato do agente I: `GET/DELETE /me/sessions`). */
+export interface SessionInfo {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  /** true para a sessão que está fazendo a requisição. */
+  current: boolean;
+  userAgent?: string;
 }
