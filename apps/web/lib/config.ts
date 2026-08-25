@@ -4,8 +4,13 @@
  * Fonte única: nenhum outro módulo deve ler `process.env.NEXT_PUBLIC_*` de URL
  * nem repetir o fallback de desenvolvimento. Em produção a ausência da variável
  * é erro de configuração, não algo a mascarar com `localhost` — um build
- * publicado apontando para a máquina do usuário falha de forma silenciosa e
- * confusa, então quebramos no boot com a mensagem do que faltou.
+ * publicado apontando para a máquina de quem abriu a página falha de forma
+ * silenciosa e confusa.
+ *
+ * Onde a falta é denunciada: no boot do cliente, com `throw`. Durante o
+ * `next build` só avisamos no log — as páginas são pré-renderizadas no
+ * servidor, e derrubar o build por uma variável que só o navegador usa
+ * impediria de empacotar o app (inclusive o desktop) antes de configurá-lo.
  */
 
 const DEV_API_URL = "http://localhost:3333";
@@ -13,11 +18,13 @@ const DEV_API_URL = "http://localhost:3333";
 function resolver(nome: string, valor: string | undefined, fallback: string): string {
   const limpo = valor?.trim();
   if (limpo) return semBarraFinal(limpo);
+
   if (process.env.NODE_ENV === "production") {
-    throw new Error(
+    const recado =
       `Configuração ausente: defina ${nome} no ambiente de build do cliente web ` +
-        `(ex.: ${nome}=https://api.seu-dominio.com).`,
-    );
+      `(ex.: ${nome}=https://api.seu-dominio.com).`;
+    if (typeof window !== "undefined") throw new Error(recado);
+    console.error(recado);
   }
   return fallback;
 }
