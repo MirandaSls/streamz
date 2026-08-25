@@ -6,27 +6,57 @@ conforme resolver.
 
 ## 1. Migrar de SQLite para Postgres — prioridade alta
 **Agora estamos em SQLite** (`apps/api/prisma/dev.db`) só para desenvolver sem
-depender de infra. Antes de produção, migrar para Postgres:
+depender de infra. O caminho para Postgres já está **preparado** (sem quebrar o
+dev SQLite atual):
 
-- [ ] No `apps/api/prisma/schema.prisma`: trocar `provider = "sqlite"` por
-      `provider = "postgresql"` e **reintroduzir os enums** (`UserStatus`,
-      `ChannelType`, `MemberRole`) nos campos `status`, `type`, `role`.
+- [x] Schema Postgres pronto em **`apps/api/prisma/schema.postgres.prisma`** —
+      cópia do schema com `provider = "postgresql"` e os **enums** reintroduzidos
+      (`UserStatus`, `ChannelType`, `MemberRole`). Validado (`prisma validate`).
+- [x] **Primeira migration** gerada em `apps/api/prisma/migrations/` (offline, via
+      `migrate diff`) — cobre todas as tabelas atuais, incl. `RefreshToken`,
+      `DMParticipant`, `ChannelMember`, `Message.parentId`, `Attachment` e as
+      flags `Channel.private/readOnly`.
 - [ ] Provisionar o Postgres — escolha um:
   - **Gerenciado (recomendado)**: banco grátis em [neon.tech](https://neon.tech)
     ou [supabase.com](https://supabase.com); colar a URL em `DATABASE_URL`.
-  - **Docker Desktop**: instalar de
-    [docker.com](https://www.docker.com/products/docker-desktop/), reiniciar o
-    terminal, então `pnpm db:up`.
-- [ ] `pnpm db:migrate` para gerar as migrations de verdade (Postgres). O schema
-      evoluiu por `db push` no dev (SQLite) e ainda **não tem migrations**:
-      `RefreshToken`, `DMParticipant`, `ChannelMember`, `Message.parentId` e as
-      flags `Channel.private/readOnly` entram todas na primeira migration.
+  - **Docker Desktop**: `pnpm db:up` (sobe só o Postgres). `DATABASE_URL=`
+    `postgresql://newdisc:newdisc@localhost:5432/newdisc?schema=public`.
+- [ ] Aplicar a migration: **`pnpm db:pg:deploy`** (`migrate deploy` usando o
+      `schema.postgres.prisma`).
+- [ ] Tornar o Postgres o schema ativo: copie `schema.postgres.prisma` sobre
+      `schema.prisma` (ou aponte `--schema`) e `prisma generate`.
 
-> Nota: enquanto estivermos em SQLite, os enums viram texto no banco, mas os
-> valores válidos continuam garantidos pelos union types em `packages/shared` e
-> pela validação nos DTOs.
+> **Sincronia dos schemas:** enquanto os dois arquivos coexistirem, toda mudança
+> de modelo feita no `schema.prisma` (SQLite, dev) precisa ser refletida no
+> `schema.postgres.prisma`. Ao adotar o Postgres de vez, apague o SQLite.
+>
+> Nota: em SQLite os enums viram texto no banco, mas os valores válidos seguem
+> garantidos pelos union types em `packages/shared` e pela validação nos DTOs.
 
-## 2. LiveKit Cloud (bloqueia a voz — Dia 4)
+## 1b. Cloudflare R2 (bloqueia os anexos)
+O código de anexos está pronto (upload, storage, render); falta só a credencial
+para testar ponta a ponta — mesmo padrão do LiveKit.
+
+- [ ] Criar um bucket em [dash.cloudflare.com](https://dash.cloudflare.com) → R2 e
+      um **API Token** (S3). Preencher no `.env`: `R2_ACCOUNT_ID`,
+      `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`.
+- [ ] (Opcional) `R2_PUBLIC_BASE_URL` com o domínio público do bucket (r2.dev ou
+      domínio próprio). Sem ela, os anexos são servidos pelo proxy da API em
+      `/api/uploads/file/:id` — funciona só com as credenciais acima.
+
+## 2. LiveKit (bloqueia a voz — Dia 4)
+O código de voz é **agnóstico de provedor** (só usa `LIVEKIT_URL/KEY/SECRET`).
+Duas formas de rodar — escolha uma:
+
+**Opção A — Self-host via Docker (preparado):**
+- [x] Serviço `livekit` no `docker-compose.yml` (profile `livekit`) + config em
+      `livekit.yaml` + scripts `pnpm livekit:up` / `livekit:down`.
+- [ ] Trocar o `keys:` do `livekit.yaml` e o `LIVEKIT_API_SECRET` do `.env` por um
+      secret aleatório (>= 32 chars) — os dois precisam **bater**.
+- [ ] `pnpm livekit:up` e usar no `.env` (Opção A): `LIVEKIT_URL=ws://localhost:7880`,
+      `NEXT_PUBLIC_LIVEKIT_URL=ws://localhost:7880`, `LIVEKIT_API_KEY=devkey`.
+
+**Opção B — LiveKit Cloud:**
 - [ ] Criar conta e um *project* em [cloud.livekit.io](https://cloud.livekit.io).
 - [ ] Copiar **URL** (`wss://...`), **API Key** e **API Secret** para o `.env`
       (`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`,
@@ -50,8 +80,12 @@ depender de infra. Antes de produção, migrar para Postgres:
 ## 6. Backlog de escopo (próximos blocos)
 Ordem sugerida dos próximos blocos de features:
 
-- [ ] **Anexos/imagens nas mensagens** — depende do armazenamento (Cloudflare R2
-      ou MinIO local); precisa do endpoint de upload + URL pré-assinada.
+- [x] ~~**Anexos/imagens nas mensagens**~~ — feito: módulos `storage` (cliente
+      S3→Cloudflare R2) e `uploads` (`POST /uploads` com validação por
+      magic-bytes + `GET /uploads/file/:id` como proxy), modelo `Attachment`
+      vinculado por id no envio da mensagem, e composer com input/drag-drop/colar
+      + render inline de imagens e card de arquivo. _Typecheck ok nos 3 pacotes;
+      o upload real depende das credenciais `R2_*` (sem elas, responde 503)._
 - [x] ~~**Convites de verdade**~~ — feito: modelo `Invite` (código, expiração,
       limite de usos), endpoints criar/preview/redeem, UI de criar convite e
       entrar por código. Verificado ponta a ponta. O `POST /guilds/:id/join`
