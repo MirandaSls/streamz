@@ -16,7 +16,12 @@ import {
   type PresenceUpdatePayload,
   type PublicUser,
 } from "@newdisc/shared";
-import { notify } from "@/lib/desktop";
+import type { NotificationSetting } from "@newdisc/shared";
+import { shouldNotifyMessage } from "@newdisc/shared";
+import { definirContadorNoIcone, notify } from "@/lib/desktop";
+import { tocarSomDeNotificacao } from "@/lib/notification-sound";
+import { levelForChannel, useNotifications } from "@/stores/notifications";
+import { useSettings } from "@/stores/settings";
 import { useAuth } from "@/stores/auth";
 import { on, onReconnect, rejoinChannel } from "@/stores/socket-adapter";
 import { useChannels } from "@/stores/channels";
@@ -44,6 +49,9 @@ import { ui } from "@/stores/ui";
  */
 export function useRealtime(currentUserId?: string): void {
   useEffect(() => {
+    // ── e-configuracoes ── sem elas, tudo notifica (o padrão do contrato)
+    void useNotifications.getState().load();
+
     const unsubscribe = [
       on<Message>(WS_EVENTS.MESSAGE_NEW, (message) => {
         useMessages.getState().handleNew(message);
@@ -124,6 +132,11 @@ export function useRealtime(currentUserId?: string): void {
         ui.toast(payload?.message || "Não foi possível concluir a ação", "error");
       }),
 
+      // ── e-configuracoes ── preferências de notificação (nível e silêncio)
+      on<NotificationSetting>(WS_EVENTS.NOTIFICATION_UPDATED, (setting) => {
+        useNotifications.getState().apply(setting);
+      }),
+
       onReconnect(() => {
         rejoinChannel();
         void useMessages.getState().resyncActive();
@@ -168,6 +181,19 @@ function onMessageArrived(message: Message, currentUserId?: string) {
   }
 
   if (!mine && !naTela) notifyIfAway(message, mention);
+  // ── e-configuracoes ── contador de menções no ícone do app
+  atualizarContadorNoIcone();
+}
+
+/** Soma as menções visíveis e escreve no ícone (quando o usuário quer). */
+function atualizarContadorNoIcone() {
+  if (!useSettings.getState().badgeCount) {
+    void definirContadorNoIcone(0);
+    return;
+  }
+  const servidores = useGuilds.getState().guilds.reduce((total, g) => total + g.mentionCount, 0);
+  const conversas = useDMs.getState().channels.reduce((total, d) => total + d.mentionCount, 0);
+  void definirContadorNoIcone(servidores + conversas);
 }
 
 /** Título para a notificação: `#canal` no servidor, nome da conversa em DM. */
@@ -178,11 +204,29 @@ function channelTitle(channelId: string): string {
   return `#${channel?.name ?? "canal"}`;
 }
 
-/** Notifica só o que o usuário perderia: mensagem de outro, fora da tela. */
+/**
+ * Notifica só o que o usuário perderia: mensagem de outro, fora da tela — e
+ * que as preferências dele deixam passar.
+ *
+ * ── e-configuracoes ──
+ * A ordem das perguntas importa: primeiro o nível efetivo do canal (canal >
+ * servidor > padrão global, com silêncio zerando tudo), depois o "não
+ * perturbe", e só então a regra antiga de "estou olhando para isso?".
+ */
 function notifyIfAway(message: Message, mention: boolean) {
   if (typeof document === "undefined") return;
+
+  const prefs = useSettings.getState();
+  const me = useAuth.getState().user;
+  const naoPerturbe = prefs.dndSilencesAll && me?.status === "DND";
+  const nivel = levelForChannel(message.channelId, message.guildId);
+  if (!shouldNotifyMessage(nivel, mention, naoPerturbe)) return;
+
   // dentro do app, só menção e DM avisam; com a janela escondida, tudo avisa
   const escondida = document.visibilityState !== "visible";
   if (!escondida && !mention && message.guildId) return;
+
+  if (prefs.notificationSound) tocarSomDeNotificacao(prefs.outputVolume / 100);
+  if (!prefs.desktopNotifications) return;
   void notify(channelTitle(message.channelId), `${displayNameOf(message.author)}: ${message.content}`);
 }

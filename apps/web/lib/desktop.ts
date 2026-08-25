@@ -191,3 +191,39 @@ function garantirPermissao(
   }
   return permissao;
 }
+
+// ── e-configuracoes: contador no ícone do app ──────────────────────────────
+
+/**
+ * Escreve o contador de menções no ícone do app (o "badge" do Discord).
+ *
+ * No desktop usa `setBadgeCount` da janela do Tauri **quando existir** — a API
+ * chegou no Tauri 2.1 e nem toda plataforma a implementa, então a chamada é
+ * opcional e a falha é silenciosa. No navegador cai no Badging API
+ * (`navigator.setAppBadge`), que só funciona em PWA instalado; onde não houver,
+ * vira no-op.
+ *
+ * `0` limpa o contador — nunca mostramos "0" no ícone.
+ */
+export async function definirContadorNoIcone(total: number): Promise<void> {
+  const valor = Number.isFinite(total) && total > 0 ? Math.floor(total) : 0;
+  try {
+    if (isTauri()) {
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      const janela = getCurrentWindow() as unknown as {
+        setBadgeCount?: (n?: number) => Promise<void>;
+      };
+      await janela.setBadgeCount?.(valor > 0 ? valor : undefined);
+      return;
+    }
+    if (typeof navigator === "undefined") return;
+    const badging = navigator as Navigator & {
+      setAppBadge?: (n?: number) => Promise<void>;
+      clearAppBadge?: () => Promise<void>;
+    };
+    if (valor > 0) await badging.setAppBadge?.(valor);
+    else await badging.clearAppBadge?.();
+  } catch {
+    // Contador é enfeite: plataforma sem suporte não pode derrubar nada.
+  }
+}

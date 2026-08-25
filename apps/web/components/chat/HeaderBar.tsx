@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, type MouseEvent, type ReactNode } from "react";
 import { Bell, HelpCircle, Inbox, Pin, Search } from "lucide-react";
 import Tooltip from "@/components/ui/Tooltip";
 
@@ -13,7 +13,7 @@ export function HeaderIcon({
   children,
 }: {
   label: string;
-  onClick?: () => void;
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   active?: boolean;
   disabled?: boolean;
   children: ReactNode;
@@ -49,6 +49,7 @@ export default function HeaderBar({
   title,
   subtitle,
   tools,
+  bell,
   searchLabel,
   onSearch,
 }: {
@@ -57,6 +58,8 @@ export default function HeaderBar({
   subtitle?: ReactNode;
   /** botões antes da busca (variam entre canal e DM). */
   tools?: ReactNode;
+  /** sino de notificação do canal; sem ele, o botão fica no estado "em breve". */
+  bell?: ReactNode;
   searchLabel: string;
   onSearch: (query: string) => void;
 }) {
@@ -80,9 +83,11 @@ export default function HeaderBar({
         <HeaderIcon label="Mensagens fixadas" disabled>
           <Pin size={24} />
         </HeaderIcon>
-        <HeaderIcon label="Configurações de notificação" disabled>
-          <Bell size={24} />
-        </HeaderIcon>
+        {bell ?? (
+          <HeaderIcon label="Configurações de notificação" disabled>
+            <Bell size={24} />
+          </HeaderIcon>
+        )}
         <form
           onSubmit={(e) => {
             e.preventDefault();

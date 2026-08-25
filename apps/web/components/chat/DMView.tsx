@@ -4,6 +4,7 @@ import { Phone, Users, Video } from "lucide-react";
 import { isGroupChannel } from "@newdisc/shared";
 import Composer from "@/components/chat/Composer";
 import HeaderBar, { HeaderIcon } from "@/components/chat/HeaderBar";
+import NotificationBell from "@/components/chat/NotificationBell";
 import MessageList from "@/components/chat/MessageList";
 import SearchPanel from "@/components/chat/SearchPanel";
 import TypingIndicator from "@/components/chat/TypingIndicator";
@@ -51,6 +52,7 @@ export default function DMView() {
   return (
     <main className="flex min-w-0 flex-1 flex-col bg-chat">
       <HeaderBar
+        bell={<NotificationBell channelId={active.id} />}
         icon={
           other ? (
             <Avatar user={other} size="sm" status={resolveStatus(statuses, other)} surface="border-chat" />

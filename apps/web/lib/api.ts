@@ -13,7 +13,10 @@ import type {
   LinkEmbed,
   MemberRole,
   Message,
+  NotificationSetting,
+  NotificationSettingUpdate,
   PublicUser,
+  SessionInfo,
   UserStatus,
 } from "@newdisc/shared";
 import { API_URL } from "./config";
@@ -168,6 +171,15 @@ export const api = {
     request<{ token: string; url: string; room: string }>(`/voice/channels/${channelId}/token`, {
       method: "POST",
     }),
+
+  // ── e-configuracoes ──
+  /** Preferências de notificação (canal, servidor e o padrão global). */
+  notificationSettings: () => request<NotificationSetting[]>("/me/notifications"),
+  updateNotificationSetting: (body: NotificationSettingUpdate) =>
+    request<NotificationSetting>("/me/notifications", patch(body)),
+  /** Sessões ativas — contrato do agente I; 404 enquanto ele não existir. */
+  sessions: () => request<SessionInfo[]>("/me/sessions"),
+  revokeSession: (id: string) => request<void>(`/me/sessions/${id}`, { method: "DELETE" }),
 
   /** Envia um arquivo e devolve o anexo (a vincular numa mensagem no envio). */
   uploadFile: (file: File): Promise<Attachment> => {

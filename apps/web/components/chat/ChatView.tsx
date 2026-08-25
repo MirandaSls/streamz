@@ -3,6 +3,7 @@
 import { Hash, Lock, Megaphone, MessagesSquare, Users } from "lucide-react";
 import Composer from "@/components/chat/Composer";
 import HeaderBar, { HeaderIcon } from "@/components/chat/HeaderBar";
+import NotificationBell from "@/components/chat/NotificationBell";
 import MessageList from "@/components/chat/MessageList";
 import SearchPanel from "@/components/chat/SearchPanel";
 import TypingIndicator from "@/components/chat/TypingIndicator";
@@ -48,6 +49,7 @@ export default function ChatView() {
   return (
     <main className="flex min-w-0 flex-1 flex-col bg-chat">
       <HeaderBar
+        bell={<NotificationBell channelId={channel.id} />}
         icon={<Icon size={24} />}
         title={name}
         searchLabel={`Buscar mensagens em ${name}`}

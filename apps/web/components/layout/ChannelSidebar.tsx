@@ -2,6 +2,8 @@
 
 import { useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import {
+  Bell,
+  BellOff,
   ChevronDown,
   ChevronRight,
   Hash,
@@ -16,12 +18,15 @@ import {
   UserPlus,
   Volume2,
 } from "lucide-react";
-import { isUnread, type Channel } from "@newdisc/shared";
+import { channelNotificationScope, guildNotificationScope, isMuted, isUnread, type Channel } from "@newdisc/shared";
 import UserFooter from "@/components/layout/UserFooter";
 import Tooltip from "@/components/ui/Tooltip";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { useCanModerate, useGuilds, useIsOwner } from "@/stores/guilds";
+import { useT } from "@/lib/i18n";
+import { abrirMenuDeNotificacao } from "@/lib/notification-menu";
+import { useNotifications } from "@/stores/notifications";
 import { ui, useUI, type MenuItem } from "@/stores/ui";
 
 /** Ícone do canal: voz, anúncio (somente leitura), privado ou texto. */
@@ -90,7 +95,10 @@ export default function ChannelSidebar() {
   const listRef = useRef<HTMLDivElement>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
+  const t = useT();
   const guild = useGuilds((s) => s.guilds.find((g) => g.id === s.activeGuildId) ?? null);
+  // ── e-configuracoes ── silenciar canal/servidor
+  const porEscopo = useNotifications((s) => s.porEscopo);
   const createInvite = useGuilds((s) => s.createInvite);
   const leaveGuild = useGuilds((s) => s.leave);
   const removeGuild = useGuilds((s) => s.remove);
@@ -121,6 +129,20 @@ export default function ChannelSidebar() {
     if (canModerate) {
       items.push({ label: "Convites", icon: <Link2 size={18} />, onSelect: () => openModal({ kind: "invites", guildId: guild.id }) });
     }
+    // o menu de contexto do app não tem submenu: abrir o de notificação no
+    // mesmo ponto é o equivalente plano do "Silenciar servidor >" do Discord
+    items.push({
+      label: t("aba.notificacoes"),
+      icon: isMuted(porEscopo[guildNotificationScope(guild.id)]) ? <BellOff size={18} /> : <Bell size={18} />,
+      onSelect: () =>
+        abrirMenuDeNotificacao(
+          r.left + 10,
+          r.bottom + 4,
+          { tipo: "servidor", guildId: guild.id },
+          porEscopo[guildNotificationScope(guild.id)],
+          t,
+        ),
+    });
     items.push({ separator: true });
     if (isOwner) {
       items.push({ label: "Apagar servidor", icon: <Trash2 size={18} />, danger: true, onSelect: () => void removeGuild(guild.id) });
@@ -133,8 +155,16 @@ export default function ChannelSidebar() {
   /** Botão direito num canal: renomear/apagar para moderação. */
   function openChannelMenu(e: MouseEvent, channel: Channel) {
     e.preventDefault();
+    const { clientX, clientY } = e;
+    const setting = porEscopo[channelNotificationScope(channel.id)];
     const items: MenuItem[] = [
       { label: "Marcar como lido", onSelect: () => void useChannels.getState().markRead(channel.id) },
+      {
+        label: t("aba.notificacoes"),
+        icon: isMuted(setting) ? <BellOff size={18} /> : <Bell size={18} />,
+        onSelect: () =>
+          abrirMenuDeNotificacao(clientX, clientY, { tipo: "canal", channelId: channel.id }, setting, t),
+      },
       { label: "Copiar ID do canal", onSelect: () => void navigator.clipboard?.writeText(channel.id) },
     ];
     if (canModerate) {
@@ -172,7 +202,10 @@ export default function ChannelSidebar() {
   function renderChannel(channel: Channel) {
     const active = (channel.type === "VOICE" ? voiceChannelId : activeChannelId) === channel.id;
     const name = channel.name ?? "canal";
-    const unread = !active && channel.type !== "VOICE" && isUnread(channel);
+    const silenciado =
+      isMuted(porEscopo[channelNotificationScope(channel.id)]) ||
+      (channel.guildId ? isMuted(porEscopo[guildNotificationScope(channel.guildId)]) : false);
+    const unread = !active && !silenciado && channel.type !== "VOICE" && isUnread(channel);
     return (
       <div
         key={channel.id}
@@ -184,7 +217,7 @@ export default function ChannelSidebar() {
             : unread
               ? "text-txt-primary hover:bg-hov"
               : "text-txt-faint hover:bg-hov hover:text-txt-normal"
-        }`}
+        } ${silenciado && !active ? "opacity-50" : ""}`}
       >
         {unread && (
           // ponto branco na margem esquerda, como o Discord marca canal não lido
