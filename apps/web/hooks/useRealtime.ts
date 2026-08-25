@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import {
   WS_EVENTS,
   type GuildRemovedEvent,
+  type PublicUser,
   type Message,
   type MessageDeletedEvent,
   type PresenceUpdatePayload,
@@ -15,6 +16,7 @@ import { dmTitle, useDMs } from "@/stores/dms";
 import { useGuilds } from "@/stores/guilds";
 import { useMessages } from "@/stores/messages";
 import { usePresence } from "@/stores/presence";
+import { useTyping } from "@/stores/typing";
 import { ui } from "@/stores/ui";
 
 /**
@@ -55,6 +57,13 @@ export function useRealtime(currentUserId?: string): void {
       on<PresenceUpdatePayload>(WS_EVENTS.PRESENCE_UPDATE, ({ userId, status }) => {
         usePresence.getState().apply(userId, status);
       }),
+
+      on<{ channelId: string; user: Pick<PublicUser, "id" | "username"> }>(
+        WS_EVENTS.TYPING,
+        ({ channelId, user }) => {
+          useTyping.getState().apply(channelId, user);
+        },
+      ),
 
       on<GuildRemovedEvent>(WS_EVENTS.GUILD_REMOVED, ({ guildId, reason }) => {
         useGuilds.getState().handleRemoved(guildId);

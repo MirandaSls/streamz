@@ -1,5 +1,6 @@
 "use client";
 
+import { horaCompleta } from "@/lib/format";
 import { useMessages } from "@/stores/messages";
 
 /** Resultados da busca do canal, sobre a timeline. */
@@ -16,25 +17,23 @@ export default function SearchPanel() {
       aria-label="Resultados da busca"
       className="border-b border-black/20 bg-panel px-4 py-2"
     >
-      <div className="mb-1 flex items-center justify-between text-xs text-neutral-400">
+      <div className="mb-1 flex items-center justify-between text-xs font-semibold uppercase text-txt-muted">
         <span>
           {searching ? "Buscando…" : `${results.length} resultado(s) para “${query}”`}
         </span>
-        <button type="button" onClick={clearSearch} className="transition hover:text-white">
-          fechar
+        <button type="button" onClick={clearSearch} className="normal-case transition hover:text-txt-primary">
+          Fechar
         </button>
       </div>
       <div className="max-h-56 overflow-y-auto">
         {results.length === 0 && !searching ? (
-          <div className="py-2 text-sm text-neutral-500">Nada encontrado.</div>
+          <div className="py-2 text-sm text-txt-muted">Nada encontrado.</div>
         ) : (
           results.map((m) => (
-            <div key={m.id} className="border-b border-black/10 py-1.5 text-sm">
-              <span className="font-semibold text-white">{m.author.username}</span>{" "}
-              <span className="text-xs text-neutral-500">
-                {new Date(m.createdAt).toLocaleString()}
-              </span>
-              <div className="text-neutral-300">{m.content}</div>
+            <div key={m.id} className="my-1 rounded bg-chat px-3 py-2 text-sm">
+              <span className="font-medium text-txt-primary">{m.author.username}</span>{" "}
+              <span className="text-xs text-txt-muted">{horaCompleta(m.createdAt)}</span>
+              <div className="text-txt-normal">{m.content}</div>
             </div>
           ))
         )}

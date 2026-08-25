@@ -1,12 +1,16 @@
 "use client";
 
+import { Hash, Lock, Megaphone, MessagesSquare, Users } from "lucide-react";
 import Composer from "@/components/chat/Composer";
+import HeaderBar, { HeaderIcon } from "@/components/chat/HeaderBar";
 import MessageList from "@/components/chat/MessageList";
 import SearchPanel from "@/components/chat/SearchPanel";
+import TypingIndicator from "@/components/chat/TypingIndicator";
 import { useAuth } from "@/stores/auth";
 import { useActiveChannel } from "@/stores/channels";
 import { useCanModerate } from "@/stores/guilds";
 import { useActiveSlice, useMessages } from "@/stores/messages";
+import { useUI } from "@/stores/ui";
 
 /** Coluna 3 no modo servidor: cabeçalho, busca, timeline e composer. */
 export default function ChatView() {
@@ -14,8 +18,9 @@ export default function ChatView() {
   const channel = useActiveChannel();
   const canModerate = useCanModerate(user?.id);
   const slice = useActiveSlice();
+  const membersOpen = useUI((s) => s.membersOpen);
+  const toggleMembers = useUI((s) => s.toggleMembers);
 
-  const searchQuery = useMessages((s) => s.searchQuery);
   const setSearchQuery = useMessages((s) => s.setSearchQuery);
   const runSearch = useMessages((s) => s.runSearch);
   const loadOlder = useMessages((s) => s.loadOlder);
@@ -29,7 +34,7 @@ export default function ChatView() {
 
   if (!channel) {
     return (
-      <main className="grid min-w-0 flex-1 place-items-center bg-chat text-neutral-500">
+      <main className="grid min-w-0 flex-1 place-items-center bg-chat text-txt-muted">
         Escolha um canal
       </main>
     );
@@ -38,27 +43,29 @@ export default function ChatView() {
   const readOnly = channel.readOnly && !canModerate;
   // canal de servidor sempre tem nome; o tipo é nullable por causa das DMs
   const name = channel.name ?? "canal";
+  const Icon = channel.readOnly ? Megaphone : channel.private ? Lock : Hash;
 
   return (
     <main className="flex min-w-0 flex-1 flex-col bg-chat">
-      <header className="flex items-center justify-between gap-3 border-b border-black/20 px-4 py-3">
-        <h1 className="truncate font-semibold"># {name}</h1>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void runSearch(channel.id);
-          }}
-        >
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            type="search"
-            aria-label={`Buscar mensagens em ${name}`}
-            placeholder="Buscar mensagens…"
-            className="w-52 rounded bg-rail px-3 py-1 text-sm outline-none"
-          />
-        </form>
-      </header>
+      <HeaderBar
+        icon={<Icon size={24} />}
+        title={name}
+        searchLabel={`Buscar mensagens em ${name}`}
+        onSearch={(q) => {
+          setSearchQuery(q);
+          void runSearch(channel.id);
+        }}
+        tools={
+          <>
+            <HeaderIcon label="Threads" disabled>
+              <MessagesSquare size={24} />
+            </HeaderIcon>
+            <HeaderIcon label={membersOpen ? "Ocultar lista de membros" : "Mostrar lista de membros"} active={membersOpen} onClick={toggleMembers}>
+              <Users size={24} />
+            </HeaderIcon>
+          </>
+        }
+      />
 
       <SearchPanel />
 
@@ -79,16 +86,22 @@ export default function ChatView() {
         onRetry={retry}
         onDiscard={discard}
         emptyText="Nenhuma mensagem ainda. Diga um oi."
+        welcome={{
+          icon: <Icon size={42} />,
+          title: `Bem-vindo a #${name}!`,
+          description: `Este é o início do canal #${name}.`,
+        }}
       />
 
       {readOnly ? (
-        <p className="px-4 pb-4 text-center text-sm text-neutral-500">
-          📢 Canal somente leitura
+        <p className="mx-4 mb-6 rounded-lg bg-input px-4 py-3 text-center text-sm text-txt-muted">
+          Você não tem permissão para enviar mensagens neste canal.
         </p>
       ) : (
         user && (
           <Composer
             key={channel.id}
+            channelId={channel.id}
             allowAttachments
             placeholder={`Conversar em #${name}`}
             ariaLabel={`Mensagem para #${name}`}
@@ -98,6 +111,7 @@ export default function ChatView() {
           />
         )
       )}
+      <TypingIndicator channelId={channel.id} />
     </main>
   );
 }

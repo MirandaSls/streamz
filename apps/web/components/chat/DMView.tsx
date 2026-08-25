@@ -1,12 +1,17 @@
 "use client";
 
+import { Phone, Users, Video } from "lucide-react";
 import { isGroupChannel } from "@newdisc/shared";
 import Composer from "@/components/chat/Composer";
+import HeaderBar, { HeaderIcon } from "@/components/chat/HeaderBar";
 import MessageList from "@/components/chat/MessageList";
 import SearchPanel from "@/components/chat/SearchPanel";
+import TypingIndicator from "@/components/chat/TypingIndicator";
+import Avatar from "@/components/ui/Avatar";
 import { useAuth } from "@/stores/auth";
 import { dmTitle, useActiveDM } from "@/stores/dms";
 import { useActiveSlice, useMessages } from "@/stores/messages";
+import { resolveStatus, usePresence } from "@/stores/presence";
 
 /**
  * Coluna 3 no modo DM: conversa aberta.
@@ -18,8 +23,8 @@ export default function DMView() {
   const user = useAuth((s) => s.user);
   const active = useActiveDM();
   const slice = useActiveSlice();
+  const statuses = usePresence((s) => s.statuses);
 
-  const searchQuery = useMessages((s) => s.searchQuery);
   const setSearchQuery = useMessages((s) => s.setSearchQuery);
   const runSearch = useMessages((s) => s.runSearch);
   const loadOlder = useMessages((s) => s.loadOlder);
@@ -33,37 +38,45 @@ export default function DMView() {
 
   if (!active) {
     return (
-      <main className="grid min-w-0 flex-1 place-items-center bg-chat text-neutral-500">
+      <main className="grid min-w-0 flex-1 place-items-center bg-chat text-txt-muted">
         Selecione uma conversa
       </main>
     );
   }
 
   const title = dmTitle(active);
+  const group = isGroupChannel(active);
+  const other = !group ? active.others[0] : undefined;
 
   return (
     <main className="flex min-w-0 flex-1 flex-col bg-chat">
-      <header className="flex items-center justify-between gap-3 border-b border-black/20 px-4 py-3">
-        <h1 className="truncate font-semibold">
-          <span aria-hidden="true">{isGroupChannel(active) ? "👥 " : "@ "}</span>
-          {title}
-        </h1>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void runSearch(active.id);
-          }}
-        >
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            type="search"
-            aria-label={`Buscar mensagens em ${title}`}
-            placeholder="Buscar mensagens…"
-            className="w-52 rounded bg-rail px-3 py-1 text-sm outline-none"
-          />
-        </form>
-      </header>
+      <HeaderBar
+        icon={
+          other ? (
+            <Avatar user={other} size="sm" status={resolveStatus(statuses, other)} surface="border-chat" />
+          ) : (
+            <span className="grid h-6 w-6 place-items-center rounded-full bg-accent text-white">
+              <Users size={14} />
+            </span>
+          )
+        }
+        title={title}
+        searchLabel={`Buscar mensagens em ${title}`}
+        onSearch={(q) => {
+          setSearchQuery(q);
+          void runSearch(active.id);
+        }}
+        tools={
+          <>
+            <HeaderIcon label="Iniciar chamada de voz" disabled>
+              <Phone size={24} />
+            </HeaderIcon>
+            <HeaderIcon label="Iniciar chamada de vídeo" disabled>
+              <Video size={24} />
+            </HeaderIcon>
+          </>
+        }
+      />
 
       <SearchPanel />
 
@@ -84,19 +97,28 @@ export default function DMView() {
         onRetry={retry}
         onDiscard={discard}
         emptyText="Nenhuma mensagem ainda. Diga um oi."
+        welcome={{
+          icon: other ? <Avatar user={other} size="xl" /> : <Users size={42} />,
+          title,
+          description: other
+            ? `Este é o início do seu histórico de mensagens diretas com @${other.username}.`
+            : `Bem-vindo ao início do grupo ${title}.`,
+        }}
       />
 
       {user && (
         <Composer
           key={active.id}
+          channelId={active.id}
           allowAttachments
-          placeholder={`Conversar em ${title}`}
+          placeholder={`Conversar em ${group ? title : `@${title}`}`}
           ariaLabel={`Mensagem para ${title}`}
           onSend={(content, attachments) =>
             send({ channelId: active.id, author: user, content, attachments })
           }
         />
       )}
+      <TypingIndicator channelId={active.id} />
     </main>
   );
 }

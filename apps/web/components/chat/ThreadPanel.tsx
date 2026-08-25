@@ -1,5 +1,6 @@
 "use client";
 
+import { X } from "lucide-react";
 import Composer from "@/components/chat/Composer";
 import MessageList from "@/components/chat/MessageList";
 import { useAuth } from "@/stores/auth";
@@ -28,18 +29,18 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
   return (
     <aside
       aria-label="Thread"
-      className="flex w-[22rem] shrink-0 flex-col border-l border-black/20 bg-panel"
+      className="flex w-[26rem] shrink-0 flex-col border-l border-black/20 bg-chat"
     >
-      <div className="flex items-center justify-between border-b border-black/20 px-4 py-3">
-        <span className="font-semibold">Thread</span>
+      <div className="flex h-12 shrink-0 items-center justify-between px-4 shadow-header">
+        <span className="font-semibold text-txt-primary">Thread</span>
         <button
           type="button"
           onClick={closeThread}
           aria-label="Fechar thread"
           title="Fechar thread"
-          className="text-neutral-400 transition hover:text-white"
+          className="text-txt-secondary transition hover:text-txt-primary"
         >
-          ✕
+          <X size={24} />
         </button>
       </div>
 
@@ -56,24 +57,27 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
         onRetry={retry}
         onDiscard={discard}
         emptyText="Thread vazia."
-        className="px-2 py-3"
+        className="pb-2"
         firstSeparator={
-          <div className="my-2 flex items-center gap-2 px-2 text-xs text-neutral-500">
-            <span className="h-px flex-1 bg-black/20" />
+          <div className="mx-4 my-2 flex items-center gap-2 text-xs font-semibold text-txt-muted">
+            <span className="h-px flex-1 bg-[#3f4147]" />
             {replies} {replies === 1 ? "resposta" : "respostas"}
-            <span className="h-px flex-1 bg-black/20" />
+            <span className="h-px flex-1 bg-[#3f4147]" />
           </div>
         }
       />
 
       {user && (
-        <Composer
-          key={parentId}
-          compact
-          placeholder="Responder na thread…"
-          ariaLabel="Responder na thread"
-          onSend={(content) => send({ channelId, author: user, content, parentId })}
-        />
+        <div className="pb-4">
+          <Composer
+            key={parentId}
+            channelId={channelId}
+            compact
+            placeholder="Responder na thread…"
+            ariaLabel="Responder na thread"
+            onSend={(content) => send({ channelId, author: user, content, parentId })}
+          />
+        </div>
       )}
     </aside>
   );
