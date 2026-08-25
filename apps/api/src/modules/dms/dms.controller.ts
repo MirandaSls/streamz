@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
 import {
   ArrayMaxSize,
   ArrayNotEmpty,
@@ -54,18 +54,18 @@ export class DMsController {
     return this.dms.list(user.sub);
   }
 
+  /** Uma conversa específica, na visão de quem pede. */
+  @Get(":id")
+  get(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
+    return this.dms.get(user.sub, id);
+  }
+
   /** Sai de um grupo de DM. Em conversa 1-a-1 não faz sentido: responde 400. */
   @Post(":id/leave")
   leave(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
     return this.dms.leaveGroup(user.sub, id);
   }
 
-  @Get(":id/messages")
-  history(
-    @CurrentUser() user: JwtPayload,
-    @Param("id") id: string,
-    @Query("cursor") cursor?: string,
-  ) {
-    return this.dms.history(user.sub, id, cursor);
-  }
+  // Histórico, busca e thread de uma conversa são os de qualquer canal:
+  // GET /channels/:id/messages[...] (MessagesController). Ver ADR-0001.
 }

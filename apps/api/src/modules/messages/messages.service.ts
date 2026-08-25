@@ -142,23 +142,23 @@ export class MessagesService {
     return this.toDTO(updated);
   }
 
-  /** Remoção: o autor, ou um OWNER/ADMIN do servidor, pode apagar. */
+  /**
+   * Remoção: o autor, ou um OWNER/ADMIN do servidor, pode apagar. Em conversa
+   * direta não há moderador — só o autor apaga (canModerateChannel devolve false).
+   */
   async remove(
     messageId: string,
     userId: string,
   ): Promise<{ channelId: string; parentId: string | null }> {
-    const msg = await this.prisma.message.findUnique({
-      where: { id: messageId },
-      include: { channel: true },
-    });
+    const msg = await this.prisma.message.findUnique({ where: { id: messageId } });
     if (!msg) throw new NotFoundException("Mensagem não encontrada");
 
     if (msg.authorId !== userId) {
-      const member = await this.prisma.guildMember.findUnique({
-        where: { userId_guildId: { userId, guildId: msg.channel.guildId } },
-      });
-      const canModerate = member?.role === "OWNER" || member?.role === "ADMIN";
+      const canModerate = await this.guilds.canModerateChannel(userId, msg.channelId);
       if (!canModerate) throw new ForbiddenException("Sem permissão para apagar esta mensagem");
+    } else {
+      // autor: ainda precisa ter acesso ao canal (não foi expulso/removido)
+      await this.guilds.assertCanViewChannel(userId, msg.channelId);
     }
 
     // apagar uma raiz remove as respostas em cascata (onDelete: Cascade)

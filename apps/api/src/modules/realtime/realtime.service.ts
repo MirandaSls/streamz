@@ -38,4 +38,16 @@ export class RealtimeService {
       .in(`user:${userId}`)
       .socketsLeave(channelIds.map((id) => `channel:${id}`));
   }
+
+  /**
+   * Põe todos os sockets dos usuários na sala do canal. Usado quando uma
+   * conversa direta nasce: quem já está conectado passa a receber `message.new`
+   * dela na hora, sem depender do join que o gateway faz só no connect.
+   */
+  joinChannelRooms(userIds: string[], channelId: string) {
+    if (!this.server || userIds.length === 0) return;
+    for (const userId of userIds) {
+      this.server.in(`user:${userId}`).socketsJoin(`channel:${channelId}`);
+    }
+  }
 }

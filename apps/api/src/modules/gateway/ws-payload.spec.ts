@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_ATTACHMENTS_PER_MESSAGE,
   MAX_MESSAGE_LENGTH,
-  dmCreateSchema,
   messageCreateSchema,
   parseWsPayload,
   reactionSchema,
@@ -68,15 +67,5 @@ describe("payloads do WebSocket", () => {
   it("recusa emoji vazio e id absurdamente longo", () => {
     expect(parseWsPayload(reactionSchema, { messageId: "m1", emoji: "" }).ok).toBe(false);
     expect(parseWsPayload(reactionSchema, { messageId: "x".repeat(200), emoji: "👍" }).ok).toBe(false);
-  });
-
-  it("aplica o mesmo teto de texto às DMs", () => {
-    expect(parseWsPayload(dmCreateSchema, { dmChannelId: "d1", content: " " }).ok).toBe(false);
-    expect(
-      parseWsPayload(dmCreateSchema, {
-        dmChannelId: "d1",
-        content: "x".repeat(MAX_MESSAGE_LENGTH + 1),
-      }).ok,
-    ).toBe(false);
   });
 });

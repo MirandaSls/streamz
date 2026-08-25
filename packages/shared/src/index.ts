@@ -25,7 +25,14 @@ export interface AuthTokens {
 
 // ── Domínio ──────────────────────────────────────────────────
 export type UserStatus = "ONLINE" | "IDLE" | "DND" | "OFFLINE";
-export type ChannelType = "TEXT" | "VOICE";
+/**
+ * Tipo do canal. TEXT/VOICE vivem num servidor; DM/GROUP são conversas sem
+ * servidor (`guildId` null) cujo acesso é ser participante — ver ADR-0001.
+ */
+export type ChannelType = "TEXT" | "VOICE" | "DM" | "GROUP";
+/** Só os tipos que um usuário cria dentro de um servidor. */
+export type GuildChannelType = Extract<ChannelType, "TEXT" | "VOICE">;
+export const GUILD_CHANNEL_TYPES: readonly GuildChannelType[] = ["TEXT", "VOICE"];
 export type MemberRole = "OWNER" | "ADMIN" | "MEMBER";
 
 export interface PublicUser {
@@ -44,8 +51,10 @@ export interface Guild {
 
 export interface Channel {
   id: string;
-  guildId: string;
-  name: string;
+  /** null em DM/GROUP: a conversa não pertence a servidor nenhum. */
+  guildId: string | null;
+  /** null em DM (o título é derivado dos participantes); opcional em GROUP. */
+  name: string | null;
   type: ChannelType;
   position: number;
   private: boolean;
@@ -134,13 +143,24 @@ export interface InvitePreview {
   reason?: string;
 }
 
-export interface DMChannelView {
-  id: string;
-  isGroup: boolean;
-  /** nome do grupo (null em DMs 1-a-1). */
-  name: string | null;
+/**
+ * Projeção de uma conversa (DM ou GROUP) para quem está olhando: o canal mais os
+ * participantes *exceto* o espectador — informação por usuário, que não cabe na
+ * tabela. Mensagens, histórico e busca são os de qualquer `Channel`.
+ */
+export interface DMChannelView extends Channel {
   /** participantes exceto o próprio usuário. */
   others: PublicUser[];
+}
+
+/** true para conversa de grupo (3+); false para DM 1-a-1. */
+export function isGroupChannel(c: Pick<Channel, "type">): boolean {
+  return c.type === "GROUP";
+}
+
+/** true para conversa sem servidor (DM ou grupo). */
+export function isDirectChannel(c: Pick<Channel, "type">): boolean {
+  return c.type === "DM" || c.type === "GROUP";
 }
 
 /** Máximo de convidados num grupo de DM, além de quem cria. */
@@ -148,18 +168,9 @@ export const MAX_DM_GROUP_INVITEES = 10;
 
 /** Resultado de sair de um grupo de DM. */
 export interface DMLeaveResult {
-  dmChannelId: string;
+  channelId: string;
   /** true quando o grupo ficou sem ninguém e a conversa foi apagada. */
   deleted: boolean;
-}
-
-export interface DirectMessage {
-  id: string;
-  dmChannelId: string;
-  author: PublicUser;
-  content: string;
-  createdAt: string;
-  editedAt: string | null;
 }
 
 // ── Eventos do WebSocket (Socket.IO) ─────────────────────────
@@ -173,14 +184,12 @@ export const WS_EVENTS = {
   TYPING: "typing",
   CHANNEL_JOIN: "channel.join",
   CHANNEL_LEAVE: "channel.leave",
-  DM_CREATE: "dm.create",
   // servidor → cliente
   ERROR: "ws.error",
   MESSAGE_NEW: "message.new",
   MESSAGE_UPDATED: "message.updated",
   MESSAGE_DELETED: "message.deleted",
   PRESENCE_UPDATE: "presence.update",
-  DM_NEW: "dm.new",
   GUILD_REMOVED: "guild.removed",
 } as const;
 
@@ -250,12 +259,6 @@ export type TypingPayload = z.infer<typeof typingSchema>;
 
 /** `channel.join` / `channel.leave` mandam o id do canal cru, sem envelope. */
 export const channelIdSchema = idSchema;
-
-export const dmCreateSchema = z.object({
-  dmChannelId: idSchema,
-  content: conteudoNaoVazioSchema,
-});
-export type DMCreatePayload = z.infer<typeof dmCreateSchema>;
 
 export interface MessageDeletedEvent {
   messageId: string;

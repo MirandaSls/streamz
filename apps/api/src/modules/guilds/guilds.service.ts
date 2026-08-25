@@ -12,6 +12,24 @@ import { toChannelDTO, toGuildDTO } from "../../common/dto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { RealtimeService } from "../realtime/realtime.service";
 
+/** O que `assertCanViewChannel` seleciona do canal — o suficiente para decidir. */
+export interface ChannelAccessRow {
+  id: string;
+  guildId: string | null;
+  type: ChannelType;
+  private: boolean;
+  readOnly: boolean;
+}
+
+/**
+ * Resultado da autorização por canal. União discriminada de propósito: quem
+ * chama é obrigado pelo compilador a decidir o que fazer numa conversa direta
+ * (`tipo: "dm"`), onde não existe papel, allowlist nem somente-leitura.
+ */
+export type ChannelAccess =
+  | { tipo: "guild"; channel: ChannelAccessRow; member: { role: MemberRole } }
+  | { tipo: "dm"; channel: ChannelAccessRow };
+
 @Injectable()
 export class GuildsService {
   constructor(
@@ -92,34 +110,57 @@ export class GuildsService {
   // ── autorização por canal (privado / somente-leitura) ──────────
 
   /**
-   * Pode ver/entrar no canal: membro do servidor e, se o canal for privado,
-   * OWNER/ADMIN ou constar na allowlist. Devolve canal + papel do membro.
+   * Pode ver/entrar no canal. Ponto único de autorização por canal, para
+   * servidor e para conversa direta:
+   * - canal de servidor: membro do servidor e, se privado, OWNER/ADMIN ou na
+   *   allowlist (`ChannelMember`);
+   * - DM/grupo (`guildId` null): ser participante (`ChannelMember`), e ponto —
+   *   não há papel nem allowlist.
    */
-  async assertCanViewChannel(userId: string, channelId: string) {
+  async assertCanViewChannel(userId: string, channelId: string): Promise<ChannelAccess> {
     const channel = await this.prisma.channel.findUnique({
       where: { id: channelId },
-      // `type` sai como String (enum vira String no SQLite) — ver CLAUDE.md
       select: { id: true, guildId: true, type: true, private: true, readOnly: true },
     });
     if (!channel) throw new NotFoundException("Canal não encontrado");
-    const member = await this.assertMember(userId, channel.guildId);
 
+    if (channel.guildId === null) {
+      const participante = await this.prisma.channelMember.findUnique({
+        where: { channelId_userId: { channelId, userId } },
+        select: { id: true },
+      });
+      if (!participante) throw new ForbiddenException("Você não participa desta conversa");
+      return { tipo: "dm", channel };
+    }
+
+    const member = await this.assertMember(userId, channel.guildId);
     if (channel.private && !this.isPrivileged(member.role)) {
       const allowed = await this.prisma.channelMember.findUnique({
         where: { channelId_userId: { channelId, userId } },
+        select: { id: true },
       });
       if (!allowed) throw new ForbiddenException("Canal privado");
     }
-    return { channel: { ...channel, type: channel.type as ChannelType }, member };
+    return { tipo: "guild", channel, member: { role: member.role } };
   }
 
-  /** Pode postar: view + se o canal for somente-leitura, precisa ser OWNER/ADMIN. */
-  async assertCanPostChannel(userId: string, channelId: string) {
-    const { channel, member } = await this.assertCanViewChannel(userId, channelId);
-    if (channel.readOnly && !this.isPrivileged(member.role)) {
+  /**
+   * Pode postar: view + se o canal for somente-leitura, precisa ser OWNER/ADMIN.
+   * Em conversa direta basta participar (somente-leitura não existe lá).
+   */
+  async assertCanPostChannel(userId: string, channelId: string): Promise<ChannelAccess> {
+    const access = await this.assertCanViewChannel(userId, channelId);
+    if (access.tipo === "dm") return access;
+    if (access.channel.readOnly && !this.isPrivileged(access.member.role)) {
       throw new ForbiddenException("Canal somente-leitura");
     }
-    return { channel, member };
+    return access;
+  }
+
+  /** Pode moderar mensagens do canal (apagar as dos outros)? Em DM, ninguém. */
+  async canModerateChannel(userId: string, channelId: string): Promise<boolean> {
+    const access = await this.assertCanViewChannel(userId, channelId);
+    return access.tipo === "guild" && this.isPrivileged(access.member.role);
   }
 
   private isPrivileged(role: MemberRole): boolean {

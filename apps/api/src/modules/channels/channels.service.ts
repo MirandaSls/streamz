@@ -2,7 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/commo
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { RealtimeService } from "../realtime/realtime.service";
-import type { Channel, ChannelType } from "@newdisc/shared";
+import type { Channel, GuildChannelType } from "@newdisc/shared";
 import { toChannelDTO } from "../../common/dto";
 
 interface CreateChannelOpts {
@@ -24,7 +24,7 @@ export class ChannelsService {
     userId: string,
     guildId: string,
     name: string,
-    type: ChannelType,
+    type: GuildChannelType,
     opts: CreateChannelOpts = {},
   ): Promise<Channel> {
     const isPrivate = !!opts.isPrivate;

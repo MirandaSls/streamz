@@ -23,9 +23,13 @@ enum UserStatus {
   OFFLINE
 }
 
+// TEXT/VOICE: canal de servidor. DM/GROUP: conversa sem servidor (guildId null),
+// cujo acesso é ser participante (ChannelMember). Ver docs/adr/0001.
 enum ChannelType {
   TEXT
   VOICE
+  DM
+  GROUP
 }
 
 enum MemberRole {
@@ -48,8 +52,7 @@ model User {
   reactions        Reaction[]
   invites          Invite[]        @relation("InviteCreator")
   bans             Ban[]           @relation("BannedUser")
-  dmParticipations DMParticipant[]
-  dmMessages       DMMessage[]     @relation("DMAuthor")
+  ownedChannels    Channel[]       @relation("ChannelOwner")
   refreshTokens    RefreshToken[]
   channelAccess    ChannelMember[]
   attachments      Attachment[]    @relation("AttachmentUploader")
@@ -132,33 +135,50 @@ model GuildMember {
   @@index([guildId])
 }
 
+// Um canal é qualquer lugar onde mensagens vivem — canal de servidor (TEXT/VOICE)
+// ou conversa direta (DM/GROUP). Uma tabela só para que toda feature de mensagem
+// (reação, anexo, thread, busca) valha nos dois casos por construção (ADR-0001).
 model Channel {
-  id       String      @id @default(cuid())
-  guildId  String
-  name     String
-  type     ChannelType @default(TEXT)
-  position Int         @default(0)
-  private  Boolean     @default(false) // só OWNER/ADMIN e a allowlist enxergam
-  readOnly Boolean     @default(false) // só OWNER/ADMIN postam; todos leem
+  id        String      @id @default(cuid())
+  // null em DM/GROUP: a conversa não pertence a servidor nenhum. Toda query de
+  // servidor precisa partir de um guildId concreto — nunca "todos os canais".
+  guildId   String?
+  // null em DM (o título é derivado dos participantes); opcional em GROUP.
+  name      String?
+  type      ChannelType @default(TEXT)
+  position  Int         @default(0)
+  private   Boolean     @default(false) // só OWNER/ADMIN e a allowlist enxergam
+  readOnly  Boolean     @default(false) // só OWNER/ADMIN postam; todos leem
+  // criador do grupo; null em DM e em canal de servidor.
+  ownerId   String?
+  // chave canônica "a:b" (ids ordenados) só em DM 1-a-1 — garante 1 canal por
+  // dupla via upsert atômico. NULLs múltiplos são permitidos no Postgres.
+  pairKey   String?     @unique
+  createdAt DateTime    @default(now())
 
-  guild    Guild           @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  guild    Guild?          @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  owner    User?           @relation("ChannelOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   messages Message[]
-  allowed  ChannelMember[] // allowlist para canais privados
+  members  ChannelMember[]
 
   @@index([guildId])
 }
 
-// Membros liberados num canal privado (além de OWNER/ADMIN, sempre com acesso).
+// Duas leituras, mesma tabela: em canal de servidor privado é a allowlist de
+// quem enxerga (além de OWNER/ADMIN, sempre com acesso); em DM/GROUP é a lista
+// de participantes. Nos dois casos responde "este usuário tem acesso a este
+// canal?".
 model ChannelMember {
-  id        String @id @default(cuid())
+  id        String   @id @default(cuid())
   channelId String
   userId    String
+  joinedAt  DateTime @default(now())
 
   channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([channelId, userId])
-  @@index([userId])
+  @@index([userId]) // "minhas conversas"
 }
 
 model Message {
@@ -217,44 +237,4 @@ model Reaction {
 
   @@unique([messageId, userId, emoji])
   @@index([messageId])
-}
-
-model DMChannel {
-  id        String   @id @default(cuid())
-  isGroup   Boolean  @default(false)
-  name      String? // nome opcional do grupo
-  ownerId   String? // criador do grupo
-  // chave canônica do par "a:b" (ids ordenados) só em DMs 1-a-1; null em grupos.
-  // Garante 1 canal por dupla via upsert atômico; NULLs múltiplos são permitidos.
-  pairKey   String?  @unique
-  createdAt DateTime @default(now())
-
-  participants DMParticipant[]
-  messages     DMMessage[]
-}
-
-model DMParticipant {
-  id          String @id @default(cuid())
-  dmChannelId String
-  userId      String
-
-  channel DMChannel @relation(fields: [dmChannelId], references: [id], onDelete: Cascade)
-  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([dmChannelId, userId])
-  @@index([userId])
-}
-
-model DMMessage {
-  id          String    @id @default(cuid())
-  dmChannelId String
-  authorId    String
-  content     String
-  createdAt   DateTime  @default(now())
-  editedAt    DateTime?
-
-  channel DMChannel @relation(fields: [dmChannelId], references: [id], onDelete: Cascade)
-  author  User      @relation("DMAuthor", fields: [authorId], references: [id], onDelete: Cascade)
-
-  @@index([dmChannelId, createdAt])
 }

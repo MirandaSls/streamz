@@ -18,15 +18,16 @@ import {
 import { ChannelsService } from "./channels.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";
-import type { ChannelType } from "@newdisc/shared";
+import { GUILD_CHANNEL_TYPES } from "@newdisc/shared";
+import type { GuildChannelType } from "@newdisc/shared";
 
 class CreateChannelDto {
   @IsString()
   @Length(1, 64)
   name!: string;
 
-  @IsIn(["TEXT", "VOICE"])
-  type!: ChannelType;
+  @IsIn(GUILD_CHANNEL_TYPES)
+  type!: GuildChannelType;
 
   @IsOptional()
   @IsBoolean()

@@ -14,7 +14,6 @@ import { Server, Socket } from "socket.io";
 import {
   WS_EVENTS,
   channelIdSchema,
-  dmCreateSchema,
   messageCreateSchema,
   messageDeleteSchema,
   messageEditSchema,
@@ -31,7 +30,6 @@ import {
 } from "./rate-limit";
 import { MessagesService } from "../messages/messages.service";
 import { PrismaService } from "../../prisma/prisma.service";
-import { DMsService } from "../dms/dms.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { RealtimeService } from "../realtime/realtime.service";
 import { CORS_OPTIONS } from "../../common/cors";
@@ -48,7 +46,6 @@ interface SocketUser {
  */
 const WS_LIMITS: Record<string, BucketLimit> = {
   [WS_EVENTS.MESSAGE_CREATE]: { capacity: 10, refillPerSecond: 1 },
-  [WS_EVENTS.DM_CREATE]: { capacity: 10, refillPerSecond: 1 },
   [WS_EVENTS.TYPING]: { capacity: 8, refillPerSecond: 2 },
 };
 
@@ -68,7 +65,6 @@ export class ChatGateway
     private readonly jwt: JwtService,
     private readonly messages: MessagesService,
     private readonly prisma: PrismaService,
-    private readonly dms: DMsService,
     private readonly guilds: GuildsService,
     private readonly realtime: RealtimeService,
   ) {}
@@ -89,7 +85,17 @@ export class ChatGateway
         { secret: process.env.JWT_SECRET },
       );
       client.data.user = { id: payload.sub, username: payload.username } satisfies SocketUser;
-      client.join(`user:${payload.sub}`); // sala pessoal para DMs
+      // sala pessoal: eventos de usuário (guild.removed) e alvo de socketsJoin/Leave
+      client.join(`user:${payload.sub}`);
+      // Conversas diretas entregam pela sala do canal, como qualquer canal. Mas
+      // ninguém "abre" uma DM antes de receber a primeira mensagem dela — então
+      // o socket entra nas salas de todas as conversas do usuário já no connect
+      // (uma query, sobre o índice de ChannelMember.userId).
+      const conversas = await this.prisma.channelMember.findMany({
+        where: { userId: payload.sub, channel: { guildId: null } },
+        select: { channelId: true },
+      });
+      for (const c of conversas) client.join(this.room(c.channelId));
       await this.markOnline(payload.sub);
     } catch {
       client.disconnect(true);
@@ -236,26 +242,6 @@ export class ChatGateway
         payload.emoji,
       );
       this.server.to(this.room(message.channelId)).emit(WS_EVENTS.MESSAGE_UPDATED, message);
-    } catch (e) {
-      this.emitError(client, e);
-    }
-  }
-
-  @SubscribeMessage(WS_EVENTS.DM_CREATE)
-  async onDM(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
-    const user = this.userOf(client);
-    if (!this.allow(client, WS_EVENTS.DM_CREATE)) return;
-    const payload = this.parse(client, dmCreateSchema, body);
-    if (!user || !payload) return;
-    try {
-      const { message, participants } = await this.dms.createMessage(
-        user.id,
-        payload.dmChannelId,
-        payload.content.trim(),
-      );
-      for (const uid of participants) {
-        this.server.to(`user:${uid}`).emit(WS_EVENTS.DM_NEW, message);
-      }
     } catch (e) {
       this.emitError(client, e);
     }
