@@ -11,12 +11,13 @@ import ChannelSidebar from "@/components/layout/ChannelSidebar";
 import DMList from "@/components/layout/DMList";
 import GuildRail from "@/components/layout/GuildRail";
 import ModalHost from "@/components/modals/ModalHost";
+import ContextMenuHost from "@/components/ui/ContextMenu";
+import ProfilePopoverHost from "@/components/ui/ProfilePopover";
 import Toasts from "@/components/ui/Toasts";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/stores/auth";
 import { useActiveChannel, useChannels, useVoiceChannel } from "@/stores/channels";
-import { useActiveDM, useDMs } from "@/stores/dms";
-import { useCanModerate, useGuilds } from "@/stores/guilds";
+import { useActiveDM } from "@/stores/dms";
 import { useMessages } from "@/stores/messages";
 import { useUI } from "@/stores/ui";
 
@@ -33,18 +34,12 @@ export default function AppPage() {
   const loadFromStorage = useAuth((s) => s.loadFromStorage);
 
   const view = useUI((s) => s.view);
+  const membersOpen = useUI((s) => s.membersOpen);
   const activeChannel = useActiveChannel();
+  const activeDM = useActiveDM();
   const voiceChannel = useVoiceChannel();
   const leaveVoice = useChannels((s) => s.leaveVoice);
   const threadParentId = useMessages((s) => s.threadParentId);
-
-  const members = useGuilds((s) => s.members);
-  const loadGuilds = useGuilds((s) => s.load);
-  const kick = useGuilds((s) => s.kick);
-  const ban = useGuilds((s) => s.ban);
-  const canModerate = useCanModerate(user?.id);
-  const openDMWith = useDMs((s) => s.openWith);
-  const activeDM = useActiveDM();
 
   useRealtime(user?.id);
 
@@ -56,12 +51,8 @@ export default function AppPage() {
     }
   }, [user, router]);
 
-  useEffect(() => {
-    void loadGuilds();
-  }, [loadGuilds]);
-
   return (
-    <div className="flex h-screen">
+    <div className="flex h-screen select-none">
       <GuildRail />
 
       {view === "dm" ? (
@@ -92,22 +83,13 @@ export default function AppPage() {
           {/* coluna 4: thread aberta OU lista de membros — nunca as duas */}
           {!voiceChannel &&
             activeChannel &&
-            (threadParentId ? (
-              <ThreadPanel channelId={activeChannel.id} />
-            ) : (
-              <MemberList
-                members={members}
-                currentUserId={user?.id}
-                canModerate={canModerate}
-                onKick={(userId) => void kick(userId)}
-                onBan={(userId) => void ban(userId)}
-                onOpenDM={(userId) => void openDMWith(userId)}
-              />
-            ))}
+            (threadParentId ? <ThreadPanel channelId={activeChannel.id} /> : membersOpen && <MemberList />)}
         </>
       )}
 
       <ModalHost />
+      <ContextMenuHost />
+      <ProfilePopoverHost />
       <Toasts />
     </div>
   );

@@ -1,8 +1,76 @@
 "use client";
 
+import { Compass, Plus } from "lucide-react";
+import Tooltip from "@/components/ui/Tooltip";
 import { useDMs } from "@/stores/dms";
 import { useGuilds } from "@/stores/guilds";
 import { useUI } from "@/stores/ui";
+
+/** Iniciais de cada palavra, como o Discord faz com servidores sem ícone. */
+function acronym(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 4)
+    .toUpperCase();
+}
+
+/**
+ * Um item do rail: círculo que vira quadrado arredondado no hover/ativo, com a
+ * "pílula" branca à esquerda (curta no hover, alta quando ativo) e o tooltip.
+ */
+function RailItem({
+  label,
+  active = false,
+  green = false,
+  onClick,
+  children,
+}: {
+  label: string;
+  active?: boolean;
+  green?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="group relative flex w-full justify-center">
+      <span
+        aria-hidden="true"
+        className={`absolute left-0 top-1/2 w-2 -translate-y-1/2 rounded-r-full bg-white transition-all duration-200 ${
+          active ? "h-10" : "h-0 group-hover:h-5"
+        }`}
+      />
+      <Tooltip label={label} side="right">
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label={label}
+          aria-current={active ? "page" : undefined}
+          className={`grid h-12 w-12 place-items-center text-[15px] font-semibold transition-all duration-200 ${
+            active
+              ? "rounded-2xl bg-accent text-white"
+              : green
+                ? "rounded-[24px] bg-panel text-green group-hover:rounded-2xl group-hover:bg-green group-hover:text-white"
+                : "rounded-[24px] bg-panel text-txt-normal group-hover:rounded-2xl group-hover:bg-accent group-hover:text-white"
+          }`}
+        >
+          {children}
+        </button>
+      </Tooltip>
+    </div>
+  );
+}
+
+/** Logo do app no botão "Mensagens diretas" (o Discord põe o logo dele aqui). */
+function Logo() {
+  return (
+    <svg width="28" height="20" viewBox="0 0 28 20" fill="currentColor" aria-hidden="true">
+      <path d="M23.7 1.7A23 23 0 0 0 18 0l-.7 1.5a21 21 0 0 0-6.6 0L10 0a23 23 0 0 0-5.7 1.7C.7 7.1-.3 12.4.2 17.6A23 23 0 0 0 7.2 20l1.5-2.4a15 15 0 0 1-2.4-1.1l.6-.4a16.5 16.5 0 0 0 14.2 0l.6.4-2.4 1.1L20.8 20a23 23 0 0 0 7-2.4c.6-6-1-11.3-4.1-15.9ZM9.4 14.3c-1.4 0-2.5-1.3-2.5-2.8s1.1-2.8 2.5-2.8 2.5 1.3 2.5 2.8-1.1 2.8-2.5 2.8Zm9.2 0c-1.4 0-2.5-1.3-2.5-2.8s1.1-2.8 2.5-2.8 2.5 1.3 2.5 2.8-1.1 2.8-2.5 2.8Z" />
+    </svg>
+  );
+}
 
 /** Coluna 1: mensagens diretas, servidores e as duas formas de ganhar um novo. */
 export default function GuildRail() {
@@ -17,60 +85,31 @@ export default function GuildRail() {
   return (
     <nav
       aria-label="Servidores"
-      className="flex w-[72px] shrink-0 flex-col items-center gap-2 overflow-y-auto bg-rail py-3"
+      className="flex w-[72px] shrink-0 flex-col items-center gap-2 overflow-y-auto bg-rail pt-3 pb-2"
     >
-      <button
-        type="button"
-        onClick={() => void openDMs()}
-        aria-label="Mensagens diretas"
-        aria-current={view === "dm" ? "page" : undefined}
-        title="Mensagens diretas"
-        className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-xl transition ${
-          view === "dm" ? "bg-accent text-white" : "bg-panel text-neutral-200"
-        }`}
-      >
-        ✉️
-      </button>
+      <RailItem label="Mensagens diretas" active={view === "dm"} onClick={() => void openDMs()}>
+        <Logo />
+      </RailItem>
 
-      <div className="my-1 h-px w-8 shrink-0 bg-black/30" />
+      <div aria-hidden="true" className="my-0.5 h-0.5 w-8 shrink-0 rounded bg-[#35363c]" />
 
-      {guilds.map((guild) => {
-        const active = view === "guild" && activeGuildId === guild.id;
-        return (
-          <button
-            key={guild.id}
-            type="button"
-            onClick={() => select(guild)}
-            aria-label={`Servidor ${guild.name}`}
-            aria-current={active ? "page" : undefined}
-            title={guild.name}
-            className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-sm font-bold transition ${
-              active ? "bg-accent text-white" : "bg-panel text-neutral-200"
-            }`}
-          >
-            {guild.name.slice(0, 2).toUpperCase()}
-          </button>
-        );
-      })}
+      {guilds.map((guild) => (
+        <RailItem
+          key={guild.id}
+          label={guild.name}
+          active={view === "guild" && activeGuildId === guild.id}
+          onClick={() => select(guild)}
+        >
+          {acronym(guild.name)}
+        </RailItem>
+      ))}
 
-      <button
-        type="button"
-        onClick={() => void create()}
-        aria-label="Criar servidor"
-        title="Criar servidor"
-        className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-panel text-2xl text-green-400 transition hover:brightness-110"
-      >
-        +
-      </button>
-      <button
-        type="button"
-        onClick={() => void joinByCode()}
-        aria-label="Entrar com convite"
-        title="Entrar com convite"
-        className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-panel text-lg text-neutral-300 transition hover:text-white"
-      >
-        ⤵
-      </button>
+      <RailItem label="Adicionar um servidor" green onClick={() => void create()}>
+        <Plus size={24} />
+      </RailItem>
+      <RailItem label="Entrar com convite" green onClick={() => void joinByCode()}>
+        <Compass size={24} />
+      </RailItem>
     </nav>
   );
 }
