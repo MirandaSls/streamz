@@ -7,6 +7,9 @@ import {
   mentionsUser,
   type Channel,
   type ChannelDeletedEvent,
+  type ChannelOverridesEvent,
+  type Guild,
+  type GuildOwnerChangedEvent,
   type GuildRemovedEvent,
   type MemberJoinedEvent,
   type MemberLeftEvent,
@@ -15,6 +18,8 @@ import {
   type MessageDeletedEvent,
   type PresenceUpdatePayload,
   type PublicUser,
+  type Role,
+  type RoleDeletedEvent,
 } from "@newdisc/shared";
 import { notify } from "@/lib/desktop";
 import { useAuth } from "@/stores/auth";
@@ -23,6 +28,7 @@ import { useChannels } from "@/stores/channels";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useGuilds } from "@/stores/guilds";
 import { useMessages } from "@/stores/messages";
+import { usePermissions } from "@/stores/permissions";
 import { usePresence } from "@/stores/presence";
 import { useTyping } from "@/stores/typing";
 import { ui } from "@/stores/ui";
@@ -97,11 +103,10 @@ export function useRealtime(currentUserId?: string): void {
         useGuilds.getState().handleMemberLeft(guildId, userId);
       }),
 
-      on<MemberUpdatedEvent>(WS_EVENTS.MEMBER_UPDATED, ({ guildId, userId, role }) => {
-        useGuilds.getState().handleMemberUpdated(guildId, userId, role);
+      on<MemberUpdatedEvent>(WS_EVENTS.MEMBER_UPDATED, ({ guildId, userId, role, roleIds }) => {
+        useGuilds.getState().handleMemberUpdated(guildId, userId, role, roleIds);
         if (userId === currentUserId) {
-          ui.toast(role === "ADMIN" ? "Você agora é administrador." : "Você deixou de ser administrador.");
-          // o que eu enxergo pode ter mudado (canais privados)
+          // o que eu enxergo pode ter mudado (cargo dá ou tira VIEW_CHANNEL)
           if (useGuilds.getState().activeGuildId === guildId) {
             void useChannels.getState().loadForGuild(guildId);
           }
@@ -124,11 +129,47 @@ export function useRealtime(currentUserId?: string): void {
         ui.toast(payload?.message || "Não foi possível concluir a ação", "error");
       }),
 
+      // ── c-cargos: cargos, regras de canal e configurações do servidor ──
+      on<Role>(WS_EVENTS.ROLE_CREATED, (role) => {
+        usePermissions.getState().handleRoleSaved(role);
+      }),
+      on<Role>(WS_EVENTS.ROLE_UPDATED, (role) => {
+        usePermissions.getState().handleRoleSaved(role);
+      }),
+      on<RoleDeletedEvent>(WS_EVENTS.ROLE_DELETED, ({ guildId, roleId }) => {
+        usePermissions.getState().handleRoleDeleted(guildId, roleId);
+      }),
+      on<ChannelOverridesEvent>(
+        WS_EVENTS.CHANNEL_OVERRIDES,
+        ({ guildId, channelId, overrides }) => {
+          usePermissions.getState().handleOverrides(guildId, channelId, overrides);
+          // ganhar ou perder VIEW_CHANNEL muda a lista de canais na hora
+          if (useGuilds.getState().activeGuildId === guildId) {
+            void useChannels.getState().loadForGuild(guildId);
+          }
+        },
+      ),
+      on<Guild>(WS_EVENTS.GUILD_UPDATED, (guild) => {
+        useGuilds.getState().handleGuildUpdated(guild);
+      }),
+      on<GuildOwnerChangedEvent>(
+        WS_EVENTS.GUILD_OWNER_CHANGED,
+        ({ guildId, ownerId, previousOwnerId }) => {
+          useGuilds.getState().handleOwnerChanged(guildId, ownerId);
+          if (ownerId === currentUserId) ui.toast("Você agora é o dono deste servidor.");
+          else if (previousOwnerId === currentUserId) {
+            ui.toast("Você transferiu a posse do servidor.");
+          }
+        },
+      ),
+
       onReconnect(() => {
         rejoinChannel();
         void useMessages.getState().resyncActive();
         void useGuilds.getState().load();
         void useDMs.getState().refreshList();
+        const guildId = useGuilds.getState().activeGuildId;
+        if (guildId) void usePermissions.getState().load(guildId);
       }),
     ];
 

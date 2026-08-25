@@ -2,6 +2,8 @@ import type {
   Attachment,
   AuthTokens,
   Channel,
+  ChannelOverride,
+  ChannelOverrideInput,
   DMChannelView,
   DMLeaveResult,
   Guild,
@@ -11,9 +13,12 @@ import type {
   InviteInfo,
   InvitePreview,
   LinkEmbed,
+  MemberPermissions,
   MemberRole,
   Message,
   PublicUser,
+  Role,
+  RoleInput,
   UserStatus,
 } from "@newdisc/shared";
 import { API_URL } from "./config";
@@ -109,6 +114,60 @@ export const api = {
     request<{ kicked: string }>(`/guilds/${guildId}/kick`, json({ userId })),
   banMember: (guildId: string, userId: string, reason?: string) =>
     request<{ banned: string }>(`/guilds/${guildId}/ban`, json({ userId, reason })),
+  listBans: (guildId: string) =>
+    request<{ user: PublicUser; reason: string | null; createdAt: string }[]>(
+      `/guilds/${guildId}/bans`,
+    ),
+  unbanMember: (guildId: string, userId: string) =>
+    request<{ unbanned: string }>(`/guilds/${guildId}/bans/${userId}`, { method: "DELETE" }),
+
+  // ── configurações do servidor (c-cargos) ──
+  updateGuild: (guildId: string, body: { name?: string; description?: string | null }) =>
+    request<Guild>(`/guilds/${guildId}`, patch(body)),
+  updateGuildIcon: (guildId: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<Guild>(`/guilds/${guildId}/icon`, { method: "POST", body: form });
+  },
+  transferGuild: (guildId: string, userId: string) =>
+    request<{ guildId: string; ownerId: string }>(`/guilds/${guildId}/transfer`, json({ userId })),
+
+  // ── cargos e permissões (c-cargos) ──
+  listRoles: (guildId: string) => request<Role[]>(`/guilds/${guildId}/roles`),
+  createRole: (guildId: string, body: RoleInput) =>
+    request<Role>(`/guilds/${guildId}/roles`, json(body)),
+  updateRole: (guildId: string, roleId: string, body: RoleInput) =>
+    request<Role>(`/guilds/${guildId}/roles/${roleId}`, patch(body)),
+  deleteRole: (guildId: string, roleId: string) =>
+    request<{ deleted: string }>(`/guilds/${guildId}/roles/${roleId}`, { method: "DELETE" }),
+  reorderRoles: (guildId: string, roleIds: string[]) =>
+    request<Role[]>(`/guilds/${guildId}/roles/order`, patch({ roleIds })),
+  assignRole: (guildId: string, userId: string, roleId: string) =>
+    request<{ userId: string; roleIds: string[] }>(
+      `/guilds/${guildId}/members/${userId}/roles/${roleId}`,
+      { method: "PUT" },
+    ),
+  unassignRole: (guildId: string, userId: string, roleId: string) =>
+    request<{ userId: string; roleIds: string[] }>(
+      `/guilds/${guildId}/members/${userId}/roles/${roleId}`,
+      { method: "DELETE" },
+    ),
+  memberPermissions: (guildId: string, userId: string) =>
+    request<MemberPermissions>(`/guilds/${guildId}/members/${userId}/permissions`),
+  guildOverrides: (guildId: string) =>
+    request<ChannelOverride[]>(`/guilds/${guildId}/overrides`),
+  channelOverrides: (guildId: string, channelId: string) =>
+    request<ChannelOverride[]>(`/guilds/${guildId}/channels/${channelId}/overrides`),
+  setChannelOverride: (guildId: string, channelId: string, body: ChannelOverrideInput) =>
+    request<ChannelOverride[]>(`/guilds/${guildId}/channels/${channelId}/overrides`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  removeChannelOverride: (guildId: string, channelId: string, targetId: string) =>
+    request<ChannelOverride[]>(
+      `/guilds/${guildId}/channels/${channelId}/overrides/${targetId}`,
+      { method: "DELETE" },
+    ),
 
   // ── convites ──
   createInvite: (guildId: string, opts?: { maxUses?: number; expiresInHours?: number }) =>
