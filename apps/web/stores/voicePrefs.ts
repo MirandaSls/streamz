@@ -1,30 +1,61 @@
 import { create } from "zustand";
+import { PTT_RELEASE_MS } from "@newdisc/shared";
+import { PTT_INICIAL, pttAberto, pttFechaEm, pttPress, pttRelease, type PttState } from "@/stores/ptt-core";
 
 /**
- * Microfone e áudio do usuário — os dois botões do rodapé, como no Discord.
- * Valem para qualquer call: o VoicePanel lê daqui ao entrar e reage às trocas.
- * Persistido no browser para sobreviver ao reload (preferência, não sessão).
+ * Microfone e áudio do usuário — os dois botões do rodapé, como no Discord,
+ * mais o push-to-talk. Valem para qualquer call: o `voice` store lê daqui ao
+ * entrar e reage às trocas. Persistido no browser para sobreviver ao reload
+ * (preferência, não sessão).
+ *
+ * `pttAtivo` é o único campo **transitório**: representa a tecla apertada agora
+ * e não faz sentido guardar entre sessões.
  */
 interface VoicePrefsState {
   muted: boolean;
   deafened: boolean;
+  /** microfone fechado por padrão, abrindo só enquanto a tecla estiver apertada. */
+  pushToTalk: boolean;
+  /** `KeyboardEvent.code` da tecla escolhida; null = ainda não definida. */
+  pttKey: string | null;
+  /** a tecla está apertada (ou dentro da folga de fechamento). */
+  pttAtivo: boolean;
+
   toggleMute: () => void;
   toggleDeafen: () => void;
+  setPushToTalk: (ativo: boolean) => void;
+  setPttKey: (code: string | null) => void;
+  /** tecla de PTT pressionada/solta — chamado pelo ouvinte global de teclado. */
+  pressPtt: () => void;
+  releasePtt: () => void;
+  /** O microfone deve estar aberto agora? É o que a call aplica no SDK. */
+  micAberto: () => boolean;
 }
 
 const KEY = "voicePrefs";
 
-function load(): Pick<VoicePrefsState, "muted" | "deafened"> {
+type Persistido = Pick<VoicePrefsState, "muted" | "deafened" | "pushToTalk" | "pttKey">;
+
+const PADRAO: Persistido = {
+  muted: false,
+  deafened: false,
+  pushToTalk: false,
+  // sem tecla padrão de propósito: qualquer escolha nossa roubaria um atalho do
+  // usuário (Espaço rolaria a conversa, Ctrl abriria menu) — ele define a dele
+  pttKey: null,
+};
+
+function load(): Persistido {
   try {
     const raw = typeof window !== "undefined" ? localStorage.getItem(KEY) : null;
-    if (raw) return JSON.parse(raw) as Pick<VoicePrefsState, "muted" | "deafened">;
+    if (raw) return { ...PADRAO, ...(JSON.parse(raw) as Partial<Persistido>) };
   } catch {
     // storage indisponível ou corrompido: volta ao padrão
   }
-  return { muted: false, deafened: false };
+  return PADRAO;
 }
 
-function save(state: Pick<VoicePrefsState, "muted" | "deafened">) {
+function save(state: Persistido) {
   try {
     localStorage.setItem(KEY, JSON.stringify(state));
   } catch {
@@ -32,21 +63,80 @@ function save(state: Pick<VoicePrefsState, "muted" | "deafened">) {
   }
 }
 
+/** Estado puro do PTT + o relógio que fecha o microfone depois da folga. */
+let ptt: PttState = PTT_INICIAL;
+let fecharEm: ReturnType<typeof setTimeout> | null = null;
+
 export const useVoicePrefs = create<VoicePrefsState>((set, get) => ({
   ...load(),
+  pttAtivo: false,
 
   toggleMute: () => {
     // desativar o áudio implica microfone mudo; reativar o microfone tira o "surdo"
     const muted = !get().muted;
     const next = { muted, deafened: muted ? get().deafened : false };
-    save(next);
-    set(next);
+    persistir(get, set, next);
   },
 
   toggleDeafen: () => {
     const deafened = !get().deafened;
-    const next = { deafened, muted: deafened ? true : get().muted };
-    save(next);
-    set(next);
+    persistir(get, set, { deafened, muted: deafened ? true : get().muted });
+  },
+
+  setPushToTalk: (pushToTalk) => {
+    ptt = PTT_INICIAL;
+    set({ pttAtivo: false });
+    persistir(get, set, { pushToTalk });
+  },
+
+  setPttKey: (pttKey) => persistir(get, set, { pttKey }),
+
+  pressPtt: () => {
+    if (fecharEm) {
+      clearTimeout(fecharEm);
+      fecharEm = null;
+    }
+    ptt = pttPress(ptt, Date.now());
+    if (!get().pttAtivo) set({ pttAtivo: true });
+  },
+
+  releasePtt: () => {
+    const agora = Date.now();
+    ptt = pttRelease(ptt, agora);
+    const falta = pttFechaEm(ptt, agora, PTT_RELEASE_MS);
+    if (falta === null) {
+      set({ pttAtivo: false });
+      return;
+    }
+    if (fecharEm) clearTimeout(fecharEm);
+    fecharEm = setTimeout(() => {
+      fecharEm = null;
+      // reconfere pelo estado puro: uma nova pressionada no meio cancela o fecho
+      if (!pttAberto(ptt, Date.now(), PTT_RELEASE_MS)) set({ pttAtivo: false });
+    }, falta);
+  },
+
+  micAberto: () => {
+    const s = get();
+    if (s.muted || s.deafened) return false;
+    return s.pushToTalk ? s.pttAtivo : true;
   },
 }));
+
+/** Grava só o que é preferência (o `pttAtivo` fica de fora) e atualiza a store. */
+function persistir(
+  get: () => VoicePrefsState,
+  set: (partial: Partial<VoicePrefsState>) => void,
+  patch: Partial<Persistido>,
+) {
+  const s = get();
+  const next: Persistido = {
+    muted: s.muted,
+    deafened: s.deafened,
+    pushToTalk: s.pushToTalk,
+    pttKey: s.pttKey,
+    ...patch,
+  };
+  save(next);
+  set(next);
+}
