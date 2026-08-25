@@ -2,11 +2,13 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { MessageSquare, Pencil } from "lucide-react";
-import { displayNameOf, type UserStatus } from "@newdisc/shared";
+import { colorRoleOf, displayNameOf, rolesOf, type UserStatus } from "@newdisc/shared";
 import Avatar, { STATUS_COLOR, STATUS_LABEL } from "@/components/ui/Avatar";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
 import { useDMs } from "@/stores/dms";
+import { useGuilds } from "@/stores/guilds";
+import { usePermissions } from "@/stores/permissions";
 import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui, useUI } from "@/stores/ui";
@@ -36,6 +38,9 @@ export default function ProfilePopoverHost() {
   const statuses = usePresence((s) => s.statuses);
   const profiles = usePresence((s) => s.profiles);
   const openWith = useDMs((s) => s.openWith);
+  // cargos do membro no servidor aberto: cor do nome e chips abaixo dele
+  const roles = usePermissions((s) => s.roles);
+  const membros = useGuilds((s) => s.members);
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -72,6 +77,9 @@ export default function ProfilePopoverHost() {
   const isMe = me?.id === popover.user.id;
   const user = isMe && me ? me : resolveUser(profiles, popover.user);
   const status = resolveStatus(statuses, user);
+  const meusCargos = membros.find((m) => m.user.id === user.id)?.roleIds ?? [];
+  const cor = colorRoleOf(meusCargos, roles)?.color ?? null;
+  const chips = rolesOf(meusCargos, roles);
 
   async function setStatus(value: UserStatus | null) {
     if (saving) return;
@@ -102,7 +110,12 @@ export default function ProfilePopoverHost() {
         <div className="rounded-lg bg-footer p-3">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <div className="truncate text-xl font-bold leading-6 text-txt-primary">{displayNameOf(user)}</div>
+              <div
+                style={cor ? { color: cor } : undefined}
+                className="truncate text-xl font-bold leading-6 text-txt-primary"
+              >
+                {displayNameOf(user)}
+              </div>
               <div className="truncate text-sm text-txt-normal">@{user.username}</div>
             </div>
             {isMe && (
@@ -119,6 +132,29 @@ export default function ProfilePopoverHost() {
               </button>
             )}
           </div>
+
+          {chips.length > 0 && (
+            <>
+              <div className="mt-3 border-t border-[#3f4147] pt-3 text-xs font-bold uppercase text-txt-secondary">
+                Cargos
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1">
+                {chips.map((r) => (
+                  <span
+                    key={r.id}
+                    className="flex items-center gap-1.5 rounded-[4px] bg-rail px-2 py-1 text-xs text-txt-normal"
+                  >
+                    <span
+                      aria-hidden="true"
+                      style={{ backgroundColor: r.color ?? "#949ba4" }}
+                      className="h-3 w-3 rounded-full"
+                    />
+                    {r.name}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
 
           {isMe ? (
             <>

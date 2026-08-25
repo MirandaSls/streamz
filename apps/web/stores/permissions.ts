@@ -151,6 +151,12 @@ export function useCanPostActiveChannel(): boolean {
   return useCan(Permission.SEND_MESSAGES, channelId);
 }
 
+/** Posso apagar mensagem dos outros no canal aberto? (MANAGE_MESSAGES) */
+export function useCanModerateActiveChannel(): boolean {
+  const channelId = useChannels((s) => s.activeChannelId);
+  return useCan(Permission.MANAGE_MESSAGES, channelId);
+}
+
 /**
  * Cor do nome de um membro: a do seu cargo mais alto que tenha cor. `null`
  * quando ele não tem cargo colorido — aí o nome fica na cor padrão do tema.
@@ -158,6 +164,17 @@ export function useCanPostActiveChannel(): boolean {
 export function useRoleColor(roleIds: readonly string[] | undefined): string | null {
   const roles = usePermissions((s) => s.roles);
   if (!roleIds?.length) return null;
+  return colorRoleOf(roleIds, roles)?.color ?? null;
+}
+
+/**
+ * Cor do nome de um membro do servidor ativo, pelo id. É o que o autor da
+ * mensagem usa: a lista de membros já traz os cargos de todo mundo.
+ */
+export function useAuthorColor(userId: string): string | null {
+  const roles = usePermissions((s) => s.roles);
+  const roleIds = useGuilds((s) => s.members.find((m) => m.user.id === userId)?.roleIds ?? EMPTY);
+  if (roleIds.length === 0) return null;
   return colorRoleOf(roleIds, roles)?.color ?? null;
 }
 

@@ -8,7 +8,10 @@ import SearchPanel from "@/components/chat/SearchPanel";
 import TypingIndicator from "@/components/chat/TypingIndicator";
 import { useAuth } from "@/stores/auth";
 import { useActiveChannel } from "@/stores/channels";
-import { useCanModerate } from "@/stores/guilds";
+import {
+  useCanModerateActiveChannel,
+  useCanPostActiveChannel,
+} from "@/stores/permissions";
 import { useActiveSlice, useMessages } from "@/stores/messages";
 import { useUI } from "@/stores/ui";
 
@@ -16,7 +19,11 @@ import { useUI } from "@/stores/ui";
 export default function ChatView() {
   const user = useAuth((s) => s.user);
   const channel = useActiveChannel();
-  const canModerate = useCanModerate(user?.id);
+  // quem posta neste canal é SEND_MESSAGES na permissão efetiva (ADR-0002):
+  // somente-leitura é deny no @everyone, e um cargo pode ter allow de volta
+  const podePostar = useCanPostActiveChannel();
+  // apagar mensagem dos outros é MANAGE_MESSAGES no canal, não mais o papel
+  const canModerate = useCanModerateActiveChannel();
   const slice = useActiveSlice();
   const membersOpen = useUI((s) => s.membersOpen);
   const toggleMembers = useUI((s) => s.toggleMembers);
@@ -40,7 +47,7 @@ export default function ChatView() {
     );
   }
 
-  const readOnly = channel.readOnly && !canModerate;
+  const readOnly = !podePostar;
   // canal de servidor sempre tem nome; o tipo é nullable por causa das DMs
   const name = channel.name ?? "canal";
   const Icon = channel.readOnly ? Megaphone : channel.private ? Lock : Hash;

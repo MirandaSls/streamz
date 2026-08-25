@@ -120,6 +120,11 @@ export default function ChannelSidebar() {
     ];
     if (canModerate) {
       items.push({ label: "Convites", icon: <Link2 size={18} />, onSelect: () => openModal({ kind: "invites", guildId: guild.id }) });
+      items.push({
+        label: "Configurações do servidor",
+        icon: <Settings size={18} />,
+        onSelect: () => openModal({ kind: "serverSettings", guildId: guild.id }),
+      });
     }
     items.push({ separator: true });
     if (isOwner) {

@@ -42,7 +42,9 @@ export type Modal =
       initial: string;
       confirmLabel: string;
       resolve: (value: string | null) => void;
-    };
+    }
+  // ── c-cargos ──
+  | { kind: "serverSettings"; guildId: string };
 
 /** Um item de menu de contexto; `separator` desenha a linha entre grupos. */
 export type MenuItem =

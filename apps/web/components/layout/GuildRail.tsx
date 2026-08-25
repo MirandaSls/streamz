@@ -66,7 +66,7 @@ function RailItem({
           onClick={onClick}
           aria-label={unread && !active ? `${label} (não lido)` : label}
           aria-current={active ? "page" : undefined}
-          className={`relative grid h-12 w-12 place-items-center text-[15px] font-semibold transition-all duration-200 ${
+          className={`relative grid h-12 w-12 place-items-center overflow-hidden text-[15px] font-semibold transition-all duration-200 ${
             active
               ? "rounded-2xl bg-accent text-white"
               : green
@@ -131,7 +131,17 @@ export default function GuildRail() {
           mentions={guild.mentionCount}
           onClick={() => select(guild)}
         >
-          {acronym(guild.name)}
+          {guild.iconUrl ? (
+            // o ícone é servido pelo proxy público da API; a sigla é o fallback
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={guild.iconUrl}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            acronym(guild.name)
+          )}
         </RailItem>
       ))}
 

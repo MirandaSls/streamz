@@ -8,6 +8,7 @@ import ImageModal from "@/components/modals/ImageModal";
 import InviteModal from "@/components/modals/InviteModal";
 import InvitesModal from "@/components/modals/InvitesModal";
 import PromptDialog from "@/components/modals/PromptDialog";
+import ServerSettingsModal from "@/components/modals/ServerSettingsModal";
 import SettingsModal from "@/components/modals/SettingsModal";
 import { useUI } from "@/stores/ui";
 
@@ -41,5 +42,8 @@ export default function ModalHost() {
       return <InvitesModal guildId={modal.guildId} />;
     case "image":
       return <ImageModal url={modal.url} alt={modal.alt} />;
+    // ── c-cargos ──
+    case "serverSettings":
+      return <ServerSettingsModal guildId={modal.guildId} />;
   }
 }
