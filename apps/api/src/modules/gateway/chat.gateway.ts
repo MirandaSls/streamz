@@ -8,6 +8,7 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from "@nestjs/websockets";
+import { HttpException, Logger } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Server, Socket } from "socket.io";
 import {
@@ -57,6 +58,8 @@ export class ChatGateway
 {
   @WebSocketServer()
   server!: Server;
+
+  private readonly logger = new Logger(ChatGateway.name);
 
   /** userId → nº de conexões abertas (suporta múltiplas abas/dispositivos). */
   private readonly online = new Map<string, number>();
@@ -290,9 +293,29 @@ export class ChatGateway
     return null;
   }
 
+  /**
+   * Só a mensagem de uma `HttpException` (que os services escrevem para o
+   * usuário: "Canal privado", "Mensagem não encontrada") volta ao cliente.
+   * Qualquer outra coisa — erro do Prisma, TypeError — descreveria a entranha
+   * do servidor para quem está do outro lado do socket, então vira "Erro
+   * interno" e o detalhe fica no log.
+   */
   private emitError(client: Socket, e: unknown) {
-    const message = e instanceof Error ? e.message : "Erro";
-    client.emit(WS_EVENTS.ERROR, { message });
+    if (e instanceof HttpException) {
+      const body = e.getResponse();
+      const detail =
+        typeof body === "string"
+          ? body
+          : ((body as { message?: string | string[] })?.message ?? e.message);
+      const message = Array.isArray(detail) ? detail.join("; ") : String(detail);
+      client.emit(WS_EVENTS.ERROR, { message } satisfies WsErrorEvent);
+      return;
+    }
+    this.logger.error(
+      `Falha em comando WS (socket ${client.id})`,
+      e instanceof Error ? e.stack : String(e),
+    );
+    client.emit(WS_EVENTS.ERROR, { message: "Erro interno" } satisfies WsErrorEvent);
   }
 
   @SubscribeMessage(WS_EVENTS.TYPING)
