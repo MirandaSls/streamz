@@ -11,9 +11,10 @@ fn main() {
     tauri::Builder::default()
         // Notificações nativas (Tauri 2 → crate própria).
         .plugin(tauri_plugin_notification::init())
-        // Auto-update — endpoint/pubkey são configurados em tauri.conf.json
-        // (`plugins.updater`). Sem servidor real ainda: ver README (seção desktop).
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        // O auto-update está DESLIGADO de propósito: não existe par de chaves de
+        // assinatura nem servidor de releases. Um updater apontando para um
+        // endpoint inexistente com pubkey placeholder só produz erro em runtime.
+        // Como religar: apps/desktop/README.md (seção "Auto-update").
         .setup(|app| {
             // --- System tray (bandeja) ---------------------------------------
             // Menu de contexto: "Abrir NewDisc" e "Sair".

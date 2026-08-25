@@ -45,15 +45,5 @@
       }
     }
   },
-  "plugins": {
-    "updater": {
-      "endpoints": [
-        "https://releases.newdisc.dev/updater/{{target}}/{{arch}}/{{current_version}}"
-      ],
-      "pubkey": "COLOQUE_AQUI_A_CHAVE_PUBLICA__gerada_com_'pnpm --filter @newdisc/desktop tauri signer generate'",
-      "windows": {
-        "installMode": "passive"
-      }
-    }
-  }
+  "plugins": {}
 }

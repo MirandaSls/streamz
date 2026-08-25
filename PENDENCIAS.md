@@ -86,6 +86,17 @@ comentado — ele liga por ambiente (`TAURI_ENV_*`, que o Tauri injeta no
       (ex.: `openssl rand -hex 32`).
 
 ## 5. Mais adiante (pós-MVP)
+- [ ] **Auto-update do desktop** — o `tauri-plugin-updater` foi **desligado**
+      (estava apontando para `releases.newdisc.dev`, que não existe, com `pubkey`
+      placeholder; assim ele só gera erro em runtime). Para religar:
+  - [ ] Gerar o par de chaves e guardar a privada **fora do repo**:
+        `pnpm --filter @newdisc/desktop tauri signer generate -w ~/.tauri/newdisc.key`
+  - [ ] Publicar um endpoint real de releases
+        (`/updater/{{target}}/{{arch}}/{{current_version}}`) servindo o JSON de
+        update assinado.
+  - [ ] Reativar plugin + capability + `plugins.updater` + `createUpdaterArtifacts`
+        e assinar o build com `TAURI_SIGNING_PRIVATE_KEY` — passo a passo em
+        `apps/desktop/README.md` (seção "Auto-update").
 - [ ] Assinatura de código do instalador Windows (Azure Trusted Signing) — remove
       o alerta do SmartScreen ao enviar o `.exe`.
 - [ ] Migrar a mídia de LiveKit Cloud para **self-host** (call sem limite de

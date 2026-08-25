@@ -83,27 +83,19 @@ quando roda dentro do Tauri. Detalhes e alternativas: `apps/desktop/README.md`.
   arquivo). A ponte depende de `withGlobalTauri: true` (já ligado em
   `tauri.conf.json`), que expõe `window.__TAURI__` — sem dependência npm nova.
 
-### Auto-update (esboçado — sem servidor ainda)
+### Auto-update — desligado
 
-O `tauri-plugin-updater` já está **registrado** no `main.rs` e **configurado**
-em `tauri.conf.json` (`plugins.updater`) com um endpoint *placeholder* e um
-campo `pubkey` a preencher. Como JSON não aceita comentários, os valores levam
-nomes autoexplicativos (`releases.newdisc.dev/...`, `COLOQUE_AQUI_A_CHAVE...`).
-Ainda **não há servidor real** — para ativar de verdade:
-
-1. Gere o par de chaves de assinatura:
-   `pnpm --filter @newdisc/desktop tauri signer generate`.
-2. Cole a **chave pública** em `plugins.updater.pubkey` no `tauri.conf.json`.
-3. Aponte `plugins.updater.endpoints` para o servidor/CDN real de releases.
-4. Troque `bundle.createUpdaterArtifacts` para `true` e assine o build exportando
-   `TAURI_SIGNING_PRIVATE_KEY` (e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`) no build.
+O `tauri-plugin-updater` **não** está registrado: não há par de chaves de
+assinatura nem servidor de releases, e um updater apontando para um endpoint
+inexistente só produz erro em runtime. O passo a passo para religar está em
+`apps/desktop/README.md` (seção *Auto-update*) e em `PENDENCIAS.md` §5.
 
 ### Permissões (capabilities)
 
 Tauri 2 exige capabilities explícitas: ver `src-tauri/capabilities/default.json`
-(janela principal + `notification:default` + `updater:default` + permissões de
-janela usadas pelo tray). O Tauri carrega automaticamente todos os arquivos da
-pasta `capabilities/`.
+(janela principal + `notification:default` + permissões de janela usadas pelo
+tray). O Tauri carrega automaticamente todos os arquivos da pasta
+`capabilities/`.
 
 ## Roadmap (sprint de 5 dias)
 
