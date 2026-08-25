@@ -33,6 +33,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { DMsService } from "../dms/dms.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { RealtimeService } from "../realtime/realtime.service";
+import { CORS_OPTIONS } from "../../common/cors";
 
 interface SocketUser {
   id: string;
@@ -50,9 +51,7 @@ const WS_LIMITS: Record<string, BucketLimit> = {
   [WS_EVENTS.TYPING]: { capacity: 8, refillPerSecond: 2 },
 };
 
-@WebSocketGateway({
-  cors: { origin: process.env.CORS_ORIGIN?.split(",") ?? "*", credentials: true },
-})
+@WebSocketGateway({ cors: CORS_OPTIONS })
 export class ChatGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
