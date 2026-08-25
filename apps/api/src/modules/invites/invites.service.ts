@@ -9,7 +9,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { RealtimeService } from "../realtime/realtime.service";
 import { isUniqueViolation } from "../../common/prisma-errors";
-import { WS_EVENTS } from "@newdisc/shared";
+import { Permission, WS_EVENTS } from "@newdisc/shared";
 import type { InviteInfo, InvitePreview } from "@newdisc/shared";
 import { toPublicUser } from "../../common/dto";
 
@@ -57,7 +57,7 @@ export class InvitesService {
 
   /** Convites do servidor (só moderação vê a lista inteira). */
   async list(userId: string, guildId: string): Promise<(InviteInfo & { creatorId: string })[]> {
-    await this.guilds.assertCanModerate(userId, guildId);
+    await this.guilds.assertCanModerate(userId, guildId, Permission.MANAGE_GUILD);
     const rows = await this.prisma.invite.findMany({
       where: { guildId },
       orderBy: { createdAt: "desc" },
@@ -69,7 +69,9 @@ export class InvitesService {
   async revoke(userId: string, guildId: string, code: string) {
     const invite = await this.prisma.invite.findUnique({ where: { code } });
     if (!invite || invite.guildId !== guildId) throw new NotFoundException("Convite não encontrado");
-    if (invite.creatorId !== userId) await this.guilds.assertCanModerate(userId, guildId);
+    if (invite.creatorId !== userId) {
+      await this.guilds.assertCanModerate(userId, guildId, Permission.MANAGE_GUILD);
+    }
     await this.prisma.invite.delete({ where: { code } });
     return { revoked: code };
   }
@@ -154,16 +156,14 @@ export class InvitesService {
     if (user) {
       this.realtime.emitToGuild(invite.guildId, WS_EVENTS.MEMBER_JOINED, {
         guildId: invite.guildId,
-        member: { role: "MEMBER", user: toPublicUser(user) },
+        // membro novo entra só com o @everyone: nenhum cargo atribuído
+        member: { role: "MEMBER", user: toPublicUser(user), roleIds: [] },
       });
     }
     // sockets já abertos passam a receber o servidor novo sem reconectar
     this.realtime.joinGuildRoom(userId, invite.guildId);
-    const publicos = await this.prisma.channel.findMany({
-      where: { guildId: invite.guildId, private: false },
-      select: { id: true },
-    });
-    for (const c of publicos) this.realtime.joinChannelRooms([userId], c.id);
+    // as salas de canal vêm de VIEW_CHANNEL, não do booleano `private`
+    await this.guilds.resyncChannelRooms(invite.guildId, userId);
     return invite.guild;
   }
 

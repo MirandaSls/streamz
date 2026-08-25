@@ -3,19 +3,39 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  PayloadTooLargeException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
-import { WS_EVENTS } from "@newdisc/shared";
+import { randomUUID } from "node:crypto";
+import type { Readable } from "node:stream";
+import {
+  ADMIN_ROLE_NAME,
+  DEFAULT_PERMISSIONS,
+  DM_PERMISSIONS,
+  EVERYONE_ROLE_NAME,
+  MAX_GUILD_DESCRIPTION,
+  MAX_GUILD_ICON_SIZE,
+  Permission,
+  WS_EVENTS,
+  computePermissions,
+  hasPermission,
+  highestPosition,
+} from "@newdisc/shared";
 import type {
   ChannelType,
   Guild,
   GuildMemberView,
   GuildWithChannels,
   MemberRole,
+  PermissionMember,
+  Role,
 } from "@newdisc/shared";
-import { toChannelDTO, toGuildDTO, toPublicUser } from "../../common/dto";
+import { toChannelDTO, toGuildDTO, toPublicUser, toRoleDTO } from "../../common/dto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { RealtimeService } from "../realtime/realtime.service";
 import { ReadStateService } from "../read-state/read-state.service";
+import { StorageService } from "../storage/storage.service";
+import { sniffImage } from "../uploads/media";
 
 /** O que `assertCanViewChannel` seleciona do canal — o suficiente para decidir. */
 export interface ChannelAccessRow {
@@ -29,14 +49,28 @@ export interface ChannelAccessRow {
 /**
  * Resultado da autorização por canal. União discriminada de propósito: quem
  * chama é obrigado pelo compilador a decidir o que fazer numa conversa direta
- * (`tipo: "dm"`), onde não existe papel, allowlist nem somente-leitura.
+ * (`tipo: "dm"`), onde não existe cargo, override nem somente-leitura.
+ *
+ * `permissions` é a permissão efetiva **naquele canal** (ADR-0002): quem já
+ * autorizou não precisa recalcular para uma segunda checagem.
  */
 export type ChannelAccess =
-  | { tipo: "guild"; channel: ChannelAccessRow; member: { role: MemberRole } }
-  | { tipo: "dm"; channel: ChannelAccessRow };
+  | {
+      tipo: "guild";
+      channel: ChannelAccessRow;
+      member: { role: MemberRole };
+      permissions: number;
+    }
+  | { tipo: "dm"; channel: ChannelAccessRow; permissions: number };
 
 /** O mínimo de um canal para decidir quem o enxerga. */
 type ChannelRow = { id: string; guildId: string | null; private: boolean };
+
+/** Cargos de um servidor mais o dono — o contexto de todo cálculo de permissão. */
+interface GuildPermissionContext {
+  ownerId: string;
+  roles: Role[];
+}
 
 @Injectable()
 export class GuildsService {
@@ -44,9 +78,14 @@ export class GuildsService {
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeService,
     private readonly readState: ReadStateService,
+    private readonly storage: StorageService,
   ) {}
 
-  /** Cria o servidor, registra o dono como membro OWNER e um canal #geral. */
+  /**
+   * Cria o servidor com o dono como membro OWNER, um canal #geral e os dois
+   * cargos que todo servidor tem: `@everyone` (o padrão de quem não tem cargo)
+   * e `Administrador` (o destino do atalho `GuildMember.role = ADMIN`).
+   */
   async create(ownerId: string, name: string): Promise<GuildWithChannels> {
     const guild = await this.prisma.guild.create({
       data: {
@@ -54,6 +93,22 @@ export class GuildsService {
         ownerId,
         members: { create: { userId: ownerId, role: "OWNER" } },
         channels: { create: { name: "geral", type: "TEXT", position: 0 } },
+        roles: {
+          create: [
+            {
+              name: EVERYONE_ROLE_NAME,
+              position: 0,
+              permissions: DEFAULT_PERMISSIONS,
+              isDefault: true,
+            },
+            {
+              name: ADMIN_ROLE_NAME,
+              position: 1,
+              permissions: Permission.ADMINISTRATOR,
+              hoist: true,
+            },
+          ],
+        },
       },
       include: { channels: true },
     });
@@ -93,8 +148,8 @@ export class GuildsService {
       include: { channels: { orderBy: { position: "asc" } } },
     });
     if (!guild) throw new NotFoundException("Servidor não encontrado");
-    const member = await this.assertMember(userId, guildId);
-    const channels = await this.filterVisible(userId, member.role, guild.channels);
+    await this.assertMember(userId, guildId);
+    const channels = await this.filterVisible(userId, guildId, guild.channels);
     const summaries = await this.readState.summaries(
       userId,
       username,
@@ -109,12 +164,22 @@ export class GuildsService {
 
   async listMembers(userId: string, guildId: string): Promise<GuildMemberView[]> {
     await this.assertMember(userId, guildId);
-    const members = await this.prisma.guildMember.findMany({
-      where: { guildId },
-      include: { user: true },
-      orderBy: { joinedAt: "asc" },
-    });
-    return members.map((m) => ({ role: m.role, user: toPublicUser(m.user) }));
+    const [members, atribuicoes] = await Promise.all([
+      this.prisma.guildMember.findMany({
+        where: { guildId },
+        include: { user: true },
+        orderBy: { joinedAt: "asc" },
+      }),
+      this.prisma.guildMemberRole.findMany({
+        where: { guildId },
+        select: { userId: true, roleId: true },
+      }),
+    ]);
+    return members.map((m) => ({
+      role: m.role,
+      user: toPublicUser(m.user),
+      roleIds: atribuicoes.filter((a) => a.userId === m.userId).map((a) => a.roleId),
+    }));
   }
 
   async assertMember(userId: string, guildId: string) {
@@ -125,23 +190,101 @@ export class GuildsService {
     return member;
   }
 
+  // ── permissões ─────────────────────────────────────────────
+
+  /** Cargos do servidor, do mais baixo para o mais alto. */
+  async listRoles(guildId: string): Promise<Role[]> {
+    const roles = await this.prisma.role.findMany({
+      where: { guildId },
+      orderBy: { position: "asc" },
+    });
+    return roles.map(toRoleDTO);
+  }
+
+  /** Ids dos cargos atribuídos a um membro (sem o @everyone, que é implícito). */
+  async roleIdsOf(guildId: string, userId: string): Promise<string[]> {
+    const rows = await this.prisma.guildMemberRole.findMany({
+      where: { guildId, userId },
+      select: { roleId: true },
+    });
+    return rows.map((r) => r.roleId);
+  }
+
+  /** Dono + cargos do servidor: o contexto que todo cálculo de permissão usa. */
+  private async permissionContext(guildId: string): Promise<GuildPermissionContext> {
+    const guild = await this.prisma.guild.findUnique({
+      where: { id: guildId },
+      select: { ownerId: true },
+    });
+    if (!guild) throw new NotFoundException("Servidor não encontrado");
+    return { ownerId: guild.ownerId, roles: await this.listRoles(guildId) };
+  }
+
+  /** Permissão efetiva de um membro no servidor (fora de canal). */
+  async permissionsOf(userId: string, guildId: string): Promise<number> {
+    const [ctx, roleIds] = await Promise.all([
+      this.permissionContext(guildId),
+      this.roleIdsOf(guildId, userId),
+    ]);
+    return computePermissions({ isOwner: ctx.ownerId === userId, roleIds }, ctx.roles);
+  }
+
+  /** Permissão efetiva de um membro **dentro de um canal** (aplica os overrides). */
+  async permissionsInChannel(
+    userId: string,
+    guildId: string,
+    channelId: string,
+  ): Promise<number> {
+    const [ctx, roleIds, overrides] = await Promise.all([
+      this.permissionContext(guildId),
+      this.roleIdsOf(guildId, userId),
+      this.prisma.channelOverride.findMany({ where: { channelId } }),
+    ]);
+    const member: PermissionMember = { isOwner: ctx.ownerId === userId, roleIds };
+    // só o override do próprio usuário interessa; os dos outros são ruído
+    const meus = overrides.filter((o) => o.userId === null || o.userId === userId);
+    return computePermissions(member, ctx.roles, meus);
+  }
+
+  /**
+   * O ator precisa ter a permissão pedida no servidor. Substitui o antigo
+   * "é OWNER ou ADMIN?" — cada chamador declara **qual** permissão exige.
+   */
+  async assertCanModerate(actorId: string, guildId: string, permission: number) {
+    const actor = await this.assertMember(actorId, guildId);
+    const bits = await this.permissionsOf(actorId, guildId);
+    if (!hasPermission(bits, permission)) {
+      throw new ForbiddenException("Você não tem permissão para isso");
+    }
+    return actor;
+  }
+
   // ── visibilidade de canais ─────────────────────────────────
 
-  /** Dos canais de um servidor, os que este membro enxerga. */
+  /** Dos canais de um servidor, os que este membro enxerga (VIEW_CHANNEL). */
   private async filterVisible<T extends ChannelRow>(
     userId: string,
-    role: MemberRole,
+    guildId: string,
     channels: T[],
   ): Promise<T[]> {
-    if (this.isPrivileged(role)) return channels;
-    const privados = channels.filter((c) => c.private);
-    if (privados.length === 0) return channels;
-    const allowed = await this.prisma.channelMember.findMany({
-      where: { userId, channelId: { in: privados.map((c) => c.id) } },
-      select: { channelId: true },
+    if (channels.length === 0) return channels;
+    const [ctx, roleIds, overrides] = await Promise.all([
+      this.permissionContext(guildId),
+      this.roleIdsOf(guildId, userId),
+      this.prisma.channelOverride.findMany({
+        where: { channelId: { in: channels.map((c) => c.id) } },
+      }),
+    ]);
+    const member: PermissionMember = { isOwner: ctx.ownerId === userId, roleIds };
+    return channels.filter((c) => {
+      const meus = overrides.filter(
+        (o) => o.channelId === c.id && (o.userId === null || o.userId === userId),
+      );
+      return hasPermission(
+        computePermissions(member, ctx.roles, meus),
+        Permission.VIEW_CHANNEL,
+      );
     });
-    const allowedSet = new Set(allowed.map((a) => a.channelId));
-    return channels.filter((c) => !c.private || allowedSet.has(c.id));
   }
 
   /**
@@ -153,13 +296,13 @@ export class GuildsService {
     const memberships = await this.prisma.guildMember.findMany({
       where: { userId },
       select: {
-        role: true,
+        guildId: true,
         guild: { select: { channels: { select: { id: true, guildId: true, private: true } } } },
       },
     });
     const out: ChannelRow[] = [];
     for (const m of memberships) {
-      out.push(...(await this.filterVisible(userId, m.role, m.guild.channels)));
+      out.push(...(await this.filterVisible(userId, m.guildId, m.guild.channels)));
     }
     const dms = await this.prisma.channel.findMany({
       where: { guildId: null, members: { some: { userId } } },
@@ -177,24 +320,29 @@ export class GuildsService {
       });
       return members.map((m) => m.userId);
     }
-    if (!channel.private) {
-      const members = await this.prisma.guildMember.findMany({
-        where: { guildId: channel.guildId },
-        select: { userId: true },
-      });
-      return members.map((m) => m.userId);
-    }
-    const [mods, allowed] = await Promise.all([
-      this.prisma.guildMember.findMany({
-        where: { guildId: channel.guildId, role: { in: ["OWNER", "ADMIN"] } },
-        select: { userId: true },
+    const guildId = channel.guildId;
+    const [ctx, members, atribuicoes, overrides] = await Promise.all([
+      this.permissionContext(guildId),
+      this.prisma.guildMember.findMany({ where: { guildId }, select: { userId: true } }),
+      this.prisma.guildMemberRole.findMany({
+        where: { guildId },
+        select: { userId: true, roleId: true },
       }),
-      this.prisma.channelMember.findMany({
-        where: { channelId: channel.id },
-        select: { userId: true },
-      }),
+      this.prisma.channelOverride.findMany({ where: { channelId: channel.id } }),
     ]);
-    return Array.from(new Set([...mods, ...allowed].map((m) => m.userId)));
+    return members
+      .filter((m) => {
+        const member: PermissionMember = {
+          isOwner: ctx.ownerId === m.userId,
+          roleIds: atribuicoes.filter((a) => a.userId === m.userId).map((a) => a.roleId),
+        };
+        const meus = overrides.filter((o) => o.userId === null || o.userId === m.userId);
+        return hasPermission(
+          computePermissions(member, ctx.roles, meus),
+          Permission.VIEW_CHANNEL,
+        );
+      })
+      .map((m) => m.userId);
   }
 
   // ── autorização por canal ──────────────────────────────────
@@ -202,10 +350,10 @@ export class GuildsService {
   /**
    * Pode ver/entrar no canal. Ponto único de autorização por canal, para
    * servidor e para conversa direta:
-   * - canal de servidor: membro do servidor e, se privado, OWNER/ADMIN ou na
-   *   allowlist (`ChannelMember`);
+   * - canal de servidor: membro do servidor **e** com `VIEW_CHANNEL` na
+   *   permissão efetiva daquele canal (cargos + overrides — ADR-0002);
    * - DM/grupo (`guildId` null): ser participante (`ChannelMember`), e ponto —
-   *   não há papel nem allowlist.
+   *   não há cargo nem override.
    */
   async assertCanViewChannel(userId: string, channelId: string): Promise<ChannelAccess> {
     const channel = await this.prisma.channel.findUnique({
@@ -220,28 +368,25 @@ export class GuildsService {
         select: { id: true },
       });
       if (!participante) throw new ForbiddenException("Você não participa desta conversa");
-      return { tipo: "dm", channel };
+      return { tipo: "dm", channel, permissions: DM_PERMISSIONS };
     }
 
     const member = await this.assertMember(userId, channel.guildId);
-    if (channel.private && !this.isPrivileged(member.role)) {
-      const allowed = await this.prisma.channelMember.findUnique({
-        where: { channelId_userId: { channelId, userId } },
-        select: { id: true },
-      });
-      if (!allowed) throw new ForbiddenException("Canal privado");
+    const permissions = await this.permissionsInChannel(userId, channel.guildId, channelId);
+    if (!hasPermission(permissions, Permission.VIEW_CHANNEL)) {
+      throw new ForbiddenException("Canal privado");
     }
-    return { tipo: "guild", channel, member: { role: member.role } };
+    return { tipo: "guild", channel, member: { role: member.role }, permissions };
   }
 
   /**
-   * Pode postar: view + se o canal for somente-leitura, precisa ser OWNER/ADMIN.
-   * Em conversa direta basta participar (somente-leitura não existe lá).
+   * Pode postar: view + `SEND_MESSAGES` na permissão efetiva do canal (é o que
+   * "somente-leitura" virou: deny SEND_MESSAGES no @everyone). Em conversa
+   * direta basta participar.
    */
   async assertCanPostChannel(userId: string, channelId: string): Promise<ChannelAccess> {
     const access = await this.assertCanViewChannel(userId, channelId);
-    if (access.tipo === "dm") return access;
-    if (access.channel.readOnly && !this.isPrivileged(access.member.role)) {
+    if (!hasPermission(access.permissions, Permission.SEND_MESSAGES)) {
       throw new ForbiddenException("Canal somente-leitura");
     }
     return access;
@@ -250,22 +395,251 @@ export class GuildsService {
   /** Pode moderar mensagens do canal (apagar as dos outros)? Em DM, ninguém. */
   async canModerateChannel(userId: string, channelId: string): Promise<boolean> {
     const access = await this.assertCanViewChannel(userId, channelId);
-    return access.tipo === "guild" && this.isPrivileged(access.member.role);
+    return hasPermission(access.permissions, Permission.MANAGE_MESSAGES);
   }
 
-  private isPrivileged(role: MemberRole): boolean {
-    return role === "OWNER" || role === "ADMIN";
+  // ── espelho de private/readOnly ────────────────────────────
+
+  /**
+   * `Channel.private` e `Channel.readOnly` são **espelho** do override do
+   * @everyone (ADR-0002): a lista de canais desenha cadeado e megafone a partir
+   * delas, mas quem autoriza é o override. Uma direção só — override → colunas —
+   * senão as duas representações divergem em silêncio.
+   */
+  async syncChannelFlags(channelId: string): Promise<void> {
+    const channel = await this.prisma.channel.findUnique({
+      where: { id: channelId },
+      select: { guildId: true },
+    });
+    if (!channel?.guildId) return;
+    const everyone = await this.everyoneRole(channel.guildId);
+    const o = await this.prisma.channelOverride.findUnique({
+      where: { channelId_roleId: { channelId, roleId: everyone.id } },
+    });
+    const deny = o?.deny ?? 0;
+    await this.prisma.channel.update({
+      where: { id: channelId },
+      data: {
+        private: hasPermission(deny, Permission.VIEW_CHANNEL),
+        readOnly: hasPermission(deny, Permission.SEND_MESSAGES),
+      },
+    });
+  }
+
+  /**
+   * Caminho inverso, usado só por quem cria/edita canal com os booleanos
+   * (`ChannelsService`): traduz `private`/`readOnly` para o override do
+   * @everyone, que é a fonte da verdade.
+   */
+  async applyChannelFlags(
+    guildId: string,
+    channelId: string,
+    flags: { private?: boolean; readOnly?: boolean },
+  ): Promise<void> {
+    const everyone = await this.everyoneRole(guildId);
+    const atual = await this.prisma.channelOverride.findUnique({
+      where: { channelId_roleId: { channelId, roleId: everyone.id } },
+    });
+    let deny = atual?.deny ?? 0;
+    if (flags.private !== undefined) {
+      deny = flags.private
+        ? deny | Permission.VIEW_CHANNEL
+        : deny & ~Permission.VIEW_CHANNEL;
+    }
+    if (flags.readOnly !== undefined) {
+      deny = flags.readOnly
+        ? deny | Permission.SEND_MESSAGES
+        : deny & ~Permission.SEND_MESSAGES;
+    }
+    await this.prisma.channelOverride.upsert({
+      where: { channelId_roleId: { channelId, roleId: everyone.id } },
+      create: { channelId, roleId: everyone.id, allow: 0, deny },
+      update: { deny },
+    });
+    await this.syncChannelFlags(channelId);
+  }
+
+  /**
+   * A allowlist de canal privado, espelhada como override de usuário. Liga o
+   * `allow` de VIEW_CHANNEL e desliga o `deny` correspondente, preservando o
+   * resto do override — ele pode carregar outras regras daquele canal.
+   */
+  async grantChannelView(channelId: string, userId: string): Promise<void> {
+    const atual = await this.prisma.channelOverride.findUnique({
+      where: { channelId_userId: { channelId, userId } },
+    });
+    const allow = (atual?.allow ?? 0) | Permission.VIEW_CHANNEL;
+    const deny = (atual?.deny ?? 0) & ~Permission.VIEW_CHANNEL;
+    await this.prisma.channelOverride.upsert({
+      where: { channelId_userId: { channelId, userId } },
+      create: { channelId, userId, allow, deny },
+      update: { allow, deny },
+    });
+  }
+
+  async revokeChannelView(channelId: string, userId: string): Promise<void> {
+    await this.prisma.channelOverride
+      .delete({ where: { channelId_userId: { channelId, userId } } })
+      .catch(() => undefined); // idempotente
+  }
+
+  /** O @everyone do servidor. Todo servidor tem um — a migração garantiu. */
+  async everyoneRole(guildId: string) {
+    const role = await this.prisma.role.findFirst({ where: { guildId, isDefault: true } });
+    if (!role) throw new NotFoundException("Servidor sem cargo @everyone");
+    return role;
   }
 
   // ── ciclo de vida do servidor ──────────────────────────────
 
-  /** Sai do servidor. O dono não sai — apaga (transferência de posse não existe no MVP). */
+  /** Edita nome e descrição (MANAGE_GUILD). */
+  async update(
+    actorId: string,
+    guildId: string,
+    patch: { name?: string; description?: string | null },
+  ): Promise<Guild> {
+    await this.assertCanModerate(actorId, guildId, Permission.MANAGE_GUILD);
+    const name = patch.name?.trim();
+    if (patch.name !== undefined && !name) throw new BadRequestException("Nome vazio");
+    const description =
+      patch.description === undefined ? undefined : patch.description?.trim() || null;
+    if (description && description.length > MAX_GUILD_DESCRIPTION) {
+      throw new BadRequestException(`Descrição acima de ${MAX_GUILD_DESCRIPTION} caracteres`);
+    }
+    const guild = await this.prisma.guild.update({
+      where: { id: guildId },
+      data: { ...(name ? { name } : {}), ...(description !== undefined ? { description } : {}) },
+    });
+    const dto = toGuildDTO(guild);
+    this.realtime.emitToGuild(guildId, WS_EVENTS.GUILD_UPDATED, dto);
+    return dto;
+  }
+
+  /** Ícone do servidor: imagem validada por bytes, guardada no storage. */
+  async updateIcon(
+    actorId: string,
+    guildId: string,
+    file: { buffer: Buffer; size: number },
+  ): Promise<Guild> {
+    await this.assertCanModerate(actorId, guildId, Permission.MANAGE_GUILD);
+    if (!this.storage.isConfigured()) {
+      throw new ServiceUnavailableException(
+        "Armazenamento (R2) não configurado. Ver PENDENCIAS.md.",
+      );
+    }
+    if (!file?.buffer?.length) throw new BadRequestException("Arquivo vazio");
+    if (file.size > MAX_GUILD_ICON_SIZE) {
+      throw new PayloadTooLargeException(
+        `Ícone acima de ${MAX_GUILD_ICON_SIZE / 1024 / 1024} MB`,
+      );
+    }
+    const image = sniffImage(file.buffer);
+    if (!image) {
+      throw new BadRequestException("O ícone precisa ser uma imagem (PNG, JPEG, GIF ou WebP)");
+    }
+
+    const key = `guild-icons/${guildId}/${randomUUID()}`;
+    await this.storage.put(key, file.buffer, image.mime);
+    const antes = await this.prisma.guild.findUnique({
+      where: { id: guildId },
+      select: { iconKey: true },
+    });
+    const guild = await this.prisma.guild.update({
+      where: { id: guildId },
+      data: { iconKey: key, iconUrl: this.iconUrl(guildId, key) },
+    });
+    if (antes?.iconKey) await this.storage.delete(antes.iconKey);
+
+    const dto = toGuildDTO(guild);
+    this.realtime.emitToGuild(guildId, WS_EVENTS.GUILD_UPDATED, dto);
+    return dto;
+  }
+
+  /** Corpo + content-type do ícone para o proxy público (GET /guilds/:id/icon). */
+  async iconStream(guildId: string): Promise<{ body: Readable; contentType: string }> {
+    const g = await this.prisma.guild.findUnique({
+      where: { id: guildId },
+      select: { iconKey: true },
+    });
+    if (!g?.iconKey) throw new NotFoundException("Sem ícone");
+    // o content-type real foi validado no upload; o proxy sempre serve imagem
+    return { body: await this.storage.get(g.iconKey), contentType: "image/*" };
+  }
+
+  /**
+   * O ícone é público (como o avatar): `<img src>` não manda token. A versão na
+   * query faz o cache do browser trocar quando o ícone muda.
+   */
+  private iconUrl(guildId: string, key: string): string {
+    const api = (process.env.API_PUBLIC_URL ?? "http://localhost:3333").replace(/\/+$/, "");
+    const v = key.split("/").pop() ?? "";
+    return `${api}/api/guilds/${guildId}/icon?v=${v}`;
+  }
+
+  /**
+   * Passa a posse a outro membro. Só o dono; o antigo dono vira ADMIN (e ganha
+   * o cargo Administrador) para não perder o servidor que acabou de entregar.
+   */
+  async transferOwnership(actorId: string, guildId: string, targetUserId: string) {
+    const guild = await this.prisma.guild.findUnique({ where: { id: guildId } });
+    if (!guild) throw new NotFoundException("Servidor não encontrado");
+    if (guild.ownerId !== actorId) throw new ForbiddenException("Só o dono transfere a posse");
+    if (targetUserId === actorId) {
+      throw new BadRequestException("Você já é o dono deste servidor");
+    }
+    const target = await this.prisma.guildMember.findUnique({
+      where: { userId_guildId: { userId: targetUserId, guildId } },
+    });
+    if (!target) throw new NotFoundException("Membro não encontrado");
+
+    const admin = await this.adminRole(guildId);
+    await this.prisma.$transaction([
+      this.prisma.guild.update({ where: { id: guildId }, data: { ownerId: targetUserId } }),
+      this.prisma.guildMember.update({
+        where: { userId_guildId: { userId: targetUserId, guildId } },
+        data: { role: "OWNER" },
+      }),
+      this.prisma.guildMember.update({
+        where: { userId_guildId: { userId: actorId, guildId } },
+        data: { role: "ADMIN" },
+      }),
+      this.prisma.guildMemberRole.upsert({
+        where: { userId_roleId: { userId: actorId, roleId: admin.id } },
+        create: { guildId, userId: actorId, roleId: admin.id },
+        update: {},
+      }),
+    ]);
+
+    this.realtime.emitToGuild(guildId, WS_EVENTS.GUILD_OWNER_CHANGED, {
+      guildId,
+      ownerId: targetUserId,
+      previousOwnerId: actorId,
+    });
+    this.realtime.emitToGuild(guildId, WS_EVENTS.MEMBER_UPDATED, {
+      guildId,
+      userId: targetUserId,
+      role: "OWNER" satisfies MemberRole,
+      roleIds: await this.roleIdsOf(guildId, targetUserId),
+    });
+    this.realtime.emitToGuild(guildId, WS_EVENTS.MEMBER_UPDATED, {
+      guildId,
+      userId: actorId,
+      role: "ADMIN" satisfies MemberRole,
+      roleIds: await this.roleIdsOf(guildId, actorId),
+    });
+    return { guildId, ownerId: targetUserId };
+  }
+
+  /** Sai do servidor. O dono não sai: transfere a posse antes, ou apaga. */
   async leave(userId: string, guildId: string) {
     const member = await this.assertMember(userId, guildId);
     if (member.role === "OWNER") {
-      throw new BadRequestException("O dono não pode sair do servidor — apague-o");
+      throw new BadRequestException(
+        "O dono não pode sair — transfira a posse ou apague o servidor",
+      );
     }
     await this.prisma.guildMember.delete({ where: { userId_guildId: { userId, guildId } } });
+    await this.prisma.guildMemberRole.deleteMany({ where: { guildId, userId } });
     await this.detachFromGuildRooms(guildId, userId);
     this.realtime.emitToGuild(guildId, WS_EVENTS.MEMBER_LEFT, { guildId, userId });
     // outras abas do próprio usuário também precisam ver o servidor sumir
@@ -283,52 +657,100 @@ export class GuildsService {
       select: { userId: true },
     });
     await this.prisma.guild.delete({ where: { id: guildId } });
+    if (guild.iconKey) await this.storage.delete(guild.iconKey);
     const ids = members.map((m) => m.userId);
     this.realtime.emitToUsers(ids, WS_EVENTS.GUILD_REMOVED, { guildId, reason: "deleted" });
     for (const id of ids) this.realtime.leaveGuildRoom(id, guildId);
     return { deleted: guildId };
   }
 
-  /** Promove a ADMIN ou rebaixa a MEMBER. Só o dono; o dono não muda de papel. */
+  /**
+   * Promove a ADMIN ou rebaixa a MEMBER. Só o dono; o dono não muda de papel.
+   *
+   * O papel é atalho para o **cargo** Administrador (ADR-0002): as duas
+   * representações são escritas juntas, aqui e em lugar nenhum mais.
+   */
   async setRole(actorId: string, guildId: string, targetUserId: string, role: MemberRole) {
     const guild = await this.prisma.guild.findUnique({ where: { id: guildId } });
     if (!guild) throw new NotFoundException("Servidor não encontrado");
     if (guild.ownerId !== actorId) throw new ForbiddenException("Só o dono altera papéis");
     if (role === "OWNER" || targetUserId === actorId) {
-      throw new BadRequestException("O papel de dono não é transferível por aqui");
+      throw new BadRequestException("Use a transferência de posse para trocar o dono");
     }
     const target = await this.prisma.guildMember.findUnique({
       where: { userId_guildId: { userId: targetUserId, guildId } },
     });
     if (!target) throw new NotFoundException("Membro não encontrado");
+
+    const admin = await this.adminRole(guildId);
     await this.prisma.guildMember.update({
       where: { userId_guildId: { userId: targetUserId, guildId } },
       data: { role },
     });
+    if (role === "ADMIN") {
+      await this.prisma.guildMemberRole.upsert({
+        where: { userId_roleId: { userId: targetUserId, roleId: admin.id } },
+        create: { guildId, userId: targetUserId, roleId: admin.id },
+        update: {},
+      });
+    } else {
+      await this.prisma.guildMemberRole.deleteMany({
+        where: { guildId, userId: targetUserId, roleId: admin.id },
+      });
+    }
+
+    const roleIds = await this.roleIdsOf(guildId, targetUserId);
     this.realtime.emitToGuild(guildId, WS_EVENTS.MEMBER_UPDATED, {
       guildId,
       userId: targetUserId,
       role,
+      roleIds,
     });
-    // virou/deixou de ser moderação: entra/sai das salas dos canais privados
-    const privados = await this.prisma.channel.findMany({
-      where: { guildId, private: true },
-      select: { id: true },
-    });
-    if (role === "ADMIN") {
-      for (const c of privados) this.realtime.joinChannelRooms([targetUserId], c.id);
-    } else {
-      const allowed = await this.prisma.channelMember.findMany({
-        where: { userId: targetUserId, channelId: { in: privados.map((c) => c.id) } },
-        select: { channelId: true },
-      });
-      const keep = new Set(allowed.map((a) => a.channelId));
-      this.realtime.leaveChannelRooms(
-        targetUserId,
-        privados.map((c) => c.id).filter((id) => !keep.has(id)),
-      );
-    }
+    await this.resyncChannelRooms(guildId, targetUserId);
     return { userId: targetUserId, role };
+  }
+
+  /**
+   * Reavalia em quais salas de canal o usuário deve estar neste servidor.
+   * Chamado sempre que a permissão dele muda (cargo, override, papel): sem
+   * isso, quem perdeu VIEW_CHANNEL seguiria recebendo mensagens ao vivo, e
+   * quem ganhou só veria o canal depois de recarregar a página.
+   */
+  async resyncChannelRooms(guildId: string, userId: string): Promise<void> {
+    const todos = await this.prisma.channel.findMany({
+      where: { guildId },
+      select: { id: true, guildId: true, private: true },
+    });
+    const visiveis = await this.filterVisible(userId, guildId, todos);
+    const visiveisSet = new Set(visiveis.map((c) => c.id));
+    for (const c of visiveis) this.realtime.joinChannelRooms([userId], c.id);
+    this.realtime.leaveChannelRooms(
+      userId,
+      todos.filter((c) => !visiveisSet.has(c.id)).map((c) => c.id),
+    );
+  }
+
+  /** O cargo "Administrador" do servidor — o destino do papel ADMIN. */
+  private async adminRole(guildId: string) {
+    const existente = await this.prisma.role.findFirst({
+      where: { guildId, name: ADMIN_ROLE_NAME, isDefault: false },
+      orderBy: { position: "desc" },
+    });
+    if (existente) return existente;
+    // servidor antigo sem o cargo (ou alguém o apagou): recria em cima da pilha
+    const maior = await this.prisma.role.aggregate({
+      where: { guildId },
+      _max: { position: true },
+    });
+    return this.prisma.role.create({
+      data: {
+        guildId,
+        name: ADMIN_ROLE_NAME,
+        position: (maior._max.position ?? 0) + 1,
+        permissions: Permission.ADMINISTRATOR,
+        hoist: true,
+      },
+    });
   }
 
   // ── moderação ──────────────────────────────────────────────
@@ -341,10 +763,11 @@ export class GuildsService {
 
   /** Expulsa um membro (pode voltar por convite). */
   async kick(actorId: string, guildId: string, targetUserId: string) {
-    await this.assertCanActOn(actorId, guildId, targetUserId);
+    await this.assertCanActOn(actorId, guildId, targetUserId, Permission.KICK_MEMBERS);
     await this.prisma.guildMember.delete({
       where: { userId_guildId: { userId: targetUserId, guildId } },
     });
+    await this.prisma.guildMemberRole.deleteMany({ where: { guildId, userId: targetUserId } });
     await this.detachFromGuildRooms(guildId, targetUserId);
     this.realtime.emitToGuild(guildId, WS_EVENTS.MEMBER_LEFT, { guildId, userId: targetUserId });
     this.realtime.emitToUser(targetUserId, WS_EVENTS.GUILD_REMOVED, {
@@ -356,8 +779,9 @@ export class GuildsService {
 
   /** Bane um membro: remove e bloqueia reentrada. */
   async ban(actorId: string, guildId: string, targetUserId: string, reason?: string) {
-    await this.assertCanActOn(actorId, guildId, targetUserId);
+    await this.assertCanActOn(actorId, guildId, targetUserId, Permission.BAN_MEMBERS);
     await this.prisma.$transaction([
+      this.prisma.guildMemberRole.deleteMany({ where: { guildId, userId: targetUserId } }),
       this.prisma.guildMember.deleteMany({
         where: { userId: targetUserId, guildId },
       }),
@@ -377,7 +801,7 @@ export class GuildsService {
   }
 
   async unban(actorId: string, guildId: string, targetUserId: string) {
-    await this.assertCanModerate(actorId, guildId);
+    await this.assertCanModerate(actorId, guildId, Permission.BAN_MEMBERS);
     await this.prisma.ban
       .delete({ where: { guildId_userId: { guildId, userId: targetUserId } } })
       .catch(() => undefined);
@@ -385,7 +809,7 @@ export class GuildsService {
   }
 
   async listBans(actorId: string, guildId: string) {
-    await this.assertCanModerate(actorId, guildId);
+    await this.assertCanModerate(actorId, guildId, Permission.BAN_MEMBERS);
     const bans = await this.prisma.ban.findMany({
       where: { guildId },
       include: { user: true },
@@ -408,32 +832,38 @@ export class GuildsService {
     this.realtime.leaveGuildRoom(userId, guildId);
   }
 
-  /** O ator precisa ser OWNER ou ADMIN do servidor. */
-  async assertCanModerate(actorId: string, guildId: string) {
-    const actor = await this.assertMember(actorId, guildId);
-    if (actor.role !== "OWNER" && actor.role !== "ADMIN") {
-      throw new ForbiddenException("Sem permissão de moderação");
-    }
-    return actor;
-  }
-
-  /** Valida hierarquia: ator só age sobre alguém de cargo estritamente inferior. */
-  private async assertCanActOn(actorId: string, guildId: string, targetUserId: string) {
+  /**
+   * Valida a permissão **e** a hierarquia: o ator só age sobre quem está
+   * estritamente abaixo dele. Sem a segunda metade, `KICK_MEMBERS` deixaria um
+   * moderador expulsar outro moderador — ou o dono.
+   */
+  private async assertCanActOn(
+    actorId: string,
+    guildId: string,
+    targetUserId: string,
+    permission: number,
+  ) {
     if (actorId === targetUserId) {
       throw new ForbiddenException("Você não pode moderar a si mesmo");
     }
-    const actor = await this.assertCanModerate(actorId, guildId);
+    const actor = await this.assertCanModerate(actorId, guildId, permission);
     const target = await this.prisma.guildMember.findUnique({
       where: { userId_guildId: { userId: targetUserId, guildId } },
     });
     if (!target) throw new NotFoundException("Membro não encontrado");
-    if (this.rank(actor.role) <= this.rank(target.role)) {
+    if ((await this.rank(guildId, actorId)) <= (await this.rank(guildId, targetUserId))) {
       throw new ForbiddenException("Você não pode moderar alguém de cargo igual ou superior");
     }
     return { actor, target };
   }
 
-  private rank(role: MemberRole): number {
-    return role === "OWNER" ? 3 : role === "ADMIN" ? 2 : 1;
+  /**
+   * Altura de um membro na hierarquia: o dono acima de todos, senão a posição
+   * do seu cargo mais alto. É o que compara "quem pode mexer em quem".
+   */
+  async rank(guildId: string, userId: string): Promise<number> {
+    const ctx = await this.permissionContext(guildId);
+    const roleIds = await this.roleIdsOf(guildId, userId);
+    return highestPosition({ isOwner: ctx.ownerId === userId, roleIds }, ctx.roles);
   }
 }

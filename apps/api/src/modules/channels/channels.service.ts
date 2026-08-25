@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { WS_EVENTS } from "@newdisc/shared";
+import { Permission, WS_EVENTS } from "@newdisc/shared";
 import type { Channel, GuildChannelType } from "@newdisc/shared";
 import { toChannelDTO, toPublicUser } from "../../common/dto";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -38,7 +38,7 @@ export class ChannelsService {
 
     // criar canal privado/somente-leitura exige moderação; canal comum, só ser membro
     if (isPrivate || readOnly) {
-      await this.guilds.assertCanModerate(userId, guildId);
+      await this.guilds.assertCanModerate(userId, guildId, Permission.MANAGE_CHANNELS);
     } else {
       await this.guilds.assertMember(userId, guildId);
     }
@@ -48,6 +48,10 @@ export class ChannelsService {
       data: { guildId, name, type, position: count, private: isPrivate, readOnly },
     });
 
+    // `private`/`readOnly` são espelho: quem autoriza é o override do @everyone
+    if (isPrivate || readOnly) {
+      await this.guilds.applyChannelFlags(guildId, channel.id, { private: isPrivate, readOnly });
+    }
     if (isPrivate && opts.memberIds?.length) {
       await this.grantAccess(guildId, channel.id, opts.memberIds);
     }
@@ -60,23 +64,15 @@ export class ChannelsService {
   }
 
   async listForGuild(userId: string, guildId: string): Promise<Channel[]> {
-    const member = await this.guilds.assertMember(userId, guildId);
+    await this.guilds.assertMember(userId, guildId);
     const channels = await this.prisma.channel.findMany({
       where: { guildId },
       orderBy: { position: "asc" },
     });
-    if (member.role === "OWNER" || member.role === "ADMIN") {
-      return channels.map((c) => toChannelDTO(c));
-    }
-
-    const allowed = await this.prisma.channelMember.findMany({
-      where: { userId, channel: { guildId } },
-      select: { channelId: true },
-    });
-    const allowedSet = new Set(allowed.map((a) => a.channelId));
-    return channels
-      .filter((c) => !c.private || allowedSet.has(c.id))
-      .map((c) => toChannelDTO(c));
+    // quem enxerga o quê é `VIEW_CHANNEL` na permissão do canal (ADR-0002)
+    const visiveis = await this.guilds.visibleChannelsForUser(userId);
+    const podeVer = new Set(visiveis.map((c) => c.id));
+    return channels.filter((c) => podeVer.has(c.id)).map((c) => toChannelDTO(c));
   }
 
   /** Renomeia (e/ou muda somente-leitura). Só moderação. */
@@ -86,7 +82,7 @@ export class ChannelsService {
     channelId: string,
     patch: { name?: string; readOnly?: boolean },
   ): Promise<Channel> {
-    await this.guilds.assertCanModerate(actorId, guildId);
+    await this.guilds.assertCanModerate(actorId, guildId, Permission.MANAGE_CHANNELS);
     await this.assertChannelInGuild(channelId, guildId);
     const name = patch.name?.trim();
     if (patch.name !== undefined && !name) throw new BadRequestException("Nome vazio");
@@ -94,6 +90,10 @@ export class ChannelsService {
       where: { id: channelId },
       data: { ...(name ? { name } : {}), ...(patch.readOnly !== undefined ? { readOnly: patch.readOnly } : {}) },
     });
+    // somente-leitura é deny SEND_MESSAGES no @everyone; o booleano é espelho
+    if (patch.readOnly !== undefined) {
+      await this.guilds.applyChannelFlags(guildId, channelId, { readOnly: patch.readOnly });
+    }
     const dto = toChannelDTO(channel);
     this.realtime.emitToUsers(await this.guilds.viewersOfChannel(channel), WS_EVENTS.CHANNEL_UPDATED, dto);
     return dto;
@@ -101,7 +101,7 @@ export class ChannelsService {
 
   /** Apaga o canal e suas mensagens. Só moderação; o último canal de texto fica. */
   async remove(actorId: string, guildId: string, channelId: string) {
-    await this.guilds.assertCanModerate(actorId, guildId);
+    await this.guilds.assertCanModerate(actorId, guildId, Permission.MANAGE_CHANNELS);
     await this.assertChannelInGuild(channelId, guildId);
     const channel = await this.prisma.channel.findUnique({ where: { id: channelId } });
     if (!channel) throw new NotFoundException("Canal não encontrado");
@@ -119,7 +119,7 @@ export class ChannelsService {
   // ── allowlist de canal privado (só moderação) ──────────────────
 
   async listMembers(actorId: string, guildId: string, channelId: string) {
-    await this.guilds.assertCanModerate(actorId, guildId);
+    await this.guilds.assertCanModerate(actorId, guildId, Permission.MANAGE_CHANNELS);
     await this.assertChannelInGuild(channelId, guildId);
     const rows = await this.prisma.channelMember.findMany({
       where: { channelId },
@@ -129,18 +129,20 @@ export class ChannelsService {
   }
 
   async addMember(actorId: string, guildId: string, channelId: string, targetUserId: string) {
-    await this.guilds.assertCanModerate(actorId, guildId);
+    await this.guilds.assertCanModerate(actorId, guildId, Permission.MANAGE_CHANNELS);
     await this.assertChannelInGuild(channelId, guildId);
     await this.grantAccess(guildId, channelId, [targetUserId]);
     return { added: targetUserId };
   }
 
   async removeMember(actorId: string, guildId: string, channelId: string, targetUserId: string) {
-    await this.guilds.assertCanModerate(actorId, guildId);
+    await this.guilds.assertCanModerate(actorId, guildId, Permission.MANAGE_CHANNELS);
     await this.assertChannelInGuild(channelId, guildId);
     await this.prisma.channelMember
       .delete({ where: { channelId_userId: { channelId, userId: targetUserId } } })
       .catch(() => undefined); // idempotente
+    // a allowlist é espelhada em override de usuário — as duas saem juntas
+    await this.guilds.revokeChannelView(channelId, targetUserId);
     // corta a sala ao vivo: sem isso ele seguiria recebendo o canal privado
     this.realtime.leaveChannelRooms(targetUserId, [channelId]);
     this.realtime.emitToUser(targetUserId, WS_EVENTS.CHANNEL_DELETED, { channelId, guildId });
@@ -163,6 +165,8 @@ export class ChannelsService {
         }),
       ),
     );
+    // a allowlist é espelhada em override de usuário (allow VIEW_CHANNEL)
+    for (const m of members) await this.guilds.grantChannelView(channelId, m.userId);
     // quem acabou de ganhar acesso passa a ver o canal e a receber ao vivo
     const channel = await this.prisma.channel.findUnique({ where: { id: channelId } });
     if (channel) {

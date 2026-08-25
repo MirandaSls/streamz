@@ -65,6 +65,9 @@ model User {
   channelAccess    ChannelMember[]
   attachments      Attachment[]    @relation("AttachmentUploader")
   readStates       ReadState[]
+  // ── c-cargos ──
+  memberRoles      GuildMemberRole[]
+  channelOverrides ChannelOverride[]
 }
 
 // Até onde cada usuário leu cada canal. É o que decide "não lido" e o badge
@@ -112,6 +115,12 @@ model Guild {
   channels Channel[]
   invites  Invite[]
   bans     Ban[]
+  // ── c-cargos ──
+  description String?
+  // chave do objeto do ícone no storage; a URL é derivada na hora
+  iconKey     String?
+  roles       Role[]
+  memberRoles GuildMemberRole[]
 }
 
 model Ban {
@@ -186,6 +195,8 @@ model Channel {
   messages   Message[]
   members    ChannelMember[]
   readStates ReadState[]
+  // ── c-cargos ──
+  overrides  ChannelOverride[]
 
   @@index([guildId])
 }
@@ -263,4 +274,72 @@ model Reaction {
 
   @@unique([messageId, userId, emoji])
   @@index([messageId])
+}
+
+// ── c-cargos ──────────────────────────────────────────────────
+// Cargos, atribuições e regras por canal. A permissão efetiva é calculada por
+// `computePermissions` (@newdisc/shared) — ver docs/adr/0002.
+
+// Um cargo do servidor. `permissions` é o bitfield de `Permission`; os bits são
+// estáveis para sempre, porque o valor fica gravado aqui.
+model Role {
+  id          String   @id @default(cuid())
+  guildId     String
+  name        String
+  // "#rrggbb"; null = sem cor (o nome herda a cor padrão do tema)
+  color       String?
+  // hierarquia: maior = mais alto. O @everyone é sempre 0.
+  position    Int      @default(1)
+  permissions Int      @default(0)
+  // exibe os membros deste cargo numa seção própria da lista de membros
+  hoist       Boolean  @default(false)
+  mentionable Boolean  @default(false)
+  // o @everyone, criado com o servidor: não se apaga nem se atribui
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  guild     Guild             @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  members   GuildMemberRole[]
+  overrides ChannelOverride[]
+
+  @@index([guildId])
+}
+
+// N:N entre membro e cargo. Chama-se GuildMemberRole (e não MemberRole) porque
+// MemberRole já é o nome do enum de papel — modelo e enum não coexistem com o
+// mesmo nome. O @everyone NÃO gera linha aqui: vale para todo membro por
+// definição, e materializá-lo só criaria estado para manter sincronizado.
+model GuildMemberRole {
+  id      String @id @default(cuid())
+  guildId String
+  userId  String
+  roleId  String
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role  Role  @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@index([guildId, userId])
+  @@index([roleId])
+}
+
+// Regra de um canal para um cargo OU um usuário (nunca os dois). É a fonte da
+// verdade de canal privado (deny VIEW_CHANNEL no @everyone) e somente-leitura
+// (deny SEND_MESSAGES no @everyone); `Channel.private`/`readOnly` são espelho.
+model ChannelOverride {
+  id        String @id @default(cuid())
+  channelId String
+  roleId    String?
+  userId    String?
+  allow     Int    @default(0)
+  deny      Int    @default(0)
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  role    Role?   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, roleId])
+  @@unique([channelId, userId])
+  @@index([channelId])
 }
