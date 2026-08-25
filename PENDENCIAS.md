@@ -141,11 +141,22 @@ Ordem sugerida dos próximos blocos de features:
       lista de canais escondendo privados e UI de criar/gerenciar acesso.
       _Ainda um corte:_ não há matriz de overrides por papel/permissão fina
       (ex.: silenciar, gerenciar mensagens) — só os dois modos acima.
-- [ ] **DM não tem as features de mensagem** (reação, anexo, edição, remoção,
-      thread, busca) porque vive em tabelas separadas de `Channel`/`Message`.
-      Proposta de unificação, com SQL de migração e plano de execução, em
-      [`docs/adr/0001-unificar-dm-em-channel-message.md`](docs/adr/0001-unificar-dm-em-channel-message.md)
-      — mudança cross-cutting, decidir antes de implementar.
+- [x] ~~**DM não tem as features de mensagem**~~ — resolvido pela
+      [ADR-0001](docs/adr/0001-unificar-dm-em-channel-message.md): DM/grupo são
+      `Channel` sem servidor e ganham reação, anexo, edição, remoção, thread e
+      busca. _Typecheck e testes ok; falta validar ponta a ponta com o Postgres._
+- [ ] **Sem indicador de "digitando"** no web — o gateway emite `typing`, mas
+      nenhum componente escuta.
+- [ ] **Sem estado de leitura** (não lido/menções) — o modelo não guarda
+      `lastReadAt` por canal; o rail e a lista de canais não marcam novidade.
+- [ ] **Sem perfil**: não há editar avatar/nome/status manual (`UsersService`
+      só tem `getPublic`), nem promoção a ADMIN, nem renomear/apagar canal, nem
+      sair/apagar servidor, nem busca de usuário (DM só pela lista de membros).
+- [ ] **Presença não zera no boot**: se a API cair, quem estava ONLINE fica
+      ONLINE no banco até reconectar. Falta um `updateMany` para OFFLINE no
+      `onModuleInit` do gateway (ou presença fora do banco, via Redis).
+- [ ] **Sem CI nem imagem**: nenhum workflow (`.github/workflows`) roda
+      typecheck/lint/test, e não há `Dockerfile` para api/web.
 
 ---
 _Status atual: backend em Postgres (schema único + migration inicial; falta só
