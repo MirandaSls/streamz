@@ -1,3 +1,4 @@
+import { MAX_MESSAGE_LENGTH } from "@newdisc/shared";
 import type { Attachment, Message, PublicUser } from "@newdisc/shared";
 
 /**
@@ -28,9 +29,8 @@ export type ChatMessage = Message & {
  */
 export const RETENTION_LIMIT = 500;
 
-/** Limite de caracteres por mensagem — espelha o corte feito no gateway. */
-// TODO: importar de `@newdisc/shared` quando `MAX_MESSAGE_LENGTH` existir lá.
-export const MAX_MESSAGE_LENGTH = 2000;
+/** Limite de caracteres por mensagem — o mesmo que o gateway valida. */
+export { MAX_MESSAGE_LENGTH };
 
 /** Corta o excesso pelo topo (o mais antigo é o que dá para repaginar). */
 export function trim(items: ChatMessage[], limit = RETENTION_LIMIT): ChatMessage[] {
