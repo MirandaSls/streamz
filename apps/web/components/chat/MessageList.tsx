@@ -2,10 +2,14 @@
 
 import type { ReactNode } from "react";
 import { ArrowDown } from "lucide-react";
-import type { Message } from "@newdisc/shared";
+import { isSystemMessage, type Message } from "@newdisc/shared";
 import MessageItem from "@/components/MessageItem";
+import BlockedMessages from "@/components/chat/BlockedMessages";
+import SystemMessageItem from "@/components/chat/SystemMessageItem";
 import { useStickyScroll } from "@/hooks/useStickyScroll";
 import { continuaAnterior, mesmoDia, rotuloDoDia } from "@/lib/format";
+import { agruparBloqueadas, primeiraDoBloco } from "@/lib/timeline";
+import { useBlockedIds } from "@/stores/friends";
 import type { ChatMessage } from "@/stores/messages-core";
 
 /** Linha com a data entre dois dias de conversa. */
@@ -73,6 +77,8 @@ export default function MessageList({
     canLoadOlder: hasMore && !loadingOlder && Boolean(onLoadOlder),
     onReachTop: onLoadOlder,
   });
+  // ── d-social ── mensagens de quem eu bloqueei viram um bloco recolhido
+  const bloqueados = useBlockedIds();
 
   const atStart = !hasMore && !loading;
 
@@ -100,25 +106,39 @@ export default function MessageList({
           <div className="py-6 text-center text-sm text-txt-muted">{emptyText}</div>
         )}
 
-        {items.map((message, index) => {
-          const anterior = index > 0 ? items[index - 1] : undefined;
-          const novoDia = !anterior || !mesmoDia(anterior.createdAt, message.createdAt);
-          const grouped = !novoDia && continuaAnterior(anterior, message);
+        {agruparBloqueadas(items, bloqueados).map((bloco, index) => {
+          const primeira = primeiraDoBloco(bloco);
+          const anterior = bloco.anterior;
+          const novoDia = !anterior || !mesmoDia(anterior.createdAt, primeira.createdAt);
           return (
-            <div key={message.id}>
-              {novoDia && (atStart || anterior) && <DateDivider iso={message.createdAt} />}
-              <MessageItem
-                message={message}
-                grouped={grouped}
-                currentUserId={currentUserId}
-                canModerate={canModerate}
-                onEdit={onEdit}
-                onDelete={onDelete}
-                onToggleReaction={onToggleReaction}
-                onOpenThread={onOpenThread}
-                onRetry={onRetry}
-                onDiscard={onDiscard}
-              />
+            <div key={primeira.id}>
+              {novoDia && (atStart || anterior) && <DateDivider iso={primeira.createdAt} />}
+
+              {bloco.kind === "bloqueadas" ? (
+                <BlockedMessages
+                  items={bloco.items}
+                  currentUserId={currentUserId}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                  onToggleReaction={onToggleReaction}
+                />
+              ) : isSystemMessage(bloco.message) ? (
+                <SystemMessageItem message={bloco.message} />
+              ) : (
+                <MessageItem
+                  message={bloco.message}
+                  grouped={!novoDia && continuaAnterior(anterior, bloco.message)}
+                  currentUserId={currentUserId}
+                  canModerate={canModerate}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                  onToggleReaction={onToggleReaction}
+                  onOpenThread={onOpenThread}
+                  onRetry={onRetry}
+                  onDiscard={onDiscard}
+                />
+              )}
+
               {index === 0 && firstSeparator}
             </div>
           );

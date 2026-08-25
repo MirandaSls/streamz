@@ -15,12 +15,18 @@ import {
   type MessageDeletedEvent,
   type PresenceUpdatePayload,
   type PublicUser,
+  // ── d-social ──
+  type FriendAcceptedEvent,
+  type FriendRemovedEvent,
+  type FriendRequestEvent,
+  type UserBlockedEvent,
 } from "@newdisc/shared";
 import { notify } from "@/lib/desktop";
 import { useAuth } from "@/stores/auth";
 import { on, onReconnect, rejoinChannel } from "@/stores/socket-adapter";
 import { useChannels } from "@/stores/channels";
 import { dmTitle, useDMs } from "@/stores/dms";
+import { useFriends } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
 import { useMessages } from "@/stores/messages";
 import { usePresence } from "@/stores/presence";
@@ -124,11 +130,29 @@ export function useRealtime(currentUserId?: string): void {
         ui.toast(payload?.message || "Não foi possível concluir a ação", "error");
       }),
 
+      // ── d-social ── amigos, pedidos e bloqueio ao vivo
+      on<FriendRequestEvent>(WS_EVENTS.FRIEND_REQUEST, ({ request }) => {
+        useFriends.getState().handleRequest(request);
+        ui.toast(`${displayNameOf(request.user)} mandou um pedido de amizade.`);
+      }),
+      on<FriendAcceptedEvent>(WS_EVENTS.FRIEND_ACCEPTED, ({ user }) => {
+        useFriends.getState().handleAccepted(user);
+        ui.toast(`Você e ${displayNameOf(user)} agora são amigos.`);
+      }),
+      on<FriendRemovedEvent>(WS_EVENTS.FRIEND_REMOVED, ({ userId }) => {
+        useFriends.getState().handleRemoved(userId);
+      }),
+      on<UserBlockedEvent>(WS_EVENTS.USER_BLOCKED, () => {
+        // o bloqueio muda listas e o que a timeline esconde: recarrega tudo
+        void useFriends.getState().load(true);
+      }),
+
       onReconnect(() => {
         rejoinChannel();
         void useMessages.getState().resyncActive();
         void useGuilds.getState().load();
         void useDMs.getState().refreshList();
+        void useFriends.getState().load(true);
       }),
     ];
 

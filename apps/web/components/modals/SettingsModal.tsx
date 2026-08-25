@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Camera, LogOut } from "lucide-react";
 import { MAX_DISPLAY_NAME, displayNameOf } from "@newdisc/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
+import PerfilTab from "@/components/settings/PerfilTab";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";
@@ -33,7 +34,7 @@ export default function SettingsModal() {
     if (!dirty || saving) return;
     setSaving(true);
     try {
-      setUser(await api.updateProfile(displayName.trim() || null));
+      setUser(await api.updateProfile({ displayName: displayName.trim() || null }));
       ui.toast("Perfil salvo.");
     } catch (e) {
       ui.toast(errorMessage(e, "Não foi possível salvar"), "error");
@@ -57,7 +58,7 @@ export default function SettingsModal() {
     <Dialog
       title="Minha conta"
       onClose={closeModal}
-      className="w-[480px]"
+      className="w-[720px]"
       footer={
         <>
           <PrimaryButton disabled={!dirty || saving} onClick={() => void save()}>
@@ -127,6 +128,11 @@ export default function SettingsModal() {
       <p className="mt-1 text-xs text-txt-muted">
         É o nome que aparece nas mensagens. Vazio = usar @{user?.username}.
       </p>
+
+      {/* ── d-social ── perfil rico; o shell de abas definitivo é do agente E */}
+      <div className="mt-6 border-t border-[#3f4147] pt-5">
+        <PerfilTab />
+      </div>
 
       <button
         type="button"

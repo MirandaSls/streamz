@@ -42,7 +42,13 @@ export type Modal =
       initial: string;
       confirmLabel: string;
       resolve: (value: string | null) => void;
-    };
+    }
+  // ── d-social ──
+  | { kind: "customStatus" }
+  /** perfil completo de alguém; `guildId` é o servidor de onde o cartão abriu. */
+  | { kind: "userProfile"; userId: string; guildId?: string }
+  | { kind: "groupSettings"; channelId: string }
+  | { kind: "addGroupMembers"; channelId: string };
 
 /** Um item de menu de contexto; `separator` desenha a linha entre grupos. */
 export type MenuItem =

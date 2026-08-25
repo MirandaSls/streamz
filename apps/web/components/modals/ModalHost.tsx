@@ -9,6 +9,11 @@ import InviteModal from "@/components/modals/InviteModal";
 import InvitesModal from "@/components/modals/InvitesModal";
 import PromptDialog from "@/components/modals/PromptDialog";
 import SettingsModal from "@/components/modals/SettingsModal";
+// ── d-social ──
+import AddGroupMembersModal from "@/components/modals/AddGroupMembersModal";
+import CustomStatusModal from "@/components/modals/CustomStatusModal";
+import GroupSettingsModal from "@/components/modals/GroupSettingsModal";
+import UserProfileModal from "@/components/modals/UserProfileModal";
 import { useUI } from "@/stores/ui";
 
 /**
@@ -41,5 +46,14 @@ export default function ModalHost() {
       return <InvitesModal guildId={modal.guildId} />;
     case "image":
       return <ImageModal url={modal.url} alt={modal.alt} />;
+    // ── d-social ──
+    case "customStatus":
+      return <CustomStatusModal />;
+    case "userProfile":
+      return <UserProfileModal userId={modal.userId} guildId={modal.guildId} />;
+    case "groupSettings":
+      return <GroupSettingsModal channelId={modal.channelId} />;
+    case "addGroupMembers":
+      return <AddGroupMembersModal channelId={modal.channelId} />;
   }
 }

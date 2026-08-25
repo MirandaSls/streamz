@@ -1,5 +1,9 @@
+import { useEffect, useRef } from "react";
 import { create } from "zustand";
+import { IDLE_APOS_MS } from "@newdisc/shared";
 import type { PublicUser, UserStatus } from "@newdisc/shared";
+import { api } from "@/lib/api";
+import { useAuth } from "@/stores/auth";
 
 /**
  * Presença e perfil ao vivo, separados das listas.
@@ -69,4 +73,63 @@ export function useLiveUser(user: PublicUser): PublicUser {
   const status = usePresence((s) => s.statuses[user.id]);
   const base = profile ?? user;
   return status && status !== base.status ? { ...base, status } : base;
+}
+
+// ── d-social ── presença rica: ausente automático
+
+/**
+ * Marca o usuário como **Ausente** depois de `IDLE_APOS_MS` sem interação na
+ * aba, e o traz de volta ao primeiro sinal de vida — é o "ausente automático"
+ * do Discord.
+ *
+ * Quem detecta é o cliente (o servidor só vê o socket aberto, que continua
+ * aberto com a aba esquecida). Só mexemos em quem *não* escolheu um status: um
+ * "Não perturbe" ou "Invisível" explícito não pode ser sobrescrito por
+ * inatividade. E ao voltar só desfazemos o ausente que nós mesmos pusemos.
+ */
+export function useAutoIdle(enabled: boolean): void {
+  const posto = useRef(false);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let timer: number | undefined;
+
+    async function aplicar(status: UserStatus | null) {
+      try {
+        const atualizado = await api.updateStatus(status);
+        useAuth.getState().setUser(atualizado);
+      } catch {
+        // presença é informação de conforto: falhar aqui não merece um aviso
+      }
+    }
+
+    function ficarAusente() {
+      const me = useAuth.getState().user;
+      // manualStatus não vem no PublicUser; o proxy é o status efetivo: só
+      // promovemos a ausente quem está simplesmente online
+      if (!me || me.status !== "ONLINE" || posto.current) return;
+      posto.current = true;
+      void aplicar("IDLE");
+    }
+
+    function voltar() {
+      if (posto.current) {
+        posto.current = false;
+        void aplicar(null);
+      }
+      window.clearTimeout(timer);
+      timer = window.setTimeout(ficarAusente, IDLE_APOS_MS);
+    }
+
+    const eventos = ["mousemove", "keydown", "mousedown", "wheel", "touchstart", "focus"] as const;
+    for (const e of eventos) window.addEventListener(e, voltar, { passive: true });
+    document.addEventListener("visibilitychange", voltar);
+    timer = window.setTimeout(ficarAusente, IDLE_APOS_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+      for (const e of eventos) window.removeEventListener(e, voltar);
+      document.removeEventListener("visibilitychange", voltar);
+    };
+  }, [enabled]);
 }
