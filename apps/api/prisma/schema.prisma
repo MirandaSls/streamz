@@ -30,6 +30,7 @@ enum ChannelType {
   VOICE
   DM
   GROUP
+  ANNOUNCEMENT
 }
 
 enum MemberRole {
@@ -112,6 +113,8 @@ model Guild {
   channels Channel[]
   invites  Invite[]
   bans     Ban[]
+  // ── b-canais ──
+  categories Category[]
 }
 
 model Ban {
@@ -187,7 +190,20 @@ model Channel {
   members    ChannelMember[]
   readStates ReadState[]
 
+  // ── b-canais ──
+  // agrupamento visual da barra lateral; null = canal solto, no topo da lista
+  categoryId      String?
+  // descrição curta mostrada no cabeçalho do canal
+  topic           String?
+  // intervalo mínimo entre mensagens do mesmo autor (0 = desligado)
+  slowmodeSeconds Int      @default(0)
+  // conteúdo sensível: o cliente pede confirmação antes de abrir
+  nsfw            Boolean  @default(false)
+  // apagar a categoria não apaga os canais — eles voltam a ficar sem categoria
+  category        Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
   @@index([guildId])
+  @@index([categoryId])
 }
 
 // Duas leituras, mesma tabela: em canal de servidor privado é a allowlist de
@@ -263,4 +279,22 @@ model Reaction {
 
   @@unique([messageId, userId, emoji])
   @@index([messageId])
+}
+
+// ── b-canais ──
+// Categoria: agrupamento de canais na barra lateral de um servidor. Não
+// autoriza nada (quem decide acesso continua sendo GuildsService) e não muda
+// rota nenhuma — é ordem e rótulo. Apagá-la solta os canais (`SetNull`) em vez
+// de levá-los junto, que é o comportamento do Discord.
+model Category {
+  id        String   @id @default(cuid())
+  guildId   String
+  name      String
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  guild    Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  channels Channel[]
+
+  @@index([guildId])
 }
