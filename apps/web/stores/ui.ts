@@ -23,7 +23,7 @@ export type Modal =
   | { kind: "channelAccess"; channelId: string }
   | { kind: "invite"; code: string }
   | { kind: "createGroupDM" }
-  | { kind: "settings" }
+  | { kind: "settings"; tab?: string }
   | { kind: "invites"; guildId: string }
   | { kind: "image"; url: string; alt: string }
   | {
@@ -42,7 +42,9 @@ export type Modal =
       initial: string;
       confirmLabel: string;
       resolve: (value: string | null) => void;
-    };
+    }
+  // ── e-configuracoes ──
+  | { kind: "quickSwitcher" };
 
 /** Um item de menu de contexto; `separator` desenha a linha entre grupos. */
 export type MenuItem =
