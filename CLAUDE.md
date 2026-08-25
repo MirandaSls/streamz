@@ -23,8 +23,9 @@ de ambiente vive em `PENDENCIAS.md`; convenções visuais em `design.md`.
 
 ```
 apps/
-  api/       # NestJS — módulos por domínio (auth, guilds, channels, messages,
-             #   gateway, dms, voice, storage, uploads)
+  api/       # NestJS — módulos por domínio (auth, users, guilds, channels,
+             #   messages, read-state, embeds, gateway, dms, voice, storage,
+             #   uploads, maintenance)
   web/       # Next.js — login/registro + app de chat de 3 colunas (app/app/page.tsx)
   desktop/   # Tauri 2 — embrulha a web num instalador
 packages/
@@ -42,6 +43,8 @@ pnpm --filter @newdisc/shared build             # OBRIGATÓRIO após mexer em pa
 pnpm --filter @newdisc/api exec tsc --noEmit    # typecheck (sempre antes de commit)
 pnpm --filter @newdisc/api exec prisma generate # após mexer no schema.prisma
 pnpm db:up               # sobe o Postgres do docker-compose (só 127.0.0.1)
+pnpm db:embedded         # alternativa sem Docker: Postgres embutido em ./.pgdata (UTF-8)
+node scripts/e2e-visual.mjs --out ./e2e-shots   # passeio com screenshots (API+web no ar)
 pnpm db:migrate          # cria/aplica migration a partir do schema (dev)
 pnpm db:deploy           # aplica as migrations existentes (prod/CI)
 ```
@@ -95,6 +98,16 @@ participante). O retorno é a união discriminada `ChannelAccess` (`tipo: "guild
 "dm"`): quem precisa de papel é obrigado a tratar o ramo DM. Handlers e services
 **chamam** esses asserts; não reimplementam a regra. Ao criar rota/handler que
 toca um canal, comece pelo assert.
+
+### Salas do gateway e "não lido"
+No connect o socket entra em **todas** as salas que o usuário pode ver
+(`channel:<id>` de cada canal visível de cada servidor + conversas) e em
+`guild:<id>` (eventos de estrutura: canal criado/renomeado/apagado, papel,
+membro entrou/saiu). Por isso `message.new` chega para qualquer canal e o
+cliente mantém não-lido/menções ao vivo (`ReadState` no banco, `POST
+/channels/:id/read`). Quem ganha/perde acesso entra/sai da sala pelo
+`RealtimeService` — nunca dependa do `channel.join` do cliente para segurança.
+Com `REDIS_URL`, broadcast/presença/throttler são compartilhados entre instâncias.
 
 ### DM é canal (ADR-0001)
 Conversa direta e grupo são `Channel` com `guildId` null e `type` DM/GROUP;

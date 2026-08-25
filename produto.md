@@ -152,6 +152,42 @@ modera sua comunidade.
   de entrada, e é onde o ban é verificado.
 - **[corte MVP]** Não há revogar convite nem listar os convites de um servidor.
 
+## Não lido e menções
+
+- Cada usuário tem um `lastReadAt` por canal. **Não lido** = existe mensagem
+  depois disso (ou nunca abriu e há mensagem). Abrir o canal, ou receber
+  mensagem com o canal na tela e a janela visível, marca como lido.
+- **Menção** = `@username` no texto (limite de palavra), de outro autor, depois
+  de `lastReadAt`. Aparece como badge vermelho no rail, no canal e na DM; a
+  mensagem ganha faixa amarela para quem foi mencionado.
+- Mensagem de outro servidor/conversa fora da tela notifica se a janela está
+  escondida; dentro do app só menção e DM notificam.
+
+## Perfil
+
+- **Nome de exibição** (até 32 caracteres) é o que aparece em toda parte;
+  vazio = `@username`. **Avatar** por upload (imagem, até 4 MB; exige R2).
+- **Status manual**: Online (automático), Ausente, Não perturbe, Invisível
+  (aparece offline). Vale enquanto conectado; desconectar = offline.
+- Mudanças de perfil e status são vistas por todos na hora (`user.updated`).
+
+## Papéis e gestão
+
+- Só o **dono** promove a ADMIN / rebaixa a MEMBER; o dono não muda de papel
+  nem transfere a posse (**[corte MVP]**).
+- Moderação renomeia e apaga canal (o último canal de texto fica) e revoga
+  qualquer convite; quem criou revoga o próprio.
+- Qualquer membro sai do servidor, exceto o dono — o dono **apaga** o servidor
+  (canais, mensagens e convites em cascata).
+
+## Texto da mensagem
+
+- Markdown do Discord: `**negrito**`, `*itálico*`, `__sublinhado__`,
+  `~~riscado~~`, `` `código` ``, blocos ```` ``` ````, `||spoiler||`, `> citação`,
+  `#` títulos, links automáticos e `@menção`. Sem HTML.
+- A primeira URL da mensagem vira uma **prévia** (Open Graph) buscada pela API
+  (só http(s), hosts públicos, 512 KB, 5 s, cache de 1 h).
+
 ## Mensagens diretas (DMs)
 
 - **1-a-1:** um único canal por dupla, garantido por uma chave canônica (abrir a

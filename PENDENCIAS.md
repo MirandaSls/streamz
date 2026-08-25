@@ -15,6 +15,10 @@ no banco e migrations versionadas. Não há mais SQLite nem `db push`. O que fal
 - [x] **Migration inicial** em `apps/api/prisma/migrations/20260825000000_init/`
       — confere com o schema atual (`prisma migrate diff --from-empty`).
 - [ ] Subir o banco — escolha um:
+  - **Sem Docker (funciona hoje nesta máquina)**: `pnpm db:embedded` sobe um
+    Postgres embutido em `./.pgdata` (UTF-8, mesmas credenciais do compose).
+    Foi assim que a validação ponta a ponta de 2026-08-25 rodou — o Docker
+    Desktop não sobe aqui porque o WSL está sem distribuição.
   - **Docker Desktop**: `pnpm db:up` (sobe só o Postgres, exposto apenas em
       `127.0.0.1:5432`). `DATABASE_URL=`
       `postgresql://newdisc:newdisc@localhost:5432/newdisc?schema=public`.
@@ -152,14 +156,16 @@ Ordem sugerida dos próximos blocos de features:
       busca. _Typecheck e testes ok; falta validar ponta a ponta com o Postgres._
 - [x] ~~**Sem indicador de "digitando"**~~ — feito: `stores/typing.ts` +
       `TypingIndicator` sob o composer; o composer emite `typing` a cada 3s.
-- [ ] **Sem estado de leitura** (não lido/menções) — o modelo não guarda
-      `lastReadAt` por canal; o rail e a lista de canais não marcam novidade.
-- [ ] **Sem perfil**: não há editar avatar/nome/status manual (`UsersService`
-      só tem `getPublic`), nem promoção a ADMIN, nem renomear/apagar canal, nem
-      sair/apagar servidor, nem busca de usuário (DM só pela lista de membros).
-- [ ] **Presença não zera no boot**: se a API cair, quem estava ONLINE fica
-      ONLINE no banco até reconectar. Falta um `updateMany` para OFFLINE no
-      `onModuleInit` do gateway (ou presença fora do banco, via Redis).
+- [x] ~~**Sem estado de leitura**~~ — feito: `ReadState` (lastReadAt por
+      usuário/canal), badge de menções e pílula de não-lido no rail, canal em
+      negrito, "marcar como lido". Validado ponta a ponta (2 usuários).
+- [x] ~~**Sem perfil**~~ — feito: nome de exibição, avatar (precisa do R2),
+      status manual (Ausente/Não perturbe/Invisível), promover/rebaixar admin,
+      renomear/apagar canal, sair/apagar servidor, convites (listar/revogar),
+      busca de usuário para DM/grupo. Markdown, menções e prévia de link também.
+- [x] ~~**Presença não zera no boot**~~ — feito (`onModuleInit` do gateway).
+      Com `REDIS_URL` a presença, o broadcast do Socket.IO e o throttler passam a
+      ser compartilhados entre instâncias; sem, ficam por processo.
 - [ ] **Sem CI nem imagem**: nenhum workflow (`.github/workflows`) roda
       typecheck/lint/test, e não há `Dockerfile` para api/web.
 
