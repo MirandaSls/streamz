@@ -36,11 +36,13 @@ export default function ChatView() {
   }
 
   const readOnly = channel.readOnly && !canModerate;
+  // canal de servidor sempre tem nome; o tipo é nullable por causa das DMs
+  const name = channel.name ?? "canal";
 
   return (
     <main className="flex min-w-0 flex-1 flex-col bg-chat">
       <header className="flex items-center justify-between gap-3 border-b border-black/20 px-4 py-3">
-        <h1 className="truncate font-semibold"># {channel.name}</h1>
+        <h1 className="truncate font-semibold"># {name}</h1>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -51,7 +53,7 @@ export default function ChatView() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             type="search"
-            aria-label={`Buscar mensagens em ${channel.name}`}
+            aria-label={`Buscar mensagens em ${name}`}
             placeholder="Buscar mensagens…"
             className="w-52 rounded bg-rail px-3 py-1 text-sm outline-none"
           />
@@ -88,8 +90,8 @@ export default function ChatView() {
           <Composer
             key={channel.id}
             allowAttachments
-            placeholder={`Conversar em #${channel.name}`}
-            ariaLabel={`Mensagem para #${channel.name}`}
+            placeholder={`Conversar em #${name}`}
+            ariaLabel={`Mensagem para #${name}`}
             onSend={(content, attachments) =>
               send({ channelId: channel.id, author: user, content, attachments })
             }

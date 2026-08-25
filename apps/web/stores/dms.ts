@@ -1,128 +1,155 @@
 import { create } from "zustand";
-import { WS_EVENTS, type DirectMessage, type DMChannelView, type PublicUser } from "@newdisc/shared";
+import {
+  isDirectChannel,
+  isGroupChannel,
+  type DMChannelView,
+  type PublicUser,
+} from "@newdisc/shared";
 import { api } from "@/lib/api";
-import { emit, errorMessage } from "@/stores/socket-adapter";
+import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
 import { useChannels } from "@/stores/channels";
-import { MAX_MESSAGE_LENGTH } from "@/stores/messages-core";
+import { useMessages } from "@/stores/messages";
 
 /**
- * Mensagens diretas: lista de conversas, conversa aberta e seu histórico.
+ * Conversas diretas: a lista e qual está aberta.
  *
- * Diferente dos canais, a entrega ao vivo não passa por sala de canal — o
- * gateway emite `dm.new` para a sala pessoal de cada participante. Por isso não
- * há join/leave aqui.
+ * Desde a ADR-0001 uma conversa é um canal como outro qualquer — histórico,
+ * envio, reação, anexo e thread vivem em `useMessages`, e a entrega ao vivo vem
+ * pela sala `channel:<id>` (o gateway põe o socket nas salas de todas as
+ * conversas no connect). Esta store só sabe *quais* conversas existem e qual
+ * está na tela; abrir uma delas é `useMessages.open(id)`.
  */
-
-/** Teto de mensagens da conversa aberta (mesma razão da timeline de canal). */
-const RETENTION_LIMIT = 500;
 
 interface DMsState {
   channels: DMChannelView[];
   activeId: string | null;
-  messages: DirectMessage[];
   loadingList: boolean;
-  loadingMessages: boolean;
 
+  /** Entra no modo DM e (re)carrega a lista. */
   openList: () => Promise<void>;
-  select: (dm: DMChannelView) => Promise<void>;
+  /** Recarrega a lista sem mudar de modo (ex.: chegou mensagem de conversa nova). */
+  refreshList: () => Promise<void>;
+  select: (dm: DMChannelView) => void;
   openWith: (userId: string) => Promise<void>;
   createGroup: (userIds: string[], name?: string) => Promise<boolean>;
-  send: (content: string) => void;
-  handleNew: (message: DirectMessage) => void;
+  leaveGroup: (channelId: string) => Promise<void>;
   clear: () => void;
 }
 
-/** Guarda de corrida do histórico da conversa aberta. */
-let historySeq = 0;
+/** Guarda de corrida da lista. */
+let listSeq = 0;
 
-export const useDMs = create<DMsState>((set, get) => ({
-  channels: [],
-  activeId: null,
-  messages: [],
-  loadingList: false,
-  loadingMessages: false,
+export const useDMs = create<DMsState>((set, get) => {
+  async function fetchList(): Promise<DMChannelView[] | null> {
+    const seq = ++listSeq;
+    set({ loadingList: true });
+    try {
+      const channels = await api.listDMs();
+      if (seq !== listSeq) return null;
+      set({ channels, loadingList: false });
+      return channels;
+    } catch (e) {
+      if (seq !== listSeq) return null;
+      set({ loadingList: false });
+      ui.toast(errorMessage(e, "Não foi possível carregar suas conversas"), "error");
+      return null;
+    }
+  }
 
-  openList: async () => {
+  /** Mostra a conversa na área principal e abre o canal dela. */
+  function show(dm: DMChannelView) {
     ui.setView("dm");
     // sai da call de voz: a área principal passa a ser a conversa
     useChannels.getState().leaveVoice();
-    set({ loadingList: true });
-    try {
-      const channels = (await api.listDMs()) as DMChannelView[];
-      set({ channels, loadingList: false });
-    } catch (e) {
-      set({ loadingList: false });
-      ui.toast(errorMessage(e, "Não foi possível carregar suas conversas"), "error");
-    }
-  },
+    set({ activeId: dm.id });
+    // sticky: a sala de uma conversa nunca é abandonada ao trocar de canal —
+    // é assim que a DM continua chegando enquanto se navega pelo servidor
+    void useMessages.getState().open(dm.id, { sticky: true });
+  }
 
-  select: async (dm) => {
-    const seq = ++historySeq;
-    set({ activeId: dm.id, messages: [], loadingMessages: true });
-    try {
-      const messages = (await api.dmHistory(dm.id)) as DirectMessage[];
-      if (seq !== historySeq) return; // trocaram de conversa no meio do fetch
-      set({ messages, loadingMessages: false });
-    } catch (e) {
-      if (seq !== historySeq) return;
-      set({ messages: [], loadingMessages: false });
-      ui.toast(errorMessage(e, "Não foi possível abrir a conversa"), "error");
-    }
-  },
+  return {
+    channels: [],
+    activeId: null,
+    loadingList: false,
 
-  openWith: async (userId) => {
-    try {
-      const dm = (await api.openDM(userId)) as DMChannelView;
+    openList: async () => {
       ui.setView("dm");
       useChannels.getState().leaveVoice();
-      set((s) => ({
-        channels: s.channels.some((d) => d.id === dm.id) ? s.channels : [dm, ...s.channels],
-      }));
-      await get().select(dm);
-    } catch (e) {
-      ui.toast(errorMessage(e, "Não foi possível abrir a conversa"), "error");
-    }
-  },
+      const active = get().activeId;
+      // voltar para a conversa que já estava aberta não refaz o histórico
+      if (active) void useMessages.getState().open(active, { sticky: true });
+      await fetchList();
+    },
 
-  createGroup: async (userIds, name) => {
-    if (userIds.length < 2) return false;
-    try {
-      const dm = (await api.createGroupDM(userIds, name)) as DMChannelView;
-      set((s) => ({ channels: [dm, ...s.channels] }));
-      await get().select(dm);
-      return true;
-    } catch (e) {
-      ui.toast(errorMessage(e, "Não foi possível criar o grupo"), "error");
-      return false;
-    }
-  },
+    refreshList: async () => {
+      await fetchList();
+    },
 
-  send: (content) => {
-    const dmChannelId = get().activeId;
-    const text = content.trim().slice(0, MAX_MESSAGE_LENGTH);
-    if (!dmChannelId || !text) return;
-    emit(WS_EVENTS.DM_CREATE, { dmChannelId, content: text });
-  },
+    select: (dm) => show(dm),
 
-  handleNew: (message) => {
-    if (message.dmChannelId !== get().activeId) return;
-    set((s) => {
-      if (s.messages.some((m) => m.id === message.id)) return s;
-      const next = [...s.messages, message];
-      return { messages: next.length > RETENTION_LIMIT ? next.slice(next.length - RETENTION_LIMIT) : next };
-    });
-  },
+    openWith: async (userId) => {
+      try {
+        const dm = await api.openDM(userId);
+        set((s) => ({
+          channels: s.channels.some((d) => d.id === dm.id) ? s.channels : [dm, ...s.channels],
+        }));
+        show(dm);
+      } catch (e) {
+        ui.toast(errorMessage(e, "Não foi possível abrir a conversa"), "error");
+      }
+    },
 
-  clear: () => {
-    ++historySeq;
-    set({ channels: [], activeId: null, messages: [], loadingMessages: false });
-  },
-}));
+    createGroup: async (userIds, name) => {
+      if (userIds.length < 2) return false;
+      try {
+        const dm = await api.createGroupDM(userIds, name);
+        set((s) => ({ channels: [dm, ...s.channels] }));
+        show(dm);
+        return true;
+      } catch (e) {
+        ui.toast(errorMessage(e, "Não foi possível criar o grupo"), "error");
+        return false;
+      }
+    },
+
+    leaveGroup: async (channelId) => {
+      const ok = await ui.confirm({
+        title: "Sair do grupo?",
+        message: "Você deixa de ver as mensagens dele. Se for o último, o grupo é apagado.",
+        confirmLabel: "Sair",
+        danger: true,
+      });
+      if (!ok) return;
+      try {
+        await api.leaveGroupDM(channelId);
+        set((s) => ({
+          channels: s.channels.filter((d) => d.id !== channelId),
+          activeId: s.activeId === channelId ? null : s.activeId,
+        }));
+        if (useMessages.getState().activeChannelId === channelId) {
+          useMessages.getState().closeChannel();
+        }
+      } catch (e) {
+        ui.toast(errorMessage(e, "Não foi possível sair do grupo"), "error");
+      }
+    },
+
+    clear: () => {
+      ++listSeq;
+      set({ channels: [], activeId: null, loadingList: false });
+    },
+  };
+});
+
+/** Conversa aberta (objeto completo), ou null. */
+export function useActiveDM(): DMChannelView | null {
+  return useDMs((s) => s.channels.find((d) => d.id === s.activeId) ?? null);
+}
 
 /** Nome de exibição de uma conversa (grupo tem nome; 1-a-1 usa o outro). */
 export function dmTitle(dm: DMChannelView): string {
-  if (dm.isGroup) {
+  if (isGroupChannel(dm)) {
     return dm.name || dm.others.map((u) => u.username).join(", ") || "Grupo";
   }
   return dm.others[0]?.username ?? "Conversa";
@@ -136,7 +163,7 @@ export function dmTitle(dm: DMChannelView): string {
 export function contactsFromDMs(channels: DMChannelView[]): PublicUser[] {
   const byId = new Map<string, PublicUser>();
   for (const dm of channels) {
-    if (dm.isGroup) continue;
+    if (!isDirectChannel(dm) || isGroupChannel(dm)) continue;
     for (const user of dm.others) byId.set(user.id, user);
   }
   return Array.from(byId.values());

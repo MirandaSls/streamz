@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Channel, ChannelType, GuildMemberView } from "@newdisc/shared";
+import type { Channel, GuildChannelType, GuildMemberView } from "@newdisc/shared";
 import { api } from "@/lib/api";
 import { errorMessage, leaveChannel } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
@@ -15,7 +15,7 @@ import { useMessages } from "@/stores/messages";
 
 export interface CreateChannelInput {
   name: string;
-  type: ChannelType;
+  type: GuildChannelType;
   isPrivate: boolean;
   readOnly: boolean;
   memberIds: string[];
@@ -106,7 +106,7 @@ export const useChannels = create<ChannelsState>((set, get) => ({
         memberIds: input.isPrivate ? input.memberIds : undefined,
       })) as Channel;
       set((s) => ({ channels: [...s.channels, channel] }));
-      ui.toast(`Canal ${channel.name} criado`);
+      ui.toast(`Canal ${channel.name ?? name} criado`);
       return true;
     } catch (e) {
       ui.toast(errorMessage(e, "Não foi possível criar o canal"), "error");

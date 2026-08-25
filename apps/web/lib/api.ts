@@ -1,4 +1,11 @@
-import type { Attachment, AuthTokens, PublicUser } from "@newdisc/shared";
+import type {
+  Attachment,
+  AuthTokens,
+  DMChannelView,
+  DMLeaveResult,
+  GuildChannelType,
+  PublicUser,
+} from "@newdisc/shared";
 import { API_URL } from "./config";
 import { ApiError } from "./api-error";
 import { getAccessToken, renovarTokens } from "./session";
@@ -89,16 +96,19 @@ export const api = {
   redeemInvite: (code: string) =>
     request<{ id: string; name: string }>(`/invites/${code}/redeem`, { method: "POST" }),
 
+  // Conversas diretas são canais (ADR-0001): histórico, busca e thread usam
+  // `history`/`searchMessages`/`thread` abaixo com o id da conversa.
   openDM: (userId: string) =>
-    request<any>(`/dms`, { method: "POST", body: JSON.stringify({ userId }) }),
+    request<DMChannelView>(`/dms`, { method: "POST", body: JSON.stringify({ userId }) }),
   createGroupDM: (userIds: string[], name?: string) =>
-    request<any>(`/dms/group`, {
+    request<DMChannelView>(`/dms/group`, {
       method: "POST",
       body: JSON.stringify({ userIds, name }),
     }),
-  listDMs: () => request<any[]>(`/dms`),
-  dmHistory: (dmChannelId: string, cursor?: string) =>
-    request<any[]>(`/dms/${dmChannelId}/messages${cursor ? `?cursor=${cursor}` : ""}`),
+  listDMs: () => request<DMChannelView[]>(`/dms`),
+  getDM: (channelId: string) => request<DMChannelView>(`/dms/${channelId}`),
+  leaveGroupDM: (channelId: string) =>
+    request<DMLeaveResult>(`/dms/${channelId}/leave`, { method: "POST" }),
 
   kickMember: (guildId: string, userId: string) =>
     request<any>(`/guilds/${guildId}/kick`, { method: "POST", body: JSON.stringify({ userId }) }),
@@ -111,7 +121,7 @@ export const api = {
   createChannel: (
     guildId: string,
     name: string,
-    type: "TEXT" | "VOICE",
+    type: GuildChannelType,
     opts?: { isPrivate?: boolean; readOnly?: boolean; memberIds?: string[] },
   ) =>
     request<any>(`/guilds/${guildId}/channels`, {

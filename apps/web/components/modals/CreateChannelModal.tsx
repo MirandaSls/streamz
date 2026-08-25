@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { ChannelType } from "@newdisc/shared";
+import type { GuildChannelType } from "@newdisc/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { useAuth } from "@/stores/auth";
 import { useCanModerate, useGuilds } from "@/stores/guilds";
@@ -18,7 +18,7 @@ export default function CreateChannelModal() {
   const create = useChannels((s) => s.create);
 
   const [name, setName] = useState("");
-  const [type, setType] = useState<ChannelType>("TEXT");
+  const [type, setType] = useState<GuildChannelType>("TEXT");
   const [isPrivate, setPrivate] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
   const [picks, setPicks] = useState<string[]>([]);

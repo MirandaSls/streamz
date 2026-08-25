@@ -15,7 +15,7 @@ import Toasts from "@/components/ui/Toasts";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/stores/auth";
 import { useActiveChannel, useChannels, useVoiceChannel } from "@/stores/channels";
-import { useDMs } from "@/stores/dms";
+import { useActiveDM, useDMs } from "@/stores/dms";
 import { useCanModerate, useGuilds } from "@/stores/guilds";
 import { useMessages } from "@/stores/messages";
 import { useUI } from "@/stores/ui";
@@ -44,6 +44,7 @@ export default function AppPage() {
   const ban = useGuilds((s) => s.ban);
   const canModerate = useCanModerate(user?.id);
   const openDMWith = useDMs((s) => s.openWith);
+  const activeDM = useActiveDM();
 
   useRealtime(user?.id);
 
@@ -67,6 +68,8 @@ export default function AppPage() {
         <>
           <DMList />
           <DMView />
+          {/* thread funciona em DM como em qualquer canal (ADR-0001) */}
+          {activeDM && threadParentId && <ThreadPanel channelId={activeDM.id} />}
         </>
       ) : (
         <>
@@ -78,7 +81,7 @@ export default function AppPage() {
                 // remontar por canal reinicia a conexão com a sala certa
                 key={voiceChannel.id}
                 channelId={voiceChannel.id}
-                channelName={voiceChannel.name}
+                channelName={voiceChannel.name ?? "voz"}
                 onLeave={leaveVoice}
               />
             </main>

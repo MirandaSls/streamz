@@ -105,7 +105,8 @@ interface MessagesState {
   searchResults: Message[] | null;
   searching: boolean;
 
-  open: (channelId: string) => Promise<void>;
+  /** `sticky`: a sala não é abandonada ao trocar de canal (conversas diretas). */
+  open: (channelId: string, opts?: { sticky?: boolean }) => Promise<void>;
   closeChannel: () => void;
   /** Recarrega o histórico do canal ativo (usado após reconexão). */
   resyncActive: () => Promise<void>;
@@ -232,8 +233,11 @@ export const useMessages = create<MessagesState>((set, get) => {
     searchResults: null,
     searching: false,
 
-    open: async (channelId) => {
-      if (get().activeChannelId === channelId) return;
+    open: async (channelId, opts = {}) => {
+      if (get().activeChannelId === channelId) {
+        joinChannel(channelId, opts); // idempotente; só garante a marcação sticky
+        return;
+      }
       set({
         activeChannelId: channelId,
         threadParentId: null,
@@ -244,7 +248,7 @@ export const useMessages = create<MessagesState>((set, get) => {
         searching: false,
       });
       touchChannel(channelId);
-      joinChannel(channelId);
+      joinChannel(channelId, opts);
       await fetchHistory(channelId);
     },
 

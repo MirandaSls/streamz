@@ -1,16 +1,35 @@
 "use client";
 
+import { isGroupChannel } from "@newdisc/shared";
 import Composer from "@/components/chat/Composer";
-import { useStickyScroll } from "@/hooks/useStickyScroll";
-import { dmTitle, useDMs } from "@/stores/dms";
+import MessageList from "@/components/chat/MessageList";
+import SearchPanel from "@/components/chat/SearchPanel";
+import { useAuth } from "@/stores/auth";
+import { dmTitle, useActiveDM } from "@/stores/dms";
+import { useActiveSlice, useMessages } from "@/stores/messages";
 
-/** Coluna 3 no modo DM: conversa aberta. */
+/**
+ * Coluna 3 no modo DM: conversa aberta.
+ *
+ * É a mesma timeline do canal de servidor (`ChatView`) — a conversa é um canal
+ * — só muda o cabeçalho e o fato de não haver moderação: em DM só o autor apaga.
+ */
 export default function DMView() {
-  const active = useDMs((s) => s.channels.find((d) => d.id === s.activeId) ?? null);
-  const messages = useDMs((s) => s.messages);
-  const loading = useDMs((s) => s.loadingMessages);
-  const send = useDMs((s) => s.send);
-  const { scrollRef, handleScroll, showJump, jumpToLatest } = useStickyScroll(messages);
+  const user = useAuth((s) => s.user);
+  const active = useActiveDM();
+  const slice = useActiveSlice();
+
+  const searchQuery = useMessages((s) => s.searchQuery);
+  const setSearchQuery = useMessages((s) => s.setSearchQuery);
+  const runSearch = useMessages((s) => s.runSearch);
+  const loadOlder = useMessages((s) => s.loadOlder);
+  const send = useMessages((s) => s.send);
+  const edit = useMessages((s) => s.edit);
+  const remove = useMessages((s) => s.remove);
+  const toggleReaction = useMessages((s) => s.toggleReaction);
+  const openThread = useMessages((s) => s.openThread);
+  const retry = useMessages((s) => s.retry);
+  const discard = useMessages((s) => s.discard);
 
   if (!active) {
     return (
@@ -24,52 +43,60 @@ export default function DMView() {
 
   return (
     <main className="flex min-w-0 flex-1 flex-col bg-chat">
-      <header className="border-b border-black/20 px-4 py-3 font-semibold">
-        <span aria-hidden="true">{active.isGroup ? "👥 " : "@ "}</span>
-        {title}
+      <header className="flex items-center justify-between gap-3 border-b border-black/20 px-4 py-3">
+        <h1 className="truncate font-semibold">
+          <span aria-hidden="true">{isGroupChannel(active) ? "👥 " : "@ "}</span>
+          {title}
+        </h1>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void runSearch(active.id);
+          }}
+        >
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            type="search"
+            aria-label={`Buscar mensagens em ${title}`}
+            placeholder="Buscar mensagens…"
+            className="w-52 rounded bg-rail px-3 py-1 text-sm outline-none"
+          />
+        </form>
       </header>
 
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        <div
-          ref={scrollRef}
-          onScroll={handleScroll}
-          className="flex-1 overflow-y-auto px-4 py-3"
-        >
-          {loading && messages.length === 0 && (
-            <div className="py-6 text-center text-sm text-neutral-500">Carregando…</div>
-          )}
-          {!loading && messages.length === 0 && (
-            <div className="py-6 text-center text-sm text-neutral-500">
-              Nenhuma mensagem ainda. Diga um oi.
-            </div>
-          )}
-          {messages.map((m) => (
-            <div key={m.id} className="mb-2">
-              <span className="mr-2 font-semibold text-white">{m.author.username}</span>
-              <span className="text-xs text-neutral-500">
-                {new Date(m.createdAt).toLocaleTimeString()}
-              </span>
-              <div className="whitespace-pre-wrap text-neutral-200">{m.content}</div>
-            </div>
-          ))}
-        </div>
-        {showJump && (
-          <button
-            type="button"
-            onClick={jumpToLatest}
-            className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-accent px-3 py-1 text-xs font-medium text-white shadow-lg"
-          >
-            ↓ Mensagens novas
-          </button>
-        )}
-      </div>
+      <SearchPanel />
 
-      <Composer
+      <MessageList
+        // remonta a cada conversa para zerar a rolagem e os marcadores de posição
         key={active.id}
-        placeholder={`Conversar em ${title}`}
-        ariaLabel={`Mensagem para ${title}`}
-        onSend={(content) => send(content)}
+        items={slice.items}
+        hasMore={slice.hasMore}
+        loading={slice.loading}
+        loadingOlder={slice.loadingOlder}
+        onLoadOlder={() => void loadOlder(active.id)}
+        currentUserId={user?.id}
+        canModerate={false}
+        onEdit={edit}
+        onDelete={(id) => void remove(id)}
+        onToggleReaction={(id, emoji) => toggleReaction(id, emoji, user?.id)}
+        onOpenThread={(message) => void openThread(active.id, message)}
+        onRetry={retry}
+        onDiscard={discard}
+        emptyText="Nenhuma mensagem ainda. Diga um oi."
       />
+
+      {user && (
+        <Composer
+          key={active.id}
+          allowAttachments
+          placeholder={`Conversar em ${title}`}
+          ariaLabel={`Mensagem para ${title}`}
+          onSend={(content, attachments) =>
+            send({ channelId: active.id, author: user, content, attachments })
+          }
+        />
+      )}
     </main>
   );
 }

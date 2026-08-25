@@ -42,17 +42,27 @@ export function onReconnect(cb: () => void): () => void {
   return aoReconectar(cb);
 }
 
-/** Sala do canal de texto atualmente aberto — para sair dela ao trocar. */
+/** Sala do canal atualmente aberto — para sair dela ao trocar. */
 let joined: string | null = null;
 
-export function joinChannel(channelId: string): void {
+/**
+ * Salas que ficam abertas mesmo quando o canal deixa de ser o ativo. São as
+ * conversas diretas: o usuário quer continuar recebendo a DM (e ser avisado)
+ * enquanto navega pelo servidor. Canal de servidor, ao contrário, só entrega ao
+ * vivo enquanto está na tela.
+ */
+const sticky = new Set<string>();
+
+export function joinChannel(channelId: string, opts: { sticky?: boolean } = {}): void {
+  if (opts.sticky) sticky.add(channelId);
   if (joined === channelId) return;
-  if (joined) leaveChannel(joined);
+  if (joined && !sticky.has(joined)) leaveChannel(joined);
   acompanharCanal(channelId);
   joined = channelId;
 }
 
 export function leaveChannel(channelId: string): void {
+  sticky.delete(channelId);
   deixarCanal(channelId);
   if (joined === channelId) joined = null;
 }

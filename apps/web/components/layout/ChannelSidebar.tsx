@@ -113,7 +113,7 @@ export default function ChannelSidebar() {
                 <span aria-hidden="true" className="text-neutral-500">
                   {channelIcon(channel)}
                 </span>
-                <span className="truncate">{channel.name}</span>
+                <span className="truncate">{channel.name ?? "canal"}</span>
                 {channel.readOnly && (
                   <span aria-label="Somente leitura" title="Somente leitura">
                     📢
@@ -124,7 +124,7 @@ export default function ChannelSidebar() {
                 <button
                   type="button"
                   onClick={() => openModal({ kind: "channelAccess", channelId: channel.id })}
-                  aria-label={`Gerenciar acesso de ${channel.name}`}
+                  aria-label={`Gerenciar acesso de ${channel.name ?? "canal"}`}
                   title="Gerenciar acesso"
                   className="hidden text-xs text-neutral-400 transition hover:text-white group-focus-within:block group-hover:block"
                 >

@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
 import { useChannels } from "@/stores/channels";
+import { useMessages } from "@/stores/messages";
 import { usePresence } from "@/stores/presence";
 
 /**
@@ -75,8 +76,13 @@ export const useGuilds = create<GuildsState>((set, get) => {
 
     select: (guild) => {
       ui.setView("guild");
-      // voltar do modo DM para o servidor que já estava aberto não refaz fetch
-      if (get().activeGuildId === guild.id) return;
+      // voltar do modo DM para o servidor que já estava aberto não refaz fetch —
+      // só devolve a timeline ao canal que estava na tela (a DM ocupava o lugar)
+      if (get().activeGuildId === guild.id) {
+        const channelId = useChannels.getState().activeChannelId;
+        if (channelId) void useMessages.getState().open(channelId);
+        return;
+      }
       set({ activeGuildId: guild.id });
       void loadMembers(guild.id);
       void useChannels.getState().loadForGuild(guild.id);
