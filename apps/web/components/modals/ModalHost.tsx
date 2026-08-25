@@ -4,8 +4,10 @@ import ChannelAccessModal from "@/components/modals/ChannelAccessModal";
 import ConfirmDialog from "@/components/modals/ConfirmDialog";
 import CreateChannelModal from "@/components/modals/CreateChannelModal";
 import CreateGroupDMModal from "@/components/modals/CreateGroupDMModal";
+import ImageModal from "@/components/modals/ImageModal";
 import InviteModal from "@/components/modals/InviteModal";
 import PromptDialog from "@/components/modals/PromptDialog";
+import SettingsModal from "@/components/modals/SettingsModal";
 import { useUI } from "@/stores/ui";
 
 /**
@@ -32,5 +34,9 @@ export default function ModalHost() {
       return <InviteModal code={modal.code} />;
     case "createGroupDM":
       return <CreateGroupDMModal />;
+    case "settings":
+      return <SettingsModal />;
+    case "image":
+      return <ImageModal url={modal.url} alt={modal.alt} />;
   }
 }

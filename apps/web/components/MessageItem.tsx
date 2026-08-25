@@ -1,11 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
+import {
+  Copy,
+  FileText,
+  MessageSquare,
+  MoreHorizontal,
+  Pencil,
+  SmilePlus,
+  Trash2,
+} from "lucide-react";
 import type { Attachment, Message } from "@newdisc/shared";
 import { isImageAttachment } from "@newdisc/shared";
+import Avatar from "@/components/ui/Avatar";
+import EmojiPicker from "@/components/ui/EmojiPicker";
+import Tooltip from "@/components/ui/Tooltip";
+import { hora, horaCompleta } from "@/lib/format";
 import type { ChatMessage } from "@/stores/messages-core";
-
-const QUICK_EMOJIS = ["👍", "❤️", "🔥", "😂", "🎉", "😢"];
+import { anchorOf, ui, type MenuItem } from "@/stores/ui";
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -19,12 +31,12 @@ function AttachmentView({ attachments }: { attachments: Attachment[] }) {
     <div className="mt-1 flex flex-col gap-2">
       {attachments.map((a) =>
         isImageAttachment(a) ? (
-          <a
+          <button
             key={a.id}
-            href={a.url}
-            target="_blank"
-            rel="noreferrer"
-            className="block w-fit"
+            type="button"
+            onClick={() => ui.openModal({ kind: "image", url: a.url, alt: a.filename })}
+            aria-label={`Abrir imagem ${a.filename}`}
+            className="block w-fit cursor-zoom-in overflow-hidden rounded-lg"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -32,9 +44,9 @@ function AttachmentView({ attachments }: { attachments: Attachment[] }) {
               alt={a.filename}
               width={a.width ?? undefined}
               height={a.height ?? undefined}
-              className="max-h-80 max-w-md rounded-lg object-contain"
+              className="max-h-[350px] max-w-[550px] object-contain"
             />
-          </a>
+          </button>
         ) : (
           <a
             key={a.id}
@@ -42,14 +54,12 @@ function AttachmentView({ attachments }: { attachments: Attachment[] }) {
             target="_blank"
             rel="noreferrer"
             download={a.filename}
-            className="flex w-fit max-w-md items-center gap-3 rounded-lg bg-rail px-3 py-2 text-sm hover:brightness-110"
+            className="flex w-[432px] max-w-full items-center gap-3 rounded-lg border border-black/30 bg-panel p-4 hover:bg-hov"
           >
-            <span className="text-xl">📎</span>
+            <FileText size={40} strokeWidth={1.25} className="shrink-0 text-txt-muted" aria-hidden="true" />
             <span className="min-w-0">
-              <span className="block truncate font-medium text-accent">
-                {a.filename}
-              </span>
-              <span className="text-xs text-neutral-500">{formatBytes(a.size)}</span>
+              <span className="block truncate font-medium text-txt-link hover:underline">{a.filename}</span>
+              <span className="text-xs text-txt-muted">{formatBytes(a.size)}</span>
             </span>
           </a>
         ),
@@ -58,8 +68,43 @@ function AttachmentView({ attachments }: { attachments: Attachment[] }) {
   );
 }
 
+/** Ícone-botão da barra de ações que aparece no hover da mensagem. */
+function ActionButton({
+  label,
+  onClick,
+  danger = false,
+  children,
+}: {
+  label: string;
+  onClick: (e: MouseEvent<HTMLButtonElement>) => void;
+  danger?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip label={label}>
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={label}
+        className={`grid h-8 w-8 place-items-center rounded-[3px] text-txt-secondary transition hover:bg-hov ${
+          danger ? "hover:text-red" : "hover:text-txt-primary"
+        }`}
+      >
+        {children}
+      </button>
+    </Tooltip>
+  );
+}
+
+/**
+ * Uma mensagem, no leiaute do Discord: avatar de 40px à esquerda, nome e hora na
+ * primeira linha, corpo abaixo. Quando `grouped`, é a continuação da anterior
+ * (mesmo autor, poucos minutos) e só mostra o corpo, com a hora na margem ao
+ * passar o mouse.
+ */
 export default function MessageItem({
   message,
+  grouped = false,
   currentUserId,
   canModerate,
   onEdit,
@@ -70,6 +115,7 @@ export default function MessageItem({
   onDiscard,
 }: {
   message: ChatMessage;
+  grouped?: boolean;
   currentUserId?: string;
   canModerate?: boolean;
   onEdit: (id: string, content: string) => void;
@@ -92,179 +138,249 @@ export default function MessageItem({
   const unconfirmed = Boolean(message.pending || message.failed);
   const canDelete = isOwn || Boolean(canModerate);
 
-  function submitEdit(e: React.FormEvent) {
-    e.preventDefault();
+  function submitEdit() {
     const t = draft.trim();
     if (t && t !== message.content) onEdit(message.id, t);
     setEditing(false);
   }
 
+  function startEdit() {
+    setDraft(message.content);
+    setEditing(true);
+  }
+
+  function openProfile(e: MouseEvent<HTMLElement>) {
+    ui.openProfile(message.author, anchorOf(e.currentTarget));
+  }
+
+  function openMenu(e: MouseEvent) {
+    if (unconfirmed) return;
+    e.preventDefault();
+    const items: MenuItem[] = [
+      { label: "Adicionar reação", icon: <SmilePlus size={18} />, onSelect: () => setPicking(true) },
+    ];
+    if (onOpenThread) {
+      items.push({
+        label: "Responder na thread",
+        icon: <MessageSquare size={18} />,
+        onSelect: () => onOpenThread(message),
+      });
+    }
+    if (isOwn) items.push({ label: "Editar mensagem", icon: <Pencil size={18} />, onSelect: startEdit });
+    items.push({ separator: true });
+    items.push({
+      label: "Copiar texto",
+      icon: <Copy size={18} />,
+      disabled: !message.content,
+      onSelect: () => void navigator.clipboard?.writeText(message.content),
+    });
+    items.push({
+      label: "Copiar ID da mensagem",
+      onSelect: () => void navigator.clipboard?.writeText(message.id),
+    });
+    if (canDelete) {
+      items.push({ separator: true });
+      items.push({
+        label: "Apagar mensagem",
+        icon: <Trash2 size={18} />,
+        danger: true,
+        onSelect: () => onDelete(message.id),
+      });
+    }
+    ui.openContextMenu(e.clientX, e.clientY, items);
+  }
+
   return (
     <div
-      className={`group relative mb-2 rounded px-2 py-1 hover:bg-black/10 ${
-        message.pending ? "opacity-60" : ""
-      }`}
+      onContextMenu={openMenu}
+      className={`group relative flex gap-4 py-0.5 pl-[72px] pr-12 hover:bg-msghov ${
+        grouped ? "" : "mt-[17px]"
+      } ${message.pending ? "opacity-60" : ""}`}
     >
-      <div className="flex items-baseline gap-2">
-        <span className="font-semibold text-white">{message.author.username}</span>
-        <span className="text-xs text-neutral-500">
-          {new Date(message.createdAt).toLocaleTimeString()}
-          {message.editedAt && <span className="ml-1 italic">(editado)</span>}
-          {message.pending && <span className="ml-1 italic">enviando…</span>}
+      {grouped ? (
+        // hora na margem, só no hover — como o Discord faz com mensagens agrupadas
+        <span className="absolute left-0 top-1 w-[72px] select-none text-center text-[11px] leading-[22px] text-txt-muted opacity-0 group-hover:opacity-100">
+          {hora(message.createdAt)}
         </span>
-      </div>
-
-      {editing ? (
-        <form onSubmit={submitEdit} className="mt-1">
-          <input
-            autoFocus
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => e.key === "Escape" && setEditing(false)}
-            aria-label="Editar mensagem"
-            className="w-full rounded bg-rail px-2 py-1 text-sm outline-none"
-          />
-          <div className="mt-1 text-xs text-neutral-500">
-            Enter para salvar · Esc para cancelar
-          </div>
-        </form>
       ) : (
-        message.content && <div className="text-neutral-200">{message.content}</div>
-      )}
-
-      {/* anexos (imagens inline / arquivos como card) */}
-      <AttachmentView attachments={message.attachments} />
-
-      {/* link para a thread (só em mensagens raiz com respostas) */}
-      {onOpenThread && message.replyCount > 0 && (
         <button
           type="button"
-          onClick={() => onOpenThread(message)}
-          className="mt-1 text-xs font-medium text-accent hover:underline"
+          onClick={openProfile}
+          aria-label={`Perfil de ${message.author.username}`}
+          className="absolute left-4 top-0.5 rounded-full transition hover:brightness-110"
         >
-          💬 {message.replyCount} {message.replyCount === 1 ? "resposta" : "respostas"}
+          <Avatar user={message.author} size="lg" />
         </button>
       )}
 
-      {/* reações */}
-      {message.reactions.length > 0 && (
-        <div className="mt-1 flex flex-wrap gap-1">
-          {message.reactions.map((r) => {
-            const mine = currentUserId ? r.userIds.includes(currentUserId) : false;
-            return (
-              <button
-                key={r.emoji}
-                type="button"
-                aria-pressed={mine}
-                aria-label={`${r.emoji}, ${r.count} ${
-                  r.count === 1 ? "reação" : "reações"
-                }`}
-                onClick={() => onToggleReaction(message.id, r.emoji)}
-                className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition ${
-                  mine
-                    ? "border-accent bg-accent/20 text-white"
-                    : "border-black/30 bg-black/20 text-neutral-300 hover:border-neutral-500"
-                }`}
-              >
-                <span>{r.emoji}</span>
-                <span>{r.count}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* envio não confirmado: dá saída para reenviar ou desistir */}
-      {message.failed && message.nonce && (
-        <div className="mt-1 flex items-center gap-2 text-xs text-red-400">
-          <span>Não foi possível enviar.</span>
-          <button
-            type="button"
-            onClick={() => onRetry?.(message.nonce as string)}
-            className="rounded bg-rail px-2 py-0.5 font-medium text-neutral-200 hover:text-white"
-          >
-            Reenviar
-          </button>
-          <button
-            type="button"
-            onClick={() => onDiscard?.(message.nonce as string)}
-            className="rounded px-1 py-0.5 text-neutral-400 hover:text-white"
-          >
-            Descartar
-          </button>
-        </div>
-      )}
-
-      {/* ações da mensagem: no hover e também ao chegar pelo teclado */}
-      {!unconfirmed && (
-        <div className="absolute -top-3 right-2 hidden gap-1 rounded bg-rail px-1 py-0.5 shadow group-focus-within:flex group-hover:flex">
-          <button
-            type="button"
-            onClick={() => setPicking((p) => !p)}
-            aria-label="Reagir à mensagem"
-            aria-expanded={picking}
-            title="Reagir"
-            className="px-1 text-sm hover:brightness-125"
-          >
-            😊
-          </button>
-          {onOpenThread && (
+      <div className="min-w-0 flex-1">
+        {!grouped && (
+          <div className="flex items-baseline gap-1.5 leading-[22px]">
             <button
               type="button"
-              onClick={() => onOpenThread(message)}
-              aria-label="Responder na thread"
-              title="Responder na thread"
-              className="px-1 text-sm hover:brightness-125"
+              onClick={openProfile}
+              className="font-medium text-txt-primary hover:underline"
             >
-              💬
+              {message.author.username}
             </button>
-          )}
-          {isOwn && (
-            <button
-              type="button"
-              onClick={() => {
-                setDraft(message.content);
-                setEditing(true);
+            <span className="ml-1 text-xs text-txt-muted">
+              {horaCompleta(message.createdAt)}
+            </span>
+            {message.pending && <span className="text-xs italic text-txt-muted">enviando…</span>}
+          </div>
+        )}
+
+        {editing ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitEdit();
+            }}
+            className="mt-1"
+          >
+            <textarea
+              autoFocus
+              rows={Math.min(8, Math.max(1, draft.split("\n").length))}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setEditing(false);
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  submitEdit();
+                }
               }}
               aria-label="Editar mensagem"
-              title="Editar"
-              className="px-1 text-sm hover:brightness-125"
-            >
-              ✏️
-            </button>
-          )}
-          {canDelete && (
+              className="w-full resize-none rounded-lg bg-input px-4 py-[11px] text-txt-normal outline-none"
+            />
+            <div className="mt-1 text-xs text-txt-muted">
+              escape para{" "}
+              <button type="button" onClick={() => setEditing(false)} className="text-txt-link hover:underline">
+                cancelar
+              </button>{" "}
+              • enter para{" "}
+              <button type="submit" className="text-txt-link hover:underline">
+                salvar
+              </button>
+            </div>
+          </form>
+        ) : (
+          message.content && (
+            <div className="whitespace-pre-wrap break-words text-txt-normal">
+              {message.content}
+              {message.editedAt && (
+                <span className="ml-1 text-[10px] text-txt-muted" title={horaCompleta(message.editedAt)}>
+                  (editado)
+                </span>
+              )}
+            </div>
+          )
+        )}
+
+        <AttachmentView attachments={message.attachments} />
+
+        {onOpenThread && message.replyCount > 0 && (
+          <button
+            type="button"
+            onClick={() => onOpenThread(message)}
+            className="mt-1 flex items-center gap-1.5 text-sm font-medium text-txt-link hover:underline"
+          >
+            <MessageSquare size={16} aria-hidden="true" />
+            {message.replyCount} {message.replyCount === 1 ? "resposta" : "respostas"}
+            <span className="font-normal text-txt-muted">›</span>
+          </button>
+        )}
+
+        {message.reactions.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {message.reactions.map((r) => {
+              const mine = currentUserId ? r.userIds.includes(currentUserId) : false;
+              return (
+                <button
+                  key={r.emoji}
+                  type="button"
+                  aria-pressed={mine}
+                  aria-label={`${r.emoji}, ${r.count} ${r.count === 1 ? "reação" : "reações"}`}
+                  onClick={() => onToggleReaction(message.id, r.emoji)}
+                  className={`flex h-[26px] items-center gap-1.5 rounded-lg border px-1.5 text-sm transition ${
+                    mine
+                      ? "border-accent bg-accent/20 text-txt-primary"
+                      : "border-transparent bg-panel text-txt-normal hover:border-[#4e5058]"
+                  }`}
+                >
+                  <span>{r.emoji}</span>
+                  <span className="text-xs font-medium">{r.count}</span>
+                </button>
+              );
+            })}
             <button
               type="button"
-              onClick={() => onDelete(message.id)}
-              aria-label="Apagar mensagem"
-              title="Apagar"
-              className="px-1 text-sm hover:brightness-125"
+              onClick={() => setPicking(true)}
+              aria-label="Adicionar reação"
+              className="grid h-[26px] w-8 place-items-center rounded-lg border border-transparent bg-panel text-txt-muted opacity-0 transition hover:border-[#4e5058] hover:text-txt-primary group-hover:opacity-100"
             >
-              🗑️
+              <SmilePlus size={16} />
             </button>
+          </div>
+        )}
+
+        {message.failed && message.nonce && (
+          <div className="mt-1 flex items-center gap-2 text-xs text-red">
+            <span>Não foi possível enviar.</span>
+            <button
+              type="button"
+              onClick={() => onRetry?.(message.nonce as string)}
+              className="rounded-[3px] bg-panel px-2 py-0.5 font-medium text-txt-normal hover:text-txt-primary"
+            >
+              Reenviar
+            </button>
+            <button
+              type="button"
+              onClick={() => onDiscard?.(message.nonce as string)}
+              className="rounded-[3px] px-1 py-0.5 text-txt-muted hover:text-txt-primary"
+            >
+              Descartar
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* barra de ações: no hover e também ao chegar pelo teclado */}
+      {!unconfirmed && !editing && (
+        <div className="absolute -top-4 right-4 hidden rounded border border-black/20 bg-chat p-0.5 shadow-high group-focus-within:flex group-hover:flex">
+          <ActionButton label="Adicionar reação" onClick={() => setPicking((p) => !p)}>
+            <SmilePlus size={20} />
+          </ActionButton>
+          {onOpenThread && (
+            <ActionButton label="Responder na thread" onClick={() => onOpenThread(message)}>
+              <MessageSquare size={20} />
+            </ActionButton>
           )}
+          {isOwn && (
+            <ActionButton label="Editar" onClick={startEdit}>
+              <Pencil size={20} />
+            </ActionButton>
+          )}
+          {canDelete && (
+            <ActionButton label="Apagar" danger onClick={() => onDelete(message.id)}>
+              <Trash2 size={20} />
+            </ActionButton>
+          )}
+          <ActionButton label="Mais" onClick={openMenu}>
+            <MoreHorizontal size={20} />
+          </ActionButton>
         </div>
       )}
 
-      {/* seletor rápido de emoji */}
       {picking && (
-        <div className="absolute right-2 top-4 z-10 flex gap-1 rounded bg-rail p-1 shadow-lg">
-          {QUICK_EMOJIS.map((e) => (
-            <button
-              key={e}
-              type="button"
-              aria-label={`Reagir com ${e}`}
-              onClick={() => {
-                onToggleReaction(message.id, e);
-                setPicking(false);
-              }}
-              className="rounded px-1 text-lg hover:bg-black/30"
-            >
-              {e}
-            </button>
-          ))}
-        </div>
+        <EmojiPicker
+          className="absolute right-4 top-4"
+          onClose={() => setPicking(false)}
+          onPick={(e) => {
+            onToggleReaction(message.id, e);
+            setPicking(false);
+          }}
+        />
       )}
     </div>
   );

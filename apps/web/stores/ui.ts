@@ -1,8 +1,9 @@
 import { create } from "zustand";
+import type { PublicUser } from "@newdisc/shared";
 
 /**
  * Estado de interface que não pertence a nenhum domínio: qual coluna está em
- * foco, qual modal está aberto e os avisos temporários.
+ * foco, qual modal está aberto, menus de contexto, popovers e os avisos.
  *
  * `confirm`/`prompt` devolvem Promise para substituir os equivalentes globais do
  * browser sem virar o código do avesso: o call site continua linear
@@ -22,6 +23,8 @@ export type Modal =
   | { kind: "channelAccess"; channelId: string }
   | { kind: "invite"; code: string }
   | { kind: "createGroupDM" }
+  | { kind: "settings" }
+  | { kind: "image"; url: string; alt: string }
   | {
       kind: "confirm";
       title: string;
@@ -39,6 +42,35 @@ export type Modal =
       confirmLabel: string;
       resolve: (value: string | null) => void;
     };
+
+/** Um item de menu de contexto; `separator` desenha a linha entre grupos. */
+export type MenuItem =
+  | { separator: true }
+  | {
+      label: string;
+      onSelect: () => void;
+      danger?: boolean;
+      disabled?: boolean;
+      /** nome do ícone lucide já resolvido pelo chamador (ReactNode evita
+       *  acoplar a store ao React; o host renderiza o que vier). */
+      icon?: unknown;
+    };
+
+export interface ContextMenuState {
+  x: number;
+  y: number;
+  items: MenuItem[];
+}
+
+/** Retângulo do elemento que abriu um popover (coordenadas da viewport). */
+export interface Anchor {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export type Popover = { kind: "profile"; user: PublicUser; anchor: Anchor };
 
 export interface ConfirmOptions {
   title: string;
@@ -58,13 +90,23 @@ export interface PromptOptions {
 interface UIState {
   /** coluna 2/3: servidores ou mensagens diretas. */
   view: "guild" | "dm";
+  /** coluna 4 (lista de membros) visível — o botão de membros do cabeçalho alterna. */
+  membersOpen: boolean;
   modal: Modal | null;
+  contextMenu: ContextMenuState | null;
+  popover: Popover | null;
   toasts: Toast[];
 
   setView: (view: "guild" | "dm") => void;
+  toggleMembers: () => void;
   openModal: (modal: Modal) => void;
   /** Fecha o modal atual; confirm/prompt pendentes resolvem como cancelados. */
   closeModal: () => void;
+
+  openContextMenu: (x: number, y: number, items: MenuItem[]) => void;
+  closeContextMenu: () => void;
+  openProfile: (user: PublicUser, anchor: Anchor) => void;
+  closePopover: () => void;
 
   confirm: (options: ConfirmOptions) => Promise<boolean>;
   prompt: (options: PromptOptions) => Promise<string | null>;
@@ -78,15 +120,19 @@ const TOAST_MS = 5000;
 
 export const useUI = create<UIState>((set, get) => ({
   view: "guild",
+  membersOpen: true,
   modal: null,
+  contextMenu: null,
+  popover: null,
   toasts: [],
 
   setView: (view) => set({ view }),
+  toggleMembers: () => set((s) => ({ membersOpen: !s.membersOpen })),
 
   openModal: (modal) => {
     // trocar de modal cancela o anterior, para não deixar Promise pendurada
     get().closeModal();
-    set({ modal });
+    set({ modal, contextMenu: null, popover: null });
   },
 
   closeModal: () => {
@@ -95,6 +141,11 @@ export const useUI = create<UIState>((set, get) => ({
     if (current?.kind === "prompt") current.resolve(null);
     set({ modal: null });
   },
+
+  openContextMenu: (x, y, items) => set({ contextMenu: { x, y, items }, popover: null }),
+  closeContextMenu: () => set({ contextMenu: null }),
+  openProfile: (user, anchor) => set({ popover: { kind: "profile", user, anchor }, contextMenu: null }),
+  closePopover: () => set({ popover: null }),
 
   confirm: (options) =>
     new Promise<boolean>((resolve) => {
@@ -152,6 +203,15 @@ export const ui = {
   prompt: (options: PromptOptions) => useUI.getState().prompt(options),
   openModal: (modal: Modal) => useUI.getState().openModal(modal),
   closeModal: () => useUI.getState().closeModal(),
+  openContextMenu: (x: number, y: number, items: MenuItem[]) =>
+    useUI.getState().openContextMenu(x, y, items),
+  openProfile: (user: PublicUser, anchor: Anchor) => useUI.getState().openProfile(user, anchor),
   setView: (view: "guild" | "dm") => useUI.getState().setView(view),
   view: () => useUI.getState().view,
 };
+
+/** Retângulo de um elemento como `Anchor` (para popovers). */
+export function anchorOf(el: Element): Anchor {
+  const r = el.getBoundingClientRect();
+  return { x: r.left, y: r.top, width: r.width, height: r.height };
+}
