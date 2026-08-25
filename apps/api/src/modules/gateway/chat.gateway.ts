@@ -133,6 +133,10 @@ export class ChatGateway
     const attachmentIds = body?.attachmentIds ?? [];
     // precisa de texto OU pelo menos um anexo
     if (!content && attachmentIds.length === 0) return;
+    // eco do nonce: o autor usa para trocar a mensagem otimista pela real.
+    // Não é persistido — só viaja de volta neste evento.
+    const nonce =
+      typeof body?.nonce === "string" ? body.nonce.slice(0, 64) : undefined;
 
     try {
       // create() valida a associação do autor ao servidor do canal
@@ -143,7 +147,9 @@ export class ChatGateway
         body.parentId,
         attachmentIds,
       );
-      this.server.to(this.room(body.channelId)).emit(WS_EVENTS.MESSAGE_NEW, message);
+      this.server
+        .to(this.room(body.channelId))
+        .emit(WS_EVENTS.MESSAGE_NEW, nonce ? { ...message, nonce } : message);
     } catch (e) {
       this.emitError(client, e);
     }

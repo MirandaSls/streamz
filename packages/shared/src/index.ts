@@ -95,6 +95,12 @@ export interface Message {
   replyCount: number;
   /** anexos vinculados (imagens/arquivos). */
   attachments: Attachment[];
+  /**
+   * Eco do nonce que o cliente mandou no `message.create`. Só aparece no evento
+   * `message.new`; nunca é persistido nem volta no histórico REST. Serve para o
+   * autor casar a mensagem real com a versão otimista que já está na tela.
+   */
+  nonce?: string;
 }
 
 export interface GuildMemberView {
@@ -168,6 +174,11 @@ export interface MessageCreatePayload {
   parentId?: string;
   /** ids de anexos já enviados (POST /uploads) a vincular nesta mensagem. */
   attachmentIds?: string[];
+  /**
+   * Identificador efêmero gerado pelo cliente. O servidor devolve o mesmo valor
+   * em `message.new` para que o autor substitua a mensagem otimista pela real.
+   */
+  nonce?: string;
 }
 
 export interface MessageEditPayload {
