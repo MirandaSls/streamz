@@ -115,6 +115,11 @@ Ordem sugerida dos próximos blocos de features:
       lista de canais escondendo privados e UI de criar/gerenciar acesso.
       _Ainda um corte:_ não há matriz de overrides por papel/permissão fina
       (ex.: silenciar, gerenciar mensagens) — só os dois modos acima.
+- [ ] **DM não tem as features de mensagem** (reação, anexo, edição, remoção,
+      thread, busca) porque vive em tabelas separadas de `Channel`/`Message`.
+      Proposta de unificação, com SQL de migração e plano de execução, em
+      [`docs/adr/0001-unificar-dm-em-channel-message.md`](docs/adr/0001-unificar-dm-em-channel-message.md)
+      — mudança cross-cutting, decidir antes de implementar.
 
 ---
 _Status atual: backend em Postgres (schema único + migration inicial; falta só

@@ -30,6 +30,7 @@ apps/
 packages/
   shared/    # @newdisc/shared — tipos + schemas zod + WS_EVENTS, fonte única de
              #   verdade do contrato api ↔ web. Toda mudança de payload passa aqui.
+docs/adr/    # decisões arquiteturais datadas (o *porquê*; ver docs/adr/README.md)
 ```
 
 ## Comandos
