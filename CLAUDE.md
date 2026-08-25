@@ -90,9 +90,19 @@ para a sala do canal (`channel:<id>`) ou do usuário (`user:<id>`).
 ### Autorização é central, nunca no handler
 Toda checagem de acesso a canal vive em `GuildsService.assertCanViewChannel` /
 `assertCanPostChannel` (cobre associação ao servidor, canal privado por allowlist
-`ChannelMember`, e somente-leitura). Handlers e services **chamam** esses
-asserts; não reimplementam a regra. Ao criar rota/handler que toca um canal,
-comece pelo assert.
+`ChannelMember`, somente-leitura **e** conversa direta, onde acesso = ser
+participante). O retorno é a união discriminada `ChannelAccess` (`tipo: "guild" |
+"dm"`): quem precisa de papel é obrigado a tratar o ramo DM. Handlers e services
+**chamam** esses asserts; não reimplementam a regra. Ao criar rota/handler que
+toca um canal, comece pelo assert.
+
+### DM é canal (ADR-0001)
+Conversa direta e grupo são `Channel` com `guildId` null e `type` DM/GROUP;
+participantes são `ChannelMember`; mensagens são `Message`. Não existe modelo,
+evento nem rota "de DM" para mensagem — `message.create`/`message.new` e
+`/channels/:id/messages` servem os dois casos. `DMsService` só abre/cria/lista/
+sai. **Toda query de servidor parte de um `guildId` concreto** — `guildId` nullable
+é a armadilha permanente dessa decisão.
 
 Perder o acesso também precisa **cortar o tempo real**: kick, ban e saída da
 allowlist chamam `RealtimeService.leaveChannelRooms`, que tira os sockets do

@@ -1,8 +1,8 @@
 # ADR-0001: Unificar DM e grupo em `Channel`/`Message`
 
-**Status:** Proposta (não implementada)
+**Status:** Aceita e implementada (2026-08-25)
 **Data:** 2026-08-25
-**Decisores:** a definir
+**Decisores:** Arthur Miranda
 **Escopo afetado:** `apps/api/prisma`, `modules/{dms,gateway,guilds,channels,messages}`, `packages/shared`, `apps/web/app/app/page.tsx`
 
 ## Contexto
@@ -237,9 +237,10 @@ DROP TABLE "DMParticipant";
 DROP TABLE "DMChannel";
 ```
 
-> **Enquanto não houver produção**, o caminho honesto é mais curto: `prisma
-> migrate reset` e uma migration só, sem os `INSERT ... SELECT`. O SQL acima fica
-> registrado aqui para o dia em que houver dados que não se pode perder.
+> **Foi o que se fez** (não havia produção): a migration
+> `20260825150000_unificar_dm_em_channel` estende o enum, altera `Channel`/
+> `ChannelMember` e dropa as três tabelas antigas, sem `INSERT ... SELECT`. O SQL
+> acima fica registrado aqui para o dia em que houver dados que não se pode perder.
 
 ## Impacto na API
 
@@ -402,14 +403,30 @@ O `dmMode` do rail continua — é navegação, não modelo.
 | 4    | Web: um caminho de conversa só                                                                                                         | DM e canal com o mesmo componente       |
 | 5    | Migration de drop das tabelas antigas                                                                                                  | histórico de DM intacto depois do drop  |
 
+## Como ficou implementado (2026-08-25)
+
+- `GuildsService.assertCanViewChannel` devolve `ChannelAccess` (`tipo: "guild" |
+  "dm"`); `assertCanPostChannel` deixa passar DM; `canModerateChannel` responde
+  false em DM — `MessagesService.remove` usa isso (em DM só o autor apaga).
+- `DMsService` encolheu para abrir/criar grupo/listar/sair; ao nascer uma
+  conversa, `RealtimeService.joinChannelRooms` põe os participantes já conectados
+  na sala. No connect, o gateway entra nas salas de todas as conversas do usuário.
+- `ChatGateway.onDM`, `dm.create`, `dm.new`, `DirectMessage` e `GET /dms/:id/messages`
+  foram removidos. `GuildChannelType` restringe o que se cria num servidor.
+- Web: `useDMs` só guarda lista + conversa ativa; a timeline é `useMessages`
+  (sala da conversa marcada como *sticky* no `socket-adapter`, para seguir
+  recebendo enquanto se navega pelo servidor). `DMView` reaproveita
+  `MessageList`/`Composer`/`SearchPanel`; thread funciona em DM.
+- Mensagem de conversa desconhecida (alguém abriu DM comigo) recarrega a lista.
+
 ## Questões em aberto
 
-- [ ] Grupo tem papéis (dono pode remover participante)? Hoje `ownerId` existe e
-      não é usado. Se sim, `ChannelMember` ganha `role` — o que reforça a decisão.
-- [ ] "Mensagens salvas" (canal só seu, `SavedMessages` no Revolt) entra junto? É
-      um valor a mais no enum e nada de código novo.
-- [ ] Sair de um grupo apaga o `ChannelMember` (o usuário perde o histórico da
-      sua visão) ou marca a saída? O Revolt remove o participante.
+- [ ] Grupo tem papéis (dono pode remover participante)? `ownerId` existe e só
+      serve para passar a posse ao sair. Se sim, `ChannelMember` ganha `role`.
+- [ ] "Mensagens salvas" (canal só seu, `SavedMessages` no Revolt)? É um valor a
+      mais no enum e nada de código novo.
+- [x] Sair de um grupo **apaga** o `ChannelMember` (como no Revolt); o último a
+      sair leva o grupo.
 
 ## Referências
 

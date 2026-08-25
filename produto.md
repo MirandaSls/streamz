@@ -27,7 +27,9 @@ modera sua comunidade.
 - **Canal** — `TEXT` ou `VOICE`, dentro de um servidor. Pode ser privado e/ou
   somente-leitura.
 - **Mensagem** — em um canal de texto; pode ter anexos, reações e respostas (thread).
-- **DM** — conversa direta 1-a-1 ou grupo (3+), fora de qualquer servidor.
+- **DM** — conversa direta 1-a-1 ou grupo (3+), fora de qualquer servidor. É um
+  **canal** sem servidor (`type` DM/GROUP): tudo que vale para mensagem de canal
+  — reação, anexo, edição, remoção, thread, busca — vale numa DM (ADR-0001).
 
 ## Contas e sessão
 
@@ -161,8 +163,13 @@ modera sua comunidade.
   dono, a posse passa a outro; o último a sair leva o grupo (e as mensagens)
   junto. Conversa 1-a-1 não tem "sair".
 - **Entrega:** ao enviar, todos os participantes (inclusive o autor) recebem em
-  tempo real, em qualquer aba/dispositivo. Mesmo teto de 2000 caracteres das
+  tempo real, em qualquer aba/dispositivo — pela sala da conversa, que o socket
+  de cada participante entra ao conectar. Mesmo teto de 2000 caracteres das
   mensagens de canal, com a mesma recusa em vez de truncar.
+- **Acesso:** ser participante. Não há papel, allowlist nem somente-leitura; em
+  DM **só o autor apaga** a própria mensagem (não existe moderador).
+- **Recursos:** reação, anexo, edição, remoção, thread, busca e histórico
+  paginado são os mesmos do canal de servidor (`/channels/:id/messages…`).
 - **[corte MVP]** Não há adicionar/remover participante nem renomear grupo.
 
 ## Voz / vídeo / tela
