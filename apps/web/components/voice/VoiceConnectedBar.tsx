@@ -39,18 +39,22 @@ export default function VoiceConnectedBar() {
   return (
     <div className="flex shrink-0 flex-col gap-1 bg-footer px-2 pb-1 pt-2" data-voice-bar>
       <div className="flex items-center gap-2">
-        <span className="min-w-0 flex-1">
+        <span className="min-w-0 flex-1 overflow-hidden">
           <span
             className={`flex items-center gap-1 text-sm font-semibold ${
               status === "connected" && midia ? "text-green" : "text-yellow"
             }`}
           >
-            <Signal size={16} aria-hidden="true" />
-            {status === "connecting"
-              ? "Conectando…"
-              : midia
-                ? "Voz conectada"
-                : "Voz não configurada"}
+            <Signal size={16} className="shrink-0" aria-hidden="true" />
+            {/* o texto precisa do próprio span: `truncate` num container flex
+                corta sem reticências */}
+            <span className="truncate">
+              {status === "connecting"
+                ? "Conectando…"
+                : midia
+                  ? "Voz conectada"
+                  : "Voz não configurada"}
+            </span>
           </span>
           <span className="block truncate text-xs text-txt-muted">{titulo}</span>
         </span>
@@ -61,7 +65,7 @@ export default function VoiceConnectedBar() {
             onClick={() => void toggleScreen()}
             aria-label={screenOn ? "Parar compartilhamento" : "Compartilhar tela"}
             aria-pressed={screenOn}
-            className={`grid h-8 w-8 place-items-center rounded-[4px] transition hover:bg-hov ${
+            className={`grid h-8 w-8 shrink-0 place-items-center rounded-[4px] transition hover:bg-hov ${
               screenOn ? "text-green" : "text-txt-secondary hover:text-txt-primary"
             }`}
           >
@@ -74,7 +78,7 @@ export default function VoiceConnectedBar() {
             onClick={() => void toggleCam()}
             aria-label={camOn ? "Desligar câmera" : "Ligar câmera"}
             aria-pressed={camOn}
-            className={`grid h-8 w-8 place-items-center rounded-[4px] transition hover:bg-hov ${
+            className={`grid h-8 w-8 shrink-0 place-items-center rounded-[4px] transition hover:bg-hov ${
               camOn ? "text-green" : "text-txt-secondary hover:text-txt-primary"
             }`}
           >
@@ -86,7 +90,7 @@ export default function VoiceConnectedBar() {
             type="button"
             onClick={() => void disconnect()}
             aria-label="Desconectar"
-            className="grid h-8 w-8 place-items-center rounded-[4px] text-txt-secondary transition hover:bg-hov hover:text-red"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-[4px] text-txt-secondary transition hover:bg-hov hover:text-red"
           >
             <PhoneOff size={18} />
           </button>

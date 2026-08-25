@@ -400,12 +400,17 @@ export class ChatGateway
   @SubscribeMessage(WS_EVENTS.VOICE_LEAVE)
   async onVoiceLeave(@ConnectedSocket() client: Socket) {
     const user = this.userOf(client);
-    const channelId = client.data.voiceChannelId as string | undefined;
-    if (!user || !channelId) return;
+    if (!user) return;
+    const lembrado = client.data.voiceChannelId as string | undefined;
     client.data.voiceChannelId = undefined;
     try {
-      await this.voice.leave(user.id, channelId);
-      await this.calls.onDisconnect(user.id, channelId);
+      // a chamada em DM entra pela rota REST, que não passa por este socket:
+      // sem o fallback, sair de uma chamada assim não teria efeito nenhum
+      const canais = lembrado ? [lembrado] : await this.voice.channelsOf(user.id);
+      for (const channelId of canais) {
+        await this.voice.leave(user.id, channelId);
+        await this.calls.onDisconnect(user.id, channelId);
+      }
     } catch (e) {
       this.emitError(client, e);
     }

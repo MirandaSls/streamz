@@ -15,6 +15,8 @@ import { api } from "@/lib/api";
 import { CHAMADA_INICIAL, callReducer, type CallAction, type CallState } from "@/stores/call-machine";
 import { emit, errorMessage } from "@/stores/socket-adapter";
 import { ui, useUI } from "@/stores/ui";
+import { useChannels } from "@/stores/channels";
+import { useDMs } from "@/stores/dms";
 import { useVoiceDevicesStore } from "@/stores/voiceDevices";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 
@@ -216,6 +218,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     disconnect: async () => {
       const channelId = get().channelId;
       fecharSala();
+      // o painel do canal de voz é a coluna 3 inteira: sair da call sem fechá-lo
+      // deixaria o usuário preso numa sala vazia
+      useChannels.getState().leaveVoice();
       if (channelId) {
         emit(WS_EVENTS.VOICE_LEAVE, {});
         if (get().call.phase !== "idle") emit(WS_EVENTS.CALL_END, { channelId });
@@ -304,6 +309,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     // ── chamada em conversa direta ──
 
     startCall: async (channelId, comVideo) => {
+      // uma conexão de voz por vez: o servidor já garante isso, o cliente
+      // precisa fechar a sala antiga para não ficar com duas conexões de mídia
+      if (get().channelId && get().channelId !== channelId) await get().disconnect();
       get().dispatchCall({ type: "start", channelId });
       set({
         channelId,
@@ -315,6 +323,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         screenOn: false,
       });
       try {
+        await abrirConversa(channelId);
         const r = await api.startCall(channelId);
         for (const e of r.states) get().applyState(e);
         if (!r.voice) {
@@ -335,18 +344,27 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     acceptCall: async () => {
       const channelId = get().call.channelId;
       if (!channelId) return;
-      get().dispatchCall({ type: "accept" });
       fecharToque();
+      if (get().channelId && get().channelId !== channelId) await get().disconnect();
+      get().dispatchCall({ type: "accept" });
       emit(WS_EVENTS.CALL_ACCEPT, { channelId });
       set({ channelId, guildId: null, status: "connecting", erro: null });
-      // entrar na mídia é o mesmo caminho de qualquer sala; sem LiveKit fica só
-      // o estado de voz, que já basta para os dois lados se verem na chamada
-      const conectou = await conectarMidia(channelId, set, rerender, get);
-      set(
-        conectou
-          ? { status: "connected", midiaDisponivel: true, erro: null }
-          : { status: "connected", midiaDisponivel: false, erro: SEM_MIDIA },
-      );
+      await abrirConversa(channelId);
+      // atender entra pela mesma rota de quem liga: ela é a que sabe de conversa
+      // direta (o token de canal de voz recusaria uma DM com 400)
+      try {
+        const r = await api.startCall(channelId);
+        for (const e of r.states) get().applyState(e);
+        if (r.voice) await entrarNaSala(r.voice, set, rerender, get);
+        set(
+          r.voice
+            ? { status: "connected", midiaDisponivel: true, erro: null }
+            : { status: "connected", midiaDisponivel: false, erro: SEM_MIDIA },
+        );
+      } catch {
+        // sem mídia a chamada ainda vale: o estado de voz já põe os dois na sala
+        set({ status: "connected", midiaDisponivel: false, erro: SEM_MIDIA });
+      }
       get().syncFlags();
     },
 
@@ -406,6 +424,21 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     },
   };
 });
+
+/**
+ * Leva a tela para a conversa da chamada. Atender sem isso deixaria o usuário
+ * olhando outro canal, sem nenhum sinal de onde a chamada está acontecendo.
+ */
+async function abrirConversa(channelId: string) {
+  let conversa = useDMs.getState().channels.find((d) => d.id === channelId);
+  if (!conversa) {
+    // conversa que ainda não estava na lista (alguém ligou primeiro)
+    await useDMs.getState().refreshList();
+    conversa = useDMs.getState().channels.find((d) => d.id === channelId);
+  }
+  ui.setView("dm");
+  if (conversa) useDMs.getState().select(conversa);
+}
 
 /** Tira a tela de chamada recebida — e só ela, para não fechar outro modal. */
 function fecharToque() {
