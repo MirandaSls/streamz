@@ -145,8 +145,8 @@ Ordem sugerida dos próximos blocos de features:
       [ADR-0001](docs/adr/0001-unificar-dm-em-channel-message.md): DM/grupo são
       `Channel` sem servidor e ganham reação, anexo, edição, remoção, thread e
       busca. _Typecheck e testes ok; falta validar ponta a ponta com o Postgres._
-- [ ] **Sem indicador de "digitando"** no web — o gateway emite `typing`, mas
-      nenhum componente escuta.
+- [x] ~~**Sem indicador de "digitando"**~~ — feito: `stores/typing.ts` +
+      `TypingIndicator` sob o composer; o composer emite `typing` a cada 3s.
 - [ ] **Sem estado de leitura** (não lido/menções) — o modelo não guarda
       `lastReadAt` por canal; o rail e a lista de canais não marcam novidade.
 - [ ] **Sem perfil**: não há editar avatar/nome/status manual (`UsersService`

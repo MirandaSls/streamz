@@ -85,18 +85,22 @@ export default function Dialog({
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         onKeyDown={handleKeyDown}
-        className={`max-h-[85vh] overflow-y-auto rounded-lg bg-panel p-6 shadow-xl outline-none ${className}`}
+        className={`flex max-h-[85vh] flex-col overflow-hidden rounded-[5px] bg-chat shadow-high outline-none ${className}`}
       >
-        <h2 id={titleId} className="mb-1 text-lg font-bold text-white">
-          {title}
-        </h2>
-        {description && (
-          <p id={descriptionId} className="mb-3 text-sm text-neutral-400">
-            {description}
-          </p>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <h2 id={titleId} className="mb-1 text-xl font-bold text-txt-primary">
+            {title}
+          </h2>
+          {description && (
+            <p id={descriptionId} className="mb-4 text-sm text-txt-muted">
+              {description}
+            </p>
+          )}
+          {children}
+        </div>
+        {footer && (
+          <div className="flex flex-row-reverse items-center gap-3 bg-panel px-4 py-4">{footer}</div>
         )}
-        {children}
-        {footer && <div className="mt-4 flex gap-2">{footer}</div>}
       </div>
     </div>
   );
@@ -125,8 +129,8 @@ export function PrimaryButton({
       onClick={onClick}
       disabled={disabled}
       data-autofocus={autoFocus ? "" : undefined}
-      className={`flex-1 rounded py-2 text-sm font-medium text-white transition disabled:opacity-40 ${
-        danger ? "bg-red-600 hover:brightness-110" : "bg-accent hover:brightness-110"
+      className={`h-[38px] min-w-24 rounded-[3px] px-4 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${
+        danger ? "bg-red hover:bg-red-hover" : "bg-accent hover:bg-accent-hover"
       }`}
     >
       {children}
@@ -152,8 +156,8 @@ export function SecondaryButton({
       type="button"
       onClick={onClick}
       data-autofocus={autoFocus ? "" : undefined}
-      className={`rounded bg-rail py-2 text-sm text-neutral-300 transition hover:text-white ${
-        full ? "w-full" : "px-4"
+      className={`h-[38px] rounded-[3px] px-4 text-sm font-medium text-txt-normal transition hover:underline ${
+        full ? "w-full bg-[#4e5058] hover:bg-[#6d6f78] hover:no-underline" : ""
       }`}
     >
       {children}

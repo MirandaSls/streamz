@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Hash, Lock, Megaphone, Volume2 } from "lucide-react";
 import type { GuildChannelType } from "@newdisc/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { useAuth } from "@/stores/auth";
@@ -75,24 +76,26 @@ export default function CreateChannelModal() {
             type="button"
             onClick={() => setType(option)}
             aria-pressed={type === option}
-            className={`flex-1 rounded py-2 text-sm transition ${
-              type === option ? "bg-accent text-white" : "bg-rail text-neutral-300"
+            className={`flex flex-1 items-center justify-center gap-2 rounded-[3px] py-2 text-sm font-medium transition ${
+              type === option ? "bg-accent text-white" : "bg-rail text-txt-normal hover:bg-hov"
             }`}
           >
-            {option === "TEXT" ? "# Texto" : "🔊 Voz"}
+            {option === "TEXT" ? <Hash size={18} aria-hidden="true" /> : <Volume2 size={18} aria-hidden="true" />}
+            {option === "TEXT" ? "Texto" : "Voz"}
           </button>
         ))}
       </div>
 
       {canModerate && (
-        <div className="mb-3 space-y-2 text-sm text-neutral-300">
+        <div className="mb-3 space-y-2 text-sm text-txt-normal">
           <label className="flex items-center gap-2">
             <input
               type="checkbox"
               checked={isPrivate}
               onChange={(e) => setPrivate(e.target.checked)}
             />
-            🔒 Privado (só a allowlist e moderadores)
+            <Lock size={16} className="text-txt-muted" aria-hidden="true" />
+            Privado (só a allowlist e moderadores)
           </label>
           <label className="flex items-center gap-2">
             <input
@@ -100,7 +103,8 @@ export default function CreateChannelModal() {
               checked={readOnly}
               onChange={(e) => setReadOnly(e.target.checked)}
             />
-            📢 Somente leitura (só moderadores postam)
+            <Megaphone size={16} className="text-txt-muted" aria-hidden="true" />
+            Somente leitura (só moderadores postam)
           </label>
         </div>
       )}
@@ -108,14 +112,14 @@ export default function CreateChannelModal() {
       {isPrivate && (
         <div className="max-h-40 overflow-y-auto rounded bg-rail/50">
           {plainMembers.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-neutral-500">
+            <p className="px-3 py-2 text-xs text-txt-muted">
               Sem membros comuns para liberar. Moderadores já têm acesso.
             </p>
           ) : (
             plainMembers.map((m) => (
               <label
                 key={m.user.id}
-                className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-black/20"
+                className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-txt-normal hover:bg-hov"
               >
                 <input
                   type="checkbox"

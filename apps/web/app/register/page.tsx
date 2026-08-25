@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import AuthCard, { FieldLabel, inputClass, submitClass } from "@/components/auth/AuthCard";
 import { api } from "@/lib/api";
 import { mensagemDeAuth, REGRAS_CREDENCIAIS, validarCredenciais } from "@/lib/auth-mensagens";
 import { useAuth } from "@/stores/auth";
@@ -36,21 +37,11 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="flex h-screen items-center justify-center">
-      <form
-        onSubmit={onSubmit}
-        noValidate
-        className="w-[380px] rounded-lg bg-panel p-6 shadow-xl"
-      >
-        <h1 className="mb-1 text-xl font-bold text-white">Criar conta</h1>
-        <p className="mb-5 text-sm text-neutral-400">Escolha um usuário e senha.</p>
-
-        <label
-          htmlFor="username"
-          className="mb-1 block text-xs font-semibold uppercase text-neutral-300"
-        >
+    <AuthCard title="Criar uma conta">
+      <form onSubmit={onSubmit} noValidate>
+        <FieldLabel htmlFor="username" invalid={!!error} hint={error ?? undefined}>
           Usuário
-        </label>
+        </FieldLabel>
         <input
           id="username"
           name="username"
@@ -60,20 +51,17 @@ export default function RegisterPage() {
           disabled={loading}
           aria-invalid={error ? true : undefined}
           aria-describedby="dica-usuario"
-          className="w-full rounded bg-rail px-3 py-2 text-sm outline-none disabled:opacity-60"
+          className={`${inputClass} mb-2`}
           autoFocus
         />
-        <p id="dica-usuario" className="mb-3 mt-1 text-xs text-neutral-500">
+        <p id="dica-usuario" className="mb-5 text-xs text-txt-muted">
           {REGRAS_CREDENCIAIS.usuario.min} a {REGRAS_CREDENCIAIS.usuario.max} caracteres —
           letras, números, _ . e -
         </p>
 
-        <label
-          htmlFor="password"
-          className="mb-1 block text-xs font-semibold uppercase text-neutral-300"
-        >
+        <FieldLabel htmlFor="password" invalid={!!error}>
           Senha
-        </label>
+        </FieldLabel>
         <input
           id="password"
           name="password"
@@ -84,32 +72,26 @@ export default function RegisterPage() {
           disabled={loading}
           aria-invalid={error ? true : undefined}
           aria-describedby="dica-senha"
-          className="w-full rounded bg-rail px-3 py-2 text-sm outline-none disabled:opacity-60"
+          className={`${inputClass} mb-2`}
         />
-        <p id="dica-senha" className="mb-4 mt-1 text-xs text-neutral-500">
+        <p id="dica-senha" className="mb-5 text-xs text-txt-muted">
           Mínimo de {REGRAS_CREDENCIAIS.senha.min} caracteres
         </p>
 
-        {/* aria-live: leitores de tela anunciam o erro sem mover o foco */}
-        <p role="alert" aria-live="polite" className="mb-3 text-sm text-red-400 empty:mb-0">
+        <p role="alert" aria-live="polite" className="sr-only">
           {error}
         </p>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded bg-accent py-2 text-sm font-semibold text-white disabled:opacity-60"
-        >
-          {loading ? "Criando…" : "Registrar"}
+        <button type="submit" disabled={loading} className={submitClass}>
+          {loading ? "Criando…" : "Continuar"}
         </button>
 
-        <p className="mt-4 text-sm text-neutral-400">
-          Já tem conta?{" "}
-          <Link href="/login" className="text-accent hover:underline">
-            Entrar
+        <p className="mt-2 text-sm">
+          <Link href="/login" className="font-medium text-txt-link hover:underline">
+            Já tem uma conta?
           </Link>
         </p>
       </form>
-    </main>
+    </AuthCard>
   );
 }

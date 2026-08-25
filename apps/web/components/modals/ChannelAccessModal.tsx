@@ -28,7 +28,7 @@ export default function ChannelAccessModal({ channelId }: { channelId: string })
 
   return (
     <Dialog
-      title={`Acesso · 🔒 ${channel?.name ?? "canal"}`}
+      title={`Acesso a #${channel?.name ?? "canal"}`}
       description="Moderadores sempre têm acesso. Marque os membros liberados."
       onClose={closeModal}
       className="w-[380px]"
@@ -36,16 +36,16 @@ export default function ChannelAccessModal({ channelId }: { channelId: string })
     >
       <div className="max-h-56 overflow-y-auto rounded bg-rail/50">
         {!ready ? (
-          <p className="px-3 py-3 text-sm text-neutral-500">Carregando…</p>
+          <p className="px-3 py-3 text-sm text-txt-muted">Carregando…</p>
         ) : plainMembers.length === 0 ? (
-          <p className="px-3 py-3 text-sm text-neutral-500">
+          <p className="px-3 py-3 text-sm text-txt-muted">
             Nenhum membro comum neste servidor.
           </p>
         ) : (
           plainMembers.map((m) => (
             <label
               key={m.user.id}
-              className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-black/20"
+              className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm text-txt-normal hover:bg-hov"
             >
               <input
                 type="checkbox"

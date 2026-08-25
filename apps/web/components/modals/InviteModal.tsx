@@ -28,18 +28,18 @@ export default function InviteModal({ code }: { code: string }) {
       footer={<SecondaryButton full onClick={closeModal}>Fechar</SecondaryButton>}
     >
       <div className="flex items-center gap-2">
-        <code className="flex-1 select-all rounded bg-rail px-3 py-2 font-mono text-sm text-accent">
+        <code className="flex-1 select-all rounded-[3px] bg-rail px-3 py-2 font-mono text-sm text-txt-normal">
           {code}
         </code>
         <button
           type="button"
           onClick={copy}
-          className="rounded bg-accent px-3 py-2 text-sm font-medium text-white transition hover:brightness-110"
+          className="rounded-[3px] bg-accent px-4 py-2 text-sm font-medium text-white transition hover:bg-accent-hover"
         >
           {copied ? "Copiado" : "Copiar"}
         </button>
       </div>
-      <p aria-live="polite" className="mt-2 h-4 text-xs text-neutral-500">
+      <p aria-live="polite" className="mt-2 h-4 text-xs text-txt-muted">
         {copied ? "Código copiado." : ""}
       </p>
     </Dialog>

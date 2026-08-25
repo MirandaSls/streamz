@@ -17,7 +17,7 @@ export default function Home() {
   }, [user, router]);
 
   return (
-    <main className="flex h-screen items-center justify-center text-neutral-400">
+    <main className="flex h-screen items-center justify-center text-txt-muted">
       Carregando…
     </main>
   );

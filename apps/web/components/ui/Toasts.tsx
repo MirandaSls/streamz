@@ -1,5 +1,6 @@
 "use client";
 
+import { X } from "lucide-react";
 import { useUI } from "@/stores/ui";
 
 /**
@@ -23,8 +24,8 @@ export default function Toasts() {
           key={toast.id}
           className={`pointer-events-auto flex items-start gap-2 rounded-lg px-3 py-2 text-sm shadow-lg ${
             toast.kind === "error"
-              ? "bg-red-900/90 text-red-100"
-              : "bg-panel text-neutral-200"
+              ? "border border-red/40 bg-[#111214] text-txt-normal"
+              : "bg-[#111214] text-txt-normal"
           }`}
         >
           <span className="min-w-0 flex-1">{toast.text}</span>
@@ -32,9 +33,9 @@ export default function Toasts() {
             type="button"
             onClick={() => dismiss(toast.id)}
             aria-label="Dispensar aviso"
-            className="text-neutral-400 transition hover:text-white"
+            className="text-txt-muted transition hover:text-txt-primary"
           >
-            ✕
+            <X size={16} />
           </button>
         </div>
       ))}

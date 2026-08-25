@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import AuthCard, { FieldLabel, inputClass, submitClass } from "@/components/auth/AuthCard";
 import { api } from "@/lib/api";
 import { mensagemDeAuth, validarCredenciais } from "@/lib/auth-mensagens";
 import { useAuth } from "@/stores/auth";
@@ -36,21 +37,11 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex h-screen items-center justify-center">
-      <form
-        onSubmit={onSubmit}
-        noValidate
-        className="w-[380px] rounded-lg bg-panel p-6 shadow-xl"
-      >
-        <h1 className="mb-1 text-xl font-bold text-white">Bem-vindo de volta</h1>
-        <p className="mb-5 text-sm text-neutral-400">Entre para conversar.</p>
-
-        <label
-          htmlFor="username"
-          className="mb-1 block text-xs font-semibold uppercase text-neutral-300"
-        >
+    <AuthCard title="Bem-vindo de volta!" subtitle="Estamos muito animados em te ver novamente!">
+      <form onSubmit={onSubmit} noValidate>
+        <FieldLabel htmlFor="username" invalid={!!error} hint={error ?? undefined}>
           Usuário
-        </label>
+        </FieldLabel>
         <input
           id="username"
           name="username"
@@ -59,16 +50,13 @@ export default function LoginPage() {
           onChange={(e) => setUsername(e.target.value)}
           disabled={loading}
           aria-invalid={error ? true : undefined}
-          className="mb-3 w-full rounded bg-rail px-3 py-2 text-sm outline-none disabled:opacity-60"
+          className={inputClass}
           autoFocus
         />
 
-        <label
-          htmlFor="password"
-          className="mb-1 block text-xs font-semibold uppercase text-neutral-300"
-        >
+        <FieldLabel htmlFor="password" invalid={!!error}>
           Senha
-        </label>
+        </FieldLabel>
         <input
           id="password"
           name="password"
@@ -78,29 +66,25 @@ export default function LoginPage() {
           onChange={(e) => setPassword(e.target.value)}
           disabled={loading}
           aria-invalid={error ? true : undefined}
-          className="mb-4 w-full rounded bg-rail px-3 py-2 text-sm outline-none disabled:opacity-60"
+          className={inputClass}
         />
 
         {/* aria-live: leitores de tela anunciam o erro sem mover o foco */}
-        <p role="alert" aria-live="polite" className="mb-3 text-sm text-red-400 empty:mb-0">
+        <p role="alert" aria-live="polite" className="sr-only">
           {error}
         </p>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded bg-accent py-2 text-sm font-semibold text-white disabled:opacity-60"
-        >
+        <button type="submit" disabled={loading} className={submitClass}>
           {loading ? "Entrando…" : "Entrar"}
         </button>
 
-        <p className="mt-4 text-sm text-neutral-400">
-          Não tem conta?{" "}
-          <Link href="/register" className="text-accent hover:underline">
+        <p className="mt-2 text-sm text-txt-muted">
+          Precisando de uma conta?{" "}
+          <Link href="/register" className="font-medium text-txt-link hover:underline">
             Registre-se
           </Link>
         </p>
       </form>
-    </main>
+    </AuthCard>
   );
 }

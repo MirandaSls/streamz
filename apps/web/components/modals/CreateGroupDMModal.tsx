@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
+import Avatar from "@/components/ui/Avatar";
 import { contactsFromDMs, useDMs } from "@/stores/dms";
 import { useUI } from "@/stores/ui";
 
@@ -54,24 +55,22 @@ export default function CreateGroupDMModal() {
       />
       <div className="max-h-56 overflow-y-auto rounded bg-rail/50">
         {contacts.length === 0 ? (
-          <p className="px-3 py-3 text-sm text-neutral-500">
-            Você ainda não tem contatos. Abra uma DM 1-a-1 primeiro (💬 na lista de
-            membros).
+          <p className="px-3 py-3 text-sm text-txt-muted">
+            Você ainda não tem contatos. Abra uma DM 1-a-1 primeiro, pela lista de
+            membros de um servidor.
           </p>
         ) : (
           contacts.map((u) => (
             <label
               key={u.id}
-              className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-black/20"
+              className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm text-txt-normal hover:bg-hov"
             >
               <input
                 type="checkbox"
                 checked={picks.includes(u.id)}
                 onChange={() => togglePick(u.id)}
               />
-              <span className="grid h-6 w-6 place-items-center rounded-full bg-rail text-[10px] font-bold text-neutral-200">
-                {u.username.slice(0, 2).toUpperCase()}
-              </span>
+              <Avatar user={u} size="sm" />
               {u.username}
             </label>
           ))
