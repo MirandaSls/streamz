@@ -12,9 +12,12 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "db:up": "docker compose up -d",
+    "db:up": "docker compose up -d postgres",
     "db:migrate": "pnpm --filter @newdisc/api prisma migrate dev",
-    "db:studio": "pnpm --filter @newdisc/api prisma studio"
+    "db:studio": "pnpm --filter @newdisc/api prisma studio",
+    "db:pg:deploy": "pnpm --filter @newdisc/api exec prisma migrate deploy --schema prisma/schema.postgres.prisma",
+    "livekit:up": "docker compose --profile livekit up -d livekit",
+    "livekit:down": "docker compose --profile livekit stop livekit"
   },
   "devDependencies": {
     "turbo": "^2.1.0",

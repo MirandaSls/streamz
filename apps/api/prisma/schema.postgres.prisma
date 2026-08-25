@@ -1,0 +1,261 @@
+// Prisma schema — NewDisc (PRODUÇÃO / Postgres)
+//
+// Variante Postgres, com os enums reintroduzidos. Mantida em par com o
+// schema.prisma (SQLite, usado no dev). Ao migrar para Postgres:
+//   1. `pnpm db:up` (sobe o Postgres) e aponte DATABASE_URL para ele.
+//   2. `pnpm db:pg:deploy` aplica as migrations desta pasta.
+//   3. Passe a usar ESTE arquivo como schema ativo (--schema) ou copie-o
+//      sobre o schema.prisma. Ver PENDENCIAS.md §1.
+//
+// IMPORTANTE: qualquer mudança de modelo feita no schema.prisma (SQLite)
+// precisa ser refletida aqui para os dois não divergirem.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ONLINE
+  IDLE
+  DND
+  OFFLINE
+}
+
+enum ChannelType {
+  TEXT
+  VOICE
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model User {
+  id           String     @id @default(cuid())
+  username     String     @unique
+  passwordHash String
+  avatarUrl    String?
+  status       UserStatus @default(OFFLINE)
+  createdAt    DateTime   @default(now())
+
+  ownedGuilds      Guild[]         @relation("GuildOwner")
+  memberships      GuildMember[]
+  messages         Message[]
+  reactions        Reaction[]
+  invites          Invite[]        @relation("InviteCreator")
+  bans             Ban[]           @relation("BannedUser")
+  dmParticipations DMParticipant[]
+  dmMessages       DMMessage[]     @relation("DMAuthor")
+  refreshTokens    RefreshToken[]
+  channelAccess    ChannelMember[]
+  attachments      Attachment[]    @relation("AttachmentUploader")
+}
+
+// Um registro por refresh token emitido. Rotação: a cada /auth/refresh o token
+// apresentado é marcado como revogado e um novo é emitido. Logout revoga.
+// Guardamos só o hash do jti — nunca o token em si.
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Guild {
+  id      String  @id @default(cuid())
+  name    String
+  iconUrl String?
+  ownerId String
+  owner   User    @relation("GuildOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  members  GuildMember[]
+  channels Channel[]
+  invites  Invite[]
+  bans     Ban[]
+}
+
+model Ban {
+  id         String   @id @default(cuid())
+  guildId    String
+  userId     String
+  bannedById String
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  user  User  @relation("BannedUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, userId])
+  @@index([guildId])
+}
+
+model Invite {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  guildId   String
+  creatorId String
+  uses      Int       @default(0)
+  maxUses   Int?
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+
+  guild   Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  creator User  @relation("InviteCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@index([guildId])
+}
+
+model GuildMember {
+  id      String     @id @default(cuid())
+  userId  String
+  guildId String
+  role    MemberRole @default(MEMBER)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  joinedAt DateTime @default(now())
+
+  @@unique([userId, guildId])
+  @@index([guildId])
+}
+
+model Channel {
+  id       String      @id @default(cuid())
+  guildId  String
+  name     String
+  type     ChannelType @default(TEXT)
+  position Int         @default(0)
+  private  Boolean     @default(false) // só OWNER/ADMIN e a allowlist enxergam
+  readOnly Boolean     @default(false) // só OWNER/ADMIN postam; todos leem
+
+  guild    Guild           @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  messages Message[]
+  allowed  ChannelMember[] // allowlist para canais privados
+
+  @@index([guildId])
+}
+
+// Membros liberados num canal privado (além de OWNER/ADMIN, sempre com acesso).
+model ChannelMember {
+  id        String @id @default(cuid())
+  channelId String
+  userId    String
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id        String    @id @default(cuid())
+  channelId String
+  authorId  String
+  content   String
+  parentId  String?
+  createdAt DateTime  @default(now())
+  editedAt  DateTime?
+
+  channel     Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author      User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  reactions   Reaction[]
+  attachments Attachment[]
+
+  // thread: uma mensagem-raiz (parentId null) agrupa respostas
+  parent  Message?  @relation("MessageThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Message[] @relation("MessageThread")
+
+  @@index([channelId, parentId, createdAt])
+  @@index([parentId])
+}
+
+// Arquivo enviado ao storage (R2). Criado no upload (messageId null) e
+// vinculado a uma mensagem no envio. Órfãos (nunca vinculados) podem ser
+// limpos por um job futuro. O objeto no bucket vive na chave `key`.
+model Attachment {
+  id          String   @id @default(cuid())
+  messageId   String?
+  uploaderId  String
+  key         String   @unique
+  filename    String
+  contentType String
+  size        Int
+  width       Int?
+  height      Int?
+  createdAt   DateTime @default(now())
+
+  message  Message? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  uploader User     @relation("AttachmentUploader", fields: [uploaderId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@index([uploaderId])
+}
+
+model Reaction {
+  id        String @id @default(cuid())
+  messageId String
+  userId    String
+  emoji     String
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+}
+
+model DMChannel {
+  id        String   @id @default(cuid())
+  isGroup   Boolean  @default(false)
+  name      String? // nome opcional do grupo
+  ownerId   String? // criador do grupo
+  // chave canônica do par "a:b" (ids ordenados) só em DMs 1-a-1; null em grupos.
+  // Garante 1 canal por dupla via upsert atômico; NULLs múltiplos são permitidos.
+  pairKey   String?  @unique
+  createdAt DateTime @default(now())
+
+  participants DMParticipant[]
+  messages     DMMessage[]
+}
+
+model DMParticipant {
+  id          String @id @default(cuid())
+  dmChannelId String
+  userId      String
+
+  channel DMChannel @relation(fields: [dmChannelId], references: [id], onDelete: Cascade)
+  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([dmChannelId, userId])
+  @@index([userId])
+}
+
+model DMMessage {
+  id          String    @id @default(cuid())
+  dmChannelId String
+  authorId    String
+  content     String
+  createdAt   DateTime  @default(now())
+  editedAt    DateTime?
+
+  channel DMChannel @relation(fields: [dmChannelId], references: [id], onDelete: Cascade)
+  author  User      @relation("DMAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([dmChannelId, createdAt])
+}
