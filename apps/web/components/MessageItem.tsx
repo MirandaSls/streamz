@@ -16,6 +16,7 @@ import {
   displayNameOf,
   extractFirstUrl,
   isDirectImageUrl,
+  parseCustomEmoji,
   youtubeVideoId,
 } from "@newdisc/shared";
 import LinkEmbedCard, { useLinkEmbed } from "@/components/chat/LinkEmbedCard";
@@ -26,6 +27,7 @@ import { emit } from "@/stores/socket-adapter";
 import Avatar from "@/components/ui/Avatar";
 import EmojiPicker from "@/components/ui/EmojiPicker";
 import Tooltip from "@/components/ui/Tooltip";
+import { API_URL } from "@/lib/config";
 import { hora, horaCompleta } from "@/lib/format";
 import { Markdown } from "@/lib/markdown";
 import { useAuth } from "@/stores/auth";
@@ -33,6 +35,31 @@ import { useGuilds } from "@/stores/guilds";
 import type { ChatMessage } from "@/stores/messages-core";
 import { useLiveUser } from "@/stores/presence";
 import { anchorOf, ui, type MenuItem } from "@/stores/ui";
+
+/**
+ * O emoji de uma reação: unicode sai como texto; personalizado é `<:nome:id>` e
+ * vira a imagem daquele id — a mesma URL pública que o markdown usa, para a
+ * reação não virar `<:festa:abc>` escrito na tela.
+ */
+function EmojiDaReacao({ emoji }: { emoji: string }) {
+  const custom = parseCustomEmoji(emoji);
+  if (!custom) return <span>{emoji}</span>;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={`${API_URL}/api/emojis/${custom.id}/image`}
+      alt={`:${custom.name}:`}
+      loading="lazy"
+      className="h-[18px] w-[18px] object-contain"
+    />
+  );
+}
+
+/** Texto acessível de uma reação (o leitor de tela não lê a imagem do emoji). */
+function rotuloDaReacao(emoji: string): string {
+  const custom = parseCustomEmoji(emoji);
+  return custom ? `:${custom.name}:` : emoji;
+}
 
 /** Ícone-botão da barra de ações que aparece no hover da mensagem. */
 function ActionButton({
@@ -317,7 +344,7 @@ export default function MessageItem({
                   key={r.emoji}
                   type="button"
                   aria-pressed={mine}
-                  aria-label={`${r.emoji}, ${r.count} ${r.count === 1 ? "reação" : "reações"}`}
+                  aria-label={`${rotuloDaReacao(r.emoji)}, ${r.count} ${r.count === 1 ? "reação" : "reações"}`}
                   onClick={() => onToggleReaction(message.id, r.emoji)}
                   className={`flex h-[26px] items-center gap-1.5 rounded-lg border px-1.5 text-sm transition ${
                     mine
@@ -325,7 +352,7 @@ export default function MessageItem({
                       : "border-transparent bg-panel text-txt-normal hover:border-[#4e5058]"
                   }`}
                 >
-                  <span>{r.emoji}</span>
+                  <EmojiDaReacao emoji={r.emoji} />
                   <span className="text-xs font-medium">{r.count}</span>
                 </button>
               );

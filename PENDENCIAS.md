@@ -45,6 +45,17 @@ para testar ponta a ponta — mesmo padrão do LiveKit.
       API devolve URL assinada com expiração, e só cai no proxy autenticado
       `/api/uploads/file/:id` quando não dá para assinar.
 
+## 1c. Tenor (bloqueia só a busca de GIF)
+O botão GIF do composer já existe e o envio de GIF por URL não depende do R2 —
+o que falta é a chave da busca. Sem ela o seletor mostra "GIFs não configurados"
+e o resto do app segue igual.
+
+- [ ] Pegar uma chave gratuita em
+      [developers.google.com/tenor](https://developers.google.com/tenor/guides/quickstart)
+      e preencher `TENOR_API_KEY` no `.env`.
+- _Emojis personalizados e figurinhas, ao contrário, **dependem do R2** (item 1b):
+  a imagem vai para o bucket; sem credencial o upload responde 503 com o motivo._
+
 ## 2. LiveKit (bloqueia a voz — Dia 4)
 O código de voz é **agnóstico de provedor** (só usa `LIVEKIT_URL/KEY/SECRET`).
 Duas formas de rodar — escolha uma:
