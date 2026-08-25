@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import type { AuthTokens, PublicUser } from "@newdisc/shared";
 import { api } from "@/lib/api";
+import { disconnectSocket } from "@/lib/socket";
+import { aoExpirarSessao, lerRefreshToken, limparTokens, salvarTokens } from "@/lib/session";
+
+const CHAVE_USUARIO = "user";
 
 interface AuthState {
   user: PublicUser | null;
@@ -13,25 +17,36 @@ export const useAuth = create<AuthState>((set) => ({
   user: null,
 
   setSession: (user, tokens) => {
-    localStorage.setItem("accessToken", tokens.accessToken);
-    localStorage.setItem("refreshToken", tokens.refreshToken);
-    localStorage.setItem("user", JSON.stringify(user));
+    // o socket é um singleton autenticado no handshake: sobrevivendo ao login,
+    // a nova sessão herdaria a conexão do usuário anterior na mesma aba
+    disconnectSocket();
+    salvarTokens(tokens);
+    localStorage.setItem(CHAVE_USUARIO, JSON.stringify(user));
     set({ user });
   },
 
   loadFromStorage: () => {
     if (typeof window === "undefined") return;
-    const raw = localStorage.getItem("user");
+    const raw = localStorage.getItem(CHAVE_USUARIO);
     if (raw) set({ user: JSON.parse(raw) as PublicUser });
   },
 
   logout: () => {
     // revoga o refresh token no servidor (best-effort) antes de limpar a sessão
-    const refreshToken = localStorage.getItem("refreshToken");
+    const refreshToken = lerRefreshToken();
     if (refreshToken) api.logout(refreshToken).catch(() => {});
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
-    localStorage.removeItem("user");
+    disconnectSocket();
+    limparTokens();
+    localStorage.removeItem(CHAVE_USUARIO);
     set({ user: null });
   },
 }));
+
+// Sessão encerrada pelo lado da rede (refresh recusado): os tokens já foram
+// apagados por session.ts — resta derrubar o socket e zerar o usuário em memória
+// para a UI não seguir renderizando uma sessão que não existe mais.
+aoExpirarSessao(() => {
+  disconnectSocket();
+  if (typeof window !== "undefined") localStorage.removeItem(CHAVE_USUARIO);
+  useAuth.setState({ user: null });
+});
