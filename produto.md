@@ -161,9 +161,10 @@ modera sua comunidade.
 
 ## Decisões de escopo (por que o MVP é assim)
 
-- **SQLite no dev, Postgres em prod.** Desenvolver sem infra externa; os enums
-  viram texto no banco, com os valores garantidos pela validação da aplicação. A
-  migração e a primeira migration são pendência conhecida (`PENDENCIAS.md`).
+- **Postgres em dev e em prod, sem variante.** Manter dois bancos "quase iguais"
+  saía mais caro que subir um container: a semântica divergia em silêncio (busca
+  sensível a caixa, por exemplo) e cada mudança de modelo tinha que ser feita
+  duas vezes. Com isso os enums ficam garantidos pelo banco, não pela aplicação.
 - **Escrita de mensagem por WebSocket, não REST.** O tempo real é o caminho
   principal; o REST cobre só leitura (histórico, thread, busca).
 - **Autorização concentrada**, não espalhada pelos handlers — uma mudança de regra
