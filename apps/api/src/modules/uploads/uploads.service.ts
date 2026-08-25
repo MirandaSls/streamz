@@ -1,14 +1,19 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
+  NotFoundException,
   PayloadTooLargeException,
   ServiceUnavailableException,
+  UnauthorizedException,
 } from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
 import { randomUUID } from "node:crypto";
 import type { Attachment as AttachmentDTO } from "@newdisc/shared";
 import { MAX_ATTACHMENT_SIZE } from "@newdisc/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
+import { GuildsService } from "../guilds/guilds.service";
 import { sniffImage, sanitizeFilename } from "./media";
 
 @Injectable()
@@ -16,6 +21,8 @@ export class UploadsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly guilds: GuildsService,
+    private readonly jwt: JwtService,
   ) {}
 
   /**
@@ -63,12 +70,59 @@ export class UploadsService {
     return this.toDTO(row);
   }
 
-  /** Metadados do anexo para o proxy de leitura. */
-  async findForServe(id: string) {
-    return this.prisma.attachment.findUnique({ where: { id } });
+  /**
+   * Autoriza a leitura pelo proxy (`GET /uploads/file/:id`) e devolve o anexo.
+   *
+   * Dois caminhos, ambos exigindo prova de autorização — o id do anexo sozinho
+   * nunca basta (era o furo: cuid vazado dava acesso a canal privado):
+   *  - `?t=` — token curto assinado pela API para AQUELE anexo, emitido só a
+   *    quem já passou pela autorização ao montar o DTO da mensagem. É o que faz
+   *    `<img src>` funcionar, já que o browser não manda `Authorization`.
+   *  - `Authorization: Bearer <access token>` — reavalia a permissão agora:
+   *    anexo vinculado a mensagem → `assertCanViewChannel` do canal dela;
+   *    anexo ainda solto → só o próprio uploader.
+   */
+  async authorizeServe(
+    id: string,
+    auth: { bearer?: string; queryToken?: string },
+  ) {
+    // A prova vem antes da consulta: sem ela, responder 404 x 401 já contaria a
+    // um anônimo quais ids de anexo existem.
+    const porToken =
+      !!auth.queryToken && this.storage.verifyAttachmentToken(auth.queryToken) === id;
+    const userId = porToken ? null : auth.bearer ? this.verifyBearer(auth.bearer) : null;
+    if (!porToken && !userId) {
+      throw new UnauthorizedException("Token ausente ou inválido");
+    }
+
+    const att = await this.prisma.attachment.findUnique({
+      where: { id },
+      include: { message: { select: { channelId: true } } },
+    });
+    if (!att) throw new NotFoundException("Anexo não encontrado");
+    if (porToken) return att;
+
+    if (att.message) {
+      await this.guilds.assertCanViewChannel(userId!, att.message.channelId);
+    } else if (att.uploaderId !== userId) {
+      throw new ForbiddenException("Anexo não vinculado a nenhuma mensagem sua");
+    }
+    return att;
   }
 
-  toDTO(a: {
+  /** Valida o access token do header e devolve o id do usuário (ou null). */
+  private verifyBearer(token: string): string | null {
+    try {
+      const payload = this.jwt.verify<{ sub: string }>(token, {
+        secret: process.env.JWT_SECRET,
+      });
+      return payload?.sub ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  async toDTO(a: {
     id: string;
     key: string;
     filename: string;
@@ -76,10 +130,10 @@ export class UploadsService {
     size: number;
     width: number | null;
     height: number | null;
-  }): AttachmentDTO {
+  }): Promise<AttachmentDTO> {
     return {
       id: a.id,
-      url: this.storage.publicUrl(a.id, a.key),
+      url: await this.storage.attachmentUrl(a.id, a.key),
       filename: a.filename,
       contentType: a.contentType,
       size: a.size,

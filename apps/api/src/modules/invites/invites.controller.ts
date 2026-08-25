@@ -3,6 +3,10 @@ import { IsInt, IsOptional, Min } from "class-validator";
 import { InvitesService } from "./invites.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";
+import {
+  INVITE_CREATE_THROTTLE,
+  INVITE_PREVIEW_THROTTLE,
+} from "../../common/throttle";
 
 class CreateInviteDto {
   @IsOptional()
@@ -21,6 +25,7 @@ export class InvitesController {
   constructor(private readonly invites: InvitesService) {}
 
   @UseGuards(JwtGuard)
+  @INVITE_CREATE_THROTTLE
   @Post("guilds/:guildId/invites")
   create(
     @CurrentUser() user: JwtPayload,
@@ -31,6 +36,7 @@ export class InvitesController {
   }
 
   /** Prévia pública: a tela de "entrar no servidor" abre sem estar logado. */
+  @INVITE_PREVIEW_THROTTLE
   @Get("invites/:code")
   preview(@Param("code") code: string) {
     return this.invites.preview(code);

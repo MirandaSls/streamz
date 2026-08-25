@@ -24,4 +24,18 @@ export class RealtimeService {
   emitToChannel(channelId: string, event: string, payload: unknown) {
     this.server?.to(`channel:${channelId}`).emit(event, payload);
   }
+
+  /**
+   * Tira todos os sockets do usuário das salas dos canais informados.
+   *
+   * Sem isto, perder o acesso (kick, ban, saída da allowlist de canal privado)
+   * não interrompia nada: o socket seguia na sala `channel:<id>` e continuava
+   * recebendo as mensagens ao vivo até recarregar a página.
+   */
+  leaveChannelRooms(userId: string, channelIds: string[]) {
+    if (!this.server || channelIds.length === 0) return;
+    this.server
+      .in(`user:${userId}`)
+      .socketsLeave(channelIds.map((id) => `channel:${id}`));
+  }
 }

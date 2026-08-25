@@ -63,6 +63,14 @@ servidor puder rodar.
 
 ## Arquitetura — o que você precisa ter na cabeça
 
+### Payload de WebSocket é validado no contrato, nunca no handler
+Todo comando cliente→servidor tem schema zod em `packages/shared` (ex.:
+`messageCreateSchema`) e passa pelo helper único `parseWsPayload`. O gateway
+valida antes de chamar o service e responde `WS_EVENTS.ERROR` com a razão —
+**nunca trunca nem ignora em silêncio**. Limites de tamanho (`MAX_MESSAGE_LENGTH`,
+`MAX_ATTACHMENTS_PER_MESSAGE`) moram no contrato, não no handler. Comando novo =
+schema novo em `shared` antes do handler.
+
 ### Mensagens são criadas por WebSocket, não REST
 O envio de mensagem (e reação, edição, remoção, DM) passa pelo **gateway**
 (`modules/gateway/chat.gateway.ts`), disparado pelos eventos de `WS_EVENTS`. O
@@ -78,6 +86,11 @@ Toda checagem de acesso a canal vive em `GuildsService.assertCanViewChannel` /
 asserts; não reimplementam a regra. Ao criar rota/handler que toca um canal,
 comece pelo assert.
 
+Perder o acesso também precisa **cortar o tempo real**: kick, ban e saída da
+allowlist chamam `RealtimeService.leaveChannelRooms`, que tira os sockets do
+usuário das salas `channel:<id>`. Sem isso o ex-membro continuaria recebendo
+mensagens até recarregar a página.
+
 ### Padrão de módulo NestJS
 Cada domínio é um módulo com `*.module.ts`, `*.service.ts` e (quando tem REST)
 `*.controller.ts`. Guard de auth: `JwtGuard` + decorator `@CurrentUser()`
@@ -85,10 +98,25 @@ Cada domínio é um módulo com `*.module.ts`, `*.service.ts` e (quando tem REST
 (ex.: `MessagesModule` importa `GuildsModule` e `StorageModule`).
 
 ### DTO na borda, entidade Prisma dentro
-Services devolvem os tipos de `@newdisc/shared` (ex.: `Message`, `Attachment`),
-não linhas do Prisma. A conversão fica em métodos `toDTO`/`toAttachmentDTO`. URL
-de anexo é derivada na hora pelo `StorageService.publicUrl` — o banco guarda só a
-`key` do objeto.
+Services devolvem os tipos de `@newdisc/shared` (ex.: `Message`, `Attachment`,
+`Guild`, `Channel`), não linhas do Prisma. A conversão fica em métodos
+`toDTO`/`toAttachmentDTO` ou nos helpers de `common/dto.ts`, que é também onde as
+colunas que o SQLite guarda como `String` voltam às union types. A URL de anexo é
+derivada na hora pelo `StorageService.attachmentUrl` — o banco guarda só a `key`
+do objeto — e por isso os `toDTO` que montam anexo são assíncronos.
+
+### Rate limiting em duas camadas
+HTTP: `@nestjs/throttler` com guard global e teto padrão folgado; os tetos
+apertados ficam em `common/throttle.ts` (login, registro, upload, convites) —
+adicione ali, não inline no controller. WebSocket: token bucket por socket em
+`gateway/rate-limit.ts`, **single-process** (o estado vive no socket; com mais de
+uma instância precisaria de store compartilhado).
+
+### Ambiente é validado no boot
+`common/env.ts` roda no `ConfigModule` e derruba o processo se faltar
+`DATABASE_URL`, `JWT_SECRET` ou `JWT_REFRESH_SECRET` (que precisam ser
+diferentes). Variável **opcional** (R2, LiveKit) não entra ali: fica com o
+`isConfigured()` do respectivo service, que responde `503`.
 
 ## Camada de dados — Postgres, um schema só
 
@@ -117,8 +145,15 @@ de anexo é derivada na hora pelo `StorageService.publicUrl` — o banco guarda 
   (`messageId: null`). O envio da mensagem vincula por id, e **só** anexos do
   próprio autor ainda não vinculados — nunca confie no content-type declarado
   pelo cliente (evita servir HTML/SVG como executável).
-- Sem base pública de bucket, a leitura sai por proxy da API
-  (`GET /uploads/file/:id`) com `X-Content-Type-Options: nosniff`.
+- **Leitura de anexo nunca é pública.** `StorageService.attachmentUrl` devolve
+  uma **URL assinada do R2** que expira (`ATTACHMENT_URL_TTL_SECONDS`); por isso
+  os `toDTO` que montam anexo são assíncronos. `R2_PUBLIC_BASE_URL` continua
+  valendo, mas é opt-in explícito de bucket público.
+- O proxy da API (`GET /uploads/file/:id`) é o **fallback autenticado**: aceita o
+  token curto `?t=` (emitido só a quem já passou pela autorização da mensagem) ou
+  `Authorization: Bearer`, que reavalia a permissão pelo canal da mensagem —
+  anexo ainda solto só o uploader lê. Mantém `X-Content-Type-Options: nosniff` e
+  `Cache-Control: private`.
 - Anexo que nunca virou mensagem (e refresh token velho) é apagado pela faxina
   diária do `modules/maintenance` — o `@nestjs/schedule` roda **por processo**,
   então com mais de uma instância da API o job repete.

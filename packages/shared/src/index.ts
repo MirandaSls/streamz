@@ -52,6 +52,11 @@ export interface Channel {
   readOnly: boolean;
 }
 
+/** Servidor com os canais que o usuário pode ver (GET /guilds/:id, POST /guilds). */
+export interface GuildWithChannels extends Guild {
+  channels: Channel[];
+}
+
 export interface ReactionGroup {
   emoji: string;
   count: number;
@@ -63,6 +68,12 @@ export interface ReactionGroup {
 export const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024; // 25 MB
 /** Máximo de anexos por mensagem. */
 export const MAX_ATTACHMENTS_PER_MESSAGE = 10;
+/**
+ * Validade (segundos) da URL de leitura de um anexo. A API devolve URL assinada
+ * do R2 (ou do seu próprio proxy) que expira — não há URL pública permanente.
+ * O cliente deve rebuscar a mensagem se a URL vencer.
+ */
+export const ATTACHMENT_URL_TTL_SECONDS = 60 * 60; // 1 h
 
 export interface Attachment {
   id: string;
@@ -126,6 +137,16 @@ export interface DMChannelView {
   others: PublicUser[];
 }
 
+/** Máximo de convidados num grupo de DM, além de quem cria. */
+export const MAX_DM_GROUP_INVITEES = 10;
+
+/** Resultado de sair de um grupo de DM. */
+export interface DMLeaveResult {
+  dmChannelId: string;
+  /** true quando o grupo ficou sem ninguém e a conversa foi apagada. */
+  deleted: boolean;
+}
+
 export interface DirectMessage {
   id: string;
   dmChannelId: string;
@@ -133,11 +154,6 @@ export interface DirectMessage {
   content: string;
   createdAt: string;
   editedAt: string | null;
-}
-
-export interface DMCreatePayload {
-  dmChannelId: string;
-  content: string;
 }
 
 // ── Eventos do WebSocket (Socket.IO) ─────────────────────────
@@ -153,6 +169,7 @@ export const WS_EVENTS = {
   CHANNEL_LEAVE: "channel.leave",
   DM_CREATE: "dm.create",
   // servidor → cliente
+  ERROR: "ws.error",
   MESSAGE_NEW: "message.new",
   MESSAGE_UPDATED: "message.updated",
   MESSAGE_DELETED: "message.deleted",
@@ -161,28 +178,73 @@ export const WS_EVENTS = {
   GUILD_REMOVED: "guild.removed",
 } as const;
 
-export interface MessageCreatePayload {
-  channelId: string;
-  content: string;
-  /** quando presente, cria a mensagem como resposta na thread desse id. */
-  parentId?: string;
-  /** ids de anexos já enviados (POST /uploads) a vincular nesta mensagem. */
-  attachmentIds?: string[];
-}
+/** Teto de caracteres de uma mensagem (canal ou DM). */
+export const MAX_MESSAGE_LENGTH = 2000;
 
-export interface MessageEditPayload {
-  messageId: string;
-  content: string;
-}
+/** id opaco (cuid) — só precisamos rejeitar vazio e string absurda. */
+const idSchema = z
+  .string({ required_error: "obrigatório", invalid_type_error: "deve ser texto" })
+  .min(1, "id ausente")
+  .max(64, "id inválido");
 
-export interface MessageDeletePayload {
-  messageId: string;
-}
+/** Corpo de mensagem: texto dentro do teto. `min` fica a cargo de quem usa. */
+const conteudoSchema = z
+  .string({ required_error: "obrigatório", invalid_type_error: "deve ser texto" })
+  .max(MAX_MESSAGE_LENGTH, `Mensagem acima de ${MAX_MESSAGE_LENGTH} caracteres`);
 
-export interface ReactionPayload {
-  messageId: string;
-  emoji: string;
-}
+/** Idem, mas rejeitando mensagem só de espaço. */
+const conteudoNaoVazioSchema = conteudoSchema.refine((c) => c.trim().length > 0, {
+  message: "Mensagem vazia",
+});
+
+export const messageCreateSchema = z
+  .object({
+    channelId: idSchema,
+    content: conteudoSchema,
+    /** quando presente, cria a mensagem como resposta na thread desse id. */
+    parentId: idSchema.optional(),
+    /** ids de anexos já enviados (POST /uploads) a vincular nesta mensagem. */
+    attachmentIds: z
+      .array(idSchema)
+      .max(MAX_ATTACHMENTS_PER_MESSAGE, `Máximo de ${MAX_ATTACHMENTS_PER_MESSAGE} anexos`)
+      .optional(),
+  })
+  // uma mensagem vazia sem anexo não é mensagem
+  .refine((m) => m.content.trim().length > 0 || (m.attachmentIds?.length ?? 0) > 0, {
+    message: "Mensagem vazia",
+  });
+export type MessageCreatePayload = z.infer<typeof messageCreateSchema>;
+
+export const messageEditSchema = z.object({
+  messageId: idSchema,
+  content: conteudoNaoVazioSchema,
+});
+export type MessageEditPayload = z.infer<typeof messageEditSchema>;
+
+export const messageDeleteSchema = z.object({ messageId: idSchema });
+export type MessageDeletePayload = z.infer<typeof messageDeleteSchema>;
+
+export const reactionSchema = z.object({
+  messageId: idSchema,
+  // emoji é texto curto vindo do cliente; o teto evita usar a coluna como blob
+  emoji: z
+    .string({ required_error: "obrigatório", invalid_type_error: "deve ser texto" })
+    .min(1, "Emoji ausente")
+    .max(64, "Emoji inválido"),
+});
+export type ReactionPayload = z.infer<typeof reactionSchema>;
+
+export const typingSchema = z.object({ channelId: idSchema });
+export type TypingPayload = z.infer<typeof typingSchema>;
+
+/** `channel.join` / `channel.leave` mandam o id do canal cru, sem envelope. */
+export const channelIdSchema = idSchema;
+
+export const dmCreateSchema = z.object({
+  dmChannelId: idSchema,
+  content: conteudoNaoVazioSchema,
+});
+export type DMCreatePayload = z.infer<typeof dmCreateSchema>;
 
 export interface MessageDeletedEvent {
   messageId: string;
@@ -191,8 +253,30 @@ export interface MessageDeletedEvent {
   parentId: string | null;
 }
 
-export interface TypingPayload {
-  channelId: string;
+/** Erro de um comando WS, devolvido ao cliente que o enviou. */
+export interface WsErrorEvent {
+  message: string;
+}
+
+/** Resultado da validação de um payload WS. */
+export type WsParseResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; message: string };
+
+/**
+ * Helper único de validação dos comandos WS (cliente→servidor). Mora aqui, e
+ * não na API, para que o contrato e a mensagem de erro sejam os mesmos dos dois
+ * lados — e para a API não precisar depender de zod diretamente.
+ */
+export function parseWsPayload<S extends z.ZodTypeAny>(
+  schema: S,
+  body: unknown,
+): WsParseResult<z.infer<S>> {
+  const result = schema.safeParse(body);
+  if (result.success) return { ok: true, data: result.data };
+  const issue = result.error.issues[0];
+  const path = issue.path.join(".");
+  return { ok: false, message: path ? `${path}: ${issue.message}` : issue.message };
 }
 
 export interface PresenceUpdatePayload {

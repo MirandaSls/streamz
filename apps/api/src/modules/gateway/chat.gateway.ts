@@ -8,36 +8,58 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from "@nestjs/websockets";
+import { HttpException, Logger } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Server, Socket } from "socket.io";
-import { WS_EVENTS } from "@newdisc/shared";
-import type {
-  MessageCreatePayload,
-  MessageEditPayload,
-  MessageDeletePayload,
-  ReactionPayload,
-  TypingPayload,
-  DMCreatePayload,
+import {
+  WS_EVENTS,
+  channelIdSchema,
+  dmCreateSchema,
+  messageCreateSchema,
+  messageDeleteSchema,
+  messageEditSchema,
+  parseWsPayload,
+  reactionSchema,
+  typingSchema,
 } from "@newdisc/shared";
+import type { WsErrorEvent } from "@newdisc/shared";
+import {
+  newBucket,
+  takeToken,
+  type BucketLimit,
+  type BucketState,
+} from "./rate-limit";
 import { MessagesService } from "../messages/messages.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { DMsService } from "../dms/dms.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { RealtimeService } from "../realtime/realtime.service";
+import { CORS_OPTIONS } from "../../common/cors";
 
 interface SocketUser {
   id: string;
   username: string;
 }
 
-@WebSocketGateway({
-  cors: { origin: process.env.CORS_ORIGIN?.split(",") ?? "*", credentials: true },
-})
+/**
+ * Tetos por socket dos comandos que geram escrita ou broadcast. `capacity` é a
+ * rajada tolerada (colar uma sequência rápida de mensagens) e `refillPerSecond`
+ * a taxa sustentada. Ver rate-limit.ts: é limite single-process.
+ */
+const WS_LIMITS: Record<string, BucketLimit> = {
+  [WS_EVENTS.MESSAGE_CREATE]: { capacity: 10, refillPerSecond: 1 },
+  [WS_EVENTS.DM_CREATE]: { capacity: 10, refillPerSecond: 1 },
+  [WS_EVENTS.TYPING]: { capacity: 8, refillPerSecond: 2 },
+};
+
+@WebSocketGateway({ cors: CORS_OPTIONS })
 export class ChatGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
   @WebSocketServer()
   server!: Server;
+
+  private readonly logger = new Logger(ChatGateway.name);
 
   /** userId → nº de conexões abertas (suporta múltiplas abas/dispositivos). */
   private readonly online = new Map<string, number>();
@@ -105,9 +127,10 @@ export class ChatGateway
   }
 
   @SubscribeMessage(WS_EVENTS.CHANNEL_JOIN)
-  async onJoin(@ConnectedSocket() client: Socket, @MessageBody() channelId: string) {
-    const user = client.data.user as SocketUser | undefined;
-    if (!user || !channelId) return;
+  async onJoin(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
+    const user = this.userOf(client);
+    const channelId = this.parse(client, channelIdSchema, body);
+    if (!user || channelId === null) return;
     try {
       // só entra na sala (e recebe mensagens ao vivo) se puder ver o canal
       await this.guilds.assertCanViewChannel(user.id, channelId);
@@ -118,49 +141,44 @@ export class ChatGateway
   }
 
   @SubscribeMessage(WS_EVENTS.CHANNEL_LEAVE)
-  onLeave(@ConnectedSocket() client: Socket, @MessageBody() channelId: string) {
+  onLeave(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
+    const channelId = this.parse(client, channelIdSchema, body);
+    if (channelId === null) return;
     client.leave(this.room(channelId));
   }
 
   @SubscribeMessage(WS_EVENTS.MESSAGE_CREATE)
-  async onMessage(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() body: MessageCreatePayload,
-  ) {
-    const user = client.data.user as SocketUser | undefined;
-    if (!user) return;
-    const content = body?.content?.trim() ?? "";
-    const attachmentIds = body?.attachmentIds ?? [];
-    // precisa de texto OU pelo menos um anexo
-    if (!content && attachmentIds.length === 0) return;
+  async onMessage(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
+    const user = this.userOf(client);
+    if (!this.allow(client, WS_EVENTS.MESSAGE_CREATE)) return;
+    const payload = this.parse(client, messageCreateSchema, body);
+    if (!user || !payload) return;
 
     try {
       // create() valida a associação do autor ao servidor do canal
       const message = await this.messages.create(
-        body.channelId,
+        payload.channelId,
         user.id,
-        content.slice(0, 2000),
-        body.parentId,
-        attachmentIds,
+        payload.content.trim(),
+        payload.parentId,
+        payload.attachmentIds ?? [],
       );
-      this.server.to(this.room(body.channelId)).emit(WS_EVENTS.MESSAGE_NEW, message);
+      this.server.to(this.room(payload.channelId)).emit(WS_EVENTS.MESSAGE_NEW, message);
     } catch (e) {
       this.emitError(client, e);
     }
   }
 
   @SubscribeMessage(WS_EVENTS.MESSAGE_EDIT)
-  async onEdit(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() body: MessageEditPayload,
-  ) {
-    const user = client.data.user as SocketUser | undefined;
-    if (!user || !body?.content?.trim()) return;
+  async onEdit(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
+    const user = this.userOf(client);
+    const payload = this.parse(client, messageEditSchema, body);
+    if (!user || !payload) return;
     try {
       const message = await this.messages.edit(
-        body.messageId,
+        payload.messageId,
         user.id,
-        body.content.trim().slice(0, 2000),
+        payload.content.trim(),
       );
       this.server.to(this.room(message.channelId)).emit(WS_EVENTS.MESSAGE_UPDATED, message);
     } catch (e) {
@@ -169,31 +187,33 @@ export class ChatGateway
   }
 
   @SubscribeMessage(WS_EVENTS.MESSAGE_DELETE)
-  async onDelete(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() body: MessageDeletePayload,
-  ) {
-    const user = client.data.user as SocketUser | undefined;
-    if (!user || !body?.messageId) return;
+  async onDelete(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
+    const user = this.userOf(client);
+    const payload = this.parse(client, messageDeleteSchema, body);
+    if (!user || !payload) return;
     try {
-      const { channelId, parentId } = await this.messages.remove(body.messageId, user.id);
-      this.server
-        .to(this.room(channelId))
-        .emit(WS_EVENTS.MESSAGE_DELETED, { messageId: body.messageId, channelId, parentId });
+      const { channelId, parentId } = await this.messages.remove(payload.messageId, user.id);
+      this.server.to(this.room(channelId)).emit(WS_EVENTS.MESSAGE_DELETED, {
+        messageId: payload.messageId,
+        channelId,
+        parentId,
+      });
     } catch (e) {
       this.emitError(client, e);
     }
   }
 
   @SubscribeMessage(WS_EVENTS.REACTION_ADD)
-  async onReactionAdd(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() body: ReactionPayload,
-  ) {
-    const user = client.data.user as SocketUser | undefined;
-    if (!user || !body?.messageId || !body?.emoji) return;
+  async onReactionAdd(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
+    const user = this.userOf(client);
+    const payload = this.parse(client, reactionSchema, body);
+    if (!user || !payload) return;
     try {
-      const message = await this.messages.addReaction(body.messageId, user.id, body.emoji);
+      const message = await this.messages.addReaction(
+        payload.messageId,
+        user.id,
+        payload.emoji,
+      );
       this.server.to(this.room(message.channelId)).emit(WS_EVENTS.MESSAGE_UPDATED, message);
     } catch (e) {
       this.emitError(client, e);
@@ -201,14 +221,16 @@ export class ChatGateway
   }
 
   @SubscribeMessage(WS_EVENTS.REACTION_REMOVE)
-  async onReactionRemove(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() body: ReactionPayload,
-  ) {
-    const user = client.data.user as SocketUser | undefined;
-    if (!user || !body?.messageId || !body?.emoji) return;
+  async onReactionRemove(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
+    const user = this.userOf(client);
+    const payload = this.parse(client, reactionSchema, body);
+    if (!user || !payload) return;
     try {
-      const message = await this.messages.removeReaction(body.messageId, user.id, body.emoji);
+      const message = await this.messages.removeReaction(
+        payload.messageId,
+        user.id,
+        payload.emoji,
+      );
       this.server.to(this.room(message.channelId)).emit(WS_EVENTS.MESSAGE_UPDATED, message);
     } catch (e) {
       this.emitError(client, e);
@@ -216,17 +238,16 @@ export class ChatGateway
   }
 
   @SubscribeMessage(WS_EVENTS.DM_CREATE)
-  async onDM(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() body: DMCreatePayload,
-  ) {
-    const user = client.data.user as SocketUser | undefined;
-    if (!user || !body?.dmChannelId || !body?.content?.trim()) return;
+  async onDM(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
+    const user = this.userOf(client);
+    if (!this.allow(client, WS_EVENTS.DM_CREATE)) return;
+    const payload = this.parse(client, dmCreateSchema, body);
+    if (!user || !payload) return;
     try {
       const { message, participants } = await this.dms.createMessage(
         user.id,
-        body.dmChannelId,
-        body.content.trim().slice(0, 2000),
+        payload.dmChannelId,
+        payload.content.trim(),
       );
       for (const uid of participants) {
         this.server.to(`user:${uid}`).emit(WS_EVENTS.DM_NEW, message);
@@ -236,19 +257,82 @@ export class ChatGateway
     }
   }
 
+  private userOf(client: Socket): SocketUser | undefined {
+    return client.data.user as SocketUser | undefined;
+  }
+
+  /**
+   * Consome um token do balde daquele comando. Os baldes ficam no próprio
+   * socket, então somem junto com a conexão — não há mapa global a limpar.
+   */
+  private allow(client: Socket, event: keyof typeof WS_LIMITS): boolean {
+    const limit = WS_LIMITS[event];
+    const buckets = (client.data.buckets ??= {} as Record<string, BucketState>);
+    const now = Date.now();
+    const state = (buckets[event] ??= newBucket(limit, now));
+    if (takeToken(state, limit, now)) return true;
+    client.emit(WS_EVENTS.ERROR, {
+      message: "Devagar: muitos comandos seguidos",
+    } satisfies WsErrorEvent);
+    return false;
+  }
+
+  /**
+   * Valida o payload de um comando WS. Devolve `null` e avisa o cliente por
+   * `ws.error` quando não bate — nada de truncar ou ignorar em silêncio, que
+   * fazia o cliente achar que a mensagem tinha ido inteira.
+   */
+  private parse<S extends Parameters<typeof parseWsPayload>[0]>(
+    client: Socket,
+    schema: S,
+    body: unknown,
+  ) {
+    const result = parseWsPayload(schema, body);
+    if (result.ok) return result.data;
+    client.emit(WS_EVENTS.ERROR, { message: result.message } satisfies WsErrorEvent);
+    return null;
+  }
+
+  /**
+   * Só a mensagem de uma `HttpException` (que os services escrevem para o
+   * usuário: "Canal privado", "Mensagem não encontrada") volta ao cliente.
+   * Qualquer outra coisa — erro do Prisma, TypeError — descreveria a entranha
+   * do servidor para quem está do outro lado do socket, então vira "Erro
+   * interno" e o detalhe fica no log.
+   */
   private emitError(client: Socket, e: unknown) {
-    const message = e instanceof Error ? e.message : "Erro";
-    client.emit("ws.error", { message });
+    if (e instanceof HttpException) {
+      const body = e.getResponse();
+      const detail =
+        typeof body === "string"
+          ? body
+          : ((body as { message?: string | string[] })?.message ?? e.message);
+      const message = Array.isArray(detail) ? detail.join("; ") : String(detail);
+      client.emit(WS_EVENTS.ERROR, { message } satisfies WsErrorEvent);
+      return;
+    }
+    this.logger.error(
+      `Falha em comando WS (socket ${client.id})`,
+      e instanceof Error ? e.stack : String(e),
+    );
+    client.emit(WS_EVENTS.ERROR, { message: "Erro interno" } satisfies WsErrorEvent);
   }
 
   @SubscribeMessage(WS_EVENTS.TYPING)
-  onTyping(@ConnectedSocket() client: Socket, @MessageBody() body: TypingPayload) {
-    const user = client.data.user as SocketUser | undefined;
-    if (!user) return;
-    client.to(this.room(body.channelId)).emit(WS_EVENTS.TYPING, {
-      channelId: body.channelId,
-      user,
-    });
+  onTyping(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
+    const user = this.userOf(client);
+    if (!this.allow(client, WS_EVENTS.TYPING)) return;
+    const payload = this.parse(client, typingSchema, body);
+    if (!user || !payload) return;
+
+    // Autorização sem ida ao banco: só está na sala `channel:<id>` quem passou
+    // por assertCanViewChannel no channel.join — e kick/ban/remoção da
+    // allowlist tiram o socket da sala (RealtimeService). "typing" é evento de
+    // alta frequência; um assert por tecla não se paga.
+    const room = this.room(payload.channelId);
+    if (!client.rooms.has(room)) return;
+
+    client.to(room).emit(WS_EVENTS.TYPING, { channelId: payload.channelId, user });
   }
 
   private room(channelId: string) {

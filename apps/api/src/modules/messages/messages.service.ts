@@ -84,7 +84,8 @@ export class MessagesService {
       take,
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
     });
-    return rows.map((m) => this.toDTO(m)).reverse();
+    const dtos = await Promise.all(rows.map((m) => this.toDTO(m)));
+    return dtos.reverse();
   }
 
   /** Uma thread: a mensagem-raiz seguida das respostas em ordem cronológica. */
@@ -102,7 +103,7 @@ export class MessagesService {
       include: MESSAGE_INCLUDE,
       orderBy: { createdAt: "asc" },
     });
-    return [parent, ...replies].map((m) => this.toDTO(m));
+    return Promise.all([parent, ...replies].map((m) => this.toDTO(m)));
   }
 
   /** Busca por conteúdo dentro de um canal (mais recentes primeiro). */
@@ -123,7 +124,7 @@ export class MessagesService {
       orderBy: { createdAt: "desc" },
       take,
     });
-    return rows.map((m) => this.toDTO(m));
+    return Promise.all(rows.map((m) => this.toDTO(m)));
   }
 
   /** Edição: só o autor (e ainda membro do servidor) pode editar. */
@@ -197,7 +198,11 @@ export class MessagesService {
     return this.toDTO(msg);
   }
 
-  private toDTO(m: {
+  /**
+   * DTO da mensagem. Assíncrono porque a URL de cada anexo é assinada na hora
+   * (URL com expiração; ver StorageService.attachmentUrl).
+   */
+  private async toDTO(m: {
     id: string;
     channelId: string;
     content: string;
@@ -216,7 +221,7 @@ export class MessagesService {
       height: number | null;
     }[];
     _count: { replies: number };
-  }): MessageDTO {
+  }): Promise<MessageDTO> {
     return {
       id: m.id,
       channelId: m.channelId,
@@ -232,11 +237,11 @@ export class MessagesService {
         status: m.author.status,
       },
       reactions: this.groupReactions(m.reactions),
-      attachments: m.attachments.map((a) => this.toAttachmentDTO(a)),
+      attachments: await Promise.all(m.attachments.map((a) => this.toAttachmentDTO(a))),
     };
   }
 
-  private toAttachmentDTO(a: {
+  private async toAttachmentDTO(a: {
     id: string;
     key: string;
     filename: string;
@@ -244,10 +249,10 @@ export class MessagesService {
     size: number;
     width: number | null;
     height: number | null;
-  }): Attachment {
+  }): Promise<Attachment> {
     return {
       id: a.id,
-      url: this.storage.publicUrl(a.id, a.key),
+      url: await this.storage.attachmentUrl(a.id, a.key),
       filename: a.filename,
       contentType: a.contentType,
       size: a.size,

@@ -37,8 +37,9 @@ para testar ponta a ponta — mesmo padrão do LiveKit.
       um **API Token** (S3). Preencher no `.env`: `R2_ACCOUNT_ID`,
       `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`.
 - [ ] (Opcional) `R2_PUBLIC_BASE_URL` com o domínio público do bucket (r2.dev ou
-      domínio próprio). Sem ela, os anexos são servidos pelo proxy da API em
-      `/api/uploads/file/:id` — funciona só com as credenciais acima.
+      domínio próprio). **Só preencha se o bucket for mesmo público**: sem ela a
+      API devolve URL assinada com expiração, e só cai no proxy autenticado
+      `/api/uploads/file/:id` quando não dá para assinar.
 
 ## 2. LiveKit (bloqueia a voz — Dia 4)
 O código de voz é **agnóstico de provedor** (só usa `LIVEKIT_URL/KEY/SECRET`).
