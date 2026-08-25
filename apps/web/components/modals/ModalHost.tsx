@@ -9,6 +9,7 @@ import InviteModal from "@/components/modals/InviteModal";
 import InvitesModal from "@/components/modals/InvitesModal";
 import PromptDialog from "@/components/modals/PromptDialog";
 import SettingsModal from "@/components/modals/SettingsModal";
+import IncomingCallModal from "@/components/voice/IncomingCallModal";
 import { useUI } from "@/stores/ui";
 
 /**
@@ -41,5 +42,8 @@ export default function ModalHost() {
       return <InvitesModal guildId={modal.guildId} />;
     case "image":
       return <ImageModal url={modal.url} alt={modal.alt} />;
+    // ── f-voz ──
+    case "incomingCall":
+      return <IncomingCallModal />;
   }
 }

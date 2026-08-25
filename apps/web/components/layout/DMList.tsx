@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type MouseEvent } from "react";
-import { LogOut, Plus, Users } from "lucide-react";
+import { LogOut, Phone, Plus, Users } from "lucide-react";
 import { displayNameOf, isGroupChannel, isUnread, type DMChannelView, type PublicUser } from "@newdisc/shared";
 import UserFooter from "@/components/layout/UserFooter";
 import Avatar from "@/components/ui/Avatar";
@@ -10,6 +10,7 @@ import { api } from "@/lib/api";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { resolveStatus, usePresence } from "@/stores/presence";
 import { ui, useUI } from "@/stores/ui";
+import { useVoice } from "@/stores/voice";
 
 /** Coluna 2 no modo DM: busca de pessoas, conversas 1-a-1 e grupos. */
 export default function DMList() {
@@ -24,6 +25,8 @@ export default function DMList() {
   const statuses = usePresence((s) => s.statuses);
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<PublicUser[]>([]);
+  // f-voz: conversas com chamada rolando ganham o ícone verde de telefone
+  const emChamada = useVoice((s) => s.states);
 
   const q = query.trim().toLowerCase();
   const visible = q ? channels.filter((dm) => dmTitle(dm).toLowerCase().includes(q)) : channels;
@@ -171,6 +174,17 @@ export default function DMList() {
                   )}
                 </span>
               </button>
+              {(emChamada[dm.id]?.length ?? 0) > 0 && (
+                <Tooltip label="Chamada em andamento">
+                  <span
+                    data-dm-call={dm.id}
+                    aria-label={`Chamada em andamento em ${title}`}
+                    className="grid h-6 w-6 place-items-center text-green"
+                  >
+                    <Phone size={16} />
+                  </span>
+                </Tooltip>
+              )}
               {dm.mentionCount > 0 && !active && (
                 <span
                   aria-label={`${dm.mentionCount} não lidas`}

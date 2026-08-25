@@ -14,7 +14,7 @@ import { Room, RoomEvent, Track, type Participant } from "livekit-client";
 import { api } from "@/lib/api";
 import { CHAMADA_INICIAL, callReducer, type CallAction, type CallState } from "@/stores/call-machine";
 import { emit, errorMessage } from "@/stores/socket-adapter";
-import { ui } from "@/stores/ui";
+import { ui, useUI } from "@/stores/ui";
 import { useVoiceDevicesStore } from "@/stores/voiceDevices";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 
@@ -336,6 +336,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       const channelId = get().call.channelId;
       if (!channelId) return;
       get().dispatchCall({ type: "accept" });
+      fecharToque();
       emit(WS_EVENTS.CALL_ACCEPT, { channelId });
       set({ channelId, guildId: null, status: "connecting", erro: null });
       // entrar na mídia é o mesmo caminho de qualquer sala; sem LiveKit fica só
@@ -352,6 +353,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     declineCall: () => {
       const channelId = get().call.channelId;
       if (!channelId) return;
+      fecharToque();
       emit(WS_EVENTS.CALL_DECLINE, { channelId });
       get().dispatchCall({ type: "decline" });
       // recusar não deixa nada na tela: volta ao repouso na hora
@@ -366,9 +368,13 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
 
     handleRing: (evento) => {
       get().dispatchCall({ type: "ring", channelId: evento.channelId, from: evento.from });
+      // o toque só vira tela se a máquina aceitou o evento (já estar em chamada
+      // ignora um toque de outra conversa — abrir o modal aí seria mentira)
+      if (get().call.phase === "incoming") ui.openModal({ kind: "incomingCall" });
     },
 
     handleEnded: (evento) => {
+      fecharToque();
       get().dispatchCall({
         type: "ended",
         channelId: evento.channelId,
@@ -386,8 +392,10 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       }
     },
 
-    dispatchCall: (action) =>
-      set((s) => ({ call: callReducer(s.call, action, Date.now()) })),
+    dispatchCall: (action) => {
+      if (action.type === "timeout" || action.type === "reset") fecharToque();
+      set((s) => ({ call: callReducer(s.call, action, Date.now()) }));
+    },
 
     syncFlags: () => {
       const f = flags();
@@ -398,6 +406,11 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     },
   };
 });
+
+/** Tira a tela de chamada recebida — e só ela, para não fechar outro modal. */
+function fecharToque() {
+  if (useUI.getState().modal?.kind === "incomingCall") ui.closeModal();
+}
 
 /**
  * Pede o token e entra na sala. Devolve false quando a voz não está configurada
