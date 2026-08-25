@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
-import { parseBlocks, type Inline } from "./markdown-core";
+import { parseBlocks, soEmojis, type Inline } from "./markdown-core";
+import { API_URL } from "./config";
 
-export { parseBlocks, parseInline, plainText } from "./markdown-core";
+export { parseBlocks, parseInline, plainText, soEmojis } from "./markdown-core";
 export type { Block, Inline } from "./markdown-core";
 
 // ── render ───────────────────────────────────────────────────
@@ -11,6 +12,35 @@ export interface RenderOptions {
   meUsername?: string;
   /** nomes de exibição por username, para mostrar @Nome em vez de @user. */
   displayNames?: Record<string, string>;
+  /** mensagem só de emoji: renderiza grande, como no Discord. */
+  jumbo?: boolean;
+}
+
+/** Lado do emoji personalizado dentro do texto e no modo "jumbo" (px). */
+const EMOJI_PX = 22;
+const EMOJI_PX_JUMBO = 48;
+
+/**
+ * Imagem de um emoji personalizado. A URL vem do id — a rota é pública e o
+ * conteúdo de um id nunca muda —, então não precisamos consultar a store para
+ * desenhar: um emoji de servidor que eu deixei não vira quadrado quebrado.
+ * O `alt` guarda `:nome:`, que é o que a mensagem tinha antes do token.
+ */
+function EmojiPersonalizado({ name, id, jumbo }: { name: string; id: string; jumbo?: boolean }) {
+  const lado = jumbo ? EMOJI_PX_JUMBO : EMOJI_PX;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={`${API_URL}/api/emojis/${id}/image`}
+      alt={`:${name}:`}
+      title={`:${name}:`}
+      width={lado}
+      height={lado}
+      loading="lazy"
+      className="inline-block align-[-0.3em] object-contain"
+      style={{ width: lado, height: lado }}
+    />
+  );
 }
 
 function Spoiler({ children }: { children: ReactNode }) {
@@ -55,6 +85,8 @@ export function renderInline(nodes: Inline[], opts: RenderOptions = {}): ReactNo
             {n.href}
           </a>
         );
+      case "emoji":
+        return <EmojiPersonalizado key={i} name={n.name} id={n.id} jumbo={opts.jumbo} />;
       case "mention": {
         const me = opts.meUsername && n.username.toLowerCase() === opts.meUsername.toLowerCase();
         const nome = opts.displayNames?.[n.username.toLowerCase()] ?? n.username;
@@ -78,23 +110,28 @@ const H_CLASS = { 1: "text-2xl font-bold mt-4 mb-2", 2: "text-xl font-bold mt-4 
 /** Mensagem inteira renderizada. */
 export function Markdown({ text, ...opts }: { text: string } & RenderOptions) {
   const blocks = parseBlocks(text);
+  // "jumbo" é decidido aqui, sobre a mensagem inteira: um emoji sozinho numa
+  // frase continua do tamanho da linha (ver soEmojis)
+  const render = { ...opts, jumbo: opts.jumbo ?? soEmojis(blocks) };
+  // no jumbo o emoji unicode também cresce, e ele é texto: quem muda o tamanho
+  // dele é a fonte do contêiner
   return (
-    <>
+    <span className={render.jumbo ? "block text-[2.75rem] leading-[1.25]" : "contents"}>
       {blocks.map((b, i) => {
         switch (b.t) {
           case "p":
             // linha vazia vira só a quebra
-            return b.c.length === 0 ? <br key={i} /> : <div key={i}>{renderInline(b.c, opts)}</div>;
+            return b.c.length === 0 ? <br key={i} /> : <div key={i}>{renderInline(b.c, render)}</div>;
           case "quote":
             return (
               <div key={i} className="my-0.5 border-l-4 border-[#4e5058] pl-3">
-                {renderInline(b.c, opts)}
+                {renderInline(b.c, render)}
               </div>
             );
           case "h":
             return (
               <div key={i} className={H_CLASS[b.level]}>
-                {renderInline(b.c, opts)}
+                {renderInline(b.c, render)}
               </div>
             );
           case "codeblock":
@@ -108,6 +145,6 @@ export function Markdown({ text, ...opts }: { text: string } & RenderOptions) {
             );
         }
       })}
-    </>
+    </span>
   );
 }

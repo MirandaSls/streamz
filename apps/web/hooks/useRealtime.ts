@@ -13,14 +13,17 @@ import {
   type MemberUpdatedEvent,
   type Message,
   type MessageDeletedEvent,
+  type EmojiUpdatedEvent,
   type PresenceUpdatePayload,
   type PublicUser,
+  type StickerUpdatedEvent,
 } from "@newdisc/shared";
 import { notify } from "@/lib/desktop";
 import { useAuth } from "@/stores/auth";
 import { on, onReconnect, rejoinChannel } from "@/stores/socket-adapter";
 import { useChannels } from "@/stores/channels";
 import { dmTitle, useDMs } from "@/stores/dms";
+import { useEmojis } from "@/stores/emojis";
 import { useGuilds } from "@/stores/guilds";
 import { useMessages } from "@/stores/messages";
 import { usePresence } from "@/stores/presence";
@@ -124,11 +127,21 @@ export function useRealtime(currentUserId?: string): void {
         ui.toast(payload?.message || "Não foi possível concluir a ação", "error");
       }),
 
+      // ── g-emojis-midia ──
+      on<EmojiUpdatedEvent>(WS_EVENTS.EMOJI_UPDATED, ({ guildId, emojis }) => {
+        useEmojis.getState().applyEmojis(guildId, emojis);
+      }),
+      on<StickerUpdatedEvent>(WS_EVENTS.STICKER_UPDATED, ({ guildId, stickers }) => {
+        useEmojis.getState().applyStickers(guildId, stickers);
+      }),
+
       onReconnect(() => {
         rejoinChannel();
         void useMessages.getState().resyncActive();
         void useGuilds.getState().load();
         void useDMs.getState().refreshList();
+        // emoji/figurinha podem ter mudado enquanto a conexão esteve fora
+        void useEmojis.getState().load();
       }),
     ];
 

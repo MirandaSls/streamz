@@ -26,6 +26,11 @@ export type Modal =
   | { kind: "settings" }
   | { kind: "invites"; guildId: string }
   | { kind: "image"; url: string; alt: string }
+  // ── g-emojis-midia ──
+  /** galeria de imagens do canal, navegável com ← →. */
+  | { kind: "galeria"; urls: string[]; alts: string[]; indice: number }
+  /** gerência de emojis e figurinhas de um servidor. */
+  | { kind: "guildEmojis"; guildId: string }
   | {
       kind: "confirm";
       title: string;

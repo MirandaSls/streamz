@@ -18,6 +18,7 @@ import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/stores/auth";
 import { useActiveChannel, useChannels, useVoiceChannel } from "@/stores/channels";
 import { useActiveDM } from "@/stores/dms";
+import { useEmojis } from "@/stores/emojis";
 import { useMessages } from "@/stores/messages";
 import { useUI } from "@/stores/ui";
 
@@ -45,6 +46,11 @@ export default function AppPage() {
 
   // sessão
   useEffect(() => loadFromStorage(), [loadFromStorage]);
+  // emojis e figurinhas de todos os meus servidores, uma vez por sessão
+  // (depois disso quem atualiza é `emoji.updated`/`sticker.updated`)
+  useEffect(() => {
+    if (user) void useEmojis.getState().load();
+  }, [user]);
   useEffect(() => {
     if (!user && typeof window !== "undefined" && !localStorage.getItem("user")) {
       router.replace("/login");

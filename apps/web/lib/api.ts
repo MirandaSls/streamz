@@ -2,6 +2,11 @@ import type {
   Attachment,
   AuthTokens,
   Channel,
+  CustomEmoji,
+  GifCategoriesResponse,
+  GifSearchResponse,
+  GuildEmojis,
+  GuildStickers,
   DMChannelView,
   DMLeaveResult,
   Guild,
@@ -14,6 +19,7 @@ import type {
   MemberRole,
   Message,
   PublicUser,
+  Sticker,
   UserStatus,
 } from "@newdisc/shared";
 import { API_URL } from "./config";
@@ -168,6 +174,52 @@ export const api = {
     request<{ token: string; url: string; room: string }>(`/voice/channels/${channelId}/token`, {
       method: "POST",
     }),
+
+  // ── emojis personalizados e figurinhas (g-emojis-midia) ──
+  /** Emojis de todos os meus servidores, agrupados — o que o seletor mostra. */
+  myEmojis: () => request<GuildEmojis[]>("/emojis"),
+  guildEmojis: (guildId: string) => request<CustomEmoji[]>(`/guilds/${guildId}/emojis`),
+  createEmoji: (guildId: string, name: string, file: File) => {
+    const form = new FormData();
+    form.append("name", name);
+    form.append("file", file);
+    return request<CustomEmoji>(`/guilds/${guildId}/emojis`, { method: "POST", body: form });
+  },
+  renameEmoji: (guildId: string, id: string, name: string) =>
+    request<CustomEmoji>(`/guilds/${guildId}/emojis/${id}`, patch({ name })),
+  deleteEmoji: (guildId: string, id: string) =>
+    request<{ deleted: string }>(`/guilds/${guildId}/emojis/${id}`, { method: "DELETE" }),
+
+  myStickers: () => request<GuildStickers[]>("/stickers"),
+  guildStickers: (guildId: string) => request<Sticker[]>(`/guilds/${guildId}/stickers`),
+  createSticker: (guildId: string, name: string, tags: string, file: File) => {
+    const form = new FormData();
+    form.append("name", name);
+    form.append("tags", tags);
+    form.append("file", file);
+    return request<Sticker>(`/guilds/${guildId}/stickers`, { method: "POST", body: form });
+  },
+  updateSticker: (guildId: string, id: string, body: { name?: string; tags?: string }) =>
+    request<Sticker>(`/guilds/${guildId}/stickers/${id}`, patch(body)),
+  deleteSticker: (guildId: string, id: string) =>
+    request<{ deleted: string }>(`/guilds/${guildId}/stickers/${id}`, { method: "DELETE" }),
+
+  // ── GIFs (Tenor; sem chave a resposta vem `configured: false`) ──
+  searchGifs: (q: string) =>
+    request<GifSearchResponse>(`/gifs/search${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  gifCategories: () => request<GifCategoriesResponse>("/gifs/categories"),
+
+  // ── mídia do canal ──
+  channelAttachments: (channelId: string, type: "image" | "all" = "image") =>
+    request<Attachment[]>(`/channels/${channelId}/attachments?type=${type}`),
+
+  /** Anexo por URL (GIF do seletor): não passa pelo nosso storage. */
+  createExternalAttachment: (body: {
+    url: string;
+    filename: string;
+    width?: number;
+    height?: number;
+  }) => request<Attachment>("/uploads/external", json(body)),
 
   /** Envia um arquivo e devolve o anexo (a vincular numa mensagem no envio). */
   uploadFile: (file: File): Promise<Attachment> => {
