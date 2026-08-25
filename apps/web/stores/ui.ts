@@ -98,6 +98,8 @@ interface UIState {
   view: "guild" | "dm";
   /** coluna 4 (lista de membros) visível — o botão de membros do cabeçalho alterna. */
   membersOpen: boolean;
+  /** coluna 4 mostrando a galeria de mídia do canal (g-emojis-midia). */
+  mediaOpen: boolean;
   modal: Modal | null;
   contextMenu: ContextMenuState | null;
   popover: Popover | null;
@@ -105,6 +107,7 @@ interface UIState {
 
   setView: (view: "guild" | "dm") => void;
   toggleMembers: () => void;
+  toggleMedia: () => void;
   openModal: (modal: Modal) => void;
   /** Fecha o modal atual; confirm/prompt pendentes resolvem como cancelados. */
   closeModal: () => void;
@@ -127,13 +130,16 @@ const TOAST_MS = 5000;
 export const useUI = create<UIState>((set, get) => ({
   view: "guild",
   membersOpen: true,
+  mediaOpen: false,
   modal: null,
   contextMenu: null,
   popover: null,
   toasts: [],
 
   setView: (view) => set({ view }),
-  toggleMembers: () => set((s) => ({ membersOpen: !s.membersOpen })),
+  // uma coluna 4 só: abrir a mídia recolhe a lista de membros e vice-versa
+  toggleMembers: () => set((s) => ({ membersOpen: !s.membersOpen, mediaOpen: false })),
+  toggleMedia: () => set((s) => ({ mediaOpen: !s.mediaOpen })),
 
   openModal: (modal) => {
     // trocar de modal cancela o anterior, para não deixar Promise pendurada

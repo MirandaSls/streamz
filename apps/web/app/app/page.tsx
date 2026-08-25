@@ -6,6 +6,7 @@ import MemberList from "@/components/MemberList";
 import VoicePanel from "@/components/VoicePanel";
 import ChatView from "@/components/chat/ChatView";
 import DMView from "@/components/chat/DMView";
+import MediaPanel from "@/components/chat/MediaPanel";
 import ThreadPanel from "@/components/chat/ThreadPanel";
 import ChannelSidebar from "@/components/layout/ChannelSidebar";
 import DMList from "@/components/layout/DMList";
@@ -36,6 +37,7 @@ export default function AppPage() {
 
   const view = useUI((s) => s.view);
   const membersOpen = useUI((s) => s.membersOpen);
+  const mediaOpen = useUI((s) => s.mediaOpen);
   const activeChannel = useActiveChannel();
   const activeDM = useActiveDM();
   const voiceChannel = useVoiceChannel();
@@ -86,10 +88,16 @@ export default function AppPage() {
             <ChatView />
           )}
 
-          {/* coluna 4: thread aberta OU lista de membros — nunca as duas */}
+          {/* coluna 4: thread, mídia do canal OU lista de membros — uma por vez */}
           {!voiceChannel &&
             activeChannel &&
-            (threadParentId ? <ThreadPanel channelId={activeChannel.id} /> : membersOpen && <MemberList />)}
+            (threadParentId ? (
+              <ThreadPanel channelId={activeChannel.id} />
+            ) : mediaOpen ? (
+              <MediaPanel channelId={activeChannel.id} />
+            ) : (
+              membersOpen && <MemberList />
+            ))}
         </>
       )}
 

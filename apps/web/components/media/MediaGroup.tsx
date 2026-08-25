@@ -1,0 +1,212 @@
+"use client";
+
+import { useState } from "react";
+import { Download, EyeOff, FileText } from "lucide-react";
+import {
+  attachmentDisplayName,
+  isAudioAttachment,
+  isImageAttachment,
+  isPdfAttachment,
+  isSpoilerAttachment,
+  isVideoAttachment,
+  type Attachment,
+} from "@newdisc/shared";
+import { ui } from "@/stores/ui";
+
+/**
+ * Os anexos de uma mensagem.
+ *
+ * Uma imagem sozinha ocupa o tamanho natural (até o teto); duas ou mais entram
+ * numa grade de duas colunas, como o Discord — quatro fotos viram 2×2 em vez de
+ * uma coluna de quatro que empurraria a conversa toda para cima. Vídeo e áudio
+ * tocam na própria mensagem; PDF e o resto viram cartão com nome e tamanho.
+ *
+ * Clicar numa imagem abre o lightbox já sabendo de todas as imagens da
+ * mensagem, que é o que faz ← → funcionarem lá dentro.
+ */
+export default function MediaGroup({ attachments }: { attachments: Attachment[] }) {
+  if (attachments.length === 0) return null;
+
+  const imagens = attachments.filter(isImageAttachment);
+  const outros = attachments.filter((a) => !isImageAttachment(a));
+
+  return (
+    <div className="mt-1 flex flex-col gap-2">
+      {imagens.length > 0 && (
+        <div
+          className={
+            imagens.length === 1
+              ? "flex"
+              : "grid max-w-[550px] grid-cols-2 gap-1 [&>*]:aspect-video"
+          }
+        >
+          {imagens.map((a, i) => (
+            <Imagem
+              key={a.id}
+              anexo={a}
+              sozinha={imagens.length === 1}
+              onAbrir={() =>
+                ui.openModal({
+                  kind: "galeria",
+                  urls: imagens.map((x) => x.url),
+                  alts: imagens.map((x) => attachmentDisplayName(x)),
+                  indice: i,
+                })
+              }
+            />
+          ))}
+        </div>
+      )}
+
+      {outros.map((a) =>
+        isVideoAttachment(a) ? (
+          <Video key={a.id} anexo={a} />
+        ) : isAudioAttachment(a) ? (
+          <Audio key={a.id} anexo={a} />
+        ) : (
+          <Arquivo key={a.id} anexo={a} />
+        ),
+      )}
+    </div>
+  );
+}
+
+/** Imagem, com a cortina de spoiler quando o nome vem marcado. */
+function Imagem({
+  anexo,
+  sozinha,
+  onAbrir,
+}: {
+  anexo: Attachment;
+  sozinha: boolean;
+  onAbrir: () => void;
+}) {
+  const [revelado, setRevelado] = useState(!isSpoilerAttachment(anexo));
+  const nome = attachmentDisplayName(anexo);
+
+  if (!revelado) {
+    return (
+      <button
+        type="button"
+        onClick={() => setRevelado(true)}
+        aria-label={`Spoiler: mostrar ${nome}`}
+        className="relative block w-fit overflow-hidden rounded-lg"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={anexo.url}
+          alt=""
+          aria-hidden="true"
+          className={`blur-2xl ${sozinha ? "max-h-[350px] max-w-[550px]" : "h-full w-full"} object-cover`}
+        />
+        <span className="absolute inset-0 grid place-items-center">
+          <span className="flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1 text-sm font-bold uppercase text-white">
+            <EyeOff size={16} aria-hidden="true" />
+            Spoiler
+          </span>
+        </span>
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onAbrir}
+      aria-label={`Abrir imagem ${nome}`}
+      className={`block cursor-zoom-in overflow-hidden rounded-lg ${sozinha ? "w-fit" : "h-full w-full"}`}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={anexo.url}
+        alt={nome}
+        width={anexo.width ?? undefined}
+        height={anexo.height ?? undefined}
+        loading="lazy"
+        className={
+          sozinha
+            ? "max-h-[350px] max-w-[550px] object-contain"
+            : "h-full w-full object-cover"
+        }
+      />
+    </button>
+  );
+}
+
+/**
+ * Vídeo anexado. `preload="metadata"` para a primeira imagem aparecer sem
+ * baixar o arquivo inteiro; toca ao passar o mouse e volta ao início quando o
+ * mouse sai — o mesmo comportamento do GIF/vídeo curto no Discord.
+ */
+function Video({ anexo }: { anexo: Attachment }) {
+  return (
+    <video
+      src={anexo.url}
+      controls
+      preload="metadata"
+      onMouseEnter={(e) => void e.currentTarget.play().catch(() => undefined)}
+      onMouseLeave={(e) => {
+        e.currentTarget.pause();
+        e.currentTarget.currentTime = 0;
+      }}
+      aria-label={attachmentDisplayName(anexo)}
+      className="max-h-[350px] max-w-[550px] rounded-lg bg-black"
+    />
+  );
+}
+
+function Audio({ anexo }: { anexo: Attachment }) {
+  return (
+    <div className="w-[432px] max-w-full rounded-lg border border-black/30 bg-panel p-3">
+      <span className="mb-2 block truncate text-sm font-medium text-txt-normal">
+        {attachmentDisplayName(anexo)}
+      </span>
+      <audio src={anexo.url} controls preload="metadata" className="w-full" />
+    </div>
+  );
+}
+
+/** PDF e qualquer outro arquivo: ícone, nome, tamanho e o link para abrir. */
+function Arquivo({ anexo }: { anexo: Attachment }) {
+  const nome = attachmentDisplayName(anexo);
+  return (
+    <div className="flex w-[432px] max-w-full items-center gap-3 rounded-lg border border-black/30 bg-panel p-4">
+      <FileText
+        size={40}
+        strokeWidth={1.25}
+        className={`shrink-0 ${isPdfAttachment(anexo) ? "text-red" : "text-txt-muted"}`}
+        aria-hidden="true"
+      />
+      <span className="min-w-0 flex-1">
+        <a
+          href={anexo.url}
+          target="_blank"
+          rel="noreferrer"
+          className="block truncate font-medium text-txt-link hover:underline"
+        >
+          {nome}
+        </a>
+        <span className="text-xs text-txt-muted">
+          {isPdfAttachment(anexo) ? "PDF · " : ""}
+          {formatBytes(anexo.size)}
+        </span>
+      </span>
+      <a
+        href={anexo.url}
+        download={nome}
+        aria-label={`Baixar ${nome}`}
+        className="grid h-8 w-8 shrink-0 place-items-center rounded text-txt-secondary hover:bg-hov hover:text-txt-primary"
+      >
+        <Download size={20} />
+      </a>
+    </div>
+  );
+}
+
+/** Tamanho legível; anexo externo (GIF do provedor) não tem bytes conhecidos. */
+function formatBytes(n: number): string {
+  if (n <= 0) return "arquivo externo";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}

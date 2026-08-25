@@ -1,6 +1,6 @@
 "use client";
 
-import { Hash, Lock, Megaphone, MessagesSquare, Users } from "lucide-react";
+import { Hash, Images, Lock, Megaphone, MessagesSquare, Users } from "lucide-react";
 import Composer from "@/components/chat/Composer";
 import HeaderBar, { HeaderIcon } from "@/components/chat/HeaderBar";
 import MessageList from "@/components/chat/MessageList";
@@ -32,6 +32,8 @@ export default function ChatView() {
   const slice = useActiveSlice();
   const membersOpen = useUI((s) => s.membersOpen);
   const toggleMembers = useUI((s) => s.toggleMembers);
+  const mediaOpen = useUI((s) => s.mediaOpen);
+  const toggleMedia = useUI((s) => s.toggleMedia);
 
   const setSearchQuery = useMessages((s) => s.setSearchQuery);
   const runSearch = useMessages((s) => s.runSearch);
@@ -71,6 +73,13 @@ export default function ChatView() {
           <>
             <HeaderIcon label="Threads" disabled>
               <MessagesSquare size={24} />
+            </HeaderIcon>
+            <HeaderIcon
+              label={mediaOpen ? "Ocultar mídia do canal" : "Mídia do canal"}
+              active={mediaOpen}
+              onClick={toggleMedia}
+            >
+              <Images size={24} />
             </HeaderIcon>
             <HeaderIcon label={membersOpen ? "Ocultar lista de membros" : "Mostrar lista de membros"} active={membersOpen} onClick={toggleMembers}>
               <Users size={24} />
