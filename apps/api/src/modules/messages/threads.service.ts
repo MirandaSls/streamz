@@ -9,6 +9,7 @@ import type { PublicUser, ThreadView } from "@newdisc/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { RealtimeService } from "../realtime/realtime.service";
+import { MessagesService } from "./messages.service";
 import { toPublicUser } from "../../common/dto";
 
 /** Quantos avatares a lista e o "ver thread" mostram. */
@@ -28,6 +29,7 @@ export class ThreadsService {
     private readonly prisma: PrismaService,
     private readonly guilds: GuildsService,
     private readonly realtime: RealtimeService,
+    private readonly messages: MessagesService,
   ) {}
 
   /** Threads do canal, ativas primeiro e mais recentes no topo. */
@@ -67,7 +69,7 @@ export class ThreadsService {
       include: { createdBy: true },
     });
     const view = (await this.toViews([row]))[0];
-    this.realtime.emitToChannel(channelId, WS_EVENTS.THREAD_UPDATED, { channelId, thread: view });
+    this.emitir(channelId, view);
     return view;
   }
 
@@ -94,8 +96,23 @@ export class ThreadsService {
       include: { createdBy: true },
     });
     const view = (await this.toViews([row]))[0];
-    this.realtime.emitToChannel(channelId, WS_EVENTS.THREAD_UPDATED, { channelId, thread: view });
+    this.emitir(channelId, view);
     return view;
+  }
+
+  /**
+   * Avisa a sala do canal duas vezes de propósito: a lista de threads muda
+   * (`thread.updated`) e a mensagem raiz também — é ela que mostra o "ver
+   * thread" na timeline, e sem `message.updated` o chip só apareceria no
+   * próximo carregamento do histórico.
+   */
+  private async emitir(channelId: string, thread: ThreadView) {
+    this.realtime.emitToChannel(channelId, WS_EVENTS.THREAD_UPDATED, { channelId, thread });
+    this.realtime.emitToChannel(
+      channelId,
+      WS_EVENTS.MESSAGE_UPDATED,
+      await this.messages.getDTO(thread.id),
+    );
   }
 
   /**
