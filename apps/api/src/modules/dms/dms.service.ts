@@ -1,10 +1,10 @@
 import { BadRequestException, Injectable, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
-import type { DMChannelView, DirectMessage, PublicUser } from "@newdisc/shared";
+import type { DMChannelView, DirectMessage, PublicUser, UserStatus } from "@newdisc/shared";
 
 type ParticipantWithUser = {
   userId: string;
-  user: { id: string; username: string; avatarUrl: string | null; status: string };
+  user: { id: string; username: string; avatarUrl: string | null; status: UserStatus };
 };
 type ChannelWithParticipants = {
   id: string;
@@ -123,8 +123,8 @@ export class DMsService {
     return { id: channel.id, isGroup: channel.isGroup, name: channel.name, others };
   }
 
-  private toPublic(u: { id: string; username: string; avatarUrl: string | null; status: string }): PublicUser {
-    return { id: u.id, username: u.username, avatarUrl: u.avatarUrl, status: u.status as PublicUser["status"] };
+  private toPublic(u: { id: string; username: string; avatarUrl: string | null; status: UserStatus }): PublicUser {
+    return { id: u.id, username: u.username, avatarUrl: u.avatarUrl, status: u.status };
   }
 
   private toDTO(m: {
@@ -133,7 +133,7 @@ export class DMsService {
     content: string;
     createdAt: Date;
     editedAt: Date | null;
-    author: { id: string; username: string; avatarUrl: string | null; status: string };
+    author: { id: string; username: string; avatarUrl: string | null; status: UserStatus };
   }): DirectMessage {
     return {
       id: m.id,

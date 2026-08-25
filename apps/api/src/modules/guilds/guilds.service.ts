@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { WS_EVENTS } from "@newdisc/shared";
+import type { MemberRole } from "@newdisc/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { RealtimeService } from "../realtime/realtime.service";
 
@@ -130,7 +131,7 @@ export class GuildsService {
     return { channel, member };
   }
 
-  private isPrivileged(role: string): boolean {
+  private isPrivileged(role: MemberRole): boolean {
     return role === "OWNER" || role === "ADMIN";
   }
 
@@ -232,7 +233,7 @@ export class GuildsService {
     return { actor, target };
   }
 
-  private rank(role: string): number {
+  private rank(role: MemberRole): number {
     return role === "OWNER" ? 3 : role === "ADMIN" ? 2 : 1;
   }
 }

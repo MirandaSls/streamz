@@ -7,7 +7,7 @@ import {
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { StorageService } from "../storage/storage.service";
-import type { Attachment, Message as MessageDTO, ReactionGroup } from "@newdisc/shared";
+import type { Attachment, Message as MessageDTO, ReactionGroup, UserStatus } from "@newdisc/shared";
 import { MAX_ATTACHMENTS_PER_MESSAGE } from "@newdisc/shared";
 
 const MESSAGE_INCLUDE = {
@@ -115,8 +115,10 @@ export class MessagesService {
     await this.guilds.assertCanViewChannel(userId, channelId);
     const q = query.trim();
     if (!q) return [];
+    // `mode: "insensitive"` é obrigatório no Postgres: lá `contains` casa
+    // maiúsculas/minúsculas, e busca de chat sensível a caixa é inútil.
     const rows = await this.prisma.message.findMany({
-      where: { channelId, content: { contains: q } },
+      where: { channelId, content: { contains: q, mode: "insensitive" } },
       include: MESSAGE_INCLUDE,
       orderBy: { createdAt: "desc" },
       take,
@@ -202,7 +204,7 @@ export class MessagesService {
     parentId: string | null;
     createdAt: Date;
     editedAt: Date | null;
-    author: { id: string; username: string; avatarUrl: string | null; status: string };
+    author: { id: string; username: string; avatarUrl: string | null; status: UserStatus };
     reactions: { emoji: string; userId: string }[];
     attachments: {
       id: string;
@@ -227,7 +229,7 @@ export class MessagesService {
         id: m.author.id,
         username: m.author.username,
         avatarUrl: m.author.avatarUrl,
-        status: m.author.status as MessageDTO["author"]["status"],
+        status: m.author.status,
       },
       reactions: this.groupReactions(m.reactions),
       attachments: m.attachments.map((a) => this.toAttachmentDTO(a)),

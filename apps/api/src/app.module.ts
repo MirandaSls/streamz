@@ -12,6 +12,7 @@ import { GatewayModule } from "./modules/gateway/gateway.module";
 import { VoiceModule } from "./modules/voice/voice.module";
 import { StorageModule } from "./modules/storage/storage.module";
 import { UploadsModule } from "./modules/uploads/uploads.module";
+import { MaintenanceModule } from "./modules/maintenance/maintenance.module";
 import { HealthController } from "./health.controller";
 
 @Module({
@@ -29,6 +30,7 @@ import { HealthController } from "./health.controller";
     VoiceModule,
     StorageModule,
     UploadsModule,
+    MaintenanceModule,
   ],
   controllers: [HealthController],
 })

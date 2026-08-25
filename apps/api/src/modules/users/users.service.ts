@@ -13,7 +13,7 @@ export class UsersService {
       id: u.id,
       username: u.username,
       avatarUrl: u.avatarUrl,
-      status: u.status as PublicUser["status"],
+      status: u.status,
     };
   }
 }
