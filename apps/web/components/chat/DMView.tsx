@@ -113,8 +113,9 @@ export default function DMView() {
           allowAttachments
           placeholder={`Conversar em ${group ? title : `@${title}`}`}
           ariaLabel={`Mensagem para ${title}`}
-          onSend={(content, attachments) =>
-            send({ channelId: active.id, author: user, content, attachments })
+          channelName={group ? title : undefined}
+          onSend={(content, attachments, sticker) =>
+            send({ channelId: active.id, author: user, content, attachments, sticker })
           }
         />
       )}

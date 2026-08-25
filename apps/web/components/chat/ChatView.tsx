@@ -12,6 +12,18 @@ import { useCanModerate } from "@/stores/guilds";
 import { useActiveSlice, useMessages } from "@/stores/messages";
 import { useUI } from "@/stores/ui";
 
+/** A última mensagem confirmada de um autor, para o `↑` do composer. */
+function ultimaDe(
+  items: { id: string; content: string; author: { id: string }; pending?: boolean }[],
+  userId: string,
+): { id: string; content: string } | null {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const m = items[i];
+    if (m.author.id === userId && !m.pending) return { id: m.id, content: m.content };
+  }
+  return null;
+}
+
 /** Coluna 3 no modo servidor: cabeçalho, busca, timeline e composer. */
 export default function ChatView() {
   const user = useAuth((s) => s.user);
@@ -105,8 +117,19 @@ export default function ChatView() {
             allowAttachments
             placeholder={`Conversar em #${name}`}
             ariaLabel={`Mensagem para #${name}`}
-            onSend={(content, attachments) =>
-              send({ channelId: channel.id, guildId: channel.guildId, author: user, content, attachments })
+            channelName={name}
+            // ↑ no campo vazio reabre a última mensagem minha para editar
+            ultimaMinhaMensagem={() => ultimaDe(slice.items, user.id)}
+            onEditMessage={edit}
+            onSend={(content, attachments, sticker) =>
+              send({
+                channelId: channel.id,
+                guildId: channel.guildId,
+                author: user,
+                content,
+                attachments,
+                sticker,
+              })
             }
           />
         )

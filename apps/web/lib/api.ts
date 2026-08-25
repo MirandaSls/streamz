@@ -227,4 +227,65 @@ export const api = {
     form.append("file", file);
     return request<Attachment>("/uploads", { method: "POST", body: form });
   },
+
+  /**
+   * Igual ao `uploadFile`, mas relatando o quanto já subiu.
+   *
+   * Usa `XMLHttpRequest` porque `fetch` não expõe progresso de envio no
+   * browser (`ReadableStream` como corpo de request ainda não é universal), e
+   * uma barra parada em 0% até o arquivo terminar é pior que barra nenhuma.
+   * O 401 é tratado à mão aqui: renova uma vez e repete, como o `request`.
+   */
+  uploadFileComProgresso: (
+    file: File,
+    onProgresso: (porcentagem: number) => void,
+  ): Promise<Attachment> => enviarComProgresso(file, onProgresso, true),
 };
+
+async function enviarComProgresso(
+  file: File,
+  onProgresso: (porcentagem: number) => void,
+  podeRenovar: boolean,
+): Promise<Attachment> {
+  const token = await getAccessToken();
+  return new Promise<Attachment>((resolve, reject) => {
+    const form = new FormData();
+    form.append("file", file);
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_URL}/api/uploads`);
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgresso(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgresso(100);
+        resolve(JSON.parse(xhr.responseText) as Attachment);
+        return;
+      }
+      if (xhr.status === 401 && podeRenovar) {
+        renovarTokens()
+          .then(() => enviarComProgresso(file, onProgresso, false))
+          .then(resolve, reject);
+        return;
+      }
+      reject(erroDoXhr(xhr));
+    };
+    xhr.onerror = () => reject(new ApiError(0, "Falha de rede ao enviar o arquivo"));
+    xhr.send(form);
+  });
+}
+
+/** Mensagem da API quando o corpo do erro é JSON; senão, algo com o status. */
+function erroDoXhr(xhr: XMLHttpRequest): ApiError {
+  try {
+    const body = JSON.parse(xhr.responseText) as { message?: unknown };
+    if (typeof body.message === "string") return new ApiError(xhr.status, body.message);
+    if (Array.isArray(body.message) && typeof body.message[0] === "string") {
+      return new ApiError(xhr.status, body.message[0]);
+    }
+  } catch {
+    /* resposta não-JSON (proxy, HTML de erro) */
+  }
+  return new ApiError(xhr.status, `Erro ${xhr.status}`);
+}

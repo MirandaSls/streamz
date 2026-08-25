@@ -5,6 +5,7 @@ import {
   type Message,
   type MessageDeletedEvent,
   type PublicUser,
+  type Sticker,
 } from "@newdisc/shared";
 import { api } from "@/lib/api";
 import { emit, errorMessage, joinChannel } from "@/stores/socket-adapter";
@@ -72,6 +73,7 @@ interface OutboxEntry {
   content: string;
   attachmentIds: string[];
   parentId?: string;
+  stickerId?: string;
 }
 const outbox = new Map<string, OutboxEntry>();
 const ackTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -91,6 +93,8 @@ export interface SendInput {
   attachments?: Attachment[];
   /** preenchido quando é uma resposta dentro de uma thread. */
   parentId?: string;
+  /** figurinha: vai sozinha na mensagem (g-emojis-midia). */
+  sticker?: Sticker | null;
 }
 
 interface MessagesState {
@@ -200,6 +204,7 @@ export const useMessages = create<MessagesState>((set, get) => {
       nonce,
       ...(entry.parentId ? { parentId: entry.parentId } : {}),
       ...(entry.attachmentIds.length ? { attachmentIds: entry.attachmentIds } : {}),
+      ...(entry.stickerId ? { stickerId: entry.stickerId } : {}),
     });
     armAck(nonce, entry.channelId, entry.parentId);
   }
@@ -294,10 +299,11 @@ export const useMessages = create<MessagesState>((set, get) => {
       }
     },
 
-    send: ({ channelId, guildId, author, content, attachments, parentId }) => {
+    send: ({ channelId, guildId, author, content, attachments, parentId, sticker }) => {
       const text = content.trim().slice(0, MAX_MESSAGE_LENGTH);
       const list = attachments ?? [];
-      if (!text && list.length === 0) return;
+      // figurinha sozinha já é mensagem — o contrato aceita conteúdo vazio nesse caso
+      if (!text && list.length === 0 && !sticker) return;
       const nonce = newNonce();
       const optimistic = optimisticMessage({
         nonce,
@@ -307,6 +313,7 @@ export const useMessages = create<MessagesState>((set, get) => {
         content: text,
         attachments: list,
         parentId,
+        sticker,
       });
       if (parentId) {
         set((s) => ({ threadItems: [...s.threadItems, optimistic] }));
@@ -320,6 +327,7 @@ export const useMessages = create<MessagesState>((set, get) => {
         content: text,
         attachmentIds: list.map((a) => a.id),
         parentId,
+        stickerId: sticker?.id,
       };
       outbox.set(nonce, entry);
       emitCreate(nonce, entry);
