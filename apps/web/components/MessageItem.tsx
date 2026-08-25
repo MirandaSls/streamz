@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Attachment, Message } from "@newdisc/shared";
 import { isImageAttachment } from "@newdisc/shared";
+import type { ChatMessage } from "@/stores/messages-core";
 
 const QUICK_EMOJIS = ["👍", "❤️", "🔥", "😂", "🎉", "😢"];
 
@@ -65,8 +66,10 @@ export default function MessageItem({
   onDelete,
   onToggleReaction,
   onOpenThread,
+  onRetry,
+  onDiscard,
 }: {
-  message: Message;
+  message: ChatMessage;
   currentUserId?: string;
   canModerate?: boolean;
   onEdit: (id: string, content: string) => void;
@@ -74,13 +77,20 @@ export default function MessageItem({
   onToggleReaction: (id: string, emoji: string) => void;
   /** ausente dentro do painel de thread (não se responde a uma resposta). */
   onOpenThread?: (message: Message) => void;
+  /** reenvia uma mensagem otimista que o servidor não confirmou. */
+  onRetry?: (nonce: string) => void;
+  /** descarta uma mensagem otimista que o servidor não confirmou. */
+  onDiscard?: (nonce: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.content);
   const [picking, setPicking] = useState(false);
 
   const isOwn = message.author.id === currentUserId;
-  const canDelete = isOwn || canModerate;
+  // sem confirmação do servidor a mensagem ainda não tem id real: editar,
+  // apagar ou reagir não teriam a que se referir
+  const unconfirmed = Boolean(message.pending || message.failed);
+  const canDelete = isOwn || Boolean(canModerate);
 
   function submitEdit(e: React.FormEvent) {
     e.preventDefault();
@@ -90,12 +100,17 @@ export default function MessageItem({
   }
 
   return (
-    <div className="group relative mb-2 rounded px-2 py-1 hover:bg-black/10">
+    <div
+      className={`group relative mb-2 rounded px-2 py-1 hover:bg-black/10 ${
+        message.pending ? "opacity-60" : ""
+      }`}
+    >
       <div className="flex items-baseline gap-2">
         <span className="font-semibold text-white">{message.author.username}</span>
         <span className="text-xs text-neutral-500">
           {new Date(message.createdAt).toLocaleTimeString()}
           {message.editedAt && <span className="ml-1 italic">(editado)</span>}
+          {message.pending && <span className="ml-1 italic">enviando…</span>}
         </span>
       </div>
 
@@ -106,6 +121,7 @@ export default function MessageItem({
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => e.key === "Escape" && setEditing(false)}
+            aria-label="Editar mensagem"
             className="w-full rounded bg-rail px-2 py-1 text-sm outline-none"
           />
           <div className="mt-1 text-xs text-neutral-500">
@@ -122,6 +138,7 @@ export default function MessageItem({
       {/* link para a thread (só em mensagens raiz com respostas) */}
       {onOpenThread && message.replyCount > 0 && (
         <button
+          type="button"
           onClick={() => onOpenThread(message)}
           className="mt-1 text-xs font-medium text-accent hover:underline"
         >
@@ -137,6 +154,11 @@ export default function MessageItem({
             return (
               <button
                 key={r.emoji}
+                type="button"
+                aria-pressed={mine}
+                aria-label={`${r.emoji}, ${r.count} ${
+                  r.count === 1 ? "reação" : "reações"
+                }`}
                 onClick={() => onToggleReaction(message.id, r.emoji)}
                 className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition ${
                   mine
@@ -152,46 +174,78 @@ export default function MessageItem({
         </div>
       )}
 
-      {/* ações no hover */}
-      <div className="absolute -top-3 right-2 hidden gap-1 rounded bg-rail px-1 py-0.5 shadow group-hover:flex">
-        <button
-          onClick={() => setPicking((p) => !p)}
-          title="Reagir"
-          className="px-1 text-sm hover:brightness-125"
-        >
-          😊
-        </button>
-        {onOpenThread && (
+      {/* envio não confirmado: dá saída para reenviar ou desistir */}
+      {message.failed && message.nonce && (
+        <div className="mt-1 flex items-center gap-2 text-xs text-red-400">
+          <span>Não foi possível enviar.</span>
           <button
-            onClick={() => onOpenThread(message)}
-            title="Responder na thread"
+            type="button"
+            onClick={() => onRetry?.(message.nonce as string)}
+            className="rounded bg-rail px-2 py-0.5 font-medium text-neutral-200 hover:text-white"
+          >
+            Reenviar
+          </button>
+          <button
+            type="button"
+            onClick={() => onDiscard?.(message.nonce as string)}
+            className="rounded px-1 py-0.5 text-neutral-400 hover:text-white"
+          >
+            Descartar
+          </button>
+        </div>
+      )}
+
+      {/* ações da mensagem: no hover e também ao chegar pelo teclado */}
+      {!unconfirmed && (
+        <div className="absolute -top-3 right-2 hidden gap-1 rounded bg-rail px-1 py-0.5 shadow group-focus-within:flex group-hover:flex">
+          <button
+            type="button"
+            onClick={() => setPicking((p) => !p)}
+            aria-label="Reagir à mensagem"
+            aria-expanded={picking}
+            title="Reagir"
             className="px-1 text-sm hover:brightness-125"
           >
-            💬
+            😊
           </button>
-        )}
-        {isOwn && (
-          <button
-            onClick={() => {
-              setDraft(message.content);
-              setEditing(true);
-            }}
-            title="Editar"
-            className="px-1 text-sm hover:brightness-125"
-          >
-            ✏️
-          </button>
-        )}
-        {canDelete && (
-          <button
-            onClick={() => onDelete(message.id)}
-            title="Apagar"
-            className="px-1 text-sm hover:brightness-125"
-          >
-            🗑️
-          </button>
-        )}
-      </div>
+          {onOpenThread && (
+            <button
+              type="button"
+              onClick={() => onOpenThread(message)}
+              aria-label="Responder na thread"
+              title="Responder na thread"
+              className="px-1 text-sm hover:brightness-125"
+            >
+              💬
+            </button>
+          )}
+          {isOwn && (
+            <button
+              type="button"
+              onClick={() => {
+                setDraft(message.content);
+                setEditing(true);
+              }}
+              aria-label="Editar mensagem"
+              title="Editar"
+              className="px-1 text-sm hover:brightness-125"
+            >
+              ✏️
+            </button>
+          )}
+          {canDelete && (
+            <button
+              type="button"
+              onClick={() => onDelete(message.id)}
+              aria-label="Apagar mensagem"
+              title="Apagar"
+              className="px-1 text-sm hover:brightness-125"
+            >
+              🗑️
+            </button>
+          )}
+        </div>
+      )}
 
       {/* seletor rápido de emoji */}
       {picking && (
@@ -199,6 +253,8 @@ export default function MessageItem({
           {QUICK_EMOJIS.map((e) => (
             <button
               key={e}
+              type="button"
+              aria-label={`Reagir com ${e}`}
               onClick={() => {
                 onToggleReaction(message.id, e);
                 setPicking(false);
