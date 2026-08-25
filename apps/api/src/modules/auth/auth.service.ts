@@ -9,7 +9,7 @@ import * as argon2 from "argon2";
 import { createHash, randomBytes } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { isUniqueViolation } from "../../common/prisma-errors";
-import type { AuthTokens, PublicUser } from "@newdisc/shared";
+import type { AuthTokens, PublicUser, UserStatus } from "@newdisc/shared";
 import { RegisterDto, LoginDto } from "./dto";
 
 interface RefreshPayload {
@@ -148,13 +148,13 @@ export class AuthService {
     id: string;
     username: string;
     avatarUrl: string | null;
-    status: string;
+    status: UserStatus;
   }): PublicUser {
     return {
       id: u.id,
       username: u.username,
       avatarUrl: u.avatarUrl,
-      status: u.status as PublicUser["status"],
+      status: u.status,
     };
   }
 }
