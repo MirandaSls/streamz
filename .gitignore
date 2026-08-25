@@ -15,6 +15,9 @@ apps/desktop/src-tauri/target/
 .env.*.local
 !.env.example
 
+# config com segredo real do LiveKit (copiada de livekit.example.yaml)
+livekit.yaml
+
 # prisma
 apps/api/prisma/*.db
 

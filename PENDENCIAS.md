@@ -49,10 +49,17 @@ O código de voz é **agnóstico de provedor** (só usa `LIVEKIT_URL/KEY/SECRET`
 Duas formas de rodar — escolha uma:
 
 **Opção A — Self-host via Docker (preparado):**
-- [x] Serviço `livekit` no `docker-compose.yml` (profile `livekit`) + config em
-      `livekit.yaml` + scripts `pnpm livekit:up` / `livekit:down`.
-- [ ] Trocar o `keys:` do `livekit.yaml` e o `LIVEKIT_API_SECRET` do `.env` por um
-      secret aleatório (>= 32 chars) — os dois precisam **bater**.
+- [x] Serviço `livekit` no `docker-compose.yml` (profile `livekit`) + modelo de
+      config em `livekit.example.yaml` + scripts `pnpm livekit:up` / `livekit:down`.
+- [ ] Criar o `livekit.yaml` **local** (ele é ignorado pelo git porque carrega o
+      secret real; o docker-compose monta esse caminho):
+
+      cp livekit.example.yaml livekit.yaml
+      openssl rand -hex 32          # gere o secret
+
+      Cole o valor gerado nos **dois** lugares — `keys: devkey: <secret>` no
+      `livekit.yaml` e `LIVEKIT_API_SECRET` no `.env`. Eles precisam **bater**,
+      senão o token de acesso é rejeitado pelo servidor.
 - [ ] `pnpm livekit:up` e usar no `.env` (Opção A): `LIVEKIT_URL=ws://localhost:7880`,
       `NEXT_PUBLIC_LIVEKIT_URL=ws://localhost:7880`, `LIVEKIT_API_KEY=devkey`.
 

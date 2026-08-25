@@ -1,0 +1,26 @@
+# Modelo da config do LiveKit self-hosted (dev).
+#
+# Este arquivo é versionado e NÃO contém segredo. Para usar:
+#
+#   cp livekit.example.yaml livekit.yaml
+#   # gere um secret aleatório e cole em `keys:` e no LIVEKIT_API_SECRET do .env
+#   openssl rand -hex 32
+#
+# `livekit.yaml` está no .gitignore justamente porque carrega o secret real —
+# ele é montado no container pelo docker-compose (`pnpm livekit:up`).
+# As chaves daqui DEVEM bater com LIVEKIT_API_KEY/LIVEKIT_API_SECRET no .env.
+port: 7880
+rtc:
+  # WebRTC sobre UDP (faixa publicada no docker-compose) + fallback TCP em 7881
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50060
+  # dev em localhost: não tenta descobrir IP externo (STUN)
+  use_external_ip: false
+# formato: <api_key>: <api_secret>
+keys:
+  devkey: TROQUE_POR_UM_SECRET_ALEATORIO_openssl_rand_hex_32
+# logs mais enxutos no dev
+logging:
+  level: info
+  json: false
