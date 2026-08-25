@@ -182,12 +182,25 @@ export const WS_EVENTS = {
 export const MAX_MESSAGE_LENGTH = 2000;
 
 /** id opaco (cuid) — só precisamos rejeitar vazio e string absurda. */
-const idSchema = z.string().min(1, "id ausente").max(64, "id inválido");
+const idSchema = z
+  .string({ required_error: "obrigatório", invalid_type_error: "deve ser texto" })
+  .min(1, "id ausente")
+  .max(64, "id inválido");
+
+/** Corpo de mensagem: texto dentro do teto. `min` fica a cargo de quem usa. */
+const conteudoSchema = z
+  .string({ required_error: "obrigatório", invalid_type_error: "deve ser texto" })
+  .max(MAX_MESSAGE_LENGTH, `Mensagem acima de ${MAX_MESSAGE_LENGTH} caracteres`);
+
+/** Idem, mas rejeitando mensagem só de espaço. */
+const conteudoNaoVazioSchema = conteudoSchema.refine((c) => c.trim().length > 0, {
+  message: "Mensagem vazia",
+});
 
 export const messageCreateSchema = z
   .object({
     channelId: idSchema,
-    content: z.string().max(MAX_MESSAGE_LENGTH, `Mensagem acima de ${MAX_MESSAGE_LENGTH} caracteres`),
+    content: conteudoSchema,
     /** quando presente, cria a mensagem como resposta na thread desse id. */
     parentId: idSchema.optional(),
     /** ids de anexos já enviados (POST /uploads) a vincular nesta mensagem. */
@@ -204,10 +217,7 @@ export type MessageCreatePayload = z.infer<typeof messageCreateSchema>;
 
 export const messageEditSchema = z.object({
   messageId: idSchema,
-  content: z
-    .string()
-    .max(MAX_MESSAGE_LENGTH, `Mensagem acima de ${MAX_MESSAGE_LENGTH} caracteres`)
-    .refine((c) => c.trim().length > 0, { message: "Mensagem vazia" }),
+  content: conteudoNaoVazioSchema,
 });
 export type MessageEditPayload = z.infer<typeof messageEditSchema>;
 
@@ -217,7 +227,10 @@ export type MessageDeletePayload = z.infer<typeof messageDeleteSchema>;
 export const reactionSchema = z.object({
   messageId: idSchema,
   // emoji é texto curto vindo do cliente; o teto evita usar a coluna como blob
-  emoji: z.string().min(1, "Emoji ausente").max(64, "Emoji inválido"),
+  emoji: z
+    .string({ required_error: "obrigatório", invalid_type_error: "deve ser texto" })
+    .min(1, "Emoji ausente")
+    .max(64, "Emoji inválido"),
 });
 export type ReactionPayload = z.infer<typeof reactionSchema>;
 
@@ -229,10 +242,7 @@ export const channelIdSchema = idSchema;
 
 export const dmCreateSchema = z.object({
   dmChannelId: idSchema,
-  content: z
-    .string()
-    .max(MAX_MESSAGE_LENGTH, `Mensagem acima de ${MAX_MESSAGE_LENGTH} caracteres`)
-    .refine((c) => c.trim().length > 0, { message: "Mensagem vazia" }),
+  content: conteudoNaoVazioSchema,
 });
 export type DMCreatePayload = z.infer<typeof dmCreateSchema>;
 

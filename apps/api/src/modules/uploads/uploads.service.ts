@@ -86,21 +86,24 @@ export class UploadsService {
     id: string,
     auth: { bearer?: string; queryToken?: string },
   ) {
+    // A prova vem antes da consulta: sem ela, responder 404 x 401 já contaria a
+    // um anônimo quais ids de anexo existem.
+    const porToken =
+      !!auth.queryToken && this.storage.verifyAttachmentToken(auth.queryToken) === id;
+    const userId = porToken ? null : auth.bearer ? this.verifyBearer(auth.bearer) : null;
+    if (!porToken && !userId) {
+      throw new UnauthorizedException("Token ausente ou inválido");
+    }
+
     const att = await this.prisma.attachment.findUnique({
       where: { id },
       include: { message: { select: { channelId: true } } },
     });
     if (!att) throw new NotFoundException("Anexo não encontrado");
-
-    if (auth.queryToken && this.storage.verifyAttachmentToken(auth.queryToken) === id) {
-      return att;
-    }
-
-    const userId = auth.bearer ? this.verifyBearer(auth.bearer) : null;
-    if (!userId) throw new UnauthorizedException("Token ausente ou inválido");
+    if (porToken) return att;
 
     if (att.message) {
-      await this.guilds.assertCanViewChannel(userId, att.message.channelId);
+      await this.guilds.assertCanViewChannel(userId!, att.message.channelId);
     } else if (att.uploaderId !== userId) {
       throw new ForbiddenException("Anexo não vinculado a nenhuma mensagem sua");
     }
