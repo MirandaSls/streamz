@@ -200,6 +200,7 @@ export class ChatGateway
         payload.content.trim(),
         payload.parentId,
         payload.attachmentIds ?? [],
+        { replyToId: payload.replyToId, replyMention: payload.replyMention },
       );
       // eco do nonce: o autor usa para trocar a mensagem otimista pela real.
       // Não é persistido — só viaja de volta neste evento.

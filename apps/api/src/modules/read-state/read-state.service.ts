@@ -36,7 +36,7 @@ export class ReadStateService {
     const out = new Map<string, ChannelReadSummary>();
     if (channelIds.length === 0) return out;
 
-    const [ultimas, lidos, mencoes] = await Promise.all([
+    const [ultimas, lidos, mencoes, respostas] = await Promise.all([
       this.prisma.message.groupBy({
         by: ["channelId"],
         where: { channelId: { in: channelIds } },
@@ -54,7 +54,17 @@ export class ReadStateService {
           authorId: { not: userId },
           content: { contains: `@${username}`, mode: "insensitive" },
         },
-        select: { channelId: true, createdAt: true, content: true },
+        select: { id: true, channelId: true, createdAt: true, content: true },
+      }),
+      // resposta a uma mensagem minha com "@ ligado" também é menção (Discord)
+      this.prisma.message.findMany({
+        where: {
+          channelId: { in: channelIds },
+          authorId: { not: userId },
+          replyMention: true,
+          replyTo: { authorId: userId },
+        },
+        select: { id: true, channelId: true, createdAt: true },
       }),
     ]);
 
@@ -66,11 +76,22 @@ export class ReadStateService {
       const s = out.get(u.channelId);
       if (s) s.lastMessageAt = u._max.createdAt;
     }
+    // uma mensagem que menciona *e* responde a mim conta uma vez só
+    const contadas = new Set<string>();
     for (const m of mencoes) {
       const s = out.get(m.channelId);
       if (!s) continue;
       if (s.lastReadAt && m.createdAt <= s.lastReadAt) continue;
-      if (mentionsUser(m.content, username)) s.mentionCount += 1;
+      if (!mentionsUser(m.content, username)) continue;
+      contadas.add(m.id);
+      s.mentionCount += 1;
+    }
+    for (const m of respostas) {
+      const s = out.get(m.channelId);
+      if (!s || contadas.has(m.id)) continue;
+      if (s.lastReadAt && m.createdAt <= s.lastReadAt) continue;
+      contadas.add(m.id);
+      s.mentionCount += 1;
     }
     return out;
   }

@@ -4,11 +4,26 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { StorageService } from "../storage/storage.service";
-import type { Attachment, Message as MessageDTO, ReactionGroup } from "@newdisc/shared";
-import { MAX_ATTACHMENTS_PER_MESSAGE } from "@newdisc/shared";
+import type {
+  Attachment,
+  Message as MessageDTO,
+  MessageReplyRef,
+  MessageType,
+  PublicUser,
+  ReactionGroup,
+  SearchFilters,
+  ThreadSummary,
+} from "@newdisc/shared";
+import {
+  MAX_ATTACHMENTS_PER_MESSAGE,
+  MESSAGE_AROUND_RADIUS,
+  isEmptySearch,
+  replySnippet,
+} from "@newdisc/shared";
 import { toPublicUser, type PublicUserRow } from "../../common/dto";
 
 const MESSAGE_INCLUDE = {
@@ -17,7 +32,28 @@ const MESSAGE_INCLUDE = {
   attachments: true,
   channel: { select: { guildId: true } },
   _count: { select: { replies: true } },
+  // ── a-mensagens ──
+  // a mensagem citada entra no DTO como trecho, não inteira: a linha de
+  // referência mostra uma linha só, e trazer o objeto todo dobraria a página.
+  replyTo: {
+    select: {
+      id: true,
+      content: true,
+      author: true,
+      _count: { select: { attachments: true } },
+    },
+  },
+  pin: { select: { messageId: true } },
+  thread: true,
 } as const;
+
+type MessageRow = Prisma.MessageGetPayload<{ include: typeof MESSAGE_INCLUDE }>;
+
+/** Participantes de cada thread, por id da raiz (avatares empilhados). */
+type ParticipantsByRoot = Map<string, PublicUser[]>;
+
+/** Quantos avatares o "ver thread" mostra. */
+const THREAD_FACES = 5;
 
 @Injectable()
 export class MessagesService {
@@ -33,6 +69,7 @@ export class MessagesService {
     content: string,
     parentId?: string,
     attachmentIds?: string[],
+    reply?: { replyToId?: string; replyMention?: boolean },
   ): Promise<MessageDTO> {
     // valida canal + associação + permissão de postar (privado/somente-leitura)
     await this.guilds.assertCanPostChannel(authorId, channelId);
@@ -51,8 +88,29 @@ export class MessagesService {
       }
     }
 
+    // reply (citação): a mensagem citada precisa ser do mesmo canal — citar
+    // mensagem de outro canal vazaria conteúdo que o leitor talvez não veja.
+    const replyToId = reply?.replyToId;
+    if (replyToId) {
+      const alvo = await this.prisma.message.findUnique({
+        where: { id: replyToId },
+        select: { channelId: true },
+      });
+      if (!alvo || alvo.channelId !== channelId) {
+        throw new NotFoundException("Mensagem respondida não encontrada");
+      }
+    }
+
     const msg = await this.prisma.message.create({
-      data: { channelId, authorId, content, parentId: parentId ?? null },
+      data: {
+        channelId,
+        authorId,
+        content,
+        parentId: parentId ?? null,
+        replyToId: replyToId ?? null,
+        // "@ ligado" é o padrão do Discord; só vale quando há citação
+        replyMention: replyToId ? (reply?.replyMention ?? true) : false,
+      },
       include: MESSAGE_INCLUDE,
     });
 
@@ -65,6 +123,24 @@ export class MessagesService {
       });
       return this.getDTO(msg.id); // recarrega com os anexos vinculados
     }
+    return this.toDTO(msg);
+  }
+
+  /**
+   * Mensagem narrada pelo sistema no canal ("X fixou uma mensagem"). O alvo vai
+   * em `replyToId`: assim o cliente já tem o trecho e o "ir para a mensagem"
+   * sem inventar um segundo mecanismo de referência.
+   */
+  async createSystem(
+    channelId: string,
+    authorId: string,
+    type: MessageType,
+    targetId?: string,
+  ): Promise<MessageDTO> {
+    const msg = await this.prisma.message.create({
+      data: { channelId, authorId, content: "", type, replyToId: targetId ?? null },
+      include: MESSAGE_INCLUDE,
+    });
     return this.toDTO(msg);
   }
 
@@ -86,8 +162,47 @@ export class MessagesService {
       take,
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
     });
-    const dtos = await Promise.all(rows.map((m) => this.toDTO(m)));
-    return dtos.reverse();
+    return this.toDTOs(rows.reverse());
+  }
+
+  /**
+   * Janela em torno de uma mensagem: ela, as `MESSAGE_AROUND_RADIUS` anteriores
+   * e as seguintes. É o que permite "ir para a mensagem" (fixada, menção,
+   * resultado de busca, resposta) sem paginar o histórico inteiro para trás.
+   */
+  async around(channelId: string, userId: string, messageId: string): Promise<MessageDTO[]> {
+    await this.guilds.assertCanViewChannel(userId, channelId);
+    const alvo = await this.prisma.message.findUnique({
+      where: { id: messageId },
+      select: { id: true, channelId: true, parentId: true, createdAt: true },
+    });
+    if (!alvo || alvo.channelId !== channelId) {
+      throw new NotFoundException("Mensagem não encontrada");
+    }
+    // uma resposta de thread não vive na timeline: a âncora é a raiz dela
+    const ancora = alvo.parentId
+      ? await this.prisma.message.findUnique({
+          where: { id: alvo.parentId },
+          select: { id: true, createdAt: true },
+        })
+      : alvo;
+    if (!ancora) throw new NotFoundException("Mensagem não encontrada");
+
+    const [antes, depois] = await Promise.all([
+      this.prisma.message.findMany({
+        where: { channelId, parentId: null, createdAt: { lt: ancora.createdAt } },
+        include: MESSAGE_INCLUDE,
+        orderBy: { createdAt: "desc" },
+        take: MESSAGE_AROUND_RADIUS,
+      }),
+      this.prisma.message.findMany({
+        where: { channelId, parentId: null, createdAt: { gte: ancora.createdAt } },
+        include: MESSAGE_INCLUDE,
+        orderBy: { createdAt: "asc" },
+        take: MESSAGE_AROUND_RADIUS + 1,
+      }),
+    ]);
+    return this.toDTOs([...antes.reverse(), ...depois]);
   }
 
   /** Uma thread: a mensagem-raiz seguida das respostas em ordem cronológica. */
@@ -105,28 +220,124 @@ export class MessagesService {
       include: MESSAGE_INCLUDE,
       orderBy: { createdAt: "asc" },
     });
-    return Promise.all([parent, ...replies].map((m) => this.toDTO(m)));
+    return this.toDTOs([parent, ...replies]);
   }
 
-  /** Busca por conteúdo dentro de um canal (mais recentes primeiro). */
+  /**
+   * Busca dentro de um canal. Aceita os mesmos filtros da busca do servidor
+   * (`from:`, `has:`, datas, `mentions:`); `in:` é ignorado aqui — o canal já
+   * está fixado pela rota.
+   */
   async search(
     channelId: string,
     userId: string,
-    query: string,
+    filters: SearchFilters,
     take = 30,
   ): Promise<MessageDTO[]> {
     await this.guilds.assertCanViewChannel(userId, channelId);
-    const q = query.trim();
-    if (!q) return [];
-    // `mode: "insensitive"` é obrigatório no Postgres: lá `contains` casa
-    // maiúsculas/minúsculas, e busca de chat sensível a caixa é inútil.
+    if (isEmptySearch(filters)) return [];
+    const where = await this.searchWhere(filters, [channelId]);
+    if (!where) return [];
     const rows = await this.prisma.message.findMany({
-      where: { channelId, content: { contains: q, mode: "insensitive" } },
+      where,
       include: MESSAGE_INCLUDE,
       orderBy: { createdAt: "desc" },
       take,
     });
-    return Promise.all(rows.map((m) => this.toDTO(m)));
+    return this.toDTOs(rows);
+  }
+
+  /**
+   * Busca no servidor inteiro, restrita aos canais que **este** usuário
+   * enxerga: a lista de canais visíveis é a fonte da autorização, e não há
+   * caminho para um canal privado entrar no `where`.
+   */
+  async searchGuild(
+    guildId: string,
+    userId: string,
+    filters: SearchFilters,
+    take = 50,
+  ): Promise<MessageDTO[]> {
+    await this.guilds.assertMember(userId, guildId);
+    if (isEmptySearch(filters)) return [];
+    const visiveis = (await this.guilds.visibleChannelsForUser(userId)).filter(
+      (c) => c.guildId === guildId,
+    );
+    let ids = visiveis.map((c) => c.id);
+    if (filters.in) {
+      const nome = filters.in.toLowerCase();
+      const doNome = await this.prisma.channel.findMany({
+        where: { guildId, id: { in: ids } },
+        select: { id: true, name: true },
+      });
+      ids = doNome.filter((c) => (c.name ?? "").toLowerCase() === nome).map((c) => c.id);
+    }
+    if (ids.length === 0) return [];
+    const where = await this.searchWhere(filters, ids);
+    if (!where) return [];
+    const rows = await this.prisma.message.findMany({
+      where,
+      include: MESSAGE_INCLUDE,
+      orderBy: { createdAt: "desc" },
+      take,
+    });
+    return this.toDTOs(rows);
+  }
+
+  /**
+   * Traduz os filtros para o `where` do Prisma. Devolve `null` quando um filtro
+   * não casa com ninguém (`from:` de um usuário que não existe) — assim a busca
+   * responde "nada encontrado" em vez de ignorar o filtro e mostrar tudo.
+   */
+  private async searchWhere(
+    filters: SearchFilters,
+    channelIds: string[],
+  ): Promise<Prisma.MessageWhereInput | null> {
+    const and: Prisma.MessageWhereInput[] = [
+      { channelId: { in: channelIds } },
+      // mensagem de sistema não é conteúdo que alguém procure
+      { type: "DEFAULT" },
+    ];
+
+    const texto = filters.text.trim();
+    if (texto) and.push({ content: { contains: texto, mode: "insensitive" } });
+
+    if (filters.from) {
+      const autor = await this.prisma.user.findUnique({
+        where: { username: filters.from },
+        select: { id: true },
+      });
+      if (!autor) return null;
+      and.push({ authorId: autor.id });
+    }
+
+    if (filters.mentions) {
+      const alvo = await this.prisma.user.findUnique({
+        where: { username: filters.mentions },
+        select: { id: true, username: true },
+      });
+      if (!alvo) return null;
+      // menção textual OU resposta com "@ ligado" ao próprio — a mesma regra do
+      // não-lido (ver `mentionsMe` em @newdisc/shared)
+      and.push({
+        OR: [
+          { content: { contains: `@${alvo.username}`, mode: "insensitive" } },
+          { replyMention: true, replyTo: { authorId: alvo.id } },
+        ],
+      });
+    }
+
+    for (const has of filters.has) {
+      if (has === "link") and.push({ content: { contains: "http", mode: "insensitive" } });
+      if (has === "image") and.push({ attachments: { some: { contentType: { startsWith: "image/" } } } });
+      if (has === "file") and.push({ attachments: { some: {} } });
+    }
+
+    // `before:`/`after:` são dias, não instantes: o dia inteiro fica de fora.
+    if (filters.before) and.push({ createdAt: { lt: new Date(`${filters.before}T00:00:00.000Z`) } });
+    if (filters.after) and.push({ createdAt: { gt: new Date(`${filters.after}T23:59:59.999Z`) } });
+
+    return { AND: and };
   }
 
   /** Edição: só o autor (e ainda membro do servidor) pode editar. */
@@ -135,6 +346,7 @@ export class MessagesService {
     if (!msg) throw new NotFoundException("Mensagem não encontrada");
     await this.guilds.assertCanViewChannel(userId, msg.channelId);
     if (msg.authorId !== userId) throw new ForbiddenException("Você só pode editar suas mensagens");
+    if (msg.type !== "DEFAULT") throw new BadRequestException("Mensagem do sistema não é editável");
 
     const updated = await this.prisma.message.update({
       where: { id: messageId },
@@ -200,31 +412,41 @@ export class MessagesService {
     return this.toDTO(msg);
   }
 
+  /** DTOs de uma página inteira, com os participantes das threads em lote. */
+  private async toDTOs(rows: MessageRow[]): Promise<MessageDTO[]> {
+    const participantes = await this.threadParticipants(
+      rows.filter((m) => m.thread).map((m) => m.id),
+    );
+    return Promise.all(rows.map((m) => this.toDTO(m, participantes)));
+  }
+
+  /**
+   * Autores das respostas de cada thread, para os avatares empilhados. Uma
+   * consulta só para a página inteira — por mensagem seria uma por linha.
+   */
+  private async threadParticipants(rootIds: string[]): Promise<ParticipantsByRoot> {
+    const out: ParticipantsByRoot = new Map();
+    if (rootIds.length === 0) return out;
+    const rows = await this.prisma.message.findMany({
+      where: { parentId: { in: rootIds } },
+      select: { parentId: true, author: true },
+      orderBy: { createdAt: "asc" },
+    });
+    for (const r of rows) {
+      if (!r.parentId) continue;
+      const lista = out.get(r.parentId) ?? [];
+      if (lista.length >= THREAD_FACES || lista.some((u) => u.id === r.author.id)) continue;
+      lista.push(toPublicUser(r.author));
+      out.set(r.parentId, lista);
+    }
+    return out;
+  }
+
   /**
    * DTO da mensagem. Assíncrono porque a URL de cada anexo é assinada na hora
    * (URL com expiração; ver StorageService.attachmentUrl).
    */
-  private async toDTO(m: {
-    id: string;
-    channelId: string;
-    channel: { guildId: string | null };
-    content: string;
-    parentId: string | null;
-    createdAt: Date;
-    editedAt: Date | null;
-    author: PublicUserRow;
-    reactions: { emoji: string; userId: string }[];
-    attachments: {
-      id: string;
-      key: string;
-      filename: string;
-      contentType: string;
-      size: number;
-      width: number | null;
-      height: number | null;
-    }[];
-    _count: { replies: number };
-  }): Promise<MessageDTO> {
+  private async toDTO(m: MessageRow, participantes?: ParticipantsByRoot): Promise<MessageDTO> {
     return {
       id: m.id,
       channelId: m.channelId,
@@ -237,6 +459,40 @@ export class MessagesService {
       author: toPublicUser(m.author),
       reactions: this.groupReactions(m.reactions),
       attachments: await Promise.all(m.attachments.map((a) => this.toAttachmentDTO(a))),
+      type: m.type,
+      replyTo: this.toReplyRef(m.replyTo),
+      replyMention: m.replyMention,
+      pinned: Boolean(m.pin),
+      thread: this.toThreadSummary(m, participantes),
+    };
+  }
+
+  private toReplyRef(
+    r: {
+      id: string;
+      content: string;
+      author: PublicUserRow;
+      _count: { attachments: number };
+    } | null,
+  ): MessageReplyRef | null {
+    if (!r) return null;
+    return {
+      id: r.id,
+      author: toPublicUser(r.author),
+      content: replySnippet(r.content),
+      hasAttachments: r._count.attachments > 0,
+    };
+  }
+
+  private toThreadSummary(m: MessageRow, participantes?: ParticipantsByRoot): ThreadSummary | null {
+    if (!m.thread) return null;
+    return {
+      id: m.thread.id,
+      name: m.thread.name,
+      archived: m.thread.archived,
+      messageCount: m._count.replies,
+      participants: participantes?.get(m.id) ?? [],
+      lastMessageAt: null,
     };
   }
 
