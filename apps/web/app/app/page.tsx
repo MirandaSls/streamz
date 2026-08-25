@@ -12,6 +12,8 @@ import {
   type DirectMessage,
   type GuildRemovedEvent,
   type PublicUser,
+  type Attachment,
+  MAX_ATTACHMENTS_PER_MESSAGE,
 } from "@newdisc/shared";
 import { api } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
@@ -43,6 +45,12 @@ export default function AppPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [inviteCode, setInviteCode] = useState<string | null>(null);
+
+  // anexos em preparo no composer do canal
+  const [pending, setPending] = useState<Attachment[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // criação de canal
   const [channelModal, setChannelModal] = useState(false);
@@ -135,6 +143,8 @@ export default function AppPage() {
     setActiveChannel(c);
     setSearchResults(null);
     setSearchQuery("");
+    setPending([]);
+    setDraft("");
     closeThread();
     const history = await api.history(c.id);
     setMessages(history);
@@ -318,14 +328,49 @@ export default function AppPage() {
     dmBottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [dmMessages]);
 
+  // envia arquivos ao storage e adiciona ao preparo (input/drag-drop/colar)
+  const addFiles = useCallback(
+    async (files: FileList | File[]) => {
+      const list = Array.from(files);
+      if (list.length === 0) return;
+      const room = MAX_ATTACHMENTS_PER_MESSAGE - pending.length;
+      if (room <= 0) {
+        alert(`Máximo de ${MAX_ATTACHMENTS_PER_MESSAGE} anexos por mensagem.`);
+        return;
+      }
+      setUploading(true);
+      try {
+        for (const file of list.slice(0, room)) {
+          try {
+            const att = await api.uploadFile(file);
+            setPending((prev) => [...prev, att]);
+          } catch (err) {
+            alert(`Falha ao enviar ${file.name}: ${(err as Error).message}`);
+          }
+        }
+      } finally {
+        setUploading(false);
+      }
+    },
+    [pending.length],
+  );
+
+  function removePending(id: string) {
+    setPending((prev) => prev.filter((a) => a.id !== id));
+  }
+
   function send(e: React.FormEvent) {
     e.preventDefault();
-    if (!draft.trim() || !activeChannel) return;
+    if (!activeChannel || uploading) return;
+    const content = draft.trim();
+    if (!content && pending.length === 0) return;
     getSocket().emit(WS_EVENTS.MESSAGE_CREATE, {
       channelId: activeChannel.id,
-      content: draft.trim(),
+      content,
+      attachmentIds: pending.map((a) => a.id),
     });
     setDraft("");
+    setPending([]);
   }
 
   function editMessage(id: string, content: string) {
@@ -838,13 +883,94 @@ export default function AppPage() {
                   📢 Canal somente leitura
                 </div>
               ) : (
-                <form onSubmit={send} className="px-4 pb-4">
-                  <input
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    placeholder={`Conversar em #${activeChannel.name}`}
-                    className="w-full rounded bg-panel px-4 py-3 text-sm outline-none"
-                  />
+                <form
+                  onSubmit={send}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragging(true);
+                  }}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragging(false);
+                    if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+                  }}
+                  className={`px-4 pb-4 ${dragging ? "opacity-70" : ""}`}
+                >
+                  {/* preview dos anexos em preparo */}
+                  {(pending.length > 0 || uploading) && (
+                    <div className="mb-2 flex flex-wrap gap-2 rounded bg-panel p-2">
+                      {pending.map((a) => (
+                        <div
+                          key={a.id}
+                          className="relative flex items-center gap-2 rounded bg-rail px-2 py-1 text-xs"
+                        >
+                          {a.contentType.startsWith("image/") ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={a.url}
+                              alt={a.filename}
+                              className="h-10 w-10 rounded object-cover"
+                            />
+                          ) : (
+                            <span className="text-lg">📎</span>
+                          )}
+                          <span className="max-w-[8rem] truncate">{a.filename}</span>
+                          <button
+                            type="button"
+                            onClick={() => removePending(a.id)}
+                            title="Remover"
+                            className="text-neutral-400 hover:text-white"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                      {uploading && (
+                        <span className="self-center text-xs text-neutral-400">
+                          Enviando…
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 rounded bg-panel px-3">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      hidden
+                      onChange={(e) => {
+                        if (e.target.files?.length) addFiles(e.target.files);
+                        e.target.value = "";
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      title="Anexar arquivo"
+                      className="text-xl text-neutral-400 hover:text-white"
+                    >
+                      ＋
+                    </button>
+                    <input
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      onPaste={(e) => {
+                        const files = Array.from(e.clipboardData.files);
+                        if (files.length) {
+                          e.preventDefault();
+                          addFiles(files);
+                        }
+                      }}
+                      placeholder={
+                        dragging
+                          ? "Solte os arquivos para anexar…"
+                          : `Conversar em #${activeChannel.name}`
+                      }
+                      className="flex-1 bg-transparent py-3 text-sm outline-none"
+                    />
+                  </div>
                 </form>
               ))}
           </>

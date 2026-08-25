@@ -6,11 +6,14 @@ import {
 } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
-import type { Message as MessageDTO, ReactionGroup } from "@newdisc/shared";
+import { StorageService } from "../storage/storage.service";
+import type { Attachment, Message as MessageDTO, ReactionGroup } from "@newdisc/shared";
+import { MAX_ATTACHMENTS_PER_MESSAGE } from "@newdisc/shared";
 
 const MESSAGE_INCLUDE = {
   author: true,
   reactions: true,
+  attachments: true,
   _count: { select: { replies: true } },
 } as const;
 
@@ -19,6 +22,7 @@ export class MessagesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly guilds: GuildsService,
+    private readonly storage: StorageService,
   ) {}
 
   async create(
@@ -26,6 +30,7 @@ export class MessagesService {
     authorId: string,
     content: string,
     parentId?: string,
+    attachmentIds?: string[],
   ): Promise<MessageDTO> {
     // valida canal + associação + permissão de postar (privado/somente-leitura)
     await this.guilds.assertCanPostChannel(authorId, channelId);
@@ -48,6 +53,16 @@ export class MessagesService {
       data: { channelId, authorId, content, parentId: parentId ?? null },
       include: MESSAGE_INCLUDE,
     });
+
+    // vincula só anexos do próprio autor e ainda soltos (evita forjar/roubar)
+    const ids = (attachmentIds ?? []).slice(0, MAX_ATTACHMENTS_PER_MESSAGE);
+    if (ids.length > 0) {
+      await this.prisma.attachment.updateMany({
+        where: { id: { in: ids }, uploaderId: authorId, messageId: null },
+        data: { messageId: msg.id },
+      });
+      return this.getDTO(msg.id); // recarrega com os anexos vinculados
+    }
     return this.toDTO(msg);
   }
 
@@ -189,6 +204,15 @@ export class MessagesService {
     editedAt: Date | null;
     author: { id: string; username: string; avatarUrl: string | null; status: string };
     reactions: { emoji: string; userId: string }[];
+    attachments: {
+      id: string;
+      key: string;
+      filename: string;
+      contentType: string;
+      size: number;
+      width: number | null;
+      height: number | null;
+    }[];
     _count: { replies: number };
   }): MessageDTO {
     return {
@@ -206,6 +230,27 @@ export class MessagesService {
         status: m.author.status as MessageDTO["author"]["status"],
       },
       reactions: this.groupReactions(m.reactions),
+      attachments: m.attachments.map((a) => this.toAttachmentDTO(a)),
+    };
+  }
+
+  private toAttachmentDTO(a: {
+    id: string;
+    key: string;
+    filename: string;
+    contentType: string;
+    size: number;
+    width: number | null;
+    height: number | null;
+  }): Attachment {
+    return {
+      id: a.id,
+      url: this.storage.publicUrl(a.id, a.key),
+      filename: a.filename,
+      contentType: a.contentType,
+      size: a.size,
+      width: a.width,
+      height: a.height,
     };
   }
 

@@ -128,15 +128,20 @@ export class ChatGateway
     @MessageBody() body: MessageCreatePayload,
   ) {
     const user = client.data.user as SocketUser | undefined;
-    if (!user || !body?.content?.trim()) return;
+    if (!user) return;
+    const content = body?.content?.trim() ?? "";
+    const attachmentIds = body?.attachmentIds ?? [];
+    // precisa de texto OU pelo menos um anexo
+    if (!content && attachmentIds.length === 0) return;
 
     try {
       // create() valida a associação do autor ao servidor do canal
       const message = await this.messages.create(
         body.channelId,
         user.id,
-        body.content.trim().slice(0, 2000),
+        content.slice(0, 2000),
         body.parentId,
+        attachmentIds,
       );
       this.server.to(this.room(body.channelId)).emit(WS_EVENTS.MESSAGE_NEW, message);
     } catch (e) {

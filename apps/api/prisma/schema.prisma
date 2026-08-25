@@ -29,6 +29,7 @@ model User {
   dmMessages       DMMessage[]     @relation("DMAuthor")
   refreshTokens    RefreshToken[]
   channelAccess    ChannelMember[]
+  attachments      Attachment[]    @relation("AttachmentUploader")
 }
 
 // Um registro por refresh token emitido. Rotação: a cada /auth/refresh o token
@@ -146,9 +147,10 @@ model Message {
   createdAt DateTime  @default(now())
   editedAt  DateTime?
 
-  channel   Channel    @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  author    User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  reactions Reaction[]
+  channel     Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author      User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  reactions   Reaction[]
+  attachments Attachment[]
 
   // thread: uma mensagem-raiz (parentId null) agrupa respostas
   parent  Message?  @relation("MessageThread", fields: [parentId], references: [id], onDelete: Cascade)
@@ -156,6 +158,28 @@ model Message {
 
   @@index([channelId, parentId, createdAt])
   @@index([parentId])
+}
+
+// Arquivo enviado ao storage (R2). Criado no upload (messageId null) e
+// vinculado a uma mensagem no envio. Órfãos (nunca vinculados) podem ser
+// limpos por um job futuro. O objeto no bucket vive na chave `key`.
+model Attachment {
+  id          String   @id @default(cuid())
+  messageId   String?
+  uploaderId  String
+  key         String   @unique
+  filename    String
+  contentType String
+  size        Int
+  width       Int?
+  height      Int?
+  createdAt   DateTime @default(now())
+
+  message  Message? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  uploader User     @relation("AttachmentUploader", fields: [uploaderId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@index([uploaderId])
 }
 
 model Reaction {

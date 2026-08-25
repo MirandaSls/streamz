@@ -1,9 +1,61 @@
 "use client";
 
 import { useState } from "react";
-import type { Message } from "@newdisc/shared";
+import type { Attachment, Message } from "@newdisc/shared";
+import { isImageAttachment } from "@newdisc/shared";
 
 const QUICK_EMOJIS = ["👍", "❤️", "🔥", "😂", "🎉", "😢"];
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function AttachmentView({ attachments }: { attachments: Attachment[] }) {
+  if (attachments.length === 0) return null;
+  return (
+    <div className="mt-1 flex flex-col gap-2">
+      {attachments.map((a) =>
+        isImageAttachment(a) ? (
+          <a
+            key={a.id}
+            href={a.url}
+            target="_blank"
+            rel="noreferrer"
+            className="block w-fit"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={a.url}
+              alt={a.filename}
+              width={a.width ?? undefined}
+              height={a.height ?? undefined}
+              className="max-h-80 max-w-md rounded-lg object-contain"
+            />
+          </a>
+        ) : (
+          <a
+            key={a.id}
+            href={a.url}
+            target="_blank"
+            rel="noreferrer"
+            download={a.filename}
+            className="flex w-fit max-w-md items-center gap-3 rounded-lg bg-rail px-3 py-2 text-sm hover:brightness-110"
+          >
+            <span className="text-xl">📎</span>
+            <span className="min-w-0">
+              <span className="block truncate font-medium text-accent">
+                {a.filename}
+              </span>
+              <span className="text-xs text-neutral-500">{formatBytes(a.size)}</span>
+            </span>
+          </a>
+        ),
+      )}
+    </div>
+  );
+}
 
 export default function MessageItem({
   message,
@@ -61,8 +113,11 @@ export default function MessageItem({
           </div>
         </form>
       ) : (
-        <div className="text-neutral-200">{message.content}</div>
+        message.content && <div className="text-neutral-200">{message.content}</div>
       )}
+
+      {/* anexos (imagens inline / arquivos como card) */}
+      <AttachmentView attachments={message.attachments} />
 
       {/* link para a thread (só em mensagens raiz com respostas) */}
       {onOpenThread && message.replyCount > 0 && (

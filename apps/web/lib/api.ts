@@ -1,4 +1,4 @@
-import type { AuthTokens, PublicUser } from "@newdisc/shared";
+import type { Attachment, AuthTokens, PublicUser } from "@newdisc/shared";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3333";
 
@@ -113,4 +113,21 @@ export const api = {
       `/voice/channels/${channelId}/token`,
       { method: "POST" },
     ),
+
+  /** Envia um arquivo e devolve o anexo (a vincular numa mensagem no envio). */
+  uploadFile: async (file: File): Promise<Attachment> => {
+    const form = new FormData();
+    form.append("file", file);
+    // sem Content-Type manual: o browser define o boundary do multipart
+    const res = await fetch(`${API_URL}/api/uploads`, {
+      method: "POST",
+      headers: { ...authHeader() },
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message ?? `Erro ${res.status}`);
+    }
+    return (await res.json()) as Attachment;
+  },
 };

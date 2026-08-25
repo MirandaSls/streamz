@@ -58,6 +58,29 @@ export interface ReactionGroup {
   userIds: string[];
 }
 
+// ── Anexos ───────────────────────────────────────────────────
+/** Teto de tamanho por arquivo (bytes). Espelhado na validação da API. */
+export const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024; // 25 MB
+/** Máximo de anexos por mensagem. */
+export const MAX_ATTACHMENTS_PER_MESSAGE = 10;
+
+export interface Attachment {
+  id: string;
+  /** URL pronta para <img>/download (bucket público ou proxy da API). */
+  url: string;
+  filename: string;
+  contentType: string;
+  size: number;
+  /** dimensões da imagem, quando o arquivo é uma imagem reconhecida. */
+  width: number | null;
+  height: number | null;
+}
+
+/** true se o content-type indica uma imagem que renderizamos inline. */
+export function isImageAttachment(a: Pick<Attachment, "contentType">): boolean {
+  return a.contentType.startsWith("image/");
+}
+
 export interface Message {
   id: string;
   channelId: string;
@@ -70,6 +93,8 @@ export interface Message {
   parentId: string | null;
   /** nº de respostas (só relevante em mensagens raiz). */
   replyCount: number;
+  /** anexos vinculados (imagens/arquivos). */
+  attachments: Attachment[];
 }
 
 export interface GuildMemberView {
@@ -141,6 +166,8 @@ export interface MessageCreatePayload {
   content: string;
   /** quando presente, cria a mensagem como resposta na thread desse id. */
   parentId?: string;
+  /** ids de anexos já enviados (POST /uploads) a vincular nesta mensagem. */
+  attachmentIds?: string[];
 }
 
 export interface MessageEditPayload {
