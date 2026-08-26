@@ -92,6 +92,8 @@ const bia: PublicUser = { ...ana, id: "u-bia", username: "bia" };
 function msg(over: Partial<Message>): Message {
   return {
     id: "m1",
+    sticker: null,
+    suppressEmbeds: false,
     channelId: "c1",
     guildId: "g1",
     author: bia,

@@ -42,6 +42,8 @@ function message(id: string, extra: Partial<Message> = {}): Message {
     replyMention: false,
     thread: null,
     pinned: false,
+    sticker: null,
+    suppressEmbeds: false,
     ...extra,
   };
 }

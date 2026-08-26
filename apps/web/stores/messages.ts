@@ -7,6 +7,7 @@ import {
   type MessageDeletedEvent,
   type MessageReplyRef,
   type PublicUser,
+  type Sticker,
 } from "@newdisc/shared";
 import { api } from "@/lib/api";
 import { emit, errorMessage, joinChannel } from "@/stores/socket-adapter";
@@ -79,6 +80,7 @@ interface OutboxEntry {
   /** id da mensagem citada (reply) e se ela menciona o autor original. */
   replyToId?: string;
   replyMention?: boolean;
+  stickerId?: string;
 }
 const outbox = new Map<string, OutboxEntry>();
 const ackTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -111,6 +113,8 @@ export interface SendInput {
   attachments?: Attachment[];
   /** preenchido quando é uma resposta dentro de uma thread. */
   parentId?: string;
+  /** figurinha: vai sozinha na mensagem (g-emojis-midia). */
+  sticker?: Sticker | null;
 }
 
 interface MessagesState {
@@ -242,6 +246,7 @@ export const useMessages = create<MessagesState>((set, get) => {
       ...(entry.replyToId
         ? { replyToId: entry.replyToId, replyMention: entry.replyMention ?? true }
         : {}),
+      ...(entry.stickerId ? { stickerId: entry.stickerId } : {}),
     });
     armAck(nonce, entry.channelId, entry.parentId);
   }
@@ -345,10 +350,11 @@ export const useMessages = create<MessagesState>((set, get) => {
       }
     },
 
-    send: ({ channelId, guildId, author, content, attachments, parentId }) => {
+    send: ({ channelId, guildId, author, content, attachments, parentId, sticker }) => {
       const text = content.trim().slice(0, MAX_MESSAGE_LENGTH);
       const list = attachments ?? [];
-      if (!text && list.length === 0) return;
+      // figurinha sozinha já é mensagem — o contrato aceita conteúdo vazio nesse caso
+      if (!text && list.length === 0 && !sticker) return;
       const nonce = newNonce();
       // a barra "Respondendo a X" só vale para o canal em que foi aberta
       const alvo = get().replyTarget;
@@ -364,6 +370,7 @@ export const useMessages = create<MessagesState>((set, get) => {
         parentId,
         replyTo: respondendo ? referenciaDe(respondendo) : null,
         replyMention: respondendo ? replyMention : false,
+        sticker,
       });
       if (parentId) {
         set((s) => ({ threadItems: [...s.threadItems, optimistic] }));
@@ -378,6 +385,7 @@ export const useMessages = create<MessagesState>((set, get) => {
         attachmentIds: list.map((a) => a.id),
         parentId,
         ...(respondendo ? { replyToId: respondendo.id, replyMention } : {}),
+        stickerId: sticker?.id,
       };
       outbox.set(nonce, entry);
       emitCreate(nonce, entry);

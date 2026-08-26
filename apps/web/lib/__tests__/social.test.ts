@@ -28,6 +28,8 @@ function msg(id: string, autorId: string): ChatMessage {
     replyMention: false,
     thread: null,
     pinned: false,
+    sticker: null,
+    suppressEmbeds: false,
     editedAt: null,
     reactions: [],
     parentId: null,

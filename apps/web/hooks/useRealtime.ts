@@ -34,6 +34,9 @@ import {
   type FriendRemovedEvent,
   type FriendRequestEvent,
   type UserBlockedEvent,
+  // ── g-emojis-midia ──
+  type EmojiUpdatedEvent,
+  type StickerUpdatedEvent,
 } from "@newdisc/shared";
 import type { NotificationSetting } from "@newdisc/shared";
 import { shouldNotifyMessage } from "@newdisc/shared";
@@ -47,6 +50,7 @@ import { useCategories } from "@/stores/categories";
 import { useChannels } from "@/stores/channels";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
+import { useEmojis } from "@/stores/emojis";
 import { useGuilds } from "@/stores/guilds";
 import { useMessages } from "@/stores/messages";
 import { usePermissions } from "@/stores/permissions";
@@ -238,6 +242,14 @@ export function useRealtime(currentUserId?: string): void {
         void useFriends.getState().load(true);
       }),
 
+      // ── g-emojis-midia ──
+      on<EmojiUpdatedEvent>(WS_EVENTS.EMOJI_UPDATED, ({ guildId, emojis }) => {
+        useEmojis.getState().applyEmojis(guildId, emojis);
+      }),
+      on<StickerUpdatedEvent>(WS_EVENTS.STICKER_UPDATED, ({ guildId, stickers }) => {
+        useEmojis.getState().applyStickers(guildId, stickers);
+      }),
+
       onReconnect(() => {
         rejoinChannel();
         void useMessages.getState().resyncActive();
@@ -253,6 +265,8 @@ export function useRealtime(currentUserId?: string): void {
         if (guildDeCategorias) void useCategories.getState().loadForGuild(guildDeCategorias);
         // amigos, pedidos e bloqueios podem ter mudado durante a queda
         void useFriends.getState().load(true);
+        // emoji/figurinha podem ter mudado enquanto a conexão esteve fora
+        void useEmojis.getState().load();
       }),
       // ── f-voz ──
       // estado de voz e chamada em DM: a store decide o que fazer, aqui só

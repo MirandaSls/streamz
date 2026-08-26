@@ -76,6 +76,8 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
           <Composer
             key={`composer-${parentId}`}
             channelId={channelId}
+            // rascunho próprio: o da thread não é o mesmo do canal
+            draftKey={`thread:${parentId}`}
             compact
             placeholder="Responder na thread…"
             ariaLabel="Responder na thread"

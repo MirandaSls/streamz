@@ -20,6 +20,7 @@ import {
   messageEditSchema,
   parseWsPayload,
   reactionSchema,
+  suppressEmbedsSchema,
   typingSchema,
   // ── f-voz ──
   callSchema,
@@ -222,6 +223,7 @@ export class ChatGateway
         payload.parentId,
         payload.attachmentIds ?? [],
         { replyToId: payload.replyToId, replyMention: payload.replyMention },
+        payload.stickerId,
       );
       // eco do nonce: o autor usa para trocar a mensagem otimista pela real.
       // Não é persistido — só viaja de volta neste evento.
@@ -294,6 +296,28 @@ export class ChatGateway
         payload.messageId,
         user.id,
         payload.emoji,
+      );
+      this.server.to(this.room(message.channelId)).emit(WS_EVENTS.MESSAGE_UPDATED, message);
+    } catch (e) {
+      this.emitError(client, e);
+    }
+  }
+
+  /**
+   * "Remover prévia" do menu da mensagem (g-emojis-midia). Como toda escrita de
+   * mensagem, entra pelo gateway e o resultado volta em `message.updated` para
+   * a sala do canal — quem já estava lendo vê o card sumir sem recarregar.
+   */
+  @SubscribeMessage(WS_EVENTS.MESSAGE_SUPPRESS_EMBEDS)
+  async onSuppressEmbeds(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
+    const user = this.userOf(client);
+    const payload = this.parse(client, suppressEmbedsSchema, body);
+    if (!user || !payload) return;
+    try {
+      const message = await this.messages.setSuppressEmbeds(
+        payload.messageId,
+        user.id,
+        payload.suppress,
       );
       this.server.to(this.room(message.channelId)).emit(WS_EVENTS.MESSAGE_UPDATED, message);
     } catch (e) {

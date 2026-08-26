@@ -14,6 +14,7 @@ import { ChannelsModule } from "../channels/channels.module";
 import { GuildsModule } from "../guilds/guilds.module";
 import { RealtimeModule } from "../realtime/realtime.module";
 import { StorageModule } from "../storage/storage.module";
+import { EmojisModule } from "../emojis/emojis.module";
 
 @Module({
   // ChannelsModule entra por causa do modo lento (b-canais): a regra é do canal
@@ -24,6 +25,7 @@ import { StorageModule } from "../storage/storage.module";
     ReadStateModule,
     ChannelsModule,
     RealtimeModule,
+    EmojisModule,
   ],
   controllers: [
     MessagesController,

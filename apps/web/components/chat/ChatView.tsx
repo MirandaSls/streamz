@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Clock, EyeOff, Hash, Lock, Megaphone, MessagesSquare, Users } from "lucide-react";
+import { Clock, EyeOff, Hash, Images, Lock, Megaphone, MessagesSquare, Users } from "lucide-react";
 import { slowmodeLabel } from "@newdisc/shared";
 import Composer from "@/components/chat/Composer";
 import HeaderBar, { HeaderIcon } from "@/components/chat/HeaderBar";
@@ -47,7 +47,19 @@ function confirmar(channelId: string) {
   }
 }
 
-/** Coluna 3 no modo servidor: cabeçalho, timeline e composer. */
+/** A última mensagem confirmada de um autor, para o `↑` do composer. */
+function ultimaDe(
+  items: { id: string; content: string; author: { id: string }; pending?: boolean }[],
+  userId: string,
+): { id: string; content: string } | null {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const m = items[i];
+    if (m.author.id === userId && !m.pending) return { id: m.id, content: m.content };
+  }
+  return null;
+}
+
+/** Coluna 3 no modo servidor: cabeçalho, busca, timeline e composer. */
 export default function ChatView() {
   const user = useAuth((s) => s.user);
   const channel = useActiveChannel();
@@ -61,6 +73,8 @@ export default function ChatView() {
   const slice = useActiveSlice();
   const membersOpen = useUI((s) => s.membersOpen);
   const toggleMembers = useUI((s) => s.toggleMembers);
+  const mediaOpen = useUI((s) => s.mediaOpen);
+  const toggleMedia = useUI((s) => s.toggleMedia);
 
   const searchQuery = useMessages((s) => s.searchQuery);
   const setSearchQuery = useMessages((s) => s.setSearchQuery);
@@ -150,6 +164,13 @@ export default function ChatView() {
         tools={
           <>
             <ThreadsPopover channelId={channel.id} canManage={canModerate} />
+            <HeaderIcon
+              label={mediaOpen ? "Ocultar mídia do canal" : "Mídia do canal"}
+              active={mediaOpen}
+              onClick={toggleMedia}
+            >
+              <Images size={24} />
+            </HeaderIcon>
             <HeaderIcon label={membersOpen ? "Ocultar lista de membros" : "Mostrar lista de membros"} active={membersOpen} onClick={toggleMembers}>
               <Users size={24} />
             </HeaderIcon>
@@ -211,14 +232,25 @@ export default function ChatView() {
               allowAttachments
               placeholder={`Conversar em #${name}`}
               ariaLabel={`Mensagem para #${name}`}
-              onSend={(content, attachments) => {
+              channelName={name}
+              // ↑ no campo vazio reabre a última mensagem minha para editar
+              ultimaMinhaMensagem={() => ultimaDe(slice.items, user.id)}
+              onEditMessage={edit}
+              onSend={(content, attachments, sticker) => {
                 // a API recusaria com 429; barrar aqui evita a mensagem otimista
                 // aparecer e sumir na cara de quem escreveu
                 if (slowmode.blocked) {
                   ui.toast(`Modo lento: aguarde ${slowmode.remaining}s`, "error");
                   return;
                 }
-                send({ channelId: channel.id, guildId: channel.guildId, author: user, content, attachments });
+                send({
+                  channelId: channel.id,
+                  guildId: channel.guildId,
+                  author: user,
+                  content,
+                  attachments,
+                  sticker,
+                });
               }}
             />
           </>

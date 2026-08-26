@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   Param,
@@ -13,12 +14,35 @@ import {
 import { FileInterceptor } from "@nestjs/platform-express";
 import { SkipThrottle } from "@nestjs/throttler";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { IsInt, IsOptional, IsString, IsUrl, Length, Max, Min } from "class-validator";
 import { MAX_ATTACHMENT_SIZE } from "@newdisc/shared";
 import { UploadsService } from "./uploads.service";
 import { StorageService } from "../storage/storage.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";
 import { UPLOAD_THROTTLE } from "../../common/throttle";
+
+class AnexoExternoDto {
+  @IsUrl({ protocols: ["https"], require_protocol: true })
+  @Length(1, 1024)
+  url!: string;
+
+  @IsString()
+  @Length(1, 200)
+  filename!: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(10000)
+  width?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(10000)
+  height?: number;
+}
 
 @Controller("uploads")
 export class UploadsController {
@@ -39,6 +63,17 @@ export class UploadsController {
     @UploadedFile() file: { originalname: string; buffer: Buffer; size: number },
   ) {
     return this.uploads.upload(user.sub, file);
+  }
+
+  /**
+   * Anexo por URL — o GIF do seletor. Sem arquivo, sem bucket: só a linha de
+   * `Attachment` apontando para a URL do provedor (ver UploadsService).
+   */
+  @Post("external")
+  @UPLOAD_THROTTLE
+  @UseGuards(JwtGuard)
+  createExternal(@CurrentUser() user: JwtPayload, @Body() dto: AnexoExternoDto) {
+    return this.uploads.createExternal(user.sub, dto);
   }
 
   /**

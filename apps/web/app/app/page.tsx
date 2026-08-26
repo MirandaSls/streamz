@@ -6,6 +6,7 @@ import MemberList from "@/components/MemberList";
 import VoicePanel from "@/components/VoicePanel";
 import ChatView from "@/components/chat/ChatView";
 import DMView from "@/components/chat/DMView";
+import MediaPanel from "@/components/chat/MediaPanel";
 import SearchPanel from "@/components/chat/SearchPanel";
 import ThreadPanel from "@/components/chat/ThreadPanel";
 import ChannelSidebar from "@/components/layout/ChannelSidebar";
@@ -22,6 +23,8 @@ import { useSettingsRoute } from "@/hooks/useSettingsRoute";
 import { useAuth } from "@/stores/auth";
 import { useActiveChannel, useChannels, useVoiceChannel } from "@/stores/channels";
 import { useActiveDM } from "@/stores/dms";
+import { useEmojis } from "@/stores/emojis";
+import { useGuilds } from "@/stores/guilds";
 import { useMessages } from "@/stores/messages";
 // ── d-social ── ausente automático depois de 10 min sem interação
 import { useAutoIdle } from "@/stores/presence";
@@ -41,6 +44,7 @@ export default function AppPage() {
 
   const view = useUI((s) => s.view);
   const membersOpen = useUI((s) => s.membersOpen);
+  const mediaOpen = useUI((s) => s.mediaOpen);
   const activeChannel = useActiveChannel();
   const activeDM = useActiveDM();
   const voiceChannel = useVoiceChannel();
@@ -57,6 +61,16 @@ export default function AppPage() {
 
   // sessão
   useEffect(() => loadFromStorage(), [loadFromStorage]);
+  // Carga inicial ao entrar no app. A lista de servidores só era buscada no
+  // `onReconnect` — que, por desenho, não dispara na primeira conexão —, então
+  // abrir/recarregar o app deixava o rail vazio até o socket cair e voltar.
+  // Emojis e figurinhas vêm junto; depois quem os atualiza é
+  // `emoji.updated`/`sticker.updated`.
+  useEffect(() => {
+    if (!user) return;
+    void useGuilds.getState().load();
+    void useEmojis.getState().load();
+  }, [user]);
   useEffect(() => {
     if (!user && typeof window !== "undefined" && !localStorage.getItem("user")) {
       router.replace("/login");
@@ -92,13 +106,15 @@ export default function AppPage() {
             <ChatView />
           )}
 
-          {/* coluna 4: busca, thread aberta OU lista de membros — nunca duas */}
+          {/* coluna 4: busca, thread, mídia OU lista de membros — uma por vez */}
           {!voiceChannel &&
             activeChannel &&
             (buscaAberta ? (
               <SearchPanel guildId={activeChannel.guildId} />
             ) : threadParentId ? (
               <ThreadPanel channelId={activeChannel.id} />
+            ) : mediaOpen ? (
+              <MediaPanel channelId={activeChannel.id} />
             ) : (
               membersOpen && <MemberList />
             ))}

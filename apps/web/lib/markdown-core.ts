@@ -1,7 +1,8 @@
 /**
  * Markdown do Discord, o subconjunto que aparece nas mensagens:
  * **negrito**, *itálico*, __sublinhado__, ~~riscado~~, `código`, ```bloco```,
- * ||spoiler||, > citação, # títulos, links automáticos e menções @usuário.
+ * ||spoiler||, > citação, # títulos, links automáticos, menções @usuário e
+ * emoji personalizado `<:nome:id>`.
  *
  * Parser próprio, pequeno e determinístico, para não trazer um markdown
  * completo (tabelas, HTML) que o Discord também não renderiza. Sem HTML: tudo
@@ -17,7 +18,9 @@ export type Inline =
   | { t: "code"; v: string }
   | { t: "spoiler"; c: Inline[] }
   | { t: "link"; href: string }
-  | { t: "mention"; username: string };
+  | { t: "mention"; username: string }
+  /** emoji personalizado de servidor: `<:nome:id>` (g-emojis-midia). */
+  | { t: "emoji"; name: string; id: string };
 
 export type Block =
   | { t: "p"; c: Inline[] }
@@ -27,9 +30,14 @@ export type Block =
 
 const URL_RE = /https?:\/\/[^\s<>"')\]]+/y;
 const MENTION_RE = /@([A-Za-z0-9_.-]{3,32})/y;
+/** Forma interna do emoji personalizado; o contrato tem a mesma expressão. */
+const EMOJI_RE = /<:([a-z0-9_]{2,32}):([A-Za-z0-9_-]{1,64})>/y;
 
 /** Delimitadores inline, do mais longo para o mais curto (ordem importa). */
-const MARKS: { open: string; t: Exclude<Inline, { t: "text" | "code" | "link" | "mention" }>["t"] }[] = [
+const MARKS: {
+  open: string;
+  t: Exclude<Inline, { t: "text" | "code" | "link" | "mention" | "emoji" }>["t"];
+}[] = [
   { open: "**", t: "bold" },
   { open: "__", t: "underline" },
   { open: "~~", t: "strike" },
@@ -74,6 +82,18 @@ export function parseInline(src: string): Inline[] {
       if (m) {
         flush();
         out.push({ t: "link", href: m[0] });
+        i += m[0].length;
+        continue;
+      }
+    }
+
+    // <:nome:id> — emoji personalizado (o cliente troca `:nome:` antes de enviar)
+    if (ch === "<") {
+      EMOJI_RE.lastIndex = i;
+      const m = EMOJI_RE.exec(src);
+      if (m) {
+        flush();
+        out.push({ t: "emoji", name: m[1], id: m[2] });
         i += m[0].length;
         continue;
       }
@@ -171,9 +191,52 @@ export function plainText(nodes: Inline[]): string {
           return n.href;
         case "mention":
           return `@${n.username}`;
+        case "emoji":
+          return `:${n.name}:`;
         default:
           return plainText(n.c);
       }
     })
     .join("");
+}
+
+/**
+ * "Jumbo": mensagem feita só de emoji vira emoji grande, como no Discord.
+ *
+ * Vale para até `MAX_EMOJIS_JUMBO` emojis (personalizados ou unicode) sem
+ * nenhum outro texto — com uma frase junto, o emoji volta ao tamanho da linha.
+ */
+export const MAX_EMOJIS_JUMBO = 27;
+
+/**
+ * Casa um emoji unicode com o que costuma vir grudado nele: seletor de variação
+ * (U+FE0F), modificador de tom de pele e o juntador ZWJ das sequências de
+ * família/profissão. Sem consumir o ZWJ, uma sequência composta deixaria o
+ * caractere invisível para trás e a mensagem não seria vista como "só emoji".
+ */
+const UNICODE_EMOJI_RE = /\p{Extended_Pictographic}(\uFE0F|\p{Emoji_Modifier}|\u200D)*/gu;
+
+/**
+ * true quando o texto da mensagem é só emoji (e espaços). Trabalha sobre os
+ * blocos já analisados para não repetir o parser — e porque `<:nome:id>` só é
+ * emoji depois de reconhecido como token.
+ */
+export function soEmojis(blocks: Block[]): boolean {
+  let total = 0;
+  for (const b of blocks) {
+    if (b.t !== "p") return false;
+    for (const n of b.c) {
+      if (n.t === "emoji") {
+        total += 1;
+        continue;
+      }
+      if (n.t !== "text") return false;
+      const semEmoji = n.v.replace(UNICODE_EMOJI_RE, () => {
+        total += 1;
+        return "";
+      });
+      if (semEmoji.trim().length > 0) return false;
+    }
+  }
+  return total > 0 && total <= MAX_EMOJIS_JUMBO;
 }

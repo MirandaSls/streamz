@@ -4,6 +4,7 @@ import { useMemo, useState, type MouseEvent } from "react";
 import {
   Copy,
   CornerUpLeft,
+  EyeOff,
   FileText,
   Link2,
   MessageSquare,
@@ -16,16 +17,25 @@ import {
 } from "lucide-react";
 import type { Attachment, Message, PublicUser } from "@newdisc/shared";
 import {
+  WS_EVENTS,
   displayNameOf,
   extractFirstUrl,
+  isDirectImageUrl,
   isImageAttachment,
   isSystemMessage,
   messageLinkPath,
+  parseCustomEmoji,
+  youtubeVideoId,
 } from "@newdisc/shared";
 import LinkEmbedCard, { useLinkEmbed } from "@/components/chat/LinkEmbedCard";
+import MediaGroup from "@/components/media/MediaGroup";
+import StickerView from "@/components/media/StickerView";
+import YouTubeEmbed from "@/components/media/YouTubeEmbed";
+import { emit } from "@/stores/socket-adapter";
 import Avatar from "@/components/ui/Avatar";
 import EmojiPicker from "@/components/ui/EmojiPicker";
 import Tooltip from "@/components/ui/Tooltip";
+import { API_URL } from "@/lib/config";
 import { dataCompleta, hora, horaCompleta } from "@/lib/format";
 import { Markdown } from "@/lib/markdown";
 import { useAuth } from "@/stores/auth";
@@ -41,53 +51,31 @@ import type { ChatMessage } from "@/stores/messages-core";
 import { useLiveUser } from "@/stores/presence";
 import { anchorOf, ui, type MenuItem } from "@/stores/ui";
 
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+/**
+ * O emoji de uma reação: unicode sai como texto; personalizado é `<:nome:id>` e
+ * vira a imagem daquele id — a mesma URL pública que o markdown usa, para a
+ * reação não virar `<:festa:abc>` escrito na tela.
+ */
+function EmojiDaReacao({ emoji, tamanho }: { emoji: string; tamanho: number }) {
+  const custom = parseCustomEmoji(emoji);
+  // o tamanho é preferência do usuário (aba Aparência de e-configuracoes)
+  if (!custom) return <span style={{ fontSize: `${tamanho}px`, lineHeight: 1.1 }}>{emoji}</span>;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={`${API_URL}/api/emojis/${custom.id}/image`}
+      alt={`:${custom.name}:`}
+      loading="lazy"
+      style={{ height: tamanho, width: tamanho }}
+      className="object-contain"
+    />
+  );
 }
 
-function AttachmentView({ attachments }: { attachments: Attachment[] }) {
-  if (attachments.length === 0) return null;
-  return (
-    <div className="mt-1 flex flex-col gap-2">
-      {attachments.map((a) =>
-        isImageAttachment(a) ? (
-          <button
-            key={a.id}
-            type="button"
-            onClick={() => ui.openModal({ kind: "image", url: a.url, alt: a.filename })}
-            aria-label={`Abrir imagem ${a.filename}`}
-            className="block w-fit cursor-zoom-in overflow-hidden rounded-lg"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={a.url}
-              alt={a.filename}
-              width={a.width ?? undefined}
-              height={a.height ?? undefined}
-              className="max-h-[350px] max-w-[550px] object-contain"
-            />
-          </button>
-        ) : (
-          <a
-            key={a.id}
-            href={a.url}
-            target="_blank"
-            rel="noreferrer"
-            download={a.filename}
-            className="flex w-[432px] max-w-full items-center gap-3 rounded-lg border border-black/30 bg-panel p-4 hover:bg-hov"
-          >
-            <FileText size={40} strokeWidth={1.25} className="shrink-0 text-txt-muted" aria-hidden="true" />
-            <span className="min-w-0">
-              <span className="block truncate font-medium text-txt-link hover:underline">{a.filename}</span>
-              <span className="text-xs text-txt-muted">{formatBytes(a.size)}</span>
-            </span>
-          </a>
-        ),
-      )}
-    </div>
-  );
+/** Texto acessível de uma reação (o leitor de tela não lê a imagem do emoji). */
+function rotuloDaReacao(emoji: string): string {
+  const custom = parseCustomEmoji(emoji);
+  return custom ? `:${custom.name}:` : emoji;
 }
 
 /** Ícone-botão da barra de ações que aparece no hover da mensagem. */
@@ -231,7 +219,16 @@ export default function MessageItem({
   const canDelete = isOwn || Boolean(canModerate);
   // em conversa direta não há moderação: qualquer participante fixa (como no Discord)
   const canPin = message.guildId === null || Boolean(canModerate);
-  const embed = useLinkEmbed(unconfirmed || sistema ? null : extractFirstUrl(message.content));
+
+  // Prévia de link: uma URL só, a primeira. `suppressEmbeds` desliga a prévia
+  // desta mensagem (item do menu, para o autor e a moderação); vídeo do YouTube
+  // vira player e imagem direta vira a própria imagem — nos dois casos o card
+  // de Open Graph não acrescentaria nada.
+  const url =
+    unconfirmed || sistema || message.suppressEmbeds ? null : extractFirstUrl(message.content);
+  const videoId = url ? youtubeVideoId(url) : null;
+  const imagemDireta = url && !videoId && isDirectImageUrl(url) ? url : null;
+  const embed = useLinkEmbed(videoId || imagemDireta ? null : url);
 
   function submitEdit() {
     const t = draft.trim();
@@ -315,6 +312,18 @@ export default function MessageItem({
       label: "Copiar ID da mensagem",
       onSelect: () => void navigator.clipboard?.writeText(message.id),
     });
+    // só faz sentido quando há link, e só o autor/moderação pode mexer
+    if ((isOwn || canModerate) && extractFirstUrl(message.content)) {
+      items.push({
+        label: message.suppressEmbeds ? "Mostrar prévia do link" : "Remover prévia do link",
+        icon: <EyeOff size={18} />,
+        onSelect: () =>
+          emit(WS_EVENTS.MESSAGE_SUPPRESS_EMBEDS, {
+            messageId: message.id,
+            suppress: !message.suppressEmbeds,
+          }),
+      });
+    }
     if (canDelete) {
       items.push({ separator: true });
       items.push({
@@ -470,7 +479,26 @@ export default function MessageItem({
           )
         )}
 
-        <AttachmentView attachments={message.attachments} />
+        {message.sticker && <StickerView sticker={message.sticker} />}
+        <MediaGroup attachments={message.attachments} />
+        {videoId && <YouTubeEmbed videoId={videoId} title={message.content} />}
+        {imagemDireta && (
+          <button
+            type="button"
+            onClick={() =>
+              ui.openModal({ kind: "galeria", urls: [imagemDireta], alts: ["Imagem"], indice: 0 })
+            }
+            className="mt-1 block w-fit cursor-zoom-in overflow-hidden rounded-lg"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={imagemDireta}
+              alt="Imagem do link"
+              loading="lazy"
+              className="max-h-[350px] max-w-[550px] object-contain"
+            />
+          </button>
+        )}
         {embed && <LinkEmbedCard embed={embed} />}
 
         {onOpenThread && (message.thread || message.replyCount > 0) && (
@@ -510,12 +538,12 @@ export default function MessageItem({
                   key={r.emoji}
                   label={`${nomesDeQuemReagiu(r.userIds, conhecidos)} ${
                     r.count === 1 ? "reagiu" : "reagiram"
-                  } com ${r.emoji}`}
+                  } com ${rotuloDaReacao(r.emoji)}`}
                 >
                   <button
                     type="button"
                     aria-pressed={mine}
-                    aria-label={`${r.emoji}, ${r.count} ${r.count === 1 ? "reação" : "reações"}`}
+                    aria-label={`${rotuloDaReacao(r.emoji)}, ${r.count} ${r.count === 1 ? "reação" : "reações"}`}
                     onClick={() => onToggleReaction(message.id, r.emoji)}
                     className={`flex min-h-[26px] items-center gap-1.5 rounded-lg border px-1.5 text-sm transition ${
                       mine
@@ -523,7 +551,7 @@ export default function MessageItem({
                         : "border-transparent bg-panel text-txt-normal hover:border-[#4e5058]"
                     }`}
                   >
-                    <span style={{ fontSize: `${tamanhoEmoji}px`, lineHeight: 1.1 }}>{r.emoji}</span>
+                    <EmojiDaReacao emoji={r.emoji} tamanho={tamanhoEmoji} />
                     <span className="text-xs font-medium">{r.count}</span>
                   </button>
                 </Tooltip>

@@ -6,6 +6,7 @@ import ChannelTopicModal from "@/components/modals/ChannelTopicModal";
 import ConfirmDialog from "@/components/modals/ConfirmDialog";
 import CreateChannelModal from "@/components/modals/CreateChannelModal";
 import CreateGroupDMModal from "@/components/modals/CreateGroupDMModal";
+import GuildEmojisModal from "@/components/modals/GuildEmojisModal";
 import ImageModal from "@/components/modals/ImageModal";
 import InviteModal from "@/components/modals/InviteModal";
 import InvitesModal from "@/components/modals/InvitesModal";
@@ -50,7 +51,7 @@ export default function ModalHost() {
     case "invites":
       return <InvitesModal guildId={modal.guildId} />;
     case "image":
-      return <ImageModal url={modal.url} alt={modal.alt} />;
+      return <ImageModal urls={[modal.url]} alts={[modal.alt]} indice={0} />;
     // ── f-voz ──
     case "incomingCall":
       return <IncomingCallModal />;
@@ -74,5 +75,10 @@ export default function ModalHost() {
       return <GroupSettingsModal channelId={modal.channelId} />;
     case "addGroupMembers":
       return <AddGroupMembersModal channelId={modal.channelId} />;
+    // ── g-emojis-midia ──
+    case "galeria":
+      return <ImageModal urls={modal.urls} alts={modal.alts} indice={modal.indice} />;
+    case "guildEmojis":
+      return <GuildEmojisModal guildId={modal.guildId} />;
   }
 }

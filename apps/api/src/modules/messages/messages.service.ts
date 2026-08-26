@@ -23,14 +23,21 @@ import {
   MAX_ATTACHMENTS_PER_MESSAGE,
   MESSAGE_AROUND_RADIUS,
   isEmptySearch,
+  parseCustomEmoji,
   replySnippet,
 } from "@newdisc/shared";
 import { toPublicUser, type PublicUserRow } from "../../common/dto";
+import { toStickerDTO, type StickerRow } from "../emojis/dto";
+import { toAttachmentDTO, type AttachmentRow } from "../uploads/attachment-dto";
+import { EmojisService } from "../emojis/emojis.service";
+import { StickersService } from "../emojis/stickers.service";
 
 const MESSAGE_INCLUDE = {
   author: true,
   reactions: true,
   attachments: true,
+  // g-emojis-midia: figurinha enviada no lugar do texto
+  sticker: true,
   channel: { select: { guildId: true } },
   _count: { select: { replies: true } },
   // ── a-mensagens ──
@@ -63,6 +70,9 @@ export class MessagesService {
     private readonly guilds: GuildsService,
     private readonly storage: StorageService,
     private readonly channels: ChannelsService,
+    // g-emojis-midia: figurinha da mensagem e emoji personalizado de reação
+    private readonly stickers: StickersService,
+    private readonly emojis: EmojisService,
   ) {}
 
   async create(
@@ -72,6 +82,7 @@ export class MessagesService {
     parentId?: string,
     attachmentIds?: string[],
     reply?: { replyToId?: string; replyMention?: boolean },
+    stickerId?: string,
   ): Promise<MessageDTO> {
     // valida canal + associação + permissão de postar (privado/somente-leitura)
     const access = await this.guilds.assertCanPostChannel(authorId, channelId);
@@ -108,6 +119,9 @@ export class MessagesService {
       }
     }
 
+    // figurinha: precisa existir e ser de um servidor do autor (g-emojis-midia)
+    if (stickerId) await this.stickers.assertPodeUsar(authorId, stickerId);
+
     const msg = await this.prisma.message.create({
       data: {
         channelId,
@@ -117,6 +131,7 @@ export class MessagesService {
         replyToId: replyToId ?? null,
         // "@ ligado" é o padrão do Discord; só vale quando há citação
         replyMention: replyToId ? (reply?.replyMention ?? true) : false,
+        stickerId: stickerId ?? null,
       },
       include: MESSAGE_INCLUDE,
     });
@@ -391,6 +406,10 @@ export class MessagesService {
     const msg = await this.prisma.message.findUnique({ where: { id: messageId } });
     if (!msg) throw new NotFoundException("Mensagem não encontrada");
     await this.guilds.assertCanViewChannel(userId, msg.channelId);
+    // `<:nome:id>`: só reage com emoji personalizado quem é membro do servidor
+    // dono dele — a reação vai para todo mundo que lê o canal (g-emojis-midia)
+    const custom = parseCustomEmoji(emoji);
+    if (custom) await this.emojis.assertPodeUsar(userId, custom.id);
     await this.prisma.reaction.upsert({
       where: { messageId_userId_emoji: { messageId, userId, emoji } },
       create: { messageId, userId, emoji },
@@ -406,6 +425,30 @@ export class MessagesService {
     await this.prisma.reaction
       .delete({ where: { messageId_userId_emoji: { messageId, userId, emoji } } })
       .catch(() => undefined); // idempotente: já não existia
+    return this.getDTO(messageId);
+  }
+
+  /**
+   * Liga/desliga a prévia de link da mensagem ("remover prévia" do menu). Só o
+   * autor ou quem modera o canal — é conteúdo da mensagem de outra pessoa
+   * (g-emojis-midia).
+   */
+  async setSuppressEmbeds(
+    messageId: string,
+    userId: string,
+    suppress: boolean,
+  ): Promise<MessageDTO> {
+    const msg = await this.prisma.message.findUnique({ where: { id: messageId } });
+    if (!msg) throw new NotFoundException("Mensagem não encontrada");
+    await this.guilds.assertCanViewChannel(userId, msg.channelId);
+    if (msg.authorId !== userId) {
+      const canModerate = await this.guilds.canModerateChannel(userId, msg.channelId);
+      if (!canModerate) throw new ForbiddenException("Sem permissão para alterar esta mensagem");
+    }
+    await this.prisma.message.update({
+      where: { id: messageId },
+      data: { suppressEmbeds: suppress },
+    });
     return this.getDTO(messageId);
   }
 
@@ -466,7 +509,11 @@ export class MessagesService {
       author: toPublicUser(m.author),
       type: m.type,
       reactions: this.groupReactions(m.reactions),
-      attachments: await Promise.all(m.attachments.map((a) => this.toAttachmentDTO(a))),
+      attachments: await Promise.all(
+        m.attachments.map((a) => toAttachmentDTO(this.storage, a)),
+      ),
+      sticker: m.sticker ? toStickerDTO(m.sticker) : null,
+      suppressEmbeds: m.suppressEmbeds,
       replyTo: this.toReplyRef(m.replyTo),
       replyMention: m.replyMention,
       pinned: Boolean(m.pin),
@@ -503,25 +550,6 @@ export class MessagesService {
     };
   }
 
-  private async toAttachmentDTO(a: {
-    id: string;
-    key: string;
-    filename: string;
-    contentType: string;
-    size: number;
-    width: number | null;
-    height: number | null;
-  }): Promise<Attachment> {
-    return {
-      id: a.id,
-      url: await this.storage.attachmentUrl(a.id, a.key),
-      filename: a.filename,
-      contentType: a.contentType,
-      size: a.size,
-      width: a.width,
-      height: a.height,
-    };
-  }
 
   private groupReactions(rows: { emoji: string; userId: string }[]): ReactionGroup[] {
     const map = new Map<string, ReactionGroup>();
