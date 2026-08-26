@@ -627,16 +627,23 @@ export interface MinhaConta {
   linkedProviders: OAuthProvider[];
 }
 
-/** Uma sessão ativa (refresh token vivo) — contrato de `GET /me/sessions`. */
+/**
+ * Uma sessão ativa (refresh token vivo) — contrato de `GET /me/sessions`.
+ *
+ * Os três campos do dispositivo são **opcionais e nunca `null`**: a aba de
+ * configurações declara a mesma sessão com `userAgent?: string`, e um `null`
+ * aqui deixaria de ser atribuível lá. Ausente = desconhecido (sessão criada
+ * antes de a coluna existir, ou requisição sem `User-Agent`).
+ */
 export interface SessaoView {
   id: string;
   /** true na sessão que fez a requisição. */
   current: boolean;
-  userAgent: string | null;
-  ip: string | null;
+  userAgent?: string;
+  ip?: string;
   createdAt: string;
-  /** último uso do refresh token (null = nunca renovou desde o login). */
-  lastUsedAt: string | null;
+  /** último uso do refresh token (ausente = nunca renovou desde o login). */
+  lastUsedAt?: string;
   expiresAt: string;
 }
 
@@ -715,4 +722,146 @@ export interface SessionsRevokedEvent {
   all: boolean;
   sessionIds: string[];
   motivo: "senha" | "logout" | "mfa" | "conta";
+}
+
+// ── i-conta · payloads das rotas de conta e segurança ────────
+// A API valida estes schemas na borda (`ZodValidationPipe`) e a web usa os
+// mesmos para recusar antes do round-trip. Uma regra, um lugar.
+
+/** Falhas de login seguidas que trancam a conta, e por quanto tempo. */
+export const LOGIN_MAX_FAILED_ATTEMPTS = 5;
+export const LOGIN_LOCK_MINUTES = 15;
+
+/** Validade dos links enviados por e-mail. */
+export const EMAIL_VERIFY_TTL_HOURS = 24;
+export const PASSWORD_RESET_TTL_HOURS = 1;
+
+const tokenDeEmailSchema = z
+  .string({ required_error: "obrigatório" })
+  .trim()
+  .min(16, "Link inválido ou incompleto")
+  .max(200);
+
+/** Código do app autenticador **ou** código de recuperação — um campo só. */
+const codigoMfaSchema = z
+  .string({ required_error: "obrigatório" })
+  .trim()
+  .min(TOTP_DIGITS, "Informe o código de 6 dígitos")
+  .max(32);
+
+const senhaAtualSchema = z
+  .string({ required_error: "obrigatório" })
+  .min(1, "Informe sua senha atual")
+  .max(MAX_PASSWORD_LENGTH);
+
+/** `POST /auth/verify-email` — o token que veio no link. */
+export const verificarEmailSchema = z.object({ token: tokenDeEmailSchema });
+export type VerificarEmailInput = z.infer<typeof verificarEmailSchema>;
+
+/** `POST /auth/resend-verification` e `POST /auth/forgot-password`. */
+export const pedidoPorEmailSchema = z.object({ email: emailSchema });
+export type PedidoPorEmailInput = z.infer<typeof pedidoPorEmailSchema>;
+
+/** `POST /auth/reset-password` — token do link + senha nova. */
+export const redefinirSenhaSchema = z.object({
+  token: tokenDeEmailSchema,
+  password: senhaNovaSchema,
+});
+export type RedefinirSenhaInput = z.infer<typeof redefinirSenhaSchema>;
+
+/** `POST /auth/mfa` — fecha o login que parou no desafio de 2FA. */
+export const mfaLoginSchema = z.object({
+  ticket: z.string({ required_error: "obrigatório" }).min(16, "Desafio inválido").max(4096),
+  code: codigoMfaSchema,
+});
+export type MfaLoginInput = z.infer<typeof mfaLoginSchema>;
+
+/** `POST /me/mfa/enable` — confirma que o app autenticador já lê o segredo. */
+export const mfaAtivarSchema = z.object({ code: codigoMfaSchema });
+export type MfaAtivarInput = z.infer<typeof mfaAtivarSchema>;
+
+/** `POST /me/mfa/disable` — desligar 2FA exige senha **e** código. */
+export const mfaDesativarSchema = z.object({
+  password: senhaAtualSchema,
+  code: codigoMfaSchema,
+});
+export type MfaDesativarInput = z.infer<typeof mfaDesativarSchema>;
+
+/** `PATCH /me/password`. */
+export const alterarSenhaSchema = z
+  .object({ currentPassword: senhaAtualSchema, newPassword: senhaNovaSchema })
+  .refine((v) => v.currentPassword !== v.newPassword, {
+    message: "A nova senha precisa ser diferente da atual.",
+    path: ["newPassword"],
+  });
+export type AlterarSenhaInput = z.infer<typeof alterarSenhaSchema>;
+
+/** `PATCH /me/email` — trocar o e-mail pede a senha (evita sequestro de aba). */
+export const alterarEmailSchema = z.object({
+  email: emailSchema,
+  password: senhaAtualSchema,
+});
+export type AlterarEmailInput = z.infer<typeof alterarEmailSchema>;
+
+/** `DELETE /me` — exclusão pede senha e, com 2FA ligado, o código. */
+export const excluirContaSchema = z.object({
+  password: senhaAtualSchema,
+  code: codigoMfaSchema.optional(),
+});
+export type ExcluirContaInput = z.infer<typeof excluirContaSchema>;
+
+/** Resposta das rotas que só confirmam que algo foi feito. */
+export interface ContaOk {
+  ok: true;
+}
+
+/** `POST /auth/verify-email`: o e-mail confirmado, para a tela dizer qual foi. */
+export interface EmailVerificado {
+  email: string;
+  /** já estava verificado (o usuário clicou no link duas vezes). */
+  alreadyVerified: boolean;
+}
+
+/**
+ * Estado do envio de e-mail (`GET /me/account` embute; a UI usa para explicar).
+ * Sem SMTP a API responde 503 nas rotas que dependem de e-mail — menos em dev,
+ * onde o provedor `console` imprime o link no log e o fluxo roda inteiro.
+ */
+export type ProvedorDeEmail = "smtp" | "console";
+
+/**
+ * "Chrome · Windows" a partir do `User-Agent` de uma sessão.
+ *
+ * Fica no contrato porque é a leitura de um campo do contrato: o usuário precisa
+ * reconhecer o aparelho para decidir se encerra a sessão, e a string crua não
+ * serve para isso. A ordem dos testes importa — Edge e Opera se anunciam como
+ * Chrome, e o Chrome se anuncia como Safari. Quem casa primeiro vence.
+ */
+export function resumoDoDispositivo(userAgent: string | null | undefined): string {
+  if (!userAgent) return "Dispositivo desconhecido";
+  if (/NewDisc(Desktop)?|Tauri|Electron/i.test(userAgent)) return "App do NewDisc";
+  return `${navegadorDe(userAgent)} · ${sistemaDe(userAgent)}`;
+}
+
+function navegadorDe(ua: string): string {
+  if (/Edg\//i.test(ua)) return "Edge";
+  if (/OPR\/|Opera/i.test(ua)) return "Opera";
+  if (/Firefox\//i.test(ua)) return "Firefox";
+  if (/Chrome\//i.test(ua)) return "Chrome";
+  if (/Safari\//i.test(ua)) return "Safari";
+  return "Navegador";
+}
+
+function sistemaDe(ua: string): string {
+  if (/Windows/i.test(ua)) return "Windows";
+  if (/Android/i.test(ua)) return "Android";
+  if (/iPhone|iPad|iPod/i.test(ua)) return "iOS";
+  if (/Mac OS X|Macintosh/i.test(ua)) return "macOS";
+  if (/Linux/i.test(ua)) return "Linux";
+  return "Sistema desconhecido";
+}
+
+/** true quando o `User-Agent` é de celular/tablet (a tela troca o ícone). */
+export function ehDispositivoMovel(userAgent: string | null | undefined): boolean {
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent ?? "");
 }
