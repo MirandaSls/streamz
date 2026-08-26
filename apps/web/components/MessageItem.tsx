@@ -20,6 +20,7 @@ import { hora, horaCompleta } from "@/lib/format";
 import { Markdown } from "@/lib/markdown";
 import { useAuth } from "@/stores/auth";
 import { useGuilds } from "@/stores/guilds";
+import { useAuthorColor } from "@/stores/permissions";
 import type { ChatMessage } from "@/stores/messages-core";
 import { useLiveUser } from "@/stores/presence";
 import { anchorOf, ui, type MenuItem } from "@/stores/ui";
@@ -138,6 +139,8 @@ export default function MessageItem({
   const [picking, setPicking] = useState(false);
 
   const author = useLiveUser(message.author);
+  // nome do autor na cor do seu cargo mais alto, como no Discord
+  const corDoAutor = useAuthorColor(message.author.id);
   const me = useAuth((s) => s.user);
   const members = useGuilds((s) => s.members);
   // @usuario → nome de exibição, para as menções mostrarem o nome como o Discord
@@ -237,6 +240,7 @@ export default function MessageItem({
             <button
               type="button"
               onClick={openProfile}
+              style={corDoAutor ? { color: corDoAutor } : undefined}
               className="font-medium text-txt-primary hover:underline"
             >
               {displayNameOf(author)}

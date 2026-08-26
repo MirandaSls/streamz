@@ -1,10 +1,12 @@
 import { create } from "zustand";
+import { Permission, hasPermission } from "@newdisc/shared";
 import type { Guild, GuildMemberView, MemberRole } from "@newdisc/shared";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
 import { useChannels } from "@/stores/channels";
 import { useMessages } from "@/stores/messages";
+import { usePermissions } from "@/stores/permissions";
 import { usePresence } from "@/stores/presence";
 
 /**
@@ -33,12 +35,25 @@ interface GuildsState {
   setRole: (userId: string, role: "ADMIN" | "MEMBER") => Promise<void>;
   kick: (userId: string) => Promise<void>;
   ban: (userId: string) => Promise<void>;
+  /** Atribui ou remove um cargo ao membro (c-cargos). */
+  toggleRole: (userId: string, roleId: string, atribuir: boolean) => Promise<void>;
+  /** Transfere a posse do servidor ativo (confirmação digitando o nome). */
+  transfer: (userId: string) => Promise<void>;
 
   /** Chegou mensagem num canal deste servidor que não está na tela. */
   bumpUnread: (guildId: string, mention: boolean) => void;
   /** Recalcula o resumo do servidor a partir dos canais carregados. */
   syncFromChannels: (guildId: string) => void;
-  handleMemberUpdated: (guildId: string, userId: string, role: MemberRole) => void;
+  handleMemberUpdated: (
+    guildId: string,
+    userId: string,
+    role: MemberRole,
+    roleIds?: string[],
+  ) => void;
+  /** Nome, ícone ou descrição do servidor mudaram (`guild.updated`). */
+  handleGuildUpdated: (guild: Guild) => void;
+  /** A posse passou para outra pessoa (`guild.ownerChanged`). */
+  handleOwnerChanged: (guildId: string, ownerId: string) => void;
   handleMemberJoined: (guildId: string, member: GuildMemberView) => void;
   handleMemberLeft: (guildId: string, userId: string) => void;
   /** Fui expulso/banido, saí ou o servidor foi apagado: some da lista, a tela se limpa. */
@@ -97,6 +112,8 @@ export const useGuilds = create<GuildsState>((set, get) => {
       set({ activeGuildId: guild.id });
       void loadMembers(guild.id);
       void useChannels.getState().loadForGuild(guild.id);
+      // cargos e regras de canal: é deles que sai o que a tela deixa fazer
+      void usePermissions.getState().load(guild.id);
     },
 
     create: async () => {
@@ -165,12 +182,15 @@ export const useGuilds = create<GuildsState>((set, get) => {
 
     remove: async (guildId) => {
       const guild = get().guilds.find((g) => g.id === guildId);
-      const ok = await ui.confirm({
+      // digitar o nome é a trava do Discord para uma ação sem volta
+      const nome = await ui.prompt({
         title: `Apagar ${guild?.name ?? "servidor"}`,
-        message: "Isso apaga todos os canais e mensagens. Não dá para desfazer.",
+        message: `Isso apaga todos os canais e mensagens, e não dá para desfazer. Digite ${guild?.name ?? ""} para confirmar.`,
+        placeholder: guild?.name,
         confirmLabel: "Apagar servidor",
-        danger: true,
       });
+      const ok = !!nome && nome.trim() === guild?.name;
+      if (nome !== null && !ok) ui.toast("O nome não confere — nada foi apagado.", "error");
       if (!ok) return;
       try {
         await api.deleteGuild(guildId);
@@ -227,6 +247,49 @@ export const useGuilds = create<GuildsState>((set, get) => {
       }
     },
 
+    toggleRole: async (userId, roleId, atribuir) => {
+      const guildId = get().activeGuildId;
+      if (!guildId) return;
+      try {
+        const r = atribuir
+          ? await api.assignRole(guildId, userId, roleId)
+          : await api.unassignRole(guildId, userId, roleId);
+        set((s) => ({
+          members: s.members.map((m) =>
+            m.user.id === userId ? { ...m, roleIds: r.roleIds } : m,
+          ),
+        }));
+      } catch (e) {
+        ui.toast(errorMessage(e, "Não foi possível mudar os cargos"), "error");
+      }
+    },
+
+    transfer: async (userId) => {
+      const guildId = get().activeGuildId;
+      const guild = get().guilds.find((g) => g.id === guildId);
+      if (!guildId || !guild) return;
+      const alvo = get().members.find((m) => m.user.id === userId);
+      const quem = alvo ? alvo.user.displayName || alvo.user.username : "Este membro";
+      // como no Discord: passar a posse não tem volta, então pede o nome
+      const nome = await ui.prompt({
+        title: "Transferir a posse do servidor",
+        message: `${quem} passa a ser o dono de ${guild.name} e você vira administrador. Digite ${guild.name} para confirmar.`,
+        placeholder: guild.name,
+        confirmLabel: "Transferir posse",
+      });
+      if (nome === null) return;
+      if (nome.trim() !== guild.name) {
+        ui.toast("O nome não confere — a posse não mudou.", "error");
+        return;
+      }
+      try {
+        await api.transferGuild(guildId, userId);
+        ui.toast("Posse transferida.");
+      } catch (e) {
+        ui.toast(errorMessage(e, "Não foi possível transferir a posse"), "error");
+      }
+    },
+
     bumpUnread: (guildId, mention) =>
       patchGuild(guildId, (g) => ({
         ...g,
@@ -244,11 +307,27 @@ export const useGuilds = create<GuildsState>((set, get) => {
       patchGuild(guildId, (g) => ({ ...g, unread, mentionCount }));
     },
 
-    handleMemberUpdated: (guildId, userId, role) => {
+    handleMemberUpdated: (guildId, userId, role, roleIds) => {
       if (get().activeGuildId !== guildId) return;
       set((s) => ({
-        members: s.members.map((m) => (m.user.id === userId ? { ...m, role } : m)),
+        members: s.members.map((m) =>
+          m.user.id === userId ? { ...m, role, roleIds: roleIds ?? m.roleIds } : m,
+        ),
       }));
+    },
+
+    handleGuildUpdated: (guild) => {
+      // o evento não carrega não-lido/menções (são por espectador): preserva
+      patchGuild(guild.id, (g) => ({
+        ...g,
+        name: guild.name,
+        iconUrl: guild.iconUrl,
+        description: guild.description,
+      }));
+    },
+
+    handleOwnerChanged: (guildId, ownerId) => {
+      patchGuild(guildId, (g) => ({ ...g, ownerId }));
     },
 
     handleMemberJoined: (guildId, member) => {
@@ -272,20 +351,43 @@ export const useGuilds = create<GuildsState>((set, get) => {
       ++membersSeq;
       set({ activeGuildId: null, members: [], membersLoading: false });
       useChannels.getState().clear();
+      usePermissions.getState().clear();
       const next = get().guilds[0];
       if (next) get().select(next);
     },
   };
 });
 
-/** Sou OWNER/ADMIN no servidor ativo? Decide o que a UI de moderação mostra. */
+/**
+ * Tenho alguma permissão de gestão no servidor ativo?
+ *
+ * Continua existindo para as telas que ainda raciocinam em bloco (mostrar ou
+ * não o menu de gestão). Para esconder **uma** ação, prefira
+ * `useCan(Permission.X)` de `stores/permissions`: é a mesma conta da API.
+ */
 export function useCanModerate(userId?: string): boolean {
-  return useGuilds((s) =>
-    s.members.some(
-      (m) => m.user.id === userId && (m.role === "OWNER" || m.role === "ADMIN"),
-    ),
-  );
+  const roles = usePermissions((s) => s.roles);
+  return useGuilds((s) => {
+    const guild = s.guilds.find((g) => g.id === s.activeGuildId);
+    if (!userId || !guild) return false;
+    if (guild.ownerId === userId) return true;
+    const roleIds = s.members.find((m) => m.user.id === userId)?.roleIds ?? [];
+    const bits = roles
+      .filter((r) => r.isDefault || roleIds.includes(r.id))
+      .reduce((acc, r) => acc | r.permissions, 0);
+    return GESTAO.some((p) => hasPermission(bits, p));
+  });
 }
+
+/** As permissões que fazem aparecer o menu de gestão do servidor. */
+const GESTAO = [
+  Permission.ADMINISTRATOR,
+  Permission.MANAGE_GUILD,
+  Permission.MANAGE_CHANNELS,
+  Permission.MANAGE_ROLES,
+  Permission.KICK_MEMBERS,
+  Permission.BAN_MEMBERS,
+];
 
 /** Sou o dono do servidor ativo? */
 export function useIsOwner(userId?: string): boolean {

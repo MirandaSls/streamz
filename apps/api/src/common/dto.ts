@@ -1,4 +1,12 @@
-import type { Channel, ChannelType, Guild, PublicUser, UserStatus } from "@newdisc/shared";
+import type {
+  Channel,
+  ChannelOverride,
+  ChannelType,
+  Guild,
+  PublicUser,
+  Role,
+  UserStatus,
+} from "@newdisc/shared";
 
 /**
  * Conversores de linha do Prisma para os DTOs de `@newdisc/shared`.
@@ -40,7 +48,13 @@ export const EMPTY_SUMMARY: ChannelReadSummary = {
 };
 
 export function toGuildDTO(
-  g: { id: string; name: string; iconUrl: string | null; ownerId: string },
+  g: {
+    id: string;
+    name: string;
+    iconUrl: string | null;
+    ownerId: string;
+    description: string | null;
+  },
   view: { unread: boolean; mentionCount: number } = { unread: false, mentionCount: 0 },
 ): Guild {
   return {
@@ -48,6 +62,7 @@ export function toGuildDTO(
     name: g.name,
     iconUrl: g.iconUrl,
     ownerId: g.ownerId,
+    description: g.description,
     unread: view.unread,
     mentionCount: view.mentionCount,
   };
@@ -76,5 +91,49 @@ export function toChannelDTO(
     lastMessageAt: summary.lastMessageAt ? summary.lastMessageAt.toISOString() : null,
     lastReadAt: summary.lastReadAt ? summary.lastReadAt.toISOString() : null,
     mentionCount: summary.mentionCount,
+  };
+}
+
+// ── c-cargos ──────────────────────────────────────────────────
+
+/** Linha de Role do Prisma → DTO. Os enums e o bitfield são atribuição direta. */
+export function toRoleDTO(r: {
+  id: string;
+  guildId: string;
+  name: string;
+  color: string | null;
+  position: number;
+  permissions: number;
+  hoist: boolean;
+  mentionable: boolean;
+  isDefault: boolean;
+}): Role {
+  return {
+    id: r.id,
+    guildId: r.guildId,
+    name: r.name,
+    color: r.color,
+    position: r.position,
+    permissions: r.permissions,
+    hoist: r.hoist,
+    mentionable: r.mentionable,
+    isDefault: r.isDefault,
+  };
+}
+
+/** Linha de ChannelOverride do Prisma → DTO (o `id` não interessa ao cliente). */
+export function toOverrideDTO(o: {
+  channelId: string;
+  roleId: string | null;
+  userId: string | null;
+  allow: number;
+  deny: number;
+}): ChannelOverride {
+  return {
+    channelId: o.channelId,
+    roleId: o.roleId,
+    userId: o.userId,
+    allow: o.allow,
+    deny: o.deny,
   };
 }

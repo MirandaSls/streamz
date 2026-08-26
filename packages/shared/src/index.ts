@@ -67,6 +67,8 @@ export interface Guild {
   name: string;
   iconUrl: string | null;
   ownerId: string;
+  /** texto livre exibido nas configurações e no convite. */
+  description: string | null;
   /** há mensagem nova em algum canal visível (por espectador). */
   unread: boolean;
   /** menções a mim não lidas, somadas nos canais visíveis (por espectador). */
@@ -186,6 +188,8 @@ export interface Message {
 export interface GuildMemberView {
   user: PublicUser;
   role: MemberRole;
+  /** ids dos cargos atribuídos (sem o @everyone, que vale para todos). */
+  roleIds: string[];
 }
 
 export interface InviteInfo {
@@ -270,6 +274,13 @@ export const WS_EVENTS = {
   VOICE_STATE: "voice.state",
   CALL_RING: "call.ring",
   CALL_ENDED: "call.ended",
+  // ── c-cargos ──
+  ROLE_CREATED: "role.created",
+  ROLE_UPDATED: "role.updated",
+  ROLE_DELETED: "role.deleted",
+  CHANNEL_OVERRIDES: "channel.overrides",
+  GUILD_UPDATED: "guild.updated",
+  GUILD_OWNER_CHANGED: "guild.ownerChanged",
 } as const;
 
 /** Teto de caracteres de uma mensagem (canal ou DM). */
@@ -394,6 +405,8 @@ export interface MemberUpdatedEvent {
   guildId: string;
   userId: string;
   role: MemberRole;
+  /** cargos do membro depois da mudança (ausente = só o papel mudou). */
+  roleIds?: string[];
 }
 
 /** Alguém entrou no servidor (convite). */
@@ -510,4 +523,396 @@ export type CallPayload = z.infer<typeof callSchema>;
 /** true se o canal é uma sala de voz possível (canal de voz ou conversa direta). */
 export function isVoiceCapable(c: Pick<Channel, "type">): boolean {
   return c.type === "VOICE" || isDirectChannel(c);
+}
+
+// ── c-cargos ─────────────────────────────────────────────────
+/**
+ * Permissões como bitfield (ver `docs/adr/0002-cargos-e-permissoes.md`).
+ *
+ * Os bits são **estáveis para sempre**: o valor fica gravado em cada linha de
+ * `Role` e de `ChannelOverride`. Permissão nova entra no próximo bit livre —
+ * nenhuma é renumerada nem reciclada.
+ *
+ * É `number` (e não `bigint`) porque `&`/`|`/`~` do JavaScript operam em 32 bits
+ * com sinal: com bigint toda checagem exigiria conversão, e um `Number()`
+ * esquecido viraria bug silencioso. O preço é o teto de 30 bits utilizáveis.
+ */
+export const Permission = {
+  VIEW_CHANNEL: 1 << 0,
+  SEND_MESSAGES: 1 << 1,
+  MANAGE_MESSAGES: 1 << 2,
+  MANAGE_CHANNELS: 1 << 3,
+  MANAGE_ROLES: 1 << 4,
+  KICK_MEMBERS: 1 << 5,
+  BAN_MEMBERS: 1 << 6,
+  MANAGE_GUILD: 1 << 7,
+  CREATE_INVITE: 1 << 8,
+  ATTACH_FILES: 1 << 9,
+  ADD_REACTIONS: 1 << 10,
+  MENTION_EVERYONE: 1 << 11,
+  CONNECT: 1 << 12,
+  SPEAK: 1 << 13,
+  MUTE_MEMBERS: 1 << 14,
+  /** silenciar temporariamente (timeout) — usado pela moderação. */
+  MODERATE_MEMBERS: 1 << 15,
+  MANAGE_EMOJIS: 1 << 16,
+  VIEW_AUDIT_LOG: 1 << 17,
+  /** ignora todas as outras checagens, inclusive overrides de canal. */
+  ADMINISTRATOR: 1 << 18,
+} as const;
+
+export type PermissionName = keyof typeof Permission;
+
+/** Nome legível e explicação de cada permissão (UI de edição de cargo). */
+export const PERMISSION_INFO: Record<
+  PermissionName,
+  { label: string; description: string; group: "geral" | "membros" | "mensagens" | "voz" }
+> = {
+  VIEW_CHANNEL: {
+    label: "Ver canais",
+    description: "Permite ver os canais do servidor por padrão (antes das regras de cada canal).",
+    group: "geral",
+  },
+  SEND_MESSAGES: {
+    label: "Enviar mensagens",
+    description: "Permite escrever nos canais de texto.",
+    group: "mensagens",
+  },
+  MANAGE_MESSAGES: {
+    label: "Gerenciar mensagens",
+    description: "Permite apagar mensagens de outras pessoas.",
+    group: "mensagens",
+  },
+  MANAGE_CHANNELS: {
+    label: "Gerenciar canais",
+    description: "Permite criar, renomear, reordenar e apagar canais.",
+    group: "geral",
+  },
+  MANAGE_ROLES: {
+    label: "Gerenciar cargos",
+    description: "Permite criar e editar cargos abaixo do seu cargo mais alto.",
+    group: "geral",
+  },
+  KICK_MEMBERS: {
+    label: "Expulsar membros",
+    description: "Permite remover membros do servidor (eles voltam com convite).",
+    group: "membros",
+  },
+  BAN_MEMBERS: {
+    label: "Banir membros",
+    description: "Permite banir e desbanir membros.",
+    group: "membros",
+  },
+  MANAGE_GUILD: {
+    label: "Gerenciar servidor",
+    description: "Permite mudar nome, ícone e descrição, e administrar convites.",
+    group: "geral",
+  },
+  CREATE_INVITE: {
+    label: "Criar convite",
+    description: "Permite gerar convites para o servidor.",
+    group: "geral",
+  },
+  ATTACH_FILES: {
+    label: "Anexar arquivos",
+    description: "Permite enviar imagens e arquivos nas mensagens.",
+    group: "mensagens",
+  },
+  ADD_REACTIONS: {
+    label: "Adicionar reações",
+    description: "Permite reagir às mensagens com emoji.",
+    group: "mensagens",
+  },
+  MENTION_EVERYONE: {
+    label: "Mencionar todos",
+    description: "Permite notificar todo mundo do canal de uma vez.",
+    group: "mensagens",
+  },
+  CONNECT: {
+    label: "Conectar",
+    description: "Permite entrar em canais de voz.",
+    group: "voz",
+  },
+  SPEAK: {
+    label: "Falar",
+    description: "Permite transmitir áudio nos canais de voz.",
+    group: "voz",
+  },
+  MUTE_MEMBERS: {
+    label: "Silenciar membros",
+    description: "Permite tirar o microfone de outras pessoas na voz.",
+    group: "voz",
+  },
+  MODERATE_MEMBERS: {
+    label: "Moderar membros",
+    description: "Permite deixar um membro de castigo (sem falar) por um tempo.",
+    group: "membros",
+  },
+  MANAGE_EMOJIS: {
+    label: "Gerenciar emojis",
+    description: "Permite adicionar e remover emojis personalizados.",
+    group: "geral",
+  },
+  VIEW_AUDIT_LOG: {
+    label: "Ver registro de auditoria",
+    description: "Permite consultar o histórico de ações administrativas.",
+    group: "geral",
+  },
+  ADMINISTRATOR: {
+    label: "Administrador",
+    description:
+      "Concede todas as permissões e ignora as regras de cada canal. Dê com cuidado.",
+    group: "geral",
+  },
+};
+
+/** Ordem em que a UI lista as permissões (agrupada, como no Discord). */
+export const PERMISSION_ORDER: readonly PermissionName[] = [
+  "ADMINISTRATOR",
+  "VIEW_CHANNEL",
+  "MANAGE_CHANNELS",
+  "MANAGE_ROLES",
+  "MANAGE_GUILD",
+  "MANAGE_EMOJIS",
+  "CREATE_INVITE",
+  "VIEW_AUDIT_LOG",
+  "SEND_MESSAGES",
+  "MANAGE_MESSAGES",
+  "ATTACH_FILES",
+  "ADD_REACTIONS",
+  "MENTION_EVERYONE",
+  "KICK_MEMBERS",
+  "BAN_MEMBERS",
+  "MODERATE_MEMBERS",
+  "CONNECT",
+  "SPEAK",
+  "MUTE_MEMBERS",
+];
+
+/** Todas as permissões ligadas — o que o dono e o ADMINISTRATOR recebem. */
+export const ALL_PERMISSIONS: number = PERMISSION_ORDER.reduce(
+  (bits, name) => bits | Permission[name],
+  0,
+);
+
+/** O que o @everyone ganha ao nascer o servidor (mesmo padrão do Discord). */
+export const DEFAULT_PERMISSIONS: number =
+  Permission.VIEW_CHANNEL |
+  Permission.SEND_MESSAGES |
+  Permission.CREATE_INVITE |
+  Permission.ATTACH_FILES |
+  Permission.ADD_REACTIONS |
+  Permission.CONNECT |
+  Permission.SPEAK;
+
+/**
+ * Permissões numa conversa direta: não há cargo nem override lá.
+ * `MANAGE_MESSAGES` fica **de fora** de propósito — é o que faz "em DM só o
+ * autor apaga" continuar valendo.
+ */
+export const DM_PERMISSIONS: number =
+  Permission.VIEW_CHANNEL |
+  Permission.SEND_MESSAGES |
+  Permission.ATTACH_FILES |
+  Permission.ADD_REACTIONS |
+  Permission.CONNECT |
+  Permission.SPEAK;
+
+/** Nome do cargo padrão de todo servidor (não é apagável nem renomeável). */
+export const EVERYONE_ROLE_NAME = "@everyone";
+/** Cargo criado com o servidor para o atalho `GuildMember.role = ADMIN`. */
+export const ADMIN_ROLE_NAME = "Administrador";
+
+export const MAX_ROLE_NAME = 32;
+
+/** true se o bitfield contém **todos** os bits de `permission`. */
+export function hasPermission(bits: number, permission: number): boolean {
+  return (bits & permission) === permission;
+}
+
+/** Nomes das permissões contidas num bitfield (para UI e depuração). */
+export function permissionNames(bits: number): PermissionName[] {
+  return PERMISSION_ORDER.filter((name) => hasPermission(bits, Permission[name]));
+}
+
+/** Paleta de cores de cargo oferecida na UI (as do Discord). */
+export const ROLE_COLORS: readonly string[] = [
+  "#1abc9c", "#2ecc71", "#3498db", "#9b59b6", "#e91e63",
+  "#f1c40f", "#e67e22", "#e74c3c", "#95a5a6", "#607d8b",
+  "#11806a", "#1f8b4c", "#206694", "#71368a", "#ad1457",
+  "#c27c0e", "#a84300", "#992d22", "#979c9f", "#546e7a",
+];
+
+/** Cor de cargo válida: `#rrggbb`. */
+export function isRoleColor(value: string): boolean {
+  return /^#[0-9a-fA-F]{6}$/.test(value);
+}
+
+export interface Role {
+  id: string;
+  guildId: string;
+  name: string;
+  /** "#rrggbb"; null = sem cor (o nome fica na cor padrão do tema). */
+  color: string | null;
+  /** hierarquia: maior = mais alto. O @everyone é sempre 0. */
+  position: number;
+  permissions: number;
+  /** membros deste cargo aparecem numa seção própria da lista de membros. */
+  hoist: boolean;
+  mentionable: boolean;
+  /** o @everyone do servidor: não se apaga, não se renomeia, não se atribui. */
+  isDefault: boolean;
+}
+
+/** Regra de um canal para um cargo **ou** um usuário (nunca os dois). */
+export interface ChannelOverride {
+  channelId: string;
+  roleId: string | null;
+  userId: string | null;
+  allow: number;
+  deny: number;
+}
+
+/** O que `computePermissions` precisa saber do membro. */
+export interface PermissionMember {
+  /** dono do servidor: recebe tudo e ignora cargos e overrides. */
+  isOwner: boolean;
+  /** ids dos cargos atribuídos (o @everyone é injetado, não entra aqui). */
+  roleIds: readonly string[];
+}
+
+/**
+ * Permissão efetiva de um membro, opcionalmente dentro de um canal.
+ *
+ * Função **pura** — a API e o cliente usam esta mesma implementação, para que a
+ * UI esconda exatamente o que a API recusaria. A ordem das etapas é a regra do
+ * Discord e está justificada na ADR-0002; mexer nela é mudança de segurança:
+ *
+ *   1. dono → tudo;
+ *   2. base = @everyone | OR dos cargos do membro;
+ *   3. ADMINISTRATOR → tudo (**antes** dos overrides: um deny de canal não
+ *      tranca o administrador para fora do próprio servidor);
+ *   4. override do @everyone       (deny, depois allow);
+ *   5. overrides dos cargos do membro, **somados entre si** (deny, depois allow);
+ *   6. override do próprio usuário (deny, depois allow).
+ *
+ * `overrides` deve conter só os do canal em questão; fora de canal, passe `[]`.
+ */
+export function computePermissions(
+  member: PermissionMember,
+  roles: readonly Role[],
+  overrides: readonly ChannelOverride[] = [],
+): number {
+  if (member.isOwner) return ALL_PERMISSIONS;
+
+  const everyone = roles.find((r) => r.isDefault);
+  const meus = roles.filter((r) => !r.isDefault && member.roleIds.includes(r.id));
+
+  let bits = everyone?.permissions ?? 0;
+  for (const r of meus) bits |= r.permissions;
+  if (hasPermission(bits, Permission.ADMINISTRATOR)) return ALL_PERMISSIONS;
+
+  if (everyone) {
+    const o = overrides.find((x) => x.roleId === everyone.id);
+    if (o) bits = (bits & ~o.deny) | o.allow;
+  }
+
+  // Overrides de cargo não se ordenam entre si: acumula deny e allow e aplica
+  // uma vez, deny primeiro — é o comportamento do Discord.
+  let allowCargos = 0;
+  let denyCargos = 0;
+  for (const r of meus) {
+    const o = overrides.find((x) => x.roleId === r.id);
+    if (!o) continue;
+    allowCargos |= o.allow;
+    denyCargos |= o.deny;
+  }
+  bits = (bits & ~denyCargos) | allowCargos;
+
+  const meu = overrides.find((x) => x.userId !== null);
+  if (meu) bits = (bits & ~meu.deny) | meu.allow;
+
+  return bits;
+}
+
+/** Posição do cargo mais alto do membro — o teto do que ele pode mexer. */
+export function highestPosition(member: PermissionMember, roles: readonly Role[]): number {
+  if (member.isOwner) return Number.MAX_SAFE_INTEGER;
+  return roles
+    .filter((r) => !r.isDefault && member.roleIds.includes(r.id))
+    .reduce((max, r) => Math.max(max, r.position), 0);
+}
+
+/** Cargo mais alto **com cor** do membro — é dele a cor do nome na tela. */
+export function colorRoleOf(roleIds: readonly string[], roles: readonly Role[]): Role | null {
+  let escolhido: Role | null = null;
+  for (const r of roles) {
+    if (r.isDefault || !r.color || !roleIds.includes(r.id)) continue;
+    if (!escolhido || r.position > escolhido.position) escolhido = r;
+  }
+  return escolhido;
+}
+
+/** Cargos do membro, do mais alto para o mais baixo (sem o @everyone). */
+export function rolesOf(roleIds: readonly string[], roles: readonly Role[]): Role[] {
+  return roles
+    .filter((r) => !r.isDefault && roleIds.includes(r.id))
+    .sort((a, b) => b.position - a.position);
+}
+
+// ── c-cargos: payloads REST e eventos ────────────────────────
+export const MAX_GUILD_DESCRIPTION = 300;
+export const MAX_GUILD_ICON_SIZE = 4 * 1024 * 1024; // 4 MB
+
+/** Campos editáveis de um cargo (POST/PATCH /guilds/:id/roles). */
+export interface RoleInput {
+  name?: string;
+  color?: string | null;
+  permissions?: number;
+  hoist?: boolean;
+  mentionable?: boolean;
+}
+
+/** Campos editáveis do servidor (PATCH /guilds/:id). */
+export interface GuildUpdate {
+  name?: string;
+  description?: string | null;
+}
+
+/** Regra de canal gravada por PUT /guilds/:id/channels/:cid/overrides. */
+export interface ChannelOverrideInput {
+  roleId?: string | null;
+  userId?: string | null;
+  allow: number;
+  deny: number;
+}
+
+/** Resposta de GET /guilds/:id/members/:uid/permissions. */
+export interface MemberPermissions {
+  userId: string;
+  guildId: string;
+  /** permissão no servidor (fora de canal). */
+  permissions: number;
+  roleIds: string[];
+}
+
+/** Cargo apagado — evento `role.deleted` na sala `guild:<id>`. */
+export interface RoleDeletedEvent {
+  guildId: string;
+  roleId: string;
+}
+
+/** Overrides de um canal mudaram: quem está vendo recalcula o que pode. */
+export interface ChannelOverridesEvent {
+  guildId: string;
+  channelId: string;
+  overrides: ChannelOverride[];
+}
+
+/** Posse do servidor passou para outra pessoa. */
+export interface GuildOwnerChangedEvent {
+  guildId: string;
+  ownerId: string;
+  /** papel de quem entregou (vira ADMIN) — a UI atualiza a coroa. */
+  previousOwnerId: string;
 }

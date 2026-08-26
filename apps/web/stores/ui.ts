@@ -45,7 +45,9 @@ export type Modal =
     }
   // ── f-voz ──
   /** chamada recebida numa conversa direta; os dados vêm de `stores/voice`. */
-  | { kind: "incomingCall" };
+  | { kind: "incomingCall" }
+  // ── c-cargos ──
+  | { kind: "serverSettings"; guildId: string };
 
 /** Um item de menu de contexto; `separator` desenha a linha entre grupos. */
 export type MenuItem =
