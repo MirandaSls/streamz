@@ -138,15 +138,32 @@ try {
   await ana.keyboard.press("Escape");
 
   // ── 5. caixa de entrada do Beto (menção da Ana) ──
-  await enviar(ana, `@${BETO.user} dá uma olhada nisso, por favor.`);
-  await beto.waitForTimeout(1200);
+  // a caixa só lista menção *não lida*, e o canal aberto é marcado como lido na
+  // hora: por isso a Ana escreve em #avisos enquanto o Beto segue no #geral.
+  await ana.click('button[aria-label="Criar canal em Canais de texto"]');
+  await ana.fill('input[aria-label="Nome do canal"]', "avisos");
+  await ana.getByRole("button", { name: "Criar canal", exact: true }).click();
+  await ana.locator("[data-channel-button]", { hasText: "avisos" }).first().click();
+  await ana.waitForSelector("text=Bem-vindo a #avisos!", { timeout: PRAZO });
+  const avisos = 'textarea[aria-label="Mensagem para #avisos"]';
+  await ana.fill(avisos, `@${BETO.user} dá uma olhada nisso, por favor.`);
+  await ana.press(avisos, "Enter");
+  await beto.waitForTimeout(1500);
+
   await beto.click('button[aria-label="Caixa de entrada"]');
-  await beto.waitForSelector('[role="dialog"][aria-label="Caixa de entrada"]');
+  const caixa = beto.locator('[role="dialog"][aria-label="Caixa de entrada"]');
+  await caixa.waitFor({ timeout: PRAZO });
+  // espera a carga terminar: sem isso o passeio fotografa o "Carregando…"
+  await caixa.getByText("dá uma olhada nisso").waitFor({ timeout: PRAZO });
   await shot(beto, "caixa-de-entrada-mencoes");
   await beto.getByRole("button", { name: "Não lidos" }).click();
-  await beto.waitForTimeout(400);
+  await caixa.getByRole("button", { name: "avisos" }).waitFor({ timeout: PRAZO });
   await shot(beto, "caixa-de-entrada-nao-lidos");
   await beto.keyboard.press("Escape");
+
+  // a Ana volta ao #geral para a busca do próximo passo
+  await ana.locator("[data-channel-button]", { hasText: "geral" }).first().click();
+  await ana.waitForSelector(composer, { timeout: PRAZO });
 
   // ── 6. busca com filtros, no painel da direita ──
   const busca = `input[aria-label="Buscar mensagens em geral"]`;
