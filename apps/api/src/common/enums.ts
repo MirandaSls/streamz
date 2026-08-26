@@ -1,5 +1,6 @@
 import type {
   ChannelType as PrismaChannelType,
+  FriendshipStatus as PrismaFriendshipStatus,
   MemberRole as PrismaMemberRole,
   MessageType as PrismaMessageType,
   NotificationLevel as PrismaNotificationLevel,
@@ -7,6 +8,7 @@ import type {
 } from "@prisma/client";
 import type {
   ChannelType,
+  FriendshipStatus,
   MemberRole,
   MessageType,
   NotificationLevel,
@@ -32,3 +34,4 @@ type _TravaChannelType = Trava<Equivalentes<PrismaChannelType, ChannelType>>;
 type _TravaMemberRole = Trava<Equivalentes<PrismaMemberRole, MemberRole>>;
 type _TravaMessageType = Trava<Equivalentes<PrismaMessageType, MessageType>>;
 type _TravaNotificationLevel = Trava<Equivalentes<PrismaNotificationLevel, NotificationLevel>>;
+type _TravaFriendshipStatus = Trava<Equivalentes<PrismaFriendshipStatus, FriendshipStatus>>;

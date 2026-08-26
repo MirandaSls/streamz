@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState, type MouseEvent } from "react";
-import { LogOut, Phone, Plus, Users } from "lucide-react";
+import { LogOut, Phone, Plus, Settings, UserPlus, Users, X } from "lucide-react";
 import { displayNameOf, isGroupChannel, isUnread, type DMChannelView, type PublicUser } from "@newdisc/shared";
 import UserFooter from "@/components/layout/UserFooter";
-import Avatar from "@/components/ui/Avatar";
+import Avatar, { GroupAvatar } from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";
 import { dmTitle, useDMs } from "@/stores/dms";
+import { useFriends, usePendingCount } from "@/stores/friends";
 import { resolveStatus, usePresence } from "@/stores/presence";
 import { ui, useUI } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
@@ -21,6 +22,11 @@ export default function DMList() {
   const openWith = useDMs((s) => s.openWith);
   const leaveGroup = useDMs((s) => s.leaveGroup);
   const markRead = useDMs((s) => s.markRead);
+  // ── d-social ── a página Amigos é a home do modo DM
+  const hide = useDMs((s) => s.hide);
+  const friendsOpen = useFriends((s) => s.open);
+  const setFriendsOpen = useFriends((s) => s.setOpen);
+  const pendentes = usePendingCount();
   const openModal = useUI((s) => s.openModal);
   const statuses = usePresence((s) => s.statuses);
   const [query, setQuery] = useState("");
@@ -63,7 +69,25 @@ export default function DMList() {
         ? [{ label: "Perfil", onSelect: () => ui.openProfile(dm.others[0], { x: e.clientX, y: e.clientY, width: 0, height: 0 }) }]
         : []),
       ...(group
-        ? [{ separator: true as const }, { label: "Sair do grupo", icon: <LogOut size={18} />, danger: true, onSelect: () => void leaveGroup(dm.id) }]
+        ? [
+            { separator: true as const },
+            {
+              label: "Configurações do grupo",
+              icon: <Settings size={18} />,
+              onSelect: () => ui.openModal({ kind: "groupSettings", channelId: dm.id }),
+            },
+            {
+              label: "Adicionar pessoas",
+              icon: <UserPlus size={18} />,
+              onSelect: () => ui.openModal({ kind: "addGroupMembers", channelId: dm.id }),
+            },
+          ]
+        : []),
+      { separator: true as const },
+      // fechar não apaga nada: a conversa volta sozinha com mensagem nova
+      { label: "Fechar conversa", icon: <X size={18} />, onSelect: () => void hide(dm.id) },
+      ...(group
+        ? [{ label: "Sair do grupo", icon: <LogOut size={18} />, danger: true, onSelect: () => void leaveGroup(dm.id) }]
         : []),
     ]);
   }
@@ -82,6 +106,25 @@ export default function DMList() {
       </div>
 
       <div role="list" aria-label="Conversas" className="flex-1 overflow-y-auto pt-2">
+        {/* ── d-social ── a home do modo DM, com o badge de pedidos pendentes */}
+        <button
+          type="button"
+          onClick={() => setFriendsOpen(true)}
+          aria-current={friendsOpen ? "true" : undefined}
+          className={"mx-2 mb-1 flex h-[42px] w-[calc(100%-1rem)] items-center gap-3 rounded-[4px] px-2 text-left " + (friendsOpen ? "bg-sel text-txt-primary" : "text-txt-faint hover:bg-hov hover:text-txt-normal")}
+        >
+          <Users size={24} aria-hidden="true" className="shrink-0" />
+          <span className="flex-1 font-medium">Amigos</span>
+          {pendentes > 0 && (
+            <span
+              aria-label={pendentes === 1 ? "1 pedido de amizade" : `${pendentes} pedidos de amizade`}
+              className="grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[11px] font-bold leading-none text-white"
+            >
+              {pendentes}
+            </span>
+          )}
+        </button>
+
         {novos.length > 0 && (
           <>
             <h3 className="pl-[18px] pr-2 pt-4 pb-1 text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">
@@ -134,7 +177,7 @@ export default function DMList() {
         )}
         {visible.map((dm) => {
           const title = dmTitle(dm);
-          const active = activeId === dm.id;
+          const active = activeId === dm.id && !friendsOpen;
           const group = isGroupChannel(dm);
           const other = !group ? dm.others[0] : undefined;
           const unread = !active && isUnread(dm);
@@ -161,9 +204,7 @@ export default function DMList() {
                 {other ? (
                   <Avatar user={other} size="md" status={resolveStatus(statuses, other)} surface={active ? "border-sel" : "border-panel"} />
                 ) : (
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent text-white" aria-hidden="true">
-                    <Users size={18} />
-                  </span>
+                  <GroupAvatar iconUrl={dm.iconUrl} size="md" />
                 )}
                 <span className="min-w-0">
                   <span className={`block truncate ${unread ? "font-semibold" : "font-medium"}`}>{title}</span>
@@ -193,18 +234,16 @@ export default function DMList() {
                   {dm.mentionCount}
                 </span>
               )}
-              {group && (
-                <Tooltip label="Sair do grupo">
-                  <button
-                    type="button"
-                    onClick={() => void leaveGroup(dm.id)}
-                    aria-label={`Sair do grupo ${title}`}
-                    className="grid h-6 w-6 place-items-center rounded text-txt-muted opacity-0 transition hover:text-txt-primary group-hover:opacity-100 focus-visible:opacity-100"
-                  >
-                    <LogOut size={16} />
-                  </button>
-                </Tooltip>
-              )}
+              <Tooltip label={group ? "Sair do grupo" : "Fechar conversa"}>
+                <button
+                  type="button"
+                  onClick={() => (group ? void leaveGroup(dm.id) : void hide(dm.id))}
+                  aria-label={group ? `Sair do grupo ${title}` : `Fechar conversa com ${title}`}
+                  className="grid h-6 w-6 place-items-center rounded text-txt-muted opacity-0 transition hover:text-txt-primary group-hover:opacity-100 focus-visible:opacity-100"
+                >
+                  {group ? <LogOut size={16} /> : <X size={16} />}
+                </button>
+              </Tooltip>
             </div>
           );
         })}

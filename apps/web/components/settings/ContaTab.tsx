@@ -42,7 +42,7 @@ export default function ContaTab() {
     if (!dirty || saving) return;
     setSaving(true);
     try {
-      setUser(await api.updateProfile(displayName.trim() || null));
+      setUser(await api.updateProfile({ displayName: displayName.trim() || null }));
       ui.toast("Perfil salvo.");
     } catch (e) {
       ui.toast(errorMessage(e, "Não foi possível salvar"), "error");

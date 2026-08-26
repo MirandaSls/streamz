@@ -1,5 +1,6 @@
 "use client";
 
+import { Users } from "lucide-react";
 import type { UserStatus } from "@newdisc/shared";
 
 /**
@@ -80,6 +81,48 @@ export default function Avatar({
           className={`absolute rounded-full ${surface} ${s.dot} ${STATUS_COLOR[status]}`}
         />
       )}
+    </span>
+  );
+}
+
+// ── d-social ──
+
+const GROUP_SIZE = {
+  sm: "h-6 w-6",
+  md: "h-8 w-8",
+  lg: "h-10 w-10",
+  xl: "h-20 w-20",
+} as const;
+
+const GROUP_ICON = { sm: 14, md: 18, lg: 22, xl: 36 } as const;
+
+/**
+ * Avatar de um grupo de DM: o ícone enviado, ou o círculo blurple com as
+ * silhuetas quando não há ícone. Existe para que a coluna de conversas, o
+ * cabeçalho e a lista de participantes desenhem o grupo do mesmo jeito.
+ */
+export function GroupAvatar({
+  iconUrl,
+  size = "md",
+  className = "",
+}: {
+  iconUrl: string | null;
+  size?: keyof typeof GROUP_SIZE;
+  className?: string;
+}) {
+  const box = GROUP_SIZE[size];
+  if (iconUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={iconUrl} alt="" className={`${box} shrink-0 rounded-full object-cover ${className}`} />
+    );
+  }
+  return (
+    <span
+      aria-hidden="true"
+      className={`${box} grid shrink-0 place-items-center rounded-full bg-accent text-white ${className}`}
+    >
+      <Users size={GROUP_ICON[size]} />
     </span>
   );
 }

@@ -1,12 +1,19 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { MessageSquare, Pencil } from "lucide-react";
-import { colorRoleOf, displayNameOf, rolesOf, type UserStatus } from "@newdisc/shared";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Check, MessageSquare, Pencil, SmilePlus, UserMinus, UserPlus, UserX } from "lucide-react";
+import {
+  colorRoleOf,
+  customStatusOf,
+  displayNameOf,
+  rolesOf,
+  type UserStatus,
+} from "@newdisc/shared";
 import Avatar, { STATUS_COLOR, STATUS_LABEL } from "@/components/ui/Avatar";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
 import { useDMs } from "@/stores/dms";
+import { useFriends, useRelationship } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
 import { usePermissions } from "@/stores/permissions";
 import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
@@ -41,6 +48,15 @@ export default function ProfilePopoverHost() {
   // cargos do membro no servidor aberto: cor do nome e chips abaixo dele
   const roles = usePermissions((s) => s.roles);
   const membros = useGuilds((s) => s.members);
+  // ── d-social ── as ações do cartão dependem da relação com quem ele mostra
+  const send = useFriends((s) => s.send);
+  const accept = useFriends((s) => s.accept);
+  const dismiss = useFriends((s) => s.dismiss);
+  const removeFriend = useFriends((s) => s.remove);
+  const block = useFriends((s) => s.block);
+  const unblock = useFriends((s) => s.unblock);
+  const incoming = useFriends((s) => s.incoming);
+  const relacao = useRelationship(popover?.user.id, me?.id);
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -117,6 +133,9 @@ export default function ProfilePopoverHost() {
                 {displayNameOf(user)}
               </div>
               <div className="truncate text-sm text-txt-normal">@{user.username}</div>
+              {customStatusOf(user) && (
+                <div className="mt-1 truncate text-sm text-txt-normal">{customStatusOf(user)}</div>
+              )}
             </div>
             {isMe && (
               <button
@@ -158,6 +177,18 @@ export default function ProfilePopoverHost() {
 
           {isMe ? (
             <>
+              <button
+                type="button"
+                onClick={() => {
+                  close();
+                  openModal({ kind: "customStatus" });
+                }}
+                className="mt-3 flex h-8 w-full items-center gap-2 rounded-[3px] px-2 text-sm text-txt-normal transition hover:bg-hov hover:text-txt-primary"
+              >
+                <SmilePlus size={16} aria-hidden="true" />
+                {customStatusOf(user) ? "Editar status personalizado" : "Definir status personalizado"}
+              </button>
+
               <div className="mt-3 border-t border-[#3f4147] pt-3 text-xs font-bold uppercase text-txt-secondary">
                 Definir status
               </div>
@@ -203,10 +234,106 @@ export default function ProfilePopoverHost() {
                 <MessageSquare size={16} aria-hidden="true" />
                 Enviar mensagem
               </button>
+
+              {/* ── d-social ── o que dá para fazer depende da relação atual */}
+              {relacao === "none" && (
+                <PopoverAction icon={<UserPlus size={16} />} onClick={() => void send(user.username)}>
+                  Adicionar amigo
+                </PopoverAction>
+              )}
+              {relacao === "outgoing" && (
+                <p className="mt-2 text-center text-xs text-txt-muted">Pedido de amizade enviado.</p>
+              )}
+              {relacao === "incoming" && (
+                <>
+                  <PopoverAction
+                    icon={<Check size={16} />}
+                    onClick={() => {
+                      const pedido = incoming.find((r) => r.user.id === user.id);
+                      if (pedido) void accept(pedido.id);
+                    }}
+                  >
+                    Aceitar pedido de amizade
+                  </PopoverAction>
+                  <PopoverAction
+                    icon={<UserX size={16} />}
+                    danger
+                    onClick={() => {
+                      const pedido = incoming.find((r) => r.user.id === user.id);
+                      if (pedido) void dismiss(pedido.id);
+                    }}
+                  >
+                    Recusar pedido
+                  </PopoverAction>
+                </>
+              )}
+              {relacao === "friend" && (
+                <PopoverAction
+                  icon={<UserMinus size={16} />}
+                  danger
+                  onClick={() => {
+                    close();
+                    void removeFriend(user);
+                  }}
+                >
+                  Remover amigo
+                </PopoverAction>
+              )}
+              {relacao === "blocked" ? (
+                <PopoverAction icon={<UserX size={16} />} onClick={() => void unblock(user.id)}>
+                  Desbloquear
+                </PopoverAction>
+              ) : (
+                <PopoverAction
+                  icon={<UserX size={16} />}
+                  danger
+                  onClick={() => {
+                    close();
+                    void block(user);
+                  }}
+                >
+                  Bloquear
+                </PopoverAction>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  close();
+                  openModal({ kind: "userProfile", userId: user.id });
+                }}
+                className="mt-2 h-8 w-full rounded-[3px] text-sm font-medium text-txt-link transition hover:underline"
+              >
+                Ver perfil completo
+              </button>
             </>
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+/** Ação secundária do cartão de perfil (adicionar amigo, bloquear, ...). */
+function PopoverAction({
+  icon,
+  onClick,
+  danger = false,
+  children,
+}: {
+  icon: ReactNode;
+  onClick: () => void;
+  danger?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={"mt-2 flex h-8 w-full items-center gap-2 rounded-[3px] px-2 text-sm font-medium transition " + (danger ? "text-red hover:bg-red hover:text-white" : "text-txt-normal hover:bg-hov hover:text-txt-primary")}
+    >
+      <span aria-hidden="true">{icon}</span>
+      {children}
+    </button>
   );
 }

@@ -14,6 +14,11 @@ import ServerSettingsModal from "@/components/modals/ServerSettingsModal";
 import QuickSwitcher from "@/components/ui/QuickSwitcher";
 import SettingsModal from "@/components/modals/SettingsModal";
 import IncomingCallModal from "@/components/voice/IncomingCallModal";
+// ── d-social ──
+import AddGroupMembersModal from "@/components/modals/AddGroupMembersModal";
+import CustomStatusModal from "@/components/modals/CustomStatusModal";
+import GroupSettingsModal from "@/components/modals/GroupSettingsModal";
+import UserProfileModal from "@/components/modals/UserProfileModal";
 import { useUI } from "@/stores/ui";
 
 /**
@@ -60,5 +65,14 @@ export default function ModalHost() {
     // ── e-configuracoes ──
     case "quickSwitcher":
       return <QuickSwitcher />;
+    // ── d-social ──
+    case "customStatus":
+      return <CustomStatusModal />;
+    case "userProfile":
+      return <UserProfileModal userId={modal.userId} guildId={modal.guildId} />;
+    case "groupSettings":
+      return <GroupSettingsModal channelId={modal.channelId} />;
+    case "addGroupMembers":
+      return <AddGroupMembersModal channelId={modal.channelId} />;
   }
 }

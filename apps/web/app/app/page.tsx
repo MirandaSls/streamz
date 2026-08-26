@@ -23,6 +23,8 @@ import { useAuth } from "@/stores/auth";
 import { useActiveChannel, useChannels, useVoiceChannel } from "@/stores/channels";
 import { useActiveDM } from "@/stores/dms";
 import { useMessages } from "@/stores/messages";
+// ── d-social ── ausente automático depois de 10 min sem interação
+import { useAutoIdle } from "@/stores/presence";
 import { useUI } from "@/stores/ui";
 
 /**
@@ -51,6 +53,7 @@ export default function AppPage() {
   // ── e-configuracoes ──
   useKeyboardShortcuts();
   useSettingsRoute();
+  useAutoIdle(!!user);
 
   // sessão
   useEffect(() => loadFromStorage(), [loadFromStorage]);

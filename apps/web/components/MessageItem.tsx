@@ -32,6 +32,7 @@ import { useAuth } from "@/stores/auth";
 import { useGuilds } from "@/stores/guilds";
 import { useAuthorColor } from "@/stores/permissions";
 import { useMessages } from "@/stores/messages";
+import SystemMessageItem from "@/components/chat/SystemMessageItem";
 import { goToMessage } from "@/stores/messages-navigate";
 import { usePins } from "@/stores/messages-pins";
 import { useThreads } from "@/stores/messages-threads";
@@ -339,43 +340,9 @@ export default function MessageItem({
       ? "border-l-2 border-yellow bg-yellow/10 hover:bg-yellow/15"
       : "hover:bg-msghov";
 
-  if (sistema) {
-    // narração do canal: sem avatar, ícone no lugar dele e texto apagado
-    return (
-      <div
-        id={`mensagem-${message.id}`}
-        onContextMenu={openMenu}
-        className={`group relative flex items-center gap-2 py-0.5 pl-[72px] pr-12 mt-[17px] ${fundo}`}
-      >
-        <Pin size={18} aria-hidden="true" className="absolute left-[38px] text-txt-muted" />
-        <p className="text-sm text-txt-muted">
-          <span className="font-medium text-txt-secondary">{displayNameOf(author)}</span>{" "}
-          fixou uma mensagem neste canal.
-          {message.replyTo && (
-            <>
-              {" "}
-              <button
-                type="button"
-                onClick={() =>
-                  void goToMessage({
-                    guildId: message.guildId,
-                    channelId: message.channelId,
-                    messageId: message.replyTo!.id,
-                  })
-                }
-                className="text-txt-link hover:underline"
-              >
-                Ver mensagem
-              </button>
-            </>
-          )}
-        </p>
-        <Tooltip label={dataCompleta(message.createdAt)}>
-          <span className="text-xs text-txt-muted">{horaCompleta(message.createdAt)}</span>
-        </Tooltip>
-      </div>
-    );
-  }
+  // narração do canal (fixar, entrada de membro, eventos de grupo): é o mesmo
+  // componente que a timeline usa, para não haver duas versões do mesmo texto
+  if (sistema) return <SystemMessageItem message={message} />;
 
   return (
     <div

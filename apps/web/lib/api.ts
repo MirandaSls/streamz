@@ -6,8 +6,11 @@ import type {
   ChannelOverride,
   ChannelOverrideInput,
   GuildReadResult,
+  CustomStatusUpdate,
   DMChannelView,
   DMLeaveResult,
+  FriendLists,
+  FriendRequest,
   Guild,
   GuildChannelType,
   GuildMemberView,
@@ -30,6 +33,8 @@ import type {
   NotificationSetting,
   NotificationSettingUpdate,
   SessionInfo,
+  ProfileUpdate,
+  UserProfile,
   UserStatus,
   VoiceStateEvent,
 } from "@newdisc/shared";
@@ -102,8 +107,7 @@ export const api = {
 
   // ── eu / usuários ──
   me: () => request<PublicUser>("/users/me"),
-  updateProfile: (displayName: string | null) =>
-    request<PublicUser>("/users/me", patch({ displayName })),
+  updateProfile: (body: ProfileUpdate) => request<PublicUser>("/users/me", patch(body)),
   updateStatus: (manualStatus: UserStatus | null) =>
     request<PublicUser>("/users/me/status", patch({ manualStatus })),
   updateAvatar: (file: File) => {
@@ -112,6 +116,31 @@ export const api = {
     return request<PublicUser>("/users/me/avatar", { method: "POST", body: form });
   },
   searchUsers: (q: string) => request<PublicUser[]>(`/users/search?q=${encodeURIComponent(q)}`),
+
+  // ── d-social: status personalizado, perfil rico ──
+  updateCustomStatus: (body: CustomStatusUpdate) =>
+    request<PublicUser>("/users/me/custom-status", patch(body)),
+  updateBanner: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<PublicUser>("/users/me/banner", { method: "POST", body: form });
+  },
+  removeBanner: () => request<PublicUser>("/users/me/banner", { method: "DELETE" }),
+  profile: (userId: string, guildId?: string) =>
+    request<UserProfile>(`/users/${userId}/profile${guildId ? `?guildId=${guildId}` : ""}`),
+
+  // ── d-social: amigos e bloqueio ──
+  friends: () => request<FriendLists>("/friends"),
+  requestFriend: (username: string) => request<FriendRequest>("/friends/requests", json({ username })),
+  acceptFriend: (requestId: string) =>
+    request<FriendRequest>(`/friends/requests/${requestId}/accept`, { method: "POST" }),
+  removeFriendRequest: (requestId: string) =>
+    request<{ removed: string }>(`/friends/requests/${requestId}`, { method: "DELETE" }),
+  removeFriend: (userId: string) =>
+    request<{ removed: string }>(`/friends/${userId}`, { method: "DELETE" }),
+  blockUser: (userId: string) => request<PublicUser>("/friends/blocks", json({ userId })),
+  unblockUser: (userId: string) =>
+    request<{ unblocked: string }>(`/friends/blocks/${userId}`, { method: "DELETE" }),
 
   // ── servidores ──
   listGuilds: () => request<Guild[]>("/guilds"),
@@ -256,6 +285,22 @@ export const api = {
   getDM: (channelId: string) => request<DMChannelView>(`/dms/${channelId}`),
   leaveGroupDM: (channelId: string) =>
     request<DMLeaveResult>(`/dms/${channelId}/leave`, { method: "POST" }),
+
+  // ── d-social: fechar conversa e gerir o grupo ──
+  dmMembers: (channelId: string) => request<PublicUser[]>(`/dms/${channelId}/members`),
+  hideDM: (channelId: string) =>
+    request<{ channelId: string }>(`/dms/${channelId}/hide`, { method: "POST" }),
+  addGroupMember: (channelId: string, userId: string) =>
+    request<DMChannelView>(`/dms/${channelId}/members`, json({ userId })),
+  removeGroupMember: (channelId: string, userId: string) =>
+    request<DMChannelView>(`/dms/${channelId}/members/${userId}`, { method: "DELETE" }),
+  renameGroupDM: (channelId: string, name: string | null) =>
+    request<DMChannelView>(`/dms/${channelId}`, patch({ name })),
+  updateGroupIcon: (channelId: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<DMChannelView>(`/dms/${channelId}/icon`, { method: "POST", body: form });
+  },
 
   // ── mensagens (qualquer canal) ──
   history: (channelId: string, cursor?: string) =>

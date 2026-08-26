@@ -52,7 +52,13 @@ export type Modal =
   | { kind: "channelSettings"; channelId: string; tab?: "geral" | "permissoes" }
   | { kind: "channelTopic"; channelId: string }
   // ── e-configuracoes ──
-  | { kind: "quickSwitcher" };
+  | { kind: "quickSwitcher" }
+  // ── d-social ──
+  | { kind: "customStatus" }
+  /** perfil completo de alguém; `guildId` é o servidor de onde o cartão abriu. */
+  | { kind: "userProfile"; userId: string; guildId?: string }
+  | { kind: "groupSettings"; channelId: string }
+  | { kind: "addGroupMembers"; channelId: string };
 
 /** Um item de menu de contexto; `separator` desenha a linha entre grupos. */
 export type MenuItem =

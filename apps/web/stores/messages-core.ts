@@ -61,8 +61,9 @@ export function optimisticMessage(input: {
     reactions: [],
     parentId: input.parentId ?? null,
     replyCount: 0,
-    attachments: input.attachments ?? [],
+    // a otimista é sempre texto de gente: mensagem de sistema nasce no servidor
     type: "DEFAULT",
+    attachments: input.attachments ?? [],
     replyTo: input.replyTo ?? null,
     replyMention: input.replyMention ?? false,
     thread: null,

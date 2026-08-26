@@ -124,7 +124,7 @@ export class CallsService {
     const evento: CallRingEvent = { channelId, from };
     this.realtime.emitToUsers(alvos, WS_EVENTS.CALL_RING, evento);
     const users = await this.prisma.user.findMany({ where: { id: { in: alvos } } });
-    return users.map(toPublicUser);
+    return users.map((u) => toPublicUser(u));
   }
 
   /** Ninguém atendeu em 30 s: a chamada morre e quem ligou sai da sala. */

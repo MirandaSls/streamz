@@ -170,7 +170,14 @@ export class ChatGateway
   /** Última conexão fechada → OFFLINE + broadcast. */
   private async markOffline(userId: string) {
     const total = await this.presence.disconnect(userId);
-    if (total === 0) await this.setStatus(userId, "OFFLINE");
+    if (total === 0) {
+      // ── d-social ── carimba o "visto por último" que o perfil mostra; só na
+      // última conexão, senão fechar uma aba já reescreveria o valor
+      await this.prisma.user
+        .update({ where: { id: userId }, data: { lastSeenAt: new Date() } })
+        .catch(() => {});
+      await this.setStatus(userId, "OFFLINE");
+    }
   }
 
   private async setStatus(userId: string, status: UserStatus) {

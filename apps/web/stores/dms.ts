@@ -10,6 +10,7 @@ import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
 import { useChannels } from "@/stores/channels";
+import { useFriends } from "@/stores/friends";
 import { useMessages } from "@/stores/messages";
 
 /**
@@ -35,6 +36,15 @@ interface DMsState {
   openWith: (userId: string) => Promise<void>;
   createGroup: (userIds: string[], name?: string) => Promise<boolean>;
   leaveGroup: (channelId: string) => Promise<void>;
+  // ── d-social ──
+  /** Fecha a conversa: some da lista até chegar mensagem nova. */
+  hide: (channelId: string) => Promise<void>;
+  addMember: (channelId: string, userId: string) => Promise<boolean>;
+  removeMember: (channelId: string, user: PublicUser) => Promise<void>;
+  rename: (channelId: string, name: string | null) => Promise<boolean>;
+  updateIcon: (channelId: string, file: File) => Promise<void>;
+  /** Aplica a conversa atualizada que chegou por `channel.updated`. */
+  handleUpdated: (dm: DMChannelView) => void;
   markRead: (channelId: string) => Promise<void>;
   bumpUnread: (channelId: string, at: string, mention: boolean) => void;
   handleDeleted: (channelId: string) => void;
@@ -68,6 +78,8 @@ export const useDMs = create<DMsState>((set, get) => {
   /** Mostra a conversa na área principal e abre o canal dela. */
   function show(dm: DMChannelView) {
     ui.setView("dm");
+    // a página Amigos e a conversa disputam a coluna 3 — abrir uma fecha a outra
+    useFriends.getState().setOpen(false);
     // sai da call de voz: a área principal passa a ser a conversa
     useChannels.getState().leaveVoice();
     set({ activeId: dm.id });
@@ -88,9 +100,9 @@ export const useDMs = create<DMsState>((set, get) => {
       const active = get().activeId;
       // voltar para a conversa que já estava aberta não refaz o histórico
       if (active) void useMessages.getState().open(active, { sticky: true });
-      const channels = await fetchList();
-      // sem conversa aberta, entra na mais recente — como o Discord faz
-      if (!get().activeId && channels?.[0]) show(channels[0]);
+      await fetchList();
+      // sem conversa aberta, a home do modo DM é a página Amigos (como o Discord)
+      if (!get().activeId) useFriends.getState().setOpen(true);
     },
 
     refreshList: async () => {
@@ -139,6 +151,69 @@ export const useDMs = create<DMsState>((set, get) => {
         ui.toast(errorMessage(e, "Não foi possível sair do grupo"), "error");
       }
     },
+
+    // ── d-social ──
+
+    hide: async (channelId) => {
+      // otimista: some da lista já; o servidor só registra o instante
+      get().handleDeleted(channelId);
+      try {
+        await api.hideDM(channelId);
+      } catch (e) {
+        ui.toast(errorMessage(e, "Não foi possível fechar a conversa"), "error");
+        void get().refreshList();
+      }
+    },
+
+    addMember: async (channelId, userId) => {
+      try {
+        get().handleUpdated(await api.addGroupMember(channelId, userId));
+        return true;
+      } catch (e) {
+        ui.toast(errorMessage(e, "Não foi possível adicionar ao grupo"), "error");
+        return false;
+      }
+    },
+
+    removeMember: async (channelId, user) => {
+      const ok = await ui.confirm({
+        title: `Remover ${displayNameOf(user)}`,
+        message: "A pessoa deixa de ver as mensagens do grupo.",
+        confirmLabel: "Remover",
+        danger: true,
+      });
+      if (!ok) return;
+      try {
+        get().handleUpdated(await api.removeGroupMember(channelId, user.id));
+      } catch (e) {
+        ui.toast(errorMessage(e, "Não foi possível remover do grupo"), "error");
+      }
+    },
+
+    rename: async (channelId, name) => {
+      try {
+        get().handleUpdated(await api.renameGroupDM(channelId, name));
+        return true;
+      } catch (e) {
+        ui.toast(errorMessage(e, "Não foi possível renomear o grupo"), "error");
+        return false;
+      }
+    },
+
+    updateIcon: async (channelId, file) => {
+      try {
+        get().handleUpdated(await api.updateGroupIcon(channelId, file));
+      } catch (e) {
+        ui.toast(errorMessage(e, "Não foi possível trocar o ícone"), "error");
+      }
+    },
+
+    handleUpdated: (dm) =>
+      set((s) => ({
+        channels: s.channels.some((d) => d.id === dm.id)
+          ? s.channels.map((d) => (d.id === dm.id ? { ...d, ...dm } : d))
+          : [dm, ...s.channels],
+      })),
 
     markRead: async (channelId) => {
       const d = get().channels.find((x) => x.id === channelId);

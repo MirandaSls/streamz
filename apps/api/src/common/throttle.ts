@@ -37,3 +37,13 @@ export const INVITE_CREATE_THROTTLE = Throttle({
 export const INVITE_PREVIEW_THROTTLE = Throttle({
   default: { ttl: seconds(60), limit: 30 },
 });
+
+// ── d-social ──
+/**
+ * Pedido de amizade: aceita um nome de usuário e diz se ele existe, então é
+ * também uma forma de enumerar contas. O teto é folgado para uso humano e
+ * apertado para varredura.
+ */
+export const FRIEND_REQUEST_THROTTLE = Throttle({
+  default: { ttl: seconds(60), limit: 15 },
+});

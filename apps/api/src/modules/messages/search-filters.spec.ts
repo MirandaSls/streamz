@@ -84,6 +84,8 @@ const ana: PublicUser = {
   displayName: null,
   avatarUrl: null,
   status: "ONLINE",
+  customStatusText: null,
+  customStatusEmoji: null,
 };
 const bia: PublicUser = { ...ana, id: "u-bia", username: "bia" };
 
