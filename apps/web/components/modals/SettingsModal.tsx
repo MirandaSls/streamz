@@ -1,145 +1,61 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Camera, LogOut } from "lucide-react";
-import { MAX_DISPLAY_NAME, displayNameOf } from "@newdisc/shared";
-import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
-import Avatar from "@/components/ui/Avatar";
-import Tooltip from "@/components/ui/Tooltip";
-import { api } from "@/lib/api";
-import { useAuth } from "@/stores/auth";
-import { errorMessage } from "@/stores/socket-adapter";
-import { ui, useUI } from "@/stores/ui";
+import { useState } from "react";
+import { ShieldCheck, User } from "lucide-react";
+import Dialog, { SecondaryButton } from "@/components/modals/Dialog";
+import ContaTab from "@/components/settings/ContaTab";
+import SegurancaTab from "@/components/settings/SegurancaTab";
+import { useUI } from "@/stores/ui";
 
 /**
- * "Minha conta" — a tela de configurações do usuário do Discord, no que o MVP
- * cobre: avatar (upload), nome de exibição e sair.
+ * Configurações do usuário.
+ *
+ * Duas abas — "Minha conta" (perfil, e-mail, senha, encerrar) e "Segurança"
+ * (2FA, códigos de recuperação, sessões). O conteúdo mora em
+ * `components/settings/*`, e não aqui, porque a frente de configurações traz um
+ * *shell* de nove abas que consome exatamente esses mesmos componentes: quando
+ * as duas branches se encontrarem, este modal sai e as abas ficam.
  */
+const ABAS = [
+  { id: "conta", rotulo: "Minha conta", icone: User, Componente: ContaTab },
+  { id: "seguranca", rotulo: "Segurança", icone: ShieldCheck, Componente: SegurancaTab },
+] as const;
+
 export default function SettingsModal() {
-  const router = useRouter();
   const closeModal = useUI((s) => s.closeModal);
-  const user = useAuth((s) => s.user);
-  const setUser = useAuth((s) => s.setUser);
-  const logout = useAuth((s) => s.logout);
-  const [displayName, setDisplayName] = useState(user?.displayName ?? "");
-  const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  const dirty = (user?.displayName ?? "") !== displayName.trim();
-
-  async function save() {
-    if (!dirty || saving) return;
-    setSaving(true);
-    try {
-      setUser(await api.updateProfile(displayName.trim() || null));
-      ui.toast("Perfil salvo.");
-    } catch (e) {
-      ui.toast(errorMessage(e, "Não foi possível salvar"), "error");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function uploadAvatar(file: File) {
-    setUploading(true);
-    try {
-      setUser(await api.updateAvatar(file));
-    } catch (e) {
-      ui.toast(errorMessage(e, "Não foi possível trocar o avatar"), "error");
-    } finally {
-      setUploading(false);
-    }
-  }
+  const [abaAtiva, setAbaAtiva] = useState<(typeof ABAS)[number]["id"]>("conta");
+  const aba = ABAS.find((a) => a.id === abaAtiva) ?? ABAS[0];
 
   return (
     <Dialog
-      title="Minha conta"
+      title="Configurações"
       onClose={closeModal}
-      className="w-[480px]"
-      footer={
-        <>
-          <PrimaryButton disabled={!dirty || saving} onClick={() => void save()}>
-            {saving ? "Salvando…" : "Salvar alterações"}
-          </PrimaryButton>
-          <SecondaryButton onClick={closeModal}>Fechar</SecondaryButton>
-        </>
-      }
+      className="w-[560px]"
+      footer={<SecondaryButton onClick={closeModal}>Fechar</SecondaryButton>}
     >
-      {user && (
-        <div className="overflow-hidden rounded-lg bg-footer">
-          <div className="h-[60px] bg-accent" />
-          <div className="px-4 pb-4">
-            <div className="-mt-8 flex items-end gap-3">
-              <div className="relative rounded-full border-[6px] border-footer">
-                <Avatar user={user} size="xl" surface="border-footer" />
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/gif,image/webp"
-                  hidden
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) void uploadAvatar(f);
-                    e.target.value = "";
-                  }}
-                />
-                <Tooltip label="Trocar avatar">
-                  <button
-                    type="button"
-                    disabled={uploading}
-                    onClick={() => fileRef.current?.click()}
-                    aria-label="Trocar avatar"
-                    className="absolute bottom-0 right-0 grid h-8 w-8 place-items-center rounded-full bg-panel text-txt-primary shadow-high hover:bg-hov disabled:opacity-50"
-                  >
-                    <Camera size={16} />
-                  </button>
-                </Tooltip>
-              </div>
-              <div className="min-w-0 pb-2">
-                <div className="truncate text-xl font-bold text-txt-primary">{displayNameOf(user)}</div>
-                <div className="truncate text-sm text-txt-muted">@{user.username}</div>
-              </div>
-            </div>
-            {uploading && <p className="mt-2 text-xs text-txt-muted">Enviando avatar…</p>}
-          </div>
-        </div>
-      )}
+      <div role="tablist" aria-label="Configurações" className="mb-4 flex gap-1">
+        {ABAS.map(({ id, rotulo, icone: Icone }) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={id === abaAtiva}
+            onClick={() => setAbaAtiva(id)}
+            className={`flex h-8 items-center gap-1.5 rounded-[3px] px-3 text-sm font-medium transition ${
+              id === abaAtiva
+                ? "bg-accent text-white"
+                : "text-txt-normal hover:bg-hov hover:text-txt-primary"
+            }`}
+          >
+            <Icone size={16} aria-hidden="true" />
+            {rotulo}
+          </button>
+        ))}
+      </div>
 
-      <label htmlFor="displayName" className="mb-2 mt-5 block text-xs font-bold uppercase text-txt-secondary">
-        Nome de exibição
-      </label>
-      <input
-        id="displayName"
-        value={displayName}
-        maxLength={MAX_DISPLAY_NAME}
-        onChange={(e) => setDisplayName(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            void save();
-          }
-        }}
-        placeholder={user?.username}
-        className="h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
-      />
-      <p className="mt-1 text-xs text-txt-muted">
-        É o nome que aparece nas mensagens. Vazio = usar @{user?.username}.
-      </p>
-
-      <button
-        type="button"
-        onClick={() => {
-          closeModal();
-          logout();
-          router.replace("/login");
-        }}
-        className="mt-5 flex h-9 w-full items-center gap-2 rounded-[3px] px-3 text-sm font-medium text-red transition hover:bg-red hover:text-white"
-      >
-        <LogOut size={16} aria-hidden="true" />
-        Sair
-      </button>
+      <div role="tabpanel">
+        <aba.Componente />
+      </div>
     </Dialog>
   );
 }

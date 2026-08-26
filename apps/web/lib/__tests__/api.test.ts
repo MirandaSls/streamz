@@ -75,7 +75,9 @@ describe("request", () => {
     servidorFalso([() => resposta(400, { message: ["username: muito curto"] })]);
     const { api } = await carregarApi();
 
-    await expect(api.register("ab", "123456")).rejects.toMatchObject({
+    await expect(
+      api.register({ email: "ana@exemplo.com", username: "ab", password: "Cavalo-Bateria-42" }),
+    ).rejects.toMatchObject({
       status: 400,
       message: "username: muito curto",
     });
