@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 /**
  * O app desktop (Tauri) empacota a web como **HTML estático** — `frontendDist`
  * aponta para `apps/web/out`, que só existe com `output: "export"`.
@@ -23,6 +25,24 @@ const exportarEstatico =
       process.env.TAURI_PLATFORM,
   );
 
+/**
+ * A imagem Docker da web roda `output: "standalone"`: o Next emite um
+ * `server.js` com apenas os arquivos que o rastreamento provou serem usados,
+ * o que dispensa levar `node_modules` inteiro para a imagem final.
+ *
+ * Fica atrás de env (`NEXT_OUTPUT=standalone`) pelo mesmo motivo do export:
+ * `next dev` e `next start` locais continuam no modo padrão, e os dois modos
+ * são mutuamente exclusivos — quando o Tauri manda exportar, o export vence.
+ */
+const saidaStandalone = !exportarEstatico && process.env.NEXT_OUTPUT === "standalone";
+
+/**
+ * Num monorepo o rastreamento precisa enxergar acima de `apps/web` para achar
+ * o `packages/shared` e o store do pnpm; sem isto o `server.js` sobe e quebra
+ * ao importar um módulo que ficou de fora.
+ */
+const raizDoMonorepo = fileURLToPath(new URL("../../", import.meta.url));
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -36,6 +56,12 @@ const nextConfig = {
         trailingSlash: true,
         // Sem servidor Next não há otimizador de imagem.
         images: { unoptimized: true },
+      }
+    : {}),
+  ...(saidaStandalone
+    ? {
+        output: "standalone",
+        experimental: { outputFileTracingRoot: raizDoMonorepo },
       }
     : {}),
 };

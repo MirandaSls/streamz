@@ -1,0 +1,94 @@
+# CI do monorepo. Um job faz a verificação inteira (é rápida e sequencial por
+# dependência: shared → api/web); outro só prova que as imagens ainda buildam.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# Push novo na mesma branch cancela a execução anterior — não adianta gastar
+# runner verificando um commit que já foi substituído.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: typecheck + testes + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Sem `version`: a action lê o campo `packageManager` do package.json da
+      # raiz, então a versão do pnpm do CI nunca diverge da do repositório.
+      - uses: pnpm/action-setup@v4
+
+      # Node 22 é o mesmo dos Dockerfiles — CI verde em outra major não prova
+      # que a imagem sobe.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # O client do Prisma é gerado, não versionado: sem isto o typecheck da
+      # api falha em todo tipo que vem do `@prisma/client`.
+      - name: Gerar client do Prisma
+        run: pnpm --filter @newdisc/api exec prisma generate
+
+      # @newdisc/shared é consumido pelo dist/ — o typecheck de api e web
+      # enxerga o contrato antigo (ou nenhum) se este passo não vier antes.
+      - name: Build do contrato compartilhado
+        run: pnpm --filter @newdisc/shared build
+
+      - name: Typecheck (shared, api, web)
+        run: |
+          pnpm --filter @newdisc/shared exec tsc --noEmit
+          pnpm --filter @newdisc/api exec tsc --noEmit
+          pnpm --filter @newdisc/web exec tsc --noEmit
+
+      # Os testes cobrem só lógica pura (vitest) — nenhum precisa de Postgres,
+      # por isso não há serviço de banco aqui. Se um dia precisar, adicione um
+      # `services: postgres:` neste job.
+      - name: Testes
+        run: |
+          pnpm --filter @newdisc/api test
+          pnpm --filter @newdisc/web test
+
+      # Prova que a web compila de verdade (typecheck não pega erro de build do
+      # Next: rota mal formada, import de server component etc.).
+      - name: Build da web
+        run: pnpm --filter @newdisc/web build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+
+  docker:
+    name: build das imagens
+    runs-on: ubuntu-latest
+    needs: verificar
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      # Só build, sem push: aqui não há registry configurado. O ganho é pegar
+      # cedo o Dockerfile que quebrou (COPY de caminho que sumiu, dependência
+      # nativa que não compila no Alpine).
+      - name: Imagem da API
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: false
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      - name: Imagem da web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: false
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web

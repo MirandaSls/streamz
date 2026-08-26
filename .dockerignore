@@ -1,0 +1,45 @@
+# Tudo que o build da imagem não deve enxergar. Além do tamanho, isto evita o
+# erro clássico de copiar um node_modules do Windows (com binários nativos do
+# argon2/prisma compilados para outra plataforma) para dentro do Alpine.
+node_modules
+**/node_modules
+.pnpm-store
+
+# builds locais
+dist
+**/dist
+.next
+**/.next
+out
+**/out
+build
+apps/desktop/src-tauri/target
+
+# segredos e estado local
+.env
+.env.*
+!.env.example
+livekit.yaml
+.pgdata
+e2e-shots
+apps/web/e2e-results
+apps/web/playwright-report
+apps/web/test-results
+
+# ferramenta / VCS
+.git
+.github
+.turbo
+**/.turbo
+*.log
+*.tsbuildinfo
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# o desktop não entra em imagem de servidor — só o manifesto, porque o
+# `pnpm install --frozen-lockfile` compara o lockfile com TODOS os workspaces
+# e um importer ausente é motivo de recusa.
+apps/desktop
+!apps/desktop/package.json

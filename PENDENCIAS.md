@@ -177,8 +177,35 @@ Ordem sugerida dos próximos blocos de features:
 - [x] ~~**Presença não zera no boot**~~ — feito (`onModuleInit` do gateway).
       Com `REDIS_URL` a presença, o broadcast do Socket.IO e o throttler passam a
       ser compartilhados entre instâncias; sem, ficam por processo.
-- [ ] **Sem CI nem imagem**: nenhum workflow (`.github/workflows`) roda
-      typecheck/lint/test, e não há `Dockerfile` para api/web.
+- [x] ~~**Sem CI nem imagem**~~ — feito: `.github/workflows/ci.yml` (Node 22 +
+      pnpm do `packageManager`) roda `prisma generate` → build do `shared` →
+      typecheck dos três pacotes → testes de api e web → `next build`, e um job
+      separado buildar as duas imagens (sem push). `apps/api/Dockerfile` e
+      `apps/web/Dockerfile` são multi-stage, rodam como usuário `node` e têm
+      `HEALTHCHECK`; o `docker-compose.yml` ganhou os serviços `api`, `web` e
+      `redis` (profile `redis`). Observabilidade junto: log JSON com id de
+      requisição, `GET /api/health` (liveness), `/api/ready` (Postgres+Redis) e
+      `/api/metrics` (Prometheus).
+      _Validado por typecheck + testes; **o build das imagens não foi executado**
+      — ver "Ambiente" abaixo._
+
+### Ainda depende de ambiente (não dá para fechar por código)
+
+- [ ] **Build de imagem nunca executado**: Docker Desktop não funciona na
+      máquina de desenvolvimento (WSL sem distro), então os dois `Dockerfile` e
+      os serviços novos do compose foram validados só por revisão. A primeira
+      execução real será o job `docker` do CI — é o lugar certo para descobrir
+      um `COPY` de caminho que sumiu ou dependência nativa que não compila no
+      Alpine.
+- [ ] **Sem registry**: o CI faz `push: false`. Publicar exige escolher o
+      destino (GHCR, Docker Hub, registry do provedor), criar o segredo e
+      decidir a tag (SHA do commit + `latest` por branch).
+- [ ] **Deploy não escolhido**: sem provedor definido não há `RUN_MIGRATIONS`
+      ligado num job de release, nem `TRUST_PROXY`/`APP_VERSION` preenchidos,
+      nem Postgres/Redis gerenciados provisionados.
+- [ ] **`/api/metrics` é público**: hoje qualquer um lê os contadores (nada
+      sensível, mas expõe volume de tráfego). Ao publicar, feche por rede ou
+      exija um token — decisão que depende de onde o Prometheus vai rodar.
 
 ---
 _Status atual: backend em Postgres (schema único + migration inicial; falta só

@@ -47,7 +47,17 @@ pnpm db:embedded         # alternativa sem Docker: Postgres embutido em ./.pgdat
 node scripts/e2e-visual.mjs --out ./e2e-shots   # passeio com screenshots (API+web no ar)
 pnpm db:migrate          # cria/aplica migration a partir do schema (dev)
 pnpm db:deploy           # aplica as migrations existentes (prod/CI)
+
+docker compose up -d --build api web            # sobe api+web em contêiner (usa o .env)
+docker compose --profile redis up -d redis      # Redis opcional (multi-instância)
+docker build -f apps/api/Dockerfile -t newdisc-api .   # contexto = raiz do monorepo
+docker build -f apps/web/Dockerfile -t newdisc-web .   # NEXT_PUBLIC_* via --build-arg
 ```
+
+O CI (`.github/workflows/ci.yml`) roda exatamente esta sequência — `prisma
+generate` → build do `shared` → typecheck dos três pacotes → testes → `next
+build` — e num job à parte builda as duas imagens sem publicar. Reproduza-a
+localmente antes de abrir PR.
 
 Testes unitários (vitest) cobrem só lógica pura (`pnpm --filter @newdisc/api test`,
 `pnpm --filter @newdisc/web test`). **Verificação = typecheck limpo nos três
