@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Logo do Streamz: perfil de corvo em branco sobre o blurple da marca.
+       Fonte dos ícones do app (tauri icon logo.svg) — ver icons/README.md.
+       O mesmo desenho vive em apps/web/app/icon.svg (favicon) e em
+       apps/web/components/ui/Corvo.tsx (marca na tela de login). -->
+  <rect width="1024" height="1024" rx="224" fill="#5865f2"/>
+  <g transform="translate(76 60) scale(8)">
+    <path fill="#ffffff" d="M10 96C14 80 22 70 22 54 22 36 32 20 48 18c8-1 16 2 22 8l29 21c1 .8 1 2 0 2.6L72 46c-1 4-5 9-10 12l5 6-6 3 5 7c-2 8 4 16 12 22Z"/>
+    <circle cx="54" cy="30" r="3.5" fill="#5865f2"/>
+  </g>
+</svg>

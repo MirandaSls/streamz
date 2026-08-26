@@ -1,0 +1,14 @@
+MARCAS DESCARTADAS
+
+corvo.svg
+  Perfil de corvo em branco sobre o blurple #5865f2. Adotado em 2026-08-26
+  (commit 6cdbcbe) e substituido no mesmo dia pelo pacote de marca v1.0 em
+  ../marca (simbolo de balao de fala, Volt Lime sobre Void Ink).
+
+  Guardado aqui e nao apagado porque foi uma escolha deliberada, nao um
+  rascunho. Se voltar a mesa, o desenho tambem vivia em:
+    apps/web/components/ui/Corvo.tsx
+    apps/web/app/icon.svg
+    apps/desktop/logo.svg
+
+  Ver docs/adr/0004-identidade-visual-volt-lime.md.
