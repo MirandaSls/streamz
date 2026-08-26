@@ -543,9 +543,16 @@ export interface StickerUpdatedEvent {
 export const MENCOES_GLOBAIS = ["everyone", "here"] as const;
 export type MencaoGlobal = (typeof MENCOES_GLOBAIS)[number];
 
-/** true se o texto contém `@everyone` ou `@here` (limite de palavra). */
+/**
+ * true se o texto contém `@everyone` ou `@here` (limite de palavra).
+ *
+ * `\@everyone` **não** conta: a barra invertida é o mesmo escape que o markdown
+ * já entende, e é o que o composer insere quando quem escreve não tem permissão
+ * de mencionar todos. Sem esta exceção a menção seguiria valendo para "não
+ * lido" e notificação mesmo depois de virar texto puro na tela.
+ */
 export function mentionsEveryone(content: string): boolean {
-  return /(^|[^\w.])@(everyone|here)(?![\w.-])/i.test(content);
+  return /(^|[^\w.\\])@(everyone|here)(?![\w.-])/i.test(content);
 }
 
 // ── GIFs (Tenor v2) ──────────────────────────────────────────
