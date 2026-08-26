@@ -37,3 +37,25 @@ export const INVITE_CREATE_THROTTLE = Throttle({
 export const INVITE_PREVIEW_THROTTLE = Throttle({
   default: { ttl: seconds(60), limit: 30 },
 });
+
+/**
+ * Rotas que disparam e-mail (verificação, "esqueci a senha"). O teto é baixo
+ * porque cada chamada custa um envio real e a rota é pública — sem ele, dá para
+ * usar o servidor de e-mail do projeto para inundar a caixa de um terceiro.
+ */
+export const AUTH_EMAIL_THROTTLE = Throttle({
+  default: { ttl: seconds(3600), limit: 5 },
+});
+
+/**
+ * Segundo fator e redefinição por token: força bruta de 6 dígitos. O bloqueio
+ * por conta (`lockout.ts`) cobre a senha; aqui é o teto por IP dos códigos.
+ */
+export const AUTH_MFA_THROTTLE = Throttle({
+  default: { ttl: seconds(60), limit: 10 },
+});
+
+/** Operações sensíveis da própria conta (trocar senha/e-mail, desativar, excluir). */
+export const ACCOUNT_THROTTLE = Throttle({
+  default: { ttl: seconds(60), limit: 10 },
+});

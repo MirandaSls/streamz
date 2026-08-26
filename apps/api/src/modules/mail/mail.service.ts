@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
 import type { Transporter } from "nodemailer";
 
 /**
@@ -39,6 +39,24 @@ export class MailService {
   /** Nome do provedor em uso — a UI mostra "não configurado" quando é console. */
   provider(): "smtp" | "console" {
     return this.isConfigured() ? "smtp" : "console";
+  }
+
+  /**
+   * Derruba a rota com `503` quando não há como entregar o e-mail.
+   *
+   * O padrão do R2/LiveKit é "sem credencial, 503". Aqui ele vale **só em
+   * produção**: em dev o provedor `console` imprime o link no log, e é assim
+   * que o fluxo inteiro (registrar → clicar → verificar) é testado sem
+   * servidor de e-mail nenhum. Responder 503 em dev tornaria o recurso
+   * impossível de exercitar nesta máquina.
+   */
+  exigirEntrega(): void {
+    if (this.isConfigured()) return;
+    if (process.env.NODE_ENV === "production") {
+      throw new ServiceUnavailableException(
+        "Envio de e-mail (SMTP) não configurado. Ver PENDENCIAS.md.",
+      );
+    }
   }
 
   /** Remetente configurado (ou um padrão legível). */
