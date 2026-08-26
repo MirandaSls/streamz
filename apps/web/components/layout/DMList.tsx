@@ -114,7 +114,7 @@ export default function DMList() {
           <span className="flex-1 font-medium">Amigos</span>
           {pendentes > 0 && (
             <span
-              aria-label={pendentes + " pedidos de amizade"}
+              aria-label={pendentes === 1 ? "1 pedido de amizade" : `${pendentes} pedidos de amizade`}
               className="grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[11px] font-bold leading-none text-white"
             >
               {pendentes}
