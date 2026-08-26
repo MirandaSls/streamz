@@ -1,0 +1,6 @@
+# Com core.autocrlf=true (padrão no Windows) o checkout converteria estes
+# arquivos para CRLF — e o `#!/bin/sh` com \r vira "no such file or directory"
+# dentro do Alpine, quebrando a imagem de um jeito difícil de diagnosticar.
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.Dockerfile text eol=lf
