@@ -9,8 +9,10 @@ import {
   Lock,
   LogOut,
   Megaphone,
+  Flag,
   Pencil,
   Plus,
+  ScrollText,
   Settings,
   Trash2,
   UserPlus,
@@ -120,6 +122,10 @@ export default function ChannelSidebar() {
     ];
     if (canModerate) {
       items.push({ label: "Convites", icon: <Link2 size={18} />, onSelect: () => openModal({ kind: "invites", guildId: guild.id }) });
+      // ── h-moderacao ──
+      items.push({ label: "Configurações do servidor", icon: <Settings size={18} />, onSelect: () => openModal({ kind: "serverSettings", guildId: guild.id }) });
+      items.push({ label: "Registro de auditoria", icon: <ScrollText size={18} />, onSelect: () => openModal({ kind: "serverSettings", guildId: guild.id, tab: "audit" }) });
+      items.push({ label: "Denúncias", icon: <Flag size={18} />, onSelect: () => openModal({ kind: "serverSettings", guildId: guild.id, tab: "reports" }) });
     }
     items.push({ separator: true });
     if (isOwner) {

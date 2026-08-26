@@ -1,14 +1,14 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
-import { CirclePlus, FileText, Gift, Smile, Sticker, X } from "lucide-react";
+import { BarChart3, CirclePlus, FileText, Gift, Paperclip, Smile, Sticker, X } from "lucide-react";
 import { MAX_ATTACHMENTS_PER_MESSAGE, MAX_MESSAGE_LENGTH, type Attachment } from "@newdisc/shared";
 import EmojiPicker from "@/components/ui/EmojiPicker";
 import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { emitTyping } from "@/stores/typing";
-import { ui } from "@/stores/ui";
+import { ui, type MenuItem } from "@/stores/ui";
 
 /** Altura máxima do campo antes de virar rolagem interna (~8 linhas). */
 const MAX_HEIGHT_PX = 200;
@@ -57,6 +57,7 @@ export default function Composer({
   allowAttachments = false,
   compact = false,
   ariaLabel,
+  onCreatePoll,
 }: {
   /** canal em que se está digitando — para o aviso de "digitando…". */
   channelId?: string;
@@ -66,6 +67,8 @@ export default function Composer({
   /** variação enxuta usada no painel de thread. */
   compact?: boolean;
   ariaLabel: string;
+  /** h-moderacao: quando presente, o "+" abre um menu com "Enquete". */
+  onCreatePoll?: () => void;
 }) {
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<Attachment[]>([]);
@@ -227,11 +230,33 @@ export default function Composer({
                   e.target.value = "";
                 }}
               />
-              <Tooltip label="Anexar arquivo">
+              <Tooltip label={onCreatePoll ? "Anexar ou criar" : "Anexar arquivo"}>
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  aria-label="Anexar arquivo"
+                  onClick={(e) => {
+                    // h-moderacao: com enquete disponível o "+" vira menu, como
+                    // no Discord; sem ela continua abrindo o seletor direto
+                    if (!onCreatePoll) {
+                      fileInputRef.current?.click();
+                      return;
+                    }
+                    const r = e.currentTarget.getBoundingClientRect();
+                    const items: MenuItem[] = [
+                      {
+                        label: "Anexar arquivo",
+                        icon: <Paperclip size={18} />,
+                        onSelect: () => fileInputRef.current?.click(),
+                      },
+                      {
+                        label: "Enquete",
+                        icon: <BarChart3 size={18} />,
+                        onSelect: onCreatePoll,
+                      },
+                    ];
+                    ui.openContextMenu(r.left, r.top - 8, items);
+                  }}
+                  aria-label={onCreatePoll ? "Anexar arquivo ou criar enquete" : "Anexar arquivo"}
+                  aria-haspopup={onCreatePoll ? "menu" : undefined}
                   className="grid h-11 w-14 place-items-center text-txt-secondary transition hover:text-txt-primary"
                 >
                   <CirclePlus size={24} />

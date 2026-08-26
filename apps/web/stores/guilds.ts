@@ -5,6 +5,7 @@ import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
 import { useChannels } from "@/stores/channels";
 import { useMessages } from "@/stores/messages";
+import { useModeration } from "@/stores/moderation";
 import { usePresence } from "@/stores/presence";
 
 /**
@@ -31,14 +32,24 @@ interface GuildsState {
   leave: (guildId: string) => Promise<void>;
   remove: (guildId: string) => Promise<void>;
   setRole: (userId: string, role: "ADMIN" | "MEMBER") => Promise<void>;
-  kick: (userId: string) => Promise<void>;
-  ban: (userId: string) => Promise<void>;
+  // h-moderacao: expulsar/banir/castigar abrem o modal com motivo; quem executa
+  // é o modal, que sabe o motivo e (no banimento) a janela de limpeza
+  kick: (userId: string) => void;
+  ban: (userId: string) => void;
+  timeout: (userId: string) => void;
+  removeTimeout: (userId: string) => Promise<void>;
 
   /** Chegou mensagem num canal deste servidor que não está na tela. */
   bumpUnread: (guildId: string, mention: boolean) => void;
   /** Recalcula o resumo do servidor a partir dos canais carregados. */
   syncFromChannels: (guildId: string) => void;
-  handleMemberUpdated: (guildId: string, userId: string, role: MemberRole) => void;
+  handleMemberUpdated: (
+    guildId: string,
+    userId: string,
+    role: MemberRole,
+    /** h-moderacao: ausente = o evento não falava de castigo. */
+    timeoutUntil?: string | null,
+  ) => void;
   handleMemberJoined: (guildId: string, member: GuildMemberView) => void;
   handleMemberLeft: (guildId: string, userId: string) => void;
   /** Fui expulso/banido, saí ou o servidor foi apagado: some da lista, a tela se limpa. */
@@ -97,6 +108,8 @@ export const useGuilds = create<GuildsState>((set, get) => {
       set({ activeGuildId: guild.id });
       void loadMembers(guild.id);
       void useChannels.getState().loadForGuild(guild.id);
+      // h-moderacao: castigo, regras e boas-vindas são por servidor
+      void useModeration.getState().loadMembership(guild.id);
     },
 
     create: async () => {
@@ -135,15 +148,11 @@ export const useGuilds = create<GuildsState>((set, get) => {
       }
     },
 
+    // h-moderacao: o modal "Convidar amigos" cria o convite e mostra as opções
     createInvite: async () => {
       const guildId = get().activeGuildId;
       if (!guildId) return;
-      try {
-        const invite = await api.createInvite(guildId);
-        ui.openModal({ kind: "invite", code: invite.code });
-      } catch (e) {
-        ui.toast(errorMessage(e, "Não foi possível criar o convite"), "error");
-      }
+      ui.openModal({ kind: "invite", guildId });
     },
 
     leave: async (guildId) => {
@@ -191,39 +200,32 @@ export const useGuilds = create<GuildsState>((set, get) => {
       }
     },
 
-    kick: async (userId) => {
+    kick: (userId) => {
       const guildId = get().activeGuildId;
-      if (!guildId) return;
-      const ok = await ui.confirm({
-        title: "Expulsar este membro?",
-        message: "Ele pode voltar com um novo convite.",
-        confirmLabel: "Expulsar",
-        danger: true,
-      });
-      if (!ok) return;
-      try {
-        await api.kickMember(guildId, userId);
-        set((s) => ({ members: s.members.filter((m) => m.user.id !== userId) }));
-      } catch (e) {
-        ui.toast(errorMessage(e, "Não foi possível expulsar"), "error");
-      }
+      const user = get().members.find((m) => m.user.id === userId)?.user;
+      if (guildId && user) ui.openModal({ kind: "kick", guildId, user });
     },
 
-    ban: async (userId) => {
+    ban: (userId) => {
+      const guildId = get().activeGuildId;
+      const user = get().members.find((m) => m.user.id === userId)?.user;
+      if (guildId && user) ui.openModal({ kind: "ban", guildId, user });
+    },
+
+    timeout: (userId) => {
+      const guildId = get().activeGuildId;
+      const user = get().members.find((m) => m.user.id === userId)?.user;
+      if (guildId && user) ui.openModal({ kind: "timeout", guildId, user });
+    },
+
+    removeTimeout: async (userId) => {
       const guildId = get().activeGuildId;
       if (!guildId) return;
-      const ok = await ui.confirm({
-        title: "Banir este membro?",
-        message: "Ele não poderá voltar, nem com convite.",
-        confirmLabel: "Banir",
-        danger: true,
-      });
-      if (!ok) return;
       try {
-        await api.banMember(guildId, userId);
-        set((s) => ({ members: s.members.filter((m) => m.user.id !== userId) }));
+        await api.removeTimeout(guildId, userId);
+        ui.toast("Castigo removido.");
       } catch (e) {
-        ui.toast(errorMessage(e, "Não foi possível banir"), "error");
+        ui.toast(errorMessage(e, "Não foi possível remover o castigo"), "error");
       }
     },
 
@@ -244,10 +246,14 @@ export const useGuilds = create<GuildsState>((set, get) => {
       patchGuild(guildId, (g) => ({ ...g, unread, mentionCount }));
     },
 
-    handleMemberUpdated: (guildId, userId, role) => {
+    handleMemberUpdated: (guildId, userId, role, timeoutUntil) => {
       if (get().activeGuildId !== guildId) return;
       set((s) => ({
-        members: s.members.map((m) => (m.user.id === userId ? { ...m, role } : m)),
+        members: s.members.map((m) =>
+          m.user.id === userId
+            ? { ...m, role, ...(timeoutUntil !== undefined ? { timeoutUntil } : {}) }
+            : m,
+        ),
       }));
     },
 

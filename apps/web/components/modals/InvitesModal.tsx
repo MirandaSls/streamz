@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Copy, Trash2 } from "lucide-react";
-import type { InviteInfo } from "@newdisc/shared";
+import { displayNameOf, type InviteDetail } from "@newdisc/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";
@@ -13,7 +13,7 @@ import { ui, useUI } from "@/stores/ui";
 /** Convites do servidor: lista, cópia e revogação (moderação). */
 export default function InvitesModal({ guildId }: { guildId: string }) {
   const closeModal = useUI((s) => s.closeModal);
-  const [invites, setInvites] = useState<(InviteInfo & { creatorId: string })[] | null>(null);
+  const [invites, setInvites] = useState<InviteDetail[] | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function load() {
@@ -79,6 +79,9 @@ export default function InvitesModal({ guildId }: { guildId: string }) {
                 {i.uses}
                 {i.maxUses ? `/${i.maxUses}` : ""} usos
                 {i.expiresAt ? ` · expira ${horaCompleta(i.expiresAt)}` : " · sem expiração"}
+                {i.creator ? ` · por ${displayNameOf(i.creator)}` : ""}
+                {i.channelName ? ` · #${i.channelName}` : ""}
+                {i.temporary ? " · temporário" : ""}
               </span>
               <Tooltip label="Copiar código">
                 <button

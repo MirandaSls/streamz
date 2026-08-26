@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from "@nestjs/common";
+import { Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { DiscoveryService } from "./discovery.service";
 import { CurrentUser } from "../../common/current-user.decorator";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
@@ -11,5 +11,11 @@ export class DiscoveryController {
   @Get()
   list(@CurrentUser() user: JwtPayload, @Query("q") q?: string) {
     return this.discovery.list(user.sub, q);
+  }
+
+  /** Entrar num servidor público direto do card, sem convite. */
+  @Post(":guildId/join")
+  join(@CurrentUser() user: JwtPayload, @Param("guildId") guildId: string) {
+    return this.discovery.join(user.sub, guildId);
   }
 }

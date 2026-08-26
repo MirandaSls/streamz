@@ -16,8 +16,17 @@ import {
   type PresenceUpdatePayload,
   type PublicUser,
 } from "@newdisc/shared";
+// ── h-moderacao ──
+import type {
+  GuildSettingsUpdatedEvent,
+  MessagesBulkDeletedEvent,
+  PollUpdatedEvent,
+  ReportView,
+} from "@newdisc/shared";
 import { notify } from "@/lib/desktop";
 import { useAuth } from "@/stores/auth";
+import { useModeration } from "@/stores/moderation";
+import { usePolls } from "@/stores/polls";
 import { on, onReconnect, rejoinChannel } from "@/stores/socket-adapter";
 import { useChannels } from "@/stores/channels";
 import { dmTitle, useDMs } from "@/stores/dms";
@@ -97,13 +106,22 @@ export function useRealtime(currentUserId?: string): void {
         useGuilds.getState().handleMemberLeft(guildId, userId);
       }),
 
-      on<MemberUpdatedEvent>(WS_EVENTS.MEMBER_UPDATED, ({ guildId, userId, role }) => {
-        useGuilds.getState().handleMemberUpdated(guildId, userId, role);
+      on<MemberUpdatedEvent>(WS_EVENTS.MEMBER_UPDATED, ({ guildId, userId, role, timeoutUntil }) => {
+        useGuilds.getState().handleMemberUpdated(guildId, userId, role, timeoutUntil);
+        // h-moderacao: o castigo chega por aqui — é o que troca o composer pelo aviso
+        if (userId === currentUserId && timeoutUntil !== undefined) {
+          useModeration.getState().applyTimeout(guildId, userId, timeoutUntil);
+        }
         if (userId === currentUserId) {
-          ui.toast(role === "ADMIN" ? "Você agora é administrador." : "Você deixou de ser administrador.");
-          // o que eu enxergo pode ter mudado (canais privados)
-          if (useGuilds.getState().activeGuildId === guildId) {
-            void useChannels.getState().loadForGuild(guildId);
+          // h-moderacao: evento de castigo não mexe em papel — não avisa nada aqui
+          if (timeoutUntil === undefined) {
+            ui.toast(
+              role === "ADMIN" ? "Você agora é administrador." : "Você deixou de ser administrador.",
+            );
+            // o que eu enxergo pode ter mudado (canais privados)
+            if (useGuilds.getState().activeGuildId === guildId) {
+              void useChannels.getState().loadForGuild(guildId);
+            }
           }
         }
       }),
@@ -122,6 +140,30 @@ export function useRealtime(currentUserId?: string): void {
       // erros de escrita voltam por um canal só do gateway (`emitError`)
       on<{ message?: string }>(WS_EVENTS.ERROR, (payload) => {
         ui.toast(payload?.message || "Não foi possível concluir a ação", "error");
+      }),
+
+      // ── h-moderacao ──
+      on<MessagesBulkDeletedEvent>(WS_EVENTS.MESSAGES_BULK_DELETED, ({ channelId, messageIds }) => {
+        // reaproveita o caminho de uma mensagem só: a timeline já sabe remover
+        for (const messageId of messageIds) {
+          useMessages.getState().handleDeleted({ messageId, channelId, parentId: null });
+        }
+      }),
+
+      on<PollUpdatedEvent>(WS_EVENTS.POLL_UPDATED, ({ poll }) => {
+        usePolls.getState().handleUpdated(poll);
+      }),
+
+      on<ReportView>(WS_EVENTS.REPORT_CREATED, (report) => {
+        useModeration.getState().handleReportCreated(report);
+        ui.toast("Nova denúncia no servidor.", "error");
+      }),
+
+      on<GuildSettingsUpdatedEvent>(WS_EVENTS.GUILD_SETTINGS_UPDATED, ({ guildId }) => {
+        // regras/boas-vindas podem ter mudado para mim
+        if (useGuilds.getState().activeGuildId === guildId) {
+          void useModeration.getState().loadMembership(guildId);
+        }
       }),
 
       onReconnect(() => {

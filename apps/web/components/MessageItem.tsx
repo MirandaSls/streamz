@@ -2,17 +2,25 @@
 
 import { useMemo, useState, type MouseEvent } from "react";
 import {
+  ArrowRightToLine,
+  CheckSquare,
   Copy,
   FileText,
+  Flag,
+  ListChecks,
   MessageSquare,
   MoreHorizontal,
   Pencil,
   SmilePlus,
   Trash2,
+  UserPlus,
 } from "lucide-react";
 import type { Attachment, Message } from "@newdisc/shared";
 import { displayNameOf, extractFirstUrl, isImageAttachment } from "@newdisc/shared";
 import LinkEmbedCard, { useLinkEmbed } from "@/components/chat/LinkEmbedCard";
+// ── h-moderacao ──
+import PollCard from "@/components/polls/PollCard";
+import { useModeration } from "@/stores/moderation";
 import Avatar from "@/components/ui/Avatar";
 import EmojiPicker from "@/components/ui/EmojiPicker";
 import Tooltip from "@/components/ui/Tooltip";
@@ -147,6 +155,13 @@ export default function MessageItem({
     return map;
   }, [members]);
 
+  // h-moderacao: seleção múltipla para remoção em lote (modo "selecionar")
+  const selecting = useModeration((s) => s.selecting && s.selectionChannelId === message.channelId);
+  const selected = useModeration((s) => s.selected.includes(message.id));
+  const toggleSelected = useModeration((s) => s.toggleSelected);
+  const startSelection = useModeration((s) => s.startSelection);
+  const deleteAfter = useModeration((s) => s.deleteAfter);
+
   const isOwn = message.author.id === currentUserId;
   // sem confirmação do servidor a mensagem ainda não tem id real: editar,
   // apagar ou reagir não teriam a que se referir
@@ -194,6 +209,29 @@ export default function MessageItem({
       label: "Copiar ID da mensagem",
       onSelect: () => void navigator.clipboard?.writeText(message.id),
     });
+    // ── h-moderacao ──
+    if (!isOwn) {
+      items.push({
+        label: "Denunciar mensagem",
+        icon: <Flag size={18} />,
+        onSelect: () =>
+          ui.openModal({ kind: "report", messageId: message.id, preview: message.content }),
+      });
+    }
+    if (canModerate) {
+      items.push({ separator: true });
+      items.push({
+        label: "Selecionar mensagens",
+        icon: <CheckSquare size={18} />,
+        onSelect: () => startSelection(message.channelId, message.id),
+      });
+      items.push({
+        label: "Apagar mensagens depois desta",
+        icon: <ArrowRightToLine size={18} />,
+        danger: true,
+        onSelect: () => void deleteAfter(message.channelId, message.id),
+      });
+    }
     if (canDelete) {
       items.push({ separator: true });
       items.push({
@@ -208,13 +246,52 @@ export default function MessageItem({
 
   const mentionsMe = !!me && new RegExp(`(^|[^\\w.])@${me.username}(?![\\w.-])`, "i").test(message.content);
 
+  // h-moderacao: mensagem escrita pelo servidor — linha discreta, sem avatar,
+  // sem barra de ações e sem menu (não há o que editar nem a quem responder)
+  if (message.systemType) {
+    return (
+      <div className="group mt-[17px] flex items-center gap-2 py-0.5 pl-[72px] pr-12 text-sm text-txt-muted hover:bg-msghov">
+        <UserPlus size={16} className="shrink-0 text-green" aria-hidden="true" />
+        <span className="min-w-0 flex-1 break-words">
+          {message.systemType === "SYSTEM_JOIN" ? (
+            <>
+              <span className="font-medium text-txt-primary">{displayNameOf(author)}</span> entrou no
+              servidor.
+            </>
+          ) : (
+            message.content
+          )}
+        </span>
+        <time className="shrink-0 text-[11px]" dateTime={message.createdAt}>
+          {hora(message.createdAt)}
+        </time>
+      </div>
+    );
+  }
+
   return (
     <div
       onContextMenu={openMenu}
+      onClick={selecting ? () => toggleSelected(message.id) : undefined}
       className={`group relative flex gap-4 py-0.5 pl-[72px] pr-12 ${
-        mentionsMe ? "border-l-2 border-yellow bg-yellow/10 hover:bg-yellow/15" : "hover:bg-msghov"
-      } ${grouped ? "" : "mt-[17px]"} ${message.pending ? "opacity-60" : ""}`}
+        selected
+          ? "bg-accent/15"
+          : mentionsMe
+            ? "border-l-2 border-yellow bg-yellow/10 hover:bg-yellow/15"
+            : "hover:bg-msghov"
+      } ${grouped ? "" : "mt-[17px]"} ${message.pending ? "opacity-60" : ""} ${
+        selecting ? "cursor-pointer" : ""
+      }`}
     >
+      {selecting && (
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => toggleSelected(message.id)}
+          aria-label={`Selecionar mensagem de ${displayNameOf(author)}`}
+          className="absolute right-4 top-1 h-4 w-4 accent-accent"
+        />
+      )}
       {grouped ? (
         // hora na margem, só no hover — como o Discord faz com mensagens agrupadas
         <span className="absolute left-0 top-1 w-[72px] select-none text-center text-[11px] leading-[22px] text-txt-muted opacity-0 group-hover:opacity-100">
@@ -294,6 +371,10 @@ export default function MessageItem({
         )}
 
         <AttachmentView attachments={message.attachments} />
+        {/* h-moderacao: a enquete é uma face da mensagem, não um bloco à parte */}
+        {message.poll && (
+          <PollCard poll={message.poll} canModerate={Boolean(canModerate)} isAuthor={isOwn} />
+        )}
         {embed && <LinkEmbedCard embed={embed} />}
 
         {onOpenThread && message.replyCount > 0 && (
@@ -363,7 +444,7 @@ export default function MessageItem({
       </div>
 
       {/* barra de ações: no hover e também ao chegar pelo teclado */}
-      {!unconfirmed && !editing && (
+      {!unconfirmed && !editing && !selecting && (
         <div className="absolute -top-4 right-4 hidden rounded border border-black/20 bg-chat p-0.5 shadow-high group-focus-within:flex group-hover:flex">
           <ActionButton label="Adicionar reação" onClick={() => setPicking((p) => !p)}>
             <SmilePlus size={20} />
@@ -376,6 +457,25 @@ export default function MessageItem({
           {isOwn && (
             <ActionButton label="Editar" onClick={startEdit}>
               <Pencil size={20} />
+            </ActionButton>
+          )}
+          {!isOwn && (
+            <ActionButton
+              label="Denunciar"
+              danger
+              onClick={() =>
+                ui.openModal({ kind: "report", messageId: message.id, preview: message.content })
+              }
+            >
+              <Flag size={20} />
+            </ActionButton>
+          )}
+          {canModerate && (
+            <ActionButton
+              label="Selecionar mensagens"
+              onClick={() => startSelection(message.channelId, message.id)}
+            >
+              <ListChecks size={20} />
             </ActionButton>
           )}
           {canDelete && (

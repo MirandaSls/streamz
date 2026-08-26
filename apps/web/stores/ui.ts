@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import type { PublicUser } from "@newdisc/shared";
+// ── h-moderacao ──
+import type { ServerSettingsTab } from "@/components/settings/server/tabs";
 
 /**
  * Estado de interface que não pertence a nenhum domínio: qual coluna está em
@@ -21,7 +23,7 @@ export interface Toast {
 export type Modal =
   | { kind: "createChannel" }
   | { kind: "channelAccess"; channelId: string }
-  | { kind: "invite"; code: string }
+  | { kind: "invite"; guildId: string; code?: string }
   | { kind: "createGroupDM" }
   | { kind: "settings" }
   | { kind: "invites"; guildId: string }
@@ -42,7 +44,17 @@ export type Modal =
       initial: string;
       confirmLabel: string;
       resolve: (value: string | null) => void;
-    };
+    }
+  // ── h-moderacao ──
+  | { kind: "timeout"; guildId: string; user: PublicUser }
+  | { kind: "kick"; guildId: string; user: PublicUser }
+  | { kind: "ban"; guildId: string; user: PublicUser }
+  | { kind: "report"; messageId: string; preview: string }
+  | { kind: "createPoll"; channelId: string }
+  | { kind: "pollVoters"; messageId: string }
+  | { kind: "serverSettings"; guildId: string; tab?: ServerSettingsTab }
+  | { kind: "discover" }
+  | { kind: "welcome"; guildId: string };
 
 /** Um item de menu de contexto; `separator` desenha a linha entre grupos. */
 export type MenuItem =

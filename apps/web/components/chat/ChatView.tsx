@@ -1,7 +1,14 @@
 "use client";
 
-import { Hash, Lock, Megaphone, MessagesSquare, Users } from "lucide-react";
+import { useEffect } from "react";
+import { Hash, Lock, Megaphone, MessagesSquare, Shield, Users } from "lucide-react";
 import Composer from "@/components/chat/Composer";
+// ── h-moderacao ──
+import { RulesNotice, TimeoutNotice } from "@/components/moderation/ComposerNotice";
+import SelectionBar from "@/components/moderation/SelectionBar";
+
+import { useModeration, useMustAcceptRules, useMyTimeout } from "@/stores/moderation";
+import { usePolls } from "@/stores/polls";
 import HeaderBar, { HeaderIcon } from "@/components/chat/HeaderBar";
 import MessageList from "@/components/chat/MessageList";
 import SearchPanel from "@/components/chat/SearchPanel";
@@ -10,7 +17,7 @@ import { useAuth } from "@/stores/auth";
 import { useActiveChannel } from "@/stores/channels";
 import { useCanModerate } from "@/stores/guilds";
 import { useActiveSlice, useMessages } from "@/stores/messages";
-import { useUI } from "@/stores/ui";
+import { ui, useUI } from "@/stores/ui";
 
 /** Coluna 3 no modo servidor: cabeçalho, busca, timeline e composer. */
 export default function ChatView() {
@@ -20,6 +27,23 @@ export default function ChatView() {
   const slice = useActiveSlice();
   const membersOpen = useUI((s) => s.membersOpen);
   const toggleMembers = useUI((s) => s.toggleMembers);
+  // ── h-moderacao ──
+  const timeoutUntil = useMyTimeout();
+  const mustAcceptRules = useMustAcceptRules();
+  const rulesChannelId = useModeration((s) => s.membership?.onboarding.rulesChannelId ?? null);
+  const guildId = useModeration((s) => s.membership?.guildId ?? null);
+  const loadMyVotes = usePolls((s) => s.loadMine);
+  const cancelSelection = useModeration((s) => s.cancelSelection);
+  const channelId = channel?.id;
+
+  // meus votos das enquetes do canal: o DTO da mensagem é igual para todo
+  // mundo, então a marcação "eu votei aqui" vem numa chamada à parte
+  useEffect(() => {
+    if (channelId) void loadMyVotes(channelId);
+  }, [channelId, loadMyVotes]);
+
+  // trocar de canal sai do modo de seleção — ela é sempre de um canal só
+  useEffect(() => () => cancelSelection(), [channelId, cancelSelection]);
 
   const setSearchQuery = useMessages((s) => s.setSearchQuery);
   const runSearch = useMessages((s) => s.runSearch);
@@ -60,6 +84,14 @@ export default function ChatView() {
             <HeaderIcon label="Threads" disabled>
               <MessagesSquare size={24} />
             </HeaderIcon>
+            {canModerate && guildId && (
+              <HeaderIcon
+                label="Configurações do servidor"
+                onClick={() => ui.openModal({ kind: "serverSettings", guildId })}
+              >
+                <Shield size={24} />
+              </HeaderIcon>
+            )}
             <HeaderIcon label={membersOpen ? "Ocultar lista de membros" : "Mostrar lista de membros"} active={membersOpen} onClick={toggleMembers}>
               <Users size={24} />
             </HeaderIcon>
@@ -93,10 +125,18 @@ export default function ChatView() {
         }}
       />
 
+      {/* h-moderacao: barra do modo "selecionar mensagens" */}
+      <SelectionBar channelId={channel.id} />
+
       {readOnly ? (
         <p className="mx-4 mb-6 rounded-lg bg-input px-4 py-3 text-center text-sm text-txt-muted">
           Você não tem permissão para enviar mensagens neste canal.
         </p>
+      ) : timeoutUntil ? (
+        // h-moderacao: o castigo troca o composer pelo aviso de até quando
+        <TimeoutNotice until={timeoutUntil} />
+      ) : mustAcceptRules ? (
+        <RulesNotice rulesChannelId={rulesChannelId} />
       ) : (
         user && (
           <Composer
@@ -105,6 +145,7 @@ export default function ChatView() {
             allowAttachments
             placeholder={`Conversar em #${name}`}
             ariaLabel={`Mensagem para #${name}`}
+            onCreatePoll={() => ui.openModal({ kind: "createPoll", channelId: channel.id })}
             onSend={(content, attachments) =>
               send({ channelId: channel.id, guildId: channel.guildId, author: user, content, attachments })
             }

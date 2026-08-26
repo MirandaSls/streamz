@@ -1,19 +1,30 @@
 import type {
   Attachment,
   AuthTokens,
+  AuditAction,
+  AuditLogPage,
   Channel,
+  DiscoverableGuild,
   DMChannelView,
   DMLeaveResult,
   Guild,
   GuildChannelType,
+  GuildMembership,
   GuildMemberView,
+  GuildOnboarding,
+  GuildOnboardingUpdate,
   GuildWithChannels,
+  InviteDetail,
+  InviteFullPreview,
   InviteInfo,
-  InvitePreview,
+  InviteOptions,
   LinkEmbed,
   MemberRole,
   Message,
+  PollVoters,
   PublicUser,
+  ReportReason,
+  ReportView,
   UserStatus,
 } from "@newdisc/shared";
 import { API_URL } from "./config";
@@ -74,6 +85,16 @@ async function comoApiError(res: Response): Promise<ApiError> {
 
 const json = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
 const patch = (body: unknown): RequestInit => ({ method: "PATCH", body: JSON.stringify(body) });
+const del = (body?: unknown): RequestInit =>
+  body === undefined ? { method: "DELETE" } : { method: "DELETE", body: JSON.stringify(body) };
+
+/** Query string a partir dos parâmetros preenchidos (ignora vazio/undefined). */
+function query(params: Record<string, string | undefined>): string {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v) q.set(k, v);
+  const s = q.toString();
+  return s ? `?${s}` : "";
+}
 
 export const api = {
   // ── auth ──
@@ -111,13 +132,12 @@ export const api = {
     request<{ banned: string }>(`/guilds/${guildId}/ban`, json({ userId, reason })),
 
   // ── convites ──
-  createInvite: (guildId: string, opts?: { maxUses?: number; expiresInHours?: number }) =>
+  createInvite: (guildId: string, opts?: InviteOptions) =>
     request<InviteInfo>(`/guilds/${guildId}/invites`, json(opts ?? {})),
-  listInvites: (guildId: string) =>
-    request<(InviteInfo & { creatorId: string })[]>(`/guilds/${guildId}/invites`),
+  listInvites: (guildId: string) => request<InviteDetail[]>(`/guilds/${guildId}/invites`),
   revokeInvite: (guildId: string, code: string) =>
     request<{ revoked: string }>(`/guilds/${guildId}/invites/${code}`, { method: "DELETE" }),
-  previewInvite: (code: string) => request<InvitePreview>(`/invites/${code}`),
+  previewInvite: (code: string) => request<InviteFullPreview>(`/invites/${code}`),
   redeemInvite: (code: string) =>
     request<{ id: string; name: string }>(`/invites/${code}/redeem`, { method: "POST" }),
 
@@ -175,4 +195,71 @@ export const api = {
     form.append("file", file);
     return request<Attachment>("/uploads", { method: "POST", body: form });
   },
+
+  // ── h-moderacao ──
+  // registro de auditoria
+  auditLog: (guildId: string, filters: { action?: AuditAction; userId?: string; cursor?: string } = {}) =>
+    request<AuditLogPage>(
+      `/guilds/${guildId}/audit-log${query({ action: filters.action, userId: filters.userId, cursor: filters.cursor })}`,
+    ),
+
+  // castigo
+  timeoutMember: (guildId: string, userId: string, body: { minutes?: number; until?: string; reason?: string }) =>
+    request<{ userId: string; timeoutUntil: string }>(
+      `/guilds/${guildId}/members/${userId}/timeout`,
+      json(body),
+    ),
+  removeTimeout: (guildId: string, userId: string) =>
+    request<{ userId: string; timeoutUntil: null }>(
+      `/guilds/${guildId}/members/${userId}/timeout`,
+      del(),
+    ),
+
+  // lista de banimentos (com o motivo registrado) e o desfazer
+  listBans: (guildId: string) =>
+    request<{ user: PublicUser; reason: string | null; createdAt: string }[]>(
+      `/guilds/${guildId}/bans`,
+    ),
+  unbanMember: (guildId: string, userId: string) =>
+    request<{ unbanned: string }>(`/guilds/${guildId}/bans/${userId}`, del()),
+
+  // expulsão e banimento com motivo (e limpeza de mensagens)
+  kickWithReason: (guildId: string, userId: string, reason?: string) =>
+    request<{ kicked: string }>(`/guilds/${guildId}/members/${userId}/kick`, json({ reason })),
+  banWithReason: (guildId: string, userId: string, body: { reason?: string; deleteMessageHours?: number }) =>
+    request<{ banned: string }>(`/guilds/${guildId}/members/${userId}/ban`, json(body)),
+
+  // remoção de mensagens em lote
+  bulkDeleteMessages: (channelId: string, ids: string[]) =>
+    request<{ deleted: string[] }>(`/channels/${channelId}/messages`, del({ ids })),
+  deleteMessagesAfter: (channelId: string, messageId: string) =>
+    request<{ deleted: string[] }>(`/channels/${channelId}/messages/delete-after`, json({ messageId })),
+
+  // denúncias
+  reportMessage: (messageId: string, reason: ReportReason, details?: string) =>
+    request<ReportView>(`/messages/${messageId}/report`, json({ reason, details })),
+  listReports: (guildId: string, resolved = false) =>
+    request<ReportView[]>(`/guilds/${guildId}/reports${query({ resolved: String(resolved) })}`),
+  resolveReport: (guildId: string, reportId: string, resolved: boolean) =>
+    request<ReportView>(`/guilds/${guildId}/reports/${reportId}`, patch({ resolved })),
+
+  // enquetes (criar/votar/encerrar vão pelo gateway — aqui só leitura)
+  myPollVotes: (channelId: string) =>
+    request<{ messageId: string; optionIndexes: number[] }[]>(`/channels/${channelId}/polls/votes`),
+  pollVoters: (messageId: string) => request<PollVoters>(`/messages/${messageId}/poll/voters`),
+
+  // onboarding, regras e boas-vindas
+  membership: (guildId: string) => request<GuildMembership>(`/guilds/${guildId}/membership`),
+  onboarding: (guildId: string) => request<GuildOnboarding>(`/guilds/${guildId}/onboarding`),
+  updateOnboarding: (guildId: string, body: GuildOnboardingUpdate) =>
+    request<GuildOnboarding>(`/guilds/${guildId}/onboarding`, patch(body)),
+  acceptRules: (guildId: string) =>
+    request<{ acceptedRulesAt: string }>(`/guilds/${guildId}/rules/accept`, { method: "POST" }),
+  markWelcomeSeen: (guildId: string) =>
+    request<{ ok: true }>(`/guilds/${guildId}/welcome/seen`, { method: "POST" }),
+
+  // descobrir servidores públicos
+  discover: (q?: string) => request<DiscoverableGuild[]>(`/discover${query({ q })}`),
+  joinDiscoverable: (guildId: string) =>
+    request<{ id: string; name: string }>(`/discover/${guildId}/join`, { method: "POST" }),
 };
