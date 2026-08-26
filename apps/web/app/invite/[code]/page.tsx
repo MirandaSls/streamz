@@ -77,7 +77,7 @@ export default function InvitePage() {
   const recado = erro ?? preview?.reason ?? "Este convite não vale mais.";
 
   return (
-    <main className="grid min-h-screen place-items-center bg-accent bg-[radial-gradient(ellipse_at_top_left,rgba(255,255,255,0.18),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(0,0,0,0.25),transparent_60%)] p-4">
+    <main className="grid min-h-screen place-items-center bg-rail bg-[radial-gradient(ellipse_at_top_left,rgba(155,227,31,0.14),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(155,227,31,0.05),transparent_60%)] p-4">
       <div className="w-[420px] max-w-full rounded-[5px] bg-chat p-8 text-center shadow-high">
         {preview === null && !erro && <p className="text-txt-muted">Carregando convite…</p>}
 

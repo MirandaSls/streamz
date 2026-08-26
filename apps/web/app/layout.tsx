@@ -1,5 +1,5 @@
 import "./globals.css";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Archivo, JetBrains_Mono, Noto_Sans } from "next/font/google";
 
 /**
@@ -39,9 +39,29 @@ const fonteMono = JetBrains_Mono({
  * data:`) — importar fonts.googleapis.com por URL quebraria o desktop.
  */
 
+/**
+ * `metadataBase` é o que faz a og-image e o favicon resolverem em URL absoluta
+ * no raspador de link. `WEB_PUBLIC_URL` já existe no .env; sem ela, localhost.
+ */
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.WEB_PUBLIC_URL ?? "http://localhost:3000"),
   title: "Streamz",
   description: "Chat de comunidade — voz, vídeo e tela",
+  applicationName: "Streamz",
+  openGraph: {
+    type: "website",
+    siteName: "Streamz",
+    locale: "pt_BR",
+    title: "Streamz",
+    description: "Chat de comunidade — voz, vídeo e tela",
+  },
+  twitter: { card: "summary_large_image", title: "Streamz" },
+};
+
+/** Void Ink: a cor que o navegador pinta na barra antes da página carregar. */
+export const viewport: Viewport = {
+  themeColor: "#0b0b0f",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({

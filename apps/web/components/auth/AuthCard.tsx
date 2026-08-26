@@ -1,11 +1,11 @@
 "use client";
 
 import type { ReactNode } from "react";
-import Corvo from "../ui/Corvo";
+import MarcaLockup from "../ui/MarcaLockup";
 
 /**
- * Moldura das telas de login/registro no estilo do Discord: fundo blurple,
- * cartão escuro centralizado de 480px, título e subtítulo centrados.
+ * Moldura das telas de conta: fundo Void Ink com um brilho de limão, cartão de
+ * 480px, lockup da marca acima do título.
  */
 export default function AuthCard({
   title,
@@ -18,9 +18,9 @@ export default function AuthCard({
   children?: ReactNode;
 }) {
   return (
-    <main className="grid min-h-screen place-items-center bg-accent bg-[radial-gradient(ellipse_at_top_left,rgba(255,255,255,0.18),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(0,0,0,0.25),transparent_60%)] p-4">
+    <main className="grid min-h-screen place-items-center bg-rail bg-[radial-gradient(ellipse_at_top_left,rgba(155,227,31,0.14),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(155,227,31,0.05),transparent_60%)] p-4">
       <div className="w-[480px] max-w-full rounded-[5px] bg-chat p-8 shadow-high">
-        <Corvo size={44} className="mx-auto mb-4 text-txt-primary" />
+        <MarcaLockup size={34} className="mb-5 flex w-full justify-center text-txt-primary" />
         <h1 className="text-center font-display text-2xl font-extrabold uppercase leading-[30px] tracking-wordmark text-txt-primary">
           {title}
         </h1>

@@ -1,11 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <!-- Logo do Streamz: perfil de corvo em branco sobre o blurple da marca.
-       Fonte dos ícones do app (tauri icon logo.svg) — ver icons/README.md.
-       O mesmo desenho vive em apps/web/app/icon.svg (favicon) e em
-       apps/web/components/ui/Corvo.tsx (marca na tela de login). -->
-  <rect width="1024" height="1024" rx="224" fill="#5865f2"/>
-  <g transform="translate(76 60) scale(8)">
-    <path fill="#ffffff" d="M10 96C14 80 22 70 22 54 22 36 32 20 48 18c8-1 16 2 22 8l29 21c1 .8 1 2 0 2.6L72 46c-1 4-5 9-10 12l5 6-6 3 5 7c-2 8 4 16 12 22Z"/>
-    <circle cx="54" cy="30" r="3.5" fill="#5865f2"/>
+  <!-- Simbolo da marca Streamz. Fonte dos icones do instalador: rode
+       `tauri icon logo.svg` neste diretorio para regenerar src-tauri/icons/.
+       Fonte da verdade do desenho: docs/branding/marca/logo-simbolo-limao.svg
+       (o mesmo path vive em apps/web/app/icon.svg e em ui/Marca.tsx). -->
+  <rect width="1024" height="1024" rx="236" fill="#0B0B0F"/>
+  <g transform="translate(150 164.48) scale(2.8357)">
+    <path fill="#9BE31F" d="M40 24 H200 A16 16 0 0 1 216 40 V176 A16 16 0 0 1 200 192 H128 L84 232 V192 H40 A16 16 0 0 1 24 176 V40 A16 16 0 0 1 40 24 Z"/>
+    <rect x="72" y="66" width="96" height="24" fill="#0B0B0F"/>
+    <polygon points="140,66 168,66 100,150 72,150" fill="#0B0B0F"/>
+    <rect x="72" y="126" width="96" height="24" fill="#0B0B0F"/>
   </g>
 </svg>
