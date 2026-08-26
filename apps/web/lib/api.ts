@@ -27,6 +27,9 @@ import type {
   Role,
   RoleInput,
   ThreadView,
+  NotificationSetting,
+  NotificationSettingUpdate,
+  SessionInfo,
   UserStatus,
   VoiceStateEvent,
 } from "@newdisc/shared";
@@ -305,6 +308,15 @@ export const api = {
     request<InboxMention[]>(`/me/mentions${limit ? `?limit=${limit}` : ""}`),
   inboxUnread: () => request<InboxUnreadGroup[]>("/me/unread"),
   markAllRead: () => request<{ channels: number }>("/me/read-all", { method: "POST" }),
+
+  // ── e-configuracoes ──
+  /** Preferências de notificação (canal, servidor e o padrão global). */
+  notificationSettings: () => request<NotificationSetting[]>("/me/notifications"),
+  updateNotificationSetting: (body: NotificationSettingUpdate) =>
+    request<NotificationSetting>("/me/notifications", patch(body)),
+  /** Sessões ativas — contrato do agente I; 404 enquanto ele não existir. */
+  sessions: () => request<SessionInfo[]>("/me/sessions"),
+  revokeSession: (id: string) => request<void>(`/me/sessions/${id}`, { method: "DELETE" }),
 
   /** Envia um arquivo e devolve o anexo (a vincular numa mensagem no envio). */
   uploadFile: (file: File): Promise<Attachment> => {

@@ -23,7 +23,7 @@ export type Modal =
   | { kind: "channelAccess"; channelId: string }
   | { kind: "invite"; code: string }
   | { kind: "createGroupDM" }
-  | { kind: "settings" }
+  | { kind: "settings"; tab?: string }
   | { kind: "invites"; guildId: string }
   | { kind: "image"; url: string; alt: string }
   | {
@@ -50,7 +50,9 @@ export type Modal =
   | { kind: "serverSettings"; guildId: string }
   // ── b-canais ──
   | { kind: "channelSettings"; channelId: string; tab?: "geral" | "permissoes" }
-  | { kind: "channelTopic"; channelId: string };
+  | { kind: "channelTopic"; channelId: string }
+  // ── e-configuracoes ──
+  | { kind: "quickSwitcher" };
 
 /** Um item de menu de contexto; `separator` desenha a linha entre grupos. */
 export type MenuItem =

@@ -11,6 +11,7 @@ import InviteModal from "@/components/modals/InviteModal";
 import InvitesModal from "@/components/modals/InvitesModal";
 import PromptDialog from "@/components/modals/PromptDialog";
 import ServerSettingsModal from "@/components/modals/ServerSettingsModal";
+import QuickSwitcher from "@/components/ui/QuickSwitcher";
 import SettingsModal from "@/components/modals/SettingsModal";
 import IncomingCallModal from "@/components/voice/IncomingCallModal";
 import { useUI } from "@/stores/ui";
@@ -40,7 +41,7 @@ export default function ModalHost() {
     case "createGroupDM":
       return <CreateGroupDMModal />;
     case "settings":
-      return <SettingsModal />;
+      return <SettingsModal tab={modal.tab} />;
     case "invites":
       return <InvitesModal guildId={modal.guildId} />;
     case "image":
@@ -56,5 +57,8 @@ export default function ModalHost() {
       return <ChannelSettingsModal channelId={modal.channelId} tab={modal.tab} />;
     case "channelTopic":
       return <ChannelTopicModal channelId={modal.channelId} />;
+    // ── e-configuracoes ──
+    case "quickSwitcher":
+      return <QuickSwitcher />;
   }
 }

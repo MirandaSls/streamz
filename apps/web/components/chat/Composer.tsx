@@ -6,6 +6,7 @@ import { MAX_ATTACHMENTS_PER_MESSAGE, MAX_MESSAGE_LENGTH, type Attachment } from
 import EmojiPicker from "@/components/ui/EmojiPicker";
 import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";
+import { useSettings } from "@/stores/settings";
 import { errorMessage } from "@/stores/socket-adapter";
 import { emitTyping } from "@/stores/typing";
 import { ui } from "@/stores/ui";
@@ -72,6 +73,7 @@ export default function Composer({
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [picking, setPicking] = useState(false);
+  const sendMode = useSettings((s) => s.sendMode);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -101,6 +103,8 @@ export default function Composer({
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey) return;
+    // ── e-configuracoes ── quem prefere Ctrl+Enter usa o Enter para quebrar linha
+    if (sendMode === "ctrl-enter" && !(event.ctrlKey || event.metaKey)) return;
     event.preventDefault();
     submit();
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import Tooltip from "@/components/ui/Tooltip";
 
 /**
@@ -19,7 +19,7 @@ export default function HeaderIcon({
   children,
 }: {
   label: string;
-  onClick?: () => void;
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   active?: boolean;
   disabled?: boolean;
   /** com o painel do botão aberto o tooltip só atrapalha: cobre o conteúdo. */

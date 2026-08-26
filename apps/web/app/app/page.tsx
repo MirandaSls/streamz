@@ -16,7 +16,9 @@ import ContextMenuHost from "@/components/ui/ContextMenu";
 import ProfilePopoverHost from "@/components/ui/ProfilePopover";
 import Toasts from "@/components/ui/Toasts";
 import VoiceLayer from "@/components/voice/VoiceLayer";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useRealtime } from "@/hooks/useRealtime";
+import { useSettingsRoute } from "@/hooks/useSettingsRoute";
 import { useAuth } from "@/stores/auth";
 import { useActiveChannel, useChannels, useVoiceChannel } from "@/stores/channels";
 import { useActiveDM } from "@/stores/dms";
@@ -46,6 +48,9 @@ export default function AppPage() {
   const buscaAberta = useMessages((s) => s.searchResults !== null || s.searching);
 
   useRealtime(user?.id);
+  // ── e-configuracoes ──
+  useKeyboardShortcuts();
+  useSettingsRoute();
 
   // sessão
   useEffect(() => loadFromStorage(), [loadFromStorage]);
@@ -56,7 +61,7 @@ export default function AppPage() {
   }, [user, router]);
 
   return (
-    <div className="flex h-screen select-none">
+    <div className="flex h-full select-none">
       <GuildRail />
 
       {view === "dm" ? (

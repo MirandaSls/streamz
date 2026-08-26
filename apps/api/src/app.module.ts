@@ -18,6 +18,7 @@ import { MaintenanceModule } from "./modules/maintenance/maintenance.module";
 import { ReadStateModule } from "./modules/read-state/read-state.module";
 import { EmbedsModule } from "./modules/embeds/embeds.module";
 import { RolesModule } from "./modules/roles/roles.module";
+import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis";
 import { redisClient } from "./modules/realtime/redis";
 import { HealthController } from "./health.controller";
@@ -57,6 +58,7 @@ import { validateEnv } from "./common/env";
     ReadStateModule,
     EmbedsModule,
     RolesModule,
+    NotificationsModule,
   ],
   controllers: [HealthController],
   // guard global: o teto padrão vale para toda rota; ver common/throttle.ts

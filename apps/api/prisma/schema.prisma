@@ -72,6 +72,7 @@ model User {
   // ── a-mensagens ──
   pinnedMessages   PinnedMessage[] @relation("PinAuthor")
   createdThreads   Thread[]        @relation("ThreadCreator")
+  notificationSettings NotificationSetting[]
 }
 
 // Até onde cada usuário leu cada canal. É o que decide "não lido" e o badge
@@ -127,6 +128,7 @@ model Guild {
   memberRoles GuildMemberRole[]
   // ── b-canais ──
   categories Category[]
+  notificationSettings NotificationSetting[]
 }
 
 model Ban {
@@ -218,6 +220,7 @@ model Channel {
   // ── a-mensagens ──
   pins       PinnedMessage[]
   threads    Thread[]
+  notificationSettings NotificationSetting[]
 
   @@index([guildId])
   @@index([categoryId])
@@ -440,4 +443,41 @@ model Thread {
   createdBy User    @relation("ThreadCreator", fields: [createdById], references: [id], onDelete: Cascade)
 
   @@index([channelId, archived])
+}
+
+// ── e-configuracoes ──────────────────────────────────────────
+
+// Quanto um escopo notifica. Mesmos literais da union `NotificationLevel` de
+// @newdisc/shared — a equivalência é travada em common/enums.ts.
+enum NotificationLevel {
+  ALL
+  MENTIONS
+  NONE
+}
+
+// Preferência de notificação de um usuário para um escopo: um canal, um
+// servidor, ou o padrão global (scope "global").
+//
+// `scope` é uma coluna canônica ("global" | "guild:<id>" | "channel:<id>")
+// porque no Postgres NULLs são distintos entre si: um @@unique sobre
+// (userId, guildId, channelId) deixaria gravar duas linhas do mesmo escopo.
+// `muted` é independente de `level` (silenciar não apaga "só menções" por
+// baixo) e `mutedUntil` null com `muted` true é "até eu reativar".
+model NotificationSetting {
+  id         String            @id @default(cuid())
+  userId     String
+  scope      String
+  guildId    String?
+  channelId  String?
+  level      NotificationLevel @default(ALL)
+  muted      Boolean           @default(false)
+  mutedUntil DateTime?
+  updatedAt  DateTime          @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  guild   Guild?   @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  channel Channel? @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, scope])
+  @@index([userId])
 }

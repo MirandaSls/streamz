@@ -35,6 +35,7 @@ import { useMessages } from "@/stores/messages";
 import { goToMessage } from "@/stores/messages-navigate";
 import { usePins } from "@/stores/messages-pins";
 import { useThreads } from "@/stores/messages-threads";
+import { useSettings } from "@/stores/settings";
 import type { ChatMessage } from "@/stores/messages-core";
 import { useLiveUser } from "@/stores/presence";
 import { anchorOf, ui, type MenuItem } from "@/stores/ui";
@@ -199,6 +200,10 @@ export default function MessageItem({
   // nome do autor na cor do seu cargo mais alto, como no Discord
   const corDoAutor = useAuthorColor(message.author.id);
   const me = useAuth((s) => s.user);
+  // ── e-configuracoes ── aparência/acessibilidade vêm da store de preferências
+  const compacto = useSettings((s) => s.compactMode);
+  const sempreHora = useSettings((s) => s.alwaysShowTime);
+  const tamanhoEmoji = useSettings((s) => s.emojiSize);
   const members = useGuilds((s) => s.members);
   const highlighted = useMessages((s) => s.highlightId === message.id);
   const startReply = useMessages((s) => s.startReply);
@@ -376,13 +381,23 @@ export default function MessageItem({
     <div
       id={`mensagem-${message.id}`}
       onContextMenu={openMenu}
-      className={`group relative flex gap-4 py-0.5 pl-[72px] pr-12 transition-colors ${fundo} ${
-        grouped && !message.replyTo ? "" : "mt-[17px]"
-      } ${message.pending ? "opacity-60" : ""}`}
+      // o respiro entre grupos é preferência do usuário (aba Aparência)
+      style={
+        grouped && !message.replyTo
+          ? undefined
+          : { marginTop: "var(--espaco-entre-grupos, 17px)" }
+      }
+      className={`group relative flex py-0.5 pr-12 transition-colors ${
+        compacto ? "gap-1.5 pl-4" : "gap-4 pl-[72px]"
+      } ${fundo} ${message.pending ? "opacity-60" : ""}`}
     >
-      {grouped && !message.replyTo ? (
+      {compacto ? null : grouped && !message.replyTo ? (
         // hora na margem, só no hover — como o Discord faz com mensagens agrupadas
-        <span className="absolute left-0 top-1 w-[72px] select-none text-center text-[11px] leading-[22px] text-txt-muted opacity-0 group-hover:opacity-100">
+        <span
+          className={`absolute left-0 top-1 w-[72px] select-none text-center text-[11px] leading-[22px] text-txt-muted ${
+            sempreHora ? "" : "opacity-0"
+          } group-hover:opacity-100`}
+        >
           {hora(message.createdAt)}
         </span>
       ) : (
@@ -401,7 +416,7 @@ export default function MessageItem({
       <div className="min-w-0 flex-1">
         <ReplyReference message={message} />
 
-        {(!grouped || message.replyTo) && (
+        {(!grouped || message.replyTo) && !compacto && (
           <div className="flex items-baseline gap-1.5 leading-[22px]">
             <button
               type="button"
@@ -461,13 +476,29 @@ export default function MessageItem({
           </form>
         ) : (
           message.content && (
-            <div className="break-words text-txt-normal">
-              <Markdown text={message.content} meUsername={me?.username} displayNames={displayNames} />
-              {message.editedAt && (
-                <Tooltip label={dataCompleta(message.editedAt)}>
-                  <span className="ml-1 text-[10px] text-txt-muted">(editado)</span>
-                </Tooltip>
+            <div className={`break-words text-txt-normal ${compacto ? "flex gap-1.5" : ""}`}>
+              {compacto && (
+                <>
+                  <span className="shrink-0 text-[11px] leading-[22px] text-txt-muted">
+                    {hora(message.createdAt)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={openProfile}
+                    className="shrink-0 font-medium text-txt-primary hover:underline"
+                  >
+                    {displayNameOf(author)}
+                  </button>
+                </>
               )}
+              <div className={compacto ? "min-w-0 flex-1" : undefined}>
+                <Markdown text={message.content} meUsername={me?.username} displayNames={displayNames} />
+                {message.editedAt && (
+                  <span className="ml-1 text-[10px] text-txt-muted" title={horaCompleta(message.editedAt)}>
+                    (editado)
+                  </span>
+                )}
+              </div>
             </div>
           )
         )}
@@ -519,13 +550,13 @@ export default function MessageItem({
                     aria-pressed={mine}
                     aria-label={`${r.emoji}, ${r.count} ${r.count === 1 ? "reação" : "reações"}`}
                     onClick={() => onToggleReaction(message.id, r.emoji)}
-                    className={`flex h-[26px] items-center gap-1.5 rounded-lg border px-1.5 text-sm transition ${
+                    className={`flex min-h-[26px] items-center gap-1.5 rounded-lg border px-1.5 text-sm transition ${
                       mine
                         ? "border-accent bg-accent/20 text-txt-primary"
                         : "border-transparent bg-panel text-txt-normal hover:border-[#4e5058]"
                     }`}
                   >
-                    <span>{r.emoji}</span>
+                    <span style={{ fontSize: `${tamanhoEmoji}px`, lineHeight: 1.1 }}>{r.emoji}</span>
                     <span className="text-xs font-medium">{r.count}</span>
                   </button>
                 </Tooltip>

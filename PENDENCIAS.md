@@ -201,3 +201,26 @@ LiveKit e o Rust para o build desktop._
 - [ ] **Visibilidade por permissão de cargo** — a filtragem ainda é
       `private` + allowlist; quando existir `Permission.VIEW_CHANNEL`, ela muda
       num ponto só (`GuildsService.filterVisible`), sem tocar na barra lateral.
+## Configurações, notificações e atalhos (agente E)
+
+Nada aqui bloqueia rodar o app — são as pontas que dependem de outra pessoa ou
+de uma variável opcional.
+
+- [ ] `NEXT_PUBLIC_APP_VERSION` (opcional): aparece no rodapé do menu de
+      configurações. Sem ela, mostra `0.0.1`.
+- [ ] **Sessões/dispositivos** dependem de `GET/DELETE /me/sessions` (agente I).
+      A aba já está pronta contra o contrato
+      (`{ id, createdAt, expiresAt, current, userAgent? }`) e mostra "ainda não
+      disponível nesta API" enquanto a rota responder 404.
+- [ ] **Perfil** (`components/settings/PerfilTab.tsx`) e **conta/privacidade**
+      (`ContaTab.tsx`, `SegurancaTab.tsx`) são stubs à espera dos agentes D e I —
+      trocar o arquivo é toda a integração; o shell e a rota já existem.
+- [ ] **Apertar para falar**: a preferência (modo e tecla) já é gravada em
+      `stores/settings`; quem transmite é o agente F.
+- [ ] **Dispositivos de áudio/vídeo**: `stores/voiceDevices.ts` é um stub
+      funcional do contrato do agente F (enumera e persiste a escolha).
+- [ ] **Notificação do navegador** só dispara depois que o usuário concede a
+      permissão (pedida uma vez por sessão, ver `lib/desktop.ts`), e o som só
+      toca depois da primeira interação com a página — regra do autoplay.
+- [ ] **Contador no ícone**: usa `setBadgeCount` no Tauri ≥ 2.1 e o Badging API
+      no navegador (só em PWA instalado). Onde não houver, vira no-op.
