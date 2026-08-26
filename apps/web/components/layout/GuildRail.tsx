@@ -1,6 +1,7 @@
 "use client";
 
 import { Compass, Plus } from "lucide-react";
+import Marca from "@/components/ui/Marca";
 import Tooltip from "@/components/ui/Tooltip";
 import { useDMs } from "@/stores/dms";
 import { useGuilds } from "@/stores/guilds";
@@ -56,7 +57,7 @@ function RailItem({
     <div className="group relative flex w-full justify-center">
       <span
         aria-hidden="true"
-        className={`absolute left-0 top-1/2 w-2 -translate-y-1/2 rounded-r-full bg-white transition-all duration-200 ${
+        className={`absolute left-0 top-1/2 w-2 -translate-y-1/2 rounded-r-full bg-paper transition-all duration-200 ${
           active ? "h-10" : unread ? "h-2 group-hover:h-5" : "h-0 group-hover:h-5"
         }`}
       />
@@ -79,15 +80,6 @@ function RailItem({
         </button>
       </Tooltip>
     </div>
-  );
-}
-
-/** Logo do app no botão "Mensagens diretas" (o Discord põe o logo dele aqui). */
-function Logo() {
-  return (
-    <svg width="28" height="20" viewBox="0 0 28 20" fill="currentColor" aria-hidden="true">
-      <path d="M23.7 1.7A23 23 0 0 0 18 0l-.7 1.5a21 21 0 0 0-6.6 0L10 0a23 23 0 0 0-5.7 1.7C.7 7.1-.3 12.4.2 17.6A23 23 0 0 0 7.2 20l1.5-2.4a15 15 0 0 1-2.4-1.1l.6-.4a16.5 16.5 0 0 0 14.2 0l.6.4-2.4 1.1L20.8 20a23 23 0 0 0 7-2.4c.6-6-1-11.3-4.1-15.9ZM9.4 14.3c-1.4 0-2.5-1.3-2.5-2.8s1.1-2.8 2.5-2.8 2.5 1.3 2.5 2.8-1.1 2.8-2.5 2.8Zm9.2 0c-1.4 0-2.5-1.3-2.5-2.8s1.1-2.8 2.5-2.8 2.5 1.3 2.5 2.8-1.1 2.8-2.5 2.8Z" />
-    </svg>
   );
 }
 
@@ -116,7 +108,8 @@ export default function GuildRail() {
         mentions={dmMentions}
         onClick={() => void openDMs()}
       >
-        <Logo />
+        {/* o símbolo da marca no lugar onde o Discord põe o logo dele */}
+        <Marca size={26} />
       </RailItem>
 
       <div aria-hidden="true" className="my-0.5 h-0.5 w-8 shrink-0 rounded bg-rail-divider" />
