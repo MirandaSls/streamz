@@ -26,6 +26,23 @@ const outDir = resolve(
 mkdirSync(outDir, { recursive: true });
 
 const WEB = process.env.WEB_URL ?? "http://localhost:3107";
+
+// i-conta: o registro exige e-mail e senha forte, o login usa `#identificador`
+// e, após registrar, a web passa por /verify-email (a conta já é utilizável).
+const E2E_EMAIL_DOMINIO = "e2e.newdisc.test";
+async function preencherCredenciais(page, user, pass) {
+  if (await page.$("#email")) await page.fill("#email", `${user}@${E2E_EMAIL_DOMINIO}`);
+  await page.fill((await page.$("#identificador")) ? "#identificador" : "#username", user);
+  await page.fill("#password", pass);
+}
+async function esperarApp(page, opts = {}) {
+  await page.waitForURL(/\/(app|verify-email)(\/|\?|#|$)/, opts);
+  if (page.url().includes("/verify-email")) {
+    await page.goto(new URL("/app", page.url()).toString());
+    await page.waitForURL("**/app", opts);
+  }
+}
+
 const API = process.env.API_URL ?? "http://localhost:3407";
 const sufixo = Date.now().toString(36).slice(-5);
 /**
@@ -90,12 +107,12 @@ try {
   const credenciais = {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: ANA.user, password: ANA.pass }),
+    body: JSON.stringify({ username: ANA.user, email: `${ANA.user}@e2e.newdisc.test`, password: ANA.pass }),
   };
   let registro = await fetch(`${API}/api/auth/register`, credenciais).then((r) => r.json());
   // já existe (execução anterior) ou o teto de registros bateu: entra na conta
   if (!registro?.tokens) {
-    registro = await fetch(`${API}/api/auth/login`, credenciais).then((r) => r.json());
+    registro = await fetch(`${API}/api/auth/login`, { ...credenciais, body: JSON.stringify({ identificador: ANA.user, password: ANA.pass }) }).then((r) => r.json());
   }
   if (!registro?.tokens) throw new Error(`sem sessão: ${JSON.stringify(registro)}`);
   const token = registro.tokens.accessToken;
@@ -148,10 +165,9 @@ try {
   const page = await ctx.newPage();
   observar(page, ANA.user);
   await page.goto(`${WEB}/login`);
-  await page.fill("#username", ANA.user);
-  await page.fill("#password", ANA.pass);
+  await preencherCredenciais(page, ANA.user, ANA.pass);
   await page.click('button[type="submit"]');
-  await page.waitForURL("**/app", { timeout: 120_000 });
+  await esperarApp(page, { timeout: 120_000 });
   // o servidor recém-criado é o último do rail; abre por ele para não cair num
   // servidor de uma execução anterior
   await page.click(`nav[aria-label="Servidores"] button[aria-label^="Servidor de Mídia ${sufixo}"]`, {

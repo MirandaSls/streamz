@@ -16,9 +16,26 @@ import { resolve } from "node:path";
 const outDir = resolve(process.argv.includes("--out") ? process.argv[process.argv.indexOf("--out") + 1] : "./e2e-shots");
 mkdirSync(outDir, { recursive: true });
 const WEB = process.env.WEB_URL ?? "http://localhost:3000";
+
+// i-conta: o registro exige e-mail e senha forte, o login usa `#identificador`
+// e, após registrar, a web passa por /verify-email (a conta já é utilizável).
+const E2E_EMAIL_DOMINIO = "e2e.newdisc.test";
+async function preencherCredenciais(page, user, pass) {
+  if (await page.$("#email")) await page.fill("#email", `${user}@${E2E_EMAIL_DOMINIO}`);
+  await page.fill((await page.$("#identificador")) ? "#identificador" : "#username", user);
+  await page.fill("#password", pass);
+}
+async function esperarApp(page, opts = {}) {
+  await page.waitForURL(/\/(app|verify-email)(\/|\?|#|$)/, opts);
+  if (page.url().includes("/verify-email")) {
+    await page.goto(new URL("/app", page.url()).toString());
+    await page.waitForURL("**/app", opts);
+  }
+}
+
 const sufixo = Date.now().toString(36).slice(-5);
-const ANA = { user: `ana${sufixo}`, pass: "senha123" };
-const BETO = { user: `beto${sufixo}`, pass: "senha123" };
+const ANA = { user: `ana${sufixo}`, pass: "Xk9#vWq2pLm7!" };
+const BETO = { user: `beto${sufixo}`, pass: "Xk9#vWq2pLm7!" };
 let n = 0;
 const shot = async (page, nome) => {
   n += 1;
@@ -41,10 +58,9 @@ async function registrar(ctx, { user, pass }) {
   const page = await ctx.newPage();
   observar(page, user);
   await page.goto(`${WEB}/register`);
-  await page.fill("#username", user);
-  await page.fill("#password", pass);
+  await preencherCredenciais(page, user, pass);
   await page.click('button[type="submit"]');
-  await page.waitForURL("**/app", { timeout: 30_000 });
+  await esperarApp(page, { timeout: 30_000 });
   await page.waitForTimeout(1500);
   return page;
 }

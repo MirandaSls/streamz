@@ -23,12 +23,23 @@ const envSchema = z
     JWT_REFRESH_SECRET: z
       .string()
       .min(16, "JWT_REFRESH_SECRET precisa de ao menos 16 caracteres aleatórios"),
+    NODE_ENV: z.string().optional(),
+    THROTTLE_DISABLED: z.string().optional(),
   })
   // segredos iguais fariam um refresh token valer como access token
   .refine((e) => e.JWT_SECRET !== e.JWT_REFRESH_SECRET, {
     message: "JWT_SECRET e JWT_REFRESH_SECRET precisam ser diferentes",
     path: ["JWT_REFRESH_SECRET"],
-  });
+  })
+  // THROTTLE_DISABLED=1 existe só para a bateria e2e local (app.module.ts);
+  // em produção deixaria login/registro sem teto de tentativas.
+  .refine(
+    (e) => !(e.NODE_ENV === "production" && e.THROTTLE_DISABLED === "1"),
+    {
+      message: "THROTTLE_DISABLED=1 não pode ser usado com NODE_ENV=production",
+      path: ["THROTTLE_DISABLED"],
+    },
+  );
 
 /**
  * Passada ao `ConfigModule.forRoot({ validate })`. Devolve a config inteira —

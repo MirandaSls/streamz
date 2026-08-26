@@ -48,6 +48,10 @@ import { validateEnv } from "./common/env";
         const redis = redisClient();
         return {
           throttlers: [DEFAULT_THROTTLE],
+          // THROTTLE_DISABLED=1 só para bateria e2e local: os passeios criam
+          // dezenas de contas de um IP só e o teto de registro é 5/hora.
+          // Nunca em produção — o env.ts recusa a combinação.
+          skipIf: () => process.env.THROTTLE_DISABLED === "1",
           ...(redis ? { storage: new ThrottlerStorageRedisService(redis) } : {}),
         };
       },
