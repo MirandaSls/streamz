@@ -218,7 +218,7 @@ function BlocoDeEmail({
 
   return (
     <Section title="E-mail">
-      <div className="flex items-center justify-between gap-4 border-b border-[#3f4147] py-3">
+      <div className="flex items-center justify-between gap-4 border-b border-border py-3">
         <div className="min-w-0">
           <p className="flex items-center gap-2 truncate text-sm font-medium text-txt-primary">
             <AtSign size={16} aria-hidden="true" />
@@ -242,7 +242,7 @@ function BlocoDeEmail({
               type="button"
               disabled={ocupado}
               onClick={() => void reenviar()}
-              className="h-8 rounded-[3px] bg-[#4e5058] px-3 text-sm font-medium text-txt-normal hover:bg-[#6d6f78] disabled:opacity-50"
+              className="h-8 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover disabled:opacity-50"
             >
               Reenviar
             </button>
@@ -250,7 +250,7 @@ function BlocoDeEmail({
           <button
             type="button"
             onClick={() => setAbrindo((v) => !v)}
-            className="h-8 rounded-[3px] bg-[#4e5058] px-3 text-sm font-medium text-txt-normal hover:bg-[#6d6f78]"
+            className="h-8 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
           >
             {abrindo ? "Cancelar" : "Alterar"}
           </button>
@@ -321,7 +321,7 @@ function BlocoDeSenha() {
 
   return (
     <Section title="Senha">
-      <div className="flex items-center justify-between gap-4 border-b border-[#3f4147] py-3">
+      <div className="flex items-center justify-between gap-4 border-b border-border py-3">
         <div className="min-w-0">
           <p className="flex items-center gap-2 text-sm font-medium text-txt-primary">
             <KeyRound size={16} aria-hidden="true" /> Senha da conta
@@ -333,7 +333,7 @@ function BlocoDeSenha() {
         <button
           type="button"
           onClick={() => setAbrindo((v) => !v)}
-          className="h-8 shrink-0 rounded-[3px] bg-[#4e5058] px-3 text-sm font-medium text-txt-normal hover:bg-[#6d6f78]"
+          className="h-8 shrink-0 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
         >
           {abrindo ? "Cancelar" : "Alterar"}
         </button>
@@ -413,7 +413,7 @@ function BlocoDeEncerramento({
 
   return (
     <Section title="Encerrar a conta">
-      <div className="flex flex-wrap gap-2 border-b border-[#3f4147] pb-3">
+      <div className="flex flex-wrap gap-2 border-b border-border pb-3">
         <button
           type="button"
           onClick={() => setAcao(acao === "disable" ? null : "disable")}

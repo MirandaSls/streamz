@@ -49,7 +49,7 @@ export default function HeaderBar({
       <h1 className="truncate font-semibold text-txt-primary">{title}</h1>
       {subtitle && (
         <>
-          <span aria-hidden="true" className="mx-2 h-6 w-px bg-[#3f4147]" />
+          <span aria-hidden="true" className="mx-2 h-6 w-px bg-border" />
           <span className="truncate text-sm text-txt-muted">{subtitle}</span>
         </>
       )}

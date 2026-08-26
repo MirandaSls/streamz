@@ -133,7 +133,7 @@ export default function InvitePage() {
                 <button
                   type="button"
                   onClick={() => router.replace(user ? "/app" : "/login")}
-                  className="mt-5 h-11 w-full rounded-[3px] bg-[#4e5058] font-medium text-white transition hover:bg-[#6d6f78]"
+                  className="mt-5 h-11 w-full rounded-[3px] bg-border-strong font-medium text-white transition hover:bg-border-strong-hover"
                 >
                   {user ? "Voltar para o app" : "Ir para o login"}
                 </button>
@@ -143,7 +143,7 @@ export default function InvitePage() {
                 type="button"
                 disabled={entrando}
                 onClick={() => void aceitar()}
-                className="mt-6 h-11 w-full rounded-[3px] bg-accent font-medium text-white transition hover:bg-accent-hover disabled:opacity-60"
+                className="mt-6 h-11 w-full rounded-[3px] bg-accent font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-60"
                 autoFocus
               >
                 {preview?.member

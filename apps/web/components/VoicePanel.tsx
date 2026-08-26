@@ -76,7 +76,7 @@ export default function VoicePanel({
         {status === "connecting" ? (
           <div className="grid h-full place-items-center text-txt-muted">
             <div className="flex flex-col items-center gap-3">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#4e5058] border-t-accent" />
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-border-strong border-t-accent" />
               <p>Entrando na sala…</p>
             </div>
           </div>

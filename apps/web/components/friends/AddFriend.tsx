@@ -51,7 +51,7 @@ export default function AddFriend() {
         <button
           type="submit"
           disabled={!valido || enviando}
-          className="h-9 shrink-0 rounded-[3px] bg-accent px-4 text-sm font-medium text-white transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-9 shrink-0 rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {enviando ? "Enviando…" : "Enviar pedido de amizade"}
         </button>

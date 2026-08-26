@@ -121,7 +121,7 @@ export default function ServerSettingsOverview({ guildId }: { guildId: string })
         </div>
       </div>
 
-      <div aria-hidden="true" className="my-6 h-px bg-[#3f4147]" />
+      <div aria-hidden="true" className="my-6 h-px bg-border" />
 
       <label
         htmlFor="guildDescription"
@@ -146,7 +146,7 @@ export default function ServerSettingsOverview({ guildId }: { guildId: string })
         type="button"
         disabled={!dirty || saving || !name.trim()}
         onClick={() => void save()}
-        className="mt-6 h-[38px] rounded-[3px] bg-accent px-4 text-sm font-medium text-white transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+        className="mt-6 h-[38px] rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
       >
         {saving ? "Salvando…" : "Salvar alterações"}
       </button>

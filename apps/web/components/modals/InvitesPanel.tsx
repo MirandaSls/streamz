@@ -103,7 +103,7 @@ export default function InvitesPanel({ guildId }: { guildId: string }) {
         type="button"
         disabled={busy}
         onClick={() => void create()}
-        className="mt-4 h-[38px] rounded-[3px] bg-accent px-4 text-sm font-medium text-white transition hover:bg-accent-hover disabled:opacity-50"
+        className="mt-4 h-[38px] rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
       >
         {busy ? "Criando…" : "Criar convite"}
       </button>

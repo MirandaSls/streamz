@@ -153,7 +153,7 @@ export default function VozTab() {
           <button
             type="button"
             onClick={() => void testarMicrofone()}
-            className="flex h-9 items-center gap-2 rounded-[3px] bg-accent px-3 text-sm font-medium text-white hover:bg-accent-hover"
+            className="flex h-9 items-center gap-2 rounded-[3px] bg-accent px-3 text-sm font-medium text-accent-ink hover:bg-accent-hover"
           >
             <Mic size={16} aria-hidden="true" />
             {testando ? t("voz.parar") : t("voz.testar")}
@@ -191,7 +191,7 @@ export default function VozTab() {
           <button
             type="button"
             onClick={() => void alternarCamera()}
-            className="h-9 rounded-[3px] bg-[#4e5058] px-3 text-sm font-medium text-txt-normal hover:bg-[#6d6f78]"
+            className="h-9 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
           >
             {camera ? t("voz.desligarCamera") : t("voz.ligarCamera")}
           </button>

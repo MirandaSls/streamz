@@ -20,7 +20,7 @@ export default function TecladoTab() {
         {SHORTCUTS.map((spec) => (
           <div
             key={spec.action}
-            className="flex items-center justify-between gap-4 border-b border-[#3f4147] py-2.5 last:border-b-0"
+            className="flex items-center justify-between gap-4 border-b border-border py-2.5 last:border-b-0"
           >
             <dt className="min-w-0 text-sm text-txt-normal">{t(spec.label as ChaveDeTexto)}</dt>
             <dd className="flex shrink-0 gap-1.5">

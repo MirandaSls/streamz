@@ -127,7 +127,7 @@ function ReplyReference({ message }: { message: Message }) {
     <div className="relative flex items-center gap-1.5 pb-0.5 text-[13px] leading-[18px] text-txt-muted">
       <span
         aria-hidden="true"
-        className="absolute -left-[38px] bottom-[7px] h-[11px] w-[32px] rounded-tl-[6px] border-l-2 border-t-2 border-[#4e5058]"
+        className="absolute -left-[38px] bottom-[7px] h-[11px] w-[32px] rounded-tl-[6px] border-l-2 border-t-2 border-border-strong"
       />
       <Avatar user={ref.author} size="sm" className="h-4 w-4" />
       <span className="font-medium text-txt-secondary">@{displayNameOf(ref.author)}</span>
@@ -614,7 +614,7 @@ export default function MessageItem({
                     className={`flex min-h-[26px] items-center gap-1.5 rounded-lg border px-1.5 text-sm transition ${
                       mine
                         ? "border-accent bg-accent/20 text-txt-primary"
-                        : "border-transparent bg-panel text-txt-normal hover:border-[#4e5058]"
+                        : "border-transparent bg-panel text-txt-normal hover:border-border-strong"
                     }`}
                   >
                     <EmojiDaReacao emoji={r.emoji} tamanho={tamanhoEmoji} />
@@ -627,7 +627,7 @@ export default function MessageItem({
               type="button"
               onClick={() => setPicking(true)}
               aria-label="Adicionar reação"
-              className="grid h-[26px] w-8 place-items-center rounded-lg border border-transparent bg-panel text-txt-muted opacity-0 transition hover:border-[#4e5058] hover:text-txt-primary group-hover:opacity-100"
+              className="grid h-[26px] w-8 place-items-center rounded-lg border border-transparent bg-panel text-txt-muted opacity-0 transition hover:border-border-strong hover:text-txt-primary group-hover:opacity-100"
             >
               <SmilePlus size={16} />
             </button>

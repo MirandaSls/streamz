@@ -158,8 +158,8 @@ export default function InviteModal({ guildId, code: initialCode }: { guildId: s
                   onClick={() => convidar(d.id)}
                   className={`h-8 rounded-[3px] px-3 text-sm font-medium transition ${
                     convidado
-                      ? "cursor-default border border-[#4e5058] text-txt-muted"
-                      : "bg-accent text-white hover:bg-accent-hover disabled:opacity-50"
+                      ? "cursor-default border border-border-strong text-txt-muted"
+                      : "bg-accent text-accent-ink hover:bg-accent-hover disabled:opacity-50"
                   }`}
                 >
                   {convidado ? "Convidado" : "Convidar"}
@@ -182,7 +182,7 @@ export default function InviteModal({ guildId, code: initialCode }: { guildId: s
           type="button"
           disabled={!url}
           onClick={() => void copiar()}
-          className="flex h-9 items-center gap-1.5 rounded-[3px] bg-accent px-4 text-sm font-medium text-white transition hover:bg-accent-hover disabled:opacity-50"
+          className="flex h-9 items-center gap-1.5 rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
         >
           {copied && <Check size={16} aria-hidden="true" />}
           {copied ? "Copiado" : "Copiar"}
@@ -265,7 +265,7 @@ export default function InviteModal({ guildId, code: initialCode }: { guildId: s
           <button
             type="button"
             onClick={() => void regerar()}
-            className="h-9 rounded-[3px] bg-accent text-sm font-medium text-white transition hover:bg-accent-hover"
+            className="h-9 rounded-[3px] bg-accent text-sm font-medium text-accent-ink transition hover:bg-accent-hover"
           >
             Gerar novo link
           </button>

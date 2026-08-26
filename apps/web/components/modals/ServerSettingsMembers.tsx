@@ -86,7 +86,7 @@ export default function ServerSettingsMembers({ guildId }: { guildId: string }) 
             <div
               key={m.user.id}
               role="listitem"
-              className="flex items-start gap-3 border-b border-[#3f4147] px-3 py-3 last:border-0"
+              className="flex items-start gap-3 border-b border-border px-3 py-3 last:border-0"
             >
               <Avatar user={m.user} size="md" surface="border-rail" />
               <div className="min-w-0 flex-1">
@@ -112,7 +112,7 @@ export default function ServerSettingsMembers({ guildId }: { guildId: string }) 
                     >
                       <span
                         aria-hidden="true"
-                        style={{ backgroundColor: r.color ?? "#949ba4" }}
+                        style={{ backgroundColor: r.color ?? "#8a8a8e" }}
                         className="h-2.5 w-2.5 rounded-full"
                       />
                       {r.name}

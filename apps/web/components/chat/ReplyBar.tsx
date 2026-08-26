@@ -29,7 +29,7 @@ export default function ReplyBar({ channelId }: { channelId: string }) {
   if (!alvo || alvo.channelId !== channelId) return null;
 
   return (
-    <div className="mx-4 -mb-2 flex h-[38px] items-center gap-2 rounded-t-lg bg-[#2b2d31] px-4 pb-2 text-sm text-txt-muted">
+    <div className="mx-4 -mb-2 flex h-[38px] items-center gap-2 rounded-t-lg bg-panel px-4 pb-2 text-sm text-txt-muted">
       <span className="min-w-0 truncate">
         Respondendo a{" "}
         <span className="font-medium text-txt-primary">{displayNameOf(alvo.message.author)}</span>
@@ -40,7 +40,7 @@ export default function ReplyBar({ channelId }: { channelId: string }) {
         aria-pressed={mention}
         className={`ml-auto shrink-0 rounded-[3px] px-1.5 py-0.5 text-xs font-bold uppercase transition ${
           mention
-            ? "bg-accent text-white hover:bg-accent-hover"
+            ? "bg-accent text-accent-ink hover:bg-accent-hover"
             : "bg-transparent text-txt-muted hover:text-txt-primary"
         }`}
       >

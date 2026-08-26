@@ -16,9 +16,9 @@ import type { ChatMessage } from "@/stores/messages-core";
 function DateDivider({ iso }: { iso: string }) {
   return (
     <div role="separator" className="mx-4 mt-6 mb-2 flex items-center">
-      <span className="h-px flex-1 bg-[#3f4147]" />
+      <span className="h-px flex-1 bg-border" />
       <span className="px-1 text-xs font-semibold text-txt-muted">{rotuloDoDia(iso)}</span>
-      <span className="h-px flex-1 bg-[#3f4147]" />
+      <span className="h-px flex-1 bg-border" />
     </div>
   );
 }
@@ -102,7 +102,7 @@ export default function MessageList({
 
         {atStart && welcome && (
           <div className="mx-4 mt-4 mb-2">
-            <div className="grid h-[68px] w-[68px] place-items-center rounded-full bg-[#41434a] text-txt-primary">
+            <div className="grid h-[68px] w-[68px] place-items-center rounded-full bg-border text-txt-primary">
               {welcome.icon}
             </div>
             <h2 className="mt-3 text-[32px] font-bold leading-10 text-txt-primary">{welcome.title}</h2>
@@ -160,7 +160,7 @@ export default function MessageList({
         <button
           type="button"
           onClick={jumpToLatest}
-          className="absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-medium text-white shadow-high hover:bg-accent-hover"
+          className="absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-ink shadow-high hover:bg-accent-hover"
         >
           <ArrowDown size={14} aria-hidden="true" />
           Mensagens novas

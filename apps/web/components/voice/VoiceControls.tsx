@@ -41,8 +41,8 @@ function Controle({
   children: React.ReactNode;
 }) {
   const cores = {
-    neutro: "bg-[#4e5058] text-white hover:bg-[#6d6f78]",
-    ativo: "bg-green text-white hover:brightness-110",
+    neutro: "bg-border-strong text-white hover:bg-border-strong-hover",
+    ativo: "bg-green text-accent-ink hover:brightness-110",
     alerta: "bg-red text-white hover:bg-red-hover",
     perigo: "bg-red text-white hover:bg-red-hover",
   }[tom];

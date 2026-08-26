@@ -99,14 +99,14 @@ export default function EmojiPicker({
           height={380}
           style={
             {
-              "--epr-bg-color": "#2b2d31",
-              "--epr-category-label-bg-color": "#2b2d31",
-              "--epr-search-input-bg-color": "#1e1f22",
-              "--epr-picker-border-color": "#1e1f22",
-              "--epr-hover-bg-color": "#35373c",
-              "--epr-text-color": "#dbdee1",
-              "--epr-search-input-text-color": "#dbdee1",
-              "--epr-category-icon-active-color": "#5865f2",
+              "--epr-bg-color": "#141419",
+              "--epr-category-label-bg-color": "#141419",
+              "--epr-search-input-bg-color": "#0b0b0f",
+              "--epr-picker-border-color": "#0b0b0f",
+              "--epr-hover-bg-color": "#1e1e23",
+              "--epr-text-color": "#d8d8d4",
+              "--epr-search-input-text-color": "#d8d8d4",
+              "--epr-category-icon-active-color": "#9be31f",
             } as React.CSSProperties
           }
         />

@@ -165,7 +165,7 @@ export default function ServerSettingsModal({
           ))}
           {isOwner && (
             <>
-              <div aria-hidden="true" className="my-2 h-px bg-[#3f4147]" />
+              <div aria-hidden="true" className="my-2 h-px bg-border" />
               <button
                 type="button"
                 onClick={() => {

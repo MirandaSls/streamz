@@ -36,7 +36,7 @@ export function Row({
   control: ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-[#3f4147] py-3 last:border-b-0">
+    <div className="flex items-center justify-between gap-4 border-b border-border py-3 last:border-b-0">
       <div className="min-w-0">
         <label htmlFor={htmlFor} className="block text-sm font-medium text-txt-primary">
           {label}
@@ -70,7 +70,7 @@ export function Switch({
       aria-label={label}
       onClick={() => onChange(!checked)}
       className={`relative h-6 w-10 shrink-0 rounded-full transition ${
-        checked ? "bg-green" : "bg-[#72767d]"
+        checked ? "bg-green" : "bg-txt-faint"
       }`}
     >
       <span
@@ -136,7 +136,7 @@ export function Slider({
 }) {
   const id = useId();
   return (
-    <div className="border-b border-[#3f4147] py-3 last:border-b-0">
+    <div className="border-b border-border py-3 last:border-b-0">
       <div className="flex items-baseline justify-between gap-4">
         <label htmlFor={id} className="text-sm font-medium text-txt-primary">
           {label}
@@ -186,7 +186,7 @@ export function RadioCards<T extends string>({
   columns?: number;
 }) {
   return (
-    <fieldset className="border-b border-[#3f4147] py-3 last:border-b-0">
+    <fieldset className="border-b border-border py-3 last:border-b-0">
       <legend
         className={legendaOculta ? "sr-only" : "mb-2 text-sm font-medium text-txt-primary"}
       >
@@ -206,7 +206,7 @@ export function RadioCards<T extends string>({
               className={`rounded-[4px] border px-3 py-2 text-left transition ${
                 ativo
                   ? "border-accent bg-accent/15 text-txt-primary"
-                  : "border-[#3f4147] text-txt-normal hover:bg-hov"
+                  : "border-border text-txt-normal hover:bg-hov"
               } ${opcao.disabled ? "cursor-not-allowed opacity-50" : ""}`}
             >
               <span className="block text-sm font-medium">{opcao.label}</span>
@@ -235,7 +235,7 @@ export function Select({
 }) {
   const id = useId();
   return (
-    <div className="border-b border-[#3f4147] py-3 last:border-b-0">
+    <div className="border-b border-border py-3 last:border-b-0">
       <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-txt-primary">
         {label}
       </label>
@@ -259,7 +259,7 @@ export function Select({
 /** Aviso de "isto é de outro agente / ainda não existe" nas abas delegadas. */
 export function EmBreve({ children }: { children: ReactNode }) {
   return (
-    <p className="rounded-[4px] border border-[#3f4147] bg-panel px-3 py-2 text-sm text-txt-muted">
+    <p className="rounded-[4px] border border-border bg-panel px-3 py-2 text-sm text-txt-muted">
       {children}
     </p>
   );

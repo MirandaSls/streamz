@@ -56,7 +56,7 @@ export function RulesNotice({ rulesChannelId }: { rulesChannelId: string | null 
       <button
         type="button"
         onClick={() => void accept()}
-        className="h-8 rounded-[3px] bg-accent px-3 font-medium text-white transition hover:bg-accent-hover"
+        className="h-8 rounded-[3px] bg-accent px-3 font-medium text-accent-ink transition hover:bg-accent-hover"
       >
         Li e aceito as regras
       </button>

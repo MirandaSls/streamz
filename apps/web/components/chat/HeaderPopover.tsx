@@ -68,7 +68,7 @@ export default function HeaderPopover({
         <div
           role="dialog"
           aria-label={title}
-          className={`absolute right-0 top-[calc(100%+12px)] z-30 ${width} overflow-hidden rounded-md bg-[#111214] shadow-high`}
+          className={`absolute right-0 top-[calc(100%+12px)] z-30 ${width} overflow-hidden rounded-md bg-overlay shadow-high`}
         >
           <header className="flex h-12 items-center gap-2 px-4 shadow-header">
             <h2 className="font-semibold text-txt-primary">{title}</h2>

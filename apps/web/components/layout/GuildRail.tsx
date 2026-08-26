@@ -68,10 +68,10 @@ function RailItem({
           aria-current={active ? "page" : undefined}
           className={`relative grid h-12 w-12 place-items-center overflow-hidden text-[15px] font-semibold transition-all duration-200 ${
             active
-              ? "rounded-2xl bg-accent text-white"
+              ? "rounded-2xl bg-accent text-accent-ink"
               : green
-                ? "rounded-[24px] bg-panel text-green group-hover:rounded-2xl group-hover:bg-green group-hover:text-white"
-                : "rounded-[24px] bg-panel text-txt-normal group-hover:rounded-2xl group-hover:bg-accent group-hover:text-white"
+                ? "rounded-[24px] bg-panel text-green group-hover:rounded-2xl group-hover:bg-green group-hover:text-accent-ink"
+                : "rounded-[24px] bg-panel text-txt-normal group-hover:rounded-2xl group-hover:bg-accent group-hover:text-accent-ink"
           }`}
         >
           {children}
@@ -119,7 +119,7 @@ export default function GuildRail() {
         <Logo />
       </RailItem>
 
-      <div aria-hidden="true" className="my-0.5 h-0.5 w-8 shrink-0 rounded bg-[#35363c]" />
+      <div aria-hidden="true" className="my-0.5 h-0.5 w-8 shrink-0 rounded bg-rail-divider" />
 
       {guilds.map((guild) => (
         <RailItem

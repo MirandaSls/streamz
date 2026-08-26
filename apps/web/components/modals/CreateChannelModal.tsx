@@ -104,7 +104,7 @@ export default function CreateChannelModal({
               onClick={() => setType(option.valor)}
               aria-pressed={type === option.valor}
               className={`flex flex-1 items-center justify-center gap-2 rounded-[3px] py-2 text-sm font-medium transition ${
-                type === option.valor ? "bg-accent text-white" : "bg-rail text-txt-normal hover:bg-hov"
+                type === option.valor ? "bg-accent text-accent-ink" : "bg-rail text-txt-normal hover:bg-hov"
               }`}
             >
               <Icone size={18} aria-hidden="true" />

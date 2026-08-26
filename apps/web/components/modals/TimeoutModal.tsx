@@ -68,7 +68,7 @@ export default function TimeoutModal({ guildId, user }: { guildId: string; user:
               onClick={() => setMinutes(p.minutes)}
               className={`h-9 rounded-[3px] px-3 text-sm font-medium transition ${
                 minutes === p.minutes
-                  ? "bg-accent text-white"
+                  ? "bg-accent text-accent-ink"
                   : "bg-rail text-txt-normal hover:bg-hov"
               }`}
             >

@@ -116,7 +116,7 @@ export default function ThreadsPopover({
               <div className="mt-0.5 flex items-center gap-2 text-xs text-txt-muted">
                 <span className="flex -space-x-1.5" aria-hidden="true">
                   {t.participants.map((p) => (
-                    <Avatar key={p.id} user={p} size="sm" className="h-4 w-4 ring-2 ring-[#111214]" />
+                    <Avatar key={p.id} user={p} size="sm" className="h-4 w-4 ring-2 ring-overlay" />
                   ))}
                 </span>
                 <span>

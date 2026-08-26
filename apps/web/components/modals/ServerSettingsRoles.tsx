@@ -43,7 +43,7 @@ function Toggle({
   disabled?: boolean;
 }) {
   return (
-    <div className="flex items-start gap-3 border-b border-[#3f4147] py-3 last:border-0">
+    <div className="flex items-start gap-3 border-b border-border py-3 last:border-0">
       <div className="min-w-0 flex-1">
         <div className="text-base text-txt-normal">{label}</div>
         <p className="mt-0.5 text-xs text-txt-muted">{description}</p>
@@ -56,7 +56,7 @@ function Toggle({
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={`relative mt-1 h-6 w-11 shrink-0 rounded-full transition disabled:cursor-not-allowed disabled:opacity-50 ${
-          checked ? "bg-green" : "bg-[#80848e]"
+          checked ? "bg-green" : "bg-txt-faint"
         }`}
       >
         <span
@@ -129,7 +129,7 @@ export default function ServerSettingsRoles({ guildId }: { guildId: string }) {
           type="button"
           disabled={busy}
           onClick={() => void criar()}
-          className="mb-3 flex h-8 w-full items-center justify-center gap-1.5 rounded-[3px] bg-accent text-sm font-medium text-white transition hover:bg-accent-hover disabled:opacity-50"
+          className="mb-3 flex h-8 w-full items-center justify-center gap-1.5 rounded-[3px] bg-accent text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
         >
           <Plus size={16} aria-hidden="true" />
           Criar cargo
@@ -151,7 +151,7 @@ export default function ServerSettingsRoles({ guildId }: { guildId: string }) {
                 >
                   <span
                     aria-hidden="true"
-                    style={{ backgroundColor: r.color ?? "#949ba4" }}
+                    style={{ backgroundColor: r.color ?? "#8a8a8e" }}
                     className="h-3 w-3 shrink-0 rounded-full"
                   />
                   <span className="min-w-0 flex-1 truncate">{r.name}</span>
@@ -291,7 +291,7 @@ function RoleEditor({
               onClick={() => setColor("")}
               aria-label="Sem cor"
               aria-pressed={color === ""}
-              className={`grid h-8 w-8 place-items-center rounded-[4px] bg-[#4e5058] text-xs text-white ${
+              className={`grid h-8 w-8 place-items-center rounded-[4px] bg-border-strong text-xs text-white ${
                 color === "" ? "ring-2 ring-white" : ""
               }`}
             >
@@ -399,7 +399,7 @@ function RoleEditor({
           type="button"
           disabled={!dirty || saving}
           onClick={() => void salvar()}
-          className="h-[38px] rounded-[3px] bg-accent px-4 text-sm font-medium text-white transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-[38px] rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {saving ? "Salvando…" : "Salvar alterações"}
         </button>

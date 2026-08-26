@@ -104,7 +104,7 @@ export default function UserProfileModal({
           closeModal();
           void openWith(user.id);
         }}
-        className="flex h-9 items-center gap-2 rounded-[3px] bg-accent px-4 text-sm font-medium text-white transition hover:bg-accent-hover"
+        className="flex h-9 items-center gap-2 rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover"
       >
         <MessageSquare size={16} aria-hidden="true" />
         Enviar mensagem
@@ -116,7 +116,7 @@ export default function UserProfileModal({
           key="add"
           type="button"
           onClick={() => void send(user.username)}
-          className="flex h-9 items-center gap-2 rounded-[3px] bg-[#4e5058] px-4 text-sm font-medium text-txt-normal transition hover:bg-[#6d6f78]"
+          className="flex h-9 items-center gap-2 rounded-[3px] bg-border-strong px-4 text-sm font-medium text-txt-normal transition hover:bg-border-strong-hover"
         >
           <UserPlus size={16} aria-hidden="true" />
           Adicionar amigo
@@ -129,7 +129,7 @@ export default function UserProfileModal({
           key="rm"
           type="button"
           onClick={() => void remove(user)}
-          className="flex h-9 items-center gap-2 rounded-[3px] bg-[#4e5058] px-4 text-sm font-medium text-txt-normal transition hover:bg-red hover:text-white"
+          className="flex h-9 items-center gap-2 rounded-[3px] bg-border-strong px-4 text-sm font-medium text-txt-normal transition hover:bg-red hover:text-white"
         >
           <UserMinus size={16} aria-hidden="true" />
           Remover amigo
@@ -142,7 +142,7 @@ export default function UserProfileModal({
           key="unblock"
           type="button"
           onClick={() => void unblock(user.id)}
-          className="flex h-9 items-center gap-2 rounded-[3px] bg-[#4e5058] px-4 text-sm font-medium text-txt-normal transition hover:bg-[#6d6f78]"
+          className="flex h-9 items-center gap-2 rounded-[3px] bg-border-strong px-4 text-sm font-medium text-txt-normal transition hover:bg-border-strong-hover"
         >
           <UserX size={16} aria-hidden="true" />
           Desbloquear
@@ -169,7 +169,7 @@ export default function UserProfileModal({
           // eslint-disable-next-line @next/next/no-img-element
           <img src={profile.bannerUrl} alt="" className="h-[120px] w-full object-cover" />
         ) : (
-          <div className="h-[120px] w-full" style={{ backgroundColor: profile.bannerColor ?? "#5865f2" }} />
+          <div className="h-[120px] w-full" style={{ backgroundColor: profile.bannerColor ?? "#9be31f" }} />
         )}
 
         <div className="px-4">
@@ -187,7 +187,7 @@ export default function UserProfileModal({
             <div className="truncate text-sm text-txt-normal">@{user.username}</div>
             {personalizado && <div className="mt-1 text-sm text-txt-normal">{personalizado}</div>}
 
-            <div className="mt-3 border-t border-[#3f4147] pt-1" />
+            <div className="mt-3 border-t border-border pt-1" />
 
             <Bloco label="Status">
               {STATUS_LABEL[status]}

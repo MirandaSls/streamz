@@ -239,7 +239,7 @@ export function VoiceParticipantMenuHost() {
           toggleSilenciado(menu.userId);
           setMenu(null);
         }}
-        className={`flex w-full items-center gap-2 rounded-[2px] px-1 py-1.5 text-left text-sm transition hover:bg-accent hover:text-white ${
+        className={`flex w-full items-center gap-2 rounded-[2px] px-1 py-1.5 text-left text-sm transition hover:bg-accent hover:text-accent-ink ${
           silenciado ? "text-red" : "text-txt-normal"
         }`}
       >

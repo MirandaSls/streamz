@@ -64,7 +64,7 @@ export default function GroupSettingsModal({ channelId }: { channelId: string })
             // eslint-disable-next-line @next/next/no-img-element
             <img src={dm.iconUrl} alt="" className="h-20 w-20 rounded-full object-cover" />
           ) : (
-            <span className="grid h-20 w-20 place-items-center rounded-full bg-accent text-white">
+            <span className="grid h-20 w-20 place-items-center rounded-full bg-accent text-accent-ink">
               <Users size={36} />
             </span>
           )}

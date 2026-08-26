@@ -65,7 +65,7 @@ export default function VoiceSettingsPanel() {
         </button>
       </div>
 
-      <div className="space-y-2 border-t border-[#3f4147] pt-4">
+      <div className="space-y-2 border-t border-border pt-4">
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -91,7 +91,7 @@ export default function VoiceSettingsPanel() {
             onBlur={() => setCapturando(false)}
             aria-label="Definir a tecla de push-to-talk"
             className={`flex h-8 items-center gap-1.5 rounded-[3px] px-3 text-sm transition ${
-              capturando ? "bg-accent text-white" : "bg-rail text-txt-normal hover:bg-hov"
+              capturando ? "bg-accent text-accent-ink" : "bg-rail text-txt-normal hover:bg-hov"
             }`}
           >
             <Keyboard size={16} aria-hidden="true" />

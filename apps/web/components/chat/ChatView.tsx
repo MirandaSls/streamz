@@ -158,7 +158,7 @@ export default function ChatView() {
               confirmar(channel.id);
               setLiberado((ids) => [...ids, channel.id]);
             }}
-            className="mt-6 h-[38px] rounded-[3px] bg-accent px-4 text-sm font-medium text-white transition hover:bg-accent-hover"
+            className="mt-6 h-[38px] rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover"
           >
             Continuar mesmo assim
           </button>

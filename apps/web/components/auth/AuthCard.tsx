@@ -65,4 +65,4 @@ export const inputClass =
   "mb-5 h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none placeholder:text-txt-muted disabled:opacity-60";
 
 export const submitClass =
-  "h-11 w-full rounded-[3px] bg-accent font-medium text-white transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60";
+  "h-11 w-full rounded-[3px] bg-accent font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60";

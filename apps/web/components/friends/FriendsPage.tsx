@@ -22,7 +22,7 @@ const ABAS: { id: FriendsTab; label: string }[] = [
 function Vazio({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {
   return (
     <div className="mt-16 grid place-items-center px-8 text-center">
-      <div className="grid h-[68px] w-[68px] place-items-center rounded-full bg-[#41434a] text-txt-secondary">
+      <div className="grid h-[68px] w-[68px] place-items-center rounded-full bg-border text-txt-secondary">
         {icon}
       </div>
       <h3 className="mt-4 text-lg font-semibold text-txt-primary">{title}</h3>
@@ -126,7 +126,7 @@ export default function FriendsPage() {
         onSearch={() => setTab("todos")}
         tools={
           <div className="flex items-center gap-1">
-            <span aria-hidden="true" className="mx-2 h-6 w-px bg-[#3f4147]" />
+            <span aria-hidden="true" className="mx-2 h-6 w-px bg-border" />
             {ABAS.map((a) => (
               <button
                 key={a.id}
@@ -152,7 +152,7 @@ export default function FriendsPage() {
               className={`ml-1 h-6 rounded-[4px] px-2 text-sm font-medium transition ${
                 tab === "adicionar"
                   ? "bg-green/20 text-green"
-                  : "bg-green text-white hover:bg-green/80"
+                  : "bg-green text-accent-ink hover:bg-green/80"
               }`}
             >
               Adicionar amigo

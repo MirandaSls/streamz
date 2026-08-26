@@ -116,12 +116,12 @@ export default function ProfilePopoverHost() {
       role="dialog"
       aria-label={`Perfil de ${displayNameOf(user)}`}
       style={{ left: pos?.x ?? 0, top: pos?.y ?? 0, width: WIDTH }}
-      className={`fixed z-[75] overflow-hidden rounded-lg bg-[#111214] shadow-high ${pos ? "" : "invisible"}`}
+      className={`fixed z-[75] overflow-hidden rounded-lg bg-overlay shadow-high ${pos ? "" : "invisible"}`}
     >
       <div className="h-[60px] bg-accent" />
       <div className="px-4 pb-4">
-        <div className="-mt-10 mb-3 w-fit rounded-full border-[6px] border-[#111214]">
-          <Avatar user={user} size="xl" status={status} surface="border-[#111214]" />
+        <div className="-mt-10 mb-3 w-fit rounded-full border-[6px] border-overlay">
+          <Avatar user={user} size="xl" status={status} surface="border-overlay" />
         </div>
         <div className="rounded-lg bg-footer p-3">
           <div className="flex items-start justify-between gap-2">
@@ -154,7 +154,7 @@ export default function ProfilePopoverHost() {
 
           {chips.length > 0 && (
             <>
-              <div className="mt-3 border-t border-[#3f4147] pt-3 text-xs font-bold uppercase text-txt-secondary">
+              <div className="mt-3 border-t border-border pt-3 text-xs font-bold uppercase text-txt-secondary">
                 Cargos
               </div>
               <div className="mt-2 flex flex-wrap gap-1">
@@ -165,7 +165,7 @@ export default function ProfilePopoverHost() {
                   >
                     <span
                       aria-hidden="true"
-                      style={{ backgroundColor: r.color ?? "#949ba4" }}
+                      style={{ backgroundColor: r.color ?? "#8a8a8e" }}
                       className="h-3 w-3 rounded-full"
                     />
                     {r.name}
@@ -189,7 +189,7 @@ export default function ProfilePopoverHost() {
                 {customStatusOf(user) ? "Editar status personalizado" : "Definir status personalizado"}
               </button>
 
-              <div className="mt-3 border-t border-[#3f4147] pt-3 text-xs font-bold uppercase text-txt-secondary">
+              <div className="mt-3 border-t border-border pt-3 text-xs font-bold uppercase text-txt-secondary">
                 Definir status
               </div>
               <div role="radiogroup" aria-label="Status" className="mt-1 flex flex-col gap-0.5">
@@ -203,7 +203,7 @@ export default function ProfilePopoverHost() {
                       aria-checked={selected}
                       disabled={saving}
                       onClick={() => void setStatus(o.value)}
-                      className={`flex items-center gap-3 rounded-[3px] px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-white ${
+                      className={`flex items-center gap-3 rounded-[3px] px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-ink ${
                         selected ? "text-txt-primary" : "text-txt-normal"
                       }`}
                     >
@@ -219,7 +219,7 @@ export default function ProfilePopoverHost() {
             </>
           ) : (
             <>
-              <div className="mt-3 border-t border-[#3f4147] pt-3 text-xs font-bold uppercase text-txt-secondary">
+              <div className="mt-3 border-t border-border pt-3 text-xs font-bold uppercase text-txt-secondary">
                 Status
               </div>
               <div className="mt-1 text-sm text-txt-normal">{STATUS_LABEL[status]}</div>
@@ -229,7 +229,7 @@ export default function ProfilePopoverHost() {
                   close();
                   void openWith(user.id);
                 }}
-                className="mt-3 flex h-8 w-full items-center justify-center gap-2 rounded-[3px] bg-accent text-sm font-medium text-white transition hover:bg-accent-hover"
+                className="mt-3 flex h-8 w-full items-center justify-center gap-2 rounded-[3px] bg-accent text-sm font-medium text-accent-ink transition hover:bg-accent-hover"
               >
                 <MessageSquare size={16} aria-hidden="true" />
                 Enviar mensagem

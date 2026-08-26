@@ -59,12 +59,12 @@ export default function ContextMenuHost() {
       ref={ref}
       role="menu"
       style={{ left: pos?.x ?? menu.x, top: pos?.y ?? menu.y, width: WIDTH }}
-      className={`fixed z-[80] rounded bg-[#111214] p-1.5 shadow-high ${pos ? "" : "invisible"}`}
+      className={`fixed z-[80] rounded bg-overlay p-1.5 shadow-high ${pos ? "" : "invisible"}`}
       onContextMenu={(e) => e.preventDefault()}
     >
       {menu.items.map((item, i) =>
         "separator" in item ? (
-          <div key={i} role="separator" className="mx-1 my-1 h-px bg-[#3f4147]" />
+          <div key={i} role="separator" className="mx-1 my-1 h-px bg-border" />
         ) : (
           <button
             key={i}
@@ -78,7 +78,7 @@ export default function ContextMenuHost() {
             className={`flex h-8 w-full items-center justify-between rounded-[3px] px-2 text-sm font-medium disabled:opacity-40 ${
               item.danger
                 ? "text-red hover:bg-red hover:text-white focus-visible:bg-red focus-visible:text-white"
-                : "text-txt-secondary hover:bg-accent hover:text-white focus-visible:bg-accent focus-visible:text-white"
+                : "text-txt-secondary hover:bg-accent hover:text-accent-ink focus-visible:bg-accent focus-visible:text-accent-ink"
             }`}
           >
             <span>{item.label}</span>

@@ -80,7 +80,7 @@ export default function SessoesTab() {
         (sessoes ?? []).map((sessao) => (
           <div
             key={sessao.id}
-            className="flex items-center gap-3 border-b border-[#3f4147] py-3 last:border-b-0"
+            className="flex items-center gap-3 border-b border-border py-3 last:border-b-0"
           >
             {ehCelular(sessao.userAgent) ? (
               <Smartphone size={20} className="shrink-0 text-txt-muted" aria-hidden="true" />
@@ -91,7 +91,7 @@ export default function SessoesTab() {
               <p className="truncate text-sm font-medium text-txt-primary">
                 {resumoDoAgente(sessao.userAgent)}
                 {sessao.current && (
-                  <span className="ml-2 rounded-[3px] bg-green px-1.5 py-0.5 text-[11px] font-bold text-white">
+                  <span className="ml-2 rounded-[3px] bg-green px-1.5 py-0.5 text-[11px] font-bold text-accent-ink">
                     {t("sessoes.atual")}
                   </span>
                 )}

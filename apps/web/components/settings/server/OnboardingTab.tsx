@@ -182,7 +182,7 @@ export default function OnboardingTab({ guildId }: { guildId: string }) {
         type="button"
         disabled={saving}
         onClick={() => void salvar()}
-        className="mt-6 h-[38px] rounded-[3px] bg-accent px-4 text-sm font-medium text-white transition hover:bg-accent-hover disabled:opacity-50"
+        className="mt-6 h-[38px] rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
       >
         {saving ? "Salvando…" : "Salvar alterações"}
       </button>

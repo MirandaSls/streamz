@@ -140,7 +140,7 @@ function BlocoDeMfa({
 
   return (
     <Section title="Verificação em duas etapas">
-      <div className="flex items-center justify-between gap-4 border-b border-[#3f4147] py-3">
+      <div className="flex items-center justify-between gap-4 border-b border-border py-3">
         <div className="min-w-0">
           <p className="flex items-center gap-2 text-sm font-medium text-txt-primary">
             {ligado ? (
@@ -161,7 +161,7 @@ function BlocoDeMfa({
             <button
               type="button"
               onClick={() => (regerando ? limpar() : (setDesligando(false), setRegerando(true)))}
-              className="h-8 rounded-[3px] bg-[#4e5058] px-3 text-sm font-medium text-txt-normal hover:bg-[#6d6f78]"
+              className="h-8 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
             >
               {regerando ? "Cancelar" : "Novos códigos"}
             </button>
@@ -179,7 +179,7 @@ function BlocoDeMfa({
               type="button"
               disabled={ocupado}
               onClick={() => (setup ? limpar() : void comecar())}
-              className="h-8 rounded-[3px] bg-accent px-3 text-sm font-medium text-white transition hover:bg-accent-hover disabled:opacity-50"
+              className="h-8 rounded-[3px] bg-accent px-3 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
             >
               {setup ? "Cancelar" : "Ativar"}
             </button>
@@ -319,7 +319,7 @@ function CodigosDeRecuperacao({
         <button
           type="button"
           onClick={baixar}
-          className="h-8 rounded-[3px] bg-[#4e5058] px-3 text-sm font-medium text-txt-normal hover:bg-[#6d6f78]"
+          className="h-8 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
         >
           Baixar .txt
         </button>
@@ -343,7 +343,7 @@ function BotaoCopiar({ texto, rotulo }: { texto: string; rotulo: string }) {
           })
           .catch(() => ui.toast("Não foi possível copiar", "error"));
       }}
-      className="mt-2 flex h-8 items-center gap-1.5 rounded-[3px] bg-[#4e5058] px-3 text-sm font-medium text-txt-normal hover:bg-[#6d6f78]"
+      className="mt-2 flex h-8 items-center gap-1.5 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
     >
       <Copy size={14} aria-hidden="true" />
       {copiado ? "Copiado!" : rotulo}
@@ -412,7 +412,7 @@ function BlocoDeSessoes() {
         (sessoes ?? []).map((sessao) => (
           <div
             key={sessao.id}
-            className="flex items-center gap-3 border-b border-[#3f4147] py-3 last:border-b-0"
+            className="flex items-center gap-3 border-b border-border py-3 last:border-b-0"
           >
             {ehDispositivoMovel(sessao.userAgent) ? (
               <Smartphone size={20} className="shrink-0 text-txt-muted" aria-hidden="true" />
@@ -423,7 +423,7 @@ function BlocoDeSessoes() {
               <p className="truncate text-sm font-medium text-txt-primary">
                 {resumoDoDispositivo(sessao.userAgent)}
                 {sessao.current && (
-                  <span className="ml-2 rounded-[3px] bg-green px-1.5 py-0.5 text-[11px] font-bold text-white">
+                  <span className="ml-2 rounded-[3px] bg-green px-1.5 py-0.5 text-[11px] font-bold text-accent-ink">
                     Este aparelho
                   </span>
                 )}

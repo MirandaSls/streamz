@@ -64,9 +64,9 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
         className="pb-2"
         firstSeparator={
           <div className="mx-4 my-2 flex items-center gap-2 text-xs font-semibold text-txt-muted">
-            <span className="h-px flex-1 bg-[#3f4147]" />
+            <span className="h-px flex-1 bg-border" />
             {replies} {replies === 1 ? "resposta" : "respostas"}
-            <span className="h-px flex-1 bg-[#3f4147]" />
+            <span className="h-px flex-1 bg-border" />
           </div>
         }
       />

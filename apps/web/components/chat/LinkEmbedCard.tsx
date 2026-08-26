@@ -32,7 +32,7 @@ export function useLinkEmbed(url: string | null): LinkEmbed | null | undefined {
 export default function LinkEmbedCard({ embed }: { embed: LinkEmbed }) {
   return (
     <div className="mt-1 grid max-w-[520px] grid-cols-[auto_1fr] overflow-hidden rounded bg-panel">
-      <div className="w-1 bg-[#1e1f22]" aria-hidden="true" />
+      <div className="w-1 bg-rail" aria-hidden="true" />
       <div className="min-w-0 p-3 pl-3">
         {embed.siteName && <div className="text-xs text-txt-muted">{embed.siteName}</div>}
         {embed.title && (

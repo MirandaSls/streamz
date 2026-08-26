@@ -73,7 +73,7 @@ export default function IncomingCallModal() {
           data-autofocus
           onClick={() => void accept()}
           aria-label="Atender chamada"
-          className="grid h-14 w-14 place-items-center rounded-full bg-green text-white transition hover:brightness-110"
+          className="grid h-14 w-14 place-items-center rounded-full bg-green text-accent-ink transition hover:brightness-110"
         >
           <Phone size={22} />
         </button>

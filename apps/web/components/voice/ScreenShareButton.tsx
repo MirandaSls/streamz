@@ -49,7 +49,7 @@ export default function ScreenShareButton() {
             aria-label={screenOn ? "Parar compartilhamento" : "Compartilhar tela"}
             aria-pressed={screenOn}
             className={`grid h-12 w-12 place-items-center rounded-l-full transition ${
-              screenOn ? "bg-green text-white hover:brightness-110" : "bg-[#4e5058] text-white hover:bg-[#6d6f78]"
+              screenOn ? "bg-green text-accent-ink hover:brightness-110" : "bg-border-strong text-white hover:bg-border-strong-hover"
             }`}
           >
             {screenOn ? <MonitorX size={20} /> : <MonitorUp size={20} />}
@@ -61,7 +61,7 @@ export default function ScreenShareButton() {
             onClick={() => setAberto((v) => !v)}
             aria-label="Opções de compartilhamento"
             aria-expanded={aberto}
-            className="grid h-12 w-6 place-items-center rounded-r-full bg-[#4e5058] text-white transition hover:bg-[#6d6f78]"
+            className="grid h-12 w-6 place-items-center rounded-r-full bg-border-strong text-white transition hover:bg-border-strong-hover"
           >
             <ChevronUp size={14} aria-hidden="true" />
           </button>
@@ -80,7 +80,7 @@ export default function ScreenShareButton() {
           {(Object.keys(SCREEN_QUALITY) as ScreenQuality[]).map((q) => (
             <label
               key={q}
-              className="flex cursor-pointer items-center gap-2 rounded-[2px] px-1 py-1.5 text-sm text-txt-normal transition hover:bg-accent hover:text-white"
+              className="flex cursor-pointer items-center gap-2 rounded-[2px] px-1 py-1.5 text-sm text-txt-normal transition hover:bg-accent hover:text-accent-ink"
             >
               <input
                 type="radio"
@@ -92,8 +92,8 @@ export default function ScreenShareButton() {
               {SCREEN_QUALITY[q].label}
             </label>
           ))}
-          <span aria-hidden="true" className="my-1 block h-px bg-[#3f4147]" />
-          <label className="flex cursor-pointer items-center gap-2 rounded-[2px] px-1 py-1.5 text-sm text-txt-normal transition hover:bg-accent hover:text-white">
+          <span aria-hidden="true" className="my-1 block h-px bg-border" />
+          <label className="flex cursor-pointer items-center gap-2 rounded-[2px] px-1 py-1.5 text-sm text-txt-normal transition hover:bg-accent hover:text-accent-ink">
             <input
               type="checkbox"
               checked={audio}

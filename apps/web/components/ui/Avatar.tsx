@@ -120,7 +120,7 @@ export function GroupAvatar({
   return (
     <span
       aria-hidden="true"
-      className={`${box} grid shrink-0 place-items-center rounded-full bg-accent text-white ${className}`}
+      className={`${box} grid shrink-0 place-items-center rounded-full bg-accent text-accent-ink ${className}`}
     >
       <Users size={GROUP_ICON[size]} />
     </span>

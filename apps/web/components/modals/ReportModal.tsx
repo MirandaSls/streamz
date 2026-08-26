@@ -56,7 +56,7 @@ export default function ReportModal({
       }
     >
       {preview && (
-        <blockquote className="mb-4 max-h-24 overflow-y-auto break-words rounded-[3px] border-l-2 border-[#4e5058] bg-rail px-3 py-2 text-sm text-txt-muted">
+        <blockquote className="mb-4 max-h-24 overflow-y-auto break-words rounded-[3px] border-l-2 border-border-strong bg-rail px-3 py-2 text-sm text-txt-muted">
           {preview}
         </blockquote>
       )}

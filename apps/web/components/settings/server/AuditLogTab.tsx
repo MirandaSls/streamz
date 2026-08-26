@@ -51,7 +51,7 @@ function valor(v: unknown): string {
 function Entry({ entry }: { entry: AuditLogEntry }) {
   const ator = entry.actor ? displayNameOf(entry.actor) : "Conta removida";
   return (
-    <div role="listitem" className="flex gap-3 border-b border-[#3f4147] px-3 py-3 last:border-b-0">
+    <div role="listitem" className="flex gap-3 border-b border-border px-3 py-3 last:border-b-0">
       {entry.actor ? (
         <Avatar user={entry.actor} size="md" surface="border-chat" />
       ) : (

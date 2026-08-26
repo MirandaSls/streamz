@@ -28,7 +28,7 @@ export default function PerfilTab() {
 
   const [aboutMe, setAboutMe] = useState("");
   const [pronouns, setPronouns] = useState("");
-  const [bannerColor, setBannerColor] = useState("#5865f2");
+  const [bannerColor, setBannerColor] = useState("#9be31f");
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -45,7 +45,7 @@ export default function PerfilTab() {
         if (!vivo) return;
         setAboutMe(p.aboutMe ?? "");
         setPronouns(p.pronouns ?? "");
-        setBannerColor(p.bannerColor ?? "#5865f2");
+        setBannerColor(p.bannerColor ?? "#9be31f");
         setBannerUrl(p.bannerUrl);
       })
       .catch(() => {
@@ -120,7 +120,7 @@ export default function PerfilTab() {
             type="button"
             disabled={enviando}
             onClick={() => fileRef.current?.click()}
-            className="flex h-9 items-center gap-2 rounded-[3px] bg-accent px-3 text-sm font-medium text-white transition hover:bg-accent-hover disabled:opacity-50"
+            className="flex h-9 items-center gap-2 rounded-[3px] bg-accent px-3 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
           >
             <ImageIcon size={16} aria-hidden="true" />
             {enviando ? "Enviando…" : "Trocar banner"}
@@ -184,7 +184,7 @@ export default function PerfilTab() {
           type="button"
           disabled={salvando}
           onClick={() => void salvar()}
-          className="mt-4 h-[38px] rounded-[3px] bg-accent px-4 text-sm font-medium text-white transition hover:bg-accent-hover disabled:opacity-50"
+          className="mt-4 h-[38px] rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
         >
           {salvando ? "Salvando…" : "Salvar perfil"}
         </button>
@@ -193,7 +193,7 @@ export default function PerfilTab() {
       {/* prévia: o mesmo cartão que os outros veem */}
       <div className="w-full shrink-0 md:w-[300px]">
         <h3 className="mb-2 text-xs font-bold uppercase text-txt-secondary">Prévia</h3>
-        <div className="overflow-hidden rounded-lg bg-[#111214]">
+        <div className="overflow-hidden rounded-lg bg-overlay">
           {bannerUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={bannerUrl} alt="" className="h-[60px] w-full object-cover" />
@@ -201,8 +201,8 @@ export default function PerfilTab() {
             <div className="h-[60px] w-full" style={{ backgroundColor: bannerColor }} />
           )}
           <div className="px-4 pb-4">
-            <div className="-mt-10 mb-3 w-fit rounded-full border-[6px] border-[#111214]">
-              <Avatar user={user} size="xl" status={user.status} surface="border-[#111214]" />
+            <div className="-mt-10 mb-3 w-fit rounded-full border-[6px] border-overlay">
+              <Avatar user={user} size="xl" status={user.status} surface="border-overlay" />
             </div>
             <div className="rounded-lg bg-footer p-3">
               <div className="flex items-baseline gap-2">
@@ -217,7 +217,7 @@ export default function PerfilTab() {
               {personalizado && <div className="mt-1 text-sm text-txt-normal">{personalizado}</div>}
               {aboutMe.trim() && (
                 <>
-                  <div className="mt-3 border-t border-[#3f4147] pt-3 text-xs font-bold uppercase text-txt-secondary">
+                  <div className="mt-3 border-t border-border pt-3 text-xs font-bold uppercase text-txt-secondary">
                     Sobre mim
                   </div>
                   <p className="mt-1 whitespace-pre-wrap break-words text-sm text-txt-normal">

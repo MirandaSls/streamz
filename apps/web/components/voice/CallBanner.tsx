@@ -59,7 +59,7 @@ export default function CallBanner({ channelId }: { channelId: string }) {
           <button
             type="button"
             onClick={() => void startCall(channelId, false)}
-            className="flex h-8 items-center gap-1.5 rounded-[3px] bg-green px-3 text-sm font-medium text-white transition hover:brightness-110"
+            className="flex h-8 items-center gap-1.5 rounded-[3px] bg-green px-3 text-sm font-medium text-accent-ink transition hover:brightness-110"
           >
             <Phone size={16} aria-hidden="true" />
             Entrar
@@ -68,7 +68,7 @@ export default function CallBanner({ channelId }: { channelId: string }) {
             type="button"
             onClick={() => void startCall(channelId, true)}
             aria-label="Entrar com vídeo"
-            className="grid h-8 w-8 place-items-center rounded-[3px] bg-[#4e5058] text-white transition hover:bg-[#6d6f78]"
+            className="grid h-8 w-8 place-items-center rounded-[3px] bg-border-strong text-white transition hover:bg-border-strong-hover"
           >
             <Video size={16} />
           </button>

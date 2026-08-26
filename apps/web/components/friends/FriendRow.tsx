@@ -42,7 +42,7 @@ export default function FriendRow({
     <div
       role="listitem"
       onContextMenu={abrirMenu}
-      className="group mx-[30px] flex h-[62px] items-center gap-3 border-t border-[#3f4147] px-2.5 hover:mx-5 hover:rounded-lg hover:border-transparent hover:bg-hov hover:px-[22px]"
+      className="group mx-[30px] flex h-[62px] items-center gap-3 border-t border-border px-2.5 hover:mx-5 hover:rounded-lg hover:border-transparent hover:bg-hov hover:px-[22px]"
     >
       <button
         type="button"

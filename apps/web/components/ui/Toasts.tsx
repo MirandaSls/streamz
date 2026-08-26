@@ -24,8 +24,8 @@ export default function Toasts() {
           key={toast.id}
           className={`pointer-events-auto flex items-start gap-2 rounded-lg px-3 py-2 text-sm shadow-lg ${
             toast.kind === "error"
-              ? "border border-red/40 bg-[#111214] text-txt-normal"
-              : "bg-[#111214] text-txt-normal"
+              ? "border border-red/40 bg-overlay text-txt-normal"
+              : "bg-overlay text-txt-normal"
           }`}
         >
           <span className="min-w-0 flex-1">{toast.text}</span>

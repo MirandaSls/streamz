@@ -826,7 +826,7 @@ function montarSugestoes(
         icone: (
           <span
             aria-hidden="true"
-            style={{ backgroundColor: r.color ?? "#949ba4" }}
+            style={{ backgroundColor: r.color ?? "#8a8a8e" }}
             className="h-3 w-3 rounded-full"
           />
         ),

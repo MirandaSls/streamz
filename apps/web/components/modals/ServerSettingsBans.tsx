@@ -80,7 +80,7 @@ export default function ServerSettingsBans({ guildId }: { guildId: string }) {
             <div
               key={b.user.id}
               role="listitem"
-              className="flex items-center gap-3 border-b border-[#3f4147] px-3 py-3 last:border-0"
+              className="flex items-center gap-3 border-b border-border px-3 py-3 last:border-0"
             >
               <Avatar user={b.user} size="md" surface="border-rail" />
               <div className="min-w-0 flex-1">

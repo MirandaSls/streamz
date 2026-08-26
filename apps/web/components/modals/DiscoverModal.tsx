@@ -146,7 +146,7 @@ export default function DiscoverModal() {
                   className={`h-9 rounded-[3px] text-sm font-medium transition disabled:opacity-50 ${
                     g.joined
                       ? "bg-rail text-txt-normal hover:bg-hov"
-                      : "bg-green text-white hover:brightness-110"
+                      : "bg-green text-accent-ink hover:brightness-110"
                   }`}
                 >
                   {g.joined ? "Abrir" : entrando === g.id ? "Entrando…" : "Entrar"}

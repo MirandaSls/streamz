@@ -129,8 +129,10 @@ export function PrimaryButton({
       onClick={onClick}
       disabled={disabled}
       data-autofocus={autoFocus ? "" : undefined}
-      className={`h-[38px] min-w-24 rounded-[3px] px-4 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${
-        danger ? "bg-red hover:bg-red-hover" : "bg-accent hover:bg-accent-hover"
+      className={`h-[38px] min-w-24 rounded-[3px] px-4 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+        danger
+          ? "bg-red text-white hover:bg-red-hover"
+          : "bg-accent text-accent-ink hover:bg-accent-hover"
       }`}
     >
       {children}
@@ -157,7 +159,7 @@ export function SecondaryButton({
       onClick={onClick}
       data-autofocus={autoFocus ? "" : undefined}
       className={`h-[38px] rounded-[3px] px-4 text-sm font-medium text-txt-normal transition hover:underline ${
-        full ? "w-full bg-[#4e5058] hover:bg-[#6d6f78] hover:no-underline" : ""
+        full ? "w-full bg-border-strong hover:bg-border-strong-hover hover:no-underline" : ""
       }`}
     >
       {children}

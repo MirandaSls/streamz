@@ -76,7 +76,7 @@ export default function AddGroupMembersModal({ channelId }: { channelId: string 
                 type="button"
                 disabled={ocupado === u.id}
                 onClick={() => void adicionar(u)}
-                className="h-8 shrink-0 rounded-[3px] border border-accent px-3 text-sm font-medium text-txt-primary transition hover:bg-accent disabled:opacity-50"
+                className="h-8 shrink-0 rounded-[3px] border border-accent px-3 text-sm font-medium text-txt-primary transition hover:bg-accent hover:text-accent-ink disabled:opacity-50"
               >
                 {ocupado === u.id ? "Adicionando…" : "Adicionar"}
               </button>
