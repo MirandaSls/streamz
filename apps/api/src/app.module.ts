@@ -28,6 +28,7 @@ import { ModerationModule } from "./modules/moderation/moderation.module";
 import { OnboardingModule } from "./modules/onboarding/onboarding.module";
 import { PollsModule } from "./modules/polls/polls.module";
 import { DiscoveryModule } from "./modules/discovery/discovery.module";
+import { MailModule } from "./modules/mail/mail.module";
 import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis";
 import { redisClient } from "./modules/realtime/redis";
 import { HealthController } from "./health.controller";
@@ -77,6 +78,7 @@ import { validateEnv } from "./common/env";
     OnboardingModule,
     PollsModule,
     DiscoveryModule,
+    MailModule,
   ],
   controllers: [HealthController],
   // guard global: o teto padrão vale para toda rota; ver common/throttle.ts

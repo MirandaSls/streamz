@@ -1,40 +1,52 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AtSign, Camera, KeyRound, LogOut, ShieldCheck } from "lucide-react";
+import { AtSign, BadgeCheck, Camera, KeyRound, LogOut, TriangleAlert } from "lucide-react";
 import { MAX_DISPLAY_NAME, displayNameOf } from "@newdisc/shared";
-import { EmBreve, Section } from "@/components/settings/controls";
+import type { MinhaConta } from "@newdisc/shared";
+import { Section } from "@/components/settings/controls";
+import { CampoDeTexto, Erro } from "@/components/settings/campos";
 import { PrimaryButton } from "@/components/modals/Dialog";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
-import { useT } from "@/lib/i18n";
 import { api } from "@/lib/api";
+import { mensagemDeAuth, validarSenha } from "@/lib/auth-mensagens";
 import { useAuth } from "@/stores/auth";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui, useUI } from "@/stores/ui";
 
 /**
- * "Minha conta".
+ * "Minha conta": perfil (nome de exibição e avatar), e-mail, senha e fim de
+ * vida da conta.
  *
- * >>> ARQUIVO DO AGENTE I (conta e segurança) <<<
- * Aqui está o que a tela de configurações já fazia antes de virar shell — nome
- * de exibição, avatar e sair — para nada regredir na troca. "Alterar senha",
- * "E-mail" e "2FA" são do agente I: os blocos existem, desativados, no lugar
- * exato onde a implementação dele entra. Quando ele trouxer a versão dele,
- * este arquivo é substituído inteiro; o shell não muda.
+ * Perfil e credenciais moram na mesma aba de propósito — é o que o Discord faz
+ * e o que a tela anterior já mostrava. O que muda aqui é que "alterar senha",
+ * "e-mail" e "desativar/excluir" deixaram de ser blocos desativados.
  */
 export default function ContaTab() {
-  const t = useT();
   const router = useRouter();
   const closeModal = useUI((s) => s.closeModal);
   const user = useAuth((s) => s.user);
   const setUser = useAuth((s) => s.setUser);
   const logout = useAuth((s) => s.logout);
+  const [conta, setConta] = useState<MinhaConta | null>(null);
   const [displayName, setDisplayName] = useState(user?.displayName ?? "");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const carregar = useCallback(async () => {
+    try {
+      setConta(await api.account());
+    } catch (e) {
+      ui.toast(errorMessage(e, "Não foi possível carregar sua conta"), "error");
+    }
+  }, []);
+
+  useEffect(() => {
+    void carregar();
+  }, [carregar]);
 
   const dirty = (user?.displayName ?? "") !== displayName.trim();
 
@@ -62,9 +74,15 @@ export default function ContaTab() {
     }
   }
 
+  function sair() {
+    closeModal();
+    logout();
+    router.replace("/login");
+  }
+
   return (
     <>
-      <Section title={t("aba.conta")}>
+      <Section title="Minha conta">
         {user && (
           <div className="overflow-hidden rounded-lg bg-footer">
             <div className="h-[60px] bg-accent" />
@@ -137,39 +155,312 @@ export default function ContaTab() {
         </div>
       </Section>
 
-      <Section title="Segurança da conta">
-        <div className="flex flex-col gap-2">
-          <EmBreve>
-            <span className="flex items-center gap-2">
-              <KeyRound size={16} aria-hidden="true" /> Alterar senha — em breve (agente I)
-            </span>
-          </EmBreve>
-          <EmBreve>
-            <span className="flex items-center gap-2">
-              <AtSign size={16} aria-hidden="true" /> E-mail da conta — em breve (agente I)
-            </span>
-          </EmBreve>
-          <EmBreve>
-            <span className="flex items-center gap-2">
-              <ShieldCheck size={16} aria-hidden="true" /> Verificação em duas etapas — em breve
-              (agente I)
-            </span>
-          </EmBreve>
-        </div>
-      </Section>
+      <BlocoDeEmail conta={conta} aoMudar={setConta} />
+      <BlocoDeSenha />
+      <BlocoDeEncerramento conta={conta} aoEncerrar={sair} />
 
       <button
         type="button"
-        onClick={() => {
-          closeModal();
-          logout();
-          router.replace("/login");
-        }}
+        onClick={sair}
         className="flex h-9 w-full items-center gap-2 rounded-[3px] px-3 text-sm font-medium text-red transition hover:bg-red hover:text-white"
       >
         <LogOut size={16} aria-hidden="true" />
-        {t("config.sair")}
+        Sair
       </button>
     </>
+  );
+}
+
+// ── e-mail ───────────────────────────────────────────────────
+
+function BlocoDeEmail({
+  conta,
+  aoMudar,
+}: {
+  conta: MinhaConta | null;
+  aoMudar: (conta: MinhaConta) => void;
+}) {
+  const [abrindo, setAbrindo] = useState(false);
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
+  const [erro, setErro] = useState<string | null>(null);
+  const [ocupado, setOcupado] = useState(false);
+
+  async function reenviar() {
+    setOcupado(true);
+    try {
+      await api.resendMyVerification();
+      ui.toast("Link de confirmação enviado.");
+    } catch (e) {
+      ui.toast(mensagemDeAuth(e, "conta"), "error");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function trocar(e: React.FormEvent) {
+    e.preventDefault();
+    if (ocupado) return;
+    setErro(null);
+    setOcupado(true);
+    try {
+      aoMudar(await api.changeEmail(email.trim(), senha));
+      setAbrindo(false);
+      setEmail("");
+      setSenha("");
+      ui.toast("E-mail alterado. Confirme pelo link que acabamos de enviar.");
+    } catch (err) {
+      setErro(mensagemDeAuth(err, "conta"));
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  return (
+    <Section title="E-mail">
+      <div className="flex items-center justify-between gap-4 border-b border-[#3f4147] py-3">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 truncate text-sm font-medium text-txt-primary">
+            <AtSign size={16} aria-hidden="true" />
+            {conta?.email ?? "Nenhum e-mail cadastrado"}
+          </p>
+          <p className="mt-0.5 flex items-center gap-1 text-xs">
+            {conta?.emailVerified ? (
+              <span className="flex items-center gap-1 text-green">
+                <BadgeCheck size={14} aria-hidden="true" /> Confirmado
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-yellow">
+                <TriangleAlert size={14} aria-hidden="true" /> Não confirmado
+              </span>
+            )}
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          {conta && !conta.emailVerified && conta.email && (
+            <button
+              type="button"
+              disabled={ocupado}
+              onClick={() => void reenviar()}
+              className="h-8 rounded-[3px] bg-[#4e5058] px-3 text-sm font-medium text-txt-normal hover:bg-[#6d6f78] disabled:opacity-50"
+            >
+              Reenviar
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setAbrindo((v) => !v)}
+            className="h-8 rounded-[3px] bg-[#4e5058] px-3 text-sm font-medium text-txt-normal hover:bg-[#6d6f78]"
+          >
+            {abrindo ? "Cancelar" : "Alterar"}
+          </button>
+        </div>
+      </div>
+
+      {abrindo && (
+        <form onSubmit={trocar} noValidate className="pt-3">
+          <CampoDeTexto
+            id="novo-email"
+            rotulo="Novo e-mail"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={setEmail}
+            disabled={ocupado}
+          />
+          <CampoDeTexto
+            id="senha-email"
+            rotulo="Sua senha"
+            type="password"
+            autoComplete="current-password"
+            value={senha}
+            onChange={setSenha}
+            disabled={ocupado}
+          />
+          <Erro texto={erro} />
+          <PrimaryButton type="submit" disabled={ocupado || !email.trim() || !senha}>
+            {ocupado ? "Salvando…" : "Alterar e-mail"}
+          </PrimaryButton>
+        </form>
+      )}
+    </Section>
+  );
+}
+
+// ── senha ────────────────────────────────────────────────────
+
+function BlocoDeSenha() {
+  const [abrindo, setAbrindo] = useState(false);
+  const [atual, setAtual] = useState("");
+  const [nova, setNova] = useState("");
+  const [erro, setErro] = useState<string | null>(null);
+  const [ocupado, setOcupado] = useState(false);
+
+  async function trocar(e: React.FormEvent) {
+    e.preventDefault();
+    if (ocupado) return;
+    const invalida = validarSenha(nova);
+    if (invalida) {
+      setErro(invalida);
+      return;
+    }
+    setErro(null);
+    setOcupado(true);
+    try {
+      await api.changePassword(atual, nova);
+      setAbrindo(false);
+      setAtual("");
+      setNova("");
+      ui.toast("Senha alterada. As outras sessões foram encerradas.");
+    } catch (err) {
+      setErro(mensagemDeAuth(err, "conta"));
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  return (
+    <Section title="Senha">
+      <div className="flex items-center justify-between gap-4 border-b border-[#3f4147] py-3">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 text-sm font-medium text-txt-primary">
+            <KeyRound size={16} aria-hidden="true" /> Senha da conta
+          </p>
+          <p className="mt-0.5 text-xs text-txt-muted">
+            Trocar a senha encerra as sessões dos outros aparelhos.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setAbrindo((v) => !v)}
+          className="h-8 shrink-0 rounded-[3px] bg-[#4e5058] px-3 text-sm font-medium text-txt-normal hover:bg-[#6d6f78]"
+        >
+          {abrindo ? "Cancelar" : "Alterar"}
+        </button>
+      </div>
+
+      {abrindo && (
+        <form onSubmit={trocar} noValidate className="pt-3">
+          <CampoDeTexto
+            id="senha-atual"
+            rotulo="Senha atual"
+            type="password"
+            autoComplete="current-password"
+            value={atual}
+            onChange={setAtual}
+            disabled={ocupado}
+          />
+          <CampoDeTexto
+            id="senha-nova"
+            rotulo="Nova senha"
+            type="password"
+            autoComplete="new-password"
+            value={nova}
+            onChange={setNova}
+            disabled={ocupado}
+          />
+          <Erro texto={erro} />
+          <PrimaryButton type="submit" disabled={ocupado || !atual || !nova}>
+            {ocupado ? "Salvando…" : "Alterar senha"}
+          </PrimaryButton>
+        </form>
+      )}
+    </Section>
+  );
+}
+
+// ── desativar / excluir ──────────────────────────────────────
+
+function BlocoDeEncerramento({
+  conta,
+  aoEncerrar,
+}: {
+  conta: MinhaConta | null;
+  aoEncerrar: () => void;
+}) {
+  const [acao, setAcao] = useState<"disable" | "delete" | null>(null);
+  const [senha, setSenha] = useState("");
+  const [codigo, setCodigo] = useState("");
+  const [erro, setErro] = useState<string | null>(null);
+  const [ocupado, setOcupado] = useState(false);
+
+  const excluindo = acao === "delete";
+
+  async function confirmar(e: React.FormEvent) {
+    e.preventDefault();
+    if (ocupado || !acao) return;
+    const ok = await ui.confirm({
+      title: excluindo ? "Excluir a conta?" : "Desativar a conta?",
+      message: excluindo
+        ? "A conta é anonimizada e não volta. Suas mensagens permanecem nas conversas, sem o seu nome."
+        : "Você sai de todos os aparelhos. Entrar de novo reativa a conta.",
+      confirmLabel: excluindo ? "Excluir" : "Desativar",
+      danger: true,
+    });
+    if (!ok) return;
+
+    setErro(null);
+    setOcupado(true);
+    try {
+      if (excluindo) await api.deleteAccount(senha, codigo.trim() || undefined);
+      else await api.disableAccount(senha);
+      aoEncerrar();
+    } catch (err) {
+      setErro(mensagemDeAuth(err, "conta"));
+      setOcupado(false);
+    }
+  }
+
+  return (
+    <Section title="Encerrar a conta">
+      <div className="flex flex-wrap gap-2 border-b border-[#3f4147] pb-3">
+        <button
+          type="button"
+          onClick={() => setAcao(acao === "disable" ? null : "disable")}
+          className="h-8 rounded-[3px] border border-red px-3 text-sm font-medium text-red transition hover:bg-red hover:text-white"
+        >
+          Desativar conta
+        </button>
+        <button
+          type="button"
+          onClick={() => setAcao(acao === "delete" ? null : "delete")}
+          className="h-8 rounded-[3px] bg-red px-3 text-sm font-medium text-white transition hover:bg-red-hover"
+        >
+          Excluir conta
+        </button>
+      </div>
+      <p className="pt-2 text-xs text-txt-muted">
+        Desativar é reversível: a conta volta quando você entra de novo. Excluir anonimiza o
+        usuário para sempre.
+      </p>
+
+      {acao && (
+        <form onSubmit={confirmar} noValidate className="pt-3">
+          <CampoDeTexto
+            id="senha-encerrar"
+            rotulo="Sua senha"
+            type="password"
+            autoComplete="current-password"
+            value={senha}
+            onChange={setSenha}
+            disabled={ocupado}
+          />
+          {excluindo && conta?.mfaEnabled && (
+            <CampoDeTexto
+              id="codigo-encerrar"
+              rotulo="Código da verificação em duas etapas"
+              autoComplete="one-time-code"
+              value={codigo}
+              onChange={setCodigo}
+              disabled={ocupado}
+            />
+          )}
+          <Erro texto={erro} />
+          <PrimaryButton type="submit" danger disabled={ocupado || !senha}>
+            {ocupado ? "Aguarde…" : excluindo ? "Excluir minha conta" : "Desativar minha conta"}
+          </PrimaryButton>
+        </form>
+      )}
+    </Section>
   );
 }

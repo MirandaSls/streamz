@@ -1,7 +1,12 @@
 import type {
   Attachment,
+  AuthSession,
   AuthTokens,
   Category,
+  ContaEncerrada,
+  ContaOk,
+  ContaRegistroInput,
+  EmailVerificado,
   Channel,
   ChannelOverride,
   ChannelOverrideInput,
@@ -53,6 +58,11 @@ import type {
   PollVoters,
   ReportReason,
   ReportView,
+  LoginResult,
+  MfaAtivado,
+  MfaSetup,
+  MinhaConta,
+  SessaoView,
   UserStatus,
   VoiceStateEvent,
 } from "@newdisc/shared";
@@ -63,7 +73,17 @@ import { getAccessToken, renovarTokens } from "./session";
 export { ApiError, isApiError } from "./api-error";
 
 /** Rotas que não devem disparar refresh: um 401 nelas é credencial errada. */
-const ROTAS_SEM_REFRESH = ["/auth/login", "/auth/register", "/auth/refresh", "/auth/logout"];
+const ROTAS_SEM_REFRESH = [
+  "/auth/login",
+  "/auth/register",
+  "/auth/refresh",
+  "/auth/logout",
+  "/auth/mfa",
+  "/auth/verify-email",
+  "/auth/resend-verification",
+  "/auth/forgot-password",
+  "/auth/reset-password",
+];
 
 function cabecalhoAuth(token: string | null): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -127,11 +147,47 @@ function query(params: Record<string, string | undefined>): string {
 
 export const api = {
   // ── auth ──
-  register: (username: string, password: string) =>
-    request<{ user: PublicUser; tokens: AuthTokens }>("/auth/register", json({ username, password })),
-  login: (username: string, password: string) =>
-    request<{ user: PublicUser; tokens: AuthTokens }>("/auth/login", json({ username, password })),
-  logout: (refreshToken: string) => request<{ ok: true }>("/auth/logout", json({ refreshToken })),
+  register: (input: ContaRegistroInput) => request<AuthSession>("/auth/register", json(input)),
+  /** `identificador` é e-mail **ou** usuário; pode devolver o desafio de 2FA. */
+  login: (identificador: string, password: string) =>
+    request<LoginResult>("/auth/login", json({ identificador, password })),
+  /** Segundo fator: fecha o login que parou no desafio. */
+  loginMfa: (ticket: string, code: string) =>
+    request<AuthSession>("/auth/mfa", json({ ticket, code })),
+  logout: (refreshToken: string) => request<ContaOk>("/auth/logout", json({ refreshToken })),
+
+  // ── e-mail e senha (rotas públicas) ──
+  verifyEmail: (token: string) => request<EmailVerificado>("/auth/verify-email", json({ token })),
+  resendVerification: (email: string) =>
+    request<ContaOk>("/auth/resend-verification", json({ email })),
+  forgotPassword: (email: string) => request<ContaOk>("/auth/forgot-password", json({ email })),
+  resetPassword: (token: string, password: string) =>
+    request<ContaOk>("/auth/reset-password", json({ token, password })),
+
+  // ── minha conta (/me) ──
+  account: () => request<MinhaConta>("/me/account"),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<ContaOk>("/me/password", patch({ currentPassword, newPassword })),
+  changeEmail: (email: string, password: string) =>
+    request<MinhaConta>("/me/email", patch({ email, password })),
+  resendMyVerification: () => request<ContaOk>("/me/email/resend", { method: "POST" }),
+  disableAccount: (password: string) =>
+    request<ContaEncerrada>("/me/disable", json({ password })),
+  deleteAccount: (password: string, code?: string) =>
+    request<ContaEncerrada>("/me", { method: "DELETE", body: JSON.stringify({ password, code }) }),
+
+  // ── verificação em duas etapas ──
+  mfaSetup: () => request<MfaSetup>("/me/mfa/setup", { method: "POST" }),
+  mfaEnable: (code: string) => request<MfaAtivado>("/me/mfa/enable", json({ code })),
+  mfaDisable: (password: string, code: string) =>
+    request<ContaOk>("/me/mfa/disable", json({ password, code })),
+  mfaRecoveryCodes: (password: string) =>
+    request<MfaAtivado>("/me/mfa/recovery-codes", json({ password })),
+
+  // ── sessões (dispositivos) ──
+  sessions: () => request<SessaoView[]>("/me/sessions"),
+  revokeSession: (id: string) => request<ContaOk>(`/me/sessions/${id}`, del()),
+  revokeOtherSessions: () => request<ContaOk>("/me/sessions", del()),
 
   // ── eu / usuários ──
   me: () => request<PublicUser>("/users/me"),
@@ -380,9 +436,6 @@ export const api = {
   notificationSettings: () => request<NotificationSetting[]>("/me/notifications"),
   updateNotificationSetting: (body: NotificationSettingUpdate) =>
     request<NotificationSetting>("/me/notifications", patch(body)),
-  /** Sessões ativas — contrato do agente I; 404 enquanto ele não existir. */
-  sessions: () => request<SessionInfo[]>("/me/sessions"),
-  revokeSession: (id: string) => request<void>(`/me/sessions/${id}`, { method: "DELETE" }),
 
   // ── emojis personalizados e figurinhas (g-emojis-midia) ──
   /** Emojis de todos os meus servidores, agrupados — o que o seletor mostra. */

@@ -43,6 +43,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { PollsService } from "../polls/polls.service";
 import { RealtimeService } from "../realtime/realtime.service";
+import { AccountStatusService } from "../auth/account-status.service";
 import { redisClient, redisSubscriber } from "../realtime/redis";
 import { CORS_OPTIONS } from "../../common/cors";
 import { VoiceService } from "../voice/voice.service";
@@ -95,6 +96,7 @@ export class ChatGateway
     private readonly calls: CallsService,
     // h-moderacao: enquete é escrita de mensagem, logo passa pelo gateway
     private readonly polls: PollsService,
+    private readonly contas: AccountStatusService,
   ) {}
 
   /**
@@ -135,6 +137,13 @@ export class ChatGateway
         token,
         { secret: process.env.JWT_SECRET },
       );
+      // conta desativada/excluída não conecta, mesmo com access token válido:
+      // sem isto o socket sobreviveria os 15 min de validade do token
+      const estado = await this.contas.estado(payload.sub);
+      if (!estado.existe || estado.excluida || estado.desativada) {
+        client.disconnect(true);
+        return;
+      }
       client.data.user = { id: payload.sub, username: payload.username } satisfies SocketUser;
       // sala pessoal: eventos de usuário (guild.removed) e alvo de socketsJoin/Leave
       client.join(`user:${payload.sub}`);

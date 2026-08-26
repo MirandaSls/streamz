@@ -103,6 +103,27 @@ model User {
   pollVotes       PollVote[]
   reportsMade     Report[]   @relation("ReportReporter")
   reportsResolved Report[]   @relation("ReportResolver")
+
+  // ── i-conta ── e-mail, 2FA, bloqueio por força bruta e fim de vida da conta
+  // nullable porque contas criadas antes de o e-mail existir seguem válidas
+  email           String?   @unique
+  emailVerifiedAt DateTime?
+  // data de nascimento (Discord pede no registro); só guardamos o dia
+  birthDate       DateTime?
+  // segredo TOTP em base32; só vira 2FA de fato quando mfaEnabledAt existe
+  mfaSecret       String?
+  mfaEnabledAt    DateTime?
+  // bloqueio progressivo por conta: 5 falhas seguidas trancam por 15 min
+  failedLogins    Int       @default(0)
+  lockedUntil     DateTime?
+  // conta desativada pelo dono: bloqueia o login até ele reativar entrando
+  disabledAt      DateTime?
+  // conta excluída: anonimizada, sem volta. As mensagens ficam (como no Discord)
+  deletedAt       DateTime?
+
+  emailTokens   EmailToken[]
+  recoveryCodes MfaRecoveryCode[]
+  oauthAccounts OAuthAccount[]
 }
 
 // Até onde cada usuário leu cada canal. É o que decide "não lido" e o badge
@@ -135,6 +156,11 @@ model RefreshToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  // ── i-conta ── um refresh token vivo *é* uma sessão na tela "Dispositivos";
+  // sem estes campos ela não teria o que mostrar além da data.
+  userAgent  String?
+  ip         String?
+  lastUsedAt DateTime?
 }
 
 model Guild {
@@ -818,4 +844,62 @@ model Report {
   // uma pessoa não denuncia a mesma mensagem duas vezes
   @@unique([messageId, reporterId])
   @@index([guildId, resolved, createdAt])
+}
+
+// ── i-conta ──────────────────────────────────────────────────
+// Verificação de e-mail, redefinição de senha, 2FA e contas sociais.
+
+// VERIFY: confirma o e-mail (24 h). RESET: redefine a senha (1 h).
+enum EmailTokenType {
+  VERIFY
+  RESET
+}
+
+// Token de uso único enviado por e-mail. Guardamos só o hash: quem lê o banco
+// não consegue verificar o e-mail nem trocar a senha de ninguém.
+model EmailToken {
+  id        String         @id @default(cuid())
+  userId    String
+  type      EmailTokenType
+  tokenHash String         @unique
+  // e-mail alvo no momento da emissão — o do usuário pode mudar antes do clique
+  email     String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([expiresAt])
+}
+
+// Código de recuperação do 2FA: 10 por ativação, hash no banco, uso único.
+model MfaRecoveryCode {
+  id        String    @id @default(cuid())
+  userId    String
+  codeHash  String    @unique
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Conta social vinculada (Google/GitHub/Discord). O vínculo é por e-mail
+// verificado: sem isso, quem controlasse um e-mail alheio no provedor entraria
+// na conta de outro. `provider` é texto por ser um conjunto aberto de fato.
+model OAuthAccount {
+  id                String   @id @default(cuid())
+  userId            String
+  provider          String
+  providerAccountId String
+  email             String?
+  createdAt         DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
 }

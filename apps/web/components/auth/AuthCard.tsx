@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { forcaDeSenha } from "@newdisc/shared";
 
 /**
  * Moldura das telas de login/registro no estilo do Discord: fundo blurple,
@@ -13,7 +14,8 @@ export default function AuthCard({
 }: {
   title: string;
   subtitle?: string;
-  children: ReactNode;
+  /** opcional: telas de resultado ("e-mail confirmado") são só título e texto. */
+  children?: ReactNode;
 }) {
   return (
     <main className="grid min-h-screen place-items-center bg-accent bg-[radial-gradient(ellipse_at_top_left,rgba(255,255,255,0.18),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(0,0,0,0.25),transparent_60%)] p-4">
@@ -63,3 +65,36 @@ export const inputClass =
 
 export const submitClass =
   "h-11 w-full rounded-[3px] bg-accent font-medium text-white transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60";
+
+/**
+ * Medidor de força da senha.
+ *
+ * A pontuação vem de `forcaDeSenha` no contrato — a mesma função que a API usa
+ * para recusar. Assim a barra nunca fica verde numa senha que o servidor nega.
+ */
+export function MedidorDeSenha({ senha }: { senha: string }) {
+  if (!senha) return null;
+  const { pontuacao, rotulo, dica } = forcaDeSenha(senha);
+  const cor =
+    pontuacao === 0 ? "bg-red"
+    : pontuacao === 1 ? "bg-red"
+    : pontuacao === 2 ? "bg-yellow"
+    : pontuacao === 3 ? "bg-green"
+    : "bg-green";
+  return (
+    <div className="mb-5 -mt-3">
+      <div className="flex gap-1" aria-hidden="true">
+        {[1, 2, 3, 4].map((nivel) => (
+          <span
+            key={nivel}
+            className={`h-1 flex-1 rounded-full ${nivel <= pontuacao ? cor : "bg-rail"}`}
+          />
+        ))}
+      </div>
+      <p className="mt-1 text-xs text-txt-muted">
+        <span className="font-medium text-txt-secondary">{rotulo}</span>
+        {dica ? ` — ${dica}` : ""}
+      </p>
+    </div>
+  );
+}

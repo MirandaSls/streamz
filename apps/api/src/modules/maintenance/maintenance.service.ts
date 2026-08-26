@@ -11,6 +11,11 @@ const RETENCAO_REFRESH_TOKEN_DIAS = 30;
  * correríamos o risco de apagar um anexo de rascunho ainda em uso.
  */
 const RETENCAO_ANEXO_ORFAO_HORAS = 24;
+/**
+ * Token de e-mail usado/expirado não autentica mais nada. 7 dias é folga para
+ * investigar "cliquei no link e não funcionou" antes de a linha sumir.
+ */
+const RETENCAO_TOKEN_EMAIL_DIAS = 7;
 /** Apagar em lotes evita segurar uma transação longa sobre a tabela inteira. */
 const TAMANHO_DO_LOTE = 200;
 
@@ -34,12 +39,13 @@ export class MaintenanceService {
   async faxinaDiaria(): Promise<void> {
     const agora = new Date();
     const tokens = await this.limparRefreshTokens(agora);
+    const emails = await this.limparTokensDeEmail(agora);
     const anexos = await this.limparAnexosOrfaos(agora);
     const status = await this.limparStatusPersonalizados(agora);
-    if (tokens || anexos || status) {
+    if (tokens || emails || anexos || status) {
       this.logger.log(
-        `Faxina: ${tokens} refresh token(s), ${anexos} anexo(s) órfão(s) e ` +
-          `${status} status personalizado(s) vencido(s) removidos`,
+        `Faxina: ${tokens} refresh token(s), ${emails} token(s) de e-mail, ` +
+          `${anexos} anexo(s) órfão(s) e ${status} status personalizado(s) vencido(s) removidos`,
       );
     }
   }
@@ -65,6 +71,19 @@ export class MaintenanceService {
     const corte = subtrairDias(agora, RETENCAO_REFRESH_TOKEN_DIAS);
     const { count } = await this.prisma.refreshToken.deleteMany({
       where: { OR: [{ revokedAt: { lt: corte } }, { expiresAt: { lt: corte } }] },
+    });
+    return count;
+  }
+
+  /**
+   * Remove tokens de verificação/redefinição já usados ou vencidos há tempo
+   * suficiente. Sem isto a tabela só cresce: cada "reenviar e-mail" deixa uma
+   * linha para trás.
+   */
+  async limparTokensDeEmail(agora: Date): Promise<number> {
+    const corte = subtrairDias(agora, RETENCAO_TOKEN_EMAIL_DIAS);
+    const { count } = await this.prisma.emailToken.deleteMany({
+      where: { OR: [{ usedAt: { lt: corte } }, { expiresAt: { lt: corte } }] },
     });
     return count;
   }
