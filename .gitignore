@@ -47,3 +47,6 @@ apps/web/next-env.d.ts
 
 # Postgres embutido (pnpm db:embedded)
 .pgdata/
+
+# screenshots dos passeios ponta a ponta (scripts/e2e-*.mjs)
+e2e-shots*/
