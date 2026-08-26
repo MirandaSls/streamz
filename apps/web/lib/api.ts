@@ -1,9 +1,11 @@
 import type {
   Attachment,
   AuthTokens,
+  Category,
   Channel,
   ChannelOverride,
   ChannelOverrideInput,
+  GuildReadResult,
   DMChannelView,
   DMLeaveResult,
   Guild,
@@ -15,6 +17,7 @@ import type {
   CallStartResponse,
   LinkEmbed,
   MemberPermissions,
+  ReorderPayload,
   MemberRole,
   Message,
   PublicUser,
@@ -187,10 +190,32 @@ export const api = {
     guildId: string,
     name: string,
     type: GuildChannelType,
-    opts?: { isPrivate?: boolean; readOnly?: boolean; memberIds?: string[] },
+    opts?: {
+      isPrivate?: boolean;
+      readOnly?: boolean;
+      memberIds?: string[];
+      categoryId?: string | null;
+    },
   ) => request<Channel>(`/guilds/${guildId}/channels`, json({ name, type, ...opts })),
-  updateChannel: (guildId: string, channelId: string, body: { name?: string; readOnly?: boolean }) =>
-    request<Channel>(`/guilds/${guildId}/channels/${channelId}`, patch(body)),
+  updateChannel: (
+    guildId: string,
+    channelId: string,
+    body: {
+      name?: string;
+      readOnly?: boolean;
+      topic?: string | null;
+      slowmodeSeconds?: number;
+      nsfw?: boolean;
+      isPrivate?: boolean;
+      categoryId?: string | null;
+    },
+  ) => request<Channel>(`/guilds/${guildId}/channels/${channelId}`, patch(body)),
+  /** Reordenação em lote de canais e categorias (arrastar-e-soltar). */
+  reorderChannels: (guildId: string, body: ReorderPayload) =>
+    request<{ channels: Channel[]; categories: Category[] }>(
+      `/guilds/${guildId}/channels/positions`,
+      patch(body),
+    ),
   deleteChannel: (guildId: string, channelId: string) =>
     request<{ deleted: string }>(`/guilds/${guildId}/channels/${channelId}`, { method: "DELETE" }),
   channelMembers: (guildId: string, channelId: string) =>
@@ -201,6 +226,20 @@ export const api = {
     request<{ removed: string }>(`/guilds/${guildId}/channels/${channelId}/members/${userId}`, {
       method: "DELETE",
     }),
+
+  // ── categorias de canais (b-canais) ──
+  listCategories: (guildId: string) => request<Category[]>(`/guilds/${guildId}/categories`),
+  createCategory: (guildId: string, name: string) =>
+    request<Category>(`/guilds/${guildId}/categories`, json({ name })),
+  renameCategory: (guildId: string, categoryId: string, name: string) =>
+    request<Category>(`/guilds/${guildId}/categories/${categoryId}`, patch({ name })),
+  deleteCategory: (guildId: string, categoryId: string) =>
+    request<{ deleted: string; released: number }>(`/guilds/${guildId}/categories/${categoryId}`, {
+      method: "DELETE",
+    }),
+  /** Marca todos os canais visíveis do servidor como lidos. */
+  markGuildRead: (guildId: string) =>
+    request<GuildReadResult>(`/guilds/${guildId}/read`, { method: "POST" }),
 
   // ── conversas diretas (canais sem servidor — ADR-0001) ──
   openDM: (userId: string) => request<DMChannelView>(`/dms`, json({ userId })),

@@ -12,14 +12,23 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   Length,
+  Max,
+  Min,
+  ValidateNested,
 } from "class-validator";
+import { Type } from "class-transformer";
 import { ChannelsService } from "./channels.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";
-import { GUILD_CHANNEL_TYPES } from "@newdisc/shared";
+import {
+  GUILD_CHANNEL_TYPES,
+  MAX_CHANNEL_TOPIC,
+  MAX_SLOWMODE_SECONDS,
+} from "@newdisc/shared";
 import type { GuildChannelType } from "@newdisc/shared";
 
 class CreateChannelDto {
@@ -42,6 +51,10 @@ class CreateChannelDto {
   @IsArray()
   @IsString({ each: true })
   memberIds?: string[];
+
+  @IsOptional()
+  @IsString()
+  categoryId?: string | null;
 }
 
 class UpdateChannelDto {
@@ -53,6 +66,68 @@ class UpdateChannelDto {
   @IsOptional()
   @IsBoolean()
   readOnly?: boolean;
+
+  // string vazia limpa o tópico (o service normaliza para null)
+  @IsOptional()
+  @IsString()
+  @Length(0, MAX_CHANNEL_TOPIC)
+  topic?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(MAX_SLOWMODE_SECONDS)
+  slowmodeSeconds?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  nsfw?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isPrivate?: boolean;
+
+  @IsOptional()
+  @IsString()
+  categoryId?: string | null;
+}
+
+/** Uma linha da reordenação em lote: canal, posição e categoria de destino. */
+class ChannelPositionDto {
+  @IsString()
+  id!: string;
+
+  @IsInt()
+  @Min(0)
+  position!: number;
+
+  // null = tirar da categoria (o canal sobe para o topo da lista)
+  @IsOptional()
+  @IsString()
+  categoryId?: string | null;
+}
+
+class CategoryPositionDto {
+  @IsString()
+  id!: string;
+
+  @IsInt()
+  @Min(0)
+  position!: number;
+}
+
+class ReorderDto {
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ChannelPositionDto)
+  channels?: ChannelPositionDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CategoryPositionDto)
+  categories?: CategoryPositionDto[];
 }
 
 class ChannelMemberDto {
@@ -75,12 +150,34 @@ export class ChannelsController {
       isPrivate: dto.isPrivate,
       readOnly: dto.readOnly,
       memberIds: dto.memberIds,
+      categoryId: dto.categoryId,
     });
   }
 
   @Get()
   list(@CurrentUser() user: JwtPayload, @Param("guildId") guildId: string) {
     return this.channels.listForGuild(user.sub, guildId);
+  }
+
+  /**
+   * Reordenação em lote (arrastar-e-soltar). Declarada **antes** de
+   * `PATCH :channelId` porque o Nest casa as rotas na ordem de declaração —
+   * invertidas, "positions" seria lido como um id de canal.
+   */
+  @Patch("positions")
+  reorder(
+    @CurrentUser() user: JwtPayload,
+    @Param("guildId") guildId: string,
+    @Body() dto: ReorderDto,
+  ) {
+    return this.channels.reorder(user.sub, guildId, {
+      channels: dto.channels?.map((c) => ({
+        id: c.id,
+        position: c.position,
+        categoryId: c.categoryId ?? null,
+      })),
+      categories: dto.categories,
+    });
   }
 
   @Patch(":channelId")

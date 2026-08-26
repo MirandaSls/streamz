@@ -19,7 +19,7 @@ export interface Toast {
 }
 
 export type Modal =
-  | { kind: "createChannel" }
+  | { kind: "createChannel"; categoryId?: string | null }
   | { kind: "channelAccess"; channelId: string }
   | { kind: "invite"; code: string }
   | { kind: "createGroupDM" }
@@ -47,7 +47,10 @@ export type Modal =
   /** chamada recebida numa conversa direta; os dados vêm de `stores/voice`. */
   | { kind: "incomingCall" }
   // ── c-cargos ──
-  | { kind: "serverSettings"; guildId: string };
+  | { kind: "serverSettings"; guildId: string }
+  // ── b-canais ──
+  | { kind: "channelSettings"; channelId: string; tab?: "geral" | "permissoes" }
+  | { kind: "channelTopic"; channelId: string };
 
 /** Um item de menu de contexto; `separator` desenha a linha entre grupos. */
 export type MenuItem =

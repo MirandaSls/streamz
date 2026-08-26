@@ -1,4 +1,5 @@
 import type {
+  Category as CategoryDTO,
   Channel,
   ChannelOverride,
   ChannelType,
@@ -77,6 +78,11 @@ export function toChannelDTO(
     position: number;
     private: boolean;
     readOnly: boolean;
+    // ── b-canais ──
+    categoryId: string | null;
+    topic: string | null;
+    slowmodeSeconds: number;
+    nsfw: boolean;
   },
   summary: ChannelReadSummary = EMPTY_SUMMARY,
 ): Channel {
@@ -91,6 +97,10 @@ export function toChannelDTO(
     lastMessageAt: summary.lastMessageAt ? summary.lastMessageAt.toISOString() : null,
     lastReadAt: summary.lastReadAt ? summary.lastReadAt.toISOString() : null,
     mentionCount: summary.mentionCount,
+    categoryId: c.categoryId,
+    topic: c.topic,
+    slowmodeSeconds: c.slowmodeSeconds,
+    nsfw: c.nsfw,
   };
 }
 
@@ -136,4 +146,15 @@ export function toOverrideDTO(o: {
     allow: o.allow,
     deny: o.deny,
   };
+}
+
+// ── b-canais ──
+/** Linha de Category como o contrato compartilhado a expõe. */
+export function toCategoryDTO(c: {
+  id: string;
+  guildId: string;
+  name: string;
+  position: number;
+}): CategoryDTO {
+  return { id: c.id, guildId: c.guildId, name: c.name, position: c.position };
 }

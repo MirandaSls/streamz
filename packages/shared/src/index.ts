@@ -26,13 +26,14 @@ export interface AuthTokens {
 // ── Domínio ──────────────────────────────────────────────────
 export type UserStatus = "ONLINE" | "IDLE" | "DND" | "OFFLINE";
 /**
- * Tipo do canal. TEXT/VOICE vivem num servidor; DM/GROUP são conversas sem
- * servidor (`guildId` null) cujo acesso é ser participante — ver ADR-0001.
+ * Tipo do canal. TEXT/VOICE/ANNOUNCEMENT vivem num servidor; DM/GROUP são
+ * conversas sem servidor (`guildId` null) cujo acesso é ser participante — ver
+ * ADR-0001. ANNOUNCEMENT é um canal de texto em que só a moderação posta.
  */
-export type ChannelType = "TEXT" | "VOICE" | "DM" | "GROUP";
+export type ChannelType = "TEXT" | "VOICE" | "DM" | "GROUP" | "ANNOUNCEMENT";
 /** Só os tipos que um usuário cria dentro de um servidor. */
-export type GuildChannelType = Extract<ChannelType, "TEXT" | "VOICE">;
-export const GUILD_CHANNEL_TYPES: readonly GuildChannelType[] = ["TEXT", "VOICE"];
+export type GuildChannelType = Extract<ChannelType, "TEXT" | "VOICE" | "ANNOUNCEMENT">;
+export const GUILD_CHANNEL_TYPES: readonly GuildChannelType[] = ["TEXT", "VOICE", "ANNOUNCEMENT"];
 export type MemberRole = "OWNER" | "ADMIN" | "MEMBER";
 
 export interface PublicUser {
@@ -91,6 +92,14 @@ export interface Channel {
   lastReadAt: string | null;
   /** menções a mim depois de lastReadAt. Por espectador. */
   mentionCount: number;
+  /** categoria a que o canal pertence (null = sem categoria, fica no topo). */
+  categoryId: string | null;
+  /** descrição curta mostrada no cabeçalho (null = sem tópico). */
+  topic: string | null;
+  /** intervalo mínimo entre mensagens do mesmo autor; 0 = desligado. */
+  slowmodeSeconds: number;
+  /** conteúdo sensível: pede confirmação antes de abrir. */
+  nsfw: boolean;
 }
 
 /** Não lido = existe mensagem depois do que eu li (ou nunca li e há mensagem). */
@@ -281,6 +290,10 @@ export const WS_EVENTS = {
   CHANNEL_OVERRIDES: "channel.overrides",
   GUILD_UPDATED: "guild.updated",
   GUILD_OWNER_CHANGED: "guild.ownerChanged",
+  // ── b-canais ──
+  CATEGORY_CREATED: "category.created",
+  CATEGORY_UPDATED: "category.updated",
+  CATEGORY_DELETED: "category.deleted",
 } as const;
 
 /** Teto de caracteres de uma mensagem (canal ou DM). */
@@ -436,6 +449,98 @@ export interface VoiceTokenResponse {
  * chamada em conversa direta (`guildId` null) — a "sala" é sempre um canal, na
  * mesma linha da ADR-0001. `connected: false` é a saída: o cliente remove o
  * participante em vez de manter um estado zumbi.
+// ── b-canais ─────────────────────────────────────────────────
+
+/**
+ * Categoria de canais dentro de um servidor. É só agrupamento visual da barra
+ * lateral: não autoriza nada e não muda a rota de nenhum canal. Um canal sem
+ * categoria (`categoryId` null) fica no topo da lista, como no Discord.
+ */
+export interface Category {
+  id: string;
+  guildId: string;
+  name: string;
+  position: number;
+}
+
+export const MAX_CATEGORY_NAME = 64;
+/** Teto do tópico do canal (o mesmo do Discord). */
+export const MAX_CHANNEL_TOPIC = 1024;
+/** Teto do modo lento: 6 horas, como no Discord. */
+export const MAX_SLOWMODE_SECONDS = 21600;
+
+/** Presets de modo lento oferecidos na UI (segundos). */
+export const SLOWMODE_PRESETS: readonly number[] = [
+  0, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 21600,
+];
+
+/** Rótulo humano de uma duração de modo lento ("5s", "2min", "6h"). */
+export function slowmodeLabel(seconds: number): string {
+  if (seconds <= 0) return "Desligado";
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}min`;
+  return `${Math.round(seconds / 3600)}h`;
+}
+
+/**
+ * Segundos que ainda faltam para o autor poder mandar outra mensagem.
+ *
+ * Fica no contrato porque os dois lados precisam do *mesmo* cálculo: a API
+ * recusa o envio (429) e o cliente mostra a contagem regressiva. Arredonda para
+ * cima para nunca prometer um envio que o servidor ainda recusaria.
+ */
+export function slowmodeRemaining(
+  slowmodeSeconds: number,
+  lastMessageAt: Date | string | null,
+  now: Date = new Date(),
+): number {
+  if (slowmodeSeconds <= 0 || !lastMessageAt) return 0;
+  const last = typeof lastMessageAt === "string" ? new Date(lastMessageAt) : lastMessageAt;
+  const decorrido = (now.getTime() - last.getTime()) / 1000;
+  if (!Number.isFinite(decorrido)) return 0;
+  return Math.max(0, Math.ceil(slowmodeSeconds - decorrido));
+}
+
+/** Canal onde se lê e escreve texto — inclui o canal de anúncios. */
+export function isTextChannel(c: Pick<Channel, "type">): boolean {
+  return c.type === "TEXT" || c.type === "ANNOUNCEMENT";
+}
+
+/** Um canal na nova ordem: posição dentro da categoria (null = sem categoria). */
+export interface ChannelPosition {
+  id: string;
+  position: number;
+  categoryId: string | null;
+}
+
+/** Uma categoria na nova ordem. */
+export interface CategoryPosition {
+  id: string;
+  position: number;
+}
+
+/** Corpo de `PATCH /guilds/:id/channels/positions` (reordenar em lote). */
+export interface ReorderPayload {
+  channels?: ChannelPosition[];
+  categories?: CategoryPosition[];
+}
+
+/** Categoria apagada — os canais dela ficam sem categoria. */
+export interface CategoryDeletedEvent {
+  categoryId: string;
+  guildId: string;
+}
+
+/** Resultado de "marcar servidor como lido" (`POST /guilds/:id/read`). */
+export interface GuildReadResult {
+  guildId: string;
+  channelIds: string[];
+  lastReadAt: string;
+}
+
+/**
+ * Quem está num canal de voz, ao vivo (emitido pelo gateway do agente F na
+ * sala `guild:<id>`; a barra lateral consome para listar sob o canal).
  */
 export interface VoiceStateEvent {
   channelId: string;

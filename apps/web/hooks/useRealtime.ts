@@ -24,10 +24,13 @@ import {
   type VoiceStateEvent,
   type Role,
   type RoleDeletedEvent,
+  type Category,
+  type CategoryDeletedEvent,
 } from "@newdisc/shared";
 import { notify } from "@/lib/desktop";
 import { useAuth } from "@/stores/auth";
 import { on, onReconnect, rejoinChannel } from "@/stores/socket-adapter";
+import { useCategories } from "@/stores/categories";
 import { useChannels } from "@/stores/channels";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useGuilds } from "@/stores/guilds";
@@ -167,7 +170,16 @@ export function useRealtime(currentUserId?: string): void {
           }
         },
       ),
-
+      // ── b-canais: categorias e estados de voz ──
+      on<Category>(WS_EVENTS.CATEGORY_CREATED, (category) => {
+        useCategories.getState().handleCreated(category);
+      }),
+      on<Category>(WS_EVENTS.CATEGORY_UPDATED, (category) => {
+        useCategories.getState().handleUpdated(category);
+      }),
+      on<CategoryDeletedEvent>(WS_EVENTS.CATEGORY_DELETED, ({ categoryId }) => {
+        useCategories.getState().handleDeleted(categoryId);
+      }),
       onReconnect(() => {
         rejoinChannel();
         void useMessages.getState().resyncActive();
@@ -175,6 +187,12 @@ export function useRealtime(currentUserId?: string): void {
         void useDMs.getState().refreshList();
         const guildId = useGuilds.getState().activeGuildId;
         if (guildId) void usePermissions.getState().load(guildId);
+        // quem estava na voz pode ter entrado/saído durante a queda: zerar e
+        // recarregar evita listar gente que já não está lá
+        useVoice.setState({ states: {} });
+        if (guildId) void useVoice.getState().loadGuild(guildId);
+        const guildDeCategorias = useCategories.getState().guildId;
+        if (guildDeCategorias) void useCategories.getState().loadForGuild(guildDeCategorias);
       }),
       // ── f-voz ──
       // estado de voz e chamada em DM: a store decide o que fazer, aqui só

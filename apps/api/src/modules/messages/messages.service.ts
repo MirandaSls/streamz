@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
+import { ChannelsService } from "../channels/channels.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { StorageService } from "../storage/storage.service";
 import type { Attachment, Message as MessageDTO, ReactionGroup } from "@newdisc/shared";
@@ -25,6 +26,7 @@ export class MessagesService {
     private readonly prisma: PrismaService,
     private readonly guilds: GuildsService,
     private readonly storage: StorageService,
+    private readonly channels: ChannelsService,
   ) {}
 
   async create(
@@ -35,7 +37,12 @@ export class MessagesService {
     attachmentIds?: string[],
   ): Promise<MessageDTO> {
     // valida canal + associação + permissão de postar (privado/somente-leitura)
-    await this.guilds.assertCanPostChannel(authorId, channelId);
+    const access = await this.guilds.assertCanPostChannel(authorId, channelId);
+    // modo lento (b-canais): regra do canal, aplicada só em canal de servidor —
+    // em conversa direta não há moderação nem intervalo mínimo
+    if (access.tipo === "guild") {
+      await this.channels.assertSlowmode(channelId, authorId, access.member.role);
+    }
 
     if (parentId) {
       // resposta: o pai precisa existir, ser do mesmo canal e ser uma raiz

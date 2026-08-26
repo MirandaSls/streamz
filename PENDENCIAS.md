@@ -175,3 +175,29 @@ subir o banco); chat de texto (editar/apagar/reagir), threads, DMs 1-a-1 e em gr
 leitura implementados (features novas com typecheck ok, faltando validação ponta
 a ponta com o servidor rodando). Falta provisionar o Postgres, credenciais do
 LiveKit e o Rust para o build desktop._
+
+<!-- b-canais -->
+### Canais: categorias, tópico, modo lento (rodada 2)
+- [x] **Categorias** — modelo `Category`, CRUD em `/guilds/:id/categories`,
+      eventos `category.created/updated/deleted`, colapso por usuário no
+      `localStorage`. Sem nenhuma categoria a barra lateral ainda agrupa por
+      tipo, como o template padrão do Discord.
+- [x] **Reordenar** — arrastar-e-soltar (DnD nativo do HTML5) de canais entre e
+      dentro de categorias e de categorias entre si; `PATCH
+      /guilds/:id/channels/positions` grava o lote e emite `channel.updated`.
+- [x] **Configurações do canal** — modal com abas (visão geral, permissões,
+      apagar): nome, tópico (`Channel.topic`), modo lento
+      (`Channel.slowmodeSeconds`), NSFW (`Channel.nsfw`), somente-leitura,
+      privacidade e allowlist.
+- [x] **Modo lento** — aplicado no envio (`429` com os segundos restantes;
+      moderação isenta) e contagem regressiva no cliente pelo `useSlowmode`.
+- [x] **Canal de anúncios** — `ChannelType.ANNOUNCEMENT` (somente-leitura com
+      ícone de megafone). `readOnly` continua valendo para os canais antigos.
+- [ ] **"Seguir" canal de anúncios** em outro servidor — item do menu existe
+      desabilitado ("em breve"); não há modelo de canal seguido.
+- [ ] **Estados de voz na barra lateral** — a lista sob o canal de voz consome
+      `voice.state` (`stores/voiceStates.ts`); fica vazia até o gateway de voz
+      passar a emitir o evento.
+- [ ] **Visibilidade por permissão de cargo** — a filtragem ainda é
+      `private` + allowlist; quando existir `Permission.VIEW_CHANNEL`, ela muda
+      num ponto só (`GuildsService.filterVisible`), sem tocar na barra lateral.
