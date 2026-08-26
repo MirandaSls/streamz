@@ -4,10 +4,12 @@ import { Users } from "lucide-react";
 import type { UserStatus } from "@streamz/shared";
 
 /**
- * Cores dos avatares padrão do Discord: quem não tem imagem ganha uma das cinco
- * cores da marca, escolhida de forma estável a partir do id.
+ * Avatar sem imagem ganha uma destas cinco, escolhida de forma estável pelo id.
+ * Nenhuma é verde-limão de propósito: o avatar não pode competir com o accent
+ * da marca nem ser confundido com a bolinha de status (ADR-0004). As cinco têm
+ * luminância parecida, para as iniciais em Paper lerem igual em todas.
  */
-const PALETTE = ["#5865f2", "#57f287", "#fee75c", "#eb459e", "#ed4245"];
+const PALETTE = ["#4c7ef3", "#0e9f8a", "#c2701c", "#d24a7b", "#7c5cf0"];
 
 export const STATUS_COLOR: Record<UserStatus, string> = {
   ONLINE: "bg-green",

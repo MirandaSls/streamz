@@ -40,6 +40,7 @@ export default {
         "accent-press": "#86C91A",
         "accent-ink": "#0B0B0F", // texto e ícone SOBRE o accent
         paper: "#FDFDFB", // Paper: cor de marca, nunca superfície (ADR-0004)
+        mention: "#D9F5A8", // texto de @menção sobre o véu de accent
         green: "#1FB86B", // afastado do limão em matiz
         yellow: "#FF9F1C", // âmbar, longe do limão
         red: "#FF4D4F",

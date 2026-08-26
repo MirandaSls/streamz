@@ -101,7 +101,7 @@ export function renderInline(nodes: Inline[], opts: RenderOptions = {}): ReactNo
             key={i}
             style={role?.color ? { color: role.color } : undefined}
             className={`rounded-[3px] px-0.5 font-medium ${
-              meu ? "bg-yellow/30 text-txt-primary" : "bg-accent/30 text-[#c9cdfb]"
+              meu ? "bg-yellow/30 text-txt-primary" : "bg-accent/25 text-mention"
             }`}
           >
             @{role?.name ?? "cargo"}
@@ -115,7 +115,7 @@ export function renderInline(nodes: Inline[], opts: RenderOptions = {}): ReactNo
           <span
             key={i}
             className={`rounded-[3px] px-0.5 font-medium ${
-              me ? "bg-yellow/30 text-txt-primary" : "bg-accent/30 text-[#c9cdfb] hover:bg-accent hover:text-accent-ink"
+              me ? "bg-yellow/30 text-txt-primary" : "bg-accent/25 text-mention hover:bg-accent hover:text-accent-ink"
             }`}
           >
             @{nome}
