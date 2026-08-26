@@ -33,23 +33,87 @@ modera sua comunidade.
 
 ## Contas e sessão
 
-- **Registro:** `username` 3–32 chars, alfabeto `a-zA-Z0-9_.-`; `password` 6–128
-  chars (sem regra de complexidade). Senha guardada com **argon2**. Username
-  duplicado → `409`. O usuário nasce **ONLINE**.
-- **Login:** credenciais inválidas devolvem sempre a mesma mensagem genérica (não
-  revela se o usuário existe).
-- **Sessão (dois tokens):** access token curto (`15m`) + refresh token longo
-  (`7d`). Do refresh guarda-se apenas o **hash do jti**, nunca o token.
-- **Rotação de refresh:** cada `/auth/refresh` **revoga** o token apresentado e
-  emite um par novo, atomicamente. Um refresh só vale se registrado, não revogado
-  e não expirado → **reuso de token vazado morre no primeiro uso**. Falha na
-  emissão faz rollback do revoke.
-- **Logout:** revoga o refresh. Logout com token já inválido responde sucesso
-  mesmo assim (idempotente).
-- **Limite de tentativas:** login, refresh e registro têm teto por IP (o registro
-  é o mais apertado, por hora), assim como upload e convites. Estourar responde
-  `429`. É contenção de abuso, não cota de uso.
-- **[corte MVP]** Não há editar perfil, avatar ou definir status manualmente.
+### Registro e login
+- **Registro:** `email` (único), `username` 3–32 chars no alfabeto `a-zA-Z0-9_.-`,
+  `password` 8–128 chars e `birthDate` opcional (`YYYY-MM-DD`). A senha passa por um
+  **medidor** que é o mesmo dos dois lados (`forcaDeSenha` no contrato): pontuação 0
+  — curta demais, palavra óbvia ou poucos caracteres distintos — é recusada pela API
+  e pela tela. Senha guardada com **argon2**. E-mail ou username duplicado → `409`
+  (a mensagem diz qual dos dois). O usuário nasce **ONLINE**.
+- **Idade mínima:** 13 anos quando a data é informada, como no Discord.
+- **Login:** um campo só, que aceita **e-mail ou usuário**. Toda recusa devolve a
+  mesma mensagem genérica — não revela se a conta existe, se está trancada ou se
+  está desativada.
+- **Bloqueio por força bruta:** 5 senhas erradas seguidas trancam a **conta** por
+  15 minutos (o teto do throttler é por IP e não cobre ataque distribuído). O
+  bloqueio não é anunciado; acertar a senha zera o contador.
+
+### Verificação de e-mail e recuperação de senha
+- **Verificação:** o registro dispara um link que vale 24 h (`POST
+  /auth/verify-email`). Pedir outro (`/auth/resend-verification`, ou `POST
+  /me/email/resend` já autenticado) **invalida o anterior** — só o último link vale.
+  A conta funciona sem confirmar; a confirmação é o que marca `emailVerified`.
+- **Esqueci a senha:** `POST /auth/forgot-password` responde **sempre 200**, exista
+  ou não a conta. `POST /auth/reset-password` troca a senha, destranca a conta e
+  **revoga todas as sessões** — quem pede a redefinição costuma ter perdido o
+  controle de alguma delas. Token de uso único, 1 h de validade.
+- **Sem SMTP:** o provedor `console` imprime assunto e link no log da API, e o fluxo
+  inteiro roda em dev sem servidor de e-mail. Em produção, a falta de `SMTP_URL` faz
+  as rotas que dependem de envio responderem `503` (mesmo padrão de R2/LiveKit).
+
+### Verificação em duas etapas (TOTP)
+- **Ativar** tem dois passos: `POST /me/mfa/setup` devolve segredo, `otpauth://` e o
+  QR já em data-URL; `POST /me/mfa/enable` confirma um código do app e só então liga
+  o 2FA. Sem o segundo passo ninguém tranca a própria conta com um segredo que
+  nunca escaneou.
+- **Códigos de recuperação:** 10 por ativação, mostrados **uma única vez** (o banco
+  guarda só o SHA-256). Alfabeto sem `0/O`, `1/I/L` e `S/5`, porque são lidos de um
+  papel. Uso único; `POST /me/mfa/recovery-codes` gera um conjunto novo e invalida o
+  antigo.
+- **Login com 2FA:** o primeiro fator devolve um **desafio** (`{ mfaRequired: true,
+  ticket }`), não uma sessão. `POST /auth/mfa` fecha o login com o código do app ou
+  um código de recuperação. O ticket dura 5 min e é assinado com um segredo derivado
+  do `JWT_SECRET` — assinado com o mesmo, passaria pelo guard como access token.
+- **Desativar** exige senha **e** código: ter a aba aberta não basta.
+
+### Sessão e dispositivos
+- **Dois tokens:** access token curto (`15m`) + refresh token longo (`7d`). Do
+  refresh guarda-se apenas o **hash do jti**, nunca o token.
+- **Rotação na mesma linha:** cada `/auth/refresh` troca o hash antigo pelo novo num
+  único update guardado por "não revogado e não expirado". Um refresh vazado morre
+  no primeiro uso e dois refreshes simultâneos só deixam um passar. Reaproveitar a
+  linha dá à sessão uma **identidade estável** — o access token carrega a claim `sid`
+  com o id dela, e é assim que a lista de dispositivos sabe qual é a atual.
+- **Dispositivos:** `GET /me/sessions` lista as sessões vivas com navegador/sistema
+  (lido do `User-Agent`), IP, quando começou e quando renovou pela última vez.
+  `DELETE /me/sessions/:id` encerra uma; `DELETE /me/sessions` encerra todas menos a
+  atual. Quem é encerrado recebe `sessions.revoked` na sala do usuário.
+- **Trocar a senha** (`PATCH /me/password`) derruba as **outras** sessões e mantém a
+  que fez a troca. **Logout** revoga o refresh (idempotente).
+
+### Desativar e excluir
+- **Desativar** (`POST /me/disable`) é reversível: a conta sai de todos os aparelhos
+  e **volta quando o dono entra de novo**. Nada é apagado.
+- **Excluir** (`DELETE /me`) é definitivo e anonimiza: username vira
+  `usuario_excluido_…`, o nome vira "Usuário excluído", e e-mail, nascimento, avatar,
+  2FA, tokens e participações em servidores/conversas somem. **As mensagens ficam**,
+  como no Discord — apagá-las abriria buracos em conversas de terceiros. Pede senha
+  e, com 2FA ligado, o código.
+- **Servidor sem dono:** ao excluir a conta, cada servidor do dono passa para o
+  membro mais antigo que sobra (ADMIN antes de MEMBER); sem mais ninguém, o servidor
+  é apagado junto. A alternativa — exigir transferência manual — travaria a exclusão,
+  porque o MVP não tem tela de transferir propriedade.
+- **O corte é imediato:** conta desativada ou excluída derruba o access token que
+  ainda valeria por até 15 min (cache de 60 s no `AccountStatusService`, invalidado
+  na hora por quem desativa/exclui/reativa) e o socket não conecta.
+
+### Limites de requisição
+- Login, refresh e registro têm teto por IP; as rotas de e-mail (verificação e
+  "esqueci a senha") têm o mais apertado — 5 por hora —, porque cada chamada custa um
+  envio real e a rota é pública. Códigos (2FA, redefinição) e operações sensíveis da
+  conta também têm teto próprio. Estourar responde `429`.
+- **[fora do escopo]** Login social (OAuth): o modelo `OAuthAccount` existe no banco
+  e `linkedProviders` está no contrato, mas nenhum provedor é vinculável.
 
 ## Servidores e membros
 

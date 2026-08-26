@@ -45,6 +45,7 @@ pnpm --filter @newdisc/api exec prisma generate # após mexer no schema.prisma
 pnpm db:up               # sobe o Postgres do docker-compose (só 127.0.0.1)
 pnpm db:embedded         # alternativa sem Docker: Postgres embutido em ./.pgdata (UTF-8)
 node scripts/e2e-visual.mjs --out ./e2e-shots   # passeio com screenshots (API+web no ar)
+pnpm --filter @newdisc/api build && pnpm --filter @newdisc/api smoke:conta  # conta/2FA ponta a ponta (só Postgres)
 pnpm db:migrate          # cria/aplica migration a partir do schema (dev)
 pnpm db:deploy           # aplica as migrations existentes (prod/CI)
 ```
@@ -127,6 +128,22 @@ Cada domínio é um módulo com `*.module.ts`, `*.service.ts` e (quando tem REST
 `*.controller.ts`. Guard de auth: `JwtGuard` + decorator `@CurrentUser()`
 (`common/`). Um service que precisa de outro importa o **módulo** que o exporta
 (ex.: `MessagesModule` importa `GuildsModule` e `StorageModule`).
+
+O `JwtGuard` não valida só a assinatura: consulta o `AccountStatusService`
+(cache de 60 s por processo, exportado pelo `AuthModule`) e recusa conta
+desativada/excluída **antes** dos 15 minutos do access token — quem desativa,
+exclui ou reativa chama `invalidar()` para o efeito ser imediato. O gateway faz a
+mesma checagem no connect.
+
+Dependência opcional segue o padrão do R2/LiveKit: `MailService.isConfigured()` é
+`false` sem `SMTP_URL` e o provedor vira `console` (imprime o link no log, que é
+como o fluxo de e-mail é testado em dev). `exigirEntrega()` só derruba a rota com
+`503` em produção — em dev, 503 tornaria o recurso impossível de exercitar.
+
+As rotas de conta e segurança validam o corpo com o **schema zod de
+`packages/shared`** (via `common/zod.pipe.ts`), não com DTO de `class-validator`:
+o contrato dessas rotas já existe em zod e é o mesmo que a web usa para recusar
+antes do round-trip. O resto da API continua com `class-validator`.
 
 ### DTO na borda, entidade Prisma dentro
 Services devolvem os tipos de `@newdisc/shared` (ex.: `Message`, `Attachment`,

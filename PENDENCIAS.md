@@ -45,6 +45,21 @@ para testar ponta a ponta — mesmo padrão do LiveKit.
       API devolve URL assinada com expiração, e só cai no proxy autenticado
       `/api/uploads/file/:id` quando não dá para assinar.
 
+## 1c. SMTP (opcional — só bloqueia o e-mail *de verdade*)
+Verificação de conta e "esqueci a senha" funcionam **sem configurar nada** em dev: o
+provedor `console` do `MailService` imprime assunto e link no log da API, e o fluxo
+inteiro (registrar → clicar no link → verificar) roda copiando o link do terminal.
+
+- [ ] Para enviar de verdade, preencher no `.env`:
+      `SMTP_URL="smtp://usuario:senha@host:587"` e `SMTP_FROM`. Serve qualquer
+      provedor SMTP (Resend, Postmark, SES, Mailtrap para teste).
+- [ ] `WEB_PUBLIC_URL` precisa apontar para a **web** (não para a API): é a base dos
+      links do e-mail. Padrão `http://localhost:3000`.
+
+> Em produção (`NODE_ENV=production`) a ausência de `SMTP_URL` faz as rotas que
+> dependem de envio responderem `503`, como R2 e LiveKit. Em dev, não — senão o
+> recurso ficaria impossível de exercitar.
+
 ## 2. LiveKit (bloqueia a voz — Dia 4)
 O código de voz é **agnóstico de provedor** (só usa `LIVEKIT_URL/KEY/SECRET`).
 Duas formas de rodar — escolha uma:
@@ -139,6 +154,14 @@ Ordem sugerida dos próximos blocos de features:
       `GET .../:messageId/thread`, contador de respostas e painel lateral de
       thread com envio em tempo real. _Typecheck ok; falta validar ponta a ponta._
 - [ ] **Stickers, emojis animados** (dependem de storage de assets — ver Anexos).
+- [ ] **Login social (OAuth)** — **fora do escopo do bloco de conta**. O modelo
+      `OAuthAccount` (provider, providerAccountId, e-mail) já existe no schema e
+      `MinhaConta.linkedProviders` já está no contrato, mas nenhum provedor é
+      vinculável: não há rota de authorize/callback nem credencial de app. Para
+      implementar seria preciso, por provedor: registrar o app, guardar
+      `OAUTH_<PROVIDER>_CLIENT_ID/SECRET`, e **exigir e-mail verificado no provedor**
+      antes de vincular — sem isso quem controlasse um e-mail alheio entraria na
+      conta de outro. Hoje `linkedProviders` responde sempre `[]`.
 
 ### Lacunas conhecidas
 - [x] ~~**Presença em tempo real**~~ — implementado: o gateway conta conexões por
