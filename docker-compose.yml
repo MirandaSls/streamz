@@ -34,5 +34,75 @@ services:
       - "7881:7881" # rtc/tcp fallback
       - "50000-50060:50000-50060/udp" # rtc/udp (mídia)
 
+  # ── Aplicação ──────────────────────────────────────────────────────────────
+  # `pnpm db:up` continua subindo só o Postgres (ele nomeia o serviço). Estes
+  # dois só sobem quando pedidos: `docker compose up -d api web`.
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: newdisc-api
+    restart: unless-stopped
+    # O .env da raiz vale como base; o que muda dentro da rede do compose é
+    # sobrescrito abaixo (`environment` vence `env_file`).
+    env_file:
+      - .env
+    environment:
+      # Dentro da rede do compose o banco é o serviço `postgres`, não localhost.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-newdisc}:${POSTGRES_PASSWORD:-newdisc}@postgres:5432/${POSTGRES_DB:-newdisc}?schema=public
+      # Uma instância só: aqui a migration no boot é segura e conveniente.
+      RUN_MIGRATIONS: "1"
+      API_HOST: 0.0.0.0
+      API_PORT: "3333"
+      LOG_FORMAT: json
+      NODE_ENV: production
+      # Vazio = Redis desligado (o código trata `REDIS_URL` ausente). Com o
+      # profile `redis` no ar, aponte para redis://redis:6379.
+      REDIS_URL: ${REDIS_URL:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3333:3333"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      # NEXT_PUBLIC_* é embutida no bundle em tempo de build — mudar depois no
+      # `environment` não teria efeito nenhum; por isso vai como build arg.
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3333}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-http://localhost:3333}
+        NEXT_PUBLIC_LIVEKIT_URL: ${NEXT_PUBLIC_LIVEKIT_URL:-ws://localhost:7880}
+    container_name: newdisc-web
+    restart: unless-stopped
+    environment:
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+      NODE_ENV: production
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  # Redis é opcional (ver modules/realtime/redis.ts): só com ele a API roda em
+  # mais de uma instância. Sob profile para não pesar no dev padrão:
+  # `docker compose --profile redis up -d redis` e REDIS_URL=redis://redis:6379.
+  redis:
+    image: redis:7-alpine
+    container_name: newdisc-redis
+    profiles: ["redis"]
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
 volumes:
   pgdata:
