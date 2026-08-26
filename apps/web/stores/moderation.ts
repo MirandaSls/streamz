@@ -102,7 +102,11 @@ export const useModeration = create<ModerationState>((set, get) => ({
 
   loadMembership: async (guildId) => {
     try {
-      set({ membership: await api.membership(guildId) });
+      const membership = await api.membership(guildId);
+      set({ membership });
+      // a tela de boas-vindas é o próprio efeito de entrar no servidor: ela
+      // aparece uma vez, aqui, e `markWelcomeSeen` garante que não volte
+      if (membership.showWelcome) ui.openModal({ kind: "welcome", guildId });
     } catch {
       // servidor sem onboarding configurado não impede o uso do app
       set({ membership: null });
