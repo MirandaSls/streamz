@@ -69,6 +69,9 @@ model User {
   // ── c-cargos ──
   memberRoles      GuildMemberRole[]
   channelOverrides ChannelOverride[]
+  // ── a-mensagens ──
+  pinnedMessages   PinnedMessage[] @relation("PinAuthor")
+  createdThreads   Thread[]        @relation("ThreadCreator")
 }
 
 // Até onde cada usuário leu cada canal. É o que decide "não lido" e o badge
@@ -212,6 +215,9 @@ model Channel {
   nsfw            Boolean  @default(false)
   // apagar a categoria não apaga os canais — eles voltam a ficar sem categoria
   category        Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  // ── a-mensagens ──
+  pins       PinnedMessage[]
+  threads    Thread[]
 
   @@index([guildId])
   @@index([categoryId])
@@ -252,8 +258,23 @@ model Message {
   parent  Message?  @relation("MessageThread", fields: [parentId], references: [id], onDelete: Cascade)
   replies Message[] @relation("MessageThread")
 
+  // ── a-mensagens ──
+  // DEFAULT ou narração do canal (SYSTEM_PIN); ver packages/shared.
+  type         MessageType @default(DEFAULT)
+  // resposta (reply do Discord): aponta para a mensagem citada, que pode estar
+  // em qualquer ponto do mesmo canal — não é o mesmo que `parentId` (thread).
+  replyToId    String?
+  // "@ ligado": a resposta menciona o autor da original e conta como menção.
+  replyMention Boolean     @default(false)
+  // SetNull, não Cascade: apagar a original não pode levar junto quem respondeu.
+  replyTo   Message?  @relation("MessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  repliedBy Message[] @relation("MessageReply")
+  pin       PinnedMessage?
+  thread    Thread?
+
   @@index([channelId, parentId, createdAt])
   @@index([parentId])
+  @@index([replyToId])
 }
 
 // Arquivo enviado ao storage (R2). Criado no upload (messageId null) e
@@ -376,4 +397,47 @@ model Category {
   channels Channel[]
 
   @@index([guildId])
+}
+
+// ── a-mensagens ──────────────────────────────────────────────
+
+enum MessageType {
+  DEFAULT
+  SYSTEM_PIN
+  SYSTEM_JOIN
+}
+
+// Mensagem fixada no canal. `messageId` é único: fixar duas vezes é idempotente,
+// e a lista do canal sai daqui em vez de uma coluna booleana na mensagem (assim
+// sabemos quem fixou e quando, que é o que a mensagem de sistema narra).
+model PinnedMessage {
+  id         String   @id @default(cuid())
+  channelId  String
+  messageId  String   @unique
+  pinnedById String
+  pinnedAt   DateTime @default(now())
+
+  channel  Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  message  Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  pinnedBy User    @relation("PinAuthor", fields: [pinnedById], references: [id], onDelete: Cascade)
+
+  @@index([channelId, pinnedAt])
+}
+
+// Thread nomeada: o *nome* de uma raiz que já agrupa respostas por `parentId`.
+// O id é o id da mensagem raiz — uma raiz tem no máximo uma thread, e raiz sem
+// linha aqui continua sendo thread sem nome (compatibilidade com o que existia).
+model Thread {
+  id          String   @id
+  channelId   String
+  name        String
+  archived    Boolean  @default(false)
+  createdById String
+  createdAt   DateTime @default(now())
+
+  root      Message @relation(fields: [id], references: [id], onDelete: Cascade)
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  createdBy User    @relation("ThreadCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([channelId, archived])
 }

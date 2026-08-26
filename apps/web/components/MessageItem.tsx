@@ -3,24 +3,38 @@
 import { useMemo, useState, type MouseEvent } from "react";
 import {
   Copy,
+  CornerUpLeft,
   FileText,
+  Link2,
   MessageSquare,
   MoreHorizontal,
   Pencil,
+  Pin,
+  PinOff,
   SmilePlus,
   Trash2,
 } from "lucide-react";
-import type { Attachment, Message } from "@newdisc/shared";
-import { displayNameOf, extractFirstUrl, isImageAttachment } from "@newdisc/shared";
+import type { Attachment, Message, PublicUser } from "@newdisc/shared";
+import {
+  displayNameOf,
+  extractFirstUrl,
+  isImageAttachment,
+  isSystemMessage,
+  messageLinkPath,
+} from "@newdisc/shared";
 import LinkEmbedCard, { useLinkEmbed } from "@/components/chat/LinkEmbedCard";
 import Avatar from "@/components/ui/Avatar";
 import EmojiPicker from "@/components/ui/EmojiPicker";
 import Tooltip from "@/components/ui/Tooltip";
-import { hora, horaCompleta } from "@/lib/format";
+import { dataCompleta, hora, horaCompleta } from "@/lib/format";
 import { Markdown } from "@/lib/markdown";
 import { useAuth } from "@/stores/auth";
 import { useGuilds } from "@/stores/guilds";
 import { useAuthorColor } from "@/stores/permissions";
+import { useMessages } from "@/stores/messages";
+import { goToMessage } from "@/stores/messages-navigate";
+import { usePins } from "@/stores/messages-pins";
+import { useThreads } from "@/stores/messages-threads";
 import type { ChatMessage } from "@/stores/messages-core";
 import { useLiveUser } from "@/stores/presence";
 import { anchorOf, ui, type MenuItem } from "@/stores/ui";
@@ -103,6 +117,49 @@ function ActionButton({
 }
 
 /**
+ * Linha de referência da resposta, acima da mensagem: avatar miúdo, nome e o
+ * começo da original. O traço em "L" à esquerda é o mesmo do Discord — é ele
+ * que amarra visualmente a resposta à mensagem citada.
+ */
+function ReplyReference({ message }: { message: Message }) {
+  const ref = message.replyTo;
+  if (!ref) return null;
+  return (
+    <div className="relative flex items-center gap-1.5 pb-0.5 text-[13px] leading-[18px] text-txt-muted">
+      <span
+        aria-hidden="true"
+        className="absolute -left-[38px] bottom-[7px] h-[11px] w-[32px] rounded-tl-[6px] border-l-2 border-t-2 border-[#4e5058]"
+      />
+      <Avatar user={ref.author} size="sm" className="h-4 w-4" />
+      <span className="font-medium text-txt-secondary">@{displayNameOf(ref.author)}</span>
+      <button
+        type="button"
+        onClick={() =>
+          void goToMessage({
+            guildId: message.guildId,
+            channelId: message.channelId,
+            messageId: ref.id,
+          })
+        }
+        className="min-w-0 truncate text-left hover:text-txt-normal"
+      >
+        {ref.content || (ref.hasAttachments ? "Clique para ver o anexo" : "Mensagem apagada")}
+      </button>
+    </div>
+  );
+}
+
+/** Nomes de quem reagiu, para o tooltip da pílula. */
+function nomesDeQuemReagiu(userIds: string[], conhecidos: Map<string, PublicUser>): string {
+  const nomes = userIds.map((id) => {
+    const u = conhecidos.get(id);
+    return u ? displayNameOf(u) : "alguém";
+  });
+  if (nomes.length <= 3) return nomes.join(", ");
+  return `${nomes.slice(0, 3).join(", ")} e mais ${nomes.length - 3}`;
+}
+
+/**
  * Uma mensagem, no leiaute do Discord: avatar de 40px à esquerda, nome e hora na
  * primeira linha, corpo (markdown, menções, prévia de link) abaixo. Quando
  * `grouped`, é a continuação da anterior (mesmo autor, poucos minutos) e só
@@ -143,19 +200,32 @@ export default function MessageItem({
   const corDoAutor = useAuthorColor(message.author.id);
   const me = useAuth((s) => s.user);
   const members = useGuilds((s) => s.members);
+  const highlighted = useMessages((s) => s.highlightId === message.id);
+  const startReply = useMessages((s) => s.startReply);
   // @usuario → nome de exibição, para as menções mostrarem o nome como o Discord
   const displayNames = useMemo(() => {
     const map: Record<string, string> = {};
     for (const m of members) map[m.user.username.toLowerCase()] = displayNameOf(m.user);
     return map;
   }, [members]);
+  // quem reagiu: os membros do servidor mais o autor (basta para o tooltip)
+  const conhecidos = useMemo(() => {
+    const map = new Map<string, PublicUser>();
+    for (const m of members) map.set(m.user.id, m.user);
+    map.set(message.author.id, message.author);
+    if (me) map.set(me.id, me);
+    return map;
+  }, [members, message.author, me]);
 
   const isOwn = message.author.id === currentUserId;
   // sem confirmação do servidor a mensagem ainda não tem id real: editar,
   // apagar ou reagir não teriam a que se referir
   const unconfirmed = Boolean(message.pending || message.failed);
+  const sistema = isSystemMessage(message);
   const canDelete = isOwn || Boolean(canModerate);
-  const embed = useLinkEmbed(unconfirmed ? null : extractFirstUrl(message.content));
+  // em conversa direta não há moderação: qualquer participante fixa (como no Discord)
+  const canPin = message.guildId === null || Boolean(canModerate);
+  const embed = useLinkEmbed(unconfirmed || sistema ? null : extractFirstUrl(message.content));
 
   function submitEdit() {
     const t = draft.trim();
@@ -172,26 +242,68 @@ export default function MessageItem({
     ui.openProfile(author, anchorOf(e.currentTarget));
   }
 
+  function copiarLink() {
+    const caminho = messageLinkPath(message.guildId, message.channelId, message.id);
+    const url = typeof window === "undefined" ? caminho : `${window.location.origin}${caminho}`;
+    void navigator.clipboard?.writeText(url);
+    ui.toast("Link da mensagem copiado");
+  }
+
+  function responder() {
+    startReply(message);
+  }
+
+  function alternarFixada() {
+    const pins = usePins.getState();
+    if (message.pinned) void pins.unpin(message.channelId, message.id);
+    else void pins.pin(message.channelId, message.id);
+  }
+
+  async function criarThread() {
+    const thread = await useThreads
+      .getState()
+      .create(message.channelId, message.id, message.content);
+    if (thread) onOpenThread?.(message);
+  }
+
   function openMenu(e: MouseEvent) {
     if (unconfirmed) return;
     e.preventDefault();
-    const items: MenuItem[] = [
-      { label: "Adicionar reação", icon: <SmilePlus size={18} />, onSelect: () => setPicking(true) },
-    ];
-    if (onOpenThread) {
+    const items: MenuItem[] = [];
+    if (!sistema) {
       items.push({
-        label: "Responder na thread",
-        icon: <MessageSquare size={18} />,
-        onSelect: () => onOpenThread(message),
+        label: "Adicionar reação",
+        icon: <SmilePlus size={18} />,
+        onSelect: () => setPicking(true),
+      });
+      if (onOpenThread) {
+        items.push({ label: "Responder", icon: <CornerUpLeft size={18} />, onSelect: responder });
+        items.push({
+          label: message.thread ? "Ver thread" : "Criar thread",
+          icon: <MessageSquare size={18} />,
+          onSelect: () => (message.thread ? onOpenThread(message) : void criarThread()),
+        });
+      }
+      if (canPin) {
+        items.push({
+          label: message.pinned ? "Desafixar mensagem" : "Fixar mensagem",
+          icon: message.pinned ? <PinOff size={18} /> : <Pin size={18} />,
+          onSelect: alternarFixada,
+        });
+      }
+      if (isOwn) items.push({ label: "Editar mensagem", icon: <Pencil size={18} />, onSelect: startEdit });
+      items.push({ separator: true });
+      items.push({
+        label: "Copiar texto",
+        icon: <Copy size={18} />,
+        disabled: !message.content,
+        onSelect: () => void navigator.clipboard?.writeText(message.content),
       });
     }
-    if (isOwn) items.push({ label: "Editar mensagem", icon: <Pencil size={18} />, onSelect: startEdit });
-    items.push({ separator: true });
     items.push({
-      label: "Copiar texto",
-      icon: <Copy size={18} />,
-      disabled: !message.content,
-      onSelect: () => void navigator.clipboard?.writeText(message.content),
+      label: "Copiar link da mensagem",
+      icon: <Link2 size={18} />,
+      onSelect: copiarLink,
     });
     items.push({
       label: "Copiar ID da mensagem",
@@ -209,16 +321,66 @@ export default function MessageItem({
     ui.openContextMenu(e.clientX, e.clientY, items);
   }
 
-  const mentionsMe = !!me && new RegExp(`(^|[^\\w.])@${me.username}(?![\\w.-])`, "i").test(message.content);
+  // menção a mim: `@usuario` no texto ou resposta minha com o "@ ligado"
+  const mentionsMe =
+    !!me &&
+    !isOwn &&
+    (new RegExp(`(^|[^\\w.])@${me.username}(?![\\w.-])`, "i").test(message.content) ||
+      Boolean(message.replyMention && message.replyTo?.author.id === me.id));
+
+  const fundo = highlighted
+    ? "bg-accent/20 hover:bg-accent/25"
+    : mentionsMe
+      ? "border-l-2 border-yellow bg-yellow/10 hover:bg-yellow/15"
+      : "hover:bg-msghov";
+
+  if (sistema) {
+    // narração do canal: sem avatar, ícone no lugar dele e texto apagado
+    return (
+      <div
+        id={`mensagem-${message.id}`}
+        onContextMenu={openMenu}
+        className={`group relative flex items-center gap-2 py-0.5 pl-[72px] pr-12 mt-[17px] ${fundo}`}
+      >
+        <Pin size={18} aria-hidden="true" className="absolute left-[38px] text-txt-muted" />
+        <p className="text-sm text-txt-muted">
+          <span className="font-medium text-txt-secondary">{displayNameOf(author)}</span>{" "}
+          fixou uma mensagem neste canal.
+          {message.replyTo && (
+            <>
+              {" "}
+              <button
+                type="button"
+                onClick={() =>
+                  void goToMessage({
+                    guildId: message.guildId,
+                    channelId: message.channelId,
+                    messageId: message.replyTo!.id,
+                  })
+                }
+                className="text-txt-link hover:underline"
+              >
+                Ver mensagem
+              </button>
+            </>
+          )}
+        </p>
+        <Tooltip label={dataCompleta(message.createdAt)}>
+          <span className="text-xs text-txt-muted">{horaCompleta(message.createdAt)}</span>
+        </Tooltip>
+      </div>
+    );
+  }
 
   return (
     <div
+      id={`mensagem-${message.id}`}
       onContextMenu={openMenu}
-      className={`group relative flex gap-4 py-0.5 pl-[72px] pr-12 ${
-        mentionsMe ? "border-l-2 border-yellow bg-yellow/10 hover:bg-yellow/15" : "hover:bg-msghov"
-      } ${grouped ? "" : "mt-[17px]"} ${message.pending ? "opacity-60" : ""}`}
+      className={`group relative flex gap-4 py-0.5 pl-[72px] pr-12 transition-colors ${fundo} ${
+        grouped && !message.replyTo ? "" : "mt-[17px]"
+      } ${message.pending ? "opacity-60" : ""}`}
     >
-      {grouped ? (
+      {grouped && !message.replyTo ? (
         // hora na margem, só no hover — como o Discord faz com mensagens agrupadas
         <span className="absolute left-0 top-1 w-[72px] select-none text-center text-[11px] leading-[22px] text-txt-muted opacity-0 group-hover:opacity-100">
           {hora(message.createdAt)}
@@ -228,14 +390,18 @@ export default function MessageItem({
           type="button"
           onClick={openProfile}
           aria-label={`Perfil de ${displayNameOf(author)}`}
-          className="absolute left-4 top-0.5 rounded-full transition hover:brightness-110"
+          className={`absolute left-4 rounded-full transition hover:brightness-110 ${
+            message.replyTo ? "top-[26px]" : "top-0.5"
+          }`}
         >
           <Avatar user={author} size="lg" />
         </button>
       )}
 
       <div className="min-w-0 flex-1">
-        {!grouped && (
+        <ReplyReference message={message} />
+
+        {(!grouped || message.replyTo) && (
           <div className="flex items-baseline gap-1.5 leading-[22px]">
             <button
               type="button"
@@ -245,7 +411,16 @@ export default function MessageItem({
             >
               {displayNameOf(author)}
             </button>
-            <span className="ml-1 text-xs text-txt-muted">{horaCompleta(message.createdAt)}</span>
+            <Tooltip label={dataCompleta(message.createdAt)}>
+              <span className="ml-1 text-xs text-txt-muted">{horaCompleta(message.createdAt)}</span>
+            </Tooltip>
+            {message.pinned && (
+              <Tooltip label="Mensagem fixada">
+                <span className="text-txt-muted">
+                  <Pin size={12} aria-label="Mensagem fixada" />
+                </span>
+              </Tooltip>
+            )}
             {message.pending && <span className="text-xs italic text-txt-muted">enviando…</span>}
           </div>
         )}
@@ -289,9 +464,9 @@ export default function MessageItem({
             <div className="break-words text-txt-normal">
               <Markdown text={message.content} meUsername={me?.username} displayNames={displayNames} />
               {message.editedAt && (
-                <span className="ml-1 text-[10px] text-txt-muted" title={horaCompleta(message.editedAt)}>
-                  (editado)
-                </span>
+                <Tooltip label={dataCompleta(message.editedAt)}>
+                  <span className="ml-1 text-[10px] text-txt-muted">(editado)</span>
+                </Tooltip>
               )}
             </div>
           )
@@ -300,14 +475,30 @@ export default function MessageItem({
         <AttachmentView attachments={message.attachments} />
         {embed && <LinkEmbedCard embed={embed} />}
 
-        {onOpenThread && message.replyCount > 0 && (
+        {onOpenThread && (message.thread || message.replyCount > 0) && (
           <button
             type="button"
             onClick={() => onOpenThread(message)}
-            className="mt-1 flex items-center gap-1.5 text-sm font-medium text-txt-link hover:underline"
+            className="mt-1 flex w-fit items-center gap-1.5 rounded-[4px] py-0.5 text-sm font-medium text-txt-link hover:underline"
           >
+            {message.thread && message.thread.participants.length > 0 && (
+              <span className="flex -space-x-1.5" aria-hidden="true">
+                {message.thread.participants.map((p) => (
+                  <Avatar key={p.id} user={p} size="sm" className="h-4 w-4 ring-2 ring-chat" />
+                ))}
+              </span>
+            )}
             <MessageSquare size={16} aria-hidden="true" />
-            {message.replyCount} {message.replyCount === 1 ? "resposta" : "respostas"}
+            {message.thread ? (
+              <>
+                <span className="text-txt-primary">{message.thread.name}</span>
+                {message.thread.archived && (
+                  <span className="text-xs font-normal text-txt-muted">(arquivada)</span>
+                )}
+              </>
+            ) : (
+              `${message.replyCount} ${message.replyCount === 1 ? "resposta" : "respostas"}`
+            )}
             <span className="font-normal text-txt-muted">›</span>
           </button>
         )}
@@ -317,21 +508,27 @@ export default function MessageItem({
             {message.reactions.map((r) => {
               const mine = currentUserId ? r.userIds.includes(currentUserId) : false;
               return (
-                <button
+                <Tooltip
                   key={r.emoji}
-                  type="button"
-                  aria-pressed={mine}
-                  aria-label={`${r.emoji}, ${r.count} ${r.count === 1 ? "reação" : "reações"}`}
-                  onClick={() => onToggleReaction(message.id, r.emoji)}
-                  className={`flex h-[26px] items-center gap-1.5 rounded-lg border px-1.5 text-sm transition ${
-                    mine
-                      ? "border-accent bg-accent/20 text-txt-primary"
-                      : "border-transparent bg-panel text-txt-normal hover:border-[#4e5058]"
-                  }`}
+                  label={`${nomesDeQuemReagiu(r.userIds, conhecidos)} ${
+                    r.count === 1 ? "reagiu" : "reagiram"
+                  } com ${r.emoji}`}
                 >
-                  <span>{r.emoji}</span>
-                  <span className="text-xs font-medium">{r.count}</span>
-                </button>
+                  <button
+                    type="button"
+                    aria-pressed={mine}
+                    aria-label={`${r.emoji}, ${r.count} ${r.count === 1 ? "reação" : "reações"}`}
+                    onClick={() => onToggleReaction(message.id, r.emoji)}
+                    className={`flex h-[26px] items-center gap-1.5 rounded-lg border px-1.5 text-sm transition ${
+                      mine
+                        ? "border-accent bg-accent/20 text-txt-primary"
+                        : "border-transparent bg-panel text-txt-normal hover:border-[#4e5058]"
+                    }`}
+                  >
+                    <span>{r.emoji}</span>
+                    <span className="text-xs font-medium">{r.count}</span>
+                  </button>
+                </Tooltip>
               );
             })}
             <button
@@ -373,8 +570,24 @@ export default function MessageItem({
             <SmilePlus size={20} />
           </ActionButton>
           {onOpenThread && (
-            <ActionButton label="Responder na thread" onClick={() => onOpenThread(message)}>
+            <ActionButton label="Responder" onClick={responder}>
+              <CornerUpLeft size={20} />
+            </ActionButton>
+          )}
+          {onOpenThread && (
+            <ActionButton
+              label={message.thread ? "Ver thread" : "Criar thread"}
+              onClick={() => (message.thread ? onOpenThread(message) : void criarThread())}
+            >
               <MessageSquare size={20} />
+            </ActionButton>
+          )}
+          {canPin && (
+            <ActionButton
+              label={message.pinned ? "Desafixar mensagem" : "Fixar mensagem"}
+              onClick={alternarFixada}
+            >
+              {message.pinned ? <PinOff size={20} /> : <Pin size={20} />}
             </ActionButton>
           )}
           {isOwn && (

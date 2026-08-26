@@ -25,6 +25,8 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
 
   if (!parentId) return null;
   const replies = Math.max(0, items.length - 1);
+  // a raiz é o primeiro item da thread; dela sai o nome quando a thread tem um
+  const nome = items[0]?.thread?.name;
 
   return (
     <aside
@@ -32,7 +34,9 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
       className="flex w-[26rem] shrink-0 flex-col border-l border-black/20 bg-chat"
     >
       <div className="flex h-12 shrink-0 items-center justify-between px-4 shadow-header">
-        <span className="font-semibold text-txt-primary">Thread</span>
+        <span className="min-w-0 truncate font-semibold text-txt-primary">
+          {nome ?? "Thread"}
+        </span>
         <button
           type="button"
           onClick={closeThread}

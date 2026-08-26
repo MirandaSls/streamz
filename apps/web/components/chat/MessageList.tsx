@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { ArrowDown } from "lucide-react";
 import type { Message } from "@newdisc/shared";
 import MessageItem from "@/components/MessageItem";
@@ -44,6 +44,7 @@ export default function MessageList({
   onOpenThread,
   onRetry,
   onDiscard,
+  scrollToId,
   emptyText,
   welcome,
   firstSeparator,
@@ -62,6 +63,8 @@ export default function MessageList({
   onOpenThread?: (message: Message) => void;
   onRetry?: (nonce: string) => void;
   onDiscard?: (nonce: string) => void;
+  /** mensagem a trazer para a tela (o "ir para" de fixadas, busca e menções). */
+  scrollToId?: string | null;
   emptyText: string;
   /** cabeçalho do início do canal ("Bem-vindo a #geral!"). */
   welcome?: Welcome;
@@ -73,6 +76,14 @@ export default function MessageList({
     canLoadOlder: hasMore && !loadingOlder && Boolean(onLoadOlder),
     onReachTop: onLoadOlder,
   });
+
+  // o "ir para a mensagem" corre depois do layout da lista (useLayoutEffect da
+  // rolagem grudenta), então este efeito é quem tem a última palavra na posição
+  useEffect(() => {
+    if (!scrollToId) return;
+    const el = document.getElementById(`mensagem-${scrollToId}`);
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [scrollToId, items]);
 
   const atStart = !hasMore && !loading;
 

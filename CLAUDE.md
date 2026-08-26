@@ -85,9 +85,12 @@ schema novo em `shared` antes do handler.
 ### Mensagens são criadas por WebSocket, não REST
 O envio de mensagem (e reação, edição, remoção, DM) passa pelo **gateway**
 (`modules/gateway/chat.gateway.ts`), disparado pelos eventos de `WS_EVENTS`. O
-REST de mensagens serve só **leitura** (histórico paginado por cursor, thread,
-busca). Ao adicionar um fluxo de escrita de mensagem, o caminho é: evento em
-`WS_EVENTS` → handler no gateway → método no `MessagesService` → `emit` de volta
+REST de mensagens serve **leitura** (histórico paginado por cursor, thread,
+janela `around/:messageId`, busca no canal e no servidor, caixa de entrada em
+`/me/mentions` e `/me/unread`) e **estrutura** (fixar em `/channels/:id/pins`,
+threads nomeadas em `/channels/:id/threads`), que avisa a sala pelo
+`RealtimeService`. Ao adicionar um fluxo de escrita de mensagem, o caminho é:
+evento em `WS_EVENTS` → handler no gateway → `MessagesService` → `emit` de volta
 para a sala do canal (`channel:<id>`) ou do usuário (`user:<id>`).
 
 ### Autorização é central, nunca no handler

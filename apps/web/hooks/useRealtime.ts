@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import {
   WS_EVENTS,
   displayNameOf,
-  mentionsUser,
+  mentionsMe,
   type Channel,
   type ChannelDeletedEvent,
   type ChannelOverridesEvent,
@@ -16,6 +16,8 @@ import {
   type MemberUpdatedEvent,
   type Message,
   type MessageDeletedEvent,
+  type MessagePinnedEvent,
+  type MessageUnpinnedEvent,
   type PresenceUpdatePayload,
   type PublicUser,
   // ── f-voz ──
@@ -26,6 +28,7 @@ import {
   type RoleDeletedEvent,
   type Category,
   type CategoryDeletedEvent,
+  type ThreadUpdatedEvent,
 } from "@newdisc/shared";
 import { notify } from "@/lib/desktop";
 import { useAuth } from "@/stores/auth";
@@ -36,6 +39,8 @@ import { dmTitle, useDMs } from "@/stores/dms";
 import { useGuilds } from "@/stores/guilds";
 import { useMessages } from "@/stores/messages";
 import { usePermissions } from "@/stores/permissions";
+import { usePins } from "@/stores/messages-pins";
+import { useThreads } from "@/stores/messages-threads";
 import { usePresence } from "@/stores/presence";
 import { useTyping } from "@/stores/typing";
 import { useVoice } from "@/stores/voice";
@@ -180,6 +185,17 @@ export function useRealtime(currentUserId?: string): void {
       on<CategoryDeletedEvent>(WS_EVENTS.CATEGORY_DELETED, ({ categoryId }) => {
         useCategories.getState().handleDeleted(categoryId);
       }),
+      // ── a-mensagens ──
+      on<MessagePinnedEvent>(WS_EVENTS.MESSAGE_PINNED, (event) => {
+        usePins.getState().handlePinned(event);
+      }),
+      on<MessageUnpinnedEvent>(WS_EVENTS.MESSAGE_UNPINNED, (event) => {
+        usePins.getState().handleUnpinned(event);
+      }),
+      on<ThreadUpdatedEvent>(WS_EVENTS.THREAD_UPDATED, (event) => {
+        useThreads.getState().handleUpdated(event);
+      }),
+
       onReconnect(() => {
         rejoinChannel();
         void useMessages.getState().resyncActive();
@@ -220,7 +236,8 @@ export function useRealtime(currentUserId?: string): void {
 function onMessageArrived(message: Message, currentUserId?: string) {
   const me = useAuth.getState().user;
   const mine = message.author.id === currentUserId;
-  const mention = !mine && !!me && mentionsUser(message.content, me.username);
+  // menção = `@usuario` no texto ou resposta a mim com o "@ ligado" (Discord)
+  const mention = !mine && !!me && mentionsMe(message, me);
   const activeChannelId = useMessages.getState().activeChannelId;
   const visivel = typeof document !== "undefined" && document.visibilityState === "visible";
   const naTela = message.channelId === activeChannelId && visivel;

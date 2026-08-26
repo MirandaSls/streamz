@@ -192,6 +192,17 @@ export interface Message {
    * autor casar a mensagem real com a versão otimista que já está na tela.
    */
   nonce?: string;
+  // ── a-mensagens ──
+  /** DEFAULT ou mensagem de sistema (fixar, entrada de membro). */
+  type: MessageType;
+  /** mensagem respondida (referência curta), quando esta é uma resposta. */
+  replyTo: MessageReplyRef | null;
+  /** true quando a resposta menciona o autor da original ("@ ligado"). */
+  replyMention: boolean;
+  /** thread nomeada iniciada nesta mensagem (só em mensagem raiz). */
+  thread: ThreadSummary | null;
+  /** true quando a mensagem está fixada no canal. */
+  pinned: boolean;
 }
 
 export interface GuildMemberView {
@@ -294,6 +305,10 @@ export const WS_EVENTS = {
   CATEGORY_CREATED: "category.created",
   CATEGORY_UPDATED: "category.updated",
   CATEGORY_DELETED: "category.deleted",
+  // ── a-mensagens ──
+  MESSAGE_PINNED: "message.pinned",
+  MESSAGE_UNPINNED: "message.unpinned",
+  THREAD_UPDATED: "thread.updated",
 } as const;
 
 /** Teto de caracteres de uma mensagem (canal ou DM). */
@@ -331,6 +346,11 @@ export const messageCreateSchema = z
      * em `message.new` para que o autor substitua a mensagem otimista pela real.
      */
     nonce: z.string().max(64).optional(),
+    // ── a-mensagens ──
+    /** id da mensagem respondida (reply do Discord — não abre thread). */
+    replyToId: idSchema.optional(),
+    /** "@ ligado": a resposta menciona o autor da original (default: ligado). */
+    replyMention: z.boolean().optional(),
   })
   // uma mensagem vazia sem anexo não é mensagem
   .refine((m) => m.content.trim().length > 0 || (m.attachmentIds?.length ?? 0) > 0, {
@@ -1020,4 +1040,255 @@ export interface GuildOwnerChangedEvent {
   ownerId: string;
   /** papel de quem entregou (vira ADMIN) — a UI atualiza a coroa. */
   previousOwnerId: string;
+}
+
+// ── a-mensagens ──────────────────────────────────────────────
+
+/**
+ * Tipo da mensagem. `SYSTEM_*` é narração do canal ("X fixou uma mensagem"):
+ * renderizada sem avatar, com ícone e texto apagado. `SYSTEM_JOIN` (entrada de
+ * membro) é declarado aqui para o contrato ser um só — quem o emite é a
+ * moderação.
+ */
+export type MessageType = "DEFAULT" | "SYSTEM_PIN" | "SYSTEM_JOIN";
+
+/** true para mensagem narrada pelo sistema (sem avatar, sem ações de autor). */
+export function isSystemMessage(m: Pick<Message, "type">): boolean {
+  return m.type !== "DEFAULT";
+}
+
+/** Tamanho do trecho citado na linha de referência de uma resposta. */
+export const MESSAGE_REPLY_SNIPPET = 100;
+
+/** Achata e corta o conteúdo citado para caber numa linha só. */
+export function replySnippet(content: string, limit = MESSAGE_REPLY_SNIPPET): string {
+  const flat = content.replace(/\s+/g, " ").trim();
+  return flat.length > limit ? `${flat.slice(0, limit - 1)}…` : flat;
+}
+
+/** Referência curta à mensagem respondida — o que a linha acima da resposta mostra. */
+export interface MessageReplyRef {
+  id: string;
+  author: PublicUser;
+  /** trecho já achatado, de até `MESSAGE_REPLY_SNIPPET` caracteres. */
+  content: string;
+  /** true quando a original tinha anexo (o trecho pode vir vazio). */
+  hasAttachments: boolean;
+}
+
+/**
+ * Menção a mim: `@usuario` no texto **ou** ser o autor da mensagem respondida
+ * com "@ ligado" — a mesma regra do Discord. Vale para o destaque na timeline
+ * e para o contador de menções do não-lido, que é onde ela erra caro.
+ */
+export function mentionsMe(
+  m: Pick<Message, "content" | "replyTo" | "replyMention" | "author">,
+  me: Pick<PublicUser, "id" | "username">,
+): boolean {
+  if (m.author.id === me.id) return false;
+  if (mentionsUser(m.content, me.username)) return true;
+  return Boolean(m.replyMention && m.replyTo && m.replyTo.author.id === me.id);
+}
+
+/** Quantas mensagens antes e depois `GET .../messages/around/:id` devolve. */
+export const MESSAGE_AROUND_RADIUS = 25;
+
+/** Caminho da rota que abre o canal e pula até a mensagem ("copiar link"). */
+export function messageLinkPath(
+  guildId: string | null,
+  channelId: string,
+  messageId: string,
+): string {
+  return `/app/channels/${guildId ?? "@me"}/${channelId}/${messageId}`;
+}
+
+// ── Fixadas ──────────────────────────────────────────────────
+
+/** Teto de mensagens fixadas por canal (o mesmo do Discord). */
+export const MAX_PINS_PER_CHANNEL = 50;
+
+export interface PinnedMessage {
+  message: Message;
+  pinnedBy: PublicUser;
+  pinnedAt: string;
+}
+
+export interface MessagePinnedEvent {
+  channelId: string;
+  pin: PinnedMessage;
+}
+
+export interface MessageUnpinnedEvent {
+  channelId: string;
+  messageId: string;
+}
+
+// ── Threads nomeadas ─────────────────────────────────────────
+
+export const MAX_THREAD_NAME = 100;
+
+/**
+ * Thread na visão da mensagem raiz (o "ver thread" da timeline). O id é o da
+ * própria mensagem raiz: uma raiz tem no máximo uma thread, e respostas antigas
+ * (`parentId` sem `Thread`) continuam sendo uma thread sem nome.
+ */
+export interface ThreadSummary {
+  id: string;
+  name: string;
+  archived: boolean;
+  messageCount: number;
+  /** primeiros participantes, para os avatares empilhados. */
+  participants: PublicUser[];
+  lastMessageAt: string | null;
+}
+
+/** Thread na lista do painel do cabeçalho. */
+export interface ThreadView extends ThreadSummary {
+  channelId: string;
+  createdBy: PublicUser;
+  createdAt: string;
+}
+
+/** Thread criada, renomeada ou (des)arquivada. */
+export interface ThreadUpdatedEvent {
+  channelId: string;
+  thread: ThreadView;
+}
+
+// ── Caixa de entrada ─────────────────────────────────────────
+
+/** Uma menção não lida na aba "Para você". */
+export interface InboxMention {
+  message: Message;
+  /** nome do canal (null em DM 1-a-1: o título vem dos participantes). */
+  channelName: string | null;
+  channelType: ChannelType;
+  guildId: string | null;
+  guildName: string | null;
+}
+
+/** Um canal com não-lido, dentro do grupo do servidor. */
+export interface InboxUnreadChannel {
+  channelId: string;
+  channelName: string | null;
+  channelType: ChannelType;
+  mentionCount: number;
+  lastMessageAt: string | null;
+}
+
+/** Não-lidos agrupados por servidor (`guildId` null = mensagens diretas). */
+export interface InboxUnreadGroup {
+  guildId: string | null;
+  guildName: string;
+  channels: InboxUnreadChannel[];
+}
+
+// ── Busca avançada ───────────────────────────────────────────
+
+export const SEARCH_HAS_VALUES = ["link", "image", "file"] as const;
+export type SearchHas = (typeof SEARCH_HAS_VALUES)[number];
+
+/** Filtros de uma busca, já separados do texto livre. */
+export interface SearchFilters {
+  /** o que sobrou depois de tirar os filtros — busca por conteúdo. */
+  text: string;
+  /** `from:@fulano` — autor. */
+  from: string | null;
+  /** `in:#canal` — canal (só na busca do servidor inteiro). */
+  in: string | null;
+  /** `has:link|image|file` — pode repetir; todos precisam valer. */
+  has: SearchHas[];
+  /** `before:AAAA-MM-DD` — mensagens antes deste dia (exclusivo). */
+  before: string | null;
+  /** `after:AAAA-MM-DD` — mensagens depois deste dia (exclusivo). */
+  after: string | null;
+  /** `mentions:@fulano` — mensagens que mencionam alguém. */
+  mentions: string | null;
+}
+
+export const EMPTY_SEARCH_FILTERS: SearchFilters = {
+  text: "",
+  from: null,
+  in: null,
+  has: [],
+  before: null,
+  after: null,
+  mentions: null,
+};
+
+const SEARCH_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** true quando `AAAA-MM-DD` existe no calendário (rejeita 2026-02-31). */
+function isCalendarDate(value: string): boolean {
+  if (!SEARCH_DATE_RE.test(value)) return false;
+  const [y, m, d] = value.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
+/**
+ * Separa `from:`, `in:`, `has:`, `before:`, `after:` e `mentions:` do texto
+ * livre da busca. Token com valor inválido (data que não existe, `has:xpto`)
+ * **volta a ser texto** em vez de virar filtro silencioso — assim a busca não
+ * devolve "nada encontrado" por um erro de digitação invisível.
+ */
+export function parseSearchQuery(raw: string): SearchFilters {
+  const out: SearchFilters = { ...EMPTY_SEARCH_FILTERS, has: [] };
+  const livre: string[] = [];
+
+  for (const token of raw.trim().split(/\s+/)) {
+    if (!token) continue;
+    const m = /^(from|in|has|before|after|mentions):(.*)$/i.exec(token);
+    if (!m) {
+      livre.push(token);
+      continue;
+    }
+    const chave = m[1].toLowerCase();
+    const valor = m[2].trim();
+    if (!valor) {
+      livre.push(token);
+      continue;
+    }
+    switch (chave) {
+      case "from":
+        out.from = valor.replace(/^@/, "");
+        break;
+      case "mentions":
+        out.mentions = valor.replace(/^@/, "");
+        break;
+      case "in":
+        out.in = valor.replace(/^#/, "");
+        break;
+      case "has": {
+        const v = valor.toLowerCase() as SearchHas;
+        if (SEARCH_HAS_VALUES.includes(v)) {
+          if (!out.has.includes(v)) out.has.push(v);
+        } else {
+          livre.push(token);
+        }
+        break;
+      }
+      case "before":
+      case "after":
+        if (isCalendarDate(valor)) out[chave] = valor;
+        else livre.push(token);
+        break;
+    }
+  }
+
+  out.text = livre.join(" ");
+  return out;
+}
+
+/** true quando não há nem texto nem filtro — não há o que consultar. */
+export function isEmptySearch(f: SearchFilters): boolean {
+  return (
+    !f.text.trim() &&
+    !f.from &&
+    !f.in &&
+    !f.mentions &&
+    !f.before &&
+    !f.after &&
+    f.has.length === 0
+  );
 }

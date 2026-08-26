@@ -103,15 +103,38 @@ modera sua comunidade.
   mensagem alheia). Marca "(editado)".
 - **Apagar:** o **autor ou a moderação** (OWNER/ADMIN). Apagar uma mensagem-raiz
   apaga as respostas em cascata.
-- **Threads (respostas):** profundidade **1** — responde-se a uma mensagem-raiz,
-  nunca a uma resposta. O pai tem que ser do mesmo canal. A timeline principal
-  mostra só as raízes; cada raiz exibe o contador de respostas.
+- **Responder (reply):** qualquer mensagem do mesmo canal pode ser citada. A
+  resposta mostra a linha de referência (autor + trecho de até 100 caracteres)
+  e o clique nela rola até a original, que fica destacada por 2 s. O
+  **"@ ligado"** (padrão, como no Discord) faz a resposta **contar como menção**
+  para quem escreveu a original; desligado, ela é só uma citação.
+- **Threads:** uma **thread nomeada** nasce de uma mensagem-raiz (o id da thread
+  *é* o da raiz); a raiz passa a exibir o nome, os avatares de quem participa e
+  quantas respostas tem. O painel de threads do cabeçalho lista as ativas e as
+  arquivadas, e quem criou (ou a moderação) renomeia e arquiva. Respostas
+  continuam com profundidade **1** — responde-se a uma raiz, nunca a uma
+  resposta —, e raiz sem nome segue funcionando como thread sem nome.
+- **Fixadas:** até **50 por canal**. Fixa a moderação (OWNER/ADMIN) ou, em
+  conversa direta, qualquer participante. Fixar narra no canal uma mensagem de
+  sistema ("X fixou uma mensagem neste canal", com "Ver mensagem"); o painel do
+  cabeçalho lista as fixadas com "ir para a mensagem".
 - **Reações:** um emoji por usuário por mensagem (reagir de novo não duplica;
   remover o que não existe não dá erro). Saída agrupada por emoji com contagem.
 - **Histórico:** paginação por **cursor**, 50 por página, ordem cronológica;
   scroll infinito para o passado. Só mensagens-raiz.
-- **Busca:** por conteúdo dentro de um canal (`contains`, sem full-text), 30
-  resultados, mais recentes primeiro.
+- **Busca:** por conteúdo, num canal (30 resultados) ou no **servidor inteiro**
+  (50), sempre restrita aos canais que **quem busca** enxerga. Aceita filtros
+  `from:@usuário`, `in:#canal`, `has:link|image|file`, `before:`/`after:`
+  (AAAA-MM-DD) e `mentions:@usuário`; filtro com valor inválido volta a ser
+  texto, em vez de virar um filtro invisível que não acha nada. Resultados no
+  painel da direita, agrupados por canal, com "ir para".
+- **Ir para a mensagem:** carrega uma janela de 25 mensagens antes e depois da
+  alvo, rola até ela e a destaca por 2 s. É o que fixadas, caixa de entrada,
+  busca, resposta e "copiar link da mensagem"
+  (`/app/channels/:guildId/:channelId/:messageId`, com `@me` em conversa) usam.
+- **Mensagens de sistema:** narração do canal (fixar; entrada de membro), sem
+  avatar, com ícone e texto apagado. Não são editáveis, fixáveis nem indexadas
+  pela busca.
 - **Canal de escrita é WebSocket:** criar/editar/apagar/reagir passam pelo
   gateway em tempo real; o REST de mensagens serve só leitura.
 
@@ -157,11 +180,15 @@ modera sua comunidade.
 - Cada usuário tem um `lastReadAt` por canal. **Não lido** = existe mensagem
   depois disso (ou nunca abriu e há mensagem). Abrir o canal, ou receber
   mensagem com o canal na tela e a janela visível, marca como lido.
-- **Menção** = `@username` no texto (limite de palavra), de outro autor, depois
-  de `lastReadAt`. Aparece como badge vermelho no rail, no canal e na DM; a
+- **Menção** = `@username` no texto (limite de palavra) **ou** resposta a uma
+  mensagem minha com o "@ ligado", de outro autor, depois de `lastReadAt` — uma
+  mensagem que seja as duas coisas conta uma vez só. Aparece como badge vermelho no rail, no canal e na DM; a
   mensagem ganha faixa amarela para quem foi mencionado.
 - Mensagem de outro servidor/conversa fora da tela notifica se a janela está
   escondida; dentro do app só menção e DM notificam.
+- **Caixa de entrada** (cabeçalho): "Para você" reúne as menções não lidas de
+  todos os servidores e conversas (clique leva até a mensagem); "Não lidos"
+  agrupa por servidor os canais com novidade e tem "marcar tudo como lido".
 
 ## Perfil
 

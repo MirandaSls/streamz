@@ -1,5 +1,10 @@
-import type { ChannelType as PrismaChannelType, MemberRole as PrismaMemberRole, UserStatus as PrismaUserStatus } from "@prisma/client";
-import type { ChannelType, MemberRole, UserStatus } from "@newdisc/shared";
+import type {
+  ChannelType as PrismaChannelType,
+  MemberRole as PrismaMemberRole,
+  MessageType as PrismaMessageType,
+  UserStatus as PrismaUserStatus,
+} from "@prisma/client";
+import type { ChannelType, MemberRole, MessageType, UserStatus } from "@newdisc/shared";
 
 /**
  * Ponte única entre os enums do Postgres (gerados pelo Prisma) e as union types
@@ -18,3 +23,4 @@ type Trava<_T extends true> = never;
 type _TravaUserStatus = Trava<Equivalentes<PrismaUserStatus, UserStatus>>;
 type _TravaChannelType = Trava<Equivalentes<PrismaChannelType, ChannelType>>;
 type _TravaMemberRole = Trava<Equivalentes<PrismaMemberRole, MemberRole>>;
+type _TravaMessageType = Trava<Equivalentes<PrismaMessageType, MessageType>>;
