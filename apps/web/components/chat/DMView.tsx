@@ -8,10 +8,12 @@ import MessageList from "@/components/chat/MessageList";
 import SearchPanel from "@/components/chat/SearchPanel";
 import TypingIndicator from "@/components/chat/TypingIndicator";
 import Avatar from "@/components/ui/Avatar";
+import CallBanner from "@/components/voice/CallBanner";
 import { useAuth } from "@/stores/auth";
 import { dmTitle, useActiveDM } from "@/stores/dms";
 import { useActiveSlice, useMessages } from "@/stores/messages";
 import { resolveStatus, usePresence } from "@/stores/presence";
+import { useVoice } from "@/stores/voice";
 
 /**
  * Coluna 3 no modo DM: conversa aberta.
@@ -24,6 +26,8 @@ export default function DMView() {
   const active = useActiveDM();
   const slice = useActiveSlice();
   const statuses = usePresence((s) => s.statuses);
+  const startCall = useVoice((s) => s.startCall);
+  const naChamada = useVoice((s) => s.channelId);
 
   const setSearchQuery = useMessages((s) => s.setSearchQuery);
   const runSearch = useMessages((s) => s.runSearch);
@@ -68,15 +72,25 @@ export default function DMView() {
         }}
         tools={
           <>
-            <HeaderIcon label="Iniciar chamada de voz" disabled>
+            <HeaderIcon
+              label="Iniciar chamada de voz"
+              active={naChamada === active.id}
+              onClick={() => void startCall(active.id, false)}
+            >
               <Phone size={24} />
             </HeaderIcon>
-            <HeaderIcon label="Iniciar chamada de vídeo" disabled>
+            <HeaderIcon
+              label="Iniciar chamada de vídeo"
+              onClick={() => void startCall(active.id, true)}
+            >
               <Video size={24} />
             </HeaderIcon>
           </>
         }
       />
+
+      {/* f-voz: barra da chamada em andamento, com quem já está nela */}
+      <CallBanner channelId={active.id} />
 
       <SearchPanel />
 

@@ -10,11 +10,13 @@ import type {
   GuildWithChannels,
   InviteInfo,
   InvitePreview,
+  CallStartResponse,
   LinkEmbed,
   MemberRole,
   Message,
   PublicUser,
   UserStatus,
+  VoiceStateEvent,
 } from "@newdisc/shared";
 import { API_URL } from "./config";
 import { ApiError } from "./api-error";
@@ -168,6 +170,11 @@ export const api = {
     request<{ token: string; url: string; room: string }>(`/voice/channels/${channelId}/token`, {
       method: "POST",
     }),
+  /** Estado inicial de voz do servidor; depois disso os `voice.state` mantêm em dia. */
+  guildVoiceStates: (guildId: string) => request<VoiceStateEvent[]>(`/guilds/${guildId}/voice-states`),
+  /** Começa (ou entra n)uma chamada de conversa direta; devolve o token de mídia, se houver. */
+  startCall: (channelId: string) =>
+    request<CallStartResponse>(`/dms/${channelId}/call`, { method: "POST" }),
 
   /** Envia um arquivo e devolve o anexo (a vincular numa mensagem no envio). */
   uploadFile: (file: File): Promise<Attachment> => {

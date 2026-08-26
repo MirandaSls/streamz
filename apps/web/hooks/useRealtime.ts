@@ -15,6 +15,10 @@ import {
   type MessageDeletedEvent,
   type PresenceUpdatePayload,
   type PublicUser,
+  // ── f-voz ──
+  type CallEndedEvent,
+  type CallRingEvent,
+  type VoiceStateEvent,
 } from "@newdisc/shared";
 import { notify } from "@/lib/desktop";
 import { useAuth } from "@/stores/auth";
@@ -25,6 +29,7 @@ import { useGuilds } from "@/stores/guilds";
 import { useMessages } from "@/stores/messages";
 import { usePresence } from "@/stores/presence";
 import { useTyping } from "@/stores/typing";
+import { useVoice } from "@/stores/voice";
 import { ui } from "@/stores/ui";
 
 /**
@@ -129,6 +134,20 @@ export function useRealtime(currentUserId?: string): void {
         void useMessages.getState().resyncActive();
         void useGuilds.getState().load();
         void useDMs.getState().refreshList();
+      }),
+      // ── f-voz ──
+      // estado de voz e chamada em DM: a store decide o que fazer, aqui só
+      // repassamos (o `voice.state` chega para qualquer canal visível)
+      on<VoiceStateEvent>(WS_EVENTS.VOICE_STATE, (evento) => {
+        useVoice.getState().applyState(evento);
+      }),
+
+      on<CallRingEvent>(WS_EVENTS.CALL_RING, (evento) => {
+        useVoice.getState().handleRing(evento);
+      }),
+
+      on<CallEndedEvent>(WS_EVENTS.CALL_ENDED, (evento) => {
+        useVoice.getState().handleEnded(evento);
       }),
     ];
 

@@ -19,6 +19,7 @@ import {
 import { isUnread, type Channel } from "@newdisc/shared";
 import UserFooter from "@/components/layout/UserFooter";
 import Tooltip from "@/components/ui/Tooltip";
+import VoiceChannelMembers from "@/components/voice/VoiceChannelMembers";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { useCanModerate, useGuilds, useIsOwner } from "@/stores/guilds";
@@ -174,6 +175,8 @@ export default function ChannelSidebar() {
     const name = channel.name ?? "canal";
     const unread = !active && channel.type !== "VOICE" && isUnread(channel);
     return (
+      // f-voz: o canal de voz carrega embaixo a lista de quem está na sala
+      <div key={`voz-${channel.id}`}>
       <div
         key={channel.id}
         role="listitem"
@@ -220,6 +223,8 @@ export default function ChannelSidebar() {
             </button>
           </Tooltip>
         )}
+      </div>
+      {channel.type === "VOICE" && <VoiceChannelMembers channelId={channel.id} />}
       </div>
     );
   }

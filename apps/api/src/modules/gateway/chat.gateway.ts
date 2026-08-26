@@ -21,6 +21,10 @@ import {
   parseWsPayload,
   reactionSchema,
   typingSchema,
+  // ── f-voz ──
+  callSchema,
+  voiceJoinSchema,
+  voiceUpdateSchema,
 } from "@newdisc/shared";
 import type { UserStatus, WsErrorEvent } from "@newdisc/shared";
 import {
@@ -36,6 +40,8 @@ import { GuildsService } from "../guilds/guilds.service";
 import { RealtimeService } from "../realtime/realtime.service";
 import { redisClient, redisSubscriber } from "../realtime/redis";
 import { CORS_OPTIONS } from "../../common/cors";
+import { VoiceService } from "../voice/voice.service";
+import { CallsService } from "../voice/calls.service";
 
 interface SocketUser {
   id: string;
@@ -51,6 +57,9 @@ interface SocketUser {
 const WS_LIMITS: Record<string, BucketLimit> = {
   [WS_EVENTS.MESSAGE_CREATE]: { capacity: 10, refillPerSecond: 1 },
   [WS_EVENTS.TYPING]: { capacity: 8, refillPerSecond: 2 },
+  // f-voz: mudo/surdo/câmera são clicáveis em rajada, mas não a esse ponto
+  [WS_EVENTS.VOICE_UPDATE]: { capacity: 10, refillPerSecond: 2 },
+  [WS_EVENTS.VOICE_JOIN]: { capacity: 5, refillPerSecond: 1 },
 };
 
 @WebSocketGateway({ cors: CORS_OPTIONS })
@@ -74,6 +83,8 @@ export class ChatGateway
     private readonly prisma: PrismaService,
     private readonly guilds: GuildsService,
     private readonly realtime: RealtimeService,
+    private readonly voice: VoiceService,
+    private readonly calls: CallsService,
   ) {}
 
   /**
@@ -138,7 +149,10 @@ export class ChatGateway
 
   handleDisconnect(client: Socket) {
     const user = client.data.user as SocketUser | undefined;
-    if (user) void this.markOffline(user.id);
+    if (!user) return;
+    void this.markOffline(user.id);
+    // f-voz: sem isto o usuário ficaria "na call" para sempre depois de fechar a aba
+    void this.desconectarDaVoz(client, user);
   }
 
   /** Primeira conexão do usuário → status escolhido (ou ONLINE) + broadcast. */
@@ -359,5 +373,113 @@ export class ChatGateway
 
   private room(channelId: string) {
     return `channel:${channelId}`;
+  }
+
+  // ── f-voz ────────────────────────────────────────────────
+  //
+  // Voz é estado efêmero, não mensagem: quem entra numa sala fica registrado no
+  // `VoiceService` enquanto o socket viver. Por isso o socket lembra em que
+  // canal de voz está (`client.data.voiceChannelId`) — é o que permite limpar
+  // tudo no disconnect sem perguntar ao banco.
+
+  @SubscribeMessage(WS_EVENTS.VOICE_JOIN)
+  async onVoiceJoin(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
+    const user = this.userOf(client);
+    if (!this.allow(client, WS_EVENTS.VOICE_JOIN)) return;
+    const payload = this.parse(client, voiceJoinSchema, body);
+    if (!user || !payload) return;
+    try {
+      // o join valida o acesso ao canal (assertCanViewChannel) e o tipo
+      await this.voice.join(user.id, payload.channelId);
+      client.data.voiceChannelId = payload.channelId;
+    } catch (e) {
+      this.emitError(client, e);
+    }
+  }
+
+  @SubscribeMessage(WS_EVENTS.VOICE_LEAVE)
+  async onVoiceLeave(@ConnectedSocket() client: Socket) {
+    const user = this.userOf(client);
+    if (!user) return;
+    const lembrado = client.data.voiceChannelId as string | undefined;
+    client.data.voiceChannelId = undefined;
+    try {
+      // a chamada em DM entra pela rota REST, que não passa por este socket:
+      // sem o fallback, sair de uma chamada assim não teria efeito nenhum
+      const canais = lembrado ? [lembrado] : await this.voice.channelsOf(user.id);
+      for (const channelId of canais) {
+        await this.voice.leave(user.id, channelId);
+        await this.calls.onDisconnect(user.id, channelId);
+      }
+    } catch (e) {
+      this.emitError(client, e);
+    }
+  }
+
+  @SubscribeMessage(WS_EVENTS.VOICE_UPDATE)
+  async onVoiceUpdate(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
+    const user = this.userOf(client);
+    if (!this.allow(client, WS_EVENTS.VOICE_UPDATE)) return;
+    const payload = this.parse(client, voiceUpdateSchema, body);
+    const channelId = client.data.voiceChannelId as string | undefined;
+    if (!user || !payload || !channelId) return;
+    try {
+      await this.voice.update(user.id, channelId, payload);
+    } catch (e) {
+      this.emitError(client, e);
+    }
+  }
+
+  @SubscribeMessage(WS_EVENTS.CALL_ACCEPT)
+  async onCallAccept(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
+    const user = this.userOf(client);
+    const payload = this.parse(client, callSchema, body);
+    if (!user || !payload) return;
+    try {
+      await this.calls.accept(user.id, payload.channelId);
+      client.data.voiceChannelId = payload.channelId;
+    } catch (e) {
+      this.emitError(client, e);
+    }
+  }
+
+  @SubscribeMessage(WS_EVENTS.CALL_DECLINE)
+  async onCallDecline(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
+    const user = this.userOf(client);
+    const payload = this.parse(client, callSchema, body);
+    if (!user || !payload) return;
+    try {
+      await this.calls.decline(user.id, payload.channelId);
+    } catch (e) {
+      this.emitError(client, e);
+    }
+  }
+
+  @SubscribeMessage(WS_EVENTS.CALL_END)
+  async onCallEnd(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
+    const user = this.userOf(client);
+    const payload = this.parse(client, callSchema, body);
+    if (!user || !payload) return;
+    client.data.voiceChannelId = undefined;
+    try {
+      await this.calls.end(user.id, payload.channelId);
+    } catch (e) {
+      this.emitError(client, e);
+    }
+  }
+
+  /**
+   * Aba fechada / conexão perdida: tira o usuário da sala de voz e emite
+   * `connected: false`. Só quando **nenhuma** outra conexão dele estiver na
+   * mesma sala — duas abas abertas no mesmo canal não podem derrubar uma à
+   * outra.
+   */
+  private async desconectarDaVoz(client: Socket, user: SocketUser) {
+    const channelId = client.data.voiceChannelId as string | undefined;
+    if (!channelId) return;
+    const outras = await this.server.in(`user:${user.id}`).fetchSockets();
+    if (outras.some((s) => s.id !== client.id && s.data.voiceChannelId === channelId)) return;
+    await this.voice.leave(user.id, channelId).catch(() => {});
+    await this.calls.onDisconnect(user.id, channelId).catch(() => {});
   }
 }
