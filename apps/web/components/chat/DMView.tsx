@@ -1,7 +1,7 @@
 "use client";
 
 import { Phone, Settings, UserPlus, Users, Video } from "lucide-react";
-import { isGroupChannel } from "@newdisc/shared";
+import { isGroupChannel } from "@streamz/shared";
 import Composer from "@/components/chat/Composer";
 import DMMemberList from "@/components/chat/DMMemberList";
 import HeaderBar, { HeaderIcon } from "@/components/chat/HeaderBar";

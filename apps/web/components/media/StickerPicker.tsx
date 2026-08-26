@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Settings2 } from "lucide-react";
-import type { Sticker } from "@newdisc/shared";
+import type { Sticker } from "@streamz/shared";
 import { useAuth } from "@/stores/auth";
 import { useEmojis } from "@/stores/emojis";
 import { useCanModerate, useGuilds } from "@/stores/guilds";

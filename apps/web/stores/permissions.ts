@@ -9,7 +9,7 @@ import {
   type ChannelOverride,
   type PermissionMember,
   type Role,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
@@ -18,7 +18,7 @@ import { useGuilds } from "@/stores/guilds";
 /**
  * Cargos e regras de canal do servidor ativo — e o cálculo de "o que eu posso".
  *
- * O cliente usa **a mesma** `computePermissions` da API (`@newdisc/shared`), e
+ * O cliente usa **a mesma** `computePermissions` da API (`@streamz/shared`), e
  * não uma segunda regra escrita à mão: assim o que a UI esconde é exatamente o
  * que a API recusaria, e a regra não envelhece em dois lugares (ADR-0002).
  *

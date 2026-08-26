@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronUp, MonitorUp, MonitorX } from "lucide-react";
-import { SCREEN_QUALITY, type ScreenQuality } from "@newdisc/shared";
+import { SCREEN_QUALITY, type ScreenQuality } from "@streamz/shared";
 import Tooltip from "@/components/ui/Tooltip";
 import { useVoice } from "@/stores/voice";
 

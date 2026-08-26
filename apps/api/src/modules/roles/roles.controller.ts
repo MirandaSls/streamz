@@ -19,7 +19,7 @@ import {
   Length,
   Min,
 } from "class-validator";
-import { MAX_ROLE_NAME } from "@newdisc/shared";
+import { MAX_ROLE_NAME } from "@streamz/shared";
 import { RolesService } from "./roles.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";

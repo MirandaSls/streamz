@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { create } from "zustand";
-import { IDLE_APOS_MS } from "@newdisc/shared";
-import type { PublicUser, UserStatus } from "@newdisc/shared";
+import { IDLE_APOS_MS } from "@streamz/shared";
+import type { PublicUser, UserStatus } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
 

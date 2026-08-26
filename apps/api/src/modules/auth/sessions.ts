@@ -1,4 +1,4 @@
-import type { SessaoView } from "@newdisc/shared";
+import type { SessaoView } from "@streamz/shared";
 
 /**
  * Uma sessão é um refresh token vivo. Este arquivo converte a linha do banco no
@@ -71,4 +71,4 @@ function recortar(valor: unknown, max: number): string | null {
  * dispositivos é quem o mostra, e um segundo cliente (o desktop) mostraria o
  * mesmo. Reexportado para os testes ficarem junto do resto da sessão.
  */
-export { ehDispositivoMovel, resumoDoDispositivo } from "@newdisc/shared";
+export { ehDispositivoMovel, resumoDoDispositivo } from "@streamz/shared";

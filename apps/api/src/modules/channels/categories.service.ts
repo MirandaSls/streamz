@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { Permission, WS_EVENTS } from "@newdisc/shared";
-import type { Category } from "@newdisc/shared";
+import { Permission, WS_EVENTS } from "@streamz/shared";
+import type { Category } from "@streamz/shared";
 import { toCategoryDTO, toChannelDTO } from "../../common/dto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";

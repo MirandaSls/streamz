@@ -7,7 +7,7 @@ import {
   SLOWMODE_PRESETS,
   slowmodeLabel,
   type Channel,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { ChannelAccessList } from "@/components/modals/ChannelAccessModal";
 import { useChannels, type UpdateChannelInput } from "@/stores/channels";

@@ -1,4 +1,4 @@
-import { LOGIN_LOCK_MINUTES, LOGIN_MAX_FAILED_ATTEMPTS } from "@newdisc/shared";
+import { LOGIN_LOCK_MINUTES, LOGIN_MAX_FAILED_ATTEMPTS } from "@streamz/shared";
 
 /**
  * Bloqueio de conta por falhas de senha seguidas.

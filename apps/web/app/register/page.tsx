@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { MIN_ACCOUNT_AGE_YEARS } from "@newdisc/shared";
+import { MIN_ACCOUNT_AGE_YEARS } from "@streamz/shared";
 import AuthCard, {
   FieldLabel,
   MedidorDeSenha,

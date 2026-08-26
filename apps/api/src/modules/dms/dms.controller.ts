@@ -23,7 +23,7 @@ import {
   Length,
 } from "class-validator";
 import type { ServerResponse } from "node:http";
-import { MAX_DM_GROUP_INVITEES, MAX_DM_GROUP_NAME, MAX_GROUP_ICON_SIZE } from "@newdisc/shared";
+import { MAX_DM_GROUP_INVITEES, MAX_DM_GROUP_NAME, MAX_GROUP_ICON_SIZE } from "@streamz/shared";
 import { DMsService } from "./dms.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";

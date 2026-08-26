@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { Volume2 } from "lucide-react";
-import { type NotificationLevel } from "@newdisc/shared";
+import { type NotificationLevel } from "@streamz/shared";
 import { RadioCards, Section, Toggle } from "@/components/settings/controls";
 import { useT } from "@/lib/i18n";
 import { tocarSomDeNotificacao } from "@/lib/notification-sound";

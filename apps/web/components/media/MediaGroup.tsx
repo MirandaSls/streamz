@@ -10,7 +10,7 @@ import {
   isSpoilerAttachment,
   isVideoAttachment,
   type Attachment,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import { ui } from "@/stores/ui";
 
 /**

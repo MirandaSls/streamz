@@ -1,4 +1,4 @@
-import { MAX_TIMEOUT_MINUTES, isTimedOut } from "@newdisc/shared";
+import { MAX_TIMEOUT_MINUTES, isTimedOut } from "@streamz/shared";
 
 /**
  * Regras puras do castigo (timeout), fora do service para poderem ser testadas

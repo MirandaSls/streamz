@@ -1,4 +1,4 @@
-import type { AuditLogChange } from "@newdisc/shared";
+import type { AuditLogChange } from "@streamz/shared";
 
 /**
  * Diferença entre o estado anterior e o novo, no formato do registro de

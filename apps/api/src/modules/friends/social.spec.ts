@@ -5,7 +5,7 @@ import {
   isSystemMessage,
   systemMessageText,
   type Message,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 
 /**
  * Lógica pura do contrato social (d-social). Fica aqui, e não numa suíte do

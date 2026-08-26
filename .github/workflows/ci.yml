@@ -36,31 +36,31 @@ jobs:
       # O client do Prisma é gerado, não versionado: sem isto o typecheck da
       # api falha em todo tipo que vem do `@prisma/client`.
       - name: Gerar client do Prisma
-        run: pnpm --filter @newdisc/api exec prisma generate
+        run: pnpm --filter @streamz/api exec prisma generate
 
-      # @newdisc/shared é consumido pelo dist/ — o typecheck de api e web
+      # @streamz/shared é consumido pelo dist/ — o typecheck de api e web
       # enxerga o contrato antigo (ou nenhum) se este passo não vier antes.
       - name: Build do contrato compartilhado
-        run: pnpm --filter @newdisc/shared build
+        run: pnpm --filter @streamz/shared build
 
       - name: Typecheck (shared, api, web)
         run: |
-          pnpm --filter @newdisc/shared exec tsc --noEmit
-          pnpm --filter @newdisc/api exec tsc --noEmit
-          pnpm --filter @newdisc/web exec tsc --noEmit
+          pnpm --filter @streamz/shared exec tsc --noEmit
+          pnpm --filter @streamz/api exec tsc --noEmit
+          pnpm --filter @streamz/web exec tsc --noEmit
 
       # Os testes cobrem só lógica pura (vitest) — nenhum precisa de Postgres,
       # por isso não há serviço de banco aqui. Se um dia precisar, adicione um
       # `services: postgres:` neste job.
       - name: Testes
         run: |
-          pnpm --filter @newdisc/api test
-          pnpm --filter @newdisc/web test
+          pnpm --filter @streamz/api test
+          pnpm --filter @streamz/web test
 
       # Prova que a web compila de verdade (typecheck não pega erro de build do
       # Next: rota mal formada, import de server component etc.).
       - name: Build da web
-        run: pnpm --filter @newdisc/web build
+        run: pnpm --filter @streamz/web build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
 

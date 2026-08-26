@@ -1,5 +1,5 @@
 {
-  "name": "@newdisc/web",
+  "name": "@streamz/web",
   "version": "0.0.1",
   "private": true,
   "scripts": {
@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@livekit/components-styles": "^1.1.4",
-    "@newdisc/shared": "workspace:*",
+    "@streamz/shared": "workspace:*",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-notification": "^2",
     "emoji-picker-react": "^4.19.1",

@@ -15,7 +15,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { SkipThrottle } from "@nestjs/throttler";
 import { IsString, Length } from "class-validator";
 import type { ServerResponse } from "node:http";
-import { MAX_CUSTOM_EMOJI_SIZE } from "@newdisc/shared";
+import { MAX_CUSTOM_EMOJI_SIZE } from "@streamz/shared";
 import { EmojisService } from "./emojis.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";

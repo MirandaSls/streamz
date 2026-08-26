@@ -1,4 +1,4 @@
-# NewDisc
+# Streamz
 
 Clone do Discord (MVP) — chat em servidores/canais em tempo real, voz/vídeo/tela
 e app desktop. Monolito **NestJS** + **Next.js** + **Tauri** num monorepo.
@@ -57,11 +57,11 @@ instalador Windows (`.exe` NSIS + `.msi`).
 
 ```bash
 # dev (abre janela nativa carregando a web em http://localhost:3000)
-pnpm --filter @newdisc/desktop dev
+pnpm --filter @streamz/desktop dev
 
 # build do instalador (Windows: .exe/.msi)
 #   antes: gere os ícones (ver apps/desktop/src-tauri/icons/README.md)
-pnpm --filter @newdisc/desktop build
+pnpm --filter @streamz/desktop build
 ```
 
 O build embute a web como HTML estático: o Next liga `output: "export"` sozinho
@@ -70,8 +70,8 @@ quando roda dentro do Tauri. Detalhes e alternativas: `apps/desktop/README.md`.
 ### Recursos nativos
 
 - **System tray (bandeja):** ícone na bandeja com menu de contexto
-  (*Abrir NewDisc*, *Sair*). Fechar a janela **minimiza para a bandeja** em vez
-  de encerrar o app; o clique esquerdo no ícone (ou o item *Abrir NewDisc*)
+  (*Abrir Streamz*, *Sair*). Fechar a janela **minimiza para a bandeja** em vez
+  de encerrar o app; o clique esquerdo no ícone (ou o item *Abrir Streamz*)
   restaura a janela. Implementado em `src-tauri/src/main.rs` com
   `tauri::tray::TrayIconBuilder` (feature `tray-icon` no `Cargo.toml`).
 - **Notificações nativas:** plugin `tauri-plugin-notification` registrado no

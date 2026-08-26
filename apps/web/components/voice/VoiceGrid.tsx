@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { HeadphoneOff, Maximize2, MicOff, MonitorUp, Volume2, VolumeX } from "lucide-react";
 import { Track, type Participant, type TrackPublication } from "livekit-client";
-import { displayNameOf, type VoiceStateEvent } from "@newdisc/shared";
+import { displayNameOf, type VoiceStateEvent } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import { useAuth } from "@/stores/auth";
 import { participantesDaSala, useVoice, videosDe } from "@/stores/voice";

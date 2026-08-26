@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CustomEmoji } from "@newdisc/shared";
+import type { CustomEmoji } from "@streamz/shared";
 import { parseBlocks, parseInline, plainText, soEmojis } from "../markdown-core";
 import { aplicarEmojisPersonalizados } from "@/stores/emojis";
 

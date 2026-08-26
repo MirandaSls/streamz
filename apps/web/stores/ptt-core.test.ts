@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PTT_RELEASE_MS } from "@newdisc/shared";
+import { PTT_RELEASE_MS } from "@streamz/shared";
 import {
   PTT_INICIAL,
   pttAberto,

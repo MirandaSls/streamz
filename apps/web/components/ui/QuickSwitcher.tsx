@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Hash, Lock, Megaphone, MessageSquare, Server, Users, Volume2 } from "lucide-react";
-import { isGroupChannel } from "@newdisc/shared";
+import { isGroupChannel } from "@streamz/shared";
 import Dialog from "@/components/modals/Dialog";
 import { useT } from "@/lib/i18n";
 import { rank, type QuickItem, type QuickKind } from "@/lib/quick-switcher";

@@ -11,7 +11,7 @@ import {
   MAX_GUILD_DESCRIPTION,
   MAX_WELCOME_CHANNELS,
   MAX_WELCOME_DESCRIPTION,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import { OnboardingService } from "./onboarding.service";
 import { CurrentUser } from "../../common/current-user.decorator";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";

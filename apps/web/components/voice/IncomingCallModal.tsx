@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { Phone, PhoneOff } from "lucide-react";
-import { CALL_RING_TIMEOUT_MS, displayNameOf, isGroupChannel } from "@newdisc/shared";
+import { CALL_RING_TIMEOUT_MS, displayNameOf, isGroupChannel } from "@streamz/shared";
 import Dialog from "@/components/modals/Dialog";
 import Avatar from "@/components/ui/Avatar";
 import { ringtoneDataUrl } from "@/lib/ringtone";

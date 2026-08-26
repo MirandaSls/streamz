@@ -1,4 +1,4 @@
-import { CALL_RING_TIMEOUT_MS, type CallEndedEvent, type PublicUser } from "@newdisc/shared";
+import { CALL_RING_TIMEOUT_MS, type CallEndedEvent, type PublicUser } from "@streamz/shared";
 
 /**
  * Máquina de estados de uma chamada em conversa direta — a parte pura.

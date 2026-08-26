@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AuthTokens, PublicUser } from "@newdisc/shared";
+import type { AuthTokens, PublicUser } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { disconnectSocket } from "@/lib/socket";
 import { aoExpirarSessao, lerRefreshToken, limparTokens, salvarTokens } from "@/lib/session";

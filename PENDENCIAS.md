@@ -21,7 +21,7 @@ no banco e migrations versionadas. Não há mais SQLite nem `db push`. O que fal
     Desktop não sobe aqui porque o WSL está sem distribuição.
   - **Docker Desktop**: `pnpm db:up` (sobe só o Postgres, exposto apenas em
       `127.0.0.1:5432`). `DATABASE_URL=`
-      `postgresql://newdisc:newdisc@localhost:5432/newdisc?schema=public`.
+      `postgresql://streamz:streamz@localhost:5432/streamz?schema=public`.
       Credenciais diferentes: exporte `POSTGRES_USER`/`POSTGRES_PASSWORD`/
       `POSTGRES_DB` antes do compose e reflita na `DATABASE_URL`.
   - **Gerenciado**: banco grátis em [neon.tech](https://neon.tech) ou
@@ -101,8 +101,8 @@ Duas formas de rodar — escolha uma:
       antigo não achar, reabra.
 - [x] ~~Gerar os ícones do app~~ — feito a partir de `apps/desktop/logo.svg`
       (balão do rail sobre o blurple). Para trocar o logo, edite o SVG e rode
-      `pnpm --filter @newdisc/desktop tauri icon logo.svg`.
-- [ ] `pnpm --filter @newdisc/desktop tauri build` — gera o instalador em
+      `pnpm --filter @streamz/desktop tauri icon logo.svg`.
+- [ ] `pnpm --filter @streamz/desktop tauri build` — gera o instalador em
       `apps/desktop/src-tauri/target/release/bundle/`.
 
 **Empacotamento resolvido:** o desktop embute a web como **HTML estático**
@@ -118,10 +118,10 @@ comentado — ele liga por ambiente (`TAURI_ENV_*`, que o Tauri injeta no
 
 ## 5. Mais adiante (pós-MVP)
 - [ ] **Auto-update do desktop** — o `tauri-plugin-updater` foi **desligado**
-      (estava apontando para `releases.newdisc.dev`, que não existe, com `pubkey`
+      (estava apontando para `releases.streamz.dev`, que não existe, com `pubkey`
       placeholder; assim ele só gera erro em runtime). Para religar:
   - [ ] Gerar o par de chaves e guardar a privada **fora do repo**:
-        `pnpm --filter @newdisc/desktop tauri signer generate -w ~/.tauri/newdisc.key`
+        `pnpm --filter @streamz/desktop tauri signer generate -w ~/.tauri/streamz.key`
   - [ ] Publicar um endpoint real de releases
         (`/updater/{{target}}/{{arch}}/{{current_version}}`) servindo o JSON de
         update assinado.

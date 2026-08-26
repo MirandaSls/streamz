@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { displayNameOf, MAX_DM_GROUP_INVITEES, type PublicUser } from "@newdisc/shared";
+import { displayNameOf, MAX_DM_GROUP_INVITEES, type PublicUser } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import Avatar from "@/components/ui/Avatar";
 import { api } from "@/lib/api";

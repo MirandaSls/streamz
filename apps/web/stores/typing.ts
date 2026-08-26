@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { WS_EVENTS, type PublicUser } from "@newdisc/shared";
+import { WS_EVENTS, type PublicUser } from "@streamz/shared";
 import { emit } from "@/stores/socket-adapter";
 
 /**

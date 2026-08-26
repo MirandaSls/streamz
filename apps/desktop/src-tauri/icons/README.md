@@ -4,7 +4,7 @@ O Tauri precisa dos ícones referenciados em `tauri.conf.json` (`32x32.png`,
 `128x128.png`, `icon.ico`). Gere todos a partir de um PNG quadrado (≥512px):
 
 ```bash
-pnpm --filter @newdisc/desktop tauri icon caminho/para/logo.png
+pnpm --filter @streamz/desktop tauri icon caminho/para/logo.png
 ```
 
 Isso cria automaticamente todos os tamanhos nesta pasta. Sem os ícones, o

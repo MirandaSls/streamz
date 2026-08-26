@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { WS_EVENTS } from "@newdisc/shared";
-import type { DiscoverableGuild } from "@newdisc/shared";
+import { WS_EVENTS } from "@streamz/shared";
+import type { DiscoverableGuild } from "@streamz/shared";
 import { toPublicUser } from "../../common/dto";
 import { isUniqueViolation } from "../../common/prisma-errors";
 import { PrismaService } from "../../prisma/prisma.service";

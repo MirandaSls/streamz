@@ -1,5 +1,5 @@
 import { io, type Socket } from "socket.io-client";
-import { WS_EVENTS } from "@newdisc/shared";
+import { WS_EVENTS } from "@streamz/shared";
 import { WS_URL } from "./config";
 import { getAccessToken, renovarTokens } from "./session";
 

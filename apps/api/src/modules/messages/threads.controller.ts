@@ -9,7 +9,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { IsBoolean, IsOptional, IsString, Length } from "class-validator";
-import { MAX_THREAD_NAME } from "@newdisc/shared";
+import { MAX_THREAD_NAME } from "@streamz/shared";
 import { ThreadsService } from "./threads.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";

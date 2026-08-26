@@ -11,13 +11,13 @@ import {
   WS_EVENTS,
   hasPermission,
   isRoleColor,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import type {
   ChannelOverride,
   MemberPermissions,
   Role,
   RoleInput,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import { toOverrideDTO, toRoleDTO } from "../../common/dto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";

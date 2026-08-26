@@ -2,7 +2,7 @@
 
 import { useEffect, type ReactNode } from "react";
 import { ArrowDown } from "lucide-react";
-import { isSystemMessage, type Message } from "@newdisc/shared";
+import { isSystemMessage, type Message } from "@streamz/shared";
 import MessageItem from "@/components/MessageItem";
 import BlockedMessages from "@/components/chat/BlockedMessages";
 import SystemMessageItem from "@/components/chat/SystemMessageItem";

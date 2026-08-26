@@ -29,9 +29,9 @@ import {
   MAX_REPORT_DETAILS,
   MAX_TIMEOUT_MINUTES,
   REPORT_REASONS,
-} from "@newdisc/shared";
-import { Permission } from "@newdisc/shared";
-import type { AuditAction, ReportReason } from "@newdisc/shared";
+} from "@streamz/shared";
+import { Permission } from "@streamz/shared";
+import type { AuditAction, ReportReason } from "@streamz/shared";
 import { ModerationService } from "./moderation.service";
 import { AuditService } from "../audit/audit.service";
 import { GuildsService } from "../guilds/guilds.service";

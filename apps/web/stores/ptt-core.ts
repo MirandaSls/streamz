@@ -1,4 +1,4 @@
-import { PTT_RELEASE_MS } from "@newdisc/shared";
+import { PTT_RELEASE_MS } from "@streamz/shared";
 
 /**
  * Push-to-talk — a parte pura.

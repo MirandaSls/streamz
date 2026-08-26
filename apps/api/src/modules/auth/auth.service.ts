@@ -9,7 +9,7 @@ import { JwtService } from "@nestjs/jwt";
 import { Prisma } from "@prisma/client";
 import * as argon2 from "argon2";
 import { createHash, randomBytes } from "crypto";
-import { WS_EVENTS, normalizarEmail, pareceEmail, validarNascimento } from "@newdisc/shared";
+import { WS_EVENTS, normalizarEmail, pareceEmail, validarNascimento } from "@streamz/shared";
 import type {
   AuthSession,
   AuthTokens,
@@ -22,7 +22,7 @@ import type {
   MinhaConta,
   PublicUser,
   SessionsRevokedEvent,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { isUniqueViolation } from "../../common/prisma-errors";
 import { toPublicUser, type PublicUserRow } from "../../common/dto";

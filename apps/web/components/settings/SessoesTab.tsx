@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Laptop, LogOut, Smartphone } from "lucide-react";
-import type { SessionInfo } from "@newdisc/shared";
+import type { SessionInfo } from "@streamz/shared";
 import { EmBreve } from "@/components/settings/controls";
 import { api } from "@/lib/api";
 import { isApiError } from "@/lib/api-error";

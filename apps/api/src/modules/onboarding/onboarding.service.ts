@@ -1,11 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { Permission, WS_EVENTS, displayNameOf } from "@newdisc/shared";
+import { Permission, WS_EVENTS, displayNameOf } from "@streamz/shared";
 import type {
   GuildMembership,
   GuildOnboarding,
   GuildOnboardingUpdate,
-} from "@newdisc/shared";
-import { MAX_WELCOME_CHANNELS } from "@newdisc/shared";
+} from "@streamz/shared";
+import { MAX_WELCOME_CHANNELS } from "@streamz/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { diffChanges } from "../audit/changes";

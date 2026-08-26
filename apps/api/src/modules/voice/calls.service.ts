@@ -6,7 +6,7 @@ import {
   type CallRingEvent,
   type CallStartResponse,
   type PublicUser,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import { GuildsService } from "../guilds/guilds.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { RealtimeService } from "../realtime/realtime.service";

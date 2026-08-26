@@ -2488,7 +2488,7 @@ const SENHAS_OBVIAS = [
   "111111",
   "iloveyou",
   "admin",
-  "newdisc",
+  "streamz",
 ];
 
 export function forcaDeSenha(senha: string): ForcaDeSenha {
@@ -2878,7 +2878,7 @@ export type ProvedorDeEmail = "smtp" | "console";
  */
 export function resumoDoDispositivo(userAgent: string | null | undefined): string {
   if (!userAgent) return "Dispositivo desconhecido";
-  if (/NewDisc(Desktop)?|Tauri|Electron/i.test(userAgent)) return "App do NewDisc";
+  if (/Streamz(Desktop)?|Tauri|Electron/i.test(userAgent)) return "App do Streamz";
   return `${navegadorDe(userAgent)} · ${sistemaDe(userAgent)}`;
 }
 

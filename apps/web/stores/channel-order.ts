@@ -1,4 +1,4 @@
-import type { Category, CategoryPosition, Channel, ChannelPosition } from "@newdisc/shared";
+import type { Category, CategoryPosition, Channel, ChannelPosition } from "@streamz/shared";
 
 /**
  * Ordem da barra lateral: como os canais se distribuem nas categorias e o que

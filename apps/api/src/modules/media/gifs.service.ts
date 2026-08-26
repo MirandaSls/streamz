@@ -4,7 +4,7 @@ import type {
   GifCategory,
   GifResult,
   GifSearchResponse,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 
 /** Base da API do provedor (Tenor v2). */
 const TENOR = "https://tenor.googleapis.com/v2";
@@ -69,7 +69,7 @@ export class GifsService {
     const rota = q ? "search" : "featured";
     const params = new URLSearchParams({
       key: process.env.TENOR_API_KEY!,
-      client_key: "newdisc",
+      client_key: "streamz",
       limit: String(Math.min(Math.max(limit, 1), 50)),
       media_filter: "gif,tinygif",
       contentfilter: "medium",
@@ -87,7 +87,7 @@ export class GifsService {
     if (!this.isConfigured()) return { configured: false, categories: [] };
     const params = new URLSearchParams({
       key: process.env.TENOR_API_KEY!,
-      client_key: "newdisc",
+      client_key: "streamz",
       type: "featured",
     });
     const dados = await this.pegar<{ tags?: TenorTag[] }>(`${TENOR}/categories?${params}`);

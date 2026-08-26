@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { FriendLists, PublicUser } from "@newdisc/shared";
+import type { FriendLists, PublicUser } from "@streamz/shared";
 import { agruparBloqueadas } from "@/lib/timeline";
 import { relationshipFrom } from "@/stores/friends";
 import type { ChatMessage } from "@/stores/messages-core";

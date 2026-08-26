@@ -6,7 +6,7 @@
  * lesse `localStorage` no seu momento, o socket ficaria autenticado com um token
  * já rotacionado. Nenhum módulo aqui importa a store, então não há ciclo.
  */
-import type { AuthTokens } from "@newdisc/shared";
+import type { AuthTokens } from "@streamz/shared";
 import { API_URL } from "./config";
 import { ApiError } from "./api-error";
 

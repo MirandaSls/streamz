@@ -1,4 +1,4 @@
-import type { Attachment } from "@newdisc/shared";
+import type { Attachment } from "@streamz/shared";
 import type { StorageService } from "../storage/storage.service";
 
 /** Linha de `Attachment` com o que o DTO precisa. */

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Keyboard, RefreshCw } from "lucide-react";
-import { PTT_RELEASE_MS } from "@newdisc/shared";
+import { PTT_RELEASE_MS } from "@streamz/shared";
 import { pttRotulo } from "@/stores/ptt-core";
 import { useVoiceDevices } from "@/stores/voiceDevices";
 import { useVoicePrefs } from "@/stores/voicePrefs";

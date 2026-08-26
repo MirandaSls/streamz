@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { WS_EVENTS, type Poll } from "@newdisc/shared";
+import { WS_EVENTS, type Poll } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { aplicarVoto, mesclarContagem } from "@/stores/polls-core";
 import { emit } from "@/stores/socket-adapter";

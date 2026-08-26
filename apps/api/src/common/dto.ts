@@ -7,10 +7,10 @@ import type {
   PublicUser,
   Role,
   UserStatus,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 
 /**
- * Conversores de linha do Prisma para os DTOs de `@newdisc/shared`.
+ * Conversores de linha do Prisma para os DTOs de `@streamz/shared`.
  *
  * Ficam aqui, e não dentro de um service, porque guilds, channels, dms, users e
  * messages devolvem os mesmos objetos.

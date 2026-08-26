@@ -29,7 +29,7 @@ const WEB = process.env.WEB_URL ?? "http://localhost:3107";
 
 // i-conta: o registro exige e-mail e senha forte, o login usa `#identificador`
 // e, após registrar, a web passa por /verify-email (a conta já é utilizável).
-const E2E_EMAIL_DOMINIO = "e2e.newdisc.test";
+const E2E_EMAIL_DOMINIO = "e2e.streamz.test";
 async function preencherCredenciais(page, user, pass) {
   if (await page.$("#email")) await page.fill("#email", `${user}@${E2E_EMAIL_DOMINIO}`);
   await page.fill((await page.$("#identificador")) ? "#identificador" : "#username", user);
@@ -107,7 +107,7 @@ try {
   const credenciais = {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: ANA.user, email: `${ANA.user}@e2e.newdisc.test`, password: ANA.pass }),
+    body: JSON.stringify({ username: ANA.user, email: `${ANA.user}@e2e.streamz.test`, password: ANA.pass }),
   };
   let registro = await fetch(`${API}/api/auth/register`, credenciais).then((r) => r.json());
   // já existe (execução anterior) ou o teto de registros bateu: entra na conta

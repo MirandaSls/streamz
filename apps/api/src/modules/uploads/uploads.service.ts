@@ -9,8 +9,8 @@ import {
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { randomUUID } from "node:crypto";
-import type { Attachment as AttachmentDTO, ExternalAttachmentInput } from "@newdisc/shared";
-import { MAX_ATTACHMENT_SIZE, externalAttachmentSchema } from "@newdisc/shared";
+import type { Attachment as AttachmentDTO, ExternalAttachmentInput } from "@streamz/shared";
+import { MAX_ATTACHMENT_SIZE, externalAttachmentSchema } from "@streamz/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
 import { GuildsService } from "../guilds/guilds.service";

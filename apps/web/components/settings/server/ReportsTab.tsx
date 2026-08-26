@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Check, Flag, RotateCcw } from "lucide-react";
-import { REPORT_REASONS, displayNameOf, type ReportView } from "@newdisc/shared";
+import { REPORT_REASONS, displayNameOf, type ReportView } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import { horaCompleta } from "@/lib/format";
 import { useModeration } from "@/stores/moderation";

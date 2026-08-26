@@ -10,7 +10,7 @@ import {
   UserMinus,
   UserPlus,
 } from "lucide-react";
-import { displayNameOf, systemMessageText, type Message, type MessageType } from "@newdisc/shared";
+import { displayNameOf, systemMessageText, type Message, type MessageType } from "@streamz/shared";
 import { horaCompleta } from "@/lib/format";
 import { goToMessage } from "@/stores/messages-navigate";
 import { useLiveUser } from "@/stores/presence";

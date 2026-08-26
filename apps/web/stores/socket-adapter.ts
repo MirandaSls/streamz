@@ -1,4 +1,4 @@
-import { WS_EVENTS } from "@newdisc/shared";
+import { WS_EVENTS } from "@streamz/shared";
 import {
   getSocket,
   joinChannel as acompanharCanal,

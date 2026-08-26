@@ -1,7 +1,7 @@
 "use client";
 
 import { Phone, PhoneOff, Video } from "lucide-react";
-import { displayNameOf } from "@newdisc/shared";
+import { displayNameOf } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
 import { useVoice } from "@/stores/voice";

@@ -6,7 +6,7 @@ import {
   pedidoPorEmailSchema,
   redefinirSenhaSchema,
   verificarEmailSchema,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import type {
   ContaLoginInput,
   ContaRegistroInput,
@@ -14,7 +14,7 @@ import type {
   PedidoPorEmailInput,
   RedefinirSenhaInput,
   VerificarEmailInput,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import { AuthService } from "./auth.service";
 import { RefreshDto } from "./dto";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";

@@ -26,7 +26,7 @@ const WEB = process.env.WEB_URL ?? "http://localhost:3108";
 
 // i-conta: o registro exige e-mail e senha forte, o login usa `#identificador`
 // e, após registrar, a web passa por /verify-email (a conta já é utilizável).
-const E2E_EMAIL_DOMINIO = "e2e.newdisc.test";
+const E2E_EMAIL_DOMINIO = "e2e.streamz.test";
 async function preencherCredenciais(page, user, pass) {
   if (await page.$("#email")) await page.fill("#email", `${user}@${E2E_EMAIL_DOMINIO}`);
   await page.fill((await page.$("#identificador")) ? "#identificador" : "#username", user);

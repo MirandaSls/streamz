@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RECOVERY_CODE_COUNT, RECOVERY_CODE_LENGTH } from "@newdisc/shared";
+import { RECOVERY_CODE_COUNT, RECOVERY_CODE_LENGTH } from "@streamz/shared";
 import {
   formatarCodigoDeRecuperacao,
   gerarCodigoDeRecuperacao,

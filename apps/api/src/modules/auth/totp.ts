@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { TOTP_DIGITS, TOTP_STEP_SECONDS } from "@newdisc/shared";
+import { TOTP_DIGITS, TOTP_STEP_SECONDS } from "@streamz/shared";
 
 /**
  * TOTP (RFC 6238) sobre HOTP (RFC 4226) com HMAC-SHA1 — o que Google

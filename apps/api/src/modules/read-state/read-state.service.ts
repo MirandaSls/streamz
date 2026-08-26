@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { mentionsUser } from "@newdisc/shared";
+import { mentionsUser } from "@streamz/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import type { ChannelReadSummary } from "../../common/dto";
 

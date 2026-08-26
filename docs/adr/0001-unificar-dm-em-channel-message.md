@@ -7,7 +7,7 @@
 
 ## Contexto
 
-Hoje o NewDisc tem **duas modelagens paralelas de conversa**:
+Hoje o Streamz tem **duas modelagens paralelas de conversa**:
 
 | Servidor        | DM / grupo      |
 | --------------- | --------------- |

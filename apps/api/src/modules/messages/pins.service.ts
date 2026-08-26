@@ -4,8 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { MAX_PINS_PER_CHANNEL, WS_EVENTS } from "@newdisc/shared";
-import type { PinnedMessage } from "@newdisc/shared";
+import { MAX_PINS_PER_CHANNEL, WS_EVENTS } from "@streamz/shared";
+import type { PinnedMessage } from "@streamz/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { RealtimeService } from "../realtime/realtime.service";

@@ -11,14 +11,14 @@ import { GuildsService } from "../guilds/guilds.service";
 import { OnboardingService } from "../onboarding/onboarding.service";
 import { RealtimeService } from "../realtime/realtime.service";
 import { isUniqueViolation } from "../../common/prisma-errors";
-import { Permission, WS_EVENTS } from "@newdisc/shared";
+import { Permission, WS_EVENTS } from "@streamz/shared";
 import type {
   InviteDetail,
   InviteFullPreview,
   InviteInfo,
   InviteOptions,
   InvitePreview,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import { toPublicUser, type PublicUserRow } from "../../common/dto";
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";

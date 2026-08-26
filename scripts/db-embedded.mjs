@@ -16,8 +16,8 @@ import { resolve } from "node:path";
 const dir = resolve(process.cwd(), ".pgdata");
 const pg = new EmbeddedPostgres({
   databaseDir: dir,
-  user: process.env.POSTGRES_USER ?? "newdisc",
-  password: process.env.POSTGRES_PASSWORD ?? "newdisc",
+  user: process.env.POSTGRES_USER ?? "streamz",
+  password: process.env.POSTGRES_PASSWORD ?? "streamz",
   port: Number(process.env.POSTGRES_PORT ?? 5432),
   persistent: true,
   // UTF-8 explícito: no Windows o initdb herda WIN1252 do sistema, e aí emoji
@@ -33,7 +33,7 @@ if (novo) {
 }
 await pg.start();
 if (novo) {
-  await pg.createDatabase(process.env.POSTGRES_DB ?? "newdisc");
+  await pg.createDatabase(process.env.POSTGRES_DB ?? "streamz");
   console.log("[db] banco criado");
 }
 console.log(`[db] Postgres no ar em localhost:${process.env.POSTGRES_PORT ?? 5432} (Ctrl+C para parar)`);

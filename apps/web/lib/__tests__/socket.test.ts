@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { WS_EVENTS } from "@newdisc/shared";
+import { WS_EVENTS } from "@streamz/shared";
 
 /** Socket de mentira: guarda handlers registrados e emissões, para o teste
  *  disparar `connect`/`connect_error` na mão. */

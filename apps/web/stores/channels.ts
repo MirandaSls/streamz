@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import { isTextChannel } from "@newdisc/shared";
-import type { Channel, GuildChannelType, GuildMemberView } from "@newdisc/shared";
+import { isTextChannel } from "@streamz/shared";
+import type { Channel, GuildChannelType, GuildMemberView } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { applyPositions, moveCategory, moveChannel } from "@/stores/channel-order";
 import { useCategories } from "@/stores/categories";

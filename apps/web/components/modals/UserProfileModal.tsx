@@ -7,7 +7,7 @@ import {
   displayNameOf,
   type MemberRole,
   type UserProfile,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import Dialog from "@/components/modals/Dialog";
 import Avatar, { STATUS_LABEL } from "@/components/ui/Avatar";
 import { api } from "@/lib/api";

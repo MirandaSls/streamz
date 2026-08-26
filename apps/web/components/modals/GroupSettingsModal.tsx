@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Camera, Users } from "lucide-react";
-import { MAX_DM_GROUP_NAME } from "@newdisc/shared";
+import { MAX_DM_GROUP_NAME } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import Tooltip from "@/components/ui/Tooltip";
 import { dmTitle, useDMs } from "@/stores/dms";

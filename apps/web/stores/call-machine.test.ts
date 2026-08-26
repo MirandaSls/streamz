@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CALL_RING_TIMEOUT_MS, type PublicUser } from "@newdisc/shared";
+import { CALL_RING_TIMEOUT_MS, type PublicUser } from "@streamz/shared";
 import {
   CHAMADA_INICIAL,
   callReducer,

@@ -22,7 +22,7 @@ export class RealtimeService {
     // /api/metrics não precisa conhecer o gateway. Com adapter Redis o número
     // é **desta instância**; o total é a soma das séries no Prometheus.
     registrarGauge(
-      "newdisc_sockets_conectados",
+      "streamz_sockets_conectados",
       "Sockets WebSocket conectados nesta instância da API",
       () => server.engine?.clientsCount ?? 0,
     );

@@ -7,7 +7,7 @@
 
 ## Contexto
 
-A autorização do NewDisc hoje cabe em três valores: `GuildMember.role` é
+A autorização do Streamz hoje cabe em três valores: `GuildMember.role` é
 `OWNER | ADMIN | MEMBER`, e todo o resto é derivado disso —
 `GuildsService.isPrivileged` responde "é OWNER ou ADMIN?" e essa única pergunta
 decide **tudo**: criar canal, apagar mensagem dos outros, expulsar, banir,
@@ -110,7 +110,7 @@ model Role {
   color       String?
   /** hierarquia: maior = mais alto. @everyone é sempre 0. */
   position    Int      @default(1)
-  /** bitfield de `Permission` (@newdisc/shared). */
+  /** bitfield de `Permission` (@streamz/shared). */
   permissions Int      @default(0)
   /** exibe os membros deste cargo numa seção própria da lista de membros. */
   hoist       Boolean  @default(false)
@@ -144,7 +144,7 @@ model ChannelOverride {   // regra de um canal para um cargo OU um usuário
 **O nome da tabela N:N é `GuildMemberRole`, e não `MemberRole`**, porque
 `MemberRole` já é o nome do **enum** do Prisma — modelo e enum não podem
 coexistir com o mesmo nome, e renomear o enum quebraria os nove módulos que o
-importam de `@newdisc/shared`.
+importam de `@streamz/shared`.
 
 `@everyone` **não gera linha** em `GuildMemberRole`: por definição vale para todo
 membro do servidor, e materializar uma linha por membro só criaria estado para

@@ -50,3 +50,6 @@ apps/web/next-env.d.ts
 
 # screenshots dos passeios ponta a ponta (scripts/e2e-*.mjs)
 e2e-shots*/
+
+# saída do graphify (grafo local do código, regenerável)
+graphify-out/

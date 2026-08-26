@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LOGIN_LOCK_MINUTES, LOGIN_MAX_FAILED_ATTEMPTS } from "@newdisc/shared";
+import { LOGIN_LOCK_MINUTES, LOGIN_MAX_FAILED_ATTEMPTS } from "@streamz/shared";
 import {
   aposAcerto,
   aposFalha,

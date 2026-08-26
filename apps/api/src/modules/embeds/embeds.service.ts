@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
-import type { LinkEmbed } from "@newdisc/shared";
+import type { LinkEmbed } from "@streamz/shared";
 
 /** Quanto tempo uma prévia fica em cache (a página não muda a cada segundo). */
 const TTL_MS = 60 * 60_000;
@@ -96,7 +96,7 @@ export class EmbedsService {
         redirect: "follow",
         headers: {
           // alguns sites só entregam OG para "bots" conhecidos
-          "user-agent": "Mozilla/5.0 (compatible; NewDiscBot/1.0; +https://newdisc.dev)",
+          "user-agent": "Mozilla/5.0 (compatible; StreamzBot/1.0; +https://streamz.dev)",
           accept: "text/html,application/xhtml+xml",
         },
       });

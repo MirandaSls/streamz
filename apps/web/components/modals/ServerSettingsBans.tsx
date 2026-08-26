@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Undo2 } from "lucide-react";
-import { displayNameOf, type PublicUser } from "@newdisc/shared";
+import { displayNameOf, type PublicUser } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";

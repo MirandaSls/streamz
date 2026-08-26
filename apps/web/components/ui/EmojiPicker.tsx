@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Picker, { Categories, EmojiStyle, Theme } from "emoji-picker-react";
 import { Settings2 } from "lucide-react";
-import { formatCustomEmoji, type CustomEmoji } from "@newdisc/shared";
+import { formatCustomEmoji, type CustomEmoji } from "@streamz/shared";
 import { useAuth } from "@/stores/auth";
 import { useEmojisOrdenados } from "@/stores/emojis";
 import { useCanModerate, useGuilds } from "@/stores/guilds";

@@ -37,16 +37,16 @@ import {
   // ── g-emojis-midia ──
   type EmojiUpdatedEvent,
   type StickerUpdatedEvent,
-} from "@newdisc/shared";
-import type { NotificationSetting } from "@newdisc/shared";
+} from "@streamz/shared";
+import type { NotificationSetting } from "@streamz/shared";
 // ── h-moderacao ──
 import type {
   GuildSettingsUpdatedEvent,
   MessagesBulkDeletedEvent,
   PollUpdatedEvent,
   ReportView,
-} from "@newdisc/shared";
-import { shouldNotifyMessage } from "@newdisc/shared";
+} from "@streamz/shared";
+import { shouldNotifyMessage } from "@streamz/shared";
 import { definirContadorNoIcone, notify } from "@/lib/desktop";
 import { tocarSomDeNotificacao } from "@/lib/notification-sound";
 import { levelForChannel, useNotifications } from "@/stores/notifications";

@@ -1,7 +1,7 @@
 "use client";
 
 import { Bell, BellOff } from "lucide-react";
-import { isMuted } from "@newdisc/shared";
+import { isMuted } from "@streamz/shared";
 import { HeaderIcon } from "@/components/chat/HeaderBar";
 import { useT } from "@/lib/i18n";
 import { abrirMenuDeNotificacao } from "@/lib/notification-menu";

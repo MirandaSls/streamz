@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Copy, Laptop, LogOut, ShieldCheck, ShieldOff, Smartphone } from "lucide-react";
-import { ehDispositivoMovel, resumoDoDispositivo } from "@newdisc/shared";
-import type { MfaSetup, MinhaConta, SessaoView } from "@newdisc/shared";
+import { ehDispositivoMovel, resumoDoDispositivo } from "@streamz/shared";
+import type { MfaSetup, MinhaConta, SessaoView } from "@streamz/shared";
 import { Section } from "@/components/settings/controls";
 import { CampoDeTexto, Erro } from "@/components/settings/campos";
 import { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
@@ -293,13 +293,13 @@ function CodigosDeRecuperacao({
   const texto = codigos.join("\n");
 
   function baixar() {
-    const blob = new Blob([`Códigos de recuperação do NewDisc\n\n${texto}\n`], {
+    const blob = new Blob([`Códigos de recuperação do Streamz\n\n${texto}\n`], {
       type: "text/plain;charset=utf-8",
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "newdisc-codigos-de-recuperacao.txt";
+    a.download = "streamz-codigos-de-recuperacao.txt";
     a.click();
     URL.revokeObjectURL(url);
   }

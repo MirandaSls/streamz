@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { displayNameOf, type PublicUser } from "@newdisc/shared";
+import { displayNameOf, type PublicUser } from "@streamz/shared";
 import Dialog, { SecondaryButton } from "@/components/modals/Dialog";
 import Avatar from "@/components/ui/Avatar";
 import { useDMs } from "@/stores/dms";

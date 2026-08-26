@@ -84,7 +84,7 @@ export default function AparenciaTab() {
               </p>
               <p className="text-txt-normal" style={{ marginTop: `${s.groupSpacing}px` }}>
                 <span className="mr-2 text-[11px] text-txt-muted">14:04</span>
-                <span className="mr-1 font-medium text-txt-primary">newdisc</span>
+                <span className="mr-1 font-medium text-txt-primary">streamz</span>
                 E este é o respiro entre grupos.
               </p>
             </>
@@ -103,7 +103,7 @@ export default function AparenciaTab() {
               <div className="flex gap-3" style={{ marginTop: `${s.groupSpacing}px` }}>
                 <div className="h-10 w-10 shrink-0 rounded-full bg-accent" aria-hidden="true" />
                 <div>
-                  <span className="font-medium text-txt-primary">newdisc</span>
+                  <span className="font-medium text-txt-primary">streamz</span>
                   <span className="ml-1.5 text-xs text-txt-muted">Hoje às 14:04</span>
                   <p className="text-txt-normal">E este é o respiro entre grupos.</p>
                 </div>

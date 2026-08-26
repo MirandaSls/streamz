@@ -18,7 +18,7 @@ import {
   displayNameOf,
   type AuditAction,
   type AuditLogEntry,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import { api } from "@/lib/api";
 import { horaCompleta } from "@/lib/format";

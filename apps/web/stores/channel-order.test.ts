@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Category, Channel } from "@newdisc/shared";
+import type { Category, Channel } from "@streamz/shared";
 import {
   applyPositions,
   groupByCategory,

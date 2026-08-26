@@ -1,19 +1,19 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: newdisc-postgres
+    container_name: streamz-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-newdisc}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-newdisc}
-      POSTGRES_DB: ${POSTGRES_DB:-newdisc}
+      POSTGRES_USER: ${POSTGRES_USER:-streamz}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-streamz}
+      POSTGRES_DB: ${POSTGRES_DB:-streamz}
     # Só na loopback: o banco de dev não fica exposto na rede local.
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-newdisc}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-streamz}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -23,7 +23,7 @@ services:
   # `pnpm livekit:up`. Config e chaves em ./livekit.yaml (batem com o .env).
   livekit:
     image: livekit/livekit-server:latest
-    container_name: newdisc-livekit
+    container_name: streamz-livekit
     profiles: ["livekit"]
     restart: unless-stopped
     command: --config /etc/livekit.yaml
@@ -41,7 +41,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    container_name: newdisc-api
+    container_name: streamz-api
     restart: unless-stopped
     # O .env da raiz vale como base; o que muda dentro da rede do compose é
     # sobrescrito abaixo (`environment` vence `env_file`).
@@ -49,7 +49,7 @@ services:
       - .env
     environment:
       # Dentro da rede do compose o banco é o serviço `postgres`, não localhost.
-      DATABASE_URL: postgresql://${POSTGRES_USER:-newdisc}:${POSTGRES_PASSWORD:-newdisc}@postgres:5432/${POSTGRES_DB:-newdisc}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER:-streamz}:${POSTGRES_PASSWORD:-streamz}@postgres:5432/${POSTGRES_DB:-streamz}?schema=public
       # Uma instância só: aqui a migration no boot é segura e conveniente.
       RUN_MIGRATIONS: "1"
       API_HOST: 0.0.0.0
@@ -76,7 +76,7 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3333}
         NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-http://localhost:3333}
         NEXT_PUBLIC_LIVEKIT_URL: ${NEXT_PUBLIC_LIVEKIT_URL:-ws://localhost:7880}
-    container_name: newdisc-web
+    container_name: streamz-web
     restart: unless-stopped
     environment:
       HOSTNAME: 0.0.0.0
@@ -92,7 +92,7 @@ services:
   # `docker compose --profile redis up -d redis` e REDIS_URL=redis://redis:6379.
   redis:
     image: redis:7-alpine
-    container_name: newdisc-redis
+    container_name: streamz-redis
     profiles: ["redis"]
     restart: unless-stopped
     command: ["redis-server", "--save", "", "--appendonly", "no"]

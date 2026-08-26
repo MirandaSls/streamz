@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import { Permission, hasPermission } from "@newdisc/shared";
-import type { Guild, GuildMemberView, MemberRole } from "@newdisc/shared";
+import { Permission, hasPermission } from "@streamz/shared";
+import type { Guild, GuildMemberView, MemberRole } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";

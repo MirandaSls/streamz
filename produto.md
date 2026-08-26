@@ -1,6 +1,6 @@
-# NewDisc — produto e regras de negócio
+# Streamz — produto e regras de negócio
 
-O que o NewDisc **é**, as regras que governam cada feature e as decisões de escopo
+O que o Streamz **é**, as regras que governam cada feature e as decisões de escopo
 tomadas no MVP. É a fonte da verdade de *comportamento* — como o sistema decide,
 não como está codificado (isso é `CLAUDE.md`) nem como se parece (`design.md`).
 

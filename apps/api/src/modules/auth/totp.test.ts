@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TOTP_DIGITS, TOTP_STEP_SECONDS } from "@newdisc/shared";
+import { TOTP_DIGITS, TOTP_STEP_SECONDS } from "@streamz/shared";
 import {
   deBase32,
   gerarCodigoTotp,
@@ -28,9 +28,9 @@ describe("base32", () => {
   });
 
   it("aceita espaços, hífens e padding na decodificação", () => {
-    const base = paraBase32(Buffer.from("newdisc", "ascii"));
+    const base = paraBase32(Buffer.from("streamz", "ascii"));
     const sujo = `${segredoLegivel(base)}=`.replace(/ /g, " - ");
-    expect(deBase32(sujo).toString("ascii")).toBe("newdisc");
+    expect(deBase32(sujo).toString("ascii")).toBe("streamz");
   });
 
   it("recusa caractere fora do alfabeto", () => {
@@ -107,11 +107,11 @@ describe("gerarSegredoTotp", () => {
 
 describe("otpauthUrl", () => {
   it("carrega segredo, emissor e os parâmetros que os apps leem", () => {
-    const url = new URL(otpauthUrl("NewDisc", "ana@exemplo.com", SEGREDO_RFC));
+    const url = new URL(otpauthUrl("Streamz", "ana@exemplo.com", SEGREDO_RFC));
     expect(url.protocol).toBe("otpauth:");
-    expect(decodeURIComponent(url.pathname)).toContain("NewDisc:ana@exemplo.com");
+    expect(decodeURIComponent(url.pathname)).toContain("Streamz:ana@exemplo.com");
     expect(url.searchParams.get("secret")).toBe(SEGREDO_RFC);
-    expect(url.searchParams.get("issuer")).toBe("NewDisc");
+    expect(url.searchParams.get("issuer")).toBe("Streamz");
     expect(url.searchParams.get("digits")).toBe(String(TOTP_DIGITS));
     expect(url.searchParams.get("period")).toBe(String(TOTP_STEP_SECONDS));
   });

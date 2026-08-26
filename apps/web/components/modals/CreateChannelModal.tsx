@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Hash, Lock, Megaphone, Volume2 } from "lucide-react";
-import type { GuildChannelType } from "@newdisc/shared";
+import type { GuildChannelType } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { useAuth } from "@/stores/auth";
 import { useCanModerate, useGuilds } from "@/stores/guilds";

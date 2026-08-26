@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { displayNameOf } from "@newdisc/shared";
+import { displayNameOf } from "@streamz/shared";
 import { useAuth } from "@/stores/auth";
 import { useGuilds } from "@/stores/guilds";
 import { typersOf, useTyping } from "@/stores/typing";

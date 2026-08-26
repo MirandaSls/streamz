@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MAX_MODERATION_REASON, displayNameOf, type PublicUser } from "@newdisc/shared";
+import { MAX_MODERATION_REASON, displayNameOf, type PublicUser } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { api } from "@/lib/api";
 import { useGuilds } from "@/stores/guilds";

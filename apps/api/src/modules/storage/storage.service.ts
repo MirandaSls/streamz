@@ -8,7 +8,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { Readable } from "node:stream";
-import { ATTACHMENT_URL_TTL_SECONDS } from "@newdisc/shared";
+import { ATTACHMENT_URL_TTL_SECONDS } from "@streamz/shared";
 
 /** Claims do token curto de leitura de anexo (`?t=` no proxy da API). */
 export interface AttachmentTokenClaims {

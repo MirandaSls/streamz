@@ -5,14 +5,14 @@ import {
   excluirContaSchema,
   mfaAtivarSchema,
   mfaDesativarSchema,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import type {
   AlterarEmailInput,
   AlterarSenhaInput,
   ExcluirContaInput,
   MfaAtivarInput,
   MfaDesativarInput,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import { z } from "zod";
 import { AccountService } from "./account.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";

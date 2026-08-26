@@ -4,8 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { WS_EVENTS } from "@newdisc/shared";
-import type { PublicUser, ThreadView } from "@newdisc/shared";
+import { WS_EVENTS } from "@streamz/shared";
+import type { PublicUser, ThreadView } from "@streamz/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { RealtimeService } from "../realtime/realtime.service";

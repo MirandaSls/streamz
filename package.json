@@ -1,5 +1,5 @@
 {
-  "name": "newdisc",
+  "name": "streamz",
   "version": "0.0.1",
   "private": true,
   "description": "Clone do Discord — monolito NestJS + Next.js + Tauri (MVP)",
@@ -13,9 +13,9 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "db:up": "docker compose up -d postgres",
-    "db:migrate": "pnpm --filter @newdisc/api prisma migrate dev",
-    "db:deploy": "pnpm --filter @newdisc/api exec prisma migrate deploy",
-    "db:studio": "pnpm --filter @newdisc/api prisma studio",
+    "db:migrate": "pnpm --filter @streamz/api prisma migrate dev",
+    "db:deploy": "pnpm --filter @streamz/api exec prisma migrate deploy",
+    "db:studio": "pnpm --filter @streamz/api prisma studio",
     "livekit:up": "docker compose --profile livekit up -d livekit",
     "livekit:down": "docker compose --profile livekit stop livekit",
     "db:embedded": "node scripts/db-embedded.mjs"

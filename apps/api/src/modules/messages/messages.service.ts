@@ -20,14 +20,14 @@ import type {
   ReactionGroup,
   SearchFilters,
   ThreadSummary,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import {
   MAX_ATTACHMENTS_PER_MESSAGE,
   MESSAGE_AROUND_RADIUS,
   isEmptySearch,
   parseCustomEmoji,
   replySnippet,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import { toPublicUser, type PublicUserRow } from "../../common/dto";
 import { toStickerDTO, type StickerRow } from "../emojis/dto";
 import { toAttachmentDTO, type AttachmentRow } from "../uploads/attachment-dto";
@@ -349,7 +349,7 @@ export class MessagesService {
       });
       if (!alvo) return null;
       // menção textual OU resposta com "@ ligado" ao próprio — a mesma regra do
-      // não-lido (ver `mentionsMe` em @newdisc/shared)
+      // não-lido (ver `mentionsMe` em @streamz/shared)
       and.push({
         OR: [
           { content: { contains: `@${alvo.username}`, mode: "insensitive" } },

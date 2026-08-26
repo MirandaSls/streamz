@@ -1,7 +1,7 @@
 "use client";
 
 import { Trash2, X } from "lucide-react";
-import { MAX_BULK_DELETE } from "@newdisc/shared";
+import { MAX_BULK_DELETE } from "@streamz/shared";
 import { useModeration } from "@/stores/moderation";
 
 /**

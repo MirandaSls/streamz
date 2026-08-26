@@ -35,7 +35,7 @@ import {
   mentionsEveryone,
   type Attachment,
   type Sticker,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import Autocomplete, { type ItemAutocomplete } from "@/components/chat/Autocomplete";
 import GifPicker from "@/components/media/GifPicker";
 import StickerPicker from "@/components/media/StickerPicker";

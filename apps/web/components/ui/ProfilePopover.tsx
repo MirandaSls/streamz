@@ -8,7 +8,7 @@ import {
   displayNameOf,
   rolesOf,
   type UserStatus,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import Avatar, { STATUS_COLOR, STATUS_LABEL } from "@/components/ui/Avatar";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";

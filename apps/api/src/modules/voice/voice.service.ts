@@ -6,7 +6,7 @@ import {
   type VoiceFlags,
   type VoiceStateEvent,
   type VoiceTokenResponse,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import { GuildsService } from "../guilds/guilds.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { RealtimeService } from "../realtime/realtime.service";
@@ -22,7 +22,7 @@ import {
  * Voz: token do LiveKit e o **estado de quem está em cada sala**.
  *
  * As duas coisas são independentes de propósito. O estado de voz (quem entrou,
- * quem está mudo) é do NewDisc e funciona sem servidor de mídia nenhum — é o
+ * quem está mudo) é do Streamz e funciona sem servidor de mídia nenhum — é o
  * que a barra lateral mostra. O token é só a credencial para o LiveKit
  * transportar áudio/vídeo; sem as credenciais a rota responde 503 e o resto
  * continua de pé (ver PENDENCIAS.md).

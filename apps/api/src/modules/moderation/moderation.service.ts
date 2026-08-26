@@ -4,8 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Permission, WS_EVENTS, MAX_BULK_DELETE, MAX_MODERATION_REASON } from "@newdisc/shared";
-import type { MessagesBulkDeletedEvent, ReportReason, ReportView } from "@newdisc/shared";
+import { Permission, WS_EVENTS, MAX_BULK_DELETE, MAX_MODERATION_REASON } from "@streamz/shared";
+import type { MessagesBulkDeletedEvent, ReportReason, ReportView } from "@streamz/shared";
 import { toPublicUser, type PublicUserRow } from "../../common/dto";
 import { isUniqueViolation } from "../../common/prisma-errors";
 import { PrismaService } from "../../prisma/prisma.service";

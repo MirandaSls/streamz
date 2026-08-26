@@ -6,7 +6,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { MAX_SLOWMODE_SECONDS, Permission, WS_EVENTS, slowmodeRemaining } from "@newdisc/shared";
+import { MAX_SLOWMODE_SECONDS, Permission, WS_EVENTS, slowmodeRemaining } from "@streamz/shared";
 import type {
   Category,
   Channel,
@@ -14,7 +14,7 @@ import type {
   GuildChannelType,
   MemberRole,
   ReorderPayload,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import { toChannelDTO, toPublicUser } from "../../common/dto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";

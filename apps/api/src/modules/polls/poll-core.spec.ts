@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isPollClosed, pollPercent } from "@newdisc/shared";
+import { isPollClosed, pollPercent } from "@streamz/shared";
 import { tallyPoll, type PollRow } from "./poll-core";
 
 const AGORA = new Date("2026-08-25T12:00:00.000Z").getTime();

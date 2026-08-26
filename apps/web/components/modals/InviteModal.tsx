@@ -8,7 +8,7 @@ import {
   WS_EVENTS,
   displayNameOf,
   type InviteInfo,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import Dialog, { SecondaryButton } from "@/components/modals/Dialog";
 import Avatar from "@/components/ui/Avatar";
 import { api } from "@/lib/api";

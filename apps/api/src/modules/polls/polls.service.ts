@@ -4,8 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { WS_EVENTS, isPollClosed } from "@newdisc/shared";
-import type { Message as MessageDTO, Poll, PollVoters } from "@newdisc/shared";
+import { WS_EVENTS, isPollClosed } from "@streamz/shared";
+import type { Message as MessageDTO, Poll, PollVoters } from "@streamz/shared";
 import { toPublicUser } from "../../common/dto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";

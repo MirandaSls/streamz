@@ -11,7 +11,7 @@ import {
   COMANDOS_BARRA,
   SUFIXOS_COMANDO,
   type ComandoBarra,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 
 /** O que fazer com a mensagem depois de reconhecer o comando. */
 export type ResultadoComando =

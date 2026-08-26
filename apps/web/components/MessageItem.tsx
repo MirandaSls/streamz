@@ -20,7 +20,7 @@ import {
   Trash2,
   UserPlus,
 } from "lucide-react";
-import type { Attachment, Message, PublicUser } from "@newdisc/shared";
+import type { Attachment, Message, PublicUser } from "@streamz/shared";
 import {
   WS_EVENTS,
   displayNameOf,
@@ -32,7 +32,7 @@ import {
   messageLinkPath,
   parseCustomEmoji,
   youtubeVideoId,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import LinkEmbedCard, { useLinkEmbed } from "@/components/chat/LinkEmbedCard";
 import MediaGroup from "@/components/media/MediaGroup";
 import StickerView from "@/components/media/StickerView";

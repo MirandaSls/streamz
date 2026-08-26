@@ -11,7 +11,7 @@ import {
   MAX_STICKER_SIZE,
   type CustomEmoji,
   type Sticker,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import Dialog, { SecondaryButton } from "@/components/modals/Dialog";
 import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";

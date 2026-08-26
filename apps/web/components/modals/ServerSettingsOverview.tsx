@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Camera } from "lucide-react";
-import { MAX_GUILD_DESCRIPTION } from "@newdisc/shared";
+import { MAX_GUILD_DESCRIPTION } from "@streamz/shared";
 import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";
 import { useGuilds } from "@/stores/guilds";

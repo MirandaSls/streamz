@@ -9,7 +9,7 @@ import {
   type ScreenQuality,
   type VoiceFlags,
   type VoiceStateEvent,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import { Room, RoomEvent, Track, type Participant } from "livekit-client";
 import { api } from "@/lib/api";
 import { CHAMADA_INICIAL, callReducer, type CallAction, type CallState } from "@/stores/call-machine";

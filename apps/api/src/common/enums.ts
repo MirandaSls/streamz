@@ -19,11 +19,11 @@ import type {
   NotificationLevel,
   ReportReason,
   UserStatus,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 
 /**
  * Ponte única entre os enums do Postgres (gerados pelo Prisma) e as union types
- * de `@newdisc/shared`, que formam o contrato api ↔ web.
+ * de `@streamz/shared`, que formam o contrato api ↔ web.
  *
  * Os dois lados são o *mesmo* conjunto de literais de string, então nenhum
  * service precisa de `as` ao devolver um DTO: basta tipar o campo com a union

@@ -20,7 +20,7 @@ import {
   computePermissions,
   hasPermission,
   highestPosition,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import type {
   ChannelType,
   Guild,
@@ -29,7 +29,7 @@ import type {
   MemberRole,
   PermissionMember,
   Role,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import { toChannelDTO, toGuildDTO, toPublicUser, toRoleDTO } from "../../common/dto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";

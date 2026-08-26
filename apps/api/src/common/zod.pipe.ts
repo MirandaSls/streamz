@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, type PipeTransform } from "@nestjs/com
 import type { ZodSchema } from "zod";
 
 /**
- * Valida o corpo da requisição com um schema de `@newdisc/shared`.
+ * Valida o corpo da requisição com um schema de `@streamz/shared`.
  *
  * O resto da API usa DTOs de `class-validator`, e continua usando. As rotas de
  * conta e segurança não usam porque o contrato delas **já existe** em zod no

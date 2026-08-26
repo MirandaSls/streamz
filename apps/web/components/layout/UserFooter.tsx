@@ -1,7 +1,7 @@
 "use client";
 
 import { Headphones, HeadphoneOff, Mic, MicOff, Settings } from "lucide-react";
-import { displayNameOf } from "@newdisc/shared";
+import { displayNameOf } from "@streamz/shared";
 import Avatar, { STATUS_LABEL } from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
 import VoiceConnectedBar from "@/components/voice/VoiceConnectedBar";

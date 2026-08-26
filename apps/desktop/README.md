@@ -1,4 +1,4 @@
-# NewDisc Desktop (Tauri 2)
+# Streamz Desktop (Tauri 2)
 
 O app desktop embrulha o cliente web numa janela nativa + instalador Windows
 (`.exe` NSIS e `.msi`).
@@ -7,8 +7,8 @@ O app desktop embrulha o cliente web numa janela nativa + instalador Windows
 precisariam de um comentário lá estão documentadas aqui.
 
 ```bash
-pnpm --filter @newdisc/desktop dev     # janela nativa carregando http://localhost:3000
-pnpm --filter @newdisc/desktop build   # instalador (precisa de Rust/cargo)
+pnpm --filter @streamz/desktop dev     # janela nativa carregando http://localhost:3000
+pnpm --filter @streamz/desktop build   # instalador (precisa de Rust/cargo)
 ```
 
 ## Estratégia de build: export estático
@@ -33,12 +33,12 @@ ambiente**, não incondicionalmente (senão o deploy web normal, com `next start
 quebraria):
 
 - `TAURI_ENV_*` — o Tauri injeta essas variáveis no `beforeBuildCommand`, então
-  `pnpm --filter @newdisc/desktop build` já produz o `out/` automaticamente;
+  `pnpm --filter @streamz/desktop build` já produz o `out/` automaticamente;
 - `NEXT_OUTPUT=export` — chave explícita, para gerar o `out/` na mão:
 
   ```bash
-  NEXT_OUTPUT=export pnpm --filter @newdisc/web build   # bash
-  $env:NEXT_OUTPUT="export"; pnpm --filter @newdisc/web build   # PowerShell
+  NEXT_OUTPUT=export pnpm --filter @streamz/web build   # bash
+  $env:NEXT_OUTPUT="export"; pnpm --filter @streamz/web build   # PowerShell
   ```
 
 No export, `trailingSlash: true` faz o Next emitir `out/app/index.html` em vez de
@@ -81,8 +81,8 @@ ambiente ao lado do `tauri.conf.json` — ex. `src-tauri/tauri.prod.conf.json`:
   "app": {
     "security": {
       "csp": {
-        "connect-src": "'self' ipc: http://ipc.localhost https://api.newdisc.dev wss://api.newdisc.dev https://newdisc.livekit.cloud wss://newdisc.livekit.cloud",
-        "img-src": "'self' data: blob: https://api.newdisc.dev https://cdn.newdisc.dev"
+        "connect-src": "'self' ipc: http://ipc.localhost https://api.streamz.dev wss://api.streamz.dev https://streamz.livekit.cloud wss://streamz.livekit.cloud",
+        "img-src": "'self' data: blob: https://api.streamz.dev https://cdn.streamz.dev"
       }
     }
   }
@@ -90,7 +90,7 @@ ambiente ao lado do `tauri.conf.json` — ex. `src-tauri/tauri.prod.conf.json`:
 ```
 
 ```bash
-pnpm --filter @newdisc/desktop tauri build --config tauri.prod.conf.json
+pnpm --filter @streamz/desktop tauri build --config tauri.prod.conf.json
 ```
 
 O merge é **por diretiva**: só as diretivas listadas mudam, mas cada uma que
@@ -109,7 +109,7 @@ IPC continua limitado pelas capabilities em `capabilities/default.json`.
 ## Auto-update — desligado de propósito
 
 O `tauri-plugin-updater` **não** está registrado. Ele estava ativo apontando para
-`releases.newdisc.dev` (domínio que não existe) com `pubkey` placeholder — nessa
+`releases.streamz.dev` (domínio que não existe) com `pubkey` placeholder — nessa
 configuração o app só produz erro de verificação em runtime, sem nunca atualizar.
 
 Para religar, quando existir chave e servidor de verdade:
@@ -117,7 +117,7 @@ Para religar, quando existir chave e servidor de verdade:
 1. Gere o par de chaves de assinatura e guarde a privada fora do repo:
 
    ```bash
-   pnpm --filter @newdisc/desktop tauri signer generate -w ~/.tauri/newdisc.key
+   pnpm --filter @streamz/desktop tauri signer generate -w ~/.tauri/streamz.key
    ```
 
 2. `src-tauri/Cargo.toml`: descomente `tauri-plugin-updater = "2"`.

@@ -9,7 +9,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { IsString, Length } from "class-validator";
-import { MAX_CATEGORY_NAME } from "@newdisc/shared";
+import { MAX_CATEGORY_NAME } from "@streamz/shared";
 import { CategoriesService } from "./categories.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";

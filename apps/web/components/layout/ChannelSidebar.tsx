@@ -29,7 +29,7 @@ import {
   isUnread,
   type Category,
   type Channel,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import UserFooter from "@/components/layout/UserFooter";
 import Tooltip from "@/components/ui/Tooltip";
 import VoiceChannelMembers from "@/components/voice/VoiceChannelMembers";

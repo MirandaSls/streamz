@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { X } from "lucide-react";
-import { displayNameOf } from "@newdisc/shared";
+import { displayNameOf } from "@streamz/shared";
 import { useMessages } from "@/stores/messages";
 
 /**

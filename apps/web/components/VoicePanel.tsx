@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { AlertTriangle, Users, Volume2 } from "lucide-react";
-import type { Channel } from "@newdisc/shared";
+import type { Channel } from "@streamz/shared";
 import VoiceControls from "@/components/voice/VoiceControls";
 import VoiceGrid from "@/components/voice/VoiceGrid";
 import { useVoice } from "@/stores/voice";

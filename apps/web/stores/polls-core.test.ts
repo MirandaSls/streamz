@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Poll } from "@newdisc/shared";
+import type { Poll } from "@streamz/shared";
 import { aplicarVoto, mesclarContagem } from "@/stores/polls-core";
 
 function enquete(over: Partial<Poll> = {}): Poll {

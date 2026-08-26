@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { LinkEmbed } from "@newdisc/shared";
+import type { LinkEmbed } from "@streamz/shared";
 import { api } from "@/lib/api";
 
 /** Cache por URL, compartilhado entre mensagens — a mesma URL não é buscada duas vezes. */

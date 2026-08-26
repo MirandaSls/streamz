@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { slowmodeRemaining } from "@newdisc/shared";
+import { slowmodeRemaining } from "@streamz/shared";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { useCanModerate } from "@/stores/guilds";

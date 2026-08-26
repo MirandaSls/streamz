@@ -12,7 +12,7 @@ import {
   NOME_USUARIO_EXCLUIDO,
   USUARIO_EXCLUIDO_PREFIXO,
   normalizarEmail,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import type {
   ContaEncerrada,
   ContaOk,
@@ -20,7 +20,7 @@ import type {
   MfaSetup,
   MinhaConta,
   SessaoView,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { isUniqueViolation } from "../../common/prisma-errors";
 import { toPublicUser } from "../../common/dto";
@@ -33,7 +33,7 @@ import { gerarSegredoTotp, otpauthUrl, validarCodigoTotp } from "./totp";
 import { toSessaoView } from "./sessions";
 
 /** Emissor mostrado pelo app autenticador ao lado do código. */
-const EMISSOR_TOTP = "NewDisc";
+const EMISSOR_TOTP = "Streamz";
 
 /**
  * Tudo o que o dono da conta faz com ela: ver, listar sessões, trocar senha e

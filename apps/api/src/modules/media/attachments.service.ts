@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { Attachment } from "@newdisc/shared";
+import type { Attachment } from "@streamz/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { StorageService } from "../storage/storage.service";

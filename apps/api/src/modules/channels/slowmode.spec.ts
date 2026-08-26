@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_SLOWMODE_SECONDS, slowmodeLabel, slowmodeRemaining } from "@newdisc/shared";
+import { MAX_SLOWMODE_SECONDS, slowmodeLabel, slowmodeRemaining } from "@streamz/shared";
 
 /**
  * O cálculo do modo lento é a única lógica pura da feature e vive no contrato

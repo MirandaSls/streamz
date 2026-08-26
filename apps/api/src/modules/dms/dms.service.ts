@@ -13,13 +13,13 @@ import {
   MAX_DM_GROUP_NAME,
   MAX_GROUP_ICON_SIZE,
   WS_EVENTS,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import type {
   DMChannelView,
   DMLeaveResult,
   MessageType,
   PublicUser,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import {
   toChannelDTO,
   toPublicUser,

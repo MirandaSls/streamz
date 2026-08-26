@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import type { MessagePinnedEvent, MessageUnpinnedEvent, PinnedMessage } from "@newdisc/shared";
+import type { MessagePinnedEvent, MessageUnpinnedEvent, PinnedMessage } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";

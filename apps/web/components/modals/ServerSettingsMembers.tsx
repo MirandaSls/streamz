@@ -8,7 +8,7 @@ import {
   displayNameOf,
   rolesOf,
   type GuildMemberView,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
 import { useAuth } from "@/stores/auth";

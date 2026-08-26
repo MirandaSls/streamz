@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { isUnread } from "@newdisc/shared";
+import { isUnread } from "@streamz/shared";
 import { actionForEvent, type ShortcutAction } from "@/lib/shortcuts";
 import { useChannels } from "@/stores/channels";
 import { useDMs } from "@/stores/dms";

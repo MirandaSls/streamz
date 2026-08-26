@@ -12,7 +12,7 @@ import {
   Shield,
   Users,
 } from "lucide-react";
-import { slowmodeLabel } from "@newdisc/shared";
+import { slowmodeLabel } from "@streamz/shared";
 import Composer from "@/components/chat/Composer";
 // ── h-moderacao ──
 import { RulesNotice, TimeoutNotice } from "@/components/moderation/ComposerNotice";
@@ -42,7 +42,7 @@ import { ui, useUI } from "@/stores/ui";
  * `sessionStorage` evita reperguntar a cada troca de canal sem "lembrar para
  * sempre" de um consentimento que é do momento.
  */
-const CHAVE_NSFW = "newdisc:nsfw-confirmados";
+const CHAVE_NSFW = "streamz:nsfw-confirmados";
 
 function jaConfirmou(channelId: string): boolean {
   if (typeof window === "undefined") return false;

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Compass, Search } from "lucide-react";
-import type { DiscoverableGuild } from "@newdisc/shared";
+import type { DiscoverableGuild } from "@streamz/shared";
 import Dialog, { SecondaryButton } from "@/components/modals/Dialog";
 import { api } from "@/lib/api";
 import { useGuilds } from "@/stores/guilds";

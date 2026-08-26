@@ -1,4 +1,4 @@
-import type { Poll } from "@newdisc/shared";
+import type { Poll } from "@streamz/shared";
 
 /** Uma linha de voto, do jeito mínimo que a contagem precisa. */
 export interface VotoRow {

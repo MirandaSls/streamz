@@ -17,7 +17,7 @@ import {
   MAX_PRONOUNS,
   HEX_COLOR,
   customStatusExpiry,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import type {
   CustomStatusUpdate,
   MemberRole,
@@ -25,7 +25,7 @@ import type {
   PublicUser,
   UserProfile,
   UserStatus,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { toPublicUser } from "../../common/dto";
 import { RealtimeService } from "../realtime/realtime.service";

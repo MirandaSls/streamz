@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type MouseEvent } from "react";
 import { Crown, MessageSquare, UserMinus, UserPlus, UserX } from "lucide-react";
-import { displayNameOf, isGroupChannel, type DMChannelView, type PublicUser } from "@newdisc/shared";
+import { displayNameOf, isGroupChannel, type DMChannelView, type PublicUser } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";

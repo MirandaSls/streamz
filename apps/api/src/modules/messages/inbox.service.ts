@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import { mentionsUser } from "@newdisc/shared";
-import type { InboxMention, InboxUnreadChannel, InboxUnreadGroup } from "@newdisc/shared";
+import { mentionsUser } from "@streamz/shared";
+import type { InboxMention, InboxUnreadChannel, InboxUnreadGroup } from "@streamz/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { ReadStateService } from "../read-state/read-state.service";

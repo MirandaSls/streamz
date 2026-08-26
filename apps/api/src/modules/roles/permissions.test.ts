@@ -14,7 +14,7 @@ import {
   type ChannelOverride,
   type PermissionMember,
   type Role,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 
 /**
  * `computePermissions` é a única regra de autorização do projeto — errar a

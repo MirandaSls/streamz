@@ -6,7 +6,7 @@ import {
   CUSTOM_STATUS_DURATIONS,
   MAX_CUSTOM_STATUS,
   type CustomStatusDuration,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import EmojiPicker from "@/components/ui/EmojiPicker";
 import Tooltip from "@/components/ui/Tooltip";

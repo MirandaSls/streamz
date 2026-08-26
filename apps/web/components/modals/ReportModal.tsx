@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MAX_REPORT_DETAILS, REPORT_REASONS, type ReportReason } from "@newdisc/shared";
+import { MAX_REPORT_DETAILS, REPORT_REASONS, type ReportReason } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";

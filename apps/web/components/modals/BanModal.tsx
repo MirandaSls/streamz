@@ -6,7 +6,7 @@ import {
   PURGE_WINDOWS,
   displayNameOf,
   type PublicUser,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { api } from "@/lib/api";
 import { useGuilds } from "@/stores/guilds";

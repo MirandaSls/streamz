@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { MAX_THREAD_NAME, type ThreadUpdatedEvent, type ThreadView } from "@newdisc/shared";
+import { MAX_THREAD_NAME, type ThreadUpdatedEvent, type ThreadView } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";

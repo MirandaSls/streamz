@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Message, PublicUser } from "@newdisc/shared";
+import type { Message, PublicUser } from "@streamz/shared";
 import {
   applyDelete,
   applyUpdate,

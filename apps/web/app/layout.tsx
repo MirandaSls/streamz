@@ -15,7 +15,7 @@ const fonteSans = Noto_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "NewDisc",
+  title: "Streamz",
   description: "Chat de comunidade — voz, vídeo e tela",
 };
 

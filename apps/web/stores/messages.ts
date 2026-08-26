@@ -8,7 +8,7 @@ import {
   type MessageReplyRef,
   type PublicUser,
   type Sticker,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import { api } from "@/lib/api";
 import { emit, errorMessage, joinChannel } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";

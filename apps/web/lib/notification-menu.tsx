@@ -6,7 +6,7 @@ import {
   isMuted,
   type NotificationLevel,
   type NotificationSetting,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import type { ChaveDeTexto } from "@/lib/i18n";
 import { useNotifications } from "@/stores/notifications";
 import { ui, type MenuItem } from "@/stores/ui";

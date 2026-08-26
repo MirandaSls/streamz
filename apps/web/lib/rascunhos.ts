@@ -11,7 +11,7 @@
  * funcionando.
  */
 
-const PREFIXO = "newdisc:rascunho:";
+const PREFIXO = "streamz:rascunho:";
 /** Rascunhos guardados de uma vez; acima disso, os mais antigos saem. */
 const MAX_RASCUNHOS = 30;
 

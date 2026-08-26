@@ -144,14 +144,14 @@ export function metricsMiddleware(
     const metodo = (req.method ?? "GET").toUpperCase();
     const rotulos = { method: metodo, status: classeDeStatus(res.statusCode) };
     incrementar(
-      "newdisc_http_requests_total",
+      "streamz_http_requests_total",
       rotulos,
       1,
       "Requisições HTTP atendidas, por método e classe de status",
     );
     const segundos = Number(process.hrtime.bigint() - inicio) / 1e9;
     incrementar(
-      "newdisc_http_request_duration_seconds_sum",
+      "streamz_http_request_duration_seconds_sum",
       rotulos,
       segundos,
       "Tempo total gasto atendendo requisições HTTP, em segundos",
@@ -163,12 +163,12 @@ export function metricsMiddleware(
 /** Gauges do processo — servem para ver reinício e vazamento de memória. */
 export function registrarGaugesDeProcesso(): void {
   registrarGauge(
-    "newdisc_process_uptime_seconds",
+    "streamz_process_uptime_seconds",
     "Segundos desde o boot do processo da API",
     () => process.uptime(),
   );
   registrarGauge(
-    "newdisc_process_resident_memory_bytes",
+    "streamz_process_resident_memory_bytes",
     "Memória residente do processo da API, em bytes",
     () => process.memoryUsage().rss,
   );

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
-import type { Attachment, GifCategory, GifResult } from "@newdisc/shared";
+import type { Attachment, GifCategory, GifResult } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";

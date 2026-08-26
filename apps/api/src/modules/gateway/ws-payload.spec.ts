@@ -5,7 +5,7 @@ import {
   messageCreateSchema,
   parseWsPayload,
   reactionSchema,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 
 /**
  * Os schemas moram no contrato, mas quem depende deles para não gravar lixo no

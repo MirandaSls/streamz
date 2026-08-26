@@ -4,13 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { WS_EVENTS } from "@newdisc/shared";
+import { WS_EVENTS } from "@streamz/shared";
 import type {
   FriendLists,
   FriendRequest,
   PublicUser,
   RelationshipKind,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { toPublicUser, type PublicUserRow } from "../../common/dto";
 import { RealtimeService } from "../realtime/realtime.service";

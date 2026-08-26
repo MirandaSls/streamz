@@ -6,7 +6,7 @@ import {
   MAX_WELCOME_CHANNELS,
   MAX_WELCOME_DESCRIPTION,
   type GuildOnboarding,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import { api } from "@/lib/api";
 import { useChannels } from "@/stores/channels";
 import { useModeration } from "@/stores/moderation";

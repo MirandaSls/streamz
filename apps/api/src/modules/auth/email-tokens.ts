@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { EMAIL_VERIFY_TTL_HOURS, PASSWORD_RESET_TTL_HOURS } from "@newdisc/shared";
+import { EMAIL_VERIFY_TTL_HOURS, PASSWORD_RESET_TTL_HOURS } from "@streamz/shared";
 
 /**
  * Tokens de uso único enviados por e-mail (verificar conta, redefinir senha).

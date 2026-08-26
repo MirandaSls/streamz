@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import { attachmentDisplayName, type Attachment } from "@newdisc/shared";
+import { attachmentDisplayName, type Attachment } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { useMessages } from "@/stores/messages";

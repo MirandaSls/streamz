@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 export default defineConfig({
   resolve: {
     alias: {
-      "@newdisc/shared": resolve(__dirname, "../../packages/shared/src/index.ts"),
+      "@streamz/shared": resolve(__dirname, "../../packages/shared/src/index.ts"),
       "@": __dirname,
     },
   },

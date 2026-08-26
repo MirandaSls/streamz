@@ -5,8 +5,8 @@ import type {
   AuditLogEntry,
   AuditLogPage,
   AuditTargetType,
-} from "@newdisc/shared";
-import { AUDIT_PAGE_SIZE, MAX_MODERATION_REASON } from "@newdisc/shared";
+} from "@streamz/shared";
+import { AUDIT_PAGE_SIZE, MAX_MODERATION_REASON } from "@streamz/shared";
 import { toPublicUser, type PublicUserRow } from "../../common/dto";
 import { PrismaService } from "../../prisma/prisma.service";
 

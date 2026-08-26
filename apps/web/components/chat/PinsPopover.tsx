@@ -1,7 +1,7 @@
 "use client";
 
 import { Pin } from "lucide-react";
-import { displayNameOf } from "@newdisc/shared";
+import { displayNameOf } from "@streamz/shared";
 import HeaderPopover from "@/components/chat/HeaderPopover";
 import Avatar from "@/components/ui/Avatar";
 import { horaCompleta } from "@/lib/format";

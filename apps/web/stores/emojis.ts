@@ -5,7 +5,7 @@ import {
   type GuildEmojis,
   type GuildStickers,
   type Sticker,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import { api } from "@/lib/api";
 
 /**

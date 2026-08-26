@@ -1,5 +1,5 @@
 import { BadRequestException, Body, Controller, Get, Patch, UseGuards } from "@nestjs/common";
-import { notificationSettingSchema, parseWsPayload } from "@newdisc/shared";
+import { notificationSettingSchema, parseWsPayload } from "@streamz/shared";
 import { NotificationsService } from "./notifications.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";

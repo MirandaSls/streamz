@@ -1,5 +1,5 @@
-import { MAX_MESSAGE_LENGTH } from "@newdisc/shared";
-import type { Attachment, Message, MessageReplyRef, PublicUser, Sticker } from "@newdisc/shared";
+import { MAX_MESSAGE_LENGTH } from "@streamz/shared";
+import type { Attachment, Message, MessageReplyRef, PublicUser, Sticker } from "@streamz/shared";
 
 /**
  * Regras puras da timeline de um canal — sem React, sem socket, sem fetch.

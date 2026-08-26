@@ -109,7 +109,7 @@ describe("resumoDoDispositivo", () => {
   });
 
   it("reconhece o app antes de tentar adivinhar o navegador", () => {
-    expect(resumoDoDispositivo("NewDiscDesktop/1.0 Tauri/2.0")).toBe("App do NewDisc");
+    expect(resumoDoDispositivo("StreamzDesktop/1.0 Tauri/2.0")).toBe("App do Streamz");
   });
 
   it("degrada sem esconder que não sabe", () => {

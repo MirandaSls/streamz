@@ -1,5 +1,5 @@
 import { createHash, randomInt } from "node:crypto";
-import { RECOVERY_CODE_COUNT, RECOVERY_CODE_LENGTH, normalizarCodigoMfa } from "@newdisc/shared";
+import { RECOVERY_CODE_COUNT, RECOVERY_CODE_LENGTH, normalizarCodigoMfa } from "@streamz/shared";
 
 /**
  * Códigos de recuperação do 2FA — a saída de emergência de quem perdeu o

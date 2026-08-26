@@ -65,7 +65,7 @@ import type {
   SessaoView,
   UserStatus,
   VoiceStateEvent,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import { API_URL } from "./config";
 import { ApiError } from "./api-error";
 import { getAccessToken, renovarTokens } from "./session";

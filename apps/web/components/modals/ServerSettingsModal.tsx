@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
-import { Permission } from "@newdisc/shared";
+import { Permission } from "@streamz/shared";
 import ServerSettingsOverview from "@/components/modals/ServerSettingsOverview";
 import ServerSettingsRoles from "@/components/modals/ServerSettingsRoles";
 import ServerSettingsMembers from "@/components/modals/ServerSettingsMembers";

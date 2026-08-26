@@ -1,5 +1,5 @@
 import type Redis from "ioredis";
-import type { VoiceFlags } from "@newdisc/shared";
+import type { VoiceFlags } from "@streamz/shared";
 
 /**
  * Quem está em cada sala de voz, e como (mudo, surdo, câmera, tela).

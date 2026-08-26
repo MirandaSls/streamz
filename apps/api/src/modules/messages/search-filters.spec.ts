@@ -6,7 +6,7 @@ import {
   replySnippet,
   type Message,
   type PublicUser,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 
 /**
  * O parser de filtros e a regra de menção por resposta são lógica pura — e são

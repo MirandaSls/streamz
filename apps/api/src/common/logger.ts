@@ -105,7 +105,7 @@ const NOME_JSON: Record<LogLevel, string> = {
 export class StructuredLogger implements LoggerService {
   private readonly minimo = nivelMinimo();
   private readonly json = usarJson();
-  private readonly service = process.env.LOG_SERVICE ?? "newdisc-api";
+  private readonly service = process.env.LOG_SERVICE ?? "streamz-api";
 
   log(mensagem: unknown, ...rest: unknown[]) {
     this.emitir("log", mensagem, rest);

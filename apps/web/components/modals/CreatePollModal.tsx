@@ -8,7 +8,7 @@ import {
   MAX_POLL_QUESTION,
   MIN_POLL_OPTIONS,
   POLL_DURATIONS,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import Tooltip from "@/components/ui/Tooltip";
 import { criarEnquete } from "@/stores/polls";

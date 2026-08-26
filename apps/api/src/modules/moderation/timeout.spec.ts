@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_TIMEOUT_MINUTES, isTimedOut } from "@newdisc/shared";
+import { MAX_TIMEOUT_MINUTES, isTimedOut } from "@streamz/shared";
 import { calcularFim, motivoDeBloqueio } from "./timeout";
 
 const AGORA = new Date("2026-08-25T12:00:00.000Z").getTime();

@@ -23,8 +23,8 @@ import {
   MAX_CUSTOM_STATUS,
   MAX_DISPLAY_NAME,
   MAX_PRONOUNS,
-} from "@newdisc/shared";
-import type { CustomStatusDuration, UserStatus } from "@newdisc/shared";
+} from "@streamz/shared";
+import type { CustomStatusDuration, UserStatus } from "@streamz/shared";
 import { UsersService } from "./users.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";

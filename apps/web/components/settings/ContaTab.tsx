@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AtSign, BadgeCheck, Camera, KeyRound, LogOut, TriangleAlert } from "lucide-react";
-import { MAX_DISPLAY_NAME, displayNameOf } from "@newdisc/shared";
-import type { MinhaConta } from "@newdisc/shared";
+import { MAX_DISPLAY_NAME, displayNameOf } from "@streamz/shared";
+import type { MinhaConta } from "@streamz/shared";
 import { Section } from "@/components/settings/controls";
 import { CampoDeTexto, Erro } from "@/components/settings/campos";
 import { PrimaryButton } from "@/components/modals/Dialog";

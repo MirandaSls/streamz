@@ -1,4 +1,4 @@
-# NewDisc — sistema de design
+# Streamz — sistema de design
 
 Referência visual: **Discord** (tema escuro, 2024+). A meta é ser indistinguível
 na paleta, na tipografia, no leiaute e nos componentes — não "inspirado". Este

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { displayNameOf, type PollVoters } from "@newdisc/shared";
+import { displayNameOf, type PollVoters } from "@streamz/shared";
 import Dialog, { SecondaryButton } from "@/components/modals/Dialog";
 import Avatar from "@/components/ui/Avatar";
 import { api } from "@/lib/api";

@@ -15,7 +15,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { SkipThrottle } from "@nestjs/throttler";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { IsInt, IsOptional, IsString, IsUrl, Length, Max, Min } from "class-validator";
-import { MAX_ATTACHMENT_SIZE } from "@newdisc/shared";
+import { MAX_ATTACHMENT_SIZE } from "@streamz/shared";
 import { UploadsService } from "./uploads.service";
 import { StorageService } from "../storage/storage.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";

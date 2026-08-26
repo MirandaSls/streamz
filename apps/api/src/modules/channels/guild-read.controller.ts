@@ -1,5 +1,5 @@
 import { Controller, Param, Post, UseGuards } from "@nestjs/common";
-import type { GuildReadResult } from "@newdisc/shared";
+import type { GuildReadResult } from "@streamz/shared";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";
 import { PrismaService } from "../../prisma/prisma.service";

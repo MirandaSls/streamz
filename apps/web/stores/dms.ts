@@ -5,7 +5,7 @@ import {
   isGroupChannel,
   type DMChannelView,
   type PublicUser,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";

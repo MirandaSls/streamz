@@ -2,7 +2,7 @@
 #
 # Imagem da web (Next.js). Multi-stage, saída `standalone`.
 #
-#   docker build -f apps/web/Dockerfile -t newdisc-web \
+#   docker build -f apps/web/Dockerfile -t streamz-web \
 #     --build-arg NEXT_PUBLIC_API_URL=https://api.exemplo.com .
 #
 # O contexto de build é a **raiz do monorepo** (o pnpm precisa do lockfile e
@@ -26,7 +26,7 @@ COPY apps/web/package.json apps/web/
 COPY apps/api/package.json apps/api/
 COPY apps/desktop/package.json apps/desktop/
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile --filter @newdisc/web... --filter @newdisc/shared...
+    pnpm install --frozen-lockfile --filter @streamz/web... --filter @streamz/shared...
 
 # ── Build ───────────────────────────────────────────────────────────────────
 FROM deps AS build
@@ -50,8 +50,8 @@ ENV NEXT_PUBLIC_LIVEKIT_URL=$NEXT_PUBLIC_LIVEKIT_URL
 ENV NEXT_OUTPUT=standalone
 ENV NODE_ENV=production
 # O shared é consumido pelo dist/ — precisa vir antes do build da web.
-RUN pnpm --filter @newdisc/shared build \
- && pnpm --filter @newdisc/web build
+RUN pnpm --filter @streamz/shared build \
+ && pnpm --filter @streamz/web build
 
 # ── Runtime ─────────────────────────────────────────────────────────────────
 FROM base AS runtime

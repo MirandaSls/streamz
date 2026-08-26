@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type MouseEvent } from "react";
 import { LogOut, Phone, Plus, Settings, UserPlus, Users, X } from "lucide-react";
-import { displayNameOf, isGroupChannel, isUnread, type DMChannelView, type PublicUser } from "@newdisc/shared";
+import { displayNameOf, isGroupChannel, isUnread, type DMChannelView, type PublicUser } from "@streamz/shared";
 import UserFooter from "@/components/layout/UserFooter";
 import Avatar, { GroupAvatar } from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";

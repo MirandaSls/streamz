@@ -2,8 +2,8 @@
 
 import { useMemo } from "react";
 import { Search, X } from "lucide-react";
-import { displayNameOf, parseSearchQuery } from "@newdisc/shared";
-import type { Message } from "@newdisc/shared";
+import { displayNameOf, parseSearchQuery } from "@streamz/shared";
+import type { Message } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import { horaCompleta } from "@/lib/format";
 import { useChannels } from "@/stores/channels";

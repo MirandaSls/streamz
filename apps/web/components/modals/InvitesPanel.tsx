@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Copy, Trash2 } from "lucide-react";
-import type { InviteDetail } from "@newdisc/shared";
+import type { InviteDetail } from "@streamz/shared";
 import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";
 import { horaCompleta } from "@/lib/format";

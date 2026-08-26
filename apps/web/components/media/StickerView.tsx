@@ -1,6 +1,6 @@
 "use client";
 
-import type { Sticker } from "@newdisc/shared";
+import type { Sticker } from "@streamz/shared";
 
 /** Lado da figurinha na mensagem (o Discord usa 160px). */
 const LADO = 160;

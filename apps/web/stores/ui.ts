@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { PublicUser } from "@newdisc/shared";
+import type { PublicUser } from "@streamz/shared";
 // ── h-moderacao ──
 import type { ServerSettingsTab } from "@/components/settings/server/tabs";
 

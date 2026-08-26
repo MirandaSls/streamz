@@ -28,8 +28,8 @@ import {
   GUILD_CHANNEL_TYPES,
   MAX_CHANNEL_TOPIC,
   MAX_SLOWMODE_SECONDS,
-} from "@newdisc/shared";
-import type { GuildChannelType } from "@newdisc/shared";
+} from "@streamz/shared";
+import type { GuildChannelType } from "@streamz/shared";
 
 class CreateChannelDto {
   @IsString()

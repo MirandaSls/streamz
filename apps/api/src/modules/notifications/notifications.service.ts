@@ -6,7 +6,7 @@ import {
   guildNotificationScope,
   type NotificationSetting,
   type NotificationSettingUpdate,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { RealtimeService } from "../realtime/realtime.service";
@@ -37,7 +37,7 @@ function toDTO(row: Row): NotificationSetting {
  *
  * Guardar é tudo o que a API faz: quem decide notificar é o cliente, que tem o
  * contexto que o servidor não tem (janela visível, canal aberto, "não perturbe"
- * local). O contrato da decisão mora em `@newdisc/shared`
+ * local). O contrato da decisão mora em `@streamz/shared`
  * (`effectiveNotificationLevel` / `shouldNotifyMessage`), para os dois lados
  * responderem igual.
  *

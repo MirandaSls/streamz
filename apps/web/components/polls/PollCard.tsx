@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { BarChart3, Check, Users } from "lucide-react";
-import { isPollClosed, pollPercent, type Poll } from "@newdisc/shared";
+import { isPollClosed, pollPercent, type Poll } from "@streamz/shared";
 import Tooltip from "@/components/ui/Tooltip";
 import { horaCompleta } from "@/lib/format";
 import { usePoll, usePolls } from "@/stores/polls";

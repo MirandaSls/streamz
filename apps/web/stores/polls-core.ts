@@ -1,4 +1,4 @@
-import type { Poll } from "@newdisc/shared";
+import type { Poll } from "@streamz/shared";
 
 /**
  * Regras puras da enquete do lado do cliente.

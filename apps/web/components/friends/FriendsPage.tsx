@@ -2,7 +2,7 @@
 
 import { useEffect, type ReactNode } from "react";
 import { Check, MessageSquare, UserMinus, UserX, Users, X } from "lucide-react";
-import { displayNameOf } from "@newdisc/shared";
+import { displayNameOf } from "@streamz/shared";
 import AddFriend from "@/components/friends/AddFriend";
 import FriendRow, { RowAction } from "@/components/friends/FriendRow";
 import HeaderBar from "@/components/chat/HeaderBar";

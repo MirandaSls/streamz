@@ -1,4 +1,4 @@
-import type { CustomEmoji, Sticker } from "@newdisc/shared";
+import type { CustomEmoji, Sticker } from "@streamz/shared";
 
 /**
  * Conversores das linhas de `CustomEmoji`/`Sticker` para os DTOs do contrato.

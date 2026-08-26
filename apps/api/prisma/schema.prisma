@@ -1,4 +1,4 @@
-// Prisma schema — NewDisc
+// Prisma schema — Streamz
 //
 // Banco único: **PostgreSQL**, em dev e em produção. Não há mais variante
 // SQLite — os enums (`UserStatus`, `ChannelType`, `MemberRole`) são garantidos
@@ -423,7 +423,7 @@ model Reaction {
 
 // ── c-cargos ──────────────────────────────────────────────────
 // Cargos, atribuições e regras por canal. A permissão efetiva é calculada por
-// `computePermissions` (@newdisc/shared) — ver docs/adr/0002.
+// `computePermissions` (@streamz/shared) — ver docs/adr/0002.
 
 // Um cargo do servidor. `permissions` é o bitfield de `Permission`; os bits são
 // estáveis para sempre, porque o valor fica gravado aqui.
@@ -513,7 +513,7 @@ model Category {
 // são narração renderizada como linha discreta, sem avatar nem ações: fixar
 // (a-mensagens), entrada de membro (moderação) e os eventos de grupo de DM
 // (d-social). O autor é sempre quem fez a ação; o `content` guarda o alvo ou o
-// valor novo. Enum único — a equivalência com `MessageType` de @newdisc/shared
+// valor novo. Enum único — a equivalência com `MessageType` de @streamz/shared
 // é travada em common/enums.ts.
 enum MessageType {
   DEFAULT
@@ -565,7 +565,7 @@ model Thread {
 // ── e-configuracoes ──────────────────────────────────────────
 
 // Quanto um escopo notifica. Mesmos literais da union `NotificationLevel` de
-// @newdisc/shared — a equivalência é travada em common/enums.ts.
+// @streamz/shared — a equivalência é travada em common/enums.ts.
 enum NotificationLevel {
   ALL
   MENTIONS
@@ -708,7 +708,7 @@ model Sticker {
 // ── h-moderacao ──────────────────────────────────────────
 
 // Ações que entram no registro de auditoria. Espelha `AuditAction` de
-// `@newdisc/shared`.
+// `@streamz/shared`.
 enum AuditAction {
   MEMBER_KICK
   MEMBER_BAN

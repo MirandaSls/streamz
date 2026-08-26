@@ -3,7 +3,7 @@
 # Imagem da API (NestJS + Prisma). Multi-stage: as dependências e o build ficam
 # num estágio descartável e a imagem final leva só o que roda.
 #
-#   docker build -f apps/api/Dockerfile -t newdisc-api .
+#   docker build -f apps/api/Dockerfile -t streamz-api .
 #
 # O contexto de build é a **raiz do monorepo** (o pnpm precisa do lockfile e dos
 # package.json de todos os workspaces para resolver `workspace:*`).
@@ -27,7 +27,7 @@ COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY apps/desktop/package.json apps/desktop/
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile --filter @newdisc/api... --filter @newdisc/shared...
+    pnpm install --frozen-lockfile --filter @streamz/api... --filter @streamz/shared...
 
 # ── Build ───────────────────────────────────────────────────────────────────
 FROM deps AS build
@@ -35,9 +35,9 @@ COPY tsconfig.base.json ./
 COPY packages/shared packages/shared
 COPY apps/api apps/api
 # O shared é consumido pelo dist/ — precisa vir antes do tsc da api.
-RUN pnpm --filter @newdisc/shared build \
- && pnpm --filter @newdisc/api exec prisma generate \
- && pnpm --filter @newdisc/api build
+RUN pnpm --filter @streamz/shared build \
+ && pnpm --filter @streamz/api exec prisma generate \
+ && pnpm --filter @streamz/api build
 
 # ── Runtime ─────────────────────────────────────────────────────────────────
 FROM base AS runtime

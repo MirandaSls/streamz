@@ -17,13 +17,13 @@ fn main() {
         // Como religar: apps/desktop/README.md (seção "Auto-update").
         .setup(|app| {
             // --- System tray (bandeja) ---------------------------------------
-            // Menu de contexto: "Abrir NewDisc" e "Sair".
-            let abrir = MenuItem::with_id(app, "abrir", "Abrir NewDisc", true, None::<&str>)?;
+            // Menu de contexto: "Abrir Streamz" e "Sair".
+            let abrir = MenuItem::with_id(app, "abrir", "Abrir Streamz", true, None::<&str>)?;
             let sair = MenuItem::with_id(app, "sair", "Sair", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&abrir, &sair])?;
 
-            let mut tray = TrayIconBuilder::with_id("newdisc-tray")
-                .tooltip("NewDisc")
+            let mut tray = TrayIconBuilder::with_id("streamz-tray")
+                .tooltip("Streamz")
                 .menu(&menu)
                 // No Windows o menu deve abrir só com o botão direito; o esquerdo
                 // reabre a janela (tratado em on_tray_icon_event).
@@ -64,7 +64,7 @@ fn main() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("erro ao iniciar o NewDisc");
+        .expect("erro ao iniciar o Streamz");
 }
 
 /// Mostra e foca a janela principal (usada pelo menu e pelo clique no ícone).

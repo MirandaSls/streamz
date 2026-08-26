@@ -1,4 +1,4 @@
-# NewDisc — guia do projeto
+# Streamz — guia do projeto
 
 Clone do Discord (MVP): chat em servidores/canais em tempo real, voz/vídeo/tela e
 app desktop. Referência de arquitetura e produto: **stoatchat** (fork do Revolt) —
@@ -29,7 +29,7 @@ apps/
   web/       # Next.js — login/registro + app de chat de 3 colunas (app/app/page.tsx)
   desktop/   # Tauri 2 — embrulha a web num instalador
 packages/
-  shared/    # @newdisc/shared — tipos + schemas zod + WS_EVENTS, fonte única de
+  shared/    # @streamz/shared — tipos + schemas zod + WS_EVENTS, fonte única de
              #   verdade do contrato api ↔ web. Toda mudança de payload passa aqui.
 docs/adr/    # decisões arquiteturais datadas (o *porquê*; ver docs/adr/README.md)
 ```
@@ -38,21 +38,21 @@ docs/adr/    # decisões arquiteturais datadas (o *porquê*; ver docs/adr/README
 
 ```bash
 pnpm dev                 # api + web juntos
-pnpm --filter @newdisc/api dev
-pnpm --filter @newdisc/shared build             # OBRIGATÓRIO após mexer em packages/shared (ver abaixo)
-pnpm --filter @newdisc/api exec tsc --noEmit    # typecheck (sempre antes de commit)
-pnpm --filter @newdisc/api exec prisma generate # após mexer no schema.prisma
+pnpm --filter @streamz/api dev
+pnpm --filter @streamz/shared build             # OBRIGATÓRIO após mexer em packages/shared (ver abaixo)
+pnpm --filter @streamz/api exec tsc --noEmit    # typecheck (sempre antes de commit)
+pnpm --filter @streamz/api exec prisma generate # após mexer no schema.prisma
 pnpm db:up               # sobe o Postgres do docker-compose (só 127.0.0.1)
 pnpm db:embedded         # alternativa sem Docker: Postgres embutido em ./.pgdata (UTF-8)
 node scripts/e2e-visual.mjs --out ./e2e-shots   # passeio com screenshots (API+web no ar)
-pnpm --filter @newdisc/api build && pnpm --filter @newdisc/api smoke:conta  # conta/2FA ponta a ponta (só Postgres)
+pnpm --filter @streamz/api build && pnpm --filter @streamz/api smoke:conta  # conta/2FA ponta a ponta (só Postgres)
 pnpm db:migrate          # cria/aplica migration a partir do schema (dev)
 pnpm db:deploy           # aplica as migrations existentes (prod/CI)
 
 docker compose up -d --build api web            # sobe api+web em contêiner (usa o .env)
 docker compose --profile redis up -d redis      # Redis opcional (multi-instância)
-docker build -f apps/api/Dockerfile -t newdisc-api .   # contexto = raiz do monorepo
-docker build -f apps/web/Dockerfile -t newdisc-web .   # NEXT_PUBLIC_* via --build-arg
+docker build -f apps/api/Dockerfile -t streamz-api .   # contexto = raiz do monorepo
+docker build -f apps/web/Dockerfile -t streamz-web .   # NEXT_PUBLIC_* via --build-arg
 ```
 
 O CI (`.github/workflows/ci.yml`) roda exatamente esta sequência — `prisma
@@ -60,13 +60,13 @@ generate` → build do `shared` → typecheck dos três pacotes → testes → `
 build` — e num job à parte builda as duas imagens sem publicar. Reproduza-a
 localmente antes de abrir PR.
 
-Testes unitários (vitest) cobrem só lógica pura (`pnpm --filter @newdisc/api test`,
-`pnpm --filter @newdisc/web test`). **Verificação = typecheck limpo nos três
+Testes unitários (vitest) cobrem só lógica pura (`pnpm --filter @streamz/api test`,
+`pnpm --filter @streamz/web test`). **Verificação = typecheck limpo nos três
 pacotes** (`api`, `web`, `shared`) + testes passando + validação manual ponta a
 ponta quando o servidor puder rodar.
 
-> **`@newdisc/shared` é consumido pelo `dist/` compilado**, não pelo `src/`. Depois
-> de qualquer mudança em `packages/shared`, rode `pnpm --filter @newdisc/shared
+> **`@streamz/shared` é consumido pelo `dist/` compilado**, não pelo `src/`. Depois
+> de qualquer mudança em `packages/shared`, rode `pnpm --filter @streamz/shared
 > build` **antes** do typecheck da api/web — sem isso o `tsc` deles enxerga o
 > contrato antigo e mente (passa com tipo que não existe mais, ou falha com
 > "no exported member" para algo que você acabou de exportar).
@@ -81,7 +81,7 @@ ponta quando o servidor puder rodar.
   branch default; criar `feat/…`, `fix/…`, etc. antes.
 - **Contrato compartilhado primeiro:** payload novo ou campo novo entram em
   `packages/shared/src/index.ts` **antes** de tocar api/web. Os dois lados
-  importam de `@newdisc/shared` — nunca redeclare um tipo localmente.
+  importam de `@streamz/shared` — nunca redeclare um tipo localmente.
 
 ## Arquitetura — o que você precisa ter na cabeça
 
@@ -115,7 +115,7 @@ toca um canal, comece pelo assert.
 
 ### Permissão é bitfield; papel é só hierarquia (ADR-0002)
 O que alguém *pode fazer* sai de `computePermissions(member, roles, overrides)`
-(`@newdisc/shared`): união dos cargos a partir do `@everyone`, depois os
+(`@streamz/shared`): união dos cargos a partir do `@everyone`, depois os
 `ChannelOverride` na ordem `deny` → `allow` (`@everyone` → cargos → usuário);
 dono e `ADMINISTRATOR` ignoram tudo. Os bits de `Permission` são **estáveis para
 sempre** — o valor fica gravado em cada `Role` e em cada override; permissão nova
@@ -193,7 +193,7 @@ o contrato dessas rotas já existe em zod e é o mesmo que a web usa para recusa
 antes do round-trip. O resto da API continua com `class-validator`.
 
 ### DTO na borda, entidade Prisma dentro
-Services devolvem os tipos de `@newdisc/shared` (ex.: `Message`, `Attachment`,
+Services devolvem os tipos de `@streamz/shared` (ex.: `Message`, `Attachment`,
 `Guild`, `Channel`), não linhas do Prisma. A conversão fica em métodos
 `toDTO`/`toAttachmentDTO` ou nos helpers de `common/dto.ts`, que é também onde as
 colunas que o SQLite guarda como `String` voltam às union types. A URL de anexo é
@@ -222,7 +222,7 @@ diferentes). Variável **opcional** (R2, LiveKit) não entra ali: fica com o
   em `prisma/migrations/` e a aplica. **Não use `prisma db push`** (ele diverge o
   banco das migrations sem deixar rastro).
 - **Enums são do banco** (`UserStatus`, `ChannelType`, `MemberRole`). O Prisma
-  gera exatamente os mesmos literais das union types de `@newdisc/shared`, então
+  gera exatamente os mesmos literais das union types de `@streamz/shared`, então
   o DTO é atribuição direta — **não precisa de `as`**. A equivalência entre os
   dois lados fica travada em tempo de compilação em `common/enums.ts`; adicionar
   um valor só de um lado quebra o typecheck lá, e em nenhum outro lugar.

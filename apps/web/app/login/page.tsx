@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { exigeMfa } from "@newdisc/shared";
+import { exigeMfa } from "@streamz/shared";
 import AuthCard, { FieldLabel, inputClass, submitClass } from "@/components/auth/AuthCard";
 import { api } from "@/lib/api";
 import { mensagemDeAuth, validarLogin } from "@/lib/auth-mensagens";

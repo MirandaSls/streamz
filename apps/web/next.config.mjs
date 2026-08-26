@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
  *
  *   - `NEXT_OUTPUT=export` — chave explícita, para gerar o `out/` na mão;
  *   - `TAURI_ENV_*` — injetadas pelo Tauri nos hooks `beforeBuildCommand`/
- *     `beforeDevCommand`, então o `pnpm --filter @newdisc/desktop build` já
+ *     `beforeDevCommand`, então o `pnpm --filter @streamz/desktop build` já
  *     produz o `out/` sem precisar de nada a mais. (`TAURI_PLATFORM` cobre o
  *     nome antigo, do Tauri 1.)
  *
@@ -46,7 +46,7 @@ const raizDoMonorepo = fileURLToPath(new URL("../../", import.meta.url));
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: ["@newdisc/shared"],
+  transpilePackages: ["@streamz/shared"],
   ...(exportarEstatico
     ? {
         output: "export",

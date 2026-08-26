@@ -1,7 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { forcaDeSenha } from "@newdisc/shared";
+import { forcaDeSenha } from "@streamz/shared";
+import Corvo from "../ui/Corvo";
 
 /**
  * Moldura das telas de login/registro no estilo do Discord: fundo blurple,
@@ -20,6 +21,7 @@ export default function AuthCard({
   return (
     <main className="grid min-h-screen place-items-center bg-accent bg-[radial-gradient(ellipse_at_top_left,rgba(255,255,255,0.18),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(0,0,0,0.25),transparent_60%)] p-4">
       <div className="w-[480px] max-w-full rounded-[5px] bg-chat p-8 shadow-high">
+        <Corvo size={44} className="mx-auto mb-4 text-txt-primary" />
         <h1 className="text-center text-2xl font-semibold leading-[30px] text-txt-primary">{title}</h1>
         {subtitle && <p className="mt-2 text-center text-txt-muted">{subtitle}</p>}
         <div className="mt-5">{children}</div>

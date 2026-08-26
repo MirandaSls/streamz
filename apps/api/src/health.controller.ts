@@ -34,7 +34,7 @@ export class HealthController {
     // com várias instâncias (um contador em memória só veria as próprias) e
     // custa uma contagem indexada por scrape.
     registrarGauge(
-      "newdisc_messages_last_minute",
+      "streamz_messages_last_minute",
       "Mensagens criadas nos últimos 60 segundos (todas as instâncias)",
       () =>
         this.prisma.message.count({
@@ -47,7 +47,7 @@ export class HealthController {
   check() {
     return {
       status: "ok",
-      service: "newdisc-api",
+      service: "streamz-api",
       version: process.env.APP_VERSION ?? "dev",
       uptime: Math.round(process.uptime()),
       ts: new Date().toISOString(),

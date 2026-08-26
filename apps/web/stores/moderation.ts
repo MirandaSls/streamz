@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { isTimedOut, type GuildMembership, type ReportView } from "@newdisc/shared";
+import { isTimedOut, type GuildMembership, type ReportView } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mentionsEveryone, mentionsUser } from "@newdisc/shared";
+import { mentionsEveryone, mentionsUser } from "@streamz/shared";
 import { parseInline, plainText } from "../markdown-core";
 
 /**

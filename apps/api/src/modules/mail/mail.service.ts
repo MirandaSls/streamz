@@ -61,7 +61,7 @@ export class MailService {
 
   /** Remetente configurado (ou um padrão legível). */
   private from(): string {
-    return process.env.SMTP_FROM?.trim() || "NewDisc <nao-responda@newdisc.local>";
+    return process.env.SMTP_FROM?.trim() || "Streamz <nao-responda@streamz.local>";
   }
 
   async enviar(email: EmailParaEnviar): Promise<void> {
@@ -99,7 +99,7 @@ export class MailService {
 
   /** Verificação de e-mail — o link expira em 24 h. */
   verificacao(to: string, nome: string, link: string): EmailParaEnviar {
-    const subject = "Confirme seu e-mail no NewDisc";
+    const subject = "Confirme seu e-mail no Streamz";
     const text =
       `Olá, ${nome}!\n\n` +
       "Confirme seu e-mail para liberar todos os recursos da sua conta:\n" +
@@ -110,7 +110,7 @@ export class MailService {
 
   /** Redefinição de senha — o link expira em 1 h. */
   redefinicao(to: string, nome: string, link: string): EmailParaEnviar {
-    const subject = "Redefinir sua senha do NewDisc";
+    const subject = "Redefinir sua senha do Streamz";
     const text =
       `Olá, ${nome}!\n\n` +
       "Recebemos um pedido para redefinir sua senha:\n" +
@@ -122,7 +122,7 @@ export class MailService {
 
   /** Aviso de senha alterada — não tem link, é só o alerta. */
   senhaAlterada(to: string, nome: string): EmailParaEnviar {
-    const subject = "Sua senha do NewDisc foi alterada";
+    const subject = "Sua senha do Streamz foi alterada";
     const text =
       `Olá, ${nome}!\n\n` +
       "A senha da sua conta acabou de ser alterada e as outras sessões foram encerradas.\n\n" +

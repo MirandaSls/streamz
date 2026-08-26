@@ -13,7 +13,7 @@ import {
   isRoleColor,
   type PermissionName,
   type Role,
-} from "@newdisc/shared";
+} from "@streamz/shared";
 import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";
 import { useGuilds } from "@/stores/guilds";

@@ -2,7 +2,7 @@
  * Traduz falhas de autenticação em texto que o usuário entende e recusa o que
  * a API recusaria, antes do round-trip.
  *
- * As **regras** não moram aqui: são os schemas de `@newdisc/shared`
+ * As **regras** não moram aqui: são os schemas de `@streamz/shared`
  * (`contaRegistroSchema`, `contaLoginSchema`, `validarSenhaNova`), os mesmos que
  * a API valida na borda. Aqui fica só a apresentação — qual frase cada status
  * vira em cada formulário, e o texto neutro para o inesperado, em vez de vazar
@@ -15,8 +15,8 @@ import {
   contaRegistroSchema,
   forcaDeSenha,
   validarSenhaNova,
-} from "@newdisc/shared";
-import type { ForcaDeSenha } from "@newdisc/shared";
+} from "@streamz/shared";
+import type { ForcaDeSenha } from "@streamz/shared";
 import { ApiError } from "./api-error";
 
 type Formulario = "login" | "registro" | "conta";
@@ -58,7 +58,7 @@ export function mensagemDeAuth(erro: unknown, formulario: Formulario): string {
 /**
  * O mínimo de um schema zod que este arquivo usa. Declarado estruturalmente
  * porque `zod` é dependência do contrato, não da web — os schemas chegam
- * prontos de `@newdisc/shared`, e a web não precisa da biblioteca.
+ * prontos de `@streamz/shared`, e a web não precisa da biblioteca.
  */
 interface SchemaValidavel {
   safeParse(valor: unknown):

@@ -1,5 +1,5 @@
 import { Controller, Get, Param, Query, UseGuards } from "@nestjs/common";
-import { parseSearchQuery } from "@newdisc/shared";
+import { parseSearchQuery } from "@streamz/shared";
 import { MessagesService } from "./messages.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";

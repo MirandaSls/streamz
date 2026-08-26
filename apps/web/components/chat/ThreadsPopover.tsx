@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Archive, ArchiveRestore, MessagesSquare, Pencil } from "lucide-react";
-import { displayNameOf } from "@newdisc/shared";
+import { displayNameOf } from "@streamz/shared";
 import HeaderPopover from "@/components/chat/HeaderPopover";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";

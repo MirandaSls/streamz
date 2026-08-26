@@ -1,7 +1,7 @@
 "use client";
 
 import { Users } from "lucide-react";
-import type { UserStatus } from "@newdisc/shared";
+import type { UserStatus } from "@streamz/shared";
 
 /**
  * Cores dos avatares padrão do Discord: quem não tem imagem ganha uma das cinco

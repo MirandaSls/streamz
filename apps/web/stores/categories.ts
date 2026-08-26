@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Category } from "@newdisc/shared";
+import type { Category } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
@@ -13,7 +13,7 @@ import { ui } from "@/stores/ui";
  * API: é preferência de tela, não dado do servidor.
  */
 
-const CHAVE_COLAPSO = "newdisc:categorias-colapsadas";
+const CHAVE_COLAPSO = "streamz:categorias-colapsadas";
 
 function lerColapso(guildId: string): string[] {
   if (typeof window === "undefined") return [];

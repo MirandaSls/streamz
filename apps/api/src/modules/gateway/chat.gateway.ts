@@ -29,8 +29,8 @@ import {
   callSchema,
   voiceJoinSchema,
   voiceUpdateSchema,
-} from "@newdisc/shared";
-import type { UserStatus, WsErrorEvent } from "@newdisc/shared";
+} from "@streamz/shared";
+import type { UserStatus, WsErrorEvent } from "@streamz/shared";
 import {
   newBucket,
   takeToken,

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Hash } from "lucide-react";
-import { displayNameOf, type InviteFullPreview } from "@newdisc/shared";
+import { displayNameOf, type InviteFullPreview } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
 import { errorMessage } from "@/stores/socket-adapter";
