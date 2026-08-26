@@ -1,7 +1,8 @@
 import { Body, Controller, Delete, Get, Param, Post, UseGuards } from "@nestjs/common";
-import { IsInt, IsOptional, Min } from "class-validator";
+import { IsBoolean, IsInt, IsOptional, IsString, Min } from "class-validator";
 import { InvitesService } from "./invites.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
+import { OptionalJwtGuard } from "../../common/optional-jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";
 import {
   INVITE_CREATE_THROTTLE,
@@ -11,13 +12,22 @@ import {
 class CreateInviteDto {
   @IsOptional()
   @IsInt()
-  @Min(1)
+  @Min(0)
   maxUses?: number;
 
+  /** minutos até expirar; `0` = nunca expira (última opção do seletor). */
   @IsOptional()
   @IsInt()
-  @Min(1)
-  expiresInHours?: number;
+  @Min(0)
+  expiresInMinutes?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  temporary?: boolean;
+
+  @IsOptional()
+  @IsString()
+  channelId?: string | null;
 }
 
 @Controller()
@@ -51,11 +61,15 @@ export class InvitesController {
     return this.invites.revoke(user.sub, guildId, code);
   }
 
-  /** Prévia pública: a tela de "entrar no servidor" abre sem estar logado. */
+  /**
+   * Prévia pública: a página `/invite/:code` abre sem estar logado. Com token
+   * válido a resposta também diz se o visitante já é membro.
+   */
+  @UseGuards(OptionalJwtGuard)
   @INVITE_PREVIEW_THROTTLE
   @Get("invites/:code")
-  preview(@Param("code") code: string) {
-    return this.invites.preview(code);
+  preview(@CurrentUser() user: JwtPayload | undefined, @Param("code") code: string) {
+    return this.invites.preview(code, user?.sub);
   }
 
   @UseGuards(JwtGuard)

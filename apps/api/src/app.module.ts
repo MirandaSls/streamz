@@ -17,6 +17,12 @@ import { UploadsModule } from "./modules/uploads/uploads.module";
 import { MaintenanceModule } from "./modules/maintenance/maintenance.module";
 import { ReadStateModule } from "./modules/read-state/read-state.module";
 import { EmbedsModule } from "./modules/embeds/embeds.module";
+// ── h-moderacao ──
+import { AuditModule } from "./modules/audit/audit.module";
+import { ModerationModule } from "./modules/moderation/moderation.module";
+import { OnboardingModule } from "./modules/onboarding/onboarding.module";
+import { PollsModule } from "./modules/polls/polls.module";
+import { DiscoveryModule } from "./modules/discovery/discovery.module";
 import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis";
 import { redisClient } from "./modules/realtime/redis";
 import { HealthController } from "./health.controller";
@@ -55,6 +61,12 @@ import { validateEnv } from "./common/env";
     MaintenanceModule,
     ReadStateModule,
     EmbedsModule,
+    // ── h-moderacao ──
+    AuditModule,
+    ModerationModule,
+    OnboardingModule,
+    PollsModule,
+    DiscoveryModule,
   ],
   controllers: [HealthController],
   // guard global: o teto padrão vale para toda rota; ver common/throttle.ts

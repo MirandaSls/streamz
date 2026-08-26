@@ -4,9 +4,10 @@ import { ChannelsService } from "./channels.service";
 import { GuildsModule } from "../guilds/guilds.module";
 import { AuthModule } from "../auth/auth.module";
 import { RealtimeModule } from "../realtime/realtime.module";
+import { AuditModule } from "../audit/audit.module";
 
 @Module({
-  imports: [GuildsModule, AuthModule, RealtimeModule],
+  imports: [GuildsModule, AuthModule, RealtimeModule, AuditModule],
   controllers: [ChannelsController],
   providers: [ChannelsService],
   exports: [ChannelsService],

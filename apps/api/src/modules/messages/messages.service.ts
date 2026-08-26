@@ -6,8 +6,16 @@ import {
 } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
+import { ModerationService } from "../moderation/moderation.service";
+import { OnboardingService } from "../onboarding/onboarding.service";
+import { tallyPoll } from "../polls/poll-core";
 import { StorageService } from "../storage/storage.service";
-import type { Attachment, Message as MessageDTO, ReactionGroup } from "@newdisc/shared";
+import type {
+  Attachment,
+  Message as MessageDTO,
+  MessageSystemType,
+  ReactionGroup,
+} from "@newdisc/shared";
 import { MAX_ATTACHMENTS_PER_MESSAGE } from "@newdisc/shared";
 import { toPublicUser, type PublicUserRow } from "../../common/dto";
 
@@ -17,6 +25,8 @@ const MESSAGE_INCLUDE = {
   attachments: true,
   channel: { select: { guildId: true } },
   _count: { select: { replies: true } },
+  // h-moderacao: a enquete é uma face da mensagem, não uma mensagem à parte
+  poll: { include: { votes: { select: { optionIndex: true, userId: true } } } },
 } as const;
 
 @Injectable()
@@ -25,6 +35,9 @@ export class MessagesService {
     private readonly prisma: PrismaService,
     private readonly guilds: GuildsService,
     private readonly storage: StorageService,
+    // h-moderacao: castigo e aceite de regras recusam a escrita antes de gravar
+    private readonly moderation: ModerationService,
+    private readonly onboarding: OnboardingService,
   ) {}
 
   async create(
@@ -35,7 +48,9 @@ export class MessagesService {
     attachmentIds?: string[],
   ): Promise<MessageDTO> {
     // valida canal + associação + permissão de postar (privado/somente-leitura)
-    await this.guilds.assertCanPostChannel(authorId, channelId);
+    const access = await this.guilds.assertCanPostChannel(authorId, channelId);
+    // h-moderacao: castigo e regras não aceitas bloqueiam a escrita no servidor
+    await this.assertPodeEscrever(access, channelId, authorId);
 
     if (parentId) {
       // resposta: o pai precisa existir, ser do mesmo canal e ser uma raiz
@@ -171,7 +186,11 @@ export class MessagesService {
   async addReaction(messageId: string, userId: string, emoji: string): Promise<MessageDTO> {
     const msg = await this.prisma.message.findUnique({ where: { id: messageId } });
     if (!msg) throw new NotFoundException("Mensagem não encontrada");
-    await this.guilds.assertCanViewChannel(userId, msg.channelId);
+    const access = await this.guilds.assertCanViewChannel(userId, msg.channelId);
+    // h-moderacao: reagir também é escrever — quem está de castigo não reage
+    if (access.tipo === "guild" && access.channel.guildId) {
+      await this.moderation.assertNotTimedOut(access.channel.guildId, userId);
+    }
     await this.prisma.reaction.upsert({
       where: { messageId_userId_emoji: { messageId, userId, emoji } },
       create: { messageId, userId, emoji },
@@ -188,6 +207,26 @@ export class MessagesService {
       .delete({ where: { messageId_userId_emoji: { messageId, userId, emoji } } })
       .catch(() => undefined); // idempotente: já não existia
     return this.getDTO(messageId);
+  }
+
+  /**
+   * h-moderacao: quem pode mesmo escrever neste canal agora.
+   *
+   * Fica junto do `create` porque é ali que a recusa precisa acontecer — antes
+   * de gravar. Em conversa direta não há castigo nem regras: `ChannelAccess`
+   * obriga a tratar o ramo DM.
+   */
+  private async assertPodeEscrever(
+    access: Awaited<ReturnType<GuildsService["assertCanPostChannel"]>>,
+    channelId: string,
+    authorId: string,
+  ): Promise<void> {
+    if (access.tipo !== "guild" || !access.channel.guildId) return;
+    const guildId = access.channel.guildId;
+    await this.moderation.assertNotTimedOut(guildId, authorId);
+    if (await this.onboarding.blocksPosting(guildId, channelId, authorId)) {
+      throw new ForbiddenException("Aceite as regras do servidor para poder escrever");
+    }
   }
 
   /** Busca uma mensagem completa (autor + reações) e devolve o DTO. */
@@ -224,6 +263,17 @@ export class MessagesService {
       height: number | null;
     }[];
     _count: { replies: number };
+    // h-moderacao
+    systemType?: MessageSystemType | null;
+    poll?: {
+      messageId: string;
+      question: string;
+      options: string[];
+      multi: boolean;
+      expiresAt: Date | null;
+      closedAt: Date | null;
+      votes: { optionIndex: number; userId: string }[];
+    } | null;
   }): Promise<MessageDTO> {
     return {
       id: m.id,
@@ -237,6 +287,11 @@ export class MessagesService {
       author: toPublicUser(m.author),
       reactions: this.groupReactions(m.reactions),
       attachments: await Promise.all(m.attachments.map((a) => this.toAttachmentDTO(a))),
+      // h-moderacao: mensagem de sistema e enquete viajam com a mensagem. O
+      // `me` da enquete sai vazio aqui (o DTO não conhece o espectador) e é
+      // preenchido por GET /channels/:id/polls/votes — ver PollsService.
+      systemType: m.systemType ?? null,
+      poll: m.poll ? tallyPoll(m.poll, m.poll.votes) : null,
     };
   }
 

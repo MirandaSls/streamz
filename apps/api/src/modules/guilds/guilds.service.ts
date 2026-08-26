@@ -14,6 +14,7 @@ import type {
 } from "@newdisc/shared";
 import { toChannelDTO, toGuildDTO, toPublicUser } from "../../common/dto";
 import { PrismaService } from "../../prisma/prisma.service";
+import { AuditService } from "../audit/audit.service";
 import { RealtimeService } from "../realtime/realtime.service";
 import { ReadStateService } from "../read-state/read-state.service";
 
@@ -44,6 +45,8 @@ export class GuildsService {
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeService,
     private readonly readState: ReadStateService,
+    // h-moderacao: kick/ban/unban/papel entram no registro de auditoria
+    private readonly audit: AuditService,
   ) {}
 
   /** Cria o servidor, registra o dono como membro OWNER e um canal #geral. */
@@ -305,6 +308,15 @@ export class GuildsService {
       where: { userId_guildId: { userId: targetUserId, guildId } },
       data: { role },
     });
+    await this.audit.log({
+      guildId,
+      actorId,
+      action: "MEMBER_ROLE_UPDATE",
+      targetId: targetUserId,
+      targetType: "USER",
+      targetName: await this.usernameOf(targetUserId),
+      changes: [{ field: "role", before: target.role, after: role }],
+    });
     this.realtime.emitToGuild(guildId, WS_EVENTS.MEMBER_UPDATED, {
       guildId,
       userId: targetUserId,
@@ -340,10 +352,19 @@ export class GuildsService {
   }
 
   /** Expulsa um membro (pode voltar por convite). */
-  async kick(actorId: string, guildId: string, targetUserId: string) {
+  async kick(actorId: string, guildId: string, targetUserId: string, reason?: string) {
     await this.assertCanActOn(actorId, guildId, targetUserId);
     await this.prisma.guildMember.delete({
       where: { userId_guildId: { userId: targetUserId, guildId } },
+    });
+    await this.audit.log({
+      guildId,
+      actorId,
+      action: "MEMBER_KICK",
+      targetId: targetUserId,
+      targetType: "USER",
+      targetName: await this.usernameOf(targetUserId),
+      reason,
     });
     await this.detachFromGuildRooms(guildId, targetUserId);
     this.realtime.emitToGuild(guildId, WS_EVENTS.MEMBER_LEFT, { guildId, userId: targetUserId });
@@ -367,6 +388,15 @@ export class GuildsService {
         update: { reason, bannedById: actorId },
       }),
     ]);
+    await this.audit.log({
+      guildId,
+      actorId,
+      action: "MEMBER_BAN",
+      targetId: targetUserId,
+      targetType: "USER",
+      targetName: await this.usernameOf(targetUserId),
+      reason,
+    });
     await this.detachFromGuildRooms(guildId, targetUserId);
     this.realtime.emitToGuild(guildId, WS_EVENTS.MEMBER_LEFT, { guildId, userId: targetUserId });
     this.realtime.emitToUser(targetUserId, WS_EVENTS.GUILD_REMOVED, {
@@ -381,7 +411,24 @@ export class GuildsService {
     await this.prisma.ban
       .delete({ where: { guildId_userId: { guildId, userId: targetUserId } } })
       .catch(() => undefined);
+    await this.audit.log({
+      guildId,
+      actorId,
+      action: "MEMBER_UNBAN",
+      targetId: targetUserId,
+      targetType: "USER",
+      targetName: await this.usernameOf(targetUserId),
+    });
     return { unbanned: targetUserId };
+  }
+
+  /** Nome de usuário para o registro de auditoria (o alvo pode sumir depois). */
+  private async usernameOf(userId: string): Promise<string | null> {
+    const u = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { username: true },
+    });
+    return u?.username ?? null;
   }
 
   async listBans(actorId: string, guildId: string) {

@@ -19,6 +19,9 @@ import {
   messageDeleteSchema,
   messageEditSchema,
   parseWsPayload,
+  pollCloseSchema,
+  pollCreateSchema,
+  pollVoteSchema,
   reactionSchema,
   typingSchema,
 } from "@newdisc/shared";
@@ -33,6 +36,7 @@ import { MemoryPresenceStore, RedisPresenceStore, type PresenceStore } from "./p
 import { MessagesService } from "../messages/messages.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
+import { PollsService } from "../polls/polls.service";
 import { RealtimeService } from "../realtime/realtime.service";
 import { redisClient, redisSubscriber } from "../realtime/redis";
 import { CORS_OPTIONS } from "../../common/cors";
@@ -51,6 +55,9 @@ interface SocketUser {
 const WS_LIMITS: Record<string, BucketLimit> = {
   [WS_EVENTS.MESSAGE_CREATE]: { capacity: 10, refillPerSecond: 1 },
   [WS_EVENTS.TYPING]: { capacity: 8, refillPerSecond: 2 },
+  // h-moderacao: enquete nasce como mensagem — mesmo teto do envio
+  [WS_EVENTS.POLL_CREATE]: { capacity: 5, refillPerSecond: 0.5 },
+  [WS_EVENTS.POLL_VOTE]: { capacity: 10, refillPerSecond: 2 },
 };
 
 @WebSocketGateway({ cors: CORS_OPTIONS })
@@ -74,6 +81,8 @@ export class ChatGateway
     private readonly prisma: PrismaService,
     private readonly guilds: GuildsService,
     private readonly realtime: RealtimeService,
+    // h-moderacao: enquete é escrita de mensagem, logo passa pelo gateway
+    private readonly polls: PollsService,
   ) {}
 
   /**
@@ -274,6 +283,50 @@ export class ChatGateway
         payload.emoji,
       );
       this.server.to(this.room(message.channelId)).emit(WS_EVENTS.MESSAGE_UPDATED, message);
+    } catch (e) {
+      this.emitError(client, e);
+    }
+  }
+
+  // ── h-moderacao: enquetes ──────────────────────────────────
+
+  @SubscribeMessage(WS_EVENTS.POLL_CREATE)
+  async onPollCreate(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
+    const user = this.userOf(client);
+    if (!this.allow(client, WS_EVENTS.POLL_CREATE)) return;
+    const payload = this.parse(client, pollCreateSchema, body);
+    if (!user || !payload) return;
+    try {
+      const message = await this.polls.create(user.id, payload);
+      this.server
+        .to(this.room(payload.channelId))
+        .emit(WS_EVENTS.MESSAGE_NEW, payload.nonce ? { ...message, nonce: payload.nonce } : message);
+    } catch (e) {
+      this.emitError(client, e);
+    }
+  }
+
+  @SubscribeMessage(WS_EVENTS.POLL_VOTE)
+  async onPollVote(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
+    const user = this.userOf(client);
+    if (!this.allow(client, WS_EVENTS.POLL_VOTE)) return;
+    const payload = this.parse(client, pollVoteSchema, body);
+    if (!user || !payload) return;
+    try {
+      // o próprio serviço faz o broadcast do `poll.updated` para a sala
+      await this.polls.vote(user.id, payload.messageId, payload.optionIndex);
+    } catch (e) {
+      this.emitError(client, e);
+    }
+  }
+
+  @SubscribeMessage(WS_EVENTS.POLL_CLOSE)
+  async onPollClose(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
+    const user = this.userOf(client);
+    const payload = this.parse(client, pollCloseSchema, body);
+    if (!user || !payload) return;
+    try {
+      await this.polls.close(user.id, payload.messageId);
     } catch (e) {
       this.emitError(client, e);
     }

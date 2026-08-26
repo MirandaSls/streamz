@@ -8,6 +8,8 @@ import { WS_EVENTS } from "@newdisc/shared";
 import type { Channel, GuildChannelType } from "@newdisc/shared";
 import { toChannelDTO, toPublicUser } from "../../common/dto";
 import { PrismaService } from "../../prisma/prisma.service";
+import { AuditService } from "../audit/audit.service";
+import { diffChanges } from "../audit/changes";
 import { GuildsService } from "../guilds/guilds.service";
 import { RealtimeService } from "../realtime/realtime.service";
 
@@ -24,6 +26,8 @@ export class ChannelsService {
     private readonly prisma: PrismaService,
     private readonly guilds: GuildsService,
     private readonly realtime: RealtimeService,
+    // h-moderacao: criar/editar/apagar canal entra no registro de auditoria
+    private readonly audit: AuditService,
   ) {}
 
   async create(
@@ -51,6 +55,19 @@ export class ChannelsService {
     if (isPrivate && opts.memberIds?.length) {
       await this.grantAccess(guildId, channel.id, opts.memberIds);
     }
+    await this.audit.log({
+      guildId,
+      actorId: userId,
+      action: "CHANNEL_CREATE",
+      targetId: channel.id,
+      targetType: "CHANNEL",
+      targetName: channel.name,
+      changes: [
+        { field: "type", before: null, after: type },
+        ...(isPrivate ? [{ field: "private", before: false, after: true }] : []),
+        ...(readOnly ? [{ field: "readOnly", before: false, after: true }] : []),
+      ],
+    });
     const dto = toChannelDTO(channel);
     // quem enxerga o canal entra na sala agora e vê o canal aparecer na lista
     const viewers = await this.guilds.viewersOfChannel(channel);
@@ -90,10 +107,30 @@ export class ChannelsService {
     await this.assertChannelInGuild(channelId, guildId);
     const name = patch.name?.trim();
     if (patch.name !== undefined && !name) throw new BadRequestException("Nome vazio");
+    const antes = await this.prisma.channel.findUnique({
+      where: { id: channelId },
+      select: { name: true, readOnly: true },
+    });
     const channel = await this.prisma.channel.update({
       where: { id: channelId },
       data: { ...(name ? { name } : {}), ...(patch.readOnly !== undefined ? { readOnly: patch.readOnly } : {}) },
     });
+    const changes = diffChanges(
+      antes ?? {},
+      { ...(name ? { name } : {}), ...(patch.readOnly !== undefined ? { readOnly: patch.readOnly } : {}) },
+      ["name", "readOnly"],
+    );
+    if (changes.length > 0) {
+      await this.audit.log({
+        guildId,
+        actorId,
+        action: "CHANNEL_UPDATE",
+        targetId: channelId,
+        targetType: "CHANNEL",
+        targetName: channel.name,
+        changes,
+      });
+    }
     const dto = toChannelDTO(channel);
     this.realtime.emitToUsers(await this.guilds.viewersOfChannel(channel), WS_EVENTS.CHANNEL_UPDATED, dto);
     return dto;
@@ -111,6 +148,14 @@ export class ChannelsService {
     }
     const viewers = await this.guilds.viewersOfChannel(channel);
     await this.prisma.channel.delete({ where: { id: channelId } });
+    await this.audit.log({
+      guildId,
+      actorId,
+      action: "CHANNEL_DELETE",
+      targetId: channelId,
+      targetType: "CHANNEL",
+      targetName: channel.name,
+    });
     this.realtime.emitToUsers(viewers, WS_EVENTS.CHANNEL_DELETED, { channelId, guildId });
     this.realtime.closeChannelRoom(channelId);
     return { deleted: channelId };
