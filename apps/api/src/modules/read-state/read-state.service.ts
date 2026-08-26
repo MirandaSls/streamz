@@ -7,8 +7,9 @@ import type { ChannelReadSummary } from "../../common/dto";
  * Estado de leitura: até onde cada usuário leu cada canal.
  *
  * É o que alimenta "não lido" (mensagem depois de `lastReadAt`) e o badge de
- * menções (`@username` em mensagem de outro, depois de `lastReadAt`). Não
- * autoriza nada — quem chama já passou por `assertCanViewChannel`.
+ * menções (`@username`, `<@&cargo meu>` ou `@everyone` em mensagem de outro,
+ * depois de `lastReadAt`). Não autoriza nada — quem chama já passou por
+ * `assertCanViewChannel`.
  */
 @Injectable()
 export class ReadStateService {
@@ -36,6 +37,15 @@ export class ReadStateService {
     const out = new Map<string, ChannelReadSummary>();
     if (channelIds.length === 0) return out;
 
+    // menção a cargo (`<@&id>`) conta para quem tem o cargo (c-cargos). Os ids
+    // são cuids únicos, então basta saber quais cargos são meus — em qualquer
+    // servidor — para reconhecer a marcação no texto.
+    const meusCargos = await this.prisma.guildMemberRole.findMany({
+      where: { userId },
+      select: { roleId: true },
+    });
+    const roleIds = meusCargos.map((r) => r.roleId);
+
     const [ultimas, lidos, mencoes, respostas] = await Promise.all([
       this.prisma.message.groupBy({
         by: ["channelId"],
@@ -52,7 +62,10 @@ export class ReadStateService {
         where: {
           channelId: { in: channelIds },
           authorId: { not: userId },
-          content: { contains: `@${username}`, mode: "insensitive" },
+          OR: [
+            { content: { contains: `@${username}`, mode: "insensitive" } },
+            ...roleIds.map((id) => ({ content: { contains: `<@&${id}>` } })),
+          ],
         },
         select: { id: true, channelId: true, createdAt: true, content: true },
       }),
@@ -82,7 +95,7 @@ export class ReadStateService {
       const s = out.get(m.channelId);
       if (!s) continue;
       if (s.lastReadAt && m.createdAt <= s.lastReadAt) continue;
-      if (!mentionsUser(m.content, username)) continue;
+      if (!mentionsUser(m.content, username, roleIds)) continue;
       contadas.add(m.id);
       s.mentionCount += 1;
     }

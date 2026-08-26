@@ -51,7 +51,7 @@ import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { aplicarEmojisPersonalizados, todosOsEmojis, useEmojis } from "@/stores/emojis";
 import { useGuilds } from "@/stores/guilds";
-import { useCan } from "@/stores/permissions";
+import { useCan, usePermissions } from "@/stores/permissions";
 import { useSettings } from "@/stores/settings";
 import { errorMessage } from "@/stores/socket-adapter";
 import { emitTyping } from "@/stores/typing";
@@ -180,6 +180,8 @@ export default function Composer({
   const membros = useGuilds((s) => s.members);
   const canais = useChannels((s) => s.channels);
   const emojisPorGuild = useEmojis((s) => s.guilds);
+  // cargos do servidor aberto: os mencionáveis entram no autocomplete do "@"
+  const cargos = usePermissions((s) => s.roles);
   // @everyone/@here é MENTION_EVERYONE na permissão efetiva do canal (ADR-0002)
   const podeMencionarTodos = useCan(Permission.MENTION_EVERYONE, channelId);
 
@@ -222,8 +224,8 @@ export default function Composer({
   const [selecionado, setSelecionado] = useState(0);
   const gatilho = useMemo<Gatilho | null>(() => detectarGatilho(draft, caret), [draft, caret]);
   const sugestoes = useMemo(
-    () => montarSugestoes(gatilho, { membros, canais, emojisPorGuild }),
-    [gatilho, membros, canais, emojisPorGuild],
+    () => montarSugestoes(gatilho, { membros, canais, emojisPorGuild, cargos }),
+    [gatilho, membros, canais, emojisPorGuild, cargos],
   );
   useEffect(() => setSelecionado(0), [gatilho?.tipo, gatilho?.termo]);
 
@@ -773,6 +775,7 @@ function montarSugestoes(
     membros: { user: { id: string; username: string; displayName: string | null; avatarUrl: string | null; status: string } }[];
     canais: { id: string; name: string | null; type: string }[];
     emojisPorGuild: { emojis: { id: string; name: string; url: string }[] }[];
+    cargos: { id: string; name: string; color: string | null; mentionable: boolean }[];
   },
 ): ItemAutocomplete[] {
   if (!gatilho) return [];
@@ -810,13 +813,32 @@ function montarSugestoes(
       { chave: "here", valor: "@here", rotulo: "@here", detalhe: "avisa quem está online" },
     ].filter((i) => i.rotulo.slice(1).startsWith(q));
 
+    // ── c-cargos ── só cargo com `mentionable` aparece; o texto grava o id,
+    // porque cargo é renomeável e o nome quebraria a menção depois
+    const cargos = fontes.cargos
+      .filter((r) => r.mentionable && r.name.toLowerCase().includes(q))
+      .slice(0, MAX_SUGESTOES - alcance.length)
+      .map<ItemAutocomplete>((r) => ({
+        chave: `r${r.id}`,
+        valor: `<@&${r.id}>`,
+        rotulo: `@${r.name}`,
+        detalhe: "cargo",
+        icone: (
+          <span
+            aria-hidden="true"
+            style={{ backgroundColor: r.color ?? "#949ba4" }}
+            className="h-3 w-3 rounded-full"
+          />
+        ),
+      }));
+
     const pessoas = fontes.membros
       .filter(
         (m) =>
           m.user.username.toLowerCase().includes(q) ||
           displayNameOf(m.user).toLowerCase().includes(q),
       )
-      .slice(0, MAX_SUGESTOES - alcance.length)
+      .slice(0, MAX_SUGESTOES - alcance.length - cargos.length)
       .map<ItemAutocomplete>((m) => ({
         chave: m.user.id,
         // a menção grava o username: é o que o `mentionsUser` do contrato casa
@@ -825,7 +847,7 @@ function montarSugestoes(
         detalhe: m.user.username,
         icone: <Avatar user={m.user as never} size="sm" />,
       }));
-    return [...alcance, ...pessoas];
+    return [...alcance, ...cargos, ...pessoas];
   }
 
   if (gatilho.tipo === "#") {

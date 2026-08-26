@@ -19,6 +19,8 @@ export type Inline =
   | { t: "spoiler"; c: Inline[] }
   | { t: "link"; href: string }
   | { t: "mention"; username: string }
+  /** menção a cargo: `<@&roleId>` (c-cargos) — o texto guarda o id, não o nome. */
+  | { t: "roleMention"; roleId: string }
   /** emoji personalizado de servidor: `<:nome:id>` (g-emojis-midia). */
   | { t: "emoji"; name: string; id: string };
 
@@ -32,11 +34,16 @@ const URL_RE = /https?:\/\/[^\s<>"')\]]+/y;
 const MENTION_RE = /@([A-Za-z0-9_.-]{3,32})/y;
 /** Forma interna do emoji personalizado; o contrato tem a mesma expressão. */
 const EMOJI_RE = /<:([a-z0-9_]{2,32}):([A-Za-z0-9_-]{1,64})>/y;
+/** Menção a cargo; a mesma expressão que `mentionedRoleIds` do contrato usa. */
+const ROLE_MENTION_RE = /<@&([A-Za-z0-9_-]{1,64})>/y;
 
 /** Delimitadores inline, do mais longo para o mais curto (ordem importa). */
 const MARKS: {
   open: string;
-  t: Exclude<Inline, { t: "text" | "code" | "link" | "mention" | "emoji" }>["t"];
+  t: Exclude<
+    Inline,
+    { t: "text" | "code" | "link" | "mention" | "roleMention" | "emoji" }
+  >["t"];
 }[] = [
   { open: "**", t: "bold" },
   { open: "__", t: "underline" },
@@ -82,6 +89,18 @@ export function parseInline(src: string): Inline[] {
       if (m) {
         flush();
         out.push({ t: "link", href: m[0] });
+        i += m[0].length;
+        continue;
+      }
+    }
+
+    // <@&id> — menção a cargo (c-cargos)
+    if (ch === "<") {
+      ROLE_MENTION_RE.lastIndex = i;
+      const m = ROLE_MENTION_RE.exec(src);
+      if (m) {
+        flush();
+        out.push({ t: "roleMention", roleId: m[1] });
         i += m[0].length;
         continue;
       }
@@ -191,6 +210,8 @@ export function plainText(nodes: Inline[]): string {
           return n.href;
         case "mention":
           return `@${n.username}`;
+        case "roleMention":
+          return "@cargo";
         case "emoji":
           return `:${n.name}:`;
         default:

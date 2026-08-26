@@ -13,8 +13,8 @@ CREATE TYPE "AuditTargetType" AS ENUM ('USER', 'CHANNEL', 'ROLE', 'INVITE', 'MES
 CREATE TYPE "ReportReason" AS ENUM ('SPAM', 'HARASSMENT', 'HATE', 'VIOLENCE', 'NSFW', 'SELF_HARM', 'OTHER');
 
 -- AlterTable
-ALTER TABLE "Guild" ADD COLUMN     "description" TEXT,
-ADD COLUMN     "discoverable" BOOLEAN NOT NULL DEFAULT false,
+-- Nota da integração r2: "description" já vem da migration de c-cargos.
+ALTER TABLE "Guild" ADD COLUMN     "discoverable" BOOLEAN NOT NULL DEFAULT false,
 ADD COLUMN     "rulesChannelId" TEXT,
 ADD COLUMN     "systemChannelId" TEXT,
 ADD COLUMN     "welcomeChannelIds" TEXT[] DEFAULT ARRAY[]::TEXT[],

@@ -12,6 +12,10 @@ export interface RenderOptions {
   meUsername?: string;
   /** nomes de exibição por username, para mostrar @Nome em vez de @user. */
   displayNames?: Record<string, string>;
+  /** cargos do servidor aberto, para desenhar `<@&id>` com nome e cor. */
+  roles?: { id: string; name: string; color: string | null }[];
+  /** cargos de quem está lendo — a menção ao meu cargo ganha o mesmo destaque. */
+  myRoleIds?: readonly string[];
   /** mensagem só de emoji: renderiza grande, como no Discord. */
   jumbo?: boolean;
 }
@@ -87,6 +91,23 @@ export function renderInline(nodes: Inline[], opts: RenderOptions = {}): ReactNo
         );
       case "emoji":
         return <EmojiPersonalizado key={i} name={n.name} id={n.id} jumbo={opts.jumbo} />;
+      case "roleMention": {
+        // cargo apagado (ou de outro servidor) vira "@cargo": o texto guarda o
+        // id, então não há nome a mostrar — e sumir com a marcação seria pior
+        const role = opts.roles?.find((r) => r.id === n.roleId);
+        const meu = opts.myRoleIds?.includes(n.roleId);
+        return (
+          <span
+            key={i}
+            style={role?.color ? { color: role.color } : undefined}
+            className={`rounded-[3px] px-0.5 font-medium ${
+              meu ? "bg-yellow/30 text-txt-primary" : "bg-accent/30 text-[#c9cdfb]"
+            }`}
+          >
+            @{role?.name ?? "cargo"}
+          </span>
+        );
+      }
       case "mention": {
         const me = opts.meUsername && n.username.toLowerCase() === opts.meUsername.toLowerCase();
         const nome = opts.displayNames?.[n.username.toLowerCase()] ?? n.username;

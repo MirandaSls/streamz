@@ -120,15 +120,47 @@ export function isUnread(c: Pick<Channel, "lastMessageAt" | "lastReadAt">): bool
 }
 
 /**
- * true se o texto menciona `@username` (limite de palavra dos dois lados) ou
- * atinge todo mundo com `@everyone`/`@here` — que também é menção a mim, senão
- * o aviso do Discord que mais importa seria o único a não contar. Quem não tem
- * permissão para mencionar todos não chega a enviar a menção: o cliente manda
- * texto puro (ver `mentionsEveryone`, na seção g-emojis-midia).
+ * Menção a cargo, do jeito que o texto a guarda: `<@&roleId>`.
+ *
+ * É a forma com id (e não `@nome`) porque cargo é renomeável: guardar o nome
+ * quebraria a menção no dia em que alguém renomeasse o cargo. Só cargos com
+ * `mentionable` chegam a ser inseridos pelo composer — a marcação em si não
+ * autoriza nada, é o cliente que decide o que oferece.
  */
-export function mentionsUser(content: string, username: string): boolean {
+const ROLE_MENTION_RE = /<@&([A-Za-z0-9_-]{1,64})>/g;
+
+/** Ids dos cargos mencionados no texto, sem repetição. */
+export function mentionedRoleIds(content: string): string[] {
+  const ids = new Set<string>();
+  for (const m of content.matchAll(ROLE_MENTION_RE)) ids.add(m[1]);
+  return Array.from(ids);
+}
+
+/** true se o texto menciona algum dos cargos passados. */
+export function mentionsRole(content: string, roleIds: readonly string[]): boolean {
+  if (roleIds.length === 0) return false;
+  const mencionados = mentionedRoleIds(content);
+  return mencionados.some((id) => roleIds.includes(id));
+}
+
+/**
+ * true se o texto menciona `@username` (limite de palavra dos dois lados), um
+ * cargo meu (`<@&roleId>`) ou atinge todo mundo com `@everyone`/`@here` — que
+ * também é menção a mim, senão o aviso do Discord que mais importa seria o
+ * único a não contar. Quem não tem permissão para mencionar todos não chega a
+ * enviar a menção: o cliente manda texto puro (ver `mentionsEveryone`, na
+ * seção g-emojis-midia).
+ *
+ * `roleIds` são os cargos de quem está lendo; em conversa direta é `[]`.
+ */
+export function mentionsUser(
+  content: string,
+  username: string,
+  roleIds: readonly string[] = [],
+): boolean {
   const esc = username.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   if (new RegExp(`(^|[^\\w.])@${esc}(?![\\w.-])`, "i").test(content)) return true;
+  if (mentionsRole(content, roleIds)) return true;
   return mentionsEveryone(content);
 }
 
@@ -1160,10 +1192,10 @@ export interface MessageReplyRef {
  */
 export function mentionsMe(
   m: Pick<Message, "content" | "replyTo" | "replyMention" | "author">,
-  me: Pick<PublicUser, "id" | "username">,
+  me: Pick<PublicUser, "id" | "username"> & { roleIds?: readonly string[] },
 ): boolean {
   if (m.author.id === me.id) return false;
-  if (mentionsUser(m.content, me.username)) return true;
+  if (mentionsUser(m.content, me.username, me.roleIds ?? [])) return true;
   return Boolean(m.replyMention && m.replyTo && m.replyTo.author.id === me.id);
 }
 

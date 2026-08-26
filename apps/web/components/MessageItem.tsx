@@ -28,6 +28,7 @@ import {
   isDirectImageUrl,
   isImageAttachment,
   isSystemMessage,
+  mentionsMe as ehMencaoParaMim,
   messageLinkPath,
   parseCustomEmoji,
   youtubeVideoId,
@@ -48,7 +49,7 @@ import { dataCompleta, hora, horaCompleta } from "@/lib/format";
 import { Markdown } from "@/lib/markdown";
 import { useAuth } from "@/stores/auth";
 import { useGuilds } from "@/stores/guilds";
-import { useAuthorColor } from "@/stores/permissions";
+import { useAuthorColor, usePermissions } from "@/stores/permissions";
 import { useMessages } from "@/stores/messages";
 import SystemMessageItem from "@/components/chat/SystemMessageItem";
 import { goToMessage } from "@/stores/messages-navigate";
@@ -163,6 +164,9 @@ function nomesDeQuemReagiu(userIds: string[], conhecidos: Map<string, PublicUser
  * `grouped`, é a continuação da anterior (mesmo autor, poucos minutos) e só
  * mostra o corpo, com a hora na margem ao passar o mouse.
  */
+/** Sem cargos: referência estável, para o seletor do zustand não oscilar. */
+const SEM_CARGOS: string[] = [];
+
 export default function MessageItem({
   message,
   grouped = false,
@@ -197,6 +201,9 @@ export default function MessageItem({
   // nome do autor na cor do seu cargo mais alto, como no Discord
   const corDoAutor = useAuthorColor(message.author.id);
   const me = useAuth((s) => s.user);
+  // ── c-cargos ── cargos do servidor (para desenhar `<@&id>`) e os meus
+  const roles = usePermissions((s) => s.roles);
+  const meusCargos = useGuilds((s) => s.members.find((m) => m.user.id === me?.id)?.roleIds ?? SEM_CARGOS);
   // ── e-configuracoes ── aparência/acessibilidade vêm da store de preferências
   const compacto = useSettings((s) => s.compactMode);
   const sempreHora = useSettings((s) => s.alwaysShowTime);
@@ -375,12 +382,9 @@ export default function MessageItem({
     ui.openContextMenu(e.clientX, e.clientY, items);
   }
 
-  // menção a mim: `@usuario` no texto ou resposta minha com o "@ ligado"
-  const mentionsMe =
-    !!me &&
-    !isOwn &&
-    (new RegExp(`(^|[^\\w.])@${me.username}(?![\\w.-])`, "i").test(message.content) ||
-      Boolean(message.replyMention && message.replyTo?.author.id === me.id));
+  // menção a mim: `@usuario`, um cargo meu (`<@&id>`) ou resposta minha com o
+  // "@ ligado" — a regra mora no contrato para os dois lados não divergirem
+  const mentionsMe = !!me && !isOwn && ehMencaoParaMim(message, { ...me, roleIds: meusCargos });
 
   const fundo = highlighted
     ? "bg-accent/20 hover:bg-accent/25"
@@ -520,7 +524,13 @@ export default function MessageItem({
                 </>
               )}
               <div className={compacto ? "min-w-0 flex-1" : undefined}>
-                <Markdown text={message.content} meUsername={me?.username} displayNames={displayNames} />
+                <Markdown
+                  text={message.content}
+                  meUsername={me?.username}
+                  displayNames={displayNames}
+                  roles={roles}
+                  myRoleIds={meusCargos}
+                />
                 {message.editedAt && (
                   <span className="ml-1 text-[10px] text-txt-muted" title={horaCompleta(message.editedAt)}>
                     (editado)

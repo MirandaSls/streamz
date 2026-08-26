@@ -336,8 +336,11 @@ export function useRealtime(currentUserId?: string): void {
 function onMessageArrived(message: Message, currentUserId?: string) {
   const me = useAuth.getState().user;
   const mine = message.author.id === currentUserId;
-  // menção = `@usuario` no texto ou resposta a mim com o "@ ligado" (Discord)
-  const mention = !mine && !!me && mentionsMe(message, me);
+  // menção = `@usuario`, um cargo meu (`<@&id>`) ou resposta a mim com o
+  // "@ ligado" — a regra é a do contrato, a mesma que a API conta
+  const meusCargos =
+    useGuilds.getState().members.find((m) => m.user.id === me?.id)?.roleIds ?? [];
+  const mention = !mine && !!me && mentionsMe(message, { ...me, roleIds: meusCargos });
   const activeChannelId = useMessages.getState().activeChannelId;
   const visivel = typeof document !== "undefined" && document.visibilityState === "visible";
   const naTela = message.channelId === activeChannelId && visivel;

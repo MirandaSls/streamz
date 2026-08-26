@@ -32,6 +32,12 @@ export class InboxService {
     const ids = canais.map((c) => c.id);
     if (ids.length === 0) return [];
     const resumos = await this.readState.summaries(userId, username, ids);
+    // menção a cargo (`<@&id>`) conta para quem tem o cargo (c-cargos)
+    const meusCargos = await this.prisma.guildMemberRole.findMany({
+      where: { userId },
+      select: { roleId: true },
+    });
+    const roleIds = meusCargos.map((r) => r.roleId);
 
     const candidatas = await this.prisma.message.findMany({
       where: {
@@ -39,6 +45,7 @@ export class InboxService {
         authorId: { not: userId },
         OR: [
           { content: { contains: `@${username}`, mode: "insensitive" } },
+          ...roleIds.map((id) => ({ content: { contains: `<@&${id}>` } })),
           { replyMention: true, replyTo: { authorId: userId } },
         ],
       },
@@ -60,7 +67,7 @@ export class InboxService {
       // o `contains` do banco não sabe onde a palavra termina (`@ana` casaria
       // `@anabela`); a resposta-menção, essa, já veio exata do banco
       return (
-        mentionsUser(m.content, username) ||
+        mentionsUser(m.content, username, roleIds) ||
         (m.replyMention && m.replyTo?.authorId === userId)
       );
     });
