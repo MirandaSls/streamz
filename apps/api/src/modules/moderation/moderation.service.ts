@@ -13,7 +13,7 @@ import { AuditService } from "../audit/audit.service";
 import { DMsService } from "../dms/dms.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { RealtimeService } from "../realtime/realtime.service";
-import { calcularFim, motivoDeBloqueio } from "./timeout";
+import { calcularFim } from "./timeout";
 
 /** Opções da expulsão/banimento vindas dos modais. */
 export interface KickOptions {
@@ -113,20 +113,6 @@ export class ModerationService {
     });
     this.emitMemberUpdated(guildId, targetUserId, null);
     return { userId: targetUserId, timeoutUntil: null };
-  }
-
-  /**
-   * Recusa a escrita de quem está de castigo. É chamado pelo `MessagesService`
-   * (mensagem e reação) — o ponto único onde o castigo vira um `403` com a
-   * frase que diz até quando.
-   */
-  async assertNotTimedOut(guildId: string, userId: string): Promise<void> {
-    const member = await this.prisma.guildMember.findUnique({
-      where: { userId_guildId: { userId, guildId } },
-      select: { timeoutUntil: true },
-    });
-    const motivo = motivoDeBloqueio(member?.timeoutUntil ?? null);
-    if (motivo) throw new ForbiddenException(motivo);
   }
 
   // ── expulsão e banimento com contexto ──────────────────────

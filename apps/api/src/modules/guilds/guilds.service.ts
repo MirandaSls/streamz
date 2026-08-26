@@ -37,6 +37,7 @@ import { RealtimeService } from "../realtime/realtime.service";
 import { ReadStateService } from "../read-state/read-state.service";
 import { StorageService } from "../storage/storage.service";
 import { sniffImage } from "../uploads/media";
+import { motivoDeBloqueio } from "../moderation/timeout";
 
 /** O que `assertCanViewChannel` seleciona do canal — o suficiente para decidir. */
 export interface ChannelAccessRow {
@@ -393,6 +394,21 @@ export class GuildsService {
       throw new ForbiddenException("Canal somente-leitura");
     }
     return access;
+  }
+
+  /**
+   * Recusa a escrita de quem está de castigo (h-moderacao). Mora aqui, e não
+   * no ModerationService, porque é regra de autorização — e porque
+   * Messages → Moderation → DMs → Messages fechava um ciclo de módulos que
+   * impedia o Nest de subir.
+   */
+  async assertNotTimedOut(guildId: string, userId: string): Promise<void> {
+    const member = await this.prisma.guildMember.findUnique({
+      where: { userId_guildId: { userId, guildId } },
+      select: { timeoutUntil: true },
+    });
+    const motivo = motivoDeBloqueio(member?.timeoutUntil ?? null);
+    if (motivo) throw new ForbiddenException(motivo);
   }
 
   /** Pode moderar mensagens do canal (apagar as dos outros)? Em DM, ninguém. */

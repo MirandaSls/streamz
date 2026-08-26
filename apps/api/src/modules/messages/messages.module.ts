@@ -15,7 +15,6 @@ import { GuildsModule } from "../guilds/guilds.module";
 import { RealtimeModule } from "../realtime/realtime.module";
 import { StorageModule } from "../storage/storage.module";
 import { EmojisModule } from "../emojis/emojis.module";
-import { ModerationModule } from "../moderation/moderation.module";
 import { OnboardingModule } from "../onboarding/onboarding.module";
 
 @Module({
@@ -28,8 +27,7 @@ import { OnboardingModule } from "../onboarding/onboarding.module";
     ChannelsModule,
     RealtimeModule,
     EmojisModule,
-    // h-moderacao: castigo e aceite de regras entram no caminho de escrita
-    ModerationModule,
+    // h-moderacao: aceite de regras entra no caminho de escrita
     OnboardingModule,
   ],
   controllers: [

@@ -8,7 +8,6 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { ChannelsService } from "../channels/channels.service";
 import { GuildsService } from "../guilds/guilds.service";
-import { ModerationService } from "../moderation/moderation.service";
 import { OnboardingService } from "../onboarding/onboarding.service";
 import { tallyPoll } from "../polls/poll-core";
 import { StorageService } from "../storage/storage.service";
@@ -78,8 +77,8 @@ export class MessagesService {
     // g-emojis-midia: figurinha da mensagem e emoji personalizado de reação
     private readonly stickers: StickersService,
     private readonly emojis: EmojisService,
-    // h-moderacao: castigo e aceite de regras recusam a escrita antes de gravar
-    private readonly moderation: ModerationService,
+    // h-moderacao: aceite de regras recusa a escrita antes de gravar (o castigo
+    // é checado pelo GuildsService, junto do resto da autorização)
     private readonly onboarding: OnboardingService,
   ) {}
 
@@ -418,7 +417,7 @@ export class MessagesService {
     const access = await this.guilds.assertCanViewChannel(userId, msg.channelId);
     // h-moderacao: reagir também é escrever — quem está de castigo não reage
     if (access.tipo === "guild" && access.channel.guildId) {
-      await this.moderation.assertNotTimedOut(access.channel.guildId, userId);
+      await this.guilds.assertNotTimedOut(access.channel.guildId, userId);
     }
     // `<:nome:id>`: só reage com emoji personalizado quem é membro do servidor
     // dono dele — a reação vai para todo mundo que lê o canal (g-emojis-midia)
@@ -480,7 +479,7 @@ export class MessagesService {
   ): Promise<void> {
     if (access.tipo !== "guild" || !access.channel.guildId) return;
     const guildId = access.channel.guildId;
-    await this.moderation.assertNotTimedOut(guildId, authorId);
+    await this.guilds.assertNotTimedOut(guildId, authorId);
     if (await this.onboarding.blocksPosting(guildId, channelId, authorId)) {
       throw new ForbiddenException("Aceite as regras do servidor para poder escrever");
     }
