@@ -9,6 +9,7 @@
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "smoke:conta": "node smoke-conta.mjs",
     "prisma": "prisma"
   },
   "dependencies": {

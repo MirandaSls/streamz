@@ -1,0 +1,5 @@
+{
+  "$comment": "Usado pelo `nest build` (o CLI prefere este arquivo). Os testes ficam de fora do dist: compilados, o vitest os coletaria como CommonJS e falharia ao importar a si mesmo.",
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
+}
