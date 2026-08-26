@@ -9,6 +9,9 @@ registra **por que** e o que foi descartado no caminho.
 | ADR                                          | Título                                | Status   | Data       |
 | -------------------------------------------- | ------------------------------------- | -------- | ---------- |
 | [0001](0001-unificar-dm-em-channel-message.md) | Unificar DM e grupo em Channel/Message | Proposta | 2026-08-25 |
+| [0002](0002-cargos-e-permissoes.md)          | Cargos e permissões por bitfield       | Aceita   | 2026-08-25 |
+| [0003](0003-livekit-cloud-como-sfu.md)       | LiveKit Cloud como SFU de voz/vídeo    | Aceita   | 2026-08-26 |
+| [0004](0004-identidade-visual-volt-lime.md)  | Identidade visual própria (Volt Lime)  | Aceita   | 2026-08-26 |
 
 ## Como escrever uma
 
