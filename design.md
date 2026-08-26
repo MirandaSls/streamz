@@ -1,20 +1,32 @@
 # Streamz — sistema de design
 
-Referência visual: **Discord** (tema escuro, 2024+). A meta é ser indistinguível
-na paleta, na tipografia, no leiaute e nos componentes — não "inspirado". Este
-documento fixa os padrões para que telas novas pareçam parte do mesmo app.
-Fonte da verdade dos tokens: `apps/web/tailwind.config.ts` e
-`apps/web/app/globals.css`.
+Identidade própria desde a **ADR-0004**: paleta ancorada no Void Ink, Volt Lime
+como accent, Archivo nos títulos. O pacote de marca está em `docs/branding/`,
+onde também estão a origem de cada asset e como regenerar.
+
+O **Discord continua como referência**, mas só de **leiaute e densidade**: três
+colunas, alturas, gutter da mensagem, ação no hover. Paridade de paleta,
+tipografia e marca deixou de ser meta. Fonte da verdade dos tokens:
+`apps/web/tailwind.config.ts` e `apps/web/app/globals.css`.
 
 ## Princípios
 
-1. **Escuro por padrão.** `color-scheme: dark`. Sem tema claro no MVP.
+1. **Escuro por padrão.** `color-scheme: dark`. Sem tema claro no MVP — o Paper
+   `#FDFDFB` é cor de texto e de marca, nunca superfície.
 2. **Densidade sobre respiro.** Muitas mensagens/canais na tela; padding curto,
    linhas próximas. Não é uma landing page.
 3. **Ação no hover, não no layout.** Editar, apagar, reagir, responder aparecem no
    hover da mensagem (`group-hover`) — a linha em repouso mostra só conteúdo.
-4. **Cor com parcimônia.** O blurple marca o estado ativo e ações primárias. O
-   resto é a escala de cinza do Discord. Texto colorido = link/ação.
+4. **Cor com parcimônia, e o limão é a mais cara de todas.** O Volt Lime marca
+   estado ativo e ação primária; o resto é a escala Void Ink. Texto colorido =
+   link ou ação. Três regras que não são preferência, são o sistema:
+   - **limão só sobre escuro** — nunca como texto sobre Paper;
+   - **texto e ícone sobre `accent` são `accent-ink`**, nunca branco (branco
+     sobre Volt Lime dá 1,57:1). Vale também para `green` e `yellow`, que são
+     claros; `red` continua com branco. Sobre **véu** (`bg-accent/25`) o fundo
+     efetivo ainda é escuro, então ali o texto é claro;
+   - **bolinha de status nunca sobre superfície limão** — verde e limão a 10px
+     de distância é o choque mais provável desta paleta.
 5. **Ícone é SVG, nunca emoji.** `lucide-react`, traço 2px, 20px em listas e 24px
    em toolbars. Emoji só como *conteúdo* (reações, texto do usuário).
 
@@ -33,7 +45,7 @@ App de **3 colunas** fixas sobre a área principal (`app/app/page.tsx`):
 - **Rail** (`w-[72px]`, `bg-rail`): item de 48px circular (`rounded-[24px]`) que
   vira `rounded-2xl` no hover/ativo, com fundo `accent`; **pílula branca** à
   esquerda (`h-5` no hover, `h-10` ativo); tooltip à direita. Botões "novo" em
-  `green`. Separador de 2px `#35363c`.
+  `green`. Separador de 2px `rail-divider`.
 - **Coluna 2** (`w-60`, `bg-panel`): cabeçalho de **48px** com `shadow-header`
   (nome do servidor + chevron → menu); categorias em caixa-alta 12px
   (`text-txt-muted`) colapsáveis; item de canal de **32px** (`h-8`), ícone 20px
@@ -49,38 +61,75 @@ App de **3 colunas** fixas sobre a área principal (`app/app/page.tsx`):
 
 ## Tokens de cor (classes Tailwind)
 
-| Classe | Hex | Discord | Uso |
-|---|---|---|---|
-| `rail` | `#1e1f22` | background-tertiary | rail, inputs escuros, tooltips |
-| `panel` | `#2b2d31` | background-secondary | colunas laterais, rodapé de modal |
-| `chat` | `#313338` | background-primary | área de mensagens, corpo de modal |
-| `footer` | `#232428` | background-secondary-alt | painel do usuário |
-| `input` | `#383a40` | channeltextarea | composer, campo de edição |
-| `hov` | `#35373c` | modifier-hover | hover de item de lista |
-| `sel` | `#404249` | modifier-selected | item ativo |
-| `msghov` | `#2e3035` | — | hover de mensagem |
-| `accent` / `accent-hover` | `#5865f2` / `#4752c4` | brand | ativo, botão primário |
-| `green` | `#23a559` | status-positive | online, botões "novo" |
-| `yellow` | `#f0b232` | status-warning | ausente, coroa do dono |
-| `red` / `red-hover` | `#f23f43` / `#da373c` | status-danger | não perturbe, destrutivo |
-| `txt-primary` | `#f2f3f5` | header-primary | títulos, nome do autor |
-| `txt-normal` | `#dbdee1` | text-normal | corpo da mensagem |
-| `txt-secondary` | `#b5bac1` | interactive-normal | ícones de toolbar |
-| `txt-muted` | `#949ba4` | text-muted | timestamps, categorias |
-| `txt-faint` | `#80848e` | channels-default | canal em repouso, offline |
-| `txt-link` | `#00a8fc` | text-link | links, "N respostas" |
+A escala de superfícies preserva os mesmos deltas de luminância que a escala
+Discord tinha — é o que mantém a hierarquia de profundidade sem mexer no
+leiaute.
 
-Menus de contexto, popovers e toasts usam `#111214`. Linhas divisórias: `#3f4147`.
+| Classe | Hex | Uso |
+|---|---|---|
+| `rail` | `#0B0B0F` | Void Ink puro: rail, inputs escuros, tooltips |
+| `footer` | `#101015` | painel do usuário |
+| `panel` | `#141419` | colunas laterais, rodapé de modal |
+| `chat` | `#1A1A20` | área de mensagens, corpo de modal |
+| `input` | `#23232B` | composer, campo de edição |
+| `msghov` | `#17171D` | hover de mensagem — **mais escuro** que `chat` |
+| `hov` | `#1E1E23` | hover de item de lista |
+| `sel` | `#29292E` | item ativo |
+| `border` | `#2A2A33` | divisórias e linhas de seção |
+| `border-strong` | `#35353F` | borda de botão secundário |
+| `border-strong-hover` | `#4C4C58` | hover dessa borda |
+| `overlay` | `#050507` | menu de contexto, popover, toast |
+| `rail-divider` | `#1C1C22` | separador de 2px do rail |
+| `scroll` | `#2A2A33` | thumb da rolagem (clareia, não escurece) |
+| `accent` / `accent-hover` / `accent-press` | `#9BE31F` / `#B4EE4D` / `#86C91A` | Volt Lime: ativo e ação primária. No escuro o hover **clareia** |
+| `accent-ink` | `#0B0B0F` | texto e ícone **sobre** o accent |
+| `paper` | `#FDFDFB` | cor de marca; nunca superfície |
+| `mention` | `#D9F5A8` | texto de @menção sobre véu de `accent/25` |
+| `green` | `#1FB86B` | online, botões "novo" — afastado do limão em matiz |
+| `yellow` | `#FF9F1C` | ausente, coroa do dono — âmbar, longe do limão |
+| `red` / `red-hover` | `#FF4D4F` / `#E23A3D` | não perturbe, destrutivo |
+| `txt-primary` | `#FDFDFB` | títulos, nome do autor — 15,8:1 sobre `chat` |
+| `txt-normal` | `#D8D8D4` | corpo da mensagem — 11,9:1 |
+| `txt-secondary` | `#A9A9A6` | ícones de toolbar — 7,4:1 |
+| `txt-muted` | `#8A8A8E` | timestamps, categorias — 5,0:1 |
+| `txt-faint` | `#6E6E76` | canal em repouso, offline — 3,4:1, **abaixo de AA** (dívida registrada na ADR-0004) |
+| `txt-link` | `#00a8fc` | links, "N respostas" — ciano, não compete com o limão |
+
+**Não escreva hexadecimal no JSX.** Faltando um valor, o token entra aqui e no
+`tailwind.config.ts` primeiro. O único hex que restou no código é o do
+`EmojiPicker`, que é de terceiro e só aceita CSS vars.
 
 ## Tipografia
 
-- Família: **Noto Sans** via `next/font` (fallback oficial da "gg sans" do
-  Discord), pesos 400/500/600/700. Variável `--font-sans`.
+Três famílias, todas por `next/font` — que as serve do próprio domínio e por
+isso passam na CSP do Tauri (`font-src 'self' data:`). **Nunca** importar
+`fonts.googleapis.com` por URL: quebraria o desktop.
+
+| Papel | Família | Variável | Onde |
+|---|---|---|---|
+| corpo e densidade | **Noto Sans** 400/500/600/700 | `--font-sans` | mensagem, listas, botões, formulário |
+| título e marca | **Archivo** 700/800 | `--font-display` | wordmark, títulos de auth e de modal, categorias |
+| rótulo técnico | **JetBrains Mono** 400/700 | `--font-mono` | código, código de convite, IDs, atalhos |
+
+Uso da Archivo (`font-display`):
+
+- **Marca e telas de conta** — 800, caixa-alta, `tracking-wordmark` (−4,5%).
+- **Títulos de modal e de seção** — 700, caixa normal, `tracking-title` (−2%).
+- **Categorias e rótulos de campo** — 700, caixa-alta 12px, tracking
+  **positivo** `[0.02em]`.
+
+Duas regras que o pacote de marca não escreve e o produto precisa:
+
+- **Tracking −4,5% só a partir de 24px.** Em caixa-alta pequena ele cola as
+  letras; por isso as categorias levam tracking positivo.
+- **Caixa-alta só onde o texto é da interface.** Nome de canal, de servidor e de
+  usuário são conteúdo: ganham Archivo, não ganham caixa-alta.
+
 - Corpo **16px / 1.375** (`text-base`); metadados 12px (`text-xs`); hora na
-  margem 11px; categorias 12px caixa-alta 600; título de modal 20px 700; título
-  de boas-vindas do canal 32px 700.
+  margem 11px; categorias 12px caixa-alta 700; título de modal 20px 700; título
+  de boas-vindas do canal 32px 800.
 - Nome do autor `font-medium text-txt-primary`; corpo `text-txt-normal`.
-- `font-mono` só para código/valores literais (ex.: código de convite).
+- `font-mono` (JetBrains Mono) só para código e valor literal.
 
 ## Espaçamento e forma
 
@@ -107,24 +156,30 @@ Menus de contexto, popovers e toasts usam `#111214`. Linhas divisórias: `#3f414
   outro arquivo vira card de 432px `bg-panel` com ícone `FileText` e nome em
   `txt-link`.
 - **Reações**: pílula `h-[26px] rounded-lg bg-panel`; a minha `border-accent
-  bg-accent/20`; hover `border-[#4e5058]`; "+" de reação aparece no hover.
+  bg-accent/20`; hover `border-border-strong`; "+" de reação aparece no hover.
 - **Composer**: caixa `bg-input rounded-lg` com `CirclePlus` (anexo) à esquerda e
   presente / GIF / figurinha / emoji à direita; contador só a partir de 90% do
   teto. Sem dica textual de teclado. Preview de anexo em cards de 184px.
 - **Modal** (`Dialog`): corpo `bg-chat` (`p-4`, título 20px), rodapé `bg-panel`
   com botão primário à direita (`h-[38px] rounded-[3px] bg-accent`) e "Cancelar"
   como texto com sublinhado no hover. Overlay `bg-black/60`, Esc/clique fora fecham.
-- **Menu de contexto** (`ContextMenuHost`): `#111214`, itens de 32px, hover
-  `bg-accent` (ou `bg-red` para destrutivo), separadores `#3f4147`.
+- **Menu de contexto** (`ContextMenuHost`): `bg-overlay`, itens de 32px, hover
+  `bg-accent text-accent-ink` (ou `bg-red` para destrutivo), separadores
+  `border`.
 - **Popover de perfil** (`ProfilePopoverHost`): 300px, faixa `accent` de 60px,
   avatar 80px sobreposto, card `bg-footer` com nome, @usuário, status e "Enviar
   mensagem".
 - **Tooltip** (`Tooltip`): `bg-rail`, 14px 600, seta, hover e foco.
-- **Avatar** (`Avatar`): iniciais sobre uma das 5 cores da marca (hash do id);
+- **Avatar** (`Avatar`): iniciais sobre uma das 5 cores do avatar — nenhuma
+  verde-limão, para não competir com o accent nem com o status (hash do id);
   bolinha de status com borda na cor da superfície (`surface`).
-- **Login/registro** (`AuthCard`): fundo blurple, card de 480px `bg-chat`,
-  rótulos 12px caixa-alta com asterisco vermelho, inputs `bg-rail h-10`, botão
-  `h-11`.
+- **Login/registro** (`AuthCard`): fundo `bg-rail` com um brilho de limão em
+  radial, lockup da marca acima do título, card de 480px `bg-chat`, rótulos 12px
+  caixa-alta com asterisco vermelho, inputs `bg-rail h-10`, botão `h-11`
+  `bg-accent text-accent-ink`.
+- **Marca** (`Marca` / `MarcaLockup`): símbolo em `currentColor` com o "Z"
+  recortado por máscara; o lockup põe o wordmark como **texto real** em Archivo.
+  Desenho e regras de uso: `docs/branding/`.
 
 ## Ícones (lucide)
 

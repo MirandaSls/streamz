@@ -1,6 +1,6 @@
 # Rebranding Streamz — plano de implementação
 
-Aplica o pacote de marca de `docs/brading/marca` (Volt Lime / Void Ink / Paper,
+Aplica o pacote de marca de `docs/branding/marca` (Volt Lime / Void Ink / Paper,
 símbolo em balão de fala, Archivo) sobre o app existente.
 
 **Decisões travadas** (respondidas em 2026-08-26):

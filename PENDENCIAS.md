@@ -72,37 +72,49 @@ inteiro (pedir o link → clicar → verificar) roda copiando o link do terminal
 > recurso ficaria impossível de exercitar.
 
 ## 2. LiveKit (bloqueia a voz — Dia 4)
-O código de voz é **agnóstico de provedor** (só usa `LIVEKIT_URL/KEY/SECRET`).
-Duas formas de rodar — escolha uma:
+O código de voz é **agnóstico de provedor** (só usa `LIVEKIT_URL/KEY/SECRET`, e
+`VoiceService.assinarToken` devolve a URL junto do token). Sem as três, a rota
+`/voice/token` responde `503` e o resto do app funciona.
 
-**Opção A — Self-host via Docker (preparado):**
+**Escolhido: LiveKit Cloud** — só o Cloud faz *cascading* (a mesma sala vive em
+vários edges e cada participante entra no mais próximo). O LiveKit aberto
+distribui *salas* entre nós, mas cada sala fica num nó só: numa chamada com
+gente em continentes diferentes, alguém sempre paga a travessia inteira.
+
+- [ ] Criar conta e um *project* em [cloud.livekit.io](https://cloud.livekit.io).
+- [ ] Settings → Keys: copiar **URL** (`wss://<project>.livekit.cloud`),
+      **API Key** e **API Secret** para `LIVEKIT_URL`, `LIVEKIT_API_KEY` e
+      `LIVEKIT_API_SECRET` no `.env` (o bloco já está pronto e vazio lá).
+- [ ] Conferir a região do project no dashboard (ela decide o edge de entrada).
+- [x] CSP do desktop já libera `https://*.livekit.cloud` e `wss://*.livekit.cloud`
+      (`apps/desktop/src-tauri/tauri.conf.json`) — nada a fazer.
+
+`NEXT_PUBLIC_LIVEKIT_URL` **não é lida por nenhum arquivo da web**: o cliente
+conecta na URL que vem no `VoiceTokenResponse`. Ela sobrevive só como build-arg
+do `apps/web/Dockerfile` e do `docker-compose.yml`; não precisa ser preenchida.
+
+**Alternativa — self-host via Docker (dev offline / teste sem conta):**
 - [x] Serviço `livekit` no `docker-compose.yml` (profile `livekit`) + modelo de
       config em `livekit.example.yaml` + scripts `pnpm livekit:up` / `livekit:down`.
-- [ ] Criar o `livekit.yaml` **local** (ele é ignorado pelo git porque carrega o
-      secret real; o docker-compose monta esse caminho):
-
-      cp livekit.example.yaml livekit.yaml
-      openssl rand -hex 32          # gere o secret
-
-      Cole o valor gerado nos **dois** lugares — `keys: devkey: <secret>` no
-      `livekit.yaml` e `LIVEKIT_API_SECRET` no `.env`. Eles precisam **bater**,
-      senão o token de acesso é rejeitado pelo servidor.
-- [ ] `pnpm livekit:up` e usar no `.env` (Opção A): `LIVEKIT_URL=ws://localhost:7880`,
-      `NEXT_PUBLIC_LIVEKIT_URL=ws://localhost:7880`, `LIVEKIT_API_KEY=devkey`.
-
-**Opção B — LiveKit Cloud:**
-- [ ] Criar conta e um *project* em [cloud.livekit.io](https://cloud.livekit.io).
-- [ ] Copiar **URL** (`wss://...`), **API Key** e **API Secret** para o `.env`
-      (`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`,
-      `NEXT_PUBLIC_LIVEKIT_URL`).
+- [ ] `cp livekit.example.yaml livekit.yaml` (ignorado pelo git — carrega o
+      secret real), `openssl rand -hex 32` e colar o valor nos **dois** lugares:
+      `keys: devkey: <secret>` no `livekit.yaml` e `LIVEKIT_API_SECRET` no `.env`.
+      Se não baterem, o servidor rejeita o token.
+- [ ] `pnpm livekit:up` e descomentar o bloco self-host do `.env`.
+- [ ] O `livekit.yaml` de exemplo é **de dev**: em produção precisaria de
+      `use_external_ip: true`, faixa UDP larga (50000–60000, hoje 61 portas),
+      TURN em TLS/443 e `network_mode: host` — publicar 10 mil portas UDP pelo
+      Docker sobe um `docker-proxy` por porta e derruba a máquina.
 
 ## 3. Rust / cargo (bloqueia o build do desktop — Dia 5)
 - [x] ~~Instalar via [rustup.rs](https://rustup.rs)~~ — feito em 2026-08-25
       (cargo 1.98). O `cargo` fica em `%USERPROFILE%\.cargo\bin`; se um terminal
       antigo não achar, reabra.
-- [x] ~~Gerar os ícones do app~~ — feito a partir de `apps/desktop/logo.svg`
-      (balão do rail sobre o blurple). Para trocar o logo, edite o SVG e rode
-      `pnpm --filter @streamz/desktop tauri icon logo.svg`.
+- [x] ~~Gerar os ícones do app~~ — regerados em 2026-08-26 a partir de
+      `apps/desktop/logo.svg` (símbolo da marca, Volt Lime sobre Void Ink).
+      Para trocar o logo, edite o SVG e rode
+      `pnpm --filter @streamz/desktop exec tauri icon logo.svg`; `docs/branding/`
+      diz quais PNGs a web copia depois.
 - [ ] `pnpm --filter @streamz/desktop tauri build` — gera o instalador em
       `apps/desktop/src-tauri/target/release/bundle/`.
 
@@ -131,8 +143,11 @@ comentado — ele liga por ambiente (`TAURI_ENV_*`, que o Tauri injeta no
         `apps/desktop/README.md` (seção "Auto-update").
 - [ ] Assinatura de código do instalador Windows (Azure Trusted Signing) — remove
       o alerta do SmartScreen ao enviar o `.exe`.
-- [ ] Migrar a mídia de LiveKit Cloud para **self-host** (call sem limite de
-      tempo) quando o MVP estiver validado.
+- [ ] Avaliar sair do LiveKit Cloud para **self-host regionalizado** (um nó por
+      região + região por servidor, como o Discord fazia) quando a conta de banda
+      justificar operar N regiões. `VoiceTokenResponse` já devolve `url` por
+      requisição, então isso é um mapa `região → {url,key,secret}` no
+      `VoiceService` — sem mexer em `packages/shared` nem no cliente.
 
 ## 6. Backlog de escopo (próximos blocos)
 Ordem sugerida dos próximos blocos de features:
