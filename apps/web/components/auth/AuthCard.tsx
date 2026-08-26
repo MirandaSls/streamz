@@ -21,7 +21,9 @@ export default function AuthCard({
     <main className="grid min-h-screen place-items-center bg-accent bg-[radial-gradient(ellipse_at_top_left,rgba(255,255,255,0.18),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(0,0,0,0.25),transparent_60%)] p-4">
       <div className="w-[480px] max-w-full rounded-[5px] bg-chat p-8 shadow-high">
         <Corvo size={44} className="mx-auto mb-4 text-txt-primary" />
-        <h1 className="text-center text-2xl font-semibold leading-[30px] text-txt-primary">{title}</h1>
+        <h1 className="text-center font-display text-2xl font-extrabold uppercase leading-[30px] tracking-wordmark text-txt-primary">
+          {title}
+        </h1>
         {subtitle && <p className="mt-2 text-center text-txt-muted">{subtitle}</p>}
         <div className="mt-5">{children}</div>
       </div>
@@ -44,7 +46,7 @@ export function FieldLabel({
   return (
     <label
       htmlFor={htmlFor}
-      className={`mb-2 block text-xs font-bold uppercase tracking-[0.02em] ${
+      className={`mb-2 block font-display text-xs font-bold uppercase tracking-[0.02em] ${
         invalid ? "text-red" : "text-txt-secondary"
       }`}
     >

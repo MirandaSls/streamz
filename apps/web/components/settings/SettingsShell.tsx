@@ -123,7 +123,7 @@ export default function SettingsShell({ tab }: { tab?: string }) {
       <div className="min-w-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex max-w-[740px] gap-6 px-10 py-14">
           <div className="min-w-0 flex-1">
-            <h1 className="mb-5 text-xl font-bold text-txt-primary">{t(aba.label)}</h1>
+            <h1 className="mb-5 font-display text-xl font-bold tracking-title text-txt-primary">{t(aba.label)}</h1>
             <Conteudo />
           </div>
 

@@ -97,7 +97,7 @@ export default function InvitePage() {
                 ? `${displayNameOf(preview.inviter)} convidou você para`
                 : "Você foi convidado para"}
             </p>
-            <h1 className="mt-1 text-2xl font-bold text-txt-primary">
+            <h1 className="mt-1 font-display text-2xl font-extrabold tracking-wordmark text-txt-primary">
               {preview?.guild.name ?? "Servidor"}
             </h1>
 

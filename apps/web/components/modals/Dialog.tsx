@@ -88,7 +88,7 @@ export default function Dialog({
         className={`flex max-h-[85vh] flex-col overflow-hidden rounded-[5px] bg-chat shadow-high outline-none ${className}`}
       >
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <h2 id={titleId} className="mb-1 text-xl font-bold text-txt-primary">
+          <h2 id={titleId} className="mb-1 font-display text-xl font-bold tracking-title text-txt-primary">
             {title}
           </h2>
           {description && (

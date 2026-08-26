@@ -97,7 +97,7 @@ function CategoryHeader({
         type="button"
         onClick={onToggle}
         aria-expanded={!collapsed}
-        className="flex min-w-0 flex-1 items-center gap-0.5 pl-2 text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted hover:text-txt-normal"
+        className="flex min-w-0 flex-1 items-center gap-0.5 pl-2 font-display text-xs font-bold uppercase tracking-[0.02em] text-txt-muted hover:text-txt-normal"
       >
         {collapsed ? (
           <ChevronRight size={12} aria-hidden="true" />

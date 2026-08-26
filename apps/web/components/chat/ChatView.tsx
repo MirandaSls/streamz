@@ -147,7 +147,7 @@ export default function ChatView() {
       <main className="grid min-w-0 flex-1 place-items-center bg-chat px-8 text-center">
         <div className="max-w-md">
           <EyeOff size={64} strokeWidth={1} className="mx-auto text-txt-muted" aria-hidden="true" />
-          <h2 className="mt-4 text-2xl font-bold text-txt-primary">#{name}</h2>
+          <h2 className="mt-4 font-display text-2xl font-extrabold tracking-wordmark text-txt-primary">#{name}</h2>
           <p className="mt-2 text-txt-muted">
             Este canal foi marcado como sensível. O conteúdo pode não ser apropriado
             para todo mundo.

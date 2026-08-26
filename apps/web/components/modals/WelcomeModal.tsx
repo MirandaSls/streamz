@@ -54,7 +54,7 @@ export default function WelcomeModal({ guildId }: { guildId: string }) {
 
       {destaques.length > 0 && (
         <>
-          <p className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+          <p className="mb-2 font-display text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
             Comece por aqui
           </p>
           <div className="flex flex-col gap-1">

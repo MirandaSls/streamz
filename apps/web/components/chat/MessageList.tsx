@@ -105,7 +105,10 @@ export default function MessageList({
             <div className="grid h-[68px] w-[68px] place-items-center rounded-full bg-border text-txt-primary">
               {welcome.icon}
             </div>
-            <h2 className="mt-3 text-[32px] font-bold leading-10 text-txt-primary">{welcome.title}</h2>
+            {/* nome de canal é conteúdo: Archivo sim, caixa-alta não. */}
+            <h2 className="mt-3 font-display text-[32px] font-extrabold leading-10 tracking-wordmark text-txt-primary">
+              {welcome.title}
+            </h2>
             <p className="text-txt-muted">{welcome.description}</p>
           </div>
         )}

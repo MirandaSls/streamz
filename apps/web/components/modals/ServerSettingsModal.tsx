@@ -185,7 +185,7 @@ export default function ServerSettingsModal({
         <div className="mx-auto max-w-[740px] px-10 py-[60px]">
           {aba ? (
             <>
-              <h1 className="mb-5 text-xl font-bold text-txt-primary">{aba.label}</h1>
+              <h1 className="mb-5 font-display text-xl font-bold tracking-title text-txt-primary">{aba.label}</h1>
               {aba.render()}
             </>
           ) : (
