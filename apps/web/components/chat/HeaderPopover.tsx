@@ -54,6 +54,7 @@ export default function HeaderPopover({
       <HeaderIcon
         label={label}
         active={open}
+        semTooltip={open}
         onClick={() => {
           const proximo = !open;
           setOpen(proximo);
