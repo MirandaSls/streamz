@@ -141,6 +141,7 @@ export default function Composer({
   ultimaMinhaMensagem,
   onEditMessage,
   onCreateThread,
+  onCreatePoll,
 }: {
   /** canal em que se está digitando — para o aviso de "digitando…". */
   channelId?: string;
@@ -159,6 +160,8 @@ export default function Composer({
   onEditMessage?: (id: string, content: string) => void;
   /** menu do "+": criar thread a partir da conversa. */
   onCreateThread?: () => void;
+  /** menu do "+": criar enquete (h-moderacao). */
+  onCreatePoll?: () => void;
 }) {
   const [draft, setDraft] = useState("");
   const [pendentes, setPendentes] = useState<AnexoLocal[]>([]);

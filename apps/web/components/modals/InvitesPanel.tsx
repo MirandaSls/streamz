@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Copy, Trash2 } from "lucide-react";
-import type { InviteInfo } from "@newdisc/shared";
+import type { InviteDetail } from "@newdisc/shared";
 import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";
 import { horaCompleta } from "@/lib/format";
@@ -17,7 +17,7 @@ import { ui } from "@/stores/ui";
  * configurações. Duplicar seria manter duas listas que envelhecem diferente.
  */
 export default function InvitesPanel({ guildId }: { guildId: string }) {
-  const [invites, setInvites] = useState<(InviteInfo & { creatorId: string })[] | null>(null);
+  const [invites, setInvites] = useState<InviteDetail[] | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {

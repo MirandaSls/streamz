@@ -1,9 +1,25 @@
 "use client";
 
-import { useState } from "react";
-import { Clock, EyeOff, Hash, Images, Lock, Megaphone, MessagesSquare, Users } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  Clock,
+  EyeOff,
+  Hash,
+  Images,
+  Lock,
+  Megaphone,
+  MessagesSquare,
+  Shield,
+  Users,
+} from "lucide-react";
 import { slowmodeLabel } from "@newdisc/shared";
 import Composer from "@/components/chat/Composer";
+// ── h-moderacao ──
+import { RulesNotice, TimeoutNotice } from "@/components/moderation/ComposerNotice";
+import SelectionBar from "@/components/moderation/SelectionBar";
+
+import { useModeration, useMustAcceptRules, useMyTimeout } from "@/stores/moderation";
+import { usePolls } from "@/stores/polls";
 import HeaderBar, { HeaderIcon } from "@/components/chat/HeaderBar";
 import NotificationBell from "@/components/chat/NotificationBell";
 import MessageList from "@/components/chat/MessageList";
@@ -59,6 +75,7 @@ function ultimaDe(
   return null;
 }
 
+
 /** Coluna 3 no modo servidor: cabeçalho, busca, timeline e composer. */
 export default function ChatView() {
   const user = useAuth((s) => s.user);
@@ -75,6 +92,23 @@ export default function ChatView() {
   const toggleMembers = useUI((s) => s.toggleMembers);
   const mediaOpen = useUI((s) => s.mediaOpen);
   const toggleMedia = useUI((s) => s.toggleMedia);
+  // ── h-moderacao ──
+  const timeoutUntil = useMyTimeout();
+  const mustAcceptRules = useMustAcceptRules();
+  const rulesChannelId = useModeration((s) => s.membership?.onboarding.rulesChannelId ?? null);
+  const guildId = useModeration((s) => s.membership?.guildId ?? null);
+  const loadMyVotes = usePolls((s) => s.loadMine);
+  const cancelSelection = useModeration((s) => s.cancelSelection);
+  const channelId = channel?.id;
+
+  // meus votos das enquetes do canal: o DTO da mensagem é igual para todo
+  // mundo, então a marcação "eu votei aqui" vem numa chamada à parte
+  useEffect(() => {
+    if (channelId) void loadMyVotes(channelId);
+  }, [channelId, loadMyVotes]);
+
+  // trocar de canal sai do modo de seleção — ela é sempre de um canal só
+  useEffect(() => () => cancelSelection(), [channelId, cancelSelection]);
 
   const searchQuery = useMessages((s) => s.searchQuery);
   const setSearchQuery = useMessages((s) => s.setSearchQuery);
@@ -171,6 +205,14 @@ export default function ChatView() {
             >
               <Images size={24} />
             </HeaderIcon>
+            {canModerate && guildId && (
+              <HeaderIcon
+                label="Configurações do servidor"
+                onClick={() => ui.openModal({ kind: "serverSettings", guildId })}
+              >
+                <Shield size={24} />
+              </HeaderIcon>
+            )}
             <HeaderIcon label={membersOpen ? "Ocultar lista de membros" : "Mostrar lista de membros"} active={membersOpen} onClick={toggleMembers}>
               <Users size={24} />
             </HeaderIcon>
@@ -218,10 +260,18 @@ export default function ChatView() {
         </p>
       )}
 
+      {/* h-moderacao: barra do modo "selecionar mensagens" */}
+      <SelectionBar channelId={channel.id} />
+
       {readOnly ? (
         <p className="mx-4 mb-6 rounded-lg bg-input px-4 py-3 text-center text-sm text-txt-muted">
           Você não tem permissão para enviar mensagens neste canal.
         </p>
+      ) : timeoutUntil ? (
+        // h-moderacao: o castigo troca o composer pelo aviso de até quando
+        <TimeoutNotice until={timeoutUntil} />
+      ) : mustAcceptRules ? (
+        <RulesNotice rulesChannelId={rulesChannelId} />
       ) : (
         user && (
           <>
@@ -236,6 +286,7 @@ export default function ChatView() {
               // ↑ no campo vazio reabre a última mensagem minha para editar
               ultimaMinhaMensagem={() => ultimaDe(slice.items, user.id)}
               onEditMessage={edit}
+              onCreatePoll={() => ui.openModal({ kind: "createPoll", channelId: channel.id })}
               onSend={(content, attachments, sticker) => {
                 // a API recusaria com 429; barrar aqui evita a mensagem otimista
                 // aparecer e sumir na cara de quem escreveu

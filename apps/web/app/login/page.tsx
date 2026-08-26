@@ -1,15 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import AuthCard, { FieldLabel, inputClass, submitClass } from "@/components/auth/AuthCard";
 import { api } from "@/lib/api";
 import { mensagemDeAuth, validarCredenciais } from "@/lib/auth-mensagens";
 import { useAuth } from "@/stores/auth";
 
 export default function LoginPage() {
+  // `useSearchParams` exige Suspense no App Router (a página é pré-renderizada)
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // h-moderacao: `?next=` traz de volta para onde a pessoa estava indo — é o
+  // que faz o link público de convite funcionar para quem ainda não entrou.
+  // Só caminho interno: `next` vindo da URL não pode virar um redirecionamento
+  // para outro site.
+  const proximo = searchParams.get("next");
+  const destino = proximo?.startsWith("/") && !proximo.startsWith("//") ? proximo : "/app";
   const setSession = useAuth((s) => s.setSession);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -29,7 +45,7 @@ export default function LoginPage() {
     try {
       const { user, tokens } = await api.login(username.trim(), password);
       setSession(user, tokens);
-      router.replace("/app");
+      router.replace(destino);
     } catch (err) {
       setError(mensagemDeAuth(err, "login"));
       setLoading(false);
@@ -80,7 +96,10 @@ export default function LoginPage() {
 
         <p className="mt-2 text-sm text-txt-muted">
           Precisando de uma conta?{" "}
-          <Link href="/register" className="font-medium text-txt-link hover:underline">
+          <Link
+            href={destino === "/app" ? "/register" : `/register?next=${encodeURIComponent(destino)}`}
+            className="font-medium text-txt-link hover:underline"
+          >
             Registre-se
           </Link>
         </p>

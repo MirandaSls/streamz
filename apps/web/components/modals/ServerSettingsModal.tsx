@@ -8,6 +8,11 @@ import ServerSettingsRoles from "@/components/modals/ServerSettingsRoles";
 import ServerSettingsMembers from "@/components/modals/ServerSettingsMembers";
 import ServerSettingsBans from "@/components/modals/ServerSettingsBans";
 import InvitesPanel from "@/components/modals/InvitesPanel";
+// ── h-moderacao: as abas de moderação, montadas neste mesmo casco ──
+import AuditLogTab from "@/components/settings/server/AuditLogTab";
+import OnboardingTab from "@/components/settings/server/OnboardingTab";
+import ReportsTab from "@/components/settings/server/ReportsTab";
+import type { ServerSettingsTab } from "@/components/settings/server/tabs";
 import { useGuilds, useIsOwner } from "@/stores/guilds";
 import { useAuth } from "@/stores/auth";
 import { useCan } from "@/stores/permissions";
@@ -15,7 +20,7 @@ import { useUI } from "@/stores/ui";
 
 /** Uma entrada do menu lateral. `owner` limita ao dono do servidor. */
 interface Aba {
-  id: string;
+  id: ServerSettingsTab;
   label: string;
   permission?: number;
   owner?: boolean;
@@ -34,7 +39,13 @@ interface Aba {
  * Cada aba pede a permissão que a API exigiria, e a lista esconde as que o
  * usuário não tem: quem só pode banir vê "Banimentos" e nada mais.
  */
-export default function ServerSettingsModal({ guildId }: { guildId: string }) {
+export default function ServerSettingsModal({
+  guildId,
+  tab: inicial,
+}: {
+  guildId: string;
+  tab?: ServerSettingsTab;
+}) {
   const closeModal = useUI((s) => s.closeModal);
   const guild = useGuilds((s) => s.guilds.find((g) => g.id === guildId) ?? null);
   const removeGuild = useGuilds((s) => s.remove);
@@ -43,6 +54,7 @@ export default function ServerSettingsModal({ guildId }: { guildId: string }) {
   const podeGerenciar = useCan(Permission.MANAGE_GUILD);
   const podeCargos = useCan(Permission.MANAGE_ROLES);
   const podeBanir = useCan(Permission.BAN_MEMBERS);
+  const podeModerarMensagens = useCan(Permission.MANAGE_MESSAGES);
 
   const abas: Aba[] = [
     {
@@ -74,6 +86,25 @@ export default function ServerSettingsModal({ guildId }: { guildId: string }) {
       permission: Permission.BAN_MEMBERS,
       render: () => <ServerSettingsBans guildId={guildId} />,
     },
+    // ── h-moderacao ──
+    {
+      id: "onboarding",
+      label: "Entrada e regras",
+      permission: Permission.MANAGE_GUILD,
+      render: () => <OnboardingTab guildId={guildId} />,
+    },
+    {
+      id: "audit",
+      label: "Registro de auditoria",
+      permission: Permission.MANAGE_GUILD,
+      render: () => <AuditLogTab guildId={guildId} />,
+    },
+    {
+      id: "reports",
+      label: "Denúncias",
+      permission: Permission.MANAGE_MESSAGES,
+      render: () => <ReportsTab guildId={guildId} />,
+    },
   ];
 
   const permitida = (a: Aba) => {
@@ -82,10 +113,14 @@ export default function ServerSettingsModal({ guildId }: { guildId: string }) {
     if (a.permission === Permission.MANAGE_GUILD) return podeGerenciar;
     if (a.permission === Permission.MANAGE_ROLES) return podeCargos;
     if (a.permission === Permission.BAN_MEMBERS) return podeBanir;
+    if (a.permission === Permission.MANAGE_MESSAGES) return podeModerarMensagens;
     return false;
   };
   const visiveis = abas.filter(permitida);
-  const [ativa, setAtiva] = useState(visiveis[0]?.id ?? "members");
+  // a aba pedida pelo call site só vale se o usuário puder abri-la
+  const [ativa, setAtiva] = useState<ServerSettingsTab>(
+    (inicial && visiveis.some((a) => a.id === inicial) ? inicial : visiveis[0]?.id) ?? "members",
+  );
   const aba = visiveis.find((a) => a.id === ativa) ?? visiveis[0] ?? null;
 
   useEffect(() => {

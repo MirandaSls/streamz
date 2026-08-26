@@ -39,12 +39,21 @@ import {
   type StickerUpdatedEvent,
 } from "@newdisc/shared";
 import type { NotificationSetting } from "@newdisc/shared";
+// ── h-moderacao ──
+import type {
+  GuildSettingsUpdatedEvent,
+  MessagesBulkDeletedEvent,
+  PollUpdatedEvent,
+  ReportView,
+} from "@newdisc/shared";
 import { shouldNotifyMessage } from "@newdisc/shared";
 import { definirContadorNoIcone, notify } from "@/lib/desktop";
 import { tocarSomDeNotificacao } from "@/lib/notification-sound";
 import { levelForChannel, useNotifications } from "@/stores/notifications";
 import { useSettings } from "@/stores/settings";
 import { useAuth } from "@/stores/auth";
+import { useModeration } from "@/stores/moderation";
+import { usePolls } from "@/stores/polls";
 import { on, onReconnect, rejoinChannel } from "@/stores/socket-adapter";
 import { useCategories } from "@/stores/categories";
 import { useChannels } from "@/stores/channels";
@@ -140,15 +149,24 @@ export function useRealtime(currentUserId?: string): void {
         useGuilds.getState().handleMemberLeft(guildId, userId);
       }),
 
-      on<MemberUpdatedEvent>(WS_EVENTS.MEMBER_UPDATED, ({ guildId, userId, role, roleIds }) => {
-        useGuilds.getState().handleMemberUpdated(guildId, userId, role, roleIds);
-        if (userId === currentUserId) {
-          // o que eu enxergo pode ter mudado (cargo dá ou tira VIEW_CHANNEL)
-          if (useGuilds.getState().activeGuildId === guildId) {
-            void useChannels.getState().loadForGuild(guildId);
+      on<MemberUpdatedEvent>(
+        WS_EVENTS.MEMBER_UPDATED,
+        ({ guildId, userId, role, roleIds, timeoutUntil }) => {
+          useGuilds.getState().handleMemberUpdated(guildId, userId, role, roleIds, timeoutUntil);
+          // h-moderacao: o castigo chega por aqui — é o que troca o composer pelo aviso
+          if (userId === currentUserId && timeoutUntil !== undefined) {
+            useModeration.getState().applyTimeout(guildId, userId, timeoutUntil);
           }
-        }
-      }),
+          // evento de castigo não fala de papel nem de cargo: nada a recarregar
+          if (userId === currentUserId && timeoutUntil === undefined) {
+            // o que eu enxergo pode ter mudado (cargo dá ou tira VIEW_CHANNEL)
+            if (useGuilds.getState().activeGuildId === guildId) {
+              void useChannels.getState().loadForGuild(guildId);
+              void usePermissions.getState().load(guildId);
+            }
+          }
+        },
+      ),
 
       on<GuildRemovedEvent>(WS_EVENTS.GUILD_REMOVED, ({ guildId, reason }) => {
         useGuilds.getState().handleRemoved(guildId);
@@ -248,6 +266,30 @@ export function useRealtime(currentUserId?: string): void {
       }),
       on<StickerUpdatedEvent>(WS_EVENTS.STICKER_UPDATED, ({ guildId, stickers }) => {
         useEmojis.getState().applyStickers(guildId, stickers);
+      }),
+
+      // ── h-moderacao ──
+      on<MessagesBulkDeletedEvent>(WS_EVENTS.MESSAGES_BULK_DELETED, ({ channelId, messageIds }) => {
+        // reaproveita o caminho de uma mensagem só: a timeline já sabe remover
+        for (const messageId of messageIds) {
+          useMessages.getState().handleDeleted({ messageId, channelId, parentId: null });
+        }
+      }),
+
+      on<PollUpdatedEvent>(WS_EVENTS.POLL_UPDATED, ({ poll }) => {
+        usePolls.getState().handleUpdated(poll);
+      }),
+
+      on<ReportView>(WS_EVENTS.REPORT_CREATED, (report) => {
+        useModeration.getState().handleReportCreated(report);
+        ui.toast("Nova denúncia no servidor.", "error");
+      }),
+
+      on<GuildSettingsUpdatedEvent>(WS_EVENTS.GUILD_SETTINGS_UPDATED, ({ guildId }) => {
+        // regras/boas-vindas podem ter mudado para mim
+        if (useGuilds.getState().activeGuildId === guildId) {
+          void useModeration.getState().loadMembership(guildId);
+        }
       }),
 
       onReconnect(() => {

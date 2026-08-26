@@ -1,0 +1,69 @@
+"use client";
+
+import { useState } from "react";
+import { MAX_MODERATION_REASON, displayNameOf, type PublicUser } from "@newdisc/shared";
+import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
+import { api } from "@/lib/api";
+import { useGuilds } from "@/stores/guilds";
+import { errorMessage } from "@/stores/socket-adapter";
+import { ui, useUI } from "@/stores/ui";
+
+/** Expulsão com motivo — o expulso pode voltar com um novo convite. */
+export default function KickModal({ guildId, user }: { guildId: string; user: PublicUser }) {
+  const closeModal = useUI((s) => s.closeModal);
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const nome = displayNameOf(user);
+
+  async function submit() {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await api.kickWithReason(guildId, user.id, reason.trim() || undefined);
+      useGuilds.setState((s) => ({ members: s.members.filter((m) => m.user.id !== user.id) }));
+      ui.toast(`${nome} foi removido do servidor.`);
+      closeModal();
+    } catch (e) {
+      ui.toast(errorMessage(e, "Não foi possível expulsar"), "error");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog
+      title={`Expulsar ${nome}`}
+      description="Essa pessoa sai do servidor, mas pode voltar com um novo convite."
+      onClose={closeModal}
+      className="w-[440px]"
+      footer={
+        <>
+          <PrimaryButton danger disabled={saving} onClick={() => void submit()}>
+            {saving ? "Expulsando…" : "Expulsar"}
+          </PrimaryButton>
+          <SecondaryButton autoFocus onClick={closeModal}>
+            Cancelar
+          </SecondaryButton>
+        </>
+      }
+    >
+      <label
+        htmlFor="kick-reason"
+        className="mb-2 block text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary"
+      >
+        Motivo (opcional)
+      </label>
+      <input
+        id="kick-reason"
+        value={reason}
+        maxLength={MAX_MODERATION_REASON}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder="Ex.: comportamento fora das regras"
+        className="h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
+        autoFocus
+      />
+      <p className="mt-1 text-xs text-txt-muted">
+        O motivo vai para o registro de auditoria e para o aviso na conversa direta.
+      </p>
+    </Dialog>
+  );
+}

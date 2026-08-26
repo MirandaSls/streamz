@@ -4,7 +4,7 @@ import { Compass, Plus } from "lucide-react";
 import Tooltip from "@/components/ui/Tooltip";
 import { useDMs } from "@/stores/dms";
 import { useGuilds } from "@/stores/guilds";
-import { useUI } from "@/stores/ui";
+import { ui, useUI } from "@/stores/ui";
 
 /** Iniciais de cada palavra, como o Discord faz com servidores sem ícone. */
 function acronym(name: string): string {
@@ -97,7 +97,6 @@ export default function GuildRail() {
   const activeGuildId = useGuilds((s) => s.activeGuildId);
   const select = useGuilds((s) => s.select);
   const create = useGuilds((s) => s.create);
-  const joinByCode = useGuilds((s) => s.joinByCode);
   const openDMs = useDMs((s) => s.openList);
   const dms = useDMs((s) => s.channels);
   const view = useUI((s) => s.view);
@@ -148,7 +147,9 @@ export default function GuildRail() {
       <RailItem label="Adicionar um servidor" green onClick={() => void create()}>
         <Plus size={24} />
       </RailItem>
-      <RailItem label="Entrar com convite" green onClick={() => void joinByCode()}>
+      {/* h-moderacao: a bússola vira "Descobrir"; entrar por código é um link
+          dentro dela, como no Discord */}
+      <RailItem label="Descobrir servidores" green onClick={() => ui.openModal({ kind: "discover" })}>
         <Compass size={24} />
       </RailItem>
     </nav>

@@ -2,11 +2,15 @@
 
 import { useMemo, useState, type MouseEvent } from "react";
 import {
+  ArrowRightToLine,
+  CheckSquare,
   Copy,
   CornerUpLeft,
   EyeOff,
   FileText,
+  Flag,
   Link2,
+  ListChecks,
   MessageSquare,
   MoreHorizontal,
   Pencil,
@@ -14,6 +18,7 @@ import {
   PinOff,
   SmilePlus,
   Trash2,
+  UserPlus,
 } from "lucide-react";
 import type { Attachment, Message, PublicUser } from "@newdisc/shared";
 import {
@@ -31,6 +36,9 @@ import LinkEmbedCard, { useLinkEmbed } from "@/components/chat/LinkEmbedCard";
 import MediaGroup from "@/components/media/MediaGroup";
 import StickerView from "@/components/media/StickerView";
 import YouTubeEmbed from "@/components/media/YouTubeEmbed";
+// ── h-moderacao ──
+import PollCard from "@/components/polls/PollCard";
+import { useModeration } from "@/stores/moderation";
 import { emit } from "@/stores/socket-adapter";
 import Avatar from "@/components/ui/Avatar";
 import EmojiPicker from "@/components/ui/EmojiPicker";
@@ -211,6 +219,13 @@ export default function MessageItem({
     return map;
   }, [members, message.author, me]);
 
+  // h-moderacao: seleção múltipla para remoção em lote (modo "selecionar")
+  const selecting = useModeration((s) => s.selecting && s.selectionChannelId === message.channelId);
+  const selected = useModeration((s) => s.selected.includes(message.id));
+  const toggleSelected = useModeration((s) => s.toggleSelected);
+  const startSelection = useModeration((s) => s.startSelection);
+  const deleteAfter = useModeration((s) => s.deleteAfter);
+
   const isOwn = message.author.id === currentUserId;
   // sem confirmação do servidor a mensagem ainda não tem id real: editar,
   // apagar ou reagir não teriam a que se referir
@@ -324,6 +339,30 @@ export default function MessageItem({
           }),
       });
     }
+
+    // ── h-moderacao ──
+    if (!isOwn) {
+      items.push({
+        label: "Denunciar mensagem",
+        icon: <Flag size={18} />,
+        onSelect: () =>
+          ui.openModal({ kind: "report", messageId: message.id, preview: message.content }),
+      });
+    }
+    if (canModerate) {
+      items.push({ separator: true });
+      items.push({
+        label: "Selecionar mensagens",
+        icon: <CheckSquare size={18} />,
+        onSelect: () => startSelection(message.channelId, message.id),
+      });
+      items.push({
+        label: "Apagar mensagens depois desta",
+        icon: <ArrowRightToLine size={18} />,
+        danger: true,
+        onSelect: () => void deleteAfter(message.channelId, message.id),
+      });
+    }
     if (canDelete) {
       items.push({ separator: true });
       items.push({
@@ -353,6 +392,7 @@ export default function MessageItem({
   // componente que a timeline usa, para não haver duas versões do mesmo texto
   if (sistema) return <SystemMessageItem message={message} />;
 
+
   return (
     <div
       id={`mensagem-${message.id}`}
@@ -363,10 +403,22 @@ export default function MessageItem({
           ? undefined
           : { marginTop: "var(--espaco-entre-grupos, 17px)" }
       }
+      onClick={selecting ? () => toggleSelected(message.id) : undefined}
       className={`group relative flex py-0.5 pr-12 transition-colors ${
         compacto ? "gap-1.5 pl-4" : "gap-4 pl-[72px]"
-      } ${fundo} ${message.pending ? "opacity-60" : ""}`}
+      } ${selected ? "bg-accent/15" : fundo} ${message.pending ? "opacity-60" : ""} ${
+        selecting ? "cursor-pointer" : ""
+      }`}
     >
+      {selecting && (
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => toggleSelected(message.id)}
+          aria-label={`Selecionar mensagem de ${displayNameOf(author)}`}
+          className="absolute right-4 top-1 h-4 w-4 accent-accent"
+        />
+      )}
       {compacto ? null : grouped && !message.replyTo ? (
         // hora na margem, só no hover — como o Discord faz com mensagens agrupadas
         <span
@@ -499,6 +551,10 @@ export default function MessageItem({
             />
           </button>
         )}
+        {/* h-moderacao: a enquete é uma face da mensagem, não um bloco à parte */}
+        {message.poll && (
+          <PollCard poll={message.poll} canModerate={Boolean(canModerate)} isAuthor={isOwn} />
+        )}
         {embed && <LinkEmbedCard embed={embed} />}
 
         {onOpenThread && (message.thread || message.replyCount > 0) && (
@@ -590,7 +646,7 @@ export default function MessageItem({
       </div>
 
       {/* barra de ações: no hover e também ao chegar pelo teclado */}
-      {!unconfirmed && !editing && (
+      {!unconfirmed && !editing && !selecting && (
         <div className="absolute -top-4 right-4 hidden rounded border border-black/20 bg-chat p-0.5 shadow-high group-focus-within:flex group-hover:flex">
           <ActionButton label="Adicionar reação" onClick={() => setPicking((p) => !p)}>
             <SmilePlus size={20} />
@@ -619,6 +675,25 @@ export default function MessageItem({
           {isOwn && (
             <ActionButton label="Editar" onClick={startEdit}>
               <Pencil size={20} />
+            </ActionButton>
+          )}
+          {!isOwn && (
+            <ActionButton
+              label="Denunciar"
+              danger
+              onClick={() =>
+                ui.openModal({ kind: "report", messageId: message.id, preview: message.content })
+              }
+            >
+              <Flag size={20} />
+            </ActionButton>
+          )}
+          {canModerate && (
+            <ActionButton
+              label="Selecionar mensagens"
+              onClick={() => startSelection(message.channelId, message.id)}
+            >
+              <ListChecks size={20} />
             </ActionButton>
           )}
           {canDelete && (

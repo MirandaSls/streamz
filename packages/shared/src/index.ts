@@ -224,6 +224,8 @@ export interface Message {
   thread: ThreadSummary | null;
   /** true quando a mensagem está fixada no canal. */
   pinned: boolean;
+  /** h-moderacao: preenchido quando a mensagem é uma enquete. */
+  poll?: Poll | null;
 }
 
 export interface GuildMemberView {
@@ -231,6 +233,8 @@ export interface GuildMemberView {
   role: MemberRole;
   /** ids dos cargos atribuídos (sem o @everyone, que vale para todos). */
   roleIds: string[];
+  /** h-moderacao: fim do castigo (ISO) — null/passado = sem castigo. */
+  timeoutUntil?: string | null;
 }
 
 export interface InviteInfo {
@@ -349,6 +353,21 @@ export const WS_EVENTS = {
   EMOJI_UPDATED: "emoji.updated",
   /** servidor → cliente: a lista de figurinhas do servidor mudou. */
   STICKER_UPDATED: "sticker.updated",
+  // ── h-moderacao ──
+  /** cliente → servidor: cria uma enquete (que nasce como mensagem no canal). */
+  POLL_CREATE: "poll.create",
+  /** servidor → cliente: contagem da enquete mudou (voto, desvoto, encerramento). */
+  POLL_UPDATED: "poll.updated",
+  /** servidor → cliente: várias mensagens sumiram de uma vez (moderação). */
+  MESSAGES_BULK_DELETED: "messages.bulkDeleted",
+  /** servidor → moderação: chegou uma denúncia nova. */
+  REPORT_CREATED: "report.created",
+  /** cliente → servidor: vota ou desvota numa opção da enquete. */
+  POLL_VOTE: "poll.vote",
+  /** cliente → servidor: encerra a enquete (autor ou moderação). */
+  POLL_CLOSE: "poll.close",
+  /** servidor → cliente: onboarding/descoberta do servidor mudou. */
+  GUILD_SETTINGS_UPDATED: "guild.settingsUpdated",
 } as const;
 
 /** Teto de caracteres de uma mensagem (canal ou DM). */
@@ -483,6 +502,8 @@ export interface MemberUpdatedEvent {
   role: MemberRole;
   /** cargos do membro depois da mudança (ausente = só o papel mudou). */
   roleIds?: string[];
+  /** h-moderacao: fim do castigo (ISO) — null = castigo removido. */
+  timeoutUntil?: string | null;
 }
 
 /** Alguém entrou no servidor (convite). */
@@ -1105,7 +1126,8 @@ export type MessageType =
   | "SYSTEM_MEMBER_REMOVED"
   | "SYSTEM_MEMBER_LEFT"
   | "SYSTEM_GROUP_RENAMED"
-  | "SYSTEM_GROUP_ICON";
+  | "SYSTEM_GROUP_ICON"
+  | "SYSTEM_MOD_NOTICE";
 
 /** true para mensagem narrada pelo sistema (sem avatar, sem ações de autor). */
 export function isSystemMessage(m: Pick<Message, "type">): boolean {
@@ -1659,6 +1681,9 @@ export function systemMessageText(m: Pick<Message, "type" | "content">, autor: s
       return `${autor} fixou uma mensagem neste canal.`;
     case "SYSTEM_JOIN":
       return `${autor} entrou no servidor.`;
+    case "SYSTEM_MOD_NOTICE":
+      // o texto do aviso da moderação já vem pronto no conteúdo
+      return m.content;
     case "SYSTEM_MEMBER_ADDED":
       return `${autor} adicionou ${m.content} ao grupo.`;
     case "SYSTEM_MEMBER_REMOVED":
@@ -1967,3 +1992,421 @@ export function isDirectImageUrl(url: string): boolean {
   const u = partesDaUrl(url);
   return !!u && /\.(png|jpe?g|gif|webp|avif)$/i.test(u.path);
 }
+// ── h-moderacao ──────────────────────────────────────────────
+// Moderação, registro de auditoria, convites, enquetes, denúncias, onboarding
+// e servidores públicos. Tudo o que a api e a web trocam sobre esses assuntos
+// mora aqui — inclusive as listas de presets que a UI desenha, para que os dois
+// lados nunca discordem sobre o que é "1 semana de castigo" ou "10 usos".
+
+/** Teto do motivo escrito por um moderador (castigo, expulsão, banimento). */
+export const MAX_MODERATION_REASON = 512;
+
+// ── Registro de auditoria ────────────────────────────────────
+
+/**
+ * O que um registro de auditoria descreve. Um valor por ação *moderável*: se
+ * uma ação nova precisa aparecer no registro, ela entra aqui, no enum do banco
+ * e em `AUDIT_ACTION_LABELS` — os três travados pelo typecheck.
+ */
+export type AuditAction =
+  | "MEMBER_KICK"
+  | "MEMBER_BAN"
+  | "MEMBER_UNBAN"
+  | "MEMBER_TIMEOUT"
+  | "MEMBER_TIMEOUT_REMOVE"
+  | "MEMBER_ROLE_UPDATE"
+  | "CHANNEL_CREATE"
+  | "CHANNEL_UPDATE"
+  | "CHANNEL_DELETE"
+  | "ROLE_CREATE"
+  | "ROLE_UPDATE"
+  | "ROLE_DELETE"
+  | "INVITE_CREATE"
+  | "INVITE_REVOKE"
+  | "MESSAGE_DELETE"
+  | "MESSAGE_BULK_DELETE"
+  | "GUILD_UPDATE"
+  | "EMOJI_CREATE"
+  | "STICKER_CREATE";
+
+/** Que tipo de coisa o `targetId` de um registro aponta. */
+export type AuditTargetType =
+  | "USER"
+  | "CHANNEL"
+  | "ROLE"
+  | "INVITE"
+  | "MESSAGE"
+  | "GUILD"
+  | "EMOJI"
+  | "STICKER";
+
+/** Rótulo em pt-BR de cada ação, para o filtro e a linha do registro. */
+export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
+  MEMBER_KICK: "Membro expulso",
+  MEMBER_BAN: "Membro banido",
+  MEMBER_UNBAN: "Banimento removido",
+  MEMBER_TIMEOUT: "Membro de castigo",
+  MEMBER_TIMEOUT_REMOVE: "Castigo removido",
+  MEMBER_ROLE_UPDATE: "Cargo alterado",
+  CHANNEL_CREATE: "Canal criado",
+  CHANNEL_UPDATE: "Canal editado",
+  CHANNEL_DELETE: "Canal apagado",
+  ROLE_CREATE: "Cargo criado",
+  ROLE_UPDATE: "Cargo editado",
+  ROLE_DELETE: "Cargo apagado",
+  INVITE_CREATE: "Convite criado",
+  INVITE_REVOKE: "Convite revogado",
+  MESSAGE_DELETE: "Mensagem apagada",
+  MESSAGE_BULK_DELETE: "Mensagens apagadas em lote",
+  GUILD_UPDATE: "Servidor editado",
+  EMOJI_CREATE: "Emoji criado",
+  STICKER_CREATE: "Figurinha criada",
+};
+
+/** Todas as ações, na ordem em que o filtro as lista. */
+export const AUDIT_ACTIONS = Object.keys(AUDIT_ACTION_LABELS) as AuditAction[];
+
+/** Um campo que mudou, do jeito que o registro guarda (antes → depois). */
+export interface AuditLogChange {
+  field: string;
+  before: unknown;
+  after: unknown;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  guildId: string;
+  /** quem agiu; null quando a conta já não existe. */
+  actor: PublicUser | null;
+  action: AuditAction;
+  targetId: string | null;
+  targetType: AuditTargetType | null;
+  /**
+   * Nome do alvo *no momento do registro*. Guardado junto porque o alvo pode
+   * deixar de existir (canal apagado, convite revogado) e o registro continua
+   * precisando dizer sobre o quê ele fala.
+   */
+  targetName: string | null;
+  changes: AuditLogChange[];
+  reason: string | null;
+  createdAt: string;
+}
+
+/** Página do registro; `nextCursor` null = acabou. */
+export interface AuditLogPage {
+  entries: AuditLogEntry[];
+  nextCursor: string | null;
+}
+
+export const AUDIT_PAGE_SIZE = 50;
+
+// ── Castigo (timeout) ────────────────────────────────────────
+
+/** Durações que a UI oferece, como no Discord. */
+export const TIMEOUT_PRESETS: readonly { label: string; minutes: number }[] = [
+  { label: "60 segundos", minutes: 1 },
+  { label: "5 minutos", minutes: 5 },
+  { label: "10 minutos", minutes: 10 },
+  { label: "1 hora", minutes: 60 },
+  { label: "1 dia", minutes: 60 * 24 },
+  { label: "1 semana", minutes: 60 * 24 * 7 },
+];
+
+/** Teto de um castigo (o Discord também para em 28 dias). */
+export const MAX_TIMEOUT_MINUTES = 60 * 24 * 28;
+
+/**
+ * O castigo está valendo agora? Um `timeoutUntil` no passado é lixo histórico —
+ * quem lê nunca deve tratar "tem data" como "está de castigo".
+ */
+export function isTimedOut(until: string | null | undefined, now: number = Date.now()): boolean {
+  if (!until) return false;
+  const t = new Date(until).getTime();
+  return Number.isFinite(t) && t > now;
+}
+
+// ── Remoção em lote ──────────────────────────────────────────
+
+/** Máximo de mensagens por chamada de remoção em lote (o Discord usa 100). */
+export const MAX_BULK_DELETE = 100;
+
+/** Janelas de limpeza oferecidas no modal de banimento. */
+export const PURGE_WINDOWS: readonly { label: string; hours: number }[] = [
+  { label: "Não apagar mensagens", hours: 0 },
+  { label: "Última hora", hours: 1 },
+  { label: "Últimas 24 horas", hours: 24 },
+  { label: "Últimos 7 dias", hours: 24 * 7 },
+];
+
+/** Várias mensagens sumiram de um canal de uma vez (moderação). */
+export interface MessagesBulkDeletedEvent {
+  channelId: string;
+  messageIds: string[];
+}
+
+// ── Mensagens de sistema ─────────────────────────────────────
+
+/**
+ * Mensagem que o servidor escreve sozinho. `SYSTEM_JOIN` é o "X entrou no
+ * servidor" do canal de sistema; `SYSTEM_MOD_NOTICE` é o aviso que a moderação
+ * manda na DM de quem foi expulso ou banido.
+ */
+
+
+// ── Enquetes ─────────────────────────────────────────────────
+
+export const MIN_POLL_OPTIONS = 2;
+export const MAX_POLL_OPTIONS = 10;
+export const MAX_POLL_QUESTION = 300;
+export const MAX_POLL_OPTION = 55;
+
+/** Durações de enquete oferecidas na UI. */
+export const POLL_DURATIONS: readonly { label: string; hours: number }[] = [
+  { label: "1 hora", hours: 1 },
+  { label: "4 horas", hours: 4 },
+  { label: "8 horas", hours: 8 },
+  { label: "1 dia", hours: 24 },
+  { label: "3 dias", hours: 24 * 3 },
+  { label: "1 semana", hours: 24 * 7 },
+  { label: "2 semanas", hours: 24 * 14 },
+];
+
+export interface PollOption {
+  /** posição da opção na enquete; é ela que o voto referencia. */
+  index: number;
+  text: string;
+  votes: number;
+  /** o espectador votou nesta opção. */
+  me: boolean;
+}
+
+export interface Poll {
+  /** a enquete é uma face da mensagem — o id dela é a chave. */
+  messageId: string;
+  question: string;
+  options: PollOption[];
+  /** aceita marcar mais de uma opção. */
+  multi: boolean;
+  expiresAt: string | null;
+  /** encerrada à mão pelo autor ou pela moderação. */
+  closedAt: string | null;
+  /** votos somados (com `multi`, uma pessoa pode contar mais de uma vez). */
+  totalVotes: number;
+}
+
+/** Não aceita mais voto: encerrada à mão ou vencida. */
+export function isPollClosed(
+  poll: Pick<Poll, "expiresAt" | "closedAt">,
+  now: number = Date.now(),
+): boolean {
+  if (poll.closedAt) return true;
+  if (!poll.expiresAt) return false;
+  const t = new Date(poll.expiresAt).getTime();
+  return Number.isFinite(t) && t <= now;
+}
+
+/**
+ * Porcentagem inteira de uma opção. Arredonda para baixo de propósito: a soma
+ * nunca passa de 100%, que é o que estragaria as barras.
+ */
+export function pollPercent(votes: number, total: number): number {
+  if (total <= 0) return 0;
+  return Math.floor((votes / total) * 100);
+}
+
+/** Contagem da enquete mudou (voto, desvoto ou encerramento). */
+export interface PollUpdatedEvent {
+  channelId: string;
+  poll: Poll;
+}
+
+/** Quem votou em cada opção (só moderação enxerga). */
+export interface PollVoters {
+  messageId: string;
+  /** por índice de opção, os usuários que a marcaram. */
+  byOption: { index: number; users: PublicUser[] }[];
+}
+
+// ── Denúncias ────────────────────────────────────────────────
+
+export type ReportReason =
+  | "SPAM"
+  | "HARASSMENT"
+  | "HATE"
+  | "VIOLENCE"
+  | "NSFW"
+  | "SELF_HARM"
+  | "OTHER";
+
+export const REPORT_REASONS: readonly { value: ReportReason; label: string }[] = [
+  { value: "SPAM", label: "Spam ou propaganda" },
+  { value: "HARASSMENT", label: "Assédio ou perseguição" },
+  { value: "HATE", label: "Discurso de ódio" },
+  { value: "VIOLENCE", label: "Violência ou ameaça" },
+  { value: "NSFW", label: "Conteúdo adulto" },
+  { value: "SELF_HARM", label: "Automutilação ou suicídio" },
+  { value: "OTHER", label: "Outro motivo" },
+];
+
+export const MAX_REPORT_DETAILS = 500;
+
+export interface ReportView {
+  id: string;
+  guildId: string;
+  channelId: string;
+  channelName: string | null;
+  messageId: string | null;
+  /** conteúdo da mensagem no momento da denúncia (ela pode sumir depois). */
+  messageContent: string | null;
+  reporter: PublicUser | null;
+  /** autor da mensagem denunciada. */
+  target: PublicUser | null;
+  reason: ReportReason;
+  details: string | null;
+  resolved: boolean;
+  resolvedBy: PublicUser | null;
+  resolvedAt: string | null;
+  createdAt: string;
+}
+
+// ── Convites ─────────────────────────────────────────────────
+
+/** Expirações oferecidas na UI; `minutes: 0` = nunca expira. */
+export const INVITE_EXPIRY_OPTIONS: readonly { label: string; minutes: number }[] = [
+  { label: "30 minutos", minutes: 30 },
+  { label: "1 hora", minutes: 60 },
+  { label: "6 horas", minutes: 360 },
+  { label: "12 horas", minutes: 720 },
+  { label: "1 dia", minutes: 1440 },
+  { label: "7 dias", minutes: 10080 },
+  { label: "Nunca", minutes: 0 },
+];
+
+/** Limites de uso oferecidos na UI; `uses: 0` = sem limite. */
+export const INVITE_USES_OPTIONS: readonly { label: string; uses: number }[] = [
+  { label: "1 uso", uses: 1 },
+  { label: "5 usos", uses: 5 },
+  { label: "10 usos", uses: 10 },
+  { label: "25 usos", uses: 25 },
+  { label: "50 usos", uses: 50 },
+  { label: "100 usos", uses: 100 },
+  { label: "Sem limite", uses: 0 },
+];
+
+/** Opções de criação de convite (0 = "sem limite"/"nunca", como na UI). */
+export interface InviteOptions {
+  expiresInMinutes?: number;
+  maxUses?: number;
+  /** convidado só continua no servidor enquanto estiver conectado. */
+  temporary?: boolean;
+  /** canal para onde o convite leva; null = canal de sistema ou o primeiro. */
+  channelId?: string | null;
+}
+
+/** Convite na lista de moderação: o `InviteInfo` mais o contexto. */
+export interface InviteDetail extends InviteInfo {
+  creator: PublicUser | null;
+  temporary: boolean;
+  channelId: string | null;
+  channelName: string | null;
+  createdAt: string;
+}
+
+/** Prévia pública, com o que a página `/invite/:code` mostra antes do login. */
+export interface InviteFullPreview extends InvitePreview {
+  memberCount: number;
+  onlineCount: number;
+  description: string | null;
+  channelName: string | null;
+  inviter: PublicUser | null;
+  /** já sou membro deste servidor (só vale para quem está logado). */
+  member: boolean;
+}
+
+// ── Onboarding, regras e boas-vindas ─────────────────────────
+
+export const MAX_WELCOME_DESCRIPTION = 300;
+export const MAX_WELCOME_CHANNELS = 5;
+
+/** Configuração do servidor que governa entrada, regras e descoberta. */
+export interface GuildOnboarding {
+  /** canal onde entram as mensagens "X entrou no servidor"; null = desligado. */
+  systemChannelId: string | null;
+  /** canal de regras; quando existe, postar exige aceite. */
+  rulesChannelId: string | null;
+  welcomeDescription: string | null;
+  /** canais em destaque na tela de boas-vindas, na ordem escolhida. */
+  welcomeChannelIds: string[];
+  /** aparece em "Descobrir". */
+  discoverable: boolean;
+  description: string | null;
+}
+
+export type GuildOnboardingUpdate = Partial<GuildOnboarding>;
+
+/** O que o cliente precisa saber sobre *mim* neste servidor. */
+export interface GuildMembership {
+  guildId: string;
+  onboarding: GuildOnboarding;
+  /** canais em destaque já resolvidos (id + nome), na ordem escolhida. */
+  welcomeChannels: { id: string; name: string | null }[];
+  acceptedRulesAt: string | null;
+  timeoutUntil: string | null;
+  /** o servidor tem canal de regras e eu ainda não aceitei. */
+  mustAcceptRules: boolean;
+  /** nunca vi a tela de boas-vindas deste servidor (e há o que mostrar). */
+  showWelcome: boolean;
+}
+
+/** A configuração de onboarding/descoberta do servidor mudou. */
+export interface GuildSettingsUpdatedEvent {
+  guildId: string;
+  onboarding: GuildOnboarding;
+}
+
+// ── Descobrir servidores ─────────────────────────────────────
+
+export interface DiscoverableGuild {
+  id: string;
+  name: string;
+  iconUrl: string | null;
+  description: string | null;
+  memberCount: number;
+  onlineCount: number;
+  /** já sou membro — o card mostra "Abrir" em vez de "Entrar". */
+  joined: boolean;
+}
+
+// ── Comandos WS de enquete ───────────────────────────────────
+
+export const pollCreateSchema = z.object({
+  channelId: idSchema,
+  question: z
+    .string({ required_error: "obrigatório" })
+    .trim()
+    .min(1, "Pergunta vazia")
+    .max(MAX_POLL_QUESTION, `Pergunta acima de ${MAX_POLL_QUESTION} caracteres`),
+  options: z
+    .array(z.string().trim().min(1, "Opção vazia").max(MAX_POLL_OPTION, "Opção longa demais"))
+    .min(MIN_POLL_OPTIONS, `Mínimo de ${MIN_POLL_OPTIONS} opções`)
+    .max(MAX_POLL_OPTIONS, `Máximo de ${MAX_POLL_OPTIONS} opções`),
+  multi: z.boolean().optional(),
+  /** duração em horas; ausente = enquete sem prazo. */
+  durationHours: z
+    .number()
+    .int()
+    .min(1)
+    .max(24 * 14)
+    .optional(),
+  nonce: z.string().max(64).optional(),
+});
+export type PollCreatePayload = z.infer<typeof pollCreateSchema>;
+
+export const pollVoteSchema = z.object({
+  messageId: idSchema,
+  optionIndex: z.number().int().min(0).max(MAX_POLL_OPTIONS - 1),
+});
+export type PollVotePayload = z.infer<typeof pollVoteSchema>;
+
+export const pollCloseSchema = z.object({ messageId: idSchema });
+export type PollClosePayload = z.infer<typeof pollCloseSchema>;

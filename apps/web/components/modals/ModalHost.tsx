@@ -20,6 +20,15 @@ import AddGroupMembersModal from "@/components/modals/AddGroupMembersModal";
 import CustomStatusModal from "@/components/modals/CustomStatusModal";
 import GroupSettingsModal from "@/components/modals/GroupSettingsModal";
 import UserProfileModal from "@/components/modals/UserProfileModal";
+// ── h-moderacao ──
+import BanModal from "@/components/modals/BanModal";
+import CreatePollModal from "@/components/modals/CreatePollModal";
+import DiscoverModal from "@/components/modals/DiscoverModal";
+import KickModal from "@/components/modals/KickModal";
+import PollVotersModal from "@/components/modals/PollVotersModal";
+import ReportModal from "@/components/modals/ReportModal";
+import TimeoutModal from "@/components/modals/TimeoutModal";
+import WelcomeModal from "@/components/modals/WelcomeModal";
 import { useUI } from "@/stores/ui";
 
 /**
@@ -43,7 +52,7 @@ export default function ModalHost() {
     case "channelAccess":
       return <ChannelAccessModal channelId={modal.channelId} />;
     case "invite":
-      return <InviteModal code={modal.code} />;
+      return <InviteModal guildId={modal.guildId} code={modal.code} />;
     case "createGroupDM":
       return <CreateGroupDMModal />;
     case "settings":
@@ -55,9 +64,6 @@ export default function ModalHost() {
     // ── f-voz ──
     case "incomingCall":
       return <IncomingCallModal />;
-    // ── c-cargos ──
-    case "serverSettings":
-      return <ServerSettingsModal guildId={modal.guildId} />;
     // ── b-canais ──
     case "channelSettings":
       return <ChannelSettingsModal channelId={modal.channelId} tab={modal.tab} />;
@@ -80,5 +86,24 @@ export default function ModalHost() {
       return <ImageModal urls={modal.urls} alts={modal.alts} indice={modal.indice} />;
     case "guildEmojis":
       return <GuildEmojisModal guildId={modal.guildId} />;
+    // ── h-moderacao ──
+    case "timeout":
+      return <TimeoutModal guildId={modal.guildId} user={modal.user} />;
+    case "kick":
+      return <KickModal guildId={modal.guildId} user={modal.user} />;
+    case "ban":
+      return <BanModal guildId={modal.guildId} user={modal.user} />;
+    case "report":
+      return <ReportModal messageId={modal.messageId} preview={modal.preview} />;
+    case "createPoll":
+      return <CreatePollModal channelId={modal.channelId} />;
+    case "pollVoters":
+      return <PollVotersModal messageId={modal.messageId} />;
+    case "serverSettings":
+      return <ServerSettingsModal guildId={modal.guildId} tab={modal.tab} />;
+    case "discover":
+      return <DiscoverModal />;
+    case "welcome":
+      return <WelcomeModal guildId={modal.guildId} />;
   }
 }

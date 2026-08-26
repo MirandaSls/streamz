@@ -1,17 +1,23 @@
 import type {
+  AuditAction as PrismaAuditAction,
+  AuditTargetType as PrismaAuditTargetType,
   ChannelType as PrismaChannelType,
   FriendshipStatus as PrismaFriendshipStatus,
   MemberRole as PrismaMemberRole,
   MessageType as PrismaMessageType,
   NotificationLevel as PrismaNotificationLevel,
+  ReportReason as PrismaReportReason,
   UserStatus as PrismaUserStatus,
 } from "@prisma/client";
 import type {
+  AuditAction,
+  AuditTargetType,
   ChannelType,
   FriendshipStatus,
   MemberRole,
   MessageType,
   NotificationLevel,
+  ReportReason,
   UserStatus,
 } from "@newdisc/shared";
 
@@ -35,3 +41,6 @@ type _TravaMemberRole = Trava<Equivalentes<PrismaMemberRole, MemberRole>>;
 type _TravaMessageType = Trava<Equivalentes<PrismaMessageType, MessageType>>;
 type _TravaNotificationLevel = Trava<Equivalentes<PrismaNotificationLevel, NotificationLevel>>;
 type _TravaFriendshipStatus = Trava<Equivalentes<PrismaFriendshipStatus, FriendshipStatus>>;
+type _TravaAuditAction = Trava<Equivalentes<PrismaAuditAction, AuditAction>>;
+type _TravaAuditTargetType = Trava<Equivalentes<PrismaAuditTargetType, AuditTargetType>>;
+type _TravaReportReason = Trava<Equivalentes<PrismaReportReason, ReportReason>>;

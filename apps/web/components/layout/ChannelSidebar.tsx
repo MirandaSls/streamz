@@ -13,8 +13,10 @@ import {
   Lock,
   LogOut,
   Megaphone,
+  Flag,
   Pencil,
   Plus,
+  ScrollText,
   Settings,
   Trash2,
   UserPlus,
@@ -187,6 +189,10 @@ export default function ChannelSidebar() {
         icon: <Settings size={18} />,
         onSelect: () => openModal({ kind: "serverSettings", guildId: guild.id }),
       });
+      // ── h-moderacao ──
+      items.push({ label: "Configurações do servidor", icon: <Settings size={18} />, onSelect: () => openModal({ kind: "serverSettings", guildId: guild.id }) });
+      items.push({ label: "Registro de auditoria", icon: <ScrollText size={18} />, onSelect: () => openModal({ kind: "serverSettings", guildId: guild.id, tab: "audit" }) });
+      items.push({ label: "Denúncias", icon: <Flag size={18} />, onSelect: () => openModal({ kind: "serverSettings", guildId: guild.id, tab: "reports" }) });
     }
     // o menu de contexto do app não tem submenu: abrir o de notificação no
     // mesmo ponto é o equivalente plano do "Silenciar servidor >" do Discord

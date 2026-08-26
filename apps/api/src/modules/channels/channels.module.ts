@@ -7,9 +7,10 @@ import { GuildReadController } from "./guild-read.controller";
 import { GuildsModule } from "../guilds/guilds.module";
 import { AuthModule } from "../auth/auth.module";
 import { RealtimeModule } from "../realtime/realtime.module";
+import { AuditModule } from "../audit/audit.module";
 
 @Module({
-  imports: [GuildsModule, AuthModule, RealtimeModule],
+  imports: [GuildsModule, AuthModule, RealtimeModule, AuditModule],
   controllers: [ChannelsController, CategoriesController, GuildReadController],
   providers: [ChannelsService, CategoriesService],
   exports: [ChannelsService, CategoriesService],

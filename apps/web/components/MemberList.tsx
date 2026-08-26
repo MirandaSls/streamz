@@ -9,12 +9,15 @@ import {
   MessageSquare,
   ShieldCheck,
   ShieldOff,
+  Timer,
+  TimerOff,
   UserX,
 } from "lucide-react";
 import {
   Permission,
   colorRoleOf,
   displayNameOf,
+  isTimedOut,
   type GuildMemberView,
   type Role,
 } from "@newdisc/shared";
@@ -68,6 +71,10 @@ export default function MemberList() {
   const podeExpulsar = useCan(Permission.KICK_MEMBERS);
   const podeBanir = useCan(Permission.BAN_MEMBERS);
   const podeCargos = useCan(Permission.MANAGE_ROLES);
+  // ── h-moderacao ── castigo é MODERATE_MEMBERS na permissão efetiva
+  const podeCastigar = useCan(Permission.MODERATE_MEMBERS);
+  const timeout = useGuilds((s) => s.timeout);
+  const removeTimeout = useGuilds((s) => s.removeTimeout);
   const isOwner = useIsOwner(user?.id);
   const openWith = useDMs((s) => s.openWith);
   // o status/perfil ao vivo vem da store de presença; a lista é só o do REST
@@ -136,11 +143,19 @@ export default function MemberList() {
     }
     if (podeAgirSobre(m) && (podeExpulsar || podeBanir)) {
       items.push({ separator: true });
+      // ── h-moderacao ──
+      if (podeCastigar) {
+        if (isTimedOut(m.timeoutUntil)) {
+          items.push({ label: "Remover castigo", icon: <TimerOff size={18} />, onSelect: () => void removeTimeout(m.user.id) });
+        } else {
+          items.push({ label: "Colocar de castigo", icon: <Timer size={18} />, onSelect: () => timeout(m.user.id) });
+        }
+      }
       if (podeExpulsar) {
-        items.push({ label: "Expulsar", icon: <UserX size={18} />, danger: true, onSelect: () => void kick(m.user.id) });
+        items.push({ label: "Expulsar", icon: <UserX size={18} />, danger: true, onSelect: () => kick(m.user.id) });
       }
       if (podeBanir) {
-        items.push({ label: "Banir", icon: <Gavel size={18} />, danger: true, onSelect: () => void ban(m.user.id) });
+        items.push({ label: "Banir", icon: <Gavel size={18} />, danger: true, onSelect: () => ban(m.user.id) });
       }
     }
     ui.openContextMenu(e.clientX, e.clientY, items);
@@ -187,6 +202,12 @@ export default function MemberList() {
                 <ShieldCheck size={14} className="shrink-0 text-accent" aria-label="Administrador" />
               </Tooltip>
             )}
+            {/* h-moderacao: relógio marca quem está de castigo agora */}
+            {isTimedOut(m.timeoutUntil) && (
+              <Tooltip label="De castigo — não pode enviar mensagens">
+                <Timer size={14} className="shrink-0 text-red" aria-label="De castigo" />
+              </Tooltip>
+            )}
           </span>
         </button>
 
@@ -203,11 +224,26 @@ export default function MemberList() {
               </button>
             </Tooltip>
           )}
+          {podeAgirSobre(m) && podeCastigar && (
+            /* h-moderacao: castigo é a ação de moderação mais usada — fica no hover */
+            <Tooltip label={isTimedOut(m.timeoutUntil) ? "Remover castigo" : "Colocar de castigo"}>
+              <button
+                type="button"
+                onClick={() =>
+                  isTimedOut(m.timeoutUntil) ? void removeTimeout(m.user.id) : timeout(m.user.id)
+                }
+                aria-label={`${isTimedOut(m.timeoutUntil) ? "Remover castigo de" : "Colocar de castigo"} ${nome}`}
+                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red"
+              >
+                {isTimedOut(m.timeoutUntil) ? <TimerOff size={16} /> : <Timer size={16} />}
+              </button>
+            </Tooltip>
+          )}
           {podeAgirSobre(m) && podeExpulsar && (
             <Tooltip label="Expulsar">
               <button
                 type="button"
-                onClick={() => void kick(m.user.id)}
+                onClick={() => kick(m.user.id)}
                 aria-label={`Expulsar ${nome}`}
                 className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red"
               >
@@ -219,7 +255,7 @@ export default function MemberList() {
             <Tooltip label="Banir">
               <button
                 type="button"
-                onClick={() => void ban(m.user.id)}
+                onClick={() => ban(m.user.id)}
                 aria-label={`Banir ${nome}`}
                 className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red"
               >

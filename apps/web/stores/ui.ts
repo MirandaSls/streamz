@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import type { PublicUser } from "@newdisc/shared";
+// ── h-moderacao ──
+import type { ServerSettingsTab } from "@/components/settings/server/tabs";
 
 /**
  * Estado de interface que não pertence a nenhum domínio: qual coluna está em
@@ -21,7 +23,7 @@ export interface Toast {
 export type Modal =
   | { kind: "createChannel"; categoryId?: string | null }
   | { kind: "channelAccess"; channelId: string }
-  | { kind: "invite"; code: string }
+  | { kind: "invite"; guildId: string; code?: string }
   | { kind: "createGroupDM" }
   | { kind: "settings"; tab?: string }
   | { kind: "invites"; guildId: string }
@@ -51,8 +53,6 @@ export type Modal =
   // ── f-voz ──
   /** chamada recebida numa conversa direta; os dados vêm de `stores/voice`. */
   | { kind: "incomingCall" }
-  // ── c-cargos ──
-  | { kind: "serverSettings"; guildId: string }
   // ── b-canais ──
   | { kind: "channelSettings"; channelId: string; tab?: "geral" | "permissoes" }
   | { kind: "channelTopic"; channelId: string }
@@ -63,7 +63,17 @@ export type Modal =
   /** perfil completo de alguém; `guildId` é o servidor de onde o cartão abriu. */
   | { kind: "userProfile"; userId: string; guildId?: string }
   | { kind: "groupSettings"; channelId: string }
-  | { kind: "addGroupMembers"; channelId: string };
+  | { kind: "addGroupMembers"; channelId: string }
+  // ── h-moderacao ──
+  | { kind: "timeout"; guildId: string; user: PublicUser }
+  | { kind: "kick"; guildId: string; user: PublicUser }
+  | { kind: "ban"; guildId: string; user: PublicUser }
+  | { kind: "report"; messageId: string; preview: string }
+  | { kind: "createPoll"; channelId: string }
+  | { kind: "pollVoters"; messageId: string }
+  | { kind: "serverSettings"; guildId: string; tab?: ServerSettingsTab }
+  | { kind: "discover" }
+  | { kind: "welcome"; guildId: string };
 
 /** Um item de menu de contexto; `separator` desenha a linha entre grupos. */
 export type MenuItem =

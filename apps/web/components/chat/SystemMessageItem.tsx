@@ -1,6 +1,15 @@
 "use client";
 
-import { ArrowRight, ImagePlus, LogOut, Pencil, Pin, UserMinus, UserPlus } from "lucide-react";
+import {
+  ArrowRight,
+  ImagePlus,
+  LogOut,
+  Pencil,
+  Pin,
+  ShieldAlert,
+  UserMinus,
+  UserPlus,
+} from "lucide-react";
 import { displayNameOf, systemMessageText, type Message, type MessageType } from "@newdisc/shared";
 import { horaCompleta } from "@/lib/format";
 import { goToMessage } from "@/stores/messages-navigate";
@@ -10,6 +19,7 @@ const ICONE: Record<MessageType, React.ReactNode> = {
   DEFAULT: <ArrowRight size={16} />,
   SYSTEM_PIN: <Pin size={16} className="text-txt-muted" />,
   SYSTEM_JOIN: <UserPlus size={16} className="text-green" />,
+  SYSTEM_MOD_NOTICE: <ShieldAlert size={16} className="text-red" />,
   SYSTEM_MEMBER_ADDED: <UserPlus size={16} className="text-green" />,
   SYSTEM_MEMBER_REMOVED: <UserMinus size={16} className="text-red" />,
   SYSTEM_MEMBER_LEFT: <LogOut size={16} className="text-red" />,

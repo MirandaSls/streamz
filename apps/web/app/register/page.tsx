@@ -1,15 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import AuthCard, { FieldLabel, inputClass, submitClass } from "@/components/auth/AuthCard";
 import { api } from "@/lib/api";
 import { mensagemDeAuth, REGRAS_CREDENCIAIS, validarCredenciais } from "@/lib/auth-mensagens";
 import { useAuth } from "@/stores/auth";
 
 export default function RegisterPage() {
+  // `useSearchParams` exige Suspense no App Router (a página é pré-renderizada)
+  return (
+    <Suspense fallback={null}>
+      <RegisterForm />
+    </Suspense>
+  );
+}
+
+function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // h-moderacao: quem chegou por um link de convite volta para ele depois de
+  // criar a conta. Só caminho interno — `next` não redireciona para fora.
+  const proximo = searchParams.get("next");
+  const destino = proximo?.startsWith("/") && !proximo.startsWith("//") ? proximo : "/app";
   const setSession = useAuth((s) => s.setSession);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -29,7 +43,7 @@ export default function RegisterPage() {
     try {
       const { user, tokens } = await api.register(username.trim(), password);
       setSession(user, tokens);
-      router.replace("/app");
+      router.replace(destino);
     } catch (err) {
       setError(mensagemDeAuth(err, "registro"));
       setLoading(false);
@@ -87,7 +101,10 @@ export default function RegisterPage() {
         </button>
 
         <p className="mt-2 text-sm">
-          <Link href="/login" className="font-medium text-txt-link hover:underline">
+          <Link
+            href={destino === "/app" ? "/login" : `/login?next=${encodeURIComponent(destino)}`}
+            className="font-medium text-txt-link hover:underline"
+          >
             Já tem uma conta?
           </Link>
         </p>
