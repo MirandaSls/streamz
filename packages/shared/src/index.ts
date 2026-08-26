@@ -2451,121 +2451,24 @@ export type PollClosePayload = z.infer<typeof pollCloseSchema>;
 // Conta e segurança: e-mail, senha, 2FA (TOTP), sessões, exclusão e OAuth.
 // Tudo o que a API e a web precisam falar sobre "a minha conta" mora aqui.
 
-/** Regras de senha. O mínimo subiu de 6 para 8 — vale para senha *nova*. */
-export const MIN_PASSWORD_LENGTH = 8;
+/**
+ * Regras de senha: só comprimento. Não há medidor de força nem lista de senhas
+ * óbvias — a única recusa é a de tamanho, igual na tela e na API.
+ */
+export const MIN_PASSWORD_LENGTH = 6;
 export const MAX_PASSWORD_LENGTH = 128;
-
-/** Idade mínima para criar conta, como no Discord. */
-export const MIN_ACCOUNT_AGE_YEARS = 13;
 
 /** Teto do e-mail: o que a RFC 5321 permite no caminho de retorno. */
 export const MAX_EMAIL_LENGTH = 254;
 
-/**
- * Força de uma senha, em 0–4.
- *
- * Não é um estimador de entropia: é o que o medidor da tela mostra e o que a
- * API recusa (`pontuacao === 0` = inválida). Fica no contrato para que a barra
- * do cliente e a recusa do servidor nunca discordem.
- */
-export interface ForcaDeSenha {
-  pontuacao: 0 | 1 | 2 | 3 | 4;
-  rotulo: "Muito fraca" | "Fraca" | "Razoável" | "Boa" | "Forte";
-  /** o que falta para melhorar; null quando já está no topo. */
-  dica: string | null;
-}
-
-const ROTULOS_DE_FORCA = ["Muito fraca", "Fraca", "Razoável", "Boa", "Forte"] as const;
-
-/** Sequências óbvias que qualquer lista de senhas vazadas tem no topo. */
-const SENHAS_OBVIAS = [
-  "senha",
-  "password",
-  "123456",
-  "12345678",
-  "qwerty",
-  "abc123",
-  "111111",
-  "iloveyou",
-  "admin",
-  "streamz",
-];
-
-export function forcaDeSenha(senha: string): ForcaDeSenha {
-  if (senha.length < MIN_PASSWORD_LENGTH) {
-    return {
-      pontuacao: 0,
-      rotulo: "Muito fraca",
-      dica: `Use pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`,
-    };
-  }
-  const minuscula = senha.toLowerCase();
-  if (SENHAS_OBVIAS.some((s) => minuscula.includes(s))) {
-    return { pontuacao: 0, rotulo: "Muito fraca", dica: "Evite palavras e sequências comuns." };
-  }
-  // um caractere só repetido passa no teste de comprimento, mas não é senha
-  if (new Set(senha).size <= 3) {
-    return { pontuacao: 0, rotulo: "Muito fraca", dica: "Varie os caracteres." };
-  }
-
-  let pontos = 0;
-  if (senha.length >= 12) pontos += 1;
-  if (senha.length >= 16) pontos += 1;
-  if (/[a-z]/.test(senha) && /[A-Z]/.test(senha)) pontos += 1;
-  if (/\d/.test(senha)) pontos += 1;
-  if (/[^A-Za-z0-9]/.test(senha)) pontos += 1;
-
-  const pontuacao = Math.min(4, Math.max(1, pontos)) as 1 | 2 | 3 | 4;
-  const dica =
-    pontuacao === 4
-      ? null
-      : senha.length < 12
-        ? "Senhas longas (12+) são mais seguras que senhas complicadas."
-        : "Misture maiúsculas, números e símbolos.";
-  return { pontuacao, rotulo: ROTULOS_DE_FORCA[pontuacao], dica };
-}
-
 /** Mensagem de recusa de uma senha nova, ou `null` quando ela serve. */
 export function validarSenhaNova(senha: string): string | null {
+  if (senha.length < MIN_PASSWORD_LENGTH) {
+    return `A senha precisa ter ao menos ${MIN_PASSWORD_LENGTH} caracteres.`;
+  }
   if (senha.length > MAX_PASSWORD_LENGTH) {
     return `A senha precisa ter no máximo ${MAX_PASSWORD_LENGTH} caracteres.`;
   }
-  const forca = forcaDeSenha(senha);
-  return forca.pontuacao === 0 ? (forca.dica ?? "Senha fraca demais.") : null;
-}
-
-/**
- * Idade completa em anos na data `hoje`, ou `null` se a data não for legível.
- * Aceita `YYYY-MM-DD` (o que o `<input type="date">` manda).
- */
-export function idadeEm(nascimento: string, hoje: Date = new Date()): number | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(nascimento.trim());
-  if (!m) return null;
-  const ano = Number(m[1]);
-  const mes = Number(m[2]);
-  const dia = Number(m[3]);
-  // rejeita 2026-02-31 e afins: o UTC normaliza a data e o dia deixa de bater
-  const data = new Date(Date.UTC(ano, mes - 1, dia));
-  if (data.getUTCFullYear() !== ano || data.getUTCMonth() !== mes - 1 || data.getUTCDate() !== dia) {
-    return null;
-  }
-  if (data.getTime() > hoje.getTime()) return null;
-
-  let idade = hoje.getUTCFullYear() - ano;
-  const mesAtual = hoje.getUTCMonth() + 1;
-  const diaAtual = hoje.getUTCDate();
-  if (mesAtual < mes || (mesAtual === mes && diaAtual < dia)) idade -= 1;
-  return idade;
-}
-
-/** Mensagem de recusa da data de nascimento, ou `null` quando ela serve. */
-export function validarNascimento(nascimento: string, hoje: Date = new Date()): string | null {
-  const idade = idadeEm(nascimento, hoje);
-  if (idade === null) return "Informe uma data de nascimento válida.";
-  if (idade < MIN_ACCOUNT_AGE_YEARS) {
-    return `É preciso ter ao menos ${MIN_ACCOUNT_AGE_YEARS} anos para criar uma conta.`;
-  }
-  if (idade > 120) return "Informe uma data de nascimento válida.";
   return null;
 }
 
@@ -2594,18 +2497,11 @@ const senhaNovaSchema = z
     if (problema) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problema });
   });
 
-/** Registro: e-mail + usuário + senha (+ nascimento, como no Discord). */
+/** Registro: e-mail + usuário + senha. */
 export const contaRegistroSchema = z.object({
   email: emailSchema,
   username: usuarioSchema,
   password: senhaNovaSchema,
-  /** `YYYY-MM-DD`. Opcional; quando vem, precisa de ≥ 13 anos. */
-  birthDate: z
-    .string()
-    .refine((d) => validarNascimento(d) === null, {
-      message: `É preciso ter ao menos ${MIN_ACCOUNT_AGE_YEARS} anos para criar uma conta.`,
-    })
-    .optional(),
 });
 export type ContaRegistroInput = z.infer<typeof contaRegistroSchema>;
 
@@ -2656,8 +2552,6 @@ export interface MinhaConta {
   /** null em conta antiga, criada antes de o e-mail existir. */
   email: string | null;
   emailVerified: boolean;
-  /** `YYYY-MM-DD`, quando informada no registro. */
-  birthDate: string | null;
   mfaEnabled: boolean;
   /** quantos códigos de recuperação ainda não foram usados. */
   recoveryCodesLeft: number;

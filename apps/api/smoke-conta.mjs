@@ -58,7 +58,7 @@ const SENHA2 = "Girafa-Turbina-77";
 
 // 1. registro exige e-mail e dispara a verificação
 let r = await chamar("POST", "/auth/register", {
-  body: { email, username: usuario, password: SENHA, birthDate: "1995-04-10" },
+  body: { email, username: usuario, password: SENHA },
 });
 ok("registro cria a conta", r.status === 201, `status ${r.status}`);
 let tokens = r.corpo.tokens;
@@ -70,9 +70,9 @@ r = await chamar("POST", "/auth/register", {
 ok("e-mail duplicado responde 409", r.status === 409, r.corpo?.message);
 
 r = await chamar("POST", "/auth/register", {
-  body: { email: `x_${sufixo}@exemplo.com`, username: `x_${sufixo}`, password: "senha123" },
+  body: { email: `x_${sufixo}@exemplo.com`, username: `x_${sufixo}`, password: "12345" },
 });
-ok("senha fraca é recusada no contrato", r.status === 400, r.corpo?.message);
+ok("senha curta demais é recusada no contrato", r.status === 400, r.corpo?.message);
 
 // 2. verificação de e-mail
 const linkVerificacao = ultimoLink();
@@ -88,7 +88,6 @@ ok("token de verificação é de uso único", r.status === 400);
 // 3. conta
 r = await chamar("GET", "/me/account", { token: tokens.accessToken });
 ok("GET /me/account traz o e-mail verificado", r.corpo?.emailVerified === true);
-ok("nascimento volta como YYYY-MM-DD", r.corpo?.birthDate === "1995-04-10", r.corpo?.birthDate);
 
 // 4. login por e-mail e por usuário; lockout
 r = await chamar("POST", "/auth/login", { body: { identificador: email, password: SENHA } });
@@ -221,7 +220,7 @@ r = await chamar("DELETE", "/me", { token: tokens.accessToken, body: { password:
 ok("exclui a conta", r.status === 200 && r.corpo.outcome === "deleted");
 const anonimo = await prisma.user.findFirst({ where: { deletedAt: { not: null }, email: null } });
 ok("username vira o prefixo de excluído", anonimo?.username.startsWith("usuario_excluido_"), anonimo?.username);
-ok("e-mail e nascimento são apagados", anonimo?.email === null && anonimo?.birthDate === null);
+ok("o e-mail é apagado", anonimo?.email === null);
 r = await chamar("POST", "/auth/login", { body: { identificador: email, password: SENHA } });
 ok("conta excluída não entra mais", r.status === 401);
 r = await chamar("GET", "/me/account", { token: tokens.accessToken });

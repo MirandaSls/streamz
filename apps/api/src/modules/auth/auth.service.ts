@@ -9,7 +9,7 @@ import { JwtService } from "@nestjs/jwt";
 import { Prisma } from "@prisma/client";
 import * as argon2 from "argon2";
 import { createHash, randomBytes } from "crypto";
-import { WS_EVENTS, normalizarEmail, pareceEmail, validarNascimento } from "@streamz/shared";
+import { WS_EVENTS, normalizarEmail, pareceEmail } from "@streamz/shared";
 import type {
   AuthSession,
   AuthTokens,
@@ -74,11 +74,6 @@ export class AuthService {
 
   async register(dto: ContaRegistroInput, ctx: ContextoDeSessao): Promise<AuthSession> {
     const email = normalizarEmail(dto.email);
-    if (dto.birthDate) {
-      const problema = validarNascimento(dto.birthDate);
-      if (problema) throw new BadRequestException(problema);
-    }
-
     const passwordHash = await argon2.hash(dto.password);
     let user;
     try {
@@ -88,7 +83,6 @@ export class AuthService {
           email,
           passwordHash,
           status: "ONLINE",
-          birthDate: dto.birthDate ? new Date(`${dto.birthDate}T00:00:00.000Z`) : null,
         },
       });
     } catch (e) {
@@ -97,9 +91,9 @@ export class AuthService {
       throw e;
     }
 
-    // o e-mail sai depois do commit: falha de envio não desfaz o registro
-    await this.enviarVerificacao(user.id, user.username, email);
-
+    // Registro não dispara e-mail: a conta nasce utilizável e a confirmação do
+    // e-mail é a pedido (`POST /me/email/resend` na aba Conta, ou
+    // `/auth/resend-verification`). Assim criar conta não depende de SMTP.
     return { user: toPublicUser(user), tokens: await this.issueTokens(user.id, user.username, ctx) };
   }
 
@@ -477,7 +471,6 @@ export class AuthService {
         displayName: true,
         email: true,
         emailVerifiedAt: true,
-        birthDate: true,
         mfaEnabledAt: true,
         createdAt: true,
         _count: { select: { recoveryCodes: { where: { usedAt: null } } } },
@@ -490,7 +483,6 @@ export class AuthService {
       displayName: user.displayName,
       email: user.email,
       emailVerified: !!user.emailVerifiedAt,
-      birthDate: user.birthDate ? user.birthDate.toISOString().slice(0, 10) : null,
       mfaEnabled: !!user.mfaEnabledAt,
       recoveryCodesLeft: user._count.recoveryCodes,
       createdAt: user.createdAt.toISOString(),

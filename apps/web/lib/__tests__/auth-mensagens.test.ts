@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../api-error";
 import {
-  forcaDaSenha,
   mensagemDeAuth,
   validarLogin,
   validarRegistro,
   validarSenha,
 } from "../auth-mensagens";
 
-const SENHA_BOA = "Cavalo-Bateria-42";
+const SENHA_BOA = "senha123";
 
 describe("mensagemDeAuth", () => {
   it("traduz os status que o usuário pode causar", () => {
@@ -48,35 +47,12 @@ describe("validarRegistro", () => {
     ).toBeNull();
   });
 
-  it("aceita nascimento vazio como 'não informei'", () => {
-    expect(
-      validarRegistro({
-        email: "ana@exemplo.com",
-        username: "ana",
-        password: SENHA_BOA,
-        birthDate: "  ",
-      }),
-    ).toBeNull();
-  });
-
-  it("recusa e-mail inválido, usuário fora do formato e senha fraca", () => {
+  it("recusa e-mail inválido, usuário fora do formato e senha curta", () => {
     const base = { email: "ana@exemplo.com", username: "ana.souza", password: SENHA_BOA };
     expect(validarRegistro({ ...base, email: "ana(at)exemplo" })).toContain("E-mail");
     expect(validarRegistro({ ...base, username: "ab" })).toContain("usuário");
     expect(validarRegistro({ ...base, username: "ana souza" })).toContain("apenas letras");
-    expect(validarRegistro({ ...base, password: "1234567" })).toContain("caracteres");
-    expect(validarRegistro({ ...base, password: "minhasenha" })).toContain("comuns");
-  });
-
-  it("recusa quem não tem a idade mínima", () => {
-    const daquiA = (anos: number) => {
-      const d = new Date();
-      d.setUTCFullYear(d.getUTCFullYear() - anos);
-      return d.toISOString().slice(0, 10);
-    };
-    const base = { email: "ana@exemplo.com", username: "ana", password: SENHA_BOA };
-    expect(validarRegistro({ ...base, birthDate: daquiA(10) })).toContain("anos");
-    expect(validarRegistro({ ...base, birthDate: daquiA(30) })).toBeNull();
+    expect(validarRegistro({ ...base, password: "12345" })).toContain("caracteres");
   });
 });
 
@@ -92,15 +68,10 @@ describe("validarLogin", () => {
   });
 });
 
-describe("validarSenha / forcaDaSenha", () => {
-  it("recusa a senha fraca com a mesma regra da API", () => {
-    expect(validarSenha("curta1!")).not.toBeNull();
-    expect(validarSenha("aaaaaaaaaaaa")).not.toBeNull();
-    expect(validarSenha(SENHA_BOA)).toBeNull();
-  });
-
-  it("o medidor acompanha a recusa: pontuação 0 é exatamente o que a API nega", () => {
-    expect(forcaDaSenha("123456").pontuacao).toBe(0);
-    expect(forcaDaSenha(SENHA_BOA).pontuacao).toBeGreaterThan(0);
+describe("validarSenha", () => {
+  it("só cobra o comprimento, a mesma regra da API", () => {
+    expect(validarSenha("12345")).not.toBeNull();
+    expect(validarSenha("123456")).toBeNull();
+    expect(validarSenha("a".repeat(129))).not.toBeNull();
   });
 });

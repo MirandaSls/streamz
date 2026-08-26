@@ -275,7 +275,7 @@ export class AccountService {
    * Exclui (soft delete): a conta é anonimizada e não volta. As mensagens ficam,
    * como no Discord — apagá-las abriria buracos nas conversas de terceiros.
    *
-   * O que sai: e-mail, nascimento, avatar, 2FA, tokens, participações em
+   * O que sai: e-mail, avatar, 2FA, tokens, participações em
    * servidores e conversas. O que fica: a linha `User` anonimizada, para as
    * mensagens antigas continuarem tendo autor.
    */
@@ -299,7 +299,6 @@ export class AccountService {
           displayName: NOME_USUARIO_EXCLUIDO,
           email: null,
           emailVerifiedAt: null,
-          birthDate: null,
           avatarKey: null,
           avatarUrl: null,
           mfaSecret: null,

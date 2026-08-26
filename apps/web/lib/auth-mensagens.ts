@@ -9,14 +9,11 @@
  * `Erro 500` na tela.
  */
 import {
-  MIN_ACCOUNT_AGE_YEARS,
   MIN_PASSWORD_LENGTH,
   contaLoginSchema,
   contaRegistroSchema,
-  forcaDeSenha,
   validarSenhaNova,
 } from "@streamz/shared";
-import type { ForcaDeSenha } from "@streamz/shared";
 import { ApiError } from "./api-error";
 
 type Formulario = "login" | "registro" | "conta";
@@ -77,13 +74,8 @@ export function validarRegistro(input: {
   email: string;
   username: string;
   password: string;
-  birthDate?: string;
 }): string | null {
-  return primeiroProblema(contaRegistroSchema, {
-    ...input,
-    // campo vazio é "não informei", não "informei errado"
-    birthDate: input.birthDate?.trim() ? input.birthDate : undefined,
-  });
+  return primeiroProblema(contaRegistroSchema, input);
 }
 
 /** Valida o formulário de login (e-mail **ou** usuário + senha). */
@@ -96,13 +88,7 @@ export function validarSenha(senha: string): string | null {
   return validarSenhaNova(senha);
 }
 
-/** Medidor mostrado sob o campo de senha nova. */
-export function forcaDaSenha(senha: string): ForcaDeSenha {
-  return forcaDeSenha(senha);
-}
-
 /** Textos fixos que as telas de conta repetem. */
 export const TEXTOS_CONTA = {
   senhaMinima: `Use pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`,
-  idadeMinima: `É preciso ter ao menos ${MIN_ACCOUNT_AGE_YEARS} anos.`,
 } as const;

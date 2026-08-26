@@ -3,13 +3,7 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { MIN_ACCOUNT_AGE_YEARS } from "@streamz/shared";
-import AuthCard, {
-  FieldLabel,
-  MedidorDeSenha,
-  inputClass,
-  submitClass,
-} from "@/components/auth/AuthCard";
+import AuthCard, { FieldLabel, inputClass, submitClass } from "@/components/auth/AuthCard";
 import { api } from "@/lib/api";
 import { mensagemDeAuth, validarRegistro } from "@/lib/auth-mensagens";
 import { useAuth } from "@/stores/auth";
@@ -34,7 +28,6 @@ function RegisterForm() {
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [birthDate, setBirthDate] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -45,7 +38,6 @@ function RegisterForm() {
       email: email.trim(),
       username: username.trim(),
       password,
-      birthDate: birthDate || undefined,
     };
     const invalido = validarRegistro(dados);
     if (invalido) {
@@ -57,8 +49,8 @@ function RegisterForm() {
     try {
       const { user, tokens } = await api.register(dados);
       setSession(user, tokens);
-      // a conta já está utilizável; a tela seguinte só pede a confirmação
-      router.replace("/verify-email");
+      // sem etapa de confirmação: o registro não envia e-mail
+      router.replace("/app");
     } catch (err) {
       setError(mensagemDeAuth(err, "registro"));
       setLoading(false);
@@ -114,29 +106,11 @@ function RegisterForm() {
           onChange={(e) => setPassword(e.target.value)}
           disabled={loading}
           aria-invalid={error ? true : undefined}
+          aria-describedby="dica-senha"
           className={`${inputClass} mb-2`}
         />
-        <MedidorDeSenha senha={password} />
-
-        <label
-          htmlFor="birthDate"
-          className="mb-2 block text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary"
-        >
-          Data de nascimento
-          <span className="normal-case italic text-txt-muted"> - opcional</span>
-        </label>
-        <input
-          id="birthDate"
-          name="birthDate"
-          type="date"
-          value={birthDate}
-          onChange={(e) => setBirthDate(e.target.value)}
-          disabled={loading}
-          aria-describedby="dica-nascimento"
-          className={`${inputClass} mb-2`}
-        />
-        <p id="dica-nascimento" className="mb-5 text-xs text-txt-muted">
-          É preciso ter ao menos {MIN_ACCOUNT_AGE_YEARS} anos para criar uma conta.
+        <p id="dica-senha" className="mb-5 text-xs text-txt-muted">
+          Ao menos 6 caracteres.
         </p>
 
         {error && (

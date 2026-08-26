@@ -38,13 +38,11 @@ modera sua comunidade.
 ## Contas e sessão
 
 ### Registro e login
-- **Registro:** `email` (único), `username` 3–32 chars no alfabeto `a-zA-Z0-9_.-`,
-  `password` 8–128 chars e `birthDate` opcional (`YYYY-MM-DD`). A senha passa por um
-  **medidor** que é o mesmo dos dois lados (`forcaDeSenha` no contrato): pontuação 0
-  — curta demais, palavra óbvia ou poucos caracteres distintos — é recusada pela API
-  e pela tela. Senha guardada com **argon2**. E-mail ou username duplicado → `409`
-  (a mensagem diz qual dos dois). O usuário nasce **ONLINE**.
-- **Idade mínima:** 13 anos quando a data é informada, como no Discord.
+- **Registro:** `email` (único), `username` 3–32 chars no alfabeto `a-zA-Z0-9_.-` e
+  `password` 6–128 chars. A senha só é verificada por **comprimento** — não há
+  medidor de força, lista de senhas óbvias nem data de nascimento. Senha guardada
+  com **argon2**. E-mail ou username duplicado → `409` (a mensagem diz qual dos
+  dois). O usuário nasce **ONLINE**.
 - **Login:** um campo só, que aceita **e-mail ou usuário**. Toda recusa devolve a
   mesma mensagem genérica — não revela se a conta existe, se está trancada ou se
   está desativada.
@@ -53,10 +51,11 @@ modera sua comunidade.
   bloqueio não é anunciado; acertar a senha zera o contador.
 
 ### Verificação de e-mail e recuperação de senha
-- **Verificação:** o registro dispara um link que vale 24 h (`POST
-  /auth/verify-email`). Pedir outro (`/auth/resend-verification`, ou `POST
-  /me/email/resend` já autenticado) **invalida o anterior** — só o último link vale.
-  A conta funciona sem confirmar; a confirmação é o que marca `emailVerified`.
+- **Verificação (a pedido):** o registro **não envia e-mail** — a conta nasce
+  utilizável e entra direto no app. Quem quiser confirmar o e-mail pede o link na
+  aba Conta (`POST /me/email/resend`) ou por `/auth/resend-verification`; o link
+  vale 24 h (`POST /auth/verify-email`) e pedir outro **invalida o anterior**. A
+  confirmação é só o que marca `emailVerified`.
 - **Esqueci a senha:** `POST /auth/forgot-password` responde **sempre 200**, exista
   ou não a conta. `POST /auth/reset-password` troca a senha, destranca a conta e
   **revoga todas as sessões** — quem pede a redefinição costuma ter perdido o
@@ -99,7 +98,7 @@ modera sua comunidade.
 - **Desativar** (`POST /me/disable`) é reversível: a conta sai de todos os aparelhos
   e **volta quando o dono entra de novo**. Nada é apagado.
 - **Excluir** (`DELETE /me`) é definitivo e anonimiza: username vira
-  `usuario_excluido_…`, o nome vira "Usuário excluído", e e-mail, nascimento, avatar,
+  `usuario_excluido_…`, o nome vira "Usuário excluído", e e-mail, avatar,
   2FA, tokens e participações em servidores/conversas somem. **As mensagens ficam**,
   como no Discord — apagá-las abriria buracos em conversas de terceiros. Pede senha
   e, com 2FA ligado, o código.

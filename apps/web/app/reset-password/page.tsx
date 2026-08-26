@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AuthCard, {
   FieldLabel,
-  MedidorDeSenha,
   inputClass,
   submitClass,
 } from "@/components/auth/AuthCard";
@@ -103,7 +102,6 @@ export default function ResetPasswordPage() {
           className={`${inputClass} mb-2`}
           autoFocus
         />
-        <MedidorDeSenha senha={password} />
 
         <p role="alert" aria-live="polite" className="sr-only">
           {error}

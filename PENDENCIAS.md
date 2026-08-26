@@ -56,9 +56,10 @@ e o resto do app segue igual.
 - _Emojis personalizados e figurinhas, ao contrário, **dependem do R2** (item 1b):
   a imagem vai para o bucket; sem credencial o upload responde 503 com o motivo._
 ## 1d. SMTP (opcional — só bloqueia o e-mail *de verdade*)
-Verificação de conta e "esqueci a senha" funcionam **sem configurar nada** em dev: o
+Criar conta **não envia e-mail** (a confirmação é a pedido, na aba Conta). A
+confirmação e o "esqueci a senha" funcionam **sem configurar nada** em dev: o
 provedor `console` do `MailService` imprime assunto e link no log da API, e o fluxo
-inteiro (registrar → clicar no link → verificar) roda copiando o link do terminal.
+inteiro (pedir o link → clicar → verificar) roda copiando o link do terminal.
 
 - [ ] Para enviar de verdade, preencher no `.env`:
       `SMTP_URL="smtp://usuario:senha@host:587"` e `SMTP_FROM`. Serve qualquer
