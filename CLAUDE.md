@@ -102,6 +102,40 @@ participante). O retorno é a união discriminada `ChannelAccess` (`tipo: "guild
 **chamam** esses asserts; não reimplementam a regra. Ao criar rota/handler que
 toca um canal, comece pelo assert.
 
+### Permissão é bitfield; papel é só hierarquia (ADR-0002)
+O que alguém *pode fazer* sai de `computePermissions(member, roles, overrides)`
+(`@newdisc/shared`): união dos cargos a partir do `@everyone`, depois os
+`ChannelOverride` na ordem `deny` → `allow` (`@everyone` → cargos → usuário);
+dono e `ADMINISTRATOR` ignoram tudo. Os bits de `Permission` são **estáveis para
+sempre** — o valor fica gravado em cada `Role` e em cada override; permissão nova
+entra no próximo bit livre, nenhuma é renumerada.
+
+`MemberRole` (OWNER/ADMIN/MEMBER) **não** decide capacidade: decide *sobre quem*
+se age. `assertCanModerate(actorId, guildId, permission)` exige o bit; quem
+precisa do alvo usa `assertCanActOn`, que soma o bit à hierarquia. Ao escrever
+uma rota de gestão, a pergunta é "qual bit?", não "qual papel?". Do lado do
+cliente a mesma conta está em `stores/permissions.ts` (`useCan`,
+`useCanPostActiveChannel`), e a UI **esconde** o que a API recusaria.
+
+"Privado" e "somente-leitura" no `Channel` são espelhos de um `deny` no
+`@everyone` do canal, mantidos porque a UI fala nesses termos —
+`applyChannelFlags` é quem sincroniza os dois lados.
+
+### Voz e chamadas vivem fora do banco
+`modules/voice` guarda o estado de quem está em cada sala num store **em memória
+do processo** (`voice-state.store.ts`) e o transmite por `voice.state`; chamada
+em conversa direta é o mesmo caminho, com toque de 30 s em `calls.service.ts`.
+Não há tabela de "sessão de voz": quem cai some sozinho. Com mais de uma
+instância da API isso precisaria de store compartilhado, como o rate limit do WS.
+
+### Notificação é preferência por escopo, não flag no canal
+`NotificationSetting` guarda nível (`ALL`/`MENTIONS`/`NONE`) e silêncio por
+**escopo canônico** — a string `"global"`, `"guild:<id>"` ou `"channel:<id>"`,
+não um par de colunas nuláveis: no Postgres dois `NULL` são distintos e um
+`@@unique` sobre colunas nuláveis deixaria gravar duas linhas do mesmo escopo.
+O mais específico vence, e `muted` é independente de `level`. Quem decide se algo
+notifica é `shouldNotifyMessage` no contrato — não replique a regra no cliente.
+
 ### Salas do gateway e "não lido"
 No connect o socket entra em **todas** as salas que o usuário pode ver
 (`channel:<id>` de cada canal visível de cada servidor + conversas) e em

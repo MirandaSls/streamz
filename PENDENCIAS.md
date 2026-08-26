@@ -206,12 +206,13 @@ LiveKit e o Rust para o build desktop._
       ícone de megafone). `readOnly` continua valendo para os canais antigos.
 - [ ] **"Seguir" canal de anúncios** em outro servidor — item do menu existe
       desabilitado ("em breve"); não há modelo de canal seguido.
-- [ ] **Estados de voz na barra lateral** — a lista sob o canal de voz consome
-      `voice.state` (`stores/voiceStates.ts`); fica vazia até o gateway de voz
-      passar a emitir o evento.
-- [ ] **Visibilidade por permissão de cargo** — a filtragem ainda é
-      `private` + allowlist; quando existir `Permission.VIEW_CHANNEL`, ela muda
-      num ponto só (`GuildsService.filterVisible`), sem tocar na barra lateral.
+- [x] **Estados de voz na barra lateral** — ligado na integração da rodada 2.
+      A lista sob o canal de voz é o `VoiceChannelMembers` de f-voz, sobre a
+      store `stores/voice`; a `stores/voiceStates.ts` era uma segunda cópia do
+      mesmo estado e foi removida.
+- [x] **Visibilidade por permissão de cargo** — `GuildsService.filterVisible`
+      calcula `VIEW_CHANNEL` com `computePermissions` (c-cargos). A barra
+      lateral não filtra nada: desenha o que a API mandou.
 ## Configurações, notificações e atalhos (agente E)
 
 Nada aqui bloqueia rodar o app — são as pontas que dependem de outra pessoa ou
@@ -223,15 +224,47 @@ de uma variável opcional.
       A aba já está pronta contra o contrato
       (`{ id, createdAt, expiresAt, current, userAgent? }`) e mostra "ainda não
       disponível nesta API" enquanto a rota responder 404.
-- [ ] **Perfil** (`components/settings/PerfilTab.tsx`) e **conta/privacidade**
-      (`ContaTab.tsx`, `SegurancaTab.tsx`) são stubs à espera dos agentes D e I —
-      trocar o arquivo é toda a integração; o shell e a rota já existem.
-- [ ] **Apertar para falar**: a preferência (modo e tecla) já é gravada em
-      `stores/settings`; quem transmite é o agente F.
-- [ ] **Dispositivos de áudio/vídeo**: `stores/voiceDevices.ts` é um stub
-      funcional do contrato do agente F (enumera e persiste a escolha).
+- [x] **Perfil** — `PerfilTab.tsx` é a versão de d-social (nome de exibição,
+      avatar, "sobre mim", pronomes, faixa). **Conta/privacidade**
+      (`ContaTab.tsx`, `SegurancaTab.tsx`) seguem esperando o agente I.
+- [x] **Apertar para falar** e **dispositivos de áudio/vídeo** — a aba "Voz e
+      vídeo" monta o `VoiceSettingsPanel` de f-voz, que é quem escreve nas
+      stores que os atalhos e os controles de voz leem. O par
+      `voiceMode`/`pushToTalkKey` de `stores/settings` era estado morto e saiu.
 - [ ] **Notificação do navegador** só dispara depois que o usuário concede a
       permissão (pedida uma vez por sessão, ver `lib/desktop.ts`), e o som só
       toca depois da primeira interação com a página — regra do autoplay.
 - [ ] **Contador no ícone**: usa `setBadgeCount` no Tauri ≥ 2.1 e o Badging API
       no navegador (só em PWA instalado). Onde não houver, vira no-op.
+
+<!-- integração r2 -->
+## Pós-integração da rodada 2
+
+O que ficou de fora depois de mesclar as oito frentes (f, c, b, a, e, d, g, h) na
+`r2-integracao`. Nada aqui bloqueia rodar o app.
+
+- [ ] **`GET/DELETE /me/sessions`** — a aba "Dispositivos" das configurações já
+      está escrita contra o contrato (`SessionInfo`) e mostra "ainda não
+      disponível nesta API" enquanto a rota responder 404. É do agente I.
+- [ ] **Apelido por servidor (`/nick`)** — o comando existe no composer e avisa
+      que não está disponível. Falta a coluna de apelido em `GuildMember` (nenhuma
+      frente da rodada 2 a criou), a rota que a edita e a leitura no
+      `displayNameOf` da lista de membros.
+- [ ] **"Seguir" canal de anúncios** em outro servidor — o item do menu existe
+      desabilitado; não há modelo de canal seguido.
+- [ ] **Estado de voz é in-memory por processo** (`voice-state.store.ts`), assim
+      como o token bucket do WebSocket. Com mais de uma instância da API cada uma
+      teria a sua visão da sala; o `RealtimeService` já usa Redis para broadcast,
+      então é o mesmo caminho a seguir.
+- [ ] **Faxina diária por processo** — o `@nestjs/schedule` do
+      `modules/maintenance` roda em toda instância; com mais de uma, o job
+      repete.
+- [ ] **Menção a cargo não vira notificação de desktop dedicada** — ela conta no
+      badge, na faixa amarela e na caixa de entrada; o texto da notificação é o
+      mesmo de uma menção comum.
+- [ ] **Cargo apagado deixa `<@&id>` órfão** no histórico — a marcação vira
+      "@cargo" em vez de sumir, que é o comportamento do Discord, mas não há
+      faxina de menções.
+- [ ] **`ADMINISTRATOR` não aparece na UI de cargos como aviso** — quem marca o
+      bit ganha tudo, inclusive por cima dos overrides de canal, sem confirmação
+      extra.
