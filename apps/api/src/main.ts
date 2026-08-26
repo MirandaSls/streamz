@@ -5,6 +5,7 @@ import type { NestExpressApplication } from "@nestjs/platform-express";
 import { AppModule } from "./app.module";
 import { CORS_OPTIONS } from "./common/cors";
 import { StructuredLogger, requestIdMiddleware } from "./common/logger";
+import { metricsMiddleware } from "./common/metrics";
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -21,8 +22,10 @@ async function bootstrap() {
   const trustProxy = resolverTrustProxy(process.env.TRUST_PROXY);
   if (trustProxy !== null) app.set("trust proxy", trustProxy);
 
-  // Antes de tudo: id por requisição, propagado aos logs e devolvido no header.
+  // Antes de tudo: id por requisição (propagado aos logs e devolvido no header)
+  // e contagem para o /api/metrics.
   app.use(requestIdMiddleware);
+  app.use(metricsMiddleware);
 
   app.setGlobalPrefix("api");
   app.useGlobalPipes(
