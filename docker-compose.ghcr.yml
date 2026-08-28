@@ -19,6 +19,11 @@ services:
   api:
     build: !reset null
     image: ghcr.io/mirandasls/streamz-api:${STREAMZ_TAG:-latest}
+    environment:
+      # `/api/health` passa a reportar a tag realmente implantada. Antes vinha
+      # do APP_VERSION escrito à mão no .env, que envelhecia a cada deploy e
+      # mentia sobre o que estava no ar — e `environment` vence `env_file`.
+      APP_VERSION: ${STREAMZ_TAG:-latest}
 
   web:
     build: !reset null
