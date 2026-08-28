@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { AuthTokens, PublicUser } from "@streamz/shared";
 import { api } from "@/lib/api";
+import { useAdmin } from "@/stores/admin";
 import { disconnectSocket } from "@/lib/socket";
 import { aoExpirarSessao, lerRefreshToken, limparTokens, salvarTokens } from "@/lib/session";
 
@@ -45,6 +46,9 @@ export const useAuth = create<AuthState>((set) => ({
     disconnectSocket();
     limparTokens();
     localStorage.removeItem(CHAVE_USUARIO);
+    // entrar com outra conta na mesma aba não pode herdar o "sou admin" da
+    // anterior — a API recusaria, mas a tela ofereceria abas que não abrem
+    useAdmin.getState().limpar();
     set({ user: null });
   },
 }));
@@ -55,5 +59,6 @@ export const useAuth = create<AuthState>((set) => ({
 aoExpirarSessao(() => {
   disconnectSocket();
   if (typeof window !== "undefined") localStorage.removeItem(CHAVE_USUARIO);
+  useAdmin.getState().limpar();
   useAuth.setState({ user: null });
 });

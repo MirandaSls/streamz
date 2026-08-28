@@ -19,6 +19,7 @@ const PT_BR = {
   "config.titulo": "Configurações",
   "config.grupoUsuario": "Configurações de usuário",
   "config.grupoApp": "Configurações do app",
+  "config.grupoAdmin": "Administração",
   "config.fechar": "Fechar",
   "config.sair": "Sair",
   "config.versao": "Versão",
@@ -35,6 +36,13 @@ const PT_BR = {
   "aba.notificacoes": "Notificações",
   "aba.teclado": "Teclado",
   "aba.idioma": "Idioma",
+
+  // ── abas do painel do administrador da instância ──
+  "aba.adminVisao": "Visão geral",
+  "aba.adminUsuarios": "Usuários",
+  "aba.adminChamadas": "Chamadas",
+  "aba.adminMensagens": "Mensagens",
+  "aba.adminServidores": "Servidores",
 
   // ── aparência ──
   "aparencia.tema": "Tema",
@@ -150,6 +158,7 @@ const EN_US: Dicionario = {
   "config.titulo": "Settings",
   "config.grupoUsuario": "User settings",
   "config.grupoApp": "App settings",
+  "config.grupoAdmin": "Administration",
   "config.fechar": "Close",
   "config.sair": "Log out",
   "config.versao": "Version",
@@ -165,6 +174,12 @@ const EN_US: Dicionario = {
   "aba.notificacoes": "Notifications",
   "aba.teclado": "Keybinds",
   "aba.idioma": "Language",
+
+  "aba.adminVisao": "Overview",
+  "aba.adminUsuarios": "Users",
+  "aba.adminChamadas": "Calls",
+  "aba.adminMensagens": "Messages",
+  "aba.adminServidores": "Servers",
 
   "aparencia.tema": "Theme",
   "aparencia.escuro": "Dark",

@@ -17,6 +17,12 @@ export interface VoiceMember extends VoiceFlags {
    * participante esmaecido em vez de vê-lo aparecer do nada quando ele voltar.
    */
   reconnecting?: boolean;
+  /**
+   * Epoch em ms de quando entrou na sala. Serve ao painel do administrador
+   * ("nesta chamada há 12 min") e é **opcional** de propósito: um estado
+   * gravado no Redis antes deste campo existir continua válido, só sem relógio.
+   */
+  entrouEm?: number;
 }
 
 export interface VoiceStateStore {
@@ -36,6 +42,12 @@ export interface VoiceStateStore {
   members(channelId: string): Promise<VoiceMember[]>;
   /** Membros de várias salas de uma vez (canais de um servidor). */
   membersOf(channelIds: string[]): Promise<Map<string, VoiceMember[]>>;
+  /**
+   * Ids dos canais com alguém dentro agora — todas as chamadas abertas da
+   * instância. Só o painel do administrador precisa disso: o resto do app
+   * sempre parte de um canal ou de um servidor concreto.
+   */
+  salasAbertas(): Promise<string[]>;
 }
 
 function chave(channelId: string) {
@@ -49,8 +61,10 @@ export class MemoryVoiceStateStore implements VoiceStateStore {
   async join(channelId: string, userId: string, flags: VoiceFlags) {
     const sala = this.salas.get(channelId) ?? new Map<string, VoiceMember>();
     // sem `reconnecting`: reentrar na sala é voltar inteiro, e um join por cima
-    // de uma carência em curso tem de limpar a marca
-    const membro: VoiceMember = { userId, ...flags };
+    // de uma carência em curso tem de limpar a marca. `entrouEm` só nasce aqui:
+    // um join por cima de si mesmo (trocar de mudo para não-mudo passa pelo
+    // `update`) reinicia o relógio, o que é o certo — é uma chamada nova.
+    const membro: VoiceMember = { userId, ...flags, entrouEm: Date.now() };
     sala.set(userId, membro);
     this.salas.set(channelId, sala);
     return membro;
@@ -58,8 +72,10 @@ export class MemoryVoiceStateStore implements VoiceStateStore {
 
   async update(channelId: string, userId: string, flags: VoiceFlags) {
     const sala = this.salas.get(channelId);
-    if (!sala?.has(userId)) return null;
-    const membro: VoiceMember = { userId, ...flags };
+    const anterior = sala?.get(userId);
+    if (!sala || !anterior) return null;
+    // mexer no microfone não é entrar de novo: o relógio da chamada continua
+    const membro: VoiceMember = { userId, ...flags, entrouEm: anterior.entrouEm };
     sala.set(userId, membro);
     return membro;
   }
@@ -91,6 +107,11 @@ export class MemoryVoiceStateStore implements VoiceStateStore {
     }
     return out;
   }
+
+  async salasAbertas() {
+    // `leave` já apaga a sala que esvazia, então toda chave aqui tem gente
+    return Array.from(this.salas.keys());
+  }
 }
 
 /** Compartilhada entre instâncias: um hash por canal, userId → flags em JSON. */
@@ -98,16 +119,21 @@ export class RedisVoiceStateStore implements VoiceStateStore {
   constructor(private readonly redis: Redis) {}
 
   async join(channelId: string, userId: string, flags: VoiceFlags) {
-    const membro: VoiceMember = { userId, ...flags };
-    await this.redis.hset(chave(channelId), userId, JSON.stringify(membro));
-    return membro;
+    return this.gravar(channelId, { userId, ...flags, entrouEm: Date.now() });
   }
 
   async update(channelId: string, userId: string, flags: VoiceFlags) {
     // só atualiza quem já estava: `hset` cru ressuscitaria quem saiu
-    const existe = await this.redis.hexists(chave(channelId), userId);
-    if (!existe) return null;
-    return this.join(channelId, userId, flags);
+    const raw = await this.redis.hget(chave(channelId), userId);
+    const anterior = raw ? parseMembro(raw) : null;
+    if (!anterior) return null;
+    // mexer no microfone não é entrar de novo: o relógio da chamada continua
+    return this.gravar(channelId, { userId, ...flags, entrouEm: anterior.entrouEm });
+  }
+
+  private async gravar(channelId: string, membro: VoiceMember) {
+    await this.redis.hset(chave(channelId), membro.userId, JSON.stringify(membro));
+    return membro;
   }
 
   async marcarReconectando(channelId: string, userId: string, reconnecting: boolean) {
@@ -115,8 +141,7 @@ export class RedisVoiceStateStore implements VoiceStateStore {
     const membro = raw ? parseMembro(raw) : null;
     if (!membro) return null;
     const atualizado: VoiceMember = { ...membro, reconnecting };
-    await this.redis.hset(chave(channelId), userId, JSON.stringify(atualizado));
-    return atualizado;
+    return this.gravar(channelId, atualizado);
   }
 
   async leave(channelId: string, userId: string) {
@@ -137,6 +162,22 @@ export class RedisVoiceStateStore implements VoiceStateStore {
       if (membros.length > 0) out.set(id, membros);
     }
     return out;
+  }
+
+  /**
+   * `SCAN` em vez de `KEYS`: a varredura é cursorizada e não trava o Redis, e
+   * esta é uma chamada de painel administrativo — pode custar um punhado de
+   * viagens. O hash vazio some sozinho no Redis, então toda chave tem gente.
+   */
+  async salasAbertas() {
+    const ids: string[] = [];
+    let cursor = "0";
+    do {
+      const [proximo, chaves] = await this.redis.scan(cursor, "MATCH", "voice:*", "COUNT", 200);
+      cursor = proximo;
+      for (const k of chaves) ids.push(k.slice("voice:".length));
+    } while (cursor !== "0");
+    return ids;
   }
 }
 

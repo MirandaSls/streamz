@@ -197,6 +197,31 @@ export class MessagesService {
   }
 
   /**
+   * O mesmo histórico, **sem** o `assertCanViewChannel` — a única leitura de
+   * mensagem do projeto que não passa pela autorização de canal.
+   *
+   * Existe para o painel do administrador da instância (`modules/admin`), que
+   * por definição lê canal do qual não é membro. A autorização não sumiu: ela
+   * mudou de lugar e virou o `PlatformAdminGuard` no controller, que é mais
+   * forte que qualquer bit de servidor. Nada além do painel pode chamar isto —
+   * o nome é comprido de propósito, para doer ao ser digitado noutro lugar.
+   */
+  async historicoSemChecagemDeAcesso(
+    channelId: string,
+    cursor?: string,
+    take = 50,
+  ): Promise<MessageDTO[]> {
+    const rows = await this.prisma.message.findMany({
+      where: { channelId, parentId: null },
+      include: MESSAGE_INCLUDE,
+      orderBy: { createdAt: "desc" },
+      take,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+    });
+    return this.toDTOs(rows.reverse());
+  }
+
+  /**
    * Janela em torno de uma mensagem: ela, as `MESSAGE_AROUND_RADIUS` anteriores
    * e as seguintes. É o que permite "ir para a mensagem" (fixada, menção,
    * resultado de busca, resposta) sem paginar o histórico inteiro para trás.

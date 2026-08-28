@@ -25,7 +25,7 @@ de ambiente vive em `PENDENCIAS.md`; convenções visuais em `design.md`.
 apps/
   api/       # NestJS — módulos por domínio (auth, users, guilds, channels,
              #   messages, read-state, embeds, gateway, dms, voice, storage,
-             #   uploads, maintenance)
+             #   uploads, maintenance, admin)
   web/       # Next.js — login/registro + app de chat de 3 colunas (app/app/page.tsx)
   desktop/   # Tauri 2 — embrulha a web num instalador
 packages/
@@ -148,6 +148,23 @@ em conversa direta é o mesmo caminho, com toque de 30 s em `calls.service.ts`.
 Não há tabela de "sessão de voz": quem cai some sozinho. Com mais de uma
 instância da API isso precisaria de store compartilhado, como o rate limit do WS.
 
+### Administrador da instância é outro eixo, e não vira permissão (ADR-0008)
+`computePermissions` responde "o que este membro pode fazer **neste servidor**".
+Existe uma segunda pergunta, que não se converte nessa: "quem manda na
+instância". A resposta sai de `PLATFORM_ADMIN_EMAILS` no ambiente da API — não
+do banco —, é conferida pelo `PlatformAdminGuard` e alimenta o `modules/admin`:
+todas as contas, todas as chamadas abertas e o histórico de qualquer canal ou
+conversa, **sem entrar em servidor nenhum**.
+
+Duas coisas a ter na cabeça ao mexer nisso. Primeira: o módulo é **só leitura**
+— banir, apagar e expulsar continuam sendo moderação de servidor, com hierarquia;
+um caminho de escrita aqui furaria as regras que o resto do código mantém.
+Segunda: `MessagesService.historicoSemChecagemDeAcesso` é a **única** leitura de
+mensagem que não passa por `assertCanViewChannel`. A autorização não sumiu,
+mudou de camada (o guard, no controller). O nome é comprido para doer ao ser
+digitado noutro lugar — se você precisou dele fora de `modules/admin`, a resposta
+é outra.
+
 ### Notificação é preferência por escopo, não flag no canal
 `NotificationSetting` guarda nível (`ALL`/`MENTIONS`/`NONE`) e silêncio por
 **escopo canônico** — a string `"global"`, `"guild:<id>"` ou `"channel:<id>"`,
@@ -267,4 +284,6 @@ diferentes). Variável **opcional** (R2, LiveKit) não entra ali: fica com o
 - Que dá para evoluir o schema com `db push` — toda mudança vira migration.
 - Que R2/LiveKit estão configurados — dependem de credenciais em `.env`.
 - Que mensagens vão por REST — vão por WS.
+- Que "admin" quer dizer uma coisa só: `MemberRole.ADMIN` é papel de servidor;
+  administrador da **instância** vem do ambiente e é outro eixo (ADR-0008).
 - Que dá para redeclarar um tipo de payload localmente — ele mora em `shared`.

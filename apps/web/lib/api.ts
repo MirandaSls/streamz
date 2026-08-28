@@ -1,4 +1,11 @@
 import type {
+  AdminCall,
+  AdminChannelsPage,
+  AdminGuildView,
+  AdminMe,
+  AdminMessagesPage,
+  AdminOverview,
+  AdminUsersPage,
   Attachment,
   AuthSession,
   AuthTokens,
@@ -579,6 +586,19 @@ export const api = {
   /** 401 aqui é senha errada — a rota está em ROTAS_SEM_REFRESH por isso. */
   downloadAutorizar: (senha: string, plataforma: DownloadPlataforma) =>
     request<DownloadAutorizado>("/downloads/token", json({ senha, plataforma })),
+
+  // ── j-painel-admin ── painel do administrador da instância (só leitura)
+  /** Toda conta pode perguntar; só quem está em `PLATFORM_ADMIN_EMAILS` ouve true. */
+  adminMe: () => request<AdminMe>("/admin/me"),
+  adminOverview: () => request<AdminOverview>("/admin/overview"),
+  adminCalls: () => request<AdminCall[]>("/admin/calls"),
+  adminUsers: (q?: string, cursor?: string) =>
+    request<AdminUsersPage>(`/admin/users${query({ q, cursor })}`),
+  adminGuilds: () => request<AdminGuildView[]>("/admin/guilds"),
+  adminChannels: (q?: string, escopo?: string, cursor?: string) =>
+    request<AdminChannelsPage>(`/admin/channels${query({ q, escopo, cursor })}`),
+  adminMessages: (channelId: string, cursor?: string) =>
+    request<AdminMessagesPage>(`/admin/channels/${channelId}/messages${query({ cursor })}`),
 };
 
 async function enviarComProgresso(
