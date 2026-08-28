@@ -68,7 +68,11 @@ COPY --from=build --chown=node:node /app/apps/web/.next/standalone ./
 # O `.next/static` fica de fora do standalone de propósito (é servido por CDN
 # em deploy grande); aqui vai junto para o server.js conseguir servir sozinho.
 COPY --from=build --chown=node:node /app/apps/web/.next/static ./apps/web/.next/static
-# Não existe `apps/web/public` neste projeto — se um dia existir, copie aqui.
+# `public/` passou a existir com o supressor de ruído: o AudioWorklet e o .wasm
+# do RNNoise são copiados do node_modules pelo `prebuild` e carregados por URL
+# em runtime. O standalone não os traz — sem esta linha `/supressor/*` responde
+# 404 e a redução de ruído avançada falha calada, sem erro visível.
+COPY --from=build --chown=node:node /app/apps/web/public ./apps/web/public
 
 USER node
 EXPOSE 3000

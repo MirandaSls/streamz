@@ -24,6 +24,7 @@ import {
 } from "livekit-client";
 import { api } from "@/lib/api";
 import { tocarSom } from "@/lib/ringtone";
+import { supressorDeRuido } from "@/lib/supressor-ruido";
 import { CHAMADA_INICIAL, callReducer, type CallAction, type CallState } from "@/stores/call-machine";
 import { emit, errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
@@ -163,15 +164,27 @@ export interface AudioPrefs {
   sensibilidade: number;
   /** folga entre soltar a tecla de PTT e o microfone fechar, em ms. */
   pttAtrasoMs: number;
-  processamento: { eco: boolean; ruido: boolean; ganho: boolean };
+  processamento: { eco: boolean; ruido: NivelDeRuido; ganho: boolean };
 }
+
+/**
+ * Quanto de supressão de ruído aplicar no microfone.
+ *
+ * - `off`: nada, o microfone cru.
+ * - `padrao`: a do navegador (`noiseSuppression` do getUserMedia). Subtração
+ *   espectral: come chiado e ventilador, não come teclado nem cachorro.
+ * - `avancada`: RNNoise em WebAssembly antes de publicar (ver
+ *   `lib/supressor-ruido.ts`). Bem melhor, ao custo de CPU no cliente — por
+ *   isso é escolha, e não o padrão.
+ */
+export type NivelDeRuido = "off" | "padrao" | "avancada";
 
 const AUDIO_PADRAO: AudioPrefs = {
   entrada: 1,
   saida: 1,
   sensibilidade: 0.35,
   pttAtrasoMs: PTT_RELEASE_MS,
-  processamento: { eco: true, ruido: true, ganho: true },
+  processamento: { eco: true, ruido: "padrao", ganho: true },
 };
 
 const AUDIO_KEY = "voiceAudioPrefs";
@@ -181,11 +194,12 @@ function carregarAudio(): AudioPrefs {
     const raw = typeof window !== "undefined" ? localStorage.getItem(AUDIO_KEY) : null;
     if (!raw) return AUDIO_PADRAO;
     const lido = JSON.parse(raw) as Partial<AudioPrefs>;
-    return {
-      ...AUDIO_PADRAO,
-      ...lido,
-      processamento: { ...AUDIO_PADRAO.processamento, ...(lido.processamento ?? {}) },
-    };
+    const processamento = { ...AUDIO_PADRAO.processamento, ...(lido.processamento ?? {}) };
+    // `ruido` era booleano antes de existir o nível "avançada": quem já tinha
+    // preferência salva não pode cair no padrão por causa da mudança de tipo
+    const bruto = (lido.processamento as { ruido?: unknown } | undefined)?.ruido;
+    if (typeof bruto === "boolean") processamento.ruido = bruto ? "padrao" : "off";
+    return { ...AUDIO_PADRAO, ...lido, processamento };
   } catch {
     return AUDIO_PADRAO;
   }
@@ -792,12 +806,21 @@ async function entrarNaSala(
   rerender();
 }
 
-/** Restrições de captura do microfone que valem para o SDK e para o teste. */
+/**
+ * Restrições de captura do microfone.
+ *
+ * A supressão nativa e a avançada são **excludentes**: encadeadas, a nativa
+ * volta a comprimir o que a rede neural já limpou e a voz sai metálica. Por
+ * isso `noiseSuppression` só vai ligada no nível "padrão".
+ */
 export function restricoesDeCaptura(audio: AudioPrefs) {
+  const nivel = audio.processamento.ruido;
   return {
     echoCancellation: audio.processamento.eco,
-    noiseSuppression: audio.processamento.ruido,
+    noiseSuppression: nivel === "padrao",
     autoGainControl: audio.processamento.ganho,
+    // o SDK publica a saída do processador no lugar do microfone cru
+    processor: nivel === "avancada" ? supressorDeRuido() : undefined,
   };
 }
 

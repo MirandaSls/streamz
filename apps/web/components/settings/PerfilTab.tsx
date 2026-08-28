@@ -141,6 +141,20 @@ export default function PerfilTab() {
     }
   }
 
+  /**
+   * Todo arquivo escolhido passa antes pelo ajuste de enquadramento: o que sobe
+   * é o recorte, não o original. Cancelar ali não envia nada.
+   */
+  async function escolherFoto(file: File) {
+    const recortada = await ui.recortarImagem(file, "avatar");
+    if (recortada) await enviarFoto(recortada);
+  }
+
+  async function escolherBanner(file: File) {
+    const recortado = await ui.recortarImagem(file, "banner");
+    if (recortado) await enviarBanner(recortado);
+  }
+
   // a foto vive na sessão (`useAuth`), não no perfil carregado aqui: trocar já
   // atualiza a prévia ao lado e toda tela que mostra o avatar
   async function enviarFoto(file: File) {
@@ -178,7 +192,7 @@ export default function PerfilTab() {
             hidden
             onChange={(e) => {
               const f = e.target.files?.[0];
-              if (f) void enviarFoto(f);
+              if (f) void escolherFoto(f);
               e.target.value = "";
             }}
           />
@@ -218,7 +232,7 @@ export default function PerfilTab() {
             hidden
             onChange={(e) => {
               const f = e.target.files?.[0];
-              if (f) void enviarBanner(f);
+              if (f) void escolherBanner(f);
               e.target.value = "";
             }}
           />

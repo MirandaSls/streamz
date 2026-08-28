@@ -51,6 +51,9 @@ packages/shared/src/*.js.map
 # Next auto-gerado
 apps/web/next-env.d.ts
 
+# supressor de ruído copiado do node_modules pelo predev/prebuild
+apps/web/public/supressor/
+
 # Postgres embutido (pnpm db:embedded)
 .pgdata/
 

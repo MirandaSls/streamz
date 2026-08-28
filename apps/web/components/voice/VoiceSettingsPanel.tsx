@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Keyboard, Mic, Video } from "lucide-react";
 import { pttRotulo } from "@/stores/ptt-core";
-import { useVoice } from "@/stores/voice";
+import { useVoice, type NivelDeRuido } from "@/stores/voice";
 import { useVoiceDevices } from "@/stores/voiceDevices";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 
@@ -196,9 +196,8 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
           ligado={audio.processamento.eco}
           onChange={(eco) => setAudioPref({ processamento: { ...audio.processamento, eco } })}
         />
-        <Chave
-          rotulo="Redução de ruído"
-          ligado={audio.processamento.ruido}
+        <NivelDeRuidoControle
+          valor={audio.processamento.ruido}
           onChange={(ruido) => setAudioPref({ processamento: { ...audio.processamento, ruido } })}
         />
         <Chave
@@ -257,7 +256,9 @@ function useNivelDoMicrofone(ativo: boolean, deviceId: string | null) {
           audio: {
             deviceId: deviceId ? { exact: deviceId } : undefined,
             echoCancellation: processamento.eco,
-            noiseSuppression: processamento.ruido,
+            // o teste ouve a captura do navegador; a supressão avançada
+            // acontece depois, no processador da faixa publicada
+            noiseSuppression: processamento.ruido === "padrao",
             autoGainControl: processamento.ganho,
           },
         });
@@ -416,6 +417,51 @@ function Radio({
       />
       {rotulo}
     </label>
+  );
+}
+
+/**
+ * Nível de redução de ruído.
+ *
+ * Três opções em vez de uma chave porque as duas supressões são coisas
+ * diferentes: a "Padrão" é a do navegador, que sempre existiu aqui, e a
+ * "Avançada" é uma rede neural rodando no cliente. Quem tem máquina modesta
+ * precisa poder ficar na primeira, e quem usa microfone bom precisa poder
+ * desligar as duas.
+ */
+function NivelDeRuidoControle({
+  valor,
+  onChange,
+}: {
+  valor: NivelDeRuido;
+  onChange: (nivel: NivelDeRuido) => void;
+}) {
+  const opcoes: { valor: NivelDeRuido; rotulo: string; ajuda: string }[] = [
+    { valor: "off", rotulo: "Desligada", ajuda: "microfone cru" },
+    { valor: "padrao", rotulo: "Padrão", ajuda: "do navegador" },
+    { valor: "avancada", rotulo: "Avançada", ajuda: "rede neural, usa mais CPU" },
+  ];
+  return (
+    <div className="py-1">
+      <p className="pb-1.5 text-sm text-txt-normal">Redução de ruído</p>
+      <div role="radiogroup" aria-label="Redução de ruído" className="flex flex-col gap-0.5">
+        {opcoes.map((o) => (
+          <button
+            key={o.valor}
+            type="button"
+            role="radio"
+            aria-checked={valor === o.valor}
+            onClick={() => onChange(o.valor)}
+            className={`flex items-center justify-between rounded-[3px] px-2 py-1.5 text-left text-sm transition ${
+              valor === o.valor ? "bg-sel text-txt-primary" : "text-txt-normal hover:bg-hov"
+            }`}
+          >
+            <span className="font-medium">{o.rotulo}</span>
+            <span className="text-xs text-txt-muted">{o.ajuda}</span>
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

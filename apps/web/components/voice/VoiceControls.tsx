@@ -1,7 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Maximize, Minimize, MoreHorizontal, PhoneOff, Settings, Video, VideoOff } from "lucide-react";
+import {
+  AudioLines,
+  Maximize,
+  Minimize,
+  MoreHorizontal,
+  PhoneOff,
+  Settings,
+  Video,
+  VideoOff,
+} from "lucide-react";
 import Tooltip from "@/components/ui/Tooltip";
 import ScreenShareButton from "@/components/voice/ScreenShareButton";
 import VoiceSettingsPanel from "@/components/voice/VoiceSettingsPanel";
@@ -82,6 +91,9 @@ export default function VoiceControls({
 
   const camOn = useVoice((s) => s.camOn);
   const toggleCam = useVoice((s) => s.toggleCam);
+  const processamento = useVoice((s) => s.audio.processamento);
+  const setAudioPref = useVoice((s) => s.setAudioPref);
+  const ruidoAvancado = processamento.ruido === "avancada";
 
   useEffect(() => {
     if (!mais) return;
@@ -160,6 +172,24 @@ export default function VoiceControls({
           </div>
         )}
       </div>
+
+      {/* O botão alterna entre a supressão avançada e a **padrão**, nunca para
+          "desligada": um clique de barra que remove toda a redução de ruído sem
+          dizer nada é armadilha. Desligar de vez é escolha consciente, e mora
+          nas configurações. Trocar aqui republica o microfone na hora (ver
+          `setAudioPref`), então o efeito é imediato no meio da conversa. */}
+      <Controle
+        label={ruidoAvancado ? "Supressão de ruído avançada (ligada)" : "Supressão de ruído avançada"}
+        tom={ruidoAvancado ? "ativo" : "neutro"}
+        pressionado={ruidoAvancado}
+        onClick={() =>
+          setAudioPref({
+            processamento: { ...processamento, ruido: ruidoAvancado ? "padrao" : "avancada" },
+          })
+        }
+      >
+        <AudioLines size={20} />
+      </Controle>
 
       {/* a folga maior é o que separa "ajustar a call" de "sair dela" */}
       <span aria-hidden="true" className="w-4" />
