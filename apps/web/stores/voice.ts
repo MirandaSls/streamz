@@ -102,6 +102,8 @@ interface VoiceStoreState {
 
   loadGuild: (guildId: string) => Promise<void>;
   applyState: (evento: VoiceStateEvent) => void;
+  /** perfil trocou (`user.updated`): atualiza o retrato dentro dos estados. */
+  aplicarPerfil: (user: PublicUser) => void;
   /** Estados de um canal, ordenados por nome (para a barra lateral). */
   statesOf: (channelId: string) => VoiceStateEvent[];
 
@@ -299,6 +301,34 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         get().dispatchCall({ type: "connected", channelId: evento.channelId });
       }
     },
+
+    /**
+     * O `user` dentro de `VoiceStateEvent` é o retrato de quem a pessoa era
+     * quando entrou na chamada — o servidor só reemite esse evento quando
+     * alguém entra, sai ou muda mudo/vídeo. Trocar a foto ou o nome no meio da
+     * chamada não mexia em nada aqui, e por isso a mudança só aparecia depois
+     * de sair e voltar.
+     *
+     * Reescrever a lista é barato porque ela é pequena por definição (quem está
+     * numa chamada), ao contrário de `members`/`messages` — que continuam
+     * resolvendo pelo overlay de `usePresence` na hora de desenhar.
+     */
+    aplicarPerfil: (user) =>
+      set((s) => {
+        let mudou = false;
+        const states: Record<string, VoiceStateEvent[]> = {};
+        for (const [canal, lista] of Object.entries(s.states)) {
+          if (!lista.some((e) => e.user.id === user.id)) {
+            states[canal] = lista;
+            continue;
+          }
+          mudou = true;
+          states[canal] = lista.map((e) => (e.user.id === user.id ? { ...e, user } : e));
+        }
+        // sem `mudou`, um `user.updated` de quem não está em chamada nenhuma
+        // trocaria a referência de `states` e re-renderizaria toda a grade
+        return mudou ? { states } : s;
+      }),
 
     statesOf: (channelId) =>
       (get().states[channelId] ?? [])
