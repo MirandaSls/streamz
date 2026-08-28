@@ -73,6 +73,13 @@ export default function ContaTab() {
     };
   }, [meuId]);
 
+  // mesmo caminho da aba "Perfil": escolher o arquivo abre o enquadramento, e
+  // só o recorte sobe
+  async function escolherAvatar(file: File) {
+    const recortado = await ui.recortarImagem(file, "avatar");
+    if (recortado) await uploadAvatar(recortado);
+  }
+
   async function uploadAvatar(file: File) {
     setUploading(true);
     try {
@@ -109,7 +116,7 @@ export default function ContaTab() {
                     hidden
                     onChange={(e) => {
                       const f = e.target.files?.[0];
-                      if (f) void uploadAvatar(f);
+                      if (f) void escolherAvatar(f);
                       e.target.value = "";
                     }}
                   />
