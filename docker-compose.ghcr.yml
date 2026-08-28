@@ -1,0 +1,25 @@
+# Override que troca "buildar aqui" por "puxar a imagem que o CI publicou".
+#
+#   docker compose -f docker-compose.yml -f docker-compose.traefik.yml \
+#     -f docker-compose.ghcr.yml --profile livekit pull api web
+#
+# Por que existe: o build da web (Next) leva minutos e disputa CPU com o
+# LiveKit, que tem `cpuset` reservado justamente porque jitter em SFU se ouve.
+# Com a imagem pronta, o deploy vira `pull` + restart — segundos, sem competir.
+#
+# `build: !reset null` apaga o bloco `build` que vem do docker-compose.yml. Sem
+# isso o compose ainda enxergaria um contexto de build e tentaria construir a
+# imagem que já existe no registro.
+#
+# STREAMZ_TAG é a tag da imagem (`sha-<7 primeiros do commit>`); sem ela cai em
+# `latest`, que é o que o `up -d` manual usa. Voltar versão = exportar a tag
+# antiga e rodar o mesmo comando.
+
+services:
+  api:
+    build: !reset null
+    image: ghcr.io/mirandasls/streamz-api:${STREAMZ_TAG:-latest}
+
+  web:
+    build: !reset null
+    image: ghcr.io/mirandasls/streamz-web:${STREAMZ_TAG:-latest}

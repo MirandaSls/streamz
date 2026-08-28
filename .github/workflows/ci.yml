@@ -1,5 +1,7 @@
-# CI do monorepo. Um job faz a verificação inteira (é rápida e sequencial por
-# dependência: shared → api/web); outro só prova que as imagens ainda buildam.
+# CI do monorepo e, no main, o caminho até produção. Um job faz a verificação
+# inteira (é rápida e sequencial por dependência: shared → api/web); o segundo
+# builda as imagens — e, só no main, publica no GHCR; o terceiro chama o
+# deploy.yml com a tag recém-publicada.
 name: CI
 
 on:
@@ -9,9 +11,11 @@ on:
 
 # Push novo na mesma branch cancela a execução anterior — não adianta gastar
 # runner verificando um commit que já foi substituído.
+# ...menos no main, onde a execução carrega um deploy junto: cancelar no meio
+# do `up -d` deixaria o stack em estado indefinido.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   verificar:
@@ -68,27 +72,73 @@ jobs:
     name: build das imagens
     runs-on: ubuntu-latest
     needs: verificar
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.destino.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
 
-      # Só build, sem push: aqui não há registry configurado. O ganho é pegar
-      # cedo o Dockerfile que quebrou (COPY de caminho que sumiu, dependência
-      # nativa que não compila no Alpine).
+      # O GHCR exige nome de imagem em minúsculas e o dono aqui é "MirandaSls":
+      # sem o `tr`, o push morre em "invalid reference format".
+      - name: Definir tag e destino
+        id: destino
+        run: |
+          echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "repo=ghcr.io/$(tr '[:upper:]' '[:lower:]' <<<'${{ github.repository_owner }}')" >> "$GITHUB_OUTPUT"
+
+      # Publicar só do main. Em branch e PR o build segue valendo pelo que
+      # sempre valeu — provar que o Dockerfile não quebrou — sem sujar o
+      # registro com imagem que ninguém vai puxar.
+      - name: Login no GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Imagem da API
         uses: docker/build-push-action@v6
         with:
           context: .
           file: apps/api/Dockerfile
-          push: false
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: |
+            ${{ steps.destino.outputs.repo }}/streamz-api:${{ steps.destino.outputs.tag }}
+            ${{ steps.destino.outputs.repo }}/streamz-api:latest
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
 
+      # NEXT_PUBLIC_* é embutida no bundle em tempo de build. Ao tirar o build
+      # do servidor, quem passa a mandar nesses valores são as *variables* do
+      # repositório — o .env da máquina não é lido aqui. Mudou domínio? Mude a
+      # variable e rode o deploy de novo; restart não adianta.
       - name: Imagem da web
         uses: docker/build-push-action@v6
         with:
           context: .
           file: apps/web/Dockerfile
-          push: false
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
+            NEXT_PUBLIC_WS_URL=${{ vars.NEXT_PUBLIC_WS_URL }}
+            NEXT_PUBLIC_LIVEKIT_URL=${{ vars.NEXT_PUBLIC_LIVEKIT_URL }}
+          tags: |
+            ${{ steps.destino.outputs.repo }}/streamz-web:${{ steps.destino.outputs.tag }}
+            ${{ steps.destino.outputs.repo }}/streamz-web:latest
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
+
+  # O deploy é um workflow à parte (deploy.yml) para poder ser chamado à mão
+  # com outra tag — é assim que se volta versão.
+  deploy:
+    name: deploy em produção
+    needs: [verificar, docker]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      tag: ${{ needs.docker.outputs.tag }}
+    secrets: inherit

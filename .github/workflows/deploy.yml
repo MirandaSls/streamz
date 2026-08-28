@@ -1,0 +1,61 @@
+# Deploy em produção. Não tem gatilho próprio de push: quem manda é o CI, e só
+# depois de verde (ver o job `deploy` em ci.yml).
+name: Deploy
+
+on:
+  # chamado pelo ci.yml quando o main passa
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+  # e à mão, que é como se volta versão: informe a tag antiga
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "tag da imagem — latest ou sha-<7 primeiros do commit>"
+        required: true
+        default: latest
+        type: string
+
+# Um deploy por vez. `cancel-in-progress: false` de propósito: cancelar um
+# deploy no meio do `up -d` deixa o stack em estado indefinido — o segundo
+# espera a vez.
+concurrency:
+  group: deploy-producao
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    name: produção
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # o servidor puxa do GHCR com o token DESTE job, que morre junto com ele;
+      # por isso não existe credencial de registro guardada na máquina
+      packages: read
+    steps:
+      - name: Preparar chave e known_hosts
+        env:
+          CHAVE: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$CHAVE" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$HOSTS" > ~/.ssh/known_hosts && chmod 600 ~/.ssh/known_hosts
+
+      # A chave do servidor está fixada em DEPLOY_KNOWN_HOSTS: sem isso o
+      # `StrictHostKeyChecking` teria de ser desligado, e aí qualquer coisa que
+      # respondesse naquele IP receberia o token do GHCR.
+      - name: Reimplantar
+        env:
+          TAG: ${{ inputs.tag }}
+          USUARIO: ${{ github.actor }}
+          TOKEN: ${{ github.token }}
+          PORTA: ${{ secrets.DEPLOY_PORT }}
+          DESTINO: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+        run: |
+          printf '%s\n%s\n' "$USUARIO" "$TOKEN" \
+            | ssh -i ~/.ssh/deploy -p "$PORTA" \
+                  -o BatchMode=yes -o StrictHostKeyChecking=yes \
+                  "$DESTINO" "$TAG"

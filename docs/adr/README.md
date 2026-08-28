@@ -14,6 +14,7 @@ registra **por que** e o que foi descartado no caminho.
 | [0004](0004-identidade-visual-volt-lime.md)  | Identidade visual própria (Volt Lime)  | Aceita   | 2026-08-26 |
 | [0005](0005-self-host-do-livekit.md)         | Self-host do LiveKit (público brasileiro) | Aceita   | 2026-08-27 |
 | [0006](0006-giphy-como-provedor-de-gif.md)   | Giphy como provedor de busca de GIF   | Aceita   | 2026-08-28 |
+| [0007](0007-cd-por-ghcr-e-ssh-travado.md)   | CD por GHCR e SSH de comando forçado  | Aceita   | 2026-08-28 |
 
 ## Como escrever uma
 

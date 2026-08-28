@@ -57,8 +57,17 @@ docker build -f apps/web/Dockerfile -t streamz-web .   # NEXT_PUBLIC_* via --bui
 
 O CI (`.github/workflows/ci.yml`) roda exatamente esta sequência — `prisma
 generate` → build do `shared` → typecheck dos três pacotes → testes → `next
-build` — e num job à parte builda as duas imagens sem publicar. Reproduza-a
-localmente antes de abrir PR.
+build` — e num job à parte builda as duas imagens. Reproduza-a localmente antes
+de abrir PR.
+
+**No `main`, CI verde vai para produção sozinho** (ADR-0007): as imagens são
+publicadas em `ghcr.io/mirandasls/streamz-{api,web}:sha-<7 do commit>` e o
+`deploy.yml` manda o servidor puxá-las por SSH. Voltar versão é rodar esse mesmo
+workflow à mão com a tag antiga — nada é rebuildado. Duas consequências para
+quem mexe no código: `NEXT_PUBLIC_*` é embutida no build da imagem e agora mora
+nas *variables* do repositório (mudar o `.env` do servidor não tem efeito), e o
+servidor avança com `--ff-only`, então editar arquivo à mão lá trava o próximo
+deploy em vez de ser sobrescrito.
 
 Testes unitários (vitest) cobrem só lógica pura (`pnpm --filter @streamz/api test`,
 `pnpm --filter @streamz/web test`). **Verificação = typecheck limpo nos três
