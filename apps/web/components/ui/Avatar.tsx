@@ -4,6 +4,7 @@ import { useId } from "react";
 import { Users } from "lucide-react";
 import type { UserStatus } from "@streamz/shared";
 import { corDoAvatar } from "@/components/ui/avatar-cores";
+import { usePresence } from "@/stores/presence";
 
 /** Cor de fundo do status — mantida para quem desenha a bolinha à mão. */
 export const STATUS_COLOR: Record<UserStatus, string> = {
@@ -73,9 +74,20 @@ const SIZE = {
 
 /**
  * Avatar circular com a foto do usuário — ou as iniciais sobre uma cor, quando
- * não há foto — e, opcionalmente,
- * a bolinha de status com a borda na cor da superfície de fundo — é a borda que
- * faz a bolinha parecer "recortada" do avatar, como no Discord.
+ * não há foto — e, opcionalmente, a bolinha de status com a borda na cor da
+ * superfície de fundo: é a borda que faz a bolinha parecer "recortada" do
+ * avatar, como no Discord.
+ *
+ * **A foto é resolvida aqui pelo overlay ao vivo de `usePresence`**, e não pelo
+ * `user` que o chamador passou. Quase todo `user` na tela é um retrato: o autor
+ * gravado na mensagem, o membro carregado ao abrir o servidor, o participante
+ * capturado quando entrou na chamada. Quem troca a foto emite `user.updated`,
+ * mas esses retratos não se reescrevem sozinhos — e sem isto a foto nova só
+ * aparecia depois de um F5 (ou de sair da chamada e voltar).
+ *
+ * Fazer a resolução no componente, e não em cada chamador, é o que garante que
+ * nenhuma tela fique de fora: são mais de trinta pontos que desenham avatar.
+ * O `username` acompanha pelo mesmo motivo — são as iniciais do fallback.
  */
 export default function Avatar({
   user,
@@ -92,12 +104,21 @@ export default function Avatar({
   className?: string;
 }) {
   const s = SIZE[size];
+  // só o perfil deste usuário: o seletor devolve a mesma referência enquanto
+  // ninguém troca a foto dele, então uma timeline com 100 avatares não
+  // re-renderiza porque um estranho mudou a dele
+  const vivo = usePresence((estado) => estado.profiles[user.id]);
+  // o perfil ao vivo substitui o retrato INTEIRO, não campo a campo: quem
+  // removeu a foto tem `avatarUrl: null`, e um `??` aqui leria isso como
+  // "não sei" e restauraria a foto que acabou de ser apagada
+  const { avatarUrl, username } = vivo ?? user;
+
   return (
     <span className={`relative inline-block shrink-0 ${className}`}>
-      {user.avatarUrl ? (
+      {avatarUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={user.avatarUrl}
+          src={avatarUrl}
           alt=""
           className={`${s.box} rounded-full object-cover`}
         />
@@ -107,7 +128,7 @@ export default function Avatar({
           style={{ backgroundColor: hashColor(user.id) }}
           className={`${s.box} grid place-items-center rounded-full font-semibold text-white`}
         >
-          {user.username.slice(0, 2).toUpperCase()}
+          {username.slice(0, 2).toUpperCase()}
         </span>
       )}
       {status && (
