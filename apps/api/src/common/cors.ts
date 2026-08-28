@@ -13,17 +13,33 @@ type OriginCallback = (err: Error | null, allow?: boolean) => void;
 
 const DEFAULT_ORIGIN = "http://localhost:3000";
 
-/** Origens permitidas (`CORS_ORIGIN`, separadas por vírgula). */
+/**
+ * Origens do app de desktop, sempre permitidas.
+ *
+ * Não são configuração: são constantes do Tauri 2. O WebView2 (Windows) serve o
+ * app de `http://tauri.localhost` e o WebKit (macOS/Linux) de
+ * `tauri://localhost` — e, ao contrário do que este arquivo dizia, o webview
+ * **manda** o header `Origin`. Deixá-las fora do padrão significa que todo
+ * instalador novo esbarra em CORS no login, com o erro do lado do servidor e
+ * uma tela de "não foi possível entrar" do lado de quem instalou.
+ *
+ * Não afrouxa nada para o browser: nenhuma página web consegue forjar estas
+ * origens.
+ */
+const ORIGENS_DO_DESKTOP = ["http://tauri.localhost", "tauri://localhost"];
+
+/** Origens permitidas: as do `CORS_ORIGIN` mais as do app de desktop. */
 export function allowedOrigins(): string[] {
-  return (process.env.CORS_ORIGIN ?? DEFAULT_ORIGIN)
+  const configuradas = (process.env.CORS_ORIGIN ?? DEFAULT_ORIGIN)
     .split(",")
     .map((o) => o.trim())
     .filter(Boolean);
+  return [...new Set([...configuradas, ...ORIGENS_DO_DESKTOP])];
 }
 
 /**
- * Requisição sem `Origin` (curl, app desktop, health check) passa: CORS existe
- * para conter o browser, e ali o header é sempre enviado.
+ * Requisição sem `Origin` (curl, health check) passa: CORS existe para conter o
+ * browser, e ali o header é sempre enviado.
  */
 export function checkOrigin(origin: string | undefined, cb: OriginCallback) {
   if (!origin || allowedOrigins().includes(origin)) return cb(null, true);
