@@ -68,6 +68,16 @@ jobs:
         env:
           NEXT_TELEMETRY_DISABLED: "1"
 
+      # O app de desktop empacota a web como HTML estático, e uma rota dinâmica
+      # sem `generateStaticParams` derruba esse build — foi exatamente o que
+      # aconteceu e só apareceu ao tentar gerar o instalador. Aqui custa um
+      # minuto no runner que já está de pé, em vez de um runner Windows.
+      - name: Export do desktop (prova que o instalador ainda builda)
+        run: pnpm --filter @streamz/web build
+        env:
+          NEXT_OUTPUT: export
+          NEXT_TELEMETRY_DISABLED: "1"
+
   docker:
     name: build das imagens
     runs-on: ubuntu-latest

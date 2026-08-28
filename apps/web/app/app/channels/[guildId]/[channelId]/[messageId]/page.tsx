@@ -1,38 +1,24 @@
-"use client";
-
-import { useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { goToMessage } from "@/stores/messages-navigate";
+import LinkDeMensagem from "./LinkDeMensagem";
 
 /**
- * Destino do "copiar link da mensagem" (`/app/channels/:guildId/:channelId/:messageId`,
- * com `@me` no lugar do servidor nas conversas diretas).
+ * O app de desktop empacota a web como HTML estático (`output: "export"`), e o
+ * export exige saber de antemão quais caminhos existem. Para esta rota a
+ * resposta é **nenhum**: link de mensagem é coisa de navegador — num app
+ * instalado não há URL para colar, e o link abre o navegador, não o app.
  *
- * A rota não desenha nada: manda para `/app` — que é o app inteiro — e pede o
- * pulo até a mensagem. O `replace` evita que voltar no navegador repita o pulo.
+ * A lista vazia faz o export ignorar a rota; no build do servidor
+ * (`standalone`) o `dynamicParams` padrão continua gerando sob demanda, então
+ * a web não muda em nada.
+ *
+ * Sem isto o `tauri build` morre em "is missing generateStaticParams()" — foi
+ * o que quebrou o instalador quando esta rota nasceu, sem ninguém notar,
+ * porque nada no CI provava que o export ainda era possível. Agora prova (ver
+ * o passo "Export do desktop" em ci.yml).
  */
-export default function MessageLinkPage() {
-  const router = useRouter();
-  const params = useParams<{ guildId: string; channelId: string; messageId: string }>();
+export function generateStaticParams() {
+  return [];
+}
 
-  useEffect(() => {
-    const { guildId, channelId, messageId } = params;
-    if (!channelId || !messageId) return;
-    router.replace("/app");
-    // o app precisa estar montado (stores carregadas) antes do pulo
-    const timer = setTimeout(() => {
-      void goToMessage({
-        guildId: guildId === "@me" ? null : guildId,
-        channelId,
-        messageId,
-      });
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [params, router]);
-
-  return (
-    <main className="grid h-screen place-items-center bg-chat text-txt-muted">
-      Abrindo a mensagem…
-    </main>
-  );
+export default function Page() {
+  return <LinkDeMensagem />;
 }
