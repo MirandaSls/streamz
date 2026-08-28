@@ -1,22 +1,19 @@
 import LinkDeMensagem from "./LinkDeMensagem";
 
 /**
- * O app de desktop empacota a web como HTML estático (`output: "export"`), e o
- * export exige saber de antemão quais caminhos existem. Para esta rota a
- * resposta é **nenhum**: link de mensagem é coisa de navegador — num app
- * instalado não há URL para colar, e o link abre o navegador, não o app.
+ * Link de mensagem é coisa de navegador, como o convite: num app instalado não há URL para colar, e clicar num link desses abre o navegador.
  *
- * A lista vazia faz o export ignorar a rota; no build do servidor
- * (`standalone`) o `dynamicParams` padrão continua gerando sob demanda, então
- * a web não muda em nada.
+ * O parâmetro devolvido é um descarte. `output: "export"` exige que toda rota
+ * dinâmica diga quais caminhos existem, e **lista vazia ele lê como "não
+ * implementou"** — o build morre em "is missing generateStaticParams()". Um
+ * item gera uma página de lixo que o desktop nunca visita, e é o preço de o
+ * export existir.
  *
- * Sem isto o `tauri build` morre em "is missing generateStaticParams()" — foi
- * o que quebrou o instalador quando esta rota nasceu, sem ninguém notar,
- * porque nada no CI provava que o export ainda era possível. Agora prova (ver
- * o passo "Export do desktop" em ci.yml).
+ * Na web nada muda: o build do servidor mantém o `dynamicParams` padrão e
+ * continua atendendo qualquer link de mensagem sob demanda.
  */
 export function generateStaticParams() {
-  return [];
+  return [{ guildId: "_", channelId: "_", messageId: "_" }];
 }
 
 export default function Page() {
