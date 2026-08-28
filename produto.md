@@ -383,7 +383,10 @@ modera sua comunidade.
   tecla apertada e continua aberto por 200 ms depois de soltar, para a última
   sílaba não sumir. A aba tem ainda volumes, teste de microfone com medidor e
   prévia da câmera — toda trilha aberta ali é fechada ao sair da tela.
-- **Compartilhar tela:** com preset de qualidade (720p30, 1080p30, 1080p60).
+- **Compartilhar tela:** resolução (720p, 1080p, 1440p) e taxa de quadros (30 ou
+  60 fps) escolhidas no seletor, que mostra o quanto cada combinação consome de
+  internet de subida. O padrão é 1440p30: ler código na tela de alguém depende
+  de resolução, não de fluidez.
 - **[corte MVP]** O token ignora o modo somente-leitura: quem vê o canal de voz
   fala nele. O estado de voz vive **em memória do processo** — com mais de uma
   instância da API cada uma teria a sua visão da sala.

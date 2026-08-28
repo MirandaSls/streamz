@@ -54,57 +54,32 @@ e o resto do app segue igual.
       [developers.google.com/tenor](https://developers.google.com/tenor/guides/quickstart)
       e preencher `TENOR_API_KEY` no `.env`.
 - _Emojis personalizados e figurinhas, ao contrário, **dependem do R2** (item 1b):
-  a imagem vai para o bucket; sem credencial o upload responde 503 com o motivo._
-## 1d. SMTP (opcional — só bloqueia o e-mail *de verdade*)
-Criar conta **não envia e-mail** (a confirmação é a pedido, na aba Conta). A
-confirmação e o "esqueci a senha" funcionam **sem configurar nada** em dev: o
-provedor `console` do `MailService` imprime assunto e link no log da API, e o fluxo
-inteiro (pedir o link → clicar → verificar) roda copiando o link do terminal.
-
-- [ ] Para enviar de verdade, preencher no `.env`:
-      `SMTP_URL="smtp://usuario:senha@host:587"` e `SMTP_FROM`. Serve qualquer
-      provedor SMTP (Resend, Postmark, SES, Mailtrap para teste).
-- [ ] `WEB_PUBLIC_URL` precisa apontar para a **web** (não para a API): é a base dos
-      links do e-mail. Padrão `http://localhost:3000`.
-
-> Em produção (`NODE_ENV=production`) a ausência de `SMTP_URL` faz as rotas que
-> dependem de envio responderem `503`, como R2 e LiveKit. Em dev, não — senão o
-> recurso ficaria impossível de exercitar.
+  a imagem vai para o bucket; sem credencial o upload responde 503 com o motivo.
 
 ## 2. LiveKit (bloqueia a voz — Dia 4)
 O código de voz é **agnóstico de provedor** (só usa `LIVEKIT_URL/KEY/SECRET`, e
 `VoiceService.assinarToken` devolve a URL junto do token). Sem as três, a rota
 `/voice/token` responde `503` e o resto do app funciona.
 
-**Escolhido: LiveKit Cloud** — só o Cloud faz *cascading* (a mesma sala vive em
-vários edges e cada participante entra no mais próximo). O LiveKit aberto
-distribui *salas* entre nós, mas cada sala fica num nó só: numa chamada com
-gente em continentes diferentes, alguém sempre paga a travessia inteira.
+**Escolhido: self-host** ([ADR-0005](docs/adr/0005-self-host-do-livekit.md),
+que substitui a ADR-0003). Com o público concentrado no Brasil e o servidor em
+São Paulo, o *cascading* do Cloud — a única capacidade que o build aberto não
+tem — deixa de comprar qualidade. **Não há chave de terceiro para pedir:** o
+secret é gerado com `openssl rand -hex 32`.
 
-- [ ] Criar conta e um *project* em [cloud.livekit.io](https://cloud.livekit.io).
-- [ ] Settings → Keys: copiar **URL** (`wss://<project>.livekit.cloud`),
-      **API Key** e **API Secret** para `LIVEKIT_URL`, `LIVEKIT_API_KEY` e
-      `LIVEKIT_API_SECRET` no `.env` (o bloco já está pronto e vazio lá).
-- [ ] Conferir a região do project no dashboard (ela decide o edge de entrada).
-- [x] CSP do desktop já libera `https://*.livekit.cloud` e `wss://*.livekit.cloud`
-      (`apps/desktop/src-tauri/tauri.conf.json`) — nada a fazer.
+- [ ] Subir o LiveKit em dev (`pnpm livekit:up`) — **depende do Docker**, que não
+      roda nesta máquina (WSL sem distro), não de credencial.
+- [ ] Produção: `docs/selfhost-livekit.md` (DNS, UDP 7882, Caddy, `use_external_ip`).
+- [ ] **CSP do desktop só libera localhost e `*.livekit.cloud`**
+      (`apps/desktop/src-tauri/tauri.conf.json`, `connect-src`). Com self-host em
+      domínio próprio, o app desktop bloqueia a conexão **em silêncio** — e o
+      mesmo vale para a API de produção (`connect-src`) e para os anexos
+      (`img-src`, hoje preso em `http://localhost:3333`). Corrigir exige só saber
+      os domínios finais; não depende de nenhuma chave.
 
 `NEXT_PUBLIC_LIVEKIT_URL` **não é lida por nenhum arquivo da web**: o cliente
 conecta na URL que vem no `VoiceTokenResponse`. Ela sobrevive só como build-arg
 do `apps/web/Dockerfile` e do `docker-compose.yml`; não precisa ser preenchida.
-
-**Alternativa — self-host via Docker (dev offline / teste sem conta):**
-- [x] Serviço `livekit` no `docker-compose.yml` (profile `livekit`) + modelo de
-      config em `livekit.example.yaml` + scripts `pnpm livekit:up` / `livekit:down`.
-- [ ] `cp livekit.example.yaml livekit.yaml` (ignorado pelo git — carrega o
-      secret real), `openssl rand -hex 32` e colar o valor nos **dois** lugares:
-      `keys: devkey: <secret>` no `livekit.yaml` e `LIVEKIT_API_SECRET` no `.env`.
-      Se não baterem, o servidor rejeita o token.
-- [ ] `pnpm livekit:up` e descomentar o bloco self-host do `.env`.
-- [ ] O `livekit.yaml` de exemplo é **de dev**: em produção precisaria de
-      `use_external_ip: true`, faixa UDP larga (50000–60000, hoje 61 portas),
-      TURN em TLS/443 e `network_mode: host` — publicar 10 mil portas UDP pelo
-      Docker sobe um `docker-proxy` por porta e derruba a máquina.
 
 ## 3. Rust / cargo (bloqueia o build do desktop — Dia 5)
 - [x] ~~Instalar via [rustup.rs](https://rustup.rs)~~ — feito em 2026-08-25
@@ -125,10 +100,6 @@ comentado — ele liga por ambiente (`TAURI_ENV_*`, que o Tauri injeta no
 (`next start`) continua funcionando. Motivo da escolha e alternativa descartada
 (carregar URL remota): `apps/desktop/README.md`.
 
-## 4. Segredos do `.env`
-- [ ] Trocar `JWT_SECRET` e `JWT_REFRESH_SECRET` por strings aleatórias longas
-      (ex.: `openssl rand -hex 32`).
-
 ## 5. Mais adiante (pós-MVP)
 - [ ] **Auto-update do desktop** — o `tauri-plugin-updater` foi **desligado**
       (estava apontando para `releases.streamz.dev`, que não existe, com `pubkey`
@@ -143,12 +114,7 @@ comentado — ele liga por ambiente (`TAURI_ENV_*`, que o Tauri injeta no
         `apps/desktop/README.md` (seção "Auto-update").
 - [ ] Assinatura de código do instalador Windows (Azure Trusted Signing) — remove
       o alerta do SmartScreen ao enviar o `.exe`.
-- [ ] Avaliar sair do LiveKit Cloud para **self-host regionalizado** (um nó por
-      região + região por servidor, como o Discord fazia) quando a conta de banda
-      justificar operar N regiões. `VoiceTokenResponse` já devolve `url` por
-      requisição, então isso é um mapa `região → {url,key,secret}` no
-      `VoiceService` — sem mexer em `packages/shared` nem no cliente.
-
+      
 ## 6. Backlog de escopo (próximos blocos)
 Ordem sugerida dos próximos blocos de features:
 
