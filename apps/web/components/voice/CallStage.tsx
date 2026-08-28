@@ -99,7 +99,11 @@ export default function CallStage({
           visivel ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
       >
-        <span className="w-24 shrink-0">
+        {/* Slots laterais iguais (`flex-1 basis-0`) em vez de 96px fixos: é o
+            que mantém o título de fato centralizado — os dois lados dividem a
+            sobra — sem espremer o selo "ao vivo", que precisa de ~230px e não
+            cabia nos 96. */}
+        <span className="flex min-w-0 flex-1 basis-0 items-start">
           <AoVivoIndicador />
         </span>
 
@@ -110,7 +114,7 @@ export default function CallStage({
           <span className="text-xs text-txt-muted">{subtitulo}</span>
         </span>
 
-        <span className="flex w-24 shrink-0 justify-end gap-1">
+        <span className="flex min-w-0 flex-1 basis-0 justify-end gap-1">
           {grupo && (
             <IconeDoPalco
               label="Adicionar pessoas"
@@ -129,7 +133,12 @@ export default function CallStage({
         </span>
       </div>
 
-      <div className="min-h-0 flex-1 px-4 pb-24 pt-14">
+      {/* Sem `pt-14`: o cabeçalho é flutuante (`absolute`) e se esconde sozinho
+          quando o mouse para — reservar altura para ele custava 56px da
+          transmissão para proteger uma faixa que nem sempre está na tela. O
+          `pb-24` fica: os controles também flutuam, mas embaixo mora a tira de
+          miniaturas, que precisa continuar clicável. */}
+      <div className="min-h-0 flex-1 px-4 pb-24">
         {chamando ? (
           <Chamando nome={destinatario ? displayNameOf(destinatario) : titulo} usuario={destinatario} />
         ) : status === "connecting" && conectadoAqui ? (

@@ -9,6 +9,16 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+import {
+  ALTURA_MIN,
+  PROPORCAO_PADRAO,
+  PROPORCAO_TRANSMISSAO,
+  alturaDoPalco,
+  proporcaoDaAlturaAntiga,
+  reservaDoChat,
+  tetoDoPalco,
+} from "@/components/voice/call-split-layout";
+import { useVoice } from "@/stores/voice";
 
 /**
  * Chamada em cima, conversa embaixo — a divisão do Discord quando voz e texto
@@ -22,70 +32,129 @@ import {
  * do uso, não a da chamada: quem assiste a uma transmissão quer o palco grande,
  * quem conversa quer o contrário, e essa escolha não muda a cada call.
  *
+ * **Tudo aqui é proporção da coluna, não pixel.** Antes eram três constantes
+ * absolutas, e o resultado é que a tela maior não dava mais palco: dava mais
+ * chat. Num notebook o palco ficava com 56% da coluna e num monitor de 27" com
+ * 34%, entregando à transmissão os mesmos poucos pixels nos dois. Os pixels que
+ * sobraram são só piso de segurança. É o mesmo princípio do `grid-layout.ts`:
+ * calcular a partir da área disponível em vez de tabelar breakpoints.
+ *
  * A tela cheia (ver `fullscreen.ts`) não tem nada a ver com esta divisão: o
  * elemento em tela cheia é promovido pelo compositor e ignora a altura daqui.
  */
 
-/** O palco nunca some de vez: menos que isso não cabe nem um rosto. */
-const ALTURA_MIN = 200;
-const ALTURA_PADRAO = 420;
-/** Reserva da conversa: sem ela o palco esmagaria o composer contra a timeline. */
-const RESERVA_CHAT = 220;
+/** Enquanto a coluna não foi medida (primeiro quadro, SSR): evita salto visível. */
+const ALTURA_ANTES_DE_MEDIR = 420;
 const PASSO_TECLADO = 24;
-const CHAVE_ALTURA = "streamz:altura-chamada";
 
-function alturaSalva(): number {
-  if (typeof window === "undefined") return ALTURA_PADRAO;
+/** Proporção 0–1 da coluna. */
+const CHAVE_PROPORCAO = "streamz:proporcao-chamada";
+/** Chave antiga, em PIXEL absoluto — migrada na primeira medição. */
+const CHAVE_ALTURA_ANTIGA = "streamz:altura-chamada";
+
+function lerProporcao(): number | null {
+  if (typeof window === "undefined") return null;
   try {
-    const n = Number(window.localStorage?.getItem(CHAVE_ALTURA));
-    return Number.isFinite(n) && n >= ALTURA_MIN ? n : ALTURA_PADRAO;
+    const n = Number(window.localStorage?.getItem(CHAVE_PROPORCAO));
+    return Number.isFinite(n) && n > 0 && n < 1 ? n : null;
   } catch {
-    return ALTURA_PADRAO;
+    return null;
   }
 }
 
-function guardarAltura(altura: number) {
+/** Lê e consome a altura em pixel da versão antiga, se houver. */
+function migrarAlturaAntiga(disponivel: number): number | null {
+  if (typeof window === "undefined") return null;
   try {
-    window.localStorage?.setItem(CHAVE_ALTURA, String(Math.round(altura)));
+    const bruto = window.localStorage?.getItem(CHAVE_ALTURA_ANTIGA);
+    if (!bruto) return null;
+    window.localStorage?.removeItem(CHAVE_ALTURA_ANTIGA);
+    return proporcaoDaAlturaAntiga(Number(bruto), disponivel);
   } catch {
-    // storage indisponível: a altura vale só nesta sessão
+    return null;
+  }
+}
+
+function guardarProporcao(proporcao: number) {
+  try {
+    window.localStorage?.setItem(CHAVE_PROPORCAO, proporcao.toFixed(4));
+  } catch {
+    // storage indisponível: a proporção vale só nesta sessão
   }
 }
 
 export default function CallSplit({ chamada, chat }: { chamada: ReactNode; chat: ReactNode }) {
   const raiz = useRef<HTMLDivElement>(null);
-  const [altura, setAltura] = useState(ALTURA_PADRAO);
+  /** Altura real da coluna; recalculada a cada mudança de tamanho, não só na montagem. */
+  const [disponivel, setDisponivel] = useState(0);
+  const [proporcao, setProporcao] = useState<number | null>(null);
 
-  // a altura guardada só existe no browser: ler no primeiro efeito evita que o
-  // HTML do servidor e o da hidratação discordem
-  useEffect(() => setAltura(alturaSalva()), []);
+  // alguém transmitindo pede palco maior — mas só decide a proporção INICIAL:
+  // quem já arrastou o divisor mandou, e ligar uma transmissão não pode
+  // desfazer a escolha da pessoa
+  const transmitindo = useVoice((s) => {
+    const id = s.channelId;
+    return !!id && (s.states[id] ?? []).some((e) => e.screen);
+  });
+  const transmitindoRef = useRef(transmitindo);
+  transmitindoRef.current = transmitindo;
 
-  /** Teto atual: o que sobra da coluna depois da reserva da conversa. */
-  const teto = useCallback(() => {
-    const disponivel = raiz.current?.clientHeight ?? 0;
-    return Math.max(ALTURA_MIN, disponivel - RESERVA_CHAT);
+  // a coluna muda de tamanho com a janela, com o abrir/fechar de painéis e no
+  // zoom do navegador: medir só na montagem era o que congelava o palco no
+  // tamanho da primeira renderização
+  useEffect(() => {
+    const el = raiz.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([entrada]) => setDisponivel(entrada.contentRect.height));
+    ro.observe(el);
+    setDisponivel(el.clientHeight);
+    return () => ro.disconnect();
+  }, []);
+
+  // a preferência só existe no browser: decidir depois da primeira medição
+  // evita que o HTML do servidor e o da hidratação discordem
+  useEffect(() => {
+    if (proporcao !== null || disponivel <= 0) return;
+    setProporcao(
+      lerProporcao() ??
+        migrarAlturaAntiga(disponivel) ??
+        (transmitindoRef.current ? PROPORCAO_TRANSMISSAO : PROPORCAO_PADRAO),
+    );
+  }, [disponivel, proporcao]);
+
+  const disponivelRef = useRef(disponivel);
+  disponivelRef.current = disponivel;
+
+  const altura =
+    disponivel > 0 && proporcao !== null
+      ? alturaDoPalco(proporcao, disponivel)
+      : ALTURA_ANTES_DE_MEDIR;
+
+  /** Grava a nova altura como fração da coluna — é isso que viaja entre telas. */
+  const aplicarAltura = useCallback((px: number, persistir: boolean) => {
+    const total = disponivelRef.current;
+    if (total <= 0) return;
+    const nova = alturaDoPalco(px / total, total) / total;
+    setProporcao(nova);
+    if (persistir) guardarProporcao(nova);
   }, []);
 
   const comecarArraste = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
       e.preventDefault();
       const topo = raiz.current?.getBoundingClientRect().top ?? 0;
-      const mover = (ev: PointerEvent) =>
-        setAltura(Math.min(teto(), Math.max(ALTURA_MIN, ev.clientY - topo)));
-      const soltar = () => {
+      const mover = (ev: PointerEvent) => aplicarAltura(ev.clientY - topo, false);
+      const soltar = (ev: PointerEvent) => {
         window.removeEventListener("pointermove", mover);
         window.removeEventListener("pointerup", soltar);
         document.body.style.cursor = "";
-        setAltura((a) => {
-          guardarAltura(a);
-          return a;
-        });
+        aplicarAltura(ev.clientY - topo, true);
       };
       document.body.style.cursor = "row-resize";
       window.addEventListener("pointermove", mover);
       window.addEventListener("pointerup", soltar);
     },
-    [teto],
+    [aplicarAltura],
   );
 
   const pelasTeclas = useCallback(
@@ -93,21 +162,18 @@ export default function CallSplit({ chamada, chat }: { chamada: ReactNode; chat:
       const delta = e.key === "ArrowUp" ? -PASSO_TECLADO : e.key === "ArrowDown" ? PASSO_TECLADO : 0;
       if (delta === 0) return;
       e.preventDefault();
-      setAltura((a) => {
-        const nova = Math.min(teto(), Math.max(ALTURA_MIN, a + delta));
-        guardarAltura(nova);
-        return nova;
-      });
+      aplicarAltura(altura + delta, true);
     },
-    [teto],
+    [altura, aplicarAltura],
   );
 
   return (
     <div ref={raiz} className="flex min-h-0 min-w-0 flex-1 flex-col bg-chat">
       <div
-        // o `maxHeight` em CSS é o que mantém a conversa visível quando a janela
-        // encolhe: sem ele a altura guardada de uma tela grande engoliria o chat
-        style={{ height: altura, maxHeight: `calc(100% - ${RESERVA_CHAT}px)` }}
+        // o `maxHeight` em CSS cobre o quadro entre a coluna encolher e o
+        // observador reagir: sem ele a altura de uma tela grande engoliria o
+        // chat por um instante
+        style={{ height: altura, maxHeight: `calc(100% - ${Math.round(reservaDoChat(disponivel || ALTURA_ANTES_DE_MEDIR))}px)` }}
         className="relative flex min-h-0 shrink-0 flex-col"
       >
         {chamada}
@@ -119,6 +185,7 @@ export default function CallSplit({ chamada, chat }: { chamada: ReactNode; chat:
         aria-label="Redimensionar a chamada"
         aria-valuenow={Math.round(altura)}
         aria-valuemin={ALTURA_MIN}
+        aria-valuemax={Math.round(tetoDoPalco(disponivel || ALTURA_ANTES_DE_MEDIR))}
         tabIndex={0}
         onPointerDown={comecarArraste}
         onKeyDown={pelasTeclas}

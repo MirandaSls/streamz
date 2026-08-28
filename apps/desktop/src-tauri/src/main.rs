@@ -8,6 +8,25 @@ use tauri::{
 };
 
 fn main() {
+    // A janela escondida na bandeja precisa continuar na chamada. O WebView2 é
+    // Chromium: com a janela oculta ele "backgrounda" o renderer e estrangula
+    // os timers, e aí o socket cai e a voz vai junto — exatamente o que a
+    // bandeja promete não fazer. Estes três argumentos desligam esse
+    // comportamento e precisam estar no ambiente ANTES de o webview subir.
+    //
+    // Só o WebView2 (Windows) lê esta variável. No WebKit (macOS/Linux) não há
+    // equivalente, e a rede de segurança é a do servidor: a carência de voz
+    // segura o usuário na sala e o cliente reentra ao voltar
+    // (VOICE_RECONNECT_GRACE_MS + `rejoinAposReconexao`).
+    if std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").is_err() {
+        std::env::set_var(
+            "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+            "--disable-background-timer-throttling \
+             --disable-renderer-backgrounding \
+             --disable-backgrounding-occluded-windows",
+        );
+    }
+
     tauri::Builder::default()
         // Notificações nativas (Tauri 2 → crate própria).
         .plugin(tauri_plugin_notification::init())
@@ -56,7 +75,10 @@ fn main() {
 
             Ok(())
         })
-        // Fechar a janela minimiza para a bandeja em vez de encerrar o app.
+        // Fechar a janela minimiza para a bandeja em vez de encerrar o app —
+        // e a chamada em curso continua, que é a promessa da bandeja. Ver os
+        // argumentos do WebView2 no `main`: sem eles a janela escondida seria
+        // congelada e a call cairia assim mesmo.
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 let _ = window.hide();

@@ -11,6 +11,12 @@ import type { VoiceFlags } from "@streamz/shared";
  */
 export interface VoiceMember extends VoiceFlags {
   userId: string;
+  /**
+   * Socket caiu e a carência está correndo. Fica **no estado**, e não só num
+   * mapa do gateway, para que quem abrir o servidor no meio da queda veja o
+   * participante esmaecido em vez de vê-lo aparecer do nada quando ele voltar.
+   */
+  reconnecting?: boolean;
 }
 
 export interface VoiceStateStore {
@@ -20,6 +26,12 @@ export interface VoiceStateStore {
   update(channelId: string, userId: string, flags: VoiceFlags): Promise<VoiceMember | null>;
   /** Sai da sala. Devolve true se realmente estava lá. */
   leave(channelId: string, userId: string): Promise<boolean>;
+  /** Liga/desliga o "reconectando". Devolve null se não estava na sala. */
+  marcarReconectando(
+    channelId: string,
+    userId: string,
+    reconnecting: boolean,
+  ): Promise<VoiceMember | null>;
   /** Membros de uma sala. */
   members(channelId: string): Promise<VoiceMember[]>;
   /** Membros de várias salas de uma vez (canais de um servidor). */
@@ -36,6 +48,8 @@ export class MemoryVoiceStateStore implements VoiceStateStore {
 
   async join(channelId: string, userId: string, flags: VoiceFlags) {
     const sala = this.salas.get(channelId) ?? new Map<string, VoiceMember>();
+    // sem `reconnecting`: reentrar na sala é voltar inteiro, e um join por cima
+    // de uma carência em curso tem de limpar a marca
     const membro: VoiceMember = { userId, ...flags };
     sala.set(userId, membro);
     this.salas.set(channelId, sala);
@@ -48,6 +62,14 @@ export class MemoryVoiceStateStore implements VoiceStateStore {
     const membro: VoiceMember = { userId, ...flags };
     sala.set(userId, membro);
     return membro;
+  }
+
+  async marcarReconectando(channelId: string, userId: string, reconnecting: boolean) {
+    const membro = this.salas.get(channelId)?.get(userId);
+    if (!membro) return null;
+    const atualizado: VoiceMember = { ...membro, reconnecting };
+    this.salas.get(channelId)!.set(userId, atualizado);
+    return atualizado;
   }
 
   async leave(channelId: string, userId: string) {
@@ -86,6 +108,15 @@ export class RedisVoiceStateStore implements VoiceStateStore {
     const existe = await this.redis.hexists(chave(channelId), userId);
     if (!existe) return null;
     return this.join(channelId, userId, flags);
+  }
+
+  async marcarReconectando(channelId: string, userId: string, reconnecting: boolean) {
+    const raw = await this.redis.hget(chave(channelId), userId);
+    const membro = raw ? parseMembro(raw) : null;
+    if (!membro) return null;
+    const atualizado: VoiceMember = { ...membro, reconnecting };
+    await this.redis.hset(chave(channelId), userId, JSON.stringify(atualizado));
+    return atualizado;
   }
 
   async leave(channelId: string, userId: string) {

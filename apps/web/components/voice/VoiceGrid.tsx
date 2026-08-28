@@ -130,9 +130,11 @@ export default function VoiceGrid({
     );
   }
 
-  // com alguém no palco a grade vira "tirinha em cima + palco embaixo"; a tira
-  // fica ACIMA porque o palco é o que precisa do canto inferior livre para os
-  // controles flutuantes
+  // com alguém no palco a grade vira "destaque em cima + tirinha embaixo".
+  // A tira ficava ACIMA para deixar o rodapé livre aos controles flutuantes,
+  // mas quem reserva esse espaço é o host (`pb-24` no CallStage e no
+  // VoicePanel) — e em cima ela empurrava o destaque para baixo, invertia a
+  // ordem de leitura e passava por baixo do cabeçalho absoluto do palco.
   const emFoco = focado ? tiles.filter((t) => t.state.user.id === focado) : [];
   // quem está no palco com tela **e** câmera: a tela é o palco, a câmera vai
   // para a tira (é o que o Discord faz com quem transmite e liga a webcam)
@@ -145,24 +147,6 @@ export default function VoiceGrid({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      {principal && (
-        <div className="flex shrink-0 gap-3 overflow-x-auto pb-1">
-          {resto.map((t) => (
-            <div key={t.key} className="h-[90px] w-40 shrink-0">
-              <VoiceTile
-                tile={t}
-                meId={me?.id}
-                falando={falando}
-                channelId={channelId}
-                assistindo={false}
-                onFocar={setFocado}
-                compacto
-              />
-            </div>
-          ))}
-        </div>
-      )}
-
       {principal ? (
         <div className="min-h-0 flex-1">
           <VoiceTile
@@ -201,6 +185,24 @@ export default function VoiceGrid({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {principal && (
+        <div className="flex shrink-0 gap-3 overflow-x-auto pb-1">
+          {resto.map((t) => (
+            <div key={t.key} className="h-[90px] w-40 shrink-0">
+              <VoiceTile
+                tile={t}
+                meId={me?.id}
+                falando={falando}
+                channelId={channelId}
+                assistindo={false}
+                onFocar={setFocado}
+                compacto
+              />
+            </div>
+          ))}
         </div>
       )}
 
@@ -282,6 +284,15 @@ function VoiceTile({
           <span className={`rounded-full ${ativo ? "ring-[3px] ring-green" : ""}`}>
             <Avatar user={state.user} size={compacto ? "md" : "xl"} surface="border-panel" />
           </span>
+        </span>
+      )}
+
+      {/* Carência do servidor correndo: a pessoa ainda está na chamada, e some
+          só se não voltar. Esmaecer em vez de remover é o que evita a grade
+          piscar a cada oscilação de rede de alguém. */}
+      {state.reconnecting && (
+        <span className="absolute inset-0 grid place-items-center bg-black/60 text-xs font-semibold text-white">
+          Reconectando…
         </span>
       )}
 

@@ -27,6 +27,27 @@ let jaConectou = false;
 /** Uma tentativa de refresh por ciclo de conexão, para não entrar em laço. */
 let tentouRenovar = false;
 
+/** O ouvinte de visibilidade é global e registrado uma vez só. */
+let ouvindoVisibilidade = false;
+
+/**
+ * Aba volta do segundo plano: reconecta na hora se o socket tiver caído.
+ *
+ * Enquanto a aba está oculta o navegador estrangula os timers, e o backoff do
+ * Socket.IO pode estar esperando vários segundos para a próxima tentativa. Quem
+ * volta para a janela no meio de uma chamada não pode ficar refém desse relógio
+ * — a carência da voz no servidor está correndo, e o que a cancela é reconectar.
+ */
+function observarVisibilidade() {
+  if (ouvindoVisibilidade || typeof document === "undefined") return;
+  ouvindoVisibilidade = true;
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && socket && !socket.connected) {
+      socket.connect();
+    }
+  });
+}
+
 export function getSocket(): Socket {
   if (socket) return socket;
 
@@ -66,6 +87,7 @@ export function getSocket(): Socket {
   });
 
   socket = s;
+  observarVisibilidade();
   return s;
 }
 

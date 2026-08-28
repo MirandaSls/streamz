@@ -672,6 +672,13 @@ export interface VoiceStateEvent {
   deafened: boolean;
   video: boolean;
   screen: boolean;
+  /**
+   * O socket caiu e a carência do servidor está correndo: a pessoa **continua**
+   * na chamada (`connected: true`) e some dela só se não voltar a tempo. A UI
+   * usa isto para esmaecer o tile em vez de fazer o participante piscar para
+   * fora da grade a cada oscilação de rede. Ausente = conectada normalmente.
+   */
+  reconnecting?: boolean;
 }
 
 /** Flags que o próprio usuário controla e transmite (`voice.update`). */
@@ -686,6 +693,19 @@ export const VOICE_FLAGS_PADRAO: VoiceFlags = {
 
 /** Tempo que uma chamada em DM toca antes de desistir sozinha. */
 export const CALL_RING_TIMEOUT_MS = 30_000;
+
+/**
+ * Quanto tempo o servidor segura alguém na sala de voz depois de o socket cair.
+ *
+ * Queda de socket **não** é sair da chamada: trocar de rede, o navegador
+ * estrangular a aba em segundo plano ou o notebook suspender por um instante
+ * derrubavam o usuário na hora. Dentro desta janela ele volta e a chamada
+ * continua como se nada tivesse acontecido; passada ela, sai de verdade.
+ *
+ * Fechar a aba também espera a carência — o preço é um participante fantasma
+ * por até este tempo, bem menor que o de ser expulso da call ao minimizar.
+ */
+export const VOICE_RECONNECT_GRACE_MS = 45_000;
 
 /**
  * Quanto tempo alguém pode ficar **sozinho** numa chamada de conversa antes de

@@ -147,6 +147,28 @@ export class VoiceService {
     return channel;
   }
 
+  /**
+   * Marca (ou desmarca) o membro como "reconectando" e avisa a sala.
+   *
+   * Não mexe na lista de propósito: durante a carência a pessoa **continua** na
+   * chamada, e quem está do outro lado precisa ver "reconectando" em vez de ver
+   * o participante sumir e voltar a cada oscilação de rede.
+   */
+  async marcarReconectando(userId: string, channelId: string, reconnecting: boolean) {
+    const membro = await this.store.marcarReconectando(channelId, userId, reconnecting);
+    if (!membro) return null;
+    const channel = await this.canal(channelId);
+    await this.broadcast(
+      channelId,
+      channel?.guildId ?? null,
+      userId,
+      { muted: membro.muted, deafened: membro.deafened, video: membro.video, screen: membro.screen },
+      true,
+      reconnecting,
+    );
+    return membro;
+  }
+
   /** Canais em que o usuário aparece como conectado (para limpar no disconnect). */
   async channelsOf(userId: string): Promise<string[]> {
     const canais = await this.canaisDeVozDoUsuario(userId);
@@ -206,6 +228,7 @@ export class VoiceService {
           deafened: m.deafened,
           video: m.video,
           screen: m.screen,
+          reconnecting: m.reconnecting ?? false,
         });
       }
     }
@@ -223,6 +246,7 @@ export class VoiceService {
     userId: string,
     flags: VoiceFlags,
     connected: boolean,
+    reconnecting = false,
   ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) return;
@@ -232,6 +256,7 @@ export class VoiceService {
       user: toPublicUser(user),
       connected,
       ...flags,
+      reconnecting,
     };
     if (guildId) {
       this.realtime.emitToGuild(guildId, WS_EVENTS.VOICE_STATE, evento);
