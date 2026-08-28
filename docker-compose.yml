@@ -60,6 +60,12 @@ services:
       # profile `redis` no ar, aponte para redis://redis:6379.
       REDIS_URL: ${REDIS_URL:-}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      # Dentro do contêiner a pasta é sempre esta; no host ela é ./downloads.
+      DOWNLOAD_DIR: /app/downloads
+    volumes:
+      # Instaladores do app de desktop servidos por /api/downloads. `:ro` porque
+      # a API só lê — publicar versão é copiar o arquivo nesta pasta no host.
+      - ./downloads:/app/downloads:ro
     depends_on:
       postgres:
         condition: service_healthy

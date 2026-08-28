@@ -62,3 +62,9 @@ graphify-out/
 
 # worktrees do Claude Code — cada uma carrega um node_modules inteiro
 .claude/worktrees/
+
+# Instaladores servidos por /api/downloads — binário de release não entra no
+# repositório; a pasta é montada no contêiner como volume somente-leitura.
+# A barra inicial ancora na raiz: sem ela o padrão engoliria também
+# apps/api/src/modules/downloads/, que é código.
+/downloads/

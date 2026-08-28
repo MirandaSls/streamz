@@ -69,3 +69,13 @@ export const AUTH_MFA_THROTTLE = Throttle({
 export const ACCOUNT_THROTTLE = Throttle({
   default: { ttl: seconds(60), limit: 10 },
 });
+
+/**
+ * Senha da página de download. O teto é o mais apertado do arquivo porque o
+ * alvo é uma senha **única e compartilhada**: não há conta para bloquear (o
+ * `lockout.ts` cobre login, não isto), então o limite por IP é a única barreira
+ * contra força bruta.
+ */
+export const DOWNLOAD_SENHA_THROTTLE = Throttle({
+  default: { ttl: seconds(60), limit: 8 },
+});

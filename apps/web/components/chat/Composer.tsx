@@ -47,6 +47,7 @@ import Autocomplete, { type ItemAutocomplete } from "@/components/chat/Autocompl
 import PickerPanel, { type PickerTab } from "@/components/media/PickerPanel";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
+import { formatBytes } from "@/lib/format";
 import { api } from "@/lib/api";
 import { aplicarEscolha, detectarGatilho, mover, type Gatilho } from "@/lib/composer-autocomplete";
 import { buscarComandos, interpretarComando } from "@/lib/comandos-barra";
@@ -927,8 +928,3 @@ function montarSugestoes(
     }));
 }
 
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
-}
