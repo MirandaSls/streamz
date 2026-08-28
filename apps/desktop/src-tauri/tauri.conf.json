@@ -32,16 +32,19 @@
         "script-src": "'self' 'unsafe-inline'",
         "style-src": "'self' 'unsafe-inline'",
         "font-src": "'self' data:",
-        "img-src": "'self' data: blob: http://localhost:3333",
+        "img-src": "'self' data: blob: http://localhost:3333 https://api.streamz.chat",
         "media-src": "'self' data: blob: mediastream:",
         "worker-src": "'self' blob:",
-        "connect-src": "'self' ipc: http://ipc.localhost http://localhost:3333 ws://localhost:3333 ws://localhost:7880 https://*.livekit.cloud wss://*.livekit.cloud"
+        "connect-src": "'self' ipc: http://ipc.localhost http://localhost:3333 ws://localhost:3333 ws://localhost:7880 https://api.streamz.chat wss://api.streamz.chat wss://livekit.streamz.chat https://*.livekit.cloud wss://*.livekit.cloud"
       }
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": [
+      "nsis",
+      "msi"
+    ],
     "publisher": "Streamz",
     "category": "SocialNetworking",
     "shortDescription": "Chat em servidores/canais em tempo real",
@@ -54,7 +57,10 @@
     "windows": {
       "nsis": {
         "installMode": "perMachine",
-        "languages": ["PortugueseBR", "English"]
+        "languages": [
+          "PortugueseBR",
+          "English"
+        ]
       }
     }
   },
