@@ -3,15 +3,8 @@
 import { useId } from "react";
 import { Users } from "lucide-react";
 import type { UserStatus } from "@streamz/shared";
+import { corDoAvatar } from "@/components/ui/avatar-cores";
 import { usePresence } from "@/stores/presence";
-
-/**
- * Avatar sem imagem ganha uma destas cinco, escolhida de forma estável pelo id.
- * Nenhuma é verde-limão de propósito: o avatar não pode competir com o accent
- * da marca nem ser confundido com a bolinha de status (ADR-0004). As cinco têm
- * luminância parecida, para as iniciais em Paper lerem igual em todas.
- */
-const PALETTE = ["#4c7ef3", "#0e9f8a", "#c2701c", "#d24a7b", "#7c5cf0"];
 
 /** Cor de fundo do status — mantida para quem desenha a bolinha à mão. */
 export const STATUS_COLOR: Record<UserStatus, string> = {
@@ -35,19 +28,6 @@ export const STATUS_LABEL: Record<UserStatus, string> = {
   DND: "Não perturbe",
   OFFLINE: "Offline",
 };
-
-/**
- * Cor de fundo do avatar sem imagem, estável pelo id.
- *
- * Exportada porque o rail desenha a conversa preenchendo um botão de 48px e não
- * pode usar o `Avatar` (que traz o próprio tamanho) — mas precisa da MESMA cor,
- * senão a mesma pessoa aparece de duas cores em duas colunas vizinhas.
- */
-export function corDoAvatar(id: string): string {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return PALETTE[h % PALETTE.length];
-}
 
 const hashColor = corDoAvatar;
 
@@ -93,9 +73,10 @@ const SIZE = {
 } as const;
 
 /**
- * Avatar circular com foto ou iniciais e, opcionalmente, a bolinha de status
- * com a borda na cor da superfície de fundo — é a borda que faz a bolinha
- * parecer "recortada" do avatar, como no Discord.
+ * Avatar circular com a foto do usuário — ou as iniciais sobre uma cor, quando
+ * não há foto — e, opcionalmente, a bolinha de status com a borda na cor da
+ * superfície de fundo: é a borda que faz a bolinha parecer "recortada" do
+ * avatar, como no Discord.
  *
  * **A foto é resolvida aqui pelo overlay ao vivo de `usePresence`**, e não pelo
  * `user` que o chamador passou. Quase todo `user` na tela é um retrato: o autor
