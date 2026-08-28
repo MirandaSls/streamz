@@ -466,7 +466,7 @@ export const api = {
   deleteSticker: (guildId: string, id: string) =>
     request<{ deleted: string }>(`/guilds/${guildId}/stickers/${id}`, { method: "DELETE" }),
 
-  // ── GIFs (Tenor; sem chave a resposta vem `configured: false`) ──
+  // ── GIFs (Giphy; sem chave a resposta vem `configured: false`) ──
   searchGifs: (q: string) =>
     request<GifSearchResponse>(`/gifs/search${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   gifCategories: () => request<GifCategoriesResponse>("/gifs/categories"),

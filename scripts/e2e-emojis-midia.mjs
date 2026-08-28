@@ -150,7 +150,7 @@ try {
     data: {
       uploaderId: registro.user.id,
       key: `external/e2e-${sufixo}`,
-      externalUrl: "https://media.tenor.com/exemplo/gato.gif",
+      externalUrl: "https://media.giphy.com/media/exemplo/gato.gif",
       filename: "gato.gif",
       contentType: "image/gif",
       size: 0,
@@ -236,7 +236,7 @@ try {
   conferir(true, "upload sem R2 avisa o motivo em vez de falhar calado");
   await shot(page, "upload-sem-r2");
 
-  // 6. seletor de GIF sem chave do Tenor
+  // 6. seletor de GIF sem chave do Giphy
   await page.click('button[aria-label="GIF"]');
   await page.waitForSelector("text=GIFs não configurados", { timeout: 15_000 });
   conferir(true, 'seletor de GIF mostra "não configurados"');

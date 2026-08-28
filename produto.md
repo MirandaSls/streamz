@@ -447,7 +447,7 @@ modera sua comunidade.
   mensagem** (não precisa de texto).
 - **Reação com emoji personalizado:** só reage quem é membro do servidor dono do
   emoji — a reação vai para todo mundo que lê o canal.
-- **GIF:** busca por categorias e por termo (Tenor). Sem `TENOR_API_KEY` a busca
+- **GIF:** busca por categorias e por termo (Giphy). Sem `GIPHY_API_KEY` a busca
   responde `503` claro e o resto do app segue funcionando.
 - **Composer:** autocomplete de `:emoji`, `@membro`, `@cargo`, `#canal` e
   `/comando`, rascunho por canal, anexo com prévia e progresso, colar imagem,

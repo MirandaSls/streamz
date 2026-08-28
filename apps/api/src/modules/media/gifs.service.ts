@@ -6,29 +6,50 @@ import type {
   GifSearchResponse,
 } from "@streamz/shared";
 
-/** Base da API do provedor (Tenor v2). */
-const TENOR = "https://tenor.googleapis.com/v2";
+/** Base da API do provedor (Giphy v1). */
+const GIPHY = "https://api.giphy.com/v1/gifs";
 const TIMEOUT_MS = 5_000;
 /** GIFs por página do seletor. */
 const LIMITE_PADRAO = 30;
 /** Quanto tempo uma busca fica em cache (o mesmo termo repete muito). */
 const TTL_MS = 10 * 60_000;
 const MAX_ENTRIES = 100;
+/**
+ * Teto de conteúdo: o Giphy devolve o rating pedido **e os abaixo dele**, então
+ * `pg` = G + PG, o mesmo recorte do antigo `contentfilter=medium`.
+ */
+const RATING = "pg";
+/** Renditions aceitas para o GIF de envio, da melhor para a mais magra. */
+const FORMATOS_ENVIO = ["original", "downsized_large", "fixed_width"];
+/**
+ * Renditions aceitas para a miniatura da grade. As `_still` vêm primeiro porque
+ * o cartão só anima no hover — dezenas de GIFs rodando juntos travam a rolagem.
+ */
+const FORMATOS_PREVIA = [
+  "fixed_width_still",
+  "fixed_width_small_still",
+  "preview_gif",
+  "fixed_width_small",
+];
 
-/** O que a resposta do Tenor traz de útil; o resto é ignorado. */
-interface TenorFormat {
+/** O que a resposta do Giphy traz de útil; o resto é ignorado. */
+interface GiphyImage {
   url?: string;
-  dims?: number[];
+  /** o Giphy manda dimensão como string ("480"), não como número. */
+  width?: string;
+  height?: string;
 }
-interface TenorItem {
+interface GiphyItem {
   id?: string;
-  content_description?: string;
-  media_formats?: Record<string, TenorFormat>;
+  title?: string;
+  alt_text?: string;
+  images?: Record<string, GiphyImage | undefined>;
 }
-interface TenorTag {
-  searchterm?: string;
+interface GiphyCategory {
   name?: string;
-  image?: string;
+  name_encoded?: string;
+  /** GIF de capa da categoria. */
+  gif?: GiphyItem;
 }
 
 interface Cached {
@@ -37,15 +58,15 @@ interface Cached {
 }
 
 /**
- * Busca de GIF pelo Tenor v2.
+ * Busca de GIF pelo Giphy v1.
  *
- * `TENOR_API_KEY` é **opcional**, como as credenciais do R2 e do LiveKit: sem
+ * `GIPHY_API_KEY` é **opcional**, como as credenciais do R2 e do LiveKit: sem
  * ela nada quebra — as rotas respondem `configured: false` e a interface mostra
  * "GIFs não configurados" em vez de um erro. Por isso a ausência da chave não
  * entra em `common/env.ts`.
  *
  * A chamada é feita pela API, não pelo browser, para a chave não ir para o
- * cliente (e porque o Tenor não devolve CORS para qualquer origem).
+ * cliente (e porque a cota é por chave: no browser qualquer um gastaria a nossa).
  */
 @Injectable()
 export class GifsService {
@@ -53,7 +74,7 @@ export class GifsService {
   private readonly cache = new Map<string, Cached>();
 
   isConfigured(): boolean {
-    return Boolean(process.env.TENOR_API_KEY);
+    return Boolean(process.env.GIPHY_API_KEY);
   }
 
   async search(query: string, limit = LIMITE_PADRAO): Promise<GifSearchResponse> {
@@ -66,18 +87,20 @@ export class GifsService {
       return { configured: true, results: hit.results };
     }
 
-    const rota = q ? "search" : "featured";
+    const rota = q ? "search" : "trending";
     const params = new URLSearchParams({
-      key: process.env.TENOR_API_KEY!,
-      client_key: "streamz",
+      api_key: process.env.GIPHY_API_KEY!,
       limit: String(Math.min(Math.max(limit, 1), 50)),
-      media_filter: "gif,tinygif",
-      contentfilter: "medium",
+      rating: RATING,
     });
-    if (q) params.set("q", q);
+    if (q) {
+      params.set("q", q);
+      // `lang` só vale na busca; o /trending ignora e devolveria erro de param
+      params.set("lang", "pt");
+    }
 
-    const dados = await this.pegar<{ results?: TenorItem[] }>(`${TENOR}/${rota}?${params}`);
-    const results = (dados?.results ?? []).flatMap((item) => this.toResult(item));
+    const dados = await this.pegar<{ data?: GiphyItem[] }>(`${GIPHY}/${rota}?${params}`);
+    const results = (dados?.data ?? []).flatMap((item) => this.toResult(item));
     this.lembrar(chave, results);
     return { configured: true, results };
   }
@@ -85,40 +108,48 @@ export class GifsService {
   /** Categorias sugeridas enquanto ainda não se buscou nada. */
   async categories(): Promise<GifCategoriesResponse> {
     if (!this.isConfigured()) return { configured: false, categories: [] };
-    const params = new URLSearchParams({
-      key: process.env.TENOR_API_KEY!,
-      client_key: "streamz",
-      type: "featured",
+    const params = new URLSearchParams({ api_key: process.env.GIPHY_API_KEY! });
+    const dados = await this.pegar<{ data?: GiphyCategory[] }>(`${GIPHY}/categories?${params}`);
+    const categories: GifCategory[] = (dados?.data ?? []).flatMap((c) => {
+      // `name` já é legível ("Reactions"); o `name_encoded` só socorre quando
+      // falta, e aí vira termo de busca trocando o hífen por espaço
+      const nome = c.name?.trim() || c.name_encoded?.replace(/-/g, " ").trim();
+      const previewUrl = c.gif ? this.previewDe(c.gif) : undefined;
+      if (!nome || !previewUrl) return [];
+      return [{ name: nome, previewUrl, searchTerm: nome }];
     });
-    const dados = await this.pegar<{ tags?: TenorTag[] }>(`${TENOR}/categories?${params}`);
-    const categories: GifCategory[] = (dados?.tags ?? [])
-      .filter((t): t is TenorTag & { searchterm: string; image: string } =>
-        Boolean(t.searchterm && t.image),
-      )
-      .map((t) => ({
-        name: t.name?.replace(/^#/, "") ?? t.searchterm,
-        previewUrl: t.image,
-        searchTerm: t.searchterm,
-      }));
     return { configured: true, categories };
   }
 
-  /** Item do Tenor → o que a interface usa; descarta o que vier incompleto. */
-  private toResult(item: TenorItem): GifResult[] {
-    const gif = item.media_formats?.gif;
-    const preview = item.media_formats?.tinygif ?? gif;
-    if (!item.id || !gif?.url || !preview?.url) return [];
-    const [w, h] = gif.dims ?? [];
+  /** Item do Giphy → o que a interface usa; descarta o que vier incompleto. */
+  private toResult(item: GiphyItem): GifResult[] {
+    const cheio = this.rendition(item, FORMATOS_ENVIO);
+    const previewUrl = this.previewDe(item) ?? cheio?.url;
+    if (!item.id || !cheio?.url || !previewUrl) return [];
     return [
       {
         id: item.id,
-        url: gif.url,
-        previewUrl: preview.url,
-        description: item.content_description ?? "GIF",
-        width: w ?? 0,
-        height: h ?? 0,
+        url: cheio.url,
+        previewUrl,
+        // `alt_text` descreve a cena; o `title` é o nome de marketing do GIF
+        description: item.alt_text?.trim() || item.title?.trim() || "GIF",
+        width: Number(cheio.width) || 0,
+        height: Number(cheio.height) || 0,
       },
     ];
+  }
+
+  private previewDe(item: GiphyItem): string | undefined {
+    return this.rendition(item, FORMATOS_PREVIA)?.url;
+  }
+
+  /** Primeira rendition da lista que o item realmente trouxe com URL. */
+  private rendition(item: GiphyItem, nomes: string[]): GiphyImage | undefined {
+    for (const nome of nomes) {
+      const img = item.images?.[nome];
+      if (img?.url) return img;
+    }
+    return undefined;
   }
 
   /**
@@ -132,12 +163,12 @@ export class GifsService {
     try {
       const res = await fetch(url, { signal: controller.signal });
       if (!res.ok) {
-        this.logger.warn(`Tenor respondeu ${res.status}`);
+        this.logger.warn(`Giphy respondeu ${res.status}`);
         return null;
       }
       return (await res.json()) as T;
     } catch (e) {
-      this.logger.warn(`Falha ao falar com o Tenor: ${e instanceof Error ? e.message : e}`);
+      this.logger.warn(`Falha ao falar com o Giphy: ${e instanceof Error ? e.message : e}`);
       return null;
     } finally {
       clearTimeout(timer);

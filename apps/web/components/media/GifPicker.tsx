@@ -15,9 +15,9 @@ const DEBOUNCE_MS = 350;
 type SubAba = "favoritos" | "tendencias";
 
 /**
- * Seletor de GIF (Tenor), com as sub-abas "Favoritos" e "Tendências".
+ * Seletor de GIF (Giphy), com as sub-abas "Favoritos" e "Tendências".
  *
- * Sem `TENOR_API_KEY` no servidor a resposta vem com `configured: false` e a
+ * Sem `GIPHY_API_KEY` no servidor a resposta vem com `configured: false` e a
  * caixa mostra um aviso neutro em vez de um erro — o mesmo tratamento que voz
  * dá à falta de LiveKit. O aviso **não** cita variável de ambiente nem arquivo
  * do repositório: quem lê é quem usa o chat, não quem o instala.
@@ -220,6 +220,14 @@ export default function GifPicker({
             </div>
           )}
         </div>
+      )}
+
+      {/* Atribuição exigida pelos termos da API do Giphy — some junto com a
+          busca quando não há chave, porque aí nada veio deles. */}
+      {configurado !== false && (
+        <p className="shrink-0 px-3 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-wide text-txt-muted">
+          Powered by GIPHY
+        </p>
       )}
     </div>
   );

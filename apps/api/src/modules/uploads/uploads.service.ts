@@ -76,7 +76,7 @@ export class UploadsService {
    *
    * O arquivo não passa pelo nosso storage: o provedor já o serve, e copiar o
    * GIF para o bucket a cada envio custaria banda e espaço sem ganho nenhum
-   * (é assim que o Discord trata o GIF do Tenor). Por isso este caminho
+   * (é assim que o Discord trata o GIF do provedor). Por isso este caminho
    * funciona mesmo sem R2 configurado.
    *
    * Só o domínio do provedor é aceito: sem essa trava, a rota viraria um jeito
@@ -169,8 +169,12 @@ export class UploadsService {
   }
 }
 
-/** Domínios do provedor de GIF (Tenor) que podem virar anexo por URL. */
-const HOSTS_DE_GIF = ["media.tenor.com", "c.tenor.com", "media1.tenor.com", "tenor.com"];
+/**
+ * Domínios do provedor de GIF (Giphy) que podem virar anexo por URL. O `giphy.com`
+ * sozinho já cobre o `media0..4` que a API sorteia a cada resposta, porque a
+ * checagem abaixo aceita subdomínio.
+ */
+const HOSTS_DE_GIF = ["media.giphy.com", "i.giphy.com", "giphy.com"];
 
 /** true se a URL é https e o host é um dos do provedor (ou subdomínio dele). */
 export function hostDeGifPermitido(url: string): boolean {

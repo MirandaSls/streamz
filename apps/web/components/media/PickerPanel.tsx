@@ -29,7 +29,7 @@ const ABAS: { id: PickerTab; rotulo: string; Icone: LucideIcon }[] = [
  * perdia a busca que já tinha sido digitada. Aqui a caixa é sempre a mesma
  * (424 × 420) e cada aba só é montada na primeira visita — mas, uma vez
  * montada, **fica montada** e apenas some da tela. É isso que preserva os
- * resultados do Tenor e o termo digitado ao ir e voltar entre as abas, sem
+ * resultados do Giphy e o termo digitado ao ir e voltar entre as abas, sem
  * pagar a busca de GIF de quem só queria um emoji.
  *
  * A caixa é dona do Escape e do clique fora; os seletores entram em modo

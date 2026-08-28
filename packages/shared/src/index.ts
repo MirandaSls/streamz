@@ -1930,7 +1930,7 @@ export function mentionsEveryone(content: string): boolean {
   return /(^|[^\w.\\])@(everyone|here)(?![\w.-])/i.test(content);
 }
 
-// ── GIFs (Tenor v2) ──────────────────────────────────────────
+// ── GIFs (Giphy v1) ──────────────────────────────────────────
 /** Um GIF do provedor de busca, reduzido ao que a interface usa. */
 export interface GifResult {
   id: string;
@@ -1952,7 +1952,7 @@ export interface GifCategory {
 }
 
 /**
- * Resposta das rotas de GIF. `configured: false` quando falta `TENOR_API_KEY` —
+ * Resposta das rotas de GIF. `configured: false` quando falta `GIPHY_API_KEY` —
  * a interface mostra "GIFs não configurados" em vez de um erro, espelhando o
  * tratamento de credencial ausente do LiveKit e do R2.
  */
