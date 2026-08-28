@@ -5,32 +5,16 @@ import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
 
 /**
- * Estado de moderação do lado do cliente: o modo "selecionar mensagens" da
- * timeline, o que vale para mim no servidor aberto (castigo, regras,
- * boas-vindas) e a fila de denúncias.
- *
- * A seleção mora aqui, e não na store de mensagens, porque é estado de
- * *interface de moderação*: sai da tela quando o moderador desiste, e nenhuma
- * mensagem precisa saber que existe.
+ * Estado de moderação do lado do cliente: o que vale para mim no servidor
+ * aberto (castigo, regras, boas-vindas) e a fila de denúncias.
  */
 
 interface ModerationState {
-  /** modo de seleção múltipla ligado no canal `selectionChannelId`. */
-  selecting: boolean;
-  selectionChannelId: string | null;
-  selected: string[];
-
   /** o que vale para mim no servidor aberto (castigo, regras, boas-vindas). */
   membership: GuildMembership | null;
 
   reports: ReportView[];
   reportsLoading: boolean;
-
-  startSelection: (channelId: string, firstId?: string) => void;
-  toggleSelected: (messageId: string) => void;
-  cancelSelection: () => void;
-  deleteSelected: () => Promise<void>;
-  deleteAfter: (channelId: string, messageId: string) => Promise<void>;
 
   loadMembership: (guildId: string) => Promise<void>;
   acceptRules: () => Promise<void>;
@@ -45,60 +29,9 @@ interface ModerationState {
 }
 
 export const useModeration = create<ModerationState>((set, get) => ({
-  selecting: false,
-  selectionChannelId: null,
-  selected: [],
   membership: null,
   reports: [],
   reportsLoading: false,
-
-  startSelection: (channelId, firstId) =>
-    set({ selecting: true, selectionChannelId: channelId, selected: firstId ? [firstId] : [] }),
-
-  toggleSelected: (messageId) =>
-    set((s) => ({
-      selected: s.selected.includes(messageId)
-        ? s.selected.filter((id) => id !== messageId)
-        : [...s.selected, messageId],
-    })),
-
-  cancelSelection: () => set({ selecting: false, selectionChannelId: null, selected: [] }),
-
-  deleteSelected: async () => {
-    const { selectionChannelId, selected } = get();
-    if (!selectionChannelId || selected.length === 0) return;
-    const ok = await ui.confirm({
-      title: `Apagar ${selected.length} ${selected.length === 1 ? "mensagem" : "mensagens"}?`,
-      message: "Elas somem para todo mundo no canal. Não dá para desfazer.",
-      confirmLabel: "Apagar",
-      danger: true,
-    });
-    if (!ok) return;
-    try {
-      const { deleted } = await api.bulkDeleteMessages(selectionChannelId, selected);
-      // a remoção da tela vem pelo evento `messages.bulkDeleted` (useRealtime)
-      ui.toast(`${deleted.length} ${deleted.length === 1 ? "mensagem apagada" : "mensagens apagadas"}.`);
-      get().cancelSelection();
-    } catch (e) {
-      ui.toast(errorMessage(e, "Não foi possível apagar"), "error");
-    }
-  },
-
-  deleteAfter: async (channelId, messageId) => {
-    const ok = await ui.confirm({
-      title: "Apagar as mensagens depois desta?",
-      message: "Apaga até 100 mensagens posteriores neste canal. Não dá para desfazer.",
-      confirmLabel: "Apagar",
-      danger: true,
-    });
-    if (!ok) return;
-    try {
-      const { deleted } = await api.deleteMessagesAfter(channelId, messageId);
-      ui.toast(`${deleted.length} ${deleted.length === 1 ? "mensagem apagada" : "mensagens apagadas"}.`);
-    } catch (e) {
-      ui.toast(errorMessage(e, "Não foi possível apagar"), "error");
-    }
-  },
 
   loadMembership: async (guildId) => {
     try {
@@ -162,14 +95,7 @@ export const useModeration = create<ModerationState>((set, get) => ({
   handleReportCreated: (report) =>
     set((s) => (s.reports.some((r) => r.id === report.id) ? s : { reports: [report, ...s.reports] })),
 
-  clear: () =>
-    set({
-      selecting: false,
-      selectionChannelId: null,
-      selected: [],
-      membership: null,
-      reports: [],
-    }),
+  clear: () => set({ membership: null, reports: [] }),
 }));
 
 /** Estou de castigo no servidor aberto? Decide o aviso no lugar do composer. */

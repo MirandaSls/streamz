@@ -1,32 +1,31 @@
 "use client";
 
-import { useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import {
-  ArrowRightToLine,
-  CheckSquare,
   Copy,
   CornerUpLeft,
+  CornerUpRight,
   EyeOff,
-  FileText,
   Flag,
+  Hash,
+  Image as ImageIcon,
   Link2,
-  ListChecks,
+  MailOpen,
   MessageSquare,
   MoreHorizontal,
   Pencil,
   Pin,
   PinOff,
+  Smile,
   SmilePlus,
   Trash2,
-  UserPlus,
 } from "lucide-react";
-import type { Attachment, Message, PublicUser } from "@streamz/shared";
+import type { Message, PublicUser } from "@streamz/shared";
 import {
   WS_EVENTS,
   displayNameOf,
   extractFirstUrl,
   isDirectImageUrl,
-  isImageAttachment,
   isSystemMessage,
   mentionsMe as ehMencaoParaMim,
   messageLinkPath,
@@ -34,12 +33,16 @@ import {
   youtubeVideoId,
 } from "@streamz/shared";
 import LinkEmbedCard, { useLinkEmbed } from "@/components/chat/LinkEmbedCard";
+import PainelFlutuante from "@/components/chat/PainelFlutuante";
+import TooltipReacao from "@/components/chat/TooltipReacao";
+import { useMarcadorNaoLido } from "@/components/chat/marcador-nao-lido";
+import { registrarUsoDeReacao, useFrequentes } from "@/components/chat/reacoes-rapidas";
+import { shiftPressionado } from "@/components/chat/tecla-shift";
 import MediaGroup from "@/components/media/MediaGroup";
 import StickerView from "@/components/media/StickerView";
 import YouTubeEmbed from "@/components/media/YouTubeEmbed";
 // ── h-moderacao ──
 import PollCard from "@/components/polls/PollCard";
-import { useModeration } from "@/stores/moderation";
 import { emit } from "@/stores/socket-adapter";
 import Avatar from "@/components/ui/Avatar";
 import EmojiPicker from "@/components/ui/EmojiPicker";
@@ -48,6 +51,8 @@ import { API_URL } from "@/lib/config";
 import { dataCompleta, hora, horaCompleta } from "@/lib/format";
 import { Markdown } from "@/lib/markdown";
 import { useAuth } from "@/stores/auth";
+import { useChannels } from "@/stores/channels";
+import { dmTitle, useDMs } from "@/stores/dms";
 import { useGuilds } from "@/stores/guilds";
 import { useAuthorColor, usePermissions } from "@/stores/permissions";
 import { useMessages } from "@/stores/messages";
@@ -58,7 +63,7 @@ import { useThreads } from "@/stores/messages-threads";
 import { useSettings } from "@/stores/settings";
 import type { ChatMessage } from "@/stores/messages-core";
 import { useLiveUser } from "@/stores/presence";
-import { anchorOf, ui, type MenuItem } from "@/stores/ui";
+import { anchorOf, ui, type Anchor, type MenuItem } from "@/stores/ui";
 
 /**
  * O emoji de uma reação: unicode sai como texto; personalizado é `<:nome:id>` e
@@ -118,19 +123,54 @@ function ActionButton({
 /**
  * Linha de referência da resposta, acima da mensagem: avatar miúdo, nome e o
  * começo da original. O traço em "L" à esquerda é o mesmo do Discord — é ele
- * que amarra visualmente a resposta à mensagem citada.
+ * que amarra visualmente a resposta à mensagem citada, e por isso ele sobe do
+ * topo do avatar de 40px (x≈32) até encostar na calha do conteúdo (x=72).
+ *
+ * Passar o mouse na linha inteira **destaca a original** na timeline: é o que
+ * responde "a qual mensagem isso responde?" sem tirar ninguém do lugar.
  */
 function ReplyReference({ message }: { message: Message }) {
   const ref = message.replyTo;
+  const cor = useAuthorColor(ref?.author.id ?? "");
   if (!ref) return null;
+
+  function realcar(ligado: boolean) {
+    const el = document.getElementById(`mensagem-${ref!.id}`);
+    // classe do Tailwind não serve: a original pode já ter fundo próprio
+    // (menção, destaque do "ir para") e a cor precisa somar, não brigar
+    if (el) el.style.backgroundColor = ligado ? "rgba(255,255,255,0.06)" : "";
+  }
+
+  function abrirPerfil(e: MouseEvent<HTMLElement>) {
+    ui.openProfile(ref!.author, anchorOf(e.currentTarget));
+  }
+
   return (
-    <div className="relative flex items-center gap-1.5 pb-0.5 text-[13px] leading-[18px] text-txt-muted">
+    <div
+      onMouseEnter={() => realcar(true)}
+      onMouseLeave={() => realcar(false)}
+      className="relative flex items-center gap-1.5 pb-0.5 text-[13px] leading-[18px] text-txt-muted"
+    >
       <span
         aria-hidden="true"
-        className="absolute -left-[38px] bottom-[7px] h-[11px] w-[32px] rounded-tl-[6px] border-l-2 border-t-2 border-border-strong"
+        className="absolute -left-10 bottom-[8px] h-3 w-10 rounded-tl-[6px] border-l-2 border-t-2 border-border-strong"
       />
-      <Avatar user={ref.author} size="sm" className="h-4 w-4" />
-      <span className="font-medium text-txt-secondary">@{displayNameOf(ref.author)}</span>
+      <button
+        type="button"
+        onClick={abrirPerfil}
+        aria-label={`Perfil de ${displayNameOf(ref.author)}`}
+        className="shrink-0 rounded-full transition hover:brightness-110"
+      >
+        <Avatar user={ref.author} size="xs" />
+      </button>
+      <button
+        type="button"
+        onClick={abrirPerfil}
+        style={cor ? { color: cor } : undefined}
+        className="shrink-0 font-medium text-txt-secondary hover:underline"
+      >
+        @{displayNameOf(ref.author)}
+      </button>
       <button
         type="button"
         onClick={() =>
@@ -140,22 +180,21 @@ function ReplyReference({ message }: { message: Message }) {
             messageId: ref.id,
           })
         }
-        className="min-w-0 truncate text-left hover:text-txt-normal"
+        className="flex min-w-0 items-center gap-1 truncate text-left hover:text-txt-normal"
       >
-        {ref.content || (ref.hasAttachments ? "Clique para ver o anexo" : "Mensagem apagada")}
+        {ref.content ? (
+          ref.content
+        ) : ref.hasAttachments ? (
+          <>
+            <ImageIcon size={14} aria-hidden="true" className="shrink-0" />
+            <span className="italic">Clique para ver o anexo</span>
+          </>
+        ) : (
+          <span className="italic text-txt-faint">Mensagem apagada</span>
+        )}
       </button>
     </div>
   );
-}
-
-/** Nomes de quem reagiu, para o tooltip da pílula. */
-function nomesDeQuemReagiu(userIds: string[], conhecidos: Map<string, PublicUser>): string {
-  const nomes = userIds.map((id) => {
-    const u = conhecidos.get(id);
-    return u ? displayNameOf(u) : "alguém";
-  });
-  if (nomes.length <= 3) return nomes.join(", ");
-  return `${nomes.slice(0, 3).join(", ")} e mais ${nomes.length - 3}`;
 }
 
 /**
@@ -167,9 +206,16 @@ function nomesDeQuemReagiu(userIds: string[], conhecidos: Map<string, PublicUser
 /** Sem cargos: referência estável, para o seletor do zustand não oscilar. */
 const SEM_CARGOS: string[] = [];
 
+/** Reações rápidas da mini-barra (o Discord mostra três). */
+const RAPIDAS_NA_BARRA = 3;
+/** Reações rápidas dentro do submenu "Adicionar Reação". */
+const RAPIDAS_NO_MENU = 6;
+
 export default function MessageItem({
   message,
   grouped = false,
+  primeiro = false,
+  threadId = null,
   currentUserId,
   canModerate,
   onEdit,
@@ -181,10 +227,14 @@ export default function MessageItem({
 }: {
   message: ChatMessage;
   grouped?: boolean;
+  /** primeiro item desenhado na lista: a mini-barra não pode sair por cima. */
+  primeiro?: boolean;
+  /** id da thread quando a lista é o painel de thread — escopo do "Responder". */
+  threadId?: string | null;
   currentUserId?: string;
   canModerate?: boolean;
   onEdit: (id: string, content: string) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string, semConfirmar?: boolean) => void;
   onToggleReaction: (id: string, emoji: string) => void;
   /** ausente dentro do painel de thread (não se responde a uma resposta). */
   onOpenThread?: (message: Message) => void;
@@ -193,9 +243,13 @@ export default function MessageItem({
   /** descarta uma mensagem otimista que o servidor não confirmou. */
   onDiscard?: (nonce: string) => void;
 }) {
-  const [editing, setEditing] = useState(false);
+  // a edição mora na store: quem a abre pode ser o `↑` do composer
+  const editing = useMessages((s) => s.editingId === message.id);
+  const startEditing = useMessages((s) => s.startEditing);
+  const stopEditing = useMessages((s) => s.stopEditing);
   const [draft, setDraft] = useState(message.content);
-  const [picking, setPicking] = useState(false);
+  /** âncora do seletor de emoji (reação ou edição); null = fechado. */
+  const [picker, setPicker] = useState<{ alvo: "reacao" | "edicao"; ancora: Anchor } | null>(null);
 
   const author = useLiveUser(message.author);
   // nome do autor na cor do seu cargo mais alto, como no Discord
@@ -208,9 +262,12 @@ export default function MessageItem({
   const compacto = useSettings((s) => s.compactMode);
   const sempreHora = useSettings((s) => s.alwaysShowTime);
   const tamanhoEmoji = useSettings((s) => s.emojiSize);
+  // "Copiar ID" só existe com o Modo Desenvolvedor ligado, como no Discord
+  const modoDesenvolvedor = useSettings((s) => s.developerMode);
   const members = useGuilds((s) => s.members);
   const highlighted = useMessages((s) => s.highlightId === message.id);
   const startReply = useMessages((s) => s.startReply);
+  const frequentes = useFrequentes(RAPIDAS_NO_MENU);
   // @usuario → nome de exibição, para as menções mostrarem o nome como o Discord
   const displayNames = useMemo(() => {
     const map: Record<string, string> = {};
@@ -225,13 +282,6 @@ export default function MessageItem({
     if (me) map.set(me.id, me);
     return map;
   }, [members, message.author, me]);
-
-  // h-moderacao: seleção múltipla para remoção em lote (modo "selecionar")
-  const selecting = useModeration((s) => s.selecting && s.selectionChannelId === message.channelId);
-  const selected = useModeration((s) => s.selected.includes(message.id));
-  const toggleSelected = useModeration((s) => s.toggleSelected);
-  const startSelection = useModeration((s) => s.startSelection);
-  const deleteAfter = useModeration((s) => s.deleteAfter);
 
   const isOwn = message.author.id === currentUserId;
   // sem confirmação do servidor a mensagem ainda não tem id real: editar,
@@ -252,15 +302,21 @@ export default function MessageItem({
   const imagemDireta = url && !videoId && isDirectImageUrl(url) ? url : null;
   const embed = useLinkEmbed(videoId || imagemDireta ? null : url);
 
+  // abrir a edição pelo `↑` do composer não passa por `startEdit`: o rascunho
+  // precisa ser semeado quando o estado da store vira este id
+  useEffect(() => {
+    if (editing) setDraft(message.content);
+  }, [editing, message.content]);
+
   function submitEdit() {
     const t = draft.trim();
     if (t && t !== message.content) onEdit(message.id, t);
-    setEditing(false);
+    stopEditing();
   }
 
   function startEdit() {
     setDraft(message.content);
-    setEditing(true);
+    startEditing(message.id);
   }
 
   function openProfile(e: MouseEvent<HTMLElement>) {
@@ -275,7 +331,16 @@ export default function MessageItem({
   }
 
   function responder() {
-    startReply(message);
+    startReply(message, threadId);
+  }
+
+  function reagir(emoji: string) {
+    registrarUsoDeReacao(emoji);
+    onToggleReaction(message.id, emoji);
+  }
+
+  function abrirSeletorDeReacao(e: MouseEvent<HTMLElement>) {
+    setPicker({ alvo: "reacao", ancora: anchorOf(e.currentTarget) });
   }
 
   function alternarFixada() {
@@ -291,53 +356,108 @@ export default function MessageItem({
     if (thread) onOpenThread?.(message);
   }
 
+  /** "Marcar como não lida": o divisor vermelho volta para cima desta mensagem. */
+  function marcarNaoLida() {
+    useMarcadorNaoLido.getState().marcarNaoLidaAPartirDe(message.channelId, message.createdAt);
+    ui.toast("Marcado como não lido a partir daqui");
+  }
+
+  /**
+   * Destinos de "Encaminhar": as conversas diretas e os canais de texto do
+   * servidor aberto. Encaminhar reenvia o **texto** — os anexos ficam presos à
+   * mensagem original (ver relatório de pendências).
+   */
+  function destinosParaEncaminhar(): MenuItem[] {
+    const eu = useAuth.getState().user;
+    if (!eu) return [];
+    const send = useMessages.getState().send;
+    const conversas = useDMs.getState().channels.slice(0, 8);
+    const canais = useChannels
+      .getState()
+      .channels.filter((c) => c.type === "TEXT" && c.id !== message.channelId)
+      .slice(0, 8);
+    const encaminhar = (channelId: string, guildId: string | null, nome: string) => () => {
+      send({ channelId, guildId, author: eu, content: message.content });
+      ui.toast(`Mensagem encaminhada para ${nome}`);
+    };
+    return [
+      ...conversas.map<MenuItem>((d) => ({
+        label: dmTitle(d),
+        onSelect: encaminhar(d.id, null, dmTitle(d)),
+      })),
+      ...(conversas.length && canais.length ? [{ separator: true } as MenuItem] : []),
+      ...canais.map<MenuItem>((c) => ({
+        label: `#${c.name ?? "canal"}`,
+        icon: <Hash size={18} />,
+        onSelect: encaminhar(c.id, c.guildId, `#${c.name ?? "canal"}`),
+      })),
+    ];
+  }
+
+  /** Submenu de reação: os emojis frequentes e a porta para o seletor completo. */
+  function submenuDeReacao(ancora: Anchor): MenuItem[] {
+    return [
+      ...frequentes.map<MenuItem>((emoji) => ({
+        label: rotuloDaReacao(emoji),
+        icon: <EmojiDaReacao emoji={emoji} tamanho={18} />,
+        onSelect: () => reagir(emoji),
+      })),
+      { separator: true },
+      {
+        label: "Mais emojis…",
+        icon: <SmilePlus size={18} />,
+        onSelect: () => setPicker({ alvo: "reacao", ancora }),
+      },
+    ];
+  }
+
   function openMenu(e: MouseEvent) {
     if (unconfirmed) return;
     e.preventDefault();
+    const ancora: Anchor = { x: e.clientX, y: e.clientY, width: 0, height: 0 };
     const items: MenuItem[] = [];
+
     if (!sistema) {
       items.push({
-        label: "Adicionar reação",
+        label: "Adicionar Reação",
         icon: <SmilePlus size={18} />,
-        onSelect: () => setPicking(true),
+        submenu: submenuDeReacao(ancora),
       });
-      if (onOpenThread) {
-        items.push({ label: "Responder", icon: <CornerUpLeft size={18} />, onSelect: responder });
-        items.push({
-          label: message.thread ? "Ver thread" : "Criar thread",
-          icon: <MessageSquare size={18} />,
-          onSelect: () => (message.thread ? onOpenThread(message) : void criarThread()),
-        });
-      }
+      if (isOwn) items.push({ label: "Editar Mensagem", icon: <Pencil size={18} />, onSelect: startEdit });
       if (canPin) {
         items.push({
-          label: message.pinned ? "Desafixar mensagem" : "Fixar mensagem",
+          label: message.pinned ? "Desafixar Mensagem" : "Fixar Mensagem",
           icon: message.pinned ? <PinOff size={18} /> : <Pin size={18} />,
           onSelect: alternarFixada,
         });
       }
-      if (isOwn) items.push({ label: "Editar mensagem", icon: <Pencil size={18} />, onSelect: startEdit });
+      items.push({ label: "Responder", icon: <CornerUpLeft size={18} />, onSelect: responder });
+      const destinos = destinosParaEncaminhar();
+      if (destinos.length > 0) {
+        items.push({ label: "Encaminhar", icon: <CornerUpRight size={18} />, submenu: destinos });
+      }
+      if (onOpenThread) {
+        items.push({
+          label: message.thread ? "Ver Tópico" : "Criar Tópico",
+          icon: <MessageSquare size={18} />,
+          onSelect: () => (message.thread ? onOpenThread(message) : void criarThread()),
+        });
+      }
       items.push({ separator: true });
       items.push({
-        label: "Copiar texto",
+        label: "Copiar Texto",
         icon: <Copy size={18} />,
         disabled: !message.content,
         onSelect: () => void navigator.clipboard?.writeText(message.content),
       });
     }
-    items.push({
-      label: "Copiar link da mensagem",
-      icon: <Link2 size={18} />,
-      onSelect: copiarLink,
-    });
-    items.push({
-      label: "Copiar ID da mensagem",
-      onSelect: () => void navigator.clipboard?.writeText(message.id),
-    });
+
+    items.push({ label: "Marcar Não Lida", icon: <MailOpen size={18} />, onSelect: marcarNaoLida });
+    items.push({ label: "Copiar Link", icon: <Link2 size={18} />, onSelect: copiarLink });
     // só faz sentido quando há link, e só o autor/moderação pode mexer
-    if ((isOwn || canModerate) && extractFirstUrl(message.content)) {
+    if (!sistema && (isOwn || canModerate) && extractFirstUrl(message.content)) {
       items.push({
-        label: message.suppressEmbeds ? "Mostrar prévia do link" : "Remover prévia do link",
+        label: message.suppressEmbeds ? "Mostrar Prévia do Link" : "Remover Prévia do Link",
         icon: <EyeOff size={18} />,
         onSelect: () =>
           emit(WS_EVENTS.MESSAGE_SUPPRESS_EMBEDS, {
@@ -347,36 +467,31 @@ export default function MessageItem({
       });
     }
 
+    if (canDelete || !isOwn) items.push({ separator: true });
+    if (canDelete) {
+      items.push({
+        label: "Apagar Mensagem",
+        icon: <Trash2 size={18} />,
+        danger: true,
+        // Shift pula a confirmação, como no Discord
+        onSelect: () => onDelete(message.id, shiftPressionado()),
+      });
+    }
     // ── h-moderacao ──
     if (!isOwn) {
       items.push({
-        label: "Denunciar mensagem",
+        label: "Denunciar Mensagem",
         icon: <Flag size={18} />,
         onSelect: () =>
           ui.openModal({ kind: "report", messageId: message.id, preview: message.content }),
       });
     }
-    if (canModerate) {
+    // sempre o último item do menu
+    if (modoDesenvolvedor) {
       items.push({ separator: true });
       items.push({
-        label: "Selecionar mensagens",
-        icon: <CheckSquare size={18} />,
-        onSelect: () => startSelection(message.channelId, message.id),
-      });
-      items.push({
-        label: "Apagar mensagens depois desta",
-        icon: <ArrowRightToLine size={18} />,
-        danger: true,
-        onSelect: () => void deleteAfter(message.channelId, message.id),
-      });
-    }
-    if (canDelete) {
-      items.push({ separator: true });
-      items.push({
-        label: "Apagar mensagem",
-        icon: <Trash2 size={18} />,
-        danger: true,
-        onSelect: () => onDelete(message.id),
+        label: "Copiar ID da Mensagem",
+        onSelect: () => void navigator.clipboard?.writeText(message.id),
       });
     }
     ui.openContextMenu(e.clientX, e.clientY, items);
@@ -394,8 +509,17 @@ export default function MessageItem({
 
   // narração do canal (fixar, entrada de membro, eventos de grupo): é o mesmo
   // componente que a timeline usa, para não haver duas versões do mesmo texto
-  if (sistema) return <SystemMessageItem message={message} />;
-
+  if (sistema) {
+    return (
+      <SystemMessageItem
+        message={message}
+        grouped={grouped}
+        currentUserId={currentUserId}
+        onToggleReaction={onToggleReaction}
+        onMenu={openMenu}
+      />
+    );
+  }
 
   return (
     <div
@@ -407,26 +531,17 @@ export default function MessageItem({
           ? undefined
           : { marginTop: "var(--espaco-entre-grupos, 17px)" }
       }
-      onClick={selecting ? () => toggleSelected(message.id) : undefined}
-      className={`group relative flex py-0.5 pr-12 transition-colors ${
+      // sem `transition-colors`: o Discord troca o fundo no mesmo quadro, e a
+      // transição fazia o realce "arrastar" atrás do cursor ao correr a lista
+      className={`group relative flex py-0.5 pr-12 ${
         compacto ? "gap-1.5 pl-4" : "gap-4 pl-[72px]"
-      } ${selected ? "bg-accent/15" : fundo} ${message.pending ? "opacity-60" : ""} ${
-        selecting ? "cursor-pointer" : ""
-      }`}
+      } ${fundo} ${message.pending ? "opacity-60" : ""}`}
     >
-      {selecting && (
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={() => toggleSelected(message.id)}
-          aria-label={`Selecionar mensagem de ${displayNameOf(author)}`}
-          className="absolute right-4 top-1 h-4 w-4 accent-accent"
-        />
-      )}
       {compacto ? null : grouped && !message.replyTo ? (
-        // hora na margem, só no hover — como o Discord faz com mensagens agrupadas
+        // hora na calha, alinhada à direita e só no hover — como o Discord faz
+        // com mensagens agrupadas
         <span
-          className={`absolute left-0 top-1 w-[72px] select-none text-center text-[11px] leading-[22px] text-txt-muted ${
+          className={`absolute left-0 top-1 w-14 select-none pr-0 text-right text-[11px] leading-[22px] text-txt-muted ${
             sempreHora ? "" : "opacity-0"
           } group-hover:opacity-100`}
         >
@@ -461,14 +576,6 @@ export default function MessageItem({
             <Tooltip label={dataCompleta(message.createdAt)}>
               <span className="ml-1 text-xs text-txt-muted">{horaCompleta(message.createdAt)}</span>
             </Tooltip>
-            {message.pinned && (
-              <Tooltip label="Mensagem fixada">
-                <span className="text-txt-muted">
-                  <Pin size={12} aria-label="Mensagem fixada" />
-                </span>
-              </Tooltip>
-            )}
-            {message.pending && <span className="text-xs italic text-txt-muted">enviando…</span>}
           </div>
         )}
 
@@ -480,24 +587,35 @@ export default function MessageItem({
             }}
             className="mt-1"
           >
-            <textarea
-              autoFocus
-              rows={Math.min(8, Math.max(1, draft.split("\n").length))}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") setEditing(false);
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  submitEdit();
-                }
-              }}
-              aria-label="Editar mensagem"
-              className="w-full resize-none rounded-lg bg-input px-4 py-[11px] text-txt-normal outline-none"
-            />
+            <div className="relative">
+              <textarea
+                autoFocus
+                rows={Math.min(8, Math.max(1, draft.split("\n").length))}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") stopEditing();
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    submitEdit();
+                  }
+                }}
+                aria-label="Editar mensagem"
+                className="w-full resize-none rounded-lg bg-input py-[11px] pl-4 pr-12 text-txt-normal outline-none"
+              />
+              {/* o Discord mantém o emoji também na caixa de edição */}
+              <button
+                type="button"
+                onClick={(e) => setPicker({ alvo: "edicao", ancora: anchorOf(e.currentTarget) })}
+                aria-label="Emoji"
+                className="absolute right-2 top-1.5 grid h-8 w-8 place-items-center text-txt-secondary transition hover:text-txt-primary"
+              >
+                <Smile size={22} />
+              </button>
+            </div>
             <div className="mt-1 text-xs text-txt-muted">
               escape para{" "}
-              <button type="button" onClick={() => setEditing(false)} className="text-txt-link hover:underline">
+              <button type="button" onClick={stopEditing} className="text-txt-link hover:underline">
                 cancelar
               </button>{" "}
               • enter para{" "}
@@ -541,7 +659,12 @@ export default function MessageItem({
           )
         )}
 
+        {/* ordem do Discord: conteúdo → enquete → anexos → embeds → reações → thread */}
         {message.sticker && <StickerView sticker={message.sticker} />}
+        {/* h-moderacao: a enquete é uma face da mensagem, não um bloco à parte */}
+        {message.poll && (
+          <PollCard poll={message.poll} canModerate={Boolean(canModerate)} isAuthor={isOwn} />
+        )}
         <MediaGroup attachments={message.attachments} />
         {videoId && <YouTubeEmbed videoId={videoId} title={message.content} />}
         {imagemDireta && (
@@ -561,11 +684,48 @@ export default function MessageItem({
             />
           </button>
         )}
-        {/* h-moderacao: a enquete é uma face da mensagem, não um bloco à parte */}
-        {message.poll && (
-          <PollCard poll={message.poll} canModerate={Boolean(canModerate)} isAuthor={isOwn} />
-        )}
         {embed && <LinkEmbedCard embed={embed} />}
+
+        {message.reactions.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {message.reactions.map((r) => {
+              const mine = currentUserId ? r.userIds.includes(currentUserId) : false;
+              return (
+                <TooltipReacao
+                  key={r.emoji}
+                  emoji={r.emoji}
+                  userIds={r.userIds}
+                  conhecidos={conhecidos}
+                >
+                  <button
+                    type="button"
+                    aria-pressed={mine}
+                    aria-label={`${rotuloDaReacao(r.emoji)}, ${r.count} ${r.count === 1 ? "reação" : "reações"}`}
+                    onClick={() => reagir(r.emoji)}
+                    className={`flex h-6 items-center gap-1.5 rounded-lg border px-1.5 transition ${
+                      mine
+                        ? "border-accent bg-accent/20 text-txt-primary"
+                        : "border-transparent bg-panel text-txt-normal hover:border-border-strong"
+                    }`}
+                  >
+                    <EmojiDaReacao emoji={r.emoji} tamanho={tamanhoEmoji} />
+                    <span className="text-sm font-semibold leading-none">{r.count}</span>
+                  </button>
+                </TooltipReacao>
+              );
+            })}
+            <Tooltip label="Adicionar reação">
+              <button
+                type="button"
+                onClick={abrirSeletorDeReacao}
+                aria-label="Adicionar reação"
+                className="grid h-6 min-w-[2.375rem] place-items-center rounded-lg border border-transparent bg-panel px-1.5 text-txt-muted opacity-0 transition hover:border-border-strong hover:text-txt-primary group-hover:opacity-100"
+              >
+                <SmilePlus size={16} />
+              </button>
+            </Tooltip>
+          </div>
+        )}
 
         {onOpenThread && (message.thread || message.replyCount > 0) && (
           <button
@@ -576,7 +736,7 @@ export default function MessageItem({
             {message.thread && message.thread.participants.length > 0 && (
               <span className="flex -space-x-1.5" aria-hidden="true">
                 {message.thread.participants.map((p) => (
-                  <Avatar key={p.id} user={p} size="sm" className="h-4 w-4 ring-2 ring-chat" />
+                  <Avatar key={p.id} user={p} size="xs" className="ring-2 ring-chat" />
                 ))}
               </span>
             )}
@@ -593,45 +753,6 @@ export default function MessageItem({
             )}
             <span className="font-normal text-txt-muted">›</span>
           </button>
-        )}
-
-        {message.reactions.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-1">
-            {message.reactions.map((r) => {
-              const mine = currentUserId ? r.userIds.includes(currentUserId) : false;
-              return (
-                <Tooltip
-                  key={r.emoji}
-                  label={`${nomesDeQuemReagiu(r.userIds, conhecidos)} ${
-                    r.count === 1 ? "reagiu" : "reagiram"
-                  } com ${rotuloDaReacao(r.emoji)}`}
-                >
-                  <button
-                    type="button"
-                    aria-pressed={mine}
-                    aria-label={`${rotuloDaReacao(r.emoji)}, ${r.count} ${r.count === 1 ? "reação" : "reações"}`}
-                    onClick={() => onToggleReaction(message.id, r.emoji)}
-                    className={`flex min-h-[26px] items-center gap-1.5 rounded-lg border px-1.5 text-sm transition ${
-                      mine
-                        ? "border-accent bg-accent/20 text-txt-primary"
-                        : "border-transparent bg-panel text-txt-normal hover:border-border-strong"
-                    }`}
-                  >
-                    <EmojiDaReacao emoji={r.emoji} tamanho={tamanhoEmoji} />
-                    <span className="text-xs font-medium">{r.count}</span>
-                  </button>
-                </Tooltip>
-              );
-            })}
-            <button
-              type="button"
-              onClick={() => setPicking(true)}
-              aria-label="Adicionar reação"
-              className="grid h-[26px] w-8 place-items-center rounded-lg border border-transparent bg-panel text-txt-muted opacity-0 transition hover:border-border-strong hover:text-txt-primary group-hover:opacity-100"
-            >
-              <SmilePlus size={16} />
-            </button>
-          </div>
         )}
 
         {message.failed && message.nonce && (
@@ -655,60 +776,38 @@ export default function MessageItem({
         )}
       </div>
 
-      {/* barra de ações: no hover e também ao chegar pelo teclado */}
-      {!unconfirmed && !editing && !selecting && (
-        <div className="absolute -top-4 right-4 hidden rounded border border-black/20 bg-chat p-0.5 shadow-high group-focus-within:flex group-hover:flex">
-          <ActionButton label="Adicionar reação" onClick={() => setPicking((p) => !p)}>
+      {/*
+        Mini-barra: no máximo quatro casas, como no Discord — reações rápidas,
+        "Adicionar reação", responder/editar e o "…". Fixar, denunciar e apagar
+        moram dentro do "…"; nove ícones em fila viravam uma régua ilegível.
+        No primeiro item da lista ela desce para dentro da linha: subindo, seria
+        cortada pelo topo da área rolável.
+      */}
+      {!unconfirmed && !editing && (
+        <div
+          className={`absolute right-4 ${
+            primeiro ? "top-0.5" : "-top-4"
+          } hidden rounded border border-black/20 bg-chat p-0.5 shadow-high group-focus-within:flex group-hover:flex`}
+        >
+          {frequentes.slice(0, RAPIDAS_NA_BARRA).map((emoji) => (
+            <ActionButton
+              key={emoji}
+              label={`Reagir com ${rotuloDaReacao(emoji)}`}
+              onClick={() => reagir(emoji)}
+            >
+              <EmojiDaReacao emoji={emoji} tamanho={20} />
+            </ActionButton>
+          ))}
+          <ActionButton label="Adicionar reação" onClick={abrirSeletorDeReacao}>
             <SmilePlus size={20} />
           </ActionButton>
-          {onOpenThread && (
-            <ActionButton label="Responder" onClick={responder}>
-              <CornerUpLeft size={20} />
-            </ActionButton>
-          )}
-          {onOpenThread && (
-            <ActionButton
-              label={message.thread ? "Ver thread" : "Criar thread"}
-              onClick={() => (message.thread ? onOpenThread(message) : void criarThread())}
-            >
-              <MessageSquare size={20} />
-            </ActionButton>
-          )}
-          {canPin && (
-            <ActionButton
-              label={message.pinned ? "Desafixar mensagem" : "Fixar mensagem"}
-              onClick={alternarFixada}
-            >
-              {message.pinned ? <PinOff size={20} /> : <Pin size={20} />}
-            </ActionButton>
-          )}
-          {isOwn && (
+          {isOwn ? (
             <ActionButton label="Editar" onClick={startEdit}>
               <Pencil size={20} />
             </ActionButton>
-          )}
-          {!isOwn && (
-            <ActionButton
-              label="Denunciar"
-              danger
-              onClick={() =>
-                ui.openModal({ kind: "report", messageId: message.id, preview: message.content })
-              }
-            >
-              <Flag size={20} />
-            </ActionButton>
-          )}
-          {canModerate && (
-            <ActionButton
-              label="Selecionar mensagens"
-              onClick={() => startSelection(message.channelId, message.id)}
-            >
-              <ListChecks size={20} />
-            </ActionButton>
-          )}
-          {canDelete && (
-            <ActionButton label="Apagar" danger onClick={() => onDelete(message.id)}>
-              <Trash2 size={20} />
+          ) : (
+            <ActionButton label="Responder" onClick={responder}>
+              <CornerUpLeft size={20} />
             </ActionButton>
           )}
           <ActionButton label="Mais" onClick={openMenu}>
@@ -717,15 +816,20 @@ export default function MessageItem({
         </div>
       )}
 
-      {picking && (
-        <EmojiPicker
-          className="absolute right-4 top-4"
-          onClose={() => setPicking(false)}
-          onPick={(e) => {
-            onToggleReaction(message.id, e);
-            setPicking(false);
-          }}
-        />
+      {picker && (
+        <PainelFlutuante ancora={picker.ancora} onClose={() => setPicker(null)}>
+          <EmojiPicker
+            onClose={() => setPicker(null)}
+            onPick={(texto, custom) => {
+              if (picker.alvo === "edicao") {
+                setDraft((d) => d + (custom ? `:${custom.name}:` : texto));
+              } else {
+                reagir(texto);
+              }
+              setPicker(null);
+            }}
+          />
+        </PainelFlutuante>
       )}
     </div>
   );

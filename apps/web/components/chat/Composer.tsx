@@ -10,15 +10,19 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   Angry,
   Annoyed,
   CirclePlus,
+  Eye,
+  EyeOff,
   FileText,
   Hash,
   Laugh,
   MessageSquarePlus,
   Paperclip,
+  Pencil,
   Smile,
   Sticker as StickerIcon,
   Upload,
@@ -31,26 +35,29 @@ import {
   MAX_MESSAGE_LENGTH,
   Permission,
   SPOILER_PREFIX,
+  colorRoleOf,
   displayNameOf,
   mentionsEveryone,
+  slowmodeLabel,
   type Attachment,
+  type Role,
   type Sticker,
 } from "@streamz/shared";
 import Autocomplete, { type ItemAutocomplete } from "@/components/chat/Autocomplete";
-import GifPicker from "@/components/media/GifPicker";
-import StickerPicker from "@/components/media/StickerPicker";
+import PickerPanel, { type PickerTab } from "@/components/media/PickerPanel";
 import Avatar from "@/components/ui/Avatar";
-import EmojiPicker from "@/components/ui/EmojiPicker";
 import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";
 import { aplicarEscolha, detectarGatilho, mover, type Gatilho } from "@/lib/composer-autocomplete";
 import { buscarComandos, interpretarComando } from "@/lib/comandos-barra";
 import { buscarEmojisUnicode } from "@/lib/emojis-unicode";
+import { EVENTO_MENCAO, type DetalheMencao } from "@/lib/mencoes";
 import { lerRascunho, limparRascunho, salvarRascunho } from "@/lib/rascunhos";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { aplicarEmojisPersonalizados, todosOsEmojis, useEmojis } from "@/stores/emojis";
 import { useGuilds } from "@/stores/guilds";
+import { useMessages } from "@/stores/messages";
 import { useCan, usePermissions } from "@/stores/permissions";
 import { useSettings } from "@/stores/settings";
 import { errorMessage } from "@/stores/socket-adapter";
@@ -63,6 +70,11 @@ const MAX_HEIGHT_PX = 200;
 const COUNTER_THRESHOLD = 0.9;
 /** Sugestões mostradas de uma vez em cada gatilho. */
 const MAX_SUGESTOES = 10;
+/** Lado do cartão de prévia de anexo. */
+const LADO_PREVIA = 216;
+/** Altura aproximada de um item do menu de contexto, para abri-lo para cima. */
+const ALTURA_ITEM = 32;
+const ALTURA_SEPARADOR = 9;
 
 /** Um arquivo escolhido, ainda não enviado — dá para renomear e marcar spoiler. */
 interface AnexoLocal {
@@ -82,31 +94,26 @@ let seqAnexo = 0;
 /** Ícones que o botão de emoji alterna no hover (o easter egg do Discord). */
 const CARINHAS = [Smile, Laugh, Angry, Annoyed];
 
-/** Botão de ícone à direita do composer (GIF, figurinha, emoji). */
+/** Botão de ícone à direita do composer (presente, GIF, figurinha, emoji). */
 function SideButton({
   label,
   onClick,
-  disabled = false,
   onMouseEnter,
   children,
 }: {
   label: string;
   onClick?: () => void;
-  disabled?: boolean;
   onMouseEnter?: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <Tooltip label={disabled ? `${label} (em breve)` : label}>
+    <Tooltip label={label}>
       <button
         type="button"
         onClick={onClick}
         onMouseEnter={onMouseEnter}
         aria-label={label}
-        aria-disabled={disabled}
-        className={`grid h-11 w-8 place-items-center text-txt-secondary transition ${
-          disabled ? "cursor-not-allowed opacity-60" : "hover:text-txt-primary"
-        }`}
+        className="grid h-11 w-8 place-items-center text-txt-secondary transition hover:text-txt-primary"
       >
         {children}
       </button>
@@ -118,7 +125,7 @@ function SideButton({
  * Campo de envio de mensagem, no leiaute do Discord.
  *
  * Além do texto, é daqui que saem anexo, GIF, figurinha, emoji e os comandos de
- * barra. Duas decisões que valem registro:
+ * barra. Três decisões que valem registro:
  *
  * - **O arquivo só sobe no envio.** Enquanto está na prévia dá para renomear e
  *   marcar como spoiler, e o nome é justamente o que carrega essa marca
@@ -128,53 +135,57 @@ function SideButton({
  *   (`localStorage`), porque o componente é remontado a cada canal e perder o
  *   que estava escrito por clicar no canal errado é o tipo de coisa que só se
  *   percebe quando acontece.
+ * - **O `↑` não edita aqui dentro.** Ele abre a edição *na própria mensagem*, na
+ *   timeline: no Discord o composer não muda de papel, e trocar o campo de envio
+ *   por um campo de edição fazia sumir o que estava escrito.
  */
 export default function Composer({
   channelId,
+  guildId,
   placeholder,
   onSend,
   allowAttachments = false,
-  compact = false,
   ariaLabel,
-  channelName,
+  destino,
   draftKey,
   ultimaMinhaMensagem,
-  onEditMessage,
   onCreateThread,
   onCreatePoll,
+  modoLento,
 }: {
   /** canal em que se está digitando — para o aviso de "digitando…". */
   channelId?: string;
+  /** servidor do canal (null em conversa direta) — os emojis do picker vêm dele. */
+  guildId?: string | null;
   placeholder: string;
   onSend: (content: string, attachments: Attachment[], sticker?: Sticker) => void;
   allowAttachments?: boolean;
-  /** variação enxuta usada no painel de thread. */
-  compact?: boolean;
   ariaLabel: string;
-  /** nome do canal, para o overlay de arrastar ("Solte para enviar em #canal"). */
-  channelName?: string;
+  /** destino já formatado ("#geral", "@ana", "Grupo X") para o overlay de arrastar. */
+  destino?: string;
   /** chave do rascunho; o painel de thread usa uma própria para não colidir. */
   draftKey?: string;
-  /** última mensagem minha neste canal — `↑` no campo vazio abre a edição. */
+  /** última mensagem minha neste canal — `↑` no campo vazio abre a edição dela. */
   ultimaMinhaMensagem?: () => { id: string; content: string } | null;
-  onEditMessage?: (id: string, content: string) => void;
   /** menu do "+": criar thread a partir da conversa. */
   onCreateThread?: () => void;
   /** menu do "+": criar enquete (h-moderacao). */
   onCreatePoll?: () => void;
+  /** modo lento do canal: o aviso e a contagem vivem dentro do composer. */
+  modoLento?: { segundos: number; restante: number; bloqueado: boolean };
 }) {
   const [draft, setDraft] = useState("");
   const [pendentes, setPendentes] = useState<AnexoLocal[]>([]);
   const [prontos, setProntos] = useState<Attachment[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const [aberto, setAberto] = useState<"emoji" | "gif" | "figurinha" | null>(null);
+  const [aberto, setAberto] = useState<PickerTab | null>(null);
   const [termoGif, setTermoGif] = useState("");
-  const [editandoId, setEditandoId] = useState<string | null>(null);
   const [carinha, setCarinha] = useState(0);
   const sendMode = useSettings((s) => s.sendMode);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const me = useAuth((s) => s.user);
   const membros = useGuilds((s) => s.members);
@@ -254,14 +265,6 @@ export default function Composer({
   async function submit() {
     if (!podeEnviar) return;
 
-    // edição de mensagem própria (aberta com ↑ no campo vazio)
-    if (editandoId) {
-      const texto = draft.trim();
-      if (texto) onEditMessage?.(editandoId, aplicarEmojisPersonalizados(texto, todosOsEmojis(emojisPorGuild)));
-      cancelarEdicao();
-      return;
-    }
-
     const comando = interpretarComando(draft.trim());
     if (comando.tipo === "desconhecido") {
       ui.toast(`Não conheço o comando /${comando.nome}.`, "error");
@@ -317,11 +320,6 @@ export default function Composer({
     return enviados;
   }
 
-  function cancelarEdicao() {
-    setEditandoId(null);
-    setDraft("");
-  }
-
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     // com o popup aberto, as setas e o Enter pertencem à lista
     if (gatilho && sugestoes.length > 0) {
@@ -342,19 +340,12 @@ export default function Composer({
       }
     }
 
-    if (event.key === "Escape" && editandoId) {
-      event.preventDefault();
-      cancelarEdicao();
-      return;
-    }
-
-    // ↑ no campo vazio abre a última mensagem minha para editar (como no Discord)
+    // ↑ no campo vazio abre a edição **na mensagem**, não aqui (como no Discord)
     if (event.key === "ArrowUp" && !draft && ultimaMinhaMensagem) {
       const ultima = ultimaMinhaMensagem();
       if (ultima) {
         event.preventDefault();
-        setEditandoId(ultima.id);
-        setDraft(ultima.content);
+        useMessages.getState().startEditing(ultima.id);
         return;
       }
     }
@@ -378,6 +369,21 @@ export default function Composer({
       el?.setSelectionRange(inicio + texto.length, inicio + texto.length);
     });
   }
+
+  // "Mencionar" dos menus de contexto (lista de membros, participantes de voz,
+  // cabeçalho de mensagem): quem menciona não sabe qual composer está montado,
+  // então o evento é global e quem está na tela resolve. Ver `lib/mencoes`.
+  useEffect(() => {
+    function aoMencionar(e: Event) {
+      const detalhe = (e as CustomEvent<DetalheMencao>).detail;
+      if (!detalhe?.texto) return;
+      // avisa quem disparou que este composer atendeu (ver `lib/mencoes`)
+      e.preventDefault();
+      inserirTexto(detalhe.texto);
+    }
+    window.addEventListener(EVENTO_MENCAO, aoMencionar);
+    return () => window.removeEventListener(EVENTO_MENCAO, aoMencionar);
+  });
 
   function adicionarArquivos(files: FileList | File[]) {
     const lista = Array.from(files);
@@ -439,20 +445,25 @@ export default function Composer({
         onSelect: onCreateThread,
       });
     }
-    items.push({
-      label: "Criar enquete",
-      icon: <Vote size={18} />,
-      disabled: true,
-      onSelect: () => undefined,
-    });
+    // "Criar enquete" só entra quando há para onde ir; o Discord nunca mostra
+    // item morto — o mesmo motivo pelo qual "Mensagem de voz" e "Criar evento"
+    // ainda não aparecem aqui (não há backend para nenhum dos dois)
+    if (onCreatePoll) {
+      items.push({ label: "Criar enquete", icon: <Vote size={18} />, onSelect: onCreatePoll });
+    }
     const r = event.currentTarget.getBoundingClientRect();
-    ui.openContextMenu(r.left, r.top, items);
+    // abre **para cima**, alinhado à borda esquerda do botão: para baixo o menu
+    // cairia por cima do próprio composer
+    const altura =
+      items.reduce((h, i) => h + ("separator" in i ? ALTURA_SEPARADOR : ALTURA_ITEM), 0) + 16;
+    ui.openContextMenu(r.left, Math.max(8, r.top - 8 - altura), items);
   }
 
   const Carinha = CARINHAS[carinha];
 
   return (
     <form
+      ref={formRef}
       onSubmit={(e) => {
         e.preventDefault();
         void submit();
@@ -477,24 +488,13 @@ export default function Composer({
       }
       className="relative shrink-0 px-4"
     >
-      {dragging && (
-        <div className="pointer-events-none absolute inset-x-4 bottom-0 top-[-140px] z-[65] grid place-items-center rounded-lg border-2 border-dashed border-accent bg-accent/20">
-          <span className="flex items-center gap-2 text-lg font-bold text-white">
-            <Upload size={28} aria-hidden="true" />
-            Solte para enviar em {channelName ? `#${channelName}` : "esta conversa"}
-          </span>
-        </div>
-      )}
-
-      {editandoId && (
-        <p className="mb-1 text-xs text-txt-muted">
-          Editando a mensagem — <kbd>esc</kbd> cancela, <kbd>enter</kbd> salva.
-        </p>
-      )}
+      {dragging && <OverlayArrastar alvo={formRef.current} destino={destino} />}
 
       <div className="rounded-lg bg-input">
         {(pendentes.length > 0 || prontos.length > 0) && (
-          <div className="flex flex-wrap gap-4 border-b border-black/20 px-3 py-4">
+          // uma linha só, com rolagem horizontal: quebrar em várias linhas
+          // empurrava a timeline para cima a cada arquivo
+          <div className="flex gap-3 overflow-x-auto border-b border-black/20 px-4 py-4">
             {pendentes.map((anexo) => (
               <PreviaAnexo
                 key={anexo.id}
@@ -519,23 +519,17 @@ export default function Composer({
               />
             ))}
             {prontos.map((a) => (
-              <div key={a.id} className="relative h-[184px] w-[184px] rounded-lg bg-panel p-2">
+              <div
+                key={a.id}
+                style={{ height: LADO_PREVIA, width: LADO_PREVIA }}
+                className="group/anexo relative shrink-0 rounded-lg bg-panel p-2"
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={a.url} alt={a.filename} className="h-full w-full rounded object-contain" />
-                {/* quem sai do fluxo é este span: o wrapper do Tooltip já é
-                    `relative`, então nem o botão de dentro nem a classe dele
-                    conseguiriam se posicionar no canto do cartão */}
-                <span className="absolute -right-2 -top-2">
-                  <Tooltip label="Remover">
-                    <button
-                      type="button"
-                      onClick={() => setProntos((prev) => prev.filter((x) => x.id !== a.id))}
-                      aria-label={`Remover ${a.filename}`}
-                      className="grid h-8 w-8 place-items-center rounded bg-panel text-red shadow-high hover:bg-hov"
-                    >
-                      <X size={18} />
-                    </button>
-                  </Tooltip>
+                <span className="absolute right-2 top-2 hidden group-hover/anexo:flex">
+                  <BotaoCartao label={`Remover ${a.filename}`} danger onClick={() => setProntos((prev) => prev.filter((x) => x.id !== a.id))}>
+                    <X size={16} />
+                  </BotaoCartao>
                 </span>
               </div>
             ))}
@@ -555,19 +549,21 @@ export default function Composer({
                   e.target.value = "";
                 }}
               />
-              <Tooltip label="Anexar, criar thread ou enquete">
-                <button
-                  type="button"
-                  onClick={abrirMenuMais}
-                  aria-label="Mais opções de envio"
-                  className="grid h-11 w-14 place-items-center text-txt-secondary transition hover:text-txt-primary"
-                >
-                  <CirclePlus size={24} />
-                </button>
-              </Tooltip>
+              {/* sem tooltip descritivo: o Discord não rotula o "+" com a lista
+                  do que ele faz */}
+              <button
+                type="button"
+                onClick={abrirMenuMais}
+                aria-label="Mais opções de envio"
+                className="mx-4 mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-full text-txt-secondary transition hover:text-txt-primary"
+              >
+                <CirclePlus size={24} />
+              </button>
             </>
           ) : (
-            <span className="w-4" aria-hidden="true" />
+            // mesmo recuo do canal: sem isso o composer da thread ficava
+            // desalinhado do resto da coluna
+            <span className="w-14 shrink-0" aria-hidden="true" />
           )}
 
           <textarea
@@ -589,24 +585,36 @@ export default function Composer({
           />
 
           <div className="flex items-center pr-2">
-            {!compact && (
-              <>
-                <SideButton
-                  label="GIF"
-                  onClick={() => setAberto((a) => (a === "gif" ? null : "gif"))}
+            {modoLento && (
+              <Tooltip label={`Modo lento ligado (${slowmodeLabel(modoLento.segundos)})`}>
+                <span
+                  aria-live="polite"
+                  className={`px-2 text-xs tabular-nums ${
+                    modoLento.bloqueado ? "text-txt-normal" : "text-txt-muted"
+                  }`}
                 >
-                  <span className="rounded-[3px] border-2 border-current px-0.5 text-[10px] font-bold leading-3">
-                    GIF
-                  </span>
-                </SideButton>
-                <SideButton
-                  label="Figurinha"
-                  onClick={() => setAberto((a) => (a === "figurinha" ? null : "figurinha"))}
-                >
-                  <StickerIcon size={24} />
-                </SideButton>
-              </>
+                  {modoLento.bloqueado
+                    ? `${modoLento.restante}s`
+                    : slowmodeLabel(modoLento.segundos)}
+                </span>
+              </Tooltip>
             )}
+            {/* Ordem do Discord: (presente) → GIF → figurinha → emoji. O botão
+                de presente fica de fora enquanto não existir o que presentear:
+                item que só avisa "indisponível" é pior que item ausente. */}
+            {/* GIF e figurinha existem também na thread: o composer da thread do
+                Discord tem os mesmos botões do canal */}
+            <SideButton label="GIF" onClick={() => setAberto((a) => (a === "gif" ? null : "gif"))}>
+              <span className="rounded-[3px] border-2 border-current px-0.5 text-[10px] font-bold leading-3">
+                GIF
+              </span>
+            </SideButton>
+            <SideButton
+              label="Figurinha"
+              onClick={() => setAberto((a) => (a === "figurinha" ? null : "figurinha"))}
+            >
+              <StickerIcon size={24} />
+            </SideButton>
             <SideButton
               label="Emoji"
               onClick={() => setAberto((a) => (a === "emoji" ? null : "emoji"))}
@@ -622,6 +630,8 @@ export default function Composer({
       {gatilho && sugestoes.length > 0 && (
         <Autocomplete
           titulo={TITULO_GATILHO[gatilho.tipo]}
+          termo={gatilho.termo}
+          gatilho={gatilho.tipo}
           itens={sugestoes}
           selecionado={selecionado}
           onEscolher={escolherSugestao}
@@ -629,33 +639,23 @@ export default function Composer({
         />
       )}
 
-      {aberto === "emoji" && (
-        <EmojiPicker
+      {/* emoji, GIF e figurinha são um painel só, com abas */}
+      {aberto && (
+        <PickerPanel
+          tab={aberto}
+          onTab={setAberto}
           className="absolute bottom-full right-4 mb-2"
+          termoGif={termoGif}
+          guildId={guildId}
           onClose={() => setAberto(null)}
           // no composer entra `:nome:`: é o que a pessoa lê e consegue editar;
           // a forma interna `<:nome:id>` é aplicada no envio
-          onPick={(texto, custom) => inserirTexto(custom ? `:${custom.name}:` : texto)}
-        />
-      )}
-
-      {aberto === "gif" && (
-        <GifPicker
-          className="absolute bottom-full right-4 mb-2"
-          termoInicial={termoGif}
-          onClose={() => setAberto(null)}
-          onEscolher={(attachment) => {
+          onPickEmoji={(texto, custom) => inserirTexto(custom ? `:${custom.name}:` : texto)}
+          onGif={(attachment) => {
             setProntos((prev) => [...prev, attachment]);
             setAberto(null);
           }}
-        />
-      )}
-
-      {aberto === "figurinha" && (
-        <StickerPicker
-          className="absolute bottom-full right-4 mb-2"
-          onClose={() => setAberto(null)}
-          onEscolher={(sticker) => {
+          onSticker={(sticker) => {
             setAberto(null);
             // figurinha é a mensagem inteira, como no Discord
             onSend("", [], sticker);
@@ -665,15 +665,43 @@ export default function Composer({
         />
       )}
 
+      {/* fora da caixa, na faixa de 24px abaixo: dentro dela o contador ficava
+          por cima dos botões de emoji */}
       {mostrarContador && (
         <span
           aria-live="polite"
-          className={`absolute bottom-1 right-6 text-xs ${restante <= 0 ? "text-red" : "text-txt-muted"}`}
+          className={`absolute -bottom-5 right-4 text-xs tabular-nums ${
+            restante <= 0 ? "text-red" : "text-txt-muted"
+          }`}
         >
           {restante}
         </span>
       )}
     </form>
+  );
+}
+
+/**
+ * Overlay de arrastar: cobre **a área do chat inteira**, e não um retângulo
+ * arbitrário acima do composer. A caixa é medida a partir do `<main>` que
+ * contém o composer e desenhada em portal, porque um `absolute` dentro do form
+ * nunca alcançaria a timeline.
+ */
+function OverlayArrastar({ alvo, destino }: { alvo: HTMLElement | null; destino?: string }) {
+  const area = (alvo?.closest("main") ?? alvo)?.getBoundingClientRect();
+  if (!area || typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      style={{ top: area.top + 8, left: area.left + 8, width: area.width - 16, height: area.height - 16 }}
+      className="pointer-events-none fixed z-[65] grid place-items-center rounded-lg border-2 border-dashed border-accent bg-accent/20"
+    >
+      <span className="flex flex-col items-center gap-3 text-center">
+        <Upload size={56} strokeWidth={1.5} aria-hidden="true" className="text-white" />
+        <span className="text-2xl font-extrabold text-white">Arraste e solte para enviar</span>
+        {destino && <span className="text-sm text-white/80">em {destino}</span>}
+      </span>
+    </div>,
+    document.body,
   );
 }
 
@@ -684,7 +712,41 @@ const TITULO_GATILHO: Record<Gatilho["tipo"], string> = {
   "/": "Comandos",
 };
 
-/** Prévia de um arquivo ainda não enviado, com nome, spoiler e progresso. */
+/** Botão de ícone no canto do cartão de prévia — só aparece no hover. */
+function BotaoCartao({
+  label,
+  onClick,
+  danger = false,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip label={label}>
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={label}
+        className={`grid h-7 w-7 place-items-center rounded bg-rail/90 transition hover:bg-hov ${
+          danger ? "text-red" : "text-txt-normal hover:text-txt-primary"
+        }`}
+      >
+        {children}
+      </button>
+    </Tooltip>
+  );
+}
+
+/**
+ * Prévia de um arquivo ainda não enviado.
+ *
+ * As três ações (spoiler, renomear, remover) são ícones no canto superior
+ * direito e só aparecem no hover, como no Discord — o checkbox com a palavra
+ * "spoiler" e o X sempre visível pesavam mais que a própria imagem.
+ */
 function PreviaAnexo({
   anexo,
   onRemover,
@@ -697,7 +759,10 @@ function PreviaAnexo({
   onSpoiler: () => void;
 }) {
   return (
-    <div className="relative flex h-[184px] w-[184px] flex-col rounded-lg bg-panel p-2">
+    <div
+      style={{ height: LADO_PREVIA, width: LADO_PREVIA }}
+      className="group/anexo relative flex shrink-0 flex-col rounded-lg bg-panel p-2"
+    >
       {anexo.previewUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -711,26 +776,8 @@ function PreviaAnexo({
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={onRenomear}
-        title="Renomear"
-        className="mt-2 truncate text-left text-sm text-txt-normal hover:underline"
-      >
-        {anexo.nome}
-      </button>
-      <div className="flex items-center justify-between gap-1 text-[11px] text-txt-muted">
-        <span className="truncate">{formatBytes(anexo.file.size)}</span>
-        <label className="flex shrink-0 cursor-pointer items-center gap-1">
-          <input
-            type="checkbox"
-            checked={anexo.spoiler}
-            onChange={onSpoiler}
-            className="accent-accent"
-          />
-          spoiler
-        </label>
-      </div>
+      <span className="mt-2 truncate text-sm text-txt-normal">{anexo.nome}</span>
+      <span className="truncate text-[11px] text-txt-muted">{formatBytes(anexo.file.size)}</span>
 
       {anexo.progresso >= 0 && (
         <div
@@ -745,17 +792,19 @@ function PreviaAnexo({
         </div>
       )}
 
-      <span className="absolute -right-2 -top-2">
-        <Tooltip label="Remover anexo">
-          <button
-            type="button"
-            onClick={onRemover}
-            aria-label={`Remover ${anexo.nome}`}
-            className="grid h-8 w-8 place-items-center rounded bg-panel text-red shadow-high hover:bg-hov"
-          >
-            <X size={18} />
-          </button>
-        </Tooltip>
+      <span className="absolute right-2 top-2 hidden gap-1 group-hover/anexo:flex">
+        <BotaoCartao
+          label={anexo.spoiler ? "Não marcar como spoiler" : "Marcar como spoiler"}
+          onClick={onSpoiler}
+        >
+          {anexo.spoiler ? <EyeOff size={16} /> : <Eye size={16} />}
+        </BotaoCartao>
+        <BotaoCartao label="Renomear" onClick={onRenomear}>
+          <Pencil size={16} />
+        </BotaoCartao>
+        <BotaoCartao label={`Remover ${anexo.nome}`} danger onClick={onRemover}>
+          <X size={16} />
+        </BotaoCartao>
       </span>
     </div>
   );
@@ -772,10 +821,13 @@ function comNomeFinal(anexo: AnexoLocal): File {
 function montarSugestoes(
   gatilho: Gatilho | null,
   fontes: {
-    membros: { user: { id: string; username: string; displayName: string | null; avatarUrl: string | null; status: string } }[];
+    membros: {
+      user: { id: string; username: string; displayName: string | null; avatarUrl: string | null; status: string };
+      roleIds: readonly string[];
+    }[];
     canais: { id: string; name: string | null; type: string }[];
     emojisPorGuild: { emojis: { id: string; name: string; url: string }[] }[];
-    cargos: { id: string; name: string; color: string | null; mentionable: boolean }[];
+    cargos: readonly Role[];
   },
 ): ItemAutocomplete[] {
   if (!gatilho) return [];
@@ -823,6 +875,7 @@ function montarSugestoes(
         valor: `<@&${r.id}>`,
         rotulo: `@${r.name}`,
         detalhe: "cargo",
+        cor: r.color ?? undefined,
         icone: (
           <span
             aria-hidden="true"
@@ -845,6 +898,8 @@ function montarSugestoes(
         valor: `@${m.user.username}`,
         rotulo: displayNameOf(m.user),
         detalhe: m.user.username,
+        // o nome do membro sai na cor do cargo mais alto, como na timeline
+        cor: colorRoleOf(m.roleIds, fontes.cargos)?.color ?? undefined,
         icone: <Avatar user={m.user as never} size="sm" />,
       }));
     return [...alcance, ...cargos, ...pessoas];

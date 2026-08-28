@@ -133,12 +133,22 @@ interface MessagesState {
   /** onde a busca corre: só no canal aberto ou no servidor inteiro. */
   searchScope: "channel" | "guild";
 
-  /** mensagem sendo respondida (barra acima do composer). */
-  replyTarget: { channelId: string; message: Message } | null;
+  /**
+   * Mensagem sendo respondida (barra acima do composer). `threadId` diz **em
+   * qual composer** a barra aparece: a thread compartilha o `channelId` com o
+   * canal, então sem ele as duas barras acenderiam ao mesmo tempo.
+   */
+  replyTarget: { channelId: string; message: Message; threadId: string | null } | null;
   /** "@ ligado": a resposta menciona o autor da original (padrão do Discord). */
   replyMention: boolean;
   /** mensagem alcançada por um "ir para" — fica destacada por 2 s. */
   highlightId: string | null;
+  /**
+   * Mensagem aberta para edição **na timeline**. Fica na store porque quem
+   * dispara a edição pelo `↑` é o composer, e no Discord o campo de envio não
+   * muda de papel: quem vira caixa de edição é a própria mensagem.
+   */
+  editingId: string | null;
 
   /** `sticky`: a sala não é abandonada ao trocar de canal (conversas diretas). */
   open: (channelId: string, opts?: { sticky?: boolean }) => Promise<void>;
@@ -151,7 +161,10 @@ interface MessagesState {
   retry: (nonce: string) => void;
   discard: (nonce: string) => void;
   edit: (messageId: string, content: string) => void;
-  remove: (messageId: string) => Promise<void>;
+  /** `semConfirmar` = Shift no clique de apagar (atalho do Discord). */
+  remove: (messageId: string, semConfirmar?: boolean) => Promise<void>;
+  startEditing: (messageId: string) => void;
+  stopEditing: () => void;
   toggleReaction: (messageId: string, emoji: string, userId?: string) => void;
 
   /** `parent` só precisa do id: a lista de threads não tem a mensagem em mãos. */
@@ -163,7 +176,7 @@ interface MessagesState {
   runSearch: (target: { channelId: string; guildId: string | null }) => Promise<void>;
   clearSearch: () => void;
 
-  startReply: (message: Message) => void;
+  startReply: (message: Message, threadId?: string | null) => void;
   cancelReply: () => void;
   toggleReplyMention: () => void;
 
@@ -285,6 +298,7 @@ export const useMessages = create<MessagesState>((set, get) => {
     replyTarget: null,
     replyMention: true,
     highlightId: null,
+    editingId: null,
 
     open: async (channelId, opts = {}) => {
       if (get().activeChannelId === channelId) {
@@ -302,6 +316,7 @@ export const useMessages = create<MessagesState>((set, get) => {
         // responder é por canal: a barra não pode sobreviver à troca
         replyTarget: null,
         highlightId: null,
+        editingId: null,
       });
       touchChannel(channelId);
       joinChannel(channelId, opts);
@@ -317,6 +332,7 @@ export const useMessages = create<MessagesState>((set, get) => {
         searchResults: null,
         replyTarget: null,
         highlightId: null,
+        editingId: null,
       });
     },
 
@@ -356,9 +372,13 @@ export const useMessages = create<MessagesState>((set, get) => {
       // figurinha sozinha já é mensagem — o contrato aceita conteúdo vazio nesse caso
       if (!text && list.length === 0 && !sticker) return;
       const nonce = newNonce();
-      // a barra "Respondendo a X" só vale para o canal em que foi aberta
+      // a barra "Respondendo a X" só vale para o canal **e o escopo** em que foi
+      // aberta: a thread divide o channelId com o canal, e sem comparar o
+      // `threadId` uma resposta iniciada no canal viajaria junto com a da thread
       const alvo = get().replyTarget;
-      const respondendo = alvo && alvo.channelId === channelId && !parentId ? alvo.message : null;
+      const mesmoEscopo =
+        !!alvo && alvo.channelId === channelId && alvo.threadId === (parentId ?? null);
+      const respondendo = mesmoEscopo ? alvo!.message : null;
       const replyMention = get().replyMention;
       const optimistic = optimisticMessage({
         nonce,
@@ -422,16 +442,26 @@ export const useMessages = create<MessagesState>((set, get) => {
       emit(WS_EVENTS.MESSAGE_EDIT, { messageId, content: text });
     },
 
-    remove: async (messageId) => {
-      const ok = await ui.confirm({
-        title: "Apagar esta mensagem?",
-        message: "A mensagem some para todo mundo no canal.",
-        confirmLabel: "Apagar",
-        danger: true,
-      });
-      if (!ok) return;
+    remove: async (messageId, semConfirmar = false) => {
+      // Shift no clique pula a caixa — é o atalho do Discord para quem está
+      // limpando várias mensagens seguidas
+      if (!semConfirmar) {
+        const ok = await ui.confirm({
+          title: "Apagar esta mensagem?",
+          message: "A mensagem some para todo mundo no canal.",
+          // a caixa desenha a própria mensagem: confirmar sem ver o que se
+          // apaga é como o erro acontece
+          preview: messageId,
+          confirmLabel: "Apagar",
+          danger: true,
+        });
+        if (!ok) return;
+      }
       emit(WS_EVENTS.MESSAGE_DELETE, { messageId });
     },
+
+    startEditing: (messageId) => set({ editingId: messageId }),
+    stopEditing: () => set({ editingId: null }),
 
     toggleReaction: (messageId, emoji, userId) => {
       const state = get();
@@ -495,8 +525,11 @@ export const useMessages = create<MessagesState>((set, get) => {
 
     clearSearch: () => set({ searchQuery: "", searchResults: null, searching: false }),
 
-    startReply: (message) =>
-      set({ replyTarget: { channelId: message.channelId, message }, replyMention: true }),
+    startReply: (message, threadId = null) =>
+      set({
+        replyTarget: { channelId: message.channelId, message, threadId },
+        replyMention: true,
+      }),
 
     cancelReply: () => set({ replyTarget: null }),
 
@@ -585,6 +618,7 @@ export const useMessages = create<MessagesState>((set, get) => {
         replyTarget: null,
         replyMention: true,
         highlightId: null,
+        editingId: null,
       });
     },
   };

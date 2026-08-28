@@ -1,13 +1,39 @@
 "use client";
 
-import { AtSign, Hash, Inbox, MessageCircle } from "lucide-react";
-import { displayNameOf } from "@streamz/shared";
-import type { InboxUnreadChannel } from "@streamz/shared";
+import { useMemo, useState } from "react";
+import { AtSign, Check, CornerUpRight, Hash, Inbox, MessageCircle, Settings } from "lucide-react";
+import { mentionsUser } from "@streamz/shared";
+import type { InboxMention, InboxUnreadChannel } from "@streamz/shared";
 import HeaderPopover from "@/components/chat/HeaderPopover";
-import Avatar from "@/components/ui/Avatar";
-import { horaCompleta } from "@/lib/format";
+import MessagePreview, { AcaoDoCartao } from "@/components/chat/MessagePreview";
+import { api } from "@/lib/api";
+import { useAuth } from "@/stores/auth";
+import { useChannels } from "@/stores/channels";
+import { useDMs } from "@/stores/dms";
+import { useGuilds } from "@/stores/guilds";
 import { useInbox } from "@/stores/messages-inbox";
 import { goToChannel, goToMessage } from "@/stores/messages-navigate";
+import { ui } from "@/stores/ui";
+
+/**
+ * Caixa de entrada do cabeçalho.
+ *
+ * São **três** abas, como no Discord: "Para Você" (tudo que chegou para mim —
+ * menções e respostas), "Não Lidas" (canais com novidade) e "Menções" (só o que
+ * cita o meu @). As três moram na linha do título, não como pílulas dentro do
+ * corpo do painel.
+ *
+ * As duas primeiras listas vêm do mesmo `GET /me/mentions`: o contrato não
+ * separa menção de resposta, então a aba "Menções" filtra pelo texto com a
+ * mesma `mentionsUser` que decide se algo notifica.
+ */
+type Aba = "paraVoce" | "naoLidas" | "mencoes";
+
+const ABAS: { id: Aba; rotulo: string }[] = [
+  { id: "paraVoce", rotulo: "Para Você" },
+  { id: "naoLidas", rotulo: "Não Lidas" },
+  { id: "mencoes", rotulo: "Menções" },
+];
 
 /** Rótulo de um canal na caixa: `#canal` no servidor, o nome na conversa. */
 function rotuloDoCanal(c: Pick<InboxUnreadChannel, "channelName" | "channelType">): string {
@@ -15,119 +41,191 @@ function rotuloDoCanal(c: Pick<InboxUnreadChannel, "channelName" | "channelType"
   return `#${c.channelName ?? "canal"}`;
 }
 
-/**
- * Caixa de entrada do cabeçalho: "Para você" (menções não lidas em todos os
- * servidores e conversas) e "Não lidos" (canais com novidade, por servidor).
- */
 export default function InboxPopover() {
-  const tab = useInbox((s) => s.tab);
-  const setTab = useInbox((s) => s.setTab);
+  const [aba, setAba] = useState<Aba>("paraVoce");
+  /** "este servidor" filtra os não-lidos pelo servidor aberto. */
+  const [soEsteServidor, setSoEsteServidor] = useState(false);
+  /** menções já resolvidas nesta sessão do painel (o contrato não tem "ler uma"). */
+  const [lidas, setLidas] = useState<Set<string>>(new Set());
+  const me = useAuth((s) => s.user);
+  const guildAtiva = useGuilds((s) => s.activeGuildId);
   const mentions = useInbox((s) => s.mentions);
   const unread = useInbox((s) => s.unread);
   const loading = useInbox((s) => s.loading);
   const load = useInbox((s) => s.load);
   const markAllRead = useInbox((s) => s.markAllRead);
 
+  const paraVoce = useMemo(
+    () => mentions.filter((m) => !lidas.has(m.message.id)),
+    [mentions, lidas],
+  );
+  const soMencoes = useMemo(
+    () => paraVoce.filter((m) => !!me && mentionsUser(m.message.content, me.username)),
+    [paraVoce, me],
+  );
+  const naoLidas = useMemo(
+    () => (soEsteServidor ? unread.filter((g) => g.guildId === guildAtiva) : unread),
+    [unread, soEsteServidor, guildAtiva],
+  );
+
+  const contagem: Record<Aba, number> = {
+    paraVoce: paraVoce.length,
+    naoLidas: naoLidas.reduce((total, g) => total + g.channels.length, 0),
+    mencoes: soMencoes.length,
+  };
+
+  /** Marca o canal da menção como lido e tira o cartão da lista. */
+  function marcarComoLida(m: InboxMention) {
+    setLidas((s) => new Set(s).add(m.message.id));
+    const channelId = m.message.channelId;
+    // a chamada é direta porque a menção pode ser de um servidor que não está
+    // aberto — as stores só conhecem os canais do servidor/conversas carregados
+    void api.markRead(channelId).catch(() => undefined);
+    void useChannels.getState().markRead(channelId);
+    void useDMs.getState().markRead(channelId);
+  }
+
+  const lista = aba === "mencoes" ? soMencoes : paraVoce;
+
   return (
     <HeaderPopover
       label="Caixa de entrada"
-      title="Caixa de entrada"
-      icon={<Inbox size={24} />}
-      width="w-[440px]"
+      title="Caixa de Entrada"
+      icon={<Inbox size={20} />}
+      largura={440}
       onOpen={() => void load()}
-      action={
-        tab === "unread" && unread.length > 0 ? (
-          <button
-            type="button"
-            onClick={() => void markAllRead()}
-            className="text-xs font-medium text-txt-link hover:underline"
-          >
-            Marcar tudo como lido
-          </button>
-        ) : undefined
-      }
-    >
-      {(fechar) => (
-        <>
-          <div className="mb-2 flex gap-1 px-1">
-            {(
-              [
-                ["mentions", "Para você"],
-                ["unread", "Não lidos"],
-              ] as const
-            ).map(([k, rotulo]) => (
+      tituloControle={() => (
+        <div className="flex min-w-0 items-center gap-3">
+          <h2 className="shrink-0 font-semibold text-txt-primary">Caixa de Entrada</h2>
+          <div role="tablist" aria-label="Caixa de entrada" className="flex min-w-0 gap-1">
+            {ABAS.map((a) => (
               <button
-                key={k}
+                key={a.id}
                 type="button"
-                onClick={() => setTab(k)}
-                aria-pressed={tab === k}
-                className={`rounded-[3px] px-2 py-1 text-sm font-medium transition ${
-                  tab === k ? "bg-sel text-txt-primary" : "text-txt-muted hover:text-txt-normal"
+                role="tab"
+                aria-selected={aba === a.id}
+                onClick={() => setAba(a.id)}
+                className={`flex shrink-0 items-center gap-1 rounded-[3px] px-1.5 py-0.5 text-xs font-medium transition ${
+                  aba === a.id ? "bg-sel text-txt-primary" : "text-txt-muted hover:text-txt-normal"
                 }`}
               >
-                {rotulo}
+                {a.rotulo}
+                {contagem[a.id] > 0 && (
+                  <span className="text-[11px] text-txt-faint">{contagem[a.id]}</span>
+                )}
               </button>
             ))}
           </div>
-
+        </div>
+      )}
+      action={
+        <button
+          type="button"
+          onClick={() => ui.openModal({ kind: "settings", tab: "notificacoes" })}
+          aria-label="Configurações de notificação"
+          className="grid h-6 w-6 place-items-center rounded text-txt-secondary transition hover:text-txt-primary"
+        >
+          <Settings size={18} />
+        </button>
+      }
+    >
+      {(fechar) => (
+        <div role="tabpanel">
           {loading && <p className="p-4 text-center text-sm text-txt-muted">Carregando…</p>}
 
-          {!loading && tab === "mentions" && (
+          {!loading && aba !== "naoLidas" && (
             <>
-              {mentions.length === 0 && (
+              {lista.length === 0 && (
                 <div className="p-6 text-center">
                   <AtSign size={32} aria-hidden="true" className="mx-auto mb-2 text-txt-faint" />
-                  <p className="text-sm text-txt-muted">Nenhuma menção não lida.</p>
+                  <p className="text-sm text-txt-muted">Nada esperando por você.</p>
                 </div>
               )}
-              {mentions.map((m) => (
-                <button
+              {lista.map((m) => (
+                <MessagePreview
                   key={m.message.id}
-                  type="button"
-                  onClick={() => {
-                    fechar();
-                    void goToMessage({
-                      guildId: m.guildId,
-                      channelId: m.message.channelId,
-                      messageId: m.message.id,
-                    });
-                  }}
-                  className="mb-1 block w-full rounded-[5px] bg-chat p-3 text-left last:mb-0 hover:bg-msghov"
-                >
-                  <div className="flex items-center gap-1.5 text-xs text-txt-muted">
-                    <span className="truncate font-medium text-txt-secondary">
-                      {m.guildName ?? "Mensagens diretas"}
-                    </span>
-                    <span aria-hidden="true">›</span>
-                    <span className="truncate">
-                      {rotuloDoCanal({ channelName: m.channelName, channelType: m.channelType })}
-                    </span>
-                    <span className="ml-auto shrink-0">{horaCompleta(m.message.createdAt)}</span>
-                  </div>
-                  <div className="mt-1 flex items-center gap-2">
-                    <Avatar user={m.message.author} size="sm" />
-                    <span className="font-medium text-txt-primary">
-                      {displayNameOf(m.message.author)}
-                    </span>
-                  </div>
-                  <p className="mt-0.5 line-clamp-2 break-words text-sm text-txt-normal">
-                    {m.message.content ||
-                      (m.message.attachments.length > 0 ? "(anexo)" : "(mensagem vazia)")}
-                  </p>
-                </button>
+                  message={m.message}
+                  className="mb-1 last:mb-0"
+                  acima={
+                    <div className="mb-1 flex items-center gap-1.5 pr-16 text-xs text-txt-muted">
+                      <span className="truncate font-medium text-txt-secondary">
+                        {m.guildName ?? "Mensagens diretas"}
+                      </span>
+                      <span aria-hidden="true">›</span>
+                      <span className="truncate">
+                        {rotuloDoCanal({
+                          channelName: m.channelName,
+                          channelType: m.channelType,
+                        })}
+                      </span>
+                    </div>
+                  }
+                  acoes={
+                    <>
+                      <AcaoDoCartao label="Marcar como lida" onClick={() => marcarComoLida(m)}>
+                        <Check size={16} />
+                      </AcaoDoCartao>
+                      <AcaoDoCartao
+                        label="Saltar"
+                        onClick={() => {
+                          fechar();
+                          void goToMessage({
+                            guildId: m.guildId,
+                            channelId: m.message.channelId,
+                            messageId: m.message.id,
+                          });
+                        }}
+                      >
+                        <CornerUpRight size={16} />
+                      </AcaoDoCartao>
+                    </>
+                  }
+                />
               ))}
             </>
           )}
 
-          {!loading && tab === "unread" && (
+          {!loading && aba === "naoLidas" && (
             <>
-              {unread.length === 0 && (
+              <div className="mb-2 flex items-center gap-1 px-1">
+                {(
+                  [
+                    [true, "Este servidor"],
+                    [false, "Todos os servidores"],
+                  ] as const
+                ).map(([valor, rotulo]) => (
+                  <button
+                    key={rotulo}
+                    type="button"
+                    onClick={() => setSoEsteServidor(valor)}
+                    aria-pressed={soEsteServidor === valor}
+                    className={`rounded-[3px] px-2 py-1 text-xs font-medium transition ${
+                      soEsteServidor === valor
+                        ? "bg-sel text-txt-primary"
+                        : "text-txt-muted hover:text-txt-normal"
+                    }`}
+                  >
+                    {rotulo}
+                  </button>
+                ))}
+                {naoLidas.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => void markAllRead()}
+                    className="ml-auto text-xs font-medium text-txt-link hover:underline"
+                  >
+                    Marcar tudo como lido
+                  </button>
+                )}
+              </div>
+
+              {naoLidas.length === 0 && (
                 <div className="p-6 text-center">
                   <Inbox size={32} aria-hidden="true" className="mx-auto mb-2 text-txt-faint" />
                   <p className="text-sm text-txt-muted">Você está em dia. Nada por ler.</p>
                 </div>
               )}
-              {unread.map((g) => (
+              {naoLidas.map((g) => (
                 <section key={g.guildId ?? "@me"} className="mb-2 last:mb-0">
                   <h3 className="px-2 py-1 text-xs font-semibold uppercase text-txt-muted">
                     {g.guildName}
@@ -161,7 +259,7 @@ export default function InboxPopover() {
               ))}
             </>
           )}
-        </>
+        </div>
       )}
     </HeaderPopover>
   );

@@ -34,7 +34,9 @@ export function useStickyScroll(
     const atBottom =
       el.scrollHeight - el.scrollTop - el.clientHeight < BOTTOM_THRESHOLD_PX;
     atBottomRef.current = atBottom;
-    if (atBottom && showJump) setShowJump(false);
+    // o botão de "voltar ao presente" acompanha a posição, não a chegada de
+    // mensagem: no Discord ele está lá sempre que você não está no fim
+    if (atBottom === showJump) setShowJump(!atBottom);
     if (el.scrollTop < TOP_TRIGGER_PX && options?.canLoadOlder && options.onReachTop) {
       heightBeforeLoadRef.current = el.scrollHeight;
       options.onReachTop();
@@ -60,6 +62,7 @@ export function useStickyScroll(
     if (wasEmpty) {
       el.scrollTop = el.scrollHeight; // primeira carga: começa no fim
       atBottomRef.current = true;
+      setShowJump(false);
       return;
     }
     // a ordem importa: uma mensagem nova pode ter cortado o topo pela janela de
