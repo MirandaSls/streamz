@@ -12,6 +12,7 @@ import InviteModal from "@/components/modals/InviteModal";
 import InvitesModal from "@/components/modals/InvitesModal";
 import PromptDialog from "@/components/modals/PromptDialog";
 import ServerSettingsModal from "@/components/modals/ServerSettingsModal";
+import RecortarImagemModal from "@/components/modals/RecortarImagemModal";
 import QuickSwitcher from "@/components/ui/QuickSwitcher";
 import SettingsModal from "@/components/modals/SettingsModal";
 // ── d-social ──
@@ -56,6 +57,8 @@ function renderModal(modal: Modal) {
       return <ConfirmDialog modal={modal} />;
     case "prompt":
       return <PromptDialog modal={modal} />;
+    case "recortarImagem":
+      return <RecortarImagemModal modal={modal} />;
     case "createChannel":
       return <CreateChannelModal categoryId={modal.categoryId ?? null} />;
     case "channelAccess":

@@ -28,11 +28,19 @@ import { ui } from "@/stores/ui";
  *
  * Quem sai da conta faz isso pelo menu lateral do shell — ter o mesmo "Sair"
  * duas vezes na mesma tela só criava a dúvida de se os dois fazem o mesmo.
+ *
+ * O banner do cartão é o **mesmo** do perfil (aba "Perfil"), e por isso vem do
+ * `GET /users/:id/profile`: ele não cabe no `PublicUser` da sessão. Uma faixa
+ * fixa aqui fazia a troca do banner parecer que não tinha pego.
  */
 export default function ContaTab() {
   const user = useAuth((s) => s.user);
   const setUser = useAuth((s) => s.setUser);
   const [conta, setConta] = useState<MinhaConta | null>(null);
+  const [banner, setBanner] = useState<{ url: string | null; cor: string | null }>({
+    url: null,
+    cor: null,
+  });
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -47,6 +55,30 @@ export default function ContaTab() {
   useEffect(() => {
     void carregar();
   }, [carregar]);
+
+  // só a aba visível fica montada, então voltar de "Perfil" já traz o banner
+  // recém-trocado; falha aqui não é erro de tela — o cartão cai na cor padrão
+  const meuId = user?.id;
+  useEffect(() => {
+    if (!meuId) return;
+    let vivo = true;
+    api
+      .profile(meuId)
+      .then((p) => {
+        if (vivo) setBanner({ url: p.bannerUrl, cor: p.bannerColor });
+      })
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, [meuId]);
+
+  // mesmo caminho da aba "Perfil": escolher o arquivo abre o enquadramento, e
+  // só o recorte sobe
+  async function escolherAvatar(file: File) {
+    const recortado = await ui.recortarImagem(file, "avatar");
+    if (recortado) await uploadAvatar(recortado);
+  }
 
   async function uploadAvatar(file: File) {
     setUploading(true);
@@ -64,7 +96,15 @@ export default function ContaTab() {
       <Section title="Minha conta">
         {user && (
           <div className="overflow-hidden rounded-lg bg-footer">
-            <div className="h-[60px] bg-accent" />
+            {banner.url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={banner.url} alt="" className="h-[60px] w-full object-cover" />
+            ) : (
+              <div
+                className="h-[60px] w-full bg-accent"
+                style={banner.cor ? { backgroundColor: banner.cor } : undefined}
+              />
+            )}
             <div className="px-4 pb-4">
               <div className="-mt-8 flex items-end gap-3">
                 <div className="relative rounded-full border-[6px] border-footer">
@@ -76,7 +116,7 @@ export default function ContaTab() {
                     hidden
                     onChange={(e) => {
                       const f = e.target.files?.[0];
-                      if (f) void uploadAvatar(f);
+                      if (f) void escolherAvatar(f);
                       e.target.value = "";
                     }}
                   />

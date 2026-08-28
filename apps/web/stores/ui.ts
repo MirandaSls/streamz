@@ -2,6 +2,8 @@ import { create } from "zustand";
 import type { PublicUser } from "@streamz/shared";
 // ── h-moderacao ──
 import type { ServerSettingsTab } from "@/components/settings/server/tabs";
+// ── recorte de imagem ──
+import type { FormatoDeRecorte } from "@/lib/recorte";
 
 /**
  * Estado de interface que não pertence a nenhum domínio: qual coluna está em
@@ -54,6 +56,18 @@ export type Modal =
       initial: string;
       confirmLabel: string;
       resolve: (value: string | null) => void;
+    }
+  // ── recorte de imagem ──
+  | {
+      /**
+       * Ajuste de enquadramento antes de subir foto/banner. Como o `prompt`,
+       * devolve pela Promise: quem escolheu o arquivo continua linear e recebe
+       * de volta o recorte (ou `null`, se desistiu).
+       */
+      kind: "recortarImagem";
+      formato: FormatoDeRecorte;
+      arquivo: File;
+      resolve: (arquivo: File | null) => void;
     }
   // ── f-voz ──
   /** chamada recebida numa conversa direta; os dados vêm de `stores/voice`. */
@@ -236,6 +250,8 @@ interface UIState {
 
   confirm: (options: ConfirmOptions) => Promise<boolean>;
   prompt: (options: PromptOptions) => Promise<string | null>;
+  /** Abre o ajuste de enquadramento; devolve o recorte ou `null` se cancelou. */
+  recortarImagem: (arquivo: File, formato: FormatoDeRecorte) => Promise<File | null>;
 
   toast: (text: string, kind?: ToastKind) => void;
   dismissToast: (id: string) => void;
@@ -267,6 +283,7 @@ export const useUI = create<UIState>((set, get) => ({
     // Promise pendurada é vazamento: cancelar explicitamente ao desempilhar
     if (topo?.kind === "confirm") topo.resolve(false);
     if (topo?.kind === "prompt") topo.resolve(null);
+    if (topo?.kind === "recortarImagem") topo.resolve(null);
     set({ modals: pilha.slice(0, -1) });
   },
 
@@ -274,6 +291,7 @@ export const useUI = create<UIState>((set, get) => ({
     for (const m of get().modals) {
       if (m.kind === "confirm") m.resolve(false);
       if (m.kind === "prompt") m.resolve(null);
+      if (m.kind === "recortarImagem") m.resolve(null);
     }
     set({ modals: [] });
   },
@@ -324,6 +342,20 @@ export const useUI = create<UIState>((set, get) => ({
       set((s) => ({ modals: [...s.modals, modal] }));
     }),
 
+  recortarImagem: (arquivo, formato) =>
+    new Promise<File | null>((resolve) => {
+      const modal: Modal = {
+        kind: "recortarImagem",
+        formato,
+        arquivo,
+        resolve: (recortado) => {
+          set((s) => ({ modals: s.modals.filter((m) => m !== modal) }));
+          resolve(recortado);
+        },
+      };
+      set((s) => ({ modals: [...s.modals, modal] }));
+    }),
+
   toast: (text, kind = "info") => {
     const id = `t${++toastSeq}`;
     set((s) => ({ toasts: [...s.toasts, { id, kind, text }] }));
@@ -341,6 +373,8 @@ export const ui = {
   toast: (text: string, kind: ToastKind = "info") => useUI.getState().toast(text, kind),
   confirm: (options: ConfirmOptions) => useUI.getState().confirm(options),
   prompt: (options: PromptOptions) => useUI.getState().prompt(options),
+  recortarImagem: (arquivo: File, formato: FormatoDeRecorte) =>
+    useUI.getState().recortarImagem(arquivo, formato),
   openModal: (modal: Modal) => useUI.getState().openModal(modal),
   closeModal: () => useUI.getState().closeModal(),
   closeAllModals: () => useUI.getState().closeAllModals(),
