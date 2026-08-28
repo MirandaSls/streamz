@@ -32,7 +32,7 @@ services:
     ports:
       - "7880:7880" # signaling (ws)
       - "7881:7881" # rtc/tcp fallback
-      - "50000-50060:50000-50060/udp" # rtc/udp (mídia)
+      - "7882:7882/udp" # rtc/udp — porta única de mídia (mux), ver livekit.yaml
 
   # ── Aplicação ──────────────────────────────────────────────────────────────
   # `pnpm db:up` continua subindo só o Postgres (ele nomeia o serviço). Estes

@@ -11,10 +11,12 @@
 # As chaves daqui DEVEM bater com LIVEKIT_API_KEY/LIVEKIT_API_SECRET no .env.
 port: 7880
 rtc:
-  # WebRTC sobre UDP (faixa publicada no docker-compose) + fallback TCP em 7881
+  # Uma porta UDP só (mux) em vez de faixa: o LiveKit multiplexa todas as
+  # sessões nela. Publicar 60 portas no Docker criaria 60 processos
+  # `docker-proxy` e não traria capacidade nenhuma em troca.
+  udp_port: 7882
+  # fallback ICE sobre TCP, para rede que bloqueia UDP
   tcp_port: 7881
-  port_range_start: 50000
-  port_range_end: 50060
   # dev em localhost: não tenta descobrir IP externo (STUN)
   use_external_ip: false
 # formato: <api_key>: <api_secret>

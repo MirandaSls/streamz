@@ -1,0 +1,51 @@
+# Modelo da config do LiveKit **self-hosted em produção**.
+#
+#   cp livekit.prod.example.yaml livekit.yaml
+#   openssl rand -hex 32     # cole em `keys:` e em LIVEKIT_API_SECRET do .env
+#
+# `livekit.yaml` está no .gitignore porque carrega o secret real. A diferença
+# para o `livekit.example.yaml` (dev) não é cosmética: as três primeiras opções
+# abaixo são o que separa "funciona no localhost" de "funciona na internet".
+
+port: 7880
+
+rtc:
+  # Porta única de mídia (mux). Precisa estar aberta em UDP no firewall do
+  # provedor **e** no do sistema — é por ela que passa todo o áudio e vídeo.
+  udp_port: 7882
+
+  # Fallback ICE sobre TCP. Cobre a maioria das redes corporativas que
+  # bloqueiam UDP de saída; sem ele, essas pessoas simplesmente não têm som.
+  tcp_port: 7881
+
+  # **A opção que mais quebra deploy.** Num VPS a placa de rede quase nunca tem
+  # o IP público: o provedor faz NAT 1:1 (é o caso de AWS, Oracle e de quem
+  # revende Oracle, como a HostGator). Com `false` o LiveKit anuncia o IP
+  # interno nos candidatos ICE e ninguém consegue conectar — a chamada entra,
+  # o vídeo nunca aparece, e nada no log parece errado.
+  use_external_ip: true
+
+# Sala vazia é fechada rápido; sala sem publicador também. Evita que uma aba
+# esquecida segure recursos do servidor indefinidamente.
+room:
+  empty_timeout: 60
+  departure_timeout: 20
+
+# TURN é o último recurso: rede que só libera 443 de saída não conecta nem por
+# UDP nem por ICE/TCP em porta alta. Deixe desligado até alguém reclamar — e
+# então veja docs/selfhost-livekit.md, porque exige certificado próprio.
+turn:
+  enabled: false
+  # domain: turn.streamz.exemplo.com
+  # tls_port: 5349
+  # cert_file: /etc/livekit/certs/fullchain.pem
+  # key_file: /etc/livekit/certs/privkey.pem
+
+# formato: <api_key>: <api_secret> — os mesmos do .env
+keys:
+  streamz: TROQUE_POR_UM_SECRET_ALEATORIO_openssl_rand_hex_32
+
+logging:
+  level: info
+  # em produção o log vai para um coletor, não para olho humano
+  json: true

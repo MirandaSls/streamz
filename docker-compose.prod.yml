@@ -1,0 +1,54 @@
+# Override de produção. Use **sempre** junto do base, nunca sozinho:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+#     --profile livekit up -d --build
+#
+# O que ele acrescenta:
+#  1. Caddy na frente, terminando TLS para a web, a API e o signaling do LiveKit
+#     (o navegador recusa `ws://` numa página https — sem isso não há voz).
+#  2. Cores fixos por serviço, para que um `VACUUM` do Postgres não roube CPU do
+#     SFU no meio de uma chamada. Mídia é sensível a jitter; banco não é.
+#
+# Os limites abaixo assumem **4 vCPU**. Numa máquina de 6, dê mais à mídia:
+# livekit `cpuset: "2-5"` e o resto continua em "0,1".
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: streamz-caddy
+    restart: unless-stopped
+    # Copie o Caddyfile.example, troque os domínios e salve como ./Caddyfile.
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - api
+      - web
+    cpuset: "0,1"
+
+  livekit:
+    # A mídia fica com metade da máquina e não divide com ninguém.
+    cpuset: "2,3"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+
+  api:
+    cpuset: "0,1"
+    mem_limit: 1g
+
+  web:
+    cpuset: "0,1"
+    mem_limit: 1g
+
+  postgres:
+    cpuset: "0,1"
+    # Teto explícito: sem ele o Postgres cresce até brigar por RAM com o resto.
+    mem_limit: 2g
+
+volumes:
+  caddy-data:
+  caddy-config:
