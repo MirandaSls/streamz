@@ -52,6 +52,49 @@ interface GiphyCategory {
   gif?: GiphyItem;
 }
 
+/**
+ * Rótulo em pt-BR das categorias. O Giphy só devolve nome em inglês e a UI do
+ * projeto é toda em português, então o mapa é fixo — a lista dele também é (28
+ * categorias), e a chave é o `name_encoded`, que não muda quando eles reescrevem
+ * o nome de exibição.
+ *
+ * O rótulo vira **também** o termo de busca: o clique joga o termo no campo, e
+ * um campo em inglês num app em português desfaria a tradução na cara de quem
+ * clicou. A busca manda `lang=pt`, que é o que torna isso viável.
+ */
+const CATEGORIAS_PT: Record<string, string> = {
+  actions: "Ações",
+  adjectives: "Adjetivos",
+  animals: "Animais",
+  anime: "Anime",
+  "art-design": "Arte e design",
+  "cartoons-comics": "Desenhos e quadrinhos",
+  celebrities: "Celebridades",
+  decades: "Décadas",
+  emotions: "Emoções",
+  "fashion-beauty": "Moda e beleza",
+  "food-drink": "Comida e bebida",
+  gaming: "Games",
+  greetings: "Saudações",
+  holiday: "Datas comemorativas",
+  identity: "Identidade",
+  interests: "Interesses",
+  memes: "Memes",
+  movies: "Filmes",
+  music: "Música",
+  nature: "Natureza",
+  "news-politics": "Notícias e política",
+  reactions: "Reações",
+  science: "Ciência",
+  sports: "Esportes",
+  // "Adesivos", não "Figurinhas": figurinha já é uma feature nossa (Sticker), e
+  // repetir o nome faria a categoria do Giphy parecer o acervo do servidor.
+  stickers: "Adesivos",
+  transportation: "Transporte",
+  tv: "TV",
+  weird: "Estranho",
+};
+
 interface Cached {
   at: number;
   results: GifResult[];
@@ -111,9 +154,11 @@ export class GifsService {
     const params = new URLSearchParams({ api_key: process.env.GIPHY_API_KEY! });
     const dados = await this.pegar<{ data?: GiphyCategory[] }>(`${GIPHY}/categories?${params}`);
     const categories: GifCategory[] = (dados?.data ?? []).flatMap((c) => {
-      // `name` já é legível ("Reactions"); o `name_encoded` só socorre quando
-      // falta, e aí vira termo de busca trocando o hífen por espaço
-      const nome = c.name?.trim() || c.name_encoded?.replace(/-/g, " ").trim();
+      // o mapa cobre as 28 de hoje; categoria nova do Giphy cai no nome em
+      // inglês em vez de sumir da grade
+      const nome =
+        CATEGORIAS_PT[c.name_encoded ?? ""] ??
+        (c.name?.trim() || c.name_encoded?.replace(/-/g, " ").trim());
       const previewUrl = c.gif ? this.previewDe(c.gif) : undefined;
       if (!nome || !previewUrl) return [];
       return [{ name: nome, previewUrl, searchTerm: nome }];
