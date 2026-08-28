@@ -119,6 +119,9 @@ export function useRealtime(currentUserId?: string): void {
 
       on<PublicUser>(WS_EVENTS.USER_UPDATED, (user) => {
         usePresence.getState().applyProfile(user);
+        // a chamada guarda o retrato de quem entrou; sem isto, trocar a foto no
+        // meio dela só aparecia depois de sair e voltar
+        useVoice.getState().aplicarPerfil(user);
         const me = useAuth.getState().user;
         if (me && me.id === user.id) useAuth.getState().setUser(user);
       }),
