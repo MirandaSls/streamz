@@ -8,7 +8,7 @@ import {
   type DMChannelView,
   type Guild,
 } from "@streamz/shared";
-import { corDoAvatar } from "@/components/ui/Avatar";
+import { corDoAvatar } from "@/components/ui/avatar-cores";
 import Marca from "@/components/ui/Marca";
 import Tooltip from "@/components/ui/Tooltip";
 import { MENU_WIDTH, MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
