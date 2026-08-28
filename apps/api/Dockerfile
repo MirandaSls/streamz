@@ -57,6 +57,11 @@ ENV API_PORT=3333
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/packages/shared/dist packages/shared/dist
 COPY --from=build /app/packages/shared/package.json packages/shared/
+# Sem esta linha a imagem sobe e morre em "Cannot find module 'zod'": no pnpm o
+# node_modules da raiz só linka as deps diretas da RAIZ, e zod é dependência do
+# shared. Quem resolve o require é o symlink que mora aqui, apontando para o
+# store em /app/node_modules/.pnpm.
+COPY --from=build /app/packages/shared/node_modules packages/shared/node_modules
 COPY --from=build /app/apps/api/node_modules apps/api/node_modules
 COPY --from=build /app/apps/api/dist apps/api/dist
 COPY --from=build /app/apps/api/package.json apps/api/

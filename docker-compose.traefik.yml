@@ -1,0 +1,60 @@
+# Override de produção com Traefik no lugar do Caddy.
+# Substitui o docker-compose.prod.yml do repo — não use os dois juntos.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.traefik.yml \
+#     --profile livekit up -d --build
+#
+# Diferenças para o prod original:
+#  1. Sem Caddy: quem termina TLS é o Traefik, que roda fora deste stack
+#     (/opt/stack/traefik) e alcança estes serviços pela rede externa `proxy`.
+#  2. cpuset calibrado para **6 vCPU** (o original assume 4): a mídia fica com
+#     4 núcleos só para ela, porque jitter em SFU é perceptível e no Postgres não.
+
+services:
+  api:
+    networks: [default, proxy]
+    cpuset: "0,1"
+    mem_limit: 1g
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.api.rule=Host(`${API_DOMAIN}`)
+      - traefik.http.routers.api.entrypoints=websecure
+      - traefik.http.routers.api.tls.certresolver=le
+      - traefik.http.services.api.loadbalancer.server.port=3333
+
+  web:
+    networks: [default, proxy]
+    cpuset: "0,1"
+    mem_limit: 1g
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.web.rule=Host(`${WEB_DOMAIN}`)
+      - traefik.http.routers.web.entrypoints=websecure
+      - traefik.http.routers.web.tls.certresolver=le
+      - traefik.http.services.web.loadbalancer.server.port=3000
+
+  livekit:
+    networks: [default, proxy]
+    cpuset: "2-5"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    # !override: sem isso o Compose CONCATENA com a lista do base e o 7880
+    # continuaria publicado direto, sem TLS, driblando o Traefik.
+    ports: !override
+      # Mídia WebRTC não atravessa proxy HTTP — estas duas ficam diretas.
+      - "7881:7881"
+      - "7882:7882/udp"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.livekit.rule=Host(`${LIVEKIT_DOMAIN}`)
+      - traefik.http.routers.livekit.entrypoints=websecure
+      - traefik.http.routers.livekit.tls.certresolver=le
+      - traefik.http.services.livekit.loadbalancer.server.port=7880
+
+  postgres:
+    cpuset: "0,1"
+    mem_limit: 2g
+
+networks:
+  proxy:
+    external: true

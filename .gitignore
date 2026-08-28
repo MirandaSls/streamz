@@ -13,6 +13,8 @@ apps/desktop/src-tauri/target/
 .env
 .env.local
 .env.*.local
+# cópia de segurança do .env feita à mão no servidor: leva os segredos reais
+.env.bak*
 !.env.example
 
 # config com segredo real do LiveKit (copiada de livekit.example.yaml em dev
@@ -57,3 +59,6 @@ e2e-shots*/
 
 # saída do graphify (grafo local do código, regenerável)
 graphify-out/
+
+# worktrees do Claude Code — cada uma carrega um node_modules inteiro
+.claude/worktrees/
