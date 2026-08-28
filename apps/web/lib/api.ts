@@ -203,6 +203,7 @@ export const api = {
     form.append("file", file);
     return request<PublicUser>("/users/me/avatar", { method: "POST", body: form });
   },
+  removeAvatar: () => request<PublicUser>("/users/me/avatar", { method: "DELETE" }),
   searchUsers: (q: string) => request<PublicUser[]>(`/users/search?q=${encodeURIComponent(q)}`),
 
   // ── d-social: status personalizado, perfil rico ──

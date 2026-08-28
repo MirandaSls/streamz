@@ -151,6 +151,31 @@ export class UsersService {
     return dto;
   }
 
+  /**
+   * Remove a foto (o perfil volta para as iniciais).
+   *
+   * Ao contrário do banner, isto **avisa todo mundo**: a foto aparece em cada
+   * linha de mensagem e na lista de membros, e sem o evento as outras telas
+   * seguiriam mostrando um rosto que já não existe até alguém recarregar.
+   */
+  async removeAvatar(meId: string): Promise<PublicUser> {
+    const antes = await this.prisma.user.findUnique({
+      where: { id: meId },
+      select: { avatarKey: true },
+    });
+    // a URL zera junto: ela é derivada da chave, e deixá-la apontaria o `<img>`
+    // de todo mundo para um proxy que agora responde 404
+    const u = await this.prisma.user.update({
+      where: { id: meId },
+      data: { avatarKey: null, avatarUrl: null },
+    });
+    if (antes?.avatarKey) await this.storage.delete(antes.avatarKey);
+
+    const dto = toPublicUser(u);
+    this.realtime.emitAll(WS_EVENTS.USER_UPDATED, dto);
+    return dto;
+  }
+
   /** Corpo + content-type do avatar para o proxy público. */
   async avatarStream(userId: string): Promise<{ body: Readable; contentType: string }> {
     const u = await this.prisma.user.findUnique({

@@ -173,6 +173,12 @@ export class UsersController {
     return this.users.updateAvatar(user.sub, file);
   }
 
+  @UseGuards(JwtGuard)
+  @Delete("me/avatar")
+  removeAvatar(@CurrentUser() user: JwtPayload) {
+    return this.users.removeAvatar(user.sub);
+  }
+
   /** Busca de usuário para abrir DM / montar grupo (mín. 2 caracteres). */
   @UseGuards(JwtGuard)
   @Get("search")

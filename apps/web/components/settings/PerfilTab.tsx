@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Image as ImageIcon, Trash2 } from "lucide-react";
+import { Camera, Image as ImageIcon, Trash2 } from "lucide-react";
 import {
   MAX_ABOUT_ME,
   MAX_PRONOUNS,
@@ -22,8 +22,14 @@ import { ui } from "@/stores/ui";
 const COR_PADRAO = "#9be31f";
 
 /**
- * Aba "Perfil": banner (imagem ou cor), pronomes e "Sobre mim", com a prévia do
- * cartão **sempre** à direita.
+ * Aba "Perfil": foto, banner (imagem ou cor), pronomes e "Sobre mim", com a
+ * prévia do cartão **sempre** à direita.
+ *
+ * A foto também é trocável pela aba "Minha conta", num botão de câmera sobre o
+ * avatar. Ter os dois caminhos não é duplicação à toa: lá se edita a *conta*
+ * (quem você é para o sistema) e aqui a *aparência do perfil*, que é onde a
+ * pessoa vem quando quer mexer em como o cartão dela aparece — e a foto é
+ * metade desse cartão. Só aqui, porém, dá para **remover**.
  *
  * A prévia não é um extra de tela grande: ela é o objeto que se está editando.
  * Empilhá-la embaixo em telas estreitas quebrava o laço entre o campo e o
@@ -42,8 +48,12 @@ export default function PerfilTab() {
   const [bannerColor, setBannerColor] = useState(COR_PADRAO);
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [enviandoFoto, setEnviandoFoto] = useState(false);
   const [salvo, setSalvo] = useState({ aboutMe: "", pronouns: "", bannerColor: COR_PADRAO });
   const fileRef = useRef<HTMLInputElement>(null);
+  // input próprio: um só, compartilhado com o banner, mandaria a foto para a
+  // rota errada dependendo de qual botão foi clicado por último
+  const fotoRef = useRef<HTMLInputElement>(null);
 
   // o perfil rico não cabe no PublicUser da sessão — busca uma vez ao montar
   const meuId = user?.id;
@@ -131,10 +141,75 @@ export default function PerfilTab() {
     }
   }
 
+  // a foto vive na sessão (`useAuth`), não no perfil carregado aqui: trocar já
+  // atualiza a prévia ao lado e toda tela que mostra o avatar
+  async function enviarFoto(file: File) {
+    setEnviandoFoto(true);
+    try {
+      setUser(await api.updateAvatar(file));
+    } catch (e) {
+      ui.toast(errorMessage(e, "Não foi possível enviar a foto"), "error");
+    } finally {
+      setEnviandoFoto(false);
+    }
+  }
+
+  async function removerFoto() {
+    setEnviandoFoto(true);
+    try {
+      setUser(await api.removeAvatar());
+    } catch (e) {
+      ui.toast(errorMessage(e, "Não foi possível remover a foto"), "error");
+    } finally {
+      setEnviandoFoto(false);
+    }
+  }
+
   return (
     <div className="flex gap-6">
       <div className="min-w-0 flex-1">
-        <h3 className={ESTILO_ROTULO}>Banner do perfil</h3>
+        <h3 className={ESTILO_ROTULO}>Foto do perfil</h3>
+        <div className="flex flex-wrap items-center gap-3">
+          <Avatar user={user} size="xl" surface="border-panel" />
+          <input
+            ref={fotoRef}
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void enviarFoto(f);
+              e.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            disabled={enviandoFoto}
+            onClick={() => fotoRef.current?.click()}
+            className="flex h-9 items-center gap-2 rounded-[3px] bg-accent px-3 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
+          >
+            <Camera size={16} aria-hidden="true" />
+            {enviandoFoto ? "Enviando…" : user.avatarUrl ? "Trocar foto" : "Escolher foto"}
+          </button>
+          {user.avatarUrl && (
+            <Tooltip label="Remover foto">
+              <button
+                type="button"
+                disabled={enviandoFoto}
+                onClick={() => void removerFoto()}
+                aria-label="Remover foto"
+                className="grid h-9 w-9 place-items-center rounded-[3px] text-txt-secondary transition hover:bg-hov hover:text-red disabled:opacity-50"
+              >
+                <Trash2 size={16} />
+              </button>
+            </Tooltip>
+          )}
+        </div>
+        <p className="mt-2 text-xs text-txt-muted">
+          Sem foto, o perfil usa as iniciais do seu nome.
+        </p>
+
+        <h3 className={`${ESTILO_ROTULO} mt-5`}>Banner do perfil</h3>
         <div className="flex flex-wrap items-center gap-2">
           <input
             ref={fileRef}
