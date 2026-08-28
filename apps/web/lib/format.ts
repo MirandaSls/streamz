@@ -84,3 +84,10 @@ const DATA_COMPLETA = new Intl.DateTimeFormat("pt-BR", {
 export function dataCompleta(iso: string): string {
   return DATA_COMPLETA.format(new Date(iso));
 }
+
+/** "48,2 MB" — peso de arquivo em anexo e na página de download. */
+export function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}

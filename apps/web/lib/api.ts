@@ -21,6 +21,9 @@ import type {
   AuditLogPage,
   DiscoverableGuild,
   DMChannelView,
+  DownloadAutorizado,
+  DownloadCatalogo,
+  DownloadPlataforma,
   DMLeaveResult,
   FriendLists,
   FriendRequest,
@@ -83,6 +86,7 @@ const ROTAS_SEM_REFRESH = [
   "/auth/resend-verification",
   "/auth/forgot-password",
   "/auth/reset-password",
+  "/downloads/token",
 ];
 
 function cabecalhoAuth(token: string | null): Record<string, string> {
@@ -568,6 +572,12 @@ export const api = {
   discover: (q?: string) => request<DiscoverableGuild[]>(`/discover${query({ q })}`),
   joinDiscoverable: (guildId: string) =>
     request<{ id: string; name: string }>(`/discover/${guildId}/join`, { method: "POST" }),
+
+  // download do app de desktop (senha única, conferida no servidor)
+  downloadCatalogo: () => request<DownloadCatalogo>("/downloads"),
+  /** 401 aqui é senha errada — a rota está em ROTAS_SEM_REFRESH por isso. */
+  downloadAutorizar: (senha: string, plataforma: DownloadPlataforma) =>
+    request<DownloadAutorizado>("/downloads/token", json({ senha, plataforma })),
 };
 
 async function enviarComProgresso(

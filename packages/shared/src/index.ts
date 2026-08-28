@@ -2859,3 +2859,67 @@ function sistemaDe(ua: string): string {
 export function ehDispositivoMovel(userAgent: string | null | undefined): boolean {
   return /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent ?? "");
 }
+
+// ── Download do app ──────────────────────────────────────────
+
+/**
+ * Plataformas do instalador.
+ *
+ * O cliente escolhe uma destas strings e a API resolve **ela** para um arquivo.
+ * O caminho nunca vem do cliente: um `?arquivo=` seria travessia de diretório
+ * disfarçada de parâmetro, e a lista fechada elimina a categoria inteira de
+ * ataque em vez de tentar filtrá-la.
+ */
+export const DOWNLOAD_PLATAFORMAS = ["windows", "macos", "linux"] as const;
+export type DownloadPlataforma = (typeof DOWNLOAD_PLATAFORMAS)[number];
+
+/**
+ * Validade do token que autoriza UM download.
+ *
+ * Curto de propósito: o token viaja na URL, porque o browser não manda
+ * `Authorization` numa navegação de download — e URL vaza em histórico, em
+ * `Referer` e em log de proxy. Ele vale o tempo de *começar* a baixar; uma
+ * transferência já iniciada não é interrompida quando ele expira.
+ */
+export const DOWNLOAD_TOKEN_TTL_SECONDS = 120;
+
+/** Corpo de `POST /downloads/token`: a senha única e a plataforma escolhida. */
+export const downloadTokenSchema = z.object({
+  senha: z.string().min(1, "Informe a senha").max(200),
+  plataforma: z.enum(DOWNLOAD_PLATAFORMAS),
+});
+export type DownloadTokenInput = z.infer<typeof downloadTokenSchema>;
+
+/**
+ * O que a página pode saber **antes** da senha: para quais sistemas existe
+ * instalador e o peso de cada um, para o seletor não oferecer uma opção que vai
+ * falhar. Sem o nome do arquivo — ele carrega o número da versão, e a build
+ * ainda é privada; o nome vem junto do token, para quem acertou a senha.
+ */
+export interface DownloadDisponivel {
+  plataforma: DownloadPlataforma;
+  /** bytes */
+  tamanho: number;
+  /** ISO 8601 — data de modificação do arquivo no servidor */
+  atualizadoEm: string;
+}
+
+export interface DownloadCatalogo {
+  /** false = sem `DOWNLOAD_PASSWORD`; a página explica em vez de pedir senha. */
+  configurado: boolean;
+  disponiveis: DownloadDisponivel[];
+}
+
+/** Senha aceita: a URL que baixa o arquivo, com o token curto já embutido. */
+export interface DownloadAutorizado {
+  url: string;
+  filename: string;
+  tamanho: number;
+  /** epoch em ms; a página avisa quando o link esfriou antes do clique. */
+  expiraEm: number;
+}
+
+/** Rótulo de plataforma para a UI (o seletor e as mensagens de erro). */
+export function rotuloPlataforma(plataforma: DownloadPlataforma): string {
+  return { windows: "Windows", macos: "macOS", linux: "Linux" }[plataforma];
+}
