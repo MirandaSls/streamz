@@ -304,6 +304,10 @@ export function useRealtime(currentUserId?: string): void {
         // recarregar evita listar gente que já não está lá
         useVoice.setState({ states: {} });
         if (guildId) void useVoice.getState().loadGuild(guildId);
+        // e **eu** preciso reentrar: o gateway perdeu meu `voiceChannelId` com
+        // o socket antigo e está contando a carência para me tirar da chamada.
+        // Antes daqui só as salas de texto reentravam, e a call caía sozinha.
+        void useVoice.getState().rejoinAposReconexao();
         const guildDeCategorias = useCategories.getState().guildId;
         if (guildDeCategorias) void useCategories.getState().loadForGuild(guildDeCategorias);
         // amigos, pedidos e bloqueios podem ter mudado durante a queda

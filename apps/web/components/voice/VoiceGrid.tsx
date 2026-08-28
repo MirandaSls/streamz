@@ -285,6 +285,15 @@ function VoiceTile({
         </span>
       )}
 
+      {/* Carência do servidor correndo: a pessoa ainda está na chamada, e some
+          só se não voltar. Esmaecer em vez de remover é o que evita a grade
+          piscar a cada oscilação de rede de alguém. */}
+      {state.reconnecting && (
+        <span className="absolute inset-0 grid place-items-center bg-black/60 text-xs font-semibold text-white">
+          Reconectando…
+        </span>
+      )}
+
       {/* quem ainda não está assistindo precisa de um convite explícito: um
           quadradinho de vídeo em movimento não diz "isto é uma transmissão" */}
       {tela && !assistindo && (

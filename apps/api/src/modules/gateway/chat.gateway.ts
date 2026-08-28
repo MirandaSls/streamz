@@ -29,6 +29,7 @@ import {
   callSchema,
   voiceJoinSchema,
   voiceUpdateSchema,
+  VOICE_RECONNECT_GRACE_MS,
 } from "@streamz/shared";
 import type { UserStatus, WsErrorEvent } from "@streamz/shared";
 import {
@@ -71,7 +72,23 @@ const WS_LIMITS: Record<string, BucketLimit> = {
   [WS_EVENTS.POLL_VOTE]: { capacity: 10, refillPerSecond: 2 },
 };
 
-@WebSocketGateway({ cors: CORS_OPTIONS })
+/**
+ * Heartbeat folgado de propósito.
+ *
+ * Os padrões do Socket.IO (25s/20s) derrubam a conexão depois de ~45s sem
+ * pong, e o Chromium estrangula os timers de uma aba em segundo plano para
+ * ~1/min — minimizar a janela por um minuto bastava para cair da chamada.
+ * Quem compartilha a tela e vai usar outro aplicativo é exatamente esse caso.
+ *
+ * Os dois valores viajam no handshake, então valem para os dois lados: subir
+ * aqui conserta o cliente junto. O preço é demorar mais para perceber uma
+ * conexão de fato morta — o que a carência da voz e a presença absorvem.
+ */
+@WebSocketGateway({
+  cors: CORS_OPTIONS,
+  pingInterval: 25_000,
+  pingTimeout: 120_000,
+})
 export class ChatGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, OnModuleInit
 {
@@ -79,6 +96,18 @@ export class ChatGateway
   server!: Server;
 
   private readonly logger = new Logger(ChatGateway.name);
+
+  /**
+   * Saídas de voz que a carência agendou, por `userId:channelId`.
+   *
+   * Vive em memória, como o próprio estado de voz (`voice-state.store.ts`):
+   * com `REDIS_URL` vazio há uma instância só e isso basta. **Com várias
+   * instâncias isto precisa de store compartilhado** — o socket pode cair numa
+   * e voltar em outra, e a carência agendada aqui não seria cancelada lá,
+   * derrubando da chamada quem reconectou. É a mesma ressalva do balde de rate
+   * limit do WS, logo acima.
+   */
+  private readonly saidasDeVozPendentes = new Map<string, ReturnType<typeof setTimeout>>();
 
   /** Conexões por usuário: em memória ou no Redis (várias instâncias). */
   private readonly presence: PresenceStore = (() => {
@@ -170,8 +199,9 @@ export class ChatGateway
     const user = client.data.user as SocketUser | undefined;
     if (!user) return;
     void this.markOffline(user.id);
-    // f-voz: sem isto o usuário ficaria "na call" para sempre depois de fechar a aba
-    void this.desconectarDaVoz(client, user);
+    // f-voz: queda de socket não é sair da chamada — a saída fica agendada e
+    // pode ser cancelada por uma reconexão (ver `agendarSaidaDaVoz`)
+    void this.agendarSaidaDaVoz(client, user);
   }
 
   /** Primeira conexão do usuário → status escolhido (ou ONLINE) + broadcast. */
@@ -486,6 +516,9 @@ export class ChatGateway
       // o join valida o acesso ao canal (assertCanViewChannel) e o tipo
       await this.voice.join(user.id, payload.channelId);
       client.data.voiceChannelId = payload.channelId;
+      // reentrou dentro da carência (reconexão do cliente): a saída agendada
+      // perde o efeito e o estado de voz segue intacto
+      this.cancelarSaidaDaVoz(user.id, payload.channelId);
     } catch (e) {
       this.emitError(client, e);
     }
@@ -502,6 +535,8 @@ export class ChatGateway
       // sem o fallback, sair de uma chamada assim não teria efeito nenhum
       const canais = lembrado ? [lembrado] : await this.voice.channelsOf(user.id);
       for (const channelId of canais) {
+        // saiu por vontade própria: não faz sentido a carência ainda mirar nele
+        this.cancelarSaidaDaVoz(user.id, channelId);
         await this.voice.leave(user.id, channelId);
         await this.calls.onDisconnect(user.id, channelId);
       }
@@ -532,6 +567,7 @@ export class ChatGateway
     try {
       await this.calls.accept(user.id, payload.channelId);
       client.data.voiceChannelId = payload.channelId;
+      this.cancelarSaidaDaVoz(user.id, payload.channelId);
     } catch (e) {
       this.emitError(client, e);
     }
@@ -563,17 +599,69 @@ export class ChatGateway
   }
 
   /**
-   * Aba fechada / conexão perdida: tira o usuário da sala de voz e emite
-   * `connected: false`. Só quando **nenhuma** outra conexão dele estiver na
-   * mesma sala — duas abas abertas no mesmo canal não podem derrubar uma à
-   * outra.
+   * Aba fechada ou conexão perdida: agenda a saída da sala de voz, **não** a
+   * executa.
+   *
+   * Só a queda do socket não distingue "fechei a aba" de "o navegador
+   * estrangulou a aba" ou "o wi-fi oscilou" — e tratar tudo como saída era o
+   * que expulsava da chamada quem só minimizou a janela. Durante a carência o
+   * usuário continua na sala, marcado como `reconnecting` para a UI poder
+   * esmaecê-lo; se voltar, `cancelarSaidaDaVoz` desfaz o agendamento.
+   *
+   * Quem fechou a aba de verdade sai ao fim da janela: um fantasma de
+   * `VOICE_RECONNECT_GRACE_MS` custa menos que derrubar quem estava só de
+   * passagem por outro aplicativo.
+   *
+   * Nada é feito quando outra conexão do mesmo usuário segue na sala — duas
+   * abas no mesmo canal não podem derrubar uma à outra.
    */
-  private async desconectarDaVoz(client: Socket, user: SocketUser) {
+  private async agendarSaidaDaVoz(client: Socket, user: SocketUser) {
     const channelId = client.data.voiceChannelId as string | undefined;
     if (!channelId) return;
-    const outras = await this.server.in(`user:${user.id}`).fetchSockets();
-    if (outras.some((s) => s.id !== client.id && s.data.voiceChannelId === channelId)) return;
-    await this.voice.leave(user.id, channelId).catch(() => {});
-    await this.calls.onDisconnect(user.id, channelId).catch(() => {});
+    if (await this.temSocketNaVoz(user.id, channelId, client.id)) return;
+
+    const chave = this.chaveDeVoz(user.id, channelId);
+    clearTimeout(this.saidasDeVozPendentes.get(chave));
+    await this.voice.marcarReconectando(user.id, channelId, true).catch(() => {});
+    this.saidasDeVozPendentes.set(
+      chave,
+      setTimeout(() => {
+        this.saidasDeVozPendentes.delete(chave);
+        void this.removerDaVoz(user.id, channelId);
+      }, VOICE_RECONNECT_GRACE_MS),
+    );
+  }
+
+  /** Voltou a tempo (ou saiu de propósito): a saída agendada perde o efeito. */
+  private cancelarSaidaDaVoz(userId: string, channelId: string) {
+    const chave = this.chaveDeVoz(userId, channelId);
+    const agendada = this.saidasDeVozPendentes.get(chave);
+    if (!agendada) return;
+    clearTimeout(agendada);
+    this.saidasDeVozPendentes.delete(chave);
+  }
+
+  /**
+   * Fim da carência. Confere de novo antes de remover: entre o agendamento e
+   * agora o usuário pode ter voltado por outra aba, e aí o que estava errado
+   * era só a marca de "reconectando".
+   */
+  private async removerDaVoz(userId: string, channelId: string) {
+    if (await this.temSocketNaVoz(userId, channelId)) {
+      await this.voice.marcarReconectando(userId, channelId, false).catch(() => {});
+      return;
+    }
+    await this.voice.leave(userId, channelId).catch(() => {});
+    await this.calls.onDisconnect(userId, channelId).catch(() => {});
+  }
+
+  private chaveDeVoz(userId: string, channelId: string) {
+    return `${userId}:${channelId}`;
+  }
+
+  /** Alguma conexão viva do usuário está nesta sala de voz? */
+  private async temSocketNaVoz(userId: string, channelId: string, ignorar?: string) {
+    const sockets = await this.server.in(`user:${userId}`).fetchSockets();
+    return sockets.some((s) => s.id !== ignorar && s.data.voiceChannelId === channelId);
   }
 }

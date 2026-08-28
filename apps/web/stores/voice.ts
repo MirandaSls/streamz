@@ -14,6 +14,7 @@ import {
   type VoiceStateEvent,
 } from "@streamz/shared";
 import {
+  ConnectionState,
   LocalAudioTrack,
   LocalVideoTrack,
   Room,
@@ -106,6 +107,8 @@ interface VoiceStoreState {
   connect: (channel: Pick<Channel, "id" | "guildId" | "name" | "type">) => Promise<void>;
   disconnect: () => Promise<void>;
   reconnect: () => Promise<void>;
+  /** Reentra na sala de voz depois de o socket voltar (ver `useRealtime`). */
+  rejoinAposReconexao: () => Promise<void>;
 
   toggleCam: () => Promise<void>;
   /** Publica uma captura já obtida pelo seletor próprio (ver ScreenShareButton). */
@@ -364,6 +367,31 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         name: channelName,
         type: guildId ? "VOICE" : "DM",
       });
+    },
+
+    /**
+     * Socket voltou: reentra na sala de voz.
+     *
+     * O gateway perdeu o `voiceChannelId` junto com o socket antigo e está
+     * contando a carência para tirar o usuário da chamada. Reemitir o join é o
+     * que a cancela — sem isto a pessoa voltava "online", continuava vendo a
+     * própria call na tela e sumia dela sozinha segundos depois, sem aviso
+     * nenhum. Antes daqui, só as salas de **texto** reentravam.
+     */
+    rejoinAposReconexao: async () => {
+      const { channelId, status } = get();
+      // fora de chamada, ou já entrando numa: não há o que reentrar
+      if (!channelId || status === "idle" || status === "connecting") return;
+
+      emit(WS_EVENTS.VOICE_JOIN, { channelId });
+      emit(WS_EVENTS.VOICE_UPDATE, flags());
+
+      // A mídia tem reconexão própria: o LiveKit se restabelece quando só a
+      // rede oscilou, e refazer a sala por cima publicaria a mesma câmera duas
+      // vezes. Só refaz quando ela caiu de vez junto com o socket.
+      const room = salaAtual();
+      if (room && room.state !== ConnectionState.Disconnected) return;
+      await get().reconnect();
     },
 
     toggleCam: async () => {
