@@ -1,10 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { Camera } from "lucide-react";
-import { MAX_GUILD_DESCRIPTION } from "@streamz/shared";
-import Tooltip from "@/components/ui/Tooltip";
+import { useEffect, useRef, useState } from "react";
+import { MAX_GUILD_DESCRIPTION, type GuildOnboarding } from "@streamz/shared";
+import { useAlteracoesNaoSalvas } from "@/components/ui/alteracoes";
+import { Select } from "@/components/ui/controls";
+import { ESTILO_AREA, ESTILO_CAMPO, ESTILO_ROTULO } from "@/components/settings/campos";
 import { api } from "@/lib/api";
+import { useChannels } from "@/stores/channels";
 import { useGuilds } from "@/stores/guilds";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
@@ -21,40 +23,88 @@ function acronym(name: string): string {
 }
 
 /**
- * Aba "Visão geral": ícone, nome e descrição do servidor.
+ * Aba "Visão geral": ícone, nome, canal de mensagens do sistema e descrição.
  *
  * O ícone depende do storage (R2). Sem credencial a API responde 503 com texto
  * claro, que aparece como aviso — o resto da tela continua funcionando.
+ *
+ * Salvar é da barra de alterações não salvas do shell. O ícone é a exceção:
+ * upload não tem "desfazer" local, então ele vale no instante em que o arquivo
+ * é escolhido, como no Discord.
  */
 export default function ServerSettingsOverview({ guildId }: { guildId: string }) {
   const guild = useGuilds((s) => s.guilds.find((g) => g.id === guildId) ?? null);
   const handleGuildUpdated = useGuilds((s) => s.handleGuildUpdated);
+  const channels = useChannels((s) => s.channels);
   const [name, setName] = useState(guild?.name ?? "");
   const [description, setDescription] = useState(guild?.description ?? "");
-  const [saving, setSaving] = useState(false);
+  const [onboarding, setOnboarding] = useState<GuildOnboarding | null>(null);
+  const [systemChannelId, setSystemChannelId] = useState("");
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  if (!guild) return null;
-  const dirty = name.trim() !== guild.name || description.trim() !== (guild.description ?? "");
+  const textos = channels.filter((c) => c.type === "TEXT");
 
-  async function save() {
-    if (!dirty || saving || !name.trim()) return;
-    setSaving(true);
-    try {
-      handleGuildUpdated(
-        await api.updateGuild(guildId, {
-          name: name.trim(),
-          description: description.trim() || null,
-        }),
-      );
-      ui.toast("Servidor salvo.");
-    } catch (e) {
-      ui.toast(errorMessage(e, "Não foi possível salvar"), "error");
-    } finally {
-      setSaving(false);
-    }
-  }
+  // o canal do sistema vive no mesmo recurso que a tela de entrada; a aba
+  // "Visão geral" é onde o Discord o mostra, então ele é lido aqui também
+  useEffect(() => {
+    let vivo = true;
+    void api
+      .onboarding(guildId)
+      .then((o) => {
+        if (!vivo) return;
+        setOnboarding(o);
+        setSystemChannelId(o.systemChannelId ?? "");
+      })
+      .catch(() => {
+        // sem onboarding carregado o seletor some; nome e ícone seguem valendo
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [guildId]);
+
+  const dirty =
+    !!guild &&
+    (name.trim() !== guild.name ||
+      description.trim() !== (guild.description ?? "") ||
+      (!!onboarding && systemChannelId !== (onboarding.systemChannelId ?? "")));
+
+  useAlteracoesNaoSalvas({
+    dirty,
+    salvar: async () => {
+      if (!name.trim()) {
+        ui.toast("O servidor precisa de um nome.", "error");
+        return;
+      }
+      try {
+        handleGuildUpdated(
+          await api.updateGuild(guildId, {
+            name: name.trim(),
+            description: description.trim() || null,
+          }),
+        );
+        if (onboarding && systemChannelId !== (onboarding.systemChannelId ?? "")) {
+          setOnboarding(
+            await api.updateOnboarding(guildId, {
+              ...onboarding,
+              systemChannelId: systemChannelId || null,
+            }),
+          );
+        }
+        ui.toast("Servidor salvo.");
+      } catch (e) {
+        ui.toast(errorMessage(e, "Não foi possível salvar"), "error");
+      }
+    },
+    redefinir: () => {
+      setName(guild?.name ?? "");
+      setDescription(guild?.description ?? "");
+      setSystemChannelId(onboarding?.systemChannelId ?? "");
+    },
+  });
+
+  if (!guild) return null;
 
   async function uploadIcon(file: File) {
     setUploading(true);
@@ -70,15 +120,9 @@ export default function ServerSettingsOverview({ guildId }: { guildId: string })
   return (
     <div>
       <div className="flex items-start gap-6">
-        <div className="relative">
-          <div className="grid h-[100px] w-[100px] place-items-center overflow-hidden rounded-full bg-panel text-xl font-semibold text-txt-normal">
-            {guild.iconUrl ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img src={guild.iconUrl} alt="" className="h-full w-full object-cover" />
-            ) : (
-              acronym(guild.name)
-            )}
-          </div>
+        {/* a área tracejada é o alvo de clique inteiro: um botão de câmera de
+            36px era a única affordance e ninguém achava */}
+        <div className="shrink-0 text-center">
           <input
             ref={fileRef}
             type="file"
@@ -90,24 +134,33 @@ export default function ServerSettingsOverview({ guildId }: { guildId: string })
               e.target.value = "";
             }}
           />
-          <Tooltip label="Trocar ícone">
-            <button
-              type="button"
-              disabled={uploading}
-              onClick={() => fileRef.current?.click()}
-              aria-label="Trocar ícone do servidor"
-              className="absolute bottom-0 right-0 grid h-9 w-9 place-items-center rounded-full bg-rail text-txt-primary shadow-high transition hover:bg-hov disabled:opacity-50"
-            >
-              <Camera size={18} />
-            </button>
-          </Tooltip>
+          <button
+            type="button"
+            disabled={uploading}
+            onClick={() => fileRef.current?.click()}
+            aria-label="Enviar ícone do servidor"
+            className="group relative grid h-[100px] w-[100px] place-items-center overflow-hidden rounded-full border-2 border-dashed border-border-strong bg-panel text-xl font-semibold text-txt-normal transition hover:border-accent disabled:opacity-50"
+          >
+            {guild.iconUrl ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src={guild.iconUrl} alt="" className="h-full w-full object-cover" />
+            ) : (
+              acronym(guild.name)
+            )}
+            <span className="absolute inset-0 grid place-items-center bg-overlay/70 text-xs font-bold uppercase tracking-[0.04em] text-white opacity-0 transition group-hover:opacity-100">
+              Enviar
+            </span>
+          </button>
+          {/* o "Remover" do Discord não existe aqui: a API não tem rota para
+              apagar o ícone, e um link que só devolve erro é pior que nenhum */}
+          <p className="mt-2 w-[100px] text-[11px] leading-tight text-txt-muted">
+            Recomendamos 512×512
+          </p>
+          {uploading && <p className="mt-1 text-xs text-txt-muted">Enviando…</p>}
         </div>
 
         <div className="min-w-0 flex-1">
-          <label
-            htmlFor="guildName"
-            className="mb-2 block text-xs font-bold uppercase text-txt-secondary"
-          >
+          <label htmlFor="guildName" className={ESTILO_ROTULO}>
             Nome do servidor
           </label>
           <input
@@ -115,18 +168,28 @@ export default function ServerSettingsOverview({ guildId }: { guildId: string })
             value={name}
             maxLength={64}
             onChange={(e) => setName(e.target.value)}
-            className="h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
+            className={ESTILO_CAMPO}
           />
-          {uploading && <p className="mt-2 text-xs text-txt-muted">Enviando ícone…</p>}
+
+          {onboarding && (
+            <div className="mt-5">
+              <Select
+                semDivisoria
+                label="Canal de mensagens do sistema"
+                value={systemChannelId}
+                options={textos.map((c) => ({ value: c.id, label: `#${c.name}` }))}
+                onChange={setSystemChannelId}
+                emptyLabel="Nenhum"
+                hint="É onde entra o “fulano entrou no servidor” a cada pessoa nova."
+              />
+            </div>
+          )}
         </div>
       </div>
 
       <div aria-hidden="true" className="my-6 h-px bg-border" />
 
-      <label
-        htmlFor="guildDescription"
-        className="mb-2 block text-xs font-bold uppercase text-txt-secondary"
-      >
+      <label htmlFor="guildDescription" className={ESTILO_ROTULO}>
         Descrição
       </label>
       <textarea
@@ -136,20 +199,11 @@ export default function ServerSettingsOverview({ guildId }: { guildId: string })
         rows={3}
         onChange={(e) => setDescription(e.target.value)}
         placeholder="Do que é este servidor?"
-        className="w-full resize-none rounded-[3px] bg-rail p-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
+        className={ESTILO_AREA}
       />
       <p className="mt-1 text-xs text-txt-muted">
         {description.length}/{MAX_GUILD_DESCRIPTION} caracteres.
       </p>
-
-      <button
-        type="button"
-        disabled={!dirty || saving || !name.trim()}
-        onClick={() => void save()}
-        className="mt-6 h-[38px] rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {saving ? "Salvando…" : "Salvar alterações"}
-      </button>
     </div>
   );
 }

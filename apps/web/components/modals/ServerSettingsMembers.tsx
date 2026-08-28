@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Crown, Gavel, Plus, UserX, X } from "lucide-react";
+import { Crown, MoreHorizontal, Search, ShieldAlert, X } from "lucide-react";
 import {
   Permission,
   colorRoleOf,
@@ -9,6 +9,9 @@ import {
   rolesOf,
   type GuildMemberView,
 } from "@streamz/shared";
+import { Select } from "@/components/ui/controls";
+import { ESTILO_CAMPO } from "@/components/settings/campos";
+import { MENU_WIDTH } from "@/components/ui/ContextMenu";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
 import { useAuth } from "@/stores/auth";
@@ -17,13 +20,18 @@ import { useCan, usePermissions } from "@/stores/permissions";
 import { ui, type MenuItem } from "@/stores/ui";
 
 /**
- * Aba "Membros": buscar, ver e mexer nos cargos de cada um, expulsar e banir.
+ * Aba "Membros": uma **tabela** com nome, cargos e sinais, filtrável por cargo.
+ *
+ * Cartões empilhados com três ícones sempre visíveis por linha viravam uma
+ * parede de botões vermelhos: num servidor de 50 pessoas são 150 ações na
+ * tela, e expulsar alguém ficava a um clique acidental de distância. Na tabela
+ * as ações moram no "…" da linha, como no Discord — e o que fica visível é a
+ * informação, não o perigo.
  *
  * Cada ação aparece só para quem tem a permissão correspondente — a mesma que
- * a API exigiria. Os chips de cargo têm o "x" para tirar e um "+" que abre o
- * menu com os cargos que faltam.
+ * a API exigiria.
  */
-export default function ServerSettingsMembers({ guildId }: { guildId: string }) {
+export default function ServerSettingsMembers({ guildId: _guildId }: { guildId: string }) {
   const me = useAuth((s) => s.user);
   const members = useGuilds((s) => s.members);
   const kick = useGuilds((s) => s.kick);
@@ -36,153 +44,200 @@ export default function ServerSettingsMembers({ guildId }: { guildId: string }) 
   const podeBanir = useCan(Permission.BAN_MEMBERS);
   const isOwner = useIsOwner(me?.id);
   const [busca, setBusca] = useState("");
+  const [filtro, setFiltro] = useState("");
 
   const q = busca.trim().toLowerCase();
-  const lista = members.filter(
-    (m) =>
+  const lista = members.filter((m) => {
+    const casaNome =
       !q ||
       m.user.username.toLowerCase().includes(q) ||
-      displayNameOf(m.user).toLowerCase().includes(q),
-  );
+      displayNameOf(m.user).toLowerCase().includes(q);
+    const casaCargo = !filtro || m.roleIds.includes(filtro);
+    return casaNome && casaCargo;
+  });
 
-  function abrirMenuDeCargos(e: React.MouseEvent, m: GuildMemberView) {
+  function abrirMenu(e: React.MouseEvent<HTMLButtonElement>, m: GuildMemberView) {
+    const eu = m.user.id === me?.id;
+    const alvoValido = !eu && m.role !== "OWNER";
     const faltando = roles
       .filter((r) => !r.isDefault && !m.roleIds.includes(r.id))
       .sort((a, b) => b.position - a.position);
-    const items: MenuItem[] =
-      faltando.length === 0
-        ? [{ label: "Nenhum cargo disponível", onSelect: () => undefined, disabled: true }]
-        : faltando.map((r) => ({
-            label: r.name,
-            icon: <Check size={18} />,
-            onSelect: () => void toggleRole(m.user.id, r.id, true),
-          }));
+
+    const items: MenuItem[] = [];
+    if (podeCargos) {
+      items.push({
+        label: "Adicionar cargo",
+        submenu:
+          faltando.length === 0
+            ? [{ label: "Nenhum cargo disponível", onSelect: () => undefined, disabled: true }]
+            : faltando.map((r) => ({
+                label: r.name,
+                dot: r.color ?? undefined,
+                onSelect: () => void toggleRole(m.user.id, r.id, true),
+              })),
+      });
+    }
+    if (isOwner && alvoValido) {
+      items.push({
+        label: "Transferir posse",
+        onSelect: () => void transfer(m.user.id),
+      });
+    }
+    if (items.length > 0 && (podeExpulsar || podeBanir) && alvoValido) {
+      items.push({ separator: true });
+    }
+    if (podeExpulsar && alvoValido) {
+      items.push({ label: "Expulsar", danger: true, onSelect: () => kick(m.user.id) });
+    }
+    if (podeBanir && alvoValido) {
+      items.push({ label: "Banir", danger: true, onSelect: () => ban(m.user.id) });
+    }
+    if (items.length === 0) {
+      items.push({ label: "Nada a fazer aqui", onSelect: () => undefined, disabled: true });
+    }
+
     const rect = e.currentTarget.getBoundingClientRect();
-    ui.openContextMenu(rect.left, rect.bottom + 4, items);
+    ui.openContextMenu(rect.right - MENU_WIDTH, rect.bottom + 4, items, MENU_WIDTH);
   }
 
   return (
     <div>
-      <input
-        value={busca}
-        onChange={(e) => setBusca(e.target.value)}
-        placeholder="Buscar membros"
-        aria-label="Buscar membros"
-        className="mb-4 h-9 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
-      />
-      <p className="mb-2 text-xs font-bold uppercase text-txt-secondary">
-        Membros — {members.length}
-      </p>
-      <div role="list" className="rounded bg-rail/50">
-        {lista.length === 0 && (
-          <p className="px-3 py-3 text-sm text-txt-muted">Ninguém com esse nome.</p>
-        )}
-        {lista.map((m) => {
-          const cor = colorRoleOf(m.roleIds, roles)?.color ?? null;
-          const chips = rolesOf(m.roleIds, roles);
-          const eu = m.user.id === me?.id;
-          const alvoValido = !eu && m.role !== "OWNER";
-          return (
-            <div
-              key={m.user.id}
-              role="listitem"
-              className="flex items-start gap-3 border-b border-border px-3 py-3 last:border-0"
-            >
-              <Avatar user={m.user} size="md" surface="border-rail" />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <span
-                    style={cor ? { color: cor } : undefined}
-                    className="truncate font-medium text-txt-primary"
-                  >
-                    {displayNameOf(m.user)}
-                  </span>
-                  {m.role === "OWNER" && (
-                    <Tooltip label="Dono do servidor">
-                      <Crown size={14} className="shrink-0 text-yellow" aria-label="Dono" />
-                    </Tooltip>
-                  )}
-                  <span className="truncate text-xs text-txt-muted">@{m.user.username}</span>
-                </div>
-                <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                  {chips.map((r) => (
-                    <span
-                      key={r.id}
-                      className="flex items-center gap-1 rounded-[4px] bg-panel py-0.5 pl-1.5 pr-1 text-xs text-txt-normal"
-                    >
-                      <span
-                        aria-hidden="true"
-                        style={{ backgroundColor: r.color ?? "#8a8a8e" }}
-                        className="h-2.5 w-2.5 rounded-full"
-                      />
-                      {r.name}
-                      {podeCargos && (
-                        <button
-                          type="button"
-                          onClick={() => void toggleRole(m.user.id, r.id, false)}
-                          aria-label={`Remover ${r.name} de ${displayNameOf(m.user)}`}
-                          className="text-txt-muted hover:text-txt-primary"
-                        >
-                          <X size={12} />
-                        </button>
-                      )}
-                    </span>
-                  ))}
-                  {podeCargos && (
-                    <button
-                      type="button"
-                      onClick={(e) => abrirMenuDeCargos(e, m)}
-                      aria-label={`Adicionar cargo a ${displayNameOf(m.user)}`}
-                      className="grid h-[22px] w-[22px] place-items-center rounded-[4px] bg-panel text-txt-muted hover:text-txt-primary"
-                    >
-                      <Plus size={12} />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex shrink-0 gap-0.5">
-                {isOwner && alvoValido && (
-                  <Tooltip label="Transferir posse">
-                    <button
-                      type="button"
-                      onClick={() => void transfer(m.user.id)}
-                      aria-label={`Transferir posse para ${displayNameOf(m.user)}`}
-                      className="grid h-8 w-8 place-items-center rounded text-txt-muted hover:text-yellow"
-                    >
-                      <Crown size={16} />
-                    </button>
-                  </Tooltip>
-                )}
-                {podeExpulsar && alvoValido && (
-                  <Tooltip label="Expulsar">
-                    <button
-                      type="button"
-                      onClick={() => void kick(m.user.id)}
-                      aria-label={`Expulsar ${displayNameOf(m.user)}`}
-                      className="grid h-8 w-8 place-items-center rounded text-txt-muted hover:text-red"
-                    >
-                      <UserX size={16} />
-                    </button>
-                  </Tooltip>
-                )}
-                {podeBanir && alvoValido && (
-                  <Tooltip label="Banir">
-                    <button
-                      type="button"
-                      onClick={() => void ban(m.user.id)}
-                      aria-label={`Banir ${displayNameOf(m.user)}`}
-                      className="grid h-8 w-8 place-items-center rounded text-txt-muted hover:text-red"
-                    >
-                      <Gavel size={16} />
-                    </button>
-                  </Tooltip>
-                )}
-              </div>
-            </div>
-          );
-        })}
+      <div className="mb-4 flex items-end gap-2">
+        <div className="relative min-w-0 flex-1">
+          <Search
+            size={14}
+            aria-hidden="true"
+            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-txt-muted"
+          />
+          <input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar membros"
+            aria-label="Buscar membros"
+            className={`${ESTILO_CAMPO} pl-8`}
+          />
+        </div>
+        <div className="w-[200px] shrink-0">
+          <Select
+            semDivisoria
+            value={filtro}
+            options={roles
+              .filter((r) => !r.isDefault)
+              .sort((a, b) => b.position - a.position)
+              .map((r) => ({ value: r.id, label: r.name }))}
+            onChange={setFiltro}
+            emptyLabel="Todos os cargos"
+          />
+        </div>
       </div>
+
+      <p className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+        Membros — {lista.length}
+      </p>
+
+      <table className="w-full table-fixed">
+        <thead>
+          <tr className="border-b border-border text-left text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+            <th scope="col" className="w-[40%] pb-2 font-bold">
+              Nome do membro
+            </th>
+            <th scope="col" className="pb-2 font-bold">
+              Cargos
+            </th>
+            <th scope="col" className="w-[72px] pb-2 font-bold">
+              Sinais
+            </th>
+            <th scope="col" className="w-10 pb-2">
+              <span className="sr-only">Ações</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {lista.length === 0 && (
+            <tr>
+              <td colSpan={4} className="py-3 text-sm text-txt-muted">
+                Ninguém com esse nome.
+              </td>
+            </tr>
+          )}
+          {lista.map((m) => {
+            const cor = colorRoleOf(m.roleIds, roles)?.color ?? null;
+            const chips = rolesOf(m.roleIds, roles);
+            const castigado =
+              !!m.timeoutUntil && new Date(m.timeoutUntil).getTime() > Date.now();
+            return (
+              <tr key={m.user.id} className="group border-b border-border align-middle">
+                <td className="py-2 pr-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Avatar user={m.user} size="sm" surface="border-chat" />
+                    <div className="min-w-0">
+                      <div
+                        style={cor ? { color: cor } : undefined}
+                        className="truncate text-sm font-medium text-txt-primary"
+                      >
+                        {displayNameOf(m.user)}
+                      </div>
+                      <div className="truncate text-xs text-txt-muted">@{m.user.username}</div>
+                    </div>
+                  </div>
+                </td>
+                <td className="py-2 pr-2">
+                  <div className="flex flex-wrap items-center gap-1">
+                    {chips.length === 0 && <span className="text-xs text-txt-muted">—</span>}
+                    {chips.map((r) => (
+                      <span
+                        key={r.id}
+                        className="flex items-center gap-1 rounded-[4px] bg-panel py-0.5 pl-1.5 pr-1 text-xs text-txt-normal"
+                      >
+                        <span
+                          aria-hidden="true"
+                          style={{ backgroundColor: r.color ?? "#8a8a8e" }}
+                          className="h-2.5 w-2.5 rounded-full"
+                        />
+                        {r.name}
+                        {podeCargos && (
+                          <button
+                            type="button"
+                            onClick={() => void toggleRole(m.user.id, r.id, false)}
+                            aria-label={`Remover ${r.name} de ${displayNameOf(m.user)}`}
+                            className="text-txt-muted hover:text-txt-primary"
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                </td>
+                <td className="py-2">
+                  <div className="flex items-center gap-1.5">
+                    {m.role === "OWNER" && (
+                      <Tooltip label="Dono do servidor">
+                        <Crown size={14} className="text-yellow" aria-label="Dono" />
+                      </Tooltip>
+                    )}
+                    {castigado && (
+                      <Tooltip label="De castigo">
+                        <ShieldAlert size={14} className="text-red" aria-label="De castigo" />
+                      </Tooltip>
+                    )}
+                  </div>
+                </td>
+                <td className="py-2 text-right">
+                  <button
+                    type="button"
+                    onClick={(e) => abrirMenu(e, m)}
+                    aria-label={`Ações para ${displayNameOf(m.user)}`}
+                    className="grid h-8 w-8 place-items-center rounded text-txt-muted opacity-0 transition hover:text-txt-primary focus-visible:opacity-100 group-hover:opacity-100"
+                  >
+                    <MoreHorizontal size={16} />
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

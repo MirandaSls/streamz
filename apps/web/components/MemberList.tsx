@@ -2,19 +2,20 @@
 
 import type { MouseEvent } from "react";
 import {
-  Check,
-  Circle,
+  AtSign,
   Crown,
   Gavel,
   MessageSquare,
+  Shield,
   ShieldCheck,
-  ShieldOff,
   Timer,
   TimerOff,
+  User,
   UserX,
 } from "lucide-react";
 import {
   Permission,
+  TIMEOUT_PRESETS,
   colorRoleOf,
   displayNameOf,
   isTimedOut,
@@ -23,11 +24,14 @@ import {
 } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
+import { MENU_WIDTH } from "@/components/ui/ContextMenu";
+import { mencionar as inserirMencao } from "@/lib/mencoes";
 import { useAuth } from "@/stores/auth";
 import { useDMs } from "@/stores/dms";
-import { useGuilds, useIsOwner } from "@/stores/guilds";
+import { useGuilds } from "@/stores/guilds";
 import { useCan, usePermissions } from "@/stores/permissions";
 import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
+import { useSettings } from "@/stores/settings";
 import { anchorOf, ui, type MenuItem } from "@/stores/ui";
 
 /** Título de seção da lista ("ONLINE — 3"). */
@@ -64,9 +68,7 @@ export default function MemberList() {
   const members = useGuilds((s) => s.members);
   const kick = useGuilds((s) => s.kick);
   const ban = useGuilds((s) => s.ban);
-  const setRole = useGuilds((s) => s.setRole);
   const toggleRole = useGuilds((s) => s.toggleRole);
-  const transfer = useGuilds((s) => s.transfer);
   const roles = usePermissions((s) => s.roles);
   const podeExpulsar = useCan(Permission.KICK_MEMBERS);
   const podeBanir = useCan(Permission.BAN_MEMBERS);
@@ -74,9 +76,10 @@ export default function MemberList() {
   // ── h-moderacao ── castigo é MODERATE_MEMBERS na permissão efetiva
   const podeCastigar = useCan(Permission.MODERATE_MEMBERS);
   const timeout = useGuilds((s) => s.timeout);
+  const applyTimeout = useGuilds((s) => s.applyTimeout);
   const removeTimeout = useGuilds((s) => s.removeTimeout);
-  const isOwner = useIsOwner(user?.id);
   const openWith = useDMs((s) => s.openWith);
+  const developerMode = useSettings((s) => s.developerMode);
   // o status/perfil ao vivo vem da store de presença; a lista é só o do REST
   const statuses = usePresence((s) => s.statuses);
   const profiles = usePresence((s) => s.profiles);
@@ -107,48 +110,82 @@ export default function MemberList() {
     return m.user.id !== user?.id && m.role !== "OWNER";
   }
 
-  function openMenu(e: MouseEvent, m: GuildMemberView) {
+  /**
+   * Botão direito num membro.
+   *
+   * Cargos e castigo viram **submenu**, como no Discord — antes cada cargo era
+   * um item solto no menu raiz, o que num servidor com dez cargos empurrava
+   * expulsar/banir para fora da tela. "Tornar administrador" e "Transferir
+   * posse" saíram: no Discord admin é cargo, e transferir posse mora em
+   * Configurações do Servidor › Membros.
+   */
+  function openMenu(e: MouseEvent, m: GuildMemberView, linha?: HTMLElement | null) {
     e.preventDefault();
     const isMe = m.user.id === user?.id;
     const items: MenuItem[] = [
       {
         label: "Perfil",
-        onSelect: () => ui.openProfile(m.user, { x: e.clientX, y: e.clientY, width: 0, height: 0 }),
+        icon: <User size={18} />,
+        // ancora na LINHA do membro, não no ponto do clique
+        onSelect: () =>
+          ui.openProfile(
+            m.user,
+            linha ? anchorOf(linha) : { x: e.clientX, y: e.clientY, width: 0, height: 0 },
+          ),
       },
     ];
     if (!isMe) {
-      items.push({ label: "Mensagem", icon: <MessageSquare size={18} />, onSelect: () => void openWith(m.user.id) });
+      items.push({
+        label: "Mencionar",
+        icon: <AtSign size={18} />,
+        onSelect: () => inserirMencao(m.user),
+      });
+      items.push({
+        label: "Mensagem",
+        icon: <MessageSquare size={18} />,
+        onSelect: () => void openWith(m.user.id),
+      });
     }
-    // cargos: um item por cargo atribuível, com marca de "já tem"
+
     const atribuiveis = roles.filter((r) => !r.isDefault).sort((a, b) => b.position - a.position);
     if (podeCargos && !isMe && atribuiveis.length > 0) {
       items.push({ separator: true });
-      for (const r of atribuiveis) {
-        const tem = m.roleIds.includes(r.id);
-        items.push({
+      items.push({
+        label: "Cargos",
+        icon: <Shield size={18} />,
+        submenu: atribuiveis.map((r) => ({
           label: r.name,
-          icon: tem ? <Check size={18} /> : <Circle size={18} />,
-          onSelect: () => void toggleRole(m.user.id, r.id, !tem),
-        });
-      }
+          control: "checkbox" as const,
+          checked: m.roleIds.includes(r.id),
+          dot: r.color ?? undefined,
+          onSelect: () => void toggleRole(m.user.id, r.id, !m.roleIds.includes(r.id)),
+        })),
+      });
     }
-    if (isOwner && !isMe && m.role !== "OWNER") {
-      items.push({ separator: true });
-      if (m.role === "ADMIN") {
-        items.push({ label: "Remover administrador", icon: <ShieldOff size={18} />, onSelect: () => void setRole(m.user.id, "MEMBER") });
-      } else {
-        items.push({ label: "Tornar administrador", icon: <ShieldCheck size={18} />, onSelect: () => void setRole(m.user.id, "ADMIN") });
-      }
-      items.push({ label: "Transferir posse", icon: <Crown size={18} />, onSelect: () => void transfer(m.user.id) });
-    }
-    if (podeAgirSobre(m) && (podeExpulsar || podeBanir)) {
+
+    if (podeAgirSobre(m) && (podeExpulsar || podeBanir || podeCastigar)) {
       items.push({ separator: true });
       // ── h-moderacao ──
       if (podeCastigar) {
         if (isTimedOut(m.timeoutUntil)) {
-          items.push({ label: "Remover castigo", icon: <TimerOff size={18} />, onSelect: () => void removeTimeout(m.user.id) });
+          items.push({
+            label: "Remover modo de espera",
+            icon: <TimerOff size={18} />,
+            onSelect: () => void removeTimeout(m.user.id),
+          });
         } else {
-          items.push({ label: "Colocar de castigo", icon: <Timer size={18} />, onSelect: () => timeout(m.user.id) });
+          items.push({
+            label: "Modo de espera",
+            icon: <Timer size={18} />,
+            submenu: [
+              ...TIMEOUT_PRESETS.map((p) => ({
+                label: p.label,
+                onSelect: () => void applyTimeout(m.user.id, p.minutes),
+              })),
+              { separator: true as const },
+              { label: "Duração personalizada…", onSelect: () => timeout(m.user.id) },
+            ],
+          });
         }
       }
       if (podeExpulsar) {
@@ -158,7 +195,15 @@ export default function MemberList() {
         items.push({ label: "Banir", icon: <Gavel size={18} />, danger: true, onSelect: () => ban(m.user.id) });
       }
     }
-    ui.openContextMenu(e.clientX, e.clientY, items);
+
+    if (developerMode) {
+      items.push({ separator: true });
+      items.push({
+        label: "Copiar ID do usuário",
+        onSelect: () => void navigator.clipboard?.writeText(m.user.id),
+      });
+    }
+    ui.openContextMenu(e.clientX, e.clientY, items, MENU_WIDTH);
   }
 
   function renderMember({ m, status }: Linha) {
@@ -171,7 +216,7 @@ export default function MemberList() {
       <div
         key={m.user.id}
         role="listitem"
-        onContextMenu={(e) => openMenu(e, m)}
+        onContextMenu={(e) => openMenu(e, m, e.currentTarget)}
         className={`group mx-2 flex h-[42px] items-center gap-3 rounded px-2 hover:bg-hov ${
           offline ? "opacity-30 hover:opacity-100" : ""
         }`}

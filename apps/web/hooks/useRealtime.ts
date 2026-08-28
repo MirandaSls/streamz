@@ -49,6 +49,7 @@ import type {
 import { shouldNotifyMessage } from "@streamz/shared";
 import { definirContadorNoIcone, notify } from "@/lib/desktop";
 import { tocarSomDeNotificacao } from "@/lib/notification-sound";
+import { somLigado } from "@/stores/sons";
 import { levelForChannel, useNotifications } from "@/stores/notifications";
 import { useSettings } from "@/stores/settings";
 import { useAuth } from "@/stores/auth";
@@ -411,7 +412,10 @@ function notifyIfAway(message: Message, mention: boolean) {
   const escondida = document.visibilityState !== "visible";
   if (!escondida && !mention && message.guildId) return;
 
-  if (prefs.notificationSound) tocarSomDeNotificacao(prefs.outputVolume / 100);
+  // `notificationSound` é o interruptor mestre; `somLigado` diz se ESTE som toca
+  if (prefs.notificationSound && somLigado("mensagem")) {
+    tocarSomDeNotificacao(prefs.outputVolume / 100);
+  }
   if (!prefs.desktopNotifications) return;
   void notify(channelTitle(message.channelId), `${displayNameOf(message.author)}: ${message.content}`);
 }

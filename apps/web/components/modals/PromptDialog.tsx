@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
+import { Rotulo } from "@/components/ui/controls";
 import type { Modal } from "@/stores/ui";
 
 /** Substitui o `prompt()` do browser. Enter confirma, Esc cancela. */
@@ -10,6 +11,7 @@ export default function PromptDialog({
 }: {
   modal: Extract<Modal, { kind: "prompt" }>;
 }) {
+  const campoId = useId();
   const [value, setValue] = useState(modal.initial);
   const empty = !value.trim();
 
@@ -23,17 +25,18 @@ export default function PromptDialog({
       title={modal.title}
       description={modal.message}
       onClose={() => modal.resolve(null)}
-      className="w-[380px]"
       footer={
         <>
-          <PrimaryButton disabled={empty} onClick={submit}>
+          <PrimaryButton danger={modal.danger} disabled={empty} onClick={submit}>
             {modal.confirmLabel}
           </PrimaryButton>
           <SecondaryButton onClick={() => modal.resolve(null)}>Cancelar</SecondaryButton>
         </>
       }
     >
+      <Rotulo htmlFor={campoId}>{modal.label ?? modal.title}</Rotulo>
       <input
+        id={campoId}
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => {
@@ -43,8 +46,7 @@ export default function PromptDialog({
           }
         }}
         placeholder={modal.placeholder}
-        aria-label={modal.title}
-        className="w-full rounded bg-rail px-3 py-2 text-sm outline-none"
+        className="h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
       />
     </Dialog>
   );

@@ -14,7 +14,6 @@ import PromptDialog from "@/components/modals/PromptDialog";
 import ServerSettingsModal from "@/components/modals/ServerSettingsModal";
 import QuickSwitcher from "@/components/ui/QuickSwitcher";
 import SettingsModal from "@/components/modals/SettingsModal";
-import IncomingCallModal from "@/components/voice/IncomingCallModal";
 // ── d-social ──
 import AddGroupMembersModal from "@/components/modals/AddGroupMembersModal";
 import CustomStatusModal from "@/components/modals/CustomStatusModal";
@@ -23,25 +22,35 @@ import UserProfileModal from "@/components/modals/UserProfileModal";
 // ── h-moderacao ──
 import BanModal from "@/components/modals/BanModal";
 import CreatePollModal from "@/components/modals/CreatePollModal";
-import DiscoverModal from "@/components/modals/DiscoverModal";
 import KickModal from "@/components/modals/KickModal";
 import PollVotersModal from "@/components/modals/PollVotersModal";
 import ReportModal from "@/components/modals/ReportModal";
 import TimeoutModal from "@/components/modals/TimeoutModal";
 import WelcomeModal from "@/components/modals/WelcomeModal";
-import { useUI } from "@/stores/ui";
+import { useUI, type Modal } from "@/stores/ui";
 
 /**
  * Único ponto de montagem de modal na tela.
  *
- * Com um modal por vez não há empilhamento acidental nem duas caixas
- * disputando o foco — e abrir um modal vira `ui.openModal(...)` de qualquer
- * lugar, sem prop drilling.
+ * Renderiza a **pilha**: confirmar algo de dentro das configurações abre a
+ * caixa por cima e, ao cancelar, a tela de trás continua onde estava. A ordem
+ * do DOM já resolve a sobreposição, e cada `Dialog` prende o próprio foco — o
+ * de cima é o último a montar, então fica com ele.
  */
 export default function ModalHost() {
-  const modal = useUI((s) => s.modal);
-  if (!modal) return null;
+  const modals = useUI((s) => s.modals);
+  if (modals.length === 0) return null;
 
+  return (
+    <>
+      {modals.map((modal, i) => (
+        <div key={`${modal.kind}-${i}`}>{renderModal(modal)}</div>
+      ))}
+    </>
+  );
+}
+
+function renderModal(modal: Modal) {
   switch (modal.kind) {
     case "confirm":
       return <ConfirmDialog modal={modal} />;
@@ -62,8 +71,6 @@ export default function ModalHost() {
     case "image":
       return <ImageModal urls={[modal.url]} alts={[modal.alt]} indice={0} />;
     // ── f-voz ──
-    case "incomingCall":
-      return <IncomingCallModal />;
     // ── b-canais ──
     case "channelSettings":
       return <ChannelSettingsModal channelId={modal.channelId} tab={modal.tab} />;
@@ -101,8 +108,6 @@ export default function ModalHost() {
       return <PollVotersModal messageId={modal.messageId} />;
     case "serverSettings":
       return <ServerSettingsModal guildId={modal.guildId} tab={modal.tab} />;
-    case "discover":
-      return <DiscoverModal />;
     case "welcome":
       return <WelcomeModal guildId={modal.guildId} />;
   }

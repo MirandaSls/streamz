@@ -27,7 +27,8 @@ interface GuildsState {
   membersLoading: boolean;
 
   load: () => Promise<void>;
-  select: (guild: Pick<Guild, "id" | "name">) => void;
+  /** `manterVisao` pré-carrega o servidor sem tirar o usuário da tela atual. */
+  select: (guild: Pick<Guild, "id" | "name">, opcoes?: { manterVisao?: boolean }) => void;
   create: () => Promise<void>;
   joinByCode: () => Promise<void>;
   createInvite: () => Promise<void>;
@@ -39,6 +40,8 @@ interface GuildsState {
   kick: (userId: string) => void;
   ban: (userId: string) => void;
   timeout: (userId: string) => void;
+  /** Castigo com duração já escolhida (submenu do menu de membro). */
+  applyTimeout: (userId: string, minutes: number) => Promise<void>;
   removeTimeout: (userId: string) => Promise<void>;
   /** Atribui ou remove um cargo ao membro (c-cargos). */
   toggleRole: (userId: string, roleId: string, atribuir: boolean) => Promise<void>;
@@ -100,15 +103,17 @@ export const useGuilds = create<GuildsState>((set, get) => {
       try {
         const guilds = await api.listGuilds();
         set({ guilds, loading: false });
-        if (!get().activeGuildId && guilds[0]) get().select(guilds[0]);
+        // pré-carrega o primeiro servidor SEM trocar a visão: o app abre na
+        // página Amigos, e `select` levaria para o modo servidor
+        if (!get().activeGuildId && guilds[0]) get().select(guilds[0], { manterVisao: true });
       } catch (e) {
         set({ loading: false });
         ui.toast(errorMessage(e, "Não foi possível carregar seus servidores"), "error");
       }
     },
 
-    select: (guild) => {
-      ui.setView("guild");
+    select: (guild, opcoes) => {
+      if (!opcoes?.manterVisao) ui.setView("guild");
       // voltar do modo DM para o servidor que já estava aberto não refaz fetch —
       // só devolve a timeline ao canal que estava na tela (a DM ocupava o lugar)
       if (get().activeGuildId === guild.id) {
@@ -190,9 +195,11 @@ export const useGuilds = create<GuildsState>((set, get) => {
       // digitar o nome é a trava do Discord para uma ação sem volta
       const nome = await ui.prompt({
         title: `Apagar ${guild?.name ?? "servidor"}`,
-        message: `Isso apaga todos os canais e mensagens, e não dá para desfazer. Digite ${guild?.name ?? ""} para confirmar.`,
+        message: "Isso apaga todos os canais e mensagens, e não dá para desfazer.",
+        label: "DIGITE O NOME DO SERVIDOR",
         placeholder: guild?.name,
         confirmLabel: "Apagar servidor",
+        danger: true,
       });
       const ok = !!nome && nome.trim() === guild?.name;
       if (nome !== null && !ok) ui.toast("O nome não confere — nada foi apagado.", "error");
@@ -232,6 +239,19 @@ export const useGuilds = create<GuildsState>((set, get) => {
       const guildId = get().activeGuildId;
       const user = get().members.find((m) => m.user.id === userId)?.user;
       if (guildId && user) ui.openModal({ kind: "timeout", guildId, user });
+    },
+
+    // o submenu de castigo do menu de membro aplica a duração direto, sem
+    // passar pelo modal — é o caminho do Discord para as durações prontas
+    applyTimeout: async (userId, minutes) => {
+      const guildId = get().activeGuildId;
+      if (!guildId) return;
+      try {
+        await api.timeoutMember(guildId, userId, { minutes });
+        ui.toast("Membro colocado em modo de espera.");
+      } catch (e) {
+        ui.toast(errorMessage(e, "Não foi possível aplicar o castigo"), "error");
+      }
     },
 
     removeTimeout: async (userId) => {

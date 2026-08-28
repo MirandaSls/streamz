@@ -8,12 +8,27 @@ import {
   type PublicUser,
 } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
+import { RadioLinha, Select } from "@/components/ui/controls";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui, useUI } from "@/stores/ui";
 
 /**
- * Castigo: escolhe a duração num dos presets do Discord e diz o motivo.
+ * Motivos prontos do modo de espera.
+ *
+ * São os do Discord: quem modera raramente escreve um motivo, e sem sugestão o
+ * registro de auditoria fica vazio. "Outro" devolve o campo livre.
+ */
+const MOTIVOS = [
+  "Conteúdo impróprio",
+  "Assédio ou perseguição",
+  "Spam ou divulgação em massa",
+  "Desrespeito às regras do servidor",
+  "Outro",
+] as const;
+
+/**
+ * Modo de espera: escolhe a duração num dos presets do Discord e diz o motivo.
  *
  * Quem está de castigo continua lendo tudo — só não escreve nem reage. O texto
  * do modal diz isso porque é a diferença entre castigo e expulsão.
@@ -21,33 +36,35 @@ import { ui, useUI } from "@/stores/ui";
 export default function TimeoutModal({ guildId, user }: { guildId: string; user: PublicUser }) {
   const closeModal = useUI((s) => s.closeModal);
   const [minutes, setMinutes] = useState(TIMEOUT_PRESETS[1].minutes);
+  const [motivo, setMotivo] = useState<string>(MOTIVOS[0]);
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const nome = displayNameOf(user);
+  const outro = motivo === "Outro";
 
   async function submit() {
     if (saving) return;
     setSaving(true);
+    const texto = (outro ? reason.trim() : motivo).slice(0, MAX_MODERATION_REASON);
     try {
-      await api.timeoutMember(guildId, user.id, { minutes, reason: reason.trim() || undefined });
-      ui.toast(`${nome} está de castigo.`);
+      await api.timeoutMember(guildId, user.id, { minutes, reason: texto || undefined });
+      ui.toast(`${nome} está em modo de espera.`);
       closeModal();
     } catch (e) {
-      ui.toast(errorMessage(e, "Não foi possível aplicar o castigo"), "error");
+      ui.toast(errorMessage(e, "Não foi possível aplicar o modo de espera"), "error");
       setSaving(false);
     }
   }
 
   return (
     <Dialog
-      title={`Colocar ${nome} de castigo`}
-      description="Durante o castigo essa pessoa continua vendo o servidor, mas não pode enviar mensagens nem reagir."
+      title={`Colocar '${nome}' em modo de espera`}
+      description="Durante o modo de espera essa pessoa continua vendo o servidor, mas não pode enviar mensagens nem reagir."
       onClose={closeModal}
-      className="w-[440px]"
       footer={
         <>
           <PrimaryButton danger disabled={saving} onClick={() => void submit()}>
-            {saving ? "Aplicando…" : "Colocar de castigo"}
+            {saving ? "Aplicando…" : "Colocar em modo de espera"}
           </PrimaryButton>
           <SecondaryButton autoFocus onClick={closeModal}>
             Cancelar
@@ -59,40 +76,41 @@ export default function TimeoutModal({ guildId, user }: { guildId: string; user:
         <legend className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
           Duração
         </legend>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-1">
           {TIMEOUT_PRESETS.map((p) => (
-            <button
+            <RadioLinha
               key={p.minutes}
-              type="button"
-              aria-pressed={minutes === p.minutes}
-              onClick={() => setMinutes(p.minutes)}
-              className={`h-9 rounded-[3px] px-3 text-sm font-medium transition ${
-                minutes === p.minutes
-                  ? "bg-accent text-accent-ink"
-                  : "bg-rail text-txt-normal hover:bg-hov"
-              }`}
-            >
-              {p.label}
-            </button>
+              name="duracao-espera"
+              checked={minutes === p.minutes}
+              onChange={() => setMinutes(p.minutes)}
+              titulo={p.label}
+            />
           ))}
         </div>
       </fieldset>
 
-      <label
-        htmlFor="timeout-reason"
-        className="mb-2 mt-5 block text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary"
-      >
-        Motivo (opcional)
-      </label>
-      <input
-        id="timeout-reason"
-        value={reason}
-        maxLength={MAX_MODERATION_REASON}
-        onChange={(e) => setReason(e.target.value)}
-        placeholder="Ex.: spam no canal geral"
-        className="h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
-      />
-      <p className="mt-1 text-xs text-txt-muted">
+      <div className="mt-5">
+        <Select
+          semDivisoria
+          label="Motivo"
+          value={motivo}
+          options={MOTIVOS.map((m) => ({ value: m, label: m }))}
+          onChange={setMotivo}
+        />
+      </div>
+
+      {outro && (
+        <input
+          value={reason}
+          maxLength={MAX_MODERATION_REASON}
+          onChange={(e) => setReason(e.target.value)}
+          aria-label="Motivo do modo de espera"
+          placeholder="Ex.: spam no canal geral"
+          className="mt-2 h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
+        />
+      )}
+
+      <p className="mt-2 text-xs text-txt-muted">
         O motivo fica registrado no registro de auditoria do servidor.
       </p>
     </Dialog>

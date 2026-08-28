@@ -8,6 +8,7 @@ import {
   type PublicUser,
 } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
+import { Rotulo, SliderMarcas } from "@/components/ui/controls";
 import { api } from "@/lib/api";
 import { useGuilds } from "@/stores/guilds";
 import { errorMessage } from "@/stores/socket-adapter";
@@ -19,8 +20,21 @@ import { ui, useUI } from "@/stores/ui";
  * A limpeza é a parte perigosa e por isso vem desligada por padrão ("Não apagar
  * mensagens"): apagar 7 dias de conversa por engano não tem desfazer.
  */
+/**
+ * Paradas do deslizador de limpeza.
+ *
+ * O Discord oferece três ("não apagar", "24 horas", "7 dias"); a "última hora"
+ * do contrato fica de fora aqui porque num deslizador de quatro paradas ela vira
+ * um passo quase idêntico ao vizinho — o campo continua aceitando o valor.
+ */
+const JANELAS = PURGE_WINDOWS.filter((w) => w.hours !== 1).map((w) => ({
+  valor: w.hours,
+  label: w.label,
+}));
+
 export default function BanModal({ guildId, user }: { guildId: string; user: PublicUser }) {
   const closeModal = useUI((s) => s.closeModal);
+  const guild = useGuilds((s) => s.guilds.find((g) => g.id === guildId) ?? null);
   const [reason, setReason] = useState("");
   const [hours, setHours] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -47,7 +61,7 @@ export default function BanModal({ guildId, user }: { guildId: string; user: Pub
 
   return (
     <Dialog
-      title={`Banir ${nome}`}
+      title={`Banir '${nome}' de ${guild?.name ?? "este servidor"}`}
       description="Essa pessoa sai do servidor e não consegue voltar, nem com um novo convite."
       onClose={closeModal}
       className="w-[440px]"
@@ -62,12 +76,7 @@ export default function BanModal({ guildId, user }: { guildId: string; user: Pub
         </>
       }
     >
-      <label
-        htmlFor="ban-reason"
-        className="mb-2 block text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary"
-      >
-        Motivo (opcional)
-      </label>
+      <Rotulo htmlFor="ban-reason">Motivo do banimento</Rotulo>
       <input
         id="ban-reason"
         value={reason}
@@ -82,28 +91,17 @@ export default function BanModal({ guildId, user }: { guildId: string; user: Pub
         essa pessoa recebe na conversa direta.
       </p>
 
-      <fieldset className="mt-5">
-        <legend className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
-          Apagar mensagens recentes
-        </legend>
-        <div className="flex flex-col gap-1">
-          {PURGE_WINDOWS.map((w) => (
-            <label
-              key={w.hours}
-              className="flex h-9 cursor-pointer items-center gap-2 rounded-[3px] px-2 text-sm text-txt-normal hover:bg-hov"
-            >
-              <input
-                type="radio"
-                name="purge"
-                checked={hours === w.hours}
-                onChange={() => setHours(w.hours)}
-                className="accent-accent"
-              />
-              {w.label}
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      <div className="mt-5">
+        <SliderMarcas
+          legenda="Apagar mensagens recentes"
+          opcoes={JANELAS}
+          indice={Math.max(
+            0,
+            JANELAS.findIndex((j) => j.valor === hours),
+          )}
+          onChange={(i) => setHours(JANELAS[i].valor)}
+        />
+      </div>
     </Dialog>
   );
 }

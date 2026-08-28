@@ -1,51 +1,59 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
-import { Check, MessageSquare, UserMinus, UserX, Users, X } from "lucide-react";
-import { displayNameOf } from "@streamz/shared";
+import { useEffect, useState } from "react";
+import {
+  Check,
+  HelpCircle,
+  MessageSquare,
+  Search,
+  UserMinus,
+  UserPlus,
+  UserX,
+  Users,
+  X,
+} from "lucide-react";
+import { displayNameOf, type PublicUser } from "@streamz/shared";
+import HeaderIcon from "@/components/chat/HeaderIcon";
+import InboxPopover from "@/components/chat/InboxPopover";
 import AddFriend from "@/components/friends/AddFriend";
+import EstadoVazio from "@/components/friends/EstadoVazio";
 import FriendRow, { RowAction } from "@/components/friends/FriendRow";
-import HeaderBar from "@/components/chat/HeaderBar";
 import { useDMs } from "@/stores/dms";
 import { useFriends, type FriendsTab } from "@/stores/friends";
 import { resolveStatus, usePresence } from "@/stores/presence";
 import { ui, type MenuItem } from "@/stores/ui";
 
+/**
+ * Rótulos no singular, como no Discord em pt-BR: a aba nomeia o *estado* de uma
+ * relação ("Pendente"), não o conjunto.
+ */
 const ABAS: { id: FriendsTab; label: string }[] = [
-  { id: "online", label: "Online" },
+  { id: "online", label: "Disponível" },
   { id: "todos", label: "Todos" },
-  { id: "pendentes", label: "Pendentes" },
-  { id: "bloqueados", label: "Bloqueados" },
+  { id: "pendentes", label: "Pendente" },
+  { id: "bloqueados", label: "Bloqueado" },
 ];
 
-/** Estado vazio ilustrado: círculo com o ícone, título e a explicação. */
-function Vazio({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {
-  return (
-    <div className="mt-16 grid place-items-center px-8 text-center">
-      <div className="grid h-[68px] w-[68px] place-items-center rounded-full bg-border text-txt-secondary">
-        {icon}
-      </div>
-      <h3 className="mt-4 text-lg font-semibold text-txt-primary">{title}</h3>
-      <p className="mt-1 max-w-md text-sm text-txt-muted">{text}</p>
-    </div>
-  );
-}
-
-/** Título de seção da lista ("ONLINE — 3"). */
+/** Título de seção da lista ("DISPONÍVEL — 3"), com a linha que abre a lista. */
 function Secao({ label, count }: { label: string; count: number }) {
   return (
-    <h3 className="mx-[30px] mb-2 mt-4 text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">
+    <h3 className="mx-[30px] mb-2 mt-6 border-b border-border pb-2 text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">
       {label} — {count}
     </h3>
   );
 }
 
 /**
- * A home do modo DM: a página Amigos do Discord.
+ * A home do modo DM: a página Amigos.
  *
  * Ocupa a coluna 3 no lugar da conversa (`DMView` decide qual mostrar). As abas
  * são só filtros sobre as listas que a store já tem — trocar de aba não vai ao
  * servidor. "Atividade" não existe aqui: o MVP não tem atividade de jogo.
+ *
+ * O cabeçalho é desenhado aqui, e não com `HeaderBar`: lá as abas cairiam em
+ * `tools`, que vive dentro de um `ml-auto` (empurraria tudo para a direita), e a
+ * busca é obrigatória no componente — nesta página ela pertence ao corpo, acima
+ * da lista, porque é ela que filtra a lista.
  */
 export default function FriendsPage() {
   const { friends, incoming, outgoing, blocked, loading, loaded } = useFriends();
@@ -59,17 +67,40 @@ export default function FriendsPage() {
   const unblock = useFriends((s) => s.unblock);
   const openWith = useDMs((s) => s.openWith);
   const statuses = usePresence((s) => s.statuses);
+  const [busca, setBusca] = useState("");
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const online = friends.filter((f) => resolveStatus(statuses, f) !== "OFFLINE");
+  const consulta = busca.trim().toLowerCase();
+  /** Filtra por nome de exibição **ou** usuário: os dois estão na linha. */
+  function combina(u: PublicUser) {
+    return (
+      !consulta ||
+      displayNameOf(u).toLowerCase().includes(consulta) ||
+      u.username.toLowerCase().includes(consulta)
+    );
+  }
+
+  const todos = friends.filter(combina);
+  const online = todos.filter((f) => resolveStatus(statuses, f) !== "OFFLINE");
+  const recebidos = incoming.filter((r) => combina(r.user));
+  const enviados = outgoing.filter((r) => combina(r.user));
+  const bloqueados = blocked.filter(combina);
+  /** o badge da aba conta o total, não o resultado da busca */
   const pendentes = incoming.length + outgoing.length;
 
-  function menuDeAmigo(user: (typeof friends)[number]): MenuItem[] {
+  function perfil(user: PublicUser): MenuItem {
+    return {
+      label: "Perfil",
+      onSelect: () => ui.openModal({ kind: "userProfile", userId: user.id }),
+    };
+  }
+
+  function menuDeAmigo(user: PublicUser): MenuItem[] {
     return [
-      { label: "Perfil", onSelect: () => ui.openModal({ kind: "userProfile", userId: user.id }) },
+      perfil(user),
       { label: "Mensagem", icon: <MessageSquare size={18} />, onSelect: () => void openWith(user.id) },
       { separator: true },
       {
@@ -82,17 +113,61 @@ export default function FriendsPage() {
     ];
   }
 
-  function listaDeAmigos(itens: typeof friends, rotulo: string) {
+  function menuDeRecebido(requestId: string, user: PublicUser): MenuItem[] {
+    return [
+      perfil(user),
+      { label: "Aceitar", icon: <Check size={18} />, onSelect: () => void accept(requestId) },
+      { label: "Recusar", icon: <X size={18} />, danger: true, onSelect: () => void dismiss(requestId) },
+      { separator: true },
+      { label: "Bloquear", icon: <UserX size={18} />, danger: true, onSelect: () => void block(user) },
+    ];
+  }
+
+  function menuDeEnviado(requestId: string, user: PublicUser): MenuItem[] {
+    return [
+      perfil(user),
+      {
+        label: "Cancelar pedido",
+        icon: <X size={18} />,
+        danger: true,
+        onSelect: () => void dismiss(requestId),
+      },
+      { label: "Bloquear", icon: <UserX size={18} />, danger: true, onSelect: () => void block(user) },
+    ];
+  }
+
+  function menuDeBloqueado(user: PublicUser): MenuItem[] {
+    return [
+      perfil(user),
+      { label: "Desbloquear", icon: <UserMinus size={18} />, onSelect: () => void unblock(user.id) },
+    ];
+  }
+
+  /** Estado vazio de "a busca não achou nada" — distinto de "a lista é vazia". */
+  function semResultado() {
+    return (
+      <EstadoVazio
+        arte="busca"
+        titulo="Nada encontrado"
+        texto={`Ninguém com “${busca.trim()}” nesta aba. Confira o nome de usuário.`}
+      />
+    );
+  }
+
+  function listaDeAmigos(itens: PublicUser[], rotulo: string, vazio: "online" | "todos") {
     if (itens.length === 0) {
-      return (
-        <Vazio
-          icon={<MessageSquare size={32} />}
-          title={rotulo === "Online" ? "Ninguém por perto" : "Você ainda não tem amigos"}
-          text={
-            rotulo === "Online"
-              ? "Quando um amigo ficar online, ele aparece aqui."
-              : "Use a aba “Adicionar amigo” para mandar um pedido pelo nome de usuário."
-          }
+      if (consulta) return semResultado();
+      return vazio === "online" ? (
+        <EstadoVazio
+          arte="online"
+          titulo="Ninguém por perto"
+          texto="Quando um amigo ficar disponível, ele aparece aqui."
+        />
+      ) : (
+        <EstadoVazio
+          arte="amigos"
+          titulo="Você ainda não tem amigos"
+          texto="Use “Adicionar amigo” para mandar um pedido pelo nome de usuário."
         />
       );
     }
@@ -105,6 +180,7 @@ export default function FriendsPage() {
               key={u.id}
               user={u}
               menu={menuDeAmigo(u)}
+              onOpen={() => void openWith(u.id)}
               actions={
                 <RowAction label={`Conversar com ${displayNameOf(u)}`} onClick={() => void openWith(u.id)}>
                   <MessageSquare size={20} />
@@ -119,71 +195,108 @@ export default function FriendsPage() {
 
   return (
     <main className="flex min-w-0 flex-1 flex-col bg-chat">
-      <HeaderBar
-        icon={<Users size={24} />}
-        title="Amigos"
-        searchLabel="Buscar amigos"
-        onSearch={() => setTab("todos")}
-        tools={
-          <div className="flex items-center gap-1">
-            <span aria-hidden="true" className="mx-2 h-6 w-px bg-border" />
-            {ABAS.map((a) => (
-              <button
-                key={a.id}
-                type="button"
-                aria-pressed={tab === a.id}
-                onClick={() => setTab(a.id)}
-                className={`flex h-6 items-center gap-1.5 rounded-[4px] px-2 text-sm font-medium transition ${
-                  tab === a.id ? "bg-sel text-txt-primary" : "text-txt-secondary hover:bg-hov hover:text-txt-primary"
-                }`}
-              >
-                {a.label}
-                {a.id === "pendentes" && pendentes > 0 && (
-                  <span className="grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[11px] font-bold leading-none text-white">
-                    {pendentes}
-                  </span>
-                )}
-              </button>
-            ))}
+      <header className="relative z-10 flex h-12 shrink-0 items-center gap-2 px-4 shadow-header">
+        <span className="text-txt-muted" aria-hidden="true">
+          <Users size={24} />
+        </span>
+        <h1 className="shrink-0 font-semibold text-txt-primary">Amigos</h1>
+        <span aria-hidden="true" className="mx-2 h-6 w-px shrink-0 bg-border" />
+
+        <nav aria-label="Filtrar amigos" className="flex items-center gap-1">
+          {ABAS.map((a) => (
             <button
+              key={a.id}
               type="button"
-              aria-pressed={tab === "adicionar"}
-              onClick={() => setTab("adicionar")}
-              className={`ml-1 h-6 rounded-[4px] px-2 text-sm font-medium transition ${
-                tab === "adicionar"
-                  ? "bg-green/20 text-green"
-                  : "bg-green text-accent-ink hover:bg-green/80"
+              aria-pressed={tab === a.id}
+              onClick={() => setTab(a.id)}
+              className={`flex h-6 items-center gap-1.5 rounded-[4px] px-2 text-sm font-medium transition ${
+                tab === a.id ? "bg-sel text-txt-primary" : "text-txt-secondary hover:bg-hov hover:text-txt-primary"
               }`}
             >
-              Adicionar amigo
+              {a.label}
+              {a.id === "pendentes" && pendentes > 0 && (
+                <span className="grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[11px] font-bold leading-none text-white">
+                  {pendentes}
+                </span>
+              )}
             </button>
-          </div>
-        }
-      />
+          ))}
+          {/* ação primária: 32px de altura e largura mínima, não um chip de aba */}
+          <button
+            type="button"
+            aria-pressed={tab === "adicionar"}
+            onClick={() => setTab("adicionar")}
+            className={`ml-2 h-8 min-w-[128px] rounded-[4px] px-4 text-sm font-medium transition ${
+              tab === "adicionar"
+                ? "bg-green/20 text-green"
+                : "bg-green text-accent-ink hover:bg-green/80"
+            }`}
+          >
+            Adicionar amigo
+          </button>
+        </nav>
+
+        <div className="ml-auto flex shrink-0 items-center gap-4">
+          <HeaderIcon
+            label="Nova mensagem de grupo"
+            onClick={() => ui.openModal({ kind: "createGroupDM" })}
+          >
+            <UserPlus size={24} />
+          </HeaderIcon>
+          <InboxPopover />
+          {/* sem central de ajuda no MVP: melhor o botão assumir isso que sumir */}
+          <HeaderIcon label="Ajuda" disabled>
+            <HelpCircle size={24} />
+          </HeaderIcon>
+        </div>
+      </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto pb-6">
         {loading && !loaded && <p className="px-[30px] py-6 text-sm text-txt-muted">Carregando…</p>}
 
+        {tab !== "adicionar" && (
+          <div className="relative px-[30px] pt-4">
+            <input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              type="search"
+              aria-label="Buscar amigos"
+              placeholder="Buscar"
+              className="h-8 w-full rounded-[3px] bg-rail pl-2 pr-8 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
+            />
+            <Search
+              size={16}
+              aria-hidden="true"
+              className="pointer-events-none absolute right-[38px] top-6 text-txt-muted"
+            />
+          </div>
+        )}
+
         {tab === "adicionar" && <AddFriend />}
-        {tab === "online" && listaDeAmigos(online, "Online")}
-        {tab === "todos" && listaDeAmigos(friends, "Todos os amigos")}
+        {tab === "online" && listaDeAmigos(online, "Disponível", "online")}
+        {tab === "todos" && listaDeAmigos(todos, "Todos os amigos", "todos")}
 
         {tab === "pendentes" &&
-          (pendentes === 0 ? (
-            <Vazio
-              icon={<Check size={32} />}
-              title="Nada pendente"
-              text="Quando alguém te mandar um pedido de amizade, ele aparece aqui."
-            />
+          (recebidos.length + enviados.length === 0 ? (
+            consulta ? (
+              semResultado()
+            ) : (
+              <EstadoVazio
+                arte="pendentes"
+                titulo="Nada pendente"
+                texto="Quando alguém te mandar um pedido de amizade, ele aparece aqui."
+              />
+            )
           ) : (
             <>
-              {incoming.length > 0 && <Secao label="Recebidos" count={incoming.length} />}
+              {recebidos.length > 0 && <Secao label="Recebidos" count={recebidos.length} />}
               <div role="list">
-                {incoming.map((r) => (
+                {recebidos.map((r) => (
                   <FriendRow
                     key={r.id}
                     user={r.user}
                     subtitle="Pedido de amizade recebido"
+                    menu={menuDeRecebido(r.id, r.user)}
                     actions={
                       <>
                         <RowAction label="Aceitar" positive onClick={() => void accept(r.id)}>
@@ -197,13 +310,14 @@ export default function FriendsPage() {
                   />
                 ))}
               </div>
-              {outgoing.length > 0 && <Secao label="Enviados" count={outgoing.length} />}
+              {enviados.length > 0 && <Secao label="Enviados" count={enviados.length} />}
               <div role="list">
-                {outgoing.map((r) => (
+                {enviados.map((r) => (
                   <FriendRow
                     key={r.id}
                     user={r.user}
                     subtitle="Pedido de amizade enviado"
+                    menu={menuDeEnviado(r.id, r.user)}
                     actions={
                       <RowAction label="Cancelar pedido" danger onClick={() => void dismiss(r.id)}>
                         <X size={20} />
@@ -216,21 +330,26 @@ export default function FriendsPage() {
           ))}
 
         {tab === "bloqueados" &&
-          (blocked.length === 0 ? (
-            <Vazio
-              icon={<UserX size={32} />}
-              title="Ninguém bloqueado"
-              text="Você não bloqueou ninguém. Quem for bloqueado não abre conversa com você."
-            />
+          (bloqueados.length === 0 ? (
+            consulta ? (
+              semResultado()
+            ) : (
+              <EstadoVazio
+                arte="bloqueados"
+                titulo="Ninguém bloqueado"
+                texto="Você não bloqueou ninguém. Quem for bloqueado não abre conversa com você."
+              />
+            )
           ) : (
             <>
-              <Secao label="Bloqueados" count={blocked.length} />
+              <Secao label="Bloqueado" count={bloqueados.length} />
               <div role="list">
-                {blocked.map((u) => (
+                {bloqueados.map((u) => (
                   <FriendRow
                     key={u.id}
                     user={u}
                     subtitle="Bloqueado"
+                    menu={menuDeBloqueado(u)}
                     actions={
                       <RowAction label="Desbloquear" onClick={() => void unblock(u.id)}>
                         <UserMinus size={20} />

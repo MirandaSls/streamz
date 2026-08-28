@@ -1,67 +1,43 @@
 "use client";
 
 import { useState } from "react";
-import { Hash, Lock, Megaphone, Shield, Sliders, Trash2, Volume2 } from "lucide-react";
-import {
-  MAX_CHANNEL_TOPIC,
-  SLOWMODE_PRESETS,
-  slowmodeLabel,
-  type Channel,
-} from "@streamz/shared";
-import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
+import { Hash, Lock, Megaphone, Shield, Trash2, Volume2 } from "lucide-react";
+import { MAX_CHANNEL_TOPIC, SLOWMODE_PRESETS, slowmodeLabel, type Channel } from "@streamz/shared";
 import { ChannelAccessList } from "@/components/modals/ChannelAccessModal";
+import TelaCheia, { ItemPerigo, type ItemDeMenu } from "@/components/ui/TelaCheia";
+import { Rotulo, SliderMarcas, ToggleLinha } from "@/components/ui/controls";
+import { RegistrarAlteracoes, useControleDeAlteracoes } from "@/components/ui/alteracoes";
 import { useChannels, type UpdateChannelInput } from "@/stores/channels";
 import { useUI } from "@/stores/ui";
 
-type Aba = "geral" | "permissoes" | "apagar";
+type Aba = "geral" | "permissoes";
 
-/** Ícone do canal na barra de abas, para o modal não parecer genérico. */
+const ROTULO: Record<Aba, string> = {
+  geral: "Visão geral",
+  permissoes: "Permissões",
+};
+
+/** Ícone do canal na barra lateral, para a tela não parecer genérica. */
 function iconeDoCanal(channel: Channel) {
-  if (channel.type === "VOICE") return <Volume2 size={20} aria-hidden="true" />;
-  if (channel.type === "ANNOUNCEMENT") return <Megaphone size={20} aria-hidden="true" />;
-  if (channel.private) return <Lock size={20} aria-hidden="true" />;
-  return <Hash size={20} aria-hidden="true" />;
+  if (channel.type === "VOICE") return <Volume2 size={18} aria-hidden="true" />;
+  if (channel.type === "ANNOUNCEMENT") return <Megaphone size={18} aria-hidden="true" />;
+  if (channel.private) return <Lock size={18} aria-hidden="true" />;
+  return <Hash size={18} aria-hidden="true" />;
 }
 
-function BotaoAba({
-  ativa,
-  onClick,
-  icon,
-  children,
-  danger = false,
-}: {
-  ativa: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-  danger?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={ativa}
-      className={`flex h-8 w-full items-center gap-2 rounded-[4px] px-2 text-left text-sm font-medium transition ${
-        ativa
-          ? "bg-sel text-txt-primary"
-          : danger
-            ? "text-red hover:bg-hov"
-            : "text-txt-faint hover:bg-hov hover:text-txt-normal"
-      }`}
-    >
-      {icon}
-      <span className="truncate">{children}</span>
-    </button>
-  );
-}
+/** Paradas do modo lento com o rótulo humano do contrato. */
+const PARADAS = SLOWMODE_PRESETS.map((s) => ({ valor: s, label: slowmodeLabel(s) }));
 
 /**
- * Configurações do canal, com abas à esquerda como no Discord: Visão geral
- * (nome, tópico, modo lento, NSFW e somente-leitura), Permissões (privacidade e
- * allowlist) e Apagar canal.
+ * Configurações do canal — **tela cheia**, como no Discord.
  *
- * O formulário é local até "Salvar": trocar de aba não perde o que foi digitado
- * e nada vai para a API antes da confirmação.
+ * Não é um `Dialog`: as configurações de canal usam a mesma moldura das de
+ * servidor e de usuário (barra lateral com o nome do canal, conteúdo centrado,
+ * botão ESC redondo). O nome do canal é o cabeçalho da barra; o `<h1>` é o nome
+ * da aba.
+ *
+ * O formulário é local até salvar, e é a barra de "alterações não salvas" que
+ * aparece quando há o que gravar — trocar de aba não perde o que foi digitado.
  */
 export default function ChannelSettingsModal({
   channelId,
@@ -83,6 +59,7 @@ export default function ChannelSettingsModal({
   const [readOnly, setReadOnly] = useState(channel?.readOnly ?? false);
   const [isPrivate, setPrivate] = useState(channel?.private ?? false);
   const [saving, setSaving] = useState(false);
+  const alteracoes = useControleDeAlteracoes();
 
   if (!channel) return null;
   const voz = channel.type === "VOICE";
@@ -97,213 +74,148 @@ export default function ChannelSettingsModal({
   if (isPrivate !== channel.private) patch.isPrivate = isPrivate;
   const dirty = Object.keys(patch).length > 0;
 
+  function redefinir() {
+    if (!channel) return;
+    setName(channel.name ?? "");
+    setTopic(channel.topic ?? "");
+    setSlowmode(channel.slowmodeSeconds);
+    setNsfw(channel.nsfw);
+    setReadOnly(channel.readOnly);
+    setPrivate(channel.private);
+  }
+
   async function salvar() {
     if (!dirty || saving) return;
     setSaving(true);
-    const ok = await update(channelId, patch);
+    await update(channelId, patch);
     setSaving(false);
-    if (ok) closeModal();
   }
 
+  const itens: ItemDeMenu[] = [
+    { id: "geral", label: ROTULO.geral, icon: iconeDoCanal(channel) },
+    { id: "permissoes", label: ROTULO.permissoes, icon: <Shield size={18} aria-hidden="true" /> },
+  ];
+
+  const paradaAtual = Math.max(
+    0,
+    PARADAS.findIndex((p) => p.valor === slowmode),
+  );
+
+  const nomeExibido = `${voz ? "" : "#"}${channel.name ?? "canal"}`;
+
   return (
-    <Dialog
-      title={`Configurações de #${channel.name ?? "canal"}`}
+    <TelaCheia
+      titulo={nomeExibido}
+      cabecalho={nomeExibido}
+      grupos={[{ id: "canal", itens }]}
+      abaId={aba}
+      onAba={(id) => setAba(id as Aba)}
+      tituloAba={ROTULO[aba]}
+      controle={alteracoes}
       onClose={closeModal}
-      className="w-[560px]"
-      footer={
-        aba === "apagar" ? (
-          <SecondaryButton full onClick={closeModal}>
-            Fechar
-          </SecondaryButton>
-        ) : (
-          <>
-            <PrimaryButton disabled={!dirty || saving} onClick={salvar}>
-              {saving ? "Salvando…" : "Salvar"}
-            </PrimaryButton>
-            <SecondaryButton onClick={closeModal}>Cancelar</SecondaryButton>
-          </>
-        )
+      rodapeMenu={
+        <ItemPerigo
+          icon={<Trash2 size={18} />}
+          onClick={async () => {
+            // o `remove` da store já pergunta antes; a tela só fecha se apagou
+            await remove(channel);
+            if (!useChannels.getState().channels.some((c) => c.id === channelId)) closeModal();
+          }}
+        >
+          Apagar canal
+        </ItemPerigo>
       }
     >
-      <div className="flex gap-4">
-        <nav aria-label="Seções" className="w-40 shrink-0 space-y-0.5">
-          <BotaoAba ativa={aba === "geral"} onClick={() => setAba("geral")} icon={iconeDoCanal(channel)}>
-            Visão geral
-          </BotaoAba>
-          <BotaoAba
-            ativa={aba === "permissoes"}
-            onClick={() => setAba("permissoes")}
-            icon={<Shield size={20} aria-hidden="true" />}
-          >
-            Permissões
-          </BotaoAba>
-          <BotaoAba
-            ativa={aba === "apagar"}
-            onClick={() => setAba("apagar")}
-            icon={<Trash2 size={20} aria-hidden="true" />}
-            danger
-          >
-            Apagar canal
-          </BotaoAba>
-        </nav>
+      <RegistrarAlteracoes dirty={dirty} salvar={salvar} redefinir={redefinir} />
 
-        <div className="min-w-0 flex-1">
-          {aba === "geral" && (
-            <div className="space-y-4">
-              <label className="block">
-                <span className="mb-2 block text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
-                  Nome do canal
-                </span>
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  maxLength={64}
-                  className="w-full rounded bg-rail px-3 py-2 text-sm text-txt-normal outline-none"
+      {aba === "geral" && (
+        <div className="space-y-6">
+          <div>
+            <Rotulo htmlFor="canal-nome">Nome do canal</Rotulo>
+            <input
+              id="canal-nome"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={64}
+              className="h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none"
+            />
+          </div>
+
+          {!voz && (
+            <div>
+              <Rotulo htmlFor="canal-topico" contador={`${topic.length}/${MAX_CHANNEL_TOPIC}`}>
+                Tópico do canal
+              </Rotulo>
+              <textarea
+                id="canal-topico"
+                value={topic}
+                onChange={(e) => setTopic(e.target.value.slice(0, MAX_CHANNEL_TOPIC))}
+                rows={3}
+                placeholder="Sobre o que é este canal?"
+                className="w-full resize-none rounded-[3px] bg-rail px-2.5 py-2 text-txt-normal outline-none placeholder:text-txt-muted"
+              />
+            </div>
+          )}
+
+          {!voz && (
+            <SliderMarcas
+              legenda="Modo lento"
+              opcoes={PARADAS}
+              indice={paradaAtual}
+              onChange={(i) => setSlowmode(PARADAS[i].valor)}
+              hint="Membros só podem enviar uma mensagem a cada intervalo. Moderadores não são afetados."
+            />
+          )}
+
+          {!voz && (
+            <div className="border-t border-border pt-1">
+              <ToggleLinha
+                checked={nsfw}
+                onChange={setNsfw}
+                titulo="Canal com conteúdo sensível"
+                hint="Quem abrir o canal vê um aviso e precisa confirmar a entrada."
+              />
+              {!anuncio && (
+                <ToggleLinha
+                  checked={readOnly}
+                  onChange={setReadOnly}
+                  titulo="Somente leitura"
+                  hint="Só moderadores enviam mensagens."
                 />
-              </label>
-
-              {!voz && (
-                <label className="block">
-                  <span className="mb-2 block text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
-                    Tópico do canal
-                  </span>
-                  <textarea
-                    value={topic}
-                    onChange={(e) => setTopic(e.target.value.slice(0, MAX_CHANNEL_TOPIC))}
-                    rows={3}
-                    placeholder="Sobre o que é este canal?"
-                    className="w-full resize-none rounded bg-rail px-3 py-2 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
-                  />
-                  <span className="mt-1 block text-right text-xs text-txt-muted">
-                    {MAX_CHANNEL_TOPIC - topic.length}
-                  </span>
-                </label>
-              )}
-
-              {!voz && (
-                <label className="block">
-                  <span className="mb-2 block text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
-                    Modo lento — {slowmodeLabel(slowmode)}
-                  </span>
-                  <select
-                    value={slowmode}
-                    onChange={(e) => setSlowmode(Number(e.target.value))}
-                    className="w-full rounded bg-rail px-3 py-2 text-sm text-txt-normal outline-none"
-                  >
-                    {SLOWMODE_PRESETS.map((s) => (
-                      <option key={s} value={s}>
-                        {slowmodeLabel(s)}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="mt-2 block text-xs text-txt-muted">
-                    Membros só podem enviar uma mensagem a cada intervalo. Moderadores
-                    não são afetados.
-                  </span>
-                </label>
-              )}
-
-              {!voz && (
-                <label className="flex cursor-pointer items-start gap-2 text-sm text-txt-normal">
-                  <input
-                    type="checkbox"
-                    checked={nsfw}
-                    onChange={(e) => setNsfw(e.target.checked)}
-                    className="mt-1"
-                  />
-                  <span>
-                    Canal com conteúdo sensível
-                    <span className="mt-0.5 block text-xs text-txt-muted">
-                      Quem abrir o canal vê um aviso e precisa confirmar a entrada.
-                    </span>
-                  </span>
-                </label>
-              )}
-
-              {!voz && !anuncio && (
-                <label className="flex cursor-pointer items-start gap-2 text-sm text-txt-normal">
-                  <input
-                    type="checkbox"
-                    checked={readOnly}
-                    onChange={(e) => setReadOnly(e.target.checked)}
-                    className="mt-1"
-                  />
-                  <span>
-                    Somente leitura
-                    <span className="mt-0.5 block text-xs text-txt-muted">
-                      Só moderadores enviam mensagens.
-                    </span>
-                  </span>
-                </label>
-              )}
-
-              {anuncio && (
-                <p className="rounded bg-rail/50 px-3 py-2 text-xs text-txt-muted">
-                  Canal de anúncios: só a moderação publica. Seguir o canal em outro
-                  servidor ainda não está disponível.
-                </p>
               )}
             </div>
           )}
 
-          {aba === "permissoes" && (
-            <div className="space-y-4">
-              <label className="flex cursor-pointer items-start gap-2 text-sm text-txt-normal">
-                <input
-                  type="checkbox"
-                  checked={isPrivate}
-                  onChange={(e) => setPrivate(e.target.checked)}
-                  className="mt-1"
-                />
-                <span>
-                  Canal privado
-                  <span className="mt-0.5 block text-xs text-txt-muted">
-                    Só moderadores e os membros marcados abaixo enxergam o canal.
-                  </span>
-                </span>
-              </label>
-
-              <div>
-                <span className="mb-2 block text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
-                  Membros com acesso
-                </span>
-                <ChannelAccessList channelId={channelId} />
-                <p className="mt-2 text-xs text-txt-muted">
-                  A marcação vale na hora — não depende do botão Salvar.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {aba === "apagar" && (
-            <div className="space-y-4">
-              <p className="text-sm text-txt-normal">
-                Apagar <span className="font-semibold">#{channel.name ?? "canal"}</span> remove
-                todas as mensagens dele. Não dá para desfazer.
-              </p>
-              <PrimaryButton
-                danger
-                onClick={async () => {
-                  await remove(channel);
-                  closeModal();
-                }}
-              >
-                <span className="flex items-center gap-2">
-                  <Trash2 size={18} aria-hidden="true" />
-                  Apagar canal
-                </span>
-              </PrimaryButton>
-            </div>
+          {anuncio && (
+            <p className="rounded-[4px] bg-panel px-3 py-2 text-xs text-txt-muted">
+              Canal de anúncios: só a moderação publica. Seguir o canal em outro servidor ainda não
+              está disponível.
+            </p>
           )}
         </div>
-      </div>
-
-      {aba === "geral" && !voz && (
-        <p className="mt-4 flex items-center gap-2 text-xs text-txt-muted">
-          <Sliders size={14} aria-hidden="true" />
-          Permissões por cargo entram nesta aba quando os cargos existirem.
-        </p>
       )}
-    </Dialog>
+
+      {aba === "permissoes" && (
+        <div className="space-y-6">
+          <div className="border-b border-border pb-1">
+            <ToggleLinha
+              checked={isPrivate}
+              onChange={setPrivate}
+              icon={<Lock size={18} />}
+              titulo="Canal privado"
+              hint="Só moderadores e os membros marcados abaixo enxergam o canal."
+            />
+          </div>
+
+          <div>
+            <Rotulo>Membros com acesso</Rotulo>
+            <ChannelAccessList channelId={channelId} />
+            <p className="mt-2 text-xs text-txt-muted">
+              A marcação vale na hora — não depende do botão salvar.
+            </p>
+          </div>
+        </div>
+      )}
+    </TelaCheia>
   );
 }

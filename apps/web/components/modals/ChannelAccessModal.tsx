@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
+import { Check } from "lucide-react";
 import Dialog, { SecondaryButton } from "@/components/modals/Dialog";
+import Avatar from "@/components/ui/Avatar";
 import { useChannels } from "@/stores/channels";
 import { useGuilds } from "@/stores/guilds";
 import { useUI } from "@/stores/ui";
@@ -39,19 +41,32 @@ export function ChannelAccessList({ channelId }: { channelId: string }) {
           Nenhum membro comum neste servidor.
         </p>
       ) : (
-        plainMembers.map((m) => (
-          <label
-            key={m.user.id}
-            className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm text-txt-normal hover:bg-hov"
-          >
-            <input
-              type="checkbox"
-              checked={access.allowed.includes(m.user.id)}
-              onChange={() => guildId && toggleAccess(guildId, channelId, m.user.id)}
-            />
-            {m.user.username}
-          </label>
-        ))
+        plainMembers.map((m) => {
+          const marcado = access.allowed.includes(m.user.id);
+          return (
+            <button
+              key={m.user.id}
+              type="button"
+              role="checkbox"
+              aria-checked={marcado}
+              onClick={() => guildId && toggleAccess(guildId, channelId, m.user.id)}
+              className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-txt-normal hover:bg-hov"
+            >
+              <Avatar user={m.user} size="sm" surface="border-chat" />
+              <span className="min-w-0 flex-1 truncate">{m.user.username}</span>
+              {/* mesmo círculo do "selecionar amigos": o checkbox nativo não
+                  segue o tema */}
+              <span
+                aria-hidden="true"
+                className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition ${
+                  marcado ? "border-accent bg-accent text-accent-ink" : "border-txt-faint"
+                }`}
+              >
+                {marcado && <Check size={14} strokeWidth={3} />}
+              </span>
+            </button>
+          );
+        })
       )}
     </div>
   );

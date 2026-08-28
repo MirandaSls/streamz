@@ -135,12 +135,14 @@ export const useChannels = create<ChannelsState>((set, get) => {
     },
 
     select: (channel) => {
-      if (channel.type === "VOICE") {
-        // voz assume a área principal; o chat de texto continua onde estava
-        set({ voiceChannelId: channel.id });
-        return;
-      }
-      set({ voiceChannelId: null, activeChannelId: channel.id });
+      // Canal de voz também é canal aberto: ele tem chat de texto próprio, e a
+      // coluna 3 empilha o palco em cima da conversa dele (ver `CallSplit`).
+      // Só `voiceChannelId` muda de significado entre os dois casos — é ele que
+      // diz se há palco a montar.
+      set({
+        voiceChannelId: channel.type === "VOICE" ? channel.id : null,
+        activeChannelId: channel.id,
+      });
       void useMessages.getState().open(channel.id);
       void get().markRead(channel.id);
     },

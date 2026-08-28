@@ -62,6 +62,68 @@ body {
   background: transparent;
 }
 
+/*
+ * Entrada de modal, tela de configurações, menu e tooltip.
+ *
+ * O Discord anima tudo que aparece por cima da interface, e a curva é a mesma em
+ * toda parte: uma "back-out" que passa um pouco do alvo e assenta. Sem isso as
+ * caixas surgem de estalo e o app parece um protótipo. `reduzir-movimento`
+ * (mais abaixo) zera todas elas de uma vez.
+ */
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+/* configurações entram encolhendo, não crescendo: a tela "recua" para o lugar */
+@keyframes settings-in {
+  from {
+    opacity: 0;
+    transform: scale(1.1);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.anim-overlay {
+  animation: overlay-in 0.2s ease;
+}
+.anim-modal {
+  animation: modal-in 0.25s cubic-bezier(0.19, 1, 0.22, 1);
+}
+.anim-settings {
+  animation: settings-in 0.2s ease-out;
+}
+/* o `transform-origin` vem do style inline: menu cresce a partir do cursor */
+.anim-menu {
+  animation: menu-in 0.12s ease-out;
+}
+
 /* Indicador de "digitando…": três pontos pulsando. */
 @keyframes typing-dot {
   0%,

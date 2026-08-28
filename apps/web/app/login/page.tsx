@@ -4,7 +4,7 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { exigeMfa } from "@streamz/shared";
-import AuthCard, { FieldLabel, inputClass, submitClass } from "@/components/auth/AuthCard";
+import AuthCard, { FieldLabel, inputClass, linkClass, submitClass } from "@/components/auth/AuthCard";
 import { api } from "@/lib/api";
 import { mensagemDeAuth, validarLogin } from "@/lib/auth-mensagens";
 import { useAuth } from "@/stores/auth";
@@ -38,6 +38,9 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [ticket, setTicket] = useState<string | null>(null);
   const [code, setCode] = useState("");
+  // o mesmo endpoint aceita o código do app e o de recuperação: alternar aqui
+  // muda só o que a tela pede, não para onde manda
+  const [backup, setBackup] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -84,13 +87,10 @@ function LoginForm() {
 
   if (ticket) {
     return (
-      <AuthCard
-        title="Verificação em duas etapas"
-        subtitle="Digite o código do seu app autenticador — ou um código de recuperação."
-      >
+      <AuthCard title="Verificação em duas etapas" subtitle="Sua conta está protegida.">
         <form onSubmit={onSubmitCodigo} noValidate>
           <FieldLabel htmlFor="code" invalid={!!error} hint={error ?? undefined}>
-            Código
+            {backup ? "Código de recuperação" : "Digite o código de autenticação"}
           </FieldLabel>
           <input
             id="code"
@@ -101,9 +101,15 @@ function LoginForm() {
             onChange={(e) => setCode(e.target.value)}
             disabled={loading}
             aria-invalid={error ? true : undefined}
-            className={`${inputClass} tracking-[0.3em]`}
+            aria-describedby="apoio-2fa"
+            className={`${inputClass} mb-2 tracking-[0.3em]`}
             autoFocus
           />
+          <p id="apoio-2fa" className="mb-5 text-sm text-txt-muted">
+            {backup
+              ? "Use um dos códigos que você guardou ao ligar a verificação em duas etapas. Cada um vale uma vez só."
+              : "Abra o seu app autenticador e informe o código de 6 dígitos da conta do Streamz."}
+          </p>
 
           <p role="alert" aria-live="polite" className="sr-only">
             {error}
@@ -113,14 +119,36 @@ function LoginForm() {
             {loading ? "Verificando…" : "Entrar"}
           </button>
 
+          <p className="mt-4 text-sm">
+            <button
+              type="button"
+              onClick={() => {
+                setBackup((v) => !v);
+                setCode("");
+                setError(null);
+              }}
+              className={linkClass}
+            >
+              {backup ? "Usar o app autenticador" : "Usar código de backup"}
+            </button>
+          </p>
+          <p className="mt-2 text-sm">
+            {/* sem central de ajuda: para quem perdeu o segundo fator, redefinir
+                a senha é o caminho que existe hoje */}
+            <Link href="/forgot-password" className={linkClass}>
+              Precisa de ajuda?
+            </Link>
+          </p>
+
           <button
             type="button"
             onClick={() => {
               setTicket(null);
               setCode("");
+              setBackup(false);
               setError(null);
             }}
-            className="mt-3 w-full text-sm font-medium text-txt-link hover:underline"
+            className={`mt-4 w-full text-sm ${linkClass}`}
           >
             Voltar
           </button>
@@ -130,7 +158,10 @@ function LoginForm() {
   }
 
   return (
-    <AuthCard title="Bem-vindo de volta!" subtitle="Estamos muito animados em te ver novamente!">
+    <AuthCard
+      title="Que bom te ver de novo!"
+      subtitle="Estamos muito animados em te ver novamente!"
+    >
       <form onSubmit={onSubmit} noValidate>
         <FieldLabel htmlFor="identificador" invalid={!!error} hint={error ?? undefined}>
           E-mail ou usuário
@@ -162,7 +193,7 @@ function LoginForm() {
           className={`${inputClass} mb-2`}
         />
         <p className="mb-5 text-sm">
-          <Link href="/forgot-password" className="font-medium text-txt-link hover:underline">
+          <Link href="/forgot-password" className={linkClass}>
             Esqueceu sua senha?
           </Link>
         </p>
@@ -180,7 +211,7 @@ function LoginForm() {
           Precisando de uma conta?{" "}
           <Link
             href={destino === "/app" ? "/register" : `/register?next=${encodeURIComponent(destino)}`}
-            className="font-medium text-txt-link hover:underline"
+            className={linkClass}
           >
             Registre-se
           </Link>

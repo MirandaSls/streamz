@@ -2,15 +2,27 @@
 
 import { useEffect, useState, type MouseEvent } from "react";
 import { LogOut, Phone, Plus, Settings, UserPlus, Users, X } from "lucide-react";
-import { displayNameOf, isGroupChannel, isUnread, type DMChannelView, type PublicUser } from "@streamz/shared";
+import {
+  channelNotificationScope,
+  displayNameOf,
+  isGroupChannel,
+  isUnread,
+  type DMChannelView,
+  type PublicUser,
+} from "@streamz/shared";
 import UserFooter from "@/components/layout/UserFooter";
 import Avatar, { GroupAvatar } from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
+import { MENU_WIDTH } from "@/components/ui/ContextMenu";
 import { api } from "@/lib/api";
+import { useT } from "@/lib/i18n";
+import { submenuSilenciar } from "@/lib/notification-menu";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useFriends, usePendingCount } from "@/stores/friends";
+import { useNotifications } from "@/stores/notifications";
 import { resolveStatus, usePresence } from "@/stores/presence";
-import { ui, useUI } from "@/stores/ui";
+import { useSettings } from "@/stores/settings";
+import { anchorOf, ui, useUI, type MenuItem } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
 
 /** Coluna 2 no modo DM: busca de pessoas, conversas 1-a-1 e grupos. */
@@ -33,6 +45,10 @@ export default function DMList() {
   const [found, setFound] = useState<PublicUser[]>([]);
   // f-voz: conversas com chamada rolando ganham o ícone verde de telefone
   const emChamada = useVoice((s) => s.states);
+  const startCall = useVoice((s) => s.startCall);
+  const porEscopo = useNotifications((s) => s.porEscopo);
+  const developerMode = useSettings((s) => s.developerMode);
+  const t = useT();
 
   const q = query.trim().toLowerCase();
   const visible = q ? channels.filter((dm) => dmTitle(dm).toLowerCase().includes(q)) : channels;
@@ -60,36 +76,65 @@ export default function DMList() {
   const knownIds = new Set(channels.flatMap((d) => d.others.map((u) => u.id)));
   const novos = found.filter((u) => !knownIds.has(u.id));
 
-  function openMenu(e: MouseEvent, dm: DMChannelView) {
+  function openMenu(e: MouseEvent, dm: DMChannelView, linha?: HTMLElement | null) {
     e.preventDefault();
     const group = isGroupChannel(dm);
-    ui.openContextMenu(e.clientX, e.clientY, [
+    const outro = dm.others[0];
+    const escopo = { tipo: "canal" as const, channelId: dm.id };
+    const setting = porEscopo[channelNotificationScope(dm.id)];
+    const items: MenuItem[] = [
       { label: "Marcar como lida", onSelect: () => void markRead(dm.id) },
-      ...(!group && dm.others[0]
-        ? [{ label: "Perfil", onSelect: () => ui.openProfile(dm.others[0], { x: e.clientX, y: e.clientY, width: 0, height: 0 }) }]
-        : []),
-      ...(group
-        ? [
-            { separator: true as const },
-            {
-              label: "Configurações do grupo",
-              icon: <Settings size={18} />,
-              onSelect: () => ui.openModal({ kind: "groupSettings", channelId: dm.id }),
-            },
-            {
-              label: "Adicionar pessoas",
-              icon: <UserPlus size={18} />,
-              onSelect: () => ui.openModal({ kind: "addGroupMembers", channelId: dm.id }),
-            },
-          ]
-        : []),
-      { separator: true as const },
-      // fechar não apaga nada: a conversa volta sozinha com mensagem nova
-      { label: "Fechar conversa", icon: <X size={18} />, onSelect: () => void hide(dm.id) },
-      ...(group
-        ? [{ label: "Sair do grupo", icon: <LogOut size={18} />, danger: true, onSelect: () => void leaveGroup(dm.id) }]
-        : []),
-    ]);
+    ];
+    if (!group && outro) {
+      items.push({ separator: true });
+      items.push({
+        label: "Perfil",
+        onSelect: () =>
+          ui.openProfile(
+            outro,
+            linha ? anchorOf(linha) : { x: e.clientX, y: e.clientY, width: 0, height: 0 },
+          ),
+      });
+      items.push({
+        label: "Chamada",
+        icon: <Phone size={18} />,
+        onSelect: () => void startCall(dm.id, false),
+      });
+    }
+    if (group) {
+      items.push({ separator: true });
+      items.push({
+        label: "Convidar para o grupo",
+        icon: <UserPlus size={18} />,
+        onSelect: () => ui.openModal({ kind: "addGroupMembers", channelId: dm.id }),
+      });
+      items.push({
+        label: "Alterar ícone",
+        icon: <Settings size={18} />,
+        onSelect: () => ui.openModal({ kind: "groupSettings", channelId: dm.id }),
+      });
+    }
+    items.push({ separator: true });
+    items.push(submenuSilenciar("Silenciar conversa", escopo, setting, t));
+    items.push({ separator: true });
+    // fechar não apaga nada: a conversa volta sozinha com mensagem nova
+    items.push({ label: "Fechar conversa", icon: <X size={18} />, onSelect: () => void hide(dm.id) });
+    if (group) {
+      items.push({
+        label: "Sair do grupo",
+        icon: <LogOut size={18} />,
+        danger: true,
+        onSelect: () => void leaveGroup(dm.id),
+      });
+    }
+    if (developerMode) {
+      items.push({ separator: true });
+      items.push({
+        label: "Copiar ID do canal",
+        onSelect: () => void navigator.clipboard?.writeText(dm.id),
+      });
+    }
+    ui.openContextMenu(e.clientX, e.clientY, items, MENU_WIDTH);
   }
 
   return (
@@ -155,11 +200,11 @@ export default function DMList() {
           <h3 className="text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted group-hover:text-txt-normal">
             Mensagens diretas
           </h3>
-          <Tooltip label="Criar grupo">
+          <Tooltip label="Nova conversa">
             <button
               type="button"
               onClick={() => openModal({ kind: "createGroupDM" })}
-              aria-label="Criar grupo"
+              aria-label="Nova conversa"
               className="text-txt-muted transition hover:text-txt-primary"
             >
               <Plus size={16} />
@@ -185,7 +230,7 @@ export default function DMList() {
             <div
               key={dm.id}
               role="listitem"
-              onContextMenu={(e) => openMenu(e, dm)}
+              onContextMenu={(e) => openMenu(e, dm, e.currentTarget)}
               className={`group mx-2 flex h-[42px] items-center rounded-[4px] pl-2 pr-1 ${
                 active
                   ? "bg-sel text-txt-primary"

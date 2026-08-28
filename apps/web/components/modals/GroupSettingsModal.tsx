@@ -1,28 +1,45 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Camera, Users } from "lucide-react";
-import { MAX_DM_GROUP_NAME } from "@streamz/shared";
-import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
+import { Camera, Settings, UserPlus, Users } from "lucide-react";
+import { MAX_DM_GROUP_NAME, displayNameOf } from "@streamz/shared";
+import Dialog from "@/components/modals/Dialog";
+import TelaCheia, { type ItemDeMenu } from "@/components/ui/TelaCheia";
+import { Rotulo } from "@/components/ui/controls";
+import { RegistrarAlteracoes, useControleDeAlteracoes } from "@/components/ui/alteracoes";
+import Avatar, { GroupAvatar } from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
 import { dmTitle, useDMs } from "@/stores/dms";
-import { useUI } from "@/stores/ui";
+import { ui, useUI } from "@/stores/ui";
 
-/** Nome e ícone do grupo de DM — qualquer participante pode mudar, como no Discord. */
+type Aba = "geral" | "convites";
+
+const ROTULO: Record<Aba, string> = {
+  geral: "Visão geral",
+  convites: "Convites",
+};
+
+/**
+ * Configurações do grupo de DM — **tela cheia**, na mesma moldura das
+ * configurações de canal e de servidor. Qualquer participante pode mudar nome e
+ * ícone, como no Discord.
+ */
 export default function GroupSettingsModal({ channelId }: { channelId: string }) {
   const closeModal = useUI((s) => s.closeModal);
   const dm = useDMs((s) => s.channels.find((d) => d.id === channelId) ?? null);
   const rename = useDMs((s) => s.rename);
   const updateIcon = useDMs((s) => s.updateIcon);
 
+  const [aba, setAba] = useState<Aba>("geral");
   const [name, setName] = useState(dm?.name ?? "");
   const [salvando, setSalvando] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const alteracoes = useControleDeAlteracoes();
 
   if (!dm) {
     return (
-      <Dialog title="Grupo" onClose={closeModal} className="w-[440px]">
+      <Dialog title="Grupo" onClose={closeModal}>
         <p className="text-sm text-txt-muted">Conversa não encontrada.</p>
       </Dialog>
     );
@@ -33,9 +50,8 @@ export default function GroupSettingsModal({ channelId }: { channelId: string })
   async function salvar() {
     if (!dirty || salvando) return;
     setSalvando(true);
-    const ok = await rename(channelId, name.trim() || null);
+    await rename(channelId, name.trim() || null);
     setSalvando(false);
-    if (ok) closeModal();
   }
 
   async function enviarIcone(file: File) {
@@ -44,80 +60,117 @@ export default function GroupSettingsModal({ channelId }: { channelId: string })
     setEnviando(false);
   }
 
-  return (
-    <Dialog
-      title="Configurações do grupo"
-      onClose={closeModal}
-      className="w-[440px]"
-      footer={
-        <>
-          <PrimaryButton disabled={!dirty || salvando} onClick={() => void salvar()}>
-            {salvando ? "Salvando…" : "Salvar"}
-          </PrimaryButton>
-          <SecondaryButton onClick={closeModal}>Fechar</SecondaryButton>
-        </>
-      }
-    >
-      <div className="flex items-center gap-4">
-        <div className="relative">
-          {dm.iconUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={dm.iconUrl} alt="" className="h-20 w-20 rounded-full object-cover" />
-          ) : (
-            <span className="grid h-20 w-20 place-items-center rounded-full bg-accent text-accent-ink">
-              <Users size={36} />
-            </span>
-          )}
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/png,image/jpeg,image/gif,image/webp"
-            hidden
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void enviarIcone(f);
-              e.target.value = "";
-            }}
-          />
-          <Tooltip label="Trocar ícone">
-            <button
-              type="button"
-              disabled={enviando}
-              onClick={() => fileRef.current?.click()}
-              aria-label="Trocar ícone do grupo"
-              className="absolute bottom-0 right-0 grid h-8 w-8 place-items-center rounded-full bg-panel text-txt-primary shadow-high hover:bg-hov disabled:opacity-50"
-            >
-              <Camera size={16} />
-            </button>
-          </Tooltip>
-        </div>
-        <div className="min-w-0">
-          <p className="truncate font-semibold text-txt-primary">{dmTitle(dm)}</p>
-          <p className="text-sm text-txt-muted">{dm.others.length + 1} participantes</p>
-          {enviando && <p className="mt-1 text-xs text-txt-muted">Enviando ícone…</p>}
-        </div>
-      </div>
+  const itens: ItemDeMenu[] = [
+    { id: "geral", label: ROTULO.geral, icon: <Settings size={18} aria-hidden="true" /> },
+    { id: "convites", label: ROTULO.convites, icon: <UserPlus size={18} aria-hidden="true" /> },
+  ];
 
-      <label htmlFor="groupName" className="mb-2 mt-5 block text-xs font-bold uppercase text-txt-secondary">
-        Nome do grupo
-      </label>
-      <input
-        id="groupName"
-        value={name}
-        maxLength={MAX_DM_GROUP_NAME}
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            void salvar();
-          }
-        }}
-        placeholder={dm.others.map((u) => u.username).join(", ")}
-        className="h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
-      />
-      <p className="mt-1 text-xs text-txt-muted">
-        Vazio = usar os nomes dos participantes.
-      </p>
-    </Dialog>
+  return (
+    <TelaCheia
+      titulo={dmTitle(dm)}
+      cabecalho={dmTitle(dm)}
+      grupos={[{ id: "grupo", itens }]}
+      abaId={aba}
+      onAba={(id) => setAba(id as Aba)}
+      tituloAba={ROTULO[aba]}
+      controle={alteracoes}
+      onClose={closeModal}
+    >
+      <RegistrarAlteracoes dirty={dirty} salvar={salvar} redefinir={() => setName(dm.name ?? "")} />
+
+      {aba === "geral" && (
+        <>
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <GroupAvatar iconUrl={dm.iconUrl} members={dm.others} size="xl" />
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp"
+                hidden
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void enviarIcone(f);
+                  e.target.value = "";
+                }}
+              />
+              <Tooltip label="Trocar ícone">
+                <button
+                  type="button"
+                  disabled={enviando}
+                  onClick={() => fileRef.current?.click()}
+                  aria-label="Trocar ícone do grupo"
+                  className="absolute bottom-0 right-0 grid h-8 w-8 place-items-center rounded-full bg-panel text-txt-primary shadow-high hover:bg-hov disabled:opacity-50"
+                >
+                  <Camera size={16} />
+                </button>
+              </Tooltip>
+            </div>
+            <div className="min-w-0">
+              <p className="truncate font-semibold text-txt-primary">{dmTitle(dm)}</p>
+              <p className="flex items-center gap-1 text-sm text-txt-muted">
+                <Users size={14} aria-hidden="true" />
+                {dm.others.length + 1} participantes
+              </p>
+              {enviando && <p className="mt-1 text-xs text-txt-muted">Enviando ícone…</p>}
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <Rotulo htmlFor="groupName">Nome do grupo</Rotulo>
+            <input
+              id="groupName"
+              value={name}
+              maxLength={MAX_DM_GROUP_NAME}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void salvar();
+                }
+              }}
+              placeholder={dm.others.map((u) => u.username).join(", ")}
+              className="h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
+            />
+            <p className="mt-1 text-xs text-txt-muted">
+              Vazio = usar os nomes dos participantes.
+            </p>
+          </div>
+        </>
+      )}
+
+      {aba === "convites" && (
+        <>
+          <p className="mb-4 text-sm text-txt-muted">
+            Grupos não têm link de convite: quem entra é adicionado por alguém que já está dentro.
+          </p>
+          <button
+            type="button"
+            onClick={() => ui.openModal({ kind: "addGroupMembers", channelId })}
+            className="flex h-10 items-center gap-2 rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover"
+          >
+            <UserPlus size={18} aria-hidden="true" />
+            Adicionar amigos ao grupo
+          </button>
+
+          <div className="mt-6">
+            <Rotulo>Participantes</Rotulo>
+            <ul className="flex flex-col">
+              {dm.others.map((u) => (
+                <li key={u.id} className="flex items-center gap-3 rounded-[3px] px-2 py-1.5">
+                  <Avatar user={u} size="md" surface="border-chat" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm text-txt-primary">
+                      {displayNameOf(u)}
+                    </span>
+                    <span className="block truncate text-xs text-txt-muted">@{u.username}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </>
+      )}
+    </TelaCheia>
   );
 }

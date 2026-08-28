@@ -139,7 +139,6 @@ const PT_BR = {
   // ── busca rápida ──
   "quick.titulo": "Para onde vamos?",
   "quick.placeholder": "Onde você quer ir?",
-  "quick.dica": "Use # para canais, @ para conversas e * para servidores.",
   "quick.vazio": "Nada encontrado.",
   "quick.recentes": "Recentes",
 } as const;
@@ -262,7 +261,6 @@ const EN_US: Dicionario = {
 
   "quick.titulo": "Where to?",
   "quick.placeholder": "Where would you like to go?",
-  "quick.dica": "Use # for channels, @ for conversations and * for servers.",
   "quick.vazio": "Nothing found.",
   "quick.recentes": "Recent",
 };

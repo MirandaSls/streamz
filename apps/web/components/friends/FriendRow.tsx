@@ -9,15 +9,27 @@ import { useLiveUser, usePresence, resolveStatus } from "@/stores/presence";
 import { anchorOf, ui, type MenuItem } from "@/stores/ui";
 
 /**
- * Uma linha da página Amigos: avatar com status, nome, o que está embaixo
- * (status personalizado ou "@usuário") e os botões redondos de ação à direita
- * — o leiaute do Discord, onde as ações são círculos de 36px em `bg-rail`.
+ * Uma linha da página Amigos: avatar com status, nome + `@usuário`, o que está
+ * embaixo (status personalizado ou o estado do pedido) e os botões redondos de
+ * ação à direita.
+ *
+ * Duas decisões que o leiaute exige:
+ *
+ * - **A linha não muda de tamanho no hover.** Margem, padding e altura são fixos;
+ *   o hover troca só fundo e borda. Antes a margem encolhia e o padding crescia,
+ *   e o retângulo "pulava" de largura sob o cursor.
+ * - **Clicar na linha abre a conversa** (`onOpen`), não o perfil. O perfil sai do
+ *   avatar ou do botão direito. Quem chega numa lista de amigos quer falar com a
+ *   pessoa; o cartão é o desvio, não o caminho. O alvo de clique é um botão
+ *   sobreposto — o texto fica `pointer-events-none` para o clique atravessar —
+ *   porque um `<button>` de verdade não pode conter os outros botões da linha.
  */
 export default function FriendRow({
   user,
   subtitle,
   actions,
   menu,
+  onOpen,
 }: {
   user: PublicUser;
   /** substitui o rodapé padrão (status personalizado / status). */
@@ -25,6 +37,8 @@ export default function FriendRow({
   actions?: ReactNode;
   /** itens do menu "mais" (também abre no clique com o botão direito). */
   menu?: MenuItem[];
+  /** ação do clique na linha; sem ela a linha abre o perfil. */
+  onOpen?: () => void;
 }) {
   const live = useLiveUser(user);
   const statuses = usePresence((s) => s.statuses);
@@ -38,31 +52,42 @@ export default function FriendRow({
     ui.openContextMenu(e.clientX, e.clientY, menu);
   }
 
+  function abrirPerfil(e: MouseEvent<HTMLElement>) {
+    ui.openProfile(live, anchorOf(e.currentTarget));
+  }
+
   return (
     <div
       role="listitem"
       onContextMenu={abrirMenu}
-      className="group mx-[30px] flex h-[62px] items-center gap-3 border-t border-border px-2.5 hover:mx-5 hover:rounded-lg hover:border-transparent hover:bg-hov hover:px-[22px]"
+      className="group relative mx-[30px] flex h-[60px] items-center gap-3 rounded-lg border-t border-border px-[10px] first:border-t-0 hover:border-transparent hover:bg-hov"
     >
       <button
         type="button"
-        onClick={(e) => ui.openProfile(live, anchorOf(e.currentTarget))}
+        onClick={(e) => (onOpen ? onOpen() : abrirPerfil(e))}
+        aria-label={onOpen ? `Conversar com ${nome}` : `Perfil de ${nome}`}
+        className="absolute inset-0 rounded-lg"
+      />
+
+      <button
+        type="button"
+        onClick={abrirPerfil}
         aria-label={`Perfil de ${nome}`}
-        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+        className="relative shrink-0 rounded-full"
       >
-        <Avatar user={live} size="lg" status={status} surface="border-chat" />
-        <span className="min-w-0">
-          <span className="flex items-baseline gap-1.5">
-            <span className="truncate font-semibold text-txt-primary">{nome}</span>
-            <span className="truncate text-sm text-txt-muted opacity-0 group-hover:opacity-100">
-              @{live.username}
-            </span>
-          </span>
-          <span className="block truncate text-sm text-txt-muted">{rodape}</span>
-        </span>
+        <Avatar user={live} size="md" status={status} surface="border-chat" />
       </button>
 
-      <div className="flex shrink-0 items-center gap-2">
+      {/* o texto deixa o clique passar para o botão que cobre a linha */}
+      <span className="pointer-events-none relative min-w-0 flex-1">
+        <span className="flex items-baseline gap-1.5">
+          <span className="truncate text-sm font-semibold text-txt-primary">{nome}</span>
+          <span className="truncate text-sm text-txt-muted">@{live.username}</span>
+        </span>
+        <span className="block truncate text-xs text-txt-muted">{rodape}</span>
+      </span>
+
+      <div className="relative flex shrink-0 items-center gap-2">
         {actions}
         {menu && menu.length > 0 && (
           <Tooltip label="Mais">
@@ -70,7 +95,7 @@ export default function FriendRow({
               type="button"
               onClick={abrirMenu}
               aria-label={`Mais opções para ${nome}`}
-              className="grid h-9 w-9 place-items-center rounded-full bg-rail text-txt-secondary transition hover:text-txt-primary"
+              className="grid h-9 w-9 place-items-center rounded-full bg-rail text-txt-secondary transition hover:bg-sel hover:text-txt-primary"
             >
               <MoreVertical size={20} />
             </button>
@@ -81,7 +106,12 @@ export default function FriendRow({
   );
 }
 
-/** Botão redondo de ação da linha (mensagem, aceitar, recusar). */
+/**
+ * Botão redondo de ação da linha (mensagem, aceitar, recusar).
+ *
+ * O hover muda o **fundo** além da cor do ícone: num círculo de 36px sobre uma
+ * linha que também acende, só o ícone mudando de tom não se lê como alvo.
+ */
 export function RowAction({
   label,
   onClick,
@@ -101,12 +131,8 @@ export function RowAction({
         type="button"
         onClick={onClick}
         aria-label={label}
-        className={`grid h-9 w-9 place-items-center rounded-full bg-rail transition ${
-          danger
-            ? "text-txt-secondary hover:text-red"
-            : positive
-              ? "text-txt-secondary hover:text-green"
-              : "text-txt-secondary hover:text-txt-primary"
+        className={`grid h-9 w-9 place-items-center rounded-full bg-rail text-txt-secondary transition hover:bg-sel ${
+          danger ? "hover:text-red" : positive ? "hover:text-green" : "hover:text-txt-primary"
         }`}
       >
         {children}

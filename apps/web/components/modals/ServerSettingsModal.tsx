@@ -1,22 +1,24 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
-import { X } from "lucide-react";
+import { useState, type MouseEvent, type ReactNode } from "react";
 import { Permission } from "@streamz/shared";
 import ServerSettingsOverview from "@/components/modals/ServerSettingsOverview";
 import ServerSettingsRoles from "@/components/modals/ServerSettingsRoles";
 import ServerSettingsMembers from "@/components/modals/ServerSettingsMembers";
 import ServerSettingsBans from "@/components/modals/ServerSettingsBans";
 import InvitesPanel from "@/components/modals/InvitesPanel";
+import { useControleDeAlteracoes } from "@/components/ui/alteracoes";
+import TelaCheia, { ItemPerigo } from "@/components/ui/TelaCheia";
 // ── h-moderacao: as abas de moderação, montadas neste mesmo casco ──
 import AuditLogTab from "@/components/settings/server/AuditLogTab";
 import OnboardingTab from "@/components/settings/server/OnboardingTab";
 import ReportsTab from "@/components/settings/server/ReportsTab";
 import type { ServerSettingsTab } from "@/components/settings/server/tabs";
+import { MENU_WIDTH } from "@/components/ui/ContextMenu";
 import { useGuilds, useIsOwner } from "@/stores/guilds";
 import { useAuth } from "@/stores/auth";
 import { useCan } from "@/stores/permissions";
-import { useUI } from "@/stores/ui";
+import { ui, useUI, type MenuItem } from "@/stores/ui";
 
 /** Uma entrada do menu lateral. `owner` limita ao dono do servidor. */
 interface Aba {
@@ -24,17 +26,26 @@ interface Aba {
   label: string;
   permission?: number;
   owner?: boolean;
-  danger?: boolean;
   render: () => ReactNode;
 }
 
 /**
- * "Configurações do servidor" — o modal de página inteira do Discord: menu à
- * esquerda, painel à direita, X no canto.
+ * Os cabeçalhos do menu lateral, na ordem do Discord.
  *
- * Não usa `Dialog` de propósito: `Dialog` é a caixa centrada de 380–480px do
- * app, e esta tela ocupa a janela toda. O que ela repete de lá é o contrato de
- * acessibilidade — `role="dialog"`, `aria-modal`, Esc fecha, foco preso.
+ * Uma lista plana de oito itens obriga a ler todos para achar "Banimentos".
+ * Agrupada, a pergunta vira "isto é moderação ou é gente?" — que é a pergunta
+ * que a pessoa já está se fazendo.
+ */
+const GRUPOS: { id: string; label: string; abas: ServerSettingsTab[] }[] = [
+  { id: "espaco", label: "Espaço do servidor", abas: ["overview", "roles"] },
+  { id: "envolvimento", label: "Envolvimento", abas: ["onboarding"] },
+  { id: "moderacao", label: "Moderação", abas: ["audit", "reports", "bans"] },
+  { id: "pessoas", label: "Pessoas", abas: ["members", "invites"] },
+];
+
+/**
+ * "Configurações do servidor" — desenhada pela `TelaCheia` de `components/ui`,
+ * a mesma moldura das configurações de usuário, canal e grupo.
  *
  * Cada aba pede a permissão que a API exigiria, e a lista esconde as que o
  * usuário não tem: quem só pode banir vê "Banimentos" e nada mais.
@@ -49,12 +60,14 @@ export default function ServerSettingsModal({
   const closeModal = useUI((s) => s.closeModal);
   const guild = useGuilds((s) => s.guilds.find((g) => g.id === guildId) ?? null);
   const removeGuild = useGuilds((s) => s.remove);
+  const leaveGuild = useGuilds((s) => s.leave);
   const me = useAuth((s) => s.user);
   const isOwner = useIsOwner(me?.id);
   const podeGerenciar = useCan(Permission.MANAGE_GUILD);
   const podeCargos = useCan(Permission.MANAGE_ROLES);
   const podeBanir = useCan(Permission.BAN_MEMBERS);
   const podeModerarMensagens = useCan(Permission.MANAGE_MESSAGES);
+  const alteracoes = useControleDeAlteracoes();
 
   const abas: Aba[] = [
     {
@@ -123,93 +136,72 @@ export default function ServerSettingsModal({
   );
   const aba = visiveis.find((a) => a.id === ativa) ?? visiveis[0] ?? null;
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeModal();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [closeModal]);
+  function abrirMenuDoServidor(e: MouseEvent<HTMLButtonElement>) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const items: MenuItem[] = [
+      {
+        label: "Convidar pessoas",
+        onSelect: () => ui.openModal({ kind: "invite", guildId }),
+      },
+      {
+        label: "Criar canal",
+        onSelect: () => ui.openModal({ kind: "createChannel" }),
+      },
+      isOwner
+        ? {
+            label: "Apagar servidor",
+            danger: true,
+            // a tela **não** fecha antes: a confirmação empilha por cima e,
+            // ao cancelar, as configurações continuam onde estavam
+            onSelect: () => void removeGuild(guildId),
+          }
+        : {
+            label: "Sair do servidor",
+            danger: true,
+            onSelect: () => void leaveGuild(guildId),
+          },
+    ];
+    ui.openContextMenu(rect.left, rect.bottom + 4, items, MENU_WIDTH);
+  }
 
   if (!guild) return null;
 
+  const grupos = GRUPOS.map((g) => ({
+    id: g.id,
+    label: g.label,
+    itens: g.abas
+      .map((id) => visiveis.find((a) => a.id === id))
+      .filter((a): a is Aba => Boolean(a))
+      .map((a) => ({ id: a.id, label: a.label })),
+  })).filter((g) => g.itens.length > 0);
+
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Configurações de ${guild.name}`}
-      className="fixed inset-0 z-50 flex bg-chat"
+    <TelaCheia
+      titulo={`Configurações de ${guild.name}`}
+      cabecalho={guild.name}
+      onCabecalho={abrirMenuDoServidor}
+      grupos={grupos}
+      abaId={ativa}
+      onAba={(id) => setAtiva(id as ServerSettingsTab)}
+      tituloAba={aba?.label}
+      rotuloFechar="Fechar configurações"
+      controle={alteracoes}
+      onClose={closeModal}
+      rodapeMenu={
+        isOwner ? (
+          // a tela **não** fecha antes: a confirmação empilha por cima e, ao
+          // cancelar, as configurações continuam onde estavam
+          <ItemPerigo onClick={() => void removeGuild(guildId)}>Apagar servidor</ItemPerigo>
+        ) : undefined
+      }
     >
-      <nav
-        aria-label="Seções das configurações"
-        className="flex w-[218px] shrink-0 flex-col items-end overflow-y-auto bg-panel py-[60px] pr-2"
-      >
-        <div className="w-[192px]">
-          <h2 className="mb-2 truncate px-2.5 text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
-            {guild.name}
-          </h2>
-          {visiveis.map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              onClick={() => setAtiva(a.id)}
-              aria-current={a.id === ativa ? "page" : undefined}
-              className={`mb-0.5 flex h-8 w-full items-center rounded-[4px] px-2.5 text-left text-base transition ${
-                a.id === ativa
-                  ? "bg-sel text-txt-primary"
-                  : "text-txt-secondary hover:bg-hov hover:text-txt-normal"
-              }`}
-            >
-              {a.label}
-            </button>
-          ))}
-          {isOwner && (
-            <>
-              <div aria-hidden="true" className="my-2 h-px bg-border" />
-              <button
-                type="button"
-                onClick={() => {
-                  closeModal();
-                  void removeGuild(guildId);
-                }}
-                className="flex h-8 w-full items-center rounded-[4px] px-2.5 text-left text-base text-red transition hover:bg-red hover:text-white"
-              >
-                Apagar servidor
-              </button>
-            </>
-          )}
-        </div>
-      </nav>
-
-      <div className="min-w-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[740px] px-10 py-[60px]">
-          {aba ? (
-            <>
-              <h1 className="mb-5 font-display text-xl font-bold tracking-title text-txt-primary">{aba.label}</h1>
-              {aba.render()}
-            </>
-          ) : (
-            <p className="text-sm text-txt-muted">
-              Você não tem permissão para gerenciar este servidor.
-            </p>
-          )}
-        </div>
-      </div>
-
-      <div className="w-[60px] shrink-0 pt-[60px]">
-        <button
-          type="button"
-          onClick={closeModal}
-          aria-label="Fechar configurações"
-          data-autofocus
-          className="grid h-9 w-9 place-items-center rounded-full border-2 border-txt-muted text-txt-muted transition hover:bg-hov hover:text-txt-primary"
-        >
-          <X size={18} />
-        </button>
-        <span className="mt-1 block w-9 text-center text-[11px] font-semibold text-txt-muted">
-          ESC
-        </span>
-      </div>
-    </div>
+      {aba ? (
+        aba.render()
+      ) : (
+        <p className="text-sm text-txt-muted">
+          Você não tem permissão para gerenciar este servidor.
+        </p>
+      )}
+    </TelaCheia>
   );
 }
