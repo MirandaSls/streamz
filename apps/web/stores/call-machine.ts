@@ -124,6 +124,8 @@ export function motivoDoFim(state: CallState): string | null {
       return "Chamada recusada";
     case "timeout":
       return "Ninguém atendeu";
+    case "alone":
+      return "Você ficou sozinho na chamada";
     case "ended":
       return "Chamada encerrada";
     default:

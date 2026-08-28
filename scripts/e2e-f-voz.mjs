@@ -231,15 +231,15 @@ try {
   await ana.waitForTimeout(1000);
   await shot(ana, "ana-em-chamada");
 
-  await conferir("a barra 'Chamada em andamento' aparece nos dois lados", async () => {
-    await beto.waitForSelector("[data-call-banner]", { timeout: 10_000 });
-    await ana.waitForSelector("[data-call-banner]", { timeout: 10_000 });
+  await conferir("o palco da chamada aparece nos dois lados", async () => {
+    await beto.waitForSelector("[data-call-stage]", { timeout: 10_000 });
+    await ana.waitForSelector("[data-call-stage]", { timeout: 10_000 });
   });
   await conferir("a conversa ganha o ícone verde de chamada na lista de DMs", async () => {
     await beto.waitForSelector("[data-dm-call]", { timeout: 10_000 });
   });
 
-  await beto.click('[data-call-banner] button:has-text("Desligar")');
+  await beto.click('[data-call-stage] button[aria-label="Desligar"]');
   await beto.waitForTimeout(1500);
   await shot(beto, "beto-desligou");
 } catch (e) {

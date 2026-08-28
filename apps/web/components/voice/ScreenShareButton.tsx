@@ -1,109 +1,98 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { ChevronUp, MonitorUp, MonitorX } from "lucide-react";
-import { SCREEN_QUALITY, type ScreenQuality } from "@streamz/shared";
+import { useState } from "react";
+import { MonitorUp, MonitorX, Radio } from "lucide-react";
 import Tooltip from "@/components/ui/Tooltip";
+import ScreenSharePicker from "@/components/voice/ScreenSharePicker";
 import { useVoice } from "@/stores/voice";
 
 /**
- * Compartilhar tela — botão com seletor de qualidade.
+ * Compartilhar tela: abre o seletor próprio (ver `ScreenSharePicker`) e, no ar,
+ * vira o botão de parar.
  *
- * A qualidade é escolhida **antes** de compartilhar porque é o que o browser
- * pede ao capturar: trocar depois exigiria republicar a faixa. Por isso o
- * chevron abre o painel e o botão grande dispara a captura com o que estiver
- * marcado.
+ * A qualidade não fica mais num popover antes do clique — ela mora dentro do
+ * seletor, junto da prévia, que é onde a escolha faz sentido: dá para ver o que
+ * 1080p60 muda naquilo que você está prestes a transmitir.
  */
-export default function ScreenShareButton() {
-  const [aberto, setAberto] = useState(false);
-  const caixa = useRef<HTMLDivElement>(null);
-
+export default function ScreenShareButton({
+  variante = "redondo",
+}: {
+  /** `largo` é o botão de largura total da barra "Voz conectada". */
+  variante?: "redondo" | "largo";
+}) {
+  const [seletor, setSeletor] = useState(false);
   const screenOn = useVoice((s) => s.screenOn);
-  const quality = useVoice((s) => s.screenQuality);
-  const audio = useVoice((s) => s.screenAudio);
-  const setQuality = useVoice((s) => s.setScreenQuality);
-  const setAudio = useVoice((s) => s.setScreenAudio);
-  const toggleScreen = useVoice((s) => s.toggleScreen);
+  const pararTela = useVoice((s) => s.pararTela);
 
-  useEffect(() => {
-    if (!aberto) return;
-    const fora = (e: MouseEvent) => {
-      if (!caixa.current?.contains(e.target as Node)) setAberto(false);
-    };
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && setAberto(false);
-    window.addEventListener("mousedown", fora);
-    window.addEventListener("keydown", esc);
-    return () => {
-      window.removeEventListener("mousedown", fora);
-      window.removeEventListener("keydown", esc);
-    };
-  }, [aberto]);
+  const label = screenOn ? "Parar transmissão" : "Compartilhar tela";
+  const acionar = () => (screenOn ? void pararTela() : setSeletor(true));
 
   return (
-    <div ref={caixa} className="relative">
-      <div className="flex items-center">
-        <Tooltip label={screenOn ? "Parar compartilhamento" : "Compartilhar tela"}>
+    <>
+      {variante === "largo" ? (
+        // "Compartilhar tela" não cabe na metade de uma coluna de 240px e
+        // truncava com reticências, desalinhando do botão de vídeo ao lado. O
+        // rótulo curto cabe inteiro; o nome completo vive no tooltip.
+        <Tooltip label={label} className="min-w-0 flex-1">
           <button
             type="button"
-            onClick={() => void toggleScreen()}
-            aria-label={screenOn ? "Parar compartilhamento" : "Compartilhar tela"}
+            onClick={acionar}
+            aria-label={label}
             aria-pressed={screenOn}
-            className={`grid h-12 w-12 place-items-center rounded-l-full transition ${
-              screenOn ? "bg-green text-accent-ink hover:brightness-110" : "bg-border-strong text-white hover:bg-border-strong-hover"
+            className={`flex h-8 w-full items-center justify-center gap-1.5 rounded-[4px] text-xs font-semibold transition ${
+              screenOn
+                ? "bg-red/20 text-red hover:bg-red/30"
+                : "bg-border-strong/60 text-txt-secondary hover:bg-border-strong hover:text-txt-primary"
+            }`}
+          >
+            {screenOn ? <MonitorX size={16} /> : <MonitorUp size={16} />}
+            {screenOn ? "Parar" : "Tela"}
+          </button>
+        </Tooltip>
+      ) : (
+        <Tooltip label={label}>
+          <button
+            type="button"
+            onClick={acionar}
+            aria-label={label}
+            aria-pressed={screenOn}
+            className={`grid h-12 w-12 place-items-center rounded-full transition ${
+              screenOn
+                ? "bg-red text-white hover:bg-red-hover"
+                : "bg-border-strong text-white hover:bg-border-strong-hover"
             }`}
           >
             {screenOn ? <MonitorX size={20} /> : <MonitorUp size={20} />}
           </button>
         </Tooltip>
-        <Tooltip label="Opções de compartilhamento">
-          <button
-            type="button"
-            onClick={() => setAberto((v) => !v)}
-            aria-label="Opções de compartilhamento"
-            aria-expanded={aberto}
-            className="grid h-12 w-6 place-items-center rounded-r-full bg-border-strong text-white transition hover:bg-border-strong-hover"
-          >
-            <ChevronUp size={14} aria-hidden="true" />
-          </button>
-        </Tooltip>
-      </div>
-
-      {aberto && (
-        <div
-          role="group"
-          aria-label="Qualidade do compartilhamento"
-          className="absolute bottom-14 right-0 w-56 rounded-[4px] bg-footer p-2 shadow-lg"
-        >
-          <p className="px-1 pb-1 text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">
-            Qualidade
-          </p>
-          {(Object.keys(SCREEN_QUALITY) as ScreenQuality[]).map((q) => (
-            <label
-              key={q}
-              className="flex cursor-pointer items-center gap-2 rounded-[2px] px-1 py-1.5 text-sm text-txt-normal transition hover:bg-accent hover:text-accent-ink"
-            >
-              <input
-                type="radio"
-                name="screen-quality"
-                checked={quality === q}
-                onChange={() => setQuality(q)}
-                className="accent-accent"
-              />
-              {SCREEN_QUALITY[q].label}
-            </label>
-          ))}
-          <span aria-hidden="true" className="my-1 block h-px bg-border" />
-          <label className="flex cursor-pointer items-center gap-2 rounded-[2px] px-1 py-1.5 text-sm text-txt-normal transition hover:bg-accent hover:text-accent-ink">
-            <input
-              type="checkbox"
-              checked={audio}
-              onChange={(e) => setAudio(e.target.checked)}
-              className="accent-accent"
-            />
-            Compartilhar áudio do sistema
-          </label>
-        </div>
       )}
+
+      {seletor && <ScreenSharePicker onClose={() => setSeletor(false)} />}
+    </>
+  );
+}
+
+/**
+ * Selo "Você está ao vivo" — o lembrete que impede alguém de continuar
+ * transmitindo sem perceber. Fica no palco, não no botão: o botão pode estar
+ * fora da tela, e o palco não.
+ */
+export function AoVivoIndicador() {
+  const screenOn = useVoice((s) => s.screenOn);
+  const pararTela = useVoice((s) => s.pararTela);
+  if (!screenOn) return null;
+
+  return (
+    <div className="flex items-center gap-2 rounded-full bg-red/15 py-1 pl-3 pr-1 text-xs font-semibold text-red">
+      <Radio size={14} aria-hidden="true" />
+      Você está ao vivo
+      <button
+        type="button"
+        onClick={() => void pararTela()}
+        className="rounded-full bg-red px-2 py-1 text-[11px] font-bold text-white transition hover:bg-red-hover"
+      >
+        Parar transmissão
+      </button>
     </div>
   );
 }
