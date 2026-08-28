@@ -2,23 +2,30 @@
 
 import { useEffect, useState } from "react";
 import {
-  MAX_GUILD_DESCRIPTION,
   MAX_WELCOME_CHANNELS,
   MAX_WELCOME_DESCRIPTION,
   type GuildOnboarding,
 } from "@streamz/shared";
+import { useAlteracoesNaoSalvas } from "@/components/ui/alteracoes";
+import { Section, Select, Toggle } from "@/components/ui/controls";
+import { ESTILO_AREA, ESTILO_ROTULO } from "@/components/settings/campos";
 import { api } from "@/lib/api";
 import { useChannels } from "@/stores/channels";
 import { useModeration } from "@/stores/moderation";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
 
-const rotulo = "mb-2 block text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary";
-const campo = "h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none placeholder:text-txt-muted";
-
 /**
- * Entrada no servidor: canal de sistema ("X entrou"), canal de regras com
- * aceite obrigatório, tela de boas-vindas e a chave de "Descobrir".
+ * Entrada no servidor: canal de regras com aceite obrigatório, tela de
+ * boas-vindas e a chave de "Descobrir".
+ *
+ * Usa os mesmos `Section`/`Select`/`Toggle` das demais abas em vez de classes
+ * soltas: rótulo e campo declarados como string local aqui eram a origem do
+ * drift — bastava alguém ajustar o campo em `campos.tsx` para esta aba ficar
+ * com dois pixels de diferença das outras.
+ *
+ * O canal de mensagens do sistema e a descrição moram em "Visão geral", que é
+ * onde o Discord os mostra; aqui eles só viajam no mesmo `PATCH`.
  *
  * Tudo aqui é opcional — um servidor sem nada configurado se comporta como
  * antes, e é por isso que cada campo aceita "Nenhum".
@@ -29,13 +36,17 @@ export default function OnboardingTab({ guildId }: { guildId: string }) {
   const textos = channels.filter((c) => c.type === "TEXT");
 
   const [form, setForm] = useState<GuildOnboarding | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [salvo, setSalvo] = useState<GuildOnboarding | null>(null);
 
   useEffect(() => {
     let ativo = true;
     void api
       .onboarding(guildId)
-      .then((o) => ativo && setForm(o))
+      .then((o) => {
+        if (!ativo) return;
+        setForm(o);
+        setSalvo(o);
+      })
       .catch((e) => ativo && ui.toast(errorMessage(e, "Não foi possível carregar"), "error"));
     return () => {
       ativo = false;
@@ -60,132 +71,81 @@ export default function OnboardingTab({ guildId }: { guildId: string }) {
     patch({ welcomeChannelIds: [...atuais, channelId] });
   }
 
-  async function salvar() {
-    if (!form || saving) return;
-    setSaving(true);
-    try {
-      const salvo = await api.updateOnboarding(guildId, form);
-      setForm(salvo);
-      await loadMembership(guildId);
-      ui.toast("Configuração salva.");
-    } catch (e) {
-      ui.toast(errorMessage(e, "Não foi possível salvar"), "error");
-    } finally {
-      setSaving(false);
-    }
-  }
+  const dirty = !!form && !!salvo && JSON.stringify(form) !== JSON.stringify(salvo);
+
+  useAlteracoesNaoSalvas({
+    dirty,
+    salvar: async () => {
+      if (!form) return;
+      try {
+        const gravado = await api.updateOnboarding(guildId, form);
+        setForm(gravado);
+        setSalvo(gravado);
+        await loadMembership(guildId);
+        ui.toast("Configuração salva.");
+      } catch (e) {
+        ui.toast(errorMessage(e, "Não foi possível salvar"), "error");
+      }
+    },
+    redefinir: () => setForm(salvo),
+  });
 
   if (!form) return <p className="text-sm text-txt-muted">Carregando…</p>;
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-      <label htmlFor="system-channel" className={rotulo}>
-        Canal de mensagens do sistema
-      </label>
-      <select
-        id="system-channel"
-        value={form.systemChannelId ?? ""}
-        onChange={(e) => patch({ systemChannelId: e.target.value || null })}
-        className={`${campo} px-2`}
-      >
-        <option value="">Nenhum</option>
-        {textos.map((c) => (
-          <option key={c.id} value={c.id}>
-            #{c.name}
-          </option>
-        ))}
-      </select>
-      <p className="mt-1 text-xs text-txt-muted">
-        É onde entra o &quot;fulano entrou no servidor&quot; a cada pessoa nova.
-      </p>
-
-      <label htmlFor="rules-channel" className={`${rotulo} mt-5`}>
-        Canal de regras
-      </label>
-      <select
-        id="rules-channel"
-        value={form.rulesChannelId ?? ""}
-        onChange={(e) => patch({ rulesChannelId: e.target.value || null })}
-        className={`${campo} px-2`}
-      >
-        <option value="">Nenhum</option>
-        {textos.map((c) => (
-          <option key={c.id} value={c.id}>
-            #{c.name}
-          </option>
-        ))}
-      </select>
-      <p className="mt-1 text-xs text-txt-muted">
-        Com um canal de regras, quem chega precisa aceitá-las antes de escrever. Quem administra o
-        servidor não fica preso por elas.
-      </p>
-
-      <label htmlFor="welcome-description" className={`${rotulo} mt-5`}>
-        Tela de boas-vindas
-      </label>
-      <textarea
-        id="welcome-description"
-        rows={3}
-        value={form.welcomeDescription ?? ""}
-        maxLength={MAX_WELCOME_DESCRIPTION}
-        onChange={(e) => patch({ welcomeDescription: e.target.value })}
-        placeholder="Conte em uma frase do que é este servidor."
-        className="w-full resize-none rounded-[3px] bg-rail px-2.5 py-2 text-txt-normal outline-none placeholder:text-txt-muted"
-      />
-
-      <p className={`${rotulo} mt-4`}>Canais em destaque (até {MAX_WELCOME_CHANNELS})</p>
-      <div className="flex flex-col gap-1">
-        {textos.length === 0 && <p className="text-sm text-txt-muted">Nenhum canal de texto ainda.</p>}
-        {textos.map((c) => (
-          <label
-            key={c.id}
-            className="flex h-9 cursor-pointer items-center gap-2 rounded-[3px] px-2 text-sm text-txt-normal hover:bg-hov"
-          >
-            <input
-              type="checkbox"
-              checked={form.welcomeChannelIds.includes(c.id)}
-              onChange={() => toggleDestaque(c.id)}
-              className="accent-accent"
-            />
-            #{c.name}
-          </label>
-        ))}
-      </div>
-
-      <label htmlFor="guild-description" className={`${rotulo} mt-5`}>
-        Descrição do servidor
-      </label>
-      <textarea
-        id="guild-description"
-        rows={2}
-        value={form.description ?? ""}
-        maxLength={MAX_GUILD_DESCRIPTION}
-        onChange={(e) => patch({ description: e.target.value })}
-        placeholder="Aparece no convite e em Descobrir."
-        className="w-full resize-none rounded-[3px] bg-rail px-2.5 py-2 text-txt-normal outline-none placeholder:text-txt-muted"
-      />
-
-      <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm text-txt-normal">
-        <input
-          type="checkbox"
-          checked={form.discoverable}
-          onChange={(e) => patch({ discoverable: e.target.checked })}
-          className="accent-accent"
+    <>
+      <Section title="Regras">
+        <Select
+          semDivisoria
+          label="Canal de regras"
+          value={form.rulesChannelId ?? ""}
+          options={textos.map((c) => ({ value: c.id, label: `#${c.name}` }))}
+          onChange={(id) => patch({ rulesChannelId: id || null })}
+          emptyLabel="Nenhum"
+          hint="Com um canal de regras, quem chega precisa aceitá-las antes de escrever. Quem administra o servidor não fica preso por elas."
         />
-        Mostrar este servidor em &quot;Descobrir&quot;
-      </label>
-      <p className="mt-1 text-xs text-txt-muted">
-        Qualquer pessoa poderá encontrar e entrar no servidor sem convite.
-      </p>
+      </Section>
 
-      <button
-        type="button"
-        disabled={saving}
-        onClick={() => void salvar()}
-        className="mt-6 h-[38px] rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
-      >
-        {saving ? "Salvando…" : "Salvar alterações"}
-      </button>
-    </div>
+      <Section title="Tela de boas-vindas">
+        <label htmlFor="welcome-description" className={ESTILO_ROTULO}>
+          Mensagem de abertura
+        </label>
+        <textarea
+          id="welcome-description"
+          rows={3}
+          value={form.welcomeDescription ?? ""}
+          maxLength={MAX_WELCOME_DESCRIPTION}
+          onChange={(e) => patch({ welcomeDescription: e.target.value })}
+          placeholder="Conte em uma frase do que é este servidor."
+          className={ESTILO_AREA}
+        />
+
+        {/* O toggle "mostrar em Descobrir" saiu junto com a tela de descoberta:
+            este é um produto de uso interno, onde se entra por convite. O campo
+            `discoverable` continua no contrato e mantém o valor que já tinha. */}
+        <p className={`${ESTILO_ROTULO} mt-4`}>
+          Canais em destaque (até {MAX_WELCOME_CHANNELS})
+        </p>
+        <div className="flex flex-col gap-1">
+          {textos.length === 0 && (
+            <p className="text-sm text-txt-muted">Nenhum canal de texto ainda.</p>
+          )}
+          {textos.map((c) => (
+            <label
+              key={c.id}
+              className="flex h-9 cursor-pointer items-center gap-2 rounded-[3px] px-2 text-sm text-txt-normal hover:bg-hov"
+            >
+              <input
+                type="checkbox"
+                checked={form.welcomeChannelIds.includes(c.id)}
+                onChange={() => toggleDestaque(c.id)}
+                className="accent-accent"
+              />
+              #{c.name}
+            </label>
+          ))}
+        </div>
+      </Section>
+    </>
   );
 }

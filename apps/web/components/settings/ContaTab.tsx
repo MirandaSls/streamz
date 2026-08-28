@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { AtSign, BadgeCheck, Camera, KeyRound, LogOut, TriangleAlert } from "lucide-react";
+import { BadgeCheck, Camera, TriangleAlert } from "lucide-react";
 import { MAX_DISPLAY_NAME, displayNameOf } from "@streamz/shared";
 import type { MinhaConta } from "@streamz/shared";
-import { Section } from "@/components/settings/controls";
-import { CampoDeTexto, Erro } from "@/components/settings/campos";
+import { Section } from "@/components/ui/controls";
+import { CampoDeTexto, ESTILO_CAMPO, Erro } from "@/components/settings/campos";
+import { useAlteracoesNaoSalvas } from "@/components/ui/alteracoes";
 import { PrimaryButton } from "@/components/modals/Dialog";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
@@ -14,25 +15,24 @@ import { api } from "@/lib/api";
 import { mensagemDeAuth, validarSenha } from "@/lib/auth-mensagens";
 import { useAuth } from "@/stores/auth";
 import { errorMessage } from "@/stores/socket-adapter";
-import { ui, useUI } from "@/stores/ui";
+import { ui } from "@/stores/ui";
 
 /**
- * "Minha conta": perfil (nome de exibição e avatar), e-mail, senha e fim de
- * vida da conta.
+ * "Minha conta": o cartão de perfil e, abaixo dele, uma **linha por dado** com
+ * o botão "Editar" à direita — nome de exibição, nome de usuário, e-mail.
  *
- * Perfil e credenciais moram na mesma aba de propósito — é o que o Discord faz
- * e o que a tela anterior já mostrava. O que muda aqui é que "alterar senha",
- * "e-mail" e "desativar/excluir" deixaram de ser blocos desativados.
+ * O formulário só existe depois do "Editar" de propósito: com todos os campos
+ * abertos ao mesmo tempo, a tela vira um cadastro e não fica claro o que já
+ * está salvo e o que ainda não. Fechado, a linha é só a resposta à pergunta
+ * "qual é o meu e-mail mesmo?".
+ *
+ * Quem sai da conta faz isso pelo menu lateral do shell — ter o mesmo "Sair"
+ * duas vezes na mesma tela só criava a dúvida de se os dois fazem o mesmo.
  */
 export default function ContaTab() {
-  const router = useRouter();
-  const closeModal = useUI((s) => s.closeModal);
   const user = useAuth((s) => s.user);
   const setUser = useAuth((s) => s.setUser);
-  const logout = useAuth((s) => s.logout);
   const [conta, setConta] = useState<MinhaConta | null>(null);
-  const [displayName, setDisplayName] = useState(user?.displayName ?? "");
-  const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -48,21 +48,6 @@ export default function ContaTab() {
     void carregar();
   }, [carregar]);
 
-  const dirty = (user?.displayName ?? "") !== displayName.trim();
-
-  async function save() {
-    if (!dirty || saving) return;
-    setSaving(true);
-    try {
-      setUser(await api.updateProfile({ displayName: displayName.trim() || null }));
-      ui.toast("Perfil salvo.");
-    } catch (e) {
-      ui.toast(errorMessage(e, "Não foi possível salvar"), "error");
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function uploadAvatar(file: File) {
     setUploading(true);
     try {
@@ -72,12 +57,6 @@ export default function ContaTab() {
     } finally {
       setUploading(false);
     }
-  }
-
-  function sair() {
-    closeModal();
-    logout();
-    router.replace("/login");
   }
 
   return (
@@ -125,62 +104,144 @@ export default function ContaTab() {
           </div>
         )}
 
-        <label
-          htmlFor="displayName"
-          className="mb-2 mt-5 block text-xs font-bold uppercase text-txt-secondary"
-        >
-          Nome de exibição
-        </label>
-        <input
-          id="displayName"
-          value={displayName}
-          maxLength={MAX_DISPLAY_NAME}
-          onChange={(e) => setDisplayName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              void save();
-            }
-          }}
-          placeholder={user?.username}
-          className="h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
-        />
-        <p className="mt-1 text-xs text-txt-muted">
-          É o nome que aparece nas mensagens. Vazio = usar @{user?.username}.
-        </p>
-        <div className="mt-3">
-          <PrimaryButton disabled={!dirty || saving} onClick={() => void save()}>
-            {saving ? "Salvando…" : "Salvar alterações"}
-          </PrimaryButton>
+        <div className="mt-4 rounded-lg bg-footer px-4 py-1">
+          <LinhaDeNomeDeExibicao />
+          <Linha
+            rotulo="Nome de usuário"
+            valor={user ? `@${user.username}` : "—"}
+            // sem rota de troca de username na API: mostrar um "Editar" que
+            // não leva a lugar nenhum seria pior do que não ter o botão
+          />
+          <LinhaDeEmail conta={conta} aoMudar={setConta} />
         </div>
       </Section>
 
-      <BlocoDeEmail conta={conta} aoMudar={setConta} />
       <BlocoDeSenha />
-      <BlocoDeEncerramento conta={conta} aoEncerrar={sair} />
-
-      <button
-        type="button"
-        onClick={sair}
-        className="flex h-9 w-full items-center gap-2 rounded-[3px] px-3 text-sm font-medium text-red transition hover:bg-red hover:text-white"
-      >
-        <LogOut size={16} aria-hidden="true" />
-        Sair
-      </button>
+      <BlocoDeEncerramento conta={conta} />
     </>
   );
 }
 
-// ── e-mail ───────────────────────────────────────────────────
+// ── linhas ───────────────────────────────────────────────────
 
-function BlocoDeEmail({
+/** Uma linha "rótulo em caixa-alta / valor / ação à direita". */
+function Linha({
+  rotulo,
+  valor,
+  acao,
+  abaixo,
+}: {
+  rotulo: string;
+  valor: ReactNode;
+  acao?: ReactNode;
+  /** formulário que aparece quando a linha está em edição. */
+  abaixo?: ReactNode;
+}) {
+  return (
+    <div className="border-b border-border py-3 last:border-b-0">
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+            {rotulo}
+          </p>
+          <div className="mt-0.5 truncate text-sm text-txt-primary">{valor}</div>
+        </div>
+        {acao && <div className="shrink-0">{acao}</div>}
+      </div>
+      {abaixo}
+    </div>
+  );
+}
+
+function BotaoDeLinha({
+  children,
+  onClick,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="h-8 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal transition hover:bg-border-strong-hover"
+    >
+      {children}
+    </button>
+  );
+}
+
+function LinhaDeNomeDeExibicao() {
+  const user = useAuth((s) => s.user);
+  const setUser = useAuth((s) => s.setUser);
+  const [editando, setEditando] = useState(false);
+  const [valor, setValor] = useState(user?.displayName ?? "");
+
+  const original = user?.displayName ?? "";
+  const dirty = editando && valor.trim() !== original;
+
+  // a barra de "alterações não salvas" do shell é quem salva esta linha
+  useAlteracoesNaoSalvas({
+    dirty,
+    salvar: async () => {
+      try {
+        setUser(await api.updateProfile({ displayName: valor.trim() || null }));
+        setEditando(false);
+        ui.toast("Perfil salvo.");
+      } catch (e) {
+        ui.toast(errorMessage(e, "Não foi possível salvar"), "error");
+      }
+    },
+    redefinir: () => {
+      setValor(original);
+      setEditando(false);
+    },
+  });
+
+  return (
+    <Linha
+      rotulo="Nome de exibição"
+      valor={original || `@${user?.username ?? ""}`}
+      acao={
+        <BotaoDeLinha
+          onClick={() => {
+            setValor(original);
+            setEditando((v) => !v);
+          }}
+        >
+          {editando ? "Cancelar" : "Editar"}
+        </BotaoDeLinha>
+      }
+      abaixo={
+        editando && (
+          <div className="pt-3">
+            <input
+              value={valor}
+              maxLength={MAX_DISPLAY_NAME}
+              autoFocus
+              onChange={(e) => setValor(e.target.value)}
+              placeholder={user?.username}
+              aria-label="Nome de exibição"
+              className={ESTILO_CAMPO}
+            />
+            <p className="mt-1 text-xs text-txt-muted">
+              É o nome que aparece nas mensagens. Vazio = usar @{user?.username}.
+            </p>
+          </div>
+        )
+      }
+    />
+  );
+}
+
+function LinhaDeEmail({
   conta,
   aoMudar,
 }: {
   conta: MinhaConta | null;
   aoMudar: (conta: MinhaConta) => void;
 }) {
-  const [abrindo, setAbrindo] = useState(false);
+  const [editando, setEditando] = useState(false);
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState<string | null>(null);
@@ -205,7 +266,7 @@ function BlocoDeEmail({
     setOcupado(true);
     try {
       aoMudar(await api.changeEmail(email.trim(), senha));
-      setAbrindo(false);
+      setEditando(false);
       setEmail("");
       setSenha("");
       ui.toast("E-mail alterado. Confirme pelo link que acabamos de enviar.");
@@ -217,26 +278,25 @@ function BlocoDeEmail({
   }
 
   return (
-    <Section title="E-mail">
-      <div className="flex items-center justify-between gap-4 border-b border-border py-3">
-        <div className="min-w-0">
-          <p className="flex items-center gap-2 truncate text-sm font-medium text-txt-primary">
-            <AtSign size={16} aria-hidden="true" />
-            {conta?.email ?? "Nenhum e-mail cadastrado"}
-          </p>
-          <p className="mt-0.5 flex items-center gap-1 text-xs">
-            {conta?.emailVerified ? (
-              <span className="flex items-center gap-1 text-green">
+    <Linha
+      rotulo="E-mail"
+      valor={
+        <span className="flex items-center gap-2">
+          <span className="truncate">{conta?.email ?? "Nenhum e-mail cadastrado"}</span>
+          {conta &&
+            (conta.emailVerified ? (
+              <span className="flex shrink-0 items-center gap-1 text-xs text-green">
                 <BadgeCheck size={14} aria-hidden="true" /> Confirmado
               </span>
             ) : (
-              <span className="flex items-center gap-1 text-yellow">
+              <span className="flex shrink-0 items-center gap-1 text-xs text-yellow">
                 <TriangleAlert size={14} aria-hidden="true" /> Não confirmado
               </span>
-            )}
-          </p>
-        </div>
-        <div className="flex shrink-0 gap-2">
+            ))}
+        </span>
+      }
+      acao={
+        <div className="flex gap-2">
           {conta && !conta.emailVerified && conta.email && (
             <button
               type="button"
@@ -247,43 +307,40 @@ function BlocoDeEmail({
               Reenviar
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => setAbrindo((v) => !v)}
-            className="h-8 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
-          >
-            {abrindo ? "Cancelar" : "Alterar"}
-          </button>
+          <BotaoDeLinha onClick={() => setEditando((v) => !v)}>
+            {editando ? "Cancelar" : "Editar"}
+          </BotaoDeLinha>
         </div>
-      </div>
-
-      {abrindo && (
-        <form onSubmit={trocar} noValidate className="pt-3">
-          <CampoDeTexto
-            id="novo-email"
-            rotulo="Novo e-mail"
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={setEmail}
-            disabled={ocupado}
-          />
-          <CampoDeTexto
-            id="senha-email"
-            rotulo="Sua senha"
-            type="password"
-            autoComplete="current-password"
-            value={senha}
-            onChange={setSenha}
-            disabled={ocupado}
-          />
-          <Erro texto={erro} />
-          <PrimaryButton type="submit" disabled={ocupado || !email.trim() || !senha}>
-            {ocupado ? "Salvando…" : "Alterar e-mail"}
-          </PrimaryButton>
-        </form>
-      )}
-    </Section>
+      }
+      abaixo={
+        editando && (
+          <form onSubmit={trocar} noValidate className="pt-3">
+            <CampoDeTexto
+              id="novo-email"
+              rotulo="Novo e-mail"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={setEmail}
+              disabled={ocupado}
+            />
+            <CampoDeTexto
+              id="senha-email"
+              rotulo="Sua senha"
+              type="password"
+              autoComplete="current-password"
+              value={senha}
+              onChange={setSenha}
+              disabled={ocupado}
+            />
+            <Erro texto={erro} />
+            <PrimaryButton type="submit" disabled={ocupado || !email.trim() || !senha}>
+              {ocupado ? "Salvando…" : "Alterar e-mail"}
+            </PrimaryButton>
+          </form>
+        )
+      }
+    />
   );
 }
 
@@ -320,27 +377,21 @@ function BlocoDeSenha() {
   }
 
   return (
-    <Section title="Senha">
-      <div className="flex items-center justify-between gap-4 border-b border-border py-3">
+    <Section title="Senha e autenticação">
+      <div className="flex items-center justify-between gap-4 py-3">
         <div className="min-w-0">
-          <p className="flex items-center gap-2 text-sm font-medium text-txt-primary">
-            <KeyRound size={16} aria-hidden="true" /> Senha da conta
-          </p>
+          <p className="text-sm font-medium text-txt-primary">Senha da conta</p>
           <p className="mt-0.5 text-xs text-txt-muted">
             Trocar a senha encerra as sessões dos outros aparelhos.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setAbrindo((v) => !v)}
-          className="h-8 shrink-0 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
-        >
-          {abrindo ? "Cancelar" : "Alterar"}
-        </button>
+        <BotaoDeLinha onClick={() => setAbrindo((v) => !v)}>
+          {abrindo ? "Cancelar" : "Alterar senha"}
+        </BotaoDeLinha>
       </div>
 
       {abrindo && (
-        <form onSubmit={trocar} noValidate className="pt-3">
+        <form onSubmit={trocar} noValidate className="pt-1">
           <CampoDeTexto
             id="senha-atual"
             rotulo="Senha atual"
@@ -371,13 +422,14 @@ function BlocoDeSenha() {
 
 // ── desativar / excluir ──────────────────────────────────────
 
-function BlocoDeEncerramento({
-  conta,
-  aoEncerrar,
-}: {
-  conta: MinhaConta | null;
-  aoEncerrar: () => void;
-}) {
+/**
+ * O fim de vida da conta fica numa seção própria no fim da aba, sem divisória
+ * embaixo: é o último bloco, e uma linha depois dele sugeriria que ainda vem
+ * mais coisa.
+ */
+function BlocoDeEncerramento({ conta }: { conta: MinhaConta | null }) {
+  const router = useRouter();
+  const logout = useAuth((s) => s.logout);
   const [acao, setAcao] = useState<"disable" | "delete" | null>(null);
   const [senha, setSenha] = useState("");
   const [codigo, setCodigo] = useState("");
@@ -404,7 +456,9 @@ function BlocoDeEncerramento({
     try {
       if (excluindo) await api.deleteAccount(senha, codigo.trim() || undefined);
       else await api.disableAccount(senha);
-      aoEncerrar();
+      ui.closeAllModals();
+      logout();
+      router.replace("/login");
     } catch (err) {
       setErro(mensagemDeAuth(err, "conta"));
       setOcupado(false);
@@ -412,8 +466,12 @@ function BlocoDeEncerramento({
   }
 
   return (
-    <Section title="Encerrar a conta">
-      <div className="flex flex-wrap gap-2 border-b border-border pb-3">
+    <Section title="Encerrar a conta" semDivisoria>
+      <p className="text-sm text-txt-muted">
+        Desativar é reversível: a conta volta quando você entra de novo. Excluir anonimiza o
+        usuário para sempre.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
         <button
           type="button"
           onClick={() => setAcao(acao === "disable" ? null : "disable")}
@@ -429,13 +487,9 @@ function BlocoDeEncerramento({
           Excluir conta
         </button>
       </div>
-      <p className="pt-2 text-xs text-txt-muted">
-        Desativar é reversível: a conta volta quando você entra de novo. Excluir anonimiza o
-        usuário para sempre.
-      </p>
 
       {acao && (
-        <form onSubmit={confirmar} noValidate className="pt-3">
+        <form onSubmit={confirmar} noValidate className="pt-4">
           <CampoDeTexto
             id="senha-encerrar"
             rotulo="Sua senha"

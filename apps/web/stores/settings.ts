@@ -59,6 +59,12 @@ export interface SettingsValues {
 
   // ── idioma ──
   locale: Locale;
+
+  /**
+   * Modo desenvolvedor: revela "Copiar ID" nos menus de contexto. Sem ele o
+   * item aparecia para todo mundo, poluindo menus que no Discord têm 5 linhas.
+   */
+  developerMode: boolean;
 }
 
 export const DEFAULT_SETTINGS: SettingsValues = {
@@ -83,6 +89,7 @@ export const DEFAULT_SETTINGS: SettingsValues = {
   dndSilencesAll: true,
 
   locale: "pt-BR",
+  developerMode: false,
 };
 
 interface SettingsState extends SettingsValues {
