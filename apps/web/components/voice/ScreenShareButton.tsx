@@ -82,14 +82,18 @@ export function AoVivoIndicador() {
   const pararTela = useVoice((s) => s.pararTela);
   if (!screenOn) return null;
 
+  // `w-max` + `nowrap`: o mesmo selo é usado no cabeçalho do palco e no do
+  // painel de canal, contêineres de larguras bem diferentes. Sem isto ele se
+  // deixava espremer, quebrava "Você está ao vivo" uma palavra por linha e o
+  // botão subia por cima do texto.
   return (
-    <div className="flex items-center gap-2 rounded-full bg-red/15 py-1 pl-3 pr-1 text-xs font-semibold text-red">
-      <Radio size={14} aria-hidden="true" />
-      Você está ao vivo
+    <div className="flex w-max items-center gap-2 rounded-full bg-red/15 py-1 pl-3 pr-1 text-xs font-semibold text-red">
+      <Radio size={14} className="shrink-0" aria-hidden="true" />
+      <span className="whitespace-nowrap">Você está ao vivo</span>
       <button
         type="button"
         onClick={() => void pararTela()}
-        className="rounded-full bg-red px-2 py-1 text-[11px] font-bold text-white transition hover:bg-red-hover"
+        className="shrink-0 whitespace-nowrap rounded-full bg-red px-2 py-1 text-[11px] font-bold text-white transition hover:bg-red-hover"
       >
         Parar transmissão
       </button>
