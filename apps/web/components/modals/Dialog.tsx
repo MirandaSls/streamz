@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 /**
@@ -10,6 +11,15 @@ import { X } from "lucide-react";
  * Aqui o contrato é único: `role="dialog"` + `aria-modal`, foco inicial no
  * primeiro elemento útil, Tab preso dentro da caixa, Esc e clique fora fecham, e
  * o foco volta para quem abriu.
+ *
+ * **Sempre num portal para o `body`**, e isso não é preferência de organização:
+ * `position: fixed` se mede pela viewport *só enquanto* nenhum ancestral tiver
+ * `transform`, `filter`, `backdrop-filter`, `perspective` ou `contain` — nesse
+ * caso o ancestral vira o bloco de contenção e o `inset-0` passa a valer para a
+ * caixa dele. Foi o que aconteceu com o seletor de tela, aberto de dentro da
+ * barra de controles da chamada (`-translate-x-1/2 backdrop-blur`): o modal
+ * nascia ancorado na pílula de controles e saía da tela. Sair da árvore é o que
+ * torna o centro do modal independente de onde ele foi aberto.
  */
 
 const FOCUSABLE =
@@ -45,8 +55,14 @@ export default function Dialog({
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const descriptionId = useId();
+  // `document` não existe na pré-renderização; o portal só pode ser criado
+  // depois de montar no cliente (a web é exportada estática para o desktop).
+  const [montado, setMontado] = useState(false);
+
+  useEffect(() => setMontado(true), []);
 
   useEffect(() => {
+    if (!montado) return;
     const previous = document.activeElement as HTMLElement | null;
     const panel = panelRef.current;
     // `data-autofocus` deixa o modal escolher o alvo (ex.: um confirm
@@ -58,7 +74,8 @@ export default function Dialog({
     target?.focus();
     // devolve o foco para o botão que abriu o modal
     return () => previous?.focus?.();
-  }, []);
+    // depende de `montado` porque na primeira passada o painel ainda não existe
+  }, [montado]);
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
@@ -82,7 +99,9 @@ export default function Dialog({
     }
   }
 
-  return (
+  if (!montado) return null;
+
+  return createPortal(
     <div
       className={`fixed inset-0 z-50 grid justify-items-center bg-black/85 p-4 anim-overlay ${
         align === "top" ? "items-start pt-[10vh]" : "items-center"
@@ -99,7 +118,7 @@ export default function Dialog({
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         onKeyDown={handleKeyDown}
-        className={`relative flex max-h-[85vh] flex-col overflow-hidden rounded-lg bg-chat shadow-high outline-none anim-modal ${className}`}
+        className={`relative flex max-h-[85vh] max-w-full flex-col overflow-hidden rounded-lg bg-chat shadow-high outline-none anim-modal ${className}`}
       >
         {/* cabeçalho fica fora da área rolável: no Discord ele não sobe junto */}
         {hideHeader ? (
@@ -139,7 +158,8 @@ export default function Dialog({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
