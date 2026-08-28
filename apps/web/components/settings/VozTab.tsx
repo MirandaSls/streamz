@@ -1,22 +1,28 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Mic, Video } from "lucide-react";
-import { Section, Slider } from "@/components/settings/controls";
-import VoiceSettingsPanel from "@/components/voice/VoiceSettingsPanel";
+import { Keyboard, Mic, RefreshCw, Video } from "lucide-react";
+import { PTT_RELEASE_MS } from "@streamz/shared";
+import { RadioCards, Section, Select, Slider } from "@/components/ui/controls";
 import { useT } from "@/lib/i18n";
+import { pttRotulo } from "@/stores/ptt-core";
 import { useSettings } from "@/stores/settings";
-import { useVoiceDevices } from "@/stores/voiceDevices";
+import { explicarMidia, motivoDaFalha, useVoiceDevices } from "@/stores/voiceDevices";
+import { useVoicePrefs } from "@/stores/voicePrefs";
 
 /**
  * Voz e vídeo: dispositivos, volumes, modo de transmissão, teste de microfone
  * e prévia da câmera.
  *
- * A escolha de dispositivo e o apertar-para-falar são o `VoiceSettingsPanel` da
- * voz, montado aqui dentro: é o mesmo painel que abre durante a chamada, e é
- * ele que escreve nas stores que os atalhos e os controles de voz leem. Esta
- * aba acrescenta o que só faz sentido nas configurações — volumes e os dois
- * testes ao vivo.
+ * Entrada e saída ficam **lado a lado**, com o volume de cada uma logo abaixo
+ * da sua coluna: é o pareamento do Discord e é o que deixa claro qual slider
+ * mexe em qual dispositivo. Empilhados, os dois volumes ficavam longe do
+ * seletor a que pertencem.
+ *
+ * Os seletores são montados aqui, e não pelo `VoiceSettingsPanel`: aquele
+ * painel é a versão de uma coluna que abre *durante* a chamada, onde não há
+ * largura para duas. Os dois escrevem na mesma store (`voiceDevices`), então a
+ * escolha continua valendo nos dois lugares.
  *
  * Toda trilha aberta aqui é parada ao sair da aba: um microfone que fica
  * gravando depois de fechar a tela é o tipo de bug que ninguém percebe.
@@ -26,11 +32,16 @@ export default function VozTab() {
   const s = useSettings();
   const devices = useVoiceDevices();
   const { refresh } = devices;
+  const pushToTalk = useVoicePrefs((p) => p.pushToTalk);
+  const pttKey = useVoicePrefs((p) => p.pttKey);
+  const setPushToTalk = useVoicePrefs((p) => p.setPushToTalk);
+  const setPttKey = useVoicePrefs((p) => p.setPttKey);
 
   const [erro, setErro] = useState<string | null>(null);
   const [nivel, setNivel] = useState(0);
   const [testando, setTestando] = useState(false);
   const [camera, setCamera] = useState(false);
+  const [capturando, setCapturando] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const micStream = useRef<MediaStream | null>(null);
@@ -99,7 +110,7 @@ export default function VozTab() {
       };
       medir();
     } catch {
-      setErro(t("voz.semPermissao"));
+      setErro(explicarMidia(motivoDaFalha()) ?? t("voz.semPermissao"));
       pararMic();
     }
   }
@@ -119,33 +130,112 @@ export default function VozTab() {
       setCamera(true);
       void refresh();
     } catch {
-      setErro(t("voz.semPermissao"));
+      setErro(explicarMidia(motivoDaFalha()) ?? t("voz.semPermissao"));
       pararCamera();
     }
   }
 
+  const opcoes = (lista: MediaDeviceInfo[], prefixo: string) =>
+    lista.map((d, i) => ({ value: d.deviceId, label: d.label || `${prefixo} ${i + 1}` }));
+
   return (
     <>
       <Section title={t("voz.dispositivos")}>
-        <div className="py-3">
-          <VoiceSettingsPanel />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Select
+            semDivisoria
+            label={t("voz.entrada")}
+            value={devices.inputId ?? ""}
+            options={opcoes(devices.inputs, t("voz.entrada"))}
+            onChange={(id) => devices.setInput(id || null)}
+            emptyLabel={t("voz.padraoSistema")}
+            disabled={devices.inputs.length === 0}
+          />
+          <Select
+            semDivisoria
+            label={t("voz.saida")}
+            value={devices.outputId ?? ""}
+            options={opcoes(devices.outputs, t("voz.saida"))}
+            onChange={(id) => devices.setOutput(id || null)}
+            emptyLabel={t("voz.padraoSistema")}
+            disabled={devices.outputs.length === 0}
+          />
+          <Slider
+            label={t("voz.volumeEntrada")}
+            value={s.inputVolume}
+            min={0}
+            max={100}
+            format={(v) => `${v}%`}
+            onChange={(inputVolume) => s.set({ inputVolume })}
+          />
+          <Slider
+            label={t("voz.volumeSaida")}
+            value={s.outputVolume}
+            min={0}
+            max={100}
+            format={(v) => `${v}%`}
+            onChange={(outputVolume) => s.set({ outputVolume })}
+          />
         </div>
-        <Slider
-          label={t("voz.volumeEntrada")}
-          value={s.inputVolume}
-          min={0}
-          max={100}
-          format={(v) => `${v}%`}
-          onChange={(inputVolume) => s.set({ inputVolume })}
+
+        <div className="mt-3 flex items-center gap-3">
+          {!devices.autorizado && (
+            <p className="min-w-0 flex-1 text-xs text-yellow">
+              Conceda acesso ao microfone para ver o nome dos dispositivos.
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => void devices.refresh()}
+            className="ml-auto flex items-center gap-1.5 text-xs text-txt-muted transition hover:text-txt-primary"
+          >
+            <RefreshCw size={14} aria-hidden="true" />
+            Atualizar lista
+          </button>
+        </div>
+      </Section>
+
+      <Section title={t("voz.modo")}>
+        <RadioCards
+          legend={t("voz.modo")}
+          legendaOculta
+          value={pushToTalk ? "ptt" : "atividade"}
+          onChange={(v) => setPushToTalk(v === "ptt")}
+          options={[
+            { value: "atividade", label: t("voz.atividade") },
+            { value: "ptt", label: t("voz.ptt") },
+          ]}
         />
-        <Slider
-          label={t("voz.volumeSaida")}
-          value={s.outputVolume}
-          min={0}
-          max={100}
-          format={(v) => `${v}%`}
-          onChange={(outputVolume) => s.set({ outputVolume })}
-        />
+        {pushToTalk && (
+          <div className="py-3">
+            <p className="mb-1.5 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+              {t("voz.pttTecla")}
+            </p>
+            <button
+              type="button"
+              onClick={() => setCapturando(true)}
+              onKeyDown={(e) => {
+                if (!capturando) return;
+                e.preventDefault();
+                // Esc limpa a tecla: é como se desfaz a escolha sem outro botão
+                setPttKey(e.code === "Escape" ? null : e.code);
+                setCapturando(false);
+              }}
+              onBlur={() => setCapturando(false)}
+              aria-label={t("voz.gravarTecla")}
+              className={`flex h-9 items-center gap-1.5 rounded-[3px] px-3 text-sm transition ${
+                capturando ? "bg-accent text-accent-ink" : "bg-rail text-txt-normal hover:bg-hov"
+              }`}
+            >
+              <Keyboard size={16} aria-hidden="true" />
+              {capturando ? t("voz.apertePara") : pttRotulo(pttKey)}
+            </button>
+            <p className="mt-1.5 text-xs text-txt-muted">
+              O microfone continua aberto por {PTT_RELEASE_MS} ms depois de soltar, para a última
+              sílaba não sumir.
+            </p>
+          </div>
+        )}
       </Section>
 
       <Section title={t("voz.testarMic")}>
@@ -153,30 +243,27 @@ export default function VozTab() {
           <button
             type="button"
             onClick={() => void testarMicrofone()}
-            className="flex h-9 items-center gap-2 rounded-[3px] bg-accent px-3 text-sm font-medium text-white hover:bg-accent-hover"
+            className="flex h-9 shrink-0 items-center gap-2 rounded-[3px] bg-accent px-3 text-sm font-medium text-accent-ink hover:bg-accent-hover"
           >
             <Mic size={16} aria-hidden="true" />
             {testando ? t("voz.parar") : t("voz.testar")}
           </button>
-          <div
-            role="meter"
-            aria-label={t("voz.volumeEntrada")}
-            aria-valuenow={Math.round(nivel * 100)}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            className="h-2 flex-1 overflow-hidden rounded-full bg-rail"
-          >
-            <div
-              className="h-full rounded-full bg-green transition-[width] duration-75"
-              style={{ width: `${Math.round(nivel * 100)}%` }}
-            />
-          </div>
+          <MedidorDeMicrofone nivel={nivel} rotulo={t("voz.volumeEntrada")} />
         </div>
       </Section>
 
-      <Section title={t("voz.previaCamera")}>
+      <Section title={t("voz.previaCamera")} semDivisoria>
         <div className="py-3">
-          <div className="mb-2 grid aspect-video w-full max-w-[420px] place-items-center overflow-hidden rounded-lg bg-rail">
+          <Select
+            semDivisoria
+            label={t("voz.camera")}
+            value={devices.cameraId ?? ""}
+            options={opcoes(devices.cameras, t("voz.camera"))}
+            onChange={(id) => devices.setCamera(id || null)}
+            emptyLabel={t("voz.padraoSistema")}
+            disabled={devices.cameras.length === 0}
+          />
+          <div className="my-3 grid aspect-video w-full max-w-[420px] place-items-center overflow-hidden rounded-lg bg-rail">
             {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
             <video
               ref={videoRef}
@@ -191,7 +278,7 @@ export default function VozTab() {
           <button
             type="button"
             onClick={() => void alternarCamera()}
-            className="h-9 rounded-[3px] bg-[#4e5058] px-3 text-sm font-medium text-txt-normal hover:bg-[#6d6f78]"
+            className="h-9 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
           >
             {camera ? t("voz.desligarCamera") : t("voz.ligarCamera")}
           </button>
@@ -200,5 +287,38 @@ export default function VozTab() {
 
       {erro && <p className="text-sm text-red">{erro}</p>}
     </>
+  );
+}
+
+const BLOCOS = 20;
+
+/**
+ * O medidor do Discord é segmentado, não uma barra lisa.
+ *
+ * Não é decoração: com blocos discretos dá para ver *quantos* acendem e voltar
+ * ao mesmo ponto depois de mexer no volume — uma barra contínua a 40% e a 45%
+ * é a mesma imagem.
+ */
+function MedidorDeMicrofone({ nivel, rotulo }: { nivel: number; rotulo: string }) {
+  const acesos = Math.round(nivel * BLOCOS);
+  return (
+    <div
+      role="meter"
+      aria-label={rotulo}
+      aria-valuenow={Math.round(nivel * 100)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      className="flex h-2 flex-1 gap-[3px]"
+    >
+      {Array.from({ length: BLOCOS }, (_, i) => (
+        <span
+          key={i}
+          aria-hidden="true"
+          className={`h-full flex-1 rounded-[1px] transition-colors duration-75 ${
+            i < acesos ? "bg-green" : "bg-rail"
+          }`}
+        />
+      ))}
+    </div>
   );
 }

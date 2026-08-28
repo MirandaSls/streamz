@@ -13,14 +13,14 @@ body {
 
 body {
   margin: 0;
-  background: #313338;
-  color: #dbdee1;
-  /* 16px é o corpo do Discord; a família vem do next/font (layout.tsx) */
+  /* mesmos valores de `chat` e `txt-normal` do tailwind.config.ts (ADR-0004) */
+  background: #1a1a20;
+  color: #d8d8d4;
+  /* 16px de corpo; a família vem do next/font (layout.tsx) */
   font-size: 16px;
   line-height: 1.375;
   font-family:
     var(--font-sans),
-    "gg sans",
     "Noto Sans",
     "Helvetica Neue",
     Helvetica,
@@ -35,28 +35,93 @@ body {
  * praticamente some sobre o tema escuro.
  */
 :focus-visible {
-  outline: 2px solid #5865f2;
+  outline: 2px solid #9be31f;
   outline-offset: 2px;
   border-radius: 2px;
 }
 
-/* Barras de rolagem finas e escuras, como as do Discord (8px, sem setas). */
+/*
+ * Barras de rolagem finas (8px, sem setas). Sobre o Void Ink o thumb precisa
+ * CLAREAR, não escurecer: o `#1a1b1e` de antes sumiria sobre o rail `#0b0b0f`.
+ */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #1a1b1e transparent;
+  scrollbar-color: #2a2a33 transparent;
 }
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 *::-webkit-scrollbar-thumb {
-  background: #1a1b1e;
+  background: #2a2a33;
   border-radius: 4px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 *::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/*
+ * Entrada de modal, tela de configurações, menu e tooltip.
+ *
+ * O Discord anima tudo que aparece por cima da interface, e a curva é a mesma em
+ * toda parte: uma "back-out" que passa um pouco do alvo e assenta. Sem isso as
+ * caixas surgem de estalo e o app parece um protótipo. `reduzir-movimento`
+ * (mais abaixo) zera todas elas de uma vez.
+ */
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+/* configurações entram encolhendo, não crescendo: a tela "recua" para o lugar */
+@keyframes settings-in {
+  from {
+    opacity: 0;
+    transform: scale(1.1);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.anim-overlay {
+  animation: overlay-in 0.2s ease;
+}
+.anim-modal {
+  animation: modal-in 0.25s cubic-bezier(0.19, 1, 0.22, 1);
+}
+.anim-settings {
+  animation: settings-in 0.2s ease-out;
+}
+/* o `transform-origin` vem do style inline: menu cresce a partir do cursor */
+.anim-menu {
+  animation: menu-in 0.12s ease-out;
 }
 
 /* Indicador de "digitando…": três pontos pulsando. */

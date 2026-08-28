@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import {
+  CALL_ALONE_TIMEOUT_MS,
   CALL_RING_TIMEOUT_MS,
   WS_EVENTS,
   type CallEndedEvent,
@@ -7,6 +8,7 @@ import {
   type CallStartResponse,
   type PublicUser,
 } from "@streamz/shared";
+import { FriendsService } from "../friends/friends.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { RealtimeService } from "../realtime/realtime.service";
@@ -24,8 +26,16 @@ interface Toque {
  * Chamadas em conversa direta (1-a-1 e grupo).
  *
  * A chamada em si é o estado de voz do canal da conversa (`VoiceService`) — o
- * que este serviço acrescenta é o **toque**: avisar quem ainda não entrou e
- * desistir sozinho depois de `CALL_RING_TIMEOUT_MS`.
+ * que este serviço acrescenta são os dois relógios que uma conversa tem e um
+ * canal de voz de servidor não tem:
+ *
+ * 1. o **toque**, que avisa quem ainda não entrou e desiste depois de
+ *    `CALL_RING_TIMEOUT_MS`;
+ * 2. a **solidão**, que encerra a chamada `CALL_ALONE_TIMEOUT_MS` depois de
+ *    sobrar uma pessoa só.
+ *
+ * Os dois nunca correm juntos: enquanto alguém ainda pode atender, quem manda é
+ * o toque — empilhar os relógios encerraria a chamada não atendida duas vezes.
  *
  * Os relógios vivem no processo, como o `@nestjs/schedule` da faxina: com mais
  * de uma instância, o toque expira na instância que iniciou a chamada. O estado
@@ -36,12 +46,15 @@ interface Toque {
 export class CallsService {
   private readonly logger = new Logger(CallsService.name);
   private readonly tocando = new Map<string, Toque>();
+  /** Canal → relógio dos 5 minutos de quem ficou sozinho na chamada. */
+  private readonly sozinhos = new Map<string, NodeJS.Timeout>();
 
   constructor(
     private readonly voice: VoiceService,
     private readonly guilds: GuildsService,
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeService,
+    private readonly friends: FriendsService,
   ) {}
 
   /**
@@ -55,18 +68,29 @@ export class CallsService {
       throw new BadRequestException("Chamada é para conversa direta — use o canal de voz");
     }
 
+    const participantes = await this.voice.participantes(channelId);
+    const alvos = participantes.filter((id) => id !== userId);
+
+    // Bloqueio vale para a chamada, não só para abrir a conversa: o canal de uma
+    // conversa que já existia continua visível depois do bloqueio, e sem esta
+    // checagem ligar seria a porta dos fundos do DM barrado. Só na conversa de
+    // dois — num grupo, bloquear uma pessoa não tira o direito de chamar as
+    // outras que estão lá.
+    if (alvos.length === 1) {
+      await this.friends.assertNotBlocked(userId, alvos[0]);
+    }
+
     const jaEmChamada = (await this.voice.count(channelId)) > 0;
     await this.voice.join(userId, channelId);
 
     const de = await this.usuario(userId);
-    const participantes = await this.voice.participantes(channelId);
-    const alvos = participantes.filter((id) => id !== userId);
 
     // toca só quando a chamada nasce agora; entrar numa em andamento é silencioso
     let ringing: PublicUser[] = [];
     if (!jaEmChamada && alvos.length > 0 && de) {
       ringing = await this.tocar(channelId, userId, de, alvos);
     }
+    await this.avaliarSolidao(channelId);
 
     return {
       channelId,
@@ -79,7 +103,11 @@ export class CallsService {
   /** Atende: entra na voz e cala o toque. */
   async accept(userId: string, channelId: string) {
     await this.voice.join(userId, channelId);
-    this.pendenteAtendido(channelId, userId);
+    // atendida deixa de ser uma chamada que toca. Sem calar aqui, o relógio dos
+    // 30 s continuaria armado e chutaria quem ligou se o outro saísse antes
+    // dele — e bloquearia o relógio da solidão, que é quem manda daqui em diante
+    this.calar(channelId);
+    await this.avaliarSolidao(channelId);
   }
 
   /** Recusa: avisa a conversa e, se ninguém mais estava para atender, encerra. */
@@ -89,6 +117,7 @@ export class CallsService {
     this.emitir(channelId, { channelId, by: quem, reason: "declined" });
     this.pendenteAtendido(channelId, userId);
     await this.encerrarSeVazia(channelId, quem, "declined");
+    await this.avaliarSolidao(channelId);
   }
 
   /** Desliga: sai da voz e, se a sala esvaziou, encerra a chamada para todos. */
@@ -97,12 +126,14 @@ export class CallsService {
     await this.voice.leave(userId, channelId);
     this.pendenteAtendido(channelId, userId);
     await this.encerrarSeVazia(channelId, quem, "ended");
+    await this.avaliarSolidao(channelId);
   }
 
   /** Sockets caindo: o gateway já tirou o usuário da voz, aqui só limpamos o toque. */
   async onDisconnect(userId: string, channelId: string) {
     this.pendenteAtendido(channelId, userId);
     await this.encerrarSeVazia(channelId, null, "ended");
+    await this.avaliarSolidao(channelId);
   }
 
   private async tocar(
@@ -136,6 +167,66 @@ export class CallsService {
     if ((await this.voice.count(channelId)) > 1) return;
     await this.voice.leave(toque.fromUserId, channelId);
     this.emitir(channelId, { channelId, by: null, reason: "timeout" });
+  }
+
+  // ── solidão ────────────────────────────────────────────────
+
+  /**
+   * Liga ou desliga o relógio dos 5 minutos sozinho, a partir de quantos
+   * sobraram na sala. Chamada depois de **toda** entrada e saída de chamada:
+   * o relógio começa quando a pessoa *fica* sozinha e morre quando alguém entra.
+   *
+   * Só vale em conversa (`guildId` null). Ficar sozinho num canal de voz de
+   * servidor é normal — é uma sala aberta esperando gente, não uma chamada.
+   */
+  private async avaliarSolidao(channelId: string) {
+    // ainda há quem atender: o toque é que decide o destino desta chamada
+    if ((await this.voice.count(channelId)) !== 1 || this.tocando.has(channelId)) {
+      this.cancelarSolidao(channelId);
+      return;
+    }
+    // já está correndo desde que a pessoa ficou sozinha: rearmar reiniciaria a
+    // contagem a cada evento e ela nunca chegaria ao fim
+    if (this.sozinhos.has(channelId)) return;
+    if (!(await this.ehConversa(channelId))) return;
+
+    const timer = setTimeout(() => {
+      void this.expirarSozinho(channelId).catch((e) =>
+        this.logger.error(
+          `Falha ao encerrar chamada solitária ${channelId}`,
+          e instanceof Error ? e.stack : String(e),
+        ),
+      );
+    }, CALL_ALONE_TIMEOUT_MS);
+    // não segura o processo vivo por causa de uma chamada esquecida
+    timer.unref?.();
+    this.sozinhos.set(channelId, timer);
+  }
+
+  /** Cinco minutos sozinho: tira quem sobrou da sala e encerra para a conversa. */
+  private async expirarSozinho(channelId: string) {
+    this.sozinhos.delete(channelId);
+    const restantes = await this.voice.membrosDaSala(channelId);
+    // entrou ou saiu alguém entre o disparo e esta linha: não há solidão a encerrar
+    if (restantes.length !== 1) return;
+    await this.voice.leave(restantes[0], channelId);
+    this.emitir(channelId, { channelId, by: null, reason: "alone" });
+  }
+
+  private cancelarSolidao(channelId: string) {
+    const timer = this.sozinhos.get(channelId);
+    if (!timer) return;
+    clearTimeout(timer);
+    this.sozinhos.delete(channelId);
+  }
+
+  /** Conversa direta ou grupo — o `guildId` null do ADR-0001. */
+  private async ehConversa(channelId: string): Promise<boolean> {
+    const canal = await this.prisma.channel.findUnique({
+      where: { id: channelId },
+      select: { guildId: true },
+    });
+    return canal?.guildId === null;
   }
 
   private pendenteAtendido(channelId: string, userId: string) {

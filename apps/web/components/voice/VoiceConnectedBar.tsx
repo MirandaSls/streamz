@@ -1,10 +1,13 @@
 "use client";
 
-import { MonitorUp, MonitorX, PhoneOff, Signal, Video, VideoOff, Radio } from "lucide-react";
+import { PhoneOff, RotateCw, Signal, SignalZero, Video } from "lucide-react";
 import Tooltip from "@/components/ui/Tooltip";
+import ScreenShareButton from "@/components/voice/ScreenShareButton";
+import { useChannels } from "@/stores/channels";
 import { dmTitle, useDMs } from "@/stores/dms";
+import { useGuilds } from "@/stores/guilds";
+import { ui } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
-import { useVoicePrefs } from "@/stores/voicePrefs";
 
 /**
  * Barra "Voz conectada" — mora acima do painel do usuário, no rodapé da coluna
@@ -12,79 +15,78 @@ import { useVoicePrefs } from "@/stores/voicePrefs";
  *
  * Ela existe para o caso em que a call **não está na tela**: o usuário entrou
  * num canal de voz e foi ler outro canal de texto. Sem essa barra não haveria
- * como sair da call nem lembrar que ela existe.
+ * como voltar para a call, nem lembrar que ela existe.
+ *
+ * São duas linhas, e a divisão é deliberada: a de cima responde "onde eu estou
+ * e como saio"; a de baixo é a fileira de ações largas, que precisam de alvo
+ * grande porque são usadas no meio de uma conversa, sem olhar.
  */
 export default function VoiceConnectedBar() {
   const channelId = useVoice((s) => s.channelId);
   const guildId = useVoice((s) => s.guildId);
   const nomeDoCanal = useVoice((s) => s.channelName);
   const status = useVoice((s) => s.status);
-  const midia = useVoice((s) => s.midiaDisponivel);
+  const erro = useVoice((s) => s.erro);
   const camOn = useVoice((s) => s.camOn);
-  const screenOn = useVoice((s) => s.screenOn);
   const toggleCam = useVoice((s) => s.toggleCam);
-  const toggleScreen = useVoice((s) => s.toggleScreen);
   const disconnect = useVoice((s) => s.disconnect);
+  const reconnect = useVoice((s) => s.reconnect);
   const conversas = useDMs((s) => s.channels);
-
-  const pushToTalk = useVoicePrefs((s) => s.pushToTalk);
-  const pttKey = useVoicePrefs((s) => s.pttKey);
-  const pttAtivo = useVoicePrefs((s) => s.pttAtivo);
+  const guilds = useGuilds((s) => s.guilds);
 
   if (!channelId) return null;
 
   const conversa = conversas.find((d) => d.id === channelId);
   const titulo = guildId ? nomeDoCanal || "voz" : conversa ? dmTitle(conversa) : "Chamada";
+  const servidor = guildId ? guilds.find((g) => g.id === guildId)?.name ?? null : null;
+  const falhou = status === "error";
+
+  /** Volta para o canal da call — o caminho de "onde isso está acontecendo?". */
+  function irParaCall() {
+    if (guildId) {
+      const guild = guilds.find((g) => g.id === guildId);
+      const canal = useChannels.getState().channels.find((c) => c.id === channelId);
+      ui.setView("guild");
+      if (guild) useGuilds.getState().select(guild);
+      if (canal) useChannels.getState().select(canal);
+      return;
+    }
+    ui.setView("dm");
+    if (conversa) useDMs.getState().select(conversa);
+  }
 
   return (
     <div className="flex shrink-0 flex-col gap-1 bg-footer px-2 pb-1 pt-2" data-voice-bar>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         <span className="min-w-0 flex-1 overflow-hidden">
           <span
             className={`flex items-center gap-1 text-sm font-semibold ${
-              status === "connected" && midia ? "text-green" : "text-yellow"
+              falhou ? "text-red" : status === "connecting" ? "text-txt-muted" : "text-green"
             }`}
           >
-            <Signal size={16} className="shrink-0" aria-hidden="true" />
+            {falhou ? (
+              <SignalZero size={16} className="shrink-0" aria-hidden="true" />
+            ) : (
+              <Signal size={16} className="shrink-0" aria-hidden="true" />
+            )}
             {/* o texto precisa do próprio span: `truncate` num container flex
                 corta sem reticências */}
             <span className="truncate">
-              {status === "connecting"
-                ? "Conectando…"
-                : midia
-                  ? "Voz conectada"
-                  : "Voz não configurada"}
+              {falhou ? "Erro de voz" : status === "connecting" ? "Conectando…" : "Voz conectada"}
             </span>
           </span>
-          <span className="block truncate text-xs text-txt-muted">{titulo}</span>
+          <button
+            type="button"
+            onClick={irParaCall}
+            className="block max-w-full truncate text-left text-xs text-txt-muted hover:underline"
+          >
+            {titulo}
+            {servidor && <span className="text-txt-faint"> / {servidor}</span>}
+          </button>
         </span>
 
-        <Tooltip label={screenOn ? "Parar compartilhamento" : "Compartilhar tela"}>
-          <button
-            type="button"
-            onClick={() => void toggleScreen()}
-            aria-label={screenOn ? "Parar compartilhamento" : "Compartilhar tela"}
-            aria-pressed={screenOn}
-            className={`grid h-8 w-8 shrink-0 place-items-center rounded-[4px] transition hover:bg-hov ${
-              screenOn ? "text-green" : "text-txt-secondary hover:text-txt-primary"
-            }`}
-          >
-            {screenOn ? <MonitorX size={18} /> : <MonitorUp size={18} />}
-          </button>
-        </Tooltip>
-        <Tooltip label={camOn ? "Desligar câmera" : "Ligar câmera"}>
-          <button
-            type="button"
-            onClick={() => void toggleCam()}
-            aria-label={camOn ? "Desligar câmera" : "Ligar câmera"}
-            aria-pressed={camOn}
-            className={`grid h-8 w-8 shrink-0 place-items-center rounded-[4px] transition hover:bg-hov ${
-              camOn ? "text-green" : "text-txt-secondary hover:text-txt-primary"
-            }`}
-          >
-            {camOn ? <Video size={18} /> : <VideoOff size={18} />}
-          </button>
-        </Tooltip>
+        {/* sem botão de chat aqui: o nome do canal logo acima já leva à call, e
+            o chat do canal de voz tem o próprio alternador no cabeçalho dele */}
         <Tooltip label="Desconectar">
           <button
             type="button"
@@ -97,18 +99,38 @@ export default function VoiceConnectedBar() {
         </Tooltip>
       </div>
 
-      {pushToTalk && (
-        // sem tecla escolhida o PTT deixaria o microfone fechado para sempre —
-        // o aviso é o que impede o usuário de achar que o microfone quebrou
-        <span
-          className={`flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.02em] ${
-            pttAtivo ? "text-green" : pttKey ? "text-txt-muted" : "text-yellow"
+      {falhou && (
+        // erro real (a queda da mídia), não "não configurado": só aqui faz
+        // sentido gastar vermelho e oferecer a repetição
+        <div className="flex items-center gap-2 rounded-[4px] bg-red/15 px-2 py-1.5 text-xs text-red">
+          <span className="min-w-0 flex-1 truncate">{erro}</span>
+          <button
+            type="button"
+            onClick={() => void reconnect()}
+            className="flex shrink-0 items-center gap-1 font-semibold hover:underline"
+          >
+            <RotateCw size={12} aria-hidden="true" />
+            Tentar de novo
+          </button>
+        </div>
+      )}
+
+      <div className="flex items-stretch gap-1 pb-1">
+        <button
+          type="button"
+          onClick={() => void toggleCam()}
+          aria-pressed={camOn}
+          className={`flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-[4px] text-xs font-semibold transition ${
+            camOn
+              ? "bg-border-strong-hover text-txt-primary"
+              : "bg-border-strong/60 text-txt-secondary hover:bg-border-strong hover:text-txt-primary"
           }`}
         >
-          <Radio size={12} aria-hidden="true" />
-          {pttKey ? (pttAtivo ? "PTT · falando" : "PTT") : "PTT sem tecla definida"}
-        </span>
-      )}
+          <Video size={16} aria-hidden="true" />
+          Vídeo
+        </button>
+        <ScreenShareButton variante="largo" />
+      </div>
     </div>
   );
 }

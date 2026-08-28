@@ -35,7 +35,7 @@ export default function ReportsTab({ guildId }: { guildId: string }) {
           aria-pressed={!resolvidas}
           onClick={() => setResolvidas(false)}
           className={`h-9 rounded-[3px] px-3 text-sm font-medium transition ${
-            !resolvidas ? "bg-accent text-white" : "bg-rail text-txt-normal hover:bg-hov"
+            !resolvidas ? "bg-accent text-accent-ink" : "bg-rail text-txt-normal hover:bg-hov"
           }`}
         >
           Pendentes
@@ -45,7 +45,7 @@ export default function ReportsTab({ guildId }: { guildId: string }) {
           aria-pressed={resolvidas}
           onClick={() => setResolvidas(true)}
           className={`h-9 rounded-[3px] px-3 text-sm font-medium transition ${
-            resolvidas ? "bg-accent text-white" : "bg-rail text-txt-normal hover:bg-hov"
+            resolvidas ? "bg-accent text-accent-ink" : "bg-rail text-txt-normal hover:bg-hov"
           }`}
         >
           Resolvidas
@@ -64,7 +64,7 @@ export default function ReportsTab({ guildId }: { guildId: string }) {
           <div
             key={r.id}
             role="listitem"
-            className="flex gap-3 border-b border-[#3f4147] px-3 py-3 last:border-b-0"
+            className="flex gap-3 border-b border-border px-3 py-3 last:border-b-0"
           >
             <Flag size={18} className="mt-1 shrink-0 text-red" aria-hidden="true" />
             <div className="min-w-0 flex-1">
@@ -82,7 +82,7 @@ export default function ReportsTab({ guildId }: { guildId: string }) {
               </div>
 
               {r.messageContent && (
-                <blockquote className="mt-2 max-h-24 overflow-y-auto break-words rounded-[3px] border-l-2 border-[#4e5058] bg-rail px-3 py-2 text-sm text-txt-normal">
+                <blockquote className="mt-2 max-h-24 overflow-y-auto break-words rounded-[3px] border-l-2 border-border-strong bg-rail px-3 py-2 text-sm text-txt-normal">
                   {r.messageContent}
                 </blockquote>
               )}

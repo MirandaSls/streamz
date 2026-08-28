@@ -1,0 +1,25 @@
+# Modelo do proxy de produção — `cp Caddyfile.example Caddyfile` e troque os
+# três domínios. O Caddy pede e renova os certificados Let's Encrypt sozinho;
+# só exige que os domínios já apontem (A/AAAA) para o IP do servidor **antes**
+# de subir, senão o desafio falha e ele fica em retry.
+
+{
+	email voce@exemplo.com
+}
+
+# Web (Next.js)
+streamz.exemplo.com {
+	reverse_proxy web:3000
+}
+
+# API (NestJS) — REST e o WebSocket do chat, que o Caddy faz upgrade sozinho
+api.streamz.exemplo.com {
+	reverse_proxy api:3333
+}
+
+# Signaling do LiveKit. É este domínio que vai em LIVEKIT_URL / NEXT_PUBLIC_
+# LIVEKIT_URL, com esquema `wss://`. A **mídia não passa por aqui**: ela vai
+# direto na UDP 7882 do servidor, que precisa estar aberta no firewall.
+livekit.streamz.exemplo.com {
+	reverse_proxy livekit:7880
+}

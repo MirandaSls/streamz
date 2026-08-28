@@ -6,7 +6,6 @@ import MemberList from "@/components/MemberList";
 import VoicePanel from "@/components/VoicePanel";
 import ChatView from "@/components/chat/ChatView";
 import DMView from "@/components/chat/DMView";
-import MediaPanel from "@/components/chat/MediaPanel";
 import SearchPanel from "@/components/chat/SearchPanel";
 import ThreadPanel from "@/components/chat/ThreadPanel";
 import ChannelSidebar from "@/components/layout/ChannelSidebar";
@@ -44,7 +43,7 @@ export default function AppPage() {
 
   const view = useUI((s) => s.view);
   const membersOpen = useUI((s) => s.membersOpen);
-  const mediaOpen = useUI((s) => s.mediaOpen);
+  const voiceChatOpen = useUI((s) => s.voiceChatOpen);
   const activeChannel = useActiveChannel();
   const activeDM = useActiveDM();
   const voiceChannel = useVoiceChannel();
@@ -94,27 +93,37 @@ export default function AppPage() {
           <ChannelSidebar />
 
           {voiceChannel ? (
-            <main className="flex min-w-0 flex-1 flex-col bg-chat">
-              <VoicePanel
-                // remontar por canal reinicia a conexão com a sala certa
-                key={voiceChannel.id}
-                channel={voiceChannel}
-                onLeave={leaveVoice}
-              />
+            // No canal de voz o palco ocupa a área inteira — o chat de texto do
+            // canal existe, mas só aparece por clique no botão do cabeçalho. É o
+            // oposto da chamada em conversa, onde voz e texto convivem
+            // empilhados (ver `CallSplit` no `DMView`).
+            <main className="flex min-w-0 flex-1 bg-chat">
+              <div className="flex min-w-0 flex-1 flex-col">
+                <VoicePanel
+                  // remontar por canal reinicia a conexão com a sala certa
+                  key={voiceChannel.id}
+                  channel={voiceChannel}
+                  onLeave={leaveVoice}
+                />
+              </div>
+              {voiceChatOpen && (
+                <div className="flex w-[400px] shrink-0 flex-col border-l border-border">
+                  <ChatView incorporado />
+                </div>
+              )}
             </main>
           ) : (
             <ChatView />
           )}
 
-          {/* coluna 4: busca, thread, mídia OU lista de membros — uma por vez */}
-          {!voiceChannel &&
-            activeChannel &&
+          {/* Coluna 4: busca, thread OU lista de membros — uma por vez. Não há
+              caso especial de voz: o canal de voz é um canal aberto como outro
+              qualquer, com busca e thread na conversa dele. */}
+          {activeChannel &&
             (buscaAberta ? (
               <SearchPanel guildId={activeChannel.guildId} />
             ) : threadParentId ? (
               <ThreadPanel channelId={activeChannel.id} />
-            ) : mediaOpen ? (
-              <MediaPanel channelId={activeChannel.id} />
             ) : (
               membersOpen && <MemberList />
             ))}

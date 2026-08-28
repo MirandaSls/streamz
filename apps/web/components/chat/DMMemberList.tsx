@@ -1,15 +1,18 @@
 "use client";
 
 import { useEffect, useState, type MouseEvent } from "react";
-import { Crown, MessageSquare, UserMinus, UserPlus, UserX } from "lucide-react";
+import { AtSign, Crown, MessageSquare, User, UserMinus, UserPlus, UserX } from "lucide-react";
 import { displayNameOf, isGroupChannel, type DMChannelView, type PublicUser } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
+import { MENU_WIDTH } from "@/components/ui/ContextMenu";
 import { api } from "@/lib/api";
+import { mencionar } from "@/lib/mencoes";
 import { useAuth } from "@/stores/auth";
 import { useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
 import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
+import { useSettings } from "@/stores/settings";
 import { anchorOf, ui, type MenuItem } from "@/stores/ui";
 
 /**
@@ -31,6 +34,7 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
   const remove = useFriends((s) => s.remove);
   const friends = useFriends((s) => s.friends);
   const send = useFriends((s) => s.send);
+  const developerMode = useSettings((s) => s.developerMode);
 
   const grupo = isGroupChannel(dm);
   const souDono = grupo && dm.ownerId === me?.id;
@@ -48,14 +52,28 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
     };
   }, [dm.id, chave]);
 
-  function abrirMenu(e: MouseEvent, user: PublicUser) {
+  function abrirMenu(e: MouseEvent, user: PublicUser, linha?: HTMLElement | null) {
     e.preventDefault();
     const euMesmo = user.id === me?.id;
     const jaAmigo = friends.some((f) => f.id === user.id);
     const items: MenuItem[] = [
-      { label: "Perfil", onSelect: () => ui.openModal({ kind: "userProfile", userId: user.id }) },
+      {
+        label: "Perfil",
+        icon: <User size={18} />,
+        // popout ancorada na linha, como na lista de membros do servidor
+        onSelect: () =>
+          ui.openProfile(
+            user,
+            linha ? anchorOf(linha) : { x: e.clientX, y: e.clientY, width: 0, height: 0 },
+          ),
+      },
     ];
     if (!euMesmo) {
+      items.push({
+        label: "Mencionar",
+        icon: <AtSign size={18} />,
+        onSelect: () => mencionar(user),
+      });
       items.push({
         label: "Mensagem",
         icon: <MessageSquare size={18} />,
@@ -92,7 +110,14 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
         });
       }
     }
-    ui.openContextMenu(e.clientX, e.clientY, items);
+    if (developerMode) {
+      items.push({ separator: true });
+      items.push({
+        label: "Copiar ID do usuário",
+        onSelect: () => void navigator.clipboard?.writeText(user.id),
+      });
+    }
+    ui.openContextMenu(e.clientX, e.clientY, items, MENU_WIDTH);
   }
 
   return (
@@ -126,7 +151,7 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
               <div
                 key={user.id}
                 role="listitem"
-                onContextMenu={(e) => abrirMenu(e, user)}
+                onContextMenu={(e) => abrirMenu(e, user, e.currentTarget)}
                 className={`group mx-2 flex h-[42px] items-center gap-3 rounded px-2 hover:bg-hov ${
                   status === "OFFLINE" ? "opacity-30 hover:opacity-100" : ""
                 }`}

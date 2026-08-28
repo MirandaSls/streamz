@@ -77,7 +77,7 @@ export default function InvitePage() {
   const recado = erro ?? preview?.reason ?? "Este convite não vale mais.";
 
   return (
-    <main className="grid min-h-screen place-items-center bg-accent bg-[radial-gradient(ellipse_at_top_left,rgba(255,255,255,0.18),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(0,0,0,0.25),transparent_60%)] p-4">
+    <main className="grid min-h-screen place-items-center bg-rail bg-[radial-gradient(ellipse_at_top_left,rgba(155,227,31,0.14),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(155,227,31,0.05),transparent_60%)] p-4">
       <div className="w-[420px] max-w-full rounded-[5px] bg-chat p-8 text-center shadow-high">
         {preview === null && !erro && <p className="text-txt-muted">Carregando convite…</p>}
 
@@ -97,7 +97,7 @@ export default function InvitePage() {
                 ? `${displayNameOf(preview.inviter)} convidou você para`
                 : "Você foi convidado para"}
             </p>
-            <h1 className="mt-1 text-2xl font-bold text-txt-primary">
+            <h1 className="mt-1 font-display text-2xl font-extrabold tracking-wordmark text-txt-primary">
               {preview?.guild.name ?? "Servidor"}
             </h1>
 
@@ -133,7 +133,7 @@ export default function InvitePage() {
                 <button
                   type="button"
                   onClick={() => router.replace(user ? "/app" : "/login")}
-                  className="mt-5 h-11 w-full rounded-[3px] bg-[#4e5058] font-medium text-white transition hover:bg-[#6d6f78]"
+                  className="mt-5 h-11 w-full rounded-[3px] bg-border-strong font-medium text-white transition hover:bg-border-strong-hover"
                 >
                   {user ? "Voltar para o app" : "Ir para o login"}
                 </button>
@@ -143,7 +143,7 @@ export default function InvitePage() {
                 type="button"
                 disabled={entrando}
                 onClick={() => void aceitar()}
-                className="mt-6 h-11 w-full rounded-[3px] bg-accent font-medium text-white transition hover:bg-accent-hover disabled:opacity-60"
+                className="mt-6 h-11 w-full rounded-[3px] bg-accent font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-60"
                 autoFocus
               >
                 {preview?.member

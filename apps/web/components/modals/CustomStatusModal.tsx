@@ -8,6 +8,7 @@ import {
   type CustomStatusDuration,
 } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
+import { Rotulo, Select } from "@/components/ui/controls";
 import EmojiPicker from "@/components/ui/EmojiPicker";
 import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";
@@ -55,30 +56,29 @@ export default function CustomStatusModal() {
 
   return (
     <Dialog
-      title="Definir status personalizado"
+      title="Definir um status personalizado"
       onClose={closeModal}
-      className="w-[440px]"
       footer={
         <>
           <PrimaryButton disabled={salvando} onClick={() => void salvar()}>
             {salvando ? "Salvando…" : "Salvar"}
           </PrimaryButton>
+          <SecondaryButton onClick={closeModal}>Cancelar</SecondaryButton>
+          {/* "Limpar" é destrutivo e fica isolado à esquerda: entre os outros
+              dois ele viraria mais um botão de confirmação */}
           {tinha && (
             <button
               type="button"
               onClick={() => void salvar(true)}
-              className="h-[38px] rounded-[3px] px-4 text-sm font-medium text-red transition hover:underline"
+              className="mr-auto h-[38px] rounded-[3px] px-2 text-sm font-medium text-red transition hover:underline"
             >
               Limpar status
             </button>
           )}
-          <SecondaryButton onClick={closeModal}>Cancelar</SecondaryButton>
         </>
       }
     >
-      <label htmlFor="statusText" className="mb-2 block text-xs font-bold uppercase text-txt-secondary">
-        O que está acontecendo?
-      </label>
+      <Rotulo htmlFor="statusText">Status personalizado</Rotulo>
       <div className="relative flex items-center gap-2 rounded-[3px] bg-rail px-2">
         <Tooltip label="Escolher emoji">
           <button
@@ -101,7 +101,7 @@ export default function CustomStatusModal() {
               void salvar();
             }
           }}
-          placeholder="Suporte a texto"
+          placeholder="O que está acontecendo?"
           className="h-10 min-w-0 flex-1 bg-transparent text-txt-normal outline-none placeholder:text-txt-muted"
         />
         {emoji && (
@@ -129,28 +129,19 @@ export default function CustomStatusModal() {
         {text.length}/{MAX_CUSTOM_STATUS}
       </p>
 
-      <fieldset className="mt-5">
-        <legend className="mb-2 text-xs font-bold uppercase text-txt-secondary">Limpar depois de</legend>
-        <div className="flex flex-col gap-0.5">
-          {CUSTOM_STATUS_DURATIONS.map((d) => (
-            <label
-              key={d.value}
-              className={`flex cursor-pointer items-center gap-3 rounded-[3px] px-2 py-1.5 text-sm transition hover:bg-hov ${
-                duration === d.value ? "text-txt-primary" : "text-txt-normal"
-              }`}
-            >
-              <input
-                type="radio"
-                name="duration"
-                checked={duration === d.value}
-                onChange={() => setDuration(d.value)}
-                className="accent-accent"
-              />
-              {d.label}
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      <div className="mt-5">
+        {/* do prazo mais longo para o mais curto, como no Discord ("Hoje"
+            antes de "1 hora"); a ordem do contrato é a inversa */}
+        <Select
+          semDivisoria
+          label="Limpar depois de"
+          value={duration}
+          options={[...CUSTOM_STATUS_DURATIONS]
+            .reverse()
+            .map((d) => ({ value: d.value, label: d.label }))}
+          onChange={(v) => setDuration(v as CustomStatusDuration)}
+        />
+      </div>
     </Dialog>
   );
 }

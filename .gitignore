@@ -15,8 +15,12 @@ apps/desktop/src-tauri/target/
 .env.*.local
 !.env.example
 
-# config com segredo real do LiveKit (copiada de livekit.example.yaml)
+# config com segredo real do LiveKit (copiada de livekit.example.yaml em dev
+# ou de livekit.prod.example.yaml no servidor)
 livekit.yaml
+
+# proxy de produção com os domínios reais (copiado de Caddyfile.example)
+Caddyfile
 
 # prisma
 apps/api/prisma/*.db

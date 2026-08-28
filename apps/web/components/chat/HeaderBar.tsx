@@ -1,9 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Bell, HelpCircle, Search } from "lucide-react";
-import HeaderIcon from "@/components/chat/HeaderIcon";
-import InboxPopover from "@/components/chat/InboxPopover";
+import { Search } from "lucide-react";
 
 export { default as HeaderIcon } from "@/components/chat/HeaderIcon";
 
@@ -11,8 +9,9 @@ export { default as HeaderIcon } from "@/components/chat/HeaderIcon";
  * Cabeçalho de 48px da área principal: ícone + nome à esquerda, toolbar à
  * direita (com a busca que se expande ao focar), como no Discord.
  *
- * A caixa de entrada é do app, não do canal, então mora aqui mesmo; as fixadas
- * dependem do canal e entram por `pins`.
+ * A toolbar carrega só o que age sobre o canal aberto: ações genéricas do app
+ * (ajuda, caixa de entrada) e o que já existe no menu de contexto do canal
+ * (sino, configurações do servidor) ficam de fora para não poluir a barra.
  */
 export default function HeaderBar({
   icon,
@@ -20,7 +19,6 @@ export default function HeaderBar({
   subtitle,
   tools,
   pins,
-  bell,
   searchLabel,
   searchValue,
   onSearch,
@@ -32,8 +30,6 @@ export default function HeaderBar({
   tools?: ReactNode;
   /** botão de mensagens fixadas do canal aberto. */
   pins?: ReactNode;
-  /** sino de notificação do canal; sem ele, o botão fica no estado "em breve". */
-  bell?: ReactNode;
   searchLabel: string;
   /** consulta em vigor — mantém o campo preenchido ao reabrir a busca. */
   searchValue?: string;
@@ -49,7 +45,7 @@ export default function HeaderBar({
       <h1 className="truncate font-semibold text-txt-primary">{title}</h1>
       {subtitle && (
         <>
-          <span aria-hidden="true" className="mx-2 h-6 w-px bg-[#3f4147]" />
+          <span aria-hidden="true" className="mx-2 h-6 w-px bg-border" />
           <span className="truncate text-sm text-txt-muted">{subtitle}</span>
         </>
       )}
@@ -57,11 +53,6 @@ export default function HeaderBar({
       <div className="ml-auto flex items-center gap-4">
         {tools}
         {pins}
-        {bell ?? (
-          <HeaderIcon label="Configurações de notificação" disabled>
-            <Bell size={24} />
-          </HeaderIcon>
-        )}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -84,10 +75,6 @@ export default function HeaderBar({
             className="pointer-events-none absolute right-1.5 top-1 text-txt-muted"
           />
         </form>
-        <InboxPopover />
-        <HeaderIcon label="Ajuda" disabled>
-          <HelpCircle size={24} />
-        </HeaderIcon>
       </div>
     </header>
   );

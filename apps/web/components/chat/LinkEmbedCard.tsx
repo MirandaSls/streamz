@@ -26,14 +26,45 @@ export function useLinkEmbed(url: string | null): LinkEmbed | null | undefined {
 }
 
 /**
- * Card de prévia de link, como o embed do Discord: barra à esquerda, nome do
- * site, título em azul, descrição e imagem.
+ * Paleta da barra lateral.
+ *
+ * No Discord a cor vem do próprio embed (`embed.color`, do Open Graph / da
+ * integração). O nosso `LinkEmbed` ainda não carrega esse campo — enquanto ele
+ * não existir, a cor é derivada do **domínio**: é estável (o mesmo site sempre
+ * na mesma cor), o que já entrega metade do que a cor comunica, e some sozinha
+ * no dia em que o contrato ganhar `color`.
+ */
+const PALETA = ["#4c7ef3", "#0e9f8a", "#c2701c", "#d24a7b", "#7c5cf0", "#3aa0d6"];
+
+function corDoDominio(url: string): string {
+  let host = url;
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    // URL malformada: o hash do texto cru serve igual
+  }
+  let h = 0;
+  for (let i = 0; i < host.length; i++) h = (h * 31 + host.charCodeAt(i)) >>> 0;
+  return PALETA[h % PALETA.length];
+}
+
+/**
+ * Card de prévia de link, como o embed do Discord: barra colorida de 4px à
+ * esquerda, nome do site, título em azul, descrição inteira e imagem na
+ * proporção real.
+ *
+ * A descrição **não** é truncada: o Discord mostra o texto completo com as
+ * quebras de linha do Open Graph, e o `line-clamp-3` cortava justamente o
+ * trecho que explicava o link.
  */
 export default function LinkEmbedCard({ embed }: { embed: LinkEmbed }) {
   return (
-    <div className="mt-1 grid max-w-[520px] grid-cols-[auto_1fr] overflow-hidden rounded bg-panel">
-      <div className="w-1 bg-[#1e1f22]" aria-hidden="true" />
-      <div className="min-w-0 p-3 pl-3">
+    <div
+      className="mt-1 grid grid-cols-[auto_1fr] overflow-hidden rounded"
+      style={{ maxWidth: embed.image ? 516 : 432 }}
+    >
+      <div className="w-1 bg-panel" style={{ backgroundColor: corDoDominio(embed.url) }} aria-hidden="true" />
+      <div className="min-w-0 bg-panel" style={{ padding: "8px 16px 16px 12px" }}>
         {embed.siteName && <div className="text-xs text-txt-muted">{embed.siteName}</div>}
         {embed.title && (
           <a
@@ -46,7 +77,7 @@ export default function LinkEmbedCard({ embed }: { embed: LinkEmbed }) {
           </a>
         )}
         {embed.description && (
-          <p className="mt-1 line-clamp-3 text-sm text-txt-normal">{embed.description}</p>
+          <p className="mt-1 whitespace-pre-line text-sm text-txt-normal">{embed.description}</p>
         )}
         {embed.image && (
           // eslint-disable-next-line @next/next/no-img-element
@@ -54,7 +85,8 @@ export default function LinkEmbedCard({ embed }: { embed: LinkEmbed }) {
             src={embed.image}
             alt=""
             loading="lazy"
-            className="mt-3 max-h-[300px] max-w-full rounded object-cover"
+            // `contain`: `cover` recortava a prévia e escondia o que ela mostrava
+            className="mt-3 max-h-[300px] max-w-full rounded object-contain"
           />
         )}
       </div>

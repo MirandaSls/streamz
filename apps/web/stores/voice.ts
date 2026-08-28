@@ -1,6 +1,9 @@
 import { create } from "zustand";
 import {
+  MEDIA_QUALITY,
+  PTT_RELEASE_MS,
   SCREEN_QUALITY,
+  SCREEN_QUALITY_PADRAO,
   WS_EVENTS,
   type CallEndedEvent,
   type CallRingEvent,
@@ -10,11 +13,20 @@ import {
   type VoiceFlags,
   type VoiceStateEvent,
 } from "@streamz/shared";
-import { Room, RoomEvent, Track, type Participant } from "livekit-client";
+import {
+  LocalAudioTrack,
+  LocalVideoTrack,
+  Room,
+  RoomEvent,
+  Track,
+  type Participant,
+} from "livekit-client";
 import { api } from "@/lib/api";
+import { tocarSom } from "@/lib/ringtone";
 import { CHAMADA_INICIAL, callReducer, type CallAction, type CallState } from "@/stores/call-machine";
 import { emit, errorMessage } from "@/stores/socket-adapter";
-import { ui, useUI } from "@/stores/ui";
+import { ui } from "@/stores/ui";
+import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { useDMs } from "@/stores/dms";
 import { useVoiceDevicesStore } from "@/stores/voiceDevices";
@@ -29,9 +41,11 @@ import { useVoicePrefs } from "@/stores/voicePrefs";
  *    do gateway (`voice.state`) e existe com ou sem servidor de mídia. É o que
  *    a barra lateral desenha.
  * 2. **Mídia** (`room`) — a conexão LiveKit. Só existe quando o LiveKit está
- *    configurado; sem ele o painel mostra "Voz não configurada" e a camada 1
- *    continua funcionando (dá para entrar num canal, tocar uma chamada e ver
- *    quem entrou — só não sai som).
+ *    configurado; sem ele a camada 1 continua funcionando (dá para entrar num
+ *    canal, tocar uma chamada e ver quem entrou — só não sai som), e **em
+ *    silêncio**: falta de configuração não é erro do usuário, então não vira
+ *    faixa de aviso permanente. `erro` fica reservado para falha real de
+ *    conexão, que é o único caso em que oferecer "tentar de novo" faz sentido.
  *
  * O objeto `Room` do SDK é mutável e cheio de referências circulares, então ele
  * fica **fora** do estado observável (`sala`, no módulo) e a store guarda um
@@ -53,7 +67,7 @@ interface VoiceStoreState {
   channelName: string;
   status: VoiceStatus;
   erro: string | null;
-  /** o LiveKit respondeu com credenciais? false = "Voz não configurada". */
+  /** o LiveKit respondeu com credenciais? false = sala sem som, sem alarde. */
   midiaDisponivel: boolean;
   tick: number;
   /** identidades (ids de usuário) falando agora. */
@@ -64,6 +78,8 @@ interface VoiceStoreState {
   screenOn: boolean;
   screenQuality: ScreenQuality;
   screenAudio: boolean;
+  /** ajustes de áudio da aba "Voz e vídeo" (persistidos no browser). */
+  audio: AudioPrefs;
 
   // ── preferências por participante (locais, não vão para o servidor) ──
   volumes: Record<string, number>;
@@ -71,6 +87,12 @@ interface VoiceStoreState {
 
   // ── foco/tela cheia da grade ──
   focado: string | null;
+  /**
+   * Ninguém escolheu o palco ainda, então uma transmissão que comece pode
+   * assumi-lo sozinha. Escolher (ou desfazer) o foco à mão desliga isso — quem
+   * saiu de uma transmissão não quer ser jogado de volta nela.
+   */
+  focoAutomatico: boolean;
   telaCheia: boolean;
 
   // ── chamada em conversa direta ──
@@ -86,14 +108,19 @@ interface VoiceStoreState {
   reconnect: () => Promise<void>;
 
   toggleCam: () => Promise<void>;
-  toggleScreen: () => Promise<void>;
+  /** Publica uma captura já obtida pelo seletor próprio (ver ScreenShareButton). */
+  publicarTela: (stream: MediaStream) => Promise<void>;
+  pararTela: () => Promise<void>;
   setScreenQuality: (q: ScreenQuality) => void;
   setScreenAudio: (on: boolean) => void;
+  setAudioPref: (patch: Partial<AudioPrefs>) => void;
 
   setVolume: (userId: string, volume: number) => void;
   toggleSilenciado: (userId: string) => void;
   setFocado: (userId: string | null) => void;
-  toggleTelaCheia: () => void;
+  /** Foco sem gesto do usuário (transmissão que começa): não desliga o automático. */
+  focarAutomaticamente: (userId: string) => void;
+  setTelaCheia: (ativo: boolean) => void;
 
   startCall: (channelId: string, comVideo: boolean) => Promise<void>;
   acceptCall: () => Promise<void>;
@@ -107,8 +134,65 @@ interface VoiceStoreState {
   syncFlags: () => void;
 }
 
-const SEM_MIDIA =
-  "Voz não configurada — ver PENDENCIAS.md. Você entrou no canal, mas não há servidor de mídia.";
+/**
+ * Ajustes de áudio da aba "Voz e vídeo".
+ *
+ * Moram aqui (e não em `voicePrefs`) porque só fazem sentido com a mídia: o que
+ * `voicePrefs` guarda é o par mudo/surdo, que vale com ou sem servidor de voz.
+ *
+ * Nem todos têm efeito no MVP e o comentário diz qual é qual, para ninguém
+ * "consertar" um slider que já está certo:
+ * - `saida` multiplica o volume de cada `<audio>` remoto — vale hoje.
+ * - `processamento` vira restrição de captura do microfone — vale hoje.
+ * - `entrada`, `sensibilidade` e `pttAtrasoMs` ficam guardados mas ainda não
+ *   mudam a captura: ganho de entrada exigiria republicar o microfone por um
+ *   grafo Web Audio, o limiar de voz é decidido pelo servidor de mídia, e o
+ *   atraso do PTT vive em `voicePrefs`, que lê a constante do contrato.
+ */
+export interface AudioPrefs {
+  /** ganho do microfone, 0–2. */
+  entrada: number;
+  /** volume geral da saída, 0–2 (multiplica o volume por pessoa). */
+  saida: number;
+  /** limiar da atividade de voz, 0–1. */
+  sensibilidade: number;
+  /** folga entre soltar a tecla de PTT e o microfone fechar, em ms. */
+  pttAtrasoMs: number;
+  processamento: { eco: boolean; ruido: boolean; ganho: boolean };
+}
+
+const AUDIO_PADRAO: AudioPrefs = {
+  entrada: 1,
+  saida: 1,
+  sensibilidade: 0.35,
+  pttAtrasoMs: PTT_RELEASE_MS,
+  processamento: { eco: true, ruido: true, ganho: true },
+};
+
+const AUDIO_KEY = "voiceAudioPrefs";
+
+function carregarAudio(): AudioPrefs {
+  try {
+    const raw = typeof window !== "undefined" ? localStorage.getItem(AUDIO_KEY) : null;
+    if (!raw) return AUDIO_PADRAO;
+    const lido = JSON.parse(raw) as Partial<AudioPrefs>;
+    return {
+      ...AUDIO_PADRAO,
+      ...lido,
+      processamento: { ...AUDIO_PADRAO.processamento, ...(lido.processamento ?? {}) },
+    };
+  } catch {
+    return AUDIO_PADRAO;
+  }
+}
+
+/** Falha real de conexão: é o único texto que vira faixa vermelha com "tentar de novo". */
+const FALHA_MIDIA = "Não foi possível conectar ao servidor de voz.";
+const QUEDA_MIDIA = "A conexão de voz caiu.";
+const SEM_SALA = "Você não está conectado a um canal de voz.";
+
+/** Resultado de tentar abrir a mídia: falta de configuração ≠ falha. */
+type ResultadoMidia = { tipo: "ok" } | { tipo: "sem-config" } | { tipo: "falha"; erro: string };
 
 export const useVoice = create<VoiceStoreState>((set, get) => {
   /** Re-render quando o SDK muda participantes/faixas. */
@@ -145,11 +229,13 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     falando: [],
     camOn: false,
     screenOn: false,
-    screenQuality: "720p30",
+    screenQuality: SCREEN_QUALITY_PADRAO,
     screenAudio: true,
+    audio: carregarAudio(),
     volumes: {},
     silenciados: {},
     focado: null,
+    focoAutomatico: true,
     telaCheia: false,
     call: CHAMADA_INICIAL,
 
@@ -158,13 +244,32 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         const estados = await api.guildVoiceStates(guildId);
         const porCanal: Record<string, VoiceStateEvent[]> = {};
         for (const e of estados) (porCanal[e.channelId] ??= []).push(e);
-        set((s) => ({ states: { ...s.states, ...porCanal } }));
+        // a resposta é a verdade **deste** servidor: some com os canais dele que
+        // esvaziaram, e preserva o cache dos outros — trocar de servidor não pode
+        // apagar quem está nas salas do anterior (a barra lateral e o palco leem
+        // daqui mesmo com o servidor em segundo plano)
+        set((s) => {
+          const outros = Object.fromEntries(
+            Object.entries(s.states).filter(([, lista]) => lista[0]?.guildId !== guildId),
+          );
+          return { states: { ...outros, ...porCanal } };
+        });
       } catch {
         // servidor sem voz ou sem acesso: a barra lateral fica sem bolinhas
       }
     },
 
     applyState: (evento) => {
+      const meuCanal = get().channelId;
+      const eu = evento.user.id === useAuth.getState().user?.id;
+      const jaEstava = (get().states[evento.channelId] ?? []).some(
+        (e) => e.user.id === evento.user.id,
+      );
+      // entrar e sair da **minha** sala tem som, como no Discord; movimento em
+      // outro canal é ruído para quem não está lá
+      if (!eu && evento.channelId === meuCanal && evento.connected !== jaEstava) {
+        tocarSom(evento.connected ? "alguem-entrou" : "alguem-saiu");
+      }
       set((s) => {
         const atual = s.states[evento.channelId] ?? [];
         const semEle = atual.filter((e) => e.user.id !== evento.user.id);
@@ -198,7 +303,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         camOn: false,
         screenOn: false,
         focado: null,
+        focoAutomatico: true,
       });
+      tocarSom("entrar");
 
       // 1) o estado de voz não depende do LiveKit: avisa o gateway primeiro,
       //    para que os outros já vejam você no canal mesmo sem mídia
@@ -206,17 +313,22 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       emit(WS_EVENTS.VOICE_UPDATE, flags());
 
       // 2) mídia, se houver
-      const conectou = await conectarMidia(channel.id, set, rerender, get);
-      if (!conectou) {
-        set({ status: "connected", midiaDisponivel: false, erro: SEM_MIDIA });
+      const r = await conectarMidia(channel.id, set, rerender, get);
+      if (r.tipo === "falha") {
+        set({ status: "error", midiaDisponivel: false, erro: r.erro });
         return;
       }
-      set({ status: "connected", midiaDisponivel: true, erro: null });
-      get().syncFlags();
+      set({
+        status: "connected",
+        midiaDisponivel: r.tipo === "ok",
+        erro: null,
+      });
+      if (r.tipo === "ok") get().syncFlags();
     },
 
     disconnect: async () => {
       const channelId = get().channelId;
+      if (channelId) tocarSom("sair");
       fecharSala();
       // o painel do canal de voz é a coluna 3 inteira: sair da call sem fechá-lo
       // deixaria o usuário preso numa sala vazia
@@ -236,6 +348,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         camOn: false,
         screenOn: false,
         focado: null,
+        focoAutomatico: true,
         telaCheia: false,
         call: CHAMADA_INICIAL,
       });
@@ -256,13 +369,23 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     toggleCam: async () => {
       const lp = sala?.localParticipant;
       if (!lp) {
-        ui.toast(SEM_MIDIA, "error");
+        ui.toast(SEM_SALA, "error");
         return;
       }
       const proximo = !lp.isCameraEnabled;
       try {
         const cameraId = useVoiceDevicesStore.getState().cameraId;
-        await lp.setCameraEnabled(proximo, cameraId ? { deviceId: cameraId } : undefined);
+        // A resolução vai explícita porque passar `captureOptions` substitui o
+        // `videoCaptureDefaults` da sala em vez de completá-lo: sem isto, ligar
+        // a câmera com um dispositivo escolhido cairia no padrão do navegador.
+        await lp.setCameraEnabled(proximo, {
+          ...(cameraId ? { deviceId: cameraId } : {}),
+          resolution: {
+            width: MEDIA_QUALITY.camera.width,
+            height: MEDIA_QUALITY.camera.height,
+            frameRate: MEDIA_QUALITY.camera.frameRate,
+          },
+        });
         set({ camOn: proximo });
       } catch (e) {
         set({ camOn: false });
@@ -272,23 +395,75 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       rerender();
     },
 
-    toggleScreen: async () => {
+    /**
+     * A captura vem pronta de fora porque o seletor é **nosso** (abas
+     * "Aplicativos"/"Telas" com prévia ao vivo): quem chama `getDisplayMedia` é
+     * o modal, e aqui só publicamos o que ele já obteve.
+     */
+    publicarTela: async (stream) => {
       const lp = sala?.localParticipant;
       if (!lp) {
-        ui.toast(SEM_MIDIA, "error");
+        stream.getTracks().forEach((t) => t.stop());
+        ui.toast(SEM_SALA, "error");
         return;
       }
-      const proximo = !lp.isScreenShareEnabled;
+      const [video] = stream.getVideoTracks();
+      if (!video) return;
       const preset = SCREEN_QUALITY[get().screenQuality];
+      // `contentHint` avisa o encoder de que o conteúdo é texto/detalhe: ele
+      // passa a preservar nitidez em vez de suavizar o quadro (o que faria com
+      // uma câmera). É o ganho de legibilidade mais barato que existe aqui.
+      video.contentHint = "detail";
       try {
-        await lp.setScreenShareEnabled(proximo, {
-          audio: get().screenAudio,
-          resolution: { width: preset.width, height: preset.height, frameRate: preset.frameRate },
+        await lp.publishTrack(new LocalVideoTrack(video), {
+          source: Track.Source.ScreenShare,
+          // sem isto a faixa sobe com o bitrate padrão do SDK, calibrado para
+          // 1080p — em 1440p o resultado seria mais pixels, todos borrados
+          videoEncoding: { maxBitrate: preset.maxBitrate, maxFramerate: preset.frameRate },
+          // simulcast de tela em alta gasta CPU de quem transmite para produzir
+          // camadas reduzidas que ninguém quer: quem abre uma tela quer lê-la
+          simulcast: false,
+          // com banda apertada, derrubar quadros preserva o texto legível;
+          // derrubar resolução o transformaria em borrão
+          degradationPreference: "maintain-resolution",
         });
-        set({ screenOn: proximo });
-      } catch {
-        // usuário cancelou o seletor de tela, ou navegador sem suporte
+        const [audio] = stream.getAudioTracks();
+        if (audio && get().screenAudio) {
+          await lp.publishTrack(new LocalAudioTrack(audio), {
+            source: Track.Source.ScreenShareAudio,
+            // áudio de tela é música/jogo/vídeo, não voz: estéreo, bitrate alto
+            // e sem DTX, que existe para cortar silêncio de conversa
+            audioPreset: { maxBitrate: MEDIA_QUALITY.screenAudioBitrate },
+            forceStereo: true,
+            dtx: false,
+            red: false,
+          });
+        }
+        // parar pelo botão do próprio navegador precisa refletir aqui, senão a
+        // UI continuaria anunciando uma transmissão que já morreu
+        video.addEventListener("ended", () => void get().pararTela(), { once: true });
+        set({ screenOn: true });
+      } catch (e) {
+        stream.getTracks().forEach((t) => t.stop());
         set({ screenOn: false });
+        ui.toast(errorMessage(e, "Não foi possível compartilhar a tela"), "error");
+      }
+      get().syncFlags();
+      rerender();
+    },
+
+    pararTela: async () => {
+      const lp = sala?.localParticipant;
+      set({ screenOn: false });
+      if (lp) {
+        for (const pub of Array.from(lp.trackPublications.values())) {
+          if (
+            pub.source === Track.Source.ScreenShare ||
+            pub.source === Track.Source.ScreenShareAudio
+          ) {
+            if (pub.track) await lp.unpublishTrack(pub.track, true).catch(() => {});
+          }
+        }
       }
       get().syncFlags();
       rerender();
@@ -297,14 +472,39 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     setScreenQuality: (screenQuality) => set({ screenQuality }),
     setScreenAudio: (screenAudio) => set({ screenAudio }),
 
+    setAudioPref: (patch) => {
+      const anterior = get().audio;
+      const audio: AudioPrefs = {
+        ...anterior,
+        ...patch,
+        processamento: { ...anterior.processamento, ...(patch.processamento ?? {}) },
+      };
+      set({ audio });
+      try {
+        localStorage.setItem(AUDIO_KEY, JSON.stringify(audio));
+      } catch {
+        // sem storage a preferência vale só nesta sessão
+      }
+      // mudar o processamento é mudar a **captura**: só republicando o
+      // microfone as novas restrições entram em vigor
+      const mudouProcessamento =
+        !!patch.processamento &&
+        (Object.keys(patch.processamento) as (keyof AudioPrefs["processamento"])[]).some(
+          (k) => patch.processamento?.[k] !== anterior.processamento[k],
+        );
+      if (mudouProcessamento) void republicarMicrofone(audio);
+    },
+
     setVolume: (userId, volume) =>
       set((s) => ({ volumes: { ...s.volumes, [userId]: Math.max(0, Math.min(2, volume)) } })),
 
     toggleSilenciado: (userId) =>
       set((s) => ({ silenciados: { ...s.silenciados, [userId]: !s.silenciados[userId] } })),
 
-    setFocado: (focado) => set((s) => ({ focado: s.focado === focado ? null : focado })),
-    toggleTelaCheia: () => set((s) => ({ telaCheia: !s.telaCheia })),
+    setFocado: (focado) =>
+      set((s) => ({ focado: s.focado === focado ? null : focado, focoAutomatico: false })),
+    focarAutomaticamente: (focado) => set({ focado }),
+    setTelaCheia: (telaCheia) => set({ telaCheia }),
 
     // ── chamada em conversa direta ──
 
@@ -327,7 +527,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         const r = await api.startCall(channelId);
         for (const e of r.states) get().applyState(e);
         if (!r.voice) {
-          set({ status: "connected", midiaDisponivel: false, erro: SEM_MIDIA });
+          // sem LiveKit a chamada ainda toca e o estado de voz vale: só não há som
+          set({ status: "connected", midiaDisponivel: false, erro: null });
           return;
         }
         await entrarNaSala(r.voice, set, rerender, get);
@@ -344,7 +545,6 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     acceptCall: async () => {
       const channelId = get().call.channelId;
       if (!channelId) return;
-      fecharToque();
       if (get().channelId && get().channelId !== channelId) await get().disconnect();
       get().dispatchCall({ type: "accept" });
       emit(WS_EVENTS.CALL_ACCEPT, { channelId });
@@ -356,14 +556,10 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         const r = await api.startCall(channelId);
         for (const e of r.states) get().applyState(e);
         if (r.voice) await entrarNaSala(r.voice, set, rerender, get);
-        set(
-          r.voice
-            ? { status: "connected", midiaDisponivel: true, erro: null }
-            : { status: "connected", midiaDisponivel: false, erro: SEM_MIDIA },
-        );
+        set({ status: "connected", midiaDisponivel: !!r.voice, erro: null });
       } catch {
         // sem mídia a chamada ainda vale: o estado de voz já põe os dois na sala
-        set({ status: "connected", midiaDisponivel: false, erro: SEM_MIDIA });
+        set({ status: "connected", midiaDisponivel: false, erro: null });
       }
       get().syncFlags();
     },
@@ -371,7 +567,6 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     declineCall: () => {
       const channelId = get().call.channelId;
       if (!channelId) return;
-      fecharToque();
       emit(WS_EVENTS.CALL_DECLINE, { channelId });
       get().dispatchCall({ type: "decline" });
       // recusar não deixa nada na tela: volta ao repouso na hora
@@ -385,14 +580,12 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     },
 
     handleRing: (evento) => {
+      // chamada recebida não abre modal: o cartão flutuante do canto vive na
+      // `VoiceLayer` e reage à fase `incoming` sozinho, sem travar a interface
       get().dispatchCall({ type: "ring", channelId: evento.channelId, from: evento.from });
-      // o toque só vira tela se a máquina aceitou o evento (já estar em chamada
-      // ignora um toque de outra conversa — abrir o modal aí seria mentira)
-      if (get().call.phase === "incoming") ui.openModal({ kind: "incomingCall" });
     },
 
     handleEnded: (evento) => {
-      fecharToque();
       get().dispatchCall({
         type: "ended",
         channelId: evento.channelId,
@@ -404,6 +597,10 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
           ui.toast(`${evento.by.username} recusou a chamada`);
         } else if (evento.reason === "timeout") {
           ui.toast("Ninguém atendeu");
+        } else if (evento.reason === "alone") {
+          // o servidor derrubou a chamada porque sobrou uma pessoa só; sem o
+          // aviso ela veria a tela fechar do nada
+          ui.toast("Chamada encerrada: você ficou sozinho");
         }
         if (channelId === evento.channelId) void get().disconnect();
         else get().dispatchCall({ type: "reset" });
@@ -411,7 +608,6 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     },
 
     dispatchCall: (action) => {
-      if (action.type === "timeout" || action.type === "reset") fecharToque();
       set((s) => ({ call: callReducer(s.call, action, Date.now()) }));
     },
 
@@ -440,34 +636,33 @@ async function abrirConversa(channelId: string) {
   if (conversa) useDMs.getState().select(conversa);
 }
 
-/** Tira a tela de chamada recebida — e só ela, para não fechar outro modal. */
-function fecharToque() {
-  if (useUI.getState().modal?.kind === "incomingCall") ui.closeModal();
-}
-
 /**
- * Pede o token e entra na sala. Devolve false quando a voz não está configurada
- * — o chamador segue com o estado de voz, sem mídia.
+ * Pede o token e entra na sala.
+ *
+ * A distinção que importa é entre **não ter mídia** e **a mídia ter falhado**:
+ * a primeira é uma instalação sem LiveKit (dev), e insistir seria inútil; a
+ * segunda é uma queda de rede, e aí o usuário precisa de um "tentar de novo".
  */
 async function conectarMidia(
   channelId: string,
   set: (partial: Partial<VoiceStoreState>) => void,
   rerender: () => void,
   get: () => VoiceStoreState,
-): Promise<boolean> {
+): Promise<ResultadoMidia> {
   let creds: { token: string; url: string; room: string };
   try {
     creds = await api.voiceToken(channelId);
   } catch {
     // 503 (sem credenciais) ou canal que não é de voz: sem mídia, e ponto
-    return false;
+    return { tipo: "sem-config" };
   }
-  if (!creds?.token || !/^wss?:\/\//i.test(creds.url ?? "")) return false;
+  if (!creds?.token || !/^wss?:\/\//i.test(creds.url ?? "")) return { tipo: "sem-config" };
   try {
     await entrarNaSala(creds, set, rerender, get);
-    return true;
-  } catch {
-    return false;
+    return { tipo: "ok" };
+  } catch (e) {
+    // credenciais existiam e mesmo assim não conectou: isso é falha
+    return { tipo: "falha", erro: errorMessage(e, FALHA_MIDIA) };
   }
 }
 
@@ -478,7 +673,32 @@ async function entrarNaSala(
   rerender: () => void,
   get: () => VoiceStoreState,
 ) {
-  const room = new Room({ adaptiveStream: true, dynacast: true });
+  const room = new Room({
+    adaptiveStream: true,
+    dynacast: true,
+    videoCaptureDefaults: {
+      resolution: {
+        width: MEDIA_QUALITY.camera.width,
+        height: MEDIA_QUALITY.camera.height,
+        frameRate: MEDIA_QUALITY.camera.frameRate,
+      },
+    },
+    // Câmera e microfone publicam com os tetos do contrato, não com o padrão do
+    // SDK (calibrado para sala grande em rede ruim). `dtx: false` mantém o
+    // fluxo de áudio contínuo: com DTX o encoder corta o silêncio e a primeira
+    // sílaba depois de uma pausa chega mutilada — economia de banda que se paga
+    // em inteligibilidade. `red` duplica os pacotes de voz e é o que segura a
+    // qualidade quando a rede perde pacote, que é a falha comum de verdade.
+    publishDefaults: {
+      videoEncoding: {
+        maxBitrate: MEDIA_QUALITY.camera.maxBitrate,
+        maxFramerate: MEDIA_QUALITY.camera.frameRate,
+      },
+      audioPreset: { maxBitrate: MEDIA_QUALITY.micBitrate },
+      dtx: false,
+      red: true,
+    },
+  });
   sala = room;
   room
     .on(RoomEvent.ParticipantConnected, rerender)
@@ -493,8 +713,10 @@ async function entrarNaSala(
       set({ falando: falantes.map((p) => p.identity) }),
     )
     .on(RoomEvent.Disconnected, () => {
+      // sair de propósito passa por `fecharSala`, que remove os ouvintes antes:
+      // se este handler rodou, a sala caiu sozinha
       sala = null;
-      set({ midiaDisponivel: false, falando: [] });
+      set({ midiaDisponivel: false, falando: [], status: "error", erro: QUEDA_MIDIA });
       rerender();
     });
 
@@ -503,10 +725,35 @@ async function entrarNaSala(
   if (devices.inputId) await room.switchActiveDevice("audioinput", devices.inputId).catch(() => {});
   if (devices.outputId) await room.switchActiveDevice("audiooutput", devices.outputId).catch(() => {});
   await room.localParticipant
-    .setMicrophoneEnabled(useVoicePrefs.getState().micAberto())
+    .setMicrophoneEnabled(
+      useVoicePrefs.getState().micAberto(),
+      restricoesDeCaptura(useVoice.getState().audio),
+    )
     .catch(() => {});
   void get; // o `get` fica na assinatura para futuras leituras de estado
   rerender();
+}
+
+/** Restrições de captura do microfone que valem para o SDK e para o teste. */
+export function restricoesDeCaptura(audio: AudioPrefs) {
+  return {
+    echoCancellation: audio.processamento.eco,
+    noiseSuppression: audio.processamento.ruido,
+    autoGainControl: audio.processamento.ganho,
+  };
+}
+
+/** Republica o microfone para as novas restrições entrarem em vigor. */
+async function republicarMicrofone(audio: AudioPrefs) {
+  const lp = sala?.localParticipant;
+  if (!lp) return;
+  const aberto = useVoicePrefs.getState().micAberto();
+  try {
+    await lp.setMicrophoneEnabled(false);
+    await lp.setMicrophoneEnabled(aberto, restricoesDeCaptura(audio));
+  } catch {
+    // o microfone pode ter sumido no meio da troca; o próximo toggle resolve
+  }
 }
 
 /** A sala LiveKit corrente (ou null). Os componentes leem daqui, nunca a guardam. */

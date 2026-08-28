@@ -1,12 +1,12 @@
 "use client";
 
 import { Headphones, HeadphoneOff, Mic, MicOff, Settings } from "lucide-react";
-import { displayNameOf } from "@streamz/shared";
+import { customStatusOf, displayNameOf } from "@streamz/shared";
 import Avatar, { STATUS_LABEL } from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
 import VoiceConnectedBar from "@/components/voice/VoiceConnectedBar";
 import { useAuth } from "@/stores/auth";
-import { resolveStatus, usePresence } from "@/stores/presence";
+import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
 import { anchorOf, useUI } from "@/stores/ui";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 
@@ -46,6 +46,7 @@ function FooterButton({
 export default function UserFooter() {
   const user = useAuth((s) => s.user);
   const statuses = usePresence((s) => s.statuses);
+  const profiles = usePresence((s) => s.profiles);
   const openProfile = useUI((s) => s.openProfile);
   const openModal = useUI((s) => s.openModal);
   const muted = useVoicePrefs((s) => s.muted);
@@ -54,7 +55,9 @@ export default function UserFooter() {
   const toggleDeafen = useVoicePrefs((s) => s.toggleDeafen);
 
   if (!user) return null;
-  const status = resolveStatus(statuses, user);
+  // o status personalizado chega por presença, não pelo `user` da sessão
+  const vivo = resolveUser(profiles, user);
+  const status = resolveStatus(statuses, vivo);
 
   return (
     <>
@@ -67,13 +70,15 @@ export default function UserFooter() {
           aria-label="Meu perfil"
           className="flex min-w-0 flex-1 items-center gap-2 rounded-[4px] py-1 pl-0.5 pr-2 text-left transition hover:bg-hov"
         >
-          <Avatar user={user} size="md" status={status} surface="border-footer" />
+          <Avatar user={vivo} size="md" status={status} surface="border-footer" />
           <span className="min-w-0">
             <span className="block truncate text-sm font-semibold leading-[18px] text-txt-primary">
               {displayNameOf(user)}
             </span>
+            {/* o status personalizado tem prioridade sobre o rótulo do estado:
+                é o que o Discord mostra quando a pessoa escreveu algo */}
             <span className="block truncate text-xs leading-[13px] text-txt-muted">
-              {STATUS_LABEL[status]}
+              {customStatusOf(vivo) ?? STATUS_LABEL[status]}
             </span>
           </span>
         </button>

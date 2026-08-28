@@ -161,6 +161,11 @@ export class VoiceService {
     return (await this.store.members(channelId)).length;
   }
 
+  /** Quem está na sala agora. É o `count` para quem precisa saber *quem* sobrou. */
+  async membrosDaSala(channelId: string): Promise<string[]> {
+    return (await this.store.members(channelId)).map((m) => m.userId);
+  }
+
   /** Estado inicial de um servidor: quem está em cada canal de voz dele. */
   async statesForGuild(userId: string, guildId: string): Promise<VoiceStateEvent[]> {
     await this.guilds.assertMember(userId, guildId);

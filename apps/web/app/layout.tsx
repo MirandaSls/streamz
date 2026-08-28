@@ -1,11 +1,11 @@
 import "./globals.css";
-import type { Metadata } from "next";
-import { Noto_Sans } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Archivo, JetBrains_Mono, Noto_Sans } from "next/font/google";
 
 /**
- * O Discord usa a "gg sans", fonte proprietária. A Noto Sans é a fallback
- * oficial deles e tem a mesma métrica geral — é o mais perto que dá sem a
- * licença. Carregada pelo next/font: sem request em runtime, sem layout shift.
+ * Corpo e densidade da interface. Ficou a Noto Sans do MVP: trocar a fonte do
+ * chat mexeria em métrica, altura de linha e leiaute de milhares de linhas, e
+ * o rebranding (ADR-0004) não é redesign.
  */
 const fonteSans = Noto_Sans({
   subsets: ["latin", "latin-ext"],
@@ -14,9 +14,54 @@ const fonteSans = Noto_Sans({
   display: "swap",
 });
 
+/**
+ * Archivo: a fonte de título do pacote de marca — wordmark, telas de auth,
+ * títulos de modal e categorias. Ver design.md para quando usar cada peso.
+ */
+const fonteDisplay = Archivo({
+  subsets: ["latin", "latin-ext"],
+  weight: ["700", "800"],
+  variable: "--font-display",
+  display: "swap",
+});
+
+/** JetBrains Mono: rótulos técnicos — código, código de convite, IDs, atalhos. */
+const fonteMono = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  variable: "--font-mono",
+  display: "swap",
+});
+
+/*
+ * As três vêm pelo next/font, que baixa e serve os arquivos no build. Isso as
+ * mantém em `'self'` e por isso passam na CSP do Tauri (`font-src 'self'
+ * data:`) — importar fonts.googleapis.com por URL quebraria o desktop.
+ */
+
+/**
+ * `metadataBase` é o que faz a og-image e o favicon resolverem em URL absoluta
+ * no raspador de link. `WEB_PUBLIC_URL` já existe no .env; sem ela, localhost.
+ */
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.WEB_PUBLIC_URL ?? "http://localhost:3000"),
   title: "Streamz",
   description: "Chat de comunidade — voz, vídeo e tela",
+  applicationName: "Streamz",
+  openGraph: {
+    type: "website",
+    siteName: "Streamz",
+    locale: "pt_BR",
+    title: "Streamz",
+    description: "Chat de comunidade — voz, vídeo e tela",
+  },
+  twitter: { card: "summary_large_image", title: "Streamz" },
+};
+
+/** Void Ink: a cor que o navegador pinta na barra antes da página carregar. */
+export const viewport: Viewport = {
+  themeColor: "#0b0b0f",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({
@@ -28,7 +73,11 @@ export default function RootLayout({
     // ── e-configuracoes ── `stores/settings` escreve style/class/lang no <html>
     // antes da hidratação (a preferência tem de valer no primeiro quadro), e é
     // exatamente a divergência que o React reclamaria aqui.
-    <html lang="pt-BR" className={fonteSans.variable} suppressHydrationWarning>
+    <html
+      lang="pt-BR"
+      className={`${fonteSans.variable} ${fonteDisplay.variable} ${fonteMono.variable}`}
+      suppressHydrationWarning
+    >
       <body className="font-sans">{children}</body>
     </html>
   );

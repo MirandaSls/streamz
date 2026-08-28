@@ -1,25 +1,55 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Check, X } from "lucide-react";
 import { displayNameOf, MAX_DM_GROUP_INVITEES, type PublicUser } from "@streamz/shared";
-import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
+import Dialog from "@/components/modals/Dialog";
 import Avatar from "@/components/ui/Avatar";
 import { api } from "@/lib/api";
 import { contactsFromDMs, useDMs } from "@/stores/dms";
+import { useFriends } from "@/stores/friends";
+import { resolveStatus, usePresence } from "@/stores/presence";
 import { useUI } from "@/stores/ui";
 
-/** Grupo de DM: nome opcional e 2+ pessoas — contatos conhecidos ou busca por nome. */
+/**
+ * "Selecionar amigos": a caixa do Discord que já chega com os **seus amigos**
+ * listados — marcar um abre a conversa direta, marcar dois ou mais cria o
+ * grupo. É a mesma tela para os dois casos porque, do ponto de vista de quem
+ * usa, a decisão é só "com quem".
+ *
+ * O nome do grupo não se escolhe aqui: no Discord ele é definido depois, nas
+ * configurações do grupo, e pedir antes obriga a nomear algo que ainda não
+ * existe.
+ *
+ * A busca por nome continua existindo para quem ainda não é amigo: aqui dá para
+ * conversar com qualquer um, não só com a lista de amizades.
+ */
 export default function CreateGroupDMModal() {
   const closeModal = useUI((s) => s.closeModal);
   const channels = useDMs((s) => s.channels);
   const createGroup = useDMs((s) => s.createGroup);
+  const openWith = useDMs((s) => s.openWith);
+  const friends = useFriends((s) => s.friends);
+  const loadFriends = useFriends((s) => s.load);
+  const statuses = usePresence((s) => s.statuses);
 
-  const contacts = useMemo(() => contactsFromDMs(channels), [channels]);
-  const [name, setName] = useState("");
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<PublicUser[]>([]);
   const [picks, setPicks] = useState<PublicUser[]>([]);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    void loadFriends();
+  }, [loadFriends]);
+
+  // amigos primeiro; quem só tem conversa aberta (e não é amigo) vem depois,
+  // porque continuar uma conversa existente é tão comum quanto começar uma
+  const conhecidos = useMemo(() => {
+    const porId = new Map<string, PublicUser>();
+    for (const u of friends) porId.set(u.id, u);
+    for (const u of contactsFromDMs(channels)) if (!porId.has(u.id)) porId.set(u.id, u);
+    return Array.from(porId.values());
+  }, [friends, channels]);
 
   const q = query.trim();
   useEffect(() => {
@@ -40,9 +70,21 @@ export default function CreateGroupDMModal() {
     };
   }, [q]);
 
-  // resultados da busca primeiro; sem busca, os contatos conhecidos
-  const candidates = q.length >= 2 ? found : contacts;
+  // com busca curta a lista é filtrada em memória; a partir de 2 letras o
+  // servidor completa com quem ainda não está em nenhuma das listas locais
+  const filtrados = q
+    ? conhecidos.filter(
+        (u) =>
+          displayNameOf(u).toLowerCase().includes(q.toLowerCase()) ||
+          u.username.toLowerCase().includes(q.toLowerCase()),
+      )
+    : conhecidos;
+  const conhecidosIds = new Set(conhecidos.map((u) => u.id));
+  const candidates = [...filtrados, ...found.filter((u) => !conhecidosIds.has(u.id))];
   const pickedIds = new Set(picks.map((u) => u.id));
+
+  const grupo = picks.length >= 2;
+  const restantes = MAX_DM_GROUP_INVITEES - picks.length;
 
   function toggle(u: PublicUser) {
     setPicks((prev) => {
@@ -53,9 +95,16 @@ export default function CreateGroupDMModal() {
   }
 
   async function submit() {
-    if (picks.length < 2 || saving) return;
+    if (picks.length === 0 || saving) return;
     setSaving(true);
-    const ok = await createGroup(picks.map((u) => u.id), name.trim() || undefined);
+    // uma pessoa é conversa direta; duas ou mais, grupo
+    if (!grupo) {
+      await openWith(picks[0].id);
+      setSaving(false);
+      closeModal();
+      return;
+    }
+    const ok = await createGroup(picks.map((u) => u.id));
     setSaving(false);
     if (ok) closeModal();
   }
@@ -63,26 +112,23 @@ export default function CreateGroupDMModal() {
   return (
     <Dialog
       title="Selecionar amigos"
-      description={`Você pode adicionar até ${MAX_DM_GROUP_INVITEES} pessoas.`}
+      description={
+        restantes > 0
+          ? `Você pode adicionar mais ${restantes} ${restantes === 1 ? "amigo" : "amigos"}.`
+          : "Este grupo já está cheio."
+      }
       onClose={closeModal}
-      className="w-[440px]"
       footer={
-        <>
-          <PrimaryButton disabled={picks.length < 2 || saving} onClick={submit}>
-            {saving ? "Criando…" : "Criar grupo"}
-          </PrimaryButton>
-          <SecondaryButton onClick={closeModal}>Cancelar</SecondaryButton>
-        </>
+        <button
+          type="button"
+          disabled={picks.length === 0 || saving}
+          onClick={submit}
+          className="h-[38px] w-full rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {saving ? "Abrindo…" : grupo ? "Criar Grupo de DM" : "Abrir conversa"}
+        </button>
       }
     >
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Nome do grupo (opcional)"
-        aria-label="Nome do grupo"
-        className="mb-3 h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
-      />
-
       {picks.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-1">
           {picks.map((u) => (
@@ -91,9 +137,10 @@ export default function CreateGroupDMModal() {
               type="button"
               onClick={() => toggle(u)}
               aria-label={`Remover ${displayNameOf(u)}`}
-              className="rounded-[3px] bg-accent/30 px-2 py-0.5 text-sm text-txt-primary hover:bg-red hover:text-white"
+              className="flex items-center gap-1 rounded-[3px] bg-rail px-2 py-1 text-sm text-txt-primary transition hover:bg-hov"
             >
-              {displayNameOf(u)} ✕
+              {displayNameOf(u)}
+              <X size={14} aria-hidden="true" className="text-txt-muted" />
             </button>
           ))}
         </div>
@@ -103,30 +150,47 @@ export default function CreateGroupDMModal() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         type="search"
-        placeholder="Digite o nome de um usuário"
+        placeholder="Digite o nome de usuário de um amigo"
         aria-label="Buscar usuário"
         className="mb-2 h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
       />
 
-      <div className="max-h-56 overflow-y-auto rounded bg-rail/50">
+      <div className="max-h-56 overflow-y-auto">
         {candidates.length === 0 ? (
           <p className="px-3 py-3 text-sm text-txt-muted">
-            {q.length >= 2 ? "Ninguém com esse nome." : "Busque alguém pelo nome acima."}
+            {q
+              ? "Ninguém com esse nome."
+              : "Você ainda não tem amigos. Busque alguém pelo nome de usuário acima."}
           </p>
         ) : (
-          candidates.map((u) => (
-            <label
-              key={u.id}
-              className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm text-txt-normal hover:bg-hov"
-            >
-              <input type="checkbox" checked={pickedIds.has(u.id)} onChange={() => toggle(u)} />
-              <Avatar user={u} size="sm" />
-              <span className="min-w-0">
-                <span className="block truncate">{displayNameOf(u)}</span>
-                <span className="block truncate text-xs text-txt-muted">@{u.username}</span>
-              </span>
-            </label>
-          ))
+          candidates.map((u) => {
+            const marcado = pickedIds.has(u.id);
+            return (
+              <button
+                key={u.id}
+                type="button"
+                role="checkbox"
+                aria-checked={marcado}
+                onClick={() => toggle(u)}
+                className="flex w-full items-center gap-3 rounded-[3px] px-2 py-1.5 text-left text-sm text-txt-normal hover:bg-hov"
+              >
+                <Avatar user={u} size="md" status={resolveStatus(statuses, u)} surface="border-chat" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-txt-primary">{displayNameOf(u)}</span>
+                  <span className="block truncate text-xs text-txt-muted">@{u.username}</span>
+                </span>
+                {/* círculo que vira ✓: o checkbox nativo não segue o tema */}
+                <span
+                  aria-hidden="true"
+                  className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition ${
+                    marcado ? "border-accent bg-accent text-accent-ink" : "border-txt-faint"
+                  }`}
+                >
+                  {marcado && <Check size={14} strokeWidth={3} />}
+                </span>
+              </button>
+            );
+          })
         )}
       </div>
     </Dialog>

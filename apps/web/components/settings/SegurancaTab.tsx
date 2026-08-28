@@ -1,11 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Copy, Laptop, LogOut, ShieldCheck, ShieldOff, Smartphone } from "lucide-react";
-import { ehDispositivoMovel, resumoDoDispositivo } from "@streamz/shared";
-import type { MfaSetup, MinhaConta, SessaoView } from "@streamz/shared";
-import { Section } from "@/components/settings/controls";
+import { Copy, Download, ShieldCheck, ShieldOff } from "lucide-react";
+import type { MfaSetup, MinhaConta } from "@streamz/shared";
+import { RadioCards, Section } from "@/components/ui/controls";
 import { CampoDeTexto, Erro } from "@/components/settings/campos";
+import {
+  usePrivacidade,
+  type FiltroDeConteudo,
+  type QuemPodeChamar,
+} from "@/stores/privacidade";
 import { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { api } from "@/lib/api";
 import { mensagemDeAuth } from "@/lib/auth-mensagens";
@@ -13,12 +17,16 @@ import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
 
 /**
- * "Privacidade e segurança": verificação em duas etapas, códigos de recuperação
- * e a lista de sessões ativas.
+ * "Privacidade e segurança": verificação em duas etapas, filtro de conteúdo,
+ * quem pode te chamar e o que fazer com os seus dados.
  *
- * As duas metades compartilham um dado — ligar/desligar o 2FA derruba nada, mas
- * encerrar sessões pode derrubar esta aba —, então a conta é recarregada depois
- * de cada operação em vez de ser adivinhada no cliente.
+ * A lista de sessões **não** está aqui: ela é a aba "Dispositivos". Ter as duas
+ * mostrando a mesma lista significava duas telas para encerrar a mesma sessão,
+ * e nenhuma das duas era a resposta óbvia para "onde eu deslogo o outro
+ * computador".
+ *
+ * A conta é recarregada depois de cada operação de 2FA em vez de ser adivinhada
+ * no cliente — quantos códigos de recuperação sobraram é conta do servidor.
  */
 export default function SegurancaTab() {
   const [conta, setConta] = useState<MinhaConta | null>(null);
@@ -38,8 +46,120 @@ export default function SegurancaTab() {
   return (
     <>
       <BlocoDeMfa conta={conta} recarregar={carregar} />
-      <BlocoDeSessoes />
+      <BlocoDeFiltro />
+      <BlocoDeMensagens />
+      <BlocoDeDados conta={conta} />
     </>
+  );
+}
+
+// ── privacidade ──────────────────────────────────────────────
+
+function BlocoDeFiltro() {
+  const filtro = usePrivacidade((s) => s.filtro);
+  const set = usePrivacidade((s) => s.set);
+
+  return (
+    <Section title="Filtro de conteúdo explícito">
+      <RadioCards<FiltroDeConteudo>
+        legend="Filtro de conteúdo explícito"
+        legendaOculta
+        columns={1}
+        value={filtro}
+        onChange={(v) => set({ filtro: v })}
+        options={[
+          {
+            value: "todos",
+            label: "Filtrar tudo",
+            hint: "Toda imagem enviada em conversa direta é analisada.",
+          },
+          {
+            value: "naoAmigos",
+            label: "Filtrar de quem não é meu amigo",
+            hint: "O padrão: seus amigos passam, o resto é analisado.",
+          },
+          {
+            value: "nenhum",
+            label: "Não filtrar",
+            hint: "Nada é analisado. Por sua conta e risco.",
+          },
+        ]}
+      />
+    </Section>
+  );
+}
+
+function BlocoDeMensagens() {
+  const quem = usePrivacidade((s) => s.quemPodeChamar);
+  const set = usePrivacidade((s) => s.set);
+
+  return (
+    <Section title="Quem pode te mandar mensagem">
+      <RadioCards<QuemPodeChamar>
+        legend="Quem pode te mandar mensagem"
+        legendaOculta
+        columns={1}
+        value={quem}
+        onChange={(v) => set({ quemPodeChamar: v })}
+        options={[
+          { value: "todos", label: "Qualquer pessoa" },
+          { value: "amigosDeAmigos", label: "Amigos de amigos" },
+          { value: "amigos", label: "Apenas meus amigos" },
+        ]}
+      />
+      <p className="pt-3 text-xs text-txt-muted">
+        Bloquear alguém encerra a conversa dos dois lados, independente desta escolha.
+      </p>
+    </Section>
+  );
+}
+
+/**
+ * "Dados e privacidade" com a única ação que o app consegue cumprir hoje:
+ * baixar o que a própria API já devolve sobre a conta. Um botão de "solicitar
+ * meus dados" que abre um chamado inexistente seria pior que não ter botão.
+ */
+function BlocoDeDados({ conta }: { conta: MinhaConta | null }) {
+  const [ocupado, setOcupado] = useState(false);
+
+  async function baixar() {
+    setOcupado(true);
+    try {
+      const [perfil, sessoes] = await Promise.all([api.me(), api.sessions().catch(() => [])]);
+      const dados = JSON.stringify({ conta, perfil, sessoes }, null, 2);
+      const url = URL.createObjectURL(new Blob([dados], { type: "application/json" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "streamz-meus-dados.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      ui.toast(errorMessage(e, "Não foi possível montar o arquivo"), "error");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  return (
+    <Section title="Dados e privacidade" semDivisoria>
+      <div className="flex items-center justify-between gap-4 py-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-txt-primary">Baixar meus dados</p>
+          <p className="mt-0.5 text-xs text-txt-muted">
+            Um arquivo com a sua conta, o seu perfil e as suas sessões ativas.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={ocupado}
+          onClick={() => void baixar()}
+          className="flex h-8 shrink-0 items-center gap-1.5 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover disabled:opacity-50"
+        >
+          <Download size={14} aria-hidden="true" />
+          {ocupado ? "Montando…" : "Baixar"}
+        </button>
+      </div>
+    </Section>
   );
 }
 
@@ -139,8 +259,8 @@ function BlocoDeMfa({
   const ligado = !!conta?.mfaEnabled;
 
   return (
-    <Section title="Verificação em duas etapas">
-      <div className="flex items-center justify-between gap-4 border-b border-[#3f4147] py-3">
+    <Section title="Segurança da conta">
+      <div className="flex items-center justify-between gap-4 border-b border-border py-3">
         <div className="min-w-0">
           <p className="flex items-center gap-2 text-sm font-medium text-txt-primary">
             {ligado ? (
@@ -161,7 +281,7 @@ function BlocoDeMfa({
             <button
               type="button"
               onClick={() => (regerando ? limpar() : (setDesligando(false), setRegerando(true)))}
-              className="h-8 rounded-[3px] bg-[#4e5058] px-3 text-sm font-medium text-txt-normal hover:bg-[#6d6f78]"
+              className="h-8 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
             >
               {regerando ? "Cancelar" : "Novos códigos"}
             </button>
@@ -179,7 +299,7 @@ function BlocoDeMfa({
               type="button"
               disabled={ocupado}
               onClick={() => (setup ? limpar() : void comecar())}
-              className="h-8 rounded-[3px] bg-accent px-3 text-sm font-medium text-white transition hover:bg-accent-hover disabled:opacity-50"
+              className="h-8 rounded-[3px] bg-accent px-3 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
             >
               {setup ? "Cancelar" : "Ativar"}
             </button>
@@ -319,7 +439,7 @@ function CodigosDeRecuperacao({
         <button
           type="button"
           onClick={baixar}
-          className="h-8 rounded-[3px] bg-[#4e5058] px-3 text-sm font-medium text-txt-normal hover:bg-[#6d6f78]"
+          className="h-8 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
         >
           Baixar .txt
         </button>
@@ -343,128 +463,10 @@ function BotaoCopiar({ texto, rotulo }: { texto: string; rotulo: string }) {
           })
           .catch(() => ui.toast("Não foi possível copiar", "error"));
       }}
-      className="mt-2 flex h-8 items-center gap-1.5 rounded-[3px] bg-[#4e5058] px-3 text-sm font-medium text-txt-normal hover:bg-[#6d6f78]"
+      className="mt-2 flex h-8 items-center gap-1.5 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
     >
       <Copy size={14} aria-hidden="true" />
       {copiado ? "Copiado!" : rotulo}
     </button>
   );
-}
-
-// ── sessões ──────────────────────────────────────────────────
-
-function BlocoDeSessoes() {
-  const [sessoes, setSessoes] = useState<SessaoView[] | null>(null);
-  const [carregando, setCarregando] = useState(true);
-
-  const carregar = useCallback(async () => {
-    setCarregando(true);
-    try {
-      setSessoes(await api.sessions());
-    } catch (e) {
-      ui.toast(errorMessage(e, "Não foi possível carregar suas sessões"), "error");
-    } finally {
-      setCarregando(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void carregar();
-  }, [carregar]);
-
-  async function encerrar(id: string) {
-    try {
-      await api.revokeSession(id);
-      setSessoes((atuais) => atuais?.filter((s) => s.id !== id) ?? null);
-    } catch (e) {
-      ui.toast(errorMessage(e, "Não foi possível encerrar a sessão"), "error");
-    }
-  }
-
-  async function encerrarOutras() {
-    const ok = await ui.confirm({
-      title: "Encerrar as outras sessões?",
-      message: "Todos os outros aparelhos vão precisar entrar de novo.",
-      confirmLabel: "Encerrar",
-      danger: true,
-    });
-    if (!ok) return;
-    try {
-      await api.revokeOtherSessions();
-      setSessoes((atuais) => atuais?.filter((s) => s.current) ?? null);
-      ui.toast("Outras sessões encerradas.");
-    } catch (e) {
-      ui.toast(errorMessage(e, "Não foi possível encerrar as sessões"), "error");
-    }
-  }
-
-  const outras = (sessoes ?? []).filter((s) => !s.current);
-
-  return (
-    <Section title="Sessões ativas">
-      <p className="mb-1 text-sm text-txt-muted">
-        Cada aparelho conectado à sua conta. Encerrar uma sessão desconecta aquele aparelho.
-      </p>
-
-      {carregando && <p className="py-3 text-sm text-txt-muted">Carregando…</p>}
-
-      {!carregando &&
-        (sessoes ?? []).map((sessao) => (
-          <div
-            key={sessao.id}
-            className="flex items-center gap-3 border-b border-[#3f4147] py-3 last:border-b-0"
-          >
-            {ehDispositivoMovel(sessao.userAgent) ? (
-              <Smartphone size={20} className="shrink-0 text-txt-muted" aria-hidden="true" />
-            ) : (
-              <Laptop size={20} className="shrink-0 text-txt-muted" aria-hidden="true" />
-            )}
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-txt-primary">
-                {resumoDoDispositivo(sessao.userAgent)}
-                {sessao.current && (
-                  <span className="ml-2 rounded-[3px] bg-green px-1.5 py-0.5 text-[11px] font-bold text-white">
-                    Este aparelho
-                  </span>
-                )}
-              </p>
-              <p className="truncate text-xs text-txt-muted">
-                {sessao.ip ? `${sessao.ip} · ` : ""}
-                desde {dataCurta(sessao.createdAt)}
-                {sessao.lastUsedAt ? ` · usada em ${dataCurta(sessao.lastUsedAt)}` : ""}
-              </p>
-            </div>
-            {!sessao.current && (
-              <button
-                type="button"
-                onClick={() => void encerrar(sessao.id)}
-                className="flex h-8 shrink-0 items-center gap-1.5 rounded-[3px] px-2 text-sm font-medium text-red transition hover:bg-red hover:text-white"
-              >
-                <LogOut size={16} aria-hidden="true" />
-                Encerrar
-              </button>
-            )}
-          </div>
-        ))}
-
-      {!carregando && outras.length === 0 && (
-        <p className="py-3 text-sm text-txt-muted">Nenhum outro aparelho conectado.</p>
-      )}
-
-      {outras.length > 0 && (
-        <button
-          type="button"
-          onClick={() => void encerrarOutras()}
-          className="mt-4 h-9 rounded-[3px] bg-red px-3 text-sm font-medium text-white hover:bg-red-hover"
-        >
-          Encerrar todas as outras
-        </button>
-      )}
-    </Section>
-  );
-}
-
-function dataCurta(iso: string): string {
-  const data = new Date(iso);
-  return Number.isNaN(data.getTime()) ? "—" : data.toLocaleDateString();
 }

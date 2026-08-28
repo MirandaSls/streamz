@@ -54,55 +54,42 @@ e o resto do app segue igual.
       [developers.google.com/tenor](https://developers.google.com/tenor/guides/quickstart)
       e preencher `TENOR_API_KEY` no `.env`.
 - _Emojis personalizados e figurinhas, ao contrário, **dependem do R2** (item 1b):
-  a imagem vai para o bucket; sem credencial o upload responde 503 com o motivo._
-## 1d. SMTP (opcional — só bloqueia o e-mail *de verdade*)
-Criar conta **não envia e-mail** (a confirmação é a pedido, na aba Conta). A
-confirmação e o "esqueci a senha" funcionam **sem configurar nada** em dev: o
-provedor `console` do `MailService` imprime assunto e link no log da API, e o fluxo
-inteiro (pedir o link → clicar → verificar) roda copiando o link do terminal.
-
-- [ ] Para enviar de verdade, preencher no `.env`:
-      `SMTP_URL="smtp://usuario:senha@host:587"` e `SMTP_FROM`. Serve qualquer
-      provedor SMTP (Resend, Postmark, SES, Mailtrap para teste).
-- [ ] `WEB_PUBLIC_URL` precisa apontar para a **web** (não para a API): é a base dos
-      links do e-mail. Padrão `http://localhost:3000`.
-
-> Em produção (`NODE_ENV=production`) a ausência de `SMTP_URL` faz as rotas que
-> dependem de envio responderem `503`, como R2 e LiveKit. Em dev, não — senão o
-> recurso ficaria impossível de exercitar.
+  a imagem vai para o bucket; sem credencial o upload responde 503 com o motivo.
 
 ## 2. LiveKit (bloqueia a voz — Dia 4)
-O código de voz é **agnóstico de provedor** (só usa `LIVEKIT_URL/KEY/SECRET`).
-Duas formas de rodar — escolha uma:
+O código de voz é **agnóstico de provedor** (só usa `LIVEKIT_URL/KEY/SECRET`, e
+`VoiceService.assinarToken` devolve a URL junto do token). Sem as três, a rota
+`/voice/token` responde `503` e o resto do app funciona.
 
-**Opção A — Self-host via Docker (preparado):**
-- [x] Serviço `livekit` no `docker-compose.yml` (profile `livekit`) + modelo de
-      config em `livekit.example.yaml` + scripts `pnpm livekit:up` / `livekit:down`.
-- [ ] Criar o `livekit.yaml` **local** (ele é ignorado pelo git porque carrega o
-      secret real; o docker-compose monta esse caminho):
+**Escolhido: self-host** ([ADR-0005](docs/adr/0005-self-host-do-livekit.md),
+que substitui a ADR-0003). Com o público concentrado no Brasil e o servidor em
+São Paulo, o *cascading* do Cloud — a única capacidade que o build aberto não
+tem — deixa de comprar qualidade. **Não há chave de terceiro para pedir:** o
+secret é gerado com `openssl rand -hex 32`.
 
-      cp livekit.example.yaml livekit.yaml
-      openssl rand -hex 32          # gere o secret
+- [ ] Subir o LiveKit em dev (`pnpm livekit:up`) — **depende do Docker**, que não
+      roda nesta máquina (WSL sem distro), não de credencial.
+- [ ] Produção: `docs/selfhost-livekit.md` (DNS, UDP 7882, Caddy, `use_external_ip`).
+- [ ] **CSP do desktop só libera localhost e `*.livekit.cloud`**
+      (`apps/desktop/src-tauri/tauri.conf.json`, `connect-src`). Com self-host em
+      domínio próprio, o app desktop bloqueia a conexão **em silêncio** — e o
+      mesmo vale para a API de produção (`connect-src`) e para os anexos
+      (`img-src`, hoje preso em `http://localhost:3333`). Corrigir exige só saber
+      os domínios finais; não depende de nenhuma chave.
 
-      Cole o valor gerado nos **dois** lugares — `keys: devkey: <secret>` no
-      `livekit.yaml` e `LIVEKIT_API_SECRET` no `.env`. Eles precisam **bater**,
-      senão o token de acesso é rejeitado pelo servidor.
-- [ ] `pnpm livekit:up` e usar no `.env` (Opção A): `LIVEKIT_URL=ws://localhost:7880`,
-      `NEXT_PUBLIC_LIVEKIT_URL=ws://localhost:7880`, `LIVEKIT_API_KEY=devkey`.
-
-**Opção B — LiveKit Cloud:**
-- [ ] Criar conta e um *project* em [cloud.livekit.io](https://cloud.livekit.io).
-- [ ] Copiar **URL** (`wss://...`), **API Key** e **API Secret** para o `.env`
-      (`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`,
-      `NEXT_PUBLIC_LIVEKIT_URL`).
+`NEXT_PUBLIC_LIVEKIT_URL` **não é lida por nenhum arquivo da web**: o cliente
+conecta na URL que vem no `VoiceTokenResponse`. Ela sobrevive só como build-arg
+do `apps/web/Dockerfile` e do `docker-compose.yml`; não precisa ser preenchida.
 
 ## 3. Rust / cargo (bloqueia o build do desktop — Dia 5)
 - [x] ~~Instalar via [rustup.rs](https://rustup.rs)~~ — feito em 2026-08-25
       (cargo 1.98). O `cargo` fica em `%USERPROFILE%\.cargo\bin`; se um terminal
       antigo não achar, reabra.
-- [x] ~~Gerar os ícones do app~~ — feito a partir de `apps/desktop/logo.svg`
-      (balão do rail sobre o blurple). Para trocar o logo, edite o SVG e rode
-      `pnpm --filter @streamz/desktop tauri icon logo.svg`.
+- [x] ~~Gerar os ícones do app~~ — regerados em 2026-08-26 a partir de
+      `apps/desktop/logo.svg` (símbolo da marca, Volt Lime sobre Void Ink).
+      Para trocar o logo, edite o SVG e rode
+      `pnpm --filter @streamz/desktop exec tauri icon logo.svg`; `docs/branding/`
+      diz quais PNGs a web copia depois.
 - [ ] `pnpm --filter @streamz/desktop tauri build` — gera o instalador em
       `apps/desktop/src-tauri/target/release/bundle/`.
 
@@ -112,10 +99,6 @@ comentado — ele liga por ambiente (`TAURI_ENV_*`, que o Tauri injeta no
 `beforeBuildCommand`, ou `NEXT_OUTPUT=export` na mão), então o build web normal
 (`next start`) continua funcionando. Motivo da escolha e alternativa descartada
 (carregar URL remota): `apps/desktop/README.md`.
-
-## 4. Segredos do `.env`
-- [ ] Trocar `JWT_SECRET` e `JWT_REFRESH_SECRET` por strings aleatórias longas
-      (ex.: `openssl rand -hex 32`).
 
 ## 5. Mais adiante (pós-MVP)
 - [ ] **Auto-update do desktop** — o `tauri-plugin-updater` foi **desligado**
@@ -131,9 +114,7 @@ comentado — ele liga por ambiente (`TAURI_ENV_*`, que o Tauri injeta no
         `apps/desktop/README.md` (seção "Auto-update").
 - [ ] Assinatura de código do instalador Windows (Azure Trusted Signing) — remove
       o alerta do SmartScreen ao enviar o `.exe`.
-- [ ] Migrar a mídia de LiveKit Cloud para **self-host** (call sem limite de
-      tempo) quando o MVP estiver validado.
-
+      
 ## 6. Backlog de escopo (próximos blocos)
 Ordem sugerida dos próximos blocos de features:
 

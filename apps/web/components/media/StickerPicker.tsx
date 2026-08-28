@@ -1,15 +1,45 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Settings2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Clock, Settings2, Star } from "lucide-react";
 import type { Sticker } from "@streamz/shared";
 import { useAuth } from "@/stores/auth";
 import { useEmojis } from "@/stores/emojis";
 import { useCanModerate, useGuilds } from "@/stores/guilds";
 import { ui } from "@/stores/ui";
+import {
+  BotaoLateral,
+  BuscaPicker,
+  CaixaPicker,
+  ColunaLateral,
+  DivisoriaLateral,
+  IconeServidor,
+  RodapePicker,
+} from "@/components/media/PickerChrome";
+import {
+  figurinhasFrequentes,
+  registrarUsoFigurinha,
+  usePrefsPicker,
+} from "@/components/media/preferencias-picker";
+
+/** 4 por linha no painel de 424px, com a coluna de packs à esquerda. */
+const COLUNAS = 4;
+const CELULA = 88;
+
+interface SecaoFigurinha {
+  id: string;
+  titulo: string;
+  icone:
+    | { tipo: "recentes" }
+    | { tipo: "frequentes" }
+    | { tipo: "servidor"; nome: string; url: string | null };
+  itens: { sticker: Sticker; pack: string }[];
+}
 
 /**
- * Seletor de figurinha: as dos meus servidores, com o servidor aberto primeiro.
+ * Seletor de figurinha: coluna de packs à esquerda, grade rolável no meio e o
+ * nome da figurinha em foco no rodapé — o mesmo desenho do seletor de emoji,
+ * porque no Discord os dois são o mesmo painel com abas.
  *
  * A busca olha nome **e** palavras-chave — é para isso que a figurinha guarda
  * `tags`; procurar só pelo nome obrigaria a lembrar como quem subiu a batizou.
@@ -18,119 +48,280 @@ export default function StickerPicker({
   onEscolher,
   onClose,
   className = "",
+  embutido = false,
+  guildId,
 }: {
   onEscolher: (sticker: Sticker) => void;
   onClose: () => void;
   className?: string;
+  /** dentro do `PickerPanel` a caixa e o fechar são do painel, não daqui. */
+  embutido?: boolean;
+  /** servidor a priorizar; sem isso vale o servidor aberto. */
+  guildId?: string | null;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
   const [busca, setBusca] = useState("");
-  const guildIdAtivo = useGuilds((s) => s.activeGuildId);
-  const secoes = useEmojis((s) => s.stickerGuilds);
+  const [foco, setFoco] = useState<{ sticker: Sticker; pack: string } | null>(null);
+  const [ativa, setAtiva] = useState("");
+  const guildIdAtivoStore = useGuilds((s) => s.activeGuildId);
+  const guildIdAtivo = guildId !== undefined ? guildId : guildIdAtivoStore;
+  const packs = useEmojis((s) => s.stickerGuilds);
   const me = useAuth((s) => s.user);
   const podeGerenciar = useCanModerate(me?.id);
+  const prefs = usePrefsPicker();
+
+  const rolagem = useRef<HTMLDivElement>(null);
+  const alvos = useRef(new Map<string, HTMLElement>());
+
+  const buscando = busca.trim().length > 0;
+
+  /** ordem dos packs: o servidor aberto primeiro, como no rail. */
+  const ordenados = useMemo(() => {
+    if (!guildIdAtivo) return packs;
+    return [
+      ...packs.filter((p) => p.guildId === guildIdAtivo),
+      ...packs.filter((p) => p.guildId !== guildIdAtivo),
+    ];
+  }, [packs, guildIdAtivo]);
+
+  const porId = useMemo(() => {
+    const mapa = new Map<string, { sticker: Sticker; pack: string }>();
+    for (const p of packs) {
+      for (const s of p.stickers) mapa.set(s.id, { sticker: s, pack: p.guildName });
+    }
+    return mapa;
+  }, [packs]);
+
+  const secoes = useMemo<SecaoFigurinha[]>(() => {
+    if (buscando) {
+      const q = busca.trim().toLowerCase();
+      const itens = [...porId.values()].filter(
+        ({ sticker }) =>
+          sticker.name.toLowerCase().includes(q) || sticker.tags.toLowerCase().includes(q),
+      );
+      return [{ id: "busca", titulo: "Resultados", icone: { tipo: "recentes" }, itens }];
+    }
+
+    const lista: SecaoFigurinha[] = [];
+
+    const recentes = prefs.figurinhasRecentes
+      .map((id) => porId.get(id))
+      .filter((x): x is { sticker: Sticker; pack: string } => x !== undefined);
+    if (recentes.length > 0) {
+      lista.push({
+        id: "recentes",
+        titulo: "Recentes",
+        icone: { tipo: "recentes" },
+        itens: recentes,
+      });
+    }
+
+    const frequentes = figurinhasFrequentes(prefs)
+      .map((id) => porId.get(id))
+      .filter((x): x is { sticker: Sticker; pack: string } => x !== undefined);
+    if (frequentes.length > 0) {
+      lista.push({
+        id: "frequentes",
+        titulo: "Frequentes",
+        icone: { tipo: "frequentes" },
+        itens: frequentes,
+      });
+    }
+
+    for (const pack of ordenados) {
+      if (pack.stickers.length === 0) continue;
+      lista.push({
+        id: `guild:${pack.guildId}`,
+        titulo: pack.guildName,
+        icone: { tipo: "servidor", nome: pack.guildName, url: pack.guildIconUrl },
+        itens: pack.stickers.map((sticker) => ({ sticker, pack: pack.guildName })),
+      });
+    }
+
+    return lista;
+  }, [buscando, busca, porId, prefs, ordenados]);
+
+  const registrarSecao = useCallback((id: string, el: HTMLElement | null) => {
+    if (el) alvos.current.set(id, el);
+    else alvos.current.delete(id);
+  }, []);
+
+  const aoRolar = useCallback(() => {
+    const caixa = rolagem.current;
+    if (!caixa) return;
+    let atual = "";
+    for (const [id, el] of alvos.current) {
+      if (el.offsetTop - caixa.scrollTop <= 8) atual = id;
+    }
+    setAtiva(atual);
+  }, []);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    const onDown = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("mousedown", onDown);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("mousedown", onDown);
-    };
-  }, [onClose]);
+    rolagem.current?.scrollTo({ top: 0 });
+    setAtiva("");
+  }, [buscando]);
 
-  const ordenadas = useMemo(() => {
-    const q = busca.trim().toLowerCase();
-    const ordem = guildIdAtivo
-      ? [
-          ...secoes.filter((s) => s.guildId === guildIdAtivo),
-          ...secoes.filter((s) => s.guildId !== guildIdAtivo),
-        ]
-      : secoes;
-    if (!q) return ordem;
-    return ordem
-      .map((s) => ({
-        ...s,
-        stickers: s.stickers.filter((f) => f.name.includes(q) || f.tags.includes(q)),
-      }))
-      .filter((s) => s.stickers.length > 0);
-  }, [secoes, guildIdAtivo, busca]);
+  function irPara(id: string) {
+    const el = alvos.current.get(id);
+    const caixa = rolagem.current;
+    if (!el || !caixa) return;
+    caixa.scrollTo({ top: el.offsetTop, behavior: "smooth" });
+    setAtiva(id);
+  }
 
-  const vazio = ordenadas.every((s) => s.stickers.length === 0);
+  const vazio = secoes.every((s) => s.itens.length === 0);
+
+  const corpo = (
+    <div className="flex h-full min-h-0 flex-col">
+      <BuscaPicker
+        valor={busca}
+        onChange={setBusca}
+        placeholder="Buscar figurinha"
+        rotulo="Buscar figurinha"
+        autoFocus
+      />
+
+      <div className="flex min-h-0 flex-1">
+        <ColunaLateral rotulo="Pacotes de figurinha">
+          {secoes.map((secao, i) => (
+            <div key={secao.id} className="contents">
+              {i > 0 &&
+                secao.id.startsWith("guild:") &&
+                !secoes[i - 1].id.startsWith("guild:") && <DivisoriaLateral />}
+              <BotaoLateral
+                rotulo={secao.titulo}
+                ativo={(ativa || secoes[0]?.id) === secao.id}
+                onClick={() => irPara(secao.id)}
+              >
+                {secao.icone.tipo === "servidor" ? (
+                  <IconeServidor nome={secao.icone.nome} iconUrl={secao.icone.url} />
+                ) : secao.icone.tipo === "frequentes" ? (
+                  <Star size={18} />
+                ) : (
+                  <Clock size={18} />
+                )}
+              </BotaoLateral>
+            </div>
+          ))}
+        </ColunaLateral>
+
+        <div
+          ref={rolagem}
+          onScroll={aoRolar}
+          // `relative` ancora o `offsetTop` das seções aqui: é o que o atalho
+          // da coluna lateral usa para rolar até o pack certo
+          className="relative min-h-0 flex-1 overflow-y-auto px-2 pb-2"
+        >
+          {vazio ? (
+            <p className="px-2 py-10 text-center text-sm text-txt-muted">
+              {buscando
+                ? "Nenhuma figurinha com esse nome."
+                : "Seus servidores ainda não têm figurinhas."}
+            </p>
+          ) : (
+            secoes.map((secao) => (
+              <SecaoGrade
+                key={secao.id}
+                secao={secao}
+                onRegistrar={registrarSecao}
+                onFocar={setFoco}
+                onEscolher={(sticker) => {
+                  registrarUsoFigurinha(sticker.id);
+                  onEscolher(sticker);
+                }}
+              />
+            ))
+          )}
+        </div>
+      </div>
+
+      <RodapePicker>
+        {foco ? (
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold text-txt-primary">
+              {foco.sticker.name}
+            </span>
+            <span className="block truncate text-[11px] text-txt-muted">{foco.pack}</span>
+          </span>
+        ) : (
+          <span className="flex-1 text-sm text-txt-muted">Escolha uma figurinha</span>
+        )}
+        {podeGerenciar && guildIdAtivo && (
+          <button
+            type="button"
+            title="Gerenciar figurinhas do servidor"
+            aria-label="Gerenciar figurinhas do servidor"
+            onClick={() => {
+              onClose();
+              ui.openModal({ kind: "guildEmojis", guildId: guildIdAtivo });
+            }}
+            className="grid h-7 w-7 shrink-0 place-items-center rounded text-txt-muted transition hover:bg-hov hover:text-txt-normal"
+          >
+            <Settings2 size={16} aria-hidden="true" />
+          </button>
+        )}
+      </RodapePicker>
+    </div>
+  );
+
+  if (embutido) return corpo;
+  return (
+    <CaixaPicker rotulo="Escolher figurinha" onClose={onClose} className={className}>
+      {corpo}
+    </CaixaPicker>
+  );
+}
+
+function SecaoGrade({
+  secao,
+  onRegistrar,
+  onEscolher,
+  onFocar,
+}: {
+  secao: SecaoFigurinha;
+  onRegistrar: (id: string, el: HTMLElement | null) => void;
+  onEscolher: (sticker: Sticker) => void;
+  onFocar: (item: { sticker: Sticker; pack: string } | null) => void;
+}) {
+  const ref = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    onRegistrar(secao.id, ref.current);
+    return () => onRegistrar(secao.id, null);
+  }, [onRegistrar, secao.id]);
 
   return (
-    <div
-      ref={ref}
-      role="dialog"
-      aria-label="Escolher figurinha"
-      className={`z-[70] flex h-[420px] w-[352px] flex-col overflow-hidden rounded-lg bg-panel shadow-high ${className}`}
-    >
-      <div className="p-2">
-        <input
-          autoFocus
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          placeholder="Buscar figurinha"
-          aria-label="Buscar figurinha"
-          className="h-8 w-full rounded bg-rail px-2 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
-        />
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-        {vazio ? (
-          <p className="px-2 py-10 text-center text-sm text-txt-muted">
-            {busca.trim()
-              ? "Nenhuma figurinha com esse nome."
-              : "Seus servidores ainda não têm figurinhas."}
-          </p>
-        ) : (
-          ordenadas.map((secao) => (
-            <section key={secao.guildId} className="mb-2">
-              <h3 className="px-1 py-1 text-xs font-semibold uppercase text-txt-muted">
-                {secao.guildName}
-              </h3>
-              <div className="grid grid-cols-3 gap-2">
-                {secao.stickers.map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    title={f.name}
-                    aria-label={f.name}
-                    onClick={() => onEscolher(f)}
-                    className="grid h-24 place-items-center rounded hover:bg-hov"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={f.url}
-                      alt={f.name}
-                      loading="lazy"
-                      className="h-20 w-20 object-contain"
-                    />
-                  </button>
-                ))}
-              </div>
-            </section>
-          ))
+    <section ref={ref} className="mb-1">
+      <h3 className="sticky top-0 z-10 flex items-center gap-1.5 bg-panel px-1 py-1.5 text-xs font-semibold uppercase tracking-wide text-txt-muted">
+        {secao.icone.tipo === "servidor" && (
+          <IconeServidor nome={secao.icone.nome} iconUrl={secao.icone.url} />
         )}
+        <span className="truncate">{secao.titulo}</span>
+      </h3>
+      <div
+        className="grid gap-1"
+        style={{ gridTemplateColumns: `repeat(${COLUNAS}, minmax(0, 1fr))` }}
+      >
+        {secao.itens.map(({ sticker, pack }) => (
+          <button
+            key={`${secao.id}-${sticker.id}`}
+            type="button"
+            aria-label={sticker.name}
+            onClick={() => onEscolher(sticker)}
+            onPointerEnter={() => onFocar({ sticker, pack })}
+            onFocus={() => onFocar({ sticker, pack })}
+            style={{ height: CELULA }}
+            className="grid place-items-center rounded transition hover:bg-hov"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={sticker.url}
+              alt={sticker.name}
+              loading="lazy"
+              className="h-[76px] w-[76px] object-contain"
+            />
+          </button>
+        ))}
       </div>
-
-      {podeGerenciar && guildIdAtivo && (
-        <button
-          type="button"
-          onClick={() => {
-            onClose();
-            ui.openModal({ kind: "guildEmojis", guildId: guildIdAtivo });
-          }}
-          className="flex items-center gap-2 border-t border-black/30 px-3 py-2 text-sm text-txt-link hover:underline"
-        >
-          <Settings2 size={16} aria-hidden="true" />
-          Gerenciar figurinhas do servidor
-        </button>
-      )}
-    </div>
+    </section>
   );
 }

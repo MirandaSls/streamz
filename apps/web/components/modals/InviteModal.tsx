@@ -1,19 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, Link2, Settings2 } from "lucide-react";
+import { Check, Hash } from "lucide-react";
 import {
   INVITE_EXPIRY_OPTIONS,
   INVITE_USES_OPTIONS,
   WS_EVENTS,
   displayNameOf,
   type InviteInfo,
+  type PublicUser,
 } from "@streamz/shared";
-import Dialog, { SecondaryButton } from "@/components/modals/Dialog";
+import Dialog from "@/components/modals/Dialog";
+import { Select, ToggleLinha } from "@/components/ui/controls";
 import Avatar from "@/components/ui/Avatar";
 import { api } from "@/lib/api";
 import { useChannels } from "@/stores/channels";
-import { dmTitle, useDMs } from "@/stores/dms";
+import { useFriends } from "@/stores/friends";
+import { useGuilds } from "@/stores/guilds";
+import { resolveStatus, usePresence } from "@/stores/presence";
 import { emit, errorMessage } from "@/stores/socket-adapter";
 import { ui, useUI } from "@/stores/ui";
 
@@ -23,24 +27,43 @@ export function inviteUrl(code: string): string {
   return `${base}/invite/${code}`;
 }
 
+/** "7 dias", "3 horas", "12 minutos" — o quanto ainda falta para expirar. */
+function faltamAte(iso: string, agora = Date.now()): string {
+  const ms = new Date(iso).getTime() - agora;
+  if (!Number.isFinite(ms) || ms <= 0) return "menos de um minuto";
+  const minutos = Math.round(ms / 60_000);
+  if (minutos < 60) return `${minutos} ${minutos === 1 ? "minuto" : "minutos"}`;
+  const horas = Math.round(minutos / 60);
+  if (horas < 24) return `${horas} ${horas === 1 ? "hora" : "horas"}`;
+  const dias = Math.round(horas / 24);
+  return `${dias} ${dias === 1 ? "dia" : "dias"}`;
+}
+
 /**
- * "Convidar amigos", como no Discord: o link no topo, a lista de conversas com
- * botão "Convidar" (manda o link na DM) e as opções de expiração/usos atrás de
- * "Editar convite".
+ * "Convidar amigos para <servidor>": a lista de **amigos** com um botão cada, o
+ * link colável embaixo e as opções atrás de "Editar link de convite".
  *
- * As conversas fazem o papel da lista de amigos enquanto o módulo social não
- * existe: convidar alguém é mandar o link para uma conversa que já existe.
+ * As opções abrem numa segunda caixa por cima desta, e não inline: é o que o
+ * Discord faz, e agora que os modais empilham a de baixo continua no lugar.
  */
-export default function InviteModal({ guildId, code: initialCode }: { guildId: string; code?: string }) {
+export default function InviteModal({
+  guildId,
+  code: initialCode,
+}: {
+  guildId: string;
+  code?: string;
+}) {
   const closeModal = useUI((s) => s.closeModal);
-  const dms = useDMs((s) => s.channels);
-  const refreshDMs = useDMs((s) => s.refreshList);
+  const guild = useGuilds((s) => s.guilds.find((g) => g.id === guildId) ?? null);
+  const friends = useFriends((s) => s.friends);
+  const loadFriends = useFriends((s) => s.load);
+  const statuses = usePresence((s) => s.statuses);
   const channels = useChannels((s) => s.channels);
 
   const [invite, setInvite] = useState<InviteInfo | null>(null);
   const [code, setCode] = useState(initialCode ?? "");
   const [copied, setCopied] = useState(false);
-  const [editing, setEditing] = useState(false);
+  const [editando, setEditando] = useState(false);
   const [convidados, setConvidados] = useState<string[]>([]);
   const [busca, setBusca] = useState("");
 
@@ -51,10 +74,11 @@ export default function InviteModal({ guildId, code: initialCode }: { guildId: s
   const [channelId, setChannelId] = useState("");
 
   const textos = channels.filter((c) => c.type === "TEXT");
+  const destino = textos.find((c) => c.id === channelId) ?? textos[0] ?? null;
 
   useEffect(() => {
-    void refreshDMs();
-  }, [refreshDMs]);
+    void loadFriends();
+  }, [loadFriends]);
 
   // cria um convite assim que o modal abre (sem código pronto), como o Discord
   useEffect(() => {
@@ -97,180 +121,204 @@ export default function InviteModal({ guildId, code: initialCode }: { guildId: s
       setInvite(novo);
       setCode(novo.code);
       setCopied(false);
-      setEditing(false);
+      setEditando(false);
       ui.toast("Novo link de convite gerado.");
     } catch (e) {
       ui.toast(errorMessage(e, "Não foi possível gerar o convite"), "error");
     }
   }
 
-  /** Manda o link do convite na conversa — é o "Convidar" da lista de amigos. */
-  function convidar(dmChannelId: string) {
+  /**
+   * Manda o link na conversa direta com o amigo.
+   *
+   * Abre a conversa pela API em vez de `useDMs.openWith`: aquele muda a coluna
+   * para o modo DM, e convidar de dentro do servidor não pode tirar ninguém de
+   * onde estava.
+   */
+  async function convidar(amigo: PublicUser) {
     if (!url) return;
-    emit(WS_EVENTS.MESSAGE_CREATE, { channelId: dmChannelId, content: url });
-    setConvidados((prev) => [...prev, dmChannelId]);
+    try {
+      const dm = await api.openDM(amigo.id);
+      emit(WS_EVENTS.MESSAGE_CREATE, { channelId: dm.id, content: url });
+      setConvidados((prev) => [...prev, amigo.id]);
+    } catch (e) {
+      ui.toast(errorMessage(e, "Não foi possível enviar o convite"), "error");
+    }
   }
 
-  const lista = dms.filter((d) => dmTitle(d).toLowerCase().includes(busca.trim().toLowerCase()));
+  const termo = busca.trim().toLowerCase();
+  const lista = friends.filter(
+    (f) =>
+      !termo ||
+      displayNameOf(f).toLowerCase().includes(termo) ||
+      f.username.toLowerCase().includes(termo),
+  );
 
   return (
-    <Dialog
-      title="Convidar amigos"
-      description="Quem abrir este link entra no servidor."
-      onClose={closeModal}
-      className="w-[460px]"
-      footer={<SecondaryButton full onClick={closeModal}>Fechar</SecondaryButton>}
-    >
-      <input
-        value={busca}
-        onChange={(e) => setBusca(e.target.value)}
-        aria-label="Buscar conversa"
-        placeholder="Buscar conversa"
-        className="mb-3 h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
-      />
-
-      <div role="list" className="max-h-64 overflow-y-auto">
-        {lista.length === 0 ? (
-          <p className="px-2 py-3 text-sm text-txt-muted">
-            Nenhuma conversa por aqui ainda. Copie o link abaixo e mande do jeito que preferir.
+    <>
+      <Dialog title={`Convidar amigos para ${guild?.name ?? "o servidor"}`} onClose={closeModal}>
+        {destino && (
+          <p className="mb-3 flex items-center gap-1 text-sm text-txt-muted">
+            <Hash size={16} aria-hidden="true" className="shrink-0" />
+            {destino.name}
           </p>
-        ) : (
-          lista.map((d) => {
-            const convidado = convidados.includes(d.id);
-            const outro = d.others[0];
-            return (
-              <div
-                key={d.id}
-                role="listitem"
-                className="flex h-[42px] items-center gap-3 rounded px-2 hover:bg-hov"
-              >
-                {outro ? (
-                  <Avatar user={outro} size="md" surface="border-chat" />
-                ) : (
-                  <span aria-hidden="true" className="h-8 w-8 shrink-0 rounded-full bg-rail" />
-                )}
-                <span className="min-w-0 flex-1 truncate text-sm text-txt-normal">
-                  {outro ? displayNameOf(outro) : dmTitle(d)}
-                </span>
-                <button
-                  type="button"
-                  disabled={convidado || !url}
-                  onClick={() => convidar(d.id)}
-                  className={`h-8 rounded-[3px] px-3 text-sm font-medium transition ${
-                    convidado
-                      ? "cursor-default border border-[#4e5058] text-txt-muted"
-                      : "bg-accent text-white hover:bg-accent-hover disabled:opacity-50"
-                  }`}
-                >
-                  {convidado ? "Convidado" : "Convidar"}
-                </button>
-              </div>
-            );
-          })
         )}
-      </div>
 
-      <p className="mb-2 mt-5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
-        <Link2 size={14} aria-hidden="true" />
-        Ou mande um link de convite
-      </p>
-      <div className="flex items-center gap-2">
-        <code className="min-w-0 flex-1 select-all truncate rounded-[3px] bg-rail px-3 py-2 font-mono text-sm text-txt-normal">
-          {url || "gerando…"}
-        </code>
-        <button
-          type="button"
-          disabled={!url}
-          onClick={() => void copiar()}
-          className="flex h-9 items-center gap-1.5 rounded-[3px] bg-accent px-4 text-sm font-medium text-white transition hover:bg-accent-hover disabled:opacity-50"
-        >
-          {copied && <Check size={16} aria-hidden="true" />}
-          {copied ? "Copiado" : "Copiar"}
-        </button>
-      </div>
-      <p aria-live="polite" className="mt-1 text-xs text-txt-muted">
-        {invite?.expiresAt
-          ? `O convite expira em ${new Date(invite.expiresAt).toLocaleString("pt-BR")}.`
-          : "Este convite não expira."}
-      </p>
+        <input
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          aria-label="Buscar amigo"
+          placeholder="Buscar amigos"
+          className="mb-3 h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
+        />
 
-      <button
-        type="button"
-        onClick={() => setEditing((v) => !v)}
-        aria-expanded={editing}
-        className="mt-3 flex items-center gap-1.5 text-sm font-medium text-txt-link hover:underline"
-      >
-        <Settings2 size={16} aria-hidden="true" />
-        {editing ? "Ocultar opções" : "Editar convite"}
-      </button>
+        <div role="list" className="max-h-64 overflow-y-auto">
+          {lista.length === 0 ? (
+            <p className="px-2 py-3 text-sm text-txt-muted">
+              {friends.length === 0
+                ? "Você ainda não tem amigos aqui. Copie o link abaixo e mande do jeito que preferir."
+                : "Nenhum amigo com esse nome."}
+            </p>
+          ) : (
+            lista.map((amigo) => {
+              const convidado = convidados.includes(amigo.id);
+              return (
+                <div
+                  key={amigo.id}
+                  role="listitem"
+                  className="flex h-[42px] items-center gap-3 rounded px-2 hover:bg-hov"
+                >
+                  <Avatar
+                    user={amigo}
+                    size="md"
+                    status={resolveStatus(statuses, amigo)}
+                    surface="border-chat"
+                  />
+                  <span className="min-w-0 flex-1 truncate text-sm text-txt-normal">
+                    {displayNameOf(amigo)}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={convidado || !url}
+                    onClick={() => void convidar(amigo)}
+                    className={`flex h-8 w-[92px] shrink-0 items-center justify-center gap-1 rounded-[3px] text-sm font-medium transition ${
+                      convidado
+                        ? "cursor-default border border-border-strong text-txt-muted"
+                        : "bg-accent text-accent-ink hover:bg-accent-hover disabled:opacity-50"
+                    }`}
+                  >
+                    {convidado && <Check size={14} aria-hidden="true" />}
+                    {convidado ? "Convidado" : "Convidar"}
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
 
-      {editing && (
-        <div className="mt-3 flex flex-col gap-3 rounded-[3px] bg-rail/50 p-3">
-          <label className="text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
-            Expira em
-            <select
-              value={expiresInMinutes}
-              onChange={(e) => setExpiresInMinutes(Number(e.target.value))}
-              className="mt-1 h-9 w-full rounded-[3px] bg-rail px-2 text-sm font-normal normal-case text-txt-normal outline-none"
-            >
-              {INVITE_EXPIRY_OPTIONS.map((o) => (
-                <option key={o.minutes} value={o.minutes}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
-            Número máximo de usos
-            <select
-              value={maxUses}
-              onChange={(e) => setMaxUses(Number(e.target.value))}
-              className="mt-1 h-9 w-full rounded-[3px] bg-rail px-2 text-sm font-normal normal-case text-txt-normal outline-none"
-            >
-              {INVITE_USES_OPTIONS.map((o) => (
-                <option key={o.uses} value={o.uses}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
-            Canal de destino
-            <select
-              value={channelId}
-              onChange={(e) => setChannelId(e.target.value)}
-              className="mt-1 h-9 w-full rounded-[3px] bg-rail px-2 text-sm font-normal normal-case text-txt-normal outline-none"
-            >
-              <option value="">Padrão do servidor</option>
-              {textos.map((c) => (
-                <option key={c.id} value={c.id}>
-                  #{c.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-txt-normal">
-            <input
-              type="checkbox"
-              checked={temporary}
-              onChange={(e) => setTemporary(e.target.checked)}
-              className="accent-accent"
-            />
-            Convite temporário
-          </label>
-
+        <p className="mb-2 mt-5 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+          Ou mande um link de convite para um amigo
+        </p>
+        {/* input + botão num container só: no Discord os dois são uma peça */}
+        <div className="flex h-10 items-center overflow-hidden rounded-[3px] bg-rail pl-2.5">
+          <input
+            value={url || "gerando…"}
+            readOnly
+            aria-label="Link do convite"
+            onFocus={(e) => e.currentTarget.select()}
+            className="min-w-0 flex-1 bg-transparent text-sm text-txt-normal outline-none"
+          />
           <button
             type="button"
-            onClick={() => void regerar()}
-            className="h-9 rounded-[3px] bg-accent text-sm font-medium text-white transition hover:bg-accent-hover"
+            disabled={!url}
+            onClick={() => void copiar()}
+            className="mr-1 flex h-8 shrink-0 items-center gap-1.5 rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
           >
-            Gerar novo link
+            {copied && <Check size={16} aria-hidden="true" />}
+            {copied ? "Copiado" : "Copiar"}
           </button>
         </div>
+        <p aria-live="polite" className="mt-2 text-xs text-txt-muted">
+          {invite?.expiresAt
+            ? `Seu link expira em ${faltamAte(invite.expiresAt)}. `
+            : "Seu link não expira. "}
+          <button
+            type="button"
+            onClick={() => setEditando(true)}
+            className="font-medium text-txt-link hover:underline"
+          >
+            Editar link de convite
+          </button>
+        </p>
+      </Dialog>
+
+      {editando && (
+        <Dialog
+          title="Configurações do link de convite"
+          onClose={() => setEditando(false)}
+          footer={
+            <>
+              <button
+                type="button"
+                onClick={() => void regerar()}
+                className="h-[38px] min-w-24 rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover"
+              >
+                Gerar novo link
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditando(false)}
+                className="h-[38px] min-w-24 rounded-[3px] px-4 text-sm font-medium text-txt-normal transition hover:underline"
+              >
+                Cancelar
+              </button>
+            </>
+          }
+        >
+          <Select
+            semDivisoria
+            label="Expirar depois de"
+            value={String(expiresInMinutes)}
+            options={INVITE_EXPIRY_OPTIONS.map((o) => ({
+              value: String(o.minutes),
+              label: o.label,
+            }))}
+            onChange={(v) => setExpiresInMinutes(Number(v))}
+          />
+
+          <div className="mt-4">
+            <Select
+              semDivisoria
+              label="Número máximo de usos"
+              value={String(maxUses)}
+              options={INVITE_USES_OPTIONS.map((o) => ({ value: String(o.uses), label: o.label }))}
+              onChange={(v) => setMaxUses(Number(v))}
+            />
+          </div>
+
+          {textos.length > 0 && (
+            <div className="mt-4">
+              <Select
+                semDivisoria
+                label="Canal de destino"
+                value={channelId}
+                options={textos.map((c) => ({ value: c.id, label: `#${c.name}` }))}
+                onChange={setChannelId}
+                emptyLabel="Padrão do servidor"
+              />
+            </div>
+          )}
+
+          <div className="mt-2 border-t border-border pt-1">
+            <ToggleLinha
+              checked={temporary}
+              onChange={setTemporary}
+              titulo="Conceder acesso de membro temporário"
+              hint="Quem entrar por este link sai do servidor ao se desconectar, a menos que ganhe um cargo."
+            />
+          </div>
+        </Dialog>
       )}
-    </Dialog>
+    </>
   );
 }

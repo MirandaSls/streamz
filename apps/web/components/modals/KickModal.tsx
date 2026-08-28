@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { MAX_MODERATION_REASON, displayNameOf, type PublicUser } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
+import { Rotulo } from "@/components/ui/controls";
 import { api } from "@/lib/api";
 import { useGuilds } from "@/stores/guilds";
 import { errorMessage } from "@/stores/socket-adapter";
@@ -11,6 +12,7 @@ import { ui, useUI } from "@/stores/ui";
 /** Expulsão com motivo — o expulso pode voltar com um novo convite. */
 export default function KickModal({ guildId, user }: { guildId: string; user: PublicUser }) {
   const closeModal = useUI((s) => s.closeModal);
+  const guild = useGuilds((s) => s.guilds.find((g) => g.id === guildId) ?? null);
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const nome = displayNameOf(user);
@@ -31,7 +33,7 @@ export default function KickModal({ guildId, user }: { guildId: string; user: Pu
 
   return (
     <Dialog
-      title={`Expulsar ${nome}`}
+      title={`Expulsar '${nome}' de ${guild?.name ?? "este servidor"}`}
       description="Essa pessoa sai do servidor, mas pode voltar com um novo convite."
       onClose={closeModal}
       className="w-[440px]"
@@ -46,12 +48,7 @@ export default function KickModal({ guildId, user }: { guildId: string; user: Pu
         </>
       }
     >
-      <label
-        htmlFor="kick-reason"
-        className="mb-2 block text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary"
-      >
-        Motivo (opcional)
-      </label>
+      <Rotulo htmlFor="kick-reason">Motivo para expulsar</Rotulo>
       <input
         id="kick-reason"
         value={reason}

@@ -18,6 +18,17 @@ import { create } from "zustand";
  * usuário negar, em vez de deixar a tela vazia sem explicação.
  */
 
+/**
+ * Por que não há microfone nem câmera à disposição.
+ *
+ * `inseguro` é o caso que mais confunde: fora de `localhost`, o navegador só
+ * expõe `navigator.mediaDevices` sobre **https**. Abrir o app pelo IP da rede
+ * (`http://192.168.x.x:3000`) faz a API sumir inteira, e antes disso o código
+ * apenas retornava — nenhuma permissão era pedida e nenhum erro aparecia, o que
+ * é indistinguível de "o botão está quebrado".
+ */
+export type MotivoDeMidia = "ok" | "negado" | "inseguro" | "indisponivel";
+
 export interface VoiceDevicesState {
   inputs: MediaDeviceInfo[];
   outputs: MediaDeviceInfo[];
@@ -27,10 +38,40 @@ export interface VoiceDevicesState {
   cameraId: string | null;
   /** true quando os rótulos vieram (permissão concedida). */
   autorizado: boolean;
+  motivo: MotivoDeMidia;
   setInput: (id: string | null) => void;
   setOutput: (id: string | null) => void;
   setCamera: (id: string | null) => void;
   refresh: () => Promise<void>;
+}
+
+/**
+ * Por que a captura falhou AGORA, sem esperar o `refresh()`.
+ *
+ * Quem chama `getUserMedia` direto precisa disso no `catch`: em contexto
+ * inseguro o erro é um `TypeError` de `mediaDevices` indefinido, e dizer
+ * "libere a permissão no navegador" manda a pessoa procurar um cadeado que
+ * nunca vai existir.
+ */
+export function motivoDaFalha(): MotivoDeMidia {
+  if (typeof navigator === "undefined" || !navigator.mediaDevices) {
+    return typeof window !== "undefined" && window.isSecureContext
+      ? "indisponivel"
+      : "inseguro";
+  }
+  return "negado";
+}
+
+/** Frase pronta para a tela, ou `null` quando está tudo certo. */
+export function explicarMidia(motivo: MotivoDeMidia): string | null {
+  if (motivo === "ok") return null;
+  if (motivo === "inseguro") {
+    return "O navegador só libera microfone e câmera em https ou em localhost. Este endereço é http na rede local, então nem a permissão chega a ser pedida — abra o app por http://localhost:3000 ou sirva por https.";
+  }
+  if (motivo === "negado") {
+    return "Permissão de microfone e câmera negada. Libere no cadeado da barra de endereço e tente de novo.";
+  }
+  return "Este navegador não expõe microfone nem câmera.";
 }
 
 const KEY = "voiceDevices";
@@ -69,6 +110,7 @@ export const useVoiceDevicesStore = create<VoiceDevicesState>((set, get) => ({
   cameras: [],
   ...load(),
   autorizado: false,
+  motivo: "ok",
 
   setInput: (id) => {
     const next = { ...ids(get()), inputId: id };
@@ -88,8 +130,21 @@ export const useVoiceDevicesStore = create<VoiceDevicesState>((set, get) => ({
 
   refresh: async () => {
     const md = midia();
-    if (!md) return;
+    if (!md) {
+      // silêncio aqui era o bug: sem `mediaDevices` nada acontecia e a tela
+      // ficava idêntica a "ainda não cliquei". Agora o motivo vai para a tela.
+      const seguro = typeof window !== "undefined" && window.isSecureContext;
+      set({
+        autorizado: false,
+        motivo: seguro ? "indisponivel" : "inseguro",
+        inputs: [],
+        outputs: [],
+        cameras: [],
+      });
+      return;
+    }
     let autorizado = get().autorizado;
+    let motivo: MotivoDeMidia = "ok";
     if (!autorizado) {
       try {
         // um stream efêmero só para destravar os rótulos; é fechado em seguida
@@ -99,11 +154,13 @@ export const useVoiceDevicesStore = create<VoiceDevicesState>((set, get) => ({
       } catch {
         // permissão negada: a lista vem sem rótulo, mas ainda dá para escolher
         autorizado = false;
+        motivo = "negado";
       }
     }
     const todos = await md.enumerateDevices().catch(() => [] as MediaDeviceInfo[]);
     set({
       autorizado,
+      motivo,
       inputs: todos.filter((d) => d.kind === "audioinput"),
       outputs: todos.filter((d) => d.kind === "audiooutput"),
       cameras: todos.filter((d) => d.kind === "videoinput"),

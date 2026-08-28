@@ -2,31 +2,27 @@
 
 import { useEffect, useState } from "react";
 import {
-  Clock,
   EyeOff,
   Hash,
-  Images,
   Lock,
   Megaphone,
-  MessagesSquare,
-  Shield,
+  Pencil,
+  UserPlus,
   Users,
+  Volume2,
 } from "lucide-react";
-import { slowmodeLabel } from "@streamz/shared";
 import Composer from "@/components/chat/Composer";
 // ── h-moderacao ──
 import { RulesNotice, TimeoutNotice } from "@/components/moderation/ComposerNotice";
-import SelectionBar from "@/components/moderation/SelectionBar";
 
 import { useModeration, useMustAcceptRules, useMyTimeout } from "@/stores/moderation";
 import { usePolls } from "@/stores/polls";
 import HeaderBar, { HeaderIcon } from "@/components/chat/HeaderBar";
-import NotificationBell from "@/components/chat/NotificationBell";
 import MessageList from "@/components/chat/MessageList";
 import PinsPopover from "@/components/chat/PinsPopover";
 import ReplyBar from "@/components/chat/ReplyBar";
-import ThreadsPopover from "@/components/chat/ThreadsPopover";
 import TypingIndicator from "@/components/chat/TypingIndicator";
+import { ultimaMinhaMensagem } from "@/components/chat/ultima-minha";
 import { useSlowmode } from "@/hooks/useSlowmode";
 import { useAuth } from "@/stores/auth";
 import { useActiveChannel } from "@/stores/channels";
@@ -63,21 +59,15 @@ function confirmar(channelId: string) {
   }
 }
 
-/** A última mensagem confirmada de um autor, para o `↑` do composer. */
-function ultimaDe(
-  items: { id: string; content: string; author: { id: string }; pending?: boolean }[],
-  userId: string,
-): { id: string; content: string } | null {
-  for (let i = items.length - 1; i >= 0; i--) {
-    const m = items[i];
-    if (m.author.id === userId && !m.pending) return { id: m.id, content: m.content };
-  }
-  return null;
-}
-
-
-/** Coluna 3 no modo servidor: cabeçalho, busca, timeline e composer. */
-export default function ChatView() {
+/**
+ * Coluna 3 no modo servidor: cabeçalho, busca, timeline e composer.
+ *
+ * `incorporado` é para quando a conversa divide a coluna com o palco de um canal
+ * de voz (ver `CallSplit`): aí ela é uma seção dentro do `<main>` da página, e
+ * não o `<main>` — dois `<main>` aninhados não existem.
+ */
+export default function ChatView({ incorporado = false }: { incorporado?: boolean }) {
+  const Raiz = incorporado ? "section" : "main";
   const user = useAuth((s) => s.user);
   const channel = useActiveChannel();
   // quem posta neste canal é SEND_MESSAGES na permissão efetiva (ADR-0002):
@@ -90,15 +80,12 @@ export default function ChatView() {
   const slice = useActiveSlice();
   const membersOpen = useUI((s) => s.membersOpen);
   const toggleMembers = useUI((s) => s.toggleMembers);
-  const mediaOpen = useUI((s) => s.mediaOpen);
-  const toggleMedia = useUI((s) => s.toggleMedia);
   // ── h-moderacao ──
   const timeoutUntil = useMyTimeout();
   const mustAcceptRules = useMustAcceptRules();
   const rulesChannelId = useModeration((s) => s.membership?.onboarding.rulesChannelId ?? null);
   const guildId = useModeration((s) => s.membership?.guildId ?? null);
   const loadMyVotes = usePolls((s) => s.loadMine);
-  const cancelSelection = useModeration((s) => s.cancelSelection);
   const channelId = channel?.id;
 
   // meus votos das enquetes do canal: o DTO da mensagem é igual para todo
@@ -106,9 +93,6 @@ export default function ChatView() {
   useEffect(() => {
     if (channelId) void loadMyVotes(channelId);
   }, [channelId, loadMyVotes]);
-
-  // trocar de canal sai do modo de seleção — ela é sempre de um canal só
-  useEffect(() => () => cancelSelection(), [channelId, cancelSelection]);
 
   const searchQuery = useMessages((s) => s.searchQuery);
   const setSearchQuery = useMessages((s) => s.setSearchQuery);
@@ -125,9 +109,9 @@ export default function ChatView() {
 
   if (!channel) {
     return (
-      <main className="grid min-w-0 flex-1 place-items-center bg-chat text-txt-muted">
+      <Raiz className="grid min-w-0 flex-1 place-items-center bg-chat text-txt-muted">
         Escolha um canal
-      </main>
+      </Raiz>
     );
   }
 
@@ -135,19 +119,27 @@ export default function ChatView() {
   // canal de servidor sempre tem nome; o tipo é nullable por causa das DMs
   const name = channel.name ?? "canal";
   const Icon =
-    channel.type === "ANNOUNCEMENT" || channel.readOnly
-      ? Megaphone
-      : channel.private
-        ? Lock
-        : Hash;
+    channel.type === "VOICE"
+      ? Volume2
+      : channel.type === "ANNOUNCEMENT" || channel.readOnly
+        ? Megaphone
+        : channel.private
+          ? Lock
+          : Hash;
+  // canal de voz não é "#": o prefixo é do canal de texto, e escrever "#geral"
+  // ao lado do alto-falante confundiria os dois na mesma coluna
+  const prefixo = channel.type === "VOICE" ? "" : "#";
 
   // conteúdo sensível: o canal só abre depois do aviso
   if (channel.nsfw && !liberado.includes(channel.id) && !jaConfirmou(channel.id)) {
     return (
-      <main className="grid min-w-0 flex-1 place-items-center bg-chat px-8 text-center">
+      <Raiz className="grid min-w-0 flex-1 place-items-center bg-chat px-8 text-center">
         <div className="max-w-md">
           <EyeOff size={64} strokeWidth={1} className="mx-auto text-txt-muted" aria-hidden="true" />
-          <h2 className="mt-4 text-2xl font-bold text-txt-primary">#{name}</h2>
+          <h2 className="mt-4 font-display text-2xl font-extrabold tracking-wordmark text-txt-primary">
+            {prefixo}
+            {name}
+          </h2>
           <p className="mt-2 text-txt-muted">
             Este canal foi marcado como sensível. O conteúdo pode não ser apropriado
             para todo mundo.
@@ -158,19 +150,18 @@ export default function ChatView() {
               confirmar(channel.id);
               setLiberado((ids) => [...ids, channel.id]);
             }}
-            className="mt-6 h-[38px] rounded-[3px] bg-accent px-4 text-sm font-medium text-white transition hover:bg-accent-hover"
+            className="mt-6 h-[38px] rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover"
           >
             Continuar mesmo assim
           </button>
         </div>
-      </main>
+      </Raiz>
     );
   }
 
   return (
-    <main className="flex min-w-0 flex-1 flex-col bg-chat">
+    <Raiz className="flex min-h-0 min-w-0 flex-1 flex-col bg-chat">
       <HeaderBar
-        bell={<NotificationBell channelId={channel.id} />}
         icon={<Icon size={24} />}
         title={name}
         subtitle={
@@ -196,33 +187,20 @@ export default function ChatView() {
           <PinsPopover channelId={channel.id} guildId={channel.guildId} canPin={canModerate} />
         }
         tools={
-          <>
-            <ThreadsPopover channelId={channel.id} canManage={canModerate} />
-            <HeaderIcon
-              label={mediaOpen ? "Ocultar mídia do canal" : "Mídia do canal"}
-              active={mediaOpen}
-              onClick={toggleMedia}
-            >
-              <Images size={24} />
-            </HeaderIcon>
-            {canModerate && guildId && (
-              <HeaderIcon
-                label="Configurações do servidor"
-                onClick={() => ui.openModal({ kind: "serverSettings", guildId })}
-              >
-                <Shield size={24} />
-              </HeaderIcon>
-            )}
-            <HeaderIcon label={membersOpen ? "Ocultar lista de membros" : "Mostrar lista de membros"} active={membersOpen} onClick={toggleMembers}>
-              <Users size={24} />
-            </HeaderIcon>
-          </>
+          <HeaderIcon
+            label={membersOpen ? "Ocultar lista de membros" : "Mostrar lista de membros"}
+            active={membersOpen}
+            onClick={toggleMembers}
+          >
+            <Users size={20} />
+          </HeaderIcon>
         }
       />
 
       <MessageList
         // remonta a cada canal para zerar a rolagem e os marcadores de posição
         key={`lista-${channel.id}`}
+        channelId={channel.id}
         items={slice.items}
         hasMore={slice.hasMore}
         loading={slice.loading}
@@ -231,7 +209,7 @@ export default function ChatView() {
         currentUserId={user?.id}
         canModerate={canModerate}
         onEdit={edit}
-        onDelete={(id) => void remove(id)}
+        onDelete={(id, semConfirmar) => void remove(id, semConfirmar)}
         onToggleReaction={(id, emoji) => toggleReaction(id, emoji, user?.id)}
         onOpenThread={(message) => void openThread(channel.id, message)}
         onRetry={retry}
@@ -240,33 +218,39 @@ export default function ChatView() {
         emptyText="Nenhuma mensagem ainda. Diga um oi."
         welcome={{
           icon: <Icon size={42} />,
-          title: `Bem-vindo a #${name}!`,
-          description: channel.topic || `Este é o início do canal #${name}.`,
+          title: `Bem-vindo a ${prefixo}${name}!`,
+          description: channel.topic || `Este é o início do canal ${prefixo}${name}.`,
+          // a fileira de ações do início do canal, como no Discord
+          actions: (
+            <>
+              {canModerate && (
+                <BotaoBoasVindas
+                  icon={<Pencil size={16} />}
+                  label="Editar canal"
+                  onClick={() =>
+                    ui.openModal({ kind: "channelSettings", channelId: channel.id, tab: "geral" })
+                  }
+                />
+              )}
+              {channel.guildId && (
+                <BotaoBoasVindas
+                  icon={<UserPlus size={16} />}
+                  label="Convidar amigos"
+                  onClick={() => ui.openModal({ kind: "invite", guildId: channel.guildId as string })}
+                />
+              )}
+            </>
+          ),
         }}
       />
 
-      {slowmode.seconds > 0 && !readOnly && (
-        // o aviso vive aqui, e não dentro do Composer, para não disputar o
-        // arquivo do composer com quem cuida dele — o hook useSlowmode é o
-        // ponto de integração se ele quiser mover a contagem para dentro
-        <p
-          aria-live="polite"
-          className="mx-4 mb-1 flex items-center gap-1.5 text-xs text-txt-muted"
-        >
-          <Clock size={14} aria-hidden="true" />
-          {slowmode.blocked
-            ? `Modo lento: aguarde ${slowmode.remaining}s`
-            : `Modo lento ligado (${slowmodeLabel(slowmode.seconds)})`}
-        </p>
-      )}
-
-      {/* h-moderacao: barra do modo "selecionar mensagens" */}
-      <SelectionBar channelId={channel.id} />
-
       {readOnly ? (
-        <p className="mx-4 mb-6 rounded-lg bg-input px-4 py-3 text-center text-sm text-txt-muted">
-          Você não tem permissão para enviar mensagens neste canal.
-        </p>
+        // mantém a forma do composer (mesma altura e raio): o parágrafo cinza
+        // centralizado que ficava aqui tirava o chão da coluna
+        <div className="mx-4 mb-6 flex min-h-11 items-center gap-2 rounded-lg bg-input px-4 text-sm text-txt-muted">
+          <Lock size={18} aria-hidden="true" className="shrink-0" />
+          <span>Você não tem permissão para enviar mensagens neste canal.</span>
+        </div>
       ) : timeoutUntil ? (
         // h-moderacao: o castigo troca o composer pelo aviso de até quando
         <TimeoutNotice until={timeoutUntil} />
@@ -279,13 +263,28 @@ export default function ChatView() {
             <Composer
               key={`composer-${channel.id}`}
               channelId={channel.id}
+              guildId={channel.guildId}
               allowAttachments
-              placeholder={`Conversar em #${name}`}
-              ariaLabel={`Mensagem para #${name}`}
-              channelName={name}
+              placeholder={
+                slowmode.blocked
+                  ? `Modo lento: aguarde ${slowmode.remaining}s`
+                  : `Conversar em ${prefixo}${name}`
+              }
+              ariaLabel={`Mensagem para ${prefixo}${name}`}
+              destino={`${prefixo}${name}`}
+              // o aviso de modo lento vive dentro do composer (contador à
+              // direita do campo), não como parágrafo solto acima dele
+              modoLento={
+                slowmode.seconds > 0
+                  ? {
+                      segundos: slowmode.seconds,
+                      restante: slowmode.remaining,
+                      bloqueado: slowmode.blocked,
+                    }
+                  : undefined
+              }
               // ↑ no campo vazio reabre a última mensagem minha para editar
-              ultimaMinhaMensagem={() => ultimaDe(slice.items, user.id)}
-              onEditMessage={edit}
+              ultimaMinhaMensagem={() => ultimaMinhaMensagem(slice.items, user.id)}
               onCreatePoll={() => ui.openModal({ kind: "createPoll", channelId: channel.id })}
               onSend={(content, attachments, sticker) => {
                 // a API recusaria com 429; barrar aqui evita a mensagem otimista
@@ -304,10 +303,34 @@ export default function ChatView() {
                 });
               }}
             />
+            {/* a faixa de 24px do "digitando…" só existe onde há composer:
+                num canal bloqueado ela reservava altura para nada */}
+            <TypingIndicator channelId={channel.id} />
           </>
         )
       )}
-      <TypingIndicator channelId={channel.id} />
-    </main>
+    </Raiz>
+  );
+}
+
+/** Botão da fileira de ações do início do canal. */
+function BotaoBoasVindas({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex h-8 items-center gap-1.5 rounded-[3px] bg-panel px-3 text-sm font-medium text-txt-normal transition hover:bg-hov hover:text-txt-primary"
+    >
+      <span aria-hidden="true">{icon}</span>
+      {label}
+    </button>
   );
 }

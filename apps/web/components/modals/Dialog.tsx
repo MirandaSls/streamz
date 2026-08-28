@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { X } from "lucide-react";
 
 /**
  * Caixa de diálogo acessível — a base de todos os modais do app.
@@ -20,14 +21,25 @@ export default function Dialog({
   onClose,
   children,
   footer,
-  className = "w-[380px]",
+  hideHeader = false,
+  showClose = true,
+  align = "center",
+  bodyClassName = "",
+  className = "w-[440px]",
 }: {
   title: string;
   description?: string;
   onClose: () => void;
   children?: ReactNode;
   footer?: ReactNode;
-  /** largura da caixa (as do app variam entre 360px e 400px). */
+  /** esconde o cabeçalho visual mantendo o título para leitores de tela
+   *  (quick switcher e perfil não têm título escrito no Discord). */
+  hideHeader?: boolean;
+  showClose?: boolean;
+  /** o quick switcher fica no terço superior, não no centro. */
+  align?: "center" | "top";
+  bodyClassName?: string;
+  /** largura da caixa (o padrão do Discord é 440px). */
   className?: string;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -72,7 +84,9 @@ export default function Dialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"
+      className={`fixed inset-0 z-50 grid justify-items-center bg-black/85 p-4 anim-overlay ${
+        align === "top" ? "items-start pt-[10vh]" : "items-center"
+      }`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -85,21 +99,44 @@ export default function Dialog({
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         onKeyDown={handleKeyDown}
-        className={`flex max-h-[85vh] flex-col overflow-hidden rounded-[5px] bg-chat shadow-high outline-none ${className}`}
+        className={`relative flex max-h-[85vh] flex-col overflow-hidden rounded-lg bg-chat shadow-high outline-none anim-modal ${className}`}
       >
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <h2 id={titleId} className="mb-1 text-xl font-bold text-txt-primary">
+        {/* cabeçalho fica fora da área rolável: no Discord ele não sobe junto */}
+        {hideHeader ? (
+          <h2 id={titleId} className="sr-only">
             {title}
           </h2>
-          {description && (
-            <p id={descriptionId} className="mb-4 text-sm text-txt-muted">
-              {description}
-            </p>
-          )}
-          {children}
-        </div>
+        ) : (
+          <div className="shrink-0 px-4 pt-4">
+            <h2
+              id={titleId}
+              className="pr-8 font-display text-xl font-bold tracking-title text-txt-primary"
+            >
+              {title}
+            </h2>
+            {description && (
+              <p id={descriptionId} className="mt-1 text-sm text-txt-muted">
+                {description}
+              </p>
+            )}
+          </div>
+        )}
+        {showClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar"
+            className="absolute right-4 top-4 z-10 grid h-6 w-6 place-items-center rounded text-txt-muted transition hover:text-txt-primary"
+          >
+            <X size={20} />
+          </button>
+        )}
+        {/* só o corpo rola; o rodapé fica sempre à vista */}
+        <div className={`min-h-0 flex-1 overflow-y-auto p-4 ${bodyClassName}`}>{children}</div>
         {footer && (
-          <div className="flex flex-row-reverse items-center gap-3 bg-panel px-4 py-4">{footer}</div>
+          <div className="flex shrink-0 flex-row-reverse items-center gap-3 bg-panel px-4 py-4 shadow-[0_-1px_0_rgba(0,0,0,.2)]">
+            {footer}
+          </div>
         )}
       </div>
     </div>
@@ -129,8 +166,10 @@ export function PrimaryButton({
       onClick={onClick}
       disabled={disabled}
       data-autofocus={autoFocus ? "" : undefined}
-      className={`h-[38px] min-w-24 rounded-[3px] px-4 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${
-        danger ? "bg-red hover:bg-red-hover" : "bg-accent hover:bg-accent-hover"
+      className={`h-[38px] min-w-24 rounded-[3px] px-4 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+        danger
+          ? "bg-red text-white hover:bg-red-hover"
+          : "bg-accent text-accent-ink hover:bg-accent-hover"
       }`}
     >
       {children}
@@ -156,8 +195,8 @@ export function SecondaryButton({
       type="button"
       onClick={onClick}
       data-autofocus={autoFocus ? "" : undefined}
-      className={`h-[38px] rounded-[3px] px-4 text-sm font-medium text-txt-normal transition hover:underline ${
-        full ? "w-full bg-[#4e5058] hover:bg-[#6d6f78] hover:no-underline" : ""
+      className={`h-[38px] min-w-24 rounded-[3px] px-4 text-sm font-medium text-txt-normal transition hover:underline ${
+        full ? "w-full bg-border-strong hover:bg-border-strong-hover hover:no-underline" : ""
       }`}
     >
       {children}

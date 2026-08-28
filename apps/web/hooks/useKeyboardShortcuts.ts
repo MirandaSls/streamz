@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { isUnread } from "@streamz/shared";
+import { atalhosEfetivos, useAtalhos } from "@/stores/atalhos";
 import { actionForEvent, type ShortcutAction } from "@/lib/shortcuts";
 import { useChannels } from "@/stores/channels";
 import { useDMs } from "@/stores/dms";
@@ -23,7 +24,9 @@ import { useVoicePrefs } from "@/stores/voicePrefs";
 export function useKeyboardShortcuts(): void {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      const action = actionForEvent(event);
+      // as combinações regravadas na aba "Teclado" entram aqui; sem isso a
+      // regravação apareceria na tela sem valer no app
+      const action = actionForEvent(event, atalhosEfetivos(useAtalhos.getState().regravados));
       if (!action) return;
 
       const comModificador = event.ctrlKey || event.altKey || event.metaKey;
@@ -52,7 +55,7 @@ function estaDigitando(alvo: EventTarget | null): boolean {
 /** Há modal, menu de contexto ou popover na tela? */
 function temCamadaAberta(): boolean {
   const ui = useUI.getState();
-  return Boolean(ui.modal || ui.contextMenu || ui.popover);
+  return Boolean(ui.modals.length > 0 || ui.contextMenu || ui.popover);
 }
 
 function executar(action: ShortcutAction): void {

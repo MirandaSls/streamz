@@ -687,24 +687,84 @@ export const VOICE_FLAGS_PADRAO: VoiceFlags = {
 /** Tempo que uma chamada em DM toca antes de desistir sozinha. */
 export const CALL_RING_TIMEOUT_MS = 30_000;
 
+/**
+ * Quanto tempo alguém pode ficar **sozinho** numa chamada de conversa antes de
+ * ela encerrar. Não tem nada a ver com o toque: o toque é "ninguém atendeu", e
+ * este é "todo mundo já saiu". Ficar sozinho num canal de voz de servidor é
+ * normal e não expira nunca — a regra vale só para conversa direta e grupo.
+ */
+export const CALL_ALONE_TIMEOUT_MS = 5 * 60_000;
+
 /** Folga entre soltar a tecla de push-to-talk e o microfone fechar de novo. */
 export const PTT_RELEASE_MS = 200;
 
 /** Presets de qualidade do compartilhamento de tela (o seletor do botão). */
-export type ScreenQuality = "720p30" | "1080p30" | "1080p60";
+export type ScreenQuality =
+  | "720p30"
+  | "720p60"
+  | "1080p30"
+  | "1080p60"
+  | "1440p30"
+  | "1440p60";
 
 export interface ScreenQualityPreset {
   label: string;
   width: number;
   height: number;
   frameRate: number;
+  /**
+   * Teto de bitrate (bits/s) com que a faixa é publicada.
+   *
+   * Mora no preset porque **resolução sem bitrate não é qualidade**: o padrão
+   * do SDK é dimensionado para 1080p e, aplicado a 1440p, entrega mais pixels
+   * borrados do que 1080p nítido. Quem publica lê daqui (`videoEncoding`), e é
+   * por isso que os dois andam sempre juntos.
+   */
+  maxBitrate: number;
 }
 
+/**
+ * Resolução × taxa de quadros, todas as combinações que a UI oferece.
+ *
+ * Os valores de bitrate são para **tela** (conteúdo estático com texto fino),
+ * não para câmera: privilegiam nitidez por quadro. 1440p30 é o padrão porque
+ * ler código na tela de alguém depende de resolução, não de fluidez — quem
+ * compartilha jogo ou vídeo troca para 1080p60 no seletor.
+ */
 export const SCREEN_QUALITY: Record<ScreenQuality, ScreenQualityPreset> = {
-  "720p30": { label: "720p · 30 fps", width: 1280, height: 720, frameRate: 30 },
-  "1080p30": { label: "1080p · 30 fps", width: 1920, height: 1080, frameRate: 30 },
-  "1080p60": { label: "1080p · 60 fps", width: 1920, height: 1080, frameRate: 60 },
+  "720p30": { label: "720p · 30 fps", width: 1280, height: 720, frameRate: 30, maxBitrate: 1_500_000 },
+  "720p60": { label: "720p · 60 fps", width: 1280, height: 720, frameRate: 60, maxBitrate: 2_500_000 },
+  "1080p30": { label: "1080p · 30 fps", width: 1920, height: 1080, frameRate: 30, maxBitrate: 3_000_000 },
+  "1080p60": { label: "1080p · 60 fps", width: 1920, height: 1080, frameRate: 60, maxBitrate: 4_500_000 },
+  "1440p30": { label: "1440p · 30 fps", width: 2560, height: 1440, frameRate: 30, maxBitrate: 6_000_000 },
+  "1440p60": { label: "1440p · 60 fps", width: 2560, height: 1440, frameRate: 60, maxBitrate: 9_000_000 },
 };
+
+/** Resolução padrão do seletor de tela. */
+export const SCREEN_QUALITY_PADRAO: ScreenQuality = "1440p30";
+
+/**
+ * Tetos de qualidade de microfone, áudio de tela e câmera.
+ *
+ * Ficam ao lado de `SCREEN_QUALITY` porque são a mesma decisão de produto —
+ * "prezar pela melhor qualidade possível" — e não o default do SDK, que é
+ * conservador de propósito (o LiveKit assume sala grande e rede ruim).
+ */
+export const MEDIA_QUALITY = {
+  /**
+   * Microfone: 64 kbps mono, o dobro do preset `music` do SDK. Voz em 64 kbps
+   * com Opus é transparente; acima disso só se paga banda sem ganho audível.
+   */
+  micBitrate: 64_000,
+  /**
+   * Áudio da tela: 160 kbps **estéreo**. Aqui o conteúdo é música, jogo ou
+   * vídeo — o oposto do microfone — e a imagem estéreo é parte do que se está
+   * compartilhando. Exige captura sem os processadores de voz (ver o seletor).
+   */
+  screenAudioBitrate: 160_000,
+  /** Câmera: 1080p30. Acima disso o encoder do navegador vira o gargalo. */
+  camera: { width: 1920, height: 1080, frameRate: 30, maxBitrate: 3_000_000 },
+} as const;
 
 /** Quem está numa chamada e o token de mídia, quando o LiveKit está configurado. */
 export interface CallStartResponse {
@@ -726,9 +786,10 @@ export interface CallRingEvent {
 /** Fim de uma chamada em DM, do ponto de vista de quem recebe o aviso. */
 export interface CallEndedEvent {
   channelId: string;
-  /** quem encerrou/recusou (null = a chamada expirou sem resposta). */
+  /** quem encerrou/recusou (null = a chamada expirou sozinha). */
   by: PublicUser | null;
-  reason: "declined" | "ended" | "timeout";
+  /** `timeout` = ninguém atendeu; `alone` = sobrou uma pessoa só tempo demais. */
+  reason: "declined" | "ended" | "timeout" | "alone";
 }
 
 export const voiceJoinSchema = z.object({ channelId: idSchema });

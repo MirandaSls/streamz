@@ -1,9 +1,14 @@
 "use client";
 
-import { useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
 import {
-  Bell,
-  BellOff,
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
+import {
   CheckCheck,
   ChevronDown,
   ChevronRight,
@@ -13,14 +18,13 @@ import {
   Lock,
   LogOut,
   Megaphone,
-  Flag,
   Pencil,
   Plus,
-  ScrollText,
   Settings,
   Trash2,
   UserPlus,
   Volume2,
+  X,
 } from "lucide-react";
 import {
   channelNotificationScope,
@@ -32,6 +36,7 @@ import {
 } from "@streamz/shared";
 import UserFooter from "@/components/layout/UserFooter";
 import Tooltip from "@/components/ui/Tooltip";
+import { MENU_WIDTH, MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
 import VoiceChannelMembers from "@/components/voice/VoiceChannelMembers";
 import { useAuth } from "@/stores/auth";
 import { useCategories } from "@/stores/categories";
@@ -39,9 +44,10 @@ import { groupByCategory, type CategoryGroup } from "@/stores/channel-order";
 import { useChannels } from "@/stores/channels";
 import { useCanModerate, useGuilds, useIsOwner } from "@/stores/guilds";
 import { useT } from "@/lib/i18n";
-import { abrirMenuDeNotificacao } from "@/lib/notification-menu";
+import { submenuNotificacoes, submenuSilenciar } from "@/lib/notification-menu";
 import { useNotifications } from "@/stores/notifications";
-import { anchorOf, ui, useUI, type MenuItem } from "@/stores/ui";
+import { useSettings } from "@/stores/settings";
+import { ui, useUI, type MenuItem } from "@/stores/ui";
 
 /** Ícone do canal: voz, anúncio (somente leitura), privado ou texto. */
 function ChannelIcon({ channel }: { channel: Channel }) {
@@ -97,7 +103,7 @@ function CategoryHeader({
         type="button"
         onClick={onToggle}
         aria-expanded={!collapsed}
-        className="flex min-w-0 flex-1 items-center gap-0.5 pl-2 text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted hover:text-txt-normal"
+        className="flex min-w-0 flex-1 items-center gap-0.5 pl-2 font-display text-xs font-bold uppercase tracking-[0.02em] text-txt-muted hover:text-txt-normal"
       >
         {collapsed ? (
           <ChevronRight size={12} aria-hidden="true" />
@@ -141,7 +147,7 @@ export default function ChannelSidebar() {
   const porEscopo = useNotifications((s) => s.porEscopo);
   const createInvite = useGuilds((s) => s.createInvite);
   const leaveGuild = useGuilds((s) => s.leave);
-  const removeGuild = useGuilds((s) => s.remove);
+  const developerMode = useSettings((s) => s.developerMode);
   const user = useAuth((s) => s.user);
   const canModerate = useCanModerate(user?.id);
   const isOwner = useIsOwner(user?.id);
@@ -155,9 +161,16 @@ export default function ChannelSidebar() {
   const removeChannel = useChannels((s) => s.remove);
   const dropChannel = useChannels((s) => s.dropChannel);
   const dropCategory = useChannels((s) => s.dropCategory);
-  const markGuildRead = useChannels((s) => s.markGuildRead);
 
   const openModal = useUI((s) => s.openModal);
+  // o chevron do cabeçalho vira X enquanto o dropdown está aberto, como no
+  // Discord; quem fecha o menu é o host, então o estado espelha a store
+  const contextMenu = useUI((s) => s.contextMenu);
+  const [menuAberto, setMenuAberto] = useState(false);
+  useEffect(() => {
+    if (!contextMenu) setMenuAberto(false);
+  }, [contextMenu]);
+
   const categories = useCategories((s) => s.categories);
   const collapsed = useCategories((s) => s.collapsed);
   const toggleCollapsed = useCategories((s) => s.toggleCollapsed);
@@ -173,54 +186,68 @@ export default function ChannelSidebar() {
   const texto = grupos[0].channels.filter((c) => c.type !== "VOICE");
   const voz = grupos[0].channels.filter((c) => c.type === "VOICE");
 
-  /** Menu do cabeçalho do servidor (o chevron do Discord). */
+  /**
+   * Menu do cabeçalho do servidor (o chevron do Discord).
+   *
+   * "Convites", "Registro de auditoria" e "Denúncias" saíram daqui: no Discord
+   * eles moram dentro de Configurações do Servidor, e o dropdown fica com as
+   * ações do dia a dia. "Marcar servidor como lido" pertence ao menu do ÍCONE
+   * no rail, não a este.
+   */
   function openGuildMenu(e: MouseEvent<HTMLButtonElement>) {
     if (!guild) return;
     const r = e.currentTarget.getBoundingClientRect();
+    const escopo = porEscopo[guildNotificationScope(guild.id)];
     const items: MenuItem[] = [
-      { label: "Convidar pessoas", icon: <UserPlus size={18} />, onSelect: () => void createInvite() },
-      { label: "Criar canal", icon: <Plus size={18} />, onSelect: () => openModal({ kind: "createChannel" }) },
+      // único item destacado do menu, como no Discord
+      {
+        label: "Convidar pessoas",
+        icon: <UserPlus size={18} />,
+        highlight: true,
+        onSelect: () => void createInvite(),
+      },
     ];
     if (canModerate) {
-      items.push({ label: "Criar categoria", icon: <FolderPlus size={18} />, onSelect: () => void novaCategoria() });
-      items.push({ label: "Convites", icon: <Link2 size={18} />, onSelect: () => openModal({ kind: "invites", guildId: guild.id }) });
       items.push({
         label: "Configurações do servidor",
         icon: <Settings size={18} />,
         onSelect: () => openModal({ kind: "serverSettings", guildId: guild.id }),
       });
-      // ── h-moderacao ──
-      items.push({ label: "Configurações do servidor", icon: <Settings size={18} />, onSelect: () => openModal({ kind: "serverSettings", guildId: guild.id }) });
-      items.push({ label: "Registro de auditoria", icon: <ScrollText size={18} />, onSelect: () => openModal({ kind: "serverSettings", guildId: guild.id, tab: "audit" }) });
-      items.push({ label: "Denúncias", icon: <Flag size={18} />, onSelect: () => openModal({ kind: "serverSettings", guildId: guild.id, tab: "reports" }) });
     }
-    // o menu de contexto do app não tem submenu: abrir o de notificação no
-    // mesmo ponto é o equivalente plano do "Silenciar servidor >" do Discord
     items.push({
-      label: t("aba.notificacoes"),
-      icon: isMuted(porEscopo[guildNotificationScope(guild.id)]) ? <BellOff size={18} /> : <Bell size={18} />,
-      onSelect: () =>
-        abrirMenuDeNotificacao(
-          r.left + 10,
-          r.bottom + 4,
-          { tipo: "servidor", guildId: guild.id },
-          porEscopo[guildNotificationScope(guild.id)],
-          t,
-        ),
+      label: "Criar canal",
+      icon: <Plus size={18} />,
+      onSelect: () => openModal({ kind: "createChannel" }),
     });
-    items.push({ separator: true });
-    items.push({
-      label: "Marcar servidor como lido",
-      icon: <CheckCheck size={18} />,
-      onSelect: () => void markGuildRead(guild.id),
-    });
-    items.push({ separator: true });
-    if (isOwner) {
-      items.push({ label: "Apagar servidor", icon: <Trash2 size={18} />, danger: true, onSelect: () => void removeGuild(guild.id) });
-    } else {
-      items.push({ label: "Sair do servidor", icon: <LogOut size={18} />, danger: true, onSelect: () => void leaveGuild(guild.id) });
+    if (canModerate) {
+      items.push({
+        label: "Criar categoria",
+        icon: <FolderPlus size={18} />,
+        onSelect: () => void novaCategoria(),
+      });
     }
-    ui.openContextMenu(r.left + 10, r.bottom + 4, items);
+    items.push({ separator: true });
+    items.push(submenuSilenciar("Silenciar servidor", { tipo: "servidor", guildId: guild.id }, escopo, t));
+    items.push(submenuNotificacoes({ tipo: "servidor", guildId: guild.id }, escopo, t));
+    // o dono não vê "sair" nem "apagar" aqui: apagar mora em Configurações
+    if (!isOwner) {
+      items.push({ separator: true });
+      items.push({
+        label: "Sair do servidor",
+        icon: <LogOut size={18} />,
+        danger: true,
+        onSelect: () => void leaveGuild(guild.id),
+      });
+    }
+    if (developerMode) {
+      items.push({ separator: true });
+      items.push({
+        label: "Copiar ID do servidor",
+        onSelect: () => void navigator.clipboard?.writeText(guild.id),
+      });
+    }
+    setMenuAberto(true);
+    ui.openContextMenu(r.left + 10, r.bottom + 4, items, MENU_WIDTH_WIDE);
   }
 
   async function novaCategoria() {
@@ -234,65 +261,92 @@ export default function ChannelSidebar() {
     if (nome?.trim()) await criarCategoria(guild.id, nome.trim());
   }
 
-  /** Botão direito num canal: leitura, configurações e moderação. */
+  /**
+   * Botão direito num canal.
+   *
+   * "Renomear canal" e "Gerenciar acesso" saíram: no Discord existe só "Editar
+   * canal", e renomear e permissões são abas de dentro dele. "Seguir canal (em
+   * breve)" saiu porque o Discord nunca mostra item morto — ou existe, ou não
+   * aparece.
+   */
   function openChannelMenu(e: MouseEvent, channel: Channel) {
     e.preventDefault();
-    const { clientX, clientY } = e;
     const setting = porEscopo[channelNotificationScope(channel.id)];
+    const escopo = { tipo: "canal" as const, channelId: channel.id };
     const items: MenuItem[] = [
-      { label: "Marcar como lido", icon: <CheckCheck size={18} />, onSelect: () => void useChannels.getState().markRead(channel.id) },
       {
-        label: t("aba.notificacoes"),
-        icon: isMuted(setting) ? <BellOff size={18} /> : <Bell size={18} />,
-        onSelect: () =>
-          abrirMenuDeNotificacao(clientX, clientY, { tipo: "canal", channelId: channel.id }, setting, t),
+        label: "Marcar como lido",
+        icon: <CheckCheck size={18} />,
+        onSelect: () => void useChannels.getState().markRead(channel.id),
       },
-      { label: "Copiar ID do canal", onSelect: () => void navigator.clipboard?.writeText(channel.id) },
+      { separator: true },
+      { label: "Convidar pessoas", icon: <UserPlus size={18} />, onSelect: () => void createInvite() },
+      {
+        label: "Copiar link do canal",
+        icon: <Link2 size={18} />,
+        onSelect: () =>
+          void navigator.clipboard?.writeText(
+            `${window.location.origin}/app/channels/${channel.guildId}/${channel.id}`,
+          ),
+      },
+      { separator: true },
+      submenuSilenciar("Silenciar canal", escopo, setting, t),
+      submenuNotificacoes(escopo, setting, t),
     ];
-    if (channel.type === "ANNOUNCEMENT") {
-      items.push({ label: "Seguir canal (em breve)", icon: <Megaphone size={18} />, disabled: true, onSelect: () => {} });
-    }
     if (canModerate) {
       items.push({ separator: true });
-      items.push({ label: "Renomear canal", icon: <Pencil size={18} />, onSelect: () => void rename(channel) });
       items.push({
-        label: "Configurações do canal",
+        label: "Editar canal",
         icon: <Settings size={18} />,
         onSelect: () => openModal({ kind: "channelSettings", channelId: channel.id }),
       });
-      if (channel.private) {
-        items.push({
-          label: "Gerenciar acesso",
-          icon: <Lock size={18} />,
-          onSelect: () => openModal({ kind: "channelSettings", channelId: channel.id, tab: "permissoes" }),
-        });
-      }
-      items.push({ label: "Apagar canal", icon: <Trash2 size={18} />, danger: true, onSelect: () => void removeChannel(channel) });
+      items.push({
+        label: "Apagar canal",
+        icon: <Trash2 size={18} />,
+        danger: true,
+        onSelect: () => void removeChannel(channel),
+      });
     }
-    ui.openContextMenu(e.clientX, e.clientY, items);
+    if (developerMode) {
+      items.push({ separator: true });
+      items.push({
+        label: "Copiar ID do canal",
+        onSelect: () => void navigator.clipboard?.writeText(channel.id),
+      });
+    }
+    ui.openContextMenu(e.clientX, e.clientY, items, MENU_WIDTH);
   }
 
-  /** Botão direito numa categoria: renomear, apagar e colapsar tudo. */
+  /** Botão direito numa categoria. */
   function openCategoryMenu(e: MouseEvent, category: Category) {
     e.preventDefault();
     if (!guild) return;
+    // "recolher/expandir todas" é UM item que alterna, não dois lado a lado
+    const todasFechadas = categories.length > 0 && categories.every((c) => collapsed.includes(c.id));
     const items: MenuItem[] = [
+      {
+        label: "Marcar como lida",
+        icon: <CheckCheck size={18} />,
+        onSelect: () => {
+          for (const c of channels.filter((c) => c.categoryId === category.id)) {
+            void useChannels.getState().markRead(c.id);
+          }
+        },
+      },
+      { separator: true },
       {
         label: collapsed.includes(category.id) ? "Expandir categoria" : "Recolher categoria",
         onSelect: () => toggleCollapsed(category.id),
       },
-      { label: "Recolher todas as categorias", onSelect: () => setAllCollapsed(true) },
-      { label: "Expandir todas as categorias", onSelect: () => setAllCollapsed(false) },
+      {
+        label: todasFechadas ? "Expandir todas as categorias" : "Recolher todas as categorias",
+        onSelect: () => setAllCollapsed(!todasFechadas),
+      },
     ];
     if (canModerate) {
       items.push({ separator: true });
       items.push({
-        label: "Criar canal",
-        icon: <Plus size={18} />,
-        onSelect: () => openModal({ kind: "createChannel", categoryId: category.id }),
-      });
-      items.push({
-        label: "Renomear categoria",
+        label: "Editar categoria",
         icon: <Pencil size={18} />,
         onSelect: () => void renomearCategoria(guild.id, category),
       });
@@ -302,8 +356,21 @@ export default function ChannelSidebar() {
         danger: true,
         onSelect: () => void apagarCategoria(guild.id, category),
       });
+      // no Discord "Criar canal" vem depois de excluir, no fim do bloco
+      items.push({
+        label: "Criar canal",
+        icon: <Plus size={18} />,
+        onSelect: () => openModal({ kind: "createChannel", categoryId: category.id }),
+      });
     }
-    ui.openContextMenu(e.clientX, e.clientY, items);
+    if (developerMode) {
+      items.push({ separator: true });
+      items.push({
+        label: "Copiar ID da categoria",
+        onSelect: () => void navigator.clipboard?.writeText(category.id),
+      });
+    }
+    ui.openContextMenu(e.clientX, e.clientY, items, MENU_WIDTH);
   }
 
   /**
@@ -382,13 +449,17 @@ export default function ChannelSidebar() {
   }
 
   function renderChannel(channel: Channel, grupo: CategoryGroup, index: number) {
-    const active = (channel.type === "VOICE" ? voiceChannelId : activeChannelId) === channel.id;
+    // um só destaque para os dois tipos: canal de voz agora também é canal
+    // aberto (ele tem chat de texto), e continua marcado depois de desligar
+    const active = activeChannelId === channel.id;
     const name = channel.name ?? "canal";
     // canal silenciado (dele ou do servidor) não conta como não lido
     const silenciado =
       isMuted(porEscopo[channelNotificationScope(channel.id)]) ||
       (channel.guildId ? isMuted(porEscopo[guildNotificationScope(channel.guildId)]) : false);
-    const unread = !active && !silenciado && channel.type !== "VOICE" && isUnread(channel);
+    // canal de voz entra na conta do não lido como qualquer outro: o chat de
+    // texto dele é real, e mensagem lá não pode passar despercebida
+    const unread = !active && !silenciado && isUnread(channel);
     const arrastando = arrasto?.tipo === "canal" && arrasto.id === channel.id;
     return (
       <div key={channel.id}>
@@ -433,12 +504,23 @@ export default function ChannelSidebar() {
               {channel.mentionCount}
             </span>
           )}
+          {/* o hover do canal no Discord mostra DOIS botões: convite e editar */}
+          <Tooltip label="Criar convite">
+            <button
+              type="button"
+              onClick={() => void createInvite()}
+              aria-label={`Criar convite para ${name}`}
+              className="grid h-6 w-6 place-items-center rounded text-txt-muted opacity-0 transition hover:text-txt-primary group-hover:opacity-100 focus-visible:opacity-100"
+            >
+              <UserPlus size={16} />
+            </button>
+          </Tooltip>
           {canModerate && (
-            <Tooltip label="Configurações do canal">
+            <Tooltip label="Editar canal">
               <button
                 type="button"
                 onClick={() => openModal({ kind: "channelSettings", channelId: channel.id })}
-                aria-label={`Configurações de ${name}`}
+                aria-label={`Editar ${name}`}
                 className="grid h-6 w-6 place-items-center rounded text-txt-muted opacity-0 transition hover:text-txt-primary group-hover:opacity-100 focus-visible:opacity-100"
               >
                 <Settings size={16} />
@@ -537,10 +619,16 @@ export default function ChannelSidebar() {
         onClick={openGuildMenu}
         disabled={!guild}
         aria-haspopup="menu"
+        aria-expanded={menuAberto}
         className="flex h-12 shrink-0 items-center justify-between px-4 font-semibold text-txt-primary shadow-header transition hover:bg-hov disabled:cursor-default disabled:hover:bg-transparent"
       >
         <span className="truncate">{guild?.name ?? "Selecione um servidor"}</span>
-        {guild && <ChevronDown size={18} aria-hidden="true" className="shrink-0 text-txt-secondary" />}
+        {guild &&
+          (menuAberto ? (
+            <X size={18} aria-hidden="true" className="shrink-0 text-txt-secondary" />
+          ) : (
+            <ChevronDown size={18} aria-hidden="true" className="shrink-0 text-txt-secondary" />
+          ))}
       </button>
 
       <div

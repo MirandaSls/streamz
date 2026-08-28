@@ -1,36 +1,89 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import Picker, { Categories, EmojiStyle, Theme } from "emoji-picker-react";
-import { Settings2 } from "lucide-react";
-import { formatCustomEmoji, type CustomEmoji } from "@streamz/shared";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Clock,
+  Coffee,
+  Flag,
+  Gamepad2,
+  Hash,
+  Leaf,
+  Lightbulb,
+  Plane,
+  Settings2,
+  Smile,
+  type LucideIcon,
+} from "lucide-react";
+import { formatCustomEmoji, parseCustomEmoji, type CustomEmoji } from "@streamz/shared";
+import {
+  buscarUnicode,
+  categoriasUnicode,
+  comTomDePele,
+  emojiPorCaractere,
+  normalizar,
+  TONS_DE_PELE,
+  type EmojiItem,
+  type TomDePele,
+} from "@/components/media/emoji-dados";
+import {
+  BotaoLateral,
+  BuscaPicker,
+  CaixaPicker,
+  ColunaLateral,
+  DivisoriaLateral,
+  IconeServidor,
+  RodapePicker,
+} from "@/components/media/PickerChrome";
+import {
+  definirTomDePele,
+  emojisFrequentes,
+  registrarUsoEmoji,
+  usePrefsPicker,
+} from "@/components/media/preferencias-picker";
 import { useAuth } from "@/stores/auth";
 import { useEmojisOrdenados } from "@/stores/emojis";
 import { useCanModerate, useGuilds } from "@/stores/guilds";
 import { ui } from "@/stores/ui";
 
-/** Nomes das categorias em pt-BR (a biblioteca vem em inglês). */
-const CATEGORIAS = [
-  { category: Categories.SUGGESTED, name: "Recentes" },
-  { category: Categories.SMILEYS_PEOPLE, name: "Pessoas" },
-  { category: Categories.ANIMALS_NATURE, name: "Natureza" },
-  { category: Categories.FOOD_DRINK, name: "Comida" },
-  { category: Categories.TRAVEL_PLACES, name: "Viagem" },
-  { category: Categories.ACTIVITIES, name: "Atividades" },
-  { category: Categories.OBJECTS, name: "Objetos" },
-  { category: Categories.SYMBOLS, name: "Símbolos" },
-  { category: Categories.FLAGS, name: "Bandeiras" },
-];
+/** Ícone de cada categoria unicode na coluna da esquerda. */
+const ICONE_CATEGORIA: Record<string, LucideIcon> = {
+  smileys_people: Smile,
+  animals_nature: Leaf,
+  food_drink: Coffee,
+  travel_places: Plane,
+  activities: Gamepad2,
+  objects: Lightbulb,
+  symbols: Hash,
+  flags: Flag,
+};
 
-type Aba = "unicode" | "servidor";
+/** 9 por linha em 424px de painel; célula de 40px, emoji de 32px. */
+const COLUNAS = 9;
+const CELULA = 40;
+
+type ItemGrade =
+  | { tipo: "unicode"; chave: string; item: EmojiItem }
+  | { tipo: "custom"; chave: string; emoji: CustomEmoji; servidor: string };
+
+interface SecaoGrade {
+  id: string;
+  titulo: string;
+  /** o que a coluna lateral desenha para pular até esta seção. */
+  icone:
+    | { tipo: "lucide"; Icone: LucideIcon }
+    | { tipo: "servidor"; nome: string; url: string | null };
+  itens: ItemGrade[];
+}
 
 /**
- * Seletor de emoji: os unicode (biblioteca completa, com busca e tons de pele)
- * e os personalizados dos meus servidores, em abas.
+ * Seletor de emoji: os personalizados dos meus servidores e os unicode na
+ * **mesma lista rolável**, com a coluna de categorias à esquerda, cabeçalho
+ * grudado no topo e o rodapé de prévia — como no Discord.
  *
- * Duas abas em vez de uma rolagem só porque as duas metades têm busca própria —
- * a da biblioteca é dela e não enxerga os nossos. Separadas, cada busca faz o
- * que promete; juntas, uma das duas mentiria.
+ * Não há aba "Do servidor": os emojis do servidor são a primeira categoria da
+ * lista, e a busca é uma só, cobrindo personalizado e unicode ao mesmo tempo.
+ * Duas buscas separadas obrigavam a saber de antemão em qual metade o emoji
+ * estava, que é justamente o que quem procura não sabe.
  *
  * `onPick` recebe o texto a inserir e, quando é personalizado, o emoji inteiro:
  * o composer insere `:nome:` (é o que a pessoa vê e edita) e a reação usa a
@@ -40,206 +93,467 @@ export default function EmojiPicker({
   onPick,
   onClose,
   className = "",
+  embutido = false,
+  guildId,
 }: {
   onPick: (texto: string, custom?: CustomEmoji) => void;
   onClose: () => void;
   className?: string;
+  /** dentro do `PickerPanel` a caixa e o fechar são do painel, não daqui. */
+  embutido?: boolean;
+  /** servidor a priorizar; sem isso vale o servidor aberto. */
+  guildId?: string | null;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const guildIdAtivo = useGuilds((s) => s.activeGuildId);
-  const secoes = useEmojisOrdenados(guildIdAtivo);
-  const temPersonalizados = secoes.some((s) => s.emojis.length > 0);
-  const [aba, setAba] = useState<Aba>("unicode");
+  const guildIdAtivoStore = useGuilds((s) => s.activeGuildId);
+  const guildIdAtivo = guildId !== undefined ? guildId : guildIdAtivoStore;
+  const secoesServidor = useEmojisOrdenados(guildIdAtivo);
+  const me = useAuth((s) => s.user);
+  const podeGerenciar = useCanModerate(me?.id);
+  const prefs = usePrefsPicker();
+
   const [busca, setBusca] = useState("");
+  const [foco, setFoco] = useState<ItemGrade | null>(null);
+  const [ativa, setAtiva] = useState<string>("");
+  const [tomAberto, setTomAberto] = useState(false);
+  const tom = prefs.tomDePele as TomDePele;
 
+  const rolagem = useRef<HTMLDivElement>(null);
+  const alvos = useRef(new Map<string, HTMLElement>());
+
+  const buscando = busca.trim().length > 0;
+
+  /** Todos os personalizados em lista plana — usados na busca e nos frequentes. */
+  const customPlanos = useMemo(
+    () =>
+      secoesServidor.flatMap((s) =>
+        s.emojis.map((emoji) => ({ emoji, servidor: s.guildName })),
+      ),
+    [secoesServidor],
+  );
+
+  const secoes = useMemo<SecaoGrade[]>(() => {
+    if (buscando) {
+      const q = normalizar(busca.trim());
+      const custom = customPlanos
+        .filter(({ emoji }) => normalizar(emoji.name).includes(q))
+        .map(({ emoji, servidor }) => ({
+          tipo: "custom" as const,
+          chave: emoji.id,
+          emoji,
+          servidor,
+        }));
+      const unicode = buscarUnicode(busca).map((item) => ({
+        tipo: "unicode" as const,
+        chave: item.u,
+        item,
+      }));
+      return [
+        {
+          id: "busca",
+          titulo: "Resultados",
+          icone: { tipo: "lucide", Icone: Smile },
+          itens: [...custom, ...unicode],
+        },
+      ];
+    }
+
+    const lista: SecaoGrade[] = [];
+
+    // "usados com frequência" primeiro, como no Discord; só aparece com histórico
+    const frequentes = emojisFrequentes(prefs)
+      .map((token): ItemGrade | null => {
+        const ref = parseCustomEmoji(token);
+        if (ref) {
+          const achado = customPlanos.find(({ emoji }) => emoji.id === ref.id);
+          return achado
+            ? {
+                tipo: "custom",
+                chave: `freq-${achado.emoji.id}`,
+                emoji: achado.emoji,
+                servidor: achado.servidor,
+              }
+            : null;
+        }
+        const item = emojiPorCaractere(token);
+        return item ? { tipo: "unicode", chave: `freq-${item.u}`, item } : null;
+      })
+      .filter((x): x is ItemGrade => x !== null);
+
+    if (frequentes.length > 0) {
+      lista.push({
+        id: "frequentes",
+        titulo: "Usados com frequência",
+        icone: { tipo: "lucide", Icone: Clock },
+        itens: frequentes,
+      });
+    }
+
+    for (const secao of secoesServidor) {
+      if (secao.emojis.length === 0) continue;
+      lista.push({
+        id: `guild:${secao.guildId}`,
+        titulo: secao.guildName,
+        icone: { tipo: "servidor", nome: secao.guildName, url: secao.guildIconUrl },
+        itens: secao.emojis.map((emoji) => ({
+          tipo: "custom" as const,
+          chave: emoji.id,
+          emoji,
+          servidor: secao.guildName,
+        })),
+      });
+    }
+
+    for (const categoria of categoriasUnicode()) {
+      lista.push({
+        id: `cat:${categoria.id}`,
+        titulo: categoria.titulo,
+        icone: { tipo: "lucide", Icone: ICONE_CATEGORIA[categoria.id] ?? Smile },
+        itens: categoria.itens.map((item) => ({
+          tipo: "unicode" as const,
+          chave: item.u,
+          item,
+        })),
+      });
+    }
+
+    return lista;
+  }, [buscando, busca, customPlanos, secoesServidor, prefs]);
+
+  // a coluna lateral acompanha a rolagem: a seção ativa é a que está no topo
+  const aoRolar = useCallback(() => {
+    const caixa = rolagem.current;
+    if (!caixa) return;
+    let atual = "";
+    for (const [id, el] of alvos.current) {
+      if (el.offsetTop - caixa.scrollTop <= 8) atual = id;
+    }
+    setAtiva(atual);
+  }, []);
+
+  const registrarSecao = useCallback((id: string, el: HTMLElement | null) => {
+    if (el) alvos.current.set(id, el);
+    else alvos.current.delete(id);
+  }, []);
+
+  // entrar ou sair da busca troca a lista inteira: volta ao topo
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    const onDown = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("mousedown", onDown);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("mousedown", onDown);
-    };
-  }, [onClose]);
+    rolagem.current?.scrollTo({ top: 0 });
+    setAtiva("");
+  }, [buscando]);
 
-  return (
-    <div
-      ref={ref}
-      role="dialog"
-      aria-label="Escolher emoji"
-      className={`z-[70] w-[352px] overflow-hidden rounded-lg bg-panel shadow-high ${className}`}
-    >
-      <div className="flex border-b border-black/30" role="tablist" aria-label="Tipo de emoji">
-        <AbaBotao ativa={aba === "unicode"} onClick={() => setAba("unicode")}>
-          Emoji
-        </AbaBotao>
-        <AbaBotao
-          ativa={aba === "servidor"}
-          onClick={() => setAba("servidor")}
-          badge={temPersonalizados ? undefined : "vazio"}
+  function irPara(id: string) {
+    const el = alvos.current.get(id);
+    const caixa = rolagem.current;
+    if (!el || !caixa) return;
+    caixa.scrollTo({ top: el.offsetTop, behavior: "smooth" });
+    setAtiva(id);
+  }
+
+  function escolher(alvo: ItemGrade) {
+    if (alvo.tipo === "custom") {
+      registrarUsoEmoji(formatCustomEmoji(alvo.emoji.name, alvo.emoji.id));
+      onPick(formatCustomEmoji(alvo.emoji.name, alvo.emoji.id), alvo.emoji);
+      return;
+    }
+    // grava o caractere neutro: o tom escolhido é preferência de exibição e
+    // muda depois — gravar já com tom espalharia o mesmo emoji em vários itens
+    registrarUsoEmoji(alvo.item.char);
+    onPick(comTomDePele(alvo.item, tom));
+  }
+
+  const corpo = (
+    <div className="flex h-full min-h-0 flex-col">
+      <BuscaPicker
+        valor={busca}
+        onChange={setBusca}
+        placeholder="Buscar emoji"
+        rotulo="Buscar emoji"
+      />
+
+      <div className="flex min-h-0 flex-1">
+        <ColunaLateral rotulo="Categorias de emoji">
+          {secoes.map((secao, i) => (
+            <div key={secao.id} className="contents">
+              {/* a divisória separa servidores das categorias unicode */}
+              {i > 0 &&
+                secao.id.startsWith("cat:") &&
+                !secoes[i - 1].id.startsWith("cat:") && <DivisoriaLateral />}
+              <BotaoLateral
+                rotulo={secao.titulo}
+                ativo={(ativa || secoes[0]?.id) === secao.id}
+                onClick={() => irPara(secao.id)}
+              >
+                {secao.icone.tipo === "lucide" ? (
+                  <secao.icone.Icone size={18} />
+                ) : (
+                  <IconeServidor nome={secao.icone.nome} iconUrl={secao.icone.url} />
+                )}
+              </BotaoLateral>
+            </div>
+          ))}
+        </ColunaLateral>
+
+        <div
+          ref={rolagem}
+          onScroll={aoRolar}
+          // `relative` não é estética: é o que faz o `offsetTop` das seções ser
+          // medido a partir daqui, e não de um ancestral posicionado qualquer —
+          // sem isso o "pular para a categoria" erra o alvo
+          className="relative min-h-0 flex-1 overflow-y-auto px-2 pb-2"
         >
-          Do servidor
-        </AbaBotao>
+          {secoes.every((s) => s.itens.length === 0) ? (
+            <p className="px-2 py-10 text-center text-sm text-txt-muted">
+              {buscando ? "Nenhum emoji com esse nome." : "Nenhum emoji por aqui."}
+            </p>
+          ) : (
+            secoes.map((secao) => (
+              <SecaoEmoji
+                key={secao.id}
+                secao={secao}
+                tom={tom}
+                raiz={rolagem}
+                onRegistrar={registrarSecao}
+                onEscolher={escolher}
+                onFocar={setFoco}
+              />
+            ))
+          )}
+        </div>
       </div>
 
-      {aba === "unicode" ? (
-        <Picker
-          onEmojiClick={(e) => onPick(e.emoji)}
-          theme={Theme.DARK}
-          emojiStyle={EmojiStyle.NATIVE}
-          lazyLoadEmojis
-          skinTonesDisabled={false}
-          searchPlaceholder="Buscar emoji"
-          categories={CATEGORIAS}
-          previewConfig={{ showPreview: false }}
-          width={352}
-          height={380}
-          style={
-            {
-              "--epr-bg-color": "#2b2d31",
-              "--epr-category-label-bg-color": "#2b2d31",
-              "--epr-search-input-bg-color": "#1e1f22",
-              "--epr-picker-border-color": "#1e1f22",
-              "--epr-hover-bg-color": "#35373c",
-              "--epr-text-color": "#dbdee1",
-              "--epr-search-input-text-color": "#dbdee1",
-              "--epr-category-icon-active-color": "#5865f2",
-            } as React.CSSProperties
-          }
+      <RodapePicker>
+        <Previa item={foco} tom={tom} />
+        <SeletorDeTom
+          tom={tom}
+          aberto={tomAberto}
+          onAbrir={setTomAberto}
+          onEscolher={(novo) => {
+            definirTomDePele(novo);
+            setTomAberto(false);
+          }}
         />
-      ) : (
-        <SecaoPersonalizados
-          busca={busca}
-          onBusca={setBusca}
-          onPick={onPick}
-          onClose={onClose}
-        />
-      )}
+        {podeGerenciar && guildIdAtivo && (
+          <button
+            type="button"
+            title="Gerenciar emojis do servidor"
+            aria-label="Gerenciar emojis do servidor"
+            onClick={() => {
+              onClose();
+              ui.openModal({ kind: "guildEmojis", guildId: guildIdAtivo });
+            }}
+            className="grid h-7 w-7 shrink-0 place-items-center rounded text-txt-muted transition hover:bg-hov hover:text-txt-normal"
+          >
+            <Settings2 size={16} aria-hidden="true" />
+          </button>
+        )}
+      </RodapePicker>
     </div>
+  );
+
+  if (embutido) return corpo;
+  return (
+    <CaixaPicker rotulo="Escolher emoji" onClose={onClose} className={className}>
+      {corpo}
+    </CaixaPicker>
   );
 }
 
-function AbaBotao({
-  ativa,
-  onClick,
-  children,
-  badge,
+/**
+ * Uma seção da lista. Só monta os botões depois que ela chega perto da tela —
+ * são ~1.900 emojis no total e montar todos de uma vez trava a abertura do
+ * painel. Antes disso ocupa a altura estimada, para a rolagem e o "pular para a
+ * categoria" caírem no lugar certo mesmo com o conteúdo ainda ausente.
+ */
+function SecaoEmoji({
+  secao,
+  tom,
+  raiz,
+  onRegistrar,
+  onEscolher,
+  onFocar,
 }: {
-  ativa: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-  badge?: string;
+  secao: SecaoGrade;
+  tom: TomDePele;
+  raiz: React.RefObject<HTMLDivElement | null>;
+  onRegistrar: (id: string, el: HTMLElement | null) => void;
+  onEscolher: (item: ItemGrade) => void;
+  onFocar: (item: ItemGrade | null) => void;
 }) {
+  const ref = useRef<HTMLElement>(null);
+  const [visivel, setVisivel] = useState(false);
+
+  useEffect(() => {
+    onRegistrar(secao.id, ref.current);
+    return () => onRegistrar(secao.id, null);
+  }, [onRegistrar, secao.id]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || visivel) return;
+    const obs = new IntersectionObserver(
+      ([entrada]) => {
+        if (entrada.isIntersecting) setVisivel(true);
+      },
+      { root: raiz.current, rootMargin: "400px 0px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [raiz, visivel]);
+
+  const linhas = Math.ceil(secao.itens.length / COLUNAS);
+
+  return (
+    <section ref={ref} className="mb-1">
+      <h3 className="sticky top-0 z-10 flex items-center gap-1.5 bg-panel px-1 py-1.5 text-xs font-semibold uppercase tracking-wide text-txt-muted">
+        {secao.icone.tipo === "servidor" ? (
+          <IconeServidor nome={secao.icone.nome} iconUrl={secao.icone.url} />
+        ) : (
+          <secao.icone.Icone size={14} aria-hidden="true" />
+        )}
+        <span className="truncate">{secao.titulo}</span>
+      </h3>
+      {visivel ? (
+        <div className="grid" style={{ gridTemplateColumns: `repeat(${COLUNAS}, ${CELULA}px)` }}>
+          {secao.itens.map((alvo) => (
+            <BotaoEmoji
+              key={alvo.chave}
+              alvo={alvo}
+              tom={tom}
+              onEscolher={onEscolher}
+              onFocar={onFocar}
+            />
+          ))}
+        </div>
+      ) : (
+        <div aria-hidden="true" style={{ height: linhas * CELULA }} />
+      )}
+    </section>
+  );
+}
+
+function BotaoEmoji({
+  alvo,
+  tom,
+  onEscolher,
+  onFocar,
+}: {
+  alvo: ItemGrade;
+  tom: TomDePele;
+  onEscolher: (item: ItemGrade) => void;
+  onFocar: (item: ItemGrade | null) => void;
+}) {
+  const rotulo = alvo.tipo === "custom" ? `:${alvo.emoji.name}:` : `:${alvo.item.nome}:`;
   return (
     <button
       type="button"
-      role="tab"
-      aria-selected={ativa}
-      onClick={onClick}
-      className={`flex-1 border-b-2 px-3 py-2 text-sm font-medium transition ${
-        ativa
-          ? "border-accent text-txt-primary"
-          : "border-transparent text-txt-muted hover:text-txt-normal"
-      }`}
+      aria-label={rotulo}
+      onClick={() => onEscolher(alvo)}
+      onPointerEnter={() => onFocar(alvo)}
+      onFocus={() => onFocar(alvo)}
+      className="grid h-10 w-10 place-items-center rounded transition hover:bg-hov"
     >
-      {children}
-      {badge && <span className="ml-1 text-[10px] text-txt-faint">({badge})</span>}
+      {alvo.tipo === "custom" ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={alvo.emoji.url}
+          alt={rotulo}
+          loading="lazy"
+          className="h-8 w-8 object-contain"
+        />
+      ) : (
+        <span className="text-[28px] leading-none">{comTomDePele(alvo.item, tom)}</span>
+      )}
     </button>
   );
 }
 
-/** Grade dos emojis personalizados, agrupada por servidor. */
-function SecaoPersonalizados({
-  busca,
-  onBusca,
-  onPick,
-  onClose,
-}: {
-  busca: string;
-  onBusca: (v: string) => void;
-  onPick: (texto: string, custom?: CustomEmoji) => void;
-  onClose: () => void;
-}) {
-  const guildIdAtivo = useGuilds((s) => s.activeGuildId);
-  const secoes = useEmojisOrdenados(guildIdAtivo);
-  const me = useAuth((s) => s.user);
-  const podeGerenciar = useCanModerate(me?.id);
-
-  const filtradas = useMemo(() => {
-    const q = busca.trim().toLowerCase();
-    if (!q) return secoes;
-    return secoes
-      .map((s) => ({ ...s, emojis: s.emojis.filter((e) => e.name.includes(q)) }))
-      .filter((s) => s.emojis.length > 0);
-  }, [secoes, busca]);
-
-  const vazio = filtradas.every((s) => s.emojis.length === 0);
-
+/** Prévia do rodapé: o emoji grande, o `:nome:` e os apelidos. */
+function Previa({ item, tom }: { item: ItemGrade | null; tom: TomDePele }) {
+  if (!item) {
+    return <span className="flex-1 text-sm text-txt-muted">Escolha um emoji</span>;
+  }
+  const nome = item.tipo === "custom" ? item.emoji.name : item.item.nome;
+  const detalhe =
+    item.tipo === "custom" ? item.servidor : item.item.aliases.slice(0, 4).join(", ");
   return (
-    <div className="flex h-[380px] flex-col">
-      <div className="p-2">
-        <input
-          value={busca}
-          onChange={(e) => onBusca(e.target.value)}
-          placeholder="Buscar emoji do servidor"
-          aria-label="Buscar emoji do servidor"
-          className="h-8 w-full rounded bg-rail px-2 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
-        />
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-        {vazio ? (
-          <p className="px-2 py-8 text-center text-sm text-txt-muted">
-            {busca.trim()
-              ? "Nenhum emoji com esse nome."
-              : "Este servidor ainda não tem emojis personalizados."}
-          </p>
-        ) : (
-          filtradas.map((secao) => (
-            <section key={secao.guildId} className="mb-2">
-              <h3 className="px-1 py-1 text-xs font-semibold uppercase text-txt-muted">
-                {secao.guildName}
-              </h3>
-              <div className="grid grid-cols-8 gap-1">
-                {secao.emojis.map((emoji) => (
-                  <button
-                    key={emoji.id}
-                    type="button"
-                    title={`:${emoji.name}:`}
-                    aria-label={`:${emoji.name}:`}
-                    onClick={() => onPick(formatCustomEmoji(emoji.name, emoji.id), emoji)}
-                    className="grid h-10 w-10 place-items-center rounded hover:bg-hov"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={emoji.url}
-                      alt={`:${emoji.name}:`}
-                      loading="lazy"
-                      className="h-7 w-7 object-contain"
-                    />
-                  </button>
-                ))}
-              </div>
-            </section>
-          ))
+    <span className="flex min-w-0 flex-1 items-center gap-2">
+      {item.tipo === "custom" ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={item.emoji.url} alt="" className="h-7 w-7 shrink-0 object-contain" />
+      ) : (
+        <span aria-hidden="true" className="shrink-0 text-2xl leading-none">
+          {comTomDePele(item.item, tom)}
+        </span>
+      )}
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-semibold text-txt-primary">{`:${nome}:`}</span>
+        {detalhe && (
+          <span className="block truncate text-[11px] text-txt-muted">{detalhe}</span>
         )}
-      </div>
+      </span>
+    </span>
+  );
+}
 
-      {podeGerenciar && guildIdAtivo && (
-        <button
-          type="button"
-          onClick={() => {
-            onClose();
-            ui.openModal({ kind: "guildEmojis", guildId: guildIdAtivo });
-          }}
-          className="flex items-center gap-2 border-t border-black/30 px-3 py-2 text-sm text-txt-link hover:underline"
+/** Tom de pele — no rodapé, à direita da prévia, como no Discord. */
+function SeletorDeTom({
+  tom,
+  aberto,
+  onAbrir,
+  onEscolher,
+}: {
+  tom: TomDePele;
+  aberto: boolean;
+  onAbrir: (v: boolean) => void;
+  onEscolher: (tom: TomDePele) => void;
+}) {
+  const atual = TONS_DE_PELE.find((t) => t.id === tom) ?? TONS_DE_PELE[0];
+  return (
+    <div
+      className="relative shrink-0"
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) onAbrir(false);
+      }}
+    >
+      <button
+        type="button"
+        aria-label={`Tom de pele: ${atual.rotulo}`}
+        aria-expanded={aberto}
+        onClick={() => onAbrir(!aberto)}
+        className="grid h-7 w-7 place-items-center rounded transition hover:bg-hov"
+      >
+        <span
+          aria-hidden="true"
+          style={{ backgroundColor: atual.amostra }}
+          className="h-4 w-4 rounded-full"
+        />
+      </button>
+      {aberto && (
+        <div
+          role="listbox"
+          aria-label="Tom de pele"
+          className="anim-menu absolute bottom-full right-0 mb-1 flex gap-1 rounded bg-rail p-1 shadow-high"
         >
-          <Settings2 size={16} aria-hidden="true" />
-          Gerenciar emojis do servidor
-        </button>
+          {TONS_DE_PELE.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="option"
+              aria-selected={t.id === tom}
+              aria-label={t.rotulo}
+              onClick={() => onEscolher(t.id)}
+              className={`grid h-7 w-7 place-items-center rounded transition hover:bg-hov ${
+                t.id === tom ? "bg-hov" : ""
+              }`}
+            >
+              <span
+                aria-hidden="true"
+                style={{ backgroundColor: t.amostra }}
+                className="h-4 w-4 rounded-full"
+              />
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );

@@ -305,7 +305,7 @@ function BotaoEnviar({
         type="button"
         disabled={disabled}
         onClick={onClick}
-        className="flex h-9 items-center gap-2 rounded-[3px] bg-accent px-4 text-sm font-medium text-white transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex h-9 items-center gap-2 rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Upload size={16} aria-hidden="true" />
         Enviar

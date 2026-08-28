@@ -58,7 +58,7 @@ export default function PollCard({
               aria-pressed={o.me}
               onClick={() => vote(poll.messageId, o.index)}
               className={`relative flex h-10 items-center gap-2 overflow-hidden rounded-[4px] border px-3 text-left transition ${
-                o.me ? "border-accent" : "border-[#4e5058]"
+                o.me ? "border-accent" : "border-border-strong"
               } ${encerrada ? "cursor-default opacity-80" : "hover:border-txt-muted"}`}
             >
               {mostrarResultado && (
@@ -73,7 +73,7 @@ export default function PollCard({
                 // caixa quadrada para múltipla escolha, redonda para escolha única
                 className={`relative grid h-4 w-4 shrink-0 place-items-center border ${
                   poll.multi ? "rounded-[3px]" : "rounded-full"
-                } ${o.me ? "border-accent bg-accent text-white" : "border-txt-muted"}`}
+                } ${o.me ? "border-accent bg-accent text-accent-ink" : "border-txt-muted"}`}
               >
                 {o.me && <Check size={12} strokeWidth={3} />}
               </span>

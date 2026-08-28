@@ -1,22 +1,26 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Search } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ChevronLeft, Star } from "lucide-react";
 import type { Attachment, GifCategory, GifResult } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
+import { BuscaPicker, CaixaPicker } from "@/components/media/PickerChrome";
+import { alternarGifFavorito, usePrefsPicker } from "@/components/media/preferencias-picker";
 
 /** Espera antes de buscar enquanto se digita (o provedor cobra por chamada). */
 const DEBOUNCE_MS = 350;
 
+type SubAba = "favoritos" | "tendencias";
+
 /**
- * Seletor de GIF (Tenor).
+ * Seletor de GIF (Tenor), com as sub-abas "Favoritos" e "Tendências".
  *
  * Sem `TENOR_API_KEY` no servidor a resposta vem com `configured: false` e a
- * caixa mostra o estado "não configurado" em vez de um erro — o mesmo
- * tratamento que voz dá à falta de LiveKit. O botão do composer continua
- * existindo: quem configurar a chave passa a ter a busca sem mudar mais nada.
+ * caixa mostra um aviso neutro em vez de um erro — o mesmo tratamento que voz
+ * dá à falta de LiveKit. O aviso **não** cita variável de ambiente nem arquivo
+ * do repositório: quem lê é quem usa o chat, não quem o instala.
  *
  * O GIF escolhido vira anexo por URL: nada é copiado para o nosso storage
  * (ver `POST /uploads/external`), então este caminho funciona mesmo sem R2.
@@ -26,33 +30,25 @@ export default function GifPicker({
   onClose,
   termoInicial = "",
   className = "",
+  embutido = false,
 }: {
   onEscolher: (attachment: Attachment) => void;
   onClose: () => void;
   /** termo já digitado (veio de `/giphy termo`). */
   termoInicial?: string;
   className?: string;
+  /** dentro do `PickerPanel` a caixa e o fechar são do painel, não daqui. */
+  embutido?: boolean;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
+  const prefs = usePrefsPicker();
   const [termo, setTermo] = useState(termoInicial);
+  const [subAba, setSubAba] = useState<SubAba>("tendencias");
+  const [categoriaAberta, setCategoriaAberta] = useState<GifCategory | null>(null);
   const [resultados, setResultados] = useState<GifResult[]>([]);
   const [categorias, setCategorias] = useState<GifCategory[]>([]);
   const [configurado, setConfigurado] = useState<boolean | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [anexando, setAnexando] = useState(false);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    const onDown = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("mousedown", onDown);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("mousedown", onDown);
-    };
-  }, [onClose]);
 
   // categorias abrem a caixa; a busca substitui a grade quando há termo
   useEffect(() => {
@@ -71,6 +67,7 @@ export default function GifPicker({
   }, []);
 
   useEffect(() => {
+    if (subAba === "favoritos" && !termo.trim()) return;
     let vivo = true;
     setCarregando(true);
     const timer = setTimeout(() => {
@@ -88,7 +85,7 @@ export default function GifPicker({
       vivo = false;
       clearTimeout(timer);
     };
-  }, [termo]);
+  }, [termo, subAba]);
 
   async function escolher(gif: GifResult) {
     setAnexando(true);
@@ -107,48 +104,84 @@ export default function GifPicker({
     }
   }
 
-  return (
-    <div
-      ref={ref}
-      role="dialog"
-      aria-label="Escolher GIF"
-      className={`z-[70] flex h-[420px] w-[352px] flex-col overflow-hidden rounded-lg bg-panel shadow-high ${className}`}
-    >
-      <div className="flex items-center gap-2 p-2">
-        <Search size={16} className="text-txt-muted" aria-hidden="true" />
-        <input
-          autoFocus
-          value={termo}
-          onChange={(e) => setTermo(e.target.value)}
-          placeholder="Buscar no Tenor"
-          aria-label="Buscar GIF"
-          className="h-8 flex-1 rounded bg-rail px-2 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
-        />
-      </div>
+  function voltar() {
+    setCategoriaAberta(null);
+    setTermo("");
+  }
+
+  const emCategoria = categoriaAberta !== null;
+  const buscando = termo.trim().length > 0;
+  const favoritos = prefs.gifsFavoritos;
+  const mostrandoFavoritos = subAba === "favoritos" && !buscando;
+  const grade = mostrandoFavoritos ? favoritos : resultados;
+
+  const corpo = (
+    <div className="flex h-full min-h-0 flex-col">
+      <BuscaPicker
+        valor={termo}
+        onChange={(v) => {
+          setCategoriaAberta(null);
+          setTermo(v);
+        }}
+        placeholder={emCategoria ? categoriaAberta.name : "Buscar GIF"}
+        rotulo="Buscar GIF"
+        autoFocus
+      >
+        {(emCategoria || buscando) && (
+          <button
+            type="button"
+            onClick={voltar}
+            aria-label="Voltar"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded text-txt-muted transition hover:bg-hov hover:text-txt-normal"
+          >
+            <ChevronLeft size={18} aria-hidden="true" />
+          </button>
+        )}
+      </BuscaPicker>
+
+      {!buscando && configurado !== false && (
+        <div className="flex gap-1 px-2 pb-2" role="tablist" aria-label="Origem dos GIFs">
+          <SubAbaBotao
+            ativa={subAba === "favoritos"}
+            onClick={() => setSubAba("favoritos")}
+            rotulo="Favoritos"
+          />
+          <SubAbaBotao
+            ativa={subAba === "tendencias"}
+            onClick={() => setSubAba("tendencias")}
+            rotulo="Tendências"
+          />
+        </div>
+      )}
 
       {configurado === false ? (
-        <div className="grid flex-1 place-items-center px-6 text-center">
+        <div className="grid flex-1 place-items-center px-8 text-center">
           <div>
-            <p className="font-medium text-txt-normal">GIFs não configurados</p>
+            <p className="font-medium text-txt-normal">GIFs indisponíveis</p>
             <p className="mt-1 text-sm text-txt-muted">
-              Defina <code className="rounded bg-rail px-1">TENOR_API_KEY</code> no servidor para
-              habilitar a busca. Ver PENDENCIAS.md.
+              A busca de GIFs não está disponível agora. Você ainda pode anexar um GIF do seu
+              computador.
             </p>
           </div>
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-          {!termo.trim() && categorias.length > 0 && (
+          {!buscando && subAba === "tendencias" && categorias.length > 0 && (
             <section className="mb-2">
-              <h3 className="px-1 py-1 text-xs font-semibold uppercase text-txt-muted">
+              <h3 className="sticky top-0 z-10 bg-panel px-1 py-1.5 text-xs font-semibold uppercase tracking-wide text-txt-muted">
                 Categorias
               </h3>
+              {/* a lista inteira, rolável: cortar em oito escondia justamente as
+                  categorias que ninguém alcança pela busca por não saber o nome */}
               <div className="grid grid-cols-2 gap-2">
-                {categorias.slice(0, 8).map((c) => (
+                {categorias.map((c) => (
                   <button
                     key={c.searchTerm}
                     type="button"
-                    onClick={() => setTermo(c.searchTerm)}
+                    onClick={() => {
+                      setCategoriaAberta(c);
+                      setTermo(c.searchTerm);
+                    }}
                     className="relative h-20 overflow-hidden rounded"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -162,36 +195,123 @@ export default function GifPicker({
             </section>
           )}
 
-          {carregando && resultados.length === 0 ? (
+          {mostrandoFavoritos && favoritos.length === 0 ? (
+            <p className="py-10 text-center text-sm text-txt-muted">
+              Nenhum GIF favoritado ainda. Passe o mouse num GIF e toque na estrela.
+            </p>
+          ) : carregando && grade.length === 0 && !mostrandoFavoritos ? (
             <p className="py-8 text-center text-sm text-txt-muted">Carregando…</p>
-          ) : resultados.length === 0 ? (
+          ) : grade.length === 0 ? (
             <p className="py-8 text-center text-sm text-txt-muted">
-              {termo.trim() ? "Nenhum GIF para esse termo." : "Nada por aqui ainda."}
+              {buscando ? "Nenhum GIF para esse termo." : "Nada por aqui ainda."}
             </p>
           ) : (
             <div className="columns-2 gap-2">
-              {resultados.map((gif) => (
-                <button
+              {grade.map((gif) => (
+                <CartaoGif
                   key={gif.id}
-                  type="button"
-                  disabled={anexando}
-                  onClick={() => void escolher(gif)}
-                  aria-label={gif.description}
-                  className="mb-2 block w-full overflow-hidden rounded disabled:opacity-50"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={gif.previewUrl}
-                    alt={gif.description}
-                    loading="lazy"
-                    className="w-full object-cover"
-                  />
-                </button>
+                  gif={gif}
+                  favorito={favoritos.some((g) => g.id === gif.id)}
+                  desabilitado={anexando}
+                  onEscolher={() => void escolher(gif)}
+                  onFavoritar={() => alternarGifFavorito(gif)}
+                />
               ))}
             </div>
           )}
         </div>
       )}
+    </div>
+  );
+
+  if (embutido) return corpo;
+  return (
+    <CaixaPicker rotulo="Escolher GIF" onClose={onClose} className={className}>
+      {corpo}
+    </CaixaPicker>
+  );
+}
+
+function SubAbaBotao({
+  ativa,
+  onClick,
+  rotulo,
+}: {
+  ativa: boolean;
+  onClick: () => void;
+  rotulo: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={ativa}
+      onClick={onClick}
+      className={`rounded px-2.5 py-1 text-sm font-medium transition ${
+        ativa ? "bg-sel text-txt-primary" : "text-txt-muted hover:bg-hov hover:text-txt-normal"
+      }`}
+    >
+      {rotulo}
+    </button>
+  );
+}
+
+/**
+ * Um GIF da grade. Em repouso mostra a miniatura estática e só **anima ao passar
+ * o mouse**: a grade tem dezenas de cartões, e deixar todos rodando ao mesmo
+ * tempo é o que trava a rolagem em máquina modesta.
+ *
+ * A estrela é irmã do botão do GIF, não filha: botão dentro de botão é HTML
+ * inválido e o clique na estrela viraria escolha do GIF.
+ */
+function CartaoGif({
+  gif,
+  favorito,
+  desabilitado,
+  onEscolher,
+  onFavoritar,
+}: {
+  gif: GifResult;
+  favorito: boolean;
+  desabilitado: boolean;
+  onEscolher: () => void;
+  onFavoritar: () => void;
+}) {
+  const [animando, setAnimando] = useState(false);
+  return (
+    <div
+      className="group relative mb-2 break-inside-avoid"
+      onPointerEnter={() => setAnimando(true)}
+      onPointerLeave={() => setAnimando(false)}
+    >
+      <button
+        type="button"
+        disabled={desabilitado}
+        onClick={onEscolher}
+        onFocus={() => setAnimando(true)}
+        onBlur={() => setAnimando(false)}
+        aria-label={gif.description}
+        className="block w-full overflow-hidden rounded disabled:opacity-50"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={animando ? gif.url : gif.previewUrl}
+          alt={gif.description}
+          loading="lazy"
+          className="w-full object-cover"
+        />
+      </button>
+      <button
+        type="button"
+        onClick={onFavoritar}
+        aria-label={favorito ? "Remover dos favoritos" : "Favoritar GIF"}
+        aria-pressed={favorito}
+        className={`absolute right-1 top-1 grid h-7 w-7 place-items-center rounded bg-black/60 transition focus-visible:opacity-100 group-hover:opacity-100 ${
+          favorito ? "text-accent opacity-100" : "text-white opacity-0"
+        }`}
+      >
+        <Star size={15} aria-hidden="true" fill={favorito ? "currentColor" : "none"} />
+      </button>
     </div>
   );
 }

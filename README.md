@@ -10,7 +10,7 @@ e app desktop. Monolito **NestJS** + **Next.js** + **Tauri** num monorepo.
 | Cliente | Next.js (App Router), React, Tailwind, TanStack Query, Zustand |
 | Backend | NestJS (REST + WebSocket via Socket.IO), Prisma |
 | Banco   | PostgreSQL |
-| Mídia   | LiveKit (Cloud no MVP → self-host depois) |
+| Mídia   | LiveKit Cloud (SFU com *cascading* — edge mais próximo por participante) |
 | Desktop | Tauri 2 |
 | Monorepo| pnpm workspaces + Turborepo |
 
@@ -32,7 +32,9 @@ Pré-requisitos: **Node 20+**, **pnpm 9+**, **Docker**, (para o desktop) **Rust*
 ```bash
 # 1. variáveis de ambiente
 cp .env.example .env
-#    preencha as credenciais do LiveKit Cloud (cloud.livekit.io)
+#    preencha LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET com as chaves
+#    do LiveKit Cloud (cloud.livekit.io -> project -> Settings -> Keys).
+#    Vazias, a voz responde 503 e o resto do app funciona normalmente.
 
 # 2. banco
 pnpm db:up                 # sobe o Postgres via docker-compose

@@ -1,6 +1,6 @@
 "use client";
 
-import { RadioCards, Slider, Toggle } from "@/components/settings/controls";
+import { RadioCards, Slider, Toggle } from "@/components/ui/controls";
 import { useT } from "@/lib/i18n";
 import { EMOJI_SIZE, useSettings, type SendMode } from "@/stores/settings";
 

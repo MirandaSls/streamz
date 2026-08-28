@@ -17,26 +17,19 @@ import { ui } from "@/stores/ui";
  * não mantemos assinatura ao vivo: a lista de não-lidos já está no rail e na
  * barra lateral, e uma segunda cópia ao vivo só criaria divergência entre as duas.
  */
-export type InboxTab = "mentions" | "unread";
-
 interface InboxState {
-  tab: InboxTab;
   mentions: InboxMention[];
   unread: InboxUnreadGroup[];
   loading: boolean;
 
-  setTab: (tab: InboxTab) => void;
   load: () => Promise<void>;
   markAllRead: () => Promise<void>;
 }
 
 export const useInbox = create<InboxState>((set) => ({
-  tab: "mentions",
   mentions: [],
   unread: [],
   loading: false,
-
-  setTab: (tab) => set({ tab }),
 
   load: async () => {
     set({ loading: true });
