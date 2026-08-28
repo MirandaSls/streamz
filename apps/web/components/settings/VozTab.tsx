@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Keyboard, Mic, RefreshCw, Video } from "lucide-react";
 import { PTT_RELEASE_MS } from "@streamz/shared";
-import { RadioCards, Section, Select, Slider } from "@/components/ui/controls";
+import { RadioCards, Section, Select, Slider, ToggleLinha } from "@/components/ui/controls";
 import { useT } from "@/lib/i18n";
 import { pttRotulo } from "@/stores/ptt-core";
 import { useSettings } from "@/stores/settings";
 import { explicarMidia, motivoDaFalha, useVoiceDevices } from "@/stores/voiceDevices";
+import { useVoice, type NivelDeRuido } from "@/stores/voice";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 
 /**
@@ -36,6 +37,10 @@ export default function VozTab() {
   const pttKey = useVoicePrefs((p) => p.pttKey);
   const setPushToTalk = useVoicePrefs((p) => p.setPushToTalk);
   const setPttKey = useVoicePrefs((p) => p.setPttKey);
+  // o processamento vive na store da voz (a mesma que o painel de dentro da
+  // chamada escreve), então a escolha vale nos dois lugares
+  const processamento = useVoice((v) => v.audio.processamento);
+  const setAudioPref = useVoice((v) => v.setAudioPref);
 
   const [erro, setErro] = useState<string | null>(null);
   const [nivel, setNivel] = useState(0);
@@ -236,6 +241,33 @@ export default function VozTab() {
             </p>
           </div>
         )}
+      </Section>
+
+      <Section title={t("voz.processamento")}>
+        <RadioCards
+          legend={t("voz.ruido")}
+          columns={3}
+          value={processamento.ruido}
+          onChange={(ruido: NivelDeRuido) =>
+            setAudioPref({ processamento: { ...processamento, ruido } })
+          }
+          options={[
+            { value: "off", label: t("voz.ruidoOff") },
+            { value: "padrao", label: t("voz.ruidoPadrao") },
+            { value: "avancada", label: t("voz.ruidoAvancada") },
+          ]}
+        />
+        <p className="-mt-1 pb-3 text-xs text-txt-muted">{t("voz.ruidoAjuda")}</p>
+        <ToggleLinha
+          titulo={t("voz.eco")}
+          checked={processamento.eco}
+          onChange={(eco) => setAudioPref({ processamento: { ...processamento, eco } })}
+        />
+        <ToggleLinha
+          titulo={t("voz.ganho")}
+          checked={processamento.ganho}
+          onChange={(ganho) => setAudioPref({ processamento: { ...processamento, ganho } })}
+        />
       </Section>
 
       <Section title={t("voz.testarMic")}>

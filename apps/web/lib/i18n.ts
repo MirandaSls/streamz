@@ -62,6 +62,15 @@ const PT_BR = {
 
   // ── voz ──
   "voz.entrada": "Dispositivo de entrada",
+  "voz.processamento": "Processamento de voz",
+  "voz.ruido": "Redução de ruído",
+  "voz.ruidoOff": "Desligada",
+  "voz.ruidoPadrao": "Padrão",
+  "voz.ruidoAvancada": "Avançada",
+  "voz.ruidoAjuda":
+    "A avançada roda uma rede neural no seu computador e tira teclado, ventilador e ar-condicionado — em troca de mais CPU. A padrão é a do navegador.",
+  "voz.eco": "Cancelamento de eco",
+  "voz.ganho": "Controle automático de ganho",
   "voz.saida": "Dispositivo de saída",
   "voz.camera": "Câmera",
   "voz.volumeEntrada": "Volume de entrada",
@@ -189,6 +198,15 @@ const EN_US: Dicionario = {
   "acess.ctrlEnter": "Ctrl + Enter",
 
   "voz.entrada": "Input device",
+  "voz.processamento": "Voice processing",
+  "voz.ruido": "Noise suppression",
+  "voz.ruidoOff": "Off",
+  "voz.ruidoPadrao": "Standard",
+  "voz.ruidoAvancada": "Advanced",
+  "voz.ruidoAjuda":
+    "Advanced runs a neural network on your computer and removes keyboard, fan and air conditioning noise — at the cost of more CPU. Standard is the browser's own.",
+  "voz.eco": "Echo cancellation",
+  "voz.ganho": "Automatic gain control",
   "voz.saida": "Output device",
   "voz.camera": "Camera",
   "voz.volumeEntrada": "Input volume",
