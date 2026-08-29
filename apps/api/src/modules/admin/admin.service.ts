@@ -1,12 +1,14 @@
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import {
   ADMIN_PAGE_SIZE,
   nomeDaConversa,
+  WS_EVENTS,
   type AdminCall,
   type AdminCallLocation,
   type AdminChannelView,
   type AdminChannelsPage,
   type AdminGuildView,
+  type AdminMensagemEnviada,
   type AdminMessagesPage,
   type AdminOverview,
   type AdminUsersPage,
@@ -18,7 +20,10 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { MessagesService } from "../messages/messages.service";
 import { VoiceService } from "../voice/voice.service";
 import { toPublicUser } from "../../common/dto";
+import { DMsService } from "../dms/dms.service";
+import { RealtimeService } from "../realtime/realtime.service";
 import { PlatformAdminService } from "./platform-admin.service";
+import { impedimentoParaMensagem } from "./admins";
 import type { VoiceMember } from "../voice/voice-state.store";
 
 /** Presença que conta como "está com o app aberto" na visão geral. */
@@ -70,6 +75,8 @@ export class AdminService {
     private readonly voice: VoiceService,
     private readonly mensagens: MessagesService,
     private readonly admins: PlatformAdminService,
+    private readonly dms: DMsService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   // ── visão geral ────────────────────────────────────────────
@@ -375,6 +382,62 @@ export class AdminService {
       proximoCursor: itens.length > 0 ? itens[0].id : null,
       itens,
     };
+  }
+
+  // ── mensagem direta ────────────────────────────────────────
+
+  /**
+   * Manda uma mensagem para qualquer conta, sem amizade e sem convite.
+   *
+   * É a **única escrita** do painel, e a exceção é estreita de propósito: abre
+   * (ou reaproveita) a conversa 1-a-1 e cria uma mensagem comum, com o
+   * administrador como autor. Nada de anônimo e nada de sistema — quem recebe vê
+   * o nome de quem escreveu e pode responder, silenciar ou bloquear como em
+   * qualquer outra conversa.
+   *
+   * Duas coisas que a rota **não** contorna: o teto de caracteres e o formato do
+   * DTO, porque quem grava é o `MessagesService.create` de sempre. A única regra
+   * que ela dispensa é a do bloqueio — o administrador da instância é o canal de
+   * último recurso para falar com alguém, e não seria isso se desse para
+   * silenciá-lo. É por isso que fica no log, como a leitura de histórico.
+   */
+  async enviarMensagem(
+    adminId: string,
+    targetUserId: string,
+    conteudo: string,
+  ): Promise<AdminMensagemEnviada> {
+    const alvo = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: { id: true, username: true, deletedAt: true },
+    });
+    const impedimento = impedimentoParaMensagem(
+      adminId,
+      alvo && { id: alvo.id, excluida: !!alvo.deletedAt },
+    );
+    if (impedimento === "inexistente") throw new NotFoundException("Usuário não encontrado");
+    if (impedimento === "si-mesmo") {
+      throw new BadRequestException("Não é possível mandar mensagem para si mesmo");
+    }
+    if (impedimento === "excluida") {
+      throw new BadRequestException("Esta conta foi excluída e não recebe mensagens");
+    }
+
+    const conversa = await this.dms.openWith(adminId, targetUserId, { ignorarBloqueio: true });
+    const mensagem = await this.mensagens.create(conversa.id, adminId, conteudo.trim());
+    this.realtime.emitToChannel(conversa.id, WS_EVENTS.MESSAGE_NEW, mensagem);
+    // a conversa pode estar nascendo agora: sem este aviso ela só apareceria na
+    // lista de quem recebe depois de recarregar a página. A visão vai montada
+    // para o destinatário — `others` é quem está do outro lado, e lá sou eu.
+    this.realtime.emitToUser(
+      targetUserId,
+      WS_EVENTS.CHANNEL_CREATED,
+      await this.dms.get(targetUserId, conversa.id),
+    );
+
+    this.logger.log(
+      `Painel: ${adminId} mandou mensagem para @${alvo?.username} (${targetUserId}) na conversa ${conversa.id}`,
+    );
+    return { channelId: conversa.id, mensagem };
   }
 
   // ── auxiliares ─────────────────────────────────────────────

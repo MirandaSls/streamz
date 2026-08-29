@@ -61,15 +61,27 @@ export class DMsService {
     private readonly storage: StorageService,
   ) {}
 
-  /** Abre (ou reaproveita) a conversa 1-a-1 entre dois usuários. */
-  async openWith(meId: string, otherUserId: string): Promise<DMChannelView> {
+  /**
+   * Abre (ou reaproveita) a conversa 1-a-1 entre dois usuários.
+   *
+   * `ignorarBloqueio` existe para um chamador só: o painel do administrador da
+   * instância (`modules/admin`), que escreve para qualquer conta. Não é uma
+   * brecha genérica — nenhuma rota aceita o sinalizador vindo do cliente, ele é
+   * decidido no servidor depois do `PlatformAdminGuard`. E é justamente por
+   * abrir esta exceção que o envio do painel fica registrado no log.
+   */
+  async openWith(
+    meId: string,
+    otherUserId: string,
+    opcoes: { ignorarBloqueio?: boolean } = {},
+  ): Promise<DMChannelView> {
     if (meId === otherUserId) {
       throw new BadRequestException("Não é possível abrir DM consigo mesmo");
     }
     const other = await this.prisma.user.findUnique({ where: { id: otherUserId } });
     if (!other) throw new NotFoundException("Usuário não encontrado");
     // bloqueado (nos dois sentidos) não abre conversa — ver FriendsService
-    await this.friends.assertNotBlocked(meId, otherUserId);
+    if (!opcoes.ignorarBloqueio) await this.friends.assertNotBlocked(meId, otherUserId);
 
     // upsert por pairKey → idempotente e à prova de corrida (1 canal por dupla)
     const [a, b] = this.pair(meId, otherUserId);

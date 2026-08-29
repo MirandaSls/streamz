@@ -129,3 +129,34 @@ que é conveniência de desenho, não segurança: a autorização é a do servid
 Nenhuma migration: a decisão não toca o schema. Para ligar o painel numa
 instância existente, basta preencher `PLATFORM_ADMIN_EMAILS` e reiniciar a API.
 O boot registra no log se o e-mail listado não tem conta ou não está verificado.
+
+## Adendo (2026-08-29): uma escrita, a mensagem direta
+
+O painel deixou de ser só leitura em um ponto. `POST /admin/users/:id/message`
+abre (ou reaproveita) a conversa 1-a-1 com qualquer conta e grava uma mensagem
+**comum**, tendo o administrador como autor — sem amizade, sem convite e sem
+sair da aba "Usuários".
+
+Por que isto não reabre o "segundo caminho de escrita" que a decisão original
+recusa: aquele receio era o de uma escrita que **ignorasse a hierarquia de
+moderação** (banir, apagar, entrar em servidor) e virasse escalada de
+privilégio. Esta não concede nada a ninguém. Quem grava é o
+`MessagesService.create` de sempre, com o teto de caracteres e o DTO de sempre;
+quem recebe vê o nome de quem escreveu e pode responder, silenciar ou bloquear
+como em qualquer conversa. O painel continua sem banir, sem apagar e sem entrar
+em servidor.
+
+O que ela dispensa, e é a parte que merece o olho: **o bloqueio**. A rota chama
+`DMsService.openWith(..., { ignorarBloqueio: true })`, o único chamador com esse
+sinalizador — nenhuma rota o aceita vindo do cliente. A justificativa é que o
+administrador da instância é o canal de último recurso para falar com um
+usuário, e não seria isso se desse para silenciá-lo; o contrapeso é o mesmo da
+leitura de histórico: fica no log do servidor (`Painel: <id> mandou mensagem
+para @<alvo>`). Quem discordar da troca tem uma linha para desfazer — tirar o
+sinalizador da chamada.
+
+Regra pura e testada em `modules/admin/admins.ts`
+(`impedimentoParaMensagem`): não escreve para conta inexistente, para conta
+excluída (anonimizada, não há quem leia) nem para si mesmo. Conta **desativada**
+recebe de propósito — ela volta quando o dono entra, e "avisar quem sumiu" é
+justamente um dos casos de uso.

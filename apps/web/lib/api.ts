@@ -3,6 +3,7 @@ import type {
   AdminChannelsPage,
   AdminGuildView,
   AdminMe,
+  AdminMensagemEnviada,
   AdminMessagesPage,
   AdminOverview,
   AdminUsersPage,
@@ -599,6 +600,9 @@ export const api = {
     request<AdminChannelsPage>(`/admin/channels${query({ q, escopo, cursor })}`),
   adminMessages: (channelId: string, cursor?: string) =>
     request<AdminMessagesPage>(`/admin/channels/${channelId}/messages${query({ cursor })}`),
+  /** A única escrita do painel: abre a conversa 1-a-1 se não existir e manda. */
+  adminEnviarMensagem: (userId: string, content: string) =>
+    request<AdminMensagemEnviada>(`/admin/users/${userId}/message`, json({ content })),
 };
 
 async function enviarComProgresso(

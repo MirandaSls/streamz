@@ -1,9 +1,12 @@
-import { Controller, Get, Param, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { adminMensagemSchema } from "@streamz/shared";
 import type {
   AdminCall,
   AdminChannelsPage,
   AdminGuildView,
   AdminMe,
+  AdminMensagemEnviada,
+  AdminMensagemInput,
   AdminMessagesPage,
   AdminOverview,
   AdminUsersPage,
@@ -13,18 +16,24 @@ import { PlatformAdminGuard } from "./admin.guard";
 import { PlatformAdminService } from "./platform-admin.service";
 import { CurrentUser } from "../../common/current-user.decorator";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
+import { zodBody } from "../../common/zod.pipe";
 
 /** Escopos aceitos pela listagem de canais; qualquer outro valor vira "todos". */
 const ESCOPOS = ["todos", "servidores", "conversas"] as const;
 type Escopo = (typeof ESCOPOS)[number];
 
 /**
- * Painel do administrador da instância. Só leitura — ver `AdminService`.
+ * Painel do administrador da instância. Leitura, e uma escrita — ver `AdminService`.
  *
  * Todas as rotas menos `/admin/me` exigem `PlatformAdminGuard`. `/admin/me` é
  * de propósito aberta a qualquer conta autenticada: é ela que o cliente usa
  * para saber se deve desenhar a aba, e responder 403 aí obrigaria o app a
  * tratar um erro esperado como erro.
+ *
+ * `POST /admin/users/:id/message` é a única rota que escreve. Ela mora aqui, e
+ * não no `DMsController`, porque o poder que a sustenta é o do painel: sem o
+ * `PlatformAdminGuard` ela seria só um jeito de furar o bloqueio de qualquer
+ * usuário.
  */
 @Controller("admin")
 export class AdminController {
@@ -84,7 +93,21 @@ export class AdminController {
   ): Promise<AdminMessagesPage> {
     return this.admin.messages(user.sub, id, cursor);
   }
+  /**
+   * Manda uma mensagem para qualquer conta, sem precisar tê-la adicionada.
+   * Também fica no log do servidor. Ver `AdminService.enviarMensagem`.
+   */
+  @UseGuards(JwtGuard, PlatformAdminGuard)
+  @Post("users/:id/message")
+  mensagem(
+    @CurrentUser() user: JwtPayload,
+    @Param("id") id: string,
+    @Body(zodBody(adminMensagemSchema)) dto: AdminMensagemInput,
+  ): Promise<AdminMensagemEnviada> {
+    return this.admin.enviarMensagem(user.sub, id, dto.content);
+  }
 }
+
 
 function normalizarEscopo(valor?: string): Escopo {
   return (ESCOPOS as readonly string[]).includes(valor ?? "") ? (valor as Escopo) : "todos";
