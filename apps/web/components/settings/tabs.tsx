@@ -3,17 +3,27 @@
 import {
   Accessibility,
   Bell,
+  Gauge,
   Keyboard,
   Languages,
   Laptop,
+  MessagesSquare,
   Paintbrush,
+  PhoneCall,
+  Server,
   ShieldCheck,
   User,
   UserCircle,
+  Users,
   Video,
 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 import AcessibilidadeTab from "@/components/settings/AcessibilidadeTab";
+import AdminChamadasTab from "@/components/settings/admin/AdminChamadasTab";
+import AdminMensagensTab from "@/components/settings/admin/AdminMensagensTab";
+import AdminServidoresTab from "@/components/settings/admin/AdminServidoresTab";
+import AdminUsuariosTab from "@/components/settings/admin/AdminUsuariosTab";
+import AdminVisaoGeralTab from "@/components/settings/admin/AdminVisaoGeralTab";
 import AparenciaTab from "@/components/settings/AparenciaTab";
 import ContaTab from "@/components/settings/ContaTab";
 import IdiomaTab from "@/components/settings/IdiomaTab";
@@ -33,7 +43,14 @@ import type { ChaveDeTexto } from "@/lib/i18n";
  * deep link e o que é renderizado à direita. Aba nova é uma linha aqui.
  */
 
-export type SettingsGroup = "usuario" | "app";
+/**
+ * `admin` é o grupo do painel da instância (`j-painel-admin`). Ele existe no
+ * registro para todo mundo — quem desenha é que decide se aparece: a
+ * `SettingsModal` só monta este grupo quando `GET /admin/me` disse que sim, e
+ * a API recusa as rotas de qualquer jeito. Esconder aqui não seria segurança,
+ * e listar aqui não é vazamento: são só nomes de aba.
+ */
+export type SettingsGroup = "usuario" | "app" | "admin";
 
 export interface SettingsTab {
   id: string;
@@ -73,11 +90,61 @@ export const SETTINGS_TABS: readonly SettingsTab[] = [
   },
   { id: "teclado", group: "app", label: "aba.teclado", icon: <Keyboard size={18} />, Component: TecladoTab },
   { id: "idioma", group: "app", label: "aba.idioma", icon: <Languages size={18} />, Component: IdiomaTab },
+
+  // ── j-painel-admin ── só aparecem para o administrador da instância
+  {
+    id: "admin-visao",
+    group: "admin",
+    label: "aba.adminVisao",
+    icon: <Gauge size={18} />,
+    Component: AdminVisaoGeralTab,
+  },
+  {
+    id: "admin-usuarios",
+    group: "admin",
+    label: "aba.adminUsuarios",
+    icon: <Users size={18} />,
+    Component: AdminUsuariosTab,
+  },
+  {
+    id: "admin-chamadas",
+    group: "admin",
+    label: "aba.adminChamadas",
+    icon: <PhoneCall size={18} />,
+    Component: AdminChamadasTab,
+  },
+  {
+    id: "admin-mensagens",
+    group: "admin",
+    label: "aba.adminMensagens",
+    icon: <MessagesSquare size={18} />,
+    Component: AdminMensagensTab,
+  },
+  {
+    id: "admin-servidores",
+    group: "admin",
+    label: "aba.adminServidores",
+    icon: <Server size={18} />,
+    Component: AdminServidoresTab,
+  },
 ];
+
+/** true para aba que só o administrador da instância enxerga. */
+export function ehAbaDeAdmin(tab: SettingsTab): boolean {
+  return tab.group === "admin";
+}
 
 export const ABA_PADRAO = "conta";
 
-/** A aba pedida, ou a padrão quando o id não existe (link velho ou digitado). */
-export function abaOuPadrao(id: string | null | undefined): SettingsTab {
-  return SETTINGS_TABS.find((t) => t.id === id) ?? SETTINGS_TABS[0];
+/**
+ * A aba pedida, ou a padrão quando o id não existe (link velho ou digitado).
+ *
+ * `admin` diz se as abas de administração contam: sem ele, um `?settings=`
+ * apontando para uma delas cai na aba padrão em vez de abrir uma tela que só
+ * responderia 403.
+ */
+export function abaOuPadrao(id: string | null | undefined, admin = false): SettingsTab {
+  const aba = SETTINGS_TABS.find((t) => t.id === id);
+  if (!aba || (ehAbaDeAdmin(aba) && !admin)) return SETTINGS_TABS[0];
+  return aba;
 }

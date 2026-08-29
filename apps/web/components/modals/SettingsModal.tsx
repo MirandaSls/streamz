@@ -5,10 +5,16 @@ import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { isTauri } from "@/lib/desktop";
-import { SETTINGS_TABS, abaOuPadrao, type SettingsGroup } from "@/components/settings/tabs";
+import {
+  SETTINGS_TABS,
+  abaOuPadrao,
+  ehAbaDeAdmin,
+  type SettingsGroup,
+} from "@/components/settings/tabs";
 import { useControleDeAlteracoes } from "@/components/ui/alteracoes";
 import TelaCheia, { ItemNeutro } from "@/components/ui/TelaCheia";
 import { escreverAbaNaUrl, limparAbaDaUrl } from "@/hooks/useSettingsRoute";
+import { useAdmin } from "@/stores/admin";
 import { useAuth } from "@/stores/auth";
 import { useUI } from "@/stores/ui";
 
@@ -24,9 +30,14 @@ import { useUI } from "@/stores/ui";
 
 const VERSAO = process.env.NEXT_PUBLIC_APP_VERSION?.trim() || "0.0.1";
 
-const GRUPOS: { id: SettingsGroup; label: "config.grupoUsuario" | "config.grupoApp" }[] = [
+const GRUPOS: {
+  id: SettingsGroup;
+  label: "config.grupoUsuario" | "config.grupoApp" | "config.grupoAdmin";
+}[] = [
   { id: "usuario", label: "config.grupoUsuario" },
   { id: "app", label: "config.grupoApp" },
+  // ── j-painel-admin ── some para quem não é admin da instância
+  { id: "admin", label: "config.grupoAdmin" },
 ];
 
 export default function SettingsModal({ tab }: { tab?: string }) {
@@ -35,17 +46,28 @@ export default function SettingsModal({ tab }: { tab?: string }) {
   const closeModal = useUI((s) => s.closeModal);
   const logout = useAuth((s) => s.logout);
   const alteracoes = useControleDeAlteracoes();
+  // `null` enquanto a resposta não chega: o grupo não aparece nem é negado
+  const admin = useAdmin((s) => s.admin);
+  const carregarAdmin = useAdmin((s) => s.carregar);
 
-  const [abaId, setAbaId] = useState(() => abaOuPadrao(tab).id);
+  const [abaId, setAbaId] = useState(() => abaOuPadrao(tab, true).id);
   const [busca, setBusca] = useState("");
-  const aba = abaOuPadrao(abaId);
+  const aba = abaOuPadrao(abaId, admin === true);
   const Conteudo = aba.Component;
 
-  // a URL acompanha a aba enquanto a tela está aberta, e é limpa ao fechar
+  // uma pergunta por sessão (o store guarda a resposta), feita ao abrir a tela:
+  // quem nunca abre as configurações não gasta a requisição
   useEffect(() => {
-    escreverAbaNaUrl(abaId);
+    void carregarAdmin();
+  }, [carregarAdmin]);
+
+  // a URL acompanha a aba enquanto a tela está aberta, e é limpa ao fechar.
+  // `aba.id`, não `abaId`: um link para aba de admin recebido por quem não é
+  // admin cai na aba padrão, e a URL tem de contar a mesma história que a tela
+  useEffect(() => {
+    escreverAbaNaUrl(aba.id);
     return () => limparAbaDaUrl();
-  }, [abaId]);
+  }, [aba.id]);
 
   const q = busca.trim().toLowerCase();
   const grupos = useMemo(
@@ -54,10 +76,13 @@ export default function SettingsModal({ tab }: { tab?: string }) {
         id: grupo.id,
         label: t(grupo.label),
         itens: SETTINGS_TABS.filter(
-          (item) => item.group === grupo.id && (!q || t(item.label).toLowerCase().includes(q)),
+          (item) =>
+            item.group === grupo.id &&
+            (admin === true || !ehAbaDeAdmin(item)) &&
+            (!q || t(item.label).toLowerCase().includes(q)),
         ).map((item) => ({ id: item.id, label: t(item.label), icon: item.icon })),
       })),
-    [q, t],
+    [admin, q, t],
   );
 
   function sair() {

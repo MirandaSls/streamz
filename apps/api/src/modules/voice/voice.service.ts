@@ -15,6 +15,7 @@ import { toPublicUser } from "../../common/dto";
 import {
   MemoryVoiceStateStore,
   RedisVoiceStateStore,
+  type VoiceMember,
   type VoiceStateStore,
 } from "./voice-state.store";
 
@@ -186,6 +187,15 @@ export class VoiceService {
   /** Quem está na sala agora. É o `count` para quem precisa saber *quem* sobrou. */
   async membrosDaSala(channelId: string): Promise<string[]> {
     return (await this.store.members(channelId)).map((m) => m.userId);
+  }
+
+  /**
+   * **Toda** chamada aberta na instância, por canal. Só o painel do
+   * administrador usa: o resto do app sempre parte de um canal ou servidor
+   * concreto, e varrer o estado inteiro seria trabalho jogado fora.
+   */
+  async salasAbertas(): Promise<Map<string, VoiceMember[]>> {
+    return this.store.membersOf(await this.store.salasAbertas());
   }
 
   /** Estado inicial de um servidor: quem está em cada canal de voz dele. */
