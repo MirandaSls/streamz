@@ -3108,3 +3108,19 @@ export function nomeDaConversa(
   if (nomes.length === 0) return "Conversa vazia";
   return nomes.join(", ");
 }
+
+/**
+ * Corpo de `POST /admin/users/:id/message` — a **única** escrita do painel.
+ *
+ * Só texto: o painel não manda anexo, figurinha, resposta nem thread. Quem
+ * precisa disso abre a conversa no app, que é onde essas coisas moram; aqui a
+ * pergunta é outra — "falar com esta pessoa agora, sem sair da listagem".
+ */
+export const adminMensagemSchema = z.object({ content: conteudoNaoVazioSchema });
+export type AdminMensagemInput = z.infer<typeof adminMensagemSchema>;
+
+/** Resposta do envio: a conversa usada (nova ou reaproveitada) e a mensagem. */
+export interface AdminMensagemEnviada {
+  channelId: string;
+  mensagem: Message;
+}

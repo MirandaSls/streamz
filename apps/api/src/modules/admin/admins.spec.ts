@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ehAdminDaInstancia, parseAdminEmails } from "./admins";
+import { ehAdminDaInstancia, impedimentoParaMensagem, parseAdminEmails } from "./admins";
 
 const CONTA = {
   email: "streamzcontato@gmail.com",
@@ -53,5 +53,24 @@ describe("ehAdminDaInstancia", () => {
 
   it("sem conta não há admin", () => {
     expect(ehAdminDaInstancia(lista, null)).toBe(false);
+  });
+});
+
+describe("impedimentoParaMensagem", () => {
+  const ADMIN = "u-admin";
+
+  it("deixa escrever para uma conta comum", () => {
+    expect(impedimentoParaMensagem(ADMIN, { id: "u-outro", excluida: false })).toBeNull();
+  });
+
+  it("conta desativada continua recebendo — ela volta quando o dono entra", () => {
+    // desativada nem chega aqui: a decisão só olha existência, identidade e exclusão
+    expect(impedimentoParaMensagem(ADMIN, { id: "u-sumido", excluida: false })).toBeNull();
+  });
+
+  it("recusa conta inexistente, excluída e o próprio admin", () => {
+    expect(impedimentoParaMensagem(ADMIN, null)).toBe("inexistente");
+    expect(impedimentoParaMensagem(ADMIN, { id: "u-ex", excluida: true })).toBe("excluida");
+    expect(impedimentoParaMensagem(ADMIN, { id: ADMIN, excluida: false })).toBe("si-mesmo");
   });
 });
