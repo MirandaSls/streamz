@@ -2,7 +2,6 @@ import {
   Controller,
   ForbiddenException,
   Get,
-  Header,
   Headers,
   HttpCode,
   NotFoundException,
@@ -77,14 +76,27 @@ export class HealthController {
     return { status: pronto ? "ready" : "unavailable", checks: { postgres, redis } };
   }
 
+  /**
+   * Os cabeçalhos são postos **aqui dentro**, e não com `@Header`: o decorator
+   * escreve na resposta antes de o handler rodar, então o 404/403 saía com
+   * `Content-Type: text/plain` e corpo JSON. Funcionava, mas o Nest logava
+   * "Content-Type doesn't match Reply body" a cada acesso — e este é justamente
+   * um caminho que scanner varre, o que enchia o log de aviso.
+   */
   @Get("metrics")
   @HttpCode(200)
-  @Header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-  @Header("Cache-Control", "no-store")
-  metrics(@Headers("authorization") authorization?: string) {
+  async metrics(
+    // tipagem estrutural em vez de `Response` do express, como em `ready`
+    @Res({ passthrough: true }) res: { setHeader(nome: string, valor: string): unknown },
+    @Headers("authorization") authorization?: string,
+  ): Promise<string> {
     switch (autorizarScrape(authorization)) {
-      case "liberado":
-        return renderizarMetricas();
+      case "liberado": {
+        const corpo = await renderizarMetricas();
+        res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+        res.setHeader("Cache-Control", "no-store");
+        return corpo;
+      }
       // 404 e não 403: sem METRICS_TOKEN em produção o endpoint simplesmente
       // não existe para quem está de fora, e um 403 confirmaria que existe.
       case "desligado":
