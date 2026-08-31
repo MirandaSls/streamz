@@ -13,8 +13,12 @@ import type { Transporter } from "nodemailer";
  * - **smtp** (`SMTP_URL=smtp://usuario:senha@host:587`): envia de verdade via
  *   nodemailer.
  *
- * Falha de envio **não** derruba a operação que a originou: o registro já
- * aconteceu, e o usuário pode pedir o reenvio. O erro vai para o log.
+ * Duas políticas de erro, e a escolha é de quem chama:
+ *
+ *  - `enviar` engole a falha (loga): o e-mail é efeito colateral de uma
+ *    operação que já aconteceu — o registro não pode falhar por causa do SMTP;
+ *  - `enviarOuFalhar` propaga como 503: a entrega **é** a operação, e responder
+ *    sucesso sem ter entregado faz a interface mentir.
  */
 
 /** Um e-mail pronto para sair: o mesmo objeto nos dois provedores. */
@@ -64,7 +68,47 @@ export class MailService {
     return process.env.SMTP_FROM?.trim() || "Streamz <nao-responda@streamz.local>";
   }
 
+  /**
+   * Envia e **engole** a falha (só loga).
+   *
+   * É o certo quando o e-mail é efeito colateral de uma operação que já
+   * aconteceu: no registro, a conta foi criada, e derrubar a resposta por causa
+   * do SMTP faria o usuário achar que o cadastro falhou. Ele pede o reenvio
+   * depois.
+   *
+   * Quando a entrega **é** a operação, use `enviarOuFalhar`.
+   */
   async enviar(email: EmailParaEnviar): Promise<void> {
+    try {
+      await this.entregar(email);
+    } catch (e) {
+      this.logger.error(`Falha ao enviar e-mail para ${email.to}: ${(e as Error).message}`);
+    }
+  }
+
+  /**
+   * Envia e **propaga** a falha.
+   *
+   * Para a rota cuja única razão de existir é entregar a mensagem — o
+   * "reenviar verificação" da tela de conta. Engolir ali faz a interface
+   * mentir: aparece "e-mail enviado", nada chega, e a pessoa repete o clique
+   * indefinidamente sem nunca saber que o provedor recusou. Foi exatamente o
+   * que aconteceu aqui com o domínio do remetente não verificado na Resend: a
+   * API logava `550 ... domain is not verified` e respondia `{ok:true}`.
+   */
+  async enviarOuFalhar(email: EmailParaEnviar): Promise<void> {
+    try {
+      await this.entregar(email);
+    } catch (e) {
+      this.logger.error(`Falha ao enviar e-mail para ${email.to}: ${(e as Error).message}`);
+      throw new ServiceUnavailableException(
+        "Não foi possível enviar o e-mail agora. Tente de novo em alguns minutos.",
+      );
+    }
+  }
+
+  /** O envio de verdade, sem política de erro — quem chama decide. */
+  private async entregar(email: EmailParaEnviar): Promise<void> {
     if (!this.isConfigured()) {
       // o link é a única coisa que importa em dev — vai destacado no log
       this.logger.log(
@@ -79,14 +123,8 @@ export class MailService {
       );
       return;
     }
-
-    try {
-      const transporter = await this.getTransporter();
-      await transporter.sendMail({ from: this.from(), ...email });
-    } catch (e) {
-      // não propaga: quem chamou já concluiu a operação de negócio
-      this.logger.error(`Falha ao enviar e-mail para ${email.to}: ${(e as Error).message}`);
-    }
+    const transporter = await this.getTransporter();
+    await transporter.sendMail({ from: this.from(), ...email });
   }
 
   private async getTransporter(): Promise<Transporter> {

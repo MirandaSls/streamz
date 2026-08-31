@@ -302,8 +302,21 @@ export class AuthService {
     return { ok: true };
   }
 
-  /** Emite o token de verificação e manda o e-mail (invalidando os anteriores). */
-  async enviarVerificacao(userId: string, nome: string, email: string): Promise<void> {
+  /**
+   * Emite o token de verificação e manda o e-mail (invalidando os anteriores).
+   *
+   * `propagarFalha` decide o que acontece se o provedor recusar. O padrão é
+   * engolir, porque o chamador comum é o registro (a conta já foi criada) e a
+   * rota pública de reenvio, que precisa responder 200 sempre para não revelar
+   * quem tem conta. Só a rota autenticada de reenvio pede `true`: ali a
+   * entrega é a operação inteira.
+   */
+  async enviarVerificacao(
+    userId: string,
+    nome: string,
+    email: string,
+    { propagarFalha = false }: { propagarFalha?: boolean } = {},
+  ): Promise<void> {
     const token = gerarTokenDeEmail();
     const agora = new Date();
     await this.prisma.$transaction([
@@ -322,7 +335,12 @@ export class AuthService {
         },
       }),
     ]);
-    await this.mail.enviar(this.mail.verificacao(email, nome, linkDeEmail("/verify-email", token)));
+    // O token já foi gravado acima. Se a entrega falhar e propagarmos, o link
+    // novo fica sem uso e o anterior segue invalidado — o pedido seguinte gera
+    // outro. É o preço de não mentir sobre o envio.
+    const mensagem = this.mail.verificacao(email, nome, linkDeEmail("/verify-email", token));
+    if (propagarFalha) await this.mail.enviarOuFalhar(mensagem);
+    else await this.mail.enviar(mensagem);
   }
 
   // ── recuperação de senha ───────────────────────────────────
