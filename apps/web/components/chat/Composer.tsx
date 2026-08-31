@@ -278,8 +278,8 @@ export default function Composer({
       return;
     }
     if (comando.tipo === "apelido") {
-      // apelido por servidor exige uma coluna em GuildMember que nenhuma frente
-      // da rodada 2 criou; ver "Pós-integração r2" em PENDENCIAS.md
+      // apelido por servidor exige uma coluna em GuildMember que ninguém criou
+      // ainda; ver "Apelido por servidor" em PENDENCIAS.md
       ui.toast("Apelido por servidor ainda não está disponível.", "error");
       return;
     }
