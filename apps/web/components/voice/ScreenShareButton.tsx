@@ -4,6 +4,7 @@ import { useState } from "react";
 import { MonitorUp, MonitorX, Radio } from "lucide-react";
 import Tooltip from "@/components/ui/Tooltip";
 import ScreenSharePicker from "@/components/voice/ScreenSharePicker";
+import { BotaoDeChamada } from "@/components/voice/controles-de-chamada";
 import { useVoice } from "@/stores/voice";
 
 /**
@@ -13,12 +14,16 @@ import { useVoice } from "@/stores/voice";
  * A qualidade não fica mais num popover antes do clique — ela mora dentro do
  * seletor, junto da prévia, que é onde a escolha faz sentido: dá para ver o que
  * 1080p60 muda naquilo que você está prestes a transmitir.
+ *
+ * No ar o botão fica **verde**, não vermelho. Vermelho cheio na barra é o
+ * desligar, e só ele: transmitindo, o botão está *ligado*, não em erro — quem
+ * lê a fileira de longe precisa achar um vermelho só, o que encerra a chamada.
  */
 export default function ScreenShareButton({
-  variante = "redondo",
+  variante = "barra",
 }: {
   /** `largo` é o botão de largura total da barra "Voz conectada". */
-  variante?: "redondo" | "largo";
+  variante?: "barra" | "largo";
 }) {
   const [seletor, setSeletor] = useState(false);
   const screenOn = useVoice((s) => s.screenOn);
@@ -50,21 +55,14 @@ export default function ScreenShareButton({
           </button>
         </Tooltip>
       ) : (
-        <Tooltip label={label}>
-          <button
-            type="button"
-            onClick={acionar}
-            aria-label={label}
-            aria-pressed={screenOn}
-            className={`grid h-12 w-12 place-items-center rounded-full transition ${
-              screenOn
-                ? "bg-red text-white hover:bg-red-hover"
-                : "bg-border-strong text-white hover:bg-border-strong-hover"
-            }`}
-          >
-            {screenOn ? <MonitorX size={20} /> : <MonitorUp size={20} />}
-          </button>
-        </Tooltip>
+        <BotaoDeChamada
+          label={label}
+          onClick={acionar}
+          tom={screenOn ? "aoVivo" : "neutro"}
+          pressionado={screenOn}
+        >
+          {screenOn ? <MonitorX size={20} /> : <MonitorUp size={20} />}
+        </BotaoDeChamada>
       )}
 
       {seletor && <ScreenSharePicker onClose={() => setSeletor(false)} />}
