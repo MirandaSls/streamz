@@ -11,6 +11,8 @@
  * nunca por caminho — `/api/guilds/<id>` viraria uma série por servidor.
  */
 
+import { timingSafeEqual } from "node:crypto";
+
 type Rotulos = Record<string, string>;
 
 interface Serie {
@@ -172,4 +174,47 @@ export function registrarGaugesDeProcesso(): void {
     "Memória residente do processo da API, em bytes",
     () => process.memoryUsage().rss,
   );
+}
+
+/** Resultado de `autorizarScrape` — o controller traduz cada caso em resposta. */
+export type AcessoAsMetricas = "liberado" | "desligado" | "negado";
+
+/**
+ * Quem pode ler `/api/metrics`.
+ *
+ * `/health` e `/ready` não dizem nada de quem usa o serviço; as métricas dizem:
+ * volume de requisições, mensagens por minuto, memória do processo. Não é PII,
+ * mas é volumetria entregue de graça no mesmo domínio público da API.
+ *
+ * A regra segue o espírito do `exigirEntrega()` do MailService — estrita em
+ * produção, permissiva em dev:
+ *
+ *  - `METRICS_TOKEN` definido → exige `Authorization: Bearer <token>`;
+ *  - sem token **e** em produção → `desligado`. O controller responde 404, e não
+ *    403, porque 403 confirma para um scanner que o endpoint existe;
+ *  - sem token fora de produção → liberado, para o `curl localhost:3333` do dia
+ *    a dia seguir funcionando sem configurar nada.
+ */
+export function autorizarScrape(
+  authorization: string | undefined,
+  env: { METRICS_TOKEN?: string; NODE_ENV?: string } = process.env,
+): AcessoAsMetricas {
+  const esperado = env.METRICS_TOKEN?.trim();
+  if (!esperado) return env.NODE_ENV === "production" ? "desligado" : "liberado";
+  return tokenConfere(authorization, esperado) ? "liberado" : "negado";
+}
+
+/**
+ * Comparação em tempo constante: com `===` o tempo de resposta vaza o tamanho
+ * do prefixo acertado, e um token se descobre byte a byte. Comparar o
+ * comprimento antes vaza só o comprimento, que não encurta a busca.
+ */
+function tokenConfere(authorization: string | undefined, esperado: string): boolean {
+  const prefixo = "Bearer ";
+  const recebido = authorization?.startsWith(prefixo)
+    ? authorization.slice(prefixo.length).trim()
+    : "";
+  const a = Buffer.from(recebido, "utf8");
+  const b = Buffer.from(esperado, "utf8");
+  return a.length === b.length && timingSafeEqual(a, b);
 }

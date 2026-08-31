@@ -209,9 +209,13 @@ Ordem sugerida dos próximos blocos de features:
 - [ ] **Deploy não escolhido**: sem provedor definido não há `RUN_MIGRATIONS`
       ligado num job de release, nem `TRUST_PROXY`/`APP_VERSION` preenchidos,
       nem Postgres/Redis gerenciados provisionados.
-- [ ] **`/api/metrics` é público**: hoje qualquer um lê os contadores (nada
-      sensível, mas expõe volume de tráfego). Ao publicar, feche por rede ou
-      exija um token — decisão que depende de onde o Prometheus vai rodar.
+- [x] ~~**`/api/metrics` é público**~~ — feito: `METRICS_TOKEN` no ambiente da
+      API exige `Authorization: Bearer <token>` no scrape (`autorizarScrape` em
+      `common/metrics.ts`). Sem a variável, o endpoint fica **aberto em dev** e
+      **desligado (404) em produção** — o padrão seguro é o de produção, e quem
+      subir um Prometheus preenche a variável. Escolhido token em vez de
+      allowlist de IP no proxy porque atrás da Cloudflare o IP que o Traefik vê
+      é o da Cloudflare, não o do cliente.
 
 ---
 _Status atual: backend em Postgres (schema único + migration inicial; falta só
