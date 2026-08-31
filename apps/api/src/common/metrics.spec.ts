@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import {
+  autorizarScrape,
   classeDeStatus,
   incrementar,
   registrarGauge,
@@ -51,5 +52,34 @@ describe("métricas", () => {
     expect(classeDeStatus(200)).toBe("2xx");
     expect(classeDeStatus(404)).toBe("4xx");
     expect(classeDeStatus(503)).toBe("5xx");
+  });
+});
+
+describe("acesso ao /metrics", () => {
+  const prod = { NODE_ENV: "production" };
+
+  it("sem METRICS_TOKEN, fica aberto em dev e desligado em produção", () => {
+    expect(autorizarScrape(undefined, { NODE_ENV: "development" })).toBe("liberado");
+    expect(autorizarScrape(undefined, prod)).toBe("desligado");
+  });
+
+  it("com METRICS_TOKEN, exige o bearer certo", () => {
+    const env = { ...prod, METRICS_TOKEN: "s3gr3d0" };
+    expect(autorizarScrape("Bearer s3gr3d0", env)).toBe("liberado");
+    expect(autorizarScrape("Bearer errado", env)).toBe("negado");
+    expect(autorizarScrape(undefined, env)).toBe("negado");
+    // token certo, esquema errado: não vale
+    expect(autorizarScrape("s3gr3d0", env)).toBe("negado");
+    expect(autorizarScrape("Basic s3gr3d0", env)).toBe("negado");
+  });
+
+  it("um prefixo correto não passa (a comparação é do valor inteiro)", () => {
+    const env = { ...prod, METRICS_TOKEN: "abcdef" };
+    expect(autorizarScrape("Bearer abc", env)).toBe("negado");
+    expect(autorizarScrape("Bearer abcdefgh", env)).toBe("negado");
+  });
+
+  it("METRICS_TOKEN só com espaços conta como ausente", () => {
+    expect(autorizarScrape("Bearer   ", { ...prod, METRICS_TOKEN: "   " })).toBe("desligado");
   });
 });
