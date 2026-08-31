@@ -1,8 +1,18 @@
-import { Controller, Get, Header, HttpCode, Res } from "@nestjs/common";
+import {
+  Controller,
+  ForbiddenException,
+  Get,
+  Header,
+  Headers,
+  HttpCode,
+  NotFoundException,
+  Res,
+} from "@nestjs/common";
 import { SkipThrottle } from "@nestjs/throttler";
 import { PrismaService } from "./prisma/prisma.service";
 import { redisClient, redisUrl } from "./modules/realtime/redis";
 import {
+  autorizarScrape,
   registrarGauge,
   registrarGaugesDeProcesso,
   renderizarMetricas,
@@ -20,7 +30,9 @@ import {
  *     toca em dependência nenhuma e nunca falha por causa delas.
  *   - `GET /api/ready` — readiness. Checa Postgres e, se `REDIS_URL` existir,
  *     Redis. Responde 503 quando alguma dependência está fora.
- *   - `GET /api/metrics` — exposição Prometheus.
+ *   - `GET /api/metrics` — exposição Prometheus, protegida por `METRICS_TOKEN`
+ *     (ver `autorizarScrape`); as duas primeiras seguem abertas de propósito,
+ *     porque sonda de orquestrador não carrega credencial.
  *
  * Todas as três ficam fora do rate limit (`@SkipThrottle`): a sonda bate a cada
  * poucos segundos e não pode competir com o teto por IP do tráfego real.
@@ -69,8 +81,17 @@ export class HealthController {
   @HttpCode(200)
   @Header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
   @Header("Cache-Control", "no-store")
-  metrics() {
-    return renderizarMetricas();
+  metrics(@Headers("authorization") authorization?: string) {
+    switch (autorizarScrape(authorization)) {
+      case "liberado":
+        return renderizarMetricas();
+      // 404 e não 403: sem METRICS_TOKEN em produção o endpoint simplesmente
+      // não existe para quem está de fora, e um 403 confirmaria que existe.
+      case "desligado":
+        throw new NotFoundException();
+      case "negado":
+        throw new ForbiddenException("Token de métricas ausente ou inválido.");
+    }
   }
 
   private async checarPostgres(): Promise<{ ok: boolean; detail?: string }> {
