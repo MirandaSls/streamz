@@ -157,7 +157,12 @@ export class AccountService {
     const user = await this.exigirUsuario(userId);
     if (!user.email) throw new BadRequestException("Sua conta não tem e-mail cadastrado.");
     if (user.emailVerifiedAt) throw new BadRequestException("Seu e-mail já está verificado.");
-    await this.auth.enviarVerificacao(userId, user.username, user.email);
+    // Rota autenticada e explícita: aqui `{ok:true}` sem entrega é mentira, e a
+    // pessoa fica clicando "reenviar" para sempre. Diferente da rota pública de
+    // reenvio, que responde 200 sempre para não revelar quem tem conta.
+    await this.auth.enviarVerificacao(userId, user.username, user.email, {
+      propagarFalha: true,
+    });
     return { ok: true };
   }
 
