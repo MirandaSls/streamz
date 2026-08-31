@@ -143,11 +143,14 @@ cliente a mesma conta está em `stores/permissions.ts` (`useCan`,
 `applyChannelFlags` é quem sincroniza os dois lados.
 
 ### Voz e chamadas vivem fora do banco
-`modules/voice` guarda o estado de quem está em cada sala num store **em memória
-do processo** (`voice-state.store.ts`) e o transmite por `voice.state`; chamada
-em conversa direta é o mesmo caminho, com toque de 30 s em `calls.service.ts`.
-Não há tabela de "sessão de voz": quem cai some sozinho. Com mais de uma
-instância da API isso precisaria de store compartilhado, como o rate limit do WS.
+`modules/voice` guarda o estado de quem está em cada sala atrás da interface
+`VoiceStateStore` (`voice-state.store.ts`) e o transmite por `voice.state`;
+chamada em conversa direta é o mesmo caminho, com toque de 30 s em
+`calls.service.ts`. Não há tabela de "sessão de voz": o estado é **efêmero** de
+propósito — sobreviver a um restart seria mentira, porque o cliente caiu junto.
+A implementação é escolhida no boot: `RedisVoiceStateStore` com `REDIS_URL`,
+`MemoryVoiceStateStore` sem ela. Ou seja, isto **já** funciona com várias
+instâncias; o que continua single-process é o token bucket do WS.
 
 ### Administrador da instância é outro eixo, e não vira permissão (ADR-0008)
 `computePermissions` responde "o que este membro pode fazer **neste servidor**".

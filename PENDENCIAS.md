@@ -86,13 +86,22 @@ baixa. O instalador em si já é gerado pelo workflow `Desktop (Windows)`.
 Coisas corretas para **uma instância** da API, que é o que roda. Viram trabalho
 no dia em que houver uma segunda — e nenhuma delas se resolve com uma flag:
 
-- **Estado de voz em memória do processo** (`voice-state.store.ts`), junto com o
-  token bucket do WebSocket (`gateway/rate-limit.ts`). Com duas instâncias, cada
-  uma teria a sua visão da sala. O `RealtimeService` já fala Redis para
-  broadcast: é o mesmo caminho.
+- **Token bucket do WebSocket** (`gateway/rate-limit.ts`) vive no socket, então
+  cada instância limita só o que passa por ela. Para o que ele existe — conter
+  o flood de **um** cliente — isso basta; um teto global de verdade é outro
+  requisito, não um conserto deste.
 - **Faxina diária por processo** — o `@nestjs/schedule` do `modules/maintenance`
-  roda em toda instância; com mais de uma, o job repete. Precisa de lock no banco
-  ou de virar job de release.
+  roda em toda instância; com mais de uma, o job repete. É inofensivo (as
+  rodadas apagam o mesmo conjunto e a segunda não acha nada), então não corre.
+  Quando correr, o detalhe que morde: `pg_advisory_lock` é **de sessão**, e o
+  pool do Prisma não garante a mesma conexão entre o lock e o unlock — tem de
+  ser `pg_try_advisory_xact_lock` dentro de um `$transaction`, o que por sua vez
+  briga com a exclusão em lotes (`TAMANHO_DO_LOTE`), feita justamente para não
+  segurar transação longa. Um job de release resolve sem esse conflito.
+
+O **estado de voz não está nesta lista**: `VoiceStateStore` tem implementação
+Redis (`RedisVoiceStateStore`), escolhida no boot quando há `REDIS_URL`. O
+`CLAUDE.md` e este arquivo afirmavam o contrário até 2026-08-31.
 
 ## 4. Comportamentos do navegador (não têm conserto no nosso lado)
 
