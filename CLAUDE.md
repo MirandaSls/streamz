@@ -4,8 +4,9 @@ Clone do Discord (MVP): chat em servidores/canais em tempo real, voz/vídeo/tela
 app desktop. Referência de arquitetura e produto: **stoatchat** (fork do Revolt) —
 mensagens referenciam anexos por id, storage S3-compatível, presença via WS.
 
-Este arquivo é o mínimo que você precisa saber antes de mexer no código. Detalhe
-de ambiente vive em `PENDENCIAS.md`; convenções visuais em `design.md`.
+Este arquivo é o mínimo que você precisa saber antes de mexer no código. O que
+ainda não está pronto vive em `PENDENCIAS.md`, cada variável de ambiente no
+`.env.example`; convenções visuais em `design.md`.
 
 ## Stack
 

@@ -92,7 +92,8 @@ quando roda dentro do Tauri. Detalhes e alternativas: `apps/desktop/README.md`.
 O `tauri-plugin-updater` **não** está registrado: não há par de chaves de
 assinatura nem servidor de releases, e um updater apontando para um endpoint
 inexistente só produz erro em runtime. O passo a passo para religar está em
-`apps/desktop/README.md` (seção *Auto-update*) e em `PENDENCIAS.md` §5.
+`apps/desktop/README.md` (seção *Auto-update*) e em `PENDENCIAS.md`
+(*Auto-update do desktop*).
 
 ### Permissões (capabilities)
 
