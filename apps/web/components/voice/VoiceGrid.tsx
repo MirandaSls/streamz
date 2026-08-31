@@ -8,6 +8,7 @@ import {
   MicOff,
   Minimize2,
   Play,
+  Plus,
   UserPlus,
   Volume2,
   VolumeX,
@@ -44,6 +45,14 @@ import { useVoicePrefs } from "@/stores/voicePrefs";
  * Tela compartilhada não divide o tile com a câmera: vira um tile próprio e,
  * quando começa, sobe sozinha ao palco — é o conteúdo que as pessoas estão de
  * fato olhando.
+ *
+ * **Há dois palcos, não um.** Numa conversa direta em que ninguém publicou
+ * vídeo nem tela, o Discord não desenha tile nenhum: os avatares ficam soltos
+ * sobre o fundo, grandes e centralizados, sem moldura e sem pílula de nome (ver
+ * `docs/Reference`). A moldura só entra quando há o que emoldurar — e ela volta
+ * assim que qualquer um liga a câmera ou transmite. Em canal de voz de servidor
+ * o tile vale desde o começo: ali a grade é a própria sala, e a moldura é o que
+ * separa uma pessoa da outra numa lista que cresce.
  */
 
 interface Tile {
@@ -58,11 +67,18 @@ export default function VoiceGrid({
   channelId,
   nomeDoCanal,
   guildId = null,
+  onAdicionar,
 }: {
   channelId: string;
   nomeDoCanal?: string;
-  /** só para a ação de convidar do estado vazio. */
+  /** ação de convidar do estado vazio — e o que distingue servidor de conversa. */
   guildId?: string | null;
+  /**
+   * Chamar mais gente para a chamada, no palco de avatares. Vem de fora porque
+   * quem sabe se a conversa aceita mais alguém é o host (grupo aceita, conversa
+   * de duas pessoas não), e a grade não precisa aprender isso.
+   */
+  onAdicionar?: () => void;
 }) {
   const me = useAuth((s) => s.user);
   // `tick` é o que traz as mudanças do SDK (faixas entrando e saindo)
@@ -105,6 +121,9 @@ export default function VoiceGrid({
     }
   }, [focoAutomatico, donoDaTransmissao, focado, focarAutomaticamente]);
 
+  // sem nenhuma faixa publicada, uma conversa direta é fileira de avatares
+  const modoAvatares = !guildId && tiles.every((t) => !t.publication);
+
   if (tiles.length === 0) {
     return (
       <div className="grid h-full place-items-center px-6 text-center">
@@ -126,6 +145,42 @@ export default function VoiceGrid({
             </button>
           )}
         </div>
+      </div>
+    );
+  }
+
+  if (modoAvatares) {
+    return (
+      <div className="flex h-full min-h-0 flex-col items-center justify-center gap-8">
+        <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-6">
+          {onAdicionar && (
+            <Tooltip label="Adicionar pessoas">
+              <button
+                type="button"
+                onClick={onAdicionar}
+                aria-label="Adicionar pessoas"
+                className="grid h-20 w-20 place-items-center rounded-full text-txt-secondary transition hover:bg-panel hover:text-txt-primary"
+              >
+                <Plus size={32} />
+              </button>
+            </Tooltip>
+          )}
+          {tiles.map((t) => (
+            <AvatarDeChamada
+              key={t.key}
+              tile={t}
+              meId={me?.id}
+              falando={falando}
+              channelId={channelId}
+            />
+          ))}
+        </div>
+
+        {states
+          .filter((s) => s.user.id !== me?.id)
+          .map((s) => (
+            <AudioDoParticipante key={`audio-${s.user.id}`} userId={s.user.id} />
+          ))}
       </div>
     );
   }
@@ -229,6 +284,59 @@ function useTamanho(el: HTMLElement | null) {
     return () => ro.disconnect();
   }, [el]);
   return tamanho;
+}
+
+/**
+ * Um participante no palco de avatares: só a foto, o anel de fala e o selo de
+ * mudo.
+ *
+ * O nome não aparece em lugar nenhum — é assim no Discord, e faz sentido: numa
+ * chamada direta você sabe com quem está falando, e o rótulo só roubaria
+ * espaço do rosto. Ele continua alcançável pelo tooltip e pelo `aria-label`,
+ * que é o que mantém a tela utilizável para quem navega por leitor de tela.
+ *
+ * O menu de contexto (volume, silenciar) segue no botão direito, igual ao tile:
+ * trocar de leiaute não pode custar uma capacidade.
+ */
+function AvatarDeChamada({
+  tile,
+  meId,
+  falando,
+  channelId,
+}: {
+  tile: Tile;
+  meId?: string;
+  falando: string[];
+  channelId: string;
+}) {
+  const { state, participant } = tile;
+  const sou = state.user.id === meId;
+  const nome = displayNameOf(state.user);
+  // quem está mudo nunca "fala": o anel verde tem de contar a mesma história
+  const ativo = !state.muted && (falando.includes(state.user.id) || !!participant?.isSpeaking);
+
+  return (
+    <Tooltip label={nome}>
+      <span
+        data-voice-avatar={state.user.id}
+        aria-label={nome}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          abrirMenuDeParticipante(e.clientX, e.clientY, state.user, { sou, channelId });
+        }}
+        className={`inline-block rounded-full transition ${ativo ? "ring-[3px] ring-green" : ""} ${
+          state.reconnecting ? "opacity-50" : ""
+        }`}
+      >
+        <Avatar
+          user={state.user}
+          size="xl"
+          surface="border-rail"
+          voz={state.deafened ? "surdo" : state.muted ? "mudo" : null}
+        />
+      </span>
+    </Tooltip>
+  );
 }
 
 /** Um participante: vídeo quando há, avatar quando não. */

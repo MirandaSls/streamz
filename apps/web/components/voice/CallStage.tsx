@@ -149,7 +149,15 @@ export default function CallStage({
             </div>
           </div>
         ) : conectadoAqui ? (
-          <VoiceGrid channelId={channelId} nomeDoCanal={titulo} />
+          <VoiceGrid
+            channelId={channelId}
+            nomeDoCanal={titulo}
+            // só grupo aceita mais gente: numa conversa de duas pessoas o "+"
+            // teria de criar um grupo novo, que é outra decisão e outra tela
+            onAdicionar={
+              grupo ? () => ui.openModal({ kind: "addGroupMembers", channelId }) : undefined
+            }
+          />
         ) : (
           <ConviteParaEntrar estados={estados} onEntrar={() => void startCall(channelId, false)} />
         )}
