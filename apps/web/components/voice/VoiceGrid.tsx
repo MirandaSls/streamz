@@ -467,7 +467,21 @@ function VoiceTile({
         </button>
       )}
 
-      <span className="pointer-events-none absolute bottom-1 left-1 flex max-w-[calc(100%-8px)] items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 text-xs text-white">
+      {/* A pílula só aparece quando tem o que dizer.
+          No print, um tile de avatar sem mudo e sem o mouse em cima é limpo: só
+          a foto e a borda verde de quem fala (113411). Ela volta quando há
+          estado a informar — mudo, surdo, transmissão — e no hover, para quem
+          quiser conferir o nome. Com vídeo ela fica sempre: aí o quadro é uma
+          imagem em movimento, e o rosto de hoje não é o de ontem.
+          Desenhá-la sempre, como fazíamos, enchia uma sala de duas pessoas de
+          rótulo que ninguém precisa ler. */}
+      <span
+        className={`pointer-events-none absolute bottom-1 left-1 flex max-w-[calc(100%-8px)] items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 text-xs text-white transition-opacity ${
+          publication || state.muted || state.deafened
+            ? ""
+            : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+        }`}
+      >
         {tela && (
           <span className="rounded-[3px] bg-red px-1 text-[10px] font-bold uppercase leading-4 tracking-[0.02em] text-white">
             Ao vivo
