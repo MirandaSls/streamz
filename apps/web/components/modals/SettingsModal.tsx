@@ -11,6 +11,8 @@ import {
   ehAbaDeAdmin,
   type SettingsGroup,
 } from "@/components/settings/tabs";
+import { ProvedorDeAbas } from "@/components/settings/navegacao";
+import Avatar from "@/components/ui/Avatar";
 import { useControleDeAlteracoes } from "@/components/ui/alteracoes";
 import TelaCheia, { ItemNeutro } from "@/components/ui/TelaCheia";
 import { escreverAbaNaUrl, limparAbaDaUrl } from "@/hooks/useSettingsRoute";
@@ -45,6 +47,7 @@ export default function SettingsModal({ tab }: { tab?: string }) {
   const router = useRouter();
   const closeModal = useUI((s) => s.closeModal);
   const logout = useAuth((s) => s.logout);
+  const user = useAuth((s) => s.user);
   const alteracoes = useControleDeAlteracoes();
   // `null` enquanto a resposta não chega: o grupo não aparece nem é negado
   const admin = useAdmin((s) => s.admin);
@@ -80,7 +83,12 @@ export default function SettingsModal({ tab }: { tab?: string }) {
             item.group === grupo.id &&
             (admin === true || !ehAbaDeAdmin(item)) &&
             (!q || t(item.label).toLowerCase().includes(q)),
-        ).map((item) => ({ id: item.id, label: t(item.label), icon: item.icon })),
+        ).map((item) => ({
+          id: item.id,
+          label: t(item.label),
+          icon: item.icon,
+          secoes: item.secoes?.map((sec) => ({ id: sec.id, label: t(sec.label) })),
+        })),
       })),
     [admin, q, t],
   );
@@ -100,6 +108,26 @@ export default function SettingsModal({ tab }: { tab?: string }) {
         onChange: setBusca,
         rotulo: "Buscar nas configurações",
       }}
+      cabecalhoRico={
+        user ? (
+          // O cartão de perfil no topo do menu, como no print: é o que responde
+          // "de quem são estas configurações" antes de qualquer aba — e a conta
+          // aberta não é óbvia para quem tem mais de uma.
+          <button
+            type="button"
+            onClick={() => setAbaId("perfil")}
+            className="mb-4 flex w-full items-center gap-2 rounded-[4px] p-1 text-left transition hover:bg-hov"
+          >
+            <Avatar user={user} size="lg" surface="border-panel" />
+            <span className="min-w-0">
+              <span className="block truncate text-base font-semibold text-txt-primary">
+                {user.displayName || user.username}
+              </span>
+              <span className="block truncate text-xs text-txt-muted">{t("config.editarPerfil")}</span>
+            </span>
+          </button>
+        ) : undefined
+      }
       grupos={grupos}
       abaId={aba.id}
       onAba={setAbaId}
@@ -124,7 +152,9 @@ export default function SettingsModal({ tab }: { tab?: string }) {
         </>
       }
     >
-      <Conteudo />
+      <ProvedorDeAbas irParaAba={setAbaId}>
+        <Conteudo />
+      </ProvedorDeAbas>
     </TelaCheia>
   );
 }

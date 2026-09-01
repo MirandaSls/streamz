@@ -58,10 +58,29 @@ export interface SettingsTab {
   label: ChaveDeTexto;
   icon: ReactNode;
   Component: ComponentType;
+  /**
+   * As seções da página, para o menu de segundo nível (ver `TelaCheia`).
+   *
+   * Cada `id` precisa casar com o `id` de um `<Section>` do componente — é o
+   * contrato entre o menu e a página. Aba sem seções continua funcionando: ela
+   * só não abre o segundo nível.
+   */
+  secoes?: { id: string; label: ChaveDeTexto }[];
 }
 
 export const SETTINGS_TABS: readonly SettingsTab[] = [
-  { id: "conta", group: "usuario", label: "aba.conta", icon: <User size={18} />, Component: ContaTab },
+  {
+    id: "conta",
+    group: "usuario",
+    label: "aba.conta",
+    icon: <User size={18} />,
+    Component: ContaTab,
+    secoes: [
+      { id: "minha-conta", label: "conta.secMinhaConta" },
+      { id: "senha", label: "conta.secSenha" },
+      { id: "encerrar", label: "conta.secEncerrar" },
+    ],
+  },
   { id: "perfil", group: "usuario", label: "aba.perfil", icon: <UserCircle size={18} />, Component: PerfilTab },
   {
     id: "privacidade",
@@ -72,21 +91,56 @@ export const SETTINGS_TABS: readonly SettingsTab[] = [
   },
   { id: "dispositivos", group: "usuario", label: "aba.sessoes", icon: <Laptop size={18} />, Component: SessoesTab },
 
-  { id: "aparencia", group: "app", label: "aba.aparencia", icon: <Paintbrush size={18} />, Component: AparenciaTab },
+  {
+    id: "aparencia",
+    group: "app",
+    label: "aba.aparencia",
+    icon: <Paintbrush size={18} />,
+    Component: AparenciaTab,
+    secoes: [
+      { id: "previa", label: "aparencia.previa" },
+      { id: "tema", label: "aparencia.tema" },
+      { id: "mensagens", label: "aparencia.mensagens" },
+    ],
+  },
   {
     id: "acessibilidade",
     group: "app",
     label: "aba.acessibilidade",
     icon: <Accessibility size={18} />,
     Component: AcessibilidadeTab,
+    secoes: [
+      { id: "legibilidade", label: "acess.secLegibilidade" },
+      { id: "cor", label: "acess.secCor" },
+      { id: "movimento", label: "acess.secMovimento" },
+      { id: "chat", label: "acess.secChat" },
+    ],
   },
-  { id: "voz", group: "app", label: "aba.voz", icon: <Video size={18} />, Component: VozTab },
+  {
+    id: "voz",
+    group: "app",
+    label: "aba.voz",
+    icon: <Video size={18} />,
+    Component: VozTab,
+    secoes: [
+      { id: "dispositivos", label: "voz.dispositivos" },
+      { id: "modo", label: "voz.modo" },
+      { id: "processamento", label: "voz.processamento" },
+      { id: "testar", label: "voz.testarMic" },
+      { id: "camera", label: "voz.previaCamera" },
+    ],
+  },
   {
     id: "notificacoes",
     group: "app",
     label: "aba.notificacoes",
     icon: <Bell size={18} />,
     Component: NotificacoesTab,
+    secoes: [
+      { id: "dispositivo", label: "notif.esteDispositivo" },
+      { id: "padrao", label: "notif.padrao" },
+      { id: "sons", label: "notif.sons" },
+    ],
   },
   { id: "teclado", group: "app", label: "aba.teclado", icon: <Keyboard size={18} />, Component: TecladoTab },
   { id: "idioma", group: "app", label: "aba.idioma", icon: <Languages size={18} />, Component: IdiomaTab },

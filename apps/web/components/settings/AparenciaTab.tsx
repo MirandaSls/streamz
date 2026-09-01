@@ -1,7 +1,16 @@
 "use client";
 
 import Avatar from "@/components/ui/Avatar";
-import { PontoDeRadio, Section, Slider, Toggle } from "@/components/ui/controls";
+import {
+  ConfiguracoesRelacionadas,
+  PontoDeRadio,
+  Section,
+  Slider,
+  Toggle,
+} from "@/components/ui/controls";
+import { useIrParaAba } from "@/components/settings/navegacao";
+import PreviaDeMensagens from "@/components/settings/PreviaDeMensagens";
+import { Accessibility } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { useAuth } from "@/stores/auth";
 import { FONT_SCALE, GROUP_SPACING, ZOOM, useSettings } from "@/stores/settings";
@@ -22,56 +31,19 @@ export default function AparenciaTab() {
   const t = useT();
   const user = useAuth((s) => s.user);
   const s = useSettings();
+  const irParaAba = useIrParaAba();
 
   return (
     <>
-      <Section title={t("aparencia.previa")}>
-        <div className="rounded-lg bg-chat p-3">
-          {s.compactMode ? (
-            <>
-              <p className="text-txt-normal">
-                <span className="mr-2 text-[11px] text-txt-muted">14:03</span>
-                <span className="mr-1 font-medium text-txt-primary">
-                  {user?.displayName || user?.username || "você"}
-                </span>
-                Assim ficam as mensagens no modo compacto.
-              </p>
-              <p className="text-txt-normal" style={{ marginTop: `${s.groupSpacing}px` }}>
-                <span className="mr-2 text-[11px] text-txt-muted">14:04</span>
-                <span className="mr-1 font-medium text-txt-primary">streamz</span>
-                E este é o respiro entre grupos.
-              </p>
-            </>
-          ) : (
-            <>
-              <div className="flex gap-3">
-                {user && <Avatar user={user} size="lg" surface="border-chat" />}
-                <div>
-                  <span className="font-medium text-txt-primary">
-                    {user?.displayName || user?.username || "você"}
-                  </span>
-                  <span className="ml-1.5 text-xs text-txt-muted">Hoje às 14:03</span>
-                  <p className="text-txt-normal">Assim ficam as mensagens no modo padrão.</p>
-                </div>
-              </div>
-              <div className="flex gap-3" style={{ marginTop: `${s.groupSpacing}px` }}>
-                <div className="h-10 w-10 shrink-0 rounded-full bg-accent" aria-hidden="true" />
-                <div>
-                  <span className="font-medium text-txt-primary">streamz</span>
-                  <span className="ml-1.5 text-xs text-txt-muted">Hoje às 14:04</span>
-                  <p className="text-txt-normal">E este é o respiro entre grupos.</p>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
+      <Section id="previa" title={t("aparencia.previa")}>
+        <PreviaDeMensagens />
       </Section>
 
-      <Section title={t("aparencia.tema")}>
+      <Section id="tema" title={t("aparencia.tema")}>
         <EscolhaDeTema />
       </Section>
 
-      <Section title={t("aparencia.mensagens")}>
+      <Section id="mensagens" title={t("aparencia.mensagens")}>
         <Slider
           label={t("aparencia.escalaFonte")}
           value={s.fontScale}
@@ -117,6 +89,19 @@ export default function AparenciaTab() {
           {t("config.restaurar")}
         </button>
       </Section>
+    
+      <ConfiguracoesRelacionadas
+        titulo={t("config.relacionadas")}
+        itens={[
+          {
+            id: "acessibilidade",
+            label: t("aba.acessibilidade"),
+            hint: t("acess.secLegibilidade"),
+            icon: <Accessibility size={18} />,
+            onSelect: () => irParaAba("acessibilidade"),
+          },
+        ]}
+      />
     </>
   );
 }

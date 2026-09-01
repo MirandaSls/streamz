@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { ChevronDown, Search, X } from "lucide-react";
 import {
   BarraDeAlteracoes,
@@ -33,6 +33,17 @@ export interface ItemDeMenu {
   id: string;
   label: string;
   icon?: ReactNode;
+  /**
+   * As seções da aba, para o menu de segundo nível.
+   *
+   * Elas não trocam de tela: rolam até o bloco correspondente da **mesma**
+   * página, e se marcam sozinhas conforme a página rola. É o que o Discord faz
+   * — e a razão é que essas páginas são longas e contínuas: quebrá-las em abas
+   * de verdade obrigaria a lembrar em qual metade estava a preferência.
+   *
+   * O `id` de cada seção casa com o `id` do `<Section>` correspondente.
+   */
+  secoes?: { id: string; label: string }[];
 }
 
 export interface GrupoDeMenu {
@@ -58,6 +69,7 @@ const ITEM_REPOUSO = "text-txt-faint hover:bg-hov hover:text-txt-normal";
 export default function TelaCheia({
   titulo,
   cabecalho,
+  cabecalhoRico,
   onCabecalho,
   busca,
   grupos,
@@ -75,6 +87,12 @@ export default function TelaCheia({
   titulo: string;
   /** nome do objeto no topo da barra lateral (servidor, canal, grupo). */
   cabecalho?: string;
+  /**
+   * Bloco livre acima da busca — o cartão de perfil das configurações do
+   * usuário. Não é `cabecalho` com outro nome: aquele é uma linha de texto em
+   * caixa-alta, este é avatar, nome e um atalho.
+   */
+  cabecalhoRico?: ReactNode;
   /** quando presente, o cabeçalho vira botão com chevron (menu do servidor). */
   onCabecalho?: (event: MouseEvent<HTMLButtonElement>) => void;
   busca?: BuscaDoMenu;
@@ -94,6 +112,53 @@ export default function TelaCheia({
   children: ReactNode;
 }) {
   const painelRef = useRef<HTMLDivElement>(null);
+  const rolagemRef = useRef<HTMLDivElement>(null);
+  const [secaoVisivel, setSecaoVisivel] = useState<string | null>(null);
+
+  const itemAtivo = grupos.flatMap((g) => g.itens).find((i) => i.id === abaId);
+  const secoes = itemAtivo?.secoes ?? [];
+
+  /**
+   * Qual seção está sendo lida agora.
+   *
+   * O `rootMargin` corta 70% de baixo: sem isso, três seções curtas cabem na
+   * tela ao mesmo tempo e a marcação piscaria entre elas a cada pixel de
+   * rolagem. Com o corte, vale a que está perto do topo — que é onde o olho
+   * está.
+   */
+  useEffect(() => {
+    const raiz = rolagemRef.current;
+    if (!raiz || secoes.length === 0 || typeof IntersectionObserver === "undefined") {
+      setSecaoVisivel(null);
+      return;
+    }
+    const alvos = Array.from(raiz.querySelectorAll<HTMLElement>("[data-secao]"));
+    if (alvos.length === 0) return;
+    setSecaoVisivel(alvos[0].dataset.secao ?? null);
+    const observador = new IntersectionObserver(
+      (entradas) => {
+        const visiveis = entradas
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        const topo = visiveis[0]?.target as HTMLElement | undefined;
+        if (topo?.dataset.secao) setSecaoVisivel(topo.dataset.secao);
+      },
+      { root: raiz, rootMargin: "0px 0px -70% 0px", threshold: 0 },
+    );
+    alvos.forEach((el) => observador.observe(el));
+    return () => observador.disconnect();
+    // `abaId` troca o conteúdo inteiro do scroller; `secoes.length` cobre a aba
+    // que ganha seções depois de carregar
+  }, [abaId, secoes.length]);
+
+  /** Rola até a seção — sem animação para quem pediu menos movimento. */
+  function irParaSecao(id: string) {
+    const alvo = rolagemRef.current?.querySelector<HTMLElement>(`[data-secao="${id}"]`);
+    if (!alvo) return;
+    const suave = !document.documentElement.classList.contains("reduzir-movimento");
+    alvo.scrollIntoView({ behavior: suave ? "smooth" : "auto", block: "start" });
+    setSecaoVisivel(id);
+  }
 
   useEffect(() => {
     // devolver o foco é o que faz o Esc não jogar o usuário no começo da página
@@ -159,6 +224,8 @@ export default function TelaCheia({
               </h2>
             ))}
 
+          {cabecalhoRico}
+
           {busca && (
             <div className="relative mb-4">
               <Search
@@ -188,22 +255,55 @@ export default function TelaCheia({
                 {grupo.itens.map((item) => {
                   const ativo = item.id === abaId;
                   return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      aria-current={ativo ? "page" : undefined}
-                      onClick={() => irPara(item.id)}
-                      className={`${ITEM_BASE} ${
-                        ativo ? "bg-sel text-txt-primary" : ITEM_REPOUSO
-                      }`}
-                    >
-                      {item.icon && (
-                        <span aria-hidden="true" className="shrink-0">
-                          {item.icon}
-                        </span>
+                    <div key={item.id}>
+                      <button
+                        type="button"
+                        aria-current={ativo ? "page" : undefined}
+                        onClick={() => irPara(item.id)}
+                        className={`${ITEM_BASE} ${
+                          ativo ? "bg-sel text-txt-primary" : ITEM_REPOUSO
+                        }`}
+                      >
+                        {item.icon && (
+                          <span aria-hidden="true" className="shrink-0">
+                            {item.icon}
+                          </span>
+                        )}
+                        <span className="truncate">{item.label}</span>
+                      </button>
+
+                      {/* Só da aba aberta: as seções das outras não são
+                          navegáveis daqui, e listá-las faria um menu de
+                          cinquenta linhas. */}
+                      {ativo && item.secoes && item.secoes.length > 0 && (
+                        <div className="mb-1 ml-3 border-l border-border pl-2">
+                          {item.secoes.map((secao) => {
+                            const aqui = secao.id === secaoVisivel;
+                            return (
+                              <button
+                                key={secao.id}
+                                type="button"
+                                aria-current={aqui ? "true" : undefined}
+                                onClick={() => irParaSecao(secao.id)}
+                                className={`relative mb-0.5 flex h-7 w-full items-center rounded-[4px] px-2.5 text-left text-sm transition ${
+                                  aqui
+                                    ? "text-txt-primary"
+                                    : "text-txt-faint hover:bg-hov hover:text-txt-normal"
+                                }`}
+                              >
+                                {aqui && (
+                                  <span
+                                    aria-hidden="true"
+                                    className="absolute -left-[9px] top-1 h-5 w-0.5 rounded-full bg-txt-primary"
+                                  />
+                                )}
+                                <span className="truncate">{secao.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
                       )}
-                      <span className="truncate">{item.label}</span>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -229,7 +329,7 @@ export default function TelaCheia({
         conteúdo todo para a direita.
       */}
       <div className="flex min-w-0 flex-[1_1_800px]">
-        <div className="min-w-0 max-w-[740px] flex-1 overflow-y-auto px-10 py-[60px]">
+        <div ref={rolagemRef} className="min-w-0 max-w-[740px] flex-1 overflow-y-auto px-10 py-[60px]">
           {tituloAba && (
             <h1 className="mb-5 font-display text-xl font-bold tracking-title text-txt-primary">
               {tituloAba}
