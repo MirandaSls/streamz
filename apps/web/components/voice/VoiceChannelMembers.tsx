@@ -1,6 +1,6 @@
 "use client";
 
-import { HeadphoneOff, MicOff, Video } from "lucide-react";
+import { ChevronRight, HeadphoneOff, MicOff, UserPlus, Video } from "lucide-react";
 import { displayNameOf } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import { abrirMenuDeParticipante } from "@/components/voice/participant-menu";
@@ -26,9 +26,17 @@ import { useVoice } from "@/stores/voice";
  * - Transmissão vira pílula "AO VIVO", que é o convite para assistir; um ícone
  *   verde a mais no meio dos outros passa despercebido.
  */
-export default function VoiceChannelMembers({ channelId }: { channelId: string }) {
+export default function VoiceChannelMembers({
+  channelId,
+  guildId,
+}: {
+  channelId: string;
+  /** só para o convite; sem ele a linha "Convidar para voz" não aparece. */
+  guildId?: string | null;
+}) {
   const estados = useVoice((s) => s.statesOf(channelId));
   const falando = useVoice((s) => s.falando);
+  const estouAqui = useVoice((s) => s.channelId === channelId);
   const meId = useAuth((s) => s.user?.id);
   if (estados.length === 0) return null;
 
@@ -82,6 +90,25 @@ export default function VoiceChannelMembers({ channelId }: { channelId: string }
           </li>
         );
       })}
+
+      {/* Só para quem está dentro: de fora, a linha seria um convite para uma
+          sala em que você não está, e o caminho de entrar é clicar no canal.
+          O chevron é o do print — ele abre a escolha de quem convidar. */}
+      {estouAqui && guildId && (
+        <li>
+          <button
+            type="button"
+            onClick={() => ui.openModal({ kind: "invite", guildId })}
+            className="flex h-[26px] w-full items-center gap-1.5 rounded-[4px] px-1 text-left text-sm text-txt-faint transition hover:bg-hov hover:text-txt-normal"
+          >
+            <span className="grid h-5 w-5 shrink-0 place-items-center">
+              <UserPlus size={14} aria-hidden="true" />
+            </span>
+            <span className="min-w-0 flex-1 truncate">Convidar para voz</span>
+            <ChevronRight size={14} className="shrink-0" aria-hidden="true" />
+          </button>
+        </li>
+      )}
     </ul>
   );
 }

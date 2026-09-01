@@ -55,6 +55,9 @@ import { useVoicePrefs } from "@/stores/voicePrefs";
  * separa uma pessoa da outra numa lista que cresce.
  */
 
+/** Uma vaga do palco: alguém, ou o convite que ocupa a vaga vazia. */
+type Celula = { tipo: "tile"; t: Tile } | { tipo: "convite" };
+
 interface Tile {
   key: string;
   state: VoiceStateEvent;
@@ -196,8 +199,17 @@ export default function VoiceGrid({
   const principal = emFoco.find((t) => t.tela) ?? emFoco[0] ?? null;
   const resto = principal ? tiles.filter((t) => t.key !== principal.key) : tiles;
 
-  const arranjo = melhorArranjo(resto.length, tamanho.largura, tamanho.altura);
-  const linhas = distribuir(resto.length, arranjo.colunas);
+  // Com uma pessoa só na sala o Discord não deixa o palco pela metade: a vaga
+  // vazia vira o convite. Com mais gente ele some — aí a grade é a própria
+  // sala, e o convite continua a um clique na barra lateral.
+  const comConvite = !!guildId && !principal && resto.length === 1;
+  const celulas: Celula[] = [
+    ...resto.map((t) => ({ tipo: "tile" as const, t })),
+    ...(comConvite ? [{ tipo: "convite" as const }] : []),
+  ];
+
+  const arranjo = melhorArranjo(celulas.length, tamanho.largura, tamanho.altura);
+  const linhas = distribuir(celulas.length, arranjo.colunas);
   let indice = 0;
 
   return (
@@ -221,20 +233,27 @@ export default function VoiceGrid({
           style={{ gap: GAP }}
         >
           {linhas.map((quantos, linha) => {
-            const fatia = resto.slice(indice, indice + quantos);
+            const fatia = celulas.slice(indice, indice + quantos);
             indice += quantos;
             return (
               <div key={linha} className="flex shrink-0 justify-center" style={{ gap: GAP }}>
-                {fatia.map((t) => (
-                  <div key={t.key} style={{ width: arranjo.largura, height: arranjo.altura }}>
-                    <VoiceTile
-                      tile={t}
-                      meId={me?.id}
-                      falando={falando}
-                      channelId={channelId}
-                      assistindo={false}
-                      onFocar={setFocado}
-                    />
+                {fatia.map((c) => (
+                  <div
+                    key={c.tipo === "tile" ? c.t.key : "convite"}
+                    style={{ width: arranjo.largura, height: arranjo.altura }}
+                  >
+                    {c.tipo === "tile" ? (
+                      <VoiceTile
+                        tile={c.t}
+                        meId={me?.id}
+                        falando={falando}
+                        channelId={channelId}
+                        assistindo={false}
+                        onFocar={setFocado}
+                      />
+                    ) : (
+                      <TileDeConvite guildId={guildId as string} />
+                    )}
                   </div>
                 ))}
               </div>
@@ -284,6 +303,35 @@ function useTamanho(el: HTMLElement | null) {
     return () => ro.disconnect();
   }, [el]);
   return tamanho;
+}
+
+/**
+ * A vaga vazia do palco, como convite.
+ *
+ * A arte do Discord aqui é ilustração proprietária deles; o que se copia é o
+ * **papel** do tile — ocupar a vaga com uma ação em vez de com vazio —, não o
+ * desenho. O nosso é o brilho do accent no canto, que é o que a marca tem.
+ *
+ * Sem "Escolher atividade" ao lado: atividade não existe no produto, e um botão
+ * que abre um "em breve" é pior que a ausência dele.
+ */
+function TileDeConvite({ guildId }: { guildId: string }) {
+  return (
+    <div className="relative grid h-full w-full place-items-center overflow-hidden rounded-lg bg-panel ring-1 ring-black/30">
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-accent/10 blur-3xl"
+      />
+      <button
+        type="button"
+        onClick={() => ui.openModal({ kind: "invite", guildId })}
+        className="relative flex h-9 items-center gap-2 rounded-[3px] bg-border-strong px-4 text-sm font-semibold text-txt-primary transition hover:bg-border-strong-hover"
+      >
+        <UserPlus size={16} aria-hidden="true" />
+        Convidar para voz
+      </button>
+    </div>
+  );
 }
 
 /**

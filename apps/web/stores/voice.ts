@@ -67,6 +67,13 @@ interface VoiceStoreState {
   channelId: string | null;
   guildId: string | null;
   channelName: string;
+  /**
+   * Quando entrei nesta call (epoch ms) — é o que alimenta o cronômetro do
+   * canal na barra lateral. Fica na store, e não num `useState` do componente,
+   * porque a barra lateral desmonta ao trocar de servidor e a call não: um
+   * cronômetro local voltaria a zero sem nada ter acontecido.
+   */
+  desde: number | null;
   status: VoiceStatus;
   erro: string | null;
   /** o LiveKit respondeu com credenciais? false = sala sem som, sem alarde. */
@@ -241,6 +248,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     channelId: null,
     guildId: null,
     channelName: "",
+    desde: null,
     status: "idle",
     erro: null,
     midiaDisponivel: false,
@@ -343,6 +351,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         channelId: channel.id,
         guildId: channel.guildId,
         channelName: channel.name ?? "voz",
+        // reconectar depois de uma queda de mídia passa por aqui com o mesmo
+        // canal: zerar o relógio ali diria que a call recomeçou, e ela não
+        desde: anterior === channel.id ? get().desde ?? Date.now() : Date.now(),
         status: "connecting",
         erro: null,
         midiaDisponivel: false,
@@ -388,6 +399,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         channelId: null,
         guildId: null,
         channelName: "",
+        desde: null,
         status: "idle",
         erro: null,
         midiaDisponivel: false,
@@ -589,6 +601,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         channelId,
         guildId: null,
         channelName: "",
+        desde: Date.now(),
         status: "connecting",
         erro: null,
         camOn: false,
@@ -620,7 +633,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       if (get().channelId && get().channelId !== channelId) await get().disconnect();
       get().dispatchCall({ type: "accept" });
       emit(WS_EVENTS.CALL_ACCEPT, { channelId });
-      set({ channelId, guildId: null, status: "connecting", erro: null });
+      set({ channelId, guildId: null, desde: Date.now(), status: "connecting", erro: null });
       await abrirConversa(channelId);
       // atender entra pela mesma rota de quem liga: ela é a que sabe de conversa
       // direta (o token de canal de voz recusaria uma DM com 400)
