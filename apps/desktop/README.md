@@ -106,36 +106,51 @@ usar uma função é superfície de ataque desnecessária: qualquer script injet
 importa `@tauri-apps/api` / `@tauri-apps/plugin-notification` — o que passa pelo
 IPC continua limitado pelas capabilities em `capabilities/default.json`.
 
-## Auto-update — desligado de propósito
+## Auto-update
 
-O `tauri-plugin-updater` **não** está registrado. Ele estava ativo apontando para
-`releases.streamz.dev` (domínio que não existe) com `pubkey` placeholder — nessa
-configuração o app só produz erro de verificação em runtime, sem nunca atualizar.
+O app procura versão nova **ao abrir** e mostra um cartão no canto (o
+`AvisoDeAtualizacao`, na web). Fechar o cartão vale para aquela sessão: ele volta
+na próxima abertura, de propósito — um "não perturbe" gravado transformaria um
+adiamento em uma versão parada para sempre. Nada é baixado sem clique.
 
-Para religar, quando existir chave e servidor de verdade:
+O caminho é: o app consulta `GET /api/updates/{target}/{arch}/{versão}` na API,
+que devolve **204** quando não há nada, ou um manifesto assinado quando há. O
+pacote só é aceito se a assinatura bater com a chave pública embutida no app —
+é isso, e não autenticação, que protege o canal.
 
-1. Gere o par de chaves de assinatura e guarde a privada fora do repo:
+### Publicar uma versão
+
+1. **Uma vez**, gere o par de chaves e guarde a privada fora do repo:
 
    ```bash
    pnpm --filter @streamz/desktop tauri signer generate -w ~/.tauri/streamz.key
    ```
 
-2. `src-tauri/Cargo.toml`: descomente `tauri-plugin-updater = "2"`.
-3. `src-tauri/src/main.rs`: volte com
-   `.plugin(tauri_plugin_updater::Builder::new().build())`.
-4. `src-tauri/capabilities/default.json`: adicione `"updater:default"`.
-5. `src-tauri/tauri.conf.json`: preencha `plugins.updater` com a **chave pública**
-   e o endpoint real, e troque `bundle.createUpdaterArtifacts` para `true`:
+   - cole a **pública** em `src-tauri/tauri.conf.json` → `plugins.updater.pubkey`;
+   - guarde a **privada** no segredo `TAURI_SIGNING_PRIVATE_KEY` do repositório
+     (e a senha dela em `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, se tiver).
 
-   ```json
-   "plugins": {
-     "updater": {
-       "endpoints": ["https://SEU-SERVIDOR/updater/{{target}}/{{arch}}/{{current_version}}"],
-       "pubkey": "<chave pública gerada no passo 1>",
-       "windows": { "installMode": "passive" }
-     }
-   }
+   Enquanto a pública estiver vazia, o app roda normalmente e o updater
+   simplesmente nunca encontra nada — mas o build de release recusa começar.
+
+2. Suba a `version` em `src-tauri/tauri.conf.json`.
+
+3. Rode o workflow **Desktop (Windows)** com `release: true`. Ele gera o `.exe`,
+   o `.sig` e imprime a assinatura no log.
+
+4. Hospede o `.exe` onde o app possa baixá-lo (o mesmo servidor serve) e ponha
+   no `.env` da API:
+
+   ```
+   DESKTOP_UPDATE_VERSION=0.1.0
+   DESKTOP_UPDATE_URL=https://.../Streamz_0.1.0_x64-setup.exe
+   DESKTOP_UPDATE_SIGNATURE=<conteúdo do .sig>
+   DESKTOP_UPDATE_NOTES=O que mudou nesta versão.
    ```
 
-6. Assine o build exportando `TAURI_SIGNING_PRIVATE_KEY` (e
-   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, se a chave tiver senha).
+   Reinicie a API. Não precisa rebuildar imagem: o manifesto é montado do
+   ambiente.
+
+Sem essas variáveis a API responde "não há atualização" — que é o estado padrão
+e não quebra nada.
+

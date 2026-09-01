@@ -11,6 +11,13 @@ name: Desktop (Windows)
 
 on:
   workflow_dispatch:
+    inputs:
+      release:
+        description: >-
+          Gerar artefatos de atualização (assinados). Exige o segredo
+          TAURI_SIGNING_PRIVATE_KEY e a chave pública em tauri.conf.json.
+        type: boolean
+        default: false
 
 concurrency:
   group: desktop-windows
@@ -42,6 +49,24 @@ jobs:
       - name: Build do contrato compartilhado
         run: pnpm --filter @streamz/shared build
 
+      # Falhar aqui, e não no meio do build de meia hora: sem a chave privada o
+      # Tauri produziria um instalador sem `.sig`, que o atualizador recusa —
+      # e a falha só apareceria no cliente, semanas depois.
+      - name: Conferir a chave de assinatura
+        if: inputs.release
+        shell: bash
+        env:
+          CHAVE: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$CHAVE" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY não está configurado. Ver apps/desktop/README.md."
+            exit 1
+          fi
+          if ! grep -q '"pubkey": *"[^"]' apps/desktop/src-tauri/tauri.conf.json; then
+            echo "::error::A chave pública não foi preenchida em tauri.conf.json. Ver apps/desktop/README.md."
+            exit 1
+          fi
+
       # `NEXT_PUBLIC_*` é embutida no bundle: sem estas, o app instalado
       # apontaria para localhost e não falaria com a produção
       - name: Build do instalador
@@ -50,7 +75,24 @@ jobs:
           NEXT_PUBLIC_WS_URL: ${{ vars.NEXT_PUBLIC_WS_URL }}
           NEXT_PUBLIC_LIVEKIT_URL: ${{ vars.NEXT_PUBLIC_LIVEKIT_URL }}
           NEXT_TELEMETRY_DISABLED: "1"
-        run: pnpm --filter @streamz/desktop build
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: >-
+          pnpm --filter @streamz/desktop build
+          ${{ inputs.release && '--config src-tauri/tauri.release.conf.json' || '' }}
+
+      # A assinatura é o que vai para DESKTOP_UPDATE_SIGNATURE na API. Ela é
+      # pública (verifica, não autoriza), então imprimi-la no log é seguro — e
+      # é muito mais prático que baixar o artefato só para ler um arquivo.
+      - name: Assinatura para a API
+        if: inputs.release
+        shell: bash
+        run: |
+          for sig in apps/desktop/src-tauri/target/release/bundle/nsis/*.sig; do
+            echo "== $(basename "$sig")"
+            cat "$sig"
+            echo
+          done
 
       - name: Listar o que saiu
         shell: bash
@@ -63,4 +105,5 @@ jobs:
           if-no-files-found: error
           path: |
             apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
+            apps/desktop/src-tauri/target/release/bundle/nsis/*.sig
             apps/desktop/src-tauri/target/release/bundle/msi/*.msi
