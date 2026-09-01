@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { AudioLines, PhoneOff, RotateCw, Signal, SignalZero, Video, VideoOff } from "lucide-react";
+import { AudioLines, PhoneOff, RotateCw, Signal, SignalZero, Video, VideoOff } from "@/components/ui/icones";
 import Tooltip from "@/components/ui/Tooltip";
 import PopoverFlutuante from "@/components/ui/PopoverFlutuante";
 import PopoverDeRuido from "@/components/voice/PopoverDeRuido";

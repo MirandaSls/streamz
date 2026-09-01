@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@livekit/components-styles": "^1.1.4",
+    "@phosphor-icons/react": "^2.1.10",
     "@sapphi-red/web-noise-suppressor": "0.4.0",
     "@streamz/shared": "workspace:*",
     "@tauri-apps/api": "^2",

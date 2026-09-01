@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCheck, Compass, LogOut, Plus, Settings, UserPlus, Users } from "lucide-react";
+import { CheckCheck, Compass, LogOut, Plus, Settings, UserPlus, Users } from "@/components/ui/icones";
 import {
   displayNameOf,
   guildNotificationScope,

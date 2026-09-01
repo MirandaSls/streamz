@@ -25,7 +25,7 @@ import {
   UserPlus,
   Volume2,
   X,
-} from "lucide-react";
+} from "@/components/ui/icones";
 import {
   channelNotificationScope,
   guildNotificationScope,

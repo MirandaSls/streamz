@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Search } from "lucide-react";
+import { Search } from "@/components/ui/icones";
 
 export { default as HeaderIcon } from "@/components/chat/HeaderIcon";
 
