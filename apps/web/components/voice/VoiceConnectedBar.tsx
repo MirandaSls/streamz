@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { AudioLines, PhoneOff, RotateCw, Signal, SignalZero, Video, VideoOff } from "lucide-react";
 import Tooltip from "@/components/ui/Tooltip";
+import PopoverDeRuido from "@/components/voice/PopoverDeRuido";
 import ScreenShareButton from "@/components/voice/ScreenShareButton";
 import { useChannels } from "@/stores/channels";
 import { dmTitle, useDMs } from "@/stores/dms";
@@ -25,7 +27,9 @@ import { useVoice } from "@/stores/voice";
  * barra do palco: é a posição do Discord, e a razão é a mesma que justifica
  * este painel existir — quem entrou num canal de voz e foi ler outro canal não
  * tem o palco na tela, e é justamente aí que se percebe que o microfone está
- * captando o ventilador.
+ * captando o ventilador. O ícone **abre uma caixa** (ver `PopoverDeRuido`), não
+ * alterna direto: quem clica ali está em dúvida, e a dúvida se responde falando
+ * e vendo a barra mexer.
  *
  * A fileira de baixo é só ícone, sem rótulo. Dois botões com texto ("Vídeo",
  * "Tela") pareciam mais claros e são menos: o rótulo empurra o alvo clicável
@@ -38,14 +42,29 @@ export default function VoiceConnectedBar() {
   const status = useVoice((s) => s.status);
   const erro = useVoice((s) => s.erro);
   const camOn = useVoice((s) => s.camOn);
-  const processamento = useVoice((s) => s.audio.processamento);
-  const setAudioPref = useVoice((s) => s.setAudioPref);
-  const ruidoAvancado = processamento.ruido === "avancada";
+  const ruidoAvancado = useVoice((s) => s.audio.processamento.ruido === "avancada");
   const toggleCam = useVoice((s) => s.toggleCam);
   const disconnect = useVoice((s) => s.disconnect);
   const reconnect = useVoice((s) => s.reconnect);
   const conversas = useDMs((s) => s.channels);
   const guilds = useGuilds((s) => s.guilds);
+
+  const [ruidoAberto, setRuidoAberto] = useState(false);
+  const caixaDoRuido = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!ruidoAberto) return;
+    const fora = (e: MouseEvent) => {
+      if (!caixaDoRuido.current?.contains(e.target as Node)) setRuidoAberto(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setRuidoAberto(false);
+    window.addEventListener("mousedown", fora);
+    window.addEventListener("keydown", esc);
+    return () => {
+      window.removeEventListener("mousedown", fora);
+      window.removeEventListener("keydown", esc);
+    };
+  }, [ruidoAberto]);
 
   if (!channelId) return null;
 
@@ -98,32 +117,33 @@ export default function VoiceConnectedBar() {
           </button>
         </span>
 
-        {/* O botão alterna entre a supressão avançada e a **padrão**, nunca para
-            "desligada": um clique que remove toda a redução de ruído sem dizer
-            nada é armadilha. Desligar de vez é escolha consciente e mora nas
-            configurações. Trocar aqui republica o microfone na hora (ver
-            `setAudioPref`), então o efeito é imediato no meio da conversa. */}
-        <Tooltip
-          label={
-            ruidoAvancado ? "Supressão de ruído avançada (ligada)" : "Supressão de ruído avançada"
-          }
-        >
-          <button
-            type="button"
-            onClick={() =>
-              setAudioPref({
-                processamento: { ...processamento, ruido: ruidoAvancado ? "padrao" : "avancada" },
-              })
-            }
-            aria-pressed={ruidoAvancado}
-            aria-label="Supressão de ruído avançada"
-            className={`grid h-8 w-8 shrink-0 place-items-center rounded-[4px] transition hover:bg-hov ${
-              ruidoAvancado ? "text-accent" : "text-txt-secondary hover:text-txt-primary"
-            }`}
-          >
-            <AudioLines size={18} />
-          </button>
-        </Tooltip>
+        <div ref={caixaDoRuido} className="relative shrink-0">
+          <Tooltip label="Supressão de ruído">
+            <button
+              type="button"
+              onClick={() => setRuidoAberto((v) => !v)}
+              aria-expanded={ruidoAberto}
+              aria-label="Supressão de ruído"
+              className={`grid h-8 w-8 place-items-center rounded-[4px] transition hover:bg-hov ${
+                ruidoAvancado ? "text-accent" : "text-txt-secondary hover:text-txt-primary"
+              }`}
+            >
+              <AudioLines size={18} />
+            </button>
+          </Tooltip>
+
+          {ruidoAberto && (
+            // abre para cima e alinhada à direita: o painel mora no rodapé da
+            // coluna, e para baixo a caixa sairia da janela
+            <div
+              role="dialog"
+              aria-label="Supressão de ruído"
+              className="absolute bottom-10 right-0 z-30 w-72 rounded-lg bg-overlay p-3 shadow-high anim-menu"
+            >
+              <PopoverDeRuido />
+            </div>
+          )}
+        </div>
 
         {/* sem botão de chat aqui: o nome do canal logo acima já leva à call, e
             o chat do canal de voz tem o próprio alternador no cabeçalho dele */}
