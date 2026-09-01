@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { AudioLines, PhoneOff, RotateCw, Signal, SignalZero, Video, VideoOff } from "lucide-react";
 import Tooltip from "@/components/ui/Tooltip";
+import PopoverFlutuante from "@/components/ui/PopoverFlutuante";
 import PopoverDeRuido from "@/components/voice/PopoverDeRuido";
 import ScreenShareButton from "@/components/voice/ScreenShareButton";
 import { useChannels } from "@/stores/channels";
@@ -50,21 +51,8 @@ export default function VoiceConnectedBar() {
   const guilds = useGuilds((s) => s.guilds);
 
   const [ruidoAberto, setRuidoAberto] = useState(false);
-  const caixaDoRuido = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!ruidoAberto) return;
-    const fora = (e: MouseEvent) => {
-      if (!caixaDoRuido.current?.contains(e.target as Node)) setRuidoAberto(false);
-    };
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && setRuidoAberto(false);
-    window.addEventListener("mousedown", fora);
-    window.addEventListener("keydown", esc);
-    return () => {
-      window.removeEventListener("mousedown", fora);
-      window.removeEventListener("keydown", esc);
-    };
-  }, [ruidoAberto]);
+  // o botão, não a caixa: quem posiciona e fecha é o `PopoverFlutuante`
+  const botaoDoRuido = useRef<HTMLButtonElement>(null);
 
   if (!channelId) return null;
 
@@ -117,33 +105,29 @@ export default function VoiceConnectedBar() {
           </button>
         </span>
 
-        <div ref={caixaDoRuido} className="relative shrink-0">
-          <Tooltip label="Supressão de ruído">
-            <button
-              type="button"
-              onClick={() => setRuidoAberto((v) => !v)}
-              aria-expanded={ruidoAberto}
-              aria-label="Supressão de ruído"
-              className={`grid h-8 w-8 place-items-center rounded-[4px] transition hover:bg-hov ${
-                ruidoAvancado ? "text-accent" : "text-txt-secondary hover:text-txt-primary"
-              }`}
-            >
-              <AudioLines size={18} />
-            </button>
-          </Tooltip>
+        <Tooltip label="Supressão de ruído">
+          <button
+            ref={botaoDoRuido}
+            type="button"
+            onClick={() => setRuidoAberto((v) => !v)}
+            aria-expanded={ruidoAberto}
+            aria-label="Supressão de ruído"
+            className={`grid h-8 w-8 shrink-0 place-items-center rounded-[4px] transition hover:bg-hov ${
+              ruidoAvancado ? "text-accent" : "text-txt-secondary hover:text-txt-primary"
+            }`}
+          >
+            <AudioLines size={18} />
+          </button>
+        </Tooltip>
 
-          {ruidoAberto && (
-            // abre para cima e alinhada à direita: o painel mora no rodapé da
-            // coluna, e para baixo a caixa sairia da janela
-            <div
-              role="dialog"
-              aria-label="Supressão de ruído"
-              className="absolute bottom-10 right-0 z-30 w-72 rounded-lg bg-overlay p-3 shadow-high anim-menu"
-            >
-              <PopoverDeRuido />
-            </div>
-          )}
-        </div>
+        <PopoverFlutuante
+          ancora={botaoDoRuido}
+          aberto={ruidoAberto}
+          onFechar={() => setRuidoAberto(false)}
+          rotulo="Supressão de ruído"
+        >
+          <PopoverDeRuido />
+        </PopoverFlutuante>
 
         {/* sem botão de chat aqui: o nome do canal logo acima já leva à call, e
             o chat do canal de voz tem o próprio alternador no cabeçalho dele */}

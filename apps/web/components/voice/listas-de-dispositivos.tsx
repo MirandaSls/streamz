@@ -1,32 +1,21 @@
 "use client";
 
-import { Camera, Check, Headphones, Mic } from "lucide-react";
+import { Camera, Check } from "lucide-react";
 import { explicarMidia, useVoiceDevices } from "@/stores/voiceDevices";
 
 /**
- * As listas de dispositivos que as setinhas abrem — no palco e no painel do
- * usuário.
+ * A lista de câmeras que a setinha da câmera abre, no palco.
  *
- * Todas montam `useVoiceDevices`, e é por isso que vivem num componente
- * separado em vez de num nó pronto: o hook pede permissão de mídia para
- * conseguir os **rótulos** dos aparelhos, e ter isso na árvore junto da barra
- * faria o navegador perguntar sozinho, sem ninguém ter clicado em nada. Só
- * entram quando o menu abre.
+ * Monta `useVoiceDevices`, e é por isso que vive num componente separado em vez
+ * de num nó pronto: o hook pede permissão de mídia para conseguir os **rótulos**
+ * dos aparelhos, e ter isso na árvore junto da barra faria o navegador
+ * perguntar sozinho, sem ninguém ter clicado em nada. Só entra quando o menu
+ * abre.
+ *
+ * Microfone e saída saíram daqui: viraram os menus curtos de
+ * `menus-de-audio.tsx`, que é o que os prints mostram. A câmera continua sendo
+ * uma lista — ali não há nada além do aparelho para escolher.
  */
-
-export function ListaDeMicrofones() {
-  const devices = useVoiceDevices();
-  return (
-    <ListaDeFontes
-      titulo="Microfone"
-      icone={<Mic size={16} />}
-      opcoes={devices.inputs}
-      atual={devices.inputId}
-      onEscolher={devices.setInput}
-      aviso={explicarMidia(devices.motivo)}
-    />
-  );
-}
 
 export function ListaDeCameras({ camLigada }: { camLigada: boolean }) {
   const devices = useVoiceDevices();
@@ -43,21 +32,6 @@ export function ListaDeCameras({ camLigada }: { camLigada: boolean }) {
         // então a troca espera o próximo `setCameraEnabled` (ver `stores/voice`)
         (camLigada ? "A troca vale na próxima vez que você ligar a câmera." : null)
       }
-    />
-  );
-}
-
-/** Saída de áudio — a seta do fone, no painel do usuário. */
-export function ListaDeSaidas() {
-  const devices = useVoiceDevices();
-  return (
-    <ListaDeFontes
-      titulo="Saída"
-      icone={<Headphones size={16} />}
-      opcoes={devices.outputs}
-      atual={devices.outputId}
-      onEscolher={devices.setOutput}
-      aviso={explicarMidia(devices.motivo)}
     />
   );
 }

@@ -3,7 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Keyboard, Mic, Video } from "lucide-react";
 import { pttRotulo } from "@/stores/ptt-core";
-import { BarraDeNivel, Chave, useNivelDoMicrofone } from "@/components/voice/pecas-de-voz";
+import {
+  BarraDeNivel,
+  Chave,
+  SliderDeVolume as Slider,
+  useNivelDoMicrofone,
+} from "@/components/voice/pecas-de-voz";
 import { useVoice, type NivelDeRuido } from "@/stores/voice";
 import { useVoiceDevices } from "@/stores/voiceDevices";
 import { useVoicePrefs } from "@/stores/voicePrefs";
@@ -267,35 +272,6 @@ function PreviaDaCamera({ deviceId }: { deviceId: string | null }) {
       // espelhado: é assim que a pessoa se reconhece na prévia
       className="aspect-video w-full -scale-x-100 rounded-lg bg-rail object-cover"
     />
-  );
-}
-
-/** Slider de volume 0–200% com o valor ao lado. */
-function Slider({
-  label,
-  valor,
-  onChange,
-}: {
-  label: string;
-  valor: number;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">
-        {label}
-        <span className="tabular-nums normal-case tracking-normal">{Math.round(valor * 100)}%</span>
-      </span>
-      <input
-        type="range"
-        min={0}
-        max={200}
-        value={Math.round(valor * 100)}
-        onChange={(e) => onChange(Number(e.target.value) / 100)}
-        aria-label={label}
-        className="w-full accent-accent"
-      />
-    </label>
   );
 }
 

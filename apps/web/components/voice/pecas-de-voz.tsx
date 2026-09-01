@@ -143,3 +143,31 @@ export function Chave({
   );
 }
 
+/** Slider de volume 0–200% com o valor ao lado. */
+export function SliderDeVolume({
+  label,
+  valor,
+  onChange,
+}: {
+  label: string;
+  valor: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">
+        {label}
+        <span className="tabular-nums normal-case tracking-normal">{Math.round(valor * 100)}%</span>
+      </span>
+      <input
+        type="range"
+        min={0}
+        max={200}
+        value={Math.round(valor * 100)}
+        onChange={(e) => onChange(Number(e.target.value) / 100)}
+        aria-label={label}
+        className="w-full accent-accent"
+      />
+    </label>
+  );
+}
