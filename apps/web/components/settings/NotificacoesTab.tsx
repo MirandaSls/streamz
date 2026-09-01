@@ -33,7 +33,7 @@ export default function NotificacoesTab() {
 
   return (
     <>
-      <Section title={t("notif.esteDispositivo")}>
+      <Section id="dispositivo" title={t("notif.esteDispositivo")}>
         <Toggle
           label={t("notif.desktop")}
           checked={s.desktopNotifications}
@@ -54,7 +54,7 @@ export default function NotificacoesTab() {
 
       <BlocoDeSons />
 
-      <Section title={t("notif.padrao")} semDivisoria>
+      <Section id="padrao" title={t("notif.padrao")} semDivisoria>
         <RadioCards<NotificationLevel>
           legend={t("notif.padrao")}
           legendaOculta
@@ -96,7 +96,7 @@ function BlocoDeSons() {
   }
 
   return (
-    <Section title="Sons">
+    <Section id="sons" title={t("notif.sons")}>
       <Row
         label={t("notif.som")}
         hint="Sem isto, notificação nenhuma faz barulho neste aparelho."

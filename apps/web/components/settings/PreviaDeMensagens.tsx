@@ -1,0 +1,84 @@
+"use client";
+
+import Avatar from "@/components/ui/Avatar";
+import { useAuth } from "@/stores/auth";
+import { useSettings } from "@/stores/settings";
+
+/**
+ * O cartão "Prévia" que fica no topo de Aparência e de Acessibilidade.
+ *
+ * Ele existe porque nenhuma dessas preferências se decide lendo o rótulo: o
+ * respiro entre grupos, o modo compacto e o tamanho do emoji só querem dizer
+ * alguma coisa **vendo**. No Discord a prévia é a primeira coisa das duas
+ * páginas, e reage enquanto se arrasta o controle lá embaixo — é ela que
+ * transforma o ajuste em decisão em vez de tentativa e erro.
+ *
+ * Estava embutido na aba de Aparência. Virou componente porque a de
+ * Acessibilidade mexe nos mesmos pixels (hora sempre visível, tamanho do emoji)
+ * e mostrava só rótulos.
+ */
+export default function PreviaDeMensagens() {
+  const user = useAuth((s) => s.user);
+  const s = useSettings();
+  const nome = user?.displayName || user?.username || "você";
+
+  return (
+    <div className="rounded-lg bg-chat p-3">
+      {s.compactMode ? (
+        <>
+          <p className="text-txt-normal">
+            <Hora s={s} valor="14:03" />
+            <span className="mr-1 font-medium text-txt-primary">{nome}</span>
+            Assim ficam as mensagens no modo compacto.
+          </p>
+          <p className="text-txt-normal" style={{ marginTop: `${s.groupSpacing}px` }}>
+            <Hora s={s} valor="14:04" />
+            <span className="mr-1 font-medium text-txt-primary">streamz</span>
+            E este é o respiro entre grupos.
+          </p>
+        </>
+      ) : (
+        <>
+          <div className="flex gap-3">
+            {user && <Avatar user={user} size="lg" surface="border-chat" />}
+            <div className="min-w-0">
+              <span className="font-medium text-txt-primary">{nome}</span>
+              <span className="ml-1.5 text-xs text-txt-muted">Hoje às 14:03</span>
+              <p className="text-txt-normal">Assim ficam as mensagens no modo padrão.</p>
+              <Reacao tamanho={s.emojiSize} />
+            </div>
+          </div>
+          <div className="flex gap-3" style={{ marginTop: `${s.groupSpacing}px` }}>
+            <div className="h-10 w-10 shrink-0 rounded-full bg-accent" aria-hidden="true" />
+            <div className="min-w-0">
+              <span className="font-medium text-txt-primary">streamz</span>
+              <span className="ml-1.5 text-xs text-txt-muted">Hoje às 14:04</span>
+              <p className="text-txt-normal">E este é o respiro entre grupos.</p>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * No modo compacto a hora fica sempre visível; no padrão ela acompanha a
+ * preferência — que é justamente a que se está ajustando na aba ao lado.
+ */
+function Hora({ s, valor }: { s: { alwaysShowTime: boolean }; valor: string }) {
+  if (!s.alwaysShowTime) return null;
+  return <span className="mr-2 text-[11px] text-txt-muted">{valor}</span>;
+}
+
+/** Chip de reação — é onde o tamanho do emoji aparece de verdade. */
+function Reacao({ tamanho }: { tamanho: number }) {
+  return (
+    <span className="mt-1 inline-flex items-center gap-1 rounded-[4px] border border-accent bg-accent/15 px-1.5 py-0.5">
+      <span aria-hidden="true" style={{ fontSize: `${tamanho}px`, lineHeight: 1 }}>
+        👍
+      </span>
+      <span className="text-xs font-semibold text-txt-primary">3</span>
+    </span>
+  );
+}

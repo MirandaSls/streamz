@@ -13,6 +13,7 @@ import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";
 import { mensagemDeAuth, validarSenha } from "@/lib/auth-mensagens";
+import { useT } from "@/lib/i18n";
 import { useAuth } from "@/stores/auth";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
@@ -34,6 +35,7 @@ import { ui } from "@/stores/ui";
  * fixa aqui fazia a troca do banner parecer que não tinha pego.
  */
 export default function ContaTab() {
+  const t = useT();
   const user = useAuth((s) => s.user);
   const setUser = useAuth((s) => s.setUser);
   const [conta, setConta] = useState<MinhaConta | null>(null);
@@ -93,7 +95,7 @@ export default function ContaTab() {
 
   return (
     <>
-      <Section title="Minha conta">
+      <Section id="minha-conta" title={t("conta.secMinhaConta")}>
         {user && (
           <div className="overflow-hidden rounded-lg bg-footer">
             {banner.url ? (
@@ -387,6 +389,7 @@ function LinhaDeEmail({
 // ── senha ────────────────────────────────────────────────────
 
 function BlocoDeSenha() {
+  const t = useT();
   const [abrindo, setAbrindo] = useState(false);
   const [atual, setAtual] = useState("");
   const [nova, setNova] = useState("");
@@ -417,7 +420,7 @@ function BlocoDeSenha() {
   }
 
   return (
-    <Section title="Senha e autenticação">
+    <Section id="senha" title={t("conta.secSenha")}>
       <div className="flex items-center justify-between gap-4 py-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-txt-primary">Senha da conta</p>
@@ -468,6 +471,7 @@ function BlocoDeSenha() {
  * mais coisa.
  */
 function BlocoDeEncerramento({ conta }: { conta: MinhaConta | null }) {
+  const t = useT();
   const router = useRouter();
   const logout = useAuth((s) => s.logout);
   const [acao, setAcao] = useState<"disable" | "delete" | null>(null);
@@ -506,7 +510,7 @@ function BlocoDeEncerramento({ conta }: { conta: MinhaConta | null }) {
   }
 
   return (
-    <Section title="Encerrar a conta" semDivisoria>
+    <Section id="encerrar" title={t("conta.secEncerrar")} semDivisoria>
       <p className="text-sm text-txt-muted">
         Desativar é reversível: a conta volta quando você entra de novo. Excluir anonimiza o
         usuário para sempre.

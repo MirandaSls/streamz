@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { Check, ChevronDown, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, X } from "lucide-react";
 
 /**
  * Vocabulário de formulário do app — um só, para configurações e modais.
@@ -20,22 +20,34 @@ import { Check, ChevronDown, X } from "lucide-react";
 
 /* ─────────────────────────── estrutura ─────────────────────────── */
 
-/** Bloco com título em caixa-alta e uma linha divisória embaixo. */
+/**
+ * Bloco com título em caixa-alta e uma linha divisória embaixo.
+ *
+ * O `id` é o que liga a seção ao menu de segundo nível da `TelaCheia`: ele vira
+ * `data-secao`, e é por esse atributo que o menu rola até aqui e que o item
+ * correspondente se marca sozinho quando a seção entra na tela. Seção sem `id`
+ * continua existindo normalmente — ela só não aparece no menu.
+ */
 export function Section({
+  id,
   title,
   children,
   /** última seção da aba, ou seção que já termina em outra divisória. */
   semDivisoria = false,
 }: {
+  id?: string;
   title?: string;
   children: ReactNode;
   semDivisoria?: boolean;
 }) {
   return (
     <section
-      className={
+      data-secao={id}
+      // `scroll-mt`: sem margem, rolar até a seção encosta o título no topo do
+      // scroller e ele fica rente demais para ler como começo de bloco
+      className={`scroll-mt-4 ${
         semDivisoria ? "mb-6" : "mb-6 border-b border-border pb-6 last:mb-0 last:border-b-0 last:pb-0"
-      }
+      }`}
     >
       {title && (
         <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
@@ -43,6 +55,52 @@ export function Section({
         </h3>
       )}
       {children}
+    </section>
+  );
+}
+
+/**
+ * "Configurações relacionadas" — o cartão do fim da página que leva à página
+ * vizinha.
+ *
+ * O Discord fecha quase toda página de configuração com um destes, e não é
+ * enfeite: metade das preferências mora na fronteira entre duas páginas (o
+ * tamanho do emoji é aparência ou acessibilidade?), e sem a ponte a pessoa volta
+ * ao menu e procura de novo.
+ */
+export function ConfiguracoesRelacionadas({
+  titulo,
+  itens,
+}: {
+  titulo: string;
+  itens: { id: string; label: string; hint: string; icon: ReactNode; onSelect: () => void }[];
+}) {
+  return (
+    <section className="mt-8">
+      <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+        {titulo}
+      </h3>
+      <div className="space-y-2">
+        {itens.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={item.onSelect}
+            className="flex w-full items-center gap-3 rounded-lg bg-panel p-3 text-left transition hover:bg-hov"
+          >
+            <span aria-hidden="true" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-rail text-txt-secondary">
+              {item.icon}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold text-txt-primary">
+                {item.label}
+              </span>
+              <span className="block truncate text-xs text-txt-muted">{item.hint}</span>
+            </span>
+            <ChevronRight size={18} aria-hidden="true" className="shrink-0 text-txt-muted" />
+          </button>
+        ))}
+      </div>
     </section>
   );
 }

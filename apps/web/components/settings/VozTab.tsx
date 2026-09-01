@@ -145,7 +145,7 @@ export default function VozTab() {
 
   return (
     <>
-      <Section title={t("voz.dispositivos")}>
+      <Section id="dispositivos" title={t("voz.dispositivos")}>
         <div className="grid gap-4 sm:grid-cols-2">
           <Select
             semDivisoria
@@ -200,7 +200,7 @@ export default function VozTab() {
         </div>
       </Section>
 
-      <Section title={t("voz.modo")}>
+      <Section id="modo" title={t("voz.modo")}>
         <RadioCards
           legend={t("voz.modo")}
           legendaOculta
@@ -243,7 +243,7 @@ export default function VozTab() {
         )}
       </Section>
 
-      <Section title={t("voz.processamento")}>
+      <Section id="processamento" title={t("voz.processamento")}>
         <RadioCards
           legend={t("voz.ruido")}
           columns={3}
@@ -270,7 +270,7 @@ export default function VozTab() {
         />
       </Section>
 
-      <Section title={t("voz.testarMic")}>
+      <Section id="testar" title={t("voz.testarMic")}>
         <div className="flex items-center gap-3 py-3">
           <button
             type="button"
@@ -284,7 +284,7 @@ export default function VozTab() {
         </div>
       </Section>
 
-      <Section title={t("voz.previaCamera")} semDivisoria>
+      <Section id="camera" title={t("voz.previaCamera")} semDivisoria>
         <div className="py-3">
           <Select
             semDivisoria
