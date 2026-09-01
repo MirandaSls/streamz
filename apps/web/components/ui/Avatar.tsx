@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { Users } from "lucide-react";
+import { HeadphoneOff, MicOff, Users } from "lucide-react";
 import type { UserStatus } from "@streamz/shared";
 import { corDoAvatar } from "@/components/ui/avatar-cores";
 import { usePresence } from "@/stores/presence";
@@ -63,14 +63,17 @@ export function StatusDot({
 
 const SIZE = {
   /** 16px: reply preview, listas compactas, participantes de thread. */
-  xs: { box: "h-4 w-4 text-[8px]", dot: "h-2 w-2 -bottom-px -right-px border-2" },
-  sm: { box: "h-6 w-6 text-[10px]", dot: "h-2.5 w-2.5 -bottom-0.5 -right-0.5 border-2" },
-  md: { box: "h-8 w-8 text-xs", dot: "h-3.5 w-3.5 -bottom-0.5 -right-0.5 border-[3px]" },
-  lg: { box: "h-10 w-10 text-sm", dot: "h-4 w-4 -bottom-0.5 -right-0.5 border-[3px]" },
-  xl: { box: "h-20 w-20 text-2xl", dot: "h-7 w-7 bottom-0 right-0 border-[5px]" },
+  xs: { box: "h-4 w-4 text-[8px]", dot: "h-2 w-2 -bottom-px -right-px border-2", icone: 6 },
+  sm: { box: "h-6 w-6 text-[10px]", dot: "h-2.5 w-2.5 -bottom-0.5 -right-0.5 border-2", icone: 8 },
+  md: { box: "h-8 w-8 text-xs", dot: "h-3.5 w-3.5 -bottom-0.5 -right-0.5 border-[3px]", icone: 9 },
+  lg: { box: "h-10 w-10 text-sm", dot: "h-4 w-4 -bottom-0.5 -right-0.5 border-[3px]", icone: 10 },
+  xl: { box: "h-20 w-20 text-2xl", dot: "h-7 w-7 bottom-0 right-0 border-[5px]", icone: 14 },
   /** 120px: cartão de perfil completo e tela de chamada. */
-  xxl: { box: "h-[120px] w-[120px] text-4xl", dot: "h-10 w-10 bottom-1 right-1 border-[6px]" },
+  xxl: { box: "h-[120px] w-[120px] text-4xl", dot: "h-10 w-10 bottom-1 right-1 border-[6px]", icone: 20 },
 } as const;
+
+/** Estado de voz que o avatar mostra no lugar da bolinha de status. */
+export type VozNoAvatar = "mudo" | "surdo";
 
 /**
  * Avatar circular com a foto do usuário — ou as iniciais sobre uma cor, quando
@@ -93,12 +96,25 @@ export default function Avatar({
   user,
   size = "md",
   status,
+  voz,
   surface = "border-panel",
   className = "",
 }: {
   user: { id: string; username: string; avatarUrl?: string | null };
   size?: keyof typeof SIZE;
   status?: UserStatus;
+  /**
+   * Microfone ou áudio desligados, desenhados como selo vermelho no mesmo
+   * canto da bolinha — e **no lugar dela**, nunca junto. É como o Discord
+   * mostra o mudo no palco de chamada, onde não há pílula de nome para
+   * hospedar o ícone; nas listas, onde a pílula existe, o ícone continua lá
+   * (ver `VoiceChannelMembers`).
+   *
+   * Duas bolinhas no mesmo canto se sobreporiam, e a pergunta que a pessoa faz
+   * olhando uma chamada é "esta pessoa está me ouvindo?", não "ela está
+   * online?" — quem está na chamada já está online.
+   */
+  voz?: VozNoAvatar | null;
   /** classe de cor da borda da bolinha = cor do fundo onde o avatar está. */
   surface?: string;
   className?: string;
@@ -131,15 +147,26 @@ export default function Avatar({
           {username.slice(0, 2).toUpperCase()}
         </span>
       )}
-      {status && (
-        // a borda é da cor da superfície: é ela que "recorta" a bolinha do avatar
+      {voz ? (
+        // surdo implica mudo: um selo só, e o de baixo é o que informa mais
         <span
           role="img"
-          aria-label={STATUS_LABEL[status]}
-          className={`absolute rounded-full ${surface} ${s.dot}`}
+          aria-label={voz === "surdo" ? "Sem áudio" : "Mudo"}
+          className={`absolute grid place-items-center rounded-full bg-red text-white ${surface} ${s.dot}`}
         >
-          <StatusDot status={status} className="h-full w-full" />
+          {voz === "surdo" ? <HeadphoneOff size={s.icone} /> : <MicOff size={s.icone} />}
         </span>
+      ) : (
+        status && (
+          // a borda é da cor da superfície: é ela que "recorta" a bolinha do avatar
+          <span
+            role="img"
+            aria-label={STATUS_LABEL[status]}
+            className={`absolute rounded-full ${surface} ${s.dot}`}
+          >
+            <StatusDot status={status} className="h-full w-full" />
+          </span>
+        )
       )}
     </span>
   );
