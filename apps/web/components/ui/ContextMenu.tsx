@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { ChevronRight } from "lucide-react";
-import { isSlider, isSubmenu, useUI, type MenuItem } from "@/stores/ui";
+import { isReacoes, isSlider, isSubmenu, useUI, type MenuItem } from "@/stores/ui";
 
 /**
  * Barra arrastável dentro do menu (o volume de um participante).
@@ -112,11 +112,47 @@ function proximo(items: MenuItem[], de: number, passo: number): number {
   for (let i = 1; i <= items.length; i++) {
     const idx = (de + passo * i + items.length * 2) % items.length;
     const item = items[idx];
-    // separador e barra deslizante não são alvos de navegação por seta
-    if ("separator" in item || isSlider(item)) continue;
+    // separador, barra deslizante e fileira de reações não são alvos de seta:
+    // a fileira anda com Tab, que é como se percorre um grupo horizontal
+    if ("separator" in item || isSlider(item) || isReacoes(item)) continue;
     if (!item.disabled) return idx;
   }
   return de;
+}
+
+/**
+ * A fileira de reações rápidas do topo do menu.
+ *
+ * Botão quadrado, sem rótulo e sem o hover de accent dos itens de texto: aqui o
+ * realce precisa deixar o emoji visível, e um fundo limão embaixo de um emoji
+ * colorido tira a legibilidade dos dois.
+ */
+function FileiraDeReacoes({
+  item,
+  onClose,
+}: {
+  item: Extract<MenuItem, { reacoes: unknown[] }>;
+  onClose: () => void;
+}) {
+  return (
+    <div role="group" aria-label="Reações rápidas" className="mb-1 flex items-center gap-1 px-1 py-1">
+      {item.reacoes.map((r) => (
+        <button
+          key={r.chave}
+          type="button"
+          role="menuitem"
+          aria-label={`Reagir com ${r.rotulo}`}
+          onClick={() => {
+            onClose();
+            r.onSelect();
+          }}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-[3px] outline-none transition hover:bg-hov focus-visible:bg-hov"
+        >
+          {r.nodo as React.ReactNode}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function Painel({
@@ -225,6 +261,9 @@ function Painel({
           }
           if (isSlider(item)) {
             return <ItemDeslizante key={i} item={item} />;
+          }
+          if (isReacoes(item)) {
+            return <FileiraDeReacoes key={i} item={item} onClose={onClose} />;
           }
           const filho = isSubmenu(item);
           const marcado = !filho && item.checked === true;
