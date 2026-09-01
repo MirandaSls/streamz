@@ -106,6 +106,23 @@ export type Modal =
  */
 export type MenuItem =
   | { separator: true }
+  /**
+   * Fileira horizontal de reações rápidas, no topo do menu da mensagem.
+   *
+   * É a primeira coisa do menu no Discord, e horizontal por um motivo: são
+   * quatro alvos do mesmo peso entre os quais se escolhe pela **cara** do
+   * emoji, não pelo nome. Empilhados como itens comuns, viravam quatro linhas
+   * de texto onde o desenho é o que identifica.
+   */
+  | {
+      reacoes: {
+        chave: string;
+        rotulo: string;
+        /** o emoji já desenhado pelo chamador (mesmo motivo de `icon`). */
+        nodo: unknown;
+        onSelect: () => void;
+      }[];
+    }
   | {
       label: string;
       onSelect: () => void;
@@ -146,6 +163,13 @@ export type MenuItem =
       };
       icon?: unknown;
     };
+
+/** `true` quando o item é a fileira de reações rápidas. */
+export function isReacoes(
+  item: MenuItem,
+): item is Extract<MenuItem, { reacoes: unknown[] }> {
+  return "reacoes" in item;
+}
 
 /** `true` quando o item abre um submenu em vez de executar uma ação. */
 export function isSubmenu(

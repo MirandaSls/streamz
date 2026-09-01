@@ -95,10 +95,17 @@ export default function EmojiPicker({
   className = "",
   embutido = false,
   guildId,
+  placeholder = "Encontre o emoji perfeito",
 }: {
   onPick: (texto: string, custom?: CustomEmoji) => void;
   onClose: () => void;
   className?: string;
+  /**
+   * O Discord troca o texto da busca conforme o que se está escolhendo — no
+   * seletor de reação ele diz "Encontre a reação perfeita". Não é enfeite: é a
+   * única coisa na tela que diz se aquele clique vai reagir ou escrever.
+   */
+  placeholder?: string;
   /** dentro do `PickerPanel` a caixa e o fechar são do painel, não daqui. */
   embutido?: boolean;
   /** servidor a priorizar; sem isso vale o servidor aberto. */
@@ -263,12 +270,7 @@ export default function EmojiPicker({
 
   const corpo = (
     <div className="flex h-full min-h-0 flex-col">
-      <BuscaPicker
-        valor={busca}
-        onChange={setBusca}
-        placeholder="Buscar emoji"
-        rotulo="Buscar emoji"
-      />
+      <BuscaPicker valor={busca} onChange={setBusca} placeholder={placeholder} rotulo={placeholder} />
 
       <div className="flex min-h-0 flex-1">
         <ColunaLateral rotulo="Categorias de emoji">
@@ -467,14 +469,28 @@ function BotaoEmoji({
   );
 }
 
-/** Prévia do rodapé: o emoji grande, o `:nome:` e os apelidos. */
+/**
+ * Prévia do rodapé: o emoji grande e, ao lado, os nomes por que ele atende.
+ *
+ * Numa linha só e todos escritos `:assim:`, como no print — antes o nome ia em
+ * cima e os apelidos embaixo, sem os dois-pontos, o que os fazia parecer
+ * descrição em vez de texto que se pode digitar. É justamente isso que a lista
+ * serve para dizer: qualquer um daqueles funciona no composer.
+ */
 function Previa({ item, tom }: { item: ItemGrade | null; tom: TomDePele }) {
   if (!item) {
     return <span className="flex-1 text-sm text-txt-muted">Escolha um emoji</span>;
   }
   const nome = item.tipo === "custom" ? item.emoji.name : item.item.nome;
+  // emoji de servidor não tem apelido: ali o que informa é de qual servidor ele é
   const detalhe =
-    item.tipo === "custom" ? item.servidor : item.item.aliases.slice(0, 4).join(", ");
+    item.tipo === "custom"
+      ? item.servidor
+      : item.item.aliases
+          .filter((a) => a !== nome)
+          .slice(0, 3)
+          .map((a) => `:${a}:`)
+          .join(" ");
   return (
     <span className="flex min-w-0 flex-1 items-center gap-2">
       {item.tipo === "custom" ? (
@@ -485,11 +501,9 @@ function Previa({ item, tom }: { item: ItemGrade | null; tom: TomDePele }) {
           {comTomDePele(item.item, tom)}
         </span>
       )}
-      <span className="min-w-0">
-        <span className="block truncate text-sm font-semibold text-txt-primary">{`:${nome}:`}</span>
-        {detalhe && (
-          <span className="block truncate text-[11px] text-txt-muted">{detalhe}</span>
-        )}
+      <span className="flex min-w-0 items-baseline gap-1.5 truncate">
+        <span className="shrink-0 text-sm font-semibold text-txt-primary">{`:${nome}:`}</span>
+        {detalhe && <span className="truncate text-sm text-txt-muted">{detalhe}</span>}
       </span>
     </span>
   );

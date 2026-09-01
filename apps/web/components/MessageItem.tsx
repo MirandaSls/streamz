@@ -210,6 +210,8 @@ const SEM_CARGOS: string[] = [];
 const RAPIDAS_NA_BARRA = 3;
 /** Reações rápidas dentro do submenu "Adicionar Reação". */
 const RAPIDAS_NO_MENU = 6;
+/** Quantas cabem na fileira horizontal do topo do menu (é o número do print). */
+const RAPIDAS_NA_FILEIRA = 4;
 
 export default function MessageItem({
   message,
@@ -418,6 +420,17 @@ export default function MessageItem({
     const items: MenuItem[] = [];
 
     if (!sistema) {
+      // A fileira horizontal é a primeira coisa do menu no Discord: quatro
+      // alvos do mesmo peso, escolhidos pela cara do emoji. Como itens comuns
+      // eles viravam quatro linhas de texto, onde o desenho é o que identifica.
+      items.push({
+        reacoes: frequentes.slice(0, RAPIDAS_NA_FILEIRA).map((emoji) => ({
+          chave: emoji,
+          rotulo: rotuloDaReacao(emoji),
+          nodo: <EmojiDaReacao emoji={emoji} tamanho={20} />,
+          onSelect: () => reagir(emoji),
+        })),
+      });
       items.push({
         label: "Adicionar Reação",
         icon: <SmilePlus size={18} />,
@@ -777,9 +790,9 @@ export default function MessageItem({
       </div>
 
       {/*
-        Mini-barra: no máximo quatro casas, como no Discord — reações rápidas,
-        "Adicionar reação", responder/editar e o "…". Fixar, denunciar e apagar
-        moram dentro do "…"; nove ícones em fila viravam uma régua ilegível.
+        Mini-barra, como no print: as reações rápidas, "Adicionar reação",
+        responder/editar, encaminhar e o "…". Fixar, denunciar e apagar moram
+        dentro do "…" — nove ícones em fila viravam uma régua ilegível.
         No primeiro item da lista ela desce para dentro da linha: subindo, seria
         cortada pelo topo da área rolável.
       */}
@@ -810,6 +823,23 @@ export default function MessageItem({
               <CornerUpLeft size={20} />
             </ActionButton>
           )}
+          {/* Encaminhar tem casa própria na barra do print, e não só dentro do
+              "…": é uma das quatro coisas que se faz com a mensagem do outro.
+              Abre a mesma lista de destinos do menu, ancorada no botão. */}
+          <ActionButton
+            label="Encaminhar"
+            onClick={(e) => {
+              const destinos = destinosParaEncaminhar();
+              if (destinos.length === 0) {
+                ui.toast("Não há para onde encaminhar ainda");
+                return;
+              }
+              const r = e.currentTarget.getBoundingClientRect();
+              ui.openContextMenu(r.left, r.bottom, destinos);
+            }}
+          >
+            <CornerUpRight size={20} />
+          </ActionButton>
           <ActionButton label="Mais" onClick={openMenu}>
             <MoreHorizontal size={20} />
           </ActionButton>
@@ -819,6 +849,9 @@ export default function MessageItem({
       {picker && (
         <PainelFlutuante ancora={picker.ancora} onClose={() => setPicker(null)}>
           <EmojiPicker
+            placeholder={
+              picker.alvo === "reacao" ? "Encontre a reação perfeita" : "Encontre o emoji perfeito"
+            }
             onClose={() => setPicker(null)}
             onPick={(texto, custom) => {
               if (picker.alvo === "edicao") {
