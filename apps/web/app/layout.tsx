@@ -1,3 +1,4 @@
+import PesoDosIcones from "@/components/ui/PesoDosIcones";
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import { Archivo, JetBrains_Mono, Noto_Sans } from "next/font/google";
@@ -78,7 +79,9 @@ export default function RootLayout({
       className={`${fonteSans.variable} ${fonteDisplay.variable} ${fonteMono.variable}`}
       suppressHydrationWarning
     >
-      <body className="font-sans">{children}</body>
+      <body className="font-sans">
+        <PesoDosIcones>{children}</PesoDosIcones>
+      </body>
     </html>
   );
 }

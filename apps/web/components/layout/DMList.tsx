@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type MouseEvent } from "react";
-import { LogOut, Phone, Plus, Settings, UserPlus, Users, X } from "lucide-react";
+import { LogOut, Phone, Plus, Settings, UserPlus, Users, X } from "@/components/ui/icones";
 import {
   channelNotificationScope,
   displayNameOf,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Mic, MicOff, MoreHorizontal, PhoneOff, Settings, Video, VideoOff } from "lucide-react";
+import { Mic, MicOff, MoreHorizontal, PhoneOff, Settings, Video, VideoOff } from "@/components/ui/icones";
 import ScreenShareButton from "@/components/voice/ScreenShareButton";
 import VoiceSettingsPanel from "@/components/voice/VoiceSettingsPanel";
 import {
