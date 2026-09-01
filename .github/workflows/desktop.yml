@@ -1,15 +1,34 @@
-# Instalador do app de desktop (Tauri) para Windows.
+# App de desktop (Tauri) para Windows.
 #
-# Roda **só à mão**: o .exe não muda a cada commit, e runner Windows em
-# repositório privado custa o dobro de minutos. Quando sair uma versão que vale
-# distribuir, dispare este workflow e baixe o artefato.
+# Dois jobs com propósitos diferentes:
 #
-# Por que não sai do servidor: o bundle NSIS/MSI é gerado pelo toolchain do
-# Windows. Compilar Tauri para Windows a partir do Linux não é caminho
-# suportado — este runner é o caminho.
+# - `checar` roda a cada PR que mexe em `apps/desktop/` e só **compila** o Rust
+#   (clippy + fmt). Sem ele nada verificava o `src-tauri`: o ci.yml é Ubuntu sem
+#   Rust, e este arquivo só rodava à mão — um erro de compilação ficaria
+#   escondido até alguém disparar o build do instalador, semanas depois.
+# - `instalador` continua **só à mão**: o .exe não muda a cada commit, e gerar o
+#   bundle leva dezenas de minutos. Quando sair uma versão que vale distribuir,
+#   dispare este workflow e baixe o artefato.
+#
+# Por que os dois no Windows: o `src-tauri` do Streamz captura tela pela API do
+# Windows, então metade do código é `#[cfg(windows)]` e não existe em outro
+# alvo. Compilar no Ubuntu não provaria nada. Runner Windows custa o dobro de
+# minutos em repositório privado, e é por isso que o `checar` tem filtro de
+# caminho e não builda a web — ele nunca roda num PR que não toca no desktop.
 name: Desktop (Windows)
 
 on:
+  # O filtro de caminho é o que mantém o custo honesto: PR de web ou api não
+  # acorda runner Windows.
+  pull_request:
+    paths:
+      - "apps/desktop/**"
+      - ".github/workflows/desktop.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/desktop/**"
+      - ".github/workflows/desktop.yml"
   workflow_dispatch:
     inputs:
       release:
@@ -19,13 +38,53 @@ on:
         type: boolean
         default: false
 
+# Por ref, e não global: com o gatilho de PR, um grupo único faria um PR
+# cancelar a checagem do outro.
 concurrency:
-  group: desktop-windows
+  group: desktop-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  checar:
+    name: clippy + fmt (src-tauri)
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: apps/desktop/src-tauri
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      # O `build.rs` do Tauri valida a config, e a config aponta `frontendDist`
+      # para `apps/web/out`. Buildar a web inteira aqui custaria mais que a
+      # checagem que viemos fazer — e não acrescenta nada, porque o ci.yml já
+      # prova o export estático no Ubuntu. Um `out/` de mentira satisfaz a
+      # validação e o clippy segue para o que interessa: o Rust.
+      - name: Placeholder do frontendDist
+        working-directory: .
+        shell: bash
+        run: |
+          mkdir -p apps/web/out
+          echo '<!doctype html><title>placeholder</title>' > apps/web/out/index.html
+
+      - name: Formatação
+        run: cargo fmt --check
+
+      # `--all-targets` pega testes e exemplos também; `-D warnings` é o que
+      # transforma a checagem em portão — clippy que só avisa ninguém lê.
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
   instalador:
     name: instalador .exe
+    if: github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
