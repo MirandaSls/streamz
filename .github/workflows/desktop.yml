@@ -38,11 +38,17 @@ on:
         type: boolean
         default: false
 
-# Por ref, e não global: com o gatilho de PR, um grupo único faria um PR
-# cancelar a checagem do outro.
+# O evento entra na chave, e não só o ref, porque os dois jobs deste arquivo
+# têm valor de tempo oposto: a checagem de PR é curta e some a cada push, e o
+# instalador é um build de meia hora que alguém pediu de propósito. Agrupados
+# juntos, um push no main tocando `apps/desktop/` cancelaria um instalador em
+# andamento — e quem pediu o .exe só descobriria meia hora depois.
+#
+# Daí também o cancelamento condicional: agressivo onde a execução é barata e
+# repetida (PR), nunca onde ela é longa e deliberada (instalador).
 concurrency:
-  group: desktop-${{ github.ref }}
-  cancel-in-progress: true
+  group: desktop-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   checar:
