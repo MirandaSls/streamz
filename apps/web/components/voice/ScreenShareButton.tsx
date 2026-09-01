@@ -35,23 +35,22 @@ export default function ScreenShareButton({
   return (
     <>
       {variante === "largo" ? (
-        // "Compartilhar tela" não cabe na metade de uma coluna de 240px e
-        // truncava com reticências, desalinhando do botão de vídeo ao lado. O
-        // rótulo curto cabe inteiro; o nome completo vive no tooltip.
+        // Só ícone, como no painel do Discord: o rótulo comia mais da metade da
+        // largura do botão e ainda precisava ser abreviado ("Tela") para caber
+        // numa coluna de 240px. O nome inteiro vive no tooltip.
         <Tooltip label={label} className="min-w-0 flex-1">
           <button
             type="button"
             onClick={acionar}
             aria-label={label}
             aria-pressed={screenOn}
-            className={`flex h-8 w-full items-center justify-center gap-1.5 rounded-[4px] text-xs font-semibold transition ${
+            className={`grid h-8 w-full place-items-center rounded-[4px] transition ${
               screenOn
-                ? "bg-red/20 text-red hover:bg-red/30"
+                ? "bg-green/20 text-green hover:bg-green/30"
                 : "bg-border-strong/60 text-txt-secondary hover:bg-border-strong hover:text-txt-primary"
             }`}
           >
             {screenOn ? <MonitorX size={16} /> : <MonitorUp size={16} />}
-            {screenOn ? "Parar" : "Tela"}
           </button>
         </Tooltip>
       ) : (

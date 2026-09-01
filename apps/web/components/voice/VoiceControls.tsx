@@ -2,9 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  AudioLines,
-  Camera,
-  Check,
   Maximize,
   Mic,
   MicOff,
@@ -23,7 +20,7 @@ import {
   Capsula,
   SplitDeDispositivo,
 } from "@/components/voice/controles-de-chamada";
-import { explicarMidia, useVoiceDevices } from "@/stores/voiceDevices";
+import { ListaDeCameras, ListaDeMicrofones } from "@/components/voice/listas-de-dispositivos";
 import { useVoice } from "@/stores/voice";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 
@@ -62,9 +59,6 @@ export default function VoiceControls({
 
   const camOn = useVoice((s) => s.camOn);
   const toggleCam = useVoice((s) => s.toggleCam);
-  const processamento = useVoice((s) => s.audio.processamento);
-  const setAudioPref = useVoice((s) => s.setAudioPref);
-  const ruidoAvancado = processamento.ruido === "avancada";
   const muted = useVoicePrefs((s) => s.muted);
   const toggleMute = useVoicePrefs((s) => s.toggleMute);
 
@@ -119,25 +113,10 @@ export default function VoiceControls({
       <Capsula>
         <ScreenShareButton />
 
-        {/* O botão alterna entre a supressão avançada e a **padrão**, nunca para
-            "desligada": um clique de barra que remove toda a redução de ruído sem
-            dizer nada é armadilha. Desligar de vez é escolha consciente, e mora
-            nas configurações. Trocar aqui republica o microfone na hora (ver
-            `setAudioPref`), então o efeito é imediato no meio da conversa. */}
-        <BotaoDeChamada
-          label={
-            ruidoAvancado ? "Supressão de ruído avançada (ligada)" : "Supressão de ruído avançada"
-          }
-          tom={ruidoAvancado ? "ativo" : "neutro"}
-          pressionado={ruidoAvancado}
-          onClick={() =>
-            setAudioPref({
-              processamento: { ...processamento, ruido: ruidoAvancado ? "padrao" : "avancada" },
-            })
-          }
-        >
-          <AudioLines size={20} />
-        </BotaoDeChamada>
+        {/* A supressão de ruído **não** mora aqui: no Discord ela é o ícone de
+            ondas do painel "Voz conectada", ao lado do desligar (ver
+            `VoiceConnectedBar`). Ali ela fica ao alcance mesmo com o palco fora
+            da tela, que é quando mais se mexe nela. */}
 
         <div ref={caixa} className="relative">
           <BotaoDeChamada
@@ -187,106 +166,6 @@ export default function VoiceControls({
         <PhoneOff size={22} />
       </BotaoDeDesligar>
     </div>
-  );
-}
-
-/**
- * A lista de microfones da seta.
- *
- * Só entra na árvore com o menu aberto: `useVoiceDevices` pede permissão de
- * mídia para conseguir os **rótulos** dos dispositivos, e fazer isso na
- * montagem da barra faria o navegador perguntar sozinho no meio da chamada.
- */
-function ListaDeMicrofones() {
-  const devices = useVoiceDevices();
-  return (
-    <ListaDeFontes
-      titulo="Microfone"
-      icone={<Mic size={16} />}
-      opcoes={devices.inputs}
-      atual={devices.inputId}
-      onEscolher={devices.setInput}
-      aviso={explicarMidia(devices.motivo)}
-    />
-  );
-}
-
-function ListaDeCameras({ camLigada }: { camLigada: boolean }) {
-  const devices = useVoiceDevices();
-  return (
-    <ListaDeFontes
-      titulo="Câmera"
-      icone={<Camera size={16} />}
-      opcoes={devices.cameras}
-      atual={devices.cameraId}
-      onEscolher={devices.setCamera}
-      aviso={
-        explicarMidia(devices.motivo) ??
-        // republicar vídeo no meio de uma frase pisca a imagem para todo mundo,
-        // então a troca espera o próximo `setCameraEnabled` (ver `stores/voice`)
-        (camLigada ? "A troca vale na próxima vez que você ligar a câmera." : null)
-      }
-    />
-  );
-}
-
-/** Menu de escolha de dispositivo, com "padrão do sistema" sempre no topo. */
-function ListaDeFontes({
-  titulo,
-  icone,
-  opcoes,
-  atual,
-  onEscolher,
-  aviso,
-}: {
-  titulo: string;
-  icone: React.ReactNode;
-  opcoes: MediaDeviceInfo[];
-  atual: string | null;
-  onEscolher: (id: string | null) => void;
-  aviso: string | null;
-}) {
-  return (
-    <>
-      <p className="flex items-center gap-1.5 px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">
-        {icone}
-        {titulo}
-      </p>
-      <Opcao rotulo="Padrão do sistema" escolhida={atual === null} onSelect={() => onEscolher(null)} />
-      {opcoes.map((d, i) => (
-        <Opcao
-          key={d.deviceId}
-          // sem permissão o `label` vem vazio: numerar é melhor que uma linha em branco
-          rotulo={d.label || `${titulo} ${i + 1}`}
-          escolhida={atual === d.deviceId}
-          onSelect={() => onEscolher(d.deviceId)}
-        />
-      ))}
-      {aviso && <p className="px-2 pb-1 pt-2 text-xs text-txt-muted">{aviso}</p>}
-    </>
-  );
-}
-
-function Opcao({
-  rotulo,
-  escolhida,
-  onSelect,
-}: {
-  rotulo: string;
-  escolhida: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="menuitemradio"
-      aria-checked={escolhida}
-      onClick={onSelect}
-      className="flex w-full items-center gap-2 rounded-[3px] px-2 py-2 text-left text-sm text-txt-normal transition hover:bg-accent hover:text-accent-ink"
-    >
-      <span className="w-4 shrink-0">{escolhida && <Check size={16} />}</span>
-      <span className="min-w-0 flex-1 truncate">{rotulo}</span>
-    </button>
   );
 }
 
