@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { ChevronDown, Headphones, HeadphoneOff, Mic, MicOff, Settings } from "lucide-react";
 import { customStatusOf, displayNameOf } from "@streamz/shared";
 import Avatar, { STATUS_LABEL } from "@/components/ui/Avatar";
+import PopoverFlutuante from "@/components/ui/PopoverFlutuante";
 import Tooltip from "@/components/ui/Tooltip";
 import VoiceConnectedBar from "@/components/voice/VoiceConnectedBar";
 import { ListaDeMicrofones, ListaDeSaidas } from "@/components/voice/listas-de-dispositivos";
@@ -61,28 +62,14 @@ function FooterSplit({
   children: React.ReactNode;
 }) {
   const [aberto, setAberto] = useState(false);
-  const caixa = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!aberto) return;
-    const fora = (e: MouseEvent) => {
-      if (!caixa.current?.contains(e.target as Node)) setAberto(false);
-    };
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && setAberto(false);
-    window.addEventListener("mousedown", fora);
-    window.addEventListener("keydown", esc);
-    return () => {
-      window.removeEventListener("mousedown", fora);
-      window.removeEventListener("keydown", esc);
-    };
-  }, [aberto]);
+  const seta = useRef<HTMLButtonElement>(null);
 
   const cor = off
     ? "bg-red/15 text-red hover:bg-red/25"
     : "text-txt-secondary hover:bg-hov hover:text-txt-primary";
 
   return (
-    <div ref={caixa} className="relative flex items-center">
+    <div className="flex items-center">
       <Tooltip label={label}>
         <button
           type="button"
@@ -96,6 +83,7 @@ function FooterSplit({
       </Tooltip>
       <Tooltip label={labelDaSeta}>
         <button
+          ref={seta}
           type="button"
           onClick={() => setAberto((v) => !v)}
           aria-label={labelDaSeta}
@@ -106,16 +94,18 @@ function FooterSplit({
         </button>
       </Tooltip>
 
-      {aberto && (
-        <div
-          role="menu"
-          aria-label={labelDaSeta}
-          onClick={() => setAberto(false)}
-          className="absolute bottom-9 right-0 z-20 w-72 rounded-lg bg-overlay p-1.5 shadow-high anim-menu"
-        >
+      <PopoverFlutuante
+        ancora={seta}
+        aberto={aberto}
+        onFechar={() => setAberto(false)}
+        rotulo={labelDaSeta}
+        largura={288}
+        denso
+      >
+        <div role="menu" aria-label={labelDaSeta} onClick={() => setAberto(false)}>
           {menu()}
         </div>
-      )}
+      </PopoverFlutuante>
     </div>
   );
 }
