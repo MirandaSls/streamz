@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { AlertTriangle, Bell, MessageSquare, RotateCw, Volume2 } from "lucide-react";
+import { AlertTriangle, MessageSquare, RotateCw, UserPlus, Volume2 } from "lucide-react";
 import {
   displayNameOf,
   type Channel,
@@ -10,6 +10,7 @@ import {
 } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
+import IconesDoCanto from "@/components/voice/IconesDoCanto";
 import VoiceControls from "@/components/voice/VoiceControls";
 import VoiceGrid from "@/components/voice/VoiceGrid";
 import { AoVivoIndicador } from "@/components/voice/ScreenShareButton";
@@ -105,12 +106,10 @@ export default function VoicePanel({
           >
             <MessageSquare size={20} />
           </IconeDeCabecalho>
-          <IconeDeCabecalho
-            label="Notificações"
-            onClick={(e) => abrirMenuDeNotificacoes(e, channel.id, channel.guildId)}
-          >
-            <Bell size={20} />
-          </IconeDeCabecalho>
+          {/* sem sino aqui: no print o cabeçalho do canal de voz tem só o
+              balão do chat. Notificação e silêncio continuam no menu de
+              contexto do canal, na barra lateral, que é de onde o Discord as
+              serve. */}
         </span>
       </header>
 
@@ -156,13 +155,37 @@ export default function VoicePanel({
         </div>
 
         {conectado && (
-          <VoiceControls
-            oculto={!visivel}
-            telaCheia={telaCheia}
-            onTelaCheia={alternar}
-            moldura={daMoldura}
-            onLeave={() => void sair()}
-          />
+          <>
+            {/* Convidar mora no canto inferior esquerdo do palco, alinhado com a
+                barra: é a ação de "esta sala está vazia demais", e no print ela
+                nunca entra na fileira dos controles da chamada. */}
+            <div
+              {...daMoldura}
+              className={`absolute bottom-8 left-6 z-10 transition-opacity duration-200 ${
+                visivel ? "opacity-100" : "pointer-events-none opacity-0"
+              }`}
+            >
+              <IconeDeCabecalho
+                label="Convidar para voz"
+                onClick={() =>
+                  channel.guildId && ui.openModal({ kind: "invite", guildId: channel.guildId })
+                }
+              >
+                <UserPlus size={22} />
+              </IconeDeCabecalho>
+            </div>
+
+            <IconesDoCanto
+              telaCheia={telaCheia}
+              onTelaCheia={alternar}
+              visivel={visivel}
+              moldura={daMoldura}
+            />
+          </>
+        )}
+
+        {conectado && (
+          <VoiceControls oculto={!visivel} moldura={daMoldura} onLeave={() => void sair()} />
         )}
       </div>
     </div>

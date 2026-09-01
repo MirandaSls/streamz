@@ -1,17 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  Maximize,
-  Mic,
-  MicOff,
-  Minimize,
-  MoreHorizontal,
-  PhoneOff,
-  Settings,
-  Video,
-  VideoOff,
-} from "lucide-react";
+import { Mic, MicOff, MoreHorizontal, PhoneOff, Settings, Video, VideoOff } from "lucide-react";
 import ScreenShareButton from "@/components/voice/ScreenShareButton";
 import VoiceSettingsPanel from "@/components/voice/VoiceSettingsPanel";
 import {
@@ -41,8 +31,6 @@ export default function VoiceControls({
   onLeave,
   leaveLabel = "Desconectar",
   oculto = false,
-  telaCheia,
-  onTelaCheia,
   moldura,
 }: {
   onLeave: () => void;
@@ -50,8 +38,6 @@ export default function VoiceControls({
   leaveLabel?: string;
   /** o palco pediu silêncio visual (mouse parado); ver `useOcultarInativo`. */
   oculto?: boolean;
-  telaCheia: boolean;
-  onTelaCheia: () => void;
   moldura?: { onPointerEnter: () => void; onPointerLeave: () => void };
 }) {
   const [mais, setMais] = useState<null | "menu" | "ajustes">(null);
@@ -133,15 +119,8 @@ export default function VoiceControls({
               aria-label="Mais opções"
               className="absolute bottom-12 left-1/2 w-56 -translate-x-1/2 rounded-lg bg-overlay p-1.5 shadow-high anim-menu"
             >
-              <ItemDoMenu
-                onSelect={() => {
-                  setMais(null);
-                  onTelaCheia();
-                }}
-                icone={telaCheia ? <Minimize size={18} /> : <Maximize size={18} />}
-              >
-                {telaCheia ? "Sair da tela cheia" : "Tela cheia"}
-              </ItemDoMenu>
+              {/* tela cheia saiu daqui: no print ela é ícone solto no canto do
+                  palco, junto do pop-out — ver `IconesDoCanto` */}
               <ItemDoMenu onSelect={() => setMais("ajustes")} icone={<Settings size={18} />}>
                 Ajustes de voz
               </ItemDoMenu>

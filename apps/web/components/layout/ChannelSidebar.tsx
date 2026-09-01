@@ -37,6 +37,7 @@ import {
 import UserFooter from "@/components/layout/UserFooter";
 import Tooltip from "@/components/ui/Tooltip";
 import { MENU_WIDTH, MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
+import Cronometro from "@/components/voice/Cronometro";
 import VoiceChannelMembers from "@/components/voice/VoiceChannelMembers";
 import { useAuth } from "@/stores/auth";
 import { useCategories } from "@/stores/categories";
@@ -46,6 +47,7 @@ import { useCanModerate, useGuilds, useIsOwner } from "@/stores/guilds";
 import { useT } from "@/lib/i18n";
 import { submenuNotificacoes, submenuSilenciar } from "@/lib/notification-menu";
 import { useNotifications } from "@/stores/notifications";
+import { useVoice } from "@/stores/voice";
 import { useSettings } from "@/stores/settings";
 import { ui, useUI, type MenuItem } from "@/stores/ui";
 
@@ -155,6 +157,8 @@ export default function ChannelSidebar() {
   const channels = useChannels((s) => s.channels);
   const loading = useChannels((s) => s.loading);
   const activeChannelId = useChannels((s) => s.activeChannelId);
+  const vozAqui = useVoice((s) => s.channelId);
+  const vozDesde = useVoice((s) => s.desde);
   const voiceChannelId = useChannels((s) => s.voiceChannelId);
   const select = useChannels((s) => s.select);
   const rename = useChannels((s) => s.rename);
@@ -504,6 +508,15 @@ export default function ChannelSidebar() {
               {channel.mentionCount}
             </span>
           )}
+          {/* Cronômetro da call, como no print: some no hover, que é quando os
+              dois botões do canal tomam o lugar dele. */}
+          {vozAqui === channel.id && vozDesde !== null && (
+            <Cronometro
+              desde={vozDesde}
+              className="mr-1 shrink-0 text-xs text-green group-hover:hidden"
+            />
+          )}
+
           {/* o hover do canal no Discord mostra DOIS botões: convite e editar */}
           <Tooltip label="Criar convite">
             <button
@@ -528,7 +541,9 @@ export default function ChannelSidebar() {
             </Tooltip>
           )}
         </div>
-        {channel.type === "VOICE" && <VoiceChannelMembers channelId={channel.id} />}
+        {channel.type === "VOICE" && (
+          <VoiceChannelMembers channelId={channel.id} guildId={channel.guildId} />
+        )}
       </div>
     );
   }

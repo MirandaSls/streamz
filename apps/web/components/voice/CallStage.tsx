@@ -5,6 +5,7 @@ import { AlertTriangle, MessageSquare, Phone, RotateCw, UserPlus } from "lucide-
 import { displayNameOf, isGroupChannel } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
+import IconesDoCanto from "@/components/voice/IconesDoCanto";
 import VoiceControls from "@/components/voice/VoiceControls";
 import VoiceGrid from "@/components/voice/VoiceGrid";
 import { AoVivoIndicador } from "@/components/voice/ScreenShareButton";
@@ -164,14 +165,20 @@ export default function CallStage({
       </div>
 
       {(conectadoAqui || chamando) && (
-        <VoiceControls
-          oculto={!visivel}
-          telaCheia={telaCheia}
-          onTelaCheia={alternar}
-          moldura={daMoldura}
-          leaveLabel={chamando ? "Cancelar chamada" : "Desligar"}
-          onLeave={() => void endCall()}
-        />
+        <>
+          <VoiceControls
+            oculto={!visivel}
+            moldura={daMoldura}
+            leaveLabel={chamando ? "Cancelar chamada" : "Desligar"}
+            onLeave={() => void endCall()}
+          />
+          <IconesDoCanto
+            telaCheia={telaCheia}
+            onTelaCheia={alternar}
+            visivel={visivel}
+            moldura={daMoldura}
+          />
+        </>
       )}
     </section>
   );
