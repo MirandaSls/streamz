@@ -1,7 +1,7 @@
 "use client";
 
 import type { MouseEvent, ReactNode } from "react";
-import { MoreVertical } from "lucide-react";
+import { MoreVertical } from "@/components/ui/icones";
 import { customStatusOf, displayNameOf, type PublicUser } from "@streamz/shared";
 import Avatar, { STATUS_LABEL } from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";

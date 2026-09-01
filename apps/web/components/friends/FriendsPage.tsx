@@ -11,7 +11,7 @@ import {
   UserX,
   Users,
   X,
-} from "lucide-react";
+} from "@/components/ui/icones";
 import { displayNameOf, type PublicUser } from "@streamz/shared";
 import HeaderIcon from "@/components/chat/HeaderIcon";
 import InboxPopover from "@/components/chat/InboxPopover";

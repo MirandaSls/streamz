@@ -1,19 +1,27 @@
 "use client";
 
+import type { ComponentType } from "react";
+
 import {
   ArrowClockwise,
-  CaretDown,
-  CaretRight,
+  Check as CheckRaw,
+  ChatCircle,
+  DotsThreeVertical,
+  Prohibit,
+  Question,
+  UserMinus,
+  CaretDown as CaretDownRaw,
+  CaretRight as CaretRightRaw,
   Checks,
   Compass,
-  DotsThree,
+  DotsThree as DotsThreeRaw,
   FolderPlus,
   GearSix,
   Hash,
   Headphones,
   Link as LinkIcon,
   Lock,
-  MagnifyingGlass,
+  MagnifyingGlass as MagnifyingGlassRaw,
   Megaphone,
   Microphone,
   MicrophoneSlash,
@@ -21,7 +29,7 @@ import {
   SignOut,
   Phone,
   PhoneDisconnect,
-  Plus,
+  Plus as PlusRaw,
   SpeakerHigh,
   Trash,
   UserPlus,
@@ -31,7 +39,7 @@ import {
   Waveform,
   WifiHigh,
   WifiSlash,
-  X,
+  X as XRaw,
   type IconProps,
 } from "@phosphor-icons/react";
 
@@ -57,20 +65,47 @@ import {
  * nomes viram os do Phosphor de uma vez.
  */
 
+/**
+ * O Discord **não** é uniformemente preenchido, e foi isso que eu errei ao
+ * ligar `fill` para tudo de uma vez.
+ *
+ * Os pictogramas dele — pessoa, microfone, fone, engrenagem — são sólidos. As
+ * **marcas utilitárias** — o `+` de nova conversa, o `×` de fechar, as setas, a
+ * lupa — são traço. São classes diferentes de sinal: o pictograma nomeia uma
+ * coisa e precisa de corpo para ser reconhecido; a marca utilitária é gesto
+ * puro, e engordá-la a transforma num carimbo que grita mais alto que o nome do
+ * item ao lado.
+ *
+ * `bold` e não `regular` porque o resto da interface é sólido: traço fino
+ * demais ao lado de pictograma cheio lê como ícone de outra família.
+ *
+ * O `weight` vem **antes** do spread de propósito: quem chamar pode sobrescrever.
+ */
+function traco<P extends IconProps>(Icone: ComponentType<P>) {
+  return function MarcaDeTraco(props: P) {
+    return <Icone weight="bold" {...props} />;
+  };
+}
+
+export const Plus = traco(PlusRaw);
+export const X = traco(XRaw);
+export const Check = traco(CheckRaw);
+export const ChevronDown = traco(CaretDownRaw);
+export const ChevronRight = traco(CaretRightRaw);
+export const Search = traco(MagnifyingGlassRaw);
+export const MoreHorizontal = traco(DotsThreeRaw);
+export const MoreVertical = traco(DotsThreeVertical);
+
 export {
-  CaretDown as ChevronDown,
-  CaretRight as ChevronRight,
   ArrowClockwise as RotateCw,
   Checks as CheckCheck,
   Compass,
-  DotsThree as MoreHorizontal,
   FolderPlus,
   GearSix as Settings,
   Hash,
   Headphones,
   LinkIcon as Link2,
   Lock,
-  MagnifyingGlass as Search,
   Megaphone,
   Microphone as Mic,
   MicrophoneSlash as MicOff,
@@ -78,17 +113,19 @@ export {
   Phone,
   PhoneDisconnect as PhoneOff,
   SignOut as LogOut,
-  Plus,
   SpeakerHigh as Volume2,
   Trash as Trash2,
   UserPlus,
   Users,
+  UserMinus,
+  Prohibit as UserX,
+  Question as HelpCircle,
+  ChatCircle as MessageSquare,
   VideoCamera as Video,
   VideoCameraSlash as VideoOff,
   Waveform as AudioLines,
   WifiHigh as Signal,
   WifiSlash as SignalZero,
-  X,
 };
 
 /**
