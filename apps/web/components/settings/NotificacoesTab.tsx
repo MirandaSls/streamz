@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronRight, Volume2 } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { type NotificationLevel } from "@streamz/shared";
 import { RadioCards, Row, Section, Switch, Toggle } from "@/components/ui/controls";
 import { SONS, useSons, type NomeDeSom } from "@/stores/sons";
@@ -79,6 +79,21 @@ export default function NotificacoesTab() {
  * ninguém abre — mas quando incomoda, incomoda por *um* som só, e é esse que
  * precisa ser desligável sem calar o resto.
  */
+/** Quantos sons ficam à vista antes do "mostrar mais" (o print mostra quatro). */
+const SONS_A_VISTA = 4;
+
+/**
+ * A lista de sons, um por evento.
+ *
+ * Cada linha tem o seu interruptor e o seu **"Prévia do som"** — e a prévia é
+ * um link sob o rótulo, não um ícone no canto: o que se está decidindo ali é
+ * "quero ouvir isto?", e a única forma de responder é ouvindo. Um alto-falante
+ * mudo à direita fazia a prévia parecer o próprio controle de volume.
+ *
+ * Só os primeiros ficam à vista. São dez eventos, e a lista inteira aberta
+ * empurra o resto da página para fora da tela por uma preferência que quase
+ * ninguém mexe — o resto entra num "mostrar mais" que diz o que tem lá dentro.
+ */
 function BlocoDeSons() {
   const t = useT();
   const s = useSettings();
@@ -95,76 +110,74 @@ function BlocoDeSons() {
     tocarSom(nome as SomDeVoz, (s.outputVolume / 100) * 0.12, true);
   }
 
+  const visiveis = aberto ? SONS : SONS.slice(0, SONS_A_VISTA);
+  const escondidos = SONS.slice(SONS_A_VISTA);
+
   return (
     <Section id="sons" title={t("notif.sons")}>
       <Row
         label={t("notif.som")}
         hint="Sem isto, notificação nenhuma faz barulho neste aparelho."
         control={
-          <div className="flex items-center gap-2">
-            <Switch
-              checked={s.notificationSound}
-              onChange={(notificationSound) => s.set({ notificationSound })}
-              label={t("notif.som")}
-            />
-            <button
-              type="button"
-              onClick={() => tocarSomDeNotificacao(s.outputVolume / 100)}
-              aria-label={t("notif.tocarSom")}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-[4px] text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
-            >
-              <Volume2 size={18} />
-            </button>
-          </div>
+          <Switch
+            checked={s.notificationSound}
+            onChange={(notificationSound) => s.set({ notificationSound })}
+            label={t("notif.som")}
+          />
         }
       />
 
-      <button
-        type="button"
-        aria-expanded={aberto}
-        onClick={() => setAberto((v) => !v)}
-        className="flex w-full items-center gap-2 border-b border-border py-3 text-left last:border-b-0"
-      >
-        <ChevronRight
-          size={16}
-          aria-hidden="true"
-          className={`shrink-0 text-txt-muted transition-transform ${aberto ? "rotate-90" : ""}`}
-        />
-        <span className="min-w-0 flex-1 text-sm font-medium text-txt-primary">
-          Sons individuais
-        </span>
-        <span className="shrink-0 text-xs text-txt-muted">
-          {SONS.length - Object.keys(desligados).length} de {SONS.length} ligados
-        </span>
-      </button>
+      <div className={s.notificationSound ? "" : "opacity-50"}>
+        {visiveis.map((som) => (
+          <Row
+            key={som.nome}
+            label={som.rotulo}
+            hint={
+              <button
+                type="button"
+                onClick={() => ouvir(som.nome)}
+                className="text-txt-link hover:underline"
+              >
+                Prévia do som
+              </button>
+            }
+            control={
+              <Switch
+                checked={!desligados[som.nome]}
+                onChange={(v) => alternar(som.nome, v)}
+                label={som.rotulo}
+                disabled={!s.notificationSound}
+              />
+            }
+          />
+        ))}
+      </div>
 
-      {aberto && (
-        <div className={s.notificationSound ? "" : "opacity-50"}>
-          {SONS.map((som) => (
-            <Row
-              key={som.nome}
-              label={som.rotulo}
-              control={
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={!desligados[som.nome]}
-                    onChange={(v) => alternar(som.nome, v)}
-                    label={som.rotulo}
-                    disabled={!s.notificationSound}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => ouvir(som.nome)}
-                    aria-label={`${t("notif.tocarSom")}: ${som.rotulo}`}
-                    className="grid h-8 w-8 shrink-0 place-items-center rounded-[4px] text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
-                  >
-                    <Volume2 size={16} />
-                  </button>
-                </div>
-              }
-            />
-          ))}
-        </div>
+      {escondidos.length > 0 && (
+        <Row
+          label={aberto ? "Mostrar menos sons" : `Mostrar ${escondidos.length} mais sons`}
+          // dizer quais são: sem isso, "mostrar mais 6" não informa se vale abrir
+          hint={escondidos
+            .slice(0, 3)
+            .map((som) => som.rotulo)
+            .join(", ")
+            .concat(escondidos.length > 3 ? " e mais" : "")}
+          control={
+            <button
+              type="button"
+              aria-expanded={aberto}
+              onClick={() => setAberto((v) => !v)}
+              aria-label={aberto ? "Mostrar menos sons" : "Mostrar mais sons"}
+              className="grid h-8 w-8 place-items-center rounded-[4px] text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
+            >
+              <ChevronRight
+                size={18}
+                aria-hidden="true"
+                className={`transition-transform ${aberto ? "-rotate-90" : "rotate-90"}`}
+              />
+            </button>
+          }
+        />
       )}
     </Section>
   );

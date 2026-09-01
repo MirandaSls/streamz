@@ -112,17 +112,35 @@ interface Aviso {
   /** duração de cada nota. */
   dur: number;
   onda: OscillatorType;
+  /**
+   * Quanto da oitava acima entra junto da fundamental, de 0 a 1.
+   *
+   * É o que separa um **sino** de um **bipe**: um oscilador sozinho soa a
+   * aparelho eletrônico, e duas senóides em oitava já soam a instrumento. Os
+   * avisos de controle levam pouco (querem passar despercebidos); os eventos
+   * sociais levam mais, porque precisam ser notados no meio de uma conversa.
+   */
+  brilho: number;
+  /**
+   * Peso do som na mistura, de 0 a 1.
+   *
+   * Aviso que eu mesmo provoquei (mutei, desmutei) não precisa do mesmo volume
+   * de um que outra pessoa provocou (alguém entrou): no primeiro eu já sei o
+   * que aconteceu, porque acabei de clicar. Sem essa diferença, um canal cheio
+   * vira uma sequência de bipes todos igualmente urgentes.
+   */
+  peso: number;
 }
 
 const AVISOS = {
-  mudo: { tons: [520, 380], dur: 0.07, onda: "sine" },
-  desmudo: { tons: [380, 520], dur: 0.07, onda: "sine" },
-  surdo: { tons: [460, 300], dur: 0.07, onda: "sine" },
-  "nao-surdo": { tons: [300, 460], dur: 0.07, onda: "sine" },
-  entrar: { tons: [523.25, 783.99], dur: 0.13, onda: "triangle" },
-  sair: { tons: [783.99, 523.25], dur: 0.13, onda: "triangle" },
-  "alguem-entrou": { tons: [659.25, 987.77], dur: 0.1, onda: "triangle" },
-  "alguem-saiu": { tons: [987.77, 659.25], dur: 0.1, onda: "triangle" },
+  mudo: { tons: [520, 380], dur: 0.06, onda: "sine", brilho: 0.12, peso: 0.55 },
+  desmudo: { tons: [380, 520], dur: 0.06, onda: "sine", brilho: 0.12, peso: 0.55 },
+  surdo: { tons: [460, 300], dur: 0.06, onda: "sine", brilho: 0.1, peso: 0.55 },
+  "nao-surdo": { tons: [300, 460], dur: 0.06, onda: "sine", brilho: 0.1, peso: 0.55 },
+  entrar: { tons: [523.25, 783.99], dur: 0.14, onda: "triangle", brilho: 0.35, peso: 1 },
+  sair: { tons: [783.99, 523.25], dur: 0.14, onda: "triangle", brilho: 0.3, peso: 1 },
+  "alguem-entrou": { tons: [659.25, 987.77], dur: 0.11, onda: "triangle", brilho: 0.3, peso: 0.8 },
+  "alguem-saiu": { tons: [987.77, 659.25], dur: 0.11, onda: "triangle", brilho: 0.25, peso: 0.8 },
 } as const satisfies Record<string, Aviso>;
 
 export type SomDeVoz = keyof typeof AVISOS;
@@ -154,27 +172,49 @@ export function tocarSom(nome: SomDeVoz, volume = 0.12, forcar = false) {
   try {
     const ac = contexto();
     if (!ac) return;
-    const { tons, dur: DUR, onda } = AVISOS[nome];
+    const { tons, dur: DUR, onda, brilho, peso } = AVISOS[nome];
     const inicio = ac.currentTime;
+    const alvo = volume * peso;
     for (const [i, freq] of tons.entries()) {
-      const osc = ac.createOscillator();
-      const ganho = ac.createGain();
-      osc.type = onda;
-      osc.frequency.value = freq;
       // as duas notas se sobrepõem um pouco: emendadas soam como um som só,
       // que é o que separa um sino de dois bipes seguidos
       const t0 = inicio + i * DUR * 0.75;
-      // envelope curto em rampa: um `gain` em degrau estala no alto-falante
-      ganho.gain.setValueAtTime(0, t0);
-      ganho.gain.linearRampToValueAtTime(volume, t0 + 0.012);
-      // queda exponencial: linear soa cortada, esta some como um sino
-      ganho.gain.exponentialRampToValueAtTime(0.0001, t0 + DUR);
-      ganho.gain.linearRampToValueAtTime(0, t0 + DUR + 0.005);
-      osc.connect(ganho).connect(ac.destination);
-      osc.start(t0);
-      osc.stop(t0 + DUR + 0.01);
+      nota(ac, freq, onda, t0, DUR, alvo);
+      // a oitava acima entra mais curta que a fundamental: o brilho é o ataque
+      // do som, não o corpo dele — sustentá-la até o fim soaria a dois bipes
+      // tocados juntos, que é exatamente o que se quer evitar
+      if (brilho > 0) nota(ac, freq * 2, "sine", t0, DUR * 0.55, alvo * brilho);
     }
   } catch {
     // contexto de áudio indisponível: o aviso simplesmente não sai
   }
+}
+
+/**
+ * Uma nota: oscilador com envelope de ataque rápido e queda exponencial.
+ *
+ * O ataque em rampa (e não em degrau) existe porque um `gain` que salta de 0
+ * para o valor estala no alto-falante; a queda é exponencial porque a linear
+ * soa cortada, e esta some como um sino. São 12 ms de subida — rápido o
+ * bastante para o som parecer instantâneo, lento o bastante para não clicar.
+ */
+function nota(
+  ac: AudioContext,
+  freq: number,
+  onda: OscillatorType,
+  t0: number,
+  dur: number,
+  volume: number,
+) {
+  const osc = ac.createOscillator();
+  const ganho = ac.createGain();
+  osc.type = onda;
+  osc.frequency.value = freq;
+  ganho.gain.setValueAtTime(0, t0);
+  ganho.gain.linearRampToValueAtTime(volume, t0 + 0.012);
+  ganho.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  ganho.gain.linearRampToValueAtTime(0, t0 + dur + 0.005);
+  osc.connect(ganho).connect(ac.destination);
+  osc.start(t0);
+  osc.stop(t0 + dur + 0.01);
 }
