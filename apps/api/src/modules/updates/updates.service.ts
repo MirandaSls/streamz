@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { caminhoDoInstalador } from "./arquivo";
 import { ehMaisNova } from "./versao";
 
 /**
@@ -32,6 +33,23 @@ export class UpdatesService {
   private readonly logger = new Logger(UpdatesService.name);
 
   constructor(private readonly config: ConfigService) {}
+
+  /**
+   * Pasta de onde o instalador é servido.
+   *
+   * Separada da pasta de `downloads` de propósito: aquela é protegida por
+   * senha, e o atualizador não sabe autenticar — ele é um cliente cego que só
+   * segue a URL do manifesto. O que garante que o pacote é nosso não é o
+   * segredo do endereço, é a assinatura.
+   */
+  diretorio(): string {
+    return this.config.get<string>("UPDATE_DIR")?.trim() || "updates";
+  }
+
+  /** Caminho no disco do instalador pedido, ou `null` se o nome não presta. */
+  arquivo(nome: string): string | null {
+    return caminhoDoInstalador(this.diretorio(), nome);
+  }
 
   isConfigured(): boolean {
     return Boolean(this.versao() && this.url() && this.assinatura());

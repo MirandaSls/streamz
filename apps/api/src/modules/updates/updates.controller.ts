@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Res } from "@nestjs/common";
+import { Controller, Get, NotFoundException, Param, Res } from "@nestjs/common";
 import { SkipThrottle } from "@nestjs/throttler";
 import { UpdatesService, type ManifestoDeAtualizacao } from "./updates.service";
 
@@ -23,6 +23,25 @@ import { UpdatesService, type ManifestoDeAtualizacao } from "./updates.service";
 @Controller("updates")
 export class UpdatesController {
   constructor(private readonly updates: UpdatesService) {}
+
+  /**
+   * O instalador em si.
+   *
+   * Aberta, como o manifesto: o atualizador baixa antes de ter qualquer sessão,
+   * e a integridade vem da assinatura, não do sigilo do endereço. Declarada
+   * **antes** da rota do manifesto porque `arquivo/:nome` tem dois segmentos e
+   * a outra tem três — a ordem evita qualquer dúvida de casamento.
+   */
+  @Get("arquivo/:nome")
+  baixar(
+    @Param("nome") nome: string,
+    @Res() res: { download(caminho: string, nome: string): void },
+  ): void {
+    const caminho = this.updates.arquivo(nome);
+    if (!caminho) throw new NotFoundException("Instalador não encontrado");
+    // `download` cuida do 404 quando o arquivo não existe no disco
+    res.download(caminho, nome);
+  }
 
   @Get(":target/:arch/:version")
   buscar(

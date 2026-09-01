@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Streamz",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "identifier": "dev.streamz.app",
   "build": {
     "beforeDevCommand": "pnpm --filter @streamz/web dev",
@@ -69,7 +69,7 @@
       "endpoints": [
         "https://api.streamz.chat/api/updates/{{target}}/{{arch}}/{{current_version}}"
       ],
-      "pubkey": "",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFFNjczOThFNERENUNCQUEKUldTcXk5Vk5qamxuSHBweUdZdVNwUzFpd1Bld3hwVklQNVVnVkdBZFZwN0QrYzBtWEJhYkNpaHYK",
       "windows": {
         "installMode": "passive"
       }
