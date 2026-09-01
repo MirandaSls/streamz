@@ -7,7 +7,7 @@ import Avatar, { STATUS_LABEL } from "@/components/ui/Avatar";
 import PopoverFlutuante from "@/components/ui/PopoverFlutuante";
 import Tooltip from "@/components/ui/Tooltip";
 import VoiceConnectedBar from "@/components/voice/VoiceConnectedBar";
-import { ListaDeMicrofones, ListaDeSaidas } from "@/components/voice/listas-de-dispositivos";
+import { MenuDeEntrada, MenuDeSaida } from "@/components/voice/menus-de-audio";
 import { useAuth } from "@/stores/auth";
 import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
 import { anchorOf, useUI } from "@/stores/ui";
@@ -102,7 +102,9 @@ function FooterSplit({
         largura={288}
         denso
       >
-        <div role="menu" aria-label={labelDaSeta} onClick={() => setAberto(false)}>
+        {/* sem fechar a cada clique: o menu tem sub-tela e um deslizador, e
+            fechar no primeiro toque impediria os dois */}
+        <div role="menu" aria-label={labelDaSeta}>
           {menu()}
         </div>
       </PopoverFlutuante>
@@ -159,7 +161,7 @@ export default function UserFooter() {
           labelDaSeta="Escolher microfone"
           off={muted}
           onClick={toggleMute}
-          menu={() => <ListaDeMicrofones />}
+          menu={() => <MenuDeEntrada />}
         >
           {muted ? <MicOff size={20} /> : <Mic size={20} />}
         </FooterSplit>
@@ -169,7 +171,7 @@ export default function UserFooter() {
           labelDaSeta="Escolher saída de áudio"
           off={deafened}
           onClick={toggleDeafen}
-          menu={() => <ListaDeSaidas />}
+          menu={() => <MenuDeSaida />}
         >
           {deafened ? <HeadphoneOff size={20} /> : <Headphones size={20} />}
         </FooterSplit>

@@ -178,7 +178,9 @@ export function SplitDeDispositivo({
         largura={288}
         denso
       >
-        <div role="menu" aria-label={labelDaSeta} onClick={() => setAberto(false)}>
+        {/* ver `UserFooter`: o menu navega e tem deslizador; fechar a cada
+            clique impediria os dois */}
+        <div role="menu" aria-label={labelDaSeta}>
           {menu()}
         </div>
       </PopoverFlutuante>

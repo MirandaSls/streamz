@@ -10,7 +10,8 @@ import {
   Capsula,
   SplitDeDispositivo,
 } from "@/components/voice/controles-de-chamada";
-import { ListaDeCameras, ListaDeMicrofones } from "@/components/voice/listas-de-dispositivos";
+import { ListaDeCameras } from "@/components/voice/listas-de-dispositivos";
+import { MenuDeEntrada } from "@/components/voice/menus-de-audio";
 import { useVoice } from "@/stores/voice";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 
@@ -79,7 +80,7 @@ export default function VoiceControls({
           tom={muted ? "mudo" : "neutro"}
           pressionado={muted}
           onClick={toggleMute}
-          menu={() => <ListaDeMicrofones />}
+          menu={() => <MenuDeEntrada />}
         >
           {muted ? <MicOff size={20} /> : <Mic size={20} />}
         </SplitDeDispositivo>
