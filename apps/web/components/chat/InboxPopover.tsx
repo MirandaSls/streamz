@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AtSign, Check, CornerUpRight, Hash, Inbox, MessageCircle, Settings } from "lucide-react";
+import { AtSign, CornerUpRight, MessageCircle } from "lucide-react";
+import { Check, Hash, Inbox, Settings } from "@/components/ui/icones";
 import { mentionsUser } from "@streamz/shared";
 import type { InboxMention, InboxUnreadChannel } from "@streamz/shared";
 import HeaderPopover from "@/components/chat/HeaderPopover";

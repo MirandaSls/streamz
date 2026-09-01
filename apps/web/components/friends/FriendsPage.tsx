@@ -34,6 +34,20 @@ const ABAS: { id: FriendsTab; label: string }[] = [
   { id: "bloqueados", label: "Bloqueado" },
 ];
 
+/**
+ * "Pendente" e "Bloqueado" só aparecem quando têm conteúdo.
+ *
+ * É o que o print mostra: com nenhum pedido e ninguém bloqueado, a fileira tem
+ * só "Disponível" e "Todos". Aba que nunca vai a lugar nenhum é ruído — e as
+ * duas passam a maior parte do tempo vazias, ao contrário das outras.
+ */
+function abasVisiveis(pendentes: number, bloqueados: number) {
+  return ABAS.filter(
+    (a) =>
+      (a.id !== "pendentes" || pendentes > 0) && (a.id !== "bloqueados" || bloqueados > 0),
+  );
+}
+
 /** Título de seção da lista ("DISPONÍVEL — 3"), com a linha que abre a lista. */
 function Secao({ label, count }: { label: string; count: number }) {
   return (
@@ -203,7 +217,7 @@ export default function FriendsPage() {
         <span aria-hidden="true" className="mx-2 h-6 w-px shrink-0 bg-border" />
 
         <nav aria-label="Filtrar amigos" className="flex items-center gap-1">
-          {ABAS.map((a) => (
+          {abasVisiveis(pendentes, blocked.length).map((a) => (
             <button
               key={a.id}
               type="button"
@@ -226,7 +240,7 @@ export default function FriendsPage() {
             type="button"
             aria-pressed={tab === "adicionar"}
             onClick={() => setTab("adicionar")}
-            className={`ml-2 h-8 min-w-[128px] rounded-[4px] px-4 text-sm font-medium transition ${
+            className={`ml-2 h-8 rounded-[4px] px-4 text-sm font-medium transition ${
               tab === "adicionar"
                 ? "bg-green/20 text-green"
                 : "bg-green text-accent-ink hover:bg-green/80"
@@ -256,24 +270,26 @@ export default function FriendsPage() {
 
         {tab !== "adicionar" && (
           <div className="relative px-[30px] pt-4">
+            {/* lupa à esquerda: é onde o print põe, e é onde o olho procura o
+                que a caixa faz antes de começar a digitar */}
+            <Search
+              size={18}
+              aria-hidden="true"
+              className="pointer-events-none absolute left-[42px] top-[26px] text-txt-muted"
+            />
             <input
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               type="search"
               aria-label="Buscar amigos"
               placeholder="Buscar"
-              className="h-8 w-full rounded-[3px] bg-rail pl-2 pr-8 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
-            />
-            <Search
-              size={16}
-              aria-hidden="true"
-              className="pointer-events-none absolute right-[38px] top-6 text-txt-muted"
+              className="h-10 w-full rounded-[4px] bg-rail pl-10 pr-3 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
             />
           </div>
         )}
 
         {tab === "adicionar" && <AddFriend />}
-        {tab === "online" && listaDeAmigos(online, "Disponível", "online")}
+        {tab === "online" && listaDeAmigos(online, "Online", "online")}
         {tab === "todos" && listaDeAmigos(todos, "Todos os amigos", "todos")}
 
         {tab === "pendentes" &&
