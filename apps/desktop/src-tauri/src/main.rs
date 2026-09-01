@@ -30,10 +30,12 @@ fn main() {
     tauri::Builder::default()
         // Notificações nativas (Tauri 2 → crate própria).
         .plugin(tauri_plugin_notification::init())
-        // O auto-update está DESLIGADO de propósito: não existe par de chaves de
-        // assinatura nem servidor de releases. Um updater apontando para um
-        // endpoint inexistente com pubkey placeholder só produz erro em runtime.
-        // Como religar: apps/desktop/README.md (seção "Auto-update").
+        // Auto-update. O plugin só busca quando a interface pede (ver
+        // `AvisoDeAtualizacao` na web): nada é baixado sozinho, e a checagem
+        // falha em silêncio quando o endpoint não tem versão a oferecer.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        // `relaunch()` depois de instalar; é o que fecha o ciclo.
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             // --- System tray (bandeja) ---------------------------------------
             // Menu de contexto: "Abrir Streamz" e "Sair".

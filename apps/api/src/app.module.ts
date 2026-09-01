@@ -32,6 +32,7 @@ import { DownloadsModule } from "./modules/downloads/downloads.module";
 import { MailModule } from "./modules/mail/mail.module";
 // ── j-painel-admin ──
 import { AdminModule } from "./modules/admin/admin.module";
+import { UpdatesModule } from "./modules/updates/updates.module";
 import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis";
 import { redisClient } from "./modules/realtime/redis";
 import { HealthController } from "./health.controller";
@@ -79,6 +80,7 @@ import { validateEnv } from "./common/env";
     FriendsModule,
     EmojisModule,
     MediaModule,
+    UpdatesModule,
     // ── h-moderacao ──
     AuditModule,
     ModerationModule,

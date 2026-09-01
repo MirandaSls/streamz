@@ -16,9 +16,11 @@ serde_json = "1"
 
 # Plugins do Tauri 2 (a API v2 separou notificação/updater em crates próprias).
 tauri-plugin-notification = "2"
-# tauri-plugin-updater: só entra quando houver chave de assinatura e servidor de
-# releases reais — ver apps/desktop/README.md (seção "Auto-update").
-# tauri-plugin-updater = "2"
+# Auto-update: o `updater` baixa e instala; o `process` reinicia o app depois.
+# Sem os dois, "atualizar" pararia no meio — instalado, mas rodando a versão
+# velha até o usuário fechar por conta.
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

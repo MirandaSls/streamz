@@ -11,6 +11,7 @@ import ThreadPanel from "@/components/chat/ThreadPanel";
 import ChannelSidebar from "@/components/layout/ChannelSidebar";
 import DMList from "@/components/layout/DMList";
 import GuildRail from "@/components/layout/GuildRail";
+import AvisoDeAtualizacao from "@/components/desktop/AvisoDeAtualizacao";
 import ModalHost from "@/components/modals/ModalHost";
 import ContextMenuHost from "@/components/ui/ContextMenu";
 import ProfilePopoverHost from "@/components/ui/ProfilePopover";
@@ -135,6 +136,8 @@ export default function AppPage() {
       <ContextMenuHost />
       <ProfilePopoverHost />
       <Toasts />
+      {/* f-desktop: só aparece dentro do Tauri, e volta a cada abertura */}
+      <AvisoDeAtualizacao />
     </div>
   );
 }
