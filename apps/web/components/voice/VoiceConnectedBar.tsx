@@ -1,6 +1,6 @@
 "use client";
 
-import { PhoneOff, RotateCw, Signal, SignalZero, Video } from "lucide-react";
+import { AudioLines, PhoneOff, RotateCw, Signal, SignalZero, Video, VideoOff } from "lucide-react";
 import Tooltip from "@/components/ui/Tooltip";
 import ScreenShareButton from "@/components/voice/ScreenShareButton";
 import { useChannels } from "@/stores/channels";
@@ -20,6 +20,16 @@ import { useVoice } from "@/stores/voice";
  * São duas linhas, e a divisão é deliberada: a de cima responde "onde eu estou
  * e como saio"; a de baixo é a fileira de ações largas, que precisam de alvo
  * grande porque são usadas no meio de uma conversa, sem olhar.
+ *
+ * A **supressão de ruído** mora na linha de cima, colada no desligar, e não na
+ * barra do palco: é a posição do Discord, e a razão é a mesma que justifica
+ * este painel existir — quem entrou num canal de voz e foi ler outro canal não
+ * tem o palco na tela, e é justamente aí que se percebe que o microfone está
+ * captando o ventilador.
+ *
+ * A fileira de baixo é só ícone, sem rótulo. Dois botões com texto ("Vídeo",
+ * "Tela") pareciam mais claros e são menos: o rótulo empurra o alvo clicável
+ * para menos da metade da largura e obriga a abreviar quando a coluna encolhe.
  */
 export default function VoiceConnectedBar() {
   const channelId = useVoice((s) => s.channelId);
@@ -28,6 +38,9 @@ export default function VoiceConnectedBar() {
   const status = useVoice((s) => s.status);
   const erro = useVoice((s) => s.erro);
   const camOn = useVoice((s) => s.camOn);
+  const processamento = useVoice((s) => s.audio.processamento);
+  const setAudioPref = useVoice((s) => s.setAudioPref);
+  const ruidoAvancado = processamento.ruido === "avancada";
   const toggleCam = useVoice((s) => s.toggleCam);
   const disconnect = useVoice((s) => s.disconnect);
   const reconnect = useVoice((s) => s.reconnect);
@@ -85,6 +98,33 @@ export default function VoiceConnectedBar() {
           </button>
         </span>
 
+        {/* O botão alterna entre a supressão avançada e a **padrão**, nunca para
+            "desligada": um clique que remove toda a redução de ruído sem dizer
+            nada é armadilha. Desligar de vez é escolha consciente e mora nas
+            configurações. Trocar aqui republica o microfone na hora (ver
+            `setAudioPref`), então o efeito é imediato no meio da conversa. */}
+        <Tooltip
+          label={
+            ruidoAvancado ? "Supressão de ruído avançada (ligada)" : "Supressão de ruído avançada"
+          }
+        >
+          <button
+            type="button"
+            onClick={() =>
+              setAudioPref({
+                processamento: { ...processamento, ruido: ruidoAvancado ? "padrao" : "avancada" },
+              })
+            }
+            aria-pressed={ruidoAvancado}
+            aria-label="Supressão de ruído avançada"
+            className={`grid h-8 w-8 shrink-0 place-items-center rounded-[4px] transition hover:bg-hov ${
+              ruidoAvancado ? "text-accent" : "text-txt-secondary hover:text-txt-primary"
+            }`}
+          >
+            <AudioLines size={18} />
+          </button>
+        </Tooltip>
+
         {/* sem botão de chat aqui: o nome do canal logo acima já leva à call, e
             o chat do canal de voz tem o próprio alternador no cabeçalho dele */}
         <Tooltip label="Desconectar">
@@ -116,19 +156,21 @@ export default function VoiceConnectedBar() {
       )}
 
       <div className="flex items-stretch gap-1 pb-1">
-        <button
-          type="button"
-          onClick={() => void toggleCam()}
-          aria-pressed={camOn}
-          className={`flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-[4px] text-xs font-semibold transition ${
-            camOn
-              ? "bg-border-strong-hover text-txt-primary"
-              : "bg-border-strong/60 text-txt-secondary hover:bg-border-strong hover:text-txt-primary"
-          }`}
-        >
-          <Video size={16} aria-hidden="true" />
-          Vídeo
-        </button>
+        <Tooltip label={camOn ? "Desligar câmera" : "Ligar câmera"} className="min-w-0 flex-1">
+          <button
+            type="button"
+            onClick={() => void toggleCam()}
+            aria-pressed={camOn}
+            aria-label={camOn ? "Desligar câmera" : "Ligar câmera"}
+            className={`grid h-8 w-full place-items-center rounded-[4px] transition ${
+              camOn
+                ? "bg-border-strong-hover text-txt-primary"
+                : "bg-border-strong/60 text-txt-secondary hover:bg-border-strong hover:text-txt-primary"
+            }`}
+          >
+            {camOn ? <Video size={16} /> : <VideoOff size={16} />}
+          </button>
+        </Tooltip>
         <ScreenShareButton variante="largo" />
       </div>
     </div>

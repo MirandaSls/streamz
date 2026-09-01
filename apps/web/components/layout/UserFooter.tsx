@@ -1,25 +1,25 @@
 "use client";
 
-import { Headphones, HeadphoneOff, Mic, MicOff, Settings } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ChevronDown, Headphones, HeadphoneOff, Mic, MicOff, Settings } from "lucide-react";
 import { customStatusOf, displayNameOf } from "@streamz/shared";
 import Avatar, { STATUS_LABEL } from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
 import VoiceConnectedBar from "@/components/voice/VoiceConnectedBar";
+import { ListaDeMicrofones, ListaDeSaidas } from "@/components/voice/listas-de-dispositivos";
 import { useAuth } from "@/stores/auth";
 import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
 import { anchorOf, useUI } from "@/stores/ui";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 
-/** Botão de ícone do rodapé (32px, hover claro; vermelho quando desligado). */
+/** Botão de ícone do rodapé (32px, hover claro). */
 function FooterButton({
   label,
   onClick,
-  off = false,
   children,
 }: {
   label: string;
   onClick: () => void;
-  off?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -28,10 +28,7 @@ function FooterButton({
         type="button"
         onClick={onClick}
         aria-label={label}
-        aria-pressed={off}
-        className={`grid h-8 w-8 place-items-center rounded-[4px] transition hover:bg-hov ${
-          off ? "text-red" : "text-txt-secondary hover:text-txt-primary"
-        }`}
+        className="grid h-8 w-8 place-items-center rounded-[4px] text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
       >
         {children}
       </button>
@@ -40,8 +37,92 @@ function FooterButton({
 }
 
 /**
+ * Microfone e áudio: o botão e, colada nele, a seta que escolhe o aparelho.
+ *
+ * Desligado é **ícone vermelho sobre véu vermelho**, não ícone vermelho solto.
+ * O véu é o que diferencia "está desligado" de "passar o mouse aqui desliga" —
+ * sem ele, mudo e não-mudo têm a mesma silhueta e a cor sozinha precisa fazer
+ * todo o trabalho, o que falha para quem não distingue vermelho.
+ */
+function FooterSplit({
+  label,
+  labelDaSeta,
+  off,
+  onClick,
+  menu,
+  children,
+}: {
+  label: string;
+  labelDaSeta: string;
+  off: boolean;
+  onClick: () => void;
+  /** função, e não nó pronto: listar aparelhos pede permissão de mídia. */
+  menu: () => React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const caixa = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!aberto) return;
+    const fora = (e: MouseEvent) => {
+      if (!caixa.current?.contains(e.target as Node)) setAberto(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setAberto(false);
+    window.addEventListener("mousedown", fora);
+    window.addEventListener("keydown", esc);
+    return () => {
+      window.removeEventListener("mousedown", fora);
+      window.removeEventListener("keydown", esc);
+    };
+  }, [aberto]);
+
+  const cor = off
+    ? "bg-red/15 text-red hover:bg-red/25"
+    : "text-txt-secondary hover:bg-hov hover:text-txt-primary";
+
+  return (
+    <div ref={caixa} className="relative flex items-center">
+      <Tooltip label={label}>
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label={label}
+          aria-pressed={off}
+          className={`grid h-8 w-8 place-items-center rounded-l-[4px] rounded-r-[1px] transition ${cor}`}
+        >
+          {children}
+        </button>
+      </Tooltip>
+      <Tooltip label={labelDaSeta}>
+        <button
+          type="button"
+          onClick={() => setAberto((v) => !v)}
+          aria-label={labelDaSeta}
+          aria-expanded={aberto}
+          className={`grid h-8 w-4 place-items-center rounded-r-[4px] rounded-l-[1px] transition ${cor}`}
+        >
+          <ChevronDown size={12} />
+        </button>
+      </Tooltip>
+
+      {aberto && (
+        <div
+          role="menu"
+          aria-label={labelDaSeta}
+          onClick={() => setAberto(false)}
+          className="absolute bottom-9 right-0 z-20 w-72 rounded-lg bg-overlay p-1.5 shadow-high anim-menu"
+        >
+          {menu()}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * Rodapé das colunas laterais — o "painel do usuário" do Discord: avatar com
- * status, nome, e os três botões de microfone, áudio e configurações.
+ * status, nome, e os controles de microfone, áudio e configurações.
  */
 export default function UserFooter() {
   const user = useAuth((s) => s.user);
@@ -63,7 +144,7 @@ export default function UserFooter() {
     <>
       {/* f-voz: a barra da call fica colada acima do painel, como no Discord */}
       <VoiceConnectedBar />
-      <div className="flex h-[52px] shrink-0 items-center gap-1 bg-footer px-2">
+      <div className="flex h-[52px] shrink-0 items-center gap-0.5 bg-footer px-2">
         <button
           type="button"
           onClick={(e) => openProfile(user, anchorOf(e.currentTarget))}
@@ -83,17 +164,30 @@ export default function UserFooter() {
           </span>
         </button>
 
-        <FooterButton label={muted ? "Desativar mudo" : "Silenciar"} off={muted} onClick={toggleMute}>
+        <FooterSplit
+          label={muted ? "Desativar mudo" : "Silenciar"}
+          labelDaSeta="Escolher microfone"
+          off={muted}
+          onClick={toggleMute}
+          menu={() => <ListaDeMicrofones />}
+        >
           {muted ? <MicOff size={20} /> : <Mic size={20} />}
-        </FooterButton>
-        <FooterButton
+        </FooterSplit>
+
+        <FooterSplit
           label={deafened ? "Reativar áudio" : "Desativar áudio"}
+          labelDaSeta="Escolher saída de áudio"
           off={deafened}
           onClick={toggleDeafen}
+          menu={() => <ListaDeSaidas />}
         >
           {deafened ? <HeadphoneOff size={20} /> : <Headphones size={20} />}
-        </FooterButton>
-        <FooterButton label="Configurações do usuário" onClick={() => openModal({ kind: "settings" })}>
+        </FooterSplit>
+
+        <FooterButton
+          label="Configurações do usuário"
+          onClick={() => openModal({ kind: "settings" })}
+        >
           <Settings size={20} />
         </FooterButton>
       </div>
