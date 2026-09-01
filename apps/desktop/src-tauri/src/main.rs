@@ -1,6 +1,8 @@
 // Evita abrir o console no Windows em release.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod tela;
+
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -36,6 +38,9 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         // `relaunch()` depois de instalar; é o que fecha o ciclo.
         .plugin(tauri_plugin_process::init())
+        // Fontes de compartilhamento de tela. A web só chama isto quando está
+        // dentro do app; no navegador ela continua no `getDisplayMedia`.
+        .invoke_handler(tauri::generate_handler![tela::fontes_de_tela])
         .setup(|app| {
             // --- System tray (bandeja) ---------------------------------------
             // Menu de contexto: "Abrir Streamz" e "Sair".
