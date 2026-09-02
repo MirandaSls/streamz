@@ -39,6 +39,7 @@ import {
   type BucketState,
 } from "./rate-limit";
 import { MemoryPresenceStore, RedisPresenceStore, type PresenceStore } from "./presence.store";
+import { conexoesAExpulsar } from "./voz-em-um-lugar-so";
 import { MessagesService } from "../messages/messages.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
@@ -515,6 +516,10 @@ export class ChatGateway
     try {
       // o join valida o acesso ao canal (assertCanViewChannel) e o tipo
       await this.voice.join(user.id, payload.channelId);
+      // ── voz em um lugar só ──
+      // A conta entrou daqui: qualquer outra conexão dela sai da voz agora.
+      // Tem que ser **antes** de marcar este socket, senão ele se expulsaria.
+      await this.expulsarOutrasConexoesDaVoz(user.id, client.id, payload.channelId);
       client.data.voiceChannelId = payload.channelId;
       // reentrou dentro da carência (reconexão do cliente): a saída agendada
       // perde o efeito e o estado de voz segue intacto
@@ -530,6 +535,13 @@ export class ChatGateway
     if (!user) return;
     const lembrado = client.data.voiceChannelId as string | undefined;
     client.data.voiceChannelId = undefined;
+    // Expulso por outra conexão: este socket já não manda na voz da conta. Sem
+    // isso, o cliente antigo desligando levaria junto a sessão que acabou de
+    // entrar — o estado de voz é por usuário, não por conexão.
+    if (client.data.expulsoDaVoz) {
+      client.data.expulsoDaVoz = false;
+      return;
+    }
     try {
       // a chamada em DM entra pela rota REST, que não passa por este socket:
       // sem o fallback, sair de uma chamada assim não teria efeito nenhum
@@ -657,6 +669,38 @@ export class ChatGateway
 
   private chaveDeVoz(userId: string, channelId: string) {
     return `${userId}:${channelId}`;
+  }
+
+  /**
+   * Tira da voz todas as outras conexões da mesma conta.
+   *
+   * O estado de voz é por **usuário**: o `VoiceService` guarda "fulano está no
+   * canal X", sem saber de qual aparelho. Enquanto isso o LiveKit é por
+   * **identidade**, e não aceita duas iguais na mesma sala — ele derruba a
+   * conexão mais antiga por conta própria. O resultado, antes disto, era o
+   * navegador ser expulso pelo app e mostrar "a conexão de voz caiu", como se
+   * fosse queda de rede.
+   *
+   * Aqui a expulsão passa a ser explícita e anunciada. O socket antigo perde a
+   * marca de voz e recebe `VOICE_EVICTED`, para dizer ao usuário o que de fato
+   * aconteceu. `expulsoDaVoz` é o que impede que o `VOICE_LEAVE` dele, que vem
+   * logo em seguida, apague a sessão que acabou de entrar.
+   *
+   * Não mexe no `VoiceService`: a conta continua na voz, só que agora pela
+   * conexão nova. Trocar de canal já é tratado pelo `leaveAllExcept` do join.
+   */
+  private async expulsarOutrasConexoesDaVoz(userId: string, manter: string, novoCanalId: string) {
+    const sockets = await this.server.in(`user:${userId}`).fetchSockets();
+    const alvos = conexoesAExpulsar(
+      sockets.map((s) => ({ id: s.id, voiceChannelId: s.data.voiceChannelId as string | undefined, s })),
+      manter,
+    );
+    for (const { s, voiceChannelId } of alvos) {
+      s.data.voiceChannelId = undefined;
+      s.data.expulsoDaVoz = true;
+      this.cancelarSaidaDaVoz(userId, voiceChannelId!);
+      s.emit(WS_EVENTS.VOICE_EVICTED, { channelId: voiceChannelId, novoCanalId });
+    }
   }
 
   /** Alguma conexão viva do usuário está nesta sala de voz? */

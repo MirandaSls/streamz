@@ -109,6 +109,19 @@ export interface GuildReadResult {
  * mesma linha da ADR-0001. `connected: false` é a saída: o cliente remove o
  * participante em vez de manter um estado zumbi.
  */
+/**
+ * Esta conexão foi tirada da voz porque a mesma conta entrou de outro lugar.
+ *
+ * `channelId` é o canal de onde ela saiu — pode ser o mesmo em que a outra
+ * ponta acabou de entrar (dois aparelhos na mesma sala), e é justamente esse
+ * caso que a expulsão resolve: o LiveKit não aceita identidade repetida.
+ */
+export interface VoiceEvictedEvent {
+  channelId: string;
+  /** Para onde a conta foi. Igual a `channelId` quando é a mesma sala. */
+  novoCanalId: string;
+}
+
 export interface VoiceStateEvent {
   channelId: string;
   guildId: string | null;

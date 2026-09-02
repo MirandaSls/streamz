@@ -5,9 +5,20 @@ import {
   WS_EVENTS,
   displayNameOf,
   mentionsMe,
+  // ── f-voz ──,
+  // ── d-social ──,
+  // ── g-emojis-midia ──,
+  type CallEndedEvent,
+  type CallRingEvent,
+  type Category,
+  type CategoryDeletedEvent,
   type Channel,
   type ChannelDeletedEvent,
   type ChannelOverridesEvent,
+  type EmojiUpdatedEvent,
+  type FriendAcceptedEvent,
+  type FriendRemovedEvent,
+  type FriendRequestEvent,
   type Guild,
   type GuildOwnerChangedEvent,
   type GuildRemovedEvent,
@@ -20,23 +31,13 @@ import {
   type MessageUnpinnedEvent,
   type PresenceUpdatePayload,
   type PublicUser,
-  // ── f-voz ──
-  type CallEndedEvent,
-  type CallRingEvent,
-  type VoiceStateEvent,
   type Role,
   type RoleDeletedEvent,
-  type Category,
-  type CategoryDeletedEvent,
-  type ThreadUpdatedEvent,
-  // ── d-social ──
-  type FriendAcceptedEvent,
-  type FriendRemovedEvent,
-  type FriendRequestEvent,
-  type UserBlockedEvent,
-  // ── g-emojis-midia ──
-  type EmojiUpdatedEvent,
   type StickerUpdatedEvent,
+  type ThreadUpdatedEvent,
+  type UserBlockedEvent,
+  type VoiceEvictedEvent,
+  type VoiceStateEvent,
 } from "@streamz/shared";
 import type { NotificationSetting } from "@streamz/shared";
 // ── h-moderacao ──
@@ -323,6 +324,10 @@ export function useRealtime(currentUserId?: string): void {
       // repassamos (o `voice.state` chega para qualquer canal visível)
       on<VoiceStateEvent>(WS_EVENTS.VOICE_STATE, (evento) => {
         useVoice.getState().applyState(evento);
+      }),
+      // voz em um lugar só: a conta entrou de outro aparelho e esta conexão sai
+      on<VoiceEvictedEvent>(WS_EVENTS.VOICE_EVICTED, (evento) => {
+        useVoice.getState().expulsoDaVoz(evento);
       }),
 
       on<CallRingEvent>(WS_EVENTS.CALL_RING, (evento) => {

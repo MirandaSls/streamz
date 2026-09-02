@@ -46,6 +46,13 @@ export const WS_EVENTS = {
   CALL_END: "call.end",
   // servidor → cliente
   VOICE_STATE: "voice.state",
+  /**
+   * Você entrou em voz de outro lugar: esta conexão está fora.
+   *
+   * Vai para **um socket só**, não para a sala do usuário — quem acabou de
+   * entrar não pode receber a própria expulsão.
+   */
+  VOICE_EVICTED: "voice.evicted",
   CALL_RING: "call.ring",
   CALL_ENDED: "call.ended",
   // ── c-cargos ──
