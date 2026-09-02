@@ -686,14 +686,14 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     },
 
     publicarTelaNativa: async (fonteId) => {
-      const { channelId, screenQuality } = get();
+      const { channelId, screenQuality, screenAudio } = get();
       if (!channelId || !sala) {
         ui.toast(SEM_SALA, "error");
         return;
       }
       try {
         const creds = await api.telaToken(channelId);
-        await iniciarTelaNativa(montarPedido(fonteId, screenQuality, creds));
+        await iniciarTelaNativa(montarPedido(fonteId, screenQuality, creds, screenAudio));
         telaNativa = true;
         set({ screenOn: true });
       } catch (e) {

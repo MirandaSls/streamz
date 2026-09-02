@@ -1,4 +1,4 @@
-import { SCREEN_QUALITY, type ScreenQuality } from "@streamz/shared";
+import { MEDIA_QUALITY, SCREEN_QUALITY, type ScreenQuality } from "@streamz/shared";
 
 /**
  * A lógica pura do seletor de compartilhamento de tela — o que dá para testar
@@ -115,13 +115,18 @@ export interface PedidoDeTela {
   altura: number;
   fps: number;
   maxBitrate: number;
+  /** Levar o som do sistema (WASAPI loopback no Rust). */
+  audio: boolean;
+  /** Teto do áudio da tela — `MEDIA_QUALITY.screenAudioBitrate`, o mesmo da web. */
+  audioMaxBitrate: number;
 }
 
-/** Monta o pedido a partir do preset: o contrato `SCREEN_QUALITY` é o único. */
+/** Monta o pedido a partir do preset: os contratos `SCREEN_QUALITY` e `MEDIA_QUALITY` são os únicos. */
 export function montarPedido(
   fonteId: string,
   q: ScreenQuality,
   creds: { url: string; token: string },
+  audio: boolean,
 ): PedidoDeTela {
   const p = SCREEN_QUALITY[q];
   return {
@@ -132,5 +137,7 @@ export function montarPedido(
     altura: p.height,
     fps: p.frameRate,
     maxBitrate: p.maxBitrate,
+    audio,
+    audioMaxBitrate: MEDIA_QUALITY.screenAudioBitrate,
   };
 }
