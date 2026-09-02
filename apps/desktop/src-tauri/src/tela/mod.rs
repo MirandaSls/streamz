@@ -21,6 +21,8 @@
 use serde::Serialize;
 
 #[cfg(windows)]
+mod audio;
+#[cfg(windows)]
 mod captura;
 #[cfg(windows)]
 mod fontes;

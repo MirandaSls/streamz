@@ -21,8 +21,9 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use livekit::options::{TrackPublishOptions, VideoEncoding};
+use livekit::options::{AudioEncoding, TrackPublishOptions, VideoEncoding};
 use livekit::prelude::*;
+use livekit::webrtc::audio_source::native::NativeAudioSource;
 use livekit::webrtc::native::yuv_helper;
 use livekit::webrtc::prelude::*;
 use livekit::webrtc::video_source::native::NativeVideoSource;
@@ -30,6 +31,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::mpsc::{error::TryRecvError, UnboundedReceiver};
 
+use super::audio::{self, ErroDeAudio, Loopback};
 use super::captura::{self, Capturador, Erro, Quadro};
 use super::fontes;
 
@@ -50,6 +52,16 @@ pub struct Pedido {
     pub altura: u32,
     pub fps: u32,
     pub max_bitrate: u64,
+    /// Levar o som do sistema junto (WASAPI loopback, ver `audio.rs`).
+    #[serde(default)]
+    pub audio: bool,
+    /// Teto do áudio da tela (`MEDIA_QUALITY.screenAudioBitrate` na web).
+    #[serde(default = "bitrate_de_audio_padrao")]
+    pub audio_max_bitrate: u64,
+}
+
+fn bitrate_de_audio_padrao() -> u64 {
+    160_000
 }
 
 /// Por que a transmissão acabou sozinha.
@@ -67,6 +79,19 @@ pub enum Motivo {
 struct EmCurso {
     parar: Arc<AtomicBool>,
     thread: JoinHandle<()>,
+    /// A thread do áudio do sistema, quando o pedido levou som.
+    audio: Option<JoinHandle<()>>,
+}
+
+impl EmCurso {
+    /// Levanta a bandeira e espera as duas threads.
+    fn encerrar(self) {
+        self.parar.store(true, Ordering::Release);
+        let _ = self.thread.join();
+        if let Some(audio) = self.audio {
+            let _ = audio.join();
+        }
+    }
 }
 
 /// Estado gerenciado pelo Tauri: a transmissão em curso, se houver.
@@ -88,8 +113,7 @@ impl Transmissao {
     /// do app chama, e ali não há runtime para esperar.
     pub fn encerrar(&self) {
         if let Some(em_curso) = self.tomar() {
-            em_curso.parar.store(true, Ordering::Release);
-            let _ = em_curso.thread.join();
+            em_curso.encerrar();
         }
     }
 }
@@ -147,6 +171,45 @@ pub async fn iniciar(app: AppHandle, estado: &Transmissao, pedido: Pedido) -> Re
         .await
         .map_err(|e| format!("não foi possível publicar a tela: {e}"))?;
 
+    // O áudio do sistema é uma segunda faixa do mesmo participante. Falhar
+    // aqui (sem dispositivo de saída, formato estranho) não derruba o vídeo:
+    // a transmissão segue muda, como quando a opção está desligada.
+    let fonte_audio = if pedido.audio {
+        let fonte = NativeAudioSource::new(
+            // sem cancelamento de eco nem supressão: a fonte é o próprio
+            // sistema, e os processadores de voz achatariam música em mono
+            AudioSourceOptions::default(),
+            audio::TAXA,
+            u32::from(audio::CANAIS),
+            FILA_DE_AUDIO_MS,
+        );
+        let faixa = LocalAudioTrack::create_audio_track(
+            "tela-audio",
+            RtcAudioSource::Native(fonte.clone()),
+        );
+        // Mesmas opções do `publicarTela` da web: estéreo, bitrate alto, sem
+        // DTX (existe para cortar silêncio de conversa) e sem RED.
+        let publicacao = TrackPublishOptions {
+            source: TrackSource::ScreenshareAudio,
+            audio_encoding: Some(AudioEncoding {
+                max_bitrate: pedido.audio_max_bitrate,
+            }),
+            dtx: false,
+            red: false,
+            ..Default::default()
+        };
+        match sala
+            .local_participant()
+            .publish_track(LocalTrack::Audio(faixa), publicacao)
+            .await
+        {
+            Ok(_) => Some(fonte),
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+
     let parar_bandeira = Arc::new(AtomicBool::new(false));
     let bandeira = parar_bandeira.clone();
     let fps = pedido.fps.max(1);
@@ -170,9 +233,18 @@ pub async fn iniciar(app: AppHandle, estado: &Transmissao, pedido: Pedido) -> Re
         })
         .map_err(|e| format!("não foi possível iniciar a thread de transmissão: {e}"))?;
 
+    let bandeira_audio = parar_bandeira.clone();
+    let audio = fonte_audio.and_then(|fonte| {
+        std::thread::Builder::new()
+            .name("streamz-tela-audio".into())
+            .spawn(move || transmitir_audio(&fonte, &bandeira_audio))
+            .ok()
+    });
+
     estado.guardar(EmCurso {
         parar: parar_bandeira,
         thread,
+        audio,
     });
     Ok(())
 }
@@ -180,11 +252,66 @@ pub async fn iniciar(app: AppHandle, estado: &Transmissao, pedido: Pedido) -> Re
 /// Para a transmissão em curso, se houver, e espera a thread sair da sala.
 pub async fn parar(estado: &Transmissao) {
     if let Some(em_curso) = estado.tomar() {
-        em_curso.parar.store(true, Ordering::Release);
         // Esperar fora do runtime: a thread pode estar no meio de um
         // `block_on(sala.close())`, e bloquear uma thread do tokio esperando
         // por isso é pedir um impasse.
-        let _ = tauri::async_runtime::spawn_blocking(move || em_curso.thread.join()).await;
+        let _ = tauri::async_runtime::spawn_blocking(move || em_curso.encerrar()).await;
+    }
+}
+
+/// Fila da fonte de áudio, em ms (múltiplo de 10, exigência do SDK). É o
+/// quanto o encoder aceita adiantado antes de `capture_frame` segurar a
+/// thread; 200 ms cobre um engasgo da leitura sem virar atraso audível.
+const FILA_DE_AUDIO_MS: u32 = 200;
+/// Sem pacote novo no mixer, quanto dormir antes de perguntar de novo.
+const PAUSA_SEM_AUDIO: Duration = Duration::from_millis(5);
+/// Tentativas de reabrir o loopback depois de o dispositivo mudar.
+const REABERTURAS: u32 = 10;
+
+/// O laço do áudio do sistema: lê o loopback e empurra para a fonte. Termina
+/// com a bandeira, ou quando o loopback não reabre mais.
+fn transmitir_audio(fonte: &NativeAudioSource, parar: &AtomicBool) {
+    let mut loopback = match Loopback::abrir() {
+        Ok(l) => l,
+        Err(_) => return,
+    };
+    let mut amostras: Vec<i16> = Vec::new();
+    let mut reaberturas = 0;
+    while !parar.load(Ordering::Acquire) {
+        amostras.clear();
+        match loopback.ler(&mut amostras) {
+            Ok(()) => {}
+            Err(ErroDeAudio::DispositivoInvalidado) => {
+                // Trocou o fone: reabrir no novo padrão. Um sono entre as
+                // tentativas porque o Windows leva um instante para eleger
+                // o dispositivo novo.
+                reaberturas += 1;
+                if reaberturas > REABERTURAS {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(200));
+                if let Ok(novo) = Loopback::abrir() {
+                    loopback = novo;
+                    reaberturas = 0;
+                }
+                continue;
+            }
+            Err(ErroDeAudio::Falha) => return,
+        }
+        if amostras.is_empty() {
+            std::thread::sleep(PAUSA_SEM_AUDIO);
+            continue;
+        }
+        let quadro = AudioFrame {
+            data: std::borrow::Cow::Borrowed(&amostras),
+            sample_rate: audio::TAXA,
+            num_channels: u32::from(audio::CANAIS),
+            samples_per_channel: (amostras.len() / usize::from(audio::CANAIS)) as u32,
+        };
+        // `capture_frame` segura quando a fila está cheia — é a cadência.
+        if tauri::async_runtime::block_on(fonte.capture_frame(&quadro)).is_err() {
+            return;
+        }
     }
 }
 

@@ -74,7 +74,7 @@ describe("fontes", () => {
 
 describe("pedido para o Rust", () => {
   it("leva resolução, taxa e bitrate do contrato compartilhado", () => {
-    expect(montarPedido("janela:1", "1080p60", { url: "wss://x", token: "t" })).toEqual({
+    expect(montarPedido("janela:1", "1080p60", { url: "wss://x", token: "t" }, true)).toEqual({
       url: "wss://x",
       token: "t",
       fonteId: "janela:1",
@@ -82,6 +82,8 @@ describe("pedido para o Rust", () => {
       altura: 1080,
       fps: 60,
       maxBitrate: 4_500_000,
+      audio: true,
+      audioMaxBitrate: 160_000,
     });
   });
 });

@@ -176,7 +176,6 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
         <Configuracoes
           quality={quality}
           audio={audio}
-          nativo={nativo}
           onQualidade={aplicarQualidade}
           onAudio={setAudio}
           onVoltar={() => setEtapa("grade")}
@@ -672,7 +671,6 @@ function Rodape({
 function Configuracoes({
   quality,
   audio,
-  nativo,
   onQualidade,
   onAudio,
   onVoltar,
@@ -681,7 +679,6 @@ function Configuracoes({
 }: {
   quality: ScreenQuality;
   audio: boolean;
-  nativo: boolean;
   onQualidade: (q: ScreenQuality) => void;
   onAudio: (on: boolean) => void;
   onVoltar: () => void;
@@ -730,26 +727,17 @@ function Configuracoes({
           Usa cerca de {estimativaDeBanda(quality)} da sua internet de subida
         </p>
 
-        {nativo ? (
-          // A captura nativa ainda não leva o som do sistema (vem na etapa do
-          // áudio, WASAPI loopback): a opção existe, desligada, com o aviso.
-          <Tooltip label="Em breve na captura nativa do desktop">
-            <label className="flex w-max cursor-not-allowed items-center gap-2 text-sm text-txt-muted">
-              <input type="checkbox" checked={false} disabled readOnly className="accent-accent" />
-              Compartilhar áudio do sistema
-            </label>
-          </Tooltip>
-        ) : (
-          <label className="flex w-max cursor-pointer items-center gap-2 text-sm text-txt-normal">
-            <input
-              type="checkbox"
-              checked={audio}
-              onChange={(e) => onAudio(e.target.checked)}
-              className="accent-accent"
-            />
-            Compartilhar áudio do sistema
-          </label>
-        )}
+        {/* No desktop o som vem do loopback do Windows (tudo o que está
+            tocando); no navegador, do que o seletor do browser permitir. */}
+        <label className="flex w-max cursor-pointer items-center gap-2 text-sm text-txt-normal">
+          <input
+            type="checkbox"
+            checked={audio}
+            onChange={(e) => onAudio(e.target.checked)}
+            className="accent-accent"
+          />
+          Compartilhar áudio do sistema
+        </label>
       </div>
 
       <div className="mt-auto flex flex-row-reverse items-center gap-3">
