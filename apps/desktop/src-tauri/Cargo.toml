@@ -28,9 +28,11 @@ custom-protocol = ["tauri/custom-protocol"]
 # Só no Windows: o compartilhamento de tela nativo é a API do Windows, e em
 # outro alvo o módulo `tela` devolve lista vazia sem tocar em nada disto.
 [target.'cfg(windows)'.dependencies]
-# 0.61 é a versão que o próprio Tauri já traz (via webview2-com). Fixar a mesma
-# evita compilar duas cópias do `windows` no mesmo binário.
-windows = { version = "0.61", features = [
+# 0.62 é a versão que o `windows-capture` exige. O Tauri (via webview2-com)
+# ainda está em 0.61, então o binário compila duas cópias do `windows` — custo
+# de tempo de build, não de tamanho relevante (só o que se usa entra). Fixar a
+# nossa em 0.62 mantém pelo menos o nosso código e a captura na mesma.
+windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
@@ -38,7 +40,12 @@ windows = { version = "0.61", features = [
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ] }
+# Captura de tela: Windows Graphics Capture (com `IsBorderRequired = false`,
+# que é o que tira a borda amarela no Windows 11) e DXGI Desktop Duplication
+# (o caminho sem borda no Windows 10). Ver `src/tela/captura/mod.rs`.
+windows-capture = "2.0.1"
 # `default-features = false`: o `image` completo traz uma dúzia de decodificadores
-# (webp, tiff, avif…) para uma tarefa que só escreve PNG de 32×32.
-image = { version = "0.25", default-features = false, features = ["png"] }
+# (webp, tiff, avif…) para duas tarefas que só escrevem: PNG de 32×32 (ícone)
+# e JPEG de 480 px (miniatura da grade).
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 base64 = "0.22"
