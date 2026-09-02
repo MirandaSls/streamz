@@ -459,7 +459,24 @@ function doDiscord(viewBox: string, ...caminhos: (string | Caminho)[]) {
  */
 export type Icone = ComponentType<{ size?: number | string; className?: string }>;
 
-const QUADRO = "0 0 100 100";
+/**
+ * O recorte útil do material de origem — **não** o quadro do arquivo.
+ *
+ * Os ativos de `svg/` vêm num quadro de 100 com o desenho entre 10 e 90: é o
+ * mesmo desenho dos de `figma/`, que vêm num quadro de 80, transladado em 10
+ * (está escrito no `ACERVO.md`). Usar `0 0 100 100` fazia cada um deles
+ * renderizar a **80% do `size` pedido** — `size={20}` saía com ~16px de tinta
+ * contra os 18-19 do Discord no mesmo lugar.
+ *
+ * O sintoma era o app inteiro parecer de ícones pequenos, e a pista de que a
+ * causa era esta: o `Amigos`, único com `viewBox` reenquadrado à mão, era o
+ * único que parecia do tamanho certo.
+ *
+ * `10 10 80 80` recorta o quadro no desenho e iguala as duas origens. Conferido
+ * antes de mudar: os 55 ícones que usam este quadro têm a tinta dentro de
+ * 10..90, então nenhum é cortado.
+ */
+const QUADRO = "10 10 80 80";
 
 /**
  * E o de `figma/`, que é outro. Os dois não são intercambiáveis: o mesmo

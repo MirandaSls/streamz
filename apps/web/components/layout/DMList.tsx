@@ -217,7 +217,7 @@ export default function DMList() {
               aria-label="Nova conversa"
               className="text-txt-muted transition hover:text-txt-primary"
             >
-              <Plus size={24} />
+              <Plus size={20} />
             </button>
           </Tooltip>
         </div>
