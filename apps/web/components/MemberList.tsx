@@ -12,6 +12,7 @@ import {
   TimerOff,
   User,
   UserX,
+  Volume2,
 } from "@/components/ui/icones";
 import {
   Permission,
@@ -33,6 +34,7 @@ import { useCan, usePermissions } from "@/stores/permissions";
 import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
 import { useSettings } from "@/stores/settings";
 import { anchorOf, ui, type MenuItem } from "@/stores/ui";
+import { useVoice } from "@/stores/voice";
 
 /**
  * Título de seção da lista ("Disponível — 1").
@@ -89,6 +91,15 @@ export default function MemberList() {
   // o status/perfil ao vivo vem da store de presença; a lista é só o do REST
   const statuses = usePresence((s) => s.statuses);
   const profiles = usePresence((s) => s.profiles);
+  // quem está numa sala de voz DESTE servidor ganha a sub-linha "Em voz", como
+  // no Discord. A store guarda estados por canal; o evento traz o `guildId`,
+  // então basta juntar os canais do servidor ativo — sem depender da sidebar.
+  const activeGuildId = useGuilds((s) => s.activeGuildId);
+  const voiceStates = useVoice((s) => s.states);
+  const emVoz = new Set<string>();
+  for (const lista of Object.values(voiceStates)) {
+    for (const e of lista) if (e.connected && e.guildId === activeGuildId) emVoz.add(e.user.id);
+  }
 
   const live: Linha[] = members.map((m) => {
     const u = resolveUser(profiles, m.user);
@@ -234,30 +245,41 @@ export default function MemberList() {
           className="flex min-w-0 flex-1 items-center gap-3 text-left"
         >
           <Avatar user={m.user} size="md" status={status} surface="border-panel" />
-          <span className="flex min-w-0 items-center gap-1">
-            <span
-              style={cor ? { color: cor } : undefined}
-              className={`truncate font-medium ${
-                destaque ? "text-txt-primary" : "text-txt-faint group-hover:text-txt-normal"
-              }`}
-            >
-              {nome}
+          {/* nome em 16px na cor muted (medido: o mesmo cinza do título da
+              seção), e a sub-linha "Em voz" em 12px com o alto-falante verde.
+              Sem atividade/jogo: não existe aqui. */}
+          <span className="flex min-w-0 flex-col">
+            <span className="flex min-w-0 items-center gap-1 text-base leading-5">
+              <span
+                style={cor ? { color: cor } : undefined}
+                className={`truncate font-medium ${
+                  destaque ? "text-txt-primary" : "text-txt-muted group-hover:text-txt-normal"
+                }`}
+              >
+                {nome}
+              </span>
+              {m.role === "OWNER" && (
+                <Tooltip label="Dono do servidor">
+                  <Crown size={14} className="shrink-0 text-yellow" aria-label="Dono do servidor" />
+                </Tooltip>
+              )}
+              {m.role === "ADMIN" && (
+                <Tooltip label="Administrador">
+                  <ShieldCheck size={14} className="shrink-0 text-accent" aria-label="Administrador" />
+                </Tooltip>
+              )}
+              {/* h-moderacao: relógio marca quem está de castigo agora */}
+              {isTimedOut(m.timeoutUntil) && (
+                <Tooltip label="De castigo — não pode enviar mensagens">
+                  <Timer size={14} className="shrink-0 text-red" aria-label="De castigo" />
+                </Tooltip>
+              )}
             </span>
-            {m.role === "OWNER" && (
-              <Tooltip label="Dono do servidor">
-                <Crown size={14} className="shrink-0 text-yellow" aria-label="Dono do servidor" />
-              </Tooltip>
-            )}
-            {m.role === "ADMIN" && (
-              <Tooltip label="Administrador">
-                <ShieldCheck size={14} className="shrink-0 text-accent" aria-label="Administrador" />
-              </Tooltip>
-            )}
-            {/* h-moderacao: relógio marca quem está de castigo agora */}
-            {isTimedOut(m.timeoutUntil) && (
-              <Tooltip label="De castigo — não pode enviar mensagens">
-                <Timer size={14} className="shrink-0 text-red" aria-label="De castigo" />
-              </Tooltip>
+            {emVoz.has(m.user.id) && (
+              <span className="flex items-center gap-1 text-xs leading-4 text-txt-muted">
+                <Volume2 size={12} className="shrink-0 text-green" aria-hidden="true" />
+                Em voz
+              </span>
             )}
           </span>
         </button>
