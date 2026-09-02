@@ -11,6 +11,17 @@ body {
   height: 100%;
 }
 
+/*
+ * f-desktop: a barra de título do app de desktop é `position: fixed` e a
+ * `BarraDeTitulo` escreve a altura dela nesta variável ao montar. O corpo
+ * desconta o espaço por padding (border-box), então o `h-full` do shell passa
+ * a medir a janela menos a barra. No navegador a variável não existe e o
+ * padding é zero.
+ */
+body {
+  padding-top: var(--barra-de-titulo, 0px);
+}
+
 body {
   margin: 0;
   /* mesmos valores de `chat` e `txt-normal` do tailwind.config.ts (ADR-0004) */
