@@ -49,7 +49,12 @@ function rotuloDoCanal(c: Pick<InboxUnreadChannel, "channelName" | "channelType"
   return `#${c.channelName ?? "canal"}`;
 }
 
-export default function InboxPopover() {
+export default function InboxPopover({
+  tamanhoDoIcone = 20,
+}: {
+  /** o ícone é de 20px no cabeçalho e de 16px na barra de título do desktop. */
+  tamanhoDoIcone?: number;
+} = {}) {
   const [aba, setAba] = useState<Aba>("paraVoce");
   /** "este servidor" filtra os não-lidos pelo servidor aberto. */
   const [soEsteServidor, setSoEsteServidor] = useState(false);
@@ -99,7 +104,7 @@ export default function InboxPopover() {
     <HeaderPopover
       label="Caixa de entrada"
       title="Caixa de Entrada"
-      icon={<Inbox size={20} />}
+      icon={<Inbox size={tamanhoDoIcone} />}
       largura={440}
       onOpen={() => void load()}
       tituloControle={() => (

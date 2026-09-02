@@ -12,7 +12,7 @@ import ChannelSidebar from "@/components/layout/ChannelSidebar";
 import DMList from "@/components/layout/DMList";
 import GuildRail from "@/components/layout/GuildRail";
 import UserFooter from "@/components/layout/UserFooter";
-import AvisoDeAtualizacao from "@/components/desktop/AvisoDeAtualizacao";
+import BarraDeTitulo from "@/components/desktop/BarraDeTitulo";
 import ModalHost from "@/components/modals/ModalHost";
 import ContextMenuHost from "@/components/ui/ContextMenu";
 import ProfilePopoverHost from "@/components/ui/ProfilePopover";
@@ -152,8 +152,9 @@ export default function AppPage() {
       <ContextMenuHost />
       <ProfilePopoverHost />
       <Toasts />
-      {/* f-desktop: só aparece dentro do Tauri, e volta a cada abertura */}
-      <AvisoDeAtualizacao />
+      {/* f-desktop: só existe dentro do Tauri; desconta a própria altura no
+          <html> (ver globals.css) e traz o aviso de atualização */}
+      <BarraDeTitulo />
     </div>
   );
 }
