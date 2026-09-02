@@ -9,9 +9,9 @@
 //! escolher a fonte.
 //!
 //! Este módulo é a metade "o que existe" (`fontes`). A metade "capture isto"
-//! é `captura`, com os dois backends sem borda amarela; a que publica o que
-//! foi capturado na sala do LiveKit vem em seguida, e as três juntas é que
-//! substituem o `getDisplayMedia` no app de desktop.
+//! é `captura`, com os dois backends sem borda amarela; `transmissao` publica
+//! o que foi capturado na sala do LiveKit, e as três juntas é que substituem
+//! o `getDisplayMedia` no app de desktop.
 //!
 //! Fora do Windows a lista sai vazia e `capacidades_de_tela` responde
 //! `nativo: false` de propósito: a web trata isso como "sem backend nativo" e
@@ -26,6 +26,8 @@ mod captura;
 mod fontes;
 #[cfg(windows)]
 mod icone;
+#[cfg(windows)]
+mod transmissao;
 
 /// Uma janela ou um monitor que o usuário pode transmitir.
 #[derive(Debug, Clone, Serialize)]
@@ -171,4 +173,57 @@ fn miniaturas(ids: &[String]) -> Vec<Option<String>> {
 #[cfg(not(windows))]
 fn miniaturas(ids: &[String]) -> Vec<Option<String>> {
     vec![None; ids.len()]
+}
+
+/// A transmissão em curso, gerenciada pelo Tauri (`app.manage`). Fora do
+/// Windows é um marcador vazio: os comandos respondem que não há captura
+/// nativa e a web fica no `getDisplayMedia`.
+#[cfg(windows)]
+pub use transmissao::Transmissao;
+
+#[cfg(not(windows))]
+#[derive(Default)]
+pub struct Transmissao;
+
+#[cfg(not(windows))]
+impl Transmissao {
+    pub fn encerrar(&self) {}
+}
+
+/// Começa a transmitir a fonte `pedido.fonteId` na sala do LiveKit como o
+/// participante do token (`<userId>#tela`). Trocar de fonte é chamar de novo.
+/// Quando a transmissão acaba sozinha (janela fechada, sala caída), a web
+/// recebe o evento `tela:encerrada` com o motivo.
+#[cfg(windows)]
+#[tauri::command]
+pub async fn iniciar_tela(
+    app: tauri::AppHandle,
+    estado: tauri::State<'_, Transmissao>,
+    pedido: transmissao::Pedido,
+) -> Result<(), String> {
+    transmissao::iniciar(app, &estado, pedido).await
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+pub async fn iniciar_tela(
+    _app: tauri::AppHandle,
+    _estado: tauri::State<'_, Transmissao>,
+    _pedido: serde_json::Value,
+) -> Result<(), String> {
+    Err("Captura de tela nativa só existe no Windows".to_string())
+}
+
+/// Para a transmissão em curso (se houver) e tira o `#tela` da sala.
+#[cfg(windows)]
+#[tauri::command]
+pub async fn parar_tela(estado: tauri::State<'_, Transmissao>) -> Result<(), String> {
+    transmissao::parar(&estado).await;
+    Ok(())
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+pub async fn parar_tela(_estado: tauri::State<'_, Transmissao>) -> Result<(), String> {
+    Ok(())
 }

@@ -44,6 +44,14 @@ windows = { version = "0.62", features = [
 # que é o que tira a borda amarela no Windows 11) e DXGI Desktop Duplication
 # (o caminho sem borda no Windows 10). Ver `src/tela/captura/mod.rs`.
 windows-capture = "2.0.1"
+# Publica a captura na sala como o participante `<userId>#tela`, direto deste
+# processo. Traz o libwebrtc pré-compilado (`webrtc-sys` baixa no build): o
+# instalador cresce dezenas de MB, e é o preço de não passar os quadros pelo
+# webview. `native-tls` porque o sinal é `wss://` e o SDK não liga TLS sozinho.
+livekit = { version = "0.8", features = ["native-tls"] }
+# Só pelo tipo do receptor de eventos da sala (`mpsc::UnboundedReceiver`); o
+# runtime é o do Tauri.
+tokio = { version = "1", features = ["sync"] }
 # `default-features = false`: o `image` completo traz uma dúzia de decodificadores
 # (webp, tiff, avif…) para duas tarefas que só escrevem: PNG de 32×32 (ícone)
 # e JPEG de 480 px (miniatura da grade).

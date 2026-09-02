@@ -6,7 +6,7 @@ mod tela;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, WindowEvent,
+    Manager, RunEvent, WindowEvent,
 };
 
 fn main() {
@@ -53,12 +53,16 @@ fn main() {
         // `relaunch()` depois de instalar; é o que fecha o ciclo.
         .plugin(tauri_plugin_process::init())
         // Compartilhamento de tela nativo: o que dá para capturar aqui, as
-        // fontes e as miniaturas da grade. A web só chama isto quando está
-        // dentro do app; no navegador ela continua no `getDisplayMedia`.
+        // fontes, as miniaturas da grade e a transmissão em si. A web só chama
+        // isto quando está dentro do app; no navegador ela continua no
+        // `getDisplayMedia`.
+        .manage(tela::Transmissao::default())
         .invoke_handler(tauri::generate_handler![
             tela::capacidades_de_tela,
             tela::fontes_de_tela,
             tela::miniaturas_de_tela,
+            tela::iniciar_tela,
+            tela::parar_tela,
         ])
         .setup(|app| {
             // --- System tray (bandeja) ---------------------------------------
@@ -111,8 +115,16 @@ fn main() {
                 api.prevent_close();
             }
         })
-        .run(tauri::generate_context!())
-        .expect("erro ao iniciar o Streamz");
+        .build(tauri::generate_context!())
+        .expect("erro ao iniciar o Streamz")
+        // Sair pela bandeja no meio de uma transmissão: tirar o `#tela` da
+        // sala antes de o processo morrer, em vez de deixar o LiveKit
+        // descobrir pelo timeout e a tela "congelar" para os outros.
+        .run(|app, event| {
+            if let RunEvent::Exit = event {
+                app.state::<tela::Transmissao>().encerrar();
+            }
+        });
 }
 
 /// Mostra e foca a janela principal (usada pelo menu e pelo clique no ícone).
