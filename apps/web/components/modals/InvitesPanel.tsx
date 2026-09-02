@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { Copy, Trash2 } from "@/components/ui/icones";
-import type { InviteDetail } from "@streamz/shared";
+import { displayNameOf, type InviteDetail } from "@streamz/shared";
+import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";
 import { horaCompleta } from "@/lib/format";
@@ -10,7 +11,8 @@ import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
 
 /**
- * Convites do servidor: lista, cópia e revogação.
+ * Convites do servidor: tabela (criado por, código, usos, expira em), cópia e
+ * revogação.
  *
  * Vive separado do modal porque é a mesma tela em dois lugares — o modal
  * `InvitesModal` (atalho do menu do servidor) e a aba "Convites" das
@@ -19,6 +21,17 @@ import { ui } from "@/stores/ui";
 export default function InvitesPanel({ guildId }: { guildId: string }) {
   const [invites, setInvites] = useState<InviteDetail[] | null>(null);
   const [busy, setBusy] = useState(false);
+  // o relógio da coluna "Expira em"; um tique por segundo só enquanto houver
+  // convite com prazo, senão o estado nem existe
+  const [agora, setAgora] = useState(() => Date.now());
+  const temPrazo = invites?.some((i) => i.expiresAt) ?? false;
+
+  useEffect(() => {
+    if (!temPrazo) return;
+    setAgora(Date.now());
+    const id = window.setInterval(() => setAgora(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [temPrazo]);
 
   useEffect(() => {
     let vivo = true;
@@ -58,55 +71,155 @@ export default function InvitesPanel({ guildId }: { guildId: string }) {
 
   return (
     <div>
-      <p className="mb-3 text-sm text-txt-muted">
-        Quem tiver um destes códigos pode entrar no servidor.
-      </p>
-      <div className="max-h-72 overflow-y-auto rounded bg-rail/50">
-        {invites === null ? (
-          <p className="px-3 py-3 text-sm text-txt-muted">Carregando…</p>
-        ) : invites.length === 0 ? (
-          <p className="px-3 py-3 text-sm text-txt-muted">Nenhum convite ativo.</p>
-        ) : (
-          invites.map((i) => (
-            <div key={i.code} className="flex items-center gap-3 px-3 py-2 text-sm hover:bg-hov">
-              <code className="font-mono text-txt-primary">{i.code}</code>
-              <span className="min-w-0 flex-1 truncate text-xs text-txt-muted">
-                {i.uses}
-                {i.maxUses ? `/${i.maxUses}` : ""} usos
-                {i.expiresAt ? ` · expira ${horaCompleta(i.expiresAt)}` : " · sem expiração"}
-              </span>
-              <Tooltip label="Copiar código">
-                <button
-                  type="button"
-                  onClick={() => void navigator.clipboard?.writeText(i.code)}
-                  aria-label={`Copiar ${i.code}`}
-                  className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-txt-primary"
-                >
-                  <Copy size={16} />
-                </button>
-              </Tooltip>
-              <Tooltip label="Revogar">
-                <button
-                  type="button"
-                  onClick={() => void revoke(i.code)}
-                  aria-label={`Revogar ${i.code}`}
-                  className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </Tooltip>
-            </div>
-          ))
-        )}
+      {/* Rótulo e botão na mesma linha, como no print: o botão tem 38 de
+          altura e raio 8. "Pausar convites" é produto e não existe aqui. */}
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <h3 className="text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
+          Links de convite ativos
+        </h3>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void create()}
+          className="h-[38px] shrink-0 rounded-lg bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
+        >
+          {busy ? "Criando…" : "Criar link de convite"}
+        </button>
       </div>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => void create()}
-        className="mt-4 h-[38px] rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
-      >
-        {busy ? "Criando…" : "Criar convite"}
-      </button>
+
+      {/*
+        A tabela do Discord, medida no print (660 de largura): colunas em
+        0 / 203 / 366 / 437 / 558 — aqui como proporção, para caber também no
+        diálogo de 480. Cabeçalho de 32 sem linha; linhas de 61 mais 1 de
+        divisória. Sem a coluna "Cargos": convite não carrega cargo aqui. As
+        ações (copiar, revogar) ocupam a última coluna e aparecem no hover.
+      */}
+      <table className="w-full table-fixed border-collapse text-sm">
+        <colgroup>
+          <col className="w-[31%]" />
+          <col className="w-[25%]" />
+          <col className="w-[11%]" />
+          <col className="w-[18%]" />
+          <col />
+        </colgroup>
+        <thead>
+          <tr className="h-8 text-left text-base font-semibold text-txt-primary">
+            <th scope="col" className="pr-2 font-semibold">
+              Criado por
+            </th>
+            <th scope="col" className="pr-2 font-semibold">
+              Código do convite
+            </th>
+            <th scope="col" className="pr-2 font-semibold">
+              Usos
+            </th>
+            <th scope="col" className="pr-2 font-semibold">
+              Expira em
+            </th>
+            <th scope="col">
+              <span className="sr-only">Ações</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {invites === null ? (
+            <tr className="h-[62px] border-b border-border">
+              <td colSpan={5} className="text-txt-muted">
+                Carregando…
+              </td>
+            </tr>
+          ) : invites.length === 0 ? (
+            <tr className="h-[62px] border-b border-border">
+              <td colSpan={5} className="text-txt-muted">
+                Nenhum convite ativo.
+              </td>
+            </tr>
+          ) : (
+            invites.map((i) => (
+              <tr key={i.code} className="group h-[62px] border-b border-border transition hover:bg-hov">
+                <td className="pr-2">
+                  <span className="flex items-center gap-3">
+                    {i.creator ? (
+                      <Avatar user={i.creator} size="sm" surface="border-chat" />
+                    ) : (
+                      <span aria-hidden="true" className="h-6 w-6 shrink-0 rounded-full bg-panel" />
+                    )}
+                    <span className="min-w-0">
+                      <span className="block truncate text-base text-txt-primary">
+                        {i.creator ? displayNameOf(i.creator) : "Conta apagada"}
+                      </span>
+                      <span className="block truncate text-xs text-txt-muted">
+                        {i.channelName ? `#${i.channelName}` : "—"}
+                      </span>
+                    </span>
+                  </span>
+                </td>
+                <td className="pr-2">
+                  <code className="font-mono text-txt-primary">{i.code}</code>
+                </td>
+                <td className="pr-2 text-txt-primary">
+                  {i.uses}
+                  {i.maxUses ? `/${i.maxUses}` : ""}
+                </td>
+                <td className="pr-2 text-txt-primary">
+                  {i.expiresAt ? (
+                    <Contagem ate={i.expiresAt} agora={agora} />
+                  ) : (
+                    <span aria-label="Nunca expira">∞</span>
+                  )}
+                </td>
+                <td>
+                  <span className="flex items-center justify-end gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
+                    <Tooltip label="Copiar código">
+                      <button
+                        type="button"
+                        onClick={() => void navigator.clipboard?.writeText(i.code)}
+                        aria-label={`Copiar ${i.code}`}
+                        className="grid h-8 w-8 place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong hover:text-txt-primary"
+                      >
+                        <Copy size={16} />
+                      </button>
+                    </Tooltip>
+                    <Tooltip label="Revogar">
+                      <button
+                        type="button"
+                        onClick={() => void revoke(i.code)}
+                        aria-label={`Revogar ${i.code}`}
+                        className="grid h-8 w-8 place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong hover:text-red"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </Tooltip>
+                  </span>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
     </div>
+  );
+}
+
+/** Dois dígitos, como o relógio do Discord. */
+function dd(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/**
+ * "03:10:45:02" — dias:horas:minutos:segundos até expirar, como na coluna
+ * "Expira em" do Discord. Um convite vencido mostra zeros até a lista
+ * recarregar; a API não o devolve na próxima leitura.
+ */
+function Contagem({ ate, agora }: { ate: string; agora: number }) {
+  const restante = Math.max(0, Math.floor((new Date(ate).getTime() - agora) / 1000));
+  const dias = Math.floor(restante / 86_400);
+  const horas = Math.floor((restante % 86_400) / 3600);
+  const minutos = Math.floor((restante % 3600) / 60);
+  const segundos = restante % 60;
+  return (
+    <time dateTime={ate} title={horaCompleta(ate)} className="font-mono tabular-nums">
+      {dd(dias)}:{dd(horas)}:{dd(minutos)}:{dd(segundos)}
+    </time>
   );
 }
