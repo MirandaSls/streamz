@@ -28,6 +28,7 @@ import { tocarSom } from "@/lib/ringtone";
 import { supressorDeRuido } from "@/lib/supressor-ruido";
 import { CHAMADA_INICIAL, callReducer, type CallAction, type CallState } from "@/stores/call-machine";
 import { emit, errorMessage } from "@/stores/socket-adapter";
+import { estadosAposReconexao, type Recarga } from "@/stores/voice-reconexao";
 import { chamadaARetomar, esquecerSala, lembrarSala, salaLembrada } from "@/stores/voice-retomada";
 import { decidirSaida, type MotivoDeSaida } from "@/stores/voice-saida";
 import { ui } from "@/stores/ui";
@@ -118,6 +119,11 @@ interface VoiceStoreState {
    * (ver `voice-retomada.ts`). Chamado ao fim de cada carga de estados.
    */
   retomarSeReconectando: () => Promise<void>;
+  /**
+   * Socket voltou: recarrega o servidor ativo **e** a sala em que estou, e só
+   * então troca `states` (ver `voice-reconexao.ts`).
+   */
+  recarregarAposReconexao: (guildAtivo: string | null) => Promise<void>;
   applyState: (evento: VoiceStateEvent) => void;
   /** perfil trocou (`user.updated`): atualiza o retrato dentro dos estados. */
   aplicarPerfil: (user: PublicUser) => void;
@@ -360,6 +366,31 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       } catch {
         // conversa que sumiu ou sem acesso: a faixa de chamada simplesmente não aparece
       }
+    },
+
+    recarregarAposReconexao: async (guildAtivo) => {
+      const { channelId, guildId } = get();
+      const pedidos: Promise<Recarga>[] = [];
+      const doServidor = (id: string) =>
+        api
+          .guildVoiceStates(id)
+          .then((estados): Recarga => ({ escopo: "servidor", guildId: id, estados }))
+          .catch((): Recarga => ({ escopo: "servidor", guildId: id, estados: null }));
+      if (guildAtivo) pedidos.push(doServidor(guildAtivo));
+      // a minha sala: uma conversa tem rota própria; um canal de voz de outro
+      // servidor vem com o servidor dele (o ativo já cobre o próprio)
+      if (channelId && !guildId) {
+        pedidos.push(
+          api
+            .dmVoiceStates(channelId)
+            .then((estados): Recarga => ({ escopo: "sala", channelId, estados }))
+            .catch((): Recarga => ({ escopo: "sala", channelId, estados: null })),
+        );
+      } else if (guildId && guildId !== guildAtivo) {
+        pedidos.push(doServidor(guildId));
+      }
+      const recargas = await Promise.all(pedidos);
+      set((s) => ({ states: estadosAposReconexao(s.states, recargas) }));
     },
 
     retomarSeReconectando: async () => {
