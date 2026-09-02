@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  Amigos,
   Check,
   HelpCircle,
   MessageSquare,
@@ -9,7 +10,6 @@ import {
   UserMinus,
   UserPlus,
   UserX,
-  Users,
   X,
 } from "@/components/ui/icones";
 import { displayNameOf, type PublicUser } from "@streamz/shared";
@@ -211,7 +211,7 @@ export default function FriendsPage() {
     <main className="flex min-w-0 flex-1 flex-col bg-chat">
       <header className="relative z-10 flex h-12 shrink-0 items-center gap-2 px-4 shadow-header">
         <span className="text-txt-muted" aria-hidden="true">
-          <Users size={24} />
+          <Amigos size={24} />
         </span>
         <h1 className="shrink-0 font-semibold text-txt-primary">Amigos</h1>
         <span aria-hidden="true" className="mx-2 h-6 w-px shrink-0 bg-border" />

@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { HeadphoneOff, MicOff } from "@/components/ui/icones";
 import {
-  HeadphoneOff,
   Maximize,
   Maximize2,
-  MicOff,
   Minimize2,
   Play,
   Plus,
