@@ -64,6 +64,8 @@ import { useFriends } from "@/stores/friends";
 import { useEmojis } from "@/stores/emojis";
 import { useGuilds } from "@/stores/guilds";
 import { useMessages } from "@/stores/messages";
+import { goToChannel } from "@/stores/messages-navigate";
+import { somarNaoLidas } from "@/stores/nao-lidas";
 import { usePermissions } from "@/stores/permissions";
 import { usePins } from "@/stores/messages-pins";
 import { useThreads } from "@/stores/messages-threads";
@@ -370,7 +372,7 @@ function onMessageArrived(message: Message, currentUserId?: string) {
   } else {
     const dms = useDMs.getState();
     if (dms.channels.some((d) => d.id === message.channelId)) {
-      dms.bumpUnread(message.channelId, message.createdAt, mention);
+      dms.bumpUnread(message.channelId, message.createdAt, mention, mine);
       if (naTela) void dms.markRead(message.channelId);
     } else if (!mine) {
       // alguém abriu uma conversa comigo agora
@@ -383,14 +385,17 @@ function onMessageArrived(message: Message, currentUserId?: string) {
   atualizarContadorNoIcone();
 }
 
-/** Soma as menções visíveis e escreve no ícone (quando o usuário quer). */
+/**
+ * Escreve no ícone o que o Discord escreve: menções nos servidores + toda
+ * mensagem não lida nas conversas (quando o usuário quer).
+ */
 function atualizarContadorNoIcone() {
   if (!useSettings.getState().badgeCount) {
     void definirContadorNoIcone(0);
     return;
   }
   const servidores = useGuilds.getState().guilds.reduce((total, g) => total + g.mentionCount, 0);
-  const conversas = useDMs.getState().channels.reduce((total, d) => total + d.mentionCount, 0);
+  const conversas = somarNaoLidas(useDMs.getState().channels);
   void definirContadorNoIcone(servidores + conversas);
 }
 
