@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { isTauri } from "@/lib/desktop";
 import {
   Amigos,
   Check,
@@ -70,6 +71,12 @@ function Secao({ label, count }: { label: string; count: number }) {
  * da lista, porque é ela que filtra a lista.
  */
 export default function FriendsPage() {
+  // `isTauri()` só é verdadeiro no cliente: decidir no primeiro render faria o
+  // servidor e o navegador desenharem coisas diferentes e a hidratação reclamar.
+  // Mesmo padrão do `BarraDeTitulo`.
+  const [noDesktop, setNoDesktop] = useState(false);
+  useEffect(() => setNoDesktop(isTauri()), []);
+
   const { friends, incoming, outgoing, blocked, loading, loaded } = useFriends();
   const tab = useFriends((s) => s.tab);
   const setTab = useFriends((s) => s.setTab);
@@ -209,21 +216,29 @@ export default function FriendsPage() {
 
   return (
     <main className="flex min-w-0 flex-1 flex-col bg-chat">
-      <header className="relative z-10 flex h-[49px] shrink-0 items-center gap-2 border-b border-border px-4 shadow-header">
+      {/* sem `shadow-header`: o cabeçalho do Discord tem borda e mais nada. Nós
+          tínhamos a borda **e** 2px de sombra por baixo, o que engrossa a linha
+          e faz a faixa parecer flutuar sobre o conteúdo. */}
+      <header className="relative z-10 flex h-12 shrink-0 items-center gap-[7px] border-b border-border pl-7 pr-5">
         <span className="text-txt-muted" aria-hidden="true">
           <Amigos size={24} />
         </span>
-        <h1 className="shrink-0 font-semibold text-txt-primary">Amigos</h1>
-        <span aria-hidden="true" className="mx-2 h-6 w-px shrink-0 bg-border" />
+        {/* mesmo tamanho das abas e do botão: no Discord todo texto desta faixa
+            mede o mesmo, e só a cor os separa. O nosso título era maior. */}
+        <h1 className="shrink-0 text-base font-semibold text-txt-primary">Amigos</h1>
+        {/* ponto, não traço: no Discord o separador do cabeçalho de Amigos é uma
+            bolinha de 4px centrada na faixa. O traço vertical lia como divisória
+            de seção, que é outra coisa. */}
+        <span aria-hidden="true" className="mx-3 h-1 w-1 shrink-0 rounded-full bg-sel" />
 
-        <nav aria-label="Filtrar amigos" className="flex items-center gap-1">
+        <nav aria-label="Filtrar amigos" className="flex items-center gap-4">
           {abasVisiveis(pendentes, blocked.length).map((a) => (
             <button
               key={a.id}
               type="button"
               aria-pressed={tab === a.id}
               onClick={() => setTab(a.id)}
-              className={`flex h-6 items-center gap-1.5 rounded-[4px] px-2 text-sm font-medium transition ${
+              className={`flex h-8 items-center gap-1.5 rounded-lg px-3 text-base font-medium transition ${
                 tab === a.id ? "bg-sel text-txt-primary" : "text-txt-secondary hover:bg-hov hover:text-txt-primary"
               }`}
             >
@@ -240,7 +255,7 @@ export default function FriendsPage() {
             type="button"
             aria-pressed={tab === "adicionar"}
             onClick={() => setTab("adicionar")}
-            className={`ml-2 h-8 rounded-[4px] px-4 text-sm font-medium transition ${
+            className={`h-8 rounded-lg px-3 text-base font-medium transition ${
               tab === "adicionar"
                 ? "bg-green/20 text-green"
                 : "bg-green text-accent-ink hover:bg-green/80"
@@ -257,19 +272,32 @@ export default function FriendsPage() {
           >
             <UserPlus size={24} />
           </HeaderIcon>
-          <InboxPopover />
-          {/* sem central de ajuda no MVP: melhor o botão assumir isso que sumir */}
-          <HeaderIcon label="Ajuda" disabled>
-            <HelpCircle size={24} />
-          </HeaderIcon>
+          {/*
+            No desktop a caixa de entrada e a ajuda vivem na barra de título
+            (`components/desktop/BarraDeTitulo.tsx`), então repeti-las aqui seria
+            o mesmo botão duas vezes na mesma tela. No navegador não há barra de
+            título, e elas continuam aqui — é o que o Discord web faz.
+
+            Se a barra de título deixar de carregar as duas, isto aqui vira um
+            buraco: as opções somem do desktop sem substituto.
+          */}
+          {!noDesktop && (
+            <>
+              <InboxPopover />
+              {/* sem central de ajuda no MVP: melhor o botão assumir isso que sumir */}
+              <HeaderIcon label="Ajuda" disabled>
+                <HelpCircle size={24} />
+              </HeaderIcon>
+            </>
+          )}
         </div>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto pb-6">
-        {loading && !loaded && <p className="px-[30px] py-6 text-sm text-txt-muted">Carregando…</p>}
+        {loading && !loaded && <p className="px-6 py-6 text-sm text-txt-muted">Carregando…</p>}
 
         {tab !== "adicionar" && (
-          <div className="relative px-[30px] pt-4">
+          <div className="relative px-6 pt-4">
             {/* lupa à esquerda: é onde o print põe, e é onde o olho procura o
                 que a caixa faz antes de começar a digitar */}
             <Search
@@ -283,7 +311,7 @@ export default function FriendsPage() {
               type="search"
               aria-label="Buscar amigos"
               placeholder="Buscar"
-              className="h-10 w-full rounded-[4px] bg-rail pl-10 pr-3 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
+              className="h-10 w-full rounded-lg bg-rail pl-10 pr-3 text-base text-txt-normal outline-none placeholder:text-txt-muted"
             />
           </div>
         )}
