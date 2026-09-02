@@ -10,7 +10,7 @@ import {
   UserPlus,
   Users,
   Volume2,
-} from "lucide-react";
+} from "@/components/ui/icones";
 import Composer from "@/components/chat/Composer";
 // ── h-moderacao ──
 import { RulesNotice, TimeoutNotice } from "@/components/moderation/ComposerNotice";

@@ -1,6 +1,6 @@
 "use client";
 
-import { CornerUpRight, Pin, X } from "lucide-react";
+import { CornerUpRight, Pin, X } from "@/components/ui/icones";
 import HeaderPopover from "@/components/chat/HeaderPopover";
 import MessagePreview, { AcaoDoCartao } from "@/components/chat/MessagePreview";
 import { goToMessage } from "@/stores/messages-navigate";

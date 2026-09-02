@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { BarChart3, Check, Users } from "lucide-react";
+import { BarChart3, Check, Users } from "@/components/ui/icones";
 import { isPollClosed, pollPercent, type Poll } from "@streamz/shared";
 import Tooltip from "@/components/ui/Tooltip";
 import { horaCompleta } from "@/lib/format";

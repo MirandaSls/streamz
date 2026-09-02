@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Copy, Trash2 } from "lucide-react";
+import { Copy, Trash2 } from "@/components/ui/icones";
 import type { InviteDetail } from "@streamz/shared";
 import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";

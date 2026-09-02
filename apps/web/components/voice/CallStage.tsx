@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { AlertTriangle, MessageSquare, Phone, RotateCw, UserPlus } from "lucide-react";
+import { AlertTriangle, MessageSquare, Phone, RotateCw, UserPlus } from "@/components/ui/icones";
 import { displayNameOf, isGroupChannel } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";

@@ -1,6 +1,6 @@
 "use client";
 
-import { AtSign, Bell, BellOff, BellRing, Clock } from "lucide-react";
+import { AtSign, Bell, BellOff, BellRing, Clock } from "@/components/ui/icones";
 import {
   MUTE_PRESETS_MINUTES,
   isMuted,

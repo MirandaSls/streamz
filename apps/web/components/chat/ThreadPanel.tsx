@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Bell, MessageSquare, MoreHorizontal, Users, X } from "lucide-react";
+import { Bell, MessageSquare, MoreHorizontal, Users, X } from "@/components/ui/icones";
 import { displayNameOf, messageLinkPath, type NotificationLevel } from "@streamz/shared";
 import Composer from "@/components/chat/Composer";
 import MessageList from "@/components/chat/MessageList";

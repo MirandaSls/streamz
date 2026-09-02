@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarDays, MessageSquare, MoreHorizontal, UserPlus } from "lucide-react";
+import { CalendarDays, MessageSquare, MoreHorizontal, UserPlus } from "@/components/ui/icones";
 import {
   customStatusOf,
   displayNameOf,

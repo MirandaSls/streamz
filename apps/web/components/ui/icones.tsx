@@ -446,6 +446,19 @@ function doDiscord(viewBox: string, ...caminhos: (string | Caminho)[]) {
 }
 
 /** O quadro em que o material de origem de `svg/` foi desenhado. */
+/**
+ * Um ícone deste vocabulário, quando passado como **valor** em vez de JSX.
+ *
+ * Existe porque dois arquivos tipavam essas listas com o `LucideIcon` do
+ * lucide. Os valores deixaram de vir de lá — agora são componentes do Phosphor
+ * ou da fábrica `doDiscord` —, e a anotação emprestada parou de bater.
+ *
+ * Declarado pelo que quem chama precisa (`size`, `className`), e não pelo que
+ * as implementações aceitam: assim as três origens continuam servindo, e trocar
+ * a origem de um ícone não quebra a lista onde ele aparece.
+ */
+export type Icone = ComponentType<{ size?: number | string; className?: string }>;
+
 const QUADRO = "0 0 100 100";
 
 /**
@@ -822,3 +835,16 @@ export const Vote = doDiscord(
  * a folha de contato — pelo nome, teria entrado errado.
  */
 export { CalendarBlank as CalendarDays, SealCheck as BadgeCheck, Compass };
+const CAMINHO_PHONECALL_1 =
+  "M0 18C1.4803e-15 13.2261 1.89642 8.64773 5.27208 5.27208C8.64773 1.89642 13.2261 2.96059e-15 18 0C19.2 -2.96059e-15 20.3333 0.733333 20.7667 1.83333L27.2 17.3C27.509 18.05 27.5338 18.8869 27.27 19.6539C27.0061 20.421 26.4716 21.0655 25.7667 21.4667L16.6667 26.6667C17.6412 32.5017 20.4137 37.8867 24.5968 42.0699C28.7799 46.253 34.165 49.0254 40 50L43.7333 42.5333C44.0856 41.8256 44.6778 41.2662 45.4044 40.9548C46.131 40.6434 46.9446 40.6003 47.7 40.8333L64.5667 46.0333C65.8333 46.4 66.6667 47.5667 66.6667 48.8667C66.6667 58.6667 58.6667 66.6667 48.8667 66.6667L47.6333 66.6667C21.3 66.6667 0 45.3333 0 19.0333L0 18ZM36.6667 3.33333C36.6667 2.44928 37.0179 1.60143 37.643 0.976311C38.2681 0.351189 39.1159 1.4803e-15 40 0C47.0724 2.96059e-15 53.8552 2.80952 58.8562 7.81049C63.8572 12.8115 66.6667 19.5942 66.6667 26.6667C66.6667 27.5507 66.3155 28.3986 65.6904 29.0237C65.0652 29.6488 64.2174 30 63.3333 30C62.4493 30 61.6014 29.6488 60.9763 29.0237C60.3512 28.3986 60 27.5507 60 26.6667C60 21.3623 57.8929 16.2753 54.1421 12.5245C50.3914 8.7738 45.3043 6.66667 40 6.66667C39.1159 6.66667 38.2681 6.31548 37.643 5.69036C37.0179 5.06523 36.6667 4.21739 36.6667 3.33333Z";
+const CAMINHO_PHONECALL_2 =
+  "M0 3.33333C0 2.44928 0.35119 1.60143 0.976311 0.976311C1.60143 0.35119 2.44928 -2.96059e-15 3.33333 0C6.86955 0 10.2609 1.40476 12.7614 3.90524C15.2619 6.40573 16.6667 9.79711 16.6667 13.3333C16.6667 14.2174 16.3155 15.0652 15.6904 15.6904C15.0652 16.3155 14.2174 16.6667 13.3333 16.6667C12.4493 16.6667 11.6014 16.3155 10.9763 15.6904C10.3512 15.0652 10 14.2174 10 13.3333C10 11.5652 9.29762 9.86953 8.04738 8.61929C6.79713 7.36905 5.10144 6.66667 3.33333 6.66667C2.44928 6.66667 1.60143 6.31548 0.976311 5.69036C0.35119 5.06523 0 4.21739 0 3.33333Z";
+
+/**
+ * Telefone com ondas — "chamada", distinto do `Phone` de atender.
+ *
+ * O acervo tem dois: o `call-2` chapado, que virou o `Phone`, e este. Ter os
+ * dois separados é o que permite a aba de voz das configurações não usar o
+ * mesmo sinal do botão de atender.
+ */
+export const PhoneCall = doDiscord(FIGMA, CAMINHO_PHONECALL_1, CAMINHO_PHONECALL_2);

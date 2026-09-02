@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Settings } from "@/components/ui/icones";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Settings } from "@/components/ui/icones";
 import { SliderDeVolume } from "@/components/voice/pecas-de-voz";
 import { ui } from "@/stores/ui";
 import { useVoice, type NivelDeRuido } from "@/stores/voice";

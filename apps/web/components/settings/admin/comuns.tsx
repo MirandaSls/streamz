@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Hash, Lock, MessagesSquare, Users, Volume2 } from "lucide-react";
+import { Hash, Lock, MessagesSquare, Users, Volume2 } from "@/components/ui/icones";
 import { displayNameOf, type AdminCallLocation, type ChannelType } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 

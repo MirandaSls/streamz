@@ -28,7 +28,7 @@ import {
   Upload,
   Vote,
   X,
-} from "lucide-react";
+} from "@/components/ui/icones";
 import {
   MAX_ATTACHMENTS_PER_MESSAGE,
   MAX_ATTACHMENT_SIZE,

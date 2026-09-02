@@ -1,7 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Archive, ArchiveRestore, ChevronDown, MessagesSquare, Pencil, Plus } from "lucide-react";
+import {
+  Archive,
+  ArchiveRestore,
+  ChevronDown,
+  MessagesSquare,
+  Pencil,
+  Plus,
+} from "@/components/ui/icones";
 import { displayNameOf, type ThreadView } from "@streamz/shared";
 import HeaderPopover from "@/components/chat/HeaderPopover";
 import Avatar from "@/components/ui/Avatar";

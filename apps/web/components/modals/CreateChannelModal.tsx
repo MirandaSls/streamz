@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Hash, Lock, Megaphone, Volume2 } from "lucide-react";
+import { Hash, Lock, Megaphone, Volume2 } from "@/components/ui/icones";
 import type { GuildChannelType } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { ChannelAccessList } from "@/components/modals/ChannelAccessModal";

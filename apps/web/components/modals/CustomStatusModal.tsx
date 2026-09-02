@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { SmilePlus, X } from "lucide-react";
+import { SmilePlus, X } from "@/components/ui/icones";
 import {
   CUSTOM_STATUS_DURATIONS,
   MAX_CUSTOM_STATUS,

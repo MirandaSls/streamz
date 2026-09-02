@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { Check, ChevronDown, ChevronRight, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, X } from "@/components/ui/icones";
 
 /**
  * Vocabulário de formulário do app — um só, para configurações e modais.

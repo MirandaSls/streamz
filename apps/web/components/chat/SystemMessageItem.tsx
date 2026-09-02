@@ -10,7 +10,7 @@ import {
   Pin,
   ShieldAlert,
   SmilePlus,
-} from "lucide-react";
+} from "@/components/ui/icones";
 import {
   displayNameOf,
   parseCustomEmoji,

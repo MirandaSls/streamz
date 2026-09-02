@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Keyboard, RotateCcw } from "lucide-react";
+import { Keyboard, RotateCcw } from "@/components/ui/icones";
 import { atalhosEfetivos, conflitoDe, useAtalhos } from "@/stores/atalhos";
 import { useT, type ChaveDeTexto } from "@/lib/i18n";
 import { formatShortcut, shortcutFromEvent, type ShortcutAction } from "@/lib/shortcuts";

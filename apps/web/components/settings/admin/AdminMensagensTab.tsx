@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, Search } from "lucide-react";
+import { ArrowLeft, Search } from "@/components/ui/icones";
 import type { AdminChannelView, AdminChannelsPage, Message } from "@streamz/shared";
 import MessagePreview from "@/components/chat/MessagePreview";
 import { ESTILO_CAMPO } from "@/components/settings/campos";

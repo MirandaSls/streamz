@@ -19,7 +19,7 @@ import {
   Smile,
   SmilePlus,
   Trash2,
-} from "lucide-react";
+} from "@/components/ui/icones";
 import type { Message, PublicUser } from "@streamz/shared";
 import {
   WS_EVENTS,

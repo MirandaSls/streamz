@@ -12,7 +12,7 @@ import {
   TimerOff,
   User,
   UserX,
-} from "lucide-react";
+} from "@/components/ui/icones";
 import {
   Permission,
   TIMEOUT_PRESETS,

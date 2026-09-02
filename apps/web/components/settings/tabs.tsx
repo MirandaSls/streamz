@@ -16,7 +16,7 @@ import {
   UserCircle,
   Users,
   Video,
-} from "lucide-react";
+} from "@/components/ui/icones";
 import type { ComponentType, ReactNode } from "react";
 import AcessibilidadeTab from "@/components/settings/AcessibilidadeTab";
 import AdminChamadasTab from "@/components/settings/admin/AdminChamadasTab";

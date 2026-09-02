@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type MouseEvent } from "react";
-import { AtSign, Crown, MessageSquare, User, UserMinus, UserPlus, UserX } from "lucide-react";
+import { AtSign, Crown, MessageSquare, User, UserMinus, UserPlus, UserX } from "@/components/ui/icones";
 import { displayNameOf, isGroupChannel, type DMChannelView, type PublicUser } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";

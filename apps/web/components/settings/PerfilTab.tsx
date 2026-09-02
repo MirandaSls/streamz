@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Camera, Image as ImageIcon, Trash2 } from "lucide-react";
+import { Camera, Image as ImageIcon, Trash2 } from "@/components/ui/icones";
 import {
   MAX_ABOUT_ME,
   MAX_PRONOUNS,

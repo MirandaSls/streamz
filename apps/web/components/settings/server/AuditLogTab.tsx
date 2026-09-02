@@ -11,7 +11,7 @@ import {
   Timer,
   Trash2,
   UserX,
-} from "lucide-react";
+} from "@/components/ui/icones";
 import {
   AUDIT_ACTIONS,
   AUDIT_ACTION_LABELS,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MonitorUp, MonitorX, Radio } from "lucide-react";
+import { MonitorUp, MonitorX, Radio } from "@/components/ui/icones";
 import Tooltip from "@/components/ui/Tooltip";
 import ScreenSharePicker from "@/components/voice/ScreenSharePicker";
 import { BotaoDeChamada } from "@/components/voice/controles-de-chamada";

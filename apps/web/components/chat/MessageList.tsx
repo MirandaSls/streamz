@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ReactNode, type UIEvent } from "react";
-import { ArrowDown } from "lucide-react";
+import { ArrowDown } from "@/components/ui/icones";
 import { isSystemMessage, type Message } from "@streamz/shared";
 import MessageItem from "@/components/MessageItem";
 import BlockedMessages from "@/components/chat/BlockedMessages";

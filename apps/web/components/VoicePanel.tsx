@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { AlertTriangle, MessageSquare, RotateCw, UserPlus, Volume2 } from "lucide-react";
+import { AlertTriangle, MessageSquare, RotateCw, UserPlus, Volume2 } from "@/components/ui/icones";
 import {
   displayNameOf,
   type Channel,

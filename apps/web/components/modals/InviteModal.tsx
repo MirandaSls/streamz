@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, Hash } from "lucide-react";
+import { Check, Hash } from "@/components/ui/icones";
 import {
   INVITE_EXPIRY_OPTIONS,
   INVITE_USES_OPTIONS,

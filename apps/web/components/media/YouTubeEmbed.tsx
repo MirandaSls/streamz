@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Play } from "lucide-react";
+import { Play } from "@/components/ui/icones";
 
 /**
  * Player do YouTube dentro da mensagem, como o Discord.

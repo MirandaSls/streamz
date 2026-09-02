@@ -1,6 +1,6 @@
 "use client";
 
-import { Paintbrush } from "lucide-react";
+import { Paintbrush } from "@/components/ui/icones";
 import { useIrParaAba } from "@/components/settings/navegacao";
 import PreviaDeMensagens from "@/components/settings/PreviaDeMensagens";
 import {

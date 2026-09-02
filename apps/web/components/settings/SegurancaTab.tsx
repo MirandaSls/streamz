@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Copy, Download, ShieldCheck, ShieldOff } from "lucide-react";
+import { Copy, Download, ShieldCheck, ShieldOff } from "@/components/ui/icones";
 import type { MfaSetup, MinhaConta } from "@streamz/shared";
 import { RadioCards, Section } from "@/components/ui/controls";
 import { CampoDeTexto, Erro } from "@/components/settings/campos";

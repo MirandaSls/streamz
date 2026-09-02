@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw } from "@/components/ui/icones";
 import { Section } from "@/components/ui/controls";
 import { api } from "@/lib/api";
 import { Estado, LocalDaChamada, Numero, duracao, usePainel } from "./comuns";

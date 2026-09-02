@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, CornerUpRight, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, CornerUpRight, Search, X } from "@/components/ui/icones";
 import { parseSearchQuery } from "@streamz/shared";
 import type { Message } from "@streamz/shared";
 import MessagePreview, { AcaoDoCartao } from "@/components/chat/MessagePreview";

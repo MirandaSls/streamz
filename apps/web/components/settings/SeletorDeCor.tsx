@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Pipette } from "lucide-react";
+import { Check, Pipette } from "@/components/ui/icones";
 
 /**
  * Seletor de cor das configurações — paleta de amostras, hexadecimal digitável

@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Mic } from "@/components/ui/icones";
-import { Check, ChevronDown, Keyboard, Video } from "lucide-react";
+import { Check, ChevronDown, Keyboard, Mic, Video } from "@/components/ui/icones";
 import { pttRotulo } from "@/stores/ptt-core";
 import {
   BarraDeNivel,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MessageSquarePlus, Search, ShieldCheck } from "lucide-react";
+import { MessageSquarePlus, Search, ShieldCheck } from "@/components/ui/icones";
 import { MAX_MESSAGE_LENGTH, type AdminUserView, type AdminUsersPage } from "@streamz/shared";
 import Avatar, { STATUS_LABEL } from "@/components/ui/Avatar";
 import { ESTILO_AREA, ESTILO_CAMPO } from "@/components/settings/campos";

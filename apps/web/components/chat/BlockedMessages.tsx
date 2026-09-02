@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight } from "@/components/ui/icones";
 import { isSystemMessage, type Message } from "@streamz/shared";
 import MessageItem from "@/components/MessageItem";
 import { continuaAnterior } from "@/lib/format";

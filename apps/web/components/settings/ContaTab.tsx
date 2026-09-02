@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { BadgeCheck, Camera, TriangleAlert } from "lucide-react";
+import { BadgeCheck, Camera, TriangleAlert } from "@/components/ui/icones";
 import { MAX_DISPLAY_NAME, displayNameOf } from "@streamz/shared";
 import type { MinhaConta } from "@streamz/shared";
 import { Section } from "@/components/ui/controls";

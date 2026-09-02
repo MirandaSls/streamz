@@ -1,6 +1,6 @@
 "use client";
 
-import { AtSign, Phone, User, Volume2, VolumeX } from "lucide-react";
+import { AtSign, Phone, User, Volume2, VolumeX } from "@/components/ui/icones";
 import { displayNameOf, type PublicUser } from "@streamz/shared";
 import { MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
 import { mencionar as entregarMencao } from "@/lib/mencoes";

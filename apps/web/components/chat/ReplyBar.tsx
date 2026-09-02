@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { X } from "lucide-react";
+import { X } from "@/components/ui/icones";
 import { displayNameOf } from "@streamz/shared";
 import { useMessages } from "@/stores/messages";
 import { useAuthorColor } from "@/stores/permissions";

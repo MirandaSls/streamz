@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Clock, Settings2, Star } from "lucide-react";
+import { Clock, Settings2, Star } from "@/components/ui/icones";
 import type { Sticker } from "@streamz/shared";
 import { useAuth } from "@/stores/auth";
 import { useEmojis } from "@/stores/emojis";

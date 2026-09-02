@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Hash, Lock, Megaphone, Shield, Trash2, Volume2 } from "lucide-react";
+import { Hash, Lock, Megaphone, Shield, Trash2, Volume2 } from "@/components/ui/icones";
 import { MAX_CHANNEL_TOPIC, SLOWMODE_PRESETS, slowmodeLabel, type Channel } from "@streamz/shared";
 import { ChannelAccessList } from "@/components/modals/ChannelAccessModal";
 import TelaCheia, { ItemPerigo, type ItemDeMenu } from "@/components/ui/TelaCheia";
