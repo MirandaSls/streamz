@@ -18,6 +18,7 @@ import { useT } from "@/lib/i18n";
 import { submenuSilenciar } from "@/lib/notification-menu";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useFriends, usePendingCount } from "@/stores/friends";
+import { rotuloDoContador } from "@/stores/nao-lidas";
 import { useNotifications } from "@/stores/notifications";
 import { resolveStatus, usePresence } from "@/stores/presence";
 import { useSettings } from "@/stores/settings";
@@ -281,12 +282,14 @@ export default function DMList() {
                   </span>
                 </Tooltip>
               )}
-              {dm.mentionCount > 0 && !active && (
+              {/* em conversa toda mensagem não lida conta, como no Discord —
+                  o número é de mensagens, não só de menções */}
+              {dm.unreadCount > 0 && !active && (
                 <span
-                  aria-label={`${dm.mentionCount} não lidas`}
+                  aria-label={`${dm.unreadCount} não lidas`}
                   className="grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[11px] font-bold leading-none text-white"
                 >
-                  {dm.mentionCount}
+                  {rotuloDoContador(dm.unreadCount)}
                 </span>
               )}
               <Tooltip label={group ? "Sair do grupo" : "Fechar conversa"}>

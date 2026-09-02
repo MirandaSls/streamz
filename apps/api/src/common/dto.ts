@@ -49,12 +49,15 @@ export interface ChannelReadSummary {
   lastMessageAt: Date | null;
   lastReadAt: Date | null;
   mentionCount: number;
+  /** mensagens de outros depois de `lastReadAt` (o badge numérico das DMs). */
+  unreadCount: number;
 }
 
 export const EMPTY_SUMMARY: ChannelReadSummary = {
   lastMessageAt: null,
   lastReadAt: null,
   mentionCount: 0,
+  unreadCount: 0,
 };
 
 export function toGuildDTO(

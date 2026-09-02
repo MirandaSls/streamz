@@ -17,8 +17,10 @@
  *     });
  *
  * Regra de bom senso do chamador (não é feita aqui): não notificar mensagem
- * própria, e notificar o canal ativo só quando a janela não está visível
- * (`document.visibilityState !== "visible"`).
+ * própria, e notificar o canal ativo só quando a janela **não tem foco**
+ * (`janelaTemFoco()`, abaixo). Visibilidade não serve de gate no desktop: uma
+ * janela aberta atrás de outro app continua `visible` para o DOM, e é
+ * justamente aí que o Discord avisa.
  *
  * Comportamento:
  *   - Dentro do Tauri: notificação nativa via `@tauri-apps/plugin-notification`;
@@ -28,7 +30,11 @@
  *     best-effort e não pode quebrar o fluxo de mensagens.
  *
  * A permissão é pedida **uma vez** por sessão (o resultado fica memoizado); se o
- * usuário negar, as chamadas seguintes saem em silêncio sem novo prompt.
+ * usuário negar, as chamadas seguintes saem em silêncio sem novo prompt. No
+ * desktop ela é negociada no boot (`prepararNotificacoes`), e não na primeira
+ * mensagem: no Windows o plugin só entrega o toast depois de
+ * `isPermissionGranted`/`requestPermission`, e deixar isso para a hora da
+ * mensagem é deixar a primeira notificação da sessão para trás.
  *
  * Os módulos do Tauri entram por `import()` dinâmico: fora do app desktop eles
  * nunca são carregados, e o bundle do browser não paga por eles.
@@ -78,6 +84,86 @@ export async function notify(
     await notificarViaBrowser(options);
   } catch {
     // Best-effort: qualquer falha (permissão, plugin ausente, SSR) é silenciada.
+  }
+}
+
+// ── Foco da janela ─────────────────────────────────────────────────────────
+
+/**
+ * Foco da janela do desktop, mantido pelo `onFocusChanged` do Tauri. `null`
+ * enquanto ninguém observou (fora do app, ou antes de `observarFoco`): aí vale
+ * o `document.hasFocus()`, que no WebView2 também acompanha a janela.
+ */
+let focoDaJanela: boolean | null = null;
+
+/**
+ * A janela está na frente e com foco? É o gate de notificação do Discord: com
+ * foco, só menção e DM avisam; sem foco (outro app na frente, minimizada, na
+ * bandeja), tudo avisa. Sem DOM (SSR) responde `true` — nada a notificar.
+ */
+export function janelaTemFoco(): boolean {
+  if (typeof document === "undefined") return true;
+  if (focoDaJanela !== null) return focoDaJanela;
+  return document.hasFocus();
+}
+
+/**
+ * Avisa quando a janela ganha ou perde foco. No navegador são os eventos
+ * `focus`/`blur` do `window`; no Tauri entra também o `onFocusChanged` da
+ * janela nativa, que é quem sabe quando o usuário clicou em outro app com a
+ * nossa barra de título (região de arrasto) no meio. Os dois podem disparar
+ * para a mesma troca; quem ouve tem que aguentar repetição.
+ */
+export function observarFoco(ouvinte: (foco: boolean) => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const ganhou = () => ouvinte(true);
+  const perdeu = () => ouvinte(false);
+  window.addEventListener("focus", ganhou);
+  window.addEventListener("blur", perdeu);
+  let pararTauri: (() => void) | null = null;
+  let cancelado = false;
+  if (isTauri()) {
+    focoDaJanela = document.hasFocus();
+    void (async () => {
+      try {
+        const { getCurrentWindow } = await import("@tauri-apps/api/window");
+        const parar = await getCurrentWindow().onFocusChanged(({ payload }) => {
+          focoDaJanela = payload;
+          ouvinte(payload);
+        });
+        if (cancelado) parar();
+        else pararTauri = parar;
+      } catch {
+        // sem o evento nativo, fica o `hasFocus()` do DOM
+        focoDaJanela = null;
+      }
+    })();
+  }
+  return () => {
+    cancelado = true;
+    window.removeEventListener("focus", ganhou);
+    window.removeEventListener("blur", perdeu);
+    pararTauri?.();
+    focoDaJanela = null;
+  };
+}
+
+/**
+ * Negocia a permissão e liga o ouvinte de clique no boot do app desktop, para
+ * a primeira notificação da sessão já sair. No navegador não faz nada: pedir
+ * permissão sem gesto do usuário é negado e o resultado ficaria memoizado.
+ */
+export async function prepararNotificacoes(): Promise<void> {
+  if (!isTauri()) return;
+  try {
+    const plugin = await import("@tauri-apps/plugin-notification");
+    const permitido = await garantirPermissao(
+      () => plugin.isPermissionGranted(),
+      async () => (await plugin.requestPermission()) === "granted",
+    );
+    if (permitido) await registrarOuvinteDeClique(plugin);
+  } catch {
+    // best-effort, como o resto: a próxima `notify` tenta de novo
   }
 }
 

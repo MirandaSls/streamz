@@ -28,6 +28,7 @@ import { tocarSom } from "@/lib/ringtone";
 import { supressorDeRuido } from "@/lib/supressor-ruido";
 import { CHAMADA_INICIAL, callReducer, type CallAction, type CallState } from "@/stores/call-machine";
 import { emit, errorMessage } from "@/stores/socket-adapter";
+import { iniciarMedicaoDePing, pararMedicaoDePing } from "@/stores/voice-ping";
 import { estadosAposReconexao, type Recarga } from "@/stores/voice-reconexao";
 import { chamadaARetomar, esquecerSala, lembrarSala, salaLembrada } from "@/stores/voice-retomada";
 import { decidirSaida, type MotivoDeSaida } from "@/stores/voice-saida";
@@ -266,6 +267,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
   /** Desmonta a sala de mídia sem tocar no estado de voz (que é do servidor). */
   function fecharSala() {
     if (!sala) return;
+    pararMedicaoDePing();
     sala.removeAllListeners();
     void sala.disconnect().catch(() => {});
     sala = null;
@@ -949,11 +951,14 @@ async function entrarNaSala(
       // sair de propósito passa por `fecharSala`, que remove os ouvintes antes:
       // se este handler rodou, a sala caiu sozinha
       sala = null;
+      pararMedicaoDePing();
       set({ midiaDisponivel: false, falando: [], status: "error", erro: QUEDA_MIDIA });
       rerender();
     });
 
   await room.connect(creds.url, creds.token);
+  // o ping da barra "Voz conectada" mora numa store própria (não no `tick`)
+  iniciarMedicaoDePing(room);
   const devices = useVoiceDevicesStore.getState();
   if (devices.inputId) await room.switchActiveDevice("audioinput", devices.inputId).catch(() => {});
   if (devices.outputId) await room.switchActiveDevice("audiooutput", devices.outputId).catch(() => {});

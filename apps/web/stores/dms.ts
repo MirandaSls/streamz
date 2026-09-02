@@ -12,6 +12,7 @@ import { ui } from "@/stores/ui";
 import { useChannels } from "@/stores/channels";
 import { useFriends } from "@/stores/friends";
 import { useMessages } from "@/stores/messages";
+import { aoChegarMensagem } from "@/stores/nao-lidas";
 
 /**
  * Conversas diretas: a lista e qual está aberta.
@@ -46,7 +47,11 @@ interface DMsState {
   /** Aplica a conversa atualizada que chegou por `channel.updated`. */
   handleUpdated: (dm: DMChannelView) => void;
   markRead: (channelId: string) => Promise<void>;
-  bumpUnread: (channelId: string, at: string, mention: boolean) => void;
+  /**
+   * Chegou mensagem na conversa: sobe para o topo e, se é de outro, conta
+   * como não lida (e como menção, quando é). `propria` = eu mandei.
+   */
+  bumpUnread: (channelId: string, at: string, mention: boolean, propria: boolean) => void;
   handleDeleted: (channelId: string) => void;
   clear: () => void;
 }
@@ -211,7 +216,20 @@ export const useDMs = create<DMsState>((set, get) => {
     handleUpdated: (dm) =>
       set((s) => ({
         channels: s.channels.some((d) => d.id === dm.id)
-          ? s.channels.map((d) => (d.id === dm.id ? { ...d, ...dm } : d))
+          ? s.channels.map((d) =>
+              d.id === dm.id
+                ? {
+                    ...d,
+                    ...dm,
+                    // a conversa atualizada (evento ou resposta de rename/membro)
+                    // vem sem a visão de leitura; a local é a boa
+                    lastMessageAt: d.lastMessageAt,
+                    lastReadAt: d.lastReadAt,
+                    mentionCount: d.mentionCount,
+                    unreadCount: d.unreadCount,
+                  }
+                : d,
+            )
           : [dm, ...s.channels],
       })),
 
@@ -219,9 +237,9 @@ export const useDMs = create<DMsState>((set, get) => {
       const d = get().channels.find((x) => x.id === channelId);
       if (!d) return;
       const jaLido = d.lastReadAt && d.lastMessageAt && d.lastReadAt >= d.lastMessageAt;
-      if (jaLido && d.mentionCount === 0) return;
+      if (jaLido && d.mentionCount === 0 && d.unreadCount === 0) return;
       const now = new Date().toISOString();
-      patchDM(channelId, (x) => ({ ...x, lastReadAt: now, mentionCount: 0 }));
+      patchDM(channelId, (x) => ({ ...x, lastReadAt: now, mentionCount: 0, unreadCount: 0 }));
       try {
         await api.markRead(channelId);
       } catch {
@@ -229,11 +247,11 @@ export const useDMs = create<DMsState>((set, get) => {
       }
     },
 
-    bumpUnread: (channelId, at, mention) =>
+    bumpUnread: (channelId, at, mention, propria) =>
       set((s) => {
         const d = s.channels.find((x) => x.id === channelId);
         if (!d) return s;
-        const next = { ...d, lastMessageAt: at, mentionCount: d.mentionCount + (mention ? 1 : 0) };
+        const next = aoChegarMensagem(d, at, { mention, propria });
         // conversa com mensagem nova sobe para o topo, como no Discord
         return { channels: [next, ...s.channels.filter((x) => x.id !== channelId)] };
       }),
