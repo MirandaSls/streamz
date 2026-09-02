@@ -121,7 +121,7 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
   }
 
   return (
-    <aside aria-label="Participantes da conversa" className="flex w-60 shrink-0 flex-col bg-panel">
+    <aside aria-label="Participantes da conversa" className="flex w-[267px] shrink-0 flex-col bg-panel">
       <div className="flex-1 overflow-y-auto pb-4">
         <div className="flex items-center justify-between px-4 pb-1 pt-4">
           <h3 className="text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">

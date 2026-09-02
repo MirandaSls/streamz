@@ -55,7 +55,7 @@ export default function BlockedMessages({
         type="button"
         onClick={() => setAberto((v) => !v)}
         aria-expanded={aberto}
-        className="flex w-full items-center gap-2 py-0.5 pl-[72px] pr-12 text-sm text-txt-muted hover:bg-msghov hover:text-txt-normal"
+        className="flex w-full items-center gap-2 py-0.5 pl-[80px] pr-12 text-sm text-txt-muted hover:bg-msghov hover:text-txt-normal"
       >
         <ChevronRight
           size={16}

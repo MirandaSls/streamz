@@ -114,7 +114,7 @@ function SideButton({
         onClick={onClick}
         onMouseEnter={onMouseEnter}
         aria-label={label}
-        className="grid h-11 w-8 place-items-center text-txt-secondary transition hover:text-txt-primary"
+        className="grid h-[58px] w-10 place-items-center text-txt-secondary transition hover:text-txt-primary"
       >
         {children}
       </button>
@@ -487,7 +487,7 @@ export default function Composer({
             }
           : undefined
       }
-      className="relative shrink-0 px-4"
+      className="relative shrink-0 px-2.5"
     >
       {dragging && <OverlayArrastar alvo={formRef.current} destino={destino} />}
 
@@ -556,9 +556,9 @@ export default function Composer({
                 type="button"
                 onClick={abrirMenuMais}
                 aria-label="Mais opções de envio"
-                className="mx-4 mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-full text-txt-secondary transition hover:text-txt-primary"
+                className="mx-4 mt-[9px] grid h-10 w-10 shrink-0 place-items-center rounded-full text-txt-secondary transition hover:text-txt-primary"
               >
-                <CirclePlus size={24} />
+                <CirclePlus size={20} />
               </button>
             </>
           ) : (
@@ -582,7 +582,7 @@ export default function Composer({
             // anuncia a lista é o próprio popup, que é um `listbox` rotulado
             aria-autocomplete="list"
             placeholder={placeholder}
-            className="min-h-11 flex-1 resize-none bg-transparent py-[11px] text-txt-normal outline-none placeholder:text-txt-muted"
+            className="min-h-[58px] flex-1 resize-none bg-transparent py-[18px] text-txt-normal outline-none placeholder:text-txt-muted"
           />
 
           <div className="flex items-center pr-2">
@@ -614,7 +614,7 @@ export default function Composer({
               label="Figurinha"
               onClick={() => setAberto((a) => (a === "figurinha" ? null : "figurinha"))}
             >
-              <StickerIcon size={24} />
+              <StickerIcon size={20} />
             </SideButton>
             <SideButton
               label="Emoji"
@@ -622,7 +622,7 @@ export default function Composer({
               // o ícone troca de carinha a cada passada do mouse, como no Discord
               onMouseEnter={() => setCarinha((c) => (c + 1) % CARINHAS.length)}
             >
-              <Carinha size={24} />
+              <Carinha size={20} />
             </SideButton>
           </div>
         </div>
@@ -645,7 +645,7 @@ export default function Composer({
         <PickerPanel
           tab={aberto}
           onTab={setAberto}
-          className="absolute bottom-full right-4 mb-2"
+          className="absolute bottom-full right-2.5 mb-2"
           termoGif={termoGif}
           guildId={guildId}
           onClose={() => setAberto(null)}
@@ -671,7 +671,7 @@ export default function Composer({
       {mostrarContador && (
         <span
           aria-live="polite"
-          className={`absolute -bottom-5 right-4 text-xs tabular-nums ${
+          className={`absolute -bottom-5 right-2.5 text-xs tabular-nums ${
             restante <= 0 ? "text-red" : "text-txt-muted"
           }`}
         >

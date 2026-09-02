@@ -90,7 +90,7 @@ export default function SearchPanel({ guildId }: { guildId: string | null }) {
       aria-label="Resultados da busca"
       className="flex w-[26rem] shrink-0 flex-col border-l border-black/20 bg-panel"
     >
-      <div className="flex h-12 shrink-0 items-center gap-2 px-4 shadow-header">
+      <div className="flex h-[49px] shrink-0 items-center gap-2 border-b border-border px-4 shadow-header">
         <Search size={18} aria-hidden="true" className="text-txt-muted" />
         <span className="min-w-0 flex-1 truncate font-semibold text-txt-primary">
           {searching ? "Buscando…" : `${total} ${total === 1 ? "resultado" : "resultados"}`}

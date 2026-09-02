@@ -247,7 +247,7 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
       {readOnly ? (
         // mantém a forma do composer (mesma altura e raio): o parágrafo cinza
         // centralizado que ficava aqui tirava o chão da coluna
-        <div className="mx-4 mb-6 flex min-h-11 items-center gap-2 rounded-lg bg-input px-4 text-sm text-txt-muted">
+        <div className="mx-2.5 mb-6 flex min-h-[58px] items-center gap-2 rounded-lg bg-input px-4 text-sm text-txt-muted">
           <Lock size={18} aria-hidden="true" className="shrink-0" />
           <span>Você não tem permissão para enviar mensagens neste canal.</span>
         </div>
