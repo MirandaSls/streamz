@@ -49,11 +49,12 @@ export default function AddFriend() {
   const borda = erro ? "border-red" : sucesso ? "border-green" : "border-border";
 
   return (
-    <div className="px-[30px] pt-4">
-      <h2 className="font-display text-xs font-bold uppercase tracking-[0.02em] text-txt-primary">
-        Adicionar amigo
-      </h2>
-      <p className="mt-2 text-sm text-txt-muted">
+    /* medido no print do Discord: título 20px bold em caixa mista com a caixa
+       alta a 25px da borda do cabeçalho; subtítulo 16px/20; o campo 58px de
+       altura (12px de respiro em volta do botão de 32) com raio 8 */
+    <div className="px-[30px] pt-5">
+      <h2 className="font-display text-xl font-bold leading-6 text-txt-primary">Adicionar amigo</h2>
+      <p className="mt-2 text-base leading-5 text-txt-normal">
         Você pode adicionar amigos com o nome de usuário do Streamz.
       </p>
 
@@ -62,7 +63,7 @@ export default function AddFriend() {
           e.preventDefault();
           void enviar();
         }}
-        className={`mt-4 flex items-center gap-2 rounded-lg border bg-rail p-2 pl-4 ${borda} focus-within:border-accent`}
+        className={`mt-4 flex items-center gap-2 rounded-lg border bg-rail p-3 ${borda} focus-within:border-accent`}
       >
         <input
           value={nome}
@@ -73,14 +74,16 @@ export default function AddFriend() {
           }}
           aria-label="Nome de usuário"
           aria-invalid={erro ? true : undefined}
-          placeholder="Digite o nome de usuário"
+          placeholder="Insira um nome de usuário"
           maxLength={33}
-          className="h-9 min-w-0 flex-1 bg-transparent text-txt-normal outline-none placeholder:text-txt-muted"
+          className="h-8 min-w-0 flex-1 bg-transparent text-base text-txt-normal outline-none placeholder:text-txt-muted"
         />
+        {/* o botão mora DENTRO do campo, à direita: 32px de altura, raio 8, na
+            cor accent. Era raio 3 com 36 de altura. */}
         <button
           type="submit"
           disabled={!valido || enviando}
-          className="h-9 shrink-0 rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-8 shrink-0 rounded-lg bg-accent px-3 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {enviando ? "Enviando…" : "Enviar pedido de amizade"}
         </button>
