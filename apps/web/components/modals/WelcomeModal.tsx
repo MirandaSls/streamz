@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, Compass, Hash, Megaphone, Volume2 } from "lucide-react";
+import { ChevronRight, Compass, Hash, Megaphone, Volume2 } from "@/components/ui/icones";
 import Dialog from "@/components/modals/Dialog";
 import { useChannels } from "@/stores/channels";
 import { useGuilds } from "@/stores/guilds";

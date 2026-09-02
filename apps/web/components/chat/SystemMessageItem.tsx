@@ -10,7 +10,7 @@ import {
   Pin,
   ShieldAlert,
   SmilePlus,
-} from "lucide-react";
+} from "@/components/ui/icones";
 import {
   displayNameOf,
   parseCustomEmoji,
@@ -87,7 +87,7 @@ export default function SystemMessageItem({
       id={`mensagem-${message.id}`}
       onContextMenu={onMenu}
       style={grouped ? undefined : { marginTop: "var(--espaco-entre-grupos, 17px)" }}
-      className="group relative py-0.5 pl-[72px] pr-12 text-sm text-txt-muted hover:bg-msghov"
+      className="group relative py-0.5 pl-[80px] pr-12 text-sm text-txt-muted hover:bg-msghov"
     >
       {/* o ícone fica no centro da calha do avatar (x≈46), não colado no texto */}
       <span aria-hidden="true" className="absolute left-[37px] top-1">

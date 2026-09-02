@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type WheelEvent } from "react";
-import { ChevronLeft, ChevronRight, ExternalLink, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, X } from "@/components/ui/icones";
 import Tooltip from "@/components/ui/Tooltip";
 import { useUI } from "@/stores/ui";
 

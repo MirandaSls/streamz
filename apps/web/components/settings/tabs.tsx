@@ -16,7 +16,7 @@ import {
   UserCircle,
   Users,
   Video,
-} from "lucide-react";
+} from "@/components/ui/icones";
 import type { ComponentType, ReactNode } from "react";
 import AcessibilidadeTab from "@/components/settings/AcessibilidadeTab";
 import AdminChamadasTab from "@/components/settings/admin/AdminChamadasTab";
@@ -73,7 +73,7 @@ export const SETTINGS_TABS: readonly SettingsTab[] = [
     id: "conta",
     group: "usuario",
     label: "aba.conta",
-    icon: <User size={18} />,
+    icon: <User size={20} />,
     Component: ContaTab,
     secoes: [
       { id: "minha-conta", label: "conta.secMinhaConta" },
@@ -81,21 +81,21 @@ export const SETTINGS_TABS: readonly SettingsTab[] = [
       { id: "encerrar", label: "conta.secEncerrar" },
     ],
   },
-  { id: "perfil", group: "usuario", label: "aba.perfil", icon: <UserCircle size={18} />, Component: PerfilTab },
+  { id: "perfil", group: "usuario", label: "aba.perfil", icon: <UserCircle size={20} />, Component: PerfilTab },
   {
     id: "privacidade",
     group: "usuario",
     label: "aba.privacidade",
-    icon: <ShieldCheck size={18} />,
+    icon: <ShieldCheck size={20} />,
     Component: SegurancaTab,
   },
-  { id: "dispositivos", group: "usuario", label: "aba.sessoes", icon: <Laptop size={18} />, Component: SessoesTab },
+  { id: "dispositivos", group: "usuario", label: "aba.sessoes", icon: <Laptop size={20} />, Component: SessoesTab },
 
   {
     id: "aparencia",
     group: "app",
     label: "aba.aparencia",
-    icon: <Paintbrush size={18} />,
+    icon: <Paintbrush size={20} />,
     Component: AparenciaTab,
     secoes: [
       { id: "previa", label: "aparencia.previa" },
@@ -107,7 +107,7 @@ export const SETTINGS_TABS: readonly SettingsTab[] = [
     id: "acessibilidade",
     group: "app",
     label: "aba.acessibilidade",
-    icon: <Accessibility size={18} />,
+    icon: <Accessibility size={20} />,
     Component: AcessibilidadeTab,
     secoes: [
       { id: "legibilidade", label: "acess.secLegibilidade" },
@@ -120,7 +120,7 @@ export const SETTINGS_TABS: readonly SettingsTab[] = [
     id: "voz",
     group: "app",
     label: "aba.voz",
-    icon: <Video size={18} />,
+    icon: <Video size={20} />,
     Component: VozTab,
     secoes: [
       { id: "dispositivos", label: "voz.dispositivos" },
@@ -134,7 +134,7 @@ export const SETTINGS_TABS: readonly SettingsTab[] = [
     id: "notificacoes",
     group: "app",
     label: "aba.notificacoes",
-    icon: <Bell size={18} />,
+    icon: <Bell size={20} />,
     Component: NotificacoesTab,
     secoes: [
       { id: "dispositivo", label: "notif.esteDispositivo" },
@@ -142,43 +142,43 @@ export const SETTINGS_TABS: readonly SettingsTab[] = [
       { id: "sons", label: "notif.sons" },
     ],
   },
-  { id: "teclado", group: "app", label: "aba.teclado", icon: <Keyboard size={18} />, Component: TecladoTab },
-  { id: "idioma", group: "app", label: "aba.idioma", icon: <Languages size={18} />, Component: IdiomaTab },
+  { id: "teclado", group: "app", label: "aba.teclado", icon: <Keyboard size={20} />, Component: TecladoTab },
+  { id: "idioma", group: "app", label: "aba.idioma", icon: <Languages size={20} />, Component: IdiomaTab },
 
   // ── j-painel-admin ── só aparecem para o administrador da instância
   {
     id: "admin-visao",
     group: "admin",
     label: "aba.adminVisao",
-    icon: <Gauge size={18} />,
+    icon: <Gauge size={20} />,
     Component: AdminVisaoGeralTab,
   },
   {
     id: "admin-usuarios",
     group: "admin",
     label: "aba.adminUsuarios",
-    icon: <Users size={18} />,
+    icon: <Users size={20} />,
     Component: AdminUsuariosTab,
   },
   {
     id: "admin-chamadas",
     group: "admin",
     label: "aba.adminChamadas",
-    icon: <PhoneCall size={18} />,
+    icon: <PhoneCall size={20} />,
     Component: AdminChamadasTab,
   },
   {
     id: "admin-mensagens",
     group: "admin",
     label: "aba.adminMensagens",
-    icon: <MessagesSquare size={18} />,
+    icon: <MessagesSquare size={20} />,
     Component: AdminMensagensTab,
   },
   {
     id: "admin-servidores",
     group: "admin",
     label: "aba.adminServidores",
-    icon: <Server size={18} />,
+    icon: <Server size={20} />,
     Component: AdminServidoresTab,
   },
 ];

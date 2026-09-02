@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Laptop, LogOut, Smartphone } from "lucide-react";
+import { Laptop, LogOut, Smartphone } from "@/components/ui/icones";
 import { ehDispositivoMovel, resumoDoDispositivo, type SessaoView } from "@streamz/shared";
 import { EmBreve, Section } from "@/components/ui/controls";
 import { api } from "@/lib/api";

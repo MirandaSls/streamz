@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, SmilePlus, X } from "lucide-react";
+import { Plus, SmilePlus, X } from "@/components/ui/icones";
 import {
   MAX_POLL_OPTION,
   MAX_POLL_OPTIONS,

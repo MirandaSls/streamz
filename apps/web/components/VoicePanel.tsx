@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { AlertTriangle, MessageSquare, RotateCw, UserPlus, Volume2 } from "lucide-react";
+import { AlertTriangle, MessageSquare, RotateCw, UserPlus, Volume2 } from "@/components/ui/icones";
 import {
   displayNameOf,
   type Channel,
@@ -87,7 +87,7 @@ export default function VoicePanel({
     >
       <header
         {...daMoldura}
-        className={`flex h-12 shrink-0 items-center justify-between gap-2 px-4 shadow-header transition-opacity duration-200 ${
+        className={`flex h-[49px] shrink-0 items-center justify-between gap-2 border-b border-border px-4 shadow-header transition-opacity duration-200 ${
           visivel ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
       >

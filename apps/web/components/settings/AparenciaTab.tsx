@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/controls";
 import { useIrParaAba } from "@/components/settings/navegacao";
 import PreviaDeMensagens from "@/components/settings/PreviaDeMensagens";
-import { Accessibility } from "lucide-react";
+import { Accessibility } from "@/components/ui/icones";
 import { useT } from "@/lib/i18n";
 import { useAuth } from "@/stores/auth";
 import { FONT_SCALE, GROUP_SPACING, ZOOM, useSettings } from "@/stores/settings";

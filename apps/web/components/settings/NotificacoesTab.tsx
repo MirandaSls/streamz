@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight } from "@/components/ui/icones";
 import { type NotificationLevel } from "@streamz/shared";
 import { RadioCards, Row, Section, Switch, Toggle } from "@/components/ui/controls";
 import { SONS, useSons, type NomeDeSom } from "@/stores/sons";

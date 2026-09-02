@@ -12,8 +12,8 @@ import {
   Plane,
   Settings2,
   Smile,
-  type LucideIcon,
-} from "lucide-react";
+  type Icone,
+} from "@/components/ui/icones";
 import { formatCustomEmoji, parseCustomEmoji, type CustomEmoji } from "@streamz/shared";
 import {
   buscarUnicode,
@@ -46,7 +46,7 @@ import { useCanModerate, useGuilds } from "@/stores/guilds";
 import { ui } from "@/stores/ui";
 
 /** Ícone de cada categoria unicode na coluna da esquerda. */
-const ICONE_CATEGORIA: Record<string, LucideIcon> = {
+const ICONE_CATEGORIA: Record<string, Icone> = {
   smileys_people: Smile,
   animals_nature: Leaf,
   food_drink: Coffee,
@@ -70,7 +70,7 @@ interface SecaoGrade {
   titulo: string;
   /** o que a coluna lateral desenha para pular até esta seção. */
   icone:
-    | { tipo: "lucide"; Icone: LucideIcon }
+    | { tipo: "lucide"; Icone: Icone }
     | { tipo: "servidor"; nome: string; url: string | null };
   itens: ItemGrade[];
 }

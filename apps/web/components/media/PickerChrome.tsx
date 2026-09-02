@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
-import { Search } from "lucide-react";
+import { Search } from "@/components/ui/icones";
 
 /**
  * Peças que os três seletores (emoji, GIF, figurinha) desenham igual: a caixa

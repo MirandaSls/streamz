@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download, X } from "lucide-react";
+import { Download, X } from "@/components/ui/icones";
 import { isTauri } from "@/lib/desktop";
 import { ui } from "@/stores/ui";
 

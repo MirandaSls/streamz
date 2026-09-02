@@ -20,7 +20,7 @@ import {
   SmilePlus,
   Users,
   X,
-} from "lucide-react";
+} from "@/components/ui/icones";
 import {
   Permission,
   colorRoleOf,

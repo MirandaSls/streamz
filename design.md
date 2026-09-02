@@ -27,8 +27,18 @@ tipografia e marca deixou de ser meta. Fonte da verdade dos tokens:
      efetivo ainda é escuro, então ali o texto é claro;
    - **bolinha de status nunca sobre superfície limão** — verde e limão a 10px
      de distância é o choque mais provável desta paleta.
-5. **Ícone é SVG, nunca emoji.** `lucide-react`, traço 2px, 20px em listas e 24px
-   em toolbars. Emoji só como *conteúdo* (reações, texto do usuário).
+5. **Ícone é SVG, nunca emoji.** Todo ícone entra por
+   `components/ui/icones.tsx`, que é o único ponto de importação do app.
+   Preenchido, não de traço: o desenho vem do **ativo do próprio Discord**
+   (`docs/Reference/Discord assets icons/`, ver `ACERVO.md`) quando existe, e do
+   Phosphor com o mesmo nome quando não existe. Emoji só como *conteúdo*
+   (reações, texto do usuário).
+
+   Não há mais exceção para marca utilitária. Ela existiu — lupa, `+`, chevrons e
+   pontinhos ficavam no Phosphor "porque no Discord são de traço" — e caiu ao
+   abrir os arquivos: **os ativos do Discord para essas são de traço**. Dava para
+   ter o desenho dele e o peso certo ao mesmo tempo. Hoje fica no Phosphor só o
+   que o acervo não tem: o `×` (lá só existe dentro de círculo) e as setas.
 
 ## Layout
 
@@ -47,12 +57,15 @@ App de **3 colunas** fixas sobre a área principal (`app/app/page.tsx`):
   esquerda (`h-5` no hover, `h-10` ativo); tooltip à direita. Botões "novo" em
   `green`. Separador de 2px `rail-divider`.
 - **Coluna 2** (`w-60`, `bg-panel`): cabeçalho de **48px** com `shadow-header`
-  (nome do servidor + chevron → menu); categorias em caixa-alta 12px
-  (`text-txt-muted`) colapsáveis; item de canal de **32px** (`h-8`), ícone 20px
+  (nome do servidor + chevron → menu); categorias em caixa mista 14px
+  (`text-txt-muted`) colapsáveis; item de canal de **36px** (`h-9`, raio 8), ícone 20px
   `text-txt-faint`, hover `bg-hov text-txt-normal`, ativo `bg-sel text-txt-primary`.
-  Rodapé = **painel do usuário** (52px, `bg-footer`): avatar com status, nome,
-  status em texto, botões mic / áudio / engrenagem.
-- **Área principal** (`flex-1`, `bg-chat`): cabeçalho de 48px (`HeaderBar`: ícone
+  **Card do usuário** (58px, raio 8, borda 1px, `bg-footer`): avatar com status,
+  nome, status em texto, botões mic / áudio / engrenagem. Ele **flutua** — sai do
+  fluxo da coluna, recuado 10px dos três lados, e a lista rola por trás. Encostado
+  nas bordas ele lia como o fim da coluna; recuado, lê como o que é: uma peça por
+  cima dela, que não pertence a nenhuma conversa da lista.
+- **Área principal** (`flex-1`, `bg-chat`): cabeçalho de 49px + 1px de borda (`HeaderBar`: ícone
   + nome, toolbar à direita com busca que expande ao focar), timeline, composer,
   linha de "digitando…" (24px).
 - **Coluna 4**: lista de membros (`w-60`, seções ONLINE/OFFLINE, offline a 30%)
@@ -181,14 +194,24 @@ Duas regras que o pacote de marca não escreve e o produto precisa:
   recortado por máscara; o lockup põe o wordmark como **texto real** em Archivo.
   Desenho e regras de uso: `docs/branding/`.
 
-## Ícones (lucide)
+## Ícones
 
-`Hash` texto · `Volume2` voz · `Lock` privado · `Megaphone` somente leitura ·
-`MessageSquare` thread/DM · `SmilePlus` reagir · `Pencil` editar · `Trash2` apagar ·
-`MoreHorizontal` mais · `CirclePlus` anexar · `Gift`/`Sticker`/`Smile` composer ·
-`Users` membros/grupo · `Crown` dono · `UserX` expulsar · `Gavel` banir ·
-`Mic`/`MicOff` · `Headphones`/`HeadphoneOff` · `Settings` · `Plus` novo ·
-`Compass` explorar · `Pin` · `Bell` · `Inbox` · `HelpCircle` · `Search` · `X` fechar.
+O vocabulário inteiro vive em `components/ui/icones.tsx` — nomes, origem de cada
+um e o porquê das exceções estão lá, não aqui: uma lista duplicada num `.md`
+envelhece sem ninguém perceber.
+
+Três coisas que só se aprendem mexendo, e que o arquivo registra:
+
+- **A cor sai fora.** Vários ativos vêm com vermelho ou verde chapado. Quem pinta
+  é quem chama, via `currentColor` — o estado desligado do rodapé pinta ícone e
+  véu juntos, e um vermelho preso dentro do glifo brigaria com ele.
+- **O quadro depende da origem.** Ativo exportado do Figma vem em `0 0 100 100`;
+  os gerados da geometria vêm em `0 0 80 80`. Trocar um pelo outro passa no
+  typecheck e sai com o ícone no tamanho errado.
+- **Nem todo ativo sobrevive a uma cor só.** Alguns são um corpo colorido com
+  caminhos brancos por cima que, no arquivo, são buraco. Achatados, cobrem o
+  desenho em vez de recortá-lo. Três voltaram para o Phosphor por isso, e os três
+  só apareceram **renderizando e olhando** — o typecheck passa em todos.
 
 ## Estados a nunca esquecer
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { LogOut } from "lucide-react";
+import { LogOut } from "@/components/ui/icones";
 import { useT } from "@/lib/i18n";
 import { isTauri } from "@/lib/desktop";
 import {

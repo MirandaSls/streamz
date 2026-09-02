@@ -81,8 +81,8 @@ function LinhaDeSolta({ ativa }: { ativa: boolean }) {
 }
 
 /**
- * Cabeçalho de categoria: chevron + nome em caixa-alta e o "+" de criar canal
- * dentro dela no hover, como no Discord.
+ * Cabeçalho de categoria: chevron + nome (14px, caixa mista, como no
+ * Discord de hoje) e o "+" de criar canal dentro dela no hover.
  */
 function CategoryHeader({
   label,
@@ -105,7 +105,7 @@ function CategoryHeader({
         type="button"
         onClick={onToggle}
         aria-expanded={!collapsed}
-        className="flex min-w-0 flex-1 items-center gap-0.5 pl-2 font-display text-xs font-bold uppercase tracking-[0.02em] text-txt-muted hover:text-txt-normal"
+        className="flex min-w-0 flex-1 items-center gap-0.5 pl-2 font-display text-sm font-bold tracking-[0.02em] text-txt-muted hover:text-txt-normal"
       >
         {collapsed ? (
           <ChevronRight size={12} aria-hidden="true" />
@@ -476,7 +476,7 @@ export default function ChannelSidebar() {
           onDragOver={(e) => sobreCanal(e, grupo, index)}
           onDrop={soltar}
           onContextMenu={(e) => openChannelMenu(e, channel)}
-          className={`group relative mx-2 flex h-8 items-center rounded-[4px] pl-2 pr-1 ${
+          className={`group relative mx-2 flex h-9 items-center rounded-lg pl-[10px] pr-1 ${
             arrastando ? "opacity-40" : ""
           } ${
             active
@@ -495,7 +495,7 @@ export default function ChannelSidebar() {
             data-channel-button
             onClick={() => select(channel)}
             aria-current={active ? "true" : undefined}
-            className={`flex h-full min-w-0 flex-1 items-center gap-1.5 text-left ${unread ? "font-semibold" : "font-medium"}`}
+            className={`flex h-full min-w-0 flex-1 items-center gap-2.5 text-left ${unread ? "font-semibold" : "font-medium"}`}
           >
             <ChannelIcon channel={channel} />
             <span className="truncate">{name}</span>
@@ -628,14 +628,14 @@ export default function ChannelSidebar() {
   }
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col bg-panel">
+    <aside className="relative flex w-[294px] shrink-0 flex-col bg-panel">
       <button
         type="button"
         onClick={openGuildMenu}
         disabled={!guild}
         aria-haspopup="menu"
         aria-expanded={menuAberto}
-        className="flex h-12 shrink-0 items-center justify-between px-4 font-semibold text-txt-primary shadow-header transition hover:bg-hov disabled:cursor-default disabled:hover:bg-transparent"
+        className="flex h-[49px] shrink-0 items-center justify-between border-b border-border px-4 font-semibold text-txt-primary shadow-header transition hover:bg-hov disabled:cursor-default disabled:hover:bg-transparent"
       >
         <span className="truncate">{guild?.name ?? "Selecione um servidor"}</span>
         {guild &&
@@ -651,7 +651,7 @@ export default function ChannelSidebar() {
         role="list"
         aria-label="Canais"
         onKeyDown={handleKeyDown}
-        className="flex-1 overflow-y-auto pb-2 pt-2"
+        className="flex-1 overflow-y-auto pb-[78px] pt-2"
       >
         {loading && <p className="px-4 py-1 text-sm text-txt-muted">Carregando canais…</p>}
         {!loading && channels.length === 0 && categories.length === 0 && (

@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import { Mic, MicOff } from "@/components/ui/icones";
-import { Monitor, RefreshCw, Video, VideoOff, VolumeX, Wifi } from "lucide-react";
+import { Mic, MicOff, Monitor, RefreshCw, Video, VideoOff, VolumeX, Wifi } from "@/components/ui/icones";
 import type { AdminCallParticipant } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import { api } from "@/lib/api";

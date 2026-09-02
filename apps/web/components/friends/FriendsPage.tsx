@@ -209,7 +209,7 @@ export default function FriendsPage() {
 
   return (
     <main className="flex min-w-0 flex-1 flex-col bg-chat">
-      <header className="relative z-10 flex h-12 shrink-0 items-center gap-2 px-4 shadow-header">
+      <header className="relative z-10 flex h-[49px] shrink-0 items-center gap-2 border-b border-border px-4 shadow-header">
         <span className="text-txt-muted" aria-hidden="true">
           <Amigos size={24} />
         </span>

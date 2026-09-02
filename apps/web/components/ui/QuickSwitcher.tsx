@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Hash, Lock, Megaphone, Server, Users, Volume2 } from "lucide-react";
+import { Hash, Lock, Megaphone, Server, Users, Volume2 } from "@/components/ui/icones";
 import { isGroupChannel, type Channel, type PublicUser, type UserStatus } from "@streamz/shared";
 import Dialog from "@/components/modals/Dialog";
 import Avatar, { GroupAvatar } from "@/components/ui/Avatar";

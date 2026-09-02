@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search } from "lucide-react";
+import { Search } from "@/components/ui/icones";
 import { displayNameOf, type PublicUser } from "@streamz/shared";
 import { ESTILO_CAMPO } from "@/components/settings/campos";
 import Avatar from "@/components/ui/Avatar";

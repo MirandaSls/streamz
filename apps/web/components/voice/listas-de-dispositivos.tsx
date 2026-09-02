@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, Check } from "lucide-react";
+import { Camera, Check } from "@/components/ui/icones";
 import { explicarMidia, useVoiceDevices } from "@/stores/voiceDevices";
 
 /**

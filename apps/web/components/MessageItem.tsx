@@ -19,7 +19,7 @@ import {
   Smile,
   SmilePlus,
   Trash2,
-} from "lucide-react";
+} from "@/components/ui/icones";
 import type { Message, PublicUser } from "@streamz/shared";
 import {
   WS_EVENTS,
@@ -124,7 +124,7 @@ function ActionButton({
  * Linha de referência da resposta, acima da mensagem: avatar miúdo, nome e o
  * começo da original. O traço em "L" à esquerda é o mesmo do Discord — é ele
  * que amarra visualmente a resposta à mensagem citada, e por isso ele sobe do
- * topo do avatar de 40px (x≈32) até encostar na calha do conteúdo (x=72).
+ * topo do avatar de 40px (x≈40) até encostar na calha do conteúdo (x=80).
  *
  * Passar o mouse na linha inteira **destaca a original** na timeline: é o que
  * responde "a qual mensagem isso responde?" sem tirar ninguém do lugar.
@@ -547,7 +547,7 @@ export default function MessageItem({
       // sem `transition-colors`: o Discord troca o fundo no mesmo quadro, e a
       // transição fazia o realce "arrastar" atrás do cursor ao correr a lista
       className={`group relative flex py-0.5 pr-12 ${
-        compacto ? "gap-1.5 pl-4" : "gap-4 pl-[72px]"
+        compacto ? "gap-1.5 pl-4" : "gap-4 pl-[80px]"
       } ${fundo} ${message.pending ? "opacity-60" : ""}`}
     >
       {compacto ? null : grouped && !message.replyTo ? (
@@ -565,7 +565,7 @@ export default function MessageItem({
           type="button"
           onClick={openProfile}
           aria-label={`Perfil de ${displayNameOf(author)}`}
-          className={`absolute left-4 rounded-full transition hover:brightness-110 ${
+          className={`absolute left-5 rounded-full transition hover:brightness-110 ${
             message.replyTo ? "top-[26px]" : "top-0.5"
           }`}
         >

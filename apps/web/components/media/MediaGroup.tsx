@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download, EyeOff, FileText } from "lucide-react";
+import { Download, EyeOff, FileText } from "@/components/ui/icones";
 import {
   attachmentDisplayName,
   isAudioAttachment,

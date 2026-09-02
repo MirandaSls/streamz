@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Bell, MessageSquare, MoreHorizontal, Users, X } from "lucide-react";
+import { Bell, MessageSquare, MoreHorizontal, Users, X } from "@/components/ui/icones";
 import { displayNameOf, messageLinkPath, type NotificationLevel } from "@streamz/shared";
 import Composer from "@/components/chat/Composer";
 import MessageList from "@/components/chat/MessageList";
@@ -131,7 +131,7 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
         className="absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize"
       />
 
-      <div className="flex h-12 shrink-0 items-center gap-2 px-4 shadow-header">
+      <div className="flex h-[49px] shrink-0 items-center gap-2 border-b border-border px-4 shadow-header">
         <MessageSquare size={20} aria-hidden="true" className="shrink-0 text-txt-secondary" />
         <span className="min-w-0 flex-1 truncate font-semibold text-txt-primary">
           {nome ?? "Tópico"}

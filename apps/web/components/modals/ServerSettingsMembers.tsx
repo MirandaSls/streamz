@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Crown, MoreHorizontal, Search, ShieldAlert, X } from "lucide-react";
+import { Crown, MoreHorizontal, Search, ShieldAlert, X } from "@/components/ui/icones";
 import {
   Permission,
   colorRoleOf,

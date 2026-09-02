@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Pencil, Trash2, Upload } from "lucide-react";
+import { Pencil, Trash2, Upload } from "@/components/ui/icones";
 import {
   MAX_CUSTOM_EMOJI_DIMENSION,
   MAX_CUSTOM_EMOJI_SIZE,

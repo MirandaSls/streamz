@@ -138,25 +138,25 @@ export default function DMList() {
   }
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col bg-panel">
-      <div className="flex h-12 shrink-0 items-center px-2.5 shadow-header">
+    <aside className="relative flex w-[294px] shrink-0 flex-col bg-panel">
+      <div className="flex h-[49px] shrink-0 items-center border-b border-border px-2.5 shadow-header">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           type="search"
           aria-label="Encontrar ou começar uma conversa"
           placeholder="Encontrar ou começar uma conversa"
-          className="h-7 w-full rounded-[4px] bg-rail px-1.5 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
+          className="h-[30px] w-full rounded-[4px] bg-rail px-1.5 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
         />
       </div>
 
-      <div role="list" aria-label="Conversas" className="flex-1 overflow-y-auto pt-2">
+      <div role="list" aria-label="Conversas" className="flex-1 overflow-y-auto pb-[78px] pt-2">
         {/* ── d-social ── a home do modo DM, com o badge de pedidos pendentes */}
         <button
           type="button"
           onClick={() => setFriendsOpen(true)}
           aria-current={friendsOpen ? "true" : undefined}
-          className={"mx-2 mb-1 flex h-[42px] w-[calc(100%-1rem)] items-center gap-3 rounded-[4px] px-2 text-left " + (friendsOpen ? "bg-sel text-txt-primary" : "text-txt-faint hover:bg-hov hover:text-txt-normal")}
+          className={"mx-2 mb-1 flex h-12 w-[calc(100%-1rem)] items-center gap-3 rounded-lg pl-[10px] pr-2 text-left " + (friendsOpen ? "bg-sel text-txt-primary" : "text-txt-faint hover:bg-hov hover:text-txt-normal")}
         >
           <Amigos size={24} aria-hidden="true" className="shrink-0" />
           <span className="flex-1 font-medium">Amigos</span>
@@ -184,7 +184,7 @@ export default function DMList() {
                   setQuery("");
                   void openWith(u.id);
                 }}
-                className="mx-2 flex h-[42px] w-[calc(100%-1rem)] items-center gap-3 rounded-[4px] px-2 text-left text-txt-faint hover:bg-hov hover:text-txt-normal"
+                className="mx-2 flex h-12 w-[calc(100%-1rem)] items-center gap-3 rounded-lg pl-[10px] pr-2 text-left text-txt-faint hover:bg-hov hover:text-txt-normal"
               >
                 <Avatar user={u} size="md" status={resolveStatus(statuses, u)} surface="border-panel" />
                 <span className="min-w-0">
@@ -231,7 +231,7 @@ export default function DMList() {
               key={dm.id}
               role="listitem"
               onContextMenu={(e) => openMenu(e, dm, e.currentTarget)}
-              className={`group mx-2 flex h-[42px] items-center rounded-[4px] pl-2 pr-1 ${
+              className={`group mx-2 flex h-12 items-center rounded-lg pl-[10px] pr-1 ${
                 active
                   ? "bg-sel text-txt-primary"
                   : unread

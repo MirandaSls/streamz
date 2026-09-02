@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronLeft, Star } from "lucide-react";
+import { ChevronLeft, Star } from "@/components/ui/icones";
 import type { Attachment, GifCategory, GifResult } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";

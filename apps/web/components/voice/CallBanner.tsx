@@ -1,6 +1,6 @@
 "use client";
 
-import { Phone } from "lucide-react";
+import { Phone } from "@/components/ui/icones";
 import Avatar from "@/components/ui/Avatar";
 import { useVoice } from "@/stores/voice";
 

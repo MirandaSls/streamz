@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, GripVertical, MoreHorizontal, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, GripVertical, MoreHorizontal, Plus, Search, Trash2 } from "@/components/ui/icones";
 import {
   MAX_ROLE_NAME,
   PERMISSION_INFO,

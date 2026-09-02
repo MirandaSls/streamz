@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Flag, RotateCcw } from "lucide-react";
+import { Check, Flag, RotateCcw } from "@/components/ui/icones";
 import { REPORT_REASONS, displayNameOf, type ReportView } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import { horaCompleta } from "@/lib/format";

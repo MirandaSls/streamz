@@ -1,7 +1,12 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
-import { Image as ImageIcon, Smile, Sticker as StickerIcon, type LucideIcon } from "lucide-react";
+import {
+  Image as ImageIcon,
+  Smile,
+  Sticker as StickerIcon,
+  type Icone,
+} from "@/components/ui/icones";
 import type { Attachment, Sticker } from "@streamz/shared";
 import EmojiPicker from "@/components/ui/EmojiPicker";
 import GifPicker from "@/components/media/GifPicker";
@@ -14,7 +19,7 @@ import {
 
 export type PickerTab = "emoji" | "gif" | "figurinha";
 
-const ABAS: { id: PickerTab; rotulo: string; Icone: LucideIcon }[] = [
+const ABAS: { id: PickerTab; rotulo: string; Icone: Icone }[] = [
   { id: "emoji", rotulo: "Emoji", Icone: Smile },
   { id: "gif", rotulo: "GIF", Icone: ImageIcon },
   { id: "figurinha", rotulo: "Figurinha", Icone: StickerIcon },

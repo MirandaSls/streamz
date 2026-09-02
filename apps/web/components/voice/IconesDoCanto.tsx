@@ -1,6 +1,6 @@
 "use client";
 
-import { Maximize, Minimize } from "lucide-react";
+import { Maximize, Minimize } from "@/components/ui/icones";
 import Tooltip from "@/components/ui/Tooltip";
 
 /**

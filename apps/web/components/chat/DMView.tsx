@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Settings } from "@/components/ui/icones";
-import { Phone, UserPlus, Users, Video } from "lucide-react";
+import { Phone, Settings, UserPlus, Users, Video } from "@/components/ui/icones";
 import { isGroupChannel } from "@streamz/shared";
 import Composer from "@/components/chat/Composer";
 import DMMemberList from "@/components/chat/DMMemberList";

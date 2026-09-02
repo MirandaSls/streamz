@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
-import { ChevronDown, Search, X } from "lucide-react";
+import { ChevronDown, Search, X } from "@/components/ui/icones";
 import {
   BarraDeAlteracoes,
   ProvedorDeAlteracoes,
@@ -22,7 +22,7 @@ import {
  * contrato de acessibilidade — `role="dialog"`, `aria-modal`, Esc fecha, o foco
  * começa dentro e **volta para quem abriu**.
  *
- * O leiaute é o do Discord: três colunas flexíveis, com o menu de 218px
+ * O leiaute é o do Discord: três colunas flexíveis, com o menu de 252px
  * ancorado à *direita* de uma região esquerda elástica e o ESC numa coluna
  * própria de 60px à direita do conteúdo. Não é enfeite — é o que mantém o bloco
  * de 740px centrado na janela em qualquer largura, em vez de empurrado pelo
@@ -63,7 +63,7 @@ export interface BuscaDoMenu {
 
 /** Classes de um item do menu lateral, compartilhadas com o rodapé. */
 const ITEM_BASE =
-  "mb-0.5 flex h-8 w-full items-center gap-2 rounded-[4px] px-2.5 text-left text-base transition";
+  "mb-1 flex h-10 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-base transition";
 const ITEM_REPOUSO = "text-txt-faint hover:bg-hov hover:text-txt-normal";
 
 export default function TelaCheia({
@@ -204,7 +204,7 @@ export default function TelaCheia({
         aria-label="Seções das configurações"
         className="flex flex-[1_0_auto] flex-col items-end overflow-y-auto bg-panel py-[60px] pr-2"
       >
-        <div className="w-[218px] px-2">
+        <div className="w-[252px] px-2">
           {cabecalho !== undefined &&
             (onCabecalho ? (
               <button
@@ -323,7 +323,7 @@ export default function TelaCheia({
 
       {/*
         A base de 800px é o que equilibra a tela. Com `flex-1` (base 0%) o
-        `<nav>`, que tem base automática de 218px, ficava com metade do espaço
+        `<nav>`, que tem base automática de 252px, ficava com metade do espaço
         livre MAIS a própria largura — numa janela de 1920px o painel lateral
         passava de 1000px e desenhava o menu quase no meio da tela, empurrando o
         conteúdo todo para a direita.

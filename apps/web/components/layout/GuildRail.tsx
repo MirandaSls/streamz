@@ -35,7 +35,7 @@ function acronym(name: string): string {
 }
 
 /**
- * A cara de uma conversa no rail, preenchendo o botão de 48px.
+ * A cara de uma conversa no rail, preenchendo o botão de 40px.
  *
  * Não usa `Avatar`: ele carrega o próprio tamanho (40px no maior que serve
  * aqui) e ficaria boiando dentro da casa, com a bolinha de status fora do
@@ -50,7 +50,7 @@ function ImagemDaConversa({ dm }: { dm: DMChannelView }) {
   }
   const outro = dm.others[0];
   if (isGroupChannel(dm) || !outro) {
-    return <Users size={24} aria-hidden="true" />;
+    return <Users size={20} aria-hidden="true" />;
   }
   // as mesmas iniciais sobre a mesma cor do `Avatar`: sem o fundo próprio, a
   // letra herdava a cor do botão e a pessoa mudava de cara entre as colunas
@@ -79,9 +79,10 @@ function Badge({ count }: { count: number }) {
 }
 
 /**
- * Um item do rail: círculo que vira quadrado arredondado no hover/ativo, com a
- * "pílula" branca à esquerda (ponto se há não lido, curta no hover, alta
- * quando ativo) e o tooltip.
+ * Um item do rail: quadrado arredondado de raio 12 — a mesma forma em repouso,
+ * hover e ativo, como no Discord; o que muda é só a cor e a "pílula" branca à
+ * esquerda (ponto se há não lido, curta no hover, alta quando ativo). Mais o
+ * tooltip.
  */
 function RailItem({
   label,
@@ -107,7 +108,7 @@ function RailItem({
     <div className="group relative flex w-full justify-center" onContextMenu={onContextMenu}>
       <span
         aria-hidden="true"
-        className={`absolute left-0 top-1/2 w-2 -translate-y-1/2 rounded-r-full bg-paper transition-all duration-200 ${
+        className={`absolute left-0 top-1/2 w-[3px] -translate-y-1/2 rounded-r-full bg-paper transition-all duration-200 ${
           active ? "h-10" : unread ? "h-2 group-hover:h-5" : "h-0 group-hover:h-5"
         }`}
       />
@@ -117,12 +118,12 @@ function RailItem({
           onClick={onClick}
           aria-label={unread && !active ? `${label} (não lido)` : label}
           aria-current={active ? "page" : undefined}
-          className={`relative grid h-12 w-12 place-items-center overflow-hidden text-[15px] font-semibold transition-all duration-200 ${
+          className={`relative grid h-10 w-10 place-items-center overflow-hidden rounded-xl text-[15px] font-semibold transition-all duration-200 ${
             active
-              ? "rounded-2xl bg-accent text-accent-ink"
+              ? "bg-accent text-accent-ink"
               : green
-                ? "rounded-[24px] bg-panel text-green group-hover:rounded-2xl group-hover:bg-green group-hover:text-accent-ink"
-                : "rounded-[24px] bg-panel text-txt-normal group-hover:rounded-2xl group-hover:bg-accent group-hover:text-accent-ink"
+                ? "bg-panel text-green group-hover:bg-green group-hover:text-accent-ink"
+                : "bg-panel text-txt-normal group-hover:bg-accent group-hover:text-accent-ink"
           }`}
         >
           {children}
@@ -252,7 +253,7 @@ export default function GuildRail() {
   return (
     <nav
       aria-label="Servidores"
-      className="flex w-[72px] shrink-0 flex-col items-center gap-2 overflow-y-auto bg-rail pt-3 pb-2"
+      className="flex w-20 shrink-0 flex-col items-center gap-2.5 overflow-y-auto bg-rail pt-3 pb-2"
     >
       <RailItem
         label="Mensagens diretas"
@@ -262,7 +263,7 @@ export default function GuildRail() {
         onClick={() => void openDMs()}
       >
         {/* o símbolo da marca no lugar onde o Discord põe o logo dele */}
-        <Marca size={26} />
+        <Marca size={22} />
       </RailItem>
 
       {/*
@@ -325,7 +326,7 @@ export default function GuildRail() {
           existe. Aqui esse menu é o ÚNICO caminho para "entrar por convite" —
           a descoberta pública de servidores não existe neste produto. */}
       <RailItem label="Adicionar um servidor" green onClick={abrirMenuDeServidor}>
-        <Plus size={24} />
+        <Plus size={20} />
       </RailItem>
     </nav>
   );

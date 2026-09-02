@@ -1,17 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { HeadphoneOff, MicOff } from "@/components/ui/icones";
 import {
+  HeadphoneOff,
   Maximize,
   Maximize2,
+  MicOff,
   Minimize2,
   Play,
   Plus,
   UserPlus,
   Volume2,
   VolumeX,
-} from "lucide-react";
+} from "@/components/ui/icones";
 import { Track, type Participant, type TrackPublication } from "livekit-client";
 import { displayNameOf, type VoiceStateEvent } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
