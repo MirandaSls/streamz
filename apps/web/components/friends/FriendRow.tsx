@@ -60,7 +60,7 @@ export default function FriendRow({
     <div
       role="listitem"
       onContextMenu={abrirMenu}
-      className="group relative mx-[30px] flex h-[60px] items-center gap-3 rounded-lg border-t border-border px-[10px] first:border-t-0 hover:border-transparent hover:bg-hov"
+      className="group relative mx-6 flex h-[61px] items-center gap-3 rounded-lg border-t border-border px-[10px] first:border-t-0 hover:border-transparent hover:bg-hov"
     >
       <button
         type="button"
@@ -81,10 +81,10 @@ export default function FriendRow({
       {/* o texto deixa o clique passar para o botão que cobre a linha */}
       <span className="pointer-events-none relative min-w-0 flex-1">
         <span className="flex items-baseline gap-1.5">
-          <span className="truncate text-sm font-semibold text-txt-primary">{nome}</span>
-          <span className="truncate text-sm text-txt-muted">@{live.username}</span>
+          <span className="truncate text-base font-semibold text-txt-primary">{nome}</span>
+          <span className="truncate text-base text-txt-muted">@{live.username}</span>
         </span>
-        <span className="block truncate text-xs text-txt-muted">{rodape}</span>
+        <span className="block truncate text-sm text-txt-muted">{rodape}</span>
       </span>
 
       <div className="relative flex shrink-0 items-center gap-2">
@@ -95,9 +95,9 @@ export default function FriendRow({
               type="button"
               onClick={abrirMenu}
               aria-label={`Mais opções para ${nome}`}
-              className="grid h-9 w-9 place-items-center rounded-full bg-rail text-txt-secondary transition hover:bg-sel hover:text-txt-primary"
+              className="grid h-9 w-9 place-items-center rounded-full text-txt-secondary transition hover:bg-sel hover:text-txt-primary"
             >
-              <MoreVertical size={20} />
+              <MoreVertical size={18} />
             </button>
           </Tooltip>
         )}
@@ -109,8 +109,14 @@ export default function FriendRow({
 /**
  * Botão redondo de ação da linha (mensagem, aceitar, recusar).
  *
- * O hover muda o **fundo** além da cor do ícone: num círculo de 36px sobre uma
- * linha que também acende, só o ícone mudando de tom não se lê como alvo.
+ * **Sem fundo em repouso, com fundo no hover.** Medido no print do Discord: em
+ * volta dos glifos há só a cor do chat; o círculo aparece ao passar o mouse.
+ * Nós tínhamos o círculo sempre visível, o que enchia a lista de alvos
+ * permanentes concorrendo com o nome da pessoa.
+ *
+ * O fundo no hover continua sendo o que faz o botão se ler como alvo: a linha
+ * inteira também acende, e só o ícone mudando de tom não bastaria para separar
+ * um do outro.
  */
 export function RowAction({
   label,
@@ -131,7 +137,7 @@ export function RowAction({
         type="button"
         onClick={onClick}
         aria-label={label}
-        className={`grid h-9 w-9 place-items-center rounded-full bg-rail text-txt-secondary transition hover:bg-sel ${
+        className={`grid h-9 w-9 place-items-center rounded-full text-txt-secondary transition hover:bg-sel ${
           danger ? "hover:text-red" : positive ? "hover:text-green" : "hover:text-txt-primary"
         }`}
       >
