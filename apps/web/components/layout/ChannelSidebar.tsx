@@ -34,7 +34,6 @@ import {
   type Category,
   type Channel,
 } from "@streamz/shared";
-import UserFooter from "@/components/layout/UserFooter";
 import Tooltip from "@/components/ui/Tooltip";
 import { MENU_WIDTH, MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
 import Cronometro from "@/components/voice/Cronometro";
@@ -628,7 +627,7 @@ export default function ChannelSidebar() {
   }
 
   return (
-    <aside className="relative flex w-[294px] shrink-0 flex-col bg-panel">
+    <aside className="flex w-[294px] shrink-0 flex-col bg-panel">
       <button
         type="button"
         onClick={openGuildMenu}
@@ -669,7 +668,6 @@ export default function ChannelSidebar() {
           : grupos.map((grupo, i) => renderGrupo(grupo, i - 1))}
       </div>
 
-      <UserFooter />
     </aside>
   );
 }
