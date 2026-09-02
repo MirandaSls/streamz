@@ -28,6 +28,7 @@ import { tocarSom } from "@/lib/ringtone";
 import { supressorDeRuido } from "@/lib/supressor-ruido";
 import { CHAMADA_INICIAL, callReducer, type CallAction, type CallState } from "@/stores/call-machine";
 import { emit, errorMessage } from "@/stores/socket-adapter";
+import { decidirSaida, type MotivoDeSaida } from "@/stores/voice-saida";
 import { ui } from "@/stores/ui";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
@@ -256,6 +257,46 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     sala = null;
   }
 
+  /**
+   * Deixa a sala atual: fecha a mídia, avisa o gateway (quando a saída é
+   * minha) e zera a minha conexão. O que **não** faz por conta própria é fechar
+   * a coluna do canal de voz — isso depende do motivo, e a tabela está em
+   * `voice-saida.ts`. Todo caminho que sai de uma sala passa por aqui;
+   * `disconnect` é o caso "o usuário quis sair".
+   */
+  function sairDaSalaAtual(motivo: MotivoDeSaida, destinoEmServidor = false) {
+    const { channelId, call } = get();
+    const decisao = decidirSaida(motivo, destinoEmServidor);
+    // expulso não tem som: o que a pessoa ouve é o toast explicando
+    if (channelId && decisao.avisaGateway) tocarSom("sair");
+    // `fecharSala` tira os ouvintes antes de desconectar, então o
+    // `RoomEvent.Disconnected` do LiveKit não vem depois marcar queda de mídia
+    fecharSala();
+    if (channelId && decisao.avisaGateway) {
+      emit(WS_EVENTS.VOICE_LEAVE, {});
+      if (call.phase !== "idle") emit(WS_EVENTS.CALL_END, { channelId });
+    }
+    // o painel do canal de voz é a coluna 3 inteira: sair da call sem fechá-lo
+    // deixaria o usuário preso numa sala vazia
+    if (decisao.fechaColuna) useChannels.getState().leaveVoice();
+    set({
+      channelId: null,
+      guildId: null,
+      channelName: "",
+      desde: null,
+      status: "idle",
+      erro: null,
+      midiaDisponivel: false,
+      falando: [],
+      camOn: false,
+      screenOn: false,
+      focado: null,
+      focoAutomatico: true,
+      telaCheia: false,
+      call: CHAMADA_INICIAL,
+    });
+  }
+
   return {
     states: {},
     channelId: null,
@@ -358,7 +399,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
 
     connect: async (channel) => {
       const anterior = get().channelId;
-      if (anterior && anterior !== channel.id) await get().disconnect();
+      // trocar de sala não é sair: a coluna do canal de destino fica de pé
+      if (anterior && anterior !== channel.id) sairDaSalaAtual("troca-de-sala", !!channel.guildId);
 
       set({
         channelId: channel.id,
@@ -397,56 +439,18 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       if (r.tipo === "ok") get().syncFlags();
     },
 
+    /** Sair porque o usuário quis (botão, atalho, "desligar", fim da chamada). */
     disconnect: async () => {
-      const channelId = get().channelId;
-      if (channelId) tocarSom("sair");
-      fecharSala();
-      // o painel do canal de voz é a coluna 3 inteira: sair da call sem fechá-lo
-      // deixaria o usuário preso numa sala vazia
-      useChannels.getState().leaveVoice();
-      if (channelId) {
-        emit(WS_EVENTS.VOICE_LEAVE, {});
-        if (get().call.phase !== "idle") emit(WS_EVENTS.CALL_END, { channelId });
-      }
-      set({
-        channelId: null,
-        guildId: null,
-        channelName: "",
-        desde: null,
-        status: "idle",
-        erro: null,
-        midiaDisponivel: false,
-        falando: [],
-        camOn: false,
-        screenOn: false,
-        focado: null,
-        focoAutomatico: true,
-        telaCheia: false,
-        call: CHAMADA_INICIAL,
-      });
+      sairDaSalaAtual("usuario");
     },
 
     expulsoDaVoz: ({ channelId, novoCanalId }) => {
       // já tinha saído daqui por conta própria: nada a desfazer
       if (get().channelId !== channelId) return;
-      // `fecharSala` tira os ouvintes antes de desconectar, então o
-      // `RoomEvent.Disconnected` do LiveKit não vem depois sobrescrever este
-      // texto pelo de queda de mídia
-      fecharSala();
-      useChannels.getState().leaveVoice();
-      set({
-        channelId: null,
-        guildId: null,
-        channelName: "",
-        desde: null,
-        status: "idle",
-        erro: null,
-        midiaDisponivel: false,
-        falando: [],
-        camOn: false,
-        screenOn: false,
-        focado: null,
-      });
+      // sem `voice.leave`: o servidor já me tirou, e o aviso derrubaria a
+      // conexão nova da conta. A coluna fecha — o painel mostraria uma sala em
+      // que não estou mais
+      sairDaSalaAtual("expulso");
       ui.toast(
         channelId === novoCanalId
           ? OUTRO_LUGAR
@@ -457,6 +461,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     reconnect: async () => {
       const { channelId, guildId, channelName } = get();
       if (!channelId) return;
+      // não passa por `sairDaSalaAtual`: refazer a mídia da **mesma** sala não
+      // é sair dela — o gateway continua me vendo lá, o relógio não zera e a
+      // coluna do canal fica como está
       fecharSala();
       await get().connect({
         id: channelId,
@@ -635,8 +642,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
 
     startCall: async (channelId, comVideo) => {
       // uma conexão de voz por vez: o servidor já garante isso, o cliente
-      // precisa fechar a sala antiga para não ficar com duas conexões de mídia
-      if (get().channelId && get().channelId !== channelId) await get().disconnect();
+      // precisa fechar a sala antiga para não ficar com duas conexões de mídia.
+      // A chamada mora na conversa, então a coluna do canal de voz fecha
+      if (get().channelId && get().channelId !== channelId) sairDaSalaAtual("troca-de-sala");
       get().dispatchCall({ type: "start", channelId });
       set({
         channelId,
@@ -671,7 +679,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     acceptCall: async () => {
       const channelId = get().call.channelId;
       if (!channelId) return;
-      if (get().channelId && get().channelId !== channelId) await get().disconnect();
+      if (get().channelId && get().channelId !== channelId) sairDaSalaAtual("troca-de-sala");
       get().dispatchCall({ type: "accept" });
       emit(WS_EVENTS.CALL_ACCEPT, { channelId });
       set({ channelId, guildId: null, desde: Date.now(), status: "connecting", erro: null });
@@ -728,7 +736,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
           // aviso ela veria a tela fechar do nada
           ui.toast("Chamada encerrada: você ficou sozinho");
         }
-        if (channelId === evento.channelId) void get().disconnect();
+        // a chamada acabou para mim: sai como se eu tivesse desligado
+        if (channelId === evento.channelId) sairDaSalaAtual("fim-da-chamada");
         else get().dispatchCall({ type: "reset" });
       }
     },
