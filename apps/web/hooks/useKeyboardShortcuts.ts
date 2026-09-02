@@ -9,6 +9,7 @@ import { useDMs } from "@/stores/dms";
 import { useGuilds } from "@/stores/guilds";
 import { useSettings, ZOOM } from "@/stores/settings";
 import { useUI } from "@/stores/ui";
+import { abrirCaixaDeEntrada } from "@/lib/caixa-de-entrada";
 
 /**
  * Atalhos globais do app (a lista está em `lib/shortcuts`, e a aba "Teclado"
@@ -66,6 +67,9 @@ function executar(action: ShortcutAction): void {
   switch (action) {
     case "quickSwitcher":
       ui.openModal({ kind: "quickSwitcher" });
+      return;
+    case "caixaDeEntrada":
+      abrirCaixaDeEntrada();
       return;
     case "configuracoes":
       ui.openModal({ kind: "settings" });

@@ -29,8 +29,14 @@ import { useAtualizacao, type Atualizacao } from "./useAtualizacao";
  * Medidas do print (`docs/Reference/Captura de tela 2026-09-02 142329.png`):
  * 32px de altura; setas de 14×10 a partir de x=21, com 24px de passo; título
  * de 14px semibold com ícone de 16px e 8px de folga, centrado na largura da
- * janela; ícones da direita com 36px de passo; separador de 1×20; controles
- * com glifo de 10×10 e 36px de passo, o último encostado na borda.
+ * janela; ícones da direita com 36px de passo; separador de 1×20 a 7px do
+ * primeiro controle; controles de 32px com 4px entre eles (glifo de 10×10),
+ * o último encostado na borda.
+ *
+ * Os controles e as setas **não recebem foco pelo mouse** (`tabIndex={-1}` e
+ * `preventDefault` no mousedown): clicar em "maximizar" deixava o anel verde
+ * de foco aceso no botão, e o Discord não mostra nada — nem tooltip — nesses
+ * botões. Caixa de entrada e ajuda continuam focáveis pelo teclado.
  */
 const ALTURA = 32;
 
@@ -116,9 +122,11 @@ function Barra() {
           {atualizacao.estado !== "nada" && <BotaoDeAtualizacao atualizacao={atualizacao} />}
         </div>
 
+        {/* 1×20 no print, (34,34,37) sobre (18,18,20): +16 de contraste. O
+            `border` sobre `rail` dá +31 — mais visível que o original */}
         <span aria-hidden="true" className="h-5 w-px bg-border" />
 
-        <div data-tauri-drag-region className="ml-1.5 flex h-full items-center">
+        <div data-tauri-drag-region className="ml-[7px] flex h-full items-center gap-1">
           <Controle label="Minimizar" onClick={() => void janela("minimizar")}>
             <path d="M0 5.5H10" />
           </Controle>
@@ -164,8 +172,9 @@ function Seta({
       aria-label={label}
       aria-disabled={!ativa}
       onClick={ativa ? onClick : undefined}
-      tabIndex={ativa ? 0 : -1}
-      className={`grid h-6 w-6 place-items-center transition ${
+      onMouseDown={(e) => e.preventDefault()}
+      tabIndex={-1}
+      className={`grid h-6 w-6 place-items-center outline-none transition ${
         ativa ? "text-txt-secondary hover:text-txt-primary" : "cursor-default opacity-30"
       }`}
     >
@@ -174,7 +183,7 @@ function Seta({
   );
 }
 
-/** Um dos três controles da janela: 36px de largura pela altura da barra. */
+/** Um dos três controles da janela: 32px de largura pela altura da barra. */
 function Controle({
   label,
   fechar = false,
@@ -188,28 +197,28 @@ function Controle({
   children: ReactNode;
 }) {
   return (
-    <Tooltip label={label} side="bottom" className="h-full">
-      <button
-        type="button"
-        aria-label={label}
-        onClick={onClick}
-        className={`grid h-full w-9 place-items-center transition ${
-          fechar ? "hover:bg-red hover:text-white" : "hover:bg-hov hover:text-txt-primary"
-        }`}
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      onMouseDown={(e) => e.preventDefault()}
+      tabIndex={-1}
+      className={`grid h-full w-8 place-items-center outline-none transition ${
+        fechar ? "hover:bg-red hover:text-white" : "hover:bg-hov hover:text-txt-primary"
+      }`}
+    >
+      <svg
+        width={10}
+        height={10}
+        viewBox="0 0 10 10"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1}
+        aria-hidden="true"
       >
-        <svg
-          width={10}
-          height={10}
-          viewBox="0 0 10 10"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={1}
-          aria-hidden="true"
-        >
-          {children}
-        </svg>
-      </button>
-    </Tooltip>
+        {children}
+      </svg>
+    </button>
   );
 }
 

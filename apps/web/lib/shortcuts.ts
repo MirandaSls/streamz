@@ -34,6 +34,7 @@ export type ShortcutAction =
   | "alternarMudo"
   | "alternarSurdo"
   | "quickSwitcher"
+  | "caixaDeEntrada"
   | "configuracoes"
   | "mostrarAtalhos"
   | "zoomMais"
@@ -51,6 +52,7 @@ export interface ShortcutSpec {
 /** Todos os atalhos do app, na ordem em que a aba "Teclado" os lista. */
 export const SHORTCUTS: readonly ShortcutSpec[] = [
   { action: "quickSwitcher", combos: ["Ctrl+K"], label: "atalho.quickSwitcher" },
+  { action: "caixaDeEntrada", combos: ["Ctrl+I"], label: "atalho.caixaDeEntrada" },
   { action: "canalProximo", combos: ["Alt+ArrowDown"], label: "atalho.canalProximo" },
   { action: "canalAnterior", combos: ["Alt+ArrowUp"], label: "atalho.canalAnterior" },
   { action: "naoLidoProximo", combos: ["Alt+Shift+ArrowDown"], label: "atalho.naoLidoProximo" },

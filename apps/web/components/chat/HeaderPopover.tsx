@@ -47,6 +47,10 @@ export default function HeaderPopover({
   action,
   busca,
   largura = 420,
+  altura = 600,
+  cabecalho,
+  corpoClassName = "p-2",
+  evento,
   onOpen,
   children,
 }: {
@@ -63,6 +67,17 @@ export default function HeaderPopover({
   /** campo de busca do cabeçalho do painel. */
   busca?: { valor: string; aoMudar: (valor: string) => void; placeholder: string };
   largura?: number;
+  /** altura fixa do painel (600 nas fixadas e threads; 466 na caixa de entrada). */
+  altura?: number;
+  /**
+   * Substitui o cabeçalho padrão (ícone + título) pelo que o chamador
+   * desenhar — a caixa de entrada tem controles e abas próprios.
+   */
+  cabecalho?: (fechar: () => void) => ReactNode;
+  /** classes do corpo rolável; o padrão é o `p-2` das listas de cartões. */
+  corpoClassName?: string;
+  /** nome de um evento no `window` que abre o painel (o atalho Ctrl+I). */
+  evento?: string;
   onOpen?: () => void;
   /** recebe o fechador para que um item da lista possa fechar o painel. */
   children: (fechar: () => void) => ReactNode;
@@ -75,6 +90,20 @@ export default function HeaderPopover({
   const botaoRef = useRef<HTMLElement | null>(null);
 
   const fechar = useCallback(() => setOpen(false), []);
+
+  // o atalho abre este painel; o primeiro montado a ouvir fica com o evento
+  const onOpenRef = useRef(onOpen);
+  onOpenRef.current = onOpen;
+  useEffect(() => {
+    if (!evento) return;
+    function abrir(e: Event) {
+      e.stopImmediatePropagation();
+      setOpen(true);
+      onOpenRef.current?.();
+    }
+    window.addEventListener(evento, abrir);
+    return () => window.removeEventListener(evento, abrir);
+  }, [evento]);
 
   // alinhado à direita do botão; se o painel vazasse pela esquerda, à esquerda
   useLayoutEffect(() => {
@@ -164,43 +193,49 @@ export default function HeaderPopover({
             aria-label={title}
             tabIndex={-1}
             onKeyDown={prenderFoco}
-            style={{ width: largura, top: `calc(100% + ${FOLGA}px)` }}
-            className={`absolute z-30 flex h-[600px] max-h-[calc(100vh-80px)] flex-col overflow-hidden rounded-md bg-overlay shadow-high outline-none anim-menu ${
+            style={{ width: largura, height: altura, top: `calc(100% + ${FOLGA}px)` }}
+            className={`absolute z-30 flex max-h-[calc(100vh-80px)] flex-col overflow-hidden rounded-lg bg-overlay shadow-high outline-none anim-menu ${
               alinharEsquerda ? "left-0" : "right-0"
             }`}
           >
-            <header className="shrink-0 shadow-header">
-              <div className="flex h-12 items-center gap-2 px-4">
-                <span aria-hidden="true" className="shrink-0 text-txt-secondary">
-                  {icon}
-                </span>
-                {tituloControle ? (
-                  tituloControle(fechar)
-                ) : (
-                  <h2 className="min-w-0 truncate font-semibold text-txt-primary">{title}</h2>
-                )}
-                {contagem !== undefined && contagem > 0 && (
-                  <span className="shrink-0 rounded-full bg-rail px-1.5 text-xs font-semibold text-txt-muted">
-                    {contagem}
+            {cabecalho ? (
+              cabecalho(fechar)
+            ) : (
+              <header className="shrink-0 shadow-header">
+                <div className="flex h-12 items-center gap-2 px-4">
+                  <span aria-hidden="true" className="shrink-0 text-txt-secondary">
+                    {icon}
                   </span>
-                )}
-                {action && <span className="ml-auto shrink-0">{action}</span>}
-              </div>
-              {busca && (
-                <div className="px-4 pb-2">
-                  <input
-                    data-autofocus
-                    value={busca.valor}
-                    onChange={(e) => busca.aoMudar(e.target.value)}
-                    type="search"
-                    aria-label={busca.placeholder}
-                    placeholder={busca.placeholder}
-                    className="h-7 w-full rounded-[4px] bg-rail px-2 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
-                  />
+                  {tituloControle ? (
+                    tituloControle(fechar)
+                  ) : (
+                    <h2 className="min-w-0 truncate font-semibold text-txt-primary">{title}</h2>
+                  )}
+                  {contagem !== undefined && contagem > 0 && (
+                    <span className="shrink-0 rounded-full bg-rail px-1.5 text-xs font-semibold text-txt-muted">
+                      {contagem}
+                    </span>
+                  )}
+                  {action && <span className="ml-auto shrink-0">{action}</span>}
                 </div>
-              )}
-            </header>
-            <div className="min-h-0 flex-1 overflow-y-auto p-2">{children(fechar)}</div>
+                {busca && (
+                  <div className="px-4 pb-2">
+                    <input
+                      data-autofocus
+                      value={busca.valor}
+                      onChange={(e) => busca.aoMudar(e.target.value)}
+                      type="search"
+                      aria-label={busca.placeholder}
+                      placeholder={busca.placeholder}
+                      className="h-7 w-full rounded-[4px] bg-rail px-2 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
+                    />
+                  </div>
+                )}
+              </header>
+            )}
+            <div className={`min-h-0 flex-1 overflow-y-auto ${corpoClassName}`}>
+              {children(fechar)}
+            </div>
           </div>
         </>
       )}

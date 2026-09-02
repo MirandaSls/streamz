@@ -133,6 +133,7 @@ const PT_BR = {
   // ── teclado ──
   "teclado.intro": "Os atalhos abaixo valem em qualquer tela do app.",
   "atalho.quickSwitcher": "Abrir a busca rápida",
+  "atalho.caixaDeEntrada": "Abrir a caixa de entrada",
   "atalho.canalAnterior": "Canal anterior",
   "atalho.canalProximo": "Próximo canal",
   "atalho.naoLidoAnterior": "Canal não lido anterior",
@@ -284,6 +285,7 @@ const EN_US: Dicionario = {
 
   "teclado.intro": "These shortcuts work anywhere in the app.",
   "atalho.quickSwitcher": "Open quick switcher",
+  "atalho.caixaDeEntrada": "Open the inbox",
   "atalho.canalAnterior": "Previous channel",
   "atalho.canalProximo": "Next channel",
   "atalho.naoLidoAnterior": "Previous unread channel",

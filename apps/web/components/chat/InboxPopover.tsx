@@ -1,47 +1,58 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   AtSign,
   Check,
+  CheckCheck,
   CornerUpRight,
   Hash,
   Inbox,
   MessageCircle,
-  Settings,
+  PedidoDeAmizade,
+  SlidersHorizontal,
 } from "@/components/ui/icones";
-import { mentionsUser } from "@streamz/shared";
 import type { InboxMention, InboxUnreadChannel } from "@streamz/shared";
 import HeaderPopover from "@/components/chat/HeaderPopover";
 import MessagePreview, { AcaoDoCartao } from "@/components/chat/MessagePreview";
+import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";
-import { useAuth } from "@/stores/auth";
+import { EVENTO_CAIXA_DE_ENTRADA } from "@/lib/caixa-de-entrada";
 import { useChannels } from "@/stores/channels";
 import { useDMs } from "@/stores/dms";
+import { useFriends } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
 import { useInbox } from "@/stores/messages-inbox";
 import { goToChannel, goToMessage } from "@/stores/messages-navigate";
 import { ui } from "@/stores/ui";
 
 /**
- * Caixa de entrada do cabeçalho.
+ * Caixa de entrada — a do Discord, medida nos prints
+ * (`docs/Reference/Captura de tela 2026-09-02 152336.png` e `152351.png`).
  *
- * São **três** abas, como no Discord: "Para Você" (tudo que chegou para mim —
- * menções e respostas), "Não Lidas" (canais com novidade) e "Menções" (só o que
- * cita o meu @). As três moram na linha do título, não como pílulas dentro do
- * corpo do painel.
+ * Painel de 600×466 com raio 8, alinhado pela direita ao ícone que o abriu.
+ * Cabeçalho com o ícone e "Caixa de Entrada" a 21px da borda; à direita, um
+ * botão quadrado de 32px que muda com a aba (duplo-visto "marcar tudo como
+ * lido" nas não lidas, filtros nas menções) e a pílula de 58×32 dos pedidos
+ * de amizade com o contador. Depois, **duas** abas de meia largura — "Não
+ * lidas" e "Menções" — com o indicador de 2px na base da ativa e uma linha de
+ * 1px separando do corpo.
  *
- * As duas primeiras listas vêm do mesmo `GET /me/mentions`: o contrato não
- * separa menção de resposta, então a aba "Menções" filtra pelo texto com a
- * mesma `mentionsUser` que decide se algo notifica.
+ * Havia uma terceira aba, "Para Você", que misturava menções e respostas. O
+ * `GET /me/mentions` não separa as duas, e é o conteúdo dela que agora mora em
+ * "Menções": resposta a mim é, na prática, alguém falando comigo, e sumir com
+ * ela por causa do nome da aba seria perder aviso.
  */
-type Aba = "paraVoce" | "naoLidas" | "mencoes";
+type Aba = "naoLidas" | "mencoes";
 
 const ABAS: { id: Aba; rotulo: string }[] = [
-  { id: "paraVoce", rotulo: "Para Você" },
-  { id: "naoLidas", rotulo: "Não Lidas" },
+  { id: "naoLidas", rotulo: "Não lidas" },
   { id: "mencoes", rotulo: "Menções" },
 ];
+
+/** O painel do Discord: 600 de largura por 466 de altura, no print. */
+const LARGURA = 600;
+const ALTURA = 466;
 
 /** Rótulo de um canal na caixa: `#canal` no servidor, o nome na conversa. */
 function rotuloDoCanal(c: Pick<InboxUnreadChannel, "channelName" | "channelType">): string {
@@ -55,37 +66,27 @@ export default function InboxPopover({
   /** o ícone é de 20px no cabeçalho e de 16px na barra de título do desktop. */
   tamanhoDoIcone?: number;
 } = {}) {
-  const [aba, setAba] = useState<Aba>("paraVoce");
+  const [aba, setAba] = useState<Aba>("naoLidas");
   /** "este servidor" filtra os não-lidos pelo servidor aberto. */
   const [soEsteServidor, setSoEsteServidor] = useState(false);
   /** menções já resolvidas nesta sessão do painel (o contrato não tem "ler uma"). */
   const [lidas, setLidas] = useState<Set<string>>(new Set());
-  const me = useAuth((s) => s.user);
   const guildAtiva = useGuilds((s) => s.activeGuildId);
   const mentions = useInbox((s) => s.mentions);
   const unread = useInbox((s) => s.unread);
   const loading = useInbox((s) => s.loading);
   const load = useInbox((s) => s.load);
   const markAllRead = useInbox((s) => s.markAllRead);
+  const pedidos = useFriends((s) => s.incoming.length);
 
-  const paraVoce = useMemo(
+  const mencoes = useMemo(
     () => mentions.filter((m) => !lidas.has(m.message.id)),
     [mentions, lidas],
-  );
-  const soMencoes = useMemo(
-    () => paraVoce.filter((m) => !!me && mentionsUser(m.message.content, me.username)),
-    [paraVoce, me],
   );
   const naoLidas = useMemo(
     () => (soEsteServidor ? unread.filter((g) => g.guildId === guildAtiva) : unread),
     [unread, soEsteServidor, guildAtiva],
   );
-
-  const contagem: Record<Aba, number> = {
-    paraVoce: paraVoce.length,
-    naoLidas: naoLidas.reduce((total, g) => total + g.channels.length, 0),
-    mencoes: soMencoes.length,
-  };
 
   /** Marca o canal da menção como lido e tira o cartão da lista. */
   function marcarComoLida(m: InboxMention) {
@@ -98,19 +99,68 @@ export default function InboxPopover({
     void useDMs.getState().markRead(channelId);
   }
 
-  const lista = aba === "mencoes" ? soMencoes : paraVoce;
+  /** A pílula: abre a página Amigos na aba de pedidos pendentes. */
+  function verPedidos(fechar: () => void) {
+    fechar();
+    ui.setView("dm");
+    useChannels.getState().leaveVoice();
+    const amigos = useFriends.getState();
+    amigos.setTab("pendentes");
+    amigos.setOpen(true);
+  }
 
   return (
     <HeaderPopover
       label="Caixa de entrada"
       title="Caixa de Entrada"
       icon={<Inbox size={tamanhoDoIcone} />}
-      largura={440}
+      largura={LARGURA}
+      altura={ALTURA}
+      evento={EVENTO_CAIXA_DE_ENTRADA}
+      corpoClassName="flex flex-col"
       onOpen={() => void load()}
-      tituloControle={() => (
-        <div className="flex min-w-0 items-center gap-3">
-          <h2 className="shrink-0 font-semibold text-txt-primary">Caixa de Entrada</h2>
-          <div role="tablist" aria-label="Caixa de entrada" className="flex min-w-0 gap-1">
+      cabecalho={(fechar) => (
+        <header className="shrink-0">
+          {/* título a 19px do topo, 36px de linha, 21px das bordas */}
+          <div className="flex h-9 items-center gap-2 px-[21px] pt-[19px]">
+            <Inbox size={20} aria-hidden="true" className="shrink-0 text-txt-secondary" />
+            <h2 className="min-w-0 truncate font-display text-xl font-bold tracking-title text-txt-primary">
+              Caixa de Entrada
+            </h2>
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              {aba === "naoLidas" ? (
+                <BotaoDoCabecalho label="Marcar tudo como lido" onClick={() => void markAllRead()}>
+                  <CheckCheck size={20} />
+                </BotaoDoCabecalho>
+              ) : (
+                // o Discord filtra as menções por servidor aqui; o nosso contrato
+                // ainda não tem esse filtro, então o botão existe e não faz nada
+                <BotaoDoCabecalho label="Filtros" inerte>
+                  <SlidersHorizontal size={20} />
+                </BotaoDoCabecalho>
+              )}
+              <Tooltip label="Ver pedidos de amizade" side="bottom">
+                <button
+                  type="button"
+                  onClick={() => verPedidos(fechar)}
+                  aria-label={`Ver pedidos de amizade (${pedidos})`}
+                  className="flex h-8 w-[58px] items-center justify-center gap-1 rounded-lg bg-hov text-txt-secondary transition hover:bg-sel hover:text-txt-primary"
+                >
+                  <PedidoDeAmizade size={20} aria-hidden="true" />
+                  <span className="grid h-5 min-w-5 place-items-center rounded-full bg-overlay px-1 text-xs font-bold leading-none text-txt-normal">
+                    {pedidos}
+                  </span>
+                </button>
+              </Tooltip>
+            </div>
+          </div>
+
+          {/* duas abas de meia largura; o indicador cobre a linha de baixo */}
+          <div
+            role="tablist"
+            aria-label="Caixa de entrada"
+            className="mx-1 mt-[22px] flex h-[50px] gap-2.5 border-b border-border"
+          >
             {ABAS.map((a) => (
               <button
                 key={a.id}
@@ -118,162 +168,240 @@ export default function InboxPopover({
                 role="tab"
                 aria-selected={aba === a.id}
                 onClick={() => setAba(a.id)}
-                className={`flex shrink-0 items-center gap-1 rounded-[3px] px-1.5 py-0.5 text-xs font-medium transition ${
-                  aba === a.id ? "bg-sel text-txt-primary" : "text-txt-muted hover:text-txt-normal"
+                className={`relative flex-1 text-sm font-medium transition ${
+                  aba === a.id
+                    ? "text-accent after:absolute after:inset-x-0 after:-bottom-px after:h-[2px] after:bg-accent"
+                    : "text-txt-secondary hover:text-txt-normal"
                 }`}
               >
                 {a.rotulo}
-                {contagem[a.id] > 0 && (
-                  <span className="text-[11px] text-txt-faint">{contagem[a.id]}</span>
-                )}
               </button>
             ))}
           </div>
-        </div>
+        </header>
       )}
-      action={
-        <button
-          type="button"
-          onClick={() => ui.openModal({ kind: "settings", tab: "notificacoes" })}
-          aria-label="Configurações de notificação"
-          className="grid h-6 w-6 place-items-center rounded text-txt-secondary transition hover:text-txt-primary"
-        >
-          <Settings size={18} />
-        </button>
-      }
     >
       {(fechar) => (
-        <div role="tabpanel">
+        <div role="tabpanel" className="flex min-h-0 flex-1 flex-col">
           {loading && <p className="p-4 text-center text-sm text-txt-muted">Carregando…</p>}
 
-          {!loading && aba !== "naoLidas" && (
+          {!loading && aba === "mencoes" && (
             <>
-              {lista.length === 0 && (
-                <div className="p-6 text-center">
-                  <AtSign size={32} aria-hidden="true" className="mx-auto mb-2 text-txt-faint" />
-                  <p className="text-sm text-txt-muted">Nada esperando por você.</p>
+              {mencoes.length === 0 && (
+                <Vazio icone={<AtSign size={40} />} titulo="Você já viu tudo!">
+                  Todas as menções recebidas ficarão salvas aqui por 7 dias.
+                </Vazio>
+              )}
+              {mencoes.length > 0 && (
+                <div className="px-[21px] py-3">
+                  {mencoes.map((m) => (
+                    <MessagePreview
+                      key={m.message.id}
+                      message={m.message}
+                      className="mb-1 last:mb-0"
+                      acima={
+                        <div className="mb-1 flex items-center gap-1.5 pr-16 text-xs text-txt-muted">
+                          <span className="truncate font-medium text-txt-secondary">
+                            {m.guildName ?? "Mensagens diretas"}
+                          </span>
+                          <span aria-hidden="true">›</span>
+                          <span className="truncate">
+                            {rotuloDoCanal({
+                              channelName: m.channelName,
+                              channelType: m.channelType,
+                            })}
+                          </span>
+                        </div>
+                      }
+                      acoes={
+                        <>
+                          <AcaoDoCartao label="Marcar como lida" onClick={() => marcarComoLida(m)}>
+                            <Check size={16} />
+                          </AcaoDoCartao>
+                          <AcaoDoCartao
+                            label="Saltar"
+                            onClick={() => {
+                              fechar();
+                              void goToMessage({
+                                guildId: m.guildId,
+                                channelId: m.message.channelId,
+                                messageId: m.message.id,
+                              });
+                            }}
+                          >
+                            <CornerUpRight size={16} />
+                          </AcaoDoCartao>
+                        </>
+                      }
+                    />
+                  ))}
                 </div>
               )}
-              {lista.map((m) => (
-                <MessagePreview
-                  key={m.message.id}
-                  message={m.message}
-                  className="mb-1 last:mb-0"
-                  acima={
-                    <div className="mb-1 flex items-center gap-1.5 pr-16 text-xs text-txt-muted">
-                      <span className="truncate font-medium text-txt-secondary">
-                        {m.guildName ?? "Mensagens diretas"}
-                      </span>
-                      <span aria-hidden="true">›</span>
-                      <span className="truncate">
-                        {rotuloDoCanal({
-                          channelName: m.channelName,
-                          channelType: m.channelType,
-                        })}
-                      </span>
-                    </div>
-                  }
-                  acoes={
-                    <>
-                      <AcaoDoCartao label="Marcar como lida" onClick={() => marcarComoLida(m)}>
-                        <Check size={16} />
-                      </AcaoDoCartao>
-                      <AcaoDoCartao
-                        label="Saltar"
-                        onClick={() => {
-                          fechar();
-                          void goToMessage({
-                            guildId: m.guildId,
-                            channelId: m.message.channelId,
-                            messageId: m.message.id,
-                          });
-                        }}
-                      >
-                        <CornerUpRight size={16} />
-                      </AcaoDoCartao>
-                    </>
-                  }
-                />
-              ))}
             </>
           )}
 
           {!loading && aba === "naoLidas" && (
             <>
-              <div className="mb-2 flex items-center gap-1 px-1">
-                {(
-                  [
-                    [true, "Este servidor"],
-                    [false, "Todos os servidores"],
-                  ] as const
-                ).map(([valor, rotulo]) => (
-                  <button
-                    key={rotulo}
-                    type="button"
-                    onClick={() => setSoEsteServidor(valor)}
-                    aria-pressed={soEsteServidor === valor}
-                    className={`rounded-[3px] px-2 py-1 text-xs font-medium transition ${
-                      soEsteServidor === valor
-                        ? "bg-sel text-txt-primary"
-                        : "text-txt-muted hover:text-txt-normal"
-                    }`}
-                  >
-                    {rotulo}
-                  </button>
-                ))}
-                {naoLidas.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => void markAllRead()}
-                    className="ml-auto text-xs font-medium text-txt-link hover:underline"
-                  >
-                    Marcar tudo como lido
-                  </button>
-                )}
-              </div>
+              {naoLidas.length === 0 && !soEsteServidor && (
+                <Vazio icone={<Inbox size={40} />} titulo="Você está por dentro!">
+                  Pressione Ctrl+I para abrir a caixa de entrada e Esc para marcar o canal
+                  aberto como lido.
+                </Vazio>
+              )}
+              {(naoLidas.length > 0 || soEsteServidor) && (
+                <div className="px-[21px] py-3">
+                  <div className="mb-2 flex items-center gap-1">
+                    {(
+                      [
+                        [true, "Este servidor"],
+                        [false, "Todos os servidores"],
+                      ] as const
+                    ).map(([valor, rotulo]) => (
+                      <button
+                        key={rotulo}
+                        type="button"
+                        onClick={() => setSoEsteServidor(valor)}
+                        aria-pressed={soEsteServidor === valor}
+                        className={`rounded-[3px] px-2 py-1 text-xs font-medium transition ${
+                          soEsteServidor === valor
+                            ? "bg-sel text-txt-primary"
+                            : "text-txt-muted hover:text-txt-normal"
+                        }`}
+                      >
+                        {rotulo}
+                      </button>
+                    ))}
+                  </div>
 
-              {naoLidas.length === 0 && (
-                <div className="p-6 text-center">
-                  <Inbox size={32} aria-hidden="true" className="mx-auto mb-2 text-txt-faint" />
-                  <p className="text-sm text-txt-muted">Você está em dia. Nada por ler.</p>
+                  {naoLidas.length === 0 && (
+                    <p className="p-4 text-center text-sm text-txt-muted">
+                      Nada por ler neste servidor.
+                    </p>
+                  )}
+                  {naoLidas.map((g) => (
+                    <section key={g.guildId ?? "@me"} className="mb-2 last:mb-0">
+                      <h3 className="px-2 py-1 text-xs font-semibold uppercase text-txt-muted">
+                        {g.guildName}
+                      </h3>
+                      {g.channels.map((c) => (
+                        <button
+                          key={c.channelId}
+                          type="button"
+                          onClick={() => {
+                            fechar();
+                            void goToChannel({ guildId: g.guildId, channelId: c.channelId });
+                          }}
+                          className="flex w-full items-center gap-2 rounded-[3px] px-2 py-1.5 text-left hover:bg-hov"
+                        >
+                          {c.channelType === "DM" || c.channelType === "GROUP" ? (
+                            <MessageCircle size={20} aria-hidden="true" className="text-txt-faint" />
+                          ) : (
+                            <Hash size={20} aria-hidden="true" className="text-txt-faint" />
+                          )}
+                          <span className="min-w-0 flex-1 truncate text-txt-normal">
+                            {c.channelName ?? "Conversa"}
+                          </span>
+                          {c.mentionCount > 0 && (
+                            <span className="grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[11px] font-bold text-white">
+                              {c.mentionCount}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </section>
+                  ))}
                 </div>
               )}
-              {naoLidas.map((g) => (
-                <section key={g.guildId ?? "@me"} className="mb-2 last:mb-0">
-                  <h3 className="px-2 py-1 text-xs font-semibold uppercase text-txt-muted">
-                    {g.guildName}
-                  </h3>
-                  {g.channels.map((c) => (
-                    <button
-                      key={c.channelId}
-                      type="button"
-                      onClick={() => {
-                        fechar();
-                        void goToChannel({ guildId: g.guildId, channelId: c.channelId });
-                      }}
-                      className="flex w-full items-center gap-2 rounded-[3px] px-2 py-1.5 text-left hover:bg-hov"
-                    >
-                      {c.channelType === "DM" || c.channelType === "GROUP" ? (
-                        <MessageCircle size={20} aria-hidden="true" className="text-txt-faint" />
-                      ) : (
-                        <Hash size={20} aria-hidden="true" className="text-txt-faint" />
-                      )}
-                      <span className="min-w-0 flex-1 truncate text-txt-normal">
-                        {c.channelName ?? "Conversa"}
-                      </span>
-                      {c.mentionCount > 0 && (
-                        <span className="grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[11px] font-bold text-white">
-                          {c.mentionCount}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </section>
-              ))}
             </>
           )}
         </div>
       )}
     </HeaderPopover>
+  );
+}
+
+// ── pedaços ────────────────────────────────────────────────────────────────
+
+/** O botão quadrado de 32px do cabeçalho, que muda com a aba. */
+function BotaoDoCabecalho({
+  label,
+  inerte = false,
+  onClick,
+  children,
+}: {
+  label: string;
+  /** existe para ocupar o lugar do original, mas ainda não faz nada. */
+  inerte?: boolean;
+  onClick?: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip label={inerte ? `${label} (em breve)` : label} side="bottom">
+      <button
+        type="button"
+        onClick={inerte ? undefined : onClick}
+        aria-label={label}
+        aria-disabled={inerte || undefined}
+        className={`grid h-8 w-8 place-items-center rounded-lg bg-hov transition ${
+          inerte
+            ? "cursor-default text-txt-secondary opacity-50"
+            : "text-txt-secondary hover:bg-sel hover:text-txt-primary"
+        }`}
+      >
+        {children}
+      </button>
+    </Tooltip>
+  );
+}
+
+/**
+ * Corpo vazio de uma aba: o círculo de 80px com o ícone, duas faíscas em
+ * volta (a de quatro pontos em ciano acima à direita, a estrela amarela
+ * abaixo à esquerda — posições do print, relativas ao círculo), o título de
+ * 24px e a "dica" com o rótulo em verde.
+ */
+function Vazio({
+  icone,
+  titulo,
+  children,
+}: {
+  icone: ReactNode;
+  titulo: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center px-10 text-center">
+      <div className="relative h-20 w-20">
+        <div className="grid h-20 w-20 place-items-center rounded-full bg-rail text-txt-secondary">
+          {icone}
+        </div>
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 12 12"
+          className="absolute left-[75px] top-0.5 h-3 w-3 text-txt-link"
+          fill="currentColor"
+        >
+          <circle cx="6" cy="1.5" r="1.5" />
+          <circle cx="10.5" cy="6" r="1.5" />
+          <circle cx="6" cy="10.5" r="1.5" />
+          <circle cx="1.5" cy="6" r="1.5" />
+        </svg>
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 14 14"
+          className="absolute left-[-10px] top-16 h-3.5 w-3.5 text-yellow"
+          fill="currentColor"
+        >
+          <path d="M7 0L8.6 5.4L14 7L8.6 8.6L7 14L5.4 8.6L0 7L5.4 5.4Z" />
+        </svg>
+      </div>
+      <h3 className="mt-8 font-display text-2xl font-bold tracking-title text-txt-primary">
+        {titulo}
+      </h3>
+      <p className="mt-2 text-xs text-txt-muted">
+        <span className="font-bold text-green">FICA A DICA: </span>
+        {children}
+      </p>
+    </div>
   );
 }
