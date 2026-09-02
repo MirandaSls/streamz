@@ -40,10 +40,11 @@ export default function WelcomeModal({ guildId }: { guildId: string }) {
     <Dialog
       title={`Bem-vindo a ${guild?.name ?? "este servidor"}!`}
       hideHeader
+      semPadding
       onClose={fechar}
       className="w-[460px]"
     >
-      <div className="-m-4">
+      <div>
         {/* arte do servidor no topo, no lugar do ícone decorativo de antes */}
         <div className="relative h-[120px] bg-accent">
           {guild?.iconUrl ? (

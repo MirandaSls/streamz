@@ -49,6 +49,7 @@ export default function Dialog({
   showClose = true,
   align = "center",
   bodyClassName = "",
+  semPadding = false,
   className = "w-[480px]",
 }: {
   title: string;
@@ -63,6 +64,9 @@ export default function Dialog({
   /** o quick switcher fica no terço superior, não no centro. */
   align?: "center" | "top";
   bodyClassName?: string;
+  /** o corpo sem padding nenhum: perfil e boas-vindas pintam a caixa inteira
+   *  (faixa de cor até a borda) e cuidam do próprio respiro. */
+  semPadding?: boolean;
   /** largura da caixa: 480 medidos no Discord, borda de 1px incluída. */
   className?: string;
 }) {
@@ -169,11 +173,15 @@ export default function Dialog({
           </button>
         )}
         {/* só o corpo rola; o rodapé fica sempre à vista */}
-        {/* sem cabeçalho o corpo mantém os 16 de sempre: perfil e boas-vindas
-            pintam a caixa inteira e anulam esse padding com `-m-4` */}
+        {/* sem cabeçalho o corpo mantém os 16 do quick switcher; quem pinta a
+            caixa inteira pede `semPadding` em vez de anular com margem negativa
+            (a margem dependia do padding daqui, e sobraria uma faixa de 8 de
+            cada lado com o corpo em 24) */}
         {temCorpo && (
           <div
-            className={`min-h-0 flex-1 overflow-y-auto ${hideHeader ? "p-4" : "px-6 py-4"} ${bodyClassName}`}
+            className={`min-h-0 flex-1 overflow-y-auto ${
+              semPadding ? "" : hideHeader ? "p-4" : "px-6 py-4"
+            } ${bodyClassName}`}
           >
             {children}
           </div>
