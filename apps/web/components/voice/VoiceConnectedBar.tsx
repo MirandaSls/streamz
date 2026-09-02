@@ -11,6 +11,7 @@ import { dmTitle, useDMs } from "@/stores/dms";
 import { useGuilds } from "@/stores/guilds";
 import { ui } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
+import { rotuloDoPing, useVoicePing, type QualidadeDeVoz } from "@/stores/voice-ping";
 
 /**
  * Barra "Voz conectada" — mora acima do painel do usuário, no rodapé da coluna
@@ -35,7 +36,18 @@ import { useVoice } from "@/stores/voice";
  * A fileira de baixo é só ícone, sem rótulo. Dois botões com texto ("Vídeo",
  * "Tela") pareciam mais claros e são menos: o rótulo empurra o alvo clicável
  * para menos da metade da largura e obriga a abreviar quando a coluna encolhe.
+ *
+ * O ícone de sinal responde ao **ping** (`useVoicePing`, medido a cada 2 s):
+ * tooltip "Ping: N ms" no hover e a cor pela qualidade, como no Discord —
+ * verde (o da barra), amarelo e vermelho são os tokens que já existem.
  */
+
+/** Cor do selo do sinal pela qualidade; sem medida, o verde de "conectado". */
+const COR_DO_SINAL: Record<QualidadeDeVoz, string> = {
+  excelente: "bg-green/15 text-green",
+  boa: "bg-yellow/15 text-yellow",
+  ruim: "bg-red/15 text-red",
+};
 export default function VoiceConnectedBar() {
   const channelId = useVoice((s) => s.channelId);
   const guildId = useVoice((s) => s.guildId);
@@ -49,6 +61,9 @@ export default function VoiceConnectedBar() {
   const reconnect = useVoice((s) => s.reconnect);
   const conversas = useDMs((s) => s.channels);
   const guilds = useGuilds((s) => s.guilds);
+  // store própria: a medição de 2 em 2 s não passa pelo `tick` da grade
+  const pingMs = useVoicePing((s) => s.pingMs);
+  const qualidade = useVoicePing((s) => s.qualidade);
 
   const [ruidoAberto, setRuidoAberto] = useState(false);
   // o botão, não a caixa: quem posiciona e fecha é o `PopoverFlutuante`
@@ -86,24 +101,27 @@ export default function VoiceConnectedBar() {
           sintoma de "ficar no canto" que o participante do canal tinha.
         */}
         <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
-          {/* selo de 32px em volta do sinal, como no Discord: sem ele o estado
+          {/* Selo de 32px em volta do sinal, como no Discord: sem ele o estado
               "conectado" é só um texto verde, e o bloco perde a âncora visual
-              que diz onde a call mora */}
-          <span
-            className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${
-              falhou
-                ? "bg-red/15 text-red"
-                : status === "connecting"
-                  ? "bg-hov text-txt-muted"
-                  : "bg-green/15 text-green"
-            }`}
-          >
-            {falhou ? (
-              <SignalZero size={18} aria-hidden="true" />
-            ) : (
-              <Signal size={18} aria-hidden="true" />
-            )}
-          </span>
+              que diz onde a call mora. A cor vem da qualidade medida do ping. */}
+          <Tooltip label={falhou ? "Sem conexão" : rotuloDoPing(pingMs)}>
+            <span
+              aria-label={falhou ? "Sem conexão" : rotuloDoPing(pingMs)}
+              className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${
+                falhou
+                  ? "bg-red/15 text-red"
+                  : status === "connecting"
+                    ? "bg-hov text-txt-muted"
+                    : COR_DO_SINAL[qualidade ?? "excelente"]
+              }`}
+            >
+              {falhou ? (
+                <SignalZero size={18} aria-hidden="true" />
+              ) : (
+                <Signal size={18} aria-hidden="true" />
+              )}
+            </span>
+          </Tooltip>
 
           <span className="flex min-w-0 flex-1 flex-col overflow-hidden">
             {/* o texto precisa do próprio span: `truncate` num container flex

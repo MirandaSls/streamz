@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { mentionsUser } from "@streamz/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import type { ChannelReadSummary } from "../../common/dto";
@@ -6,10 +7,11 @@ import type { ChannelReadSummary } from "../../common/dto";
 /**
  * Estado de leitura: até onde cada usuário leu cada canal.
  *
- * É o que alimenta "não lido" (mensagem depois de `lastReadAt`) e o badge de
+ * É o que alimenta "não lido" (mensagem depois de `lastReadAt`), o badge de
  * menções (`@username`, `<@&cargo meu>` ou `@everyone` em mensagem de outro,
- * depois de `lastReadAt`). Não autoriza nada — quem chama já passou por
- * `assertCanViewChannel`.
+ * depois de `lastReadAt`) e a contagem de não lidas (toda mensagem de outro
+ * depois de `lastReadAt` — o número que a conversa mostra). Não autoriza nada
+ * — quem chama já passou por `assertCanViewChannel`.
  */
 @Injectable()
 export class ReadStateService {
@@ -27,7 +29,7 @@ export class ReadStateService {
 
   /**
    * Resumo de leitura de vários canais de uma vez, na visão de `userId`:
-   * três consultas no total, independentemente do número de canais.
+   * cinco consultas no total, independentemente do número de canais.
    */
   async summaries(
     userId: string,
@@ -46,7 +48,7 @@ export class ReadStateService {
     });
     const roleIds = meusCargos.map((r) => r.roleId);
 
-    const [ultimas, lidos, mencoes, respostas] = await Promise.all([
+    const [ultimas, lidos, mencoes, respostas, naoLidas] = await Promise.all([
       this.prisma.message.groupBy({
         by: ["channelId"],
         where: { channelId: { in: channelIds } },
@@ -79,11 +81,17 @@ export class ReadStateService {
         },
         select: { id: true, channelId: true, createdAt: true },
       }),
+      this.contarNaoLidas(userId, channelIds),
     ]);
 
     const lastRead = new Map(lidos.map((r) => [r.channelId, r.lastReadAt]));
     for (const id of channelIds) {
-      out.set(id, { lastMessageAt: null, lastReadAt: lastRead.get(id) ?? null, mentionCount: 0 });
+      out.set(id, {
+        lastMessageAt: null,
+        lastReadAt: lastRead.get(id) ?? null,
+        mentionCount: 0,
+        unreadCount: naoLidas.get(id) ?? 0,
+      });
     }
     for (const u of ultimas) {
       const s = out.get(u.channelId);
@@ -107,6 +115,28 @@ export class ReadStateService {
       s.mentionCount += 1;
     }
     return out;
+  }
+
+  /**
+   * Quantas mensagens de outros chegaram depois do que eu li, por canal.
+   *
+   * Uma consulta só para todos os canais: o `lastReadAt` é por canal, então o
+   * filtro precisa do join com `ReadState` — o `groupBy` do Prisma não compara
+   * duas colunas. Canal que nunca abri conta tudo, como o `isUnread` do
+   * contrato. Só canais com alguma não lida voltam no mapa.
+   */
+  private async contarNaoLidas(userId: string, channelIds: string[]): Promise<Map<string, number>> {
+    const rows = await this.prisma.$queryRaw<{ channelId: string; n: number }[]>`
+      SELECT m."channelId", COUNT(*)::int AS n
+      FROM "Message" m
+      LEFT JOIN "ReadState" r
+        ON r."channelId" = m."channelId" AND r."userId" = ${userId}
+      WHERE m."channelId" IN (${Prisma.join(channelIds)})
+        AND m."authorId" <> ${userId}
+        AND (r."lastReadAt" IS NULL OR m."createdAt" > r."lastReadAt")
+      GROUP BY m."channelId"
+    `;
+    return new Map(rows.map((r) => [r.channelId, r.n]));
   }
 
   /** Agrega os resumos de vários canais num "há novidade?" + total de menções. */

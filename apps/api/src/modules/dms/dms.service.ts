@@ -240,6 +240,7 @@ export class DMsService {
       others,
       iconUrl: this.iconUrl(channel.id, channel.iconKey),
       ownerId: channel.ownerId,
+      unreadCount: summary?.unreadCount ?? 0,
     };
   }
 

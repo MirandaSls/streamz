@@ -116,6 +116,12 @@ export interface DMChannelView extends Channel {
   iconUrl: string | null;
   /** dono do grupo — quem pode remover participantes. null em DM 1-a-1. */
   ownerId: string | null;
+  /**
+   * Mensagens de outros depois de `lastReadAt` — o número do badge da
+   * conversa, como no Discord (em DM toda mensagem não lida conta, não só a
+   * menção). Por espectador.
+   */
+  unreadCount: number;
 }
 
 /** true para conversa de grupo (3+); false para DM 1-a-1. */

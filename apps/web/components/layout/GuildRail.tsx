@@ -26,6 +26,7 @@ import { submenuNotificacoes, submenuSilenciar } from "@/lib/notification-menu";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { dmTitle, useDMs } from "@/stores/dms";
+import { somarNaoLidas } from "@/stores/nao-lidas";
 import { useFriends } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
 import { useNotifications } from "@/stores/notifications";
@@ -194,7 +195,8 @@ export default function GuildRail() {
   const meuId = useAuth((s) => s.user?.id);
 
   const dmUnread = dms.some((d) => d.lastMessageAt && (!d.lastReadAt || d.lastMessageAt > d.lastReadAt));
-  const dmMentions = dms.reduce((n, d) => n + d.mentionCount, 0);
+  // em conversa toda mensagem não lida conta (Discord): o rail soma as conversas
+  const dmMentions = somarNaoLidas(dms);
 
   /**
    * O rail destaca a conversa que está **na tela** e as que têm mensagem não
@@ -317,7 +319,7 @@ export default function GuildRail() {
             label={dmTitle(dm)}
             active={view === "dm" && activeDMId === dm.id}
             unread={naoLida}
-            mentions={dm.mentionCount}
+            mentions={dm.unreadCount}
             onClick={() => {
               ui.setView("dm");
               // sair da página Amigos: sem isso a conversa é selecionada por
