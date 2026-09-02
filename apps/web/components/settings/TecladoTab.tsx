@@ -9,7 +9,8 @@ import { ui } from "@/stores/ui";
 
 /**
  * Aba "Teclado": a lista dos atalhos, gerada do mesmo registro
- * (`lib/shortcuts`) que `useKeyboardShortcuts` executa, agora **regravável**.
+ * (`lib/shortcuts`) que `useKeyboardShortcuts` e `VoiceHotkeys` executam, agora
+ * **regravável**.
  *
  * Uma fonte só evita o problema clássico desta tela: documentação que continua
  * anunciando um atalho que alguém já mudou. A regravação só sobrescreve a

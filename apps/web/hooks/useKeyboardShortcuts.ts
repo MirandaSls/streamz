@@ -3,13 +3,12 @@
 import { useEffect } from "react";
 import { isUnread } from "@streamz/shared";
 import { atalhosEfetivos, useAtalhos } from "@/stores/atalhos";
-import { actionForEvent, type ShortcutAction } from "@/lib/shortcuts";
+import { ACOES_DE_VOZ, actionForEvent, type ShortcutAction } from "@/lib/shortcuts";
 import { useChannels } from "@/stores/channels";
 import { useDMs } from "@/stores/dms";
 import { useGuilds } from "@/stores/guilds";
 import { useSettings, ZOOM } from "@/stores/settings";
 import { useUI } from "@/stores/ui";
-import { useVoicePrefs } from "@/stores/voicePrefs";
 
 /**
  * Atalhos globais do app (a lista está em `lib/shortcuts`, e a aba "Teclado"
@@ -20,6 +19,9 @@ import { useVoicePrefs } from "@/stores/voicePrefs";
  * exceções são deliberadas — dentro de um campo de texto só passam
  * combinações com Ctrl/Alt/Meta (senão digitar viraria navegação), e com um
  * modal aberto só o zoom vale (Esc é do próprio modal, que sabe o que fechar).
+ *
+ * Mudo e surdo estão no registro, mas não são executados daqui: o dono é o
+ * `VoiceHotkeys` (ver `ACOES_DE_VOZ`). Dois donos davam toggle duplo.
  */
 export function useKeyboardShortcuts(): void {
   useEffect(() => {
@@ -27,7 +29,7 @@ export function useKeyboardShortcuts(): void {
       // as combinações regravadas na aba "Teclado" entram aqui; sem isso a
       // regravação apareceria na tela sem valer no app
       const action = actionForEvent(event, atalhosEfetivos(useAtalhos.getState().regravados));
-      if (!action) return;
+      if (!action || ACOES_DE_VOZ.has(action)) return;
 
       const comModificador = event.ctrlKey || event.altKey || event.metaKey;
       if (!comModificador && estaDigitando(event.target)) return;
@@ -80,13 +82,6 @@ function executar(action: ShortcutAction): void {
       return;
     case "zoomPadrao":
       useSettings.getState().set({ zoom: ZOOM.default });
-      return;
-
-    case "alternarMudo":
-      useVoicePrefs.getState().toggleMute();
-      return;
-    case "alternarSurdo":
-      useVoicePrefs.getState().toggleDeafen();
       return;
 
     case "canalAnterior":

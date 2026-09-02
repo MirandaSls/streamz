@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 import { tocarSom } from "@/lib/ringtone";
+import { ACOES_DE_VOZ, actionForEvent } from "@/lib/shortcuts";
+import { atalhosEfetivos, useAtalhos } from "@/stores/atalhos";
 import { pttCombina } from "@/stores/ptt-core";
 import { useVoice } from "@/stores/voice";
 import { useVoicePrefs } from "@/stores/voicePrefs";
@@ -12,9 +14,15 @@ import { useVoicePrefs } from "@/stores/voicePrefs";
  * push-to-talk.
  *
  * Os dois primeiros ficam montados no app inteiro, e não no painel de voz,
- * porque valem fora de qualquer call — é o mesmo par de botões do rodapé. O
- * push-to-talk **não** chama `preventDefault`: a tecla continua digitando
- * normalmente na conversa, ela só abre o microfone enquanto está apertada.
+ * porque valem fora de qualquer call — é o mesmo par de botões do rodapé. Eles
+ * estão no registro de `lib/shortcuts` (a aba "Teclado" lista e regrava), mas
+ * quem os executa é **só** este componente: o `useKeyboardShortcuts` os pula
+ * (`ACOES_DE_VOZ`). Com dois ouvintes a mesma tecla dava mudo e desmudo, e o
+ * bipe tocava por nada. Este é o dono porque toca o bipe e porque mudo/surdo
+ * precisam valer com um modal aberto — a combinação vem do registro, então a
+ * regravação da aba vale aqui também. O push-to-talk **não** chama
+ * `preventDefault`: a tecla continua digitando normalmente na conversa, ela só
+ * abre o microfone enquanto está apertada.
  *
  * Atalho que muda estado sem nada na tela mudar precisa de som: quem aperta
  * Ctrl+Shift+M no meio de uma frase não está olhando para o rodapé, e o bipe é
@@ -28,19 +36,20 @@ export default function VoiceHotkeys() {
     function onKeyDown(e: KeyboardEvent) {
       const prefs = useVoicePrefs.getState();
 
-      if (e.ctrlKey && e.shiftKey && !e.altKey) {
-        if (e.code === "KeyM") {
-          e.preventDefault();
+      const acao = actionForEvent(e, atalhosEfetivos(useAtalhos.getState().regravados));
+      if (acao && ACOES_DE_VOZ.has(acao)) {
+        e.preventDefault();
+        if (acao === "alternarMudo") {
           prefs.toggleMute();
           tocarSom(useVoicePrefs.getState().muted ? "mudo" : "desmudo");
-          return;
-        }
-        if (e.code === "KeyD") {
-          e.preventDefault();
+        } else {
           prefs.toggleDeafen();
           tocarSom(useVoicePrefs.getState().deafened ? "surdo" : "nao-surdo");
-          return;
         }
+        return;
+      }
+
+      if (e.ctrlKey && e.shiftKey && !e.altKey) {
         if (e.code === "KeyK") {
           e.preventDefault();
           if (useVoice.getState().channelId) void useVoice.getState().disconnect();

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ACOES_DE_VOZ,
   SHORTCUTS,
   actionForEvent,
   formatShortcut,
@@ -151,5 +152,18 @@ describe("formatShortcut", () => {
     expect(formatShortcut("Alt+Shift+ArrowDown")).toBe("Alt + Shift + ↓");
     expect(formatShortcut("Ctrl+Shift+M")).toBe("Ctrl + Shift + M");
     expect(formatShortcut("Escape")).toBe("Esc");
+  });
+});
+
+describe("ACOES_DE_VOZ", () => {
+  it("mudo e surdo estão no registro (a aba Teclado lista e regrava) mas têm um dono só", () => {
+    // o defeito: `useKeyboardShortcuts` e `VoiceHotkeys` executavam os dois, e
+    // Ctrl+Shift+M dava mudo + desmudo na mesma tecla
+    for (const acao of ACOES_DE_VOZ) {
+      expect(SHORTCUTS.some((s) => s.action === acao)).toBe(true);
+    }
+    expect(ACOES_DE_VOZ.has(actionForEvent(tecla("M", { ctrl: true, shift: true }))!)).toBe(true);
+    expect(ACOES_DE_VOZ.has(actionForEvent(tecla("D", { ctrl: true, shift: true }))!)).toBe(true);
+    expect(ACOES_DE_VOZ.has(actionForEvent(tecla("k", { ctrl: true }))!)).toBe(false);
   });
 });
