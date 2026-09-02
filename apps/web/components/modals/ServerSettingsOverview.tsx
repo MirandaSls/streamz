@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { MAX_GUILD_DESCRIPTION, type GuildOnboarding } from "@streamz/shared";
 import { useAlteracoesNaoSalvas } from "@/components/ui/alteracoes";
 import { Select } from "@/components/ui/controls";
+import Tooltip from "@/components/ui/Tooltip";
 import { ESTILO_AREA, ESTILO_CAMPO, ESTILO_ROTULO } from "@/components/settings/campos";
 import { api } from "@/lib/api";
 import { useChannels } from "@/stores/channels";
@@ -23,7 +24,9 @@ function acronym(name: string): string {
 }
 
 /**
- * Aba "Visão geral": ícone, nome, canal de mensagens do sistema e descrição.
+ * Aba "Visão geral": nome, ícone, canal de mensagens do sistema e descrição,
+ * com o cartão de prévia do servidor à direita — a ordem e as medidas do
+ * "Perfil do servidor" do Discord.
  *
  * O ícone depende do storage (R2). Sem credencial a API responde 503 com texto
  * claro, que aparece como aviso — o resto da tela continua funcionando.
@@ -36,6 +39,7 @@ export default function ServerSettingsOverview({ guildId }: { guildId: string })
   const guild = useGuilds((s) => s.guilds.find((g) => g.id === guildId) ?? null);
   const handleGuildUpdated = useGuilds((s) => s.handleGuildUpdated);
   const channels = useChannels((s) => s.channels);
+  const members = useGuilds((s) => s.members);
   const [name, setName] = useState(guild?.name ?? "");
   const [description, setDescription] = useState(guild?.description ?? "");
   const [onboarding, setOnboarding] = useState<GuildOnboarding | null>(null);
@@ -117,93 +121,125 @@ export default function ServerSettingsOverview({ guildId }: { guildId: string })
     }
   }
 
+  const nomeNaPrevia = name.trim() || guild.name;
+
   return (
-    <div>
-      <div className="flex items-start gap-6">
-        {/* a área tracejada é o alvo de clique inteiro: um botão de câmera de
-            36px era a única affordance e ninguém achava */}
-        <div className="shrink-0 text-center">
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/png,image/jpeg,image/gif,image/webp"
-            hidden
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void uploadIcon(f);
-              e.target.value = "";
-            }}
-          />
+    <div className="flex items-start gap-6">
+      <div className="min-w-0 flex-1">
+        <label htmlFor="guildName" className={ESTILO_ROTULO}>
+          Nome do servidor
+        </label>
+        <input
+          id="guildName"
+          value={name}
+          maxLength={64}
+          onChange={(e) => setName(e.target.value)}
+          className={ESTILO_CAMPO}
+        />
+
+        {/* Medidas do Discord (visão geral do servidor): divisória 40 abaixo do
+            campo, título 41 abaixo dela, dica 6 abaixo do título, botões 9
+            abaixo da dica, e outra divisória 40 depois. */}
+        <div aria-hidden="true" className="mt-10 h-px bg-border" />
+
+        <h2 className="mt-10 text-base font-semibold text-txt-primary">Ícone</h2>
+        <p className="mt-1.5 text-sm text-txt-muted">
+          Recomendamos uma imagem de, pelo menos, 512x512.
+        </p>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/gif,image/webp"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void uploadIcon(f);
+            e.target.value = "";
+          }}
+        />
+        <div className="mt-2 flex items-center gap-3">
+          {/* 32 de altura, raio 8, 12 de respiro lateral: o botão de ação das
+              configurações do Discord. */}
           <button
             type="button"
             disabled={uploading}
             onClick={() => fileRef.current?.click()}
-            aria-label="Enviar ícone do servidor"
-            className="group relative grid h-[100px] w-[100px] place-items-center overflow-hidden rounded-full border-2 border-dashed border-border-strong bg-panel text-xl font-semibold text-txt-normal transition hover:border-accent disabled:opacity-50"
+            className="h-8 shrink-0 rounded-lg bg-accent px-3 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
           >
-            {guild.iconUrl ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img src={guild.iconUrl} alt="" className="h-full w-full object-cover" />
-            ) : (
-              acronym(guild.name)
-            )}
-            <span className="absolute inset-0 grid place-items-center bg-overlay/70 text-xs font-bold uppercase tracking-[0.04em] text-white opacity-0 transition group-hover:opacity-100">
-              Enviar
-            </span>
+            {uploading ? "Enviando…" : "Altere o ícone do servidor"}
           </button>
-          {/* o "Remover" do Discord não existe aqui: a API não tem rota para
-              apagar o ícone, e um link que só devolve erro é pior que nenhum */}
-          <p className="mt-2 w-[100px] text-[11px] leading-tight text-txt-muted">
-            Recomendamos 512×512
-          </p>
-          {uploading && <p className="mt-1 text-xs text-txt-muted">Enviando…</p>}
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <label htmlFor="guildName" className={ESTILO_ROTULO}>
-            Nome do servidor
-          </label>
-          <input
-            id="guildName"
-            value={name}
-            maxLength={64}
-            onChange={(e) => setName(e.target.value)}
-            className={ESTILO_CAMPO}
-          />
-
-          {onboarding && (
-            <div className="mt-5">
-              <Select
-                semDivisoria
-                label="Canal de mensagens do sistema"
-                value={systemChannelId}
-                options={textos.map((c) => ({ value: c.id, label: `#${c.name}` }))}
-                onChange={setSystemChannelId}
-                emptyLabel="Nenhum"
-                hint="É onde entra o “fulano entrou no servidor” a cada pessoa nova."
-              />
-            </div>
+          {/* A API não tem rota para apagar o ícone. O botão existe como no
+              Discord — visual, inerte, com tooltip — pela regra de §6.6 do
+              processo; ganha função quando a rota existir. */}
+          {guild.iconUrl && (
+            <Tooltip label="Em breve">
+              <button
+                type="button"
+                aria-disabled="true"
+                className="h-8 shrink-0 rounded-lg bg-border-strong px-3 text-sm font-medium text-red transition hover:bg-border-strong-hover"
+              >
+                Remover o ícone
+              </button>
+            </Tooltip>
           )}
         </div>
+
+        <div aria-hidden="true" className="mt-10 h-px bg-border" />
+
+        {onboarding && (
+          <div className="mt-10">
+            <Select
+              semDivisoria
+              label="Canal de mensagens do sistema"
+              value={systemChannelId}
+              options={textos.map((c) => ({ value: c.id, label: `#${c.name}` }))}
+              onChange={setSystemChannelId}
+              emptyLabel="Nenhum"
+              hint="É onde entra o “fulano entrou no servidor” a cada pessoa nova."
+            />
+            <div aria-hidden="true" className="mt-10 h-px bg-border" />
+          </div>
+        )}
+
+        <label htmlFor="guildDescription" className={`${ESTILO_ROTULO} mt-10`}>
+          Descrição
+        </label>
+        <textarea
+          id="guildDescription"
+          value={description}
+          maxLength={MAX_GUILD_DESCRIPTION}
+          rows={3}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Do que é este servidor?"
+          className={ESTILO_AREA}
+        />
+        <p className="mt-1 text-xs text-txt-muted">
+          {description.length}/{MAX_GUILD_DESCRIPTION} caracteres.
+        </p>
       </div>
 
-      <div aria-hidden="true" className="my-6 h-px bg-border" />
-
-      <label htmlFor="guildDescription" className={ESTILO_ROTULO}>
-        Descrição
-      </label>
-      <textarea
-        id="guildDescription"
-        value={description}
-        maxLength={MAX_GUILD_DESCRIPTION}
-        rows={3}
-        onChange={(e) => setDescription(e.target.value)}
-        placeholder="Do que é este servidor?"
-        className={ESTILO_AREA}
-      />
-      <p className="mt-1 text-xs text-txt-muted">
-        {description.length}/{MAX_GUILD_DESCRIPTION} caracteres.
-      </p>
+      {/*
+        O cartão de prévia do Discord: 296 de largura, borda de 1px, ícone de
+        68 com raio 16 e um anel de 4 na cor do cartão, nome em negrito e a
+        contagem de membros. Sem a faixa, a tag e o "desde": são produto, e o
+        `Guild` não tem data de criação. O nome acompanha o campo enquanto se
+        digita, como lá.
+      */}
+      <div className="w-[296px] shrink-0 rounded-lg border border-border bg-input p-4">
+        <div className="grid h-[68px] w-[68px] place-items-center overflow-hidden rounded-2xl bg-panel text-xl font-semibold text-txt-normal ring-4 ring-input">
+          {guild.iconUrl ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img src={guild.iconUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            acronym(nomeNaPrevia)
+          )}
+        </div>
+        <p className="mt-3 truncate text-base font-bold text-txt-primary">{nomeNaPrevia}</p>
+        <p className="mt-1 flex items-center gap-1.5 text-sm text-txt-muted">
+          <span aria-hidden="true" className="h-2 w-2 rounded-full bg-txt-muted" />
+          {members.length} {members.length === 1 ? "membro" : "membros"}
+        </p>
+      </div>
     </div>
   );
 }
