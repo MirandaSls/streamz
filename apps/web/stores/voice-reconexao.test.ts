@@ -6,7 +6,15 @@ function estado(userId: string, channelId: string, guildId: string | null = null
   return {
     channelId,
     guildId,
-    user: { id: userId, username: userId, avatarUrl: null },
+    user: {
+      id: userId,
+      username: userId,
+      displayName: null,
+      avatarUrl: null,
+      status: "ONLINE",
+      customStatusText: null,
+      customStatusEmoji: null,
+    },
     connected: true,
     muted: false,
     deafened: false,

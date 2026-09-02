@@ -15,7 +15,19 @@ import type { RealtimeService } from "../realtime/realtime.service";
  */
 function servico(participantes: Record<string, string[]>) {
   const usuarios = new Map(
-    ["ana", "bia", "caio"].map((id) => [id, { id, username: id, avatarUrl: null }]),
+    ["ana", "bia", "caio"].map((id) => [
+      id,
+      {
+        id,
+        username: id,
+        displayName: null,
+        avatarUrl: null,
+        status: "ONLINE",
+        customStatusText: null,
+        customStatusEmoji: null,
+        customStatusExpiresAt: null,
+      },
+    ]),
   );
   const guilds = {
     async assertCanViewChannel(userId: string, channelId: string) {
@@ -40,6 +52,10 @@ function servico(participantes: Record<string, string[]>) {
     channel: {
       async findUnique({ where }: { where: { id: string } }) {
         return { id: where.id, guildId: null, type: "DM" };
+      },
+      // "todo canal em que o usuário poderia estar em voz": as conversas dele
+      async findMany() {
+        return Object.keys(participantes).map((id) => ({ id }));
       },
     },
     channelMember: {
