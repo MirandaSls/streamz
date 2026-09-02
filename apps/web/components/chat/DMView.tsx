@@ -7,7 +7,7 @@ import Composer from "@/components/chat/Composer";
 import DMMemberList from "@/components/chat/DMMemberList";
 import DMProfilePanel from "@/components/chat/DMProfilePanel";
 import HeaderBar, { HeaderIcon } from "@/components/chat/HeaderBar";
-import MessageList from "@/components/chat/MessageList";
+import MessageList, { BotaoBoasVindas } from "@/components/chat/MessageList";
 import PinsPopover from "@/components/chat/PinsPopover";
 import ReplyBar from "@/components/chat/ReplyBar";
 import TypingIndicator from "@/components/chat/TypingIndicator";
@@ -17,9 +17,10 @@ import Avatar, { GroupAvatar } from "@/components/ui/Avatar";
 import CallBanner from "@/components/voice/CallBanner";
 import CallSplit from "@/components/voice/CallSplit";
 import CallStage from "@/components/voice/CallStage";
+import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
 import { dmTitle, useActiveDM } from "@/stores/dms";
-import { useBlockedIds, useFriends } from "@/stores/friends";
+import { useBlockedIds, useFriends, useRelationship } from "@/stores/friends";
 import { useActiveSlice, useMessages } from "@/stores/messages";
 import { resolveStatus, usePresence } from "@/stores/presence";
 import { ui, useUI } from "@/stores/ui";
@@ -51,6 +52,30 @@ export default function DMView() {
   const bloqueados = useBlockedIds();
   const membersOpen = useUI((s) => s.membersOpen);
   const toggleMembers = useUI((s) => s.toggleMembers);
+
+  // O início da conversa 1:1 traz "N servidores em comum · Desfazer amizade ·
+  // Bloquear", como no Discord. A relação vem das listas em memória (o botão
+  // some no instante em que a amizade acaba); os servidores em comum vêm do
+  // perfil calculado por espectador (`GET /users/:id/profile`), o mesmo que a
+  // coluna 4 usa — sem resposta a linha fica só com os botões.
+  const outroId = active && !isGroupChannel(active) ? active.others[0]?.id : undefined;
+  const relacao = useRelationship(outroId, user?.id);
+  const removerAmigo = useFriends((s) => s.remove);
+  const bloquear = useFriends((s) => s.block);
+  const desbloquear = useFriends((s) => s.unblock);
+  const [servidoresEmComum, setServidoresEmComum] = useState<number | null>(null);
+  useEffect(() => {
+    setServidoresEmComum(null);
+    if (!outroId) return;
+    let vivo = true;
+    void api
+      .profile(outroId)
+      .then((p) => vivo && setServidoresEmComum(p.mutualGuilds.length))
+      .catch(() => undefined);
+    return () => {
+      vivo = false;
+    };
+  }, [outroId]);
 
   // chamada em andamento nesta conversa (minha ou de outro participante)
   const emChamada = useVoice((s) => (s.statesOf(active?.id ?? "").length > 0));
@@ -120,13 +145,56 @@ export default function DMView() {
         onDiscard={discard}
         scrollToId={highlightId}
         emptyText="Nenhuma mensagem ainda. Diga um oi."
-        welcome={{
-          icon: other ? <Avatar user={other} size="xl" /> : <GroupAvatar iconUrl={active.iconUrl} size="lg" />,
-          title,
-          description: other
-            ? `Este é o início do seu histórico de mensagens diretas com @${other.username}.`
-            : `Bem-vindo ao início do grupo ${title}.`,
-        }}
+        welcome={
+          other
+            ? {
+                // medido no Discord: avatar de 80px sem círculo, nome 32/800,
+                // username 20/600 logo abaixo, nome do contato em negrito na
+                // frase (sem "@"), e a linha de relação com botões de 32/raio 8
+                icon: <Avatar user={other} size="xl" />,
+                semCirculo: true,
+                title,
+                subtitle: other.username,
+                description: (
+                  <>
+                    Este é o começo do seu histórico de mensagens diretas com{" "}
+                    <strong className="font-semibold text-txt-primary">{title}</strong>.
+                  </>
+                ),
+                // descrição → topo dos botões: 25px medidos (8 de margem + a folga
+                // do parágrafo). Texto → ponto → botão: 12px de cada lado; entre
+                // botões, 8px.
+                actions: (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {servidoresEmComum !== null && (
+                      <>
+                        <span className="text-sm text-txt-muted">
+                          {servidoresEmComum === 0
+                            ? "Nenhum servidor em comum"
+                            : servidoresEmComum === 1
+                              ? "1 servidor em comum"
+                              : `${servidoresEmComum} servidores em comum`}
+                        </span>
+                        <span aria-hidden="true" className="mx-1 h-1 w-1 rounded-full bg-txt-muted" />
+                      </>
+                    )}
+                    {relacao === "friend" && (
+                      <BotaoBoasVindas label="Desfazer amizade" onClick={() => void removerAmigo(other)} />
+                    )}
+                    {relacao === "blocked" ? (
+                      <BotaoBoasVindas label="Desbloquear" onClick={() => void desbloquear(other.id)} />
+                    ) : (
+                      <BotaoBoasVindas label="Bloquear" onClick={() => void bloquear(other)} />
+                    )}
+                  </div>
+                ),
+              }
+            : {
+                icon: <GroupAvatar iconUrl={active.iconUrl} size="lg" />,
+                title,
+                description: `Bem-vindo(a) ao começo do grupo ${title}.`,
+              }
+        }
       />
 
       {user && (
