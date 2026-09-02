@@ -1,0 +1,311 @@
+//! Publicar a captura na sala do LiveKit — a etapa que fecha o circuito.
+//!
+//! Quem transmite é um **segundo participante** da sala, `<userId>#tela`,
+//! ligado direto deste processo pelo SDK Rust do LiveKit (o mesmo caminho do
+//! Discord). A alternativa — empurrar os quadros crus para o JS por IPC e
+//! publicar pelo `canvas.captureStream` — morre na banda: 1440p60 são ~330 MB/s
+//! de quadros atravessando o canal do WebView2. Aqui o quadro sai da captura,
+//! vira I420 e entra no encoder sem sair do Rust.
+//!
+//! A conexão do webview (voz, câmera) não muda: o `#tela` entra quando a
+//! transmissão começa e sai quando ela para. A web funde as faixas dele no
+//! tile do dono (`donoDaIdentidade`, em `@streamz/shared`).
+//!
+//! Uma thread por transmissão, dona de tudo o que ela precisa (captura, fonte
+//! de vídeo, sala). Parar é levantar uma bandeira e esperar a thread: não há
+//! `Room` compartilhado atrás de mutex, e não há como o comando `parar_tela`
+//! e o fim natural (janela fechada) disputarem quem desliga o quê.
+
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
+
+use livekit::options::{TrackPublishOptions, VideoEncoding};
+use livekit::prelude::*;
+use livekit::webrtc::native::yuv_helper;
+use livekit::webrtc::prelude::*;
+use livekit::webrtc::video_source::native::NativeVideoSource;
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Emitter};
+use tokio::sync::mpsc::{error::TryRecvError, UnboundedReceiver};
+
+use super::captura::{self, Capturador, Erro, Quadro};
+use super::fontes;
+
+/// Evento para a web quando a transmissão acaba **sem** o `parar_tela`: a
+/// janela fechou, a sala caiu. O payload é o motivo, para a mensagem certa.
+pub const EVENTO_ENCERRADA: &str = "tela:encerrada";
+
+/// O que a web manda para começar. Resolução, taxa e bitrate vêm do preset
+/// `SCREEN_QUALITY` de `@streamz/shared` — o contrato continua único, e o
+/// Rust não tem cópia dele.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Pedido {
+    pub url: String,
+    pub token: String,
+    pub fonte_id: String,
+    pub largura: u32,
+    pub altura: u32,
+    pub fps: u32,
+    pub max_bitrate: u64,
+}
+
+/// Por que a transmissão acabou sozinha.
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Motivo {
+    /// A janela fechou ou o monitor foi desligado.
+    FonteSumiu,
+    /// A sala do LiveKit desconectou e não voltou.
+    Desconectado,
+    /// A API de captura falhou no meio.
+    Falha,
+}
+
+struct EmCurso {
+    parar: Arc<AtomicBool>,
+    thread: JoinHandle<()>,
+}
+
+/// Estado gerenciado pelo Tauri: a transmissão em curso, se houver.
+#[derive(Default)]
+pub struct Transmissao {
+    atual: Mutex<Option<EmCurso>>,
+}
+
+impl Transmissao {
+    fn tomar(&self) -> Option<EmCurso> {
+        self.atual.lock().unwrap_or_else(|e| e.into_inner()).take()
+    }
+
+    fn guardar(&self, em_curso: EmCurso) {
+        *self.atual.lock().unwrap_or_else(|e| e.into_inner()) = Some(em_curso);
+    }
+
+    /// Para e espera a thread. Síncrono de propósito: é o que o encerramento
+    /// do app chama, e ali não há runtime para esperar.
+    pub fn encerrar(&self) {
+        if let Some(em_curso) = self.tomar() {
+            em_curso.parar.store(true, Ordering::Release);
+            let _ = em_curso.thread.join();
+        }
+    }
+}
+
+pub async fn iniciar(app: AppHandle, estado: &Transmissao, pedido: Pedido) -> Result<(), String> {
+    // Uma transmissão por vez: começar outra é trocar de fonte.
+    parar(estado).await;
+
+    let alvo = fontes::alvo(&pedido.fonte_id)
+        .ok_or_else(|| "A janela ou tela escolhida não existe mais".to_string())?;
+    // Abrir a captura antes de entrar na sala: se a fonte recusar (conteúdo
+    // protegido, janela que sumiu), ninguém vê um `#tela` entrar e sair.
+    let capturador = tauri::async_runtime::spawn_blocking(move || captura::abrir(alvo))
+        .await
+        .map_err(|e| format!("falha ao abrir a captura: {e}"))?
+        .map_err(|e| e.to_string())?;
+
+    let mut opcoes = RoomOptions::default();
+    // Este participante só publica (o token nem permite assinar): não baixar
+    // o áudio de ninguém — a pessoa já ouve pela conexão do webview.
+    opcoes.auto_subscribe = false;
+    let (sala, eventos) = Room::connect(&pedido.url, &pedido.token, opcoes)
+        .await
+        .map_err(|e| format!("não foi possível entrar na sala: {e}"))?;
+
+    // O teto do preset, já em dimensões pares; a fonte real se encaixa nele
+    // quadro a quadro (`para_i420`).
+    let (largura, altura) = encaixar(pedido.largura, pedido.altura, pedido.largura, pedido.altura);
+    let fonte = NativeVideoSource::new(
+        VideoResolution {
+            width: largura,
+            height: altura,
+        },
+        // "screencast": o encoder prioriza nitidez de texto sobre movimento
+        // suave, o mesmo que o `contentHint = "detail"` faz na web.
+        true,
+    );
+    let faixa = LocalVideoTrack::create_video_track("tela", RtcVideoSource::Native(fonte.clone()));
+
+    // Espelha o `publicarTela` da web: teto de bitrate do preset, sem
+    // simulcast (quem abre uma tela quer lê-la, não uma camada reduzida) e,
+    // com banda apertada, derrubar quadros em vez de resolução.
+    let publicacao = TrackPublishOptions {
+        source: TrackSource::Screenshare,
+        video_encoding: Some(VideoEncoding {
+            max_bitrate: pedido.max_bitrate,
+            max_framerate: f64::from(pedido.fps),
+        }),
+        simulcast: false,
+        degradation_preference: Some(DegradationPreference::MaintainResolution),
+        ..Default::default()
+    };
+    sala.local_participant()
+        .publish_track(LocalTrack::Video(faixa), publicacao)
+        .await
+        .map_err(|e| format!("não foi possível publicar a tela: {e}"))?;
+
+    let parar_bandeira = Arc::new(AtomicBool::new(false));
+    let bandeira = parar_bandeira.clone();
+    let fps = pedido.fps.max(1);
+    let thread = std::thread::Builder::new()
+        .name("streamz-tela".into())
+        .spawn(move || {
+            let motivo = transmitir(
+                capturador,
+                &fonte,
+                (largura, altura),
+                fps,
+                &bandeira,
+                eventos,
+            );
+            // Sair da sala antes de avisar: quando a web reagir ao evento, o
+            // `#tela` já não está lá.
+            let _ = tauri::async_runtime::block_on(sala.close());
+            if let Some(motivo) = motivo {
+                let _ = app.emit(EVENTO_ENCERRADA, motivo);
+            }
+        })
+        .map_err(|e| format!("não foi possível iniciar a thread de transmissão: {e}"))?;
+
+    estado.guardar(EmCurso {
+        parar: parar_bandeira,
+        thread,
+    });
+    Ok(())
+}
+
+/// Para a transmissão em curso, se houver, e espera a thread sair da sala.
+pub async fn parar(estado: &Transmissao) {
+    if let Some(em_curso) = estado.tomar() {
+        em_curso.parar.store(true, Ordering::Release);
+        // Esperar fora do runtime: a thread pode estar no meio de um
+        // `block_on(sala.close())`, e bloquear uma thread do tokio esperando
+        // por isso é pedir um impasse.
+        let _ = tauri::async_runtime::spawn_blocking(move || em_curso.thread.join()).await;
+    }
+}
+
+/// O laço da transmissão. Devolve `None` quando parou a pedido, ou o motivo
+/// quando acabou sozinha.
+fn transmitir(
+    mut capturador: Box<dyn Capturador>,
+    fonte: &NativeVideoSource,
+    (largura_max, altura_max): (u32, u32),
+    fps: u32,
+    parar: &AtomicBool,
+    mut eventos: UnboundedReceiver<RoomEvent>,
+) -> Option<Motivo> {
+    let intervalo = Duration::from_micros(1_000_000 / u64::from(fps));
+    let mut ultimo = Instant::now() - intervalo;
+    loop {
+        if parar.load(Ordering::Acquire) {
+            return None;
+        }
+        if sala_caiu(&mut eventos) {
+            return Some(Motivo::Desconectado);
+        }
+        match capturador.proximo_quadro(intervalo) {
+            Ok(Some(quadro)) => {
+                // A fonte pode repintar mais rápido que o preset (60 Hz de
+                // tela para 30 fps): quadro adiantado é descartado antes de
+                // custar a conversão.
+                if ultimo.elapsed() < intervalo {
+                    continue;
+                }
+                let buffer = para_i420(&quadro, largura_max, altura_max);
+                fonte.capture_frame(&VideoFrame {
+                    rotation: VideoRotation::VideoRotation0,
+                    // zero = "agora", pelo relógio do SDK
+                    timestamp_us: 0,
+                    frame_metadata: None,
+                    buffer,
+                });
+                ultimo = Instant::now();
+            }
+            // Nada repintou: o encoder segue com o último quadro que recebeu.
+            Ok(None) => {}
+            Err(Erro::FonteSumiu) => return Some(Motivo::FonteSumiu),
+            Err(Erro::Falha(_)) => return Some(Motivo::Falha),
+        }
+    }
+}
+
+/// Drena os eventos da sala e diz se ela desconectou de vez. Os outros
+/// eventos não interessam a um participante que só publica.
+fn sala_caiu(eventos: &mut UnboundedReceiver<RoomEvent>) -> bool {
+    loop {
+        match eventos.try_recv() {
+            Ok(RoomEvent::Disconnected { .. }) | Err(TryRecvError::Disconnected) => return true,
+            Ok(_) => {}
+            Err(TryRecvError::Empty) => return false,
+        }
+    }
+}
+
+/// BGRA → I420 na resolução da fonte e, se ela for maior que o preset,
+/// redução mantendo a proporção. A libyuv chama de "ARGB" a ordem de bytes
+/// B, G, R, A em memória — exatamente o que o Windows entrega.
+fn para_i420(quadro: &Quadro, largura_max: u32, altura_max: u32) -> I420Buffer {
+    let mut cheio = I420Buffer::new(quadro.largura, quadro.altura);
+    let (passo_y, passo_u, passo_v) = cheio.strides();
+    let (y, u, v) = cheio.data_mut();
+    yuv_helper::argb_to_i420(
+        &quadro.bgra,
+        quadro.largura * 4,
+        y,
+        passo_y,
+        u,
+        passo_u,
+        v,
+        passo_v,
+        quadro.largura as i32,
+        quadro.altura as i32,
+    );
+    let (largura, altura) = encaixar(quadro.largura, quadro.altura, largura_max, altura_max);
+    if (largura, altura) == (quadro.largura, quadro.altura) {
+        cheio
+    } else {
+        cheio.scale(largura as i32, altura as i32)
+    }
+}
+
+/// Encaixa `largura`×`altura` dentro de `max_l`×`max_a` mantendo a proporção,
+/// em dimensões pares (o I420 divide o croma por dois). Fonte menor que o
+/// preset fica como está: ampliar só gastaria bitrate em pixels inventados.
+fn encaixar(largura: u32, altura: u32, max_l: u32, max_a: u32) -> (u32, u32) {
+    let (largura, altura) = (largura.max(2), altura.max(2));
+    if largura <= max_l && altura <= max_a {
+        return (largura & !1, altura & !1);
+    }
+    let escala = f64::from(max_l) / f64::from(largura);
+    let escala = escala.min(f64::from(max_a) / f64::from(altura));
+    let l = ((f64::from(largura) * escala).round() as u32).max(2) & !1;
+    let a = ((f64::from(altura) * escala).round() as u32).max(2) & !1;
+    (l, a)
+}
+
+#[cfg(test)]
+mod testes {
+    use super::encaixar;
+
+    #[test]
+    fn fonte_menor_que_o_preset_nao_amplia() {
+        assert_eq!(encaixar(1280, 720, 1920, 1080), (1280, 720));
+    }
+
+    #[test]
+    fn fonte_maior_reduz_mantendo_a_proporcao() {
+        assert_eq!(encaixar(2560, 1440, 1920, 1080), (1920, 1080));
+        assert_eq!(encaixar(3840, 1600, 1920, 1080), (1920, 800));
+        assert_eq!(encaixar(1080, 1920, 1920, 1080), (608, 1080));
+    }
+
+    #[test]
+    fn dimensoes_saem_pares() {
+        assert_eq!(encaixar(1001, 601, 1920, 1080), (1000, 600));
+        assert_eq!(encaixar(2561, 1441, 1280, 720), (1280, 720));
+    }
+}
