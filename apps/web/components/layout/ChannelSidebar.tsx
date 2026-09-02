@@ -628,7 +628,7 @@ export default function ChannelSidebar() {
   }
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col bg-panel">
+    <aside className="relative flex w-60 shrink-0 flex-col bg-panel">
       <button
         type="button"
         onClick={openGuildMenu}
@@ -651,7 +651,7 @@ export default function ChannelSidebar() {
         role="list"
         aria-label="Canais"
         onKeyDown={handleKeyDown}
-        className="flex-1 overflow-y-auto pb-2 pt-2"
+        className="flex-1 overflow-y-auto pb-[78px] pt-2"
       >
         {loading && <p className="px-4 py-1 text-sm text-txt-muted">Carregando canais…</p>}
         {!loading && channels.length === 0 && categories.length === 0 && (

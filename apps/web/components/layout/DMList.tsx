@@ -138,7 +138,7 @@ export default function DMList() {
   }
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col bg-panel">
+    <aside className="relative flex w-60 shrink-0 flex-col bg-panel">
       <div className="flex h-12 shrink-0 items-center px-2.5 shadow-header">
         <input
           value={query}
@@ -150,7 +150,7 @@ export default function DMList() {
         />
       </div>
 
-      <div role="list" aria-label="Conversas" className="flex-1 overflow-y-auto pt-2">
+      <div role="list" aria-label="Conversas" className="flex-1 overflow-y-auto pb-[78px] pt-2">
         {/* ── d-social ── a home do modo DM, com o badge de pedidos pendentes */}
         <button
           type="button"
