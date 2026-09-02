@@ -18,6 +18,7 @@ import { ultimaMinhaMensagem } from "@/components/chat/ultima-minha";
 import { useSlowmode } from "@/hooks/useSlowmode";
 import { useAuth } from "@/stores/auth";
 import { useActiveChannel } from "@/stores/channels";
+import { useGuilds } from "@/stores/guilds";
 import {
   useCanModerateActiveChannel,
   useCanPostActiveChannel,
@@ -62,6 +63,10 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
   const Raiz = incorporado ? "section" : "main";
   const user = useAuth((s) => s.user);
   const channel = useActiveChannel();
+  // o placeholder da busca é "Buscar <servidor>": a busca corre no servidor inteiro
+  const nomeDoServidor = useGuilds(
+    (s) => s.guilds.find((g) => g.id === s.activeGuildId)?.name ?? null,
+  );
   // quem posta neste canal é SEND_MESSAGES na permissão efetiva (ADR-0002):
   // somente-leitura é deny no @everyone, e um cargo pode ter allow de volta
   const podePostar = useCanPostActiveChannel();
@@ -169,6 +174,7 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
           ) : undefined
         }
         searchLabel={`Buscar mensagens em ${name}`}
+        searchPlaceholder={nomeDoServidor ? `Buscar ${nomeDoServidor}` : "Buscar"}
         searchValue={searchQuery}
         onSearch={(q) => {
           setSearchQuery(q);

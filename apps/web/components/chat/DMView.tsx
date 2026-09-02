@@ -234,7 +234,9 @@ export default function DMView() {
           }
           title={title}
           searchLabel={`Buscar mensagens em ${title}`}
-          searchPlaceholder={other ? `Buscar ${other.username}` : "Buscar"}
+          // "Buscar <username>" na conversa 1:1 e "Buscar <nome do grupo>" no
+          // grupo — a busca corre só neste canal nos dois casos
+          searchPlaceholder={`Buscar ${other ? other.username : title}`}
           searchValue={searchQuery}
           onSearch={(q) => {
             setSearchQuery(q);
