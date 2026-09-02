@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { displayNameOf, type PublicUser } from "@streamz/shared";
 import { useAuth } from "@/stores/auth";
 import { useDMs } from "@/stores/dms";
@@ -35,8 +35,41 @@ function frase(nomes: string[]): React.ReactNode {
   );
 }
 
-/** Linha de 24px sob o composer: os três pontos e quem está digitando. */
+/**
+ * Respiro entre o composer e o fundo da janela, medido no Discord
+ * (`173327.png`, coluna x=800: caixa termina em y=1021, borda da janela em
+ * 1032). Antes eram 24px, porque esta faixa reservava `h-6` para o texto.
+ */
+const RESPIRO = 10;
+
+/**
+ * Quem está digitando: os três pontos e os nomes, **por cima** da lista, logo
+ * acima do composer.
+ *
+ * Este componente é o irmão seguinte do composer (`ChatView`, `DMView`), e é
+ * dele que vem o respiro de 10px até o fundo. O texto não pode ocupar espaço
+ * próprio — reservar 24px aqui era o que empurrava o composer para 24px do
+ * fundo, contra os 10 do Discord —, então ele flutua: `bottom-full` deste
+ * espaçador é a base do composer, e o `marginBottom` com a altura do composer
+ * (lida no irmão anterior por `ResizeObserver`, porque ela muda com linhas e
+ * anexos) leva a faixa para cima dele, sobre o `pb-4` da lista.
+ *
+ * Limite conhecido: com a `ReplyBar` aberta, a faixa cobre os 24px de baixo
+ * dela enquanto alguém digita.
+ */
 export default function TypingIndicator({ channelId }: { channelId: string }) {
+  const raiz = useRef<HTMLDivElement>(null);
+  const [alturaDoComposer, setAlturaDoComposer] = useState(0);
+  useLayoutEffect(() => {
+    const composer = raiz.current?.previousElementSibling;
+    if (!(composer instanceof HTMLElement)) return;
+    const medir = () => setAlturaDoComposer(composer.offsetHeight);
+    medir();
+    const observador = new ResizeObserver(medir);
+    observador.observe(composer);
+    return () => observador.disconnect();
+  }, []);
+
   const me = useAuth((s) => s.user);
   const byChannel = useTyping((s) => s.byChannel);
   const prune = useTyping((s) => s.prune);
@@ -69,9 +102,12 @@ export default function TypingIndicator({ channelId }: { channelId: string }) {
   }, [nomes.length, prune]);
 
   return (
-    <div aria-live="polite" className="flex h-6 items-center gap-1.5 px-4 text-[13px] text-txt-normal">
+    <div ref={raiz} aria-live="polite" className="relative shrink-0" style={{ height: RESPIRO }}>
       {nomes.length > 0 && (
-        <>
+        <div
+          className="absolute inset-x-0 bottom-full flex h-6 items-center gap-1.5 bg-chat px-4 text-[13px] text-txt-normal"
+          style={{ marginBottom: alturaDoComposer }}
+        >
           <style>{ANIMACAO}</style>
           <span aria-hidden="true" className="flex items-center gap-[3px]">
             {[0, 1, 2].map((i) => (
@@ -86,7 +122,7 @@ export default function TypingIndicator({ channelId }: { channelId: string }) {
             ))}
           </span>
           <span>{frase(nomes)}…</span>
-        </>
+        </div>
       )}
     </div>
   );
