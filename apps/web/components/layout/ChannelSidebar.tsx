@@ -510,9 +510,13 @@ export default function ChannelSidebar() {
           {/* Cronômetro da call, como no print: some no hover, que é quando os
               dois botões do canal tomam o lugar dele. */}
           {vozAqui === channel.id && vozDesde !== null && (
+            /* `ml-auto`: no Discord o cronômetro é alinhado à **direita** da
+               linha, a ~10px da borda. O nosso ficava colado no nome, sobrando
+               56px de vazio à direita. Continua sumindo no hover, que é quando
+               os dois botões do canal tomam o lugar dele. */
             <Cronometro
               desde={vozDesde}
-              className="mr-1 shrink-0 text-xs text-green group-hover:hidden"
+              className="ml-auto mr-1 shrink-0 text-xs text-green group-hover:hidden"
             />
           )}
 
