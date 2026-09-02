@@ -1,16 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  EyeOff,
-  Hash,
-  Lock,
-  Megaphone,
-  Pencil,
-  UserPlus,
-  Users,
-  Volume2,
-} from "@/components/ui/icones";
+import { EyeOff, Hash, Lock, Megaphone, Pencil, Users, Volume2 } from "@/components/ui/icones";
 import Composer from "@/components/chat/Composer";
 // ── h-moderacao ──
 import { RulesNotice, TimeoutNotice } from "@/components/moderation/ComposerNotice";
@@ -18,7 +9,7 @@ import { RulesNotice, TimeoutNotice } from "@/components/moderation/ComposerNoti
 import { useModeration, useMustAcceptRules, useMyTimeout } from "@/stores/moderation";
 import { usePolls } from "@/stores/polls";
 import HeaderBar, { HeaderIcon } from "@/components/chat/HeaderBar";
-import MessageList from "@/components/chat/MessageList";
+import MessageList, { BotaoBoasVindas } from "@/components/chat/MessageList";
 import PinsPopover from "@/components/chat/PinsPopover";
 import ReplyBar from "@/components/chat/ReplyBar";
 import TypingIndicator from "@/components/chat/TypingIndicator";
@@ -218,29 +209,25 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
         emptyText="Nenhuma mensagem ainda. Diga um oi."
         welcome={{
           icon: <Icon size={42} />,
-          title: `Bem-vindo a ${prefixo}${name}!`,
-          description: channel.topic || `Este é o início do canal ${prefixo}${name}.`,
-          // a fileira de ações do início do canal, como no Discord
-          actions: (
-            <>
-              {canModerate && (
-                <BotaoBoasVindas
-                  icon={<Pencil size={16} />}
-                  label="Editar canal"
-                  onClick={() =>
-                    ui.openModal({ kind: "channelSettings", channelId: channel.id, tab: "geral" })
-                  }
-                />
-              )}
-              {channel.guildId && (
-                <BotaoBoasVindas
-                  icon={<UserPlus size={16} />}
-                  label="Convidar amigos"
-                  onClick={() => ui.openModal({ kind: "invite", guildId: channel.guildId as string })}
-                />
-              )}
-            </>
-          ),
+          // o texto do Discord em pt-BR: "Bem-vindo(a) a #geral!" e "começo"
+          title: `Bem-vindo(a) a ${prefixo}${name}!`,
+          description: channel.topic || `Este é o começo do canal ${prefixo}${name}.`,
+          // No print do Discord, quem administra vê só "Editar canal" aqui;
+          // "Convidar amigos" mora no cabeçalho da coluna de canais. Quem não
+          // administra não vê fileira nenhuma (a regra de permissão de antes).
+          // Descrição → topo do botão: 30px medidos; 14px de margem + a folga
+          // do parágrafo.
+          actions: canModerate ? (
+            <div className="mt-3.5 flex flex-wrap gap-2">
+              <BotaoBoasVindas
+                icon={<Pencil size={16} />}
+                label="Editar canal"
+                onClick={() =>
+                  ui.openModal({ kind: "channelSettings", channelId: channel.id, tab: "geral" })
+                }
+              />
+            </div>
+          ) : undefined,
         }}
       />
 
@@ -310,27 +297,5 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
         )
       )}
     </Raiz>
-  );
-}
-
-/** Botão da fileira de ações do início do canal. */
-function BotaoBoasVindas({
-  icon,
-  label,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex h-8 items-center gap-1.5 rounded-[3px] bg-panel px-3 text-sm font-medium text-txt-normal transition hover:bg-hov hover:text-txt-primary"
-    >
-      <span aria-hidden="true">{icon}</span>
-      {label}
-    </button>
   );
 }
