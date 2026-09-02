@@ -18,7 +18,9 @@ import { useUI } from "@/stores/ui";
  * usa, a decisão é só "com quem".
  *
  * Medida no print (`docs/Reference/Captura de tela 2026-09-02 152402.png`):
- * 478 de largura, raio 8; título de 20px com o subtítulo de 14px; busca de
+ * 480 de largura com a borda de 1px (o padrão do `Dialog` desde o #59; o
+ * `w-[478px]` de antes somado à borda dava 480 medidos), raio 8; título de
+ * 20px com o subtítulo de 14px; busca de
  * 40px com raio 8 e a dica de 12px embaixo; linhas de 48px com avatar de 32,
  * nome de 16 e usuário de 12, e o quadrado de 20px (raio 4) à direita; rodapé
  * com "Cancelar" e "Criar mensagem" de 40px, raio 8, meio a meio.
@@ -121,8 +123,7 @@ export default function CreateGroupDMModal() {
       title="Nova mensagem"
       description={`Grupos privados podem ter até ${membros} membros.`}
       onClose={closeModal}
-      className="w-[478px]"
-      bodyClassName="px-6 pt-6"
+      bodyClassName="pt-6"
       footer={
         <>
           <button
