@@ -12,13 +12,21 @@ export { default as HeaderIcon } from "@/components/chat/HeaderIcon";
  * A toolbar carrega só o que age sobre o canal aberto: ações genéricas do app
  * (ajuda, caixa de entrada) e o que já existe no menu de contexto do canal
  * (sino, configurações do servidor) ficam de fora para não poluir a barra.
+ *
+ * Quem chama entrega a fileira inteira em `tools`, na ordem do Discord — o
+ * alfinete fica no meio dela (threads → alfinete → membros no servidor;
+ * telefone → vídeo → alfinete → adicionar → perfil na conversa), então não há
+ * um lugar fixo "das fixadas" aqui.
+ *
+ * Medido no print do Discord (1919px): caixas de 24px com 18px entre elas
+ * (passo de 42); a busca tem 244×32, raio 8, borda de 1px mais clara que o
+ * fundo, texto a 8px da borda e a lupa a 5px da borda direita.
  */
 export default function HeaderBar({
   icon,
   title,
   subtitle,
   tools,
-  pins,
   searchLabel,
   searchPlaceholder,
   searchValue,
@@ -27,12 +35,10 @@ export default function HeaderBar({
   icon: ReactNode;
   title: ReactNode;
   subtitle?: ReactNode;
-  /** botões antes da busca (variam entre canal e DM). */
+  /** botões antes da busca, já na ordem (variam entre canal e DM). */
   tools?: ReactNode;
-  /** botão de mensagens fixadas do canal aberto. */
-  pins?: ReactNode;
   searchLabel: string;
-  /** vai no placeholder: no Discord é "Buscar <usuário>", não um "Buscar" solto. */
+  /** vai no placeholder: no Discord é "Buscar <servidor|usuário|grupo>", não um "Buscar" solto. */
   searchPlaceholder?: string;
   /** consulta em vigor — mantém o campo preenchido ao reabrir a busca. */
   searchValue?: string;
@@ -55,9 +61,8 @@ export default function HeaderBar({
         </>
       )}
 
-      <div className="ml-auto flex shrink-0 items-center gap-4">
+      <div className="ml-auto flex shrink-0 items-center gap-[18px]">
         {tools}
-        {pins}
         <form
           onSubmit={(e) => {
             e.preventDefault();

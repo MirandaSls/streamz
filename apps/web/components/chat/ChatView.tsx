@@ -12,6 +12,7 @@ import HeaderBar, { HeaderIcon } from "@/components/chat/HeaderBar";
 import MessageList, { BotaoBoasVindas } from "@/components/chat/MessageList";
 import PinsPopover from "@/components/chat/PinsPopover";
 import ReplyBar from "@/components/chat/ReplyBar";
+import ThreadsPopover from "@/components/chat/ThreadsPopover";
 import TypingIndicator from "@/components/chat/TypingIndicator";
 import { ultimaMinhaMensagem } from "@/components/chat/ultima-minha";
 import { useSlowmode } from "@/hooks/useSlowmode";
@@ -174,17 +175,22 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
           // no servidor a busca é do servidor inteiro, com `in:#canal` filtrando
           void runSearch({ channelId: channel.id, guildId: channel.guildId });
         }}
-        pins={
-          <PinsPopover channelId={channel.id} guildId={channel.guildId} canPin={canModerate} />
-        }
         tools={
-          <HeaderIcon
-            label={membersOpen ? "Ocultar lista de membros" : "Mostrar lista de membros"}
-            active={membersOpen}
-            onClick={toggleMembers}
-          >
-            <Users size={20} />
-          </HeaderIcon>
+          // a ordem do Discord: threads → (sino) → alfinete → membros → busca.
+          // O sino (notificações do canal) não existe aqui e não foi criado.
+          // Tinta medida no print: 18×18 em cada glifo; `size` por ícone
+          // porque cada desenho ocupa uma fração diferente do quadro.
+          <>
+            <ThreadsPopover channelId={channel.id} canManage={canModerate} />
+            <PinsPopover channelId={channel.id} guildId={channel.guildId} canPin={canModerate} />
+            <HeaderIcon
+              label={membersOpen ? "Ocultar lista de membros" : "Mostrar lista de membros"}
+              active={membersOpen}
+              onClick={toggleMembers}
+            >
+              <Users size={22} />
+            </HeaderIcon>
+          </>
         }
       />
 

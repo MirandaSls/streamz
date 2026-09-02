@@ -241,11 +241,8 @@ export default function DMView() {
             // conversa não tem servidor: a busca corre só neste canal
             void runSearch({ channelId: active.id, guildId: null });
           }}
-          pins={
-            // em conversa direta não há moderação: qualquer participante fixa
-            <PinsPopover channelId={active.id} guildId={null} canPin />
-          }
           tools={
+            // a ordem do Discord: telefone → vídeo → alfinete → adicionar → perfil → busca
             <>
               {/* bloqueado não recebe chamada: a API recusa, e oferecer o botão
                   só para o clique falhar é pior que não ter o botão */}
@@ -266,6 +263,8 @@ export default function DMView() {
                   </HeaderIcon>
                 </>
               )}
+              {/* em conversa direta não há moderação: qualquer participante fixa */}
+              <PinsPopover channelId={active.id} guildId={null} canPin />
               {group && (
                 <>
                   <HeaderIcon
