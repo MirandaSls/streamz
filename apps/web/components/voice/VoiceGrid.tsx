@@ -305,7 +305,7 @@ function useTamanho(el: HTMLElement | null) {
  */
 function TileDeConvite({ guildId }: { guildId: string }) {
   return (
-    <div className="relative grid h-full w-full place-items-center overflow-hidden rounded-lg bg-panel ring-1 ring-black/30">
+    <div className="relative grid h-full w-full place-items-center overflow-hidden rounded-lg bg-input">
       <span
         aria-hidden="true"
         className="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-accent/10 blur-3xl"
@@ -360,7 +360,7 @@ function AvatarDeChamada({
           e.preventDefault();
           abrirMenuDeParticipante(e.clientX, e.clientY, state.user, { sou, channelId });
         }}
-        className={`inline-block rounded-full transition ${ativo ? "ring-[3px] ring-green" : ""} ${
+        className={`relative inline-grid rounded-full transition ${
           state.reconnecting ? "opacity-50" : ""
         }`}
       >
@@ -369,7 +369,17 @@ function AvatarDeChamada({
           size="xl"
           surface="border-rail"
           voz={state.deafened ? "surdo" : state.muted ? "mudo" : null}
+          className={`transition-transform ${ativo ? "scale-[0.925]" : ""}`}
         />
+        {/* O anel fica DENTRO do Ø80: a foto encolhe 2px e ele ocupa a folga.
+            Desenhado por fora, o avatar crescia quando a pessoa falava e a
+            fileira inteira parecia pular a cada sílaba. */}
+        {ativo && (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-inset ring-green"
+          />
+        )}
       </span>
     </Tooltip>
   );
@@ -415,18 +425,37 @@ function VoiceTile({
         abrirMenuDeParticipante(e.clientX, e.clientY, state.user, { sou, channelId });
       }}
       aria-label={`${nome}${tela ? " — tela compartilhada" : ""}`}
-      className={`group relative h-full w-full overflow-hidden rounded-lg bg-panel transition ${
-        ativo ? "ring-2 ring-green" : "ring-1 ring-black/30"
-      }`}
+      // O tile **emerge** do palco: superfície mais clara que o fundo, como no
+      // Discord (tile `#272324` sobre palco preto). Com `panel` sobre `chat`
+      // ele afundava, e a única coisa que o separava do fundo era a moldura.
+      //
+      // Moldura que não existe mais: nem a linha preta, nem a borda verde de
+      // quem fala. No Discord o tile não tem borda em estado nenhum — o sinal
+      // de fala mora no anel do avatar, que é onde o olho já está.
+      className="group relative h-full w-full overflow-hidden rounded-lg bg-input transition"
     >
       {publication ? (
         <VideoDaFaixa publication={publication} espelhar={sou && !tela} />
       ) : (
-        <span className="grid h-full w-full place-items-center bg-panel">
-          {/* o anel acompanha o avatar, e não só a caixa: num tile grande a
-              borda externa fica longe demais do rosto para ler como "falando" */}
-          <span className={`rounded-full ${ativo ? "ring-[3px] ring-green" : ""}`}>
-            <Avatar user={state.user} size={compacto ? "md" : "xl"} surface="border-panel" />
+        <span className="grid h-full w-full place-items-center">
+          {/* o anel acompanha o avatar, e não a caixa: num tile grande a borda
+              externa fica longe demais do rosto para ler como "falando". E ele
+              é desenhado por DENTRO do Ø80 — a foto encolhe 2px e o anel ocupa
+              a folga —, senão o avatar cresce quando a pessoa fala e o tile
+              inteiro parece pular. */}
+          <span className="relative inline-grid rounded-full">
+            <Avatar
+              user={state.user}
+              size={compacto ? "md" : "xl"}
+              surface="border-input"
+              className={`transition-transform ${ativo ? "scale-[0.925]" : ""}`}
+            />
+            {ativo && (
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-inset ring-green"
+              />
+            )}
           </span>
         </span>
       )}
@@ -455,16 +484,24 @@ function VoiceTile({
         </button>
       )}
 
-      {/* A pílula só aparece quando tem o que dizer.
-          No print, um tile de avatar sem mudo e sem o mouse em cima é limpo: só
-          a foto e a borda verde de quem fala (113411). Ela volta quando há
-          estado a informar — mudo, surdo, transmissão — e no hover, para quem
-          quiser conferir o nome. Com vídeo ela fica sempre: aí o quadro é uma
-          imagem em movimento, e o rosto de hoje não é o de ontem.
-          Desenhá-la sempre, como fazíamos, enchia uma sala de duas pessoas de
-          rótulo que ninguém precisa ler. */}
+      {/* O rótulo de nome — que é também onde o mudo mora.
+          O Discord não desenha selo circular de microfone no avatar do tile: o
+          próprio rótulo vira o aviso, com o glifo cortado ANTES do nome. Pílula
+          de 32px de altura, a 12px da borda esquerda e da de baixo, raio 6 e
+          preto a 50% sobre o tile.
+          Ela só existe quando tem o que dizer: no tile sem mudo e sem vídeo o
+          Discord não desenha rótulo nenhum. Volta quando há estado a informar —
+          mudo, surdo, transmissão — e no hover, para quem quiser conferir o
+          nome. Com vídeo ela fica sempre: aí o quadro é uma imagem em
+          movimento, e o rosto de hoje não é o de ontem. */}
       <span
-        className={`pointer-events-none absolute bottom-1 left-1 flex max-w-[calc(100%-8px)] items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 text-xs text-white transition-opacity ${
+        className={`pointer-events-none absolute flex items-center rounded-md bg-black/50 text-white transition-opacity ${
+          // a medida é a do tile do palco; na tirinha de miniaturas (90px de
+          // altura) 32px de pílula a 12px do canto comeriam o quadro
+          compacto
+            ? "bottom-1.5 left-1.5 h-6 max-w-[calc(100%-12px)] gap-1 px-1.5 text-xs"
+            : "bottom-3 left-3 h-8 max-w-[calc(100%-24px)] gap-1.5 px-2 text-sm"
+        } ${
           publication || state.muted || state.deafened
             ? ""
             : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
@@ -475,18 +512,27 @@ function VoiceTile({
             Ao vivo
           </span>
         )}
+        {/* surdo implica mudo: mostrar os dois glifos contaria duas vezes a
+            mesma coisa. "Silenciado por você" não entra — é estado meu, não
+            dele, e vive no menu de contexto.
+            Branco, e não vermelho: no Discord o alarme é a presença do glifo,
+            não a cor dele — e o vermelho sobre preto a 50% é o que menos se lê
+            de perto. */}
+        {(state.deafened || state.muted) && (
+          <span
+            className={`grid shrink-0 place-items-center ${compacto ? "h-3.5 w-3.5" : "h-4 w-4"}`}
+          >
+            {state.deafened ? (
+              <HeadphoneOff size={compacto ? 12 : 14} role="img" aria-label="Sem áudio" />
+            ) : (
+              <MicOff size={compacto ? 12 : 14} role="img" aria-label="Mudo" />
+            )}
+          </span>
+        )}
         <span className="truncate">
           {nome}
           {sou && " (você)"}
         </span>
-        {/* surdo implica mudo: mostrar os dois ícones contaria duas vezes a
-            mesma coisa. "Silenciado por você" não entra — é estado meu, não
-            dele, e vive no menu de contexto */}
-        {state.deafened ? (
-          <HeadphoneOff size={12} className="shrink-0 text-red" aria-label="Sem áudio" />
-        ) : (
-          state.muted && <MicOff size={12} className="shrink-0 text-red" aria-label="Mudo" />
-        )}
       </span>
 
       {!compacto && (
