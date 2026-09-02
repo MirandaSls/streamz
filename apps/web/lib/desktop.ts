@@ -41,6 +41,8 @@
  * (`withGlobalTauri` está desligado — não existe mais `window.__TAURI__`.)
  */
 
+import type { FonteDeTela, PedidoDeTela } from "@/lib/seletor-de-tela";
+
 export type NotificacaoOptions = {
   title: string;
   body?: string;
@@ -312,4 +314,111 @@ export async function definirContadorNoIcone(total: number): Promise<void> {
   } catch {
     // Contador é enfeite: plataforma sem suporte não pode derrubar nada.
   }
+}
+
+// ── Compartilhamento de tela nativo (só no app de desktop) ─────────────────
+
+/** O que a captura nativa consegue nesta máquina (`capacidades_de_tela`). */
+export interface CapacidadesDeTela {
+  /** Há backend nativo — hoje, só no Windows. */
+  nativo: boolean;
+  /** `wgc` (Windows 11, janela isolada) ou `dxgi` (Windows 10, recorte do monitor). */
+  backend: "wgc" | "dxgi" | null;
+  /** Compartilhar uma janela mostra o que estiver por cima dela (DXGI). */
+  janelaRecortada: boolean;
+}
+
+const SEM_CAPTURA: CapacidadesDeTela = { nativo: false, backend: null, janelaRecortada: false };
+
+/**
+ * A captura nativa existe aqui? Fora do Tauri (ou num desktop sem Windows) a
+ * resposta é `nativo: false`, e o seletor fica no `getDisplayMedia`. Nunca
+ * lança: falha na ponte é o mesmo que não ter captura.
+ */
+export async function capacidadesDeTela(): Promise<CapacidadesDeTela> {
+  if (!isTauri()) return SEM_CAPTURA;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return await invoke<CapacidadesDeTela>("capacidades_de_tela");
+  } catch {
+    return SEM_CAPTURA;
+  }
+}
+
+/** Janelas e monitores que dá para transmitir agora (`fontes_de_tela`). */
+export async function fontesDeTela(): Promise<FonteDeTela[]> {
+  if (!isTauri()) return [];
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return await invoke<FonteDeTela[]>("fontes_de_tela");
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Miniaturas ao vivo das fontes, na mesma ordem, como data URLs JPEG; `null`
+ * onde a captura não deu (janela minimizada, conteúdo protegido). Uma
+ * varredura por chamada — quem quer "ao vivo" chama de novo quando esta volta.
+ */
+export async function miniaturasDeTela(ids: string[]): Promise<(string | null)[]> {
+  if (!isTauri() || ids.length === 0) return ids.map(() => null);
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return await invoke<(string | null)[]>("miniaturas_de_tela", { ids });
+  } catch {
+    return ids.map(() => null);
+  }
+}
+
+/**
+ * Começa a transmitir pela captura nativa: o Rust entra na sala como o
+ * participante do token (`<userId>#tela`) e publica a fonte. Lança com a
+ * mensagem do Rust quando não dá (fonte sumiu, sala recusou) — aqui o erro
+ * interessa a quem clicou.
+ */
+export async function iniciarTelaNativa(pedido: PedidoDeTela): Promise<void> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("iniciar_tela", { pedido });
+}
+
+/** Para a transmissão nativa, se houver. Best-effort: parar nunca falha para o usuário. */
+export async function pararTelaNativa(): Promise<void> {
+  if (!isTauri()) return;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("parar_tela");
+  } catch {
+    // já parada, ou a ponte caiu: o estado da store é quem manda
+  }
+}
+
+/** Por que a transmissão nativa acabou sem o usuário pedir (`tela:encerrada`). */
+export type MotivoDeEncerramento = "fonteSumiu" | "desconectado" | "falha";
+
+/**
+ * Avisa quando a transmissão nativa acaba sozinha: a janela fechou, a sala
+ * caiu, a captura falhou. Devolve a função que para de ouvir.
+ */
+export function ouvirTelaEncerrada(ouvinte: (motivo: MotivoDeEncerramento) => void): () => void {
+  if (!isTauri()) return () => {};
+  let parar: (() => void) | null = null;
+  let cancelado = false;
+  void (async () => {
+    try {
+      const { listen } = await import("@tauri-apps/api/event");
+      const desligar = await listen<MotivoDeEncerramento>("tela:encerrada", ({ payload }) =>
+        ouvinte(payload),
+      );
+      if (cancelado) desligar();
+      else parar = desligar;
+    } catch {
+      // sem o evento, a transmissão que morrer sozinha só some no próximo
+      // `parar`; é degradado, não quebrado
+    }
+  })();
+  return () => {
+    cancelado = true;
+    parar?.();
+  };
 }

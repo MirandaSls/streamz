@@ -1,34 +1,64 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { AppWindow, Monitor, MonitorUp } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { SCREEN_QUALITY, type ScreenQuality } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
+import { AppWindow, ArrowLeft, Camera, Monitor, MonitorUp, Settings } from "@/components/ui/icones";
+import Tooltip from "@/components/ui/Tooltip";
+import {
+  capacidadesDeTela,
+  fontesDeTela,
+  isTauri,
+  miniaturasDeTela,
+  type CapacidadesDeTela,
+} from "@/lib/desktop";
+import {
+  PRESET_SD,
+  descreverPreset,
+  estimativaDeBanda,
+  fontesDaAba,
+  juntarPreset,
+  perfilDoPreset,
+  presetDoPerfil,
+  rotuloDaFonte,
+  separarPreset,
+  type Aba,
+  type FonteDeTela,
+} from "@/lib/seletor-de-tela";
 import { ui } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
 
 /**
- * Seletor de transmissão — as abas "Aplicativos"/"Telas", a prévia ao vivo e a
- * qualidade num lugar só, como no Discord.
+ * Seletor de transmissão — o modal do Discord: três abas no topo, a grade de
+ * miniaturas ao vivo no corpo e, no rodapé, o preset em duas linhas com o
+ * alternador SD/HD e a engrenagem.
  *
- * **Por que a grade de miniaturas de janelas não existe aqui:** na web não há
- * como enumerar janelas ou telas. `getDisplayMedia` é uma API de *gesto*: ela
- * abre o seletor do próprio navegador/sistema e devolve **uma** captura já
- * escolhida — não existe "listar fontes" (isso é privilégio de aplicação
- * nativa; num Tauri/Electron viria de `desktopCapturer`). Enumerar janelas sem
- * consentimento vazaria o que o usuário tem aberto, e é por isso que a
- * plataforma não expõe.
+ * **Duas origens para a grade, um visual só.** No app de desktop as fontes
+ * vêm do Rust (`fontes_de_tela` + `miniaturas_de_tela`, captura nativa sem a
+ * borda amarela) e clicar numa miniatura **já transmite**, como no Discord —
+ * não há prévia nem "Ao vivo" para confirmar. No navegador não existe listar
+ * janelas (`getDisplayMedia` é uma API de gesto: abre o seletor do próprio
+ * navegador e devolve uma captura escolhida), então a aba mostra um botão
+ * "Escolher…", a captura vira a única miniatura da grade, e clicar nela vai ao
+ * ar. A aba "Dispositivos" (câmeras e placas de captura) é igual nos dois.
  *
- * O que dá para reproduzir com honestidade — e é o que este modal faz — é o
- * resto do fluxo: escolher o *tipo* de fonte (o `displaySurface` é uma dica que
- * o navegador respeita), ver a **prévia ao vivo** do que será transmitido,
- * ajustar resolução e taxa de quadros antes de subir, e só então ir ao ar.
+ * A etapa de configurações (engrenagem) tem os controles que já existiam —
+ * resolução, taxa de quadros, áudio do sistema, estimativa de banda — e volta
+ * para a grade. Medidas do print de referência: modal 955 de largura, barra
+ * de abas 40 (segmento 32), miniatura 440×248 raio 8, pílula SD/HD 112×40,
+ * engrenagem 40×40, ambas raio 8.
  */
 export default function ScreenSharePicker({ onClose }: { onClose: () => void }) {
-  const [aba, setAba] = useState<"aplicativos" | "telas">("aplicativos");
+  const [aba, setAba] = useState<Aba>("aplicativos");
+  const [etapa, setEtapa] = useState<"grade" | "configuracoes">("grade");
+  // null = ainda não perguntamos ao desktop; no navegador resolve na hora
+  const [capacidades, setCapacidades] = useState<CapacidadesDeTela | null>(
+    isTauri() ? null : { nativo: false, backend: null, janelaRecortada: false },
+  );
+  // captura do navegador à espera do clique (só fora do desktop)
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [capturando, setCapturando] = useState(false);
-  const video = useRef<HTMLVideoElement>(null);
+  const [iniciando, setIniciando] = useState(false);
   const publicado = useRef(false);
 
   const quality = useVoice((s) => s.screenQuality);
@@ -36,10 +66,21 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
   const setQuality = useVoice((s) => s.setScreenQuality);
   const setAudio = useVoice((s) => s.setScreenAudio);
   const publicarTela = useVoice((s) => s.publicarTela);
+  const publicarTelaNativa = useVoice((s) => s.publicarTelaNativa);
+  // o "HD" do alternador lembra o que a engrenagem definiu por último
+  const [ultimoHd, setUltimoHd] = useState<ScreenQuality | null>(
+    quality === PRESET_SD ? null : quality,
+  );
 
   useEffect(() => {
-    if (video.current) video.current.srcObject = stream;
-  }, [stream]);
+    let vivo = true;
+    void capacidadesDeTela().then((c) => {
+      if (vivo) setCapacidades(c);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, []);
 
   // fechar sem ir ao ar não pode deixar a captura viva (o navegador seguiria
   // mostrando "compartilhando" com ninguém do outro lado)
@@ -49,19 +90,29 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
     };
   }, [stream]);
 
-  const preset = SCREEN_QUALITY[quality];
-  // a chave é `<resolução><fps>` ("1440p30"): separá-la deixa os dois controles
-  // independentes, já que o contrato tem todas as combinações
-  const fps = quality.endsWith("60") ? "60" : "30";
-  const resolucao = quality.slice(0, -2);
+  const nativo = capacidades?.nativo ?? false;
 
-  async function capturar(tipo: "aplicativos" | "telas") {
+  function aplicarQualidade(q: ScreenQuality) {
+    setQuality(q);
+    if (q !== PRESET_SD) setUltimoHd(q);
+    // prévia do navegador no ar: reconstrange a faixa em vez de recapturar
+    const faixa = stream?.getVideoTracks()[0];
+    const p = SCREEN_QUALITY[q];
+    void faixa
+      ?.applyConstraints({ width: p.width, height: p.height, frameRate: p.frameRate })
+      .catch(() => {
+        // fonte que não aceita a restrição: ela vai como está, e é melhor assim
+      });
+  }
+
+  async function capturarNoNavegador(tipo: Aba) {
     const md = typeof navigator !== "undefined" ? navigator.mediaDevices : null;
     if (!md?.getDisplayMedia) {
       ui.toast("Este navegador não permite compartilhar a tela", "error");
       return;
     }
     setCapturando(true);
+    const preset = SCREEN_QUALITY[quality];
     try {
       const novo = await md.getDisplayMedia({
         video: {
@@ -93,115 +144,567 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
     }
   }
 
-  /** Trocar a qualidade com a prévia no ar não recaptura: reconstrange a faixa. */
-  function aplicarQualidade(q: ScreenQuality) {
-    setQuality(q);
-    const faixa = stream?.getVideoTracks()[0];
-    const p = SCREEN_QUALITY[q];
-    void faixa
-      ?.applyConstraints({ width: p.width, height: p.height, frameRate: p.frameRate })
-      .catch(() => {
-        // fonte que não aceita a restrição: ela vai como está, e é melhor assim
-      });
+  /** Vai ao ar com uma captura do navegador (janela/tela escolhida, ou câmera). */
+  async function irAoVivoCom(captura: MediaStream) {
+    if (iniciando) return;
+    setIniciando(true);
+    publicado.current = true;
+    await publicarTela(captura);
+    onClose();
   }
 
-  async function irAoVivo() {
-    if (!stream) return;
-    publicado.current = true;
-    await publicarTela(stream);
-    onClose();
+  /** Vai ao ar com uma fonte da captura nativa — o clique na miniatura. */
+  async function irAoVivoNativo(fonteId: string) {
+    if (iniciando) return;
+    setIniciando(true);
+    await publicarTelaNativa(fonteId);
+    // a store avisa o erro em toast; só fecha se de fato foi ao ar
+    if (useVoice.getState().screenOn) onClose();
+    else setIniciando(false);
   }
 
   return (
     <Dialog
       title="Compartilhar sua tela"
       onClose={onClose}
-      className="w-[640px]"
-      footer={
-        <>
-          <PrimaryButton onClick={() => void irAoVivo()} disabled={!stream}>
-            Ao vivo
-          </PrimaryButton>
-          <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
-        </>
-      }
+      hideHeader
+      showClose={false}
+      className="h-[560px] w-[955px]"
+      bodyClassName="flex flex-col px-[22px] pb-[22px] pt-[21px]"
     >
-      {/*
-       * Barra de abas do Discord, medida na print de referência: sulco escuro
-       * de 40px com 4px de folga, segmentos de 32px repartindo a largura em
-       * partes iguais, canto de 8px por fora e 6px por dentro.
-       *
-       * A aba ativa é preenchida com a cor do **corpo do modal**, não com uma
-       * cor nova: o efeito é o fundo emergindo do sulco, e é isso que dá o
-       * relevo sem precisar de borda.
-       *
-       * Sem acento aqui de propósito. No Discord esta barra não tem cor de
-       * marca nenhuma, e o limão deste modal já mora nas pílulas de qualidade e
-       * no botão "Ao vivo" — dois acentos na mesma tela enfraquecem os dois.
-       */}
-      <div
-        role="tablist"
-        aria-label="Tipo de fonte"
-        className="mb-5 flex gap-1 rounded-lg bg-rail p-1"
-      >
-        {(
-          [
-            ["aplicativos", "Aplicativos", <AppWindow key="a" size={16} />],
-            ["telas", "Telas", <Monitor key="t" size={16} />],
-          ] as const
-        ).map(([id, rotulo, icone]) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={aba === id}
-            onClick={() => setAba(id)}
-            className={`flex h-8 flex-1 items-center justify-center gap-2 rounded-md text-sm font-medium transition ${
-              aba === id
-                ? "bg-chat text-txt-primary"
-                : "text-txt-secondary hover:bg-hov hover:text-txt-primary"
-            }`}
+      {etapa === "configuracoes" ? (
+        <Configuracoes
+          quality={quality}
+          audio={audio}
+          nativo={nativo}
+          onQualidade={aplicarQualidade}
+          onAudio={setAudio}
+          onVoltar={() => setEtapa("grade")}
+          aoVivo={stream ? () => void irAoVivoCom(stream) : null}
+          iniciando={iniciando}
+        />
+      ) : (
+        <>
+          <BarraDeAbas aba={aba} onAba={setAba} />
+
+          <div className="-mr-3 mt-6 min-h-0 flex-1 overflow-y-auto pr-3">
+            {aba === "dispositivos" ? (
+              <Dispositivos onEscolher={(s) => void irAoVivoCom(s)} iniciando={iniciando} />
+            ) : capacidades === null ? (
+              <p className="pt-10 text-center text-sm text-txt-muted">Procurando janelas…</p>
+            ) : nativo ? (
+              <GradeNativa
+                aba={aba}
+                aviso={
+                  aba === "aplicativos" && capacidades.janelaRecortada
+                    ? "Neste Windows, compartilhar uma janela mostra o que estiver por cima dela."
+                    : null
+                }
+                onEscolher={(id) => void irAoVivoNativo(id)}
+                iniciando={iniciando}
+              />
+            ) : (
+              <EscolhaDoNavegador
+                aba={aba}
+                stream={stream}
+                capturando={capturando}
+                iniciando={iniciando}
+                onEscolher={() => void capturarNoNavegador(aba)}
+                onIrAoVivo={() => {
+                  if (stream) void irAoVivoCom(stream);
+                }}
+              />
+            )}
+          </div>
+
+          <Rodape
+            quality={quality}
+            onPerfil={(perfil) => aplicarQualidade(presetDoPerfil(perfil, ultimoHd))}
+            onEngrenagem={() => setEtapa("configuracoes")}
+          />
+        </>
+      )}
+    </Dialog>
+  );
+}
+
+// ── barra de abas ──────────────────────────────────────────────────────────
+
+/**
+ * Barra de abas do Discord, medida na print de referência: sulco escuro de
+ * 40px com 4px de folga, segmentos de 32px repartindo a largura em partes
+ * iguais, canto de 8px por fora e 6px por dentro. A aba ativa é preenchida
+ * com a cor do **corpo do modal**, não com uma cor nova: o efeito é o fundo
+ * emergindo do sulco, e é isso que dá o relevo sem precisar de borda. Sem
+ * acento aqui de propósito: o limão deste modal mora nas pílulas de qualidade.
+ */
+function BarraDeAbas({ aba, onAba }: { aba: Aba; onAba: (aba: Aba) => void }) {
+  const abas = [
+    ["aplicativos", "Aplicativos", <AppWindow key="a" size={20} />],
+    ["telas", "Tela Inteira", <Monitor key="t" size={20} />],
+    ["dispositivos", "Dispositivos", <Camera key="d" size={20} />],
+  ] as const;
+  return (
+    <div
+      role="tablist"
+      aria-label="Tipo de fonte"
+      className="flex h-10 shrink-0 gap-1 rounded-lg bg-rail p-1"
+    >
+      {abas.map(([id, rotulo, icone]) => (
+        <button
+          key={id}
+          type="button"
+          role="tab"
+          aria-selected={aba === id}
+          onClick={() => onAba(id)}
+          className={`flex h-8 flex-1 items-center justify-center gap-2 rounded-md text-sm font-semibold transition ${
+            aba === id
+              ? "bg-chat text-txt-primary"
+              : "text-txt-secondary hover:bg-hov hover:text-txt-primary"
+          }`}
+        >
+          {icone}
+          {rotulo}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── grade nativa (desktop) ─────────────────────────────────────────────────
+
+/** Quanto esperar entre uma varredura de miniaturas e a próxima. */
+const PAUSA_ENTRE_VARREDURAS_MS = 400;
+/** Relistar janelas (abertas e fechadas desde a última vez) a cada tanto. */
+const RELISTAR_MS = 3000;
+
+function GradeNativa({
+  aba,
+  aviso,
+  onEscolher,
+  iniciando,
+}: {
+  aba: Aba;
+  aviso: string | null;
+  onEscolher: (fonteId: string) => void;
+  iniciando: boolean;
+}) {
+  const [fontes, setFontes] = useState<FonteDeTela[] | null>(null);
+  const [miniaturas, setMiniaturas] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let vivo = true;
+    const listar = () =>
+      void fontesDeTela().then((f) => {
+        if (vivo) setFontes(f);
+      });
+    listar();
+    const timer = setInterval(listar, RELISTAR_MS);
+    return () => {
+      vivo = false;
+      clearInterval(timer);
+    };
+  }, []);
+
+  const visiveis = useMemo(() => fontesDaAba(fontes ?? [], aba), [fontes, aba]);
+  const ids = visiveis.map((f) => f.id).join("\n");
+
+  // Miniaturas ao vivo: a próxima varredura só depois de a anterior voltar —
+  // é o ritmo natural, e nunca há duas capturas da mesma janela ao mesmo tempo.
+  useEffect(() => {
+    if (!ids) return;
+    let vivo = true;
+    const lista = ids.split("\n");
+    void (async () => {
+      while (vivo) {
+        const resultado = await miniaturasDeTela(lista);
+        if (!vivo) return;
+        setMiniaturas((atual) => {
+          const proximo = { ...atual };
+          lista.forEach((id, i) => {
+            const m = resultado[i];
+            if (m) proximo[id] = m;
+          });
+          return proximo;
+        });
+        await new Promise((r) => setTimeout(r, PAUSA_ENTRE_VARREDURAS_MS));
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [ids]);
+
+  if (fontes === null) {
+    return <p className="pt-10 text-center text-sm text-txt-muted">Procurando janelas…</p>;
+  }
+  if (visiveis.length === 0) {
+    return (
+      <EstadoVazio
+        icone={aba === "telas" ? <Monitor size={32} /> : <AppWindow size={32} />}
+        texto={
+          aba === "telas" ? "Nenhuma tela encontrada" : "Nenhuma janela aberta para compartilhar"
+        }
+      />
+    );
+  }
+
+  return (
+    <div>
+      {aviso && <p className="mb-3 text-xs text-txt-muted">{aviso}</p>}
+      <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+        {visiveis.map((f) => (
+          <Miniatura
+            key={f.id}
+            rotulo={rotuloDaFonte(f)}
+            icone={
+              f.icone ? (
+                // eslint-disable-next-line @next/next/no-img-element -- data URL vinda do Rust
+                <img src={f.icone} alt="" className="h-4 w-4 shrink-0 object-contain" />
+              ) : f.tipo === "monitor" ? (
+                <Monitor size={16} className="shrink-0 text-txt-secondary" />
+              ) : (
+                <AppWindow size={16} className="shrink-0 text-txt-secondary" />
+              )
+            }
+            onClick={() => onEscolher(f.id)}
+            disabled={iniciando}
           >
-            {icone}
-            {rotulo}
-          </button>
+            {miniaturas[f.id] ? (
+              // eslint-disable-next-line @next/next/no-img-element -- quadro ao vivo, data URL
+              <img src={miniaturas[f.id]} alt="" className="h-full w-full object-contain" />
+            ) : f.icone ? (
+              // janela que não deixa capturar (minimizada, conteúdo protegido):
+              // o ícone do app no lugar do quadro
+              // eslint-disable-next-line @next/next/no-img-element -- data URL vinda do Rust
+              <img src={f.icone} alt="" className="h-12 w-12 object-contain" />
+            ) : f.tipo === "monitor" ? (
+              <Monitor size={48} className="text-txt-muted" />
+            ) : (
+              <AppWindow size={48} className="text-txt-muted" />
+            )}
+          </Miniatura>
         ))}
       </div>
+    </div>
+  );
+}
 
-      <div className="grid aspect-video w-full place-items-center overflow-hidden rounded-lg bg-rail">
-        {stream ? (
-          <video ref={video} autoPlay playsInline muted className="h-full w-full object-contain" />
-        ) : (
-          <div className="flex flex-col items-center gap-3 px-8 text-center">
-            <MonitorUp size={32} className="text-txt-muted" aria-hidden="true" />
-            <p className="text-sm text-txt-muted">
-              {aba === "telas"
-                ? "Escolha a tela que todos vão ver. A prévia aparece aqui antes de você ir ao ar."
-                : "Escolha a janela que todos vão ver. A prévia aparece aqui antes de você ir ao ar."}
-            </p>
-            <button
-              type="button"
-              onClick={() => void capturar(aba)}
-              disabled={capturando}
-              className="h-9 rounded-[3px] bg-border-strong px-4 text-sm font-medium text-txt-primary transition hover:bg-border-strong-hover disabled:opacity-50"
-            >
-              {capturando ? "Aguardando…" : aba === "telas" ? "Escolher tela" : "Escolher janela"}
-            </button>
-          </div>
-        )}
+/** Um cartão da grade: quadro 440×248 raio 8 sobre preto, e o nome embaixo. */
+function Miniatura({
+  rotulo,
+  icone,
+  onClick,
+  disabled,
+  children,
+}: {
+  rotulo: string;
+  icone: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="group flex w-[440px] max-w-full flex-col text-left outline-none disabled:cursor-wait"
+    >
+      <div className="grid h-[248px] w-full place-items-center overflow-hidden rounded-lg bg-black transition group-hover:ring-2 group-hover:ring-border-strong-hover group-focus-visible:ring-2 group-focus-visible:ring-accent">
+        {children}
       </div>
+      <div className="mt-2 flex h-6 w-full items-center gap-2">
+        {icone}
+        <span className="truncate text-sm font-semibold text-txt-primary">{rotulo}</span>
+      </div>
+    </button>
+  );
+}
 
+function EstadoVazio({ icone, texto }: { icone: ReactNode; texto: string }) {
+  return (
+    <div className="flex h-full min-h-[248px] flex-col items-center justify-center gap-3 text-txt-muted">
+      {icone}
+      <p className="text-sm">{texto}</p>
+    </div>
+  );
+}
+
+// ── navegador: o seletor do próprio browser ────────────────────────────────
+
+function EscolhaDoNavegador({
+  aba,
+  stream,
+  capturando,
+  iniciando,
+  onEscolher,
+  onIrAoVivo,
+}: {
+  aba: Aba;
+  stream: MediaStream | null;
+  capturando: boolean;
+  iniciando: boolean;
+  onEscolher: () => void;
+  onIrAoVivo: () => void;
+}) {
+  const video = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    if (video.current) video.current.srcObject = stream;
+  }, [stream]);
+
+  const rotuloDoBotao = aba === "telas" ? "Escolher tela" : "Escolher janela";
+
+  return (
+    <div className="grid grid-cols-2 gap-x-4 gap-y-4">
       {stream && (
+        <Miniatura
+          rotulo={stream.getVideoTracks()[0]?.label || "Captura do navegador"}
+          icone={
+            aba === "telas" ? (
+              <Monitor size={16} className="shrink-0 text-txt-secondary" />
+            ) : (
+              <AppWindow size={16} className="shrink-0 text-txt-secondary" />
+            )
+          }
+          onClick={onIrAoVivo}
+          disabled={iniciando}
+        >
+          <video ref={video} autoPlay playsInline muted className="h-full w-full object-contain" />
+        </Miniatura>
+      )}
+      <div className="flex w-[440px] max-w-full flex-col">
+        <div className="flex h-[248px] w-full flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border-strong px-8 text-center">
+          <MonitorUp size={32} className="text-txt-muted" aria-hidden="true" />
+          <p className="text-sm text-txt-muted">
+            {stream
+              ? "Clique na miniatura para ir ao ar, ou escolha outra fonte."
+              : aba === "telas"
+                ? "O navegador abre o seletor de telas; a escolhida aparece aqui."
+                : "O navegador abre o seletor de janelas; a escolhida aparece aqui."}
+          </p>
+          <button
+            type="button"
+            onClick={onEscolher}
+            disabled={capturando || iniciando}
+            className="h-9 rounded-[3px] bg-border-strong px-4 text-sm font-medium text-txt-primary transition hover:bg-border-strong-hover disabled:opacity-50"
+          >
+            {capturando ? "Aguardando…" : stream ? "Trocar fonte" : rotuloDoBotao}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── dispositivos: câmeras e placas de captura ──────────────────────────────
+
+function Dispositivos({
+  onEscolher,
+  iniciando,
+}: {
+  onEscolher: (stream: MediaStream) => void;
+  iniciando: boolean;
+}) {
+  const [dispositivos, setDispositivos] = useState<MediaDeviceInfo[] | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    const md = typeof navigator !== "undefined" ? navigator.mediaDevices : null;
+    if (!md?.enumerateDevices) {
+      setDispositivos([]);
+      return;
+    }
+    void md
+      .enumerateDevices()
+      .then((todos) => {
+        if (vivo) setDispositivos(todos.filter((d) => d.kind === "videoinput"));
+      })
+      .catch(() => {
+        if (vivo) setDispositivos([]);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  if (dispositivos === null) {
+    return <p className="pt-10 text-center text-sm text-txt-muted">Procurando dispositivos…</p>;
+  }
+  if (dispositivos.length === 0) {
+    return <EstadoVazio icone={<Camera size={32} />} texto="Nenhum dispositivo de captura" />;
+  }
+  return (
+    <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+      {dispositivos.map((d, i) => (
+        <Dispositivo
+          key={d.deviceId || i}
+          dispositivo={d}
+          indice={i}
+          onEscolher={onEscolher}
+          iniciando={iniciando}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Uma câmera com prévia ao vivo; o clique entrega a própria captura da prévia. */
+function Dispositivo({
+  dispositivo,
+  indice,
+  onEscolher,
+  iniciando,
+}: {
+  dispositivo: MediaDeviceInfo;
+  indice: number;
+  onEscolher: (stream: MediaStream) => void;
+  iniciando: boolean;
+}) {
+  const video = useRef<HTMLVideoElement>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const entregue = useRef(false);
+
+  useEffect(() => {
+    let vivo = true;
+    let aberta: MediaStream | null = null;
+    void navigator.mediaDevices
+      .getUserMedia({ video: { deviceId: { exact: dispositivo.deviceId } } })
+      .then((s) => {
+        if (!vivo) {
+          s.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        aberta = s;
+        setStream(s);
+      })
+      .catch(() => {
+        // câmera ocupada ou recusada: fica o ícone no lugar da prévia
+      });
+    return () => {
+      vivo = false;
+      if (!entregue.current) aberta?.getTracks().forEach((t) => t.stop());
+    };
+  }, [dispositivo.deviceId]);
+
+  useEffect(() => {
+    if (video.current) video.current.srcObject = stream;
+  }, [stream]);
+
+  return (
+    <Miniatura
+      rotulo={dispositivo.label || `Dispositivo ${indice + 1}`}
+      icone={<Camera size={16} className="shrink-0 text-txt-secondary" />}
+      onClick={() => {
+        if (!stream) return;
+        entregue.current = true;
+        onEscolher(stream);
+      }}
+      disabled={iniciando || !stream}
+    >
+      {stream ? (
+        <video ref={video} autoPlay playsInline muted className="h-full w-full object-contain" />
+      ) : (
+        <Camera size={48} className="text-txt-muted" />
+      )}
+    </Miniatura>
+  );
+}
+
+// ── rodapé ─────────────────────────────────────────────────────────────────
+
+function Rodape({
+  quality,
+  onPerfil,
+  onEngrenagem,
+}: {
+  quality: ScreenQuality;
+  onPerfil: (perfil: "sd" | "hd") => void;
+  onEngrenagem: () => void;
+}) {
+  const { titulo, resumo } = descreverPreset(quality);
+  const perfil = perfilDoPreset(quality);
+  return (
+    <div className="mt-5 flex h-10 shrink-0 items-center justify-between gap-4">
+      <div className="min-w-0">
+        <p className="truncate text-base font-bold leading-5 text-txt-primary">{titulo}</p>
+        <p className="truncate text-xs leading-4 text-txt-muted">{resumo}</p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <div
+          role="group"
+          aria-label="Qualidade"
+          className="flex h-10 w-28 gap-1 rounded-lg bg-rail p-1"
+        >
+          {(["sd", "hd"] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              aria-pressed={perfil === p}
+              onClick={() => onPerfil(p)}
+              className={`h-8 flex-1 rounded-md text-sm font-semibold uppercase transition ${
+                perfil === p
+                  ? "bg-chat text-txt-primary"
+                  : "text-txt-secondary hover:text-txt-primary"
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+        <Tooltip label="Configurações da transmissão">
+          <button
+            type="button"
+            onClick={onEngrenagem}
+            aria-label="Configurações da transmissão"
+            className="grid h-10 w-10 place-items-center rounded-lg bg-border-strong text-txt-primary transition hover:bg-border-strong-hover"
+          >
+            <Settings size={20} />
+          </button>
+        </Tooltip>
+      </div>
+    </div>
+  );
+}
+
+// ── configurações (engrenagem) ─────────────────────────────────────────────
+
+function Configuracoes({
+  quality,
+  audio,
+  nativo,
+  onQualidade,
+  onAudio,
+  onVoltar,
+  aoVivo,
+  iniciando,
+}: {
+  quality: ScreenQuality;
+  audio: boolean;
+  nativo: boolean;
+  onQualidade: (q: ScreenQuality) => void;
+  onAudio: (on: boolean) => void;
+  onVoltar: () => void;
+  /** com uma captura do navegador à espera, "Ao vivo" publica daqui mesmo */
+  aoVivo: (() => void) | null;
+  iniciando: boolean;
+}) {
+  const { resolucao, fps } = separarPreset(quality);
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex h-10 shrink-0 items-center gap-3">
         <button
           type="button"
-          onClick={() => void capturar(aba)}
-          className="mt-2 text-xs text-txt-muted transition hover:text-txt-primary hover:underline"
+          onClick={onVoltar}
+          aria-label="Voltar para as fontes"
+          className="grid h-10 w-10 place-items-center rounded-lg bg-rail text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
         >
-          Trocar fonte
+          <ArrowLeft size={20} />
         </button>
-      )}
+        <h3 className="text-base font-bold text-txt-primary">Configurações da transmissão</h3>
+      </div>
 
-      <div className="mt-4 space-y-3">
+      <div className="mt-6 max-w-[520px] space-y-4">
         <Segmento
           rotulo="Resolução"
           opcoes={[
@@ -210,7 +713,7 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
             { valor: "1440p", texto: "1440p" },
           ]}
           atual={resolucao}
-          onEscolher={(v) => aplicarQualidade(`${v}${fps}` as ScreenQuality)}
+          onEscolher={(v) => onQualidade(juntarPreset(v, fps))}
         />
         <Segmento
           rotulo="Taxa de quadros"
@@ -219,30 +722,54 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
             { valor: "60", texto: "60 fps" },
           ]}
           atual={fps}
-          onEscolher={(v) => aplicarQualidade(`${resolucao}${v}` as ScreenQuality)}
+          onEscolher={(v) => onQualidade(juntarPreset(resolucao, v))}
         />
         {/* O custo de subida é a única coisa que o usuário não consegue deduzir
             sozinho, e é o que decide se 1440p vai funcionar na conexão dele. */}
         <p className="text-right text-xs text-txt-muted">
-          Usa cerca de {(preset.maxBitrate / 1_000_000).toFixed(1).replace(".", ",")} Mbps da sua
-          internet de subida
+          Usa cerca de {estimativaDeBanda(quality)} da sua internet de subida
         </p>
+
+        {nativo ? (
+          // A captura nativa ainda não leva o som do sistema (vem na etapa do
+          // áudio, WASAPI loopback): a opção existe, desligada, com o aviso.
+          <Tooltip label="Em breve na captura nativa do desktop">
+            <label className="flex w-max cursor-not-allowed items-center gap-2 text-sm text-txt-muted">
+              <input type="checkbox" checked={false} disabled readOnly className="accent-accent" />
+              Compartilhar áudio do sistema
+            </label>
+          </Tooltip>
+        ) : (
+          <label className="flex w-max cursor-pointer items-center gap-2 text-sm text-txt-normal">
+            <input
+              type="checkbox"
+              checked={audio}
+              onChange={(e) => onAudio(e.target.checked)}
+              className="accent-accent"
+            />
+            Compartilhar áudio do sistema
+          </label>
+        )}
       </div>
 
-      <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm text-txt-normal">
-        <input
-          type="checkbox"
-          checked={audio}
-          onChange={(e) => setAudio(e.target.checked)}
-          className="accent-accent"
-        />
-        Compartilhar áudio do sistema
-      </label>
-    </Dialog>
+      <div className="mt-auto flex flex-row-reverse items-center gap-3">
+        {aoVivo ? (
+          <PrimaryButton onClick={aoVivo} disabled={iniciando}>
+            Ao vivo
+          </PrimaryButton>
+        ) : (
+          <PrimaryButton onClick={onVoltar}>Concluído</PrimaryButton>
+        )}
+        <SecondaryButton onClick={onVoltar}>Voltar</SecondaryButton>
+      </div>
+    </div>
   );
 }
 
-/** Controle segmentado de uma linha (rótulo à esquerda, opções à direita). */
+/**
+ * Controle segmentado de uma linha (rótulo à esquerda, opções à direita), na
+ * mesma forma da barra de abas: sulco de 40px raio 8, segmentos de 32px.
+ */
 function Segmento({
   rotulo,
   opcoes,
@@ -259,14 +786,14 @@ function Segmento({
       <span className="text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">
         {rotulo}
       </span>
-      <div role="group" aria-label={rotulo} className="flex gap-1 rounded-[4px] bg-rail p-1">
+      <div role="group" aria-label={rotulo} className="flex h-10 gap-1 rounded-lg bg-rail p-1">
         {opcoes.map((o) => (
           <button
             key={o.valor}
             type="button"
             aria-pressed={atual === o.valor}
             onClick={() => onEscolher(o.valor)}
-            className={`h-7 rounded-[3px] px-3 text-sm font-medium transition ${
+            className={`h-8 rounded-md px-3 text-sm font-semibold transition ${
               atual === o.valor
                 ? "bg-accent text-accent-ink"
                 : "text-txt-muted hover:bg-hov hover:text-txt-primary"
