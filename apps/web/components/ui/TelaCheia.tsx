@@ -204,7 +204,10 @@ export default function TelaCheia({
         aria-label="Seções das configurações"
         className="flex flex-[1_0_auto] flex-col items-end overflow-y-auto bg-panel py-[60px] pr-2"
       >
-        <div className="w-[252px] px-2">
+        {/* 252 de coluna com 16 de cada lado: o item do Discord mede 220×40
+            (print das configurações do usuário, medido por pixel), e a busca e
+            os cabeçalhos acompanham a mesma largura. */}
+        <div className="w-[252px] px-4">
           {cabecalho !== undefined &&
             (onCabecalho ? (
               <button
