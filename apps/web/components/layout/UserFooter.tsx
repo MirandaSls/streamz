@@ -63,13 +63,21 @@ function FooterSplit({
 }) {
   const [aberto, setAberto] = useState(false);
   const seta = useRef<HTMLButtonElement>(null);
+  /**
+   * A caixa se alinha pelo **par**, não pela setinha.
+   *
+   * Medido no print: o popover do Discord começa na borda esquerda do botão do
+   * microfone. Ancorado na setinha, o nosso nascia ~33px à direita disso — a
+   * caixa parecia pendurada no canto do botão em vez de sair dele.
+   */
+  const par = useRef<HTMLDivElement>(null);
 
   const cor = off
     ? "bg-red/15 text-red hover:bg-red/25"
     : "text-txt-secondary hover:bg-hov hover:text-txt-primary";
 
   return (
-    <div className="flex items-center gap-px">
+    <div ref={par} className="flex items-center gap-px">
       <Tooltip label={label}>
         <button
           type="button"
@@ -95,7 +103,7 @@ function FooterSplit({
       </Tooltip>
 
       <PopoverFlutuante
-        ancora={seta}
+        ancora={par}
         aberto={aberto}
         onFechar={() => setAberto(false)}
         rotulo={labelDaSeta}

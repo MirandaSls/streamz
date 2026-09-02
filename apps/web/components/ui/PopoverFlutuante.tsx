@@ -6,11 +6,16 @@ import { createPortal } from "react-dom";
 /**
  * Caixa flutuante ancorada num botão — o popover de verdade, em portal.
  *
- * Existe porque `absolute` dentro da barra lateral não serve: a coluna tem
- * 240px e estas caixas têm ~290px, então uma caixa alinhada à direita cresce
- * **para a esquerda**, passa por cima do rail de servidores e sai da janela. Foi
- * o que aconteceu com a supressão de ruído. Alargar a coluna não é opção, e
- * encolher a caixa faria o teste de microfone não caber.
+ * Existe porque `absolute` dentro da barra lateral não serve. O motivo original
+ * era aritmético — a coluna tinha 240px e estas caixas têm ~290 —, e ele
+ * caducou quando a coluna foi para 294. O motivo que fica é o de forma: a caixa
+ * precisa crescer **para a direita, por cima do conteúdo**, e de dentro da
+ * coluna ela não pode: ou é cortada pelo `overflow` de um ancestral, ou cresce
+ * para a esquerda por cima do rail de servidores e sai da janela. Foi o que
+ * aconteceu com a supressão de ruído.
+ *
+ * Repare que a conta de posição é presa à **janela**, não à coluna, e por isso
+ * sobreviveu à mudança de largura sem ninguém tocar nela.
  *
  * Em portal, com posição medida e presa à janela, o problema deixa de existir:
  * a caixa abre onde couber e nunca é cortada por `overflow` de ancestral.
