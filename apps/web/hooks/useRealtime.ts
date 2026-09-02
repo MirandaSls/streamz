@@ -48,7 +48,7 @@ import type {
   ReportView,
 } from "@streamz/shared";
 import { shouldNotifyMessage } from "@streamz/shared";
-import { definirContadorNoIcone, notify } from "@/lib/desktop";
+import { definirContadorNoIcone, janelaTemFoco, notify, observarFoco, prepararNotificacoes } from "@/lib/desktop";
 import { tocarSomDeNotificacao } from "@/lib/notification-sound";
 import { somLigado } from "@/stores/sons";
 import { levelForChannel, useNotifications } from "@/stores/notifications";
@@ -83,7 +83,9 @@ import { ui } from "@/stores/ui";
  * O socket está em todas as salas que o usuário pode ver (o gateway faz isso
  * no connect), então `message.new` chega para qualquer canal: o do servidor
  * aberto, os dos outros servidores (rail) e as conversas. Cada um atualiza
- * seu "não lido"; o canal na tela, com a janela visível, é marcado como lido.
+ * seu "não lido"; o canal na tela, com a janela em foco, é marcado como lido
+ * — e o que chegou nele enquanto a janela estava atrás de outro app é lido
+ * quando ela volta ao foco.
  *
  * Reconexão: o servidor esquece as salas quando a conexão cai, então
  * recarregamos o histórico do canal ativo e as listas — sem isso o que chegou
@@ -99,6 +101,13 @@ export function useRealtime(currentUserId?: string): void {
     // sessão. Fora do escopo do agente E, mas é o que faz o deep link funcionar.
     if (useGuilds.getState().guilds.length === 0) void useGuilds.getState().load();
     if (useDMs.getState().channels.length === 0) void useDMs.getState().refreshList();
+    // desktop: permissão e clique da notificação resolvidos antes da primeira
+    void prepararNotificacoes();
+    // voltar ao app lê o canal que está na tela (o que chegou sem foco contou
+    // como não lido e notificou, como no Discord)
+    const pararDeObservarFoco = observarFoco((foco) => {
+      if (foco) lerCanalNaTela();
+    });
 
     const unsubscribe = [
       on<Message>(WS_EVENTS.MESSAGE_NEW, (message) => {
@@ -343,8 +352,25 @@ export function useRealtime(currentUserId?: string): void {
 
     return () => {
       for (const off of unsubscribe) off();
+      pararDeObservarFoco();
     };
   }, [currentUserId]);
+}
+
+/** Marca como lido o canal aberto (servidor ou conversa), se há o que ler. */
+function lerCanalNaTela() {
+  const activeChannelId = useMessages.getState().activeChannelId;
+  if (!activeChannelId) return;
+  const dms = useDMs.getState();
+  if (dms.channels.some((d) => d.id === activeChannelId)) {
+    void dms.markRead(activeChannelId);
+    return;
+  }
+  const channels = useChannels.getState();
+  if (channels.channels.some((c) => c.id === activeChannelId)) {
+    void channels.markRead(activeChannelId);
+    if (channels.guildId) useGuilds.getState().syncFromChannels(channels.guildId);
+  }
 }
 
 /** Não lido, menções, "subir a conversa" e notificação — para uma mensagem que chegou. */
@@ -357,8 +383,10 @@ function onMessageArrived(message: Message, currentUserId?: string) {
     useGuilds.getState().members.find((m) => m.user.id === me?.id)?.roleIds ?? [];
   const mention = !mine && !!me && mentionsMe(message, { ...me, roleIds: meusCargos });
   const activeChannelId = useMessages.getState().activeChannelId;
+  // "na tela" = canal aberto numa janela visível **e com foco**: atrás de outro
+  // app a mensagem conta como não lida e notifica, como no Discord
   const visivel = typeof document !== "undefined" && document.visibilityState === "visible";
-  const naTela = message.channelId === activeChannelId && visivel;
+  const naTela = message.channelId === activeChannelId && visivel && janelaTemFoco();
 
   if (message.guildId) {
     const channels = useChannels.getState();
@@ -415,6 +443,11 @@ function channelTitle(channelId: string): string {
  * A ordem das perguntas importa: primeiro o nível efetivo do canal (canal >
  * servidor > padrão global, com silêncio zerando tudo), depois o "não
  * perturbe", e só então a regra antiga de "estou olhando para isso?".
+ *
+ * O gate de "estou olhando" é o **foco** da janela, não a visibilidade: no
+ * desktop a janela aberta atrás de outro app continua `visible`, e com o gate
+ * antigo mensagem de servidor nunca notificava. Com foco, só menção e DM
+ * avisam; sem foco (outro app na frente, minimizada, bandeja), tudo avisa.
  */
 function notifyIfAway(message: Message, mention: boolean) {
   if (typeof document === "undefined") return;
@@ -425,14 +458,19 @@ function notifyIfAway(message: Message, mention: boolean) {
   const nivel = levelForChannel(message.channelId, message.guildId);
   if (!shouldNotifyMessage(nivel, mention, naoPerturbe)) return;
 
-  // dentro do app, só menção e DM avisam; com a janela escondida, tudo avisa
-  const escondida = document.visibilityState !== "visible";
-  if (!escondida && !mention && message.guildId) return;
+  const semFoco = document.visibilityState !== "visible" || !janelaTemFoco();
+  if (!semFoco && !mention && message.guildId) return;
 
   // `notificationSound` é o interruptor mestre; `somLigado` diz se ESTE som toca
   if (prefs.notificationSound && somLigado("mensagem")) {
     tocarSomDeNotificacao(prefs.outputVolume / 100);
   }
   if (!prefs.desktopNotifications) return;
-  void notify(channelTitle(message.channelId), `${displayNameOf(message.author)}: ${message.content}`);
+  const { guildId, channelId } = message;
+  void notify({
+    title: channelTitle(channelId),
+    body: `${displayNameOf(message.author)}: ${message.content}`,
+    // o clique já focou a janela (`focarJanela`); falta abrir a conversa
+    onClick: () => void goToChannel({ guildId, channelId }),
+  });
 }
