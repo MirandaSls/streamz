@@ -1,6 +1,15 @@
 "use client";
 
-import { CheckCheck, Compass, LogOut, Plus, Settings, UserPlus, Users } from "@/components/ui/icones";
+import {
+  CheckCheck,
+  Compass,
+  LogOut,
+  Plus,
+  Settings,
+  UserPlus,
+  Users,
+  Volume2,
+} from "@/components/ui/icones";
 import {
   displayNameOf,
   guildNotificationScope,
@@ -21,6 +30,7 @@ import { useFriends } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
 import { useNotifications } from "@/stores/notifications";
 import { useSettings } from "@/stores/settings";
+import { useVoice } from "@/stores/voice";
 import { ui, useUI, type MenuItem } from "@/stores/ui";
 
 /** Iniciais de cada palavra, como o Discord faz com servidores sem ícone. */
@@ -66,6 +76,27 @@ function ImagemDaConversa({ dm }: { dm: DMChannelView }) {
 }
 
 /** Badge vermelho de contagem (menções), no canto do ícone. */
+/**
+ * Selo de voz: você está numa call **deste** servidor.
+ *
+ * Fica no canto **superior direito**, medido no print: círculo de 16px tangente
+ * às bordas de cima e da direita, sem ultrapassar a caixa de 40 do ícone.
+ *
+ * A posição não é escolha nossa — é onde o Discord põe. Importa registrar
+ * porque o badge de menção fica no canto **inferior** direito, e os dois
+ * conviverem sem se cobrir depende de continuarem em cantos opostos.
+ */
+function SeloDeVoz() {
+  return (
+    <span
+      aria-label="Você está em voz neste servidor"
+      className="absolute right-0 top-0 grid h-4 w-4 place-items-center rounded-full bg-green ring-[2.5px] ring-rail"
+    >
+      <Volume2 size={12} className="text-accent-ink" aria-hidden="true" />
+    </span>
+  );
+}
+
 function Badge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
@@ -89,6 +120,7 @@ function RailItem({
   active = false,
   unread = false,
   mentions = 0,
+  emVoz = false,
   green = false,
   onClick,
   onContextMenu,
@@ -98,6 +130,8 @@ function RailItem({
   active?: boolean;
   unread?: boolean;
   mentions?: number;
+  /** você está numa call deste servidor. */
+  emVoz?: boolean;
   green?: boolean;
   /** recebe o evento porque o "+" ancora um menu no retângulo do botão. */
   onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
@@ -127,6 +161,7 @@ function RailItem({
           }`}
         >
           {children}
+          {emVoz && <SeloDeVoz />}
           <Badge count={mentions} />
         </button>
       </Tooltip>
@@ -136,6 +171,8 @@ function RailItem({
 
 /** Coluna 1: mensagens diretas, servidores e as duas formas de ganhar um novo. */
 export default function GuildRail() {
+  // de qual servidor é a call em curso, para o selo do ícone
+  const vozGuildId = useVoice((s) => s.guildId);
   const guilds = useGuilds((s) => s.guilds);
   const activeGuildId = useGuilds((s) => s.activeGuildId);
   const select = useGuilds((s) => s.select);
@@ -305,6 +342,7 @@ export default function GuildRail() {
           active={view === "guild" && activeGuildId === guild.id}
           unread={guild.unread}
           mentions={guild.mentionCount}
+          emVoz={vozGuildId === guild.id}
           onClick={() => select(guild)}
           onContextMenu={(e) => openGuildIconMenu(e, guild)}
         >

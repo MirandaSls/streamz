@@ -78,40 +78,52 @@ export default function VoiceConnectedBar() {
   return (
     <div className="pointer-events-auto flex shrink-0 flex-col gap-2 rounded-lg border border-border bg-footer px-3.5 pb-3 pt-3" data-voice-bar>
       <div className="flex items-center gap-1">
-        <span className="min-w-0 flex-1 overflow-hidden">
+        {/*
+          O selo sai de dentro da linha do título e vira irmão dela: no Discord
+          o ícone fica à esquerda e **título e subtítulo empilham ao lado dele**.
+          Do jeito anterior o subtítulo começava na borda do painel, embaixo do
+          ícone — o nome do canal caía 39px à esquerda do título. É o mesmo
+          sintoma de "ficar no canto" que o participante do canal tinha.
+        */}
+        <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+          {/* selo de 32px em volta do sinal, como no Discord: sem ele o estado
+              "conectado" é só um texto verde, e o bloco perde a âncora visual
+              que diz onde a call mora */}
           <span
-            className={`flex items-center gap-1 text-sm font-semibold ${
-              falhou ? "text-red" : status === "connecting" ? "text-txt-muted" : "text-green"
+            className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${
+              falhou
+                ? "bg-red/15 text-red"
+                : status === "connecting"
+                  ? "bg-hov text-txt-muted"
+                  : "bg-green/15 text-green"
             }`}
           >
-            {/* selo de 32px em volta do sinal, como no Discord: sem ele o
-                estado "conectado" é só um texto verde, e o bloco perde a âncora
-                visual que diz onde a call mora */}
-            <span
-              className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${
-                falhou ? "bg-red/15" : status === "connecting" ? "bg-hov" : "bg-green/15"
-              }`}
-            >
-              {falhou ? (
-                <SignalZero size={18} aria-hidden="true" />
-              ) : (
-                <Signal size={18} aria-hidden="true" />
-              )}
-            </span>
+            {falhou ? (
+              <SignalZero size={18} aria-hidden="true" />
+            ) : (
+              <Signal size={18} aria-hidden="true" />
+            )}
+          </span>
+
+          <span className="flex min-w-0 flex-1 flex-col overflow-hidden">
             {/* o texto precisa do próprio span: `truncate` num container flex
                 corta sem reticências */}
-            <span className="truncate">
+            <span
+              className={`truncate text-sm font-semibold ${
+                falhou ? "text-red" : status === "connecting" ? "text-txt-muted" : "text-green"
+              }`}
+            >
               {falhou ? "Erro de voz" : status === "connecting" ? "Conectando…" : "Voz conectada"}
             </span>
+            <button
+              type="button"
+              onClick={irParaCall}
+              className="block max-w-full truncate text-left text-xs text-txt-muted hover:underline"
+            >
+              {titulo}
+              {servidor && <span className="text-txt-faint"> / {servidor}</span>}
+            </button>
           </span>
-          <button
-            type="button"
-            onClick={irParaCall}
-            className="block max-w-full truncate text-left text-xs text-txt-muted hover:underline"
-          >
-            {titulo}
-            {servidor && <span className="text-txt-faint"> / {servidor}</span>}
-          </button>
         </span>
 
         <Tooltip label="Supressão de ruído">
