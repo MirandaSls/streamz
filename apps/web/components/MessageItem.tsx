@@ -582,7 +582,10 @@ export default function MessageItem({
               type="button"
               onClick={openProfile}
               style={corDoAutor ? { color: corDoAutor } : undefined}
-              className="font-medium text-txt-primary hover:underline"
+              // 600, não 500: no print da DM (`142337.png`) a haste do "d"
+              // de "Md" tem 2,1px contra 1,45px do "l" do corpo — a razão do
+              // semibold (0,13em contra 0,09em em 16px); o medium daria ~1,75
+              className="font-semibold text-txt-primary hover:underline"
             >
               {displayNameOf(author)}
             </button>
