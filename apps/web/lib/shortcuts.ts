@@ -3,9 +3,10 @@
  * combinação sabe se um `KeyboardEvent` a satisfaz.
  *
  * A lógica é pura de propósito — quem escuta o teclado é
- * `hooks/useKeyboardShortcuts`, quem desenha a lista é a aba "Teclado". Aqui só
- * existe o parser, o formatador e o comparador, que são o que dá para testar
- * sem DOM e o que quebra em silêncio quando alguém digita "Ctrl + Alt + Up".
+ * `hooks/useKeyboardShortcuts` (e `VoiceHotkeys`, para as ações de voz), quem
+ * desenha a lista é a aba "Teclado". Aqui só existe o parser, o formatador e o
+ * comparador, que são o que dá para testar sem DOM e o que quebra em silêncio
+ * quando alguém digita "Ctrl + Alt + Up".
  */
 
 export interface Shortcut {
@@ -17,7 +18,10 @@ export interface Shortcut {
   key: string;
 }
 
-/** Ações que um atalho dispara. O handler mora em `useKeyboardShortcuts`. */
+/**
+ * Ações que um atalho dispara. O handler mora em `useKeyboardShortcuts` —
+ * menos o das ações de `ACOES_DE_VOZ`, que é o `VoiceHotkeys`.
+ */
 export type ShortcutAction =
   | "canalAnterior"
   | "canalProximo"
@@ -55,6 +59,7 @@ export const SHORTCUTS: readonly ShortcutSpec[] = [
   { action: "servidorAnterior", combos: ["Ctrl+Alt+ArrowUp"], label: "atalho.servidorAnterior" },
   { action: "marcarLido", combos: ["Escape"], label: "atalho.marcarLido" },
   { action: "marcarServidorLido", combos: ["Shift+Escape"], label: "atalho.marcarServidorLido" },
+  // executadas pelo `VoiceHotkeys`, não pelo `useKeyboardShortcuts` (ver `ACOES_DE_VOZ`)
   { action: "alternarMudo", combos: ["Ctrl+Shift+M"], label: "atalho.alternarMudo" },
   { action: "alternarSurdo", combos: ["Ctrl+Shift+D"], label: "atalho.alternarSurdo" },
   { action: "configuracoes", combos: ["Ctrl+,"], label: "atalho.configuracoes" },
@@ -63,6 +68,20 @@ export const SHORTCUTS: readonly ShortcutSpec[] = [
   { action: "zoomMenos", combos: ["Ctrl+-"], label: "atalho.zoomMenos" },
   { action: "zoomPadrao", combos: ["Ctrl+0"], label: "atalho.zoomPadrao" },
 ];
+
+/**
+ * As ações cujo dono é o `VoiceHotkeys`, e não o `useKeyboardShortcuts`.
+ *
+ * Elas continuam no registro para a aba "Teclado" listá-las e regravá-las, mas
+ * quem executa é um só: os dois ouvintes rodando o mesmo toggle davam mudo e
+ * desmudo na mesma tecla — nada mudava, e o bipe tocava. O `VoiceHotkeys` fica
+ * com elas porque é quem toca o bipe e porque mudo/surdo têm de valer com um
+ * modal aberto, coisa que os atalhos gerais, por desenho, não fazem.
+ */
+export const ACOES_DE_VOZ: ReadonlySet<ShortcutAction> = new Set<ShortcutAction>([
+  "alternarMudo",
+  "alternarSurdo",
+]);
 
 type Modificador = "ctrl" | "alt" | "shift" | "meta";
 

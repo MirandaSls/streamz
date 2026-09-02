@@ -216,6 +216,25 @@ export class VoiceService {
     return this.statesOf([channelId], guildId);
   }
 
+  /**
+   * Estado da chamada de uma conversa direta, para quem chega depois — ou
+   * recarrega a página no meio dela.
+   *
+   * O estado de servidor tem carga inicial (`statesForGuild`); o de conversa
+   * só chegava por `startCall` ou por `voice.state`. Depois de um F5 a store
+   * do cliente nascia vazia e ele não sabia que a própria chamada continuava
+   * de pé na carência do gateway: sem faixa, sem palco, sem como voltar a não
+   * ser ligando de novo. Mesmo guard das outras rotas de conversa: só
+   * participante lê, e canal de servidor não entra por aqui.
+   */
+  async statesForDM(userId: string, channelId: string): Promise<VoiceStateEvent[]> {
+    const access = await this.guilds.assertCanViewChannel(userId, channelId);
+    if (access.tipo !== "dm") {
+      throw new BadRequestException("Estado de chamada é de conversa direta — use o do servidor");
+    }
+    return this.statesOf([channelId], null);
+  }
+
   private async statesOf(channelIds: string[], guildId: string | null): Promise<VoiceStateEvent[]> {
     const mapa = await this.store.membersOf(channelIds);
     const userIds = Array.from(

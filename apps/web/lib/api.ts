@@ -412,6 +412,8 @@ export const api = {
     }),
   /** Estado inicial de voz do servidor; depois disso os `voice.state` mantêm em dia. */
   guildVoiceStates: (guildId: string) => request<VoiceStateEvent[]>(`/guilds/${guildId}/voice-states`),
+  /** Quem está na chamada de uma conversa agora — o par do de servidor, para DM e grupo. */
+  dmVoiceStates: (channelId: string) => request<VoiceStateEvent[]>(`/dms/${channelId}/voice-states`),
   /** Começa (ou entra n)uma chamada de conversa direta; devolve o token de mídia, se houver. */
   startCall: (channelId: string) =>
     request<CallStartResponse>(`/dms/${channelId}/call`, { method: "POST" }),

@@ -304,10 +304,10 @@ export function useRealtime(currentUserId?: string): void {
         void useDMs.getState().refreshList();
         const guildId = useGuilds.getState().activeGuildId;
         if (guildId) void usePermissions.getState().load(guildId);
-        // quem estava na voz pode ter entrado/saído durante a queda: zerar e
-        // recarregar evita listar gente que já não está lá
-        useVoice.setState({ states: {} });
-        if (guildId) void useVoice.getState().loadGuild(guildId);
+        // quem estava na voz pode ter entrado/saído durante a queda: recarrega
+        // o servidor ativo e a sala em que estou, e troca tudo de uma vez —
+        // zerar antes da resposta esvaziava o palco da chamada em conversa
+        void useVoice.getState().recarregarAposReconexao(guildId);
         // e **eu** preciso reentrar: o gateway perdeu meu `voiceChannelId` com
         // o socket antigo e está contando a carência para me tirar da chamada.
         // Antes daqui só as salas de texto reentravam, e a call caía sozinha.
