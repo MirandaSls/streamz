@@ -76,7 +76,7 @@ export default function VoiceConnectedBar() {
   }
 
   return (
-    <div className="pointer-events-auto flex shrink-0 flex-col gap-1 rounded-lg border border-border bg-footer px-2 pb-1 pt-2" data-voice-bar>
+    <div className="pointer-events-auto flex shrink-0 flex-col gap-2 rounded-lg border border-border bg-footer px-3.5 pb-3 pt-3" data-voice-bar>
       <div className="flex items-center gap-1">
         <span className="min-w-0 flex-1 overflow-hidden">
           <span
@@ -84,11 +84,20 @@ export default function VoiceConnectedBar() {
               falhou ? "text-red" : status === "connecting" ? "text-txt-muted" : "text-green"
             }`}
           >
-            {falhou ? (
-              <SignalZero size={16} className="shrink-0" aria-hidden="true" />
-            ) : (
-              <Signal size={16} className="shrink-0" aria-hidden="true" />
-            )}
+            {/* selo de 32px em volta do sinal, como no Discord: sem ele o
+                estado "conectado" é só um texto verde, e o bloco perde a âncora
+                visual que diz onde a call mora */}
+            <span
+              className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${
+                falhou ? "bg-red/15" : status === "connecting" ? "bg-hov" : "bg-green/15"
+              }`}
+            >
+              {falhou ? (
+                <SignalZero size={18} aria-hidden="true" />
+              ) : (
+                <Signal size={18} aria-hidden="true" />
+              )}
+            </span>
             {/* o texto precisa do próprio span: `truncate` num container flex
                 corta sem reticências */}
             <span className="truncate">
@@ -116,7 +125,7 @@ export default function VoiceConnectedBar() {
               ruidoAvancado ? "text-accent" : "text-txt-secondary hover:text-txt-primary"
             }`}
           >
-            <AudioLines size={18} />
+            <AudioLines size={20} />
           </button>
         </Tooltip>
 
@@ -138,7 +147,7 @@ export default function VoiceConnectedBar() {
             aria-label="Desconectar"
             className="grid h-8 w-8 shrink-0 place-items-center rounded-[4px] text-txt-secondary transition hover:bg-hov hover:text-red"
           >
-            <PhoneOff size={18} />
+            <PhoneOff size={20} />
           </button>
         </Tooltip>
       </div>
@@ -159,20 +168,22 @@ export default function VoiceConnectedBar() {
         </div>
       )}
 
-      <div className="flex items-stretch gap-1 pb-1">
+      {/* vão de 10px entre os botões, como no Discord — tínhamos 4, e com o raio
+          de 8 eles quase se encostavam */}
+      <div className="flex items-stretch gap-2.5">
         <Tooltip label={camOn ? "Desligar câmera" : "Ligar câmera"} className="min-w-0 flex-1">
           <button
             type="button"
             onClick={() => void toggleCam()}
             aria-pressed={camOn}
             aria-label={camOn ? "Desligar câmera" : "Ligar câmera"}
-            className={`grid h-8 w-full place-items-center rounded-[4px] transition ${
+            className={`grid h-8 w-full place-items-center rounded-lg transition ${
               camOn
                 ? "bg-border-strong-hover text-txt-primary"
                 : "bg-border-strong/60 text-txt-secondary hover:bg-border-strong hover:text-txt-primary"
             }`}
           >
-            {camOn ? <Video size={16} /> : <VideoOff size={16} />}
+            {camOn ? <Video size={20} /> : <VideoOff size={18} />}
           </button>
         </Tooltip>
         <ScreenShareButton variante="largo" />

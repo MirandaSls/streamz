@@ -165,7 +165,7 @@ export default function DMList() {
           aria-current={friendsOpen ? "true" : undefined}
           className={"mx-2 flex h-10 w-[calc(100%-1rem)] items-center gap-3 rounded-lg pl-3 pr-2 text-left " + (friendsOpen ? "bg-sel text-txt-primary" : "text-txt-faint hover:bg-hov hover:text-txt-normal")}
         >
-          <Amigos size={20} aria-hidden="true" className="shrink-0" />
+          <Amigos size={21} aria-hidden="true" className="shrink-0" />
           <span className="flex-1 font-medium">Amigos</span>
           {pendentes > 0 && (
             <span
@@ -217,7 +217,7 @@ export default function DMList() {
               aria-label="Nova conversa"
               className="text-txt-muted transition hover:text-txt-primary"
             >
-              <Plus size={24} />
+              <Plus size={20} />
             </button>
           </Tooltip>
         </div>

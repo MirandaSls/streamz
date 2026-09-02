@@ -37,20 +37,20 @@ export default function ScreenShareButton({
       {variante === "largo" ? (
         // Só ícone, como no painel do Discord: o rótulo comia mais da metade da
         // largura do botão e ainda precisava ser abreviado ("Tela") para caber
-        // numa coluna de 240px. O nome inteiro vive no tooltip.
+        // na largura de meio cartão. O nome inteiro vive no tooltip.
         <Tooltip label={label} className="min-w-0 flex-1">
           <button
             type="button"
             onClick={acionar}
             aria-label={label}
             aria-pressed={screenOn}
-            className={`grid h-8 w-full place-items-center rounded-[4px] transition ${
+            className={`grid h-8 w-full place-items-center rounded-lg transition ${
               screenOn
                 ? "bg-green/20 text-green hover:bg-green/30"
                 : "bg-border-strong/60 text-txt-secondary hover:bg-border-strong hover:text-txt-primary"
             }`}
           >
-            {screenOn ? <MonitorX size={16} /> : <MonitorUp size={16} />}
+            {screenOn ? <MonitorX size={24} /> : <MonitorUp size={20} />}
           </button>
         </Tooltip>
       ) : (

@@ -59,7 +59,6 @@ export {
   Camera,
   ChartBar as BarChart3,
   Coffee,
-  DownloadSimple as Download,
   FileText,
   Gauge,
   PaintBrush as Paintbrush,
@@ -459,7 +458,24 @@ function doDiscord(viewBox: string, ...caminhos: (string | Caminho)[]) {
  */
 export type Icone = ComponentType<{ size?: number | string; className?: string }>;
 
-const QUADRO = "0 0 100 100";
+/**
+ * O recorte útil do material de origem — **não** o quadro do arquivo.
+ *
+ * Os ativos de `svg/` vêm num quadro de 100 com o desenho entre 10 e 90: é o
+ * mesmo desenho dos de `figma/`, que vêm num quadro de 80, transladado em 10
+ * (está escrito no `ACERVO.md`). Usar `0 0 100 100` fazia cada um deles
+ * renderizar a **80% do `size` pedido** — `size={20}` saía com ~16px de tinta
+ * contra os 18-19 do Discord no mesmo lugar.
+ *
+ * O sintoma era o app inteiro parecer de ícones pequenos, e a pista de que a
+ * causa era esta: o `Amigos`, único com `viewBox` reenquadrado à mão, era o
+ * único que parecia do tamanho certo.
+ *
+ * `10 10 80 80` recorta o quadro no desenho e iguala as duas origens. Conferido
+ * antes de mudar: os 55 ícones que usam este quadro têm a tinta dentro de
+ * 10..90, então nenhum é cortado.
+ */
+const QUADRO = "10 10 80 80";
 
 /**
  * E o de `figma/`, que é outro. Os dois não são intercambiáveis: o mesmo
@@ -898,3 +914,28 @@ export const SlidersHorizontal = doDiscord(FIGMA, {
   d: CAMINHO_SLIDERSHORIZONTAL,
   desloca: "matrix(1 0 0 1 6.6667 8.3333)",
 });
+
+/*
+ * O único ícone deste arquivo que **não** vem de um ativo: foi desenhado.
+ *
+ * O acervo não tem download em SVG (só um PNG, em `Collections/donwload.png`),
+ * e o `DownloadSimple` do Phosphor tem outra forma: seta de ponta triangular
+ * maciça dentro de uma bandeja em U com paredes laterais. O do Discord é traço
+ * fino, ponta em **V aberto**, e um traço solto embaixo, sem paredes.
+ *
+ * A geometria saiu de um recorte ampliado do print, medida com precisão
+ * subpixel: espessura uniforme de 10,3% da largura, chevron de 64% de largura
+ * por 35% de altura com braços a 45°, e a bandeja ocupando a largura inteira
+ * — é ela que define a caixa. Convertido para o quadro do acervo.
+ */
+const CAMINHO_DOWNLOAD_HASTE = "M45.9 10H54.1V66H45.9Z";
+const CAMINHO_DOWNLOAD_CHEVRON =
+  "M21.5 43.2L50.0 71.5L78.5 43.2L72.7 37.4L50.0 59.9L27.3 37.4Z";
+const CAMINHO_DOWNLOAD_BANDEJA = "M10 81.8H90V90H10Z";
+
+export const Download = doDiscord(
+  QUADRO,
+  CAMINHO_DOWNLOAD_HASTE,
+  CAMINHO_DOWNLOAD_CHEVRON,
+  CAMINHO_DOWNLOAD_BANDEJA,
+);

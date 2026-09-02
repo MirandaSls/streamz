@@ -609,11 +609,11 @@ export default function Composer({
               >
                 {/* `+` liso, não o `CirclePlus`: o do Discord é marca de traço,
                     sem o círculo cheio em volta */}
-                {/* 38 e não 18: a tinta deste ativo ocupa 46,7% do quadro (o caminho vai
-              de 26,7 a 73,3 num viewBox de 100), então `size` aqui não é o tamanho
-              do desenho. 38 × 0,467 ≈ 18, que é o glifo medido no Discord e o que
-              iguala este `+` aos cinco ícones da direita. */}
-          <Plus size={38} />
+                {/* O `+` do Discord é desenhado pequeno dentro do próprio ativo: a tinta
+              ocupa 58% do quadro, contra ~83% dos vizinhos. Então `size` aqui não
+              é o tamanho do desenho — 30 × 0,58 ≈ 17,5, que é o glifo de 18
+              medido no composer do Discord. */}
+          <Plus size={30} />
               </button>
             </>
           ) : (
