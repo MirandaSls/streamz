@@ -12,6 +12,7 @@ import {
   TimerOff,
   User,
   UserX,
+  Volume2,
 } from "@/components/ui/icones";
 import {
   Permission,
@@ -33,13 +34,20 @@ import { useCan, usePermissions } from "@/stores/permissions";
 import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
 import { useSettings } from "@/stores/settings";
 import { anchorOf, ui, type MenuItem } from "@/stores/ui";
+import { useVoice } from "@/stores/voice";
 
-/** Título de seção da lista ("ONLINE — 3"). */
+/**
+ * Título de seção da lista ("Disponível — 1").
+ *
+ * Medido no print do Discord: 14px, caixa mista, semibold, na cor muted, com o
+ * texto a 20px da borda do painel (o avatar das linhas fica a 18). Era 12px em
+ * caixa alta, o que dava um rótulo de categoria de canal, e não o do Discord.
+ */
 function Section({ label, count, color }: { label: string; count: number; color?: string | null }) {
   return (
     <h3
       style={color ? { color } : undefined}
-      className="mt-6 px-2 pb-1 text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted"
+      className="mt-6 pb-1 pl-5 pr-2 text-sm font-semibold leading-5 text-txt-muted"
     >
       {label} — {count}
     </h3>
@@ -57,7 +65,7 @@ interface Linha {
  *
  * O agrupamento é o do Discord: primeiro uma seção por **cargo com "exibir
  * separadamente"** (`hoist`), do mais alto para o mais baixo, com quem está
- * online; depois "Online" (os demais) e "Offline". Um membro aparece na seção
+ * online; depois "Disponível" (os demais) e "Offline". Um membro aparece na seção
  * do seu cargo hoisted mais alto, e em nenhuma outra.
  *
  * O nome vai na cor do cargo mais alto que tenha cor. Ações de gestão
@@ -83,6 +91,15 @@ export default function MemberList() {
   // o status/perfil ao vivo vem da store de presença; a lista é só o do REST
   const statuses = usePresence((s) => s.statuses);
   const profiles = usePresence((s) => s.profiles);
+  // quem está numa sala de voz DESTE servidor ganha a sub-linha "Em voz", como
+  // no Discord. A store guarda estados por canal; o evento traz o `guildId`,
+  // então basta juntar os canais do servidor ativo — sem depender da sidebar.
+  const activeGuildId = useGuilds((s) => s.activeGuildId);
+  const voiceStates = useVoice((s) => s.states);
+  const emVoz = new Set<string>();
+  for (const lista of Object.values(voiceStates)) {
+    for (const e of lista) if (e.connected && e.guildId === activeGuildId) emVoz.add(e.user.id);
+  }
 
   const live: Linha[] = members.map((m) => {
     const u = resolveUser(profiles, m.user);
@@ -92,7 +109,7 @@ export default function MemberList() {
   const offline = live.filter((x) => x.status === "OFFLINE");
 
   // seções por cargo hoisted, do mais alto para o mais baixo; quem sobra cai
-  // em "Online". Offline nunca hoista — é assim no Discord.
+  // em "Disponível". Offline nunca hoista — é assim no Discord.
   const hoisted = roles
     .filter((r) => r.hoist && !r.isDefault)
     .sort((a, b) => b.position - a.position);
@@ -228,30 +245,41 @@ export default function MemberList() {
           className="flex min-w-0 flex-1 items-center gap-3 text-left"
         >
           <Avatar user={m.user} size="md" status={status} surface="border-panel" />
-          <span className="flex min-w-0 items-center gap-1">
-            <span
-              style={cor ? { color: cor } : undefined}
-              className={`truncate font-medium ${
-                destaque ? "text-txt-primary" : "text-txt-faint group-hover:text-txt-normal"
-              }`}
-            >
-              {nome}
+          {/* nome em 16px na cor muted (medido: o mesmo cinza do título da
+              seção), e a sub-linha "Em voz" em 12px com o alto-falante verde.
+              Sem atividade/jogo: não existe aqui. */}
+          <span className="flex min-w-0 flex-col">
+            <span className="flex min-w-0 items-center gap-1 text-base leading-5">
+              <span
+                style={cor ? { color: cor } : undefined}
+                className={`truncate font-medium ${
+                  destaque ? "text-txt-primary" : "text-txt-muted group-hover:text-txt-normal"
+                }`}
+              >
+                {nome}
+              </span>
+              {m.role === "OWNER" && (
+                <Tooltip label="Dono do servidor">
+                  <Crown size={14} className="shrink-0 text-yellow" aria-label="Dono do servidor" />
+                </Tooltip>
+              )}
+              {m.role === "ADMIN" && (
+                <Tooltip label="Administrador">
+                  <ShieldCheck size={14} className="shrink-0 text-accent" aria-label="Administrador" />
+                </Tooltip>
+              )}
+              {/* h-moderacao: relógio marca quem está de castigo agora */}
+              {isTimedOut(m.timeoutUntil) && (
+                <Tooltip label="De castigo — não pode enviar mensagens">
+                  <Timer size={14} className="shrink-0 text-red" aria-label="De castigo" />
+                </Tooltip>
+              )}
             </span>
-            {m.role === "OWNER" && (
-              <Tooltip label="Dono do servidor">
-                <Crown size={14} className="shrink-0 text-yellow" aria-label="Dono do servidor" />
-              </Tooltip>
-            )}
-            {m.role === "ADMIN" && (
-              <Tooltip label="Administrador">
-                <ShieldCheck size={14} className="shrink-0 text-accent" aria-label="Administrador" />
-              </Tooltip>
-            )}
-            {/* h-moderacao: relógio marca quem está de castigo agora */}
-            {isTimedOut(m.timeoutUntil) && (
-              <Tooltip label="De castigo — não pode enviar mensagens">
-                <Timer size={14} className="shrink-0 text-red" aria-label="De castigo" />
-              </Tooltip>
+            {emVoz.has(m.user.id) && (
+              <span className="flex items-center gap-1 text-xs leading-4 text-txt-muted">
+                <Volume2 size={12} className="shrink-0 text-green" aria-hidden="true" />
+                Em voz
+              </span>
             )}
           </span>
         </button>
@@ -329,7 +357,7 @@ export default function MemberList() {
           <p className="px-4 py-3 text-sm text-txt-muted">Nenhum membro por aqui.</p>
         )}
         {secoes.map((s) => renderSecao(s.role, s.gente))}
-        {restoOnline.length > 0 && <Section label="Online" count={restoOnline.length} />}
+        {restoOnline.length > 0 && <Section label="Disponível" count={restoOnline.length} />}
         {restoOnline.map(renderMember)}
         {offline.length > 0 && <Section label="Offline" count={offline.length} />}
         {offline.map(renderMember)}
