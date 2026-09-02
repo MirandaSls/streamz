@@ -59,7 +59,6 @@ export {
   Camera,
   ChartBar as BarChart3,
   Coffee,
-  DownloadSimple as Download,
   FileText,
   Gauge,
   PaintBrush as Paintbrush,
@@ -915,3 +914,28 @@ export const SlidersHorizontal = doDiscord(FIGMA, {
   d: CAMINHO_SLIDERSHORIZONTAL,
   desloca: "matrix(1 0 0 1 6.6667 8.3333)",
 });
+
+/*
+ * O único ícone deste arquivo que **não** vem de um ativo: foi desenhado.
+ *
+ * O acervo não tem download em SVG (só um PNG, em `Collections/donwload.png`),
+ * e o `DownloadSimple` do Phosphor tem outra forma: seta de ponta triangular
+ * maciça dentro de uma bandeja em U com paredes laterais. O do Discord é traço
+ * fino, ponta em **V aberto**, e um traço solto embaixo, sem paredes.
+ *
+ * A geometria saiu de um recorte ampliado do print, medida com precisão
+ * subpixel: espessura uniforme de 10,3% da largura, chevron de 64% de largura
+ * por 35% de altura com braços a 45°, e a bandeja ocupando a largura inteira
+ * — é ela que define a caixa. Convertido para o quadro do acervo.
+ */
+const CAMINHO_DOWNLOAD_HASTE = "M45.9 10H54.1V66H45.9Z";
+const CAMINHO_DOWNLOAD_CHEVRON =
+  "M21.5 43.2L50.0 71.5L78.5 43.2L72.7 37.4L50.0 59.9L27.3 37.4Z";
+const CAMINHO_DOWNLOAD_BANDEJA = "M10 81.8H90V90H10Z";
+
+export const Download = doDiscord(
+  QUADRO,
+  CAMINHO_DOWNLOAD_HASTE,
+  CAMINHO_DOWNLOAD_CHEVRON,
+  CAMINHO_DOWNLOAD_BANDEJA,
+);

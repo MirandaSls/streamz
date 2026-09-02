@@ -221,7 +221,7 @@ export default function FriendsPage() {
           e faz a faixa parecer flutuar sobre o conteúdo. */}
       <header className="relative z-10 flex h-12 shrink-0 items-center gap-[7px] border-b border-border pl-7 pr-5">
         <span className="text-txt-muted" aria-hidden="true">
-          <Amigos size={24} />
+          <Amigos size={21} />
         </span>
         {/* mesmo tamanho das abas e do botão: no Discord todo texto desta faixa
             mede o mesmo, e só a cor os separa. O nosso título era maior. */}
