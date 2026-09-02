@@ -45,10 +45,24 @@ body {
  * modais, ações da mensagem no group-focus-within) e o anel padrão do browser
  * praticamente some sobre o tema escuro.
  */
-:focus-visible {
+:focus-visible:not(input):not(textarea):not([contenteditable="true"]) {
   outline: 2px solid #9be31f;
   outline-offset: 2px;
   border-radius: 2px;
+}
+
+/*
+ * Campos de texto: uma borda só. O anel afastado de 2px em cima de um campo
+ * que já tem fundo e raio próprios lia como duas bordas (e o `border-radius:
+ * 2px` acima ainda achatava o canto do campo no foco). Como no Discord, o foco
+ * de um campo é a própria borda mudando de cor, 1px, colada e seguindo o raio
+ * do campo — por isso o offset negativo e nenhum raio imposto aqui.
+ */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus-visible,
+textarea:focus-visible,
+[contenteditable="true"]:focus-visible {
+  outline: 1px solid #9be31f;
+  outline-offset: -1px;
 }
 
 /*

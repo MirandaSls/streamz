@@ -27,8 +27,6 @@ import {
 import { useAuth } from "@/stores/auth";
 import { ui } from "@/stores/ui";
 import { participantesDaSala, useVoice, videosDe } from "@/stores/voice";
-import { aplicarSaida, useVoiceDevicesStore } from "@/stores/voiceDevices";
-import { useVoicePrefs } from "@/stores/voicePrefs";
 
 /**
  * A grade de participantes de uma sala de voz.
@@ -53,6 +51,9 @@ import { useVoicePrefs } from "@/stores/voicePrefs";
  * assim que qualquer um liga a câmera ou transmite. Em canal de voz de servidor
  * o tile vale desde o começo: ali a grade é a própria sala, e a moldura é o que
  * separa uma pessoa da outra numa lista que cresce.
+ *
+ * O **áudio** dos outros não é daqui. Ele fica em `AudioRemotoHost`, montado
+ * com o app inteiro: a grade desmonta ao trocar de tela, e a chamada não.
  */
 
 /** Uma vaga do palco: alguém, ou o convite que ocupa a vaga vazia. */
@@ -178,12 +179,6 @@ export default function VoiceGrid({
             />
           ))}
         </div>
-
-        {states
-          .filter((s) => s.user.id !== me?.id)
-          .map((s) => (
-            <AudioDoParticipante key={`audio-${s.user.id}`} userId={s.user.id} />
-          ))}
       </div>
     );
   }
@@ -279,13 +274,6 @@ export default function VoiceGrid({
           ))}
         </div>
       )}
-
-      {/* áudio dos outros: fora da grade, para não sumir junto com um tile de vídeo */}
-      {states
-        .filter((s) => s.user.id !== me?.id)
-        .map((s) => (
-          <AudioDoParticipante key={`audio-${s.user.id}`} userId={s.user.id} />
-        ))}
     </div>
   );
 }
@@ -650,83 +638,4 @@ function VideoDaFaixa({ publication, espelhar }: { publication: TrackPublication
       className={`h-full w-full bg-black object-contain ${espelhar ? "-scale-x-100" : ""}`}
     />
   );
-}
-
-/**
- * Áudio de um participante remoto, com o volume individual, o "silenciar
- * localmente" e o "desativar áudio" do rodapé aplicados — e a saída apontada
- * para o dispositivo escolhido nas configurações.
- *
- * Acima de 100% o `volume` do elemento não serve: ele satura em 1. O reforço
- * passa por um `GainNode`, montado **sob demanda** — `createMediaElementSource`
- * é irreversível e tira o elemento do caminho do `setSinkId`, então quem nunca
- * subiu o volume continua com a saída de áudio escolhida valendo.
- */
-function AudioDoParticipante({ userId }: { userId: string }) {
-  const ref = useRef<HTMLAudioElement>(null);
-  const grafo = useRef<{ ctx: AudioContext; ganho: GainNode } | null>(null);
-  useVoice((s) => s.tick);
-  const porPessoa = useVoice((s) => (userId in s.volumes ? s.volumes[userId] : 1));
-  // o volume geral da aba "Voz e vídeo" multiplica o de cada pessoa
-  const geral = useVoice((s) => s.audio.saida);
-  const volume = porPessoa * geral;
-  const silenciado = useVoice((s) => !!s.silenciados[userId]);
-  const deafened = useVoicePrefs((s) => s.deafened);
-  const outputId = useVoiceDevicesStore((s) => s.outputId);
-
-  const participante = participantesDaSala().find((p) => p.identity === userId) ?? null;
-  const faixa = participante
-    ? Array.from(participante.trackPublications.values()).find(
-        (pub) => pub.kind === Track.Kind.Audio && !!pub.track,
-      )?.track ?? null
-    : null;
-
-  useEffect(() => {
-    const el = ref.current;
-    if (el && faixa) faixa.attach(el);
-    return () => {
-      if (el && faixa) faixa.detach(el);
-    };
-  }, [faixa]);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-
-    if (volume > 1 && !grafo.current) {
-      try {
-        const Ctor =
-          window.AudioContext ??
-          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-        if (Ctor) {
-          const ctx = new Ctor();
-          const fonte = ctx.createMediaElementSource(el);
-          const ganho = ctx.createGain();
-          fonte.connect(ganho).connect(ctx.destination);
-          grafo.current = { ctx, ganho };
-        }
-      } catch {
-        // sem Web Audio o volume simplesmente não passa de 100%
-      }
-    }
-
-    if (grafo.current) {
-      el.volume = 1;
-      grafo.current.ganho.gain.value = Math.max(0, volume);
-      void grafo.current.ctx.resume().catch(() => {});
-    } else {
-      el.volume = Math.max(0, Math.min(1, volume));
-    }
-    void aplicarSaida(el, outputId);
-  }, [volume, outputId]);
-
-  useEffect(() => {
-    return () => {
-      void grafo.current?.ctx.close().catch(() => {});
-      grafo.current = null;
-    };
-  }, []);
-
-  // surdo cala **todos** os `<audio>` de uma vez; o silenciar é por pessoa
-  return <audio ref={ref} autoPlay muted={deafened || silenciado} />;
 }

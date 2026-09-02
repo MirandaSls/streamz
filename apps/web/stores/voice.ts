@@ -28,6 +28,9 @@ import { tocarSom } from "@/lib/ringtone";
 import { supressorDeRuido } from "@/lib/supressor-ruido";
 import { CHAMADA_INICIAL, callReducer, type CallAction, type CallState } from "@/stores/call-machine";
 import { emit, errorMessage } from "@/stores/socket-adapter";
+import { estadosAposReconexao, type Recarga } from "@/stores/voice-reconexao";
+import { chamadaARetomar, esquecerSala, lembrarSala, salaLembrada } from "@/stores/voice-retomada";
+import { decidirSaida, type MotivoDeSaida } from "@/stores/voice-saida";
 import { ui } from "@/stores/ui";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
@@ -109,6 +112,18 @@ interface VoiceStoreState {
   call: CallState;
 
   loadGuild: (guildId: string) => Promise<void>;
+  /** Estado da chamada de uma conversa (o par de `loadGuild` para DM e grupo). */
+  loadDM: (channelId: string) => Promise<void>;
+  /**
+   * Depois de recarregar a página no meio de uma chamada, volta a ela sozinho
+   * (ver `voice-retomada.ts`). Chamado ao fim de cada carga de estados.
+   */
+  retomarSeReconectando: () => Promise<void>;
+  /**
+   * Socket voltou: recarrega o servidor ativo **e** a sala em que estou, e só
+   * então troca `states` (ver `voice-reconexao.ts`).
+   */
+  recarregarAposReconexao: (guildAtivo: string | null) => Promise<void>;
   applyState: (evento: VoiceStateEvent) => void;
   /** perfil trocou (`user.updated`): atualiza o retrato dentro dos estados. */
   aplicarPerfil: (user: PublicUser) => void;
@@ -256,6 +271,48 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     sala = null;
   }
 
+  /**
+   * Deixa a sala atual: fecha a mídia, avisa o gateway (quando a saída é
+   * minha) e zera a minha conexão. O que **não** faz por conta própria é fechar
+   * a coluna do canal de voz — isso depende do motivo, e a tabela está em
+   * `voice-saida.ts`. Todo caminho que sai de uma sala passa por aqui;
+   * `disconnect` é o caso "o usuário quis sair".
+   */
+  function sairDaSalaAtual(motivo: MotivoDeSaida, destinoEmServidor = false) {
+    const { channelId, call } = get();
+    const decisao = decidirSaida(motivo, destinoEmServidor);
+    // expulso não tem som: o que a pessoa ouve é o toast explicando
+    if (channelId && decisao.avisaGateway) tocarSom("sair");
+    // `fecharSala` tira os ouvintes antes de desconectar, então o
+    // `RoomEvent.Disconnected` do LiveKit não vem depois marcar queda de mídia
+    fecharSala();
+    // saí de vez: um F5 depois disto não deve me trazer de volta
+    esquecerSala();
+    if (channelId && decisao.avisaGateway) {
+      emit(WS_EVENTS.VOICE_LEAVE, {});
+      if (call.phase !== "idle") emit(WS_EVENTS.CALL_END, { channelId });
+    }
+    // o painel do canal de voz é a coluna 3 inteira: sair da call sem fechá-lo
+    // deixaria o usuário preso numa sala vazia
+    if (decisao.fechaColuna) useChannels.getState().leaveVoice();
+    set({
+      channelId: null,
+      guildId: null,
+      channelName: "",
+      desde: null,
+      status: "idle",
+      erro: null,
+      midiaDisponivel: false,
+      falando: [],
+      camOn: false,
+      screenOn: false,
+      focado: null,
+      focoAutomatico: true,
+      telaCheia: false,
+      call: CHAMADA_INICIAL,
+    });
+  }
+
   return {
     states: {},
     channelId: null,
@@ -294,9 +351,71 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
           );
           return { states: { ...outros, ...porCanal } };
         });
+        await get().retomarSeReconectando();
       } catch {
         // servidor sem voz ou sem acesso: a barra lateral fica sem bolinhas
       }
+    },
+
+    loadDM: async (channelId) => {
+      try {
+        const estados = await api.dmVoiceStates(channelId);
+        // a resposta é a verdade **desta** conversa; as outras salas ficam como estão
+        set((s) => ({ states: { ...s.states, [channelId]: estados } }));
+        await get().retomarSeReconectando();
+      } catch {
+        // conversa que sumiu ou sem acesso: a faixa de chamada simplesmente não aparece
+      }
+    },
+
+    recarregarAposReconexao: async (guildAtivo) => {
+      const { channelId, guildId } = get();
+      const pedidos: Promise<Recarga>[] = [];
+      const doServidor = (id: string) =>
+        api
+          .guildVoiceStates(id)
+          .then((estados): Recarga => ({ escopo: "servidor", guildId: id, estados }))
+          .catch((): Recarga => ({ escopo: "servidor", guildId: id, estados: null }));
+      if (guildAtivo) pedidos.push(doServidor(guildAtivo));
+      // a minha sala: uma conversa tem rota própria; um canal de voz de outro
+      // servidor vem com o servidor dele (o ativo já cobre o próprio)
+      if (channelId && !guildId) {
+        pedidos.push(
+          api
+            .dmVoiceStates(channelId)
+            .then((estados): Recarga => ({ escopo: "sala", channelId, estados }))
+            .catch((): Recarga => ({ escopo: "sala", channelId, estados: null })),
+        );
+      } else if (guildId && guildId !== guildAtivo) {
+        pedidos.push(doServidor(guildId));
+      }
+      const recargas = await Promise.all(pedidos);
+      set((s) => ({ states: estadosAposReconexao(s.states, recargas) }));
+    },
+
+    retomarSeReconectando: async () => {
+      const alvo = chamadaARetomar({
+        states: get().states,
+        meuId: useAuth.getState().user?.id,
+        conectadoEm: get().channelId,
+        lembrada: salaLembrada(),
+      });
+      if (!alvo) return;
+      // duas cargas podem terminar quase juntas (servidor ativo + sala
+      // lembrada): a primeira a chegar aqui esquece a sala e a segunda não
+      // acha nada. `connect` volta a lembrar
+      esquecerSala();
+      if (alvo.guildId) {
+        await get().connect({ id: alvo.channelId, guildId: alvo.guildId, name: alvo.name, type: "VOICE" });
+        // com os canais do servidor já na tela, abre o palco; senão a barra do
+        // rodapé mostra a conexão e o clique no canal encontra a sala já ocupada
+        const canal = useChannels.getState().channels.find((c) => c.id === alvo.channelId);
+        if (canal) useChannels.getState().select(canal);
+        return;
+      }
+      // a chamada de conversa é a tela em que a pessoa estava: volta para ela
+      await abrirConversa(alvo.channelId);
+      await get().connect({ id: alvo.channelId, guildId: null, name: "", type: "DM" });
     },
 
     applyState: (evento) => {
@@ -358,7 +477,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
 
     connect: async (channel) => {
       const anterior = get().channelId;
-      if (anterior && anterior !== channel.id) await get().disconnect();
+      // trocar de sala não é sair: a coluna do canal de destino fica de pé
+      if (anterior && anterior !== channel.id) sairDaSalaAtual("troca-de-sala", !!channel.guildId);
 
       set({
         channelId: channel.id,
@@ -376,6 +496,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         focado: null,
         focoAutomatico: true,
       });
+      lembrarSala({ channelId: channel.id, guildId: channel.guildId, name: channel.name ?? "" });
       tocarSom("entrar");
 
       // 1) o estado de voz não depende do LiveKit: avisa o gateway primeiro,
@@ -384,7 +505,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       emit(WS_EVENTS.VOICE_UPDATE, flags());
 
       // 2) mídia, se houver
-      const r = await conectarMidia(channel.id, set, rerender, get);
+      const r = await conectarMidia(channel, set, rerender, get);
       if (r.tipo === "falha") {
         set({ status: "error", midiaDisponivel: false, erro: r.erro });
         return;
@@ -397,56 +518,18 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       if (r.tipo === "ok") get().syncFlags();
     },
 
+    /** Sair porque o usuário quis (botão, atalho, "desligar", fim da chamada). */
     disconnect: async () => {
-      const channelId = get().channelId;
-      if (channelId) tocarSom("sair");
-      fecharSala();
-      // o painel do canal de voz é a coluna 3 inteira: sair da call sem fechá-lo
-      // deixaria o usuário preso numa sala vazia
-      useChannels.getState().leaveVoice();
-      if (channelId) {
-        emit(WS_EVENTS.VOICE_LEAVE, {});
-        if (get().call.phase !== "idle") emit(WS_EVENTS.CALL_END, { channelId });
-      }
-      set({
-        channelId: null,
-        guildId: null,
-        channelName: "",
-        desde: null,
-        status: "idle",
-        erro: null,
-        midiaDisponivel: false,
-        falando: [],
-        camOn: false,
-        screenOn: false,
-        focado: null,
-        focoAutomatico: true,
-        telaCheia: false,
-        call: CHAMADA_INICIAL,
-      });
+      sairDaSalaAtual("usuario");
     },
 
     expulsoDaVoz: ({ channelId, novoCanalId }) => {
       // já tinha saído daqui por conta própria: nada a desfazer
       if (get().channelId !== channelId) return;
-      // `fecharSala` tira os ouvintes antes de desconectar, então o
-      // `RoomEvent.Disconnected` do LiveKit não vem depois sobrescrever este
-      // texto pelo de queda de mídia
-      fecharSala();
-      useChannels.getState().leaveVoice();
-      set({
-        channelId: null,
-        guildId: null,
-        channelName: "",
-        desde: null,
-        status: "idle",
-        erro: null,
-        midiaDisponivel: false,
-        falando: [],
-        camOn: false,
-        screenOn: false,
-        focado: null,
-      });
+      // sem `voice.leave`: o servidor já me tirou, e o aviso derrubaria a
+      // conexão nova da conta. A coluna fecha — o painel mostraria uma sala em
+      // que não estou mais
+      sairDaSalaAtual("expulso");
       ui.toast(
         channelId === novoCanalId
           ? OUTRO_LUGAR
@@ -457,6 +540,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     reconnect: async () => {
       const { channelId, guildId, channelName } = get();
       if (!channelId) return;
+      // não passa por `sairDaSalaAtual`: refazer a mídia da **mesma** sala não
+      // é sair dela — o gateway continua me vendo lá, o relógio não zera e a
+      // coluna do canal fica como está
       fecharSala();
       await get().connect({
         id: channelId,
@@ -635,8 +721,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
 
     startCall: async (channelId, comVideo) => {
       // uma conexão de voz por vez: o servidor já garante isso, o cliente
-      // precisa fechar a sala antiga para não ficar com duas conexões de mídia
-      if (get().channelId && get().channelId !== channelId) await get().disconnect();
+      // precisa fechar a sala antiga para não ficar com duas conexões de mídia.
+      // A chamada mora na conversa, então a coluna do canal de voz fecha
+      if (get().channelId && get().channelId !== channelId) sairDaSalaAtual("troca-de-sala");
       get().dispatchCall({ type: "start", channelId });
       set({
         channelId,
@@ -648,6 +735,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         camOn: false,
         screenOn: false,
       });
+      lembrarSala({ channelId, guildId: null, name: "" });
       try {
         await abrirConversa(channelId);
         const r = await api.startCall(channelId);
@@ -671,10 +759,11 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     acceptCall: async () => {
       const channelId = get().call.channelId;
       if (!channelId) return;
-      if (get().channelId && get().channelId !== channelId) await get().disconnect();
+      if (get().channelId && get().channelId !== channelId) sairDaSalaAtual("troca-de-sala");
       get().dispatchCall({ type: "accept" });
       emit(WS_EVENTS.CALL_ACCEPT, { channelId });
       set({ channelId, guildId: null, desde: Date.now(), status: "connecting", erro: null });
+      lembrarSala({ channelId, guildId: null, name: "" });
       await abrirConversa(channelId);
       // atender entra pela mesma rota de quem liga: ela é a que sabe de conversa
       // direta (o token de canal de voz recusaria uma DM com 400)
@@ -728,7 +817,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
           // aviso ela veria a tela fechar do nada
           ui.toast("Chamada encerrada: você ficou sozinho");
         }
-        if (channelId === evento.channelId) void get().disconnect();
+        // a chamada acabou para mim: sai como se eu tivesse desligado
+        if (channelId === evento.channelId) sairDaSalaAtual("fim-da-chamada");
         else get().dispatchCall({ type: "reset" });
       }
     },
@@ -768,19 +858,36 @@ async function abrirConversa(channelId: string) {
  * A distinção que importa é entre **não ter mídia** e **a mídia ter falhado**:
  * a primeira é uma instalação sem LiveKit (dev), e insistir seria inútil; a
  * segunda é uma queda de rede, e aí o usuário precisa de um "tentar de novo".
+ *
+ * Numa conversa direta o token vem de `POST /dms/:id/call` — a rota de canal
+ * de voz recusa DM com 400. Entrar numa chamada que já está rolando por ali é
+ * silencioso (não toca de novo), então é o caminho certo tanto para "tentar
+ * novamente" quanto para voltar depois de um F5. Sem isto, reconectar numa
+ * chamada de conversa dava "conectado", sem som.
  */
 async function conectarMidia(
-  channelId: string,
+  channel: Pick<Channel, "id" | "guildId">,
   set: (partial: Partial<VoiceStoreState>) => void,
   rerender: () => void,
   get: () => VoiceStoreState,
 ): Promise<ResultadoMidia> {
-  let creds: { token: string; url: string; room: string };
-  try {
-    creds = await api.voiceToken(channelId);
-  } catch {
-    // 503 (sem credenciais) ou canal que não é de voz: sem mídia, e ponto
-    return { tipo: "sem-config" };
+  let creds: { token: string; url: string; room: string } | null;
+  if (channel.guildId) {
+    try {
+      creds = await api.voiceToken(channel.id);
+    } catch {
+      // 503 (sem credenciais) ou canal que não é de voz: sem mídia, e ponto
+      return { tipo: "sem-config" };
+    }
+  } else {
+    try {
+      const r = await api.startCall(channel.id);
+      for (const e of r.states) get().applyState(e);
+      creds = r.voice;
+    } catch (e) {
+      // aqui não é falta de configuração: a conversa recusou (bloqueio, acesso)
+      return { tipo: "falha", erro: errorMessage(e, FALHA_MIDIA) };
+    }
   }
   if (!creds?.token || !/^wss?:\/\//i.test(creds.url ?? "")) return { tipo: "sem-config" };
   try {
