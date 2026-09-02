@@ -14,7 +14,7 @@ import {
 import { ProvedorDeAbas } from "@/components/settings/navegacao";
 import Avatar from "@/components/ui/Avatar";
 import { useControleDeAlteracoes } from "@/components/ui/alteracoes";
-import TelaCheia, { ItemNeutro } from "@/components/ui/TelaCheia";
+import TelaCheia, { ItemPerigo } from "@/components/ui/TelaCheia";
 import { escreverAbaNaUrl, limparAbaDaUrl } from "@/hooks/useSettingsRoute";
 import { useAdmin } from "@/stores/admin";
 import { useAuth } from "@/stores/auth";
@@ -138,9 +138,11 @@ export default function SettingsModal({ tab }: { tab?: string }) {
       onClose={closeModal}
       rodapeMenu={
         <>
-          <ItemNeutro onClick={sair} icon={<LogOut size={16} />}>
+          {/* Vermelho, como no Discord: é a única ação do menu que tira o usuário
+              da conta. O ícone tem os 20px dos outros itens da coluna. */}
+          <ItemPerigo onClick={sair} icon={<LogOut size={20} />}>
             {t("config.sair")}
-          </ItemNeutro>
+          </ItemPerigo>
 
           {/* no Discord web não existe linha de versão — ela só faz sentido no
               instalador, onde o usuário não atualiza recarregando a página */}

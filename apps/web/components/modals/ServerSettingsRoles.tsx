@@ -1,7 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, GripVertical, MoreHorizontal, Plus, Search, Trash2 } from "@/components/ui/icones";
+import {
+  ArrowLeft,
+  ChevronRight,
+  GripVertical,
+  MoreHorizontal,
+  Search,
+  Trash2,
+  User,
+  Users,
+} from "@/components/ui/icones";
 import {
   MAX_ROLE_NAME,
   PERMISSION_INFO,
@@ -37,7 +46,10 @@ const GRUPOS: { id: "geral" | "membros" | "mensagens" | "voz"; label: string }[]
  * Aba "Cargos" — duas telas, não duas colunas.
  *
  * A **lista** ocupa a largura toda (nome, quantos membros, "…"); clicar num
- * cargo abre o **editor** como sub-página, com abas horizontais. Lado a lado,
+ * cargo abre o **editor** como sub-página, com abas horizontais. O @everyone
+ * não está na lista: é o cartão "Permissões padrão" acima da busca, como no
+ * Discord — ele não tem nome, cor nem posição, e misturá-lo aos outros fazia
+ * parecer que dava para arrastá-lo. Lado a lado,
  * a lista de 200px espremia o editor num terço da janela e as permissões
  * ficavam com uma coluna de texto ilegível — que é exatamente o motivo de o
  * Discord ter separado as duas telas.
@@ -57,9 +69,11 @@ export default function ServerSettingsRoles({ guildId }: { guildId: string }) {
   // do mais alto para o mais baixo, com o @everyone sempre no fim
   const ordenados = [...roles].sort((a, b) => b.position - a.position);
   const emEdicao = ordenados.find((r) => r.id === selecionado) ?? null;
+  const padrao = ordenados.find((r) => r.isDefault) ?? null;
+  const editaveis = ordenados.filter((r) => !r.isDefault);
 
   const q = busca.trim().toLowerCase();
-  const lista = ordenados.filter((r) => !q || r.name.toLowerCase().includes(q));
+  const lista = editaveis.filter((r) => !q || r.name.toLowerCase().includes(q));
 
   function quantosTem(r: Role): number {
     return r.isDefault ? members.length : members.filter((m) => m.roleIds.includes(r.id)).length;
@@ -158,12 +172,38 @@ export default function ServerSettingsRoles({ guildId }: { guildId: string }) {
 
   return (
     <div>
-      <p className="mb-4 text-sm text-txt-muted">
-        Use os cargos para agrupar membros e dar permissões. Arraste pela alça para mudar a
-        hierarquia — quem está mais acima manda em quem está abaixo.
+      <p className="mb-4 text-sm text-txt-normal">
+        Use cargos para agrupar os membros do servidor e dar permissões.
       </p>
 
-      <div className="mb-4 flex items-center gap-2">
+      {/* O cartão "Permissões padrão" do Discord, medido no print: 74 de
+          altura, borda de 1px, raio 4, ícone em círculo de 32, 16 de respiro
+          entre as partes e 32 até a busca. */}
+      {padrao && (
+        <button
+          type="button"
+          onClick={() => setSelecionado(padrao.id)}
+          className="mb-8 flex h-[74px] w-full items-center gap-4 rounded border border-border bg-input pl-4 pr-6 text-left transition hover:bg-hov"
+        >
+          <span
+            aria-hidden="true"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-chat text-txt-normal"
+          >
+            <Users size={20} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-base font-semibold text-txt-primary">
+              Permissões padrão
+            </span>
+            <span className="mt-1 block truncate text-xs text-txt-muted">
+              @everyone • vale para todos os membros do servidor
+            </span>
+          </span>
+          <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-txt-muted" />
+        </button>
+      )}
+
+      <div className="flex items-center gap-4">
         <div className="relative min-w-0 flex-1">
           <Search
             size={14}
@@ -178,53 +218,57 @@ export default function ServerSettingsRoles({ guildId }: { guildId: string }) {
             className={`${ESTILO_CAMPO} pl-8`}
           />
         </div>
+        {/* 32 de altura, raio 8, sem ícone: o "Criar cargo" do print. */}
         <button
           type="button"
           disabled={busy}
           onClick={() => void criar()}
-          className="flex h-10 shrink-0 items-center gap-1.5 rounded-[3px] bg-accent px-3 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
+          className="h-8 shrink-0 rounded-lg bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
         >
-          <Plus size={16} aria-hidden="true" />
           Criar cargo
         </button>
       </div>
+      <p className="mt-2 text-sm text-txt-normal">
+        Os membros usam a cor do cargo mais alto que eles possuem nesta lista. Arraste os
+        cargos para reordenar.
+      </p>
 
-      <div className="flex items-center gap-2 border-b border-border pb-2 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+      <div className="mt-8 flex items-center gap-2 border-b border-border pb-2 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
         <span className="w-6 shrink-0" aria-hidden="true" />
-        <span className="min-w-0 flex-1">Cargos — {roles.length}</span>
+        <span className="min-w-0 flex-1">Cargos — {editaveis.length}</span>
         <span className="w-[92px] shrink-0 text-right">Membros</span>
-        <span className="w-8 shrink-0" aria-hidden="true" />
+        <span className="w-10 shrink-0" aria-hidden="true" />
       </div>
 
       <div role="list">
         {lista.length === 0 && (
-          <p className="py-3 text-sm text-txt-muted">Nenhum cargo com esse nome.</p>
+          <p className="py-3 text-sm text-txt-muted">
+            {editaveis.length === 0 ? "Ainda não há cargos além do @everyone." : "Nenhum cargo com esse nome."}
+          </p>
         )}
         {lista.map((r) => (
           <div
             key={r.id}
             role="listitem"
-            draggable={!r.isDefault}
+            draggable
             onDragStart={() => setArrastando(r.id)}
             onDragOver={(e) => {
-              if (arrastando && !r.isDefault) e.preventDefault();
+              if (arrastando) e.preventDefault();
             }}
             onDrop={() => void soltarEm(r)}
             onDragEnd={() => setArrastando(null)}
-            className={`group flex items-center gap-2 border-b border-border py-2 transition ${
+            className={`group flex h-[61px] items-center gap-2 border-b border-border transition ${
               arrastando === r.id ? "opacity-40" : "hover:bg-hov"
             }`}
           >
             <span className="w-6 shrink-0 text-txt-faint">
-              {!r.isDefault && (
-                <Tooltip label="Arraste para reordenar">
-                  <GripVertical
-                    size={16}
-                    aria-hidden="true"
-                    className="cursor-grab active:cursor-grabbing"
-                  />
-                </Tooltip>
-              )}
+              <Tooltip label="Arraste para reordenar">
+                <GripVertical
+                  size={16}
+                  aria-hidden="true"
+                  className="cursor-grab active:cursor-grabbing"
+                />
+              </Tooltip>
             </span>
             <button
               type="button"
@@ -238,14 +282,15 @@ export default function ServerSettingsRoles({ guildId }: { guildId: string }) {
               />
               <span className="min-w-0 flex-1 truncate text-sm text-txt-primary">{r.name}</span>
             </button>
-            <span className="w-[92px] shrink-0 text-right text-sm text-txt-muted">
+            <span className="flex w-[92px] shrink-0 items-center justify-end gap-1.5 text-sm text-txt-normal">
               {quantosTem(r)}
+              <User size={16} aria-hidden="true" className="text-txt-muted" />
             </span>
             <button
               type="button"
               onClick={(e) => abrirMenu(e, r)}
               aria-label={`Ações do cargo ${r.name}`}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded text-txt-muted opacity-0 transition hover:text-txt-primary focus-visible:opacity-100 group-hover:opacity-100"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-txt-muted opacity-0 transition hover:bg-border-strong hover:text-txt-primary focus-visible:opacity-100 group-hover:opacity-100"
             >
               <MoreHorizontal size={16} />
             </button>
