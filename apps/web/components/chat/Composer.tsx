@@ -14,7 +14,7 @@ import { createPortal } from "react-dom";
 import {
   Angry,
   Annoyed,
-  AppWindow,
+  Apps,
   Eye,
   EyeOff,
   FileText,
@@ -662,20 +662,25 @@ export default function Composer({
                 sem inventar um modal que não existe. */}
             {/* GIF e figurinha existem também na thread: o composer da thread do
                 Discord tem os mesmos botões do canal */}
+            {/* `size={20}` para 18px de tinta: os ativos de `figma/` desenham
+                o glifo em 83% do quadro. Medido no composer do Discord
+                (`173327.png`, y≈992): presente, GIF, figurinha e apps com
+                18px, carinha com 16, passo de 40 entre centros — o mesmo
+                `w-10` do `SideButton`. */}
             <SideButton label="Presente">
-              <Gift size={18} />
+              <Gift size={20} />
             </SideButton>
             <SideButton label="GIF" onClick={() => setAberto((a) => (a === "gif" ? null : "gif"))}>
               {/* o ativo do Discord, não `<span>GIF</span>` com borda: texto
                   muda de peso com a fonte do sistema e nunca casa com os
                   vizinhos */}
-              <Gif size={18} />
+              <Gif size={20} />
             </SideButton>
             <SideButton
               label="Figurinha"
               onClick={() => setAberto((a) => (a === "figurinha" ? null : "figurinha"))}
             >
-              <StickerIcon size={18} />
+              <StickerIcon size={20} />
             </SideButton>
             <SideButton
               label="Emoji"
@@ -683,12 +688,13 @@ export default function Composer({
               // o ícone troca de carinha a cada passada do mouse, como no Discord
               onMouseEnter={() => setCarinha((c) => (c + 1) % CARINHAS.length)}
             >
-              {/* 16 e não 18: a carinha é o único glifo menor da fileira no
-                  Discord */}
-              <Carinha size={16} />
+              {/* menor que os vizinhos: a carinha é o único glifo de 16px da
+                  fileira no Discord. `size={18}` porque o círculo ocupa 92%
+                  do quadro (o nosso print media 14px com `size={16}`) */}
+              <Carinha size={18} />
             </SideButton>
             <SideButton label="Apps">
-              <AppWindow size={18} />
+              <Apps size={20} />
             </SideButton>
           </div>
         </div>
@@ -732,12 +738,16 @@ export default function Composer({
         />
       )}
 
-      {/* fora da caixa, na faixa de 24px abaixo: dentro dela o contador ficava
-          por cima dos botões de emoji */}
+      {/* No canto inferior direito da caixa, como o `characterCount` do
+          Discord. Antes ficava na faixa de 24px abaixo do composer, que não
+          existe mais (o "digitando…" flutua por cima da lista e o composer
+          termina a 10px do fundo). Não colide com os botões: o contador só
+          aparece a partir de 1800 caracteres, e com esse texto a caixa está
+          na altura máxima, com a fileira de ícones presa ao topo. */}
       {mostrarContador && (
         <span
           aria-live="polite"
-          className={`absolute -bottom-5 right-2.5 text-xs tabular-nums ${
+          className={`absolute bottom-1.5 right-[26px] text-xs tabular-nums ${
             restante <= 0 ? "text-red" : "text-txt-muted"
           }`}
         >
