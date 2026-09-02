@@ -11,6 +11,7 @@ import ThreadPanel from "@/components/chat/ThreadPanel";
 import ChannelSidebar from "@/components/layout/ChannelSidebar";
 import DMList from "@/components/layout/DMList";
 import GuildRail from "@/components/layout/GuildRail";
+import UserFooter from "@/components/layout/UserFooter";
 import AvisoDeAtualizacao from "@/components/desktop/AvisoDeAtualizacao";
 import ModalHost from "@/components/modals/ModalHost";
 import ContextMenuHost from "@/components/ui/ContextMenu";
@@ -79,11 +80,28 @@ export default function AppPage() {
 
   return (
     <div className="flex h-full select-none">
-      <GuildRail />
+      {/*
+        Rail e coluna dentro do mesmo bloco posicionado, e o card do usuário
+        como irmão dos dois.
+
+        O card **atravessa a rail** no Discord: começa a 10px da borda da janela,
+        passa por cima dos ícones de servidor e termina 10px antes do fim da
+        coluna. Conferido no print — a divisória da rail aparece acima dele e
+        some atrás dele. Enquanto ele morava dentro do `<aside>`, ficava preso à
+        coluna e essa travessia era impossível.
+
+        O card usa `inset-x-2.5` neste bloco, e não larguras somadas: assim ele
+        continua certo se a rail ou a coluna mudarem de tamanho de novo — e elas
+        acabaram de mudar.
+      */}
+      <div className="relative flex shrink-0">
+        <GuildRail />
+        {view === "dm" ? <DMList /> : <ChannelSidebar />}
+        <UserFooter />
+      </div>
 
       {view === "dm" ? (
         <>
-          <DMList />
           <DMView />
           {activeDM && buscaAberta && <SearchPanel guildId={null} />}
           {/* thread funciona em DM como em qualquer canal (ADR-0001) */}
@@ -91,8 +109,6 @@ export default function AppPage() {
         </>
       ) : (
         <>
-          <ChannelSidebar />
-
           {voiceChannel ? (
             // No canal de voz o palco ocupa a área inteira — o chat de texto do
             // canal existe, mas só aparece por clique no botão do cabeçalho. É o

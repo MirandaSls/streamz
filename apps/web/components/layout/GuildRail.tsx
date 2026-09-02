@@ -253,7 +253,7 @@ export default function GuildRail() {
   return (
     <nav
       aria-label="Servidores"
-      className="flex w-20 shrink-0 flex-col items-center gap-2.5 overflow-y-auto bg-rail pt-3 pb-2"
+      className="flex w-20 shrink-0 flex-col items-center gap-2.5 overflow-y-auto bg-rail pt-3 pb-[78px]"
     >
       <RailItem
         label="Mensagens diretas"

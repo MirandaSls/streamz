@@ -10,7 +10,6 @@ import {
   type DMChannelView,
   type PublicUser,
 } from "@streamz/shared";
-import UserFooter from "@/components/layout/UserFooter";
 import Avatar, { GroupAvatar } from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
 import { MENU_WIDTH } from "@/components/ui/ContextMenu";
@@ -138,7 +137,7 @@ export default function DMList() {
   }
 
   return (
-    <aside className="relative flex w-[294px] shrink-0 flex-col bg-panel">
+    <aside className="flex w-[294px] shrink-0 flex-col bg-panel">
       <div className="flex h-[49px] shrink-0 items-center border-b border-border px-2.5 shadow-header">
         <input
           value={query}
@@ -294,7 +293,6 @@ export default function DMList() {
         })}
       </div>
 
-      <UserFooter />
     </aside>
   );
 }
