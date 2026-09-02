@@ -302,8 +302,9 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
                 });
               }}
             />
-            {/* a faixa de 24px do "digitando…" só existe onde há composer:
-                num canal bloqueado ela reservava altura para nada */}
+            {/* o "digitando…" flutua sobre a lista desde o #60; este irmão do
+                composer só dá o respiro de 10px até o fundo e mede a altura
+                dele, então só faz sentido onde há composer */}
             <TypingIndicator channelId={channel.id} />
           </>
         )
