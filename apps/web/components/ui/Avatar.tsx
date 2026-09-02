@@ -1,7 +1,8 @@
 "use client";
 
 import { useId } from "react";
-import { HeadphoneOff, MicOff, Users } from "lucide-react";
+import { HeadphoneOff, MicOff } from "@/components/ui/icones";
+import { Users } from "lucide-react";
 import type { UserStatus } from "@streamz/shared";
 import { corDoAvatar } from "@/components/ui/avatar-cores";
 import { usePresence } from "@/stores/presence";

@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Camera, Settings, UserPlus, Users } from "lucide-react";
+import { Settings } from "@/components/ui/icones";
+import { Camera, UserPlus, Users } from "lucide-react";
 import { MAX_DM_GROUP_NAME, displayNameOf } from "@streamz/shared";
 import Dialog from "@/components/modals/Dialog";
 import TelaCheia, { type ItemDeMenu } from "@/components/ui/TelaCheia";

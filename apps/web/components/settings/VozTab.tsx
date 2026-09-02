@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Keyboard, Mic, RefreshCw, Video } from "lucide-react";
+import { Mic } from "@/components/ui/icones";
+import { Keyboard, RefreshCw, Video } from "lucide-react";
 import { PTT_RELEASE_MS } from "@streamz/shared";
 import { RadioCards, Section, Select, Slider, ToggleLinha } from "@/components/ui/controls";
 import { useT } from "@/lib/i18n";

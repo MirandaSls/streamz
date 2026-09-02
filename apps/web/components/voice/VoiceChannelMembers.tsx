@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronRight, HeadphoneOff, MicOff, UserPlus, Video } from "lucide-react";
+import { HeadphoneOff, MicOff } from "@/components/ui/icones";
+import { ChevronRight, UserPlus, Video } from "lucide-react";
 import { displayNameOf } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import { abrirMenuDeParticipante } from "@/components/voice/participant-menu";

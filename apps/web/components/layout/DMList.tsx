@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type MouseEvent } from "react";
-import { LogOut, Phone, Plus, Settings, UserPlus, Users, X } from "@/components/ui/icones";
+import { Amigos, LogOut, Phone, Plus, Settings, UserPlus, X } from "@/components/ui/icones";
 import {
   channelNotificationScope,
   displayNameOf,
@@ -158,7 +158,7 @@ export default function DMList() {
           aria-current={friendsOpen ? "true" : undefined}
           className={"mx-2 mb-1 flex h-[42px] w-[calc(100%-1rem)] items-center gap-3 rounded-[4px] px-2 text-left " + (friendsOpen ? "bg-sel text-txt-primary" : "text-txt-faint hover:bg-hov hover:text-txt-normal")}
         >
-          <Users size={24} aria-hidden="true" className="shrink-0" />
+          <Amigos size={24} aria-hidden="true" className="shrink-0" />
           <span className="flex-1 font-medium">Amigos</span>
           {pendentes > 0 && (
             <span
