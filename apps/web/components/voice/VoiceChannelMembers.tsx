@@ -58,22 +58,33 @@ export default function VoiceChannelMembers({
                   channelId,
                 });
               }}
-              className={`flex h-[26px] w-full items-center gap-1.5 rounded-[4px] px-1 text-left text-sm hover:bg-hov hover:text-txt-normal ${
+              /*
+                `pl-[38px]`: no Discord tudo que pende do canal é recuado. O
+                avatar do participante começa 26px depois do ícone do canal, e o
+                nome 30px depois do nome do canal. Sem isso o participante fica
+                **à esquerda** do ícone do próprio canal — colado na borda da
+                coluna, que foi a queixa.
+              */
+              className={`flex h-8 w-full items-center gap-1.5 rounded-[4px] pl-[38px] pr-1 text-left text-sm hover:bg-hov hover:text-txt-normal ${
                 e.deafened ? "text-txt-faint opacity-30" : "text-txt-faint"
               }`}
             >
-              {/* 20px é o tamanho do Discord aqui, e a escala do Avatar salta de
-                  16 para 24: o ajuste vai por className no invólucro, que é o
-                  que evita inventar um sexto tamanho global por um caso só */}
+              {/* 24px, medido no print. O anel de "está falando" é `inset`
+                  para casar com o do tile do palco, que passou a ser desenhado
+                  por dentro: por fora, o avatar cresce ao falar e a linha pula. A escala do `Avatar` salta de 16 para
+                  24, então este é um tamanho que existe — o `className` fica só
+                  para o anel de quem está falando. */}
               <Avatar
                 user={e.user}
                 size="sm"
                 surface="border-panel"
-                className={`h-5 w-5 rounded-full [&>img]:h-5 [&>img]:w-5 [&>span]:h-5 [&>span]:w-5 [&>span]:text-[9px] ${
-                  ativo ? "ring-2 ring-green" : ""
+                className={`h-6 w-6 rounded-full [&>img]:h-6 [&>img]:w-6 [&>span]:h-6 [&>span]:w-6 [&>span]:text-[10px] ${
+                  ativo ? "ring-2 ring-inset ring-green" : ""
                 }`}
               />
-              <span className="min-w-0 flex-1 truncate">{nome}</span>
+              {/* menor que o nome do canal, como no Discord: nosso texto era maior que o
+                  do canal acima, o que invertia a hierarquia */}
+              <span className="min-w-0 flex-1 truncate text-[14px]">{nome}</span>
               {e.screen ? (
                 <span className="shrink-0 rounded-[3px] bg-red px-1 text-[10px] font-bold uppercase leading-4 tracking-[0.02em] text-white">
                   Ao vivo
@@ -99,7 +110,7 @@ export default function VoiceChannelMembers({
           <button
             type="button"
             onClick={() => ui.openModal({ kind: "invite", guildId })}
-            className="flex h-[26px] w-full items-center gap-1.5 rounded-[4px] px-1 text-left text-sm text-txt-faint transition hover:bg-hov hover:text-txt-normal"
+            className="flex h-8 w-full items-center gap-1.5 rounded-[4px] pl-[38px] pr-1 text-left text-sm text-txt-faint transition hover:bg-hov hover:text-txt-normal"
           >
             <span className="grid h-5 w-5 shrink-0 place-items-center">
               <UserPlus size={14} aria-hidden="true" />
