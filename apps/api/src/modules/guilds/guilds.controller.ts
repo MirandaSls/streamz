@@ -131,6 +131,13 @@ export class GuildsController {
     return this.guilds.updateIcon(user.sub, id, file);
   }
 
+  /** Remover o ícone do servidor (MANAGE_GUILD). */
+  @UseGuards(JwtGuard)
+  @Delete(":id/icon")
+  removeIcon(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
+    return this.guilds.removeIcon(user.sub, id);
+  }
+
   /** Transferir a posse (só o dono; o antigo dono vira ADMIN). */
   @UseGuards(JwtGuard)
   @Post(":id/transfer")
