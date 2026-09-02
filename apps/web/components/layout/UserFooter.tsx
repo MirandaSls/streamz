@@ -69,7 +69,7 @@ function FooterSplit({
     : "text-txt-secondary hover:bg-hov hover:text-txt-primary";
 
   return (
-    <div className="flex items-center">
+    <div className="flex items-center gap-px">
       <Tooltip label={label}>
         <button
           type="button"
@@ -90,7 +90,7 @@ function FooterSplit({
           aria-expanded={aberto}
           className={`grid h-8 w-4 place-items-center rounded-r-[4px] rounded-l-[1px] transition ${cor}`}
         >
-          <ChevronDown size={12} />
+          <ChevronDown size={16} />
         </button>
       </Tooltip>
 
@@ -133,19 +133,35 @@ export default function UserFooter() {
   const status = resolveStatus(statuses, vivo);
 
   return (
-    <>
-      {/* f-voz: a barra da call fica colada acima do painel, como no Discord */}
+    /**
+     * O card **flutua**: sai do fluxo da coluna e a lista rola por trás dele.
+     *
+     * Era um rodapé em fluxo, encostado nas três bordas e da largura inteira da
+     * coluna. Medido no print do Discord, o card de lá tem 58px de altura, raio
+     * de 8px, borda de 1px e 10px de recuo dos três lados — e a lista continua
+     * atrás: dá para ver um avatar cortado pela borda de cima do card, e o
+     * divisor da coluna reaparece embaixo dele.
+     *
+     * A diferença não é enfeite. Encostado nas bordas, o painel lê como o fim da
+     * coluna; recuado, lê como uma peça por cima dela — que é o que ele é, já
+     * que não pertence a nenhuma conversa da lista.
+     *
+     * `pb` na lista (ver `DMList` e `ChannelSidebar`) é o que garante que o
+     * último item ainda seja alcançável por baixo do card.
+     */
+    <div className="pointer-events-none absolute inset-x-2.5 bottom-2.5 z-20 flex flex-col gap-2">
+      {/* f-voz: a barra da call sobe junto, como parte da mesma pilha flutuante */}
       <VoiceConnectedBar />
-      <div className="flex h-[52px] shrink-0 items-center gap-0.5 bg-footer px-2">
+      <div className="pointer-events-auto flex h-[58px] shrink-0 items-center gap-2 rounded-lg border border-border bg-footer px-3.5">
         <button
           type="button"
           onClick={(e) => openProfile(user, anchorOf(e.currentTarget))}
           aria-label="Meu perfil"
-          className="flex min-w-0 flex-1 items-center gap-2 rounded-[4px] py-1 pl-0.5 pr-2 text-left transition hover:bg-hov"
+          className="-ml-1 flex min-w-0 flex-1 items-center gap-2 rounded-[4px] py-1 pl-1 pr-2 text-left transition hover:bg-hov"
         >
           <Avatar user={vivo} size="md" status={status} surface="border-footer" />
           <span className="min-w-0">
-            <span className="block truncate text-sm font-semibold leading-[18px] text-txt-primary">
+            <span className="block truncate text-base font-semibold leading-[19px] text-txt-primary">
               {displayNameOf(user)}
             </span>
             {/* o status personalizado tem prioridade sobre o rótulo do estado:
@@ -183,6 +199,6 @@ export default function UserFooter() {
           <Settings size={20} />
         </FooterButton>
       </div>
-    </>
+    </div>
   );
 }

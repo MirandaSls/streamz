@@ -76,7 +76,7 @@ export default function VoiceConnectedBar() {
   }
 
   return (
-    <div className="flex shrink-0 flex-col gap-1 bg-footer px-2 pb-1 pt-2" data-voice-bar>
+    <div className="pointer-events-auto flex shrink-0 flex-col gap-1 rounded-lg border border-border bg-footer px-2 pb-1 pt-2" data-voice-bar>
       <div className="flex items-center gap-1">
         <span className="min-w-0 flex-1 overflow-hidden">
           <span
