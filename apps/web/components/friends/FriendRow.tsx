@@ -87,7 +87,8 @@ export default function FriendRow({
         <span className="block truncate text-sm text-txt-muted">{rodape}</span>
       </span>
 
-      <div className="relative flex shrink-0 items-center gap-2">
+      {/* 10px entre os círculos, medido no hover da linha do Discord */}
+      <div className="relative flex shrink-0 items-center gap-2.5">
         {actions}
         {menu && menu.length > 0 && (
           <Tooltip label="Mais">
@@ -97,7 +98,9 @@ export default function FriendRow({
               aria-label={`Mais opções para ${nome}`}
               className="grid h-9 w-9 place-items-center rounded-full text-txt-secondary transition hover:bg-sel hover:text-txt-primary"
             >
-              <MoreVertical size={18} />
+              {/* o "⋮" do Discord mede 16px de altura; o nosso caminho desenha
+                  0,83 do `size`, então 20 → 16,7 (em 18 saía com 15) */}
+              <MoreVertical size={20} />
             </button>
           </Tooltip>
         )}
