@@ -15,6 +15,7 @@ import {
   ChevronRight,
   LogOut,
   MoreVertical,
+  Pencil,
   Plus,
   SendHorizonal,
   SmilePlus,
@@ -64,7 +65,8 @@ import { ui, useUI, type MenuItem, type Popover } from "@/stores/ui";
  * Um só na tela, aberto por `ui.openProfile(user, anchor)`.
  */
 
-const LARGURA = 340;
+/** 300 no print `2026-09-01 113533` (x=700..999); o conteúdo fica com 268. */
+const LARGURA = 300;
 /** folga entre o elemento que abriu e o cartão. */
 const FOLGA = 8;
 const BORDA = 8;
@@ -531,94 +533,110 @@ export default function ProfilePopoverHost() {
               </div>
             </Secao>
           )}
-
-          {isMe && (
-            <>
-              <div className="mt-3 border-t border-border pt-3">
-                <div role="radiogroup" aria-label="Status" className="flex flex-col gap-0.5">
-                  {STATUS_OPTIONS.map((o) => {
-                    const selecionado =
-                      (me?.status === "OFFLINE" ? "OFFLINE" : status) === o.dot &&
-                      (o.value !== null || status === "ONLINE");
-                    const comDuracao = o.value === "IDLE" || o.value === "DND";
-                    return (
-                      <button
-                        key={o.label}
-                        type="button"
-                        role="radio"
-                        aria-checked={selecionado}
-                        disabled={saving}
-                        onClick={(e) => {
-                          if (!comDuracao) {
-                            void setStatus(o.value);
-                            return;
-                          }
-                          // ausente/não perturbe abrem o "por quanto tempo"
-                          const r = e.currentTarget.getBoundingClientRect();
-                          abrirMenuDoCartao(
-                            popover,
-                            r.right - MENU_WIDTH,
-                            r.bottom + 4,
-                            DURACOES.map((d) => ({
-                              label: d.label,
-                              onSelect: () => void setStatus(o.value, d.minutos),
-                            })),
-                            MENU_WIDTH,
-                          );
-                        }}
-                        className={`flex items-center gap-3 rounded-[3px] px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-ink ${
-                          selecionado ? "text-txt-primary" : "text-txt-normal"
-                        }`}
-                      >
-                        <StatusDot status={o.dot} className="h-2.5 w-2.5 shrink-0" />
-                        <span className="flex-1">
-                          <span className="block font-medium">{o.label}</span>
-                          {o.hint && <span className="block text-xs opacity-70">{o.hint}</span>}
-                        </span>
-                        {comDuracao && <ChevronRight size={14} aria-hidden="true" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* ordem do Discord: status → separador → personalizado → conta */}
-              <div className="mt-2 flex flex-col gap-0.5 border-t border-border pt-2">
-                <ItemDeMenu
-                  icon={<SmilePlus size={16} />}
-                  onClick={() => {
-                    close();
-                    openModal({ kind: "customStatus" });
-                  }}
-                >
-                  {customStatusOf(user) ? "Editar status personalizado" : "Status personalizado"}
-                </ItemDeMenu>
-                <ItemDeMenu
-                  icon={<ArrowLeftRight size={16} />}
-                  onClick={() => {
-                    // não há multiconta: trocar de conta é sair e entrar de novo
-                    close();
-                    logout();
-                    router.replace("/login");
-                  }}
-                >
-                  Trocar de conta
-                </ItemDeMenu>
-                <ItemDeMenu
-                  icon={<LogOut size={16} />}
-                  danger
-                  onClick={() => {
-                    close();
-                    logout();
-                    router.replace("/login");
-                  }}
-                >
-                  Sair
-                </ItemDeMenu>
-              </div>
-            </>
-          )}
         </div>
+
+        {isMe && (
+          <>
+            {/*
+              O botão do print `113533`: 268x32, raio 8, 16 de folga das bordas
+              do cartão. Fica fora do cartão interno, como no Discord, e as
+              opções de status e de conta vêm depois dele.
+            */}
+            <button
+              type="button"
+              onClick={() => {
+                close();
+                openModal({ kind: "settings", tab: "perfil" });
+              }}
+              className="mt-3 flex h-8 w-full items-center justify-center gap-2 rounded-lg bg-accent text-sm font-medium text-accent-ink transition hover:bg-accent-hover"
+            >
+              <Pencil size={16} aria-hidden="true" />
+              Editar perfil
+            </button>
+            <div className="mt-3 border-t border-border pt-3">
+              <div role="radiogroup" aria-label="Status" className="flex flex-col gap-0.5">
+                {STATUS_OPTIONS.map((o) => {
+                  const selecionado =
+                    (me?.status === "OFFLINE" ? "OFFLINE" : status) === o.dot &&
+                    (o.value !== null || status === "ONLINE");
+                  const comDuracao = o.value === "IDLE" || o.value === "DND";
+                  return (
+                    <button
+                      key={o.label}
+                      type="button"
+                      role="radio"
+                      aria-checked={selecionado}
+                      disabled={saving}
+                      onClick={(e) => {
+                        if (!comDuracao) {
+                          void setStatus(o.value);
+                          return;
+                        }
+                        // ausente/não perturbe abrem o "por quanto tempo"
+                        const r = e.currentTarget.getBoundingClientRect();
+                        abrirMenuDoCartao(
+                          popover,
+                          r.right - MENU_WIDTH,
+                          r.bottom + 4,
+                          DURACOES.map((d) => ({
+                            label: d.label,
+                            onSelect: () => void setStatus(o.value, d.minutos),
+                          })),
+                          MENU_WIDTH,
+                        );
+                      }}
+                      className={`flex items-center gap-3 rounded-[3px] px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-ink ${
+                        selecionado ? "text-txt-primary" : "text-txt-normal"
+                      }`}
+                    >
+                      <StatusDot status={o.dot} className="h-2.5 w-2.5 shrink-0" />
+                      <span className="flex-1">
+                        <span className="block font-medium">{o.label}</span>
+                        {o.hint && <span className="block text-xs opacity-70">{o.hint}</span>}
+                      </span>
+                      {comDuracao && <ChevronRight size={14} aria-hidden="true" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* ordem do Discord: status → separador → personalizado → conta */}
+            <div className="mt-2 flex flex-col gap-0.5 border-t border-border pt-2">
+              <ItemDeMenu
+                icon={<SmilePlus size={16} />}
+                onClick={() => {
+                  close();
+                  openModal({ kind: "customStatus" });
+                }}
+              >
+                {customStatusOf(user) ? "Editar status personalizado" : "Status personalizado"}
+              </ItemDeMenu>
+              <ItemDeMenu
+                icon={<ArrowLeftRight size={16} />}
+                onClick={() => {
+                  // não há multiconta: trocar de conta é sair e entrar de novo
+                  close();
+                  logout();
+                  router.replace("/login");
+                }}
+              >
+                Trocar de conta
+              </ItemDeMenu>
+              <ItemDeMenu
+                icon={<LogOut size={16} />}
+                danger
+                onClick={() => {
+                  close();
+                  logout();
+                  router.replace("/login");
+                }}
+              >
+                Sair
+              </ItemDeMenu>
+            </div>
+          </>
+        )}
 
         {!isMe && relacao !== "blocked" && (
           <form
