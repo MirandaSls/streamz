@@ -12,10 +12,16 @@ import { resolveStatus, usePresence } from "@/stores/presence";
 import { useUI } from "@/stores/ui";
 
 /**
- * "Selecionar amigos": a caixa do Discord que já chega com os **seus amigos**
+ * "Nova mensagem": a caixa do Discord que já chega com os **seus amigos**
  * listados — marcar um abre a conversa direta, marcar dois ou mais cria o
  * grupo. É a mesma tela para os dois casos porque, do ponto de vista de quem
  * usa, a decisão é só "com quem".
+ *
+ * Medida no print (`docs/Reference/Captura de tela 2026-09-02 152402.png`):
+ * 478 de largura, raio 8; título de 20px com o subtítulo de 14px; busca de
+ * 40px com raio 8 e a dica de 12px embaixo; linhas de 48px com avatar de 32,
+ * nome de 16 e usuário de 12, e o quadrado de 20px (raio 4) à direita; rodapé
+ * com "Cancelar" e "Criar mensagem" de 40px, raio 8, meio a meio.
  *
  * O nome do grupo não se escolhe aqui: no Discord ele é definido depois, nas
  * configurações do grupo, e pedir antes obriga a nomear algo que ainda não
@@ -84,7 +90,8 @@ export default function CreateGroupDMModal() {
   const pickedIds = new Set(picks.map((u) => u.id));
 
   const grupo = picks.length >= 2;
-  const restantes = MAX_DM_GROUP_INVITEES - picks.length;
+  // o limite do contrato é de convidados, além de quem cria
+  const membros = MAX_DM_GROUP_INVITEES + 1;
 
   function toggle(u: PublicUser) {
     setPicks((prev) => {
@@ -111,22 +118,29 @@ export default function CreateGroupDMModal() {
 
   return (
     <Dialog
-      title="Selecionar amigos"
-      description={
-        restantes > 0
-          ? `Você pode adicionar mais ${restantes} ${restantes === 1 ? "amigo" : "amigos"}.`
-          : "Este grupo já está cheio."
-      }
+      title="Nova mensagem"
+      description={`Grupos privados podem ter até ${membros} membros.`}
       onClose={closeModal}
+      className="w-[478px]"
+      bodyClassName="px-6 pt-6"
       footer={
-        <button
-          type="button"
-          disabled={picks.length === 0 || saving}
-          onClick={submit}
-          className="h-[38px] w-full rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {saving ? "Abrindo…" : grupo ? "Criar Grupo de DM" : "Abrir conversa"}
-        </button>
+        <>
+          <button
+            type="button"
+            disabled={picks.length === 0 || saving}
+            onClick={submit}
+            className="h-10 flex-1 rounded-lg bg-accent text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {saving ? "Abrindo…" : "Criar mensagem"}
+          </button>
+          <button
+            type="button"
+            onClick={closeModal}
+            className="h-10 flex-1 rounded-lg bg-border-strong text-sm font-medium text-txt-normal transition hover:bg-border-strong-hover"
+          >
+            Cancelar
+          </button>
+        </>
       }
     >
       {picks.length > 0 && (
@@ -137,7 +151,7 @@ export default function CreateGroupDMModal() {
               type="button"
               onClick={() => toggle(u)}
               aria-label={`Remover ${displayNameOf(u)}`}
-              className="flex items-center gap-1 rounded-[3px] bg-rail px-2 py-1 text-sm text-txt-primary transition hover:bg-hov"
+              className="flex items-center gap-1 rounded-[4px] bg-rail px-2 py-1 text-sm text-txt-primary transition hover:bg-hov"
             >
               {displayNameOf(u)}
               <X size={14} aria-hidden="true" className="text-txt-muted" />
@@ -146,16 +160,20 @@ export default function CreateGroupDMModal() {
         </div>
       )}
 
+      {/* a borda em accent no foco vem do estilo global de campos */}
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         type="search"
-        placeholder="Digite o nome de usuário de um amigo"
+        placeholder="Buscar"
         aria-label="Buscar usuário"
-        className="mb-2 h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
+        className="h-10 w-full rounded-lg bg-rail px-3 text-txt-normal outline-none placeholder:text-txt-muted"
       />
+      <p className="mt-2 text-xs text-txt-muted">
+        Adicione amigos, ou busque alguém pelo nome de usuário, a grupos privados.
+      </p>
 
-      <div className="max-h-56 overflow-y-auto">
+      <div className="-mx-2 mt-4 max-h-[480px] overflow-y-auto">
         {candidates.length === 0 ? (
           <p className="px-3 py-3 text-sm text-txt-muted">
             {q
@@ -172,21 +190,23 @@ export default function CreateGroupDMModal() {
                 role="checkbox"
                 aria-checked={marcado}
                 onClick={() => toggle(u)}
-                className="flex w-full items-center gap-3 rounded-[3px] px-2 py-1.5 text-left text-sm text-txt-normal hover:bg-hov"
+                className="flex h-12 w-full items-center gap-3 rounded-lg px-2 text-left hover:bg-hov"
               >
                 <Avatar user={u} size="md" status={resolveStatus(statuses, u)} surface="border-chat" />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-txt-primary">{displayNameOf(u)}</span>
-                  <span className="block truncate text-xs text-txt-muted">@{u.username}</span>
+                  <span className="block truncate text-base font-semibold leading-5 text-txt-primary">
+                    {displayNameOf(u)}
+                  </span>
+                  <span className="block truncate text-xs leading-4 text-txt-muted">{u.username}</span>
                 </span>
-                {/* círculo que vira ✓: o checkbox nativo não segue o tema */}
+                {/* o quadrado de 20px do Discord; o checkbox nativo não segue o tema */}
                 <span
                   aria-hidden="true"
-                  className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition ${
+                  className={`grid h-5 w-5 shrink-0 place-items-center rounded-[4px] border transition ${
                     marcado ? "border-accent bg-accent text-accent-ink" : "border-txt-faint"
                   }`}
                 >
-                  {marcado && <Check size={14} strokeWidth={3} />}
+                  {marcado && <Check size={14} />}
                 </span>
               </button>
             );
