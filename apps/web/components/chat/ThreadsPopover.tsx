@@ -107,7 +107,9 @@ export default function ThreadsPopover({
       label="Threads"
       title={ROTULO_DA_ABA[aba]}
       contagem={lista.length}
-      icon={<MessagesSquare size={20} />}
+      // 21 para 18,2×18,4 de tinta (bbox do caminho: 69,2×70 do quadro de 80),
+      // a mesma dos vizinhos do cabeçalho (`Users` a 22 → 18,3; Discord 18)
+      icon={<MessagesSquare size={21} />}
       onOpen={() => void load(channelId)}
       busca={{ valor: busca, aoMudar: setBusca, placeholder: "Buscar threads" }}
       tituloControle={() => (

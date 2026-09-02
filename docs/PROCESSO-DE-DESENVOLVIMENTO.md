@@ -325,6 +325,16 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
 | #48 | Barra polida, caixa de entrada e modal "Nova mensagem" como no Discord |
 | #49 | Bump 0.0.8 |
 | #50 | Popover do microfone nasce do botão, não da setinha |
+| #51 | Este documento |
+| #52 | O quadro dos ícones recortava no arquivo, não no desenho (`10 10 80 80`) |
+| #53 | Bump 0.0.9 |
+| #54 | Não lidas por conversa, notificações do Windows, mídia sem prompt e ping na barra de voz |
+| #55 | A parte visual da call medida contra o Discord |
+| #56 | Lista de membros, Amigos e Adicionar amigo como no Discord |
+| #57 | Configurações: navegação, campos, ícone do servidor, cargos e convites como no Discord |
+| #58 | Cabeçalho de canal, busca e boas-vindas como no Discord |
+| #59 | Menu de contexto, tooltip, popover de perfil e modal como no Discord |
+| #60 | Composer, embed e mensagem como no Discord |
 
 Desktop: 0.0.6 (#38 + #40 + #41), 0.0.7 (+ #42), 0.0.8 (tudo até #50).
 

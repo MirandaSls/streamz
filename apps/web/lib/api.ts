@@ -261,6 +261,8 @@ export const api = {
     form.append("file", file);
     return request<Guild>(`/guilds/${guildId}/icon`, { method: "POST", body: form });
   },
+  removeGuildIcon: (guildId: string) =>
+    request<Guild>(`/guilds/${guildId}/icon`, { method: "DELETE" }),
   transferGuild: (guildId: string, userId: string) =>
     request<{ guildId: string; ownerId: string }>(`/guilds/${guildId}/transfer`, json({ userId })),
 
