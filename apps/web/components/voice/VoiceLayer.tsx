@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import AudioRemotoHost from "@/components/voice/AudioRemotoHost";
 import IncomingCallModal from "@/components/voice/IncomingCallModal";
 import VoiceHotkeys from "@/components/voice/VoiceHotkeys";
 import { VoiceVolumePopoverHost } from "@/components/voice/VoiceGrid";
@@ -10,8 +11,13 @@ import { useVoice } from "@/stores/voice";
 
 /**
  * As peças de voz que precisam existir com o app inteiro, não só com o painel
- * aberto: atalhos de teclado, o cartão de chamada recebida, o popover de volume
- * e a carga do estado de voz dos servidores.
+ * aberto: o áudio dos outros participantes, atalhos de teclado, o cartão de
+ * chamada recebida, o popover de volume e a carga do estado de voz dos
+ * servidores.
+ *
+ * O áudio vem primeiro na lista porque é o motivo de a camada existir: a
+ * chamada continua enquanto o usuário navega, e o que ele ouve não pode
+ * depender de qual tela está aberta (ver `AudioRemotoHost`).
  *
  * O estado de voz precisa vir uma vez por servidor (`GET /guilds/:id/
  * voice-states`) porque o `voice.state` só conta o que muda **daqui para a
@@ -43,6 +49,7 @@ export default function VoiceLayer() {
 
   return (
     <>
+      <AudioRemotoHost />
       <VoiceHotkeys />
       <VoiceVolumePopoverHost />
       <IncomingCallModal />
