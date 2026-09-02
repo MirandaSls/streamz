@@ -23,10 +23,11 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetWindow, GetWindowLongPtrW, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
-    GetWindowThreadProcessId, IsIconic, IsWindowVisible, GWL_EXSTYLE, GWL_STYLE, GW_OWNER,
-    WS_CHILD, WS_EX_TOOLWINDOW,
+    GetWindowThreadProcessId, IsIconic, IsWindow, IsWindowVisible, GWL_EXSTYLE, GWL_STYLE,
+    GW_OWNER, WS_CHILD, WS_EX_TOOLWINDOW,
 };
 
+use super::captura::Alvo;
 use super::{Fonte, TipoDeFonte};
 
 /// Janela menor que isto não é aplicativo: é caixa de mensagem oculta, splash
@@ -263,4 +264,62 @@ unsafe extern "system" fn visitar_monitor(
 fn nome_do_dispositivo(sz: &[u16; 32]) -> String {
     let fim = sz.iter().position(|&c| c == 0).unwrap_or(sz.len());
     String::from_utf16_lossy(&sz[..fim])
+}
+
+/// Resolve o id de uma `Fonte` no handle que a captura precisa.
+///
+/// `None` quando a fonte já não existe: a janela fechou entre a enumeração e o
+/// clique (e o `HWND` pode até ter sido reciclado — daí revalidar com
+/// `IsWindow`), ou o monitor foi desligado. É a revalidação prometida no
+/// comentário de `Fonte::id`.
+pub fn alvo(id: &str) -> Option<Alvo> {
+    if let Some(numero) = id.strip_prefix("janela:") {
+        let hwnd = HWND(numero.parse::<isize>().ok()? as *mut c_void);
+        let existe = unsafe { IsWindow(Some(hwnd)) }.as_bool();
+        return existe.then_some(Alvo::Janela(hwnd));
+    }
+    let nome = id.strip_prefix("monitor:")?;
+    hmonitor_do_dispositivo(nome).map(Alvo::Monitor)
+}
+
+/// O `HMONITOR` atual do dispositivo com esse nome (`\\.\DISPLAY1`). O handle
+/// muda quando um monitor é ligado ou desligado, por isso a fonte guarda o
+/// nome e o handle é procurado na hora.
+fn hmonitor_do_dispositivo(nome: &str) -> Option<HMONITOR> {
+    let mut achados: Vec<(HMONITOR, String)> = Vec::new();
+    let ptr = &mut achados as *mut Vec<(HMONITOR, String)> as isize;
+    // SAFETY: mesma garantia de `monitores` — chamada síncrona, ponteiro só
+    // usado pelo callback.
+    unsafe {
+        let _ = EnumDisplayMonitors(None, None, Some(visitar_hmonitor), LPARAM(ptr));
+    }
+    achados
+        .into_iter()
+        .find(|(_, dispositivo)| dispositivo == nome)
+        .map(|(hmonitor, _)| hmonitor)
+}
+
+unsafe extern "system" fn visitar_hmonitor(
+    hmonitor: HMONITOR,
+    _hdc: HDC,
+    _rect: *mut RECT,
+    lparam: LPARAM,
+) -> BOOL {
+    let achados = &mut *(lparam.0 as *mut Vec<(HMONITOR, String)>);
+    let mut info = MONITORINFOEXW {
+        monitorInfo: MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFOEXW>() as u32,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    if GetMonitorInfoW(
+        hmonitor,
+        &mut info as *mut MONITORINFOEXW as *mut MONITORINFO,
+    )
+    .as_bool()
+    {
+        achados.push((hmonitor, nome_do_dispositivo(&info.szDevice)));
+    }
+    BOOL::from(true)
 }

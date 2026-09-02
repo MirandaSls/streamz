@@ -8,15 +8,20 @@
 //! do WebView2 também não resolve: ele só deixa *permitir ou cancelar*, nunca
 //! escolher a fonte.
 //!
-//! Este módulo é a metade "o que existe". A metade "capture isto" vem depois,
-//! e as duas juntas é que substituem o `getDisplayMedia` no app de desktop.
+//! Este módulo é a metade "o que existe" (`fontes`). A metade "capture isto"
+//! é `captura`, com os dois backends sem borda amarela; a que publica o que
+//! foi capturado na sala do LiveKit vem em seguida, e as três juntas é que
+//! substituem o `getDisplayMedia` no app de desktop.
 //!
-//! Fora do Windows a lista sai vazia de propósito: a web trata lista vazia como
-//! "sem backend nativo" e cai no `getDisplayMedia` de sempre, que é o caminho
-//! do navegador e do desenvolvimento em Linux/macOS.
+//! Fora do Windows a lista sai vazia e `capacidades_de_tela` responde
+//! `nativo: false` de propósito: a web trata isso como "sem backend nativo" e
+//! cai no `getDisplayMedia` de sempre, que é o caminho do navegador e do
+//! desenvolvimento em Linux/macOS.
 
 use serde::Serialize;
 
+#[cfg(windows)]
+mod captura;
 #[cfg(windows)]
 mod fontes;
 #[cfg(windows)]
@@ -75,4 +80,95 @@ fn listar() -> Vec<Fonte> {
 #[cfg(not(windows))]
 fn listar() -> Vec<Fonte> {
     Vec::new()
+}
+
+/// O que a captura nativa consegue nesta máquina — o seletor decide por isto
+/// se mostra a grade de miniaturas ou o botão do `getDisplayMedia`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Capacidades {
+    /// Há backend nativo (só no Windows).
+    pub nativo: bool,
+    /// `"wgc"` (Windows 11, janela isolada) ou `"dxgi"` (Windows 10, recorte
+    /// do monitor). `None` sem backend.
+    pub backend: Option<&'static str>,
+    /// Compartilhar uma **janela** mostra o que estiver por cima dela. É o
+    /// caso do DXGI, e o seletor avisa o usuário antes de ele escolher.
+    pub janela_recortada: bool,
+}
+
+#[tauri::command]
+pub fn capacidades_de_tela() -> Capacidades {
+    capacidades()
+}
+
+#[cfg(windows)]
+fn capacidades() -> Capacidades {
+    let backend = captura::backend();
+    Capacidades {
+        nativo: true,
+        backend: Some(backend.nome()),
+        janela_recortada: backend == captura::Backend::Dxgi,
+    }
+}
+
+#[cfg(not(windows))]
+fn capacidades() -> Capacidades {
+    Capacidades {
+        nativo: false,
+        backend: None,
+        janela_recortada: false,
+    }
+}
+
+/// Miniaturas ao vivo das fontes pedidas, na mesma ordem, como data URLs JPEG.
+/// `None` onde não deu (janela minimizada, conteúdo protegido, fonte que
+/// sumiu): a grade mostra o ícone do app no lugar.
+///
+/// A web chama isto em laço enquanto o seletor está aberto — a próxima
+/// chamada só depois de a anterior voltar, o que dá o ritmo natural (uma
+/// varredura leva de cem milissegundos a um segundo, conforme o número de
+/// janelas). Roda fora da thread principal e uma varredura por vez: duas
+/// sessões de captura da mesma janela ao mesmo tempo é o que o WGC menos
+/// gosta.
+#[tauri::command]
+pub async fn miniaturas_de_tela(ids: Vec<String>) -> Result<Vec<Option<String>>, String> {
+    tauri::async_runtime::spawn_blocking(move || miniaturas(&ids))
+        .await
+        .map_err(|e| format!("falha ao gerar miniaturas: {e}"))
+}
+
+#[cfg(windows)]
+fn miniaturas(ids: &[String]) -> Vec<Option<String>> {
+    use base64::Engine as _;
+    use std::sync::Mutex;
+
+    static UMA_POR_VEZ: Mutex<()> = Mutex::new(());
+    let _guarda = UMA_POR_VEZ.lock().unwrap_or_else(|e| e.into_inner());
+
+    // Quem não resolve (fonte que sumiu) fica de fora da captura e volta
+    // `None` na posição dele — a ordem da resposta é a do pedido.
+    let alvos: Vec<(usize, captura::Alvo)> = ids
+        .iter()
+        .enumerate()
+        .filter_map(|(i, id)| fontes::alvo(id).map(|alvo| (i, alvo)))
+        .collect();
+    let so_alvos: Vec<captura::Alvo> = alvos.iter().map(|(_, alvo)| *alvo).collect();
+    let jpegs = captura::miniaturas(&so_alvos);
+
+    let mut saida: Vec<Option<String>> = vec![None; ids.len()];
+    for ((i, _), jpeg) in alvos.iter().zip(jpegs) {
+        saida[*i] = jpeg.map(|bytes| {
+            format!(
+                "data:image/jpeg;base64,{}",
+                base64::engine::general_purpose::STANDARD.encode(bytes)
+            )
+        });
+    }
+    saida
+}
+
+#[cfg(not(windows))]
+fn miniaturas(ids: &[String]) -> Vec<Option<String>> {
+    vec![None; ids.len()]
 }

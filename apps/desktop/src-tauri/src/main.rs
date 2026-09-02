@@ -52,9 +52,14 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         // `relaunch()` depois de instalar; é o que fecha o ciclo.
         .plugin(tauri_plugin_process::init())
-        // Fontes de compartilhamento de tela. A web só chama isto quando está
+        // Compartilhamento de tela nativo: o que dá para capturar aqui, as
+        // fontes e as miniaturas da grade. A web só chama isto quando está
         // dentro do app; no navegador ela continua no `getDisplayMedia`.
-        .invoke_handler(tauri::generate_handler![tela::fontes_de_tela])
+        .invoke_handler(tauri::generate_handler![
+            tela::capacidades_de_tela,
+            tela::fontes_de_tela,
+            tela::miniaturas_de_tela,
+        ])
         .setup(|app| {
             // --- System tray (bandeja) ---------------------------------------
             // Menu de contexto: "Abrir Streamz" e "Sair".
