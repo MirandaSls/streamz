@@ -41,6 +41,9 @@ export default function DMList() {
   const openModal = useUI((s) => s.openModal);
   const statuses = usePresence((s) => s.statuses);
   const [query, setQuery] = useState("");
+  // busca em repouso imita o botão do Discord: rótulo centrado; ao focar/digitar
+  // o texto volta para a esquerda (`::placeholder` não aceita text-align)
+  const [buscaFocada, setBuscaFocada] = useState(false);
   const [found, setFound] = useState<PublicUser[]>([]);
   // f-voz: conversas com chamada rolando ganham o ícone verde de telefone
   const emChamada = useVoice((s) => s.states);
@@ -142,10 +145,15 @@ export default function DMList() {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => setBuscaFocada(true)}
+          onBlur={() => setBuscaFocada(false)}
           type="search"
           aria-label="Encontrar ou começar uma conversa"
           placeholder="Encontrar ou começar uma conversa"
-          className="h-[30px] w-full rounded-[4px] bg-rail px-1.5 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
+          className={
+            "h-8 w-full rounded-lg bg-rail px-1.5 text-sm text-txt-normal outline-none placeholder:text-txt-muted " +
+            (buscaFocada || query ? "text-left" : "text-center")
+          }
         />
       </div>
 
@@ -155,9 +163,9 @@ export default function DMList() {
           type="button"
           onClick={() => setFriendsOpen(true)}
           aria-current={friendsOpen ? "true" : undefined}
-          className={"mx-2 mb-1 flex h-12 w-[calc(100%-1rem)] items-center gap-3 rounded-lg pl-[10px] pr-2 text-left " + (friendsOpen ? "bg-sel text-txt-primary" : "text-txt-faint hover:bg-hov hover:text-txt-normal")}
+          className={"mx-2 flex h-10 w-[calc(100%-1rem)] items-center gap-3 rounded-lg pl-3 pr-2 text-left " + (friendsOpen ? "bg-sel text-txt-primary" : "text-txt-faint hover:bg-hov hover:text-txt-normal")}
         >
-          <Amigos size={24} aria-hidden="true" className="shrink-0" />
+          <Amigos size={20} aria-hidden="true" className="shrink-0" />
           <span className="flex-1 font-medium">Amigos</span>
           {pendentes > 0 && (
             <span
@@ -171,7 +179,7 @@ export default function DMList() {
 
         {novos.length > 0 && (
           <>
-            <h3 className="pl-[18px] pr-2 pt-4 pb-1 text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">
+            <h3 className="pl-5 pr-5 pt-3 pb-0.5 text-xs font-semibold text-txt-muted">
               Pessoas
             </h3>
             {novos.map((u) => (
@@ -183,7 +191,7 @@ export default function DMList() {
                   setQuery("");
                   void openWith(u.id);
                 }}
-                className="mx-2 flex h-12 w-[calc(100%-1rem)] items-center gap-3 rounded-lg pl-[10px] pr-2 text-left text-txt-faint hover:bg-hov hover:text-txt-normal"
+                className="mx-2 mb-0.5 flex h-12 w-[calc(100%-1rem)] items-center gap-3 rounded-lg pl-[10px] pr-2 text-left text-txt-faint hover:bg-hov hover:text-txt-normal"
               >
                 <Avatar user={u} size="md" status={resolveStatus(statuses, u)} surface="border-panel" />
                 <span className="min-w-0">
@@ -195,8 +203,11 @@ export default function DMList() {
           </>
         )}
 
-        <div className="group flex items-center justify-between pl-[18px] pr-2 pt-4 pb-1">
-          <h3 className="text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted group-hover:text-txt-normal">
+        {/* linha da largura do item (278px), logo antes do título da seção */}
+        <div className="mx-2 mt-3 border-t border-border" />
+
+        <div className="group flex items-center justify-between pl-5 pr-3.5 pt-3 pb-0.5">
+          <h3 className="text-xs font-semibold text-txt-muted group-hover:text-txt-normal">
             Mensagens diretas
           </h3>
           <Tooltip label="Nova conversa">
@@ -206,7 +217,7 @@ export default function DMList() {
               aria-label="Nova conversa"
               className="text-txt-muted transition hover:text-txt-primary"
             >
-              <Plus size={16} />
+              <Plus size={24} />
             </button>
           </Tooltip>
         </div>
@@ -230,7 +241,7 @@ export default function DMList() {
               key={dm.id}
               role="listitem"
               onContextMenu={(e) => openMenu(e, dm, e.currentTarget)}
-              className={`group mx-2 flex h-12 items-center rounded-lg pl-[10px] pr-1 ${
+              className={`group mx-2 mb-0.5 flex h-12 items-center rounded-lg pl-[10px] pr-1 ${
                 active
                   ? "bg-sel text-txt-primary"
                   : unread
