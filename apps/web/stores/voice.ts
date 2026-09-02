@@ -1,17 +1,18 @@
 import { create } from "zustand";
 import {
-  MEDIA_QUALITY,
-  PTT_RELEASE_MS,
-  SCREEN_QUALITY,
-  SCREEN_QUALITY_PADRAO,
-  WS_EVENTS,
   type CallEndedEvent,
   type CallRingEvent,
   type Channel,
+  MEDIA_QUALITY,
+  PTT_RELEASE_MS,
   type PublicUser,
+  SCREEN_QUALITY,
+  SCREEN_QUALITY_PADRAO,
   type ScreenQuality,
+  type VoiceEvictedEvent,
   type VoiceFlags,
   type VoiceStateEvent,
+  WS_EVENTS,
 } from "@streamz/shared";
 import {
   ConnectionState,
@@ -116,6 +117,8 @@ interface VoiceStoreState {
 
   connect: (channel: Pick<Channel, "id" | "guildId" | "name" | "type">) => Promise<void>;
   disconnect: () => Promise<void>;
+  /** O servidor tirou esta conexão da voz: a conta entrou de outro lugar. */
+  expulsoDaVoz: (evento: VoiceEvictedEvent) => void;
   reconnect: () => Promise<void>;
   /** Reentra na sala de voz depois de o socket voltar (ver `useRealtime`). */
   rejoinAposReconexao: () => Promise<void>;
@@ -216,6 +219,16 @@ function carregarAudio(): AudioPrefs {
 const FALHA_MIDIA = "Não foi possível conectar ao servidor de voz.";
 const QUEDA_MIDIA = "A conexão de voz caiu.";
 const SEM_SALA = "Você não está conectado a um canal de voz.";
+
+/**
+ * Expulso porque a conta entrou em voz de outro lugar.
+ *
+ * Antes isto chegava como `QUEDA_MIDIA` — o LiveKit derruba a identidade
+ * repetida, o `RoomEvent.Disconnected` dispara e o handler supõe queda de rede.
+ * Dizer "a conexão caiu" para quem acabou de entrar pelo celular manda a pessoa
+ * investigar a internet quando o app está funcionando exatamente como devia.
+ */
+const OUTRO_LUGAR = "Você entrou na chamada em outro dispositivo.";
 
 /** Resultado de tentar abrir a mídia: falta de configuração ≠ falha. */
 type ResultadoMidia = { tipo: "ok" } | { tipo: "sem-config" } | { tipo: "falha"; erro: string };
@@ -411,6 +424,34 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         telaCheia: false,
         call: CHAMADA_INICIAL,
       });
+    },
+
+    expulsoDaVoz: ({ channelId, novoCanalId }) => {
+      // já tinha saído daqui por conta própria: nada a desfazer
+      if (get().channelId !== channelId) return;
+      // `fecharSala` tira os ouvintes antes de desconectar, então o
+      // `RoomEvent.Disconnected` do LiveKit não vem depois sobrescrever este
+      // texto pelo de queda de mídia
+      fecharSala();
+      useChannels.getState().leaveVoice();
+      set({
+        channelId: null,
+        guildId: null,
+        channelName: "",
+        desde: null,
+        status: "idle",
+        erro: null,
+        midiaDisponivel: false,
+        falando: [],
+        camOn: false,
+        screenOn: false,
+        focado: null,
+      });
+      ui.toast(
+        channelId === novoCanalId
+          ? OUTRO_LUGAR
+          : "Você entrou em outro canal de voz em outro dispositivo.",
+      );
     },
 
     reconnect: async () => {
