@@ -34,12 +34,18 @@ import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
 import { useSettings } from "@/stores/settings";
 import { anchorOf, ui, type MenuItem } from "@/stores/ui";
 
-/** Título de seção da lista ("ONLINE — 3"). */
+/**
+ * Título de seção da lista ("Disponível — 1").
+ *
+ * Medido no print do Discord: 14px, caixa mista, semibold, na cor muted, com o
+ * texto a 20px da borda do painel (o avatar das linhas fica a 18). Era 12px em
+ * caixa alta, o que dava um rótulo de categoria de canal, e não o do Discord.
+ */
 function Section({ label, count, color }: { label: string; count: number; color?: string | null }) {
   return (
     <h3
       style={color ? { color } : undefined}
-      className="mt-6 px-2 pb-1 text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted"
+      className="mt-6 pb-1 pl-5 pr-2 text-sm font-semibold leading-5 text-txt-muted"
     >
       {label} — {count}
     </h3>
@@ -57,7 +63,7 @@ interface Linha {
  *
  * O agrupamento é o do Discord: primeiro uma seção por **cargo com "exibir
  * separadamente"** (`hoist`), do mais alto para o mais baixo, com quem está
- * online; depois "Online" (os demais) e "Offline". Um membro aparece na seção
+ * online; depois "Disponível" (os demais) e "Offline". Um membro aparece na seção
  * do seu cargo hoisted mais alto, e em nenhuma outra.
  *
  * O nome vai na cor do cargo mais alto que tenha cor. Ações de gestão
@@ -92,7 +98,7 @@ export default function MemberList() {
   const offline = live.filter((x) => x.status === "OFFLINE");
 
   // seções por cargo hoisted, do mais alto para o mais baixo; quem sobra cai
-  // em "Online". Offline nunca hoista — é assim no Discord.
+  // em "Disponível". Offline nunca hoista — é assim no Discord.
   const hoisted = roles
     .filter((r) => r.hoist && !r.isDefault)
     .sort((a, b) => b.position - a.position);
@@ -329,7 +335,7 @@ export default function MemberList() {
           <p className="px-4 py-3 text-sm text-txt-muted">Nenhum membro por aqui.</p>
         )}
         {secoes.map((s) => renderSecao(s.role, s.gente))}
-        {restoOnline.length > 0 && <Section label="Online" count={restoOnline.length} />}
+        {restoOnline.length > 0 && <Section label="Disponível" count={restoOnline.length} />}
         {restoOnline.map(renderMember)}
         {offline.length > 0 && <Section label="Offline" count={offline.length} />}
         {offline.map(renderMember)}
