@@ -49,12 +49,22 @@ function abasVisiveis(pendentes: number, bloqueados: number) {
   );
 }
 
-/** Título de seção da lista ("DISPONÍVEL — 3"), com a linha que abre a lista. */
+/**
+ * Título de seção da lista ("Online — 5"), com a linha que abre a lista.
+ *
+ * Medido no print do Discord: 14px, caixa mista, semibold, na cor clara dos
+ * títulos, a 24px da borda (onde a busca começa); a linha de 1px fica 14px
+ * abaixo da caixa do texto, começa 6px mais para dentro que o texto, e a
+ * primeira linha de amigo vem colada nela. Era 12px em caixa alta e muted.
+ */
 function Secao({ label, count }: { label: string; count: number }) {
   return (
-    <h3 className="mx-[30px] mb-2 mt-6 border-b border-border pb-2 text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">
-      {label} — {count}
-    </h3>
+    <>
+      <h3 className="mx-6 mt-6 text-sm font-semibold leading-5 text-txt-primary">
+        {label} — {count}
+      </h3>
+      <div aria-hidden="true" className="mx-[30px] mt-3.5 h-px bg-border" />
+    </>
   );
 }
 
@@ -297,13 +307,14 @@ export default function FriendsPage() {
         {loading && !loaded && <p className="px-6 py-6 text-sm text-txt-muted">Carregando…</p>}
 
         {tab !== "adicionar" && (
-          <div className="relative px-6 pt-4">
+          /* 12px entre a borda do cabeçalho e a busca (medido); era 16 */
+          <div className="relative px-6 pt-3">
             {/* lupa à esquerda: é onde o print põe, e é onde o olho procura o
                 que a caixa faz antes de começar a digitar */}
             <Search
               size={18}
               aria-hidden="true"
-              className="pointer-events-none absolute left-[42px] top-[26px] text-txt-muted"
+              className="pointer-events-none absolute left-[42px] top-[22px] text-txt-muted"
             />
             <input
               value={busca}
