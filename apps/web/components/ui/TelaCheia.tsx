@@ -61,7 +61,7 @@ export interface BuscaDoMenu {
   rotulo: string;
 }
 
-/** Classes de um item do menu lateral, compartilhadas com o rodapé. */
+/** Classes de um item do menu lateral, compartilhadas com o rodapé ("Sair", "Apagar…"). */
 const ITEM_BASE =
   "mb-1 flex h-10 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-base transition";
 const ITEM_REPOUSO = "text-txt-faint hover:bg-hov hover:text-txt-normal";
@@ -363,29 +363,6 @@ export default function TelaCheia({
         </div>
       </div>
     </div>
-  );
-}
-
-/** Item neutro do rodapé da barra lateral (ex.: "Sair"). */
-export function ItemNeutro({
-  onClick,
-  icon,
-  children,
-}: {
-  onClick: () => void;
-  /** fica à *direita* do rótulo, como o "Sair" do Discord. */
-  icon?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <button type="button" onClick={onClick} className={`${ITEM_BASE} ${ITEM_REPOUSO}`}>
-      <span className="min-w-0 flex-1 truncate">{children}</span>
-      {icon && (
-        <span aria-hidden="true" className="shrink-0">
-          {icon}
-        </span>
-      )}
-    </button>
   );
 }
 
