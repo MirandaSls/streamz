@@ -20,12 +20,26 @@ fn main() {
     // equivalente, e a rede de segurança é a do servidor: a carência de voz
     // segura o usuário na sala e o cliente reentra ao voltar
     // (VOICE_RECONNECT_GRACE_MS + `rejoinAposReconexao`).
+    //
+    // `--auto-accept-camera-and-microphone-capture` tira o "permitir microfone
+    // e câmera?" que o WebView2 mostra no `getUserMedia` — o Discord não
+    // pergunta, e a captura já foi autorizada quando a pessoa instalou o app.
+    // É o argumento que o Chromium recomenda no lugar de
+    // `--use-fake-ui-for-media-stream`: este último também sequestra o
+    // `getDisplayMedia` (escolhe uma tela sem abrir o seletor), e o nosso
+    // compartilhamento de tela ainda passa pelo seletor do `getDisplayMedia`
+    // (o módulo `tela` só enumera as fontes). Os dois juntos derrubam o
+    // processo do navegador: são mutuamente exclusivos por `CHECK` em
+    // content/browser/renderer_host/media/media_stream_manager.cc. Nada de
+    // `--use-fake-device-for-media-stream`, que trocaria o microfone real por
+    // um gerador de tom.
     if std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").is_err() {
         std::env::set_var(
             "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
             "--disable-background-timer-throttling \
              --disable-renderer-backgrounding \
-             --disable-backgrounding-occluded-windows",
+             --disable-backgrounding-occluded-windows \
+             --auto-accept-camera-and-microphone-capture",
         );
     }
 
