@@ -3,6 +3,7 @@ import { AccessToken } from "livekit-server-sdk";
 import {
   VOICE_FLAGS_PADRAO,
   WS_EVENTS,
+  identidadeDeTela,
   type VoiceFlags,
   type VoiceStateEvent,
   type VoiceTokenResponse,
@@ -70,6 +71,53 @@ export class VoiceService {
       throw new BadRequestException("Este canal não é de voz");
     }
     return this.assinarToken(this.salaDe(channel.type, channelId), userId, username);
+  }
+
+  /**
+   * Token do **participante de tela** (`<userId>#tela`) para o app de desktop.
+   *
+   * No desktop a captura de tela é nativa (Rust) e publica na sala por uma
+   * segunda conexão LiveKit, separada da do webview. Esse participante só
+   * publica: `canSubscribe: false` (não baixa o áudio de ninguém — a pessoa já
+   * está ouvindo pela conexão principal) e `canPublishData: false` (não é um
+   * cliente, não manda mensagem). A metadata `telaDe` é o dono, para qualquer
+   * consumidor que não queira depender do sufixo do nome.
+   *
+   * Serve canal de voz e conversa direta: a checagem de acesso é a mesma da
+   * chamada (só quem vê o canal), e a sala é a que `salaDe` já calcula. Canal
+   * de texto é recusado como em `join`.
+   */
+  async createScreenToken(
+    channelId: string,
+    userId: string,
+    username: string,
+  ): Promise<VoiceTokenResponse> {
+    const { channel } = await this.guilds.assertCanViewChannel(userId, channelId);
+    if (channel.type === "TEXT") {
+      throw new BadRequestException("Este canal não tem voz");
+    }
+    if (!this.isConfigured()) {
+      throw new ServiceUnavailableException(
+        "Voz (LiveKit) não configurada. Ver PENDENCIAS.md.",
+      );
+    }
+    const room = this.salaDe(channel.type, channelId);
+    const at = new AccessToken(process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!, {
+      identity: identidadeDeTela(userId),
+      // o mesmo nome do dono: um cliente que não conheça o sufixo ainda
+      // mostra "tela de fulano" com o nome certo
+      name: username,
+      metadata: JSON.stringify({ telaDe: userId }),
+      ttl: "1h",
+    });
+    at.addGrant({
+      room,
+      roomJoin: true,
+      canPublish: true,
+      canSubscribe: false,
+      canPublishData: false,
+    });
+    return { token: await at.toJwt(), url: process.env.LIVEKIT_URL!, room };
   }
 
   /** Nome da sala no LiveKit: prefixo `voice:` num canal de servidor, `dm:` numa conversa. */
