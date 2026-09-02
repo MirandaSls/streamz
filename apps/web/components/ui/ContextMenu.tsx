@@ -56,10 +56,15 @@ function ItemDeslizante({ item }: { item: Extract<MenuItem, { slider: object }> 
   );
 }
 
-/** Largura padrão — a dos menus de mensagem, canal e membro do Discord. */
-export const MENU_WIDTH = 188;
-/** Menus com rótulos longos (dropdown do servidor). */
-export const MENU_WIDTH_WIDE = 220;
+/**
+ * Largura dos menus do Discord, medida nos prints: 220 no menu do servidor
+ * (`124207`, x=116..335) e 222 no menu de mensagem (`124022`, x=992..1213),
+ * borda de 1px incluída. Antes eram duas larguras (188 e 220); os dois prints
+ * dizem que é uma só.
+ */
+export const MENU_WIDTH = 220;
+/** Mesma largura: fica exportado porque os chamadores ainda distinguem os dois. */
+export const MENU_WIDTH_WIDE = MENU_WIDTH;
 
 const EDGE = 8;
 /** o submenu abre depois de uma pausa: passar o mouse por cima não dispara. */
@@ -250,14 +255,14 @@ function Painel({
           width: largura,
           transformOrigin: pos?.origem ?? "left top",
         }}
-        className={`fixed z-[80] rounded-md border border-border/70 bg-overlay p-1.5 shadow-high anim-menu ${
+        className={`fixed z-[80] rounded-lg border border-border/70 bg-overlay p-2 shadow-high anim-menu ${
           pos ? "" : "invisible"
         }`}
         onContextMenu={(e) => e.preventDefault()}
       >
         {items.map((item, i) => {
           if ("separator" in item) {
-            return <div key={i} role="separator" className="my-1 h-px bg-border" />;
+            return <div key={i} role="separator" className="my-2 h-px bg-border" />;
           }
           if (isSlider(item)) {
             return <ItemDeslizante key={i} item={item} />;
@@ -305,19 +310,37 @@ function Painel({
                 onClose();
                 item.onSelect();
               }}
-              className={`flex h-8 w-full items-center gap-2 whitespace-nowrap rounded-[3px] px-2 text-left text-sm font-medium outline-none disabled:opacity-40 ${cor} ${
+              className={`flex h-9 w-full items-center gap-2 whitespace-nowrap rounded-[4px] px-2 text-left text-sm font-medium outline-none disabled:opacity-40 ${cor} ${
                 aberto === i ? "bg-accent text-accent-ink" : ""
               }`}
             >
+              {item.icon ? (
+                // caixa de 20px como a do Discord: o chamador manda o ícone no
+                // tamanho que quiser (18 ou 20) e ele sai sempre no mesmo quadro
+                <span
+                  aria-hidden="true"
+                  className="grid h-5 w-5 shrink-0 place-items-center opacity-80 [&>svg]:h-5 [&>svg]:w-5"
+                >
+                  {item.icon as ReactNode}
+                </span>
+              ) : null}
+              {!filho && item.dot && (
+                <span
+                  aria-hidden="true"
+                  style={{ backgroundColor: item.dot }}
+                  className="h-2 w-2 shrink-0 rounded-full"
+                />
+              )}
+              <span className="flex-1">{item.label}</span>
               {controle === "checkbox" && (
                 <span
                   aria-hidden="true"
-                  className={`grid h-4 w-4 shrink-0 place-items-center rounded-[3px] border-2 ${
+                  className={`grid h-5 w-5 shrink-0 place-items-center rounded-[4px] border ${
                     marcado ? "border-current bg-current" : "border-current opacity-60"
                   }`}
                 >
                   {marcado && (
-                    <svg viewBox="0 0 12 12" className="h-3 w-3 text-overlay">
+                    <svg viewBox="0 0 12 12" className="h-3.5 w-3.5 text-overlay">
                       <path
                         d="M2.5 6.2 4.8 8.5 9.5 3.8"
                         fill="none"
@@ -330,14 +353,6 @@ function Painel({
                   )}
                 </span>
               )}
-              {!filho && item.dot && (
-                <span
-                  aria-hidden="true"
-                  style={{ backgroundColor: item.dot }}
-                  className="h-2 w-2 shrink-0 rounded-full"
-                />
-              )}
-              <span className="flex-1">{item.label}</span>
               {controle === "radio" && (
                 <span
                   aria-hidden="true"
@@ -348,11 +363,7 @@ function Painel({
                   {marcado && <span className="h-2 w-2 rounded-full bg-current" />}
                 </span>
               )}
-              {filho ? (
-                <ChevronRight size={16} className="shrink-0 opacity-80" />
-              ) : item.icon ? (
-                <span className="shrink-0 opacity-80">{item.icon as ReactNode}</span>
-              ) : null}
+              {filho && <ChevronRight size={16} className="shrink-0 opacity-80" />}
             </button>
           );
         })}
@@ -361,9 +372,10 @@ function Painel({
         <Painel
           items={(items[aberto] as Extract<MenuItem, { submenu: MenuItem[] }>).submenu}
           largura={largura}
-          // submenu encosta no item, com 4px de sobreposição, como no Discord
+          // submenu encosta no item, com 4px de sobreposição, como no Discord;
+          // sobe o padding (8) e a borda (1) para o primeiro filho alinhar com o pai
           x={ancora.right - 4}
-          y={ancora.top - 6}
+          y={ancora.top - 9}
           alternativoX={ancora.left + 4}
           onClose={onClose}
           autoFoco={false}
@@ -374,9 +386,12 @@ function Painel({
 }
 
 /**
- * Menu de contexto (botão direito) no estilo do Discord: caixa escura, itens
- * de 32px, hover cheio, submenus com chevron. Um só na tela, aberto por
- * `ui.openContextMenu(x, y, items, largura)`.
+ * Menu de contexto (botão direito) no estilo do Discord: caixa escura de 220
+ * com raio 8 e padding 8, itens de 36px com o ícone de 20 à esquerda do rótulo,
+ * hover cheio, submenus com chevron. Um só na tela, aberto por
+ * `ui.openContextMenu(x, y, items, largura)`. Medidas dos prints `124207` e
+ * `124022`: separador de 1px com 8 de folga de cada lado, item de 204x36
+ * (raio 4), caixa de marcar de 20 à direita.
  *
  * Fecha com Esc, clique fora, rolagem ou redimensionamento — qualquer coisa que
  * deixaria o menu solto longe do que o abriu.

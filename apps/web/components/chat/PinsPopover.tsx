@@ -31,7 +31,9 @@ export default function PinsPopover({
       label="Mensagens fixadas"
       title="Mensagens Fixadas"
       contagem={items.length}
-      icon={<Pin size={20} />}
+      // 21 para 18,5 de tinta (bbox do caminho: 70,5 do quadro de 80), a
+      // mesma dos vizinhos do cabeçalho (`Users` a 22 → 18,3; Discord 18)
+      icon={<Pin size={21} />}
       onOpen={() => void load(channelId)}
     >
       {(fechar) => (

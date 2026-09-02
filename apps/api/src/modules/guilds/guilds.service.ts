@@ -574,6 +574,32 @@ export class GuildsService {
     return dto;
   }
 
+  /**
+   * Remove o ícone (o rail volta para a sigla). MANAGE_GUILD, como a troca.
+   *
+   * A URL zera junto com a chave: ela é derivada da chave, e deixá-la faria o
+   * `<img>` de todo mundo apontar para um proxy que agora responde 404. O
+   * arquivo sai do storage depois de o banco já não o referenciar, na mesma
+   * ordem da troca — se apagar falhar, sobra um objeto órfão, não um ícone
+   * quebrado.
+   */
+  async removeIcon(actorId: string, guildId: string): Promise<Guild> {
+    await this.assertCanModerate(actorId, guildId, Permission.MANAGE_GUILD);
+    const antes = await this.prisma.guild.findUnique({
+      where: { id: guildId },
+      select: { iconKey: true },
+    });
+    const guild = await this.prisma.guild.update({
+      where: { id: guildId },
+      data: { iconKey: null, iconUrl: null },
+    });
+    if (antes?.iconKey) await this.storage.delete(antes.iconKey);
+
+    const dto = toGuildDTO(guild);
+    this.realtime.emitToGuild(guildId, WS_EVENTS.GUILD_UPDATED, dto);
+    return dto;
+  }
+
   /** Corpo + content-type do ícone para o proxy público (GET /guilds/:id/icon). */
   async iconStream(guildId: string): Promise<{ body: Readable; contentType: string }> {
     const g = await this.prisma.guild.findUnique({

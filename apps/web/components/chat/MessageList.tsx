@@ -62,10 +62,48 @@ function marcarLidas(channelId: string) {
 
 export interface Welcome {
   icon: ReactNode;
+  /**
+   * O ícone já é a figura inteira (o avatar de 80px da conversa direta) e não
+   * vai dentro do círculo de 68px do canal.
+   */
+  semCirculo?: boolean;
   title: string;
-  description: string;
-  /** fileira de ações abaixo da descrição ("Editar canal", "Convidar amigos"). */
+  /** linha logo abaixo do título — o username na conversa direta (20px/600). */
+  subtitle?: string;
+  /** aceita nó porque a DM põe o nome do contato em negrito. */
+  description: ReactNode;
+  /**
+   * O que vem abaixo da descrição ("Editar canal"; "Nenhum servidor em comum ·
+   * Desfazer amizade · Bloquear"). Quem chama traz a margem: a distância medida
+   * no Discord difere entre canal e DM.
+   */
   actions?: ReactNode;
+}
+
+/**
+ * Botão da fileira do início do canal/conversa, medido no Discord: 32px de
+ * altura, raio 8, 12px de padding lateral, texto 14/600, lápis de 16px com 6px
+ * até o texto.
+ */
+export function BotaoBoasVindas({
+  icon,
+  label,
+  onClick,
+}: {
+  icon?: ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex h-8 items-center gap-1.5 rounded-lg bg-panel px-3 text-sm font-semibold text-txt-normal transition hover:bg-hov hover:text-txt-primary"
+    >
+      {icon && <span aria-hidden="true">{icon}</span>}
+      {label}
+    </button>
+  );
 }
 
 /** Onde está o divisor de não lidas em relação à parte visível da lista. */
@@ -203,15 +241,29 @@ export default function MessageList({
 
         {atStart && welcome && (
           <div className="mx-4 mt-4">
-            <div className="grid h-[68px] w-[68px] place-items-center rounded-full bg-border text-txt-primary">
-              {welcome.icon}
-            </div>
+            {welcome.semCirculo ? (
+              welcome.icon
+            ) : (
+              <div className="grid h-[68px] w-[68px] place-items-center rounded-full bg-border text-txt-primary">
+                {welcome.icon}
+              </div>
+            )}
+            {/* Distâncias medidas no Discord, do topo da tinta ao topo da tinta:
+                figura → título 17px, título → subtítulo 44px (canal) e 45px
+                (nome → username na DM), username → descrição 48px. As margens
+                descontam a metade da entrelinha e a folga do ascendente de cada
+                fonte; sem app aberto, o resultado é aritmética, não render. */}
             {/* nome de canal é conteúdo: Archivo sim, caixa-alta não. */}
-            <h2 className="mt-3 font-display text-[32px] font-extrabold leading-10 tracking-wordmark text-txt-primary">
+            <h2 className="mt-2 font-display text-[32px] font-extrabold leading-10 tracking-wordmark text-txt-primary">
               {welcome.title}
             </h2>
-            <p className="text-txt-muted">{welcome.description}</p>
-            {welcome.actions && <div className="mt-3 flex flex-wrap gap-2">{welcome.actions}</div>}
+            {welcome.subtitle && (
+              <p className="mt-1.5 text-xl font-semibold leading-7 text-txt-primary">{welcome.subtitle}</p>
+            )}
+            <p className={`${welcome.subtitle ? "mt-5" : "mt-1.5"} text-txt-muted`}>
+              {welcome.description}
+            </p>
+            {welcome.actions}
           </div>
         )}
 

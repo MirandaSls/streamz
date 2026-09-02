@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  Children,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { X } from "@/components/ui/icones";
 
@@ -20,6 +28,12 @@ import { X } from "@/components/ui/icones";
  * barra de controles da chamada (`-translate-x-1/2 backdrop-blur`): o modal
  * nascia ancorado na pílula de controles e saía da tela. Sair da árvore é o que
  * torna o centro do modal independente de onde ele foi aberto.
+ *
+ * Forma medida nos prints do Discord (`2026-08-31 124114`, confirmação, e
+ * `2026-09-02 152402`, "Nova mensagem"): caixa de 480 com borda de 1px e raio
+ * 8; padding de 24 em volta; título de 20/700, descrição de 16 em linha de 20
+ * a 8 do título; "×" de 24 a 16 do canto; botões de 40 com raio 8 e 8 entre
+ * eles, "Cancelar" com fundo cinza; rodapé na mesma cor do corpo, sem faixa.
  */
 
 const FOCUSABLE =
@@ -35,7 +49,8 @@ export default function Dialog({
   showClose = true,
   align = "center",
   bodyClassName = "",
-  className = "w-[440px]",
+  semPadding = false,
+  className = "w-[480px]",
 }: {
   title: string;
   description?: string;
@@ -49,7 +64,10 @@ export default function Dialog({
   /** o quick switcher fica no terço superior, não no centro. */
   align?: "center" | "top";
   bodyClassName?: string;
-  /** largura da caixa (o padrão do Discord é 440px). */
+  /** o corpo sem padding nenhum: perfil e boas-vindas pintam a caixa inteira
+   *  (faixa de cor até a borda) e cuidam do próprio respiro. */
+  semPadding?: boolean;
+  /** largura da caixa: 480 medidos no Discord, borda de 1px incluída. */
   className?: string;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -101,6 +119,10 @@ export default function Dialog({
 
   if (!montado) return null;
 
+  // sem corpo (um confirm sem prévia) a descrição encosta direto no rodapé;
+  // `toArray` descarta `false`/`null` que um `{cond && ...}` deixa para trás
+  const temCorpo = Children.toArray(children).length > 0;
+
   return createPortal(
     <div
       className={`fixed inset-0 z-50 grid justify-items-center bg-black/85 p-4 anim-overlay ${
@@ -118,7 +140,7 @@ export default function Dialog({
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         onKeyDown={handleKeyDown}
-        className={`relative flex max-h-[85vh] max-w-full flex-col overflow-hidden rounded-lg bg-chat shadow-high outline-none anim-modal ${className}`}
+        className={`relative flex max-h-[85vh] max-w-full flex-col overflow-hidden rounded-lg border border-border bg-chat shadow-high outline-none anim-modal ${className}`}
       >
         {/* cabeçalho fica fora da área rolável: no Discord ele não sobe junto */}
         {hideHeader ? (
@@ -126,7 +148,7 @@ export default function Dialog({
             {title}
           </h2>
         ) : (
-          <div className="shrink-0 px-4 pt-4">
+          <div className="shrink-0 px-6 pt-6">
             <h2
               id={titleId}
               className="pr-8 font-display text-xl font-bold tracking-title text-txt-primary"
@@ -134,7 +156,7 @@ export default function Dialog({
               {title}
             </h2>
             {description && (
-              <p id={descriptionId} className="mt-1 text-sm text-txt-muted">
+              <p id={descriptionId} className="mt-2 text-base leading-5 text-txt-muted">
                 {description}
               </p>
             )}
@@ -147,13 +169,29 @@ export default function Dialog({
             aria-label="Fechar"
             className="absolute right-4 top-4 z-10 grid h-6 w-6 place-items-center rounded text-txt-muted transition hover:text-txt-primary"
           >
-            <X size={20} />
+            <X size={24} />
           </button>
         )}
         {/* só o corpo rola; o rodapé fica sempre à vista */}
-        <div className={`min-h-0 flex-1 overflow-y-auto p-4 ${bodyClassName}`}>{children}</div>
+        {/* sem cabeçalho o corpo mantém os 16 do quick switcher; quem pinta a
+            caixa inteira pede `semPadding` em vez de anular com margem negativa
+            (a margem dependia do padding daqui, e sobraria uma faixa de 8 de
+            cada lado com o corpo em 24) */}
+        {temCorpo && (
+          <div
+            className={`min-h-0 flex-1 overflow-y-auto ${
+              semPadding ? "" : hideHeader ? "p-4" : "px-6 py-4"
+            } ${bodyClassName}`}
+          >
+            {children}
+          </div>
+        )}
         {footer && (
-          <div className="flex shrink-0 flex-row-reverse items-center gap-3 bg-panel px-4 py-4 shadow-[0_-1px_0_rgba(0,0,0,.2)]">
+          <div
+            className={`flex shrink-0 flex-row-reverse items-center gap-2 px-6 pb-6 ${
+              temCorpo ? "pt-2" : "pt-6"
+            }`}
+          >
             {footer}
           </div>
         )}
@@ -186,7 +224,7 @@ export function PrimaryButton({
       onClick={onClick}
       disabled={disabled}
       data-autofocus={autoFocus ? "" : undefined}
-      className={`h-[38px] min-w-24 rounded-[3px] px-4 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+      className={`h-10 min-w-24 rounded-lg px-4 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
         danger
           ? "bg-red text-white hover:bg-red-hover"
           : "bg-accent text-accent-ink hover:bg-accent-hover"
@@ -197,7 +235,7 @@ export function PrimaryButton({
   );
 }
 
-/** Botão secundário (cancelar/fechar). */
+/** Botão secundário (cancelar/fechar): fundo cinza, como o "Cancelar" do Discord. */
 export function SecondaryButton({
   children,
   onClick,
@@ -215,8 +253,8 @@ export function SecondaryButton({
       type="button"
       onClick={onClick}
       data-autofocus={autoFocus ? "" : undefined}
-      className={`h-[38px] min-w-24 rounded-[3px] px-4 text-sm font-medium text-txt-normal transition hover:underline ${
-        full ? "w-full bg-border-strong hover:bg-border-strong-hover hover:no-underline" : ""
+      className={`h-10 min-w-24 rounded-lg bg-border-strong px-4 text-sm font-medium text-txt-normal transition hover:bg-border-strong-hover ${
+        full ? "w-full" : ""
       }`}
     >
       {children}

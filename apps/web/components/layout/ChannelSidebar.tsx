@@ -104,14 +104,21 @@ function CategoryHeader({
         type="button"
         onClick={onToggle}
         aria-expanded={!collapsed}
-        className="flex min-w-0 flex-1 items-center gap-0.5 pl-2 font-display text-sm font-bold tracking-[0.02em] text-txt-muted hover:text-txt-normal"
+        /*
+          Fonte do corpo e peso médio, não a de display em negrito: medido, o
+          Discord usa a mesma família do resto da coluna aqui. E o chevron vem
+          **depois** do texto, não antes — o texto começa em x=100, alinhado com
+          o nome do servidor acima e com o `#` dos canais abaixo. Com o chevron
+          na frente, essa coluna de alinhamento se perdia.
+        */
+        className="flex min-w-0 flex-1 items-center gap-1 pl-2.5 text-sm font-medium text-txt-muted hover:text-txt-normal"
       >
-        {collapsed ? (
-          <ChevronRight size={12} aria-hidden="true" />
-        ) : (
-          <ChevronDown size={12} aria-hidden="true" />
-        )}
         <span className="truncate">{label}</span>
+        {collapsed ? (
+          <ChevronRight size={12} className="shrink-0" aria-hidden="true" />
+        ) : (
+          <ChevronDown size={12} className="shrink-0" aria-hidden="true" />
+        )}
       </button>
       {onCreate && (
         <Tooltip label="Criar canal">
@@ -463,6 +470,8 @@ export default function ChannelSidebar() {
     // canal de voz entra na conta do não lido como qualquer outro: o chat de
     // texto dele é real, e mensagem lá não pode passar despercebida
     const unread = !active && !silenciado && isUnread(channel);
+    // conectado à voz **deste** canal: no Discord ganha ícone verde e nome branco
+    const conectadoAqui = vozAqui === channel.id;
     const arrastando = arrasto?.tipo === "canal" && arrasto.id === channel.id;
     return (
       <div key={channel.id}>
@@ -528,7 +537,7 @@ export default function ChannelSidebar() {
               aria-label={`Criar convite para ${name}`}
               className="grid h-6 w-6 place-items-center rounded text-txt-muted opacity-0 transition hover:text-txt-primary group-hover:opacity-100 focus-visible:opacity-100"
             >
-              <UserPlus size={16} />
+              <UserPlus size={18} />
             </button>
           </Tooltip>
           {canModerate && (
@@ -539,7 +548,7 @@ export default function ChannelSidebar() {
                 aria-label={`Editar ${name}`}
                 className="grid h-6 w-6 place-items-center rounded text-txt-muted opacity-0 transition hover:text-txt-primary group-hover:opacity-100 focus-visible:opacity-100"
               >
-                <Settings size={16} />
+                <Settings size={18} />
               </button>
             </Tooltip>
           )}
@@ -632,22 +641,45 @@ export default function ChannelSidebar() {
 
   return (
     <aside className="flex w-[294px] shrink-0 flex-col bg-panel">
-      <button
-        type="button"
-        onClick={openGuildMenu}
-        disabled={!guild}
-        aria-haspopup="menu"
-        aria-expanded={menuAberto}
-        className="flex h-[49px] shrink-0 items-center justify-between border-b border-border px-4 font-semibold text-txt-primary shadow-header transition hover:bg-hov disabled:cursor-default disabled:hover:bg-transparent"
-      >
-        <span className="truncate">{guild?.name ?? "Selecione um servidor"}</span>
-        {guild &&
-          (menuAberto ? (
-            <X size={18} aria-hidden="true" className="shrink-0 text-txt-secondary" />
-          ) : (
-            <ChevronDown size={18} aria-hidden="true" className="shrink-0 text-txt-secondary" />
-          ))}
-      </button>
+      {/*
+        O cabeçalho deixa de ser um botão só. No Discord o chevron fica **colado
+        ao nome**, não na extremidade, e sobra a ponta direita para o botão de
+        convidar — que a gente não tinha em lugar nenhum visível, só enterrado
+        no menu de contexto.
+
+        Botão dentro de botão não é HTML válido, então o que era um vira dois
+        irmãos: o do menu ocupa o espaço do nome, o de convidar fica ao lado.
+      */}
+      <div className="flex h-[49px] shrink-0 items-center border-b border-border pl-5 pr-3 shadow-header">
+        <button
+          type="button"
+          onClick={openGuildMenu}
+          disabled={!guild}
+          aria-haspopup="menu"
+          aria-expanded={menuAberto}
+          className="-ml-1 flex min-w-0 flex-1 items-center gap-1.5 rounded-[4px] py-1 pl-1 pr-2 text-left font-semibold text-txt-primary transition hover:bg-hov disabled:cursor-default disabled:hover:bg-transparent"
+        >
+          <span className="truncate">{guild?.name ?? "Selecione um servidor"}</span>
+          {guild &&
+            (menuAberto ? (
+              <X size={14} aria-hidden="true" className="shrink-0 text-txt-secondary" />
+            ) : (
+              <ChevronDown size={14} aria-hidden="true" className="shrink-0 text-txt-secondary" />
+            ))}
+        </button>
+        {guild && (
+          <Tooltip label="Convidar pessoas">
+            <button
+              type="button"
+              onClick={() => void createInvite()}
+              aria-label={`Convidar pessoas para ${guild.name}`}
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-[4px] text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
+            >
+              <UserPlus size={20} />
+            </button>
+          </Tooltip>
+        )}
+      </div>
 
       <div
         ref={listRef}
@@ -666,8 +698,8 @@ export default function ChannelSidebar() {
         {semCategorias
           ? // servidor que nunca criou categoria: rótulos por tipo, um bloco só
             [
-              { chave: "tipo:texto", label: "Canais de texto", channels: texto },
-              { chave: "tipo:voz", label: "Canais de voz", channels: voz },
+              { chave: "tipo:texto", label: "Canais de Texto", channels: texto },
+              { chave: "tipo:voz", label: "Canais de Voz", channels: voz },
             ].map((v) => renderGrupo(grupos[0], -1, v))
           : grupos.map((grupo, i) => renderGrupo(grupo, i - 1))}
       </div>

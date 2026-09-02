@@ -110,11 +110,12 @@ export default function UserProfileModal({
     <Dialog
       title={`Perfil de ${nome}`}
       hideHeader
+      semPadding
       showClose={false}
       onClose={closeModal}
       className="w-[600px]"
     >
-      <div className="-m-4">
+      <div>
         <div className="relative">
           {profile.bannerUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -299,8 +300,8 @@ function Selo({ titulo, valor }: { titulo: string; valor: string }) {
  */
 function Esqueleto({ erro, onClose }: { erro: string | null; onClose: () => void }) {
   return (
-    <Dialog title="Perfil" hideHeader onClose={onClose} className="w-[600px]">
-      <div className="-m-4">
+    <Dialog title="Perfil" hideHeader semPadding onClose={onClose} className="w-[600px]">
+      <div>
         <div className="h-[120px] w-full animate-pulse bg-panel" />
         <div className="px-4 pb-4">
           <div className="-mt-12 mb-3 w-fit rounded-full border-[6px] border-chat">

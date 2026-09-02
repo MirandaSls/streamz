@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { MAX_GUILD_DESCRIPTION, type GuildOnboarding } from "@streamz/shared";
 import { useAlteracoesNaoSalvas } from "@/components/ui/alteracoes";
 import { Select } from "@/components/ui/controls";
-import Tooltip from "@/components/ui/Tooltip";
 import { ESTILO_AREA, ESTILO_CAMPO, ESTILO_ROTULO } from "@/components/settings/campos";
 import { api } from "@/lib/api";
 import { useChannels } from "@/stores/channels";
@@ -33,7 +32,8 @@ function acronym(name: string): string {
  *
  * Salvar é da barra de alterações não salvas do shell. O ícone é a exceção:
  * upload não tem "desfazer" local, então ele vale no instante em que o arquivo
- * é escolhido, como no Discord.
+ * é escolhido, como no Discord. Remover também vale na hora, mas passa por uma
+ * confirmação: não há como voltar atrás depois que o arquivo sai do storage.
  */
 export default function ServerSettingsOverview({ guildId }: { guildId: string }) {
   const guild = useGuilds((s) => s.guilds.find((g) => g.id === guildId) ?? null);
@@ -121,6 +121,24 @@ export default function ServerSettingsOverview({ guildId }: { guildId: string })
     }
   }
 
+  async function removeIcon() {
+    const ok = await ui.confirm({
+      title: "Remover o ícone do servidor?",
+      message: "O servidor volta a aparecer pela sigla do nome. Não dá para desfazer.",
+      confirmLabel: "Remover o ícone",
+      danger: true,
+    });
+    if (!ok) return;
+    setUploading(true);
+    try {
+      handleGuildUpdated(await api.removeGuildIcon(guildId));
+    } catch (e) {
+      ui.toast(errorMessage(e, "Não foi possível remover o ícone"), "error");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   const nomeNaPrevia = name.trim() || guild.name;
 
   return (
@@ -168,19 +186,17 @@ export default function ServerSettingsOverview({ guildId }: { guildId: string })
           >
             {uploading ? "Enviando…" : "Altere o ícone do servidor"}
           </button>
-          {/* A API não tem rota para apagar o ícone. O botão existe como no
-              Discord — visual, inerte, com tooltip — pela regra de §6.6 do
-              processo; ganha função quando a rota existir. */}
+          {/* Só aparece quando há o que remover, como no Discord. Compartilha o
+              `uploading` com a troca: as duas mexem no mesmo arquivo. */}
           {guild.iconUrl && (
-            <Tooltip label="Em breve">
-              <button
-                type="button"
-                aria-disabled="true"
-                className="h-8 shrink-0 rounded-lg bg-border-strong px-3 text-sm font-medium text-red transition hover:bg-border-strong-hover"
-              >
-                Remover o ícone
-              </button>
-            </Tooltip>
+            <button
+              type="button"
+              disabled={uploading}
+              onClick={() => void removeIcon()}
+              className="h-8 shrink-0 rounded-lg bg-border-strong px-3 text-sm font-medium text-red transition hover:bg-border-strong-hover disabled:opacity-50"
+            >
+              Remover o ícone
+            </button>
           )}
         </div>
 

@@ -129,6 +129,10 @@ function estiloSeta(p: Posicao): React.CSSProperties {
 /**
  * Tooltip escuro com seta, como o do Discord.
  *
+ * Medido no print `2026-09-02 152343` ("Ver pedidos de amizade"): 34 de
+ * altura com borda de 1px, texto de 14/600 em linha de 16, padding 8x12, raio
+ * 8, seta de 6 sem borda.
+ *
  * Renderiza em portal e calcula a posição na hora: qualquer ancestral com
  * `overflow-hidden` (popovers, pickers, o cabeçalho do canal) cortaria uma
  * caixa posicionada por CSS puro. `shortcut` desenha a tecla ao lado do rótulo,
@@ -221,12 +225,12 @@ export default function Tooltip({
               left: pos?.left ?? 0,
               visibility: pos ? "visible" : "hidden",
             }}
-            className="pointer-events-none fixed z-[100] max-w-[280px] rounded-lg bg-rail px-2.5 py-1.5 text-sm font-semibold text-txt-primary shadow-high anim-menu"
+            className="pointer-events-none fixed z-[100] max-w-[280px] rounded-lg border border-border bg-rail px-3 py-2 text-sm font-semibold leading-4 text-txt-primary shadow-high anim-menu"
           >
             <span className="flex items-center gap-2">
               <span>{label}</span>
               {shortcut && (
-                <kbd className="rounded bg-panel px-1.5 py-0.5 font-sans text-[11px] font-semibold text-txt-muted">
+                <kbd className="rounded bg-panel px-1.5 py-0.5 font-sans text-[11px] font-semibold leading-none text-txt-muted">
                   {shortcut}
                 </kbd>
               )}

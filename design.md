@@ -57,7 +57,7 @@ App de **3 colunas** fixas sobre a área principal (`app/app/page.tsx`):
   esquerda (`h-5` no hover, `h-10` ativo); tooltip à direita. Botões "novo" em
   `green`. Separador de 2px `rail-divider`.
 - **Coluna 2** (`w-60`, `bg-panel`): cabeçalho de **48px** com `shadow-header`
-  (nome do servidor + chevron → menu); categorias em caixa mista 14px
+  (nome do servidor + chevron → menu); categorias em caixa mista 14px, fonte do corpo, chevron **depois** do texto
   (`text-txt-muted`) colapsáveis; item de canal de **36px** (`h-9`, raio 8), ícone 20px
   `text-txt-faint`, hover `bg-hov text-txt-normal`, ativo `bg-sel text-txt-primary`.
   **Card do usuário** (58px, raio 8, borda 1px, `bg-footer`): avatar com status,
@@ -146,11 +146,16 @@ Duas regras que o pacote de marca não escreve e o produto precisa:
 
 ## Espaçamento e forma
 
-- Grid base de 4px. Cabeçalhos 48px; itens de lista 32px (canal) / 42px (DM,
+- Grid base de 4px. Cabeçalhos 48px; itens de lista 36px (canal) / 42px (DM,
   membro); botões de ícone 24–32px; composer 44px de altura mínima.
-- Raios: itens de lista e botões `rounded-[3px]`/`rounded-[4px]`; composer,
-  cards e modais `rounded-lg`/`rounded-[5px]`; rail `rounded-[24px]`→`rounded-2xl`;
-  avatares `rounded-full`.
+- **Botões de ação**: 32 de altura nas configurações (#57) e 40 nos modais
+  (#59), raio 8 (`rounded-lg`), 12/16 de respiro lateral. **Campos**: 40 de
+  altura, raio 8, borda de 1px `border` que vira `accent` no foco
+  (`settings/campos.tsx`, #57).
+- Raios: raio 8 (`rounded-lg`) em botões, campos, itens de lista, cards,
+  composer, modal, menu e tooltip; rail `rounded-2xl`; avatares
+  `rounded-full`. Sobras de `rounded-[3px]`/`rounded-[4px]` em pílulas e chips
+  antigos ainda existem e saem tela a tela, nunca em massa.
 - Sombras: `shadow-header` sob cabeçalhos de 48px; `shadow-high` em menus,
   popovers, tooltips e modais.
 
@@ -173,16 +178,23 @@ Duas regras que o pacote de marca não escreve e o produto precisa:
 - **Composer**: caixa `bg-input rounded-lg` com `CirclePlus` (anexo) à esquerda e
   presente / GIF / figurinha / emoji à direita; contador só a partir de 90% do
   teto. Sem dica textual de teclado. Preview de anexo em cards de 184px.
-- **Modal** (`Dialog`): corpo `bg-chat` (`p-4`, título 20px), rodapé `bg-panel`
-  com botão primário à direita (`h-[38px] rounded-[3px] bg-accent`) e "Cancelar"
-  como texto com sublinhado no hover. Overlay `bg-black/60`, Esc/clique fora fecham.
-- **Menu de contexto** (`ContextMenuHost`): `bg-overlay`, itens de 32px, hover
-  `bg-accent text-accent-ink` (ou `bg-red` para destrutivo), separadores
-  `border`.
+- **Modal** (`Dialog`, #59): caixa de 480 (borda de 1px incluída), raio 8,
+  `bg-chat`, padding de 24; título 20px 700, descrição 16px em linha de 20 a 8
+  do título, "×" de 24 a 16 do canto. Rodapé na mesma cor do corpo, sem faixa:
+  botões de 40 com raio 8 e 8 entre eles — primário `bg-accent` à direita
+  (`PrimaryButton`), "Cancelar" com fundo `border-strong` (`SecondaryButton`).
+  Overlay `bg-black/85`, Esc/clique fora fecham. `semPadding` para quem pinta a
+  caixa inteira (perfil, boas-vindas).
+- **Menu de contexto** (`ContextMenuHost`, #59): caixa de 220 (borda incluída),
+  raio 8, `bg-overlay` com `p-2`, itens de 32px, hover `bg-accent
+  text-accent-ink` (ou `bg-red` para destrutivo), separadores `border`.
 - **Popover de perfil** (`ProfilePopoverHost`): 300px, faixa `accent` de 60px,
   avatar 80px sobreposto, card `bg-footer` com nome, @usuário, status e "Enviar
   mensagem".
-- **Tooltip** (`Tooltip`): `bg-rail`, 14px 600, seta, hover e foco.
+- **Tooltip** (`Tooltip`, #59): 34 de altura (14px 600 em linha de 16, 8 de
+  respiro vertical, borda de 1px), raio 8, `bg-rail`, seta, hover e foco.
+- **Mensagem no hover** (#60): barra de ações com raio 8, botões de 28 e borda
+  clara; composer a 10px do fundo, sem faixa reservada para o "digitando…".
 - **Avatar** (`Avatar`): iniciais sobre uma das 5 cores do avatar — nenhuma
   verde-limão, para não competir com o accent nem com o status (hash do id);
   bolinha de status com borda na cor da superfície (`surface`).
