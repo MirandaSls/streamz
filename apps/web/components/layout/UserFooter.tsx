@@ -157,10 +157,10 @@ export default function UserFooter() {
      * `pb` na lista (ver `DMList` e `ChannelSidebar`) é o que garante que o
      * último item ainda seja alcançável por baixo do card.
      */
-    <div className="pointer-events-none absolute inset-x-2.5 bottom-2.5 z-20 flex flex-col gap-2">
+    <div className="pointer-events-auto absolute inset-x-2.5 bottom-2.5 z-20 flex flex-col overflow-hidden rounded-lg border border-border bg-footer">
       {/* f-voz: a barra da call sobe junto, como parte da mesma pilha flutuante */}
       <VoiceConnectedBar />
-      <div className="pointer-events-auto flex h-[58px] shrink-0 items-center gap-2 rounded-lg border border-border bg-footer px-3.5">
+      <div className="flex h-[58px] shrink-0 items-center gap-2 px-3.5">
         <button
           type="button"
           onClick={(e) => openProfile(user, anchorOf(e.currentTarget))}

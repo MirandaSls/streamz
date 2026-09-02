@@ -91,7 +91,17 @@ export default function VoiceConnectedBar() {
   }
 
   return (
-    <div className="pointer-events-auto flex shrink-0 flex-col gap-2 rounded-lg border border-border bg-footer px-3.5 pb-3 pt-3" data-voice-bar>
+    <div /*
+        Sem moldura própria: esta é a **seção de cima de um cartão só**, não um
+        cartão separado. No Discord o bloco inteiro tem 163px contínuos, com uma
+        divisória de 1px entre voz e usuário; nós tínhamos dois cartões com 8px
+        de fundo aparecendo no meio.
+
+        O que torna a junção segura: a seção do usuário **não se move** — em
+        chamada ou fora dela ela ocupa a mesma faixa, e é a seção de voz que
+        cresce para cima. Por isso o respiro fixo das listas continua valendo.
+      */
+      className="flex shrink-0 flex-col gap-3 border-b border-border px-3.5 pb-[14px] pt-[15px]" data-voice-bar>
       <div className="flex items-center gap-1">
         {/*
           O selo sai de dentro da linha do título e vira irmão dela: no Discord
@@ -107,7 +117,12 @@ export default function VoiceConnectedBar() {
           <Tooltip label={falhou ? "Sem conexão" : rotuloDoPing(pingMs)}>
             <span
               aria-label={falhou ? "Sem conexão" : rotuloDoPing(pingMs)}
-              className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${
+              /* Quadrado arredondado, não círculo. Eu tinha feito redondo no #55 e
+                 estava errado: o ajuste de raio no perfil de pixels do canto dá
+                 7,5 (erro 0,015) contra 16 do círculo (erro 0,54) — uma ordem de
+                 grandeza. A aresta reta de cima e a da esquerda existem no print,
+                 e num círculo elas não existiriam. */
+              className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${
                 falhou
                   ? "bg-red/15 text-red"
                   : status === "connecting"
