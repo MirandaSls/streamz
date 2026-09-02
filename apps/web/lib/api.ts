@@ -412,6 +412,15 @@ export const api = {
     request<{ token: string; url: string; room: string }>(`/voice/channels/${channelId}/token`, {
       method: "POST",
     }),
+  /**
+   * Token do participante de tela (`<userId>#tela`) para a captura nativa do
+   * desktop — canal de voz ou conversa direta, a mesma sala da chamada.
+   */
+  telaToken: (channelId: string) =>
+    request<{ token: string; url: string; room: string }>(
+      `/voice/channels/${channelId}/tela-token`,
+      { method: "POST" },
+    ),
   /** Estado inicial de voz do servidor; depois disso os `voice.state` mantêm em dia. */
   guildVoiceStates: (guildId: string) => request<VoiceStateEvent[]>(`/guilds/${guildId}/voice-states`),
   /** Quem está na chamada de uma conversa agora — o par do de servidor, para DM e grupo. */

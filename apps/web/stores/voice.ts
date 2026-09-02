@@ -13,6 +13,7 @@ import {
   type VoiceFlags,
   type VoiceStateEvent,
   WS_EVENTS,
+  donoDaIdentidade,
 } from "@streamz/shared";
 import {
   ConnectionState,
@@ -24,7 +25,9 @@ import {
   type Participant,
 } from "livekit-client";
 import { api } from "@/lib/api";
+import { iniciarTelaNativa, isTauri, ouvirTelaEncerrada, pararTelaNativa } from "@/lib/desktop";
 import { tocarSom } from "@/lib/ringtone";
+import { montarPedido } from "@/lib/seletor-de-tela";
 import { supressorDeRuido } from "@/lib/supressor-ruido";
 import { CHAMADA_INICIAL, callReducer, type CallAction, type CallState } from "@/stores/call-machine";
 import { emit, errorMessage } from "@/stores/socket-adapter";
@@ -63,6 +66,12 @@ export type VoiceStatus = "idle" | "connecting" | "connected" | "error";
 
 /** Sala do canal em que estou — fora da store, ver o comentário acima. */
 let sala: Room | null = null;
+/**
+ * A transmissão de tela em curso é a **nativa** (captura no Rust, participante
+ * `#tela`)? Fora do estado observável como `sala`: é detalhe de transporte, e
+ * o que a interface lê é `screenOn`.
+ */
+let telaNativa = false;
 
 interface VoiceStoreState {
   /** estados de voz por canal (só quem está conectado). */
@@ -142,6 +151,11 @@ interface VoiceStoreState {
   toggleCam: () => Promise<void>;
   /** Publica uma captura já obtida pelo seletor próprio (ver ScreenShareButton). */
   publicarTela: (stream: MediaStream) => Promise<void>;
+  /**
+   * Transmite uma janela ou tela pela captura nativa do desktop: o Rust entra
+   * na sala como `<userId>#tela` e publica; aqui só o estado e o token.
+   */
+  publicarTelaNativa: (fonteId: string) => Promise<void>;
   pararTela: () => Promise<void>;
   setScreenQuality: (q: ScreenQuality) => void;
   setScreenAudio: (on: boolean) => void;
@@ -266,6 +280,12 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
 
   /** Desmonta a sala de mídia sem tocar no estado de voz (que é do servidor). */
   function fecharSala() {
+    // a transmissão nativa é uma segunda conexão: sair da sala tem que
+    // derrubá-la também, senão o `#tela` fica na sala sem dono
+    if (telaNativa) {
+      telaNativa = false;
+      void pararTelaNativa();
+    }
     if (!sala) return;
     pararMedicaoDePing();
     sala.removeAllListeners();
@@ -665,9 +685,33 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       rerender();
     },
 
+    publicarTelaNativa: async (fonteId) => {
+      const { channelId, screenQuality } = get();
+      if (!channelId || !sala) {
+        ui.toast(SEM_SALA, "error");
+        return;
+      }
+      try {
+        const creds = await api.telaToken(channelId);
+        await iniciarTelaNativa(montarPedido(fonteId, screenQuality, creds));
+        telaNativa = true;
+        set({ screenOn: true });
+      } catch (e) {
+        telaNativa = false;
+        set({ screenOn: false });
+        ui.toast(errorMessage(e, "Não foi possível compartilhar a tela"), "error");
+      }
+      get().syncFlags();
+      rerender();
+    },
+
     pararTela: async () => {
       const lp = sala?.localParticipant;
       set({ screenOn: false });
+      if (telaNativa) {
+        telaNativa = false;
+        await pararTelaNativa();
+      }
       if (lp) {
         for (const pub of Array.from(lp.trackPublications.values())) {
           if (
@@ -1028,10 +1072,46 @@ export function audiosDe(p: Participant) {
   );
 }
 
-/** Usuário do estado de voz correspondente a uma identidade do LiveKit. */
+/**
+ * Usuário do estado de voz correspondente a uma identidade do LiveKit. A
+ * identidade pode ser a da pessoa (`userId`) ou a do participante de tela
+ * dela (`userId#tela`, a captura nativa do desktop): o dono é o mesmo.
+ */
 export function usuarioDaIdentidade(channelId: string, identity: string): PublicUser | null {
   const estados = useVoice.getState().states[channelId] ?? [];
-  return estados.find((e) => e.user.id === identity)?.user ?? null;
+  const dono = donoDaIdentidade(identity);
+  return estados.find((e) => e.user.id === dono)?.user ?? null;
+}
+
+/**
+ * Todos os participantes da sala que pertencem a um usuário: a pessoa e, se
+ * ela transmite pelo desktop, o `#tela`. A pessoa vem primeiro — é o
+ * participante de quem se lê "falando" e o microfone.
+ */
+export function participantesDe(userId: string): Participant[] {
+  return participantesDaSala()
+    .filter((p) => donoDaIdentidade(p.identity) === userId)
+    .sort((a, b) => Number(a.identity !== userId) - Number(b.identity !== userId));
+}
+
+// A transmissão nativa pode acabar sem ninguém pedir: a janela fechou, a sala
+// do `#tela` caiu. O Rust avisa por evento e a store volta ao repouso — sem
+// isto o botão continuaria dizendo "ao vivo" com ninguém do outro lado.
+if (typeof window !== "undefined" && isTauri()) {
+  ouvirTelaEncerrada((motivo) => {
+    if (!telaNativa) return;
+    telaNativa = false;
+    useVoice.setState((s) => ({ screenOn: false, tick: s.tick + 1 }));
+    useVoice.getState().syncFlags();
+    ui.toast(
+      motivo === "fonteSumiu"
+        ? "A janela compartilhada foi fechada; a transmissão parou."
+        : motivo === "desconectado"
+          ? "A transmissão caiu: a conexão com a sala foi perdida."
+          : "A transmissão parou: a captura de tela falhou.",
+      "error",
+    );
+  });
 }
 
 // Trocar de microfone/saída nas configurações vale **na hora**, sem sair da

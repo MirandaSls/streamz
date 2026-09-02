@@ -26,7 +26,7 @@ import {
 } from "@/components/voice/participant-menu";
 import { useAuth } from "@/stores/auth";
 import { ui } from "@/stores/ui";
-import { participantesDaSala, useVoice, videosDe } from "@/stores/voice";
+import { participantesDe, useVoice, videosDe } from "@/stores/voice";
 
 /**
  * A grade de participantes de uma sala de voz.
@@ -98,10 +98,13 @@ export default function VoiceGrid({
   const [palco, setPalco] = useState<HTMLDivElement | null>(null);
   const tamanho = useTamanho(palco);
 
-  const porIdentidade = new Map(participantesDaSala().map((p) => [p.identity, p]));
+  // Quem transmite pelo app de desktop tem **dois** participantes na sala: a
+  // pessoa e o `<userId>#tela` da captura nativa. As faixas dos dois entram no
+  // tile do dono — o `#tela` nunca vira uma pessoa a mais na grade.
   const tiles: Tile[] = states.flatMap((state): Tile[] => {
-    const p = porIdentidade.get(state.user.id) ?? null;
-    const videos = p ? videosDe(p) : [];
+    const meus = participantesDe(state.user.id);
+    const p = meus[0] ?? null;
+    const videos = meus.flatMap(videosDe);
     if (videos.length === 0) {
       return [{ key: state.user.id, state, participant: p, publication: null, tela: false }];
     }

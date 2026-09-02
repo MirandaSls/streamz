@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Track } from "livekit-client";
+import { Track, type Track as TrackTipo } from "livekit-client";
+import { donoDaIdentidade } from "@streamz/shared";
 import { ouvintesRemotos } from "@/components/voice/audio-remoto";
 import { useAuth } from "@/stores/auth";
-import { participantesDaSala, useVoice } from "@/stores/voice";
+import { participantesDaSala, participantesDe, useVoice } from "@/stores/voice";
 import { aplicarSaida, useVoiceDevicesStore } from "@/stores/voiceDevices";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 
@@ -35,7 +36,9 @@ export default function AudioRemotoHost() {
 
   if (!channelId) return null;
 
-  const identidades = participantesDaSala().map((p) => p.identity);
+  // O `<userId>#tela` da captura nativa é do mesmo dono: o áudio dele toca
+  // junto com o da pessoa, e o meu próprio `#tela` não volta para mim.
+  const identidades = participantesDaSala().map((p) => donoDaIdentidade(p.identity));
   return (
     <>
       {ouvintesRemotos(estados, identidades, meuId).map((userId) => (
@@ -46,7 +49,29 @@ export default function AudioRemotoHost() {
 }
 
 /**
- * Áudio de um participante remoto, com o volume individual, o "silenciar
+ * Áudio de um participante remoto: **todas** as faixas de áudio dele — o
+ * microfone e, quando transmite, o áudio da tela (que no desktop chega pelo
+ * participante `#tela`). Um `<audio>` por faixa, todos com o mesmo volume
+ * individual e o mesmo "silenciar" da pessoa.
+ */
+export function AudioDoParticipante({ userId }: { userId: string }) {
+  useVoice((s) => s.tick);
+  const faixas = participantesDe(userId).flatMap((p) =>
+    Array.from(p.trackPublications.values())
+      .filter((pub) => pub.kind === Track.Kind.Audio && !!pub.track)
+      .map((pub) => ({ sid: pub.trackSid, faixa: pub.track as TrackTipo })),
+  );
+  return (
+    <>
+      {faixas.map(({ sid, faixa }) => (
+        <AudioDaFaixa key={sid} userId={userId} faixa={faixa} />
+      ))}
+    </>
+  );
+}
+
+/**
+ * Um `<audio>` de uma faixa, com o volume individual, o "silenciar
  * localmente" e o "desativar áudio" do rodapé aplicados — e a saída apontada
  * para o dispositivo escolhido nas configurações.
  *
@@ -55,10 +80,9 @@ export default function AudioRemotoHost() {
  * é irreversível e tira o elemento do caminho do `setSinkId`, então quem nunca
  * subiu o volume continua com a saída de áudio escolhida valendo.
  */
-export function AudioDoParticipante({ userId }: { userId: string }) {
+function AudioDaFaixa({ userId, faixa }: { userId: string; faixa: TrackTipo }) {
   const ref = useRef<HTMLAudioElement>(null);
   const grafo = useRef<{ ctx: AudioContext; ganho: GainNode } | null>(null);
-  useVoice((s) => s.tick);
   const porPessoa = useVoice((s) => (userId in s.volumes ? s.volumes[userId] : 1));
   // o volume geral da aba "Voz e vídeo" multiplica o de cada pessoa
   const geral = useVoice((s) => s.audio.saida);
@@ -66,13 +90,6 @@ export function AudioDoParticipante({ userId }: { userId: string }) {
   const silenciado = useVoice((s) => !!s.silenciados[userId]);
   const deafened = useVoicePrefs((s) => s.deafened);
   const outputId = useVoiceDevicesStore((s) => s.outputId);
-
-  const participante = participantesDaSala().find((p) => p.identity === userId) ?? null;
-  const faixa = participante
-    ? Array.from(participante.trackPublications.values()).find(
-        (pub) => pub.kind === Track.Kind.Audio && !!pub.track,
-      )?.track ?? null
-    : null;
 
   useEffect(() => {
     const el = ref.current;
