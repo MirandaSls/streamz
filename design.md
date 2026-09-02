@@ -57,7 +57,7 @@ App de **3 colunas** fixas sobre a área principal (`app/app/page.tsx`):
   esquerda (`h-5` no hover, `h-10` ativo); tooltip à direita. Botões "novo" em
   `green`. Separador de 2px `rail-divider`.
 - **Coluna 2** (`w-60`, `bg-panel`): cabeçalho de **48px** com `shadow-header`
-  (nome do servidor + chevron → menu); categorias em caixa mista 14px
+  (nome do servidor + chevron → menu); categorias em caixa mista 14px, fonte do corpo, chevron **depois** do texto
   (`text-txt-muted`) colapsáveis; item de canal de **36px** (`h-9`, raio 8), ícone 20px
   `text-txt-faint`, hover `bg-hov text-txt-normal`, ativo `bg-sel text-txt-primary`.
   **Card do usuário** (58px, raio 8, borda 1px, `bg-footer`): avatar com status,
