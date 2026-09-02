@@ -110,7 +110,10 @@ function ActionButton({
         type="button"
         onClick={onClick}
         aria-label={label}
-        className={`grid h-8 w-8 place-items-center rounded-[3px] text-txt-secondary transition hover:bg-hov ${
+        // 28px com raio 6, medido no botão "…" da barra do Discord
+        // (`2026-08-31 124022.png`, x 1222..1249, y 394..421; canto sobe
+        // 4, 2, 1, 1, 0 px). Era 32 com raio 3.
+        className={`grid h-7 w-7 place-items-center rounded-md text-txt-secondary transition hover:bg-hov ${
           danger ? "hover:text-red" : "hover:text-txt-primary"
         }`}
       >
@@ -798,12 +801,19 @@ export default function MessageItem({
         dentro do "…" — nove ícones em fila viravam uma régua ilegível.
         No primeiro item da lista ela desce para dentro da linha: subindo, seria
         cortada pelo topo da área rolável.
+
+        Medidas do Discord (`2026-08-31 124022.png`, barra em x ..1252,
+        y 391..424): 34px de altura = borda 1 + 2 + botão 28 + 2 + borda 1;
+        raio 8 (canto sobe 4, 3, 2, 1, 0); borda de 1px **mais clara** que o
+        fundo da barra (50 contra 36), não a `black/20` escura de antes — daí o
+        token `border`, que já é a divisória do app; termina 14px antes da
+        borda da linha e começa 25px acima do topo dela (entra 9 na linha).
       */}
       {!unconfirmed && !editing && (
         <div
-          className={`absolute right-4 ${
-            primeiro ? "top-0.5" : "-top-4"
-          } hidden rounded border border-black/20 bg-chat p-0.5 shadow-high group-focus-within:flex group-hover:flex`}
+          className={`absolute right-3.5 ${
+            primeiro ? "top-0.5" : "-top-[25px]"
+          } hidden rounded-lg border border-border bg-chat p-0.5 shadow-high group-focus-within:flex group-hover:flex`}
         >
           {frequentes.slice(0, RAPIDAS_NA_BARRA).map((emoji) => (
             <ActionButton
