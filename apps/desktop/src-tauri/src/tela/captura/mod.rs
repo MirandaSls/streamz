@@ -127,6 +127,9 @@ pub trait Capturador: Send {
 }
 
 /// Abre uma sessão de captura no backend desta máquina.
+// Consumido pela etapa seguinte (publicar no LiveKit); até lá só as miniaturas
+// usam o módulo, e o clippy do CI é `-D warnings`.
+#[allow(dead_code)]
 pub fn abrir(alvo: Alvo) -> Result<Box<dyn Capturador>, Erro> {
     match backend() {
         Backend::Wgc => Ok(Box::new(wgc::Sessao::abrir(alvo)?)),
