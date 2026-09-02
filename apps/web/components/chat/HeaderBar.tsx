@@ -20,6 +20,7 @@ export default function HeaderBar({
   tools,
   pins,
   searchLabel,
+  searchPlaceholder,
   searchValue,
   onSearch,
 }: {
@@ -31,6 +32,8 @@ export default function HeaderBar({
   /** botão de mensagens fixadas do canal aberto. */
   pins?: ReactNode;
   searchLabel: string;
+  /** vai no placeholder: no Discord é "Buscar <usuário>", não um "Buscar" solto. */
+  searchPlaceholder?: string;
   /** consulta em vigor — mantém o campo preenchido ao reabrir a busca. */
   searchValue?: string;
   onSearch: (query: string) => void;
@@ -42,7 +45,9 @@ export default function HeaderBar({
       <span className="text-txt-muted" aria-hidden="true">
         {icon}
       </span>
-      <h1 className="truncate font-semibold text-txt-primary">{title}</h1>
+      {/* `min-w-0` é o que faz o `truncate` valer dentro de um flex: sem ele o
+          título empurra a toolbar para fora em vez de cortar o próprio texto */}
+      <h1 className="min-w-0 truncate font-semibold text-txt-primary">{title}</h1>
       {subtitle && (
         <>
           <span aria-hidden="true" className="mx-2 h-6 w-px bg-border" />
@@ -50,7 +55,7 @@ export default function HeaderBar({
         </>
       )}
 
-      <div className="ml-auto flex items-center gap-4">
+      <div className="ml-auto flex shrink-0 items-center gap-4">
         {tools}
         {pins}
         <form
@@ -65,14 +70,17 @@ export default function HeaderBar({
             onChange={(e) => setQuery(e.target.value)}
             type="search"
             aria-label={searchLabel}
-            placeholder="Buscar"
+            placeholder={searchPlaceholder ?? "Buscar"}
             title="Filtros: from:@usuário in:#canal has:link|image|file before:AAAA-MM-DD after:AAAA-MM-DD mentions:@usuário"
-            className="h-6 w-36 rounded-[4px] bg-rail pl-1.5 pr-6 text-sm text-txt-normal outline-none transition-all placeholder:text-txt-muted focus:w-60"
+            /* fixa, não mais expansível: no Discord a caixa já nasce do tamanho
+               final. A busca que cresce ao focar empurrava os ícones vizinhos e
+               fazia a barra inteira dançar a cada clique. */
+            className="h-[30px] w-[245px] rounded-lg bg-rail pl-2.5 pr-8 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
           />
           <Search
             size={16}
             aria-hidden="true"
-            className="pointer-events-none absolute right-1.5 top-1 text-txt-muted"
+            className="pointer-events-none absolute right-2.5 top-[7px] text-txt-muted"
           />
         </form>
       </div>

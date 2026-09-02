@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Phone, Settings, UserPlus, Users, Video } from "@/components/ui/icones";
+import { PhoneCall, Settings, UserPlus, UserProfile, Users, Video } from "@/components/ui/icones";
 import { isGroupChannel } from "@streamz/shared";
 import Composer from "@/components/chat/Composer";
 import DMMemberList from "@/components/chat/DMMemberList";
+import DMProfilePanel from "@/components/chat/DMProfilePanel";
 import HeaderBar, { HeaderIcon } from "@/components/chat/HeaderBar";
 import MessageList from "@/components/chat/MessageList";
 import PinsPopover from "@/components/chat/PinsPopover";
@@ -165,6 +166,7 @@ export default function DMView() {
           }
           title={title}
           searchLabel={`Buscar mensagens em ${title}`}
+          searchPlaceholder={other ? `Buscar ${other.username}` : "Buscar"}
           searchValue={searchQuery}
           onSearch={(q) => {
             setSearchQuery(q);
@@ -186,7 +188,7 @@ export default function DMView() {
                     active={naChamada === active.id}
                     onClick={() => void startCall(active.id, false)}
                   >
-                    <Phone size={20} />
+                    <PhoneCall size={20} />
                   </HeaderIcon>
                   <HeaderIcon
                     label="Iniciar chamada de vídeo"
@@ -212,12 +214,24 @@ export default function DMView() {
                   </HeaderIcon>
                 </>
               )}
+              {/* só em 1:1: no grupo o "adicionar pessoas" já existe acima */}
+              {!group && !bloqueado && (
+                <HeaderIcon
+                  label="Adicionar amigo à conversa"
+                  onClick={() => ui.openModal({ kind: "createGroupDM" })}
+                >
+                  <UserPlus size={20} />
+                </HeaderIcon>
+              )}
               <HeaderIcon
-                label={group ? "Mostrar participantes" : "Mostrar detalhes"}
+                label={group ? "Mostrar participantes" : "Mostrar perfil"}
                 active={membersOpen}
                 onClick={toggleMembers}
               >
-                <Users size={20} />
+                {/* em conversa 1:1 o painel é o perfil do contato, e o sinal é
+                    a pessoa dentro do círculo; em grupo continua sendo a lista
+                    de participantes */}
+                {group ? <Users size={20} /> : <UserProfile size={20} />}
               </HeaderIcon>
             </>
           }
@@ -237,8 +251,14 @@ export default function DMView() {
         )}
       </main>
 
-      {/* coluna 4 do modo DM: quem está na conversa */}
-      {membersOpen && <DMMemberList dm={active} />}
+      {/*
+        Coluna 4 do modo DM. O botão do cabeçalho é o mesmo; o que ele abre é
+        que depende da conversa, como no Discord: em grupo, quem está nela; em
+        conversa 1:1, o perfil do contato — uma lista de um nome só não
+        acrescentava nada ao cabeçalho.
+      */}
+      {membersOpen &&
+        (group || !other ? <DMMemberList dm={active} /> : <DMProfilePanel user={other} />)}
     </>
   );
 }

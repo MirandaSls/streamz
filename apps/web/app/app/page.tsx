@@ -78,8 +78,12 @@ export default function AppPage() {
     }
   }, [user, router]);
 
+  // `min-w` no shell: abaixo de ~940px o cabeçalho da conversa quebrava — o
+  // título espremia os ícones, sobrava um caractere solto à esquerda e o
+  // placeholder do composer partia em três linhas. O Discord também tem um piso
+  // de largura de janela; sem ele o leiaute de quatro colunas não cabe.
   return (
-    <div className="flex h-full select-none">
+    <div className="flex h-full min-w-[940px] select-none">
       {/*
         Rail e coluna dentro do mesmo bloco posicionado, e o card do usuário
         como irmão dos dois.

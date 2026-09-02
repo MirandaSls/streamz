@@ -14,15 +14,18 @@ import { createPortal } from "react-dom";
 import {
   Angry,
   Annoyed,
-  CirclePlus,
+  AppWindow,
   Eye,
   EyeOff,
   FileText,
+  Gif,
+  Gift,
   Hash,
   Laugh,
   MessageSquarePlus,
   Paperclip,
   Pencil,
+  Plus,
   Smile,
   Sticker as StickerIcon,
   Upload,
@@ -67,6 +70,12 @@ import { ui, type MenuItem } from "@/stores/ui";
 
 /** Altura máxima do campo antes de virar rolagem interna (~8 linhas). */
 const MAX_HEIGHT_PX = 200;
+/**
+ * Altura da caixa com uma linha (medida no Discord): os 22px da linha mais os
+ * 18px de respiro de cada lado do `py-[18px]`. É o valor que o campo vazio
+ * assume **sem perguntar ao layout** — ver `medir` no `useLayoutEffect`.
+ */
+const ALTURA_UMA_LINHA = 58;
 /** A contagem de caracteres só aparece quando começa a importar (Discord: 1800). */
 const COUNTER_THRESHOLD = 0.9;
 /** Sugestões mostradas de uma vez em cada gatilho. */
@@ -95,7 +104,13 @@ let seqAnexo = 0;
 /** Ícones que o botão de emoji alterna no hover (o easter egg do Discord). */
 const CARINHAS = [Smile, Laugh, Angry, Annoyed];
 
-/** Botão de ícone à direita do composer (presente, GIF, figurinha, emoji). */
+/**
+ * Botão de ícone à direita do composer (presente, GIF, figurinha, emoji, apps).
+ *
+ * `onClick` é opcional porque presente e apps **não fazem nada**: existem para
+ * a fileira ter os cinco ícones do Discord, e um botão que abrisse um aviso de
+ * "indisponível" seria pior que um botão calado.
+ */
 function SideButton({
   label,
   onClick,
@@ -214,8 +229,39 @@ export default function Composer({
   useLayoutEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT_PX)}px`;
+
+    function medir() {
+      const campo = textareaRef.current;
+      if (!campo) return;
+      // **Campo vazio tem altura fixa de uma linha.** Não dá para perguntar ao
+      // `scrollHeight`: com o valor vazio quem o Chrome mede é o
+      // **placeholder**, e um placeholder que quebra em duas ou três linhas
+      // (composer estreito, janela pequena, lista de membros aberta) devolvia
+      // 80 ou 102px no lugar de 58. Pior: a medida ficava, porque isto só
+      // rodava de novo quando o texto mudava — a caixa continuava alta depois
+      // de alargar a janela, com o texto colado no topo e o resto morto.
+      if (!draft) {
+        campo.style.height = `${ALTURA_UMA_LINHA}px`;
+        return;
+      }
+      campo.style.height = "auto";
+      campo.style.height = `${Math.min(campo.scrollHeight, MAX_HEIGHT_PX)}px`;
+    }
+
+    medir();
+
+    // Mudar de largura requebra o texto: sem remedir, a altura calculada na
+    // largura antiga fica congelada até a próxima tecla.
+    if (typeof ResizeObserver === "undefined") return;
+    let larguraAnterior = -1;
+    const observador = new ResizeObserver(([entrada]) => {
+      // só a largura interessa — reagir à altura seria reagir ao próprio ajuste
+      if (entrada.contentRect.width === larguraAnterior) return;
+      larguraAnterior = entrada.contentRect.width;
+      medir();
+    });
+    observador.observe(el);
+    return () => observador.disconnect();
   }, [draft]);
 
   // As prévias locais são URLs de objeto e precisam ser revogadas ao desmontar.
@@ -556,9 +602,18 @@ export default function Composer({
                 type="button"
                 onClick={abrirMenuMais}
                 aria-label="Mais opções de envio"
-                className="mx-4 mt-[9px] grid h-10 w-10 shrink-0 place-items-center rounded-full text-txt-secondary transition hover:text-txt-primary"
+                // `ml-2.5` põe o glifo de 18 a 21px da borda esquerda da caixa,
+                // que é onde ele fica no Discord: 10 de margem + os 11 que
+                // sobram de cada lado dentro do alvo de 40
+                className="ml-2.5 mr-4 mt-[9px] grid h-10 w-10 shrink-0 place-items-center rounded-full text-txt-secondary transition hover:text-txt-primary"
               >
-                <CirclePlus size={20} />
+                {/* `+` liso, não o `CirclePlus`: o do Discord é marca de traço,
+                    sem o círculo cheio em volta */}
+                {/* 38 e não 18: a tinta deste ativo ocupa 46,7% do quadro (o caminho vai
+              de 26,7 a 73,3 num viewBox de 100), então `size` aqui não é o tamanho
+              do desenho. 38 × 0,467 ≈ 18, que é o glifo medido no Discord e o que
+              iguala este `+` aos cinco ícones da direita. */}
+          <Plus size={38} />
               </button>
             </>
           ) : (
@@ -600,21 +655,27 @@ export default function Composer({
                 </span>
               </Tooltip>
             )}
-            {/* Ordem do Discord: (presente) → GIF → figurinha → emoji. O botão
-                de presente fica de fora enquanto não existir o que presentear:
-                item que só avisa "indisponível" é pior que item ausente. */}
+            {/* Ordem do Discord, os cinco: presente → GIF → figurinha → emoji
+                → apps. **Presente e apps são inertes de propósito**: não há o
+                que presentear nem o que abrir, e eles estão aqui só para a
+                fileira ter a forma da do Discord. Sem `onClick`, portanto — e
+                sem inventar um modal que não existe. */}
             {/* GIF e figurinha existem também na thread: o composer da thread do
                 Discord tem os mesmos botões do canal */}
+            <SideButton label="Presente">
+              <Gift size={18} />
+            </SideButton>
             <SideButton label="GIF" onClick={() => setAberto((a) => (a === "gif" ? null : "gif"))}>
-              <span className="rounded-[3px] border-2 border-current px-0.5 text-[10px] font-bold leading-3">
-                GIF
-              </span>
+              {/* o ativo do Discord, não `<span>GIF</span>` com borda: texto
+                  muda de peso com a fonte do sistema e nunca casa com os
+                  vizinhos */}
+              <Gif size={18} />
             </SideButton>
             <SideButton
               label="Figurinha"
               onClick={() => setAberto((a) => (a === "figurinha" ? null : "figurinha"))}
             >
-              <StickerIcon size={20} />
+              <StickerIcon size={18} />
             </SideButton>
             <SideButton
               label="Emoji"
@@ -622,7 +683,12 @@ export default function Composer({
               // o ícone troca de carinha a cada passada do mouse, como no Discord
               onMouseEnter={() => setCarinha((c) => (c + 1) % CARINHAS.length)}
             >
-              <Carinha size={20} />
+              {/* 16 e não 18: a carinha é o único glifo menor da fileira no
+                  Discord */}
+              <Carinha size={16} />
+            </SideButton>
+            <SideButton label="Apps">
+              <AppWindow size={18} />
             </SideButton>
           </div>
         </div>
