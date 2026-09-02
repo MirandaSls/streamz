@@ -126,7 +126,24 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
         </>
       }
     >
-      <div role="tablist" aria-label="Tipo de fonte" className="mb-3 flex gap-1 border-b border-border">
+      {/*
+       * Barra de abas do Discord, medida na print de referência: sulco escuro
+       * de 40px com 4px de folga, segmentos de 32px repartindo a largura em
+       * partes iguais, canto de 8px por fora e 6px por dentro.
+       *
+       * A aba ativa é preenchida com a cor do **corpo do modal**, não com uma
+       * cor nova: o efeito é o fundo emergindo do sulco, e é isso que dá o
+       * relevo sem precisar de borda.
+       *
+       * Sem acento aqui de propósito. No Discord esta barra não tem cor de
+       * marca nenhuma, e o limão deste modal já mora nas pílulas de qualidade e
+       * no botão "Ao vivo" — dois acentos na mesma tela enfraquecem os dois.
+       */}
+      <div
+        role="tablist"
+        aria-label="Tipo de fonte"
+        className="mb-5 flex gap-1 rounded-lg bg-rail p-1"
+      >
         {(
           [
             ["aplicativos", "Aplicativos", <AppWindow key="a" size={16} />],
@@ -139,10 +156,10 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
             role="tab"
             aria-selected={aba === id}
             onClick={() => setAba(id)}
-            className={`-mb-px flex items-center gap-1.5 border-b-2 px-3 pb-2 text-sm font-semibold transition ${
+            className={`flex h-8 flex-1 items-center justify-center gap-2 rounded-md text-sm font-medium transition ${
               aba === id
-                ? "border-accent text-txt-primary"
-                : "border-transparent text-txt-muted hover:text-txt-normal"
+                ? "bg-chat text-txt-primary"
+                : "text-txt-secondary hover:bg-hov hover:text-txt-primary"
             }`}
           >
             {icone}
