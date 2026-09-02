@@ -143,7 +143,10 @@ function RailItem({
     <div className="group relative flex w-full justify-center" onContextMenu={onContextMenu}>
       <span
         aria-hidden="true"
-        className={`absolute left-0 top-1/2 w-[3px] -translate-y-1/2 rounded-r-full bg-paper transition-all duration-200 ${
+        /* 4px de largura, medido. A **altura** de 40 no ativo já estava certa:
+          a auditoria dizia 36-38, e a medição em 7 prints do Discord deu 40 nos
+          sete — a pílula vai de ponta a ponta do botão. */
+        className={`absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r-full bg-paper transition-all duration-200 ${
           active ? "h-10" : unread ? "h-2 group-hover:h-5" : "h-0 group-hover:h-5"
         }`}
       />
@@ -292,7 +295,10 @@ export default function GuildRail() {
   return (
     <nav
       aria-label="Servidores"
-      className="flex w-20 shrink-0 flex-col items-center gap-2.5 overflow-y-auto bg-rail pt-3 pb-[78px]"
+      /* sem `pt`: no Discord o topo do primeiro botão encosta na barra de
+          título. Os nossos 12px de folga faziam a rail começar mais baixo que
+          a coluna ao lado, e a diferença aparece na horizontal do topo. */
+      className="flex w-20 shrink-0 flex-col items-center gap-2.5 overflow-y-auto bg-rail pb-[78px]"
     >
       <RailItem
         label="Mensagens diretas"
@@ -335,7 +341,10 @@ export default function GuildRail() {
         );
       })}
 
-      <div aria-hidden="true" className="my-0.5 h-0.5 w-8 shrink-0 rounded bg-rail-divider" />
+      {/* 1px, e a folga de 10 vem do `gap-2.5` do container — tínhamos 2px com
+          mais 2 de margem de cada lado, o que engrossava a linha e afastava os
+          grupos */}
+      <div aria-hidden="true" className="h-px w-8 shrink-0 bg-rail-divider" />
 
       {guilds.map((guild) => (
         <RailItem
