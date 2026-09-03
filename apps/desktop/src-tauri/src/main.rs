@@ -33,13 +33,26 @@ fn main() {
     // content/browser/renderer_host/media/media_stream_manager.cc. Nada de
     // `--use-fake-device-for-media-stream`, que trocaria o microfone real por
     // um gerador de tom.
+    //
+    // `--autoplay-policy=no-user-gesture-required` é o que faz o **toque de
+    // chamada** sair. O WebView2 é Chromium e herda a política padrão
+    // (`document-user-activation-required`): `HTMLAudioElement.play()` só é
+    // aceito depois que o documento recebeu um clique ou uma tecla. É a razão
+    // de o áudio da call funcionar e o telefone não — os `<audio>` do
+    // `AudioRemotoHost` nascem **depois** do clique de entrar na chamada
+    // (está escrito lá), enquanto o toque precisa começar com o app parado na
+    // bandeja, sem gesto nenhum, que é exatamente o caso recusado. No navegador
+    // quase sempre já houve um clique na aba antes de o telefone tocar, e por
+    // isso o mesmo código soa no site e não soava aqui. A rede de segurança do
+    // lado da web (retomar no primeiro gesto) está em `lib/toque-com-gesto.ts`.
     if std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").is_err() {
         std::env::set_var(
             "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
             "--disable-background-timer-throttling \
              --disable-renderer-backgrounding \
              --disable-backgrounding-occluded-windows \
-             --auto-accept-camera-and-microphone-capture",
+             --auto-accept-camera-and-microphone-capture \
+             --autoplay-policy=no-user-gesture-required",
         );
     }
 

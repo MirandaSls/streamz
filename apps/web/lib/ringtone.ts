@@ -27,10 +27,25 @@
  *
  * Os arquivos são servidos junto com o app (`/sons/...`): no desktop vão
  * dentro do `.exe` (frontendDist) e a CSP já libera `media-src 'self'`.
+ * `'self'` é a origem do documento, que no Windows é `http://tauri.localhost`
+ * (`use_https_scheme` é `false` por padrão) — a mesma de onde o protocolo do
+ * Tauri devolve `/sons/chamada.mp3`, com `audio/mpeg` no `Content-Type`
+ * (o `infer` do `tauri-utils` reconhece o `ID3` do arquivo).
+ *
+ * Duas coisas **não** são de graça e estão tratadas aqui:
+ *
+ * - **Autoplay.** O toque é o único som que precisa começar sem gesto nenhum.
+ *   Ver `toque-com-gesto.ts` e a flag do WebView2 em `src-tauri/src/main.rs`.
+ * - **Saída de áudio.** Quem escolheu um fone na aba "Voz e vídeo" espera o
+ *   telefone tocando **nele**, não no alto-falante padrão do sistema. O áudio
+ *   remoto já faz isso (`AudioRemotoHost` → `aplicarSaida`); os sons daqui
+ *   passaram a fazer também.
  */
 
+import { pararToqueEm, tocarToqueEm } from "@/lib/toque-com-gesto";
 import { somLigado } from "@/stores/sons";
 import { useSettings } from "@/stores/settings";
+import { aplicarSaida, useVoiceDevicesStore } from "@/stores/voiceDevices";
 
 /** Toque de chamada recebida, para o `src` de um `<audio loop>`. */
 export function toqueDeChamadaUrl(): string {
@@ -54,7 +69,29 @@ export function ringbackUrl(): string {
 export function prepararToque(el: HTMLAudioElement | null): boolean {
   if (!el) return false;
   el.volume = Math.min(1, Math.max(0, volumeDeSaida()));
+  aplicarSaidaEscolhida(el);
   return useSettings.getState().notificationSound && somLigado("chamada");
+}
+
+/**
+ * Começa (ou recomeça) o toque, com a retomada no primeiro gesto se o autoplay
+ * recusar. Só para o toque e o ringback: um aviso curto que chegasse atrasado,
+ * no clique seguinte, seria pior do que não tocar.
+ */
+export function tocarToque(el: HTMLAudioElement | null): void {
+  if (!el) return;
+  void tocarToqueEm(el, typeof window === "undefined" ? null : window);
+}
+
+/** Para o toque e desarma a espera por gesto, se houver. */
+export function pararToque(el: HTMLAudioElement | null): void {
+  if (!el) return;
+  pararToqueEm(el);
+}
+
+/** Manda o elemento para o dispositivo de saída escolhido nas configurações. */
+function aplicarSaidaEscolhida(el: HTMLAudioElement): void {
+  void aplicarSaida(el, useVoiceDevicesStore.getState().outputId);
 }
 
 /** Elementos reaproveitados por arquivo: criar um `Audio` por toque vazaria memória. */
@@ -76,6 +113,7 @@ export function tocarArquivo(url: string, volume: number): void {
       el.preload = "auto";
       elementos.set(url, el);
     }
+    aplicarSaidaEscolhida(el);
     el.volume = Math.min(1, Math.max(0, volume));
     el.currentTime = 0;
     void el.play().catch(() => {

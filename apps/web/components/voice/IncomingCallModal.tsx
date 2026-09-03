@@ -5,7 +5,7 @@ import { Phone, PhoneOff, Video } from "@/components/ui/icones";
 import { CALL_RING_TIMEOUT_MS, displayNameOf, isGroupChannel } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
-import { prepararToque, toqueDeChamadaUrl } from "@/lib/ringtone";
+import { pararToque, prepararToque, tocarToque, toqueDeChamadaUrl } from "@/lib/ringtone";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useVoice } from "@/stores/voice";
 
@@ -25,7 +25,10 @@ import { useVoice } from "@/stores/voice";
  * tocando para sempre.
  *
  * Autoplay: navegadores só deixam tocar som depois de alguma interação do
- * usuário na página. Quando bloqueiam, a chamada continua na tela em silêncio.
+ * usuário na página, e este é o som que mais precisa começar sem gesto nenhum
+ * — o telefone toca com o app parado na bandeja. No desktop a flag do WebView2
+ * resolve na raiz; aqui, se ainda assim `play()` for recusado, `tocarToque`
+ * fica à espera do primeiro clique ou tecla e começa ali (`toque-com-gesto.ts`).
  */
 export default function IncomingCallModal() {
   const call = useVoice((s) => s.call);
@@ -42,12 +45,11 @@ export default function IncomingCallModal() {
   useEffect(() => {
     if (!tocando) return;
     const el = audio.current;
-    // pode ser bloqueado pelo autoplay: o catch mantém a chamada silenciosa
-    if (prepararToque(el)) void el?.play().catch(() => {});
+    if (prepararToque(el)) tocarToque(el);
     const t = window.setTimeout(() => dispatchCall({ type: "timeout" }), CALL_RING_TIMEOUT_MS);
     return () => {
       window.clearTimeout(t);
-      el?.pause();
+      pararToque(el);
     };
   }, [tocando, dispatchCall]);
 
@@ -74,7 +76,7 @@ export default function IncomingCallModal() {
       aria-label={`Chamada recebida de ${nome}`}
       className="fixed bottom-[76px] left-[84px] z-40 w-[248px] rounded-lg bg-overlay p-3 shadow-high anim-modal"
     >
-      <audio ref={audio} src={toqueDeChamadaUrl()} loop />
+      <audio ref={audio} src={toqueDeChamadaUrl()} preload="auto" loop />
       <div className="flex items-center gap-3">
         <Avatar user={call.from} size="lg" surface="border-overlay" />
         <span className="min-w-0">
