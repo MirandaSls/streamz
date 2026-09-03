@@ -137,6 +137,9 @@ export function useAtualizacao(): Atualizacao {
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
       const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
 
+      // normalmente não existe: a da abertura fecha antes de a barra aparecer.
+      // Se existir (uma atualização já em curso), o certo é trazê-la para a
+      // frente, não criar outra — o rótulo é único
       const existente = await WebviewWindow.getByLabel(JANELA_SPLASH);
       if (existente) {
         await existente.show();
