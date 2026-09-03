@@ -8,7 +8,7 @@ import { conteudoNaoVazioSchema, conteudoSchema, idSchema } from "./internos";
 
 import { z } from "zod";
 import { MAX_POLL_OPTION, MAX_POLL_OPTIONS, MAX_POLL_QUESTION, MIN_POLL_OPTIONS } from "./comunidade";
-import type { MemberRole, UserStatus } from "./dominio";
+import type { Guild, MemberRole, UserStatus } from "./dominio";
 import { MAX_ATTACHMENTS_PER_MESSAGE } from "./midia";
 import type { GuildMemberView } from "./midia";
 
@@ -29,6 +29,16 @@ export const WS_EVENTS = {
   MESSAGE_DELETED: "message.deleted",
   PRESENCE_UPDATE: "presence.update",
   GUILD_REMOVED: "guild.removed",
+  /**
+   * Entrei num servidor: criei, resgatei um convite ou fui adicionado.
+   *
+   * Vai para a **sala do usuário** (`user:<id>`), ou seja, para todas as
+   * conexões dele — é o par de `guild.removed` e o que faz a segunda sessão
+   * (o desktop enquanto o site entra, ou vice-versa) mostrar o servidor no
+   * rail sem recarregar. Um único evento cobre "criei" e "entrei": o que o
+   * cliente faz com os dois é idêntico (pôr o servidor na lista).
+   */
+  GUILD_JOINED: "guild.joined",
   CHANNEL_CREATED: "channel.created",
   CHANNEL_UPDATED: "channel.updated",
   CHANNEL_DELETED: "channel.deleted",
@@ -206,6 +216,19 @@ export interface PresenceUpdatePayload {
 export interface GuildRemovedEvent {
   guildId: string;
   reason: "kicked" | "banned" | "left" | "deleted";
+}
+
+/**
+ * Entrei num servidor (`guild.joined`).
+ *
+ * Carrega o servidor inteiro, e não só o id, para o rail desenhar na hora sem
+ * uma volta ao `GET /guilds`. Servidor recém-entrado não tem não-lido nem
+ * menção — `unread: false`, `mentionCount: 0`.
+ */
+export interface GuildJoinedEvent {
+  guild: Guild;
+  /** `created` quando fui eu que criei o servidor; `joined` no convite. */
+  reason: "created" | "joined";
 }
 
 /** Canal apagado (guildId null = conversa direta). */
