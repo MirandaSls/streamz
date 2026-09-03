@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { MoreHorizontal, UserPlus } from "@/components/ui/icones";
 import { displayNameOf, type PublicUser, type UserProfile } from "@streamz/shared";
-import Avatar, { StatusDot, STATUS_LABEL } from "@/components/ui/Avatar";
+import Avatar, { STATUS_LABEL } from "@/components/ui/Avatar";
+import IconeDeStatus from "@/components/ui/IconeDeStatus";
 import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
@@ -145,17 +146,19 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
           <div className="relative -mt-[55px] ml-[10px] w-fit rounded-full border-[6px] border-input">
             <Avatar user={user} size="xl" />
             {/*
-              A bolinha do `Avatar` fica no canto da caixa; aqui ela precisa
-              pousar no ponto de 45° da circunferência — 16px de bolinha dentro
-              de um recorte de 5px dá 26px, e `40 + 40/√2 − 13 ≈ 55` deixa a
-              caixa 1px para fora do avatar nos dois eixos.
+              O selo do `Avatar` fica no canto da caixa; aqui ele precisa pousar
+              no ponto de 45° da circunferência. Mesma geometria medida no print
+              `2026-09-03 161607` para o avatar de 80: disco de 16 dentro de um
+              anel de 6 (caixa de 28), com o centro em 0,84375 × 80 = 67,5 —
+              `-right-px` sobre a caixa de recheio (o avatar) põe o centro em 67.
+              O fundo `bg-input` é o que aparece pelos recortes vazados.
             */}
             <span
               role="img"
               aria-label={STATUS_LABEL[status]}
-              className="absolute -bottom-px -right-px h-[26px] w-[26px] rounded-full border-[5px] border-input"
+              className="absolute -bottom-px -right-px h-7 w-7 rounded-full border-[6px] border-input bg-input"
             >
-              <StatusDot status={status} className="h-full w-full" />
+              <IconeDeStatus status={status} className="h-full w-full" />
             </span>
           </div>
 

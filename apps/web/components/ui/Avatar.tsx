@@ -1,26 +1,10 @@
 "use client";
 
-import { useId } from "react";
 import { HeadphoneOff, MicOff, Users } from "@/components/ui/icones";
+import IconeDeStatus from "@/components/ui/IconeDeStatus";
 import type { UserStatus } from "@streamz/shared";
 import { corDoAvatar } from "@/components/ui/avatar-cores";
 import { usePresence } from "@/stores/presence";
-
-/** Cor de fundo do status — mantida para quem desenha a bolinha à mão. */
-export const STATUS_COLOR: Record<UserStatus, string> = {
-  ONLINE: "bg-green",
-  IDLE: "bg-yellow",
-  DND: "bg-red",
-  OFFLINE: "bg-txt-faint",
-};
-
-/** Cor do traço do status (a forma é desenhada em `currentColor`). */
-const STATUS_INK: Record<UserStatus, string> = {
-  ONLINE: "text-green",
-  IDLE: "text-yellow",
-  DND: "text-red",
-  OFFLINE: "text-txt-faint",
-};
 
 export const STATUS_LABEL: Record<UserStatus, string> = {
   ONLINE: "Online",
@@ -32,44 +16,49 @@ export const STATUS_LABEL: Record<UserStatus, string> = {
 const hashColor = corDoAvatar;
 
 /**
- * Cada status tem **forma** própria, não só cor: cheio (online), lua (ausente),
- * barra vazada (não perturbe) e anel (offline). É o que deixa o estado legível
- * para quem não distingue as cores — e é como o Discord desenha.
+ * Fundo do selo, na cor da superfície onde o avatar está. É o par do `surface`
+ * (que é a **borda** do selo): sem ele, os recortes vazados do `IconeDeStatus`
+ * — o traço do "não perturbe", o furo do anel, a barriga da lua — deixariam
+ * aparecer a foto do avatar por dentro. No Discord aparece a superfície: o
+ * avatar tem um furo, e o selo mora dentro dele.
+ *
+ * Medido no print `2026-09-03 161607`: entre a foto e o disco há 3px da cor da
+ * lista (`(26,26,30)`), e o traço do selo vermelho do "Peixoto" é exatamente
+ * essa mesma cor — não é branco nem uma versão escura do vermelho.
  */
-export function StatusDot({
-  status,
-  className = "",
-}: {
-  status: UserStatus;
-  className?: string;
-}) {
-  const maskId = useId();
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      className={`${STATUS_INK[status]} ${className}`}
-    >
-      <mask id={maskId}>
-        <circle cx="12" cy="12" r="12" fill="white" />
-        {status === "IDLE" && <circle cx="7" cy="7" r="8" fill="black" />}
-        {status === "DND" && <rect x="4" y="9.5" width="16" height="5" rx="2.5" fill="black" />}
-        {status === "OFFLINE" && <circle cx="12" cy="12" r="6" fill="black" />}
-      </mask>
-      <circle cx="12" cy="12" r="12" fill="currentColor" mask={`url(#${maskId})`} />
-    </svg>
-  );
-}
+const FUNDO_DO_SELO: Record<string, string> = {
+  "border-panel": "bg-panel",
+  "border-chat": "bg-chat",
+  "border-footer": "bg-footer",
+  "border-overlay": "bg-overlay",
+  "border-rail": "bg-rail",
+  "border-input": "bg-input",
+  "border-sel": "bg-sel",
+  "border-hov": "bg-hov",
+  "border-msghov": "bg-msghov",
+};
 
+/**
+ * Selo de status por tamanho de avatar. O Discord põe o **centro** do selo em
+ * 0,84375 × o lado do avatar e faz o disco crescer mais devagar que a foto —
+ * medido no print `2026-09-03 161607`: avatar de 32 com disco de 10 e anel de
+ * 3 (centro em 27, isto é, 3px para fora da borda), avatar de 80 com disco de
+ * 16 e anel de 6 (centro em 67,5). Os outros tamanhos interpolam essa curva e
+ * **não foram medidos**: não há avatar de 16, 24, 40 nem 120 com selo no print.
+ *
+ * `dot` é a caixa inteira (disco + anel), e o `border-N` come o anel; o
+ * deslocamento negativo é o quanto a caixa passa da borda do avatar, arredondado
+ * ao pixel (erro máximo de meio pixel contra o centro alvo).
+ */
 const SIZE = {
   /** 16px: reply preview, listas compactas, participantes de thread. */
-  xs: { box: "h-4 w-4 text-[8px]", dot: "h-2 w-2 -bottom-px -right-px border-2", icone: 6 },
-  sm: { box: "h-6 w-6 text-[10px]", dot: "h-2.5 w-2.5 -bottom-0.5 -right-0.5 border-2", icone: 8 },
-  md: { box: "h-8 w-8 text-xs", dot: "h-3.5 w-3.5 -bottom-0.5 -right-0.5 border-[3px]", icone: 9 },
-  lg: { box: "h-10 w-10 text-sm", dot: "h-4 w-4 -bottom-0.5 -right-0.5 border-[3px]", icone: 10 },
-  xl: { box: "h-20 w-20 text-2xl", dot: "h-7 w-7 bottom-0 right-0 border-[5px]", icone: 14 },
+  xs: { box: "h-4 w-4 text-[8px]", dot: "h-2.5 w-2.5 -bottom-[2px] -right-[2px] border-2", icone: 6 },
+  sm: { box: "h-6 w-6 text-[10px]", dot: "h-3 w-3 -bottom-[2px] -right-[2px] border-2", icone: 8 },
+  md: { box: "h-8 w-8 text-xs", dot: "h-4 w-4 -bottom-[3px] -right-[3px] border-[3px]", icone: 9 },
+  lg: { box: "h-10 w-10 text-sm", dot: "h-[18px] w-[18px] -bottom-[3px] -right-[3px] border-[3px]", icone: 10 },
+  xl: { box: "h-20 w-20 text-2xl", dot: "h-7 w-7 -bottom-[2px] -right-[2px] border-[6px]", icone: 14 },
   /** 120px: cartão de perfil completo e tela de chamada. */
-  xxl: { box: "h-[120px] w-[120px] text-4xl", dot: "h-10 w-10 bottom-1 right-1 border-[6px]", icone: 20 },
+  xxl: { box: "h-[120px] w-[120px] text-4xl", dot: "h-10 w-10 -bottom-px -right-px border-[8px]", icone: 20 },
 } as const;
 
 /** Estado de voz que o avatar mostra no lugar da bolinha de status. */
@@ -162,9 +151,9 @@ export default function Avatar({
           <span
             role="img"
             aria-label={STATUS_LABEL[status]}
-            className={`absolute rounded-full ${surface} ${s.dot}`}
+            className={`absolute rounded-full ${surface} ${FUNDO_DO_SELO[surface] ?? ""} ${s.dot}`}
           >
-            <StatusDot status={status} className="h-full w-full" />
+            <IconeDeStatus status={status} className="h-full w-full" />
           </span>
         )
       )}
