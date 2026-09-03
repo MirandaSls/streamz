@@ -351,7 +351,17 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
 - Seletor de tela (`ScreenSharePicker`): duas abas (Aplicativos e Tela
   Inteira) e, no rodapé, resolução e taxa de quadros como segmentos sempre
   visíveis, com as opções vindas de `SCREEN_QUALITY` — sem aba de
-  dispositivos, sem alternador SD/HD e sem a etapa da engrenagem.
+  dispositivos, sem alternador SD/HD e sem a etapa da engrenagem. **Medidas**
+  (prints `2026-08-31 123946`/`124000`, janela do Discord de 1283×718, 1:1
+  conferido pelo avatar de 32 da lista de DMs, pela rail de 40+10 e pela barra
+  de tarefas de 48): modal 960×606, ou seja 75% da largura e 85% da altura da
+  janela — no nosso `Dialog`, `w-[min(1400px,max(75vw,880px))]` e `h-[888px]`
+  sob o `max-h-[85vh]` da base, com teto no maior modal do Discord já medido
+  (1400×888, janela de configurações) e piso de 880, este não medido. Barra de
+  abas 40 (segmento 32), grade de `auto-fill` com mínimo de 300 e 16 entre
+  colunas, quadro 16:9 raio 8 e nome com ícone de 16 embaixo. **A grade não é
+  de duas colunas fixas**: 2×441 na janela do print, 4×322 numa de 1920 — foi
+  o `w-[440px]` fixo que deixava a miniatura grande demais em janela larga.
 - **No navegador não existe seletor nosso**: "Compartilhar tela" chama
   `getDisplayMedia` direto (`restricoesDeCaptura`, preset da store) e publica;
   cancelar o diálogo do browser não é erro e não vira toast. O modal de

@@ -40,9 +40,24 @@ import { useVoice } from "@/stores/voice";
  * (`SegmentosDeQualidade`, os mesmos das configurações), com a estimativa de
  * banda e o áudio do sistema à esquerda, na mesma altura.
  *
- * Medidas do print de referência: modal 955 de largura, barra de abas 40
- * (segmento 32, raio 8 por fora e 6 por dentro), miniatura 440×248 raio 8. Os
- * segmentos do rodapé repetem essa forma, com o acento limão na opção ativa.
+ * **Medidas** (prints `2026-08-31 123946` e `124000`, janela do Discord de
+ * 1283×718, conferidas 1:1 pelo avatar de 32 da lista de DMs, pela rail de
+ * 40+10 e pela barra de tarefas de 48 do print de tela cheia — nenhum fator de
+ * escala): modal 960×606 = **75% da largura e 85% da altura da janela**; barra
+ * de abas 40 (segmento 32, raio 8 por fora e 6 por dentro); grade de
+ * **auto-fill** com miniatura mínima de 300, 16 entre colunas, quadro 16:9 raio
+ * 8 (440×247 nas duas colunas daquela janela) e o nome logo abaixo com ícone de
+ * 16; padding de 24 em volta, 24 entre as abas e a grade.
+ *
+ * Por isso a grade aqui **não é de duas colunas fixas**: numa janela de 1283 dá
+ * 2×441 como no print, e numa de 1920 dá 4×322 — as miniaturas menores
+ * que o usuário vê no Discord dele. O modal acompanha (75vw/85vh) com teto de
+ * 1400×888, que é o maior modal do Discord já medido aqui (janela de
+ * configurações, prints `2026-09-01 1143–1146`, janela de 1920×1032), e piso de
+ * 880 para o rodapé não quebrar — o piso é nosso, não medido.
+ *
+ * Os segmentos do rodapé repetem a forma das abas, com o acento limão na opção
+ * ativa.
  */
 export default function ScreenSharePicker({ onClose }: { onClose: () => void }) {
   const [aba, setAba] = useState<Aba>("aplicativos");
@@ -82,12 +97,12 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
       onClose={onClose}
       hideHeader
       showClose={false}
-      className="h-[560px] w-[955px]"
-      bodyClassName="flex flex-col px-[22px] pb-[22px] pt-[21px]"
+      className="h-[888px] w-[min(1400px,max(75vw,880px))]"
+      bodyClassName="flex flex-col px-6 pb-6 pt-6"
     >
       <BarraDeAbas aba={aba} onAba={setAba} />
 
-      <div className="-mr-3 mt-6 min-h-0 flex-1 overflow-y-auto pr-3">
+      <div className="mt-6 min-h-0 flex-1 overflow-y-auto pr-4">
         {capacidades === null ? (
           <p className="pt-10 text-center text-sm text-txt-muted">Procurando janelas…</p>
         ) : capacidades.nativo ? (
@@ -244,7 +259,7 @@ function GradeNativa({
   return (
     <div>
       {aviso && <p className="mb-3 text-xs text-txt-muted">{aviso}</p>}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-x-4 gap-y-4">
         {visiveis.map((f) => (
           <Miniatura
             key={f.id}
@@ -282,7 +297,11 @@ function GradeNativa({
   );
 }
 
-/** Um cartão da grade: quadro 440×248 raio 8 sobre preto, e o nome embaixo. */
+/**
+ * Um cartão da grade: quadro 16:9 raio 8 sobre preto, e o nome embaixo com o
+ * ícone de 16. A largura vem da coluna (`auto-fill`), não de um número fixo —
+ * era o `w-[440px]` que deixava a miniatura grande demais em janela larga.
+ */
 function Miniatura({
   rotulo,
   icone,
@@ -301,9 +320,9 @@ function Miniatura({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="group flex w-[440px] max-w-full flex-col text-left outline-none disabled:cursor-wait"
+      className="group flex w-full flex-col text-left outline-none disabled:cursor-wait"
     >
-      <div className="grid h-[248px] w-full place-items-center overflow-hidden rounded-lg bg-black transition group-hover:ring-2 group-hover:ring-border-strong-hover group-focus-visible:ring-2 group-focus-visible:ring-accent">
+      <div className="grid aspect-video w-full place-items-center overflow-hidden rounded-lg bg-black transition group-hover:ring-2 group-hover:ring-border-strong-hover group-focus-visible:ring-2 group-focus-visible:ring-accent">
         {children}
       </div>
       <div className="mt-2 flex h-6 w-full items-center gap-2">
