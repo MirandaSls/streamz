@@ -59,7 +59,8 @@ export interface SettingsTab {
   icon: ReactNode;
   Component: ComponentType;
   /**
-   * As seções da página, para o menu de segundo nível (ver `TelaCheia`).
+   * As seções da página, para o menu de segundo nível (ver a moldura em
+   * `components/ui/JanelaDeConfiguracoes.tsx`).
    *
    * Cada `id` precisa casar com o `id` de um `<Section>` do componente — é o
    * contrato entre o menu e a página. Aba sem seções continua funcionando: ela

@@ -8,7 +8,7 @@ import ServerSettingsMembers from "@/components/modals/ServerSettingsMembers";
 import ServerSettingsBans from "@/components/modals/ServerSettingsBans";
 import InvitesPanel from "@/components/modals/InvitesPanel";
 import { useControleDeAlteracoes } from "@/components/ui/alteracoes";
-import TelaCheia, { ItemPerigo } from "@/components/ui/TelaCheia";
+import JanelaDeConfiguracoes, { ItemPerigo } from "@/components/ui/JanelaDeConfiguracoes";
 // ── h-moderacao: as abas de moderação, montadas neste mesmo casco ──
 import AuditLogTab from "@/components/settings/server/AuditLogTab";
 import OnboardingTab from "@/components/settings/server/OnboardingTab";
@@ -44,8 +44,8 @@ const GRUPOS: { id: string; label: string; abas: ServerSettingsTab[] }[] = [
 ];
 
 /**
- * "Configurações do servidor" — desenhada pela `TelaCheia` de `components/ui`,
- * a mesma moldura das configurações de usuário, canal e grupo.
+ * "Configurações do servidor" — desenhada pela `JanelaDeConfiguracoes` de
+ * `components/ui`, a mesma moldura das de usuário, canal e grupo.
  *
  * Cada aba pede a permissão que a API exigiria, e a lista esconde as que o
  * usuário não tem: quem só pode banir vê "Banimentos" e nada mais.
@@ -176,7 +176,7 @@ export default function ServerSettingsModal({
   })).filter((g) => g.itens.length > 0);
 
   return (
-    <TelaCheia
+    <JanelaDeConfiguracoes
       titulo={`Configurações de ${guild.name}`}
       cabecalho={guild.name}
       onCabecalho={abrirMenuDoServidor}
@@ -202,6 +202,6 @@ export default function ServerSettingsModal({
           Você não tem permissão para gerenciar este servidor.
         </p>
       )}
-    </TelaCheia>
+    </JanelaDeConfiguracoes>
   );
 }

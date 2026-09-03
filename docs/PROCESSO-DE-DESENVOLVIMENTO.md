@@ -262,6 +262,11 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   colado, no verde do `design.md`.
 - Card do usuário: flutuante, 58px, raio 8, atravessa a rail (irmão de rail e
   coluna, `inset-x-2.5`), listas e rail com respiro embaixo (`pb-[78px]`).
+- Configurações (usuário, servidor, canal e grupo, todas na mesma moldura
+  `components/ui/JanelaDeConfiguracoes.tsx`): **janela flutuante** de 1400×888
+  centrada sobre o app escurecido — não página inteira —, com menu de 252,
+  busca de 40 e cabeçalho de 48 com o X simples no canto (medido nos prints
+  `2026-09-01 1143–1146`, janela de 1920×1032).
 
 ## 7. Arquitetura de voz (o que precisa continuar verdade)
 
@@ -386,8 +391,8 @@ som (`stores/sons.ts`) valem para todos; a prévia da aba Notificações passa
   os dados do site.
 - `ScreenSharePicker.tsx` ainda importa do lucide; a sessão do compartilhamento
   de tela reescreve.
-- Coluna do modal de configurações foi para 252 assumindo que a medida do
-  Discord é da coluna; se for do conteúdo, o alvo é 268.
+- Coluna do modal de configurações: os 252 estavam certos — no print da janela
+  flutuante a coluna mede 252 de borda a borda.
 - Polimentos de voz listados no §7.
 - Painel "Ativo agora" e a barra de título no navegador: decisão do usuário.
 
