@@ -125,6 +125,7 @@ function FooterSplit({
  * status, nome, e os controles de microfone, áudio e configurações.
  */
 export default function UserFooter() {
+  const painel = useRef<HTMLDivElement>(null);
   const user = useAuth((s) => s.user);
   const statuses = usePresence((s) => s.statuses);
   const profiles = usePresence((s) => s.profiles);
@@ -157,13 +158,23 @@ export default function UserFooter() {
      * `pb` na lista (ver `DMList` e `ChannelSidebar`) é o que garante que o
      * último item ainda seja alcançável por baixo do card.
      */
-    <div className="pointer-events-auto absolute inset-x-2.5 bottom-2.5 z-20 flex flex-col overflow-hidden rounded-lg border border-border bg-footer">
+    <div
+      ref={painel}
+      className="pointer-events-auto absolute inset-x-2.5 bottom-2.5 z-20 flex flex-col overflow-hidden rounded-lg border border-border bg-footer"
+    >
       {/* f-voz: a barra da call sobe junto, como parte da mesma pilha flutuante */}
       <VoiceConnectedBar />
       <div className="flex h-[58px] shrink-0 items-center gap-2 px-3.5">
         <button
           type="button"
-          onClick={(e) => openProfile(user, anchorOf(e.currentTarget))}
+          /*
+            O cartão nasce do **painel**, não do botão do nome: no print
+            `2026-09-03 180020` ele encosta na borda esquerda da janela (x=10, a
+            mesma folga do painel) e a base fica 6px acima do topo dele.
+            Ancorado no botão, saía à direita — por cima da lista de conversas —
+            e com uma folga que o Discord não tem.
+          */
+          onClick={(e) => openProfile(user, anchorOf(painel.current ?? e.currentTarget), true)}
           aria-label="Meu perfil"
           className="-ml-1 flex min-w-0 flex-1 items-center gap-2 rounded-[4px] py-1 pl-1 pr-2 text-left transition hover:bg-hov"
         >

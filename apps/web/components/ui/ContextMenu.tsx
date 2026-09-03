@@ -273,11 +273,15 @@ function Painel({
           const filho = isSubmenu(item);
           const marcado = !filho && item.checked === true;
           const controle = !filho ? item.control : undefined;
+          const descricao = !filho ? item.description : undefined;
+          const forte = !filho && item.forte === true;
           const cor = item.danger
             ? "text-red hover:bg-red hover:text-white focus:bg-red focus:text-white"
             : !filho && item.highlight
               ? "text-accent hover:bg-accent hover:text-accent-ink focus:bg-accent focus:text-accent-ink"
-              : "text-txt-secondary hover:bg-accent hover:text-accent-ink focus:bg-accent focus:text-accent-ink";
+              : forte
+                ? "text-txt-primary hover:bg-accent hover:text-accent-ink focus:bg-accent focus:text-accent-ink"
+                : "text-txt-secondary hover:bg-accent hover:text-accent-ink focus:bg-accent focus:text-accent-ink";
           return (
             <button
               key={i}
@@ -310,7 +314,15 @@ function Painel({
                 onClose();
                 item.onSelect();
               }}
-              className={`flex h-9 w-full items-center gap-2 whitespace-nowrap rounded-[4px] px-2 text-left text-sm font-medium outline-none disabled:opacity-40 ${cor} ${
+              /*
+                `min-h-9 py-2` mantém o item de uma linha do tamanho de antes
+                (8 + entrelinha + 8 dá exatamente o `h-9` que estava aqui) e
+                deixa o de duas linhas crescer. No print `2026-09-03 180020` a
+                escada é 36 / 52 / 68 (uma linha, com uma linha de descrição,
+                com duas); aqui sai 34,9 / 50,4 / 65,9, porque a raiz do app é
+                de 15,5px e todo o `rem` do Tailwind encolhe 3%.
+              */
+              className={`flex min-h-9 w-full items-center gap-2 whitespace-nowrap rounded-[4px] px-2 py-2 text-left text-sm outline-none disabled:opacity-40 ${cor} ${
                 aberto === i ? "bg-accent text-accent-ink" : ""
               }`}
             >
@@ -319,7 +331,9 @@ function Painel({
                 // tamanho que quiser (18 ou 20) e ele sai sempre no mesmo quadro
                 <span
                   aria-hidden="true"
-                  className="grid h-5 w-5 shrink-0 place-items-center opacity-80 [&>svg]:h-5 [&>svg]:w-5"
+                  className={`grid h-5 w-5 shrink-0 place-items-center [&>svg]:h-5 [&>svg]:w-5 ${
+                    forte ? "" : "opacity-80"
+                  }`}
                 >
                   {item.icon as ReactNode}
                 </span>
@@ -331,7 +345,18 @@ function Painel({
                   className="h-2 w-2 shrink-0 rounded-full"
                 />
               )}
-              <span className="flex-1">{item.label}</span>
+              <span className="min-w-0 flex-1">
+                <span className={`block ${forte ? "font-semibold" : "font-medium"}`}>
+                  {item.label}
+                </span>
+                {descricao && (
+                  // 12/16 e apagada, como no print; `whitespace-normal` porque a
+                  // descrição do "Não perturbar" ocupa duas linhas
+                  <span className="block whitespace-normal text-xs font-normal leading-4 opacity-60">
+                    {descricao}
+                  </span>
+                )}
+              </span>
               {controle === "checkbox" && (
                 <span
                   aria-hidden="true"
@@ -363,7 +388,16 @@ function Painel({
                   {marcado && <span className="h-2 w-2 rounded-full bg-current" />}
                 </span>
               )}
-              {filho && <ChevronRight size={16} className="shrink-0 opacity-80" />}
+              {/*
+                O chevron do item que só *parece* ter submenu (seletor de
+                status) fica no mesmo lugar do de verdade. Tamanhos medidos pelo
+                desenho do glifo no print `2026-09-03 180020`: 6x12 de tinta no
+                seletor de status (= 24 no nosso ativo, que pinta 25% x 50% da
+                caixa) contra os 16 dos menus de botão direito já medidos.
+              */}
+              {(filho || (!filho && item.chevron)) && (
+                <ChevronRight size={forte ? 24 : 16} className="shrink-0 opacity-80" />
+              )}
             </button>
           );
         })}
@@ -388,7 +422,9 @@ function Painel({
 /**
  * Menu de contexto (botão direito) no estilo do Discord: caixa escura de 220
  * com raio 8 e padding 8, itens de 36px com o ícone de 20 à esquerda do rótulo,
- * hover cheio, submenus com chevron. Um só na tela, aberto por
+ * hover cheio, submenus com chevron. Item com `description` vira de duas
+ * linhas (rótulo 14/20 + descrição 12/16) e cresce para 52 ou 68 — é o
+ * formato do seletor de status do cartão do usuário. Um só na tela, aberto por
  * `ui.openContextMenu(x, y, items, largura)`. Medidas dos prints `124207` e
  * `124022`: separador de 1px com 8 de folga de cada lado, item de 204x36
  * (raio 4), caixa de marcar de 20 à direita.

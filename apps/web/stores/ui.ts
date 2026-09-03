@@ -138,6 +138,28 @@ export type MenuItem =
       /** nome do ícone lucide já resolvido pelo chamador (ReactNode evita
        *  acoplar a store ao React; o host renderiza o que vier). */
       icon?: unknown;
+      /**
+       * Segunda linha, menor e apagada, embaixo do rótulo — os itens de duas
+       * linhas do seletor de status ("Você não receberá notificação na área de
+       * trabalho"). Medido no print `2026-09-03 180020`: rótulo de 14 com
+       * entrelinha 20, descrição de 12 com entrelinha 16, item de 52 com uma
+       * linha de descrição e 68 com duas.
+       */
+      description?: string;
+      /**
+       * Chevron **só visual** à direita. O Discord desenha a setinha nos itens
+       * de status que teriam um submenu de duração; aqui o clique já aplica o
+       * status, então o item não é `submenu` — mas a seta continua na mesma
+       * posição, como no original.
+       */
+      chevron?: boolean;
+      /**
+       * Item de escolha, não de comando: rótulo em negrito e no branco do
+       * título, e ícone **sem** o véu de 80% do quadro padrão — no seletor de
+       * status a cor do ícone (verde/amarelo/vermelho/cinza) é a informação, e
+       * esmaecê-la aproxima os quatro estados.
+       */
+      forte?: boolean;
     }
   | {
       label: string;
@@ -201,7 +223,19 @@ export interface Anchor {
   height: number;
 }
 
-export type Popover = { kind: "profile"; user: PublicUser; anchor: Anchor };
+export type Popover = {
+  kind: "profile";
+  user: PublicUser;
+  anchor: Anchor;
+  /**
+   * Cartão **em cima** da âncora e alinhado pela borda esquerda dela, em vez de
+   * ao lado. É como o Discord abre o cartão do rodapé: mesma margem esquerda do
+   * painel do usuário, encostado na borda da janela. Medido no print
+   * `2026-09-03 180020`: cartão em x=10 (a mesma folga de 10 do rodapé) e base
+   * 6px acima do topo do rodapé.
+   */
+  acima?: boolean;
+};
 
 export interface ConfirmOptions {
   title: string;
@@ -259,7 +293,7 @@ interface UIState {
   /**
    * Abrir um menu fecha o popover — em geral o menu *substitui* o cartão.
    * `manterPopover` é para os menus que PERTENCEM ao cartão (o kebab do perfil,
-   * o "+" de cargo, a duração do status): fechá-lo ali deixaria o menu órfão.
+   * o "+" de cargo, o seletor de status): fechá-lo ali deixaria o menu órfão.
    */
   openContextMenu: (
     x: number,
@@ -269,7 +303,7 @@ interface UIState {
     manterPopover?: boolean,
   ) => void;
   closeContextMenu: () => void;
-  openProfile: (user: PublicUser, anchor: Anchor) => void;
+  openProfile: (user: PublicUser, anchor: Anchor, acima?: boolean) => void;
   closePopover: () => void;
 
   confirm: (options: ConfirmOptions) => Promise<boolean>;
@@ -326,7 +360,8 @@ export const useUI = create<UIState>((set, get) => ({
       popover: manterPopover ? s.popover : null,
     })),
   closeContextMenu: () => set({ contextMenu: null }),
-  openProfile: (user, anchor) => set({ popover: { kind: "profile", user, anchor }, contextMenu: null }),
+  openProfile: (user, anchor, acima) =>
+    set({ popover: { kind: "profile", user, anchor, acima }, contextMenu: null }),
   closePopover: () => set({ popover: null }),
 
   // confirm/prompt empilham: quem chamou pode estar dentro de outro modal
@@ -409,7 +444,8 @@ export const ui = {
     width?: number,
     manterPopover?: boolean,
   ) => useUI.getState().openContextMenu(x, y, items, width, manterPopover),
-  openProfile: (user: PublicUser, anchor: Anchor) => useUI.getState().openProfile(user, anchor),
+  openProfile: (user: PublicUser, anchor: Anchor, acima?: boolean) =>
+    useUI.getState().openProfile(user, anchor, acima),
   setView: (view: "guild" | "dm") => useUI.getState().setView(view),
   view: () => useUI.getState().view,
 };
