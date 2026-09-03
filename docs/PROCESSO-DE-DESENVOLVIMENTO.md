@@ -285,6 +285,10 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
 - LiveKit é por identidade e não aceita duas iguais: entrar de outro aparelho
   expulsa a conexão anterior de propósito, com evento `voice.evicted` e a
   mensagem "você entrou de outro dispositivo" (`voz-em-um-lugar-so.ts`).
+- Seletor de tela (`ScreenSharePicker`): duas abas (Aplicativos e Tela
+  Inteira) e, no rodapé, resolução e taxa de quadros como segmentos sempre
+  visíveis, com as opções vindas de `SCREEN_QUALITY` — sem aba de
+  dispositivos, sem alternador SD/HD e sem a etapa da engrenagem.
 - Ainda aquém do Discord (não é defeito): botão de voltar para call em outro
   servidor cai no primeiro canal de texto; barra "conectado" sem cronômetro nem
   quem fala; sem "ocupado" para quem liga durante uma call; diálogos invisíveis
