@@ -189,67 +189,16 @@ se veem fora dali.
 O desktop embute a web: o que entra em `main` depois do build só chega ao
 instalado na versão seguinte.
 
-### 5.1 O assistente do instalador (NSIS)
+### 5.1 O instalador é o padrão do Tauri (NSIS)
 
-O `.exe` que sai do passo 2 é gerado pelo NSIS a partir de um template
-**nosso**, e não do que vem embutido no tauri-bundler:
-
-| arquivo | o que é |
-| --- | --- |
-| `apps/desktop/src-tauri/nsis/installer.nsi` | o template, fork do oficial |
-| `apps/desktop/src-tauri/nsis/ganchos.nsh` | `installerHooks`; só entrega o caminho absoluto da arte |
-| `apps/desktop/src-tauri/nsis/gerar-arte.py` | gera os BMP e o AVI a partir de `icons/icon.png` |
-| `apps/desktop/src-tauri/nsis/cabecalho.bmp`, `lateral.bmp` | cabeçalho (150×57) e lateral das boas-vindas (164×314) |
-| `apps/desktop/src-tauri/nsis/anim/` | 12 quadros do pulso do ícone + `instalando.avi` |
-
-Três coisas que precisam continuar verdade:
-
-1. **O template é um fork preso numa versão.** Ele saiu de
-   `crates/tauri-bundler/src/bundle/windows/nsis/installer.nsi` na tag
-   `tauri-cli-v2.11.4` — a versão do `@tauri-apps/cli` presa no
-   `pnpm-lock.yaml`. **Ao subir essa versão, refaça o diff contra o
-   `installer.nsi` da tag nova** e traga o que mudou. Um template velho
-   compila e passa no CI; o que quebra em silêncio é o updater, que depende
-   dos parâmetros `/UPDATE`, `/P`, `/S`, `/R` e `/NS` tratados lá dentro.
-   Toda linha nossa está marcada com `; streamz:` justamente para o diff ser
-   fácil.
-2. **A arte é commitada, não gerada no CI.** O runner do Windows não tem
-   Pillow, e ninguém vai instalar. Para trocar a marca, mexa no
-   `gerar-arte.py` e rode (o host não tem python com Pillow):
-
-   ```
-   docker run --rm -v /opt/stack/streamz/.claude/worktrees/<nome>:/w \
-     -w /w/apps/desktop/src-tauri python:3-slim bash -lc \
-     "apt-get update -qq && apt-get install -y -qq fonts-dejavu-core \
-      && pip install --quiet pillow && python nsis/gerar-arte.py"
-   ```
-
-   Os BMP têm que sair em **BMP3 24 bits**: o MUI2 e o `LoadImage` do Win32
-   engolem BMP de 32 bits com alfa como um retângulo preto.
-3. **Dá para compilar o `.nsi` aqui, e só isso.** Um teste de fumaça que
-   preenche os `{{...}}` do Handlebars com valores plausíveis, troca as
-   chamadas do plugin `nsis_tauri_utils` por `Push 0` e roda o `makensis` do
-   Debian pega erro de sintaxe, `!define` faltando, LangString sem tradução,
-   BMP inválido e `File` apontando para arquivo que não existe. **Não pega
-   nada de comportamento** — leiaute, cor, animação, fechar sozinho e abrir o
-   app só o Windows prova. Quem quiser refazer o harness: ver o PR #78.
-
-O que o assistente faz hoje: boas-vindas escuras com a lateral da marca →
-(se já houver instalação) escolher entre reinstalar e desinstalar → escolher a
-pasta → página de instalação escura com o ícone do Streamz pulsando e a barra
-em Volt Lime → **fecha sozinho e abre o app**. Não existe página de conclusão;
-o atalho na área de trabalho, que era uma caixinha marcada por padrão lá,
-passou a ser criado sempre na seção de instalação.
-
-Nada disso aparece numa **atualização**: desde o #77 o updater roda o
-instalador com `installMode: "quiet"`, que é `/S` — sem janela nenhuma. O
-assistente bonito é o da instalação manual, a que sai do site.
-
-O ícone anima num controle `SysAnimate32` do Windows tocando um AVI RGB sem
-compressão, e não num temporizador do NSIS trocando bitmaps: o NSIS roda a
-instalação numa thread separada, então o callback de script não desenha
-enquanto o `File` do executável principal está copiando — que é exatamente o
-trecho que a animação existe para cobrir.
+Em 2026-09-03 o PR #79 trouxe um template NSIS próprio (tema escuro, arte,
+ícone animado por `SysAnimate32`, fechar sozinho e abrir o app). Custou três
+builds de ~35 min (comentário com `{{...}}` quebra o Handlebars; `${__FILEDIR__}`
+sem separador final no makensis do Windows; `File` não aceita barra normal) e
+o resultado saiu com o **corpo branco** do MUI apesar do cabeçalho escuro. O
+usuário viu as prints e preferiu o instalador padrão: o PR seguinte apagou
+`nsis/` e deixou só `installerIcon`. Se voltar a esse assunto, o histórico do
+#79 tem o template, o `gerar-arte.py` e o harness de fumaça.
 
 ## 6. Paridade visual com o Discord (o método)
 
