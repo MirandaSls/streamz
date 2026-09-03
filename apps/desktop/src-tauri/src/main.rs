@@ -59,9 +59,11 @@ fn main() {
     tauri::Builder::default()
         // Notificações nativas (Tauri 2 → crate própria).
         .plugin(tauri_plugin_notification::init())
-        // Auto-update. O plugin só busca quando a interface pede (ver
-        // `AvisoDeAtualizacao` na web): nada é baixado sozinho, e a checagem
-        // falha em silêncio quando o endpoint não tem versão a oferecer.
+        // Auto-update. Quem pede é a janelinha `splash` (ver
+        // `components/desktop/JanelaSplash.tsx`): na abertura, antes de a
+        // janela principal aparecer, e de novo quando a setinha verde da barra
+        // de título é clicada. A checagem falha em silêncio quando o endpoint
+        // não tem versão a oferecer.
         .plugin(tauri_plugin_updater::Builder::new().build())
         // `relaunch()` depois de instalar; é o que fecha o ciclo.
         .plugin(tauri_plugin_process::init())
@@ -118,14 +120,21 @@ fn main() {
 
             Ok(())
         })
-        // Fechar a janela minimiza para a bandeja em vez de encerrar o app —
-        // e a chamada em curso continua, que é a promessa da bandeja. Ver os
-        // argumentos do WebView2 no `main`: sem eles a janela escondida seria
-        // congelada e a call cairia assim mesmo.
+        // Fechar a janela principal minimiza para a bandeja em vez de encerrar
+        // o app — e a chamada em curso continua, que é a promessa da bandeja.
+        // Ver os argumentos do WebView2 no `main`: sem eles a janela escondida
+        // seria congelada e a call cairia assim mesmo.
+        //
+        // Só a principal. A janelinha de abertura/atualização (`splash`) fecha
+        // de verdade quando pede: se ela também fosse escondida, continuaria
+        // existindo com o rótulo ocupado, e a próxima atualização não
+        // conseguiria criar a janela ("window label already exists").
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
-                let _ = window.hide();
-                api.prevent_close();
+                if window.label() == "main" {
+                    let _ = window.hide();
+                    api.prevent_close();
+                }
             }
         })
         .build(tauri::generate_context!())
