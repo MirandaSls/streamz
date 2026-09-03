@@ -35,6 +35,11 @@ interface DMsState {
   refreshList: () => Promise<void>;
   select: (dm: DMChannelView) => void;
   openWith: (userId: string) => Promise<void>;
+  /**
+   * Garante a conversa 1-a-1 com `userId` **na lista**, em primeiro, sem
+   * abrir — é o que acontece quando uma amizade nasce, como no Discord.
+   */
+  garantirNaLista: (userId: string) => Promise<void>;
   createGroup: (userIds: string[], name?: string) => Promise<boolean>;
   leaveGroup: (channelId: string) => Promise<void>;
   // ── d-social ──
@@ -125,6 +130,17 @@ export const useDMs = create<DMsState>((set, get) => {
         show(dm);
       } catch (e) {
         ui.toast(errorMessage(e, "Não foi possível abrir a conversa"), "error");
+      }
+    },
+
+    garantirNaLista: async (userId) => {
+      try {
+        const dm = await api.openDM(userId);
+        set((s) => ({
+          channels: [dm, ...s.channels.filter((d) => d.id !== dm.id)],
+        }));
+      } catch {
+        // a lista recarregada no próximo `openList` traz a conversa
       }
     },
 

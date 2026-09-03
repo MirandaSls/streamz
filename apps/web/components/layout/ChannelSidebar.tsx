@@ -516,42 +516,44 @@ export default function ChannelSidebar() {
               {channel.mentionCount}
             </span>
           )}
-          {/* Cronômetro da call, como no print: some no hover, que é quando os
-              dois botões do canal tomam o lugar dele. */}
+          {/* Cronômetro da call: alinhado à direita, a 10px da borda da linha,
+              como no Discord. Some no hover, que é quando os dois botões do
+              canal tomam o lugar dele. */}
           {vozAqui === channel.id && vozDesde !== null && (
-            /* `ml-auto`: no Discord o cronômetro é alinhado à **direita** da
-               linha, a ~10px da borda. O nosso ficava colado no nome, sobrando
-               56px de vazio à direita. Continua sumindo no hover, que é quando
-               os dois botões do canal tomam o lugar dele. */
             <Cronometro
               desde={vozDesde}
-              className="ml-auto mr-1 shrink-0 text-xs text-green group-hover:hidden"
+              className="ml-auto mr-1.5 shrink-0 text-xs text-green group-hover:hidden"
             />
           )}
 
-          {/* o hover do canal no Discord mostra DOIS botões: convite e editar */}
-          <Tooltip label="Criar convite">
-            <button
-              type="button"
-              onClick={() => void createInvite()}
-              aria-label={`Criar convite para ${name}`}
-              className="grid h-6 w-6 place-items-center rounded text-txt-muted opacity-0 transition hover:text-txt-primary group-hover:opacity-100 focus-visible:opacity-100"
-            >
-              <UserPlus size={18} />
-            </button>
-          </Tooltip>
-          {canModerate && (
-            <Tooltip label="Editar canal">
+          {/* O hover do canal no Discord mostra DOIS botões: convite e editar.
+              Ficam **fora do fluxo** (`absolute`): invisíveis eles ainda
+              ocupavam 48px, e era isso que empurrava o cronômetro para longe
+              da borda. Só aparecem no hover ou com foco de teclado. */}
+          <span className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center">
+            <Tooltip label="Criar convite">
               <button
                 type="button"
-                onClick={() => openModal({ kind: "channelSettings", channelId: channel.id })}
-                aria-label={`Editar ${name}`}
+                onClick={() => void createInvite()}
+                aria-label={`Criar convite para ${name}`}
                 className="grid h-6 w-6 place-items-center rounded text-txt-muted opacity-0 transition hover:text-txt-primary group-hover:opacity-100 focus-visible:opacity-100"
               >
-                <Settings size={18} />
+                <UserPlus size={18} />
               </button>
             </Tooltip>
-          )}
+            {canModerate && (
+              <Tooltip label="Editar canal">
+                <button
+                  type="button"
+                  onClick={() => openModal({ kind: "channelSettings", channelId: channel.id })}
+                  aria-label={`Editar ${name}`}
+                  className="grid h-6 w-6 place-items-center rounded text-txt-muted opacity-0 transition hover:text-txt-primary group-hover:opacity-100 focus-visible:opacity-100"
+                >
+                  <Settings size={18} />
+                </button>
+              </Tooltip>
+            )}
+          </span>
         </div>
         {channel.type === "VOICE" && (
           <VoiceChannelMembers channelId={channel.id} guildId={channel.guildId} />

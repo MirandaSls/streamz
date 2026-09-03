@@ -21,9 +21,12 @@ import { ui } from "@/stores/ui";
  * do modo DM: a coluna 3 mostra a página quando ela está ligada e a conversa
  * quando não.
  *
- * Amizade nova **abre a conversa na hora** (`abrirConversa`): virar amigo só
- * para cair de volta numa lista é meio caminho — o próximo passo é sempre
- * falar com a pessoa.
+ * Amizade nova **aparece no topo das conversas** dos dois lados, como no
+ * Discord — quem aceitou e quem pediu. Isso não mora aqui: o servidor avisa
+ * os dois com `friend.accepted`, e é o tratador desse evento (`useRealtime`)
+ * que garante a conversa na lista (`useDMs.garantirNaLista`). Ninguém é
+ * arrancado da página Amigos para dentro da conversa; ela só passa a existir
+ * na coluna, em primeiro.
  */
 
 export type FriendsTab = "online" | "todos" | "pendentes" | "bloqueados" | "adicionar";
@@ -64,11 +67,6 @@ let seq = 0;
  * O import é dinâmico de propósito: `stores/dms` já importa esta store, e um
  * import estático de volta fecharia um ciclo entre os dois módulos.
  */
-async function abrirConversa(userId: string) {
-  const { useDMs } = await import("@/stores/dms");
-  await useDMs.getState().openWith(userId);
-}
-
 export const useFriends = create<FriendsState>((set, get) => {
   async function fetchLists() {
     const meu = ++seq;
@@ -111,15 +109,12 @@ export const useFriends = create<FriendsState>((set, get) => {
       try {
         const request = await api.requestFriend(nome);
         // pedido cruzado vira amizade na hora: o servidor devolve ACCEPTED e o
-        // evento `friend.accepted` chega junto — recarregar evita divergência
+        // evento `friend.accepted` chega junto (é ele que toasta e põe a
+        // conversa na lista) — recarregar evita divergência
         await fetchLists();
         // o DTO do pedido não carrega o status, mas a lista recarregada carrega:
         // já ser amigo é o sinal de que os dois pedidos se casaram
-        if (get().friends.some((f) => f.id === request.user.id)) {
-          ui.toast(`Vocês agora são amigos, @${request.user.username}.`);
-          await abrirConversa(request.user.id);
-          return true;
-        }
+        if (get().friends.some((f) => f.id === request.user.id)) return true;
         ui.toast(`Pedido de amizade enviado para @${request.user.username}.`);
         return true;
       } catch (e) {
@@ -131,14 +126,14 @@ export const useFriends = create<FriendsState>((set, get) => {
     accept: async (requestId) => {
       const pedido = get().incoming.find((r) => r.id === requestId);
       if (!pedido) return;
-      // otimista: o evento `friend.accepted` confirma logo em seguida
+      // otimista: o evento `friend.accepted` confirma logo em seguida (e é
+      // ele que põe a conversa nova no topo da lista)
       set((s) => ({
         incoming: s.incoming.filter((r) => r.id !== requestId),
         friends: [...s.friends, pedido.user],
       }));
       try {
         await api.acceptFriend(requestId);
-        await abrirConversa(pedido.user.id);
       } catch (e) {
         ui.toast(errorMessage(e, "Não foi possível aceitar o pedido"), "error");
         await fetchLists();
