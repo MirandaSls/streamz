@@ -1,0 +1,17 @@
+# Flags de link do app de desktop (apps/desktop/src-tauri).
+#
+# A `libwebrtc` que o crate `livekit` baixa para Windows vem compilada com a
+# CRT **estática** (/MT). Sem esta flag o resto do binário sai com a CRT
+# dinâmica (/MD) e o `link.exe` recusa a mistura: centenas de
+# `LNK2038: mismatch detected for 'RuntimeLibrary'` e `LNK2005: already
+# defined` — foi o que derrubou o build da 0.0.11. É a mesma configuração que
+# o próprio livekit/rust-sdks usa no `.cargo/config.toml` dele.
+#
+# Fica na raiz do repositório (e não em src-tauri) porque o cargo procura o
+# arquivo subindo a partir do diretório atual: vale rodando `cargo` de qualquer
+# pasta do monorepo, inclusive pelo `tauri build`.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
