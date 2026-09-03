@@ -11,7 +11,7 @@ import {
 } from "react";
 import {
   ALTURA_MIN,
-  PROPORCAO_PADRAO,
+  proporcaoPadrao,
   PROPORCAO_TRANSMISSAO,
   alturaDoPalco,
   proporcaoDaAlturaAntiga,
@@ -118,7 +118,7 @@ export default function CallSplit({ chamada, chat }: { chamada: ReactNode; chat:
     setProporcao(
       lerProporcao() ??
         migrarAlturaAntiga(disponivel) ??
-        (transmitindoRef.current ? PROPORCAO_TRANSMISSAO : PROPORCAO_PADRAO),
+        (transmitindoRef.current ? PROPORCAO_TRANSMISSAO : proporcaoPadrao(disponivel)),
     );
   }, [disponivel, proporcao]);
 

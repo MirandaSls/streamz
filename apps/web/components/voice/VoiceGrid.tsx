@@ -497,6 +497,20 @@ function VoiceTile({
           mudo, surdo, transmissão — e no hover, para quem quiser conferir o
           nome. Com vídeo ela fica sempre: aí o quadro é uma imagem em
           movimento, e o rosto de hoje não é o de ontem. */}
+      {/* "Ao vivo" é selo próprio no canto **superior direito**, não um pedaço
+          do rótulo de nome. No Discord os dois convivem: o nome embaixo à
+          esquerda, o aviso de transmissão em cima à direita. Dentro do rótulo
+          ele competia com o nome pela mesma linha e sumia junto com ela. */}
+      {tela && (
+        <span
+          className={`pointer-events-none absolute rounded-[4px] bg-red font-bold uppercase leading-none tracking-[0.02em] text-white ${
+            compacto ? "right-1.5 top-1.5 px-1 py-0.5 text-[9px]" : "right-3 top-3 px-1.5 py-1 text-[10px]"
+          }`}
+        >
+          Ao vivo
+        </span>
+      )}
+
       <span
         className={`pointer-events-none absolute flex items-center rounded-md bg-black/50 text-white transition-opacity ${
           // a medida é a do tile do palco; na tirinha de miniaturas (90px de
@@ -510,11 +524,6 @@ function VoiceTile({
             : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
         }`}
       >
-        {tela && (
-          <span className="rounded-[3px] bg-red px-1 text-[10px] font-bold uppercase leading-4 tracking-[0.02em] text-white">
-            Ao vivo
-          </span>
-        )}
         {/* surdo implica mudo: mostrar os dois glifos contaria duas vezes a
             mesma coisa. "Silenciado por você" não entra — é estado meu, não
             dele, e vive no menu de contexto.
