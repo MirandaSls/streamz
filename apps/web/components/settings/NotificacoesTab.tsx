@@ -75,7 +75,7 @@ export default function NotificacoesTab() {
 /**
  * "Ativar sons de notificação" e, dentro dele, um interruptor por som.
  *
- * A lista fica recolhida porque são dez linhas para uma preferência que quase
+ * A lista fica recolhida porque são treze linhas para uma preferência que quase
  * ninguém abre — mas quando incomoda, incomoda por *um* som só, e é esse que
  * precisa ser desligável sem calar o resto.
  */
@@ -90,7 +90,7 @@ const SONS_A_VISTA = 4;
  * "quero ouvir isto?", e a única forma de responder é ouvindo. Um alto-falante
  * mudo à direita fazia a prévia parecer o próprio controle de volume.
  *
- * Só os primeiros ficam à vista. São dez eventos, e a lista inteira aberta
+ * Só os primeiros ficam à vista. São treze eventos, e a lista inteira aberta
  * empurra o resto da página para fora da tela por uma preferência que quase
  * ninguém mexe — o resto entra num "mostrar mais" que diz o que tem lá dentro.
  */
@@ -112,7 +112,9 @@ function BlocoDeSons() {
       tocarArquivo(toqueDeChamadaUrl(), volume);
       return;
     }
-    // a prévia toca mesmo o som desligado: é o que a pessoa está avaliando
+    // a prévia toca mesmo o som desligado (e mesmo com o interruptor mestre
+    // desligado): é justamente o som que a pessoa está avaliando. Vale também
+    // para "Movido de canal", que ainda não tem nenhum evento que o dispare.
     tocarSom(nome as SomDeVoz, volume, true);
   }
 
