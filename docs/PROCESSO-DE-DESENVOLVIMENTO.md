@@ -427,9 +427,35 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
 | #73 | Sons originais do Discord (`public/sons/`), badge de não lidas na borda (rail com miolo de 16px), cronômetro colado na borda (botões do hover fora do fluxo), amizade nova põe a conversa no topo dos dois lados |
 | #74 | Sons do Discord em todo caminho: mudo/surdo pelo botão do rodapé (o som foi para a store), entrar e transmissão de tela com arquivo, nada mais sintetizado |
 | #99 | GIF animado como foto de perfil e banner: o GIF pula o recorte (canvas achata a animação) e sobe inteiro, com teto de 8 MB, lado de 2048px, assinatura `GIF87a`/`GIF89a` conferida e content-type real no proxy |
+| #104 | Convite vira cartão com "Entrar" (reconhecido no host público **e** no host do app), `guild.joined` para todas as conexões da conta, logo do rail volta para Amigos, e o foco da janela do desktop volta a marcar a conversa aberta como lida |
 
 Desktop: 0.0.6 (#38 + #40 + #41), 0.0.7 (+ #42), 0.0.8 (tudo até #50),
 0.0.10 (até #64), 0.0.11 (até #71, primeira com a tela nativa), 0.0.12 (até #73).
+
+**Duas sessões da mesma conta.** O que muda a lista de servidores ou de
+conversas sai para a **sala do usuário** (`user:<id>`, `emitToUser`), onde estão
+todas as conexões — não para o socket que fez a requisição, que já tem a
+resposta HTTP na mão. Foi essa a falha do `redeem` até o #104: ele punha os
+sockets na sala do servidor e avisava o servidor do membro novo, mas não avisava
+o próprio usuário, e o desktop ficava com o rail velho até reiniciar. Vale para
+`guild.joined` (entrei/criei), `guild.removed` (saí/expulso/apagado),
+`channel.updated` (conversa aberta ou reaberta), amizade e `account.updated`.
+
+**O host do app de desktop não é o host público.** Dentro do Tauri a origem é
+`http://tauri.localhost` — o WebView2 serve o export estático de dentro do app.
+Qualquer regra que compare com `window.location.origin` (link de convite, link
+de mensagem, "é nosso?") tem que aceitar **os dois**: o host público, que vem de
+`WEB_URL` em `lib/config.ts` (derivado do `NEXT_PUBLIC_API_URL`, o único que
+todos os builds recebem), e o do próprio app.
+
+**O foco da janela é o gate de "marcar como lido".** `lib/na-tela.ts` decide o
+que está na tela; `janelaTemFoco()` decide se o usuário está olhando. No desktop
+a janela `main` nasce `visible: false` (§5.2), então o primeiro
+`document.hasFocus()` é `false` e quem mostra a janela é a janelinha. O estado
+de foco precisa aceitar sinal do `focus`/`blur` do DOM **e** do `onFocusChanged`
+do Tauri (`lib/foco-da-janela.ts`): fotografá-lo uma vez e esperar só pelo
+ouvinte nativo — que entra por `import()` assíncrono — travava tudo em "sem
+foco" pelo resto da sessão.
 
 **Sons.** `lib/ringtone.ts` e `lib/notification-sound.ts` tocam arquivos de
 `apps/web/public/sons/` (origem: `docs/Reference/audio/`, fora do git). **Nada
