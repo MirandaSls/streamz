@@ -103,7 +103,7 @@ export default function ScreenShareButton({
           tom={screenOn ? "aoVivo" : "neutro"}
           pressionado={screenOn}
         >
-          {screenOn ? <MonitorX size={20} /> : <MonitorUp size={20} />}
+          {screenOn ? <MonitorX size={22} /> : <MonitorUp size={22} />}
         </BotaoDeChamada>
       )}
 
