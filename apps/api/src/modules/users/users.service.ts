@@ -31,7 +31,7 @@ import { toPublicUser } from "../../common/dto";
 import { RealtimeService } from "../realtime/realtime.service";
 import { StorageService } from "../storage/storage.service";
 import { FriendsService } from "../friends/friends.service";
-import { sniffImage } from "../uploads/media";
+import { contentTypeDaChave, validarImagemDePerfil } from "./imagem-de-perfil";
 
 @Injectable()
 export class UsersService {
@@ -121,7 +121,11 @@ export class UsersService {
     return dto;
   }
 
-  /** Avatar: imagem reconhecida pelos bytes, guardada no storage, servida por /users/:id/avatar. */
+  /**
+   * Avatar: imagem reconhecida pelos bytes, guardada no storage, servida por
+   * /users/:id/avatar. GIF entra inteiro e sem passar por nenhum processamento
+   * — é o que preserva a animação (ver `imagem-de-perfil.ts`).
+   */
   async updateAvatar(
     meId: string,
     file: { buffer: Buffer; size: number },
@@ -129,15 +133,20 @@ export class UsersService {
     if (!this.storage.isConfigured()) {
       throw new ServiceUnavailableException("Armazenamento (R2) não configurado. Ver PENDENCIAS.md.");
     }
-    if (!file?.buffer?.length) throw new BadRequestException("Arquivo vazio");
-    if (file.size > MAX_AVATAR_SIZE) {
-      throw new PayloadTooLargeException(`Avatar acima de ${MAX_AVATAR_SIZE / 1024 / 1024} MB`);
+    const imagem = validarImagemDePerfil(file?.buffer, {
+      maxEstatico: MAX_AVATAR_SIZE,
+      rotulo: "Avatar",
+    });
+    if (!imagem.ok) {
+      throw imagem.grande
+        ? new PayloadTooLargeException(imagem.motivo)
+        : new BadRequestException(imagem.motivo);
     }
-    const image = sniffImage(file.buffer);
-    if (!image) throw new BadRequestException("O avatar precisa ser uma imagem (PNG, JPEG, GIF ou WebP)");
 
-    const key = `avatars/${meId}/${randomUUID()}`;
-    await this.storage.put(key, file.buffer, image.mime);
+    // a extensão fica na chave: é dela que sai o content-type do proxy, e é o
+    // que faz um GIF chegar ao browser como GIF (ver `contentTypeDaChave`)
+    const key = `avatars/${meId}/${randomUUID()}.${imagem.extensao}`;
+    await this.storage.put(key, file.buffer, imagem.mime);
 
     const antes = await this.prisma.user.findUnique({ where: { id: meId }, select: { avatarKey: true } });
     const u = await this.prisma.user.update({
@@ -183,8 +192,11 @@ export class UsersService {
       select: { avatarKey: true },
     });
     if (!u?.avatarKey) throw new NotFoundException("Sem avatar");
-    // o content-type real foi validado no upload; o proxy sempre serve como imagem
-    return { body: await this.storage.get(u.avatarKey), contentType: "image/*" };
+    // o content-type real foi validado no upload e vive na extensão da chave
+    return {
+      body: await this.storage.get(u.avatarKey),
+      contentType: contentTypeDaChave(u.avatarKey),
+    };
   }
 
   /**
@@ -226,20 +238,23 @@ export class UsersService {
     return dto;
   }
 
-  /** Banner do perfil: mesma mecânica do avatar (magic-bytes + storage + proxy). */
+  /** Banner do perfil: mesma mecânica do avatar (magic-bytes + storage + proxy), GIF incluído. */
   async updateBanner(meId: string, file: { buffer: Buffer; size: number }): Promise<PublicUser> {
     if (!this.storage.isConfigured()) {
       throw new ServiceUnavailableException("Armazenamento (R2) não configurado. Ver PENDENCIAS.md.");
     }
-    if (!file?.buffer?.length) throw new BadRequestException("Arquivo vazio");
-    if (file.size > MAX_BANNER_SIZE) {
-      throw new PayloadTooLargeException(`Banner acima de ${MAX_BANNER_SIZE / 1024 / 1024} MB`);
+    const imagem = validarImagemDePerfil(file?.buffer, {
+      maxEstatico: MAX_BANNER_SIZE,
+      rotulo: "Banner",
+    });
+    if (!imagem.ok) {
+      throw imagem.grande
+        ? new PayloadTooLargeException(imagem.motivo)
+        : new BadRequestException(imagem.motivo);
     }
-    const image = sniffImage(file.buffer);
-    if (!image) throw new BadRequestException("O banner precisa ser uma imagem (PNG, JPEG, GIF ou WebP)");
 
-    const key = `banners/${meId}/${randomUUID()}`;
-    await this.storage.put(key, file.buffer, image.mime);
+    const key = `banners/${meId}/${randomUUID()}.${imagem.extensao}`;
+    await this.storage.put(key, file.buffer, imagem.mime);
 
     const antes = await this.prisma.user.findUnique({
       where: { id: meId },
@@ -273,7 +288,10 @@ export class UsersService {
       select: { bannerKey: true },
     });
     if (!u?.bannerKey) throw new NotFoundException("Sem banner");
-    return { body: await this.storage.get(u.bannerKey), contentType: "image/*" };
+    return {
+      body: await this.storage.get(u.bannerKey),
+      contentType: contentTypeDaChave(u.bannerKey),
+    };
   }
 
   /**

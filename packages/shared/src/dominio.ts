@@ -38,6 +38,64 @@ export function displayNameOf(u: Pick<PublicUser, "username" | "displayName">): 
 export const MAX_DISPLAY_NAME = 32;
 export const MAX_AVATAR_SIZE = 4 * 1024 * 1024; // 4 MB
 
+// ── Imagem de perfil (foto e banner) ─────────────────────────
+//
+// Foto e banner aceitam os mesmos formatos, e **GIF animado é um deles**, como
+// no Discord: o arquivo sobe inteiro e é guardado como veio.
+//
+// Por que o GIF tem teto próprio: as outras imagens passam antes pelo recorte
+// do cliente, que grava um WebP de 512px (avatar) ou 960px (banner) — o que
+// chega na API já é pequeno. O GIF **não** passa por ali (recortar num canvas
+// achataria a animação num quadro só) e sobe do jeito que a pessoa escolheu,
+// então precisa de folga; a API também não redimensiona (não há `sharp`), e é
+// por isso que existe um lado máximo em pixels só para ele.
+
+/** Formatos aceitos na foto de perfil e no banner. */
+export const TIPOS_DE_IMAGEM_DE_PERFIL = [
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+] as const;
+
+/** Valor do `accept` do `<input type="file">` de foto e banner. */
+export const ACCEPT_IMAGEM_DE_PERFIL = TIPOS_DE_IMAGEM_DE_PERFIL.join(",");
+
+/** Teto do arquivo quando é GIF (foto ou banner), em bytes. */
+export const MAX_IMAGEM_DE_PERFIL_GIF = 8 * 1024 * 1024; // 8 MB
+
+/**
+ * Lado máximo (px) de um GIF de perfil. Sem redimensionamento no servidor, é o
+ * único freio contra um GIF de 4000px que o browser de todo mundo teria que
+ * decodificar quadro a quadro em cada linha de mensagem.
+ */
+export const MAX_LADO_IMAGEM_DE_PERFIL_GIF = 2048;
+
+/** Maior arquivo que qualquer rota de imagem de perfil pode receber (bytes). */
+export function maxUploadDeImagemDePerfil(maxEstatico: number): number {
+  return Math.max(maxEstatico, MAX_IMAGEM_DE_PERFIL_GIF);
+}
+
+/**
+ * true quando o arquivo escolhido se anuncia como GIF. É o que o **cliente**
+ * usa para desviar do recorte; a palavra final é do servidor, que olha os
+ * bytes (`GIF87a`/`GIF89a`) e não o que o arquivo disse ser.
+ */
+export function ehGifDeclarado(arquivo: { type?: string; name?: string }): boolean {
+  return (
+    arquivo.type?.toLowerCase() === "image/gif" ||
+    /\.gif$/i.test(arquivo.name ?? "")
+  );
+}
+
+/** Teto em bytes para este arquivo: o do GIF, ou o do formato estático. */
+export function maxDaImagemDePerfil(
+  arquivo: { type?: string; name?: string },
+  maxEstatico: number,
+): number {
+  return ehGifDeclarado(arquivo) ? MAX_IMAGEM_DE_PERFIL_GIF : maxEstatico;
+}
+
 /** Campos editáveis do próprio perfil (PATCH /users/me). */
 export interface ProfileUpdate {
   displayName?: string | null;

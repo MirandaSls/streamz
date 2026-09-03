@@ -20,6 +20,7 @@ import {
   MAX_ABOUT_ME,
   MAX_AVATAR_SIZE,
   MAX_BANNER_SIZE,
+  maxUploadDeImagemDePerfil,
   MAX_CUSTOM_STATUS,
   MAX_DISPLAY_NAME,
   MAX_PRONOUNS,
@@ -116,7 +117,13 @@ export class UsersController {
   @UseGuards(JwtGuard)
   @UPLOAD_THROTTLE
   @Post("me/banner")
-  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: MAX_BANNER_SIZE } }))
+  // o teto do multer é o do maior formato (GIF, 8 MB); qual limite vale para
+  // este arquivo é decisão do service, que já olhou os bytes
+  @UseInterceptors(
+    FileInterceptor("file", {
+      limits: { fileSize: maxUploadDeImagemDePerfil(MAX_BANNER_SIZE) },
+    }),
+  )
   updateBanner(
     @CurrentUser() user: JwtPayload,
     @UploadedFile() file: { buffer: Buffer; size: number },
@@ -165,7 +172,12 @@ export class UsersController {
   @UseGuards(JwtGuard)
   @UPLOAD_THROTTLE
   @Post("me/avatar")
-  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: MAX_AVATAR_SIZE } }))
+  // idem ao banner: multer no teto do GIF, limite fino no service
+  @UseInterceptors(
+    FileInterceptor("file", {
+      limits: { fileSize: maxUploadDeImagemDePerfil(MAX_AVATAR_SIZE) },
+    }),
+  )
   updateAvatar(
     @CurrentUser() user: JwtPayload,
     @UploadedFile() file: { buffer: Buffer; size: number },

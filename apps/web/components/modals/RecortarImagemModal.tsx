@@ -31,6 +31,10 @@ import { ui, type Modal } from "@/stores/ui";
  * quem recortasse do outro lado. De quebra o upload encolhe — o que sobe é a
  * moldura, não a foto de 12 MP.
  *
+ * **GIF não chega aqui.** Canvas desenha um quadro só, e recortar devolveria a
+ * animação parada; quem desvia é o `recortarImagem` da store de interface, que
+ * manda o arquivo inteiro para a API (`lib/imagem-de-perfil.ts`).
+ *
  * A conta que traduz "arrastei até aqui" em retângulo de origem mora em
  * `lib/recorte.ts`, testada à parte.
  */
@@ -175,7 +179,6 @@ export default function RecortarImagemModal({
   }
 
   const tela = natural ? tamanhoNaTela(moldura, natural, enquadramento.zoom) : null;
-  const animado = arquivo.type === "image/gif";
 
   return (
     <Dialog
@@ -189,17 +192,6 @@ export default function RecortarImagemModal({
             {gerando ? "Aplicando…" : "Aplicar"}
           </PrimaryButton>
           <SecondaryButton onClick={() => resolve(null)}>Cancelar</SecondaryButton>
-          {animado && !erro && (
-            // recortar no canvas achata o gif; quem quer a animação de volta
-            // manda o arquivo como veio e aceita o enquadramento automático
-            <button
-              type="button"
-              onClick={() => resolve(arquivo)}
-              className="mr-auto text-sm text-txt-muted transition hover:text-txt-primary hover:underline"
-            >
-              Enviar sem recortar
-            </button>
-          )}
         </>
       }
     >
@@ -278,11 +270,6 @@ export default function RecortarImagemModal({
             />
           </div>
 
-          {animado && (
-            <p className="mt-1 text-xs text-txt-muted">
-              GIFs animados perdem a animação ao serem recortados.
-            </p>
-          )}
         </div>
       )}
     </Dialog>

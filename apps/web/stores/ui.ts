@@ -4,6 +4,7 @@ import type { PublicUser } from "@streamz/shared";
 import type { ServerSettingsTab } from "@/components/settings/server/tabs";
 // ── recorte de imagem ──
 import type { FormatoDeRecorte } from "@/lib/recorte";
+import { AVISO_DO_GIF, ehGif, erroDeTamanho } from "@/lib/imagem-de-perfil";
 
 /**
  * Estado de interface que não pertence a nenhum domínio: qual coluna está em
@@ -308,7 +309,12 @@ interface UIState {
 
   confirm: (options: ConfirmOptions) => Promise<boolean>;
   prompt: (options: PromptOptions) => Promise<string | null>;
-  /** Abre o ajuste de enquadramento; devolve o recorte ou `null` se cancelou. */
+  /**
+   * Prepara a imagem escolhida para subir: abre o ajuste de enquadramento e
+   * devolve o recorte, `null` se a pessoa cancelou (ou se o arquivo é grande
+   * demais) — e o **arquivo original** quando é GIF, que não passa pelo
+   * recorte para não perder a animação (ver `lib/imagem-de-perfil.ts`).
+   */
   recortarImagem: (arquivo: File, formato: FormatoDeRecorte) => Promise<File | null>;
 
   toast: (text: string, kind?: ToastKind) => void;
@@ -401,8 +407,20 @@ export const useUI = create<UIState>((set, get) => ({
       set((s) => ({ modals: [...s.modals, modal] }));
     }),
 
-  recortarImagem: (arquivo, formato) =>
-    new Promise<File | null>((resolve) => {
+  recortarImagem: (arquivo, formato) => {
+    // grande demais: o servidor recusaria com 413 depois de subir tudo
+    const erro = erroDeTamanho(arquivo, formato);
+    if (erro) {
+      get().toast(erro, "error");
+      return Promise.resolve(null);
+    }
+    // GIF não abre o enquadramento: o canvas do recorte devolveria um quadro
+    // parado. Sobe como veio, com o aviso de que quem enquadra é a tela.
+    if (ehGif(arquivo)) {
+      get().toast(AVISO_DO_GIF);
+      return Promise.resolve(arquivo);
+    }
+    return new Promise<File | null>((resolve) => {
       const modal: Modal = {
         kind: "recortarImagem",
         formato,
@@ -413,7 +431,8 @@ export const useUI = create<UIState>((set, get) => ({
         },
       };
       set((s) => ({ modals: [...s.modals, modal] }));
-    }),
+    });
+  },
 
   toast: (text, kind = "info") => {
     const id = `t${++toastSeq}`;
