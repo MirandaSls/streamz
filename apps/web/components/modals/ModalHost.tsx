@@ -60,7 +60,7 @@ function renderModal(modal: Modal) {
     case "recortarImagem":
       return <RecortarImagemModal modal={modal} />;
     case "createChannel":
-      return <CreateChannelModal categoryId={modal.categoryId ?? null} />;
+      return <CreateChannelModal categoryId={modal.categoryId ?? null} tipo={modal.tipo} />;
     case "channelAccess":
       return <ChannelAccessModal channelId={modal.channelId} />;
     case "invite":

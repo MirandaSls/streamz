@@ -122,6 +122,9 @@ rodando", e a validação é o usuário mandar prints.
 | Shell do app | `apps/web/app/app/page.tsx` (rail + coluna + conteúdo; `VoiceLayer`, `BarraDeTitulo`) |
 | Rail de servidores | `components/layout/GuildRail.tsx` |
 | Coluna de DMs / canais | `components/layout/DMList.tsx`, `ChannelSidebar.tsx` |
+| Categorias de canal | `stores/categories.ts`, `stores/channel-order.ts`; API em `apps/api/src/modules/channels/categories.{controller,service}.ts` (`MANAGE_CHANNELS` nas três rotas, eventos `category.*`) |
+| Criar canal / categoria | `components/modals/CreateChannelModal.tsx` (recebe `categoryId` **e** `tipo` do "+" do cabeçalho); "Criar canal"/"Criar categoria" no dropdown do nome do servidor, dentro de `ChannelSidebar.tsx` |
+| Arrastar na coluna | tudo em `ChannelSidebar.tsx` (`inicioArrasto`/`LinhaDeSolta`, DnD nativo): canal, categoria **e** participante de voz. A regra pura de onde o participante pode cair é `stores/voice-mover.ts` |
 | Card do usuário (mic/fone/engrenagem) | `components/layout/UserFooter.tsx` (irmão de rail+coluna, atravessa a rail), `voice/VoiceConnectedBar.tsx` |
 | Conversa (DM) | `components/chat/DMView.tsx`, `HeaderBar.tsx`, `Composer.tsx`, `MessageList.tsx`, painel de perfil em DM 1:1 |
 | Canal de texto | `components/chat/ChatView.tsx` |
@@ -318,6 +321,14 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   navegador ficam no cabeçalho de Amigos (como o Discord web).
 - Foco: anel afastado de 2px para botões/links; campos de texto focam com 1px
   colado, no verde do `design.md`.
+- **Cabeçalho de categoria** (medido na print `2026-09-03 201805`, coluna de
+  294, 1:1 pelo `h-9` do canal): o "+" de criar canal é **sempre visível**, não
+  de hover — na print o cursor está sobre outro canal e os três cabeçalhos
+  mostram o "+". Glifo de 12×12 (`Plus size={20}`: o quadro do ativo do Discord
+  desenha 0,583 do tamanho), na mesma coluna da engrenagem do canal; rótulo a
+  18px da borda do painel, alinhado com o ícone do canal; linha de 22px, centro
+  a 29px do canal anterior e canal seguinte a 42. A zona de solta do fim de um
+  bloco leva `-mb-3` para não somar 12px a esse vão.
 - Card do usuário: flutuante, 58px, raio 8, atravessa a rail (irmão de rail e
   coluna, `inset-x-2.5`), listas e rail com respiro embaixo (`pb-[78px]`).
 - Configurações (usuário, servidor, canal e grupo, todas na mesma moldura

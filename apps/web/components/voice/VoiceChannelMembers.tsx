@@ -25,14 +25,27 @@ import { useVoice } from "@/stores/voice";
  *   reservado a quem está com o áudio desativado (não escuta ninguém).
  * - Transmissão vira pílula "AO VIVO", que é o convite para assistir; um ícone
  *   verde a mais no meio dos outros passa despercebido.
+ *
+ * Arrastar um participante daqui para outro canal de voz é de quem tem
+ * `MOVE_MEMBERS`; quem guarda o estado do arrasto e desenha o realce no canal
+ * alvo é a `ChannelSidebar`, que já faz isso para canais e categorias. Este
+ * componente só marca o `li` como arrastável e avisa quem começou e quando
+ * acabou — não decide nada.
  */
 export default function VoiceChannelMembers({
   channelId,
   guildId,
+  podeMover = false,
+  onArrastarMembro,
+  onFimDoArrasto,
 }: {
   channelId: string;
   /** só para o convite; sem ele a linha "Convidar para voz" não aparece. */
   guildId?: string | null;
+  /** `MOVE_MEMBERS`: sem ela o participante não é arrastável. */
+  podeMover?: boolean;
+  onArrastarMembro?: (userId: string) => void;
+  onFimDoArrasto?: () => void;
 }) {
   const estados = useVoice((s) => s.statesOf(channelId));
   const falando = useVoice((s) => s.falando);
@@ -47,7 +60,19 @@ export default function VoiceChannelMembers({
         // quem está mudo nunca "fala": o anel tem de contar a mesma história
         const ativo = !e.muted && falando.includes(e.user.id);
         return (
-          <li key={e.user.id} data-voice-member={e.user.id}>
+          <li
+            key={e.user.id}
+            data-voice-member={e.user.id}
+            draggable={podeMover}
+            onDragStart={(ev) => {
+              // o Firefox só inicia o arrasto se houver algo no dataTransfer
+              ev.dataTransfer.effectAllowed = "move";
+              ev.dataTransfer.setData("text/plain", e.user.id);
+              onArrastarMembro?.(e.user.id);
+            }}
+            onDragEnd={() => onFimDoArrasto?.()}
+            className={podeMover ? "cursor-grab active:cursor-grabbing" : undefined}
+          >
             <button
               type="button"
               onClick={(ev) => ui.openProfile(e.user, anchorOf(ev.currentTarget))}
