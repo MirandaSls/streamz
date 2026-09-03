@@ -12,10 +12,35 @@ import { create } from "zustand";
  * reage. Os ids são persistidos — trocar de fone não deve virar um ritual a
  * cada reload.
  *
- * Cuidado do browser: sem permissão de mídia concedida, `enumerateDevices`
- * devolve entradas com `label` vazio. É por isso que `refresh()` pede a
- * permissão antes de listar — e segue em frente (com a lista anônima) se o
- * usuário negar, em vez de deixar a tela vazia sem explicação.
+ * ## Por que a lista vinha com um aparelho só e sem nome
+ *
+ * O Chromium **esconde a lista inteira** de quem não tem a permissão de mídia
+ * *concedida*: `enumerateDevices()` devolve exatamente uma entrada por tipo,
+ * com `deviceId` e `label` vazios. É isso, e não um bug nosso de renderização,
+ * que produzia "Padrão do sistema / Microfone 1" e "Padrão do sistema /
+ * Saída 1" nos prints `2026-09-03 191339` e `191344`.
+ *
+ * O código antigo já pedia `getUserMedia` antes de listar, e mesmo assim caía
+ * nisso, por duas razões medidas:
+ *
+ * 1. **`getUserMedia` resolver não é o mesmo que ter a permissão.** No desktop,
+ *    o `--auto-accept-camera-and-microphone-capture` do WebView2 aceita a
+ *    captura sem prompt, mas não registra a concessão: medido em Chromium
+ *    headless com essa flag, `getUserMedia` devolve uma faixa com o nome certo
+ *    e `navigator.permissions.query({name:"microphone"})` continua em
+ *    `"prompt"` — com a faixa **viva** e depois de pará-la, `enumerateDevices`
+ *    segue devolvendo `[audioinput ""], [videoinput ""], [audiooutput ""]`.
+ *    Enumerar com a trilha aberta, que é o truque que funciona no Firefox, não
+ *    resolve esse caso: só a permissão de verdade resolve (a flag saiu do
+ *    `main.rs` do desktop por causa disso).
+ * 2. **`autorizado` era ligado no sucesso do `getUserMedia`**, então o motivo
+ *    ficava `"ok"` e a tela não dizia nada — e, como `refresh()` só pedia
+ *    permissão quando `autorizado` era falso, nunca mais tentava.
+ *
+ * Agora `autorizado` é o que se pode *verificar*: veio rótulo. Sem rótulo o
+ * motivo é `"sem-rotulos"` e a tela explica. E a permissão é pedida enquanto a
+ * lista estiver anônima (uma vez por sessão sem forçar, sempre que o usuário
+ * clicar em "Atualizar lista").
  */
 
 /**
@@ -26,8 +51,12 @@ import { create } from "zustand";
  * (`http://192.168.x.x:3000`) faz a API sumir inteira, e antes disso o código
  * apenas retornava — nenhuma permissão era pedida e nenhum erro aparecia, o que
  * é indistinguível de "o botão está quebrado".
+ *
+ * `sem-rotulos` é o caso novo: a captura funciona, mas o navegador não conta o
+ * nome de nada. Dizer "permissão negada" aqui mandaria a pessoa procurar um
+ * cadeado que, no desktop, não existe.
  */
-export type MotivoDeMidia = "ok" | "negado" | "inseguro" | "indisponivel";
+export type MotivoDeMidia = "ok" | "negado" | "inseguro" | "indisponivel" | "sem-rotulos";
 
 export interface VoiceDevicesState {
   inputs: MediaDeviceInfo[];
@@ -36,13 +65,20 @@ export interface VoiceDevicesState {
   inputId: string | null;
   outputId: string | null;
   cameraId: string | null;
-  /** true quando os rótulos vieram (permissão concedida). */
+  /** true quando os rótulos vieram (permissão concedida de verdade). */
   autorizado: boolean;
+  /**
+   * O navegador deixa escolher a saída? `setSinkId` é do Chromium; no Firefox
+   * antigo e no Safari um `<audio>` toca sempre na saída do sistema, e oferecer
+   * uma lista que não muda nada é pior que não oferecer.
+   */
+  saidaSelecionavel: boolean;
   motivo: MotivoDeMidia;
   setInput: (id: string | null) => void;
   setOutput: (id: string | null) => void;
   setCamera: (id: string | null) => void;
-  refresh: () => Promise<void>;
+  /** `forcar` reabre o pedido de permissão mesmo depois de uma recusa. */
+  refresh: (forcar?: boolean) => Promise<void>;
 }
 
 /**
@@ -70,6 +106,9 @@ export function explicarMidia(motivo: MotivoDeMidia): string | null {
   }
   if (motivo === "negado") {
     return "Permissão de microfone e câmera negada. Libere no cadeado da barra de endereço e tente de novo.";
+  }
+  if (motivo === "sem-rotulos") {
+    return "O navegador aceitou a captura mas não está entregando o nome dos aparelhos, e sem isso ele mostra um dispositivo genérico por tipo. Autorize o microfone para este endereço e atualize a lista.";
   }
   return "Este navegador não expõe microfone nem câmera.";
 }
@@ -102,7 +141,76 @@ function midia(): MediaDevices | null {
   return navigator.mediaDevices ?? null;
 }
 
-let ouvindoTroca = false;
+/** `setSinkId` é o que faz a escolha de saída valer alguma coisa. */
+function temSetSinkId(): boolean {
+  return (
+    typeof HTMLMediaElement !== "undefined" &&
+    typeof (HTMLMediaElement.prototype as { setSinkId?: unknown }).setSinkId === "function"
+  );
+}
+
+/**
+ * `default` e `communications` são apelidos do Chromium para o aparelho que o
+ * Windows escolheu — o mesmo hardware aparecendo de novo, com "Padrão -" ou
+ * "Comunicações -" grudado no nome. A linha "Padrão do sistema" (id `null`) já
+ * é esse apelido, então listá-los outra vez só duplicaria a lista.
+ */
+export function aparelhosReais(lista: MediaDeviceInfo[]): MediaDeviceInfo[] {
+  return lista.filter((d) => d.deviceId !== "default" && d.deviceId !== "communications");
+}
+
+/** Um rótulo por dispositivo, igual em todo lugar que mostra a lista. */
+export interface OpcaoDeDispositivo {
+  id: string;
+  nome: string;
+}
+
+/**
+ * Nome que vai para a tela. O `label` vazio é o navegador escondendo o
+ * aparelho; numerar é o último recurso, e é melhor que uma linha em branco.
+ */
+export function opcoesDe(lista: MediaDeviceInfo[], prefixo: string): OpcaoDeDispositivo[] {
+  return lista.map((d, i) => ({ id: d.deviceId, nome: d.label || `${prefixo} ${i + 1}` }));
+}
+
+/** O nome do escolhido, ou "Padrão do sistema" quando ninguém foi escolhido. */
+export function nomeEscolhido(
+  lista: MediaDeviceInfo[],
+  id: string | null,
+  prefixo: string,
+): string {
+  if (id === null) return "Padrão do sistema";
+  return opcoesDe(lista, prefixo).find((o) => o.id === id)?.nome ?? "Padrão do sistema";
+}
+
+/** true quando pelo menos um aparelho veio com nome — a prova de que há permissão. */
+function temRotulo(lista: MediaDeviceInfo[]): boolean {
+  return lista.some((d) => d.label !== "");
+}
+
+/**
+ * `permissions.query` não existe em todo navegador (o Firefox só ganhou
+ * `microphone` recentemente e o Safari não tem). `null` quer dizer "não dá para
+ * saber" — nesse caso vale tentar pedir.
+ */
+async function estadoDaPermissao(): Promise<PermissionState | null> {
+  try {
+    const p = await navigator.permissions?.query({ name: "microphone" as PermissionName });
+    return p?.state ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Já pedimos permissão nesta sessão? Sem isso, cada abrir de menu com a lista
+ * anônima viraria um novo prompt — e no desktop, onde a lista fica anônima por
+ * outro motivo, seria um prompt por clique. O botão "Atualizar lista" passa
+ * `forcar` e ignora esta trava.
+ */
+let jaPediu = false;
+/** Um `refresh` de cada vez: quatro componentes montando juntos não são quatro prompts. */
+let emCurso: Promise<void> | null = null;
 
 export const useVoiceDevicesStore = create<VoiceDevicesState>((set, get) => ({
   inputs: [],
@@ -110,6 +218,7 @@ export const useVoiceDevicesStore = create<VoiceDevicesState>((set, get) => ({
   cameras: [],
   ...load(),
   autorizado: false,
+  saidaSelecionavel: true,
   motivo: "ok",
 
   setInput: (id) => {
@@ -128,60 +237,88 @@ export const useVoiceDevicesStore = create<VoiceDevicesState>((set, get) => ({
     set(next);
   },
 
-  refresh: async () => {
-    const md = midia();
-    if (!md) {
-      // silêncio aqui era o bug: sem `mediaDevices` nada acontecia e a tela
-      // ficava idêntica a "ainda não cliquei". Agora o motivo vai para a tela.
-      const seguro = typeof window !== "undefined" && window.isSecureContext;
-      set({
-        autorizado: false,
-        motivo: seguro ? "indisponivel" : "inseguro",
-        inputs: [],
-        outputs: [],
-        cameras: [],
-      });
-      return;
-    }
-    let autorizado = get().autorizado;
-    let motivo: MotivoDeMidia = "ok";
-    if (!autorizado) {
-      try {
-        // um stream efêmero só para destravar os rótulos; é fechado em seguida
-        const stream = await md.getUserMedia({ audio: true });
-        stream.getTracks().forEach((t) => t.stop());
-        autorizado = true;
-      } catch {
-        // permissão negada: a lista vem sem rótulo, mas ainda dá para escolher
-        autorizado = false;
-        motivo = "negado";
+  refresh: (forcar = false) => {
+    if (emCurso && !forcar) return emCurso;
+    const p = (async () => {
+      const md = midia();
+      if (!md) {
+        // silêncio aqui era o bug: sem `mediaDevices` nada acontecia e a tela
+        // ficava idêntica a "ainda não cliquei". Agora o motivo vai para a tela.
+        const seguro = typeof window !== "undefined" && window.isSecureContext;
+        set({
+          autorizado: false,
+          motivo: seguro ? "indisponivel" : "inseguro",
+          inputs: [],
+          outputs: [],
+          cameras: [],
+        });
+        return;
       }
-    }
-    const todos = await md.enumerateDevices().catch(() => [] as MediaDeviceInfo[]);
-    set({
-      autorizado,
-      motivo,
-      inputs: todos.filter((d) => d.kind === "audioinput"),
-      outputs: todos.filter((d) => d.kind === "audiooutput"),
-      cameras: todos.filter((d) => d.kind === "videoinput"),
+
+      const enumerar = () => md.enumerateDevices().catch(() => [] as MediaDeviceInfo[]);
+      let todos = await enumerar();
+      let motivo: MotivoDeMidia = "ok";
+
+      // A lista anônima é a única coisa que distingue "não tenho permissão" de
+      // "tenho": o navegador não conta de outro jeito.
+      if (!temRotulo(todos)) {
+        const estado = await estadoDaPermissao();
+        if (estado === "denied" && !forcar) {
+          motivo = "negado";
+        } else if (jaPediu && !forcar) {
+          motivo = "sem-rotulos";
+        } else {
+          jaPediu = true;
+          let faixa: MediaStream | null = null;
+          try {
+            faixa = await md.getUserMedia({ audio: true });
+            // enumerar com a trilha **viva**: é o que o Firefox exige para
+            // entregar rótulo sem permissão persistida. No Chromium não muda
+            // nada (medido), mas também não custa nada.
+            todos = await enumerar();
+          } catch {
+            motivo = "negado";
+          } finally {
+            faixa?.getTracks().forEach((t) => t.stop());
+          }
+          if (motivo === "ok" && !temRotulo(todos)) motivo = "sem-rotulos";
+        }
+      }
+
+      const inputs = aparelhosReais(todos.filter((d) => d.kind === "audioinput"));
+      const outputs = aparelhosReais(todos.filter((d) => d.kind === "audiooutput"));
+      const cameras = aparelhosReais(todos.filter((d) => d.kind === "videoinput"));
+      set({
+        autorizado: temRotulo(todos),
+        saidaSelecionavel: temSetSinkId(),
+        motivo,
+        inputs,
+        outputs,
+        cameras,
+      });
+
+      // dispositivo escolhido que foi desconectado volta a "padrão do sistema"
+      const atual = ids(get());
+      const valido = (id: string | null, lista: MediaDeviceInfo[]) =>
+        id === null || lista.some((d) => d.deviceId === id) ? id : null;
+      const next: Ids = {
+        inputId: valido(atual.inputId, inputs),
+        outputId: valido(atual.outputId, outputs),
+        cameraId: valido(atual.cameraId, cameras),
+      };
+      if (
+        next.inputId !== atual.inputId ||
+        next.outputId !== atual.outputId ||
+        next.cameraId !== atual.cameraId
+      ) {
+        save(next);
+        set(next);
+      }
+    })();
+    emCurso = p.finally(() => {
+      if (emCurso === p) emCurso = null;
     });
-    // dispositivo escolhido que foi desconectado volta a "padrão do sistema"
-    const atual = ids(get());
-    const valido = (id: string | null, lista: MediaDeviceInfo[]) =>
-      id === null || lista.some((d) => d.deviceId === id) ? id : null;
-    const next: Ids = {
-      inputId: valido(atual.inputId, get().inputs),
-      outputId: valido(atual.outputId, get().outputs),
-      cameraId: valido(atual.cameraId, get().cameras),
-    };
-    if (
-      next.inputId !== atual.inputId ||
-      next.outputId !== atual.outputId ||
-      next.cameraId !== atual.cameraId
-    ) {
-      save(next);
-      set(next);
-    }
+    return emCurso;
   },
 }));
 
@@ -190,24 +327,37 @@ function ids(s: VoiceDevicesState): Ids {
 }
 
 /**
- * Hook público (é o que a aba "Voz e vídeo" consome): devolve a store e cuida
- * de listar na montagem e de reagir a `devicechange` — plugar um fone atualiza
- * a lista sozinho.
+ * `devicechange` é assinado **uma vez por documento**, no primeiro uso.
+ *
+ * Era um par de `addEventListener`/`removeEventListener` no efeito do hook, com
+ * uma trava de módulo: o segundo componente a montar não assinava (a trava já
+ * estava de pé) e o primeiro a desmontar removia o ouvinte de todo mundo.
+ * Depois de abrir e fechar o menu do microfone uma vez, plugar um fone não
+ * atualizava mais nada. Um ouvinte que vive o documento inteiro não tem esse
+ * problema e não vaza: é um só.
+ */
+let assinado = false;
+function assinarTrocaDeDispositivo() {
+  if (assinado) return;
+  const md = midia();
+  if (!md?.addEventListener) return;
+  assinado = true;
+  md.addEventListener("devicechange", () => {
+    void useVoiceDevicesStore.getState().refresh();
+  });
+}
+
+/**
+ * Hook público — a lista é a mesma no menu da setinha, no painel da call e na
+ * aba "Voz e vídeo": os três montam isto. Lista na montagem e reage a
+ * `devicechange`, então plugar um fone atualiza sozinho.
  */
 export function useVoiceDevices(): VoiceDevicesState {
   const state = useVoiceDevicesStore();
 
   useEffect(() => {
     void useVoiceDevicesStore.getState().refresh();
-    const md = midia();
-    if (!md || ouvindoTroca) return;
-    ouvindoTroca = true;
-    const aoTrocar = () => void useVoiceDevicesStore.getState().refresh();
-    md.addEventListener?.("devicechange", aoTrocar);
-    return () => {
-      ouvindoTroca = false;
-      md.removeEventListener?.("devicechange", aoTrocar);
-    };
+    assinarTrocaDeDispositivo();
   }, []);
 
   return state;

@@ -10,7 +10,7 @@ import {
   useNivelDoMicrofone,
 } from "@/components/voice/pecas-de-voz";
 import { useVoice, type NivelDeRuido } from "@/stores/voice";
-import { useVoiceDevices } from "@/stores/voiceDevices";
+import { explicarMidia, opcoesDe, useVoiceDevices } from "@/stores/voiceDevices";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 
 /**
@@ -66,7 +66,8 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
         />
         {!devices.autorizado && (
           <p className="text-xs text-yellow">
-            Conceda acesso ao microfone para ver o nome dos dispositivos.
+            {explicarMidia(devices.motivo) ??
+              "Conceda acesso ao microfone para ver o nome dos dispositivos."}
           </p>
         )}
       </section>
@@ -381,8 +382,8 @@ function Dropdown({
   }, [aberto]);
 
   const vazia = options.length === 0;
-  const atual = options.find((d) => d.deviceId === value);
-  const texto = vazia ? vazio : atual ? atual.label || label : "Padrão do sistema";
+  const atual = opcoesDe(options, label).find((o) => o.id === value);
+  const texto = vazia ? vazio : (atual?.nome ?? "Padrão do sistema");
 
   return (
     <div ref={caixa} className="relative">
@@ -416,16 +417,16 @@ function Dropdown({
           >
             Padrão do sistema
           </OpcaoDoDropdown>
-          {options.map((d, i) => (
+          {opcoesDe(options, label).map((o) => (
             <OpcaoDoDropdown
-              key={d.deviceId}
-              marcada={value === d.deviceId}
+              key={o.id}
+              marcada={value === o.id}
               onSelect={() => {
-                onChange(d.deviceId);
+                onChange(o.id);
                 setAberto(false);
               }}
             >
-              {d.label || `${label} ${i + 1}`}
+              {o.nome}
             </OpcaoDoDropdown>
           ))}
         </ul>

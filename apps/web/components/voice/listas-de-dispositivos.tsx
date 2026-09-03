@@ -1,7 +1,7 @@
 "use client";
 
 import { Camera, Check } from "@/components/ui/icones";
-import { explicarMidia, useVoiceDevices } from "@/stores/voiceDevices";
+import { explicarMidia, opcoesDe, useVoiceDevices } from "@/stores/voiceDevices";
 
 /**
  * A lista de câmeras que a setinha da câmera abre, no palco.
@@ -59,13 +59,14 @@ function ListaDeFontes({
         {titulo}
       </p>
       <Opcao rotulo="Padrão do sistema" escolhida={atual === null} onSelect={() => onEscolher(null)} />
-      {opcoes.map((d, i) => (
+      {/* o nome (e o "Câmera N" de quando não há rótulo) sai de `opcoesDe`, que
+          é o mesmo que os menus do rodapé e a aba Voz usam */}
+      {opcoesDe(opcoes, titulo).map((o) => (
         <Opcao
-          key={d.deviceId}
-          // sem permissão o `label` vem vazio: numerar é melhor que uma linha em branco
-          rotulo={d.label || `${titulo} ${i + 1}`}
-          escolhida={atual === d.deviceId}
-          onSelect={() => onEscolher(d.deviceId)}
+          key={o.id}
+          rotulo={o.nome}
+          escolhida={atual === o.id}
+          onSelect={() => onEscolher(o.id)}
         />
       ))}
       {aviso && <p className="px-2 pb-1 pt-2 text-xs text-txt-muted">{aviso}</p>}
