@@ -1,20 +1,29 @@
 /**
  * Sons da voz e da chamada: o toque, o ringback e os avisos curtos de
- * mudo/surdo/entrar/sair.
+ * mudo/surdo/entrar/sair/transmissão.
  *
- * São os **arquivos originais do Discord**, em `public/sons/` (pedido de
- * 2026-09-03, a partir de `docs/Reference/audio/`). Antes eram tons
- * sintetizados no Web Audio; o usuário quer o som que o ouvido já conhece.
+ * São os **arquivos originais do Discord**, em `public/sons/` (copiados de
+ * `docs/Reference/audio/`, que está fora do git). Nada mais é sintetizado: a
+ * primeira leva deixou entrar/alguém-entrou como tons do Web Audio porque o
+ * arquivo ainda não existia, e era exatamente isso que soava "errado" para
+ * quem conhece o som do Discord de ouvido.
  *
- * - `chamada.mp3` — toque de chamada recebida; serve também de ringback (o
- *   que quem liga escuta enquanto o outro lado toca).
- * - `mudo.mp3` / `desmudo.mp3` — microfone; surdo e não-surdo reaproveitam
- *   os dois, porque o Discord não trouxe arquivo próprio.
- * - `sair.mp3` — desconectar e "alguém saiu". O arquivo veio nomeado como
- *   "connect and disconnect", mas tem **um som só**, descendente
- *   (440 → 330 Hz, medido por FFT): é o de sair.
- * - entrar / alguém entrou — continuam **sintetizados** (quinta ascendente,
- *   onda triangular) até chegar o arquivo de entrada do Discord.
+ * O mapeamento, decidido pelo usuário (arquivo de origem → nosso arquivo → uso):
+ *
+ * | origem | nosso | quando toca |
+ * |---|---|---|
+ * | `discord-notification.mp3` | `mensagem.mp3` | mensagem nova (`notification-sound.ts`) |
+ * | `discord-call-sound.mp3` | `chamada.mp3` | chamada recebida (em loop) **e** o ringback de quem liga |
+ * | `discord mute.mp3` | `mudo.mp3` | mutar o microfone **e** desligar o áudio (surdo) |
+ * | `discord-unmute-sound.mp3` | `desmudo.mp3` | desmutar **e** religar o áudio |
+ * | `user_join.mp3` | `entrar.mp3` | eu entrei na chamada **e** alguém entrou |
+ * | `discord connect and disconect.mp3` | `sair.mp3` | eu saí **e** alguém saiu |
+ * | `discord_start_screan.mp3` | `transmissao-iniciada.mp3` | a **minha** transmissão de tela começou |
+ * | `discord-stream-stop.mp3` | `transmissao-encerrada.mp3` | a minha transmissão terminou |
+ * | `discord-user-moved.mp3` | `movido.mp3` | fui movido de canal — ainda **sem chamador** (a API não move ninguém) |
+ *
+ * Mudo e surdo dividem o mesmo par de arquivos de propósito: é o que o usuário
+ * pediu, e é o que o Discord faz.
  *
  * Os arquivos são servidos junto com o app (`/sons/...`): no desktop vão
  * dentro do `.exe` (frontendDist) e a CSP já libera `media-src 'self'`.
@@ -31,6 +40,21 @@ export function toqueDeChamadaUrl(): string {
 /** Ringback — o mesmo toque, do lado de quem liga. */
 export function ringbackUrl(): string {
   return toqueDeChamadaUrl();
+}
+
+/**
+ * Prepara um `<audio loop>` de toque (a chamada recebida e o ringback de quem
+ * liga) e diz se ele pode tocar.
+ *
+ * Existe porque esses dois são elementos do React, não passam por `tocarSom`, e
+ * por isso saíam sempre em volume cheio e ignorando os interruptores: quem
+ * baixou o volume de saída ou desligou "Chamada recebida" na aba Notificações
+ * levava o toque na mesma altura de antes.
+ */
+export function prepararToque(el: HTMLAudioElement | null): boolean {
+  if (!el) return false;
+  el.volume = Math.min(1, Math.max(0, volumeDeSaida()));
+  return useSettings.getState().notificationSound && somLigado("chamada");
 }
 
 /** Elementos reaproveitados por arquivo: criar um `Audio` por toque vazaria memória. */
@@ -63,7 +87,7 @@ export function tocarArquivo(url: string, volume: number): void {
 }
 
 /** Volume de saída das configurações, de 0 a 1 — o mesmo do resto do app. */
-function volumeDeSaida(): number {
+export function volumeDeSaida(): number {
   return useSettings.getState().outputVolume / 100;
 }
 
@@ -77,108 +101,48 @@ export type SomDeVoz =
   | "entrar"
   | "sair"
   | "alguem-entrou"
-  | "alguem-saiu";
+  | "alguem-saiu"
+  | "transmissao-iniciada"
+  | "transmissao-encerrada"
+  | "movido";
 
-/** Qual arquivo toca cada aviso; ausente = ainda sintetizado. */
-const ARQUIVOS: Partial<Record<SomDeVoz, string>> = {
+/** Qual arquivo toca cada aviso. Todos têm arquivo: nada aqui é sintetizado. */
+const ARQUIVOS: Record<SomDeVoz, string> = {
   mudo: "/sons/mudo.mp3",
   desmudo: "/sons/desmudo.mp3",
   surdo: "/sons/mudo.mp3",
   "nao-surdo": "/sons/desmudo.mp3",
+  entrar: "/sons/entrar.mp3",
   sair: "/sons/sair.mp3",
+  "alguem-entrou": "/sons/entrar.mp3",
   "alguem-saiu": "/sons/sair.mp3",
+  "transmissao-iniciada": "/sons/transmissao-iniciada.mp3",
+  "transmissao-encerrada": "/sons/transmissao-encerrada.mp3",
+  movido: "/sons/movido.mp3",
 };
-
-/**
- * Os avisos sem arquivo: um par de tons ascendentes (dó→sol, onda triangular),
- * que soa "sino" em vez de "bipe de erro". `brilho` é quanto da oitava acima
- * entra junto; `peso` é o volume relativo na mistura.
- */
-interface Aviso {
-  tons: readonly [number, number];
-  dur: number;
-  onda: OscillatorType;
-  brilho: number;
-  peso: number;
-}
-
-const SINTETIZADOS: Partial<Record<SomDeVoz, Aviso>> = {
-  entrar: { tons: [523.25, 783.99], dur: 0.14, onda: "triangle", brilho: 0.35, peso: 1 },
-  "alguem-entrou": { tons: [659.25, 987.77], dur: 0.11, onda: "triangle", brilho: 0.3, peso: 0.8 },
-};
-
-/** Os tons sintetizados foram calibrados para este teto; o arquivo não precisa. */
-const TETO_SINTETIZADO = 0.12;
-
-let ctx: AudioContext | null = null;
-
-function contexto(): AudioContext | null {
-  if (typeof window === "undefined") return null;
-  const Ctor =
-    window.AudioContext ??
-    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!Ctor) return null;
-  ctx ??= new Ctor();
-  // o navegador suspende o contexto criado antes de qualquer gesto do usuário
-  if (ctx.state === "suspended") void ctx.resume().catch(() => {});
-  return ctx;
-}
 
 /**
  * Toca um aviso curto no volume de saída das configurações (ou no `volume`
  * dado, de 0 a 1).
  *
- * O filtro por som vive aqui, e não em cada chamador, para que desligar um item
- * na aba "Notificações" valha em todo lugar que toca aquele som. `forcar` é
- * para a prévia da própria aba, que precisa tocar mesmo o que está desligado.
+ * O filtro vive aqui, e não em cada chamador, para que desligar um item na aba
+ * "Notificações" valha em todo lugar que toca aquele som — e o interruptor
+ * mestre (`notificationSound`) vale junto, que é o que a aba promete ao
+ * desabilitar a lista inteira quando ele está desligado. `forcar` é para a
+ * prévia da própria aba, que precisa tocar mesmo o que está desligado.
  */
 export function tocarSom(nome: SomDeVoz, volume = volumeDeSaida(), forcar = false) {
-  if (!forcar && !somLigado(nome)) return;
-  const arquivo = ARQUIVOS[nome];
-  if (arquivo) {
-    tocarArquivo(arquivo, volume);
-    return;
-  }
-  const aviso = SINTETIZADOS[nome];
-  if (!aviso) return;
-  try {
-    const ac = contexto();
-    if (!ac) return;
-    const { tons, dur: DUR, onda, brilho, peso } = aviso;
-    const inicio = ac.currentTime;
-    const alvo = volume * TETO_SINTETIZADO * peso;
-    for (const [i, freq] of tons.entries()) {
-      // as duas notas se sobrepõem um pouco: emendadas soam como um som só
-      const t0 = inicio + i * DUR * 0.75;
-      nota(ac, freq, onda, t0, DUR, alvo);
-      // a oitava acima entra mais curta: o brilho é o ataque, não o corpo
-      if (brilho > 0) nota(ac, freq * 2, "sine", t0, DUR * 0.55, alvo * brilho);
-    }
-  } catch {
-    // contexto de áudio indisponível: o aviso simplesmente não sai
-  }
+  if (!forcar && (!useSettings.getState().notificationSound || !somLigado(nome))) return;
+  tocarArquivo(ARQUIVOS[nome], volume);
 }
 
 /**
- * Uma nota: oscilador com envelope de ataque rápido (12 ms em rampa, para não
- * estalar) e queda exponencial (a linear soa cortada; esta some como um sino).
+ * "Você foi movido de canal".
+ *
+ * Fica pronto e **sem chamador**: mover alguém de canal não existe na API nem
+ * no gateway ainda. Quando existir, o handler do evento chama isto — o som já
+ * está no lugar, na lista da aba "Notificações" e com interruptor próprio.
  */
-function nota(
-  ac: AudioContext,
-  freq: number,
-  onda: OscillatorType,
-  t0: number,
-  dur: number,
-  alvo: number,
-) {
-  const osc = ac.createOscillator();
-  const ganho = ac.createGain();
-  osc.type = onda;
-  osc.frequency.value = freq;
-  ganho.gain.setValueAtTime(0.0001, t0);
-  ganho.gain.linearRampToValueAtTime(alvo, t0 + 0.012);
-  ganho.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-  osc.connect(ganho).connect(ac.destination);
-  osc.start(t0);
-  osc.stop(t0 + dur + 0.02);
+export function tocarSomDeMovido(volume = volumeDeSaida()): void {
+  tocarSom("movido", volume);
 }

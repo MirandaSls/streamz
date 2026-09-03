@@ -5,7 +5,7 @@ import { Phone, PhoneOff, Video } from "@/components/ui/icones";
 import { CALL_RING_TIMEOUT_MS, displayNameOf, isGroupChannel } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
-import { toqueDeChamadaUrl } from "@/lib/ringtone";
+import { prepararToque, toqueDeChamadaUrl } from "@/lib/ringtone";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useVoice } from "@/stores/voice";
 
@@ -43,7 +43,7 @@ export default function IncomingCallModal() {
     if (!tocando) return;
     const el = audio.current;
     // pode ser bloqueado pelo autoplay: o catch mantém a chamada silenciosa
-    void el?.play().catch(() => {});
+    if (prepararToque(el)) void el?.play().catch(() => {});
     const t = window.setTimeout(() => dispatchCall({ type: "timeout" }), CALL_RING_TIMEOUT_MS);
     return () => {
       window.clearTimeout(t);

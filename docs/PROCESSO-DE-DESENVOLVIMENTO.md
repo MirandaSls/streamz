@@ -346,11 +346,31 @@ Desktop: 0.0.6 (#38 + #40 + #41), 0.0.7 (+ #42), 0.0.8 (tudo até #50),
 0.0.10 (até #64), 0.0.11 (até #71, primeira com a tela nativa), 0.0.12 (até #73).
 
 **Sons.** `lib/ringtone.ts` e `lib/notification-sound.ts` tocam arquivos de
-`apps/web/public/sons/` (origem: `docs/Reference/audio/`, fora do git). O
-arquivo "connect and disconnect" tem um som só, descendente — é o de sair;
-entrar/alguém-entrou continuam sintetizados até chegar o arquivo. Surdo e
-não-surdo reaproveitam mudo/desmudo. O volume é o `outputVolume` das
-configurações; a prévia da aba Notificações passa `forcar`.
+`apps/web/public/sons/` (origem: `docs/Reference/audio/`, fora do git). **Nada
+é sintetizado** — os tons de Web Audio de entrar/alguém-entrou saíram quando o
+arquivo de entrada chegou.
+Mapeamento final (origem → nosso arquivo → quando toca):
+
+| origem | nosso | quando |
+|---|---|---|
+| `discord-notification.mp3` | `mensagem.mp3` | mensagem nova |
+| `discord-call-sound.mp3` | `chamada.mp3` | chamada recebida (loop) e o ringback de quem liga |
+| `discord mute.mp3` | `mudo.mp3` | mutar o microfone **e** ficar surdo |
+| `discord-unmute-sound.mp3` | `desmudo.mp3` | desmutar **e** religar o áudio |
+| `user_join.mp3` | `entrar.mp3` | eu entrei **e** alguém entrou |
+| `discord connect and disconect.mp3` | `sair.mp3` | eu saí **e** alguém saiu |
+| `discord_start_screan.mp3` | `transmissao-iniciada.mp3` | a minha transmissão de tela começou |
+| `discord-stream-stop.mp3` | `transmissao-encerrada.mp3` | a minha transmissão terminou |
+| `discord-user-moved.mp3` | `movido.mp3` | movido de canal — **sem chamador** (a API não move ninguém) |
+
+O som de mudo/surdo mora dentro de `useVoicePrefs.toggleMute`/`toggleDeafen`,
+não em quem chama: assim o botão do rodapé, a barra da call e o atalho soam
+igual, e fora de qualquer chamada também. Tocá-lo no `VoiceHotkeys` de novo
+dobrava o aviso — por isso ele lá só dispara a ação. O volume é o
+`outputVolume` das configurações (inclusive nos dois `<audio>` de toque, via
+`prepararToque`); o interruptor mestre `notificationSound` e o interruptor por
+som (`stores/sons.ts`) valem para todos; a prévia da aba Notificações passa
+`forcar` e ignora os dois.
 
 ## 10. Pendências e o que não foi verificado
 

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { PTT_RELEASE_MS } from "@streamz/shared";
+import { tocarSom } from "@/lib/ringtone";
 import { PTT_INICIAL, pttAberto, pttFechaEm, pttPress, pttRelease, type PttState } from "@/stores/ptt-core";
 
 /**
@@ -10,6 +11,13 @@ import { PTT_INICIAL, pttAberto, pttFechaEm, pttPress, pttRelease, type PttState
  *
  * `pttAtivo` é o único campo **transitório**: representa a tecla apertada agora
  * e não faz sentido guardar entre sessões.
+ *
+ * **O som mora aqui**, dentro de `toggleMute`/`toggleDeafen`, e não em quem
+ * chama. Antes ele estava só no `VoiceHotkeys`: o atalho Ctrl+Shift+M avisava,
+ * mas o mesmo botão do rodapé do usuário (e o da barra da call) trocava o
+ * estado em silêncio. Com o som na store, todo caminho — botão, atalho, menu —
+ * soa igual, e continua soando **fora** de qualquer chamada, porque mudo e
+ * surdo são preferências do app, não da call.
  */
 interface VoicePrefsState {
   muted: boolean;
@@ -76,11 +84,15 @@ export const useVoicePrefs = create<VoicePrefsState>((set, get) => ({
     const muted = !get().muted;
     const next = { muted, deafened: muted ? get().deafened : false };
     persistir(get, set, next);
+    // um som por ação, não um por campo mudado: quem desmuta com o "surdo"
+    // ligado pediu uma coisa só e ouve uma coisa só
+    tocarSom(muted ? "mudo" : "desmudo");
   },
 
   toggleDeafen: () => {
     const deafened = !get().deafened;
     persistir(get, set, { deafened, muted: deafened ? true : get().muted });
+    tocarSom(deafened ? "surdo" : "nao-surdo");
   },
 
   setPushToTalk: (pushToTalk) => {
