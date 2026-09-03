@@ -3,6 +3,11 @@
 
 mod tela;
 
+// Só o WebView2 tem `PermissionRequested`; nos outros alvos o módulo nem
+// existe (ver o porquê dele no próprio arquivo).
+#[cfg(windows)]
+mod permissoes;
+
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -22,36 +27,15 @@ fn main() {
     // (VOICE_RECONNECT_GRACE_MS + `rejoinAposReconexao`).
     //
     // **Não** volte a pôr `--auto-accept-camera-and-microphone-capture` aqui.
-    // Ele estava neste bloco para tirar o "permitir microfone e câmera?" que o
-    // WebView2 mostra no `getUserMedia`, e o preço era a lista de dispositivos
-    // inteira: a flag aceita a *captura* sem registrar a *permissão*, e o
-    // Chromium esconde a lista de quem não tem permissão concedida —
-    // `enumerateDevices()` devolve uma entrada por tipo, sem id e sem nome. Era
-    // a causa de "Padrão do sistema / Microfone 1" nos prints
-    // `docs/Reference/Captura de tela 2026-09-03 191339.png` e `191344`.
-    //
-    // Medido em Chromium headless (`--use-fake-device-for-media-stream`):
-    //   sem flag        → enumerate: [audioinput ""], [videoinput ""], [audiooutput ""]
-    //   +auto-accept    → getUserMedia OK ("Fake Default Audio Input"),
-    //                     permissions.query(microphone) = "prompt",
-    //                     enumerate (com a faixa viva E depois de pará-la):
-    //                     [audioinput ""], [videoinput ""], [audiooutput ""]
-    //   +fake-ui        → permissions.query = "granted", 7 aparelhos com nome
-    // Ou seja: nem enumerar com a trilha aberta salva o caso da flag; só a
-    // permissão de verdade. E `--use-fake-ui-for-media-stream` não serve de
-    // troca: além de ser mutuamente exclusivo com o outro por `CHECK` em
-    // content/browser/renderer_host/media/media_stream_manager.cc, ele também
-    // sequestra o `getDisplayMedia` (escolhe uma tela sem abrir o seletor), o
-    // que aqui seria transmitir a tela sem ninguém ter escolhido nada. Nada de
-    // `--use-fake-device-for-media-stream`, que trocaria o microfone real por
-    // um gerador de tom.
-    //
-    // Sem a flag o WebView2 volta a mostrar o próprio prompt no primeiro
-    // `getUserMedia` e guarda a resposta no perfil: uma pergunta na primeira
-    // chamada de cada instalação, em troca de a lista de microfones e de saídas
-    // existir. Se um dia isso incomodar, o caminho certo é tratar o
-    // `PermissionRequested` do WebView2 (`with_webview` + `webview2-com`) e
-    // responder `Allow`, que concede a permissão de verdade.
+    // Ele estava neste bloco para tirar o "permitir microfone e câmera?" do
+    // WebView2 e o preço era a lista de dispositivos inteira: a flag aceita a
+    // *captura* sem registrar a *permissão*, e o Chromium esconde nome e id de
+    // quem não tem permissão concedida. Quem tira o pop-up agora é o
+    // `PermissionRequested` do módulo `permissoes` (registrado no `setup`), que
+    // responde `ALLOW` **e** deixa a concessão registrada — que é o que o
+    // `enumerateDevices()` consulta. A medição que separa os dois casos está lá.
+    // Nada de `--use-fake-device-for-media-stream`, que trocaria o microfone
+    // real por um gerador de tom.
     //
     // `--autoplay-policy=no-user-gesture-required` é o que faz o **toque de
     // chamada** sair. O WebView2 é Chromium e herda a política padrão
@@ -98,6 +82,20 @@ fn main() {
             tela::parar_tela,
         ])
         .setup(|app| {
+            // --- Permissão de mídia ------------------------------------------
+            // Antes da bandeja e antes de a janela carregar a web: o primeiro
+            // `getUserMedia` da página tem de encontrar o ouvinte de pé, senão
+            // o WebView2 cai no comportamento padrão e pergunta. Falhar aqui
+            // não pode impedir o app de subir — no pior caso volta o pop-up.
+            #[cfg(windows)]
+            {
+                if let Some(janela) = app.get_webview_window("main") {
+                    let _ = janela.with_webview(|webview| {
+                        permissoes::liberar_camera_e_microfone(&webview.controller());
+                    });
+                }
+            }
+
             // --- System tray (bandeja) ---------------------------------------
             // Menu de contexto: "Abrir Streamz" e "Sair".
             let abrir = MenuItem::with_id(app, "abrir", "Abrir Streamz", true, None::<&str>)?;

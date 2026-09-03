@@ -28,6 +28,11 @@ custom-protocol = ["tauri/custom-protocol"]
 # Só no Windows: o compartilhamento de tela nativo é a API do Windows, e em
 # outro alvo o módulo `tela` devolve lista vazia sem tocar em nada disto.
 [target.'cfg(windows)'.dependencies]
+# `PermissionRequested` do WebView2 (ver `src/permissoes.rs`). A versão é a
+# mesma que o Tauri usa — o `ICoreWebView2Controller` que o `with_webview`
+# entrega vem deste crate, e duas cópias dele seriam dois tipos diferentes com
+# o mesmo nome.
+webview2-com = "0.38"
 # 0.62 é a versão que o `windows-capture` exige. O Tauri (via webview2-com)
 # ainda está em 0.61, então o binário compila duas cópias do `windows` — custo
 # de tempo de build, não de tamanho relevante (só o que se usa entra). Fixar a

@@ -31,8 +31,9 @@ import { create } from "zustand";
  *    `"prompt"` — com a faixa **viva** e depois de pará-la, `enumerateDevices`
  *    segue devolvendo `[audioinput ""], [videoinput ""], [audiooutput ""]`.
  *    Enumerar com a trilha aberta, que é o truque que funciona no Firefox, não
- *    resolve esse caso: só a permissão de verdade resolve (a flag saiu do
- *    `main.rs` do desktop por causa disso).
+ *    resolve esse caso: só a permissão de verdade resolve. No desktop a flag
+ *    deu lugar a um ouvinte de `PermissionRequested` do WebView2, que responde
+ *    `ALLOW` sem pop-up **e** registra a concessão (`src-tauri/src/permissoes.rs`).
  * 2. **`autorizado` era ligado no sucesso do `getUserMedia`**, então o motivo
  *    ficava `"ok"` e a tela não dizia nada — e, como `refresh()` só pedia
  *    permissão quando `autorizado` era falso, nunca mais tentava.
