@@ -159,6 +159,13 @@ model RefreshToken {
   userAgent  String?
   ip         String?
   lastUsedAt DateTime?
+  // O `User-Agent` do app de desktop é o do Edge (Tauri 2 = WebView2), então
+  // ele não separa "app instalado" de "aba do navegador". Quem separa é o
+  // cabeçalho `X-Streamz-Client`, que só existe na requisição — por isso o tipo
+  // é classificado no login/refresh e **guardado**: "desktop" | "navegador" |
+  // "celular" | "desconhecido". Null = sessão anterior à coluna (a tela cai no
+  // palpite pelo `User-Agent` até o próximo refresh).
+  dispositivo String?
 }
 
 model Guild {

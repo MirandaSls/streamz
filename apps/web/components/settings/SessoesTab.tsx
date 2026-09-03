@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Laptop, LogOut, Smartphone } from "@/components/ui/icones";
-import { ehDispositivoMovel, resumoDoDispositivo, type SessaoView } from "@streamz/shared";
+import { Browser, Laptop, LogOut, Monitor, Smartphone, type Icone } from "@/components/ui/icones";
+import { classificarDispositivo, type SessaoView, type TipoDeDispositivo } from "@streamz/shared";
 import { EmBreve, Section } from "@/components/ui/controls";
 import { api } from "@/lib/api";
 import { isApiError } from "@/lib/api-error";
@@ -129,20 +129,36 @@ export default function SessoesTab() {
   );
 }
 
+/**
+ * Um ícone por tipo de dispositivo — o rótulo diz qual é, e o ícone tem que
+ * concordar com ele de longe.
+ *
+ * Os três foram escolhidos **renderizados**, e não pelo nome: `AppWindow`, o
+ * palpite óbvio para "navegador", é uma grade 2×2 de aplicativos; e o `Laptop`
+ * do acervo é um monitor levemente mais largo que o `Monitor` — lado a lado,
+ * as duas linhas ficavam iguais. Sobrou o `Browser` do Phosphor, que é uma
+ * janela com barra de endereço e se distingue do monitor a 20px.
+ */
+const ICONE: Record<TipoDeDispositivo, Icone> = {
+  desktop: Monitor,
+  navegador: Browser,
+  celular: Smartphone,
+  desconhecido: Laptop,
+};
+
 /** Ícone + aparelho + quando começou. Compartilhado pelas duas listas. */
 function LinhaDeSessao({ sessao }: { sessao: SessaoView }) {
   const t = useT();
+  const dispositivo = classificarDispositivo({
+    userAgent: sessao.userAgent,
+    tipoSalvo: sessao.dispositivo,
+  });
+  const Icone = ICONE[dispositivo.tipo];
   return (
     <div className="flex min-w-0 flex-1 items-center gap-3">
-      {ehDispositivoMovel(sessao.userAgent) ? (
-        <Smartphone size={20} className="shrink-0 text-txt-muted" aria-hidden="true" />
-      ) : (
-        <Laptop size={20} className="shrink-0 text-txt-muted" aria-hidden="true" />
-      )}
+      <Icone size={20} className="shrink-0 text-txt-muted" aria-hidden="true" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-txt-primary">
-          {resumoDoDispositivo(sessao.userAgent)}
-        </p>
+        <p className="truncate text-sm font-medium text-txt-primary">{dispositivo.rotulo}</p>
         <p className="truncate text-xs text-txt-muted">
           {sessao.ip ? `${sessao.ip} · ` : ""}
           {t("sessoes.desde")} {dataCurta(sessao.createdAt)} · {t("sessoes.expira")}{" "}

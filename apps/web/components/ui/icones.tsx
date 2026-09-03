@@ -56,6 +56,9 @@ export {
   Airplane as Plane,
   Archive,
   BellRinging as BellRing,
+  // janela de navegador: o acervo do Discord não tem globo nem janela, e o
+  // `AppWindow` do vocabulário é uma grade 2×2 de "aplicativos" — outro sinal
+  Browser,
   Camera,
   ChartBar as BarChart3,
   Coffee,

@@ -229,10 +229,14 @@ export interface MinhaConta {
 /**
  * Uma sessão ativa (refresh token vivo) — contrato de `GET /me/sessions`.
  *
- * Os três campos do dispositivo são **opcionais e nunca `null`**: a aba de
+ * Os campos do dispositivo são **opcionais e nunca `null`**: a aba de
  * configurações declara a mesma sessão com `userAgent?: string`, e um `null`
  * aqui deixaria de ser atribuível lá. Ausente = desconhecido (sessão criada
  * antes de a coluna existir, ou requisição sem `User-Agent`).
+ *
+ * `dispositivo` é a exceção: vem sempre, porque a API sempre consegue chegar a
+ * um valor (no pior caso `"desconhecido"`) e a tela precisa dele para escolher
+ * o ícone.
  */
 export interface SessaoView {
   id: string;
@@ -240,6 +244,8 @@ export interface SessaoView {
   current: boolean;
   userAgent?: string;
   ip?: string;
+  /** como o usuário entrou; ver `classificarDispositivo`. */
+  dispositivo: TipoDeDispositivo;
   createdAt: string;
   /** último uso do refresh token (ausente = nunca renovou desde o login). */
   lastUsedAt?: string;
@@ -429,38 +435,139 @@ export interface EmailVerificado {
 export type ProvedorDeEmail = "smtp" | "console";
 
 /**
- * "Chrome · Windows" a partir do `User-Agent` de uma sessão.
- *
- * Fica no contrato porque é a leitura de um campo do contrato: o usuário precisa
- * reconhecer o aparelho para decidir se encerra a sessão, e a string crua não
- * serve para isso. A ordem dos testes importa — Edge e Opera se anunciam como
- * Chrome, e o Chrome se anuncia como Safari. Quem casa primeiro vence.
+ * Cabeçalho com que os **nossos** clientes se apresentam: `desktop/0.0.14`,
+ * `celular/1.2.0`. Existe porque o `User-Agent` não resolve — o app de desktop
+ * é Tauri 2 com WebView2, e o WebView2 manda o `User-Agent` do Edge, letra por
+ * letra igual ao de quem abriu o site no navegador. Sem um sinal explícito do
+ * cliente, "app instalado" e "aba do Edge" são a mesma string.
  */
-export function resumoDoDispositivo(userAgent: string | null | undefined): string {
-  if (!userAgent) return "Dispositivo desconhecido";
-  if (/Streamz(Desktop)?|Tauri|Electron/i.test(userAgent)) return "App do Streamz";
-  return `${navegadorDe(userAgent)} · ${sistemaDe(userAgent)}`;
+export const HEADER_CLIENTE = "X-Streamz-Client";
+
+/** Como o usuário entrou. É o que escolhe o ícone na aba "Dispositivos". */
+export type TipoDeDispositivo = "desktop" | "navegador" | "celular" | "desconhecido";
+
+/** O dispositivo de uma sessão, já legível. */
+export interface DispositivoDaSessao {
+  tipo: TipoDeDispositivo;
+  /** "Streamz para Windows", "Firefox no Windows", "Chrome no Android". */
+  rotulo: string;
+  /** "Windows", "macOS", "Linux", "Android", "iOS" — `null` se não deu para saber. */
+  sistema: string | null;
+  /** Nome do navegador; `null` no app de desktop e no que não deu para saber. */
+  navegador: string | null;
+  /** Versão do app, quando o cliente a mandou no cabeçalho. */
+  versaoDoApp: string | null;
 }
 
-function navegadorDe(ua: string): string {
+/** O que se sabe sobre quem fez a requisição (ou sobre a linha guardada). */
+export interface EntradaDeDispositivo {
+  /** Valor cru do `X-Streamz-Client` da requisição. */
+  cliente?: string | null;
+  userAgent?: string | null;
+  /** `tipo` já gravado na sessão — vence o palpite pelo `User-Agent`. */
+  tipoSalvo?: string | null;
+}
+
+/**
+ * Classifica a sessão em {desktop, navegador, celular} e monta o rótulo.
+ *
+ * Mora no contrato porque os dois lados precisam: a API classifica na hora do
+ * login e do refresh (é a única hora em que o `X-Streamz-Client` existe) e
+ * guarda o `tipo`; a tela lê o que foi guardado e monta o rótulo. A ordem das
+ * fontes é a ordem da confiança:
+ *
+ * 1. **o cliente**, que se declarou — só ele distingue WebView2 de Edge;
+ * 2. **o tipo salvo** na sessão, escrito por um login/refresh que viu o (1);
+ * 3. **o `User-Agent`**, que ainda separa celular de computador e é tudo o que
+ *    sessões antigas têm.
+ *
+ * A ordem dos testes de navegador também importa — Edge e Opera se anunciam
+ * como Chrome, e o Chrome se anuncia como Safari. Quem casa primeiro vence.
+ */
+export function classificarDispositivo(entrada: EntradaDeDispositivo): DispositivoDaSessao {
+  const ua = entrada.userAgent ?? "";
+  const doCliente = lerCliente(entrada.cliente);
+  const sistema = sistemaDe(ua);
+  const navegador = navegadorDe(ua);
+
+  const tipo =
+    doCliente?.tipo ??
+    tipoValido(entrada.tipoSalvo) ??
+    tipoPeloUserAgent(ua);
+
+  return {
+    tipo,
+    rotulo: rotuloDe(tipo, sistema, navegador),
+    sistema,
+    navegador: tipo === "desktop" ? null : navegador,
+    versaoDoApp: doCliente?.versao ?? null,
+  };
+}
+
+/**
+ * `X-Streamz-Client: desktop/0.0.14` → `{ tipo: "desktop", versao: "0.0.14" }`.
+ * Cabeçalho ausente, vazio ou com um tipo que não conhecemos devolve `null` —
+ * o valor é livre e vem do cliente; nada aqui pode confiar nele às cegas.
+ */
+function lerCliente(
+  cliente: string | null | undefined,
+): { tipo: TipoDeDispositivo; versao: string | null } | null {
+  if (!cliente) return null;
+  const [bruto, versao] = cliente.trim().split("/", 2);
+  const tipo = tipoValido(bruto);
+  if (!tipo || tipo === "desconhecido") return null;
+  return { tipo, versao: versao?.trim() || null };
+}
+
+/** O texto vira `TipoDeDispositivo` só se for um dos quatro que existem. */
+function tipoValido(valor: string | null | undefined): TipoDeDispositivo | null {
+  const limpo = valor?.trim().toLowerCase();
+  return limpo === "desktop" || limpo === "navegador" || limpo === "celular" ||
+    limpo === "desconhecido"
+    ? limpo
+    : null;
+}
+
+/**
+ * Palpite pelo `User-Agent` sozinho: serve para sessões criadas antes de o
+ * cliente se identificar e para clientes que não são nossos. `Tauri`/`Electron`
+ * aparecem em webview de desktop fora do Windows (o WebKit não esconde),
+ * então continuam valendo como desktop.
+ */
+function tipoPeloUserAgent(ua: string): TipoDeDispositivo {
+  if (!ua) return "desconhecido";
+  if (/Streamz|Tauri|Electron/i.test(ua)) return "desktop";
+  if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua)) return "celular";
+  return "navegador";
+}
+
+function rotuloDe(
+  tipo: TipoDeDispositivo,
+  sistema: string | null,
+  navegador: string | null,
+): string {
+  if (tipo === "desktop") return sistema ? `Streamz para ${sistema}` : "Streamz para computador";
+  if (tipo === "desconhecido") return "Dispositivo desconhecido";
+  if (navegador && sistema) return `${navegador} no ${sistema}`;
+  if (navegador) return navegador;
+  if (sistema) return `Navegador no ${sistema}`;
+  return "Dispositivo desconhecido";
+}
+
+function navegadorDe(ua: string): string | null {
   if (/Edg\//i.test(ua)) return "Edge";
   if (/OPR\/|Opera/i.test(ua)) return "Opera";
   if (/Firefox\//i.test(ua)) return "Firefox";
   if (/Chrome\//i.test(ua)) return "Chrome";
   if (/Safari\//i.test(ua)) return "Safari";
-  return "Navegador";
+  return null;
 }
 
-function sistemaDe(ua: string): string {
+function sistemaDe(ua: string): string | null {
   if (/Windows/i.test(ua)) return "Windows";
   if (/Android/i.test(ua)) return "Android";
   if (/iPhone|iPad|iPod/i.test(ua)) return "iOS";
   if (/Mac OS X|Macintosh/i.test(ua)) return "macOS";
   if (/Linux/i.test(ua)) return "Linux";
-  return "Sistema desconhecido";
-}
-
-/** true quando o `User-Agent` é de celular/tablet (a tela troca o ícone). */
-export function ehDispositivoMovel(userAgent: string | null | undefined): boolean {
-  return /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent ?? "");
+  return null;
 }
