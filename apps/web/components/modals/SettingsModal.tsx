@@ -14,15 +14,15 @@ import {
 import { ProvedorDeAbas } from "@/components/settings/navegacao";
 import Avatar from "@/components/ui/Avatar";
 import { useControleDeAlteracoes } from "@/components/ui/alteracoes";
-import TelaCheia, { ItemPerigo } from "@/components/ui/TelaCheia";
+import JanelaDeConfiguracoes, { ItemPerigo } from "@/components/ui/JanelaDeConfiguracoes";
 import { escreverAbaNaUrl, limparAbaDaUrl } from "@/hooks/useSettingsRoute";
 import { useAdmin } from "@/stores/admin";
 import { useAuth } from "@/stores/auth";
 import { useUI } from "@/stores/ui";
 
 /**
- * Configurações do usuário — a `TelaCheia` de `components/ui`, a mesma moldura
- * das configurações de servidor, canal e grupo. É a única das quatro que tem
+ * Configurações do usuário — a `JanelaDeConfiguracoes` de `components/ui`, a
+ * mesma moldura das de servidor, canal e grupo. É a única das quatro que tem
  * campo de busca no menu, porque é a única com dez abas.
  *
  * A aba viaja na URL (`?settings=aparencia`) para que um link leve direto a
@@ -101,7 +101,7 @@ export default function SettingsModal({ tab }: { tab?: string }) {
   }
 
   return (
-    <TelaCheia
+    <JanelaDeConfiguracoes
       titulo={t("config.titulo")}
       busca={{
         valor: busca,
@@ -116,7 +116,7 @@ export default function SettingsModal({ tab }: { tab?: string }) {
           <button
             type="button"
             onClick={() => setAbaId("perfil")}
-            className="mb-4 flex w-full items-center gap-2 rounded-[4px] p-1 text-left transition hover:bg-hov"
+            className="mb-3 flex w-full items-center gap-2 rounded-[4px] p-1 text-left transition hover:bg-hov"
           >
             <Avatar user={user} size="lg" surface="border-panel" />
             <span className="min-w-0">
@@ -157,6 +157,6 @@ export default function SettingsModal({ tab }: { tab?: string }) {
       <ProvedorDeAbas irParaAba={setAbaId}>
         <Conteudo />
       </ProvedorDeAbas>
-    </TelaCheia>
+    </JanelaDeConfiguracoes>
   );
 }

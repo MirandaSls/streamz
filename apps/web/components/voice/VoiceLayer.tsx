@@ -5,7 +5,7 @@ import AudioRemotoHost from "@/components/voice/AudioRemotoHost";
 import IncomingCallModal from "@/components/voice/IncomingCallModal";
 import VoiceHotkeys from "@/components/voice/VoiceHotkeys";
 import { VoiceVolumePopoverHost } from "@/components/voice/VoiceGrid";
-import { ringbackUrl } from "@/lib/ringtone";
+import { prepararToque, ringbackUrl } from "@/lib/ringtone";
 import { useAuth } from "@/stores/auth";
 import { useDMs } from "@/stores/dms";
 import { useGuilds } from "@/stores/guilds";
@@ -64,7 +64,7 @@ export default function VoiceLayer() {
   useEffect(() => {
     const el = ringback.current;
     if (!el) return;
-    if (fase === "outgoing") void el.play().catch(() => {});
+    if (fase === "outgoing" && prepararToque(el)) void el.play().catch(() => {});
     else {
       el.pause();
       el.currentTime = 0;

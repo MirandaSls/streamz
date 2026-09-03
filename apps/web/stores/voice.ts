@@ -676,6 +676,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         // UI continuaria anunciando uma transmissão que já morreu
         video.addEventListener("ended", () => void get().pararTela(), { once: true });
         set({ screenOn: true });
+        tocarSom("transmissao-iniciada");
       } catch (e) {
         stream.getTracks().forEach((t) => t.stop());
         set({ screenOn: false });
@@ -696,6 +697,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         await iniciarTelaNativa(montarPedido(fonteId, screenQuality, creds, screenAudio));
         telaNativa = true;
         set({ screenOn: true });
+        tocarSom("transmissao-iniciada");
       } catch (e) {
         telaNativa = false;
         set({ screenOn: false });
@@ -707,7 +709,11 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
 
     pararTela: async () => {
       const lp = sala?.localParticipant;
+      // só avisa quem estava mesmo no ar: `pararTela` também chega pelo botão
+      // do navegador e por um segundo clique, e som de fim sem começo confunde
+      const estava = get().screenOn;
       set({ screenOn: false });
+      if (estava) tocarSom("transmissao-encerrada");
       if (telaNativa) {
         telaNativa = false;
         await pararTelaNativa();
@@ -1102,6 +1108,7 @@ if (typeof window !== "undefined" && isTauri()) {
     if (!telaNativa) return;
     telaNativa = false;
     useVoice.setState((s) => ({ screenOn: false, tick: s.tick + 1 }));
+    tocarSom("transmissao-encerrada");
     useVoice.getState().syncFlags();
     ui.toast(
       motivo === "fonteSumiu"

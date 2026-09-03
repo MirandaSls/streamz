@@ -30,6 +30,11 @@ export const SONS: { nome: NomeDeSom; rotulo: string }[] = [
   { nome: "desmudo", rotulo: "Microfone aberto" },
   { nome: "surdo", rotulo: "Áudio desligado" },
   { nome: "nao-surdo", rotulo: "Áudio religado" },
+  { nome: "transmissao-iniciada", rotulo: "Transmissão iniciada" },
+  { nome: "transmissao-encerrada", rotulo: "Transmissão encerrada" },
+  // sem chamador ainda: mover alguém de canal não existe na API. O
+  // interruptor e a prévia já ficam de pé para quando existir.
+  { nome: "movido", rotulo: "Movido de canal" },
 ];
 
 interface SonsState {

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect } from "react";
-import { tocarSom } from "@/lib/ringtone";
 import { ACOES_DE_VOZ, actionForEvent } from "@/lib/shortcuts";
 import { atalhosEfetivos, useAtalhos } from "@/stores/atalhos";
 import { pttCombina } from "@/stores/ptt-core";
@@ -18,15 +17,17 @@ import { useVoicePrefs } from "@/stores/voicePrefs";
  * estão no registro de `lib/shortcuts` (a aba "Teclado" lista e regrava), mas
  * quem os executa é **só** este componente: o `useKeyboardShortcuts` os pula
  * (`ACOES_DE_VOZ`). Com dois ouvintes a mesma tecla dava mudo e desmudo, e o
- * bipe tocava por nada. Este é o dono porque toca o bipe e porque mudo/surdo
- * precisam valer com um modal aberto — a combinação vem do registro, então a
+ * som tocava por nada. Este é o dono porque mudo/surdo precisam valer com um
+ * modal aberto — a combinação vem do registro, então a
  * regravação da aba vale aqui também. O push-to-talk **não** chama
  * `preventDefault`: a tecla continua digitando normalmente na conversa, ela só
  * abre o microfone enquanto está apertada.
  *
  * Atalho que muda estado sem nada na tela mudar precisa de som: quem aperta
- * Ctrl+Shift+M no meio de uma frase não está olhando para o rodapé, e o bipe é
- * a única confirmação de que o microfone fechou.
+ * Ctrl+Shift+M no meio de uma frase não está olhando para o rodapé, e o som é
+ * a única confirmação de que o microfone fechou. Quem o toca é
+ * `useVoicePrefs.toggleMute`/`toggleDeafen`, para valer também no botão do
+ * rodapé e na barra da call — aqui só se dispara a ação.
  *
  * `keyup` pode se perder quando a janela some com a tecla apertada (alt-tab),
  * o que deixaria o microfone aberto: o `blur` fecha por segurança.
@@ -39,13 +40,10 @@ export default function VoiceHotkeys() {
       const acao = actionForEvent(e, atalhosEfetivos(useAtalhos.getState().regravados));
       if (acao && ACOES_DE_VOZ.has(acao)) {
         e.preventDefault();
-        if (acao === "alternarMudo") {
-          prefs.toggleMute();
-          tocarSom(useVoicePrefs.getState().muted ? "mudo" : "desmudo");
-        } else {
-          prefs.toggleDeafen();
-          tocarSom(useVoicePrefs.getState().deafened ? "surdo" : "nao-surdo");
-        }
+        // o som é da store (`voicePrefs`), não daqui: tocá-lo também neste
+        // ponto dobrava o aviso do atalho e deixava o botão do rodapé mudo
+        if (acao === "alternarMudo") prefs.toggleMute();
+        else prefs.toggleDeafen();
         return;
       }
 

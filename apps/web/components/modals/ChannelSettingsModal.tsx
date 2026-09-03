@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Hash, Lock, Megaphone, Shield, Trash2, Volume2 } from "@/components/ui/icones";
 import { MAX_CHANNEL_TOPIC, SLOWMODE_PRESETS, slowmodeLabel, type Channel } from "@streamz/shared";
 import { ChannelAccessList } from "@/components/modals/ChannelAccessModal";
-import TelaCheia, { ItemPerigo, type ItemDeMenu } from "@/components/ui/TelaCheia";
+import JanelaDeConfiguracoes, { ItemPerigo, type ItemDeMenu } from "@/components/ui/JanelaDeConfiguracoes";
 import { Rotulo, SliderMarcas, ToggleLinha } from "@/components/ui/controls";
 import { RegistrarAlteracoes, useControleDeAlteracoes } from "@/components/ui/alteracoes";
 import { useChannels, type UpdateChannelInput } from "@/stores/channels";
@@ -104,7 +104,7 @@ export default function ChannelSettingsModal({
   const nomeExibido = `${voz ? "" : "#"}${channel.name ?? "canal"}`;
 
   return (
-    <TelaCheia
+    <JanelaDeConfiguracoes
       titulo={nomeExibido}
       cabecalho={nomeExibido}
       grupos={[{ id: "canal", itens }]}
@@ -216,6 +216,6 @@ export default function ChannelSettingsModal({
           </div>
         </div>
       )}
-    </TelaCheia>
+    </JanelaDeConfiguracoes>
   );
 }

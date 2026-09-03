@@ -49,6 +49,11 @@ import type {
 } from "@streamz/shared";
 import { shouldNotifyMessage } from "@streamz/shared";
 import { definirContadorNoIcone, janelaTemFoco, notify, observarFoco, prepararNotificacoes } from "@/lib/desktop";
+import {
+  canalExibidoAgora,
+  canalNaTela,
+  type EstadoDaInterface,
+} from "@/lib/na-tela";
 import { tocarSomDeNotificacao } from "@/lib/notification-sound";
 import { somLigado } from "@/stores/sons";
 import { levelForChannel, useNotifications } from "@/stores/notifications";
@@ -72,7 +77,7 @@ import { useThreads } from "@/stores/messages-threads";
 import { usePresence } from "@/stores/presence";
 import { useTyping } from "@/stores/typing";
 import { useVoice } from "@/stores/voice";
-import { ui } from "@/stores/ui";
+import { ui, useUI } from "@/stores/ui";
 
 /**
  * Único ponto de assinatura dos eventos do gateway.
@@ -359,19 +364,44 @@ export function useRealtime(currentUserId?: string): void {
   }, [currentUserId]);
 }
 
-/** Marca como lido o canal aberto (servidor ou conversa), se há o que ler. */
+/**
+ * O recorte das stores que diz o que a interface está mostrando agora.
+ *
+ * `useMessages.activeChannelId` **não** entra: a sala de uma conversa é
+ * `sticky` e continua aberta depois que se sai dela (ver `lib/na-tela.ts`).
+ */
+function estadoDaInterface(): EstadoDaInterface {
+  const channels = useChannels.getState();
+  return {
+    view: useUI.getState().view,
+    amigosAberta: useFriends.getState().open,
+    dmAtiva: useDMs.getState().activeId,
+    canalAtivo: channels.activeChannelId,
+    guildDosCanais: channels.guildId,
+  };
+}
+
+/** A janela está visível e com foco? */
+function estadoDaJanela() {
+  return {
+    visivel: typeof document === "undefined" || document.visibilityState === "visible",
+    comFoco: janelaTemFoco(),
+  };
+}
+
+/** Marca como lido o canal que está na tela (servidor ou conversa). */
 function lerCanalNaTela() {
-  const activeChannelId = useMessages.getState().activeChannelId;
-  if (!activeChannelId) return;
-  const dms = useDMs.getState();
-  if (dms.channels.some((d) => d.id === activeChannelId)) {
-    void dms.markRead(activeChannelId);
+  const canal = canalExibidoAgora(estadoDaInterface());
+  if (!canal) return;
+  if (!canal.guildId) {
+    const dms = useDMs.getState();
+    if (dms.channels.some((d) => d.id === canal.channelId)) void dms.markRead(canal.channelId);
     return;
   }
   const channels = useChannels.getState();
-  if (channels.channels.some((c) => c.id === activeChannelId)) {
-    void channels.markRead(activeChannelId);
-    if (channels.guildId) useGuilds.getState().syncFromChannels(channels.guildId);
+  if (channels.channels.some((c) => c.id === canal.channelId)) {
+    void channels.markRead(canal.channelId);
+    useGuilds.getState().syncFromChannels(canal.guildId);
   }
 }
 
@@ -384,11 +414,16 @@ function onMessageArrived(message: Message, currentUserId?: string) {
   const meusCargos =
     useGuilds.getState().members.find((m) => m.user.id === me?.id)?.roleIds ?? [];
   const mention = !mine && !!me && mentionsMe(message, { ...me, roleIds: meusCargos });
-  const activeChannelId = useMessages.getState().activeChannelId;
-  // "na tela" = canal aberto numa janela visível **e com foco**: atrás de outro
-  // app a mensagem conta como não lida e notifica, como no Discord
-  const visivel = typeof document !== "undefined" && document.visibilityState === "visible";
-  const naTela = message.channelId === activeChannelId && visivel && janelaTemFoco();
+  // "na tela" = a interface está **mostrando** este canal (modo de visão,
+  // página Amigos, conversa/canal selecionado — ver `lib/na-tela.ts`) numa
+  // janela visível **e com foco**: atrás de outro app, ou com a conversa
+  // apenas "aberta por baixo", a mensagem conta como não lida e notifica,
+  // como no Discord
+  const naTela = canalNaTela(
+    { channelId: message.channelId, guildId: message.guildId },
+    estadoDaInterface(),
+    estadoDaJanela(),
+  );
 
   if (message.guildId) {
     const channels = useChannels.getState();

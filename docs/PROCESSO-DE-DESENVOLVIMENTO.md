@@ -176,6 +176,16 @@ Passo a passo, como foi feito para 0.0.6, 0.0.7 e 0.0.8:
 5. O primeiro salto de quem está antes da 0.0.3 é manual (a chave pública mora
    no app instalado).
 
+**A atualização acontece dentro do app.** `plugins.updater.windows.installMode`
+é `"quiet"` (o NSIS roda com `/S /R`, sem janela do instalador) e quem mostra
+progresso, "Instalando…" e o erro é `components/desktop/TelaDeAtualizacao.tsx`,
+tela cheia aberta pela setinha verde da barra. Duas consequências: com
+`bundle.windows.nsis.installMode: "perMachine"` o **UAC continua aparecendo**
+uma vez por atualização (silêncio é do instalador, não da elevação), e o plugin
+chama `exit(0)` logo depois de disparar o instalador — no Windows o app morre em
+"Instalando…" e quem reabre é o `/R`, então "Reiniciando…" e o `relaunch()` só
+se veem fora dali.
+
 O desktop embute a web: o que entra em `main` depois do build só chega ao
 instalado na versão seguinte.
 
@@ -230,6 +240,10 @@ pasta → página de instalação escura com o ícone do Streamz pulsando e a ba
 em Volt Lime → **fecha sozinho e abre o app**. Não existe página de conclusão;
 o atalho na área de trabalho, que era uma caixinha marcada por padrão lá,
 passou a ser criado sempre na seção de instalação.
+
+Nada disso aparece numa **atualização**: desde o #77 o updater roda o
+instalador com `installMode: "quiet"`, que é `/S` — sem janela nenhuma. O
+assistente bonito é o da instalação manual, a que sai do site.
 
 O ícone anima num controle `SysAnimate32` do Windows tocando um AVI RGB sem
 compressão, e não num temporizador do NSIS trocando bitmaps: o NSIS roda a
@@ -320,6 +334,11 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   colado, no verde do `design.md`.
 - Card do usuário: flutuante, 58px, raio 8, atravessa a rail (irmão de rail e
   coluna, `inset-x-2.5`), listas e rail com respiro embaixo (`pb-[78px]`).
+- Configurações (usuário, servidor, canal e grupo, todas na mesma moldura
+  `components/ui/JanelaDeConfiguracoes.tsx`): **janela flutuante** de 1400×888
+  centrada sobre o app escurecido — não página inteira —, com menu de 252,
+  busca de 40 e cabeçalho de 48 com o X simples no canto (medido nos prints
+  `2026-09-01 1143–1146`, janela de 1920×1032).
 
 ## 7. Arquitetura de voz (o que precisa continuar verdade)
 
@@ -343,6 +362,10 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
 - LiveKit é por identidade e não aceita duas iguais: entrar de outro aparelho
   expulsa a conexão anterior de propósito, com evento `voice.evicted` e a
   mensagem "você entrou de outro dispositivo" (`voz-em-um-lugar-so.ts`).
+- Seletor de tela (`ScreenSharePicker`): duas abas (Aplicativos e Tela
+  Inteira) e, no rodapé, resolução e taxa de quadros como segmentos sempre
+  visíveis, com as opções vindas de `SCREEN_QUALITY` — sem aba de
+  dispositivos, sem alternador SD/HD e sem a etapa da engrenagem.
 - Ainda aquém do Discord (não é defeito): botão de voltar para call em outro
   servidor cai no primeiro canal de texto; barra "conectado" sem cronômetro nem
   quem fala; sem "ocupado" para quem liga durante uma call; diálogos invisíveis
@@ -399,16 +422,37 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
 | #71 | **CRT estática no Windows** (`.cargo/config.toml` na raiz): a libwebrtc do `livekit` vem com /MT e o link da 0.0.11 quebrou com LNK2038 — o clippy não pega porque não linka |
 | #72 | Palco da call abre numa faixa fixa (~215px), não em metade da coluna |
 | #73 | Sons originais do Discord (`public/sons/`), badge de não lidas na borda (rail com miolo de 16px), cronômetro colado na borda (botões do hover fora do fluxo), amizade nova põe a conversa no topo dos dois lados |
+| #74 | Sons do Discord em todo caminho: mudo/surdo pelo botão do rodapé (o som foi para a store), entrar e transmissão de tela com arquivo, nada mais sintetizado |
 
 Desktop: 0.0.6 (#38 + #40 + #41), 0.0.7 (+ #42), 0.0.8 (tudo até #50),
 0.0.10 (até #64), 0.0.11 (até #71, primeira com a tela nativa), 0.0.12 (até #73).
 
 **Sons.** `lib/ringtone.ts` e `lib/notification-sound.ts` tocam arquivos de
-`apps/web/public/sons/` (origem: `docs/Reference/audio/`, fora do git). O
-arquivo "connect and disconnect" tem um som só, descendente — é o de sair;
-entrar/alguém-entrou continuam sintetizados até chegar o arquivo. Surdo e
-não-surdo reaproveitam mudo/desmudo. O volume é o `outputVolume` das
-configurações; a prévia da aba Notificações passa `forcar`.
+`apps/web/public/sons/` (origem: `docs/Reference/audio/`, fora do git). **Nada
+é sintetizado** — os tons de Web Audio de entrar/alguém-entrou saíram quando o
+arquivo de entrada chegou.
+Mapeamento final (origem → nosso arquivo → quando toca):
+
+| origem | nosso | quando |
+|---|---|---|
+| `discord-notification.mp3` | `mensagem.mp3` | mensagem nova |
+| `discord-call-sound.mp3` | `chamada.mp3` | chamada recebida (loop) e o ringback de quem liga |
+| `discord mute.mp3` | `mudo.mp3` | mutar o microfone **e** ficar surdo |
+| `discord-unmute-sound.mp3` | `desmudo.mp3` | desmutar **e** religar o áudio |
+| `user_join.mp3` | `entrar.mp3` | eu entrei **e** alguém entrou |
+| `discord connect and disconect.mp3` | `sair.mp3` | eu saí **e** alguém saiu |
+| `discord_start_screan.mp3` | `transmissao-iniciada.mp3` | a minha transmissão de tela começou |
+| `discord-stream-stop.mp3` | `transmissao-encerrada.mp3` | a minha transmissão terminou |
+| `discord-user-moved.mp3` | `movido.mp3` | movido de canal — **sem chamador** (a API não move ninguém) |
+
+O som de mudo/surdo mora dentro de `useVoicePrefs.toggleMute`/`toggleDeafen`,
+não em quem chama: assim o botão do rodapé, a barra da call e o atalho soam
+igual, e fora de qualquer chamada também. Tocá-lo no `VoiceHotkeys` de novo
+dobrava o aviso — por isso ele lá só dispara a ação. O volume é o
+`outputVolume` das configurações (inclusive nos dois `<audio>` de toque, via
+`prepararToque`); o interruptor mestre `notificationSound` e o interruptor por
+som (`stores/sons.ts`) valem para todos; a prévia da aba Notificações passa
+`forcar` e ignora os dois.
 
 ## 10. Pendências e o que não foi verificado
 
@@ -419,8 +463,8 @@ configurações; a prévia da aba Notificações passa `forcar`.
   os dados do site.
 - `ScreenSharePicker.tsx` ainda importa do lucide; a sessão do compartilhamento
   de tela reescreve.
-- Coluna do modal de configurações foi para 252 assumindo que a medida do
-  Discord é da coluna; se for do conteúdo, o alvo é 268.
+- Coluna do modal de configurações: os 252 estavam certos — no print da janela
+  flutuante a coluna mede 252 de borda a borda.
 - Polimentos de voz listados no §7.
 - Painel "Ativo agora" e a barra de título no navegador: decisão do usuário.
 - **O instalador novo (§5.1) nunca rodou no Windows.** O `.nsi` compila aqui,
@@ -439,6 +483,13 @@ configurações; a prévia da aba Notificações passa `forcar`.
   chamar o desinstalador antigo por `ExecShell "runas"`, um UAC único), e isso
   precisa ser testado numa máquina que já tenha a versão perMachine — não dá
   para verificar daqui.
+- **Janela branca no boot do desktop.** A tela de abertura cobre o shell vazio,
+  mas antes dela o WebView2 ainda pinta um quadro branco. O conserto é
+  `"visible": false` na janela do `tauri.conf.json` + `getCurrentWindow().show()`
+  quando o React montar; a permissão (`core:window:allow-show`) já existe e a
+  bandeja ("Abrir Streamz") é a rede de segurança se o JS não subir. Não foi
+  feito no PR da tela de abertura para não disputar o `tauri.conf.json` com
+  outra sessão, e porque só dá para validar num Windows.
 
 ## 11. Checklist para uma sessão nova
 
