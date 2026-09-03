@@ -42,6 +42,12 @@
  */
 
 import type { FonteDeTela, PedidoDeTela } from "@/lib/seletor-de-tela";
+import {
+  SEM_OBSERVACAO,
+  comSinal,
+  temFoco,
+  type EstadoDeFoco,
+} from "@/lib/foco-da-janela";
 
 export type NotificacaoOptions = {
   title: string;
@@ -134,21 +140,21 @@ async function lerVersaoDoApp(): Promise<void> {
 // ── Foco da janela ─────────────────────────────────────────────────────────
 
 /**
- * Foco da janela do desktop, mantido pelo `onFocusChanged` do Tauri. `null`
- * enquanto ninguém observou (fora do app, ou antes de `observarFoco`): aí vale
- * o `document.hasFocus()`, que no WebView2 também acompanha a janela.
+ * Foco da janela do desktop. A regra (e o porquê) estão em
+ * `lib/foco-da-janela.ts`; aqui fica só o estado e a ligação com o ambiente.
  */
-let focoDaJanela: boolean | null = null;
+let focoDaJanela: EstadoDeFoco = SEM_OBSERVACAO;
 
 /**
  * A janela está na frente e com foco? É o gate de notificação do Discord: com
  * foco, só menção e DM avisam; sem foco (outro app na frente, minimizada, na
- * bandeja), tudo avisa. Sem DOM (SSR) responde `true` — nada a notificar.
+ * bandeja), tudo avisa. E é também o gate de **marcar como lido**: a conversa
+ * aberta numa janela em foco lê o que chega. Sem DOM (SSR) responde `true` —
+ * nada a notificar.
  */
 export function janelaTemFoco(): boolean {
   if (typeof document === "undefined") return true;
-  if (focoDaJanela !== null) return focoDaJanela;
-  return document.hasFocus();
+  return temFoco(focoDaJanela, document.hasFocus());
 }
 
 /**
@@ -157,29 +163,45 @@ export function janelaTemFoco(): boolean {
  * janela nativa, que é quem sabe quando o usuário clicou em outro app com a
  * nossa barra de título (região de arrasto) no meio. Os dois podem disparar
  * para a mesma troca; quem ouve tem que aguentar repetição.
+ *
+ * **As duas fontes alimentam o estado**, e não só a do Tauri. No desktop a
+ * janela `main` nasce escondida (a janelinha de abertura é quem a mostra), o
+ * primeiro `document.hasFocus()` é `false`, e o ouvinte nativo só fica pronto
+ * depois de um `import()` assíncrono: se o foco chegava nesse meio-tempo,
+ * ninguém desmentia o `false` e a conversa aberta parava de ser marcada como
+ * lida pelo resto da sessão. O `focus` do DOM, que já estava registrado,
+ * fecha essa janela de corrida — e uma releitura logo depois do ouvinte nativo
+ * entrar cobre o caso em que nem esse evento veio.
  */
 export function observarFoco(ouvinte: (foco: boolean) => void): () => void {
   if (typeof window === "undefined") return () => {};
-  const ganhou = () => ouvinte(true);
-  const perdeu = () => ouvinte(false);
+  const anotar = (foco: boolean) => {
+    focoDaJanela = comSinal(focoDaJanela, foco);
+    ouvinte(foco);
+  };
+  const ganhou = () => anotar(true);
+  const perdeu = () => anotar(false);
   window.addEventListener("focus", ganhou);
   window.addEventListener("blur", perdeu);
   let pararTauri: (() => void) | null = null;
   let cancelado = false;
   if (isTauri()) {
-    focoDaJanela = document.hasFocus();
+    focoDaJanela = comSinal(focoDaJanela, document.hasFocus());
     void (async () => {
       try {
         const { getCurrentWindow } = await import("@tauri-apps/api/window");
-        const parar = await getCurrentWindow().onFocusChanged(({ payload }) => {
-          focoDaJanela = payload;
-          ouvinte(payload);
-        });
-        if (cancelado) parar();
-        else pararTauri = parar;
+        const parar = await getCurrentWindow().onFocusChanged(({ payload }) => anotar(payload));
+        if (cancelado) {
+          parar();
+          return;
+        }
+        pararTauri = parar;
+        // o que aconteceu enquanto o `import()` corria não gerou evento aqui:
+        // relê o DOM agora que o ouvinte existe
+        if (document.hasFocus()) anotar(true);
       } catch {
         // sem o evento nativo, fica o `hasFocus()` do DOM
-        focoDaJanela = null;
+        focoDaJanela = SEM_OBSERVACAO;
       }
     })();
   }
@@ -188,7 +210,7 @@ export function observarFoco(ouvinte: (foco: boolean) => void): () => void {
     window.removeEventListener("focus", ganhou);
     window.removeEventListener("blur", perdeu);
     pararTauri?.();
-    focoDaJanela = null;
+    focoDaJanela = SEM_OBSERVACAO;
   };
 }
 
