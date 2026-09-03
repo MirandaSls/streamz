@@ -172,6 +172,61 @@ textarea:focus-visible,
   animation-delay: 0.4s;
 }
 
+/*
+ * A marca respirando (`components/ui/IconeAnimado`): tela de abertura e tela de
+ * atualização do desktop.
+ *
+ * Sobe e desce numa senoide de 2,6s, com 3% de escala, e a sombra elíptica
+ * embaixo encolhe e clareia na mesma cadência — é o que faz o símbolo parecer
+ * ter peso em vez de piscar. Nada gira: spinner é para espera curta.
+ *
+ * O desfoque da sombra acompanha o tamanho pedido (`--icone-tam`), senão um
+ * ícone pequeno viraria uma mancha e um grande, um risco duro.
+ *
+ * `prefers-reduced-motion` do sistema deixa tudo parado no repouso; a classe
+ * `reduzir-movimento` das configurações (mais abaixo) já zera qualquer animação
+ * do app, esta inclusive.
+ */
+@keyframes marca-respira {
+  0%,
+  100% {
+    transform: translateY(2.5%) scale(0.985);
+  }
+  50% {
+    transform: translateY(-5.5%) scale(1.03);
+  }
+}
+@keyframes marca-respira-sombra {
+  0%,
+  100% {
+    transform: scaleX(1);
+    opacity: 0.26;
+  }
+  50% {
+    transform: scaleX(0.66);
+    opacity: 0.1;
+  }
+}
+.icone-animado-marca {
+  animation: marca-respira 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  will-change: transform;
+}
+.icone-animado-sombra {
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.26;
+  filter: blur(calc(var(--icone-tam, 72px) * 0.085));
+  animation: marca-respira-sombra 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  will-change: transform, opacity;
+}
+@media (prefers-reduced-motion: reduce) {
+  .icone-animado-marca,
+  .icone-animado-sombra {
+    animation: none;
+    transform: none;
+  }
+}
+
 /* ── e-configuracoes: preferências de aparência e acessibilidade ──────────
  * Os valores vêm de `stores/settings`, que escreve as variáveis e as classes
  * no `<html>`. Aqui fica só como cada uma se traduz em pixel.

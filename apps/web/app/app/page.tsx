@@ -16,6 +16,7 @@ import BarraDeTitulo from "@/components/desktop/BarraDeTitulo";
 import ModalHost from "@/components/modals/ModalHost";
 import ContextMenuHost from "@/components/ui/ContextMenu";
 import ProfilePopoverHost from "@/components/ui/ProfilePopover";
+import TelaDeAbertura from "@/components/ui/TelaDeAbertura";
 import Toasts from "@/components/ui/Toasts";
 import VoiceLayer from "@/components/voice/VoiceLayer";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -159,6 +160,10 @@ export default function AppPage() {
       {/* f-desktop: só existe dentro do Tauri; desconta a própria altura no
           <html> (ver globals.css) e traz o aviso de atualização */}
       <BarraDeTitulo />
+      {/* cobre o shell vazio enquanto sessão, servidores e conversas chegam —
+          no site e no desktop. Aparece só se a carga passar de 150ms e sai por
+          fade; depois do primeiro boot nunca mais volta */}
+      <TelaDeAbertura />
     </div>
   );
 }
