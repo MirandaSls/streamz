@@ -11,6 +11,7 @@ import { useFriends } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
 import { observar, useHistorico } from "@/stores/historico";
 import { useUI } from "@/stores/ui";
+import TelaDeAtualizacao from "./TelaDeAtualizacao";
 import { useAtualizacao, type Atualizacao } from "./useAtualizacao";
 
 /**
@@ -71,6 +72,15 @@ function Barra() {
   const titulo = useTitulo();
   const atualizacao = useAtualizacao();
   const maximizada = useMaximizada();
+  // a tela cheia de atualização é aberta pela setinha verde e vive aqui porque
+  // é aqui que o estado do atualizador já mora; `fixed` faz o resto
+  const [telaDeAtualizacao, setTelaDeAtualizacao] = useState(false);
+
+  /** Abre a tela e toca a atualização adiante (baixar, ou reiniciar se pronta). */
+  function abrirAtualizacao() {
+    setTelaDeAtualizacao(true);
+    void atualizacao.iniciar();
+  }
 
   async function janela(acao: "minimizar" | "alternar" | "fechar") {
     try {
@@ -85,70 +95,81 @@ function Barra() {
   }
 
   return (
-    <header
-      data-tauri-drag-region
-      aria-label="Barra de título"
-      style={{ height: ALTURA }}
-      className="fixed inset-x-0 top-0 z-40 flex select-none items-center bg-rail text-txt-secondary"
-    >
-      {/* ← → : o histórico interno do app, esmaecidas quando não há para onde ir */}
-      <div data-tauri-drag-region className="flex items-center pl-4">
-        <Seta label="Voltar" ativa={podeVoltar} onClick={() => void voltar()}>
-          <ArrowLeft size={16} />
-        </Seta>
-        <Seta label="Avançar" ativa={podeAvancar} onClick={() => void avancar()}>
-          <ArrowRight size={16} />
-        </Seta>
-      </div>
-
-      {/* o título é centrado na janela, não no espaço que sobra; e não recebe
-          clique, para o arrasto passar por ele */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-center gap-2 px-64 text-sm font-semibold text-txt-primary"
+    <>
+      <header
+        data-tauri-drag-region
+        aria-label="Barra de título"
         style={{ height: ALTURA }}
+        className="fixed inset-x-0 top-0 z-40 flex select-none items-center bg-rail text-txt-secondary"
       >
-        <span className="grid h-4 w-4 shrink-0 place-items-center">{titulo.icone}</span>
-        <span className="truncate">{titulo.nome}</span>
-      </div>
-
-      <div data-tauri-drag-region className="ml-auto flex h-full items-center">
-        <div data-tauri-drag-region className="flex items-center gap-3 pr-4">
-          <InboxPopover tamanhoDoIcone={19} />
-          {/* sem central de ajuda no MVP: o mesmo botão da página Amigos */}
-          <HeaderIcon label="Ajuda" disabled>
-            <HelpCircle size={18} />
-          </HeaderIcon>
-          {atualizacao.estado !== "nada" && <BotaoDeAtualizacao atualizacao={atualizacao} />}
+        {/* ← → : o histórico interno do app, esmaecidas quando não há para onde ir */}
+        <div data-tauri-drag-region className="flex items-center pl-4">
+          <Seta label="Voltar" ativa={podeVoltar} onClick={() => void voltar()}>
+            <ArrowLeft size={16} />
+          </Seta>
+          <Seta label="Avançar" ativa={podeAvancar} onClick={() => void avancar()}>
+            <ArrowRight size={16} />
+          </Seta>
         </div>
 
-        {/* 1×20 no print, (34,34,37) sobre (18,18,20): +16 de contraste. O
-            `border` sobre `rail` dá +31 — mais visível que o original */}
-        <span aria-hidden="true" className="h-5 w-px bg-border" />
+        {/* o título é centrado na janela, não no espaço que sobra; e não recebe
+            clique, para o arrasto passar por ele */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-center gap-2 px-64 text-sm font-semibold text-txt-primary"
+          style={{ height: ALTURA }}
+        >
+          <span className="grid h-4 w-4 shrink-0 place-items-center">{titulo.icone}</span>
+          <span className="truncate">{titulo.nome}</span>
+        </div>
 
-        <div data-tauri-drag-region className="ml-[7px] flex h-full items-center gap-1">
-          <Controle label="Minimizar" onClick={() => void janela("minimizar")}>
-            <path d="M0 5.5H10" />
-          </Controle>
-          <Controle
-            label={maximizada ? "Restaurar" : "Maximizar"}
-            onClick={() => void janela("alternar")}
-          >
-            {maximizada ? (
-              <>
-                <path d="M2.5 2.5V0.5H9.5V7.5H7.5" />
-                <rect x="0.5" y="2.5" width="7" height="7" />
-              </>
-            ) : (
-              <rect x="0.5" y="0.5" width="9" height="9" />
+        <div data-tauri-drag-region className="ml-auto flex h-full items-center">
+          <div data-tauri-drag-region className="flex items-center gap-3 pr-4">
+            <InboxPopover tamanhoDoIcone={19} />
+            {/* sem central de ajuda no MVP: o mesmo botão da página Amigos */}
+            <HeaderIcon label="Ajuda" disabled>
+              <HelpCircle size={18} />
+            </HeaderIcon>
+            {atualizacao.estado !== "nada" && (
+              <BotaoDeAtualizacao atualizacao={atualizacao} onAbrir={abrirAtualizacao} />
             )}
-          </Controle>
-          <Controle label="Fechar" fechar onClick={() => void janela("fechar")}>
-            <path d="M0.5 0.5L9.5 9.5M9.5 0.5L0.5 9.5" />
-          </Controle>
+          </div>
+
+          {/* 1×20 no print, (34,34,37) sobre (18,18,20): +16 de contraste. O
+              `border` sobre `rail` dá +31 — mais visível que o original */}
+          <span aria-hidden="true" className="h-5 w-px bg-border" />
+
+          <div data-tauri-drag-region className="ml-[7px] flex h-full items-center gap-1">
+            <Controle label="Minimizar" onClick={() => void janela("minimizar")}>
+              <path d="M0 5.5H10" />
+            </Controle>
+            <Controle
+              label={maximizada ? "Restaurar" : "Maximizar"}
+              onClick={() => void janela("alternar")}
+            >
+              {maximizada ? (
+                <>
+                  <path d="M2.5 2.5V0.5H9.5V7.5H7.5" />
+                  <rect x="0.5" y="2.5" width="7" height="7" />
+                </>
+              ) : (
+                <rect x="0.5" y="0.5" width="9" height="9" />
+              )}
+            </Controle>
+            <Controle label="Fechar" fechar onClick={() => void janela("fechar")}>
+              <path d="M0.5 0.5L9.5 9.5M9.5 0.5L0.5 9.5" />
+            </Controle>
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      {telaDeAtualizacao && (
+        <TelaDeAtualizacao
+          atualizacao={atualizacao}
+          onFechar={() => setTelaDeAtualizacao(false)}
+        />
+      )}
+    </>
   );
 }
 
@@ -224,19 +245,32 @@ function Controle({
 
 /**
  * A setinha verde: só aparece quando há versão nova. Durante o download, um
- * anel em volta dela mostra o progresso; quando a instalação termina, o
- * clique reinicia o app.
+ * anel em volta dela mostra o progresso — ele continua aqui porque a tela cheia
+ * pode estar fechada (o erro tem "Agora não") e a barra é o que resta.
+ *
+ * O clique **abre a tela de atualização**; quem baixa, instala e reinicia é
+ * ela, com o mesmo `useAtualizacao`.
  */
-function BotaoDeAtualizacao({ atualizacao }: { atualizacao: Atualizacao }) {
-  const { estado, versao, progresso, iniciar } = atualizacao;
+function BotaoDeAtualizacao({
+  atualizacao,
+  onAbrir,
+}: {
+  atualizacao: Atualizacao;
+  onAbrir: () => void;
+}) {
+  const { estado, versao, progresso } = atualizacao;
   const rotulo =
     estado === "baixando"
       ? `Baixando… ${Math.round(progresso * 100)}%`
-      : estado === "pronta"
-        ? "Reiniciar para atualizar"
-        : estado === "erro"
-          ? "Não foi possível atualizar. Tentar de novo"
-          : `Atualização disponível: v${versao ?? "?"}`;
+      : estado === "instalando"
+        ? "Instalando a atualização…"
+        : estado === "reiniciando"
+          ? "Reiniciando…"
+          : estado === "pronta"
+            ? "Reiniciar para atualizar"
+            : estado === "erro"
+              ? "Não foi possível atualizar. Tentar de novo"
+              : `Atualização disponível: v${versao ?? "?"}`;
   const circunferencia = 2 * Math.PI * 10.5;
   return (
     <Tooltip label={rotulo} side="bottom">
@@ -244,7 +278,7 @@ function BotaoDeAtualizacao({ atualizacao }: { atualizacao: Atualizacao }) {
         type="button"
         aria-label={rotulo}
         aria-busy={estado === "baixando"}
-        onClick={() => void iniciar()}
+        onClick={onAbrir}
         className={`relative grid h-6 w-6 place-items-center text-green transition hover:opacity-80 ${
           estado === "baixando" ? "cursor-progress" : ""
         }`}
