@@ -40,3 +40,38 @@ export function aoChegarMensagem<T extends Pick<DMChannelView, "lastMessageAt" |
     unreadCount: dm.unreadCount + (opcoes.propria ? 0 : 1),
   };
 }
+
+/** O que o ícone da caixa de entrada mostra. */
+export type BadgeDaCaixa =
+  | { tipo: "nada" }
+  /** há novidade, mas nada que se conte: um ponto, sem número. */
+  | { tipo: "ponto" }
+  | { tipo: "contagem"; total: number };
+
+/**
+ * O badge do ícone da caixa de entrada (barra de título do desktop e cabeçalho
+ * de Amigos no navegador).
+ *
+ * A regra é a que o resto do app já usa e a que o Discord mostra: **conta-se o
+ * que é dirigido a mim** — menção em servidor e mensagem em conversa direta —,
+ * e o resto (canal de servidor com mensagem nova, sem menção) vira só um ponto.
+ * Números e ponto não se somam: quando há o que contar, o número já diz que há
+ * novidade.
+ *
+ * É a mesma aritmética do contador no ícone do app (`atualizarContadorNoIcone`
+ * em `hooks/useRealtime.ts`), de propósito: dois lugares dizendo números
+ * diferentes sobre a mesma caixa seria pior do que não ter badge.
+ */
+export function badgeDaCaixa(entrada: {
+  /** soma dos `mentionCount` dos servidores. */
+  mencoes: number;
+  /** soma dos `unreadCount` das conversas. */
+  conversas: number;
+  /** algum servidor com canal não lido (sem menção). */
+  temServidorNaoLido: boolean;
+}): BadgeDaCaixa {
+  const total = Math.max(0, entrada.mencoes) + Math.max(0, entrada.conversas);
+  if (total > 0) return { tipo: "contagem", total };
+  if (entrada.temServidorNaoLido) return { tipo: "ponto" };
+  return { tipo: "nada" };
+}

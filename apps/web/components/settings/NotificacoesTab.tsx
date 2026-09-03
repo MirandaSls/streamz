@@ -6,8 +6,7 @@ import { type NotificationLevel } from "@streamz/shared";
 import { RadioCards, Row, Section, Switch, Toggle } from "@/components/ui/controls";
 import { SONS, useSons, type NomeDeSom } from "@/stores/sons";
 import { useT } from "@/lib/i18n";
-import { tocarSomDeNotificacao } from "@/lib/notification-sound";
-import { tocarArquivo, tocarSom, toqueDeChamadaUrl, type SomDeVoz } from "@/lib/ringtone";
+import { tocarSom } from "@/lib/ringtone";
 import { useGlobalSetting, useNotifications } from "@/stores/notifications";
 import { useSettings } from "@/stores/settings";
 
@@ -102,20 +101,13 @@ function BlocoDeSons() {
   const [aberto, setAberto] = useState(false);
 
   function ouvir(nome: NomeDeSom) {
-    const volume = s.outputVolume / 100;
-    if (nome === "mensagem") {
-      tocarSomDeNotificacao(volume);
-      return;
-    }
-    if (nome === "chamada") {
-      // uma passada do toque, sem o loop da chamada de verdade
-      tocarArquivo(toqueDeChamadaUrl(), volume);
-      return;
-    }
     // a prévia toca mesmo o som desligado (e mesmo com o interruptor mestre
     // desligado): é justamente o som que a pessoa está avaliando. Vale também
     // para "Movido de canal", que ainda não tem nenhum evento que o dispare.
-    tocarSom(nome as SomDeVoz, volume, true);
+    //
+    // "chamada" sai numa passada só, sem o loop da chamada de verdade — e no
+    // mesmo volume dela, porque quem decide é `volumeDoSom` e não este botão.
+    tocarSom(nome, { forcar: true });
   }
 
   const visiveis = aberto ? SONS : SONS.slice(0, SONS_A_VISTA);

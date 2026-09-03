@@ -55,7 +55,6 @@ import {
   type EstadoDaInterface,
 } from "@/lib/na-tela";
 import { tocarSomDeNotificacao } from "@/lib/notification-sound";
-import { somLigado } from "@/stores/sons";
 import { levelForChannel, useNotifications } from "@/stores/notifications";
 import { useSettings } from "@/stores/settings";
 import { useAuth } from "@/stores/auth";
@@ -498,10 +497,9 @@ function notifyIfAway(message: Message, mention: boolean) {
   const semFoco = document.visibilityState !== "visible" || !janelaTemFoco();
   if (!semFoco && !mention && message.guildId) return;
 
-  // `notificationSound` é o interruptor mestre; `somLigado` diz se ESTE som toca
-  if (prefs.notificationSound && somLigado("mensagem")) {
-    tocarSomDeNotificacao(prefs.outputVolume / 100);
-  }
+  // interruptor mestre, interruptor deste som, volume e a guarda contra o mesmo
+  // som sobreposto em menos de 300 ms: tudo dentro (`lib/ringtone.ts`)
+  tocarSomDeNotificacao();
   if (!prefs.desktopNotifications) return;
   const { guildId, channelId } = message;
   void notify({
