@@ -5,6 +5,7 @@ import { Keyboard, Mic, RefreshCw, Video } from "@/components/ui/icones";
 import { PTT_RELEASE_MS } from "@streamz/shared";
 import { RadioCards, Section, Select, Slider, ToggleLinha } from "@/components/ui/controls";
 import { SegmentosDeQualidade } from "@/components/voice/qualidade-de-tela";
+import { useTesteDeMicrofone } from "@/components/voice/useTesteDeMicrofone";
 import { useT } from "@/lib/i18n";
 import { estimativaDeBanda } from "@/lib/seletor-de-tela";
 import { pttRotulo } from "@/stores/ptt-core";
@@ -28,7 +29,10 @@ import { useVoicePrefs } from "@/stores/voicePrefs";
  * escolha continua valendo nos dois lugares.
  *
  * Toda trilha aberta aqui é parada ao sair da aba: um microfone que fica
- * gravando depois de fechar a tela é o tipo de bug que ninguém percebe.
+ * gravando depois de fechar a tela é o tipo de bug que ninguém percebe. O
+ * teste de microfone é o mesmo do popover de supressão de ruído e vem do mesmo
+ * hook (`useTesteDeMicrofone`): enquanto ele corre você fica surdo — a sala não
+ * te ouve e você não ouve ninguém — e escuta o seu próprio microfone.
  *
  * A seção "Compartilhar tela" está aqui porque no **navegador** o botão de
  * transmitir não abre mais modal nenhum — ele chama `getDisplayMedia` direto e
@@ -57,31 +61,16 @@ export default function VozTab() {
   const setScreenAudio = useVoice((v) => v.setScreenAudio);
 
   const [erro, setErro] = useState<string | null>(null);
-  const [nivel, setNivel] = useState(0);
-  const [testando, setTestando] = useState(false);
   const [camera, setCamera] = useState(false);
   const [capturando, setCapturando] = useState(false);
+  const { testando, nivel, erro: erroDoTeste, alternar: alternarTeste } = useTesteDeMicrofone();
 
   const videoRef = useRef<HTMLVideoElement>(null);
-  const micStream = useRef<MediaStream | null>(null);
   const camStream = useRef<MediaStream | null>(null);
-  const audioCtx = useRef<AudioContext | null>(null);
-  const raf = useRef<number | null>(null);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
-
-  const pararMic = useCallback(() => {
-    if (raf.current !== null) cancelAnimationFrame(raf.current);
-    raf.current = null;
-    micStream.current?.getTracks().forEach((track) => track.stop());
-    micStream.current = null;
-    void audioCtx.current?.close();
-    audioCtx.current = null;
-    setNivel(0);
-    setTestando(false);
-  }, []);
 
   const pararCamera = useCallback(() => {
     camStream.current?.getTracks().forEach((track) => track.stop());
@@ -90,48 +79,14 @@ export default function VozTab() {
     setCamera(false);
   }, []);
 
-  // sair da aba (ou do modal) tem de fechar microfone e câmera
-  useEffect(() => () => {
-    pararMic();
-    pararCamera();
-  }, [pararMic, pararCamera]);
+  // sair da aba (ou do modal) tem de fechar a câmera; o microfone do teste é
+  // encerrado pelo próprio hook ao desmontar
+  useEffect(() => () => pararCamera(), [pararCamera]);
 
-  async function testarMicrofone() {
-    if (testando) {
-      pararMic();
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: devices.inputId ? { deviceId: { exact: devices.inputId } } : true,
-      });
-      micStream.current = stream;
-      setErro(null);
-      setTestando(true);
-      // rótulos de dispositivo só existem depois da permissão
-      void refresh();
-
-      const contexto = new AudioContext();
-      audioCtx.current = contexto;
-      const analisador = contexto.createAnalyser();
-      analisador.fftSize = 512;
-      contexto.createMediaStreamSource(stream).connect(analisador);
-      const amostras = new Uint8Array(analisador.frequencyBinCount);
-
-      const medir = () => {
-        analisador.getByteTimeDomainData(amostras);
-        // RMS em torno do silêncio (128) — pico puro pisca demais para virar barra
-        let soma = 0;
-        for (const amostra of amostras) soma += (amostra - 128) ** 2;
-        const rms = Math.sqrt(soma / amostras.length) / 128;
-        setNivel(Math.min(1, rms * 3));
-        raf.current = requestAnimationFrame(medir);
-      };
-      medir();
-    } catch {
-      setErro(explicarMidia(motivoDaFalha()) ?? t("voz.semPermissao"));
-      pararMic();
-    }
+  function testarMicrofone() {
+    alternarTeste();
+    // rótulos de dispositivo só existem depois da permissão
+    void refresh();
   }
 
   async function alternarCamera() {
@@ -288,7 +243,7 @@ export default function VozTab() {
         <div className="flex items-center gap-3 py-3">
           <button
             type="button"
-            onClick={() => void testarMicrofone()}
+            onClick={testarMicrofone}
             className="flex h-9 shrink-0 items-center gap-2 rounded-[3px] bg-accent px-3 text-sm font-medium text-accent-ink hover:bg-accent-hover"
           >
             <Mic size={16} aria-hidden="true" />
@@ -296,6 +251,14 @@ export default function VozTab() {
           </button>
           <MedidorDeMicrofone nivel={nivel} rotulo={t("voz.volumeEntrada")} />
         </div>
+        {/* O que o teste faz, dito antes de a pessoa estranhar o silêncio: o
+            Discord também ensurdece, e sem o aviso parece que a call caiu. */}
+        <p className="-mt-1 pb-3 text-xs text-txt-muted">
+          {testando
+            ? "Você está se ouvindo. Enquanto o teste durar, a sala não te ouve e você não ouve ninguém."
+            : "Você vai se ouvir; a chamada fica em silêncio dos dois lados enquanto o teste durar."}
+        </p>
+        {erroDoTeste && <p className="pb-3 text-xs text-red">{erroDoTeste}</p>}
       </Section>
 
       <Section id="tela" title={t("voz.tela")}>

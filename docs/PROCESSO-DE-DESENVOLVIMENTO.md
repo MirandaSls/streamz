@@ -338,6 +338,40 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   `acceptCall` usam o primeiro (trocar de canal de voz não pode desmontar o
   painel que pediu a conexão).
 - Atalhos de mudo/surdo (Ctrl+Shift+M/D) têm um dono só: `VoiceHotkeys`.
+- **Quem está falando é um conjunto só**: `falando: ReadonlySet<userId>` na
+  store, montado em `stores/voice-falantes.ts`. Palco (`VoiceGrid`), lista do
+  canal (`VoiceChannelMembers`) e lista de membros (`MemberList`) leem esse
+  conjunto e mais nada — `participant.isSpeaking` lido no render era uma segunda
+  conta, e era dela que vinham as divergências. Duas fontes o alimentam:
+  `RoomEvent.ActiveSpeakersChanged` para os **outros** (recomposto também em
+  `ParticipantConnected`/`Disconnected`/`TrackMuted`, senão quem sai falando
+  fica com o anel aceso) e, para **mim**, um detector local em
+  `stores/voz-detector-local.ts` — o SFU decide fala a cada 500 ms, com limiar
+  próprio e por canal *lossy*, e era isso que fazia o meu anel piscar ou não
+  acender. O detector é rearmado por `rearmarDetectorLocal()` em todo caminho
+  que troca a faixa, inclusive `switchActiveDevice`, que reinicia a faixa **sem**
+  emitir `LocalTrackPublished`. Identidade do LiveKit vira `userId` por
+  `donoDaIdentidade` (o `<userId>#tela` é a mesma pessoa).
+- **O anel verde tem uma definição só**, `AnelDeFala` em `pecas-de-voz.tsx`:
+  2px, `ring-green` (`rgb(31,184,107)`), desenhado por **cima** do avatar e por
+  dentro do diâmetro, com o avatar em `ENCOLHE_AO_FALAR`. Não é `ring-inset` na
+  caixa do próprio `Avatar`: sombra `inset` é pintada abaixo do conteúdo, então
+  a `<img>` (ou o círculo das iniciais) cobria o anel por completo — a regra
+  estava na lista lateral e o anel nunca aparecia. Conferido renderizando os
+  dois markups com o CSS compilado do app: o antigo não produz um pixel verde.
+- **"Testar microfone" é uma cabine, não um medidor** (Discord): enquanto dura,
+  você fica surdo dos dois lados e ouve a si mesmo. Um hook só,
+  `components/voice/useTesteDeMicrofone.ts`, para os três lugares (popover de
+  supressão, `VoiceSettingsPanel`, aba Voz e vídeo). O estado é
+  `testandoMicrofone` na store — transitório, **sobrepõe** mudo/surdo sem
+  escrevê-los (`stores/teste-de-microfone.ts`, com teste unitário) e não vai
+  para o gateway: o Discord ensurdece só de um lado. Quem o respeita é a
+  publicação do microfone (`microfoneNaSala`) e o `<audio>` de cada participante
+  remoto (`saidaCalada`, em `AudioRemotoHost`). O retorno sai por um `<audio>`
+  criado pelo hook — só elemento de mídia tem `setSinkId`, e é ele que faz o
+  teste tocar na saída escolhida —, com o mesmo eco/ganho/supressão da call
+  (RNNoise incluso). Sair da call, fechar o popover ou trocar de aba param o
+  teste.
 - Estados de voz de DM têm rota REST (`GET /dms/:id/voice-states`); o boot
   retoma a call após F5 se o usuário aparecer como `reconnecting`
   (`stores/voice-retomada.ts`, `sessionStorage`); a reconexão do socket não

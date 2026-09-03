@@ -1,94 +1,47 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useVoice } from "@/stores/voice";
-
 /**
- * Peças de voz usadas em mais de um lugar: o medidor do microfone, a barra que
- * o desenha e o interruptor.
+ * Peças de voz usadas em mais de um lugar: o anel de fala, a barra de nível, o
+ * interruptor e o slider de volume.
  *
  * Elas moravam dentro do `VoiceSettingsPanel`, que era o único dono. Deixaram
  * de ser: o popover de supressão de ruído do painel "Voz conectada" tem o mesmo
  * teste de microfone, e duplicar a captura seria duplicar também o pedido de
  * permissão e o `AudioContext`.
+ *
+ * A captura em si saiu daqui: quem abre o microfone do teste é o hook
+ * `useTesteDeMicrofone`, porque o teste passou a ser mais do que um medidor
+ * (ensurdece e devolve o próprio som). O que ficou é só desenho.
  */
 
 /**
- * Nível do microfone em tempo real (RMS do sinal).
+ * O anel verde de quem está falando — **uma** definição de cor e espessura,
+ * para o palco e as listas não divergirem.
  *
- * Abre uma captura **própria**, separada da call: o teste tem de funcionar sem
- * estar em nenhuma sala, que é justamente quando as pessoas conferem o
- * microfone.
+ * Ele é um irmão posicionado por cima do avatar, e não um `ring` na caixa do
+ * próprio avatar. A diferença não é estilística: sombra `inset` é pintada
+ * acima do fundo e **abaixo do conteúdo**, então a `<img>` do avatar (ou o
+ * círculo das iniciais, que também preenche a caixa inteira) cobria o anel por
+ * completo. Era esse o defeito da lista lateral: a regra estava lá, e o anel
+ * simplesmente não aparecia nunca.
+ *
+ * Desenhado **por dentro** do diâmetro, com o avatar encolhido por
+ * `ENCOLHE_AO_FALAR`: por fora, o avatar cresce ao falar e a fileira inteira
+ * pula a cada sílaba.
+ *
+ * Quem usa precisa de um pai `relative` (ou `inline-grid` posicionado).
  */
-export function useNivelDoMicrofone(ativo: boolean, deviceId: string | null) {
-  const [nivel, setNivel] = useState(0);
-  const processamento = useVoice((s) => s.audio.processamento);
-
-  useEffect(() => {
-    if (!ativo || typeof navigator === "undefined" || !navigator.mediaDevices) {
-      setNivel(0);
-      return;
-    }
-    let parado = false;
-    let stream: MediaStream | null = null;
-    let ctx: AudioContext | null = null;
-    let quadro = 0;
-
-    void (async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            deviceId: deviceId ? { exact: deviceId } : undefined,
-            echoCancellation: processamento.eco,
-            // o teste ouve a captura do navegador; a supressão avançada
-            // acontece depois, no processador da faixa publicada
-            noiseSuppression: processamento.ruido === "padrao",
-            autoGainControl: processamento.ganho,
-          },
-        });
-        if (parado) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        const Ctor =
-          window.AudioContext ??
-          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-        if (!Ctor) return;
-        ctx = new Ctor();
-        const fonte = ctx.createMediaStreamSource(stream);
-        const analisador = ctx.createAnalyser();
-        analisador.fftSize = 1024;
-        fonte.connect(analisador);
-        const amostras = new Uint8Array(analisador.fftSize);
-        const ler = () => {
-          analisador.getByteTimeDomainData(amostras);
-          let soma = 0;
-          for (const v of amostras) {
-            const x = (v - 128) / 128;
-            soma += x * x;
-          }
-          // ×3 porque fala normal fica em RMS baixo: sem o ganho visual a barra
-          // mal sairia do lugar e o teste não provaria nada
-          setNivel(Math.min(1, Math.sqrt(soma / amostras.length) * 3));
-          quadro = requestAnimationFrame(ler);
-        };
-        ler();
-      } catch {
-        // sem permissão de microfone não há o que medir
-      }
-    })();
-
-    return () => {
-      parado = true;
-      cancelAnimationFrame(quadro);
-      stream?.getTracks().forEach((t) => t.stop());
-      void ctx?.close().catch(() => {});
-      setNivel(0);
-    };
-  }, [ativo, deviceId, processamento.eco, processamento.ruido, processamento.ganho]);
-
-  return nivel;
+export function AnelDeFala() {
+  return (
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-inset ring-green"
+    />
+  );
 }
+
+/** Classe do avatar enquanto o anel está aceso: ele cede a folga para o anel. */
+export const ENCOLHE_AO_FALAR = "scale-[0.925]";
 
 /** Barra de nível; com `limiar`, marca onde a voz passa a contar. */
 export function BarraDeNivel({ nivel, limiar }: { nivel: number; limiar?: number }) {
