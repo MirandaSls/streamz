@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Keyboard, Mic, RefreshCw, Video } from "@/components/ui/icones";
 import { PTT_RELEASE_MS } from "@streamz/shared";
 import { RadioCards, Section, Select, Slider, ToggleLinha } from "@/components/ui/controls";
+import { SegmentosDeQualidade } from "@/components/voice/qualidade-de-tela";
 import { useT } from "@/lib/i18n";
+import { estimativaDeBanda } from "@/lib/seletor-de-tela";
 import { pttRotulo } from "@/stores/ptt-core";
 import { useSettings } from "@/stores/settings";
 import { explicarMidia, motivoDaFalha, useVoiceDevices } from "@/stores/voiceDevices";
@@ -27,6 +29,13 @@ import { useVoicePrefs } from "@/stores/voicePrefs";
  *
  * Toda trilha aberta aqui é parada ao sair da aba: um microfone que fica
  * gravando depois de fechar a tela é o tipo de bug que ninguém percebe.
+ *
+ * A seção "Compartilhar tela" está aqui porque no **navegador** o botão de
+ * transmitir não abre mais modal nenhum — ele chama `getDisplayMedia` direto e
+ * publica (`ScreenShareButton`). A escolha de resolução, taxa de quadros e
+ * áudio do sistema precisava de um lugar calmo, e é este; no desktop os mesmos
+ * controles continuam no rodapé do seletor, escrevendo na mesma store, então
+ * não há duas verdades.
  */
 export default function VozTab() {
   const t = useT();
@@ -41,6 +50,11 @@ export default function VozTab() {
   // chamada escreve), então a escolha vale nos dois lugares
   const processamento = useVoice((v) => v.audio.processamento);
   const setAudioPref = useVoice((v) => v.setAudioPref);
+  // preset da transmissão de tela — o mesmo que o rodapé do seletor escreve
+  const screenQuality = useVoice((v) => v.screenQuality);
+  const screenAudio = useVoice((v) => v.screenAudio);
+  const setScreenQuality = useVoice((v) => v.setScreenQuality);
+  const setScreenAudio = useVoice((v) => v.setScreenAudio);
 
   const [erro, setErro] = useState<string | null>(null);
   const [nivel, setNivel] = useState(0);
@@ -282,6 +296,23 @@ export default function VozTab() {
           </button>
           <MedidorDeMicrofone nivel={nivel} rotulo={t("voz.volumeEntrada")} />
         </div>
+      </Section>
+
+      <Section id="tela" title={t("voz.tela")}>
+        <div className="py-3">
+          <SegmentosDeQualidade quality={screenQuality} onQualidade={setScreenQuality} />
+        </div>
+        {/* O custo de subida é a única coisa que o usuário não consegue deduzir
+            sozinho, e é o que decide se 1440p vai funcionar na conexão dele. */}
+        <p className="-mt-1 pb-3 text-xs text-txt-muted">
+          Usa cerca de {estimativaDeBanda(screenQuality)} da sua internet de subida
+        </p>
+        <ToggleLinha
+          titulo={t("voz.telaAudio")}
+          hint={t("voz.telaAudioAjuda")}
+          checked={screenAudio}
+          onChange={setScreenAudio}
+        />
       </Section>
 
       <Section id="camera" title={t("voz.previaCamera")} semDivisoria>

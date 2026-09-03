@@ -3,16 +3,19 @@ import { SCREEN_QUALITY } from "@streamz/shared";
 import {
   RESOLUCOES,
   TAXAS,
+  ehCancelamento,
   estimativaDeBanda,
   fontesDaAba,
   juntarPreset,
+  mensagemDeErro,
   montarPedido,
+  restricoesDeCaptura,
   rotuloDaFonte,
   separarPreset,
   type FonteDeTela,
 } from "./seletor-de-tela";
 
-describe("seletores de qualidade do rodapé", () => {
+describe("seletores de qualidade", () => {
   it("separa e junta a chave do preset", () => {
     expect(separarPreset("1440p30")).toEqual({ resolucao: "1440p", fps: "30" });
     expect(separarPreset("720p60")).toEqual({ resolucao: "720p", fps: "60" });
@@ -72,5 +75,52 @@ describe("pedido para o Rust", () => {
       audio: true,
       audioMaxBitrate: 160_000,
     });
+  });
+});
+
+describe("captura do navegador", () => {
+  it("leva o preset e o áudio de sistema sem processamento de voz", () => {
+    expect(restricoesDeCaptura("1080p60", true)).toEqual({
+      video: { displaySurface: "monitor", width: 1920, height: 1080, frameRate: 60 },
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        channelCount: 2,
+      },
+    });
+  });
+
+  it("sem áudio do sistema, pede vídeo só", () => {
+    expect(restricoesDeCaptura("720p30", false)).toEqual({
+      video: { displaySurface: "monitor", width: 1280, height: 720, frameRate: 30 },
+      audio: false,
+    });
+  });
+
+  it("cancelar o diálogo não é erro; bloqueio do sistema é", () => {
+    // o usuário fechou o seletor do navegador: nada acontece, sem aviso
+    const cancelou = new DOMException(
+      "The request is not allowed by the user agent or the platform in the current context.",
+      "NotAllowedError",
+    );
+    expect(ehCancelamento(cancelou)).toBe(true);
+    // permissão de gravação de tela negada no sistema operacional
+    const bloqueio = new DOMException("System policy denies screen capture", "NotAllowedError");
+    expect(ehCancelamento(bloqueio)).toBe(false);
+    expect(mensagemDeErro(bloqueio)).toMatch(/permissões do sistema/);
+    expect(ehCancelamento(new Error("qualquer outra coisa"))).toBe(false);
+  });
+
+  it("traduz os erros que o navegador sabe dar", () => {
+    expect(mensagemDeErro(new DOMException("", "NotFoundError"))).toBe(
+      "Nenhuma fonte de captura disponível.",
+    );
+    expect(mensagemDeErro(new DOMException("", "NotReadableError"))).toBe(
+      "Outro aplicativo está usando essa fonte.",
+    );
+    expect(mensagemDeErro(new Error("boom"))).toBe(
+      "Não foi possível iniciar o compartilhamento de tela.",
+    );
   });
 });
