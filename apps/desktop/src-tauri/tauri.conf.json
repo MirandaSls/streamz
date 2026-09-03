@@ -61,7 +61,12 @@
         "languages": [
           "PortugueseBR",
           "English"
-        ]
+        ],
+        "template": "nsis/installer.nsi",
+        "installerHooks": "nsis/ganchos.nsh",
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "nsis/cabecalho.bmp",
+        "sidebarImage": "nsis/lateral.bmp"
       }
     }
   },
