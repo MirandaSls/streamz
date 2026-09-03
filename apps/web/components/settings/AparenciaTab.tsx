@@ -50,7 +50,9 @@ export default function AparenciaTab() {
           min={FONT_SCALE.min}
           max={FONT_SCALE.max}
           step={FONT_SCALE.step}
-          format={(v) => `${v}px`}
+          // o passo é de meio pixel (o padrão é 15,5): em pt-BR o separador
+          // decimal é vírgula, e "15.5px" no rótulo lia como outro número
+          format={(v) => `${v.toLocaleString(s.locale)}px`}
           onChange={(fontScale) => s.set({ fontScale })}
         />
         <Slider
