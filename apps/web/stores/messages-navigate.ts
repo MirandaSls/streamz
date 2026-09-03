@@ -64,17 +64,13 @@ export async function goToChannel({ guildId, channelId }: ChannelTarget): Promis
     }
     if (canais.activeChannelId !== channelId) canais.select(canal);
   } else {
-    const dms = useDMs.getState();
-    let conversa = dms.channels.find((d) => d.id === channelId);
-    if (!conversa) {
-      await dms.refreshList();
-      conversa = useDMs.getState().channels.find((d) => d.id === channelId);
-    }
-    if (!conversa) {
+    // `abrirPorId` busca no servidor quando a conversa não está na lista — é o
+    // caso de uma conversa fechada, que o `GET /dms` não devolve: antes o link
+    // dizia "você não participa mais dessa conversa" para algo que era só um X.
+    if (!(await useDMs.getState().abrirPorId(channelId))) {
       ui.toast("Você não participa mais dessa conversa", "error");
       return false;
     }
-    if (useDMs.getState().activeId !== channelId) useDMs.getState().select(conversa);
   }
   return true;
 }

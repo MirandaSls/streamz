@@ -257,6 +257,9 @@ export default function ProfilePopoverHost() {
     setRascunho("");
     try {
       const dm = await api.openDM(user.id);
+      // a conversa passa a existir para valer: sem isto ela ficava fora da
+      // coluna até chegar mensagem do outro lado
+      useDMs.getState().registrar(dm);
       useMessages.getState().send({ channelId: dm.id, guildId: null, author: me, content: texto });
       ui.toast(`Mensagem enviada para @${user.username}`);
     } catch (e) {

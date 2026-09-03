@@ -13,6 +13,7 @@ import { useChannels } from "@/stores/channels";
 import { useFriends } from "@/stores/friends";
 import { useMessages } from "@/stores/messages";
 import { aoChegarMensagem } from "@/stores/nao-lidas";
+import { comAConversaAberta, noTopo } from "@/stores/dms-lista";
 
 /**
  * Conversas diretas: a lista e qual está aberta.
@@ -36,10 +37,19 @@ interface DMsState {
   select: (dm: DMChannelView) => void;
   openWith: (userId: string) => Promise<void>;
   /**
+   * Abre a conversa pelo **id do canal** — o rail, um link para a mensagem, a
+   * caixa de entrada e uma chamada recebida só sabem o id. Busca no servidor
+   * quando ela não está na lista (fechada, ou aberta pelo outro lado). `false`
+   * = não participo mais dela.
+   */
+  abrirPorId: (channelId: string) => Promise<boolean>;
+  /**
    * Garante a conversa 1-a-1 com `userId` **na lista**, em primeiro, sem
    * abrir — é o que acontece quando uma amizade nasce, como no Discord.
    */
   garantirNaLista: (userId: string) => Promise<void>;
+  /** Põe na lista, em primeiro, uma conversa que o chamador já tem em mãos. */
+  registrar: (dm: DMChannelView) => void;
   createGroup: (userIds: string[], name?: string) => Promise<boolean>;
   leaveGroup: (channelId: string) => Promise<void>;
   // ── d-social ──
@@ -69,8 +79,11 @@ export const useDMs = create<DMsState>((set, get) => {
     const seq = ++listSeq;
     set({ loadingList: true });
     try {
-      const channels = await api.listDMs();
+      const doServidor = await api.listDMs();
       if (seq !== listSeq) return null;
+      // a conversa aberta nunca sai da coluna, mesmo que esta resposta tenha
+      // sido montada antes de ela existir (ver `comAConversaAberta`)
+      const channels = comAConversaAberta(doServidor, get().activeId, get().channels);
       set({ channels, loadingList: false });
       return channels;
     } catch (e) {
@@ -85,14 +98,32 @@ export const useDMs = create<DMsState>((set, get) => {
     set((s) => ({ channels: s.channels.map((d) => (d.id === channelId ? fn(d) : d)) }));
   }
 
-  /** Mostra a conversa na área principal e abre o canal dela. */
-  function show(dm: DMChannelView) {
+  /**
+   * Mostra a conversa na área principal e abre o canal dela.
+   *
+   * **Aberta = na lista**, como no Discord: quem chega aqui entra na coluna se
+   * ainda não estiver nela, e o servidor desfaz o "fechar conversa"
+   * (`POST /dms/:id/show`) — sem isso a conversa aparecia na tela mas o
+   * servidor continuava escondendo-a, e o próximo `GET /dms` a tirava da
+   * coluna. `jaReaberta` é para quem já veio de uma rota que reabre
+   * (`POST /dms`): não vale gastar outra requisição.
+   */
+  function show(dm: DMChannelView, opcoes: { jaReaberta?: boolean } = {}) {
     ui.setView("dm");
     // a página Amigos e a conversa disputam a coluna 3 — abrir uma fecha a outra
     useFriends.getState().setOpen(false);
     // sai da call de voz: a área principal passa a ser a conversa
     useChannels.getState().leaveVoice();
-    set({ activeId: dm.id });
+    const foraDaLista = !get().channels.some((d) => d.id === dm.id);
+    set((s) => ({
+      channels: foraDaLista ? noTopo(s.channels, dm) : s.channels,
+      activeId: dm.id,
+    }));
+    if (foraDaLista && !opcoes.jaReaberta) {
+      // a lista do servidor é a verdade da coluna: reabrir lá é o que faz a
+      // conversa continuar aparecendo depois do próximo recarregamento
+      void api.showDM(dm.id).catch(() => undefined);
+    }
     // sticky: a sala de uma conversa nunca é abandonada ao trocar de canal —
     // é assim que a DM continua chegando enquanto se navega pelo servidor
     void useMessages.getState().open(dm.id, { sticky: true });
@@ -123,33 +154,44 @@ export const useDMs = create<DMsState>((set, get) => {
 
     openWith: async (userId) => {
       try {
-        const dm = await api.openDM(userId);
-        set((s) => ({
-          channels: s.channels.some((d) => d.id === dm.id) ? s.channels : [dm, ...s.channels],
-        }));
-        show(dm);
+        // `POST /dms` já reabre a conversa do meu lado
+        show(await api.openDM(userId), { jaReaberta: true });
       } catch (e) {
         ui.toast(errorMessage(e, "Não foi possível abrir a conversa"), "error");
       }
     },
 
+    abrirPorId: async (channelId) => {
+      const naLista = get().channels.find((d) => d.id === channelId);
+      if (naLista) {
+        show(naLista);
+        return true;
+      }
+      try {
+        // `GET /dms/:id` responde mesmo com a conversa fechada; é `show` quem a
+        // devolve para a coluna e para a lista do servidor
+        show(await api.getDM(channelId));
+        return true;
+      } catch {
+        return false;
+      }
+    },
+
     garantirNaLista: async (userId) => {
       try {
-        const dm = await api.openDM(userId);
-        set((s) => ({
-          channels: [dm, ...s.channels.filter((d) => d.id !== dm.id)],
-        }));
+        get().registrar(await api.openDM(userId));
       } catch {
         // a lista recarregada no próximo `openList` traz a conversa
       }
     },
 
+    registrar: (dm) => set((s) => ({ channels: noTopo(s.channels, dm) })),
+
     createGroup: async (userIds, name) => {
       if (userIds.length < 2) return false;
       try {
         const dm = await api.createGroupDM(userIds, name);
-        set((s) => ({ channels: [dm, ...s.channels] }));
-        show(dm);
+        show(dm, { jaReaberta: true });
         return true;
       } catch (e) {
         ui.toast(errorMessage(e, "Não foi possível criar o grupo"), "error");
@@ -269,7 +311,7 @@ export const useDMs = create<DMsState>((set, get) => {
         if (!d) return s;
         const next = aoChegarMensagem(d, at, { mention, propria });
         // conversa com mensagem nova sobe para o topo, como no Discord
-        return { channels: [next, ...s.channels.filter((x) => x.id !== channelId)] };
+        return { channels: noTopo(s.channels, next) };
       }),
 
     handleDeleted: (channelId) => {
