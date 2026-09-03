@@ -23,10 +23,11 @@ import { Check, ChevronDown, ChevronRight, X } from "@/components/ui/icones";
 /**
  * Bloco com título em caixa-alta e uma linha divisória embaixo.
  *
- * O `id` é o que liga a seção ao menu de segundo nível da `TelaCheia`: ele vira
- * `data-secao`, e é por esse atributo que o menu rola até aqui e que o item
- * correspondente se marca sozinho quando a seção entra na tela. Seção sem `id`
- * continua existindo normalmente — ela só não aparece no menu.
+ * O `id` é o que liga a seção ao menu de segundo nível da
+ * `JanelaDeConfiguracoes`: ele vira `data-secao`, e é por esse atributo que o
+ * menu rola até aqui e que o item correspondente se marca sozinho quando a
+ * seção entra na tela. Seção sem `id` continua existindo normalmente — ela só
+ * não aparece no menu.
  */
 export function Section({
   id,

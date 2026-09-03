@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { Camera, Settings, UserPlus, Users } from "@/components/ui/icones";
 import { MAX_DM_GROUP_NAME, displayNameOf } from "@streamz/shared";
 import Dialog from "@/components/modals/Dialog";
-import TelaCheia, { type ItemDeMenu } from "@/components/ui/TelaCheia";
+import JanelaDeConfiguracoes, { type ItemDeMenu } from "@/components/ui/JanelaDeConfiguracoes";
 import { Rotulo } from "@/components/ui/controls";
 import { RegistrarAlteracoes, useControleDeAlteracoes } from "@/components/ui/alteracoes";
 import Avatar, { GroupAvatar } from "@/components/ui/Avatar";
@@ -66,7 +66,7 @@ export default function GroupSettingsModal({ channelId }: { channelId: string })
   ];
 
   return (
-    <TelaCheia
+    <JanelaDeConfiguracoes
       titulo={dmTitle(dm)}
       cabecalho={dmTitle(dm)}
       grupos={[{ id: "grupo", itens }]}
@@ -171,6 +171,6 @@ export default function GroupSettingsModal({ channelId }: { channelId: string })
           </div>
         </>
       )}
-    </TelaCheia>
+    </JanelaDeConfiguracoes>
   );
 }
