@@ -115,6 +115,60 @@ rodando", e a validação é o usuário mandar prints.
 - Para acompanhar sem poluir: `gh pr checks <n> --watch --interval 30` em
   segundo plano, ou um laço em `gh run view <id> --json status`.
 
+> **Desde 2026-09-03 o Actions não inicia job nenhum**: a conta do GitHub caiu
+> em pendência de cobrança ("recent account payments have failed or your
+> spending limit needs to be increased"). `build das imagens`, `deploy em
+> produção` e tudo que roda em `windows-latest` nem chegam a começar — o job
+> aparece como *failure* com zero passos. Enquanto isso não for resolvido, o
+> caminho é o §3.6. Os workflows continuam no `.github/` de propósito: voltam a
+> valer sozinhos assim que a cobrança destravar.
+
+### 3.6 Sem o Actions: publicar local
+
+`scripts/publicar-local.sh` faz no servidor o que o `ci.yml` + `deploy.yml`
+faziam. É idempotente: pode rodar duas vezes seguidas.
+
+```
+scripts/publicar-local.sh                 # origin/main
+scripts/publicar-local.sh <commit-ish>    # outra referência — é assim que se volta versão
+scripts/publicar-local.sh --sem-verificar # pula a verificação (o merge já foi verificado)
+scripts/publicar-local.sh --refazer-imagens
+```
+
+O que ele faz, na ordem:
+
+1. **Worktree destacada** do commit em `.claude/worktrees/publicar-<7>` — nunca
+   dá checkout em `/opt/stack/streamz` (§2.1).
+2. **Verificação** em `docker run node:22`, os mesmos passos do job
+   `typecheck + testes + build`: install, `prisma generate`, build do `shared`,
+   typecheck dos três pacotes, testes de api e web, lint da web, build da web e
+   o export do desktop (`NEXT_OUTPUT=export`). Mais `cargo fmt --check` do
+   `src-tauri` num `rust:1-slim`.
+3. **Imagens** `ghcr.io/mirandasls/streamz-{api,web}:sha-<7>`, com o mesmo
+   contexto (a raiz), os mesmos Dockerfiles e os mesmos build-args da web
+   (`NEXT_PUBLIC_API_URL`, `_WS_URL`, `_LIVEKIT_URL` — as *variables* do repo,
+   embutidas no bundle em tempo de build). **Sem push**: o host não está logado
+   no GHCR, a imagem fica no disco e o compose não puxa o que já existe.
+4. **`up -d` de api e web** com `STREAMZ_TAG=sha-<7>` e os três compose. A API
+   aplica as migrations no boot. No fim imprime as tags, `docker ps`,
+   `/api/health` e o HTTP da raiz de `streamz.chat`.
+
+**O que ele NÃO cobre:**
+
+- **O instalador `.exe` do desktop.** O job `instalador .exe` do `desktop.yml`
+  roda em `windows-latest` e é o único lugar que produz e assina o pacote — não
+  há como fazê-lo neste Linux. Enquanto o Actions estiver parado, **não sai
+  versão nova de desktop** (§5); o site e o auto-update continuam servindo a
+  última que já foi publicada.
+- **`clippy` do Rust.** O alvo do desktop é msvc; aqui só dá para checar
+  formatação. Para o clippy sem esperar o Windows há o caminho das crates de
+  sombra descrito na memória `streamz-rust-check-no-linux`.
+- **O `latest` do GHCR e o registro em geral.** Ninguém publica imagem enquanto
+  o Actions está parado; voltar versão só funciona para tag que ainda esteja no
+  disco desta máquina (`docker images | grep streamz`).
+- **Merge do PR.** Continua sendo `gh pr merge <n> --merge`, à mão, com
+  autorização do usuário (§2.5) — o script só publica o que já está na `main`.
+
 ## 4. Onde as coisas estão (mapa de componentes)
 
 | Área | Arquivos |
