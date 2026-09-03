@@ -190,7 +190,7 @@ instalado na versão seguinte.
 
 ### 5.2 A janelinha de abertura e atualização (`splash`)
 
-Desde o PR #85, abrir e atualizar o Streamz é uma **janela de 300×350** no meio
+Desde o PR #88, abrir e atualizar o Streamz é uma **janela de 300×350** no meio
 da tela, como a do Discord — não uma tela dentro do app. O que existe:
 
 - `tauri.conf.json`: a janela `main` nasce `"visible": false` e a janela
@@ -476,7 +476,7 @@ som (`stores/sons.ts`) valem para todos; a prévia da aba Notificações passa
   chamar o desinstalador antigo por `ExecShell "runas"`, um UAC único), e isso
   precisa ser testado numa máquina que já tenha a versão perMachine — não dá
   para verificar daqui.
-- **Janela branca no boot do desktop**: resolvida no papel pelo PR #85 (a
+- **Janela branca no boot do desktop**: resolvida no papel pelo PR #88 (a
   `main` nasce `"visible": false` e quem a mostra é a janelinha, que também
   nasce escondida e se mostra no primeiro quadro), mas **nunca vista num
   Windows** — nem ela, nem o canto arredondado por `transparent: true` no
