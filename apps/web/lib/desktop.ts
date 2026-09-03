@@ -89,6 +89,48 @@ export async function notify(
   }
 }
 
+// ── Identificação do cliente ───────────────────────────────────────────────
+
+/**
+ * Versão do app, quando já foi lida do Tauri. Fica em módulo porque o
+ * `getVersion()` é assíncrono e o cabeçalho é montado no meio de um `fetch`.
+ */
+let versaoDoApp: string | null = null;
+/** Evita disparar a leitura da versão a cada requisição. */
+let versaoPedida = false;
+
+/**
+ * Como este cliente se apresenta no cabeçalho `X-Streamz-Client` — ou `null`
+ * no navegador, que não tem nada a declarar.
+ *
+ * Existe porque o `User-Agent` do desktop **é** o do Edge: o Tauri 2 no Windows
+ * roda em WebView2, e a aba "Dispositivos" listava o app instalado como se
+ * fosse mais um navegador. A API classifica a sessão por este cabeçalho no
+ * login e no refresh.
+ *
+ * A primeira chamada devolve `"desktop"` sem versão e dispara a leitura em
+ * segundo plano (o login não pode esperar por ela); as seguintes já saem
+ * `"desktop/0.0.14"`. A classificação só depende do que vem antes da barra, e
+ * por isso a corrida não muda o resultado.
+ */
+export function identificacaoDoCliente(): string | null {
+  if (!isTauri()) return null;
+  if (!versaoPedida) {
+    versaoPedida = true;
+    void lerVersaoDoApp();
+  }
+  return versaoDoApp ? `desktop/${versaoDoApp}` : "desktop";
+}
+
+async function lerVersaoDoApp(): Promise<void> {
+  try {
+    const { getVersion } = await import("@tauri-apps/api/app");
+    versaoDoApp = await getVersion();
+  } catch {
+    // sem a versão o cabeçalho continua valendo: o tipo é o que importa
+  }
+}
+
 // ── Foco da janela ─────────────────────────────────────────────────────────
 
 /**

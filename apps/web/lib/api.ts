@@ -79,6 +79,7 @@ import type {
 } from "@streamz/shared";
 import { API_URL } from "./config";
 import { ApiError } from "./api-error";
+import { cabecalhoDoCliente } from "./cliente";
 import { getAccessToken, renovarTokens } from "./session";
 
 export { ApiError, isApiError } from "./api-error";
@@ -108,6 +109,8 @@ async function enviar(path: string, init: RequestInit | undefined, token: string
       // FormData define o próprio Content-Type (com boundary) — não sobrescreve
       ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
       ...cabecalhoAuth(token),
+      // quem é este cliente: o `/auth/login` daqui é quem classifica a sessão
+      ...cabecalhoDoCliente(),
       ...(init?.headers ?? {}),
     },
   });

@@ -1,4 +1,5 @@
-import type { SessaoView } from "@streamz/shared";
+import { classificarDispositivo } from "@streamz/shared";
+import type { SessaoView, TipoDeDispositivo } from "@streamz/shared";
 
 /**
  * Uma sessão é um refresh token vivo. Este arquivo converte a linha do banco no
@@ -13,6 +14,8 @@ export interface LinhaDeSessao {
   id: string;
   userAgent: string | null;
   ip: string | null;
+  /** tipo classificado no login/refresh; null nas sessões anteriores à coluna. */
+  dispositivo: string | null;
   createdAt: Date;
   lastUsedAt: Date | null;
   expiresAt: Date;
@@ -23,6 +26,9 @@ export const MAX_USER_AGENT = 200;
 
 /** Teto do que guardamos do IP (IPv6 com escopo cabe folgado). */
 export const MAX_IP = 64;
+
+/** Teto do `X-Streamz-Client` lido da requisição (`desktop/0.0.14` e sobra). */
+export const MAX_CLIENTE = 64;
 
 /**
  * `SessaoView` da linha. `sessaoAtual` vem da claim `sid` do access token — é o
@@ -36,6 +42,11 @@ export function toSessaoView(linha: LinhaDeSessao, sessaoAtual: string | null): 
     // ausente, nunca null: ver o comentário de `SessaoView` no contrato
     ...(linha.userAgent ? { userAgent: linha.userAgent } : {}),
     ...(linha.ip ? { ip: linha.ip } : {}),
+    // sessão antiga (coluna nula) ainda ganha o palpite pelo `User-Agent`
+    dispositivo: classificarDispositivo({
+      userAgent: linha.userAgent,
+      tipoSalvo: linha.dispositivo,
+    }).tipo,
     createdAt: linha.createdAt.toISOString(),
     ...(linha.lastUsedAt ? { lastUsedAt: linha.lastUsedAt.toISOString() } : {}),
     expiresAt: linha.expiresAt.toISOString(),
@@ -60,6 +71,23 @@ export function normalizarIp(valor: unknown): string | null {
   return recortar(limpo, MAX_IP);
 }
 
+/** Corta o `X-Streamz-Client` na largura da coluna; vazio vira null. */
+export function normalizarCliente(valor: unknown): string | null {
+  const bruto = Array.isArray(valor) ? valor[0] : valor;
+  return recortar(bruto, MAX_CLIENTE);
+}
+
+/**
+ * O tipo que vai para a coluna `dispositivo` na hora do login e do refresh.
+ * É aqui que o `X-Streamz-Client` do app de desktop deixa de ser efêmero.
+ */
+export function tipoDeDispositivoDaRequisicao(
+  cliente: string | null,
+  userAgent: string | null,
+): TipoDeDispositivo {
+  return classificarDispositivo({ cliente, userAgent }).tipo;
+}
+
 function recortar(valor: unknown, max: number): string | null {
   if (typeof valor !== "string") return null;
   const limpo = valor.trim();
@@ -67,8 +95,8 @@ function recortar(valor: unknown, max: number): string | null {
 }
 
 /**
- * O resumo legível do `User-Agent` mora no **contrato**, e não aqui: a tela de
- * dispositivos é quem o mostra, e um segundo cliente (o desktop) mostraria o
- * mesmo. Reexportado para os testes ficarem junto do resto da sessão.
+ * A classificação e o rótulo legível moram no **contrato**, e não aqui: a tela
+ * de dispositivos é quem os mostra, e um segundo cliente (o desktop) mostraria
+ * o mesmo. Reexportado para os testes ficarem junto do resto da sessão.
  */
-export { ehDispositivoMovel, resumoDoDispositivo } from "@streamz/shared";
+export { classificarDispositivo } from "@streamz/shared";

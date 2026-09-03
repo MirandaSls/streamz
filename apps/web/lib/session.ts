@@ -9,6 +9,7 @@
 import type { AuthTokens } from "@streamz/shared";
 import { API_URL } from "./config";
 import { ApiError } from "./api-error";
+import { cabecalhoDoCliente } from "./cliente";
 
 const CHAVE_ACCESS = "accessToken";
 const CHAVE_REFRESH = "refreshToken";
@@ -93,7 +94,10 @@ async function executarRefresh(): Promise<AuthTokens> {
   try {
     res = await fetch(`${API_URL}/api/auth/refresh`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // o refresh não passa por `lib/api.ts` (seria recursivo), então o
+      // cabeçalho do cliente entra aqui à mão — é ele que reclassifica a
+      // sessão de quem já estava logado quando esta versão subiu
+      headers: { "Content-Type": "application/json", ...cabecalhoDoCliente() },
       body: JSON.stringify({ refreshToken }),
     });
   } catch {

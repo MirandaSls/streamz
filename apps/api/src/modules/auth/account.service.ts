@@ -74,6 +74,7 @@ export class AccountService {
         id: true,
         userAgent: true,
         ip: true,
+        dispositivo: true,
         createdAt: true,
         lastUsedAt: true,
         expiresAt: true,

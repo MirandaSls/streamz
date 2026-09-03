@@ -9,7 +9,7 @@ import { JwtService } from "@nestjs/jwt";
 import { Prisma } from "@prisma/client";
 import * as argon2 from "argon2";
 import { createHash, randomBytes } from "crypto";
-import { WS_EVENTS, normalizarEmail, pareceEmail } from "@streamz/shared";
+import { HEADER_CLIENTE, WS_EVENTS, normalizarEmail, pareceEmail } from "@streamz/shared";
 import type {
   AuthSession,
   AuthTokens,
@@ -22,6 +22,7 @@ import type {
   MinhaConta,
   PublicUser,
   SessionsRevokedEvent,
+  TipoDeDispositivo,
 } from "@streamz/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { isUniqueViolation } from "../../common/prisma-errors";
@@ -31,7 +32,12 @@ import { MailService } from "../mail/mail.service";
 import { AccountStatusService } from "./account-status.service";
 import { expiraEm, gerarTokenDeEmail, hashDeToken, linkDeEmail } from "./email-tokens";
 import { aposAcerto, aposFalha, estaBloqueada, semMudanca } from "./lockout";
-import { normalizarIp, normalizarUserAgent } from "./sessions";
+import {
+  normalizarCliente,
+  normalizarIp,
+  normalizarUserAgent,
+  tipoDeDispositivoDaRequisicao,
+} from "./sessions";
 import { hashDeCodigo, pareceCodigoDeRecuperacao } from "./recovery-codes";
 import { validarCodigoTotp } from "./totp";
 
@@ -50,6 +56,12 @@ interface TicketMfaPayload {
 export interface ContextoDeSessao {
   userAgent: string | null;
   ip: string | null;
+  /**
+   * App de desktop, navegador ou celular. Vem do `X-Streamz-Client` quando o
+   * cliente é nosso; o `User-Agent` sozinho não separa o desktop (WebView2)
+   * de uma aba do Edge. Guardado na sessão porque o cabeçalho só existe aqui.
+   */
+  dispositivo: TipoDeDispositivo;
 }
 
 /** Ticket de 2FA: curto de propósito — é só a ponte entre os dois fatores. */
@@ -227,6 +239,9 @@ export class AuthService {
         lastUsedAt: agora,
         userAgent: ctx.userAgent,
         ip: ctx.ip,
+        // reclassifica a cada renovação: sessão criada antes desta coluna
+        // (ou antes de o desktop se identificar) se conserta sozinha aqui
+        dispositivo: ctx.dispositivo,
         expiresAt: this.expiracaoDoRefresh(agora),
       },
     });
@@ -428,6 +443,7 @@ export class AuthService {
         expiresAt: this.expiracaoDoRefresh(agora),
         userAgent: ctx.userAgent,
         ip: ctx.ip,
+        dispositivo: ctx.dispositivo,
       },
       select: { id: true },
     });
@@ -520,9 +536,13 @@ export class AuthService {
     socket?: { remoteAddress?: string };
   }): ContextoDeSessao {
     const headers = req.headers ?? {};
+    const userAgent = normalizarUserAgent(headers["user-agent"]);
+    // o header chega em minúsculas no Node, qualquer que seja a caixa do cliente
+    const cliente = normalizarCliente(headers[HEADER_CLIENTE.toLowerCase()]);
     return {
-      userAgent: normalizarUserAgent(headers["user-agent"]),
+      userAgent,
       ip: normalizarIp(headers["x-forwarded-for"] ?? req.ip ?? req.socket?.remoteAddress),
+      dispositivo: tipoDeDispositivoDaRequisicao(cliente, userAgent),
     };
   }
 
