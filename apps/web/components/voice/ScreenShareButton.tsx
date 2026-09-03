@@ -1,19 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { MonitorUp, MonitorX, Radio } from "@/components/ui/icones";
 import Tooltip from "@/components/ui/Tooltip";
 import ScreenSharePicker from "@/components/voice/ScreenSharePicker";
 import { BotaoDeChamada } from "@/components/voice/controles-de-chamada";
+import { isTauri } from "@/lib/desktop";
+import { ehCancelamento, mensagemDeErro, restricoesDeCaptura } from "@/lib/seletor-de-tela";
+import { ui } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
 
 /**
- * Compartilhar tela: abre o seletor próprio (ver `ScreenSharePicker`) e, no ar,
- * vira o botão de parar.
+ * Compartilhar tela — dois caminhos, um botão.
  *
- * A qualidade não fica mais num popover antes do clique — ela mora dentro do
- * seletor, junto da prévia, que é onde a escolha faz sentido: dá para ver o que
- * 1080p60 muda naquilo que você está prestes a transmitir.
+ * **No desktop** abre o seletor próprio (`ScreenSharePicker`): lá o Rust sabe
+ * listar janelas e monitores, e a grade de miniaturas é a escolha.
+ *
+ * **No navegador** não abre modal nenhum. Quem lista as fontes é o próprio
+ * browser, e `getDisplayMedia` só pode ser chamada no gesto do usuário: o modal
+ * antes dela era um "Escolher janela" que abria o diálogo de verdade, virava a
+ * captura numa miniatura e ainda pedia um clique nela — dois passos para uma
+ * escolha que já tinha sido feita. Agora o clique chama a captura direto, com o
+ * preset que está na store, e publica. Cancelar o diálogo do navegador é uma
+ * decisão, não um erro: não acontece nada, sem aviso.
+ *
+ * A qualidade (resolução, taxa de quadros e áudio do sistema) fica no rodapé do
+ * seletor no desktop e na **aba Voz das configurações** no navegador — a mesma
+ * store nos dois, e os mesmos segmentos (`SegmentosDeQualidade`).
  *
  * No ar o botão fica **verde**, não vermelho. Vermelho cheio na barra é o
  * desligar, e só ele: transmitindo, o botão está *ligado*, não em erro — quem
@@ -26,11 +39,41 @@ export default function ScreenShareButton({
   variante?: "barra" | "largo";
 }) {
   const [seletor, setSeletor] = useState(false);
+  // o diálogo do navegador já está aberto: um segundo clique só faria o browser
+  // recusar a chamada (o botão continua clicável porque a fileira não tem
+  // estado "ocupado" — o que falta é a segunda chamada, não o clique)
+  const pedindo = useRef(false);
   const screenOn = useVoice((s) => s.screenOn);
   const pararTela = useVoice((s) => s.pararTela);
 
   const label = screenOn ? "Parar transmissão" : "Compartilhar tela";
-  const acionar = () => (screenOn ? void pararTela() : setSeletor(true));
+
+  async function capturarNoNavegador() {
+    const md = typeof navigator !== "undefined" ? navigator.mediaDevices : null;
+    if (!md?.getDisplayMedia) {
+      ui.toast("Este navegador não permite compartilhar a tela", "error");
+      return;
+    }
+    if (pedindo.current) return;
+    pedindo.current = true;
+    const { screenQuality, screenAudio, publicarTela } = useVoice.getState();
+    try {
+      const captura = await md.getDisplayMedia(restricoesDeCaptura(screenQuality, screenAudio));
+      await publicarTela(captura);
+    } catch (e) {
+      if (!ehCancelamento(e)) ui.toast(mensagemDeErro(e), "error");
+    } finally {
+      pedindo.current = false;
+    }
+  }
+
+  const acionar = () => {
+    if (screenOn) return void pararTela();
+    // `isTauri()` no clique, não na renderização: o valor não muda em runtime e
+    // ler no evento evita divergir do HTML servido antes da hidratação
+    if (isTauri()) return setSeletor(true);
+    void capturarNoNavegador();
+  };
 
   return (
     <>

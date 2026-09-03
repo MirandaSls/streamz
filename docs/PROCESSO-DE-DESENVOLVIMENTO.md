@@ -315,6 +315,13 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   Inteira) e, no rodapé, resolução e taxa de quadros como segmentos sempre
   visíveis, com as opções vindas de `SCREEN_QUALITY` — sem aba de
   dispositivos, sem alternador SD/HD e sem a etapa da engrenagem.
+- **No navegador não existe seletor nosso**: "Compartilhar tela" chama
+  `getDisplayMedia` direto (`restricoesDeCaptura`, preset da store) e publica;
+  cancelar o diálogo do browser não é erro e não vira toast. O modal de
+  miniaturas é só do desktop, e a qualidade no navegador se ajusta na aba Voz
+  das configurações, com os mesmos `SegmentosDeQualidade` do rodapé. A barra
+  branca "Você está compartilhando sua tela inteira" que cobre o cabeçalho é do
+  Firefox, não nossa — não dá para mover nem esconder.
 - Ainda aquém do Discord (não é defeito): botão de voltar para call em outro
   servidor cai no primeiro canal de texto; barra "conectado" sem cronômetro nem
   quem fala; sem "ocupado" para quem liga durante uma call; diálogos invisíveis
