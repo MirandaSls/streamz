@@ -269,7 +269,6 @@ export default function RecortarImagemModal({
               onChange={(zoom) => ajustar({ zoom })}
             />
           </div>
-
         </div>
       )}
     </Dialog>
