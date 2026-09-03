@@ -117,6 +117,7 @@ ${StrLoc}
 ; Constantes do Win32. `/ifndef` porque parte delas já chega pelo WinCore.nsh /
 ; nsDialogs.nsh dependendo da versão do NSIS, e redefinir é erro.
 !define /ifndef SW_HIDE 0
+!define /ifndef SW_SHOW 5
 !define /ifndef HWND_BOTTOM 1
 !define /ifndef WS_CHILD 0x40000000
 !define /ifndef WS_VISIBLE 0x10000000
@@ -1217,7 +1218,9 @@ Function MostrarInstalacao
 
   ; --- fora o log ---------------------------------------------------------
   ; A lista de "Extract: ..." é ruído para quem instala. Ela continua sendo
-  ; escrita (e aparece se a instalação abortar, porque aí a página fica).
+  ; escrita, e o `SairInstalacao` a traz de volta se a instalação abortar — é
+  ; nela que o NSIS escreve a mensagem de um `Abort "..."` (a seção do WebView2
+  ; tem três).
   ShowWindow $mui.InstFilesPage.Log ${SW_HIDE}
   ShowWindow $mui.InstFilesPage.ShowLogButton ${SW_HIDE}
 
@@ -1298,9 +1301,49 @@ FunctionEnd
 
 
 Function SairInstalacao
-  ; Para o clipe e devolve o que foi alocado. Na prática o processo morre logo
-  ; depois (SetAutoClose), mas uma instalação que aborta volta para cá com a
-  ; janela viva — e um AVI tocando atrás de uma mensagem de erro é ruim.
+  ; Numa página `instfiles` o NSIS chama o callback de saída assim que a
+  ; execução das seções termina — dando certo ou abortando —, e não quando a
+  ; pessoa clica em algum botão. É por isso que dá para decidir aqui o que
+  ; fazer com o erro.
+  IfAbort StreamzAbortou
+
+  Goto StreamzLimpar
+
+  StreamzAbortou:
+    ; A instalação abortou. A explicação (`Abort "$(webview2AbortError)"` e
+    ; companhia) foi escrita no log, que está escondido — sem isto a pessoa
+    ; ficaria olhando uma barra parada sem nenhum texto. Traz o log de volta,
+    ; ocupando o espaço que era da animação.
+    ${If} $mui.InstFilesPage.Log <> 0
+      System::Call "user32::GetDpiForWindow(p $mui.InstFilesPage) i .r2"
+      ${If} $2 < 48
+        StrCpy $2 96
+      ${EndIf}
+      System::Call "*(i, i, i, i) p .r1"
+      System::Call "user32::GetClientRect(p $mui.InstFilesPage, p r1)"
+      System::Call "*$1(i .r3, i .r4, i .r8, i .r9)"
+      System::Free $1
+      ; mesmas margens da barra: x = 24, topo = 12, base = topo da barra - 12
+      IntOp $3 24 * $2
+      IntOp $3 $3 / 96
+      IntOp $4 12 * $2
+      IntOp $4 $4 / 96
+      IntOp $5 70 * $2
+      IntOp $5 $5 / 96
+      IntOp $5 $9 - $5      ; altura disponível = altura - 58 - 12
+      IntOp $5 $5 - $4
+      IntOp $6 $8 - $3
+      IntOp $6 $6 - $3
+      ${If} $5 > 0
+        System::Call "user32::SetWindowPos(p $mui.InstFilesPage.Log, p 0, i r3, i r4, i r6, i r5, i ${SWP_NOZORDER}|${SWP_NOACTIVATE})"
+      ${EndIf}
+      ShowWindow $mui.InstFilesPage.Log ${SW_SHOW}
+    ${EndIf}
+
+  StreamzLimpar:
+  ; Para o clipe e devolve o que foi alocado. Numa instalação que dá certo o
+  ; processo morre logo depois (SetAutoClose); numa que aborta a janela fica
+  ; viva, e um AVI pulsando atrás de uma mensagem de erro é ruim.
   ${If} $StreamzAnim <> 0
     SendMessage $StreamzAnim ${ACM_STOP} 0 0
     System::Call "user32::DestroyWindow(p $StreamzAnim)"
