@@ -26,7 +26,6 @@ import { submenuNotificacoes, submenuSilenciar } from "@/lib/notification-menu";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { dmTitle, useDMs } from "@/stores/dms";
-import { somarNaoLidas } from "@/stores/nao-lidas";
 import { useFriends } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
 import { useNotifications } from "@/stores/notifications";
@@ -76,7 +75,6 @@ function ImagemDaConversa({ dm }: { dm: DMChannelView }) {
   );
 }
 
-/** Badge vermelho de contagem (menções), no canto do ícone. */
 /**
  * Selo de voz: você está numa call **deste** servidor.
  *
@@ -107,13 +105,20 @@ function SeloDeVoz() {
  * um número de 11px, e o "1" saía cortado embaixo, como na print. É a medida
  * do Discord: pílula de 16 de altura, mínimo 16 de largura, 4px de folga
  * lateral.
+ *
+ * Mora **fora** do botão. O botão precisa de `overflow-hidden` (é ele que faz
+ * a foto seguir o raio 12), e enquanto o badge era filho dele o pedaço que
+ * passa da caixa de 40 — os 2px de canto e os 3px de anel — sumia recortado.
+ * Quem ancora agora é a caixa de 40 sem corte do `RailItem`. `pointer-events-
+ * none` porque ele cobre o canto do botão: o clique tem que continuar caindo
+ * no servidor, não no número.
  */
 function Badge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
     <span
       aria-label={`${count} ${count === 1 ? "menção" : "menções"}`}
-      className="absolute -bottom-0.5 -right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[12px] font-bold leading-none text-white ring-[3px] ring-rail"
+      className="pointer-events-none absolute -bottom-0.5 -right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[12px] font-bold leading-none text-white ring-[3px] ring-rail"
     >
       {count > 99 ? "99+" : count}
     </span>
@@ -160,25 +165,31 @@ function RailItem({
           active ? "h-10" : unread ? "h-2 group-hover:h-5" : "h-0 group-hover:h-5"
         }`}
       />
-      <Tooltip label={label} side="right">
-        <button
-          type="button"
-          onClick={onClick}
-          aria-label={unread && !active ? `${label} (não lido)` : label}
-          aria-current={active ? "page" : undefined}
-          className={`relative grid h-10 w-10 place-items-center overflow-hidden rounded-xl text-[15px] font-semibold transition-all duration-200 ${
-            active
-              ? "bg-accent text-accent-ink"
-              : green
-                ? "bg-panel text-green group-hover:bg-green group-hover:text-accent-ink"
-                : "bg-panel text-txt-normal group-hover:bg-accent group-hover:text-accent-ink"
-          }`}
-        >
-          {children}
-          {emVoz && <SeloDeVoz />}
-          <Badge count={mentions} />
-        </button>
-      </Tooltip>
+      {/* A caixa de 40 que **não** corta: é ela que ancora o badge. O selo de
+          voz continua dentro do botão de propósito — ele é tangente às bordas
+          de cima e da direita e não pode ultrapassar a caixa (ver `SeloDeVoz`);
+          o badge, sim, transborda o canto de baixo. */}
+      <div className="relative h-10 w-10 shrink-0">
+        <Tooltip label={label} side="right">
+          <button
+            type="button"
+            onClick={onClick}
+            aria-label={unread && !active ? `${label} (não lido)` : label}
+            aria-current={active ? "page" : undefined}
+            className={`relative grid h-10 w-10 place-items-center overflow-hidden rounded-xl text-[15px] font-semibold transition-all duration-200 ${
+              active
+                ? "bg-accent text-accent-ink"
+                : green
+                  ? "bg-panel text-green group-hover:bg-green group-hover:text-accent-ink"
+                  : "bg-panel text-txt-normal group-hover:bg-accent group-hover:text-accent-ink"
+            }`}
+          >
+            {children}
+            {emVoz && <SeloDeVoz />}
+          </button>
+        </Tooltip>
+        <Badge count={mentions} />
+      </div>
     </div>
   );
 }
@@ -208,8 +219,6 @@ export default function GuildRail() {
   const meuId = useAuth((s) => s.user?.id);
 
   const dmUnread = dms.some((d) => d.lastMessageAt && (!d.lastReadAt || d.lastMessageAt > d.lastReadAt));
-  // em conversa toda mensagem não lida conta (Discord): o rail soma as conversas
-  const dmMentions = somarNaoLidas(dms);
 
   /**
    * O rail destaca a conversa que está **na tela** e as que têm mensagem não
@@ -310,11 +319,25 @@ export default function GuildRail() {
           a coluna ao lado, e a diferença aparece na horizontal do topo. */
       className="flex w-20 shrink-0 flex-col items-center gap-2.5 overflow-y-auto bg-rail pb-[78px]"
     >
+      {/*
+        Sem `mentions`: o botão de início **não** ganha badge vermelho.
+
+        Medido no print do Discord `2026-09-01 130840` (e nos dois vizinhos):
+        há uma conversa não lida — o avatar dela, logo abaixo, mostra o badge
+        `1` no canto inferior direito, com o ponto branco de não lido à
+        esquerda — e o botão de início, no mesmo instante, está limpo. O número
+        aparece em quem mandou (o item da conversa) e nos servidores com
+        menção, nunca somado no início.
+
+        A pílula branca de não lido continua: é o que diz "há conversa nova"
+        sem inventar um número. Nos prints o início aparece ativo em todos os
+        casos com DM não lida, então o ponto no início **inativo** não deu para
+        confirmar; ficou como estava.
+      */}
       <RailItem
         label="Mensagens diretas"
         active={view === "dm"}
         unread={dmUnread}
-        mentions={dmMentions}
         onClick={() => void openDMs()}
       >
         {/* o símbolo da marca no lugar onde o Discord põe o logo dele */}
