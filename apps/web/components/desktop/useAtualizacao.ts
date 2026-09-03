@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isTauri } from "@/lib/desktop";
-import { ui } from "@/stores/ui";
 
 /**
  * A atualização do app de desktop, como estado para a barra de título.
@@ -17,10 +16,27 @@ import { ui } from "@/stores/ui";
  * de MB na conexão de alguém que talvez esteja numa call. Quando a versão
  * nova já está instalada (`"pronta"`), `iniciar` reinicia o app.
  *
- * A única coisa que fala com o usuário daqui é o erro, por toast; o resto é a
- * setinha verde na barra, que é quem consome este hook.
+ * Quem fala com o usuário é a `TelaDeAtualizacao` (tela cheia, aberta pela
+ * setinha verde da barra). Este hook não dá toast: erro é estado, e a tela é
+ * quem mostra a mensagem e o "Tentar de novo".
+ *
+ * **No Windows a instalação não devolve o controle.** Com
+ * `plugins.updater.windows.installMode: "quiet"` o plugin dispara o instalador
+ * NSIS com `/S /R` por `ShellExecute` e chama `std::process::exit(0)` em
+ * seguida: o app morre ali, e quem reabre a versão nova é o próprio instalador
+ * (`/R`). Ou seja, `"reiniciando"` e o `relaunch()` só se veem fora do Windows
+ * — no Windows a última tela que aparece é `"instalando"`. O caminho continua
+ * escrito porque é ele que fecha o ciclo nas outras plataformas e quando o
+ * `exit(0)` não acontece.
  */
-export type EstadoDaAtualizacao = "nada" | "disponivel" | "baixando" | "pronta" | "erro";
+export type EstadoDaAtualizacao =
+  | "nada"
+  | "disponivel"
+  | "baixando"
+  | "instalando"
+  | "reiniciando"
+  | "pronta"
+  | "erro";
 
 export interface Atualizacao {
   estado: EstadoDaAtualizacao;
@@ -71,16 +87,32 @@ export function useAtualizacao(): Atualizacao {
     };
   }, []);
 
+  /**
+   * Reabre o app na versão nova. Se o `relaunch` não for possível (permissão
+   * ausente, plataforma sem suporte), a versão **já está instalada** — o
+   * estado vira `"pronta"` e a tela passa a pedir o reinício em vez de dar
+   * erro por algo que já deu certo.
+   */
+  const reiniciar = useCallback(async () => {
+    setEstado("reiniciando");
+    try {
+      const { relaunch } = await import("@tauri-apps/plugin-process");
+      await relaunch();
+    } catch {
+      setEstado("pronta");
+    }
+  }, []);
+
   const iniciar = useCallback(async () => {
     const atual = pacote.current;
     if (!atual) return;
+    // já em curso: o clique só reabre a tela, não recomeça o download
+    if (estado === "baixando" || estado === "instalando" || estado === "reiniciando") return;
+    if (estado === "pronta") {
+      await reiniciar();
+      return;
+    }
     try {
-      if (estado === "pronta") {
-        const { relaunch } = await import("@tauri-apps/plugin-process");
-        await relaunch();
-        return;
-      }
-      if (estado === "baixando") return;
       let total = 0;
       let baixado = 0;
       setProgresso(0);
@@ -89,20 +121,24 @@ export function useAtualizacao(): Atualizacao {
         if (evento.event === "Started") total = evento.data?.contentLength ?? 0;
         if (evento.event === "Progress") {
           baixado += evento.data?.chunkLength ?? 0;
-          setProgresso(total > 0 ? baixado / total : 0);
+          // o servidor pode mentir no `contentLength`; a barra não passa de 100%
+          setProgresso(total > 0 ? Math.min(1, baixado / total) : 0);
         }
-        if (evento.event === "Finished") setProgresso(1);
+        // baixou tudo: daqui em diante é o instalador. No Windows este é o
+        // último quadro que o usuário vê antes de o processo morrer
+        if (evento.event === "Finished") {
+          setProgresso(1);
+          setEstado("instalando");
+        }
       });
-      // instalado: o app precisa reabrir para valer. No Windows o instalador
-      // encerra o app sozinho; nas outras plataformas fica a setinha pedindo o
-      // reinício — sem o `relaunch` o usuário fica na versão velha até fechar
-      // por conta
-      setEstado("pronta");
+      await reiniciar();
     } catch {
-      ui.toast("Não foi possível atualizar agora. Tente mais tarde.", "error");
+      // rede caída no meio, assinatura recusada, UAC negado no Windows
+      // (o `ShellExecute` volta com acesso negado): tudo cai aqui, e a tela
+      // oferece "Tentar de novo"
       setEstado("erro");
     }
-  }, [estado]);
+  }, [estado, reiniciar]);
 
   return {
     estado,
