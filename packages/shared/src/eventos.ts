@@ -53,6 +53,14 @@ export const WS_EVENTS = {
    * entrar não pode receber a própria expulsão.
    */
   VOICE_EVICTED: "voice.evicted",
+  /**
+   * Alguém com "mover membros" me arrastou para outro canal de voz.
+   *
+   * Vai só para o usuário movido: é ele quem troca de sala no LiveKit. Todo o
+   * resto do servidor já sabe pelos dois `voice.state` (saiu de lá, entrou
+   * aqui) que o próprio `move` emite.
+   */
+  VOICE_MOVED: "voice.moved",
   CALL_RING: "call.ring",
   CALL_ENDED: "call.ended",
   // ── c-cargos ──

@@ -11,8 +11,10 @@ import {
   type ScreenQuality,
   type VoiceEvictedEvent,
   type VoiceFlags,
+  type VoiceMovedEvent,
   type VoiceStateEvent,
   WS_EVENTS,
+  displayNameOf,
   donoDaIdentidade,
 } from "@streamz/shared";
 import {
@@ -26,7 +28,7 @@ import {
 } from "livekit-client";
 import { api } from "@/lib/api";
 import { iniciarTelaNativa, isTauri, ouvirTelaEncerrada, pararTelaNativa } from "@/lib/desktop";
-import { tocarSom } from "@/lib/ringtone";
+import { tocarSom, tocarSomDeMovido } from "@/lib/ringtone";
 import { montarPedido } from "@/lib/seletor-de-tela";
 import { supressorDeRuido } from "@/lib/supressor-ruido";
 import { CHAMADA_INICIAL, callReducer, type CallAction, type CallState } from "@/stores/call-machine";
@@ -34,6 +36,7 @@ import { emit, errorMessage } from "@/stores/socket-adapter";
 import { iniciarMedicaoDePing, pararMedicaoDePing } from "@/stores/voice-ping";
 import { estadosAposReconexao, type Recarga } from "@/stores/voice-reconexao";
 import { chamadaARetomar, esquecerSala, lembrarSala, salaLembrada } from "@/stores/voice-retomada";
+import { decidirMovido } from "@/stores/voice-mover";
 import { decidirSaida, type MotivoDeSaida } from "@/stores/voice-saida";
 import { ui } from "@/stores/ui";
 import { useAuth } from "@/stores/auth";
@@ -140,10 +143,15 @@ interface VoiceStoreState {
   /** Estados de um canal, ordenados por nome (para a barra lateral). */
   statesOf: (channelId: string) => VoiceStateEvent[];
 
-  connect: (channel: Pick<Channel, "id" | "guildId" | "name" | "type">) => Promise<void>;
+  connect: (
+    channel: Pick<Channel, "id" | "guildId" | "name" | "type">,
+    opcoes?: { som?: boolean },
+  ) => Promise<void>;
   disconnect: () => Promise<void>;
   /** O servidor tirou esta conexão da voz: a conta entrou de outro lugar. */
   expulsoDaVoz: (evento: VoiceEvictedEvent) => void;
+  /** Alguém com "mover membros" me arrastou para outro canal de voz. */
+  movidoDeCanal: (evento: VoiceMovedEvent) => Promise<void>;
   reconnect: () => Promise<void>;
   /** Reentra na sala de voz depois de o socket voltar (ver `useRealtime`). */
   rejoinAposReconexao: () => Promise<void>;
@@ -497,7 +505,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         .slice()
         .sort((a, b) => a.user.username.localeCompare(b.user.username)),
 
-    connect: async (channel) => {
+    connect: async (channel, opcoes) => {
       const anterior = get().channelId;
       // trocar de sala não é sair: a coluna do canal de destino fica de pé
       if (anterior && anterior !== channel.id) sairDaSalaAtual("troca-de-sala", !!channel.guildId);
@@ -519,7 +527,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         focoAutomatico: true,
       });
       lembrarSala({ channelId: channel.id, guildId: channel.guildId, name: channel.name ?? "" });
-      tocarSom("entrar");
+      // `som: false` é de quem já tocou o próprio aviso — hoje só o `movido`,
+      // que tem som próprio e não pode soar como uma entrada que eu escolhi
+      if (opcoes?.som !== false) tocarSom("entrar");
 
       // 1) o estado de voz não depende do LiveKit: avisa o gateway primeiro,
       //    para que os outros já vejam você no canal mesmo sem mídia
@@ -556,6 +566,28 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         channelId === novoCanalId
           ? OUTRO_LUGAR
           : "Você entrou em outro canal de voz em outro dispositivo.",
+      );
+    },
+
+    movidoDeCanal: async (evento) => {
+      if (decidirMovido(evento, get().channelId) === "ignorar") return;
+      // o servidor já me tirou do canal antigo e me pôs no novo: `movido` não
+      // manda `voice.leave` (desfaria o move) nem toca o som de sair, e mantém
+      // a coluna do canal de pé — para quem foi movido a chamada não acabou
+      sairDaSalaAtual("movido");
+      tocarSomDeMovido();
+      ui.toast(`${displayNameOf(evento.movedBy)} moveu você para ${evento.channelName}`);
+      // o nome vem no evento porque a lista de canais pode não ter o destino
+      // ainda (canal criado agora, ou `channel.created` que chegou atrasado)
+      const canal = useChannels.getState().channels.find((c) => c.id === evento.channelId);
+      await get().connect(
+        {
+          id: evento.channelId,
+          guildId: evento.guildId,
+          name: canal?.name ?? evento.channelName,
+          type: "VOICE",
+        },
+        { som: false },
       );
     },
 

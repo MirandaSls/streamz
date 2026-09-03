@@ -129,7 +129,7 @@ rodando", e a validação é o usuário mandar prints.
 | Caixa de entrada | `components/chat/InboxPopover.tsx` (+ `HeaderPopover.tsx`) |
 | Modal "Nova mensagem" | `components/modals/CreateGroupDMModal.tsx` |
 | Ícones | `components/ui/icones.tsx` — **único** ponto de importação de ícone (§6.2) |
-| Voz (estado) | `stores/voice.ts`, `voice-saida.ts`, `voice-retomada.ts`, `voice-reconexao.ts`, `voicePrefs.ts`, `voiceDevices.ts` |
+| Voz (estado) | `stores/voice.ts`, `voice-saida.ts`, `voice-mover.ts`, `voice-retomada.ts`, `voice-reconexao.ts`, `voicePrefs.ts`, `voiceDevices.ts` |
 | Voz (UI) | `components/voice/*` — `VoiceLayer.tsx` (global), `AudioRemotoHost.tsx` (global), `VoiceGrid.tsx`, `CallStage.tsx`, `VoicePanel.tsx`, `VoiceHotkeys.tsx`, `ScreenSharePicker.tsx` |
 | Desktop | `components/desktop/BarraDeTitulo.tsx`, `useAtualizacao.ts`, `JanelaSplash.tsx` + `janela-splash.ts` (janelinha de abertura/atualização, rota `app/splash/`); `apps/desktop/src-tauri/tauri.conf.json`, `capabilities/{default,splash}.json` |
 | Atalhos | `lib/shortcuts.ts`, `hooks/useKeyboardShortcuts.ts` (M/D de voz são do `VoiceHotkeys`) |
@@ -345,6 +345,22 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
 - Servidor: presença de voz por usuário, carência de 45 s
   (`VOICE_RECONNECT_GRACE_MS`) antes de tirar quem caiu; `POST /dms/:id/call`
   em call já existente entra em silêncio (não toca de novo).
+- **Mover alguém de canal de voz** (`POST /guilds/:id/voice/move`, permissão
+  `MOVE_MEMBERS`, bit 19 — o primeiro depois do `ADMINISTRATOR`): quem arrasta
+  chama a rota; a API troca o estado de voz pelo **mesmo** `join` do caminho
+  normal (que já tira da sala anterior e emite os dois `voice.state`), e por
+  cima manda um `voice.moved` **só para quem foi movido**. Quem troca a sala no
+  LiveKit é o cliente movido, nunca o servidor: `movidoDeCanal` na store faz
+  `sairDaSalaAtual("movido")` + `connect(..., { som: false })` e toca
+  `tocarSomDeMovido()`. O motivo `movido` existe para não mandar `voice.leave`
+  (ele desfaria o move que acabou de acontecer), não tocar o som de sair e não
+  fechar a coluna do canal — para quem foi movido a chamada não acabou. As
+  quatro recusas da rota (sem permissão, destino que não é canal de voz deste
+  servidor, alvo fora da voz, alvo que não enxerga o destino) estão em
+  `voice-mover.spec.ts`; a decisão de onde o arrasto pode cair e do que fazer
+  com um `voice.moved` atrasado é pura, em `stores/voice-mover.ts`.
+- Câmera e tela **não** sobrevivem ao move: as faixas ficaram na sala antiga do
+  LiveKit. Mudo e surdo viajam junto com a pessoa.
 - LiveKit é por identidade e não aceita duas iguais: entrar de outro aparelho
   expulsa a conexão anterior de propósito, com evento `voice.evicted` e a
   mensagem "você entrou de outro dispositivo" (`voz-em-um-lugar-so.ts`).
