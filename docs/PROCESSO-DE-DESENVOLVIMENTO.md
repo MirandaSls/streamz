@@ -179,6 +179,64 @@ Passo a passo, como foi feito para 0.0.6, 0.0.7 e 0.0.8:
 O desktop embute a web: o que entra em `main` depois do build só chega ao
 instalado na versão seguinte.
 
+### 5.1 O assistente do instalador (NSIS)
+
+O `.exe` que sai do passo 2 é gerado pelo NSIS a partir de um template
+**nosso**, e não do que vem embutido no tauri-bundler:
+
+| arquivo | o que é |
+| --- | --- |
+| `apps/desktop/src-tauri/nsis/installer.nsi` | o template, fork do oficial |
+| `apps/desktop/src-tauri/nsis/ganchos.nsh` | `installerHooks`; só entrega o caminho absoluto da arte |
+| `apps/desktop/src-tauri/nsis/gerar-arte.py` | gera os BMP e o AVI a partir de `icons/icon.png` |
+| `apps/desktop/src-tauri/nsis/cabecalho.bmp`, `lateral.bmp` | cabeçalho (150×57) e lateral das boas-vindas (164×314) |
+| `apps/desktop/src-tauri/nsis/anim/` | 12 quadros do pulso do ícone + `instalando.avi` |
+
+Três coisas que precisam continuar verdade:
+
+1. **O template é um fork preso numa versão.** Ele saiu de
+   `crates/tauri-bundler/src/bundle/windows/nsis/installer.nsi` na tag
+   `tauri-cli-v2.11.4` — a versão do `@tauri-apps/cli` presa no
+   `pnpm-lock.yaml`. **Ao subir essa versão, refaça o diff contra o
+   `installer.nsi` da tag nova** e traga o que mudou. Um template velho
+   compila e passa no CI; o que quebra em silêncio é o updater, que depende
+   dos parâmetros `/UPDATE`, `/P`, `/S`, `/R` e `/NS` tratados lá dentro.
+   Toda linha nossa está marcada com `; streamz:` justamente para o diff ser
+   fácil.
+2. **A arte é commitada, não gerada no CI.** O runner do Windows não tem
+   Pillow, e ninguém vai instalar. Para trocar a marca, mexa no
+   `gerar-arte.py` e rode (o host não tem python com Pillow):
+
+   ```
+   docker run --rm -v /opt/stack/streamz/.claude/worktrees/<nome>:/w \
+     -w /w/apps/desktop/src-tauri python:3-slim bash -lc \
+     "apt-get update -qq && apt-get install -y -qq fonts-dejavu-core \
+      && pip install --quiet pillow && python nsis/gerar-arte.py"
+   ```
+
+   Os BMP têm que sair em **BMP3 24 bits**: o MUI2 e o `LoadImage` do Win32
+   engolem BMP de 32 bits com alfa como um retângulo preto.
+3. **Dá para compilar o `.nsi` aqui, e só isso.** Um teste de fumaça que
+   preenche os `{{...}}` do Handlebars com valores plausíveis, troca as
+   chamadas do plugin `nsis_tauri_utils` por `Push 0` e roda o `makensis` do
+   Debian pega erro de sintaxe, `!define` faltando, LangString sem tradução,
+   BMP inválido e `File` apontando para arquivo que não existe. **Não pega
+   nada de comportamento** — leiaute, cor, animação, fechar sozinho e abrir o
+   app só o Windows prova. Quem quiser refazer o harness: ver o PR #78.
+
+O que o assistente faz hoje: boas-vindas escuras com a lateral da marca →
+(se já houver instalação) escolher entre reinstalar e desinstalar → escolher a
+pasta → página de instalação escura com o ícone do Streamz pulsando e a barra
+em Volt Lime → **fecha sozinho e abre o app**. Não existe página de conclusão;
+o atalho na área de trabalho, que era uma caixinha marcada por padrão lá,
+passou a ser criado sempre na seção de instalação.
+
+O ícone anima num controle `SysAnimate32` do Windows tocando um AVI RGB sem
+compressão, e não num temporizador do NSIS trocando bitmaps: o NSIS roda a
+instalação numa thread separada, então o callback de script não desenha
+enquanto o `File` do executável principal está copiando — que é exatamente o
+trecho que a animação existe para cobrir.
+
 ## 6. Paridade visual com o Discord (o método)
 
 O objetivo do usuário é "idêntico ao Discord", com uma exceção fixa: **cores e
@@ -365,6 +423,22 @@ configurações; a prévia da aba Notificações passa `forcar`.
   Discord é da coluna; se for do conteúdo, o alvo é 268.
 - Polimentos de voz listados no §7.
 - Painel "Ativo agora" e a barra de título no navegador: decisão do usuário.
+- **O instalador novo (§5.1) nunca rodou no Windows.** O `.nsi` compila aqui,
+  mas cor, leiaute, animação, fechar-sozinho e abrir-o-app dependem do build do
+  CI e de alguém instalando.
+- **`installMode` continua `perMachine`, e por isso toda atualização pede UAC.**
+  Só `currentUser` seria 100% silencioso (é o que o Discord faz). A troca não é
+  só mudar a linha: o template do Tauri detecta instalação anterior lendo
+  `SHCTX`, e o `SetContext` do `utils.nsh` aponta `SHCTX` para HKCU quando o
+  modo é `currentUser` — ou seja, o instalador por usuário **não enxerga** a
+  instalação perMachine que está na máquina hoje (0.0.12) e deixaria duas
+  cópias: arquivos em `Program Files` + entrada em HKLM, mais uma cópia em
+  `%LOCALAPPDATA%`. A varredura de WiX no topo do `PageReinstall` também não
+  ajuda: ela só casa com desinstaladores que começam com `msiexec`. Migrar
+  exige um passo próprio no template (ler `HKLM\...\Uninstall\Streamz` e
+  chamar o desinstalador antigo por `ExecShell "runas"`, um UAC único), e isso
+  precisa ser testado numa máquina que já tenha a versão perMachine — não dá
+  para verificar daqui.
 
 ## 11. Checklist para uma sessão nova
 
