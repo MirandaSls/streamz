@@ -46,6 +46,13 @@ import { sniffImage } from "../uploads/media";
 
 type MemberWithUser = { userId: string; user: PublicUserRow };
 
+/** A linha de `Channel` (com participantes) que `toView` sabe traduzir. */
+type CanalComParticipantes = Parameters<typeof toChannelDTO>[0] & {
+  members: MemberWithUser[];
+  ownerId: string | null;
+  iconKey: string | null;
+};
+
 const WITH_MEMBERS = {
   members: { include: { user: true } },
 } as const;
@@ -69,11 +76,16 @@ export class DMsService {
    * brecha genérica — nenhuma rota aceita o sinalizador vindo do cliente, ele é
    * decidido no servidor depois do `PlatformAdminGuard`. E é justamente por
    * abrir esta exceção que o envio do painel fica registrado no log.
+   *
+   * `username` é o de quem abre: com ele a conversa volta com o estado de
+   * leitura (`lastMessageAt`, não lidas), que é o que a coluna precisa para
+   * ordenar e badgear. Sem ele — o painel do administrador — volta a visão
+   * seca, que ninguém lista.
    */
   async openWith(
     meId: string,
     otherUserId: string,
-    opcoes: { ignorarBloqueio?: boolean } = {},
+    opcoes: { ignorarBloqueio?: boolean; username?: string } = {},
   ): Promise<DMChannelView> {
     if (meId === otherUserId) {
       throw new BadRequestException("Não é possível abrir DM consigo mesmo");
@@ -99,10 +111,25 @@ export class DMsService {
     // quem já está conectado passa a receber a conversa ao vivo na hora
     this.realtime.joinChannelRooms([a, b], channel.id);
     // reabrir manualmente desfaz o "fechar conversa" de quem abriu
-    await this.prisma.dMHidden
-      .delete({ where: { userId_channelId: { userId: meId, channelId: channel.id } } })
-      .catch(() => undefined);
-    return this.toView(channel, meId);
+    await this.reabrirParaMim(meId, channel.id);
+    return this.comResumo(channel, meId, opcoes.username);
+  }
+
+  /**
+   * Reabre a conversa para quem pede: ela volta para a coluna e fica lá até
+   * ser fechada de novo, como no Discord.
+   *
+   * É o par de `hide`, e existe porque `openWith` não é a única porta que
+   * mostra uma conversa: o rail, um link para a mensagem, a caixa de entrada e
+   * uma chamada recebida abrem pelo **id do canal**. Sem esta rota, esses
+   * caminhos punham a conversa na tela e o servidor continuava escondendo-a —
+   * o próximo `GET /dms` a apagava da coluna, e ela só voltava com mensagem
+   * nova. Idempotente: reabrir o que não estava fechado não faz nada.
+   */
+  async mostrar(meId: string, channelId: string, username: string): Promise<DMChannelView> {
+    const channel = await this.acharConversa(meId, channelId);
+    await this.reabrirParaMim(meId, channelId);
+    return this.comResumo(channel, meId, username);
   }
 
   /** Cria um grupo (3+ participantes, contando o criador). */
@@ -212,14 +239,35 @@ export class DMsService {
       .sort((a, b) => atividade(b).localeCompare(atividade(a)));
   }
 
-  /** Uma conversa específica, na visão de quem pede (404 se não participa). */
-  async get(meId: string, channelId: string): Promise<DMChannelView> {
-    const channel = await this.prisma.channel.findFirst({
-      where: { id: channelId, guildId: null, members: { some: { userId: meId } } },
-      include: WITH_MEMBERS,
-    });
-    if (!channel) throw new NotFoundException("Conversa não encontrada");
-    return this.toView(channel, meId);
+  /**
+   * Uma conversa específica, na visão de quem pede (404 se não participa).
+   * Responde mesmo com a conversa fechada: é assim que um link ou uma chamada
+   * conseguem trazê-la de volta para a coluna.
+   */
+  async get(meId: string, channelId: string, username?: string): Promise<DMChannelView> {
+    const channel = await this.acharConversa(meId, channelId);
+    return this.comResumo(channel, meId, username);
+  }
+
+  /** Desfaz o "fechar conversa" de quem está abrindo. */
+  private async reabrirParaMim(meId: string, channelId: string): Promise<void> {
+    await this.prisma.dMHidden.deleteMany({ where: { userId: meId, channelId } });
+  }
+
+  /**
+   * A conversa na minha visão, com o estado de leitura — o mesmo que `list`
+   * devolve, para que uma conversa que chega por qualquer rota entre na coluna
+   * já com a ordem e o badge certos (sem isto, reabrir uma conversa cheia de
+   * histórico a punha na lista com `lastMessageAt` nulo).
+   */
+  private async comResumo(
+    channel: CanalComParticipantes,
+    meId: string,
+    username?: string,
+  ): Promise<DMChannelView> {
+    if (!username) return this.toView(channel, meId);
+    const summaries = await this.readState.summaries(meId, username, [channel.id]);
+    return this.toView(channel, meId, summaries.get(channel.id));
   }
 
   /** Canonicaliza o par (ordem estável) para garantir 1 canal por dupla. */
@@ -228,11 +276,7 @@ export class DMsService {
   }
 
   private toView(
-    channel: Parameters<typeof toChannelDTO>[0] & {
-      members: MemberWithUser[];
-      ownerId: string | null;
-      iconKey: string | null;
-    },
+    channel: CanalComParticipantes,
     meId: string,
     summary?: ChannelReadSummary,
   ): DMChannelView {

@@ -70,7 +70,7 @@ export class DMsController {
   @UseGuards(JwtGuard)
   @Post()
   open(@CurrentUser() user: JwtPayload, @Body() dto: OpenDMDto) {
-    return this.dms.openWith(user.sub, dto.userId);
+    return this.dms.openWith(user.sub, dto.userId, { username: user.username });
   }
 
   @UseGuards(JwtGuard)
@@ -89,7 +89,7 @@ export class DMsController {
   @UseGuards(JwtGuard)
   @Get(":id")
   get(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
-    return this.dms.get(user.sub, id);
+    return this.dms.get(user.sub, id, user.username);
   }
 
   /** Sai de um grupo de DM. Em conversa 1-a-1 não faz sentido: responde 400. */
@@ -113,6 +113,17 @@ export class DMsController {
   @Post(":id/hide")
   hide(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
     return this.dms.hide(user.sub, id);
+  }
+
+  /**
+   * Reabre a conversa: ela volta para a coluna e fica lá até ser fechada de
+   * novo. O par de `hide`, para os caminhos que abrem pelo id do canal (rail,
+   * link, caixa de entrada, chamada) e não passam por `POST /dms`.
+   */
+  @UseGuards(JwtGuard)
+  @Post(":id/show")
+  show(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
+    return this.dms.mostrar(user.sub, id, user.username);
   }
 
   /** Qualquer participante adiciona ao grupo (como no Discord). */

@@ -896,14 +896,11 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
  * olhando outro canal, sem nenhum sinal de onde a chamada está acontecendo.
  */
 async function abrirConversa(channelId: string) {
-  let conversa = useDMs.getState().channels.find((d) => d.id === channelId);
-  if (!conversa) {
-    // conversa que ainda não estava na lista (alguém ligou primeiro)
-    await useDMs.getState().refreshList();
-    conversa = useDMs.getState().channels.find((d) => d.id === channelId);
-  }
   ui.setView("dm");
-  if (conversa) useDMs.getState().select(conversa);
+  // `abrirPorId` cobre a conversa que ainda não estava na lista (alguém ligou
+  // primeiro) e a que estava fechada — esta o `GET /dms` não devolve, e a
+  // chamada ficava sem tela nenhuma
+  await useDMs.getState().abrirPorId(channelId);
 }
 
 /**

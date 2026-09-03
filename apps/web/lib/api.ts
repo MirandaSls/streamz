@@ -382,6 +382,9 @@ export const api = {
   dmMembers: (channelId: string) => request<PublicUser[]>(`/dms/${channelId}/members`),
   hideDM: (channelId: string) =>
     request<{ channelId: string }>(`/dms/${channelId}/hide`, { method: "POST" }),
+  /** Reabre a conversa fechada: o par de `hideDM`. */
+  showDM: (channelId: string) =>
+    request<DMChannelView>(`/dms/${channelId}/show`, { method: "POST" }),
   addGroupMember: (channelId: string, userId: string) =>
     request<DMChannelView>(`/dms/${channelId}/members`, json({ userId })),
   removeGroupMember: (channelId: string, userId: string) =>
