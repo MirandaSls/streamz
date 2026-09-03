@@ -660,10 +660,13 @@ export default function ProfilePopoverHost() {
               onPointerEnter={(e) => {
                 const el = e.currentTarget;
                 window.clearTimeout(timerDoSubmenu.current);
-                timerDoSubmenu.current = window.setTimeout(
-                  () => abrirSubmenuDeStatus(el),
-                  ATRASO_DO_SUBMENU,
-                );
+                timerDoSubmenu.current = window.setTimeout(() => {
+                  // com um menu já aberto o hover não faz nada: reabrir o mesmo
+                  // submenu remontaria o painel e ele reapareceria piscando a
+                  // cada ida e volta do mouse
+                  if (useUI.getState().contextMenu) return;
+                  abrirSubmenuDeStatus(el);
+                }, ATRASO_DO_SUBMENU);
               }}
               onPointerLeave={() => window.clearTimeout(timerDoSubmenu.current)}
               className="mt-2 flex h-8 w-full items-center gap-2 rounded-lg bg-footer px-2 text-left text-sm font-semibold text-txt-primary transition hover:bg-hov"
