@@ -40,17 +40,22 @@ const TOM: Record<Tom, string> = {
   desligar: "bg-red text-white hover:bg-red-hover",
 };
 
+// o raio grande é sempre a metade da altura do botão (44/2): é o que mantém a
+// ponta em pílula depois do aumento. O 4 do lado colado não acompanha — ele é o
+// respiro entre botão e vizinho, e a 4,4px não haveria pixel para mostrar.
 const BORDA: Record<Borda, string> = {
-  sozinho: "rounded-[20px]",
-  esquerda: "rounded-l-[20px] rounded-r-[4px]",
-  direita: "rounded-r-[20px] rounded-l-[4px]",
+  sozinho: "rounded-[22px]",
+  esquerda: "rounded-l-[22px] rounded-r-[4px]",
+  direita: "rounded-r-[22px] rounded-l-[4px]",
 };
 
 /** Fundo escuro que agrupa um punhado de controles. */
 export function Capsula({ children }: { children: React.ReactNode }) {
-  // 48 de altura: 4 de padding + 40 do botão. Tínhamos 6 de padding, e os 52
-  // resultantes deixavam a cápsula mais alta que a do Discord — diferença que
-  // passou a aparecer agora que a faixa do palco é fixa.
+  // 52 de altura: 4 de padding + 44 do botão. Foram 48 (4 + 40), que é
+  // exatamente a medida do Discord (medido no print 2026-08-31 101857: cápsula
+  // de 48, botão de 40, ícone de 18 de tinta). O usuário pediu maior mesmo
+  // assim, então a fileira toda subiu ~10% a partir daquela paridade — não é
+  // correção de desvio, é escolha, e por isso está escrita aqui.
   return (
     <div className="flex items-center gap-1 rounded-full bg-overlay/90 p-1 shadow-high backdrop-blur">
       {children}
@@ -58,7 +63,7 @@ export function Capsula({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Botão de 40px da barra. Largura maior quando está sozinho na cápsula. */
+/** Botão de 44px da barra. Largura maior quando está sozinho na cápsula. */
 export function BotaoDeChamada({
   label,
   onClick,
@@ -86,7 +91,7 @@ export function BotaoDeChamada({
         aria-label={label}
         aria-pressed={pressionado}
         aria-expanded={expandido}
-        className={`grid h-10 w-12 place-items-center transition ${TOM[tom]} ${BORDA[borda]}`}
+        className={`grid h-11 w-[52px] place-items-center transition ${TOM[tom]} ${BORDA[borda]}`}
       >
         {children}
       </button>
@@ -115,7 +120,7 @@ export function BotaoDeDesligar({
         type="button"
         onClick={onClick}
         aria-label={label}
-        className="grid h-[52px] w-16 place-items-center rounded-full bg-red text-white shadow-high transition hover:bg-red-hover"
+        className="grid h-14 w-[70px] place-items-center rounded-full bg-red text-white shadow-high transition hover:bg-red-hover"
       >
         {children}
       </button>
@@ -165,11 +170,11 @@ export function SplitDeDispositivo({
           onClick={() => setAberto((v) => !v)}
           aria-label={labelDaSeta}
           aria-expanded={aberto}
-          className={`grid h-10 w-6 place-items-center rounded-l-[4px] rounded-r-[20px] transition ${
+          className={`grid h-11 w-[26px] place-items-center rounded-l-[4px] rounded-r-[22px] transition ${
             tom === "mudo" ? "bg-red/15 text-red hover:bg-red/25" : "text-white hover:bg-white/10"
           }`}
         >
-          <ChevronDown size={16} />
+          <ChevronDown size={18} />
         </button>
       </Tooltip>
 

@@ -82,7 +82,7 @@ export default function VoiceControls({
           onClick={toggleMute}
           menu={() => <MenuDeEntrada />}
         >
-          {muted ? <MicOff size={20} /> : <Mic size={20} />}
+          {muted ? <MicOff size={22} /> : <Mic size={22} />}
         </SplitDeDispositivo>
 
         <SplitDeDispositivo
@@ -93,7 +93,7 @@ export default function VoiceControls({
           onClick={() => void toggleCam()}
           menu={() => <ListaDeCameras camLigada={camOn} />}
         >
-          {camOn ? <Video size={20} /> : <VideoOff size={20} />}
+          {camOn ? <Video size={22} /> : <VideoOff size={22} />}
         </SplitDeDispositivo>
       </Capsula>
 
@@ -111,14 +111,16 @@ export default function VoiceControls({
             expandido={mais !== null}
             onClick={() => setMais((v) => (v ? null : "menu"))}
           >
-            <MoreHorizontal size={20} />
+            <MoreHorizontal size={22} />
           </BotaoDeChamada>
 
+          {/* `bottom-[52px]` é a altura do botão (44) mais os 8 de folga que a
+              caixa sempre teve; era `bottom-12` quando o botão media 40. */}
           {mais === "menu" && (
             <div
               role="menu"
               aria-label="Mais opções"
-              className="absolute bottom-12 left-1/2 w-56 -translate-x-1/2 rounded-lg bg-overlay p-1.5 shadow-high anim-menu"
+              className="absolute bottom-[52px] left-1/2 w-56 -translate-x-1/2 rounded-lg bg-overlay p-1.5 shadow-high anim-menu"
             >
               {/* tela cheia saiu daqui: no print ela é ícone solto no canto do
                   palco, junto do pop-out — ver `IconesDoCanto` */}
@@ -134,7 +136,7 @@ export default function VoiceControls({
             <div
               role="dialog"
               aria-label="Ajustes de voz"
-              className="absolute bottom-12 left-1/2 max-h-[60vh] w-[380px] -translate-x-1/2 overflow-y-auto rounded-lg bg-overlay p-4 shadow-high anim-menu"
+              className="absolute bottom-[52px] left-1/2 max-h-[60vh] w-[380px] -translate-x-1/2 overflow-y-auto rounded-lg bg-overlay p-4 shadow-high anim-menu"
             >
               <VoiceSettingsPanel compacto />
             </div>
@@ -143,7 +145,7 @@ export default function VoiceControls({
       </Capsula>
 
       <BotaoDeDesligar label={leaveLabel} onClick={onLeave}>
-        <PhoneOff size={22} />
+        <PhoneOff size={24} />
       </BotaoDeDesligar>
     </div>
   );
