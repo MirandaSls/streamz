@@ -176,6 +176,16 @@ Passo a passo, como foi feito para 0.0.6, 0.0.7 e 0.0.8:
 5. O primeiro salto de quem está antes da 0.0.3 é manual (a chave pública mora
    no app instalado).
 
+**A atualização acontece dentro do app.** `plugins.updater.windows.installMode`
+é `"quiet"` (o NSIS roda com `/S /R`, sem janela do instalador) e quem mostra
+progresso, "Instalando…" e o erro é `components/desktop/TelaDeAtualizacao.tsx`,
+tela cheia aberta pela setinha verde da barra. Duas consequências: com
+`bundle.windows.nsis.installMode: "perMachine"` o **UAC continua aparecendo**
+uma vez por atualização (silêncio é do instalador, não da elevação), e o plugin
+chama `exit(0)` logo depois de disparar o instalador — no Windows o app morre em
+"Instalando…" e quem reabre é o `/R`, então "Reiniciando…" e o `relaunch()` só
+se veem fora dali.
+
 O desktop embute a web: o que entra em `main` depois do build só chega ao
 instalado na versão seguinte.
 
@@ -365,6 +375,13 @@ configurações; a prévia da aba Notificações passa `forcar`.
   Discord é da coluna; se for do conteúdo, o alvo é 268.
 - Polimentos de voz listados no §7.
 - Painel "Ativo agora" e a barra de título no navegador: decisão do usuário.
+- **Janela branca no boot do desktop.** A tela de abertura cobre o shell vazio,
+  mas antes dela o WebView2 ainda pinta um quadro branco. O conserto é
+  `"visible": false` na janela do `tauri.conf.json` + `getCurrentWindow().show()`
+  quando o React montar; a permissão (`core:window:allow-show`) já existe e a
+  bandeja ("Abrir Streamz") é a rede de segurança se o JS não subir. Não foi
+  feito no PR da tela de abertura para não disputar o `tauri.conf.json` com
+  outra sessão, e porque só dá para validar num Windows.
 
 ## 11. Checklist para uma sessão nova
 
