@@ -31,7 +31,8 @@ import {
   type UserProfile,
   type UserStatus,
 } from "@streamz/shared";
-import Avatar, { StatusDot } from "@/components/ui/Avatar";
+import Avatar from "@/components/ui/Avatar";
+import IconeDeStatus from "@/components/ui/IconeDeStatus";
 import { MENU_WIDTH, MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
 import { api } from "@/lib/api";
 import { lerRascunho, salvarRascunho } from "@/lib/rascunhos";
@@ -589,7 +590,7 @@ export default function ProfilePopoverHost() {
                         selecionado ? "text-txt-primary" : "text-txt-normal"
                       }`}
                     >
-                      <StatusDot status={o.dot} className="h-2.5 w-2.5 shrink-0" />
+                      <IconeDeStatus status={o.dot} className="h-2.5 w-2.5 shrink-0" />
                       <span className="flex-1">
                         <span className="block font-medium">{o.label}</span>
                         {o.hint && <span className="block text-xs opacity-70">{o.hint}</span>}
