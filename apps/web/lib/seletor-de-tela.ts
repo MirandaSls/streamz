@@ -6,10 +6,15 @@ import {
 } from "@streamz/shared";
 
 /**
- * A lógica pura do seletor de compartilhamento de tela — o que dá para testar
- * sem DOM nem Tauri: os dois seletores de qualidade do rodapé, a estimativa de
- * banda, a divisão das fontes por aba e o pedido que vai para a captura nativa.
- */
+ * A lógica pura do compartilhamento de tela — o que dá para testar sem DOM nem
+ * Tauri: os dois seletores de qualidade, a estimativa de banda, as restrições
+ * que vão para `getDisplayMedia` no navegador, a leitura do erro do diálogo, a
+ * divisão das fontes por aba e o pedido que vai para a captura nativa.
+ *
+ * Os dois caminhos saem daqui: no **desktop** o seletor com miniaturas manda um
+ * `PedidoDeTela` para o Rust; no **navegador** o botão chama `getDisplayMedia`
+ * direto com `restricoesDeCaptura` — o seletor de janelas já é do browser, e um
+ * modal nosso antes dele só somava um passo.
 
 // ── qualidade ──────────────────────────────────────────────────────────────
 
@@ -49,6 +54,61 @@ export const RESOLUCOES: string[] = [...new Set(CHAVES.map((q) => separarPreset(
 export const TAXAS: ("30" | "60")[] = [...new Set(CHAVES.map((q) => separarPreset(q).fps))].sort(
   (a, b) => Number(a) - Number(b),
 );
+
+// ── captura do navegador ───────────────────────────────────────────────────
+
+/**
+ * O que `getDisplayMedia` recebe no navegador. `displaySurface` é só uma
+ * **dica** de qual painel do diálogo abrir primeiro (o navegador lista tudo de
+ * qualquer jeito); como o botão se chama "Compartilhar tela", a dica é o
+ * monitor.
+ *
+ * O áudio vai com os três processadores de voz desligados e dois canais de
+ * propósito: eles são feitos para microfone e achatam música/jogo em mono
+ * abafado. Aqui a fonte é o próprio sistema, então não há eco a cancelar.
+ */
+export function restricoesDeCaptura(q: ScreenQuality, audio: boolean): DisplayMediaStreamOptions {
+  const p = SCREEN_QUALITY[q];
+  return {
+    video: {
+      displaySurface: "monitor",
+      width: p.width,
+      height: p.height,
+      frameRate: p.frameRate,
+    } as MediaTrackConstraints,
+    audio: audio
+      ? ({
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          channelCount: 2,
+        } as MediaTrackConstraints)
+      : false,
+  };
+}
+
+/**
+ * Cancelar o diálogo e ter a permissão bloqueada chegam como o mesmo
+ * `NotAllowedError` — só a mensagem distingue. Cancelar é uma decisão, e
+ * decisão não vira aviso; bloqueio do sistema é um beco sem saída, e o usuário
+ * precisa saber por que nada aconteceu.
+ */
+export function ehCancelamento(e: unknown): boolean {
+  if (!(e instanceof DOMException)) return false;
+  return e.name === "NotAllowedError" && !/system|policy/i.test(e.message);
+}
+
+/** A frase do toast para o que não é cancelamento. */
+export function mensagemDeErro(e: unknown): string {
+  if (e instanceof DOMException) {
+    if (e.name === "NotAllowedError") {
+      return "O sistema bloqueou a captura de tela. Autorize o navegador nas permissões do sistema.";
+    }
+    if (e.name === "NotFoundError") return "Nenhuma fonte de captura disponível.";
+    if (e.name === "NotReadableError") return "Outro aplicativo está usando essa fonte.";
+  }
+  return "Não foi possível iniciar o compartilhamento de tela.";
+}
 
 // ── fontes ─────────────────────────────────────────────────────────────────
 

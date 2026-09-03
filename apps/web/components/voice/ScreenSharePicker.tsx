@@ -1,49 +1,44 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { SCREEN_QUALITY, type ScreenQuality } from "@streamz/shared";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import type { ScreenQuality } from "@streamz/shared";
 import Dialog from "@/components/modals/Dialog";
-import { AppWindow, Monitor, MonitorUp } from "@/components/ui/icones";
+import { AppWindow, Monitor } from "@/components/ui/icones";
+import { SegmentosDeQualidade } from "@/components/voice/qualidade-de-tela";
 import {
   capacidadesDeTela,
   fontesDeTela,
-  isTauri,
   miniaturasDeTela,
   type CapacidadesDeTela,
 } from "@/lib/desktop";
 import {
-  RESOLUCOES,
-  TAXAS,
   estimativaDeBanda,
   fontesDaAba,
-  juntarPreset,
   rotuloDaFonte,
-  separarPreset,
   type Aba,
   type FonteDeTela,
 } from "@/lib/seletor-de-tela";
-import { ui } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
 
 /**
- * Seletor de transmissão — o modal do Discord: duas abas no topo
+ * Seletor de transmissão do **desktop** — o modal do Discord: duas abas no topo
  * ("Aplicativos" e "Tela Inteira", repartindo a largura), a grade de
  * miniaturas ao vivo no corpo e, no rodapé, a qualidade inteira à mostra.
  *
- * **Duas origens para a grade, um visual só.** No app de desktop as fontes
- * vêm do Rust (`fontes_de_tela` + `miniaturas_de_tela`, captura nativa sem a
- * borda amarela) e clicar numa miniatura **já transmite**, como no Discord —
- * não há prévia nem "Ao vivo" para confirmar. No navegador não existe listar
- * janelas (`getDisplayMedia` é uma API de gesto: abre o seletor do próprio
- * navegador e devolve uma captura escolhida), então a aba mostra um botão
- * "Escolher…", a captura vira a única miniatura da grade, e clicar nela vai ao
- * ar.
+ * **Só no app de desktop.** As fontes vêm do Rust (`fontes_de_tela` +
+ * `miniaturas_de_tela`, captura nativa sem a borda amarela) e clicar numa
+ * miniatura **já transmite**, como no Discord — não há prévia nem "Ao vivo"
+ * para confirmar. No navegador este modal não abre: lá não existe listar
+ * janelas (`getDisplayMedia` é uma API de gesto, com seletor próprio do
+ * browser), e o modal virava um passo a mais antes do diálogo que decide de
+ * verdade — `ScreenShareButton` chama a captura direto, e a qualidade mora na
+ * aba Voz das configurações.
  *
  * **Qualidade sem etapa.** O alternador SD/HD e a engrenagem viravam uma
  * segunda tela para responder "em que resolução isto vai?" — pergunta que se
  * responde olhando. No lugar deles, dois segmentos sempre visíveis no rodapé
- * (resolução e taxa de quadros, as opções vindas de `SCREEN_QUALITY`), com a
- * estimativa de banda e o áudio do sistema à esquerda, na mesma altura.
+ * (`SegmentosDeQualidade`, os mesmos das configurações), com a estimativa de
+ * banda e o áudio do sistema à esquerda, na mesma altura.
  *
  * Medidas do print de referência: modal 955 de largura, barra de abas 40
  * (segmento 32, raio 8 por fora e 6 por dentro), miniatura 440×248 raio 8. Os
@@ -51,21 +46,14 @@ import { useVoice } from "@/stores/voice";
  */
 export default function ScreenSharePicker({ onClose }: { onClose: () => void }) {
   const [aba, setAba] = useState<Aba>("aplicativos");
-  // null = ainda não perguntamos ao desktop; no navegador resolve na hora
-  const [capacidades, setCapacidades] = useState<CapacidadesDeTela | null>(
-    isTauri() ? null : { nativo: false, backend: null, janelaRecortada: false },
-  );
-  // captura do navegador à espera do clique (só fora do desktop)
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const [capturando, setCapturando] = useState(false);
+  // null = ainda não perguntamos ao Rust
+  const [capacidades, setCapacidades] = useState<CapacidadesDeTela | null>(null);
   const [iniciando, setIniciando] = useState(false);
-  const publicado = useRef(false);
 
   const quality = useVoice((s) => s.screenQuality);
   const audio = useVoice((s) => s.screenAudio);
   const setQuality = useVoice((s) => s.setScreenQuality);
   const setAudio = useVoice((s) => s.setScreenAudio);
-  const publicarTela = useVoice((s) => s.publicarTela);
   const publicarTelaNativa = useVoice((s) => s.publicarTelaNativa);
 
   useEffect(() => {
@@ -77,76 +65,6 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
       vivo = false;
     };
   }, []);
-
-  // fechar sem ir ao ar não pode deixar a captura viva (o navegador seguiria
-  // mostrando "compartilhando" com ninguém do outro lado)
-  useEffect(() => {
-    return () => {
-      if (!publicado.current) stream?.getTracks().forEach((t) => t.stop());
-    };
-  }, [stream]);
-
-  const nativo = capacidades?.nativo ?? false;
-
-  function aplicarQualidade(q: ScreenQuality) {
-    setQuality(q);
-    // prévia do navegador no ar: reconstrange a faixa em vez de recapturar
-    const faixa = stream?.getVideoTracks()[0];
-    const p = SCREEN_QUALITY[q];
-    void faixa
-      ?.applyConstraints({ width: p.width, height: p.height, frameRate: p.frameRate })
-      .catch(() => {
-        // fonte que não aceita a restrição: ela vai como está, e é melhor assim
-      });
-  }
-
-  async function capturarNoNavegador(tipo: Aba) {
-    const md = typeof navigator !== "undefined" ? navigator.mediaDevices : null;
-    if (!md?.getDisplayMedia) {
-      ui.toast("Este navegador não permite compartilhar a tela", "error");
-      return;
-    }
-    setCapturando(true);
-    const preset = SCREEN_QUALITY[quality];
-    try {
-      const novo = await md.getDisplayMedia({
-        video: {
-          // dica de qual seletor abrir; o navegador pode ignorar, e tudo bem
-          displaySurface: tipo === "telas" ? "monitor" : "window",
-          width: preset.width,
-          height: preset.height,
-          frameRate: preset.frameRate,
-        } as MediaTrackConstraints,
-        // Estéreo de verdade exige desligar os processadores de voz: eles são
-        // feitos para microfone e achatam música/jogo em mono abafado. Aqui a
-        // fonte é o próprio sistema, então não há eco a cancelar.
-        audio: audio
-          ? ({
-              echoCancellation: false,
-              noiseSuppression: false,
-              autoGainControl: false,
-              channelCount: 2,
-            } as MediaTrackConstraints)
-          : false,
-      });
-      stream?.getTracks().forEach((t) => t.stop());
-      setStream(novo);
-    } catch (e) {
-      if (ehCancelamento(e)) return;
-      ui.toast(mensagemDeErro(e), "error");
-    } finally {
-      setCapturando(false);
-    }
-  }
-
-  /** Vai ao ar com uma captura do navegador (janela/tela escolhida, ou câmera). */
-  async function irAoVivoCom(captura: MediaStream) {
-    if (iniciando) return;
-    setIniciando(true);
-    publicado.current = true;
-    await publicarTela(captura);
-    onClose();
-  }
 
   /** Vai ao ar com uma fonte da captura nativa — o clique na miniatura. */
   async function irAoVivoNativo(fonteId: string) {
@@ -172,7 +90,7 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
       <div className="-mr-3 mt-6 min-h-0 flex-1 overflow-y-auto pr-3">
         {capacidades === null ? (
           <p className="pt-10 text-center text-sm text-txt-muted">Procurando janelas…</p>
-        ) : nativo ? (
+        ) : capacidades.nativo ? (
           <GradeNativa
             aba={aba}
             aviso={
@@ -184,25 +102,17 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
             iniciando={iniciando}
           />
         ) : (
-          <EscolhaDoNavegador
-            aba={aba}
-            stream={stream}
-            capturando={capturando}
-            iniciando={iniciando}
-            onEscolher={() => void capturarNoNavegador(aba)}
-            onIrAoVivo={() => {
-              if (stream) void irAoVivoCom(stream);
-            }}
+          // O Rust respondeu que não sabe capturar aqui (backend ausente ou o
+          // comando falhou). Sem grade não há o que clicar, e dizer isso é
+          // melhor do que um modal vazio.
+          <EstadoVazio
+            icone={<Monitor size={32} />}
+            texto="A captura de tela não está disponível neste sistema"
           />
         )}
       </div>
 
-      <Rodape
-        quality={quality}
-        audio={audio}
-        onQualidade={aplicarQualidade}
-        onAudio={setAudio}
-      />
+      <Rodape quality={quality} audio={audio} onQualidade={setQuality} onAudio={setAudio} />
     </Dialog>
   );
 }
@@ -413,72 +323,6 @@ function EstadoVazio({ icone, texto }: { icone: ReactNode; texto: string }) {
   );
 }
 
-// ── navegador: o seletor do próprio browser ────────────────────────────────
-
-function EscolhaDoNavegador({
-  aba,
-  stream,
-  capturando,
-  iniciando,
-  onEscolher,
-  onIrAoVivo,
-}: {
-  aba: Aba;
-  stream: MediaStream | null;
-  capturando: boolean;
-  iniciando: boolean;
-  onEscolher: () => void;
-  onIrAoVivo: () => void;
-}) {
-  const video = useRef<HTMLVideoElement>(null);
-  useEffect(() => {
-    if (video.current) video.current.srcObject = stream;
-  }, [stream]);
-
-  const rotuloDoBotao = aba === "telas" ? "Escolher tela" : "Escolher janela";
-
-  return (
-    <div className="grid grid-cols-2 gap-x-4 gap-y-4">
-      {stream && (
-        <Miniatura
-          rotulo={stream.getVideoTracks()[0]?.label || "Captura do navegador"}
-          icone={
-            aba === "telas" ? (
-              <Monitor size={16} className="shrink-0 text-txt-secondary" />
-            ) : (
-              <AppWindow size={16} className="shrink-0 text-txt-secondary" />
-            )
-          }
-          onClick={onIrAoVivo}
-          disabled={iniciando}
-        >
-          <video ref={video} autoPlay playsInline muted className="h-full w-full object-contain" />
-        </Miniatura>
-      )}
-      <div className="flex w-[440px] max-w-full flex-col">
-        <div className="flex h-[248px] w-full flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border-strong px-8 text-center">
-          <MonitorUp size={32} className="text-txt-muted" aria-hidden="true" />
-          <p className="text-sm text-txt-muted">
-            {stream
-              ? "Clique na miniatura para ir ao ar, ou escolha outra fonte."
-              : aba === "telas"
-                ? "O navegador abre o seletor de telas; a escolhida aparece aqui."
-                : "O navegador abre o seletor de janelas; a escolhida aparece aqui."}
-          </p>
-          <button
-            type="button"
-            onClick={onEscolher}
-            disabled={capturando || iniciando}
-            className="h-9 rounded-[3px] bg-border-strong px-4 text-sm font-medium text-txt-primary transition hover:bg-border-strong-hover disabled:opacity-50"
-          >
-            {capturando ? "Aguardando…" : stream ? "Trocar fonte" : rotuloDoBotao}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── rodapé ─────────────────────────────────────────────────────────────────
 
 /**
@@ -498,12 +342,11 @@ function Rodape({
   onQualidade: (q: ScreenQuality) => void;
   onAudio: (on: boolean) => void;
 }) {
-  const { resolucao, fps } = separarPreset(quality);
   return (
     <div className="mt-5 flex h-10 shrink-0 items-center justify-between gap-6">
       <div className="min-w-0">
-        {/* No desktop o som vem do loopback do Windows (tudo o que está
-            tocando); no navegador, do que o seletor do browser permitir. */}
+        {/* O som vem do loopback do Windows (tudo o que está tocando), pelo
+            WASAPI do Rust — não da fonte escolhida. */}
         <label className="flex w-max cursor-pointer items-center gap-2 text-sm leading-5 text-txt-normal">
           <input
             type="checkbox"
@@ -520,85 +363,11 @@ function Rodape({
         </p>
       </div>
 
-      <div className="flex shrink-0 items-center gap-4">
-        <Segmento
-          rotulo="Resolução"
-          opcoes={RESOLUCOES.map((r) => ({ valor: r, texto: r }))}
-          atual={resolucao}
-          onEscolher={(v) => onQualidade(juntarPreset(v, fps))}
-        />
-        <Segmento
-          rotulo="Taxa de quadros"
-          opcoes={TAXAS.map((f) => ({ valor: f, texto: `${f} fps` }))}
-          atual={fps}
-          onEscolher={(v) => onQualidade(juntarPreset(resolucao, v))}
-        />
-      </div>
+      <SegmentosDeQualidade
+        quality={quality}
+        onQualidade={onQualidade}
+        className="flex shrink-0 items-center gap-4"
+      />
     </div>
   );
-}
-
-/**
- * Controle segmentado de uma linha (rótulo à esquerda, opções à direita), na
- * mesma forma da barra de abas: sulco de 40px raio 8, segmentos de 32px. Dois
- * deles cabem lado a lado no rodapé; o rótulo em versalete é o que os separa
- * sem precisar de moldura.
- */
-function Segmento({
-  rotulo,
-  opcoes,
-  atual,
-  onEscolher,
-}: {
-  rotulo: string;
-  opcoes: { valor: string; texto: string }[];
-  atual: string;
-  onEscolher: (valor: string) => void;
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="whitespace-nowrap text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">
-        {rotulo}
-      </span>
-      <div role="group" aria-label={rotulo} className="flex h-10 gap-1 rounded-lg bg-rail p-1">
-        {opcoes.map((o) => (
-          <button
-            key={o.valor}
-            type="button"
-            aria-pressed={atual === o.valor}
-            onClick={() => onEscolher(o.valor)}
-            className={`h-8 rounded-md px-3 text-sm font-semibold transition ${
-              atual === o.valor
-                ? "bg-accent text-accent-ink"
-                : "text-txt-muted hover:bg-hov hover:text-txt-primary"
-            }`}
-          >
-            {o.texto}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Cancelar o seletor e ter a permissão bloqueada chegam como o mesmo
- * `NotAllowedError` — só a mensagem distingue. Cancelar é uma decisão, e
- * decisão não vira aviso; bloqueio do sistema é um beco sem saída, e o usuário
- * precisa saber por que nada aconteceu.
- */
-function ehCancelamento(e: unknown): boolean {
-  if (!(e instanceof DOMException)) return false;
-  return e.name === "NotAllowedError" && !/system|policy/i.test(e.message);
-}
-
-function mensagemDeErro(e: unknown): string {
-  if (e instanceof DOMException) {
-    if (e.name === "NotAllowedError") {
-      return "O sistema bloqueou a captura de tela. Autorize o navegador nas permissões do sistema.";
-    }
-    if (e.name === "NotFoundError") return "Nenhuma fonte de captura disponível.";
-    if (e.name === "NotReadableError") return "Outro aplicativo está usando essa fonte.";
-  }
-  return "Não foi possível iniciar o compartilhamento de tela.";
 }

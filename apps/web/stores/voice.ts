@@ -149,7 +149,7 @@ interface VoiceStoreState {
   rejoinAposReconexao: () => Promise<void>;
 
   toggleCam: () => Promise<void>;
-  /** Publica uma captura já obtida pelo seletor próprio (ver ScreenShareButton). */
+  /** Publica uma captura já obtida pelo botão do navegador (ver ScreenShareButton). */
   publicarTela: (stream: MediaStream) => Promise<void>;
   /**
    * Transmite uma janela ou tela pela captura nativa do desktop: o Rust entra
@@ -629,9 +629,11 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     },
 
     /**
-     * A captura vem pronta de fora porque o seletor é **nosso** (abas
-     * "Aplicativos"/"Telas" com prévia ao vivo): quem chama `getDisplayMedia` é
-     * o modal, e aqui só publicamos o que ele já obteve.
+     * A captura vem pronta de fora porque `getDisplayMedia` só funciona no
+     * gesto do usuário: quem a chama é o botão (`ScreenShareButton`, no
+     * navegador), com as restrições de `restricoesDeCaptura`, e aqui só
+     * publicamos o que ele já obteve. No desktop a tela não passa por aqui —
+     * vai pelo Rust, em `publicarTelaNativa`.
      */
     publicarTela: async (stream) => {
       const lp = sala?.localParticipant;
