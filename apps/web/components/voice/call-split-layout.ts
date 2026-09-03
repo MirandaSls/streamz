@@ -13,8 +13,27 @@ export const ALTURA_MIN = 200;
 export const RESERVA_CHAT_MIN = 180;
 /** Fatia da coluna reservada à conversa quando há altura de sobra. */
 export const RESERVA_CHAT_PROPORCAO = 0.28;
-/** Fatia inicial do palco. */
+/**
+ * Altura inicial do palco — em **pixel**, não em proporção.
+ *
+ * Medido nos prints do Discord: 220px numa janela de 714 e 207px numa de 914.
+ * Praticamente a mesma altura absoluta em janelas de alturas bem diferentes, ou
+ * seja o palco abre numa faixa **fixa** e quem cresce com a tela é a conversa.
+ *
+ * A proporção de 0,5 fazia o oposto: o palco dobrava junto com a janela. Numa
+ * de 914 ele abria com ~450px, mais que o dobro do Discord, e a conversa ficava
+ * uma tira. O redimensionamento pelo usuário continua guardado como proporção —
+ * o que muda é só de onde parte quando não há preferência salva.
+ */
+export const ALTURA_PADRAO = 215;
+
+/** Fatia inicial do palco, quando não se sabe a altura da coluna. */
 export const PROPORCAO_PADRAO = 0.5;
+
+/** A proporção que equivale à altura inicial fixa, nesta coluna. */
+export function proporcaoPadrao(disponivel: number): number {
+  return disponivel > 0 ? ALTURA_PADRAO / disponivel : PROPORCAO_PADRAO;
+}
 /** Com transmissão o palco começa maior: 16:9 numa faixa baixa vira miniatura. */
 export const PROPORCAO_TRANSMISSAO = 0.68;
 

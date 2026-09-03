@@ -48,8 +48,11 @@ const BORDA: Record<Borda, string> = {
 
 /** Fundo escuro que agrupa um punhado de controles. */
 export function Capsula({ children }: { children: React.ReactNode }) {
+  // 48 de altura: 4 de padding + 40 do botão. Tínhamos 6 de padding, e os 52
+  // resultantes deixavam a cápsula mais alta que a do Discord — diferença que
+  // passou a aparecer agora que a faixa do palco é fixa.
   return (
-    <div className="flex items-center gap-1 rounded-full bg-overlay/90 p-1.5 shadow-high backdrop-blur">
+    <div className="flex items-center gap-1 rounded-full bg-overlay/90 p-1 shadow-high backdrop-blur">
       {children}
     </div>
   );
