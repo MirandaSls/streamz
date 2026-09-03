@@ -335,8 +335,22 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
 | #58 | Cabeçalho de canal, busca e boas-vindas como no Discord |
 | #59 | Menu de contexto, tooltip, popover de perfil e modal como no Discord |
 | #60 | Composer, embed e mensagem como no Discord |
+| #61–#62, #66–#67, #69 | Compartilhamento de tela nativo no desktop: enumerar fontes, capturar sem a borda amarela, publicar no LiveKit pelo Rust, seletor com miniaturas, áudio do sistema (WASAPI) |
+| #63–#64, #68 | Coluna de canais, rota de remover ícone, rail e rodapé medidos |
+| #65, #70 | Bumps 0.0.10 e 0.0.11 |
+| #71 | **CRT estática no Windows** (`.cargo/config.toml` na raiz): a libwebrtc do `livekit` vem com /MT e o link da 0.0.11 quebrou com LNK2038 — o clippy não pega porque não linka |
+| #72 | Palco da call abre numa faixa fixa (~215px), não em metade da coluna |
+| #73 | Sons originais do Discord (`public/sons/`), badge de não lidas na borda (rail com miolo de 16px), cronômetro colado na borda (botões do hover fora do fluxo), amizade nova põe a conversa no topo dos dois lados |
 
-Desktop: 0.0.6 (#38 + #40 + #41), 0.0.7 (+ #42), 0.0.8 (tudo até #50).
+Desktop: 0.0.6 (#38 + #40 + #41), 0.0.7 (+ #42), 0.0.8 (tudo até #50),
+0.0.10 (até #64), 0.0.11 (até #71, primeira com a tela nativa), 0.0.12 (até #73).
+
+**Sons.** `lib/ringtone.ts` e `lib/notification-sound.ts` tocam arquivos de
+`apps/web/public/sons/` (origem: `docs/Reference/audio/`, fora do git). O
+arquivo "connect and disconnect" tem um som só, descendente — é o de sair;
+entrar/alguém-entrou continuam sintetizados até chegar o arquivo. Surdo e
+não-surdo reaproveitam mudo/desmudo. O volume é o `outputVolume` das
+configurações; a prévia da aba Notificações passa `forcar`.
 
 ## 10. Pendências e o que não foi verificado
 

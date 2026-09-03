@@ -5,7 +5,7 @@ import { Phone, PhoneOff, Video } from "@/components/ui/icones";
 import { CALL_RING_TIMEOUT_MS, displayNameOf, isGroupChannel } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
-import { ringtoneDataUrl } from "@/lib/ringtone";
+import { toqueDeChamadaUrl } from "@/lib/ringtone";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useVoice } from "@/stores/voice";
 
@@ -19,7 +19,7 @@ import { useVoice } from "@/stores/voice";
  * não recusam nada (recusar é uma resposta, e responder por engano é pior do
  * que deixar tocar). A chamada sai da tela por ação explícita ou pelos 30 s.
  *
- * O toque é um `<audio loop>` com um WAV sintetizado (`lib/ringtone.ts`). O
+ * O toque é um `<audio loop>` com o som de chamada do Discord (`lib/ringtone.ts`). O
  * relógio é o mesmo do servidor: ele também desiste, mas o cliente não pode
  * ficar tocando à espera do evento — uma conexão instável deixaria o telefone
  * tocando para sempre.
@@ -74,7 +74,7 @@ export default function IncomingCallModal() {
       aria-label={`Chamada recebida de ${nome}`}
       className="fixed bottom-[76px] left-[84px] z-40 w-[248px] rounded-lg bg-overlay p-3 shadow-high anim-modal"
     >
-      <audio ref={audio} src={ringtoneDataUrl()} loop />
+      <audio ref={audio} src={toqueDeChamadaUrl()} loop />
       <div className="flex items-center gap-3">
         <Avatar user={call.from} size="lg" surface="border-overlay" />
         <span className="min-w-0">

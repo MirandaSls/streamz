@@ -98,12 +98,22 @@ function SeloDeVoz() {
   );
 }
 
+/**
+ * Badge de menção/não lidas, canto **inferior** direito (o selo de voz mora no
+ * superior — ver `SeloDeVoz`).
+ *
+ * Miolo de 16px com o número em 12px, e o anel escuro de 3px fica **por fora**
+ * (`ring`, não `border`): com borda, o anel comia o miolo — sobravam 12px para
+ * um número de 11px, e o "1" saía cortado embaixo, como na print. É a medida
+ * do Discord: pílula de 16 de altura, mínimo 16 de largura, 4px de folga
+ * lateral.
+ */
 function Badge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
     <span
       aria-label={`${count} ${count === 1 ? "menção" : "menções"}`}
-      className="absolute -bottom-1 -right-1 grid h-[18px] min-w-[18px] place-items-center rounded-full border-[3px] border-rail bg-red px-1 text-[11px] font-bold leading-none text-white"
+      className="absolute -bottom-0.5 -right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[12px] font-bold leading-none text-white ring-[3px] ring-rail"
     >
       {count > 99 ? "99+" : count}
     </span>

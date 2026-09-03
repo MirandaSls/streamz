@@ -5,7 +5,7 @@ import AudioRemotoHost from "@/components/voice/AudioRemotoHost";
 import IncomingCallModal from "@/components/voice/IncomingCallModal";
 import VoiceHotkeys from "@/components/voice/VoiceHotkeys";
 import { VoiceVolumePopoverHost } from "@/components/voice/VoiceGrid";
-import { ringbackDataUrl } from "@/lib/ringtone";
+import { ringbackUrl } from "@/lib/ringtone";
 import { useAuth } from "@/stores/auth";
 import { useDMs } from "@/stores/dms";
 import { useGuilds } from "@/stores/guilds";
@@ -77,7 +77,7 @@ export default function VoiceLayer() {
       <VoiceHotkeys />
       <VoiceVolumePopoverHost />
       <IncomingCallModal />
-      <audio ref={ringback} src={ringbackDataUrl()} loop />
+      <audio ref={ringback} src={ringbackUrl()} loop />
     </>
   );
 }

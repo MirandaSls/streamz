@@ -197,6 +197,10 @@ export class DMsService {
       this.prisma.dMHidden.findMany({ where: { userId: meId }, select: { channelId: true, hiddenAt: true } }),
     ]);
     const hiddenAt = new Map(escondidas.map((h) => [h.channelId, h.hiddenAt]));
+    // conversa recém-criada (amizade nova) ainda sem mensagem fica no topo,
+    // como no Discord: a chave de ordem é a última atividade, e criar conta
+    const criadaEm = new Map(channels.map((c) => [c.id, c.createdAt.toISOString()]));
+    const atividade = (c: DMChannelView) => c.lastMessageAt ?? criadaEm.get(c.id) ?? "";
     return channels
       .map((c) => this.toView(c, meId, summaries.get(c.id)))
       // conversa fechada volta sozinha quando chega mensagem depois do fechamento
@@ -205,7 +209,7 @@ export class DMsService {
         if (!at) return true;
         return !!c.lastMessageAt && new Date(c.lastMessageAt).getTime() > at.getTime();
       })
-      .sort((a, b) => (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? ""));
+      .sort((a, b) => atividade(b).localeCompare(atividade(a)));
   }
 
   /** Uma conversa específica, na visão de quem pede (404 se não participa). */

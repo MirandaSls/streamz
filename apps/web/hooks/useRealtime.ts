@@ -267,6 +267,8 @@ export function useRealtime(currentUserId?: string): void {
       on<FriendAcceptedEvent>(WS_EVENTS.FRIEND_ACCEPTED, ({ user }) => {
         useFriends.getState().handleAccepted(user);
         ui.toast(`Você e ${displayNameOf(user)} agora são amigos.`);
+        // amigo novo ganha conversa no topo da coluna, dos dois lados
+        void useDMs.getState().garantirNaLista(user.id);
       }),
       on<FriendRemovedEvent>(WS_EVENTS.FRIEND_REMOVED, ({ userId }) => {
         useFriends.getState().handleRemoved(userId);

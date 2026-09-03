@@ -7,7 +7,7 @@ import { RadioCards, Row, Section, Switch, Toggle } from "@/components/ui/contro
 import { SONS, useSons, type NomeDeSom } from "@/stores/sons";
 import { useT } from "@/lib/i18n";
 import { tocarSomDeNotificacao } from "@/lib/notification-sound";
-import { tocarSom, type SomDeVoz } from "@/lib/ringtone";
+import { tocarArquivo, tocarSom, toqueDeChamadaUrl, type SomDeVoz } from "@/lib/ringtone";
 import { useGlobalSetting, useNotifications } from "@/stores/notifications";
 import { useSettings } from "@/stores/settings";
 
@@ -102,12 +102,18 @@ function BlocoDeSons() {
   const [aberto, setAberto] = useState(false);
 
   function ouvir(nome: NomeDeSom) {
-    if (nome === "mensagem" || nome === "chamada") {
-      tocarSomDeNotificacao(s.outputVolume / 100);
+    const volume = s.outputVolume / 100;
+    if (nome === "mensagem") {
+      tocarSomDeNotificacao(volume);
+      return;
+    }
+    if (nome === "chamada") {
+      // uma passada do toque, sem o loop da chamada de verdade
+      tocarArquivo(toqueDeChamadaUrl(), volume);
       return;
     }
     // a prévia toca mesmo o som desligado: é o que a pessoa está avaliando
-    tocarSom(nome as SomDeVoz, (s.outputVolume / 100) * 0.12, true);
+    tocarSom(nome as SomDeVoz, volume, true);
   }
 
   const visiveis = aberto ? SONS : SONS.slice(0, SONS_A_VISTA);

@@ -242,7 +242,7 @@ export default function DMList() {
               key={dm.id}
               role="listitem"
               onContextMenu={(e) => openMenu(e, dm, e.currentTarget)}
-              className={`group mx-2 mb-0.5 flex h-12 items-center rounded-lg pl-[10px] pr-1 ${
+              className={`group mx-2 mb-0.5 flex h-12 items-center rounded-lg pl-[10px] pr-2 ${
                 active
                   ? "bg-sel text-txt-primary"
                   : unread
@@ -282,26 +282,32 @@ export default function DMList() {
                   </span>
                 </Tooltip>
               )}
-              {/* em conversa toda mensagem não lida conta, como no Discord —
-                  o número é de mensagens, não só de menções */}
-              {dm.unreadCount > 0 && !active && (
-                <span
-                  aria-label={`${dm.unreadCount} não lidas`}
-                  className="grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[11px] font-bold leading-none text-white"
-                >
-                  {rotuloDoContador(dm.unreadCount)}
-                </span>
-              )}
-              <Tooltip label={group ? "Sair do grupo" : "Fechar conversa"}>
-                <button
-                  type="button"
-                  onClick={() => (group ? void leaveGroup(dm.id) : void hide(dm.id))}
-                  aria-label={group ? `Sair do grupo ${title}` : `Fechar conversa com ${title}`}
-                  className="grid h-6 w-6 place-items-center rounded text-txt-muted opacity-0 transition hover:text-txt-primary group-hover:opacity-100 focus-visible:opacity-100"
-                >
-                  {group ? <LogOut size={16} /> : <X size={16} />}
-                </button>
-              </Tooltip>
+              {/* Um só encaixe de 24px na borda direita para o badge e o X:
+                  em repouso mostra o número, no hover o X toma o lugar dele,
+                  como no Discord. Antes o X invisível ficava ao lado e
+                  empurrava o badge 24px para dentro da linha. */}
+              <span className="relative grid h-6 w-6 shrink-0 place-items-center">
+                {/* em conversa toda mensagem não lida conta, como no Discord —
+                    o número é de mensagens, não só de menções */}
+                {dm.unreadCount > 0 && !active && (
+                  <span
+                    aria-label={`${dm.unreadCount} não lidas`}
+                    className="absolute grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[12px] font-bold leading-none text-white group-hover:hidden group-focus-within:hidden"
+                  >
+                    {rotuloDoContador(dm.unreadCount)}
+                  </span>
+                )}
+                <Tooltip label={group ? "Sair do grupo" : "Fechar conversa"}>
+                  <button
+                    type="button"
+                    onClick={() => (group ? void leaveGroup(dm.id) : void hide(dm.id))}
+                    aria-label={group ? `Sair do grupo ${title}` : `Fechar conversa com ${title}`}
+                    className="grid h-6 w-6 place-items-center rounded text-txt-muted opacity-0 transition hover:text-txt-primary group-hover:opacity-100 focus-visible:opacity-100"
+                  >
+                    {group ? <LogOut size={16} /> : <X size={16} />}
+                  </button>
+                </Tooltip>
+              </span>
             </div>
           );
         })}
