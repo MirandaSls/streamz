@@ -2,7 +2,7 @@
 
 import Avatar from "@/components/ui/Avatar";
 import { useAuth } from "@/stores/auth";
-import { useSettings } from "@/stores/settings";
+import { alturaDoChipDeReacao, useSettings } from "@/stores/settings";
 
 /**
  * O cartão "Prévia" que fica no topo de Aparência e de Acessibilidade.
@@ -71,14 +71,28 @@ function Hora({ s, valor }: { s: { alwaysShowTime: boolean }; valor: string }) {
   return <span className="mr-2 text-[11px] text-txt-muted">{valor}</span>;
 }
 
-/** Chip de reação — é onde o tamanho do emoji aparece de verdade. */
+/**
+ * Chip de reação — é onde o tamanho do emoji aparece de verdade.
+ *
+ * Mesma geometria do chip real (`components/MessageItem.tsx`): raio 8, 6px de
+ * padding, 6px de gap, altura por `alturaDoChipDeReacao` e o emoji numa caixa
+ * quadrada centrada. Uma prévia com outra caixa mentiria sobre o que o controle
+ * faz — era ela que estava com raio 4 e sem altura.
+ */
 function Reacao({ tamanho }: { tamanho: number }) {
   return (
-    <span className="mt-1 inline-flex items-center gap-1 rounded-[4px] border border-accent bg-accent/15 px-1.5 py-0.5">
-      <span aria-hidden="true" style={{ fontSize: `${tamanho}px`, lineHeight: 1 }}>
+    <span
+      style={{ height: alturaDoChipDeReacao(tamanho) }}
+      className="mt-1 inline-flex items-center gap-1.5 rounded-lg border border-accent bg-accent/20 px-1.5"
+    >
+      <span
+        aria-hidden="true"
+        className="inline-flex shrink-0 items-center justify-center"
+        style={{ fontSize: `${tamanho}px`, lineHeight: 1, height: tamanho, width: tamanho }}
+      >
         👍
       </span>
-      <span className="text-xs font-semibold text-txt-primary">3</span>
+      <span className="text-sm font-semibold leading-none text-txt-primary">3</span>
     </span>
   );
 }

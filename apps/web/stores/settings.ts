@@ -22,7 +22,27 @@ export type SendMode = "enter" | "ctrl-enter";
 export const FONT_SCALE = { min: 12, max: 24, step: 1, default: 16 };
 // 17px é o respiro que o Discord usa entre grupos de mensagens
 export const GROUP_SPACING = { min: 0, max: 24, step: 1, default: 17 };
-export const EMOJI_SIZE = { min: 16, max: 48, step: 2, default: 22 };
+// 20px é o emoji do chip de reação do Discord, medido no print
+// `docs/Reference/Captura de tela 2026-08-31 120906.png` (chip 😍 1 com o avatar
+// de 40px confirmando escala 1:1): tinta do emoji de 20×20 dentro de um chip de
+// 52×30. O padrão era 22 num chip fixo de 24 e o glifo do Segoe UI Emoji — cuja
+// tinta ocupa o em inteiro — pintava por cima da própria borda de baixo.
+export const EMOJI_SIZE = { min: 16, max: 48, step: 2, default: 20 };
+
+/**
+ * Altura do chip de reação para um emoji de lado `tamanho`.
+ *
+ * 30px com o emoji de 20 é a medida do Discord (mesmo print): borda de 1, 4px
+ * de folga acima e 4 abaixo do emoji. Os 10px de folga acompanham o controle de
+ * tamanho do emoji — é isso que impede o glifo de encostar na borda quando o
+ * usuário sobe o valor, em vez de o chip continuar fixo e o emoji transbordar.
+ *
+ * Mora aqui, e não no componente, porque a prévia das configurações desenha o
+ * mesmo chip e não pode divergir dele.
+ */
+export function alturaDoChipDeReacao(tamanho: number): number {
+  return Math.max(30, tamanho + 10);
+}
 export const ZOOM = { min: 0.8, max: 2, step: 0.1, default: 1 };
 
 export interface SettingsValues {
