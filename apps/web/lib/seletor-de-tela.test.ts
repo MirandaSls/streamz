@@ -1,49 +1,37 @@
 import { describe, expect, it } from "vitest";
+import { SCREEN_QUALITY } from "@streamz/shared";
 import {
-  descreverPreset,
+  RESOLUCOES,
+  TAXAS,
   estimativaDeBanda,
   fontesDaAba,
   juntarPreset,
   montarPedido,
-  perfilDoPreset,
-  presetDoPerfil,
   rotuloDaFonte,
   separarPreset,
   type FonteDeTela,
 } from "./seletor-de-tela";
 
-describe("alternador SD / HD", () => {
-  it("SD é só o 720p30; qualquer outro preset acende HD", () => {
-    expect(perfilDoPreset("720p30")).toBe("sd");
-    expect(perfilDoPreset("720p60")).toBe("hd");
-    expect(perfilDoPreset("1440p30")).toBe("hd");
-  });
-
-  it("HD volta para o que a engrenagem definiu por último", () => {
-    expect(presetDoPerfil("hd", "1440p60")).toBe("1440p60");
-    expect(presetDoPerfil("hd", null)).toBe("1080p60");
-    // o "último HD" nunca é o SD: trocar SD→HD tem que sair do 720p30
-    expect(presetDoPerfil("hd", "720p30")).toBe("1080p60");
-    expect(presetDoPerfil("sd", "1440p60")).toBe("720p30");
-  });
-
+describe("seletores de qualidade do rodapé", () => {
   it("separa e junta a chave do preset", () => {
     expect(separarPreset("1440p30")).toEqual({ resolucao: "1440p", fps: "30" });
+    expect(separarPreset("720p60")).toEqual({ resolucao: "720p", fps: "60" });
     expect(juntarPreset("1080p", "60")).toBe("1080p60");
-    expect(juntarPreset("4k", "60")).toBe("1080p60");
+    // combinação que o contrato não tem: cai no padrão em vez de virar chave inválida
+    expect(juntarPreset("4k", "60")).toBe("1440p30");
   });
-});
 
-describe("rodapé", () => {
-  it("descreve o preset em duas linhas", () => {
-    expect(descreverPreset("720p30")).toEqual({
-      titulo: "Definição padrão",
-      resumo: "Texto mais nítido · 720p · 30fps",
-    });
-    expect(descreverPreset("1080p60")).toEqual({
-      titulo: "Alta definição",
-      resumo: "Vídeo mais suave · 1080p · 60fps",
-    });
+  it("oferece o que os presets permitem, em ordem crescente", () => {
+    expect(RESOLUCOES).toEqual(["720p", "1080p", "1440p"]);
+    expect(TAXAS).toEqual(["30", "60"]);
+  });
+
+  it("toda combinação das duas listas é um preset de verdade", () => {
+    for (const r of RESOLUCOES) {
+      for (const f of TAXAS) {
+        expect(`${r}${f}` in SCREEN_QUALITY).toBe(true);
+      }
+    }
   });
 
   it("estima a banda com vírgula decimal", () => {
@@ -62,7 +50,6 @@ describe("fontes", () => {
   it("divide por aba na ordem em que o Rust entregou", () => {
     expect(fontesDaAba(fontes, "aplicativos").map((f) => f.id)).toEqual(["janela:1", "janela:2"]);
     expect(fontesDaAba(fontes, "telas").map((f) => f.id)).toEqual(["monitor:\\\\.\\DISPLAY1"]);
-    expect(fontesDaAba(fontes, "dispositivos")).toEqual([]);
   });
 
   it("rotula pelo título, acrescentando o app só quando o título não o cita", () => {

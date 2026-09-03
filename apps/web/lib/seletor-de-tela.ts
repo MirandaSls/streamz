@@ -1,52 +1,17 @@
-import { MEDIA_QUALITY, SCREEN_QUALITY, type ScreenQuality } from "@streamz/shared";
+import {
+  MEDIA_QUALITY,
+  SCREEN_QUALITY,
+  SCREEN_QUALITY_PADRAO,
+  type ScreenQuality,
+} from "@streamz/shared";
 
 /**
  * A lógica pura do seletor de compartilhamento de tela — o que dá para testar
- * sem DOM nem Tauri: o alternador SD/HD, o texto do rodapé, a divisão das
- * fontes por aba e o pedido que vai para a captura nativa.
+ * sem DOM nem Tauri: os dois seletores de qualidade do rodapé, a estimativa de
+ * banda, a divisão das fontes por aba e o pedido que vai para a captura nativa.
  */
 
-// ── SD / HD ────────────────────────────────────────────────────────────────
-
-export type Perfil = "sd" | "hd";
-
-/** SD é um preset só: 720p a 30 fps, o que qualquer conexão aguenta. */
-export const PRESET_SD: ScreenQuality = "720p30";
-/** HD começa em 1080p60; a engrenagem pode subir (1440p) e o alternador lembra. */
-export const PRESET_HD_PADRAO: ScreenQuality = "1080p60";
-
-/** Qual dos dois lados do alternador um preset acende. */
-export function perfilDoPreset(q: ScreenQuality): Perfil {
-  return q === PRESET_SD ? "sd" : "hd";
-}
-
-/**
- * Preset ao clicar num lado do alternador. "HD" volta para o que a engrenagem
- * definiu por último acima de SD (`ultimoHd`), e só cai no padrão quando o
- * usuário nunca mexeu — trocar SD→HD não pode desfazer um 1440p escolhido.
- */
-export function presetDoPerfil(perfil: Perfil, ultimoHd: ScreenQuality | null): ScreenQuality {
-  if (perfil === "sd") return PRESET_SD;
-  return ultimoHd && ultimoHd !== PRESET_SD ? ultimoHd : PRESET_HD_PADRAO;
-}
-
-// ── rodapé ─────────────────────────────────────────────────────────────────
-
-/**
- * As duas linhas do rodapé: o nome do perfil e o resumo do preset — o que o
- * Discord escreve como "Jogos" / "Vídeo mais suave · 720p · 30fps". Não temos
- * os perfis de atividade dele; o título é o lado do alternador por extenso, e o
- * descritor vem da taxa de quadros: 60 fps privilegia movimento, 30 fps deixa
- * bitrate para nitidez de texto (a faixa sobe com `contentHint = "detail"`).
- */
-export function descreverPreset(q: ScreenQuality): { titulo: string; resumo: string } {
-  const p = SCREEN_QUALITY[q];
-  const descritor = p.frameRate >= 60 ? "Vídeo mais suave" : "Texto mais nítido";
-  return {
-    titulo: perfilDoPreset(q) === "sd" ? "Definição padrão" : "Alta definição",
-    resumo: `${descritor} · ${p.height}p · ${p.frameRate}fps`,
-  };
-}
+// ── qualidade ──────────────────────────────────────────────────────────────
 
 /** "9,0 Mbps": o custo de subida do preset, com vírgula decimal. */
 export function estimativaDeBanda(q: ScreenQuality): string {
@@ -54,19 +19,40 @@ export function estimativaDeBanda(q: ScreenQuality): string {
   return `${mbps.toFixed(1).replace(".", ",")} Mbps`;
 }
 
-/** A chave `<resolução><fps>` separada nos dois controles da engrenagem. */
+/** A chave `<resolução><fps>` separada nos dois seletores do rodapé. */
 export function separarPreset(q: ScreenQuality): { resolucao: string; fps: "30" | "60" } {
   return { resolucao: q.slice(0, -2), fps: q.endsWith("60") ? "60" : "30" };
 }
 
+/**
+ * Volta de resolução + taxa para a chave do preset. Toda combinação das listas
+ * abaixo existe em `SCREEN_QUALITY`; o padrão é a saída de segurança para uma
+ * chave que o contrato não tenha (nunca alcançável pela UI, mas o tipo exige).
+ */
 export function juntarPreset(resolucao: string, fps: string): ScreenQuality {
   const chave = `${resolucao}${fps}`;
-  return chave in SCREEN_QUALITY ? (chave as ScreenQuality) : PRESET_HD_PADRAO;
+  return chave in SCREEN_QUALITY ? (chave as ScreenQuality) : SCREEN_QUALITY_PADRAO;
 }
+
+const CHAVES = Object.keys(SCREEN_QUALITY) as ScreenQuality[];
+
+/**
+ * As opções dos dois seletores saem do próprio contrato: o que
+ * `SCREEN_QUALITY` oferece é o que aparece no rodapé, em ordem crescente.
+ * Não há "Fonte" (resolução nativa da janela) porque não existe preset para
+ * ela — entrar com essa opção é mudar `packages/shared`, não a UI.
+ */
+export const RESOLUCOES: string[] = [...new Set(CHAVES.map((q) => separarPreset(q).resolucao))].sort(
+  (a, b) => Number.parseInt(a, 10) - Number.parseInt(b, 10),
+);
+
+export const TAXAS: ("30" | "60")[] = [...new Set(CHAVES.map((q) => separarPreset(q).fps))].sort(
+  (a, b) => Number(a) - Number(b),
+);
 
 // ── fontes ─────────────────────────────────────────────────────────────────
 
-export type Aba = "aplicativos" | "telas" | "dispositivos";
+export type Aba = "aplicativos" | "telas";
 
 /** O que o Rust devolve em `fontes_de_tela` (ver `tela/mod.rs`). */
 export interface FonteDeTela {
@@ -87,7 +73,6 @@ export interface FonteDeTela {
  * uma fonte com tipo desconhecido não some em silêncio nem cai na aba errada.
  */
 export function fontesDaAba(fontes: readonly FonteDeTela[], aba: Aba): FonteDeTela[] {
-  if (aba === "dispositivos") return [];
   const tipo = aba === "telas" ? "monitor" : "janela";
   return fontes.filter((f) => f.tipo === tipo);
 }
