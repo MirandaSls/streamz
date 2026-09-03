@@ -5,7 +5,7 @@
 ; `tauri-cli-v2.11.4` (a versão presa no pnpm-lock.yaml):
 ;   crates/tauri-bundler/src/bundle/windows/nsis/installer.nsi
 ;
-; Ele continua sendo um template do Handlebars: as expressões entre chaves duplas é preenchido pelo
+; Ele continua sendo um template do Handlebars: as expressões entre chaves duplas são preenchidas pelo
 ; bundler na hora de gerar o .nsi de verdade. Toda linha nossa está marcada com
 ; `streamz:` — o resto é idêntico ao original de propósito, porque é aí que
 ; moram o contrato do updater (`/UPDATE`, `/P`, `/S`, `/R`, `/NS`), os hooks
