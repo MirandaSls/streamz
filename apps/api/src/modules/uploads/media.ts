@@ -70,7 +70,37 @@ function jpegSize(b: Buffer): { width: number | null; height: number | null } {
 }
 
 function isGif(b: Buffer): boolean {
-  return b.length > 10 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46;
+  return assinaturaGif(b) !== null;
+}
+
+/**
+ * Assinatura do GIF, ou null. São as **duas** versões que existem (`GIF87a` e
+ * `GIF89a`, esta a que carrega animação): conferir só as três primeiras letras
+ * aceitaria qualquer arquivo que comece com "GIF", e o content-type declarado
+ * pelo cliente nunca é usado como prova aqui.
+ */
+export function assinaturaGif(b: Buffer): "GIF87a" | "GIF89a" | null {
+  if (b.length <= 10) return null;
+  const marca = b.toString("ascii", 0, 6);
+  return marca === "GIF87a" || marca === "GIF89a" ? marca : null;
+}
+
+/**
+ * GIF animado pela extensão de aplicação `NETSCAPE2.0`, que carrega o número de
+ * repetições do laço. É o marcador que todo codificador de GIF animado escreve;
+ * contar os descritores de imagem exigiria percorrer os blocos comprimidos.
+ * Um GIF de quadro único com o bloco de laço seria marcado como animado — o
+ * efeito é só um selo na interface, então o falso positivo é barato.
+ */
+export function gifAnimado(b: Buffer): boolean {
+  return b.includes("NETSCAPE2.0", 0, "ascii");
+}
+
+/** WebP animado: contêiner VP8X com o bit ANIM (0x02) ligado nas flags. */
+export function webpAnimado(b: Buffer): boolean {
+  if (b.length < 21) return false;
+  if (b.toString("ascii", 12, 16) !== "VP8X") return false;
+  return (b[20] & 0x02) !== 0;
 }
 
 function gifSize(b: Buffer): { width: number | null; height: number | null } {

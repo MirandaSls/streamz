@@ -11,7 +11,7 @@
  * Funções puras de propósito: o service traduz o resultado em exceção HTTP.
  */
 
-import { sniffImage } from "../uploads/media";
+import { gifAnimado, sniffImage, webpAnimado } from "../uploads/media";
 
 /** Formatos aceitos: os que o `<img>` do cliente sabe animar/mostrar. */
 export const TIPOS_DE_IMAGEM = ["image/png", "image/gif", "image/webp"] as const;
@@ -72,22 +72,4 @@ export function temAnimacao(buf: Buffer, mime: string): boolean {
   if (mime === "image/gif") return gifAnimado(buf);
   if (mime === "image/webp") return webpAnimado(buf);
   return false;
-}
-
-/**
- * GIF animado pela extensão de aplicação `NETSCAPE2.0`, que carrega o número de
- * repetições do laço. É o marcador que todo codificador de GIF animado escreve;
- * contar os descritores de imagem exigiria percorrer os blocos comprimidos.
- * Um GIF de quadro único com o bloco de laço seria marcado como animado — o
- * efeito é só o selo do seletor, então o falso positivo é barato.
- */
-function gifAnimado(buf: Buffer): boolean {
-  return buf.includes("NETSCAPE2.0", 0, "ascii");
-}
-
-/** WebP animado: contêiner VP8X com o bit ANIM (0x02) ligado nas flags. */
-function webpAnimado(buf: Buffer): boolean {
-  if (buf.length < 21) return false;
-  if (buf.toString("ascii", 12, 16) !== "VP8X") return false;
-  return (buf[20] & 0x02) !== 0;
 }

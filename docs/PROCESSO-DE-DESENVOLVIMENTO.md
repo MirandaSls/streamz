@@ -426,6 +426,7 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
 | #72 | Palco da call abre numa faixa fixa (~215px), não em metade da coluna |
 | #73 | Sons originais do Discord (`public/sons/`), badge de não lidas na borda (rail com miolo de 16px), cronômetro colado na borda (botões do hover fora do fluxo), amizade nova põe a conversa no topo dos dois lados |
 | #74 | Sons do Discord em todo caminho: mudo/surdo pelo botão do rodapé (o som foi para a store), entrar e transmissão de tela com arquivo, nada mais sintetizado |
+| #99 | GIF animado como foto de perfil e banner: o GIF pula o recorte (canvas achata a animação) e sobe inteiro, com teto de 8 MB, lado de 2048px, assinatura `GIF87a`/`GIF89a` conferida e content-type real no proxy |
 
 Desktop: 0.0.6 (#38 + #40 + #41), 0.0.7 (+ #42), 0.0.8 (tudo até #50),
 0.0.10 (até #64), 0.0.11 (até #71, primeira com a tela nativa), 0.0.12 (até #73).

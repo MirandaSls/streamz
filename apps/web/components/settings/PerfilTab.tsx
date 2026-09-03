@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Camera, Image as ImageIcon, Trash2 } from "@/components/ui/icones";
 import {
+  ACCEPT_IMAGEM_DE_PERFIL,
   MAX_ABOUT_ME,
   MAX_PRONOUNS,
   ROLE_COLORS,
@@ -143,7 +144,9 @@ export default function PerfilTab() {
 
   /**
    * Todo arquivo escolhido passa antes pelo ajuste de enquadramento: o que sobe
-   * é o recorte, não o original. Cancelar ali não envia nada.
+   * é o recorte, não o original. Cancelar ali não envia nada. A exceção é o
+   * GIF, que sobe inteiro para não perder a animação — quem decide é o
+   * `recortarImagem` da store.
    */
   async function escolherFoto(file: File) {
     const recortada = await ui.recortarImagem(file, "avatar");
@@ -188,7 +191,7 @@ export default function PerfilTab() {
           <input
             ref={fotoRef}
             type="file"
-            accept="image/png,image/jpeg,image/gif,image/webp"
+            accept={ACCEPT_IMAGEM_DE_PERFIL}
             hidden
             onChange={(e) => {
               const f = e.target.files?.[0];
@@ -228,7 +231,7 @@ export default function PerfilTab() {
           <input
             ref={fileRef}
             type="file"
-            accept="image/png,image/jpeg,image/gif,image/webp"
+            accept={ACCEPT_IMAGEM_DE_PERFIL}
             hidden
             onChange={(e) => {
               const f = e.target.files?.[0];

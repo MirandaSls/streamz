@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { BadgeCheck, Camera, TriangleAlert } from "@/components/ui/icones";
-import { MAX_DISPLAY_NAME, displayNameOf } from "@streamz/shared";
+import { ACCEPT_IMAGEM_DE_PERFIL, MAX_DISPLAY_NAME, displayNameOf } from "@streamz/shared";
 import type { MinhaConta } from "@streamz/shared";
 import { Section } from "@/components/ui/controls";
 import { CampoDeTexto, ESTILO_CAMPO, Erro } from "@/components/settings/campos";
@@ -76,7 +76,8 @@ export default function ContaTab() {
   }, [meuId]);
 
   // mesmo caminho da aba "Perfil": escolher o arquivo abre o enquadramento, e
-  // só o recorte sobe
+  // só o recorte sobe — menos GIF, que sobe inteiro (a animação não sobrevive
+  // ao canvas do recorte)
   async function escolherAvatar(file: File) {
     const recortado = await ui.recortarImagem(file, "avatar");
     if (recortado) await uploadAvatar(recortado);
@@ -114,7 +115,7 @@ export default function ContaTab() {
                   <input
                     ref={fileRef}
                     type="file"
-                    accept="image/png,image/jpeg,image/gif,image/webp"
+                    accept={ACCEPT_IMAGEM_DE_PERFIL}
                     hidden
                     onChange={(e) => {
                       const f = e.target.files?.[0];
