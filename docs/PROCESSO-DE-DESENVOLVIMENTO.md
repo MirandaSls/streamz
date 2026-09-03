@@ -427,6 +427,7 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
 | #73 | Sons originais do Discord (`public/sons/`), badge de não lidas na borda (rail com miolo de 16px), cronômetro colado na borda (botões do hover fora do fluxo), amizade nova põe a conversa no topo dos dois lados |
 | #74 | Sons do Discord em todo caminho: mudo/surdo pelo botão do rodapé (o som foi para a store), entrar e transmissão de tela com arquivo, nada mais sintetizado |
 | #99 | GIF animado como foto de perfil e banner: o GIF pula o recorte (canvas achata a animação) e sobe inteiro, com teto de 8 MB, lado de 2048px, assinatura `GIF87a`/`GIF89a` conferida e content-type real no proxy |
+| #105 | Sons: um som não se sobrepõe a si mesmo em menos de 300 ms, um dono só do volume com fator por som, e badge de não lidas no ícone da caixa de entrada |
 
 Desktop: 0.0.6 (#38 + #40 + #41), 0.0.7 (+ #42), 0.0.8 (tudo até #50),
 0.0.10 (até #64), 0.0.11 (até #71, primeira com a tela nativa), 0.0.12 (até #73).
@@ -452,11 +453,55 @@ Mapeamento final (origem → nosso arquivo → quando toca):
 O som de mudo/surdo mora dentro de `useVoicePrefs.toggleMute`/`toggleDeafen`,
 não em quem chama: assim o botão do rodapé, a barra da call e o atalho soam
 igual, e fora de qualquer chamada também. Tocá-lo no `VoiceHotkeys` de novo
-dobrava o aviso — por isso ele lá só dispara a ação. O volume é o
-`outputVolume` das configurações (inclusive nos dois `<audio>` de toque, via
-`prepararToque`); o interruptor mestre `notificationSound` e o interruptor por
-som (`stores/sons.ts`) valem para todos; a prévia da aba Notificações passa
-`forcar` e ignora os dois.
+dobrava o aviso — por isso ele lá só dispara a ação. O interruptor mestre
+`notificationSound` e o interruptor por som (`stores/sons.ts`) valem para
+todos; a prévia da aba Notificações passa `forcar` e ignora os dois.
+
+**Duas regras que o #105 acrescentou, e que não devem ser desfeitas:**
+
+1. **Um som não se sobrepõe a si mesmo.** `tocarSom` é a única porta, e ela
+   engole um segundo pedido do **mesmo arquivo** dentro de 300 ms
+   (`JANELA_SEM_REPETIR_MS`, a janela do Discord). A guarda é por arquivo e
+   não por nome porque o recurso disputado é o elemento: `mudo`/`surdo` são o
+   mesmo `mudo.mp3`, `entrar`/`alguem-entrou` o mesmo `entrar.mp3`. Sons
+   *diferentes* continuam podendo soar juntos (sair + entrar ao trocar de
+   sala). Isso existe porque vários caminhos legítimos disparam o mesmo aviso
+   quase junto — o `useEffect` de `useRealtime` remontando (StrictMode em
+   dev), `connect()` chamado por `startCall`/`acceptCall`/retomada/reconexão
+   de mídia no mesmo canal, `pararTela` e o evento `telaEncerrada` do Rust — e
+   o `currentTime = 0` sobre o elemento em cache reiniciava o som no meio,
+   que é o que se ouvia como "toca várias vezes" e "varia de volume".
+   Duas sessões da mesma conta (desktop + navegador) continuam tocando uma
+   vez cada: a guarda é por cliente, e não há como ser diferente.
+2. **Um dono só do volume.** `volumeDoSom(nome)` = `outputVolume` das
+   configurações × o fator do som. **Ninguém mais passa volume** — nem
+   `tocarSomDeNotificacao`, nem a prévia da aba, nem `prepararToque` (os dois
+   `<audio loop>` de toque saem no mesmo `volumeDoSom("chamada")`). Antes eram
+   quatro contas diferentes e a mensagem tinha `1` como padrão. Os fatores,
+   decididos com o usuário: chamada 0,7; entrar/sair/alguém-entrou/
+   alguém-saiu/transmissão/movido 0,5; mensagem 0,4; mudo/desmudo/surdo/
+   não-surdo 0,35. `setSinkId` só é reaplicado quando a saída escolhida muda:
+   trocar a rota de um elemento tocando também dá salto de nível.
+
+`NomeDeSom` mora em `lib/ringtone.ts` (é a chave dos mapas de arquivo e de
+fator) e `stores/sons.ts` o reexporta.
+
+**Caixa de entrada (badge).** O ícone que abre a caixa mostra um selo vermelho
+quando há o que ler — na barra de título do desktop e no cabeçalho de Amigos
+do navegador, que são o **mesmo** `InboxPopover`. Conta o que é dirigido a mim
+(menção em servidor + não lida em conversa), igual ao contador no ícone do
+app; canal de servidor não lido sem menção vira um ponto de 8px, e número e
+ponto não se somam (`badgeDaCaixa`, em `stores/nao-lidas.ts`, com teste). Lê
+`useGuilds`/`useDMs`, **não** o `useInbox` — este é um retrato tirado ao abrir
+o painel, e um ícone que só descobre a novidade depois do clique não serve
+para nada; é também por isso que o selo some sozinho no "marcar tudo como
+lido". Medidas (renderizado com o CSS compilado e conferido no Pillow):
+miolo 16×16, número 12px bold, anel de 3px na cor da superfície (`ring-rail`
+na barra, `ring-chat` no cabeçalho), em `top-0 -right-2` sobre o botão de 24.
+O `-top-1 -right-1` do rail é para um item de 40: num botão de 24 dentro da
+barra de 32 ele cobria o ícone quase inteiro e o anel passava da borda da
+janela. Decisão do usuário: **só o badge** — sem faixa no topo e sem
+notificação extra.
 
 ## 10. Pendências e o que não foi verificado
 
