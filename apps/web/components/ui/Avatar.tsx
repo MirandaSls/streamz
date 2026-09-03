@@ -6,10 +6,16 @@ import type { UserStatus } from "@streamz/shared";
 import { corDoAvatar } from "@/components/ui/avatar-cores";
 import { usePresence } from "@/stores/presence";
 
+/**
+ * Como o Discord chama cada estado. "Disponível" e "Não perturbar" são as
+ * palavras do print `2026-09-03 180020` (lista de membros e seletor de status);
+ * OFFLINE fica "Offline" porque é o que se vê **dos outros** — "Invisível" é só
+ * o nome da minha própria escolha, e mora no cartão do usuário.
+ */
 export const STATUS_LABEL: Record<UserStatus, string> = {
-  ONLINE: "Online",
+  ONLINE: "Disponível",
   IDLE: "Ausente",
-  DND: "Não perturbe",
+  DND: "Não perturbar",
   OFFLINE: "Offline",
 };
 

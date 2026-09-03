@@ -71,6 +71,8 @@ const LARGURA = 300;
 /** folga entre o elemento que abriu e o cartão. */
 const FOLGA = 8;
 const BORDA = 8;
+/** base do cartão até o topo do rodapé, medida no print (1196,5 → 1202). */
+const FOLGA_DO_RODAPE = 6;
 
 /** "25 de agosto de 2026" — o "membro desde" não precisa da hora. */
 const DATA = new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "long", year: "numeric" });
@@ -78,36 +80,82 @@ const DATA = new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "long", y
 const FOCALIZAVEL =
   'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-/** As quatro opções do seletor de status do Discord (Invisível = OFFLINE manual). */
-const STATUS_OPTIONS: { value: UserStatus | null; label: string; hint: string; dot: UserStatus }[] =
-  [
-    { value: null, label: "Online", hint: "Automático", dot: "ONLINE" },
-    { value: "IDLE", label: "Ausente", hint: "", dot: "IDLE" },
-    { value: "DND", label: "Não perturbe", hint: "Você não recebe notificações", dot: "DND" },
-    { value: "OFFLINE", label: "Invisível", hint: "Você aparece offline", dot: "OFFLINE" },
-  ];
-
-/** Durações do "ausente/não perturbe por…" (o submenu do Discord). */
-const DURACOES: { label: string; minutos: number | null }[] = [
-  { label: "Por 30 minutos", minutos: 30 },
-  { label: "Por 1 hora", minutos: 60 },
-  { label: "Por 8 horas", minutos: 480 },
-  { label: "Por 24 horas", minutos: 1440 },
-  { label: "Até eu mudar", minutos: null },
+/**
+ * O seletor de status do Discord, medido no print `2026-09-03 180020`.
+ *
+ * São **duas** peças, e antes eram uma só (quatro botões empilhados dentro do
+ * cartão):
+ *
+ * 1. uma **linha** no cartão — ponto de status, o rótulo do estado atual e um
+ *    chevron —, 32px de altura e raio 8, num fundo levemente mais claro;
+ * 2. um **submenu** de 300 que nasce à direita dela, com as quatro escolhas.
+ *
+ * **Não há mais "por quanto tempo".** O Discord não pergunta duração aqui: os
+ * chevrons de "Ausente", "Não perturbar" e "Invisível" existem no desenho, mas
+ * o clique aplica o status na hora. Por isso eles são `chevron` (enfeite) e não
+ * `submenu` — e o antigo menu de "Por 30 minutos… Até eu mudar", junto com o
+ * `setTimeout` que desfazia a escolha, saiu inteiro.
+ */
+const OPCOES_DE_STATUS: {
+  /** `null` = automático (o servidor devolve ONLINE). */
+  value: UserStatus | null;
+  dot: UserStatus;
+  label: string;
+  description?: string;
+  /** o Discord desenha a setinha em três das quatro. */
+  chevron?: boolean;
+}[] = [
+  { value: null, dot: "ONLINE", label: "Disponível" },
+  { value: "IDLE", dot: "IDLE", label: "Ausente", chevron: true },
+  {
+    value: "DND",
+    dot: "DND",
+    label: "Não perturbar",
+    description: "Você não receberá notificação na área de trabalho",
+    chevron: true,
+  },
+  {
+    value: "OFFLINE",
+    dot: "OFFLINE",
+    label: "Invisível",
+    description: "Você vai aparecer Off-line",
+    chevron: true,
+  },
 ];
 
 /**
- * Volta ao status automático quando a duração escolhida acaba.
- *
- * O contrato só guarda `manualStatus` — não há validade para o status manual —,
- * então o prazo vive nesta aba e morre com ela. Enquanto `StatusUpdate` não
- * ganhar um `expiresAt`, é o máximo honesto que dá para fazer no cliente.
+ * Rótulo do **meu** status na linha do cartão. Difere do `STATUS_LABEL` geral
+ * em OFFLINE: para os outros é "Offline"; para mim, que escolhi, é "Invisível".
  */
-let timerDoStatus: number | undefined;
-function agendarVoltaAoAutomatico(minutos: number | null, voltar: () => void) {
-  window.clearTimeout(timerDoStatus);
-  if (minutos === null) return;
-  timerDoStatus = window.setTimeout(voltar, minutos * 60_000);
+const ROTULO_DO_MEU_STATUS: Record<UserStatus, string> = {
+  ONLINE: "Disponível",
+  IDLE: "Ausente",
+  DND: "Não perturbar",
+  OFFLINE: "Invisível",
+};
+
+/** Largura do submenu de status: 300 no print (x=298..597, borda inclusa). */
+const LARGURA_DO_SUBMENU = 300;
+/** o submenu encosta na linha e entra 12px por cima do cartão, como no print. */
+const SOBREPOSICAO_DO_SUBMENU = 12;
+/** padding (8) + borda (1) do menu: sobe o filho para o topo alinhar com a linha. */
+const TOPO_DO_SUBMENU = 9;
+/** mesma pausa dos submenus do `ContextMenu`: passar o mouse por cima não abre. */
+const ATRASO_DO_SUBMENU = 120;
+
+/**
+ * Aplica o status escolhido.
+ *
+ * Fora do componente de propósito: escolher no submenu fecha o cartão (o
+ * mousedown cai fora dele), então quem termina o pedido não pode depender de o
+ * `ProfilePopover` ainda estar montado.
+ */
+async function aplicarStatus(value: UserStatus | null) {
+  try {
+    useAuth.getState().setUser(await api.updateStatus(value));
+  } catch (e) {
+    ui.toast(errorMessage(e, "Não foi possível mudar o status"), "error");
+  }
 }
 
 interface Colocacao {
@@ -138,7 +186,25 @@ function abrirMenuDoCartao(
  * janela. Antes o topo era o `anchor.y` cru com um clamp — perto do rodapé o
  * cartão descolava do que o abriu.
  */
-function posicionar(anchor: { x: number; y: number; width: number; height: number }, altura: number): Colocacao {
+function posicionar(
+  anchor: { x: number; y: number; width: number; height: number },
+  altura: number,
+  acima = false,
+): Colocacao {
+  /*
+    Cartão do rodapé: **em cima** do painel do usuário e alinhado pela borda
+    esquerda dele. Ancorado no botão do nome, o nosso nascia à direita dele — no
+    meio da coluna de conversas — e com uma folga que o Discord não tem. Medido
+    no print `2026-09-03 180020`: cartão em x=10 (a mesma folga de 10 do rodapé,
+    ou seja colado na borda da janela) e base 6px acima do topo do rodapé.
+  */
+  if (acima) {
+    const y = anchor.y - altura - FOLGA_DO_RODAPE;
+    return {
+      x: Math.max(BORDA, Math.min(anchor.x, window.innerWidth - LARGURA - BORDA)),
+      y: Math.max(BORDA, y),
+    };
+  }
   let x = anchor.x + anchor.width + FOLGA;
   if (x + LARGURA > window.innerWidth - BORDA) x = anchor.x - LARGURA - FOLGA;
   if (x < BORDA) x = Math.max(BORDA, window.innerWidth - LARGURA - BORDA);
@@ -154,7 +220,6 @@ export default function ProfilePopoverHost() {
   const close = useUI((s) => s.closePopover);
   const openModal = useUI((s) => s.openModal);
   const me = useAuth((s) => s.user);
-  const setMe = useAuth((s) => s.setUser);
   const logout = useAuth((s) => s.logout);
   const statuses = usePresence((s) => s.statuses);
   const profiles = usePresence((s) => s.profiles);
@@ -175,8 +240,8 @@ export default function ProfilePopoverHost() {
   const incoming = useFriends((s) => s.incoming);
   const relacao = useRelationship(popover?.user.id, me?.id);
   const ref = useRef<HTMLDivElement>(null);
+  const timerDoSubmenu = useRef<number | undefined>(undefined);
   const [pos, setPos] = useState<Colocacao | null>(null);
-  const [saving, setSaving] = useState(false);
   const [perfil, setPerfil] = useState<UserProfile | null>(null);
   const [rascunho, setRascunho] = useState("");
 
@@ -202,8 +267,10 @@ export default function ProfilePopoverHost() {
       setPos(null);
       return;
     }
-    setPos(posicionar(popover.anchor, ref.current?.offsetHeight ?? 0));
+    setPos(posicionar(popover.anchor, ref.current?.offsetHeight ?? 0, popover.acima));
   }, [popover, perfil]);
+
+  useEffect(() => () => window.clearTimeout(timerDoSubmenu.current), []);
 
   useEffect(() => {
     if (!popover) return;
@@ -234,22 +301,6 @@ export default function ProfilePopoverHost() {
 
   const atividade = atividadeDe(user);
 
-  async function setStatus(value: UserStatus | null, minutos?: number | null) {
-    if (saving) return;
-    setSaving(true);
-    try {
-      const updated = await api.updateStatus(value);
-      setMe(updated);
-      if (minutos !== undefined) {
-        agendarVoltaAoAutomatico(minutos, () => void api.updateStatus(null).then(setMe));
-      }
-    } catch (e) {
-      ui.toast(errorMessage(e, "Não foi possível mudar o status"), "error");
-    } finally {
-      setSaving(false);
-    }
-  }
-
   /** Envia a mensagem sem sair da popout — o rodapé do cartão do Discord. */
   async function enviar() {
     const texto = rascunho.trim();
@@ -277,6 +328,37 @@ export default function ProfilePopoverHost() {
     salvarRascunho(channelId, `${prefixo}@${user.username} `);
     ui.toast(`@${user.username} foi para a caixa de mensagem`);
     close();
+  }
+
+  /**
+   * Submenu de status, à direita da linha. `manterPopover` (via
+   * `abrirMenuDoCartao`) é o que impede o cartão de sumir quando ele abre.
+   */
+  function abrirSubmenuDeStatus(linha: HTMLElement) {
+    const r = linha.getBoundingClientRect();
+    const direitaDoCartao = ref.current?.getBoundingClientRect().right ?? r.right;
+    abrirMenuDoCartao(
+      cartao,
+      direitaDoCartao - SOBREPOSICAO_DO_SUBMENU,
+      r.top - TOPO_DO_SUBMENU,
+      OPCOES_DE_STATUS.flatMap((o, i) => {
+        const item: MenuItem = {
+          label: o.label,
+          description: o.description,
+          chevron: o.chevron,
+          forte: true,
+          icon: (
+            <span className="block h-2.5 w-2.5">
+              <IconeDeStatus status={o.dot} className="h-full w-full" />
+            </span>
+          ),
+          onSelect: () => void aplicarStatus(o.value),
+        };
+        // separador só depois de "Disponível", como no print
+        return i === 1 ? [{ separator: true } as MenuItem, item] : [item];
+      }),
+      LARGURA_DO_SUBMENU,
+    );
   }
 
   function abrirKebab(x: number, y: number) {
@@ -557,56 +639,48 @@ export default function ProfilePopoverHost() {
               <Pencil size={16} aria-hidden="true" />
               Editar perfil
             </button>
-            <div className="mt-3 border-t border-border pt-3">
-              <div role="radiogroup" aria-label="Status" className="flex flex-col gap-0.5">
-                {STATUS_OPTIONS.map((o) => {
-                  const selecionado =
-                    (me?.status === "OFFLINE" ? "OFFLINE" : status) === o.dot &&
-                    (o.value !== null || status === "ONLINE");
-                  const comDuracao = o.value === "IDLE" || o.value === "DND";
-                  return (
-                    <button
-                      key={o.label}
-                      type="button"
-                      role="radio"
-                      aria-checked={selecionado}
-                      disabled={saving}
-                      onClick={(e) => {
-                        if (!comDuracao) {
-                          void setStatus(o.value);
-                          return;
-                        }
-                        // ausente/não perturbe abrem o "por quanto tempo"
-                        const r = e.currentTarget.getBoundingClientRect();
-                        abrirMenuDoCartao(
-                          popover,
-                          r.right - MENU_WIDTH,
-                          r.bottom + 4,
-                          DURACOES.map((d) => ({
-                            label: d.label,
-                            onSelect: () => void setStatus(o.value, d.minutos),
-                          })),
-                          MENU_WIDTH,
-                        );
-                      }}
-                      className={`flex items-center gap-3 rounded-[3px] px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-ink ${
-                        selecionado ? "text-txt-primary" : "text-txt-normal"
-                      }`}
-                    >
-                      <IconeDeStatus status={o.dot} className="h-2.5 w-2.5 shrink-0" />
-                      <span className="flex-1">
-                        <span className="block font-medium">{o.label}</span>
-                        {o.hint && <span className="block text-xs opacity-70">{o.hint}</span>}
-                      </span>
-                      {comDuracao && <ChevronRight size={14} aria-hidden="true" />}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            {/*
+              A linha de status do print `2026-09-03 180020` (x=34..285,
+              y=1076..1107): 32 de altura, raio 8, fundo levemente mais claro
+              que o cartão, ponto de 12 num quadro de 16 com 8 de folga até o
+              rótulo (14, negrito) e o chevron no canto. Abre no clique e no
+              hover, como no Discord.
+
+              Duas diferenças registradas. (1) Lá a linha mora dentro de um
+              painel de 268 junto com "Editar perfil", e por isso mede 252 com 8
+              de folga de cada lado; aqui "Editar perfil" continua sendo o botão
+              de accent medido no #44, então a linha usa os 268 inteiros do
+              miolo do cartão. (2) `h-8` dá 31 e não 32: a raiz do app é de
+              15,5px e todo o `rem` do Tailwind encolhe 3%.
+            */}
+            <button
+              type="button"
+              aria-haspopup="menu"
+              onClick={(e) => abrirSubmenuDeStatus(e.currentTarget)}
+              onPointerEnter={(e) => {
+                const el = e.currentTarget;
+                window.clearTimeout(timerDoSubmenu.current);
+                timerDoSubmenu.current = window.setTimeout(() => {
+                  // com um menu já aberto o hover não faz nada: reabrir o mesmo
+                  // submenu remontaria o painel e ele reapareceria piscando a
+                  // cada ida e volta do mouse
+                  if (useUI.getState().contextMenu) return;
+                  abrirSubmenuDeStatus(el);
+                }, ATRASO_DO_SUBMENU);
+              }}
+              onPointerLeave={() => window.clearTimeout(timerDoSubmenu.current)}
+              className="mt-2 flex h-8 w-full items-center gap-2 rounded-lg bg-footer px-2 text-left text-sm font-semibold text-txt-primary transition hover:bg-hov"
+            >
+              <span aria-hidden="true" className="grid h-4 w-4 shrink-0 place-items-center">
+                <IconeDeStatus status={status} className="h-3 w-3" />
+              </span>
+              <span className="flex-1 truncate">{ROTULO_DO_MEU_STATUS[status]}</span>
+              {/* 5x10 de tinta no print → 20 no nosso ativo (ver `ContextMenu`) */}
+              <ChevronRight size={20} aria-hidden="true" className="shrink-0 opacity-80" />
+            </button>
 
             {/* ordem do Discord: status → separador → personalizado → conta */}
-            <div className="mt-2 flex flex-col gap-0.5 border-t border-border pt-2">
+            <div className="mt-3 flex flex-col gap-0.5 border-t border-border pt-3">
               <ItemDeMenu
                 icon={<SmilePlus size={16} />}
                 onClick={() => {
