@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissoes padrao do Streamz desktop: janela principal (sem decoracao nativa: a barra de titulo e nossa), notificacao e auto-update.",
+  "description": "Permissoes da janela principal do Streamz desktop: sem decoracao nativa (a barra de titulo e nossa), notificacao, checagem de atualizacao e a criacao da janelinha (splash) que baixa e instala.",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -15,8 +15,9 @@
     "core:window:allow-is-maximized",
     "core:window:allow-close",
     "core:window:allow-start-dragging",
+    "core:webview:allow-create-webview-window",
     "notification:default",
-    "updater:default",
+    "updater:allow-check",
     "process:allow-restart"
   ]
 }

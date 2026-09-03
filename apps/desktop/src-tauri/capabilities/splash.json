@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "splash",
+  "description": "Permissoes da janelinha de abertura/atualizacao: mostrar-se e fechar-se, mostrar e focar a janela principal, e o ciclo do atualizador (checar, baixar, instalar, reiniciar).",
+  "windows": ["splash"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "core:window:allow-unminimize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "updater:default",
+    "process:allow-restart"
+  ]
+}

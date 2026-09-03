@@ -11,7 +11,6 @@ import { useFriends } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
 import { observar, useHistorico } from "@/stores/historico";
 import { useUI } from "@/stores/ui";
-import TelaDeAtualizacao from "./TelaDeAtualizacao";
 import { useAtualizacao, type Atualizacao } from "./useAtualizacao";
 
 /**
@@ -72,15 +71,6 @@ function Barra() {
   const titulo = useTitulo();
   const atualizacao = useAtualizacao();
   const maximizada = useMaximizada();
-  // a tela cheia de atualização é aberta pela setinha verde e vive aqui porque
-  // é aqui que o estado do atualizador já mora; `fixed` faz o resto
-  const [telaDeAtualizacao, setTelaDeAtualizacao] = useState(false);
-
-  /** Abre a tela e toca a atualização adiante (baixar, ou reiniciar se pronta). */
-  function abrirAtualizacao() {
-    setTelaDeAtualizacao(true);
-    void atualizacao.iniciar();
-  }
 
   async function janela(acao: "minimizar" | "alternar" | "fechar") {
     try {
@@ -130,8 +120,8 @@ function Barra() {
             <HeaderIcon label="Ajuda" disabled>
               <HelpCircle size={18} />
             </HeaderIcon>
-            {atualizacao.estado !== "nada" && (
-              <BotaoDeAtualizacao atualizacao={atualizacao} onAbrir={abrirAtualizacao} />
+            {atualizacao.estado === "disponivel" && (
+              <BotaoDeAtualizacao atualizacao={atualizacao} />
             )}
           </div>
 
@@ -162,13 +152,6 @@ function Barra() {
           </div>
         </div>
       </header>
-
-      {telaDeAtualizacao && (
-        <TelaDeAtualizacao
-          atualizacao={atualizacao}
-          onFechar={() => setTelaDeAtualizacao(false)}
-        />
-      )}
     </>
   );
 }
@@ -244,67 +227,26 @@ function Controle({
 }
 
 /**
- * A setinha verde: só aparece quando há versão nova. Durante o download, um
- * anel em volta dela mostra o progresso — ele continua aqui porque a tela cheia
- * pode estar fechada (o erro tem "Agora não") e a barra é o que resta.
+ * A setinha verde: só aparece quando há versão nova, e o clique **troca o app
+ * pela janelinha** — a principal se esconde e a `JanelaSplash` baixa e instala
+ * no lugar dela, do mesmo jeito que na abertura. Antes disso, o clique abria
+ * uma tela cheia dentro do app; o app inteiro ficava atrás de uma tela que não
+ * dava para usar, e o Discord não faz isso.
  *
- * O clique **abre a tela de atualização**; quem baixa, instala e reinicia é
- * ela, com o mesmo `useAtualizacao`.
+ * Não há progresso aqui: quem mostra o download é a janelinha, e enquanto ela
+ * está no ar esta barra nem está na tela.
  */
-function BotaoDeAtualizacao({
-  atualizacao,
-  onAbrir,
-}: {
-  atualizacao: Atualizacao;
-  onAbrir: () => void;
-}) {
-  const { estado, versao, progresso } = atualizacao;
-  const rotulo =
-    estado === "baixando"
-      ? `Baixando… ${Math.round(progresso * 100)}%`
-      : estado === "instalando"
-        ? "Instalando a atualização…"
-        : estado === "reiniciando"
-          ? "Reiniciando…"
-          : estado === "pronta"
-            ? "Reiniciar para atualizar"
-            : estado === "erro"
-              ? "Não foi possível atualizar. Tentar de novo"
-              : `Atualização disponível: v${versao ?? "?"}`;
-  const circunferencia = 2 * Math.PI * 10.5;
+function BotaoDeAtualizacao({ atualizacao }: { atualizacao: Atualizacao }) {
+  const rotulo = `Atualização disponível: v${atualizacao.versao ?? "?"}`;
   return (
     <Tooltip label={rotulo} side="bottom">
       <button
         type="button"
         aria-label={rotulo}
-        aria-busy={estado === "baixando"}
-        onClick={onAbrir}
-        className={`relative grid h-6 w-6 place-items-center text-green transition hover:opacity-80 ${
-          estado === "baixando" ? "cursor-progress" : ""
-        }`}
+        onClick={() => void atualizacao.abrir()}
+        className="relative grid h-6 w-6 place-items-center text-green transition hover:opacity-80"
       >
-        {estado === "baixando" && (
-          <svg
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-            className="absolute inset-0 h-6 w-6 -rotate-90"
-          >
-            <circle cx="12" cy="12" r="10.5" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.25" />
-            <circle
-              cx="12"
-              cy="12"
-              r="10.5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeDasharray={circunferencia}
-              strokeDashoffset={circunferencia * (1 - progresso)}
-              className="transition-[stroke-dashoffset]"
-            />
-          </svg>
-        )}
-        <Download size={estado === "baixando" ? 12 : 15} />
+        <Download size={15} />
       </button>
     </Tooltip>
   );
