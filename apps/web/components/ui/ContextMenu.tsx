@@ -67,10 +67,15 @@ export const MENU_WIDTH = 220;
 export const MENU_WIDTH_WIDE = MENU_WIDTH;
 
 const EDGE = 8;
-/** o submenu abre depois de uma pausa: passar o mouse por cima não dispara. */
-const SUBMENU_DELAY = 120;
+/**
+ * O submenu abre depois de uma pausa: passar o mouse por cima a caminho de
+ * outro item não dispara. Exportado porque os menus de áudio do rodapé
+ * (`components/voice/menus-de-audio.tsx`) abrem no hover com a mesma pausa —
+ * dois tempos diferentes para o mesmo gesto seriam sentidos como um defeito.
+ */
+export const SUBMENU_DELAY = 120;
 
-interface Colocacao {
+export interface Colocacao {
   x: number;
   y: number;
   /** origem da animação, para o menu crescer a partir do ponto de ancoragem. */
@@ -82,8 +87,11 @@ interface Colocacao {
  * vez de só empurrar: perto da borda de baixo, empurrar faria o menu cobrir o
  * próprio cursor. `alternativoX` é para onde o menu vai quando espelha — o
  * cursor no caso do menu raiz, a borda esquerda do item no caso de um submenu.
+ *
+ * Exportada: os menus de áudio do rodapé abrem submenu ao lado e precisam da
+ * mesma regra de espelhar na borda da janela.
  */
-function colocar(
+export function colocar(
   x: number,
   y: number,
   largura: number,

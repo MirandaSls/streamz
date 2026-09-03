@@ -9,7 +9,7 @@ import { useT } from "@/lib/i18n";
 import { estimativaDeBanda } from "@/lib/seletor-de-tela";
 import { pttRotulo } from "@/stores/ptt-core";
 import { useSettings } from "@/stores/settings";
-import { explicarMidia, motivoDaFalha, useVoiceDevices } from "@/stores/voiceDevices";
+import { explicarMidia, motivoDaFalha, opcoesDe, useVoiceDevices } from "@/stores/voiceDevices";
 import { useVoice, type NivelDeRuido } from "@/stores/voice";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 
@@ -154,8 +154,10 @@ export default function VozTab() {
     }
   }
 
+  // mesma lista e mesmos nomes dos menus da setinha (`opcoesDe`), só no
+  // formato que o `Select` pede
   const opcoes = (lista: MediaDeviceInfo[], prefixo: string) =>
-    lista.map((d, i) => ({ value: d.deviceId, label: d.label || `${prefixo} ${i + 1}` }));
+    opcoesDe(lista, prefixo).map((o) => ({ value: o.id, label: o.nome }));
 
   return (
     <>
@@ -199,13 +201,18 @@ export default function VozTab() {
 
         <div className="mt-3 flex items-center gap-3">
           {!devices.autorizado && (
+            // o motivo real, e não sempre "conceda a permissão": no desktop a
+            // captura é aceita e mesmo assim os nomes não vêm
             <p className="min-w-0 flex-1 text-xs text-yellow">
-              Conceda acesso ao microfone para ver o nome dos dispositivos.
+              {explicarMidia(devices.motivo) ??
+                "Conceda acesso ao microfone para ver o nome dos dispositivos."}
             </p>
           )}
           <button
             type="button"
-            onClick={() => void devices.refresh()}
+            // `true`: este botão é o pedido explícito de tentar de novo, e tem
+            // de furar a trava que impede um prompt por abertura de menu
+            onClick={() => void devices.refresh(true)}
             className="ml-auto flex items-center gap-1.5 text-xs text-txt-muted transition hover:text-txt-primary"
           >
             <RefreshCw size={14} aria-hidden="true" />

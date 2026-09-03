@@ -3,6 +3,11 @@
 
 mod tela;
 
+// Só o WebView2 tem `PermissionRequested`; nos outros alvos o módulo nem
+// existe (ver o porquê dele no próprio arquivo).
+#[cfg(windows)]
+mod permissoes;
+
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -21,18 +26,16 @@ fn main() {
     // segura o usuário na sala e o cliente reentra ao voltar
     // (VOICE_RECONNECT_GRACE_MS + `rejoinAposReconexao`).
     //
-    // `--auto-accept-camera-and-microphone-capture` tira o "permitir microfone
-    // e câmera?" que o WebView2 mostra no `getUserMedia` — o Discord não
-    // pergunta, e a captura já foi autorizada quando a pessoa instalou o app.
-    // É o argumento que o Chromium recomenda no lugar de
-    // `--use-fake-ui-for-media-stream`: este último também sequestra o
-    // `getDisplayMedia` (escolhe uma tela sem abrir o seletor), e o nosso
-    // compartilhamento de tela ainda passa pelo seletor do `getDisplayMedia`
-    // (o módulo `tela` só enumera as fontes). Os dois juntos derrubam o
-    // processo do navegador: são mutuamente exclusivos por `CHECK` em
-    // content/browser/renderer_host/media/media_stream_manager.cc. Nada de
-    // `--use-fake-device-for-media-stream`, que trocaria o microfone real por
-    // um gerador de tom.
+    // **Não** volte a pôr `--auto-accept-camera-and-microphone-capture` aqui.
+    // Ele estava neste bloco para tirar o "permitir microfone e câmera?" do
+    // WebView2 e o preço era a lista de dispositivos inteira: a flag aceita a
+    // *captura* sem registrar a *permissão*, e o Chromium esconde nome e id de
+    // quem não tem permissão concedida. Quem tira o pop-up agora é o
+    // `PermissionRequested` do módulo `permissoes` (registrado no `setup`), que
+    // responde `ALLOW` **e** deixa a concessão registrada — que é o que o
+    // `enumerateDevices()` consulta. A medição que separa os dois casos está lá.
+    // Nada de `--use-fake-device-for-media-stream`, que trocaria o microfone
+    // real por um gerador de tom.
     //
     // `--autoplay-policy=no-user-gesture-required` é o que faz o **toque de
     // chamada** sair. O WebView2 é Chromium e herda a política padrão
@@ -51,7 +54,6 @@ fn main() {
             "--disable-background-timer-throttling \
              --disable-renderer-backgrounding \
              --disable-backgrounding-occluded-windows \
-             --auto-accept-camera-and-microphone-capture \
              --autoplay-policy=no-user-gesture-required",
         );
     }
@@ -80,6 +82,20 @@ fn main() {
             tela::parar_tela,
         ])
         .setup(|app| {
+            // --- Permissão de mídia ------------------------------------------
+            // Antes da bandeja e antes de a janela carregar a web: o primeiro
+            // `getUserMedia` da página tem de encontrar o ouvinte de pé, senão
+            // o WebView2 cai no comportamento padrão e pergunta. Falhar aqui
+            // não pode impedir o app de subir — no pior caso volta o pop-up.
+            #[cfg(windows)]
+            {
+                if let Some(janela) = app.get_webview_window("main") {
+                    let _ = janela.with_webview(|webview| {
+                        permissoes::liberar_camera_e_microfone(&webview.controller());
+                    });
+                }
+            }
+
             // --- System tray (bandeja) ---------------------------------------
             // Menu de contexto: "Abrir Streamz" e "Sair".
             let abrir = MenuItem::with_id(app, "abrir", "Abrir Streamz", true, None::<&str>)?;

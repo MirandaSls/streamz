@@ -7,7 +7,11 @@ import Avatar, { STATUS_LABEL } from "@/components/ui/Avatar";
 import PopoverFlutuante from "@/components/ui/PopoverFlutuante";
 import Tooltip from "@/components/ui/Tooltip";
 import VoiceConnectedBar from "@/components/voice/VoiceConnectedBar";
-import { MenuDeEntrada, MenuDeSaida } from "@/components/voice/menus-de-audio";
+import {
+  LARGURA_DO_MENU_DE_AUDIO,
+  MenuDeEntrada,
+  MenuDeSaida,
+} from "@/components/voice/menus-de-audio";
 import { useAuth } from "@/stores/auth";
 import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
 import { anchorOf, useUI } from "@/stores/ui";
@@ -107,7 +111,7 @@ function FooterSplit({
         aberto={aberto}
         onFechar={() => setAberto(false)}
         rotulo={labelDaSeta}
-        largura={288}
+        largura={LARGURA_DO_MENU_DE_AUDIO}
         denso
       >
         {/* sem fechar a cada clique: o menu tem sub-tela e um deslizador, e

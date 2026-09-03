@@ -82,6 +82,11 @@ export default function PopoverFlutuante({
     const fora = (e: MouseEvent) => {
       const alvo = e.target as Node;
       if (caixa.current?.contains(alvo) || ancora.current?.contains(alvo)) return;
+      // Um submenu desta caixa (os menus de áudio do rodapé) também mora num
+      // portal, então não é descendente dela no DOM. Sem esta linha o primeiro
+      // `mousedown` num aparelho fechava o popover — e, com ele, o submenu —
+      // antes de o clique chegar ao botão: escolher microfone não funcionava.
+      if (alvo instanceof Element && alvo.closest("[data-submenu-de-popover]")) return;
       onFechar();
     };
     const esc = (e: KeyboardEvent) => {
