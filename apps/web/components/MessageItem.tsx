@@ -60,7 +60,7 @@ import SystemMessageItem from "@/components/chat/SystemMessageItem";
 import { goToMessage } from "@/stores/messages-navigate";
 import { usePins } from "@/stores/messages-pins";
 import { useThreads } from "@/stores/messages-threads";
-import { useSettings } from "@/stores/settings";
+import { alturaDoChipDeReacao, useSettings } from "@/stores/settings";
 import type { ChatMessage } from "@/stores/messages-core";
 import { useLiveUser } from "@/stores/presence";
 import { anchorOf, ui, type Anchor, type MenuItem } from "@/stores/ui";
@@ -69,11 +69,29 @@ import { anchorOf, ui, type Anchor, type MenuItem } from "@/stores/ui";
  * O emoji de uma reação: unicode sai como texto; personalizado é `<:nome:id>` e
  * vira a imagem daquele id — a mesma URL pública que o markdown usa, para a
  * reação não virar `<:festa:abc>` escrito na tela.
+ *
+ * Os dois casos ocupam a **mesma caixa quadrada** de lado `tamanho`, centrada.
+ * O unicode é texto, e texto se posiciona pela linha de base da fonte: com
+ * `line-height: 1.1` a caixa de linha ficava maior que a caixa de conteúdo do
+ * chip e o glifo descia — no Segoe UI Emoji do Windows a tinta de 😂 tem a
+ * altura inteira do em, então ele saía pela borda de baixo. Uma caixa fixa com
+ * `line-height: 1` e centralização por flex tira a métrica da fonte da conta.
+ *
+ * Nada de Twemoji: a CSP não deixa buscar de CDN e o desktop roda offline. A
+ * fonte é a do sistema; o que se acerta aqui é a caixa.
  */
 function EmojiDaReacao({ emoji, tamanho }: { emoji: string; tamanho: number }) {
   const custom = parseCustomEmoji(emoji);
-  // o tamanho é preferência do usuário (aba Aparência de e-configuracoes)
-  if (!custom) return <span style={{ fontSize: `${tamanho}px`, lineHeight: 1.1 }}>{emoji}</span>;
+  // o tamanho é preferência do usuário (aba Acessibilidade de e-configuracoes)
+  if (!custom)
+    return (
+      <span
+        className="inline-flex shrink-0 items-center justify-center"
+        style={{ fontSize: `${tamanho}px`, lineHeight: 1, height: tamanho, width: tamanho }}
+      >
+        {emoji}
+      </span>
+    );
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
@@ -81,7 +99,7 @@ function EmojiDaReacao({ emoji, tamanho }: { emoji: string; tamanho: number }) {
       alt={`:${custom.name}:`}
       loading="lazy"
       style={{ height: tamanho, width: tamanho }}
-      className="object-contain"
+      className="shrink-0 object-contain"
     />
   );
 }
@@ -721,7 +739,8 @@ export default function MessageItem({
                     aria-pressed={mine}
                     aria-label={`${rotuloDaReacao(r.emoji)}, ${r.count} ${r.count === 1 ? "reação" : "reações"}`}
                     onClick={() => reagir(r.emoji)}
-                    className={`flex h-6 items-center gap-1.5 rounded-lg border px-1.5 transition ${
+                    style={{ height: alturaDoChipDeReacao(tamanhoEmoji) }}
+                    className={`flex items-center gap-1.5 rounded-lg border px-1.5 transition ${
                       mine
                         ? "border-accent bg-accent/20 text-txt-primary"
                         : "border-transparent bg-panel text-txt-normal hover:border-border-strong"
@@ -738,7 +757,9 @@ export default function MessageItem({
                 type="button"
                 onClick={abrirSeletorDeReacao}
                 aria-label="Adicionar reação"
-                className="grid h-6 min-w-[2.375rem] place-items-center rounded-lg border border-transparent bg-panel px-1.5 text-txt-muted opacity-0 transition hover:border-border-strong hover:text-txt-primary group-hover:opacity-100"
+                // mesma altura dos chips ao lado, inclusive quando o emoji cresce
+                style={{ height: alturaDoChipDeReacao(tamanhoEmoji) }}
+                className="grid min-w-[2.375rem] place-items-center rounded-lg border border-transparent bg-panel px-1.5 text-txt-muted opacity-0 transition hover:border-border-strong hover:text-txt-primary group-hover:opacity-100"
               >
                 <SmilePlus size={16} />
               </button>
