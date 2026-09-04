@@ -48,6 +48,13 @@ export interface RestricoesDeMicrofone {
 
 /** A faixa local de áudio do LiveKit, só com o que este módulo usa. */
 export interface FaixaDeMicrofone {
+  /**
+   * O que sai para a sala. O `LocalTrack` do LiveKit já devolve aqui a faixa
+   * **processada** quando há processador (`processor?.processedTrack ??
+   * _mediaStreamTrack`), e é por isso que o detector local de fala e o retorno
+   * do teste de microfone podem ler daqui sem saber da cadeia.
+   */
+  readonly mediaStreamTrack: MediaStreamTrack;
   setAudioContext(ctx: AudioContext | undefined): void;
   setProcessor(cadeia: CadeiaDoMicrofone): Promise<void>;
   stopProcessor(): Promise<void>;
@@ -80,6 +87,30 @@ interface Vivo {
   faixa: FaixaDeMicrofone;
   cadeia: CadeiaDoMicrofone | null;
   prefs: PreferenciasDoMicrofone;
+  /** a faixa está publicada na sala agora? O teste de microfone a tira de lá. */
+  publicado: boolean;
+  /** teste de microfone em curso: fora da sala, e aberta mesmo se mudo. */
+  testando: boolean;
+  /** o que já foi aplicado na faixa, para não mutar/desmutar à toa. */
+  mudo: boolean;
+}
+
+/**
+ * O microfone deve estar **capturando** agora?
+ *
+ * Durante o teste, sim — sempre. O teste do Discord funciona com o microfone
+ * mudo (é justamente onde se descobre que ele estava mudo), e quem garante que
+ * a sala não ouve nada é a despublicação, não o mudo.
+ */
+function abertoDeFato(estado: Vivo): boolean {
+  return estado.testando || estado.prefs.aberto;
+}
+
+async function aplicarMudo(estado: Vivo) {
+  const mudo = !abertoDeFato(estado);
+  if (mudo === estado.mudo) return;
+  estado.mudo = mudo;
+  await (mudo ? estado.faixa.mute() : estado.faixa.unmute());
 }
 
 let vivo: Vivo | null = null;
@@ -155,11 +186,20 @@ async function aplicarCadeia(estado: Vivo, prefs: PreferenciasDoMicrofone) {
 export function abrirMicrofone(
   sala: SalaDoMicrofone,
   prefs: PreferenciasDoMicrofone,
+  testando = false,
 ): Promise<void> {
   return emFila(async () => {
     await fechar();
     const faixa = await sala.criarFaixa(prefs.restricoes);
-    const estado: Vivo = { sala, faixa, cadeia: null, prefs };
+    const estado: Vivo = {
+      sala,
+      faixa,
+      cadeia: null,
+      prefs,
+      publicado: false,
+      testando,
+      mudo: false,
+    };
     try {
       // a cadeia é um luxo; o microfone não. Se o wasm não baixar ou a
       // `AudioContext` não abrir, publica cru — ficar sem microfone porque a
@@ -171,10 +211,15 @@ export function abrirMicrofone(
         estado.cadeia = null;
       }
       // mudo antes de publicar: quem entra em mudo não solta meio segundo de sala
-      if (!prefs.aberto) await faixa.mute();
-      await sala.publicar(faixa);
-      // o `publicar` repõe o contexto da `Room` na faixa; o nosso é que vale
-      faixa.setAudioContext(contextoDeCaptura());
+      await aplicarMudo(estado);
+      // entrar numa sala no meio de um teste de microfone não publica nada: o
+      // teste é surdo dos dois lados enquanto dura
+      if (!estado.testando) {
+        await sala.publicar(faixa);
+        estado.publicado = true;
+        // o `publicar` repõe o contexto da `Room` na faixa; o nosso é que vale
+        faixa.setAudioContext(contextoDeCaptura());
+      }
     } catch (e) {
       await descartar(estado);
       throw e;
@@ -199,10 +244,8 @@ export function atualizarMicrofone(prefs: PreferenciasDoMicrofone): Promise<void
       // mesma regra do `abrirMicrofone`: a call continua, sem a cadeia
       estado.cadeia = null;
     }
-    if (estado.prefs.aberto !== prefs.aberto) {
-      await (prefs.aberto ? estado.faixa.unmute() : estado.faixa.mute());
-    }
     estado.prefs = prefs;
+    await aplicarMudo(estado);
   });
 }
 
@@ -212,8 +255,43 @@ export function definirMicrofoneAberto(aberto: boolean): Promise<void> {
     const estado = vivo;
     if (!estado || estado.prefs.aberto === aberto) return;
     estado.prefs = { ...estado.prefs, aberto };
-    await (aberto ? estado.faixa.unmute() : estado.faixa.mute());
+    await aplicarMudo(estado);
   });
+}
+
+/**
+ * Teste de microfone: tira a faixa da sala sem fechá-la.
+ *
+ * Despublicar, e não mutar: o teste devolve o próprio som à pessoa, e um mudo
+ * (que é `mediaStreamTrack.enabled = false` na **entrada** da cadeia) faria o
+ * retorno sair mudo junto. Assim a mesma faixa — com a mesma cadeia, o mesmo
+ * supressor e o mesmo volume de entrada — continua rodando: o teste ouve
+ * exatamente o que a sala ouviria, sem um segundo `getUserMedia` e sem um
+ * segundo `AudioContext`.
+ */
+export function definirMicrofoneEmTeste(testando: boolean): Promise<void> {
+  return emFila(async () => {
+    const estado = vivo;
+    if (!estado || estado.testando === testando) return;
+    estado.testando = testando;
+    await aplicarMudo(estado);
+    if (testando && estado.publicado) {
+      await estado.sala.despublicar(estado.faixa).catch(() => {});
+      estado.publicado = false;
+    } else if (!testando && !estado.publicado) {
+      await estado.sala.publicar(estado.faixa).catch(() => {});
+      estado.publicado = true;
+      estado.faixa.setAudioContext(contextoDeCaptura());
+    }
+  });
+}
+
+/**
+ * A faixa que está (ou estaria) no ar, para quem só quer **ouvir** o microfone:
+ * o detector local de fala e o retorno do teste. Já vem processada.
+ */
+export function faixaDeMonitoracao(): MediaStreamTrack | null {
+  return vivo?.faixa.mediaStreamTrack ?? null;
 }
 
 /** Fecha o microfone. Chamar duas vezes (ou sem nada aberto) não faz nada. */
@@ -232,7 +310,10 @@ async function fechar() {
 async function descartar(estado: Vivo) {
   // despublicar primeiro: desmontar a cadeia com o `sender` ainda apontando
   // para ela mandaria silêncio para a sala antes de o "saiu" chegar
-  await estado.sala.despublicar(estado.faixa).catch(() => {});
+  if (estado.publicado) {
+    estado.publicado = false;
+    await estado.sala.despublicar(estado.faixa).catch(() => {});
+  }
   if (estado.cadeia) {
     await estado.cadeia.destroy().catch(() => {});
     estado.cadeia = null;

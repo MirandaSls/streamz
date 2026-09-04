@@ -138,6 +138,11 @@ class FaixaFalsa {
 
   constructor(public midia: FaixaFalsaDeMidia) {}
 
+  /** como o `LocalTrack`: a faixa processada quando há processador. */
+  get mediaStreamTrack(): FaixaFalsaDeMidia {
+    return (this.processor?.processedTrack as FaixaFalsaDeMidia | undefined) ?? this.midia;
+  }
+
   setAudioContext(ctx: AudioContext | undefined) {
     this.ctx = ctx;
   }
@@ -277,6 +282,41 @@ describe("dono da faixa de microfone", () => {
     await fecharMicrofone();
     expect(cadeiasMontadas()).toBe(0);
     expect(vivas()).toBe(0);
+  });
+
+  it("o teste de microfone tira a faixa da sala sem fechá-la", async () => {
+    const {
+      abrirMicrofone,
+      definirMicrofoneAberto,
+      definirMicrofoneEmTeste,
+      faixaDeMonitoracao,
+      fecharMicrofone,
+    } = await import("@/lib/microfone");
+    const { cadeiasMontadas, usuariosDoContexto } = await import("@/lib/supressor-ruido");
+
+    await abrirMicrofone(salaFalsa() as never, prefs({ supressao: true }));
+    const monitorada = faixaDeMonitoracao();
+    expect(publicadas.size).toBe(1);
+
+    // mudo: a captura continua, mas a faixa de entrada é desabilitada
+    await definirMicrofoneAberto(false);
+
+    await definirMicrofoneEmTeste(true);
+    // fora da sala…
+    expect(publicadas.size).toBe(0);
+    // …mas viva, com a mesma cadeia e a mesma faixa a monitorar — e aberta,
+    // porque o teste do Discord funciona com o microfone mudo
+    expect(cadeiasMontadas()).toBe(1);
+    expect(usuariosDoContexto()).toBeGreaterThan(0);
+    expect(faixaDeMonitoracao()).toBe(monitorada);
+    expect(vivas()).toBe(2);
+
+    await definirMicrofoneEmTeste(false);
+    expect(publicadas.size).toBe(1);
+
+    await fecharMicrofone();
+    expect(vivas()).toBe(0);
+    expect(usuariosDoContexto()).toBe(0);
   });
 
   it("desligar a supressão tira a cadeia quando o volume está em 1", async () => {

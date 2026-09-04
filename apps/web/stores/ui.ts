@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { PublicUser } from "@streamz/shared";
+import type { GuildChannelType, PublicUser } from "@streamz/shared";
 // ── h-moderacao ──
 import type { ServerSettingsTab } from "@/components/settings/server/tabs";
 // ── recorte de imagem ──
@@ -24,7 +24,7 @@ export interface Toast {
 }
 
 export type Modal =
-  | { kind: "createChannel"; categoryId?: string | null }
+  | { kind: "createChannel"; categoryId?: string | null; tipo?: GuildChannelType }
   | { kind: "channelAccess"; channelId: string }
   | { kind: "invite"; guildId: string; code?: string }
   | { kind: "createGroupDM" }
@@ -91,7 +91,11 @@ export type Modal =
   | { kind: "createPoll"; channelId: string }
   | { kind: "pollVoters"; messageId: string }
   | { kind: "serverSettings"; guildId: string; tab?: ServerSettingsTab }
-  | { kind: "welcome"; guildId: string };
+  | { kind: "welcome"; guildId: string }
+  // ── multiconta ── ver `lib/contas.ts`
+  | { kind: "gerenciarContas" }
+  /** `voltar` = reabrir "Gerenciar contas" ao sair daqui, como no Discord. */
+  | { kind: "adicionarConta"; voltar?: boolean };
 
 /**
  * Um item de menu de contexto; `separator` desenha a linha entre grupos.

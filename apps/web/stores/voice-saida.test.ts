@@ -17,6 +17,14 @@ describe("decidirSaida", () => {
     expect(decidirSaida("troca-de-sala", true)).toEqual({ avisaGateway: true, fechaColuna: false });
   });
 
+  it("movido por outra pessoa não manda voice.leave e mantém a coluna", () => {
+    // um `voice.leave` chegando depois do move desfaria o próprio move; e a
+    // coluna fica porque o destino é sempre outro canal de voz do servidor
+    expect(decidirSaida("movido")).toEqual({ avisaGateway: false, fechaColuna: false });
+    // `destinoEmServidor` não muda nada aqui: mover só existe entre canais de voz
+    expect(decidirSaida("movido", true)).toEqual({ avisaGateway: false, fechaColuna: false });
+  });
+
   it("trocar para uma chamada em conversa fecha a coluna do servidor", () => {
     // senão o painel antigo reconectaria no canal de voz ao voltar ao servidor
     expect(decidirSaida("troca-de-sala", false)).toEqual({ avisaGateway: true, fechaColuna: true });

@@ -115,7 +115,8 @@ function Barra() {
 
         <div data-tauri-drag-region className="ml-auto flex h-full items-center">
           <div data-tauri-drag-region className="flex items-center gap-3 pr-4">
-            <InboxPopover tamanhoDoIcone={19} />
+            {/* o anel do badge é o fundo da barra (`bg-rail`), não uma cor nova */}
+            <InboxPopover tamanhoDoIcone={19} anelDaSuperficie="ring-rail" />
             {/* sem central de ajuda no MVP: o mesmo botão da página Amigos */}
             <HeaderIcon label="Ajuda" disabled>
               <HelpCircle size={18} />

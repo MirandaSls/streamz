@@ -1,10 +1,12 @@
 import { BadRequestException, Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { AccessToken } from "livekit-server-sdk";
 import {
+  Permission,
   VOICE_FLAGS_PADRAO,
   WS_EVENTS,
   identidadeDeTela,
   type VoiceFlags,
+  type VoiceMovedEvent,
   type VoiceStateEvent,
   type VoiceTokenResponse,
 } from "@streamz/shared";
@@ -176,6 +178,82 @@ export class VoiceService {
     await this.store.join(channelId, userId, flags);
     await this.broadcast(channelId, channel.guildId, userId, flags, true);
     return channel;
+  }
+
+  /**
+   * Move alguém de um canal de voz para outro **do mesmo servidor**.
+   *
+   * É a versão servidor do arrasto da barra lateral. Quatro coisas têm de valer
+   * antes de mexer no estado, e cada uma já foi um jeito de burlar:
+   *
+   * 1. quem move precisa de `MOVE_MEMBERS` no servidor (o dono tem tudo);
+   * 2. o destino é canal de voz **daquele** servidor — sem isso dava para jogar
+   *    alguém na chamada de uma conversa direta de que ele nem participa;
+   * 3. o alvo tem de estar em voz **neste** servidor agora: mover quem está
+   *    offline seria arrastá-lo para dentro de uma chamada sem ele saber;
+   * 4. o alvo tem de **enxergar** o destino — quem move não empurra ninguém
+   *    para dentro de um canal privado. Quem garante isso é o `join`, que passa
+   *    pelo `assertCanViewChannel` do próprio movido.
+   *
+   * O caminho de estado é o mesmo do join normal (`join` já tira da sala
+   * anterior e emite os dois `voice.state`); o `voice.moved` por cima é só para
+   * o cliente movido, que precisa trocar de sala no LiveKit.
+   */
+  async move(actorId: string, guildId: string, userId: string, channelId: string) {
+    await this.guilds.assertCanModerate(actorId, guildId, Permission.MOVE_MEMBERS);
+
+    const destino = await this.prisma.channel.findUnique({
+      where: { id: channelId },
+      select: { id: true, guildId: true, type: true, name: true },
+    });
+    if (!destino || destino.guildId !== guildId || destino.type !== "VOICE") {
+      throw new BadRequestException("O canal de destino não é um canal de voz deste servidor");
+    }
+
+    const origem = await this.canalDeVozNoServidor(userId, guildId);
+    if (!origem) {
+      throw new BadRequestException("Esta pessoa não está em nenhum canal de voz do servidor");
+    }
+    if (origem.channelId === channelId) {
+      throw new BadRequestException("Esta pessoa já está neste canal");
+    }
+
+    // as flags viajam com a pessoa: quem estava mudo continua mudo do outro lado
+    await this.join(userId, channelId, {
+      muted: origem.membro.muted,
+      deafened: origem.membro.deafened,
+      // câmera e tela não sobrevivem à troca de sala: as faixas ficaram na
+      // sala antiga do LiveKit, e o cliente republica se quiser
+      video: false,
+      screen: false,
+    });
+
+    const ator = await this.prisma.user.findUnique({ where: { id: actorId } });
+    if (ator) {
+      const evento: VoiceMovedEvent = {
+        guildId,
+        channelId,
+        channelName: destino.name ?? "voz",
+        deChannelId: origem.channelId,
+        movedBy: toPublicUser(ator),
+      };
+      this.realtime.emitToUser(userId, WS_EVENTS.VOICE_MOVED, evento);
+    }
+    return { moved: userId, from: origem.channelId, to: channelId };
+  }
+
+  /** Em qual canal de voz **deste servidor** o usuário está agora (ou null). */
+  private async canalDeVozNoServidor(userId: string, guildId: string) {
+    const canais = await this.prisma.channel.findMany({
+      where: { guildId, type: "VOICE" },
+      select: { id: true },
+    });
+    const mapa = await this.store.membersOf(canais.map((c) => c.id));
+    for (const [channelId, membros] of mapa) {
+      const membro = membros.find((m) => m.userId === userId);
+      if (membro) return { channelId, membro };
+    }
+    return null;
   }
 
   /** Atualiza mudo/surdo/vídeo/tela. Devolve null se o usuário não estava na sala. */

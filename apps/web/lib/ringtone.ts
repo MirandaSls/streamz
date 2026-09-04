@@ -32,14 +32,29 @@
  * Tauri devolve `/sons/chamada.mp3`, com `audio/mpeg` no `Content-Type`
  * (o `infer` do `tauri-utils` reconhece o `ID3` do arquivo).
  *
- * Duas coisas **não** são de graça e estão tratadas aqui:
+ * Quatro coisas **não** são de graça e estão tratadas aqui:
  *
  * - **Autoplay.** O toque é o único som que precisa começar sem gesto nenhum.
  *   Ver `toque-com-gesto.ts` e a flag do WebView2 em `src-tauri/src/main.rs`.
  * - **Saída de áudio.** Quem escolheu um fone na aba "Voz e vídeo" espera o
  *   telefone tocando **nele**, não no alto-falante padrão do sistema. O áudio
  *   remoto já faz isso (`AudioRemotoHost` → `aplicarSaida`); os sons daqui
- *   passaram a fazer também.
+ *   passaram a fazer também. O `setSinkId` só é reaplicado quando a escolha
+ *   **mudou** (`SAIDA_APLICADA`): trocar a rota de um elemento no meio do
+ *   `play()` produz um salto de nível audível, e antes isso acontecia em todo
+ *   toque.
+ * - **Um som não se sobrepõe a si mesmo.** Toda entrada passa por
+ *   `JANELA_SEM_REPETIR_MS`: dois pedidos do *mesmo arquivo* a menos de 300 ms
+ *   viram um, como no Discord. É o que conserta o "toca várias vezes ao mesmo
+ *   tempo" — a origem da repetição varia (o `useEffect` remontando em
+ *   desenvolvimento, um caminho de voz que chama o mesmo aviso duas vezes, o
+ *   mesmo elemento reiniciado no meio da reprodução), mas o efeito é sempre o
+ *   mesmo e o remédio mora num lugar só.
+ * - **Um dono do volume.** `volumeDoSom()` é o **único** ponto que decide
+ *   quanto sai: `outputVolume` das configurações × o fator do som (`FATOR`).
+ *   Ninguém mais passa volume — antes eram quatro contas diferentes espalhadas
+ *   (a mensagem tinha `1` como padrão, o toque em loop tinha outra), e o
+ *   resultado era o "os sons ficam variando de volume do nada".
  */
 
 import { pararToqueEm, tocarToqueEm } from "@/lib/toque-com-gesto";
@@ -47,9 +62,94 @@ import { somLigado } from "@/stores/sons";
 import { useSettings } from "@/stores/settings";
 import { aplicarSaida, useVoiceDevicesStore } from "@/stores/voiceDevices";
 
+// ── o vocabulário de sons ──────────────────────────────────────────────────
+
+/** Avisos curtos da voz. */
+export type SomDeVoz =
+  | "mudo"
+  | "desmudo"
+  | "surdo"
+  | "nao-surdo"
+  | "entrar"
+  | "sair"
+  | "alguem-entrou"
+  | "alguem-saiu"
+  | "transmissao-iniciada"
+  | "transmissao-encerrada"
+  | "movido";
+
+/**
+ * Todo som que o app sabe tocar. Mora aqui, e não em `stores/sons`, porque é a
+ * chave dos dois mapas abaixo (arquivo e fator de volume); a store dos
+ * interruptores reexporta o tipo para quem só lida com a lista da aba
+ * "Notificações".
+ */
+export type NomeDeSom = "mensagem" | "chamada" | SomDeVoz;
+
+/** Qual arquivo toca cada som. Todos têm arquivo: nada aqui é sintetizado. */
+const ARQUIVOS: Record<NomeDeSom, string> = {
+  mensagem: "/sons/mensagem.mp3",
+  chamada: "/sons/chamada.mp3",
+  mudo: "/sons/mudo.mp3",
+  desmudo: "/sons/desmudo.mp3",
+  surdo: "/sons/mudo.mp3",
+  "nao-surdo": "/sons/desmudo.mp3",
+  entrar: "/sons/entrar.mp3",
+  sair: "/sons/sair.mp3",
+  "alguem-entrou": "/sons/entrar.mp3",
+  "alguem-saiu": "/sons/sair.mp3",
+  "transmissao-iniciada": "/sons/transmissao-iniciada.mp3",
+  "transmissao-encerrada": "/sons/transmissao-encerrada.mp3",
+  movido: "/sons/movido.mp3",
+};
+
+/**
+ * Quanto de `outputVolume` cada som usa.
+ *
+ * Os arquivos do Discord estão masterizados em níveis diferentes e o app tocava
+ * todos em volume cheio: o bipe de "microfone mudo" saía tão alto quanto o
+ * telefone tocando. A mistura aqui é a mesma ordem do Discord — a chamada é o
+ * som que precisa acordar alguém; os avisos de voz são os que mais se repetem,
+ * e por isso são os mais baixos.
+ *
+ * Só o fator é opinião; o resto é o volume que o usuário escolheu.
+ */
+const FATOR: Record<NomeDeSom, number> = {
+  mensagem: 0.4,
+  chamada: 0.7,
+  mudo: 0.35,
+  desmudo: 0.35,
+  surdo: 0.35,
+  "nao-surdo": 0.35,
+  entrar: 0.5,
+  sair: 0.5,
+  "alguem-entrou": 0.5,
+  "alguem-saiu": 0.5,
+  "transmissao-iniciada": 0.5,
+  "transmissao-encerrada": 0.5,
+  movido: 0.5,
+};
+
+/** Dois pedidos do mesmo arquivo dentro desta janela viram um (a do Discord). */
+export const JANELA_SEM_REPETIR_MS = 300;
+
+// ── volume: o único lugar que decide ───────────────────────────────────────
+
+/** Volume de saída das configurações, de 0 a 1 — o mesmo do resto do app. */
+export function volumeDeSaida(): number {
+  return useSettings.getState().outputVolume / 100;
+}
+
+/** Quanto este som sai, de 0 a 1. **Ninguém mais calcula volume de som.** */
+export function volumeDoSom(nome: NomeDeSom): number {
+  return Math.min(1, Math.max(0, volumeDeSaida() * FATOR[nome]));
+}
+
+// ── o toque em loop (chamada recebida e ringback) ──────────────────────────
+
 /** Toque de chamada recebida, para o `src` de um `<audio loop>`. */
 export function toqueDeChamadaUrl(): string {
-  return "/sons/chamada.mp3";
+  return ARQUIVOS.chamada;
 }
 
 /** Ringback — o mesmo toque, do lado de quem liga. */
@@ -64,11 +164,13 @@ export function ringbackUrl(): string {
  * Existe porque esses dois são elementos do React, não passam por `tocarSom`, e
  * por isso saíam sempre em volume cheio e ignorando os interruptores: quem
  * baixou o volume de saída ou desligou "Chamada recebida" na aba Notificações
- * levava o toque na mesma altura de antes.
+ * levava o toque na mesma altura de antes. O volume sai do mesmo
+ * `volumeDoSom("chamada")` do resto — dois elementos tocando o mesmo arquivo
+ * não podem estar em níveis diferentes.
  */
 export function prepararToque(el: HTMLAudioElement | null): boolean {
   if (!el) return false;
-  el.volume = Math.min(1, Math.max(0, volumeDeSaida()));
+  el.volume = volumeDoSom("chamada");
   aplicarSaidaEscolhida(el);
   return useSettings.getState().notificationSound && somLigado("chamada");
 }
@@ -89,23 +191,52 @@ export function pararToque(el: HTMLAudioElement | null): void {
   pararToqueEm(el);
 }
 
-/** Manda o elemento para o dispositivo de saída escolhido nas configurações. */
-function aplicarSaidaEscolhida(el: HTMLAudioElement): void {
-  void aplicarSaida(el, useVoiceDevicesStore.getState().outputId);
-}
+// ── tocar um arquivo ───────────────────────────────────────────────────────
 
 /** Elementos reaproveitados por arquivo: criar um `Audio` por toque vazaria memória. */
 const elementos = new Map<string, HTMLAudioElement>();
 
+/** Última saída já aplicada a cada elemento — ver o comentário do cabeçalho. */
+const saidaAplicada = new WeakMap<HTMLMediaElement, string | null>();
+
+/** Quando cada arquivo tocou pela última vez (a guarda dos 300 ms). */
+const ultimoToque = new Map<string, number>();
+
+/** Manda o elemento para o dispositivo de saída escolhido — só se mudou. */
+function aplicarSaidaEscolhida(el: HTMLAudioElement): void {
+  const escolhida = useVoiceDevicesStore.getState().outputId;
+  if (saidaAplicada.has(el) && saidaAplicada.get(el) === escolhida) return;
+  saidaAplicada.set(el, escolhida);
+  void aplicarSaida(el, escolhida);
+}
+
 /**
- * Toca um arquivo curto do começo. `volume` vai de 0 a 1.
+ * Esquece as janelas de repetição. Existe para o teste e para o logout: a
+ * sessão seguinte não herda o relógio da anterior.
+ */
+export function esquecerToquesRecentes(): void {
+  ultimoToque.clear();
+}
+
+/**
+ * Toca um arquivo curto do começo, no volume dado (0 a 1), **no máximo uma vez
+ * por `JANELA_SEM_REPETIR_MS`**.
+ *
+ * A guarda é por arquivo, e não por nome de som, porque o recurso disputado é o
+ * arquivo: `mudo` e `surdo` são o mesmo `mudo.mp3` no mesmo elemento, e
+ * reiniciá-lo no meio da reprodução (o `currentTime = 0` abaixo) é o que soava
+ * como "o som variando de volume".
  *
  * Falha em silêncio de propósito: som de interface é enfeite — se o navegador
  * bloquear (autoplay antes do primeiro gesto), o estado visual já contou a
  * história.
  */
-export function tocarArquivo(url: string, volume: number): void {
+function tocarArquivo(url: string, volume: number): void {
   if (typeof Audio === "undefined") return;
+  const agora = Date.now();
+  const anterior = ultimoToque.get(url);
+  if (anterior !== undefined && agora - anterior < JANELA_SEM_REPETIR_MS) return;
+  ultimoToque.set(url, agora);
   try {
     let el = elementos.get(url);
     if (!el) {
@@ -124,44 +255,9 @@ export function tocarArquivo(url: string, volume: number): void {
   }
 }
 
-/** Volume de saída das configurações, de 0 a 1 — o mesmo do resto do app. */
-export function volumeDeSaida(): number {
-  return useSettings.getState().outputVolume / 100;
-}
-
-// ── avisos curtos ──────────────────────────────────────────────────────────
-
-export type SomDeVoz =
-  | "mudo"
-  | "desmudo"
-  | "surdo"
-  | "nao-surdo"
-  | "entrar"
-  | "sair"
-  | "alguem-entrou"
-  | "alguem-saiu"
-  | "transmissao-iniciada"
-  | "transmissao-encerrada"
-  | "movido";
-
-/** Qual arquivo toca cada aviso. Todos têm arquivo: nada aqui é sintetizado. */
-const ARQUIVOS: Record<SomDeVoz, string> = {
-  mudo: "/sons/mudo.mp3",
-  desmudo: "/sons/desmudo.mp3",
-  surdo: "/sons/mudo.mp3",
-  "nao-surdo": "/sons/desmudo.mp3",
-  entrar: "/sons/entrar.mp3",
-  sair: "/sons/sair.mp3",
-  "alguem-entrou": "/sons/entrar.mp3",
-  "alguem-saiu": "/sons/sair.mp3",
-  "transmissao-iniciada": "/sons/transmissao-iniciada.mp3",
-  "transmissao-encerrada": "/sons/transmissao-encerrada.mp3",
-  movido: "/sons/movido.mp3",
-};
-
 /**
- * Toca um aviso curto no volume de saída das configurações (ou no `volume`
- * dado, de 0 a 1).
+ * Toca um som pelo nome. É a única porta: arquivo, volume e guarda de
+ * repetição saem todos daqui.
  *
  * O filtro vive aqui, e não em cada chamador, para que desligar um item na aba
  * "Notificações" valha em todo lugar que toca aquele som — e o interruptor
@@ -169,9 +265,9 @@ const ARQUIVOS: Record<SomDeVoz, string> = {
  * desabilitar a lista inteira quando ele está desligado. `forcar` é para a
  * prévia da própria aba, que precisa tocar mesmo o que está desligado.
  */
-export function tocarSom(nome: SomDeVoz, volume = volumeDeSaida(), forcar = false) {
-  if (!forcar && (!useSettings.getState().notificationSound || !somLigado(nome))) return;
-  tocarArquivo(ARQUIVOS[nome], volume);
+export function tocarSom(nome: NomeDeSom, opcoes: { forcar?: boolean } = {}): void {
+  if (!opcoes.forcar && (!useSettings.getState().notificationSound || !somLigado(nome))) return;
+  tocarArquivo(ARQUIVOS[nome], volumeDoSom(nome));
 }
 
 /**
@@ -181,6 +277,6 @@ export function tocarSom(nome: SomDeVoz, volume = volumeDeSaida(), forcar = fals
  * no gateway ainda. Quando existir, o handler do evento chama isto — o som já
  * está no lugar, na lista da aba "Notificações" e com interruptor próprio.
  */
-export function tocarSomDeMovido(volume = volumeDeSaida()): void {
-  tocarSom("movido", volume);
+export function tocarSomDeMovido(): void {
+  tocarSom("movido");
 }

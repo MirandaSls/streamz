@@ -11,8 +11,10 @@ import {
   type ScreenQuality,
   type VoiceEvictedEvent,
   type VoiceFlags,
+  type VoiceMovedEvent,
   type VoiceStateEvent,
   WS_EVENTS,
+  displayNameOf,
   donoDaIdentidade,
 } from "@streamz/shared";
 import {
@@ -27,12 +29,13 @@ import {
 } from "livekit-client";
 import { api } from "@/lib/api";
 import { iniciarTelaNativa, isTauri, ouvirTelaEncerrada, pararTelaNativa } from "@/lib/desktop";
-import { tocarSom } from "@/lib/ringtone";
+import { tocarSom, tocarSomDeMovido } from "@/lib/ringtone";
 import { montarPedido } from "@/lib/seletor-de-tela";
 import {
   abrirMicrofone,
   atualizarMicrofone,
   definirMicrofoneAberto,
+  definirMicrofoneEmTeste,
   fecharMicrofone,
   type PreferenciasDoMicrofone,
   type RestricoesDeMicrofone,
@@ -43,7 +46,16 @@ import { emit, errorMessage } from "@/stores/socket-adapter";
 import { iniciarMedicaoDePing, pararMedicaoDePing } from "@/stores/voice-ping";
 import { estadosAposReconexao, type Recarga } from "@/stores/voice-reconexao";
 import { chamadaARetomar, esquecerSala, lembrarSala, salaLembrada } from "@/stores/voice-retomada";
+import { decidirMovido } from "@/stores/voice-mover";
 import { decidirSaida, type MotivoDeSaida } from "@/stores/voice-saida";
+import {
+  NINGUEM,
+  comFalante,
+  falantesDeIdentidades,
+  proximoConjunto,
+} from "@/stores/voice-falantes";
+import { armarDetectorLocal, desarmarDetectorLocal } from "@/stores/voz-detector-local";
+import { microfoneNaSala, type EstadoDeVozNoTeste } from "@/stores/teste-de-microfone";
 import { ui } from "@/stores/ui";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
@@ -102,8 +114,19 @@ interface VoiceStoreState {
   /** o LiveKit respondeu com credenciais? false = sala sem som, sem alarde. */
   midiaDisponivel: boolean;
   tick: number;
-  /** identidades (ids de usuário) falando agora. */
-  falando: string[];
+  /**
+   * Quem está falando agora, por `userId` — a fonte **única** do anel verde,
+   * lida igual pelo palco, pela lista do canal e pela lista de membros.
+   * Ver `stores/voice-falantes.ts` para de onde vem cada nome do conjunto.
+   */
+  falando: ReadonlySet<string>;
+  /**
+   * Teste de microfone em curso (o de `PopoverDeRuido` e o da aba "Voz e
+   * vídeo"). Estado **transitório**: enquanto ele vale, a saída dos outros fica
+   * calada e o meu microfone não é publicado, sem que mudo/surdo persistidos
+   * mudem — ver `stores/teste-de-microfone.ts`.
+   */
+  testandoMicrofone: boolean;
 
   // ── mídia local ──
   camOn: boolean;
@@ -149,10 +172,15 @@ interface VoiceStoreState {
   /** Estados de um canal, ordenados por nome (para a barra lateral). */
   statesOf: (channelId: string) => VoiceStateEvent[];
 
-  connect: (channel: Pick<Channel, "id" | "guildId" | "name" | "type">) => Promise<void>;
+  connect: (
+    channel: Pick<Channel, "id" | "guildId" | "name" | "type">,
+    opcoes?: { som?: boolean },
+  ) => Promise<void>;
   disconnect: () => Promise<void>;
   /** O servidor tirou esta conexão da voz: a conta entrou de outro lugar. */
   expulsoDaVoz: (evento: VoiceEvictedEvent) => void;
+  /** Alguém com "mover membros" me arrastou para outro canal de voz. */
+  movidoDeCanal: (evento: VoiceMovedEvent) => Promise<void>;
   reconnect: () => Promise<void>;
   /** Reentra na sala de voz depois de o socket voltar (ver `useRealtime`). */
   rejoinAposReconexao: () => Promise<void>;
@@ -187,6 +215,16 @@ interface VoiceStoreState {
 
   /** Reenvia mudo/surdo/vídeo/tela ao gateway e aplica no SDK. */
   syncFlags: () => void;
+
+  /**
+   * Começa o teste de microfone: fica surdo (sem ouvir os outros) e para de
+   * publicar o microfone, **sem** mexer em mudo/surdo persistidos e sem avisar
+   * o gateway. A captura de retorno é do hook `useTesteDeMicrofone`, que ouve
+   * este estado — aqui fica só o que a chamada precisa saber.
+   */
+  iniciarTesteDeMicrofone: () => void;
+  /** Volta tudo ao que as preferências dizem (ver `teste-de-microfone.ts`). */
+  pararTesteDeMicrofone: () => void;
 }
 
 /**
@@ -271,6 +309,17 @@ const SEM_SALA = "Você não está conectado a um canal de voz.";
  */
 const OUTRO_LUGAR = "Você entrou na chamada em outro dispositivo.";
 
+/**
+ * O `set` da store, na forma que a zustand entrega — inclusive a de função,
+ * que é a única segura para mexer no conjunto de falantes: o valor anterior tem
+ * de vir do estado do momento, e não de um `get()` de antes do `await`.
+ */
+type AjustarVoz = (
+  partial:
+    | Partial<VoiceStoreState>
+    | ((estado: VoiceStoreState) => Partial<VoiceStoreState>),
+) => void;
+
 /** Resultado de tentar abrir a mídia: falta de configuração ≠ falha. */
 type ResultadoMidia = { tipo: "ok" } | { tipo: "sem-config" } | { tipo: "falha"; erro: string };
 
@@ -303,6 +352,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     // própria `AudioContext` no `disconnect`, e o que estivesse pendurado nela
     // rodaria num contexto morto na próxima entrada
     void fecharMicrofone();
+    desarmarDetectorLocal(() => {});
     sala.removeAllListeners();
     void sala.disconnect().catch(() => {});
     sala = null;
@@ -340,7 +390,10 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       status: "idle",
       erro: null,
       midiaDisponivel: false,
-      falando: [],
+      falando: NINGUEM,
+      // sair da call encerra o teste de microfone junto: ele existe para dizer
+      // "o outro lado vai te ouvir assim", e sem outro lado não há o que testar
+      testandoMicrofone: false,
       camOn: false,
       screenOn: false,
       focado: null,
@@ -360,7 +413,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     erro: null,
     midiaDisponivel: false,
     tick: 0,
-    falando: [],
+    falando: NINGUEM,
+    testandoMicrofone: false,
     camOn: false,
     screenOn: false,
     screenQuality: SCREEN_QUALITY_PADRAO,
@@ -512,7 +566,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         .slice()
         .sort((a, b) => a.user.username.localeCompare(b.user.username)),
 
-    connect: async (channel) => {
+    connect: async (channel, opcoes) => {
       const anterior = get().channelId;
       // trocar de sala não é sair: a coluna do canal de destino fica de pé
       if (anterior && anterior !== channel.id) sairDaSalaAtual("troca-de-sala", !!channel.guildId);
@@ -527,14 +581,16 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         status: "connecting",
         erro: null,
         midiaDisponivel: false,
-        falando: [],
+        falando: NINGUEM,
         camOn: false,
         screenOn: false,
         focado: null,
         focoAutomatico: true,
       });
       lembrarSala({ channelId: channel.id, guildId: channel.guildId, name: channel.name ?? "" });
-      tocarSom("entrar");
+      // `som: false` é de quem já tocou o próprio aviso — hoje só o `movido`,
+      // que tem som próprio e não pode soar como uma entrada que eu escolhi
+      if (opcoes?.som !== false) tocarSom("entrar");
 
       // 1) o estado de voz não depende do LiveKit: avisa o gateway primeiro,
       //    para que os outros já vejam você no canal mesmo sem mídia
@@ -571,6 +627,28 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         channelId === novoCanalId
           ? OUTRO_LUGAR
           : "Você entrou em outro canal de voz em outro dispositivo.",
+      );
+    },
+
+    movidoDeCanal: async (evento) => {
+      if (decidirMovido(evento, get().channelId) === "ignorar") return;
+      // o servidor já me tirou do canal antigo e me pôs no novo: `movido` não
+      // manda `voice.leave` (desfaria o move) nem toca o som de sair, e mantém
+      // a coluna do canal de pé — para quem foi movido a chamada não acabou
+      sairDaSalaAtual("movido");
+      tocarSomDeMovido();
+      ui.toast(`${displayNameOf(evento.movedBy)} moveu você para ${evento.channelName}`);
+      // o nome vem no evento porque a lista de canais pode não ter o destino
+      // ainda (canal criado agora, ou `channel.created` que chegou atrasado)
+      const canal = useChannels.getState().channels.find((c) => c.id === evento.channelId);
+      await get().connect(
+        {
+          id: evento.channelId,
+          guildId: evento.guildId,
+          name: canal?.name ?? evento.channelName,
+          type: "VOICE",
+        },
+        { som: false },
       );
     },
 
@@ -901,15 +979,59 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
 
     syncFlags: () => {
       const f = flags();
+      // o teste de microfone é local: o gateway continua vendo as preferências
       emit(WS_EVENTS.VOICE_UPDATE, f);
       if (!sala) return;
       // NÃO é `setMicrophoneEnabled`: sem publicação, ele criaria uma faixa
       // crua (sem restrições e sem cadeia) por baixo do dono — era isso que
-      // "voltava ao normal" alguns segundos depois de entrar
-      void definirMicrofoneAberto(!f.muted).catch(() => {});
+      // "voltava ao normal" alguns segundos depois de entrar. Quem decide se o
+      // microfone está aberto é `micAberto()`; quem decide se ele está **na
+      // sala** é o teste de microfone, e essa parte mora em `aplicarTesteNaSala`
+      void definirMicrofoneAberto(!f.muted)
+        .then(rearmarDetectorLocal)
+        .catch(() => {});
+    },
+
+    iniciarTesteDeMicrofone: () => {
+      if (get().testandoMicrofone) return;
+      set({ testandoMicrofone: true });
+      aplicarTesteNaSala();
+    },
+
+    pararTesteDeMicrofone: () => {
+      if (!get().testandoMicrofone) return;
+      set({ testandoMicrofone: false });
+      aplicarTesteNaSala();
     },
   };
 });
+
+/** Preferências de voz + teste, do jeito que `teste-de-microfone.ts` decide. */
+function estadoDeVozNoTeste(): EstadoDeVozNoTeste {
+  const prefs = useVoicePrefs.getState();
+  return {
+    prefs: { muted: prefs.muted, deafened: prefs.deafened, micAberto: prefs.micAberto() },
+    testando: useVoice.getState().testandoMicrofone,
+  };
+}
+
+/**
+ * Aplica (ou desfaz) o teste na sala: só o microfone publicado muda aqui — a
+ * saída dos outros é decidida pelo `<audio>` de cada faixa, em
+ * `AudioRemotoHost`, que lê o mesmo estado.
+ *
+ * Sem `voice.update`: os outros não precisam saber que estou testando, e uma
+ * linha "mudo" piscando na lista a cada teste seria ruído. É o que o Discord
+ * faz — ensurdece só de um lado.
+ */
+function aplicarTesteNaSala() {
+  if (!sala) return;
+  // o dono **não fecha** a faixa: ela sai da sala e continua rodando, porque é
+  // dela que o teste tira o retorno e o medidor. Ver `definirMicrofoneEmTeste`
+  void definirMicrofoneEmTeste(useVoice.getState().testandoMicrofone)
+    .then(rearmarDetectorLocal)
+    .catch(() => {});
+}
 
 /**
  * Leva a tela para a conversa da chamada. Atender sem isso deixaria o usuário
@@ -938,7 +1060,7 @@ async function abrirConversa(channelId: string) {
  */
 async function conectarMidia(
   channel: Pick<Channel, "id" | "guildId">,
-  set: (partial: Partial<VoiceStoreState>) => void,
+  set: AjustarVoz,
   rerender: () => void,
   get: () => VoiceStoreState,
 ): Promise<ResultadoMidia> {
@@ -973,7 +1095,7 @@ async function conectarMidia(
 /** Conecta o `Room` e liga os eventos do SDK ao `tick`/`falando` da store. */
 async function entrarNaSala(
   creds: { token: string; url: string },
-  set: (partial: Partial<VoiceStoreState>) => void,
+  set: AjustarVoz,
   rerender: () => void,
   get: () => VoiceStoreState,
 ) {
@@ -1004,24 +1126,62 @@ async function entrarNaSala(
     },
   });
   sala = room;
+
+  /**
+   * Recalcula o conjunto de falantes a partir do que a sala diz **agora**.
+   *
+   * Não basta ouvir `ActiveSpeakersChanged` e guardar o que ele traz: quem sai
+   * da sala no meio de uma frase (ou muta) sai da lista de participantes sem
+   * gerar um novo aviso de fala, e o anel dele ficava aceso para sempre. Por
+   * isso o conjunto é recomposto também quando alguém entra, sai ou muta.
+   */
+  const recomporFalantes = () => {
+    const eu = donoDaIdentidade(room.localParticipant.identity ?? "");
+    // as minhas identidades ficam de fora: quem decide o meu anel é o detector
+    // local, e o `<userId>#tela` da transmissão nativa não é a minha voz
+    const outros = room.activeSpeakers.filter((p) => donoDaIdentidade(p.identity) !== eu);
+    const proximo = falantesDeIdentidades(outros.map((p) => p.identity));
+    if (useVoice.getState().falando.has(eu)) proximo.add(eu);
+    set((s) => ({ falando: proximoConjunto(s.falando, proximo) }));
+  };
+
   room
-    .on(RoomEvent.ParticipantConnected, rerender)
-    .on(RoomEvent.ParticipantDisconnected, rerender)
+    .on(RoomEvent.ParticipantConnected, () => {
+      recomporFalantes();
+      rerender();
+    })
+    .on(RoomEvent.ParticipantDisconnected, () => {
+      recomporFalantes();
+      rerender();
+    })
     .on(RoomEvent.TrackSubscribed, rerender)
     .on(RoomEvent.TrackUnsubscribed, rerender)
-    .on(RoomEvent.LocalTrackPublished, rerender)
-    .on(RoomEvent.LocalTrackUnpublished, rerender)
-    .on(RoomEvent.TrackMuted, rerender)
-    .on(RoomEvent.TrackUnmuted, rerender)
-    .on(RoomEvent.ActiveSpeakersChanged, (falantes: Participant[]) =>
-      set({ falando: falantes.map((p) => p.identity) }),
-    )
+    .on(RoomEvent.LocalTrackPublished, () => {
+      rearmarDetectorLocal();
+      rerender();
+    })
+    .on(RoomEvent.LocalTrackUnpublished, () => {
+      rearmarDetectorLocal();
+      rerender();
+    })
+    .on(RoomEvent.TrackMuted, () => {
+      rearmarDetectorLocal();
+      recomporFalantes();
+      rerender();
+    })
+    .on(RoomEvent.TrackUnmuted, () => {
+      rearmarDetectorLocal();
+      recomporFalantes();
+      rerender();
+    })
+    .on(RoomEvent.ActiveSpeakersChanged, recomporFalantes)
     .on(RoomEvent.Disconnected, () => {
       // sair de propósito passa por `fecharSala`, que remove os ouvintes antes:
       // se este handler rodou, a sala caiu sozinha
       sala = null;
       pararMedicaoDePing();
-      set({ midiaDisponivel: false, falando: [], status: "error", erro: QUEDA_MIDIA });
+      desarmarDetectorLocal(() => {});
+      set({ midiaDisponivel: false, falando: NINGUEM, status: "error", erro: QUEDA_MIDIA });
       rerender();
     });
 
@@ -1032,13 +1192,39 @@ async function entrarNaSala(
   if (devices.outputId) await room.switchActiveDevice("audiooutput", devices.outputId).catch(() => {});
   // o microfone entra pelo dono da faixa (`lib/microfone`), com a cadeia de
   // captura já montada — nunca por `setMicrophoneEnabled`, que ignora as opções
-  // quando a publicação já existe e não consegue montar processador nenhum
+  // quando a publicação já existe e não consegue montar processador nenhum.
+  // Entrar numa sala no meio de um teste de microfone abre a faixa mas **não**
+  // a publica: o teste é surdo dos dois lados enquanto dura
   await abrirMicrofone(
     salaDoMicrofone(room),
     preferenciasDoMicrofone(useVoice.getState().audio),
+    useVoice.getState().testandoMicrofone,
   ).catch(() => {});
+  // a faixa acabou de nascer: é aqui que o detector local ganha o que medir
+  rearmarDetectorLocal();
   void get; // o `get` fica na assinatura para futuras leituras de estado
   rerender();
+}
+
+/**
+ * Religa o detector local de fala à faixa de microfone publicada **agora**.
+ *
+ * Precisa ser chamada por todo caminho que troca a faixa, e não só pelos
+ * eventos do SDK: `switchActiveDevice` (trocar de microfone nas configurações)
+ * reinicia a faixa por dentro, sem emitir `LocalTrackPublished`, e um
+ * analisador preso à faixa anterior mede silêncio para sempre — é uma das
+ * causas de "o anel parou de acender depois que eu mexi nas configurações".
+ */
+function rearmarDetectorLocal() {
+  const room = sala;
+  if (!room) return;
+  armarDetectorLocal(room, (falando) => {
+    const eu = room.localParticipant.identity;
+    if (!eu) return;
+    useVoice.setState((s) => ({
+      falando: comFalante(s.falando, donoDaIdentidade(eu), falando),
+    }));
+  });
 }
 
 /**
@@ -1108,9 +1294,14 @@ function salaDoMicrofone(room: Room): SalaDoMicrofone {
 /** Aplica as preferências novas na faixa que está no ar (sem republicar nada). */
 async function republicarMicrofone(audio: AudioPrefs) {
   if (!sala) return;
-  await atualizarMicrofone(preferenciasDoMicrofone(audio)).catch(() => {
-    // o microfone pode ter sumido no meio da troca; o próximo toggle resolve
-  });
+  // trocar a supressão no meio de um teste de microfone não devolve o microfone
+  // para a sala: quem manda enquanto o teste dura é o teste, e o dono da faixa
+  // guarda esse estado (`definirMicrofoneEmTeste`)
+  await atualizarMicrofone(preferenciasDoMicrofone(audio))
+    .then(rearmarDetectorLocal)
+    .catch(() => {
+      // o microfone pode ter sumido no meio da troca; o próximo toggle resolve
+    });
 }
 
 /** A sala LiveKit corrente (ou null). Os componentes leem daqui, nunca a guardam. */
@@ -1193,8 +1384,11 @@ if (typeof window !== "undefined") {
     anteriores = chave;
     const room = sala;
     if (!room) return;
-    // a entrada passa pelo dono da faixa (que reinicia a captura com a cadeia
-    // junto); a saída é do SDK mesmo
+    // A entrada passa pelo dono da faixa, que reinicia a captura com a cadeia
+    // junto — e não por `switchActiveDevice`, que mexeria na faixa por baixo
+    // dele. Reiniciar a faixa troca a identidade dela sem emitir
+    // `LocalTrackPublished`: sem rearmar, o anel de fala local morre ao trocar
+    // de microfone.
     void republicarMicrofone(useVoice.getState().audio);
     if (devices.outputId) void room.switchActiveDevice("audiooutput", devices.outputId).catch(() => {});
   });

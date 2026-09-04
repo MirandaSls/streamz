@@ -97,8 +97,16 @@ function carregarModelo(): Promise<Modelo> {
 /** O contexto de captura da aba, e o `addModule` que já rodou nele. */
 let ctx: AudioContext | null = null;
 let worklet: Promise<void> | null = null;
-/** Quantas cadeias estão montadas: com zero, o contexto é suspenso. */
+/** Quantas cadeias estão montadas — só o teste do ciclo pergunta. */
 let montadas = 0;
+/**
+ * Quem está usando o contexto agora: as cadeias, o detector local de fala e o
+ * retorno do teste de microfone. Com zero, o contexto é suspenso — e **só**
+ * com zero: suspendê-lo enquanto o detector mede deixaria o anel de fala
+ * congelado, que foi como o defeito apareceria se o contador fosse só o das
+ * cadeias.
+ */
+let usuarios = 0;
 
 /** Uma `AudioContext` de 48 kHz por aba — ver o cabeçalho. */
 export function contextoDeCaptura(): AudioContext {
@@ -108,6 +116,25 @@ export function contextoDeCaptura(): AudioContext {
     worklet = null;
   }
   return ctx;
+}
+
+/** Toma o contexto (e o acorda). Todo `usar` precisa de um `liberar`. */
+export function usarContextoDeCaptura(): AudioContext {
+  const c = contextoDeCaptura();
+  usuarios += 1;
+  if (c.state === "suspended") void c.resume().catch(() => {});
+  return c;
+}
+
+/** Devolve o contexto; o último a sair o suspende (não o fecha: é um por aba). */
+export function liberarContextoDeCaptura() {
+  usuarios = Math.max(0, usuarios - 1);
+  if (usuarios === 0) void ctx?.suspend().catch(() => {});
+}
+
+/** Só para os testes: quantos donos o contexto tem agora. */
+export function usuariosDoContexto(): number {
+  return usuarios;
 }
 
 async function garantirWorklet(c: AudioContext) {
@@ -184,7 +211,7 @@ export function cadeiaDoMicrofone(inicial: {
     destino = null;
     cadeia.processedTrack = undefined;
     // o contexto fica de pé (é um por aba), mas suspenso não gasta CPU
-    if (montadas === 0) void ctx?.suspend().catch(() => {});
+    liberarContextoDeCaptura();
   }
 
   /** O nó do RNNoise, já com o modelo carregado. Só existe com a supressão ligada. */
@@ -199,7 +226,9 @@ export function cadeiaDoMicrofone(inicial: {
   }
 
   async function montar(track: MediaStreamTrack) {
-    const c = contextoDeCaptura();
+    const c = usarContextoDeCaptura();
+    montada = true;
+    montadas += 1;
     // o modelo é carregado ANTES de o grafo existir: publicar a faixa e só
     // então esperar o wasm é o que mandava alguns segundos de áudio cru
     const noDoModelo = opcoes.supressao ? await criarNoDoModelo(c) : null;
@@ -219,8 +248,6 @@ export function cadeiaDoMicrofone(inicial: {
     ganho.gain.setValueAtTime(0, agora);
     ganho.gain.linearRampToValueAtTime(opcoes.ganho, agora + SUBIDA_S);
 
-    montada = true;
-    montadas += 1;
     cadeia.processedTrack = destino.stream.getAudioTracks()[0];
   }
 

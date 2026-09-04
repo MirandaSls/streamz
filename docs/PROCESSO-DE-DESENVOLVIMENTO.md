@@ -98,22 +98,77 @@ rodando", e a validação é o usuário mandar prints.
   Discord / nosso antes / nosso depois por item (§6).
 - Não mergeie sem autorização do usuário (§2.5).
 
-### 3.5 CI e deploy
-- Um push em PR roda `CI` (`typecheck + testes + build`, `build das imagens`).
-  Um push em `main` roda o mesmo e, no fim, o job `deploy em produção`
-  (`deploy.yml` é chamado pelo `ci.yml`; não tem gatilho próprio).
-- Duração típica do `main` completo: 8 a 11 minutos. O deploy é um por vez
-  (`concurrency: deploy-producao`); um merge logo atrás do outro **cancela o run
-  anterior** e o mais novo leva os dois.
-- Merge: `gh pr merge <n> --merge` quando `gh pr view <n> --json mergeStateStatus`
-  devolve `CLEAN`.
-- Confirmação: `docker ps --filter name=streamz` mostra as imagens
-  `ghcr.io/mirandasls/streamz-{web,api}:sha-<7>`; `/api/health` devolve a tag.
-- **Falha conhecida e inofensiva**: `build das imagens` cai com
-  `@prisma/engines postinstall: Error: aborted` (download dos motores do Prisma
-  abortou no runner). É rede. `gh run rerun <id> --failed` resolve.
-- Para acompanhar sem poluir: `gh pr checks <n> --watch --interval 30` em
-  segundo plano, ou um laço em `gh run view <id> --json status`.
+### 3.5 Verificação, imagens e deploy (sem GitHub Actions)
+- Em 2026-09-03 os workflows (`ci.yml`, `deploy.yml`, `desktop.yml`) foram
+  **removidos** do repositório a pedido do usuário: o repo é privado, o runner
+  Windows custa 2× e a cobrança travou os jobs. Não há mais CI no GitHub.
+- O caminho é `scripts/publicar-local.sh` (PR #101), rodado **neste servidor**:
+  verificação idêntica à do antigo `ci.yml` (typecheck, testes, lint, build e
+  export da web, `cargo fmt --check`), build das imagens `streamz-{api,web}`
+  com os mesmos Dockerfiles e `NEXT_PUBLIC_*` de produção, tag
+  `ghcr.io/mirandasls/streamz-*:sha-<7>` **local** (sem push) e
+  `docker compose … up -d api web` com `STREAMZ_TAG`. A API aplica migrations
+  no boot (`RUN_MIGRATIONS=1`).
+- Merge: `gh pr merge <n> --merge` depois de a verificação local passar; não há
+  mais `mergeStateStatus: CLEAN` a esperar.
+- Confirmação: `docker ps --filter name=streamz` e `/api/health` devolvendo a
+  tag; `/api/updates/windows/x86_64/<versão>` continua respondendo.
+- Instalador do desktop: ver §5 (build no servidor via `cargo-xwin`, se
+  viável; senão numa máquina Windows).
+
+> **Desde 2026-09-03 o Actions não inicia job nenhum**: a conta do GitHub caiu
+> em pendência de cobrança ("recent account payments have failed or your
+> spending limit needs to be increased"). `build das imagens`, `deploy em
+> produção` e tudo que roda em `windows-latest` nem chegam a começar — o job
+> aparece como *failure* com zero passos. Enquanto isso não for resolvido, o
+> caminho é o §3.6. Os workflows continuam no `.github/` de propósito: voltam a
+> valer sozinhos assim que a cobrança destravar.
+
+### 3.6 Sem o Actions: publicar local
+
+`scripts/publicar-local.sh` faz no servidor o que o `ci.yml` + `deploy.yml`
+faziam. É idempotente: pode rodar duas vezes seguidas.
+
+```
+scripts/publicar-local.sh                 # origin/main
+scripts/publicar-local.sh <commit-ish>    # outra referência — é assim que se volta versão
+scripts/publicar-local.sh --sem-verificar # pula a verificação (o merge já foi verificado)
+scripts/publicar-local.sh --refazer-imagens
+```
+
+O que ele faz, na ordem:
+
+1. **Worktree destacada** do commit em `.claude/worktrees/publicar-<7>` — nunca
+   dá checkout em `/opt/stack/streamz` (§2.1).
+2. **Verificação** em `docker run node:22`, os mesmos passos do job
+   `typecheck + testes + build`: install, `prisma generate`, build do `shared`,
+   typecheck dos três pacotes, testes de api e web, lint da web, build da web e
+   o export do desktop (`NEXT_OUTPUT=export`). Mais `cargo fmt --check` do
+   `src-tauri` num `rust:1-slim`.
+3. **Imagens** `ghcr.io/mirandasls/streamz-{api,web}:sha-<7>`, com o mesmo
+   contexto (a raiz), os mesmos Dockerfiles e os mesmos build-args da web
+   (`NEXT_PUBLIC_API_URL`, `_WS_URL`, `_LIVEKIT_URL` — as *variables* do repo,
+   embutidas no bundle em tempo de build). **Sem push**: o host não está logado
+   no GHCR, a imagem fica no disco e o compose não puxa o que já existe.
+4. **`up -d` de api e web** com `STREAMZ_TAG=sha-<7>` e os três compose. A API
+   aplica as migrations no boot. No fim imprime as tags, `docker ps`,
+   `/api/health` e o HTTP da raiz de `streamz.chat`.
+
+**O que ele NÃO cobre:**
+
+- **O instalador `.exe` do desktop.** O job `instalador .exe` do `desktop.yml`
+  roda em `windows-latest` e é o único lugar que produz e assina o pacote — não
+  há como fazê-lo neste Linux. Enquanto o Actions estiver parado, **não sai
+  versão nova de desktop** (§5); o site e o auto-update continuam servindo a
+  última que já foi publicada.
+- **`clippy` do Rust.** O alvo do desktop é msvc; aqui só dá para checar
+  formatação. Para o clippy sem esperar o Windows há o caminho das crates de
+  sombra descrito na memória `streamz-rust-check-no-linux`.
+- **O `latest` do GHCR e o registro em geral.** Ninguém publica imagem enquanto
+  o Actions está parado; voltar versão só funciona para tag que ainda esteja no
+  disco desta máquina (`docker images | grep streamz`).
+- **Merge do PR.** Continua sendo `gh pr merge <n> --merge`, à mão, com
+  autorização do usuário (§2.5) — o script só publica o que já está na `main`.
 
 ## 4. Onde as coisas estão (mapa de componentes)
 
@@ -122,14 +177,19 @@ rodando", e a validação é o usuário mandar prints.
 | Shell do app | `apps/web/app/app/page.tsx` (rail + coluna + conteúdo; `VoiceLayer`, `BarraDeTitulo`) |
 | Rail de servidores | `components/layout/GuildRail.tsx` |
 | Coluna de DMs / canais | `components/layout/DMList.tsx`, `ChannelSidebar.tsx` |
+| Categorias de canal | `stores/categories.ts`, `stores/channel-order.ts`; API em `apps/api/src/modules/channels/categories.{controller,service}.ts` (`MANAGE_CHANNELS` nas três rotas, eventos `category.*`) |
+| Criar canal / categoria | `components/modals/CreateChannelModal.tsx` (recebe `categoryId` **e** `tipo` do "+" do cabeçalho); "Criar canal"/"Criar categoria" no dropdown do nome do servidor, dentro de `ChannelSidebar.tsx` |
+| Arrastar na coluna | tudo em `ChannelSidebar.tsx` (`inicioArrasto`/`LinhaDeSolta`, DnD nativo): canal, categoria **e** participante de voz. A regra pura de onde o participante pode cair é `stores/voice-mover.ts` |
 | Card do usuário (mic/fone/engrenagem) | `components/layout/UserFooter.tsx` (irmão de rail+coluna, atravessa a rail), `voice/VoiceConnectedBar.tsx` |
 | Conversa (DM) | `components/chat/DMView.tsx`, `HeaderBar.tsx`, `Composer.tsx`, `MessageList.tsx`, painel de perfil em DM 1:1 |
 | Canal de texto | `components/chat/ChatView.tsx` |
 | Amigos | `components/friends/FriendsPage.tsx`, `FriendRow.tsx`, `AddFriend.tsx` |
 | Caixa de entrada | `components/chat/InboxPopover.tsx` (+ `HeaderPopover.tsx`) |
 | Modal "Nova mensagem" | `components/modals/CreateGroupDMModal.tsx` |
+| Sessão do cliente | `lib/session.ts` (par de tokens + renovação), `lib/usuario-guardado.ts` (retrato da conta em uso), `stores/auth.ts` |
+| Multiconta ("Mudar de conta") | `lib/contas.ts` (o cofre: `localStorage` versionado com as contas do aparelho e a ativa; puro e testado), `lib/troca-de-contas.ts` (trocar, sair de uma conta, esquecer), `components/modals/GerenciarContasModal.tsx` e `AdicionarContaModal.tsx`, aberto pela linha "Mudar de conta" do `ProfilePopover.tsx` |
 | Ícones | `components/ui/icones.tsx` — **único** ponto de importação de ícone (§6.2) |
-| Voz (estado) | `stores/voice.ts`, `voice-saida.ts`, `voice-retomada.ts`, `voice-reconexao.ts`, `voicePrefs.ts`, `voiceDevices.ts` |
+| Voz (estado) | `stores/voice.ts`, `voice-saida.ts`, `voice-mover.ts`, `voice-retomada.ts`, `voice-reconexao.ts`, `voicePrefs.ts`, `voiceDevices.ts` |
 | Voz (UI) | `components/voice/*` — `VoiceLayer.tsx` (global), `AudioRemotoHost.tsx` (global), `VoiceGrid.tsx`, `CallStage.tsx`, `VoicePanel.tsx`, `VoiceHotkeys.tsx`, `ScreenSharePicker.tsx` |
 | Desktop | `components/desktop/BarraDeTitulo.tsx`, `useAtualizacao.ts`, `JanelaSplash.tsx` + `janela-splash.ts` (janelinha de abertura/atualização, rota `app/splash/`); `apps/desktop/src-tauri/tauri.conf.json`, `capabilities/{default,splash}.json` |
 | Atalhos | `lib/shortcuts.ts`, `hooks/useKeyboardShortcuts.ts` (M/D de voz são do `VoiceHotkeys`) |
@@ -318,6 +378,14 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   navegador ficam no cabeçalho de Amigos (como o Discord web).
 - Foco: anel afastado de 2px para botões/links; campos de texto focam com 1px
   colado, no verde do `design.md`.
+- **Cabeçalho de categoria** (medido na print `2026-09-03 201805`, coluna de
+  294, 1:1 pelo `h-9` do canal): o "+" de criar canal é **sempre visível**, não
+  de hover — na print o cursor está sobre outro canal e os três cabeçalhos
+  mostram o "+". Glifo de 12×12 (`Plus size={20}`: o quadro do ativo do Discord
+  desenha 0,583 do tamanho), na mesma coluna da engrenagem do canal; rótulo a
+  18px da borda do painel, alinhado com o ícone do canal; linha de 22px, centro
+  a 29px do canal anterior e canal seguinte a 42. A zona de solta do fim de um
+  bloco leva `-mb-3` para não somar 12px a esse vão.
 - Card do usuário: flutuante, 58px, raio 8, atravessa a rail (irmão de rail e
   coluna, `inset-x-2.5`), listas e rail com respiro embaixo (`pb-[78px]`).
 - Configurações (usuário, servidor, canal e grupo, todas na mesma moldura
@@ -338,6 +406,50 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   `acceptCall` usam o primeiro (trocar de canal de voz não pode desmontar o
   painel que pediu a conexão).
 - Atalhos de mudo/surdo (Ctrl+Shift+M/D) têm um dono só: `VoiceHotkeys`.
+- **Quem está falando é um conjunto só**: `falando: ReadonlySet<userId>` na
+  store, montado em `stores/voice-falantes.ts`. Palco (`VoiceGrid`), lista do
+  canal (`VoiceChannelMembers`) e lista de membros (`MemberList`) leem esse
+  conjunto e mais nada — `participant.isSpeaking` lido no render era uma segunda
+  conta, e era dela que vinham as divergências. Duas fontes o alimentam:
+  `RoomEvent.ActiveSpeakersChanged` para os **outros** (recomposto também em
+  `ParticipantConnected`/`Disconnected`/`TrackMuted`, senão quem sai falando
+  fica com o anel aceso) e, para **mim**, um detector local em
+  `stores/voz-detector-local.ts` — o SFU decide fala a cada 500 ms, com limiar
+  próprio e por canal *lossy*, e era isso que fazia o meu anel piscar ou não
+  acender. O detector é rearmado por `rearmarDetectorLocal()` em todo caminho
+  que troca a faixa, inclusive `switchActiveDevice`, que reinicia a faixa **sem**
+  emitir `LocalTrackPublished`. Identidade do LiveKit vira `userId` por
+  `donoDaIdentidade` (o `<userId>#tela` é a mesma pessoa).
+- **O anel verde tem uma definição só**, `AnelDeFala` em `pecas-de-voz.tsx`:
+  2px, `ring-green` (`rgb(31,184,107)`), desenhado por **cima** do avatar e por
+  dentro do diâmetro, com o avatar em `ENCOLHE_AO_FALAR`. Não é `ring-inset` na
+  caixa do próprio `Avatar`: sombra `inset` é pintada abaixo do conteúdo, então
+  a `<img>` (ou o círculo das iniciais) cobria o anel por completo — a regra
+  estava na lista lateral e o anel nunca aparecia. Conferido renderizando os
+  dois markups com o CSS compilado do app: o antigo não produz um pixel verde.
+- **"Testar microfone" é uma cabine, não um medidor** (Discord): enquanto dura,
+  você fica surdo dos dois lados e ouve a si mesmo. Um hook só,
+  `components/voice/useTesteDeMicrofone.ts`, para os três lugares (popover de
+  supressão, `VoiceSettingsPanel`, aba Voz e vídeo). O estado é
+  `testandoMicrofone` na store — transitório, **sobrepõe** mudo/surdo sem
+  escrevê-los (`stores/teste-de-microfone.ts`, com teste unitário) e não vai
+  para o gateway: o Discord ensurdece só de um lado. Quem o respeita é a
+  publicação do microfone (`microfoneNaSala`) e o `<audio>` de cada participante
+  remoto (`saidaCalada`, em `AudioRemotoHost`). O retorno sai por um `<audio>`
+  criado pelo hook — só elemento de mídia tem `setSinkId`, e é ele que faz o
+  teste tocar na saída escolhida —, com o mesmo eco/ganho/supressão da call
+  (RNNoise incluso). Sair da call, fechar o popover ou trocar de aba param o
+  teste.
+- **Numa call, o teste não abre uma segunda captura.** Ele escuta a faixa que o
+  dono do microfone já tem aberta, e o que muda na sala é a **despublicação**
+  (`definirMicrofoneEmTeste`), não o fechamento: a mesma faixa, a mesma cadeia e
+  o mesmo volume de entrada continuam rodando, então o retorno é literalmente o
+  que a sala ouviria. Mutar em vez de despublicar não serviria — o mudo é
+  `mediaStreamTrack.enabled = false` na **entrada** da cadeia, e o retorno sairia
+  mudo junto; despublicando, o teste funciona com o microfone mudo, que é
+  justamente onde se descobre que ele estava mudo. Fora de qualquer call não há
+  faixa de ninguém, e aí o hook abre a captura dele montando a mesma
+  `cadeiaDoMicrofone`.
 - Estados de voz de DM têm rota REST (`GET /dms/:id/voice-states`); o boot
   retoma a call após F5 se o usuário aparecer como `reconnecting`
   (`stores/voice-retomada.ts`, `sessionStorage`); a reconexão do socket não
@@ -345,6 +457,22 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
 - Servidor: presença de voz por usuário, carência de 45 s
   (`VOICE_RECONNECT_GRACE_MS`) antes de tirar quem caiu; `POST /dms/:id/call`
   em call já existente entra em silêncio (não toca de novo).
+- **Mover alguém de canal de voz** (`POST /guilds/:id/voice/move`, permissão
+  `MOVE_MEMBERS`, bit 19 — o primeiro depois do `ADMINISTRATOR`): quem arrasta
+  chama a rota; a API troca o estado de voz pelo **mesmo** `join` do caminho
+  normal (que já tira da sala anterior e emite os dois `voice.state`), e por
+  cima manda um `voice.moved` **só para quem foi movido**. Quem troca a sala no
+  LiveKit é o cliente movido, nunca o servidor: `movidoDeCanal` na store faz
+  `sairDaSalaAtual("movido")` + `connect(..., { som: false })` e toca
+  `tocarSomDeMovido()`. O motivo `movido` existe para não mandar `voice.leave`
+  (ele desfaria o move que acabou de acontecer), não tocar o som de sair e não
+  fechar a coluna do canal — para quem foi movido a chamada não acabou. As
+  quatro recusas da rota (sem permissão, destino que não é canal de voz deste
+  servidor, alvo fora da voz, alvo que não enxerga o destino) estão em
+  `voice-mover.spec.ts`; a decisão de onde o arrasto pode cair e do que fazer
+  com um `voice.moved` atrasado é pura, em `stores/voice-mover.ts`.
+- Câmera e tela **não** sobrevivem ao move: as faixas ficaram na sala antiga do
+  LiveKit. Mudo e surdo viajam junto com a pessoa.
 - LiveKit é por identidade e não aceita duas iguais: entrar de outro aparelho
   expulsa a conexão anterior de propósito, com evento `voice.evicted` e a
   mensagem "você entrou de outro dispositivo" (`voz-em-um-lugar-so.ts`).
@@ -403,8 +531,22 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
      que ficasse pendurado nela rodava num contexto morto.
 - **Um `AudioContext` de captura por aba, e ele é nosso** (`contextoDeCaptura`,
   em `lib/supressor-ruido.ts`), em 48 kHz porque é a taxa que o RNNoise assume.
-  Fica suspenso quando nenhuma cadeia está montada. O worklet é registrado uma
-  vez nele — `addModule` repetido no mesmo contexto é erro.
+  O worklet é registrado uma vez nele — `addModule` repetido no mesmo contexto é
+  erro. Quem o usa o toma e o devolve (`usarContextoDeCaptura` /
+  `liberarContextoDeCaptura`): as cadeias, o detector local de fala e o retorno
+  do teste. Ele é **suspenso** — nunca fechado — quando o último dono sai;
+  contar só as cadeias deixaria o anel de fala congelado sempre que a supressão
+  estivesse desligada e o volume em 100%, que é justamente o caso em que não há
+  cadeia nenhuma.
+- **O detector local de fala ouve a faixa já processada.**
+  `LocalTrack.mediaStreamTrack` devolve `processor?.processedTrack ??
+  _mediaStreamTrack`, então o `AnalyserNode` de `voz-detector-local.ts` mede a
+  saída da cadeia. É o certo duas vezes: o anel acende pelo que os outros ouvem
+  (o ventilador que o RNNoise comeu não acende mais nada) e o volume de entrada
+  vale também para ele. Ele é rearmado por **todo** caminho que troca a faixa —
+  entrar, mudo/desmudo, trocar de microfone, mudar a supressão, começar e parar
+  o teste —, porque trocar a faixa não emite `LocalTrackPublished` e um
+  analisador preso à antiga mede silêncio para sempre.
 - **A cadeia é `fonte → [RNNoise] → ganho → destino`.** O ganho é o "volume de
   entrada" (`audio.entrada`, 0–2) e fica **depois** do supressor de propósito: o
   RNNoise decide o que é voz pelo nível que o microfone entrega, e empurrar 200%
@@ -415,7 +557,10 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   nada: anda numa rampa de 20 ms dentro do `GainNode`. Ligar/desligar a supressão
   troca o grafo por `setProcessor`/`stopProcessor`, que fazem `replaceTrack` no
   mesmo `sender` — sem renegociação e sem corte. Só eco/supressão nativa/AGC/
-  dispositivo exigem `restartTrack`, porque são do `getUserMedia`.
+  dispositivo exigem `restartTrack`, porque são do `getUserMedia`. A troca de
+  **microfone** também passa pelo dono, e não por `room.switchActiveDevice`:
+  aquele reiniciaria a faixa por baixo dele. A saída (`audiooutput`) continua
+  sendo do SDK.
 - **A cadeia sobe do silêncio**: 120 ms de rampa no `GainNode` ao montar, em vez
   de entrar com o áudio no volume cheio num grafo recém-nascido. E o modelo é
   carregado **antes** de o grafo existir — publicar primeiro e esperar o wasm
@@ -425,7 +570,9 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   dublês de `AudioContext`, `getUserMedia` e da faixa local do LiveKit — este
   último imitando o vício que importa (o `stop()` chama a `destroy()` do
   processador sem esperar por ela). Conferido que o teste **falha** quando o
-  contexto volta a ser um por `init()`: 60 contextos vivos em vez de 1.
+  contexto volta a ser um por `init()`: 60 contextos vivos em vez de 1. Um caso
+  à parte cobre o teste de microfone: a faixa sai da sala, continua viva com a
+  cadeia montada e volta.
 - O popover da setinha do microfone tem, como no print `2026-09-03 202542`:
   "Dispositivo de entrada ›", "Redução de ruído ›" (o "Perfil de entrada" do
   Discord é o Krisp, que não temos), o slider "Volume de entrada" e
@@ -498,9 +645,36 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
 | #73 | Sons originais do Discord (`public/sons/`), badge de não lidas na borda (rail com miolo de 16px), cronômetro colado na borda (botões do hover fora do fluxo), amizade nova põe a conversa no topo dos dois lados |
 | #74 | Sons do Discord em todo caminho: mudo/surdo pelo botão do rodapé (o som foi para a store), entrar e transmissão de tela com arquivo, nada mais sintetizado |
 | #99 | GIF animado como foto de perfil e banner: o GIF pula o recorte (canvas achata a animação) e sobe inteiro, com teto de 8 MB, lado de 2048px, assinatura `GIF87a`/`GIF89a` conferida e content-type real no proxy |
+| #104 | Convite vira cartão com "Entrar" (reconhecido no host público **e** no host do app), `guild.joined` para todas as conexões da conta, logo do rail volta para Amigos, e o foco da janela do desktop volta a marcar a conversa aberta como lida |
+| #105 | Sons: um som não se sobrepõe a si mesmo em menos de 300 ms, um dono só do volume com fator por som, e badge de não lidas no ícone da caixa de entrada |
 
 Desktop: 0.0.6 (#38 + #40 + #41), 0.0.7 (+ #42), 0.0.8 (tudo até #50),
 0.0.10 (até #64), 0.0.11 (até #71, primeira com a tela nativa), 0.0.12 (até #73).
+
+**Duas sessões da mesma conta.** O que muda a lista de servidores ou de
+conversas sai para a **sala do usuário** (`user:<id>`, `emitToUser`), onde estão
+todas as conexões — não para o socket que fez a requisição, que já tem a
+resposta HTTP na mão. Foi essa a falha do `redeem` até o #104: ele punha os
+sockets na sala do servidor e avisava o servidor do membro novo, mas não avisava
+o próprio usuário, e o desktop ficava com o rail velho até reiniciar. Vale para
+`guild.joined` (entrei/criei), `guild.removed` (saí/expulso/apagado),
+`channel.updated` (conversa aberta ou reaberta), amizade e `account.updated`.
+
+**O host do app de desktop não é o host público.** Dentro do Tauri a origem é
+`http://tauri.localhost` — o WebView2 serve o export estático de dentro do app.
+Qualquer regra que compare com `window.location.origin` (link de convite, link
+de mensagem, "é nosso?") tem que aceitar **os dois**: o host público, que vem de
+`WEB_URL` em `lib/config.ts` (derivado do `NEXT_PUBLIC_API_URL`, o único que
+todos os builds recebem), e o do próprio app.
+
+**O foco da janela é o gate de "marcar como lido".** `lib/na-tela.ts` decide o
+que está na tela; `janelaTemFoco()` decide se o usuário está olhando. No desktop
+a janela `main` nasce `visible: false` (§5.2), então o primeiro
+`document.hasFocus()` é `false` e quem mostra a janela é a janelinha. O estado
+de foco precisa aceitar sinal do `focus`/`blur` do DOM **e** do `onFocusChanged`
+do Tauri (`lib/foco-da-janela.ts`): fotografá-lo uma vez e esperar só pelo
+ouvinte nativo — que entra por `import()` assíncrono — travava tudo em "sem
+foco" pelo resto da sessão.
 
 **Sons.** `lib/ringtone.ts` e `lib/notification-sound.ts` tocam arquivos de
 `apps/web/public/sons/` (origem: `docs/Reference/audio/`, fora do git). **Nada
@@ -523,11 +697,55 @@ Mapeamento final (origem → nosso arquivo → quando toca):
 O som de mudo/surdo mora dentro de `useVoicePrefs.toggleMute`/`toggleDeafen`,
 não em quem chama: assim o botão do rodapé, a barra da call e o atalho soam
 igual, e fora de qualquer chamada também. Tocá-lo no `VoiceHotkeys` de novo
-dobrava o aviso — por isso ele lá só dispara a ação. O volume é o
-`outputVolume` das configurações (inclusive nos dois `<audio>` de toque, via
-`prepararToque`); o interruptor mestre `notificationSound` e o interruptor por
-som (`stores/sons.ts`) valem para todos; a prévia da aba Notificações passa
-`forcar` e ignora os dois.
+dobrava o aviso — por isso ele lá só dispara a ação. O interruptor mestre
+`notificationSound` e o interruptor por som (`stores/sons.ts`) valem para
+todos; a prévia da aba Notificações passa `forcar` e ignora os dois.
+
+**Duas regras que o #105 acrescentou, e que não devem ser desfeitas:**
+
+1. **Um som não se sobrepõe a si mesmo.** `tocarSom` é a única porta, e ela
+   engole um segundo pedido do **mesmo arquivo** dentro de 300 ms
+   (`JANELA_SEM_REPETIR_MS`, a janela do Discord). A guarda é por arquivo e
+   não por nome porque o recurso disputado é o elemento: `mudo`/`surdo` são o
+   mesmo `mudo.mp3`, `entrar`/`alguem-entrou` o mesmo `entrar.mp3`. Sons
+   *diferentes* continuam podendo soar juntos (sair + entrar ao trocar de
+   sala). Isso existe porque vários caminhos legítimos disparam o mesmo aviso
+   quase junto — o `useEffect` de `useRealtime` remontando (StrictMode em
+   dev), `connect()` chamado por `startCall`/`acceptCall`/retomada/reconexão
+   de mídia no mesmo canal, `pararTela` e o evento `telaEncerrada` do Rust — e
+   o `currentTime = 0` sobre o elemento em cache reiniciava o som no meio,
+   que é o que se ouvia como "toca várias vezes" e "varia de volume".
+   Duas sessões da mesma conta (desktop + navegador) continuam tocando uma
+   vez cada: a guarda é por cliente, e não há como ser diferente.
+2. **Um dono só do volume.** `volumeDoSom(nome)` = `outputVolume` das
+   configurações × o fator do som. **Ninguém mais passa volume** — nem
+   `tocarSomDeNotificacao`, nem a prévia da aba, nem `prepararToque` (os dois
+   `<audio loop>` de toque saem no mesmo `volumeDoSom("chamada")`). Antes eram
+   quatro contas diferentes e a mensagem tinha `1` como padrão. Os fatores,
+   decididos com o usuário: chamada 0,7; entrar/sair/alguém-entrou/
+   alguém-saiu/transmissão/movido 0,5; mensagem 0,4; mudo/desmudo/surdo/
+   não-surdo 0,35. `setSinkId` só é reaplicado quando a saída escolhida muda:
+   trocar a rota de um elemento tocando também dá salto de nível.
+
+`NomeDeSom` mora em `lib/ringtone.ts` (é a chave dos mapas de arquivo e de
+fator) e `stores/sons.ts` o reexporta.
+
+**Caixa de entrada (badge).** O ícone que abre a caixa mostra um selo vermelho
+quando há o que ler — na barra de título do desktop e no cabeçalho de Amigos
+do navegador, que são o **mesmo** `InboxPopover`. Conta o que é dirigido a mim
+(menção em servidor + não lida em conversa), igual ao contador no ícone do
+app; canal de servidor não lido sem menção vira um ponto de 8px, e número e
+ponto não se somam (`badgeDaCaixa`, em `stores/nao-lidas.ts`, com teste). Lê
+`useGuilds`/`useDMs`, **não** o `useInbox` — este é um retrato tirado ao abrir
+o painel, e um ícone que só descobre a novidade depois do clique não serve
+para nada; é também por isso que o selo some sozinho no "marcar tudo como
+lido". Medidas (renderizado com o CSS compilado e conferido no Pillow):
+miolo 16×16, número 12px bold, anel de 3px na cor da superfície (`ring-rail`
+na barra, `ring-chat` no cabeçalho), em `top-0 -right-2` sobre o botão de 24.
+O `-top-1 -right-1` do rail é para um item de 40: num botão de 24 dentro da
+barra de 32 ele cobria o ícone quase inteiro e o anel passava da borda da
+janela. Decisão do usuário: **só o badge** — sem faixa no topo e sem
+notificação extra.
 
 ## 10. Pendências e o que não foi verificado
 

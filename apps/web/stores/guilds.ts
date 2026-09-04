@@ -9,6 +9,7 @@ import { useMessages } from "@/stores/messages";
 import { useModeration } from "@/stores/moderation";
 import { usePermissions } from "@/stores/permissions";
 import { usePresence } from "@/stores/presence";
+import { comServidorNovo } from "@/stores/guilds-entrada";
 
 /**
  * Servidores do usuário, servidor ativo e seus membros.
@@ -31,6 +32,8 @@ interface GuildsState {
   select: (guild: Pick<Guild, "id" | "name">, opcoes?: { manterVisao?: boolean }) => void;
   create: () => Promise<void>;
   joinByCode: () => Promise<void>;
+  /** Resgata um convite pelo código e abre o servidor (cartão de convite e menu). */
+  entrarPorConvite: (code: string) => Promise<void>;
   createInvite: () => Promise<void>;
   leave: (guildId: string) => Promise<void>;
   remove: (guildId: string) => Promise<void>;
@@ -68,6 +71,13 @@ interface GuildsState {
   handleMemberLeft: (guildId: string, userId: string) => void;
   /** Fui expulso/banido, saí ou o servidor foi apagado: some da lista, a tela se limpa. */
   handleRemoved: (guildId: string) => void;
+  /**
+   * Entrei num servidor de **outro lugar** (`guild.joined`): outra aba, o site
+   * enquanto o desktop está aberto, ou esta mesma sessão recebendo o próprio
+   * evento de volta. Só põe no rail — não troca a tela de quem está lendo
+   * outra coisa.
+   */
+  handleJoined: (guild: Guild) => void;
 }
 
 let membersSeq = 0;
@@ -155,9 +165,15 @@ export const useGuilds = create<GuildsState>((set, get) => {
         confirmLabel: "Entrar",
       });
       if (!code?.trim()) return;
+      await get().entrarPorConvite(code.trim());
+    },
+
+    entrarPorConvite: async (code) => {
       try {
-        const guild = await api.redeemInvite(code.trim());
-        // a lista completa traz não-lido e menções; entrar é raro, vale refazer
+        const guild = await api.redeemInvite(code);
+        // a lista completa traz não-lido e menções; entrar é raro, vale refazer.
+        // O `guild.joined` que a API manda para todas as minhas conexões chega
+        // aqui também e é idempotente — quem chegar primeiro resolve.
         const guilds = await api.listGuilds();
         set({ guilds });
         get().select(guild);
@@ -368,6 +384,10 @@ export const useGuilds = create<GuildsState>((set, get) => {
     handleMemberLeft: (guildId, userId) => {
       if (get().activeGuildId !== guildId) return;
       set((s) => ({ members: s.members.filter((m) => m.user.id !== userId) }));
+    },
+
+    handleJoined: (guild) => {
+      set((s) => ({ guilds: comServidorNovo(s.guilds, guild) }));
     },
 
     handleRemoved: (guildId) => {

@@ -10,7 +10,6 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeftRight,
   CalendarDays,
   ChevronRight,
   LogOut,
@@ -19,6 +18,7 @@ import {
   Plus,
   SendHorizonal,
   SmilePlus,
+  UserCircle,
   Users,
   X,
 } from "@/components/ui/icones";
@@ -690,16 +690,20 @@ export default function ProfilePopoverHost() {
               >
                 {customStatusOf(user) ? "Editar status personalizado" : "Status personalizado"}
               </ItemDeMenu>
+              {/*
+                "Mudar de conta" é a palavra do print `2026-09-03 202926`, e o
+                ícone é o pictograma de pessoa em círculo que aparece nele. A
+                linha deixou de deslogar: agora abre "Gerenciar contas", com as
+                contas do aparelho (`lib/contas.ts`).
+              */}
               <ItemDeMenu
-                icon={<ArrowLeftRight size={16} />}
+                icon={<UserCircle size={16} />}
                 onClick={() => {
-                  // não há multiconta: trocar de conta é sair e entrar de novo
                   close();
-                  logout();
-                  router.replace("/login");
+                  openModal({ kind: "gerenciarContas" });
                 }}
               >
-                Trocar de conta
+                Mudar de conta
               </ItemDeMenu>
               <ItemDeMenu
                 icon={<LogOut size={16} />}

@@ -112,7 +112,12 @@ export class DMsService {
     this.realtime.joinChannelRooms([a, b], channel.id);
     // reabrir manualmente desfaz o "fechar conversa" de quem abriu
     await this.reabrirParaMim(meId, channel.id);
-    return this.comResumo(channel, meId, opcoes.username);
+    const view = await this.comResumo(channel, meId, opcoes.username);
+    // as minhas outras sessões põem a conversa na coluna sem esperar mensagem
+    // nova nem recarregar. Só as **minhas**: no Discord abrir uma conversa não
+    // a faz aparecer do outro lado antes de você escrever algo.
+    this.realtime.emitToUser(meId, WS_EVENTS.CHANNEL_UPDATED, view);
+    return view;
   }
 
   /**
@@ -129,7 +134,10 @@ export class DMsService {
   async mostrar(meId: string, channelId: string, username: string): Promise<DMChannelView> {
     const channel = await this.acharConversa(meId, channelId);
     await this.reabrirParaMim(meId, channelId);
-    return this.comResumo(channel, meId, username);
+    const view = await this.comResumo(channel, meId, username);
+    // a coluna das minhas outras sessões acompanha (ver `openWith`)
+    this.realtime.emitToUser(meId, WS_EVENTS.CHANNEL_UPDATED, view);
+    return view;
   }
 
   /** Cria um grupo (3+ participantes, contando o criador). */
@@ -156,6 +164,11 @@ export class DMsService {
       include: WITH_MEMBERS,
     });
     this.realtime.joinChannelRooms(ids, channel.id);
+    // grupo novo entra na coluna de todo mundo (aqui, ao contrário da DM 1:1,
+    // ser adicionado já é fazer parte) e em todas as conexões de cada um
+    for (const id of ids) {
+      this.realtime.emitToUser(id, WS_EVENTS.CHANNEL_UPDATED, this.toView(channel, id));
+    }
     return this.toView(channel, meId);
   }
 
