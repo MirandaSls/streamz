@@ -1,6 +1,6 @@
 [package]
 name = "streamz-desktop"
-version = "0.0.16"
+version = "0.0.17"
 description = "Streamz desktop app"
 edition = "2021"
 
