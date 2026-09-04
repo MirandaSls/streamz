@@ -186,6 +186,8 @@ O que ele faz, na ordem:
 | Amigos | `components/friends/FriendsPage.tsx`, `FriendRow.tsx`, `AddFriend.tsx` |
 | Caixa de entrada | `components/chat/InboxPopover.tsx` (+ `HeaderPopover.tsx`) |
 | Modal "Nova mensagem" | `components/modals/CreateGroupDMModal.tsx` |
+| Sessão do cliente | `lib/session.ts` (par de tokens + renovação), `lib/usuario-guardado.ts` (retrato da conta em uso), `stores/auth.ts` |
+| Multiconta ("Mudar de conta") | `lib/contas.ts` (o cofre: `localStorage` versionado com as contas do aparelho e a ativa; puro e testado), `lib/troca-de-contas.ts` (trocar, sair de uma conta, esquecer), `components/modals/GerenciarContasModal.tsx` e `AdicionarContaModal.tsx`, aberto pela linha "Mudar de conta" do `ProfilePopover.tsx` |
 | Ícones | `components/ui/icones.tsx` — **único** ponto de importação de ícone (§6.2) |
 | Voz (estado) | `stores/voice.ts`, `voice-saida.ts`, `voice-mover.ts`, `voice-retomada.ts`, `voice-reconexao.ts`, `voicePrefs.ts`, `voiceDevices.ts` |
 | Voz (UI) | `components/voice/*` — `VoiceLayer.tsx` (global), `AudioRemotoHost.tsx` (global), `VoiceGrid.tsx`, `CallStage.tsx`, `VoicePanel.tsx`, `VoiceHotkeys.tsx`, `ScreenSharePicker.tsx` |

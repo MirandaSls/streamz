@@ -4,8 +4,12 @@ import { api } from "@/lib/api";
 import { useAdmin } from "@/stores/admin";
 import { disconnectSocket } from "@/lib/socket";
 import { aoExpirarSessao, lerRefreshToken, limparTokens, salvarTokens } from "@/lib/session";
-
-const CHAVE_USUARIO = "user";
+import { atualizarPerfil, guardarConta, mudarCofre, removerConta } from "@/lib/contas";
+import {
+  lerUsuarioGuardado,
+  limparUsuarioGuardado,
+  salvarUsuarioGuardado,
+} from "@/lib/usuario-guardado";
 
 interface AuthState {
   user: PublicUser | null;
@@ -24,19 +28,26 @@ export const useAuth = create<AuthState>((set) => ({
     // a nova sessão herdaria a conexão do usuário anterior na mesma aba
     disconnectSocket();
     salvarTokens(tokens);
-    localStorage.setItem(CHAVE_USUARIO, JSON.stringify(user));
+    // todo login entra no cofre e vira a conta ativa — inclusive o da tela de
+    // entrada. É o que faz "Gerenciar contas" já ter a conta certa na lista sem
+    // ninguém precisar "adicionar" a que acabou de entrar.
+    mudarCofre((cofre) => guardarConta(cofre, user, tokens.refreshToken));
+    salvarUsuarioGuardado(user);
     set({ user });
   },
 
   setUser: (user) => {
-    localStorage.setItem(CHAVE_USUARIO, JSON.stringify(user));
+    salvarUsuarioGuardado(user);
+    // o cofre desenha o avatar e o nome de cada conta: sem isto, trocar a foto
+    // deixaria a antiga no cartão de "Gerenciar contas" até o próximo login
+    mudarCofre((cofre) => atualizarPerfil(cofre, user));
     set({ user });
   },
 
   loadFromStorage: () => {
     if (typeof window === "undefined") return;
-    const raw = localStorage.getItem(CHAVE_USUARIO);
-    if (raw) set({ user: JSON.parse(raw) as PublicUser });
+    const guardado = lerUsuarioGuardado();
+    if (guardado) set({ user: guardado });
   },
 
   logout: () => {
@@ -45,7 +56,11 @@ export const useAuth = create<AuthState>((set) => ({
     if (refreshToken) api.logout(refreshToken).catch(() => {});
     disconnectSocket();
     limparTokens();
-    localStorage.removeItem(CHAVE_USUARIO);
+    // sair é sair do aparelho também: a conta some do cofre, senão "Gerenciar
+    // contas" ofereceria uma volta com um refresh que acabamos de revogar
+    const atual = useAuth.getState().user;
+    if (atual) mudarCofre((cofre) => removerConta(cofre, atual.id));
+    limparUsuarioGuardado();
     // entrar com outra conta na mesma aba não pode herdar o "sou admin" da
     // anterior — a API recusaria, mas a tela ofereceria abas que não abrem
     useAdmin.getState().limpar();
@@ -58,7 +73,7 @@ export const useAuth = create<AuthState>((set) => ({
 // para a UI não seguir renderizando uma sessão que não existe mais.
 aoExpirarSessao(() => {
   disconnectSocket();
-  if (typeof window !== "undefined") localStorage.removeItem(CHAVE_USUARIO);
+  limparUsuarioGuardado();
   useAdmin.getState().limpar();
   useAuth.setState({ user: null });
 });
