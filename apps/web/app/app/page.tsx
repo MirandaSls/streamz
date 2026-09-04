@@ -18,7 +18,7 @@ import ContextMenuHost from "@/components/ui/ContextMenu";
 import ProfilePopoverHost from "@/components/ui/ProfilePopover";
 import TelaDeAbertura from "@/components/ui/TelaDeAbertura";
 import Toasts from "@/components/ui/Toasts";
-import PainelDeChatDaCall from "@/components/voice/PainelDeChatDaCall";
+import CallSplit from "@/components/voice/CallSplit";
 import VoiceLayer from "@/components/voice/VoiceLayer";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useRealtime } from "@/hooks/useRealtime";
@@ -119,25 +119,30 @@ export default function AppPage() {
           {voiceChannel ? (
             // No canal de voz o palco ocupa a área inteira — o chat de texto do
             // canal existe, mas só aparece por clique no balão (no cabeçalho do
-            // palco ou na linha do canal). Quando abre, é a coluna de 450 da
-            // direita, com a casca medida em `PainelDeChatDaCall` — a mesma da
-            // chamada em conversa (ver `CallSplit` no `DMView`).
+            // palco ou na linha do canal). Quando abre, é a **coluna da
+            // direita**, que é o que o Discord faz em canal de voz e o oposto
+            // do que ele faz em conversa direta: quem decide isso é o
+            // `orientacaoDaChamada`, dentro do `CallSplit`, pelo `guildId`.
             <main className="flex min-w-0 flex-1 bg-chat">
-              <div className="flex min-w-0 flex-1 flex-col">
-                <VoicePanel
-                  // remontar por canal reinicia a conexão com a sala certa
-                  key={voiceChannel.id}
-                  channel={voiceChannel}
-                  onLeave={leaveVoice}
-                />
-              </div>
-              {voiceChatOpen && (
-                <PainelDeChatDaCall
+              {voiceChatOpen ? (
+                <CallSplit
+                  guildId={voiceChannel.guildId}
                   titulo={voiceChannel.name ?? "voz"}
-                  onFechar={toggleVoiceChat}
-                >
-                  <ChatView incorporado />
-                </PainelDeChatDaCall>
+                  onFecharChat={toggleVoiceChat}
+                  chamada={
+                    <VoicePanel
+                      // remontar por canal reinicia a conexão com a sala certa
+                      key={voiceChannel.id}
+                      channel={voiceChannel}
+                      onLeave={leaveVoice}
+                    />
+                  }
+                  chat={<ChatView incorporado />}
+                />
+              ) : (
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <VoicePanel key={voiceChannel.id} channel={voiceChannel} onLeave={leaveVoice} />
+                </div>
               )}
             </main>
           ) : (
