@@ -42,25 +42,25 @@ describe("quantos avatares o palco desenha", () => {
 });
 
 describe("memória do balão por canal", () => {
-  it("canal que ninguém mexeu usa o padrão (aberto, como na print)", () => {
-    expect(CHAT_ABERTO_POR_PADRAO).toBe(true);
-    expect(chatDoCanalAberto({}, "c1")).toBe(true);
+  it("canal que ninguém mexeu usa o padrão (fechado: só abre pelo balão)", () => {
+    expect(CHAT_ABERTO_POR_PADRAO).toBe(false);
+    expect(chatDoCanalAberto({}, "c1")).toBe(false);
   });
 
   it("sem canal nenhum devolve o padrão em vez de estourar", () => {
-    expect(chatDoCanalAberto({}, null)).toBe(true);
-    expect(chatDoCanalAberto({}, undefined)).toBe(true);
+    expect(chatDoCanalAberto({}, null)).toBe(false);
+    expect(chatDoCanalAberto({}, undefined)).toBe(false);
   });
 
-  it("fechar num canal não fecha no outro", () => {
+  it("abrir num canal não abre no outro", () => {
     const mapa = alternarChatDoCanal({}, "c1");
-    expect(chatDoCanalAberto(mapa, "c1")).toBe(false);
-    expect(chatDoCanalAberto(mapa, "c2")).toBe(true);
+    expect(chatDoCanalAberto(mapa, "c1")).toBe(true);
+    expect(chatDoCanalAberto(mapa, "c2")).toBe(false);
   });
 
   it("alternar duas vezes volta ao padrão", () => {
     const mapa = alternarChatDoCanal(alternarChatDoCanal({}, "c1"), "c1");
-    expect(chatDoCanalAberto(mapa, "c1")).toBe(true);
+    expect(chatDoCanalAberto(mapa, "c1")).toBe(false);
   });
 
   it("definir o mesmo valor devolve o mesmo mapa (não re-renderiza à toa)", () => {
@@ -81,10 +81,10 @@ describe("memória do balão por canal", () => {
   });
 
   it("esquecer tira o canal do mapa e ele volta ao padrão", () => {
-    const mapa = definirChatDoCanal({}, "c1", false);
+    const mapa = definirChatDoCanal({}, "c1", true);
     const limpo = esquecerChatDoCanal(mapa, "c1");
     expect(limpo).toEqual({});
-    expect(chatDoCanalAberto(limpo, "c1")).toBe(true);
+    expect(chatDoCanalAberto(limpo, "c1")).toBe(false);
   });
 
   it("esquecer canal que não está no mapa devolve o mesmo mapa", () => {
