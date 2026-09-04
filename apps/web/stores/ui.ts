@@ -2,13 +2,6 @@ import { create } from "zustand";
 import type { GuildChannelType, PublicUser } from "@streamz/shared";
 // ── h-moderacao ──
 import type { ServerSettingsTab } from "@/components/settings/server/tabs";
-import {
-  alternarChatDoCanal,
-  definirChatDoCanal,
-  esquecerChatDoCanal,
-  type ChatPorCanal,
-} from "@/components/voice/vista-do-canal-de-voz";
-import { useChannels } from "@/stores/channels";
 // ── recorte de imagem ──
 import type { FormatoDeRecorte } from "@/lib/recorte";
 import { AVISO_DO_GIF, ehGif, erroDeTamanho } from "@/lib/imagem-de-perfil";
@@ -276,17 +269,11 @@ interface UIState {
   /** coluna 4 (lista de membros) visível — o botão de membros do cabeçalho alterna. */
   membersOpen: boolean;
   /**
-   * Chat do canal de VOZ à mostra, **canal a canal**.
-   *
-   * Era um booleano só, fechado por padrão, de quando a conversa do canal de
-   * voz ainda interrompia um palco cheio. A print
-   * `2026-09-04 102429` mostra o Discord abrindo o canal de voz já com a coluna
-   * da direita na tela — e mostra também por que a memória é por canal: dois
-   * canais de voz têm dois usos, e quem fecha a conversa de um não pediu nada
-   * sobre o outro. Canal ausente do mapa = ninguém mexeu = `CHAT_ABERTO_POR_PADRAO`
-   * (ver `components/voice/vista-do-canal-de-voz.ts`).
+   * Chat do canal de VOZ à mostra. Fica fechado por padrão: no canal de voz o
+   * palco ocupa a área inteira, e o texto só aparece por clique — ao contrário
+   * da chamada em conversa, onde os dois convivem empilhados o tempo todo.
    */
-  chatDaCallPorCanal: ChatPorCanal;
+  voiceChatOpen: boolean;
   /**
    * Pilha de modais. É pilha, e não um só, porque confirmar algo de dentro das
    * configurações (apagar um cargo, um emoji, o servidor) precisa abrir a caixa
@@ -300,14 +287,9 @@ interface UIState {
 
   setView: (view: "guild" | "dm") => void;
   toggleMembers: () => void;
-  /**
-   * Abre a conversa da call sem alternar (o balão do canal na barra lateral).
-   * Sem `channelId` vale para o canal de voz aberto agora.
-   */
-  abrirVoiceChat: (channelId?: string | null) => void;
-  toggleVoiceChat: (channelId?: string | null) => void;
-  /** Canal apagado: some com a preferência dele em vez de guardar um fantasma. */
-  esquecerChatDaCall: (channelId: string) => void;
+  /** Abre a conversa da call sem alternar (o balão do canal na barra lateral). */
+  abrirVoiceChat: () => void;
+  toggleVoiceChat: () => void;
   /** Empilha um modal sobre o que já estiver aberto. */
   openModal: (modal: Modal) => void;
   /** Desempilha o modal do topo; confirm/prompt pendente resolve cancelado. */
@@ -345,17 +327,6 @@ interface UIState {
   dismissToast: (id: string) => void;
 }
 
-/**
- * O canal de voz na tela agora — o alvo padrão do balão.
- *
- * `abrirVoiceChat()` é chamado sem argumento pelo balão da linha do canal na
- * barra lateral, logo depois do `select(canal)`: ali o canal certo já está na
- * store de canais, e repetir o id no call site só criaria uma segunda fonte da
- * mesma verdade. A leitura é sempre em tempo de clique (`getState`), então o
- * laço de importação entre as duas stores nunca chega a ser avaliado.
- */
-const canalDeVozAtual = () => useChannels.getState().voiceChannelId;
-
 let toastSeq = 0;
 const TOAST_MS = 5000;
 
@@ -363,7 +334,7 @@ export const useUI = create<UIState>((set, get) => ({
   // o app abre em "mensagens diretas", que é onde mora a página Amigos
   view: "dm",
   membersOpen: true,
-  chatDaCallPorCanal: {},
+  voiceChatOpen: false,
   modals: [],
   contextMenu: null,
   popover: null,
@@ -371,24 +342,11 @@ export const useUI = create<UIState>((set, get) => ({
 
   setView: (view) => set({ view }),
   toggleMembers: () => set((s) => ({ membersOpen: !s.membersOpen })),
-  toggleVoiceChat: (channelId) =>
-    set((s) => ({
-      chatDaCallPorCanal: alternarChatDoCanal(s.chatDaCallPorCanal, channelId ?? canalDeVozAtual()),
-    })),
+  toggleVoiceChat: () => set((s) => ({ voiceChatOpen: !s.voiceChatOpen })),
   // o balão da linha do canal **abre**, não alterna: quem clica nele estando
   // noutro canal quer ver a conversa daquela call, e um alternador fecharia o
   // painel que ainda nem estava na tela
-  abrirVoiceChat: (channelId) =>
-    set((s) => ({
-      chatDaCallPorCanal: definirChatDoCanal(
-        s.chatDaCallPorCanal,
-        channelId ?? canalDeVozAtual(),
-        true,
-      ),
-    })),
-
-  esquecerChatDaCall: (channelId) =>
-    set((s) => ({ chatDaCallPorCanal: esquecerChatDoCanal(s.chatDaCallPorCanal, channelId) })),
+  abrirVoiceChat: () => set({ voiceChatOpen: true }),
 
   openModal: (modal) =>
     set((s) => ({ modals: [...s.modals, modal], contextMenu: null, popover: null })),
@@ -518,7 +476,6 @@ export const ui = {
   openProfile: (user: PublicUser, anchor: Anchor, acima?: boolean) =>
     useUI.getState().openProfile(user, anchor, acima),
   setView: (view: "guild" | "dm") => useUI.getState().setView(view),
-  esquecerChatDaCall: (channelId: string) => useUI.getState().esquecerChatDaCall(channelId),
   view: () => useUI.getState().view,
 };
 

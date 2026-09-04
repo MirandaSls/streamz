@@ -20,7 +20,6 @@ import TelaDeAbertura from "@/components/ui/TelaDeAbertura";
 import Toasts from "@/components/ui/Toasts";
 import CallSplit from "@/components/voice/CallSplit";
 import VoiceLayer from "@/components/voice/VoiceLayer";
-import { chatDoCanalAberto } from "@/components/voice/vista-do-canal-de-voz";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useSettingsRoute } from "@/hooks/useSettingsRoute";
@@ -48,14 +47,12 @@ export default function AppPage() {
 
   const view = useUI((s) => s.view);
   const membersOpen = useUI((s) => s.membersOpen);
-  const chatDaCallPorCanal = useUI((s) => s.chatDaCallPorCanal);
+  const voiceChatOpen = useUI((s) => s.voiceChatOpen);
   const toggleVoiceChat = useUI((s) => s.toggleVoiceChat);
   const activeChannel = useActiveChannel();
   const activeDM = useActiveDM();
   const voiceChannel = useVoiceChannel();
   const leaveVoice = useChannels((s) => s.leaveVoice);
-  // o balão nasce aberto e é lembrado canal a canal (ver `vista-do-canal-de-voz`)
-  const voiceChatOpen = chatDoCanalAberto(chatDaCallPorCanal, voiceChannel?.id);
   const threadParentId = useMessages((s) => s.threadParentId);
   // a busca ocupa a coluna 4 (como no Discord) e tem prioridade sobre thread e membros
   const buscaAberta = useMessages((s) => s.searchResults !== null || s.searching);
@@ -120,20 +117,21 @@ export default function AppPage() {
       ) : (
         <>
           {voiceChannel ? (
-            // No canal de voz o palco ocupa a área e a conversa do canal abre
-            // numa **coluna à direita** — o oposto do que o Discord faz em
-            // conversa direta, e quem decide é o `orientacaoDaChamada`, dentro
-            // do `CallSplit`, pelo `guildId`. A coluna nasce ABERTA (é assim na
-            // print `2026-09-04 102429`) e o balão é lembrado canal a canal.
+            // No canal de voz o palco ocupa a área inteira — o chat de texto do
+            // canal existe, mas só aparece por clique no balão (no cabeçalho do
+            // palco ou na linha do canal). Quando abre, é a **coluna da
+            // direita**, que é o que o Discord faz em canal de voz e o oposto
+            // do que ele faz em conversa direta: quem decide isso é o
+            // `orientacaoDaChamada`, dentro do `CallSplit`, pelo `guildId`.
             <main className="flex min-w-0 flex-1 bg-chat">
               {voiceChatOpen ? (
                 <CallSplit
                   guildId={voiceChannel.guildId}
                   titulo={voiceChannel.name ?? "voz"}
-                  onFecharChat={() => toggleVoiceChat(voiceChannel.id)}
+                  onFecharChat={toggleVoiceChat}
                   chamada={
                     <VoicePanel
-                      // remontar por canal zera a tela para a sala certa
+                      // remontar por canal reinicia a conexão com a sala certa
                       key={voiceChannel.id}
                       channel={voiceChannel}
                       onLeave={leaveVoice}
