@@ -7,26 +7,39 @@ import {
   Maximize2,
   MicOff,
   Minimize2,
+  MonitorX,
+  MoreHorizontal,
   Play,
   Plus,
   UserPlus,
   Volume2,
   VolumeX,
 } from "@/components/ui/icones";
-import { Track, type Participant, type TrackPublication } from "livekit-client";
+import type { Participant, TrackPublication } from "livekit-client";
 import { displayNameOf, type VoiceStateEvent } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
+import { corDoAvatar } from "@/components/ui/avatar-cores";
 import { alternarTelaCheiaDe } from "@/components/voice/fullscreen";
-import { GAP, distribuir, melhorArranjo } from "@/components/voice/grid-layout";
+import {
+  FAIXA_ALTURA,
+  FAIXA_GAP,
+  FAIXA_LARGURA,
+  FOCO_GAP,
+  GAP,
+  distribuir,
+  melhorArranjo,
+} from "@/components/voice/grid-layout";
 import {
   abrirMenuDeParticipante,
   abrirVolumeDe,
   registrarVolumePopover,
 } from "@/components/voice/participant-menu";
+import { useCorDominante } from "@/lib/cor-dominante";
 import { useAuth } from "@/stores/auth";
+import { usePresence } from "@/stores/presence";
 import { ui } from "@/stores/ui";
-import { participantesDe, useVoice, videosDe } from "@/stores/voice";
+import { camerasDe, participantesDe, telasDe, useVoice } from "@/stores/voice";
 
 /**
  * A grade de participantes de uma sala de voz.
@@ -40,9 +53,19 @@ import { participantesDe, useVoice, videosDe } from "@/stores/voice";
  * tamanho real do palco (`grid-layout.ts`), como no Discord. Rolagem aqui seria
  * a admissão de que alguém na sala está fora do campo de visão.
  *
- * Tela compartilhada não divide o tile com a câmera: vira um tile próprio e,
- * quando começa, sobe sozinha ao palco — é o conteúdo que as pessoas estão de
- * fato olhando.
+ * **Cada pessoa tem um tile, e cada tela tem outro.** Quem transmite aparece
+ * duas vezes — o avatar dela e a transmissão —, que é o que o Discord faz. E dá
+ * para assistir a **várias** telas ao mesmo tempo: quem se assiste está em
+ * `assistindo` na store, e é isso que decide se a faixa é baixada
+ * (`aplicarAssinaturasDeTela`). Tela que ninguém abriu mostra só o convite
+ * "Assistir transmissão" sobre a cor da pessoa, sem gastar rede.
+ *
+ * **Com um tile no palco (foco) o leiaute vira "destaque + faixa".** Medido na
+ * print `2026-09-03 203909` (escala 0,8075 = 2777/3439, conferida pelo passo da
+ * lista de canais — 26px → 32 — e pela cápsula de controles — 38px → 48):
+ * destaque de 1458×823 px = **16:9 exato**, centralizado, com 229px de folga de
+ * cada lado; vão de 6px (**8**) até a faixa; tile da faixa de 150×86 px
+ * (**188×106**), também centralizado.
  *
  * **Há dois palcos, não um.** Numa conversa direta em que ninguém publicou
  * vídeo nem tela, o Discord não desenha tile nenhum: os avatares ficam soltos
@@ -65,6 +88,8 @@ interface Tile {
   participant: Participant | null;
   publication: TrackPublication | null;
   tela: boolean;
+  /** só para tela: a faixa está assinada porque eu escolhi assistir (ou é minha). */
+  assistindo: boolean;
 }
 
 export default function VoiceGrid({
@@ -91,45 +116,61 @@ export default function VoiceGrid({
   const falando = useVoice((s) => s.falando);
   const focado = useVoice((s) => s.focado);
   const focoAutomatico = useVoice((s) => s.focoAutomatico);
+  const assistindo = useVoice((s) => s.assistindo);
   const setFocado = useVoice((s) => s.setFocado);
   const focarAutomaticamente = useVoice((s) => s.focarAutomaticamente);
+  const assistir = useVoice((s) => s.assistir);
+  const pararDeAssistir = useVoice((s) => s.pararDeAssistir);
   // elemento em estado (e não em ref): o palco é desmontado quando alguém sobe
   // ao destaque, e um `ref` não avisaria o observador de que voltou
   const [palco, setPalco] = useState<HTMLDivElement | null>(null);
   const tamanho = useTamanho(palco);
 
   // Quem transmite pelo app de desktop tem **dois** participantes na sala: a
-  // pessoa e o `<userId>#tela` da captura nativa. As faixas dos dois entram no
-  // tile do dono — o `#tela` nunca vira uma pessoa a mais na grade.
+  // pessoa e o `<userId>#tela` da captura nativa. As faixas dos dois entram nos
+  // tiles do dono — o `#tela` nunca vira uma pessoa a mais na grade.
   const tiles: Tile[] = states.flatMap((state): Tile[] => {
     const meus = participantesDe(state.user.id);
     const p = meus[0] ?? null;
-    const videos = meus.flatMap(videosDe);
-    if (videos.length === 0) {
-      return [{ key: state.user.id, state, participant: p, publication: null, tela: false }];
-    }
-    return videos.map((pub) => ({
-      key: `${state.user.id}:${pub.trackSid}`,
+    const sou = state.user.id === me?.id;
+    const pessoa: Tile = {
+      key: state.user.id,
       state,
       participant: p,
-      publication: pub,
-      tela: pub.source === Track.Source.ScreenShare,
-    }));
+      // câmera fica no tile da pessoa; tela nunca — ela tem tile próprio
+      publication: meus.flatMap(camerasDe)[0] ?? null,
+      tela: false,
+      assistindo: false,
+    };
+    const telas = meus.flatMap(telasDe).map(
+      (pub): Tile => ({
+        key: `${state.user.id}:${pub.trackSid}`,
+        state,
+        participant: p,
+        publication: pub,
+        tela: true,
+        // a minha transmissão é local: não há o que assinar, e esconder a
+        // própria tela atrás de "Assistir" seria pedir permissão a si mesmo
+        assistindo: sou || assistindo.has(state.user.id),
+      }),
+    );
+    return [pessoa, ...telas];
   });
 
-  const transmissao = tiles.find((t) => t.tela) ?? null;
-  const donoDaTransmissao = transmissao?.state.user.id ?? null;
-
-  // transmissão que começa assume o palco sozinha (Discord). Só quando ninguém
-  // escolheu nada à mão — ver `focoAutomatico` na store.
+  // transmissão que eu **estou assistindo** assume o palco sozinha (Discord).
+  // Só quando ninguém escolheu nada à mão — ver `focoAutomatico` na store —, e
+  // só depois de assistida: subir ao palco uma tela fechada daria o convite
+  // "Assistir transmissão" em tamanho de cinema.
+  const telaAssistida = tiles.find((t) => t.tela && t.assistindo) ?? null;
+  const chaveDaTela = telaAssistida?.key ?? null;
   useEffect(() => {
-    if (focoAutomatico && donoDaTransmissao && focado !== donoDaTransmissao) {
-      focarAutomaticamente(donoDaTransmissao);
+    if (focoAutomatico && chaveDaTela && focado !== chaveDaTela) {
+      focarAutomaticamente(chaveDaTela);
     }
-  }, [focoAutomatico, donoDaTransmissao, focado, focarAutomaticamente]);
+  }, [focoAutomatico, chaveDaTela, focado, focarAutomaticamente]);
 
   // sem nenhuma faixa publicada, uma conversa direta é fileira de avatares
-  const modoAvatares = !guildId && tiles.every((t) => !t.publication);
+  const modoAvatares = !guildId && tiles.every((t) => !t.publication && !t.tela);
 
   if (tiles.length === 0) {
     return (
@@ -186,21 +227,70 @@ export default function VoiceGrid({
     );
   }
 
-  // com alguém no palco a grade vira "destaque em cima + tirinha embaixo".
-  // A tira ficava ACIMA para deixar o rodapé livre aos controles flutuantes,
-  // mas quem reserva esse espaço é o host (`pb-24` no CallStage e no
-  // VoicePanel) — e em cima ela empurrava o destaque para baixo, invertia a
-  // ordem de leitura e passava por baixo do cabeçalho absoluto do palco.
-  const emFoco = focado ? tiles.filter((t) => t.state.user.id === focado) : [];
-  // quem está no palco com tela **e** câmera: a tela é o palco, a câmera vai
-  // para a tira (é o que o Discord faz com quem transmite e liga a webcam)
-  const principal = emFoco.find((t) => t.tela) ?? emFoco[0] ?? null;
+  // Foco: um tile grande em cima, o resto numa faixa embaixo. A chave é a do
+  // tile (`userId` ou `userId:sid`), não o id da pessoa — quem assiste a duas
+  // telas tem dois tiles do mesmo dono; o casamento por id fica como reserva
+  // para quem tenha guardado só a pessoa.
+  const principal =
+    (focado ? tiles.find((t) => t.key === focado) : null) ??
+    (focado ? tiles.find((t) => t.state.user.id === focado) : null) ??
+    null;
   const resto = principal ? tiles.filter((t) => t.key !== principal.key) : tiles;
+
+  const acoes = {
+    meId: me?.id,
+    falando,
+    channelId,
+    onFocar: setFocado,
+    // assistir e subir ao palco são o mesmo gesto: ninguém abre uma
+    // transmissão para vê-la do tamanho de um selo. `setFocado` alterna, então
+    // só se chama quando o tile ainda não é o do palco.
+    onAssistir: (userId: string, chave: string) => {
+      assistir(userId);
+      if (focado !== chave) setFocado(chave);
+    },
+    onPararDeAssistir: pararDeAssistir,
+  };
+
+  if (principal) {
+    const foco = melhorArranjo(1, tamanho.largura, tamanho.altura);
+    return (
+      <div className="flex h-full min-h-0 flex-col items-center" style={{ gap: FOCO_GAP }}>
+        {/* o destaque mantém 16:9 e fica centralizado nos dois eixos, como na
+            print: é `melhorArranjo` com uma vaga só */}
+        <div
+          ref={setPalco}
+          className="flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden"
+        >
+          <div style={{ width: foco.largura, height: foco.altura }}>
+            <VoiceTile tile={principal} {...acoes} grande />
+          </div>
+        </div>
+
+        {resto.length > 0 && (
+          <div
+            className="flex shrink-0 justify-center overflow-x-auto"
+            style={{ gap: FAIXA_GAP, height: FAIXA_ALTURA }}
+          >
+            {resto.map((t) => (
+              <div
+                key={t.key}
+                className="shrink-0"
+                style={{ width: FAIXA_LARGURA, height: FAIXA_ALTURA }}
+              >
+                <VoiceTile tile={t} {...acoes} compacto />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   // Com uma pessoa só na sala o Discord não deixa o palco pela metade: a vaga
   // vazia vira o convite. Com mais gente ele some — aí a grade é a própria
   // sala, e o convite continua a um clique na barra lateral.
-  const comConvite = !!guildId && !principal && resto.length === 1;
+  const comConvite = !!guildId && resto.length === 1;
   const celulas: Celula[] = [
     ...resto.map((t) => ({ tipo: "tile" as const, t })),
     ...(comConvite ? [{ tipo: "convite" as const }] : []),
@@ -211,72 +301,31 @@ export default function VoiceGrid({
   let indice = 0;
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      {principal ? (
-        <div className="min-h-0 flex-1">
-          <VoiceTile
-            tile={principal}
-            meId={me?.id}
-            falando={falando}
-            channelId={channelId}
-            assistindo
-            onFocar={setFocado}
-            grande
-          />
-        </div>
-      ) : (
-        <div
-          ref={setPalco}
-          className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden"
-          style={{ gap: GAP }}
-        >
-          {linhas.map((quantos, linha) => {
-            const fatia = celulas.slice(indice, indice + quantos);
-            indice += quantos;
-            return (
-              <div key={linha} className="flex shrink-0 justify-center" style={{ gap: GAP }}>
-                {fatia.map((c) => (
-                  <div
-                    key={c.tipo === "tile" ? c.t.key : "convite"}
-                    style={{ width: arranjo.largura, height: arranjo.altura }}
-                  >
-                    {c.tipo === "tile" ? (
-                      <VoiceTile
-                        tile={c.t}
-                        meId={me?.id}
-                        falando={falando}
-                        channelId={channelId}
-                        assistindo={false}
-                        onFocar={setFocado}
-                      />
-                    ) : (
-                      <TileDeConvite guildId={guildId as string} />
-                    )}
-                  </div>
-                ))}
+    <div
+      ref={setPalco}
+      className="flex h-full min-h-0 flex-col items-center justify-center overflow-hidden"
+      style={{ gap: GAP }}
+    >
+      {linhas.map((quantos, linha) => {
+        const fatia = celulas.slice(indice, indice + quantos);
+        indice += quantos;
+        return (
+          <div key={linha} className="flex shrink-0 justify-center" style={{ gap: GAP }}>
+            {fatia.map((c) => (
+              <div
+                key={c.tipo === "tile" ? c.t.key : "convite"}
+                style={{ width: arranjo.largura, height: arranjo.altura }}
+              >
+                {c.tipo === "tile" ? (
+                  <VoiceTile tile={c.t} {...acoes} />
+                ) : (
+                  <TileDeConvite guildId={guildId as string} />
+                )}
               </div>
-            );
-          })}
-        </div>
-      )}
-
-      {principal && (
-        <div className="flex shrink-0 gap-3 overflow-x-auto pb-1">
-          {resto.map((t) => (
-            <div key={t.key} className="h-[90px] w-40 shrink-0">
-              <VoiceTile
-                tile={t}
-                meId={me?.id}
-                falando={falando}
-                channelId={channelId}
-                assistindo={false}
-                onFocar={setFocado}
-                compacto
-              />
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -388,14 +437,22 @@ function AvatarDeChamada({
   );
 }
 
-/** Um participante: vídeo quando há, avatar quando não. */
+/**
+ * Um participante: vídeo quando há, avatar quando não.
+ *
+ * O fundo é a **cor dominante da foto** (ver `lib/cor-dominante.ts`), como no
+ * Discord: medido na print `203909`, o fundo do tile e o fundo do avatar são o
+ * mesmo pixel. Quem não tem foto fica na cor do avatar sem imagem, que já é
+ * estável por id.
+ */
 function VoiceTile({
   tile,
   meId,
   falando,
   channelId,
-  assistindo,
   onFocar,
+  onAssistir,
+  onPararDeAssistir,
   grande = false,
   compacto = false,
 }: {
@@ -403,13 +460,13 @@ function VoiceTile({
   meId?: string;
   falando: string[];
   channelId: string;
-  /** este tile é o que está no palco (só a transmissão usa a distinção). */
-  assistindo: boolean;
-  onFocar: (userId: string | null) => void;
+  onFocar: (chave: string | null) => void;
+  onAssistir: (userId: string, chave: string) => void;
+  onPararDeAssistir: (userId: string) => void;
   grande?: boolean;
   compacto?: boolean;
 }) {
-  const { state, participant, publication, tela } = tile;
+  const { state, participant, publication, tela, assistindo } = tile;
   const sou = state.user.id === meId;
   const caixa = useRef<HTMLDivElement>(null);
   const silenciado = useVoice((s) => !!s.silenciados[state.user.id]);
@@ -417,41 +474,65 @@ function VoiceTile({
   // quem está mudo nunca "fala": o anel verde tem de contar a mesma história
   const ativo = !state.muted && (falando.includes(state.user.id) || !!participant?.isSpeaking);
   const nome = displayNameOf(state.user);
+  // a foto ao vivo, pelo mesmo caminho do `Avatar`: quem troca a foto troca
+  // também a cor do tile, sem F5
+  const perfil = usePresence((e) => e.profiles[state.user.id]);
+  const fundo = useCorDominante((perfil ?? state.user).avatarUrl, corDoAvatar(state.user.id));
+  /** só mostra vídeo quando há faixa: tela fechada não tem o que desenhar. */
+  const video = publication?.track ? publication : null;
 
   return (
     <div
       ref={caixa}
-      data-voice-tile={state.user.id}
-      onDoubleClick={() => onFocar(state.user.id)}
+      data-voice-tile={tile.key}
+      // Um clique põe no palco, e o clique no que já está no palco volta para a
+      // grade (`setFocado` alterna). Era duplo clique: ninguém adivinha isso, e
+      // a print mostra o Discord trocando de foco com um toque só. Os botões de
+      // dentro param a propagação — senão "silenciar" também mexeria no palco.
+      onClick={() => onFocar(tile.key)}
       onContextMenu={(e) => {
         e.preventDefault();
         abrirMenuDeParticipante(e.clientX, e.clientY, state.user, { sou, channelId });
       }}
       aria-label={`${nome}${tela ? " — tela compartilhada" : ""}`}
-      // O tile **emerge** do palco: superfície mais clara que o fundo, como no
-      // Discord (tile `#272324` sobre palco preto). Com `panel` sobre `chat`
-      // ele afundava, e a única coisa que o separava do fundo era a moldura.
+      // O tile **emerge** do palco na cor da pessoa (ver o comentário do
+      // componente). Sem foto, `corDoAvatar` — e com vídeo o `<video>` cobre
+      // tudo, então a cor só aparece nas bordas do `object-contain`.
       //
       // Moldura que não existe mais: nem a linha preta, nem a borda verde de
       // quem fala. No Discord o tile não tem borda em estado nenhum — o sinal
       // de fala mora no anel do avatar, que é onde o olho já está.
-      className="group relative h-full w-full overflow-hidden rounded-lg bg-input transition"
+      style={{ backgroundColor: fundo }}
+      className="group relative h-full w-full overflow-hidden rounded-lg transition"
     >
-      {publication ? (
-        <VideoDaFaixa publication={publication} espelhar={sou && !tela} />
+      {video ? (
+        <VideoDaFaixa publication={video} espelhar={sou && !tela} />
+      ) : tela ? (
+        // tela que ainda não se assiste: sem faixa, sem quadro — o convite é
+        // tudo o que há para ver, e ele vem logo abaixo
+        <span className="block h-full w-full" />
       ) : (
         <span className="grid h-full w-full place-items-center">
           {/* o anel acompanha o avatar, e não a caixa: num tile grande a borda
               externa fica longe demais do rosto para ler como "falando". E ele
-              é desenhado por DENTRO do Ø80 — a foto encolhe 2px e o anel ocupa
-              a folga —, senão o avatar cresce quando a pessoa fala e o tile
-              inteiro parece pular. */}
+              é desenhado por DENTRO do avatar — a foto encolhe 2px e o anel
+              ocupa a folga —, senão o avatar cresce quando a pessoa fala e o
+              tile inteiro parece pular.
+
+              80px no tile do palco (medido na print `2026-08-31 101857`, 1:1:
+              avatar de 80 num tile de 760×428) e 64 na faixa de miniaturas
+              (medido em `203909`: ~68px num tile de 188×106 — o avatar do
+              Discord é quase constante, não uma fração do tile). */}
           <span className="relative inline-grid rounded-full">
             <Avatar
               user={state.user}
-              size={compacto ? "md" : "xl"}
+              size="xl"
               surface="border-input"
-              className={`transition-transform ${ativo ? "scale-[0.925]" : ""}`}
+              className={`transition-transform ${ativo ? "scale-[0.925]" : ""} ${
+                compacto
+                  ? "h-16 w-16 [&>img]:h-16 [&>img]:w-16 [&>span]:h-16 [&>span]:w-16 [&>span]:text-xl"
+                  : ""
+              }`}
             />
             {ativo && (
               <span
@@ -472,38 +553,43 @@ function VoiceTile({
         </span>
       )}
 
-      {/* quem ainda não está assistindo precisa de um convite explícito: um
-          quadradinho de vídeo em movimento não diz "isto é uma transmissão" */}
+      {/* Convite para abrir uma transmissão que ainda não estou assistindo.
+          Pílula de 32px de altura, e não a chapa que cobria o tile inteiro: o
+          botão gigante escondia justamente o tile que ele anuncia (print nosso
+          `2026-09-03 203457`). Não há print do Discord com este botão — os 32
+          são a medida do resto da interface, não medição. */}
       {tela && !assistindo && (
         <button
           type="button"
-          onClick={() => onFocar(state.user.id)}
-          className="absolute inset-0 grid place-items-center bg-black/50 opacity-0 transition group-hover:opacity-100"
+          onClick={(e) => {
+            e.stopPropagation();
+            onAssistir(state.user.id, tile.key);
+          }}
+          aria-label={`Assistir à transmissão de ${nome}`}
+          className="absolute inset-0 grid place-items-center"
         >
-          <span className="flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-ink">
-            <Play size={16} aria-hidden="true" />
-            Assistir transmissão
+          <span
+            className={`flex h-8 items-center rounded-full bg-accent font-semibold text-accent-ink shadow-high transition group-hover:brightness-110 ${
+              compacto ? "w-8 justify-center" : "gap-2 px-3 text-[13px]"
+            }`}
+          >
+            <Play size={14} aria-hidden="true" />
+            {!compacto && "Assistir transmissão"}
           </span>
         </button>
       )}
 
-      {/* O rótulo de nome — que é também onde o mudo mora.
-          O Discord não desenha selo circular de microfone no avatar do tile: o
-          próprio rótulo vira o aviso, com o glifo cortado ANTES do nome. Pílula
-          de 32px de altura, a 12px da borda esquerda e da de baixo, raio 6 e
-          preto a 50% sobre o tile.
-          Ela só existe quando tem o que dizer: no tile sem mudo e sem vídeo o
-          Discord não desenha rótulo nenhum. Volta quando há estado a informar —
-          mudo, surdo, transmissão — e no hover, para quem quiser conferir o
-          nome. Com vídeo ela fica sempre: aí o quadro é uma imagem em
-          movimento, e o rosto de hoje não é o de ontem. */}
       {/* "Ao vivo" é selo próprio no canto **superior direito**, não um pedaço
           do rótulo de nome. No Discord os dois convivem: o nome embaixo à
           esquerda, o aviso de transmissão em cima à direita. Dentro do rótulo
           ele competia com o nome pela mesma linha e sumia junto com ela. */}
       {tela && (
+        // some no hover: as ações do tile moram neste mesmo canto, e as duas
+        // coisas empilhadas viravam um borrão vermelho com botões por cima. O
+        // selo diz "isto é uma transmissão", que é informação de relance — no
+        // hover a pergunta já é outra
         <span
-          className={`pointer-events-none absolute rounded-[4px] bg-red font-bold uppercase leading-none tracking-[0.02em] text-white ${
+          className={`pointer-events-none absolute rounded-[4px] bg-red font-bold uppercase leading-none tracking-[0.02em] text-white transition-opacity group-hover:opacity-0 group-focus-within:opacity-0 ${
             compacto ? "right-1.5 top-1.5 px-1 py-0.5 text-[9px]" : "right-3 top-3 px-1.5 py-1 text-[10px]"
           }`}
         >
@@ -511,15 +597,23 @@ function VoiceTile({
         </span>
       )}
 
+      {/* O rótulo de nome — que é também onde o mudo mora.
+          O Discord não desenha selo circular de microfone no avatar do tile: o
+          próprio rótulo vira o aviso, com o glifo cortado ANTES do nome.
+          Pílula de 32px de altura, a 12px da borda esquerda e da de baixo —
+          medida nas duas prints: 101857 a 1:1 dá 32 e 12; 203909 dá 26px e
+          8–9px de folga, que na escala de 0,8075 são os mesmos 32 e 12. Na
+          faixa de miniaturas a folga cai para 4px, que é o que a print mostra.
+          Ela só existe quando tem o que dizer: no tile sem mudo e sem vídeo o
+          Discord não desenha rótulo nenhum. Volta quando há estado a informar —
+          mudo, surdo, transmissão — e no hover, para quem quiser conferir o
+          nome. Com vídeo ela fica sempre: aí o quadro é uma imagem em
+          movimento, e o rosto de hoje não é o de ontem. */}
       <span
-        className={`pointer-events-none absolute flex items-center rounded-md bg-black/50 text-white transition-opacity ${
-          // a medida é a do tile do palco; na tirinha de miniaturas (90px de
-          // altura) 32px de pílula a 12px do canto comeriam o quadro
-          compacto
-            ? "bottom-1.5 left-1.5 h-6 max-w-[calc(100%-12px)] gap-1 px-1.5 text-xs"
-            : "bottom-3 left-3 h-8 max-w-[calc(100%-24px)] gap-1.5 px-2 text-sm"
+        className={`pointer-events-none absolute flex h-8 items-center gap-1.5 rounded-lg bg-black/50 px-2 text-sm text-white transition-opacity ${
+          compacto ? "bottom-1 left-1 max-w-[calc(100%-8px)]" : "bottom-3 left-3 max-w-[calc(100%-24px)]"
         } ${
-          publication || state.muted || state.deafened
+          video || tela || state.muted || state.deafened
             ? ""
             : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
         }`}
@@ -530,55 +624,75 @@ function VoiceTile({
             Branco, e não vermelho: no Discord o alarme é a presença do glifo,
             não a cor dele — e o vermelho sobre preto a 50% é o que menos se lê
             de perto. */}
-        {(state.deafened || state.muted) && (
-          <span
-            className={`grid shrink-0 place-items-center ${compacto ? "h-3.5 w-3.5" : "h-4 w-4"}`}
-          >
+        {(state.deafened || state.muted) && !tela && (
+          <span className="grid h-4 w-4 shrink-0 place-items-center">
             {state.deafened ? (
-              <HeadphoneOff size={compacto ? 12 : 14} role="img" aria-label="Sem áudio" />
+              <HeadphoneOff size={14} role="img" aria-label="Sem áudio" />
             ) : (
-              <MicOff size={compacto ? 12 : 14} role="img" aria-label="Mudo" />
+              <MicOff size={14} role="img" aria-label="Mudo" />
             )}
           </span>
         )}
         <span className="truncate">
           {nome}
-          {sou && " (você)"}
+          {sou && !tela && " (você)"}
         </span>
       </span>
 
-      {!compacto && (
-        <div className="absolute right-1 top-1 flex items-center gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
-          {!sou && (
-            <>
+      {/* Ações do hover, no canto superior direito. Numa tela **já assistida** o
+          que falta não é "assistir", é sair dela: entra o botão de parar,
+          pequeno, ao lado do "…" que a print mostra no tile da faixa. */}
+      <div className="absolute right-1 top-1 flex items-center gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
+        {tela
+          ? assistindo &&
+            !sou && (
               <AcaoDoTile
-                label={`Volume de ${nome}`}
-                onClick={(e) => {
-                  const r = e.currentTarget.getBoundingClientRect();
-                  abrirVolumeDe(r.left, r.bottom, state.user.id, nome);
-                }}
+                label={`Parar de assistir a ${nome}`}
+                onClick={() => onPararDeAssistir(state.user.id)}
               >
-                <Volume2 size={14} />
+                <MonitorX size={14} />
               </AcaoDoTile>
-              <AcaoDoTile
-                label={silenciado ? `Reativar ${nome}` : `Silenciar ${nome}`}
-                onClick={() => toggleSilenciado(state.user.id)}
-              >
-                <VolumeX size={14} className={silenciado ? "text-red" : undefined} />
-              </AcaoDoTile>
-            </>
-          )}
-          <AcaoDoTile
-            label={grande ? "Sair do palco" : "Colocar no palco"}
-            onClick={() => onFocar(state.user.id)}
-          >
-            {grande ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-          </AcaoDoTile>
+            )
+          : !sou && (
+              <>
+                <AcaoDoTile
+                  label={`Volume de ${nome}`}
+                  onClick={(e) => {
+                    const r = e.currentTarget.getBoundingClientRect();
+                    abrirVolumeDe(r.left, r.bottom, state.user.id, nome);
+                  }}
+                >
+                  <Volume2 size={14} />
+                </AcaoDoTile>
+                <AcaoDoTile
+                  label={silenciado ? `Reativar ${nome}` : `Silenciar ${nome}`}
+                  onClick={() => toggleSilenciado(state.user.id)}
+                >
+                  <VolumeX size={14} className={silenciado ? "text-red" : undefined} />
+                </AcaoDoTile>
+              </>
+            )}
+        <AcaoDoTile
+          label={grande ? "Sair do palco" : "Colocar no palco"}
+          onClick={() => onFocar(tile.key)}
+        >
+          {grande ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+        </AcaoDoTile>
+        {!compacto && (
           <AcaoDoTile label="Tela cheia" onClick={() => void alternarTelaCheiaDe(caixa.current)}>
             <Maximize size={14} />
           </AcaoDoTile>
-        </div>
-      )}
+        )}
+        <AcaoDoTile
+          label={`Mais opções de ${nome}`}
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            abrirMenuDeParticipante(r.left, r.bottom + 4, state.user, { sou, channelId });
+          }}
+        >
+          <MoreHorizontal size={14} />
+        </AcaoDoTile>
+      </div>
     </div>
   );
 }
@@ -597,7 +711,12 @@ function AcaoDoTile({
     <Tooltip label={label}>
       <button
         type="button"
-        onClick={onClick}
+        onClick={(e) => {
+          // o tile inteiro é clicável (põe no palco): sem isto, silenciar
+          // alguém também trocaria o foco
+          e.stopPropagation();
+          onClick(e);
+        }}
         aria-label={label}
         className="grid h-7 w-7 place-items-center rounded bg-black/60 text-white transition hover:bg-black/80"
       >
@@ -674,8 +793,23 @@ export function VoiceVolumePopoverHost() {
   );
 }
 
-/** `<video>` colado numa faixa do SDK; solta a faixa ao trocar/desmontar. */
-function VideoDaFaixa({ publication, espelhar }: { publication: TrackPublication; espelhar: boolean }) {
+/**
+ * `<video>` colado numa faixa do SDK; solta a faixa ao trocar/desmontar.
+ *
+ * Exportado porque a miniatura ao vivo do hover (`PreviaDeTela`) desenha a
+ * mesma faixa noutro lugar da tela, e duplicar o `attach`/`detach` é a receita
+ * de deixar faixa pendurada quando o pop-up fecha.
+ */
+export function VideoDaFaixa({
+  publication,
+  espelhar = false,
+  ajuste = "object-contain",
+}: {
+  publication: TrackPublication;
+  espelhar?: boolean;
+  /** `object-cover` na miniatura, que é pequena demais para letterbox. */
+  ajuste?: string;
+}) {
   const ref = useRef<HTMLVideoElement>(null);
   const track = publication.track;
 
@@ -693,7 +827,7 @@ function VideoDaFaixa({ publication, espelhar }: { publication: TrackPublication
       autoPlay
       playsInline
       muted
-      className={`h-full w-full bg-black object-contain ${espelhar ? "-scale-x-100" : ""}`}
+      className={`h-full w-full bg-black ${ajuste} ${espelhar ? "-scale-x-100" : ""}`}
     />
   );
 }

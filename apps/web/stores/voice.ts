@@ -19,10 +19,13 @@ import {
   ConnectionState,
   LocalAudioTrack,
   LocalVideoTrack,
+  RemoteTrackPublication,
   Room,
   RoomEvent,
   Track,
+  VideoQuality,
   type Participant,
+  type TrackPublication,
 } from "livekit-client";
 import { api } from "@/lib/api";
 import { iniciarTelaNativa, isTauri, ouvirTelaEncerrada, pararTelaNativa } from "@/lib/desktop";
@@ -117,6 +120,20 @@ interface VoiceStoreState {
    */
   focoAutomatico: boolean;
   telaCheia: boolean;
+  /**
+   * Telas que eu escolhi assistir, por id de **dono** (a captura pode ser um
+   * participante `#tela`, mas quem se assiste é a pessoa).
+   *
+   * Dá para assistir a várias ao mesmo tempo: cada uma vira um tile no palco.
+   * O conjunto é o que decide a assinatura da faixa no LiveKit — tela que
+   * ninguém está olhando não é baixada (ver `aplicarAssinaturasDeTela`).
+   */
+  assistindo: Set<string>;
+  /**
+   * Dono da tela cuja **miniatura ao vivo** está aberta (o pop-up do hover na
+   * lista do canal). Assina a faixa em baixa qualidade enquanto durar, e só.
+   */
+  previa: string | null;
 
   // ── chamada em conversa direta ──
   call: CallState;
@@ -163,10 +180,21 @@ interface VoiceStoreState {
 
   setVolume: (userId: string, volume: number) => void;
   toggleSilenciado: (userId: string) => void;
-  setFocado: (userId: string | null) => void;
+  /**
+   * Põe um tile no palco, ou tira o que está lá (clicar no focado volta à
+   * grade). A chave é a do tile, não o id da pessoa: quem assiste a duas telas
+   * tem dois tiles do mesmo dono.
+   */
+  setFocado: (chave: string | null) => void;
   /** Foco sem gesto do usuário (transmissão que começa): não desliga o automático. */
-  focarAutomaticamente: (userId: string) => void;
+  focarAutomaticamente: (chave: string) => void;
   setTelaCheia: (ativo: boolean) => void;
+  /** Passa a assistir à tela desta pessoa (assina a faixa). */
+  assistir: (userId: string) => void;
+  /** Para de assistir (desassina a faixa e some com o tile do palco). */
+  pararDeAssistir: (userId: string) => void;
+  /** Abre/fecha a miniatura ao vivo do hover — assinatura em baixa qualidade. */
+  abrirPrevia: (userId: string | null) => void;
 
   startCall: (channelId: string, comVideo: boolean) => Promise<void>;
   acceptCall: () => Promise<void>;
@@ -264,8 +292,18 @@ const OUTRO_LUGAR = "Você entrou na chamada em outro dispositivo.";
 type ResultadoMidia = { tipo: "ok" } | { tipo: "sem-config" } | { tipo: "falha"; erro: string };
 
 export const useVoice = create<VoiceStoreState>((set, get) => {
-  /** Re-render quando o SDK muda participantes/faixas. */
-  const rerender = () => set((s) => ({ tick: s.tick + 1 }));
+  /**
+   * Re-render quando o SDK muda participantes/faixas.
+   *
+   * É aqui que as assinaturas de tela são reaplicadas: uma faixa que acabou de
+   * ser publicada chega **depois** da escolha de assistir (o `assistindo` pode
+   * ter sido montado antes de a pessoa ligar a tela), e sem isto ela entraria
+   * assinada por padrão — que é justamente o gasto que se quer evitar.
+   */
+  const rerender = () => {
+    aplicarAssinaturasDeTela();
+    set((s) => ({ tick: s.tick + 1 }));
+  };
 
   /** Flags atuais do usuário, do jeito que o gateway espera. */
   function flags(): VoiceFlags {
@@ -331,6 +369,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       focado: null,
       focoAutomatico: true,
       telaCheia: false,
+      assistindo: new Set(),
+      previa: null,
       call: CHAMADA_INICIAL,
     });
   }
@@ -356,6 +396,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     focado: null,
     focoAutomatico: true,
     telaCheia: false,
+    assistindo: new Set<string>(),
+    previa: null,
     call: CHAMADA_INICIAL,
 
     loadGuild: async (guildId) => {
@@ -517,6 +559,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         screenOn: false,
         focado: null,
         focoAutomatico: true,
+        assistindo: new Set<string>(),
+        previa: null,
       });
       lembrarSala({ channelId: channel.id, guildId: channel.guildId, name: channel.name ?? "" });
       tocarSom("entrar");
@@ -770,6 +814,31 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       set((s) => ({ focado: s.focado === focado ? null : focado, focoAutomatico: false })),
     focarAutomaticamente: (focado) => set({ focado }),
     setTelaCheia: (telaCheia) => set({ telaCheia }),
+
+    // Um `Set` novo a cada mudança, e não `add`/`delete` no mesmo: zustand
+    // compara por referência, e mutar o conjunto no lugar não re-renderizaria
+    // tile nenhum.
+    assistir: (userId) => {
+      set((s) => (s.assistindo.has(userId) ? s : { assistindo: new Set(s.assistindo).add(userId) }));
+      aplicarAssinaturasDeTela();
+    },
+    pararDeAssistir: (userId) => {
+      set((s) => {
+        if (!s.assistindo.has(userId)) return s;
+        const assistindo = new Set(s.assistindo);
+        assistindo.delete(userId);
+        // o tile sai do palco junto: deixar o foco apontando para uma tela que
+        // não se assiste mais daria um palco com o convite "Assistir" em tela
+        // cheia, que é o oposto do que o clique pediu
+        const focado = s.focado?.startsWith(`${userId}:`) || s.focado === userId ? null : s.focado;
+        return { assistindo, focado };
+      });
+      aplicarAssinaturasDeTela();
+    },
+    abrirPrevia: (previa) => {
+      set({ previa });
+      aplicarAssinaturasDeTela();
+    },
 
     // ── chamada em conversa direta ──
 
@@ -1068,6 +1137,58 @@ export function videosDe(p: Participant) {
   return Array.from(p.trackPublications.values()).filter(
     (pub) => pub.kind === Track.Kind.Video && !!pub.track && !pub.isMuted,
   );
+}
+
+/** Só a câmera: a tela tem tile próprio e regra própria (ver `telasDe`). */
+export function camerasDe(p: Participant) {
+  return videosDe(p).filter((pub) => pub.source !== Track.Source.ScreenShare);
+}
+
+/**
+ * Telas publicadas por um participante — **com ou sem faixa baixada**.
+ *
+ * Diferente de `videosDe`, que exige `pub.track`: uma transmissão que ninguém
+ * está assistindo fica *desassinada*, e então não há faixa nenhuma. O tile
+ * precisa existir mesmo assim, senão o botão "Assistir transmissão" não teria
+ * onde morar e a transmissão sumiria do palco.
+ */
+export function telasDe(p: Participant) {
+  return Array.from(p.trackPublications.values()).filter(
+    (pub) => pub.kind === Track.Kind.Video && pub.source === Track.Source.ScreenShare,
+  );
+}
+
+/**
+ * Assina só as telas que alguém está de fato olhando.
+ *
+ * O LiveKit assina tudo por padrão (`autoSubscribe`), o que numa sala com três
+ * transmissões significa baixar três vídeos em alta para mostrar três
+ * quadradinhos. Aqui a regra é explícita: assina quem está em `assistindo`, e
+ * em **baixa qualidade** quando a única razão é a miniatura do hover.
+ *
+ * A minha própria tela não passa por aqui: faixa local não se assina.
+ */
+export function aplicarAssinaturasDeTela() {
+  const { assistindo, previa } = useVoice.getState();
+  for (const p of participantesDaSala()) {
+    const dono = donoDaIdentidade(p.identity);
+    for (const pub of telasDe(p)) {
+      if (!(pub instanceof RemoteTrackPublication)) continue;
+      const assistida = assistindo.has(dono);
+      const querida = assistida || previa === dono;
+      if (pub.isSubscribed !== querida) pub.setSubscribed(querida);
+      if (querida) pub.setVideoQuality(assistida ? VideoQuality.HIGH : VideoQuality.LOW);
+    }
+  }
+}
+
+/** Alguém publicou tela nesta sala (mesmo sem eu estar assistindo)? */
+export function telaPublicadaDe(userId: string): TrackPublication | null {
+  for (const p of participantesDe(userId)) {
+    const [tela] = telasDe(p);
+    if (tela) return tela;
+  }
+  return null;
 }
 
 /** Faixas de áudio publicadas por um participante. */

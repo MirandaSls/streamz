@@ -21,6 +21,33 @@ export interface Arranjo {
 export const GAP = 12;
 const PROPORCAO = 16 / 9;
 
+/**
+ * O leiaute de **foco**: um tile grande em cima, os outros numa faixa embaixo.
+ *
+ * Medido na print `docs/Reference/Captura de tela 2026-09-03 203909.png`, na
+ * escala 0,8075 (= 2777/3439, a largura da imagem sobre a do monitor do
+ * usuário; conferida pelo passo da lista de canais — 26px medidos, 32 reais —,
+ * pelo avatar do card do usuário — 25px, 32 — e pela cápsula de controles —
+ * 38px, 48):
+ *
+ * | o quê | na print | real |
+ * |---|---|---|
+ * | destaque | 1458×823 (16:9 exato) | 1806×1019 |
+ * | folga lateral do destaque | 229 de cada lado | centralizado |
+ * | vão destaque → faixa | 6 | **8** |
+ * | tile da faixa | 150×86 | **188×106** |
+ *
+ * O destaque não tem tamanho fixo: ele é 16:9 **contido** na área que sobra, e
+ * é por isso que a conta dele é `melhorArranjo(1, …)`. Só a faixa é fixa — no
+ * Discord a miniatura tem o mesmo tamanho com dois ou com dez participantes, e
+ * a faixa rola de lado quando não cabem.
+ */
+export const FOCO_GAP = 8;
+export const FAIXA_ALTURA = 106;
+export const FAIXA_LARGURA = 188;
+/** Vão entre miniaturas: a print só tem uma: não medido, igual ao `FOCO_GAP`. */
+export const FAIXA_GAP = 8;
+
 export function melhorArranjo(
   quantidade: number,
   largura: number,
