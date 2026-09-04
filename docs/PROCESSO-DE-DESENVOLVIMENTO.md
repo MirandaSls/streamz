@@ -1063,6 +1063,7 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
 | #105 | Sons: um som não se sobrepõe a si mesmo em menos de 300 ms, um dono só do volume com fator por som, e badge de não lidas no ícone da caixa de entrada |
 | #112 | As duas categorias padrão viram categorias de verdade (§4.1): paravam de existir na primeira categoria criada, e não dava para renomear nem apagar |
 | #117 | Auditoria de tempo real entre as sessões da conta (§4.2) e as lacunas fechadas: `channel.read` (o "lido" num cliente apaga o badge no outro), fechar conversa/sair do grupo, pedido de amizade na aba "Enviados", `account.updated` e `sessions.revoked` finalmente ouvidos, entrar pela Descobrir, aceitar as regras, tirar o banner |
+| #124 | "Testar microfone" muta e ensurdece de verdade (§7): liga mudo e surdo pelo caminho normal (som, ícone e `voice.update`) e restaura o par de antes ao parar por qualquer caminho; o retorno sobrevive ao mudo porque a captura fica aberta durante o teste |
 
 Desktop: 0.0.6 (#38 + #40 + #41), 0.0.7 (+ #42), 0.0.8 (tudo até #50),
 0.0.10 (até #64), 0.0.11 (até #71, primeira com a tela nativa), 0.0.12 (até #73).
