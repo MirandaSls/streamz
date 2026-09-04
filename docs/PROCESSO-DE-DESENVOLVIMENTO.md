@@ -905,7 +905,7 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   à parte cobre o teste de microfone: a faixa sai da sala, continua viva com a
   cadeia montada e volta.
 - **A supressão avançada exige `'wasm-unsafe-eval'` na CSP do desktop** (PR
-  #124), e a falha dela não pode ser calada. O `RnnoiseWorkletNode` monta sem
+  #126), e a falha dela não pode ser calada. O `RnnoiseWorkletNode` monta sem
   reclamar: o construtor só cria o nó e manda o `.wasm` pela porta. Quem
   instancia o WebAssembly é o processador **dentro** do
   `AudioWorkletGlobalScope`, num `async` sem `catch` — e quando isso falha, o
@@ -1070,7 +1070,7 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
 | #105 | Sons: um som não se sobrepõe a si mesmo em menos de 300 ms, um dono só do volume com fator por som, e badge de não lidas no ícone da caixa de entrada |
 | #112 | As duas categorias padrão viram categorias de verdade (§4.1): paravam de existir na primeira categoria criada, e não dava para renomear nem apagar |
 | #117 | Auditoria de tempo real entre as sessões da conta (§4.2) e as lacunas fechadas: `channel.read` (o "lido" num cliente apaga o badge no outro), fechar conversa/sair do grupo, pedido de amizade na aba "Enviados", `account.updated` e `sessions.revoked` finalmente ouvidos, entrar pela Descobrir, aceitar as regras, tirar o banner |
-| #124 | Supressão de ruído avançada no desktop: a CSP sem `'wasm-unsafe-eval'` fazia o RNNoise publicar silêncio, calado (§7) |
+| #126 | Supressão de ruído avançada no desktop: a CSP sem `'wasm-unsafe-eval'` fazia o RNNoise publicar silêncio, calado (§7) |
 
 Desktop: 0.0.6 (#38 + #40 + #41), 0.0.7 (+ #42), 0.0.8 (tudo até #50),
 0.0.10 (até #64), 0.0.11 (até #71, primeira com a tela nativa), 0.0.12 (até #73).
