@@ -37,6 +37,7 @@ import {
   type ThreadUpdatedEvent,
   type UserBlockedEvent,
   type VoiceEvictedEvent,
+  type VoiceMovedEvent,
   type VoiceStateEvent,
 } from "@streamz/shared";
 import type { NotificationSetting } from "@streamz/shared";
@@ -346,6 +347,11 @@ export function useRealtime(currentUserId?: string): void {
       // voz em um lugar só: a conta entrou de outro aparelho e esta conexão sai
       on<VoiceEvictedEvent>(WS_EVENTS.VOICE_EVICTED, (evento) => {
         useVoice.getState().expulsoDaVoz(evento);
+      }),
+      // fui arrastado para outro canal de voz por quem tem "mover membros":
+      // o estado no servidor já mudou; aqui só a sala do LiveKit acompanha
+      on<VoiceMovedEvent>(WS_EVENTS.VOICE_MOVED, (evento) => {
+        void useVoice.getState().movidoDeCanal(evento);
       }),
 
       on<CallRingEvent>(WS_EVENTS.CALL_RING, (evento) => {

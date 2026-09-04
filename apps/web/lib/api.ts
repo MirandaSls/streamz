@@ -75,6 +75,7 @@ import type {
   MinhaConta,
   SessaoView,
   UserStatus,
+  VoiceMoveInput,
   VoiceStateEvent,
 } from "@streamz/shared";
 import { API_URL } from "./config";
@@ -431,6 +432,16 @@ export const api = {
   guildVoiceStates: (guildId: string) => request<VoiceStateEvent[]>(`/guilds/${guildId}/voice-states`),
   /** Quem está na chamada de uma conversa agora — o par do de servidor, para DM e grupo. */
   dmVoiceStates: (channelId: string) => request<VoiceStateEvent[]>(`/dms/${channelId}/voice-states`),
+  /**
+   * Move alguém de um canal de voz para outro do mesmo servidor (arrasto da
+   * barra lateral). Recusa com 403 sem `MOVE_MEMBERS` e com 400 quando o alvo
+   * não está em voz neste servidor — quem chama mostra o erro no toast.
+   */
+  moverParaCanalDeVoz: (guildId: string, userId: string, channelId: string) =>
+    request<{ moved: string; from: string; to: string }>(
+      `/guilds/${guildId}/voice/move`,
+      json({ userId, channelId } satisfies VoiceMoveInput),
+    ),
   /** Começa (ou entra n)uma chamada de conversa direta; devolve o token de mídia, se houver. */
   startCall: (channelId: string) =>
     request<CallStartResponse>(`/dms/${channelId}/call`, { method: "POST" }),
