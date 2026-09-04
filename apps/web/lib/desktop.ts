@@ -64,6 +64,23 @@ declare global {
   }
 }
 
+/**
+ * Bloqueia o menu de contexto NATIVO do WebView2 (Voltar, Recarregar,
+ * Inspecionar…) no desktop. O Discord não mostra esse menu em lugar nenhum; os
+ * menus do próprio app chamam `preventDefault` antes e continuam funcionando —
+ * este ouvinte fica no `document`, em fase de borbulha, e só age quando
+ * nenhum menu nosso reivindicou o clique. Copiar/colar seguem por atalho.
+ * No site não faz nada: lá o menu do navegador é do usuário.
+ */
+export function bloquearMenuNativo(): () => void {
+  if (!isTauri() || typeof document === "undefined") return () => {};
+  const ouvinte = (e: MouseEvent) => {
+    if (!e.defaultPrevented) e.preventDefault();
+  };
+  document.addEventListener("contextmenu", ouvinte);
+  return () => document.removeEventListener("contextmenu", ouvinte);
+}
+
 /** True quando o código está executando dentro do app desktop (Tauri). */
 export function isTauri(): boolean {
   return (

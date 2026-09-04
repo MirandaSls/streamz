@@ -6,7 +6,7 @@ import InboxPopover from "@/components/chat/InboxPopover";
 import { Amigos, ArrowLeft, ArrowRight, Download, HelpCircle } from "@/components/ui/icones";
 import Marca from "@/components/ui/Marca";
 import Tooltip from "@/components/ui/Tooltip";
-import { isTauri } from "@/lib/desktop";
+import { bloquearMenuNativo, isTauri } from "@/lib/desktop";
 import { useFriends } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
 import { observar, useHistorico } from "@/stores/historico";
@@ -67,6 +67,8 @@ function Barra() {
   const voltar = useHistorico((s) => s.voltar);
   const avancar = useHistorico((s) => s.avancar);
   useEffect(() => observar(), []);
+  // o menu nativo do WebView2 (Voltar/Recarregar/Inspecionar) não existe no Discord
+  useEffect(() => bloquearMenuNativo(), []);
 
   const titulo = useTitulo();
   const atualizacao = useAtualizacao();
