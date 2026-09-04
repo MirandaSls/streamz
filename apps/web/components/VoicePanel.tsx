@@ -25,8 +25,9 @@ import { ui, useUI, type MenuItem } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
 
 /**
- * Painel de voz/vídeo/tela de um canal de VOZ — a **metade de cima** da coluna
- * 3, com o chat de texto do mesmo canal embaixo (ver `CallSplit`).
+ * Painel de voz/vídeo/tela de um canal de VOZ — a coluna 3 inteira, com o chat
+ * de texto do mesmo canal numa coluna **à direita** quando aberto (ver
+ * `CallSplit`, que escolhe esse leiaute por ser canal de servidor).
  *
  * Aqui não há conexão nenhuma: quem conecta, guarda estado e fala com o
  * LiveKit é a store `stores/voice.ts`. Este componente só monta a tela em cima

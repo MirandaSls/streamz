@@ -764,6 +764,30 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   A miniatura do hover da lista do canal (`PreviaDeTela`) assina em **baixa
   qualidade** só enquanto o pop-up está na tela.
 
+- **Voz e texto dividem a coluna de dois jeitos, e quem escolhe é o contexto**
+  (`orientacaoDaChamada`, em `call-split-layout.ts`, com teste). O PR #108
+  apagou a diferença e mandou tudo para a coluna da direita; o usuário viu na
+  print `2026-09-04 001116` uma DM com a timeline espremida.
+  - **Conversa direta e grupo → faixa em cima.** O palco é uma tira no topo e a
+    conversa continua embaixo, na largura toda, com o composer no lugar de
+    sempre. A faixa é **fixa em 199px**, medida por `getpixel` em quatro prints
+    de chamada em DM com janelas bem diferentes — `2026-08-31 123800` (714),
+    `160122` (718), `160106` (788) e `103419` (914) —, do filete do cabeçalho
+    até onde começa o fundo da conversa. (O #72 já tinha visto o fixo, mas leu
+    215; a releitura dá 199 nas quatro.) `ALTURA_MIN` passou a ser a própria
+    faixa: abaixo dela os 96px que o `CallStage` reserva aos controles começam a
+    comer o avatar de 80. O arrasto guarda **proporção**, para que tela maior dê
+    mais palco. Na faixa o `CallStage` não desenha título: o cabeçalho da
+    conversa está 199px acima dizendo o mesmo nome, e na print do Discord a
+    faixa não tem título nenhum.
+  - **Canal de voz de servidor → coluna de 450 à direita**
+    (`PainelDeChatDaCall`). Medidas da print `2026-09-03 203909`: painel de
+    363px → **450**; cabeçalho de 36 → **44** com balão de 18 a 14 da borda,
+    nome e X a 16 da direita; composer de 41 → 51. O cabeçalho **não** tem
+    busca, alfinete nem lista de membros — por isso o `ChatView incorporado`
+    deixou de desenhar o `HeaderBar`. O arrasto guarda **pixel**: na print são
+    450 numa janela de 3333, não uma fração dela. Abre pelo balão do cabeçalho
+    do palco e pelo balão da linha do canal (hover, print `image (1)`).
 - **A minha própria tela é assinada de volta — foi a tela preta da 0.0.18.** A
   regra de assinatura acima nasceu com um furo: no desktop a captura é nativa e
   entra na sala como um **participante remoto**, `<userId>#tela`. Do ponto de
