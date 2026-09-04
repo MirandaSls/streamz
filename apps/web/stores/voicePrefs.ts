@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { PTT_RELEASE_MS } from "@streamz/shared";
-import { tocarSom } from "@/lib/ringtone";
+import { tocarSom, type SomDeVoz } from "@/lib/ringtone";
 import { PTT_INICIAL, pttAberto, pttFechaEm, pttPress, pttRelease, type PttState } from "@/stores/ptt-core";
+import type { PrefsDeVoz } from "@/stores/teste-de-microfone";
 
 /**
  * Microfone e áudio do usuário — os dois botões do rodapé, como no Discord,
@@ -12,8 +13,8 @@ import { PTT_INICIAL, pttAberto, pttFechaEm, pttPress, pttRelease, type PttState
  * `pttAtivo` é o único campo **transitório**: representa a tecla apertada agora
  * e não faz sentido guardar entre sessões.
  *
- * **O som mora aqui**, dentro de `toggleMute`/`toggleDeafen`, e não em quem
- * chama. Antes ele estava só no `VoiceHotkeys`: o atalho Ctrl+Shift+M avisava,
+ * **O som mora aqui**, dentro de `toggleMute`/`toggleDeafen`/`setMuteDeafen`,
+ * e não em quem chama. Antes ele estava só no `VoiceHotkeys`: o atalho Ctrl+Shift+M avisava,
  * mas o mesmo botão do rodapé do usuário (e o da barra da call) trocava o
  * estado em silêncio. Com o som na store, todo caminho — botão, atalho, menu —
  * soa igual, e continua soando **fora** de qualquer chamada, porque mudo e
@@ -31,6 +32,17 @@ interface VoicePrefsState {
 
   toggleMute: () => void;
   toggleDeafen: () => void;
+  /**
+   * Põe mudo e surdo num valor **absoluto**, como se o usuário tivesse
+   * clicado: persiste, avisa o gateway (pela assinatura em `stores/voice.ts`)
+   * e toca **um** som — ver `somDaMudanca`.
+   *
+   * É o caminho de quem restaura um par guardado, e não de quem alterna: o
+   * teste de microfone ensurdece ao começar e devolve o estado de antes ao
+   * parar. Fazer isso com dois `toggle` tocaria dois sons e passaria por um
+   * estado intermediário que ninguém pediu.
+   */
+  setMuteDeafen: (alvo: PrefsDeVoz) => void;
   setPushToTalk: (ativo: boolean) => void;
   setPttKey: (code: string | null) => void;
   /** tecla de PTT pressionada/solta — chamado pelo ouvinte global de teclado. */
@@ -95,6 +107,16 @@ export const useVoicePrefs = create<VoicePrefsState>((set, get) => ({
     tocarSom(deafened ? "surdo" : "nao-surdo");
   },
 
+  setMuteDeafen: (alvo) => {
+    const antes: PrefsDeVoz = { muted: get().muted, deafened: get().deafened };
+    // surdo implica mudo, a mesma regra do `toggleDeafen`: um par
+    // "surdo sem mudo" mostraria um ícone que o resto do app não sabe desenhar
+    const depois: PrefsDeVoz = { muted: alvo.deafened || alvo.muted, deafened: alvo.deafened };
+    const som = somDaMudanca(antes, depois);
+    persistir(get, set, depois);
+    if (som) tocarSom(som);
+  },
+
   setPushToTalk: (pushToTalk) => {
     ptt = PTT_INICIAL;
     set({ pttAtivo: false });
@@ -134,6 +156,20 @@ export const useVoicePrefs = create<VoicePrefsState>((set, get) => ({
     return s.pushToTalk ? s.pttAtivo : true;
   },
 }));
+
+/**
+ * O som de uma mudança de mudo/surdo — **um só**, o que o usuário percebe.
+ *
+ * O surdo manda quando muda, porque é a mudança maior (ele arrasta o mudo
+ * junto); só quando ele fica onde estava é que o mudo fala. Nada mudou, nada
+ * toca: restaurar o teste de quem já estava surdo é silencioso, como tem de
+ * ser — a pessoa não fez nada.
+ */
+export function somDaMudanca(antes: PrefsDeVoz, depois: PrefsDeVoz): SomDeVoz | null {
+  if (antes.deafened !== depois.deafened) return depois.deafened ? "surdo" : "nao-surdo";
+  if (antes.muted !== depois.muted) return depois.muted ? "mudo" : "desmudo";
+  return null;
+}
 
 /** Grava só o que é preferência (o `pttAtivo` fica de fora) e atualiza a store. */
 function persistir(
