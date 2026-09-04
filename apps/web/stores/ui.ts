@@ -91,7 +91,11 @@ export type Modal =
   | { kind: "createPoll"; channelId: string }
   | { kind: "pollVoters"; messageId: string }
   | { kind: "serverSettings"; guildId: string; tab?: ServerSettingsTab }
-  | { kind: "welcome"; guildId: string };
+  | { kind: "welcome"; guildId: string }
+  // ── multiconta ── ver `lib/contas.ts`
+  | { kind: "gerenciarContas" }
+  /** `voltar` = reabrir "Gerenciar contas" ao sair daqui, como no Discord. */
+  | { kind: "adicionarConta"; voltar?: boolean };
 
 /**
  * Um item de menu de contexto; `separator` desenha a linha entre grupos.

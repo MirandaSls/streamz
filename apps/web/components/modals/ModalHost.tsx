@@ -28,6 +28,9 @@ import PollVotersModal from "@/components/modals/PollVotersModal";
 import ReportModal from "@/components/modals/ReportModal";
 import TimeoutModal from "@/components/modals/TimeoutModal";
 import WelcomeModal from "@/components/modals/WelcomeModal";
+// ── multiconta ──
+import AdicionarContaModal from "@/components/modals/AdicionarContaModal";
+import GerenciarContasModal from "@/components/modals/GerenciarContasModal";
 import { useUI, type Modal } from "@/stores/ui";
 
 /**
@@ -67,6 +70,11 @@ function renderModal(modal: Modal) {
       return <InviteModal guildId={modal.guildId} code={modal.code} />;
     case "createGroupDM":
       return <CreateGroupDMModal />;
+    // ── multiconta ──
+    case "gerenciarContas":
+      return <GerenciarContasModal />;
+    case "adicionarConta":
+      return <AdicionarContaModal voltar={modal.voltar ?? false} />;
     case "settings":
       return <SettingsModal tab={modal.tab} />;
     case "invites":
