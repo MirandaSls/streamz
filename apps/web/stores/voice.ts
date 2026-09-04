@@ -25,7 +25,6 @@ import {
   Room,
   RoomEvent,
   Track,
-  VideoQuality,
   createLocalTracks,
   type Participant,
   type TrackPublication,
@@ -44,6 +43,7 @@ import {
   type RestricoesDeMicrofone,
   type SalaDoMicrofone,
 } from "@/lib/microfone";
+import { aplicarAssinaturas, type ParticipanteDeTela } from "@/stores/assinaturas-de-tela";
 import { CHAMADA_INICIAL, callReducer, type CallAction, type CallState } from "@/stores/call-machine";
 import { emit, errorMessage } from "@/stores/socket-adapter";
 import { iniciarMedicaoDePing, pararMedicaoDePing } from "@/stores/voice-ping";
@@ -906,9 +906,18 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     toggleSilenciado: (userId) =>
       set((s) => ({ silenciados: { ...s.silenciados, [userId]: !s.silenciados[userId] } })),
 
-    setFocado: (focado) =>
-      set((s) => ({ focado: s.focado === focado ? null : focado, focoAutomatico: false })),
-    focarAutomaticamente: (focado) => set({ focado }),
+    // Trocar o palco troca a **qualidade** pedida: o que sobe ao destaque passa
+    // a valer alta, e o que desce para a faixa (188×106) vira miniatura. Sem
+    // reaplicar aqui, a tela que acabou de subir continuaria em baixa até o
+    // próximo evento do SDK.
+    setFocado: (focado) => {
+      set((s) => ({ focado: s.focado === focado ? null : focado, focoAutomatico: false }));
+      aplicarAssinaturasDeTela();
+    },
+    focarAutomaticamente: (focado) => {
+      set({ focado });
+      aplicarAssinaturasDeTela();
+    },
     setTelaCheia: (telaCheia) => set({ telaCheia }),
 
     // Um `Set` novo a cada mudança, e não `add`/`delete` no mesmo: zustand
@@ -1223,6 +1232,13 @@ async function entrarNaSala(
       recomporFalantes();
       rerender();
     })
+    // `TrackPublished`/`TrackUnpublished` são de participante **remoto**: é por
+    // eles que uma transmissão que começa é notada na hora. Sem eles, a única
+    // notícia vinha do `autoSubscribe` já tendo baixado a faixa — ou seja, o
+    // gasto que a regra de assinatura existe para evitar acontecia antes de a
+    // regra rodar, e uma tela que ninguém fosse assistir chegava a ser baixada
+    .on(RoomEvent.TrackPublished, rerender)
+    .on(RoomEvent.TrackUnpublished, rerender)
     .on(RoomEvent.TrackSubscribed, rerender)
     .on(RoomEvent.TrackUnsubscribed, rerender)
     .on(RoomEvent.LocalTrackPublished, () => {
@@ -1410,28 +1426,58 @@ export function telasDe(p: Participant) {
   );
 }
 
+/** O meu `userId` nesta sala (a identidade local nunca tem sufixo, mas custa nada). */
+function meuIdNaSala(): string | null {
+  const identity = sala?.localParticipant.identity;
+  return identity ? donoDaIdentidade(identity) : null;
+}
+
 /**
- * Assina só as telas que alguém está de fato olhando.
+ * Os participantes da sala reduzidos ao que a regra de assinatura lê.
  *
- * O LiveKit assina tudo por padrão (`autoSubscribe`), o que numa sala com três
- * transmissões significa baixar três vídeos em alta para mostrar três
- * quadradinhos. Aqui a regra é explícita: assina quem está em `assistindo`, e
- * em **baixa qualidade** quando a única razão é a miniatura do hover.
+ * O `instanceof RemoteTrackPublication` é a fronteira: **faixa local não se
+ * assina**, e é por ela que a tela do navegador (publicada no meu próprio
+ * participante) segue no ar sem depender de assinatura nenhuma. No desktop a
+ * minha tela chega como remota, pelo participante `<userId>#tela`, e aí a
+ * regra vale para ela como para as outras.
+ */
+function participantesComTelas(): ParticipanteDeTela[] {
+  return participantesDaSala().map((p) => {
+    const publicacoes = Array.from(p.trackPublications.values());
+    return {
+      dono: donoDaIdentidade(p.identity),
+      telas: publicacoes.filter(
+        (pub): pub is RemoteTrackPublication =>
+          pub instanceof RemoteTrackPublication &&
+          pub.kind === Track.Kind.Video &&
+          pub.source === Track.Source.ScreenShare,
+      ),
+      audios: publicacoes.filter(
+        (pub): pub is RemoteTrackPublication =>
+          pub instanceof RemoteTrackPublication &&
+          pub.kind === Track.Kind.Audio &&
+          pub.source === Track.Source.ScreenShareAudio,
+      ),
+    };
+  });
+}
+
+/**
+ * Assina as telas que têm um tile mostrando vídeo, e desassina o resto.
  *
- * A minha própria tela não passa por aqui: faixa local não se assina.
+ * A regra inteira mora em `stores/assinaturas-de-tela.ts` (com o porquê de cada
+ * caso e o teste); aqui só se traduz a sala do LiveKit para ela. Chamada a cada
+ * evento do SDK e a cada mudança de `assistindo`/`previa`/`focado` — quem muda
+ * o palco muda a qualidade pedida.
  */
 export function aplicarAssinaturasDeTela() {
-  const { assistindo, previa } = useVoice.getState();
-  for (const p of participantesDaSala()) {
-    const dono = donoDaIdentidade(p.identity);
-    for (const pub of telasDe(p)) {
-      if (!(pub instanceof RemoteTrackPublication)) continue;
-      const assistida = assistindo.has(dono);
-      const querida = assistida || previa === dono;
-      if (pub.isSubscribed !== querida) pub.setSubscribed(querida);
-      if (querida) pub.setVideoQuality(assistida ? VideoQuality.HIGH : VideoQuality.LOW);
-    }
-  }
+  const { assistindo, previa, focado } = useVoice.getState();
+  aplicarAssinaturas(participantesComTelas(), {
+    meuId: meuIdNaSala(),
+    assistindo,
+    previa,
+    focado,
+  });
 }
 
 /** Alguém publicou tela nesta sala (mesmo sem eu estar assistindo)? */
