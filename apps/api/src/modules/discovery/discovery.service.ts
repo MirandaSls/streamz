@@ -96,6 +96,9 @@ export class DiscoveryService {
         iconUrl: true,
         ownerId: true,
         description: true,
+        // o `Guild` do contrato carrega os dois desde o "perfil do servidor"
+        bannerColor: true,
+        createdAt: true,
       },
     });
     if (!guild) throw new NotFoundException("Servidor não encontrado");
@@ -118,11 +121,23 @@ export class DiscoveryService {
       return { id: guild.id, name: guild.name };
     }
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (user) {
+    const [user, novoMembro] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId } }),
+      // `joinedAt` do banco: é por ele que a tabela de membros ordena
+      this.prisma.guildMember.findUnique({
+        where: { userId_guildId: { userId, guildId } },
+        select: { joinedAt: true },
+      }),
+    ]);
+    if (user && novoMembro) {
       this.realtime.emitToGuild(guildId, WS_EVENTS.MEMBER_JOINED, {
         guildId,
-        member: { role: "MEMBER", user: toPublicUser(user) },
+        member: {
+          role: "MEMBER",
+          user: toPublicUser(user),
+          roleIds: [],
+          joinedAt: novoMembro.joinedAt.toISOString(),
+        },
       });
     }
     this.realtime.joinGuildRoom(userId, guildId);

@@ -9,6 +9,8 @@ function guild(id: string, extra: Partial<Guild> = {}): Guild {
     iconUrl: null,
     ownerId: "bia",
     description: null,
+    bannerColor: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
     unread: false,
     mentionCount: 0,
     ...extra,

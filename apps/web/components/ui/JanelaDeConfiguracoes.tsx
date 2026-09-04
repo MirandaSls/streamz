@@ -95,6 +95,7 @@ export default function JanelaDeConfiguracoes({
   menuVazio,
   rodapeMenu,
   tituloAba,
+  fecharComoEsc = false,
   rotuloFechar = "Fechar",
   controle,
   onClose,
@@ -122,6 +123,24 @@ export default function JanelaDeConfiguracoes({
   rodapeMenu?: ReactNode;
   /** vira o `<h1>` do cabeçalho: o nome da aba, não o do objeto. */
   tituloAba?: string;
+  /**
+   * Desenha o fechar como o **X redondo com "ESC"** ao lado da coluna de
+   * conteúdo, sem a barra de 48px — e aí quem escreve o título é a página.
+   *
+   * As configurações do **servidor** do Discord são assim (prints
+   * `2026-09-04 100541`–`100821`); as do usuário, que foram medidas em
+   * `2026-09-01 1143–1146`, têm a barra com o X simples. São dois desenhos
+   * diferentes no mesmo produto, então isto é uma opção e não uma troca: quem
+   * não pedir continua com a barra.
+   *
+   * Medidas (print `2026-09-04 100700`, janela 1919×1079, `getpixel`):
+   * círculo de 36 com anel de 2px, centro a 58 da borda direita da coluna de
+   * conteúdo; "ESC" em caixa-alta 9px abaixo do círculo. A altura do print
+   * (centro a 110 do topo da janela) **não** transfere — lá a tela ocupa a
+   * janela inteira e aqui é um modal de 888 —, então o círculo alinha o centro
+   * com a primeira linha do título da página.
+   */
+  fecharComoEsc?: boolean;
   rotuloFechar?: string;
   /** barra de "alterações não salvas": o shell desenha e barra a saída. */
   controle?: ControleDeAlteracoes;
@@ -281,10 +300,17 @@ export default function JanelaDeConfiguracoes({
           {/* A lista é a única parte que rola: numa janela baixa o cartão e a
               busca continuam à vista, como no Discord. */}
           <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-            {grupos.map((grupo) => {
+            {grupos.map((grupo, i) => {
               if (grupo.itens.length === 0) return null;
               return (
                 <div key={grupo.id} className={grupo.label ? "mb-4" : undefined}>
+                  {/* Divisória entre grupos: está nos dois prints do menu (o do
+                      servidor, `2026-09-04 100541`, com a linha entre "Vantagens
+                      de Impulso" e EXPRESSÕES; e o do usuário, `2026-09-01
+                      114404`, acima de "Jogos e apps"). Sem ela os cabeçalhos em
+                      caixa-alta eram a única separação, e grupo de um item só
+                      encostava no anterior. */}
+                  {i > 0 && <div aria-hidden="true" className="mb-2 mt-1 h-px bg-border" />}
                   {grupo.label && (
                     <h2 className="mb-1 px-2.5 text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
                       {grupo.label}
@@ -359,31 +385,39 @@ export default function JanelaDeConfiguracoes({
           </div>
         </nav>
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="relative flex min-w-0 flex-1 flex-col">
           {/* Cabeçalho de 48px com divisória, só sobre o conteúdo: o título da
               aba fica aqui (era um `<h1>` dentro do miolo) e o fechar é um X
               simples com o centro a 24px da borda — sem o círculo com "ESC",
-              que no Discord de hoje só aparece nas telas que ainda ocupam a
-              janela inteira. */}
-          <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border pl-4 pr-2">
-            <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-txt-primary">
-              {tituloAba}
-            </h1>
-            <button
-              type="button"
-              onClick={fechar}
-              aria-label={rotuloFechar}
-              title={`${rotuloFechar} (Esc)`}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-txt-muted transition hover:bg-hov hover:text-txt-primary"
-            >
-              <X size={16} />
-            </button>
-          </header>
+              que no Discord de hoje só aparece nas telas do **servidor**
+              (`fecharComoEsc`). */}
+          {!fecharComoEsc && (
+            <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border pl-4 pr-2">
+              <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-txt-primary">
+                {tituloAba}
+              </h1>
+              <button
+                type="button"
+                onClick={fechar}
+                aria-label={rotuloFechar}
+                title={`${rotuloFechar} (Esc)`}
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-txt-muted transition hover:bg-hov hover:text-txt-primary"
+              >
+                <X size={16} />
+              </button>
+            </header>
+          )}
 
-          {/* Coluna útil de 700px centrada com 40 de recuo: no print o miolo
-              não acompanha a largura do modal, ele fica no meio. */}
+          {/* Coluna útil de 700px com 40 de recuo. Centrada na variante com
+              barra; encostada à esquerda na variante "ESC", porque lá o círculo
+              de fechar mora à direita dela e o conjunto é que fica alinhado ao
+              começo do conteúdo, como no print do servidor. */}
           <div ref={rolagemRef} className="min-h-0 flex-1 overflow-y-auto">
-            <div className="mx-auto w-full max-w-[780px] px-10 pb-10 pt-10">
+            <div
+              className={`w-full max-w-[780px] px-10 pb-10 pt-10 ${
+                fecharComoEsc ? "" : "mx-auto"
+              }`}
+            >
               {controle ? (
                 <ProvedorDeAlteracoes controle={controle}>
                   {children}
@@ -394,6 +428,31 @@ export default function JanelaDeConfiguracoes({
               )}
             </div>
           </div>
+
+          {/* Fora do scroller de propósito: no Discord o botão não sobe com a
+              página. `min(...)` prende ao fim da coluna de 700 (740 + 58 - 18)
+              e recua para a borda do painel quando a janela é estreita demais
+              para os dois caberem lado a lado. */}
+          {fecharComoEsc && (
+            <button
+              type="button"
+              onClick={fechar}
+              aria-label={rotuloFechar}
+              title={`${rotuloFechar} (Esc)`}
+              style={{ left: "min(780px, calc(100% - 52px))" }}
+              className="absolute top-9 flex w-9 flex-col items-center gap-[9px] text-txt-secondary transition hover:text-txt-primary"
+            >
+              <span
+                aria-hidden="true"
+                className="grid h-9 w-9 place-items-center rounded-full border-2 border-current"
+              >
+                <X size={16} />
+              </span>
+              <span aria-hidden="true" className="text-[11px] font-bold tracking-[0.02em]">
+                ESC
+              </span>
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -614,6 +614,48 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   centrada sobre o app escurecido — não página inteira —, com menu de 252,
   busca de 40 e cabeçalho de 48 com o X simples no canto (medido nos prints
   `2026-09-01 1143–1146`, janela de 1920×1032).
+- **Fechar: dois desenhos, um por família de tela.** Os prints de
+  `2026-09-04 100527–100821` (configurações do **servidor**, janela 1919×1079)
+  mostram que ali o Discord não usa a barra de 48: o título é da página e o
+  fechar é um **X redondo de 36 com anel de 2px e "ESC" embaixo**, com o centro
+  a 58 da borda direita da coluna de conteúdo e o rótulo 9px abaixo do círculo.
+  A `JanelaDeConfiguracoes` ganhou `fecharComoEsc` para isso; as de usuário,
+  canal e grupo continuam com a barra. A altura do círculo no print (centro a
+  110 do topo da janela) **não** transfere — lá a tela ocupa a janela inteira e
+  aqui é um modal de 888 —, então ele alinha o centro com a primeira linha do
+  título. O menu ganhou **divisória entre grupos**, que está nos dois prints.
+- **Configurações do servidor (lote #128, prints `2026-09-04`).** Ordem e
+  rótulos do menu do Discord, só com o que existe: Perfil do servidor,
+  Engajamento / EXPRESSÕES: Emoji / PESSOAS: Membros, Cargos, Convites, Acesso /
+  MODERAÇÃO: Registro de auditoria, Banimentos, Denúncias (esta última é nossa,
+  não do Discord; a fila existe e escondê-la tiraria acesso a uma tela que
+  funciona). **Não criar** Tag, Vantagens de Impulso, Figurinhas, Painel de
+  efeitos sonoros, Integrações, Diretório de Apps, Configurações de Segurança,
+  Visão geral da comunidade, Onboarding, Análises e Modelo do servidor.
+  Medidas lidas por `getpixel` (coluna de conteúdo de 660, x 732→1391):
+
+  | tela | print | medida |
+  |---|---|---|
+  | título da página | todas | 20 semibold; subtítulo de 14 apagado 6px abaixo |
+  | Perfil: coluna do formulário | `100541` | 560 (x 732→1291) |
+  | Perfil: campo "Nome" | `100541` | 560×47; rótulo de 16 semibold, não caixa-alta |
+  | Perfil: botões do ícone | `100541` | 32 de altura ("Altere…" 198, "Remover…" 117, 8 entre) |
+  | Perfil: amostra de faixa | `100541` | 105×64, 5 por linha, 8 de espaço, duas linhas; anel de 2 do acento a 3 de distância |
+  | Perfil: cartão de prévia | `100541` | 300×238, faixa de 118 no topo, ícone de 68 raio 16 com anel de 4 |
+  | Membros: cabeçalho / linha | `100649` | 57 / 55, divisória de 1px `#2E2E33` |
+  | Cargos: cartão "Permissões padrão" | `100700` | 660×74; busca 660×40 32 abaixo; linhas de 61 |
+  | Convites: botões | `100706` | 40 de altura ("Criar link" 169, "Pausar" 141 — este não existe aqui) |
+  | Acesso: painel dos cartões | `100713` | 660×151 raio 8 com 8 de recuo; cartão 209×132; interruptor 48×24 |
+
+  A **faixa** do perfil é dado do servidor (`Guild.bannerColor` + a tabela de
+  degradês `GUILD_BANNER_COLORS`), **não** token de tema — as dez amostras são
+  os pares topo/base lidos no print.
+
+  Colunas e controles do print sem recurso por trás, e por isso ausentes:
+  "Características" (Perfil), "Ingressou no Discord" e "Forma de adesão"
+  (Membros), "Cargos" (Convites), "Pausar convites", "Mediante solicitação"
+  (Acesso — não há fila de aprovação) e tudo que Engajamento tem além do canal
+  do sistema e da tela de boas-vindas.
 
 ## 7. Arquitetura de voz (o que precisa continuar verdade)
 

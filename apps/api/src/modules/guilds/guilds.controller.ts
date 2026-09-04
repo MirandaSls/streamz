@@ -13,7 +13,7 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { SkipThrottle } from "@nestjs/throttler";
-import { IsIn, IsOptional, IsString, Length } from "class-validator";
+import { IsIn, IsOptional, IsString, Length, Matches } from "class-validator";
 import type { ServerResponse } from "node:http";
 import { MAX_GUILD_DESCRIPTION, MAX_GUILD_ICON_SIZE } from "@streamz/shared";
 import type { MemberRole } from "@streamz/shared";
@@ -59,6 +59,16 @@ class UpdateGuildDto {
   @IsString()
   @Length(0, MAX_GUILD_DESCRIPTION)
   description?: string | null;
+
+  /**
+   * Cor da faixa do perfil, `#rrggbb`. String vazia apaga a faixa — o mesmo
+   * contrato de `description`, para o cliente não precisar de dois jeitos de
+   * dizer "sem valor" no mesmo formulário.
+   */
+  @IsOptional()
+  @IsString()
+  @Matches(/^(#[0-9a-fA-F]{6})?$/, { message: "Cor inválida (use #rrggbb)" })
+  bannerColor?: string | null;
 }
 
 class TransferDto {

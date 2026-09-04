@@ -2,16 +2,17 @@
 
 import { useState, type MouseEvent, type ReactNode } from "react";
 import { Permission } from "@streamz/shared";
-import ServerSettingsOverview from "@/components/modals/ServerSettingsOverview";
-import ServerSettingsRoles from "@/components/modals/ServerSettingsRoles";
-import ServerSettingsMembers from "@/components/modals/ServerSettingsMembers";
-import ServerSettingsBans from "@/components/modals/ServerSettingsBans";
-import InvitesPanel from "@/components/modals/InvitesPanel";
 import { useControleDeAlteracoes } from "@/components/ui/alteracoes";
 import JanelaDeConfiguracoes, { ItemPerigo } from "@/components/ui/JanelaDeConfiguracoes";
-// ── h-moderacao: as abas de moderação, montadas neste mesmo casco ──
+import PerfilDoServidorTab from "@/components/settings/server/PerfilDoServidorTab";
+import EngajamentoTab from "@/components/settings/server/EngajamentoTab";
+import EmojiTab from "@/components/settings/server/EmojiTab";
+import MembrosTab from "@/components/settings/server/MembrosTab";
+import CargosTab from "@/components/settings/server/CargosTab";
+import ConvitesTab from "@/components/settings/server/ConvitesTab";
+import AcessoTab from "@/components/settings/server/AcessoTab";
 import AuditLogTab from "@/components/settings/server/AuditLogTab";
-import OnboardingTab from "@/components/settings/server/OnboardingTab";
+import BanimentosTab from "@/components/settings/server/BanimentosTab";
 import ReportsTab from "@/components/settings/server/ReportsTab";
 import type { ServerSettingsTab } from "@/components/settings/server/tabs";
 import { MENU_WIDTH } from "@/components/ui/ContextMenu";
@@ -30,22 +31,36 @@ interface Aba {
 }
 
 /**
- * Os cabeçalhos do menu lateral, na ordem do Discord.
+ * Os grupos do menu lateral, na ordem e com os rótulos do Discord (print
+ * `docs/Reference/Captura de tela 2026-09-04 100541.png`).
  *
- * Uma lista plana de oito itens obriga a ler todos para achar "Banimentos".
- * Agrupada, a pergunta vira "isto é moderação ou é gente?" — que é a pergunta
- * que a pessoa já está se fazendo.
+ * O primeiro grupo não tem cabeçalho no print — vem logo abaixo do nome do
+ * servidor em caixa-alta —, e por isso `label` é opcional na
+ * `JanelaDeConfiguracoes`.
+ *
+ * Do menu do print faltam aqui, de propósito, os itens sem recurso por trás:
+ * "Tag do servidor", "Vantagens de Impulso", "Figurinhas", "Painel de efeitos
+ * sonoros", "Integrações", "Diretório de Apps", "Configurações de Segurança",
+ * "Visão geral da comunidade", "Onboarding", "Análises do servidor" e "Modelo
+ * do servidor". Sobra um item que o Discord **não** tem, "Denúncias": a fila
+ * existe no produto, e escondê-la para copiar o menu tiraria acesso a uma tela
+ * que funciona.
  */
-const GRUPOS: { id: string; label: string; abas: ServerSettingsTab[] }[] = [
-  { id: "espaco", label: "Espaço do servidor", abas: ["overview", "roles"] },
-  { id: "envolvimento", label: "Envolvimento", abas: ["onboarding"] },
-  { id: "moderacao", label: "Moderação", abas: ["audit", "reports", "bans"] },
-  { id: "pessoas", label: "Pessoas", abas: ["members", "invites"] },
+const GRUPOS: { id: string; label?: string; abas: ServerSettingsTab[] }[] = [
+  { id: "servidor", abas: ["overview", "engajamento"] },
+  { id: "expressoes", label: "Expressões", abas: ["emoji"] },
+  { id: "pessoas", label: "Pessoas", abas: ["members", "roles", "invites", "acesso"] },
+  { id: "moderacao", label: "Moderação", abas: ["audit", "bans", "reports"] },
 ];
 
 /**
  * "Configurações do servidor" — desenhada pela `JanelaDeConfiguracoes` de
  * `components/ui`, a mesma moldura das de usuário, canal e grupo.
+ *
+ * Entra nela em `fecharComoEsc`: nas configurações **do servidor** o Discord não
+ * tem a barra de 48 com o X simples; o título é da página e o fechar é o X
+ * redondo com "ESC" ao lado da coluna de conteúdo. As de usuário continuam com
+ * a barra, que é como os prints de 2026-09-01 as mostram.
  *
  * Cada aba pede a permissão que a API exigiria, e a lista esconde as que o
  * usuário não tem: quem só pode banir vê "Banimentos" e nada mais.
@@ -67,50 +82,62 @@ export default function ServerSettingsModal({
   const podeCargos = useCan(Permission.MANAGE_ROLES);
   const podeBanir = useCan(Permission.BAN_MEMBERS);
   const podeModerarMensagens = useCan(Permission.MANAGE_MESSAGES);
+  const podeEmojis = useCan(Permission.MANAGE_EMOJIS);
   const alteracoes = useControleDeAlteracoes();
 
   const abas: Aba[] = [
     {
       id: "overview",
-      label: "Visão geral",
+      label: "Perfil do servidor",
       permission: Permission.MANAGE_GUILD,
-      render: () => <ServerSettingsOverview guildId={guildId} />,
+      render: () => <PerfilDoServidorTab guildId={guildId} />,
+    },
+    {
+      id: "engajamento",
+      label: "Engajamento",
+      permission: Permission.MANAGE_GUILD,
+      render: () => <EngajamentoTab guildId={guildId} />,
+    },
+    {
+      id: "emoji",
+      label: "Emoji",
+      permission: Permission.MANAGE_EMOJIS,
+      render: () => <EmojiTab guildId={guildId} />,
+    },
+    {
+      id: "members",
+      label: "Membros",
+      render: () => <MembrosTab guildId={guildId} />,
     },
     {
       id: "roles",
       label: "Cargos",
       permission: Permission.MANAGE_ROLES,
-      render: () => <ServerSettingsRoles guildId={guildId} />,
-    },
-    {
-      id: "members",
-      label: "Membros",
-      render: () => <ServerSettingsMembers guildId={guildId} />,
+      render: () => <CargosTab guildId={guildId} />,
     },
     {
       id: "invites",
       label: "Convites",
       permission: Permission.MANAGE_GUILD,
-      render: () => <InvitesPanel guildId={guildId} />,
+      render: () => <ConvitesTab guildId={guildId} />,
     },
     {
-      id: "bans",
-      label: "Banimentos",
-      permission: Permission.BAN_MEMBERS,
-      render: () => <ServerSettingsBans guildId={guildId} />,
-    },
-    // ── h-moderacao ──
-    {
-      id: "onboarding",
-      label: "Entrada e regras",
+      id: "acesso",
+      label: "Acesso",
       permission: Permission.MANAGE_GUILD,
-      render: () => <OnboardingTab guildId={guildId} />,
+      render: () => <AcessoTab guildId={guildId} />,
     },
     {
       id: "audit",
       label: "Registro de auditoria",
       permission: Permission.MANAGE_GUILD,
       render: () => <AuditLogTab guildId={guildId} />,
+    },
+    {
+      id: "bans",
+      label: "Banimentos",
+      permission: Permission.BAN_MEMBERS,
+      render: () => <BanimentosTab guildId={guildId} />,
     },
     {
       id: "reports",
@@ -127,6 +154,7 @@ export default function ServerSettingsModal({
     if (a.permission === Permission.MANAGE_ROLES) return podeCargos;
     if (a.permission === Permission.BAN_MEMBERS) return podeBanir;
     if (a.permission === Permission.MANAGE_MESSAGES) return podeModerarMensagens;
+    if (a.permission === Permission.MANAGE_EMOJIS) return podeEmojis;
     return false;
   };
   const visiveis = abas.filter(permitida);
@@ -184,6 +212,7 @@ export default function ServerSettingsModal({
       abaId={ativa}
       onAba={(id) => setAtiva(id as ServerSettingsTab)}
       tituloAba={aba?.label}
+      fecharComoEsc
       rotuloFechar="Fechar configurações"
       controle={alteracoes}
       onClose={closeModal}

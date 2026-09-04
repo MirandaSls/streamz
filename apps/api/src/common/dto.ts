@@ -67,6 +67,8 @@ export function toGuildDTO(
     iconUrl: string | null;
     ownerId: string;
     description: string | null;
+    bannerColor: string | null;
+    createdAt: Date;
   },
   view: { unread: boolean; mentionCount: number } = { unread: false, mentionCount: 0 },
 ): Guild {
@@ -76,6 +78,8 @@ export function toGuildDTO(
     iconUrl: g.iconUrl,
     ownerId: g.ownerId,
     description: g.description,
+    bannerColor: g.bannerColor,
+    createdAt: g.createdAt.toISOString(),
     unread: view.unread,
     mentionCount: view.mentionCount,
   };

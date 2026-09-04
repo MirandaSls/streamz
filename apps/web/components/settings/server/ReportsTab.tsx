@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Check, Flag, RotateCcw } from "@/components/ui/icones";
 import { REPORT_REASONS, displayNameOf, type ReportView } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
+import { TituloDaPagina } from "@/components/settings/server/pagina";
 import { horaCompleta } from "@/lib/format";
 import { useModeration } from "@/stores/moderation";
 
@@ -29,6 +30,11 @@ export default function ReportsTab({ guildId }: { guildId: string }) {
 
   return (
     <div className="flex min-h-0 flex-col">
+      <TituloDaPagina
+        titulo="Denúncias"
+        subtitulo="O que os membros denunciaram por aqui. Não existe no Discord como página do servidor; existe aqui porque a fila existe."
+      />
+
       <div className="mb-3 flex items-center gap-2">
         <button
           type="button"

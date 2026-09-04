@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Search } from "@/components/ui/icones";
 import { displayNameOf, type PublicUser } from "@streamz/shared";
 import { ESTILO_CAMPO } from "@/components/settings/campos";
+import { TituloDaPagina } from "@/components/settings/server/pagina";
 import Avatar from "@/components/ui/Avatar";
 import { api } from "@/lib/api";
 import { horaCompleta } from "@/lib/format";
@@ -23,7 +24,7 @@ interface Banimento {
  * Discord não há botão de desbanir visível na lista, e é assim que revogar
  * deixa de ser algo que se faz por engano ao passar o mouse.
  */
-export default function ServerSettingsBans({ guildId }: { guildId: string }) {
+export default function BanimentosTab({ guildId }: { guildId: string }) {
   const [bans, setBans] = useState<Banimento[] | null>(null);
   const [busca, setBusca] = useState("");
 
@@ -69,6 +70,8 @@ export default function ServerSettingsBans({ guildId }: { guildId: string }) {
 
   return (
     <div>
+      <TituloDaPagina titulo="Banimentos" />
+
       <div className="relative mb-4">
         <Search
           size={14}

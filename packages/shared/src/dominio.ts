@@ -119,10 +119,67 @@ export interface Guild {
   ownerId: string;
   /** texto livre exibido nas configurações e no convite. */
   description: string | null;
+  /**
+   * Cor da faixa do perfil do servidor — o topo do degradê, em `#rrggbb`.
+   * null = sem faixa (o cartão de prévia usa o fundo neutro).
+   *
+   * É **dado do servidor**, não token de tema: quem escolhe é quem administra,
+   * e o valor viaja para todo mundo que vê o cartão. Ver `GUILD_BANNER_COLORS`.
+   */
+  bannerColor: string | null;
+  /** quando o servidor foi criado (ISO) — o "Desde …" do cartão de prévia. */
+  createdAt: string;
   /** há mensagem nova em algum canal visível (por espectador). */
   unread: boolean;
   /** menções a mim não lidas, somadas nos canais visíveis (por espectador). */
   mentionCount: number;
+}
+
+/**
+ * As dez faixas do "Perfil do servidor" — cinco por linha, duas linhas.
+ *
+ * Cada uma é um degradê vertical, e os dois extremos foram lidos com `getpixel`
+ * no print `docs/Reference/Captura de tela 2026-09-04 100541.png` (amostra de
+ * 105×64; topo a 4px da borda de cima, base a 4px da de baixo). Guardar o par
+ * medido evita inventar uma fórmula de clareamento que erraria o degradê.
+ *
+ * São **dados**, não tokens: nada aqui entra no tema. O que fica gravado em
+ * `Guild.bannerColor` é o `de` — o `ate` é derivado por esta tabela e, para uma
+ * cor fora dela (hexadecimal digitado), a faixa fica sólida.
+ *
+ * A primeira amostra, no Discord, é a cor tirada do ícone do servidor. Nós não
+ * extraímos cor de imagem, então ela entra como mais uma amostra fixa.
+ */
+export const GUILD_BANNER_COLORS: readonly { de: string; ate: string }[] = [
+  { de: "#521c17", ate: "#a26259" },
+  { de: "#ff1c90", ate: "#ff89e1" },
+  { de: "#e81d1e", ate: "#fe8166" },
+  { de: "#e86e1d", ate: "#febf6c" },
+  { de: "#e8c02f", ate: "#fefc85" },
+  { de: "#71368a", ate: "#c281db" },
+  { de: "#029ffc", ate: "#8ff1ff" },
+  { de: "#4fe2ca", ate: "#aefefc" },
+  { de: "#406601", ate: "#8fb453" },
+  { de: "#272727", ate: "#6c6c6c" },
+];
+
+/** Cor de faixa válida: `#rrggbb` (o mesmo formato da cor de cargo). */
+export function isGuildBannerColor(value: string): boolean {
+  return /^#[0-9a-fA-F]{6}$/.test(value);
+}
+
+/**
+ * CSS da faixa a partir do que está gravado.
+ *
+ * Cor da tabela vira o degradê medido; cor de fora dela vira sólida (é o que
+ * dá para afirmar sem inventar o segundo tom); `null` devolve `undefined`, e aí
+ * quem desenha usa o fundo neutro do cartão.
+ */
+export function guildBannerBackground(cor: string | null | undefined): string | undefined {
+  if (!cor) return undefined;
+  const alvo = cor.toLowerCase();
+  const par = GUILD_BANNER_COLORS.find((c) => c.de === alvo);
+  return par ? `linear-gradient(to bottom, ${par.de}, ${par.ate})` : alvo;
 }
 
 export interface Channel {
