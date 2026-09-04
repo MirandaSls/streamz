@@ -281,7 +281,10 @@ export const api = {
     request<{ banned: string }>(`/guilds/${guildId}/ban`, json({ userId, reason })),
 
   // ── configurações do servidor (c-cargos) ──
-  updateGuild: (guildId: string, body: { name?: string; description?: string | null }) =>
+  updateGuild: (
+    guildId: string,
+    body: { name?: string; description?: string | null; bannerColor?: string | null },
+  ) =>
     request<Guild>(`/guilds/${guildId}`, patch(body)),
   updateGuildIcon: (guildId: string, file: File) => {
     const form = new FormData();

@@ -70,7 +70,10 @@ function servicoDeConvites() {
     iconUrl: null,
     ownerId: "bia",
     description: null,
+    bannerColor: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
   };
+  let entrou = false;
   const prisma = {
     invite: {
       async findUnique() {
@@ -89,10 +92,13 @@ function servicoDeConvites() {
       },
     },
     guildMember: {
+      // antes do resgate não sou membro; depois do `create` sou, e é dessa
+      // leitura que sai o `joinedAt` do evento `member.joined`
       async findUnique() {
-        return null; // ainda não sou membro
+        return entrou ? { joinedAt: new Date("2026-01-01T00:00:00.000Z") } : null;
       },
       async create() {
+        entrou = true;
         return {};
       },
     },
@@ -148,6 +154,8 @@ describe("resgatar um convite", () => {
         iconUrl: null,
         ownerId: "bia",
         description: null,
+        bannerColor: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
         unread: false,
         mentionCount: 0,
       },

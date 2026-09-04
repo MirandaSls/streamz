@@ -232,12 +232,26 @@ export class InvitesService {
     });
 
     // quem já está no servidor vê o membro novo aparecer na lista
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (user) {
+    const [user, novoMembro] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId } }),
+      // `joinedAt` vem do banco, e não de `new Date()` aqui: a tabela de
+      // membros ordena por ele, e um relógio do processo diferente do da
+      // transação colocaria o recém-chegado na posição errada
+      this.prisma.guildMember.findUnique({
+        where: { userId_guildId: { userId, guildId: invite.guildId } },
+        select: { joinedAt: true },
+      }),
+    ]);
+    if (user && novoMembro) {
       this.realtime.emitToGuild(invite.guildId, WS_EVENTS.MEMBER_JOINED, {
         guildId: invite.guildId,
         // membro novo entra só com o @everyone: nenhum cargo atribuído
-        member: { role: "MEMBER", user: toPublicUser(user), roleIds: [] },
+        member: {
+          role: "MEMBER",
+          user: toPublicUser(user),
+          roleIds: [],
+          joinedAt: novoMembro.joinedAt.toISOString(),
+        },
       });
     }
     // sockets já abertos passam a receber o servidor novo sem reconectar

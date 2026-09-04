@@ -6,13 +6,21 @@
  * nenhum — store não deve arrastar React consigo. A *lista* das abas (com
  * rótulo, permissão e o que cada uma desenha) vive no `ServerSettingsModal`,
  * que é quem sabe esconder as que o usuário não pode abrir.
+ *
+ * Os ids seguem a ordem do menu do Discord (print `docs/Reference/Captura de
+ * tela 2026-09-04 100541.png`). Os que ele tem e nós não criamos — tag,
+ * vantagens de impulso, figurinhas, efeitos sonoros, integrações, diretório de
+ * apps, segurança, comunidade, onboarding, análises e modelo do servidor — não
+ * entram: não existe recurso por trás deles.
  */
 export type ServerSettingsTab =
   | "overview"
-  | "roles"
+  | "engajamento"
+  | "emoji"
   | "members"
+  | "roles"
   | "invites"
-  | "bans"
-  | "onboarding"
+  | "acesso"
   | "audit"
+  | "bans"
   | "reports";

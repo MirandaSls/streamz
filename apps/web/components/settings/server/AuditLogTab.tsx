@@ -20,6 +20,7 @@ import {
   type AuditLogEntry,
 } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
+import { TituloDaPagina } from "@/components/settings/server/pagina";
 import { api } from "@/lib/api";
 import { horaCompleta } from "@/lib/format";
 import { useGuilds } from "@/stores/guilds";
@@ -123,6 +124,11 @@ export default function AuditLogTab({ guildId }: { guildId: string }) {
 
   return (
     <div className="flex min-h-0 flex-col">
+      <TituloDaPagina
+        titulo="Registro de auditoria"
+        subtitulo="Quem fez o quê neste servidor. Ações de moderação entram aqui sozinhas."
+      />
+
       <div className="mb-3 flex flex-wrap gap-2">
         <label className="sr-only" htmlFor="audit-user">
           Filtrar por moderador
