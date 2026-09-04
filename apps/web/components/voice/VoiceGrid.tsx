@@ -37,6 +37,7 @@ import {
 } from "@/components/voice/participant-menu";
 import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
 import { useCorDominante } from "@/lib/cor-dominante";
+import { chaveDoTileDeTela } from "@/stores/assinaturas-de-tela";
 import { useAuth } from "@/stores/auth";
 import { usePresence } from "@/stores/presence";
 import { ui } from "@/stores/ui";
@@ -142,12 +143,15 @@ export default function VoiceGrid({
     };
     const telas = meus.flatMap(telasDe).map(
       (pub): Tile => ({
-        key: `${state.user.id}:${pub.trackSid}`,
+        key: chaveDoTileDeTela(state.user.id, pub.trackSid),
         state,
         publication: pub,
         tela: true,
-        // a minha transmissão é local: não há o que assinar, e esconder a
-        // própria tela atrás de "Assistir" seria pedir permissão a si mesmo
+        // A minha transmissão é sempre exibida, como no Discord: no navegador
+        // porque a faixa é local, e no desktop porque a store assina de volta o
+        // `<userId>#tela` da captura nativa (ver `assinaturas-de-tela.ts`).
+        // Esconder a própria tela atrás de "Assistir" seria pedir permissão a
+        // si mesmo — e foi por não haver esse pedido que ela ficou preta.
         assistindo: sou || assistindo.has(state.user.id),
       }),
     );
@@ -506,9 +510,15 @@ function VoiceTile({
       {video ? (
         <VideoDaFaixa publication={video} espelhar={sou && !tela} />
       ) : tela ? (
-        // tela que ainda não se assiste: sem faixa, sem quadro — o convite é
-        // tudo o que há para ver, e ele vem logo abaixo
-        <span className="block h-full w-full" />
+        // Sem faixa. Ou a tela não se assiste ainda — e aí o convite logo
+        // abaixo é tudo o que há para ver —, ou ela já foi assinada e o
+        // primeiro quadro está a caminho: assinar é uma ida e volta ao
+        // servidor de mídia, e um retângulo mudo nesse intervalo é
+        // indistinguível de uma transmissão quebrada (foi como a tela preta
+        // apareceu na print da 0.0.18).
+        <span className="grid h-full w-full place-items-center px-3 text-center text-xs text-white/70">
+          {assistindo ? "Carregando a transmissão…" : null}
+        </span>
       ) : (
         <span className="grid h-full w-full place-items-center">
           {/* o anel acompanha o avatar, e não a caixa: num tile grande a borda

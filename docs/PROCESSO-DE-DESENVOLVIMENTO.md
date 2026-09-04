@@ -788,6 +788,45 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
     deixou de desenhar o `HeaderBar`. O arrasto guarda **pixel**: na print são
     450 numa janela de 3333, não uma fração dela. Abre pelo balão do cabeçalho
     do palco e pelo balão da linha do canal (hover, print `image (1)`).
+- **A minha própria tela é assinada de volta — foi a tela preta da 0.0.18.** A
+  regra de assinatura acima nasceu com um furo: no desktop a captura é nativa e
+  entra na sala como um **participante remoto**, `<userId>#tela`. Do ponto de
+  vista do meu cliente a minha transmissão é uma publicação remota como
+  qualquer outra — e como ninguém entra em `assistindo` pela própria tela (o
+  botão "Assistir" não aparece no próprio tile, e não deve mesmo), o cliente
+  mandava `setSubscribed(false)` **na própria transmissão**. O SFU parava de
+  encaminhá-la, `pub.track` ficava `undefined` e o tile no palco ficava
+  **totalmente preto**, com o nome e o selo "Ao vivo" por cima (print
+  `2026-09-04 001246`). O Rust não tinha nada a ver: ele segue publicando o
+  tempo todo, e o quadro morria no cliente. Nada disso aparecia no navegador,
+  onde a faixa é local e não passa por assinatura nenhuma. A regra corrigida
+  mora inteira em `stores/assinaturas-de-tela.ts`, com teste e participantes de
+  mentira com identidade `#tela`:
+  1. **a minha tela é sempre assinada** (no Discord você vê a sua própria
+     transmissão no palco — é como se confere o que está no ar);
+  2. tela escolhida (`assistindo`) e miniatura aberta (`previa`) são assinadas;
+     o resto — tile que mostra só o convite — fica desassinado, que é o ganho
+     do #108;
+  3. **a qualidade segue o tamanho do tile**: `HIGH` no destaque e na grade sem
+     foco, `LOW` na faixa de 188×106 e no pop-up de 240×135. Por isso
+     `setFocado`/`focarAutomaticamente` reaplicam as assinaturas — antes, quem
+     subia ao destaque continuava pedindo a camada baixa.
+  Duas consequências de encanamento: `RoomEvent.TrackPublished`/`TrackUnpublished`
+  entraram na lista de eventos da sala (sem eles, a única notícia de uma
+  transmissão nova vinha do `autoSubscribe` **já** tendo baixado a faixa), e o
+  áudio da minha própria tela é desassinado de propósito — `AudioRemotoHost`
+  não desenha `<audio>` para mim, então ele era banda paga por silêncio. Com a
+  faixa assinada mas ainda sem o primeiro quadro, o tile diz "Carregando a
+  transmissão…": um retângulo mudo é indistinguível de uma transmissão
+  quebrada, que foi exatamente a leitura da print.
+
+- **A conversa da chamada é uma coluna à direita**, não uma faixa embaixo
+  (`PainelDeChatDaCall`, usado pelo canal de voz e pelo `CallSplit` da conversa
+  direta). Medidas da print: painel de 363px → **450**; cabeçalho de 36 → **44**
+  com balão de 18 a 14 da borda, nome e X a 16 da direita; composer de 41 → 51.
+  O cabeçalho **não** tem busca, alfinete nem lista de membros — por isso o
+  `ChatView incorporado` deixou de desenhar o `HeaderBar`. Abre pelo balão do
+  cabeçalho do palco e pelo balão da linha do canal (hover, print `image (1)`).
 
 - **A faixa do microfone tem um dono só: `lib/microfone.ts`.** Ele cria a faixa,
   monta a cadeia de captura **antes** de publicar, aplica preferências novas na
