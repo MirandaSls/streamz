@@ -2,7 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Track } from "livekit-client";
-import { supressorDeRuido } from "@/lib/supressor-ruido";
+import { faixaDeMonitoracao } from "@/lib/microfone";
+import {
+  cadeiaDoMicrofone,
+  liberarContextoDeCaptura,
+  usarContextoDeCaptura,
+  type CadeiaDoMicrofone,
+} from "@/lib/supressor-ruido";
 import { rmsDeAmostras } from "@/stores/voice-falantes";
 import { useVoice } from "@/stores/voice";
 import { aplicarSaida, explicarMidia, motivoDaFalha, useVoiceDevicesStore } from "@/stores/voiceDevices";
@@ -25,9 +31,24 @@ import { aplicarSaida, explicarMidia, motivoDaFalha, useVoiceDevicesStore } from
  *   `<audio>` de cada participante remoto (`AudioRemotoHost`). Ele é
  *   transitório e sobrepõe as preferências sem escrevê-las — ver
  *   `stores/teste-de-microfone.ts`;
- * - a **mídia** (captura, retorno e medidor) mora neste hook, montada enquanto
- *   o estado vale e desmontada quando ele cai. Sair da call derruba o estado
- *   (`sairDaSalaAtual`), e com ele a captura — sem nenhum acoplamento a mais.
+ * - a **mídia** (retorno e medidor) mora neste hook, montada enquanto o estado
+ *   vale e desmontada quando ele cai. Sair da call derruba o estado
+ *   (`sairDaSalaAtual`), e com ele o retorno.
+ *
+ * ## Numa call, o teste NÃO abre uma segunda captura
+ *
+ * Ele escuta a faixa que o dono do microfone (`lib/microfone.ts`) já tem
+ * aberta — a mesma, com o mesmo supressor e o mesmo volume de entrada. O que o
+ * teste faz na sala é **despublicá-la**, não fechá-la
+ * (`definirMicrofoneEmTeste`): assim o retorno é literalmente o que a sala
+ * ouviria, e não uma segunda opinião sobre o mesmo microfone. Abrir um
+ * `getUserMedia` por cima do que a call já mantém aberto é o tipo de coisa que
+ * no Windows produz um estalo — e, na melhor das hipóteses, mede outra coisa.
+ *
+ * **Fora da call** não há faixa de ninguém, e aí o hook abre a captura dele,
+ * montando a mesma cadeia (`cadeiaDoMicrofone`) para a resposta continuar
+ * valendo. Nos dois caminhos a `AudioContext` é a única da aba
+ * (`usarContextoDeCaptura`).
  *
  * Fechar o popover ou trocar de aba desmonta o hook, e desmontar para o teste:
  * um microfone que continua gravando depois de a caixa sumir é exatamente o
@@ -35,13 +56,13 @@ import { aplicarSaida, explicarMidia, motivoDaFalha, useVoiceDevicesStore } from
  */
 
 /**
- * Quem está com a captura na mão.
+ * Quem está com o teste na mão.
  *
  * O popover e a aba podem estar montados ao mesmo tempo (o modal de
- * configurações cobre o painel da call, não o desmonta). Duas capturas do mesmo
- * microfone seriam dois pedidos de permissão e dois retornos sobrepostos, então
- * a primeira instância que reivindica é a que toca o teste; a outra acompanha o
- * botão, sem medidor.
+ * configurações cobre o painel da call, não o desmonta). Dois retornos
+ * sobrepostos seriam dois `<audio>` tocando a mesma voz, então a primeira
+ * instância que reivindica é a que toca o teste; a outra acompanha o botão, sem
+ * medidor.
  */
 let dono: symbol | null = null;
 
@@ -62,6 +83,7 @@ export function useTesteDeMicrofone(): TesteDeMicrofone {
   const iniciar = useVoice((s) => s.iniciarTesteDeMicrofone);
   const parar = useVoice((s) => s.pararTesteDeMicrofone);
   const processamento = useVoice((s) => s.audio.processamento);
+  const entrada = useVoice((s) => s.audio.entrada);
   const inputId = useVoiceDevicesStore((s) => s.inputId);
   const outputId = useVoiceDevicesStore((s) => s.outputId);
   const [nivel, setNivel] = useState(0);
@@ -71,6 +93,11 @@ export function useTesteDeMicrofone(): TesteDeMicrofone {
   token.current ??= Symbol("teste-de-microfone");
   /** já fui o dono alguma vez? é quem pode encerrar o teste ao desmontar. */
   const fuiDono = useRef(false);
+  /** a cadeia da captura própria (fora da call), para o volume valer na hora. */
+  const cadeiaPropria = useRef<CadeiaDoMicrofone | null>(null);
+  /** lido a cada montagem; nas dependências, arrastar o slider reabriria tudo. */
+  const ganhoAtual = useRef(entrada);
+  ganhoAtual.current = entrada;
 
   const { eco, ruido, ganho } = processamento;
 
@@ -85,59 +112,81 @@ export function useTesteDeMicrofone(): TesteDeMicrofone {
 
     let cancelado = false;
     let stream: MediaStream | null = null;
-    let ctx: AudioContext | null = null;
+    let cadeia: CadeiaDoMicrofone | null = null;
     let elemento: HTMLAudioElement | null = null;
-    let supressor: ReturnType<typeof supressorDeRuido> | null = null;
     let timer: ReturnType<typeof setInterval> | null = null;
+    let fonte: MediaStreamAudioSourceNode | null = null;
+    let ligada: MediaStreamTrack | null = null;
+
+    // tomar o contexto fora do fluxo assíncrono: se falhar, o teste nem começa
+    // (e o `dono` é devolvido na hora, senão o outro montado ficaria travado)
+    let ctx: AudioContext;
+    try {
+      ctx = usarContextoDeCaptura();
+    } catch {
+      dono = null;
+      setErro("Este navegador não expõe o Web Audio, e sem ele não há teste.");
+      return;
+    }
+    const analisador = ctx.createAnalyser();
+    analisador.fftSize = 1024;
+    const destino = ctx.createMediaStreamDestination();
+
+    /** (Re)liga o medidor e o retorno a uma faixa. Trocar de faixa é barato. */
+    const ligarEm = (faixa: MediaStreamTrack) => {
+      fonte?.disconnect();
+      fonte = ctx.createMediaStreamSource(new MediaStream([faixa]));
+      fonte.connect(analisador);
+      fonte.connect(destino);
+      ligada = faixa;
+    };
 
     void (async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            deviceId: inputId ? { exact: inputId } : undefined,
-            // o mesmo processamento que a call publicaria: um teste com outra
-            // cadeia responderia sobre um microfone que não é o seu
-            echoCancellation: eco,
-            noiseSuppression: ruido === "padrao",
-            autoGainControl: ganho,
-          },
-        });
-      } catch {
-        setErro(explicarMidia(motivoDaFalha()) ?? "Não foi possível abrir o microfone.");
-        useVoice.getState().pararTesteDeMicrofone();
-        return;
-      }
-      if (cancelado) {
-        stream.getTracks().forEach((t) => t.stop());
-        return;
-      }
-      setErro(null);
+      let faixa = faixaDeMonitoracao();
 
-      const Ctor =
-        window.AudioContext ??
-        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!Ctor) return;
-      // 48 kHz é a taxa que o RNNoise exige; pedir aqui evita que ele abra uma
-      // segunda `AudioContext` só para converter
-      ctx = new Ctor({ sampleRate: 48_000 });
-
-      let faixa = stream.getAudioTracks()[0];
-      if (ruido === "avancada" && faixa) {
+      if (!faixa) {
+        // fora de qualquer call: a captura é deste hook
         try {
-          supressor = supressorDeRuido();
-          await supressor.init({ kind: Track.Kind.Audio, track: faixa, audioContext: ctx });
-          faixa = supressor.processedTrack ?? faixa;
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              deviceId: inputId ? { exact: inputId } : undefined,
+              // o mesmo processamento que a call publicaria: um teste com outra
+              // cadeia responderia sobre um microfone que não é o seu
+              echoCancellation: eco,
+              noiseSuppression: ruido === "padrao",
+              autoGainControl: ganho,
+            },
+          });
         } catch {
-          // sem o wasm o teste continua valendo, só sem a supressão avançada
-          supressor = null;
+          setErro(explicarMidia(motivoDaFalha()) ?? "Não foi possível abrir o microfone.");
+          useVoice.getState().pararTesteDeMicrofone();
+          return;
+        }
+        if (cancelado) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        const crua = stream.getAudioTracks()[0];
+        if (!crua) return;
+        faixa = crua;
+        try {
+          cadeia = cadeiaDoMicrofone({
+            supressao: ruido === "avancada",
+            ganho: ganhoAtual.current,
+          });
+          await cadeia.init({ kind: Track.Kind.Audio, track: crua, audioContext: ctx });
+          faixa = cadeia.processedTrack ?? crua;
+          cadeiaPropria.current = cadeia;
+        } catch {
+          // sem o wasm o teste continua valendo, só sem a cadeia
+          cadeia = null;
+          cadeiaPropria.current = null;
         }
       }
-      if (cancelado || !faixa) return;
 
-      const fonte = ctx.createMediaStreamSource(new MediaStream([faixa]));
-      const analisador = ctx.createAnalyser();
-      analisador.fftSize = 1024;
-      fonte.connect(analisador);
+      if (cancelado || !faixa) return;
+      setErro(null);
+      ligarEm(faixa);
 
       /*
         O retorno sai por um `<audio>`, e não por `ctx.destination`: só elemento
@@ -146,8 +195,6 @@ export function useTesteDeMicrofone(): TesteDeMicrofone {
         responde nada. O atraso é o do grafo (poucos ms), que é o que se quer:
         latência alta transforma o retorno em eco e a pessoa gagueja.
       */
-      const destino = ctx.createMediaStreamDestination();
-      fonte.connect(destino);
       elemento = document.createElement("audio");
       elemento.autoplay = true;
       elemento.srcObject = destino.stream;
@@ -155,13 +202,19 @@ export function useTesteDeMicrofone(): TesteDeMicrofone {
       document.body.appendChild(elemento);
       await aplicarSaida(elemento, outputId);
       void elemento.play().catch(() => {});
-      void ctx.resume().catch(() => {});
 
       const amostras = new Uint8Array(analisador.fftSize);
       timer = setInterval(() => {
+        // o dono da faixa pode trocá-la debaixo do teste (mudar a supressão
+        // remonta a cadeia): sem religar, o medidor congelaria no silêncio
+        if (!stream) {
+          const atual = faixaDeMonitoracao();
+          if (atual && atual !== ligada) ligarEm(atual);
+        }
         analisador.getByteTimeDomainData(amostras);
         // ×3 porque fala normal fica em RMS baixo: sem o ganho visual a barra
-        // mal sairia do lugar e o teste não provaria nada
+        // mal sairia do lugar e o teste não provaria nada. O volume de entrada
+        // já está no sinal — é a mesma cadeia que a sala ouviria
         setNivel(Math.min(1, rmsDeAmostras(amostras) * 3));
       }, INTERVALO_MS);
     })();
@@ -174,13 +227,24 @@ export function useTesteDeMicrofone(): TesteDeMicrofone {
         elemento.srcObject = null;
         elemento.remove();
       }
-      void supressor?.destroy().catch(() => {});
+      fonte?.disconnect();
+      analisador.disconnect();
+      destino.disconnect();
+      cadeiaPropria.current = null;
+      void cadeia?.destroy().catch(() => {});
       stream?.getTracks().forEach((t) => t.stop());
-      void ctx?.close().catch(() => {});
+      // o contexto é um por aba: devolve, não fecha
+      liberarContextoDeCaptura();
       if (dono === token.current) dono = null;
       setNivel(0);
     };
   }, [testando, inputId, outputId, eco, ruido, ganho]);
+
+  // o volume de entrada vale na hora nos dois caminhos: numa call quem o aplica
+  // é o dono da faixa (`setAudioPref` → `atualizarMicrofone`); fora dela, aqui
+  useEffect(() => {
+    cadeiaPropria.current?.setGanho(entrada);
+  }, [entrada]);
 
   // fechar o popover, trocar de aba ou fechar as configurações para o teste
   useEffect(

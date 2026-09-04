@@ -1,4 +1,5 @@
 import { Track, type Room } from "livekit-client";
+import { liberarContextoDeCaptura, usarContextoDeCaptura } from "@/lib/supressor-ruido";
 import {
   FALA_INICIAL,
   passoDeFala,
@@ -22,9 +23,21 @@ import {
  * vindo do SFU — deles não temos o áudio antes de a rede entregar.
  *
  * O detector é **rearmado** sempre que a faixa muda de identidade: desmutar,
- * trocar de microfone nas configurações e a reconexão da sala republicam o
- * microfone, e um analisador preso à faixa antiga mede silêncio para sempre.
- * Quem chama cuida disso (ver os eventos ligados em `stores/voice.ts`).
+ * trocar de microfone nas configurações, mudar a supressão de ruído e a
+ * reconexão da sala trocam a faixa, e um analisador preso à antiga mede
+ * silêncio para sempre. Quem chama cuida disso (ver os eventos ligados em
+ * `stores/voice.ts`).
+ *
+ * O que ele ouve é a faixa **já processada**: `LocalTrack.mediaStreamTrack`
+ * devolve `processor?.processedTrack ?? _mediaStreamTrack`, ou seja, a saída da
+ * cadeia de captura (`lib/supressor-ruido.ts`) quando ela existe. É o certo por
+ * dois motivos: o anel acende pelo que os outros ouvem, e não pelo que o
+ * microfone captou antes do supressor (senão o ventilador acenderia o anel); e
+ * o volume de entrada, que é um `GainNode` dentro da cadeia, passa a valer
+ * também para o anel.
+ *
+ * A `AudioContext` é a única da aba (`usarContextoDeCaptura`): abrir uma por
+ * detector era mais um caminho para o teto de contextos do Chromium.
  */
 
 /** Quantas leituras por segundo. `setInterval`, e não `requestAnimationFrame`: */
@@ -65,15 +78,19 @@ export function armarDetectorLocal(room: Room, aoMudar: (falando: boolean) => vo
   if (detector?.faixa === faixa) return;
   desarmarDetectorLocal(aoMudar);
 
-  const Ctor =
-    typeof window === "undefined"
-      ? undefined
-      : (window.AudioContext ??
-        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
-  if (!Ctor) return;
+  if (typeof window === "undefined" || typeof AudioContext === "undefined") return;
+
+  // tomar o contexto fica fora do `try` de baixo: se ele falhar, não há nada a
+  // devolver, e um `liberar` sem `usar` roubaria o contexto de quem o tem
+  let ctx: AudioContext;
+  try {
+    ctx = usarContextoDeCaptura();
+  } catch {
+    // sem Web Audio o anel local volta a depender do SFU, que é o que era antes
+    return;
+  }
 
   try {
-    const ctx = new Ctor();
     const fonte = ctx.createMediaStreamSource(new MediaStream([faixa]));
     const analisador = ctx.createAnalyser();
     analisador.fftSize = 1024;
@@ -88,9 +105,9 @@ export function armarDetectorLocal(room: Room, aoMudar: (falando: boolean) => vo
       if (estado.falando !== antes) aoMudar(estado.falando);
     }, INTERVALO_MS);
     detector = { faixa, ctx, fonte, timer };
-    void ctx.resume().catch(() => {});
   } catch {
-    // sem Web Audio o anel local volta a depender do SFU, que é o que era antes
+    // montar o grafo e falhar deixaria um dono a mais para sempre
+    liberarContextoDeCaptura();
   }
 }
 
@@ -99,7 +116,8 @@ export function desarmarDetectorLocal(aoMudar: (falando: boolean) => void) {
   if (detector) {
     clearInterval(detector.timer);
     detector.fonte.disconnect();
-    void detector.ctx.close().catch(() => {});
+    // o contexto é um por aba: devolve, não fecha
+    liberarContextoDeCaptura();
     detector = null;
   }
   if (estado.falando) aoMudar(false);

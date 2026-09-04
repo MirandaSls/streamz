@@ -559,6 +559,16 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   teste tocar na saída escolhida —, com o mesmo eco/ganho/supressão da call
   (RNNoise incluso). Sair da call, fechar o popover ou trocar de aba param o
   teste.
+- **Numa call, o teste não abre uma segunda captura.** Ele escuta a faixa que o
+  dono do microfone já tem aberta, e o que muda na sala é a **despublicação**
+  (`definirMicrofoneEmTeste`), não o fechamento: a mesma faixa, a mesma cadeia e
+  o mesmo volume de entrada continuam rodando, então o retorno é literalmente o
+  que a sala ouviria. Mutar em vez de despublicar não serviria — o mudo é
+  `mediaStreamTrack.enabled = false` na **entrada** da cadeia, e o retorno sairia
+  mudo junto; despublicando, o teste funciona com o microfone mudo, que é
+  justamente onde se descobre que ele estava mudo. Fora de qualquer call não há
+  faixa de ninguém, e aí o hook abre a captura dele montando a mesma
+  `cadeiaDoMicrofone`.
 - Estados de voz de DM têm rota REST (`GET /dms/:id/voice-states`); o boot
   retoma a call após F5 se o usuário aparecer como `reconnecting`
   (`stores/voice-retomada.ts`, `sessionStorage`); a reconexão do socket não
@@ -606,6 +616,96 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   das configurações, com os mesmos `SegmentosDeQualidade` do rodapé. A barra
   branca "Você está compartilhando sua tela inteira" que cobre o cabeçalho é do
   Firefox, não nossa — não dá para mover nem esconder.
+- **A faixa do microfone tem um dono só: `lib/microfone.ts`.** Ele cria a faixa,
+  monta a cadeia de captura **antes** de publicar, aplica preferências novas na
+  faixa que já está no ar e a fecha — tudo numa fila, então `fecharMicrofone()`
+  é idempotente e nunca roda no meio de um `abrirMicrofone()`. Ninguém mais
+  chama `setMicrophoneEnabled`: nem o `syncFlags`, nem a troca de dispositivo,
+  nem a aba de voz. Três defeitos vieram de não haver esse dono, e os três eram
+  relatos do usuário:
+  1. **`processor` em `captureOptions` nunca funcionou.** No livekit-client
+     2.22.0, `createLocalTracks` chama `track.setProcessor(...)` *antes* de o
+     `LocalParticipant` chamar `track.setAudioContext(...)`, e
+     `LocalAudioTrack.setProcessor` começa lançando `"Audio context needs to be
+     set on LocalAudioTrack in order to enable processors"` quando não há
+     contexto. Medido aqui, fora do browser, com dublês de `getUserMedia` e
+     `AudioContext`: a chamada rejeita, sempre. Como o `conectarMidia` termina
+     em `.catch(() => {})`, entrar com "Avançada" **não publicava microfone
+     nenhum**; segundos depois o `syncFlags` chamava `setMicrophoneEnabled(true)`
+     *sem opções* e subia a faixa **crua**, sem eco, sem AGC e sem supressor. É
+     isto que se ouvia como "a voz fica estranha ao entrar e depois volta ao
+     normal".
+  2. **`setMicrophoneEnabled(true, opts)` ignora `opts` quando a publicação já
+     existe** — só faz `unmute()`. O `mute → unmute` que servia de "republicar o
+     microfone" não aplicava restrição nem processador: ligar a supressão no
+     meio da call não mudava nada (e, quando o publish inicial tinha falhado,
+     mudava para pior).
+  3. **Vazamento de `AudioContext`.** O supressor antigo abria uma
+     `AudioContext` própria quando a do LiveKit não estava em 48 kHz, e quem a
+     fecharia era a `destroy()` do processador — que o `LocalTrack.stop()`
+     dispara **sem `await`**. Entrar e sair algumas vezes encostava no teto do
+     Chromium (≈6 contextos por página), `new AudioContext()` passava a lançar e
+     a supressão "bugava" até o F5. E a outra metade era pior: a `AudioContext`
+     do LiveKit é fechada pelo próprio `Room.disconnect()`, então o supressor
+     que ficasse pendurado nela rodava num contexto morto.
+- **Um `AudioContext` de captura por aba, e ele é nosso** (`contextoDeCaptura`,
+  em `lib/supressor-ruido.ts`), em 48 kHz porque é a taxa que o RNNoise assume.
+  O worklet é registrado uma vez nele — `addModule` repetido no mesmo contexto é
+  erro. Quem o usa o toma e o devolve (`usarContextoDeCaptura` /
+  `liberarContextoDeCaptura`): as cadeias, o detector local de fala e o retorno
+  do teste. Ele é **suspenso** — nunca fechado — quando o último dono sai;
+  contar só as cadeias deixaria o anel de fala congelado sempre que a supressão
+  estivesse desligada e o volume em 100%, que é justamente o caso em que não há
+  cadeia nenhuma.
+- **O detector local de fala ouve a faixa já processada.**
+  `LocalTrack.mediaStreamTrack` devolve `processor?.processedTrack ??
+  _mediaStreamTrack`, então o `AnalyserNode` de `voz-detector-local.ts` mede a
+  saída da cadeia. É o certo duas vezes: o anel acende pelo que os outros ouvem
+  (o ventilador que o RNNoise comeu não acende mais nada) e o volume de entrada
+  vale também para ele. Ele é rearmado por **todo** caminho que troca a faixa —
+  entrar, mudo/desmudo, trocar de microfone, mudar a supressão, começar e parar
+  o teste —, porque trocar a faixa não emite `LocalTrackPublished` e um
+  analisador preso à antiga mede silêncio para sempre.
+- **A cadeia é `fonte → [RNNoise] → ganho → destino`.** O ganho é o "volume de
+  entrada" (`audio.entrada`, 0–2) e fica **depois** do supressor de propósito: o
+  RNNoise decide o que é voz pelo nível que o microfone entrega, e empurrar 200%
+  na entrada dele faria ruído alto virar "voz"; já o detector de fala que acende
+  o anel do participante é o do LiveKit, que mede o áudio **publicado** — ou
+  seja, depois do ganho. Assim o slider mexe no que os outros ouvem e no que o
+  medidor mostra, sem mexer no VAD do modelo. Mudar só o volume não republica
+  nada: anda numa rampa de 20 ms dentro do `GainNode`. Ligar/desligar a supressão
+  troca o grafo por `setProcessor`/`stopProcessor`, que fazem `replaceTrack` no
+  mesmo `sender` — sem renegociação e sem corte. Só eco/supressão nativa/AGC/
+  dispositivo exigem `restartTrack`, porque são do `getUserMedia`. A troca de
+  **microfone** também passa pelo dono, e não por `room.switchActiveDevice`:
+  aquele reiniciaria a faixa por baixo dele. A saída (`audiooutput`) continua
+  sendo do SDK.
+- **A cadeia sobe do silêncio**: 120 ms de rampa no `GainNode` ao montar, em vez
+  de entrar com o áudio no volume cheio num grafo recém-nascido. E o modelo é
+  carregado **antes** de o grafo existir — publicar primeiro e esperar o wasm
+  depois é o que mandava os primeiros segundos de áudio cru.
+- O ciclo (entrar → ligar/desligar supressão → trocar de microfone → sair →
+  entrar de novo, dez vezes) tem teste: `lib/__tests__/microfone.test.ts`, com
+  dublês de `AudioContext`, `getUserMedia` e da faixa local do LiveKit — este
+  último imitando o vício que importa (o `stop()` chama a `destroy()` do
+  processador sem esperar por ela). Conferido que o teste **falha** quando o
+  contexto volta a ser um por `init()`: 60 contextos vivos em vez de 1. Um caso
+  à parte cobre o teste de microfone: a faixa sai da sala, continua viva com a
+  cadeia montada e volta.
+- O popover da setinha do microfone tem, como no print `2026-09-03 202542`:
+  "Dispositivo de entrada ›", "Redução de ruído ›" (o "Perfil de entrada" do
+  Discord é o Krisp, que não temos), o slider "Volume de entrada" e
+  "Configurações de voz". O slider é o mesmo `SliderDeVolume` do "Volume de
+  saída" do menu do fone, **0–200%** — o print do Discord mostra o dele numa
+  escala de 0 a 100, mas 0–200 é a escala que o app já usa nos dois lugares onde
+  este mesmo `audio.entrada` aparece (o popover e a aba de voz), e microfone
+  baixo demais é o problema comum: cortar o reforço tiraria a metade útil.
+- **Não descartado**: `voiceDevices.refresh()` abre um `getUserMedia` só para
+  descobrir os nomes dos aparelhos quando a lista vem anônima, e o para em
+  seguida. Com uma call em pé, isso é uma segunda captura do mesmo microfone no
+  Windows. Só acontece sem permissão persistida (no desktop o
+  `PermissionRequested` do WebView2 resolve), e não foi medido como causa de
+  nada — mas é o candidato que sobrou para um estalo isolado ao entrar.
 - Ainda aquém do Discord (não é defeito): botão de voltar para call em outro
   servidor cai no primeiro canal de texto; barra "conectado" sem cronômetro nem
   quem fala; sem "ocupado" para quem liga durante uma call; diálogos invisíveis

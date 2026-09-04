@@ -376,16 +376,24 @@ function ListaDeAparelhos({
 /**
  * Menu do microfone.
  *
- * O **volume de entrada** do print não entra: `audio.entrada` é guardado e não
- * chega à captura (ganho exigiria um grafo Web Audio antes de publicar, ver
- * `stores/voice`). Ele já aparece assim na aba de voz; repeti-lo aqui, onde a
- * mão vai no meio de uma conversa, seria pôr um controle morto no caminho mais
- * usado. Volta quando o ganho existir de verdade.
+ * O **volume de entrada** entra agora: o ganho existe de verdade (um `GainNode`
+ * depois do supressor, em `lib/supressor-ruido.ts`) e mexe no volume da faixa
+ * publicada na hora, sem republicar nada. Enquanto ele era só um número
+ * guardado, ficava de fora — um controle morto no caminho mais usado é pior que
+ * um controle a menos.
+ *
+ * Ele é o mesmo `SliderDeVolume` do "Volume de saída" do menu do fone, com a
+ * mesma escala de 0 a 200%. O print do Discord (`2026-09-03 202542`) mostra o
+ * dele com o cursor no fim de uma escala de 0 a 100 — a nossa vai a 200 porque
+ * é a escala que o app já usa nos dois lugares onde este mesmo `audio.entrada`
+ * aparece (aqui e na aba de voz), e porque microfone baixo demais é o problema
+ * comum: cortar o reforço deixaria o slider sem a metade útil.
  */
 export function MenuDeEntrada() {
   const devices = useVoiceDevices();
   const ctrl = useSubmenus();
   const processamento = useVoice((s) => s.audio.processamento);
+  const entrada = useVoice((s) => s.audio.entrada);
   const setAudioPref = useVoice((s) => s.setAudioPref);
   const aviso = explicarMidia(devices.motivo);
 
@@ -420,6 +428,14 @@ export function MenuDeEntrada() {
           />
         ))}
       </LinhaComSubmenu>
+
+      <div className="px-2 py-2" onPointerEnter={() => ctrl.agendar(null, null)}>
+        <SliderDeVolume
+          label="Volume de entrada"
+          valor={entrada}
+          onChange={(v) => setAudioPref({ entrada: v })}
+        />
+      </div>
 
       <AtalhoDeConfiguracoes ctrl={ctrl} />
     </>
