@@ -14,6 +14,7 @@ import { useFriends } from "@/stores/friends";
 import { useMessages } from "@/stores/messages";
 import { aoChegarMensagem } from "@/stores/nao-lidas";
 import { comAConversaAberta, noTopo } from "@/stores/dms-lista";
+import { conversaLida, listaLida } from "@/stores/leitura";
 
 /**
  * Conversas diretas: a lista e qual está aberta.
@@ -62,6 +63,11 @@ interface DMsState {
   /** Aplica a conversa atualizada que chegou por `channel.updated`. */
   handleUpdated: (dm: DMChannelView) => void;
   markRead: (channelId: string) => Promise<void>;
+  /**
+   * `channel.read`: li estas conversas em **outra** conexão da minha conta —
+   * badge e contador zeram aqui sem ida à API. Idempotente (`stores/leitura`).
+   */
+  aplicarLeitura: (channelIds: readonly string[], lastReadAt: string) => void;
   /**
    * Chegou mensagem na conversa: sobe para o topo e, se é de outro, conta
    * como não lida (e como menção, quando é). `propria` = eu mandei.
@@ -304,6 +310,12 @@ export const useDMs = create<DMsState>((set, get) => {
         // o próximo reload da lista traz o valor do servidor
       }
     },
+
+    aplicarLeitura: (channelIds, lastReadAt) =>
+      set((s) => {
+        const channels = listaLida(s.channels, channelIds, (d) => conversaLida(d, lastReadAt));
+        return channels === s.channels ? s : { channels };
+      }),
 
     bumpUnread: (channelId, at, mention, propria) =>
       set((s) => {

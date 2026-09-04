@@ -1,9 +1,10 @@
 import { Controller, Param, Post, UseGuards } from "@nestjs/common";
-import type { GuildReadResult } from "@streamz/shared";
+import { WS_EVENTS, type ChannelReadEvent, type GuildReadResult } from "@streamz/shared";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
+import { RealtimeService } from "../realtime/realtime.service";
 
 /**
  * "Marcar servidor como lido": zera o não-lido de todos os canais que o usuário
@@ -19,6 +20,7 @@ export class GuildReadController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly guilds: GuildsService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   @Post("read")
@@ -40,6 +42,12 @@ export class GuildReadController {
         }),
       ),
     );
+    // as outras conexões da conta zeram o rail e a coluna junto (ver `channel.read`)
+    this.realtime.emitToUser(user.sub, WS_EVENTS.CHANNEL_READ, {
+      channelIds: doServidor,
+      lastReadAt: at.toISOString(),
+      guildId,
+    } satisfies ChannelReadEvent);
     return { guildId, channelIds: doServidor, lastReadAt: at.toISOString() };
   }
 }

@@ -278,7 +278,12 @@ export class UsersService {
     });
     const u = await this.prisma.user.update({ where: { id: meId }, data: { bannerKey: null } });
     if (antes?.bannerKey) await this.storage.delete(antes.bannerKey);
-    return toPublicUser(u);
+
+    const dto = toPublicUser(u);
+    // o par de `updateBanner`: sem este aviso, tirar o banner num aparelho
+    // deixava o cartão do outro com o banner antigo até recarregar
+    this.realtime.emitAll(WS_EVENTS.USER_UPDATED, dto);
+    return dto;
   }
 
   /** Corpo + content-type do banner para o proxy público (como o avatar). */

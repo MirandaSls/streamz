@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { BadgeCheck, Camera, TriangleAlert } from "@/components/ui/icones";
 import { ACCEPT_IMAGEM_DE_PERFIL, MAX_DISPLAY_NAME, displayNameOf } from "@streamz/shared";
@@ -15,6 +15,7 @@ import { api } from "@/lib/api";
 import { mensagemDeAuth, validarSenha } from "@/lib/auth-mensagens";
 import { useT } from "@/lib/i18n";
 import { useAuth } from "@/stores/auth";
+import { useConta } from "@/stores/conta";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
 
@@ -38,21 +39,17 @@ export default function ContaTab() {
   const t = useT();
   const user = useAuth((s) => s.user);
   const setUser = useAuth((s) => s.setUser);
-  const [conta, setConta] = useState<MinhaConta | null>(null);
+  // a conta é da pessoa, não da aba: mora numa store para o `account.updated`
+  // do outro aparelho chegar aqui (ver `stores/conta`)
+  const conta = useConta((s) => s.conta);
+  const carregar = useConta((s) => s.carregar);
+  const aplicarConta = useConta((s) => s.aplicar);
   const [banner, setBanner] = useState<{ url: string | null; cor: string | null }>({
     url: null,
     cor: null,
   });
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-
-  const carregar = useCallback(async () => {
-    try {
-      setConta(await api.account());
-    } catch (e) {
-      ui.toast(errorMessage(e, "Não foi possível carregar sua conta"), "error");
-    }
-  }, []);
 
   useEffect(() => {
     void carregar();
@@ -155,7 +152,7 @@ export default function ContaTab() {
             // sem rota de troca de username na API: mostrar um "Editar" que
             // não leva a lugar nenhum seria pior do que não ter o botão
           />
-          <LinhaDeEmail conta={conta} aoMudar={setConta} />
+          <LinhaDeEmail conta={conta} aoMudar={aplicarConta} />
         </div>
       </Section>
 

@@ -10,8 +10,10 @@ import {
   // ── g-emojis-midia ──,
   type CallEndedEvent,
   type CallRingEvent,
+  type AccountUpdatedEvent,
   type Category,
   type CategoryDeletedEvent,
+  type ChannelReadEvent,
   type Channel,
   type ChannelDeletedEvent,
   type ChannelOverridesEvent,
@@ -34,6 +36,7 @@ import {
   type PublicUser,
   type Role,
   type RoleDeletedEvent,
+  type SessionsRevokedEvent,
   type StickerUpdatedEvent,
   type ThreadUpdatedEvent,
   type UserBlockedEvent,
@@ -41,7 +44,7 @@ import {
   type VoiceMovedEvent,
   type VoiceStateEvent,
 } from "@streamz/shared";
-import type { NotificationSetting } from "@streamz/shared";
+import type { DMChannelView, NotificationSetting } from "@streamz/shared";
 // ── h-moderacao ──
 import type {
   GuildSettingsUpdatedEvent,
@@ -57,7 +60,9 @@ import {
   type EstadoDaInterface,
 } from "@/lib/na-tela";
 import { tocarSomDeNotificacao } from "@/lib/notification-sound";
+import { expirarSessao, sidDaSessaoAtual } from "@/lib/session";
 import { levelForChannel, useNotifications } from "@/stores/notifications";
+import { useConta } from "@/stores/conta";
 import { useSettings } from "@/stores/settings";
 import { useAuth } from "@/stores/auth";
 import { useModeration } from "@/stores/moderation";
@@ -157,11 +162,41 @@ export function useRealtime(currentUserId?: string): void {
       }),
       on<Channel>(WS_EVENTS.CHANNEL_UPDATED, (channel) => {
         if (channel.guildId) useChannels.getState().handleUpdated(channel);
-        else void useDMs.getState().refreshList();
+        // conversa: o evento **é** a visão atualizada dela (nome, ícone,
+        // participantes, e a conversa reaberta que precisa entrar na coluna).
+        // Recarregar a lista inteira aqui era uma volta ao servidor para
+        // aplicar o que já estava no payload — e piscava a coluna.
+        else useDMs.getState().handleUpdated(channel as DMChannelView);
       }),
       on<ChannelDeletedEvent>(WS_EVENTS.CHANNEL_DELETED, ({ channelId, guildId }) => {
         if (guildId) useChannels.getState().handleDeleted(channelId);
         else useDMs.getState().handleDeleted(channelId);
+      }),
+
+      /**
+       * Li um canal em outra conexão da conta (abri a conversa no desktop, e
+       * este é o site). Só o estado de leitura muda: badge apaga, nada navega.
+       * O eco da própria leitura cai no mesmo estado — os aplicadores são
+       * idempotentes (`stores/leitura`).
+       */
+      on<ChannelReadEvent>(WS_EVENTS.CHANNEL_READ, ({ channelIds, lastReadAt, guildId }) => {
+        useDMs.getState().aplicarLeitura(channelIds, lastReadAt);
+        useChannels.getState().aplicarLeitura(channelIds, lastReadAt);
+        if (guildId) {
+          // com os canais deste servidor na memória, o resumo do rail sai
+          // deles; sem eles (servidor fechado, "marcar como lido" no menu), a
+          // leitura foi de tudo que eu enxergo lá — o badge zera direto
+          if (useChannels.getState().guildId === guildId) {
+            useGuilds.getState().syncFromChannels(guildId);
+          } else {
+            useGuilds.getState().clearUnread(guildId);
+          }
+        } else if (useChannels.getState().guildId) {
+          // lote sem servidor ("marcar tudo como lido") pode ter zerado canais
+          // do servidor aberto
+          useGuilds.getState().syncFromChannels(useChannels.getState().guildId!);
+        }
+        atualizarContadorNoIcone();
       }),
 
       on<MemberJoinedEvent>(WS_EVENTS.MEMBER_JOINED, ({ guildId, member }) => {
@@ -277,9 +312,13 @@ export function useRealtime(currentUserId?: string): void {
       }),
 
       // ── d-social ── amigos, pedidos e bloqueio ao vivo
-      on<FriendRequestEvent>(WS_EVENTS.FRIEND_REQUEST, ({ request }) => {
-        useFriends.getState().handleRequest(request);
-        ui.toast(`${displayNameOf(request.user)} mandou um pedido de amizade.`);
+      on<FriendRequestEvent>(WS_EVENTS.FRIEND_REQUEST, ({ request, direcao }) => {
+        useFriends.getState().handleRequest(request, direcao);
+        // o pedido que **eu** mandei de outro aparelho só atualiza a aba
+        // "Enviados": avisar "fulano mandou um pedido" seria mentira
+        if (direcao === "incoming") {
+          ui.toast(`${displayNameOf(request.user)} mandou um pedido de amizade.`);
+        }
       }),
       on<FriendAcceptedEvent>(WS_EVENTS.FRIEND_ACCEPTED, ({ user }) => {
         useFriends.getState().handleAccepted(user);
@@ -290,9 +329,10 @@ export function useRealtime(currentUserId?: string): void {
       on<FriendRemovedEvent>(WS_EVENTS.FRIEND_REMOVED, ({ userId }) => {
         useFriends.getState().handleRemoved(userId);
       }),
-      on<UserBlockedEvent>(WS_EVENTS.USER_BLOCKED, () => {
-        // o bloqueio muda listas e o que a timeline esconde: recarrega tudo
-        void useFriends.getState().load(true);
+      on<UserBlockedEvent>(WS_EVENTS.USER_BLOCKED, ({ user, blocked }) => {
+        // o evento traz a pessoa: as quatro listas mudam pelo delta, sem uma
+        // volta ao `GET /friends` (é o que a timeline lê para colapsar)
+        useFriends.getState().handleBlocked(user, blocked);
       }),
 
       // ── g-emojis-midia ──
@@ -327,6 +367,22 @@ export function useRealtime(currentUserId?: string): void {
         }
       }),
 
+      // ── i-conta ── e-mail, verificação e 2FA valem para a conta inteira
+      on<AccountUpdatedEvent>(WS_EVENTS.ACCOUNT_UPDATED, ({ account }) => {
+        useConta.getState().aplicar(account);
+      }),
+
+      /**
+       * "Sair desta sessão" (ou o fim da conta): as conexões atingidas caem
+       * para o login na hora, em vez de continuarem vivas até o access token
+       * vencer. O evento vai para todas as conexões da conta e cada uma se
+       * reconhece pelo `sid` do próprio token — quem não está na lista fica.
+       */
+      on<SessionsRevokedEvent>(WS_EVENTS.SESSIONS_REVOKED, ({ all, sessionIds }) => {
+        const meu = sidDaSessaoAtual();
+        if (all || (meu && sessionIds.includes(meu))) expirarSessao();
+      }),
+
       onReconnect(() => {
         rejoinChannel();
         void useMessages.getState().resyncActive();
@@ -348,6 +404,10 @@ export function useRealtime(currentUserId?: string): void {
         void useFriends.getState().load(true);
         // emoji/figurinha podem ter mudado enquanto a conexão esteve fora
         void useEmojis.getState().load();
+        // silenciar um canal/servidor no outro aparelho durante a queda
+        void useNotifications.getState().load();
+        // e a conta (e-mail verificado, 2FA), quando alguma tela a mostra
+        if (useConta.getState().conta) void useConta.getState().carregar();
       }),
       // ── f-voz ──
       // estado de voz e chamada em DM: a store decide o que fazer, aqui só

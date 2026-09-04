@@ -196,6 +196,7 @@ export class DMsService {
     const restantes = channel.members.filter((p) => p.userId !== meId);
     if (restantes.length === 0) {
       await this.prisma.channel.delete({ where: { id: channelId } });
+      this.saiuDaMinhaColuna(meId, channelId);
       return { channelId, deleted: true };
     }
 
@@ -214,6 +215,7 @@ export class DMsService {
     ]);
     // corta a sala ao vivo: sem isso ele seguiria recebendo o grupo
     this.realtime.leaveChannelRooms(meId, [channelId]);
+    this.saiuDaMinhaColuna(meId, channelId);
     await this.avisoDeSistema(channelId, meId, "SYSTEM_MEMBER_LEFT", "");
     return { channelId, deleted: false };
   }
@@ -332,7 +334,22 @@ export class DMsService {
       create: { userId: meId, channelId },
       update: { hiddenAt: new Date() },
     });
+    this.saiuDaMinhaColuna(meId, channelId);
     return { channelId };
+  }
+
+  /**
+   * "Esta conversa saiu da minha coluna" — para **todas** as minhas conexões.
+   *
+   * Fechar a conversa e sair do grupo são decisões da conta, não da aba: sem
+   * este aviso, fechar no desktop deixava a conversa na coluna do site até o
+   * próximo `GET /dms`. Reusa `channel.deleted` de propósito — do lado do
+   * cliente os dois casos são a mesma coisa (tira da lista e fecha se estiver
+   * aberta) — e vai só para `user:<id>`, nunca para os outros participantes,
+   * que continuam com a conversa.
+   */
+  private saiuDaMinhaColuna(meId: string, channelId: string): void {
+    this.realtime.emitToUser(meId, WS_EVENTS.CHANNEL_DELETED, { channelId, guildId: null });
   }
 
   /** Adiciona alguém ao grupo. Qualquer participante pode, como no Discord. */

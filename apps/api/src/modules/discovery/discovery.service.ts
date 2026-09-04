@@ -1,7 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { WS_EVENTS } from "@streamz/shared";
 import type { DiscoverableGuild } from "@streamz/shared";
-import { toPublicUser } from "../../common/dto";
+import { toGuildDTO, toPublicUser } from "../../common/dto";
 import { isUniqueViolation } from "../../common/prisma-errors";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
@@ -89,7 +89,14 @@ export class DiscoveryService {
   async join(userId: string, guildId: string) {
     const guild = await this.prisma.guild.findUnique({
       where: { id: guildId },
-      select: { id: true, name: true, discoverable: true },
+      select: {
+        id: true,
+        name: true,
+        discoverable: true,
+        iconUrl: true,
+        ownerId: true,
+        description: true,
+      },
     });
     if (!guild) throw new NotFoundException("Servidor não encontrado");
     if (!guild.discoverable) throw new ForbiddenException("Este servidor não é público");
@@ -124,6 +131,13 @@ export class DiscoveryService {
       select: { id: true },
     });
     for (const c of publicos) this.realtime.joinChannelRooms([userId], c.id);
+    // as minhas outras conexões põem o servidor no rail na hora — a mesma regra
+    // do resgate de convite (§9, PR #104): entrar pela Descobrir no site não
+    // pode deixar o desktop com o rail velho até reiniciar
+    this.realtime.emitToUser(userId, WS_EVENTS.GUILD_JOINED, {
+      guild: toGuildDTO(guild),
+      reason: "joined",
+    });
     await this.onboarding.announceJoin(guildId, userId);
     return { id: guild.id, name: guild.name };
   }

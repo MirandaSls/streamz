@@ -1,7 +1,8 @@
 /** Fabrica um JWT sem assinatura válida — o cliente só lê o payload. */
-export function jwtComExp(expEmMs: number): string {
-  const payload = Buffer.from(JSON.stringify({ sub: "u1", exp: Math.floor(expEmMs / 1000) }))
-    .toString("base64url");
+export function jwtComExp(expEmMs: number, sid?: string): string {
+  const payload = Buffer.from(
+    JSON.stringify({ sub: "u1", exp: Math.floor(expEmMs / 1000), ...(sid ? { sid } : {}) }),
+  ).toString("base64url");
   return `cabecalho.${payload}.assinatura`;
 }
 

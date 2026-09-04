@@ -233,6 +233,108 @@ Canal sem categoria continua no topo da coluna, sem título — é o que o Disco
 faz com quem você arrasta para fora de uma categoria. Apagar uma categoria
 **solta** os canais dela (FK `SetNull`) em vez de apagá-los.
 
+### 4.2 Tempo real entre as sessões da mesma conta (a tabela de referência)
+
+A mesma conta fica aberta no desktop **e** no site. A regra, que vale para
+qualquer rota nova:
+
+> **Toda mutação que muda o que EU vejo tem de chegar às outras conexões da
+> minha conta.** A sala que as tem todas é `user:<id>` (`emitToUser`). O socket
+> que fez a requisição já recebeu a resposta HTTP — o evento não é para ele, é
+> para os outros. Quando o efeito também é dos outros (canal, servidor), a sala
+> do canal (`channel:<id>`) ou a do servidor (`guild:<id>`) já cobre as minhas
+> conexões, porque elas estão nessas salas: `handleConnection` põe cada socket
+> em `user:<id>`, em todos os canais visíveis e em todos os servidores, e refaz
+> isso a cada reconexão. Desktop e site rodam o mesmo código: as salas são as
+> mesmas nos dois.
+
+E do lado do cliente, duas exigências:
+
+- **Idempotência.** Quem originou a mutação já aplicou o resultado de forma
+  otimista; o evento chega depois, para todo mundo, inclusive para ele. Aplicar
+  o mesmo estado duas vezes não pode duplicar linha, somar contador duas vezes
+  nem redesenhar à toa. Onde "nada mudou", os aplicadores devolvem a **mesma
+  referência** (`stores/leitura.ts`), que é o que impede a piscada.
+- **Delta, não `refreshList` cego.** O evento carrega o objeto novo; recarregar
+  a lista inteira para aplicar o que já veio no payload é uma volta ao servidor
+  e uma piscada. Só se recarrega quando o evento realmente não basta.
+
+| Mutação | Evento | Para quem | Cliente (`useRealtime` → store) | Sem F5 |
+|---|---|---|---|---|
+| **Perfil e conta** | | | | |
+| nome de exibição, avatar (pôr/tirar) | `user.updated` | todos (`emitAll`) | `usePresence.applyProfile` + `useAuth.setUser` | sim |
+| banner (pôr) | `user.updated` | todos | idem | sim |
+| banner (tirar) | `user.updated` | todos | idem | **sim (era não)** |
+| status personalizado | `user.updated` | todos | idem | sim |
+| status manual (Online/Ausente/Não perturbe/Invisível) | `presence.update` + `user.updated` | todos | `usePresence.apply` + `useAuth.setUser` | sim |
+| e-mail trocado, verificado, 2FA ligado/desligado, códigos regerados | `account.updated` | `user:<id>` | `useConta.aplicar` | **sim (era não — ninguém ouvia)** |
+| encerrar uma sessão / todas as outras / desativar / excluir | `sessions.revoked` | `user:<id>` | cai para o login se `all` ou se o `sid` do meu token está na lista | **sim (era não — ninguém ouvia)** |
+| preferências de aparência, voz, idioma, privacidade | — | — | — | **não, de propósito**: são do aparelho (`localStorage`, `stores/settings.ts` e `privacidade.ts`), não da conta |
+| **Notificações** | | | | |
+| nível global / por servidor / por canal, silenciar | `notification.updated` | `user:<id>` | `useNotifications.apply` | sim |
+| **Leitura ("lido" num cliente apaga o badge no outro)** | | | | |
+| abrir/ler um canal (`POST /channels/:id/read`) | `channel.read` | `user:<id>` | `useDMs`/`useChannels.aplicarLeitura` + `useGuilds.syncFromChannels` | **sim (era não)** |
+| marcar o servidor como lido (`POST /guilds/:id/read`) | `channel.read` (lote + `guildId`) | `user:<id>` | idem, com `useGuilds.clearUnread` quando o servidor não está aberto | **sim (era não)** |
+| marcar tudo como lido (`POST /me/read-all`) | `channel.read` (lote) | `user:<id>` | idem | **sim (era não)** |
+| **Amizades** | | | | |
+| mandar pedido | `friend.request` | `user:<alvo>` **e** `user:<eu>`, com `direcao` | `useFriends.handleRequest` (Pendentes / Enviados) | **sim (a aba "Enviados" era não)** |
+| aceitar | `friend.accepted` | os dois `user:<id>` | `handleAccepted` + `useDMs.garantirNaLista` | sim |
+| recusar, cancelar, remover amigo | `friend.removed` | os dois `user:<id>` | `handleRemoved` | sim |
+| bloquear | `friend.removed` (ao outro) + `user.blocked` (a mim, **com a pessoa**) | `user:<id>` | `handleBlocked` — delta, sem refazer o `GET /friends` | sim |
+| desbloquear | `user.blocked` | `user:<eu>` | `handleBlocked` | sim |
+| **Conversas (DM e grupo)** | | | | |
+| abrir conversa / reabrir (`POST /dms`, `/dms/:id/show`) | `channel.updated` | `user:<eu>` | `useDMs.handleUpdated` (era `refreshList` cego) | sim |
+| criar grupo | `channel.updated` | `user:<id>` de cada participante | `handleUpdated` | sim |
+| renomear, trocar ícone, adicionar/remover participante | `channel.updated` (+ `message.new` de sistema) | `user:<id>` de cada participante | `handleUpdated` | sim |
+| fechar a conversa (`POST /dms/:id/hide`) | `channel.deleted` | `user:<eu>` **só** | `useDMs.handleDeleted` | **sim (era não)** |
+| sair do grupo | `channel.deleted` (a mim) + `message.new` de sistema | `user:<eu>` / canal | `handleDeleted` | **sim (era não)** |
+| ser removido do grupo | `channel.deleted` | `user:<removido>` | `handleDeleted` | sim |
+| **Servidores** | | | | |
+| criar | `guild.joined` (`created`) | `user:<eu>` | `useGuilds.handleJoined` | sim (#104) |
+| entrar por convite | `guild.joined` + `member.joined` | `user:<eu>` / `guild:<id>` | idem | sim (#104) |
+| entrar pela Descobrir | `guild.joined` + `member.joined` | `user:<eu>` / `guild:<id>` | idem | **sim (era não)** |
+| editar nome/descrição, ícone (pôr/tirar) | `guild.updated` | `guild:<id>` | `handleGuildUpdated` | sim |
+| transferir a posse | `guild.ownerChanged` + 2× `member.updated` | `guild:<id>` | `handleOwnerChanged`, `handleMemberUpdated` | sim |
+| sair | `member.left` + `guild.removed` | `guild:<id>` / `user:<eu>` | `handleRemoved` | sim |
+| apagar | `guild.removed` | `user:<id>` de todos os membros | `handleRemoved` | sim |
+| expulsar, banir | `member.left` + `guild.removed` | `guild:<id>` / `user:<alvo>` | `handleRemoved` + toast | sim |
+| papel (ADMIN/MEMBER), cargo atribuído/removido, castigo | `member.updated` | `guild:<id>` | `handleMemberUpdated` (+ recarrega canais e permissões quando sou eu) | sim |
+| aceitar as regras, ver as boas-vindas | `guild.settingsUpdated` | `user:<eu>` | recarrega a minha associação | **sim (era não)** |
+| onboarding/descoberta do servidor | `guild.settingsUpdated` | `guild:<id>` | idem | sim |
+| **Canais e categorias** | | | | |
+| criar, editar, apagar canal | `channel.created` / `.updated` / `.deleted` | quem enxerga o canal (`emitToUsers`) | `useChannels.handle*` | sim |
+| reordenar canais e categorias | `channel.updated` / `category.updated` | quem enxerga / `guild:<id>` | `handleUpdated` (a coluna ordena por `position` ao desenhar) | sim |
+| criar, renomear, apagar categoria | `category.created` / `.updated` / `.deleted` | `guild:<id>` | `useCategories.handle*` | sim |
+| dar/tirar acesso a canal privado | `channel.created` / `.deleted` + entra/sai da sala | `user:<id>` de quem ganhou/perdeu | `handle*` | sim |
+| permissões de cargo e overrides de canal | `role.*`, `channel.overrides` | `guild:<id>` | `usePermissions.handle*` (+ recarrega a lista de canais) | sim |
+| **Mensagens** | | | | |
+| enviar, editar, apagar, reagir | `message.new` / `.updated` / `.deleted` | `channel:<id>` | `useMessages.handle*` (dedupe por id; o `nonce` só casa no autor) | sim |
+| fixar/desafixar | `message.pinned` / `.unpinned` | `channel:<id>` | `usePins.handle*` | sim |
+| thread, enquete, exclusão em massa | `thread.updated`, `poll.updated`, `messages.bulkDeleted` | `channel:<id>` | stores correspondentes | sim |
+| emoji e figurinha do servidor | `emoji.updated` / `sticker.updated` | `guild:<id>` | `useEmojis.apply*` | sim |
+| **Voz** | | | | |
+| entrar, sair, mudo, surdo, tela, câmera | `voice.state` | `guild:<id>` ou os participantes | `useVoice.applyState` | sim |
+| mover alguém de canal (`MOVE_MEMBERS`) | `voice.moved` (ao movido) + 2× `voice.state` | `user:<movido>` / servidor | `useVoice.movidoDeCanal` — a conexão que **não** estava na chamada ignora (`decidirMovido`) | sim |
+| entrar de outro aparelho | `voice.evicted` | **um socket só** (é a exceção da regra: quem acabou de entrar não pode receber a própria expulsão) | `useVoice.expulsoDaVoz` | sim |
+| chamada em conversa (tocar/encerrar) | `call.ring` / `call.ended` | `user:<id>` dos envolvidos | `useVoice.handleRing`/`handleEnded` | sim |
+| **Convites** | | | | |
+| criar/revogar convite | — | — | — | **não**: a lista de convites vive dentro do modal de configurações do servidor e é relida ao abrir. O Discord também não a atualiza ao vivo. Se virar incômodo, o caminho é um `invite.updated` em `guild:<id>` |
+
+**Reconexão.** O servidor esquece as salas quando a conexão cai, mas
+`handleConnection` reentra em todas — o cliente só precisa ressincronizar o que
+perdeu enquanto esteve fora. O `onReconnect` de `useRealtime` faz um resync
+leve, sem recarregar a página: histórico do canal ativo, servidores, conversas,
+amigos/bloqueios, permissões e categorias do servidor aberto, emojis,
+preferências de notificação, a conta (quando alguma tela a mostra) e a
+retomada da voz. Listas de servidores e conversas trazem o estado de leitura
+junto, então os badges voltam certos sem rota nova.
+
+**Onde ficam os testes.** `apps/api/src/modules/realtime/entre-sessoes.spec.ts`
+(um teste por grupo de mutação, cada um só perguntando "saiu para `user:<id>`?"),
+`todas-as-conexoes.spec.ts` (criar servidor e resgatar convite),
+`apps/web/stores/leitura.test.ts` e `friends-eventos.test.ts` (os tratadores,
+com a idempotência explícita).
+
 ## 5. Publicar uma versão do desktop
 
 O app consulta `GET /api/updates/{target}/{arch}/{versão}` na abertura: 204
@@ -824,6 +926,7 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
 | #104 | Convite vira cartão com "Entrar" (reconhecido no host público **e** no host do app), `guild.joined` para todas as conexões da conta, logo do rail volta para Amigos, e o foco da janela do desktop volta a marcar a conversa aberta como lida |
 | #105 | Sons: um som não se sobrepõe a si mesmo em menos de 300 ms, um dono só do volume com fator por som, e badge de não lidas no ícone da caixa de entrada |
 | #112 | As duas categorias padrão viram categorias de verdade (§4.1): paravam de existir na primeira categoria criada, e não dava para renomear nem apagar |
+| #117 | Auditoria de tempo real entre as sessões da conta (§4.2) e as lacunas fechadas: `channel.read` (o "lido" num cliente apaga o badge no outro), fechar conversa/sair do grupo, pedido de amizade na aba "Enviados", `account.updated` e `sessions.revoked` finalmente ouvidos, entrar pela Descobrir, aceitar as regras, tirar o banner |
 
 Desktop: 0.0.6 (#38 + #40 + #41), 0.0.7 (+ #42), 0.0.8 (tudo até #50),
 0.0.10 (até #64), 0.0.11 (até #71, primeira com a tela nativa), 0.0.12 (até #73).
