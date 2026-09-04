@@ -1,11 +1,14 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { ChevronRight, HeadphoneOff, MicOff, UserPlus, Video } from "@/components/ui/icones";
 import { displayNameOf } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
 import { abrirMenuDeParticipante } from "@/components/voice/participant-menu";
+import PreviaDeTela, { type AlvoDaPrevia } from "@/components/voice/PreviaDeTela";
 import { useAuth } from "@/stores/auth";
+import { useChannels } from "@/stores/channels";
 import { anchorOf, ui } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
 
@@ -26,6 +29,12 @@ import { useVoice } from "@/stores/voice";
  *   reservado a quem está com o áudio desativado (não escuta ninguém).
  * - Transmissão vira pílula "AO VIVO", que é o convite para assistir; um ícone
  *   verde a mais no meio dos outros passa despercebido.
+ *
+ * O hover de quem transmite abre a **miniatura ao vivo** (`PreviaDeTela`), com
+ * a faixa assinada em baixa qualidade só enquanto o pop-up está na tela: é o
+ * que deixa decidir se vale entrar sem entrar. Ele não atrapalha o arrasto: o
+ * `pointerenter` só abre o cartão de quem está transmitindo, e arrastar a
+ * linha o fecha junto com o `dragstart`.
  *
  * Arrastar um participante daqui para outro canal de voz é de quem tem
  * `MOVE_MEMBERS`; quem guarda o estado do arrasto e desenha o realce no canal
@@ -52,101 +61,143 @@ export default function VoiceChannelMembers({
   const falando = useVoice((s) => s.falando);
   const estouAqui = useVoice((s) => s.channelId === channelId);
   const meId = useAuth((s) => s.user?.id);
+  const assistir = useVoice((s) => s.assistir);
+  const canal = useChannels((s) => s.channels.find((c) => c.id === channelId) ?? null);
+  const select = useChannels((s) => s.select);
+  const [previa, setPrevia] = useState<AlvoDaPrevia | null>(null);
+  // fechar com um respiro: entre a linha e o cartão há 8px de vão, e sem a
+  // carência o pop-up piscaria toda vez que o cursor os atravessa
+  const adiado = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const agendarFechar = () => {
+    if (adiado.current) clearTimeout(adiado.current);
+    adiado.current = setTimeout(() => setPrevia(null), 140);
+  };
+  const cancelarFechar = () => {
+    if (adiado.current) clearTimeout(adiado.current);
+    adiado.current = null;
+  };
   if (estados.length === 0) return null;
 
   return (
-    <ul aria-label="Na sala de voz" className="mb-1 ml-3 mr-2 mt-0.5 space-y-0.5">
-      {estados.map((e) => {
-        const nome = displayNameOf(e.user);
-        // quem está mudo nunca "fala": o anel tem de contar a mesma história
-        const ativo = !e.muted && falando.has(e.user.id);
-        return (
-          <li
-            key={e.user.id}
-            data-voice-member={e.user.id}
-            draggable={podeMover}
-            onDragStart={(ev) => {
-              // o Firefox só inicia o arrasto se houver algo no dataTransfer
-              ev.dataTransfer.effectAllowed = "move";
-              ev.dataTransfer.setData("text/plain", e.user.id);
-              onArrastarMembro?.(e.user.id);
-            }}
-            onDragEnd={() => onFimDoArrasto?.()}
-            className={podeMover ? "cursor-grab active:cursor-grabbing" : undefined}
-          >
+    <>
+      <ul aria-label="Na sala de voz" className="mb-1 ml-3 mr-2 mt-0.5 space-y-0.5">
+        {estados.map((e) => {
+          const nome = displayNameOf(e.user);
+          // quem está mudo nunca "fala": o anel tem de contar a mesma história
+          const ativo = !e.muted && falando.has(e.user.id);
+          return (
+            <li
+              key={e.user.id}
+              data-voice-member={e.user.id}
+              draggable={podeMover}
+              onDragStart={(ev) => {
+                // o cartão da prévia é `fixed` e ficaria pendurado no meio da
+                // tela enquanto a linha viaja para outro canal
+                setPrevia(null);
+                // o Firefox só inicia o arrasto se houver algo no dataTransfer
+                ev.dataTransfer.effectAllowed = "move";
+                ev.dataTransfer.setData("text/plain", e.user.id);
+                onArrastarMembro?.(e.user.id);
+              }}
+              onDragEnd={() => onFimDoArrasto?.()}
+              onPointerEnter={(ev) => {
+                if (!e.screen) return;
+                cancelarFechar();
+                const r = ev.currentTarget.getBoundingClientRect();
+                setPrevia({ user: e.user, rect: { top: r.top, bottom: r.bottom, right: r.right } });
+              }}
+              onPointerLeave={() => e.screen && agendarFechar()}
+              className={podeMover ? "cursor-grab active:cursor-grabbing" : undefined}
+            >
+              <button
+                type="button"
+                onClick={(ev) => ui.openProfile(e.user, anchorOf(ev.currentTarget))}
+                onContextMenu={(ev) => {
+                  ev.preventDefault();
+                  abrirMenuDeParticipante(ev.clientX, ev.clientY, e.user, {
+                    sou: e.user.id === meId,
+                    channelId,
+                  });
+                }}
+                /*
+                  `pl-[38px]`: no Discord tudo que pende do canal é recuado. O
+                  avatar do participante começa 26px depois do ícone do canal, e o
+                  nome 30px depois do nome do canal. Sem isso o participante fica
+                  **à esquerda** do ícone do próprio canal — colado na borda da
+                  coluna, que foi a queixa.
+                */
+                className={`flex h-8 w-full items-center gap-1.5 rounded-[4px] pl-[38px] pr-1 text-left text-sm hover:bg-hov hover:text-txt-normal ${
+                  e.deafened ? "text-txt-faint opacity-30" : "text-txt-faint"
+                }`}
+              >
+                {/* 24px (`sm`), medido no print. O anel de "está falando" é o
+                    mesmo do palco — mesma cor, mesma espessura, mesmo desenho por
+                    dentro do diâmetro —, e por isso vem de `AnelDeFala`. Ele é um
+                    irmão por cima do avatar: como `ring-inset` na caixa do
+                    próprio avatar, a foto o cobria e o anel nunca aparecia. */}
+                <span className="relative inline-grid shrink-0 rounded-full">
+                  <Avatar
+                    user={e.user}
+                    size="sm"
+                    surface="border-panel"
+                    className={`transition-transform ${ativo ? ENCOLHE_AO_FALAR : ""}`}
+                  />
+                  {ativo && <AnelDeFala />}
+                </span>
+                {/* menor que o nome do canal, como no Discord: nosso texto era maior que o
+                    do canal acima, o que invertia a hierarquia */}
+                <span className="min-w-0 flex-1 truncate text-[14px]">{nome}</span>
+                {e.screen ? (
+                  <span className="shrink-0 rounded-[3px] bg-red px-1 text-[10px] font-bold uppercase leading-4 tracking-[0.02em] text-white">
+                    Ao vivo
+                  </span>
+                ) : (
+                  e.video && <Video size={14} className="shrink-0 text-txt-muted" aria-label="Com câmera" />
+                )}
+                {e.deafened ? (
+                  <HeadphoneOff size={14} className="shrink-0 text-red" aria-label="Sem áudio" />
+                ) : (
+                  e.muted && <MicOff size={14} className="shrink-0 text-red" aria-label="Mudo" />
+                )}
+              </button>
+            </li>
+          );
+        })}
+
+        {/* Só para quem está dentro: de fora, a linha seria um convite para uma
+            sala em que você não está, e o caminho de entrar é clicar no canal.
+            O chevron é o do print — ele abre a escolha de quem convidar. */}
+        {estouAqui && guildId && (
+          <li>
             <button
               type="button"
-              onClick={(ev) => ui.openProfile(e.user, anchorOf(ev.currentTarget))}
-              onContextMenu={(ev) => {
-                ev.preventDefault();
-                abrirMenuDeParticipante(ev.clientX, ev.clientY, e.user, {
-                  sou: e.user.id === meId,
-                  channelId,
-                });
-              }}
-              /*
-                `pl-[38px]`: no Discord tudo que pende do canal é recuado. O
-                avatar do participante começa 26px depois do ícone do canal, e o
-                nome 30px depois do nome do canal. Sem isso o participante fica
-                **à esquerda** do ícone do próprio canal — colado na borda da
-                coluna, que foi a queixa.
-              */
-              className={`flex h-8 w-full items-center gap-1.5 rounded-[4px] pl-[38px] pr-1 text-left text-sm hover:bg-hov hover:text-txt-normal ${
-                e.deafened ? "text-txt-faint opacity-30" : "text-txt-faint"
-              }`}
+              onClick={() => ui.openModal({ kind: "invite", guildId })}
+              className="flex h-8 w-full items-center gap-1.5 rounded-[4px] pl-[38px] pr-1 text-left text-sm text-txt-faint transition hover:bg-hov hover:text-txt-normal"
             >
-              {/* 24px (`sm`), medido no print. O anel de "está falando" é o
-                  mesmo do palco — mesma cor, mesma espessura, mesmo desenho por
-                  dentro do diâmetro —, e por isso vem de `AnelDeFala`. Ele é um
-                  irmão por cima do avatar: como `ring-inset` na caixa do
-                  próprio avatar, a foto o cobria e o anel nunca aparecia. */}
-              <span className="relative inline-grid shrink-0 rounded-full">
-                <Avatar
-                  user={e.user}
-                  size="sm"
-                  surface="border-panel"
-                  className={`transition-transform ${ativo ? ENCOLHE_AO_FALAR : ""}`}
-                />
-                {ativo && <AnelDeFala />}
+              <span className="grid h-5 w-5 shrink-0 place-items-center">
+                <UserPlus size={14} aria-hidden="true" />
               </span>
-              {/* menor que o nome do canal, como no Discord: nosso texto era maior que o
-                  do canal acima, o que invertia a hierarquia */}
-              <span className="min-w-0 flex-1 truncate text-[14px]">{nome}</span>
-              {e.screen ? (
-                <span className="shrink-0 rounded-[3px] bg-red px-1 text-[10px] font-bold uppercase leading-4 tracking-[0.02em] text-white">
-                  Ao vivo
-                </span>
-              ) : (
-                e.video && <Video size={14} className="shrink-0 text-txt-muted" aria-label="Com câmera" />
-              )}
-              {e.deafened ? (
-                <HeadphoneOff size={14} className="shrink-0 text-red" aria-label="Sem áudio" />
-              ) : (
-                e.muted && <MicOff size={14} className="shrink-0 text-red" aria-label="Mudo" />
-              )}
+              <span className="min-w-0 flex-1 truncate">Convidar para voz</span>
+              <ChevronRight size={14} className="shrink-0" aria-hidden="true" />
             </button>
           </li>
-        );
-      })}
+        )}
+      </ul>
 
-      {/* Só para quem está dentro: de fora, a linha seria um convite para uma
-          sala em que você não está, e o caminho de entrar é clicar no canal.
-          O chevron é o do print — ele abre a escolha de quem convidar. */}
-      {estouAqui && guildId && (
-        <li>
-          <button
-            type="button"
-            onClick={() => ui.openModal({ kind: "invite", guildId })}
-            className="flex h-8 w-full items-center gap-1.5 rounded-[4px] pl-[38px] pr-1 text-left text-sm text-txt-faint transition hover:bg-hov hover:text-txt-normal"
-          >
-            <span className="grid h-5 w-5 shrink-0 place-items-center">
-              <UserPlus size={14} aria-hidden="true" />
-            </span>
-            <span className="min-w-0 flex-1 truncate">Convidar para voz</span>
-            <ChevronRight size={14} className="shrink-0" aria-hidden="true" />
-          </button>
-        </li>
+      {previa && (
+        <PreviaDeTela
+          alvo={previa}
+          onFechar={agendarFechar}
+          onManter={cancelarFechar}
+          onAssistir={() => {
+            // fora da sala não há faixa para assinar: entrar no canal é parte
+            // do "assistir" (o `VoicePanel` conecta ao montar)
+            if (!estouAqui && canal) select(canal);
+            assistir(previa.user.id);
+            setPrevia(null);
+          }}
+        />
       )}
-    </ul>
+    </>
   );
 }

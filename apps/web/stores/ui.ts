@@ -287,6 +287,8 @@ interface UIState {
 
   setView: (view: "guild" | "dm") => void;
   toggleMembers: () => void;
+  /** Abre a conversa da call sem alternar (o balão do canal na barra lateral). */
+  abrirVoiceChat: () => void;
   toggleVoiceChat: () => void;
   /** Empilha um modal sobre o que já estiver aberto. */
   openModal: (modal: Modal) => void;
@@ -341,6 +343,10 @@ export const useUI = create<UIState>((set, get) => ({
   setView: (view) => set({ view }),
   toggleMembers: () => set((s) => ({ membersOpen: !s.membersOpen })),
   toggleVoiceChat: () => set((s) => ({ voiceChatOpen: !s.voiceChatOpen })),
+  // o balão da linha do canal **abre**, não alterna: quem clica nele estando
+  // noutro canal quer ver a conversa daquela call, e um alternador fecharia o
+  // painel que ainda nem estava na tela
+  abrirVoiceChat: () => set({ voiceChatOpen: true }),
 
   openModal: (modal) =>
     set((s) => ({ modals: [...s.modals, modal], contextMenu: null, popover: null })),

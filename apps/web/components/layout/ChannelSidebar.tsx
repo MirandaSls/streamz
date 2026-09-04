@@ -18,6 +18,7 @@ import {
   Lock,
   LogOut,
   Megaphone,
+  MessageSquare,
   Pencil,
   Plus,
   Settings,
@@ -225,6 +226,7 @@ export default function ChannelSidebar() {
   const dropCategory = useChannels((s) => s.dropCategory);
 
   const openModal = useUI((s) => s.openModal);
+  const abrirVoiceChat = useUI((s) => s.abrirVoiceChat);
   // o chevron do cabeçalho vira X enquanto o dropdown está aberto, como no
   // Discord; quem fecha o menu é o host, então o estado espelha a store
   const contextMenu = useUI((s) => s.contextMenu);
@@ -631,6 +633,26 @@ export default function ChannelSidebar() {
               ocupavam 48px, e era isso que empurrava o cronômetro para longe
               da borda. Só aparecem no hover ou com foco de teclado. */}
           <span className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center">
+            {/* O balão do canal de VOZ, que a print `image (1).png` mostra à
+                esquerda do convite e da engrenagem: ele abre a conversa **da
+                call** (a coluna de 450 da direita, ver `PainelDeChatDaCall`).
+                Só existe em canal de voz — no de texto a conversa é a própria
+                coluna, e o botão não teria o que abrir. */}
+            {channel.type === "VOICE" && (
+              <Tooltip label="Abrir conversa">
+                <button
+                  type="button"
+                  onClick={() => {
+                    select(channel);
+                    abrirVoiceChat();
+                  }}
+                  aria-label={`Abrir a conversa de ${name}`}
+                  className="grid h-6 w-6 place-items-center rounded text-txt-muted opacity-0 transition hover:text-txt-primary group-hover:opacity-100 focus-visible:opacity-100"
+                >
+                  <MessageSquare size={18} />
+                </button>
+              </Tooltip>
+            )}
             <Tooltip label="Criar convite">
               <button
                 type="button"

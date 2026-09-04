@@ -18,6 +18,7 @@ import ContextMenuHost from "@/components/ui/ContextMenu";
 import ProfilePopoverHost from "@/components/ui/ProfilePopover";
 import TelaDeAbertura from "@/components/ui/TelaDeAbertura";
 import Toasts from "@/components/ui/Toasts";
+import PainelDeChatDaCall from "@/components/voice/PainelDeChatDaCall";
 import VoiceLayer from "@/components/voice/VoiceLayer";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useRealtime } from "@/hooks/useRealtime";
@@ -47,6 +48,7 @@ export default function AppPage() {
   const view = useUI((s) => s.view);
   const membersOpen = useUI((s) => s.membersOpen);
   const voiceChatOpen = useUI((s) => s.voiceChatOpen);
+  const toggleVoiceChat = useUI((s) => s.toggleVoiceChat);
   const activeChannel = useActiveChannel();
   const activeDM = useActiveDM();
   const voiceChannel = useVoiceChannel();
@@ -116,9 +118,10 @@ export default function AppPage() {
         <>
           {voiceChannel ? (
             // No canal de voz o palco ocupa a área inteira — o chat de texto do
-            // canal existe, mas só aparece por clique no botão do cabeçalho. É o
-            // oposto da chamada em conversa, onde voz e texto convivem
-            // empilhados (ver `CallSplit` no `DMView`).
+            // canal existe, mas só aparece por clique no balão (no cabeçalho do
+            // palco ou na linha do canal). Quando abre, é a coluna de 450 da
+            // direita, com a casca medida em `PainelDeChatDaCall` — a mesma da
+            // chamada em conversa (ver `CallSplit` no `DMView`).
             <main className="flex min-w-0 flex-1 bg-chat">
               <div className="flex min-w-0 flex-1 flex-col">
                 <VoicePanel
@@ -129,9 +132,12 @@ export default function AppPage() {
                 />
               </div>
               {voiceChatOpen && (
-                <div className="flex w-[400px] shrink-0 flex-col border-l border-border">
+                <PainelDeChatDaCall
+                  titulo={voiceChannel.name ?? "voz"}
+                  onFechar={toggleVoiceChat}
+                >
                   <ChatView incorporado />
-                </div>
+                </PainelDeChatDaCall>
               )}
             </main>
           ) : (
