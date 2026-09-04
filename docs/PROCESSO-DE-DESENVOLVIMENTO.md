@@ -98,22 +98,23 @@ rodando", e a validação é o usuário mandar prints.
   Discord / nosso antes / nosso depois por item (§6).
 - Não mergeie sem autorização do usuário (§2.5).
 
-### 3.5 CI e deploy
-- Um push em PR roda `CI` (`typecheck + testes + build`, `build das imagens`).
-  Um push em `main` roda o mesmo e, no fim, o job `deploy em produção`
-  (`deploy.yml` é chamado pelo `ci.yml`; não tem gatilho próprio).
-- Duração típica do `main` completo: 8 a 11 minutos. O deploy é um por vez
-  (`concurrency: deploy-producao`); um merge logo atrás do outro **cancela o run
-  anterior** e o mais novo leva os dois.
-- Merge: `gh pr merge <n> --merge` quando `gh pr view <n> --json mergeStateStatus`
-  devolve `CLEAN`.
-- Confirmação: `docker ps --filter name=streamz` mostra as imagens
-  `ghcr.io/mirandasls/streamz-{web,api}:sha-<7>`; `/api/health` devolve a tag.
-- **Falha conhecida e inofensiva**: `build das imagens` cai com
-  `@prisma/engines postinstall: Error: aborted` (download dos motores do Prisma
-  abortou no runner). É rede. `gh run rerun <id> --failed` resolve.
-- Para acompanhar sem poluir: `gh pr checks <n> --watch --interval 30` em
-  segundo plano, ou um laço em `gh run view <id> --json status`.
+### 3.5 Verificação, imagens e deploy (sem GitHub Actions)
+- Em 2026-09-03 os workflows (`ci.yml`, `deploy.yml`, `desktop.yml`) foram
+  **removidos** do repositório a pedido do usuário: o repo é privado, o runner
+  Windows custa 2× e a cobrança travou os jobs. Não há mais CI no GitHub.
+- O caminho é `scripts/publicar-local.sh` (PR #101), rodado **neste servidor**:
+  verificação idêntica à do antigo `ci.yml` (typecheck, testes, lint, build e
+  export da web, `cargo fmt --check`), build das imagens `streamz-{api,web}`
+  com os mesmos Dockerfiles e `NEXT_PUBLIC_*` de produção, tag
+  `ghcr.io/mirandasls/streamz-*:sha-<7>` **local** (sem push) e
+  `docker compose … up -d api web` com `STREAMZ_TAG`. A API aplica migrations
+  no boot (`RUN_MIGRATIONS=1`).
+- Merge: `gh pr merge <n> --merge` depois de a verificação local passar; não há
+  mais `mergeStateStatus: CLEAN` a esperar.
+- Confirmação: `docker ps --filter name=streamz` e `/api/health` devolvendo a
+  tag; `/api/updates/windows/x86_64/<versão>` continua respondendo.
+- Instalador do desktop: ver §5 (build no servidor via `cargo-xwin`, se
+  viável; senão numa máquina Windows).
 
 ## 4. Onde as coisas estão (mapa de componentes)
 
