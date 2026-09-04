@@ -1,7 +1,13 @@
-import { BadRequestException, Injectable, ServiceUnavailableException } from "@nestjs/common";
-import { AccessToken } from "livekit-server-sdk";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  ServiceUnavailableException,
+} from "@nestjs/common";
+import { AccessToken, TrackSource } from "livekit-server-sdk";
 import {
   Permission,
+  hasPermission,
   VOICE_FLAGS_PADRAO,
   WS_EVENTS,
   identidadeDeTela,
@@ -68,11 +74,19 @@ export class VoiceService {
     username: string,
   ): Promise<VoiceTokenResponse> {
     // só quem pode ver o canal (membro; se privado, na allowlist) recebe token
-    const { channel } = await this.guilds.assertCanViewChannel(userId, channelId);
+    const access = await this.guilds.assertCanViewChannel(userId, channelId);
+    const { channel } = access;
     if (channel.type !== "VOICE") {
       throw new BadRequestException("Este canal não é de voz");
     }
-    return this.assinarToken(this.salaDe(channel.type, channelId), userId, username);
+    // c-cargos: ver o canal de voz não é poder entrar nele
+    this.assertPodeConectar(access.permissions);
+    return this.assinarToken(
+      this.salaDe(channel.type, channelId),
+      userId,
+      username,
+      access.permissions,
+    );
   }
 
   /**
@@ -94,9 +108,15 @@ export class VoiceService {
     userId: string,
     username: string,
   ): Promise<VoiceTokenResponse> {
-    const { channel } = await this.guilds.assertCanViewChannel(userId, channelId);
+    const access = await this.guilds.assertCanViewChannel(userId, channelId);
+    const { channel } = access;
     if (channel.type === "TEXT") {
       throw new BadRequestException("Este canal não tem voz");
+    }
+    // c-cargos: a segunda conexão só existe para publicar tela — sem STREAM ela
+    // não deve nem ser assinada. A conexão principal continua ouvindo.
+    if (!hasPermission(access.permissions, Permission.STREAM)) {
+      throw new ForbiddenException("Você não pode compartilhar a tela neste canal");
     }
     if (!this.isConfigured()) {
       throw new ServiceUnavailableException(
@@ -141,10 +161,22 @@ export class VoiceService {
     return this.assinarToken(room, userId, username);
   }
 
+  /**
+   * Assina o token do LiveKit **com o que a pessoa pode publicar**.
+   *
+   * É aqui que `SPEAK` e `STREAM` viram regra de verdade. Uma checagem só na
+   * hora do `join` seria decorativa: quem falasse com o cliente na mão pediria
+   * o token e publicaria assim mesmo. O `canPublishSources` do LiveKit é o que
+   * o servidor de mídia obedece, e ele é derivado da permissão efetiva do canal.
+   *
+   * `permissions` ausente = conversa direta ou grupo (`DM_PERMISSIONS` já traz
+   * SPEAK e STREAM): quem participa fala e mostra a tela, como sempre foi.
+   */
   private async assinarToken(
     room: string,
     userId: string,
     username: string,
+    permissions?: number,
   ): Promise<VoiceTokenResponse> {
     if (!this.isConfigured()) {
       throw new ServiceUnavailableException(
@@ -156,8 +188,29 @@ export class VoiceService {
       name: username,
       ttl: "1h",
     });
-    at.addGrant({ room, roomJoin: true, canPublish: true, canSubscribe: true });
+    const podeFalar = permissions === undefined || hasPermission(permissions, Permission.SPEAK);
+    const podeVideo = permissions === undefined || hasPermission(permissions, Permission.STREAM);
+    const fontes: TrackSource[] = [
+      ...(podeFalar ? [TrackSource.MICROPHONE] : []),
+      ...(podeVideo
+        ? [TrackSource.CAMERA, TrackSource.SCREEN_SHARE, TrackSource.SCREEN_SHARE_AUDIO]
+        : []),
+    ];
+    at.addGrant({
+      room,
+      roomJoin: true,
+      canPublish: fontes.length > 0,
+      canPublishSources: fontes,
+      canSubscribe: true,
+    });
     return { token: await at.toJwt(), url: process.env.LIVEKIT_URL!, room };
+  }
+
+  /** `CONNECT` — ver o canal de voz na coluna não é poder entrar nele. */
+  private assertPodeConectar(permissions: number): void {
+    if (!hasPermission(permissions, Permission.CONNECT)) {
+      throw new ForbiddenException("Você não pode entrar neste canal de voz");
+    }
   }
 
   // ── estado de voz ──────────────────────────────────────────
@@ -168,16 +221,42 @@ export class VoiceService {
    * de voz ou conversa direta.
    */
   async join(userId: string, channelId: string, flags: VoiceFlags = VOICE_FLAGS_PADRAO) {
-    const { channel } = await this.guilds.assertCanViewChannel(userId, channelId);
+    const access = await this.guilds.assertCanViewChannel(userId, channelId);
+    const { channel } = access;
     if (channel.type === "TEXT") {
       throw new BadRequestException("Este canal não tem voz");
     }
+    // c-cargos: `CONNECT` para entrar, e as flags de entrada já respeitam
+    // `SPEAK`/`STREAM` — entrar mudo num canal onde não se fala é o que o
+    // Discord faz, em vez de recusar a entrada inteira
+    this.assertPodeConectar(access.permissions);
+    const flagsPermitidas = this.flagsPermitidas(flags, access.permissions);
     // uma conexão de voz por usuário: sair da anterior evita estado zumbi em
     // duas salas quando o cliente entra num canal sem sair do outro
     await this.leaveAllExcept(userId, channelId);
-    await this.store.join(channelId, userId, flags);
-    await this.broadcast(channelId, channel.guildId, userId, flags, true);
+    await this.store.join(channelId, userId, flagsPermitidas);
+    await this.broadcast(channelId, channel.guildId, userId, flagsPermitidas, true);
     return channel;
+  }
+
+  /**
+   * As flags que a pessoa pode mesmo ligar naquele canal.
+   *
+   * Sem `SPEAK` ela entra muda e não desmuta; sem `STREAM` a câmera e a tela
+   * ficam desligadas. O `deafened` é escolha dela e não depende de permissão.
+   * O LiveKit já recusaria a publicação (o token não a autoriza), mas o estado
+   * de voz é do Streamz: sem isto a coluna mostraria "com câmera" para alguém
+   * que não está publicando nada.
+   */
+  private flagsPermitidas(flags: VoiceFlags, permissions: number): VoiceFlags {
+    const podeFalar = hasPermission(permissions, Permission.SPEAK);
+    const podeVideo = hasPermission(permissions, Permission.STREAM);
+    return {
+      ...flags,
+      muted: podeFalar ? flags.muted : true,
+      video: podeVideo ? flags.video : false,
+      screen: podeVideo ? flags.screen : false,
+    };
   }
 
   /**
@@ -258,10 +337,15 @@ export class VoiceService {
 
   /** Atualiza mudo/surdo/vídeo/tela. Devolve null se o usuário não estava na sala. */
   async update(userId: string, channelId: string, flags: VoiceFlags) {
-    const membro = await this.store.update(channelId, userId, flags);
+    // c-cargos: desmutar sem SPEAK, ou ligar câmera/tela sem STREAM, não passa.
+    // Vale o mesmo caminho do join — quem entrou com permissão e a perdeu no
+    // meio (cargo removido) é corrigido no primeiro update que mandar.
+    const access = await this.guilds.assertCanViewChannel(userId, channelId);
+    const permitidas = this.flagsPermitidas(flags, access.permissions);
+    const membro = await this.store.update(channelId, userId, permitidas);
     if (!membro) return null;
     const channel = await this.canal(channelId);
-    await this.broadcast(channelId, channel?.guildId ?? null, userId, flags, true);
+    await this.broadcast(channelId, channel?.guildId ?? null, userId, permitidas, true);
     return membro;
   }
 

@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { BadRequestException, ForbiddenException } from "@nestjs/common";
-import { Permission, WS_EVENTS, hasPermission } from "@streamz/shared";
+import {
+  DEFAULT_PERMISSIONS,
+  DM_PERMISSIONS,
+  Permission,
+  WS_EVENTS,
+  hasPermission,
+} from "@streamz/shared";
 import { VoiceService } from "./voice.service";
 import type { GuildsService } from "../guilds/guilds.service";
 import type { PrismaService } from "../../prisma/prisma.service";
@@ -60,7 +66,13 @@ function servico(permissoesDoAtor: number) {
       if (channelId === "voz-privada" && userId !== "bia") {
         throw new ForbiddenException("Você não tem acesso a este canal");
       }
-      return { tipo: channel.guildId ? "guild" : "dm", channel };
+      // c-cargos: o `assertCanViewChannel` de verdade sempre devolve a permissão
+      // efetiva do canal — o token e as flags de voz saem dela
+      return {
+        tipo: channel.guildId ? "guild" : "dm",
+        channel,
+        permissions: channel.guildId ? DEFAULT_PERMISSIONS : DM_PERMISSIONS,
+      };
     },
   } as unknown as GuildsService;
 

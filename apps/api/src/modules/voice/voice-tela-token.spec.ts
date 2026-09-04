@@ -4,7 +4,13 @@ import {
   ForbiddenException,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import { donoDaIdentidade, ehIdentidadeDeTela, identidadeDeTela } from "@streamz/shared";
+import {
+  DEFAULT_PERMISSIONS,
+  DM_PERMISSIONS,
+  donoDaIdentidade,
+  ehIdentidadeDeTela,
+  identidadeDeTela,
+} from "@streamz/shared";
 import { VoiceService } from "./voice.service";
 import type { GuildsService } from "../guilds/guilds.service";
 import type { PrismaService } from "../../prisma/prisma.service";
@@ -33,13 +39,27 @@ function servico() {
     async assertMember() {},
     async assertCanViewChannel(userId: string, channelId: string) {
       if (channelId === "voz1") {
-        return { tipo: "guild", channel: { id: channelId, guildId: "g1", type: "VOICE" } };
+        // c-cargos: o `assertCanViewChannel` de verdade sempre devolve a permissão
+      // efetiva do canal — o token e as flags de voz saem dela
+      return {
+          tipo: "guild",
+          channel: { id: channelId, guildId: "g1", type: "VOICE" },
+          permissions: DEFAULT_PERMISSIONS,
+        };
       }
       if (channelId === "texto1") {
-        return { tipo: "guild", channel: { id: channelId, guildId: "g1", type: "TEXT" } };
+        return {
+          tipo: "guild",
+          channel: { id: channelId, guildId: "g1", type: "TEXT" },
+          permissions: DEFAULT_PERMISSIONS,
+        };
       }
       if (channelId === "dm1" && userId === "ana") {
-        return { tipo: "dm", channel: { id: channelId, guildId: null, type: "DM" } };
+        return {
+          tipo: "dm",
+          channel: { id: channelId, guildId: null, type: "DM" },
+          permissions: DM_PERMISSIONS,
+        };
       }
       throw new ForbiddenException("Sem acesso");
     },

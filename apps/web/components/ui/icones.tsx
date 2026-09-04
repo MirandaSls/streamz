@@ -991,3 +991,41 @@ export const Download = doDiscord(
   CAMINHO_DOWNLOAD_CHEVRON,
   CAMINHO_DOWNLOAD_BANDEJA,
 );
+
+/*
+ * A barra diagonal do "herdar" — o **segundo** ícone deste arquivo que não vem
+ * de ativo nenhum, e o único que também não vem do Phosphor.
+ *
+ * Ela é a coluna do meio do tri-estado de permissões (`✗ ╱ ✓`), o estado
+ * neutro: "esta regra não decide nada, vale o que vier de cima". O acervo do
+ * Discord não tem esse glifo solto — lá a barra só existe **dentro** dos ícones
+ * cortados (`PushPinSlash`, `ShieldSlash`), colada ao pictograma que ela risca
+ * — e o `Prohibit` do Phosphor é a barra dentro de um círculo, que lê como
+ * "proibido" e colidiria com o `✗` de negar bem ao lado.
+ *
+ * Por isso é desenhada aqui, e como **marca utilitária**: gesto puro, de traço,
+ * no quadro de 24 do lucide, espessura 2 com ponta arredondada — as mesmas
+ * convenções dos vizinhos de contorno — e em `currentColor`, para herdar a cor
+ * do estado como todo o resto do vocabulário.
+ */
+export function Slash({
+  size = 24,
+  ...resto
+}: { size?: number | string } & ComponentProps<"svg">) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...resto}
+    >
+      <line x1="5" y1="19" x2="19" y2="5" />
+    </svg>
+  );
+}

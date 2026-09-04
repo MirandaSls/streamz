@@ -27,7 +27,9 @@ import type {
 import {
   MAX_ATTACHMENTS_PER_MESSAGE,
   MESSAGE_AROUND_RADIUS,
+  Permission,
   WS_EVENTS,
+  hasPermission,
   isEmptySearch,
   parseCustomEmoji,
   replySnippet,
@@ -102,6 +104,12 @@ export class MessagesService {
     const access = await this.guilds.assertCanPostChannel(authorId, channelId);
     // h-moderacao: castigo e regras não aceitas bloqueiam a escrita no servidor
     await this.assertPodeEscrever(access, channelId, authorId);
+    // c-cargos: anexar é uma permissão à parte de escrever. A checagem é aqui,
+    // e não no upload: o arquivo solto é privado de quem enviou e só vira
+    // conteúdo do canal ao ser vinculado a uma mensagem.
+    if ((attachmentIds?.length ?? 0) > 0 && !hasPermission(access.permissions, Permission.ATTACH_FILES)) {
+      throw new ForbiddenException("Você não pode anexar arquivos neste canal");
+    }
     // modo lento (b-canais): regra do canal, aplicada só em canal de servidor —
     // em conversa direta não há moderação nem intervalo mínimo
     if (access.tipo === "guild") {
@@ -485,6 +493,11 @@ export class MessagesService {
     // h-moderacao: reagir também é escrever — quem está de castigo não reage
     if (access.tipo === "guild" && access.channel.guildId) {
       await this.guilds.assertNotTimedOut(access.channel.guildId, userId);
+    }
+    // c-cargos: reagir é a permissão ADD_REACTIONS, não SEND_MESSAGES — dá para
+    // ter um canal em que se reage sem poder escrever, e vice-versa
+    if (!hasPermission(access.permissions, Permission.ADD_REACTIONS)) {
+      throw new ForbiddenException("Você não pode reagir neste canal");
     }
     // `<:nome:id>`: só reage com emoji personalizado quem é membro do servidor
     // dono dele — a reação vai para todo mundo que lê o canal (g-emojis-midia)

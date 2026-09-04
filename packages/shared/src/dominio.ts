@@ -206,6 +206,12 @@ export interface Channel {
   slowmodeSeconds: number;
   /** conteúdo sensível: pede confirmação antes de abrir. */
   nsfw: boolean;
+  /**
+   * "sincronizado com a categoria" (c-cargos): as permissões deste canal são,
+   * hoje, as da categoria dele. A primeira edição feita no próprio canal
+   * dessincroniza. Sempre false em canal sem categoria, em DM e em grupo.
+   */
+  syncedWithCategory: boolean;
 }
 
 /** Não lido = existe mensagem depois do que eu li (ou nunca li e há mensagem). */

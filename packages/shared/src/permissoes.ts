@@ -39,6 +39,8 @@ export const Permission = {
   ADMINISTRATOR: 1 << 18,
   /** arrastar alguém de um canal de voz para outro do mesmo servidor. */
   MOVE_MEMBERS: 1 << 19,
+  /** ligar a câmera e compartilhar a tela num canal de voz (o "Vídeo" do Discord). */
+  STREAM: 1 << 20,
 } as const;
 
 export type PermissionName = keyof typeof Permission;
@@ -128,6 +130,11 @@ export const PERMISSION_INFO: Record<
     description: "Permite arrastar alguém de um canal de voz para outro do servidor.",
     group: "voz",
   },
+  STREAM: {
+    label: "Vídeo",
+    description: "Permite ligar a câmera e compartilhar a tela nos canais de voz.",
+    group: "voz",
+  },
   MODERATE_MEMBERS: {
     label: "Moderar membros",
     description: "Permite deixar um membro de castigo (sem falar) por um tempo.",
@@ -171,6 +178,7 @@ export const PERMISSION_ORDER: readonly PermissionName[] = [
   "MODERATE_MEMBERS",
   "CONNECT",
   "SPEAK",
+  "STREAM",
   "MUTE_MEMBERS",
   "MOVE_MEMBERS",
 ];
@@ -189,7 +197,8 @@ export const DEFAULT_PERMISSIONS: number =
   Permission.ATTACH_FILES |
   Permission.ADD_REACTIONS |
   Permission.CONNECT |
-  Permission.SPEAK;
+  Permission.SPEAK |
+  Permission.STREAM;
 
 /**
  * Permissões numa conversa direta: não há cargo nem override lá.
@@ -202,7 +211,8 @@ export const DM_PERMISSIONS: number =
   Permission.ATTACH_FILES |
   Permission.ADD_REACTIONS |
   Permission.CONNECT |
-  Permission.SPEAK;
+  Permission.SPEAK |
+  Permission.STREAM;
 
 /** Nome do cargo padrão de todo servidor (não é apagável nem renomeável). */
 export const EVERYONE_ROLE_NAME = "@everyone";
@@ -250,13 +260,96 @@ export interface Role {
   isDefault: boolean;
 }
 
-/** Regra de um canal para um cargo **ou** um usuário (nunca os dois). */
-export interface ChannelOverride {
-  channelId: string;
+/**
+ * Uma regra de permissão: para um cargo **ou** para um usuário, nunca os dois.
+ *
+ * É a forma que canal e categoria compartilham — a única diferença entre as
+ * duas é a coluna que diz a quem a regra pertence. Tudo que só precisa
+ * calcular (`computePermissions`, a UI tri-estado) fala nesta forma e serve aos
+ * dois casos sem duplicação.
+ */
+export interface PermissionOverwrite {
   roleId: string | null;
   userId: string | null;
   allow: number;
   deny: number;
+}
+
+/** Regra de um canal para um cargo **ou** um usuário (nunca os dois). */
+export interface ChannelOverride extends PermissionOverwrite {
+  channelId: string;
+}
+
+/**
+ * Regra de uma **categoria**. Vale por si (a categoria é privada ou não) e é
+ * o que os canais sincronizados herdam — ver `overridesEfetivos`.
+ */
+export interface CategoryOverride extends PermissionOverwrite {
+  categoryId: string;
+}
+
+/**
+ * As regras que valem de fato para um canal.
+ *
+ * O Discord chama de "sincronizado" o canal cujas permissões são as da
+ * categoria. Enquanto ele está sincronizado, quem manda é a categoria; a
+ * primeira edição feita **no canal** o dessincroniza (a API copia as regras da
+ * categoria para o canal antes de aplicar a edição, e a partir daí o canal
+ * anda sozinho). Ter as duas leituras — a cópia gravada e esta função — é de
+ * propósito: se a cópia divergir por qualquer motivo, o cálculo continua
+ * devolvendo o que a tela promete.
+ */
+export function overridesEfetivos<T extends PermissionOverwrite>(
+  sincronizado: boolean,
+  doCanal: readonly T[],
+  daCategoria: readonly T[],
+): readonly T[] {
+  return sincronizado ? daCategoria : doCanal;
+}
+
+/** Chave de um alvo de regra: `cargo:<id>` ou `membro:<id>`. */
+export function alvoDoOverwrite(o: PermissionOverwrite): string {
+  return o.roleId ? `cargo:${o.roleId}` : `membro:${o.userId}`;
+}
+
+/**
+ * true quando os dois conjuntos de regras dizem exatamente a mesma coisa.
+ * É como a API decide se um canal continua "sincronizado" com a categoria
+ * depois de uma edição — e como a tela mostra o aviso de dessincronizado.
+ */
+export function overridesIguais(
+  a: readonly PermissionOverwrite[],
+  b: readonly PermissionOverwrite[],
+): boolean {
+  const chave = (o: PermissionOverwrite) => `${alvoDoOverwrite(o)}:${o.allow}:${o.deny}`;
+  // regra vazia (allow 0, deny 0) não diz nada: some dos dois lados antes
+  const util = (lista: readonly PermissionOverwrite[]) =>
+    lista.filter((o) => o.allow !== 0 || o.deny !== 0).map(chave).sort();
+  const x = util(a);
+  const y = util(b);
+  return x.length === y.length && x.every((v, i) => v === y[i]);
+}
+
+/** Os três estados de uma permissão na tela de edição de regra. */
+export type EstadoDaRegra = "negar" | "herdar" | "permitir";
+
+/** Em que estado a permissão `bit` está numa regra. */
+export function estadoDaRegra(o: PermissionOverwrite | undefined, bit: number): EstadoDaRegra {
+  if (!o) return "herdar";
+  if (hasPermission(o.allow, bit)) return "permitir";
+  if (hasPermission(o.deny, bit)) return "negar";
+  return "herdar";
+}
+
+/** A regra com `bit` posto no estado pedido (allow e deny são exclusivos). */
+export function comEstadoDaRegra<T extends PermissionOverwrite>(
+  o: T,
+  bit: number,
+  estado: EstadoDaRegra,
+): T {
+  const allow = estado === "permitir" ? o.allow | bit : o.allow & ~bit;
+  const deny = estado === "negar" ? o.deny | bit : o.deny & ~bit;
+  return { ...o, allow, deny };
 }
 
 /** O que `computePermissions` precisa saber do membro. */
@@ -282,12 +375,14 @@ export interface PermissionMember {
  *   5. overrides dos cargos do membro, **somados entre si** (deny, depois allow);
  *   6. override do próprio usuário (deny, depois allow).
  *
- * `overrides` deve conter só os do canal em questão; fora de canal, passe `[]`.
+ * `overrides` são as regras que valem para aquele canal — as dele, ou as da
+ * categoria quando o canal está sincronizado (`overridesEfetivos`). Fora de
+ * canal, passe `[]`.
  */
 export function computePermissions(
   member: PermissionMember,
   roles: readonly Role[],
-  overrides: readonly ChannelOverride[] = [],
+  overrides: readonly PermissionOverwrite[] = [],
 ): number {
   if (member.isOwner) return ALL_PERMISSIONS;
 
@@ -401,4 +496,82 @@ export interface GuildOwnerChangedEvent {
   ownerId: string;
   /** papel de quem entregou (vira ADMIN) — a UI atualiza a coroa. */
   previousOwnerId: string;
+}
+
+
+/** Overrides de uma categoria mudaram — evento `category.overrides`. */
+export interface CategoryOverridesEvent {
+  guildId: string;
+  categoryId: string;
+  overrides: CategoryOverride[];
+}
+
+/** Regra de categoria gravada por PUT /guilds/:id/categories/:cid/overrides. */
+export type CategoryOverrideInput = ChannelOverrideInput;
+
+// ── seções da tela de permissões (canal e categoria) ─────────
+
+/**
+ * Onde a lista de permissões está sendo editada. A categoria mostra tudo (os
+ * canais dela podem ser de texto ou de voz); um canal mostra só o que se aplica
+ * a ele — é o que o Discord faz, e evita oferecer "Falar" num canal de texto.
+ */
+export type EscopoDePermissao = "categoria" | "texto" | "voz";
+
+export interface SecaoDePermissoes {
+  id: string;
+  label: string;
+  permissions: readonly PermissionName[];
+}
+
+/**
+ * As seções da aba "Permissões", na ordem do Discord (prints
+ * `2026-09-04 102249`, `102300` e `102342`).
+ *
+ * A lista é **só o que o Streamz tem**: cada linha aqui é um bit que existe em
+ * `Permission` e que alguma rota da API de fato consulta. As permissões do
+ * Discord que não têm feature correspondente (webhooks, tópicos, figurinhas,
+ * eventos, aplicativos, texto-para-voz, enquetes, modo lento, voz prioritária,
+ * status do canal de voz) ficam de fora em vez de virarem caixinhas inertes.
+ */
+export function secoesDePermissoes(escopo: EscopoDePermissao): SecaoDePermissoes[] {
+  const geral: SecaoDePermissoes = {
+    id: "geral",
+    label:
+      escopo === "categoria"
+        ? "Permissões gerais das categorias"
+        : "Permissões gerais do canal",
+    permissions: ["VIEW_CHANNEL", "MANAGE_CHANNELS", "MANAGE_ROLES"],
+  };
+  const assinatura: SecaoDePermissoes = {
+    id: "assinatura",
+    label: "Permissões da assinatura",
+    permissions: ["CREATE_INVITE"],
+  };
+  const texto: SecaoDePermissoes = {
+    id: "texto",
+    label: "Permissões de canal de texto",
+    permissions: [
+      "SEND_MESSAGES",
+      "ATTACH_FILES",
+      "ADD_REACTIONS",
+      "MENTION_EVERYONE",
+      "MANAGE_MESSAGES",
+    ],
+  };
+  const voz: SecaoDePermissoes = {
+    id: "voz",
+    label: "Permissões de canal de voz",
+    permissions: ["CONNECT", "SPEAK", "STREAM", "MUTE_MEMBERS", "MOVE_MEMBERS"],
+  };
+  if (escopo === "texto") return [geral, assinatura, texto];
+  if (escopo === "voz") return [geral, assinatura, voz];
+  return [geral, assinatura, texto, voz];
+}
+
+/** Todos os bits editáveis num escopo — o que a tela pode mexer. */
+export function bitsDoEscopo(escopo: EscopoDePermissao): number {
+  return secoesDePermissoes(escopo)
+    .flatMap((s) => s.permissions)
+    .reduce((bits, name) => bits | Permission[name], 0);
 }

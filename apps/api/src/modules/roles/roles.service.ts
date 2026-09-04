@@ -201,8 +201,10 @@ export class RolesService {
   ): Promise<ChannelOverride[]> {
     await this.assertCanalDoServidor(guildId, channelId);
     await this.guilds.assertCanViewChannel(actorId, channelId);
-    const rows = await this.prisma.channelOverride.findMany({ where: { channelId } });
-    return rows.map(toOverrideDTO);
+    // canal sincronizado devolve as regras da CATEGORIA, que são as que valem —
+    // a cópia nas linhas do canal existe, mas quem manda é `regrasDoCanal`
+    const regras = await this.guilds.regrasDoCanal(channelId);
+    return regras.map((o) => toOverrideDTO({ ...o, channelId }));
   }
 
   /** Todas as regras dos canais **visíveis** do servidor — a carga do cliente. */
@@ -243,6 +245,10 @@ export class RolesService {
     if (roleId) await this.assertPodeMexerNoCargo(actorId, guildId, roleId);
     else await this.guilds.assertMember(userId!, guildId);
 
+    // editar a permissão DENTRO do canal o tira da sincronia com a categoria
+    // (copiando antes o que ele herdava) — é o comportamento do Discord
+    await this.guilds.dessincronizarDaCategoria(channelId);
+
     const allow = input.allow & ALL_PERMISSIONS;
     const deny = input.deny & ALL_PERMISSIONS & ~allow;
     if (roleId) {
@@ -269,6 +275,7 @@ export class RolesService {
   ): Promise<ChannelOverride[]> {
     await this.guilds.assertCanModerate(actorId, guildId, Permission.MANAGE_ROLES);
     await this.assertCanalDoServidor(guildId, channelId);
+    await this.guilds.dessincronizarDaCategoria(channelId);
     await this.prisma.channelOverride.deleteMany({
       where: { channelId, OR: [{ roleId: targetId }, { userId: targetId }] },
     });

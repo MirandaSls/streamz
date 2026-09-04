@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Bell, MessageSquare, MoreHorizontal, Users, X } from "@/components/ui/icones";
 import { displayNameOf, messageLinkPath, type NotificationLevel } from "@streamz/shared";
+import { urlPublica } from "@/lib/links-do-app";
 import Composer from "@/components/chat/Composer";
 import MessageList from "@/components/chat/MessageList";
 import ReplyBar from "@/components/chat/ReplyBar";
@@ -91,9 +92,8 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
       {
         label: "Copiar link do tópico",
         onSelect: () => {
-          const caminho = messageLinkPath(guildId, channelId, parentId as string);
-          const url =
-            typeof window === "undefined" ? caminho : `${window.location.origin}${caminho}`;
+          // origem pública, como no "copiar link da mensagem" (ver `urlPublica`)
+          const url = urlPublica(messageLinkPath(guildId, channelId, parentId as string));
           void navigator.clipboard?.writeText(url);
           ui.toast("Link do tópico copiado");
         },

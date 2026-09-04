@@ -21,6 +21,7 @@ function canal(
     position,
     private: false,
     readOnly: false,
+    syncedWithCategory: false,
     lastMessageAt: null,
     lastReadAt: null,
     mentionCount: 0,

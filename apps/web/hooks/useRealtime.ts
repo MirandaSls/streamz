@@ -13,6 +13,7 @@ import {
   type AccountUpdatedEvent,
   type Category,
   type CategoryDeletedEvent,
+  type CategoryOverridesEvent,
   type ChannelReadEvent,
   type Channel,
   type ChannelDeletedEvent,
@@ -272,6 +273,14 @@ export function useRealtime(currentUserId?: string): void {
           }
         },
       ),
+      on<CategoryOverridesEvent>(WS_EVENTS.CATEGORY_OVERRIDES, (evento) => {
+        usePermissions.getState().handleCategoryOverrides(evento);
+        // canal sincronizado herda daqui: ganhar ou perder VIEW_CHANNEL na
+        // categoria muda a lista de canais na hora, como no override de canal
+        if (useGuilds.getState().activeGuildId === evento.guildId) {
+          void useChannels.getState().loadForGuild(evento.guildId);
+        }
+      }),
       on<Guild>(WS_EVENTS.GUILD_UPDATED, (guild) => {
         useGuilds.getState().handleGuildUpdated(guild);
       }),

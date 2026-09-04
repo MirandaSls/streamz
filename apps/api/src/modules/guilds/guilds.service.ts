@@ -21,6 +21,7 @@ import {
   hasPermission,
   highestPosition,
   isGuildBannerColor,
+  overridesEfetivos,
 } from "@streamz/shared";
 import type {
   ChannelType,
@@ -29,6 +30,7 @@ import type {
   GuildWithChannels,
   MemberRole,
   PermissionMember,
+  PermissionOverwrite,
   Role,
 } from "@streamz/shared";
 import { toChannelDTO, toGuildDTO, toPublicUser, toRoleDTO } from "../../common/dto";
@@ -275,7 +277,7 @@ export class GuildsService {
     const [ctx, roleIds, overrides] = await Promise.all([
       this.permissionContext(guildId),
       this.roleIdsOf(guildId, userId),
-      this.prisma.channelOverride.findMany({ where: { channelId } }),
+      this.regrasDoCanal(channelId),
     ]);
     const member: PermissionMember = { isOwner: ctx.ownerId === userId, roleIds };
     // só o override do próprio usuário interessa; os dos outros são ruído
@@ -296,6 +298,62 @@ export class GuildsService {
     return actor;
   }
 
+  // ── herança categoria → canal ──────────────────────────────
+
+  /**
+   * As regras que valem para cada canal da lista.
+   *
+   * Um canal **sincronizado** com a categoria (`syncedWithCategory`) não tem
+   * regra própria que conte: quem manda é a categoria. A API também copia as
+   * regras da categoria para as linhas do canal quando sincroniza, então na
+   * prática as duas leituras batem — esta função é a que decide, e existe para
+   * que uma cópia atrasada (evento perdido, escrita concorrente) nunca vire
+   * "a tela promete uma coisa e a API faz outra".
+   *
+   * Uma consulta a mais por checagem, de propósito: o `categoryId` e o
+   * `syncedWithCategory` não estão em todos os chamadores, e passá-los à mão
+   * por seis assinaturas seria seis lugares para esquecer.
+   */
+  private async regrasPorCanal(
+    channelIds: readonly string[],
+  ): Promise<Map<string, PermissionOverwrite[]>> {
+    const out = new Map<string, PermissionOverwrite[]>();
+    if (channelIds.length === 0) return out;
+    const canais = await this.prisma.channel.findMany({
+      where: { id: { in: [...channelIds] } },
+      select: { id: true, categoryId: true, syncedWithCategory: true },
+    });
+    const herdeiros = canais.filter((c) => c.syncedWithCategory && c.categoryId);
+    const proprios = canais.filter((c) => !(c.syncedWithCategory && c.categoryId));
+    const categorias = [...new Set(herdeiros.map((c) => c.categoryId as string))];
+    const [doCanal, daCategoria] = await Promise.all([
+      proprios.length > 0
+        ? this.prisma.channelOverride.findMany({
+            where: { channelId: { in: proprios.map((c) => c.id) } },
+          })
+        : Promise.resolve([]),
+      categorias.length > 0
+        ? this.prisma.categoryOverride.findMany({ where: { categoryId: { in: categorias } } })
+        : Promise.resolve([]),
+    ]);
+    for (const c of canais) {
+      out.set(
+        c.id,
+        overridesEfetivos<PermissionOverwrite>(
+          Boolean(c.syncedWithCategory && c.categoryId),
+          doCanal.filter((o) => o.channelId === c.id),
+          daCategoria.filter((o) => o.categoryId === c.categoryId),
+        ) as PermissionOverwrite[],
+      );
+    }
+    return out;
+  }
+
+  /** As regras de um canal só (atalho de `regrasPorCanal`). */
+  async regrasDoCanal(channelId: string): Promise<PermissionOverwrite[]> {
+    return (await this.regrasPorCanal([channelId])).get(channelId) ?? [];
+  }
+
   // ── visibilidade de canais ─────────────────────────────────
 
   /** Dos canais de um servidor, os que este membro enxerga (VIEW_CHANNEL). */
@@ -305,17 +363,15 @@ export class GuildsService {
     channels: T[],
   ): Promise<T[]> {
     if (channels.length === 0) return channels;
-    const [ctx, roleIds, overrides] = await Promise.all([
+    const [ctx, roleIds, regras] = await Promise.all([
       this.permissionContext(guildId),
       this.roleIdsOf(guildId, userId),
-      this.prisma.channelOverride.findMany({
-        where: { channelId: { in: channels.map((c) => c.id) } },
-      }),
+      this.regrasPorCanal(channels.map((c) => c.id)),
     ]);
     const member: PermissionMember = { isOwner: ctx.ownerId === userId, roleIds };
     return channels.filter((c) => {
-      const meus = overrides.filter(
-        (o) => o.channelId === c.id && (o.userId === null || o.userId === userId),
+      const meus = (regras.get(c.id) ?? []).filter(
+        (o) => o.userId === null || o.userId === userId,
       );
       return hasPermission(
         computePermissions(member, ctx.roles, meus),
@@ -365,7 +421,7 @@ export class GuildsService {
         where: { guildId },
         select: { userId: true, roleId: true },
       }),
-      this.prisma.channelOverride.findMany({ where: { channelId: channel.id } }),
+      this.regrasDoCanal(channel.id),
     ]);
     return members
       .filter((m) => {
@@ -450,6 +506,79 @@ export class GuildsService {
     return hasPermission(access.permissions, Permission.MANAGE_MESSAGES);
   }
 
+  // ── sincronia com a categoria ──────────────────────────────
+
+  /**
+   * Tira o canal da sincronia com a categoria, **copiando antes** as regras
+   * dela para o próprio canal.
+   *
+   * É o que o Discord faz na primeira edição feita dentro do canal: ele passa a
+   * andar sozinho a partir do que herdava, não do vazio — senão editar uma
+   * permissão qualquer apagaria em silêncio o "canal privado" que vinha da
+   * categoria. Idempotente: canal já dessincronizado, ou sem categoria, sai
+   * daqui sem escrever nada.
+   *
+   * Todo caminho que grava `ChannelOverride` chama isto primeiro. Se algum
+   * esquecer, a escrita vira fantasma: a linha existe e o cálculo ignora,
+   * porque `regrasPorCanal` continua devolvendo as da categoria.
+   */
+  async dessincronizarDaCategoria(channelId: string): Promise<void> {
+    const canal = await this.prisma.channel.findUnique({
+      where: { id: channelId },
+      select: { categoryId: true, syncedWithCategory: true },
+    });
+    if (!canal?.syncedWithCategory) return;
+    if (canal.categoryId) {
+      const daCategoria = await this.prisma.categoryOverride.findMany({
+        where: { categoryId: canal.categoryId },
+      });
+      await this.prisma.$transaction([
+        this.prisma.channelOverride.deleteMany({ where: { channelId } }),
+        ...daCategoria.map((o) =>
+          this.prisma.channelOverride.create({
+            data: { channelId, roleId: o.roleId, userId: o.userId, allow: o.allow, deny: o.deny },
+          }),
+        ),
+      ]);
+    }
+    await this.prisma.channel.update({
+      where: { id: channelId },
+      data: { syncedWithCategory: false },
+    });
+    await this.syncChannelFlags(channelId);
+  }
+
+  /**
+   * Põe o canal de volta na sincronia: as regras dele passam a ser, linha por
+   * linha, as da categoria. Descarta o que ele tinha de próprio — é o sentido
+   * do botão "Sincronizar com a categoria", e o aviso está na tela.
+   */
+  async sincronizarComACategoria(channelId: string): Promise<void> {
+    const canal = await this.prisma.channel.findUnique({
+      where: { id: channelId },
+      select: { categoryId: true },
+    });
+    if (!canal?.categoryId) {
+      throw new BadRequestException("Este canal não está em nenhuma categoria");
+    }
+    const daCategoria = await this.prisma.categoryOverride.findMany({
+      where: { categoryId: canal.categoryId },
+    });
+    await this.prisma.$transaction([
+      this.prisma.channelOverride.deleteMany({ where: { channelId } }),
+      ...daCategoria.map((o) =>
+        this.prisma.channelOverride.create({
+          data: { channelId, roleId: o.roleId, userId: o.userId, allow: o.allow, deny: o.deny },
+        }),
+      ),
+      this.prisma.channel.update({
+        where: { id: channelId },
+        data: { syncedWithCategory: true },
+      }),
+    ]);
+    await this.syncChannelFlags(channelId);
+  }
+
   // ── espelho de private/readOnly ────────────────────────────
 
   /**
@@ -488,6 +617,8 @@ export class GuildsService {
     channelId: string,
     flags: { private?: boolean; readOnly?: boolean },
   ): Promise<void> {
+    // marcar o canal como privado é editar a permissão dele: sai da sincronia
+    await this.dessincronizarDaCategoria(channelId);
     const everyone = await this.everyoneRole(guildId);
     const atual = await this.prisma.channelOverride.findUnique({
       where: { channelId_roleId: { channelId, roleId: everyone.id } },
@@ -517,6 +648,7 @@ export class GuildsService {
    * resto do override — ele pode carregar outras regras daquele canal.
    */
   async grantChannelView(channelId: string, userId: string): Promise<void> {
+    await this.dessincronizarDaCategoria(channelId);
     const atual = await this.prisma.channelOverride.findUnique({
       where: { channelId_userId: { channelId, userId } },
     });
@@ -530,6 +662,7 @@ export class GuildsService {
   }
 
   async revokeChannelView(channelId: string, userId: string): Promise<void> {
+    await this.dessincronizarDaCategoria(channelId);
     await this.prisma.channelOverride
       .delete({ where: { channelId_userId: { channelId, userId } } })
       .catch(() => undefined); // idempotente

@@ -199,6 +199,16 @@ export class ChannelsController {
     return this.channels.remove(user.sub, guildId, channelId);
   }
 
+  /** Devolve o canal à herança da categoria (c-cargos). */
+  @Post(":channelId/sync-category")
+  syncCategory(
+    @CurrentUser() user: JwtPayload,
+    @Param("guildId") guildId: string,
+    @Param("channelId") channelId: string,
+  ) {
+    return this.channels.sincronizarComACategoria(user.sub, guildId, channelId);
+  }
+
   @Get(":channelId/members")
   members(
     @CurrentUser() user: JwtPayload,

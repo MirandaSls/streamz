@@ -84,6 +84,7 @@ model User {
   // ── c-cargos ──
   memberRoles      GuildMemberRole[]
   channelOverrides ChannelOverride[]
+  categoryOverrides CategoryOverride[]
   // ── a-mensagens ──
   pinnedMessages   PinnedMessage[] @relation("PinAuthor")
   createdThreads   Thread[]        @relation("ThreadCreator")
@@ -312,6 +313,11 @@ model Channel {
   slowmodeSeconds Int      @default(0)
   // conteúdo sensível: o cliente pede confirmação antes de abrir
   nsfw            Boolean  @default(false)
+  // "sincronizado" (Discord): as permissões deste canal são as da categoria.
+  // Enquanto é true, editar a categoria reescreve os ChannelOverride do canal;
+  // a primeira edição feita NO canal copia as regras da categoria e desliga
+  // isto — daí em diante o canal anda sozinho. Falso para canal sem categoria.
+  syncedWithCategory Boolean @default(false)
   // apagar a categoria não apaga os canais — eles voltam a ficar sem categoria
   category        Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   // ── a-mensagens ──
@@ -455,6 +461,7 @@ model Role {
   guild     Guild             @relation(fields: [guildId], references: [id], onDelete: Cascade)
   members   GuildMemberRole[]
   overrides ChannelOverride[]
+  categoryOverrides CategoryOverride[]
 
   @@index([guildId])
 }
@@ -512,8 +519,33 @@ model Category {
 
   guild    Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
   channels Channel[]
+  // ── c-cargos ──
+  overrides CategoryOverride[]
 
   @@index([guildId])
+}
+
+// Regra de uma CATEGORIA para um cargo OU um usuário (nunca os dois). Mesma
+// forma do ChannelOverride: é a fonte da verdade de "categoria privada" e o
+// molde que os canais sincronizados (`Channel.syncedWithCategory`) copiam.
+// Tabela separada, e não um `categoryId` nullable no ChannelOverride, porque
+// as unicidades ("uma regra por cargo por canal") são por dono e um NULL a
+// mais as tornaria inexprimíveis no Postgres.
+model CategoryOverride {
+  id         String @id @default(cuid())
+  categoryId String
+  roleId     String?
+  userId     String?
+  allow      Int    @default(0)
+  deny       Int    @default(0)
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  role     Role?    @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user     User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, roleId])
+  @@unique([categoryId, userId])
+  @@index([categoryId])
 }
 
 // ── a-mensagens ──────────────────────────────────────────────

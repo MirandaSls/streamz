@@ -73,6 +73,11 @@ export function mentionsMe(
 /** Quantas mensagens antes e depois `GET .../messages/around/:id` devolve. */
 export const MESSAGE_AROUND_RADIUS = 25;
 
+/** Caminho da rota que abre um canal ("copiar link do canal"). */
+export function channelLinkPath(guildId: string | null, channelId: string): string {
+  return `/app/channels/${guildId ?? "@me"}/${channelId}`;
+}
+
 /** Caminho da rota que abre o canal e pula até a mensagem ("copiar link"). */
 export function messageLinkPath(
   guildId: string | null,

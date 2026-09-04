@@ -1,5 +1,6 @@
 import type {
   Category as CategoryDTO,
+  CategoryOverride,
   Channel,
   ChannelOverride,
   ChannelType,
@@ -99,6 +100,8 @@ export function toChannelDTO(
     topic: string | null;
     slowmodeSeconds: number;
     nsfw: boolean;
+    // ── c-cargos ──
+    syncedWithCategory?: boolean;
   },
   summary: ChannelReadSummary = EMPTY_SUMMARY,
 ): Channel {
@@ -117,6 +120,9 @@ export function toChannelDTO(
     topic: c.topic,
     slowmodeSeconds: c.slowmodeSeconds,
     nsfw: c.nsfw,
+    // canal sem categoria nunca herda de ninguém: o `?? false` é o caso de DM
+    // e de grupo, cujas linhas nem trazem a coluna
+    syncedWithCategory: c.syncedWithCategory ?? false,
   };
 }
 
@@ -173,4 +179,21 @@ export function toCategoryDTO(c: {
   position: number;
 }): CategoryDTO {
   return { id: c.id, guildId: c.guildId, name: c.name, position: c.position };
+}
+
+/** Linha de CategoryOverride do Prisma → DTO. Gêmea de `toOverrideDTO`. */
+export function toCategoryOverrideDTO(o: {
+  categoryId: string;
+  roleId: string | null;
+  userId: string | null;
+  allow: number;
+  deny: number;
+}): CategoryOverride {
+  return {
+    categoryId: o.categoryId,
+    roleId: o.roleId,
+    userId: o.userId,
+    allow: o.allow,
+    deny: o.deny,
+  };
 }

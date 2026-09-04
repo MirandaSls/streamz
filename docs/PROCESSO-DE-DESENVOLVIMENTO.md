@@ -189,6 +189,9 @@ O que ele faz, na ordem:
 | Modal "Nova mensagem" | `components/modals/CreateGroupDMModal.tsx` |
 | Sessão do cliente | `lib/session.ts` (par de tokens + renovação), `lib/usuario-guardado.ts` (retrato da conta em uso), `stores/auth.ts` |
 | Multiconta ("Mudar de conta") | `lib/contas.ts` (o cofre: `localStorage` versionado com as contas do aparelho e a ativa; puro e testado), `lib/troca-de-contas.ts` (trocar, sair de uma conta, esquecer), `components/modals/GerenciarContasModal.tsx` e `AdicionarContaModal.tsx`, aberto pela linha "Mudar de conta" do `ProfilePopover.tsx` |
+| Permissões (contrato) | `packages/shared/src/permissoes.ts` — bits, `computePermissions`, `overridesEfetivos`, `secoesDePermissoes`, o tri-estado (`estadoDaRegra`/`comEstadoDaRegra`) |
+| Permissões (API) | `modules/guilds/guilds.service.ts` (`regrasPorCanal`, `assertCanViewChannel`, `dessincronizarDaCategoria`), `modules/channels/categories.service.ts` (regras da categoria), `modules/roles/roles.service.ts` (regras do canal), `modules/guilds/permissoes-legado.ts` (conversão idempotente do boot) |
+| Permissões (UI) | `components/permissoes/*` (tri-estado e editor), `modals/ChannelSettingsModal.tsx`, `modals/CategorySettingsModal.tsx` |
 | Ícones | `components/ui/icones.tsx` — **único** ponto de importação de ícone (§6.2) |
 | Voz (estado) | `stores/voice.ts`, `voice-saida.ts`, `voice-mover.ts`, `voice-retomada.ts`, `voice-reconexao.ts`, `voicePrefs.ts`, `voiceDevices.ts` |
 | Voz (UI) | `components/voice/*` — `VoiceLayer.tsx` (global), `AudioRemotoHost.tsx` (global), `VoiceGrid.tsx`, `CallStage.tsx`, `VoicePanel.tsx`, `VoiceHotkeys.tsx`, `ScreenSharePicker.tsx` |
@@ -623,6 +626,24 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   `figma/collections/private-messages-direct-messages/chat/friends-status`)
   quando já há. Busca e thread continuam irmãs do `<main>`: têm cabeçalho
   próprio de 49 que encosta no da conversa.
+- **Permissões de canal e de categoria** (PR das permissões, 2026-09-04): o
+  modelo é o do Discord — `allow`/`deny` por cargo e por membro, em
+  `ChannelOverride` e `CategoryOverride`. Um canal dentro de categoria nasce
+  **sincronizado** (`Channel.syncedWithCategory`) e herda as regras dela; a
+  primeira edição feita no próprio canal copia o que ele herdava e o
+  dessincroniza (é o que o Discord faz). Quem decide é
+  `GuildsService.regrasPorCanal`; a cópia gravada nas linhas do canal é
+  otimização, não fonte da verdade. `Channel.private`/`readOnly` e a allowlist
+  antiga continuam sendo **espelho** do override do @everyone — nunca o
+  contrário. A tela é a aba "Permissões" com o cartão "Canal/Categoria privada"
+  e o tri-estado ✗/╱/✓ (grupo de 96×28, três botões de 32×28 encostados,
+  medido no print `2026-09-04 102249`).
+- Permissões que **não** existem aqui, e por que não se inventa uma caixinha
+  inerte para elas: webhooks, tópicos, figurinhas, eventos, aplicativos,
+  texto-para-voz, enquetes como permissão, fixar como bit próprio, ignorar modo
+  lento, voz prioritária, ensurdecer e status do canal de voz. O Streamz não
+  tem a feature; o dia em que tiver, o bit entra no próximo livre — os bits
+  **nunca** são renumerados.
 - Configurações (usuário, servidor, canal e grupo, todas na mesma moldura
   `components/ui/JanelaDeConfiguracoes.tsx`): **janela flutuante** de 1400×888
   centrada sobre o app escurecido — não página inteira —, com menu de 252,

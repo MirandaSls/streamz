@@ -4,6 +4,7 @@ import ChannelAccessModal from "@/components/modals/ChannelAccessModal";
 import ChannelSettingsModal from "@/components/modals/ChannelSettingsModal";
 import ChannelTopicModal from "@/components/modals/ChannelTopicModal";
 import ConfirmDialog from "@/components/modals/ConfirmDialog";
+import CategorySettingsModal from "@/components/modals/CategorySettingsModal";
 import CreateChannelModal from "@/components/modals/CreateChannelModal";
 import CreateGroupDMModal from "@/components/modals/CreateGroupDMModal";
 import GuildEmojisModal from "@/components/modals/GuildEmojisModal";
@@ -85,6 +86,8 @@ function renderModal(modal: Modal) {
     // ── b-canais ──
     case "channelSettings":
       return <ChannelSettingsModal channelId={modal.channelId} tab={modal.tab} />;
+    case "categorySettings":
+      return <CategorySettingsModal categoryId={modal.categoryId} tab={modal.tab} />;
     case "channelTopic":
       return <ChannelTopicModal channelId={modal.channelId} />;
     // ── e-configuracoes ──

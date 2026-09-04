@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Hash, Lock, Megaphone, Volume2 } from "@/components/ui/icones";
-import { Permission, type GuildChannelType } from "@streamz/shared";
+import { Permission, type Channel, type GuildChannelType } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { ChannelAccessList } from "@/components/modals/ChannelAccessModal";
 import { RadioLinha, Rotulo, ToggleLinha } from "@/components/ui/controls";
@@ -66,6 +66,10 @@ export default function CreateChannelModal({
   // o antigo `canModerate` deixava passar quem só expulsa membros, e o POST dava 403
   const podeGerenciarCanais = useCan(Permission.MANAGE_CHANNELS);
   const create = useChannels((s) => s.create);
+  // `select` abre a **vista** do canal sem entrar na call: quem conecta é o
+  // `connect` da store de voz, e ele não é chamado aqui (ver `abrirCanalNovo`)
+  const select = useChannels((s) => s.select);
+  const expandirCategoria = useCategories((s) => s.expandir);
   const categoria = useCategories((s) => s.categories.find((c) => c.id === categoryId) ?? null);
 
   const [name, setName] = useState("");
@@ -78,6 +82,25 @@ export default function CreateChannelModal({
 
   const anuncio = type === "ANNOUNCEMENT";
   const tipos = TIPOS.filter((t) => t.valor !== "ANNOUNCEMENT" || podeGerenciarCanais);
+
+  /**
+   * Depois de criar, vai para o canal — como no Discord.
+   *
+   * Sem isto o canal novo era criado **e não aparecia**: se a categoria de
+   * destino estava recolhida, ele nascia escondido dentro dela e dava a
+   * impressão de que a criação falhara. Então duas coisas, nesta ordem: abrir a
+   * categoria (`expandir`, que não fecha a que já está aberta) e selecionar o
+   * canal.
+   *
+   * `select` serve aos dois tipos. Em canal de voz ele monta a vista da sala
+   * (só define `voiceChannelId`) — **não entra na call**: quem conecta é o
+   * `connect` da store de voz, e ninguém o chama a partir daqui. É a mesma
+   * chamada que o balão de conversa do canal de voz faz na barra lateral.
+   */
+  function abrirCanalNovo(novo: Channel) {
+    if (novo.categoryId) expandirCategoria(novo.categoryId);
+    select(novo);
+  }
 
   async function submit() {
     if (!guildId || !name.trim() || saving) return;
@@ -96,6 +119,9 @@ export default function CreateChannelModal({
     setSaving(false);
     if (!ok) return;
     const novo = useChannels.getState().channels.find((c) => !antes.has(c.id));
+    // navega para o canal novo mesmo no caso privado: o segundo passo continua
+    // por cima, e ao fechá-lo a pessoa já cai dentro do canal que acabou de criar
+    if (novo) abrirCanalNovo(novo);
     if (isPrivate && novo) {
       setCriadoId(novo.id);
       return;

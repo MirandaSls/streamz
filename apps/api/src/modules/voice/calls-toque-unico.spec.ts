@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { WS_EVENTS } from "@streamz/shared";
+import { DM_PERMISSIONS, WS_EVENTS } from "@streamz/shared";
 import { CallsService } from "./calls.service";
 import { VoiceService } from "./voice.service";
 import type { FriendsService } from "../friends/friends.service";
@@ -39,7 +39,13 @@ function servicos(participantes: Record<string, string[]>) {
   );
   const guilds = {
     async assertCanViewChannel(_userId: string, channelId: string) {
-      return { tipo: "dm", channel: { id: channelId, guildId: null, type: "DM" } };
+      // c-cargos: o `assertCanViewChannel` de verdade sempre devolve a permissão
+      // efetiva do canal — o token e as flags de voz saem dela
+      return {
+        tipo: "dm",
+        channel: { id: channelId, guildId: null, type: "DM" },
+        permissions: DM_PERMISSIONS,
+      };
     },
   } as unknown as GuildsService;
   const prisma = {
