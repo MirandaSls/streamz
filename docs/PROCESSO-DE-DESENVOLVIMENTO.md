@@ -369,10 +369,64 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   das configurações, com os mesmos `SegmentosDeQualidade` do rodapé. A barra
   branca "Você está compartilhando sua tela inteira" que cobre o cabeçalho é do
   Firefox, não nossa — não dá para mover nem esconder.
+- **O palco tem dois leiautes: grade e foco.** Sem nada no palco, a grade é a
+  de sempre (`grid-layout.ts`, 16:9 maximizado na área). Com um tile no palco —
+  clique no tile, duplo clique, ou "Assistir transmissão" — ele vai para o
+  **destaque**, 16:9 centralizado e contido na área, e os outros descem para uma
+  **faixa** de miniaturas centralizada; clicar no destaque volta para a grade.
+  Medido na print `2026-09-03 203909`, escala 0,8075 (= 2777/3439, a largura da
+  imagem sobre a do monitor do usuário; conferida por três elementos: passo da
+  lista de canais 26px → 32, avatar do card do usuário 25px → 32, cápsula de
+  controles 38px → 48):
+
+  | o quê | na print | real |
+  |---|---|---|
+  | destaque | 1458×823 (16:9 exato) | 1806×1019, centralizado |
+  | vão destaque → faixa | 6 | **8** (`FOCO_GAP`) |
+  | tile da faixa | 150×86 | **188×106** (`FAIXA_ALTURA`/`FAIXA_LARGURA`) |
+  | raio do tile | 6 | **8** (o `rounded-lg` que já havia) |
+  | pílula de nome | 26 de altura, 8–9 de folga | **32**, folga **12** |
+  | avatar no tile | 57 | ~72 (usamos 80, que é o medido a 1:1 na `101857`) |
+  | cápsula de controles | 38 | 48 |
+  | ícones do canto | 15–16 de tinta, 12 da direita | 20, 15 |
+
+  A cápsula e os dois ícones do canto foram conferidos contra esta print: os
+  **ícones batem** (20px de tinta, ~15 da borda direita, ~28 da de baixo — é o
+  que o `IconesDoCanto` já fazia) e a **cápsula diverge**: o Discord tem 48 de
+  altura e 64×48 no botão vermelho, e nós temos 52 e 70×56. A divergência é a do
+  PR #91, pedida pelo usuário ("uns 10% maior"), e por isso ficou como está.
+
+- **O fundo do tile é a cor dominante da foto** (`lib/cor-dominante.ts`), não um
+  token: medido na print, o fundo do tile e o fundo do avatar são o **mesmo**
+  pixel. A extração é no cliente, num canvas de 16×16, com cache por URL e
+  `crossOrigin = "anonymous"`; se o canvas contaminar (CORS) ou não houver foto,
+  cai na cor do avatar sem imagem (`corDoAvatar`, estável por id). A parte pura
+  (`corDominanteDosPixels`) tem teste.
+
+- **Dá para assistir a várias telas ao mesmo tempo.** A store guarda
+  `assistindo: Set<userId>`, e é ele que decide a assinatura da faixa no LiveKit
+  (`aplicarAssinaturasDeTela`): tela que ninguém abriu fica **desassinada** — o
+  tile existe, com o convite "Assistir transmissão" sobre a cor da pessoa, e
+  nada é baixado. Cada tela assistida é um tile próprio no palco; a chave do
+  tile passou a ser `userId` ou `userId:trackSid`, e é ela que o `focado`
+  guarda. No tile já assistido não há "Assistir": há o botão de parar e o "…".
+  A miniatura do hover da lista do canal (`PreviaDeTela`) assina em **baixa
+  qualidade** só enquanto o pop-up está na tela.
+
+- **A conversa da chamada é uma coluna à direita**, não uma faixa embaixo
+  (`PainelDeChatDaCall`, usado pelo canal de voz e pelo `CallSplit` da conversa
+  direta). Medidas da print: painel de 363px → **450**; cabeçalho de 36 → **44**
+  com balão de 18 a 14 da borda, nome e X a 16 da direita; composer de 41 → 51.
+  O cabeçalho **não** tem busca, alfinete nem lista de membros — por isso o
+  `ChatView incorporado` deixou de desenhar o `HeaderBar`. Abre pelo balão do
+  cabeçalho do palco e pelo balão da linha do canal (hover, print `image (1)`).
+
 - Ainda aquém do Discord (não é defeito): botão de voltar para call em outro
   servidor cai no primeiro canal de texto; barra "conectado" sem cronômetro nem
   quem fala; sem "ocupado" para quem liga durante uma call; diálogos invisíveis
-  com o palco em tela cheia; sem PiP.
+  com o palco em tela cheia; sem PiP; sem o degradê sutil no topo do tile que a
+  print mostra; sem o tile de "atividade" ao lado do palco vazio (atividade não
+  existe no produto).
 
 ## 8. Barra de título do desktop
 
