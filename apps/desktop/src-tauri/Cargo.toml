@@ -21,6 +21,17 @@ tauri-plugin-notification = "2"
 # velha até o usuário fechar por conta.
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+# Ações da imagem em tela cheia (ver `components/modals/ImageModal.tsx`):
+# `opener` abre no navegador do sistema — o WebView2 não tem abas e
+# `window.open`/`target="_blank"` morrem em silêncio dentro do app, que era o
+# defeito do botão "Abrir no navegador"; `clipboard-manager` é a segunda
+# chance para "Copiar imagem" quando o `navigator.clipboard.write` do WebView2
+# recusa; `dialog` + `fs` são o "Salvar como" de verdade (o diálogo do Windows
+# escolhe o caminho, o `fs` escreve os bytes, sem passar pelo navegador).
+tauri-plugin-opener = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

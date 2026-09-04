@@ -69,6 +69,15 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         // `relaunch()` depois de instalar; é o que fecha o ciclo.
         .plugin(tauri_plugin_process::init())
+        // Ações da imagem em tela cheia (ver `ImageModal.tsx` na web):
+        // abrir no navegador do sistema, copiar o bitmap e "Salvar como".
+        // As permissões — inclusive o escopo de `http`/`https` do `opener` e
+        // as pastas onde o `fs` pode escrever — estão em
+        // `capabilities/default.json`.
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         // Compartilhamento de tela nativo: o que dá para capturar aqui, as
         // fontes, as miniaturas da grade e a transmissão em si. A web só chama
         // isto quando está dentro do app; no navegador ela continua no

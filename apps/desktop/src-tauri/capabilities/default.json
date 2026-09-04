@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissoes da janela principal do Streamz desktop: sem decoracao nativa (a barra de titulo e nossa), notificacao, checagem de atualizacao e a criacao da janelinha (splash) que baixa e instala.",
+  "description": "Permissoes da janela principal do Streamz desktop: sem decoracao nativa (a barra de titulo e nossa), notificacao, checagem de atualizacao, a criacao da janelinha (splash) que baixa e instala, e as acoes da imagem em tela cheia (abrir no navegador do sistema, copiar o bitmap e Salvar como).",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -18,6 +18,21 @@
     "core:webview:allow-create-webview-window",
     "notification:default",
     "updater:allow-check",
-    "process:allow-restart"
+    "process:allow-restart",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "http://*" }, { "url": "https://*" }]
+    },
+    "clipboard-manager:allow-write-image",
+    "dialog:allow-save",
+    {
+      "identifier": "fs:allow-write-file",
+      "allow": [
+        { "path": "$DOWNLOAD/**" },
+        { "path": "$PICTURE/**" },
+        { "path": "$DESKTOP/**" },
+        { "path": "$DOCUMENT/**" }
+      ]
+    }
   ]
 }

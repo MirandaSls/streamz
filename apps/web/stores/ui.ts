@@ -41,8 +41,15 @@ export type Modal =
   | { kind: "invites"; guildId: string }
   | { kind: "image"; url: string; alt: string }
   // ── g-emojis-midia ──
-  /** galeria de imagens do canal, navegável com ← →. */
-  | { kind: "galeria"; urls: string[]; alts: string[]; indice: number }
+  /**
+   * galeria de imagens do canal, navegável com ← →.
+   *
+   * `messageId` é a mensagem dona das imagens, quando há uma: é o que deixa o
+   * visualizador reagir (a reação é da mensagem, não do arquivo) e mostrar as
+   * reações existentes embaixo da foto. A galeria do canal e a prévia de link
+   * solta abrem sem ele.
+   */
+  | { kind: "galeria"; urls: string[]; alts: string[]; indice: number; messageId?: string }
   /** gerência de emojis e figurinhas de um servidor. */
   | { kind: "guildEmojis"; guildId: string }
   | {
