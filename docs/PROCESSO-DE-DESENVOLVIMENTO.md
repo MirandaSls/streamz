@@ -155,6 +155,8 @@ Passo a passo, como foi feito para 0.0.6, 0.0.7 e 0.0.8:
 2. **Build assinado**: `gh workflow run desktop.yml --ref main -f release=true`.
    Leva ~30 minutos. Pegue o id em `gh run list --workflow=desktop.yml --limit 1`
    e acompanhe com um monitor de até 1 hora (um `until` em bash morre em 10).
+   **Ou, de graça, neste servidor:** `scripts/build-desktop-no-servidor.sh`
+   (~1 min com cache quente) — ver §5.3, inclusive o que só o Windows prova.
 3. **Publicar** (o script usado está em
    `scratchpad/publicar-0.0.8.sh` da sessão que fez; recrie se precisar):
    - `gh run download <id> -R MirandaSls/streamz -n streamz-windows -D <dir>`
@@ -236,6 +238,82 @@ da tela, como a do Discord — não uma tela dentro do app. O que existe:
   atualização não conseguiria criar a janela.
 - A rede de segurança quando o JS da janelinha não sobe continua sendo a
   bandeja ("Abrir Streamz"), porque a `main` nasce invisível.
+
+### 5.3 Instalador sem o Actions (build no próprio servidor)
+
+O runner `windows-latest` custa **2× minuto** em repositório privado e cada
+instalador leva ~35 min lá. Desde 2026-09-03 o mesmo `.exe` assinado sai deste
+servidor Linux, em Docker, sem gastar nada:
+
+```bash
+scripts/build-desktop-no-servidor.sh            # origin/main, assinado
+scripts/build-desktop-no-servidor.sh <ref>      # outro commit
+scripts/build-desktop-no-servidor.sh --sem-assinar
+```
+
+Sai em `.claude/saida-desktop/<versão>-<commit>/`: `Streamz_X.Y.Z_x64-setup.exe`
+e `.exe.sig`. Daí em diante o §5 segue igual (copiar para `updates/` e
+`downloads/`, preencher o `.env`, recriar a API).
+
+**Como funciona.** `apps/desktop/Dockerfile.xwin` monta `rust:1-bookworm` +
+`cargo-xwin` + clang/lld 21 + NSIS + node 22. O `cargo-xwin` baixa a CRT e o
+SDK do Windows dos endereços públicos da Microsoft e põe `clang-cl`/`lld-link`
+no lugar de `cl.exe`/`link.exe`. **O alvo é o mesmo do CI**
+(`x86_64-pc-windows-msvc`): mesma ABI, mesmo `+crt-static` do
+`.cargo/config.toml`, mesma `libwebrtc` pré-compilada que o `webrtc-sys` baixa
+no Windows. Não é mingw. O empacotador NSIS do `tauri-bundler` já roda no
+Linux sem gambiarra: fora do Windows ele chama o `makensis` do PATH e só baixa
+o plugin `nsis_tauri_utils.dll`. A assinatura do atualizador é minisign em
+Rust puro e funciona em qualquer sistema.
+
+**Números da primeira prova (commit `3221908`, versão 0.0.16):**
+
+| | |
+|---|---|
+| imagem Docker | ~2 min, 3,4 GB |
+| primeira rodada (tudo frio) | ~17 min |
+| rodadas seguintes | ~1 min 20 s |
+| caches em volumes | `streamz-xwin-cache` 1,1 GB · `streamz-cargo` 0,8 GB · `streamz-pnpm` · `streamz-xdg` |
+| `target/` na worktree | 2,6 GB |
+| instalador gerado | 12 643 158 bytes |
+| instalador do CI (mesma versão) | 12 585 908 bytes (+0,45 %) |
+
+A assinatura foi conferida contra a **chave pública que está dentro do app**
+(`plugins.updater.pubkey` do `tauri.conf.json`): keyID igual e Ed25519
+`Signature Verified Successfully` sobre o blake2b do arquivo. É a mesma
+verificação que o atualizador faz no cliente.
+
+**Duas armadilhas que custaram rodadas** (estão comentadas no script e no
+Dockerfile; não desfaça sem ler):
+
+1. **A UCRT some no link.** O `tauri build` exporta `STATIC_VCRUNTIME=true`, e
+   com isso o `static_vcruntime.rs` do `tauri-build` emite
+   `/NODEFAULTLIB:libucrt.lib` + `/DEFAULTLIB:ucrt.lib` (CRT estática com UCRT
+   **dinâmica** — o que o Windows monta). O `cargo-xwin`, vendo `+crt-static`,
+   acrescenta `-nodefaultlib:ucrt -defaultlib:libucrt`, querendo a UCRT
+   estática. Um cancela o outro e o binário fica sem UCRT nenhuma: centenas de
+   `undefined symbol: cos/sin/strlen/_wassert`. A saída é passar a `ucrt.lib`
+   como **arquivo de entrada** (`-C link-arg=<caminho>/ucrt.lib`), que o
+   `/NODEFAULTLIB` não alcança. Sintoma enganoso: `cargo xwin build` sozinho
+   linka de boa, porque só o `tauri build` liga o `STATIC_VCRUNTIME`.
+2. **"Can't detect any appindicator library".** O `tauri-cli` tem um bloco
+   `#[cfg(target_os = "linux")]` que olha o **hospedeiro**, não o alvo: com a
+   feature `tray-icon` ligada ele exige o appindicator via `pkg-config` e entra
+   em pânico, mesmo compilando para Windows. O resultado só alimentaria as
+   dependências do `.deb` e do AppImage, que este build nunca gera. A imagem
+   responde com um `.pc` de fachada em vez de arrastar 146 pacotes de GTK.
+
+**O que este build NÃO prova.** Que o instalador instala e que o app abre —
+isso continua só o Windows dizendo. O `wine` não serve de substituto aqui: o
+stub do NSIS é PE32 (todo instalador NSIS é), então precisaria de wine 32 bits,
+e o app depende do WebView2, que o wine não tem. A recomendação prática: gerar
+aqui, e antes de publicar em `updates/` instalar uma vez numa máquina Windows.
+O `desktop.yml` continua no repositório e continua sendo a referência — se algo
+divergir, ele é o desempate.
+
+Diferenças conhecidas e aceitas em relação ao artefato do CI: o NSIS é o 3.08
+do Debian (no Windows o bundler baixa o 3.11), e o `.exe` sai sem assinatura
+Authenticode — igual ao do CI, que também não tem certificado.
 
 ## 6. Paridade visual com o Discord (o método)
 
