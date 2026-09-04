@@ -85,10 +85,20 @@ export class CallsService {
 
     const de = await this.usuario(userId);
 
-    // toca só quando a chamada nasce agora; entrar numa em andamento é silencioso
+    // toca só quando a chamada nasce agora; entrar numa em andamento é silencioso.
+    //
+    // `this.tocando.has` não é redundante com `jaEmChamada`: dois `POST
+    // /dms/:id/call` do **mesmo** clique duplo podem ler a contagem antes de
+    // qualquer um dos dois entrar na sala, e aí os dois achariam que a chamada
+    // nasce agora — o outro lado recebia dois `call.ring` e o telefone dele
+    // recomeçava do zero no meio do primeiro toque
     let ringing: PublicUser[] = [];
-    if (!jaEmChamada && alvos.length > 0 && de) {
+    if (!jaEmChamada && !this.tocando.has(channelId) && alvos.length > 0 && de) {
       ringing = await this.tocar(channelId, userId, de, alvos);
+    } else if (this.tocando.get(channelId)?.fromUserId === userId) {
+      // já é a minha chamada tocando: a resposta continua dizendo para quem
+      // ela toca, sem reemitir evento nenhum
+      ringing = await this.pendentes(channelId);
     }
     await this.avaliarSolidao(channelId);
 
@@ -261,6 +271,16 @@ export class CallsService {
       .catch(() => {
         /* conversa apagada no meio: não há a quem avisar */
       });
+  }
+
+  /** Quem ainda não atendeu esta chamada — o `ringing` da resposta, sem tocar de novo. */
+  private async pendentes(channelId: string): Promise<PublicUser[]> {
+    const toque = this.tocando.get(channelId);
+    if (!toque) return [];
+    const ids = Array.from(toque.pendentes);
+    if (ids.length === 0) return [];
+    const users = await this.prisma.user.findMany({ where: { id: { in: ids } } });
+    return users.map((u) => toPublicUser(u));
   }
 
   private async usuario(userId: string): Promise<PublicUser | null> {

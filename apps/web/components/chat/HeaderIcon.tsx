@@ -15,6 +15,7 @@ export default function HeaderIcon({
   onClick,
   active = false,
   disabled = false,
+  motivoDesabilitado,
   semTooltip = false,
   children,
 }: {
@@ -22,6 +23,12 @@ export default function HeaderIcon({
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   active?: boolean;
   disabled?: boolean;
+  /**
+   * Por que o botão está cinza. Sem isto o tooltip do desabilitado é sempre
+   * "(em breve)", que é verdade para os botões ainda sem função e mentira para
+   * o telefone durante uma chamada — ali o motivo é "já estou nela".
+   */
+  motivoDesabilitado?: string;
   /** com o painel do botão aberto o tooltip só atrapalha: cobre o conteúdo. */
   semTooltip?: boolean;
   children: ReactNode;
@@ -29,6 +36,11 @@ export default function HeaderIcon({
   const botao = (
     <button
       type="button"
+      // `aria-disabled` e não o atributo `disabled`: um `<button disabled>` não
+      // dispara evento de ponteiro nenhum no Chromium, e o tooltip que explica
+      // *por que* ele está cinza nunca apareceria. O clique já não faz nada
+      // (o `onClick` some), e a guarda de verdade contra o clique repetido
+      // está na store (`chamada-em-curso.ts`) — o botão é o aviso, não a trava
       onClick={disabled ? undefined : onClick}
       aria-label={label}
       aria-disabled={disabled}
@@ -46,8 +58,9 @@ export default function HeaderIcon({
   );
 
   if (semTooltip) return botao;
+  const dica = disabled ? (motivoDesabilitado ?? `${label} (em breve)`) : label;
   return (
-    <Tooltip label={disabled ? `${label} (em breve)` : label} side="bottom">
+    <Tooltip label={dica} side="bottom">
       {botao}
     </Tooltip>
   );

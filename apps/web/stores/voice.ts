@@ -45,6 +45,7 @@ import {
 } from "@/lib/microfone";
 import { aplicarAssinaturas, type ParticipanteDeTela } from "@/stores/assinaturas-de-tela";
 import { CHAMADA_INICIAL, callReducer, type CallAction, type CallState } from "@/stores/call-machine";
+import { jaNaChamada, type ConexaoDeChamada } from "@/stores/chamada-em-curso";
 import { emit, errorMessage } from "@/stores/socket-adapter";
 import { iniciarMedicaoDePing, pararMedicaoDePing } from "@/stores/voice-ping";
 import { estadosAposReconexao, type Recarga } from "@/stores/voice-reconexao";
@@ -191,7 +192,12 @@ interface VoiceStoreState {
 
   connect: (
     channel: Pick<Channel, "id" | "guildId" | "name" | "type">,
-    opcoes?: { som?: boolean },
+    /**
+     * `som: false` é de quem já tocou o próprio aviso; `forcar` é de quem
+     * precisa refazer a **mesma** sala (`reconnect`), e por isso não pode
+     * esbarrar na guarda de "já estou aqui".
+     */
+    opcoes?: { som?: boolean; forcar?: boolean },
   ) => Promise<void>;
   disconnect: () => Promise<void>;
   /** O servidor tirou esta conexão da voz: a conta entrou de outro lugar. */
@@ -351,6 +357,45 @@ type AjustarVoz = (
 /** Resultado de tentar abrir a mídia: falta de configuração ≠ falha. */
 type ResultadoMidia = { tipo: "ok" } | { tipo: "sem-config" } | { tipo: "falha"; erro: string };
 
+/** O recorte da store que `chamada-em-curso.ts` lê (a guarda do clique repetido). */
+function instantaneo(s: VoiceStoreState): ConexaoDeChamada {
+  return {
+    channelId: s.channelId,
+    status: s.status,
+    fase: s.call.phase,
+    canalDaChamada: s.call.channelId,
+  };
+}
+
+/**
+ * Desmonta a sala de mídia sem tocar no estado de voz (que é do servidor).
+ *
+ * Mora no escopo do módulo, e não dentro da store, porque `entrarNaSala`
+ * também precisa dela: **duas `Room` vivas ao mesmo tempo é o defeito**, não
+ * um detalhe de arrumação. O LiveKit não aceita a mesma identidade duas vezes
+ * — a conexão nova derruba a antiga —, e quem recebia esse tombo era o handler
+ * de `Disconnected` da sala **velha**, que anunciava "a conexão de voz caiu" e
+ * zerava `sala` por cima da sala nova, que estava perfeita.
+ */
+function desmontarSala() {
+  // a transmissão nativa é uma segunda conexão: sair da sala tem que
+  // derrubá-la também, senão o `#tela` fica na sala sem dono
+  if (telaNativa) {
+    telaNativa = false;
+    void pararTelaNativa();
+  }
+  if (!sala) return;
+  pararMedicaoDePing();
+  // o microfone tem dono e é ele quem desmonta a cadeia: a `Room` fecha a
+  // própria `AudioContext` no `disconnect`, e o que estivesse pendurado nela
+  // rodaria num contexto morto na próxima entrada
+  void fecharMicrofone();
+  desarmarDetectorLocal(() => {});
+  sala.removeAllListeners();
+  void sala.disconnect().catch(() => {});
+  sala = null;
+}
+
 export const useVoice = create<VoiceStoreState>((set, get) => {
   /**
    * Re-render quando o SDK muda participantes/faixas.
@@ -377,24 +422,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
   }
 
   /** Desmonta a sala de mídia sem tocar no estado de voz (que é do servidor). */
-  function fecharSala() {
-    // a transmissão nativa é uma segunda conexão: sair da sala tem que
-    // derrubá-la também, senão o `#tela` fica na sala sem dono
-    if (telaNativa) {
-      telaNativa = false;
-      void pararTelaNativa();
-    }
-    if (!sala) return;
-    pararMedicaoDePing();
-    // o microfone tem dono e é ele quem desmonta a cadeia: a `Room` fecha a
-    // própria `AudioContext` no `disconnect`, e o que estivesse pendurado nela
-    // rodaria num contexto morto na próxima entrada
-    void fecharMicrofone();
-    desarmarDetectorLocal(() => {});
-    sala.removeAllListeners();
-    void sala.disconnect().catch(() => {});
-    sala = null;
-  }
+  const fecharSala = desmontarSala;
 
   /**
    * Deixa a sala atual: fecha a mídia, avisa o gateway (quando a saída é
@@ -568,10 +596,32 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         const lista = evento.connected ? [...semEle, evento] : semEle;
         return { states: { ...s.states, [evento.channelId]: lista } };
       });
-      // alguém entrou na minha chamada de DM: ela deixou de estar "tocando"
+      // **Outra pessoa** entrou na minha chamada de DM: ela deixou de estar
+      // "tocando". O `!eu` é o que fazia o ringback não existir: `startCall`
+      // aplica os estados que o `POST /dms/:id/call` devolve, e o primeiro
+      // deles sou **eu** entrando na sala — a chamada virava `active` antes de
+      // o outro lado atender, o `<audio loop>` da `VoiceLayer` parava no mesmo
+      // instante e quem ligava ouvia silêncio. Quem confirma a chamada é
+      // sempre o outro lado
       const { call, channelId } = get();
-      if (evento.connected && evento.channelId === channelId && call.phase !== "idle") {
+      if (!eu && evento.connected && evento.channelId === channelId && call.phase !== "idle") {
         get().dispatchCall({ type: "connected", channelId: evento.channelId });
+      }
+      // **a minha conta** entrou nesta chamada, e não foi por esta janela:
+      // atendi no celular, no desktop ou na outra aba. Desde o #117 os eventos
+      // vão para todas as sessões da conta, e sem isto a segunda continuava
+      // tocando os 30 s inteiros com o cartão "Atender" na tela — e atender ali
+      // entraria na sala com a **mesma identidade**, expulsando a sessão que
+      // já estava na chamada. Não é recusa: nada é avisado ao gateway, o
+      // telefone só se cala
+      if (
+        eu &&
+        evento.connected &&
+        call.phase === "incoming" &&
+        call.channelId === evento.channelId &&
+        channelId !== evento.channelId
+      ) {
+        get().dispatchCall({ type: "reset" });
       }
     },
 
@@ -610,6 +660,11 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
 
     connect: async (channel, opcoes) => {
       const anterior = get().channelId;
+      // já estou (ou estou entrando) nesta sala: o pedido não tem o que fazer.
+      // Sem esta linha, o segundo clique no mesmo canal abria uma **segunda**
+      // `Room` com a mesma identidade e o LiveKit derrubava a primeira — a
+      // "queda de alguns segundos" que também levava a tela compartilhada
+      if (!opcoes?.forcar && jaNaChamada(instantaneo(get()), channel.id)) return;
       // trocar de sala não é sair: a coluna do canal de destino fica de pé
       if (anterior && anterior !== channel.id) sairDaSalaAtual("troca-de-sala", !!channel.guildId);
 
@@ -703,12 +758,17 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       // é sair dela — o gateway continua me vendo lá, o relógio não zera e a
       // coluna do canal fica como está
       fecharSala();
-      await get().connect({
-        id: channelId,
-        guildId,
-        name: channelName,
-        type: guildId ? "VOICE" : "DM",
-      });
+      await get().connect(
+        {
+          id: channelId,
+          guildId,
+          name: channelName,
+          type: guildId ? "VOICE" : "DM",
+        },
+        // a guarda de "já estou nesta sala" existe contra o clique repetido;
+        // refazer a mídia da mesma sala é o caso legítimo de repetir
+        { forcar: true },
+      );
     },
 
     /**
@@ -948,6 +1008,14 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     // ── chamada em conversa direta ──
 
     startCall: async (channelId, comVideo) => {
+      // clicar de novo no telefone enquanto a chamada sai **não** é pedir outra
+      // chamada. Sem esta guarda, o segundo clique refazia tudo: `POST
+      // /dms/:id/call` de novo, uma segunda `Room` com a mesma identidade (que
+      // o LiveKit derruba), a tela compartilhada marcada como desligada e o
+      // ringback interrompido. O botão da conversa também fica cinza aqui
+      // (`botaoDeChamadaBloqueado`), mas a guarda mora nos dois lugares: quem
+      // clica não é só o botão — a faixa "entrar" e o teclado chegam aqui
+      if (jaNaChamada(instantaneo(get()), channelId)) return;
       // uma conexão de voz por vez: o servidor já garante isso, o cliente
       // precisa fechar a sala antiga para não ficar com duas conexões de mídia.
       // A chamada mora na conversa, então a coluna do canal de voz fecha
@@ -987,6 +1055,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     acceptCall: async () => {
       const channelId = get().call.channelId;
       if (!channelId) return;
+      // só se atende o que está tocando: um segundo clique em "Atender" (ou o
+      // atalho junto com o clique) entrava na sala duas vezes
+      if (get().call.phase !== "incoming") return;
       if (get().channelId && get().channelId !== channelId) sairDaSalaAtual("troca-de-sala");
       get().dispatchCall({ type: "accept" });
       emit(WS_EVENTS.CALL_ACCEPT, { channelId });
@@ -1177,6 +1248,11 @@ async function entrarNaSala(
   rerender: () => void,
   get: () => VoiceStoreState,
 ) {
+  // **Nunca duas `Room` ao mesmo tempo.** O LiveKit não aceita a mesma
+  // identidade duas vezes: a conexão nova derruba a anterior, e a anterior —
+  // com os ouvintes ainda pendurados — anunciava "a conexão de voz caiu" e
+  // apagava `sala`, matando a conexão boa e a transmissão de tela junto
+  desmontarSala();
   const room = new Room({
     adaptiveStream: true,
     dynacast: true,
@@ -1261,6 +1337,10 @@ async function entrarNaSala(
     })
     .on(RoomEvent.ActiveSpeakersChanged, recomporFalantes)
     .on(RoomEvent.Disconnected, () => {
+      // esta sala já não é a minha (troquei de canal, ou refiz a conexão):
+      // quem chegou depois manda, e uma sala aposentada não tem o direito de
+      // anunciar queda nem de zerar `sala`
+      if (sala !== room) return;
       // sair de propósito passa por `fecharSala`, que remove os ouvintes antes:
       // se este handler rodou, a sala caiu sozinha
       sala = null;

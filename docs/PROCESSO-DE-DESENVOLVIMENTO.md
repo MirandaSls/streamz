@@ -918,6 +918,58 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   Windows. Só acontece sem permissão persistida (no desktop o
   `PermissionRequested` do WebView2 resolve), e não foi medido como causa de
   nada — mas é o candidato que sobrou para um estalo isolado ao entrar.
+- **Ligar numa conversa é idempotente e serializado** (PR #122). Três regras
+  que precisam continuar verdade, cada uma com o defeito que a originou:
+  1. **Uma tentativa por conversa por vez.** `startCall`, `acceptCall` e
+     `connect` perguntam a `stores/chamada-em-curso.ts` (`jaNaChamada`) antes de
+     agir: mesmo canal com `status` `connecting`/`connected`, ou fase
+     `outgoing`/`active`, é **no-op**. `error` fica de fora — a faixa vermelha
+     precisa do "tentar de novo". `connect` aceita `{ forcar: true }`, e só o
+     `reconnect` usa (refazer a mídia da mesma sala é o caso legítimo de
+     repetir). Sem isso, cada clique a mais no telefone era um `POST
+     /dms/:id/call` e uma `Room` a mais.
+  2. **Nunca duas `Room` ao mesmo tempo.** `entrarNaSala` chama `desmontarSala()`
+     antes de construir a nova, e o handler de `RoomEvent.Disconnected` começa
+     com `if (sala !== room) return`. O LiveKit não aceita identidade repetida:
+     a conexão nova derruba a antiga, e era a **antiga** — com os ouvintes ainda
+     vivos — que anunciava "a conexão de voz caiu" e zerava `sala` por cima da
+     conexão boa. Essa era a "queda de alguns segundos ao ligar", e era ela que
+     matava a tela compartilhada junto (quem transmite depende da mesma `sala`;
+     e a captura nativa ficava como `#tela` órfão).
+  3. **O meu próprio estado de voz não confirma a minha chamada.** `applyState`
+     só dispara `{ type: "connected" }` quando o estado é de **outra pessoa**.
+     `startCall` aplica o que o `POST /dms/:id/call` devolve, e o primeiro
+     estado da lista sou eu entrando na sala: a fase pulava de `outgoing` para
+     `active` antes de o outro lado atender, e o ringback (`<audio loop>` da
+     `VoiceLayer`, que só toca em `outgoing`) morria no instante em que
+     começava. **Não era a guarda de 300 ms do `tocarArquivo`** — nem o
+     ringback nem o toque passam por ela; os dois são elementos próprios, e
+     dividir o `chamada.mp3` é seguro.
+- **Os botões de ligar e vídeo da DM ficam cinzas** enquanto a chamada daquela
+  conversa está saindo, tocando (para mim) ou de pé, com tooltip "Chamada em
+  andamento" (`botaoDeChamadaBloqueado` + `HeaderIcon.motivoDesabilitado`). É
+  `aria-disabled`, **não** o atributo `disabled`: um `<button disabled>` não
+  dispara evento de ponteiro no Chromium e o tooltip que explica o cinza nunca
+  apareceria. A trava de verdade é a da store — quem clica não é só o botão (a
+  faixa `CallBanner` e o teclado chegam ao mesmo `startCall`).
+- **Eventos de chamada da própria conta** (todas as sessões recebem, desde o
+  #117): atender em outro aparelho **cala** o toque desta janela sem avisar o
+  gateway (`applyState`, o ramo `eu && call.phase === "incoming"`). Sem isso a
+  segunda sessão tocava os 30 s inteiros com o cartão "Atender" na tela — e
+  atender ali entrava na sala com a mesma identidade, expulsando a sessão que já
+  estava na chamada. `call.ring` **não** chega a quem ligou (o servidor tira o
+  autor de `alvos`); `call.ended` chega, e é inofensivo porque a máquina ignora
+  evento de canal que não é o dela.
+- **`POST /dms/:id/call` não toca duas vezes** (`CallsService.start`): além de
+  `jaEmChamada`, o guarda é `this.tocando.has(channelId)`. Dois pedidos do mesmo
+  clique duplo podem ler a contagem da sala antes de qualquer um dos dois entrar
+  nela, e aí os dois concluíam que a chamada nascia agora — o outro lado recebia
+  dois `call.ring` e o telefone recomeçava no meio do primeiro toque.
+- **Onde estão os testes disso**: `apps/web/stores/chamada-em-curso.test.ts` (a
+  regra pura), `apps/web/stores/voice-chamada.test.ts` (a store inteira com uma
+  `Room` e um gateway de mentira — o primeiro teste que exercita `stores/voice.ts`
+  de ponta a ponta; 9 dos 13 falham no `main` de antes) e
+  `apps/api/src/modules/voice/calls-toque-unico.spec.ts`.
 - Ainda aquém do Discord (não é defeito): botão de voltar para call em outro
   servidor cai no primeiro canal de texto; barra "conectado" sem cronômetro nem
   quem fala; sem "ocupado" para quem liga durante uma call; diálogos invisíveis

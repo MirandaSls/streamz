@@ -59,8 +59,27 @@ export default function VoiceLayer() {
     void (lembrada.guildId ? voice.loadGuild(lembrada.guildId) : voice.loadDM(lembrada.channelId));
   }, [userId]);
 
-  // quem liga também precisa ouvir alguma coisa: silêncio absoluto do lado de
-  // cá é indistinguível de chamada que não saiu
+  /**
+   * Ringback: quem liga também precisa ouvir alguma coisa — silêncio absoluto
+   * do lado de cá é indistinguível de chamada que não saiu.
+   *
+   * Duas coisas seguram este som, e as duas já falharam:
+   *
+   * 1. **A fase tem de continuar `outgoing` até o outro atender.** É elemento
+   *    próprio (não passa pelo `tocarArquivo` nem pela guarda de 300 ms por
+   *    arquivo, então dividir o `chamada.mp3` com o toque de quem recebe é
+   *    seguro), mas ele só toca enquanto a fase for `outgoing`. Até o PR desta
+   *    correção, `applyState` lia o **meu próprio** estado de voz como "alguém
+   *    entrou na chamada" e a fase pulava para `active` no mesmo instante: o
+   *    som começava e morria dentro da mesma requisição.
+   * 2. **O gesto já foi dado**: quem liga acabou de clicar no telefone, então o
+   *    documento tem ativação e o `play()` passa. A rede de segurança do
+   *    `toque-com-gesto` fica para o toque de quem **recebe**, que é o que
+   *    chega sem ninguém ter encostado na janela.
+   *
+   * A dependência é a fase (um primitivo), e não `call`: a máquina troca o
+   * objeto a cada evento, e reiniciar o áudio a cada troca faria o toque gaguejar.
+   */
   useEffect(() => {
     const el = ringback.current;
     if (!el) return;
