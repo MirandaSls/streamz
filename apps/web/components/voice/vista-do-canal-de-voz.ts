@@ -16,13 +16,13 @@
 /**
  * O painel de conversa do canal de voz nasce **aberto**.
  *
- * Na print o canal acabou de ser aberto e a coluna da direita já está lá, com
- * o balão do cabeçalho aceso. Ele era `false` desde o #108, quando a conversa
- * do canal de voz ainda era uma novidade que interrompia o palco; agora o palco
- * vazio não tem o que interromper — o que a pessoa quer ver ao abrir um canal
- * de voz sem gente é justamente o que foi dito nele.
+ * Decisão do usuário (2026-09-04): a conversa da call NÃO abre sozinha ao
+ * entrar na chamada nem ao abrir o canal — só quando a pessoa clica no balão
+ * ("abrir conversa"). O #131 tinha posto `true` copiando uma print em que o
+ * balão já estava aceso; o dono do produto quer o palco limpo por padrão, e a
+ * escolha continua lembrada por canal depois do primeiro clique.
  */
-export const CHAT_ABERTO_POR_PADRAO = true;
+export const CHAT_ABERTO_POR_PADRAO = false;
 
 /**
  * O balão é lembrado **por canal**, não uma vez para o app inteiro.
