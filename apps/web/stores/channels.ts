@@ -331,6 +331,9 @@ export const useChannels = create<ChannelsState>((set, get) => {
         channels: restantes,
         voiceChannelId: s.voiceChannelId === channelId ? null : s.voiceChannelId,
       });
+      // o balão da conversa é lembrado por canal (ver `vista-do-canal-de-voz`):
+      // canal que não existe mais não tem preferência a guardar
+      ui.esquecerChatDaCall(channelId);
       if (s.activeChannelId === channelId) {
         leaveChannel(channelId);
         useMessages.getState().closeChannel();
