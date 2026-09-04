@@ -1,16 +1,12 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { AlertTriangle, MessageSquare, RotateCw, UserPlus, Volume2 } from "@/components/ui/icones";
-import {
-  displayNameOf,
-  type Channel,
-  type NotificationLevel,
-  type VoiceStateEvent,
-} from "@streamz/shared";
-import Avatar from "@/components/ui/Avatar";
+import type { Channel, NotificationLevel } from "@streamz/shared";
 import Tooltip from "@/components/ui/Tooltip";
 import IconesDoCanto from "@/components/voice/IconesDoCanto";
+import VistaDoCanalDeVoz from "@/components/voice/VistaDoCanalDeVoz";
+import { chatDoCanalAberto } from "@/components/voice/vista-do-canal-de-voz";
 import VoiceControls from "@/components/voice/VoiceControls";
 import VoiceGrid from "@/components/voice/VoiceGrid";
 import { AoVivoIndicador } from "@/components/voice/ScreenShareButton";
@@ -34,10 +30,16 @@ import { useVoice } from "@/stores/voice";
  * do que ela expõe — o que permite ao painel ser fechado (trocar de canal de
  * texto) sem derrubar a call, que é como o Discord se comporta.
  *
- * Clicar no canal **conecta na hora**, como no Discord: o canal de voz não é
- * uma tela para visitar, é a sala. A antessala continua existindo, mas só como
- * estado de espera enquanto a conexão não sobe — e como saída para quem caiu,
- * com o botão de entrar de novo.
+ * **Clicar no canal NÃO conecta.** O painel tinha um efeito que chamava
+ * `connect` na montagem, e a antessala só aparecia para quem tinha caído. A
+ * print `2026-09-04 102429` mostra o Discord fazendo o contrário: o canal de
+ * voz "Geral" está selecionado, o palco é o degradê com o nome do canal,
+ * "Ninguém está em voz" e um botão "Entrar na chamada de voz" — e a conversa do
+ * canal já aberta à direita. Faz sentido além da paridade: entrar abre o
+ * microfone para outras pessoas, e um clique de barra lateral não é
+ * consentimento para isso. Quem conecta agora é o botão (ver
+ * `VistaDoCanalDeVoz`); a retomada depois do F5 e o "movido de canal"
+ * continuam vindo da store, sem passar por aqui.
  */
 export default function VoicePanel({
   channel,
@@ -53,7 +55,8 @@ export default function VoicePanel({
   const disconnect = useVoice((s) => s.disconnect);
   const reconnect = useVoice((s) => s.reconnect);
   const estados = useVoice((s) => s.statesOf(channel.id));
-  const chatAberto = useUI((s) => s.voiceChatOpen);
+  // o balão é lembrado por canal, e nasce aberto (ver `vista-do-canal-de-voz`)
+  const chatAberto = useUI((s) => chatDoCanalAberto(s.chatDaCallPorCanal, channel.id));
   const toggleVoiceChat = useUI((s) => s.toggleVoiceChat);
 
   const palco = useRef<HTMLDivElement>(null);
@@ -63,16 +66,18 @@ export default function VoicePanel({
   const aqui = conectadoEm === channel.id;
   const conectado = aqui && status === "connected";
   const nome = channel.name ?? "voz";
+  // O `useOcultarInativo` existe para tirar a moldura da frente do VÍDEO. Na
+  // vista do canal não há vídeo nenhum — sumir com o nome do canal depois de 3s
+  // parado seria esconder a única coisa que a tela tem a dizer, e a print
+  // mostra o cabeçalho lá.
+  const molduraVisivel = !aqui || visivel;
 
-  // Clicar no canal já é a intenção de entrar — o Discord conecta no clique, e
-  // uma tela intermediária com "Entrar" transforma um clique em dois. Só entra
-  // quando não há conexão neste canal, para não reconectar a cada re-render.
-  useEffect(() => {
-    if (!aqui) void connect(channel);
-    // `channel.id` basta: trocar de canal remonta o painel (key na página)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channel.id]);
-
+  // Desligar ainda **fecha a coluna** (`decidirSaida("usuario").fechaColuna`,
+  // em `voice-saida.ts`, e este `onLeave`): quem sai cai no `ChatView` de
+  // largura inteira do mesmo canal. No Discord ele voltaria para a vista do
+  // canal, com o botão de entrar de novo — agora que existe uma vista para
+  // voltar, essa decisão vale ser revisitada. Não foi mexida aqui: ela mora num
+  // módulo com teste próprio e vale um PR só dela.
   async function sair() {
     await disconnect();
     onLeave?.();
@@ -88,9 +93,11 @@ export default function VoicePanel({
     >
       <header
         {...daMoldura}
-        className={`flex h-[49px] shrink-0 items-center justify-between gap-2 border-b border-border px-4 shadow-header transition-opacity duration-200 ${
-          visivel ? "opacity-100" : "pointer-events-none opacity-0"
-        }`}
+        // Na vista do canal o cabeçalho flutua sobre o degradê: na print não há
+        // filete nenhum cruzando o palco, e o brilho sobe por trás do nome.
+        className={`flex h-[49px] shrink-0 items-center justify-between gap-2 px-4 transition-opacity duration-200 ${
+          aqui ? "border-b border-border shadow-header" : ""
+        } ${molduraVisivel ? "opacity-100" : "pointer-events-none opacity-0"}`}
       >
         <span className="flex min-w-0 items-center gap-2 font-semibold text-txt-primary">
           <Volume2 size={24} className="shrink-0 text-txt-muted" aria-hidden="true" />
@@ -103,7 +110,7 @@ export default function VoicePanel({
           <IconeDeCabecalho
             label={chatAberto ? "Ocultar chat" : "Abrir chat"}
             active={chatAberto}
-            onClick={toggleVoiceChat}
+            onClick={() => toggleVoiceChat(channel.id)}
           >
             <MessageSquare size={20} />
           </IconeDeCabecalho>
@@ -136,24 +143,27 @@ export default function VoicePanel({
       {/* a barra de controles flutua sobre a grade (Discord) — por isso ela fica
           fora do bloco de conteúdo, que ocupa a área toda sem rolar */}
       <div className="relative min-h-0 flex-1">
-        <div className={`h-full p-4 ${conectado ? "pb-24" : ""}`}>
-          {aqui && status === "connecting" ? (
-            <div className="grid h-full place-items-center text-txt-muted">
-              <div className="flex flex-col items-center gap-3">
-                <div className="h-8 w-8 animate-spin rounded-full border-2 border-border-strong border-t-accent" />
-                <p>Entrando na sala…</p>
+        {aqui ? (
+          <div className={`h-full p-4 ${conectado ? "pb-24" : ""}`}>
+            {status === "connecting" ? (
+              <div className="grid h-full place-items-center text-txt-muted">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-border-strong border-t-accent" />
+                  <p>Entrando na sala…</p>
+                </div>
               </div>
-            </div>
-          ) : aqui ? (
-            <VoiceGrid channelId={channel.id} nomeDoCanal={nome} guildId={channel.guildId} />
-          ) : (
-            <Antessala
-              nome={nome}
-              estados={estados}
-              onEntrar={() => void connect(channel)}
-            />
-          )}
-        </div>
+            ) : (
+              <VoiceGrid channelId={channel.id} nomeDoCanal={nome} guildId={channel.guildId} />
+            )}
+          </div>
+        ) : (
+          // sem `p-4`: o degradê vai de borda a borda do palco, como na print
+          <VistaDoCanalDeVoz
+            nome={nome}
+            estados={estados}
+            onEntrar={() => void connect(channel)}
+          />
+        )}
 
         {conectado && (
           <>
@@ -188,61 +198,6 @@ export default function VoicePanel({
         {conectado && (
           <VoiceControls oculto={!visivel} moldura={daMoldura} onLeave={() => void sair()} />
         )}
-      </div>
-    </div>
-  );
-}
-
-/**
- * A antessala: quem já está na sala e o convite para entrar.
- *
- * Mostrar as pessoas antes é o que transforma "canal de voz" em "sala com
- * gente" — é a informação que decide se você entra agora ou depois.
- */
-function Antessala({
-  nome,
-  estados,
-  onEntrar,
-}: {
-  nome: string;
-  estados: VoiceStateEvent[];
-  onEntrar: () => void;
-}) {
-  return (
-    <div className="grid h-full place-items-center">
-      <div className="flex w-full max-w-md flex-col items-center gap-5 rounded-lg bg-panel px-8 py-10 text-center">
-        {estados.length > 0 ? (
-          <>
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              {estados.slice(0, 6).map((e) => (
-                <span key={e.user.id} className="flex flex-col items-center gap-1.5">
-                  <Avatar user={e.user} size="xl" surface="border-panel" />
-                  <span className="max-w-20 truncate text-xs text-txt-muted">
-                    {displayNameOf(e.user)}
-                  </span>
-                </span>
-              ))}
-            </div>
-            {estados.length > 6 && (
-              <p className="text-sm text-txt-muted">e mais {estados.length - 6}</p>
-            )}
-          </>
-        ) : (
-          <>
-            <span className="grid h-20 w-20 place-items-center rounded-full bg-chat">
-              <Volume2 size={36} className="text-txt-muted" aria-hidden="true" />
-            </span>
-            <p className="text-sm text-txt-muted">Ninguém está em {nome} agora.</p>
-          </>
-        )}
-
-        <button
-          type="button"
-          onClick={onEntrar}
-          className="h-11 rounded-[3px] bg-green px-8 text-base font-semibold text-accent-ink transition hover:brightness-110"
-        >
-          Entrar na Voz
-        </button>
       </div>
     </div>
   );

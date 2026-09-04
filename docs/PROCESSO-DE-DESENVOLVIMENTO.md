@@ -191,7 +191,7 @@ O que ele faz, na ordem:
 | Multiconta ("Mudar de conta") | `lib/contas.ts` (o cofre: `localStorage` versionado com as contas do aparelho e a ativa; puro e testado), `lib/troca-de-contas.ts` (trocar, sair de uma conta, esquecer), `components/modals/GerenciarContasModal.tsx` e `AdicionarContaModal.tsx`, aberto pela linha "Mudar de conta" do `ProfilePopover.tsx` |
 | Ícones | `components/ui/icones.tsx` — **único** ponto de importação de ícone (§6.2) |
 | Voz (estado) | `stores/voice.ts`, `voice-saida.ts`, `voice-mover.ts`, `voice-retomada.ts`, `voice-reconexao.ts`, `voicePrefs.ts`, `voiceDevices.ts` |
-| Voz (UI) | `components/voice/*` — `VoiceLayer.tsx` (global), `AudioRemotoHost.tsx` (global), `VoiceGrid.tsx`, `CallStage.tsx`, `VoicePanel.tsx`, `VoiceHotkeys.tsx`, `ScreenSharePicker.tsx` |
+| Voz (UI) | `components/voice/*` — `VoiceLayer.tsx` (global), `AudioRemotoHost.tsx` (global), `VoiceGrid.tsx`, `CallStage.tsx`, `VoicePanel.tsx`, `VistaDoCanalDeVoz.tsx` (canal clicado sem entrar), `VoiceHotkeys.tsx`, `ScreenSharePicker.tsx` |
 | Desktop | `components/desktop/BarraDeTitulo.tsx`, `useAtualizacao.ts`, `JanelaSplash.tsx` + `janela-splash.ts` (janelinha de abertura/atualização, rota `app/splash/`); `apps/desktop/src-tauri/tauri.conf.json`, `capabilities/{default,splash}.json` |
 | Atalhos | `lib/shortcuts.ts`, `hooks/useKeyboardShortcuts.ts` (M/D de voz são do `VoiceHotkeys`) |
 | Gateway de voz | `apps/api/src/modules/gateway/chat.gateway.ts`, `voz-em-um-lugar-so.ts`, `modules/voice/*` |
@@ -810,12 +810,58 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
     faixa não tem título nenhum.
   - **Canal de voz de servidor → coluna de 450 à direita**
     (`PainelDeChatDaCall`). Medidas da print `2026-09-03 203909`: painel de
-    363px → **450**; cabeçalho de 36 → **44** com balão de 18 a 14 da borda,
-    nome e X a 16 da direita; composer de 41 → 51. O cabeçalho **não** tem
+    363px → **450**; composer de 41 → 51. O cabeçalho **não** tem
     busca, alfinete nem lista de membros — por isso o `ChatView incorporado`
     deixou de desenhar o `HeaderBar`. O arrasto guarda **pixel**: na print são
     450 numa janela de 3333, não uma fração dela. Abre pelo balão do cabeçalho
     do palco e pelo balão da linha do canal (hover, print `image (1)`).
+    O cabeçalho passou de 44 para **49** na releitura 1:1 (abaixo), com o balão
+    de 18 a **20** da borda e o nome a 13 dele, em 16px: são os mesmos 49 do
+    cabeçalho do palco, e é por isso que os dois nomes ficam na mesma linha.
+
+- **Clicar num canal de voz NÃO entra na chamada** — abre a *vista do canal*
+  (`VistaDoCanalDeVoz`, com a conta pura em `vista-do-canal-de-voz.ts`). O
+  `VoicePanel` tinha um `useEffect` que chamava `connect` na montagem, e a
+  antessala só aparecia para quem tinha caído. A print
+  `2026-09-04 102429` (1919×1079, **1:1** — a coluna de canais mede 294 nela e
+  294 aqui, então nada de escala) mostra o Discord fazendo o contrário: canal
+  "Geral" selecionado, ninguém em voz, e o palco inteiro é um convite. Também é
+  o certo fora da paridade: entrar abre o microfone para outras pessoas, e um
+  clique de barra lateral não é consentimento para isso. Quem conecta agora é o
+  botão; a retomada depois do F5 (`retomarSeReconectando`) e o `movidoDeCanal`
+  continuam chamando `connect` pela store, sem passar pelo painel.
+  - **Medidas do palco** (`getpixel`, tinta a tinta): palco 1057×999
+    (x 375..1431, y 32..1031); nome do canal em **32px** (caixa alta 22);
+    "Ninguém está em voz" em **14px** (caixa alta 10); botão **211×40** com raio
+    **8**, texto de **16px** e folga lateral de 17,5; do nome ao subtítulo 22 e
+    do subtítulo ao botão 26 (linha de base → topo da tinta).
+  - **Um botão só.** Não existe "Entrar com vídeo" na print: entre o subtítulo e
+    a base do palco há exatamente um retângulo branco, e ele é centrado na
+    largura do palco (798..1008 tem centro 903; o palco também).
+  - **O painel de conversa nasce aberto**, e o balão é lembrado **canal a
+    canal** (`chatDaCallPorCanal` na `stores/ui.ts`; `abrirVoiceChat`/
+    `toggleVoiceChat` aceitam o id e, sem ele, agem no canal de voz da vez).
+    Era um booleano só, fechado por padrão, de quando a conversa interrompia um
+    palco cheio — o palco vazio não tem o que interromper. Dois canais de voz
+    têm dois usos, e quem fecha a conversa de um não pediu nada sobre o outro.
+  - **O degradê é nosso.** No Discord é um brilho *blurple* saindo do meio da
+    borda de baixo: medido, um `radial-gradient` circular em (50%, 100%), pico
+    `rgb(116,131,225)` e queda quase linear até o fundo num raio de ~960px (85%
+    do raio até o canto mais distante). Aqui é o mesmo desenho a partir do
+    **acento** (Volt Lime) sobre `bg-chat`, via `--tw-gradient-stops` —
+    **nenhum token novo**. A força saiu do **campo**, não do pico: a média de
+    luminância relativa do palco na print do Discord é 0,0438 (0,0762 na metade
+    de baixo) e o nosso render em 1920×1000 dá 0,0481 (0,0748) com
+    `from-accent/40`. Casar pelo *pico* pediria 60% e o palco virava um campo
+    verde-oliva — o verde pesa 0,7152 na luminância e o azul 0,0722, então a
+    mesma luminância de pico espalha muito mais brilho pelo meio-tom.
+  - Com gente na sala o palco mostra os avatares e "N pessoas em voz"
+    (`textoDePresenca`, com teste do singular). **Não medido**: a print do
+    usuário é de um canal vazio.
+  - "Editar canal" nas boas-vindas do painel passou a pedir `MANAGE_CHANNELS`
+    (`useCanManageActiveChannel`), que é a permissão que o modal que ele abre
+    exige — estava atrás de `MANAGE_MESSAGES`, que é a de apagar mensagem dos
+    outros.
 - **A minha própria tela é assinada de volta — foi a tela preta da 0.0.18.** A
   regra de assinatura acima nasceu com um furo: no desktop a captura é nativa e
   entra na sala como um **participante remoto**, `<userId>#tela`. Do ponto de
@@ -849,12 +895,14 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   quebrada, que foi exatamente a leitura da print.
 
 - **A conversa da chamada é uma coluna à direita**, não uma faixa embaixo
-  (`PainelDeChatDaCall`, usado pelo canal de voz e pelo `CallSplit` da conversa
-  direta). Medidas da print: painel de 363px → **450**; cabeçalho de 36 → **44**
-  com balão de 18 a 14 da borda, nome e X a 16 da direita; composer de 41 → 51.
-  O cabeçalho **não** tem busca, alfinete nem lista de membros — por isso o
-  `ChatView incorporado` deixou de desenhar o `HeaderBar`. Abre pelo balão do
-  cabeçalho do palco e pelo balão da linha do canal (hover, print `image (1)`).
+  (`PainelDeChatDaCall`, do canal de voz). Painel de **450** (ponto de partida
+  de um divisor arrastável), cabeçalho de **49** com balão de 18 a 20 da borda,
+  nome de 16px a 13 do balão e o X a 8 da direita — os 49 e os 20 vêm da
+  releitura 1:1 na print `2026-09-04 102429`; o 450 e o composer de 51, da
+  `2026-09-03 203909`, que precisava de escala. O cabeçalho **não** tem busca,
+  alfinete nem lista de membros — por isso o `ChatView incorporado` deixou de
+  desenhar o `HeaderBar`. Abre sozinho ao entrar no canal, e o balão (cabeçalho
+  do palco ou linha do canal) alterna e é lembrado por canal.
 
 - **A faixa do microfone tem um dono só: `lib/microfone.ts`.** Ele cria a faixa,
   monta a cadeia de captura **antes** de publicar, aplica preferências novas na
