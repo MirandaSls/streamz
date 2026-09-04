@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { SomDeVoz } from "@/lib/ringtone";
+import type { NomeDeSom } from "@/lib/ringtone";
 
 /**
  * Quais sons de notificação o app pode tocar.
@@ -16,8 +16,12 @@ import type { SomDeVoz } from "@/lib/ringtone";
  * som novo no código já nasce audível para quem nunca abriu esta lista.
  */
 
-/** Todo som que o app sabe tocar, na ordem em que a aba os lista. */
-export type NomeDeSom = "mensagem" | "chamada" | SomDeVoz;
+/**
+ * Todo som que o app sabe tocar. A união mora em `lib/ringtone.ts` (é a chave
+ * dos mapas de arquivo e de volume); aqui só é reexportada para quem lida com
+ * a lista da aba "Notificações".
+ */
+export type { NomeDeSom };
 
 export const SONS: { nome: NomeDeSom; rotulo: string }[] = [
   { nome: "mensagem", rotulo: "Mensagem" },
