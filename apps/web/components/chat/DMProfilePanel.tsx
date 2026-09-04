@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MoreHorizontal, UserPlus } from "@/components/ui/icones";
+import { MoreHorizontal, UserCheck, UserPlus } from "@/components/ui/icones";
 import { displayNameOf, type PublicUser, type UserProfile } from "@streamz/shared";
 import Avatar, { STATUS_LABEL } from "@/components/ui/Avatar";
 import IconeDeStatus from "@/components/ui/IconeDeStatus";
@@ -24,6 +24,10 @@ import { anchorOf, ui, type MenuItem } from "@/stores/ui";
  * ser uma faixa colada na borda da janela, e o fundo dele é mais claro que o do
  * chat: é o que separa o perfil da conversa sem precisar de divisória.
  *
+ * A coluna **começa abaixo do cabeçalho da conversa**, que atravessa a largura
+ * toda (ver `DMView`). É o que põe os dois botões do canto do cartão no lugar
+ * do Discord — antes eles subiam até a altura da busca.
+ *
  * **Nada aqui é inventado.** O que o `PublicUser` da store já traz (nome,
  * username, foto, status) aparece na hora; o resto (banner, "membro desde",
  * amigos mútuos) vem do `GET /users/:id/profile`, que é calculado por
@@ -37,6 +41,13 @@ const DATA = new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "short", 
 
 /** Quantas caras cabem na pilha antes do texto "N amigos mútuos". */
 const MAX_CARAS = 3;
+
+/**
+ * Os discos do canto do cartão: 30px, medidos no print. O véu é preto a 52%
+ * sobre o cartão — o mesmo (17,17,19) sobre (34,35,39) que o print tem.
+ */
+const CANTO =
+  "grid h-[30px] w-[30px] place-items-center rounded-full bg-black/[0.52] text-white transition hover:bg-black/70";
 
 export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
   const me = useAuth((s) => s.user);
@@ -71,6 +82,18 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
   const nome = displayNameOf(user);
   const mutuos = perfil?.mutualFriends ?? [];
 
+  /**
+   * O menu do boneco com o visto: um item só, "Remover amigo". É o que o botão
+   * faz no Discord, e é a mesma ação que o "…" ao lado já oferece — o botão
+   * existe para **dizer** que a amizade existe, não para trazer ação nova.
+   */
+  function abrirMenuDeAmizade(alvo: HTMLElement) {
+    const r = anchorOf(alvo);
+    ui.openContextMenu(r.x, r.y + r.height + 4, [
+      { label: "Remover amigo", danger: true, onSelect: () => void remove(user) },
+    ]);
+  }
+
   function abrirMenu(alvo: HTMLElement) {
     const itens: MenuItem[] = [];
     if (relacao === "friend") {
@@ -89,10 +112,20 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
     <aside
       aria-label={`Perfil de ${nome}`}
       // o vão é do fundo do chat, não do painel: o cartão é que flutua.
-      // 8px até o composer à esquerda, 7px nos outros três lados.
-      className="flex w-[317px] shrink-0 flex-col bg-chat pb-[7px] pl-2 pr-[7px] pt-[7px]"
+      // Medido no print `2026-09-04 102757`: 7px nos quatro lados (topo contado
+      // da linha do cabeçalho) e cartão de 306 — 320 de coluna. Os 7 da
+      // esquerda somam com os 10 do `px-2.5` do composer e dão os 17px que
+      // separam a caixa de escrever do cartão no Discord. Largura em px, não
+      // `w-80`: o `html` deste app tem 15,5px de base, então `rem` aqui daria
+      // 310.
+      className="flex w-[320px] shrink-0 flex-col bg-chat p-[7px]"
     >
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-border bg-input">
+      {/* Raio 8, e não os 10 de antes: a rampa de antisserrilhado do canto no
+          print (26 → 32, 37, 42, 44) bate com a de um `border-radius: 8px`
+          renderizado no mesmo Chromium (26 → 34, 38, 42, 44); com 10 a rampa
+          começa um pixel mais tarde. Em px porque `rounded-lg` é `rem`, e a
+          base deste app é 15,5px. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[8px] border border-border bg-input">
         <div className="relative shrink-0">
           {perfil?.bannerUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -107,17 +140,44 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
             />
           )}
 
-          {/* ações sobre a faixa, como no Discord — 32px, 8px de vão e de borda */}
-          <div className="absolute right-2 top-2 flex items-center gap-2">
+          {/*
+            Ações sobre a faixa. Medidas no print `2026-09-04 102757`: dois
+            discos de 30, 10px entre eles, 11px do topo e da borda do cartão.
+
+            São **sempre dois**. O da esquerda troca de significado com a
+            relação, como no Discord: "adicionar amigo" enquanto não há amizade
+            e a pessoa com o visto quando já há — no print o contato é amigo e
+            o boneco tem o visto. Bloqueado e pedido pendente não ganham botão
+            nenhum: nos dois casos não há ação nova a oferecer aqui, e o menu
+            do "…" já tem a que existe.
+          */}
+          <div className="absolute right-[11px] top-[11px] flex items-center gap-[10px]">
             {relacao === "none" && (
               <Tooltip label="Adicionar amigo">
                 <button
                   type="button"
                   onClick={() => void send(user.username)}
                   aria-label={`Adicionar ${nome} como amigo`}
-                  className="grid h-8 w-8 place-items-center rounded-full bg-black/[0.52] text-white transition hover:bg-black/70"
+                  className={CANTO}
                 >
                   <UserPlus size={18} />
+                </button>
+              </Tooltip>
+            )}
+            {relacao === "friend" && (
+              <Tooltip label="Amigos">
+                <button
+                  type="button"
+                  onClick={(e) => abrirMenuDeAmizade(e.currentTarget)}
+                  aria-label={`Você e ${nome} são amigos`}
+                  aria-haspopup="menu"
+                  className={CANTO}
+                >
+                  {/* 16 e não 18: neste ativo a tinta ocupa mais do quadro
+                      que a dos vizinhos, e é com `size={16}` que ela sai com
+                      os 15×14 medidos no print — o "…" ao lado, a 18, sai com
+                      os 14 de largura que o print tem */}
+                  <UserCheck size={16} />
                 </button>
               </Tooltip>
             )}
@@ -127,7 +187,7 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
                 onClick={(e) => abrirMenu(e.currentTarget)}
                 aria-label={`Mais opções para ${nome}`}
                 aria-haspopup="menu"
-                className="grid h-8 w-8 place-items-center rounded-full bg-black/[0.52] text-white transition hover:bg-black/70"
+                className={CANTO}
               >
                 <MoreHorizontal size={18} />
               </button>

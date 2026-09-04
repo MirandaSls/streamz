@@ -236,125 +236,143 @@ export default function DMView() {
   );
 
   return (
-    <>
-      <main className="flex min-w-0 flex-1 flex-col bg-chat">
-        <HeaderBar
-          icon={
-            other ? (
-              <Avatar user={other} size="sm" status={resolveStatus(statuses, other)} surface="border-chat" />
-            ) : (
-              <GroupAvatar iconUrl={active.iconUrl} size="sm" />
-            )
-          }
-          title={title}
-          searchLabel={`Buscar mensagens em ${title}`}
-          // "Buscar <username>" na conversa 1:1 e "Buscar <nome do grupo>" no
-          // grupo — a busca corre só neste canal nos dois casos
-          searchPlaceholder={`Buscar ${other ? other.username : title}`}
-          searchValue={searchQuery}
-          onSearch={(q) => {
-            setSearchQuery(q);
-            // conversa não tem servidor: a busca corre só neste canal
-            void runSearch({ channelId: active.id, guildId: null });
-          }}
-          tools={
-            // a ordem do Discord: telefone → vídeo → alfinete → adicionar → perfil → busca
-            <>
-              {/* bloqueado não recebe chamada: a API recusa, e oferecer o botão
-                  só para o clique falhar é pior que não ter o botão */}
-              {!bloqueado && (
-                <>
-                  <HeaderIcon
-                    label="Iniciar chamada de voz"
-                    active={naChamada === active.id}
-                    disabled={chamadaBloqueada}
-                    motivoDesabilitado={CHAMADA_EM_ANDAMENTO}
-                    onClick={() => void startCall(active.id, false)}
-                  >
-                    <PhoneCall size={20} />
-                  </HeaderIcon>
-                  <HeaderIcon
-                    label="Iniciar chamada de vídeo"
-                    disabled={chamadaBloqueada}
-                    motivoDesabilitado={CHAMADA_EM_ANDAMENTO}
-                    onClick={() => void startCall(active.id, true)}
-                  >
-                    <Video size={20} />
-                  </HeaderIcon>
-                </>
-              )}
-              {/* em conversa direta não há moderação: qualquer participante fixa */}
-              <PinsPopover channelId={active.id} guildId={null} canPin />
-              {group && (
-                <>
-                  <HeaderIcon
-                    label="Adicionar pessoas"
-                    onClick={() => ui.openModal({ kind: "addGroupMembers", channelId: active.id })}
-                  >
-                    <UserPlus size={20} />
-                  </HeaderIcon>
-                  <HeaderIcon
-                    label="Configurações do grupo"
-                    onClick={() => ui.openModal({ kind: "groupSettings", channelId: active.id })}
-                  >
-                    <Settings size={20} />
-                  </HeaderIcon>
-                </>
-              )}
-              {/* só em 1:1: no grupo o "adicionar pessoas" já existe acima */}
-              {!group && !bloqueado && (
+    /*
+      O cabeçalho atravessa a **área de conteúdo inteira**, coluna 4 inclusive:
+      no Discord (print `2026-09-04 102757`) o nome, os botões e a busca da
+      conversa vão do fim da coluna de conversas até a borda da janela, e a
+      linha de baixo dele também. Por isso a coluna 4 do modo DM é montada aqui
+      dentro, **embaixo** do cabeçalho, e não como irmã do `<main>`: enquanto
+      ela era irmã, o cartão de perfil subia até o topo e o "…" dele ficava na
+      altura da busca — que é exatamente o que o usuário viu.
+
+      A busca e a thread continuam irmãs do `<main>` (montadas na página): elas
+      têm cabeçalho próprio de 49px, que encosta no nosso e continua a linha.
+    */
+    <main className="flex min-w-0 flex-1 flex-col bg-chat">
+      <HeaderBar
+        icon={
+          other ? (
+            <Avatar user={other} size="sm" status={resolveStatus(statuses, other)} surface="border-chat" />
+          ) : (
+            <GroupAvatar iconUrl={active.iconUrl} size="sm" />
+          )
+        }
+        title={title}
+        searchLabel={`Buscar mensagens em ${title}`}
+        // "Buscar <username>" na conversa 1:1 e "Buscar <nome do grupo>" no
+        // grupo — a busca corre só neste canal nos dois casos
+        searchPlaceholder={`Buscar ${other ? other.username : title}`}
+        searchValue={searchQuery}
+        onSearch={(q) => {
+          setSearchQuery(q);
+          // conversa não tem servidor: a busca corre só neste canal
+          void runSearch({ channelId: active.id, guildId: null });
+        }}
+        tools={
+          // a ordem do Discord: telefone → vídeo → alfinete → adicionar → perfil → busca
+          <>
+            {/* bloqueado não recebe chamada: a API recusa, e oferecer o botão
+                só para o clique falhar é pior que não ter o botão */}
+            {!bloqueado && (
+              <>
                 <HeaderIcon
-                  label="Adicionar amigo à conversa"
-                  onClick={() => ui.openModal({ kind: "createGroupDM" })}
+                  label="Iniciar chamada de voz"
+                  active={naChamada === active.id}
+                  disabled={chamadaBloqueada}
+                  motivoDesabilitado={CHAMADA_EM_ANDAMENTO}
+                  onClick={() => void startCall(active.id, false)}
+                >
+                  <PhoneCall size={20} />
+                </HeaderIcon>
+                <HeaderIcon
+                  label="Iniciar chamada de vídeo"
+                  disabled={chamadaBloqueada}
+                  motivoDesabilitado={CHAMADA_EM_ANDAMENTO}
+                  onClick={() => void startCall(active.id, true)}
+                >
+                  <Video size={20} />
+                </HeaderIcon>
+              </>
+            )}
+            {/* em conversa direta não há moderação: qualquer participante fixa */}
+            <PinsPopover channelId={active.id} guildId={null} canPin />
+            {group && (
+              <>
+                <HeaderIcon
+                  label="Adicionar pessoas"
+                  onClick={() => ui.openModal({ kind: "addGroupMembers", channelId: active.id })}
                 >
                   <UserPlus size={20} />
                 </HeaderIcon>
-              )}
+                <HeaderIcon
+                  label="Configurações do grupo"
+                  onClick={() => ui.openModal({ kind: "groupSettings", channelId: active.id })}
+                >
+                  <Settings size={20} />
+                </HeaderIcon>
+              </>
+            )}
+            {/* só em 1:1: no grupo o "adicionar pessoas" já existe acima */}
+            {!group && !bloqueado && (
               <HeaderIcon
-                label={group ? "Mostrar participantes" : "Mostrar perfil"}
-                active={membersOpen}
-                onClick={toggleMembers}
+                label="Adicionar amigo à conversa"
+                onClick={() => ui.openModal({ kind: "createGroupDM" })}
               >
-                {/* em conversa 1:1 o painel é o perfil do contato, e o sinal é
-                    a pessoa dentro do círculo; em grupo continua sendo a lista
-                    de participantes */}
-                {group ? <Users size={20} /> : <UserProfile size={20} />}
+                <UserPlus size={20} />
               </HeaderIcon>
-            </>
-          }
-        />
+            )}
+            <HeaderIcon
+              label={group ? "Mostrar participantes" : "Mostrar perfil"}
+              active={membersOpen}
+              onClick={toggleMembers}
+            >
+              {/* em conversa 1:1 o painel é o perfil do contato, e o sinal é
+                  a pessoa dentro do círculo; em grupo continua sendo a lista
+                  de participantes */}
+              {group ? <Users size={20} /> : <UserProfile size={20} />}
+            </HeaderIcon>
+          </>
+        }
+      />
 
-        {/* Faixa fina "Fulano está numa chamada — Entrar", para quem está lendo
-            a conversa sem ter entrado. Some sozinha quando eu entro. */}
-        <CallBanner channelId={active.id} />
+      {/* Embaixo do cabeçalho: a conversa à esquerda e a coluna 4 à direita. */}
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {/* Faixa fina "Fulano está numa chamada — Entrar", para quem está
+              lendo a conversa sem ter entrado. Some sozinha quando eu entro.
+              Fica **dentro** desta coluna: a faixa e o palco da chamada são da
+              conversa, não da coluna 4 — o cartão de perfil segue inteiro ao
+              lado deles, como antes. */}
+          <CallBanner channelId={active.id} />
 
-        {/* f-voz: com chamada, o palco é a **faixa em cima** e a conversa fica
-            embaixo, na largura toda — numa conversa direta o Discord não põe a
-            timeline numa coluna lateral (ver `call-split-layout.ts`). Sem
-            `guildId`, e é o que decide a orientação. */}
-        {emChamada && chatAberto ? (
-          <CallSplit
-            chamada={palco}
-            chat={conversa}
-            titulo={title}
-            guildId={null}
-            onFecharChat={() => setChatManual(false)}
-          />
-        ) : emChamada ? (
-          palco
-        ) : (
-          conversa
-        )}
-      </main>
+          {/* f-voz: com chamada, o palco é a **faixa em cima** e a conversa fica
+              embaixo, na largura toda — numa conversa direta o Discord não põe a
+              timeline numa coluna lateral (ver `call-split-layout.ts`). Sem
+              `guildId`, e é o que decide a orientação. */}
+          {emChamada && chatAberto ? (
+            <CallSplit
+              chamada={palco}
+              chat={conversa}
+              titulo={title}
+              guildId={null}
+              onFecharChat={() => setChatManual(false)}
+            />
+          ) : emChamada ? (
+            palco
+          ) : (
+            conversa
+          )}
+        </div>
 
-      {/*
-        Coluna 4 do modo DM. O botão do cabeçalho é o mesmo; o que ele abre é
-        que depende da conversa, como no Discord: em grupo, quem está nela; em
-        conversa 1:1, o perfil do contato — uma lista de um nome só não
-        acrescentava nada ao cabeçalho.
-      */}
-      {membersOpen &&
-        (group || !other ? <DMMemberList dm={active} /> : <DMProfilePanel user={other} />)}
-    </>
+        {/*
+          Coluna 4 do modo DM. O botão do cabeçalho é o mesmo; o que ele abre é
+          que depende da conversa, como no Discord: em grupo, quem está nela; em
+          conversa 1:1, o perfil do contato — uma lista de um nome só não
+          acrescentava nada ao cabeçalho.
+        */}
+        {membersOpen &&
+          (group || !other ? <DMMemberList dm={active} /> : <DMProfilePanel user={other} />)}
+      </div>
+    </main>
   );
 }

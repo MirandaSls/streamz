@@ -609,6 +609,20 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   bloco leva `-mb-3` para não somar 12px a esse vão.
 - Card do usuário: flutuante, 58px, raio 8, atravessa a rail (irmão de rail e
   coluna, `inset-x-2.5`), listas e rail com respiro embaixo (`pb-[78px]`).
+- **Cabeçalho da conversa direta** (medido na print `2026-09-04 102757`, coluna
+  de conversas de 294, 1:1): ele atravessa a **área de conteúdo inteira** —
+  nome, telefone, vídeo, alfinete, adicionar, perfil e a busca de 244 vão do fim
+  da coluna de conversas até a borda da janela, e a linha de 1px de baixo dele
+  também. A coluna 4 do modo DM (perfil em 1:1, participantes em grupo) começa
+  **abaixo** dele, por isso ela é montada dentro do `<main>` do `DMView` e não
+  como irmã. O cartão de perfil é de 306 com 7px nos quatro lados (coluna de
+  320) e raio 8 — os 7 da esquerda somam com os 10 do composer e dão os 17px
+  que separam um do outro na print. Os dois discos do canto do cartão são de 30,
+  10px entre eles, 11px do topo e da borda; o da esquerda é "adicionar amigo"
+  quando não há amizade e a **pessoa com o visto** (`UserCheck`, ativo
+  `figma/collections/private-messages-direct-messages/chat/friends-status`)
+  quando já há. Busca e thread continuam irmãs do `<main>`: têm cabeçalho
+  próprio de 49 que encosta no da conversa.
 - Configurações (usuário, servidor, canal e grupo, todas na mesma moldura
   `components/ui/JanelaDeConfiguracoes.tsx`): **janela flutuante** de 1400×888
   centrada sobre o app escurecido — não página inteira —, com menu de 252,
