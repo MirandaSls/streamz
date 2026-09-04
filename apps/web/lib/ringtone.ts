@@ -115,19 +115,21 @@ const ARQUIVOS: Record<NomeDeSom, string> = {
  * Só o fator é opinião; o resto é o volume que o usuário escolheu.
  */
 const FATOR: Record<NomeDeSom, number> = {
-  mensagem: 0.4,
-  chamada: 0.7,
-  mudo: 0.35,
-  desmudo: 0.35,
-  surdo: 0.35,
-  "nao-surdo": 0.35,
-  entrar: 0.5,
-  sair: 0.5,
-  "alguem-entrou": 0.5,
-  "alguem-saiu": 0.5,
-  "transmissao-iniciada": 0.5,
-  "transmissao-encerrada": 0.5,
-  movido: 0.5,
+  // 2026-09-03: o usuário achou tudo alto demais ("mutar está extremamente
+  // alto; coloque bem baixo"). Mudo/desmudo são os mais baixos de todos.
+  mensagem: 0.15,
+  chamada: 0.35,
+  mudo: 0.08,
+  desmudo: 0.08,
+  surdo: 0.08,
+  "nao-surdo": 0.08,
+  entrar: 0.2,
+  sair: 0.2,
+  "alguem-entrou": 0.2,
+  "alguem-saiu": 0.2,
+  "transmissao-iniciada": 0.2,
+  "transmissao-encerrada": 0.2,
+  movido: 0.2,
 };
 
 /** Dois pedidos do mesmo arquivo dentro desta janela viram um (a do Discord). */
