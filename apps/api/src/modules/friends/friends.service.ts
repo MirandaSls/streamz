@@ -8,8 +8,10 @@ import { WS_EVENTS } from "@streamz/shared";
 import type {
   FriendLists,
   FriendRequest,
+  FriendRequestEvent,
   PublicUser,
   RelationshipKind,
+  UserBlockedEvent,
 } from "@streamz/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { toPublicUser, type PublicUserRow } from "../../common/dto";
@@ -157,11 +159,18 @@ export class FriendsService {
       data: { requesterId: meId, addresseeId: alvo.id, pairKey },
       include: { requester: true, addressee: true },
     });
-    // quem recebe vê o pedido na hora; quem enviou atualiza a aba "enviados"
+    // quem recebe vê o pedido na hora; quem enviou atualiza a aba "Enviados" em
+    // todas as suas conexões — cada lado recebe o *outro* dentro do pedido
     this.realtime.emitToUser(alvo.id, WS_EVENTS.FRIEND_REQUEST, {
       request: this.toRequest(row, row.requester),
-    });
-    return this.toRequest(row, alvo);
+      direcao: "incoming",
+    } satisfies FriendRequestEvent);
+    const meu = this.toRequest(row, alvo);
+    this.realtime.emitToUser(meId, WS_EVENTS.FRIEND_REQUEST, {
+      request: meu,
+      direcao: "outgoing",
+    } satisfies FriendRequestEvent);
+    return meu;
   }
 
   /** Aceita um pedido recebido. Devolve o novo amigo. */
@@ -240,16 +249,28 @@ export class FriendsService {
     ]);
 
     // o outro lado só vê a relação sumir — nunca que foi um bloqueio
+    const dto = toPublicUser(alvo);
     this.realtime.emitToUser(otherId, WS_EVENTS.FRIEND_REMOVED, { userId: meId });
-    this.realtime.emitToUser(meId, WS_EVENTS.USER_BLOCKED, { userId: otherId, blocked: true });
-    return toPublicUser(alvo);
+    this.realtime.emitToUser(meId, WS_EVENTS.USER_BLOCKED, {
+      userId: otherId,
+      blocked: true,
+      user: dto,
+    } satisfies UserBlockedEvent);
+    return dto;
   }
 
   async unblock(meId: string, otherId: string): Promise<{ unblocked: string }> {
     await this.prisma.block
       .delete({ where: { blockerId_blockedId: { blockerId: meId, blockedId: otherId } } })
       .catch(() => undefined); // idempotente: já não estava bloqueado
-    this.realtime.emitToUser(meId, WS_EVENTS.USER_BLOCKED, { userId: otherId, blocked: false });
+    const alvo = await this.prisma.user.findUnique({ where: { id: otherId } });
+    if (alvo) {
+      this.realtime.emitToUser(meId, WS_EVENTS.USER_BLOCKED, {
+        userId: otherId,
+        blocked: false,
+        user: toPublicUser(alvo),
+      } satisfies UserBlockedEvent);
+    }
     return { unblocked: otherId };
   }
 

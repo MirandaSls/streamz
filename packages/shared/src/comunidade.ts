@@ -170,10 +170,18 @@ export interface GuildMembership {
   showWelcome: boolean;
 }
 
-/** A configuração de onboarding/descoberta do servidor mudou. */
+/**
+ * Mudou algo que altera o que eu vejo ao entrar neste servidor.
+ *
+ * Duas origens, um tratador só ("releia a sua associação neste servidor"):
+ * a configuração de onboarding/descoberta mudou para todo mundo (vai para
+ * `guild:<id>`, com `onboarding`), ou o **meu** estado de membro mudou —
+ * aceitei as regras, vi as boas-vindas — e o aviso vai só para as minhas
+ * conexões (`user:<id>`, sem `onboarding`, porque nada mudou no servidor).
+ */
 export interface GuildSettingsUpdatedEvent {
   guildId: string;
-  onboarding: GuildOnboarding;
+  onboarding?: GuildOnboarding;
 }
 
 // ── Descobrir servidores ─────────────────────────────────────

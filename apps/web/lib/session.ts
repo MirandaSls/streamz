@@ -54,20 +54,44 @@ export function limparTokens(): void {
 }
 
 /**
- * `exp` do JWT em milissegundos, ou `null` se o token não tiver um payload
- * legível. Decodifica sem verificar assinatura de propósito: o cliente só quer
- * saber *quando* renovar; quem valida o token é a API.
+ * Payload do JWT sem verificar assinatura. É de propósito: o cliente só quer
+ * saber *quando* renovar e *qual* sessão é a sua; quem valida o token é a API.
  */
-export function expDoToken(token: string): number | null {
+function payloadDoToken(token: string): { exp?: unknown; sid?: unknown } | null {
   const payloadB64 = token.split(".")[1];
   if (!payloadB64) return null;
   try {
     const json = atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/"));
-    const payload = JSON.parse(json) as { exp?: unknown };
-    return typeof payload.exp === "number" ? payload.exp * 1000 : null;
+    return JSON.parse(json) as { exp?: unknown; sid?: unknown };
   } catch {
     return null;
   }
+}
+
+/** `exp` do JWT em milissegundos, ou `null` sem payload legível. */
+export function expDoToken(token: string): number | null {
+  const exp = payloadDoToken(token)?.exp;
+  return typeof exp === "number" ? exp * 1000 : null;
+}
+
+/**
+ * Id da linha de sessão (`sid`) deste access token, ou `null`.
+ *
+ * É o que deixa `sessions.revoked` saber se **esta** aba foi encerrada: o
+ * evento chega a todas as conexões da conta com os ids revogados, e só quem se
+ * reconhece cai para o login. A claim sobrevive à renovação do par de tokens
+ * (a linha de sessão é a mesma), e falta nos tokens emitidos antes de ela
+ * existir — nesse caso só o `all` derruba a aba.
+ */
+export function sidDoToken(token: string): string | null {
+  const sid = payloadDoToken(token)?.sid;
+  return typeof sid === "string" && sid ? sid : null;
+}
+
+/** `sid` da sessão desta aba, lido do access token guardado. */
+export function sidDaSessaoAtual(): string | null {
+  const token = lerAccessToken();
+  return token ? sidDoToken(token) : null;
 }
 
 /** True quando o token já expirou ou expira dentro da margem de renovação. */

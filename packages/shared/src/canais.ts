@@ -100,6 +100,26 @@ export interface GuildReadResult {
 }
 
 /**
+ * Evento `channel.read`: eu li estes canais até `lastReadAt`.
+ *
+ * Vai para a sala `user:<id>` — leitura é por pessoa, ninguém mais precisa
+ * saber. É o que faz abrir a conversa no desktop apagar o badge dela no site
+ * sem F5, e cobre as três portas de leitura: um canal
+ * (`POST /channels/:id/read`), um servidor inteiro (`POST /guilds/:id/read`) e
+ * a caixa de entrada (`POST /me/read-all`).
+ *
+ * `guildId` é o servidor quando a leitura veio dele (o rail zera o badge mesmo
+ * sem os canais carregados); `null` quando é conversa direta ou lote misto.
+ * Aplicar duas vezes dá o mesmo estado: quem originou a leitura já a aplicou
+ * de forma otimista e o eco não desfaz nada.
+ */
+export interface ChannelReadEvent {
+  channelIds: string[];
+  lastReadAt: string;
+  guildId: string | null;
+}
+
+/**
  * Estado de voz de um usuário num canal, do jeito que o gateway transmite:
  * quem está num canal de voz, ao vivo (emitido na sala `guild:<id>`; a barra
  * lateral consome para listar sob o canal).

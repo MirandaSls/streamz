@@ -1,10 +1,16 @@
 import { Injectable } from "@nestjs/common";
-import { mentionsUser } from "@streamz/shared";
-import type { InboxMention, InboxUnreadChannel, InboxUnreadGroup } from "@streamz/shared";
+import { WS_EVENTS, mentionsUser } from "@streamz/shared";
+import type {
+  ChannelReadEvent,
+  InboxMention,
+  InboxUnreadChannel,
+  InboxUnreadGroup,
+} from "@streamz/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { ReadStateService } from "../read-state/read-state.service";
 import { MessagesService } from "./messages.service";
+import { RealtimeService } from "../realtime/realtime.service";
 
 /** Quantas candidatas a menção varremos antes de filtrar pelo "não lido". */
 const CANDIDATAS = 200;
@@ -24,6 +30,7 @@ export class InboxService {
     private readonly guilds: GuildsService,
     private readonly readState: ReadStateService,
     private readonly messages: MessagesService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   /** Menções não lidas, mais recentes primeiro ("Para você"). */
@@ -143,6 +150,13 @@ export class InboxService {
         }),
       ),
     );
+    // o lote inteiro vira um `channel.read` só para as outras conexões da conta:
+    // o rail, a coluna e a caixa de entrada zeram no mesmo quadro, sem F5
+    this.realtime.emitToUser(userId, WS_EVENTS.CHANNEL_READ, {
+      channelIds: canais.map((c) => c.id),
+      lastReadAt: agora.toISOString(),
+      guildId: null,
+    } satisfies ChannelReadEvent);
     return { channels: canais.length };
   }
 

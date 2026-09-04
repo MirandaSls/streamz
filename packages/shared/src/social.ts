@@ -58,9 +58,18 @@ export const friendRequestSchema = z.object({
 });
 export type FriendRequestInput = z.infer<typeof friendRequestSchema>;
 
-/** Evento: alguém me mandou um pedido (chega a quem recebe). */
+/**
+ * Evento: um pedido de amizade nasceu.
+ *
+ * Vai para as salas `user:<id>` dos **dois** lados, e `direcao` diz de quem é a
+ * visão de quem recebe: `incoming` para quem foi pedido (a aba "Pendentes"
+ * ganha uma linha e um toast), `outgoing` para as outras conexões de quem
+ * pediu — sem isso, mandar o pedido no desktop deixava o site sem a linha em
+ * "Enviados" até recarregar. `request.user` é sempre **o outro lado**.
+ */
 export interface FriendRequestEvent {
   request: FriendRequest;
+  direcao: "incoming" | "outgoing";
 }
 
 /** Evento: um pedido virou amizade (chega aos dois lados). */
@@ -76,10 +85,17 @@ export interface FriendRemovedEvent {
   userId: string;
 }
 
-/** Evento: eu bloqueei/desbloqueei alguém (só as minhas abas recebem). */
+/**
+ * Evento: eu bloqueei/desbloqueei alguém (só as minhas conexões recebem).
+ *
+ * `user` vem junto para o cliente aplicar o delta sem uma volta ao
+ * `GET /friends`: bloquear tira das listas de amigos/pedidos e põe em
+ * "Bloqueados", desbloquear só tira de lá.
+ */
 export interface UserBlockedEvent {
   userId: string;
   blocked: boolean;
+  user: PublicUser;
 }
 
 // ── Status personalizado ─────────────────────────────────────

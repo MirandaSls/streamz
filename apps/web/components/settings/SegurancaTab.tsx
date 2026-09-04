@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Copy, Download, ShieldCheck, ShieldOff } from "@/components/ui/icones";
 import type { MfaSetup, MinhaConta } from "@streamz/shared";
 import { RadioCards, Section } from "@/components/ui/controls";
@@ -13,6 +13,7 @@ import {
 import { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { api } from "@/lib/api";
 import { mensagemDeAuth } from "@/lib/auth-mensagens";
+import { useConta } from "@/stores/conta";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
 
@@ -29,15 +30,10 @@ import { ui } from "@/stores/ui";
  * no cliente — quantos códigos de recuperação sobraram é conta do servidor.
  */
 export default function SegurancaTab() {
-  const [conta, setConta] = useState<MinhaConta | null>(null);
-
-  const carregar = useCallback(async () => {
-    try {
-      setConta(await api.account());
-    } catch (e) {
-      ui.toast(errorMessage(e, "Não foi possível carregar sua conta"), "error");
-    }
-  }, []);
+  // a conta vive numa store, e não aqui: `account.updated` chega a todas as
+  // conexões da pessoa, e ligar o 2FA num aparelho tem de aparecer no outro
+  const conta = useConta((s) => s.conta);
+  const carregar = useConta((s) => s.carregar);
 
   useEffect(() => {
     void carregar();

@@ -50,9 +50,20 @@ interface FriendsState extends FriendLists {
   unblock: (userId: string) => Promise<void>;
 
   // ── eventos do gateway ──
-  handleRequest: (request: FriendRequest) => void;
+  /**
+   * `friend.request`: um pedido nasceu. `direcao` diz de que lado eu estou —
+   * `incoming` quando me pediram, `outgoing` quando fui eu que pedi de outro
+   * aparelho. Idempotente: o pedido que já está na lista não entra de novo.
+   */
+  handleRequest: (request: FriendRequest, direcao: "incoming" | "outgoing") => void;
   handleAccepted: (user: PublicUser) => void;
   handleRemoved: (userId: string) => void;
+  /**
+   * `user.blocked`: eu bloqueei ou desbloquei alguém (em qualquer conexão da
+   * conta). Aplica o delta em vez de recarregar as quatro listas — bloquear
+   * tira de amigos e pedidos e põe em "Bloqueados"; desbloquear só tira de lá.
+   */
+  handleBlocked: (user: PublicUser, blocked: boolean) => void;
   clear: () => void;
 }
 
@@ -202,12 +213,13 @@ export const useFriends = create<FriendsState>((set, get) => {
       }
     },
 
-    handleRequest: (request) =>
-      set((s) =>
-        s.incoming.some((r) => r.id === request.id)
-          ? s
-          : { incoming: [request, ...s.incoming] },
-      ),
+    handleRequest: (request, direcao) =>
+      set((s) => {
+        const lista = direcao === "incoming" ? s.incoming : s.outgoing;
+        if (lista.some((r) => r.id === request.id)) return s;
+        const nova = [request, ...lista];
+        return direcao === "incoming" ? { incoming: nova } : { outgoing: nova };
+      }),
 
     handleAccepted: (user) =>
       set((s) => ({
@@ -221,6 +233,18 @@ export const useFriends = create<FriendsState>((set, get) => {
         friends: s.friends.filter((f) => f.id !== userId),
         incoming: s.incoming.filter((r) => r.user.id !== userId),
         outgoing: s.outgoing.filter((r) => r.user.id !== userId),
+      })),
+
+    handleBlocked: (user, blocked) =>
+      set((s) => ({
+        friends: blocked ? s.friends.filter((f) => f.id !== user.id) : s.friends,
+        incoming: blocked ? s.incoming.filter((r) => r.user.id !== user.id) : s.incoming,
+        outgoing: blocked ? s.outgoing.filter((r) => r.user.id !== user.id) : s.outgoing,
+        blocked: blocked
+          ? s.blocked.some((b) => b.id === user.id)
+            ? s.blocked
+            : [...s.blocked, user]
+          : s.blocked.filter((b) => b.id !== user.id),
       })),
 
     clear: () => {

@@ -3,6 +3,7 @@ import { isTextChannel } from "@streamz/shared";
 import type { Channel, GuildChannelType, GuildMemberView } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { applyPositions, moveCategory, moveChannel } from "@/stores/channel-order";
+import { canalLido, listaLida } from "@/stores/leitura";
 import { useCategories } from "@/stores/categories";
 import { errorMessage, leaveChannel } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
@@ -70,6 +71,12 @@ interface ChannelsState {
 
   /** Marca o canal como lido (na API e localmente). */
   markRead: (channelId: string) => Promise<void>;
+  /**
+   * `channel.read`: li estes canais em **outra** conexão da minha conta. Só
+   * aplica o estado de leitura — não fala com a API e não muda o que está na
+   * tela. Idempotente (ver `stores/leitura`).
+   */
+  aplicarLeitura: (channelIds: readonly string[], lastReadAt: string) => void;
   /** Mensagem nova num canal deste servidor. */
   bumpUnread: (channelId: string, at: string, mention: boolean) => void;
   handleCreated: (channel: Channel) => void;
@@ -281,6 +288,12 @@ export const useChannels = create<ChannelsState>((set, get) => {
         // falhou em silêncio: o próximo reload da lista traz o valor do servidor
       }
     },
+
+    aplicarLeitura: (channelIds, lastReadAt) =>
+      set((s) => {
+        const channels = listaLida(s.channels, channelIds, (c) => canalLido(c, lastReadAt));
+        return channels === s.channels ? s : { channels };
+      }),
 
     bumpUnread: (channelId, at, mention) =>
       patchChannel(channelId, (c) => ({

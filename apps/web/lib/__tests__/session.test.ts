@@ -15,6 +15,30 @@ beforeEach(() => {
   localStorage.setItem("refreshToken", "refresh-antigo");
 });
 
+/**
+ * `sid` é o que deixa `sessions.revoked` derrubar **esta** aba e só ela: o
+ * evento chega a todas as conexões da conta com os ids encerrados, e cada uma
+ * se reconhece (ou não) pelo próprio token.
+ */
+describe("sidDoToken", () => {
+  it("lê a sessão que emitiu o token", async () => {
+    const { sidDoToken } = await carregarSession();
+    expect(sidDoToken(jwtComExp(Date.now() + 60_000, "sessao-1"))).toBe("sessao-1");
+  });
+
+  it("token antigo (sem a claim) devolve null — só o `all` o derruba", async () => {
+    const { sidDoToken } = await carregarSession();
+    expect(sidDoToken(jwtComExp(Date.now() + 60_000))).toBeNull();
+    expect(sidDoToken("nao-e-jwt")).toBeNull();
+  });
+
+  it("`sidDaSessaoAtual` lê o access token guardado", async () => {
+    localStorage.setItem("accessToken", jwtComExp(Date.now() + 60_000, "sessao-9"));
+    const { sidDaSessaoAtual } = await carregarSession();
+    expect(sidDaSessaoAtual()).toBe("sessao-9");
+  });
+});
+
 describe("expDoToken", () => {
   it("lê o exp do payload em milissegundos", async () => {
     const { expDoToken } = await carregarSession();

@@ -17,7 +17,8 @@ import { comServidorNovo } from "@/stores/guilds-entrada";
  * Ao trocar de servidor esta store cuida da lista de membros e delega os canais
  * para `useChannels` — cada store faz o seu próprio fetch. O "não lido" e as
  * menções por servidor vêm da API na carga e são mantidos ao vivo por
- * `bumpUnread` (mensagem nova) e `clearUnread` (canal lido).
+ * `bumpUnread` (mensagem nova), `syncFromChannels` (recontagem a partir dos
+ * canais carregados) e `clearUnread` (servidor lido).
  */
 
 interface GuildsState {
@@ -55,6 +56,12 @@ interface GuildsState {
   bumpUnread: (guildId: string, mention: boolean) => void;
   /** Recalcula o resumo do servidor a partir dos canais carregados. */
   syncFromChannels: (guildId: string) => void;
+  /**
+   * O servidor inteiro foi lido (em qualquer conexão da conta): o rail apaga o
+   * ponto e o badge. Vale mesmo com os canais dele fora da memória — é o caso
+   * de "marcar como lido" num servidor que não está aberto.
+   */
+  clearUnread: (guildId: string) => void;
   handleMemberUpdated: (
     guildId: string,
     userId: string,
@@ -330,6 +337,11 @@ export const useGuilds = create<GuildsState>((set, get) => {
         unread: true,
         mentionCount: g.mentionCount + (mention ? 1 : 0),
       })),
+
+    clearUnread: (guildId) =>
+      patchGuild(guildId, (g) =>
+        !g.unread && g.mentionCount === 0 ? g : { ...g, unread: false, mentionCount: 0 },
+      ),
 
     syncFromChannels: (guildId) => {
       const channels = useChannels.getState().channels;

@@ -42,6 +42,13 @@ export const WS_EVENTS = {
   CHANNEL_CREATED: "channel.created",
   CHANNEL_UPDATED: "channel.updated",
   CHANNEL_DELETED: "channel.deleted",
+  /**
+   * Li um canal (ou um lote deles) — vai para a sala `user:<id>`.
+   *
+   * É o par de "não lido" do lado da leitura: sem ele, abrir a conversa no
+   * desktop deixava o badge aceso no site até recarregar a página.
+   */
+  CHANNEL_READ: "channel.read",
   MEMBER_UPDATED: "member.updated",
   MEMBER_JOINED: "member.joined",
   MEMBER_LEFT: "member.left",

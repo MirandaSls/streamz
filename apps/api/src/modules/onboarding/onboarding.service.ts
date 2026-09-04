@@ -143,6 +143,7 @@ export class OnboardingService {
       where: { userId_guildId: { userId, guildId } },
       data: { acceptedRulesAt: new Date() },
     });
+    this.avisarMinhasConexoes(userId, guildId);
     return { acceptedRulesAt: updated.acceptedRulesAt!.toISOString() };
   }
 
@@ -153,7 +154,20 @@ export class OnboardingService {
       where: { userId, guildId, welcomeSeenAt: null },
       data: { welcomeSeenAt: new Date() },
     });
+    this.avisarMinhasConexoes(userId, guildId);
     return { ok: true };
+  }
+
+  /**
+   * Aceitar as regras e ver as boas-vindas são estados **por membro**: o evento
+   * vai só para a sala `user:<id>`, e o cliente relê a sua associação. Sem
+   * isso, aceitar as regras no desktop deixava o site preso no mesmo portão.
+   * O payload é o mesmo de `guild.settingsUpdated` porque o tratador do
+   * cliente já é "releia o que mudou para mim neste servidor" — e reler duas
+   * vezes dá o mesmo resultado.
+   */
+  private avisarMinhasConexoes(userId: string, guildId: string): void {
+    this.realtime.emitToUser(userId, WS_EVENTS.GUILD_SETTINGS_UPDATED, { guildId });
   }
 
   /**
