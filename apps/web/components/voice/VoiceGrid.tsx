@@ -13,7 +13,7 @@ import {
   Volume2,
   VolumeX,
 } from "@/components/ui/icones";
-import { Track, type Participant, type TrackPublication } from "livekit-client";
+import { Track, type TrackPublication } from "livekit-client";
 import { displayNameOf, type VoiceStateEvent } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
@@ -24,6 +24,7 @@ import {
   abrirVolumeDe,
   registrarVolumePopover,
 } from "@/components/voice/participant-menu";
+import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
 import { useAuth } from "@/stores/auth";
 import { ui } from "@/stores/ui";
 import { participantesDe, useVoice, videosDe } from "@/stores/voice";
@@ -62,7 +63,6 @@ type Celula = { tipo: "tile"; t: Tile } | { tipo: "convite" };
 interface Tile {
   key: string;
   state: VoiceStateEvent;
-  participant: Participant | null;
   publication: TrackPublication | null;
   tela: boolean;
 }
@@ -102,16 +102,13 @@ export default function VoiceGrid({
   // pessoa e o `<userId>#tela` da captura nativa. As faixas dos dois entram no
   // tile do dono — o `#tela` nunca vira uma pessoa a mais na grade.
   const tiles: Tile[] = states.flatMap((state): Tile[] => {
-    const meus = participantesDe(state.user.id);
-    const p = meus[0] ?? null;
-    const videos = meus.flatMap(videosDe);
+    const videos = participantesDe(state.user.id).flatMap(videosDe);
     if (videos.length === 0) {
-      return [{ key: state.user.id, state, participant: p, publication: null, tela: false }];
+      return [{ key: state.user.id, state, publication: null, tela: false }];
     }
     return videos.map((pub) => ({
       key: `${state.user.id}:${pub.trackSid}`,
       state,
-      participant: p,
       publication: pub,
       tela: pub.source === Track.Source.ScreenShare,
     }));
@@ -345,14 +342,17 @@ function AvatarDeChamada({
 }: {
   tile: Tile;
   meId?: string;
-  falando: string[];
+  falando: ReadonlySet<string>;
   channelId: string;
 }) {
-  const { state, participant } = tile;
+  const { state } = tile;
   const sou = state.user.id === meId;
   const nome = displayNameOf(state.user);
-  // quem está mudo nunca "fala": o anel verde tem de contar a mesma história
-  const ativo = !state.muted && (falando.includes(state.user.id) || !!participant?.isSpeaking);
+  // quem está mudo nunca "fala": o anel verde tem de contar a mesma história.
+  // A conta é só esta — `participant.isSpeaking` saiu de cena: era uma segunda
+  // fonte, lida no render em vez de reagir a evento, e é dela que vinham as
+  // duas divergências (palco aceso e lista apagada; palco piscando).
+  const ativo = !state.muted && falando.has(state.user.id);
 
   return (
     <Tooltip label={nome}>
@@ -372,17 +372,12 @@ function AvatarDeChamada({
           size="xl"
           surface="border-rail"
           voz={state.deafened ? "surdo" : state.muted ? "mudo" : null}
-          className={`transition-transform ${ativo ? "scale-[0.925]" : ""}`}
+          className={`transition-transform ${ativo ? ENCOLHE_AO_FALAR : ""}`}
         />
         {/* O anel fica DENTRO do Ø80: a foto encolhe 2px e ele ocupa a folga.
             Desenhado por fora, o avatar crescia quando a pessoa falava e a
             fileira inteira parecia pular a cada sílaba. */}
-        {ativo && (
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-inset ring-green"
-          />
-        )}
+        {ativo && <AnelDeFala />}
       </span>
     </Tooltip>
   );
@@ -401,7 +396,7 @@ function VoiceTile({
 }: {
   tile: Tile;
   meId?: string;
-  falando: string[];
+  falando: ReadonlySet<string>;
   channelId: string;
   /** este tile é o que está no palco (só a transmissão usa a distinção). */
   assistindo: boolean;
@@ -409,13 +404,16 @@ function VoiceTile({
   grande?: boolean;
   compacto?: boolean;
 }) {
-  const { state, participant, publication, tela } = tile;
+  const { state, publication, tela } = tile;
   const sou = state.user.id === meId;
   const caixa = useRef<HTMLDivElement>(null);
   const silenciado = useVoice((s) => !!s.silenciados[state.user.id]);
   const toggleSilenciado = useVoice((s) => s.toggleSilenciado);
-  // quem está mudo nunca "fala": o anel verde tem de contar a mesma história
-  const ativo = !state.muted && (falando.includes(state.user.id) || !!participant?.isSpeaking);
+  // quem está mudo nunca "fala": o anel verde tem de contar a mesma história.
+  // A conta é só esta — `participant.isSpeaking` saiu de cena: era uma segunda
+  // fonte, lida no render em vez de reagir a evento, e é dela que vinham as
+  // duas divergências (palco aceso e lista apagada; palco piscando).
+  const ativo = !state.muted && falando.has(state.user.id);
   const nome = displayNameOf(state.user);
 
   return (
@@ -451,14 +449,9 @@ function VoiceTile({
               user={state.user}
               size={compacto ? "md" : "xl"}
               surface="border-input"
-              className={`transition-transform ${ativo ? "scale-[0.925]" : ""}`}
+              className={`transition-transform ${ativo ? ENCOLHE_AO_FALAR : ""}`}
             />
-            {ativo && (
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-inset ring-green"
-              />
-            )}
+            {ativo && <AnelDeFala />}
           </span>
         </span>
       )}

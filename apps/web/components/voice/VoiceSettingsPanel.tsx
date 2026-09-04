@@ -3,12 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Keyboard, Mic, Video } from "@/components/ui/icones";
 import { pttRotulo } from "@/stores/ptt-core";
-import {
-  BarraDeNivel,
-  Chave,
-  SliderDeVolume as Slider,
-  useNivelDoMicrofone,
-} from "@/components/voice/pecas-de-voz";
+import { BarraDeNivel, Chave, SliderDeVolume as Slider } from "@/components/voice/pecas-de-voz";
+import { useTesteDeMicrofone } from "@/components/voice/useTesteDeMicrofone";
 import { useVoice, type NivelDeRuido } from "@/stores/voice";
 import { explicarMidia, opcoesDe, useVoiceDevices } from "@/stores/voiceDevices";
 import { useVoicePrefs } from "@/stores/voicePrefs";
@@ -22,7 +18,10 @@ import { useVoicePrefs } from "@/stores/voicePrefs";
  * é onde o usuário percebe que escolheu o microfone errado.
  *
  * O teste de microfone existe porque "escolhi o dispositivo certo?" não se
- * responde por uma lista de nomes: responde-se falando e vendo a barra mexer.
+ * responde por uma lista de nomes: responde-se falando e **se ouvindo**. É o
+ * mesmo teste do popover de supressão e da aba das configurações — um hook só
+ * (`useTesteDeMicrofone`), que ensurdece enquanto dura e devolve o seu som na
+ * saída escolhida.
  *
  * O nome do dispositivo só existe com permissão de mídia concedida — sem ela o
  * browser devolve a lista anônima, e é isso que o aviso explica. A lista se
@@ -39,13 +38,17 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
   const setAudioPref = useVoice((s) => s.setAudioPref);
 
   const [capturando, setCapturando] = useState(false);
-  const [testandoMic, setTestandoMic] = useState(false);
   const [testandoCam, setTestandoCam] = useState(false);
 
   // a barra de nível serve aos dois: ao teste e ao limiar de sensibilidade.
   // Ela só liga com o teste — abrir o microfone só por exibir a aba pediria
   // permissão sem que o usuário tenha pedido nada
-  const nivel = useNivelDoMicrofone(testandoMic, devices.inputId);
+  const {
+    testando: testandoMic,
+    nivel,
+    erro: erroDoTeste,
+    alternar: alternarTeste,
+  } = useTesteDeMicrofone();
 
   return (
     <div className="space-y-5 text-sm text-txt-normal">
@@ -90,13 +93,14 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
           Teste de microfone
         </h3>
         <p className="text-xs text-txt-muted">
-          Com problemas? Comece uma verificação e diga algo divertido — a barra se mexe se a gente
-          estiver ouvindo você.
+          {testandoMic
+            ? "Você está se ouvindo. Enquanto o teste durar, a sala não te ouve e você não ouve ninguém."
+            : "Com problemas? Comece uma verificação e diga algo divertido — você vai se ouvir, e a barra se mexe se a gente estiver ouvindo você."}
         </p>
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => setTestandoMic((v) => !v)}
+            onClick={alternarTeste}
             className="flex h-8 shrink-0 items-center gap-1.5 rounded-[3px] bg-border-strong px-3 text-xs font-semibold text-txt-primary transition hover:bg-border-strong-hover"
           >
             <Mic size={14} aria-hidden="true" />
@@ -104,6 +108,7 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
           </button>
           <BarraDeNivel nivel={nivel} />
         </div>
+        {erroDoTeste && <p className="text-xs text-red">{erroDoTeste}</p>}
       </section>
 
       <section className="space-y-3 border-t border-border pt-4">
