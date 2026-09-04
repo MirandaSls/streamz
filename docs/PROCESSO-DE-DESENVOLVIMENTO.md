@@ -904,6 +904,41 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   contexto volta a ser um por `init()`: 60 contextos vivos em vez de 1. Um caso
   à parte cobre o teste de microfone: a faixa sai da sala, continua viva com a
   cadeia montada e volta.
+- **A supressão avançada exige `'wasm-unsafe-eval'` na CSP do desktop** (PR
+  #124), e a falha dela não pode ser calada. O `RnnoiseWorkletNode` monta sem
+  reclamar: o construtor só cria o nó e manda o `.wasm` pela porta. Quem
+  instancia o WebAssembly é o processador **dentro** do
+  `AudioWorkletGlobalScope`, num `async` sem `catch` — e quando isso falha, o
+  `process()` do pacote (`... || !this.processor || this.processor.process(...)`)
+  passa a devolver **silêncio**, não o som cru. No desktop 0.0.20 a
+  `app.security.csp` era `script-src 'self' 'unsafe-inline'`, e no Chromium
+  compilar WebAssembly exige `'wasm-unsafe-eval'` nessa mesma diretiva: ligar a
+  "Avançada" deixava a pessoa **muda**, sem um erro em lugar nenhum. Medido num
+  Chromium headless (puppeteer) servindo o `out/` exportado, ruído branco em
+  48 kHz, RMS antes/depois do nó, oito segundos:
+
+  | `script-src` | `addModule` | `WebAssembly.compile` | RMS depois/antes |
+  |---|---|---|---|
+  | sem CSP | ok | ok | 0,79 |
+  | `'self' 'unsafe-inline'` | ok | `CompileError: …violates… 'unsafe-eval'` | **0,0000** |
+  | `… 'wasm-unsafe-eval'` | ok | ok | 0,79 |
+
+  Duas coisas saem daí. A primeira: 0,79 (≈ −2 dB) **é** o RNNoise trabalhando —
+  medido também fora do Web Audio, chamando o processador direto com um shim de
+  `AudioWorkletProcessor`, dá −3,8 dB. Ele não zera ruído branco sintético, e
+  esperar silêncio é o erro de leitura fácil aqui; o que denuncia a falha é a
+  saída **exatamente zero**. A segunda: a CSP ganhou `'wasm-unsafe-eval'`, e
+  `lib/supressor-ruido.ts` ganhou uma **sonda** — compilar um módulo wasm vazio
+  de 8 bytes na thread principal antes de criar o nó, que é a única forma de
+  saber daqui o que aconteceria lá dentro. Recusada a sonda (ou o
+  `/supressor/*` que não subiu), a cadeia se monta **sem** o RNNoise (o ganho é
+  dela também), `supressaoIndisponivel()` passa a devolver o motivo,
+  `restricoesDeCaptura` volta a pedir a supressão do navegador — ficar sem
+  nenhuma das duas seria pior do que antes de escolher "Avançada" — e
+  `aoFalharASupressao` vira toast "Supressão avançada indisponível: …". Escolher
+  o nível de novo esquece o veredito e tenta outra vez. Teste:
+  `lib/__tests__/supressor-indisponivel.test.ts`, que também guarda a CSP do
+  `tauri.conf.json` contra uma regressão.
 - O popover da setinha do microfone tem, como no print `2026-09-03 202542`:
   "Dispositivo de entrada ›", "Redução de ruído ›" (o "Perfil de entrada" do
   Discord é o Krisp, que não temos), o slider "Volume de entrada" e
@@ -1035,6 +1070,7 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
 | #105 | Sons: um som não se sobrepõe a si mesmo em menos de 300 ms, um dono só do volume com fator por som, e badge de não lidas no ícone da caixa de entrada |
 | #112 | As duas categorias padrão viram categorias de verdade (§4.1): paravam de existir na primeira categoria criada, e não dava para renomear nem apagar |
 | #117 | Auditoria de tempo real entre as sessões da conta (§4.2) e as lacunas fechadas: `channel.read` (o "lido" num cliente apaga o badge no outro), fechar conversa/sair do grupo, pedido de amizade na aba "Enviados", `account.updated` e `sessions.revoked` finalmente ouvidos, entrar pela Descobrir, aceitar as regras, tirar o banner |
+| #124 | Supressão de ruído avançada no desktop: a CSP sem `'wasm-unsafe-eval'` fazia o RNNoise publicar silêncio, calado (§7) |
 
 Desktop: 0.0.6 (#38 + #40 + #41), 0.0.7 (+ #42), 0.0.8 (tudo até #50),
 0.0.10 (até #64), 0.0.11 (até #71, primeira com a tela nativa), 0.0.12 (até #73).
