@@ -1114,6 +1114,7 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
 | #117 | Auditoria de tempo real entre as sessões da conta (§4.2) e as lacunas fechadas: `channel.read` (o "lido" num cliente apaga o badge no outro), fechar conversa/sair do grupo, pedido de amizade na aba "Enviados", `account.updated` e `sessions.revoked` finalmente ouvidos, entrar pela Descobrir, aceitar as regras, tirar o banner |
 | #124 | "Testar microfone" muta e ensurdece de verdade (§7): liga mudo e surdo pelo caminho normal (som, ícone e `voice.update`) e restaura o par de antes ao parar por qualquer caminho; o retorno sobrevive ao mudo porque a captura fica aberta durante o teste |
 | #126 | Supressão de ruído avançada no desktop: a CSP sem `'wasm-unsafe-eval'` fazia o RNNoise publicar silêncio, calado (§7) |
+| #129 | "Convidar amigos" medido contra o Discord, o link do convite nasce no host público (o desktop mandava `tauri.localhost`) e **quem escreve leu**: o convite que eu mandei deixava a conversa em negrito para mim |
 
 Desktop: 0.0.6 (#38 + #40 + #41), 0.0.7 (+ #42), 0.0.8 (tudo até #50),
 0.0.10 (até #64), 0.0.11 (até #71, primeira com a tela nativa), 0.0.12 (até #73).
@@ -1134,6 +1135,16 @@ de mensagem, "é nosso?") tem que aceitar **os dois**: o host público, que vem 
 `WEB_URL` em `lib/config.ts` (derivado do `NEXT_PUBLIC_API_URL`, o único que
 todos os builds recebem), e o do próprio app.
 
+E o mesmo vale para **escrever** o link, não só para reconhecê-lo: o modal
+"Convidar amigos" montava a URL com `window.location.origin` e no desktop
+mandava `http://tauri.localhost/invite/<código>` para o amigo — endereço que só
+existe dentro do WebView2 de quem convidou. Quem gera é `urlDeConvite()`, no
+**mesmo módulo** que reconhece (`lib/links-de-convite.ts`): o link nasce na
+primeira origem de `origensDeConvite()`, que é a pública. Ainda **não**
+arrumado, mesma família: "Copiar link da mensagem" e "Copiar link do canal"
+(`MessageItem.tsx`, `ThreadPanel.tsx`, `ChannelSidebar.tsx`) continuam usando
+`window.location.origin`.
+
 **O foco da janela é o gate de "marcar como lido".** `lib/na-tela.ts` decide o
 que está na tela; `janelaTemFoco()` decide se o usuário está olhando. No desktop
 a janela `main` nasce `visible: false` (§5.2), então o primeiro
@@ -1142,6 +1153,19 @@ de foco precisa aceitar sinal do `focus`/`blur` do DOM **e** do `onFocusChanged`
 do Tauri (`lib/foco-da-janela.ts`): fotografá-lo uma vez e esperar só pelo
 ouvinte nativo — que entra por `import()` assíncrono — travava tudo em "sem
 foco" pelo resto da sessão.
+
+**Quem escreve leu.** Mandar uma mensagem marca o canal como lido para quem
+mandou — no **servidor** (`ReadStateService.marcarLidoAoEnviar`, chamado por
+`MessagesService.create` com o instante da mensagem, só andando para a frente)
+e no cliente (`aoChegarMensagem`/`bumpUnread` aplicam `conversaLida`/`canalLido`
+quando `propria`). Sem isso, mandar para uma conversa que **não está na tela** —
+é o que o modal de convite faz — deixava a conversa não lida para quem escreveu:
+`isUnread` compara `lastMessageAt` com `lastReadAt` e não sabe de quem é a
+mensagem, então o meu próprio convite aparecia em negrito, como se o
+destinatário tivesse escrito para mim. O `channel.read` que o envio gera vai
+para a sala do usuário, então o negrito também apaga na outra sessão da conta
+(§4.2). Nunca foi o autor da mensagem que estava errado: a API sempre gravou
+`authorId` = quem enviou (o gateway usa o usuário do socket).
 
 **Sons.** `lib/ringtone.ts` e `lib/notification-sound.ts` tocam arquivos de
 `apps/web/public/sons/` (origem: `docs/Reference/audio/`, fora do git). **Nada

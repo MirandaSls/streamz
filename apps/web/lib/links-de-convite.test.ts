@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codigoDeConvite } from "./links-de-convite";
+import { codigoDeConvite, urlDeConvite } from "./links-de-convite";
 
 /**
  * O defeito preso aqui: no desktop o app é servido de `http://tauri.localhost`,
@@ -50,5 +50,29 @@ describe("reconhecer um convite", () => {
   it("a porta faz parte do host (desenvolvimento)", () => {
     expect(codigoDeConvite("http://localhost:3000/invite/x", ["http://localhost:3000"])).toBe("x");
     expect(codigoDeConvite("http://localhost:3001/invite/x", ["http://localhost:3000"])).toBeNull();
+  });
+});
+
+/**
+ * O outro lado do mesmo defeito: **gerar** o link.
+ *
+ * O modal "Convidar amigos" montava a URL com `window.location.origin` e, no
+ * desktop, mandava `http://tauri.localhost/invite/<código>` para o amigo — um
+ * endereço que só existe dentro do WebView2 de quem convidou. O link tem que
+ * nascer no host público, e o que nasce ali tem que ser reconhecido como
+ * convite dos dois lados (é o cartão com "Entrar" do #104).
+ */
+describe("gerar o link do convite", () => {
+  it("usa o host público mesmo com o app servido do tauri.localhost", () => {
+    expect(urlDeConvite("vyuo3x0x", NOSSAS)).toBe("https://streamz.chat/invite/vyuo3x0x");
+  });
+
+  it("o link gerado é reconhecido como convite (o cartão com Entrar)", () => {
+    const url = urlDeConvite("vyuo3x0x", NOSSAS);
+    expect(codigoDeConvite(url, NOSSAS)).toBe("vyuo3x0x");
+  });
+
+  it("sem host público configurado cai na origem da janela", () => {
+    expect(urlDeConvite("x", ["", "http://localhost:3000"])).toBe("http://localhost:3000/invite/x");
   });
 });

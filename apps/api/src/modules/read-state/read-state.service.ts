@@ -28,6 +28,38 @@ export class ReadStateService {
   }
 
   /**
+   * "Eu escrevi aqui, logo li até aqui" — a leitura que o **envio** implica.
+   *
+   * Só anda para a frente: se eu já tinha lido depois deste instante (o eco de
+   * uma leitura mais nova chegou antes), o valor antigo fica. Sem isso, mandar
+   * uma mensagem para uma conversa que não está na tela — é o que o modal de
+   * convite faz — deixava a conversa **não lida para quem escreveu**: o
+   * `lastMessageAt` andava e o `lastReadAt` ficava para trás, e a linha
+   * aparecia em negrito, como se o outro tivesse escrito.
+   */
+  async marcarLidoAoEnviar(userId: string, channelId: string, at: Date): Promise<Date> {
+    const atual = await this.prisma.readState.findUnique({
+      where: { userId_channelId: { userId, channelId } },
+      select: { lastReadAt: true },
+    });
+    if (atual && atual.lastReadAt >= at) return atual.lastReadAt;
+    // `updateMany` com o filtro de tempo resolve a corrida com o `markRead` de
+    // outra aba sem transação: quem chegar com o instante menor não escreve.
+    const { count } = await this.prisma.readState.updateMany({
+      where: { userId, channelId, lastReadAt: { lt: at } },
+      data: { lastReadAt: at },
+    });
+    if (count === 0 && !atual) {
+      await this.prisma.readState.upsert({
+        where: { userId_channelId: { userId, channelId } },
+        create: { userId, channelId, lastReadAt: at },
+        update: {},
+      });
+    }
+    return at;
+  }
+
+  /**
    * Resumo de leitura de vários canais de uma vez, na visão de `userId`:
    * cinco consultas no total, independentemente do número de canais.
    */

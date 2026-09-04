@@ -1,4 +1,5 @@
 import type { DMChannelView } from "@streamz/shared";
+import { conversaLida } from "@/stores/leitura";
 
 /**
  * A aritmética do badge de não lidas — a parte pura, testável sem store.
@@ -27,17 +28,25 @@ export function somarNaoLidas(dms: readonly Pick<DMChannelView, "unreadCount">[]
  * O que muda na conversa quando chega uma mensagem: `lastMessageAt` sempre;
  * menção e não lida só quando a mensagem é de outro — a minha nunca é "não
  * lida" para mim.
+ *
+ * **Quem escreve leu.** A minha mensagem não só deixa de contar: ela move o
+ * `lastReadAt` para o instante dela, como o Discord faz e como o servidor
+ * grava no envio (`ReadStateService.marcarLidoAoEnviar`). Sem isso a conversa
+ * ficava em **negrito para mim** — `isUnread` compara `lastMessageAt` com
+ * `lastReadAt` e não sabe de quem é a mensagem —, que é o defeito de mandar o
+ * convite pelo modal "Convidar amigos": a conversa nem chega a estar na tela,
+ * ninguém a marca como lida, e o meu próprio convite aparecia como mensagem
+ * nova do destinatário.
  */
-export function aoChegarMensagem<T extends Pick<DMChannelView, "lastMessageAt" | "mentionCount" | "unreadCount">>(
-  dm: T,
-  at: string,
-  opcoes: { mention: boolean; propria: boolean },
-): T {
+export function aoChegarMensagem<
+  T extends Pick<DMChannelView, "lastMessageAt" | "lastReadAt" | "mentionCount" | "unreadCount">,
+>(dm: T, at: string, opcoes: { mention: boolean; propria: boolean }): T {
+  if (opcoes.propria) return conversaLida({ ...dm, lastMessageAt: at }, at);
   return {
     ...dm,
     lastMessageAt: at,
-    mentionCount: dm.mentionCount + (opcoes.mention && !opcoes.propria ? 1 : 0),
-    unreadCount: dm.unreadCount + (opcoes.propria ? 0 : 1),
+    mentionCount: dm.mentionCount + (opcoes.mention ? 1 : 0),
+    unreadCount: dm.unreadCount + 1,
   };
 }
 
