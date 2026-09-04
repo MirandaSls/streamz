@@ -38,7 +38,7 @@ import { useAtualizacao, type Atualizacao } from "./useAtualizacao";
  * de foco aceso no botão, e o Discord não mostra nada — nem tooltip — nesses
  * botões. Caixa de entrada e ajuda continuam focáveis pelo teclado.
  */
-const ALTURA = 32;
+export const ALTURA = 32;
 
 export default function BarraDeTitulo() {
   // `isTauri()` só é verdadeiro no cliente: decidir no render inicial faria o
@@ -74,17 +74,6 @@ function Barra() {
   const atualizacao = useAtualizacao();
   const maximizada = useMaximizada();
 
-  async function janela(acao: "minimizar" | "alternar" | "fechar") {
-    try {
-      const { getCurrentWindow } = await import("@tauri-apps/api/window");
-      const atual = getCurrentWindow();
-      if (acao === "minimizar") await atual.minimize();
-      else if (acao === "alternar") await atual.toggleMaximize();
-      else await atual.close();
-    } catch {
-      // sem a permissão certa a chamada rejeita; a barra não pode derrubar o app
-    }
-  }
 
   return (
     <>
@@ -132,27 +121,7 @@ function Barra() {
               `border` sobre `rail` dá +31 — mais visível que o original */}
           <span aria-hidden="true" className="h-5 w-px bg-border" />
 
-          <div data-tauri-drag-region className="ml-[7px] flex h-full items-center gap-1">
-            <Controle label="Minimizar" onClick={() => void janela("minimizar")}>
-              <path d="M0 5.5H10" />
-            </Controle>
-            <Controle
-              label={maximizada ? "Restaurar" : "Maximizar"}
-              onClick={() => void janela("alternar")}
-            >
-              {maximizada ? (
-                <>
-                  <path d="M2.5 2.5V0.5H9.5V7.5H7.5" />
-                  <rect x="0.5" y="2.5" width="7" height="7" />
-                </>
-              ) : (
-                <rect x="0.5" y="0.5" width="9" height="9" />
-              )}
-            </Controle>
-            <Controle label="Fechar" fechar onClick={() => void janela("fechar")}>
-              <path d="M0.5 0.5L9.5 9.5M9.5 0.5L0.5 9.5" />
-            </Controle>
-          </div>
+          <ControlesDaJanela maximizada={maximizada} />
         </div>
       </header>
     </>
@@ -160,6 +129,46 @@ function Barra() {
 }
 
 // ── pedaços ────────────────────────────────────────────────────────────────
+
+/** Minimizar, maximizar/restaurar ou fechar a janela do Tauri. */
+export async function janela(acao: "minimizar" | "alternar" | "fechar") {
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    const atual = getCurrentWindow();
+    if (acao === "minimizar") await atual.minimize();
+    else if (acao === "alternar") await atual.toggleMaximize();
+    else await atual.close();
+  } catch {
+    // sem a permissão certa a chamada rejeita; a barra não pode derrubar o app
+  }
+}
+
+/** Os três controles da janela, à direita da barra (Windows). */
+export function ControlesDaJanela({ maximizada }: { maximizada: boolean }) {
+  return (
+    <div data-tauri-drag-region className="ml-[7px] flex h-full items-center gap-1">
+      <Controle label="Minimizar" onClick={() => void janela("minimizar")}>
+        <path d="M0 5.5H10" />
+      </Controle>
+      <Controle
+        label={maximizada ? "Restaurar" : "Maximizar"}
+        onClick={() => void janela("alternar")}
+      >
+        {maximizada ? (
+          <>
+            <path d="M2.5 2.5V0.5H9.5V7.5H7.5" />
+            <rect x="0.5" y="2.5" width="7" height="7" />
+          </>
+        ) : (
+          <rect x="0.5" y="0.5" width="9" height="9" />
+        )}
+      </Controle>
+      <Controle label="Fechar" fechar onClick={() => void janela("fechar")}>
+        <path d="M0.5 0.5L9.5 9.5M9.5 0.5L0.5 9.5" />
+      </Controle>
+    </div>
+  );
+}
 
 function Seta({
   label,
@@ -191,7 +200,7 @@ function Seta({
 }
 
 /** Um dos três controles da janela: 32px de largura pela altura da barra. */
-function Controle({
+export function Controle({
   label,
   fechar = false,
   onClick,
@@ -258,7 +267,7 @@ function BotaoDeAtualizacao({ atualizacao }: { atualizacao: Atualizacao }) {
 // ── estado ─────────────────────────────────────────────────────────────────
 
 /** `true` enquanto a janela está maximizada (o ícone vira "restaurar"). */
-function useMaximizada(): boolean {
+export function useMaximizada(): boolean {
   const [maximizada, setMaximizada] = useState(false);
   useEffect(() => {
     let vivo = true;

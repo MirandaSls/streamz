@@ -1,3 +1,4 @@
+import BarraDeTituloMinima from "@/components/desktop/BarraDeTituloMinima";
 import PesoDosIcones from "@/components/ui/PesoDosIcones";
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
@@ -80,6 +81,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="font-sans">
+        <BarraDeTituloMinima />
         <PesoDosIcones>{children}</PesoDosIcones>
       </body>
     </html>
