@@ -22,13 +22,22 @@ import {
   Room,
   RoomEvent,
   Track,
+  createLocalTracks,
   type Participant,
 } from "livekit-client";
 import { api } from "@/lib/api";
 import { iniciarTelaNativa, isTauri, ouvirTelaEncerrada, pararTelaNativa } from "@/lib/desktop";
 import { tocarSom } from "@/lib/ringtone";
 import { montarPedido } from "@/lib/seletor-de-tela";
-import { supressorDeRuido } from "@/lib/supressor-ruido";
+import {
+  abrirMicrofone,
+  atualizarMicrofone,
+  definirMicrofoneAberto,
+  fecharMicrofone,
+  type PreferenciasDoMicrofone,
+  type RestricoesDeMicrofone,
+  type SalaDoMicrofone,
+} from "@/lib/microfone";
 import { CHAMADA_INICIAL, callReducer, type CallAction, type CallState } from "@/stores/call-machine";
 import { emit, errorMessage } from "@/stores/socket-adapter";
 import { iniciarMedicaoDePing, pararMedicaoDePing } from "@/stores/voice-ping";
@@ -190,13 +199,15 @@ interface VoiceStoreState {
  * "consertar" um slider que já está certo:
  * - `saida` multiplica o volume de cada `<audio>` remoto — vale hoje.
  * - `processamento` vira restrição de captura do microfone — vale hoje.
- * - `entrada`, `sensibilidade` e `pttAtrasoMs` ficam guardados mas ainda não
- *   mudam a captura: ganho de entrada exigiria republicar o microfone por um
- *   grafo Web Audio, o limiar de voz é decidido pelo servidor de mídia, e o
- *   atraso do PTT vive em `voicePrefs`, que lê a constante do contrato.
+ * - `entrada` é o "volume de entrada": um `GainNode` depois do supressor, na
+ *   cadeia de captura (`lib/supressor-ruido.ts`) — vale hoje, e muda o volume
+ *   na hora, sem republicar a faixa.
+ * - `sensibilidade` e `pttAtrasoMs` ficam guardados mas ainda não mudam a
+ *   captura: o limiar de voz é decidido pelo servidor de mídia, e o atraso do
+ *   PTT vive em `voicePrefs`, que lê a constante do contrato.
  */
 export interface AudioPrefs {
-  /** ganho do microfone, 0–2. */
+  /** volume de entrada do microfone, 0–2 (1 = sem mexer). */
   entrada: number;
   /** volume geral da saída, 0–2 (multiplica o volume por pessoa). */
   saida: number;
@@ -288,6 +299,10 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     }
     if (!sala) return;
     pararMedicaoDePing();
+    // o microfone tem dono e é ele quem desmonta a cadeia: a `Room` fecha a
+    // própria `AudioContext` no `disconnect`, e o que estivesse pendurado nela
+    // rodaria num contexto morto na próxima entrada
+    void fecharMicrofone();
     sala.removeAllListeners();
     void sala.disconnect().catch(() => {});
     sala = null;
@@ -750,14 +765,17 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       } catch {
         // sem storage a preferência vale só nesta sessão
       }
-      // mudar o processamento é mudar a **captura**: só republicando o
-      // microfone as novas restrições entram em vigor
+      // processamento e volume de entrada são a **captura**: quem os aplica na
+      // faixa que já está no ar é o dono dela. O volume anda numa rampa dentro
+      // da cadeia (nada é republicado); o processamento pode exigir reiniciar a
+      // captura, e é o dono que decide qual dos dois é o caso
       const mudouProcessamento =
         !!patch.processamento &&
         (Object.keys(patch.processamento) as (keyof AudioPrefs["processamento"])[]).some(
           (k) => patch.processamento?.[k] !== anterior.processamento[k],
         );
-      if (mudouProcessamento) void republicarMicrofone(audio);
+      const mudouEntrada = patch.entrada !== undefined && patch.entrada !== anterior.entrada;
+      if (mudouProcessamento || mudouEntrada) void republicarMicrofone(audio);
     },
 
     setVolume: (userId, volume) =>
@@ -884,9 +902,11 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     syncFlags: () => {
       const f = flags();
       emit(WS_EVENTS.VOICE_UPDATE, f);
-      const lp = sala?.localParticipant;
-      if (!lp) return;
-      lp.setMicrophoneEnabled(!f.muted).catch(() => {});
+      if (!sala) return;
+      // NÃO é `setMicrophoneEnabled`: sem publicação, ele criaria uma faixa
+      // crua (sem restrições e sem cadeia) por baixo do dono — era isso que
+      // "voltava ao normal" alguns segundos depois de entrar
+      void definirMicrofoneAberto(!f.muted).catch(() => {});
     },
   };
 });
@@ -1009,14 +1029,14 @@ async function entrarNaSala(
   // o ping da barra "Voz conectada" mora numa store própria (não no `tick`)
   iniciarMedicaoDePing(room);
   const devices = useVoiceDevicesStore.getState();
-  if (devices.inputId) await room.switchActiveDevice("audioinput", devices.inputId).catch(() => {});
   if (devices.outputId) await room.switchActiveDevice("audiooutput", devices.outputId).catch(() => {});
-  await room.localParticipant
-    .setMicrophoneEnabled(
-      useVoicePrefs.getState().micAberto(),
-      restricoesDeCaptura(useVoice.getState().audio),
-    )
-    .catch(() => {});
+  // o microfone entra pelo dono da faixa (`lib/microfone`), com a cadeia de
+  // captura já montada — nunca por `setMicrophoneEnabled`, que ignora as opções
+  // quando a publicação já existe e não consegue montar processador nenhum
+  await abrirMicrofone(
+    salaDoMicrofone(room),
+    preferenciasDoMicrofone(useVoice.getState().audio),
+  ).catch(() => {});
   void get; // o `get` fica na assinatura para futuras leituras de estado
   rerender();
 }
@@ -1027,29 +1047,70 @@ async function entrarNaSala(
  * A supressão nativa e a avançada são **excludentes**: encadeadas, a nativa
  * volta a comprimir o que a rede neural já limpou e a voz sai metálica. Por
  * isso `noiseSuppression` só vai ligada no nível "padrão".
+ *
+ * O processador **não** vem daqui. Passá-lo em `captureOptions` era o defeito
+ * de origem dos dois primeiros relatos: ver o cabeçalho de `lib/microfone.ts`.
  */
-export function restricoesDeCaptura(audio: AudioPrefs) {
+export function restricoesDeCaptura(audio: AudioPrefs): RestricoesDeMicrofone {
   const nivel = audio.processamento.ruido;
+  const deviceId = useVoiceDevicesStore.getState().inputId;
   return {
+    ...(deviceId ? { deviceId } : {}),
     echoCancellation: audio.processamento.eco,
     noiseSuppression: nivel === "padrao",
     autoGainControl: audio.processamento.ganho,
-    // o SDK publica a saída do processador no lugar do microfone cru
-    processor: nivel === "avancada" ? supressorDeRuido() : undefined,
   };
 }
 
-/** Republica o microfone para as novas restrições entrarem em vigor. */
+/** O que o dono da faixa precisa saber, lido das três stores de uma vez. */
+function preferenciasDoMicrofone(audio: AudioPrefs): PreferenciasDoMicrofone {
+  return {
+    restricoes: restricoesDeCaptura(audio),
+    supressao: audio.processamento.ruido === "avancada",
+    ganho: audio.entrada,
+    aberto: useVoicePrefs.getState().micAberto(),
+  };
+}
+
+/**
+ * A `Room` vista pelo dono da faixa.
+ *
+ * A faixa é criada e publicada por nós, e não por `setMicrophoneEnabled`,
+ * porque só assim ela sobe com a cadeia de captura já montada — o SDK monta o
+ * processador *depois* de publicar (quando monta), e é essa janela que se ouve
+ * como áudio cru nos primeiros segundos.
+ */
+function salaDoMicrofone(room: Room): SalaDoMicrofone {
+  return {
+    criarFaixa: async (restricoes) => {
+      const faixas = await createLocalTracks({ audio: { ...restricoes }, video: false });
+      const faixa = faixas.find((f): f is LocalAudioTrack => f instanceof LocalAudioTrack);
+      if (!faixa) {
+        faixas.forEach((f) => f.stop());
+        throw new Error("O navegador não devolveu nenhuma faixa de microfone.");
+      }
+      return faixa;
+    },
+    publicar: async (faixa) => {
+      // `publishDefaults` da sala (bitrate, dtx, red) continuam valendo: o SDK
+      // os mescla com estas opções
+      await room.localParticipant.publishTrack(faixa as LocalAudioTrack, {
+        source: Track.Source.Microphone,
+      });
+    },
+    despublicar: async (faixa) => {
+      // `false`: quem para a faixa é o dono, na ordem dele
+      await room.localParticipant.unpublishTrack(faixa as LocalAudioTrack, false);
+    },
+  };
+}
+
+/** Aplica as preferências novas na faixa que está no ar (sem republicar nada). */
 async function republicarMicrofone(audio: AudioPrefs) {
-  const lp = sala?.localParticipant;
-  if (!lp) return;
-  const aberto = useVoicePrefs.getState().micAberto();
-  try {
-    await lp.setMicrophoneEnabled(false);
-    await lp.setMicrophoneEnabled(aberto, restricoesDeCaptura(audio));
-  } catch {
+  if (!sala) return;
+  await atualizarMicrofone(preferenciasDoMicrofone(audio)).catch(() => {
     // o microfone pode ter sumido no meio da troca; o próximo toggle resolve
-  }
+  });
 }
 
 /** A sala LiveKit corrente (ou null). Os componentes leem daqui, nunca a guardam. */
@@ -1132,7 +1193,9 @@ if (typeof window !== "undefined") {
     anteriores = chave;
     const room = sala;
     if (!room) return;
-    if (devices.inputId) void room.switchActiveDevice("audioinput", devices.inputId).catch(() => {});
+    // a entrada passa pelo dono da faixa (que reinicia a captura com a cadeia
+    // junto); a saída é do SDK mesmo
+    void republicarMicrofone(useVoice.getState().audio);
     if (devices.outputId) void room.switchActiveDevice("audiooutput", devices.outputId).catch(() => {});
   });
 }

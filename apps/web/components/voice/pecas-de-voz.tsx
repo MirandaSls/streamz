@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useVoice } from "@/stores/voice";
 
 /**
@@ -23,6 +23,12 @@ import { useVoice } from "@/stores/voice";
 export function useNivelDoMicrofone(ativo: boolean, deviceId: string | null) {
   const [nivel, setNivel] = useState(0);
   const processamento = useVoice((s) => s.audio.processamento);
+  // o medidor mostra o que **sai**, e o que sai passa pelo volume de entrada:
+  // uma barra que ignora o slider faria o usuário baixá-lo até sumir da call
+  // sem nunca ver a barra encolher
+  const entrada = useVoice((s) => s.audio.entrada);
+  const ganhoAtual = useRef(entrada);
+  ganhoAtual.current = entrada;
 
   useEffect(() => {
     if (!ativo || typeof navigator === "undefined" || !navigator.mediaDevices) {
@@ -68,8 +74,10 @@ export function useNivelDoMicrofone(ativo: boolean, deviceId: string | null) {
             soma += x * x;
           }
           // ×3 porque fala normal fica em RMS baixo: sem o ganho visual a barra
-          // mal sairia do lugar e o teste não provaria nada
-          setNivel(Math.min(1, Math.sqrt(soma / amostras.length) * 3));
+          // mal sairia do lugar e o teste não provaria nada. O `entrada` é o
+          // mesmo `GainNode` da cadeia de captura, aplicado aqui em número
+          // (esta captura é própria do teste e não passa pela cadeia)
+          setNivel(Math.min(1, Math.sqrt(soma / amostras.length) * 3 * ganhoAtual.current));
           quadro = requestAnimationFrame(ler);
         };
         ler();
@@ -85,6 +93,9 @@ export function useNivelDoMicrofone(ativo: boolean, deviceId: string | null) {
       void ctx?.close().catch(() => {});
       setNivel(0);
     };
+    // o volume de entrada NÃO entra nas dependências: ele é lido por `ref` a
+    // cada quadro. Nas dependências, arrastar o slider reabriria a captura a
+    // cada pixel — e cada reabertura é um `getUserMedia` novo
   }, [ativo, deviceId, processamento.eco, processamento.ruido, processamento.ganho]);
 
   return nivel;

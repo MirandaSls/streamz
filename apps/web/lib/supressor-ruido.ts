@@ -2,101 +2,257 @@ import { Track } from "livekit-client";
 import type { AudioProcessorOptions, TrackProcessor } from "livekit-client";
 
 /**
- * Supressão de ruído por rede neural (RNNoise), no microfone e antes de publicar.
+ * A cadeia de captura do microfone: supressão de ruído (RNNoise) e volume de
+ * entrada, num grafo Web Audio só, publicado no lugar do microfone cru.
  *
- * Por que não o do Discord: o do Discord é o Krisp, licenciado, e o filtro
- * pronto do LiveKit só funciona no LiveKit Cloud — que a ADR-0005 abandonou de
- * propósito. O RNNoise é o equivalente aberto (o mesmo que o Jitsi usa): tira
- * ventilador, ar-condicionado, teclado e chiado; perde para o Krisp quando o
- * ruído é *outra voz* ou um cachorro.
+ * Por que não o supressor do Discord: o do Discord é o Krisp, licenciado, e o
+ * filtro pronto do LiveKit só funciona no LiveKit Cloud — que a ADR-0005
+ * abandonou de propósito. O RNNoise é o equivalente aberto (o mesmo que o Jitsi
+ * usa): tira ventilador, ar-condicionado, teclado e chiado; perde para o Krisp
+ * quando o ruído é *outra voz* ou um cachorro.
  *
  * Ele não substitui a supressão nativa do navegador por capricho: rodar as duas
  * em série soa metálico, porque a nativa volta a comprimir o que a rede já
  * limpou. Por isso quem escolhe "Avançada" desliga a nativa (ver
- * `restricoesDeCaptura`).
+ * `restricoesDeCaptura`, em `stores/voice`).
  *
- * O modelo assume **48 kHz**. A `AudioContext` que o LiveKit entrega quase
- * sempre já está nessa taxa; quando não estiver, abrimos a nossa — em 44,1 kHz
- * o RNNoise devolveria a voz com a altura errada.
+ * ## Um contexto por aba, e ele é NOSSO
+ *
+ * A versão anterior usava a `AudioContext` que o LiveKit entrega em
+ * `init({ audioContext })` sempre que ela já estivesse em 48 kHz, e abria uma
+ * própria só no caso contrário — sem nunca reaproveitá-la. As duas metades
+ * quebravam ao sair e entrar da call várias vezes:
+ *
+ * 1. **A do LiveKit morre na saída.** `Room.disconnect()` faz
+ *    `audioContext.close()` (livekit-client 2.22.0). Um supressor que ficou
+ *    pendurado nela — a `destroy()` do processador é chamada por
+ *    `LocalTrack.stop()` *sem `await`* — passa a rodar num contexto fechado.
+ * 2. **A nossa vazava.** Uma `AudioContext` nova por `init()`, fechada só na
+ *    `destroy()` correspondente, encosta no teto do Chromium (≈6 contextos por
+ *    página): a partir daí `new AudioContext()` lança, a `init()` falha e a
+ *    supressão "buga" até o F5.
+ *
+ * Agora há **um** contexto de captura por aba, criado sob demanda, em 48 kHz
+ * (o modelo assume essa taxa; em 44,1 kHz o RNNoise devolveria a voz com a
+ * altura errada) e suspenso quando ninguém o usa. O worklet é registrado uma
+ * vez nele — `addModule` duas vezes no mesmo contexto é erro.
+ *
+ * ## Ordem: supressor → ganho
+ *
+ * O ganho fica **depois** da rede neural, e não antes, por duas razões:
+ * o RNNoise decide o que é voz a partir do nível que o microfone entrega, e
+ * empurrar 200% na entrada dele muda essa decisão (ruído alto vira "voz");
+ * e o detector de fala que acende o anel do participante é o do LiveKit, que
+ * mede o áudio **publicado** — ou seja, depois do ganho. Assim o slider mexe
+ * no que os outros ouvem e no que o medidor mostra, sem mexer no VAD do modelo.
  */
 
 /** Servidos de `public/supressor/` pelo `predev`/`prebuild`. */
 const BASE = "/supressor";
 const TAXA_EXIGIDA = 48_000;
 
-/** O wasm é o mesmo para todo mundo: baixa uma vez por aba. */
-let wasm: Promise<ArrayBuffer> | null = null;
-function binarioDoModelo(): Promise<ArrayBuffer> {
-  wasm ??= import("@sapphi-red/web-noise-suppressor").then((m) =>
-    m.loadRnnoise({ url: `${BASE}/rnnoise.wasm`, simdUrl: `${BASE}/rnnoise_simd.wasm` }),
-  );
-  return wasm;
+/**
+ * Rampa de subida do ganho ao ligar a cadeia.
+ *
+ * Sem ela o primeiro bloco sai no volume cheio no meio de um grafo que acabou
+ * de nascer, e é isso que se ouve como "a voz fica estranha ao entrar". 120 ms
+ * de silêncio subindo é curto demais para cortar uma sílaba e longo o bastante
+ * para o worklet estabilizar.
+ */
+const SUBIDA_S = 0.12;
+/** Rampa das trocas de volume: sem ela, arrastar o slider estala. */
+const AJUSTE_S = 0.02;
+
+/**
+ * O pacote e o wasm são os mesmos para todo mundo: carregam uma vez por aba.
+ *
+ * Um `import()` só, e não um por peça: são o mesmo módulo, e duas entradas
+ * dinâmicas para o mesmo pacote é a diferença entre "baixa uma vez" e "baixa
+ * quando der".
+ */
+type Modelo = {
+  RnnoiseWorkletNode: typeof import("@sapphi-red/web-noise-suppressor").RnnoiseWorkletNode;
+  wasmBinary: ArrayBuffer;
+};
+let modelo: Promise<Modelo> | null = null;
+function carregarModelo(): Promise<Modelo> {
+  if (!modelo) {
+    modelo = import("@sapphi-red/web-noise-suppressor")
+      .then(async (m) => ({
+        RnnoiseWorkletNode: m.RnnoiseWorkletNode,
+        wasmBinary: await m.loadRnnoise({
+          url: `${BASE}/rnnoise.wasm`,
+          simdUrl: `${BASE}/rnnoise_simd.wasm`,
+        }),
+      }))
+      .catch((e: unknown) => {
+        // falhou (rede, 404 do `predev`): a próxima tentativa recomeça
+        modelo = null;
+        throw e;
+      });
+  }
+  return modelo;
 }
 
-/** `addModule` duas vezes no mesmo contexto explode: registrar processador repetido é erro. */
-const contextosComWorklet = new WeakSet<BaseAudioContext>();
-async function garantirWorklet(ctx: AudioContext) {
-  if (contextosComWorklet.has(ctx)) return;
-  await ctx.audioWorklet.addModule(`${BASE}/rnnoise-worklet.js`);
-  contextosComWorklet.add(ctx);
+/** O contexto de captura da aba, e o `addModule` que já rodou nele. */
+let ctx: AudioContext | null = null;
+let worklet: Promise<void> | null = null;
+/** Quantas cadeias estão montadas: com zero, o contexto é suspenso. */
+let montadas = 0;
+
+/** Uma `AudioContext` de 48 kHz por aba — ver o cabeçalho. */
+export function contextoDeCaptura(): AudioContext {
+  if (!ctx || ctx.state === "closed") {
+    ctx = new AudioContext({ sampleRate: TAXA_EXIGIDA });
+    // contexto novo, worklet ainda não registrado nele
+    worklet = null;
+  }
+  return ctx;
+}
+
+async function garantirWorklet(c: AudioContext) {
+  // a promessa é guardada, não um booleano: duas cadeias montando ao mesmo
+  // tempo esperam o mesmo `addModule` em vez de disputá-lo
+  worklet ??= c.audioWorklet.addModule(`${BASE}/rnnoise-worklet.js`);
+  try {
+    await worklet;
+  } catch (e) {
+    // falhou: a próxima tentativa tem de poder registrar de novo
+    worklet = null;
+    throw e;
+  }
+}
+
+/** Só para os testes: quantas cadeias estão montadas neste contexto. */
+export function cadeiasMontadas(): number {
+  return montadas;
+}
+
+export interface CadeiaDoMicrofone
+  extends TrackProcessor<Track.Kind.Audio, AudioProcessorOptions> {
+  /** Volume de entrada, 0–2. Vale na hora, sem republicar a faixa. */
+  setGanho(valor: number): void;
 }
 
 /**
- * Processador de faixa no formato do LiveKit: entra em
- * `setMicrophoneEnabled(…, { processor })` e o SDK publica a saída dele no
- * lugar do microfone cru.
+ * Monta a cadeia como um processador de faixa do LiveKit.
+ *
+ * `supressao` liga o RNNoise; sem ele a cadeia é só o ganho — e continua
+ * existindo, porque tirá-la e recolocá-la a cada mudança de volume republicaria
+ * o microfone no meio da frase.
  */
-export function supressorDeRuido(): TrackProcessor<Track.Kind.Audio, AudioProcessorOptions> {
-  let ctx: AudioContext | null = null;
-  /** true quando a `AudioContext` é nossa — só nesse caso podemos fechá-la. */
-  let ctxProprio = false;
+export function cadeiaDoMicrofone(inicial: {
+  supressao: boolean;
+  ganho: number;
+}): CadeiaDoMicrofone {
+  const opcoes = { ...inicial };
+
   let fonte: MediaStreamAudioSourceNode | null = null;
   let no: (AudioWorkletNode & { destroy(): void }) | null = null;
+  let ganho: GainNode | null = null;
   let destino: MediaStreamAudioDestinationNode | null = null;
+  /** true entre a `destroy()` e uma `init()` nova: a cadeia não pode ressuscitar sozinha. */
+  let montada = false;
+  /**
+   * `init`, `restart` e `destroy` chegam de lados diferentes (nós, o LiveKit ao
+   * trocar de microfone, o `stop()` da faixa) e o SDK não espera pela nossa
+   * `destroy()`. A fila é o que torna a `destroy()` idempotente de verdade:
+   * ela nunca roda no meio de uma `init()`.
+   */
+  let fila: Promise<void> = Promise.resolve();
+  const emFila = (fn: () => Promise<void>): Promise<void> => {
+    fila = fila.then(fn, fn);
+    return fila;
+  };
 
-  const processador: TrackProcessor<Track.Kind.Audio, AudioProcessorOptions> = {
-    name: "supressor-rnnoise",
+  function desmontar() {
+    if (!montada) return;
+    montada = false;
+    montadas = Math.max(0, montadas - 1);
+    fonte?.disconnect();
+    no?.disconnect();
+    no?.destroy();
+    ganho?.disconnect();
+    destino?.disconnect();
+    // a faixa de saída é uma `MediaStreamTrack` como outra qualquer: sem parar,
+    // ela fica viva depois de a cadeia morrer (o `stop()` da faixa local do
+    // LiveKit só para a de **entrada**)
+    destino?.stream.getTracks().forEach((t) => t.stop());
+    fonte = null;
+    no = null;
+    ganho = null;
+    destino = null;
+    cadeia.processedTrack = undefined;
+    // o contexto fica de pé (é um por aba), mas suspenso não gasta CPU
+    if (montadas === 0) void ctx?.suspend().catch(() => {});
+  }
 
-    async init({ track, audioContext }: AudioProcessorOptions) {
-      ctxProprio = audioContext.sampleRate !== TAXA_EXIGIDA;
-      ctx = ctxProprio ? new AudioContext({ sampleRate: TAXA_EXIGIDA }) : audioContext;
+  /** O nó do RNNoise, já com o modelo carregado. Só existe com a supressão ligada. */
+  async function criarNoDoModelo(c: AudioContext) {
+    const [{ RnnoiseWorkletNode, wasmBinary }] = await Promise.all([
+      carregarModelo(),
+      garantirWorklet(c),
+    ]);
+    // mono: o microfone é uma fonte só, e cada canal a mais é uma inferência
+    // a mais por quadro
+    return new RnnoiseWorkletNode(c, { maxChannels: 1, wasmBinary }) as typeof no;
+  }
 
-      const [{ RnnoiseWorkletNode }, wasmBinary] = await Promise.all([
-        import("@sapphi-red/web-noise-suppressor"),
-        binarioDoModelo(),
-        garantirWorklet(ctx),
-      ]);
+  async function montar(track: MediaStreamTrack) {
+    const c = contextoDeCaptura();
+    // o modelo é carregado ANTES de o grafo existir: publicar a faixa e só
+    // então esperar o wasm é o que mandava alguns segundos de áudio cru
+    const noDoModelo = opcoes.supressao ? await criarNoDoModelo(c) : null;
+    // suspenso pela cadeia anterior: sem isto o grafo nasce parado e não sai som
+    if (c.state === "suspended") await c.resume().catch(() => {});
 
-      fonte = ctx.createMediaStreamSource(new MediaStream([track]));
-      // mono: o microfone é uma fonte só, e cada canal a mais é uma inferência
-      // a mais por quadro
-      no = new RnnoiseWorkletNode(ctx, { maxChannels: 1, wasmBinary }) as typeof no;
-      destino = ctx.createMediaStreamDestination();
-      fonte.connect(no!).connect(destino);
+    fonte = c.createMediaStreamSource(new MediaStream([track]));
+    ganho = c.createGain();
+    destino = c.createMediaStreamDestination();
+    no = noDoModelo;
+    if (no) fonte.connect(no).connect(ganho);
+    else fonte.connect(ganho);
+    ganho.connect(destino);
 
-      processador.processedTrack = destino.stream.getAudioTracks()[0];
-    },
+    // sobe do silêncio em vez de entrar com o áudio no volume cheio
+    const agora = c.currentTime;
+    ganho.gain.setValueAtTime(0, agora);
+    ganho.gain.linearRampToValueAtTime(opcoes.ganho, agora + SUBIDA_S);
 
-    async restart(opts: AudioProcessorOptions) {
-      await processador.destroy();
-      await processador.init(opts);
-    },
+    montada = true;
+    montadas += 1;
+    cadeia.processedTrack = destino.stream.getAudioTracks()[0];
+  }
 
-    async destroy() {
-      fonte?.disconnect();
-      no?.disconnect();
-      no?.destroy();
-      destino?.disconnect();
-      // fechar uma `AudioContext` que não é nossa derrubaria o áudio do resto
-      // da chamada junto
-      if (ctxProprio) await ctx?.close().catch(() => {});
-      fonte = null;
-      no = null;
-      destino = null;
-      ctx = null;
-      processador.processedTrack = undefined;
+  const cadeia: CadeiaDoMicrofone = {
+    name: "cadeia-do-microfone",
+
+    init: ({ track }: AudioProcessorOptions) =>
+      emFila(async () => {
+        desmontar();
+        await montar(track);
+      }),
+
+    restart: ({ track }: AudioProcessorOptions) =>
+      emFila(async () => {
+        desmontar();
+        await montar(track);
+      }),
+
+    destroy: () => emFila(async () => desmontar()),
+
+    setGanho: (valor) => {
+      opcoes.ganho = valor;
+      if (!ganho || !ctx) return;
+      const agora = ctx.currentTime;
+      // segura o valor de agora antes de agendar o próximo: sem isto, mexer no
+      // slider durante os 120 ms de subida deixaria a rampa antiga terminar por
+      // cima e o volume voltaria sozinho para o anterior
+      ganho.gain.cancelAndHoldAtTime?.(agora);
+      // rampa curta: um salto de ganho estala no fone de quem escuta
+      ganho.gain.setTargetAtTime(valor, agora, AJUSTE_S);
     },
   };
 
-  return processador;
+  return cadeia;
 }
