@@ -19,6 +19,7 @@ import CallSplit from "@/components/voice/CallSplit";
 import CallStage from "@/components/voice/CallStage";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
+import { botaoDeChamadaBloqueado, CHAMADA_EM_ANDAMENTO } from "@/stores/chamada-em-curso";
 import { dmTitle, useActiveDM } from "@/stores/dms";
 import { useBlockedIds, useFriends, useRelationship } from "@/stores/friends";
 import { useActiveSlice, useMessages } from "@/stores/messages";
@@ -47,6 +48,13 @@ export default function DMView() {
   const statuses = usePresence((s) => s.statuses);
   const startCall = useVoice((s) => s.startCall);
   const naChamada = useVoice((s) => s.channelId);
+  // o telefone e a câmera ficam cinzas enquanto a chamada **desta** conversa
+  // está saindo, tocando ou de pé: cada clique a mais refazia a chamada
+  // inteira (nova sala com a mesma identidade, tela compartilhada perdida).
+  // A mesma regra vale na store — ver `stores/chamada-em-curso.ts`
+  const statusDeVoz = useVoice((s) => s.status);
+  const fase = useVoice((s) => s.call.phase);
+  const canalDaChamada = useVoice((s) => s.call.channelId);
   const friendsOpen = useFriends((s) => s.open);
   // hook antes de qualquer `return` antecipado; o uso vem depois de `other`
   const bloqueados = useBlockedIds();
@@ -112,6 +120,10 @@ export default function DMView() {
 
   const title = dmTitle(active);
   const group = isGroupChannel(active);
+  const chamadaBloqueada = botaoDeChamadaBloqueado(
+    { channelId: naChamada, status: statusDeVoz, fase, canalDaChamada },
+    active.id,
+  );
   const other = !group ? active.others[0] : undefined;
   const bloqueado = !!other && bloqueados.has(other.id);
 
@@ -255,12 +267,16 @@ export default function DMView() {
                   <HeaderIcon
                     label="Iniciar chamada de voz"
                     active={naChamada === active.id}
+                    disabled={chamadaBloqueada}
+                    motivoDesabilitado={CHAMADA_EM_ANDAMENTO}
                     onClick={() => void startCall(active.id, false)}
                   >
                     <PhoneCall size={20} />
                   </HeaderIcon>
                   <HeaderIcon
                     label="Iniciar chamada de vídeo"
+                    disabled={chamadaBloqueada}
+                    motivoDesabilitado={CHAMADA_EM_ANDAMENTO}
                     onClick={() => void startCall(active.id, true)}
                   >
                     <Video size={20} />
