@@ -7,12 +7,17 @@ import {
   moveChannel,
 } from "@/stores/channel-order";
 
-function canal(id: string, position: number, categoryId: string | null = null): Channel {
+function canal(
+  id: string,
+  position: number,
+  categoryId: string | null = null,
+  type: Channel["type"] = "TEXT",
+): Channel {
   return {
     id,
     guildId: "g1",
     name: id,
-    type: "TEXT",
+    type,
     position,
     private: false,
     readOnly: false,
@@ -50,6 +55,40 @@ describe("groupByCategory", () => {
   it("não some com canal cuja categoria já não existe", () => {
     const grupos = groupByCategory([canal("orfao", 0, "sumida")], []);
     expect(grupos[0].channels.map((c) => c.id)).toEqual(["orfao"]);
+  });
+
+  /*
+    O defeito relatado: criar uma categoria fazia "Canais de Texto" e "Canais
+    de Voz" sumirem. A causa era desenho, não este cálculo — a barra lateral
+    inventava esses dois títulos por tipo enquanto `categories` estivesse
+    vazia, e desligava o modo na primeira categoria de verdade. Com as duas
+    padrão virando linhas de `Category`, é este agrupamento que passa a
+    responder, e ele não tem modo nenhum: bloco sem título no topo, depois uma
+    categoria por linha, sempre.
+  */
+  it("criar uma categoria nova não mexe nas duas padrão", () => {
+    const padrao = [categoria("texto", 0), categoria("voz", 1)];
+    const canais = [canal("geral", 0, "texto"), canal("Geral", 0, "voz", "VOICE")];
+
+    const antes = groupByCategory(canais, padrao);
+    expect(antes.map((g) => g.category?.id ?? null)).toEqual([null, "texto", "voz"]);
+
+    // a pessoa cria "Assuntos gerais": as duas continuam lá, com os canais
+    const depois = groupByCategory(canais, [...padrao, categoria("nova", 2)]);
+    expect(depois.map((g) => g.category?.id ?? null)).toEqual([null, "texto", "voz", "nova"]);
+    expect(depois[1].channels.map((c) => c.id)).toEqual(["geral"]);
+    expect(depois[2].channels.map((c) => c.id)).toEqual(["Geral"]);
+    expect(depois[3].channels).toEqual([]);
+  });
+
+  it("canal solto continua no topo, sem título, mesmo havendo categorias", () => {
+    const grupos = groupByCategory(
+      [canal("solto", 0), canal("dentro", 0, "texto")],
+      [categoria("texto", 0)],
+    );
+    expect(grupos[0].category).toBeNull();
+    expect(grupos[0].channels.map((c) => c.id)).toEqual(["solto"]);
+    expect(grupos[1].channels.map((c) => c.id)).toEqual(["dentro"]);
   });
 });
 

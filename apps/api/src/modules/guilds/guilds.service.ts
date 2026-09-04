@@ -31,6 +31,11 @@ import type {
   Role,
 } from "@streamz/shared";
 import { toChannelDTO, toGuildDTO, toPublicUser, toRoleDTO } from "../../common/dto";
+import {
+  CANAL_TEXTO_INICIAL,
+  CANAL_VOZ_INICIAL,
+  arrumarCategoriasPadrao,
+} from "./categorias-padrao";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { RealtimeService } from "../realtime/realtime.service";
@@ -86,9 +91,15 @@ export class GuildsService {
   ) {}
 
   /**
-   * Cria o servidor com o dono como membro OWNER, um canal #geral e os dois
-   * cargos que todo servidor tem: `@everyone` (o padrão de quem não tem cargo)
-   * e `Administrador` (o destino do atalho `GuildMember.role = ADMIN`).
+   * Cria o servidor com o dono como membro OWNER, o par de canais iniciais
+   * (#geral de texto e Geral de voz) dentro das duas categorias padrão, e os
+   * dois cargos que todo servidor tem: `@everyone` (o padrão de quem não tem
+   * cargo) e `Administrador` (o destino do atalho `GuildMember.role = ADMIN`).
+   *
+   * Os canais nascem soltos e quem os recolhe é `arrumarCategoriasPadrao` — a
+   * **mesma** rotina que conserta servidor antigo. Duas implementações do que é
+   * "um servidor recém-criado" acabariam divergindo; uma só, testada uma vez,
+   * não tem como.
    */
   async create(ownerId: string, name: string): Promise<GuildWithChannels> {
     const guild = await this.prisma.guild.create({
@@ -96,7 +107,12 @@ export class GuildsService {
         name,
         ownerId,
         members: { create: { userId: ownerId, role: "OWNER" } },
-        channels: { create: { name: "geral", type: "TEXT", position: 0 } },
+        channels: {
+          create: [
+            { name: CANAL_TEXTO_INICIAL, type: "TEXT", position: 0 },
+            { name: CANAL_VOZ_INICIAL, type: "VOICE", position: 1 },
+          ],
+        },
         roles: {
           create: [
             {
@@ -114,11 +130,18 @@ export class GuildsService {
           ],
         },
       },
-      include: { channels: true },
+    });
+    await arrumarCategoriasPadrao(this.prisma, guild.id);
+    // relê depois da arrumação: os canais devolvidos ao cliente já saem com o
+    // `categoryId` certo, senão a coluna desenharia os dois no bloco do topo
+    // até o primeiro refresh
+    const channels = await this.prisma.channel.findMany({
+      where: { guildId: guild.id },
+      orderBy: [{ position: "asc" }, { createdAt: "asc" }],
     });
     this.realtime.joinGuildRoom(ownerId, guild.id);
-    for (const c of guild.channels) this.realtime.joinChannelRooms([ownerId], c.id);
-    return { ...toGuildDTO(guild), channels: guild.channels.map((c) => toChannelDTO(c)) };
+    for (const c of channels) this.realtime.joinChannelRooms([ownerId], c.id);
+    return { ...toGuildDTO(guild), channels: channels.map((c) => toChannelDTO(c)) };
   }
 
   /** Servidores em que o usuário é membro, com "há novidade?" e menções. */
