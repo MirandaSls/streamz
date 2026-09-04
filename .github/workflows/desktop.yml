@@ -15,6 +15,12 @@
 # alvo. Compilar no Ubuntu não provaria nada. Runner Windows custa o dobro de
 # minutos em repositório privado, e é por isso que o `checar` tem filtro de
 # caminho e não builda a web — ele nunca roda num PR que não toca no desktop.
+#
+# As duas exclusões abaixo são desse mesmo bolso: o `README.md` e o
+# `Dockerfile.xwin` (a imagem que gera o instalador no Linux, §5.3 do processo)
+# vivem dentro de `apps/desktop/`, mas nenhum dos dois muda uma linha de Rust —
+# acordar meia hora de runner Windows por causa deles seria dinheiro jogado
+# fora. Quem mexe no Dockerfile prova a mudança rodando o build aqui mesmo.
 name: Desktop (Windows)
 
 on:
@@ -23,11 +29,15 @@ on:
   pull_request:
     paths:
       - "apps/desktop/**"
+      - "!apps/desktop/README.md"
+      - "!apps/desktop/Dockerfile.xwin"
       - ".github/workflows/desktop.yml"
   push:
     branches: [main]
     paths:
       - "apps/desktop/**"
+      - "!apps/desktop/README.md"
+      - "!apps/desktop/Dockerfile.xwin"
       - ".github/workflows/desktop.yml"
   workflow_dispatch:
     inputs:
