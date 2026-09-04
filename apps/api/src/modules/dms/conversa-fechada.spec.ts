@@ -117,7 +117,8 @@ function servico(ultimaMensagem: Record<string, Date | undefined> = {}) {
 
   const service = new DMsService(
     prisma,
-    {} as RealtimeService,
+    // reabrir a conversa avisa as outras sessões da conta (`CHANNEL_UPDATED`)
+    { emitToUser() {}, joinChannelRooms() {}, leaveChannelRooms() {} } as unknown as RealtimeService,
     readState,
     {} as FriendsService,
     {} as MessagesService,

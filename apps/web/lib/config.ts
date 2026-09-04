@@ -43,3 +43,33 @@ export const WS_URL = resolver(
   process.env.NEXT_PUBLIC_WS_URL ?? process.env.NEXT_PUBLIC_API_URL,
   DEV_API_URL,
 );
+
+/**
+ * Origem pública do app na web (`https://streamz.chat`) — o host que aparece
+ * nos links de convite que as pessoas colam no chat.
+ *
+ * Por que não `window.location.origin`: no app de desktop a origem é
+ * `http://tauri.localhost` (o WebView2 serve o export estático de dentro do
+ * app), e comparar com ela fazia o link `https://streamz.chat/invite/xxxx`
+ * deixar de ser reconhecido como convite — virava prévia genérica de link.
+ *
+ * Por que não uma variável nova: `NEXT_PUBLIC_WEB_URL` seria mais uma coisa a
+ * configurar em três lugares (CI da web, CI do desktop, Dockerfile) e um build
+ * antigo continuaria sem ela. `NEXT_PUBLIC_API_URL` **já** é embutida em todos
+ * os builds, inclusive no do desktop, e o padrão do produto é `api.<domínio>`:
+ * tirar o `api.` devolve o domínio público. Quando a variável explícita
+ * existir, ela ganha.
+ */
+export const WEB_URL = resolverWeb();
+
+function resolverWeb(): string {
+  const explicito = process.env.NEXT_PUBLIC_WEB_URL?.trim();
+  if (explicito) return semBarraFinal(explicito);
+  try {
+    const url = new URL(API_URL);
+    url.hostname = url.hostname.replace(/^api\./, "");
+    return url.origin;
+  } catch {
+    return "";
+  }
+}

@@ -23,6 +23,7 @@ import { useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
 import { useInbox } from "@/stores/messages-inbox";
+import { badgeDaCaixa, rotuloDoContador, somarNaoLidas } from "@/stores/nao-lidas";
 import { goToChannel, goToMessage } from "@/stores/messages-navigate";
 import { ui } from "@/stores/ui";
 
@@ -62,9 +63,17 @@ function rotuloDoCanal(c: Pick<InboxUnreadChannel, "channelName" | "channelType"
 
 export default function InboxPopover({
   tamanhoDoIcone = 20,
+  anelDaSuperficie = "ring-chat",
 }: {
-  /** o ícone é de 20px no cabeçalho e de 16px na barra de título do desktop. */
+  /** o ícone é de 20px no cabeçalho e de 19px na barra de título do desktop. */
   tamanhoDoIcone?: number;
+  /**
+   * Cor do anel do badge: é a **superfície atrás do ícone**, não uma cor nova
+   * (`ring-chat` no cabeçalho de Amigos, `ring-rail` na barra de título). O
+   * anel existe para descolar o vermelho do ícone, e só funciona se for
+   * exatamente o fundo — ver o badge do rail em `GuildRail`.
+   */
+  anelDaSuperficie?: string;
 } = {}) {
   const [aba, setAba] = useState<Aba>("naoLidas");
   /** "este servidor" filtra os não-lidos pelo servidor aberto. */
@@ -78,6 +87,17 @@ export default function InboxPopover({
   const load = useInbox((s) => s.load);
   const markAllRead = useInbox((s) => s.markAllRead);
   const pedidos = useFriends((s) => s.incoming.length);
+  // o badge lê o mesmo não-lido do rail e da lista de conversas, e não o
+  // `useInbox`: aquele é um retrato tirado quando o painel abre, e um ícone que
+  // só sabe da novidade depois de ser clicado não serve para nada
+  const mencoesEmServidores = useGuilds((s) => s.guilds.reduce((n, g) => n + g.mentionCount, 0));
+  const temServidorNaoLido = useGuilds((s) => s.guilds.some((g) => g.unread));
+  const naoLidasEmConversas = useDMs((s) => somarNaoLidas(s.channels));
+  const badge = badgeDaCaixa({
+    mencoes: mencoesEmServidores,
+    conversas: naoLidasEmConversas,
+    temServidorNaoLido,
+  });
 
   const mencoes = useMemo(
     () => mentions.filter((m) => !lidas.has(m.message.id)),
@@ -111,9 +131,10 @@ export default function InboxPopover({
 
   return (
     <HeaderPopover
-      label="Caixa de entrada"
+      label={rotuloDoBotao(badge)}
       title="Caixa de Entrada"
       icon={<Inbox size={tamanhoDoIcone} />}
+      badge={<BadgeDaCaixa estado={badge} anel={anelDaSuperficie} />}
       largura={LARGURA}
       altura={ALTURA}
       evento={EVENTO_CAIXA_DE_ENTRADA}
@@ -321,6 +342,66 @@ export default function InboxPopover({
 }
 
 // ── pedaços ────────────────────────────────────────────────────────────────
+
+/**
+ * Rótulo do botão — é o que o leitor de tela anuncia e o que o tooltip mostra.
+ * O selo é `aria-hidden`: um número solto ao lado de "Caixa de entrada" não
+ * diria do que ele é.
+ */
+function rotuloDoBotao(estado: ReturnType<typeof badgeDaCaixa>): string {
+  if (estado.tipo === "contagem") {
+    return `Caixa de entrada (${estado.total} não ${estado.total === 1 ? "lida" : "lidas"})`;
+  }
+  if (estado.tipo === "ponto") return "Caixa de entrada (novidades)";
+  return "Caixa de entrada";
+}
+
+/**
+ * O selo vermelho no canto do ícone da caixa de entrada.
+ *
+ * Mesma forma do badge do rail (`GuildRail`), porque é a mesma informação: o
+ * miolo tem 16px de altura e no mínimo 16 de largura, o número é 12px bold, e
+ * o anel de 3px fica **por fora** (`ring`, não `border`) — com borda o anel
+ * comeria o miolo e o "1" sairia cortado embaixo. Quando não há o que contar
+ * (só canal de servidor não lido) o miolo vira um ponto de 8px: o Discord não
+ * inventa número para o que ele mesmo não conta.
+ *
+ * O ícone medido no print (`Captura de tela 2026-09-03 203013.png`) tem 17×16
+ * de desenho dentro do botão de 24, e a barra tem 32 de altura — só 4px de
+ * folga acima do botão. Daí as duas medidas do selo, escolhidas renderizando e
+ * olhando: `top-0` (o rail usa `-top-1`, e aqui o anel passaria da borda da
+ * janela) e `-right-2`, que tira 8px do miolo para fora e é a mesma proporção
+ * de sobreposição do rail (14 de 40). Com o `-right-1` do rail, o selo cobria
+ * o ícone quase inteiro num botão de 24 e sobrava só o canto de baixo.
+ *
+ * `pointer-events-none`: o selo cobre o canto do botão, e o clique tem que
+ * continuar caindo no botão, não no número.
+ */
+function BadgeDaCaixa({
+  estado,
+  anel,
+}: {
+  estado: ReturnType<typeof badgeDaCaixa>;
+  anel: string;
+}) {
+  if (estado.tipo === "nada") return null;
+  if (estado.tipo === "ponto") {
+    return (
+      <span
+        aria-hidden="true"
+        className={`pointer-events-none absolute -right-1 top-0.5 h-2 w-2 rounded-full bg-red ring-[3px] ${anel}`}
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden="true"
+      className={`pointer-events-none absolute -right-2 top-0 grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[12px] font-bold leading-none text-white ring-[3px] ${anel}`}
+    >
+      {rotuloDoContador(estado.total)}
+    </span>
+  );
+}
 
 /** O botão quadrado de 32px do cabeçalho, que muda com a aba. */
 function BotaoDoCabecalho({

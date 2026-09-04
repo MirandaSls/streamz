@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aoChegarMensagem, rotuloDoContador, somarNaoLidas } from "./nao-lidas";
+import { aoChegarMensagem, badgeDaCaixa, rotuloDoContador, somarNaoLidas } from "./nao-lidas";
 
 describe("rotuloDoContador", () => {
   it("mostra o número até 99", () => {
@@ -45,5 +45,42 @@ describe("aoChegarMensagem", () => {
     expect(depois.unreadCount).toBe(2);
     expect(depois.mentionCount).toBe(0);
     expect(depois.lastMessageAt).toBe("2026-09-02T00:00:00.000Z");
+  });
+});
+
+describe("badgeDaCaixa", () => {
+  const vazio = { mencoes: 0, conversas: 0, temServidorNaoLido: false };
+
+  it("sem novidade nenhuma não há badge", () => {
+    expect(badgeDaCaixa(vazio)).toEqual({ tipo: "nada" });
+  });
+
+  it("menção em servidor e mensagem em conversa somam no mesmo número", () => {
+    expect(badgeDaCaixa({ ...vazio, mencoes: 2, conversas: 3 })).toEqual({
+      tipo: "contagem",
+      total: 5,
+    });
+  });
+
+  it("canal de servidor não lido sem menção é só um ponto", () => {
+    expect(badgeDaCaixa({ ...vazio, temServidorNaoLido: true })).toEqual({ tipo: "ponto" });
+  });
+
+  it("havendo o que contar, o número manda: ponto e número não se somam", () => {
+    expect(badgeDaCaixa({ mencoes: 1, conversas: 0, temServidorNaoLido: true })).toEqual({
+      tipo: "contagem",
+      total: 1,
+    });
+  });
+
+  it("o badge some quando tudo é marcado como lido", () => {
+    const depois = badgeDaCaixa(vazio);
+    expect(depois.tipo).toBe("nada");
+  });
+
+  it("número negativo (estado sujo) não vira badge", () => {
+    expect(badgeDaCaixa({ mencoes: -3, conversas: 0, temServidorNaoLido: false })).toEqual({
+      tipo: "nada",
+    });
   });
 });

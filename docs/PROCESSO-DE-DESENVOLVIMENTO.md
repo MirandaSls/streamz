@@ -187,6 +187,8 @@ O que ele faz, na ordem:
 | Amigos | `components/friends/FriendsPage.tsx`, `FriendRow.tsx`, `AddFriend.tsx` |
 | Caixa de entrada | `components/chat/InboxPopover.tsx` (+ `HeaderPopover.tsx`) |
 | Modal "Nova mensagem" | `components/modals/CreateGroupDMModal.tsx` |
+| Sessão do cliente | `lib/session.ts` (par de tokens + renovação), `lib/usuario-guardado.ts` (retrato da conta em uso), `stores/auth.ts` |
+| Multiconta ("Mudar de conta") | `lib/contas.ts` (o cofre: `localStorage` versionado com as contas do aparelho e a ativa; puro e testado), `lib/troca-de-contas.ts` (trocar, sair de uma conta, esquecer), `components/modals/GerenciarContasModal.tsx` e `AdicionarContaModal.tsx`, aberto pela linha "Mudar de conta" do `ProfilePopover.tsx` |
 | Ícones | `components/ui/icones.tsx` — **único** ponto de importação de ícone (§6.2) |
 | Voz (estado) | `stores/voice.ts`, `voice-saida.ts`, `voice-mover.ts`, `voice-retomada.ts`, `voice-reconexao.ts`, `voicePrefs.ts`, `voiceDevices.ts` |
 | Voz (UI) | `components/voice/*` — `VoiceLayer.tsx` (global), `AudioRemotoHost.tsx` (global), `VoiceGrid.tsx`, `CallStage.tsx`, `VoicePanel.tsx`, `VoiceHotkeys.tsx`, `ScreenSharePicker.tsx` |
@@ -249,6 +251,8 @@ Passo a passo, como foi feito para 0.0.6, 0.0.7 e 0.0.8:
 2. **Build assinado**: `gh workflow run desktop.yml --ref main -f release=true`.
    Leva ~30 minutos. Pegue o id em `gh run list --workflow=desktop.yml --limit 1`
    e acompanhe com um monitor de até 1 hora (um `until` em bash morre em 10).
+   **Ou, de graça, neste servidor:** `scripts/build-desktop-no-servidor.sh`
+   (~1 min com cache quente) — ver §5.3, inclusive o que só o Windows prova.
 3. **Publicar** (o script usado está em
    `scratchpad/publicar-0.0.8.sh` da sessão que fez; recrie se precisar):
    - `gh run download <id> -R MirandaSls/streamz -n streamz-windows -D <dir>`
@@ -330,6 +334,87 @@ da tela, como a do Discord — não uma tela dentro do app. O que existe:
   atualização não conseguiria criar a janela.
 - A rede de segurança quando o JS da janelinha não sobe continua sendo a
   bandeja ("Abrir Streamz"), porque a `main` nasce invisível.
+
+### 5.3 Instalador sem o Actions (build no próprio servidor)
+
+O runner `windows-latest` custa **2× minuto** em repositório privado e cada
+instalador leva ~35 min lá. Desde 2026-09-03 o mesmo `.exe` assinado sai deste
+servidor Linux, em Docker, sem gastar nada:
+
+```bash
+scripts/build-desktop-no-servidor.sh            # origin/main, assinado
+scripts/build-desktop-no-servidor.sh <ref>      # outro commit
+scripts/build-desktop-no-servidor.sh --sem-assinar
+```
+
+Sai em `.claude/saida-desktop/<versão>-<commit>/`: `Streamz_X.Y.Z_x64-setup.exe`
+e `.exe.sig`. Daí em diante o §5 segue igual (copiar para `updates/` e
+`downloads/`, preencher o `.env`, recriar a API).
+
+**Como funciona.** `apps/desktop/Dockerfile.xwin` monta `rust:1-bookworm` +
+`cargo-xwin` + clang/lld 21 + NSIS + node 22. O `cargo-xwin` baixa a CRT e o
+SDK do Windows dos endereços públicos da Microsoft e põe `clang-cl`/`lld-link`
+no lugar de `cl.exe`/`link.exe`. **O alvo é o mesmo do CI**
+(`x86_64-pc-windows-msvc`): mesma ABI, mesmo `+crt-static` do
+`.cargo/config.toml`, mesma `libwebrtc` pré-compilada que o `webrtc-sys` baixa
+no Windows. Não é mingw. O empacotador NSIS do `tauri-bundler` já roda no
+Linux sem gambiarra: fora do Windows ele chama o `makensis` do PATH e só baixa
+o plugin `nsis_tauri_utils.dll`. A assinatura do atualizador é minisign em
+Rust puro e funciona em qualquer sistema.
+
+**Números da primeira prova (commit `3221908`, versão 0.0.16):**
+
+| | |
+|---|---|
+| imagem Docker | ~2 min, 0,8 GB |
+| primeira rodada (tudo frio, baixa CRT+SDK do Windows) | ~17 min |
+| worktree nova, caches quentes | 3 min 36 s |
+| mesma worktree, incremental | ~1 min 20 s |
+| caches em volumes | `streamz-xwin-cache` 1,1 GB · `streamz-pnpm` 1,1 GB · `streamz-cargo` 0,8 GB · `streamz-xdg` 23 MB |
+| `target/` na worktree | 2,6 GB |
+| instalador gerado | 12 643 158 bytes |
+| instalador do CI (mesma versão) | 12 585 908 bytes (+0,45 %) |
+
+A assinatura foi conferida contra a **chave pública que está dentro do app**
+(`plugins.updater.pubkey` do `tauri.conf.json`): keyID igual e Ed25519
+`Signature Verified Successfully` sobre o blake2b do arquivo. É a mesma
+verificação que o atualizador faz no cliente.
+
+**Duas armadilhas que custaram rodadas** (estão comentadas no script e no
+Dockerfile; não desfaça sem ler):
+
+1. **A UCRT some no link.** O `tauri build` exporta `STATIC_VCRUNTIME=true`, e
+   com isso o `static_vcruntime.rs` do `tauri-build` emite
+   `/NODEFAULTLIB:libucrt.lib` + `/DEFAULTLIB:ucrt.lib` (CRT estática com UCRT
+   **dinâmica** — o que o Windows monta). O `cargo-xwin`, vendo `+crt-static`,
+   acrescenta `-nodefaultlib:ucrt -defaultlib:libucrt`, querendo a UCRT
+   estática. Um cancela o outro e o binário fica sem UCRT nenhuma: centenas de
+   `undefined symbol: cos/sin/strlen/_wassert`. A saída é passar a `ucrt.lib`
+   como **arquivo de entrada** (`-C link-arg=<caminho>/ucrt.lib`), que o
+   `/NODEFAULTLIB` não alcança. Sintoma enganoso: `cargo xwin build` sozinho
+   linka de boa, porque só o `tauri build` liga o `STATIC_VCRUNTIME`.
+2. **"Can't detect any appindicator library".** O `tauri-cli` tem um bloco
+   `#[cfg(target_os = "linux")]` que olha o **hospedeiro**, não o alvo: com a
+   feature `tray-icon` ligada ele exige o appindicator via `pkg-config` e entra
+   em pânico, mesmo compilando para Windows. O resultado só alimentaria as
+   dependências do `.deb` e do AppImage, que este build nunca gera. A imagem
+   responde com um `.pc` de fachada em vez de arrastar 146 pacotes de GTK.
+
+**O que este build NÃO prova.** Que o instalador instala e que o app abre —
+isso continua só o Windows dizendo. O `wine` não serve de substituto aqui: o
+stub do NSIS é PE32 (todo instalador NSIS é), então precisaria de wine 32 bits,
+e o app depende do WebView2, que o wine não tem. A recomendação prática: gerar
+aqui, e antes de publicar em `updates/` instalar uma vez numa máquina Windows.
+(O `file` mostra o stub do NSIS como PE32 — todo instalador NSIS é 32 bits; o
+binário do app que ele carrega dentro é PE32+ x86-64, e o do CI é igual.)
+O build também não é bit a bit reprodutível: duas rodadas do mesmo commit
+saíram com ~6 KB de diferença, coisa de timestamp dentro do LZMA do NSIS.
+O `desktop.yml` continua no repositório e continua sendo a referência — se algo
+divergir, ele é o desempate.
+
+Diferenças conhecidas e aceitas em relação ao artefato do CI: o NSIS é o 3.08
+do Debian (no Windows o bundler baixa o 3.11), e o `.exe` sai sem assinatura
+Authenticode — igual ao do CI, que também não tem certificado.
 
 ## 6. Paridade visual com o Discord (o método)
 
@@ -580,10 +665,37 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
 | #74 | Sons do Discord em todo caminho: mudo/surdo pelo botão do rodapé (o som foi para a store), entrar e transmissão de tela com arquivo, nada mais sintetizado |
 | #99 | GIF animado como foto de perfil e banner: o GIF pula o recorte (canvas achata a animação) e sobe inteiro, com teto de 8 MB, lado de 2048px, assinatura `GIF87a`/`GIF89a` conferida e content-type real no proxy |
 | #103 | Criar canal e categoria pela coluna, "+" sempre visível no cabeçalho, e mover alguém de canal de voz arrastando (`MOVE_MEMBERS`) |
+| #104 | Convite vira cartão com "Entrar" (reconhecido no host público **e** no host do app), `guild.joined` para todas as conexões da conta, logo do rail volta para Amigos, e o foco da janela do desktop volta a marcar a conversa aberta como lida |
+| #105 | Sons: um som não se sobrepõe a si mesmo em menos de 300 ms, um dono só do volume com fator por som, e badge de não lidas no ícone da caixa de entrada |
 | #112 | As duas categorias padrão viram categorias de verdade (§4.1): paravam de existir na primeira categoria criada, e não dava para renomear nem apagar |
 
 Desktop: 0.0.6 (#38 + #40 + #41), 0.0.7 (+ #42), 0.0.8 (tudo até #50),
 0.0.10 (até #64), 0.0.11 (até #71, primeira com a tela nativa), 0.0.12 (até #73).
+
+**Duas sessões da mesma conta.** O que muda a lista de servidores ou de
+conversas sai para a **sala do usuário** (`user:<id>`, `emitToUser`), onde estão
+todas as conexões — não para o socket que fez a requisição, que já tem a
+resposta HTTP na mão. Foi essa a falha do `redeem` até o #104: ele punha os
+sockets na sala do servidor e avisava o servidor do membro novo, mas não avisava
+o próprio usuário, e o desktop ficava com o rail velho até reiniciar. Vale para
+`guild.joined` (entrei/criei), `guild.removed` (saí/expulso/apagado),
+`channel.updated` (conversa aberta ou reaberta), amizade e `account.updated`.
+
+**O host do app de desktop não é o host público.** Dentro do Tauri a origem é
+`http://tauri.localhost` — o WebView2 serve o export estático de dentro do app.
+Qualquer regra que compare com `window.location.origin` (link de convite, link
+de mensagem, "é nosso?") tem que aceitar **os dois**: o host público, que vem de
+`WEB_URL` em `lib/config.ts` (derivado do `NEXT_PUBLIC_API_URL`, o único que
+todos os builds recebem), e o do próprio app.
+
+**O foco da janela é o gate de "marcar como lido".** `lib/na-tela.ts` decide o
+que está na tela; `janelaTemFoco()` decide se o usuário está olhando. No desktop
+a janela `main` nasce `visible: false` (§5.2), então o primeiro
+`document.hasFocus()` é `false` e quem mostra a janela é a janelinha. O estado
+de foco precisa aceitar sinal do `focus`/`blur` do DOM **e** do `onFocusChanged`
+do Tauri (`lib/foco-da-janela.ts`): fotografá-lo uma vez e esperar só pelo
+ouvinte nativo — que entra por `import()` assíncrono — travava tudo em "sem
+foco" pelo resto da sessão.
 
 **Sons.** `lib/ringtone.ts` e `lib/notification-sound.ts` tocam arquivos de
 `apps/web/public/sons/` (origem: `docs/Reference/audio/`, fora do git). **Nada
@@ -606,11 +718,63 @@ Mapeamento final (origem → nosso arquivo → quando toca):
 O som de mudo/surdo mora dentro de `useVoicePrefs.toggleMute`/`toggleDeafen`,
 não em quem chama: assim o botão do rodapé, a barra da call e o atalho soam
 igual, e fora de qualquer chamada também. Tocá-lo no `VoiceHotkeys` de novo
-dobrava o aviso — por isso ele lá só dispara a ação. O volume é o
-`outputVolume` das configurações (inclusive nos dois `<audio>` de toque, via
-`prepararToque`); o interruptor mestre `notificationSound` e o interruptor por
-som (`stores/sons.ts`) valem para todos; a prévia da aba Notificações passa
-`forcar` e ignora os dois.
+dobrava o aviso — por isso ele lá só dispara a ação. O interruptor mestre
+`notificationSound` e o interruptor por som (`stores/sons.ts`) valem para
+todos; a prévia da aba Notificações passa `forcar` e ignora os dois.
+
+**Duas regras que o #105 acrescentou, e que não devem ser desfeitas:**
+
+1. **Um som não se sobrepõe a si mesmo.** `tocarSom` é a única porta, e ela
+   engole um segundo pedido do **mesmo arquivo** dentro de 300 ms
+   (`JANELA_SEM_REPETIR_MS`, a janela do Discord). A guarda é por arquivo e
+   não por nome porque o recurso disputado é o elemento: `mudo`/`surdo` são o
+   mesmo `mudo.mp3`, `entrar`/`alguem-entrou` o mesmo `entrar.mp3`. Sons
+   *diferentes* continuam podendo soar juntos (sair + entrar ao trocar de
+   sala). Isso existe porque vários caminhos legítimos disparam o mesmo aviso
+   quase junto — o `useEffect` de `useRealtime` remontando (StrictMode em
+   dev), `connect()` chamado por `startCall`/`acceptCall`/retomada/reconexão
+   de mídia no mesmo canal, `pararTela` e o evento `telaEncerrada` do Rust — e
+   o `currentTime = 0` sobre o elemento em cache reiniciava o som no meio,
+   que é o que se ouvia como "toca várias vezes" e "varia de volume".
+   Duas sessões da mesma conta (desktop + navegador) continuam tocando uma
+   vez cada: a guarda é por cliente, e não há como ser diferente.
+2. **Um dono só do volume.** `volumeDoSom(nome)` = `outputVolume` das
+   configurações × o fator do som. **Ninguém mais passa volume** — nem
+   `tocarSomDeNotificacao`, nem a prévia da aba, nem `prepararToque` (os dois
+   `<audio loop>` de toque saem no mesmo `volumeDoSom("chamada")`). Antes eram
+   quatro contas diferentes e a mensagem tinha `1` como padrão. Os fatores,
+   decididos com o usuário: chamada 0,7; entrar/sair/alguém-entrou/
+   alguém-saiu/transmissão/movido 0,5; mensagem 0,4; mudo/desmudo/surdo/
+   não-surdo 0,35. `setSinkId` só é reaplicado quando a saída escolhida muda:
+   trocar a rota de um elemento tocando também dá salto de nível.
+
+`NomeDeSom` mora em `lib/ringtone.ts` (é a chave dos mapas de arquivo e de
+fator) e `stores/sons.ts` o reexporta.
+
+**Caixa de entrada (badge).** O ícone que abre a caixa mostra um selo vermelho
+quando há o que ler — na barra de título do desktop e no cabeçalho de Amigos
+do navegador, que são o **mesmo** `InboxPopover`. Conta o que é dirigido a mim
+(menção em servidor + não lida em conversa), igual ao contador no ícone do
+app; canal de servidor não lido sem menção vira um ponto de 8px, e número e
+ponto não se somam (`badgeDaCaixa`, em `stores/nao-lidas.ts`, com teste). Lê
+`useGuilds`/`useDMs`, **não** o `useInbox` — este é um retrato tirado ao abrir
+o painel, e um ícone que só descobre a novidade depois do clique não serve
+para nada; é também por isso que o selo some sozinho no "marcar tudo como
+lido". Medidas (renderizado com o CSS compilado e conferido no Pillow):
+miolo 16×16, número 12px bold, anel de 3px na cor da superfície (`ring-rail`
+na barra, `ring-chat` no cabeçalho), em `top-0 -right-2` sobre o botão de 24.
+O `-top-1 -right-1` do rail é para um item de 40: num botão de 24 dentro da
+barra de 32 ele cobria o ícone quase inteiro e o anel passava da borda da
+janela. Decisão do usuário: **só o badge** — sem faixa no topo e sem
+notificação extra.
+
+**Sons (2026-09-03, noite).** Quatro arquivos trocados pelos que o usuário
+colocou em `docs/Reference/audio/`: `enter.mp3` → `entrar.mp3` (eu entrei e
+alguém entrou), `notificacao.mp3` → `mensagem.mp3`, `discord_call.mp3` →
+`chamada.mp3` (toque e ringback), `discord_disconnect.mp3` → `sair.mp3` (eu saí
+e alguém saiu). Fatores de volume bem baixos por pedido dele: mensagem 0,15;
+chamada 0,35; mudo/desmudo/surdo/não-surdo 0,08; entrar/sair/transmissão/movido
+0,2 — sempre × `outputVolume`.
 
 ## 10. Pendências e o que não foi verificado
 

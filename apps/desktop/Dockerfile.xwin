@@ -1,0 +1,107 @@
+# Imagem que compila o instalador Windows do Streamz **no Linux**.
+#
+# Por que ela existe: o repositório é privado, e minuto de runner Windows no
+# GitHub Actions custa o dobro do de Linux. O `desktop.yml` continua sendo a
+# referência (é ele que roda no Windows de verdade), mas um build de ~35 min
+# num runner 2× a cada instalador é caro para uma coisa que este servidor
+# consegue fazer sozinho.
+#
+# O truque é o `cargo-xwin`: ele baixa o SDK do Windows e a CRT da Microsoft
+# (os mesmos pacotes que o Visual Studio instala, pelos endereços públicos do
+# instalador) e faz o papel do `cl.exe`/`link.exe` com `clang-cl` e
+# `lld-link`. O alvo continua sendo `x86_64-pc-windows-msvc` — o mesmo do CI —,
+# então a ABI, a CRT estática (`.cargo/config.toml`) e a `libwebrtc` do LiveKit
+# são as mesmas. Não é mingw.
+#
+# Do lado do empacotador: o `tauri-bundler` roda NSIS no Linux sem gambiarra
+# (`src/bundle/windows/nsis/mod.rs` chama `makensis` do PATH quando não está no
+# Windows e só baixa o plugin `nsis_tauri_utils.dll`). O que ele **não** faz
+# fora do Windows é MSI — o WiX é Windows-only —, por isso o build passa
+# `--bundles nsis`. A assinatura do atualizador é minisign em Rust puro e
+# funciona em qualquer sistema.
+#
+# Uso: `scripts/build-desktop-no-servidor.sh` (constrói a imagem e roda tudo).
+FROM rust:1-bookworm
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# clang 21, e não o 14 do bookworm, pelo mesmo motivo da imagem `rust-lk` de
+# checagem: a `libwebrtc` que o `webrtc-sys` baixa vem com o libc++ hermético
+# do Chromium, cujos cabeçalhos usam recursos que o clang antigo recusa.
+# `nsis` é o `makensis` que o tauri-bundler procura no PATH.
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        ca-certificates curl gnupg git xz-utils unzip zip python3 \
+        nsis nsis-common pkg-config file; \
+    curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key \
+        -o /etc/apt/trusted.gpg.d/apt.llvm.org.asc; \
+    echo "deb http://apt.llvm.org/bookworm/ llvm-toolchain-bookworm-21 main" \
+        > /etc/apt/sources.list.d/llvm21.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends clang-21 lld-21 llvm-21; \
+    rm -rf /var/lib/apt/lists/*
+
+# Os binários do apt.llvm.org moram em /usr/lib/llvm-21/bin com sufixo `-21` em
+# /usr/bin. O cargo-xwin e o crate `cc` procuram `clang-cl`, `lld-link`,
+# `llvm-lib` e `llvm-rc` sem sufixo, então o diretório da versão vem primeiro.
+ENV PATH=/usr/lib/llvm-21/bin:$PATH
+
+# --- Remendo para um bug do tauri-cli ao cruzar compilação -------------------
+# `tauri build` roda um bloco `#[cfg(target_os = "linux")]` que olha o
+# **hospedeiro**, não o alvo: se a feature `tray-icon` está ligada (a nossa
+# está, por causa da bandeja), ele exige o appindicator via `pkg-config` e
+# entra em pânico com "Can't detect any appindicator library" — mesmo
+# compilando para Windows. O resultado dessa consulta só alimenta as
+# dependências do `.deb` e os arquivos do AppImage, que este build nunca gera
+# (`--bundles nsis`), então nada disto entra no `.exe`.
+#
+# Instalar o `libayatana-appindicator3-dev` de verdade traria 146 pacotes (o
+# GTK2/GTK3 de desenvolvimento inteiro) para satisfazer uma checagem cujo
+# resultado é descartado. Este `.pc` responde a pergunta e para por aí.
+# (`--libs-only-L` só imprime o `-L` de diretório de sistema porque o próprio
+# tauri-cli chama o pkg-config com `PKG_CONFIG_ALLOW_SYSTEM_LIBS=1`.)
+RUN set -eux; \
+    mkdir -p /usr/lib/x86_64-linux-gnu/pkgconfig; \
+    printf '%s\n' \
+        'prefix=/usr' \
+        'libdir=/usr/lib/x86_64-linux-gnu' \
+        'includedir=/usr/include' \
+        '' \
+        'Name: ayatana-appindicator3' \
+        'Description: stub para a checagem de bandeja do tauri-cli em cross-compile' \
+        'Version: 0.5.92' \
+        'Libs: -L${libdir} -layatana-appindicator3' \
+        'Cflags: -I${includedir}' \
+        > /usr/lib/x86_64-linux-gnu/pkgconfig/ayatana-appindicator3-0.1.pc; \
+    PKG_CONFIG_ALLOW_SYSTEM_LIBS=1 pkg-config --libs-only-L ayatana-appindicator3-0.1
+
+ARG NODE_VERSION=22.23.2
+RUN set -eux; \
+    curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
+        | tar -xJ -C /usr/local --strip-components=1; \
+    corepack enable; \
+    node -v
+
+# O alvo é o mesmo do runner Windows. `rust-std` do msvc é só a biblioteca
+# padrão pré-compilada; quem linka é o lld-link.
+RUN rustup target add x86_64-pc-windows-msvc
+
+ARG CARGO_XWIN_VERSION=0.23.1
+RUN set -eux; \
+    curl -fsSL "https://github.com/rust-cross/cargo-xwin/releases/download/v${CARGO_XWIN_VERSION}/cargo-xwin-v${CARGO_XWIN_VERSION}.x86_64-unknown-linux-musl.tar.gz" \
+        | tar -xz -C /usr/local/bin cargo-xwin; \
+    cargo-xwin --version
+
+# Caches que valem entre rodadas (montados como volumes pelo script):
+#   /cache/cargo  — registry + git do cargo
+#   /cache/xwin   — SDK/CRT do Windows baixados pelo xwin (~1,5 GB)
+#   /cache/pnpm   — store do pnpm
+#   /cache/tauri  — NSIS/nsis_tauri_utils.dll que o bundler baixa
+ENV CARGO_HOME=/cache/cargo \
+    XWIN_CACHE_DIR=/cache/xwin \
+    PNPM_STORE_PATH=/cache/pnpm \
+    XDG_CACHE_HOME=/cache/xdg \
+    PATH=/cache/cargo/bin:/usr/lib/llvm-21/bin:/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+WORKDIR /repo

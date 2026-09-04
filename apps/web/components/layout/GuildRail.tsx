@@ -205,7 +205,7 @@ export default function GuildRail() {
   const joinByCode = useGuilds((s) => s.joinByCode);
   const createInvite = useGuilds((s) => s.createInvite);
   const leaveGuild = useGuilds((s) => s.leave);
-  const openDMs = useDMs((s) => s.openList);
+  const atualizarConversas = useDMs((s) => s.refreshList);
   const dms = useDMs((s) => s.channels);
   const activeDMId = useDMs((s) => s.activeId);
   const selectDM = useDMs((s) => s.select);
@@ -215,6 +215,7 @@ export default function GuildRail() {
   const t = useT();
   const porEscopo = useNotifications((s) => s.porEscopo);
   const markGuildRead = useChannels((s) => s.markGuildRead);
+  const sairDaColunaDeVoz = useChannels((s) => s.leaveVoice);
   const developerMode = useSettings((s) => s.developerMode);
   const meuId = useAuth((s) => s.user?.id);
 
@@ -238,6 +239,27 @@ export default function GuildRail() {
         d.id === naTela || (!!d.lastMessageAt && (!d.lastReadAt || d.lastMessageAt > d.lastReadAt)),
     )
     .slice(0, 6);
+
+  /**
+   * O logo volta para **Amigos** (a home), como o do Discord.
+   *
+   * Antes ele chamava `useDMs.openList`, que reabre a última conversa e só cai
+   * na página Amigos quando não há nenhuma — na prática o logo nunca levava
+   * para Amigos depois da primeira conversa aberta. Agora é o mesmo caminho do
+   * botão "Amigos" da coluna e do histórico (`stores/historico.ts`):
+   * `ui.setView("dm")` + `useFriends.setOpen(true)`.
+   *
+   * `leaveVoice` só tira o **painel** do canal de voz da coluna 3 (é um id de
+   * exibição, ver `stores/channels.ts`); a chamada em si vive na store de voz e
+   * continua tocando. A lista de conversas é atualizada porque estamos entrando
+   * no modo DM — era o que o `openList` fazia por último.
+   */
+  function irParaAmigos() {
+    ui.setView("dm");
+    sairDaColunaDeVoz();
+    fecharAmigos(true);
+    void atualizarConversas();
+  }
 
   /** Menu do "+": criar um servidor ou entrar com um código de convite. */
   function abrirMenuDeServidor(e: React.MouseEvent<HTMLButtonElement>) {
@@ -338,7 +360,7 @@ export default function GuildRail() {
         label="Mensagens diretas"
         active={view === "dm"}
         unread={dmUnread}
-        onClick={() => void openDMs()}
+        onClick={irParaAmigos}
       >
         {/* o símbolo da marca no lugar onde o Discord põe o logo dele */}
         <Marca size={22} />

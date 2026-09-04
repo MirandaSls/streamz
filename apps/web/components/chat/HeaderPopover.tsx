@@ -41,6 +41,7 @@ const BORDA = 8;
 export default function HeaderPopover({
   label,
   icon,
+  badge,
   title,
   tituloControle,
   contagem,
@@ -56,6 +57,13 @@ export default function HeaderPopover({
 }: {
   label: string;
   icon: ReactNode;
+  /**
+   * Selo desenhado por cima do canto do botão (o badge de não lidas da caixa
+   * de entrada). Fica **fora** do `HeaderIcon` porque este é o botão de toda a
+   * toolbar, e o selo é assunto de um painel só; a âncora é a caixa `relative`
+   * que já envolve o botão.
+   */
+  badge?: ReactNode;
   /** título do painel — vira o rótulo acessível quando há `tituloControle`. */
   title: string;
   /** substitui o título escrito (o seletor "Threads Ativas ▾"). */
@@ -173,6 +181,7 @@ export default function HeaderPopover({
       >
         {icon}
       </HeaderIcon>
+      {badge}
 
       {open && (
         <>
