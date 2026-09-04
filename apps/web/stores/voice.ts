@@ -41,6 +41,11 @@ import {
 import { tocarSom, tocarSomDeMovido } from "@/lib/ringtone";
 import { montarPedido } from "@/lib/seletor-de-tela";
 import {
+  aoFalharASupressao,
+  esquecerSupressaoIndisponivel,
+  supressaoIndisponivel,
+} from "@/lib/supressor-ruido";
+import {
   abrirMicrofone,
   atualizarMicrofone,
   definirMicrofoneAberto,
@@ -169,6 +174,16 @@ interface VoiceStoreState {
   screenAudio: boolean;
   /** ajustes de áudio da aba "Voz e vídeo" (persistidos no browser). */
   audio: AudioPrefs;
+  /**
+   * Por que a supressão **avançada** não está no ar, quando ela foi escolhida.
+   *
+   * Não é preferência e não se persiste: é um fato desta janela (a CSP, o
+   * navegador, o `/supressor/` que não subiu). Existe porque a falha era
+   * completamente calada — ver `SupressaoIndisponivel` em
+   * `lib/supressor-ruido.ts`. Enquanto vale, a captura volta a usar a supressão
+   * do navegador (`restricoesDeCaptura`).
+   */
+  erroDeSupressao: string | null;
 
   // ── preferências por participante (locais, não vão para o servidor) ──
   volumes: Record<string, number>;
@@ -553,6 +568,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     screenQuality: SCREEN_QUALITY_PADRAO,
     screenAudio: true,
     audio: carregarAudio(),
+    erroDeSupressao: null,
     volumes: {},
     silenciados: {},
     focado: null,
@@ -1084,6 +1100,13 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
           (k) => patch.processamento?.[k] !== anterior.processamento[k],
         );
       const mudouEntrada = patch.entrada !== undefined && patch.entrada !== anterior.entrada;
+      // escolher o nível de novo é pedir uma nova tentativa: sem esquecer o
+      // veredito anterior, quem viu "indisponível" uma vez nunca mais teria a
+      // avançada nesta aba — nem o aviso de que ela continua fora
+      if (patch.processamento?.ruido && patch.processamento.ruido !== anterior.processamento.ruido) {
+        esquecerSupressaoIndisponivel();
+        set({ erroDeSupressao: null });
+      }
       if (mudouProcessamento || mudouEntrada) void republicarMicrofone(audio);
     },
 
@@ -1545,10 +1568,14 @@ function rearmarDetectorLocal() {
 export function restricoesDeCaptura(audio: AudioPrefs): RestricoesDeMicrofone {
   const nivel = audio.processamento.ruido;
   const deviceId = useVoiceDevicesStore.getState().inputId;
+  // quem escolheu "Avançada" e não pode tê-la (CSP, navegador sem WebAssembly,
+  // `/supressor/` fora do ar) fica com a do navegador em vez de **nenhuma**:
+  // desligar as duas deixaria a pessoa pior do que antes de escolher
+  const avancadaCaiu = nivel === "avancada" && supressaoIndisponivel() !== null;
   return {
     ...(deviceId ? { deviceId } : {}),
     echoCancellation: audio.processamento.eco,
-    noiseSuppression: nivel === "padrao",
+    noiseSuppression: nivel === "padrao" || avancadaCaiu,
     autoGainControl: audio.processamento.ganho,
   };
 }
@@ -1557,7 +1584,7 @@ export function restricoesDeCaptura(audio: AudioPrefs): RestricoesDeMicrofone {
 function preferenciasDoMicrofone(audio: AudioPrefs): PreferenciasDoMicrofone {
   return {
     restricoes: restricoesDeCaptura(audio),
-    supressao: audio.processamento.ruido === "avancada",
+    supressao: audio.processamento.ruido === "avancada" && supressaoIndisponivel() === null,
     ganho: audio.entrada,
     aberto: useVoicePrefs.getState().micAberto(),
   };
@@ -1608,6 +1635,25 @@ async function republicarMicrofone(audio: AudioPrefs) {
       // o microfone pode ter sumido no meio da troca; o próximo toggle resolve
     });
 }
+
+/**
+ * A supressão avançada deixa de falhar em silêncio.
+ *
+ * Este é o defeito relatado: no desktop, ligar a "Avançada" não fazia efeito —
+ * na verdade fazia pior, publicava **silêncio** —, e não havia erro em lugar
+ * nenhum, porque o WebAssembly do RNNoise é instanciado dentro do
+ * `AudioWorkletGlobalScope`, onde a rejeição não sai. Agora a cadeia recusa
+ * antes (a sonda de `lib/supressor-ruido.ts`), avisa aqui, e a captura volta a
+ * pedir a supressão do navegador.
+ */
+aoFalharASupressao((motivo) => {
+  if (useVoice.getState().erroDeSupressao === motivo) return;
+  useVoice.setState({ erroDeSupressao: motivo });
+  ui.toast(`Supressão avançada indisponível: ${motivo}. Usando a do navegador.`, "error");
+  // sem isto a pessoa ficaria sem nenhuma das duas supressões: `avisar` chega
+  // no meio da montagem da cadeia, com as restrições da captura já aplicadas
+  void republicarMicrofone(useVoice.getState().audio);
+});
 
 /** A sala LiveKit corrente (ou null). Os componentes leem daqui, nunca a guardam. */
 export function salaAtual(): Room | null {

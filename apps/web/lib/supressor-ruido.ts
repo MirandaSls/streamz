@@ -51,6 +51,112 @@ import type { AudioProcessorOptions, TrackProcessor } from "livekit-client";
 const BASE = "/supressor";
 const TAXA_EXIGIDA = 48_000;
 
+/* ---------------------------------------------------------------- */
+/* A supressão avançada está disponível nesta janela?                */
+/* ---------------------------------------------------------------- */
+
+/**
+ * Por que existe uma sonda, e por que ela é a correção deste defeito.
+ *
+ * O `RnnoiseWorkletNode` **nunca falha visivelmente**: o construtor só cria o
+ * nó e manda o `.wasm` pela porta; quem instancia o WebAssembly é o processador
+ * lá dentro do `AudioWorkletGlobalScope`, dentro de um `async` sem `catch` e
+ * sem ninguém escutando. Se essa instanciação falhar, o processador fica
+ * `undefined` para sempre e o `process()` do pacote devolve **silêncio** — não
+ * o som cru:
+ *
+ * ```js
+ * process(i, o) { ...|| !this.processor || this.processor.process(i[0], o[0]), true }
+ * ```
+ *
+ * Foi exatamente o que acontecia no desktop. A CSP da janela do Tauri era
+ * `script-src 'self' 'unsafe-inline'`, e no Chromium **compilar WebAssembly
+ * exige `'wasm-unsafe-eval'`** nessa mesma diretiva. Medido num Chromium
+ * headless servindo o `out/` exportado, com e sem a CSP do
+ * `tauri.conf.json` (ruído branco em 48 kHz, RMS antes/depois):
+ *
+ * | CSP | `addModule` | `WebAssembly.compile` | RMS depois/antes |
+ * |---|---|---|---|
+ * | sem | ok | ok | 0,79 (o RNNoise come ~2 dB do ruído branco) |
+ * | a do desktop | ok | `CompileError: ...violates... 'unsafe-eval'` | **0,0000** |
+ *
+ * Ou seja: no desktop, ligar a "Avançada" não deixava de suprimir — deixava a
+ * pessoa **muda**, sem um erro sequer no console. A CSP ganhou
+ * `'wasm-unsafe-eval'`; a sonda existe para o caso geral (uma CSP futura, um
+ * navegador sem WebAssembly, o `/supressor/` que não subiu no deploy): em vez
+ * de montar um nó que devolve silêncio, ela recusa antes, a cadeia continua
+ * **sem** o RNNoise e o usuário é avisado (`aoFalharASupressao`).
+ */
+export class SupressaoIndisponivel extends Error {
+  constructor(
+    readonly motivo: string,
+    opcoes?: { cause?: unknown },
+  ) {
+    super(`Supressão avançada indisponível: ${motivo}`, opcoes);
+    this.name = "SupressaoIndisponivel";
+  }
+}
+
+/** Módulo wasm válido e vazio (só o cabeçalho): compilá-lo custa microssegundos. */
+const WASM_VAZIO = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
+
+/** O motivo da última recusa, ou `null` enquanto tudo funciona. */
+let indisponivel: string | null = null;
+let relator: ((motivo: string) => void) | null = null;
+
+/**
+ * Por que a supressão avançada não está disponível — de forma **síncrona**,
+ * para `restricoesDeCaptura` poder devolver a supressão do navegador no lugar
+ * (ficar sem nenhuma das duas seria pior do que antes de escolher "Avançada").
+ */
+export function supressaoIndisponivel(): string | null {
+  return indisponivel;
+}
+
+/** Quem mostra a falha ao usuário. A store de voz liga o toast aqui. */
+export function aoFalharASupressao(fn: ((motivo: string) => void) | null) {
+  relator = fn;
+}
+
+/** Só para os testes: esquece a sonda e o motivo. */
+export function esquecerSupressaoIndisponivel() {
+  indisponivel = null;
+  sonda = null;
+}
+
+function avisar(motivo: string) {
+  indisponivel = motivo;
+  relator?.(motivo);
+}
+
+function motivoDe(e: unknown): string {
+  return e instanceof SupressaoIndisponivel ? e.motivo : `falha inesperada (${String(e)})`;
+}
+
+let sonda: Promise<void> | null = null;
+
+/**
+ * Compila um módulo vazio só para saber se **esta janela** pode compilar
+ * WebAssembly. É a única forma de descobrir na thread principal o que
+ * aconteceria dentro do worklet, onde o erro não sai.
+ */
+function garantirWebAssembly(): Promise<void> {
+  sonda ??= (async () => {
+    if (typeof WebAssembly === "undefined" || typeof WebAssembly.compile !== "function") {
+      throw new SupressaoIndisponivel("este navegador não tem WebAssembly");
+    }
+    try {
+      await WebAssembly.compile(WASM_VAZIO);
+    } catch (cause) {
+      throw new SupressaoIndisponivel(
+        "a política de segurança da janela bloqueia WebAssembly",
+        { cause },
+      );
+    }
+  })();
+  return sonda;
+}
+
 /**
  * Rampa de subida do ganho ao ligar a cadeia.
  *
@@ -214,24 +320,60 @@ export function cadeiaDoMicrofone(inicial: {
     liberarContextoDeCaptura();
   }
 
-  /** O nó do RNNoise, já com o modelo carregado. Só existe com a supressão ligada. */
+  /**
+   * O nó do RNNoise, já com o modelo carregado. Só existe com a supressão
+   * ligada, e só depois de a sonda dizer que este navegador compila
+   * WebAssembly — ver `SupressaoIndisponivel`. Cada falha vira uma
+   * `SupressaoIndisponivel` com o motivo em português, porque é ele que a
+   * pessoa vai ler no toast.
+   */
   async function criarNoDoModelo(c: AudioContext) {
+    await garantirWebAssembly();
     const [{ RnnoiseWorkletNode, wasmBinary }] = await Promise.all([
-      carregarModelo(),
-      garantirWorklet(c),
+      carregarModelo().catch((cause: unknown) => {
+        throw new SupressaoIndisponivel(`o modelo não carregou (${BASE}/rnnoise*.wasm)`, {
+          cause,
+        });
+      }),
+      garantirWorklet(c).catch((cause: unknown) => {
+        throw new SupressaoIndisponivel(
+          `o worklet não carregou (${BASE}/rnnoise-worklet.js)`,
+          { cause },
+        );
+      }),
     ]);
     // mono: o microfone é uma fonte só, e cada canal a mais é uma inferência
     // a mais por quadro
-    return new RnnoiseWorkletNode(c, { maxChannels: 1, wasmBinary }) as typeof no;
+    const criado = new RnnoiseWorkletNode(c, { maxChannels: 1, wasmBinary }) as typeof no;
+    // o worklet pode morrer depois de montado (o `process` lançou): sem isto,
+    // o nó continua no grafo devolvendo silêncio e ninguém fica sabendo
+    if (criado) {
+      criado.onprocessorerror = () => avisar("o worklet do RNNoise parou de rodar");
+    }
+    return criado;
   }
 
   async function montar(track: MediaStreamTrack) {
     const c = usarContextoDeCaptura();
     montada = true;
     montadas += 1;
-    // o modelo é carregado ANTES de o grafo existir: publicar a faixa e só
-    // então esperar o wasm é o que mandava alguns segundos de áudio cru
-    const noDoModelo = opcoes.supressao ? await criarNoDoModelo(c) : null;
+    // O modelo é carregado ANTES de o grafo existir: publicar a faixa e só
+    // então esperar o wasm é o que mandava alguns segundos de áudio cru.
+    //
+    // E a falha dele **não** derruba a cadeia: o ganho também é dela, e um nó
+    // de RNNoise que não subiu devolve silêncio (ver `SupressaoIndisponivel`),
+    // o que é pior do que publicar a voz sem supressão. Quem conta à pessoa o
+    // que houve é `avisar` → toast.
+    let noDoModelo: typeof no = null;
+    if (opcoes.supressao) {
+      try {
+        noDoModelo = await criarNoDoModelo(c);
+        // subiu: uma recusa anterior (outra aba, outro contexto) não vale mais
+        indisponivel = null;
+      } catch (e) {
+        avisar(motivoDe(e));
+      }
+    }
     // suspenso pela cadeia anterior: sem isto o grafo nasce parado e não sai som
     if (c.state === "suspended") await c.resume().catch(() => {});
 
