@@ -25,7 +25,7 @@ import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useSettingsRoute } from "@/hooks/useSettingsRoute";
 import { useAuth } from "@/stores/auth";
-import { useActiveChannel, useChannels, useVoiceChannel } from "@/stores/channels";
+import { useActiveChannel, useVoiceChannel } from "@/stores/channels";
 import { useActiveDM } from "@/stores/dms";
 import { useEmojis } from "@/stores/emojis";
 import { useGuilds } from "@/stores/guilds";
@@ -53,7 +53,6 @@ export default function AppPage() {
   const activeChannel = useActiveChannel();
   const activeDM = useActiveDM();
   const voiceChannel = useVoiceChannel();
-  const leaveVoice = useChannels((s) => s.leaveVoice);
   // o balão nasce aberto e é lembrado canal a canal (ver `vista-do-canal-de-voz`)
   const voiceChatOpen = chatDoCanalAberto(chatDaCallPorCanal, voiceChannel?.id);
   const threadParentId = useMessages((s) => s.threadParentId);
@@ -136,14 +135,13 @@ export default function AppPage() {
                       // remontar por canal zera a tela para a sala certa
                       key={voiceChannel.id}
                       channel={voiceChannel}
-                      onLeave={leaveVoice}
                     />
                   }
                   chat={<ChatView incorporado />}
                 />
               ) : (
                 <div className="flex min-w-0 flex-1 flex-col">
-                  <VoicePanel key={voiceChannel.id} channel={voiceChannel} onLeave={leaveVoice} />
+                  <VoicePanel key={voiceChannel.id} channel={voiceChannel} />
                 </div>
               )}
             </main>

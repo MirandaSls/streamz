@@ -9,17 +9,25 @@ import {
 } from "@/components/voice/vista-do-canal-de-voz";
 
 /**
- * A **vista do canal de voz**: o que o clique num canal de voz abre *sem*
- * entrar na chamada.
+ * A **vista do canal de voz**: o canal de voz aberto na coluna *sem* que eu
+ * esteja na chamada.
  *
- * Antes daqui, clicar num canal de voz conectava na hora e esta tela só existia
- * como antessala de quem tinha caído. A print
- * `docs/Reference/Captura de tela 2026-09-04 102429.png` (1919×1079, 1:1 — a
- * coluna de canais mede 294 na print e 294 aqui) mostra o Discord fazendo o
- * contrário: o canal "Geral" está selecionado, ninguém entrou, e o palco
- * inteiro é um convite. Entrar num canal de voz é uma decisão barulhenta — o
- * microfone abre para outras pessoas —, e um clique de barra lateral não é
- * consentimento suficiente para ela.
+ * Medida na print `docs/Reference/Captura de tela 2026-09-04 102429.png`
+ * (1919×1079, 1:1 — a coluna de canais mede 294 na print e 294 aqui): o canal
+ * "Geral" está selecionado, ninguém entrou, e o palco inteiro é um convite.
+ *
+ * **Como se chega aqui** (a tabela mora em `stores/voice-entrada.ts` e
+ * `stores/voice-saida.ts`):
+ *
+ * - pelo **balão de conversa** da linha do canal, que abre a conversa dele com
+ *   esta vista ao lado;
+ * - por um **link** — caixa de entrada, busca rápida, as setas do histórico;
+ * - **desligando** com o canal ainda aberto: em vez de fechar a coluna, ela
+ *   volta para cá, com o botão de entrar de novo.
+ *
+ * O que **não** traz para cá é o clique na linha do canal: ali o Discord entra
+ * na chamada, e nós também (era o defeito da 0.0.22, em que o clique parava
+ * nesta tela). O botão daqui é para quem chegou por um dos três caminhos acima.
  *
  * **Medidas da print** (`getpixel`, tinta a tinta):
  *

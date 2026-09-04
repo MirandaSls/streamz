@@ -1,6 +1,6 @@
 /**
- * A conta da **vista do canal de voz** — a tela que o clique num canal de voz
- * abre *sem* entrar na chamada (ver `VistaDoCanalDeVoz`).
+ * A conta da **vista do canal de voz** — o canal de voz na coluna sem que eu
+ * esteja na chamada (ver `VistaDoCanalDeVoz`, que lista como se chega lá).
  *
  * Módulo à parte pelo mesmo motivo do `call-split-layout.ts`: são decisões de
  * texto e de estado, testáveis sem montar componente nenhum. Duas moram aqui:
@@ -10,13 +10,13 @@
  *
  * Medido na print `docs/Reference/Captura de tela 2026-09-04 102429.png`
  * (1919×1079, 1:1 — a coluna de canais mede 294px na print e 294px aqui, ver
- * `ChannelSidebar`), servidor "Notas", canal de voz "Geral" clicado sem entrar.
+ * `ChannelSidebar`), servidor "Notas", canal de voz "Geral" aberto sem entrar.
  */
 
 /**
  * O painel de conversa do canal de voz nasce **aberto**.
  *
- * Na print o canal acabou de ser clicado e a coluna da direita já está lá, com
+ * Na print o canal acabou de ser aberto e a coluna da direita já está lá, com
  * o balão do cabeçalho aceso. Ele era `false` desde o #108, quando a conversa
  * do canal de voz ainda era uma novidade que interrompia o palco; agora o palco
  * vazio não tem o que interromper — o que a pessoa quer ver ao abrir um canal

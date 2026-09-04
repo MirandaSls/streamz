@@ -191,8 +191,9 @@ export default function VoiceChannelMembers({
           onManter={cancelarFechar}
           onAssistir={() => {
             // fora da sala não há faixa para assinar: entrar no canal é parte
-            // do "assistir" (o `VoicePanel` conecta ao montar)
-            if (!estouAqui && canal) select(canal);
+            // do "assistir", e por isso este `select` vai como `"clique"` —
+            // é a mesma intenção da linha do canal (ver `voice-entrada.ts`)
+            if (!estouAqui && canal) select(canal, "clique");
             assistir(previa.user.id);
             setPrevia(null);
           }}
