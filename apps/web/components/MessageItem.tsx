@@ -33,6 +33,8 @@ import {
   youtubeVideoId,
 } from "@streamz/shared";
 import LinkEmbedCard, { useLinkEmbed } from "@/components/chat/LinkEmbedCard";
+import InviteEmbed from "@/components/chat/InviteEmbed";
+import { codigoDeConviteDaUrl } from "@/lib/links-de-convite";
 import PainelFlutuante from "@/components/chat/PainelFlutuante";
 import TooltipReacao from "@/components/chat/TooltipReacao";
 import { useMarcadorNaoLido } from "@/components/chat/marcador-nao-lido";
@@ -323,7 +325,11 @@ export default function MessageItem({
     unconfirmed || sistema || message.suppressEmbeds ? null : extractFirstUrl(message.content);
   const videoId = url ? youtubeVideoId(url) : null;
   const imagemDireta = url && !videoId && isDirectImageUrl(url) ? url : null;
-  const embed = useLinkEmbed(videoId || imagemDireta ? null : url);
+  // convite do nosso servidor vira cartão com botão "Entrar", não prévia de
+  // link — ver `lib/links-de-convite.ts` (o host do app de desktop não é o
+  // host público, e era isso que fazia o cartão sumir lá)
+  const codigoDeConvite = url ? codigoDeConviteDaUrl(url) : null;
+  const embed = useLinkEmbed(videoId || imagemDireta || codigoDeConvite ? null : url);
 
   // abrir a edição pelo `↑` do composer não passa por `startEdit`: o rascunho
   // precisa ser semeado quando o estado da store vira este id
@@ -721,6 +727,7 @@ export default function MessageItem({
             />
           </button>
         )}
+        {codigoDeConvite && <InviteEmbed code={codigoDeConvite} />}
         {embed && <LinkEmbedCard embed={embed} />}
 
         {message.reactions.length > 0 && (

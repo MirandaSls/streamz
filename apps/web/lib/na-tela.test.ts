@@ -125,3 +125,25 @@ describe("canal exibido agora", () => {
     ).toBeNull();
   });
 });
+
+/**
+ * Os três cenários do defeito relatado ("mensagem não marca como lida com a
+ * conversa aberta"), escritos como o usuário os descreve. A regra em si não
+ * mudou; o que estava errado era a resposta de `janelaTemFoco()` no desktop
+ * (ver `lib/foco-da-janela.ts`), e estes testes fixam o contrato que ela
+ * alimenta.
+ */
+describe("mensagem que chega com a conversa aberta", () => {
+  it("DM aberta e janela em foco → lida", () => {
+    expect(canalNaTela(DM, CONVERSA_ABERTA, { visivel: true, comFoco: true })).toBe(true);
+  });
+
+  it("DM aberta e janela atrás → não lida (e é o que faz notificar)", () => {
+    expect(canalNaTela(DM, CONVERSA_ABERTA, { visivel: true, comFoco: false })).toBe(false);
+  });
+
+  it("Amigos aberto por cima da conversa → não lida, mesmo com foco", () => {
+    const amigos = { ...CONVERSA_ABERTA, amigosAberta: true };
+    expect(canalNaTela(DM, amigos, { visivel: true, comFoco: true })).toBe(false);
+  });
+});
