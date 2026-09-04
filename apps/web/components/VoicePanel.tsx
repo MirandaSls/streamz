@@ -125,13 +125,18 @@ export default function VoicePanel({
               toolbar do canal de texto: aqui o vizinho é o balão de 20, e os
               dois saem do mesmo quadro do acervo, então 20 é o que dá a MESMA
               tinta dos dois glifos deste cabeçalho. */}
-          <IconeDeCabecalho
-            label={listaVisivel ? "Ocultar lista de membros" : "Mostrar lista de membros"}
-            active={listaVisivel}
-            onClick={() => alternarMembros(channel.id)}
-          >
-            <Users size={20} />
-          </IconeDeCabecalho>
+          {/* Decisão do usuário (2026-09-04): dentro do PALCO da call só fica
+              o balão da conversa; a lista de membros tem interruptor apenas
+              na vista do canal sem entrar. */}
+          {!conectado && (
+            <IconeDeCabecalho
+              label={listaVisivel ? "Ocultar lista de membros" : "Mostrar lista de membros"}
+              active={listaVisivel}
+              onClick={() => alternarMembros(channel.id)}
+            >
+              <Users size={20} />
+            </IconeDeCabecalho>
+          )}
           {/* sem sino aqui: no print o cabeçalho do canal de voz tem só o
               balão do chat. Notificação e silêncio continuam no menu de
               contexto do canal, na barra lateral, que é de onde o Discord as
