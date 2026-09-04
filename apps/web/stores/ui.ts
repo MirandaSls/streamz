@@ -2,8 +2,10 @@ import { create } from "zustand";
 import type { GuildChannelType, PublicUser } from "@streamz/shared";
 // ── h-moderacao ──
 import type { ServerSettingsTab } from "@/components/settings/server/tabs";
+import { cliqueNosMembros } from "@/components/voice/paineis-da-call";
 import {
   alternarChatDoCanal,
+  chatDoCanalAberto,
   definirChatDoCanal,
   esquecerChatDoCanal,
   type ChatPorCanal,
@@ -303,6 +305,16 @@ interface UIState {
   setView: (view: "guild" | "dm") => void;
   toggleMembers: () => void;
   /**
+   * O ícone de pessoas do cabeçalho do **canal de voz**.
+   *
+   * Não é o `toggleMembers`: ali a coluna da direita é disputada com a conversa
+   * da call, e só cabe um painel (ver `components/voice/paineis-da-call.ts`).
+   * Com a conversa aberta, este clique mostra a lista **fechando a conversa** —
+   * um `toggleMembers` cru ligaria `membersOpen` sem tirar a conversa da frente
+   * e nada mudaria na tela. Sem `channelId` vale para o canal de voz aberto agora.
+   */
+  alternarMembrosNaCall: (channelId?: string | null) => void;
+  /**
    * Abre a conversa da call sem alternar (o balão do canal na barra lateral).
    * Sem `channelId` vale para o canal de voz aberto agora.
    */
@@ -373,6 +385,19 @@ export const useUI = create<UIState>((set, get) => ({
 
   setView: (view) => set({ view }),
   toggleMembers: () => set((s) => ({ membersOpen: !s.membersOpen })),
+  alternarMembrosNaCall: (channelId) =>
+    set((s) => {
+      const canal = channelId ?? canalDeVozAtual();
+      const acao = cliqueNosMembros(chatDoCanalAberto(s.chatDaCallPorCanal, canal), s.membersOpen);
+      return {
+        membersOpen: acao.membros,
+        // fechar é gravar `false` no canal, não esquecer a preferência: quem
+        // voltar a este canal encontra a conversa fechada, como deixou
+        chatDaCallPorCanal: acao.fecharChat
+          ? definirChatDoCanal(s.chatDaCallPorCanal, canal, false)
+          : s.chatDaCallPorCanal,
+      };
+    }),
   toggleVoiceChat: (channelId) =>
     set((s) => ({
       chatDaCallPorCanal: alternarChatDoCanal(s.chatDaCallPorCanal, channelId ?? canalDeVozAtual()),

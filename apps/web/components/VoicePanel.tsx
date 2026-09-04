@@ -1,10 +1,11 @@
 "use client";
 
 import { useRef } from "react";
-import { AlertTriangle, MessageSquare, RotateCw, UserPlus, Volume2 } from "@/components/ui/icones";
+import { AlertTriangle, MessageSquare, RotateCw, UserPlus, Users, Volume2 } from "@/components/ui/icones";
 import type { Channel, NotificationLevel } from "@streamz/shared";
 import Tooltip from "@/components/ui/Tooltip";
 import IconesDoCanto from "@/components/voice/IconesDoCanto";
+import { membrosVisiveis } from "@/components/voice/paineis-da-call";
 import VistaDoCanalDeVoz from "@/components/voice/VistaDoCanalDeVoz";
 import { chatDoCanalAberto } from "@/components/voice/vista-do-canal-de-voz";
 import VoiceControls from "@/components/voice/VoiceControls";
@@ -63,6 +64,13 @@ export default function VoicePanel({
   // o balão é lembrado por canal, e nasce aberto (ver `vista-do-canal-de-voz`)
   const chatAberto = useUI((s) => chatDoCanalAberto(s.chatDaCallPorCanal, channel.id));
   const toggleVoiceChat = useUI((s) => s.toggleVoiceChat);
+  // a lista de membros do servidor divide a coluna da direita com a conversa da
+  // call, e só cabe um painel (ver `paineis-da-call.ts`): o botão espelha o que
+  // está **na tela**, não o `membersOpen` guardado
+  const listaVisivel = useUI((s) =>
+    membrosVisiveis(chatDoCanalAberto(s.chatDaCallPorCanal, channel.id), s.membersOpen),
+  );
+  const alternarMembros = useUI((s) => s.alternarMembrosNaCall);
 
   const palco = useRef<HTMLDivElement>(null);
   const { telaCheia, alternar } = useTelaCheia(palco);
@@ -107,6 +115,22 @@ export default function VoicePanel({
             onClick={() => toggleVoiceChat(channel.id)}
           >
             <MessageSquare size={20} />
+          </IconeDeCabecalho>
+          {/* **Membros também aqui.** O canal de voz é um canal do servidor
+              como outro qualquer, e a lista da coluna da direita é a mesma do
+              canal de texto (`MemberList`: cargos, Disponível, Offline e a
+              sub-linha "Em voz"). Sem este botão ela não tinha interruptor
+              nenhum dentro da call — quem a desligasse num canal de texto
+              ficava sem caminho de volta. `Users` a 20 e não a 22 como na
+              toolbar do canal de texto: aqui o vizinho é o balão de 20, e os
+              dois saem do mesmo quadro do acervo, então 20 é o que dá a MESMA
+              tinta dos dois glifos deste cabeçalho. */}
+          <IconeDeCabecalho
+            label={listaVisivel ? "Ocultar lista de membros" : "Mostrar lista de membros"}
+            active={listaVisivel}
+            onClick={() => alternarMembros(channel.id)}
+          >
+            <Users size={20} />
           </IconeDeCabecalho>
           {/* sem sino aqui: no print o cabeçalho do canal de voz tem só o
               balão do chat. Notificação e silêncio continuam no menu de

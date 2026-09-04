@@ -19,6 +19,7 @@ import ProfilePopoverHost from "@/components/ui/ProfilePopover";
 import TelaDeAbertura from "@/components/ui/TelaDeAbertura";
 import Toasts from "@/components/ui/Toasts";
 import CallSplit from "@/components/voice/CallSplit";
+import { membrosVisiveis } from "@/components/voice/paineis-da-call";
 import VoiceLayer from "@/components/voice/VoiceLayer";
 import { chatDoCanalAberto } from "@/components/voice/vista-do-canal-de-voz";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -55,6 +56,12 @@ export default function AppPage() {
   const voiceChannel = useVoiceChannel();
   // o balão nasce aberto e é lembrado canal a canal (ver `vista-do-canal-de-voz`)
   const voiceChatOpen = chatDoCanalAberto(chatDaCallPorCanal, voiceChannel?.id);
+  // ...e disputa a coluna da direita com a lista de membros, que no canal de voz
+  // é a mesma do canal de texto. Só cabe um painel: a regra (medida nas prints
+  // `2026-09-04 102422`/`102429`) está em `paineis-da-call.ts`. Em canal de
+  // texto não há conversa de call, `voiceChatOpen` é falso e isto vira o próprio
+  // `membersOpen` — por isso a linha é uma só para os dois casos.
+  const listaDeMembros = membrosVisiveis(voiceChatOpen, membersOpen);
   const threadParentId = useMessages((s) => s.threadParentId);
   // a busca ocupa a coluna 4 (como no Discord) e tem prioridade sobre thread e membros
   const buscaAberta = useMessages((s) => s.searchResults !== null || s.searching);
@@ -151,14 +158,16 @@ export default function AppPage() {
 
           {/* Coluna 4: busca, thread OU lista de membros — uma por vez. Não há
               caso especial de voz: o canal de voz é um canal aberto como outro
-              qualquer, com busca e thread na conversa dele. */}
+              qualquer, com busca e thread na conversa dele, e a mesma lista de
+              membros do servidor — que ali cede a vez à conversa da call quando
+              as duas estão ligadas (`paineis-da-call.ts`). */}
           {activeChannel &&
             (buscaAberta ? (
               <SearchPanel guildId={activeChannel.guildId} />
             ) : threadParentId ? (
               <ThreadPanel channelId={activeChannel.id} />
             ) : (
-              membersOpen && <MemberList />
+              listaDeMembros && <MemberList />
             ))}
         </>
       )}
