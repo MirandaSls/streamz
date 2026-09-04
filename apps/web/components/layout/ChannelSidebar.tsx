@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/icones";
 import {
   Permission,
+  channelLinkPath,
   channelNotificationScope,
   guildNotificationScope,
   isMuted,
@@ -41,6 +42,7 @@ import { MENU_WIDTH, MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
 import Cronometro from "@/components/voice/Cronometro";
 import VoiceChannelMembers from "@/components/voice/VoiceChannelMembers";
 import { useAuth } from "@/stores/auth";
+import { urlPublica } from "@/lib/links-do-app";
 import { canalVisivel } from "@/stores/categoria-colapso";
 import { useCategories } from "@/stores/categories";
 import { groupByCategory, type CategoryGroup } from "@/stores/channel-order";
@@ -387,9 +389,11 @@ export default function ChannelSidebar() {
       {
         label: "Copiar link do canal",
         icon: <Link2 size={18} />,
+        // origem pública e caminho do contrato: montar a URL à mão com
+        // `window.location.origin` copiava `http://tauri.localhost/...` no desktop
         onSelect: () =>
           void navigator.clipboard?.writeText(
-            `${window.location.origin}/app/channels/${channel.guildId}/${channel.id}`,
+            urlPublica(channelLinkPath(channel.guildId, channel.id)),
           ),
       },
       { separator: true },

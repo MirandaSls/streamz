@@ -35,6 +35,7 @@ import {
 import LinkEmbedCard, { useLinkEmbed } from "@/components/chat/LinkEmbedCard";
 import InviteEmbed from "@/components/chat/InviteEmbed";
 import { codigoDeConviteDaUrl } from "@/lib/links-de-convite";
+import { urlPublica } from "@/lib/links-do-app";
 import PainelFlutuante from "@/components/chat/PainelFlutuante";
 import TooltipReacao from "@/components/chat/TooltipReacao";
 import { useMarcadorNaoLido } from "@/components/chat/marcador-nao-lido";
@@ -353,8 +354,9 @@ export default function MessageItem({
   }
 
   function copiarLink() {
-    const caminho = messageLinkPath(message.guildId, message.channelId, message.id);
-    const url = typeof window === "undefined" ? caminho : `${window.location.origin}${caminho}`;
+    // a origem é a pública, não a da janela: no desktop `window.location.origin`
+    // é `http://tauri.localhost` e o link copiado não abria para mais ninguém
+    const url = urlPublica(messageLinkPath(message.guildId, message.channelId, message.id));
     void navigator.clipboard?.writeText(url);
     ui.toast("Link da mensagem copiado");
   }

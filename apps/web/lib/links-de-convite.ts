@@ -21,7 +21,7 @@
  * convite colado como `http://` e como `https://` é o mesmo convite.
  */
 
-import { WEB_URL } from "@/lib/config";
+import { origensDoApp, urlPublica } from "@/lib/links-do-app";
 
 /**
  * `/invite/<código>`, com barra final opcional. O código é o alfabeto dos
@@ -70,8 +70,9 @@ export function codigoDeConvite(bruto: string, origens: readonly string[]): stri
  * regra (acima) e o ambiente.
  */
 export function origensDeConvite(): string[] {
-  const daJanela = typeof window === "undefined" ? "" : (window.location?.origin ?? "");
-  return [WEB_URL, daJanela].filter(Boolean);
+  // é a mesma lista de "origens nossas" que o "copiar link" usa; ela mora em
+  // `links-do-app` porque convite não é o único link que sai daqui para o mundo
+  return origensDoApp();
 }
 
 /** Atalho para quem só tem a URL em mãos (o caminho normal na interface). */
@@ -93,6 +94,5 @@ export function codigoDeConviteDaUrl(bruto: string): string | null {
  * **reconhecer** o link público; aqui ele aprende a **escrever**.
  */
 export function urlDeConvite(codigo: string, origens = origensDeConvite()): string {
-  const base = origens.find(Boolean) ?? "";
-  return `${base}/invite/${codigo}`;
+  return urlPublica(`/invite/${codigo}`, origens);
 }

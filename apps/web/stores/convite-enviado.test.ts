@@ -55,6 +55,7 @@ beforeEach(() => {
         position: 0,
         private: false,
         readOnly: false,
+        syncedWithCategory: false,
         lastMessageAt: "2026-09-04T10:00:00.000Z",
         lastReadAt: "2026-09-04T10:00:00.000Z",
         mentionCount: 0,
