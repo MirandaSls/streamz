@@ -647,7 +647,9 @@ export default function ChannelSidebar() {
           <button
             type="button"
             data-channel-button
-            onClick={() => select(channel)}
+            // `"clique"`: num canal de VOZ isto **entra na chamada**, sem
+            // antessala nem prompt (ver `stores/voice-entrada.ts`)
+            onClick={() => select(channel, "clique")}
             aria-current={active ? "true" : undefined}
             className={`flex h-full min-w-0 flex-1 items-center gap-2.5 text-left ${unread ? "font-semibold" : "font-medium"}`}
           >
@@ -687,7 +689,9 @@ export default function ChannelSidebar() {
                 <button
                   type="button"
                   onClick={() => {
-                    select(channel);
+                    // `"balao"`: abre o canal **sem** entrar — é aqui que a
+                    // `VistaDoCanalDeVoz` aparece, com a conversa ao lado
+                    select(channel, "balao");
                     abrirVoiceChat();
                   }}
                   aria-label={`Abrir a conversa de ${name}`}

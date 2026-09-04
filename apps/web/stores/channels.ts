@@ -8,6 +8,12 @@ import { useCategories } from "@/stores/categories";
 import { errorMessage, leaveChannel } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
 import { useMessages } from "@/stores/messages";
+import {
+  ORIGEM_PADRAO,
+  deveEntrarNaChamada,
+  type OrigemDaAbertura,
+} from "@/stores/voice-entrada";
+import { useVoice } from "@/stores/voice";
 
 /**
  * Canais do servidor ativo: lista, canal de texto aberto, canal de voz em que
@@ -53,7 +59,11 @@ interface ChannelsState {
 
   loadForGuild: (guildId: string) => Promise<void>;
   clear: () => void;
-  select: (channel: Channel) => void;
+  /**
+   * Abre o canal na coluna 3. `origem` diz de onde veio o pedido, e é o que
+   * decide se um canal de VOZ também entra na chamada (ver `voice-entrada.ts`).
+   */
+  select: (channel: Channel, origem?: OrigemDaAbertura) => void;
   leaveVoice: () => void;
   create: (guildId: string, input: CreateChannelInput) => Promise<boolean>;
   rename: (channel: Channel) => Promise<void>;
@@ -141,7 +151,7 @@ export const useChannels = create<ChannelsState>((set, get) => {
       useMessages.getState().closeChannel();
     },
 
-    select: (channel) => {
+    select: (channel, origem = ORIGEM_PADRAO) => {
       // Canal de voz também é canal aberto: ele tem chat de texto próprio, e a
       // coluna 3 empilha o palco em cima da conversa dele (ver `CallSplit`).
       // Só `voiceChannelId` muda de significado entre os dois casos — é ele que
@@ -152,6 +162,23 @@ export const useChannels = create<ChannelsState>((set, get) => {
       });
       void useMessages.getState().open(channel.id);
       void get().markRead(channel.id);
+
+      // **Clicar no canal de voz entra na chamada** — é o clique do Discord, e
+      // é este o caminho que o #131 tinha perdido junto com o `useEffect` de
+      // montagem do `VoicePanel`. Quem não é clique (balão, link, F5) só abre a
+      // vista; a tabela inteira está em `voice-entrada.ts`. A leitura da store
+      // de voz é em tempo de clique, como o `ui.ts` faz com esta aqui: o laço de
+      // importação entre as duas nunca chega a ser avaliado.
+      const voz = useVoice.getState();
+      if (
+        deveEntrarNaChamada({
+          origem,
+          ehCanalDeVoz: channel.type === "VOICE",
+          jaConectadoAqui: voz.channelId === channel.id,
+        })
+      ) {
+        void voz.connect(channel);
+      }
     },
 
     leaveVoice: () => set({ voiceChannelId: null }),

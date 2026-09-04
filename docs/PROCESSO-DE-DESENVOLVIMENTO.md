@@ -699,10 +699,13 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
 - **Áudio remoto é global**: `AudioRemotoHost` em `VoiceLayer` renderiza um
   `<audio>` por participante da sala da store, independente da tela. A grade
   (`VoiceGrid`) é só visual. Sem isso, trocar de DM silenciava a call.
-- `sairDaSalaAtual(motivo)` fecha a sala e avisa o gateway; `disconnect` é o
-  caminho do usuário e também fecha a coluna. `connect`, `startCall` e
-  `acceptCall` usam o primeiro (trocar de canal de voz não pode desmontar o
-  painel que pediu a conexão).
+- `sairDaSalaAtual(motivo)` fecha a sala e avisa o gateway; **se a coluna do
+  canal fecha junto é uma decisão à parte**, por motivo e contexto, em
+  `stores/voice-saida.ts` (`decidirSaida`, com teste). `connect`, `startCall` e
+  `acceptCall` passam por ele com `troca-de-sala` — trocar de canal de voz não
+  pode desmontar o painel que pediu a conexão —, e `disconnect` com `usuario`,
+  que **mantém** a coluna quando o canal de servidor continua aberto (a vista do
+  canal volta no lugar da chamada).
 - Atalhos de mudo/surdo (Ctrl+Shift+M/D) têm um dono só: `VoiceHotkeys`.
 - **"Testar microfone" muta e ensurdece de verdade.** O teste é o mesmo nos
   três lugares (`PopoverDeRuido`, aba "Voz e vídeo", `VoiceSettingsPanel`), num
@@ -896,17 +899,54 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
     de 18 a **20** da borda e o nome a 13 dele, em 16px: são os mesmos 49 do
     cabeçalho do palco, e é por isso que os dois nomes ficam na mesma linha.
 
-- **Clicar num canal de voz NÃO entra na chamada** — abre a *vista do canal*
-  (`VistaDoCanalDeVoz`, com a conta pura em `vista-do-canal-de-voz.ts`). O
-  `VoicePanel` tinha um `useEffect` que chamava `connect` na montagem, e a
-  antessala só aparecia para quem tinha caído. A print
-  `2026-09-04 102429` (1919×1079, **1:1** — a coluna de canais mede 294 nela e
-  294 aqui, então nada de escala) mostra o Discord fazendo o contrário: canal
-  "Geral" selecionado, ninguém em voz, e o palco inteiro é um convite. Também é
-  o certo fora da paridade: entrar abre o microfone para outras pessoas, e um
-  clique de barra lateral não é consentimento para isso. Quem conecta agora é o
-  botão; a retomada depois do F5 (`retomarSeReconectando`) e o `movidoDeCanal`
-  continuam chamando `connect` pela store, sem passar pelo painel.
+- **Clicar num canal de voz ENTRA na chamada**, direto — sem prompt e sem tela
+  intermediária. A *vista do canal* (`VistaDoCanalDeVoz`) continua existindo,
+  para os outros caminhos. Foram três versões até acertar, e as duas primeiras
+  erraram pelo mesmo motivo:
+  - até o #130 quem conectava era um `useEffect` de **montagem** do
+    `VoicePanel`. Clicar entrava (certo), mas qualquer coisa que montasse o
+    painel também entrava: link da caixa de entrada, busca rápida, setas do
+    histórico, F5.
+  - o #131 tirou o efeito e pôs a vista no lugar de tudo. Aí **o clique deixou
+    de entrar**, e foi o defeito que o usuário relatou na 0.0.22 ("ao clicar na
+    call não está entrando; antes entrava").
+  - agora a intenção viaja com o clique: `useChannels.select(canal, origem)`, e
+    a tabela pura está em `stores/voice-entrada.ts` (`deveEntrarNaChamada`, com
+    teste). Montar um painel é consequência; **origem** é intenção.
+
+  | origem | quem chama | entra? |
+  |---|---|---|
+  | `clique` | a linha do canal na coluna (`ChannelSidebar`) e o "Assistir" da miniatura (`VoiceChannelMembers`) | **sim** |
+  | `balao` | o balão de conversa da mesma linha | não — vista + conversa |
+  | `navegacao` | `goToChannel` (link, caixa de entrada, busca rápida, histórico), canal recém-criado, "voltar para a call" | não |
+  | `retomada` | `retomarSeReconectando` depois do F5 | não — ela já conectou (ou decidiu não conectar) |
+
+  O padrão de quem não declara origem é `navegacao`: um call site novo que
+  esqueceu deve errar para o lado de **não** abrir o microfone de ninguém.
+  Clicar de novo no canal em que já se está não reconecta — é a idempotência do
+  #122, escrita na decisão pura além da guarda do `connect` (uma segunda `Room`
+  com a mesma identidade derruba a primeira, e leva a tela compartilhada junto).
+  O `movidoDeCanal` continua chamando `connect` pela store, sem passar por aqui.
+
+- **A vista do canal aparece quando o canal é aberto sem entrar**: pelo balão da
+  linha, por um link, ou **depois de desligar** com o canal ainda aberto. Este
+  último é a mudança em `decidirSaida("usuario")`: ele fechava a coluna sempre, e
+  quem desligava caía num `ChatView` de largura inteira que ninguém pediu, sem
+  caminho de volta a não ser clicar no canal outra vez. Agora
+  `canalDeServidorAberto` (canal de **servidor** que ainda é o `voiceChannelId`)
+  mantém a coluna de pé, e o `VoicePanel` volta a desenhar a vista — com o botão
+  de entrar de novo, como no Discord. Em conversa direta não há coluna de canal,
+  e `expulso` continua fechando: a vista com "entrar" ali seria um convite a
+  derrubar o aparelho de onde a conta acabou de entrar. As razões e os testes
+  estão em `stores/voice-saida.ts` e `voice-saida.test.ts`. Como consequência, o
+  `VoicePanel` perdeu a prop `onLeave` (que fechava a coluna por fora, passando
+  por cima da decisão): quem manda na coluna é o `decidirSaida`, num lugar só.
+
+- **A vista em si** (`VistaDoCanalDeVoz`, com a conta pura em
+  `vista-do-canal-de-voz.ts`) foi medida na print `2026-09-04 102429`
+  (1919×1079, **1:1** — a coluna de canais mede 294 nela e 294 aqui, então nada
+  de escala): canal "Geral" selecionado, ninguém em voz, o palco inteiro é um
+  convite.
   - **Medidas do palco** (`getpixel`, tinta a tinta): palco 1057×999
     (x 375..1431, y 32..1031); nome do canal em **32px** (caixa alta 22);
     "Ninguém está em voz" em **14px** (caixa alta 10); botão **211×40** com raio

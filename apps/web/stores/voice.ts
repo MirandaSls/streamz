@@ -508,12 +508,20 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
    * `disconnect` é o caso "o usuário quis sair".
    */
   function sairDaSalaAtual(motivo: MotivoDeSaida, destinoEmServidor = false) {
-    const { channelId, call } = get();
+    const { channelId, guildId, call } = get();
     // sair da call encerra o teste: ele existe para dizer "o outro lado vai te
     // ouvir assim", e sem outro lado não há o que testar. Antes do resto, para
     // o mudo/surdo voltarem ao que eram enquanto o gateway ainda escuta
     encerrarTeste(false);
-    const decisao = decidirSaida(motivo, destinoEmServidor);
+    const decisao = decidirSaida(motivo, {
+      destinoEmServidor,
+      // o canal de voz que estou deixando ainda é o que está na coluna: há uma
+      // `VistaDoCanalDeVoz` para onde voltar, em vez de cair no chat de largura
+      // inteira. Numa chamada de conversa (`guildId` nulo) não há coluna, e
+      // depois de navegar para outro canal o `voiceChannelId` já é outro
+      canalDeServidorAberto:
+        !!guildId && !!channelId && useChannels.getState().voiceChannelId === channelId,
+    });
     // expulso não tem som: o que a pessoa ouve é o toast explicando
     if (channelId && decisao.avisaGateway) tocarSom("sair");
     // `fecharSala` tira os ouvintes antes de desconectar, então o
@@ -525,8 +533,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       emit(WS_EVENTS.VOICE_LEAVE, {});
       if (call.phase !== "idle") emit(WS_EVENTS.CALL_END, { channelId });
     }
-    // o painel do canal de voz é a coluna 3 inteira: sair da call sem fechá-lo
-    // deixaria o usuário preso numa sala vazia
+    // fechar aqui é o que devolve a coluna 3 ao chat do canal; quando a decisão
+    // é manter, o `VoicePanel` continua montado e desenha a vista do canal
     if (decisao.fechaColuna) useChannels.getState().leaveVoice();
     set({
       channelId: null,
@@ -652,7 +660,10 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         // com os canais do servidor já na tela, abre o palco; senão a barra do
         // rodapé mostra a conexão e o clique no canal encontra a sala já ocupada
         const canal = useChannels.getState().channels.find((c) => c.id === alvo.channelId);
-        if (canal) useChannels.getState().select(canal);
+        // `"retomada"`: quem decidiu reconectar foi o `chamadaARetomar` logo
+        // acima. O `select` aqui só põe o canal na tela — se ele entrasse por
+        // conta própria, um F5 fora da carência viraria uma entrada nova
+        if (canal) useChannels.getState().select(canal, "retomada");
         return;
       }
       // a chamada de conversa é a tela em que a pessoa estava: volta para ela

@@ -30,23 +30,28 @@ import { useVoice } from "@/stores/voice";
  * do que ela expõe — o que permite ao painel ser fechado (trocar de canal de
  * texto) sem derrubar a call, que é como o Discord se comporta.
  *
- * **Clicar no canal NÃO conecta.** O painel tinha um efeito que chamava
- * `connect` na montagem, e a antessala só aparecia para quem tinha caído. A
- * print `2026-09-04 102429` mostra o Discord fazendo o contrário: o canal de
- * voz "Geral" está selecionado, o palco é o degradê com o nome do canal,
- * "Ninguém está em voz" e um botão "Entrar na chamada de voz" — e a conversa do
- * canal já aberta à direita. Faz sentido além da paridade: entrar abre o
- * microfone para outras pessoas, e um clique de barra lateral não é
- * consentimento para isso. Quem conecta agora é o botão (ver
- * `VistaDoCanalDeVoz`); a retomada depois do F5 e o "movido de canal"
- * continuam vindo da store, sem passar por aqui.
+ * **Quem entra na chamada não é este componente.** Ele já teve um `useEffect`
+ * que chamava `connect` na montagem, e o problema era que montar não é uma
+ * intenção: um link da caixa de entrada, a busca rápida, as setas do histórico e
+ * o F5 montavam o painel e entravam na sala sem que ninguém tivesse pedido. O
+ * #131 tirou o efeito — e levou junto o clique, que *era* o pedido. Agora a
+ * decisão viaja com a origem do clique até a store
+ * (`useChannels.select(canal, "clique")` → `connect`, ver
+ * `stores/voice-entrada.ts`), e este painel só desenha o que a store diz.
+ *
+ * Por isso ele tem **duas caras**, e `conectadoEm === channel.id` é o que as
+ * separa:
+ *
+ * - **na sala**: cabeçalho com filete, a grade (`VoiceGrid`) e os controles;
+ * - **fora dela**: a `VistaDoCanalDeVoz` — degradê, nome do canal, quantas
+ *   pessoas estão em voz e o botão de entrar. É a tela da print
+ *   `2026-09-04 102429`, e chega-se a ela pelo balão da linha do canal, por um
+ *   link, ou **desligando** com o canal ainda aberto (`decidirSaida`).
  */
 export default function VoicePanel({
   channel,
-  onLeave,
 }: {
   channel: Pick<Channel, "id" | "guildId" | "name" | "type">;
-  onLeave?: () => void;
 }) {
   const status = useVoice((s) => s.status);
   const erro = useVoice((s) => s.erro);
@@ -71,17 +76,6 @@ export default function VoicePanel({
   // parado seria esconder a única coisa que a tela tem a dizer, e a print
   // mostra o cabeçalho lá.
   const molduraVisivel = !aqui || visivel;
-
-  // Desligar ainda **fecha a coluna** (`decidirSaida("usuario").fechaColuna`,
-  // em `voice-saida.ts`, e este `onLeave`): quem sai cai no `ChatView` de
-  // largura inteira do mesmo canal. No Discord ele voltaria para a vista do
-  // canal, com o botão de entrar de novo — agora que existe uma vista para
-  // voltar, essa decisão vale ser revisitada. Não foi mexida aqui: ela mora num
-  // módulo com teste próprio e vale um PR só dela.
-  async function sair() {
-    await disconnect();
-    onLeave?.();
-  }
 
   return (
     <div
@@ -196,7 +190,11 @@ export default function VoicePanel({
         )}
 
         {conectado && (
-          <VoiceControls oculto={!visivel} moldura={daMoldura} onLeave={() => void sair()} />
+          // Desligar não fecha mais a coluna quando o canal continua aberto:
+          // `decidirSaida("usuario")` mantém o painel de pé e ele volta à vista
+          // do canal, com o botão de entrar de novo. Fechar era o que jogava
+          // quem desligava num `ChatView` de largura inteira que ninguém pediu.
+          <VoiceControls oculto={!visivel} moldura={daMoldura} onLeave={() => void disconnect()} />
         )}
       </div>
     </div>
