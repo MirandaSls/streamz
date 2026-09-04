@@ -24,9 +24,11 @@ import {
  * abre a mesma janelinha em `?modo=atualizar`. Aqui ficam só as duas coisas que
  * a barra precisa: se existe versão nova (para a setinha aparecer) e o clique.
  *
- * A checagem se repete a cada {@link INTERVALO_DE_CHECAGEM}: sem isso a setinha
- * seria decoração: a janelinha já checou na abertura, e quem fica com o app
- * aberto o dia inteiro nunca veria a versão publicada depois do almoço.
+ * A checagem se repete a cada {@link INTERVALO_DE_CHECAGEM} e também quando a
+ * janela ganha foco (com folga de {@link FOLGA_ENTRE_CHECAGENS}): sem isso a
+ * setinha seria decoração — a janelinha já checou na abertura, e quem fica com
+ * o app aberto o dia inteiro nunca veria a versão publicada depois do almoço.
+ * Eram 30 min; o usuário publicou e ficou esperando a setinha (2026-09-04).
  */
 export type EstadoDaAtualizacao = "nada" | "disponivel";
 
@@ -40,7 +42,9 @@ export interface Atualizacao {
 }
 
 /** De quanto em quanto tempo perguntar de novo se há versão nova (ms). */
-const INTERVALO_DE_CHECAGEM = 30 * 60 * 1000;
+const INTERVALO_DE_CHECAGEM = 5 * 60 * 1000;
+/** Ao ganhar foco, não perguntar de novo antes disto (ms). */
+const FOLGA_ENTRE_CHECAGENS = 60 * 1000;
 
 /**
  * A janelinha de atualização é a mesma da abertura, com as medidas do
@@ -96,11 +100,27 @@ export function useAtualizacao(): Atualizacao {
       }
     };
 
-    void verificar();
-    const relogio = window.setInterval(() => void verificar(), INTERVALO_DE_CHECAGEM);
+    let ultima = 0;
+    const verificarComFolga = () => {
+      const agora = Date.now();
+      if (agora - ultima < FOLGA_ENTRE_CHECAGENS) return;
+      ultima = agora;
+      void verificar();
+    };
+    verificarComFolga();
+    const relogio = window.setInterval(verificarComFolga, INTERVALO_DE_CHECAGEM);
+    // voltar para o app depois de um tempo fora é a hora natural de perguntar
+    const aoFocar = () => verificarComFolga();
+    const aoVisivel = () => {
+      if (document.visibilityState === "visible") verificarComFolga();
+    };
+    window.addEventListener("focus", aoFocar);
+    document.addEventListener("visibilitychange", aoVisivel);
     return () => {
       vivo = false;
       window.clearInterval(relogio);
+      window.removeEventListener("focus", aoFocar);
+      document.removeEventListener("visibilitychange", aoVisivel);
     };
   }, []);
 
