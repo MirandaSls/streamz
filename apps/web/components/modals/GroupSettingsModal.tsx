@@ -130,7 +130,7 @@ export default function GroupSettingsModal({ channelId }: { channelId: string })
                 }
               }}
               placeholder={dm.others.map((u) => u.username).join(", ")}
-              className="h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
+              className="h-10 w-full rounded-[3px] bg-void px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
             />
             <p className="mt-1 text-xs text-txt-muted">
               Vazio = usar os nomes dos participantes.

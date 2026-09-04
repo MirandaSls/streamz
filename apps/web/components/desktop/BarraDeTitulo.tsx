@@ -92,7 +92,7 @@ function Barra() {
         data-tauri-drag-region
         aria-label="Barra de título"
         style={{ height: ALTURA }}
-        className="fixed inset-x-0 top-0 z-40 flex select-none items-center bg-rail text-txt-secondary"
+        className="fixed inset-x-0 top-0 z-40 flex select-none items-center bg-panel text-txt-secondary"
       >
         {/* ← → : o histórico interno do app, esmaecidas quando não há para onde ir */}
         <div data-tauri-drag-region className="flex items-center pl-4">
@@ -117,8 +117,8 @@ function Barra() {
 
         <div data-tauri-drag-region className="ml-auto flex h-full items-center">
           <div data-tauri-drag-region className="flex items-center gap-3 pr-4">
-            {/* o anel do badge é o fundo da barra (`bg-rail`), não uma cor nova */}
-            <InboxPopover tamanhoDoIcone={19} anelDaSuperficie="ring-rail" />
+            {/* o anel do badge é o fundo da barra (`bg-panel`), não uma cor nova */}
+            <InboxPopover tamanhoDoIcone={19} anelDaSuperficie="ring-panel" />
             {/* sem central de ajuda no MVP: o mesmo botão da página Amigos */}
             <HeaderIcon label="Ajuda" disabled>
               <HelpCircle size={18} />
@@ -312,7 +312,7 @@ function useTitulo(): { icone: ReactNode; nome: string } {
         /* eslint-disable-next-line @next/next/no-img-element */
         <img src={guild.iconUrl} alt="" className="h-4 w-4 rounded-full object-cover" />
       ) : (
-        <span className="grid h-4 w-4 place-items-center rounded-full bg-panel text-[8px] font-bold leading-none text-txt-secondary">
+        <span className="grid h-4 w-4 place-items-center rounded-full bg-hov text-[8px] font-bold leading-none text-txt-secondary">
           {sigla(guild.name)}
         </span>
       ),

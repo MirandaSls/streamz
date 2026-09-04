@@ -106,7 +106,7 @@ export default function TimeoutModal({ guildId, user }: { guildId: string; user:
           onChange={(e) => setReason(e.target.value)}
           aria-label="Motivo do modo de espera"
           placeholder="Ex.: spam no canal geral"
-          className="mt-2 h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
+          className="mt-2 h-10 w-full rounded-[3px] bg-void px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
         />
       )}
 

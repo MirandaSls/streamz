@@ -89,7 +89,7 @@ export function ConfiguracoesRelacionadas({
             onClick={item.onSelect}
             className="flex w-full items-center gap-3 rounded-lg bg-panel p-3 text-left transition hover:bg-hov"
           >
-            <span aria-hidden="true" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-rail text-txt-secondary">
+            <span aria-hidden="true" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-void text-txt-secondary">
               {item.icon}
             </span>
             <span className="min-w-0 flex-1">
@@ -497,7 +497,7 @@ export function Slider({
       {hint && <p className="mt-0.5 text-xs text-txt-muted">{hint}</p>}
 
       <div className="relative mt-3 h-5">
-        <div className="absolute inset-x-0 top-1.5 h-2 rounded-full bg-rail" aria-hidden="true" />
+        <div className="absolute inset-x-0 top-1.5 h-2 rounded-full bg-void" aria-hidden="true" />
         <div
           className="absolute left-0 top-1.5 h-2 rounded-full bg-accent"
           style={{ width: `${pct}%` }}
@@ -575,7 +575,7 @@ export function SliderMarcas<T>({
         value={indice}
         aria-valuetext={opcoes[indice]?.label}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-rail accent-accent"
+        className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-void accent-accent"
       />
       <div className="mt-1.5 flex justify-between gap-1">
         {opcoes.map((o, i) => (

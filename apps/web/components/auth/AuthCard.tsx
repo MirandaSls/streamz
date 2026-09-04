@@ -27,7 +27,7 @@ export default function AuthCard({
   children?: ReactNode;
 }) {
   return (
-    <main className="relative grid min-h-screen place-items-center overflow-hidden bg-rail p-4">
+    <main className="relative grid min-h-screen place-items-center overflow-hidden bg-void p-4">
       <AuthBackground />
 
       <MarcaLockup
@@ -103,10 +103,10 @@ export function OptionalFieldLabel({
   );
 }
 
-// a borda escura é o que separa o campo do corpo do cartão: `bg-rail` sozinho
+// a borda escura é o que separa o campo do corpo do cartão: `bg-void` sozinho
 // encosta no `bg-chat` sem aresta e o campo some
 export const inputClass =
-  "mb-5 h-10 w-full rounded-[3px] border border-black/30 bg-rail px-2.5 text-txt-normal outline-none placeholder:text-txt-muted disabled:opacity-60";
+  "mb-5 h-10 w-full rounded-[3px] border border-black/30 bg-void px-2.5 text-txt-normal outline-none placeholder:text-txt-muted disabled:opacity-60";
 
 export const submitClass =
   "h-11 w-full rounded-[3px] bg-accent font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60";

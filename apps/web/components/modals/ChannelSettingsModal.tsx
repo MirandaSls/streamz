@@ -256,7 +256,7 @@ export default function ChannelSettingsModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={64}
-              className="h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none"
+              className="h-10 w-full rounded-[3px] bg-void px-2.5 text-txt-normal outline-none"
             />
           </div>
 
@@ -271,7 +271,7 @@ export default function ChannelSettingsModal({
                 onChange={(e) => setTopic(e.target.value.slice(0, MAX_CHANNEL_TOPIC))}
                 rows={3}
                 placeholder="Sobre o que é este canal?"
-                className="w-full resize-none rounded-[3px] bg-rail px-2.5 py-2 text-txt-normal outline-none placeholder:text-txt-muted"
+                className="w-full resize-none rounded-[3px] bg-void px-2.5 py-2 text-txt-normal outline-none placeholder:text-txt-muted"
               />
             </div>
           )}

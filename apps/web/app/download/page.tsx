@@ -149,7 +149,7 @@ export default function DownloadPage() {
                 className={`h-10 rounded-[3px] border text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
                   ativo
                     ? "border-accent bg-accent text-accent-ink"
-                    : "border-border-strong bg-rail text-txt-normal hover:border-border-strong-hover"
+                    : "border-border-strong bg-void text-txt-normal hover:border-border-strong-hover"
                 }`}
               >
                 {rotuloPlataforma(p)}

@@ -1,16 +1,22 @@
 import type { Config } from "tailwindcss";
 
 /**
- * Tokens visuais da marca Streamz (ADR-0004). A escala de superfícies é
- * ancorada no Void Ink `#0B0B0F` e preserva os mesmos deltas de luminância que
- * a escala do Discord tinha — é o que mantém a hierarquia de profundidade
- * (rail < footer < panel < chat < input) sem mexer no leiaute. Ver design.md.
+ * Tokens visuais da marca Streamz (ADR-0004). A escala de superfícies deixou de
+ * ser derivada do Void Ink e passou a ser o **cinza neutro do Discord medido nos
+ * prints** (`docs/Reference/Captura de tela 2026-09-04 102422, 102757 e
+ * 100527.png`, getpixel em área plana): a nossa escala descia mais fundo que
+ * a dele e a rail ficava quase preta ao lado do resto do app. A marca (Volt Lime) e os textos
+ * (Paper e derivados) não mudaram. Ver a Emenda 1 da ADR-0004.
  *
- * Três regras não são preferência, são o sistema:
- *   1. Limão só sobre escuro — nunca como texto sobre `paper`.
- *   2. Texto e ícone sobre `accent` são `accent-ink`, nunca branco
+ * Quatro regras não são preferência, são o sistema:
+ *   1. No Discord a **rail de servidores, a coluna de canais/DMs e a barra de
+ *      título são a MESMA superfície** (`#121214`), separadas por uma linha de
+ *      1px `#222225` — não por uma diferença de cor. Por isso não existe mais
+ *      um token `rail`: é `panel`, e quem separa é `rail-divider`.
+ *   2. Limão só sobre escuro — nunca como texto sobre `paper`.
+ *   3. Texto e ícone sobre `accent` são `accent-ink`, nunca branco
  *      (branco sobre Volt Lime dá 1,57:1).
- *   3. `green` e `yellow` ficam afastados do limão em matiz, e bolinha de
+ *   4. `green` e `yellow` ficam afastados do limão em matiz, e bolinha de
  *      status nunca vai sobre superfície limão.
  */
 export default {
@@ -18,21 +24,25 @@ export default {
   theme: {
     extend: {
       colors: {
-        // superfícies
-        rail: "#0B0B0F", // Void Ink puro: rail, inputs escuros, tooltips
-        footer: "#101015", // painel do usuário
-        panel: "#141419", // colunas laterais, rodapé de modal
-        chat: "#1A1A20", // área de mensagens, corpo de modal
-        input: "#23232B", // composer, campo de edição
-        msghov: "#17171D", // hover de mensagem — mais escuro que `chat`
-        hov: "#1E1E23", // hover de item de lista (sobre `panel`)
-        sel: "#29292E", // item ativo
+        // superfícies — hex medidos nos prints do Discord (getpixel)
+        panel: "#121214", // rail, coluna de canais/DMs, barra de título, rodapé de modal
+        footer: "#202024", // card do usuário — no Discord ele CLAREIA sobre a coluna
+        chat: "#1A1A1E", // área de mensagens, cabeçalho, painel de membros, corpo de modal
+        input: "#222327", // composer, campo de edição, cartão de perfil em DM
+        msghov: "#17171A", // hover de mensagem — mais escuro que `chat` (não medido)
+        hov: "#222225", // hover de item de lista e botão vazio da rail (sobre `panel`)
+        sel: "#2C2C30", // item ativo
+        // Void Ink: não é mais superfície de coluna, e sim o preto da marca —
+        // campos escuros, tooltips, palco de chamada e trilhos. Era `rail`.
+        void: "#0B0B0F",
         // bordas e sobreposições (antes eram hex soltos no JSX)
         border: "#2A2A33", // divisórias e linhas de seção
         "border-strong": "#35353F", // borda de botão secundário
         "border-strong-hover": "#4C4C58", // hover dessa borda
-        overlay: "#050507", // menu de contexto, popover, toast
-        "rail-divider": "#1C1C22", // separador de 2px do rail
+        // menu de contexto, popover, toast. O Discord usa `#28282D` (menu MAIS
+        // claro que o app); aqui continua o nosso preto — fora do escopo deste PR.
+        overlay: "#050507",
+        "rail-divider": "#222225", // linha de 1px: rail|coluna e separador dentro da rail
         scroll: "#2A2A33", // thumb da rolagem — precisa clarear, não escurecer
         // marca e semântica
         accent: "#9BE31F", // Volt Lime
@@ -46,12 +56,13 @@ export default {
         red: "#FF4D4F",
         "red-hover": "#E23A3D",
         // texto (ancorado no Paper)
-        "txt-primary": "#FDFDFB", // títulos, nome do autor — 15,8:1 sobre chat
-        "txt-normal": "#D8D8D4", // corpo da mensagem — 11,9:1
+        "txt-primary": "#FDFDFB", // títulos, nome do autor — 17,0:1 sobre chat
+        "txt-normal": "#D8D8D4", // corpo da mensagem — 12,1:1
         "txt-secondary": "#A9A9A6", // ícones de toolbar — 7,4:1
-        "txt-muted": "#8A8A8E", // timestamps, categorias — 5,0:1
-        // canal em repouso e offline. 3,4:1 sobre `chat`: abaixo de AA, mesma
-        // folga que o `#80848e` do Discord tinha. Dívida registrada na ADR-0004.
+        "txt-muted": "#8A8A8E", // timestamps, categorias — 5,1:1
+        // canal em repouso e offline. 3,4:1 sobre `chat` (o novo `#1A1A1E` dá o
+        // mesmo 3,43): abaixo de AA, mesma folga que o `#80848e` do Discord
+        // tinha. Dívida registrada na ADR-0004.
         "txt-faint": "#6E6E76",
         "txt-link": "#00a8fc", // ciano: não compete com o limão
       },

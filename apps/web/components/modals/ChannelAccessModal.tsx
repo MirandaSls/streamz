@@ -33,7 +33,7 @@ export function ChannelAccessList({ channelId }: { channelId: string }) {
   const ready = access.channelId === channelId && !access.loading;
 
   return (
-    <div className="max-h-56 overflow-y-auto rounded bg-rail/50">
+    <div className="max-h-56 overflow-y-auto rounded bg-void/50">
       {!ready ? (
         <p className="px-3 py-3 text-sm text-txt-muted">Carregando…</p>
       ) : plainMembers.length === 0 ? (

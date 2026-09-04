@@ -47,7 +47,7 @@ export const ENCOLHE_AO_FALAR = "scale-[0.925]";
 export function BarraDeNivel({ nivel, limiar }: { nivel: number; limiar?: number }) {
   const acima = limiar === undefined || nivel >= limiar;
   return (
-    <div className="relative h-2 w-full overflow-hidden rounded-full bg-rail">
+    <div className="relative h-2 w-full overflow-hidden rounded-full bg-void">
       <div
         className={`h-full rounded-full transition-[width] duration-75 ${acima ? "bg-accent" : "bg-txt-faint"}`}
         style={{ width: `${Math.round(nivel * 100)}%` }}

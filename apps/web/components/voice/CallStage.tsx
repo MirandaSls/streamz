@@ -83,7 +83,7 @@ export default function CallStage({
       aria-label={`Chamada em ${titulo}`}
       // a tela cheia é a do navegador (ver `fullscreen.ts`): o elemento é promovido
       // pelo compositor, então não há classe de posicionamento a aplicar aqui
-      className="relative flex min-w-0 flex-1 flex-col bg-rail"
+      className="relative flex min-w-0 flex-1 flex-col bg-void"
     >
       {erro && conectadoAqui && status === "error" && (
         <div
@@ -219,7 +219,7 @@ function Chamando({
             className="absolute h-[132px] w-[132px] animate-ping rounded-full bg-green/20"
           />
           {usuario ? (
-            <Avatar user={usuario} size="xxl" surface="border-rail" />
+            <Avatar user={usuario} size="xxl" surface="border-void" />
           ) : (
             <span className="grid h-[120px] w-[120px] place-items-center rounded-full bg-panel">
               <Phone size={44} className="text-txt-muted" aria-hidden="true" />
@@ -260,7 +260,7 @@ function ConviteParaEntrar({
       <div className="flex flex-col items-center gap-5 text-center">
         <div className="flex items-center justify-center -space-x-4">
           {estados.slice(0, 3).map((e) => (
-            <Avatar key={e.user.id} user={e.user} size="xl" surface="border-rail" className="rounded-full ring-4 ring-rail" />
+            <Avatar key={e.user.id} user={e.user} size="xl" surface="border-void" className="rounded-full ring-4 ring-void" />
           ))}
         </div>
         <p className="font-display text-lg font-bold text-txt-primary">{texto}</p>

@@ -80,8 +80,11 @@ export default function HeaderBar({
             /* fixa, não mais expansível: no Discord a caixa já nasce do tamanho
                final. A busca que cresce ao focar empurrava os ícones vizinhos e
                fazia a barra inteira dançar a cada clique.
-               `bg-panel` é o token mais perto do preenchimento medido
-               (23,23,26); `border` é o mais perto da borda (48,48,53). */
+               O preenchimento medido no Discord é (23,23,26) = `#17171A`, e
+               `border` é o mais perto da borda (48,48,53). Com a escala remedida
+               (2026-09-04) nenhum token cai exatamente ali: `bg-panel` (#121214)
+               é o mais próximo por baixo, 5 níveis abaixo do medido. Registrado
+               em vez de criar um token de um uso só. */
             className="h-8 w-[244px] rounded-lg border border-border bg-panel pl-2 pr-[30px] text-sm text-txt-normal outline-none placeholder:text-txt-muted"
           />
           <Search

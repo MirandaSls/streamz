@@ -151,8 +151,12 @@ export default function DMList() {
           type="search"
           aria-label="Encontrar ou começar uma conversa"
           placeholder="Encontrar ou começar uma conversa"
+          /* o campo é `hov` (#222225) e não `void`: medido no print do Discord
+             `2026-09-04 102757` (x 46-77, y 42-71), lá ele CLAREIA sobre a
+             coluna em vez de escurecer — e com a coluna em #121214 um campo
+             Void Ink sumiria dentro dela */
           className={
-            "h-8 w-full rounded-lg bg-rail px-1.5 text-sm text-txt-normal outline-none placeholder:text-txt-muted " +
+            "h-8 w-full rounded-lg bg-hov px-1.5 text-sm text-txt-normal outline-none placeholder:text-txt-muted " +
             (buscaFocada || query ? "text-left" : "text-center")
           }
         />

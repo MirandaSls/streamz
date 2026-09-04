@@ -121,7 +121,7 @@ export default function VistaDoCanalDeVoz({
           <button
             type="button"
             onClick={onEntrar}
-            className="mt-6 h-10 rounded-lg bg-paper px-[18px] text-base font-medium text-rail transition hover:brightness-90"
+            className="mt-6 h-10 rounded-lg bg-paper px-[18px] text-base font-medium text-void transition hover:brightness-90"
           >
             Entrar na chamada de voz
           </button>

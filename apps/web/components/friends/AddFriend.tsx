@@ -63,7 +63,7 @@ export default function AddFriend() {
           e.preventDefault();
           void enviar();
         }}
-        className={`mt-4 flex items-center gap-2 rounded-lg border bg-rail p-3 ${borda} focus-within:border-accent`}
+        className={`mt-4 flex items-center gap-2 rounded-lg border bg-void p-3 ${borda} focus-within:border-accent`}
       >
         <input
           value={nome}

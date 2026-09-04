@@ -546,7 +546,7 @@ function SeletorDeTom({
         <div
           role="listbox"
           aria-label="Tom de pele"
-          className="anim-menu absolute bottom-full right-0 mb-1 flex gap-1 rounded bg-rail p-1 shadow-high"
+          className="anim-menu absolute bottom-full right-0 mb-1 flex gap-1 rounded bg-void p-1 shadow-high"
         >
           {TONS_DE_PELE.map((t) => (
             <button

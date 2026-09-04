@@ -80,7 +80,7 @@ function posicionar(alvo: DOMRect, caixa: DOMRect, preferido: Side): Posicao {
 
 /** Estilo da seta a partir do lado escolhido — sempre apontando para o alvo. */
 function estiloSeta(p: Posicao): React.CSSProperties {
-  const cor = "#0B0B0F"; // `rail`, o mesmo fundo da caixa
+  const cor = "#0B0B0F"; // `void`, o mesmo fundo da caixa
   const base: React.CSSProperties = { position: "absolute", width: 0, height: 0 };
   if (p.side === "top") {
     return {
@@ -225,7 +225,7 @@ export default function Tooltip({
               left: pos?.left ?? 0,
               visibility: pos ? "visible" : "hidden",
             }}
-            className="pointer-events-none fixed z-[100] max-w-[280px] rounded-lg border border-border bg-rail px-3 py-2 text-sm font-semibold leading-4 text-txt-primary shadow-high anim-menu"
+            className="pointer-events-none fixed z-[100] max-w-[280px] rounded-lg border border-border bg-void px-3 py-2 text-sm font-semibold leading-4 text-txt-primary shadow-high anim-menu"
           >
             <span className="flex items-center gap-2">
               <span>{label}</span>

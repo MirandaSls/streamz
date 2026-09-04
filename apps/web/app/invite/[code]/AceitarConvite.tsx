@@ -77,13 +77,13 @@ export default function AceitarConvite() {
   const recado = erro ?? preview?.reason ?? "Este convite não vale mais.";
 
   return (
-    <main className="grid min-h-screen place-items-center bg-rail bg-[radial-gradient(ellipse_at_top_left,rgba(155,227,31,0.14),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(155,227,31,0.05),transparent_60%)] p-4">
+    <main className="grid min-h-screen place-items-center bg-void bg-[radial-gradient(ellipse_at_top_left,rgba(155,227,31,0.14),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(155,227,31,0.05),transparent_60%)] p-4">
       <div className="w-[420px] max-w-full rounded-[5px] bg-chat p-8 text-center shadow-high">
         {preview === null && !erro && <p className="text-txt-muted">Carregando convite…</p>}
 
         {(preview || erro) && (
           <>
-            <div className="mx-auto grid h-20 w-20 place-items-center overflow-hidden rounded-3xl bg-rail text-xl font-semibold text-txt-primary">
+            <div className="mx-auto grid h-20 w-20 place-items-center overflow-hidden rounded-3xl bg-void text-xl font-semibold text-txt-primary">
               {preview?.guild.iconUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={preview.guild.iconUrl} alt="" className="h-full w-full object-cover" />

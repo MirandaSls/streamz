@@ -561,7 +561,7 @@ export default function ProfilePopoverHost() {
                 {chips.map((r) => (
                   <span
                     key={r.id}
-                    className="flex items-center gap-1.5 rounded-[4px] bg-rail py-1 pl-2 pr-1 text-xs text-txt-normal"
+                    className="flex items-center gap-1.5 rounded-[4px] bg-void py-1 pl-2 pr-1 text-xs text-txt-normal"
                   >
                     <span
                       aria-hidden="true"
@@ -599,7 +599,7 @@ export default function ProfilePopoverHost() {
                       );
                     }}
                     aria-label="Adicionar cargo"
-                    className="grid h-[26px] w-6 place-items-center rounded-[4px] bg-rail text-txt-muted transition hover:text-txt-primary"
+                    className="grid h-[26px] w-6 place-items-center rounded-[4px] bg-void text-txt-muted transition hover:text-txt-primary"
                   >
                     <Plus size={14} />
                   </button>

@@ -217,7 +217,7 @@ function Ficha({ rotulo, ativo = false }: { rotulo: string; ativo?: boolean }) {
   return (
     <span
       className={`rounded-[3px] px-1.5 py-0.5 text-xs font-medium ${
-        ativo ? "bg-accent/20 text-txt-primary" : "bg-rail text-txt-muted"
+        ativo ? "bg-accent/20 text-txt-primary" : "bg-void text-txt-muted"
       }`}
     >
       {rotulo}

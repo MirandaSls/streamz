@@ -167,7 +167,7 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
                 onBlur={() => setCapturando(false)}
                 aria-label="Definir a tecla de push-to-talk"
                 className={`flex h-8 items-center gap-1.5 rounded-[3px] px-3 text-sm transition ${
-                  capturando ? "bg-accent text-accent-ink" : "bg-rail text-txt-normal hover:bg-hov"
+                  capturando ? "bg-accent text-accent-ink" : "bg-void text-txt-normal hover:bg-hov"
                 }`}
               >
                 <Keyboard size={16} aria-hidden="true" />
@@ -277,7 +277,7 @@ function PreviaDaCamera({ deviceId }: { deviceId: string | null }) {
       playsInline
       muted
       // espelhado: é assim que a pessoa se reconhece na prévia
-      className="aspect-video w-full -scale-x-100 rounded-lg bg-rail object-cover"
+      className="aspect-video w-full -scale-x-100 rounded-lg bg-void object-cover"
     />
   );
 }
@@ -402,7 +402,7 @@ function Dropdown({
         aria-haspopup="listbox"
         aria-expanded={aberto}
         onClick={() => setAberto((v) => !v)}
-        className="flex h-9 w-full items-center justify-between gap-2 rounded-[3px] bg-rail px-3 text-left text-sm text-txt-normal transition hover:bg-hov disabled:opacity-50"
+        className="flex h-9 w-full items-center justify-between gap-2 rounded-[3px] bg-void px-3 text-left text-sm text-txt-normal transition hover:bg-hov disabled:opacity-50"
       >
         <span className="truncate">{texto}</span>
         <ChevronDown size={16} className="shrink-0 text-txt-muted" aria-hidden="true" />

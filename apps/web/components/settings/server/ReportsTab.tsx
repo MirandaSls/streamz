@@ -41,7 +41,7 @@ export default function ReportsTab({ guildId }: { guildId: string }) {
           aria-pressed={!resolvidas}
           onClick={() => setResolvidas(false)}
           className={`h-9 rounded-[3px] px-3 text-sm font-medium transition ${
-            !resolvidas ? "bg-accent text-accent-ink" : "bg-rail text-txt-normal hover:bg-hov"
+            !resolvidas ? "bg-accent text-accent-ink" : "bg-void text-txt-normal hover:bg-hov"
           }`}
         >
           Pendentes
@@ -51,14 +51,14 @@ export default function ReportsTab({ guildId }: { guildId: string }) {
           aria-pressed={resolvidas}
           onClick={() => setResolvidas(true)}
           className={`h-9 rounded-[3px] px-3 text-sm font-medium transition ${
-            resolvidas ? "bg-accent text-accent-ink" : "bg-rail text-txt-normal hover:bg-hov"
+            resolvidas ? "bg-accent text-accent-ink" : "bg-void text-txt-normal hover:bg-hov"
           }`}
         >
           Resolvidas
         </button>
       </div>
 
-      <div role="list" className="min-h-0 flex-1 overflow-y-auto rounded bg-rail/40">
+      <div role="list" className="min-h-0 flex-1 overflow-y-auto rounded bg-void/40">
         {loading && <p className="px-3 py-4 text-sm text-txt-muted">Carregando…</p>}
         {!loading && reports.length === 0 && (
           <p className="px-3 py-4 text-sm text-txt-muted">
@@ -88,7 +88,7 @@ export default function ReportsTab({ guildId }: { guildId: string }) {
               </div>
 
               {r.messageContent && (
-                <blockquote className="mt-2 max-h-24 overflow-y-auto break-words rounded-[3px] border-l-2 border-border-strong bg-rail px-3 py-2 text-sm text-txt-normal">
+                <blockquote className="mt-2 max-h-24 overflow-y-auto break-words rounded-[3px] border-l-2 border-border-strong bg-void px-3 py-2 text-sm text-txt-normal">
                   {r.messageContent}
                 </blockquote>
               )}
@@ -104,7 +104,7 @@ export default function ReportsTab({ guildId }: { guildId: string }) {
             <button
               type="button"
               onClick={() => void resolve(guildId, r.id, !r.resolved)}
-              className="flex h-8 shrink-0 items-center gap-1.5 self-start rounded-[3px] bg-rail px-3 text-sm font-medium text-txt-normal transition hover:bg-hov"
+              className="flex h-8 shrink-0 items-center gap-1.5 self-start rounded-[3px] bg-void px-3 text-sm font-medium text-txt-normal transition hover:bg-hov"
             >
               {r.resolved ? (
                 <>

@@ -55,7 +55,7 @@ export default function KickModal({ guildId, user }: { guildId: string; user: Pu
         maxLength={MAX_MODERATION_REASON}
         onChange={(e) => setReason(e.target.value)}
         placeholder="Ex.: comportamento fora das regras"
-        className="h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
+        className="h-10 w-full rounded-[3px] bg-void px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
         autoFocus
       />
       <p className="mt-1 text-xs text-txt-muted">

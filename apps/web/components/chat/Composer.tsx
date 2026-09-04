@@ -807,7 +807,7 @@ function BotaoCartao({
         type="button"
         onClick={onClick}
         aria-label={label}
-        className={`grid h-7 w-7 place-items-center rounded bg-rail/90 transition hover:bg-hov ${
+        className={`grid h-7 w-7 place-items-center rounded bg-void/90 transition hover:bg-hov ${
           danger ? "text-red" : "text-txt-normal hover:text-txt-primary"
         }`}
       >
@@ -863,7 +863,7 @@ function PreviaAnexo({
           aria-valuemin={0}
           aria-valuemax={100}
           aria-label={`Enviando ${anexo.nome}`}
-          className="mt-1 h-1 overflow-hidden rounded bg-rail"
+          className="mt-1 h-1 overflow-hidden rounded bg-void"
         >
           <div className="h-full bg-accent transition-all" style={{ width: `${anexo.progresso}%` }} />
         </div>

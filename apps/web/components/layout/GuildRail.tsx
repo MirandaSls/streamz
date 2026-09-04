@@ -89,7 +89,7 @@ function SeloDeVoz() {
   return (
     <span
       aria-label="Você está em voz neste servidor"
-      className="absolute right-0 top-0 grid h-4 w-4 place-items-center rounded-full bg-green ring-[2.5px] ring-rail"
+      className="absolute right-0 top-0 grid h-4 w-4 place-items-center rounded-full bg-green ring-[2.5px] ring-panel"
     >
       <Volume2 size={12} className="text-accent-ink" aria-hidden="true" />
     </span>
@@ -118,7 +118,7 @@ function Badge({ count }: { count: number }) {
   return (
     <span
       aria-label={`${count} ${count === 1 ? "menção" : "menções"}`}
-      className="pointer-events-none absolute -bottom-0.5 -right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[12px] font-bold leading-none text-white ring-[3px] ring-rail"
+      className="pointer-events-none absolute -bottom-0.5 -right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[12px] font-bold leading-none text-white ring-[3px] ring-panel"
     >
       {count > 99 ? "99+" : count}
     </span>
@@ -180,8 +180,8 @@ function RailItem({
               active
                 ? "bg-accent text-accent-ink"
                 : green
-                  ? "bg-panel text-green group-hover:bg-green group-hover:text-accent-ink"
-                  : "bg-panel text-txt-normal group-hover:bg-accent group-hover:text-accent-ink"
+                  ? "bg-hov text-green group-hover:bg-green group-hover:text-accent-ink"
+                  : "bg-hov text-txt-normal group-hover:bg-accent group-hover:text-accent-ink"
             }`}
           >
             {children}
@@ -339,7 +339,7 @@ export default function GuildRail() {
       /* sem `pt`: no Discord o topo do primeiro botão encosta na barra de
           título. Os nossos 12px de folga faziam a rail começar mais baixo que
           a coluna ao lado, e a diferença aparece na horizontal do topo. */
-      className="flex w-20 shrink-0 flex-col items-center gap-2.5 overflow-y-auto bg-rail pb-[78px]"
+      className="flex w-20 shrink-0 flex-col items-center gap-2.5 overflow-y-auto bg-panel pb-[78px] shadow-[inset_-1px_0_0_theme(colors.rail-divider)]"
     >
       {/*
         Sem `mentions`: o botão de início **não** ganha badge vermelho.

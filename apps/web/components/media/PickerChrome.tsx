@@ -101,7 +101,7 @@ export function BuscaPicker({
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           aria-label={rotulo}
-          className="h-8 w-full rounded bg-rail pl-7 pr-2 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
+          className="h-8 w-full rounded bg-void pl-7 pr-2 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
         />
       </div>
     </div>
@@ -156,7 +156,7 @@ export function IconeServidor({ nome, iconUrl }: { nome: string; iconUrl: string
     );
   }
   return (
-    <span className="grid h-6 w-6 place-items-center rounded-full bg-rail text-[9px] font-semibold text-txt-normal">
+    <span className="grid h-6 w-6 place-items-center rounded-full bg-void text-[9px] font-semibold text-txt-normal">
       {sigla(nome)}
     </span>
   );
@@ -179,7 +179,7 @@ export function DivisoriaLateral() {
 
 export function RodapePicker({ children }: { children: ReactNode }) {
   return (
-    <footer className="flex h-11 shrink-0 items-center gap-2 border-t border-black/30 bg-rail/40 px-3">
+    <footer className="flex h-11 shrink-0 items-center gap-2 border-t border-black/30 bg-void/40 px-3">
       {children}
     </footer>
   );

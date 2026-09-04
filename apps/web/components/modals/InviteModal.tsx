@@ -179,7 +179,7 @@ export default function InviteModal({
           </p>
         )}
 
-        <div className="mx-6 mt-6 flex h-10 items-center gap-3 rounded-lg bg-rail px-3">
+        <div className="mx-6 mt-6 flex h-10 items-center gap-3 rounded-lg bg-void px-3">
           <Search size={16} aria-hidden="true" className="shrink-0 text-txt-muted" />
           <input
             value={busca}
@@ -244,7 +244,7 @@ export default function InviteModal({
             Ou, envie um convite do servidor a um amigo
           </p>
           {/* input + botão num container só: no Discord os dois são uma peça */}
-          <div className="mt-2 flex h-10 items-center overflow-hidden rounded-lg bg-rail pl-3 pr-1">
+          <div className="mt-2 flex h-10 items-center overflow-hidden rounded-lg bg-void pl-3 pr-1">
             <input
               value={url || "gerando…"}
               readOnly

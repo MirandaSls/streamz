@@ -51,10 +51,10 @@ export default function AddGroupMembersModal({ channelId }: { channelId: string 
         type="search"
         placeholder="Buscar entre seus amigos"
         aria-label="Buscar amigo"
-        className="mb-2 h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
+        className="mb-2 h-10 w-full rounded-[3px] bg-void px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
       />
 
-      <div className="max-h-64 overflow-y-auto rounded bg-rail/50">
+      <div className="max-h-64 overflow-y-auto rounded bg-void/50">
         {candidatos.length === 0 ? (
           <p className="px-3 py-3 text-sm text-txt-muted">
             {friends.length === 0

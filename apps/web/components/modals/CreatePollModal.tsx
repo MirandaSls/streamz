@@ -85,7 +85,7 @@ export default function CreatePollModal({ channelId }: { channelId: string }) {
       }
     >
       <Rotulo htmlFor="poll-question">Pergunta</Rotulo>
-      <div className="relative flex h-10 items-center gap-1 rounded-[3px] bg-rail px-1.5">
+      <div className="relative flex h-10 items-center gap-1 rounded-[3px] bg-void px-1.5">
         <input
           id="poll-question"
           value={question}
@@ -114,7 +114,7 @@ export default function CreatePollModal({ channelId }: { channelId: string }) {
       </p>
       <div className="flex flex-col gap-2">
         {options.map((o, i) => (
-          <div key={i} className="relative flex h-10 items-center gap-1 rounded-[3px] bg-rail px-1.5">
+          <div key={i} className="relative flex h-10 items-center gap-1 rounded-[3px] bg-void px-1.5">
             <BotaoEmoji
               aberto={escolhendo === i}
               emoji={emojis[i]}
