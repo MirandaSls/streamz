@@ -932,6 +932,14 @@ e alguém saiu). Fatores de volume bem baixos por pedido dele: mensagem 0,15;
 chamada 0,35; mudo/desmudo/surdo/não-surdo 0,08; entrar/sair/transmissão/movido
 0,2 — sempre × `outputVolume`.
 
+**Arrastar e soltar no desktop (2026-09-03).** O WebView2 do Tauri nasce com
+`dragDropEnabled: true` (o gancho nativo de arquivos), e isso **engole o
+drag-and-drop HTML5** da página: arrastar participante entre canais, reordenar
+canais/categorias — tudo funcionava no site e nada no app. `dragDropEnabled:
+false` na janela `main` devolve os eventos ao DOM; o app não usa o gancho
+nativo (nenhum `onDragDropEvent`), então anexar arquivo por arrasto continua
+pelo `drop` da página.
+
 ## 10. Pendências e o que não foi verificado
 
 - **Nenhum PR de hoje foi visto em app rodando.** Validação pelos prints do
