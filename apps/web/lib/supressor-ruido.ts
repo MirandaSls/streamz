@@ -357,11 +357,13 @@ export function cadeiaDoMicrofone(inicial: {
     const c = usarContextoDeCaptura();
     montada = true;
     montadas += 1;
-    // o modelo é carregado ANTES de o grafo existir: publicar a faixa e só
-    // então esperar o wasm é o que mandava alguns segundos de áudio cru
-    // a falha do RNNoise **não** derruba a cadeia: o ganho é dela também, e
-    // publicar silêncio (ou nada) porque a rede neural não subiu é pior do que
-    // publicar a voz sem ela. Quem avisa a pessoa é `avisar` → toast.
+    // O modelo é carregado ANTES de o grafo existir: publicar a faixa e só
+    // então esperar o wasm é o que mandava alguns segundos de áudio cru.
+    //
+    // E a falha dele **não** derruba a cadeia: o ganho também é dela, e um nó
+    // de RNNoise que não subiu devolve silêncio (ver `SupressaoIndisponivel`),
+    // o que é pior do que publicar a voz sem supressão. Quem conta à pessoa o
+    // que houve é `avisar` → toast.
     let noDoModelo: typeof no = null;
     if (opcoes.supressao) {
       try {
