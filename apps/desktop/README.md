@@ -8,8 +8,12 @@ precisariam de um comentário lá estão documentadas aqui.
 
 ```bash
 pnpm --filter @streamz/desktop dev     # janela nativa carregando http://localhost:3000
-pnpm --filter @streamz/desktop build   # instalador (precisa de Rust/cargo)
+pnpm --filter @streamz/desktop build   # instalador (precisa de Rust/cargo no Windows)
 ```
+
+O instalador também sai **do Linux**, sem gastar runner Windows: veja
+`Dockerfile.xwin` aqui do lado e `scripts/build-desktop-no-servidor.sh`
+(documentado no §5.3 de `docs/PROCESSO-DE-DESENVOLVIMENTO.md`).
 
 ## Estratégia de build: export estático
 
