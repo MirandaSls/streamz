@@ -120,6 +120,8 @@ export default function DMView() {
       channelId={active.id}
       titulo={title}
       chatAberto={chatAberto}
+      // com a conversa aberta o palco é a faixa de 199px: lá o título sai
+      faixa={chatAberto}
       onToggleChat={() => setChatManual(!chatAberto)}
     />
   );
@@ -310,13 +312,16 @@ export default function DMView() {
             a conversa sem ter entrado. Some sozinha quando eu entro. */}
         <CallBanner channelId={active.id} />
 
-        {/* f-voz: com chamada, o palco toma a coluna e a conversa vai para a
-            direita, numa coluna de 450 (ver `CallSplit`) */}
+        {/* f-voz: com chamada, o palco é a **faixa em cima** e a conversa fica
+            embaixo, na largura toda — numa conversa direta o Discord não põe a
+            timeline numa coluna lateral (ver `call-split-layout.ts`). Sem
+            `guildId`, e é o que decide a orientação. */}
         {emChamada && chatAberto ? (
           <CallSplit
             chamada={palco}
             chat={conversa}
             titulo={title}
+            guildId={null}
             onFecharChat={() => setChatManual(false)}
           />
         ) : emChamada ? (

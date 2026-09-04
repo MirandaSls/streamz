@@ -34,11 +34,20 @@ export default function CallStage({
   titulo,
   chatAberto,
   onToggleChat,
+  faixa = false,
 }: {
   channelId: string;
   titulo: string;
   chatAberto: boolean;
   onToggleChat: () => void;
+  /**
+   * O palco está na **faixa** de 199px sobre a conversa (ver `CallSplit`).
+   * Aí o título sai: ele fica a 199px do cabeçalho da conversa, que já diz o
+   * mesmo nome, e — medido — o rótulo cai em cima do rosto de quem está na
+   * chamada. Na print `2026-08-31 103419` a faixa do Discord não tem título
+   * nenhum. Com a conversa fechada o palco é a coluna toda e o título volta.
+   */
+  faixa?: boolean;
 }) {
   const estados = useVoice((s) => s.statesOf(channelId));
   const conectadoAqui = useVoice((s) => s.channelId === channelId);
@@ -109,11 +118,15 @@ export default function CallStage({
         </span>
 
         {/* título centralizado: o palco é simétrico, e o nome no canto puxaria a
-            atenção para fora das pessoas */}
-        <span className="flex min-w-0 flex-col items-center text-center">
-          <span className="max-w-full truncate text-sm font-semibold text-txt-primary">{titulo}</span>
-          <span className="text-xs text-txt-muted">{subtitulo}</span>
-        </span>
+            atenção para fora das pessoas. Na faixa ele não existe — ver `faixa`. */}
+        {!faixa && (
+          <span className="flex min-w-0 flex-col items-center text-center">
+            <span className="max-w-full truncate text-sm font-semibold text-txt-primary">
+              {titulo}
+            </span>
+            <span className="text-xs text-txt-muted">{subtitulo}</span>
+          </span>
+        )}
 
         <span className="flex min-w-0 flex-1 basis-0 justify-end gap-1">
           {grupo && (
