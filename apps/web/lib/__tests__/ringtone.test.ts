@@ -100,12 +100,12 @@ describe("um som não se sobrepõe a si mesmo", () => {
 
 describe("um dono só do volume", () => {
   it("cada som tem o fator do Discord sobre o volume de saída", () => {
-    expect(volumeDoSom("mensagem")).toBeCloseTo(0.4);
-    expect(volumeDoSom("chamada")).toBeCloseTo(0.7);
-    expect(volumeDoSom("mudo")).toBeCloseTo(0.35);
-    expect(volumeDoSom("nao-surdo")).toBeCloseTo(0.35);
-    expect(volumeDoSom("entrar")).toBeCloseTo(0.5);
-    expect(volumeDoSom("transmissao-iniciada")).toBeCloseTo(0.5);
+    expect(volumeDoSom("mensagem")).toBeCloseTo(0.15);
+    expect(volumeDoSom("chamada")).toBeCloseTo(0.35);
+    expect(volumeDoSom("mudo")).toBeCloseTo(0.08);
+    expect(volumeDoSom("nao-surdo")).toBeCloseTo(0.08);
+    expect(volumeDoSom("entrar")).toBeCloseTo(0.2);
+    expect(volumeDoSom("transmissao-iniciada")).toBeCloseTo(0.2);
   });
 
   it("o volume de saída multiplica o fator", () => {
@@ -123,14 +123,14 @@ describe("um dono só do volume", () => {
 
   it("o elemento recebe exatamente esse volume — a mensagem não sai em 1", () => {
     tocarSom("mensagem");
-    expect(AudioFalso.tocados[0].volume).toBeCloseTo(0.4);
+    expect(AudioFalso.tocados[0].volume).toBeCloseTo(0.15);
   });
 
   it("o mesmo som pedido duas vezes sai sempre no mesmo nível", () => {
     tocarSom("entrar");
     vi.advanceTimersByTime(1000);
     tocarSom("alguem-entrou"); // mesmo arquivo, outro nome
-    expect(AudioFalso.tocados.map((t) => t.volume)).toEqual([0.5, 0.5]);
+    expect(AudioFalso.tocados.map((t) => t.volume)).toEqual([0.2, 0.2]);
   });
 });
 
