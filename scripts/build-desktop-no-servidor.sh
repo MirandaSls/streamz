@@ -185,5 +185,7 @@ sha256sum "$SAIDA"/*.exe
 echo
 echo "A assinatura (o que vai em DESKTOP_UPDATE_SIGNATURE do .env) está no .sig"
 echo "acima; ela não é impressa aqui de propósito. Ver o §5 do processo."
-echo "Só o Windows prova que o instalador roda: este script prova que ele existe,"
-echo "é PE64, tem o tamanho esperado e está assinado com a chave do atualizador."
+echo "O stub do NSIS é PE32 (todo instalador NSIS é); o binário do app que ele"
+echo "carrega dentro é PE32+ x86-64. Só o Windows prova que o instalador roda:"
+echo "aqui se prova que ele existe, tem o tamanho esperado e está assinado com a"
+echo "chave do atualizador."

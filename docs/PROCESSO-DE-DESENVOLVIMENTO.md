@@ -270,10 +270,11 @@ Rust puro e funciona em qualquer sistema.
 
 | | |
 |---|---|
-| imagem Docker | ~2 min, 3,4 GB |
-| primeira rodada (tudo frio) | ~17 min |
-| rodadas seguintes | ~1 min 20 s |
-| caches em volumes | `streamz-xwin-cache` 1,1 GB · `streamz-cargo` 0,8 GB · `streamz-pnpm` · `streamz-xdg` |
+| imagem Docker | ~2 min, 0,8 GB |
+| primeira rodada (tudo frio, baixa CRT+SDK do Windows) | ~17 min |
+| worktree nova, caches quentes | 3 min 36 s |
+| mesma worktree, incremental | ~1 min 20 s |
+| caches em volumes | `streamz-xwin-cache` 1,1 GB · `streamz-pnpm` 1,1 GB · `streamz-cargo` 0,8 GB · `streamz-xdg` 23 MB |
 | `target/` na worktree | 2,6 GB |
 | instalador gerado | 12 643 158 bytes |
 | instalador do CI (mesma versão) | 12 585 908 bytes (+0,45 %) |
@@ -308,6 +309,10 @@ isso continua só o Windows dizendo. O `wine` não serve de substituto aqui: o
 stub do NSIS é PE32 (todo instalador NSIS é), então precisaria de wine 32 bits,
 e o app depende do WebView2, que o wine não tem. A recomendação prática: gerar
 aqui, e antes de publicar em `updates/` instalar uma vez numa máquina Windows.
+(O `file` mostra o stub do NSIS como PE32 — todo instalador NSIS é 32 bits; o
+binário do app que ele carrega dentro é PE32+ x86-64, e o do CI é igual.)
+O build também não é bit a bit reprodutível: duas rodadas do mesmo commit
+saíram com ~6 KB de diferença, coisa de timestamp dentro do LZMA do NSIS.
 O `desktop.yml` continua no repositório e continua sendo a referência — se algo
 divergir, ele é o desempate.
 
