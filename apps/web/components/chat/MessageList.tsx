@@ -232,7 +232,14 @@ export default function MessageList({
         </div>
       )}
 
-      <div ref={scrollRef} onScroll={aoRolar} className={`flex-1 overflow-y-auto ${className}`}>
+      {/* `select-text`: a casca do app é `select-none` (rail, colunas, cabeçalhos
+          não são texto para copiar), mas a timeline é — relato do usuário em
+          2026-09-04: não dava para selecionar mensagem nem no site nem no app. */}
+      <div
+        ref={scrollRef}
+        onScroll={aoRolar}
+        className={`flex-1 select-text overflow-y-auto ${className}`}
+      >
         {loadingOlder && (
           <div className="grid place-items-center py-3" role="status" aria-label="Carregando mensagens">
             <span className="h-5 w-5 animate-spin rounded-full border-2 border-border-strong border-t-txt-muted" />
