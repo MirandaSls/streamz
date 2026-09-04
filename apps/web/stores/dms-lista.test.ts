@@ -18,6 +18,7 @@ function dm(id: string, lastMessageAt: string | null = null): DMChannelView {
     position: 0,
     private: false,
     readOnly: false,
+    syncedWithCategory: false,
     lastMessageAt,
     lastReadAt: null,
     mentionCount: 0,

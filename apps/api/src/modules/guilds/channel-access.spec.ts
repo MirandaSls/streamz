@@ -30,6 +30,9 @@ interface Mundo {
     type?: ChannelType;
     private?: boolean;
     readOnly?: boolean;
+    // ── c-cargos: herança da categoria ──
+    categoryId?: string | null;
+    syncedWithCategory?: boolean;
   }[];
   membros?: { userId: string; guildId: string; role?: MemberRole; timeoutUntil?: Date | null }[];
   cargos?: {
@@ -48,6 +51,14 @@ interface Mundo {
     deny?: number;
   }[];
   participantes?: { channelId: string; userId: string }[];
+  /** regras de categoria — o que um canal sincronizado herda. */
+  overridesDeCategoria?: {
+    categoryId: string;
+    roleId?: string | null;
+    userId?: string | null;
+    allow?: number;
+    deny?: number;
+  }[];
 }
 
 function servicoCom(mundo: Mundo): GuildsService {
@@ -57,6 +68,8 @@ function servicoCom(mundo: Mundo): GuildsService {
     type: (c.type ?? "TEXT") as ChannelType,
     private: c.private ?? false,
     readOnly: c.readOnly ?? false,
+    categoryId: c.categoryId ?? null,
+    syncedWithCategory: c.syncedWithCategory ?? false,
   }));
   const cargos = (mundo.cargos ?? []).map((r) => ({
     id: r.id,
@@ -77,6 +90,21 @@ function servicoCom(mundo: Mundo): GuildsService {
     allow: o.allow ?? 0,
     deny: o.deny ?? 0,
   }));
+  const overridesDeCategoria = (mundo.overridesDeCategoria ?? []).map((o, i) => ({
+    id: `cov${i}`,
+    categoryId: o.categoryId,
+    roleId: o.roleId ?? null,
+    userId: o.userId ?? null,
+    allow: o.allow ?? 0,
+    deny: o.deny ?? 0,
+  }));
+  /** `{ in: [...] }` ou valor cru — o Prisma aceita os dois e o service usa os dois. */
+  const casa = (valor: unknown, campo: string | null): boolean => {
+    if (valor && typeof valor === "object" && "in" in valor) {
+      return (valor as { in: string[] }).in.includes(campo as string);
+    }
+    return valor === undefined || valor === campo;
+  };
   const membros = (mundo.membros ?? []).map((m) => ({
     userId: m.userId,
     guildId: m.guildId,
@@ -88,6 +116,9 @@ function servicoCom(mundo: Mundo): GuildsService {
     channel: {
       findUnique: async ({ where }: { where: { id: string } }) =>
         canais.find((c) => c.id === where.id) ?? null,
+      // c-cargos: `regrasPorCanal` lê categoryId/syncedWithCategory em lote
+      findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
+        canais.filter((c) => where.id.in.includes(c.id)),
     },
     guild: {
       findUnique: async ({ where }: { where: { id: string } }) =>
@@ -130,8 +161,12 @@ function servicoCom(mundo: Mundo): GuildsService {
           .map((a) => ({ roleId: a.roleId })),
     },
     channelOverride: {
-      findMany: async ({ where }: { where: { channelId: string } }) =>
-        overrides.filter((o) => o.channelId === where.channelId),
+      findMany: async ({ where }: { where: { channelId: unknown } }) =>
+        overrides.filter((o) => casa(where.channelId, o.channelId)),
+    },
+    categoryOverride: {
+      findMany: async ({ where }: { where: { categoryId: unknown } }) =>
+        overridesDeCategoria.filter((o) => casa(where.categoryId, o.categoryId)),
     },
   };
 
@@ -393,5 +428,82 @@ describe("assertNotTimedOut", () => {
     await expect(
       servicoCom(servidorSimples()).assertNotTimedOut("g1", "ana"),
     ).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * c-cargos — herança da categoria na autorização de verdade.
+ *
+ * O `roles/heranca-de-categoria.test.ts` cobre a função pura. Aqui é a costura:
+ * o service tem mesmo de ir buscar as regras da CATEGORIA quando o canal está
+ * sincronizado, e as do canal quando não está. Foi por não fazer isso que um
+ * "canal privado" já apareceu para todo mundo.
+ */
+describe("herança categoria → canal", () => {
+  const mundoComCategoria = (syncedWithCategory: boolean, extra: Partial<Mundo> = {}): Mundo => ({
+    guilds: [{ id: "g1", ownerId: "dono" }],
+    channels: [{ id: "c1", guildId: "g1", categoryId: "cat1", syncedWithCategory }],
+    membros: [
+      { userId: "dono", guildId: "g1", role: "OWNER" },
+      { userId: "ana", guildId: "g1" },
+    ],
+    cargos: [{ id: "everyone", guildId: "g1", permissions: DEFAULT_PERMISSIONS, isDefault: true }],
+    overridesDeCategoria: [
+      { categoryId: "cat1", roleId: "everyone", deny: Permission.VIEW_CHANNEL },
+    ],
+    ...extra,
+  });
+
+  it("canal sincronizado com categoria privada é 403 para o membro comum", async () => {
+    const s = servicoCom(mundoComCategoria(true));
+    await expect(s.assertCanViewChannel("ana", "c1")).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("o mesmo canal, dessincronizado e sem regra própria, volta a ser público", async () => {
+    const s = servicoCom(mundoComCategoria(false));
+    const acesso = await s.assertCanViewChannel("ana", "c1");
+    expect(acesso.permissions).toBe(DEFAULT_PERMISSIONS);
+  });
+
+  it("canal sincronizado ignora a regra própria: quem manda é a categoria", async () => {
+    // a linha do canal diz "pode ver"; a categoria diz que não. Vence a categoria.
+    const s = servicoCom(
+      mundoComCategoria(true, {
+        overrides: [{ channelId: "c1", roleId: "everyone", allow: Permission.VIEW_CHANNEL }],
+      }),
+    );
+    await expect(s.assertCanViewChannel("ana", "c1")).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("a liberação por membro na categoria vale no canal sincronizado", async () => {
+    const s = servicoCom(
+      mundoComCategoria(true, {
+        overridesDeCategoria: [
+          { categoryId: "cat1", roleId: "everyone", deny: Permission.VIEW_CHANNEL },
+          { categoryId: "cat1", userId: "ana", allow: Permission.VIEW_CHANNEL },
+        ],
+      }),
+    );
+    const acesso = await s.assertCanViewChannel("ana", "c1");
+    expect(acesso.tipo).toBe("guild");
+  });
+
+  it("canal marcado sincronizado mas sem categoria usa as próprias regras", async () => {
+    // estado impossível pela API (sincronizado exige categoria), mas o cálculo
+    // não pode explodir nem abrir o canal por causa dele
+    const s = servicoCom({
+      guilds: [{ id: "g1", ownerId: "dono" }],
+      channels: [{ id: "c1", guildId: "g1", categoryId: null, syncedWithCategory: true }],
+      membros: [{ userId: "ana", guildId: "g1" }],
+      cargos: [{ id: "everyone", guildId: "g1", permissions: DEFAULT_PERMISSIONS, isDefault: true }],
+      overrides: [{ channelId: "c1", roleId: "everyone", deny: Permission.VIEW_CHANNEL }],
+    });
+    await expect(s.assertCanViewChannel("ana", "c1")).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("o dono atravessa a categoria privada", async () => {
+    const s = servicoCom(mundoComCategoria(true));
+    const acesso = await s.assertCanViewChannel("dono", "c1");
+    expect(acesso.tipo).toBe("guild");
   });
 });

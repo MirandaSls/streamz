@@ -74,6 +74,8 @@ export type Modal =
   /** chamada recebida numa conversa direta; os dados vêm de `stores/voice`. */
   // ── b-canais ──
   | { kind: "channelSettings"; channelId: string; tab?: "geral" | "permissoes" }
+  /** ── c-cargos: a categoria ganhou tela própria (nome + permissões). */
+  | { kind: "categorySettings"; categoryId: string; tab?: "geral" | "permissoes" }
   | { kind: "channelTopic"; channelId: string }
   // ── e-configuracoes ──
   | { kind: "quickSwitcher" }

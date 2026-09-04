@@ -85,6 +85,7 @@ export const WS_EVENTS = {
   ROLE_UPDATED: "role.updated",
   ROLE_DELETED: "role.deleted",
   CHANNEL_OVERRIDES: "channel.overrides",
+  CATEGORY_OVERRIDES: "category.overrides",
   GUILD_UPDATED: "guild.updated",
   GUILD_OWNER_CHANGED: "guild.ownerChanged",
   // ── b-canais ──

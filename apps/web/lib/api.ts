@@ -18,6 +18,8 @@ import type {
   Channel,
   ChannelOverride,
   ChannelOverrideInput,
+  CategoryOverride,
+  CategoryOverrideInput,
   GuildReadResult,
   CustomStatusUpdate,
   CustomEmoji,
@@ -330,6 +332,35 @@ export const api = {
       { method: "DELETE" },
     ),
 
+  /**
+   * Regras de **categoria** — a mesma forma das de canal, com a coluna do dono
+   * trocada (`categoryId` no lugar de `channelId`).
+   *
+   * As quatro rotas espelham as de canal de propósito, inclusive o fato de as
+   * três de escrita devolverem a **lista inteira** da categoria em vez da linha
+   * mexida: é o que deixa a tela redesenhar sem uma segunda ida ao servidor, e
+   * o que faz o `PUT` de uma regra vazia (`allow: 0, deny: 0`) valer como
+   * "adicione este alvo à lista".
+   *
+   * `guildCategoryOverrides` é o par de `guildOverrides`: uma carga só, ao
+   * trocar de servidor, porque "posso ver este canal?" é pergunta de toda
+   * renderização e o canal sincronizado responde pela categoria.
+   */
+  guildCategoryOverrides: (guildId: string) =>
+    request<CategoryOverride[]>(`/guilds/${guildId}/categories/overrides`),
+  categoryOverrides: (guildId: string, categoryId: string) =>
+    request<CategoryOverride[]>(`/guilds/${guildId}/categories/${categoryId}/overrides`),
+  setCategoryOverride: (guildId: string, categoryId: string, body: CategoryOverrideInput) =>
+    request<CategoryOverride[]>(`/guilds/${guildId}/categories/${categoryId}/overrides`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  removeCategoryOverride: (guildId: string, categoryId: string, targetId: string) =>
+    request<CategoryOverride[]>(
+      `/guilds/${guildId}/categories/${categoryId}/overrides/${targetId}`,
+      { method: "DELETE" },
+    ),
+
   // ── convites ──
   createInvite: (guildId: string, opts?: InviteOptions) =>
     request<InviteInfo>(`/guilds/${guildId}/invites`, json(opts ?? {})),
@@ -373,6 +404,18 @@ export const api = {
     ),
   deleteChannel: (guildId: string, channelId: string) =>
     request<{ deleted: string }>(`/guilds/${guildId}/channels/${channelId}`, { method: "DELETE" }),
+  /**
+   * Devolve o canal às regras da categoria (`syncedWithCategory` volta a true).
+   *
+   * É POST e não PATCH porque não é a edição de um campo: o servidor **apaga**
+   * as regras do canal e passa a responder pelas da categoria. Mandar
+   * `syncedWithCategory: true` num PATCH sugeriria que dá para dessincronizar
+   * pelo mesmo caminho — e não dá: quem dessincroniza é editar uma regra.
+   */
+  syncChannelWithCategory: (guildId: string, channelId: string) =>
+    request<Channel>(`/guilds/${guildId}/channels/${channelId}/sync-category`, {
+      method: "POST",
+    }),
   channelMembers: (guildId: string, channelId: string) =>
     request<{ user: PublicUser }[]>(`/guilds/${guildId}/channels/${channelId}/members`),
   addChannelMember: (guildId: string, channelId: string, userId: string) =>

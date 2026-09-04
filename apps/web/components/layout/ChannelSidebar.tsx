@@ -41,6 +41,7 @@ import { MENU_WIDTH, MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
 import Cronometro from "@/components/voice/Cronometro";
 import VoiceChannelMembers from "@/components/voice/VoiceChannelMembers";
 import { useAuth } from "@/stores/auth";
+import { canalVisivel } from "@/stores/categoria-colapso";
 import { useCategories } from "@/stores/categories";
 import { groupByCategory, type CategoryGroup } from "@/stores/channel-order";
 import { useChannels } from "@/stores/channels";
@@ -123,6 +124,7 @@ function CategoryHeader({
   collapsed,
   onToggle,
   onCreate,
+  onEdit,
   onContextMenu,
   dragProps,
 }: {
@@ -130,12 +132,18 @@ function CategoryHeader({
   collapsed: boolean;
   onToggle: () => void;
   onCreate?: () => void;
+  onEdit?: () => void;
   onContextMenu?: (e: MouseEvent) => void;
   dragProps?: Record<string, unknown>;
 }) {
   return (
+    /*
+      O `group` existe só pela engrenagem, que é de hover (o "+" não é). Ele não
+      mexe no hover dos canais: as regras `group-hover` deles estão na linha do
+      canal, que é irmã deste cabeçalho e não descendente dele.
+    */
     <div
-      className="mx-2 flex h-[22px] items-center pr-1"
+      className="group mx-2 flex h-[22px] items-center pr-1"
       onContextMenu={onContextMenu}
       {...dragProps}
     >
@@ -159,6 +167,23 @@ function CategoryHeader({
           <ChevronDown size={12} className="shrink-0" aria-hidden="true" />
         )}
       </button>
+      {/* A engrenagem da categoria abre o mesmo modal do item "Editar
+          categoria" do menu de contexto. Ao contrário do "+", ela é de hover —
+          as classes são as mesmas dos dois botões de hover do canal, para os
+          três acenderem igual. Fica à esquerda do "+" para não mover o "+",
+          cuja coluna (x=318) está medida na print. */}
+      {onEdit && (
+        <Tooltip label="Editar categoria">
+          <button
+            type="button"
+            onClick={onEdit}
+            aria-label={`Editar ${label}`}
+            className="grid h-[22px] w-6 shrink-0 place-items-center rounded text-txt-muted opacity-0 transition hover:text-txt-primary group-hover:opacity-100 focus-visible:opacity-100"
+          >
+            <Settings size={18} />
+          </button>
+        </Tooltip>
+      )}
       {onCreate && (
         <Tooltip label="Criar canal">
           <button
@@ -240,7 +265,6 @@ export default function ChannelSidebar() {
   const toggleCollapsed = useCategories((s) => s.toggleCollapsed);
   const setAllCollapsed = useCategories((s) => s.setAllCollapsed);
   const criarCategoria = useCategories((s) => s.create);
-  const renomearCategoria = useCategories((s) => s.rename);
   const apagarCategoria = useCategories((s) => s.remove);
 
   /*
@@ -424,10 +448,16 @@ export default function ChannelSidebar() {
     ];
     if (podeGerenciarCanais) {
       items.push({ separator: true });
+      /*
+        "Editar categoria" era um `prompt` de renomear. Agora abre o mesmo modal
+        da engrenagem do cabeçalho, com abas (geral e permissões) — como no
+        Discord, onde renomear é um campo dentro de "Editar categoria" e não uma
+        caixinha à parte.
+      */
       items.push({
         label: "Editar categoria",
         icon: <Pencil size={18} />,
-        onSelect: () => void renomearCategoria(guild.id, category),
+        onSelect: () => openModal({ kind: "categorySettings", categoryId: category.id }),
       });
       items.push({
         label: "Apagar categoria",
@@ -557,15 +587,25 @@ export default function ChannelSidebar() {
     return alvo?.tipo === "canal" && alvo.categoryId === categoryId && alvo.index === index;
   }
 
+  /**
+   * Canal silenciado (por ele mesmo ou pelo servidor) não conta como não lido.
+   *
+   * Virou função porque a categoria recolhida também precisa da resposta, para
+   * decidir quais canais continuam à vista.
+   */
+  function estaSilenciado(channel: Channel): boolean {
+    return (
+      isMuted(porEscopo[channelNotificationScope(channel.id)]) ||
+      (channel.guildId ? isMuted(porEscopo[guildNotificationScope(channel.guildId)]) : false)
+    );
+  }
+
   function renderChannel(channel: Channel, grupo: CategoryGroup, index: number) {
     // um só destaque para os dois tipos: canal de voz agora também é canal
     // aberto (ele tem chat de texto), e continua marcado depois de desligar
     const active = activeChannelId === channel.id;
     const name = channel.name ?? "canal";
-    // canal silenciado (dele ou do servidor) não conta como não lido
-    const silenciado =
-      isMuted(porEscopo[channelNotificationScope(channel.id)]) ||
-      (channel.guildId ? isMuted(porEscopo[guildNotificationScope(channel.guildId)]) : false);
+    const silenciado = estaSilenciado(channel);
     // canal de voz entra na conta do não lido como qualquer outro: o chat de
     // texto dele é real, e mensagem lá não pode passar despercebida
     const unread = !active && !silenciado && isUnread(channel);
@@ -704,10 +744,25 @@ export default function ChannelSidebar() {
     const lista = grupo.channels;
     const colapsavel = !!category;
     const fechada = colapsavel && collapsed.includes(chave);
-    // categoria fechada ainda mostra o canal ativo, como no Discord
-    const visiveis = fechada
-      ? lista.filter((c) => c.id === activeChannelId || c.id === voiceChannelId)
-      : lista;
+    /*
+      Categoria fechada não esconde tudo: o canal ativo continua à vista e,
+      junto com ele, o que tem novidade — não lido ou menção. É o que o Discord
+      faz, e é o que impede o colapso de engolir uma mensagem nova (ou um canal
+      recém-criado, que entra aqui já como ativo). A regra é pura e testada em
+      `stores/categoria-colapso`.
+
+      Silenciado zera o "não lido" (a mesma conta do `renderChannel`), mas **não**
+      as menções: o canal silenciado já desenha a pílula vermelha quando alguém
+      me cita, e escondê-lo aqui apagaria da tela a citação que a pílula mostra.
+    */
+    const visiveis = lista.filter((c) =>
+      canalVisivel({
+        recolhida: fechada,
+        ativo: c.id === activeChannelId || c.id === voiceChannelId,
+        naoLido: !estaSilenciado(c) && isUnread(c),
+        mencoes: c.mentionCount,
+      }),
+    );
 
     // categoria vazia continua desenhada (é onde se solta o primeiro canal);
     // o bloco sem título, não — senão sobraria um respiro no topo da coluna
@@ -732,6 +787,11 @@ export default function ChannelSidebar() {
               onCreate={
                 podeGerenciarCanais
                   ? () => openModal({ kind: "createChannel", categoryId: category?.id ?? null })
+                  : undefined
+              }
+              onEdit={
+                podeGerenciarCanais && category
+                  ? () => openModal({ kind: "categorySettings", categoryId: category.id })
                   : undefined
               }
               onContextMenu={category ? (e) => openCategoryMenu(e, category) : undefined}

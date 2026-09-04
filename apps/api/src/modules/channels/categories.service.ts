@@ -1,7 +1,12 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { Permission, WS_EVENTS } from "@streamz/shared";
-import type { Category } from "@streamz/shared";
-import { toCategoryDTO, toChannelDTO } from "../../common/dto";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import { ALL_PERMISSIONS, Permission, WS_EVENTS, hasPermission } from "@streamz/shared";
+import type { Category, CategoryOverride, ChannelOverrideInput } from "@streamz/shared";
+import { toCategoryDTO, toCategoryOverrideDTO, toChannelDTO, toOverrideDTO } from "../../common/dto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { RealtimeService } from "../realtime/realtime.service";
@@ -76,6 +81,14 @@ export class CategoriesService {
       where: { categoryId },
       select: { id: true },
     });
+    // c-cargos: os canais soltos não herdam mais de ninguém. As regras que eles
+    // herdavam já estão copiadas nas linhas deles (é o que a sincronia grava),
+    // então o acesso não muda — o que muda é parar de dizer "sincronizado" para
+    // um canal cuja categoria não existe mais.
+    await this.prisma.channel.updateMany({
+      where: { categoryId, syncedWithCategory: true },
+      data: { syncedWithCategory: false },
+    });
     await this.prisma.category.delete({ where: { id: categoryId } });
     this.realtime.emitToGuild(guildId, WS_EVENTS.CATEGORY_DELETED, { categoryId, guildId });
 
@@ -123,6 +136,166 @@ export class CategoriesService {
       this.realtime.emitToGuild(guildId, WS_EVENTS.CATEGORY_UPDATED, dto);
     }
     return dtos;
+  }
+
+  // ── regras (overrides) da categoria ────────────────────────
+
+  /**
+   * As regras da categoria. Basta ser membro do servidor: a tela de permissões
+   * mostra o mesmo que a coluna já deixa deduzir (quem enxerga o quê), e
+   * esconder isso de quem não modera só quebraria a UI sem esconder nada.
+   */
+  async listOverrides(
+    userId: string,
+    guildId: string,
+    categoryId: string,
+  ): Promise<CategoryOverride[]> {
+    await this.guilds.assertMember(userId, guildId);
+    await this.assertInGuild(categoryId, guildId);
+    const rows = await this.prisma.categoryOverride.findMany({ where: { categoryId } });
+    return rows.map(toCategoryOverrideDTO);
+  }
+
+  /** Todas as regras de todas as categorias do servidor — a carga do cliente. */
+  async listGuildOverrides(userId: string, guildId: string): Promise<CategoryOverride[]> {
+    await this.guilds.assertMember(userId, guildId);
+    const rows = await this.prisma.categoryOverride.findMany({
+      where: { category: { guildId } },
+    });
+    return rows.map(toCategoryOverrideDTO);
+  }
+
+  /**
+   * Grava a regra de um cargo ou de um usuário numa categoria e **propaga** aos
+   * canais sincronizados.
+   *
+   * As mesmas duas travas do override de canal: exige `MANAGE_ROLES`, e ninguém
+   * concede o que não tem — senão `MANAGE_ROLES` viraria `ADMINISTRATOR` por
+   * um caminho de duas telas.
+   */
+  async setOverride(
+    actorId: string,
+    guildId: string,
+    categoryId: string,
+    input: ChannelOverrideInput,
+  ): Promise<CategoryOverride[]> {
+    await this.guilds.assertCanModerate(actorId, guildId, Permission.MANAGE_ROLES);
+    await this.assertInGuild(categoryId, guildId);
+    const roleId = input.roleId ?? null;
+    const userId = input.userId ?? null;
+    if ((roleId === null) === (userId === null)) {
+      throw new BadRequestException(
+        "A regra vale para um cargo ou para um usuário, não os dois",
+      );
+    }
+    const minhas = await this.guilds.permissionsOf(actorId, guildId);
+    const mexidas = (input.allow | input.deny) & ALL_PERMISSIONS;
+    if (!hasPermission(minhas, mexidas)) {
+      throw new ForbiddenException("Você não pode mexer numa permissão que não tem");
+    }
+    if (roleId) {
+      const cargo = await this.prisma.role.findUnique({ where: { id: roleId } });
+      if (!cargo || cargo.guildId !== guildId) {
+        throw new BadRequestException("Cargo não pertence a este servidor");
+      }
+    } else {
+      await this.guilds.assertMember(userId as string, guildId);
+    }
+
+    const allow = input.allow & ALL_PERMISSIONS;
+    const deny = input.deny & ALL_PERMISSIONS & ~allow;
+    if (roleId) {
+      await this.prisma.categoryOverride.upsert({
+        where: { categoryId_roleId: { categoryId, roleId } },
+        create: { categoryId, roleId, allow, deny },
+        update: { allow, deny },
+      });
+    } else {
+      await this.prisma.categoryOverride.upsert({
+        where: { categoryId_userId: { categoryId, userId: userId as string } },
+        create: { categoryId, userId: userId as string, allow, deny },
+        update: { allow, deny },
+      });
+    }
+    return this.aposMudarOverrides(guildId, categoryId);
+  }
+
+  async removeOverride(
+    actorId: string,
+    guildId: string,
+    categoryId: string,
+    targetId: string,
+  ): Promise<CategoryOverride[]> {
+    await this.guilds.assertCanModerate(actorId, guildId, Permission.MANAGE_ROLES);
+    await this.assertInGuild(categoryId, guildId);
+    await this.prisma.categoryOverride.deleteMany({
+      where: { categoryId, OR: [{ roleId: targetId }, { userId: targetId }] },
+    });
+    return this.aposMudarOverrides(guildId, categoryId);
+  }
+
+  /**
+   * Copia as regras da categoria para todo canal sincronizado dela, avisa a
+   * quem interessa e devolve o estado novo.
+   *
+   * A propagação é uma **cópia**, não um ponteiro: é assim que o Discord faz, e
+   * é o que permite dessincronizar um canal sem perder o que ele herdava. O
+   * cálculo de permissão continua sabendo herdar por conta própria
+   * (`GuildsService.regrasPorCanal`) — as duas coisas juntas fazem a cópia ser
+   * uma otimização, não a fonte da verdade.
+   */
+  private async aposMudarOverrides(
+    guildId: string,
+    categoryId: string,
+  ): Promise<CategoryOverride[]> {
+    const rows = await this.prisma.categoryOverride.findMany({ where: { categoryId } });
+    const overrides = rows.map(toCategoryOverrideDTO);
+
+    const sincronizados = await this.prisma.channel.findMany({
+      where: { categoryId, syncedWithCategory: true },
+      select: { id: true },
+    });
+    for (const canal of sincronizados) {
+      await this.prisma.$transaction([
+        this.prisma.channelOverride.deleteMany({ where: { channelId: canal.id } }),
+        ...rows.map((o) =>
+          this.prisma.channelOverride.create({
+            data: {
+              channelId: canal.id,
+              roleId: o.roleId,
+              userId: o.userId,
+              allow: o.allow,
+              deny: o.deny,
+            },
+          }),
+        ),
+      ]);
+      await this.guilds.syncChannelFlags(canal.id);
+    }
+
+    // quem passou a ver (ou deixou de ver) um canal precisa entrar/sair da sala
+    const membros = await this.prisma.guildMember.findMany({
+      where: { guildId },
+      select: { userId: true },
+    });
+    for (const m of membros) await this.guilds.resyncChannelRooms(guildId, m.userId);
+
+    this.realtime.emitToGuild(guildId, WS_EVENTS.CATEGORY_OVERRIDES, {
+      guildId,
+      categoryId,
+      overrides,
+    });
+    for (const canal of sincronizados) {
+      const linhas = await this.prisma.channelOverride.findMany({
+        where: { channelId: canal.id },
+      });
+      this.realtime.emitToGuild(guildId, WS_EVENTS.CHANNEL_OVERRIDES, {
+        guildId,
+        channelId: canal.id,
+        overrides: linhas.map(toOverrideDTO),
+      });
+    }
+    return overrides;
   }
 
   private async assertInGuild(categoryId: string, guildId: string) {

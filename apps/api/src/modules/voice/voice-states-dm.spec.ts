@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BadRequestException, ForbiddenException } from "@nestjs/common";
+import { DEFAULT_PERMISSIONS, DM_PERMISSIONS } from "@streamz/shared";
 import { VoiceService } from "./voice.service";
 import type { GuildsService } from "../guilds/guilds.service";
 import type { PrismaService } from "../../prisma/prisma.service";
@@ -32,12 +33,22 @@ function servico(participantes: Record<string, string[]>) {
   const guilds = {
     async assertCanViewChannel(userId: string, channelId: string) {
       if (channelId === "canal-de-servidor") {
-        return { tipo: "guild", channel: { id: channelId, guildId: "g1", type: "VOICE" } };
+        // c-cargos: o `assertCanViewChannel` de verdade sempre devolve a permissão
+      // efetiva do canal — o token e as flags de voz saem dela
+      return {
+          tipo: "guild",
+          channel: { id: channelId, guildId: "g1", type: "VOICE" },
+          permissions: DEFAULT_PERMISSIONS,
+        };
       }
       if (!participantes[channelId]?.includes(userId)) {
         throw new ForbiddenException("Você não participa desta conversa");
       }
-      return { tipo: "dm", channel: { id: channelId, guildId: null, type: "DM" } };
+      return {
+        tipo: "dm",
+        channel: { id: channelId, guildId: null, type: "DM" },
+        permissions: DM_PERMISSIONS,
+      };
     },
   } as unknown as GuildsService;
   const prisma = {

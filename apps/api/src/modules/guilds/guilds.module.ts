@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { GuildsController } from "./guilds.controller";
 import { GuildsService } from "./guilds.service";
 import { CategoriasPadraoService } from "./categorias-padrao";
+import { PermissoesLegadoService } from "./permissoes-legado";
 import { AuthModule } from "../auth/auth.module";
 import { RealtimeModule } from "../realtime/realtime.module";
 import { ReadStateModule } from "../read-state/read-state.module";
@@ -14,7 +15,9 @@ import { StorageModule } from "../storage/storage.module";
   controllers: [GuildsController],
   // CategoriasPadraoService: passo idempotente do boot que cria as duas
   // categorias padrão nos servidores que nasceram antes delas existirem
-  providers: [GuildsService, CategoriasPadraoService],
+  // PermissoesLegadoService: passo idempotente do boot que converte
+  // `private`/`readOnly` e a allowlist antiga para overrides (c-cargos)
+  providers: [GuildsService, CategoriasPadraoService, PermissoesLegadoService],
   exports: [GuildsService],
 })
 export class GuildsModule {}

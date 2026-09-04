@@ -50,6 +50,8 @@ interface CategoriesState {
   remove: (guildId: string, category: Category) => Promise<void>;
 
   toggleCollapsed: (categoryId: string) => void;
+  /** abre a categoria (idempotente) — ver o porquê na implementação. */
+  expandir: (categoryId: string) => void;
   setAllCollapsed: (collapsed: boolean) => void;
 
   handleCreated: (category: Category) => void;
@@ -138,6 +140,20 @@ export const useCategories = create<CategoriesState>((set, get) => ({
     if (guildId) gravarColapso(guildId, proximo);
   },
 
+  /*
+    Abrir sem alternar. Quem cria um canal precisa **garantir** que a categoria
+    dele está aberta: com `toggleCollapsed` uma categoria já aberta se fecharia,
+    e o canal novo sumiria — que é o inverso do que se quer. Não escreve nada
+    quando já está aberta, para não redesenhar a coluna nem gravar de novo.
+  */
+  expandir: (categoryId) => {
+    const { guildId, collapsed } = get();
+    if (!collapsed.includes(categoryId)) return;
+    const proximo = collapsed.filter((id) => id !== categoryId);
+    set({ collapsed: proximo });
+    if (guildId) gravarColapso(guildId, proximo);
+  },
+
   setAllCollapsed: (collapsed) => {
     const { guildId, categories } = get();
     const proximo = collapsed ? categories.map((c) => c.id) : [];
@@ -147,11 +163,21 @@ export const useCategories = create<CategoriesState>((set, get) => ({
 
   handleCreated: (category) => {
     if (category.guildId !== get().guildId) return;
-    set((s) =>
-      s.categories.some((c) => c.id === category.id)
-        ? s
-        : { categories: [...s.categories, category].sort((a, b) => a.position - b.position) },
-    );
+    // eco repetido do socket não é criação: sai antes de mexer no colapso, ou
+    // reabriria uma categoria que a pessoa fechou depois de recebê-la
+    if (get().categories.some((c) => c.id === category.id)) return;
+    set((s) => ({
+      categories: [...s.categories, category].sort((a, b) => a.position - b.position),
+    }));
+    /*
+      Categoria nova nasce aberta. Colapso é opt-in, então o id novo não
+      deveria estar em `collapsed` — mas o colapso vive no `localStorage` do
+      navegador, e uma entrada velha de um id reciclado (ou de uma categoria
+      apagada e recriada com o mesmo id) faria a categoria nascer fechada e
+      parecer que a criação não funcionou. `expandir` é idempotente: no caso
+      normal não faz nada.
+    */
+    get().expandir(category.id);
   },
 
   handleUpdated: (category) => {

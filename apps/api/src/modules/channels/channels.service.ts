@@ -15,7 +15,7 @@ import type {
   MemberRole,
   ReorderPayload,
 } from "@streamz/shared";
-import { toChannelDTO, toPublicUser } from "../../common/dto";
+import { toChannelDTO, toOverrideDTO, toPublicUser } from "../../common/dto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 import { diffChanges } from "../audit/changes";
@@ -88,10 +88,21 @@ export class ChannelsService {
         private: isPrivate,
         readOnly: somenteLeitura,
         categoryId,
+        // canal novo dentro de uma categoria nasce **sincronizado** com ela, o
+        // que é o que o Discord faz — e o que faz "criei um canal na categoria
+        // privada e ele saiu público" não acontecer. Sem categoria, não há de
+        // quem herdar.
+        syncedWithCategory: categoryId !== null,
       },
     });
+    // sincronizado quer dizer "com as mesmas regras": copia as da categoria
+    if (categoryId !== null) {
+      await this.guilds.sincronizarComACategoria(channel.id);
+    }
 
-    // `private`/`readOnly` são espelho: quem autoriza é o override do @everyone
+    // `private`/`readOnly` são espelho: quem autoriza é o override do @everyone.
+    // Marcar privado/somente-leitura **no canal** o tira da sincronia — quem
+    // pediu uma regra própria na criação não quer herdar a da categoria.
     if (isPrivate || readOnly) {
       await this.guilds.applyChannelFlags(guildId, channel.id, { private: isPrivate, readOnly });
     }
@@ -165,6 +176,13 @@ export class ChannelsService {
         ? undefined
         : await this.resolveCategory(guildId, patch.categoryId);
 
+    // mudar de categoria não re-herda sozinho: o canal sai da sincronia levando
+    // consigo as regras que herdava (o Discord também não sincroniza ao mover).
+    // Quem quiser herdar da nova categoria usa "Sincronizar com a categoria".
+    if (categoryId !== undefined && categoryId !== antes.categoryId) {
+      await this.guilds.dessincronizarDaCategoria(channelId);
+    }
+
     const channel = await this.prisma.channel.update({
       where: { id: channelId },
       data: {
@@ -179,9 +197,16 @@ export class ChannelsService {
         ...(categoryId !== undefined ? { categoryId } : {}),
       },
     });
-    // somente-leitura é deny SEND_MESSAGES no @everyone; o booleano é espelho
-    if (patch.readOnly !== undefined) {
-      await this.guilds.applyChannelFlags(guildId, channelId, { readOnly: patch.readOnly });
+    // `readOnly` é deny SEND_MESSAGES e `private` é deny VIEW_CHANNEL, os dois
+    // no @everyone; as colunas são espelho. `private` não passava por aqui: a
+    // coluna era escrita e o override não, e o `syncChannelFlags` seguinte
+    // desfazia a marcação em silêncio — o interruptor "Canal privado" da aba
+    // Permissões não pegava.
+    if (patch.readOnly !== undefined || patch.isPrivate !== undefined) {
+      await this.guilds.applyChannelFlags(guildId, channelId, {
+        ...(patch.readOnly !== undefined ? { readOnly: patch.readOnly } : {}),
+        ...(patch.isPrivate !== undefined ? { private: patch.isPrivate } : {}),
+      });
     }
 
     const changes = diffChanges(
@@ -316,6 +341,39 @@ export class ChannelsService {
   }
 
   // ── allowlist de canal privado (só moderação) ──────────────────
+
+  /**
+   * Devolve o canal à sincronia com a categoria: as regras dele passam a ser as
+   * dela, e o que ele tinha de próprio é descartado (a tela avisa antes).
+   */
+  async sincronizarComACategoria(
+    actorId: string,
+    guildId: string,
+    channelId: string,
+  ): Promise<Channel> {
+    await this.guilds.assertCanModerate(actorId, guildId, Permission.MANAGE_CHANNELS);
+    await this.assertChannelInGuild(channelId, guildId);
+    const antes = await this.prisma.channel.findUnique({ where: { id: channelId } });
+    if (!antes) throw new NotFoundException("Canal não encontrado");
+    await this.guilds.sincronizarComACategoria(channelId);
+    const depois = await this.prisma.channel.findUnique({ where: { id: channelId } });
+    if (!depois) throw new NotFoundException("Canal não encontrado");
+    // quem passou a ver (ou deixou de ver) o canal entra/sai da sala agora
+    const membros = await this.prisma.guildMember.findMany({
+      where: { guildId },
+      select: { userId: true },
+    });
+    for (const m of membros) await this.guilds.resyncChannelRooms(guildId, m.userId);
+    const dto = toChannelDTO(depois);
+    await this.emitChannelChange(antes, depois, dto);
+    const overrides = await this.prisma.channelOverride.findMany({ where: { channelId } });
+    this.realtime.emitToGuild(guildId, WS_EVENTS.CHANNEL_OVERRIDES, {
+      guildId,
+      channelId,
+      overrides: overrides.map(toOverrideDTO),
+    });
+    return dto;
+  }
 
   async listMembers(actorId: string, guildId: string, channelId: string) {
     await this.guilds.assertCanModerate(actorId, guildId, Permission.MANAGE_CHANNELS);
