@@ -119,7 +119,7 @@ function Cartao({
     >
       <span
         aria-hidden="true"
-        className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-rail text-txt-secondary"
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-void text-txt-secondary"
       >
         {icone}
       </span>

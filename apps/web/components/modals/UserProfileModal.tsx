@@ -240,7 +240,7 @@ export default function UserProfileModal({
                             className="h-6 w-6 shrink-0 rounded-full object-cover"
                           />
                         ) : (
-                          <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-rail text-[10px] font-semibold text-txt-primary">
+                          <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-void text-[10px] font-semibold text-txt-primary">
                             {g.name.slice(0, 2).toUpperCase()}
                           </span>
                         )}

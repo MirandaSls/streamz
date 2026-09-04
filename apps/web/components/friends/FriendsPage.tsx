@@ -322,7 +322,7 @@ export default function FriendsPage() {
               type="search"
               aria-label="Buscar amigos"
               placeholder="Buscar"
-              className="h-10 w-full rounded-lg bg-rail pl-10 pr-3 text-base text-txt-normal outline-none placeholder:text-txt-muted"
+              className="h-10 w-full rounded-lg bg-void pl-10 pr-3 text-base text-txt-normal outline-none placeholder:text-txt-muted"
             />
           </div>
         )}

@@ -79,7 +79,7 @@ export default function CustomStatusModal() {
       }
     >
       <Rotulo htmlFor="statusText">Status personalizado</Rotulo>
-      <div className="relative flex items-center gap-2 rounded-[3px] bg-rail px-2">
+      <div className="relative flex items-center gap-2 rounded-[3px] bg-void px-2">
         <Tooltip label="Escolher emoji">
           <button
             type="button"

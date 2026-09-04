@@ -104,7 +104,7 @@ export default function InviteEmbed({ code }: { code: string }) {
           : "Você foi convidado para entrar em um servidor"}
       </p>
       <div className="mt-3 flex items-center gap-4">
-        <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl bg-rail text-sm font-semibold text-txt-primary">
+        <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl bg-void text-sm font-semibold text-txt-primary">
           {previa.guild.iconUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={previa.guild.iconUrl} alt="" className="h-full w-full object-cover" />

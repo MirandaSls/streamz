@@ -32,7 +32,7 @@ type Borda = "sozinho" | "esquerda" | "direita";
 
 const TOM: Record<Tom, string> = {
   neutro: "text-white hover:bg-white/10",
-  ativo: "bg-white text-rail hover:bg-white/90",
+  ativo: "bg-white text-void hover:bg-white/90",
   // transmitir é o único "ligado" que o Discord pinta de verde, e não de
   // branco: é o estado que continua valendo quando você olha para outra aba
   aoVivo: "bg-green text-accent-ink hover:brightness-110",

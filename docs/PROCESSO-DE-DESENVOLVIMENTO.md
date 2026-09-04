@@ -594,7 +594,10 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
 
 ### 6.6 Decisões já tomadas (não reabrir sem o usuário)
 - Cores e tokens: intocados. Nova superfície usa o token existente mais próximo
-  e o PR registra a diferença.
+  e o PR registra a diferença. **Exceção aberta pelo usuário em 2026-09-04**: a
+  escala de superfícies foi remedida no Discord e passou a valer o cinza dele
+  (rail = coluna = barra de título = `#121214`); ver "Emenda 1" da ADR-0004. O
+  accent limão e os textos continuam sendo nossos, e a regra volta a valer.
 - Nitro, Loja, Missões e o painel "Ativo agora": não criar.
 - Botões sem função no nosso app (presente e apps no composer, filtros na caixa
   de entrada): existem como visual, inertes, com tooltip, registrados no PR.

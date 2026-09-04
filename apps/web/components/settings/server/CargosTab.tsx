@@ -428,7 +428,7 @@ function RoleEditor({
       </div>
 
       {role.isDefault && (
-        <p className="mb-4 rounded bg-rail/50 px-3 py-2 text-sm text-txt-muted">
+        <p className="mb-4 rounded bg-void/50 px-3 py-2 text-sm text-txt-muted">
           O @everyone vale para todo membro do servidor. Ele não tem nome, cor nem posição —
           só o conjunto de permissões que todo mundo recebe por padrão.
         </p>
@@ -496,7 +496,7 @@ function RoleEditor({
       {aba === "membros" && (
         <>
           <h3 className={ESTILO_ROTULO}>Membros com este cargo — {doCargo.length}</h3>
-          <div className="rounded bg-rail/50">
+          <div className="rounded bg-void/50">
             {doCargo.length === 0 ? (
               <p className="px-3 py-2 text-sm text-txt-muted">Ninguém tem este cargo ainda.</p>
             ) : (

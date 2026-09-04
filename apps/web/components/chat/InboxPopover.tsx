@@ -69,7 +69,7 @@ export default function InboxPopover({
   tamanhoDoIcone?: number;
   /**
    * Cor do anel do badge: é a **superfície atrás do ícone**, não uma cor nova
-   * (`ring-chat` no cabeçalho de Amigos, `ring-rail` na barra de título). O
+   * (`ring-chat` no cabeçalho de Amigos, `ring-void` na barra de título). O
    * anel existe para descolar o vermelho do ícone, e só funciona se for
    * exatamente o fundo — ver o badge do rail em `GuildRail`.
    */
@@ -453,7 +453,7 @@ function Vazio({
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-10 text-center">
       <div className="relative h-20 w-20">
-        <div className="grid h-20 w-20 place-items-center rounded-full bg-rail text-txt-secondary">
+        <div className="grid h-20 w-20 place-items-center rounded-full bg-void text-txt-secondary">
           {icone}
         </div>
         <svg

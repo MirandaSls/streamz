@@ -37,7 +37,7 @@ const FUNDO_DO_SELO: Record<string, string> = {
   "border-chat": "bg-chat",
   "border-footer": "bg-footer",
   "border-overlay": "bg-overlay",
-  "border-rail": "bg-rail",
+  "border-void": "bg-void",
   "border-input": "bg-input",
   "border-sel": "bg-sel",
   "border-hov": "bg-hov",

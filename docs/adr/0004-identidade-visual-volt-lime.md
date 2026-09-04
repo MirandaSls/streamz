@@ -63,6 +63,10 @@ componentes e movimento da marca.
 
 ## Decisão
 
+> **Emendado em 2026-09-04 (ver "Emenda 1" no fim).** A parte da escala de
+> superfícies abaixo foi revertida: os cinzas voltaram a ser os do Discord,
+> medidos. O accent, as três regras e a tipografia continuam valendo.
+
 **Opção B.** A escala de cinza é reancorada no Void Ink `#0B0B0F` preservando os
 mesmos deltas de luminância entre superfícies que a escala Discord tem hoje
 (`rail` < `footer` < `panel` < `chat` < `input`), e o Volt Lime `#9BE31F`
@@ -113,3 +117,52 @@ Tema claro continua fora do MVP. O Paper `#FDFDFB` entra apenas como cor de text
 e de marca, nunca como superfície. Adotá-lo como tema exigiria um accent
 alternativo para fundo claro, que o pacote de marca ainda não define — e isso é
 outra ADR.
+
+## Emenda 1 — 2026-09-04: os cinzas voltam a ser os do Discord
+
+O usuário viu o app ao lado do Discord e disse: "a barra lateral está mais
+escura que o restante do app; no Discord isso não acontece". A medição
+(Pillow/`getpixel` em área plana dos prints `docs/Reference/Captura de tela
+2026-09-04 102422/102429/102757/100527.png` e `2026-09-02 180835.png`) mostrou
+duas coisas que a escala ancorada no Void Ink não previa:
+
+1. **No Discord a rail de servidores, a coluna de canais/DMs e a barra de título
+   são a mesma superfície** — `#121214`, os três. O que as separa é uma linha de
+   1px `#222225`, não uma diferença de cor. A nossa escala tinha `rail #0B0B0F`
+   contra `panel #141419`: um degrau que o Discord não tem, e ainda por cima no
+   fundo do poço.
+2. A nossa escala **descia mais fundo** que a do Discord onde ele sobe: o card
+   do usuário era `#101015` (mais escuro que a coluna) quando no Discord ele é
+   `#202024` (mais claro que a coluna).
+
+Decisão: as superfícies passam a ser os hex medidos no Discord. A marca não
+muda — Volt Lime continua o accent, Paper continua o texto, e o Void Ink
+`#0B0B0F` continua no produto: virou o token `void` (campos escuros, tooltips,
+palco de chamada, trilhos), que era o antigo `rail`.
+
+| Token | Antes | Depois (medido no Discord) |
+|---|---|---|
+| `rail` → `panel` | `#0B0B0F` / `#141419` | `#121214` (rail = coluna = barra de título) |
+| `footer` | `#101015` | `#202024` |
+| `chat` | `#1A1A20` | `#1A1A1E` |
+| `input` | `#23232B` | `#222327` |
+| `hov` | `#1E1E23` | `#222225` |
+| `sel` | `#29292E` | `#2C2C30` |
+| `rail-divider` | `#1C1C22` (2px) | `#222225` (1px) |
+| `msghov` | `#17171D` | `#17171A` (não medido: só re-harmonizado com `chat`) |
+| `void` (novo, era `rail`) | — | `#0B0B0F` |
+
+Consequências:
+
+- O token `rail` **deixa de existir**. Quem era `bg-rail` de campo escuro virou
+  `bg-void`; quem era a superfície da rail virou `bg-panel`.
+- Sem o degrau de cor entre rail e coluna, a separação passa a ser a linha de
+  1px (`rail-divider`), como no Discord.
+- A dívida do `txt-faint` continua igual: 3,43:1 sobre o novo `chat` `#1A1A1E`
+  (era 3,43:1 sobre `#1A1A20`). Nenhum texto perdeu AA por causa desta emenda;
+  o pior caso novo é `txt-muted` sobre `sel`, que foi de 4,21:1 para 4,04:1 —
+  já estava abaixo de AA e `sel` quase sempre carrega `txt-primary`.
+- **Fora desta emenda:** `overlay` (menu de contexto, popover, toast) continua
+  `#050507`. O Discord usa `#28282D` — o menu dele é *mais claro* que o app,
+  o nosso é mais escuro. É uma inversão do modelo de elevação, não um ajuste de
+  valor, e vale uma decisão própria.

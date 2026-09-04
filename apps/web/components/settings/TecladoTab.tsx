@@ -83,7 +83,7 @@ export default function TecladoTab() {
                     {spec.combos.map((combo) => (
                       <kbd
                         key={combo}
-                        className="rounded-[3px] bg-rail px-2 py-1 text-xs font-semibold text-txt-primary"
+                        className="rounded-[3px] bg-void px-2 py-1 text-xs font-semibold text-txt-primary"
                       >
                         {formatShortcut(combo)}
                       </kbd>

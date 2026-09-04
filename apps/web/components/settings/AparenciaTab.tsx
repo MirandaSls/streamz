@@ -163,9 +163,9 @@ function EscolhaDeTema() {
 /** Um app de três colunas em miniatura — o mesmo desenho que o Discord usa. */
 function MiniaturaDeTema({ variante }: { variante: Tema }) {
   const claro = variante === "light";
-  const fundo = claro ? "#FFFFFF" : "#1A1A20";
-  const painel = claro ? "#E8E8EC" : "#141419";
-  const rail = claro ? "#D2D2DA" : "#0B0B0F";
+  const fundo = claro ? "#FFFFFF" : "#1A1A1E";
+  const painel = claro ? "#E8E8EC" : "#121214";
+  const rail = claro ? "#D2D2DA" : "#121214";
   const linha = claro ? "#B8B8C2" : "#35353F";
 
   return (

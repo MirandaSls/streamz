@@ -152,7 +152,7 @@ export default function CreateGroupDMModal() {
               type="button"
               onClick={() => toggle(u)}
               aria-label={`Remover ${displayNameOf(u)}`}
-              className="flex items-center gap-1 rounded-[4px] bg-rail px-2 py-1 text-sm text-txt-primary transition hover:bg-hov"
+              className="flex items-center gap-1 rounded-[4px] bg-void px-2 py-1 text-sm text-txt-primary transition hover:bg-hov"
             >
               {displayNameOf(u)}
               <X size={14} aria-hidden="true" className="text-txt-muted" />
@@ -168,7 +168,7 @@ export default function CreateGroupDMModal() {
         type="search"
         placeholder="Buscar"
         aria-label="Buscar usuário"
-        className="h-10 w-full rounded-lg bg-rail px-3 text-txt-normal outline-none placeholder:text-txt-muted"
+        className="h-10 w-full rounded-lg bg-void px-3 text-txt-normal outline-none placeholder:text-txt-muted"
       />
       <p className="mt-2 text-xs text-txt-muted">
         Adicione amigos, ou busque alguém pelo nome de usuário, a grupos privados.

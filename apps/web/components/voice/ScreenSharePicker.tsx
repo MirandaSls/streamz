@@ -178,7 +178,7 @@ function BarraDeAbas({ aba, onAba }: { aba: Aba; onAba: (aba: Aba) => void }) {
     <div
       role="tablist"
       aria-label="Tipo de fonte"
-      className="flex h-10 shrink-0 gap-1 rounded-lg bg-rail p-1"
+      className="flex h-10 shrink-0 gap-1 rounded-lg bg-void p-1"
     >
       {abas.map(([id, rotulo, icone]) => (
         <button

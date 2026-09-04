@@ -423,7 +423,7 @@ function AvatarDeChamada({
         <Avatar
           user={state.user}
           size="xl"
-          surface="border-rail"
+          surface="border-void"
           voz={state.deafened ? "surdo" : state.muted ? "mudo" : null}
           className={`transition-transform ${ativo ? ENCOLHE_AO_FALAR : ""}`}
         />

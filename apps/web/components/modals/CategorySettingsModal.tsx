@@ -197,7 +197,7 @@ export default function CategorySettingsModal({
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={MAX_CATEGORY_NAME}
-            className="h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none"
+            className="h-10 w-full rounded-[3px] bg-void px-2.5 text-txt-normal outline-none"
           />
         </div>
       )}

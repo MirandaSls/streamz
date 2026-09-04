@@ -14,7 +14,7 @@
  *
  * Mora aqui como constante, e não como classe repetida em cada aba, porque o
  * estado de foco é a única pista de "onde estou digitando" numa tela sem
- * contorno: um `bg-rail` sem borda deixa o campo indistinguível do fundo e o
+ * contorno: um `bg-void` sem borda deixa o campo indistinguível do fundo e o
  * foco invisível. Quem precisa de `<textarea>` usa `ESTILO_AREA`.
  *
  * Medidas do campo "Nome" do Discord (visão geral do servidor): 40 de altura,

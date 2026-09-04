@@ -278,11 +278,11 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
         <div className="hidden w-[300px] shrink-0 overflow-hidden rounded-lg bg-panel xl:block">
           <div
             aria-hidden="true"
-            className="h-[118px] w-full bg-rail"
+            className="h-[118px] w-full bg-void"
             style={faixa ? { background: faixa } : undefined}
           />
           <div className="px-4 pb-4">
-            <div className="-mt-8 grid h-[68px] w-[68px] place-items-center overflow-hidden rounded-2xl bg-rail text-xl font-semibold text-txt-normal ring-4 ring-panel">
+            <div className="-mt-8 grid h-[68px] w-[68px] place-items-center overflow-hidden rounded-2xl bg-void text-xl font-semibold text-txt-normal ring-4 ring-panel">
               {guild.iconUrl ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img src={guild.iconUrl} alt="" className="h-full w-full object-cover" />

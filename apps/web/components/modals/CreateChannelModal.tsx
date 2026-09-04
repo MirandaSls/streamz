@@ -180,7 +180,7 @@ export default function CreateChannelModal({
 
       <div className="mt-5">
         <Rotulo htmlFor="novo-canal-nome">Nome do canal</Rotulo>
-        <div className="flex h-10 items-center gap-1 rounded-[3px] bg-rail px-2.5">
+        <div className="flex h-10 items-center gap-1 rounded-[3px] bg-void px-2.5">
           <span aria-hidden="true" className="shrink-0 text-txt-muted">
             {type === "VOICE" ? <Volume2 size={18} /> : "#"}
           </span>

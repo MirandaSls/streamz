@@ -56,7 +56,7 @@ function Entry({ entry }: { entry: AuditLogEntry }) {
       {entry.actor ? (
         <Avatar user={entry.actor} size="md" surface="border-chat" />
       ) : (
-        <span aria-hidden="true" className="h-8 w-8 shrink-0 rounded-full bg-rail" />
+        <span aria-hidden="true" className="h-8 w-8 shrink-0 rounded-full bg-void" />
       )}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
@@ -137,7 +137,7 @@ export default function AuditLogTab({ guildId }: { guildId: string }) {
           id="audit-user"
           value={userId}
           onChange={(e) => setUserId(e.target.value)}
-          className="h-9 rounded-[3px] bg-rail px-2 text-sm text-txt-normal outline-none"
+          className="h-9 rounded-[3px] bg-void px-2 text-sm text-txt-normal outline-none"
         >
           <option value="">Todos os membros</option>
           {members.map((m) => (
@@ -154,7 +154,7 @@ export default function AuditLogTab({ guildId }: { guildId: string }) {
           id="audit-action"
           value={action}
           onChange={(e) => setAction(e.target.value as AuditAction | "")}
-          className="h-9 rounded-[3px] bg-rail px-2 text-sm text-txt-normal outline-none"
+          className="h-9 rounded-[3px] bg-void px-2 text-sm text-txt-normal outline-none"
         >
           <option value="">Todas as ações</option>
           {AUDIT_ACTIONS.map((a) => (
@@ -165,7 +165,7 @@ export default function AuditLogTab({ guildId }: { guildId: string }) {
         </select>
       </div>
 
-      <div role="list" className="min-h-0 flex-1 overflow-y-auto rounded bg-rail/40">
+      <div role="list" className="min-h-0 flex-1 overflow-y-auto rounded bg-void/40">
         {entries.length === 0 && !loading && (
           <p className="px-3 py-4 text-sm text-txt-muted">
             Nada registrado ainda. Ações de moderação aparecem aqui automaticamente.
@@ -182,7 +182,7 @@ export default function AuditLogTab({ guildId }: { guildId: string }) {
           type="button"
           disabled={loading}
           onClick={() => void load(true)}
-          className="mt-3 h-9 shrink-0 rounded-[3px] bg-rail text-sm font-medium text-txt-normal transition hover:bg-hov disabled:opacity-50"
+          className="mt-3 h-9 shrink-0 rounded-[3px] bg-void text-sm font-medium text-txt-normal transition hover:bg-hov disabled:opacity-50"
         >
           Carregar mais
         </button>

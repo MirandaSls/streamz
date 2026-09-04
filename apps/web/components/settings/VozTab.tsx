@@ -206,7 +206,7 @@ export default function VozTab() {
               onBlur={() => setCapturando(false)}
               aria-label={t("voz.gravarTecla")}
               className={`flex h-9 items-center gap-1.5 rounded-[3px] px-3 text-sm transition ${
-                capturando ? "bg-accent text-accent-ink" : "bg-rail text-txt-normal hover:bg-hov"
+                capturando ? "bg-accent text-accent-ink" : "bg-void text-txt-normal hover:bg-hov"
               }`}
             >
               <Keyboard size={16} aria-hidden="true" />
@@ -298,7 +298,7 @@ export default function VozTab() {
             emptyLabel={t("voz.padraoSistema")}
             disabled={devices.cameras.length === 0}
           />
-          <div className="my-3 grid aspect-video w-full max-w-[420px] place-items-center overflow-hidden rounded-lg bg-rail">
+          <div className="my-3 grid aspect-video w-full max-w-[420px] place-items-center overflow-hidden rounded-lg bg-void">
             {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
             <video
               ref={videoRef}
@@ -350,7 +350,7 @@ function MedidorDeMicrofone({ nivel, rotulo }: { nivel: number; rotulo: string }
           key={i}
           aria-hidden="true"
           className={`h-full flex-1 rounded-[1px] transition-colors duration-75 ${
-            i < acesos ? "bg-green" : "bg-rail"
+            i < acesos ? "bg-green" : "bg-void"
           }`}
         />
       ))}

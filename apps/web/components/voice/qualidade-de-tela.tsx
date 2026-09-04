@@ -69,7 +69,7 @@ function Segmento({
       <span className="whitespace-nowrap text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">
         {rotulo}
       </span>
-      <div role="group" aria-label={rotulo} className="flex h-10 gap-1 rounded-lg bg-rail p-1">
+      <div role="group" aria-label={rotulo} className="flex h-10 gap-1 rounded-lg bg-void p-1">
         {opcoes.map((o) => (
           <button
             key={o.valor}

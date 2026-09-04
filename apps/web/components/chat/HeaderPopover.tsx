@@ -221,7 +221,7 @@ export default function HeaderPopover({
                     <h2 className="min-w-0 truncate font-semibold text-txt-primary">{title}</h2>
                   )}
                   {contagem !== undefined && contagem > 0 && (
-                    <span className="shrink-0 rounded-full bg-rail px-1.5 text-xs font-semibold text-txt-muted">
+                    <span className="shrink-0 rounded-full bg-void px-1.5 text-xs font-semibold text-txt-muted">
                       {contagem}
                     </span>
                   )}
@@ -236,7 +236,7 @@ export default function HeaderPopover({
                       type="search"
                       aria-label={busca.placeholder}
                       placeholder={busca.placeholder}
-                      className="h-7 w-full rounded-[4px] bg-rail px-2 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
+                      className="h-7 w-full rounded-[4px] bg-void px-2 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
                     />
                   </div>
                 )}

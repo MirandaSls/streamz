@@ -290,7 +290,7 @@ export default function QuickSwitcher() {
         <ul className="flex flex-wrap gap-x-4 gap-y-1 px-4 pb-3 text-xs text-txt-muted">
           {PREFIXOS.map(([prefixo, o]) => (
             <li key={prefixo} className="flex items-center gap-1.5">
-              <kbd className="rounded bg-rail px-1.5 py-0.5 font-mono text-[11px] font-semibold text-txt-normal">
+              <kbd className="rounded bg-void px-1.5 py-0.5 font-mono text-[11px] font-semibold text-txt-normal">
                 {prefixo}
               </kbd>
               {o}
@@ -377,7 +377,7 @@ function ItemIcon({
     ) : name ? (
       <span
         aria-hidden="true"
-        className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-rail text-[10px] font-semibold text-txt-normal"
+        className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-void text-[10px] font-semibold text-txt-normal"
       >
         {name.slice(0, 2).toUpperCase()}
       </span>

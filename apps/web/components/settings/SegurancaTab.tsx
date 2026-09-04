@@ -322,7 +322,7 @@ function BlocoDeMfa({
               <p className="mb-1 text-xs font-bold uppercase text-txt-secondary">
                 Ou digite o segredo
               </p>
-              <code className="block break-all rounded-[3px] bg-rail px-2 py-1 text-sm text-txt-normal">
+              <code className="block break-all rounded-[3px] bg-void px-2 py-1 text-sm text-txt-normal">
                 {setup.secret}
               </code>
               <BotaoCopiar texto={setup.secret} rotulo="Copiar segredo" />
