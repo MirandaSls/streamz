@@ -2,73 +2,54 @@
  * A conta da divisão entre palco e conversa (ver `CallSplit`).
  *
  * Módulo à parte pelo mesmo motivo do `grid-layout.ts`: é aritmética pura sobre
- * a área disponível, testável sem montar componente nenhum — e foi a falta
- * dela, com três constantes em pixel absoluto no lugar, que fazia a tela maior
- * dar mais chat em vez de mais palco.
+ * a área disponível, testável sem montar componente nenhum.
+ *
+ * **A divisão virou horizontal.** Ela era vertical — palco em cima, conversa
+ * embaixo — e isso não é o que o Discord faz: na print
+ * `docs/Reference/Captura de tela 2026-09-03 203909.png` a conversa da chamada
+ * é uma **coluna à direita**, o palco fica com a largura que sobra, e a
+ * timeline continua com a altura toda da janela. Empilhado, o palco de uma
+ * transmissão em 16:9 ficava numa faixa de 215px e a conversa numa tira.
+ *
+ * A largura é arrastável e lembrada entre sessões, e é guardada em **pixel** e
+ * não em proporção: na print o painel mede 363px numa janela de 3333 (escala
+ * 0,8075 ⇒ **450**), e não uma fração dela — quem tem monitor maior ganha mais
+ * palco, não mais conversa. É o oposto da altura, que era proporcional porque
+ * ali quem tinha de crescer com a tela era o palco.
  */
 
-/** O palco nunca some de vez: menos que isso não cabe nem um rosto. */
-export const ALTURA_MIN = 200;
-/** Piso da conversa: sem ele o palco esmagaria o composer contra a timeline. */
-export const RESERVA_CHAT_MIN = 180;
-/** Fatia da coluna reservada à conversa quando há altura de sobra. */
-export const RESERVA_CHAT_PROPORCAO = 0.28;
+/** Largura da coluna de conversa. Medido: 363px na print ÷ 0,8075 = 450. */
+export const LARGURA_PADRAO = 450;
 /**
- * Altura inicial do palco — em **pixel**, não em proporção.
- *
- * Medido nos prints do Discord: 220px numa janela de 714 e 207px numa de 914.
- * Praticamente a mesma altura absoluta em janelas de alturas bem diferentes, ou
- * seja o palco abre numa faixa **fixa** e quem cresce com a tela é a conversa.
- *
- * A proporção de 0,5 fazia o oposto: o palco dobrava junto com a janela. Numa
- * de 914 ele abria com ~450px, mais que o dobro do Discord, e a conversa ficava
- * uma tira. O redimensionamento pelo usuário continua guardado como proporção —
- * o que muda é só de onde parte quando não há preferência salva.
+ * Piso da conversa: abaixo disto o composer perde os botões da direita e a
+ * timeline quebra todo anexo. Não medido — é o menor que ainda se lê.
  */
-export const ALTURA_PADRAO = 215;
-
-/** Fatia inicial do palco, quando não se sabe a altura da coluna. */
-export const PROPORCAO_PADRAO = 0.5;
-
-/** A proporção que equivale à altura inicial fixa, nesta coluna. */
-export function proporcaoPadrao(disponivel: number): number {
-  return disponivel > 0 ? ALTURA_PADRAO / disponivel : PROPORCAO_PADRAO;
-}
-/** Com transmissão o palco começa maior: 16:9 numa faixa baixa vira miniatura. */
-export const PROPORCAO_TRANSMISSAO = 0.68;
-
-/** Faixa em que uma altura salva na versão em pixel ainda conta como preferência. */
-const MIGRACAO_MIN = 0.2;
-const MIGRACAO_MAX = 0.85;
+export const LARGURA_MIN = 320;
+/** Piso do palco: menos que isso não cabe nem um rosto. Não medido. */
+export const PALCO_MIN = 360;
 
 export const limitar = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 
-/** Quanto a conversa reserva numa coluna de `altura`. */
-export function reservaDoChat(altura: number): number {
-  return Math.max(RESERVA_CHAT_MIN, altura * RESERVA_CHAT_PROPORCAO);
+/** Maior largura que a conversa pode ter sem engolir o palco. */
+export function tetoDoChat(disponivel: number): number {
+  return Math.max(LARGURA_MIN, disponivel - PALCO_MIN);
 }
 
-/** Maior altura que o palco pode ter sem engolir a conversa. */
-export function tetoDoPalco(altura: number): number {
-  return Math.max(ALTURA_MIN, altura - reservaDoChat(altura));
-}
-
-/** Altura do palco, em pixel, para uma proporção guardada e uma coluna medida. */
-export function alturaDoPalco(proporcao: number, disponivel: number): number {
-  return limitar(proporcao * disponivel, ALTURA_MIN, tetoDoPalco(disponivel));
+/** Largura da conversa, em pixel, para uma preferência e uma coluna medida. */
+export function larguraDoChat(desejada: number, disponivel: number): number {
+  if (disponivel <= 0) return LARGURA_PADRAO;
+  // coluna estreita demais para os dois: a conversa cede, mas não desaparece —
+  // quem abriu o painel quer lê-lo
+  return limitar(desejada, Math.min(LARGURA_MIN, disponivel), tetoDoChat(disponivel));
 }
 
 /**
- * Converte a altura em pixel da versão antiga para proporção.
+ * Converte uma largura salva para o que se guarda de fato.
  *
- * Migrar com tolerância — e não descartar — é o que não quebra quem já tinha
- * arrastado o divisor: 300px ajustados num notebook viram "aquela fração da
- * coluna", que é o que a pessoa quis dizer. Fora de uma faixa sensata o valor é
- * ignorado, porque pixel salvo numa janela minúscula não é preferência, é
- * acidente.
+ * Fora de uma faixa sensata o valor é ignorado: largura salva numa janela
+ * minúscula não é preferência, é acidente.
  */
-export function proporcaoDaAlturaAntiga(px: number, disponivel: number): number | null {
-  if (!Number.isFinite(px) || px <= 0 || disponivel <= 0) return null;
-  const proporcao = px / disponivel;
-  return proporcao >= MIGRACAO_MIN && proporcao <= MIGRACAO_MAX ? proporcao : null;
+export function larguraGuardavel(px: number): number | null {
+  if (!Number.isFinite(px)) return null;
+  return px >= LARGURA_MIN && px <= 1200 ? px : null;
 }

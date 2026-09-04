@@ -158,6 +158,12 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
 
   return (
     <Raiz className="flex min-h-0 min-w-0 flex-1 flex-col bg-chat">
+      {/* Incorporado ao palco de uma chamada, o cabeçalho é o do
+          `PainelDeChatDaCall` (balão + nome + X, 44px): na print do Discord a
+          coluna da conversa da call **não** tem busca, alfinete nem lista de
+          membros. Dois cabeçalhos empilhados comeriam 93px de timeline numa
+          coluna de 450. */}
+      {!incorporado && (
       <HeaderBar
         icon={<Icon size={24} />}
         title={name}
@@ -199,6 +205,7 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
           </>
         }
       />
+      )}
 
       <MessageList
         // remonta a cada canal para zerar a rolagem e os marcadores de posição

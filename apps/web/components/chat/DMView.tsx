@@ -310,9 +310,15 @@ export default function DMView() {
             a conversa sem ter entrado. Some sozinha quando eu entro. */}
         <CallBanner channelId={active.id} />
 
-        {/* f-voz: com chamada, o palco fica em cima e a conversa embaixo */}
+        {/* f-voz: com chamada, o palco toma a coluna e a conversa vai para a
+            direita, numa coluna de 450 (ver `CallSplit`) */}
         {emChamada && chatAberto ? (
-          <CallSplit chamada={palco} chat={conversa} />
+          <CallSplit
+            chamada={palco}
+            chat={conversa}
+            titulo={title}
+            onFecharChat={() => setChatManual(false)}
+          />
         ) : emChamada ? (
           palco
         ) : (
