@@ -37,6 +37,8 @@ export const Permission = {
   VIEW_AUDIT_LOG: 1 << 17,
   /** ignora todas as outras checagens, inclusive overrides de canal. */
   ADMINISTRATOR: 1 << 18,
+  /** arrastar alguém de um canal de voz para outro do mesmo servidor. */
+  MOVE_MEMBERS: 1 << 19,
 } as const;
 
 export type PermissionName = keyof typeof Permission;
@@ -121,6 +123,11 @@ export const PERMISSION_INFO: Record<
     description: "Permite tirar o microfone de outras pessoas na voz.",
     group: "voz",
   },
+  MOVE_MEMBERS: {
+    label: "Mover membros",
+    description: "Permite arrastar alguém de um canal de voz para outro do servidor.",
+    group: "voz",
+  },
   MODERATE_MEMBERS: {
     label: "Moderar membros",
     description: "Permite deixar um membro de castigo (sem falar) por um tempo.",
@@ -165,6 +172,7 @@ export const PERMISSION_ORDER: readonly PermissionName[] = [
   "CONNECT",
   "SPEAK",
   "MUTE_MEMBERS",
+  "MOVE_MEMBERS",
 ];
 
 /** Todas as permissões ligadas — o que o dono e o ADMINISTRATOR recebem. */

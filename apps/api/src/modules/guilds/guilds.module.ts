@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { GuildsController } from "./guilds.controller";
 import { GuildsService } from "./guilds.service";
+import { CategoriasPadraoService } from "./categorias-padrao";
 import { AuthModule } from "../auth/auth.module";
 import { RealtimeModule } from "../realtime/realtime.module";
 import { ReadStateModule } from "../read-state/read-state.module";
@@ -11,7 +12,9 @@ import { StorageModule } from "../storage/storage.module";
   // StorageModule: o ícone do servidor vive no mesmo storage dos anexos
   imports: [AuthModule, RealtimeModule, ReadStateModule, StorageModule, AuditModule],
   controllers: [GuildsController],
-  providers: [GuildsService],
+  // CategoriasPadraoService: passo idempotente do boot que cria as duas
+  // categorias padrão nos servidores que nasceram antes delas existirem
+  providers: [GuildsService, CategoriasPadraoService],
   exports: [GuildsService],
 })
 export class GuildsModule {}

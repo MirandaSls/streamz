@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { ChevronRight, HeadphoneOff, MicOff, UserPlus, Video } from "@/components/ui/icones";
 import { displayNameOf } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
+import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
 import { abrirMenuDeParticipante } from "@/components/voice/participant-menu";
 import PreviaDeTela, { type AlvoDaPrevia } from "@/components/voice/PreviaDeTela";
 import { useAuth } from "@/stores/auth";
@@ -31,15 +32,30 @@ import { useVoice } from "@/stores/voice";
  *
  * O hover de quem transmite abre a **miniatura ao vivo** (`PreviaDeTela`), com
  * a faixa assinada em baixa qualidade só enquanto o pop-up está na tela: é o
- * que deixa decidir se vale entrar sem entrar.
+ * que deixa decidir se vale entrar sem entrar. Ele não atrapalha o arrasto: o
+ * `pointerenter` só abre o cartão de quem está transmitindo, e arrastar a
+ * linha o fecha junto com o `dragstart`.
+ *
+ * Arrastar um participante daqui para outro canal de voz é de quem tem
+ * `MOVE_MEMBERS`; quem guarda o estado do arrasto e desenha o realce no canal
+ * alvo é a `ChannelSidebar`, que já faz isso para canais e categorias. Este
+ * componente só marca o `li` como arrastável e avisa quem começou e quando
+ * acabou — não decide nada.
  */
 export default function VoiceChannelMembers({
   channelId,
   guildId,
+  podeMover = false,
+  onArrastarMembro,
+  onFimDoArrasto,
 }: {
   channelId: string;
   /** só para o convite; sem ele a linha "Convidar para voz" não aparece. */
   guildId?: string | null;
+  /** `MOVE_MEMBERS`: sem ela o participante não é arrastável. */
+  podeMover?: boolean;
+  onArrastarMembro?: (userId: string) => void;
+  onFimDoArrasto?: () => void;
 }) {
   const estados = useVoice((s) => s.statesOf(channelId));
   const falando = useVoice((s) => s.falando);
@@ -68,11 +84,22 @@ export default function VoiceChannelMembers({
         {estados.map((e) => {
           const nome = displayNameOf(e.user);
           // quem está mudo nunca "fala": o anel tem de contar a mesma história
-          const ativo = !e.muted && falando.includes(e.user.id);
+          const ativo = !e.muted && falando.has(e.user.id);
           return (
             <li
               key={e.user.id}
               data-voice-member={e.user.id}
+              draggable={podeMover}
+              onDragStart={(ev) => {
+                // o cartão da prévia é `fixed` e ficaria pendurado no meio da
+                // tela enquanto a linha viaja para outro canal
+                setPrevia(null);
+                // o Firefox só inicia o arrasto se houver algo no dataTransfer
+                ev.dataTransfer.effectAllowed = "move";
+                ev.dataTransfer.setData("text/plain", e.user.id);
+                onArrastarMembro?.(e.user.id);
+              }}
+              onDragEnd={() => onFimDoArrasto?.()}
               onPointerEnter={(ev) => {
                 if (!e.screen) return;
                 cancelarFechar();
@@ -80,6 +107,7 @@ export default function VoiceChannelMembers({
                 setPrevia({ user: e.user, rect: { top: r.top, bottom: r.bottom, right: r.right } });
               }}
               onPointerLeave={() => e.screen && agendarFechar()}
+              className={podeMover ? "cursor-grab active:cursor-grabbing" : undefined}
             >
               <button
                 type="button"
@@ -102,19 +130,20 @@ export default function VoiceChannelMembers({
                   e.deafened ? "text-txt-faint opacity-30" : "text-txt-faint"
                 }`}
               >
-                {/* 24px, medido no print. O anel de "está falando" é `inset`
-                    para casar com o do tile do palco, que passou a ser desenhado
-                    por dentro: por fora, o avatar cresce ao falar e a linha pula. A escala do `Avatar` salta de 16 para
-                    24, então este é um tamanho que existe — o `className` fica só
-                    para o anel de quem está falando. */}
-                <Avatar
-                  user={e.user}
-                  size="sm"
-                  surface="border-panel"
-                  className={`h-6 w-6 rounded-full [&>img]:h-6 [&>img]:w-6 [&>span]:h-6 [&>span]:w-6 [&>span]:text-[10px] ${
-                    ativo ? "ring-2 ring-inset ring-green" : ""
-                  }`}
-                />
+                {/* 24px (`sm`), medido no print. O anel de "está falando" é o
+                    mesmo do palco — mesma cor, mesma espessura, mesmo desenho por
+                    dentro do diâmetro —, e por isso vem de `AnelDeFala`. Ele é um
+                    irmão por cima do avatar: como `ring-inset` na caixa do
+                    próprio avatar, a foto o cobria e o anel nunca aparecia. */}
+                <span className="relative inline-grid shrink-0 rounded-full">
+                  <Avatar
+                    user={e.user}
+                    size="sm"
+                    surface="border-panel"
+                    className={`transition-transform ${ativo ? ENCOLHE_AO_FALAR : ""}`}
+                  />
+                  {ativo && <AnelDeFala />}
+                </span>
                 {/* menor que o nome do canal, como no Discord: nosso texto era maior que o
                     do canal acima, o que invertia a hierarquia */}
                 <span className="min-w-0 flex-1 truncate text-[14px]">{nome}</span>

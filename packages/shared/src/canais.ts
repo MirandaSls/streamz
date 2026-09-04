@@ -122,6 +122,31 @@ export interface VoiceEvictedEvent {
   novoCanalId: string;
 }
 
+/**
+ * Fui movido de canal de voz por quem tem `MOVE_MEMBERS`.
+ *
+ * Chega **só** para quem foi movido, e é o gatilho de trocar de sala no
+ * LiveKit: o estado de voz no servidor já mudou antes do evento sair. O nome do
+ * canal viaja junto para que o cliente consiga reconectar mesmo que a lista de
+ * canais dele ainda não tenha o destino (canal recém-criado, por exemplo).
+ */
+export interface VoiceMovedEvent {
+  guildId: string;
+  /** canal de destino — para onde o cliente deve se conectar agora. */
+  channelId: string;
+  channelName: string;
+  /** canal de origem, para o cliente ignorar o evento se já saiu de lá. */
+  deChannelId: string;
+  /** quem moveu (para a mensagem "fulano moveu você"). */
+  movedBy: PublicUser;
+}
+
+/** Corpo de `POST /guilds/:id/voice/move`. */
+export interface VoiceMoveInput {
+  userId: string;
+  channelId: string;
+}
+
 export interface VoiceStateEvent {
   channelId: string;
   guildId: string | null;

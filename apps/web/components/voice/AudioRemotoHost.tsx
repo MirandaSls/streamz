@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { Track, type Track as TrackTipo } from "livekit-client";
 import { donoDaIdentidade } from "@streamz/shared";
 import { ouvintesRemotos } from "@/components/voice/audio-remoto";
+import { saidaCalada } from "@/stores/teste-de-microfone";
 import { useAuth } from "@/stores/auth";
 import { participantesDaSala, participantesDe, useVoice } from "@/stores/voice";
 import { aplicarSaida, useVoiceDevicesStore } from "@/stores/voiceDevices";
@@ -89,6 +90,9 @@ function AudioDaFaixa({ userId, faixa }: { userId: string; faixa: TrackTipo }) {
   const volume = porPessoa * geral;
   const silenciado = useVoice((s) => !!s.silenciados[userId]);
   const deafened = useVoicePrefs((s) => s.deafened);
+  // testar o microfone ensurdece **localmente** enquanto dura (o Discord faz
+  // igual): ninguém do outro lado sabe, e mudo/surdo persistidos não mudam
+  const testandoMicrofone = useVoice((s) => s.testandoMicrofone);
   const outputId = useVoiceDevicesStore((s) => s.outputId);
 
   useEffect(() => {
@@ -138,5 +142,11 @@ function AudioDaFaixa({ userId, faixa }: { userId: string; faixa: TrackTipo }) {
   }, []);
 
   // surdo cala **todos** os `<audio>` de uma vez; o silenciar é por pessoa
-  return <audio ref={ref} autoPlay muted={deafened || silenciado} />;
+  return (
+    <audio
+      ref={ref}
+      autoPlay
+      muted={saidaCalada(deafened, testandoMicrofone, silenciado)}
+    />
+  );
 }

@@ -19,7 +19,7 @@ import type {
   InviteOptions,
   InvitePreview,
 } from "@streamz/shared";
-import { toPublicUser, type PublicUserRow } from "../../common/dto";
+import { toGuildDTO, toPublicUser, type PublicUserRow } from "../../common/dto";
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 
@@ -244,6 +244,15 @@ export class InvitesService {
     this.realtime.joinGuildRoom(userId, invite.guildId);
     // as salas de canal vêm de VIEW_CHANNEL, não do booleano `private`
     await this.guilds.resyncChannelRooms(invite.guildId, userId);
+    // e as **minhas outras sessões** precisam saber que entrei: sem isto, quem
+    // aceitava o convite no site só via o servidor no desktop depois de
+    // reiniciar. `emitToUser` acerta a sala `user:<id>`, ou seja, todas as
+    // conexões da conta — inclusive a que fez este POST (inserir duas vezes o
+    // mesmo servidor é inofensivo: o cliente troca pelo id).
+    this.realtime.emitToUser(userId, WS_EVENTS.GUILD_JOINED, {
+      guild: toGuildDTO(invite.guild),
+      reason: "joined",
+    });
     // "X entrou no servidor" no canal de sistema, quando o servidor tem um
     await this.onboarding.announceJoin(invite.guildId, userId);
     return invite.guild;

@@ -28,6 +28,7 @@ import {
   X,
 } from "@/components/ui/icones";
 import {
+  Permission,
   channelNotificationScope,
   guildNotificationScope,
   isMuted,
@@ -44,9 +45,13 @@ import { useCategories } from "@/stores/categories";
 import { groupByCategory, type CategoryGroup } from "@/stores/channel-order";
 import { useChannels } from "@/stores/channels";
 import { useCanModerate, useGuilds, useIsOwner } from "@/stores/guilds";
+import { useCan } from "@/stores/permissions";
+import { podeSoltarEm } from "@/stores/voice-mover";
 import { useT } from "@/lib/i18n";
 import { submenuNotificacoes, submenuSilenciar } from "@/lib/notification-menu";
+import { errorMessage } from "@/stores/socket-adapter";
 import { useNotifications } from "@/stores/notifications";
+import { api } from "@/lib/api";
 import { useVoice } from "@/stores/voice";
 import { useSettings } from "@/stores/settings";
 import { ui, useUI, type MenuItem } from "@/stores/ui";
@@ -62,12 +67,22 @@ function ChannelIcon({ channel }: { channel: Channel }) {
   return <Hash size={20} className={cls} aria-hidden="true" />;
 }
 
-/** O que está sendo arrastado agora (só moderação arrasta). */
-type Arrasto = { tipo: "canal" | "categoria"; id: string } | null;
-/** Onde a linha de inserção aparece. */
+/**
+ * O que está sendo arrastado agora (só moderação arrasta).
+ *
+ * `membro-voz` é o participante de um canal de voz indo para outro (`userId` e o
+ * canal de onde ele saiu) — a regra de onde ele pode cair é pura, em
+ * `stores/voice-mover`.
+ */
+type Arrasto =
+  | { tipo: "canal" | "categoria"; id: string }
+  | { tipo: "membro-voz"; userId: string; deChannelId: string }
+  | null;
+/** Onde a linha de inserção (ou o realce, no caso do participante) aparece. */
 type Alvo =
   | { tipo: "canal"; categoryId: string | null; index: number }
   | { tipo: "categoria"; index: number }
+  | { tipo: "membro-voz"; channelId: string }
   | null;
 
 /** Linha de 2px que marca onde o item vai cair. */
@@ -81,8 +96,27 @@ function LinhaDeSolta({ ativa }: { ativa: boolean }) {
 }
 
 /**
- * Cabeçalho de categoria: chevron + nome (14px, caixa mista, como no
- * Discord de hoje) e o "+" de criar canal dentro dela no hover.
+ * Cabeçalho de categoria: nome + chevron (14px, caixa mista) e o "+" de criar
+ * canal dentro dela.
+ *
+ * **O "+" não é de hover.** Medido na print `2026-09-03 201805`: o cursor está
+ * sobre o canal "warframe" (os dois botões dele estão acesos) e mesmo assim os
+ * três cabeçalhos mostram o "+". Ele era `opacity-0` aqui, e só aparecia quando
+ * o ponteiro passava por cima do próprio cabeçalho.
+ *
+ * Medidas da mesma print (coluna de 294, 1:1 pelo `h-9` do canal, que lá mede
+ * 36 exatos):
+ *
+ * | item | Discord | aqui |
+ * |---|---|---|
+ * | glifo do "+" | 12×12 | `Plus size={20}` → 11,7 (o quadro do ativo desenha 0,583 do tamanho) |
+ * | centro do "+" | x=315,5 | x=318 — a mesma coluna da engrenagem do canal (`pr-1` + botão de 24), que na print está em 315,5 também |
+ * | rótulo | começa em x=67 | `mx-2` + `pl-[10px]` = 67 |
+ * | altura da linha | 12 de conteúdo, centro 29 abaixo do canal anterior | `h-[22px]` com `mt-4` + 2 da linha de solta = 29 |
+ * | próximo canal | 42 abaixo do canal anterior | 16+2+22+2 = 42 |
+ *
+ * A cor é a mesma do rótulo e a mesma dos nomes de canal não lidos — na print
+ * os três picam no mesmo valor (129,130,138), o que é `text-txt-muted`.
  */
 function CategoryHeader({
   label,
@@ -100,7 +134,11 @@ function CategoryHeader({
   dragProps?: Record<string, unknown>;
 }) {
   return (
-    <div className="group flex items-center pr-2" onContextMenu={onContextMenu} {...dragProps}>
+    <div
+      className="mx-2 flex h-[22px] items-center pr-1"
+      onContextMenu={onContextMenu}
+      {...dragProps}
+    >
       <button
         type="button"
         onClick={onToggle}
@@ -127,9 +165,9 @@ function CategoryHeader({
             type="button"
             onClick={onCreate}
             aria-label={`Criar canal em ${label}`}
-            className="text-txt-muted opacity-0 transition hover:text-txt-primary group-hover:opacity-100 focus-visible:opacity-100"
+            className="grid h-[22px] w-6 shrink-0 place-items-center rounded text-txt-muted transition hover:text-txt-primary"
           >
-            <Plus size={18} />
+            <Plus size={20} />
           </button>
         </Tooltip>
       )}
@@ -160,6 +198,20 @@ export default function ChannelSidebar() {
   const user = useAuth((s) => s.user);
   const canModerate = useCanModerate(user?.id);
   const isOwner = useIsOwner(user?.id);
+  /*
+    `canModerate` é "tenho **alguma** permissão de gestão" — quem só expulsa
+    membros passava por ele e via o "+" e o "Criar canal", que a API recusa com
+    403 (`channels.service` e `categories.service` exigem `MANAGE_CHANNELS` nas
+    dez rotas). Criar, editar, apagar e reordenar canal e categoria passam a
+    perguntar **a mesma** permissão que a API, pelo `useCan` — que roda a
+    `computePermissions` do `@streamz/shared`, a mesma função do servidor. O
+    dono continua vendo tudo: para ele `computePermissions` devolve
+    `ALL_PERMISSIONS`. `canModerate` fica onde ele é certo: o item
+    "Configurações do servidor", que é o guarda-chuva de gestão.
+  */
+  const podeGerenciarCanais = useCan(Permission.MANAGE_CHANNELS);
+  /** Arrastar alguém de um canal de voz para outro (bit novo, ver ADR-0002). */
+  const podeMoverMembros = useCan(Permission.MOVE_MEMBERS);
 
   const channels = useChannels((s) => s.channels);
   const loading = useChannels((s) => s.loading);
@@ -191,12 +243,20 @@ export default function ChannelSidebar() {
   const renomearCategoria = useCategories((s) => s.rename);
   const apagarCategoria = useCategories((s) => s.remove);
 
+  /*
+    Um bloco por categoria, mais o bloco sem título do topo para os canais
+    soltos — e nada além disso.
+
+    Aqui existia um segundo modo: enquanto o servidor não tivesse categoria
+    nenhuma, a coluna **inventava** os títulos "Canais de Texto" e "Canais de
+    Voz" separando os canais soltos por tipo. Como eram desenho e não dado, a
+    primeira categoria de verdade que alguém criasse desligava esse modo: os
+    dois títulos sumiam e os canais iam todos para o bloco sem título. Agora as
+    duas categorias padrão são linhas em `Category`, criadas junto com o
+    servidor (e criadas para os antigos pelo passo de boot da API), então
+    aparecem, se renomeiam e se apagam como qualquer outra.
+  */
   const grupos = groupByCategory(channels, categories);
-  // sem nenhuma categoria o Discord ainda separa "texto" de "voz": mantemos o
-  // agrupamento por tipo até o servidor criar a primeira categoria de verdade
-  const semCategorias = categories.length === 0;
-  const texto = grupos[0].channels.filter((c) => c.type !== "VOICE");
-  const voz = grupos[0].channels.filter((c) => c.type === "VOICE");
 
   /**
    * Menu do cabeçalho do servidor (o chevron do Discord).
@@ -226,12 +286,19 @@ export default function ChannelSidebar() {
         onSelect: () => openModal({ kind: "serverSettings", guildId: guild.id }),
       });
     }
-    items.push({
-      label: "Criar canal",
-      icon: <Plus size={18} />,
-      onSelect: () => openModal({ kind: "createChannel" }),
-    });
-    if (canModerate) {
+    /*
+      Ordem da print `2026-09-03 201809`: Convidar, Config. do servidor, Criar
+      canal, Criar categoria, e só então o bloco de notificações. Os itens que
+      não existem no Streamz (Impulso, Criar evento, Diretório de Apps) ficam de
+      fora — o Discord nunca mostra item morto, e criar um botão inerte aqui
+      seria pior que não ter. Os dois de criar exigem `MANAGE_CHANNELS`.
+    */
+    if (podeGerenciarCanais) {
+      items.push({
+        label: "Criar canal",
+        icon: <Plus size={18} />,
+        onSelect: () => openModal({ kind: "createChannel" }),
+      });
       items.push({
         label: "Criar categoria",
         icon: <FolderPlus size={18} />,
@@ -305,7 +372,7 @@ export default function ChannelSidebar() {
       submenuSilenciar("Silenciar canal", escopo, setting, t),
       submenuNotificacoes(escopo, setting, t),
     ];
-    if (canModerate) {
+    if (podeGerenciarCanais) {
       items.push({ separator: true });
       items.push({
         label: "Editar canal",
@@ -355,7 +422,7 @@ export default function ChannelSidebar() {
         onSelect: () => setAllCollapsed(!todasFechadas),
       },
     ];
-    if (canModerate) {
+    if (podeGerenciarCanais) {
       items.push({ separator: true });
       items.push({
         label: "Editar categoria",
@@ -426,14 +493,25 @@ export default function ChannelSidebar() {
     return e.clientY - r.top > r.height / 2 ? index + 1 : index;
   }
 
-  function sobreCanal(e: DragEvent, grupo: CategoryGroup, index: number) {
+  function sobreCanal(e: DragEvent, grupo: CategoryGroup, index: number, channel: Channel) {
+    // participante de voz sendo arrastado: o alvo é o canal inteiro, não uma
+    // posição entre canais — realce em vez de linha
+    if (arrasto?.tipo === "membro-voz") {
+      if (!podeSoltarEm(arrasto, channel, podeMoverMembros)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      setAlvo({ tipo: "membro-voz", channelId: channel.id });
+      return;
+    }
     if (arrasto?.tipo !== "canal") return;
     e.preventDefault();
     setAlvo({ tipo: "canal", categoryId: grupo.category?.id ?? null, index: indiceNaLinha(e, index) });
   }
 
   function sobreCabecalho(e: DragEvent, grupo: CategoryGroup, indexCategoria: number) {
-    if (!arrasto) return;
+    // cabeçalho de categoria não recebe gente: mover é de canal de voz para
+    // canal de voz, e uma categoria não é uma sala
+    if (!arrasto || arrasto.tipo === "membro-voz") return;
     e.preventDefault();
     if (arrasto.tipo === "canal") {
       // soltar no cabeçalho joga o canal para o topo daquela categoria
@@ -453,6 +531,25 @@ export default function ChannelSidebar() {
       void dropChannel(atual.id, destino.categoryId, destino.index);
     } else if (atual.tipo === "categoria" && destino.tipo === "categoria") {
       void dropCategory(atual.id, destino.index);
+    } else if (atual.tipo === "membro-voz" && destino.tipo === "membro-voz") {
+      void moverMembro(atual.userId, destino.channelId);
+    }
+  }
+
+  /**
+   * Solta o participante no canal de voz alvo.
+   *
+   * Quem troca de sala é o cliente **movido**, ao receber o `voice.moved`; aqui
+   * não se toca no estado local: os dois `voice.state` do servidor (saiu de lá,
+   * entrou aqui) já redesenham as duas listas para todo mundo. Recusa da API
+   * (sem permissão, alvo que saiu da voz no meio do arrasto) vira toast.
+   */
+  async function moverMembro(userId: string, channelId: string) {
+    if (!guild) return;
+    try {
+      await api.moverParaCanalDeVoz(guild.id, userId, channelId);
+    } catch (e) {
+      ui.toast(errorMessage(e, "Não foi possível mover esta pessoa"), "error");
     }
   }
 
@@ -475,20 +572,23 @@ export default function ChannelSidebar() {
     // conectado à voz **deste** canal: no Discord ganha ícone verde e nome branco
     const conectadoAqui = vozAqui === channel.id;
     const arrastando = arrasto?.tipo === "canal" && arrasto.id === channel.id;
+    // alvo do arrasto de um participante: realce no canal inteiro. Linha de
+    // inserção não serve aqui — não há "entre dois" numa sala de voz
+    const alvoDeMembro = alvo?.tipo === "membro-voz" && alvo.channelId === channel.id;
     return (
       <div key={channel.id}>
         <LinhaDeSolta ativa={alvoDeCanal(grupo.category?.id ?? null, index)} />
         <div
           role="listitem"
-          draggable={canModerate}
+          draggable={podeGerenciarCanais}
           onDragStart={(e) => inicioArrasto(e, "canal", channel.id)}
           onDragEnd={fimArrasto}
-          onDragOver={(e) => sobreCanal(e, grupo, index)}
+          onDragOver={(e) => sobreCanal(e, grupo, index, channel)}
           onDrop={soltar}
           onContextMenu={(e) => openChannelMenu(e, channel)}
           className={`group relative mx-2 flex h-9 items-center rounded-lg pl-[10px] pr-1 ${
             arrastando ? "opacity-40" : ""
-          } ${
+          } ${alvoDeMembro ? "bg-hov ring-2 ring-inset ring-accent" : ""} ${
             active
               ? "bg-sel text-txt-primary"
               : unread
@@ -563,7 +663,7 @@ export default function ChannelSidebar() {
                 <UserPlus size={18} />
               </button>
             </Tooltip>
-            {canModerate && (
+            {podeGerenciarCanais && (
               <Tooltip label="Editar canal">
                 <button
                   type="button"
@@ -578,50 +678,59 @@ export default function ChannelSidebar() {
           </span>
         </div>
         {channel.type === "VOICE" && (
-          <VoiceChannelMembers channelId={channel.id} guildId={channel.guildId} />
+          <VoiceChannelMembers
+            channelId={channel.id}
+            guildId={channel.guildId}
+            podeMover={podeMoverMembros}
+            onArrastarMembro={(userId) =>
+              setArrasto({ tipo: "membro-voz", userId, deChannelId: channel.id })
+            }
+            onFimDoArrasto={fimArrasto}
+          />
         )}
       </div>
     );
   }
 
   /**
-   * Desenha um bloco da lista. `override` existe para o modo sem categorias:
-   * os canais continuam sendo um bloco só (é sobre ele que a reordenação
-   * calcula os índices), mas aparecem sob os rótulos por tipo — o template
-   * padrão de um servidor novo no Discord.
+   * Desenha um bloco da lista: o cabeçalho da categoria (quando há uma) e os
+   * canais dela. O bloco dos canais soltos não tem cabeçalho — no Discord eles
+   * ficam no topo, sem título — e some quando está vazio.
    */
-  function renderGrupo(
-    grupo: CategoryGroup,
-    indexCategoria: number,
-    override?: { chave: string; label: string; channels: Channel[] },
-  ) {
+  function renderGrupo(grupo: CategoryGroup, indexCategoria: number) {
     const category = grupo.category;
-    const chave = override?.chave ?? category?.id ?? "sem-categoria";
-    const rotulo = override?.label ?? category?.name ?? "";
-    const lista = override?.channels ?? grupo.channels;
-    const colapsavel = !!category || !!override;
+    const chave = category?.id ?? "sem-categoria";
+    const rotulo = category?.name ?? "";
+    const lista = grupo.channels;
+    const colapsavel = !!category;
     const fechada = colapsavel && collapsed.includes(chave);
     // categoria fechada ainda mostra o canal ativo, como no Discord
     const visiveis = fechada
       ? lista.filter((c) => c.id === activeChannelId || c.id === voiceChannelId)
       : lista;
 
+    // categoria vazia continua desenhada (é onde se solta o primeiro canal);
+    // o bloco sem título, não — senão sobraria um respiro no topo da coluna
     if (!colapsavel && grupo.channels.length === 0) return null;
-    if (override && lista.length === 0) return null;
 
     return (
       <div key={chave} className={colapsavel ? "mt-4" : "mt-1"}>
         {colapsavel && (
           <>
-            {category && (
-              <LinhaDeSolta ativa={alvo?.tipo === "categoria" && alvo.index === indexCategoria} />
-            )}
+            {/* 2px que a medida do cabeçalho conta: a linha existe em todo
+                cabeçalho de categoria e só acende no alvo do arrasto */}
+            <LinhaDeSolta
+              ativa={alvo?.tipo === "categoria" && alvo.index === indexCategoria}
+            />
             <CategoryHeader
               label={rotulo}
               collapsed={fechada}
               onToggle={() => toggleCollapsed(chave)}
+              // numa categoria cabem os dois tipos — inclusive nas duas
+              // padrão, que agora são categorias comuns —, então quem pergunta
+              // é o modal, como no Discord
               onCreate={
-                canModerate
+                podeGerenciarCanais
                   ? () => openModal({ kind: "createChannel", categoryId: category?.id ?? null })
                   : undefined
               }
@@ -629,7 +738,7 @@ export default function ChannelSidebar() {
               dragProps={
                 category
                   ? {
-                      draggable: canModerate,
+                      draggable: podeGerenciarCanais,
                       onDragStart: (e: DragEvent) => inicioArrasto(e, "categoria", category.id),
                       onDragEnd: fimArrasto,
                       onDragOver: (e: DragEvent) => sobreCabecalho(e, grupo, indexCategoria),
@@ -640,9 +749,18 @@ export default function ChannelSidebar() {
             />
           </>
         )}
-        <div className="mt-0.5">
+        {/* sem margem: cada canal já traz 2px de linha de solta na frente, e
+            era esse par que empurrava o primeiro canal 2px abaixo da print */}
+        <div>
           {visiveis.map((c) => renderChannel(c, grupo, grupo.channels.indexOf(c)))}
-          {/* zona de solta no fim do bloco (inclusive quando ele está vazio) */}
+          {/*
+            Zona de solta no fim do bloco (inclusive quando ele está vazio).
+            `-mb-3` tira os 12px dela do fluxo: ela passa a ocupar os 12
+            primeiros pixels da margem do bloco seguinte, que é espaço morto de
+            qualquer jeito. Em fluxo, esses 12px somavam ao `mt-4` do próximo
+            cabeçalho e abriam 54px entre um canal e o cabeçalho seguinte, onde
+            a print tem 42 — era o buraco mais visível da coluna.
+          */}
           <div
             onDragOver={(e) => {
               if (arrasto?.tipo !== "canal") return;
@@ -654,7 +772,7 @@ export default function ChannelSidebar() {
               });
             }}
             onDrop={soltar}
-            className="h-3"
+            className="h-3 -mb-3"
           >
             <LinhaDeSolta ativa={alvoDeCanal(category?.id ?? null, grupo.channels.length)} />
           </div>
@@ -719,13 +837,7 @@ export default function ChannelSidebar() {
           </p>
         )}
 
-        {semCategorias
-          ? // servidor que nunca criou categoria: rótulos por tipo, um bloco só
-            [
-              { chave: "tipo:texto", label: "Canais de Texto", channels: texto },
-              { chave: "tipo:voz", label: "Canais de Voz", channels: voz },
-            ].map((v) => renderGrupo(grupos[0], -1, v))
-          : grupos.map((grupo, i) => renderGrupo(grupo, i - 1))}
+        {grupos.map((grupo, i) => renderGrupo(grupo, i - 1))}
       </div>
 
     </aside>

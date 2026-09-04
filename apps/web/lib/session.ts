@@ -10,6 +10,7 @@ import type { AuthTokens } from "@streamz/shared";
 import { API_URL } from "./config";
 import { ApiError } from "./api-error";
 import { cabecalhoDoCliente } from "./cliente";
+import { atualizarRefresh, marcarExpirada, mudarCofre } from "./contas";
 
 const CHAVE_ACCESS = "accessToken";
 const CHAVE_REFRESH = "refreshToken";
@@ -37,6 +38,13 @@ export function salvarTokens(tokens: AuthTokens): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(CHAVE_ACCESS, tokens.accessToken);
   localStorage.setItem(CHAVE_REFRESH, tokens.refreshToken);
+  // A API rotaciona o refresh a cada uso: o hash antigo deixa de existir na
+  // hora. Sem espelhar a rotação no cofre, a conta que ficou de fundo guardaria
+  // um token morto e voltaria como "Sessão expirada" na primeira troca — ainda
+  // que ninguém tenha saído de nada. Ver `lib/contas.ts`.
+  mudarCofre((cofre) =>
+    cofre.ativa ? atualizarRefresh(cofre, cofre.ativa, tokens.refreshToken) : cofre,
+  );
 }
 
 export function limparTokens(): void {
@@ -144,6 +152,9 @@ export function aoExpirarSessao(ouvinte: Ouvinte): () => void {
 /** Limpa os tokens, avisa os ouvintes e manda o usuário para o login. */
 export function expirarSessao(): void {
   limparTokens();
+  // a conta não sai do cofre: quem teve a sessão recusada continua listado em
+  // "Gerenciar contas", só que sem token — e voltar para ela pede a senha
+  mudarCofre((cofre) => (cofre.ativa ? marcarExpirada(cofre, cofre.ativa) : cofre));
   for (const ouvinte of ouvintesExpiracao) {
     try {
       ouvinte();

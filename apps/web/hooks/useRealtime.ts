@@ -20,6 +20,7 @@ import {
   type FriendRemovedEvent,
   type FriendRequestEvent,
   type Guild,
+  type GuildJoinedEvent,
   type GuildOwnerChangedEvent,
   type GuildRemovedEvent,
   type MemberJoinedEvent,
@@ -37,6 +38,7 @@ import {
   type ThreadUpdatedEvent,
   type UserBlockedEvent,
   type VoiceEvictedEvent,
+  type VoiceMovedEvent,
   type VoiceStateEvent,
 } from "@streamz/shared";
 import type { NotificationSetting } from "@streamz/shared";
@@ -55,7 +57,6 @@ import {
   type EstadoDaInterface,
 } from "@/lib/na-tela";
 import { tocarSomDeNotificacao } from "@/lib/notification-sound";
-import { somLigado } from "@/stores/sons";
 import { levelForChannel, useNotifications } from "@/stores/notifications";
 import { useSettings } from "@/stores/settings";
 import { useAuth } from "@/stores/auth";
@@ -188,6 +189,17 @@ export function useRealtime(currentUserId?: string): void {
           }
         },
       ),
+
+      /**
+       * Entrei num servidor de outro lugar (o site enquanto o desktop está
+       * aberto, outra aba, ou esta mesma sessão recebendo o próprio evento).
+       * O rail atualiza sem F5; a tela de quem está lendo outra coisa não se
+       * mexe — quem entrou pelo próprio aparelho já foi levado ao servidor por
+       * `entrarPorConvite`.
+       */
+      on<GuildJoinedEvent>(WS_EVENTS.GUILD_JOINED, ({ guild }) => {
+        useGuilds.getState().handleJoined(guild);
+      }),
 
       on<GuildRemovedEvent>(WS_EVENTS.GUILD_REMOVED, ({ guildId, reason }) => {
         useGuilds.getState().handleRemoved(guildId);
@@ -347,6 +359,11 @@ export function useRealtime(currentUserId?: string): void {
       on<VoiceEvictedEvent>(WS_EVENTS.VOICE_EVICTED, (evento) => {
         useVoice.getState().expulsoDaVoz(evento);
       }),
+      // fui arrastado para outro canal de voz por quem tem "mover membros":
+      // o estado no servidor já mudou; aqui só a sala do LiveKit acompanha
+      on<VoiceMovedEvent>(WS_EVENTS.VOICE_MOVED, (evento) => {
+        void useVoice.getState().movidoDeCanal(evento);
+      }),
 
       on<CallRingEvent>(WS_EVENTS.CALL_RING, (evento) => {
         useVoice.getState().handleRing(evento);
@@ -498,10 +515,9 @@ function notifyIfAway(message: Message, mention: boolean) {
   const semFoco = document.visibilityState !== "visible" || !janelaTemFoco();
   if (!semFoco && !mention && message.guildId) return;
 
-  // `notificationSound` é o interruptor mestre; `somLigado` diz se ESTE som toca
-  if (prefs.notificationSound && somLigado("mensagem")) {
-    tocarSomDeNotificacao(prefs.outputVolume / 100);
-  }
+  // interruptor mestre, interruptor deste som, volume e a guarda contra o mesmo
+  // som sobreposto em menos de 300 ms: tudo dentro (`lib/ringtone.ts`)
+  tocarSomDeNotificacao();
   if (!prefs.desktopNotifications) return;
   const { guildId, channelId } = message;
   void notify({
