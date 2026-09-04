@@ -436,14 +436,64 @@ export async function miniaturasDeTela(ids: string[]): Promise<(string | null)[]
 }
 
 /**
+ * Quanto custou cada etapa de ir ao ar (ver `Tempos` em `transmissao.rs`).
+ * Serve para `console.debug`: é a única medida que existe da máquina de quem
+ * reclama de demora, já que ninguém abre um depurador lá.
+ */
+export interface TemposDeTela {
+  capturaMs: number;
+  primeiroQuadroMs: number;
+  conexaoMs: number;
+  publicacaoMs: number;
+  totalMs: number;
+  reaproveitouSala: boolean;
+  semPrimeiroQuadro: boolean;
+}
+
+/**
+ * Entra na sala como `<userId>#tela` **sem publicar nada**, para o clique na
+ * miniatura só ter de publicar (`preparar_tela`).
+ *
+ * O seletor chama isto ao abrir: o usuário paga o handshake do LiveKit
+ * enquanto escolhe o que transmitir, em vez de pagar depois de escolher.
+ * Nunca lança — falhar aqui só significa que `iniciarTelaNativa` conecta na
+ * hora, como antes.
+ */
+export async function prepararTelaNativa(preparo: {
+  url: string;
+  token: string;
+}): Promise<void> {
+  if (!isTauri()) return;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("preparar_tela", { preparo });
+  } catch {
+    // sem pré-conexão o caminho é o de sempre
+  }
+}
+
+/** Desfaz a pré-conexão: o seletor fechou sem ninguém escolher fonte. */
+export async function descartarTelaNativa(): Promise<void> {
+  if (!isTauri()) return;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("descartar_tela");
+  } catch {
+    // já descartada, ou a ponte caiu
+  }
+}
+
+/**
  * Começa a transmitir pela captura nativa: o Rust entra na sala como o
  * participante do token (`<userId>#tela`) e publica a fonte. Lança com a
  * mensagem do Rust quando não dá (fonte sumiu, sala recusou) — aqui o erro
  * interessa a quem clicou.
+ *
+ * Devolve o tempo de cada etapa; ver `TemposDeTela`.
  */
-export async function iniciarTelaNativa(pedido: PedidoDeTela): Promise<void> {
+export async function iniciarTelaNativa(pedido: PedidoDeTela): Promise<TemposDeTela> {
   const { invoke } = await import("@tauri-apps/api/core");
-  await invoke("iniciar_tela", { pedido });
+  return await invoke<TemposDeTela>("iniciar_tela", { pedido });
 }
 
 /** Para a transmissão nativa, se houver. Best-effort: parar nunca falha para o usuário. */

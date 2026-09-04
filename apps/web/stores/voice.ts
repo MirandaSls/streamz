@@ -30,7 +30,14 @@ import {
   type TrackPublication,
 } from "livekit-client";
 import { api } from "@/lib/api";
-import { iniciarTelaNativa, isTauri, ouvirTelaEncerrada, pararTelaNativa } from "@/lib/desktop";
+import {
+  descartarTelaNativa as ponteDescartarTela,
+  iniciarTelaNativa,
+  isTauri,
+  ouvirTelaEncerrada,
+  pararTelaNativa,
+  prepararTelaNativa as pontePrepararTela,
+} from "@/lib/desktop";
 import { tocarSom, tocarSomDeMovido } from "@/lib/ringtone";
 import { montarPedido } from "@/lib/seletor-de-tela";
 import {
@@ -97,6 +104,22 @@ let sala: Room | null = null;
  * o que a interface lê é `screenOn`.
  */
 let telaNativa = false;
+/**
+ * A credencial do `#tela` já buscada e a sala já pré-conectada por
+ * `prepararTelaNativa` (o seletor abrindo). Guardada aqui para o clique na
+ * miniatura não pagar nem o `POST /tela-token` nem o handshake do LiveKit.
+ * `channelId` junto porque trocar de canal com o seletor aberto invalida as
+ * duas coisas.
+ */
+let telaPreparada: { url: string; token: string; channelId: string } | null = null;
+/**
+ * Geração da pré-conexão. Preparar é assíncrono em duas etapas (token e
+ * `connect`), e o seletor pode fechar no meio: sem este contador a conexão
+ * que chegasse atrasada deixaria um `#tela` mudo na sala para sempre. Quem
+ * descarta, publica ou desmonta a sala incrementa; quem preparava e vê o
+ * número mudado desfaz o que acabou de abrir.
+ */
+let geracaoDeTela = 0;
 
 interface VoiceStoreState {
   /** estados de voz por canal (só quem está conectado). */
@@ -216,6 +239,10 @@ interface VoiceStoreState {
    * na sala como `<userId>#tela` e publica; aqui só o estado e o token.
    */
   publicarTelaNativa: (fonteId: string) => Promise<void>;
+  /** Pré-conecta o `#tela` na sala enquanto o seletor está aberto. */
+  prepararTelaNativa: () => Promise<void>;
+  /** Desfaz a pré-conexão (seletor fechado sem escolha). */
+  descartarTelaNativa: () => Promise<void>;
   pararTela: () => Promise<void>;
   setScreenQuality: (q: ScreenQuality) => void;
   setScreenAudio: (on: boolean) => void;
@@ -383,6 +410,12 @@ function desmontarSala() {
   if (telaNativa) {
     telaNativa = false;
     void pararTelaNativa();
+  }
+  // idem para a sala que o seletor deixou pré-conectada sem publicar nada
+  geracaoDeTela += 1;
+  if (telaPreparada) {
+    telaPreparada = null;
+    void ponteDescartarTela();
   }
   if (!sala) return;
   pararMedicaoDePing();
@@ -885,19 +918,81 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       rerender();
     },
 
+    /**
+     * Pré-conecta o `#tela` enquanto o seletor está aberto.
+     *
+     * **É onde estava a maior parte do atraso do clique.** Ir ao ar era, em
+     * ordem: `POST /tela-token` (ida e volta à API), abrir a captura, entrar
+     * na sala do LiveKit (sinal `wss`, join, ICE, DTLS) e só então publicar —
+     * tudo depois do clique, com o seletor ainda aberto na frente. As duas
+     * primeiras não dependem da fonte escolhida, então acontecem agora, com o
+     * usuário olhando a grade.
+     *
+     * Não lança e não avisa nada: se falhar, `publicarTelaNativa` faz o
+     * caminho inteiro como antes.
+     */
+    prepararTelaNativa: async () => {
+      const { channelId, screenOn } = get();
+      // com a tela já no ar, uma segunda conexão com a identidade `#tela`
+      // expulsaria a que está transmitindo (o LiveKit não aceita duas iguais)
+      if (!channelId || !sala || screenOn || !isTauri()) return;
+      if (telaPreparada?.channelId === channelId) return;
+      const geracao = ++geracaoDeTela;
+      try {
+        const creds = await api.telaToken(channelId);
+        // o seletor fechou, ou troquei de canal, enquanto o token vinha
+        if (geracao !== geracaoDeTela || useVoice.getState().channelId !== channelId) return;
+        await pontePrepararTela(creds);
+        if (geracao !== geracaoDeTela) {
+          // fechou enquanto a conexão subia: desfazer, senão fica um `#tela`
+          // mudo na sala até o LiveKit expirá-lo
+          void ponteDescartarTela();
+          return;
+        }
+        telaPreparada = { ...creds, channelId };
+      } catch {
+        if (geracao === geracaoDeTela) telaPreparada = null;
+      }
+    },
+
+    /** O seletor fechou sem ninguém escolher: tira o `#tela` da sala. */
+    descartarTelaNativa: async () => {
+      geracaoDeTela += 1;
+      telaPreparada = null;
+      await ponteDescartarTela();
+    },
+
     publicarTelaNativa: async (fonteId) => {
       const { channelId, screenQuality, screenAudio } = get();
       if (!channelId || !sala) {
         ui.toast(SEM_SALA, "error");
         return;
       }
+      const comeco = performance.now();
+      // a pré-conexão desta rodada acaba aqui: ou vira transmissão, ou o Rust
+      // a descarta por não servir. Uma que ainda estivesse subindo se desfaz.
+      geracaoDeTela += 1;
       try {
-        const creds = await api.telaToken(channelId);
-        await iniciarTelaNativa(montarPedido(fonteId, screenQuality, creds, screenAudio));
+        // A credencial da pré-conexão, quando é deste canal: o Rust reconhece
+        // o mesmo par url+token e reaproveita a sala já conectada.
+        const preparada = telaPreparada?.channelId === channelId ? telaPreparada : null;
+        const creds = preparada ?? (await api.telaToken(channelId));
+        const tempos = await iniciarTelaNativa(
+          montarPedido(fonteId, screenQuality, creds, screenAudio),
+        );
+        // a sala pré-conectada foi consumida (ou descartada) pelo Rust
+        telaPreparada = null;
         telaNativa = true;
         set({ screenOn: true });
         tocarSom("transmissao-iniciada");
+        // O tempo por etapa, para o dia em que alguém disser "demorou": sem
+        // isto a única medida é a impressão de quem clicou.
+        console.debug("[tela] ao vivo", {
+          ...tempos,
+          cliqueAteAoVivoMs: Math.round(performance.now() - comeco),
+        });
       } catch (e) {
+        telaPreparada = null;
         telaNativa = false;
         set({ screenOn: false });
         ui.toast(errorMessage(e, "Não foi possível compartilhar a tela"), "error");

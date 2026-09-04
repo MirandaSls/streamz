@@ -64,6 +64,49 @@ fn bitrate_de_audio_padrao() -> u64 {
     160_000
 }
 
+/// O que a web manda para **pré-conectar** (ver `preparar`): só a credencial,
+/// porque ainda não há fonte escolhida.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Preparo {
+    pub url: String,
+    pub token: String,
+}
+
+/// Quanto custou cada etapa de ir ao ar, em milissegundos. Volta para a web,
+/// que imprime em `console.debug` — sem isto, "demorou" é a única medida que
+/// existe da máquina do usuário.
+#[derive(Debug, Clone, Copy, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Tempos {
+    /// Abrir a sessão de captura (dispositivo D3D, fila de quadros).
+    pub captura_ms: u64,
+    /// Esperar o primeiro quadro da fonte. É aqui que uma **janela** parada
+    /// se separa de um monitor, que repinta sempre.
+    pub primeiro_quadro_ms: u64,
+    /// Entrar na sala do LiveKit. Zero quando a pré-conexão foi aproveitada.
+    pub conexao_ms: u64,
+    /// Publicar as faixas (vídeo e, se pedido, áudio do sistema).
+    pub publicacao_ms: u64,
+    pub total_ms: u64,
+    /// A sala já estava conectada pelo `preparar` do seletor.
+    pub reaproveitou_sala: bool,
+    /// Nenhum quadro chegou antes de publicar: a fonte não repintou a tempo, e
+    /// o primeiro quadro vai sair quando ela repintar.
+    pub sem_primeiro_quadro: bool,
+}
+
+/// Quanto esperar pelo primeiro quadro antes de publicar.
+///
+/// Publicar com um quadro na mão faz diferença duas vezes: o encoder é
+/// configurado no tamanho real da fonte (nada de reconfigurar no primeiro
+/// quadro) e a faixa sobe já com imagem, em vez de subir vazia e o outro lado
+/// ficar em "Carregando a transmissão…" até a janela repintar. É um teto
+/// baixo de propósito — em monitor o quadro chega em um vsync, e em janela
+/// visível o `cutucar` do WGC provoca o repinte. Passou disto, segue-se sem
+/// ele: melhor a faixa no ar do que a espera.
+const ESPERA_DO_PRIMEIRO_QUADRO: Duration = Duration::from_millis(400);
+
 /// Por que a transmissão acabou sozinha.
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -94,10 +137,21 @@ impl EmCurso {
     }
 }
 
-/// Estado gerenciado pelo Tauri: a transmissão em curso, se houver.
+/// A sala já conectada pelo seletor, esperando alguém escolher uma fonte.
+struct Preparada {
+    /// A credencial que a abriu: `iniciar` só a reaproveita se for a mesma
+    /// sala (trocar de canal entre abrir o seletor e clicar muda o token).
+    url: String,
+    token: String,
+    sala: Room,
+    eventos: UnboundedReceiver<RoomEvent>,
+}
+
+/// Estado gerenciado pelo Tauri: a transmissão em curso e a sala pré-conectada.
 #[derive(Default)]
 pub struct Transmissao {
     atual: Mutex<Option<EmCurso>>,
+    preparada: Mutex<Option<Preparada>>,
 }
 
 impl Transmissao {
@@ -109,16 +163,99 @@ impl Transmissao {
         *self.atual.lock().unwrap_or_else(|e| e.into_inner()) = Some(em_curso);
     }
 
-    /// Para e espera a thread. Síncrono de propósito: é o que o encerramento
-    /// do app chama, e ali não há runtime para esperar.
+    fn transmitindo(&self) -> bool {
+        self.atual
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some()
+    }
+
+    fn tomar_preparada(&self) -> Option<Preparada> {
+        self.preparada
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+    }
+
+    fn guardar_preparada(&self, preparada: Preparada) {
+        *self.preparada.lock().unwrap_or_else(|e| e.into_inner()) = Some(preparada);
+    }
+
+    /// Já há uma sala pronta com esta credencial?
+    fn tem_preparada(&self, url: &str, token: &str) -> bool {
+        self.preparada
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .is_some_and(|p| p.url == url && p.token == token)
+    }
+
+    /// Para e espera a thread, e derruba a sala pré-conectada. Síncrono de
+    /// propósito: é o que o encerramento do app chama, e ali não há runtime
+    /// para esperar.
     pub fn encerrar(&self) {
+        if let Some(preparada) = self.tomar_preparada() {
+            fechar_em_outra_thread(preparada.sala);
+        }
         if let Some(em_curso) = self.tomar() {
             em_curso.encerrar();
         }
     }
 }
 
-pub async fn iniciar(app: AppHandle, estado: &Transmissao, pedido: Pedido) -> Result<(), String> {
+/// Sai da sala de uma thread própria. `Room::close` é assíncrono e quem chama
+/// isto pode ser a thread do encerramento do app, que não é do runtime.
+fn fechar_em_outra_thread(sala: Room) {
+    if let Ok(thread) = std::thread::Builder::new()
+        .name("streamz-tela-fechar".into())
+        .spawn(move || {
+            let _ = tauri::async_runtime::block_on(sala.close());
+        })
+    {
+        let _ = thread.join();
+    }
+}
+
+/// Entra na sala como `<userId>#tela` sem publicar nada, para o clique na
+/// miniatura só ter de publicar. Ver o comando `preparar_tela`.
+///
+/// **Não pré-conecta durante uma transmissão.** A identidade `<userId>#tela` é
+/// única no LiveKit: uma segunda conexão com ela expulsaria a que está no ar.
+/// Reabrir o seletor para trocar de fonte cai no caminho de sempre.
+pub async fn preparar(estado: &Transmissao, preparo: Preparo) -> Result<(), String> {
+    if estado.transmitindo() || estado.tem_preparada(&preparo.url, &preparo.token) {
+        return Ok(());
+    }
+    descartar(estado).await;
+    let mut opcoes = RoomOptions::default();
+    opcoes.auto_subscribe = false;
+    let (sala, eventos) = Room::connect(&preparo.url, &preparo.token, opcoes)
+        .await
+        .map_err(|e| format!("não foi possível entrar na sala: {e}"))?;
+    estado.guardar_preparada(Preparada {
+        url: preparo.url,
+        token: preparo.token,
+        sala,
+        eventos,
+    });
+    Ok(())
+}
+
+/// Derruba a sala pré-conectada, se houver: o seletor fechou sem escolha.
+pub async fn descartar(estado: &Transmissao) {
+    if let Some(preparada) = estado.tomar_preparada() {
+        let _ = preparada.sala.close().await;
+    }
+}
+
+pub async fn iniciar(
+    app: AppHandle,
+    estado: &Transmissao,
+    pedido: Pedido,
+) -> Result<Tempos, String> {
+    let comeco = Instant::now();
+    let mut tempos = Tempos::default();
+
     // Uma transmissão por vez: começar outra é trocar de fonte.
     parar(estado).await;
 
@@ -126,22 +263,69 @@ pub async fn iniciar(app: AppHandle, estado: &Transmissao, pedido: Pedido) -> Re
         .ok_or_else(|| "A janela ou tela escolhida não existe mais".to_string())?;
     // Abrir a captura antes de entrar na sala: se a fonte recusar (conteúdo
     // protegido, janela que sumiu), ninguém vê um `#tela` entrar e sair.
-    let capturador = tauri::async_runtime::spawn_blocking(move || captura::abrir(alvo))
+    //
+    // E, na mesma ida à thread de bloqueio, **esperar o primeiro quadro**: com
+    // ele na mão o encoder nasce no tamanho certo e a faixa sobe já com
+    // imagem. Ver `ESPERA_DO_PRIMEIRO_QUADRO`.
+    let marca = Instant::now();
+    let (capturador, primeiro, captura_ms) =
+        tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
+            let aberta = Instant::now();
+            let mut capturador = captura::abrir(alvo).map_err(|e| e.to_string())?;
+            let captura_ms = aberta.elapsed().as_millis() as u64;
+            let primeiro = match capturador.proximo_quadro(ESPERA_DO_PRIMEIRO_QUADRO) {
+                Ok(quadro) => quadro,
+                // A fonte sumiu entre escolher e capturar: dizer isso agora é
+                // melhor que publicar uma faixa que nunca teria imagem.
+                Err(e) => return Err(e.to_string()),
+            };
+            Ok((capturador, primeiro, captura_ms))
+        })
         .await
-        .map_err(|e| format!("falha ao abrir a captura: {e}"))?
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("falha ao abrir a captura: {e}"))??;
+    tempos.captura_ms = captura_ms;
+    tempos.primeiro_quadro_ms = (marca.elapsed().as_millis() as u64).saturating_sub(captura_ms);
+    tempos.sem_primeiro_quadro = primeiro.is_none();
 
-    let mut opcoes = RoomOptions::default();
-    // Este participante só publica (o token nem permite assinar): não baixar
-    // o áudio de ninguém — a pessoa já ouve pela conexão do webview.
-    opcoes.auto_subscribe = false;
-    let (sala, eventos) = Room::connect(&pedido.url, &pedido.token, opcoes)
-        .await
-        .map_err(|e| format!("não foi possível entrar na sala: {e}"))?;
+    // A sala pré-conectada pelo seletor, quando é a mesma credencial. É a
+    // etapa que sozinha custava segundos no clique (ver `preparar`).
+    let marca = Instant::now();
+    let (sala, eventos) = match estado.tomar_preparada() {
+        Some(preparada) if preparada.url == pedido.url && preparada.token == pedido.token => {
+            tempos.reaproveitou_sala = true;
+            (preparada.sala, preparada.eventos)
+        }
+        // Credencial diferente (o usuário trocou de canal com o seletor
+        // aberto): a sala pronta não serve, e deixá-la conectada seria um
+        // `#tela` fantasma em outra sala.
+        outra => {
+            if let Some(outra) = outra {
+                let _ = outra.sala.close().await;
+            }
+            let mut opcoes = RoomOptions::default();
+            // Este participante só publica (o token nem permite assinar): não
+            // baixar o áudio de ninguém — a pessoa já ouve pela conexão do
+            // webview.
+            opcoes.auto_subscribe = false;
+            Room::connect(&pedido.url, &pedido.token, opcoes)
+                .await
+                .map_err(|e| format!("não foi possível entrar na sala: {e}"))?
+        }
+    };
+    tempos.conexao_ms = marca.elapsed().as_millis() as u64;
 
     // O teto do preset, já em dimensões pares; a fonte real se encaixa nele
     // quadro a quadro (`para_i420`).
-    let (largura, altura) = encaixar(pedido.largura, pedido.altura, pedido.largura, pedido.altura);
+    let (largura_max, altura_max) =
+        encaixar(pedido.largura, pedido.altura, pedido.largura, pedido.altura);
+    // A resolução **declarada** é a do primeiro quadro já encaixado, e não o
+    // teto do preset. Uma janela quase nunca tem o tamanho do preset: declarar
+    // 1920×1080 e entregar 1263×943 obriga o encoder a se reconfigurar no
+    // primeiro quadro, que é justamente o quadro que se quer rápido. Sem
+    // primeiro quadro não há o que medir, e o teto volta a ser o palpite.
+    let (largura, altura) = primeiro.as_ref().map_or((largura_max, altura_max), |q| {
+        encaixar(q.largura, q.altura, largura_max, altura_max)
+    });
     let fonte = NativeVideoSource::new(
         VideoResolution {
             width: largura,
@@ -153,9 +337,17 @@ pub async fn iniciar(app: AppHandle, estado: &Transmissao, pedido: Pedido) -> Re
     );
     let faixa = LocalVideoTrack::create_video_track("tela", RtcVideoSource::Native(fonte.clone()));
 
+    // O quadro entra na fonte **antes** de publicar: quando o SFU encaminhar a
+    // faixa, o encoder já terá conteúdo, e o outro lado vê imagem em vez do
+    // "Carregando a transmissão…" até a fonte repintar.
+    if let Some(quadro) = &primeiro {
+        empurrar(&fonte, quadro, largura_max, altura_max);
+    }
+
     // Espelha o `publicarTela` da web: teto de bitrate do preset, sem
     // simulcast (quem abre uma tela quer lê-la, não uma camada reduzida) e,
     // com banda apertada, derrubar quadros em vez de resolução.
+    let marca = Instant::now();
     let publicacao = TrackPublishOptions {
         source: TrackSource::Screenshare,
         video_encoding: Some(VideoEncoding {
@@ -209,6 +401,7 @@ pub async fn iniciar(app: AppHandle, estado: &Transmissao, pedido: Pedido) -> Re
     } else {
         None
     };
+    tempos.publicacao_ms = marca.elapsed().as_millis() as u64;
 
     let parar_bandeira = Arc::new(AtomicBool::new(false));
     let bandeira = parar_bandeira.clone();
@@ -219,7 +412,7 @@ pub async fn iniciar(app: AppHandle, estado: &Transmissao, pedido: Pedido) -> Re
             let motivo = transmitir(
                 capturador,
                 &fonte,
-                (largura, altura),
+                (largura_max, altura_max),
                 fps,
                 &bandeira,
                 eventos,
@@ -246,7 +439,8 @@ pub async fn iniciar(app: AppHandle, estado: &Transmissao, pedido: Pedido) -> Re
         thread,
         audio,
     });
-    Ok(())
+    tempos.total_ms = comeco.elapsed().as_millis() as u64;
+    Ok(tempos)
 }
 
 /// Para a transmissão em curso, se houver, e espera a thread sair da sala.
@@ -342,14 +536,7 @@ fn transmitir(
                 if ultimo.elapsed() < intervalo {
                     continue;
                 }
-                let buffer = para_i420(&quadro, largura_max, altura_max);
-                fonte.capture_frame(&VideoFrame {
-                    rotation: VideoRotation::VideoRotation0,
-                    // zero = "agora", pelo relógio do SDK
-                    timestamp_us: 0,
-                    frame_metadata: None,
-                    buffer,
-                });
+                empurrar(fonte, &quadro, largura_max, altura_max);
                 ultimo = Instant::now();
             }
             // Nada repintou: o encoder segue com o último quadro que recebeu.
@@ -370,6 +557,22 @@ fn sala_caiu(eventos: &mut UnboundedReceiver<RoomEvent>) -> bool {
             Err(TryRecvError::Empty) => return false,
         }
     }
+}
+
+/// Converte e entrega um quadro à fonte de vídeo do SDK.
+///
+/// Está separado do laço porque o **primeiro** quadro é empurrado em
+/// `iniciar`, antes de publicar a faixa: assim a publicação já sobe com
+/// imagem.
+fn empurrar(fonte: &NativeVideoSource, quadro: &Quadro, largura_max: u32, altura_max: u32) {
+    let buffer = para_i420(quadro, largura_max, altura_max);
+    fonte.capture_frame(&VideoFrame {
+        rotation: VideoRotation::VideoRotation0,
+        // zero = "agora", pelo relógio do SDK
+        timestamp_us: 0,
+        frame_metadata: None,
+        buffer,
+    });
 }
 
 /// BGRA → I420 na resolução da fonte e, se ela for maior que o preset,
