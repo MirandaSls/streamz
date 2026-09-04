@@ -1,67 +1,125 @@
 /**
- * O estado temporário do teste de microfone, e o que ele decide.
+ * A máquina de estados do teste de microfone.
  *
- * "Testar microfone" no Discord não é só um medidor: enquanto o teste corre,
- * você fica **surdo** — não ouve os outros e eles não te ouvem — e ouve a si
- * mesmo. A tentação é implementar isso ligando mudo e surdo de verdade; seria
- * errado, porque mudo e surdo são preferências persistidas (`voicePrefs`, com
- * som próprio e ícone no rodapé) e quem entra num teste não pediu para mudar
- * nada: sairia dele mudo, sem saber por quê.
+ * "Testar microfone" no Discord não é um medidor: é uma cabine. Enquanto o
+ * teste corre você fica **mudo e surdo** — não ouve ninguém, ninguém te ouve —
+ * e escuta a si mesmo, com o mesmo processamento que o outro lado receberia. É
+ * o que responde a pergunta que levou a pessoa ali ("estou pegando o
+ * ventilador?"): com a sala tocando por cima é impossível julgar o próprio som.
  *
- * Então o teste é uma camada **por cima** das preferências, e este módulo é a
- * regra dessa camada, sem DOM e sem LiveKit para poder ser testada:
+ * A primeira versão (#102) ensurdecia **por dentro**: um estado transitório
+ * (`testandoMicrofone`) sobrepunha mudo/surdo sem escrevê-los e sem avisar o
+ * gateway. Funcionava e não deixava rastro, mas era invisível: os ícones do
+ * rodapé e da cápsula continuavam dizendo que você estava ouvindo, e os outros
+ * te viam normal enquanto você não ouvia nada. A decisão do usuário
+ * (2026-09-04) é a do Discord: o teste **muta e ensurdece de verdade**, pelos
+ * mesmos caminhos do botão do rodapé — com som, com ícone e com `voice.update`
+ * para o gateway —, e ao parar **restaura exatamente** o que estava antes.
  *
- * - o teste nunca escreve em `prefs` — o que ele faz é sobrepor;
- * - parar o teste não "restaura um retrato": as preferências nunca saíram do
- *   lugar, então basta parar de sobrepor. É por isso que trocar de mudo no meio
- *   do teste vale ao sair dele, e não é desfeito.
+ * Daí este módulo, sem DOM, sem LiveKit e sem store, só a regra:
  *
- * O gateway também não fica sabendo: `voice.update` continua mandando as flags
- * das preferências. O Discord ensurdece só de um lado, e é o certo — os outros
- * não têm o que fazer com "fulano está testando o microfone", e uma linha
- * "mudo" piscando na lista a cada teste seria ruído.
+ * - **entrar**: guarda o par mudo/surdo de agora e pede o par do teste;
+ * - **sair**: devolve o par guardado — mas só se ninguém tiver mexido nele no
+ *   meio do caminho. Se o usuário desmutou/dessurdou na mão, a escolha dele é
+ *   mais nova que a nossa e fica (e o teste para: `testeSobrevive`);
+ * - quem já estava surdo antes do teste entra e sai sem que nada mude — sem
+ *   escrita, sem som.
+ *
+ * O que sobra para a store (`stores/voice.ts`) é aplicar: escrever em
+ * `voicePrefs` com `setMuteDeafen`, tirar o microfone da sala
+ * (`definirMicrofoneEmTeste`) e ligar o retorno. Ver o cabeçalho de
+ * `components/voice/useTesteDeMicrofone.ts` para a parte de mídia.
  */
 
+/** O par que o rodapé mostra e o gateway recebe. */
 export interface PrefsDeVoz {
   muted: boolean;
   deafened: boolean;
-  /** o que `voicePrefs.micAberto()` responde (já considera mudo, surdo e PTT). */
-  micAberto: boolean;
 }
 
-export interface EstadoDeVozNoTeste {
-  prefs: PrefsDeVoz;
-  /** transitório: não é persistido e não vai para o gateway. */
+/**
+ * O que o teste exige enquanto dura.
+ *
+ * Surdo **e** mudo, porque no Discord surdo implica mudo — é a mesma regra de
+ * `voicePrefs.toggleDeafen`, e o par tem de bater com o que ela escreve para a
+ * restauração saber que foi o teste quem pôs isso ali.
+ */
+export const PREFS_DO_TESTE: PrefsDeVoz = { muted: true, deafened: true };
+
+export interface EstadoDoTeste {
   testando: boolean;
+  /** o mudo/surdo de antes do teste; `null` fora dele. */
+  anterior: PrefsDeVoz | null;
 }
 
-/** Liga/desliga o teste sem tocar nas preferências. */
-export function comTeste(estado: EstadoDeVozNoTeste, testando: boolean): EstadoDeVozNoTeste {
-  if (estado.testando === testando) return estado;
-  return { prefs: estado.prefs, testando };
+export const FORA_DO_TESTE: EstadoDoTeste = { testando: false, anterior: null };
+
+/** O estado seguinte e o que escrever em `voicePrefs` (`null` = nada a fazer). */
+export interface PassoDoTeste {
+  estado: EstadoDoTeste;
+  aplicar: PrefsDeVoz | null;
 }
 
-/** O microfone deve estar publicado na sala agora? Durante o teste, nunca. */
-export function microfoneNaSala(estado: EstadoDeVozNoTeste): boolean {
-  return estado.testando ? false : estado.prefs.micAberto;
+export function mesmasPrefs(a: PrefsDeVoz, b: PrefsDeVoz): boolean {
+  return a.muted === b.muted && a.deafened === b.deafened;
+}
+
+/**
+ * Começa o teste: guarda o estado atual e pede o do teste.
+ *
+ * Chamar duas vezes não faz nada — e, principalmente, **não** regrava o
+ * `anterior`: um segundo "Testar" (o popover e a aba podem estar abertos ao
+ * mesmo tempo) guardaria o par já ensurdecido pelo primeiro e a restauração
+ * deixaria a pessoa surda para sempre.
+ */
+export function iniciarTeste(estado: EstadoDoTeste, atual: PrefsDeVoz): PassoDoTeste {
+  if (estado.testando) return { estado, aplicar: null };
+  return {
+    estado: { testando: true, anterior: { ...atual } },
+    aplicar: mesmasPrefs(atual, PREFS_DO_TESTE) ? null : PREFS_DO_TESTE,
+  };
+}
+
+/**
+ * Para o teste (botão, popover fechado, aba trocada, saída da call, desmonte)
+ * e diz o que restaurar.
+ *
+ * A condição de restaurar é "as preferências ainda são exatamente as que o
+ * teste pôs". É ela que faz o caminho do usuário no meio do teste — desmutar
+ * ou dessurdar na mão — não ser desfeito: aí `atual` já não é
+ * `PREFS_DO_TESTE`, e nada é escrito por cima da escolha dele.
+ */
+export function pararTeste(estado: EstadoDoTeste, atual: PrefsDeVoz): PassoDoTeste {
+  if (!estado.testando) return { estado: FORA_DO_TESTE, aplicar: null };
+  const { anterior } = estado;
+  const restaurar =
+    anterior !== null && mesmasPrefs(atual, PREFS_DO_TESTE) && !mesmasPrefs(anterior, atual);
+  return { estado: FORA_DO_TESTE, aplicar: restaurar ? anterior : null };
+}
+
+/**
+ * O teste continua de pé com estas preferências?
+ *
+ * Não: mexeu no mudo ou no surdo enquanto o teste corria, o teste acabou. O
+ * botão do rodapé (e o Ctrl+Shift+M/D) é um pedido para voltar à call, e
+ * manter a cabine aberta por cima dele deixaria o ícone e o áudio brigando.
+ */
+export function testeSobrevive(atual: PrefsDeVoz): boolean {
+  return mesmasPrefs(atual, PREFS_DO_TESTE);
 }
 
 /**
  * O áudio de um participante remoto deve estar calado agora?
  *
- * Assinatura solta (e não `EstadoDeVozNoTeste`) porque quem pergunta é um
- * `<audio>` por faixa, em `AudioRemotoHost`: ele já tem os três booleanos na
- * mão e montar um objeto por faixa a cada render seria cerimônia à toa.
+ * Assinatura solta (e não um objeto) porque quem pergunta é um `<audio>` por
+ * faixa, em `AudioRemotoHost`: ele já tem os três booleanos na mão e montar um
+ * objeto por faixa a cada render seria cerimônia à toa.
+ *
+ * Durante o teste `deafened` já é verdade — quem cala é o surdo de verdade,
+ * como em qualquer outro momento. O `testando` fica como cinto de segurança
+ * para a fração de render entre "o teste começou" e "as preferências foram
+ * escritas", e para o teste fora de qualquer call.
  */
 export function saidaCalada(deafened: boolean, testando: boolean, silenciadoLocal = false): boolean {
   return testando || deafened || silenciadoLocal;
-}
-
-/**
- * O que o gateway vê. É o espelho de `flags()` em `stores/voice.ts` — `muted`
- * ali é "o microfone está fechado agora", que o PTT também decide — e existe
- * aqui para o teste poder provar que **não** aparece nele.
- */
-export function flagsParaOGateway(estado: EstadoDeVozNoTeste): { muted: boolean; deafened: boolean } {
-  return { muted: !estado.prefs.micAberto, deafened: estado.prefs.deafened };
 }

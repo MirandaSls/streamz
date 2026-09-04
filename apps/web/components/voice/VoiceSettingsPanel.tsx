@@ -20,8 +20,9 @@ import { useVoicePrefs } from "@/stores/voicePrefs";
  * O teste de microfone existe porque "escolhi o dispositivo certo?" não se
  * responde por uma lista de nomes: responde-se falando e **se ouvindo**. É o
  * mesmo teste do popover de supressão e da aba das configurações — um hook só
- * (`useTesteDeMicrofone`), que ensurdece enquanto dura e devolve o seu som na
- * saída escolhida.
+ * (`useTesteDeMicrofone`), que muta e ensurdece de verdade enquanto dura e
+ * devolve o seu som na saída escolhida. Parar (ou fechar o painel) restaura o
+ * mudo/surdo de antes.
  *
  * O nome do dispositivo só existe com permissão de mídia concedida — sem ela o
  * browser devolve a lista anônima, e é isso que o aviso explica. A lista se
@@ -94,8 +95,8 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
         </h3>
         <p className="text-xs text-txt-muted">
           {testandoMic
-            ? "Você está se ouvindo. Enquanto o teste durar, a sala não te ouve e você não ouve ninguém."
-            : "Com problemas? Comece uma verificação e diga algo divertido — você vai se ouvir, e a barra se mexe se a gente estiver ouvindo você."}
+            ? "Você está se ouvindo. Enquanto o teste durar você fica mudo e surdo — a sala não te ouve e você não ouve ninguém."
+            : "Com problemas? Comece uma verificação e diga algo divertido — você vai se ouvir, e a barra se mexe se a gente estiver ouvindo você. Enquanto durar, você fica mudo e surdo."}
         </p>
         <div className="flex items-center gap-3">
           <button

@@ -18,8 +18,10 @@ import { useVoice } from "@/stores/voice";
  * desligar de vez continua sendo escolha consciente, nas configurações.
  *
  * O teste é o mesmo da aba "Voz e vídeo", e por isso vem do mesmo hook: ele
- * ensurdece durante o teste e devolve o seu próprio som (ver
- * `useTesteDeMicrofone`). Fechar o popover para o teste.
+ * muta e ensurdece de verdade enquanto dura — os ícones do rodapé mostram os
+ * dois e os outros me veem assim — e devolve o seu próprio som (ver
+ * `useTesteDeMicrofone`). Fechar o popover para o teste e devolve mudo e surdo
+ * ao que eram.
  */
 export default function PopoverDeRuido() {
   const { testando, nivel, erro, alternar } = useTesteDeMicrofone();
@@ -60,8 +62,8 @@ export default function PopoverDeRuido() {
         </div>
         <p className="text-xs text-txt-muted">
           {testando
-            ? "Fale: você está se ouvindo. Enquanto o teste durar, a sala não te ouve e você não ouve ninguém."
-            : "Fale, ou bata palmas: com a supressão ligada, o outro lado ouve só você."}
+            ? "Fale: você está se ouvindo. Enquanto o teste durar você fica mudo e surdo — a sala não te ouve e você não ouve ninguém."
+            : "Fale, ou bata palmas: com a supressão ligada, o outro lado ouve só você. Testar te deixa mudo e surdo até você parar."}
         </p>
         {erro && <p className="text-xs text-red">{erro}</p>}
       </div>
