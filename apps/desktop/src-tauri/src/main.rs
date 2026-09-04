@@ -78,6 +78,8 @@ fn main() {
             tela::capacidades_de_tela,
             tela::fontes_de_tela,
             tela::miniaturas_de_tela,
+            tela::preparar_tela,
+            tela::descartar_tela,
             tela::iniciar_tela,
             tela::parar_tela,
         ])

@@ -11,6 +11,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
+use windows::Win32::Foundation::HWND;
+use windows::Win32::Graphics::Gdi::{RedrawWindow, RDW_ALLCHILDREN, RDW_INVALIDATE};
 use windows::Win32::UI::WindowsAndMessaging::IsWindow;
 use windows_capture::capture::{CaptureControl, Context, GraphicsCaptureApiHandler};
 use windows_capture::frame::Frame;
@@ -109,7 +111,9 @@ impl Sessao {
                 if !unsafe { IsWindow(Some(hwnd)) }.as_bool() {
                     return Err(Erro::FonteSumiu);
                 }
-                iniciar(Window::from_raw_hwnd(hwnd.0), caixa.clone())?
+                let controle = iniciar(Window::from_raw_hwnd(hwnd.0), caixa.clone())?;
+                cutucar(hwnd);
+                controle
             }
             Alvo::Monitor(hmonitor) => {
                 iniciar(Monitor::from_raw_hmonitor(hmonitor.0), caixa.clone())?
@@ -141,6 +145,28 @@ where
         caixa,
     );
     Entregador::start_free_threaded(settings).map_err(|e| Erro::Falha(e.to_string()))
+}
+
+/// Pede à janela que se redesenhe, logo depois de abrir a captura.
+///
+/// **É a diferença entre "janela" e "tela inteira" no tempo até o primeiro
+/// quadro.** O WGC de monitor entrega quadro a cada composição do desktop, que
+/// nunca para; o de janela só entrega quando *aquela* janela repinta. Uma
+/// janela parada — um editor sem foco, um leitor de PDF, um jogo pausado —
+/// pode ficar segundos sem repintar, e nesse intervalo a faixa já está
+/// publicada mas sem imagem: é o "Carregando a transmissão…" que não sai.
+/// Marcar a janela como suja põe um `WM_PAINT` na fila dela e o quadro chega
+/// na composição seguinte.
+///
+/// Sem `RDW_UPDATENOW` de propósito: essa bandeira manda a mensagem em
+/// sincronia, e uma janela travada prenderia a nossa thread junto. Assim o
+/// pedido é só enfileirado; se a outra aplicação estiver ocupada, o quadro
+/// atrasa em vez de nos travar. Falhar aqui não é erro — no pior caso é o
+/// comportamento de antes.
+fn cutucar(hwnd: HWND) {
+    unsafe {
+        let _ = RedrawWindow(Some(hwnd), None, None, RDW_INVALIDATE | RDW_ALLCHILDREN);
+    }
 }
 
 impl Capturador for Sessao {

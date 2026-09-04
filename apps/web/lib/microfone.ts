@@ -98,9 +98,13 @@ interface Vivo {
 /**
  * O microfone deve estar **capturando** agora?
  *
- * Durante o teste, sim — sempre. O teste do Discord funciona com o microfone
- * mudo (é justamente onde se descobre que ele estava mudo), e quem garante que
- * a sala não ouve nada é a despublicação, não o mudo.
+ * Durante o teste, sim — sempre, e é isto que faz o retorno funcionar com o
+ * usuário mudo. O teste liga mudo e surdo de verdade (ver
+ * `stores/teste-de-microfone.ts`), e mudo aqui é `enabled = false` na faixa
+ * **de entrada** da cadeia: aplicá-lo mataria o próprio som que o teste
+ * devolve. Então enquanto o teste dura a captura fica aberta — o ramo que o
+ * retorno ouve é a cadeia inteira, antes do interruptor de mudo — e quem
+ * garante que a sala não ouve nada é a despublicação, não o mudo.
  */
 function abertoDeFato(estado: Vivo): boolean {
   return estado.testando || estado.prefs.aberto;
@@ -268,6 +272,11 @@ export function definirMicrofoneAberto(aberto: boolean): Promise<void> {
  * supressor e o mesmo volume de entrada — continua rodando: o teste ouve
  * exatamente o que a sala ouviria, sem um segundo `getUserMedia` e sem um
  * segundo `AudioContext`.
+ *
+ * É também o que sustenta o mudo de verdade do teste: `abertoDeFato` mantém a
+ * captura aberta enquanto `testando` vale, então o mudo que o rodapé mostra
+ * (e que o gateway recebe) não chega a apagar o retorno. Fora da sala e sem
+ * ninguém escutando, uma faixa aberta não vaza para lugar nenhum.
  */
 export function definirMicrofoneEmTeste(testando: boolean): Promise<void> {
   return emFila(async () => {

@@ -12,6 +12,7 @@
 //! tira do que está atrás em cada lado.
 
 use std::ffi::c_void;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use windows::Win32::Foundation::{HWND, RECT};
@@ -218,11 +219,20 @@ fn retangulo_do_monitor(monitor: HMONITOR) -> Option<RECT> {
 /// Miniaturas no DXGI: um quadro por monitor, e cada janela é um recorte
 /// dele. Além de mais barato, é o único jeito — o DXGI derruba a duplicação
 /// anterior quando outra é aberta no mesmo monitor.
-pub fn miniaturas(alvos: &[Alvo]) -> Vec<Option<Vec<u8>>> {
+///
+/// `cancelar` para a varredura no meio: aqui isso importa ainda mais que no
+/// WGC, porque **abrir uma duplicação derruba a anterior do mesmo monitor**.
+/// Enquanto o seletor varre, cada miniatura tira a duplicação da transmissão
+/// que está começando debaixo dela; parar a varredura no clique é o que evita
+/// essa cabo de guerra.
+pub fn miniaturas(alvos: &[Alvo], cancelar: &AtomicBool) -> Vec<Option<Vec<u8>>> {
     let mut saida: Vec<Option<Vec<u8>>> = vec![None; alvos.len()];
     let mut quadros: Vec<(HMONITOR, Option<Quadro>)> = Vec::new();
 
     for (i, alvo) in alvos.iter().enumerate() {
+        if cancelar.load(Ordering::Acquire) {
+            break;
+        }
         let monitor = match *alvo {
             Alvo::Monitor(hmonitor) => hmonitor,
             Alvo::Janela(hwnd) => {

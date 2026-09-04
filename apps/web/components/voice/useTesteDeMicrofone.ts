@@ -18,19 +18,22 @@ import { aplicarSaida, explicarMidia, motivoDaFalha, useVoiceDevicesStore } from
  * "Voz e vídeo", com um dono só.
  *
  * O teste do Discord não é um medidor: é uma cabine. Enquanto ele corre você
- * fica **surdo dos dois lados** (não ouve ninguém e ninguém te ouve) e ouve a
- * si mesmo, com o mesmo processamento que o outro lado receberia. Só assim a
+ * fica **mudo e surdo** (não ouve ninguém e ninguém te ouve) e ouve a si
+ * mesmo, com o mesmo processamento que o outro lado receberia. Só assim a
  * pergunta que levou a pessoa ali — "estou pegando o ventilador?" — tem
  * resposta: com a sala tocando por cima é impossível julgar o próprio som, e
  * com o microfone ainda publicado o teste vira um monólogo para a call.
+ *
+ * O mudo e o surdo são **de verdade**: os ícones do rodapé e da cápsula
+ * mostram os dois, o gateway recebe as flags e os outros me veem como veriam
+ * qualquer um que se ensurdeceu. Ao parar, o par de antes volta exatamente
+ * como estava — a regra é `stores/teste-de-microfone.ts`.
  *
  * A divisão de trabalho:
  *
  * - o **estado** (`testandoMicrofone`) mora na store da voz, porque quem tem
  *   de respeitá-lo está fora daqui: a publicação do microfone (`voice.ts`) e o
- *   `<audio>` de cada participante remoto (`AudioRemotoHost`). Ele é
- *   transitório e sobrepõe as preferências sem escrevê-las — ver
- *   `stores/teste-de-microfone.ts`;
+ *   `<audio>` de cada participante remoto (`AudioRemotoHost`);
  * - a **mídia** (retorno e medidor) mora neste hook, montada enquanto o estado
  *   vale e desmontada quando ele cai. Sair da call derruba o estado
  *   (`sairDaSalaAtual`), e com ele o retorno.
@@ -45,14 +48,21 @@ import { aplicarSaida, explicarMidia, motivoDaFalha, useVoiceDevicesStore } from
  * `getUserMedia` por cima do que a call já mantém aberto é o tipo de coisa que
  * no Windows produz um estalo — e, na melhor das hipóteses, mede outra coisa.
  *
+ * É também por isso que o mudo do teste não emudece o retorno: mudo é
+ * `enabled = false` na entrada da cadeia, e o dono da faixa mantém a captura
+ * aberta enquanto o teste dura (`abertoDeFato`, em `lib/microfone.ts`). O
+ * retorno ouve a cadeia inteira, antes do interruptor de mudo; a sala não ouve
+ * nada porque a faixa saiu de lá.
+ *
  * **Fora da call** não há faixa de ninguém, e aí o hook abre a captura dele,
  * montando a mesma cadeia (`cadeiaDoMicrofone`) para a resposta continuar
  * valendo. Nos dois caminhos a `AudioContext` é a única da aba
  * (`usarContextoDeCaptura`).
  *
- * Fechar o popover ou trocar de aba desmonta o hook, e desmontar para o teste:
- * um microfone que continua gravando depois de a caixa sumir é exatamente o
- * bug que ninguém percebe.
+ * Fechar o popover ou trocar de aba desmonta o hook, e desmontar para o teste
+ * — o que também devolve mudo e surdo ao que eram: um microfone que continua
+ * gravando (ou um surdo que ninguém pediu) depois de a caixa sumir é
+ * exatamente o bug que ninguém percebe.
  */
 
 /**

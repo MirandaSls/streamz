@@ -30,7 +30,14 @@ import {
   type TrackPublication,
 } from "livekit-client";
 import { api } from "@/lib/api";
-import { iniciarTelaNativa, isTauri, ouvirTelaEncerrada, pararTelaNativa } from "@/lib/desktop";
+import {
+  descartarTelaNativa as ponteDescartarTela,
+  iniciarTelaNativa,
+  isTauri,
+  ouvirTelaEncerrada,
+  pararTelaNativa,
+  prepararTelaNativa as pontePrepararTela,
+} from "@/lib/desktop";
 import { tocarSom, tocarSomDeMovido } from "@/lib/ringtone";
 import { montarPedido } from "@/lib/seletor-de-tela";
 import {
@@ -64,7 +71,13 @@ import {
   proximoConjunto,
 } from "@/stores/voice-falantes";
 import { armarDetectorLocal, desarmarDetectorLocal } from "@/stores/voz-detector-local";
-import { microfoneNaSala, type EstadoDeVozNoTeste } from "@/stores/teste-de-microfone";
+import {
+  iniciarTeste,
+  pararTeste,
+  testeSobrevive,
+  type EstadoDoTeste,
+  type PrefsDeVoz,
+} from "@/stores/teste-de-microfone";
 import { ui } from "@/stores/ui";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
@@ -102,6 +115,22 @@ let sala: Room | null = null;
  * o que a interface lê é `screenOn`.
  */
 let telaNativa = false;
+/**
+ * A credencial do `#tela` já buscada e a sala já pré-conectada por
+ * `prepararTelaNativa` (o seletor abrindo). Guardada aqui para o clique na
+ * miniatura não pagar nem o `POST /tela-token` nem o handshake do LiveKit.
+ * `channelId` junto porque trocar de canal com o seletor aberto invalida as
+ * duas coisas.
+ */
+let telaPreparada: { url: string; token: string; channelId: string } | null = null;
+/**
+ * Geração da pré-conexão. Preparar é assíncrono em duas etapas (token e
+ * `connect`), e o seletor pode fechar no meio: sem este contador a conexão
+ * que chegasse atrasada deixaria um `#tela` mudo na sala para sempre. Quem
+ * descarta, publica ou desmonta a sala incrementa; quem preparava e vê o
+ * número mudado desfaz o que acabou de abrir.
+ */
+let geracaoDeTela = 0;
 
 interface VoiceStoreState {
   /** estados de voz por canal (só quem está conectado). */
@@ -130,10 +159,11 @@ interface VoiceStoreState {
    */
   falando: ReadonlySet<string>;
   /**
-   * Teste de microfone em curso (o de `PopoverDeRuido` e o da aba "Voz e
-   * vídeo"). Estado **transitório**: enquanto ele vale, a saída dos outros fica
-   * calada e o meu microfone não é publicado, sem que mudo/surdo persistidos
-   * mudem — ver `stores/teste-de-microfone.ts`.
+   * Teste de microfone em curso (o do `PopoverDeRuido`, o da aba "Voz e vídeo"
+   * e o do `VoiceSettingsPanel`). Enquanto ele vale, o meu microfone sai da
+   * sala e **mudo e surdo são ligados de verdade** — com som, com ícone no
+   * rodapé e com `voice.update`, como se eu tivesse clicado. Parar restaura o
+   * par de antes. Ver `stores/teste-de-microfone.ts`.
    */
   testandoMicrofone: boolean;
 
@@ -231,6 +261,10 @@ interface VoiceStoreState {
    * na sala como `<userId>#tela` e publica; aqui só o estado e o token.
    */
   publicarTelaNativa: (fonteId: string) => Promise<void>;
+  /** Pré-conecta o `#tela` na sala enquanto o seletor está aberto. */
+  prepararTelaNativa: () => Promise<void>;
+  /** Desfaz a pré-conexão (seletor fechado sem escolha). */
+  descartarTelaNativa: () => Promise<void>;
   pararTela: () => Promise<void>;
   setScreenQuality: (q: ScreenQuality) => void;
   setScreenAudio: (on: boolean) => void;
@@ -266,13 +300,16 @@ interface VoiceStoreState {
   syncFlags: () => void;
 
   /**
-   * Começa o teste de microfone: fica surdo (sem ouvir os outros) e para de
-   * publicar o microfone, **sem** mexer em mudo/surdo persistidos e sem avisar
-   * o gateway. A captura de retorno é do hook `useTesteDeMicrofone`, que ouve
-   * este estado — aqui fica só o que a chamada precisa saber.
+   * Começa o teste de microfone: tira a faixa da sala e liga mudo e surdo pelo
+   * caminho normal (`voicePrefs.setMuteDeafen`), guardando o par de antes. A
+   * captura de retorno é do hook `useTesteDeMicrofone`, que ouve este estado —
+   * aqui fica só o que a chamada precisa saber.
    */
   iniciarTesteDeMicrofone: () => void;
-  /** Volta tudo ao que as preferências dizem (ver `teste-de-microfone.ts`). */
+  /**
+   * Para o teste e restaura o mudo/surdo de antes dele — a não ser que o
+   * usuário já os tenha mudado na mão (ver `teste-de-microfone.ts`).
+   */
   pararTesteDeMicrofone: () => void;
 }
 
@@ -399,6 +436,12 @@ function desmontarSala() {
     telaNativa = false;
     void pararTelaNativa();
   }
+  // idem para a sala que o seletor deixou pré-conectada sem publicar nada
+  geracaoDeTela += 1;
+  if (telaPreparada) {
+    telaPreparada = null;
+    void ponteDescartarTela();
+  }
   if (!sala) return;
   pararMedicaoDePing();
   // o microfone tem dono e é ele quem desmonta a cadeia: a `Room` fecha a
@@ -440,6 +483,24 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
   const fecharSala = desmontarSala;
 
   /**
+   * Encerra o teste de microfone e devolve mudo/surdo ao que eram antes dele.
+   *
+   * `naSala` diz se ainda vale mexer na publicação: quem está saindo da call já
+   * vai fechar a faixa, e republicá-la antes disso seria um "entrou/saiu" à toa
+   * na sala que está indo embora.
+   */
+  function encerrarTeste(naSala: boolean) {
+    if (!get().testandoMicrofone) return;
+    const { estado, aplicar } = pararTeste(estadoDoTeste(), prefsDeVoz());
+    anteriorDoTeste = estado.anterior;
+    set({ testandoMicrofone: false });
+    // a restauração vem antes de republicar: assim o dono da faixa já a
+    // devolve à sala com o mudo certo, sem um mudo/desmudo no meio
+    if (aplicar) useVoicePrefs.getState().setMuteDeafen(aplicar);
+    if (naSala) aplicarTesteNaSala();
+  }
+
+  /**
    * Deixa a sala atual: fecha a mídia, avisa o gateway (quando a saída é
    * minha) e zera a minha conexão. O que **não** faz por conta própria é fechar
    * a coluna do canal de voz — isso depende do motivo, e a tabela está em
@@ -448,6 +509,10 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
    */
   function sairDaSalaAtual(motivo: MotivoDeSaida, destinoEmServidor = false) {
     const { channelId, call } = get();
+    // sair da call encerra o teste: ele existe para dizer "o outro lado vai te
+    // ouvir assim", e sem outro lado não há o que testar. Antes do resto, para
+    // o mudo/surdo voltarem ao que eram enquanto o gateway ainda escuta
+    encerrarTeste(false);
     const decisao = decidirSaida(motivo, destinoEmServidor);
     // expulso não tem som: o que a pessoa ouve é o toast explicando
     if (channelId && decisao.avisaGateway) tocarSom("sair");
@@ -472,8 +537,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       erro: null,
       midiaDisponivel: false,
       falando: NINGUEM,
-      // sair da call encerra o teste de microfone junto: ele existe para dizer
-      // "o outro lado vai te ouvir assim", e sem outro lado não há o que testar
+      // o teste já foi encerrado (com a restauração) no topo desta função;
+      // aqui é só o campo voltando ao padrão junto com o resto
       testandoMicrofone: false,
       camOn: false,
       screenOn: false,
@@ -901,19 +966,81 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       rerender();
     },
 
+    /**
+     * Pré-conecta o `#tela` enquanto o seletor está aberto.
+     *
+     * **É onde estava a maior parte do atraso do clique.** Ir ao ar era, em
+     * ordem: `POST /tela-token` (ida e volta à API), abrir a captura, entrar
+     * na sala do LiveKit (sinal `wss`, join, ICE, DTLS) e só então publicar —
+     * tudo depois do clique, com o seletor ainda aberto na frente. As duas
+     * primeiras não dependem da fonte escolhida, então acontecem agora, com o
+     * usuário olhando a grade.
+     *
+     * Não lança e não avisa nada: se falhar, `publicarTelaNativa` faz o
+     * caminho inteiro como antes.
+     */
+    prepararTelaNativa: async () => {
+      const { channelId, screenOn } = get();
+      // com a tela já no ar, uma segunda conexão com a identidade `#tela`
+      // expulsaria a que está transmitindo (o LiveKit não aceita duas iguais)
+      if (!channelId || !sala || screenOn || !isTauri()) return;
+      if (telaPreparada?.channelId === channelId) return;
+      const geracao = ++geracaoDeTela;
+      try {
+        const creds = await api.telaToken(channelId);
+        // o seletor fechou, ou troquei de canal, enquanto o token vinha
+        if (geracao !== geracaoDeTela || useVoice.getState().channelId !== channelId) return;
+        await pontePrepararTela(creds);
+        if (geracao !== geracaoDeTela) {
+          // fechou enquanto a conexão subia: desfazer, senão fica um `#tela`
+          // mudo na sala até o LiveKit expirá-lo
+          void ponteDescartarTela();
+          return;
+        }
+        telaPreparada = { ...creds, channelId };
+      } catch {
+        if (geracao === geracaoDeTela) telaPreparada = null;
+      }
+    },
+
+    /** O seletor fechou sem ninguém escolher: tira o `#tela` da sala. */
+    descartarTelaNativa: async () => {
+      geracaoDeTela += 1;
+      telaPreparada = null;
+      await ponteDescartarTela();
+    },
+
     publicarTelaNativa: async (fonteId) => {
       const { channelId, screenQuality, screenAudio } = get();
       if (!channelId || !sala) {
         ui.toast(SEM_SALA, "error");
         return;
       }
+      const comeco = performance.now();
+      // a pré-conexão desta rodada acaba aqui: ou vira transmissão, ou o Rust
+      // a descarta por não servir. Uma que ainda estivesse subindo se desfaz.
+      geracaoDeTela += 1;
       try {
-        const creds = await api.telaToken(channelId);
-        await iniciarTelaNativa(montarPedido(fonteId, screenQuality, creds, screenAudio));
+        // A credencial da pré-conexão, quando é deste canal: o Rust reconhece
+        // o mesmo par url+token e reaproveita a sala já conectada.
+        const preparada = telaPreparada?.channelId === channelId ? telaPreparada : null;
+        const creds = preparada ?? (await api.telaToken(channelId));
+        const tempos = await iniciarTelaNativa(
+          montarPedido(fonteId, screenQuality, creds, screenAudio),
+        );
+        // a sala pré-conectada foi consumida (ou descartada) pelo Rust
+        telaPreparada = null;
         telaNativa = true;
         set({ screenOn: true });
         tocarSom("transmissao-iniciada");
+        // O tempo por etapa, para o dia em que alguém disser "demorou": sem
+        // isto a única medida é a impressão de quem clicou.
+        console.debug("[tela] ao vivo", {
+          ...tempos,
+          cliqueAteAoVivoMs: Math.round(performance.now() - comeco),
+        });
       } catch (e) {
+        telaPreparada = null;
         telaNativa = false;
         set({ screenOn: false });
         ui.toast(errorMessage(e, "Não foi possível compartilhar a tela"), "error");
@@ -1151,7 +1278,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
 
     syncFlags: () => {
       const f = flags();
-      // o teste de microfone é local: o gateway continua vendo as preferências
+      // durante o teste de microfone as preferências **são** mudo e surdo: o
+      // gateway recebe isso, e os outros me veem como o Discord os mostraria
       emit(WS_EVENTS.VOICE_UPDATE, f);
       if (!sala) return;
       // NÃO é `setMicrophoneEnabled`: sem publicação, ele criaria uma faixa
@@ -1166,25 +1294,37 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
 
     iniciarTesteDeMicrofone: () => {
       if (get().testandoMicrofone) return;
+      const { estado, aplicar } = iniciarTeste(estadoDoTeste(), prefsDeVoz());
+      anteriorDoTeste = estado.anterior;
       set({ testandoMicrofone: true });
+      // tirar o microfone da sala primeiro: entre o clique e o mudo não pode
+      // haver uma fatia de segundo em que a sala ainda me ouve
       aplicarTesteNaSala();
+      if (aplicar) useVoicePrefs.getState().setMuteDeafen(aplicar);
     },
 
-    pararTesteDeMicrofone: () => {
-      if (!get().testandoMicrofone) return;
-      set({ testandoMicrofone: false });
-      aplicarTesteNaSala();
-    },
+    pararTesteDeMicrofone: () => encerrarTeste(true),
   };
 });
 
-/** Preferências de voz + teste, do jeito que `teste-de-microfone.ts` decide. */
-function estadoDeVozNoTeste(): EstadoDeVozNoTeste {
+/**
+ * O mudo/surdo de antes do teste de microfone; `null` fora do teste.
+ *
+ * Fica fora da store porque não é para a tela: quem a tela lê é
+ * `testandoMicrofone`. Aqui é só a memória da restauração, e ela vive tanto
+ * quanto a aba.
+ */
+let anteriorDoTeste: PrefsDeVoz | null = null;
+
+/** O par mudo/surdo de agora, do jeito que a máquina do teste o lê. */
+function prefsDeVoz(): PrefsDeVoz {
   const prefs = useVoicePrefs.getState();
-  return {
-    prefs: { muted: prefs.muted, deafened: prefs.deafened, micAberto: prefs.micAberto() },
-    testando: useVoice.getState().testandoMicrofone,
-  };
+  return { muted: prefs.muted, deafened: prefs.deafened };
+}
+
+/** O estado do teste, montado das duas metades que o guardam. */
+function estadoDoTeste(): EstadoDoTeste {
+  return { testando: useVoice.getState().testandoMicrofone, anterior: anteriorDoTeste };
 }
 
 /**
@@ -1192,9 +1332,9 @@ function estadoDeVozNoTeste(): EstadoDeVozNoTeste {
  * saída dos outros é decidida pelo `<audio>` de cada faixa, em
  * `AudioRemotoHost`, que lê o mesmo estado.
  *
- * Sem `voice.update`: os outros não precisam saber que estou testando, e uma
- * linha "mudo" piscando na lista a cada teste seria ruído. É o que o Discord
- * faz — ensurdece só de um lado.
+ * O `voice.update` não sai daqui: quem o dispara é a escrita de mudo/surdo em
+ * `voicePrefs` (a assinatura no fim deste arquivo), e é por isso que os outros
+ * me veem mudo e surdo durante o teste — como no Discord.
  */
 function aplicarTesteNaSala() {
   if (!sala) return;
@@ -1696,6 +1836,15 @@ if (typeof window !== "undefined") {
     const chave = `${prefs.muted}|${prefs.deafened}|${prefs.pushToTalk}|${prefs.pttAtivo}`;
     if (chave === anterior) return;
     anterior = chave;
+    // desmutar ou dessurdar na mão no meio do teste **para** o teste: quem
+    // clicou no rodapé (ou no Ctrl+Shift+M/D) quer voltar para a call, e a
+    // escolha dele é mais nova que a nossa — `pararTeste` não a desfaz
+    if (
+      useVoice.getState().testandoMicrofone &&
+      !testeSobrevive({ muted: prefs.muted, deafened: prefs.deafened })
+    ) {
+      useVoice.getState().pararTesteDeMicrofone();
+    }
     if (useVoice.getState().channelId) useVoice.getState().syncFlags();
   });
 }

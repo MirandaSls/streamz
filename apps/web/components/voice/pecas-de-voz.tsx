@@ -11,7 +11,7 @@
  *
  * A captura em si saiu daqui: quem abre o microfone do teste é o hook
  * `useTesteDeMicrofone`, porque o teste passou a ser mais do que um medidor
- * (ensurdece e devolve o próprio som). O que ficou é só desenho.
+ * (muta, ensurdece e devolve o próprio som). O que ficou é só desenho.
  */
 
 /**

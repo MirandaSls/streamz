@@ -627,6 +627,34 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   `acceptCall` usam o primeiro (trocar de canal de voz não pode desmontar o
   painel que pediu a conexão).
 - Atalhos de mudo/surdo (Ctrl+Shift+M/D) têm um dono só: `VoiceHotkeys`.
+- **"Testar microfone" muta e ensurdece de verdade.** O teste é o mesmo nos
+  três lugares (`PopoverDeRuido`, aba "Voz e vídeo", `VoiceSettingsPanel`), num
+  hook só (`useTesteDeMicrofone`). Ao começar ele liga mudo **e** surdo pelo
+  caminho normal — `voicePrefs.setMuteDeafen`, com o som de surdo, os ícones do
+  rodapé e da cápsula acesos e `voice.update` para o gateway, como se o usuário
+  tivesse clicado — e ao parar **restaura exatamente** o par de antes. A regra
+  pura (e testada) é `stores/teste-de-microfone.ts`
+  (`iniciarTeste`/`pararTeste`/`testeSobrevive`); o par guardado mora fora da
+  store, em `anteriorDoTeste` (`stores/voice.ts`). Três coisas que precisam
+  continuar verdade:
+  - **o retorno sobrevive ao mudo.** Mudo é `enabled = false` na faixa de
+    **entrada** da cadeia, então aplicá-lo mataria o próprio som que o teste
+    devolve: `abertoDeFato` (`lib/microfone.ts`) mantém a captura aberta
+    enquanto o teste dura, e o loopback ouve a cadeia inteira, antes do
+    interruptor de mudo. Quem garante que a sala não ouve nada é a
+    despublicação (`definirMicrofoneEmTeste`), nunca o mudo.
+  - **todo caminho de saída passa pelo mesmo `pararTeste`**: o botão, fechar o
+    popover, trocar de aba, fechar o painel, desmontar o hook e
+    `sairDaSalaAtual` — este último com `naSala = false`, para não republicar a
+    faixa numa sala que já está indo embora.
+  - **mexer em mudo/surdo na mão no meio do teste para o teste**, e a escolha do
+    usuário fica: a restauração só acontece se as preferências ainda forem as
+    que o próprio teste pôs.
+  A primeira versão (#102) ensurdecia por dentro — um estado transitório
+  sobrepunha as preferências sem escrevê-las e sem avisar o gateway. Funcionava
+  e não deixava rastro, mas era invisível: os ícones diziam que você estava
+  ouvindo e os outros te viam normal enquanto você não ouvia nada. A decisão do
+  usuário (2026-09-04) é a do Discord — o teste aparece.
 - **Quem está falando é um conjunto só**: `falando: ReadonlySet<userId>` na
   store, montado em `stores/voice-falantes.ts`. Palco (`VoiceGrid`), lista do
   canal (`VoiceChannelMembers`) e lista de membros (`MemberList`) leem esse
@@ -1070,6 +1098,7 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
 | #105 | Sons: um som não se sobrepõe a si mesmo em menos de 300 ms, um dono só do volume com fator por som, e badge de não lidas no ícone da caixa de entrada |
 | #112 | As duas categorias padrão viram categorias de verdade (§4.1): paravam de existir na primeira categoria criada, e não dava para renomear nem apagar |
 | #117 | Auditoria de tempo real entre as sessões da conta (§4.2) e as lacunas fechadas: `channel.read` (o "lido" num cliente apaga o badge no outro), fechar conversa/sair do grupo, pedido de amizade na aba "Enviados", `account.updated` e `sessions.revoked` finalmente ouvidos, entrar pela Descobrir, aceitar as regras, tirar o banner |
+| #124 | "Testar microfone" muta e ensurdece de verdade (§7): liga mudo e surdo pelo caminho normal (som, ícone e `voice.update`) e restaura o par de antes ao parar por qualquer caminho; o retorno sobrevive ao mudo porque a captura fica aberta durante o teste |
 | #126 | Supressão de ruído avançada no desktop: a CSP sem `'wasm-unsafe-eval'` fazia o RNNoise publicar silêncio, calado (§7) |
 
 Desktop: 0.0.6 (#38 + #40 + #41), 0.0.7 (+ #42), 0.0.8 (tudo até #50),

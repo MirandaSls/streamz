@@ -31,8 +31,9 @@ import { useVoicePrefs } from "@/stores/voicePrefs";
  * Toda trilha aberta aqui é parada ao sair da aba: um microfone que fica
  * gravando depois de fechar a tela é o tipo de bug que ninguém percebe. O
  * teste de microfone é o mesmo do popover de supressão de ruído e vem do mesmo
- * hook (`useTesteDeMicrofone`): enquanto ele corre você fica surdo — a sala não
- * te ouve e você não ouve ninguém — e escuta o seu próprio microfone.
+ * hook (`useTesteDeMicrofone`): enquanto ele corre você fica mudo e surdo de
+ * verdade — a sala não te ouve, você não ouve ninguém e os outros te veem
+ * assim — e escuta o seu próprio microfone. Parar devolve o par de antes.
  *
  * A seção "Compartilhar tela" está aqui porque no **navegador** o botão de
  * transmitir não abre mais modal nenhum — ele chama `getDisplayMedia` direto e
@@ -258,12 +259,13 @@ export default function VozTab() {
           </button>
           <MedidorDeMicrofone nivel={nivel} rotulo={t("voz.volumeEntrada")} />
         </div>
-        {/* O que o teste faz, dito antes de a pessoa estranhar o silêncio: o
-            Discord também ensurdece, e sem o aviso parece que a call caiu. */}
+        {/* O que o teste faz, dito antes de a pessoa estranhar o silêncio (e
+            os dois ícones acesos no rodapé): o Discord também ensurdece, e sem
+            o aviso parece que a call caiu. */}
         <p className="-mt-1 pb-3 text-xs text-txt-muted">
           {testando
-            ? "Você está se ouvindo. Enquanto o teste durar, a sala não te ouve e você não ouve ninguém."
-            : "Você vai se ouvir; a chamada fica em silêncio dos dois lados enquanto o teste durar."}
+            ? "Você está se ouvindo. Enquanto o teste durar você fica mudo e surdo — a sala não te ouve e você não ouve ninguém."
+            : "Você vai se ouvir; enquanto o teste durar você fica mudo e surdo, e a chamada fica em silêncio dos dois lados."}
         </p>
         {erroDoTeste && <p className="pb-3 text-xs text-red">{erroDoTeste}</p>}
       </Section>
