@@ -75,6 +75,7 @@ import type {
   MinhaConta,
   SessaoView,
   UserStatus,
+  VoiceMoveInput,
   VoiceStateEvent,
 } from "@streamz/shared";
 import { API_URL } from "./config";
@@ -97,6 +98,20 @@ const ROTAS_SEM_REFRESH = [
   "/auth/reset-password",
   "/downloads/token",
 ];
+
+/**
+ * `GET /users/me` com um access token explícito.
+ *
+ * A troca de contas precisa do perfil da conta de **destino** antes de a
+ * sessão ativa mudar; `request()` sempre usa o token da sessão em uso e
+ * devolveria o perfil errado. Não renova em 401: o token acabou de sair do
+ * `/auth/refresh`, então um 401 aqui é problema real e quem chamou decide.
+ */
+export async function usuarioDoToken(accessToken: string): Promise<PublicUser> {
+  const res = await enviar("/users/me", undefined, accessToken);
+  if (!res.ok) throw await comoApiError(res);
+  return (await res.json()) as PublicUser;
+}
 
 function cabecalhoAuth(token: string | null): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -170,6 +185,15 @@ export const api = {
   loginMfa: (ticket: string, code: string) =>
     request<AuthSession>("/auth/mfa", json({ ticket, code })),
   logout: (refreshToken: string) => request<ContaOk>("/auth/logout", json({ refreshToken })),
+  /**
+   * Renova **um refresh token qualquer**, não o da sessão em uso.
+   *
+   * A multiconta precisa disto: `renovarTokens()` de `session.ts` lê o token do
+   * `localStorage` e, na recusa, chama `expirarSessao()` — que derrubaria a
+   * conta que está aberta por causa de um token de outra que caducou. Aqui o
+   * token entra por parâmetro e a recusa é só um `ApiError` para quem chamou.
+   */
+  refreshDe: (refreshToken: string) => request<AuthTokens>("/auth/refresh", json({ refreshToken })),
 
   // ── e-mail e senha (rotas públicas) ──
   verifyEmail: (token: string) => request<EmailVerificado>("/auth/verify-email", json({ token })),
@@ -431,6 +455,16 @@ export const api = {
   guildVoiceStates: (guildId: string) => request<VoiceStateEvent[]>(`/guilds/${guildId}/voice-states`),
   /** Quem está na chamada de uma conversa agora — o par do de servidor, para DM e grupo. */
   dmVoiceStates: (channelId: string) => request<VoiceStateEvent[]>(`/dms/${channelId}/voice-states`),
+  /**
+   * Move alguém de um canal de voz para outro do mesmo servidor (arrasto da
+   * barra lateral). Recusa com 403 sem `MOVE_MEMBERS` e com 400 quando o alvo
+   * não está em voz neste servidor — quem chama mostra o erro no toast.
+   */
+  moverParaCanalDeVoz: (guildId: string, userId: string, channelId: string) =>
+    request<{ moved: string; from: string; to: string }>(
+      `/guilds/${guildId}/voice/move`,
+      json({ userId, channelId } satisfies VoiceMoveInput),
+    ),
   /** Começa (ou entra n)uma chamada de conversa direta; devolve o token de mídia, se houver. */
   startCall: (channelId: string) =>
     request<CallStartResponse>(`/dms/${channelId}/call`, { method: "POST" }),

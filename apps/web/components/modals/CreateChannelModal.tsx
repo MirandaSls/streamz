@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import { Hash, Lock, Megaphone, Volume2 } from "@/components/ui/icones";
-import type { GuildChannelType } from "@streamz/shared";
+import { Permission, type GuildChannelType } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { ChannelAccessList } from "@/components/modals/ChannelAccessModal";
 import { RadioLinha, Rotulo, ToggleLinha } from "@/components/ui/controls";
-import { useAuth } from "@/stores/auth";
-import { useCanModerate, useGuilds } from "@/stores/guilds";
+import { useGuilds } from "@/stores/guilds";
+import { useCan } from "@/stores/permissions";
 import { useCategories } from "@/stores/categories";
 import { useChannels } from "@/stores/channels";
 import { useUI } from "@/stores/ui";
@@ -46,21 +46,30 @@ const TIPOS: {
  * subtítulo. E a allowlist do canal privado não cabe aqui — o Discord cria o
  * canal primeiro e só então pergunta quem entra, que é o segundo passo deste
  * mesmo modal.
+ *
+ * `tipo` é o mesmo raciocínio aplicado ao tipo: o "+" de "Canais de Voz" já
+ * decidiu que o canal é de voz, e abrir o modal em "Texto" faria a pessoa
+ * corrigir a escolha que ela acabou de fazer. Vem `undefined` do "+" de uma
+ * categoria de verdade (que aceita os dois) e do "Criar canal" do menu do
+ * servidor — aí a pergunta continua de pé, começando em Texto.
  */
 export default function CreateChannelModal({
   categoryId = null,
+  tipo,
 }: {
   categoryId?: string | null;
+  tipo?: GuildChannelType;
 }) {
   const closeModal = useUI((s) => s.closeModal);
   const guildId = useGuilds((s) => s.activeGuildId);
-  const user = useAuth((s) => s.user);
-  const canModerate = useCanModerate(user?.id);
+  // a mesma permissão que a API exige em `channels.service` (MANAGE_CHANNELS):
+  // o antigo `canModerate` deixava passar quem só expulsa membros, e o POST dava 403
+  const podeGerenciarCanais = useCan(Permission.MANAGE_CHANNELS);
   const create = useChannels((s) => s.create);
   const categoria = useCategories((s) => s.categories.find((c) => c.id === categoryId) ?? null);
 
   const [name, setName] = useState("");
-  const [type, setType] = useState<GuildChannelType>("TEXT");
+  const [type, setType] = useState<GuildChannelType>(tipo ?? "TEXT");
   const [isPrivate, setPrivate] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -68,7 +77,7 @@ export default function CreateChannelModal({
   const [criadoId, setCriadoId] = useState<string | null>(null);
 
   const anuncio = type === "ANNOUNCEMENT";
-  const tipos = TIPOS.filter((t) => t.valor !== "ANNOUNCEMENT" || canModerate);
+  const tipos = TIPOS.filter((t) => t.valor !== "ANNOUNCEMENT" || podeGerenciarCanais);
 
   async function submit() {
     if (!guildId || !name.trim() || saving) return;
@@ -166,7 +175,7 @@ export default function CreateChannelModal({
         </div>
       </div>
 
-      {canModerate && !anuncio && (
+      {podeGerenciarCanais && !anuncio && (
         <div className="mt-4 border-t border-border pt-1">
           <ToggleLinha
             checked={isPrivate}

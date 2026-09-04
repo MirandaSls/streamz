@@ -1,7 +1,19 @@
-import { Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { IsString, Length } from "class-validator";
 import { VoiceService } from "./voice.service";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";
+
+/** Corpo de `POST /guilds/:id/voice/move` (contrato `VoiceMoveInput`). */
+class MoveVoiceDto {
+  @IsString()
+  @Length(1, 64)
+  userId!: string;
+
+  @IsString()
+  @Length(1, 64)
+  channelId!: string;
+}
 
 @UseGuards(JwtGuard)
 @Controller()
@@ -32,5 +44,22 @@ export class VoiceController {
   @Get("guilds/:guildId/voice-states")
   states(@CurrentUser() user: JwtPayload, @Param("guildId") guildId: string) {
     return this.voice.statesForGuild(user.sub, guildId);
+  }
+
+  /**
+   * Arrasta alguém de um canal de voz para outro do mesmo servidor.
+   *
+   * REST e não evento de socket porque é uma ação de moderação com resposta:
+   * quem arrastou precisa saber se foi recusada (sem permissão, alvo fora da
+   * voz) para desfazer o realce e mostrar o toast. O `voice.state` de sempre é
+   * quem conta o resultado para o resto do servidor.
+   */
+  @Post("guilds/:guildId/voice/move")
+  move(
+    @CurrentUser() user: JwtPayload,
+    @Param("guildId") guildId: string,
+    @Body() body: MoveVoiceDto,
+  ) {
+    return this.voice.move(user.sub, guildId, body.userId, body.channelId);
   }
 }
