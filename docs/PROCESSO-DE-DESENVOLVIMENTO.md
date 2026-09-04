@@ -958,12 +958,13 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   - **Um botão só.** Não existe "Entrar com vídeo" na print: entre o subtítulo e
     a base do palco há exatamente um retângulo branco, e ele é centrado na
     largura do palco (798..1008 tem centro 903; o palco também).
-  - **O painel de conversa nasce aberto**, e o balão é lembrado **canal a
+  - **O painel de conversa nasce fechado**, e o balão é lembrado **canal a
     canal** (`chatDaCallPorCanal` na `stores/ui.ts`; `abrirVoiceChat`/
     `toggleVoiceChat` aceitam o id e, sem ele, agem no canal de voz da vez).
-    Era um booleano só, fechado por padrão, de quando a conversa interrompia um
-    palco cheio — o palco vazio não tem o que interromper. Dois canais de voz
-    têm dois usos, e quem fecha a conversa de um não pediu nada sobre o outro.
+    Era um booleano só, para o app inteiro: dois canais de voz têm dois usos, e
+    quem fecha a conversa de um não pediu nada sobre o outro. O padrão chegou a
+    ser "aberto" no #131, copiando uma print em que o balão já estava aceso; o
+    dono do produto quer o palco limpo, e desde o #139 é `false`.
   - **O degradê é nosso.** No Discord é um brilho *blurple* saindo do meio da
     borda de baixo: medido, um `radial-gradient` circular em (50%, 100%), pico
     `rgb(116,131,225)` e queda quase linear até o fundo num raio de ~960px (85%
@@ -1022,7 +1023,52 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   `2026-09-03 203909`, que precisava de escala. O cabeçalho **não** tem busca,
   alfinete nem lista de membros — por isso o `ChatView incorporado` deixou de
   desenhar o `HeaderBar`. Abre sozinho ao entrar no canal, e o balão (cabeçalho
-  do palco ou linha do canal) alterna e é lembrado por canal.
+  do palco ou linha do canal) alterna e é lembrado por canal — **fechado** por
+  padrão (`CHAT_ABERTO_POR_PADRAO = false`, decisão do usuário em 2026-09-04:
+  palco limpo até alguém pedir a conversa).
+
+- **A lista de membros existe dentro do canal de voz, e a coluna da direita só
+  cabe um painel** (`components/voice/paineis-da-call.ts`, com teste). O
+  cabeçalho do canal de voz (`VoicePanel`, o mesmo com a `VistaDoCanalDeVoz` por
+  baixo quando ainda não se entrou) ganhou o **ícone de pessoas** ao lado do
+  balão, com tooltip "Mostrar/Ocultar lista de membros" e ligado ao mesmo
+  `membersOpen` do resto do app. Antes ele não existia: quem desligasse a lista
+  num canal de texto ficava sem nenhum interruptor dentro da call, que foi o
+  relato ("a parte de mostrar membros não mostra dentro da call"). A lista é a
+  `MemberList` de sempre — cargos hoisted, "Disponível", "Offline" e a sub-linha
+  "Em voz" de quem está na sala.
+  - **A regra de exclusividade saiu das prints, não do gosto.** Em
+    `2026-09-04 102422` (canal de texto `#warframe`) a lista de membros está na
+    tela: filete em x=1651, painel de 1652 a 1919 → **267 de largura**. Sete
+    segundos depois, em `102429`, o mesmo servidor com o canal de voz "Geral"
+    aberto e a conversa da call à direita (painel a partir de x=1432): **a lista
+    sumiu**. Ela não foi desligada pelo usuário — estava lá sete segundos antes
+    e voltou depois. Quem a tirou foi a conversa. Daí: **a conversa da call
+    ganha da lista de membros**, e clicar num fecha o outro.
+  - **Cada painel guarda a própria escolha, e a exclusividade é só de quem está
+    na tela.** `chatDaCallPorCanal` continua canal a canal e `membersOpen`
+    continua do app inteiro; ninguém apaga a preferência do outro. Por isso
+    voltar ao canal de texto reencontra a lista aberta, e voltar ao canal de voz
+    reencontra a conversa onde foi deixada. O ícone de pessoas espelha o que se
+    **vê** (`membrosVisiveis`), não o que está guardado: com a conversa aberta a
+    lista está ligada mas invisível, e ali o clique tem de mostrá-la fechando a
+    conversa — um `toggleMembers` cru ligaria `membersOpen` e nada mudaria na
+    tela. É o que faz `ui.alternarMembrosNaCall`, e é o caso mais importante do
+    teste puro.
+  - No canal de texto a regra é transparente: lá não há conversa de call, então
+    `painelDaCall(false, membersOpen)` devolve exatamente `membersOpen` e a
+    `page.tsx` usa **uma linha só** para os dois casos.
+  - **Conferido renderizando** (Chromium headless, 1919×1039, rota temporária
+    que semeia as stores): a borda esquerda da nossa lista cai em **x=1652**, o
+    mesmo pixel da print do Discord, e com a conversa aberta a coluna some e o
+    ícone de pessoas volta ao cinza da toolbar. `Users` vai a **20** aqui (e não
+    aos 22 da toolbar do canal de texto): o vizinho é o balão de 20 e os dois
+    saem do mesmo quadro do acervo, então 20 é o que dá a mesma tinta nos dois
+    glifos deste cabeçalho. **Não medido no Discord**: nas três prints de canal
+    de voz que temos (`102429`, `203909`) o cabeçalho está com a conversa aberta
+    e **não tem ícone nenhum** à direita — o X de fechar mora no painel da
+    conversa, como no nosso. A posição do ícone de membros aqui é a ordem do
+    canal de texto (balão → membros), a pedido do usuário, não uma medida.
 
 - **A faixa do microfone tem um dono só: `lib/microfone.ts`.** Ele cria a faixa,
   monta a cadeia de captura **antes** de publicar, aplica preferências novas na
