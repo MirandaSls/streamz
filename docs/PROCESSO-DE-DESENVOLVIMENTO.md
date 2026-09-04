@@ -647,6 +647,14 @@ barra de 32 ele cobria o ícone quase inteiro e o anel passava da borda da
 janela. Decisão do usuário: **só o badge** — sem faixa no topo e sem
 notificação extra.
 
+**Sons (2026-09-03, noite).** Quatro arquivos trocados pelos que o usuário
+colocou em `docs/Reference/audio/`: `enter.mp3` → `entrar.mp3` (eu entrei e
+alguém entrou), `notificacao.mp3` → `mensagem.mp3`, `discord_call.mp3` →
+`chamada.mp3` (toque e ringback), `discord_disconnect.mp3` → `sair.mp3` (eu saí
+e alguém saiu). Fatores de volume bem baixos por pedido dele: mensagem 0,15;
+chamada 0,35; mudo/desmudo/surdo/não-surdo 0,08; entrar/sair/transmissão/movido
+0,2 — sempre × `outputVolume`.
+
 ## 10. Pendências e o que não foi verificado
 
 - **Nenhum PR de hoje foi visto em app rodando.** Validação pelos prints do
