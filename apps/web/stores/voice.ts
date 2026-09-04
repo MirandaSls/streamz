@@ -39,10 +39,12 @@ import {
   prepararTelaNativa as pontePrepararTela,
 } from "@/lib/desktop";
 import { tocarSom, tocarSomDeMovido } from "@/lib/ringtone";
+import { cronometroDeVoz, type CronometroDeVoz } from "@/lib/tempos-de-voz";
 import { montarPedido } from "@/lib/seletor-de-tela";
 import {
   aoFalharASupressao,
   esquecerSupressaoIndisponivel,
+  preaquecerSupressor,
   supressaoIndisponivel,
 } from "@/lib/supressor-ruido";
 import {
@@ -151,6 +153,17 @@ interface VoiceStoreState {
   erro: string | null;
   /** o LiveKit respondeu com credenciais? false = sala sem som, sem alarde. */
   midiaDisponivel: boolean;
+  /**
+   * O microfone já está no ar nesta sala?
+   *
+   * `status: "connected"` passou a significar **estou na sala e ouvindo** — o
+   * microfone sobe depois, sem segurar a entrada (ver `entrarNaSala`). Entre um
+   * e outro a pessoa ouve todo mundo e ninguém a ouve, e a barra de controles
+   * mostra o microfone como mudo, com "Ativando microfone…" no rótulo. Sem esta
+   * flag não haveria como distinguir "estou mudo porque quis" de "a faixa ainda
+   * não subiu", e o segundo caso pareceria um defeito.
+   */
+  microfonePronto: boolean;
   tick: number;
   /**
    * Quem está falando agora, por `userId` — a fonte **única** do anel verde,
@@ -544,6 +557,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       status: "idle",
       erro: null,
       midiaDisponivel: false,
+      microfonePronto: false,
       falando: NINGUEM,
       // o teste já foi encerrado (com a restauração) no topo desta função;
       // aqui é só o campo voltando ao padrão junto com o resto
@@ -568,6 +582,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     status: "idle",
     erro: null,
     midiaDisponivel: false,
+    microfonePronto: false,
     tick: 0,
     falando: NINGUEM,
     testandoMicrofone: false,
@@ -770,6 +785,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         status: "connecting",
         erro: null,
         midiaDisponivel: false,
+        // o microfone desta sala ainda não subiu — quem o sobe é
+        // `publicarMicrofone`, depois de a sala estar de pé
+        microfonePronto: false,
         falando: NINGUEM,
         camOn: false,
         screenOn: false,
@@ -1387,10 +1405,12 @@ async function conectarMidia(
   rerender: () => void,
   get: () => VoiceStoreState,
 ): Promise<ResultadoMidia> {
+  const crono = cronometroDeVoz("conectarMidia");
   let creds: { token: string; url: string; room: string } | null;
   if (channel.guildId) {
     try {
       creds = await api.voiceToken(channel.id);
+      crono.etapa("token do LiveKit");
     } catch {
       // 503 (sem credenciais) ou canal que não é de voz: sem mídia, e ponto
       return { tipo: "sem-config" };
@@ -1408,6 +1428,7 @@ async function conectarMidia(
   if (!creds?.token || !/^wss?:\/\//i.test(creds.url ?? "")) return { tipo: "sem-config" };
   try {
     await entrarNaSala(creds, set, rerender, get);
+    crono.etapa("na sala (o palco já pode aparecer)");
     return { tipo: "ok" };
   } catch (e) {
     // credenciais existiam e mesmo assim não conectou: isso é falha
@@ -1520,29 +1541,83 @@ async function entrarNaSala(
       sala = null;
       pararMedicaoDePing();
       desarmarDetectorLocal(() => {});
-      set({ midiaDisponivel: false, falando: NINGUEM, status: "error", erro: QUEDA_MIDIA });
+      set({
+        midiaDisponivel: false,
+        microfonePronto: false,
+        falando: NINGUEM,
+        status: "error",
+        erro: QUEDA_MIDIA,
+      });
       rerender();
     });
 
+  const crono = cronometroDeVoz("entrarNaSala");
   await room.connect(creds.url, creds.token);
+  crono.etapa("room.connect (ICE + sinalização)");
   // o ping da barra "Voz conectada" mora numa store própria (não no `tick`)
   iniciarMedicaoDePing(room);
-  const devices = useVoiceDevicesStore.getState();
-  if (devices.outputId) await room.switchActiveDevice("audiooutput", devices.outputId).catch(() => {});
-  // o microfone entra pelo dono da faixa (`lib/microfone`), com a cadeia de
-  // captura já montada — nunca por `setMicrophoneEnabled`, que ignora as opções
-  // quando a publicação já existe e não consegue montar processador nenhum.
-  // Entrar numa sala no meio de um teste de microfone abre a faixa mas **não**
-  // a publica: o teste é surdo dos dois lados enquanto dura
-  await abrirMicrofone(
-    salaDoMicrofone(room),
-    preferenciasDoMicrofone(useVoice.getState().audio),
-    useVoice.getState().testandoMicrofone,
-  ).catch(() => {});
-  // a faixa acabou de nascer: é aqui que o detector local ganha o que medir
-  rearmarDetectorLocal();
+  // **A sala está de pé: a entrada acabou aqui.** O que vem depois — a saída de
+  // áudio escolhida e o microfone — não é condição para ouvir ninguém, e era
+  // exatamente por ser esperado neste ponto que o palco só aparecia segundos
+  // depois do clique. Medido nos logs do LiveKit em produção (168 h, 213
+  // entradas), o intervalo entre a sessão RTC começar e o microfone ser
+  // publicado tem p50 de 457 ms, p75 de 833 ms, p90 de 3,5 s e p95 de 12,3 s:
+  // 23% das entradas passavam de um segundo **de tela de espera** por causa do
+  // `getUserMedia` e do `publishTrack`, com o áudio dos outros já chegando.
+  // Agora é como no Discord: entra e ouve primeiro, o microfone vem em seguida.
+  void aplicarSaidaEscolhida(room);
+  void publicarMicrofone(room, set, crono);
   void get; // o `get` fica na assinatura para futuras leituras de estado
   rerender();
+}
+
+/**
+ * A saída de áudio escolhida nas configurações, aplicada **sem** segurar a
+ * entrada. `switchActiveDevice` percorre os elementos de áudio e pode esperar
+ * pelo `setSinkId` do navegador; ninguém precisa disso para estar na sala.
+ */
+async function aplicarSaidaEscolhida(room: Room) {
+  const { outputId } = useVoiceDevicesStore.getState();
+  if (!outputId) return;
+  await room.switchActiveDevice("audiooutput", outputId).catch(() => {});
+}
+
+/**
+ * Abre o microfone e o publica na sala que já está de pé.
+ *
+ * O microfone entra pelo dono da faixa (`lib/microfone`), com a cadeia de
+ * captura já montada — nunca por `setMicrophoneEnabled`, que ignora as opções
+ * quando a publicação já existe e não consegue montar processador nenhum (#107).
+ * Entrar numa sala no meio de um teste de microfone abre a faixa mas **não** a
+ * publica: o teste é surdo dos dois lados enquanto dura.
+ *
+ * Duas guardas por ser assíncrono em relação à entrada:
+ *
+ * 1. `sala !== room` no fim: quem saiu (ou trocou de canal) enquanto o
+ *    `getUserMedia` pensava não pode ganhar um microfone publicado numa sala
+ *    aposentada, nem a bandeira de "pronto" de uma sala que já não é a dele.
+ * 2. o mudo é **reaplicado** depois de a faixa nascer: um `toggleMute` que
+ *    aconteça durante a abertura chega em `definirMicrofoneAberto` quando ainda
+ *    não há faixa nenhuma, e sem esta linha o clique se perderia — a pessoa
+ *    veria o botão mudo e a sala a ouviria.
+ */
+async function publicarMicrofone(room: Room, set: AjustarVoz, crono: CronometroDeVoz) {
+  try {
+    await abrirMicrofone(
+      salaDoMicrofone(room),
+      preferenciasDoMicrofone(useVoice.getState().audio),
+      useVoice.getState().testandoMicrofone,
+    );
+    crono.etapa("microfone aberto e publicado");
+  } catch {
+    // ficar sem microfone não tira ninguém da sala: continua ouvindo
+    crono.etapa("microfone falhou");
+  }
+  if (sala !== room) return;
+  await definirMicrofoneAberto(useVoicePrefs.getState().micAberto()).catch(() => {});
+  set({ microfonePronto: true });
+  // a faixa acabou de nascer: é aqui que o detector local ganha o que medir
+  rearmarDetectorLocal();
 }
 
 /**
@@ -1669,6 +1744,26 @@ aoFalharASupressao((motivo) => {
 /** A sala LiveKit corrente (ou null). Os componentes leem daqui, nunca a guardam. */
 export function salaAtual(): Room | null {
   return sala;
+}
+
+/**
+ * Paga adiantado o que a entrada na call pagaria no pior momento.
+ *
+ * Chamado quando o app abre e quando o mouse passa por um canal de voz: as duas
+ * são horas em que o usuário não está esperando nada. O que se pré-aquece é a
+ * supressão avançada (chunk do pacote, os dois `.wasm` e o `addModule`), porque
+ * é a única peça da cadeia que baixa alguma coisa da rede — o `getUserMedia`
+ * não dá para adiantar sem acender a luz do microfone sem motivo.
+ *
+ * Só quem escolheu "Avançada" paga esse custo: para o nível padrão a cadeia nem
+ * chega a existir (`precisaDeCadeia`), e baixar um modelo que não vai ser usado
+ * é gastar a rede de quem não pediu.
+ */
+export function preaquecerCadeiaDeVoz() {
+  const { audio } = useVoice.getState();
+  if (audio.processamento.ruido !== "avancada") return;
+  if (supressaoIndisponivel() !== null) return;
+  void preaquecerSupressor();
 }
 
 /** Participantes da sala: eu primeiro, como no Discord. */

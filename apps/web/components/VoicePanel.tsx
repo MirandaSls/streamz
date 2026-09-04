@@ -138,17 +138,20 @@ export default function VoicePanel({
           fora do bloco de conteúdo, que ocupa a área toda sem rolar */}
       <div className="relative min-h-0 flex-1">
         {aqui ? (
-          <div className={`h-full p-4 ${conectado ? "pb-24" : ""}`}>
-            {status === "connecting" ? (
-              <div className="grid h-full place-items-center text-txt-muted">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-border-strong border-t-accent" />
-                  <p>Entrando na sala…</p>
-                </div>
-              </div>
-            ) : (
-              <VoiceGrid channelId={channel.id} nomeDoCanal={nome} guildId={channel.guildId} />
-            )}
+          // `pb-24` também durante o `connecting`: a barra de controles já está
+          // na tela desde o clique, e reservar o espaço só no `connected` fazia
+          // a grade dar um pulo de 96px no meio da entrada
+          <div className="h-full p-4 pb-24">
+            {/* **A grade aparece no clique, não no `connected`.** Quem manda
+                nela é o estado de voz do servidor (`states`), que já chegou
+                pelos eventos `voice.state` — o LiveKit só acrescenta o vídeo.
+                Trocar a sala inteira por um spinner enquanto o `getUserMedia` e
+                o `publishTrack` terminavam era o "demora muito para entrar" do
+                relato: medido em produção, isso passava de um segundo em 23%
+                das entradas e de três segundos em 12%. Quem está conectando
+                aparece na barra "Conectando…" (`VoiceConnectedBar`), como no
+                Discord. */}
+            <VoiceGrid channelId={channel.id} nomeDoCanal={nome} guildId={channel.guildId} />
           </div>
         ) : (
           // sem `p-4`: o degradê vai de borda a borda do palco, como na print

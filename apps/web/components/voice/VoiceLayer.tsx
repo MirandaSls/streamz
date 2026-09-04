@@ -9,7 +9,7 @@ import { pararToque, prepararToque, ringbackUrl, tocarToque } from "@/lib/ringto
 import { useAuth } from "@/stores/auth";
 import { useDMs } from "@/stores/dms";
 import { useGuilds } from "@/stores/guilds";
-import { useVoice } from "@/stores/voice";
+import { preaquecerCadeiaDeVoz, useVoice } from "@/stores/voice";
 import { salaLembrada } from "@/stores/voice-retomada";
 
 /**
@@ -57,6 +57,27 @@ export default function VoiceLayer() {
     if (!lembrada) return;
     const voice = useVoice.getState();
     void (lembrada.guildId ? voice.loadGuild(lembrada.guildId) : voice.loadDM(lembrada.channelId));
+  }, [userId]);
+
+  /**
+   * Pré-aquece a cadeia de captura enquanto ninguém espera por ela.
+   *
+   * O chunk do RNNoise, os dois `.wasm` e o `addModule` são caros uma vez por
+   * aba, e eram pagos no meio da entrada na call — com a pessoa olhando a tela
+   * de espera. Aqui saem do caminho crítico. `requestIdleCallback` para não
+   * disputar com o primeiro render; `setTimeout` onde ele não existe (Safari).
+   * Só vale para quem escolheu a supressão "Avançada" (ver
+   * `preaquecerCadeiaDeVoz`); os outros não baixam nada.
+   */
+  useEffect(() => {
+    if (!userId) return;
+    const ocioso = window.requestIdleCallback;
+    if (ocioso) {
+      const id = ocioso(() => preaquecerCadeiaDeVoz());
+      return () => window.cancelIdleCallback?.(id);
+    }
+    const id = window.setTimeout(preaquecerCadeiaDeVoz, 2000);
+    return () => window.clearTimeout(id);
   }, [userId]);
 
   /**

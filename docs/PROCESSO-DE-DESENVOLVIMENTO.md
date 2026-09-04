@@ -1208,6 +1208,84 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   print mostra; sem o tile de "atividade" ao lado do palco vazio (atividade não
   existe no produto).
 
+### 7.1 Entrar na call é rápido porque a entrada não espera pelo microfone
+
+Relato da 0.0.24: "ao entrar na call de algum servidor está demorando muito
+tempo para carregar e entrar". **Não era infraestrutura.** Medido nos logs do
+`streamz-livekit` em produção (168 h; só leitura, nada foi reiniciado):
+
+| o quê | n | p50 | p75 | p90 | p95 | max |
+|---|---|---|---|---|---|---|
+| ICE (`connectTime` do LiveKit) | 279 | 188 ms | — | 311 ms | — | 2,03 s |
+| sessão RTC → microfone publicado | 213 | 457 ms | 833 ms | **3,5 s** | **12,3 s** | 218 s |
+
+284 das 285 conexões fecharam por **UDP** (uma por TCP), então `turn.enabled:
+false` no `livekit.yaml` está certo e a 7882/udp está aberta (o host não tem
+`ufw` ativo). O Traefik roteia só a sinalização (7880) e não bufferiza nada que
+apareça nesses números; a mídia sai direta pelas portas publicadas. O banco
+também não era: com 5 servidores, 10 cargos, 26 canais e **zero**
+`ChannelOverride`, cada uma das ~7 consultas de `assertCanViewChannel` custa
+menos de 1 ms. Memoizar permissão seria pôr cache num caminho de autorização
+para ganhar ~4 ms — não foi feito, de propósito.
+
+O tempo era **todo do cliente, e todo serializado**:
+
+1. `connect` → `POST /voice/channels/:id/token` (o `voice.join` já saía antes,
+   pelo socket, sem `ack`: o estado de voz não depende do LiveKit);
+2. `Room.connect` (ICE, ~190 ms);
+3. `switchActiveDevice("audiooutput", …)` — **esperado**;
+4. `abrirMicrofone`: `getUserMedia` + cadeia + `publishTrack` — **esperado**;
+5. só então `status: "connected"`.
+
+E o palco só existia no passo 5: `VoicePanel` e `CallStage` trocavam a grade
+inteira por um spinner ("Entrando na sala…") enquanto o passo 4 rodava. Ou
+seja, 23% das entradas passavam um segundo em tela de espera e 12% passavam
+três — com o áudio dos outros já chegando por baixo, porque `AudioRemotoHost`
+nunca dependeu do `status`.
+
+O que mudou (#144):
+
+- **`entrarNaSala` termina no `Room.connect`.** A saída de áudio
+  (`aplicarSaidaEscolhida`) e o microfone (`publicarMicrofone`) sobem soltos,
+  como o Discord faz: entra e ouve primeiro, o microfone vem em seguida. Duas
+  guardas nisso — `sala !== room` no fim (quem saiu no meio do `getUserMedia`
+  não ganha faixa publicada numa sala aposentada) e a **reaplicação do mudo**
+  depois de a faixa nascer (um `toggleMute` clicado durante a abertura chegava
+  em `definirMicrofoneAberto` sem faixa nenhuma e se perdia).
+- **`microfonePronto` na store.** Entre "estou na sala" e "minha faixa está no
+  ar" a barra mostra o microfone em mudo, com o rótulo "Ativando microfone…" —
+  mostrar o microfone aberto antes de ele existir é a mentira pior. A regra está
+  em `components/voice/estado-do-microfone.ts`, e não no componente, por causa
+  do caso que ela erraria sozinha: sem LiveKit não há faixa para subir, e um
+  `!microfonePronto` solto prenderia o rótulo para sempre.
+- **A grade aparece no clique.** Quem manda nela é o estado de voz do servidor
+  (`states`), que já chegou pelos eventos `voice.state`; o LiveKit só acrescenta
+  o vídeo. Os dois spinners saíram. Quem conta que a mídia ainda vem é a barra
+  "Conectando…" da `VoiceConnectedBar`.
+- **Pré-aquecimento da supressão avançada** (`preaquecerSupressor`): o chunk do
+  `@sapphi-red/web-noise-suppressor`, os dois `.wasm` e o `addModule` são caros
+  uma vez por aba e eram pagos no meio da entrada. Agora saem no repouso — ao
+  abrir o app (`requestIdleCallback` na `VoiceLayer`) e quando o mouse passa por
+  um canal de voz (`ChannelSidebar`). Só para quem escolheu "Avançada": no nível
+  padrão a cadeia nem existe (`precisaDeCadeia`), e baixar modelo para quem não
+  pediu é gastar a rede dos outros. A `AudioContext` nasce suspensa, o que é
+  permitido sem gesto, e é a mesma que a cadeia usa depois.
+- **Cronômetro por etapa** (`lib/tempos-de-voz.ts`), ligado em produção:
+  `console.debug("[voz] entrarNaSala · room.connect (ICE + sinalização): …ms")`.
+  `console.debug` não aparece no nível padrão do console e custa uma chamada de
+  função por entrada na sala. É o que permite dizer, na máquina de quem reclama,
+  qual etapa comeu o tempo — sem ele o relato volta a ser "está demorando".
+
+O que **não** mudou e continua sendo o teto: o `getUserMedia`. A cauda de 12 s
+(p95) é o navegador esperando a pessoa responder ao pedido de permissão, ou um
+headset Bluetooth acordando. Não dá para adiantar sem acender a luz do microfone
+sem motivo — a diferença é que agora isso acontece **dentro** da call, e não na
+frente dela.
+
+Ainda de fora: a barra de controles do palco só aparece no `connected`. A janela
+virou ~500 ms e o espaço dela já fica reservado (senão a grade dava um pulo de
+96px); quem quiser sair antes disso usa a `VoiceConnectedBar`.
+
 ## 8. Barra de título do desktop
 
 - `tauri.conf.json`: `decorations: false`. Permissões em
