@@ -29,7 +29,6 @@ import {
   isSystemMessage,
   mentionsMe as ehMencaoParaMim,
   messageLinkPath,
-  parseCustomEmoji,
   youtubeVideoId,
 } from "@streamz/shared";
 import LinkEmbedCard, { useLinkEmbed } from "@/components/chat/LinkEmbedCard";
@@ -39,9 +38,11 @@ import { urlPublica } from "@/lib/links-do-app";
 import PainelFlutuante from "@/components/chat/PainelFlutuante";
 import TooltipReacao from "@/components/chat/TooltipReacao";
 import { useMarcadorNaoLido } from "@/components/chat/marcador-nao-lido";
+import { EmojiDaReacao, rotuloDaReacao } from "@/components/chat/EmojiDeReacao";
 import { registrarUsoDeReacao, useFrequentes } from "@/components/chat/reacoes-rapidas";
 import { shiftPressionado } from "@/components/chat/tecla-shift";
 import MediaGroup from "@/components/media/MediaGroup";
+import { itensDaImagem } from "@/components/media/menu-da-imagem";
 import StickerView from "@/components/media/StickerView";
 import YouTubeEmbed from "@/components/media/YouTubeEmbed";
 // ── h-moderacao ──
@@ -50,7 +51,6 @@ import { emit } from "@/stores/socket-adapter";
 import Avatar from "@/components/ui/Avatar";
 import EmojiPicker from "@/components/ui/EmojiPicker";
 import Tooltip from "@/components/ui/Tooltip";
-import { API_URL } from "@/lib/config";
 import { dataCompleta, hora, horaCompleta } from "@/lib/format";
 import { Markdown } from "@/lib/markdown";
 import { useAuth } from "@/stores/auth";
@@ -67,51 +67,6 @@ import { alturaDoChipDeReacao, useSettings } from "@/stores/settings";
 import type { ChatMessage } from "@/stores/messages-core";
 import { useLiveUser } from "@/stores/presence";
 import { anchorOf, ui, type Anchor, type MenuItem } from "@/stores/ui";
-
-/**
- * O emoji de uma reação: unicode sai como texto; personalizado é `<:nome:id>` e
- * vira a imagem daquele id — a mesma URL pública que o markdown usa, para a
- * reação não virar `<:festa:abc>` escrito na tela.
- *
- * Os dois casos ocupam a **mesma caixa quadrada** de lado `tamanho`, centrada.
- * O unicode é texto, e texto se posiciona pela linha de base da fonte: com
- * `line-height: 1.1` a caixa de linha ficava maior que a caixa de conteúdo do
- * chip e o glifo descia — no Segoe UI Emoji do Windows a tinta de 😂 tem a
- * altura inteira do em, então ele saía pela borda de baixo. Uma caixa fixa com
- * `line-height: 1` e centralização por flex tira a métrica da fonte da conta.
- *
- * Nada de Twemoji: a CSP não deixa buscar de CDN e o desktop roda offline. A
- * fonte é a do sistema; o que se acerta aqui é a caixa.
- */
-function EmojiDaReacao({ emoji, tamanho }: { emoji: string; tamanho: number }) {
-  const custom = parseCustomEmoji(emoji);
-  // o tamanho é preferência do usuário (aba Acessibilidade de e-configuracoes)
-  if (!custom)
-    return (
-      <span
-        className="inline-flex shrink-0 items-center justify-center"
-        style={{ fontSize: `${tamanho}px`, lineHeight: 1, height: tamanho, width: tamanho }}
-      >
-        {emoji}
-      </span>
-    );
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={`${API_URL}/api/emojis/${custom.id}/image`}
-      alt={`:${custom.name}:`}
-      loading="lazy"
-      style={{ height: tamanho, width: tamanho }}
-      className="shrink-0 object-contain"
-    />
-  );
-}
-
-/** Texto acessível de uma reação (o leitor de tela não lê a imagem do emoji). */
-function rotuloDaReacao(emoji: string): string {
-  const custom = parseCustomEmoji(emoji);
-  return custom ? `:${custom.name}:` : emoji;
-}
 
 /** Ícone-botão da barra de ações que aparece no hover da mensagem. */
 function ActionButton({
@@ -710,14 +665,39 @@ export default function MessageItem({
         {message.poll && (
           <PollCard poll={message.poll} canModerate={Boolean(canModerate)} isAuthor={isOwn} />
         )}
-        <MediaGroup attachments={message.attachments} />
+        <MediaGroup
+          attachments={message.attachments}
+          mensagemId={unconfirmed ? undefined : message.id}
+        />
         {videoId && <YouTubeEmbed videoId={videoId} title={message.content} />}
         {imagemDireta && (
           <button
             type="button"
             onClick={() =>
-              ui.openModal({ kind: "galeria", urls: [imagemDireta], alts: ["Imagem"], indice: 0 })
+              ui.openModal({
+                kind: "galeria",
+                urls: [imagemDireta],
+                alts: ["Imagem"],
+                indice: 0,
+                messageId: unconfirmed ? undefined : message.id,
+              })
             }
+            onContextMenu={(e) => {
+              // a imagem de uma prévia de link tem as mesmas ações da imagem
+              // anexada; no desktop, sem isto, o botão direito não faz nada
+              e.preventDefault();
+              e.stopPropagation();
+              const ancora: Anchor = { x: e.clientX, y: e.clientY, width: 0, height: 0 };
+              ui.openContextMenu(
+                e.clientX,
+                e.clientY,
+                itensDaImagem({
+                  url: imagemDireta,
+                  alt: "Imagem",
+                  onReagir: unconfirmed ? undefined : () => setPicker({ alvo: "reacao", ancora }),
+                }),
+              );
+            }}
             className="mt-1 block w-fit cursor-zoom-in overflow-hidden rounded-lg"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}

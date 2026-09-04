@@ -553,3 +553,75 @@ export function ouvirTelaEncerrada(ouvinte: (motivo: MotivoDeEncerramento) => vo
     parar?.();
   };
 }
+
+// ── Imagem: abrir fora, copiar bitmap, salvar em disco ─────────────────────
+
+/**
+ * Abre um endereço no navegador **padrão do sistema** (plugin `opener`).
+ *
+ * Existe porque o WebView2 não tem abas: `window.open` e `target="_blank"`
+ * morrem em silêncio dentro do app, e era esse o defeito do "Abrir no
+ * navegador" do visualizador de imagem — o clique não fazia nada. No site esta
+ * função não é usada (lá é `window.open` com `noopener`); a escolha entre os
+ * dois caminhos é `comoAbrir` em `lib/imagem-acoes.ts`.
+ *
+ * Devolve `false` quando não deu, para quem chamou avisar em vez de fingir que
+ * abriu. A permissão é `opener:allow-open-url`, restrita a `http`/`https` em
+ * `capabilities/default.json`.
+ */
+export async function abrirNoSistema(url: string): Promise<boolean> {
+  if (!isTauri()) return false;
+  try {
+    const { openUrl } = await import("@tauri-apps/plugin-opener");
+    await openUrl(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Põe um PNG na área de transferência pelo plugin nativo
+ * (`clipboard-manager`), como segunda chance quando o
+ * `navigator.clipboard.write` do WebView2 recusa — ele exige documento em
+ * foco e pode negar sem dizer por quê.
+ *
+ * Recebe os bytes do PNG; o plugin decodifica (o `tauri` está com a feature
+ * `image-png`) e escreve o bitmap. `false` quando não deu.
+ */
+export async function copiarImagemNativa(png: Uint8Array): Promise<boolean> {
+  if (!isTauri()) return false;
+  try {
+    const { writeImage } = await import("@tauri-apps/plugin-clipboard-manager");
+    await writeImage(png);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * "Salvar como" de verdade: o diálogo do Windows (plugin `dialog`) escolhe o
+ * caminho e o plugin `fs` escreve. Devolve o caminho salvo, ou `null` quando o
+ * usuário cancelou — cancelar não é erro.
+ *
+ * O escopo do `fs` em `capabilities/default.json` cobre as pastas onde se
+ * salva imagem (Downloads, Imagens, Área de Trabalho, Documentos); é também
+ * onde o diálogo abre. Salvar fora dali é recusado pela permissão, e quem
+ * chamou mostra o erro.
+ */
+export async function salvarArquivoNativo(
+  nomeSugerido: string,
+  bytes: Uint8Array,
+): Promise<string | null> {
+  const { save } = await import("@tauri-apps/plugin-dialog");
+  const { writeFile } = await import("@tauri-apps/plugin-fs");
+  const extensao = nomeSugerido.split(".").pop() ?? "png";
+  const caminho = await save({
+    defaultPath: nomeSugerido,
+    filters: [{ name: "Imagem", extensions: [extensao] }],
+  });
+  if (!caminho) return null;
+  await writeFile(caminho, bytes);
+  return caminho;
+}

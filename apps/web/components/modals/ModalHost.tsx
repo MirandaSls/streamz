@@ -104,7 +104,14 @@ function renderModal(modal: Modal) {
       return <AddGroupMembersModal channelId={modal.channelId} />;
     // ── g-emojis-midia ──
     case "galeria":
-      return <ImageModal urls={modal.urls} alts={modal.alts} indice={modal.indice} />;
+      return (
+        <ImageModal
+          urls={modal.urls}
+          alts={modal.alts}
+          indice={modal.indice}
+          messageId={modal.messageId}
+        />
+      );
     case "guildEmojis":
       return <GuildEmojisModal guildId={modal.guildId} />;
     // ── h-moderacao ──

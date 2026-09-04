@@ -178,7 +178,7 @@ O que ele faz, na ordem:
 | Rail de servidores | `components/layout/GuildRail.tsx` |
 | Coluna de DMs / canais | `components/layout/DMList.tsx`, `ChannelSidebar.tsx` |
 | Categorias de canal | `stores/categories.ts`, `stores/channel-order.ts`; API em `apps/api/src/modules/channels/categories.{controller,service}.ts` (`MANAGE_CHANNELS` nas três rotas, eventos `category.*`) |
-| Categorias padrão ("Canais de Texto"/"Canais de Voz") | `apps/api/src/modules/guilds/categorias-padrao.ts` — os nomes, a rotina que as cria e o passo de boot que conserta servidor antigo. **São categorias de verdade**, não rótulo da coluna (§4.1) |
+| Categorias padrão ("Canais de Texto"/"Canais de Voz") | `apps/api/src/modules/guilds/categorias-padrao.ts` — os nomes, a rotina que as cria e o passo de boot que conserta servidor antigo. **São categorias de verdade**, não rótulo da coluna (§4.2) |
 | Criar canal / categoria | `components/modals/CreateChannelModal.tsx` (recebe `categoryId` **e** `tipo` do "+" do cabeçalho); "Criar canal"/"Criar categoria" no dropdown do nome do servidor, dentro de `ChannelSidebar.tsx` |
 | Arrastar na coluna | tudo em `ChannelSidebar.tsx` (`inicioArrasto`/`LinhaDeSolta`, DnD nativo): canal, categoria **e** participante de voz. A regra pura de onde o participante pode cair é `stores/voice-mover.ts` |
 | Card do usuário (mic/fone/engrenagem) | `components/layout/UserFooter.tsx` (irmão de rail+coluna, atravessa a rail), `voice/VoiceConnectedBar.tsx` |
@@ -187,6 +187,8 @@ O que ele faz, na ordem:
 | Amigos | `components/friends/FriendsPage.tsx`, `FriendRow.tsx`, `AddFriend.tsx` |
 | Caixa de entrada | `components/chat/InboxPopover.tsx` (+ `HeaderPopover.tsx`) |
 | Modal "Nova mensagem" | `components/modals/CreateGroupDMModal.tsx` |
+| Imagem em tela cheia | `components/modals/ImageModal.tsx` (visualizador + barra de ações), `components/media/menu-da-imagem.tsx` (o mesmo menu de botão direito na mensagem e no visualizador), `lib/imagem-acoes.ts` (parte pura, testada) e `lib/imagem-arquivo.ts` (rede, área de transferência, disco) |
+| Anexos na mensagem | `components/media/MediaGroup.tsx` (grade, spoiler, vídeo/áudio/arquivo, botão direito na imagem) |
 | Sessão do cliente | `lib/session.ts` (par de tokens + renovação), `lib/usuario-guardado.ts` (retrato da conta em uso), `stores/auth.ts` |
 | Multiconta ("Mudar de conta") | `lib/contas.ts` (o cofre: `localStorage` versionado com as contas do aparelho e a ativa; puro e testado), `lib/troca-de-contas.ts` (trocar, sair de uma conta, esquecer), `components/modals/GerenciarContasModal.tsx` e `AdicionarContaModal.tsx`, aberto pela linha "Mudar de conta" do `ProfilePopover.tsx` |
 | Permissões (contrato) | `packages/shared/src/permissoes.ts` — bits, `computePermissions`, `overridesEfetivos`, `secoesDePermissoes`, o tri-estado (`estadoDaRegra`/`comEstadoDaRegra`) |
@@ -201,7 +203,58 @@ O que ele faz, na ordem:
 | Updates do desktop | `apps/api/src/modules/updates/*`; site de download em `modules/downloads/*` |
 | Estilos globais | `apps/web/app/globals.css` (foco: anel afastado para botões, 1px colado para campos), `tailwind.config.ts` (tokens) |
 
-### 4.1 As duas categorias padrão são linhas, não desenho
+### 4.1 A imagem em tela cheia: copiar, salvar, reagir e abrir
+
+A imagem aberta em tela cheia (`ImageModal`) tem uma **barra de ações** no alto
+à direita e um **menu de botão direito** — o mesmo menu vale para a imagem
+dentro da mensagem, porque no desktop o menu nativo do WebView2 está bloqueado
+(#138) e sem isto o clique direito sobre uma foto não fazia nada lá.
+
+**Medidas** (print `2026-08-31 120919.png`, visualizador do Discord com a
+janela em 1919 de largura): a pílula é 148×40, raio 8, em x 1696..1843 /
+y 37..76, com os botões a um passo de ~36px (centros 1715, 1752, 1787, 1823) e
+o ícone com 13 a 14px de tinta; o X fica **fora** dela, num quadrado de 40
+(x 1856..1895) com o mesmo raio, 12px depois da pílula e 24 da borda da janela.
+Fundo #1E1F22 com borda 1px de #313137 — usamos `bg-chat` + `border-border`,
+que é a dupla mais próxima que já existe (a mesma da mini-barra da mensagem).
+As **ações** não são as do Discord (lá a pílula é zoom / encaminhar / abrir /
+"…", com copiar e salvar dentro do "…"): aqui ficam à vista Reagir, Copiar
+imagem, Salvar imagem, Copiar link e Abrir no navegador.
+
+**Reagir é da mensagem, não do arquivo.** O modal recebe `messageId` (a `Modal`
+`galeria` ganhou o campo) e chama `stores/messages.toggleReaction`; as reações
+existentes aparecem embaixo da foto e são clicáveis. Sem `messageId` — galeria
+do canal, prévia de link solta — o botão de reação some.
+
+**Quatro plugins do Tauri entraram por causa disto** (`Cargo.toml`, `main.rs`,
+`capabilities/default.json`, e os pacotes `@tauri-apps/plugin-*` na web):
+
+- `opener` (`opener:allow-open-url`, escopo `http://*` e `https://*`) — o
+  WebView2 não tem abas: `window.open` e `target="_blank"` morrem em silêncio,
+  e era esse o defeito do "Abrir no navegador", que simplesmente não fazia
+  nada. A escolha entre "sistema" e "aba nova com `noopener,noreferrer`" é
+  `comoAbrir` em `lib/imagem-acoes.ts`, testada.
+- `clipboard-manager` (`allow-write-image`) — segunda chance do "Copiar
+  imagem": a primeira tentativa é sempre `navigator.clipboard.write` com
+  `image/png`, que o WebView2 tem, mas pode recusar (exige documento em foco).
+- `dialog` (`allow-save`) + `fs` (`allow-write-file`, com escopo em
+  `$DOWNLOAD`, `$PICTURE`, `$DESKTOP` e `$DOCUMENT`) — o "Salvar como" de
+  verdade. Salvar **fora** dessas quatro pastas é recusado pela permissão e
+  vira toast de erro; se isso incomodar, o escopo é o lugar de mexer.
+
+**CSP.** Copiar e salvar precisam dos bytes, e no desktop quem manda no `fetch`
+é o `connect-src`. Ele ganhou `https://*.r2.cloudflarestorage.com`,
+`https://*.r2.dev`, `https://media.giphy.com` e `https://i.giphy.com` — os
+hosts que servem as nossas imagens além de `api.streamz.chat`. Imagem de
+qualquer outro host aparece na tela (`img-src` é `https:`) mas não deixa buscar
+os bytes: "Salvar" cai no download direto pela URL e "Copiar imagem" avisa que
+não deu. No site o obstáculo equivalente é o CORS do host.
+
+**Conversão de tipo.** A área de transferência só aceita PNG; JPEG/WEBP/GIF
+passam por um canvas antes (`precisaConverterParaPng`), e um GIF animado vira o
+primeiro quadro — igual ao Discord.
+
+### 4.2 As duas categorias padrão são linhas, não desenho
 
 Todo servidor do Discord nasce com "Canais de Texto" e "Canais de Voz". Aqui
 elas eram **inventadas pela barra lateral**: enquanto `categories` estivesse
@@ -236,7 +289,7 @@ Canal sem categoria continua no topo da coluna, sem título — é o que o Disco
 faz com quem você arrasta para fora de uma categoria. Apagar uma categoria
 **solta** os canais dela (FK `SetNull`) em vez de apagá-los.
 
-### 4.2 Tempo real entre as sessões da mesma conta (a tabela de referência)
+### 4.3 Tempo real entre as sessões da mesma conta (a tabela de referência)
 
 A mesma conta fica aberta no desktop **e** no site. A regra, que vale para
 qualquer rota nova:
@@ -1388,8 +1441,8 @@ virou ~500 ms e o espaço dela já fica reservado (senão a grade dava um pulo d
 | #103 | Criar canal e categoria pela coluna, "+" sempre visível no cabeçalho, e mover alguém de canal de voz arrastando (`MOVE_MEMBERS`) |
 | #104 | Convite vira cartão com "Entrar" (reconhecido no host público **e** no host do app), `guild.joined` para todas as conexões da conta, logo do rail volta para Amigos, e o foco da janela do desktop volta a marcar a conversa aberta como lida |
 | #105 | Sons: um som não se sobrepõe a si mesmo em menos de 300 ms, um dono só do volume com fator por som, e badge de não lidas no ícone da caixa de entrada |
-| #112 | As duas categorias padrão viram categorias de verdade (§4.1): paravam de existir na primeira categoria criada, e não dava para renomear nem apagar |
-| #117 | Auditoria de tempo real entre as sessões da conta (§4.2) e as lacunas fechadas: `channel.read` (o "lido" num cliente apaga o badge no outro), fechar conversa/sair do grupo, pedido de amizade na aba "Enviados", `account.updated` e `sessions.revoked` finalmente ouvidos, entrar pela Descobrir, aceitar as regras, tirar o banner |
+| #112 | As duas categorias padrão viram categorias de verdade (§4.2): paravam de existir na primeira categoria criada, e não dava para renomear nem apagar |
+| #117 | Auditoria de tempo real entre as sessões da conta (§4.3) e as lacunas fechadas: `channel.read` (o "lido" num cliente apaga o badge no outro), fechar conversa/sair do grupo, pedido de amizade na aba "Enviados", `account.updated` e `sessions.revoked` finalmente ouvidos, entrar pela Descobrir, aceitar as regras, tirar o banner |
 | #124 | "Testar microfone" muta e ensurdece de verdade (§7): liga mudo e surdo pelo caminho normal (som, ícone e `voice.update`) e restaura o par de antes ao parar por qualquer caminho; o retorno sobrevive ao mudo porque a captura fica aberta durante o teste |
 | #126 | Supressão de ruído avançada no desktop: a CSP sem `'wasm-unsafe-eval'` fazia o RNNoise publicar silêncio, calado (§7) |
 | #129 | "Convidar amigos" medido contra o Discord, o link do convite nasce no host público (o desktop mandava `tauri.localhost`) e **quem escreve leu**: o convite que eu mandei deixava a conversa em negrito para mim |
@@ -1442,7 +1495,7 @@ quando `propria`). Sem isso, mandar para uma conversa que **não está na tela**
 mensagem, então o meu próprio convite aparecia em negrito, como se o
 destinatário tivesse escrito para mim. O `channel.read` que o envio gera vai
 para a sala do usuário, então o negrito também apaga na outra sessão da conta
-(§4.2). Nunca foi o autor da mensagem que estava errado: a API sempre gravou
+(§4.3). Nunca foi o autor da mensagem que estava errado: a API sempre gravou
 `authorId` = quem enviou (o gateway usa o usuário do socket).
 
 **Sons.** `lib/ringtone.ts` e `lib/notification-sound.ts` tocam arquivos de

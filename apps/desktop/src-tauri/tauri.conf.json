@@ -54,7 +54,7 @@
         "img-src": "'self' data: blob: https: http://localhost:3333",
         "media-src": "'self' data: blob: mediastream: https: http://localhost:3333",
         "worker-src": "'self' blob:",
-        "connect-src": "'self' ipc: http://ipc.localhost http://localhost:3333 ws://localhost:3333 ws://localhost:7880 https://api.streamz.chat wss://api.streamz.chat wss://livekit.streamz.chat https://*.livekit.cloud wss://*.livekit.cloud"
+        "connect-src": "'self' ipc: http://ipc.localhost http://localhost:3333 ws://localhost:3333 ws://localhost:7880 https://api.streamz.chat wss://api.streamz.chat wss://livekit.streamz.chat https://*.livekit.cloud wss://*.livekit.cloud https://*.r2.cloudflarestorage.com https://*.r2.dev https://media.giphy.com https://i.giphy.com"
       }
     }
   },

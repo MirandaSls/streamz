@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
 import { Download, EyeOff, FileText } from "@/components/ui/icones";
 import {
   attachmentDisplayName,
@@ -11,7 +11,13 @@ import {
   isVideoAttachment,
   type Attachment,
 } from "@streamz/shared";
-import { ui } from "@/stores/ui";
+import EmojiPicker from "@/components/ui/EmojiPicker";
+import PainelFlutuante from "@/components/chat/PainelFlutuante";
+import { registrarUsoDeReacao } from "@/components/chat/reacoes-rapidas";
+import { itensDaImagem } from "@/components/media/menu-da-imagem";
+import { useAuth } from "@/stores/auth";
+import { useMessages } from "@/stores/messages";
+import { ui, type Anchor } from "@/stores/ui";
 
 /**
  * Os anexos de uma mensagem.
@@ -22,13 +28,51 @@ import { ui } from "@/stores/ui";
  * tocam na própria mensagem; PDF e o resto viram cartão com nome e tamanho.
  *
  * Clicar numa imagem abre o lightbox já sabendo de todas as imagens da
- * mensagem, que é o que faz ← → funcionarem lá dentro.
+ * mensagem, que é o que faz ← → funcionarem lá dentro. O **botão direito**
+ * abre o menu do app com copiar/salvar/copiar link/abrir e, quando a imagem
+ * pertence a uma mensagem confirmada (`mensagemId`), também "Adicionar
+ * Reação" — no desktop o menu nativo do WebView2 está bloqueado (#138), então
+ * sem este menu o clique direito sobre uma foto não fazia nada lá.
  */
-export default function MediaGroup({ attachments }: { attachments: Attachment[] }) {
+export default function MediaGroup({
+  attachments,
+  mensagemId,
+}: {
+  attachments: Attachment[];
+  /** mensagem dona dos anexos; sem ela não há a que reagir (prévia, rascunho). */
+  mensagemId?: string;
+}) {
+  // o seletor de emoji aberto pelo menu de contexto da imagem; a âncora é o
+  // ponto do clique, como no menu que o chamou
+  const [picker, setPicker] = useState<Anchor | null>(null);
+  const meuId = useAuth((s) => s.user?.id);
+  const toggleReaction = useMessages((s) => s.toggleReaction);
+
   if (attachments.length === 0) return null;
 
   const imagens = attachments.filter(isImageAttachment);
   const outros = attachments.filter((a) => !isImageAttachment(a));
+
+  function reagir(emoji: string) {
+    if (!mensagemId) return;
+    registrarUsoDeReacao(emoji);
+    toggleReaction(mensagemId, emoji, meuId);
+  }
+
+  function abrirMenu(e: MouseEvent, anexo: Attachment) {
+    e.preventDefault();
+    e.stopPropagation();
+    const ancora: Anchor = { x: e.clientX, y: e.clientY, width: 0, height: 0 };
+    ui.openContextMenu(
+      e.clientX,
+      e.clientY,
+      itensDaImagem({
+        url: anexo.url,
+        alt: attachmentDisplayName(anexo),
+        onReagir: mensagemId ? () => setPicker(ancora) : undefined,
+      }),
+    );
+  }
 
   return (
     <div className="mt-1 flex flex-col gap-2">
@@ -45,12 +89,14 @@ export default function MediaGroup({ attachments }: { attachments: Attachment[] 
               key={a.id}
               anexo={a}
               sozinha={imagens.length === 1}
+              onMenu={(e) => abrirMenu(e, a)}
               onAbrir={() =>
                 ui.openModal({
                   kind: "galeria",
                   urls: imagens.map((x) => x.url),
                   alts: imagens.map((x) => attachmentDisplayName(x)),
                   indice: i,
+                  messageId: mensagemId,
                 })
               }
             />
@@ -67,6 +113,19 @@ export default function MediaGroup({ attachments }: { attachments: Attachment[] 
           <Arquivo key={a.id} anexo={a} />
         ),
       )}
+
+      {picker && (
+        <PainelFlutuante ancora={picker} onClose={() => setPicker(null)}>
+          <EmojiPicker
+            placeholder="Encontre a reação perfeita"
+            onClose={() => setPicker(null)}
+            onPick={(texto) => {
+              reagir(texto);
+              setPicker(null);
+            }}
+          />
+        </PainelFlutuante>
+      )}
     </div>
   );
 }
@@ -76,10 +135,12 @@ function Imagem({
   anexo,
   sozinha,
   onAbrir,
+  onMenu,
 }: {
   anexo: Attachment;
   sozinha: boolean;
   onAbrir: () => void;
+  onMenu: (e: MouseEvent) => void;
 }) {
   const [revelado, setRevelado] = useState(!isSpoilerAttachment(anexo));
   const nome = attachmentDisplayName(anexo);
@@ -113,6 +174,7 @@ function Imagem({
     <button
       type="button"
       onClick={onAbrir}
+      onContextMenu={onMenu}
       aria-label={`Abrir imagem ${nome}`}
       className={`block cursor-zoom-in overflow-hidden rounded-lg ${sozinha ? "w-fit" : "h-full w-full"}`}
     >
