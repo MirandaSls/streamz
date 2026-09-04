@@ -29,6 +29,7 @@
 //! escreveu a enumeração; este módulo é a etapa "capturar sem borda" dele.
 
 use std::fmt;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 use std::time::Duration;
 
@@ -135,18 +136,33 @@ pub fn abrir(alvo: Alvo) -> Result<Box<dyn Capturador>, Erro> {
 }
 
 /// Miniaturas JPEG de várias fontes, na ordem pedida. `None` onde não deu
-/// (janela minimizada, conteúdo protegido, monitor que sumiu): a grade mostra
-/// o ícone do app no lugar.
+/// (janela minimizada, conteúdo protegido, monitor que sumiu, varredura
+/// cancelada): a grade mostra o ícone do app no lugar.
 ///
 /// A lista inteira num comando só porque no DXGI o quadro é do monitor: uma
 /// duplicação por monitor serve todas as janelas dele, em vez de uma por
 /// janela — e o DXGI não deixa duas duplicações do mesmo monitor conviverem.
-pub fn miniaturas(alvos: &[Alvo]) -> Vec<Option<Vec<u8>>> {
+///
+/// **`cancelar` é o freio de mão**, e ele existe por causa do atraso ao ir ao
+/// ar. Uma varredura é sequencial e cada fonte custa uma sessão de captura
+/// inteira (dispositivo D3D novo, fila de quadros, laço de mensagens, e até
+/// meio segundo esperando a janela repintar): com dez janelas abertas ela
+/// leva mais de um segundo. Quando o usuário clica numa miniatura, a captura
+/// definitiva não pode ficar disputando o mesmo alvo com o resto da
+/// varredura — quem inicia levanta esta bandeira e a varredura desiste na
+/// fonte seguinte, devolvendo `None` para o que faltava.
+pub fn miniaturas(alvos: &[Alvo], cancelar: &AtomicBool) -> Vec<Option<Vec<u8>>> {
     match backend() {
-        Backend::Wgc => alvos
-            .iter()
-            .map(|alvo| wgc::um_quadro(*alvo).and_then(|q| escala::jpeg(&q)))
-            .collect(),
-        Backend::Dxgi => dxgi::miniaturas(alvos),
+        Backend::Wgc => {
+            let mut saida: Vec<Option<Vec<u8>>> = vec![None; alvos.len()];
+            for (i, alvo) in alvos.iter().enumerate() {
+                if cancelar.load(Ordering::Acquire) {
+                    break;
+                }
+                saida[i] = wgc::um_quadro(*alvo).and_then(|q| escala::jpeg(&q));
+            }
+            saida
+        }
+        Backend::Dxgi => dxgi::miniaturas(alvos, cancelar),
     }
 }

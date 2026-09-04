@@ -282,6 +282,24 @@ pub fn alvo(id: &str) -> Option<Alvo> {
     hmonitor_do_dispositivo(nome).map(Alvo::Monitor)
 }
 
+/// A fonte é uma janela **minimizada**?
+///
+/// A enumeração já esconde as minimizadas (não há o que capturar nelas), mas
+/// entre listar e clicar cabe um Win+D. Quem inicia a transmissão pergunta
+/// isto antes de abrir a captura: com a janela na barra de tarefas, o WGC
+/// nunca entrega um quadro e o outro lado fica em "Carregando a transmissão…"
+/// para sempre. Recusar com uma frase é melhor que transmitir o nada.
+pub fn minimizada(id: &str) -> bool {
+    let Some(numero) = id.strip_prefix("janela:") else {
+        return false;
+    };
+    let Ok(numero) = numero.parse::<isize>() else {
+        return false;
+    };
+    let hwnd = HWND(numero as *mut c_void);
+    unsafe { IsWindow(Some(hwnd)).as_bool() && IsIconic(hwnd).as_bool() }
+}
+
 /// O `HMONITOR` atual do dispositivo com esse nome (`\\.\DISPLAY1`). O handle
 /// muda quando um monitor é ligado ou desligado, por isso a fonte guarda o
 /// nome e o handle é procurado na hora.

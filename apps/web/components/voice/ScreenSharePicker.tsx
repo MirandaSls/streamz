@@ -70,6 +70,8 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
   const setQuality = useVoice((s) => s.setScreenQuality);
   const setAudio = useVoice((s) => s.setScreenAudio);
   const publicarTelaNativa = useVoice((s) => s.publicarTelaNativa);
+  const prepararTelaNativa = useVoice((s) => s.prepararTelaNativa);
+  const descartarTelaNativa = useVoice((s) => s.descartarTelaNativa);
 
   useEffect(() => {
     let vivo = true;
@@ -80,6 +82,27 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
       vivo = false;
     };
   }, []);
+
+  /**
+   * O `#tela` entra na sala **agora**, sem publicar nada, e o clique na
+   * miniatura só terá de publicar. O handshake do LiveKit (mais o
+   * `POST /tela-token`) é a etapa mais cara de ir ao ar, e ela não depende da
+   * fonte escolhida: pagá-la enquanto o usuário olha a grade é tempo que ele
+   * já ia gastar. Ver `prepararTelaNativa` na store.
+   */
+  useEffect(() => {
+    if (!capacidades?.nativo) return;
+    void prepararTelaNativa();
+  }, [capacidades?.nativo, prepararTelaNativa]);
+
+  // Fechou sem escolher: o `#tela` não pode ficar na sala sem publicar nada.
+  // Se foi ao ar, a conexão virou a transmissão e não há o que descartar.
+  useEffect(
+    () => () => {
+      if (!useVoice.getState().screenOn) void descartarTelaNativa();
+    },
+    [descartarTelaNativa],
+  );
 
   /** Vai ao ar com uma fonte da captura nativa — o clique na miniatura. */
   async function irAoVivoNativo(fonteId: string) {
@@ -200,6 +223,11 @@ function GradeNativa({
   const [miniaturas, setMiniaturas] = useState<Record<string, string>>({});
 
   useEffect(() => {
+    // Parar de relistar enquanto a transmissão começa: enumerar janelas abre e
+    // decodifica o ícone de cada executável, e nesse instante toda a máquina
+    // deveria estar servindo a captura que acabou de ser pedida. A lista que
+    // já está na tela continua desenhada — nada some.
+    if (iniciando) return;
     let vivo = true;
     const listar = () =>
       void fontesDeTela().then((f) => {
@@ -211,15 +239,23 @@ function GradeNativa({
       vivo = false;
       clearInterval(timer);
     };
-  }, []);
+  }, [iniciando]);
 
   const visiveis = useMemo(() => fontesDaAba(fontes ?? [], aba), [fontes, aba]);
   const ids = visiveis.map((f) => f.id).join("\n");
 
   // Miniaturas ao vivo: a próxima varredura só depois de a anterior voltar —
   // é o ritmo natural, e nunca há duas capturas da mesma janela ao mesmo tempo.
+  //
+  // **`iniciando` para o laço**, e isso é metade da correção do atraso. Este
+  // modal só fecha depois de a transmissão ir ao ar, então antes o laço
+  // continuava varrendo durante todo o início da captura definitiva: uma
+  // sessão de captura por janela, inclusive na janela recém-escolhida,
+  // disputando o mesmo alvo com quem estava tentando transmitir. (O Rust
+  // também se defende sozinho — ver `SemMiniaturas` em `tela/mod.rs` —, mas
+  // não pedir é mais barato que cancelar.)
   useEffect(() => {
-    if (!ids) return;
+    if (!ids || iniciando) return;
     let vivo = true;
     const lista = ids.split("\n");
     void (async () => {
@@ -240,7 +276,7 @@ function GradeNativa({
     return () => {
       vivo = false;
     };
-  }, [ids]);
+  }, [ids, iniciando]);
 
   if (fontes === null) {
     return <p className="pt-10 text-center text-sm text-txt-muted">Procurando janelas…</p>;

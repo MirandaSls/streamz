@@ -145,10 +145,12 @@ pub async fn miniaturas_de_tela(ids: Vec<String>) -> Result<Vec<Option<String>>,
 #[cfg(windows)]
 fn miniaturas(ids: &[String]) -> Vec<Option<String>> {
     use base64::Engine as _;
-    use std::sync::Mutex;
 
-    static UMA_POR_VEZ: Mutex<()> = Mutex::new(());
-    let _guarda = UMA_POR_VEZ.lock().unwrap_or_else(|e| e.into_inner());
+    // Uma transmissão está sendo aberta: nem começar (ver `SemMiniaturas`).
+    if SEM_MINIATURAS.load(std::sync::atomic::Ordering::Acquire) {
+        return vec![None; ids.len()];
+    }
+    let _guarda = UMA_VARREDURA.lock().unwrap_or_else(|e| e.into_inner());
 
     // Quem não resolve (fonte que sumiu) fica de fora da captura e volta
     // `None` na posição dele — a ordem da resposta é a do pedido.
@@ -158,7 +160,7 @@ fn miniaturas(ids: &[String]) -> Vec<Option<String>> {
         .filter_map(|(i, id)| fontes::alvo(id).map(|alvo| (i, alvo)))
         .collect();
     let so_alvos: Vec<captura::Alvo> = alvos.iter().map(|(_, alvo)| *alvo).collect();
-    let jpegs = captura::miniaturas(&so_alvos);
+    let jpegs = captura::miniaturas(&so_alvos, &SEM_MINIATURAS);
 
     let mut saida: Vec<Option<String>> = vec![None; ids.len()];
     for ((i, _), jpeg) in alvos.iter().zip(jpegs) {
@@ -177,6 +179,51 @@ fn miniaturas(ids: &[String]) -> Vec<Option<String>> {
     vec![None; ids.len()]
 }
 
+/// Uma varredura de miniaturas por vez: duas sessões de captura da mesma
+/// janela ao mesmo tempo é o que o WGC menos gosta.
+#[cfg(windows)]
+static UMA_VARREDURA: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Enquanto isto está levantado, a grade não gera miniatura nenhuma — e a
+/// varredura que já estava rodando desiste na fonte seguinte.
+#[cfg(windows)]
+static SEM_MINIATURAS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// **Onde estava boa parte do atraso ao transmitir uma janela.**
+///
+/// O seletor mantém as miniaturas ao vivo enquanto está aberto, e ele só
+/// fecha depois que a transmissão foi ao ar — ou seja, a varredura continua
+/// girando durante todo o início da captura definitiva, abrindo e fechando
+/// uma sessão de captura por janela, inclusive na janela que o usuário
+/// acabou de escolher. No WGC isso é um dispositivo D3D novo por miniatura
+/// disputando o mesmo alvo; no DXGI é pior, porque cada duplicação derruba a
+/// anterior do mesmo monitor.
+///
+/// Esta guarda levanta a bandeira, **espera a varredura em curso sair**
+/// (a de dentro desiste na próxima fonte, então a espera é curta) e só
+/// devolve o controle quando o caminho está livre. Ao ser derrubada, as
+/// miniaturas voltam — o seletor pode ter continuado aberto porque a
+/// transmissão falhou.
+#[cfg(windows)]
+pub struct SemMiniaturas;
+
+#[cfg(windows)]
+impl SemMiniaturas {
+    /// Bloqueia até a varredura em curso terminar: chame de `spawn_blocking`.
+    fn erguer() -> Self {
+        SEM_MINIATURAS.store(true, std::sync::atomic::Ordering::Release);
+        drop(UMA_VARREDURA.lock().unwrap_or_else(|e| e.into_inner()));
+        Self
+    }
+}
+
+#[cfg(windows)]
+impl Drop for SemMiniaturas {
+    fn drop(&mut self) {
+        SEM_MINIATURAS.store(false, std::sync::atomic::Ordering::Release);
+    }
+}
+
 /// A transmissão em curso, gerenciada pelo Tauri (`app.manage`). Fora do
 /// Windows é um marcador vazio: os comandos respondem que não há captura
 /// nativa e a web fica no `getDisplayMedia`.
@@ -192,18 +239,75 @@ impl Transmissao {
     pub fn encerrar(&self) {}
 }
 
+/// Entra na sala como `<userId>#tela` **sem publicar nada**, para que o
+/// clique na miniatura só tenha de publicar.
+///
+/// Abrir a conexão é a etapa mais cara do início: sinal `wss`, join, ICE,
+/// DTLS. Feita no clique, ela é segundo(s) de tela preta; feita quando o
+/// seletor abre, o usuário a paga enquanto escolhe o que transmitir. Falhar
+/// aqui não é erro para ninguém — `iniciar_tela` conecta na hora, como antes.
+#[cfg(windows)]
+#[tauri::command]
+pub async fn preparar_tela(
+    estado: tauri::State<'_, Transmissao>,
+    preparo: transmissao::Preparo,
+) -> Result<(), String> {
+    transmissao::preparar(&estado, preparo).await
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+pub async fn preparar_tela(
+    _estado: tauri::State<'_, Transmissao>,
+    _preparo: serde_json::Value,
+) -> Result<(), String> {
+    Err("Captura de tela nativa só existe no Windows".to_string())
+}
+
+/// Desfaz a pré-conexão: o seletor fechou sem ninguém escolher fonte. Sem
+/// isto o `#tela` ficaria na sala sem publicar até o LiveKit expirá-lo.
+#[cfg(windows)]
+#[tauri::command]
+pub async fn descartar_tela(estado: tauri::State<'_, Transmissao>) -> Result<(), String> {
+    transmissao::descartar(&estado).await;
+    Ok(())
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+pub async fn descartar_tela(_estado: tauri::State<'_, Transmissao>) -> Result<(), String> {
+    Ok(())
+}
+
 /// Começa a transmitir a fonte `pedido.fonteId` na sala do LiveKit como o
 /// participante do token (`<userId>#tela`). Trocar de fonte é chamar de novo.
 /// Quando a transmissão acaba sozinha (janela fechada, sala caída), a web
 /// recebe o evento `tela:encerrada` com o motivo.
+///
+/// Devolve o tempo de cada etapa (ver `transmissao::Tempos`): é o que a web
+/// imprime em `console.debug`, e é como se descobre qual delas ficou cara sem
+/// ninguém ter um depurador aberto na máquina do usuário.
 #[cfg(windows)]
 #[tauri::command]
 pub async fn iniciar_tela(
     app: tauri::AppHandle,
     estado: tauri::State<'_, Transmissao>,
     pedido: transmissao::Pedido,
-) -> Result<(), String> {
-    transmissao::iniciar(app, &estado, pedido).await
+) -> Result<transmissao::Tempos, String> {
+    if fontes::minimizada(&pedido.fonte_id) {
+        return Err(
+            "Restaure a janela antes de transmitir: minimizada, ela não desenha nada para capturar"
+                .to_string(),
+        );
+    }
+    // As miniaturas param **antes** de a captura definitiva abrir, e só voltam
+    // quando isto sai de cena. Ver `SemMiniaturas`.
+    let guarda = tauri::async_runtime::spawn_blocking(SemMiniaturas::erguer)
+        .await
+        .map_err(|e| format!("falha ao pausar as miniaturas: {e}"))?;
+    let resultado = transmissao::iniciar(app, &estado, pedido).await;
+    drop(guarda);
+    resultado
 }
 
 #[cfg(not(windows))]
@@ -212,7 +316,7 @@ pub async fn iniciar_tela(
     _app: tauri::AppHandle,
     _estado: tauri::State<'_, Transmissao>,
     _pedido: serde_json::Value,
-) -> Result<(), String> {
+) -> Result<serde_json::Value, String> {
     Err("Captura de tela nativa só existe no Windows".to_string())
 }
 
