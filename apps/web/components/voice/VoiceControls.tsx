@@ -12,6 +12,7 @@ import {
 } from "@/components/voice/controles-de-chamada";
 import { ListaDeCameras } from "@/components/voice/listas-de-dispositivos";
 import { MenuDeEntrada } from "@/components/voice/menus-de-audio";
+import { microfoneAbrindo } from "@/components/voice/estado-do-microfone";
 import { useVoice } from "@/stores/voice";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 
@@ -48,6 +49,10 @@ export default function VoiceControls({
   const toggleCam = useVoice((s) => s.toggleCam);
   const muted = useVoicePrefs((s) => s.muted);
   const toggleMute = useVoicePrefs((s) => s.toggleMute);
+  // a faixa ainda não subiu: a sala já me ouviria, mas não há o que ouvir.
+  // Desde o #144 a entrada não espera pelo microfone, e este é o intervalo em
+  // que a pessoa já está na call e ainda não pode falar
+  const abrindoMicrofone = useVoice(microfoneAbrindo);
 
   useEffect(() => {
     if (!mais) return;
@@ -74,15 +79,26 @@ export default function VoiceControls({
       }`}
     >
       <Capsula>
+        {/* Enquanto a faixa sobe o botão mostra o **mudo**, e o rótulo diz por
+            quê. Mostrar o microfone aberto antes de ele existir seria a mentira
+            pior: a pessoa fala e ninguém ouve. O clique continua valendo — o
+            dono da faixa reaplica o mudo escolhido assim que ela nasce (ver
+            `publicarMicrofone`). Sem cor nova: é o mesmo tom "mudo" de sempre. */}
         <SplitDeDispositivo
-          label={muted ? "Desativar mudo" : "Silenciar"}
+          label={
+            abrindoMicrofone
+              ? "Ativando microfone…"
+              : muted
+                ? "Desativar mudo"
+                : "Silenciar"
+          }
           labelDaSeta="Escolher microfone"
-          tom={muted ? "mudo" : "neutro"}
+          tom={muted || abrindoMicrofone ? "mudo" : "neutro"}
           pressionado={muted}
           onClick={toggleMute}
           menu={() => <MenuDeEntrada />}
         >
-          {muted ? <MicOff size={22} /> : <Mic size={22} />}
+          {muted || abrindoMicrofone ? <MicOff size={22} /> : <Mic size={22} />}
         </SplitDeDispositivo>
 
         <SplitDeDispositivo

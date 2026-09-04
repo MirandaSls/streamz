@@ -55,7 +55,7 @@ import { submenuNotificacoes, submenuSilenciar } from "@/lib/notification-menu";
 import { errorMessage } from "@/stores/socket-adapter";
 import { useNotifications } from "@/stores/notifications";
 import { api } from "@/lib/api";
-import { useVoice } from "@/stores/voice";
+import { preaquecerCadeiaDeVoz, useVoice } from "@/stores/voice";
 import { useSettings } from "@/stores/settings";
 import { ui, useUI, type MenuItem } from "@/stores/ui";
 
@@ -650,6 +650,11 @@ export default function ChannelSidebar() {
             // `"clique"`: num canal de VOZ isto **entra na chamada**, sem
             // antessala nem prompt (ver `stores/voice-entrada.ts`)
             onClick={() => select(channel, "clique")}
+            // passar o mouse por um canal de voz é o aviso mais barato de que o
+            // clique pode vir: aproveita para pagar o chunk e o `.wasm` da
+            // supressão avançada antes da hora (ver `preaquecerCadeiaDeVoz`,
+            // que não faz nada para quem não a escolheu)
+            onPointerEnter={channel.type === "VOICE" ? preaquecerCadeiaDeVoz : undefined}
             aria-current={active ? "true" : undefined}
             className={`flex h-full min-w-0 flex-1 items-center gap-2.5 text-left ${unread ? "font-semibold" : "font-medium"}`}
           >

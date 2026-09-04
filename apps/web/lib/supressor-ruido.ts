@@ -261,6 +261,38 @@ export function cadeiasMontadas(): number {
   return montadas;
 }
 
+/**
+ * Pré-aquece a supressão avançada: o pacote, o `.wasm` e o `addModule`.
+ *
+ * As três coisas são caras **uma vez por aba** e hoje eram pagas no pior
+ * momento possível — no meio da entrada na call, com a pessoa olhando a tela de
+ * espera. O `import()` é um chunk separado; o `loadRnnoise` baixa dois `.wasm`;
+ * o `addModule` compila o worklet. Feito no repouso (ao abrir o app, ou quando
+ * o mouse passa pelo canal de voz), a entrada encontra tudo memoizado:
+ * `carregarModelo` guarda a promessa e `garantirWorklet` também.
+ *
+ * A `AudioContext` nasce **suspensa** — criá-la sem gesto do usuário é
+ * permitido, só não toca som —, e é a mesma que a cadeia vai usar depois
+ * (`contextoDeCaptura` é um por aba). `addModule` funciona em contexto suspenso;
+ * quem o acorda é `usarContextoDeCaptura`, no clique.
+ *
+ * Nunca rejeita: pré-aquecer é otimização. Se falhar, a entrada tenta de novo
+ * pelo caminho normal e, aí sim, avisa a pessoa (`aoFalharASupressao`).
+ */
+export async function preaquecerSupressor(): Promise<void> {
+  if (typeof window === "undefined" || typeof AudioContext === "undefined") return;
+  try {
+    await garantirWebAssembly();
+  } catch {
+    // esta janela não compila wasm: não adianta baixar modelo nenhum
+    return;
+  }
+  await Promise.all([
+    carregarModelo().catch(() => {}),
+    garantirWorklet(contextoDeCaptura()).catch(() => {}),
+  ]);
+}
+
 export interface CadeiaDoMicrofone
   extends TrackProcessor<Track.Kind.Audio, AudioProcessorOptions> {
   /** Volume de entrada, 0–2. Vale na hora, sem republicar a faixa. */

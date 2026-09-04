@@ -155,14 +155,13 @@ export default function CallStage({
       <div className="min-h-0 flex-1 px-4 pb-24">
         {chamando ? (
           <Chamando nome={destinatario ? displayNameOf(destinatario) : titulo} usuario={destinatario} />
-        ) : status === "connecting" && conectadoAqui ? (
-          <div className="grid h-full place-items-center text-txt-muted">
-            <div className="flex flex-col items-center gap-3">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-border-strong border-t-accent" />
-              <p>Entrando na chamada…</p>
-            </div>
-          </div>
         ) : conectadoAqui ? (
+          /* Sem tela de espera: a grade é desenhada a partir do estado de voz
+             do servidor, que já está aqui, e o `connecting` só quer dizer que a
+             mídia ainda está subindo. Trocá-la por um spinner escondia a
+             chamada pelo tempo do `getUserMedia` + `publishTrack` — p90 de 3,5s
+             medido em produção. Quem conta que a mídia ainda vem é a barra
+             "Conectando…" do rodapé. */
           <VoiceGrid
             channelId={channelId}
             nomeDoCanal={titulo}
