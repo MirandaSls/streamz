@@ -178,6 +178,7 @@ O que ele faz, na ordem:
 | Rail de servidores | `components/layout/GuildRail.tsx` |
 | Coluna de DMs / canais | `components/layout/DMList.tsx`, `ChannelSidebar.tsx` |
 | Categorias de canal | `stores/categories.ts`, `stores/channel-order.ts`; API em `apps/api/src/modules/channels/categories.{controller,service}.ts` (`MANAGE_CHANNELS` nas três rotas, eventos `category.*`) |
+| Categorias padrão ("Canais de Texto"/"Canais de Voz") | `apps/api/src/modules/guilds/categorias-padrao.ts` — os nomes, a rotina que as cria e o passo de boot que conserta servidor antigo. **São categorias de verdade**, não rótulo da coluna (§4.1) |
 | Criar canal / categoria | `components/modals/CreateChannelModal.tsx` (recebe `categoryId` **e** `tipo` do "+" do cabeçalho); "Criar canal"/"Criar categoria" no dropdown do nome do servidor, dentro de `ChannelSidebar.tsx` |
 | Arrastar na coluna | tudo em `ChannelSidebar.tsx` (`inicioArrasto`/`LinhaDeSolta`, DnD nativo): canal, categoria **e** participante de voz. A regra pura de onde o participante pode cair é `stores/voice-mover.ts` |
 | Card do usuário (mic/fone/engrenagem) | `components/layout/UserFooter.tsx` (irmão de rail+coluna, atravessa a rail), `voice/VoiceConnectedBar.tsx` |
@@ -196,6 +197,41 @@ O que ele faz, na ordem:
 | Gateway de voz | `apps/api/src/modules/gateway/chat.gateway.ts`, `voz-em-um-lugar-so.ts`, `modules/voice/*` |
 | Updates do desktop | `apps/api/src/modules/updates/*`; site de download em `modules/downloads/*` |
 | Estilos globais | `apps/web/app/globals.css` (foco: anel afastado para botões, 1px colado para campos), `tailwind.config.ts` (tokens) |
+
+### 4.1 As duas categorias padrão são linhas, não desenho
+
+Todo servidor do Discord nasce com "Canais de Texto" e "Canais de Voz". Aqui
+elas eram **inventadas pela barra lateral**: enquanto `categories` estivesse
+vazia, `ChannelSidebar` separava os canais soltos por tipo e desenhava os dois
+títulos; a primeira categoria de verdade que alguém criasse desligava esse modo
+e os dois títulos sumiam, com os canais indo todos para o bloco sem título do
+topo. Também não havia como renomear ou apagar o que não existe no banco.
+
+Agora são linhas de `Category`, e portanto categorias comuns: renomeáveis,
+apagáveis e arrastáveis pelo mesmo menu de contexto (Editar categoria / Apagar
+categoria / Criar canal) e pelo mesmo arrasto de qualquer outra. Duas
+consequências para quem mexer nisso:
+
+- **Uma rotina só.** `arrumarCategoriasPadrao(prisma, guildId)` cria as duas e
+  recolhe para elas os canais sem categoria, pelo tipo (voz na de voz, todo o
+  resto na de texto), renumerando as posições de 0 dentro de cada bloco. É ela
+  que `GuildsService.create` chama depois de criar o servidor com os dois canais
+  iniciais soltos (`geral` de texto, `Geral` de voz) — servidor novo e servidor
+  antigo passam pelo mesmo caminho, então não há duas verdades sobre o que é um
+  servidor arrumado.
+- **A correção dos servidores antigos é de dado, não de esquema**: nenhuma
+  coluna mudou, então **não há migration SQL nova**. Ela é um passo idempotente
+  do boot da API (`CategoriasPadraoService.onModuleInit`, antes de a porta
+  abrir; independe de `RUN_MIGRATIONS`). A guarda é a mais conservadora
+  possível: a rotina só age em servidor que **não tem categoria nenhuma**. Da
+  segunda vez em diante ela não acha ninguém, e um servidor já organizado por
+  gente nunca é tocado — quem renomeou "Canais de Texto" para "Bate-papo" não
+  ganha uma "Canais de Texto" de volta no próximo boot, e quem deixou um canal
+  de propósito no topo, sem categoria (o Discord permite), não o vê ser engolido.
+
+Canal sem categoria continua no topo da coluna, sem título — é o que o Discord
+faz com quem você arrasta para fora de uma categoria. Apagar uma categoria
+**solta** os canais dela (FK `SetNull`) em vez de apagá-los.
 
 ## 5. Publicar uma versão do desktop
 
@@ -628,8 +664,10 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
 | #73 | Sons originais do Discord (`public/sons/`), badge de não lidas na borda (rail com miolo de 16px), cronômetro colado na borda (botões do hover fora do fluxo), amizade nova põe a conversa no topo dos dois lados |
 | #74 | Sons do Discord em todo caminho: mudo/surdo pelo botão do rodapé (o som foi para a store), entrar e transmissão de tela com arquivo, nada mais sintetizado |
 | #99 | GIF animado como foto de perfil e banner: o GIF pula o recorte (canvas achata a animação) e sobe inteiro, com teto de 8 MB, lado de 2048px, assinatura `GIF87a`/`GIF89a` conferida e content-type real no proxy |
+| #103 | Criar canal e categoria pela coluna, "+" sempre visível no cabeçalho, e mover alguém de canal de voz arrastando (`MOVE_MEMBERS`) |
 | #104 | Convite vira cartão com "Entrar" (reconhecido no host público **e** no host do app), `guild.joined` para todas as conexões da conta, logo do rail volta para Amigos, e o foco da janela do desktop volta a marcar a conversa aberta como lida |
 | #105 | Sons: um som não se sobrepõe a si mesmo em menos de 300 ms, um dono só do volume com fator por som, e badge de não lidas no ícone da caixa de entrada |
+| #112 | As duas categorias padrão viram categorias de verdade (§4.1): paravam de existir na primeira categoria criada, e não dava para renomear nem apagar |
 
 Desktop: 0.0.6 (#38 + #40 + #41), 0.0.7 (+ #42), 0.0.8 (tudo até #50),
 0.0.10 (até #64), 0.0.11 (até #71, primeira com a tela nativa), 0.0.12 (até #73).

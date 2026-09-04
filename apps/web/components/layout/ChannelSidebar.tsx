@@ -34,7 +34,6 @@ import {
   isUnread,
   type Category,
   type Channel,
-  type GuildChannelType,
 } from "@streamz/shared";
 import Tooltip from "@/components/ui/Tooltip";
 import { MENU_WIDTH, MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
@@ -242,12 +241,20 @@ export default function ChannelSidebar() {
   const renomearCategoria = useCategories((s) => s.rename);
   const apagarCategoria = useCategories((s) => s.remove);
 
+  /*
+    Um bloco por categoria, mais o bloco sem título do topo para os canais
+    soltos — e nada além disso.
+
+    Aqui existia um segundo modo: enquanto o servidor não tivesse categoria
+    nenhuma, a coluna **inventava** os títulos "Canais de Texto" e "Canais de
+    Voz" separando os canais soltos por tipo. Como eram desenho e não dado, a
+    primeira categoria de verdade que alguém criasse desligava esse modo: os
+    dois títulos sumiam e os canais iam todos para o bloco sem título. Agora as
+    duas categorias padrão são linhas em `Category`, criadas junto com o
+    servidor (e criadas para os antigos pelo passo de boot da API), então
+    aparecem, se renomeiam e se apagam como qualquer outra.
+  */
   const grupos = groupByCategory(channels, categories);
-  // sem nenhuma categoria o Discord ainda separa "texto" de "voz": mantemos o
-  // agrupamento por tipo até o servidor criar a primeira categoria de verdade
-  const semCategorias = categories.length === 0;
-  const texto = grupos[0].channels.filter((c) => c.type !== "VOICE");
-  const voz = grupos[0].channels.filter((c) => c.type === "VOICE");
 
   /**
    * Menu do cabeçalho do servidor (o chevron do Discord).
@@ -664,55 +671,45 @@ export default function ChannelSidebar() {
   }
 
   /**
-   * Desenha um bloco da lista. `override` existe para o modo sem categorias:
-   * os canais continuam sendo um bloco só (é sobre ele que a reordenação
-   * calcula os índices), mas aparecem sob os rótulos por tipo — o template
-   * padrão de um servidor novo no Discord.
+   * Desenha um bloco da lista: o cabeçalho da categoria (quando há uma) e os
+   * canais dela. O bloco dos canais soltos não tem cabeçalho — no Discord eles
+   * ficam no topo, sem título — e some quando está vazio.
    */
-  function renderGrupo(
-    grupo: CategoryGroup,
-    indexCategoria: number,
-    override?: { chave: string; label: string; channels: Channel[]; tipo: GuildChannelType },
-  ) {
+  function renderGrupo(grupo: CategoryGroup, indexCategoria: number) {
     const category = grupo.category;
-    const chave = override?.chave ?? category?.id ?? "sem-categoria";
-    const rotulo = override?.label ?? category?.name ?? "";
-    const lista = override?.channels ?? grupo.channels;
-    const colapsavel = !!category || !!override;
+    const chave = category?.id ?? "sem-categoria";
+    const rotulo = category?.name ?? "";
+    const lista = grupo.channels;
+    const colapsavel = !!category;
     const fechada = colapsavel && collapsed.includes(chave);
     // categoria fechada ainda mostra o canal ativo, como no Discord
     const visiveis = fechada
       ? lista.filter((c) => c.id === activeChannelId || c.id === voiceChannelId)
       : lista;
 
+    // categoria vazia continua desenhada (é onde se solta o primeiro canal);
+    // o bloco sem título, não — senão sobraria um respiro no topo da coluna
     if (!colapsavel && grupo.channels.length === 0) return null;
-    if (override && lista.length === 0) return null;
 
     return (
       <div key={chave} className={colapsavel ? "mt-4" : "mt-1"}>
         {colapsavel && (
           <>
-            {/* sempre desenhada, ativa só em categoria de verdade: são 2px, e
-                sem eles os blocos "Canais de Texto"/"Canais de Voz" ficavam 2px
-                acima dos de categoria — a medida do cabeçalho conta com ela */}
+            {/* 2px que a medida do cabeçalho conta: a linha existe em todo
+                cabeçalho de categoria e só acende no alvo do arrasto */}
             <LinhaDeSolta
-              ativa={!!category && alvo?.tipo === "categoria" && alvo.index === indexCategoria}
+              ativa={alvo?.tipo === "categoria" && alvo.index === indexCategoria}
             />
             <CategoryHeader
               label={rotulo}
               collapsed={fechada}
               onToggle={() => toggleCollapsed(chave)}
+              // numa categoria cabem os dois tipos — inclusive nas duas
+              // padrão, que agora são categorias comuns —, então quem pergunta
+              // é o modal, como no Discord
               onCreate={
                 podeGerenciarCanais
-                  ? () =>
-                      openModal({
-                        kind: "createChannel",
-                        categoryId: category?.id ?? null,
-                        // sob "Canais de Texto"/"Canais de Voz" o tipo já está
-                        // decidido pelo grupo; numa categoria de verdade cabem
-                        // os dois, e aí o modal pergunta
-                        tipo: override?.tipo,
-                      })
+                  ? () => openModal({ kind: "createChannel", categoryId: category?.id ?? null })
                   : undefined
               }
               onContextMenu={category ? (e) => openCategoryMenu(e, category) : undefined}
@@ -818,13 +815,7 @@ export default function ChannelSidebar() {
           </p>
         )}
 
-        {semCategorias
-          ? // servidor que nunca criou categoria: rótulos por tipo, um bloco só
-            [
-              { chave: "tipo:texto", label: "Canais de Texto", channels: texto, tipo: "TEXT" as const },
-              { chave: "tipo:voz", label: "Canais de Voz", channels: voz, tipo: "VOICE" as const },
-            ].map((v) => renderGrupo(grupos[0], -1, v))
-          : grupos.map((grupo, i) => renderGrupo(grupo, i - 1))}
+        {grupos.map((grupo, i) => renderGrupo(grupo, i - 1))}
       </div>
 
     </aside>
