@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { PublicUser } from "@streamz/shared";
+import type { GuildChannelType, PublicUser } from "@streamz/shared";
 // ── h-moderacao ──
 import type { ServerSettingsTab } from "@/components/settings/server/tabs";
 // ── recorte de imagem ──
@@ -24,7 +24,7 @@ export interface Toast {
 }
 
 export type Modal =
-  | { kind: "createChannel"; categoryId?: string | null }
+  | { kind: "createChannel"; categoryId?: string | null; tipo?: GuildChannelType }
   | { kind: "channelAccess"; channelId: string }
   | { kind: "invite"; guildId: string; code?: string }
   | { kind: "createGroupDM" }

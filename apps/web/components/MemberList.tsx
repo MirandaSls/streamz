@@ -26,6 +26,7 @@ import {
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
 import { MENU_WIDTH } from "@/components/ui/ContextMenu";
+import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
 import { mencionar as inserirMencao } from "@/lib/mencoes";
 import { useAuth } from "@/stores/auth";
 import { useDMs } from "@/stores/dms";
@@ -96,6 +97,9 @@ export default function MemberList() {
   // então basta juntar os canais do servidor ativo — sem depender da sidebar.
   const activeGuildId = useGuilds((s) => s.activeGuildId);
   const voiceStates = useVoice((s) => s.states);
+  // e quem, dentre eles, está falando agora: o mesmo conjunto que o palco e a
+  // lista do canal leem (ver `stores/voice-falantes.ts`)
+  const falando = useVoice((s) => s.falando);
   const emVoz = new Set<string>();
   for (const lista of Object.values(voiceStates)) {
     for (const e of lista) if (e.connected && e.guildId === activeGuildId) emVoz.add(e.user.id);
@@ -244,7 +248,18 @@ export default function MemberList() {
           aria-label={`Perfil de ${nome}`}
           className="flex min-w-0 flex-1 items-center gap-3 text-left"
         >
-          <Avatar user={m.user} size="md" status={status} surface="border-panel" />
+          {/* o anel verde de fala é o mesmo do palco e da lista do canal —
+              no Discord ele acende aqui também, e não só lá dentro */}
+          <span className="relative inline-grid shrink-0 rounded-full">
+            <Avatar
+              user={m.user}
+              size="md"
+              status={status}
+              surface="border-panel"
+              className={`transition-transform ${falando.has(m.user.id) ? ENCOLHE_AO_FALAR : ""}`}
+            />
+            {falando.has(m.user.id) && <AnelDeFala />}
+          </span>
           {/* nome em 16px na cor muted (medido: o mesmo cinza do título da
               seção), e a sub-linha "Em voz" em 12px com o alto-falante verde.
               Sem atividade/jogo: não existe aqui. */}

@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { BarraDeNivel, Chave, useNivelDoMicrofone } from "@/components/voice/pecas-de-voz";
+import { BarraDeNivel, Chave } from "@/components/voice/pecas-de-voz";
+import { useTesteDeMicrofone } from "@/components/voice/useTesteDeMicrofone";
 import { useVoice } from "@/stores/voice";
-import { useVoiceDevices } from "@/stores/voiceDevices";
 
 /**
  * O que o ícone de ondas do painel "Voz conectada" abre.
@@ -17,14 +16,16 @@ import { useVoiceDevices } from "@/stores/voiceDevices";
  * O toggle vai entre a supressão **avançada** e a **padrão**, nunca até
  * "desligada": tirar toda a redução de ruído sem dizer nada é armadilha, e
  * desligar de vez continua sendo escolha consciente, nas configurações.
+ *
+ * O teste é o mesmo da aba "Voz e vídeo", e por isso vem do mesmo hook: ele
+ * ensurdece durante o teste e devolve o seu próprio som (ver
+ * `useTesteDeMicrofone`). Fechar o popover para o teste.
  */
 export default function PopoverDeRuido() {
-  const [testando, setTestando] = useState(false);
-  const devices = useVoiceDevices();
+  const { testando, nivel, erro, alternar } = useTesteDeMicrofone();
   const processamento = useVoice((s) => s.audio.processamento);
   const setAudioPref = useVoice((s) => s.setAudioPref);
   const avancada = processamento.ruido === "avancada";
-  const nivel = useNivelDoMicrofone(testando, devices.inputId);
 
   return (
     <div className="space-y-3">
@@ -48,7 +49,7 @@ export default function PopoverDeRuido() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setTestando((v) => !v)}
+            onClick={alternar}
             className="h-8 shrink-0 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-primary transition hover:bg-border-strong-hover"
           >
             {testando ? "Parar" : "Testar"}
@@ -58,8 +59,11 @@ export default function PopoverDeRuido() {
           </span>
         </div>
         <p className="text-xs text-txt-muted">
-          Fale, ou bata palmas: com a supressão ligada, o outro lado ouve só você.
+          {testando
+            ? "Fale: você está se ouvindo. Enquanto o teste durar, a sala não te ouve e você não ouve ninguém."
+            : "Fale, ou bata palmas: com a supressão ligada, o outro lado ouve só você."}
         </p>
+        {erro && <p className="text-xs text-red">{erro}</p>}
       </div>
 
       {/* Crédito honesto: o motor é o RNNoise, o mesmo que o Jitsi usa. Sem ele

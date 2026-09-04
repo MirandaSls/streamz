@@ -118,6 +118,12 @@ export class GuildsService {
     });
     this.realtime.joinGuildRoom(ownerId, guild.id);
     for (const c of guild.channels) this.realtime.joinChannelRooms([ownerId], c.id);
+    // as outras sessões da conta (o desktop enquanto o site cria) põem o
+    // servidor no rail na hora — `emitToUser` é a sala `user:<id>`
+    this.realtime.emitToUser(ownerId, WS_EVENTS.GUILD_JOINED, {
+      guild: toGuildDTO(guild),
+      reason: "created",
+    });
     return { ...toGuildDTO(guild), channels: guild.channels.map((c) => toChannelDTO(c)) };
   }
 
