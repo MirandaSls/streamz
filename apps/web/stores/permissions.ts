@@ -224,6 +224,18 @@ export function useCanModerateActiveChannel(): boolean {
 }
 
 /**
+ * Posso editar o canal aberto? (MANAGE_CHANNELS)
+ *
+ * Não é o mesmo que moderar: apagar mensagem dos outros é `MANAGE_MESSAGES`, e
+ * abrir as configurações do canal é `MANAGE_CHANNELS` — é a permissão que a
+ * engrenagem da barra lateral já pede para o mesmo modal.
+ */
+export function useCanManageActiveChannel(): boolean {
+  const channelId = useChannels((s) => s.activeChannelId);
+  return useCan(Permission.MANAGE_CHANNELS, channelId);
+}
+
+/**
  * Cor do nome de um membro: a do seu cargo mais alto que tenha cor. `null`
  * quando ele não tem cargo colorido — aí o nome fica na cor padrão do tema.
  */

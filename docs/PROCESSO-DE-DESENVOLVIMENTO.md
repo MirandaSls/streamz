@@ -194,7 +194,7 @@ O que ele faz, na ordem:
 | Permissões (UI) | `components/permissoes/*` (tri-estado e editor), `modals/ChannelSettingsModal.tsx`, `modals/CategorySettingsModal.tsx` |
 | Ícones | `components/ui/icones.tsx` — **único** ponto de importação de ícone (§6.2) |
 | Voz (estado) | `stores/voice.ts`, `voice-saida.ts`, `voice-mover.ts`, `voice-retomada.ts`, `voice-reconexao.ts`, `voicePrefs.ts`, `voiceDevices.ts` |
-| Voz (UI) | `components/voice/*` — `VoiceLayer.tsx` (global), `AudioRemotoHost.tsx` (global), `VoiceGrid.tsx`, `CallStage.tsx`, `VoicePanel.tsx`, `VoiceHotkeys.tsx`, `ScreenSharePicker.tsx` |
+| Voz (UI) | `components/voice/*` — `VoiceLayer.tsx` (global), `AudioRemotoHost.tsx` (global), `VoiceGrid.tsx`, `CallStage.tsx`, `VoicePanel.tsx`, `VistaDoCanalDeVoz.tsx` (canal clicado sem entrar), `VoiceHotkeys.tsx`, `ScreenSharePicker.tsx` |
 | Desktop | `components/desktop/BarraDeTitulo.tsx`, `useAtualizacao.ts`, `JanelaSplash.tsx` + `janela-splash.ts` (janelinha de abertura/atualização, rota `app/splash/`); `apps/desktop/src-tauri/tauri.conf.json`, `capabilities/{default,splash}.json` |
 | Atalhos | `lib/shortcuts.ts`, `hooks/useKeyboardShortcuts.ts` (M/D de voz são do `VoiceHotkeys`) |
 | Gateway de voz | `apps/api/src/modules/gateway/chat.gateway.ts`, `voz-em-um-lugar-so.ts`, `modules/voice/*` |
@@ -612,6 +612,20 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   bloco leva `-mb-3` para não somar 12px a esse vão.
 - Card do usuário: flutuante, 58px, raio 8, atravessa a rail (irmão de rail e
   coluna, `inset-x-2.5`), listas e rail com respiro embaixo (`pb-[78px]`).
+- **Cabeçalho da conversa direta** (medido na print `2026-09-04 102757`, coluna
+  de conversas de 294, 1:1): ele atravessa a **área de conteúdo inteira** —
+  nome, telefone, vídeo, alfinete, adicionar, perfil e a busca de 244 vão do fim
+  da coluna de conversas até a borda da janela, e a linha de 1px de baixo dele
+  também. A coluna 4 do modo DM (perfil em 1:1, participantes em grupo) começa
+  **abaixo** dele, por isso ela é montada dentro do `<main>` do `DMView` e não
+  como irmã. O cartão de perfil é de 306 com 7px nos quatro lados (coluna de
+  320) e raio 8 — os 7 da esquerda somam com os 10 do composer e dão os 17px
+  que separam um do outro na print. Os dois discos do canto do cartão são de 30,
+  10px entre eles, 11px do topo e da borda; o da esquerda é "adicionar amigo"
+  quando não há amizade e a **pessoa com o visto** (`UserCheck`, ativo
+  `figma/collections/private-messages-direct-messages/chat/friends-status`)
+  quando já há. Busca e thread continuam irmãs do `<main>`: têm cabeçalho
+  próprio de 49 que encosta no da conversa.
 - **Permissões de canal e de categoria** (PR das permissões, 2026-09-04): o
   modelo é o do Discord — `allow`/`deny` por cargo e por membro, em
   `ChannelOverride` e `CategoryOverride`. Um canal dentro de categoria nasce
@@ -635,6 +649,48 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   centrada sobre o app escurecido — não página inteira —, com menu de 252,
   busca de 40 e cabeçalho de 48 com o X simples no canto (medido nos prints
   `2026-09-01 1143–1146`, janela de 1920×1032).
+- **Fechar: dois desenhos, um por família de tela.** Os prints de
+  `2026-09-04 100527–100821` (configurações do **servidor**, janela 1919×1079)
+  mostram que ali o Discord não usa a barra de 48: o título é da página e o
+  fechar é um **X redondo de 36 com anel de 2px e "ESC" embaixo**, com o centro
+  a 58 da borda direita da coluna de conteúdo e o rótulo 9px abaixo do círculo.
+  A `JanelaDeConfiguracoes` ganhou `fecharComoEsc` para isso; as de usuário,
+  canal e grupo continuam com a barra. A altura do círculo no print (centro a
+  110 do topo da janela) **não** transfere — lá a tela ocupa a janela inteira e
+  aqui é um modal de 888 —, então ele alinha o centro com a primeira linha do
+  título. O menu ganhou **divisória entre grupos**, que está nos dois prints.
+- **Configurações do servidor (lote #128, prints `2026-09-04`).** Ordem e
+  rótulos do menu do Discord, só com o que existe: Perfil do servidor,
+  Engajamento / EXPRESSÕES: Emoji / PESSOAS: Membros, Cargos, Convites, Acesso /
+  MODERAÇÃO: Registro de auditoria, Banimentos, Denúncias (esta última é nossa,
+  não do Discord; a fila existe e escondê-la tiraria acesso a uma tela que
+  funciona). **Não criar** Tag, Vantagens de Impulso, Figurinhas, Painel de
+  efeitos sonoros, Integrações, Diretório de Apps, Configurações de Segurança,
+  Visão geral da comunidade, Onboarding, Análises e Modelo do servidor.
+  Medidas lidas por `getpixel` (coluna de conteúdo de 660, x 732→1391):
+
+  | tela | print | medida |
+  |---|---|---|
+  | título da página | todas | 20 semibold; subtítulo de 14 apagado 6px abaixo |
+  | Perfil: coluna do formulário | `100541` | 560 (x 732→1291) |
+  | Perfil: campo "Nome" | `100541` | 560×47; rótulo de 16 semibold, não caixa-alta |
+  | Perfil: botões do ícone | `100541` | 32 de altura ("Altere…" 198, "Remover…" 117, 8 entre) |
+  | Perfil: amostra de faixa | `100541` | 105×64, 5 por linha, 8 de espaço, duas linhas; anel de 2 do acento a 3 de distância |
+  | Perfil: cartão de prévia | `100541` | 300×238, faixa de 118 no topo, ícone de 68 raio 16 com anel de 4 |
+  | Membros: cabeçalho / linha | `100649` | 57 / 55, divisória de 1px `#2E2E33` |
+  | Cargos: cartão "Permissões padrão" | `100700` | 660×74; busca 660×40 32 abaixo; linhas de 61 |
+  | Convites: botões | `100706` | 40 de altura ("Criar link" 169, "Pausar" 141 — este não existe aqui) |
+  | Acesso: painel dos cartões | `100713` | 660×151 raio 8 com 8 de recuo; cartão 209×132; interruptor 48×24 |
+
+  A **faixa** do perfil é dado do servidor (`Guild.bannerColor` + a tabela de
+  degradês `GUILD_BANNER_COLORS`), **não** token de tema — as dez amostras são
+  os pares topo/base lidos no print.
+
+  Colunas e controles do print sem recurso por trás, e por isso ausentes:
+  "Características" (Perfil), "Ingressou no Discord" e "Forma de adesão"
+  (Membros), "Cargos" (Convites), "Pausar convites", "Mediante solicitação"
+  (Acesso — não há fila de aprovação) e tudo que Engajamento tem além do canal
+  do sistema e da tela de boas-vindas.
 
 ## 7. Arquitetura de voz (o que precisa continuar verdade)
 
@@ -831,12 +887,58 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
     faixa não tem título nenhum.
   - **Canal de voz de servidor → coluna de 450 à direita**
     (`PainelDeChatDaCall`). Medidas da print `2026-09-03 203909`: painel de
-    363px → **450**; cabeçalho de 36 → **44** com balão de 18 a 14 da borda,
-    nome e X a 16 da direita; composer de 41 → 51. O cabeçalho **não** tem
+    363px → **450**; composer de 41 → 51. O cabeçalho **não** tem
     busca, alfinete nem lista de membros — por isso o `ChatView incorporado`
     deixou de desenhar o `HeaderBar`. O arrasto guarda **pixel**: na print são
     450 numa janela de 3333, não uma fração dela. Abre pelo balão do cabeçalho
     do palco e pelo balão da linha do canal (hover, print `image (1)`).
+    O cabeçalho passou de 44 para **49** na releitura 1:1 (abaixo), com o balão
+    de 18 a **20** da borda e o nome a 13 dele, em 16px: são os mesmos 49 do
+    cabeçalho do palco, e é por isso que os dois nomes ficam na mesma linha.
+
+- **Clicar num canal de voz NÃO entra na chamada** — abre a *vista do canal*
+  (`VistaDoCanalDeVoz`, com a conta pura em `vista-do-canal-de-voz.ts`). O
+  `VoicePanel` tinha um `useEffect` que chamava `connect` na montagem, e a
+  antessala só aparecia para quem tinha caído. A print
+  `2026-09-04 102429` (1919×1079, **1:1** — a coluna de canais mede 294 nela e
+  294 aqui, então nada de escala) mostra o Discord fazendo o contrário: canal
+  "Geral" selecionado, ninguém em voz, e o palco inteiro é um convite. Também é
+  o certo fora da paridade: entrar abre o microfone para outras pessoas, e um
+  clique de barra lateral não é consentimento para isso. Quem conecta agora é o
+  botão; a retomada depois do F5 (`retomarSeReconectando`) e o `movidoDeCanal`
+  continuam chamando `connect` pela store, sem passar pelo painel.
+  - **Medidas do palco** (`getpixel`, tinta a tinta): palco 1057×999
+    (x 375..1431, y 32..1031); nome do canal em **32px** (caixa alta 22);
+    "Ninguém está em voz" em **14px** (caixa alta 10); botão **211×40** com raio
+    **8**, texto de **16px** e folga lateral de 17,5; do nome ao subtítulo 22 e
+    do subtítulo ao botão 26 (linha de base → topo da tinta).
+  - **Um botão só.** Não existe "Entrar com vídeo" na print: entre o subtítulo e
+    a base do palco há exatamente um retângulo branco, e ele é centrado na
+    largura do palco (798..1008 tem centro 903; o palco também).
+  - **O painel de conversa nasce aberto**, e o balão é lembrado **canal a
+    canal** (`chatDaCallPorCanal` na `stores/ui.ts`; `abrirVoiceChat`/
+    `toggleVoiceChat` aceitam o id e, sem ele, agem no canal de voz da vez).
+    Era um booleano só, fechado por padrão, de quando a conversa interrompia um
+    palco cheio — o palco vazio não tem o que interromper. Dois canais de voz
+    têm dois usos, e quem fecha a conversa de um não pediu nada sobre o outro.
+  - **O degradê é nosso.** No Discord é um brilho *blurple* saindo do meio da
+    borda de baixo: medido, um `radial-gradient` circular em (50%, 100%), pico
+    `rgb(116,131,225)` e queda quase linear até o fundo num raio de ~960px (85%
+    do raio até o canto mais distante). Aqui é o mesmo desenho a partir do
+    **acento** (Volt Lime) sobre `bg-chat`, via `--tw-gradient-stops` —
+    **nenhum token novo**. A força saiu do **campo**, não do pico: a média de
+    luminância relativa do palco na print do Discord é 0,0438 (0,0762 na metade
+    de baixo) e o nosso render em 1920×1000 dá 0,0481 (0,0748) com
+    `from-accent/40`. Casar pelo *pico* pediria 60% e o palco virava um campo
+    verde-oliva — o verde pesa 0,7152 na luminância e o azul 0,0722, então a
+    mesma luminância de pico espalha muito mais brilho pelo meio-tom.
+  - Com gente na sala o palco mostra os avatares e "N pessoas em voz"
+    (`textoDePresenca`, com teste do singular). **Não medido**: a print do
+    usuário é de um canal vazio.
+  - "Editar canal" nas boas-vindas do painel passou a pedir `MANAGE_CHANNELS`
+    (`useCanManageActiveChannel`), que é a permissão que o modal que ele abre
+    exige — estava atrás de `MANAGE_MESSAGES`, que é a de apagar mensagem dos
+    outros.
 - **A minha própria tela é assinada de volta — foi a tela preta da 0.0.18.** A
   regra de assinatura acima nasceu com um furo: no desktop a captura é nativa e
   entra na sala como um **participante remoto**, `<userId>#tela`. Do ponto de
@@ -870,12 +972,14 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   quebrada, que foi exatamente a leitura da print.
 
 - **A conversa da chamada é uma coluna à direita**, não uma faixa embaixo
-  (`PainelDeChatDaCall`, usado pelo canal de voz e pelo `CallSplit` da conversa
-  direta). Medidas da print: painel de 363px → **450**; cabeçalho de 36 → **44**
-  com balão de 18 a 14 da borda, nome e X a 16 da direita; composer de 41 → 51.
-  O cabeçalho **não** tem busca, alfinete nem lista de membros — por isso o
-  `ChatView incorporado` deixou de desenhar o `HeaderBar`. Abre pelo balão do
-  cabeçalho do palco e pelo balão da linha do canal (hover, print `image (1)`).
+  (`PainelDeChatDaCall`, do canal de voz). Painel de **450** (ponto de partida
+  de um divisor arrastável), cabeçalho de **49** com balão de 18 a 20 da borda,
+  nome de 16px a 13 do balão e o X a 8 da direita — os 49 e os 20 vêm da
+  releitura 1:1 na print `2026-09-04 102429`; o 450 e o composer de 51, da
+  `2026-09-03 203909`, que precisava de escala. O cabeçalho **não** tem busca,
+  alfinete nem lista de membros — por isso o `ChatView incorporado` deixou de
+  desenhar o `HeaderBar`. Abre sozinho ao entrar no canal, e o balão (cabeçalho
+  do palco ou linha do canal) alterna e é lembrado por canal.
 
 - **A faixa do microfone tem um dono só: `lib/microfone.ts`.** Ele cria a faixa,
   monta a cadeia de captura **antes** de publicar, aplica preferências novas na
@@ -1121,6 +1225,7 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
 | #117 | Auditoria de tempo real entre as sessões da conta (§4.2) e as lacunas fechadas: `channel.read` (o "lido" num cliente apaga o badge no outro), fechar conversa/sair do grupo, pedido de amizade na aba "Enviados", `account.updated` e `sessions.revoked` finalmente ouvidos, entrar pela Descobrir, aceitar as regras, tirar o banner |
 | #124 | "Testar microfone" muta e ensurdece de verdade (§7): liga mudo e surdo pelo caminho normal (som, ícone e `voice.update`) e restaura o par de antes ao parar por qualquer caminho; o retorno sobrevive ao mudo porque a captura fica aberta durante o teste |
 | #126 | Supressão de ruído avançada no desktop: a CSP sem `'wasm-unsafe-eval'` fazia o RNNoise publicar silêncio, calado (§7) |
+| #129 | "Convidar amigos" medido contra o Discord, o link do convite nasce no host público (o desktop mandava `tauri.localhost`) e **quem escreve leu**: o convite que eu mandei deixava a conversa em negrito para mim |
 
 Desktop: 0.0.6 (#38 + #40 + #41), 0.0.7 (+ #42), 0.0.8 (tudo até #50),
 0.0.10 (até #64), 0.0.11 (até #71, primeira com a tela nativa), 0.0.12 (até #73).
@@ -1141,6 +1246,16 @@ de mensagem, "é nosso?") tem que aceitar **os dois**: o host público, que vem 
 `WEB_URL` em `lib/config.ts` (derivado do `NEXT_PUBLIC_API_URL`, o único que
 todos os builds recebem), e o do próprio app.
 
+E o mesmo vale para **escrever** o link, não só para reconhecê-lo: o modal
+"Convidar amigos" montava a URL com `window.location.origin` e no desktop
+mandava `http://tauri.localhost/invite/<código>` para o amigo — endereço que só
+existe dentro do WebView2 de quem convidou. Quem gera é `urlDeConvite()`, no
+**mesmo módulo** que reconhece (`lib/links-de-convite.ts`): o link nasce na
+primeira origem de `origensDeConvite()`, que é a pública. Ainda **não**
+arrumado, mesma família: "Copiar link da mensagem" e "Copiar link do canal"
+(`MessageItem.tsx`, `ThreadPanel.tsx`, `ChannelSidebar.tsx`) continuam usando
+`window.location.origin`.
+
 **O foco da janela é o gate de "marcar como lido".** `lib/na-tela.ts` decide o
 que está na tela; `janelaTemFoco()` decide se o usuário está olhando. No desktop
 a janela `main` nasce `visible: false` (§5.2), então o primeiro
@@ -1149,6 +1264,19 @@ de foco precisa aceitar sinal do `focus`/`blur` do DOM **e** do `onFocusChanged`
 do Tauri (`lib/foco-da-janela.ts`): fotografá-lo uma vez e esperar só pelo
 ouvinte nativo — que entra por `import()` assíncrono — travava tudo em "sem
 foco" pelo resto da sessão.
+
+**Quem escreve leu.** Mandar uma mensagem marca o canal como lido para quem
+mandou — no **servidor** (`ReadStateService.marcarLidoAoEnviar`, chamado por
+`MessagesService.create` com o instante da mensagem, só andando para a frente)
+e no cliente (`aoChegarMensagem`/`bumpUnread` aplicam `conversaLida`/`canalLido`
+quando `propria`). Sem isso, mandar para uma conversa que **não está na tela** —
+é o que o modal de convite faz — deixava a conversa não lida para quem escreveu:
+`isUnread` compara `lastMessageAt` com `lastReadAt` e não sabe de quem é a
+mensagem, então o meu próprio convite aparecia em negrito, como se o
+destinatário tivesse escrito para mim. O `channel.read` que o envio gera vai
+para a sala do usuário, então o negrito também apaga na outra sessão da conta
+(§4.2). Nunca foi o autor da mensagem que estava errado: a API sempre gravou
+`authorId` = quem enviou (o gateway usa o usuário do socket).
 
 **Sons.** `lib/ringtone.ts` e `lib/notification-sound.ts` tocam arquivos de
 `apps/web/public/sons/` (origem: `docs/Reference/audio/`, fora do git). **Nada

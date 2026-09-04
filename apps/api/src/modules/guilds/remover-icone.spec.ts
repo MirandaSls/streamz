@@ -38,6 +38,8 @@ function servicoCom(mundo: Mundo): { s: GuildsService; gravado: Gravado } {
     name: "Servidor",
     ownerId: mundo.guild.ownerId,
     description: null,
+    bannerColor: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
     iconKey: mundo.guild.iconKey,
     iconUrl: mundo.guild.iconKey ? `http://api/api/guilds/${mundo.guild.id}/icon?v=x` : null,
   });

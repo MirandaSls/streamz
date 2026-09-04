@@ -6,6 +6,7 @@ import {
   ChevronRight,
   GripVertical,
   MoreHorizontal,
+  Pencil,
   Search,
   Trash2,
   User,
@@ -26,6 +27,7 @@ import {
 import { useAlteracoesNaoSalvas } from "@/components/ui/alteracoes";
 import { Section, Toggle } from "@/components/ui/controls";
 import { ESTILO_CAMPO, ESTILO_ROTULO } from "@/components/settings/campos";
+import { TituloDaPagina } from "@/components/settings/server/pagina";
 import SeletorDeCor from "@/components/settings/SeletorDeCor";
 import { MENU_WIDTH } from "@/components/ui/ContextMenu";
 import Tooltip from "@/components/ui/Tooltip";
@@ -58,7 +60,7 @@ const GRUPOS: { id: "geral" | "membros" | "mensagens" | "voz"; label: string }[]
  * chevrons antigos só apareciam no hover, então a única affordance de "isto se
  * reordena" era invisível até o mouse passar por cima.
  */
-export default function ServerSettingsRoles({ guildId }: { guildId: string }) {
+export default function CargosTab({ guildId }: { guildId: string }) {
   const roles = usePermissions((s) => s.roles);
   const members = useGuilds((s) => s.members);
   const [selecionado, setSelecionado] = useState<string | null>(null);
@@ -172,9 +174,10 @@ export default function ServerSettingsRoles({ guildId }: { guildId: string }) {
 
   return (
     <div>
-      <p className="mb-4 text-sm text-txt-normal">
-        Use cargos para agrupar os membros do servidor e dar permissões.
-      </p>
+      <TituloDaPagina
+        titulo="Cargos"
+        subtitulo="Use cargos para agrupar os membros do servidor e dar permissões."
+      />
 
       {/* O cartão "Permissões padrão" do Discord, medido no print: 74 de
           altura, borda de 1px, raio 4, ícone em círculo de 32, 16 de respiro
@@ -237,7 +240,7 @@ export default function ServerSettingsRoles({ guildId }: { guildId: string }) {
         <span className="w-6 shrink-0" aria-hidden="true" />
         <span className="min-w-0 flex-1">Cargos — {editaveis.length}</span>
         <span className="w-[92px] shrink-0 text-right">Membros</span>
-        <span className="w-10 shrink-0" aria-hidden="true" />
+        <span className="w-20 shrink-0" aria-hidden="true" />
       </div>
 
       <div role="list">
@@ -286,11 +289,25 @@ export default function ServerSettingsRoles({ guildId }: { guildId: string }) {
               {quantosTem(r)}
               <User size={16} aria-hidden="true" className="text-txt-muted" />
             </span>
+            {/* O lápis do print, sempre visível: no Discord ele é a ação
+                principal da linha e não espera o hover — o "…" ao lado é que
+                guarda o resto. */}
+            <button
+              type="button"
+              onClick={() => setSelecionado(r.id)}
+              aria-label={`Editar o cargo ${r.name}`}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong hover:text-txt-primary"
+            >
+              <Pencil size={16} />
+            </button>
             <button
               type="button"
               onClick={(e) => abrirMenu(e, r)}
               aria-label={`Ações do cargo ${r.name}`}
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-txt-muted opacity-0 transition hover:bg-border-strong hover:text-txt-primary focus-visible:opacity-100 group-hover:opacity-100"
+              // sempre visível, como no print: o lápis e o "…" são o par de
+              // ações da linha, e um que some no hover parecia bug ao lado do
+              // outro que não some
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong hover:text-txt-primary"
             >
               <MoreHorizontal size={16} />
             </button>

@@ -514,7 +514,7 @@ function onMessageArrived(message: Message, currentUserId?: string) {
   if (message.guildId) {
     const channels = useChannels.getState();
     if (channels.guildId === message.guildId) {
-      channels.bumpUnread(message.channelId, message.createdAt, mention);
+      channels.bumpUnread(message.channelId, message.createdAt, mention, mine);
       if (naTela) void channels.markRead(message.channelId);
       useGuilds.getState().syncFromChannels(message.guildId);
     } else if (!mine) {

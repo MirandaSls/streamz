@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, Hash } from "@/components/ui/icones";
+import { Check, Hash, Search } from "@/components/ui/icones";
 import {
   INVITE_EXPIRY_OPTIONS,
   INVITE_USES_OPTIONS,
@@ -14,18 +14,12 @@ import Dialog from "@/components/modals/Dialog";
 import { Select, ToggleLinha } from "@/components/ui/controls";
 import Avatar from "@/components/ui/Avatar";
 import { api } from "@/lib/api";
+import { urlDeConvite } from "@/lib/links-de-convite";
 import { useChannels } from "@/stores/channels";
 import { useFriends } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
-import { resolveStatus, usePresence } from "@/stores/presence";
 import { emit, errorMessage } from "@/stores/socket-adapter";
 import { ui, useUI } from "@/stores/ui";
-
-/** URL pública do convite — é o que se cola em qualquer lugar. */
-export function inviteUrl(code: string): string {
-  const base = typeof window !== "undefined" ? window.location.origin : "";
-  return `${base}/invite/${code}`;
-}
 
 /** "7 dias", "3 horas", "12 minutos" — o quanto ainda falta para expirar. */
 function faltamAte(iso: string, agora = Date.now()): string {
@@ -45,6 +39,20 @@ function faltamAte(iso: string, agora = Date.now()): string {
  *
  * As opções abrem numa segunda caixa por cima desta, e não inline: é o que o
  * Discord faz, e agora que os modais empilham a de baixo continua no lugar.
+ *
+ * **Medidas** (print do Discord `docs/Reference/Captura de tela 2026-09-04
+ * 101009.png`, 1:1 conferido pelo avatar de 32 e pelo campo de 40): caixa de
+ * 480×800 com padding de 24 (16 embaixo); subtítulo de 16 em linha de 20 com o
+ * `#` do canal; busca de 40 com raio 8, lupa de 16 a 12 da borda e o texto a 12
+ * da lupa; lista de 10 linhas e meia rolando com a barra a 4 da borda da
+ * caixa; linha de 48 com avatar de 32, 10 até o nome (16/600) e o usuário
+ * embaixo (12), botão de 32 com raio 8 e ~78 de largura, alinhado à direita do
+ * conteúdo; divisória de 1px **de ponta a ponta**; rótulo de 16/600 a 24 dela;
+ * campo do link de 40 com o botão embutido a 4 das bordas (raio 4); rodapé
+ * de 12 a 16 do campo. Diferenças anotadas no PR: o botão da linha usa o cinza
+ * do `SecondaryButton` da casa (`border-strong`), o "Copiar" segue no `accent`
+ * do Streamz (o do Discord é o blurple da marca dele) e o subtítulo fica em
+ * `txt-muted`, como a descrição dos outros modais.
  */
 export default function InviteModal({
   guildId,
@@ -57,7 +65,6 @@ export default function InviteModal({
   const guild = useGuilds((s) => s.guilds.find((g) => g.id === guildId) ?? null);
   const friends = useFriends((s) => s.friends);
   const loadFriends = useFriends((s) => s.load);
-  const statuses = usePresence((s) => s.statuses);
   const channels = useChannels((s) => s.channels);
 
   const [invite, setInvite] = useState<InviteInfo | null>(null);
@@ -97,7 +104,8 @@ export default function InviteModal({
     };
   }, [guildId, initialCode]);
 
-  const url = useMemo(() => (code ? inviteUrl(code) : ""), [code]);
+  // sempre o endereço público (`WEB_URL`), nunca o `tauri.localhost` do desktop
+  const url = useMemo(() => (code ? urlDeConvite(code) : ""), [code]);
 
   async function copiar() {
     if (!url) return;
@@ -156,25 +164,37 @@ export default function InviteModal({
 
   return (
     <>
-      <Dialog title={`Convidar amigos para ${guild?.name ?? "o servidor"}`} onClose={closeModal}>
+      <Dialog
+        title={`Convidar amigos para ${guild?.name ?? "o servidor"}`}
+        onClose={closeModal}
+        semPadding
+        bodyClassName="flex flex-col pt-1"
+      >
+        {/* o subtítulo do Discord diz para onde a pessoa cai, não só o canal */}
         {destino && (
-          <p className="mb-3 flex items-center gap-1 text-sm text-txt-muted">
+          <p className="flex items-center gap-1 px-6 text-base leading-5 text-txt-muted">
+            <span className="shrink-0">Os destinatários chegarão em</span>
             <Hash size={16} aria-hidden="true" className="shrink-0" />
-            {destino.name}
+            <span className="truncate">{destino.name}</span>
           </p>
         )}
 
-        <input
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          aria-label="Buscar amigo"
-          placeholder="Buscar amigos"
-          className="mb-3 h-10 w-full rounded-[3px] bg-rail px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
-        />
+        <div className="mx-6 mt-6 flex h-10 items-center gap-3 rounded-lg bg-rail px-3">
+          <Search size={16} aria-hidden="true" className="shrink-0 text-txt-muted" />
+          <input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            aria-label="Buscar amigo"
+            placeholder="Buscar amigos"
+            className="min-w-0 flex-1 bg-transparent text-txt-normal outline-none placeholder:text-txt-muted"
+          />
+        </div>
 
-        <div role="list" className="max-h-64 overflow-y-auto">
+        {/* a barra de rolagem fica a 4 da borda da caixa (por isso o `mr-1`) e
+            as linhas param 12 antes dela */}
+        <div role="list" className="ml-6 mr-1 mt-3 max-h-[31.5rem] overflow-y-auto pr-3">
           {lista.length === 0 ? (
-            <p className="px-2 py-3 text-sm text-txt-muted">
+            <p className="py-3 text-sm text-txt-muted">
               {friends.length === 0
                 ? "Você ainda não tem amigos aqui. Copie o link abaixo e mande do jeito que preferir."
                 : "Nenhum amigo com esse nome."}
@@ -186,25 +206,26 @@ export default function InviteModal({
                 <div
                   key={amigo.id}
                   role="listitem"
-                  className="flex h-[42px] items-center gap-3 rounded px-2 hover:bg-hov"
+                  className="flex h-12 items-center gap-2.5 rounded-lg"
                 >
-                  <Avatar
-                    user={amigo}
-                    size="md"
-                    status={resolveStatus(statuses, amigo)}
-                    surface="border-chat"
-                  />
-                  <span className="min-w-0 flex-1 truncate text-sm text-txt-normal">
-                    {displayNameOf(amigo)}
+                  {/* sem bolinha de status: o Discord não a mostra nesta lista */}
+                  <Avatar user={amigo} size="md" surface="border-chat" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-base font-semibold leading-5 text-txt-primary">
+                      {displayNameOf(amigo)}
+                    </span>
+                    <span className="block truncate text-xs leading-4 text-txt-muted">
+                      {amigo.username}
+                    </span>
                   </span>
                   <button
                     type="button"
                     disabled={convidado || !url}
                     onClick={() => void convidar(amigo)}
-                    className={`flex h-8 w-[92px] shrink-0 items-center justify-center gap-1 rounded-[3px] text-sm font-medium transition ${
+                    className={`flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg px-3 text-sm font-medium transition ${
                       convidado
                         ? "cursor-default border border-border-strong text-txt-muted"
-                        : "bg-accent text-accent-ink hover:bg-accent-hover disabled:opacity-50"
+                        : "bg-border-strong text-txt-normal hover:bg-border-strong-hover disabled:opacity-50"
                     }`}
                   >
                     {convidado && <Check size={14} aria-hidden="true" />}
@@ -216,40 +237,45 @@ export default function InviteModal({
           )}
         </div>
 
-        <p className="mb-2 mt-5 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
-          Ou mande um link de convite para um amigo
-        </p>
-        {/* input + botão num container só: no Discord os dois são uma peça */}
-        <div className="flex h-10 items-center overflow-hidden rounded-[3px] bg-rail pl-2.5">
-          <input
-            value={url || "gerando…"}
-            readOnly
-            aria-label="Link do convite"
-            onFocus={(e) => e.currentTarget.select()}
-            className="min-w-0 flex-1 bg-transparent text-sm text-txt-normal outline-none"
-          />
-          <button
-            type="button"
-            disabled={!url}
-            onClick={() => void copiar()}
-            className="mr-1 flex h-8 shrink-0 items-center gap-1.5 rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
-          >
-            {copied && <Check size={16} aria-hidden="true" />}
-            {copied ? "Copiado" : "Copiar"}
-          </button>
+        {/* a divisória do Discord vai de ponta a ponta da caixa: por isso a
+            borda mora no bloco de baixo, que não tem o padding lateral */}
+        <div className="border-t border-border px-6 pb-4 pt-6">
+          <p className="text-base font-semibold leading-5 text-txt-primary">
+            Ou, envie um convite do servidor a um amigo
+          </p>
+          {/* input + botão num container só: no Discord os dois são uma peça */}
+          <div className="mt-2 flex h-10 items-center overflow-hidden rounded-lg bg-rail pl-3 pr-1">
+            <input
+              value={url || "gerando…"}
+              readOnly
+              aria-label="Link do convite"
+              onFocus={(e) => e.currentTarget.select()}
+              className="min-w-0 flex-1 bg-transparent text-txt-normal outline-none"
+            />
+            <button
+              type="button"
+              disabled={!url}
+              onClick={() => void copiar()}
+              className="flex h-8 shrink-0 items-center gap-1.5 rounded bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
+            >
+              {copied && <Check size={16} aria-hidden="true" />}
+              {copied ? "Copiado" : "Copiar"}
+            </button>
+          </div>
+          <p aria-live="polite" className="mt-4 text-xs leading-4 text-txt-muted">
+            {invite?.expiresAt
+              ? `Seu link de convite expira em ${faltamAte(invite.expiresAt)}. `
+              : "Seu link de convite não expira. "}
+            <button
+              type="button"
+              onClick={() => setEditando(true)}
+              className="font-medium text-txt-link hover:underline"
+            >
+              Editar link de convite
+            </button>
+            .
+          </p>
         </div>
-        <p aria-live="polite" className="mt-2 text-xs text-txt-muted">
-          {invite?.expiresAt
-            ? `Seu link expira em ${faltamAte(invite.expiresAt)}. `
-            : "Seu link não expira. "}
-          <button
-            type="button"
-            onClick={() => setEditando(true)}
-            className="font-medium text-txt-link hover:underline"
-          >
-            Editar link de convite
-          </button>
-        </p>
       </Dialog>
 
       {editando && (

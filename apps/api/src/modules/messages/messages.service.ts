@@ -11,6 +11,8 @@ import { GuildsService } from "../guilds/guilds.service";
 import { OnboardingService } from "../onboarding/onboarding.service";
 import { tallyPoll } from "../polls/poll-core";
 import { StorageService } from "../storage/storage.service";
+import { ReadStateService } from "../read-state/read-state.service";
+import { RealtimeService } from "../realtime/realtime.service";
 import type {
   Attachment,
   Message as MessageDTO,
@@ -20,11 +22,13 @@ import type {
   ReactionGroup,
   SearchFilters,
   ThreadSummary,
+  ChannelReadEvent,
 } from "@streamz/shared";
 import {
   MAX_ATTACHMENTS_PER_MESSAGE,
   MESSAGE_AROUND_RADIUS,
   Permission,
+  WS_EVENTS,
   hasPermission,
   isEmptySearch,
   parseCustomEmoji,
@@ -82,6 +86,9 @@ export class MessagesService {
     // h-moderacao: aceite de regras recusa a escrita antes de gravar (o castigo
     // é checado pelo GuildsService, junto do resto da autorização)
     private readonly onboarding: OnboardingService,
+    // escrever é ler: ver `marcarLidoNoEnvio`
+    private readonly readState: ReadStateService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   async create(
@@ -153,6 +160,9 @@ export class MessagesService {
       include: MESSAGE_INCLUDE,
     });
 
+    // escrever num canal é tê-lo lido até aqui (ver `marcarLidoNoEnvio`)
+    await this.marcarLidoNoEnvio(authorId, channelId, msg.createdAt, access.channel.guildId);
+
     // vincula só anexos do próprio autor e ainda soltos (evita forjar/roubar)
     const ids = (attachmentIds ?? []).slice(0, MAX_ATTACHMENTS_PER_MESSAGE);
     if (ids.length > 0) {
@@ -163,6 +173,38 @@ export class MessagesService {
       return this.getDTO(msg.id); // recarrega com os anexos vinculados
     }
     return this.toDTO(msg);
+  }
+
+  /**
+   * A leitura que o envio implica, e o `channel.read` que ela gera.
+   *
+   * Quem escreve leu o que estava ali: é o que o Discord faz, e é o que o
+   * cliente já fazia sozinho **quando o canal estava na tela**. Fora da tela
+   * ninguém marcava nada — e o convite mandado pelo modal "Convidar amigos"
+   * abria a conversa com a minha própria mensagem em negrito, contada como se
+   * o destinatário tivesse escrito para mim.
+   *
+   * O evento vai para a sala do usuário (todas as sessões da conta, §4.2), como
+   * o `POST /channels/:id/read`: mandar do site tem que apagar o negrito no
+   * desktop sem F5. Uma falha aqui não pode derrubar o envio — a mensagem já
+   * está gravada e o pior caso é um negrito a mais até o próximo `markRead`.
+   */
+  private async marcarLidoNoEnvio(
+    authorId: string,
+    channelId: string,
+    at: Date,
+    guildId: string | null,
+  ): Promise<void> {
+    try {
+      const lido = await this.readState.marcarLidoAoEnviar(authorId, channelId, at);
+      this.realtime.emitToUser(authorId, WS_EVENTS.CHANNEL_READ, {
+        channelIds: [channelId],
+        lastReadAt: lido.toISOString(),
+        guildId,
+      } satisfies ChannelReadEvent);
+    } catch {
+      // a mensagem já existe; o badge se resolve no próximo `markRead`
+    }
   }
 
   /**

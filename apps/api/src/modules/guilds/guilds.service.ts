@@ -20,6 +20,7 @@ import {
   computePermissions,
   hasPermission,
   highestPosition,
+  isGuildBannerColor,
   overridesEfetivos,
 } from "@streamz/shared";
 import type {
@@ -214,6 +215,9 @@ export class GuildsService {
       role: m.role,
       user: toPublicUser(m.user),
       roleIds: atribuicoes.filter((a) => a.userId === m.userId).map((a) => a.roleId),
+      // a tabela de membros ordena e mostra "Membro desde" por este campo
+      joinedAt: m.joinedAt.toISOString(),
+      timeoutUntil: m.timeoutUntil?.toISOString() ?? null,
     }));
   }
 
@@ -673,11 +677,11 @@ export class GuildsService {
 
   // ── ciclo de vida do servidor ──────────────────────────────
 
-  /** Edita nome e descrição (MANAGE_GUILD). */
+  /** Edita nome, descrição e cor da faixa (MANAGE_GUILD). */
   async update(
     actorId: string,
     guildId: string,
-    patch: { name?: string; description?: string | null },
+    patch: { name?: string; description?: string | null; bannerColor?: string | null },
   ): Promise<Guild> {
     await this.assertCanModerate(actorId, guildId, Permission.MANAGE_GUILD);
     const name = patch.name?.trim();
@@ -687,9 +691,22 @@ export class GuildsService {
     if (description && description.length > MAX_GUILD_DESCRIPTION) {
       throw new BadRequestException(`Descrição acima de ${MAX_GUILD_DESCRIPTION} caracteres`);
     }
+    // string vazia = apagar a faixa; qualquer outra coisa tem que ser #rrggbb,
+    // porque o valor vai direto para `style` no cliente
+    const bannerColor =
+      patch.bannerColor === undefined
+        ? undefined
+        : ((patch.bannerColor ?? "").trim().toLowerCase() || null);
+    if (bannerColor && !isGuildBannerColor(bannerColor)) {
+      throw new BadRequestException("Cor da faixa inválida (use #rrggbb)");
+    }
     const guild = await this.prisma.guild.update({
       where: { id: guildId },
-      data: { ...(name ? { name } : {}), ...(description !== undefined ? { description } : {}) },
+      data: {
+        ...(name ? { name } : {}),
+        ...(description !== undefined ? { description } : {}),
+        ...(bannerColor !== undefined ? { bannerColor } : {}),
+      },
     });
     const dto = toGuildDTO(guild);
     this.realtime.emitToGuild(guildId, WS_EVENTS.GUILD_UPDATED, dto);

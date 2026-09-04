@@ -78,3 +78,21 @@ export function origensDeConvite(): string[] {
 export function codigoDeConviteDaUrl(bruto: string): string | null {
   return codigoDeConvite(bruto, origensDeConvite());
 }
+
+/**
+ * O link **público** deste convite — o que o modal mostra, copia e manda na
+ * conversa.
+ *
+ * Gerar e reconhecer são o mesmo assunto, e por isso moram no mesmo módulo: o
+ * link nasce na **primeira** origem de `origensDeConvite()`, que é a pública
+ * configurada (`WEB_URL`), e só cai na origem da janela quando não há
+ * configuração nenhuma. Era exatamente o que faltava: o modal montava a URL
+ * com `window.location.origin` e, no desktop, entregava
+ * `http://tauri.localhost/invite/xxxx` — um endereço que só existe dentro do
+ * WebView2 da máquina de quem convidou. O #104 ensinou o cliente a
+ * **reconhecer** o link público; aqui ele aprende a **escrever**.
+ */
+export function urlDeConvite(codigo: string, origens = origensDeConvite()): string {
+  const base = origens.find(Boolean) ?? "";
+  return `${base}/invite/${codigo}`;
+}

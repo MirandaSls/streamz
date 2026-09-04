@@ -13,6 +13,7 @@ import {
   type Sticker,
 } from "@streamz/shared";
 import Dialog, { SecondaryButton } from "@/components/modals/Dialog";
+import { AJUDA_NOME, sugerirNome } from "@/components/settings/server/emojis-nome";
 import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
@@ -90,9 +91,6 @@ function AbaBotao({
     </button>
   );
 }
-
-/** Regra de nome, repetida ao usuário antes de o servidor recusar. */
-const AJUDA_NOME = "Só letras minúsculas, números e _ (2 a 32 caracteres).";
 
 function ListaEmojis({ guildId, emojis }: { guildId: string; emojis: CustomEmoji[] }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -340,15 +338,5 @@ function IconeAcao({
       </button>
     </Tooltip>
   );
-}
-
-/** Nome sugerido a partir do arquivo: "Festa Final.png" → "festa_final". */
-function sugerirNome(filename: string): string {
-  return filename
-    .replace(/\.[^.]+$/, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9_]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 32);
 }
 

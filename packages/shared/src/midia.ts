@@ -87,6 +87,11 @@ export interface GuildMemberView {
   roleIds: string[];
   /** h-moderacao: fim do castigo (ISO) — null/passado = sem castigo. */
   timeoutUntil?: string | null;
+  /**
+   * Quando entrou no servidor (ISO). É a coluna "Membro desde" da tabela de
+   * membros e o critério de ordenação padrão dela.
+   */
+  joinedAt: string;
 }
 
 export interface InviteInfo {

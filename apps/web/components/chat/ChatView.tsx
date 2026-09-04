@@ -20,6 +20,7 @@ import { useAuth } from "@/stores/auth";
 import { useActiveChannel } from "@/stores/channels";
 import { useGuilds } from "@/stores/guilds";
 import {
+  useCanManageActiveChannel,
   useCanModerateActiveChannel,
   useCanPostActiveChannel,
 } from "@/stores/permissions";
@@ -72,6 +73,11 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
   const podePostar = useCanPostActiveChannel();
   // apagar mensagem dos outros é MANAGE_MESSAGES no canal, não mais o papel
   const canModerate = useCanModerateActiveChannel();
+  // "Editar canal" nas boas-vindas abre as configurações do canal: a permissão
+  // dele é MANAGE_CHANNELS, a mesma da engrenagem da barra lateral. Ficava atrás
+  // de MANAGE_MESSAGES, que é a de apagar mensagem dos outros — quem modera a
+  // conversa não necessariamente edita o canal.
+  const podeEditarCanal = useCanManageActiveChannel();
   const slowmode = useSlowmode(channel?.id ?? null);
   const [liberado, setLiberado] = useState<string[]>([]);
   const slice = useActiveSlice();
@@ -159,7 +165,7 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
   return (
     <Raiz className="flex min-h-0 min-w-0 flex-1 flex-col bg-chat">
       {/* Incorporado ao palco de uma chamada, o cabeçalho é o do
-          `PainelDeChatDaCall` (balão + nome + X, 44px): na print do Discord a
+          `PainelDeChatDaCall` (balão + nome + X, 49px): na print do Discord a
           coluna da conversa da call **não** tem busca, alfinete nem lista de
           membros. Dois cabeçalhos empilhados comeriam 93px de timeline numa
           coluna de 450. */}
@@ -236,7 +242,7 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
           // administra não vê fileira nenhuma (a regra de permissão de antes).
           // Descrição → topo do botão: 30px medidos; 14px de margem + a folga
           // do parágrafo.
-          actions: canModerate ? (
+          actions: podeEditarCanal ? (
             <div className="mt-3.5 flex flex-wrap gap-2">
               <BotaoBoasVindas
                 icon={<Pencil size={16} />}

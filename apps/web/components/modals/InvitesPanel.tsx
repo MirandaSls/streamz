@@ -6,6 +6,7 @@ import { displayNameOf, type InviteDetail } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";
+import { BOTAO_ACENTO } from "@/components/settings/server/pagina";
 import { horaCompleta } from "@/lib/format";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
@@ -71,8 +72,10 @@ export default function InvitesPanel({ guildId }: { guildId: string }) {
 
   return (
     <div>
-      {/* Rótulo e botão na mesma linha, como no print: o botão tem 38 de
-          altura e raio 8. "Pausar convites" é produto e não existe aqui. */}
+      {/* Rótulo e botão na mesma linha, como no print `2026-09-04 100706`: o
+          botão mede 169×40 (raio 8), o rótulo é caixa-alta de 12. "Pausar
+          convites", que no print fica à esquerda dele, não existe aqui — a API
+          não sabe suspender convite. */}
       <div className="mb-4 flex items-center justify-between gap-4">
         <h3 className="text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
           Links de convite ativos
@@ -81,7 +84,7 @@ export default function InvitesPanel({ guildId }: { guildId: string }) {
           type="button"
           disabled={busy}
           onClick={() => void create()}
-          className="h-[38px] shrink-0 rounded-lg bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
+          className={`h-10 ${BOTAO_ACENTO}`}
         >
           {busy ? "Criando…" : "Criar link de convite"}
         </button>

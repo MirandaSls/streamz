@@ -184,6 +184,10 @@ model Guild {
   bans     Ban[]
   // ── c-cargos ──
   description String?
+  // Cor da faixa do perfil do servidor (`#rrggbb`), o topo do degradê.
+  // null = sem faixa. É dado do servidor, escolhido em Configurações →
+  // Perfil do servidor; a tabela de degradês vive em `GUILD_BANNER_COLORS`.
+  bannerColor String?
   // chave do objeto do ícone no storage; a URL é derivada na hora
   iconKey     String?
   roles       Role[]

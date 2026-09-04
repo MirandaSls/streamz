@@ -78,7 +78,7 @@ interface ChannelsState {
    */
   aplicarLeitura: (channelIds: readonly string[], lastReadAt: string) => void;
   /** Mensagem nova num canal deste servidor. */
-  bumpUnread: (channelId: string, at: string, mention: boolean) => void;
+  bumpUnread: (channelId: string, at: string, mention: boolean, propria: boolean) => void;
   handleCreated: (channel: Channel) => void;
   handleUpdated: (channel: Channel) => void;
   handleDeleted: (channelId: string) => void;
@@ -295,12 +295,13 @@ export const useChannels = create<ChannelsState>((set, get) => {
         return channels === s.channels ? s : { channels };
       }),
 
-    bumpUnread: (channelId, at, mention) =>
-      patchChannel(channelId, (c) => ({
-        ...c,
-        lastMessageAt: at,
-        mentionCount: c.mentionCount + (mention ? 1 : 0),
-      })),
+    // a minha mensagem também lê o canal: ver `aoChegarMensagem` (nao-lidas.ts)
+    bumpUnread: (channelId, at, mention, propria) =>
+      patchChannel(channelId, (c) =>
+        propria
+          ? canalLido({ ...c, lastMessageAt: at }, at)
+          : { ...c, lastMessageAt: at, mentionCount: c.mentionCount + (mention ? 1 : 0) },
+      ),
 
     handleCreated: (channel) => {
       if (channel.guildId !== get().guildId) return;
@@ -330,6 +331,9 @@ export const useChannels = create<ChannelsState>((set, get) => {
         channels: restantes,
         voiceChannelId: s.voiceChannelId === channelId ? null : s.voiceChannelId,
       });
+      // o balão da conversa é lembrado por canal (ver `vista-do-canal-de-voz`):
+      // canal que não existe mais não tem preferência a guardar
+      ui.esquecerChatDaCall(channelId);
       if (s.activeChannelId === channelId) {
         leaveChannel(channelId);
         useMessages.getState().closeChannel();

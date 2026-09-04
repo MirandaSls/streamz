@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { isUnread } from "@streamz/shared";
 import { aoChegarMensagem, badgeDaCaixa, rotuloDoContador, somarNaoLidas } from "./nao-lidas";
 
 describe("rotuloDoContador", () => {
@@ -25,7 +26,12 @@ describe("somarNaoLidas", () => {
 });
 
 describe("aoChegarMensagem", () => {
-  const dm = { lastMessageAt: "2026-09-01T00:00:00.000Z", mentionCount: 0, unreadCount: 2 };
+  const dm = {
+    lastMessageAt: "2026-09-01T00:00:00.000Z",
+    lastReadAt: "2026-09-01T00:00:00.000Z",
+    mentionCount: 0,
+    unreadCount: 2,
+  };
 
   it("mensagem de outro conta como não lida", () => {
     const depois = aoChegarMensagem(dm, "2026-09-02T00:00:00.000Z", { mention: false, propria: false });
@@ -40,11 +46,34 @@ describe("aoChegarMensagem", () => {
     expect(depois.mentionCount).toBe(1);
   });
 
-  it("a minha mensagem só move a conversa: não é não lida para mim", () => {
+  it("a minha mensagem move a conversa e a marca como lida (quem escreve leu)", () => {
     const depois = aoChegarMensagem(dm, "2026-09-02T00:00:00.000Z", { mention: false, propria: true });
-    expect(depois.unreadCount).toBe(2);
-    expect(depois.mentionCount).toBe(0);
     expect(depois.lastMessageAt).toBe("2026-09-02T00:00:00.000Z");
+    // o convite que EU mandei não pode voltar como novidade do destinatário:
+    // `isUnread` compara os dois instantes e não sabe de quem é a mensagem
+    expect(depois.lastReadAt).toBe("2026-09-02T00:00:00.000Z");
+    expect(isUnread(depois)).toBe(false);
+    expect(depois.unreadCount).toBe(0);
+    expect(depois.mentionCount).toBe(0);
+  });
+
+  it("a leitura do envio não anda para trás", () => {
+    const jaLido = { ...dm, lastReadAt: "2026-09-03T00:00:00.000Z" };
+    const depois = aoChegarMensagem(jaLido, "2026-09-02T00:00:00.000Z", {
+      mention: false,
+      propria: true,
+    });
+    expect(depois.lastReadAt).toBe("2026-09-03T00:00:00.000Z");
+    expect(depois.unreadCount).toBe(0);
+  });
+
+  it("a mensagem de outro continua deixando a conversa não lida", () => {
+    const depois = aoChegarMensagem(dm, "2026-09-02T00:00:00.000Z", {
+      mention: false,
+      propria: false,
+    });
+    expect(isUnread(depois)).toBe(true);
+    expect(depois.lastReadAt).toBe("2026-09-01T00:00:00.000Z");
   });
 });
 
