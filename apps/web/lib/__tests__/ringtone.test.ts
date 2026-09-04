@@ -110,8 +110,8 @@ describe("um dono só do volume", () => {
 
   it("o volume de saída multiplica o fator", () => {
     settings.outputVolume = 50;
-    expect(volumeDoSom("mensagem")).toBeCloseTo(0.2);
-    expect(volumeDoSom("chamada")).toBeCloseTo(0.35);
+    expect(volumeDoSom("mensagem")).toBeCloseTo(0.075);
+    expect(volumeDoSom("chamada")).toBeCloseTo(0.175);
     settings.outputVolume = 0;
     expect(volumeDoSom("chamada")).toBe(0);
   });
