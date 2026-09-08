@@ -34,7 +34,11 @@ SEGUNDOS="${2:-180}"
 
 REDE="streamz-voz-$SUFIXO"
 SUBREDE="172.31.77.0/24"
+# IPs fixos porque os dois precisam anunciar o próprio endereço: o `READY.ip`
+# da ponte e o `--node-ip` do LiveKit (sem ele o ICE sai procurando IP externo
+# e a mídia não fecha dentro de uma rede de docker).
 IP_DA_PONTE="172.31.77.10"
+IP_DO_LIVEKIT="172.31.77.20"
 PG="streamz-voz-$SUFIXO-pg"
 API="streamz-voz-$SUFIXO-api"
 LK="streamz-voz-$SUFIXO-livekit"
@@ -90,10 +94,12 @@ docker run -d --name "$PG" --network "$REDE" \
   postgres:16-alpine >/dev/null
 esperar "o Postgres" docker exec "$PG" pg_isready -U postgres
 
-# LiveKit de brinquedo. `--dev` não serve: precisamos da chave que a API assina.
-docker run -d --name "$LK" --network "$REDE" \
+# LiveKit de brinquedo. `--dev` **não serve**: ele só baixa o nível de log e
+# não define chave nenhuma (medido pelo lote A2). E sem `--node-ip` o ICE sai
+# procurando o IP externo do servidor, que não é por onde esta rede fala.
+docker run -d --name "$LK" --network "$REDE" --ip "$IP_DO_LIVEKIT" --network-alias livekit \
   -e "LIVEKIT_KEYS=$LIVEKIT_API_KEY: $LIVEKIT_API_SECRET" \
-  livekit/livekit-server:latest --bind 0.0.0.0 >/dev/null
+  livekit/livekit-server:latest --bind 0.0.0.0 --node-ip "$IP_DO_LIVEKIT" >/dev/null
 esperar "o LiveKit" docker exec "$LK" wget -q -O- http://localhost:7880
 
 # O mp3 e a ponte, servidos por nginx. `voz.teste` é um alias de rede: é assim

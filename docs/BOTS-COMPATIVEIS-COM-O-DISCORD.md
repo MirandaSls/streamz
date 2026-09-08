@@ -870,11 +870,14 @@ A pergunta é "em que SDK dá para publicar Opus no LiveKit **sem transcodificar
 1. É o único caminho onde o quadro Opus que saiu do Lavalink chega ao navegador
    **bit a bit igual** — zero perda de qualidade, zero CPU de codec.
 2. Não precisamos de libopus, nem de libwebrtc, nem de clang 21: binário
-   estático, imagem `FROM scratch` de ~20 MB, build de segundos.
-   > **Correção da F2:** a imagem de build é **`golang:1.26`**, não a `1.23`
-   > que este documento dizia. O `server-sdk-go/v2@v2.18.1` e o
+   estático, imagem pequena, build de segundos.
+   > **Duas correções da F2.** A imagem de build é **`golang:1.26`**, não a
+   > `1.23` que este documento dizia: o `server-sdk-go/v2@v2.18.1` e o
    > `x/crypto@v0.57.0` exigem `go >= 1.26`, e com a 1.23 o `go get` recusa
-   > antes de compilar qualquer coisa.
+   > antes de compilar qualquer coisa. E a imagem final é **alpine, não
+   > `scratch`** (43,6 MB, não ~20 MB): a ponte abre **WSS** contra o LiveKit e
+   > sem `ca-certificates` isso morre com `x509: certificate signed by unknown
+   > authority`; o `HEALTHCHECK` também precisa de algum binário que fale HTTP.
 3. A criptografia é biblioteca padrão: `crypto/aes` + `cipher.NewGCM` e
    `golang.org/x/crypto/chacha20poly1305.NewX`.
 4. É um contêiner isolado: não entra no `pnpm`, não entra no typecheck, não
@@ -1133,6 +1136,11 @@ Riscos concretos, na ordem de probabilidade:
    1 KB. Se alguma implementação truncar, a saída é o token virar um
    **ticket opaco de 32 bytes** e a ponte buscar os dados na API
    (`GET /api/interno/ponte-voz/ticket/:t`). Barato e à prova.
+   > **Medido na F2: 1029 bytes**, e isso já com um token de LiveKit de
+   > brinquedo (o de produção é maior). O `@discordjs/voice` engoliu sem
+   > reclamar. **Passa de 1 KB, então este risco continua de pé para o
+   > Lavalink** — e o ticket opaco fica como a primeira dívida da fase, a ser
+   > paga no dia em que alguém vir o token truncado.
 2. **Versão do voice gateway.** Alguma versão do koe/udpqueue conecta em `v=4`
    e manda heartbeat como int. Já previsto (aceitar as duas formas).
 3. **`endpoint` com porta.** Algumas libs cortam `:80`/`:443` do endpoint;
@@ -1568,7 +1576,9 @@ linguagem.
    certo.
 3. Um script Node com `@discordjs/voice` sozinho (sem bot) apontado para a ponte
    toca um `.ogg` → aparece um participante `bot:` no LiveKit
-   (`livekit-cli list-participants`).
+   (`lk room participants list <sala>` — o `livekit-cli list-participants` que
+   este § dizia **não existe** no `livekit/livekit-cli` v2.18.6, e o nome da
+   sala é **posicional**: `--room` responde "flag provided but not defined").
 4. **A prova de verdade:** Lavalink v4 + um bot de ~200 linhas, `/play <link do
    YouTube>`, e **o som sai no navegador de duas pessoas na mesma call**, sem
    picote por 3 minutos. Com link do Spotify (que o discord-player converte em
