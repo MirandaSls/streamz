@@ -98,7 +98,11 @@ export function BotaoBoasVindas({
     <button
       type="button"
       onClick={onClick}
-      className="flex h-8 items-center gap-1.5 rounded-lg bg-panel px-3 text-sm font-semibold text-txt-normal transition hover:bg-hov hover:text-txt-primary"
+      /* 44 literal no celular: `h-8` mede 31 (a raiz do app é 15,5px e todo
+         `rem` do Tailwind sai 3% menor — ver `components/mobile/pecas.tsx`), e
+         estes botões das boas-vindas ("Editar canal", "Bloquear", "Desfazer
+         amizade") são os primeiros alvos de quem abre uma conversa vazia. */
+      className="flex h-8 items-center gap-1.5 rounded-lg bg-panel px-3 text-sm font-semibold text-txt-normal transition hover:bg-hov hover:text-txt-primary celular:h-[44px] celular:px-4"
     >
       {icon && <span aria-hidden="true">{icon}</span>}
       {label}
@@ -358,7 +362,9 @@ export default function MessageList({
           type="button"
           onClick={jumpToLatest}
           aria-label="Ir para as mensagens mais recentes"
-          className="absolute bottom-4 right-6 grid h-10 w-10 place-items-center rounded-full bg-panel text-txt-normal shadow-high transition hover:bg-hov hover:text-txt-primary"
+          /* 39×39 com `h-10 w-10`; no celular vai a 44 literal, e sobe um pouco
+             para não encostar na cápsula do composer */
+          className="absolute bottom-4 right-6 grid h-10 w-10 place-items-center rounded-full bg-panel text-txt-normal shadow-high transition hover:bg-hov hover:text-txt-primary celular:bottom-5 celular:right-4 celular:h-[44px] celular:w-[44px]"
         >
           <ArrowDown size={20} aria-hidden="true" />
         </button>

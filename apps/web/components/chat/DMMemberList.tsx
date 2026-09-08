@@ -133,7 +133,7 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
                 type="button"
                 onClick={() => ui.openModal({ kind: "addGroupMembers", channelId: dm.id })}
                 aria-label="Adicionar pessoas ao grupo"
-                className="text-txt-muted transition hover:text-txt-primary"
+                className="text-txt-muted transition hover:text-txt-primary celular:-mr-2 celular:grid celular:h-[44px] celular:w-[44px] celular:place-items-center"
               >
                 <UserPlus size={16} />
               </button>
@@ -152,7 +152,10 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
                 key={user.id}
                 role="listitem"
                 onContextMenu={(e) => abrirMenu(e, user, e.currentTarget)}
-                className={`group mx-2 flex h-[42px] items-center gap-3 rounded px-2 hover:bg-hov ${
+                /* 60px no celular, como na lista de membros do servidor:
+                   `docs/Reference/mobile/MEDIDAS.md` §10 mede 59,9pt no
+                   Discord do telefone. */
+                className={`group mx-2 flex h-[42px] items-center gap-3 rounded px-2 hover:bg-hov celular:h-[60px] ${
                   status === "OFFLINE" ? "opacity-30 hover:opacity-100" : ""
                 }`}
               >
@@ -181,7 +184,9 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
                       type="button"
                       onClick={() => void removeMember(dm.id, user)}
                       aria-label={`Remover ${nome} do grupo`}
-                      className="hidden h-7 w-7 place-items-center rounded text-txt-muted hover:text-red group-focus-within:grid group-hover:grid"
+                      /* sempre à mostra no celular: sem hover e sem botão direito, "remover
+                         do grupo" não tinha caminho nenhum a partir daqui */
+                      className="hidden h-7 w-7 place-items-center rounded text-txt-muted hover:text-red group-focus-within:grid group-hover:grid celular:grid celular:h-[44px] celular:w-[44px]"
                     >
                       <UserMinus size={16} />
                     </button>

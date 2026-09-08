@@ -729,7 +729,12 @@ export default function MessageItem({
                     aria-label={`${rotuloDaReacao(r.emoji)}, ${r.count} ${r.count === 1 ? "reação" : "reações"}`}
                     onClick={() => reagir(r.emoji)}
                     style={{ height: alturaDoChipDeReacao(tamanhoEmoji) }}
-                    className={`flex items-center gap-1.5 rounded-lg border px-1.5 transition ${
+                    /* `min-h` (e não uma altura fixa) no celular: ele vence a
+                       altura em linha sem apagá-la, então quem aumentou o
+                       tamanho do emoji nas configurações continua com o chip
+                       maior — e quem está no padrão ganha os 44px de alvo que
+                       o dedo pede. */
+                    className={`flex items-center gap-1.5 rounded-lg border px-1.5 transition celular:min-h-[44px] celular:px-3 ${
                       mine
                         ? "border-accent bg-accent/20 text-txt-primary"
                         : "border-transparent bg-panel text-txt-normal hover:border-border-strong"
@@ -748,7 +753,12 @@ export default function MessageItem({
                 aria-label="Adicionar reação"
                 // mesma altura dos chips ao lado, inclusive quando o emoji cresce
                 style={{ height: alturaDoChipDeReacao(tamanhoEmoji) }}
-                className="grid min-w-[2.375rem] place-items-center rounded-lg border border-transparent bg-panel px-1.5 text-txt-muted opacity-0 transition hover:border-border-strong hover:text-txt-primary group-hover:opacity-100"
+                /* No celular ele é **opaco desde sempre**: era `opacity-0` até
+                   o hover, e no dedo isso quer dizer "não existe". O toque
+                   longo abre o menu com "Adicionar Reação", mas o "+" ao lado
+                   das reações é o gesto direto, e some-se dele custava um menu
+                   inteiro por reação. */
+                className="grid min-w-[2.375rem] place-items-center rounded-lg border border-transparent bg-panel px-1.5 text-txt-muted opacity-0 transition hover:border-border-strong hover:text-txt-primary group-hover:opacity-100 celular:min-h-[44px] celular:min-w-[44px] celular:opacity-100"
               >
                 <SmilePlus size={16} />
               </button>
@@ -760,7 +770,7 @@ export default function MessageItem({
           <button
             type="button"
             onClick={() => onOpenThread(message)}
-            className="mt-1 flex w-fit items-center gap-1.5 rounded-[4px] py-0.5 text-sm font-medium text-txt-link hover:underline"
+            className="mt-1 flex w-fit items-center gap-1.5 rounded-[4px] py-0.5 text-sm font-medium text-txt-link hover:underline celular:min-h-[44px] celular:py-2"
           >
             {message.thread && message.thread.participants.length > 0 && (
               <span className="flex -space-x-1.5" aria-hidden="true">
@@ -821,9 +831,15 @@ export default function MessageItem({
       */}
       {!unconfirmed && !editing && (
         <div
+          /* `celular:!hidden`: no celular esta barra não existe. Ela é de
+             `hover`, que o dedo não tem — mas `group-focus-within` a fazia
+             aparecer sozinha depois de qualquer toque que desse foco dentro da
+             mensagem, com sete botões de 27px empilhados sobre o texto (medido
+             em 390×844). As mesmas ações estão no menu de toque longo, que é
+             onde elas pertencem no telefone. */
           className={`absolute right-3.5 ${
             primeiro ? "top-0.5" : "-top-[25px]"
-          } hidden rounded-lg border border-border bg-chat p-0.5 shadow-high group-focus-within:flex group-hover:flex`}
+          } hidden rounded-lg border border-border bg-chat p-0.5 shadow-high group-focus-within:flex group-hover:flex celular:!hidden`}
         >
           {frequentes.slice(0, RAPIDAS_NA_BARRA).map((emoji) => (
             <ActionButton

@@ -106,6 +106,29 @@ export default {
         // menus, popovers e tooltips
         high: "0 8px 16px rgba(0,0,0,.4)",
       },
+      screens: {
+        /**
+         * `celular:` — a mesma pergunta do `hooks/useEhMobile`, só que em CSS.
+         *
+         * O leiaute de celular é ligado por JS (`CONSULTA_MOBILE`), mas há
+         * ajuste que não passa por componente do shell: alvo de toque numa
+         * lista, campo de 48px, área segura — e as telas de conta, que shell
+         * nenhum embrulha. Esses vão em classe, e a classe precisa perguntar
+         * **exatamente o mesmo** que o hook.
+         *
+         * Por isso não serve o `max-md:` do Tailwind: ele é só
+         * `(max-width: 767px)` e deixa o **telefone deitado** de fora — 844×390
+         * é celular para o hook (ponteiro grosso, 390 de altura) e desktop para
+         * o `max-md`, ou seja, girar o aparelho devolvia os alvos de 31px.
+         *
+         * Mantenha as duas em sincronia: se `CONSULTA_MOBILE` mudar, esta linha
+         * muda junto. `raw` porque não é um ponto de quebra de largura, e sim a
+         * consulta inteira — a vírgula ali é "ou".
+         */
+        celular: {
+          raw: "(max-width: 767px), (pointer: coarse) and (max-height: 599px)",
+        },
+      },
     },
   },
   plugins: [],

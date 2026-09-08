@@ -46,8 +46,11 @@ const MAX_CARAS = 3;
  * Os discos do canto do cartão: 30px, medidos no print. O véu é preto a 52%
  * sobre o cartão — o mesmo (17,17,19) sobre (34,35,39) que o print tem.
  */
+// 44px no celular: com 30 os dois discos ficavam abaixo do piso de toque, e
+// eles são o único caminho para "adicionar amigo" e para o menu de bloquear
+// dentro do painel deslizante do telefone.
 const CANTO =
-  "grid h-[30px] w-[30px] place-items-center rounded-full bg-black/[0.52] text-white transition hover:bg-black/70";
+  "grid h-[30px] w-[30px] place-items-center rounded-full bg-black/[0.52] text-white transition hover:bg-black/70 celular:h-[44px] celular:w-[44px]";
 
 export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
   const me = useAuth((s) => s.user);
@@ -272,7 +275,7 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
         <button
           type="button"
           onClick={() => ui.openModal({ kind: "userProfile", userId: user.id })}
-          className="mx-4 mb-4 h-10 shrink-0 rounded-lg bg-border-strong text-base font-medium text-txt-primary transition hover:bg-border-strong-hover"
+          className="mx-4 mb-4 h-10 shrink-0 rounded-lg bg-border-strong text-base font-medium text-txt-primary transition hover:bg-border-strong-hover celular:mb-[max(1rem,env(safe-area-inset-bottom))] celular:h-[48px]"
         >
           Ver Perfil Completo
         </button>

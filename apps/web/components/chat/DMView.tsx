@@ -382,12 +382,17 @@ export default function DMView({
           que depende da conversa, como no Discord: em grupo, quem está nela; em
           conversa 1:1, o perfil do contato — uma lista de um nome só não
           acrescentava nada ao cabeçalho.
+
+          **`!semCabecalho`**: no celular esta coluna não existe. Lá o mesmo
+          `DMMemberList`/`DMProfilePanel` é o painel deslizante da direita
+          (`components/mobile/telas-de-conversa`), aberto pelo botão do
+          cabeçalho de 48px — e o `membersOpen` do desktop continua valendo
+          para o desktop. Sem esta condição os dois montavam juntos: o cartão de
+          perfil de 320px entrava como coluna dentro de uma tela de 390 e
+          espremia a conversa inteira em 70px (medido em 390×844), com a
+          timeline e o composer ilegíveis. O padrão é `false`, então o desktop
+          renderiza exatamente como antes.
         */}
-        {/* `!semCabecalho`: no celular a quarta coluna não existe — a lista de
-            participantes e o cartão do contato são o painel deslizante do
-            cabeçalho (`components/mobile/telas-de-conversa.tsx`). Amarrar isso
-            ao `semCabecalho` em vez de a um booleano compartilhado é o que
-            garante que os dois nunca apareçam ao mesmo tempo. */}
         {membersOpen &&
           !semCabecalho &&
           (group || !other ? <DMMemberList dm={active} /> : <DMProfilePanel user={other} />)}
