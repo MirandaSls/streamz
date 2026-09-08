@@ -1,5 +1,12 @@
 # Cobertura do leiaute mobile — varredura de 2026-09-08
 
+> **Revisado depois de mesclar a base.** A `feat/layout-mobile` andou quatro
+> commits depois desta varredura e consertou três coisas que estavam anotadas
+> aqui como buraco: o toque longo passou a valer no app inteiro (§6.1), tocar
+> num canal de voz passou a abrir o palco, e o desligar da quarta coluna no
+> celular virou atribuição. As linhas afetadas foram reescritas e dizem o que
+> mudou; nada foi apagado sem registro.
+
 O app inteiro percorrido num **iPhone 14 emulado (390×844 @3×, `isMobile` +
 `hasTouch`)** contra a branch `feat/layout-mobile`, tela por tela. Cada linha
 diz o que está de pé, o que está pela metade e o que não existe no celular —
@@ -23,6 +30,17 @@ que nenhum número teria contado sozinho.
 | **parcial** | funciona, mas falta alguma coisa — está dito qual |
 | **não** | não existe no celular, ou está quebrada a ponto de não dar para usar |
 | **n/a** | não se aplica ao celular (é do desktop/Tauri) |
+
+**A variante `celular:`.** Os consertos deste PR não são JS: são classes com
+o prefixo `celular:`, uma tela ("screen") `raw` do `tailwind.config.ts` que
+repete **exatamente** a `CONSULTA_MOBILE` do `hooks/useEhMobile` —
+`(max-width: 767px), (pointer: coarse) and (max-height: 599px)`. Começaram como
+`max-md:`, e isso deixava o **telefone deitado** de fora: 844×390 é celular
+para o hook (ponteiro grosso, 390 de altura) e desktop para o `max-md`, ou seja,
+girar o aparelho devolvia os alvos de 31px e o cartão de login sem área segura.
+Conferido nos dois sentidos: em 390×844 e em 844×390 o campo de login mede 47px
+com fonte de 16, a busca da lista de conversas 43, as abas de Amigos 43, a
+linha de membro 60 e o chip de reação 44.
 
 **Sobre os 43px.** O shell do celular usa `h-11` para os botões de cabeçalho, e
 com a base de 15,5px do `html` isso dá **42,6px**, não 44. A varredura reporta
@@ -58,8 +76,8 @@ que tem a sua.
 
 | tela | arquivo | estado | o que falta |
 |---|---|---|---|
-| Servidores (rail + canais) | `components/mobile/telas-base.tsx` + `layout/GuildRail.tsx` + `layout/ChannelSidebar.tsx` | **parcial** | ver §6.1: os botões por linha de canal (convite, editar, abrir conversa) e a engrenagem da categoria são de `hover` e não têm caminho no toque; o menu de contexto do canal existe e funciona, mas nada o abre num telefone |
-| Mensagens (lista de conversas) | `layout/DMList.tsx` | parcial → **ok** | campo de busca de 31px e o "+" de nova conversa com 20×20 — os dois em 44 agora. Continua faltando: "fechar conversa" só aparece no hover (§6.1) |
+| Servidores (rail + canais) | `components/mobile/telas-base.tsx` + `layout/GuildRail.tsx` + `layout/ChannelSidebar.tsx` | parcial → **ok** | os botões por linha (convite, editar, abrir conversa) e a engrenagem da categoria continuam sendo de `hover`, mas **as mesmas ações estão no menu de toque longo**, que a base passou a ligar no shell inteiro (§6.1) — conferido: segurar a linha de `#geral` abre a folha com sete itens. A linha de canal fica em 35px, que é a medida do próprio Discord no telefone (`MEDIDAS.md` §5: 36pt) |
+| Mensagens (lista de conversas) | `layout/DMList.tsx` | parcial → **ok** | campo de busca de 31px e o "+" de nova conversa com 20×20 — os dois em 44 agora. O "X" de fechar conversa continua `opacity-0` até o hover, mas "Fechar conversa" está no menu de toque longo da linha (§6.1) |
 | Notificações (caixa de entrada) | `chat/InboxPopover.tsx` (`modoTela`) | parcial → **ok** | "Marcar tudo como lido" e a pílula de pedidos mediam 31px |
 | Você | `components/mobile/telas-base.tsx` | **ok** | — (os dois botões de microfone/áudio ficam em 43px, a convenção do shell) |
 
@@ -70,7 +88,7 @@ que tem a sua.
 | Canal de texto | `chat/ChatView.tsx` + `MessageList` + `MessageItem` | parcial | **parcial** | a barra de ações do hover não existe no dedo — coberta pelo menu de toque longo (§4); busca, fixados e threads não têm entrada no celular (§5) |
 | **Conversa direta** | `chat/DMView.tsx` | **não** | **ok** | **o cartão de perfil de 320px era montado como coluna dentro da tela de 390 e espremia a conversa em 70px** — a timeline e o composer ficavam ilegíveis. A coluna 4 agora só existe no desktop; no celular ela é o painel deslizante |
 | **Amigos** | `friends/FriendsPage.tsx` | **não** | **ok** | **o cabeçalho media 553px numa tela de 390** e o shell o cortava: "Adicionar amigo" saía pela metade e as abas "Pendente" e "Bloqueado" ficavam inteiramente fora da tela, sem nenhum jeito de alcançá-las |
-| Palco da chamada | `components/mobile/telas-de-conversa.tsx` + `VoicePanel` | **não** (não chega lá) | **não** | tocar num canal de voz **entra na chamada mas abre a tela de texto do canal**, não o palco — defeito do shell, §6.2 |
+| Palco da chamada | `components/mobile/telas-de-conversa.tsx` + `VoicePanel` | **não** (não chegava lá) | **parcial** | a base consertou o caminho: tocar num canal de voz agora abre o palco, com a grade e o botão para a conversa do canal no cabeçalho (`tela-de-voz-retrato.png`). O que falta é a **barra de controles**: com a tela empilhada a barra de abas sai de cena e junto com ela a `BarraDeVozMobile`, então no palco não há mudo, surdo nem desligar — o Discord põe uma barra de 68pt flutuando ali (`MEDIDAS.md` §12). Área do agente da call |
 
 ## 4. Mensagem (`components/MessageItem.tsx`)
 
@@ -103,38 +121,44 @@ que tem a sua.
 | superfície | arquivo | estado | observação |
 |---|---|---|---|
 | Menu do servidor | `layout/ChannelSidebar.tsx` + `ui/ContextMenu.tsx` | **ok** | folha inferior, itens de 43px: convidar, configurações, criar canal, criar categoria, silenciar, notificações |
-| Menu do canal | idem | **parcial** | a folha está certa (marcar como lido, convidar, copiar link, silenciar, editar, apagar) — **mas nada a abre num telefone**: ela nasce de `onContextMenu` e o toque longo só existe dentro da conversa. Verificado disparando o evento na mão |
-| Menu da mensagem | `ui/ContextMenu.tsx` + `AreaDeToqueLongo` | **ok** | as 4 reações rápidas ficam em 31px de largura — arquivo do dono do shell, relatado |
-| Menu do membro | `MemberList.tsx` | **não** | mesmo problema do menu do canal: sem gesto que o abra |
+| Menu do canal | idem | parcial → **ok** | a folha sempre esteve certa (marcar como lido, convidar, copiar link, silenciar, editar, apagar); o que faltava era o gesto. A base pôs o toque longo no shell inteiro — conferido depois do merge: segurar a linha do canal abre a folha com **sete** itens |
+| Menu da mensagem | `ui/ContextMenu.tsx` + `AreaDeToqueLongo` | **ok** | as 4 reações rápidas mediam 31px de largura; a base as levou a 44 no mesmo commit do toque longo |
+| Menu do membro | `MemberList.tsx` | **não** → **ok** | mesmo caso do menu do canal: o gesto passou a existir |
 | Menu do "+" do composer | `chat/Composer.tsx` | **ok** | "Enviar arquivo" e "Criar enquete", 43px |
 | Emoji / GIF / Figurinha | `media/PickerPanel.tsx` | **parcial** | o painel mede 424px e nasce **44px à esquerda da tela** — sai pelos dois lados. Arquivo do agente dos modais |
 | Cartão de perfil | `ui/ProfilePopover.tsx` | **parcial** | itens de 31px de altura e o "…" em 27px. Arquivo do agente dos modais |
 | Trocador rápido (Ctrl+K) | `ui/QuickSwitcher.tsx` | **parcial** | a caixa cabe e as linhas medem 39px, mas **não há como abri-lo no celular**: o gatilho é um atalho de teclado |
 | Avisos (`Toasts`) | `ui/Toasts.tsx` | não avaliado | nenhum toast disparou na varredura |
 
-### 6.1 O buraco estrutural: o toque longo só existe dentro da conversa
+### 6.1 O toque longo — o buraco que a base fechou
 
-`AreaDeToqueLongo` (em `components/mobile/telas-de-conversa.tsx`) envolve só o
-`ChatView`/`DMView`. Consequência: **todo menu de contexto de lista fica sem
-gesto que o abra num telefone** — canal, categoria, conversa da lista de DMs,
-membro. E como as mesmas ações também moram em botões de `hover`, elas somem
-duas vezes. O que fica inalcançável hoje:
+Quando esta varredura foi feita, `AreaDeToqueLongo` envolvia só o
+`ChatView`/`DMView` e ignorava qualquer `button`. Consequência: **todo menu de
+contexto de lista ficava sem gesto que o abrisse num telefone** — canal,
+categoria, conversa da lista de DMs, membro. Como as mesmas ações também moram
+em botões de `hover`, elas sumiam duas vezes: editar canal, criar convite do
+canal, apagar canal, editar categoria, fechar conversa, marcar como lida,
+silenciar, castigar, expulsar, banir, denunciar.
 
-- **canal**: editar canal, criar convite do canal, abrir a conversa de um canal
-  de voz, apagar canal, copiar link, silenciar (parte disso sobra no menu do
-  servidor: convidar, criar canal, criar categoria, silenciar o servidor);
-- **categoria**: editar categoria;
-- **conversa da lista de DMs**: fechar conversa, marcar como lida, silenciar,
-  sair do grupo — o "X" de fechar é `opacity-0` até o hover;
-- **membro**: castigar, expulsar, banir, denunciar, copiar ID.
+O commit `0b5209d` da base resolveu: a área de toque longo passou a envolver o
+shell inteiro e o filtro deixou de ignorar botões — só campo de texto continua
+de fora, porque lá o gesto é do cursor. Conferido depois do merge, em retrato e
+em paisagem: segurar a linha de `#geral` abre a folha do canal com sete itens.
 
-O conserto não é meu (é o arquivo do dono do shell): envolver também as
-telas-base com a mesma `AreaDeToqueLongo`, ou expor o gesto como um hook que
-as listas possam usar. Optei por **não** encher as listas de botões sempre
-visíveis: numa faixa de 390px isso trunca o nome do canal e do membro, e não é
-o que o Discord do celular faz — lá o gesto é o toque longo.
+Fica registrado o **porquê de não ter enchido as listas de botões**: numa faixa
+de 390px, três ou quatro alvos de 44 por linha truncam o nome do canal e do
+membro (medido: "betoxip…"), e não é o que o Discord do celular faz — lá o
+gesto é o toque longo. Foi por isso que na lista de membros só "Mensagem" ficou
+sempre visível e a moderação continuou no menu.
 
 ### 6.2 Defeitos nos arquivos dos outros (relatados, não consertados)
+
+Três itens que esta varredura tinha listado aqui **saíram da lista**: a base os
+consertou nos commits `0b5209d` e `2c5d583` — o toque longo no shell inteiro
+(§6.1), o canal de voz que abria a tela de texto em vez do palco
+(`aoTocarNaLista` lia a store na fase de captura), e o `membersOpen` que era
+alternado em vez de atribuído. As reações rápidas do menu-folha também foram de
+31 para 44px. O que sobra:
 
 | onde | o que acontece | de quem |
 |---|---|---|
@@ -143,21 +167,20 @@ o que o Discord do celular faz — lá o gesto é o toque longo.
 | `components/ui/ProfilePopover.tsx` | itens de menu com 31px e o "…" com 27px (`perfil-popover.png`) | agente dos modais |
 | `components/modals/*` (moldura `Dialog`) | a caixa em si está certa (375px de largura, áreas seguras) — o que está pequeno é o conteúdo: o "X" de fechar em 23px e os botões de rodapé em 39px, em todos os modais (`modal-convite.png`, `modal-criar-canal.png`, `modal-nova-conversa.png`, `modal-quem-votou.png`) | agente dos modais |
 | `components/modals/CreatePollModal.tsx` | os campos de pergunta e resposta ficam com 22px de altura e os botões de emoji com 31px (`criar-enquete.png`) | agente dos modais |
-| `components/mobile/ShellMobile.tsx` | **tocar num canal de voz entra na chamada mas abre a tela de texto do canal, não o palco.** `aoTocarNaLista` roda na fase de **captura** e lê `useChannels.getState()` antes de o botão do canal trocar o canal ativo, então `ativo?.type` ainda é o do canal anterior e o `empilhar("voz")` nunca acontece (`tela-de-voz.png`: a barra "Voz conectada · Geral" no rodapé com a conversa de texto na frente) | dono do shell |
-| `components/mobile/ShellMobile.tsx` | o `membersOpen` do `stores/ui` (padrão `true`) é desligado por um efeito de montagem que **alterna** em vez de atribuir; com o StrictMode do `next dev` ele monta duas vezes e o valor volta a `true`. Era o que fazia o `DMView` montar a coluna 4 no celular. Consertei o sintoma no meu arquivo (a coluna 4 não existe mais quando `semCabecalho`), mas a linha continua frágil: `setMembersOpen(false)` seria à prova disso | dono do shell |
-| `components/mobile/telas-de-conversa.tsx` | o cabeçalho de 48px do canal só tem "voltar" e "membros" — busca, fixados e threads não têm entrada nenhuma no celular (§5) | dono do shell |
-| `components/ui/ContextMenu.tsx` | as 4 reações rápidas do topo da folha medem 31px de largura (43 de altura) | dono do shell |
+| `components/mobile/telas-de-conversa.tsx` | o cabeçalho de 48px do canal só tem "voltar" e "membros" — busca, fixados e threads não têm entrada nenhuma no celular (§5). Continua valendo depois do merge | dono do shell |
+| `components/mobile/ShellMobile.tsx` + `VoicePanel` | no palco da chamada não há barra de controles: a tela empilhada tira a barra de abas de cena e a `BarraDeVozMobile` vai junto, então mudo, surdo e desligar somem enquanto se olha a chamada | dono do shell / agente da call |
 | `components/chat/Composer.tsx` (compartilhado) | os três botões do composer ("+", GIF, emoji) medem 39px | combinar |
-| `components/voice/**` | palco, barra de chamada e seletor de tela não avaliados no celular — não consegui chegar ao palco por causa do defeito acima | agente da call |
+| `components/voice/**` | o palco abre (depois do merge) e a grade cabe; barra de controles, chamada de DM e seletor de tela continuam não avaliados | agente da call |
 
 ## 7. O que este PR consertou
 
-Tudo atrás de `max-md:` (a media query de 767px, o mesmo corte de
-`hooks/useEhMobile`) ou de uma condição que só o shell do celular liga. **0
-pixels de diferença no desktop em 1300×900.**
+Tudo atrás de `celular:` (a variante que repete a `CONSULTA_MOBILE`, retrato
+**e** paisagem) ou de uma condição que só o shell do celular liga. **0 pixels
+de diferença no desktop em 1300×900.**
 
 | arquivo | conserto |
 |---|---|
+| `tailwind.config.ts` | a variante `celular:` — uma tela `raw` com a mesma consulta do `hooks/useEhMobile`, para as classes perguntarem o mesmo que o JS (e não perderem o telefone deitado) |
 | `app/invite/[code]/AceitarConvite.tsx` | `w-full max-w-[420px]` no lugar de `w-[420px] max-w-full` (fim do estouro de 46px), `100dvh`, áreas seguras, botão de 48 |
 | `components/auth/AuthCard.tsx` | `100dvh`, áreas seguras no padding e na marca, cartão com 24px de respiro, campos e botão de envio em 48px — vale para login, registro, esqueci/redefinir senha, verificar e-mail e download |
 | `app/download/page.tsx` | os três botões de sistema em 48px |
@@ -180,7 +203,9 @@ pixels de diferença no desktop em 1300×900.**
 - Aparelho real (só Chromium emulado com `hasTouch`/`isMobile`).
 - Android (perfil `Pixel 7` do `e2e-mobile.mjs`) — a varredura toda foi em
   iPhone 14.
-- Rotação para paisagem.
+- Paisagem: **conferida** para os consertos deste PR (844×390: campo de login
+  47px/16px, busca 43, abas de Amigos 43, linha de membro 60, chip de reação
+  44), mas a varredura tela a tela da tabela acima foi toda em retrato.
 - Grupo de conversa (a semente só tem 1:1), chamada, tela compartilhada.
 - Modais que não têm caminho pelo celular: `AddGroupMembersModal`,
   `AdicionarContaModal`, `AdicionarSomModal`, `BanModal`,
