@@ -31,7 +31,7 @@ import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { useAuth } from "@/stores/auth";
 import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
-import { ui } from "@/stores/ui";
+import { ui, useUI } from "@/stores/ui";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 
 /**
@@ -54,30 +54,27 @@ import { useVoicePrefs } from "@/stores/voicePrefs";
 const COLUNA_INTEIRA = "[&>aside]:!w-full [&>aside]:min-h-0 [&>aside]:flex-1";
 
 /**
- * Aba **Servidores**: a rail à esquerda e a lista de canais do servidor
- * escolhido preenchendo o resto — lado a lado, como no app do Discord. É a
- * única aba com duas colunas, e é assim no original: a rail é a navegação
- * entre servidores e precisa estar sempre à vista.
+ * Aba **Início**: a rail à esquerda e, à direita, **ou** a lista de canais do
+ * servidor escolhido **ou** a lista de conversas — a rail fica à vista nos dois
+ * casos.
  *
- * O cabeçalho com o nome do servidor e o menu já é o da `ChannelSidebar`; não
- * há um segundo por cima dele.
+ * É a estrutura das capturas `discord-mobile-servidor-2024.png` e
+ * `discord-mobile-dms-2024.png`: a mesma tela, a mesma rail, e o que muda é a
+ * coluna. Quem troca é a bolha de conversas no topo da rail (que põe o `view`
+ * em `"dm"`) e o ícone de um servidor (que o põe em `"guild"`) — os mesmos
+ * caminhos do desktop, sem estado novo.
+ *
+ * Por isso não existe aba "Mensagens": no Discord do celular as conversas não
+ * são uma seção do rodapé, são um item da rail.
  */
-export function TelaServidores() {
+export function TelaInicio() {
+  const view = useUI((s) => s.view);
   return (
     <div className="flex h-full min-h-0">
       <GuildRail compacto />
       <div className={`flex min-w-0 flex-1 flex-col ${COLUNA_INTEIRA}`}>
-        <ChannelSidebar />
+        {view === "dm" ? <DMList /> : <ChannelSidebar />}
       </div>
-    </div>
-  );
-}
-
-/** Aba **Mensagens**: a lista de conversas em tela cheia. */
-export function TelaMensagens() {
-  return (
-    <div className={`flex h-full min-h-0 flex-col ${COLUNA_INTEIRA}`}>
-      <DMList />
     </div>
   );
 }

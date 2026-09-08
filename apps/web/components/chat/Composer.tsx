@@ -572,6 +572,31 @@ export default function Composer({
 
   const Carinha = CARINHAS[carinha];
 
+  /**
+   * O "+" das opções de envio. No desktop vive dentro da caixa do composer; no
+   * celular, fora dela, à esquerda — é o leiaute da captura do Discord, e é
+   * também o que devolve largura ao campo num telefone de 390px.
+   */
+  const botaoMais = (
+    <button
+      type="button"
+      onClick={abrirMenuMais}
+      aria-label="Mais opções de envio"
+      // `ml-2.5` põe o glifo de 18 a 21px da borda esquerda da caixa, que é
+      // onde ele fica no Discord: 10 de margem + os 11 que sobram de cada lado
+      // dentro do alvo de 40
+      className={`grid shrink-0 place-items-center rounded-full text-txt-secondary transition hover:text-txt-primary ${
+        ehMobile ? "h-[40px] w-[40px] bg-hov" : "ml-2.5 mr-4 mt-[9px] h-10 w-10"
+      }`}
+    >
+      {/* `+` liso, não o `CirclePlus`: o do Discord é marca de traço, sem o
+          círculo cheio em volta. O `+` do Discord é desenhado pequeno dentro do
+          próprio ativo: a tinta ocupa 58% do quadro, contra ~83% dos vizinhos —
+          30 × 0,58 ≈ 17,5, que é o glifo de 18 medido no composer. */}
+      <Plus size={30} />
+    </button>
+  );
+
   return (
     <form
       ref={formRef}
@@ -605,7 +630,13 @@ export default function Composer({
           `docs/Reference/mobile/discord-mobile-chat-canal-2024.png`, 1px=1pt,
           `MEDIDAS.md` §7. No desktop segue o retângulo de raio 8 e 58 de altura
           medido no Discord do computador. */}
-      <div className={ehMobile ? "rounded-[20px] bg-input" : "rounded-lg bg-input"}>
+      <div className={ehMobile ? "flex items-end gap-2" : ""}>
+      {ehMobile && allowAttachments && botaoMais}
+      <div
+        className={
+          ehMobile ? "min-w-0 flex-1 rounded-[20px] bg-input" : "rounded-lg bg-input"
+        }
+      >
         {(pendentes.length > 0 || prontos.length > 0) && (
           // uma linha só, com rolagem horizontal: quebrar em várias linhas
           // empurrava a timeline para cima a cada arquivo
@@ -664,6 +695,10 @@ export default function Composer({
                   e.target.value = "";
                 }}
               />
+              {/* Os dois caminhos de imagem do celular. Ficam aqui, e não ao
+                  lado do "+" (que no telefone mora fora da cápsula): o que
+                  importa é montar os inputs enquanto `allowAttachments` valer,
+                  porque quem os aciona é o menu que o "+" abre, pela `ref`. */}
               {ehMobile && (
                 <>
                   <input
@@ -691,32 +726,16 @@ export default function Composer({
                   />
                 </>
               )}
-              {/* sem tooltip descritivo: o Discord não rotula o "+" com a lista
-                  do que ele faz */}
-              <button
-                type="button"
-                onClick={abrirMenuMais}
-                aria-label="Mais opções de envio"
-                // `ml-2.5` põe o glifo de 18 a 21px da borda esquerda da caixa,
-                // que é onde ele fica no Discord: 10 de margem + os 11 que
-                // sobram de cada lado dentro do alvo de 40
-                className={`grid shrink-0 place-items-center rounded-full text-txt-secondary transition hover:text-txt-primary ${
-                  ehMobile ? "mx-0.5 h-[40px] w-[40px]" : "ml-2.5 mr-4 mt-[9px] h-10 w-10"
-                }`}
-              >
-                {/* `+` liso, não o `CirclePlus`: o do Discord é marca de traço,
-                    sem o círculo cheio em volta */}
-                {/* O `+` do Discord é desenhado pequeno dentro do próprio ativo: a tinta
-              ocupa 58% do quadro, contra ~83% dos vizinhos. Então `size` aqui não
-              é o tamanho do desenho — 30 × 0,58 ≈ 17,5, que é o glifo de 18
-              medido no composer do Discord. */}
-          <Plus size={30} />
-              </button>
+              {/* No celular o "+" mora **fora** da cápsula, à esquerda dela
+                  (ver `discord-mobile-chat-canal-2024.png`); no desktop ele fica
+                  dentro da caixa. O botão é o mesmo — muda onde é montado. */}
+              {!ehMobile && botaoMais}
             </>
           ) : (
             // mesmo recuo do canal: sem isso o composer da thread ficava
-            // desalinhado do resto da coluna
-            <span className="w-14 shrink-0" aria-hidden="true" />
+            // desalinhado do resto da coluna. No celular não há recuo a imitar:
+            // o "+" está fora da cápsula.
+            !ehMobile && <span className="w-14 shrink-0" aria-hidden="true" />
           )}
 
           <textarea
@@ -735,7 +754,7 @@ export default function Composer({
             aria-autocomplete="list"
             placeholder={placeholder}
             className={`flex-1 resize-none bg-transparent text-txt-normal outline-none placeholder:text-txt-muted ${
-              ehMobile ? "min-h-[40px] py-[9px]" : "min-h-[58px] py-[18px]"
+              ehMobile ? "min-h-[40px] py-[9px] pl-4" : "min-h-[58px] py-[18px]"
             }`}
           />
 
@@ -823,6 +842,8 @@ export default function Composer({
             )}
           </div>
         </div>
+      </div>
+
       </div>
 
       {gatilho && sugestoes.length > 0 && (
