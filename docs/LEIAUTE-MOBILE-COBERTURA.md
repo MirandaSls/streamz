@@ -46,29 +46,42 @@ repete **exatamente** a `CONSULTA_MOBILE` do `hooks/useEhMobile` —
 `max-md:`, e isso deixava o **telefone deitado** de fora: 844×390 é celular
 para o hook (ponteiro grosso, 390 de altura) e desktop para o `max-md`, ou seja,
 girar o aparelho devolvia os alvos de 31px e o cartão de login sem área segura.
-Conferido nos dois sentidos: em 390×844 e em 844×390 o campo de login mede 47px
-com fonte de 16, a busca da lista de conversas 43, as abas de Amigos 43, a
+Conferido nos dois sentidos: em 390×844 e em 844×390 o campo de login mede 48px
+com fonte de 16, a busca da lista de conversas 44, as abas de Amigos 44, a
 linha de membro 60 e o chip de reação 44.
 
 **A raiz é 15,5px, e isso muda todos os números.** `html { font-size: 15.5px }`
 (`app/globals.css`): todo tamanho em `rem` do Tailwind sai **3% menor que o
 nominal**. `h-6` é 23,25 e não 24; `h-10` é 38,75 e não 40; `h-11` é 42,6 e não
-44. É a explicação de metade dos "alvos abaixo de 44" desta varredura, e a
-lição que vale para quem vier depois: **não se lê a classe do Tailwind e se
-assume o número** — mede-se, com `getBoundingClientRect` no aparelho emulado.
+44; `h-14` é 54,25 e não 56. É a explicação da maioria dos "alvos abaixo de 44"
+desta varredura, e a lição que vale para quem vier depois: **não se lê a classe
+do Tailwind e se assume o número** — mede-se, com `getBoundingClientRect` no
+aparelho emulado.
 
-Daí a convenção que este documento segue:
+A regra que ficou, e que vale para o leiaute inteiro:
 
-- onde 44 é **piso de segurança** — o × que é a única saída de um modal, o
-  botão que expulsa ou bane, o chip de reação, o "+" ao lado dele — o número é
-  **literal** (`h-[44px]`, `min-h-[44px]`). É o que o #178 fez com
-  `ALTURA_DE_TOQUE` e o que eu fiz nos chips de reação;
-- onde é **coerência de leiaute** — botões de cabeçalho, abas, linhas de lista
-  — vale a escala do shell (`h-11` = 42,6px no `BotaoDeToque` de
-  `components/mobile/pecas.tsx`). A varredura reporta esses 43 como "abaixo de
-  44", e eles seguem a mesma medida de propósito: um segundo padrão com 1px de
-  diferença seria pior que 1px a menos. Se a decisão for subir, é uma linha em
-  `pecas.tsx` e vale para todos de uma vez.
+> **Literal onde o número significa alguma coisa** — uma medida tirada da
+> captura do Discord (`h-[56px]` no cabeçalho, `h-[48px]` no ícone do rail e na
+> aba do rodapé, 40 na cápsula do composer) ou um piso de segurança
+> (`h-[44px]` no alvo de toque, no × que é a única saída de um modal, no botão
+> que expulsa ou bane, no chip de reação). **A escala do Tailwind só onde o
+> número não significa nada** — espaçamento, respiro, raio.
+
+Ela nasceu desta varredura e cobrou duas dívidas: o #178 passou a usar
+`ALTURA_DE_TOQUE = "h-[44px]"` nos modais, e a base (`cf33055`) descobriu que
+**as medidas que diziam vir das capturas oficiais estavam todas 3% erradas no
+código** — o rail "de 48" media 46,5, o cabeçalho "de 56" media 54,25, os alvos
+"de 44" mediam 43. O pior caso era a cápsula do composer, que media **58 num
+telefone** contra os 40pt do `MEDIDAS.md` §7, porque quem escrevia a altura era
+o `style.height` do auto-ajuste e não a classe.
+
+**Os 43px sumiram.** Uma versão anterior deste documento tratava os 43 como
+convenção do shell e pedia para não criar um segundo padrão com 1px de
+diferença; a resposta certa era a outra — subir todos de uma vez, que é o que
+`pecas.tsx` fez. Os consertos deste PR acompanharam: onde eu tinha `h-11`/`h-12`
+agora está `h-[44px]`/`h-[48px]`. Conferido nos dois sentidos, com
+`getBoundingClientRect`: campo do login 48, busca da lista de conversas 44, abas
+de Amigos 44, chip de reação 44, linha de membro 60.
 
 ---
 
@@ -96,7 +109,7 @@ que tem a sua.
 
 | tela | arquivo | estado | o que falta |
 |---|---|---|---|
-| Servidores (rail + canais) | `components/mobile/telas-base.tsx` + `layout/GuildRail.tsx` + `layout/ChannelSidebar.tsx` | parcial → **ok** | os botões por linha (convite, editar, abrir conversa) e a engrenagem da categoria continuam sendo de `hover`, mas **as mesmas ações estão no menu de toque longo**, que a base passou a ligar no shell inteiro (§6.1) — conferido: segurar a linha de `#geral` abre a folha com sete itens. A linha de canal fica em 35px, que é a medida do próprio Discord no telefone (`MEDIDAS.md` §5: 36pt) |
+| Servidores (rail + canais) | `components/mobile/telas-base.tsx` + `layout/GuildRail.tsx` + `layout/ChannelSidebar.tsx` | parcial → **ok** | os botões por linha (convite, editar, abrir conversa) e a engrenagem da categoria continuam sendo de `hover`, mas **as mesmas ações estão no menu de toque longo**, que a base passou a ligar no shell inteiro (§6.1) — conferido: segurar a linha de `#geral` abre a folha com sete itens. A linha de canal mede 35px, contra os 36pt do Discord (`MEDIDAS.md` §5): é `h-9`, e cai na mesma armadilha do `rem` descrita no topo — 1px, não vale um PR sozinho, mas está anotado |
 | Mensagens (lista de conversas) | `layout/DMList.tsx` | parcial → **ok** | campo de busca de 31px e o "+" de nova conversa com 20×20 — os dois em 44 agora. O "X" de fechar conversa continua `opacity-0` até o hover, mas "Fechar conversa" está no menu de toque longo da linha (§6.1) |
 | Notificações (caixa de entrada) | `chat/InboxPopover.tsx` (`modoTela`) | parcial → **ok** | "Marcar tudo como lido" e a pílula de pedidos mediam 31px |
 | Você | `components/mobile/telas-base.tsx` | **ok** | — (os dois botões de microfone/áudio ficam em 43px, a convenção do shell) |
@@ -119,6 +132,8 @@ que tem a sua.
 | Chips de reação | parcial | **ok** | mediam ~26px de altura; agora 44 (`min-height`, que preserva quem aumentou o tamanho do emoji nas configurações) |
 | "+" ao lado das reações | **não** | **ok** | era `opacity-0` até o hover — no dedo, inexistente. Agora 44×44 e sempre visível |
 | Botão de thread na mensagem | parcial | **ok** | 22px de altura; agora 44 |
+| Botões das boas-vindas ("Editar canal", "Bloquear") | parcial | **ok** | mediam 31px (`h-8`); agora 44 literal no celular |
+| "Ir para as mensagens mais recentes" | parcial | **ok** | 39×39 (`h-10 w-10`); agora 44 literal, afastado da cápsula do composer |
 | Carimbo de hora (mensagem seguida) | parcial | parcial | continua `opacity-0` até o hover. É decorativo: a hora completa está na dica e no menu |
 | Enquete (`polls/PollCard.tsx`) | parcial | **ok** | as opções em 39px (agora 48) e "Quem votou"/"Encerrar" com **16px de altura** (agora 44) |
 | Dica de ferramenta (`ui/Tooltip.tsx`) | **defeito** | **ok** | `pointerenter` dispara no toque e o `pointerleave` que a fecharia pode só chegar no próximo toque: um toque no carimbo de hora deixava a caixa "terça-feira, 8 de setembro de 2026 às 17:14" **parada sobre a conversa**. Agora a dica só nasce de ponteiro do tipo mouse (e de foco que não veio de toque) |
@@ -196,7 +211,8 @@ se mediu aberto.
 | `components/modals/*` (moldura `Dialog`) | o "X" de fechar em 23px e os botões de rodapé em 39px (`modal-convite.png`, `modal-criar-canal.png`, `modal-nova-conversa.png`, `modal-quem-votou.png`) | **ok (com o #178).** Em duas partes: os modais de conteúdo (criar canal, enquete, convite, grupo, contas, emojis, som, adicionar pessoas) pedem `telaCheiaNoCelular` e no celular viram tela cheia, com cabeçalho de 56 e **seta de voltar de 44px no lugar do × de 24**. E o que continua sendo cartão centrado — confirmar, prompt, "quem votou", expulsar, banir — foi corrigido depois (`0acbc33`): × com alvo de 44×44 (glifo ainda 24, recuo compensado), `[&>button]:min-h-[44px]` no rodapé (pega até quem escreve o próprio `<button>`, como o link de convite, que nascia com 38) e `ALTURA_DE_TOQUE = "h-[44px]"` literal nos botões. Medido no iPhone 14 emulado, na confirmação de "Sair": × 44×44, "Sair" 93×44, "Cancelar" 93×44 |
 | `components/modals/CreatePollModal.tsx` | campos de pergunta e resposta com 22px de altura, botões de emoji com 31px (`criar-enquete.png`) | **ok (com o #178)** — está entre os que pedem tela cheia |
 | `components/chat/Composer.tsx` (compartilhado) | os três botões ("+", GIF, emoji) medem 39px | **ok (com o #178)** — 14 ramos `ehMobile`, e o menu do "+" ganhou "Galeria" e "Tirar foto" |
-| `components/mobile/telas-de-conversa.tsx` | o cabeçalho de 48px do canal só tem "voltar" e "membros" — **busca, fixados e threads não têm entrada nenhuma no celular** (§5) | **aberto — o único.** Do dono do shell, pendência conhecida do #170, e deixada aberta de propósito nesta rodada: meia entrada de busca é pior que nenhuma, e o lugar dela depende de medir a captura do cabeçalho do Discord, que o acervo só tem em GIF |
+| `components/mobile/telas-de-conversa.tsx` | o cabeçalho de 56px do canal só tem "voltar" e "membros" — **busca, fixados e threads não têm entrada nenhuma no celular** (§5) | **aberto — o único que importa.** Do dono do shell, pendência conhecida do #170, e deixada aberta de propósito nesta rodada: meia entrada de busca é pior que nenhuma, e o lugar dela depende de medir a captura do cabeçalho do Discord, que o acervo só tem em GIF |
+| miudezas de 1px do `rem` | sobraram alguns lugares onde a classe ainda decide um número que significa algo: a linha de canal em 35 contra 36pt (`h-9`), o avatar da mensagem em 39 contra 40pt (`Avatar`, compartilhado com o desktop) e os botões laterais do composer em 39 de largura (`w-10`) contra os 40pt do `MEDIDAS.md` §7 | anotado, não consertado — cada um é 1px e mora em arquivo compartilhado com o desktop |
 | `components/voice/**` | o palco abre (depois do merge) e a grade cabe; eu tinha anotado que faltava a barra de controles | **ok (com o #180)** — `ControlesMobile` de 68pt. Chamada de DM e seletor de tela continuam não avaliados **por mim** |
 
 ## 7. O que este PR consertou
@@ -223,7 +239,9 @@ de diferença no desktop em 1300×900.**
 | `components/MessageItem.tsx` | barra de ações do hover desligada no celular, chips de reação e "+" em 44, botão de thread em 44 |
 | `components/polls/PollCard.tsx` | opções em 48px, "Quem votou"/"Encerrar" em 44 |
 | `components/permissoes/EditorDePermissoes.tsx` | as duas colunas empilham no celular (a de permissões ficava com ~190px), linhas em 44, "remover regra" sempre visível |
+| `components/chat/MessageList.tsx` | botões das boas-vindas de 31 para 44 e o "voltar ao presente" de 39 para 44 |
 | `components/ui/Tooltip.tsx` | a dica não nasce mais de um toque |
+| (todos os acima) | os tamanhos que eram `celular:h-11`/`h-12`/`h-14` viraram **px literal** depois que a base provou que `rem` mente com a raiz de 15,5px |
 
 ## 8. O que não foi visto
 

@@ -120,15 +120,18 @@ export function OptionalFieldLabel({
 // a borda escura é o que separa o campo do corpo do cartão: `bg-void` sozinho
 // encosta no `bg-chat` sem aresta e o campo some
 //
-// `celular:h-12` nos dois: 40 e 43px são alvos de dedo curtos (o piso das
-// diretrizes de toque é 44), e no celular o texto do campo passa a 16px por
-// causa da regra do `globals.css` que evita o zoom do iOS — numa caixa de 40px
-// ele fica encostado nas bordas. 48px acomoda os dois. No desktop nada muda.
+// `celular:h-[48px]` nos dois, e o **48 é literal**: a raiz do app é 15,5px, e
+// `h-12` mediria 46,5 (todo `rem` do Tailwind sai 3% menor aqui — ver
+// `components/mobile/pecas.tsx`). No desktop os campos ficam com `h-10`, que
+// mede 38,75, e o botão com `h-11`, 42,6: alvos de dedo curtos para o piso de
+// 44 das duas diretrizes. Além disso, no celular o texto do campo passa a 16px
+// por causa da regra do `globals.css` que evita o zoom do iOS — numa caixa de
+// 39px ele fica encostado nas bordas. 48 acomoda os dois. No desktop nada muda.
 export const inputClass =
-  "mb-5 h-10 w-full rounded-[3px] border border-black/30 bg-void px-2.5 text-txt-normal outline-none placeholder:text-txt-muted disabled:opacity-60 celular:h-12";
+  "mb-5 h-10 w-full rounded-[3px] border border-black/30 bg-void px-2.5 text-txt-normal outline-none placeholder:text-txt-muted disabled:opacity-60 celular:h-[48px]";
 
 export const submitClass =
-  "h-11 w-full rounded-[3px] bg-accent font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60 celular:h-12";
+  "h-11 w-full rounded-[3px] bg-accent font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60 celular:h-[48px]";
 
 /** Link de apoio dos formulários de conta (voltar, ajuda, alternativas). */
 export const linkClass = "font-medium text-txt-link hover:underline";

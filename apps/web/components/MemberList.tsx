@@ -318,7 +318,7 @@ export default function MemberList() {
                 type="button"
                 onClick={() => void openWith(m.user.id)}
                 aria-label={`Abrir conversa com ${nome}`}
-                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-txt-primary celular:h-11 celular:w-11"
+                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-txt-primary celular:h-[44px] celular:w-[44px]"
               >
                 <MessageSquare size={16} />
               </button>

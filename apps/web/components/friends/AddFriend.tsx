@@ -83,14 +83,14 @@ export default function AddFriend() {
           aria-invalid={erro ? true : undefined}
           placeholder="Insira um nome de usuário"
           maxLength={33}
-          className="h-8 min-w-0 flex-1 bg-transparent text-base text-txt-normal outline-none placeholder:text-txt-muted celular:h-11"
+          className="h-8 min-w-0 flex-1 bg-transparent text-base text-txt-normal outline-none placeholder:text-txt-muted celular:h-[44px]"
         />
         {/* o botão mora DENTRO do campo, à direita: 32px de altura, raio 8, na
             cor accent. Era raio 3 com 36 de altura. */}
         <button
           type="submit"
           disabled={!valido || enviando}
-          className="h-8 shrink-0 rounded-lg bg-accent px-3 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 celular:h-11"
+          className="h-8 shrink-0 rounded-lg bg-accent px-3 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 celular:h-[44px]"
         >
           {enviando ? "Enviando…" : "Enviar pedido de amizade"}
         </button>

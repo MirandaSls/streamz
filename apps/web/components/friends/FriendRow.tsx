@@ -96,7 +96,7 @@ export default function FriendRow({
               type="button"
               onClick={abrirMenu}
               aria-label={`Mais opções para ${nome}`}
-              className="grid h-9 w-9 place-items-center rounded-full text-txt-secondary transition hover:bg-sel hover:text-txt-primary celular:h-11 celular:w-11"
+              className="grid h-9 w-9 place-items-center rounded-full text-txt-secondary transition hover:bg-sel hover:text-txt-primary celular:h-[44px] celular:w-[44px]"
             >
               {/* o "⋮" do Discord mede 16px de altura; o nosso caminho desenha
                   0,83 do `size`, então 20 → 16,7 (em 18 saía com 15) */}
@@ -140,7 +140,7 @@ export function RowAction({
         type="button"
         onClick={onClick}
         aria-label={label}
-        className={`grid h-9 w-9 place-items-center rounded-full text-txt-secondary transition hover:bg-sel celular:h-11 celular:w-11 ${
+        className={`grid h-9 w-9 place-items-center rounded-full text-txt-secondary transition hover:bg-sel celular:h-[44px] celular:w-[44px] ${
           danger ? "hover:text-red" : positive ? "hover:text-green" : "hover:text-txt-primary"
         }`}
       >

@@ -201,7 +201,7 @@ export default function EditorDePermissoes({
                     aria-haspopup="dialog"
                     aria-expanded={popover}
                     onClick={() => setPopover((v) => !v)}
-                    className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-txt-muted transition hover:bg-hov hover:text-txt-primary celular:-my-2 celular:h-9 celular:w-9"
+                    className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-txt-muted transition hover:bg-hov hover:text-txt-primary celular:-my-2 celular:h-[44px] celular:w-[44px]"
                   >
                     <Plus size={14} />
                   </button>
@@ -215,7 +215,7 @@ export default function EditorDePermissoes({
                   return (
                     <li
                       key={alvo.chave}
-                      className={`group mb-0.5 flex h-8 items-center rounded-[4px] pr-1 transition celular:h-11 ${
+                      className={`group mb-0.5 flex h-8 items-center rounded-[4px] pr-1 transition celular:h-[44px] ${
                         ativo ? "bg-sel" : "hover:bg-hov"
                       }`}
                     >
@@ -226,7 +226,7 @@ export default function EditorDePermissoes({
                         type="button"
                         aria-current={ativo ? "true" : undefined}
                         onClick={() => setSelecionado(alvo.chave)}
-                        className={`flex h-8 min-w-0 flex-1 items-center gap-2 rounded-[4px] px-2 text-left text-sm celular:h-11 ${
+                        className={`flex h-8 min-w-0 flex-1 items-center gap-2 rounded-[4px] px-2 text-left text-sm celular:h-[44px] ${
                           ativo ? "text-txt-primary" : "text-txt-normal"
                         }`}
                       >
@@ -251,7 +251,7 @@ export default function EditorDePermissoes({
                           aria-label={`Remover regra de ${alvo.nome}`}
                           onClick={() => void onRemoverRegra(alvo.id)}
                           /* no dedo não há hover: sem isto "remover regra" não tinha caminho */
-                          className="grid h-5 w-5 shrink-0 place-items-center rounded text-txt-muted opacity-0 transition hover:text-red focus-visible:opacity-100 group-hover:opacity-100 celular:h-9 celular:w-9 celular:opacity-100"
+                          className="grid h-5 w-5 shrink-0 place-items-center rounded text-txt-muted opacity-0 transition hover:text-red focus-visible:opacity-100 group-hover:opacity-100 celular:h-[44px] celular:w-[44px] celular:opacity-100"
                         >
                           <X size={12} />
                         </button>

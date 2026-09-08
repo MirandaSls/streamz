@@ -250,7 +250,7 @@ export default function FriendsPage() {
         No desktop nada disto se aplica: a faixa continua sendo a linha única
         de 48px com identidade, abas e o grupo da direita.
       */}
-      <header className="relative z-10 flex h-12 shrink-0 items-center gap-[7px] border-b border-border pl-7 pr-5 celular:h-14 celular:gap-0 celular:px-0">
+      <header className="relative z-10 flex h-12 shrink-0 items-center gap-[7px] border-b border-border pl-7 pr-5 celular:h-[56px] celular:gap-0 celular:px-0">
         <span className="text-txt-muted celular:hidden" aria-hidden="true">
           <Amigos size={21} />
         </span>
@@ -272,7 +272,7 @@ export default function FriendsPage() {
               type="button"
               aria-pressed={tab === a.id}
               onClick={() => setTab(a.id)}
-              className={`flex h-8 items-center gap-1.5 rounded-lg px-3 text-base font-medium transition celular:h-11 celular:shrink-0 celular:snap-start ${
+              className={`flex h-8 items-center gap-1.5 rounded-lg px-3 text-base font-medium transition celular:h-[44px] celular:shrink-0 celular:snap-start ${
                 tab === a.id ? "bg-sel text-txt-primary" : "text-txt-secondary hover:bg-hov hover:text-txt-primary"
               }`}
             >
@@ -289,7 +289,7 @@ export default function FriendsPage() {
             type="button"
             aria-pressed={tab === "adicionar"}
             onClick={() => setTab("adicionar")}
-            className={`h-8 rounded-lg px-3 text-base font-medium transition celular:h-11 celular:shrink-0 celular:snap-start ${
+            className={`h-8 rounded-lg px-3 text-base font-medium transition celular:h-[44px] celular:shrink-0 celular:snap-start ${
               tab === "adicionar"
                 ? "bg-green/20 text-green"
                 : "bg-green text-accent-ink hover:bg-green/80"
@@ -346,7 +346,7 @@ export default function FriendsPage() {
               type="search"
               aria-label="Buscar amigos"
               placeholder="Buscar"
-              className="h-10 w-full rounded-lg bg-void pl-10 pr-3 text-base text-txt-normal outline-none placeholder:text-txt-muted celular:h-12"
+              className="h-10 w-full rounded-lg bg-void pl-10 pr-3 text-base text-txt-normal outline-none placeholder:text-txt-muted celular:h-[48px]"
             />
           </div>
         )}

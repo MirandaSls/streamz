@@ -133,7 +133,7 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
                 type="button"
                 onClick={() => ui.openModal({ kind: "addGroupMembers", channelId: dm.id })}
                 aria-label="Adicionar pessoas ao grupo"
-                className="text-txt-muted transition hover:text-txt-primary celular:-mr-2 celular:grid celular:h-11 celular:w-11 celular:place-items-center"
+                className="text-txt-muted transition hover:text-txt-primary celular:-mr-2 celular:grid celular:h-[44px] celular:w-[44px] celular:place-items-center"
               >
                 <UserPlus size={16} />
               </button>
@@ -186,7 +186,7 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
                       aria-label={`Remover ${nome} do grupo`}
                       /* sempre à mostra no celular: sem hover e sem botão direito, "remover
                          do grupo" não tinha caminho nenhum a partir daqui */
-                      className="hidden h-7 w-7 place-items-center rounded text-txt-muted hover:text-red group-focus-within:grid group-hover:grid celular:grid celular:h-11 celular:w-11"
+                      className="hidden h-7 w-7 place-items-center rounded text-txt-muted hover:text-red group-focus-within:grid group-hover:grid celular:grid celular:h-[44px] celular:w-[44px]"
                     >
                       <UserMinus size={16} />
                     </button>

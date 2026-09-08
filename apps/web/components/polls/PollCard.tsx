@@ -59,7 +59,7 @@ export default function PollCard({
               onClick={() => vote(poll.messageId, o.index)}
               /* 48px no celular: votar é um alvo de dedo, e 39px ficam abaixo
                  do piso de 44 */
-              className={`relative flex h-10 items-center gap-2 overflow-hidden rounded-[4px] border px-3 text-left transition celular:h-12 ${
+              className={`relative flex h-10 items-center gap-2 overflow-hidden rounded-[4px] border px-3 text-left transition celular:h-[48px] ${
                 o.me ? "border-accent" : "border-border-strong"
               } ${encerrada ? "cursor-default opacity-80" : "hover:border-txt-muted"}`}
             >

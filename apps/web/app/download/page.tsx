@@ -146,7 +146,7 @@ export default function DownloadPage() {
                 aria-checked={ativo}
                 disabled={loading || (!!catalogo && !tem)}
                 onClick={() => setPlataforma(p)}
-                className={`h-10 rounded-[3px] border text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 celular:h-12 ${
+                className={`h-10 rounded-[3px] border text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 celular:h-[48px] ${
                   ativo
                     ? "border-accent bg-accent text-accent-ink"
                     : "border-border-strong bg-void text-txt-normal hover:border-border-strong-hover"

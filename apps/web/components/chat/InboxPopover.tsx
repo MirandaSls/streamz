@@ -147,7 +147,7 @@ export default function InboxPopover({
       cabecalho={(fechar) => (
         <header className="shrink-0">
           {/* título a 19px do topo, 36px de linha, 21px das bordas */}
-          <div className="flex h-9 items-center gap-2 px-[21px] pt-[19px] celular:h-11 celular:px-4">
+          <div className="flex h-9 items-center gap-2 px-[21px] pt-[19px] celular:h-[44px] celular:px-4">
             <Inbox size={20} aria-hidden="true" className="shrink-0 text-txt-secondary" />
             <h2 className="min-w-0 truncate font-display text-xl font-bold tracking-title text-txt-primary">
               Caixa de Entrada
@@ -169,7 +169,7 @@ export default function InboxPopover({
                   type="button"
                   onClick={() => verPedidos(fechar)}
                   aria-label={`Ver pedidos de amizade (${pedidos})`}
-                  className="flex h-8 w-[58px] items-center justify-center gap-1 rounded-lg bg-hov text-txt-secondary transition hover:bg-sel hover:text-txt-primary celular:h-11 celular:w-[66px]"
+                  className="flex h-8 w-[58px] items-center justify-center gap-1 rounded-lg bg-hov text-txt-secondary transition hover:bg-sel hover:text-txt-primary celular:h-[44px] celular:w-[66px]"
                 >
                   <PedidoDeAmizade size={20} aria-hidden="true" />
                   <span className="grid h-5 min-w-5 place-items-center rounded-full bg-overlay px-1 text-xs font-bold leading-none text-txt-normal">
@@ -429,7 +429,7 @@ function BotaoDoCabecalho({
         aria-disabled={inerte || undefined}
         /* 44px no celular: na aba Notificações (`modoTela`) estes são os únicos
            botões do topo da tela, e 31px não são alvo de dedo */
-        className={`grid h-8 w-8 place-items-center rounded-lg bg-hov transition celular:h-11 celular:w-11 ${
+        className={`grid h-8 w-8 place-items-center rounded-lg bg-hov transition celular:h-[44px] celular:w-[44px] ${
           inerte
             ? "cursor-default text-txt-secondary opacity-50"
             : "text-txt-secondary hover:bg-sel hover:text-txt-primary"
