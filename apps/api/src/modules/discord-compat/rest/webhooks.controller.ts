@@ -1,4 +1,31 @@
-import { Controller } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  UseFilters,
+  UseInterceptors,
+} from "@nestjs/common";
+import { SkipThrottle } from "@nestjs/throttler";
+import type { Message as MessageDTO } from "@streamz/shared";
+import { zodBody } from "../../../common/zod.pipe";
+import { InteractionsService } from "../../interactions/interactions.service";
+import type { InteracaoAutenticada } from "../../interactions/tipos";
+import { DadosDeCompatService } from "../dados.service";
+import {
+  FiltroDeErrosDoDiscord,
+  interacaoDesconhecida,
+  mensagemDesconhecida,
+  naoImplementado,
+} from "../erros";
+import { RateLimitDoDiscordInterceptor } from "../rate-limit.interceptor";
+import type { MensagemDoDiscord } from "../tipos";
+import { mensagemParaDiscord } from "../traducao/mensagem";
+import { dadosDeRespostaSchema, type DadosDeResposta } from "./corpos-f3";
 
 /**
  * Os followups de uma interação — o `editReply()`, o `fetchReply()` e o
@@ -14,19 +41,133 @@ import { Controller } from "@nestjs/common";
  * ```
  *
  * Como no callback, **sem `BotTokenGuard`**: o token do caminho é o único
- * credencial (§9 do documento). O `:app` tem que bater com o snowflake da
- * `Application` da interação; não batendo, 404 `10062` — e não 403, porque para
- * quem não tem o token a interação não existe.
+ * credencial (§9 do documento; §3.3 do `CONTRATO-F3.md`). O `:app` tem que bater
+ * com o snowflake da `Application` da interação; não batendo, 404 `10062` — e
+ * não 403, porque para quem não tem o token a interação não existe.
  *
  * `/messages/:mid` (um followup específico, que não o original) é **F5**: 501.
  * O `editReply()` e o `deleteReply()` do discord.js usam `@original`, que é o
  * que a prova 3 da fase exercita.
  *
- * Cuidado com a ordem das rotas no Nest: `/@original` tem que ser declarado
- * **antes** de qualquer `/:mid`, senão o `@original` casa como um id.
+ * Cuidado com a ordem das rotas no Nest: `/@original` está declarado **antes**
+ * de qualquer `/:mid`, senão o `@original` casaria como um id. O Express casa na
+ * ordem de registro, e a ordem de registro é a ordem dos métodos neste arquivo.
+ *
+ * A resposta é a mensagem no formato do Discord. Como `InteractionsService`
+ * devolve o DTO de `@streamz/shared` (cuid, sem snowflake), a linha é relida por
+ * `DadosDeCompatService.mensagemPorCuid` — o mesmo caminho do
+ * `messages.controller.ts` da F1, e pelo mesmo motivo.
  */
-@Controller()
-export class WebhooksCompatController {}
+@SkipThrottle()
+@UseFilters(FiltroDeErrosDoDiscord)
+@UseInterceptors(RateLimitDoDiscordInterceptor)
+@Controller("v10/webhooks/:app/:token")
+export class WebhooksCompatController {
+  constructor(
+    protected readonly interacoes: InteractionsService,
+    protected readonly dados: DadosDeCompatService,
+  ) {}
 
-@Controller()
+  /**
+   * `followUp()` — uma mensagem nova no mesmo canal.
+   *
+   * 200 e não 201: é o que o Discord devolve, e o `webhook.send()` do discord.js
+   * espera o corpo da mensagem de volta (ele manda `?wait=true`, que aqui é o
+   * único comportamento — não temos webhook "dispara e esquece").
+   */
+  @Post()
+  @HttpCode(200)
+  async followup(
+    @Param("app") app: string,
+    @Param("token") token: string,
+    @Body(zodBody(dadosDeRespostaSchema)) dados: DadosDeResposta,
+  ): Promise<MensagemDoDiscord> {
+    const interacao = await this.resolver(app, token);
+    return this.reler(interacao, await this.interacoes.followup(interacao, dados));
+  }
+
+  /** `fetchReply()` — a mensagem que o callback criou. */
+  @Get("messages/@original")
+  async lerOriginal(
+    @Param("app") app: string,
+    @Param("token") token: string,
+  ): Promise<MensagemDoDiscord> {
+    const interacao = await this.resolver(app, token);
+    return this.reler(interacao, await this.interacoes.lerOriginal(interacao));
+  }
+
+  /** `editReply()` — o que transforma o "pensando…" na resposta de verdade. */
+  @Patch("messages/@original")
+  async editarOriginal(
+    @Param("app") app: string,
+    @Param("token") token: string,
+    @Body(zodBody(dadosDeRespostaSchema)) dados: DadosDeResposta,
+  ): Promise<MensagemDoDiscord> {
+    const interacao = await this.resolver(app, token);
+    return this.reler(interacao, await this.interacoes.editarOriginal(interacao, dados));
+  }
+
+  /** `deleteReply()`. 204, como o Discord. */
+  @Delete("messages/@original")
+  @HttpCode(204)
+  async apagarOriginal(@Param("app") app: string, @Param("token") token: string): Promise<void> {
+    const interacao = await this.resolver(app, token);
+    await this.interacoes.apagarOriginal(interacao);
+  }
+
+  // ── os followups nomeados: F5 ──────────────────────────────
+  //
+  // Declarados **depois** do `@original` (ordem de rota) e de propósito: sem
+  // eles, um `interaction.webhook.editMessage(id, …)` cairia no 404 do Nest, com
+  // o corpo `{statusCode, message}` que a lib lê como `code: 0`. Com eles, o bot
+  // recebe um 501 `20012` dizendo o que falta.
+
+  @Get("messages/:mid")
+  async lerFollowup(): Promise<never> {
+    throw naoImplementado("GET /webhooks/:app/:token/messages/:id");
+  }
+
+  @Patch("messages/:mid")
+  async editarFollowup(): Promise<never> {
+    throw naoImplementado("PATCH /webhooks/:app/:token/messages/:id");
+  }
+
+  @Delete("messages/:mid")
+  async apagarFollowup(): Promise<never> {
+    throw naoImplementado("DELETE /webhooks/:app/:token/messages/:id");
+  }
+
+  // ── internos ───────────────────────────────────────────────
+
+  /**
+   * O `:token` do caminho → a interação, conferindo o `:app` junto.
+   *
+   * Ver `interactions.controller.ts`: token que não existe, token vencido e
+   * `:app` de outra aplicação levam todos o **mesmo** 404 `10062`.
+   */
+  protected async resolver(app: string, token: string): Promise<InteracaoAutenticada> {
+    const interacao = await this.interacoes.porToken(token);
+    if (String(interacao.applicationSnowflake) !== app) throw interacaoDesconhecida();
+    return interacao;
+  }
+
+  /**
+   * O DTO do service → o objeto `message` do Discord.
+   *
+   * A releitura é obrigatória e não é desperdício: o DTO de `@streamz/shared`
+   * carrega o `id` cuid e **não** tem snowflake, e o `Message` do discord.js
+   * constrói o id a partir de `data.id` — um cuid ali viraria um snowflake
+   * inválido que a lib usaria em toda rota seguinte.
+   */
+  protected async reler(
+    interacao: InteracaoAutenticada,
+    mensagem: MessageDTO,
+  ): Promise<MensagemDoDiscord> {
+    const linha = await this.dados.mensagemPorCuid(mensagem.id, interacao.botUserId);
+    if (!linha) throw mensagemDesconhecida();
+    return mensagemParaDiscord(linha);
+  }
+}
+
+@Controller("v9/webhooks/:app/:token")
 export class WebhooksCompatControllerV9 extends WebhooksCompatController {}

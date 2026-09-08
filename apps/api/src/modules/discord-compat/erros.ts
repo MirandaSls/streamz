@@ -97,6 +97,35 @@ export const corpoInvalido = (errors?: ErrosPorCampo) =>
   new ErroDoDiscord(HttpStatus.BAD_REQUEST, CODIGO.CORPO_INVALIDO, "Invalid Form Body", errors);
 
 /**
+ * ── F3 ── 404 `10062`: o token do caminho não achou interação nenhuma.
+ *
+ * É a resposta de **três** casos, e de propósito: token que não existe, token
+ * vencido (> 15 min) e token cujo `:id`/`:app` do caminho não bate com a linha.
+ * O terceiro poderia ser 403, e não é: para quem não tem o token, a interação
+ * não existe — dizer "existe, mas não é sua" já seria contar demais.
+ *
+ * O texto é o do Discord, letra por letra: o `interactionCreate` de muito bot
+ * loga `error.message` cru, e "Unknown interaction" é o que o dono do bot vai
+ * procurar no Google.
+ */
+export const interacaoDesconhecida = () =>
+  new ErroDoDiscord(HttpStatus.NOT_FOUND, CODIGO.INTERACAO_DESCONHECIDA, "Unknown interaction");
+
+/**
+ * ── F3 ── 400 `40060`: já houve um callback nesta interação.
+ *
+ * O discord.js classifica este código e transforma num
+ * `InteractionAlreadyReplied`; um bot que chama `reply()` depois de
+ * `deferReply()` tem um defeito, e é este erro que o diz.
+ */
+export const interacaoJaRespondida = () =>
+  new ErroDoDiscord(
+    HttpStatus.BAD_REQUEST,
+    CODIGO.INTERACAO_JA_RESPONDIDA,
+    "Interaction has already been acknowledged.",
+  );
+
+/**
  * O 401 do Discord, letra por letra.
  *
  * O texto é `"401: Unauthorized"` mesmo — é o que o Discord devolve, e o
