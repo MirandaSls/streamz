@@ -92,11 +92,15 @@ export function PainelDeslizante({
 }
 
 /**
- * Toque longo na conversa abre o menu da mensagem.
+ * Toque longo abre o menu de contexto — de mensagem, de canal, de servidor, de
+ * conversa ou de membro.
  *
- * No desktop esse menu é o botão direito; no celular não existe botão direito,
- * e a fileira de ações que aparece no `hover` também não — o dedo não paira.
- * Sobra o toque longo, que é o gesto das duas plataformas.
+ * No desktop esses menus são o botão direito; no celular não existe botão
+ * direito, e a fileira de ações que aparece no `hover` também não — o dedo não
+ * paira. Sobra o toque longo, que é o gesto das duas plataformas. Por isso esta
+ * área envolve **o shell inteiro** (`ShellMobile`), e não só a conversa: uma
+ * lista de canais sem toque longo é uma lista sem "marcar como lido", sem
+ * "silenciar" e sem "configurações do canal".
  *
  * A implementação dispara o **mesmo** evento `contextmenu` que o mouse
  * dispararia, no ponto do toque: assim o menu, os itens e as permissões
@@ -131,9 +135,13 @@ export function AreaDeToqueLongo({ children }: { children: ReactNode }) {
       if (e.pointerType === "mouse") return;
       noDedo.current = true;
       const alvo = e.target as HTMLElement | null;
-      // um toque longo num botão (reagir, abrir imagem) é do botão, não da
-      // mensagem: o menu só nasce do corpo dela
-      if (!alvo || alvo.closest("button, a, input, textarea")) return;
+      // Campo de texto tem gesto próprio (cursor, seleção, colar) e não pode
+      // ser sequestrado. Fora isso o toque longo vale em **qualquer** lugar,
+      // botão de lista incluído: no telefone é o único gesto que existe para o
+      // que no desktop é o botão direito, e o menu do canal, do servidor, da
+      // conversa e do membro só existem por ele. Quem não tem menu não abre
+      // nada — o evento sobe e ninguém o atende.
+      if (!alvo || alvo.closest("input, textarea, [contenteditable='true']")) return;
       const { clientX: x, clientY: y } = e;
       origem.current = { x, y };
       cancelar();
@@ -223,9 +231,7 @@ export function TelaDeCanal() {
           </BotaoDeToque>
         }
       />
-      <AreaDeToqueLongo>
-        <ChatView incorporado />
-      </AreaDeToqueLongo>
+      <ChatView incorporado />
       {membrosAbertos && (
         <PainelDeslizante rotulo="Membros" titulo="Membros" onFechar={() => voltar()}>
           <MemberList />
@@ -266,9 +272,7 @@ export function TelaDeDM() {
           </BotaoDeToque>
         }
       />
-      <AreaDeToqueLongo>
-        <DMView semCabecalho />
-      </AreaDeToqueLongo>
+      <DMView semCabecalho />
       {membrosAbertos && (
         <PainelDeslizante
           rotulo={grupo ? "Participantes" : "Perfil"}
