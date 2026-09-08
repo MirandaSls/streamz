@@ -38,6 +38,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "socket.io": "^4.7.5",
+    "ws": "^8.21.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -45,6 +46,7 @@
     "@types/node": "^20.14.0",
     "@types/nodemailer": "^6.4.16",
     "@types/qrcode": "^1.5.5",
+    "@types/ws": "^8.18.1",
     "prisma": "^5.19.1",
     "typescript": "^5.5.4",
     "vitest": "^4.1.11"
