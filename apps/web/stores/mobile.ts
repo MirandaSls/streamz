@@ -17,14 +17,19 @@ import { create } from "zustand";
  * ver as notificações e voltar devolve a conversa onde estava.
  */
 
-export type AbaMobile = "servidores" | "mensagens" | "notificacoes" | "voce";
+/**
+ * As **três** abas do app do Discord no celular, medidas em
+ * `docs/Reference/mobile/discord-mobile-servidor-2024.png`: `Home`,
+ * `Notifications` e `You`.
+ *
+ * Não há aba de mensagens. As conversas diretas entram pela **bolha no topo da
+ * rail** — tocá-la troca a coluna da direita pela lista "Mensagens", com a rail
+ * ainda à vista (ver `discord-mobile-dms-2024.png`). Servidores e conversas são
+ * a mesma seção "Início"; o que muda é o que a coluna mostra.
+ */
+export type AbaMobile = "inicio" | "notificacoes" | "voce";
 
-export const ABAS_MOBILE: readonly AbaMobile[] = [
-  "servidores",
-  "mensagens",
-  "notificacoes",
-  "voce",
-];
+export const ABAS_MOBILE: readonly AbaMobile[] = ["inicio", "notificacoes", "voce"];
 
 /** Uma tela cheia empilhada sobre a base da aba. */
 export type TelaMobile =
@@ -64,14 +69,13 @@ interface EstadoMobile {
 }
 
 const PILHAS_VAZIAS: Record<AbaMobile, TelaMobile[]> = {
-  servidores: [],
-  mensagens: [],
+  inicio: [],
   notificacoes: [],
   voce: [],
 };
 
 export const useMobile = create<EstadoMobile>((set, get) => ({
-  aba: "servidores",
+  aba: "inicio",
   pilhas: PILHAS_VAZIAS,
   membrosAbertos: false,
   folha: null,
