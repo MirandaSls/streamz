@@ -20,9 +20,25 @@ describe("só um painel na coluna da direita", () => {
   });
 
   it("no canal de texto a regra é transparente: vale o `membersOpen`", () => {
-    // lá não há conversa de call, então `chatAberto` é sempre falso
+    // lá não há conversa de call nem palco, então os dois são falsos
     expect(membrosVisiveis(false, true)).toBe(true);
     expect(membrosVisiveis(false, false)).toBe(false);
+  });
+});
+
+describe("no palco da call não cabe a lista de membros", () => {
+  it("com o palco na tela a lista some, mesmo ligada", () => {
+    expect(painelDaCall(false, true, true)).toBeNull();
+    expect(membrosVisiveis(false, true, true)).toBe(false);
+  });
+
+  it("a conversa da call continua podendo aparecer no palco", () => {
+    expect(painelDaCall(true, true, true)).toBe("chat");
+  });
+
+  it("na vista do canal (sem entrar) a lista volta ao que estava", () => {
+    // fechar o palco não apaga a preferência: é o mesmo `membersOpen` de antes
+    expect(membrosVisiveis(false, true, false)).toBe(true);
   });
 });
 

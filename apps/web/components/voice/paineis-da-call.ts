@@ -38,16 +38,34 @@ export type PainelDaCall = "chat" | "membros" | null;
  * Qual dos dois está na tela.
  *
  * Vale também para o canal de texto: lá não existe conversa de call
- * (`chatAberto` é sempre `false`) e a função devolve exatamente `membersOpen`.
+ * (`chatAberto` é sempre `false`, `palcoAberto` também) e a função devolve
+ * exatamente `membersOpen`.
+ *
+ * `palcoAberto` é a call **na tela** (o `aqui` do `VoicePanel`: a voz aponta
+ * para este canal, e a grade está no lugar da vista do canal). Decisão do
+ * usuário, a mesma que o #148 aplicou ao ícone: no palco só fica o balão da
+ * conversa, então a lista de membros do servidor **não aparece ali** — nem
+ * quando ficou ligada num canal de texto antes de entrar na call. Não é
+ * desligar `membersOpen`: a preferência continua guardada e a lista volta
+ * sozinha ao sair do palco.
  */
-export function painelDaCall(chatAberto: boolean, membrosLigados: boolean): PainelDaCall {
+export function painelDaCall(
+  chatAberto: boolean,
+  membrosLigados: boolean,
+  palcoAberto = false,
+): PainelDaCall {
   if (chatAberto) return "chat";
+  if (palcoAberto) return null;
   return membrosLigados ? "membros" : null;
 }
 
 /** A lista de membros está visível de fato (e não só ligada). */
-export function membrosVisiveis(chatAberto: boolean, membrosLigados: boolean): boolean {
-  return painelDaCall(chatAberto, membrosLigados) === "membros";
+export function membrosVisiveis(
+  chatAberto: boolean,
+  membrosLigados: boolean,
+  palcoAberto = false,
+): boolean {
+  return painelDaCall(chatAberto, membrosLigados, palcoAberto) === "membros";
 }
 
 /** O que gravar quando alguém clica no ícone de pessoas do cabeçalho. */
