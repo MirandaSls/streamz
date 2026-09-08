@@ -4,9 +4,10 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { Prisma, type ChannelType } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { ChannelsService } from "../channels/channels.service";
+import { FriendsService } from "../friends/friends.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { OnboardingService } from "../onboarding/onboarding.service";
 import { tallyPoll } from "../polls/poll-core";
@@ -89,6 +90,9 @@ export class MessagesService {
     // escrever é ler: ver `marcarLidoNoEnvio`
     private readonly readState: ReadStateService,
     private readonly realtime: RealtimeService,
+    // d-social: a barreira do bloqueio na conversa direta — ver
+    // `assertDMNaoBloqueada`
+    private readonly friends: FriendsService,
   ) {}
 
   async create(
@@ -102,7 +106,8 @@ export class MessagesService {
   ): Promise<MessageDTO> {
     // valida canal + associação + permissão de postar (privado/somente-leitura)
     const access = await this.guilds.assertCanPostChannel(authorId, channelId);
-    // h-moderacao: castigo e regras não aceitas bloqueiam a escrita no servidor
+    // h-moderacao: castigo e regras não aceitas bloqueiam a escrita no servidor;
+    // d-social: bloqueio recusa a escrita na conversa direta
     await this.assertPodeEscrever(access, channelId, authorId);
     // c-cargos: anexar é uma permissão à parte de escrever. A checagem é aqui,
     // e não no upload: o arquivo solto é privado de quem enviou e só vira
@@ -494,6 +499,10 @@ export class MessagesService {
     if (access.tipo === "guild" && access.channel.guildId) {
       await this.guilds.assertNotTimedOut(access.channel.guildId, userId);
     }
+    // d-social: e pelo mesmo motivo o bloqueio vale aqui. A reação aparece com
+    // nome e avatar para o outro lado e volta como notificação — barrar só o
+    // envio deixaria a DM de quem bloqueou aberta ao assédio por emoji.
+    await this.assertDMNaoBloqueada(access.channel, userId);
     // c-cargos: reagir é a permissão ADD_REACTIONS, não SEND_MESSAGES — dá para
     // ter um canal em que se reage sem poder escrever, e vice-versa
     if (!hasPermission(access.permissions, Permission.ADD_REACTIONS)) {
@@ -549,20 +558,64 @@ export class MessagesService {
    * h-moderacao: quem pode mesmo escrever neste canal agora.
    *
    * Fica junto do `create` porque é ali que a recusa precisa acontecer — antes
-   * de gravar. Em conversa direta não há castigo nem regras: `ChannelAccess`
-   * obriga a tratar o ramo DM.
+   * de gravar. Em conversa direta não há castigo nem regras, mas há bloqueio:
+   * `ChannelAccess` obriga a tratar o ramo DM, e o ramo DM tem a sua própria
+   * barreira (`assertDMNaoBloqueada`).
    */
   private async assertPodeEscrever(
     access: Awaited<ReturnType<GuildsService["assertCanPostChannel"]>>,
     channelId: string,
     authorId: string,
   ): Promise<void> {
-    if (access.tipo !== "guild" || !access.channel.guildId) return;
+    if (access.tipo !== "guild") {
+      await this.assertDMNaoBloqueada(access.channel, authorId);
+      return;
+    }
+    if (!access.channel.guildId) return;
     const guildId = access.channel.guildId;
     await this.guilds.assertNotTimedOut(guildId, authorId);
     if (await this.onboarding.blocksPosting(guildId, channelId, authorId)) {
       throw new ForbiddenException("Aceite as regras do servidor para poder escrever");
     }
+  }
+
+  /**
+   * d-social: o bloqueio precisa valer na conversa **que já existe**, não só na
+   * hora de abri-la.
+   *
+   * Sem isto, bloquear era decorativo contra assédio: A e B já tinham
+   * conversado, B bloqueava A, e A seguia gravando mensagens no `channelId` que
+   * já conhecia — o `assertNotBlocked` do `DMsService.openWith` só barra a
+   * abertura, enquanto o canal, os dois `ChannelMember` e a sala ao vivo
+   * continuavam de pé (quem bloqueou recebia a mensagem na hora, porque entrou
+   * na sala do canal no connect). Pior: cada mensagem trazia a conversa de
+   * volta para a coluna de quem bloqueou, porque `DMsService.list` reexibe a
+   * conversa fechada assim que chega mensagem depois do fechamento.
+   *
+   * Vale nos dois sentidos, como toda barreira de bloqueio daqui
+   * (`blockedBetween`): quem bloqueou também não escreve para quem bloqueou.
+   * Além de ser o comportamento do Discord, o contrário seria a mão-de-volta do
+   * assédio — bloquear e continuar mandando mensagem que o outro não pode
+   * responder.
+   *
+   * Só na DM de 1-a-1 (`type: "DM"`). No grupo o canal não é de uma dupla:
+   * recusar o envio porque *alguém* ali bloqueou *alguém* calaria a conversa
+   * inteira — dois participantes brigados derrubariam o grupo para todo mundo.
+   * O grupo se defende na entrada, onde a dupla ainda é identificável
+   * (`DMsService.createGroup` e `addMember` chamam `assertNotBlocked`).
+   */
+  private async assertDMNaoBloqueada(
+    channel: { id: string; type: ChannelType },
+    userId: string,
+  ): Promise<void> {
+    if (channel.type !== "DM") return;
+    const outro = await this.prisma.channelMember.findFirst({
+      where: { channelId: channel.id, userId: { not: userId } },
+      select: { userId: true },
+    });
+    // conversa sem o outro lado (conta apagada): não há bloqueio a checar
+    if (!outro) return;
+    await this.friends.assertNotBlocked(userId, outro.userId);
   }
 
   /** Busca uma mensagem completa (autor + reações) e devolve o DTO. */

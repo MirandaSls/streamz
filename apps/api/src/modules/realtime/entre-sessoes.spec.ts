@@ -296,6 +296,19 @@ describe("amizade", () => {
           return {};
         },
       },
+      // d-social: bloquear procura a DM da dupla para tirá-la da minha coluna.
+      // Aqui os dois nunca conversaram — não há canal, e o que este teste olha
+      // é só o aviso `user.blocked`.
+      channel: {
+        async findUnique() {
+          return null;
+        },
+      },
+      dMHidden: {
+        async upsert() {
+          return {};
+        },
+      },
       async $transaction() {
         return [];
       },
