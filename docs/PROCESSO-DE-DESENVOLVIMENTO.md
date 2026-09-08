@@ -638,6 +638,12 @@ dois é pego por typecheck, lint ou teste:
 A régua é `getBoundingClientRect` no aparelho emulado, dentro do passeio de
 render — ver `scripts/e2e-mobile.mjs` e `scripts/medir-call-mobile.mjs`.
 
+E há um terceiro caso que **nenhuma régua pega: o comentário mentindo sobre o
+código que está certo.** Aconteceu duas vezes aqui — um arquivo prometendo 48
+onde a classe entregava 46,5, e outro citando uma margem de 31pt que era do
+leiaute de dois tiles do print, não do nosso (o código sempre usou 12). Script
+nenhum confere prosa; só releitura com a captura ao lado.
+
 **Provar que o desktop não mudou: compare o retângulo certo.** O par
 `scripts/e2e-desktop-diff.mjs` + `ImageChops.difference` do Pillow fotografa a
 mesma conta nos dois builds em 1300×900 e conta os pixels diferentes; o alvo é
