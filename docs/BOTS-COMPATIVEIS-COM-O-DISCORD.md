@@ -1019,6 +1019,19 @@ SSRC vai para a sala certa. Pacote com SSRC desconhecido: descartado em
 silêncio (é a superfície de ataque óbvia — um `sync.Map` com teto e expiração,
 mais um limite de pacotes/s por origem).
 
+> **A consequência que o §12 não viu: o `nc -u` sozinho não testa o firewall.**
+> Como o SSRC é atribuído por nós no `READY`, um pedido de descoberta feito na
+> mão traz um SSRC que não é de sessão nenhuma — e a ponte, corretamente, **não
+> responde** (responder daria a qualquer um na internet um refletor de 74
+> bytes). Porta fechada e porta aberta produziriam exatamente o mesmo silêncio,
+> e o conselho do §12 — "verificar com `nc -u` **antes** de culpar o código" —
+> seria inútil justamente no momento em que importa.
+>
+> A saída, implementada na F2: a ponte **registra** o pedido ignorado, uma vez
+> por IP de origem. A checagem de firewall passa a ser "mande o pacote e veja se
+> a linha aparece no log da ponte", e é assim que o passo a passo do §D5.5
+> manda conferir.
+
 `READY.ip` é o **IP público do servidor**, não um hostname:
 `PONTE_VOZ_IP_PUBLICO=143.95.161.17`. Cloudflare não entra na história — é UDP.
 

@@ -138,7 +138,7 @@ echo "$SEMENTE" | sed -E 's/"token":"[^"]*"/"token":"<oculto>"/'
 # O `semear.mjs` da F1 semeia canal de texto. Se o lote B já tiver acrescentado
 # o canal de voz, usamos o dele; senão, criamos um aqui — a prova não pode
 # depender de qual das duas versões está na árvore.
-CANAL_DE_VOZ="$(docker exec -e SEMENTE="$SEMENTE" "$API" node -e '
+CANAL_DE_VOZ="$(docker exec -w /w/apps/api -e SEMENTE="$SEMENTE" "$API" node -e '
 const s = JSON.parse(process.env.SEMENTE);
 if (s.canalDeVoz?.snowflake) { console.log(JSON.stringify(s.canalDeVoz)); process.exit(0); }
 const { PrismaClient } = require("@prisma/client");
@@ -176,18 +176,39 @@ docker run -d --name "$TLS" --network "$REDE" --network-alias voz.teste \
   -v "$AQUI/voz/nginx.conf:/etc/nginx/nginx.conf:ro" \
   -v "$TRABALHO:/certs:ro" \
   nginx:alpine >/dev/null
-esperar "o TLS da ponte" docker exec "$TLS" wget -q --no-check-certificate -O- https://localhost/saude
+# `127.0.0.1`, e não `localhost`: o wget do busybox resolve `localhost` para
+# `::1` primeiro, e o nginx só escuta em IPv4 — o healthcheck falhava com
+# "connection refused" com o terminador perfeitamente de pé.
+esperar "o TLS da ponte" docker exec "$TLS" wget -q --no-check-certificate -O- https://127.0.0.1/saude
 
 echo
-echo "== degrau 2: descoberta de IP por UDP (74 bytes) =="
-# O pedido: tipo 0x0001, tamanho 70, ssrc 1, resto zero. A resposta tem que
-# trazer o IP de ORIGEM como a ponte o viu — e é isso que o NAT do bot precisa.
-docker run --rm --network "$REDE" -v "$TRABALHO:/t" alpine:latest sh -c "
-  apk add --no-cache netcat-openbsd xxd >/dev/null 2>&1
+echo "== degrau 2: a porta 7883/udp carrega o pacote de 74 bytes =="
+# O pedido: tipo 0x0001, tamanho 70, ssrc 1, resto zero.
+#
+# **A ponte não responde a este pacote, e está certa.** O SSRC é atribuído por
+# nós no `READY`, e responder a um SSRC desconhecido daria a qualquer um na
+# internet um refletor de 74 bytes. Como nenhum bot se identificou ainda, o
+# SSRC 1 não é de sessão nenhuma.
+#
+# Isso torna o "verifique com `nc -u`" do §12 impossível como estava escrito:
+# porta fechada e porta aberta produziriam o mesmo silêncio. Por isso a ponte
+# **registra** o pedido ignorado, uma vez por origem — e é essa linha de log
+# que prova que o pacote atravessou. A descoberta de verdade, com sessão e com
+# resposta, é provada mais abaixo pelo `descoberta de IP respondida` do bot.
+docker run --rm --network "$REDE" alpine:latest sh -c "
+  apk add --no-cache netcat-openbsd >/dev/null 2>&1
   printf '\\x00\\x01\\x00\\x46\\x00\\x00\\x00\\x01' > /tmp/p
   dd if=/dev/zero bs=1 count=66 >> /tmp/p 2>/dev/null
-  nc -u -w 3 $IP_DA_PONTE 7883 < /tmp/p | xxd | head -6
-" || echo "[voz] ATENÇÃO: a descoberta de IP não respondeu"
+  wc -c < /tmp/p | tr -d ' ' | sed 's/^/[voz] bytes enviados: /'
+  nc -u -w 2 $IP_DA_PONTE 7883 < /tmp/p >/dev/null 2>&1 || true
+"
+sleep 1
+if docker logs "$PONTE" 2>&1 | grep -q "descoberta de IP com SSRC desconhecido"; then
+  echo "[voz] OK: o pacote de 74 bytes chegou à ponte pela 7883/udp"
+  docker logs "$PONTE" 2>&1 | grep "SSRC desconhecido" | tail -1
+else
+  echo "[voz] ATENÇÃO: o pacote não chegou — em produção isto é firewall, não código"
+fi
 
 echo
 echo "== 5. Lavalink v4 =="
@@ -200,7 +221,7 @@ esperar "o Lavalink" docker exec "$LAVA" sh -c "wget -q -O- --header='Authorizat
 
 echo
 echo "== 6. o ouvinte entra na sala e começa a medir =="
-TOKEN_OUVINTE="$(docker exec -e SALA="$SALA" "$API" node -e '
+TOKEN_OUVINTE="$(docker exec -w /w/apps/api -e SALA="$SALA" "$API" node -e '
 const { AccessToken } = require("livekit-server-sdk");
 (async () => {
   const at = new AccessToken(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET, {
@@ -226,7 +247,7 @@ docker run --rm --network "$REDE" \
   -e LAVALINK_HOST="lavalink:2333" \
   -e LAVALINK_SENHA="$SENHA_LAVALINK" \
   -e MUSICA="http://musica/musica.mp3" \
-  -e SEGUNDOS="$((SEGUNDOS + 20))" \
+  -e SEGUNDOS="$((SEGUNDOS + 60))" \
   -e NODE_EXTRA_CA_CERTS=/certs/ca.pem \
   -v "$TRABALHO:/certs:ro" -v "$AQUI/voz:/prova:ro" -w /tmp \
   node:22 bash -lc "
@@ -237,8 +258,18 @@ docker run --rm --network "$REDE" \
 
 echo
 echo "== a medição do ouvinte =="
-docker logs "streamz-voz-$SUFIXO-ouvinte" 2>&1 | tail -20
-docker rm -f "streamz-voz-$SUFIXO-ouvinte" >/dev/null 2>&1 || true
+# **Esperar o ouvinte sair é obrigatório.** Ele só começa a contar quando a
+# faixa do bot é assinada, o que acontece depois de o bot começar — ou seja,
+# ele sempre termina **depois** do bot. Na primeira versão deste script o
+# `docker rm` chegou três segundos antes do veredito e a medição se perdeu.
+OUVINTE="streamz-voz-$SUFIXO-ouvinte"
+for _ in $(seq 1 90); do
+  [ "$(docker inspect -f '{{.State.Running}}' "$OUVINTE" 2>/dev/null || echo false)" = "false" ] && break
+  sleep 2
+done
+# O SDK do LiveKit é falante; o que interessa é o relatório do `main.go`.
+docker logs "$OUVINTE" 2>&1 | grep -avE '^[0-9]{4}/[0-9]{2}/[0-9]{2} ' | tail -20
+docker rm -f "$OUVINTE" >/dev/null 2>&1 || true
 
 echo
 echo "== log da ponte (últimas 40 linhas) =="

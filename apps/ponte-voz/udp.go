@@ -64,6 +64,9 @@ type ServidorUDP struct {
 	// chegou RTP antes da descoberta de IP. Um aviso por SSRC: silêncio total
 	// aqui seria o modo de falha calado que a fase toda tenta evitar.
 	avisouSemOrigem map[uint32]bool
+	// avisouDescoberta evita repetir o aviso de descoberta com SSRC
+	// desconhecido. Chaveado por IP de origem — ver `avisarDescobertaSemSessao`.
+	avisouDescoberta map[string]bool
 	// dumps conta quantos pacotes de cada SSRC já saíram em hexdump.
 	dumps map[uint32]int
 
@@ -81,14 +84,15 @@ func NovoServidorUDP(cfg ConfigDaPonte, registro RegistroDeSessoes, log *slog.Lo
 		return nil, err
 	}
 	return &ServidorUDP{
-		cfg:             cfg,
-		conexao:         conexao,
-		registro:        registro,
-		log:             log,
-		filas:           make(map[uint32]*FilaDeQuadros),
-		avisouSemOrigem: make(map[uint32]bool),
-		dumps:           make(map[uint32]int),
-		limitador:       novoLimitadorDeOrigem(LimiteDePacotesPorSegundo, TetoDeOrigens),
+		cfg:              cfg,
+		conexao:          conexao,
+		registro:         registro,
+		log:              log,
+		filas:            make(map[uint32]*FilaDeQuadros),
+		avisouSemOrigem:  make(map[uint32]bool),
+		avisouDescoberta: make(map[string]bool),
+		dumps:            make(map[uint32]int),
+		limitador:        novoLimitadorDeOrigem(LimiteDePacotesPorSegundo, TetoDeOrigens),
 	}, nil
 }
 
@@ -180,6 +184,17 @@ func (s *ServidorUDP) responderDescoberta(pacote []byte, origem *net.UDPAddr) {
 	}
 	sessao, ok := s.registro.PorSSRC(ssrc)
 	if !ok {
+		// **Não** respondemos: o SSRC é atribuído por nós no READY, e responder
+		// a um desconhecido daria a qualquer um na internet um refletor de 74
+		// bytes. Mas **registramos**, uma vez por origem — porque essa é a
+		// única maneira de o dono confirmar que a 7883/udp chegou até aqui.
+		//
+		// O §12 do documento manda "verificar com `nc -u` antes de culpar o
+		// código", e um `nc -u` de fora **nunca** recebe resposta, justamente
+		// por causa do parágrafo acima. Sem esta linha, a checagem de firewall
+		// que o documento prescreve simplesmente não existe: silêncio de porta
+		// fechada e silêncio de porta aberta seriam idênticos.
+		s.avisarDescobertaSemSessao(ssrc, origem)
 		return
 	}
 	// Já amarrada a outro endereço: só o primeiro vale, senão qualquer um na
@@ -214,6 +229,26 @@ func (s *ServidorUDP) filaDe(ssrc uint32, sessao SessaoDeVoz) *FilaDeQuadros {
 // avisarSemOrigem loga **uma vez por SSRC** que chegou RTP antes da descoberta
 // de IP. É o único caso de descarte que merece log: significa um cliente que
 // pulou a descoberta, e sem esta linha seria silêncio sem causa.
+// avisarDescobertaSemSessao registra, **uma vez por IP de origem**, um pedido
+// de descoberta cujo SSRC não é de sessão nenhuma.
+//
+// Uma vez por IP, e não por SSRC: quem está testando o firewall manda sempre o
+// mesmo SSRC, e quem está varrendo a porta manda um diferente a cada pacote —
+// a chave por IP serve aos dois casos e é limitada pelo mesmo balde de fichas
+// que já protege o resto do laço.
+func (s *ServidorUDP) avisarDescobertaSemSessao(ssrc uint32, origem *net.UDPAddr) {
+	chave := origem.IP.String()
+	s.mu.Lock()
+	novo := !s.avisouDescoberta[chave]
+	s.avisouDescoberta[chave] = true
+	s.mu.Unlock()
+	if novo {
+		s.log.Info("ponte-voz: descoberta de IP com SSRC desconhecido; ignorada "+
+			"(se você está conferindo o firewall, esta linha é a confirmação de que o pacote chegou)",
+			"ssrc", ssrc, "origem", origem.String())
+	}
+}
+
 func (s *ServidorUDP) avisarSemOrigem(ssrc uint32, origem *net.UDPAddr) {
 	s.mu.Lock()
 	novo := !s.avisouSemOrigem[ssrc]

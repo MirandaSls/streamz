@@ -61,7 +61,10 @@ services:
       # VOICE_SERVER_UPDATE. Sem ele, a ponte recusa todo IDENTIFY com 4004 e
       # a API responde 503 no op 4 — de propósito.
       PONTE_VOZ_SEGREDO: ${PONTE_VOZ_SEGREDO:-}
-      LIVEKIT_URL: ${LIVEKIT_URL:-}
+      # Sem `LIVEKIT_URL` de propósito: a ponte **não** tem as credenciais do
+      # LiveKit. A URL e o token da sala chegam **dentro** do JWT do
+      # VOICE_SERVER_UPDATE, assinados pela API (§D5.6). Conferido no
+      # `main.go`, que é o único lugar do binário que lê o ambiente.
       # Dentro da rede do compose a API é o serviço `api`, não localhost.
       API_INTERNA_URL: http://api:3333
     ports:
