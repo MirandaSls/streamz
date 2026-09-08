@@ -245,7 +245,7 @@ export default function ImageModal({
           onClick={closeModal}
           aria-label="Fechar"
           className={`grid place-items-center rounded-lg border border-border bg-chat text-txt-secondary transition hover:bg-hov hover:text-txt-primary ${
-            ehMobile ? "h-11 w-11" : "h-[40px] w-[40px]"
+            ehMobile ? "h-[44px] w-[44px]" : "h-[40px] w-[40px]"
           }`}
         >
           <X size={24} />
@@ -500,7 +500,7 @@ function Seta({
         aria-label={label}
         className={`absolute top-1/2 z-20 grid -translate-y-1/2 place-items-center transition ${
           grande
-            ? "h-12 w-12 rounded-full bg-black/50 text-white/80 active:bg-black/70"
+            ? "h-[48px] w-[48px] rounded-full bg-black/50 text-white/80 active:bg-black/70"
             : "h-16 w-16 text-white/60 hover:text-white"
         } ${lado === "esquerda" ? (grande ? "left-2" : "left-0") : grande ? "right-2" : "right-0"}`}
       >

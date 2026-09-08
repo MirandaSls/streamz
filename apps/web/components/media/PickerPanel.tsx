@@ -105,7 +105,11 @@ export default function PickerPanel({
             aria-controls={`${baseId}-${id}-painel`}
             tabIndex={tab === id ? 0 : -1}
             onClick={() => trocar(id)}
+            // `px-3 py-2` dá **36,88** de altura (raiz de 15,5px: o `rem`
+            // encolhe 3%); no dedo a aba é alvo como qualquer outro botão
             className={`flex flex-1 items-center justify-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition ${
+              ehMobile ? "min-h-[44px]" : ""
+            } ${
               tab === id
                 ? "border-accent text-txt-primary"
                 : "border-transparent text-txt-muted hover:text-txt-normal"

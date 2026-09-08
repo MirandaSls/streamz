@@ -82,6 +82,9 @@ export default function Dialog({
    * altura só afastaria a pergunta do botão que a responde.
    *
    * Só muda a moldura — o conteúdo de cada modal fica como está.
+   *
+   * A barra é `h-[56px]` e o voltar `h-[44px]`, **literais**: a raiz do app é
+   * 15,5px e `h-14`/`h-11` mediriam 54,25 e 42,6 (ver `ALTURA_DE_TOQUE`).
    */
   telaCheiaNoCelular?: boolean;
   /** largura da caixa: 480 medidos no Discord, borda de 1px incluída. */
@@ -201,12 +204,12 @@ export default function Dialog({
              do app de celular (`components/mobile/pecas.tsx`), e não o título
              de 20/700 com o × no canto, que é a forma do cartão. Vale também
              para quem pediu `hideHeader`: sem barra não haveria como sair. */
-          <header className="flex h-14 shrink-0 items-center gap-1 border-b border-border bg-panel pl-1 pr-2">
+          <header className="flex h-[56px] shrink-0 items-center gap-1 border-b border-border bg-panel pl-1 pr-2">
             <button
               type="button"
               onClick={onClose}
               aria-label="Voltar"
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-txt-secondary transition active:bg-hov"
+              className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg text-txt-secondary transition active:bg-hov"
             >
               <ArrowLeft size={24} />
             </button>

@@ -73,6 +73,14 @@ import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
  * - as cores não mudam (§6.6): o fundo da página é o `chat` e o cartão é o
  *   `panel`, que é o par de superfícies mais próximo do `#26272F` sobre o preto
  *   da referência.
+ *
+ * **Os tamanhos do ramo de celular são literais** — `h-[56px]` no cabeçalho,
+ * `h-[44px]` nos alvos, `min-h-[48px]` na linha —, e não `h-14`/`h-11`/`h-12`:
+ * a raiz do app é 15,5px e todo `rem` do Tailwind sai 3% menor que o nominal
+ * (`h-14` mede 54,25; `h-11`, 42,6). Onde o número é medida da captura ou piso
+ * de toque, ler a classe e assumir o valor dá errado — é a mesma regra do
+ * `components/mobile/pecas.tsx`. O que não é medida nem alvo (a caixa de 24 do
+ * ícone da linha, os respiros) fica na escala de propósito.
  */
 
 export interface ItemDeMenu {
@@ -297,12 +305,12 @@ export default function JanelaDeConfiguracoes({
       >
         {emDetalhe ? (
           <>
-            <header className="flex h-14 shrink-0 items-center gap-1 border-b border-border bg-panel pl-1 pr-2">
+            <header className="flex h-[56px] shrink-0 items-center gap-1 border-b border-border bg-panel pl-1 pr-2">
               <button
                 type="button"
                 onClick={voltarParaALista}
                 aria-label="Voltar"
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-txt-secondary transition active:bg-hov"
+                className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg text-txt-secondary transition active:bg-hov"
               >
                 <ArrowLeft size={24} />
               </button>
@@ -323,7 +331,7 @@ export default function JanelaDeConfiguracoes({
           </>
         ) : (
           <>
-            <header className="flex h-14 shrink-0 items-center gap-1 border-b border-border bg-panel pl-4 pr-1">
+            <header className="flex h-[56px] shrink-0 items-center gap-1 border-b border-border bg-panel pl-4 pr-1">
               <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-txt-primary">
                 {titulo}
               </h1>
@@ -331,7 +339,7 @@ export default function JanelaDeConfiguracoes({
                 type="button"
                 onClick={fechar}
                 aria-label={rotuloFechar}
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-txt-secondary transition active:bg-hov"
+                className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg text-txt-secondary transition active:bg-hov"
               >
                 <X size={22} />
               </button>
@@ -347,7 +355,7 @@ export default function JanelaDeConfiguracoes({
                     type="button"
                     onClick={onCabecalho}
                     aria-haspopup="menu"
-                    className="mb-2 flex h-11 w-full items-center gap-1 rounded-lg px-1 text-left transition active:bg-hov"
+                    className="mb-2 flex h-[44px] w-full items-center gap-1 rounded-lg px-1 text-left transition active:bg-hov"
                   >
                     <span className="min-w-0 flex-1 truncate text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
                       {cabecalho}
@@ -374,7 +382,7 @@ export default function JanelaDeConfiguracoes({
                     onChange={(e) => busca.onChange(e.target.value)}
                     placeholder={busca.placeholder ?? "Buscar"}
                     aria-label={busca.rotulo}
-                    className="h-11 w-full rounded-lg bg-input pl-10 pr-3 text-base text-txt-normal outline-none transition-colors placeholder:text-txt-muted focus:ring-1 focus:ring-accent"
+                    className="h-[44px] w-full rounded-lg bg-input pl-10 pr-3 text-base text-txt-normal outline-none transition-colors placeholder:text-txt-muted focus:ring-1 focus:ring-accent"
                   />
                 </div>
               )}
@@ -435,7 +443,7 @@ export default function JanelaDeConfiguracoes({
               {rodapeMenu && (
                 // os itens do rodapé vêm com os 40px do desktop (`ITEM_BASE`);
                 // aqui sobem para o alvo de toque de 44
-                <div className="mt-5 overflow-hidden rounded-xl bg-panel p-1 [&_button]:h-11 [&_button]:mb-0">
+                <div className="mt-5 overflow-hidden rounded-xl bg-panel p-1 [&_button]:h-[44px] [&_button]:mb-0">
                   {rodapeMenu}
                 </div>
               )}
