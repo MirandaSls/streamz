@@ -7,6 +7,7 @@ import ConfirmDialog from "@/components/modals/ConfirmDialog";
 import CategorySettingsModal from "@/components/modals/CategorySettingsModal";
 import CreateChannelModal from "@/components/modals/CreateChannelModal";
 import CreateGroupDMModal from "@/components/modals/CreateGroupDMModal";
+import AdicionarSomModal from "@/components/modals/AdicionarSomModal";
 import GuildEmojisModal from "@/components/modals/GuildEmojisModal";
 import ImageModal from "@/components/modals/ImageModal";
 import InviteModal from "@/components/modals/InviteModal";
@@ -114,6 +115,8 @@ function renderModal(modal: Modal) {
       );
     case "guildEmojis":
       return <GuildEmojisModal guildId={modal.guildId} />;
+    case "adicionarSom":
+      return <AdicionarSomModal guildId={modal.guildId} />;
     // ── h-moderacao ──
     case "timeout":
       return <TimeoutModal guildId={modal.guildId} user={modal.user} />;

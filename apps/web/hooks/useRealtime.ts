@@ -38,6 +38,8 @@ import {
   type Role,
   type RoleDeletedEvent,
   type SessionsRevokedEvent,
+  type SoundboardPlayEvent,
+  type SoundboardUpdatedEvent,
   type StickerUpdatedEvent,
   type ThreadUpdatedEvent,
   type UserBlockedEvent,
@@ -74,6 +76,7 @@ import { useChannels } from "@/stores/channels";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
 import { useEmojis } from "@/stores/emojis";
+import { useSoundboard } from "@/stores/soundboard";
 import { useGuilds } from "@/stores/guilds";
 import { useMessages } from "@/stores/messages";
 import { goToChannel } from "@/stores/messages-navigate";
@@ -352,6 +355,27 @@ export function useRealtime(currentUserId?: string): void {
         useEmojis.getState().applyStickers(guildId, stickers);
       }),
 
+      // ── painel de efeitos sonoros ──
+      on<SoundboardUpdatedEvent>(WS_EVENTS.SOUNDBOARD_UPDATED, ({ guildId, sounds }) => {
+        useSoundboard.getState().aplicar(guildId, sounds);
+      }),
+
+      /**
+       * Alguém apertou um som na chamada — **este é o "tocar para todos"**.
+       *
+       * O evento só chega para quem está no canal de voz (a API o manda para a
+       * lista de quem está na sala, não para o servidor inteiro), e cada cliente
+       * toca o arquivo **localmente**, no volume de efeitos que a pessoa
+       * escolheu. Nada disso passa pelo LiveKit: o áudio não entra na faixa de
+       * microfone de ninguém.
+       *
+       * Vale inclusive para quem apertou: assim o autor ouve junto com a sala,
+       * e não adiantado — e não ouve nada quando a API recusa.
+       */
+      on<SoundboardPlayEvent>(WS_EVENTS.SOUNDBOARD_PLAY, ({ sound }) => {
+        useSoundboard.getState().tocarLocalmente(sound);
+      }),
+
       // ── h-moderacao ──
       on<MessagesBulkDeletedEvent>(WS_EVENTS.MESSAGES_BULK_DELETED, ({ channelId, messageIds }) => {
         // reaproveita o caminho de uma mensagem só: a timeline já sabe remover
@@ -413,6 +437,8 @@ export function useRealtime(currentUserId?: string): void {
         void useFriends.getState().load(true);
         // emoji/figurinha podem ter mudado enquanto a conexão esteve fora
         void useEmojis.getState().load();
+        // e os sons do painel, que mudam pelo mesmo tipo de evento
+        void useSoundboard.getState().load();
         // silenciar um canal/servidor no outro aparelho durante a queda
         void useNotifications.getState().load();
         // e a conta (e-mail verificado, 2FA), quando alguma tela a mostra

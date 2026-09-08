@@ -9,14 +9,16 @@
  *
  * Os ids seguem a ordem do menu do Discord (print `docs/Reference/Captura de
  * tela 2026-09-04 100541.png`). Os que ele tem e nós não criamos — tag,
- * vantagens de impulso, figurinhas, efeitos sonoros, integrações, diretório de
- * apps, segurança, comunidade, onboarding, análises e modelo do servidor — não
- * entram: não existe recurso por trás deles.
+ * vantagens de impulso, figurinhas, integrações, diretório de apps, segurança,
+ * comunidade, onboarding, análises e modelo do servidor — não entram: não
+ * existe recurso por trás deles. "Painel de efeitos sonoros" **entra**: desde
+ * o soundboard, existe recurso por trás dele.
  */
 export type ServerSettingsTab =
   | "overview"
   | "engajamento"
   | "emoji"
+  | "soundboard"
   | "members"
   | "roles"
   | "invites"
