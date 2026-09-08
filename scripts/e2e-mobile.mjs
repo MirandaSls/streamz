@@ -210,8 +210,21 @@ try {
 
   const aba = (nome) => page.locator(`nav[aria-label="Seções"] button`).filter({ hasText: nome });
 
+  /**
+   * A barra de abas some quando há tela empilhada (é o que o Discord faz).
+   * Voltar até a base é, portanto, pré-requisito de trocar de aba.
+   */
+  async function irParaAba(nome) {
+    for (let i = 0; i < 4; i++) {
+      if (await page.locator('nav[aria-label="Seções"]').count()) break;
+      await page.locator('button[aria-label="Voltar"]').first().click();
+      await page.waitForTimeout(400);
+    }
+    await aba(nome).click();
+  }
+
   // 01 — servidores: rail + lista de canais
-  await aba("Servidores").click();
+  await irParaAba("Servidores");
   await page.waitForTimeout(1200);
   await foto(page, "01-servidores");
 
@@ -245,7 +258,7 @@ try {
   await page.locator("textarea").first().fill("");
 
   // 04 — conversas
-  await aba("Mensagens").click();
+  await irParaAba("Mensagens");
   await page.waitForTimeout(1000);
   await foto(page, "04-dms");
 
@@ -255,12 +268,12 @@ try {
   await foto(page, "05-dm-aberta");
 
   // 06 — notificações
-  await aba("Notificações").click();
+  await irParaAba("Notificações");
   await page.waitForTimeout(1500);
   await foto(page, "06-notificacoes");
 
   // 07 — você
-  await aba("Você").click();
+  await irParaAba("Você");
   await page.waitForTimeout(900);
   await foto(page, "07-voce");
 
