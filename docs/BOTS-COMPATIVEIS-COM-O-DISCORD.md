@@ -1118,10 +1118,10 @@ opções de tipo 3 (string), 4 (integer), 5 (boolean), 6 (user), 7 (channel),
 ```
 usuário digita "/play never gonna give you up" no composer
         │
-        ▼  POST /api/interactions  (rota interna, JwtGuard — não é a compat)
+        ▼  POST /api/channels/:id/interactions  (rota interna, JwtGuard — não é a compat)
    InteractionsService
      • acha o ApplicationCommand pelo (guild, nome)
-     • checa se a application está instalada no servidor (GuildApplication)
+     • checa se o usuário-bot é membro do servidor (ver a nota abaixo)
      • cria Interaction { snowflake, token(random 64), expiraEm: agora+15min }
      • dispatch INTERACTION_CREATE na sessão de gateway do bot
         │
@@ -1147,8 +1147,51 @@ DELETE /api/v10/webhooks/{app}/{token}/messages/@original
 ```
 
 O `token` da interação é o **único** credencial dessas rotas (é assim no
-Discord): 64 bytes aleatórios, válido 15 minutos, ligado a uma linha
-`Interaction`. Depois disso → 404 `10062 Unknown interaction`.
+Discord): 64 bytes aleatórios em base64url — 86 caracteres —, válido 15 minutos,
+ligado a uma linha `Interaction`. Depois disso → 404 `10062 Unknown interaction`.
+
+> **A rota interna é `POST /api/channels/:id/interactions`**, e não
+> `POST /api/interactions`: o canal é o recurso. E a listagem para o composer é
+> `GET /api/guilds/:id/comandos-de-app` — o REST interno é em português.
+> (Corrigido na F3; o desenho original está acima só para o diagrama fazer
+> sentido.)
+>
+> **A checagem de instalação é `GuildMember`, não `GuildApplication`.** A tabela
+> `GuildApplication` é a migration 3, da **F4**, e não existe na F3: "o bot está
+> no servidor" quer dizer que existe uma linha de `GuildMember` para o
+> usuário-bot. Quando a F4 chegar, a checagem passa a ser a instalação.
+>
+> **Comando de barra em conversa direta leva 404.** O §9 não tratava o caso;
+> DM com bot é F5.
+
+#### As três coisas que só uma lib de verdade ensina
+
+As duas primeiras custaram a prova 3 da fase, e nenhum teste unitário as pegaria
+— é a mesma lição do risco (a) da F1, repetida:
+
+1. **As rotas de callback e de followup não levam `Authorization`.** O
+   `@discordjs/rest` as manda com `auth: false`, e o discord.py faz o mesmo. Um
+   guard de token nelas dá 401 em todo `reply()`, `deferReply()` e `editReply()`
+   do planeta. O credencial é o `:token` do caminho, e só ele. (As rotas de
+   **registro** de comando, essas sim, vão autenticadas com `Bot <token>`.)
+2. **O discord.js manda `%40original`, não `@original`.** O `editReply()` sai
+   como `PATCH …/messages/%40original` — o `@` vai percent-encoded — e o Express
+   casa rota pelo caminho **cru**, decodificando `req.params` só depois. Uma rota
+   declarada como `messages/@original` **não** casa com o que a lib manda; o
+   pedido cai no `/:mid` seguinte. Decodifique antes de comparar, e aceite as
+   duas formas: o discord.py manda a crua.
+3. **O discord.py manda `?with_response=1` e parseia o corpo.** O `defer()` dele
+   (2.6+) constrói um `InteractionCallbackResponse` e lê `data['interaction']`
+   **sem `.get`**. Com o 204 vazio — que é o que o Discord sempre devolveu — o
+   `json_or_text` da lib devolve `''` e o acesso estoura em `TypeError: string
+   indices must be integers`, dentro da lib, com o bot pendurado no `defer()` e
+   nada no log. É o mesmo defeito, letra por letra, que o `Content-Type` com
+   charset causou na F1 (§5). Então: **204 sem `with_response`, e 200 com o
+   `InteractionCallbackResponse` quando ele vier.**
+
+E uma que o `INTERACTION_CREATE` ensinou: **`attachment_size_limit` é
+obrigatório** no payload — o discord.py 2.7 o lê sem `.get`, e sem ele o
+`on_interaction` nunca dispara.
 
 Mensagem efêmera (`flags: 64`): a F3 **aceita a flag e entrega a mensagem
 normal**, com um aviso no log. Efêmera de verdade exigiria "mensagem que só uma
@@ -1157,19 +1200,35 @@ compatibilidade — fica para quando alguém pedir.
 
 ### O `/` no cliente
 
-Já está pronto (`lib/composer-autocomplete.ts` detecta `/` na posição 0;
-`Composer.tsx:997` chama `buscarComandos`). O que falta:
+Já estava quase pronto (`lib/composer-autocomplete.ts` detecta `/` na posição 0;
+o ramo `/` de `montarSugestoes`, em `Composer.tsx`, chama `buscarComandos`). O
+que a F3 acrescentou:
 
-1. `stores/comandos-de-app.ts` — carrega `GET /api/guilds/:id/application-commands`
-   ao trocar de servidor e escuta um evento novo `application.commandsUpdated`.
-2. Em `Composer.tsx:997-1005`, concatenar esses comandos aos de
-   `COMANDOS_BARRA`, com `icone` = avatar do bot e `detalhe` = descrição.
-3. Em `lib/comandos-barra.ts`, um `ResultadoComando` novo — `{ tipo: "interacao",
-   commandId, opcoes }` — e o ramo correspondente em `Composer.tsx:315-333`.
-4. `MessageItem` mostra "usou /play" acima da resposta do bot
-   (`interaction` no DTO da mensagem). Opcional; fica bonito.
+1. `stores/comandos-de-app.ts` — carrega `GET /api/guilds/:id/comandos-de-app`
+   ao trocar de servidor e escuta o evento novo `application.commandsUpdated`.
+   Com a guarda de corrida do `stores/categories.ts` (`loadSeq`), senão o
+   composer mostra os comandos do servidor anterior.
+2. No ramo `/` de `montarSugestoes`, concatenar esses comandos **depois** dos de
+   `COMANDOS_BARRA`, com `icone` = `<Avatar user={botUser} size="sm" />` e
+   `detalhe` = descrição. **Sem tocar em `buscarComandos`**, que é do contrato de
+   `@streamz/shared` e tem teste de prefixo próprio.
+3. Em `lib/comandos-barra.ts`, dois `ResultadoComando` novos — `{ tipo:
+   "interacao", commandId, opcoes }` e `{ tipo: "faltaOpcao", … }` — e o ramo
+   correspondente no `submit()` do `Composer.tsx`. **O ramo tem que vir antes do
+   `if (comando.tipo === "desconhecido")`**, senão o toast de "não conheço o
+   comando" come o `/play` antes de qualquer coisa. `interpretarComando` ganha um
+   segundo parâmetro **opcional**, para os testes existentes não mudarem.
+4. `MessageItem` mostra "@fulano usou /play" acima da resposta do bot
+   (`Message.interacao`). **Não é opcional como este documento dizia:** a
+   resposta a um `/comando` chega ao canal sem nenhuma mensagem do usuário antes
+   dela, e sem a faixa o bot parece falar sozinho.
 
-Nada disso mexe em `detectarGatilho` nem em `Autocomplete.tsx`.
+Não mexe em `Autocomplete.tsx`. **Mexe numa linha de `detectarGatilho`**, ao
+contrário do que este documento dizia: o `TERMO["/"]` era `/^[a-z]*$/`, e o nome
+de um comando de barra do Discord aceita `[-_a-z0-9]`. Um bot que registrasse
+`/play-next` ou `/r6stats` sumia do popup no instante do hífen ou do dígito —
+comando que existe, que o composer aceita enviar, e que o autocomplete escondia.
+Alargar é seguro porque a regra de o `/` só valer na posição 0 não mudou.
 
 ---
 
@@ -1284,10 +1343,19 @@ model Interaction {
   channelId     String
   guildId       String?
   commandId     String?
+  /// o nome do comando, copiado na hora. O `PUT` de registro é sobrescrita em
+  /// bloco e apaga a linha do `ApplicationCommand`; sem esta cópia, a faixa
+  /// "usou /play" de uma mensagem antiga sumiria só porque o dono do bot rodou
+  /// o `deploy-commands.js` de novo.
+  commandName   String
   /// o `data` do INTERACTION_CREATE, como foi enviado
   data          Json
-  /// mensagem criada pelo callback tipo 4/5 — alvo do @original
-  responseMessageId String?
+  /// mensagem criada pelo callback tipo 4/5 — alvo do @original.
+  /// `@unique` de propósito: é o que faz a back-relation do lado da `Message`
+  /// ser `Interaction?` e não `Interaction[]`, que é o que o `include` do
+  /// `MessagesService` espera. E é por aqui que a ligação existe **sem nenhum
+  /// `ALTER TABLE "Message"`** — a maior tabela do banco não é tocada.
+  responseMessageId String? @unique
   respondedAt   DateTime?
   createdAt     DateTime @default(now())
   /// createdAt + 15 min
@@ -1547,13 +1615,42 @@ linguagem.
 | Lote | Arquivos |
 |---|---|
 | A | `modules/interactions/` (service, controller interno), migration 4 |
-| B | `modules/discord-compat/rest/{applications,interactions}.controller.ts` |
+| B | `modules/discord-compat/rest/{application-commands,interactions,webhooks}.controller.ts` |
 | C | web: `stores/comandos-de-app.ts`, `Composer.tsx` (2 pontos), `lib/comandos-barra.ts` |
+
+São **três** arquivos no lote B, e não dois: os followups (`webhooks`) que o §9
+pede não estavam nesta tabela. E o `applications.controller.ts` da F1 não é
+tocado — o registro de comandos entra num arquivo novo, para dois lotes não
+editarem o mesmo arquivo (§6.4 do processo).
 
 **Prova:** o `deploy-commands.js` padrão do guia do discord.js roda sem erro
 contra a nossa API; `/play` aparece no autocomplete do composer com o avatar do
 bot; o bot responde com `deferReply()` e depois `editReply()`, e as duas
 aparecem no navegador.
+
+**O que as provas pegaram, na prática** (a fase foi feita; isto é o resultado
+medido, não previsão):
+
+- **As duas libs travaram no mesmo passo, por motivos diferentes, e nenhum
+  teste unitário viu.** O discord.js porque manda `%40original` e a rota literal
+  `@original` não casa; o discord.py porque manda `?with_response=1` e parseia
+  um corpo que o 204 não tem. Os dois estão no §9, com o porquê. Isto é a
+  terceira repetição da mesma lição — F1 (`Content-Type`, `DEFAULT_GATEWAY`), F1
+  de novo (`bitrate` no `GUILD_CREATE`), F3 agora: **o payload sempre está
+  "certo" para o nosso próprio tipo, e só a lib do outro lado discorda.**
+- **`attachment_size_limit` no `INTERACTION_CREATE`**, lido sem `.get` pelo
+  discord.py 2.7 — achado pelo lote A rodando as libs à mão, antes da
+  integração.
+- **Duas linhas de fiação do Nest** que só aparecem no bootstrap, nunca no
+  `tsc`: o `InteractionsModule` precisa importar `ApplicationsModule` (pelo
+  `BotTokenGuard`) e `AuthModule` (pelo `JwtGuard`). Os dois lotes as acharam e
+  relataram sem consertar, porque o arquivo era do coordenador — e foi o certo.
+- **O que *não* deu problema:** o desenho sem `forwardRef` (o
+  `InteractionsModule` importa o `DiscordCompatModule`, e os controllers de
+  `/api/v10` do lote B moram lá mas são registrados aqui) subiu de primeira; e a
+  F3 não encostou em `gateway/dispatch.ts`, porque o `INTERACTION_CREATE` sai
+  direto pelo `RegistroDeSessoes` — o que a manteve fora do caminho da F2, que
+  corria em paralelo no mesmo arquivo.
 
 **Esforço:** 6–8 dias.
 
