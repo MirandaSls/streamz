@@ -102,20 +102,19 @@ done
 
 # ── 4. a ponte, compilada desta branch ───────────────────────
 #
-# O lote A1 (cripto + UDP) pode ainda estar em `panic` na branch: se estiver, a
-# prova sobrepõe as três peças provisórias de `a1-provisorio/` **só na árvore
-# temporária** — `apps/ponte-voz/` no repo não é tocado. Quando o A1 entrar, a
-# condição fica falsa sozinha e a prova roda contra o código de verdade.
+# Enquanto os dois lotes de Go estavam abertos, esta prova sobrepunha peças
+# provisórias de cripto e UDP para conseguir rodar sem o outro lote. **Não
+# sobrepõe mais**: o A1 entrou na branch de integração (PR #181) e a prova roda
+# contra o código de verdade — que é o que ela existe para provar. O
+# `a1-provisorio/` foi removido no merge.
 echo "[prova] montando a árvore de build da ponte"
 rm -rf "$TRABALHO/ctx"
 mkdir -p "$TRABALHO/ctx/apps"
 cp -r "$RAIZ/apps/ponte-voz" "$TRABALHO/ctx/apps/ponte-voz"
 rm -f "$TRABALHO/ctx/apps/ponte-voz/ponte-voz"
 if grep -q 'panic("F2 lote A1' "$TRABALHO/ctx/apps/ponte-voz/cripto.go"; then
-  echo "[prova] AVISO: o lote A1 ainda está em panic; usando a1-provisorio/ SÓ para esta prova"
-  cp "$AQUI/a1-provisorio/"*.go "$TRABALHO/ctx/apps/ponte-voz/"
-else
-  echo "[prova] o lote A1 está implementado na branch; a prova usa o código de verdade"
+  echo "[prova] ERRO: a cripto do lote A1 voltou a estar em panic nesta árvore." >&2
+  exit 1
 fi
 
 docker build -q -f "$TRABALHO/ctx/apps/ponte-voz/Dockerfile" -t "$IMAGEM" "$TRABALHO/ctx" >/dev/null
