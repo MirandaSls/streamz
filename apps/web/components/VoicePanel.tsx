@@ -61,6 +61,8 @@ export default function VoicePanel({
   const disconnect = useVoice((s) => s.disconnect);
   const reconnect = useVoice((s) => s.reconnect);
   const estados = useVoice((s) => s.statesOf(channel.id));
+  // a call é NESTE canal: é o que troca a vista do canal pelo palco, logo abaixo
+  const aqui = conectadoEm === channel.id;
   // o balão é lembrado por canal, e nasce aberto (ver `vista-do-canal-de-voz`)
   const chatAberto = useUI((s) => chatDoCanalAberto(s.chatDaCallPorCanal, channel.id));
   const toggleVoiceChat = useUI((s) => s.toggleVoiceChat);
@@ -68,7 +70,7 @@ export default function VoicePanel({
   // call, e só cabe um painel (ver `paineis-da-call.ts`): o botão espelha o que
   // está **na tela**, não o `membersOpen` guardado
   const listaVisivel = useUI((s) =>
-    membrosVisiveis(chatDoCanalAberto(s.chatDaCallPorCanal, channel.id), s.membersOpen),
+    membrosVisiveis(chatDoCanalAberto(s.chatDaCallPorCanal, channel.id), s.membersOpen, aqui),
   );
   const alternarMembros = useUI((s) => s.alternarMembrosNaCall);
 
@@ -76,7 +78,6 @@ export default function VoicePanel({
   const { telaCheia, alternar } = useTelaCheia(palco);
   const { visivel, doPalco, daMoldura } = useOcultarInativo();
 
-  const aqui = conectadoEm === channel.id;
   const conectado = aqui && status === "connected";
   const nome = channel.name ?? "voz";
   // O `useOcultarInativo` existe para tirar a moldura da frente do VÍDEO. Na
@@ -127,8 +128,12 @@ export default function VoicePanel({
               tinta dos dois glifos deste cabeçalho. */}
           {/* Decisão do usuário (2026-09-04): dentro do PALCO da call só fica
               o balão da conversa; a lista de membros tem interruptor apenas
-              na vista do canal sem entrar. */}
-          {!conectado && (
+              na vista do canal sem entrar. `aqui` e não `conectado`: o palco
+              entra no clique, não no `connected` (ver a grade abaixo), e é ele
+              que também tira a `MemberList` da coluna da direita
+              (`paineis-da-call.ts`) — os dois têm de sumir no mesmo instante,
+              senão sobra um botão que não muda nada na tela. */}
+          {!aqui && (
             <IconeDeCabecalho
               label={listaVisivel ? "Ocultar lista de membros" : "Mostrar lista de membros"}
               active={listaVisivel}

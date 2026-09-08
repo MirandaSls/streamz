@@ -34,6 +34,7 @@ import { useMessages } from "@/stores/messages";
 // ── d-social ── ausente automático depois de 10 min sem interação
 import { useAutoIdle } from "@/stores/presence";
 import { useUI } from "@/stores/ui";
+import { useVoice } from "@/stores/voice";
 
 /**
  * Layout de 3 colunas do app (ver `design.md`).
@@ -56,12 +57,17 @@ export default function AppPage() {
   const voiceChannel = useVoiceChannel();
   // o balão nasce aberto e é lembrado canal a canal (ver `vista-do-canal-de-voz`)
   const voiceChatOpen = chatDoCanalAberto(chatDaCallPorCanal, voiceChannel?.id);
+  // O palco está na tela quando a voz aponta para o canal de voz aberto — o
+  // mesmo `aqui` do `VoicePanel`, que troca a vista do canal pela grade.
+  const vozEm = useVoice((s) => s.channelId);
+  const palcoAberto = !!voiceChannel && vozEm === voiceChannel.id;
   // ...e disputa a coluna da direita com a lista de membros, que no canal de voz
   // é a mesma do canal de texto. Só cabe um painel: a regra (medida nas prints
-  // `2026-09-04 102422`/`102429`) está em `paineis-da-call.ts`. Em canal de
-  // texto não há conversa de call, `voiceChatOpen` é falso e isto vira o próprio
-  // `membersOpen` — por isso a linha é uma só para os dois casos.
-  const listaDeMembros = membrosVisiveis(voiceChatOpen, membersOpen);
+  // `2026-09-04 102422`/`102429`) está em `paineis-da-call.ts`. No PALCO não
+  // cabe nenhum: ali a lista some mesmo ligada, e volta ao sair. Em canal de
+  // texto não há conversa de call nem palco, os dois são falsos e isto vira o
+  // próprio `membersOpen` — por isso a linha é uma só para os três casos.
+  const listaDeMembros = membrosVisiveis(voiceChatOpen, membersOpen, palcoAberto);
   const threadParentId = useMessages((s) => s.threadParentId);
   // a busca ocupa a coluna 4 (como no Discord) e tem prioridade sobre thread e membros
   const buscaAberta = useMessages((s) => s.searchResults !== null || s.searching);
