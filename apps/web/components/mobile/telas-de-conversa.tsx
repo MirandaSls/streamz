@@ -2,7 +2,16 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Hash, Lock, Megaphone, Users, UserProfile, Volume2, X } from "@/components/ui/icones";
+import {
+  Hash,
+  Lock,
+  Megaphone,
+  MessageSquare,
+  Users,
+  UserProfile,
+  Volume2,
+  X,
+} from "@/components/ui/icones";
 import { isGroupChannel } from "@streamz/shared";
 import ChatView from "@/components/chat/ChatView";
 import DMMemberList from "@/components/chat/DMMemberList";
@@ -305,10 +314,18 @@ export function TelaDeAmigos() {
  * O cabeçalho aqui não tem "voltar" comum: **voltar não desliga**. Sair da tela
  * devolve a conversa e a chamada continua, com a barra compacta acima das abas
  * — é o comportamento do Discord, e a razão pela qual a barra existe.
+ *
+ * O balão à direita abre a **conversa do canal de voz**. No desktop ela é uma
+ * coluna ao lado do palco (`CallSplit`); num telefone não há coluna ao lado de
+ * nada, então ela entra como mais uma tela da pilha — e o palco volta com a
+ * seta, com a chamada intacta. Sem este botão a conversa do canal de voz não
+ * teria caminho nenhum no celular: o cabeçalho do `VoicePanel`, que a abre no
+ * desktop, é justamente o que o leiaute de celular esconde.
  */
 export function TelaDeVoz() {
   const canal = useVoiceChannel();
   const voltar = useMobile((s) => s.voltar);
+  const empilhar = useMobile((s) => s.empilhar);
   if (!canal) return null;
   return (
     <>
@@ -316,6 +333,11 @@ export function TelaDeVoz() {
         aoVoltar={() => voltar()}
         icone={<Volume2 size={20} />}
         titulo={canal.name ?? "voz"}
+        acoes={
+          <BotaoDeToque label="Conversa do canal" onClick={() => empilhar("canal")}>
+            <MessageSquare size={22} />
+          </BotaoDeToque>
+        }
       />
       <div className="flex min-h-0 flex-1 flex-col">
         <VoicePanel key={canal.id} channel={canal} />
