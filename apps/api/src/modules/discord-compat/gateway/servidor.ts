@@ -15,7 +15,9 @@ import {
 import { usuarioParaDiscord } from "../traducao/usuario";
 import { PonteDeEventos } from "./dispatch";
 import { lerIdentify, lerResume, montarReady } from "./identify";
-import { RegistroDeSessoes, SessaoWs } from "./sessao";
+import { FluxoZlib, lerCompressao, ZLIB_STREAM } from "./compressao";
+import { RegistroDeSessoes, SessaoWs, type SoqueteDeSaida } from "./sessao";
+import { VozDoGateway } from "./voz";
 
 /**
  * O servidor WebSocket **cru** (`ws`) do gateway compatível, em `/gateway`.
@@ -47,8 +49,14 @@ import { RegistroDeSessoes, SessaoWs } from "./sessao";
  * Os quatro opcodes que fazem o `login()` chegar em `ready`: `10 HELLO`,
  * `11 HEARTBEAT_ACK`, `2 IDENTIFY` (→ READY) e `0 DISPATCH`. Mais `6 RESUME`
  * (replay do buffer + `RESUMED`; sessão que não existe mais → `op 9` com
- * `d: false`), `1 HEARTBEAT`, `3 PRESENCE_UPDATE` (aceita e ignora) e `4`
- * (F2 — na F1 aceita e ignora).
+ * `d: false`), `1 HEARTBEAT`, `3 PRESENCE_UPDATE` (aceita e ignora) e
+ * `4 VOICE_STATE_UPDATE`, que desde a F2 é roteado para `gateway/voz.ts` — é a
+ * porta de entrada da voz.
+ *
+ * **Compressão (F2, lote C):** `compress=zlib-stream` na query passa a valer de
+ * verdade — ver `compressao.ts`, que explica por que ela é necessária mesmo com
+ * texto puro funcionando. Todo quadro de saída passa por `escrever()`, porque o
+ * fluxo deflate é um só por conexão e a ordem dos blocos **é** o formato.
  */
 
 /** O caminho que assumimos no servidor HTTP do Nest. */
@@ -80,6 +88,14 @@ interface Conexao {
   ocupada: boolean;
   morta: boolean;
   relogioZumbi: ReturnType<typeof setTimeout> | null;
+  /**
+   * F2: o fluxo do `compress=zlib-stream`, ou `null` para texto puro (o padrão).
+   *
+   * Fica na **conexão** e não na sessão porque a compressão começa no `HELLO`,
+   * antes de existir sessão nenhuma — quem pediu `zlib-stream` na query espera
+   * binário desde o primeiro quadro.
+   */
+  compressor: FluxoZlib | null;
 }
 
 @Injectable()
@@ -97,6 +113,8 @@ export class GatewayCompatService implements OnApplicationShutdown {
     private readonly aplicativos: ApplicationsService,
     private readonly dados: DadosDeCompatService,
     private readonly ponte: PonteDeEventos,
+    // F2: quem trata o op 4 (`gateway/voz.ts`).
+    private readonly voz: VozDoGateway,
   ) {}
 
   /**
@@ -143,6 +161,12 @@ export class GatewayCompatService implements OnApplicationShutdown {
     for (const conexao of [...this.conexoes]) {
       // op 7 antes do close: é o jeito do Discord dizer "volta já" — a lib
       // reconecta e tenta RESUME em vez de tratar como queda.
+      //
+      // Ressalva conhecida, e pequena: num cliente com `zlib-stream` a
+      // compressão é assíncrona e o `encerrarConexao` da linha seguinte é
+      // síncrono, então **este** op 7 pode não sair. O close code (4000) sai
+      // do mesmo jeito e a lib reconecta por ele — o que se perde é a
+      // gentileza de pedir RESUME, não a reconexão.
       this.enviarBruto(conexao, OPCODE.RECONNECT, null);
       this.encerrarConexao(conexao, FECHAMENTO.ERRO_DESCONHECIDO, "servidor reiniciando");
     }
@@ -173,6 +197,7 @@ export class GatewayCompatService implements OnApplicationShutdown {
       ocupada: false,
       morta: false,
       relogioZumbi: null,
+      compressor: null,
     };
     this.conexoes.add(conexao);
 
@@ -196,14 +221,19 @@ export class GatewayCompatService implements OnApplicationShutdown {
       return;
     }
 
-    const compress = consulta.get("compress");
-    if (compress) {
-      // Funciona assim mesmo: a compressão é opcional por mensagem, e o
-      // discord.py só descomprime `if type(msg) is bytes` (§7). O aviso existe
-      // para quando alguém for depurar "por que está sem compressão".
-      this.logger.warn(
-        `bot pediu compress=${compress}; na F1 respondemos sempre quadro de texto (§7)`,
-      );
+    // F2: `compress=zlib-stream` de verdade (§7). Texto puro continua sendo o
+    // padrão, inclusive para `zstd-stream` — recusar aquilo quebra o
+    // discord.py 2.7 (medido; ver `compressao.ts`).
+    const compressao = lerCompressao(consulta.get("compress"));
+    if (compressao.aviso) this.logger.warn(compressao.aviso);
+    if (compressao.zlib) {
+      conexao.compressor = new FluxoZlib((erro) => {
+        // Deflate quebrado não tem conserto: o dicionário do outro lado já não
+        // bate, e todo quadro seguinte seria lixo.
+        this.logger.error(`fluxo ${ZLIB_STREAM} falhou: ${erro.message}`);
+        this.encerrarConexao(conexao, FECHAMENTO.ERRO_DESCONHECIDO, "falha na compressão");
+      });
+      this.logger.debug(`bot pediu compress=${ZLIB_STREAM}: fluxo ligado`);
     }
 
     // HELLO **na hora**: é o que põe `bytesWritten > 0` antes de o relógio do
@@ -264,13 +294,22 @@ export class GatewayCompatService implements OnApplicationShutdown {
         await this.retomar(conexao, d);
         return;
 
-      // Aceitos e ignorados de propósito. O op 3 é presence rica (§13: "aceitamos
-      // e ignoramos"), o op 4 é a porta da voz (F2) e o op 8 é F5. Fechar a
-      // conexão por causa deles derrubaria bots que funcionam.
-      case OPCODE.PRESENCE_UPDATE:
+      // F2: a porta de entrada da voz. Sem sessão é um op 4 antes do IDENTIFY —
+      // ignorado, como o Discord faz, em vez de fechar a conexão.
       case OPCODE.VOICE_STATE_UPDATE:
+        if (!conexao.sessao) {
+          this.logger.debug("op 4 antes do IDENTIFY: ignorado");
+          return;
+        }
+        await this.voz.tratarAtualizacaoDeVoz(conexao.sessao, d);
+        return;
+
+      // Aceitos e ignorados de propósito. O op 3 é presence rica (§13: "aceitamos
+      // e ignoramos") e o op 8 é F5. Fechar a conexão por causa deles
+      // derrubaria bots que funcionam.
+      case OPCODE.PRESENCE_UPDATE:
       case OPCODE.REQUEST_GUILD_MEMBERS:
-        this.logger.debug(`op ${op} aceito e ignorado na F1`);
+        this.logger.debug(`op ${op} aceito e ignorado`);
         return;
 
       default:
@@ -322,7 +361,7 @@ export class GatewayCompatService implements OnApplicationShutdown {
         intents: lido.corpo.intents,
         aoEncerrar: (s) => this.registro.remover(s.id),
       });
-      sessao.atender(conexao.soquete);
+      sessao.atender(this.soqueteDaSessao(conexao));
       conexao.sessao = sessao;
       this.registro.registrar(sessao);
 
@@ -425,7 +464,7 @@ export class GatewayCompatService implements OnApplicationShutdown {
         return;
       }
 
-      sessao.atender(conexao.soquete);
+      sessao.atender(this.soqueteDaSessao(conexao));
       conexao.sessao = sessao;
       const repostos = sessao.reproduzir(lido.corpo.seq);
       sessao.despachar("RESUMED", {});
@@ -459,11 +498,55 @@ export class GatewayCompatService implements OnApplicationShutdown {
 
   private enviarBruto(conexao: Conexao, op: number, d: unknown): void {
     if (conexao.morta) return;
-    try {
-      conexao.soquete.send(JSON.stringify({ op, d, s: null, t: null }));
-    } catch (erro) {
-      this.logger.debug(`não deu para escrever op ${op}: ${(erro as Error).message}`);
+    this.escrever(conexao, JSON.stringify({ op, d, s: null, t: null }));
+  }
+
+  /**
+   * A **única** saída de quadro da conexão: texto puro ou um bloco
+   * `zlib-stream`.
+   *
+   * Tudo passa por aqui — o `HELLO` e os dispatches da sessão — porque o fluxo
+   * deflate é um só e a ordem dos blocos **é** o formato: dois quadros fora de
+   * ordem viram lixo do lado de lá, não uma mensagem trocada.
+   */
+  private escrever(conexao: Conexao, texto: string): void {
+    if (conexao.morta) return;
+    const compressor = conexao.compressor;
+    if (!compressor) {
+      this.enviarNoSoquete(conexao, texto);
+      return;
     }
+    compressor.escrever(texto, (quadro) => this.enviarNoSoquete(conexao, quadro));
+  }
+
+  private enviarNoSoquete(conexao: Conexao, dado: string | Buffer): void {
+    if (conexao.morta) return;
+    try {
+      conexao.soquete.send(dado);
+    } catch (erro) {
+      this.logger.debug(`não deu para escrever no gateway compat: ${(erro as Error).message}`);
+    }
+  }
+
+  /**
+   * O socket que a sessão enxerga.
+   *
+   * A `SessaoWs` escreve texto e não sabe de compressão — nem precisa. Este
+   * embrulho é o que põe os dispatches dela no mesmo caminho (e no mesmo fluxo
+   * deflate) do `HELLO`. Sem compressão ele é o socket real, sem custo nenhum.
+   */
+  private soqueteDaSessao(conexao: Conexao): SoqueteDeSaida {
+    if (!conexao.compressor) return conexao.soquete;
+    return {
+      get readyState() {
+        // 3 é `WebSocket.CLOSED`: conexão morta é socket fechado, do ponto de
+        // vista da sessão — ela para de escrever sozinha.
+        return conexao.morta ? 3 : conexao.soquete.readyState;
+      },
+      send: (texto: string) => this.escrever(conexao, texto),
+      // O close vai cru: um quadro de fechamento não é dado do fluxo.
+      close: (codigo?: number, razao?: string) => conexao.soquete.close(codigo, razao),
+    };
   }
 
   /**
@@ -474,6 +557,7 @@ export class GatewayCompatService implements OnApplicationShutdown {
     if (conexao.morta) return;
     conexao.morta = true;
     this.limparRelogio(conexao);
+    conexao.compressor?.fechar();
     if (conexao.sessao) {
       conexao.sessao.fechar(codigo, razao);
     } else {
@@ -493,6 +577,7 @@ export class GatewayCompatService implements OnApplicationShutdown {
   private aoFechar(conexao: Conexao): void {
     conexao.morta = true;
     this.limparRelogio(conexao);
+    conexao.compressor?.fechar();
     this.conexoes.delete(conexao);
     conexao.sessao?.desatar();
   }

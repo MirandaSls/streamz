@@ -1,0 +1,56 @@
+# Lavalink v4 do ambiente de prova (degrau 4 do §12 F2). Descartável.
+#
+# O §14 do documento diz, e é verdade: **nada muda no Lavalink**. Ele nem sabe
+# que existe Discord — recebe `endpoint`, `token` e `sessionId` do bot e
+# conecta. Este arquivo é o `application.yml` de sempre, com duas escolhas
+# feitas para a prova ser hermética:
+#
+#  1. `sources.http: true` e o resto desligado. A prova toca um arquivo servido
+#     por um nginx da própria rede de teste, e não o YouTube: YouTube a partir
+#     de um IP de datacenter é bloqueado com frequência, e uma prova que falha
+#     por causa disso não prova nada sobre a ponte. O caminho exercitado é
+#     **idêntico** — o lavaplayer entrega os mesmos quadros Opus de 20 ms.
+#  2. `opusEncodingQuality` e `resamplingQuality` no máximo, porque o ponto da
+#     fase é justamente não perder qualidade no repasse.
+#
+# Para tentar o YouTube (opcional, e é o que o usuário vai querer de verdade),
+# acrescente o plugin `dev.lavalink.youtube:youtube-plugin` — o Lavalink v4
+# removeu a fonte embutida.
+
+server:
+  port: 2333
+  address: 0.0.0.0
+
+lavalink:
+  server:
+    password: "senha-de-teste"
+    sources:
+      http: true
+      youtube: false
+      bandcamp: false
+      soundcloud: false
+      twitch: false
+      vimeo: false
+      nico: false
+      local: false
+    filters:
+      volume: true
+    bufferDurationMs: 400
+    frameBufferDurationMs: 5000
+    opusEncodingQuality: 10
+    resamplingQuality: HIGH
+    trackStuckThresholdMs: 10000
+    useSeekGhosting: true
+    youtubePlaylistLoadLimit: 6
+    playerUpdateInterval: 5
+    youtubeSearchEnabled: false
+    soundcloudSearchEnabled: false
+
+logging:
+  level:
+    root: INFO
+    lavalink: INFO
+    # O que interessa quando o som não sai: a conexão de voz do koe com a nossa
+    # ponte. Sem isto, "não toca" é tudo que se sabe.
+    com.sedmelluq.discord.lavaplayer: INFO
+    moe.kyokobot.koe: DEBUG

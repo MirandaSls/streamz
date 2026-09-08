@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { GuildsService } from "../../guilds/guilds.service";
 import type { AlvoDoEvento, RealtimeService } from "../../realtime/realtime.service";
+import type { VoiceService } from "../../voice/voice.service";
 import type { DadosDeCompatService } from "../dados.service";
 import type { IdsService } from "../ids.service";
 import { CAMPOS_DO_SERVIDOR } from "../traducao/servidor";
@@ -204,7 +205,16 @@ function ambiente() {
     },
   } as unknown as GuildsService;
 
-  const ponte = new PonteDeEventos(realtime, registro, dados, ids, guilds);
+  // F2: o `voice_states` do GUILD_CREATE sai do estado de voz. Sem ninguém em
+  // call, a lista é vazia — que é o caso destes testes, todos de F1.
+  const voz = {
+    async statesForGuild(userId: string, guildId: string) {
+      consultas.push(`statesForGuild:${userId}:${guildId}`);
+      return [];
+    },
+  } as unknown as VoiceService;
+
+  const ponte = new PonteDeEventos(realtime, registro, dados, ids, guilds, voz);
   ponte.iniciar();
 
   function ligar(id: string, botUserId: string, intents: number) {

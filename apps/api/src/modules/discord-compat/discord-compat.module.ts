@@ -5,13 +5,16 @@ import { GuildsModule } from "../guilds/guilds.module";
 import { MessagesModule } from "../messages/messages.module";
 import { RealtimeModule } from "../realtime/realtime.module";
 import { RolesModule } from "../roles/roles.module";
+import { VoiceModule } from "../voice/voice.module";
 import { BotTokenGuard } from "./bot-token.guard";
 import { DadosDeCompatService } from "./dados.service";
 import { IdsService } from "./ids.service";
+import { PonteDeVozController } from "./ponte-voz.controller";
 import { RateLimitDoDiscordInterceptor } from "./rate-limit.interceptor";
 import { PonteDeEventos } from "./gateway/dispatch";
 import { RegistroDeSessoes } from "./gateway/sessao";
 import { GatewayCompatService } from "./gateway/servidor";
+import { VozDoGateway } from "./gateway/voz";
 import {
   ApplicationsCompatController,
   ApplicationsCompatControllerV9,
@@ -50,6 +53,9 @@ import { UsersCompatController, UsersCompatControllerV9 } from "./rest/users.con
     MessagesModule,
     RolesModule,
     RealtimeModule,
+    // F2: o `VoiceService` é quem grava o estado de voz do bot (§D5.7) e quem
+    // assina o JWT da ponte (§3 do CONTRATO-F2).
+    VoiceModule,
   ],
   controllers: [
     GatewayCompatController,
@@ -67,6 +73,9 @@ import { UsersCompatController, UsersCompatControllerV9 } from "./rest/users.con
     ChannelsCompatControllerV9,
     MessagesCompatController,
     MessagesCompatControllerV9,
+    // F2: a ponte de voz avisa aqui que caiu (§4 do CONTRATO-F2). Não é uma
+    // rota de bot — não leva `BotTokenGuard` nem o filtro de erros do Discord.
+    PonteDeVozController,
   ],
   providers: [
     IdsService,
@@ -76,6 +85,7 @@ import { UsersCompatController, UsersCompatControllerV9 } from "./rest/users.con
     RegistroDeSessoes,
     GatewayCompatService,
     PonteDeEventos,
+    VozDoGateway,
   ],
   // ── F3 ── o `InteractionsModule` importa este módulo e precisa destes três:
   // `RegistroDeSessoes` para despachar o `INTERACTION_CREATE` direto na sessão

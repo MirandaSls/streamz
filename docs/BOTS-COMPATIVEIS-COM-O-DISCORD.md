@@ -651,6 +651,17 @@ registramos um aviso: o cliente aceita, porque a compressão por payload é
 opcional por mensagem no protocolo. `zstd-stream` e `encoding=etf`: **nunca** —
 quem pedir `etf` leva close 4000 com a razão.
 
+> **Correção da F2, e ela custou uma prova quebrada.** "Nunca" para o
+> `zstd-stream` quer dizer **"não implementamos"**, não "recusamos a conexão".
+> O lote C implementou o close 4000 como este § dá a entender e a prova 4 da F1
+> quebrou na hora: o **discord.py 2.7.1 pede `compress=zstd-stream` mesmo sem o
+> `zstandard` instalado**, e o close derruba o `login()` com
+> `AttributeError: 'NoneType' object has no attribute 'sequence'` dentro da
+> lib, antes do `ready` — o mesmo sintoma horrível do §12 (o bot conecta, nada
+> no log, o `ready` nunca vem). A resposta certa para `zstd-stream` é a mesma
+> de `compress: true`: **texto puro, com aviso**. Só o `encoding=etf` é
+> estrito, porque ali não há resposta que o cliente entenda.
+
 ### Prova de que a casca é fina o bastante
 
 Rodamos `discord.js@14.27.0` em `node:22` contra um servidor HTTP+WS de ~80
@@ -816,6 +827,15 @@ O bot **nunca decodifica** o áudio: o Lavalink/lavaplayer já entrega quadros
 Opus de 20 ms a 48 kHz estéreo, que é exatamente o que o WebRTC quer. Isso é o
 que torna a ponte viável sem transcodificar.
 
+> **Correção da F2 — o `exp` de 60 s do desenho abaixo era curto demais.** O
+> `@discordjs/voice` **reusa o mesmo token** quando reconecta o WS de voz
+> (queda de rede, close 4015, a ponte reiniciando) sem pedir um
+> `VOICE_SERVER_UPDATE` novo. Com 60 s, a primeira reconexão depois de um
+> minuto de música morre com 4004 e o bot desiste de vez. O JWT vale **15
+> minutos**, e o token do LiveKit lá dentro tem `ttl: "6h"` — o TTL do LiveKit
+> vale na **entrada** na sala, e uma reconexão duas horas depois do `!play`
+> precisa entrar de novo.
+
 ### O desenho
 
 ```
@@ -826,7 +846,7 @@ que torna a ponte viável sem transcodificar.
 │             │◄── VOICE_SERVER_UPDATE ──────────│  • VoiceStateStore.join(bot) │
 └──────┬──────┘    {endpoint:"voz.streamz.chat", │  • assina o token (JWT HS256)│
        │            token:"<JWT>", guild_id}     │    {sala, canal, guild, bot, │
-       │                                          │     tokenLiveKit, exp:60s}   │
+       │                                          │     tokenLiveKit, exp:15min} │
        │ repassa endpoint/token/session_id       └──────────────┬───────────────┘
        ▼                                                        │ (nada mais)
 ┌─────────────┐                                                 │
@@ -861,7 +881,14 @@ A pergunta é "em que SDK dá para publicar Opus no LiveKit **sem transcodificar
 1. É o único caminho onde o quadro Opus que saiu do Lavalink chega ao navegador
    **bit a bit igual** — zero perda de qualidade, zero CPU de codec.
 2. Não precisamos de libopus, nem de libwebrtc, nem de clang 21: binário
-   estático, imagem `FROM scratch` de ~20 MB, build de segundos.
+   estático, imagem pequena, build de segundos.
+   > **Duas correções da F2.** A imagem de build é **`golang:1.26`**, não a
+   > `1.23` que este documento dizia: o `server-sdk-go/v2@v2.18.1` e o
+   > `x/crypto@v0.57.0` exigem `go >= 1.26`, e com a 1.23 o `go get` recusa
+   > antes de compilar qualquer coisa. E a imagem final é **alpine, não
+   > `scratch`** (43,6 MB, não ~20 MB): a ponte abre **WSS** contra o LiveKit e
+   > sem `ca-certificates` isso morre com `x509: certificate signed by unknown
+   > authority`; o `HEALTHCHECK` também precisa de algum binário que fale HTTP.
 3. A criptografia é biblioteca padrão: `crypto/aes` + `cipher.NewGCM` e
    `golang.org/x/crypto/chacha20poly1305.NewX`.
 4. É um contêiner isolado: não entra no `pnpm`, não entra no typecheck, não
@@ -899,6 +926,17 @@ negocia para baixo e usa o transporte normal. |
 
 `endpoint` = `voz.streamz.chat` (as libs montam `wss://<endpoint>/?v=8`, sem
 caminho — por isso um host próprio, e não um path da API).
+
+> **O que a F2 descobriu e este § não dizia: o `wss://` é fixo no código do
+> cliente.** No `@discordjs/voice@0.19.2` (`dist/index.js:1424`) a URL é
+> montada como `` `wss://${endpoint}?v=8` `` — o esquema **não** vem do
+> `endpoint`, e o koe do Lavalink faz o mesmo. Consequências práticas: (i) a
+> ponte **não** precisa falar TLS (quem termina é o Traefik, como no §D5.5), e
+> (ii) **não existe apontar um bot para uma ponte em `ws://`** — qualquer
+> prova local precisa de um terminador TLS com uma CA em que o cliente confie
+> (`NODE_EXTRA_CA_CERTS` no Node; um truststore no Lavalink, porque a JVM não
+> tem "confie em tudo"). É a primeira parede em que qualquer um esbarra, e é o
+> que o `apps/api/test/discord-compat/prova-voz.sh` monta.
 
 ### D5.3 — Criptografia: os dois modos AEAD, e só eles
 
@@ -940,6 +978,24 @@ caminho mais lento sem ganho nenhum.
   F2, e o teste unitário do §12 (F2) existe por causa dele.
 - Não é preciso reordenar por `seq`: entregamos ao `WriteSample` na ordem de
   chegada e o `LocalSampleTrack` gera a própria numeração RTP.
+- **O `tamanho` do preâmbulo de extensão conta palavras de 32 bits, não bytes**
+  (RFC 3550 §5.3.1). Este § não dizia, e quem implementar lendo só o documento
+  erra por um fator de 4 — o corpo da extensão tem `4 × tamanho` bytes.
+
+> **O que a F2 mediu do `_rtpsize`, e o que continua aberto.** Os vetores
+> gravados do lote A1 batem **byte a byte com duas implementações
+> independentes**: OpenSSL (`createCipheriv('aes-256-gcm')` do Node 22, que é o
+> caminho do `@discordjs/voice`) e libsodium
+> (`crypto_aead_xchacha20poly1305_ietf_encrypt` do PyNaCl, o caminho do
+> discord.py). Nonce de 4 bytes no sufixo, zero-padding até 12/24, tag colada no
+> ciphertext e AAD = cabeçalho estão **confirmados**.
+>
+> O que **continua sem medição contra cliente real** é uma coisa só: **onde o
+> cabeçalho termina quando há extensão** (`0x90`) — se o corpo da extensão entra
+> no AAD ou vai cifrado. A ponte implementa a leitura deste § (só o preâmbulo no
+> AAD) como primeira aposta e, se ela falhar num pacote com o bit X, **tenta a
+> outra e anota no log qual venceu**. É o degrau 4 que responde, e a resposta
+> tem que voltar para cá.
 
 ### D5.4 — UDP e descoberta de IP
 
@@ -963,6 +1019,43 @@ SSRC vai para a sala certa. Pacote com SSRC desconhecido: descartado em
 silêncio (é a superfície de ataque óbvia — um `sync.Map` com teto e expiração,
 mais um limite de pacotes/s por origem).
 
+> **A consequência que o §12 não viu: o `nc -u` sozinho não testa o firewall.**
+> Como o SSRC é atribuído por nós no `READY`, um pedido de descoberta feito na
+> mão traz um SSRC que não é de sessão nenhuma — e a ponte, corretamente, **não
+> responde** (responder daria a qualquer um na internet um refletor de 74
+> bytes). Porta fechada e porta aberta produziriam exatamente o mesmo silêncio,
+> e o conselho do §12 — "verificar com `nc -u` **antes** de culpar o código" —
+> seria inútil justamente no momento em que importa.
+>
+> A saída, implementada na F2: a ponte **registra** o pedido ignorado, uma vez
+> por IP de origem. A checagem de firewall passa a ser "mande o pacote e veja se
+> a linha aparece no log da ponte", e é assim que o passo a passo do §D5.5
+> manda conferir.
+
+> ### O erro mais caro da F2, e ele estava neste §
+>
+> Este § diz "amarramos `ssrc → (endereço de origem, sessão)` e todo RTP daquele
+> endereço com aquele SSRC vai para a sala certa". **Isso não funciona com o
+> Lavalink**, e a fase inteira quase morreu aqui.
+>
+> Medido no degrau 4: **o Lavalink faz a descoberta de IP num socket UDP e manda
+> a mídia de outro.** Descoberta da porta 54865, RTP da 35159, mesmo IP. Com a
+> amarração por `IP:porta`, todo pacote de áudio era descartado — e o sintoma
+> era o pior que existe: o bot conecta, o Lavalink diz que está tocando, o
+> LiveKit mostra a faixa publicada, o log não acusa nada, e **não sai som**. O
+> `@discordjs/voice` usa um socket só, então o degrau 3 passava e *escondia* o
+> defeito; foi preciso o degrau 4, com Lavalink de verdade, para revelá-lo.
+>
+> A regra correta, e a que a ponte implementa: **quem autentica o pacote é a tag
+> AEAD, não o endereço.** Se o endereço não é o esperado, tenta-se decifrar
+> assim mesmo; se a tag fecha, o remetente provou que tem a `secret_key` — uma
+> garantia estritamente mais forte do que um par IP:porta — e o endereço é
+> reamarrado, com uma linha de log. Se não fecha, descarta. O custo de um pacote
+> forjado é uma abertura AEAD, com teto pelo limitador por origem.
+>
+> A lição geral da fase, em uma frase: **a descoberta de IP revela o NAT do
+> cliente; ela não autoriza o socket dele.**
+
 `READY.ip` é o **IP público do servidor**, não um hostname:
 `PONTE_VOZ_IP_PUBLICO=143.95.161.17`. Cloudflare não entra na história — é UDP.
 
@@ -982,12 +1075,19 @@ precisamos dele: publicamos a porta direto no nosso próprio compose.
       PONTE_VOZ_PORTA_UDP: 7883
       PONTE_VOZ_IP_PUBLICO: ${PONTE_VOZ_IP_PUBLICO}
       PONTE_VOZ_SEGREDO: ${PONTE_VOZ_SEGREDO}     # valida o JWT do VOICE_SERVER_UPDATE
-      LIVEKIT_URL: ${LIVEKIT_URL}
+      PONTE_VOZ_IP_PUBLICO: ${PONTE_VOZ_IP_PUBLICO}
       API_INTERNA_URL: http://api:3333
     ports:
       - "7883:7883/udp"        # mídia do bot — direto, sem Traefik
-    depends_on: [livekit]
+    depends_on: [api]
 ```
+
+> **Duas correções da F2.** (i) `depends_on: [livekit]` **não serve**: o
+> `livekit` está sob o profile `livekit` e pode nem existir (quem usa LiveKit
+> Cloud não o sobe). A dependência real é a **api**, que é quem a ponte chama na
+> rota interna. (ii) A ponte **não lê `LIVEKIT_URL`**: a URL e o token do
+> LiveKit chegam dentro do JWT, assinados pela API — é o desenho do §D5.6, e
+> ter a variável aqui só faria alguém achar que a ponte precisa das credenciais.
 
 `docker-compose.traefik.yml` (também nosso; só o WS passa por aqui):
 
@@ -1038,11 +1138,20 @@ track, _ := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{
 room.LocalParticipant.PublishTrack(track, &lksdk.TrackPublicationOptions{
     Name: "musica", Source: livekit.TrackSource_MICROPHONE,
     DisableDTX: true,   // silêncio entre faixas não pode virar buraco
-    Red:        false,  // redundância dobraria a banda sem ganho aqui
+    Stereo:     true,   // o Lavalink entrega 48 kHz estéreo
 })
 // por quadro recebido do UDP:
 track.WriteSample(media.Sample{Data: opus, Duration: 20 * time.Millisecond}, nil)
 ```
+
+> **Correção da F2, medida contra `server-sdk-go/v2@v2.18.1`:** o
+> `lksdk.TrackPublicationOptions` **não tem o campo `Red`** que este § mandava
+> usar — o código não compila com ele. Tem `Stereo`, que o documento não citava
+> e que importa mais aqui. Entrar na sala é
+> `room.JoinWithToken(url, token, ...ConnectOption)`. O resto do trecho (o
+> `NewLocalSampleTrack` com `MimeTypeOpus` e o `WriteSample` com `Duration`)
+> está certo e compila — o risco nº 2 do §15 deixou de ser "confirmado só no
+> papel" no nível da API.
 
 O `AudioSourceOptions` com cancelamento de eco / supressão de ruído / AGC
 **não existe neste caminho** — mais uma vantagem do repasse: nenhum
@@ -1057,7 +1166,16 @@ await this.voice.join(botUserId, channelId, { muted:false, deafened:true, video:
 ```
 
 Isso dispara `voice.state` para `guild:<id>`, e o bot aparece na coluna e no
-palco do web sem uma linha de UI nova (a tag "BOT" é o §11). Sair: op 4 com
+palco do web sem uma linha de UI nova (a tag "BOT" é o §11).
+
+> **O que este § não tratava: o `session_id` de quem *não* é bot.** O
+> `VOICE_STATE_UPDATE` também sai quando uma **pessoa** entra na call, e o
+> campo `session_id` é obrigatório nas libs — mas uma pessoa no navegador não
+> tem sessão de gateway compat. A F2 manda o **snowflake do próprio usuário**:
+> é estável entre eventos, é opaco, e não revela nada que o evento já não
+> carregue (o cuid interno, que a casca esconde de propósito, ficaria de fora).
+
+Sair: op 4 com
 `channel_id: null` → `voice.leave`. Queda da ponte: ela avisa a API por
 `POST /api/interno/ponte-voz/estado` (autenticada por `X-Ponte-Segredo`), que
 chama `voice.leave`. A carência de 45 s (`VOICE_RECONNECT_GRACE_MS`) do gateway
@@ -1082,6 +1200,11 @@ Riscos concretos, na ordem de probabilidade:
    1 KB. Se alguma implementação truncar, a saída é o token virar um
    **ticket opaco de 32 bytes** e a ponte buscar os dados na API
    (`GET /api/interno/ponte-voz/ticket/:t`). Barato e à prova.
+   > **Medido na F2: 1029 bytes**, e isso já com um token de LiveKit de
+   > brinquedo (o de produção é maior). O `@discordjs/voice` engoliu sem
+   > reclamar. **Passa de 1 KB, então este risco continua de pé para o
+   > Lavalink** — e o ticket opaco fica como a primeira dívida da fase, a ser
+   > paga no dia em que alguém vir o token truncado.
 2. **Versão do voice gateway.** Alguma versão do koe/udpqueue conecta em `v=4`
    e manda heartbeat como int. Já previsto (aceitar as duas formas).
 3. **`endpoint` com porta.** Algumas libs cortam `:80`/`:443` do endpoint;
@@ -1585,7 +1708,9 @@ linguagem.
    certo.
 3. Um script Node com `@discordjs/voice` sozinho (sem bot) apontado para a ponte
    toca um `.ogg` → aparece um participante `bot:` no LiveKit
-   (`livekit-cli list-participants`).
+   (`lk room participants list <sala>` — o `livekit-cli list-participants` que
+   este § dizia **não existe** no `livekit/livekit-cli` v2.18.6, e o nome da
+   sala é **posicional**: `--room` responde "flag provided but not defined").
 4. **A prova de verdade:** Lavalink v4 + um bot de ~200 linhas, `/play <link do
    YouTube>`, e **o som sai no navegador de duas pessoas na mesma call**, sem
    picote por 3 minutos. Com link do Spotify (que o discord-player converte em

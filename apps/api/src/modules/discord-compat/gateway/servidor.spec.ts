@@ -24,6 +24,7 @@ import { FECHAMENTO, OPCODE } from "../tipos";
 import type { PonteDeEventos } from "./dispatch";
 import { GatewayCompatService } from "./servidor";
 import { RegistroDeSessoes, SessaoWs } from "./sessao";
+import type { VozDoGateway } from "./voz";
 
 const TOKEN = "MjIy.aBcDeF.um-token-de-teste-que-nao-vale-nada";
 
@@ -54,7 +55,13 @@ function fakes() {
     montarGuildCreate: vi.fn(async () => ({ id: "333", name: "Servidor", unavailable: false })),
   } as unknown as PonteDeEventos;
 
-  return { aplicativos, dados, ponte };
+  // F2: o op 4 é roteado para cá. O que ele faz está provado em `voz.spec.ts`;
+  // aqui só interessa que a conexão **não** caia por causa dele.
+  const voz = {
+    tratarAtualizacaoDeVoz: vi.fn(async () => undefined),
+  } as unknown as VozDoGateway;
+
+  return { aplicativos, dados, ponte, voz };
 }
 
 /** Um quadro recebido, com o registro de ter chegado como texto ou binário. */
@@ -129,8 +136,8 @@ describe("GatewayCompatService — o aperto de mão do §7", () => {
   beforeEach(async () => {
     clientes = [];
     registro = new RegistroDeSessoes();
-    const { aplicativos, dados, ponte } = fakes();
-    servico = new GatewayCompatService(registro, aplicativos, dados, ponte);
+    const { aplicativos, dados, ponte, voz } = fakes();
+    servico = new GatewayCompatService(registro, aplicativos, dados, ponte, voz);
 
     http = createServer((_req, res) => res.end("ok"));
     await new Promise<void>((pronto) => http.listen(0, "127.0.0.1", pronto));
@@ -245,21 +252,27 @@ describe("GatewayCompatService — o aperto de mão do §7", () => {
     expect(bot.quadros).toHaveLength(0);
   });
 
-  it("compress=zlib-stream na query é ignorado: conexão normal, quadro de texto", async () => {
-    const bot = abrir("v=10&encoding=json&compress=zlib-stream");
+  // Mudou na F2 (lote C): o `zlib-stream` passou a valer de verdade. O que a F1
+  // prendia aqui — "pediu compressão e recebeu texto" — deixou de ser verdade
+  // **de propósito**; o formato do fluxo está preso em `compressao.spec.ts`.
+  it("sem compress na query, o quadro continua sendo texto (o padrão não mudou)", async () => {
+    const bot = abrir("v=10&encoding=json");
     const hello = await bot.esperarOp(OPCODE.HELLO);
     expect(hello.binario).toBe(false);
 
+    // `compress: true` **no corpo** do IDENTIFY continua ignorado: aquilo é
+    // compressão por payload, e o protocolo a deixa opcional por mensagem.
     bot.mandar(OPCODE.IDENTIFY, { token: TOKEN, intents: 1, compress: true });
     const ready = await bot.esperarOp(OPCODE.DISPATCH, "READY");
     expect(ready.binario).toBe(false);
     expect(bot.fechamento).toBeNull();
   });
 
-  it("aceita e ignora os ops 3, 4 e 8 sem derrubar a conexão", async () => {
+  it("aceita e ignora os ops 3 e 8, e roteia o 4, sem derrubar a conexão", async () => {
     const bot = abrir();
     await bot.esperarOp(OPCODE.HELLO);
     bot.mandar(OPCODE.PRESENCE_UPDATE, { status: "online" });
+    // F2: o op 4 já não é ignorado — vai para o `VozDoGateway` (dublado aqui).
     bot.mandar(OPCODE.VOICE_STATE_UPDATE, { guild_id: "333", channel_id: null });
     bot.mandar(OPCODE.REQUEST_GUILD_MEMBERS, { guild_id: "333" });
     bot.mandar(OPCODE.HEARTBEAT, null);
@@ -291,8 +304,8 @@ describe("GatewayCompatService — RESUME", () => {
   beforeEach(async () => {
     clientes = [];
     registro = new RegistroDeSessoes();
-    const { aplicativos, dados, ponte } = fakes();
-    servico = new GatewayCompatService(registro, aplicativos, dados, ponte);
+    const { aplicativos, dados, ponte, voz } = fakes();
+    servico = new GatewayCompatService(registro, aplicativos, dados, ponte, voz);
     http = createServer();
     await new Promise<void>((pronto) => http.listen(0, "127.0.0.1", pronto));
     porta = (http.address() as AddressInfo).port;
@@ -376,8 +389,8 @@ describe("GatewayCompatService — RESUME", () => {
 describe("GatewayCompatService.ligar", () => {
   it("é idempotente: chamar duas vezes não registra um segundo listener", async () => {
     const registro = new RegistroDeSessoes();
-    const { aplicativos, dados, ponte } = fakes();
-    const servico = new GatewayCompatService(registro, aplicativos, dados, ponte);
+    const { aplicativos, dados, ponte, voz } = fakes();
+    const servico = new GatewayCompatService(registro, aplicativos, dados, ponte, voz);
     const http = createServer();
     await new Promise<void>((pronto) => http.listen(0, "127.0.0.1", pronto));
 
