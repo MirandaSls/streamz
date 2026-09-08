@@ -1,3 +1,5 @@
+import { paraBitfieldDoDiscord } from "@streamz/shared";
+
 import type { CargoDoDiscord, LinhaDeCargo } from "../tipos";
 
 /**
@@ -18,11 +20,26 @@ import type { CargoDoDiscord, LinhaDeCargo } from "../tipos";
  * `color` do Discord é inteiro (`0xRRGGBB`); o nosso é `"#rrggbb"` ou null
  * (que vira 0, "sem cor").
  */
-export function cargoParaDiscord(_r: LinhaDeCargo): CargoDoDiscord {
-  throw new Error("F1 lote C: cargoParaDiscord não implementado");
+export function cargoParaDiscord(r: LinhaDeCargo): CargoDoDiscord {
+  return {
+    id: String(r.isDefault ? r.guildSnowflake : r.snowflake),
+    name: r.name,
+    color: corParaInteiro(r.color),
+    hoist: r.hoist,
+    position: r.position,
+    permissions: String(paraBitfieldDoDiscord(r.permissions)),
+    // `managed` é "cargo criado por uma integração, que ninguém edita à mão".
+    // O cargo gerenciado do bot nasce com a instalação, que é F4.
+    managed: false,
+    mentionable: r.mentionable,
+    flags: 0,
+  };
 }
 
 /** `"#5865f2"` → `5793266`; null → 0. Isolado para o teste. */
-export function corParaInteiro(_cor: string | null): number {
-  throw new Error("F1 lote C: corParaInteiro não implementado");
+export function corParaInteiro(cor: string | null): number {
+  // Cor inválida vira 0 ("sem cor") em vez de `NaN`: um `NaN` aqui atravessa o
+  // `JSON.stringify` como `null` e o discord.js faz `role.color.toString(16)`.
+  if (!cor || !/^#?[0-9a-f]{6}$/i.test(cor)) return 0;
+  return Number.parseInt(cor.startsWith("#") ? cor.slice(1) : cor, 16);
 }
