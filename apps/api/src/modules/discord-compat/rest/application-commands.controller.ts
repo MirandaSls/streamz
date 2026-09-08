@@ -14,6 +14,7 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { SkipThrottle } from "@nestjs/throttler";
+import { Prisma } from "@prisma/client";
 import { ehSnowflake, type OpcaoDeComando } from "@streamz/shared";
 import { zodBody } from "../../../common/zod.pipe";
 import { PrismaService } from "../../../prisma/prisma.service";
@@ -61,22 +62,16 @@ import {
  * `Application` do token — outro valor é **403 `50001`**, não 404: o bot existe,
  * mas não é dele.
  *
- * > **Falta uma linha de fiação, e ela é do coordenador** (regra do §1 do
- * > `CONTRATO-F3.md`: quem acha uma peça faltando relata, não cria). Este
- * > controller é registrado no `InteractionsModule`, e o Nest constrói o
- * > `BotTokenGuard` no contexto **desse** módulo — mas o `ApplicationsService`
- * > de que o guard depende só é visível de dentro do `DiscordCompatModule`, que
- * > importa o `ApplicationsModule` **sem reexportá-lo**. Sem uma das duas
- * > linhas abaixo, a aplicação não sobe (`Nest can't resolve dependencies of
- * > the BotTokenGuard`), e o erro aparece no `bootstrap`, não aqui:
- * >
- * > - `DiscordCompatModule`: `exports: [… , ApplicationsModule]`, ou
- * > - `InteractionsModule`: `imports: [… , ApplicationsModule]`.
- * >
- * > Conferido num Nest de verdade, com esta forma exata de grafo: sem o
- * > reexport o `NestFactory.create` rejeita; com ele, sobe. As rotas de callback
- * > e followup **não** têm esse problema — elas não têm guard nenhum, o que é
- * > o §3.3 do contrato.
+ * > **A fiação que faltava, e que já foi feita.** Este controller é registrado
+ * > no `InteractionsModule`, e o Nest constrói o `BotTokenGuard` no contexto
+ * > **desse** módulo — mas o `ApplicationsService` de que o guard depende só era
+ * > visível de dentro do `DiscordCompatModule`, que importa o
+ * > `ApplicationsModule` sem reexportá-lo. Sem isso a aplicação não subia
+ * > (`Nest can't resolve dependencies of the BotTokenGuard`), e o erro aparecia
+ * > no `bootstrap`, não aqui. O conserto foi `imports: [… , ApplicationsModule]`
+ * > no `InteractionsModule` — o lado certo: um módulo não deve reexportar o que
+ * > usa por dentro só porque um vizinho precisa. As rotas de callback e followup
+ * > nunca tiveram esse problema, porque não têm guard nenhum (§3.3 do contrato).
  *
  * O `PUT` é sobrescrita em bloco: o que não veio no corpo **some**. É assim no
  * Discord, e é o que faz o `deploy-commands.js` ser idempotente.
@@ -93,13 +88,13 @@ import {
  * outro lado (`comandosDoServidor`, do lote A) só lê. Um service no meio seria
  * uma camada de repasse.
  *
- * **O acesso à tabela é por uma interface estrutural** (`RepositorioDeComandos`,
- * no fim do arquivo) e não pelo `prisma.applicationCommand` gerado, porque o
- * modelo `ApplicationCommand` entra no `schema.prisma` pela migration 4, que é
- * do **lote A**: escrever `this.prisma.applicationCommand` nesta branch não
- * compilaria, e duplicar o bloco do schema aqui daria conflito no merge. O
- * formato dos campos é o do §10 do documento, palavra por palavra; quando os
- * dois lotes se juntarem, o `cast` vira redundância inofensiva.
+ * **O acesso à tabela é pelo delegate gerado do Prisma**, por `comandosDe` (no
+ * fim do arquivo). Enquanto os lotes A e B corriam em paralelo isto era uma
+ * interface estrutural com um `cast`, porque o modelo `ApplicationCommand` só
+ * entrava no `schema.prisma` pela migration 4, do lote A. **Na integração o
+ * `cast` saiu**, e é de propósito: com o tipo de verdade, o `tsc` confere nome
+ * de campo por nome de campo contra o schema — um `cast` compila igualzinho com
+ * o nome errado, e a casca e a migration divergiriam em silêncio.
  */
 @SkipThrottle()
 @UseFilters(FiltroDeErrosDoDiscord)
@@ -296,7 +291,7 @@ export class ApplicationCommandsCompatController {
       where: { applicationId: bot.applicationId, guildId: escopo.guildId },
       orderBy: { name: "asc" },
     });
-    return linhas.map((linha) => this.paraDiscord(bot, escopo, linha));
+    return linhas.map((linha: LinhaDeComando) => this.paraDiscord(bot, escopo, linha));
   }
 
   /**
@@ -338,7 +333,7 @@ export class ApplicationCommandsCompatController {
       return repositorio.findMany({ where: doEscopo, orderBy: { name: "asc" } });
     });
 
-    return linhas.map((linha) => this.paraDiscord(bot, escopo, linha));
+    return linhas.map((linha: LinhaDeComando) => this.paraDiscord(bot, escopo, linha));
   }
 
   /**
@@ -370,14 +365,19 @@ export class ApplicationCommandsCompatController {
 
   /** Grava um comando: atualiza o de mesmo nome, ou cria. */
   private async gravar(
-    repositorio: RepositorioDeComandos,
+    repositorio: PrismaService["applicationCommand"],
     doEscopo: { applicationId: string; guildId: string | null },
     comando: ComandoNormalizado,
   ): Promise<void> {
     const dados = {
       description: comando.description,
       type: comando.type,
-      options: comando.options,
+      // A coluna é `Json`, e o input de Json do Prisma é `InputJsonValue` — um
+      // tipo estrutural que **não** aceita um array de interface nomeada (falta
+      // a index signature). O `cast` é sobre a forma do JSON, não sobre o nome
+      // das colunas: essas o `tsc` continua conferindo, no `where` e no `create`
+      // logo abaixo, que é justamente por que o delegate aqui é o gerado.
+      options: comando.options as unknown as Prisma.InputJsonValue,
       defaultMemberPermissions: comando.defaultMemberPermissions,
     };
 
@@ -451,7 +451,7 @@ export class ApplicationCommandsCompatController {
   }
 
   /** O repositório fora de transação. Ver o cabeçalho do arquivo. */
-  private comandos(): RepositorioDeComandos {
+  private comandos(): PrismaService["applicationCommand"] {
     return comandosDe(this.prisma);
   }
 }
@@ -486,24 +486,20 @@ interface LinhaDeComando {
   defaultMemberPermissions: string | null;
 }
 
-/** O punhado de operações do Prisma que o registro de comandos usa. */
-interface RepositorioDeComandos {
-  findMany(argumentos: unknown): Promise<LinhaDeComando[]>;
-  findFirst(argumentos: unknown): Promise<LinhaDeComando | null>;
-  create(argumentos: unknown): Promise<LinhaDeComando>;
-  updateMany(argumentos: unknown): Promise<{ count: number }>;
-  deleteMany(argumentos: unknown): Promise<{ count: number }>;
-}
-
 /**
- * O delegate de `ApplicationCommand`, do cliente ou de uma transação.
+ * O delegate de `ApplicationCommand`, do cliente ou de dentro de uma transação.
  *
- * O `cast` é a ponte entre os dois lotes desta fase e some sozinho quando a
- * migration 4 entrar: a partir daí `cliente.applicationCommand` existe com este
- * mesmo formato, e a interface acima vira a documentação do que a casca usa.
+ * Enquanto os lotes A e B corriam em paralelo isto era uma interface estrutural
+ * com um `cast`, porque o modelo só entrava no `schema.prisma` pela migration 4,
+ * que é do lote A. **Na integração o `cast` saiu**, e é de propósito: com o
+ * delegate gerado, o `tsc` confere nome de campo por nome de campo contra o
+ * schema. Era o único jeito de a migration e a casca não divergirem em silêncio
+ * — um `cast` compila igualzinho com o nome errado.
  */
-function comandosDe(cliente: unknown): RepositorioDeComandos {
-  return (cliente as { applicationCommand: RepositorioDeComandos }).applicationCommand;
+function comandosDe(cliente: {
+  applicationCommand: PrismaService["applicationCommand"];
+}): PrismaService["applicationCommand"] {
+  return cliente.applicationCommand;
 }
 
 /** O Json da coluna → a lista de opções que a resposta do Discord leva. */
@@ -514,13 +510,14 @@ function opcoes(valor: unknown): OpcaoDeComando[] {
 /**
  * 404 para um comando que não existe naquele escopo.
  *
- * O código do Discord para isto é o **10063** (`Unknown application command`), e
- * ele **não está** no mapa `CODIGO` de `erros.ts` — que é do coordenador, e onde
- * a F3 só podia acrescentar os dois atalhos de interação (§2 do `CONTRATO-F3.md`).
- * Até o mapa ganhar o 10063, o código é o 0 genérico e o texto é o do Discord:
- * o `DiscordAPIError` do bot mostra a mensagem certa, e só a classificação
- * numérica fica pobre. **Relatado no PR.**
+ * O 10063 entrou no mapa `CODIGO` na integração da fase, exatamente por causa
+ * desta função: é o código que a lib do bot usa para distinguir "esse comando eu
+ * mesmo apaguei" de "deu ruim no servidor".
  */
 function comandoDesconhecido(): ErroDoDiscord {
-  return new ErroDoDiscord(HttpStatus.NOT_FOUND, CODIGO.GERAL, "Unknown application command");
+  return new ErroDoDiscord(
+    HttpStatus.NOT_FOUND,
+    CODIGO.COMANDO_DESCONHECIDO,
+    "Unknown application command",
+  );
 }
