@@ -21,6 +21,7 @@ import { RolesModule } from "./modules/roles/roles.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { FriendsModule } from "./modules/friends/friends.module";
 import { EmojisModule } from "./modules/emojis/emojis.module";
+import { SoundboardModule } from "./modules/soundboard/soundboard.module";
 import { MediaModule } from "./modules/media/media.module";
 // ── h-moderacao ──
 import { AuditModule } from "./modules/audit/audit.module";
@@ -79,6 +80,7 @@ import { validateEnv } from "./common/env";
     NotificationsModule,
     FriendsModule,
     EmojisModule,
+    SoundboardModule,
     MediaModule,
     UpdatesModule,
     // ── h-moderacao ──

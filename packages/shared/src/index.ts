@@ -12,6 +12,7 @@ export * from "./canais";
 export * from "./mensagens";
 export * from "./midia";
 export * from "./voz";
+export * from "./soundboard";
 export * from "./social";
 export * from "./moderacao";
 export * from "./comunidade";
