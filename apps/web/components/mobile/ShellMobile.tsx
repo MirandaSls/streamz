@@ -270,10 +270,16 @@ export default function ShellMobile() {
  * Não há rota por tela de propósito: a web é exportada estática e servida ao
  * app de desktop também; inventar URLs para as telas do celular mudaria o
  * roteamento dos dois.
+ *
+ * **Com modal aberto, esta pilha não se mexe.** O modal tem a própria sentinela
+ * (`hooks/useVoltarNoCelular`), e o `popstate` é um evento só: a ordem em que os
+ * dois ouvintes rodam não é garantida, então sem esta guarda um "voltar" dentro
+ * das configurações fechava a caixa **e** a conversa atrás dela.
  */
 function useVoltarDoAndroid(profundidadeAtual: number) {
   useEffect(() => {
     const aoVoltar = () => {
+      if (useUI.getState().modals.length > 0) return;
       sentinela = false;
       useMobile.getState().voltar();
     };
