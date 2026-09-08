@@ -120,6 +120,7 @@ export default function CreateGroupDMModal() {
 
   return (
     <Dialog
+      telaCheiaNoCelular
       title="Nova mensagem"
       description={`Grupos privados podem ter até ${membros} membros.`}
       onClose={closeModal}

@@ -52,6 +52,7 @@ export default function HeaderPopover({
   cabecalho,
   corpoClassName = "p-2",
   evento,
+  modoTela = false,
   onOpen,
   children,
 }: {
@@ -86,6 +87,19 @@ export default function HeaderPopover({
   corpoClassName?: string;
   /** nome de um evento no `window` que abre o painel (o atalho Ctrl+I). */
   evento?: string;
+  /**
+   * **Painel sem popover**: sem botão, sempre aberto, preenchendo o pai.
+   *
+   * É o que a aba "Notificações" do celular usa. Lá a caixa de entrada é uma
+   * *tela*, não uma caixa pendurada num ícone de cabeçalho — e o cabeçalho de
+   * ferramentas onde esse ícone mora não existe no leiaute de abas. Sem este
+   * modo, o mesmo conteúdo teria de ser recriado no `components/mobile/`, com
+   * duas listas de menções para manter em sincronia.
+   *
+   * Aqui não há foco preso, Esc nem clique-fora: nada disso faz sentido numa
+   * tela que não cobre outra.
+   */
+  modoTela?: boolean;
   onOpen?: () => void;
   /** recebe o fechador para que um item da lista possa fechar o painel. */
   children: (fechar: () => void) => ReactNode;
@@ -167,6 +181,8 @@ export default function HeaderPopover({
     }
   }
 
+  if (modoTela) return <ComoTela {...{ icon, title, tituloControle, contagem, action, busca, cabecalho, corpoClassName, onOpen, children }} />;
+
   return (
     <div ref={boxRef} className="relative">
       <HeaderIcon
@@ -210,37 +226,15 @@ export default function HeaderPopover({
             {cabecalho ? (
               cabecalho(fechar)
             ) : (
-              <header className="shrink-0 shadow-header">
-                <div className="flex h-12 items-center gap-2 px-4">
-                  <span aria-hidden="true" className="shrink-0 text-txt-secondary">
-                    {icon}
-                  </span>
-                  {tituloControle ? (
-                    tituloControle(fechar)
-                  ) : (
-                    <h2 className="min-w-0 truncate font-semibold text-txt-primary">{title}</h2>
-                  )}
-                  {contagem !== undefined && contagem > 0 && (
-                    <span className="shrink-0 rounded-full bg-void px-1.5 text-xs font-semibold text-txt-muted">
-                      {contagem}
-                    </span>
-                  )}
-                  {action && <span className="ml-auto shrink-0">{action}</span>}
-                </div>
-                {busca && (
-                  <div className="px-4 pb-2">
-                    <input
-                      data-autofocus
-                      value={busca.valor}
-                      onChange={(e) => busca.aoMudar(e.target.value)}
-                      type="search"
-                      aria-label={busca.placeholder}
-                      placeholder={busca.placeholder}
-                      className="h-7 w-full rounded-[4px] bg-void px-2 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
-                    />
-                  </div>
-                )}
-              </header>
+              <CabecalhoPadrao
+                icon={icon}
+                title={title}
+                tituloControle={tituloControle}
+                contagem={contagem}
+                action={action}
+                busca={busca}
+                fechar={fechar}
+              />
             )}
             <div className={`min-h-0 flex-1 overflow-y-auto ${corpoClassName}`}>
               {children(fechar)}
@@ -248,6 +242,117 @@ export default function HeaderPopover({
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/** O cabeçalho de fábrica do painel — o mesmo no popover e no `modoTela`. */
+function CabecalhoPadrao({
+  icon,
+  title,
+  tituloControle,
+  contagem,
+  action,
+  busca,
+  fechar,
+}: {
+  icon: ReactNode;
+  title: string;
+  tituloControle?: (fechar: () => void) => ReactNode;
+  contagem?: number;
+  action?: ReactNode;
+  busca?: { valor: string; aoMudar: (valor: string) => void; placeholder: string };
+  fechar: () => void;
+}) {
+  return (
+    <header className="shrink-0 shadow-header">
+      <div className="flex h-12 items-center gap-2 px-4">
+        <span aria-hidden="true" className="shrink-0 text-txt-secondary">
+          {icon}
+        </span>
+        {tituloControle ? (
+          tituloControle(fechar)
+        ) : (
+          <h2 className="min-w-0 truncate font-semibold text-txt-primary">{title}</h2>
+        )}
+        {contagem !== undefined && contagem > 0 && (
+          <span className="shrink-0 rounded-full bg-void px-1.5 text-xs font-semibold text-txt-muted">
+            {contagem}
+          </span>
+        )}
+        {action && <span className="ml-auto shrink-0">{action}</span>}
+      </div>
+      {busca && (
+        <div className="px-4 pb-2">
+          <input
+            data-autofocus
+            value={busca.valor}
+            onChange={(e) => busca.aoMudar(e.target.value)}
+            type="search"
+            aria-label={busca.placeholder}
+            placeholder={busca.placeholder}
+            className="h-7 w-full rounded-[4px] bg-void px-2 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
+          />
+        </div>
+      )}
+    </header>
+  );
+}
+
+/**
+ * O mesmo painel, mas como **tela**: sem botão que o abra, sem moldura
+ * flutuante e sem largura fixa. Ver `modoTela`.
+ */
+function ComoTela({
+  icon,
+  title,
+  tituloControle,
+  contagem,
+  action,
+  busca,
+  cabecalho,
+  corpoClassName,
+  onOpen,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  tituloControle?: (fechar: () => void) => ReactNode;
+  contagem?: number;
+  action?: ReactNode;
+  busca?: { valor: string; aoMudar: (valor: string) => void; placeholder: string };
+  cabecalho?: (fechar: () => void) => ReactNode;
+  corpoClassName: string;
+  onOpen?: () => void;
+  children: (fechar: () => void) => ReactNode;
+}) {
+  // no popover a carga é disparada pelo clique que abre; aqui a tela já nasce
+  // aberta, e a montagem é o equivalente
+  const carregar = useRef(onOpen);
+  carregar.current = onOpen;
+  useEffect(() => {
+    carregar.current?.();
+  }, []);
+
+  // nada a fechar: a tela é a aba inteira. Quem quiser sair troca de aba.
+  const fechar = useCallback(() => {}, []);
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-panel" role="region" aria-label={title}>
+      {cabecalho ? (
+        cabecalho(fechar)
+      ) : (
+        <CabecalhoPadrao
+          icon={icon}
+          title={title}
+          tituloControle={tituloControle}
+          contagem={contagem}
+          action={action}
+          busca={busca}
+          fechar={fechar}
+        />
+      )}
+      <div className={`min-h-0 flex-1 overflow-y-auto ${corpoClassName}`}>{children(fechar)}</div>
     </div>
   );
 }

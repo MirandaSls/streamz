@@ -15,17 +15,20 @@ import {
   Angry,
   Annoyed,
   Apps,
+  Camera,
   Eye,
   EyeOff,
   FileText,
   Gif,
   Gift,
   Hash,
+  Image as ImageIcon,
   Laugh,
   MessageSquarePlus,
   Paperclip,
   Pencil,
   Plus,
+  SendHorizonal,
   Smile,
   Sticker as StickerIcon,
   Upload,
@@ -58,6 +61,7 @@ import { buscarComandos, interpretarComando, sugestoesDeComandosDeApp } from "@/
 import { buscarEmojisUnicode } from "@/lib/emojis-unicode";
 import { EVENTO_MENCAO, type DetalheMencao } from "@/lib/mencoes";
 import { lerRascunho, limparRascunho, salvarRascunho } from "@/lib/rascunhos";
+import { useEhMobile } from "@/hooks/useEhMobile";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { useComandosDeApp } from "@/stores/comandos-de-app";
@@ -78,6 +82,15 @@ const MAX_HEIGHT_PX = 200;
  * assume **sem perguntar ao layout** — ver `medir` no `useLayoutEffect`.
  */
 const ALTURA_UMA_LINHA = 58;
+/**
+ * A mesma coisa no celular: a cápsula do composer do Discord mede **40pt**
+ * (medido em `docs/Reference/mobile/discord-mobile-chat-canal-2024.png`,
+ * 1px=1pt, `MEDIDAS.md` §7), com 9px de respiro de cada lado de uma linha de
+ * 22. Sem esta constante o `min-h-[40px]` da classe não valia nada: quem
+ * escreve a altura do campo vazio é o `style.height` daqui, e ele mandava 58 —
+ * a cápsula media 58 num telefone, 45% mais alta que a do Discord.
+ */
+const ALTURA_UMA_LINHA_MOBILE = 40;
 /** A contagem de caracteres só aparece quando começa a importar (Discord: 1800). */
 const COUNTER_THRESHOLD = 0.9;
 /** Sugestões mostradas de uma vez em cada gatilho. */
@@ -117,11 +130,14 @@ function SideButton({
   label,
   onClick,
   onMouseEnter,
+  baixo = false,
   children,
 }: {
   label: string;
   onClick?: () => void;
   onMouseEnter?: () => void;
+  /** 40px de altura em vez de 58: o composer do celular é uma cápsula de 40. */
+  baixo?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -131,7 +147,12 @@ function SideButton({
         onClick={onClick}
         onMouseEnter={onMouseEnter}
         aria-label={label}
-        className="grid h-[58px] w-10 place-items-center text-txt-secondary transition hover:text-txt-primary"
+        /* no celular o lado é literal pelo mesmo motivo da altura: `w-10` sobre
+           a raiz de 15,5px dá 38,75, e o botão do composer do Discord mede 40pt
+           (`MEDIDAS.md` §7) */
+        className={`grid place-items-center text-txt-secondary transition hover:text-txt-primary ${
+          baixo ? "h-[40px] w-[40px]" : "h-[58px] w-10"
+        }`}
       >
         {children}
       </button>
@@ -201,8 +222,21 @@ export default function Composer({
   const [termoGif, setTermoGif] = useState("");
   const [carinha, setCarinha] = useState(0);
   const sendMode = useSettings((s) => s.sendMode);
+  /**
+   * No celular o composer muda em duas coisas, e só nelas: a fileira de cinco
+   * ícones vira duas (não cabem cinco alvos de 40px ao lado de um campo de
+   * texto em 390px de tela — o rótulo do canal quebrava em três linhas), e
+   * ganha um **botão de enviar**, porque o Enter ali é quebra de linha.
+   */
+  const ehMobile = useEhMobile();
+  /** o `medir()` lê isto de dentro de um efeito que não depende do estado. */
+  const ehMobileRef = useRef(ehMobile);
+  ehMobileRef.current = ehMobile;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  /** só no celular: galeria de fotos e câmera (ver `abrirMenuMais`). */
+  const galeriaInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   const me = useAuth((s) => s.user);
@@ -245,7 +279,7 @@ export default function Composer({
       // rodava de novo quando o texto mudava — a caixa continuava alta depois
       // de alargar a janela, com o texto colado no topo e o resto morto.
       if (!draft) {
-        campo.style.height = `${ALTURA_UMA_LINHA}px`;
+        campo.style.height = `${ehMobileRef.current ? ALTURA_UMA_LINHA_MOBILE : ALTURA_UMA_LINHA}px`;
         return;
       }
       campo.style.height = "auto";
@@ -266,7 +300,7 @@ export default function Composer({
     });
     observador.observe(el);
     return () => observador.disconnect();
-  }, [draft]);
+  }, [draft, ehMobile]);
 
   // As prévias locais são URLs de objeto e precisam ser revogadas ao desmontar.
   // A lista vive numa ref porque a limpeza tem de rodar **só** no desmonte: com
@@ -427,6 +461,11 @@ export default function Composer({
     }
 
     if (event.key !== "Enter" || event.shiftKey) return;
+    // No celular o Enter do teclado da tela **quebra linha**, e quem envia é o
+    // botão ao lado. É a regra do Discord no telefone, e a razão é mecânica:
+    // no teclado virtual não existe Shift+Enter, então um Enter que enviasse
+    // tornaria impossível escrever duas linhas.
+    if (ehMobile && !(event.ctrlKey || event.metaKey)) return;
     // ── e-configuracoes ── quem prefere Ctrl+Enter usa o Enter para quebrar linha
     if (sendMode === "ctrl-enter" && !(event.ctrlKey || event.metaKey)) return;
     event.preventDefault();
@@ -507,13 +546,38 @@ export default function Composer({
   }
 
   function abrirMenuMais(event: MouseEvent<HTMLButtonElement>) {
-    const items: MenuItem[] = [
-      {
-        label: "Enviar arquivo",
-        icon: <Paperclip size={18} />,
-        onSelect: () => fileInputRef.current?.click(),
-      },
-    ];
+    const items: MenuItem[] = [];
+    /*
+      No celular, os dois caminhos que o sistema oferece e o `<input type=file>`
+      cru não pede: a **galeria** (`accept="image/*"`) e a **câmera**
+      (`capture="environment"`, que faz o Android e o iOS abrirem a traseira
+      direto, sem passar pelo seletor de arquivos).
+
+      São inputs separados, e não atributos ligados e desligados no mesmo:
+      `capture` é lido quando o seletor abre, e alternar o atributo do input
+      compartilhado deixava a próxima escolha com o modo da anterior em alguns
+      WebViews. Três inputs escondidos custam nada e cada um só sabe uma coisa.
+
+      "Enviar arquivo" continua embaixo, e no desktop continua sendo o único —
+      lá `capture` não existe e `accept` só atrapalharia quem quer mandar um zip.
+    */
+    if (ehMobile) {
+      items.push({
+        label: "Galeria",
+        icon: <ImageIcon size={18} />,
+        onSelect: () => galeriaInputRef.current?.click(),
+      });
+      items.push({
+        label: "Tirar foto",
+        icon: <Camera size={18} />,
+        onSelect: () => cameraInputRef.current?.click(),
+      });
+    }
+    items.push({
+      label: "Enviar arquivo",
+      icon: <Paperclip size={18} />,
+      onSelect: () => fileInputRef.current?.click(),
+    });
     if (onCreateThread) {
       items.push({
         label: "Criar thread",
@@ -536,6 +600,31 @@ export default function Composer({
   }
 
   const Carinha = CARINHAS[carinha];
+
+  /**
+   * O "+" das opções de envio. No desktop vive dentro da caixa do composer; no
+   * celular, fora dela, à esquerda — é o leiaute da captura do Discord, e é
+   * também o que devolve largura ao campo num telefone de 390px.
+   */
+  const botaoMais = (
+    <button
+      type="button"
+      onClick={abrirMenuMais}
+      aria-label="Mais opções de envio"
+      // `ml-2.5` põe o glifo de 18 a 21px da borda esquerda da caixa, que é
+      // onde ele fica no Discord: 10 de margem + os 11 que sobram de cada lado
+      // dentro do alvo de 40
+      className={`grid shrink-0 place-items-center rounded-full text-txt-secondary transition hover:text-txt-primary ${
+        ehMobile ? "h-[40px] w-[40px] bg-hov" : "ml-2.5 mr-4 mt-[9px] h-10 w-10"
+      }`}
+    >
+      {/* `+` liso, não o `CirclePlus`: o do Discord é marca de traço, sem o
+          círculo cheio em volta. O `+` do Discord é desenhado pequeno dentro do
+          próprio ativo: a tinta ocupa 58% do quadro, contra ~83% dos vizinhos —
+          30 × 0,58 ≈ 17,5, que é o glifo de 18 medido no composer. */}
+      <Plus size={30} />
+    </button>
+  );
 
   return (
     <form
@@ -562,11 +651,21 @@ export default function Composer({
             }
           : undefined
       }
-      className="relative shrink-0 px-2.5"
+      className={`relative shrink-0 ${ehMobile ? "px-3 pb-1" : "px-2.5"}`}
     >
       {dragging && <OverlayArrastar alvo={formRef.current} destino={destino} />}
 
-      <div className="rounded-lg bg-input">
+      {/* Cápsula de 40pt no celular (raio 20, margens de 12) — medido em
+          `docs/Reference/mobile/discord-mobile-chat-canal-2024.png`, 1px=1pt,
+          `MEDIDAS.md` §7. No desktop segue o retângulo de raio 8 e 58 de altura
+          medido no Discord do computador. */}
+      <div className={ehMobile ? "flex items-end gap-2" : ""}>
+      {ehMobile && allowAttachments && botaoMais}
+      <div
+        className={
+          ehMobile ? "min-w-0 flex-1 rounded-[20px] bg-input" : "rounded-lg bg-input"
+        }
+      >
         {(pendentes.length > 0 || prontos.length > 0) && (
           // uma linha só, com rolagem horizontal: quebrar em várias linhas
           // empurrava a timeline para cima a cada arquivo
@@ -625,30 +724,47 @@ export default function Composer({
                   e.target.value = "";
                 }}
               />
-              {/* sem tooltip descritivo: o Discord não rotula o "+" com a lista
-                  do que ele faz */}
-              <button
-                type="button"
-                onClick={abrirMenuMais}
-                aria-label="Mais opções de envio"
-                // `ml-2.5` põe o glifo de 18 a 21px da borda esquerda da caixa,
-                // que é onde ele fica no Discord: 10 de margem + os 11 que
-                // sobram de cada lado dentro do alvo de 40
-                className="ml-2.5 mr-4 mt-[9px] grid h-10 w-10 shrink-0 place-items-center rounded-full text-txt-secondary transition hover:text-txt-primary"
-              >
-                {/* `+` liso, não o `CirclePlus`: o do Discord é marca de traço,
-                    sem o círculo cheio em volta */}
-                {/* O `+` do Discord é desenhado pequeno dentro do próprio ativo: a tinta
-              ocupa 58% do quadro, contra ~83% dos vizinhos. Então `size` aqui não
-              é o tamanho do desenho — 30 × 0,58 ≈ 17,5, que é o glifo de 18
-              medido no composer do Discord. */}
-          <Plus size={30} />
-              </button>
+              {/* Os dois caminhos de imagem do celular. Ficam aqui, e não ao
+                  lado do "+" (que no telefone mora fora da cápsula): o que
+                  importa é montar os inputs enquanto `allowAttachments` valer,
+                  porque quem os aciona é o menu que o "+" abre, pela `ref`. */}
+              {ehMobile && (
+                <>
+                  <input
+                    ref={galeriaInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    hidden
+                    onChange={(e) => {
+                      if (e.target.files?.length) adicionarArquivos(e.target.files);
+                      e.target.value = "";
+                    }}
+                  />
+                  {/* sem `multiple`: uma foto por vez é o que a câmera devolve */}
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    hidden
+                    onChange={(e) => {
+                      if (e.target.files?.length) adicionarArquivos(e.target.files);
+                      e.target.value = "";
+                    }}
+                  />
+                </>
+              )}
+              {/* No celular o "+" mora **fora** da cápsula, à esquerda dela
+                  (ver `discord-mobile-chat-canal-2024.png`); no desktop ele fica
+                  dentro da caixa. O botão é o mesmo — muda onde é montado. */}
+              {!ehMobile && botaoMais}
             </>
           ) : (
             // mesmo recuo do canal: sem isso o composer da thread ficava
-            // desalinhado do resto da coluna
-            <span className="w-14 shrink-0" aria-hidden="true" />
+            // desalinhado do resto da coluna. No celular não há recuo a imitar:
+            // o "+" está fora da cápsula.
+            !ehMobile && <span className="w-14 shrink-0" aria-hidden="true" />
           )}
 
           <textarea
@@ -666,7 +782,9 @@ export default function Composer({
             // anuncia a lista é o próprio popup, que é um `listbox` rotulado
             aria-autocomplete="list"
             placeholder={placeholder}
-            className="min-h-[58px] flex-1 resize-none bg-transparent py-[18px] text-txt-normal outline-none placeholder:text-txt-muted"
+            className={`flex-1 resize-none bg-transparent text-txt-normal outline-none placeholder:text-txt-muted ${
+              ehMobile ? "min-h-[40px] py-[9px] pl-4" : "min-h-[58px] py-[18px]"
+            }`}
           />
 
           <div className="flex items-center pr-2">
@@ -696,23 +814,35 @@ export default function Composer({
                 (`173327.png`, y≈992): presente, GIF, figurinha e apps com
                 18px, carinha com 16, passo de 40 entre centros — o mesmo
                 `w-10` do `SideButton`. */}
-            <SideButton label="Presente">
-              <Gift size={20} />
-            </SideButton>
-            <SideButton label="GIF" onClick={() => setAberto((a) => (a === "gif" ? null : "gif"))}>
+            {/* Presente e apps são os dois botões inertes da fileira (§6.6):
+                no celular, onde a fileira já não cabe inteira, são também os
+                dois primeiros a sair. */}
+            {!ehMobile && (
+              <SideButton label="Presente">
+                <Gift size={20} />
+              </SideButton>
+            )}
+            <SideButton
+              label="GIF"
+              baixo={ehMobile}
+              onClick={() => setAberto((a) => (a === "gif" ? null : "gif"))}
+            >
               {/* o ativo do Discord, não `<span>GIF</span>` com borda: texto
                   muda de peso com a fonte do sistema e nunca casa com os
                   vizinhos */}
               <Gif size={20} />
             </SideButton>
-            <SideButton
-              label="Figurinha"
-              onClick={() => setAberto((a) => (a === "figurinha" ? null : "figurinha"))}
-            >
-              <StickerIcon size={20} />
-            </SideButton>
+            {!ehMobile && (
+              <SideButton
+                label="Figurinha"
+                onClick={() => setAberto((a) => (a === "figurinha" ? null : "figurinha"))}
+              >
+                <StickerIcon size={20} />
+              </SideButton>
+            )}
             <SideButton
               label="Emoji"
+              baixo={ehMobile}
               onClick={() => setAberto((a) => (a === "emoji" ? null : "emoji"))}
               // o ícone troca de carinha a cada passada do mouse, como no Discord
               onMouseEnter={() => setCarinha((c) => (c + 1) % CARINHAS.length)}
@@ -722,11 +852,27 @@ export default function Composer({
                   do quadro (o nosso print media 14px com `size={16}`) */}
               <Carinha size={18} />
             </SideButton>
-            <SideButton label="Apps">
-              <Apps size={20} />
-            </SideButton>
+            {!ehMobile && (
+              <SideButton label="Apps">
+                <Apps size={20} />
+              </SideButton>
+            )}
+            {/* Enviar: só no celular, e só quando há o que enviar. No desktop o
+                Enter é o botão, e um ícone permanente ali seria ruído. */}
+            {ehMobile && (draft.trim().length > 0 || pendentes.length > 0 || prontos.length > 0) && (
+              <button
+                type="submit"
+                disabled={enviando}
+                aria-label="Enviar mensagem"
+                className="mb-[9px] mr-[9px] mt-[9px] grid h-[40px] w-[40px] shrink-0 place-items-center self-end rounded-full bg-accent text-accent-ink transition disabled:opacity-50"
+              >
+                <SendHorizonal size={20} />
+              </button>
+            )}
           </div>
         </div>
+      </div>
+
       </div>
 
       {gatilho && sugestoes.length > 0 && (

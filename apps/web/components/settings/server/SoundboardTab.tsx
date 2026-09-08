@@ -62,98 +62,103 @@ export default function SoundboardTab({ guildId }: { guildId: string }) {
         Sons — {sons.length}/{MAX_SOUNDBOARD_POR_GUILD}
       </p>
 
-      <table className="w-full table-fixed">
-        <colgroup>
-          <col className="w-[220px]" />
-          <col />
-          <col className="w-[32%]" />
-          <col className="w-[88px]" />
-        </colgroup>
-        <thead>
-          <tr className={`h-10 ${TABELA_CABECALHO}`}>
-            <th scope="col" className="font-bold">
-              Som
-            </th>
-            <th scope="col" className="font-bold">
-              Nome
-            </th>
-            <th scope="col" className="font-bold">
-              Enviado por
-            </th>
-            <th scope="col">
-              <span className="sr-only">Ações</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {sons.length === 0 && (
-            <tr className="h-[55px]">
-              <td colSpan={4} className="text-sm text-txt-muted">
-                Nenhum som ainda.
-              </td>
+      {/* A tabela rola por dentro no celular: `table-fixed` sem piso de
+          largura espremeria quatro colunas em 358px e nenhuma ficaria legível.
+          Em 660 (a coluna do desktop) o piso não tem efeito. */}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[520px] table-fixed">
+          <colgroup>
+            <col className="w-[220px]" />
+            <col />
+            <col className="w-[32%]" />
+            <col className="w-[88px]" />
+          </colgroup>
+          <thead>
+            <tr className={`h-10 ${TABELA_CABECALHO}`}>
+              <th scope="col" className="font-bold">
+                Som
+              </th>
+              <th scope="col" className="font-bold">
+                Nome
+              </th>
+              <th scope="col" className="font-bold">
+                Enviado por
+              </th>
+              <th scope="col">
+                <span className="sr-only">Ações</span>
+              </th>
             </tr>
-          )}
-          {sons.map((som) => {
-            const autor = members.find((m) => m.user.id === som.createdById)?.user ?? null;
-            return (
-              <tr key={som.id} className="group h-[55px] border-b border-border align-middle">
-                <td className="pr-2">
-                  {/* sem legenda de propósito: é um efeito sonoro de meio
-                      segundo, não fala — o nome ao lado é a descrição dele */}
-                  <audio src={som.url} controls preload="none" className="h-8 w-[200px]" />
-                </td>
-                <td className="pr-2">
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span aria-hidden="true" className="shrink-0 text-base leading-none">
-                      {som.emoji || "🔊"}
-                    </span>
-                    <span className="truncate text-sm text-txt-primary">{som.name}</span>
-                  </span>
-                </td>
-                <td className="pr-2">
-                  {autor ? (
-                    <span className="flex min-w-0 items-center gap-2">
-                      <Avatar user={autor} size="sm" surface="border-chat" />
-                      <span className="truncate text-sm text-txt-normal">
-                        {displayNameOf(autor)}
-                      </span>
-                    </span>
-                  ) : (
-                    <span className="text-sm text-txt-muted">—</span>
-                  )}
-                </td>
-                <td>
-                  <span className="flex items-center justify-end gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
-                    <Tooltip label="Remover">
-                      <button
-                        type="button"
-                        aria-label="Remover"
-                        onClick={async () => {
-                          const ok = await ui.confirm({
-                            title: `Remover "${som.name}"?`,
-                            message: "O som sai do painel de todo mundo do servidor.",
-                            confirmLabel: "Remover",
-                            danger: true,
-                          });
-                          if (!ok) return;
-                          try {
-                            await api.deleteSound(guildId, som.id);
-                          } catch (e) {
-                            ui.toast(errorMessage(e, "Não foi possível remover"), "error");
-                          }
-                        }}
-                        className="grid h-8 w-8 place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong hover:text-red"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </Tooltip>
-                  </span>
+          </thead>
+          <tbody>
+            {sons.length === 0 && (
+              <tr className="h-[55px]">
+                <td colSpan={4} className="text-sm text-txt-muted">
+                  Nenhum som ainda.
                 </td>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            )}
+            {sons.map((som) => {
+              const autor = members.find((m) => m.user.id === som.createdById)?.user ?? null;
+              return (
+                <tr key={som.id} className="group h-[55px] border-b border-border align-middle">
+                  <td className="pr-2">
+                    {/* sem legenda de propósito: é um efeito sonoro de meio
+                        segundo, não fala — o nome ao lado é a descrição dele */}
+                    <audio src={som.url} controls preload="none" className="h-8 w-[200px]" />
+                  </td>
+                  <td className="pr-2">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span aria-hidden="true" className="shrink-0 text-base leading-none">
+                        {som.emoji || "🔊"}
+                      </span>
+                      <span className="truncate text-sm text-txt-primary">{som.name}</span>
+                    </span>
+                  </td>
+                  <td className="pr-2">
+                    {autor ? (
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Avatar user={autor} size="sm" surface="border-chat" />
+                        <span className="truncate text-sm text-txt-normal">
+                          {displayNameOf(autor)}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="text-sm text-txt-muted">—</span>
+                    )}
+                  </td>
+                  <td>
+                    <span className="flex items-center justify-end gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
+                      <Tooltip label="Remover">
+                        <button
+                          type="button"
+                          aria-label="Remover"
+                          onClick={async () => {
+                            const ok = await ui.confirm({
+                              title: `Remover "${som.name}"?`,
+                              message: "O som sai do painel de todo mundo do servidor.",
+                              confirmLabel: "Remover",
+                              danger: true,
+                            });
+                            if (!ok) return;
+                            try {
+                              await api.deleteSound(guildId, som.id);
+                            } catch (e) {
+                              ui.toast(errorMessage(e, "Não foi possível remover"), "error");
+                            }
+                          }}
+                          className="grid h-8 w-8 place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong hover:text-red"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </Tooltip>
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }

@@ -108,6 +108,7 @@ export default function UserProfileModal({
 
   return (
     <Dialog
+      telaCheiaNoCelular
       title={`Perfil de ${nome}`}
       hideHeader
       semPadding
@@ -300,7 +301,14 @@ function Selo({ titulo, valor }: { titulo: string; valor: string }) {
  */
 function Esqueleto({ erro, onClose }: { erro: string | null; onClose: () => void }) {
   return (
-    <Dialog title="Perfil" hideHeader semPadding onClose={onClose} className="w-[600px]">
+    <Dialog
+      title="Perfil"
+      hideHeader
+      semPadding
+      telaCheiaNoCelular
+      onClose={onClose}
+      className="w-[600px]"
+    >
       <div>
         <div className="h-[120px] w-full animate-pulse bg-panel" />
         <div className="px-4 pb-4">

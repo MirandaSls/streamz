@@ -59,6 +59,11 @@
 
 import { pararToqueEm, tocarToqueEm } from "@/lib/toque-com-gesto";
 import { somLigado } from "@/stores/sons";
+import {
+  destravarElementos,
+  urlsDistintas,
+  type ElementoDestravavel,
+} from "@/lib/destravar-sons";
 import { useSettings } from "@/stores/settings";
 import { aplicarSaida, useVoiceDevicesStore } from "@/stores/voiceDevices";
 
@@ -270,6 +275,38 @@ function tocarArquivo(url: string, volume: number): void {
 export function tocarSom(nome: NomeDeSom, opcoes: { forcar?: boolean } = {}): void {
   if (!opcoes.forcar && (!useSettings.getState().notificationSound || !somLigado(nome))) return;
   tocarArquivo(ARQUIVOS[nome], volumeDoSom(nome));
+}
+
+/**
+ * Destrava os sons no primeiro gesto da sessão (iOS). Ver
+ * `lib/destravar-sons.ts` para o porquê e para as duas regras do truque.
+ *
+ * Mora aqui porque é aqui que vive o cache de elementos: destravar um `<audio>`
+ * que depois é descartado não serve de nada, e é justamente **estes** objetos
+ * que vão tocar o som de mensagem e o toque de chamada mais tarde.
+ *
+ * Roda uma vez só. Chamadas seguintes devolvem `0` sem tocar nada.
+ */
+let jaDestravou = false;
+export function destravarSons(): Promise<number> {
+  if (jaDestravou || typeof Audio === "undefined") return Promise.resolve(0);
+  jaDestravou = true;
+  const els: ElementoDestravavel[] = [];
+  for (const url of urlsDistintas(ARQUIVOS)) {
+    let el = elementos.get(url);
+    if (!el) {
+      el = new Audio(url);
+      el.preload = "auto";
+      elementos.set(url, el);
+    }
+    els.push(el);
+  }
+  return destravarElementos(els);
+}
+
+/** Só para o teste: desfaz a guarda de "uma vez por sessão". */
+export function esquecerDestravamento(): void {
+  jaDestravou = false;
 }
 
 /**

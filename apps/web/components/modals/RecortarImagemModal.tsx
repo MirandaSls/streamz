@@ -182,6 +182,7 @@ export default function RecortarImagemModal({
 
   return (
     <Dialog
+      telaCheiaNoCelular
       title={titulo}
       description="Arraste a imagem para escolher o enquadramento e use o zoom para aproximar."
       onClose={() => resolve(null)}

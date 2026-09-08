@@ -13,6 +13,7 @@ import {
   VolumeX,
 } from "@/components/ui/icones";
 import PopoverFlutuante from "@/components/ui/PopoverFlutuante";
+import { useEhMobile } from "@/hooks/useEhMobile";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
 import { usePermissions } from "@/stores/permissions";
@@ -110,6 +111,14 @@ export default function PainelDeSons({
   const membros = useGuilds((s) => s.members);
   const permGuildId = usePermissions((s) => s.guildId);
   const cargos = usePermissions((s) => s.roles);
+
+  /**
+   * No celular o `PopoverFlutuante` já entrega a folha inferior (véu, largura
+   * cheia, 85dvh, área segura). O que muda aqui dentro é a **caixa**: os 532×522
+   * fixos, medidos no print do desktop, viram largura da tela e 60% da altura,
+   * e a moldura arredondada some — quem arredonda é a folha.
+   */
+  const ehMobile = useEhMobile();
 
   const [busca, setBusca] = useState("");
   // só o que o usuário abriu ou fechou na mão; o resto segue o padrão de
@@ -257,8 +266,10 @@ export default function PainelDeSons({
       semRespiro
     >
       <div
-        style={{ height: ALTURA_PAINEL }}
-        className="flex flex-col overflow-hidden rounded-lg border border-border bg-footer"
+        style={ehMobile ? undefined : { height: ALTURA_PAINEL }}
+        className={`flex flex-col overflow-hidden bg-footer ${
+          ehMobile ? "h-[60dvh]" : "rounded-lg border border-border"
+        }`}
       >
         {/* cabeçalho de 64: campo de 40 a 12 da borda esquerda, e a zona de 48
             do alto-falante colada na direita (sem respiro ali) — é o que dá os
@@ -271,7 +282,9 @@ export default function PainelDeSons({
               className="pointer-events-none absolute left-[12px] top-1/2 -translate-y-1/2 text-txt-muted"
             />
             <input
-              autoFocus
+              // no celular o foco automático sobe o teclado por cima da folha
+              // antes de a pessoa ver um som sequer
+              autoFocus={!ehMobile}
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Encontre o som perfeito"
@@ -445,6 +458,7 @@ function SecaoDeSons({
   onAdicionar: () => void;
 }) {
   const ref = useRef<HTMLElement>(null);
+  const ehMobile = useEhMobile();
   useEffect(() => {
     onRegistrar(secao.id, ref.current);
     return () => onRegistrar(secao.id, null);
@@ -473,8 +487,11 @@ function SecaoDeSons({
         </button>
       </h3>
 
+      {/* três colunas em 532 dão os 148 do print; nos ~330 que sobram numa folha
+          de 390 elas virariam 101 e o nome do som só apareceria cortado — no
+          celular são duas */}
       {!fechada && (secao.sons.length > 0 || secao.podeAdicionar) && (
-        <div className="grid grid-cols-3 gap-[8px]">
+        <div className={`grid gap-[8px] ${ehMobile ? "grid-cols-2" : "grid-cols-3"}`}>
           {secao.sons.map((sound) => (
             <CardDeSom
               key={`${secao.id}:${sound.id}`}

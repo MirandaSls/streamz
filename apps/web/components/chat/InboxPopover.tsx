@@ -64,9 +64,12 @@ function rotuloDoCanal(c: Pick<InboxUnreadChannel, "channelName" | "channelType"
 export default function InboxPopover({
   tamanhoDoIcone = 20,
   anelDaSuperficie = "ring-chat",
+  modoTela = false,
 }: {
   /** o ícone é de 20px no cabeçalho e de 19px na barra de título do desktop. */
   tamanhoDoIcone?: number;
+  /** a caixa como **tela**: é a aba "Notificações" do celular (`HeaderPopover`). */
+  modoTela?: boolean;
   /**
    * Cor do anel do badge: é a **superfície atrás do ícone**, não uma cor nova
    * (`ring-chat` no cabeçalho de Amigos, `ring-void` na barra de título). O
@@ -137,13 +140,14 @@ export default function InboxPopover({
       badge={<BadgeDaCaixa estado={badge} anel={anelDaSuperficie} />}
       largura={LARGURA}
       altura={ALTURA}
-      evento={EVENTO_CAIXA_DE_ENTRADA}
+      modoTela={modoTela}
+      evento={modoTela ? undefined : EVENTO_CAIXA_DE_ENTRADA}
       corpoClassName="flex flex-col"
       onOpen={() => void load()}
       cabecalho={(fechar) => (
         <header className="shrink-0">
           {/* título a 19px do topo, 36px de linha, 21px das bordas */}
-          <div className="flex h-9 items-center gap-2 px-[21px] pt-[19px]">
+          <div className="flex h-9 items-center gap-2 px-[21px] pt-[19px] celular:h-[44px] celular:px-4">
             <Inbox size={20} aria-hidden="true" className="shrink-0 text-txt-secondary" />
             <h2 className="min-w-0 truncate font-display text-xl font-bold tracking-title text-txt-primary">
               Caixa de Entrada
@@ -165,7 +169,7 @@ export default function InboxPopover({
                   type="button"
                   onClick={() => verPedidos(fechar)}
                   aria-label={`Ver pedidos de amizade (${pedidos})`}
-                  className="flex h-8 w-[58px] items-center justify-center gap-1 rounded-lg bg-hov text-txt-secondary transition hover:bg-sel hover:text-txt-primary"
+                  className="flex h-8 w-[58px] items-center justify-center gap-1 rounded-lg bg-hov text-txt-secondary transition hover:bg-sel hover:text-txt-primary celular:h-[44px] celular:w-[66px]"
                 >
                   <PedidoDeAmizade size={20} aria-hidden="true" />
                   <span className="grid h-5 min-w-5 place-items-center rounded-full bg-overlay px-1 text-xs font-bold leading-none text-txt-normal">
@@ -423,7 +427,9 @@ function BotaoDoCabecalho({
         onClick={inerte ? undefined : onClick}
         aria-label={label}
         aria-disabled={inerte || undefined}
-        className={`grid h-8 w-8 place-items-center rounded-lg bg-hov transition ${
+        /* 44px no celular: na aba Notificações (`modoTela`) estes são os únicos
+           botões do topo da tela, e 31px não são alvo de dedo */
+        className={`grid h-8 w-8 place-items-center rounded-lg bg-hov transition celular:h-[44px] celular:w-[44px] ${
           inerte
             ? "cursor-default text-txt-secondary opacity-50"
             : "text-txt-secondary hover:bg-sel hover:text-txt-primary"

@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { ChevronRight } from "@/components/ui/icones";
+import { useEhMobile } from "@/hooks/useEhMobile";
 import { isReacoes, isSlider, isSubmenu, useUI, type MenuItem } from "@/stores/ui";
 
 /**
@@ -176,6 +177,7 @@ function Painel({
   alternativoX,
   onClose,
   autoFoco,
+  folha = false,
 }: {
   items: MenuItem[];
   largura: number;
@@ -184,6 +186,17 @@ function Painel({
   alternativoX: number;
   onClose: () => void;
   autoFoco: boolean;
+  /**
+   * **Folha inferior** em vez de caixa ancorada — o menu no celular.
+   *
+   * Um menu de contexto nasce onde o ponteiro está porque o ponteiro é preciso
+   * e a mão não cobre nada. No telefone as duas coisas são falsas: o menu
+   * nasceria embaixo do dedo que o abriu, e uma caixa de 220px no meio da tela
+   * fica longe do polegar. As duas plataformas resolvem igual — a lista sobe do
+   * fundo, na largura inteira. O conteúdo (itens, ícones, permissões) é
+   * exatamente o mesmo; muda a moldura.
+   */
+  folha?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const botoes = useRef<(HTMLButtonElement | null)[]>([]);
@@ -253,19 +266,35 @@ function Painel({
 
   return (
     <>
+      {folha && (
+        // o véu é o alvo de "fechar" mais fácil do telefone: tudo que não é a
+        // folha. `mousedown` fora já fecha (ver `ContextMenuHost`); isto só dá
+        // a ele a aparência de camada.
+        <div aria-hidden="true" className="anim-overlay fixed inset-0 z-[79] bg-black/60" />
+      )}
       <div
         ref={ref}
         role="menu"
         onKeyDown={aoTeclado}
-        style={{
-          left: pos?.x ?? x,
-          top: pos?.y ?? y,
-          width: largura,
-          transformOrigin: pos?.origem ?? "left top",
-        }}
-        className={`fixed z-[80] rounded-lg border border-border/70 bg-overlay p-2 shadow-high anim-menu ${
-          pos ? "" : "invisible"
-        }`}
+        style={
+          folha
+            ? undefined
+            : {
+                left: pos?.x ?? x,
+                top: pos?.y ?? y,
+                width: largura,
+                transformOrigin: pos?.origem ?? "left top",
+              }
+        }
+        className={
+          folha
+            ? // `min-h-11` em cada item: 44px é o alvo de toque, e os itens do
+              // menu do desktop têm 32 porque lá o ponteiro acerta 32
+              "anim-folha fixed inset-x-0 bottom-0 z-[80] max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl bg-overlay p-2 pb-[calc(env(safe-area-inset-bottom)+8px)] shadow-high [&_[role=menuitem]]:min-h-[44px] [&_[role=menuitemcheckbox]]:min-h-[44px] [&_[role=menuitemradio]]:min-h-[44px] [&_[role=group]]:gap-2 [&_[role=group]>button]:h-[44px] [&_[role=group]>button]:w-[44px] [&_[role=group]>button]:text-2xl"
+            : `fixed z-[80] rounded-lg border border-border/70 bg-overlay p-2 shadow-high anim-menu ${
+                pos ? "" : "invisible"
+              }`
+        }
         onContextMenu={(e) => e.preventDefault()}
       >
         {items.map((item, i) => {
@@ -444,6 +473,8 @@ export default function ContextMenuHost() {
   const menu = useUI((s) => s.contextMenu);
   const close = useUI((s) => s.closeContextMenu);
   const raiz = useRef<HTMLDivElement>(null);
+  // no celular o menu é folha inferior, e ela não é ancorada em nada
+  const ehMobile = useEhMobile();
 
   useEffect(() => {
     if (!menu) return;
@@ -455,15 +486,21 @@ export default function ContextMenuHost() {
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("mousedown", onDown);
-    window.addEventListener("scroll", close, true);
-    window.addEventListener("resize", close);
+    // Rolagem e redimensionamento fecham o menu ancorado porque ele ficaria
+    // solto longe do que o abriu. A folha não tem âncora: fechá-la na rolagem
+    // significaria que rolar a **própria folha** a fecha, e o teclado do
+    // celular, que dispara `resize`, também.
+    if (!ehMobile) {
+      window.addEventListener("scroll", close, true);
+      window.addEventListener("resize", close);
+    }
     return () => {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("mousedown", onDown);
       window.removeEventListener("scroll", close, true);
       window.removeEventListener("resize", close);
     };
-  }, [menu, close]);
+  }, [menu, close, ehMobile]);
 
   if (!menu) return null;
 
@@ -476,7 +513,8 @@ export default function ContextMenuHost() {
         y={menu.y}
         alternativoX={menu.x}
         onClose={close}
-        autoFoco
+        autoFoco={!ehMobile}
+        folha={ehMobile}
       />
     </div>
   );

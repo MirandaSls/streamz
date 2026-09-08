@@ -34,6 +34,8 @@ import {
 import Avatar from "@/components/ui/Avatar";
 import IconeDeStatus from "@/components/ui/IconeDeStatus";
 import { MENU_WIDTH, MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
+import { useEhMobile } from "@/hooks/useEhMobile";
+import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
 import { api } from "@/lib/api";
 import { lerRascunho, salvarRascunho } from "@/lib/rascunhos";
 import { useAuth } from "@/stores/auth";
@@ -241,6 +243,24 @@ export default function ProfilePopoverHost() {
   const relacao = useRelationship(popover?.user.id, me?.id);
   const ref = useRef<HTMLDivElement>(null);
   const timerDoSubmenu = useRef<number | undefined>(undefined);
+  /**
+   * No celular o cartão vira **folha inferior**.
+   *
+   * Os 300px ancorados no avatar são a forma certa onde há ponteiro e tela
+   * sobrando ao lado; num telefone de 390 o cartão cobre quase a largura toda de
+   * qualquer jeito, e ancorado num avatar do topo da conversa ele nasce longe do
+   * polegar. Sobe do fundo, como todo popover ancorado do app faz no celular
+   * (`components/ui/PopoverFlutuante.tsx`). O cartão não ganha alça: ele começa
+   * com a faixa do banner, que precisa encostar nos cantos arredondados.
+   *
+   * Virar folha não bastava. As linhas do cartão são `h-8`, que sobre a raiz de
+   * 15,5px do app medem **31px** (todo `rem` do Tailwind sai 3% menor que o
+   * nominal), e o kebab e o enviar são `h-7` = 27. No ponteiro isso é
+   * confortável; no dedo é bem abaixo do piso de 44. Só no celular eles sobem
+   * para `h-[44px]` — **literal**, porque numa classe de escala "44" não seria
+   * 44 (`h-11` daria 42,6).
+   */
+  const ehMobile = useEhMobile();
   const [pos, setPos] = useState<Colocacao | null>(null);
   const [perfil, setPerfil] = useState<UserProfile | null>(null);
   const [rascunho, setRascunho] = useState("");
@@ -285,6 +305,8 @@ export default function ProfilePopoverHost() {
       window.removeEventListener("mousedown", onDown);
     };
   }, [popover, close]);
+
+  useVoltarNoCelular(ehMobile && popover !== null, close);
 
   if (!popover) return null;
   // cópia já estreitada: `abrirKebab` é declaração de função e não herda o
@@ -454,18 +476,30 @@ export default function ProfilePopoverHost() {
   }
 
   return (
-    <div
-      ref={ref}
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Perfil de ${displayNameOf(user)}`}
-      onKeyDown={prenderFoco}
-      style={{ left: pos?.x ?? 0, top: pos?.y ?? 0, width: LARGURA }}
-      className={`fixed z-[75] overflow-hidden rounded-lg bg-overlay shadow-high anim-menu ${
-        pos ? "" : "invisible"
-      }`}
-    >
-      <div className="relative">
+    <>
+      {ehMobile && (
+        <div
+          aria-hidden="true"
+          onMouseDown={close}
+          className="anim-overlay fixed inset-0 z-[74] bg-black/70"
+        />
+      )}
+      <div
+        ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Perfil de ${displayNameOf(user)}`}
+        onKeyDown={prenderFoco}
+        style={ehMobile ? undefined : { left: pos?.x ?? 0, top: pos?.y ?? 0, width: LARGURA }}
+        className={
+          ehMobile
+            ? "anim-folha fixed inset-x-0 bottom-0 z-[75] max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl bg-overlay pb-[env(safe-area-inset-bottom)] shadow-high"
+            : `fixed z-[75] overflow-hidden rounded-lg bg-overlay shadow-high anim-menu ${
+                pos ? "" : "invisible"
+              }`
+        }
+      >
+        <div className="relative">
         {banner ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={banner} alt="" className="h-[120px] w-full object-cover" />
@@ -482,7 +516,9 @@ export default function ProfilePopoverHost() {
             abrirKebab(r.right - MENU_WIDTH_WIDE, r.bottom + 4);
           }}
           aria-label="Mais opções"
-          className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded bg-black/40 text-white/90 transition hover:bg-black/60"
+          className={`absolute right-2 top-2 grid place-items-center rounded bg-black/40 text-white/90 transition hover:bg-black/60 ${
+            ehMobile ? "h-[44px] w-[44px]" : "h-7 w-7"
+          }`}
         >
           <MoreVertical size={16} />
         </button>
@@ -634,7 +670,9 @@ export default function ProfilePopoverHost() {
                 close();
                 openModal({ kind: "settings", tab: "perfil" });
               }}
-              className="mt-3 flex h-8 w-full items-center justify-center gap-2 rounded-lg bg-accent text-sm font-medium text-accent-ink transition hover:bg-accent-hover"
+              className={`mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-accent text-sm font-medium text-accent-ink transition hover:bg-accent-hover ${
+                ehMobile ? "h-[44px]" : "h-8"
+              }`}
             >
               <Pencil size={16} aria-hidden="true" />
               Editar perfil
@@ -669,7 +707,9 @@ export default function ProfilePopoverHost() {
                 }, ATRASO_DO_SUBMENU);
               }}
               onPointerLeave={() => window.clearTimeout(timerDoSubmenu.current)}
-              className="mt-2 flex h-8 w-full items-center gap-2 rounded-lg bg-footer px-2 text-left text-sm font-semibold text-txt-primary transition hover:bg-hov"
+              className={`mt-2 flex w-full items-center gap-2 rounded-lg bg-footer px-2 text-left text-sm font-semibold text-txt-primary transition hover:bg-hov ${
+                ehMobile ? "h-[44px]" : "h-8"
+              }`}
             >
               <span aria-hidden="true" className="grid h-4 w-4 shrink-0 place-items-center">
                 <IconeDeStatus status={status} className="h-3 w-3" />
@@ -739,14 +779,17 @@ export default function ProfilePopoverHost() {
               type="submit"
               disabled={!rascunho.trim()}
               aria-label="Enviar mensagem"
-              className="grid h-7 w-7 shrink-0 place-items-center rounded text-txt-secondary transition hover:text-txt-primary disabled:opacity-40"
+              className={`grid shrink-0 place-items-center rounded text-txt-secondary transition hover:text-txt-primary disabled:opacity-40 ${
+                ehMobile ? "h-[44px] w-[44px]" : "h-7 w-7"
+              }`}
             >
               <SendHorizonal size={16} />
             </button>
           </form>
         )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -792,11 +835,14 @@ function ItemDeMenu({
   danger?: boolean;
   children: ReactNode;
 }) {
+  const ehMobile = useEhMobile();
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex h-8 w-full items-center gap-2 rounded-[3px] px-2 text-left text-sm transition ${
+      className={`flex w-full items-center gap-2 rounded-[3px] px-2 text-left text-sm transition ${
+        ehMobile ? "h-[44px]" : "h-8"
+      } ${
         danger
           ? "text-red hover:bg-red hover:text-white"
           : "text-txt-normal hover:bg-hov hover:text-txt-primary"

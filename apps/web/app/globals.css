@@ -21,6 +21,18 @@ body {
  */
 html {
   font-size: 15.5px;
+  /*
+   * Desliga o "aumento automático de fonte" dos navegadores móveis. Sem esta
+   * linha o Chrome do Android (e o WebView) inflam o texto de blocos largos por
+   * conta própria — medido no render de 390×844: o cabeçalho do servidor saía
+   * com 23px onde o CSS pede 15,5, e cada tela ficava com duas escalas de
+   * tipografia convivendo. A escala da fonte do app continua sendo a das
+   * configurações; o navegador é que não opina.
+   *
+   * No desktop é inerte: lá o valor já é `auto` sem efeito.
+   */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 /*
@@ -264,6 +276,94 @@ body {
  * então modais e menus `position: fixed` continuam ancorados na janela. */
 html.cores-ajustadas {
   filter: saturate(var(--saturacao, 1));
+}
+
+/* ── leiaute de celular (< 768px) ────────────────────────────────────────
+ * As telas e a pilha estão em `components/mobile/`; aqui ficam só as regras
+ * que precisam ser globais — animações e correções de comportamento do
+ * navegador móvel. Tudo dentro da media query: acima de 768px, e no app de
+ * desktop, nada disto existe.
+ */
+
+/* Uma tela entra deslizando da direita (a pilha do app do Discord). */
+@keyframes deslizar-da-direita {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+.anim-empilhar {
+  animation: deslizar-da-direita 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.anim-deslizar-direita {
+  animation: deslizar-da-direita 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Folha inferior: sobe do fundo. */
+@keyframes folha-subindo {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+.anim-folha {
+  animation: folha-subindo 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/*
+ * O telefone **deitado** também é telefone. 844x390 passa dos 767 de largura e
+ * cairia no shell de colunas (piso de 940px), com a rolagem horizontal de
+ * volta. O que não muda ao girar é o ponteiro grosso e a altura curta — a mesma
+ * dupla do `hooks/useEhMobile`, aqui para o quadro que o JS ainda não alcançou.
+ * Tablet não casa (lado curto de 768) e janela de computador também não (ali o
+ * ponteiro é fino).
+ */
+@media (pointer: coarse) and (max-height: 599px) {
+  [data-shell-desktop] {
+    display: none !important;
+  }
+}
+
+@media (max-width: 767px), (pointer: coarse) and (max-height: 599px) {
+  /*
+   * **16px em todo campo de texto.** É a causa (não o sintoma) do zoom que o
+   * Safari do iOS dá ao focar um campo: abaixo de 16px ele amplia a página
+   * inteira e não volta, e a pessoa fica com o app fora de escala pelo resto da
+   * sessão. Nossa base é 15,5px (`html { font-size: 15.5px }`), então quase
+   * todo campo caía nessa regra. `max(16px, 1em)` mantém quem já era maior —
+   * inclusive quando a pessoa aumenta a escala da fonte nas configurações.
+   */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  textarea,
+  select,
+  [contenteditable="true"] {
+    font-size: max(16px, 1em);
+  }
+
+  /*
+   * Rolagem com inércia nas listas (mensagens, canais, conversas) e sem
+   * "arrastar a página" ao chegar no fim delas — é o que dispara o "puxar para
+   * atualizar" do Chrome no meio de uma conversa.
+   */
+  [data-shell-mobile] .overflow-y-auto,
+  [data-shell-mobile] .overflow-auto {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  /*
+   * O toque longo abre o menu da mensagem (ver `AreaDeToqueLongo`), e o balão
+   * nativo do iOS ("Copiar / Pesquisar") competiria com ele. Isto desliga só
+   * esse balão: **a seleção de texto continua**, e copiar um trecho da mensagem
+   * com o gesto de sempre também.
+   */
+  [data-shell-mobile] {
+    -webkit-touch-callout: none;
+  }
 }
 
 /* Reduzir movimento: nada de transição nem animação em lugar nenhum. */

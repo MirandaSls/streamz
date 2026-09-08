@@ -41,7 +41,15 @@ import { useVoice } from "@/stores/voice";
  * de fora dela, aberta — quem só está vendo que existe uma call continua lendo
  * o histórico.
  */
-export default function DMView() {
+export default function DMView({
+  /**
+   * Sem o cabeçalho de 49px — o par do `incorporado` do `ChatView`. É o que o
+   * leiaute de celular usa: lá o cabeçalho é o de 48px com a seta de voltar
+   * (`components/mobile/pecas.tsx`), e dois empilhados comeriam metade da
+   * timeline num telefone. No desktop nada muda: o padrão é `false`.
+   */
+  semCabecalho = false,
+}: { semCabecalho?: boolean } = {}) {
   const user = useAuth((s) => s.user);
   const active = useActiveDM();
   const slice = useActiveSlice();
@@ -248,7 +256,11 @@ export default function DMView() {
       A busca e a thread continuam irmãs do `<main>` (montadas na página): elas
       têm cabeçalho próprio de 49px, que encosta no nosso e continua a linha.
     */
-    <main className="flex min-w-0 flex-1 flex-col bg-chat">
+    // `min-h-0` só sem cabeçalho (celular): ali este `main` é filho de uma
+    // coluna que já mede a tela, e sem ele a timeline empurraria o composer
+    // para fora. No desktop a classe fica exatamente como era.
+    <main className={`flex min-w-0 flex-1 flex-col bg-chat ${semCabecalho ? "min-h-0" : ""}`}>
+      {!semCabecalho && (
       <HeaderBar
         icon={
           other ? (
@@ -334,6 +346,7 @@ export default function DMView() {
           </>
         }
       />
+      )}
 
       {/* Embaixo do cabeçalho: a conversa à esquerda e a coluna 4 à direita. */}
       <div className="flex min-h-0 flex-1">
@@ -369,8 +382,19 @@ export default function DMView() {
           que depende da conversa, como no Discord: em grupo, quem está nela; em
           conversa 1:1, o perfil do contato — uma lista de um nome só não
           acrescentava nada ao cabeçalho.
+
+          **`!semCabecalho`**: no celular esta coluna não existe. Lá o mesmo
+          `DMMemberList`/`DMProfilePanel` é o painel deslizante da direita
+          (`components/mobile/telas-de-conversa`), aberto pelo botão do
+          cabeçalho de 48px — e o `membersOpen` do desktop continua valendo
+          para o desktop. Sem esta condição os dois montavam juntos: o cartão de
+          perfil de 320px entrava como coluna dentro de uma tela de 390 e
+          espremia a conversa inteira em 70px (medido em 390×844), com a
+          timeline e o composer ilegíveis. O padrão é `false`, então o desktop
+          renderiza exatamente como antes.
         */}
         {membersOpen &&
+          !semCabecalho &&
           (group || !other ? <DMMemberList dm={active} /> : <DMProfilePanel user={other} />)}
       </div>
     </main>

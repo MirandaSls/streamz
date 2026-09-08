@@ -114,6 +114,7 @@ export default function AdicionarContaModal({ voltar }: { voltar: boolean }) {
   if (ticket) {
     return (
       <Dialog
+        telaCheiaNoCelular
         title="Verificação em duas etapas"
         description="Esta conta pede um código do app autenticador."
         onClose={fechar}
@@ -158,6 +159,7 @@ export default function AdicionarContaModal({ voltar }: { voltar: boolean }) {
 
   return (
     <Dialog
+      telaCheiaNoCelular
       title="Adicionar conta"
       description="Entrar com outra conta tornará mais fácil alternar entre contas neste dispositivo."
       onClose={fechar}

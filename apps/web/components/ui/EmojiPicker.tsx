@@ -40,6 +40,7 @@ import {
   registrarUsoEmoji,
   usePrefsPicker,
 } from "@/components/media/preferencias-picker";
+import { useEhMobile } from "@/hooks/useEhMobile";
 import { useAuth } from "@/stores/auth";
 import { useEmojisOrdenados } from "@/stores/emojis";
 import { useCanModerate, useGuilds } from "@/stores/guilds";
@@ -402,6 +403,7 @@ function SecaoEmoji({
     return () => obs.disconnect();
   }, [raiz, visivel]);
 
+  const ehMobile = useEhMobile();
   const linhas = Math.ceil(secao.itens.length / COLUNAS);
 
   return (
@@ -415,7 +417,19 @@ function SecaoEmoji({
         <span className="truncate">{secao.titulo}</span>
       </h3>
       {visivel ? (
-        <div className="grid" style={{ gridTemplateColumns: `repeat(${COLUNAS}, ${CELULA}px)` }}>
+        <div
+          className="grid"
+          style={{
+            // No celular a grade é **fluida**: 9 células de 40 dão 360 e, com a
+            // coluna lateral de atalhos, passam dos 390 de um telefone — a
+            // folha ganharia rolagem horizontal. `auto-fill` põe quantas
+            // couberem (8 em 390) e distribui a sobra. No desktop continua a
+            // grade de 9 colunas fixas medida no Discord.
+            gridTemplateColumns: ehMobile
+              ? `repeat(auto-fill, minmax(${CELULA}px, 1fr))`
+              : `repeat(${COLUNAS}, ${CELULA}px)`,
+          }}
+        >
           {secao.itens.map((alvo) => (
             <BotaoEmoji
               key={alvo.chave}

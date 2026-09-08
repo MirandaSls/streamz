@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Play } from "@/components/ui/icones";
 import { displayNameOf, type PublicUser } from "@streamz/shared";
-import { VideoDaFaixa } from "@/components/voice/VoiceGrid";
+import { VideoDaFaixa } from "@/components/voice/TileDeVoz";
 import { telaPublicadaDe, useVoice } from "@/stores/voice";
 
 /**

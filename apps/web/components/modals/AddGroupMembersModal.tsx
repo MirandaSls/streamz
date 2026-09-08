@@ -39,6 +39,7 @@ export default function AddGroupMembersModal({ channelId }: { channelId: string 
 
   return (
     <Dialog
+      telaCheiaNoCelular
       title="Adicionar pessoas"
       description="Só amigos aparecem aqui."
       onClose={closeModal}
