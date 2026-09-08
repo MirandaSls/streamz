@@ -5,8 +5,9 @@ import { MonitorUp, MonitorX, Radio } from "@/components/ui/icones";
 import Tooltip from "@/components/ui/Tooltip";
 import ScreenSharePicker from "@/components/voice/ScreenSharePicker";
 import { BotaoDeChamada } from "@/components/voice/controles-de-chamada";
+import { SEM_CAPTURA_DE_TELA, capturarTelaNoNavegador } from "@/lib/captura-de-tela";
 import { isTauri } from "@/lib/desktop";
-import { ehCancelamento, mensagemDeErro, restricoesDeCaptura } from "@/lib/seletor-de-tela";
+import { ehCancelamento, mensagemDeErro } from "@/lib/seletor-de-tela";
 import { ui } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
 
@@ -49,16 +50,19 @@ export default function ScreenShareButton({
   const label = screenOn ? "Parar transmissão" : "Compartilhar tela";
 
   async function capturarNoNavegador() {
-    const md = typeof navigator !== "undefined" ? navigator.mediaDevices : null;
-    if (!md?.getDisplayMedia) {
-      ui.toast("Este navegador não permite compartilhar a tela", "error");
-      return;
-    }
     if (pedindo.current) return;
     pedindo.current = true;
     const { screenQuality, screenAudio, publicarTela } = useVoice.getState();
     try {
-      const captura = await md.getDisplayMedia(restricoesDeCaptura(screenQuality, screenAudio));
+      // `null` = o navegador não tem `getDisplayMedia` (Safari do iOS, Chrome
+      // do Android). Aqui isso é raro — quem chega neste botão está num
+      // computador —, e no celular o botão já nasce apagado com a mesma frase
+      // (ver `ControlesMobile`). O aviso fica porque falhar calado é pior.
+      const captura = await capturarTelaNoNavegador(screenQuality, screenAudio);
+      if (!captura) {
+        ui.toast(SEM_CAPTURA_DE_TELA, "error");
+        return;
+      }
       await publicarTela(captura);
     } catch (e) {
       if (!ehCancelamento(e)) ui.toast(mensagemDeErro(e), "error");

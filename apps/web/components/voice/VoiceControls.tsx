@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Mic, MicOff, MoreHorizontal, PhoneOff, Settings, Video, VideoOff } from "@/components/ui/icones";
 import BotaoDeSons from "@/components/voice/BotaoDeSons";
+import ControlesMobile from "@/components/voice/ControlesMobile";
 import ScreenShareButton from "@/components/voice/ScreenShareButton";
 import VoiceSettingsPanel from "@/components/voice/VoiceSettingsPanel";
 import {
@@ -14,6 +15,7 @@ import {
 import { ListaDeCameras } from "@/components/voice/listas-de-dispositivos";
 import { MenuDeEntrada } from "@/components/voice/menus-de-audio";
 import { microfoneAbrindo } from "@/components/voice/estado-do-microfone";
+import { useEhMobile } from "@/hooks/useEhMobile";
 import { useVoice } from "@/stores/voice";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 
@@ -45,6 +47,7 @@ export default function VoiceControls({
 }) {
   const [mais, setMais] = useState<null | "menu" | "ajustes">(null);
   const caixa = useRef<HTMLDivElement>(null);
+  const ehMobile = useEhMobile();
 
   const camOn = useVoice((s) => s.camOn);
   const toggleCam = useVoice((s) => s.toggleCam);
@@ -68,6 +71,13 @@ export default function VoiceControls({
       window.removeEventListener("keydown", esc);
     };
   }, [mais]);
+
+  // No celular a fileira é outra: cápsula única de 68pt com seis botões
+  // redondos, medida em `docs/Reference/mobile/MEDIDAS.md` §12. As cápsulas
+  // agrupadas, as setinhas de dispositivo e o menu "…" não sobrevivem a 390pt
+  // — a seta de escolher microfone tem 26px de largura, metade de um alvo de
+  // toque. Ver `ControlesMobile`.
+  if (ehMobile) return <ControlesMobile onLeave={onLeave} leaveLabel={leaveLabel} oculto={oculto} />;
 
   // com o menu aberto a barra não pode sumir debaixo do cursor
   const escondida = oculto && !mais;
