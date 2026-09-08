@@ -91,8 +91,15 @@ export default function ShellMobile() {
     if (aba === "servidores") ui.setView("guild");
     else if (aba === "mensagens") ui.setView("dm");
   }, [aba]);
-  /** ...e o caminho inverso: o logo da rail volta para "dm" — logo, para a aba. */
+  /**
+   * ...e o caminho inverso: o logo da rail volta para "dm" — logo, para a aba.
+   *
+   * Só **depois do primeiro toque**, pela mesma razão dos efeitos abaixo: o
+   * `view` nasce `"dm"` (é o padrão da store), e sem essa condição o app abriria
+   * sempre na aba Mensagens, ignorando a aba inicial.
+   */
   useEffect(() => {
+    if (!jaInteragiu.current) return;
     if (view === "dm" && useMobile.getState().aba === "servidores") mobile.irParaAba("mensagens");
   }, [view]);
 

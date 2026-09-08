@@ -31,7 +31,19 @@ import { isTauri } from "@/lib/desktop";
  * JS subir. Esse quadro é resolvido no CSS: o shell desktop leva `max-md:hidden`
  * (ver `app/app/page.tsx`), então abaixo de 768px ele já nasce escondido.
  */
-export const CONSULTA_MOBILE = "(max-width: 767px)";
+/**
+ * Duas condições, e a segunda existe por causa da **paisagem**.
+ *
+ * Um iPhone deitado mede 844×390: a largura passa dos 767 e cairia no leiaute
+ * de colunas — que tem piso de 940px, ou seja, girar o telefone devolvia a
+ * rolagem horizontal que este trabalho veio tirar. O que não muda ao girar é o
+ * ponteiro (grosso) e a **altura** (390): daí o segundo termo.
+ *
+ * Os 599px de teto de altura foram escolhidos para caber todo telefone deitado
+ * (o maior hoje tem ~430) e nenhum tablet (o iPad menor tem 768 de lado curto).
+ * Uma janela de computador de 844×390 não casa: lá o ponteiro é fino.
+ */
+export const CONSULTA_MOBILE = "(max-width: 767px), (pointer: coarse) and (max-height: 599px)";
 
 /** `useLayoutEffect` no cliente; no servidor o React avisa que não roda. */
 const useEfeitoDeLeiaute = typeof window === "undefined" ? useEffect : useLayoutEffect;

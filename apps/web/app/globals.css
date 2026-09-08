@@ -314,7 +314,21 @@ html.cores-ajustadas {
   animation: folha-subindo 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-@media (max-width: 767px) {
+/*
+ * O telefone **deitado** também é telefone. 844x390 passa dos 767 de largura e
+ * cairia no shell de colunas (piso de 940px), com a rolagem horizontal de
+ * volta. O que não muda ao girar é o ponteiro grosso e a altura curta — a mesma
+ * dupla do `hooks/useEhMobile`, aqui para o quadro que o JS ainda não alcançou.
+ * Tablet não casa (lado curto de 768) e janela de computador também não (ali o
+ * ponteiro é fino).
+ */
+@media (pointer: coarse) and (max-height: 599px) {
+  [data-shell-desktop] {
+    display: none !important;
+  }
+}
+
+@media (max-width: 767px), (pointer: coarse) and (max-height: 599px) {
   /*
    * **16px em todo campo de texto.** É a causa (não o sintoma) do zoom que o
    * Safari do iOS dá ao focar um campo: abaixo de 16px ele amplia a página

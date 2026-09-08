@@ -117,12 +117,16 @@ export default function AppPage() {
   // placeholder do composer partia em três linhas. O Discord também tem um piso
   // de largura de janela; sem ele o leiaute de quatro colunas não cabe.
   //
-  // `max-md:hidden` cobre o único quadro que o `useEhMobile` não alcança: o HTML
-  // estático que o navegador pinta **antes** do JS subir. Sem ele, quem abre o
-  // site no telefone vê meio segundo de leiaute de 940px com rolagem horizontal.
-  // A partir de 768px a classe não faz nada, e o desktop é o mesmo pixel.
+  // `max-md:hidden` (e a regra irmã de `globals.css`, para o telefone deitado)
+  // cobrem o único quadro que o `useEhMobile` não alcança: o HTML estático que o
+  // navegador pinta **antes** do JS subir. Sem elas, quem abre o site no
+  // telefone vê meio segundo de leiaute de 940px com rolagem horizontal. Em
+  // janela de computador nenhuma das duas faz nada, e o desktop é o mesmo pixel.
   return (
-    <div className="flex h-full min-w-[940px] select-none max-md:hidden">
+    <div
+      data-shell-desktop
+      className="flex h-full min-w-[940px] select-none max-md:hidden"
+    >
       {/*
         Rail e coluna dentro do mesmo bloco posicionado, e o card do usuário
         como irmão dos dois.
