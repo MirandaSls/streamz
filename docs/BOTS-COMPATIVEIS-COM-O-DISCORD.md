@@ -651,6 +651,17 @@ registramos um aviso: o cliente aceita, porque a compressão por payload é
 opcional por mensagem no protocolo. `zstd-stream` e `encoding=etf`: **nunca** —
 quem pedir `etf` leva close 4000 com a razão.
 
+> **Correção da F2, e ela custou uma prova quebrada.** "Nunca" para o
+> `zstd-stream` quer dizer **"não implementamos"**, não "recusamos a conexão".
+> O lote C implementou o close 4000 como este § dá a entender e a prova 4 da F1
+> quebrou na hora: o **discord.py 2.7.1 pede `compress=zstd-stream` mesmo sem o
+> `zstandard` instalado**, e o close derruba o `login()` com
+> `AttributeError: 'NoneType' object has no attribute 'sequence'` dentro da
+> lib, antes do `ready` — o mesmo sintoma horrível do §12 (o bot conecta, nada
+> no log, o `ready` nunca vem). A resposta certa para `zstd-stream` é a mesma
+> de `compress: true`: **texto puro, com aviso**. Só o `encoding=etf` é
+> estrito, porque ali não há resposta que o cliente entenda.
+
 ### Prova de que a casca é fina o bastante
 
 Rodamos `discord.js@14.27.0` em `node:22` contra um servidor HTTP+WS de ~80
@@ -1027,12 +1038,19 @@ precisamos dele: publicamos a porta direto no nosso próprio compose.
       PONTE_VOZ_PORTA_UDP: 7883
       PONTE_VOZ_IP_PUBLICO: ${PONTE_VOZ_IP_PUBLICO}
       PONTE_VOZ_SEGREDO: ${PONTE_VOZ_SEGREDO}     # valida o JWT do VOICE_SERVER_UPDATE
-      LIVEKIT_URL: ${LIVEKIT_URL}
+      PONTE_VOZ_IP_PUBLICO: ${PONTE_VOZ_IP_PUBLICO}
       API_INTERNA_URL: http://api:3333
     ports:
       - "7883:7883/udp"        # mídia do bot — direto, sem Traefik
-    depends_on: [livekit]
+    depends_on: [api]
 ```
+
+> **Duas correções da F2.** (i) `depends_on: [livekit]` **não serve**: o
+> `livekit` está sob o profile `livekit` e pode nem existir (quem usa LiveKit
+> Cloud não o sobe). A dependência real é a **api**, que é quem a ponte chama na
+> rota interna. (ii) A ponte **não lê `LIVEKIT_URL`**: a URL e o token do
+> LiveKit chegam dentro do JWT, assinados pela API — é o desenho do §D5.6, e
+> ter a variável aqui só faria alguém achar que a ponte precisa das credenciais.
 
 `docker-compose.traefik.yml` (também nosso; só o WS passa por aqui):
 
@@ -1111,7 +1129,16 @@ await this.voice.join(botUserId, channelId, { muted:false, deafened:true, video:
 ```
 
 Isso dispara `voice.state` para `guild:<id>`, e o bot aparece na coluna e no
-palco do web sem uma linha de UI nova (a tag "BOT" é o §11). Sair: op 4 com
+palco do web sem uma linha de UI nova (a tag "BOT" é o §11).
+
+> **O que este § não tratava: o `session_id` de quem *não* é bot.** O
+> `VOICE_STATE_UPDATE` também sai quando uma **pessoa** entra na call, e o
+> campo `session_id` é obrigatório nas libs — mas uma pessoa no navegador não
+> tem sessão de gateway compat. A F2 manda o **snowflake do próprio usuário**:
+> é estável entre eventos, é opaco, e não revela nada que o evento já não
+> carregue (o cuid interno, que a casca esconde de propósito, ficaria de fora).
+
+Sair: op 4 com
 `channel_id: null` → `voice.leave`. Queda da ponte: ela avisa a API por
 `POST /api/interno/ponte-voz/estado` (autenticada por `X-Ponte-Segredo`), que
 chama `voice.leave`. A carência de 45 s (`VOICE_RECONNECT_GRACE_MS`) do gateway
