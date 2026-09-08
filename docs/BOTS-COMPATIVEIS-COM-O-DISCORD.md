@@ -816,6 +816,15 @@ O bot **nunca decodifica** o áudio: o Lavalink/lavaplayer já entrega quadros
 Opus de 20 ms a 48 kHz estéreo, que é exatamente o que o WebRTC quer. Isso é o
 que torna a ponte viável sem transcodificar.
 
+> **Correção da F2 — o `exp` de 60 s do desenho abaixo era curto demais.** O
+> `@discordjs/voice` **reusa o mesmo token** quando reconecta o WS de voz
+> (queda de rede, close 4015, a ponte reiniciando) sem pedir um
+> `VOICE_SERVER_UPDATE` novo. Com 60 s, a primeira reconexão depois de um
+> minuto de música morre com 4004 e o bot desiste de vez. O JWT vale **15
+> minutos**, e o token do LiveKit lá dentro tem `ttl: "6h"` — o TTL do LiveKit
+> vale na **entrada** na sala, e uma reconexão duas horas depois do `!play`
+> precisa entrar de novo.
+
 ### O desenho
 
 ```
@@ -826,7 +835,7 @@ que torna a ponte viável sem transcodificar.
 │             │◄── VOICE_SERVER_UPDATE ──────────│  • VoiceStateStore.join(bot) │
 └──────┬──────┘    {endpoint:"voz.streamz.chat", │  • assina o token (JWT HS256)│
        │            token:"<JWT>", guild_id}     │    {sala, canal, guild, bot, │
-       │                                          │     tokenLiveKit, exp:60s}   │
+       │                                          │     tokenLiveKit, exp:15min} │
        │ repassa endpoint/token/session_id       └──────────────┬───────────────┘
        ▼                                                        │ (nada mais)
 ┌─────────────┐                                                 │
@@ -862,6 +871,10 @@ A pergunta é "em que SDK dá para publicar Opus no LiveKit **sem transcodificar
    **bit a bit igual** — zero perda de qualidade, zero CPU de codec.
 2. Não precisamos de libopus, nem de libwebrtc, nem de clang 21: binário
    estático, imagem `FROM scratch` de ~20 MB, build de segundos.
+   > **Correção da F2:** a imagem de build é **`golang:1.26`**, não a `1.23`
+   > que este documento dizia. O `server-sdk-go/v2@v2.18.1` e o
+   > `x/crypto@v0.57.0` exigem `go >= 1.26`, e com a 1.23 o `go get` recusa
+   > antes de compilar qualquer coisa.
 3. A criptografia é biblioteca padrão: `crypto/aes` + `cipher.NewGCM` e
    `golang.org/x/crypto/chacha20poly1305.NewX`.
 4. É um contêiner isolado: não entra no `pnpm`, não entra no typecheck, não
@@ -899,6 +912,17 @@ negocia para baixo e usa o transporte normal. |
 
 `endpoint` = `voz.streamz.chat` (as libs montam `wss://<endpoint>/?v=8`, sem
 caminho — por isso um host próprio, e não um path da API).
+
+> **O que a F2 descobriu e este § não dizia: o `wss://` é fixo no código do
+> cliente.** No `@discordjs/voice@0.19.2` (`dist/index.js:1424`) a URL é
+> montada como `` `wss://${endpoint}?v=8` `` — o esquema **não** vem do
+> `endpoint`, e o koe do Lavalink faz o mesmo. Consequências práticas: (i) a
+> ponte **não** precisa falar TLS (quem termina é o Traefik, como no §D5.5), e
+> (ii) **não existe apontar um bot para uma ponte em `ws://`** — qualquer
+> prova local precisa de um terminador TLS com uma CA em que o cliente confie
+> (`NODE_EXTRA_CA_CERTS` no Node; um truststore no Lavalink, porque a JVM não
+> tem "confie em tudo"). É a primeira parede em que qualquer um esbarra, e é o
+> que o `apps/api/test/discord-compat/prova-voz.sh` monta.
 
 ### D5.3 — Criptografia: os dois modos AEAD, e só eles
 
@@ -1038,11 +1062,20 @@ track, _ := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{
 room.LocalParticipant.PublishTrack(track, &lksdk.TrackPublicationOptions{
     Name: "musica", Source: livekit.TrackSource_MICROPHONE,
     DisableDTX: true,   // silêncio entre faixas não pode virar buraco
-    Red:        false,  // redundância dobraria a banda sem ganho aqui
+    Stereo:     true,   // o Lavalink entrega 48 kHz estéreo
 })
 // por quadro recebido do UDP:
 track.WriteSample(media.Sample{Data: opus, Duration: 20 * time.Millisecond}, nil)
 ```
+
+> **Correção da F2, medida contra `server-sdk-go/v2@v2.18.1`:** o
+> `lksdk.TrackPublicationOptions` **não tem o campo `Red`** que este § mandava
+> usar — o código não compila com ele. Tem `Stereo`, que o documento não citava
+> e que importa mais aqui. Entrar na sala é
+> `room.JoinWithToken(url, token, ...ConnectOption)`. O resto do trecho (o
+> `NewLocalSampleTrack` com `MimeTypeOpus` e o `WriteSample` com `Duration`)
+> está certo e compila — o risco nº 2 do §15 deixou de ser "confirmado só no
+> papel" no nível da API.
 
 O `AudioSourceOptions` com cancelamento de eco / supressão de ruído / AGC
 **não existe neste caminho** — mais uma vantagem do repasse: nenhum
