@@ -15,12 +15,14 @@ import {
   Angry,
   Annoyed,
   Apps,
+  Camera,
   Eye,
   EyeOff,
   FileText,
   Gif,
   Gift,
   Hash,
+  Image as ImageIcon,
   Laugh,
   MessageSquarePlus,
   Paperclip,
@@ -230,6 +232,9 @@ export default function Composer({
   ehMobileRef.current = ehMobile;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  /** só no celular: galeria de fotos e câmera (ver `abrirMenuMais`). */
+  const galeriaInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   const me = useAuth((s) => s.user);
@@ -512,13 +517,38 @@ export default function Composer({
   }
 
   function abrirMenuMais(event: MouseEvent<HTMLButtonElement>) {
-    const items: MenuItem[] = [
-      {
-        label: "Enviar arquivo",
-        icon: <Paperclip size={18} />,
-        onSelect: () => fileInputRef.current?.click(),
-      },
-    ];
+    const items: MenuItem[] = [];
+    /*
+      No celular, os dois caminhos que o sistema oferece e o `<input type=file>`
+      cru não pede: a **galeria** (`accept="image/*"`) e a **câmera**
+      (`capture="environment"`, que faz o Android e o iOS abrirem a traseira
+      direto, sem passar pelo seletor de arquivos).
+
+      São inputs separados, e não atributos ligados e desligados no mesmo:
+      `capture` é lido quando o seletor abre, e alternar o atributo do input
+      compartilhado deixava a próxima escolha com o modo da anterior em alguns
+      WebViews. Três inputs escondidos custam nada e cada um só sabe uma coisa.
+
+      "Enviar arquivo" continua embaixo, e no desktop continua sendo o único —
+      lá `capture` não existe e `accept` só atrapalharia quem quer mandar um zip.
+    */
+    if (ehMobile) {
+      items.push({
+        label: "Galeria",
+        icon: <ImageIcon size={18} />,
+        onSelect: () => galeriaInputRef.current?.click(),
+      });
+      items.push({
+        label: "Tirar foto",
+        icon: <Camera size={18} />,
+        onSelect: () => cameraInputRef.current?.click(),
+      });
+    }
+    items.push({
+      label: "Enviar arquivo",
+      icon: <Paperclip size={18} />,
+      onSelect: () => fileInputRef.current?.click(),
+    });
     if (onCreateThread) {
       items.push({
         label: "Criar thread",
@@ -665,6 +695,37 @@ export default function Composer({
                   e.target.value = "";
                 }}
               />
+              {/* Os dois caminhos de imagem do celular. Ficam aqui, e não ao
+                  lado do "+" (que no telefone mora fora da cápsula): o que
+                  importa é montar os inputs enquanto `allowAttachments` valer,
+                  porque quem os aciona é o menu que o "+" abre, pela `ref`. */}
+              {ehMobile && (
+                <>
+                  <input
+                    ref={galeriaInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    hidden
+                    onChange={(e) => {
+                      if (e.target.files?.length) adicionarArquivos(e.target.files);
+                      e.target.value = "";
+                    }}
+                  />
+                  {/* sem `multiple`: uma foto por vez é o que a câmera devolve */}
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    hidden
+                    onChange={(e) => {
+                      if (e.target.files?.length) adicionarArquivos(e.target.files);
+                      e.target.value = "";
+                    }}
+                  />
+                </>
+              )}
               {/* No celular o "+" mora **fora** da cápsula, à esquerda dela
                   (ver `discord-mobile-chat-canal-2024.png`); no desktop ele fica
                   dentro da caixa. O botão é o mesmo — muda onde é montado. */}

@@ -184,9 +184,15 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
       <TituloDaPagina titulo="Membros" />
 
       {/* Linha de comando da tabela: busca à esquerda, "Ordenar" e "Remover" à
-          direita — a ordem do print, com o vermelho só no destrutivo. */}
-      <div className="mb-4 flex items-center gap-2">
-        <div className="relative min-w-0 flex-1">
+          direita — a ordem do print, com o vermelho só no destrutivo.
+
+          `flex-wrap` por causa do celular: busca + filtro de cargo + "Ordenar"
+          + "Remover" somam ~560, e numa tela de 390 o "Remover" ficava cortado
+          pela borda. Na coluna de 660 do desktop tudo cabe numa linha e o
+          `wrap` não muda nada. */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {/* a busca ocupa a linha inteira quando a fileira quebra */}
+        <div className="relative min-w-0 flex-1 max-md:basis-full">
           <Search
             size={14}
             aria-hidden="true"
@@ -240,145 +246,152 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
         )}
       </div>
 
-      <table className="w-full table-fixed">
-        <colgroup>
-          <col className="w-10" />
-          <col />
-          <col className="w-[132px]" />
-          <col className="w-[38%]" />
-          <col className="w-[64px]" />
-          <col className="w-10" />
-        </colgroup>
-        <thead>
-          <tr className={`h-[57px] ${TABELA_CABECALHO}`}>
-            <th scope="col">
-              <input
-                type="checkbox"
-                checked={todosMarcados}
-                disabled={selecionaveis.length === 0}
-                onChange={alternarTodos}
-                aria-label="Selecionar todos os membros desta página"
-                className="accent-accent"
-              />
-            </th>
-            <th scope="col" className="font-bold">
-              Nome
-            </th>
-            <th scope="col" className="font-bold">
-              Membro desde
-            </th>
-            <th scope="col" className="font-bold">
-              Cargos
-            </th>
-            <th scope="col" className="font-bold">
-              Sinais
-            </th>
-            <th scope="col">
-              <span className="sr-only">Ações</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {pag.itens.length === 0 && (
-            <tr className="h-[55px]">
-              <td colSpan={6} className="text-sm text-txt-muted">
-                {members.length === 0 ? "Ninguém aqui ainda." : "Ninguém com esses filtros."}
-              </td>
+      {/* A tabela rola por dentro no celular: `table-fixed` sem piso de
+          largura espremeria seis colunas em 358px. O piso é 720 e não 520
+          porque a coluna de cargos leva 38%: abaixo disso o nome sobrava com
+          46px. Na coluna de 660 do desktop a tabela já era mais larga que a
+          área útil e rolava do mesmo jeito. */}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] table-fixed">
+          <colgroup>
+            <col className="w-10" />
+            <col />
+            <col className="w-[132px]" />
+            <col className="w-[38%]" />
+            <col className="w-[64px]" />
+            <col className="w-10" />
+          </colgroup>
+          <thead>
+            <tr className={`h-[57px] ${TABELA_CABECALHO}`}>
+              <th scope="col">
+                <input
+                  type="checkbox"
+                  checked={todosMarcados}
+                  disabled={selecionaveis.length === 0}
+                  onChange={alternarTodos}
+                  aria-label="Selecionar todos os membros desta página"
+                  className="accent-accent"
+                />
+              </th>
+              <th scope="col" className="font-bold">
+                Nome
+              </th>
+              <th scope="col" className="font-bold">
+                Membro desde
+              </th>
+              <th scope="col" className="font-bold">
+                Cargos
+              </th>
+              <th scope="col" className="font-bold">
+                Sinais
+              </th>
+              <th scope="col">
+                <span className="sr-only">Ações</span>
+              </th>
             </tr>
-          )}
-          {pag.itens.map((m) => {
-            const cor = colorRoleOf(m.roleIds, roles)?.color ?? null;
-            const chips = rolesOf(m.roleIds, roles);
-            const castigado = !!m.timeoutUntil && new Date(m.timeoutUntil).getTime() > Date.now();
-            return (
-              <tr key={m.user.id} className="group h-[55px] border-b border-border align-middle">
-                <td>
-                  <input
-                    type="checkbox"
-                    checked={marcados.includes(m.user.id)}
-                    disabled={!alvoValido(m)}
-                    onChange={() => alternar(m.user.id)}
-                    aria-label={`Selecionar ${displayNameOf(m.user)}`}
-                    className="accent-accent disabled:opacity-40"
-                  />
-                </td>
-                <td className="pr-2">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Avatar user={m.user} size="sm" surface="border-chat" />
-                    <div className="min-w-0">
-                      <div
-                        style={cor ? { color: cor } : undefined}
-                        className="truncate text-sm font-medium text-txt-primary"
-                      >
-                        {displayNameOf(m.user)}
-                      </div>
-                      <div className="truncate text-xs text-txt-muted">@{m.user.username}</div>
-                    </div>
-                  </div>
-                </td>
-                <td className="pr-2 text-sm text-txt-normal">{haQuantoTempo(m.joinedAt)}</td>
-                <td className="pr-2">
-                  <div className="flex flex-wrap items-center gap-1">
-                    {chips.length === 0 && <span className="text-xs text-txt-muted">—</span>}
-                    {chips.map((r) => (
-                      <span
-                        key={r.id}
-                        className="flex items-center gap-1 rounded-[4px] bg-panel py-0.5 pl-1.5 pr-1 text-xs text-txt-normal"
-                      >
-                        <span
-                          aria-hidden="true"
-                          style={{ backgroundColor: r.color ?? "#8a8a8e" }}
-                          className="h-2.5 w-2.5 rounded-full"
-                        />
-                        {r.name}
-                        {podeCargos && (
-                          <button
-                            type="button"
-                            onClick={() => void toggleRole(m.user.id, r.id, false)}
-                            aria-label={`Remover ${r.name} de ${displayNameOf(m.user)}`}
-                            // no print a pilha de cargos é só cor + nome; o "×"
-                            // aparece com o mouse na linha (e com o foco, para
-                            // quem navega pelo teclado)
-                            className="text-txt-muted opacity-0 transition hover:text-txt-primary focus-visible:opacity-100 group-hover:opacity-100"
-                          >
-                            <X size={12} />
-                          </button>
-                        )}
-                      </span>
-                    ))}
-                  </div>
-                </td>
-                <td>
-                  <div className="flex items-center gap-1.5">
-                    {m.role === "OWNER" && (
-                      <Tooltip label="Dono do servidor">
-                        <Crown size={14} className="text-yellow" aria-label="Dono" />
-                      </Tooltip>
-                    )}
-                    {castigado && (
-                      <Tooltip label="De castigo">
-                        <ShieldAlert size={14} className="text-red" aria-label="De castigo" />
-                      </Tooltip>
-                    )}
-                  </div>
-                </td>
-                <td className="text-right">
-                  <button
-                    type="button"
-                    onClick={(e) => abrirMenu(e, m)}
-                    aria-label={`Ações para ${displayNameOf(m.user)}`}
-                    // sempre visível: é a coluna de ações da tabela do print,
-                    // não uma ação escondida de hover
-                    className="grid h-8 w-8 place-items-center rounded text-txt-muted transition hover:bg-border-strong hover:text-txt-primary"
-                  >
-                    <MoreHorizontal size={16} />
-                  </button>
+          </thead>
+          <tbody>
+            {pag.itens.length === 0 && (
+              <tr className="h-[55px]">
+                <td colSpan={6} className="text-sm text-txt-muted">
+                  {members.length === 0 ? "Ninguém aqui ainda." : "Ninguém com esses filtros."}
                 </td>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            )}
+            {pag.itens.map((m) => {
+              const cor = colorRoleOf(m.roleIds, roles)?.color ?? null;
+              const chips = rolesOf(m.roleIds, roles);
+              const castigado = !!m.timeoutUntil && new Date(m.timeoutUntil).getTime() > Date.now();
+              return (
+                <tr key={m.user.id} className="group h-[55px] border-b border-border align-middle">
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={marcados.includes(m.user.id)}
+                      disabled={!alvoValido(m)}
+                      onChange={() => alternar(m.user.id)}
+                      aria-label={`Selecionar ${displayNameOf(m.user)}`}
+                      className="accent-accent disabled:opacity-40"
+                    />
+                  </td>
+                  <td className="pr-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Avatar user={m.user} size="sm" surface="border-chat" />
+                      <div className="min-w-0">
+                        <div
+                          style={cor ? { color: cor } : undefined}
+                          className="truncate text-sm font-medium text-txt-primary"
+                        >
+                          {displayNameOf(m.user)}
+                        </div>
+                        <div className="truncate text-xs text-txt-muted">@{m.user.username}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="pr-2 text-sm text-txt-normal">{haQuantoTempo(m.joinedAt)}</td>
+                  <td className="pr-2">
+                    <div className="flex flex-wrap items-center gap-1">
+                      {chips.length === 0 && <span className="text-xs text-txt-muted">—</span>}
+                      {chips.map((r) => (
+                        <span
+                          key={r.id}
+                          className="flex items-center gap-1 rounded-[4px] bg-panel py-0.5 pl-1.5 pr-1 text-xs text-txt-normal"
+                        >
+                          <span
+                            aria-hidden="true"
+                            style={{ backgroundColor: r.color ?? "#8a8a8e" }}
+                            className="h-2.5 w-2.5 rounded-full"
+                          />
+                          {r.name}
+                          {podeCargos && (
+                            <button
+                              type="button"
+                              onClick={() => void toggleRole(m.user.id, r.id, false)}
+                              aria-label={`Remover ${r.name} de ${displayNameOf(m.user)}`}
+                              // no print a pilha de cargos é só cor + nome; o "×"
+                              // aparece com o mouse na linha (e com o foco, para
+                              // quem navega pelo teclado)
+                              className="text-txt-muted opacity-0 transition hover:text-txt-primary focus-visible:opacity-100 group-hover:opacity-100"
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td>
+                    <div className="flex items-center gap-1.5">
+                      {m.role === "OWNER" && (
+                        <Tooltip label="Dono do servidor">
+                          <Crown size={14} className="text-yellow" aria-label="Dono" />
+                        </Tooltip>
+                      )}
+                      {castigado && (
+                        <Tooltip label="De castigo">
+                          <ShieldAlert size={14} className="text-red" aria-label="De castigo" />
+                        </Tooltip>
+                      )}
+                    </div>
+                  </td>
+                  <td className="text-right">
+                    <button
+                      type="button"
+                      onClick={(e) => abrirMenu(e, m)}
+                      aria-label={`Ações para ${displayNameOf(m.user)}`}
+                      // sempre visível: é a coluna de ações da tabela do print,
+                      // não uma ação escondida de hover
+                      className="grid h-8 w-8 place-items-center rounded text-txt-muted transition hover:bg-border-strong hover:text-txt-primary"
+                    >
+                      <MoreHorizontal size={16} />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
       {/* Rodapé do print: "Mostrando [12] membros de 61" à esquerda e a
           paginação à direita, com a página atual em pílula de acento. */}

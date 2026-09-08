@@ -91,67 +91,72 @@ export default function BanimentosTab({ guildId }: { guildId: string }) {
         Banimentos — {(bans ?? []).length}
       </p>
 
-      <table className="w-full table-fixed">
-        <thead>
-          <tr className="border-b border-border text-left text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
-            <th scope="col" className="w-[45%] pb-2 font-bold">
-              Usuário
-            </th>
-            <th scope="col" className="pb-2 font-bold">
-              Motivo do banimento
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {bans === null && (
-            <tr>
-              <td colSpan={2} className="py-3 text-sm text-txt-muted">
-                Carregando…
-              </td>
+      {/* A tabela rola por dentro no celular: `table-fixed` sem piso de
+          largura espremeria quatro colunas em 358px e nenhuma ficaria legível.
+          Em 660 (a coluna do desktop) o piso não tem efeito. */}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[520px] table-fixed">
+          <thead>
+            <tr className="border-b border-border text-left text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+              <th scope="col" className="w-[45%] pb-2 font-bold">
+                Usuário
+              </th>
+              <th scope="col" className="pb-2 font-bold">
+                Motivo do banimento
+              </th>
             </tr>
-          )}
-          {bans !== null && lista.length === 0 && (
-            <tr>
-              <td colSpan={2} className="py-3 text-sm text-txt-muted">
-                {bans.length === 0 ? "Ninguém banido por aqui." : "Ninguém com esse nome."}
-              </td>
-            </tr>
-          )}
-          {lista.map((b) => (
-            <tr
-              key={b.user.id}
-              tabIndex={0}
-              role="button"
-              onClick={() => void revogar(b)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  void revogar(b);
-                }
-              }}
-              aria-label={`Revogar o banimento de ${displayNameOf(b.user)}`}
-              className="cursor-pointer border-b border-border align-middle outline-none transition hover:bg-hov focus-visible:bg-hov"
-            >
-              <td className="py-2 pr-2">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Avatar user={b.user} size="sm" surface="border-chat" />
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-txt-primary">
-                      {displayNameOf(b.user)}
-                    </div>
-                    <div className="truncate text-xs text-txt-muted">
-                      {horaCompleta(b.createdAt)}
+          </thead>
+          <tbody>
+            {bans === null && (
+              <tr>
+                <td colSpan={2} className="py-3 text-sm text-txt-muted">
+                  Carregando…
+                </td>
+              </tr>
+            )}
+            {bans !== null && lista.length === 0 && (
+              <tr>
+                <td colSpan={2} className="py-3 text-sm text-txt-muted">
+                  {bans.length === 0 ? "Ninguém banido por aqui." : "Ninguém com esse nome."}
+                </td>
+              </tr>
+            )}
+            {lista.map((b) => (
+              <tr
+                key={b.user.id}
+                tabIndex={0}
+                role="button"
+                onClick={() => void revogar(b)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    void revogar(b);
+                  }
+                }}
+                aria-label={`Revogar o banimento de ${displayNameOf(b.user)}`}
+                className="cursor-pointer border-b border-border align-middle outline-none transition hover:bg-hov focus-visible:bg-hov"
+              >
+                <td className="py-2 pr-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Avatar user={b.user} size="sm" surface="border-chat" />
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-txt-primary">
+                        {displayNameOf(b.user)}
+                      </div>
+                      <div className="truncate text-xs text-txt-muted">
+                        {horaCompleta(b.createdAt)}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </td>
-              <td className="py-2 text-sm text-txt-normal">
-                <span className="line-clamp-2">{b.reason || "Sem motivo registrado"}</span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                </td>
+                <td className="py-2 text-sm text-txt-normal">
+                  <span className="line-clamp-2">{b.reason || "Sem motivo registrado"}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

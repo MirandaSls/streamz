@@ -13,6 +13,7 @@ export default function InvitesModal({ guildId }: { guildId: string }) {
   const closeModal = useUI((s) => s.closeModal);
   return (
     <Dialog
+      telaCheiaNoCelular
       title="Convites"
       onClose={closeModal}
       className="w-[480px]"

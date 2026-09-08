@@ -165,6 +165,7 @@ export default function InviteModal({
   return (
     <>
       <Dialog
+        telaCheiaNoCelular
         title={`Convidar amigos para ${guild?.name ?? "o servidor"}`}
         onClose={closeModal}
         semPadding
@@ -280,6 +281,7 @@ export default function InviteModal({
 
       {editando && (
         <Dialog
+          telaCheiaNoCelular
           title="Configurações do link de convite"
           onClose={() => setEditando(false)}
           footer={

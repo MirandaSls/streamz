@@ -132,6 +132,7 @@ export default function CreateChannelModal({
   if (criadoId) {
     return (
       <Dialog
+        telaCheiaNoCelular
         title="Adicionar membros ou cargos"
         description={`Quem você marcar consegue ver #${name.trim()}. Moderadores entram sempre.`}
         onClose={closeModal}
@@ -144,6 +145,7 @@ export default function CreateChannelModal({
 
   return (
     <Dialog
+      telaCheiaNoCelular
       title="Criar canal"
       description={categoria ? `em ${categoria.name}` : undefined}
       onClose={closeModal}

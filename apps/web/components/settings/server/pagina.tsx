@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useEhMobile } from "@/hooks/useEhMobile";
 
 /**
  * O topo de cada página das configurações do servidor e os botões de ação que
@@ -37,10 +38,21 @@ export function TituloDaPagina({
   /** botão à direita do título, quando a página tem um (não é o "ESC"). */
   acao?: ReactNode;
 }) {
+  /**
+   * No celular quem escreve o nome da seção é a **barra** da
+   * `JanelaDeConfiguracoes` (seta de voltar + título), então o `<h1>` aqui
+   * viraria o mesmo nome duas vezes seguidas, a 56px de distância. Ele continua
+   * existindo para leitor de tela — o que sai é a tinta, não a estrutura.
+   */
+  const ehMobile = useEhMobile();
   return (
-    <div className={`flex items-start justify-between gap-4 ${subtitulo ? "mb-[18px]" : "mb-6"}`}>
+    <div
+      className={`flex items-start justify-between gap-4 ${
+        ehMobile && !subtitulo && !acao ? "" : subtitulo ? "mb-[18px]" : "mb-6"
+      }`}
+    >
       <div className="min-w-0">
-        <h1 className="text-xl font-semibold text-txt-primary">{titulo}</h1>
+        <h1 className={ehMobile ? "sr-only" : "text-xl font-semibold text-txt-primary"}>{titulo}</h1>
         {subtitulo && <p className="mt-1.5 text-sm text-txt-muted">{subtitulo}</p>}
       </div>
       {acao && <div className="shrink-0">{acao}</div>}

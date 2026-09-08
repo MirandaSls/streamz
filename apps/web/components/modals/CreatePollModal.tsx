@@ -71,6 +71,7 @@ export default function CreatePollModal({ channelId }: { channelId: string }) {
 
   return (
     <Dialog
+      telaCheiaNoCelular
       title="Criar uma enquete"
       description="A enquete aparece como uma mensagem no canal e os votos aparecem ao vivo."
       onClose={closeModal}

@@ -84,6 +84,7 @@ export default function AdicionarSomModal({ guildId }: { guildId: string }) {
 
   return (
     <Dialog
+      telaCheiaNoCelular
       title="Adicionar som"
       description={`MP3, OGG ou WAV de até ${KILOBYTES} KB e ${SEGUNDOS} segundos. Até ${MAX_SOUNDBOARD_POR_GUILD} sons por servidor.`}
       onClose={closeModal}
