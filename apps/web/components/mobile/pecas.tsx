@@ -126,6 +126,11 @@ export function CabecalhoMobile({
  */
 export function TelaEmpilhada({ children }: { children: ReactNode }) {
   return (
-    <div className="anim-empilhar absolute inset-0 z-10 flex flex-col bg-chat">{children}</div>
+    /* a área segura de baixo vem para cá: com uma tela empilhada a barra de
+       abas sai de cena (ver `ShellMobile`), e sem isto o composer encostaria na
+       barra de gestos do aparelho */
+    <div className="anim-empilhar absolute inset-0 z-10 flex flex-col bg-chat pb-[env(safe-area-inset-bottom)]">
+      {children}
+    </div>
   );
 }

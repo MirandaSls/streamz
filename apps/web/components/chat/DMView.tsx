@@ -393,8 +393,8 @@ export default function DMView({
           timeline e o composer ilegíveis. O padrão é `false`, então o desktop
           renderiza exatamente como antes.
         */}
-        {!semCabecalho &&
-          membersOpen &&
+        {membersOpen &&
+          !semCabecalho &&
           (group || !other ? <DMMemberList dm={active} /> : <DMProfilePanel user={other} />)}
       </div>
     </main>
