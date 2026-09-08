@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import MemberList from "@/components/MemberList";
 import VoicePanel from "@/components/VoicePanel";
+import DiretorioDeApps from "@/components/apps/DiretorioDeApps";
 import ChatView from "@/components/chat/ChatView";
 import DMView from "@/components/chat/DMView";
 import SearchPanel from "@/components/chat/SearchPanel";
@@ -28,6 +29,7 @@ import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useSettingsRoute } from "@/hooks/useSettingsRoute";
 import { useAuth } from "@/stores/auth";
+import { useAplicativos } from "@/stores/aplicativos";
 import { useActiveChannel, useVoiceChannel } from "@/stores/channels";
 import { useActiveDM } from "@/stores/dms";
 import { useEmojis } from "@/stores/emojis";
@@ -76,6 +78,10 @@ export default function AppPage() {
   // texto não há conversa de call nem palco, os dois são falsos e isto vira o
   // próprio `membersOpen` — por isso a linha é uma só para os três casos.
   const listaDeMembros = membrosVisiveis(voiceChatOpen, membersOpen, palcoAberto);
+  // ── j-bots · F4 ── "Descobrir aplicativos" toma a coluna 3 (e as da direita)
+  // sem trocar o `view`: a coluna 1 e a 2 continuam sendo as que já estavam, que
+  // é como o Discord abre o App Directory. Ver `stores/aplicativos.ts`.
+  const appsAbertos = useAplicativos((s) => s.aberto);
   const threadParentId = useMessages((s) => s.threadParentId);
   // a busca ocupa a coluna 4 (como no Discord) e tem prioridade sobre thread e membros
   const buscaAberta = useMessages((s) => s.searchResults !== null || s.searching);
@@ -147,7 +153,18 @@ export default function AppPage() {
         <UserFooter />
       </div>
 
-      {view === "dm" ? (
+      {appsAbertos ? (
+        /*
+          O diretório cobre a coluna 3 **e** a 4: ele já tem uma coluna de
+          conteúdo de 1024 medida do Discord, e a lista de membros ao lado dela
+          espremeria a grade para três cards. Quem o fecha é o rail (qualquer
+          servidor, conversa ou o logo) e o `FecharAoNavegar` logo abaixo.
+        */
+        <>
+          <DiretorioDeApps />
+          <FecharAoNavegar />
+        </>
+      ) : view === "dm" ? (
         <>
           <DMView />
           {activeDM && buscaAberta && <SearchPanel guildId={null} />}
@@ -217,4 +234,34 @@ export default function AppPage() {
       <TelaDeAbertura />
     </div>
   );
+}
+
+/**
+ * ── j-bots · F4 ── fecha o diretório quando a pessoa navega por outro caminho.
+ *
+ * O rail já fecha o diretório nos cliques dele (servidor, conversa, logo), mas
+ * a **coluna 2** continua ali ao lado enquanto o diretório está aberto: clicar
+ * num canal na `ChannelSidebar` ou numa conversa na `DMList` selecionaria o
+ * canal por baixo e a tela continuaria mostrando a grade de aplicativos — o
+ * mesmo defeito que o `fecharAmigos(false)` do rail existe para evitar na
+ * página Amigos.
+ *
+ * É um componente, e não um `useEffect` no corpo da página, porque assim o
+ * efeito só existe **enquanto o diretório está aberto**: montado junto com ele,
+ * ele nunca precisa da guarda de "ignore a primeira execução" que um efeito
+ * permanente exigiria (o valor inicial de `activeChannel` não é uma navegação).
+ */
+function FecharAoNavegar() {
+  const fechar = useAplicativos((s) => s.fechar);
+  const canalId = useActiveChannel()?.id ?? null;
+  const dmId = useActiveDM()?.id ?? null;
+  const primeira = useRef(true);
+  useEffect(() => {
+    if (primeira.current) {
+      primeira.current = false;
+      return;
+    }
+    fechar();
+  }, [canalId, dmId, fechar]);
+  return null;
 }
