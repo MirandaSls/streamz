@@ -1,5 +1,13 @@
 # Cobertura do leiaute mobile — varredura de 2026-09-08
 
+> **A tabela foi medida na `feat/layout-mobile` sozinha.** Ela é a base dos
+> quatro PRs empilhados, e não contém o trabalho dos outros três: modais
+> (#178), chamada (#180) e o que veio depois no shell. Onde a coluna "agora"
+> diz "ok (com o #178)" ou "(com o #180)", o conserto está **naquele** PR e não
+> nesta branch — foi conferido no arquivo, não no app rodando. Depois que os
+> quatro entrarem no `main`, as colunas valem juntas. **Não reabra uma linha
+> marcada assim** sem antes olhar o app com os quatro PRs dentro.
+>
 > **Revisado depois de mesclar a base.** A `feat/layout-mobile` andou quatro
 > commits depois desta varredura e consertou três coisas que estavam anotadas
 > aqui como buraco: o toque longo passou a valer no app inteiro (§6.1), tocar
@@ -110,7 +118,7 @@ que tem a sua.
 | Lista de membros do canal | `components/MemberList.tsx` | parcial → **ok** | linha de 42px (o Discord do celular usa **60** — `docs/Reference/mobile/MEDIDAS.md` §10) e as ações só no hover. Agora: linha de 60, "Mensagem" sempre visível em 44px. Castigo, expulsar e banir ficam escondidos no celular de propósito — quatro botões de 44 numa faixa de 335 truncavam o nome em "betoxip…"; eles continuam no menu de contexto, que ainda depende do toque longo (§6.1) |
 | Perfil do contato em DM | `chat/DMProfilePanel.tsx` | parcial → **ok** | os dois discos do canto ("adicionar amigo" e "…") mediam 30px; "Ver Perfil Completo" 39px. Agora 44 e 48, com a área segura no rodapé |
 | Participantes do grupo | `chat/DMMemberList.tsx` | parcial → **ok** | mesma linha de 42px e "remover do grupo" só no hover. **Não visto rodando**: a semente não tem grupo; a correção é a mesma do `MemberList`, por simetria |
-| **Busca de mensagens** | `chat/SearchPanel.tsx` | **não** | não é montado no celular. Ele é irmão do `<main>` em `app/app/page.tsx`, que o shell mobile substitui; e o botão que o abre vive no `HeaderBar`, que fica oculto (`incorporado`/`semCabecalho`). §6.2 |
+| **Busca de mensagens** | `chat/SearchPanel.tsx` | **não** | não é montado no celular. Ele é irmão do `<main>` em `app/app/page.tsx`, que o shell mobile substitui; e o botão que o abre vive no `HeaderBar`, que fica oculto (`incorporado`/`semCabecalho`). **É o único item da §6.2 que continua aberto**, registrado como pendência no #170 |
 | **Thread** | `chat/ThreadPanel.tsx` | **não** | idem. O menu de toque longo abre "Criar Tópico", mas o painel resultante não tem onde aparecer |
 | **Fixados** | `chat/PinsPopover.tsx` | **não** | só existe dentro do `tools` do `HeaderBar`, oculto no celular |
 | **Threads (lista)** | `chat/ThreadsPopover.tsx` | **não** | idem |
@@ -125,8 +133,8 @@ que tem a sua.
 | Menu da mensagem | `ui/ContextMenu.tsx` + `AreaDeToqueLongo` | **ok** | as 4 reações rápidas mediam 31px de largura; a base as levou a 44 no mesmo commit do toque longo |
 | Menu do membro | `MemberList.tsx` | **não** → **ok** | mesmo caso do menu do canal: o gesto passou a existir |
 | Menu do "+" do composer | `chat/Composer.tsx` | **ok** | "Enviar arquivo" e "Criar enquete", 43px |
-| Emoji / GIF / Figurinha | `media/PickerPanel.tsx` | **parcial** | o painel mede 424px e nasce **44px à esquerda da tela** — sai pelos dois lados. Arquivo do agente dos modais |
-| Cartão de perfil | `ui/ProfilePopover.tsx` | **parcial** | itens de 31px de altura e o "…" em 27px. Arquivo do agente dos modais |
+| Emoji / GIF / Figurinha | `media/PickerPanel.tsx` | **parcial** → **ok (com o #178)** | o painel media 424px e nascia **44px à esquerda da tela**, saindo pelos dois lados. O #178 o transforma em **folha inferior de 60dvh** no celular (`if (ehMobile)` no `PickerPanel`, com `anim-folha` e área segura) |
+| Cartão de perfil | `ui/ProfilePopover.tsx` | **parcial** → **ok (com o #178)** | itens de 31px e o "…" em 27px; o #178 o transforma em **folha inferior** no celular (`anim-folha`, `max-h-[85dvh]`, área segura) |
 | Trocador rápido (Ctrl+K) | `ui/QuickSwitcher.tsx` | **parcial** | a caixa cabe e as linhas medem 39px, mas **não há como abri-lo no celular**: o gatilho é um atalho de teclado |
 | Avisos (`Toasts`) | `ui/Toasts.tsx` | não avaliado | nenhum toast disparou na varredura |
 
@@ -153,23 +161,24 @@ sempre visível e a moderação continuou no menu.
 
 ### 6.2 Defeitos nos arquivos dos outros (relatados, não consertados)
 
-Três itens que esta varredura tinha listado aqui **saíram da lista**: a base os
-consertou nos commits `0b5209d` e `2c5d583` — o toque longo no shell inteiro
-(§6.1), o canal de voz que abria a tela de texto em vez do palco
-(`aoTocarNaLista` lia a store na fase de captura), e o `membersOpen` que era
-alternado em vez de atribuído. As reações rápidas do menu-folha também foram de
-31 para 44px. O que sobra:
+Esta lista encolheu duas vezes. **A base** consertou três coisas (`0b5209d` e
+`2c5d583`): o toque longo no shell inteiro (§6.1), o canal de voz que abria a
+tela de texto em vez do palco, e o `membersOpen` que era alternado em vez de
+atribuído — mais as reações rápidas do menu-folha, de 31 para 44px. **O #178
+(modais) e o #180 (chamada)** cobrem quase todo o resto: eu medi numa branch que
+não tinha o trabalho deles, então o que estava aqui como "aberto" já tinha dono
+e conserto. Conferi cada um no arquivo da branch antes de reescrever a linha.
 
-| onde | o que acontece | de quem |
+| onde | o que acontecia | estado |
 |---|---|---|
-| `components/ui/JanelaDeConfiguracoes.tsx` | **as configurações são inutilizáveis no celular**: o menu de 252px come dois terços da tela e o corpo fica com ~28px de largura — o campo "Nome do canal" mostra uma letra por linha, o parágrafo do modo lento sai uma palavra por linha. Vale para configurações do usuário, do servidor, do canal e da categoria (PNGs `configuracoes.png`, `config-servidor.png`, `config-canal.png`) | agente dos modais |
-| `components/media/PickerPanel.tsx` | painel de 424px ancorado 44px fora da tela à esquerda; a busca de GIF fica cortada nos dois lados (`gif-picker.png`) | agente dos modais |
-| `components/ui/ProfilePopover.tsx` | itens de menu com 31px e o "…" com 27px (`perfil-popover.png`) | agente dos modais |
-| `components/modals/*` (moldura `Dialog`) | a caixa em si está certa (375px de largura, áreas seguras) — o que está pequeno é o conteúdo: o "X" de fechar em 23px e os botões de rodapé em 39px, em todos os modais (`modal-convite.png`, `modal-criar-canal.png`, `modal-nova-conversa.png`, `modal-quem-votou.png`) | agente dos modais |
-| `components/modals/CreatePollModal.tsx` | os campos de pergunta e resposta ficam com 22px de altura e os botões de emoji com 31px (`criar-enquete.png`) | agente dos modais |
-| `components/mobile/telas-de-conversa.tsx` | o cabeçalho de 48px do canal só tem "voltar" e "membros" — busca, fixados e threads não têm entrada nenhuma no celular (§5). Continua valendo depois do merge | dono do shell |
-| `components/chat/Composer.tsx` (compartilhado) | os três botões do composer ("+", GIF, emoji) medem 39px | combinar |
-| `components/voice/**` | o palco abre (depois do merge) e a grade cabe. A barra de controles que eu tinha anotado como faltando **está no #180** (`ControlesMobile`, 68pt) — não é pendência. Chamada de DM e seletor de tela continuam não avaliados por mim | agente da call (#180) |
+| `components/ui/JanelaDeConfiguracoes.tsx` | **as configurações eram inutilizáveis no celular**: o menu de 252px comia dois terços da tela e o corpo ficava com ~28px de largura — "Nome do canal" com uma letra por linha, o parágrafo do modo lento com uma palavra por linha (`configuracoes.png`, `config-servidor.png`, `config-canal.png`) | **ok (com o #178)** — vira **mestre-detalhe em tela cheia**: a lista de abas ocupa a tela, tocar numa aba empurra o detalhe (`emDetalhe`), e o "voltar" do sistema volta para a lista antes de fechar (`useVoltarNoCelular`, duas camadas) |
+| `components/media/PickerPanel.tsx` | painel de 424px ancorado 44px fora da tela à esquerda; a busca de GIF cortada dos dois lados (`gif-picker.png`) | **ok (com o #178)** — folha inferior de 60dvh |
+| `components/ui/ProfilePopover.tsx` | itens de menu com 31px e o "…" com 27px (`perfil-popover.png`) | **ok (com o #178)** — folha inferior |
+| `components/modals/*` (moldura `Dialog`) | o "X" de fechar em 23px e os botões de rodapé em 39px (`modal-convite.png`, `modal-criar-canal.png`, `modal-nova-conversa.png`, `modal-quem-votou.png`) | **quase, com o #178.** O `Dialog` ganhou `telaCheiaNoCelular`, e os modais de conteúdo (criar canal, enquete, convite, grupo, contas, emojis, som, adicionar pessoas) o pedem: no celular viram tela cheia, com cabeçalho de 56 e uma **seta de voltar de 44px no lugar do × de 24**, e rodapé colado na base com os botões esticados. **Fica de fora o que não pede tela cheia** — confirmar, prompt e "quem votou" continuam como cartão centrado, com o × de 24 e `PrimaryButton`/`SecondaryButton` em `h-10` (39px). É pouco, mas não é zero |
+| `components/modals/CreatePollModal.tsx` | campos de pergunta e resposta com 22px de altura, botões de emoji com 31px (`criar-enquete.png`) | **ok (com o #178)** — está entre os que pedem tela cheia |
+| `components/chat/Composer.tsx` (compartilhado) | os três botões ("+", GIF, emoji) medem 39px | **ok (com o #178)** — 14 ramos `ehMobile`, e o menu do "+" ganhou "Galeria" e "Tirar foto" |
+| `components/mobile/telas-de-conversa.tsx` | o cabeçalho de 48px do canal só tem "voltar" e "membros" — **busca, fixados e threads não têm entrada nenhuma no celular** (§5) | **aberto.** É o único que sobra. Do dono do shell, registrado como pendência no #170 |
+| `components/voice/**` | o palco abre (depois do merge) e a grade cabe; eu tinha anotado que faltava a barra de controles | **ok (com o #180)** — `ControlesMobile` de 68pt. Chamada de DM e seletor de tela continuam não avaliados **por mim** |
 
 ## 7. O que este PR consertou
 
@@ -206,12 +215,13 @@ de diferença no desktop em 1300×900.**
   47px/16px, busca 43, abas de Amigos 43, linha de membro 60, chip de reação
   44), mas a varredura tela a tela da tabela acima foi toda em retrato.
 - Grupo de conversa (a semente só tem 1:1), chamada, tela compartilhada.
-- Modais que não têm caminho pelo celular: `AddGroupMembersModal`,
+- Modais que eu não consegui abrir pelo celular: `AddGroupMembersModal`,
   `AdicionarContaModal`, `AdicionarSomModal`, `BanModal`,
   `CategorySettingsModal`, `ChannelAccessModal`, `ChannelTopicModal`,
   `CustomStatusModal`, `GroupSettingsModal`, `GuildEmojisModal`, `ImageModal`,
   `InvitesModal`/`InvitesPanel`, `KickModal`, `RecortarImagemModal`,
   `ReportModal`, `TimeoutModal`, `WelcomeModal`, `PromptDialog`. Todos usam a
-  moldura `Dialog`, que o shell já ajustou para a largura da tela; o que vale
-  para os medidos (X de 23px, rodapé de 39px) provavelmente vale para eles.
+  moldura `Dialog`, e boa parte deles passou a pedir `telaCheiaNoCelular` no
+  #178 — mas quem olhar de novo deve **medir**, não deduzir daqui: esta
+  varredura não os viu.
 - Segundo passo do login (2FA) e a página de link de mensagem.
