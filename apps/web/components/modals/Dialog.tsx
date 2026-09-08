@@ -242,11 +242,25 @@ export default function Dialog({
           </p>
         )}
         {showClose && !cheio && (
+          /*
+            No celular o alvo vai a 44 e o glifo **continua 24**: cresce a área,
+            não o desenho (a mesma regra do `BotaoDeToque` de
+            `components/mobile/pecas.tsx`). Aqui pesa mais do que na média
+            porque, num modal que não vira tela cheia — confirmar, prompt,
+            "quem votou" —, este × é o único jeito de sair sem escolher. E o
+            quadro de `h-6` mede **23,25px**, não 24: a raiz do app é de 15,5px
+            e todo `rem` do Tailwind sai 3% menor que o nominal.
+
+            O recuo acompanha para o glifo não mudar de lugar: o quadro cresce
+            ~21px e metade disso sai do `right-4`/`top-4` (16 − 10 ≈ 6).
+          */
           <button
             type="button"
             onClick={onClose}
             aria-label="Fechar"
-            className="absolute right-4 top-4 z-10 grid h-6 w-6 place-items-center rounded text-txt-muted transition hover:text-txt-primary"
+            className={`absolute z-10 grid place-items-center rounded text-txt-muted transition hover:text-txt-primary ${
+              ehMobile ? "right-[6px] top-[6px] h-[44px] w-[44px]" : "right-4 top-4 h-6 w-6"
+            }`}
           >
             <X size={24} />
           </button>
@@ -272,8 +286,17 @@ export default function Dialog({
           </div>
         )}
         {footer && (
+          /*
+            `[&>button]:min-h-[44px]` no celular pega também os rodapés que não
+            usam `PrimaryButton`/`SecondaryButton` — "Nova mensagem" e as
+            configurações do link de convite escrevem o próprio `<button>`, e um
+            deles nasce com `h-[38px]`. Um fragmento não cria nó, então o `>`
+            continua alcançando os filhos de um `<>…</>`.
+          */
           <div
             className={`flex shrink-0 flex-row-reverse items-center gap-2 ${
+              ehMobile ? "[&>button]:min-h-[44px]" : ""
+            } ${
               cheio
                 ? // rodapé colado no fim da tela, acima da barra de gestos, com
                   // os botões esticados: é onde o polegar está
@@ -289,6 +312,20 @@ export default function Dialog({
     document.body,
   );
 }
+
+/**
+ * Altura dos botões de rodapé no celular.
+ *
+ * `h-10` são **38,75px**, e não 40: a raiz do app é de 15,5px e todo `rem` do
+ * Tailwind encolhe 3%. Abaixo do piso de toque de 44px das duas plataformas — e
+ * isto vale justamente para os modais que continuam sendo cartão centrado
+ * (confirmar, prompt, expulsar, banir, castigo), onde o botão errado apaga
+ * mensagem, expulsa e bane. Por isso o número é literal e não uma classe de
+ * escala: 44 tem que ser 44.
+ *
+ * No desktop nada muda — lá o ponteiro é preciso e os 40 vieram do print.
+ */
+const ALTURA_DE_TOQUE = "h-[44px]";
 
 /** Botão primário do rodapé de um modal. */
 export function PrimaryButton({
@@ -307,13 +344,16 @@ export function PrimaryButton({
   /** marca este botão como o alvo do foco inicial do modal. */
   autoFocus?: boolean;
 }) {
+  const ehMobile = useEhMobile();
   return (
     <button
       type={type}
       onClick={onClick}
       disabled={disabled}
       data-autofocus={autoFocus ? "" : undefined}
-      className={`h-10 min-w-24 rounded-lg px-4 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+      className={`${
+        ehMobile ? ALTURA_DE_TOQUE : "h-10"
+      } min-w-24 rounded-lg px-4 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
         danger
           ? "bg-red text-white hover:bg-red-hover"
           : "bg-accent text-accent-ink hover:bg-accent-hover"
@@ -337,12 +377,15 @@ export function SecondaryButton({
   /** marca este botão como o alvo do foco inicial do modal. */
   autoFocus?: boolean;
 }) {
+  const ehMobile = useEhMobile();
   return (
     <button
       type="button"
       onClick={onClick}
       data-autofocus={autoFocus ? "" : undefined}
-      className={`h-10 min-w-24 rounded-lg bg-border-strong px-4 text-sm font-medium text-txt-normal transition hover:bg-border-strong-hover ${
+      className={`${
+        ehMobile ? ALTURA_DE_TOQUE : "h-10"
+      } min-w-24 rounded-lg bg-border-strong px-4 text-sm font-medium text-txt-normal transition hover:bg-border-strong-hover ${
         full ? "w-full" : ""
       }`}
     >
