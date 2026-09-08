@@ -64,7 +64,9 @@ const composer = 'textarea[aria-label="Mensagem para #geral"]';
 
 const foto = async (page, nome) => {
   const file = resolve(outDir, `${nome}.png`);
-  await page.screenshot({ path: file });
+  // termina as transições antes de fotografar: sem isso a captura pode pegar
+  // uma tela no meio do slide de entrada
+  await page.screenshot({ path: file, animations: "disabled" });
   console.log("📸", file);
 };
 
@@ -114,9 +116,14 @@ async function toqueLongo(page, ctx, locator, ms = 700) {
   await page.waitForTimeout(500);
 }
 
+/**
+ * `--disable-gpu` e `animations: "disabled"` na captura: o Chromium sem cabeça
+ * fotografa no meio de uma transição se ninguém pedir o contrário, e o quadro
+ * sai com a tela que estava saindo por cima da que entrou.
+ */
 const browser = await chromium.launch({
   headless: true,
-  args: ["--font-render-hinting=none", "--disable-lcd-text"],
+  args: ["--font-render-hinting=none", "--disable-lcd-text", "--disable-gpu"],
 });
 
 try {
