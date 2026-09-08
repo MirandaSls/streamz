@@ -19,3 +19,6 @@ export * from "./comunidade";
 export * from "./conta";
 export * from "./admin";
 export * from "./eventos";
+// ── j-bots ──
+export * from "./snowflake";
+export * from "./aplicativos";

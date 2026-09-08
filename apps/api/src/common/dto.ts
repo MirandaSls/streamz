@@ -28,6 +28,9 @@ export interface PublicUserRow {
   customStatusText?: string | null;
   customStatusEmoji?: string | null;
   customStatusExpiresAt?: Date | null;
+  // ── j-bots ── conta de bot. Opcional pelo mesmo motivo dos campos acima: nem
+  // toda query traz a coluna. Ausente = não é bot.
+  isBot?: boolean;
 }
 
 export function toPublicUser(u: PublicUserRow, agora = new Date()): PublicUser {
@@ -42,6 +45,9 @@ export function toPublicUser(u: PublicUserRow, agora = new Date()): PublicUser {
     status: u.status,
     customStatusText: vencido ? null : (u.customStatusText ?? null),
     customStatusEmoji: vencido ? null : (u.customStatusEmoji ?? null),
+    // sempre presente na saída da API, mesmo quando a linha não trouxe a coluna:
+    // o cliente lê `bot === true`, e "não sei" e "não é" são a mesma coisa aqui.
+    bot: u.isBot ?? false,
   };
 }
 

@@ -7,6 +7,21 @@
 // Fluxo: `pnpm db:up` (Postgres do docker-compose) → `pnpm db:migrate`
 // (migrate dev, cria/aplica migration) ou `pnpm db:deploy` em produção.
 // `prisma db push` NÃO é o fluxo: toda mudança de modelo vira migration.
+//
+// ── j-bots ── a coluna `snowflake`
+//
+// Nove tabelas (User, Guild, Channel, Category, Message, Role, CustomEmoji,
+// Attachment, Sticker) têm, além do `id` cuid, um `snowflake BIGINT UNIQUE`
+// gerado pelo banco (função `streamz_snowflake()`, migration `..._snowflakes`).
+// É o id que as bibliotecas de bot do Discord exigem — elas derivam a data de
+// criação dele. O cuid **não** foi migrado e continua sendo a chave: o
+// snowflake é uma segunda identidade, só para a casca de compatibilidade. Ver
+// `docs/BOTS-COMPATIVEIS-COM-O-DISCORD.md` §4 (decisão D1).
+//
+// Cuidado ao ler essas tabelas: `BigInt` do Prisma vira `bigint` do JS, e
+// `JSON.stringify` de um `bigint` lança `TypeError`. Nunca devolva a linha crua
+// numa resposta HTTP nem num `emit` — passe pelos conversores de
+// `src/common/dto.ts`, que montam o DTO campo a campo.
 generator client {
   provider = "prisma-client-js"
 }
@@ -41,6 +56,7 @@ enum MemberRole {
 
 model User {
   id                    String      @id @default(cuid())
+  snowflake             BigInt      @unique @default(dbgenerated("streamz_snowflake()"))
   username              String      @unique
   passwordHash          String
   // nome de exibição (o Discord separa "display name" de "username")
@@ -124,6 +140,15 @@ model User {
   emailTokens   EmailToken[]
   recoveryCodes MfaRecoveryCode[]
   oauthAccounts OAuthAccount[]
+
+  // ── j-bots ──
+  // Conta de bot: não faz login, não recebe e-mail, aparece com a tag BOT.
+  // A senha é um hash de bytes aleatórios que ninguém conhece — a coluna é
+  // obrigatória e não há "sem senha" no esquema.
+  isBot          Boolean       @default(false)
+  /// a application de que este usuário é o bot (só quando isBot)
+  botApplication Application?  @relation("AppBot")
+  ownedApps      Application[] @relation("AppOwner")
 }
 
 // Até onde cada usuário leu cada canal. É o que decide "não lido" e o badge
@@ -172,6 +197,7 @@ model RefreshToken {
 
 model Guild {
   id      String  @id @default(cuid())
+  snowflake BigInt      @unique @default(dbgenerated("streamz_snowflake()"))
   name    String
   iconUrl String?
   ownerId String
@@ -280,6 +306,7 @@ model GuildMember {
 // (reação, anexo, thread, busca) valha nos dois casos por construção (ADR-0001).
 model Channel {
   id        String      @id @default(cuid())
+  snowflake BigInt      @unique @default(dbgenerated("streamz_snowflake()"))
   // null em DM/GROUP: a conversa não pertence a servidor nenhum. Toda query de
   // servidor precisa partir de um guildId concreto — nunca "todos os canais".
   guildId   String?
@@ -356,6 +383,7 @@ model ChannelMember {
 
 model Message {
   id        String      @id @default(cuid())
+  snowflake BigInt      @unique @default(dbgenerated("streamz_snowflake()"))
   channelId String
   authorId  String
   content   String
@@ -405,6 +433,7 @@ model Message {
 // bucket vive na chave `key`.
 model Attachment {
   id          String   @id @default(cuid())
+  snowflake   BigInt      @unique @default(dbgenerated("streamz_snowflake()"))
   messageId   String?
   uploaderId  String
   key         String   @unique
@@ -446,6 +475,7 @@ model Reaction {
 // estáveis para sempre, porque o valor fica gravado aqui.
 model Role {
   id          String   @id @default(cuid())
+  snowflake   BigInt      @unique @default(dbgenerated("streamz_snowflake()"))
   guildId     String
   name        String
   // "#rrggbb"; null = sem cor (o nome herda a cor padrão do tema)
@@ -514,6 +544,7 @@ model ChannelOverride {
 // de levá-los junto, que é o comportamento do Discord.
 model Category {
   id        String   @id @default(cuid())
+  snowflake BigInt      @unique @default(dbgenerated("streamz_snowflake()"))
   guildId   String
   name      String
   position  Int      @default(0)
@@ -708,6 +739,7 @@ model DMHidden {
 // canal (é o mesmo que o Discord faz com o CDN de emoji).
 model CustomEmoji {
   id          String   @id @default(cuid())
+  snowflake   BigInt      @unique @default(dbgenerated("streamz_snowflake()"))
   guildId     String
   // sem os dois-pontos: `festa` em `:festa:`. Único dentro do servidor.
   name        String
@@ -731,6 +763,7 @@ model CustomEmoji {
 // consulta além do nome.
 model Sticker {
   id          String   @id @default(cuid())
+  snowflake   BigInt      @unique @default(dbgenerated("streamz_snowflake()"))
   guildId     String
   name        String
   tags        String   @default("")
@@ -973,4 +1006,57 @@ model OAuthAccount {
 
   @@unique([provider, providerAccountId])
   @@index([userId])
+}
+
+// ── j-bots ───────────────────────────────────────────────────
+//
+// O registro de um bot. Ver `docs/BOTS-COMPATIVEIS-COM-O-DISCORD.md` §10.
+// A instalação por servidor (`GuildApplication`), os comandos e as interações
+// entram nas fases seguintes, com migrations próprias.
+
+/// Uma "application" do portal: o registro do bot, dono e identidade.
+model Application {
+  id          String   @id @default(cuid())
+  snowflake   BigInt   @unique @default(dbgenerated("streamz_snowflake()"))
+  ownerId     String
+  name        String
+  description String?
+  /// chave do ícone no storage; a URL é derivada na hora (padrão do repo)
+  iconKey     String?
+  /// aparece em "Descobrir aplicativos". Opt-in do dono, como o `discoverable`.
+  publico     Boolean  @default(false)
+  /// bitfield de `Permission` que a tela de instalação sugere por padrão
+  permissoesPadrao Int  @default(0)
+  /// o usuário-bot: um User com isBot = true, criado junto e sem senha utilizável
+  botUserId   String   @unique
+  createdAt   DateTime @default(now())
+
+  owner   User       @relation("AppOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  botUser User       @relation("AppBot", fields: [botUserId], references: [id], onDelete: Cascade)
+  tokens  BotToken[]
+
+  @@index([ownerId])
+  @@index([publico])
+}
+
+/// Token do bot. Guardamos só o SHA-256 — quem lê o banco não vira o bot.
+/// Regenerar cria uma linha nova e revoga a antiga (nunca apaga: auditoria).
+model BotToken {
+  id            String    @id @default(cuid())
+  applicationId String
+  /// sha256 do token em hex. Não é argon2 de propósito: é lido a cada request.
+  tokenHash     String    @unique
+  /// Os 8 primeiros caracteres do token. Eles caem todos dentro da parte 1,
+  /// que é o id do usuário-bot: identificam **o bot**, não o token, e não
+  /// mudam quando se regenera. Servem para o dono reconhecer de quem é um
+  /// token achado num arquivo de configuração; quem distingue um token do
+  /// outro na tela é o `createdAt`.
+  prefixo       String
+  createdAt     DateTime  @default(now())
+  lastUsedAt    DateTime?
+  revokedAt     DateTime?
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
 }

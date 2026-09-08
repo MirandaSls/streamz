@@ -130,26 +130,60 @@ processo ficam em 0 porque a fonte é única (um banco) e a sequência já garan
 4096 ids distintos por milissegundo.
 
 ```sql
--- prisma/migrations/2026XXXX_snowflakes/migration.sql
-CREATE SEQUENCE streamz_snowflake_seq CYCLE MAXVALUE 4095;
+-- prisma/migrations/20260908130000_snowflakes/migration.sql  (escrito na F0)
+CREATE SEQUENCE "streamz_snowflake_seq" CYCLE MAXVALUE 4095;
 
 CREATE FUNCTION streamz_snowflake() RETURNS bigint
-LANGUAGE sql VOLATILE AS $$
-  SELECT (((EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::bigint - 1420070400000) << 22)
-       | nextval('streamz_snowflake_seq');
+LANGUAGE plpgsql VOLATILE AS $$
+DECLARE
+  ms bigint;
+BEGIN
+  ms := floor(EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::bigint - 1420070400000;
+  RETURN (ms << 22) | nextval('streamz_snowflake_seq');
+END;
 $$;
 
 ALTER TABLE "Message" ADD COLUMN "snowflake" BIGINT;
 -- backfill: o timestamp vem do createdAt real; o incremento desempata a mesma ms
-UPDATE "Message" SET "snowflake" =
-  (((EXTRACT(EPOCH FROM "createdAt") * 1000)::bigint - 1420070400000) << 22)
-  | (ROW_NUMBER() OVER (PARTITION BY date_trunc('milliseconds', "createdAt")
-                        ORDER BY "id") - 1);
+UPDATE "Message" AS alvo SET "snowflake" = calc."sf"
+FROM (
+  SELECT "id",
+         (((EXTRACT(EPOCH FROM "createdAt") * 1000)::bigint - 1420070400000) << 22)
+         | (ROW_NUMBER() OVER (PARTITION BY date_trunc('milliseconds', "createdAt")
+                               ORDER BY "id") - 1) AS "sf"
+  FROM "Message"
+) AS calc
+WHERE alvo."id" = calc."id";
 ALTER TABLE "Message" ALTER COLUMN "snowflake" SET NOT NULL,
                       ALTER COLUMN "snowflake" SET DEFAULT streamz_snowflake();
 CREATE UNIQUE INDEX "Message_snowflake_key" ON "Message"("snowflake");
 -- idem para as outras oito tabelas
 ```
+
+Três coisas que o rascunho deste § tinha errado e a F0 corrigiu contra um
+Postgres 16 de verdade:
+
+1. **A janela não cabe no `UPDATE ... SET`.** O Postgres recusa
+   `ROW_NUMBER() OVER (…)` numa cláusula `SET` (*"window functions are not
+   allowed in UPDATE"*); ela precisa de uma subconsulta com `FROM`, como acima.
+2. **`::bigint` arredonda, e o certo é `floor`.** O cast de `numeric` para
+   `bigint` no Postgres arredonda para o mais próximo, então meio milissegundo
+   para cima faria a data derivada do id ficar *à frente* do `createdAt`. No
+   backfill dá na mesma (a coluna é `TIMESTAMP(3)`, o produto é inteiro), mas na
+   função vale a diferença. A função também virou PL/pgSQL, só para o `floor` e
+   o comentário caberem.
+3. **Linha nova nasce com ~2 ms a mais que o `createdAt`.** `createdAt` é
+   `CURRENT_TIMESTAMP`, que no Postgres é o instante do **início da transação**;
+   `clock_timestamp()` é o de **agora**. Medido: 2 ms de diferença numa
+   inserção comum. Não trocamos por `now()` de propósito — com `now()` todas as
+   linhas de uma transação longa cairiam no mesmo milissegundo e passariam a
+   depender só dos 4095 do incremento. **No backfill a data é exata**, porque
+   ali o milissegundo vem do próprio `createdAt`.
+
+**O teto de 4095 por milissegundo é também o limite da monotonicidade.** A
+sequência cicla; passar de 4095 inserções dentro do mesmo milissegundo faria um
+snowflake sair menor que o anterior. São 4 milhões de linhas por segundo — não
+é o regime deste banco, e está escrito na migration para quem for mexer.
 
 **Tabelas que ganham a coluna** (as que aparecem num payload do Discord):
 
@@ -182,18 +216,33 @@ model Message {
 passa por `String(snowflake)`; um `JSON.stringify` de `bigint` lança
 `TypeError`, o que é bom: quebra alto em vez de truncar em silêncio.
 
+Cuidado prático que a F0 já custou uma correção: **linha crua dessas tabelas
+não pode chegar a uma resposta HTTP nem a um `emit`.** `InvitesService.redeem`
+devolvia `invite.guild` direto (o `emit` do mesmo método já usava
+`toGuildDTO`); com a coluna nova isso vira `TypeError` no
+`JSON.stringify` do Nest. Uma varredura dos 30 módulos não achou outro caso —
+todo o resto passa pelos conversores de `src/common/dto.ts`.
+
 **Helpers**, em `packages/shared/src/snowflake.ts` (novo, puro, testável):
 
 ```ts
 export const EPOCH_DISCORD = 1420070400000n;
+export const DESLOCAMENTO_TIMESTAMP = 22n;
 export function snowflakeParaData(s: bigint): Date;
 export function dataParaSnowflake(d: Date): bigint;   // para paginação before/after
 export function ehSnowflake(v: string): boolean;      // /^\d{17,20}$/
 ```
 
-**Custo real**: a migration em produção é um `UPDATE` de tabela inteira em
-`Message` (a única grande). Com o volume atual roda em segundos; ainda assim,
-faça em janela e com `CREATE INDEX CONCURRENTLY` se a tabela crescer.
+**Custo real, medido** (Postgres 16 descartável, neste servidor, com
+`prisma migrate deploy` das migrations todas):
+
+| Volume de `Message` | Tempo |
+|---|---|
+| 119 (o de produção em 2026-09-08) | 1,98 s de ponta a ponta, quase todo boot do Prisma |
+| 2 000 000 (pior caso inventado) | 45,5 s de ponta a ponta — 46 s no `UPDATE`, 1,1 s no índice único |
+
+Ou seja: em produção a migration é instantânea. O `CREATE INDEX CONCURRENTLY`
+só passa a valer a pena na casa do milhão.
 
 ---
 
@@ -249,9 +298,14 @@ Três partes separadas por ponto, como o do Discord:
 
 | Parte | Conteúdo | Tamanho | Ex. |
 |---|---|---|---|
-| 1 | `base64url(ascii do id decimal do usuário-bot)` | 24 | `MTM4MjkxNTc3MDA1NzI0OTQ3Mg` |
+| 1 | `base64url(ascii do id decimal do usuário-bot)` | 24 ou 26 | `MTM4MjkxNTc3MDA1NzI0OTQ3Mg` |
 | 2 | `base64url(4 bytes BE do unix time da emissão)` | 6 | `aGVjNzU` |
 | 3 | `base64url(32 bytes de crypto.randomBytes)` | 43 | — |
+
+> O tamanho da parte 1 não é escolha: é `ceil(dígitos × 4 / 3)`. Um snowflake
+> de 18 dígitos dá 24 caracteres (é o do exemplo acima, e o número que se lê
+> nos fóruns); os nossos, gerados hoje, têm 19 dígitos e dão **26**. Como o
+> Discord também já emite ids de 19 dígitos, é o mesmo que acontece lá.
 
 Os tamanhos vieram de tokens reais nos doctests da lib Nostrum
 (`OTY4NTU2MzQ4MzkwMzkxODU5.G49NjP.pD8PLpKp-Xx8sr-8m1DCxSPTJZdcpcJZOExc1c`):
@@ -1130,7 +1184,13 @@ model BotToken {
   applicationId String
   /// sha256 do token em hex. Não é argon2 de propósito: é lido a cada request.
   tokenHash     String    @unique
-  /// os 8 primeiros caracteres, para a UI dizer "token •••• a1b2c3d4"
+  /// os 8 primeiros caracteres do token, para a UI dizer "token MTU0Njkz…"
+  ///
+  /// Atenção ao que este prefixo é e ao que não é: os 8 primeiros caracteres
+  /// caem todos dentro da parte 1, que é o id do usuário-bot — ou seja, ele
+  /// identifica **o bot**, não o token, e não muda quando se regenera. Serve
+  /// para o dono reconhecer de quem é um token achado num arquivo de
+  /// configuração. Quem distingue um token do outro na tela é o `createdAt`.
   prefixo       String
   createdAt     DateTime  @default(now())
   lastUsedAt    DateTime?
@@ -1237,9 +1297,12 @@ Separadas de propósito: a 1 é a arriscada (backfill) e roda sozinha; as outras
 são aditivas puras e voltam com um `DROP`.
 
 `packages/shared/src/aplicativos.ts` (novo) leva os tipos do contrato:
-`AppView`, `AppDetalhe`, `AppInstalacao`, `ComandoDeApp`, `TokenCriado`, e os
-schemas zod de criação/edição. E `PublicUser` ganha `bot?: boolean` — **é a
-única mudança em contrato existente na F1**, e como o `dist` é o que a api/web
+`AppView`, `AppDetalhe`, `AppCriado`, `TokenCriado` e o schema zod de criação
+na F0; `AppInstalacao` e `ComandoDeApp` entram junto com as tabelas deles
+(migrations 3 e 4), para o contrato não descrever o que o banco não tem. E
+`PublicUser` ganha `bot?: boolean` — **é a única mudança em contrato existente
+nesta parte do plano** (entrou já na F0, com o `PublicUser` da API sempre
+preenchendo `bot: false` por padrão), e como o `dist` é o que a api/web
 consomem, lembre do `pnpm --filter @streamz/shared build` antes do typecheck.
 
 ---
@@ -1321,26 +1384,30 @@ Regras que valem para todas: worktree própria por fase (`git worktree add`,
 nunca `checkout` no clone), verificação completa no docker antes do PR,
 commits em português, PR com "como testar", ninguém mergeia sem o usuário.
 
-### F0 — Fundação (sequencial, bloqueia tudo)
+### F0 — Fundação (sequencial, bloqueia tudo) — **feita**
 **Entrega:** snowflakes no banco, identidade de bot, e um token que dá para
 usar com `curl`. Sem UI.
 
 | Item | Arquivos |
 |---|---|
-| Snowflakes | `prisma/schema.prisma`, migration 1, `packages/shared/src/snowflake.ts` (+ teste) |
-| Identidade | migration 2, `modules/applications/` (service + controller REST interno: criar, listar, regenerar token) |
-| Contrato | `packages/shared/src/aplicativos.ts`, `PublicUser.bot` |
+| Snowflakes | `prisma/schema.prisma`, `migrations/20260908130000_snowflakes`, `packages/shared/src/snowflake.ts` (+ `applications/snowflake.test.ts`) |
+| Identidade | `migrations/20260908130100_bots_identidade`, `modules/applications/` (service + controller REST interno: criar, listar, regenerar token; `token.ts` puro) |
+| Contrato | `packages/shared/src/aplicativos.ts`, `PublicUser.bot` (preenchido em `common/dto.ts`) |
+| Consequência | `invites.service.ts` passou a devolver `toGuildDTO` em vez da linha crua (§4) |
 
 **Prova:** `POST /api/applications {name:"Teste"}` devolve um token de três
-partes; `SELECT snowflake FROM "Message" ORDER BY "createdAt" DESC LIMIT 1`
-convertido com `snowflakeParaData` bate com o `createdAt` da linha; typecheck e
-testes verdes nos três pacotes.
+partes (26/6/43); `SELECT snowflake FROM "Message" ORDER BY "createdAt" DESC
+LIMIT 1` convertido com `snowflakeParaData` bate com o `createdAt` da linha —
+exato nas 119 linhas do backfill, +2 ms nas inseridas pelo `DEFAULT` (o motivo
+está no §4); 4095 snowflakes gerados na mesma transação saem estritamente
+crescentes; typecheck e testes verdes nos três pacotes.
 
 **Paralelizável:** não. É a fase A do modelo do §6.4 do processo — fecha o
 vocabulário antes de qualquer consumo.
 
 **Riscos:** o backfill em `Message`. Mitigação: rodar em janela, medir antes com
-`SELECT count(*)`, e ter o `DROP COLUMN` pronto.
+`SELECT count(*)`, e ter o `DROP COLUMN` pronto. Medido: 119 mensagens em
+produção, e a migration inteira em 1,98 s num Postgres 16 descartável (§4).
 
 **Esforço:** 3–5 dias.
 
