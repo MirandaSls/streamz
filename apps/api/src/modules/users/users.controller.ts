@@ -27,6 +27,7 @@ import {
 } from "@streamz/shared";
 import type { CustomStatusDuration, UserStatus } from "@streamz/shared";
 import { UsersService } from "./users.service";
+import { cabecalhosDeImagemPublica } from "./imagem-de-perfil";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";
 import { UPLOAD_THROTTLE } from "../../common/throttle";
@@ -156,9 +157,7 @@ export class UsersController {
   @Get(":id/banner")
   async banner(@Param("id") id: string, @Res() res: ServerResponse) {
     const { body, contentType } = await this.users.bannerStream(id);
-    res.setHeader("Content-Type", contentType);
-    res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    cabecalhosDeImagemPublica(res, contentType);
     body.on("error", () => res.destroy());
     body.pipe(res);
   }
@@ -203,9 +202,7 @@ export class UsersController {
   @Get(":id/avatar")
   async avatar(@Param("id") id: string, @Res() res: ServerResponse) {
     const { body, contentType } = await this.users.avatarStream(id);
-    res.setHeader("Content-Type", contentType);
-    res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    cabecalhosDeImagemPublica(res, contentType);
     body.on("error", () => res.destroy());
     body.pipe(res);
   }

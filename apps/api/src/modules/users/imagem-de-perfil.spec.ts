@@ -11,6 +11,7 @@ import {
 } from "@streamz/shared";
 import { assinaturaGif } from "../uploads/media";
 import {
+  cabecalhosDeImagemPublica,
   contentTypeDaChave,
   extensaoDe,
   validarImagemDePerfil,
@@ -149,6 +150,63 @@ describe("content-type servido pelo proxy", () => {
     for (const mime of TIPOS_DE_IMAGEM_DE_PERFIL) {
       expect(contentTypeDaChave(`avatars/u1/x.${extensaoDe(mime)}`)).toBe(mime);
     }
+  });
+});
+
+/**
+ * Resposta de mentira que **começa com o que o `app.enableCors()` já pôs**: é
+ * essa a situação real das duas rotas, e é dela que vinha a foto em branco no
+ * palco da chamada.
+ */
+function respostaComCorsGlobal() {
+  const headers = new Map<string, string>([
+    ["Vary", "Origin"],
+    ["Access-Control-Allow-Credentials", "true"],
+    ["Access-Control-Allow-Origin", "https://streamz.chat"],
+  ]);
+  return {
+    headers,
+    setHeader: (nome: string, valor: string) => headers.set(nome, valor),
+    removeHeader: (nome: string) => headers.delete(nome),
+  };
+}
+
+describe("cabeçalhos da imagem pública de perfil", () => {
+  it("serve uma variante só: nada de Vary nem de credenciais", () => {
+    const res = respostaComCorsGlobal();
+    cabecalhosDeImagemPublica(res, "image/webp");
+
+    // é isto que faz a foto do `<img>` e a leitura de cor (`crossOrigin`)
+    // compartilharem a MESMA entrada de cache
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(res.headers.has("Vary")).toBe(false);
+    // `*` com credenciais é combinação que o browser recusa — e a rota não lê
+    // cookie nem token
+    expect(res.headers.has("Access-Control-Allow-Credentials")).toBe(false);
+  });
+
+  it("mantém o tipo, o nosniff e o cache de um ano", () => {
+    const res = respostaComCorsGlobal();
+    cabecalhosDeImagemPublica(res, "image/gif");
+
+    expect(res.headers.get("Content-Type")).toBe("image/gif");
+    expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(res.headers.get("Cache-Control")).toBe("public, max-age=31536000, immutable");
+  });
+
+  it("não depende de a origem ter vindo na requisição", () => {
+    // o `<img src>` comum é no-cors e não manda `Origin`: o `cors` global então
+    // não põe `Access-Control-Allow-Origin` nenhum. A resposta tem de sair
+    // igual à do pedido com origem, senão são duas variantes de novo.
+    const semOrigem = respostaComCorsGlobal();
+    semOrigem.removeHeader("Access-Control-Allow-Origin");
+    cabecalhosDeImagemPublica(semOrigem, "image/png");
+
+    const comOrigem = respostaComCorsGlobal();
+    cabecalhosDeImagemPublica(comOrigem, "image/png");
+
+    const ordenados = (r: { headers: Map<string, string> }) => [...r.headers].sort();
+    expect(ordenados(semOrigem)).toEqual(ordenados(comOrigem));
   });
 });
 
