@@ -229,8 +229,7 @@ export class RolesService {
     channelId: string,
     input: { roleId?: string | null; userId?: string | null; allow: number; deny: number },
   ): Promise<ChannelOverride[]> {
-    await this.guilds.assertCanModerate(actorId, guildId, Permission.MANAGE_ROLES);
-    await this.assertCanalDoServidor(guildId, channelId);
+    await this.assertPodeMexerNasRegrasDoCanal(actorId, guildId, channelId);
     const roleId = input.roleId ?? null;
     const userId = input.userId ?? null;
     if ((roleId === null) === (userId === null)) {
@@ -267,14 +266,36 @@ export class RolesService {
     return this.aposMudarOverrides(guildId, channelId);
   }
 
+  /**
+   * Apaga a regra de um cargo ou de um usuário no canal.
+   *
+   * Passa pelas **mesmas** checagens do `setOverride`, porque apagar regra é
+   * escrever permissão. Sem elas, dois caminhos de escalada estavam abertos:
+   *
+   * - apagar a regra do @everyone de um canal privado. `syncChannelFlags`
+   *   deriva `Channel.private` de `deny & VIEW_CHANNEL`, então some o deny,
+   *   some o cadeado: **o canal abre para o servidor inteiro numa chamada só**;
+   * - apagar a regra de um cargo **acima** do ator, desfazendo a restrição que
+   *   quem está acima dele tinha posto — exatamente o que
+   *   `assertPodeMexerNoCargo` existe para impedir no `PUT`.
+   */
   async removeOverride(
     actorId: string,
     guildId: string,
     channelId: string,
     targetId: string,
   ): Promise<ChannelOverride[]> {
-    await this.guilds.assertCanModerate(actorId, guildId, Permission.MANAGE_ROLES);
-    await this.assertCanalDoServidor(guildId, channelId);
+    await this.assertPodeMexerNasRegrasDoCanal(actorId, guildId, channelId);
+    // `targetId` é id de cargo **ou** de usuário; só o de cargo tem hierarquia
+    // a respeitar — e o @everyone (posição 0) entra na regra, que é o caso que
+    // abria o canal. Alvo que não é cargo deste servidor é regra de usuário.
+    const cargo = await this.prisma.role.findUnique({
+      where: { id: targetId },
+      select: { guildId: true },
+    });
+    if (cargo?.guildId === guildId) {
+      await this.assertPodeMexerNoCargo(actorId, guildId, targetId);
+    }
     await this.guilds.dessincronizarDaCategoria(channelId);
     await this.prisma.channelOverride.deleteMany({
       where: { channelId, OR: [{ roleId: targetId }, { userId: targetId }] },
@@ -337,6 +358,36 @@ export class RolesService {
           select: { userId: true },
         });
     for (const m of membros) await this.guilds.resyncChannelRooms(guildId, m.userId);
+  }
+
+  /**
+   * O portão das duas escritas de regra de canal (gravar e apagar):
+   * `MANAGE_ROLES` no servidor, canal deste servidor **e enxergar o canal**.
+   *
+   * A terceira é a que faltava. A leitura (`listOverrides`) sempre exigiu
+   * `assertCanViewChannel`; a escrita, não — e a assimetria era a porta:
+   * barrado de um canal privado por um deny de `VIEW_CHANNEL`, quem tinha
+   * `MANAGE_ROLES` no servidor gravava a própria regra
+   * (`{ userId: <ele mesmo>, allow: VIEW_CHANNEL }`) e entrava. A máscara de
+   * "não se concede o que não se tem" não segurava, porque `VIEW_CHANNEL` está
+   * em `DEFAULT_PERMISSIONS` — todo mundo a tem no servidor —, e
+   * `aposMudarOverrides` ainda o colocava nas salas do WebSocket.
+   *
+   * **Não cria impasse.** `computePermissions` (ADR-0002) devolve
+   * `ALL_PERMISSIONS` ao dono (etapa 1) e a quem tem `ADMINISTRATOR` (etapa 3,
+   * **antes** dos overrides), então `assertCanViewChannel` nunca recusa esses
+   * dois: um canal cujo @everyone nega tudo continua consertável por eles. Quem
+   * fica de fora é só o moderador que o canal já escondia — que é o ponto, e é
+   * o comportamento do Discord.
+   */
+  private async assertPodeMexerNasRegrasDoCanal(
+    actorId: string,
+    guildId: string,
+    channelId: string,
+  ) {
+    await this.guilds.assertCanModerate(actorId, guildId, Permission.MANAGE_ROLES);
+    await this.assertCanalDoServidor(guildId, channelId);
+    await this.guilds.assertCanViewChannel(actorId, channelId);
   }
 
   /**
