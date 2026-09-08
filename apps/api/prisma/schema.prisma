@@ -140,6 +140,15 @@ model User {
   emailTokens   EmailToken[]
   recoveryCodes MfaRecoveryCode[]
   oauthAccounts OAuthAccount[]
+
+  // ── j-bots ──
+  // Conta de bot: não faz login, não recebe e-mail, aparece com a tag BOT.
+  // A senha é um hash de bytes aleatórios que ninguém conhece — a coluna é
+  // obrigatória e não há "sem senha" no esquema.
+  isBot          Boolean       @default(false)
+  /// a application de que este usuário é o bot (só quando isBot)
+  botApplication Application?  @relation("AppBot")
+  ownedApps      Application[] @relation("AppOwner")
 }
 
 // Até onde cada usuário leu cada canal. É o que decide "não lido" e o badge
@@ -997,4 +1006,57 @@ model OAuthAccount {
 
   @@unique([provider, providerAccountId])
   @@index([userId])
+}
+
+// ── j-bots ───────────────────────────────────────────────────
+//
+// O registro de um bot. Ver `docs/BOTS-COMPATIVEIS-COM-O-DISCORD.md` §10.
+// A instalação por servidor (`GuildApplication`), os comandos e as interações
+// entram nas fases seguintes, com migrations próprias.
+
+/// Uma "application" do portal: o registro do bot, dono e identidade.
+model Application {
+  id          String   @id @default(cuid())
+  snowflake   BigInt   @unique @default(dbgenerated("streamz_snowflake()"))
+  ownerId     String
+  name        String
+  description String?
+  /// chave do ícone no storage; a URL é derivada na hora (padrão do repo)
+  iconKey     String?
+  /// aparece em "Descobrir aplicativos". Opt-in do dono, como o `discoverable`.
+  publico     Boolean  @default(false)
+  /// bitfield de `Permission` que a tela de instalação sugere por padrão
+  permissoesPadrao Int  @default(0)
+  /// o usuário-bot: um User com isBot = true, criado junto e sem senha utilizável
+  botUserId   String   @unique
+  createdAt   DateTime @default(now())
+
+  owner   User       @relation("AppOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  botUser User       @relation("AppBot", fields: [botUserId], references: [id], onDelete: Cascade)
+  tokens  BotToken[]
+
+  @@index([ownerId])
+  @@index([publico])
+}
+
+/// Token do bot. Guardamos só o SHA-256 — quem lê o banco não vira o bot.
+/// Regenerar cria uma linha nova e revoga a antiga (nunca apaga: auditoria).
+model BotToken {
+  id            String    @id @default(cuid())
+  applicationId String
+  /// sha256 do token em hex. Não é argon2 de propósito: é lido a cada request.
+  tokenHash     String    @unique
+  /// Os 8 primeiros caracteres do token. Eles caem todos dentro da parte 1,
+  /// que é o id do usuário-bot: identificam **o bot**, não o token, e não
+  /// mudam quando se regenera. Servem para o dono reconhecer de quem é um
+  /// token achado num arquivo de configuração; quem distingue um token do
+  /// outro na tela é o `createdAt`.
+  prefixo       String
+  createdAt     DateTime  @default(now())
+  lastUsedAt    DateTime?
+  revokedAt     DateTime?
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
 }

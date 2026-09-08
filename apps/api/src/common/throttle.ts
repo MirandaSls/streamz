@@ -79,3 +79,16 @@ export const ACCOUNT_THROTTLE = Throttle({
 export const DOWNLOAD_SENHA_THROTTLE = Throttle({
   default: { ttl: seconds(60), limit: 8 },
 });
+
+// ── j-bots ──
+/**
+ * Criar aplicativo e regenerar token.
+ *
+ * Criar um aplicativo cria **uma conta de usuário** (a do bot) e uma
+ * credencial de longa duração: é a rota de registro com outro nome, e merece o
+ * mesmo tipo de freio. O teto é por hora, não por minuto, porque o uso humano
+ * é "faço um bot, depois outro", não uma sequência.
+ */
+export const APP_CREATE_THROTTLE = Throttle({
+  default: { ttl: seconds(3600), limit: 10 },
+});

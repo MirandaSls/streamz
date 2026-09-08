@@ -33,6 +33,8 @@ import { DownloadsModule } from "./modules/downloads/downloads.module";
 import { MailModule } from "./modules/mail/mail.module";
 // ── j-painel-admin ──
 import { AdminModule } from "./modules/admin/admin.module";
+// ── j-bots ──
+import { ApplicationsModule } from "./modules/applications/applications.module";
 import { UpdatesModule } from "./modules/updates/updates.module";
 import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis";
 import { redisClient } from "./modules/realtime/redis";
@@ -93,6 +95,8 @@ import { validateEnv } from "./common/env";
     MailModule,
     // ── j-painel-admin ──
     AdminModule,
+    // ── j-bots ──
+    ApplicationsModule,
   ],
   controllers: [HealthController],
   // guard global: o teto padrão vale para toda rota; ver common/throttle.ts
