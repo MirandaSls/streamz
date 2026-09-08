@@ -31,9 +31,13 @@ type ConfigDaPonte struct {
 	// PortaUdp é a porta de mídia, publicada **direta** no host — o Traefik
 	// não faz UDP (§D5.5).
 	PortaUdp int
-	// IpPublico é o que vai no `READY.ip` e na resposta da descoberta de IP.
-	// É um IP, nunca um hostname: o cliente manda RTP para ele sem resolver
-	// nada (§D5.4).
+	// IpPublico é o que vai no `READY.ip`. É um IP, nunca um hostname: o
+	// cliente manda RTP para ele sem resolver nada (§D5.4).
+	//
+	// **Não** é o que vai na resposta da descoberta de IP: lá vai o endereço
+	// **do cliente**, como nós o vimos no `ReadFromUDP` — é o NAT dele que a
+	// descoberta existe para revelar. A primeira versão deste comentário dizia
+	// as duas coisas; o lote A1 pegou.
 	IpPublico string
 	// Segredo valida (HS256) o JWT que a API assinou e que chega no
 	// `IDENTIFY.token` (§ "O JWT" do CONTRATO-F2.md).

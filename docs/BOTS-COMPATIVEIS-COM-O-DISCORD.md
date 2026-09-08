@@ -964,6 +964,24 @@ caminho mais lento sem ganho nenhum.
   F2, e o teste unitário do §12 (F2) existe por causa dele.
 - Não é preciso reordenar por `seq`: entregamos ao `WriteSample` na ordem de
   chegada e o `LocalSampleTrack` gera a própria numeração RTP.
+- **O `tamanho` do preâmbulo de extensão conta palavras de 32 bits, não bytes**
+  (RFC 3550 §5.3.1). Este § não dizia, e quem implementar lendo só o documento
+  erra por um fator de 4 — o corpo da extensão tem `4 × tamanho` bytes.
+
+> **O que a F2 mediu do `_rtpsize`, e o que continua aberto.** Os vetores
+> gravados do lote A1 batem **byte a byte com duas implementações
+> independentes**: OpenSSL (`createCipheriv('aes-256-gcm')` do Node 22, que é o
+> caminho do `@discordjs/voice`) e libsodium
+> (`crypto_aead_xchacha20poly1305_ietf_encrypt` do PyNaCl, o caminho do
+> discord.py). Nonce de 4 bytes no sufixo, zero-padding até 12/24, tag colada no
+> ciphertext e AAD = cabeçalho estão **confirmados**.
+>
+> O que **continua sem medição contra cliente real** é uma coisa só: **onde o
+> cabeçalho termina quando há extensão** (`0x90`) — se o corpo da extensão entra
+> no AAD ou vai cifrado. A ponte implementa a leitura deste § (só o preâmbulo no
+> AAD) como primeira aposta e, se ela falhar num pacote com o bit X, **tenta a
+> outra e anota no log qual venceu**. É o degrau 4 que responde, e a resposta
+> tem que voltar para cá.
 
 ### D5.4 — UDP e descoberta de IP
 

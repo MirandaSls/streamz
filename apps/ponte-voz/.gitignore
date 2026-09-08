@@ -1,0 +1,3 @@
+# O binário do `go build ./...` — o esqueleto da fase o commitou por engano
+# (achado pelo lote A1) e qualquer build na árvore o reescrevia.
+/ponte-voz
