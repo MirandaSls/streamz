@@ -99,6 +99,9 @@ export class GuildsService {
    * dois cargos que todo servidor tem: `@everyone` (o padrão de quem não tem
    * cargo) e `Administrador` (o destino do atalho `GuildMember.role = ADMIN`).
    *
+   * O canal de sistema (onde entra "X entrou no servidor") já nasce apontando
+   * para o #geral, como no Discord.
+   *
    * Os canais nascem soltos e quem os recolhe é `arrumarCategoriasPadrao` — a
    * **mesma** rotina que conserta servidor antigo. Duas implementações do que é
    * "um servidor recém-criado" acabariam divergindo; uma só, testada uma vez,
@@ -142,6 +145,19 @@ export class GuildsService {
       where: { guildId: guild.id },
       orderBy: [{ position: "asc" }, { createdAt: "asc" }],
     });
+    // Canal de sistema: o #geral que acabou de nascer, como no Discord. Sem
+    // isto `OnboardingService.announceJoin` sai calado (ele volta cedo quando
+    // `systemChannelId` é null) e servidor novo nunca anuncia "X entrou no
+    // servidor" — só depois de o dono escolher o canal à mão em Configurações →
+    // Visão geral. Continua desligável do mesmo lugar: limpar o campo apaga o
+    // anúncio de novo.
+    const canalDeSistema = channels.find((c) => c.type === "TEXT");
+    if (canalDeSistema) {
+      await this.prisma.guild.update({
+        where: { id: guild.id },
+        data: { systemChannelId: canalDeSistema.id },
+      });
+    }
     this.realtime.joinGuildRoom(ownerId, guild.id);
     for (const c of channels) this.realtime.joinChannelRooms([ownerId], c.id);
     // as outras sessões da conta (o desktop enquanto o site cria) põem o
