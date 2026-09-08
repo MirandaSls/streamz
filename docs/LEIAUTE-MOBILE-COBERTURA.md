@@ -50,13 +50,25 @@ Conferido nos dois sentidos: em 390×844 e em 844×390 o campo de login mede 47p
 com fonte de 16, a busca da lista de conversas 43, as abas de Amigos 43, a
 linha de membro 60 e o chip de reação 44.
 
-**Sobre os 43px.** O shell do celular usa `h-11` para os botões de cabeçalho, e
-com a base de 15,5px do `html` isso dá **42,6px**, não 44. A varredura reporta
-esses botões como "abaixo de 44", mas eles são a convenção do próprio shell
-(`BotaoDeToque` em `components/mobile/pecas.tsx`) e os consertos deste
-documento seguiram a mesma medida, para não criar um segundo padrão de 1px de
-diferença. Se a decisão for subir para 44, é uma linha em `pecas.tsx` e vale
-para todos.
+**A raiz é 15,5px, e isso muda todos os números.** `html { font-size: 15.5px }`
+(`app/globals.css`): todo tamanho em `rem` do Tailwind sai **3% menor que o
+nominal**. `h-6` é 23,25 e não 24; `h-10` é 38,75 e não 40; `h-11` é 42,6 e não
+44. É a explicação de metade dos "alvos abaixo de 44" desta varredura, e a
+lição que vale para quem vier depois: **não se lê a classe do Tailwind e se
+assume o número** — mede-se, com `getBoundingClientRect` no aparelho emulado.
+
+Daí a convenção que este documento segue:
+
+- onde 44 é **piso de segurança** — o × que é a única saída de um modal, o
+  botão que expulsa ou bane, o chip de reação, o "+" ao lado dele — o número é
+  **literal** (`h-[44px]`, `min-h-[44px]`). É o que o #178 fez com
+  `ALTURA_DE_TOQUE` e o que eu fiz nos chips de reação;
+- onde é **coerência de leiaute** — botões de cabeçalho, abas, linhas de lista
+  — vale a escala do shell (`h-11` = 42,6px no `BotaoDeToque` de
+  `components/mobile/pecas.tsx`). A varredura reporta esses 43 como "abaixo de
+  44", e eles seguem a mesma medida de propósito: um segundo padrão com 1px de
+  diferença seria pior que 1px a menos. Se a decisão for subir, é uma linha em
+  `pecas.tsx` e vale para todos de uma vez.
 
 ---
 
@@ -161,23 +173,30 @@ sempre visível e a moderação continuou no menu.
 
 ### 6.2 Defeitos nos arquivos dos outros (relatados, não consertados)
 
-Esta lista encolheu duas vezes. **A base** consertou três coisas (`0b5209d` e
-`2c5d583`): o toque longo no shell inteiro (§6.1), o canal de voz que abria a
-tela de texto em vez do palco, e o `membersOpen` que era alternado em vez de
-atribuído — mais as reações rápidas do menu-folha, de 31 para 44px. **O #178
-(modais) e o #180 (chamada)** cobrem quase todo o resto: eu medi numa branch que
-não tinha o trabalho deles, então o que estava aqui como "aberto" já tinha dono
-e conserto. Conferi cada um no arquivo da branch antes de reescrever a linha.
+Esta lista encolheu três vezes, e hoje tem **um** item aberto.
+
+**A base** consertou três coisas (`0b5209d` e `2c5d583`): o toque longo no shell
+inteiro (§6.1), o canal de voz que abria a tela de texto em vez do palco, e o
+`membersOpen` que era alternado em vez de atribuído — mais as reações rápidas do
+menu-folha, de 31 para 44px. **O #178 (modais) e o #180 (chamada)** cobrem todo
+o resto: eu medi numa branch que não tinha o trabalho deles, então o que estava
+aqui como "aberto" já tinha dono e conserto.
+
+Conferi cada linha no arquivo da branch antes de reescrevê-la — e uma delas
+voltou como correção: os modais que **não** viram tela cheia continuavam com o ×
+de 23px e o rodapé de 39, e ficaram anotados aqui como "quase" até o #178
+fechá-los de propósito (`0acbc33`). Vale a pena não marcar como resolvido o que
+se mediu aberto.
 
 | onde | o que acontecia | estado |
 |---|---|---|
 | `components/ui/JanelaDeConfiguracoes.tsx` | **as configurações eram inutilizáveis no celular**: o menu de 252px comia dois terços da tela e o corpo ficava com ~28px de largura — "Nome do canal" com uma letra por linha, o parágrafo do modo lento com uma palavra por linha (`configuracoes.png`, `config-servidor.png`, `config-canal.png`) | **ok (com o #178)** — vira **mestre-detalhe em tela cheia**: a lista de abas ocupa a tela, tocar numa aba empurra o detalhe (`emDetalhe`), e o "voltar" do sistema volta para a lista antes de fechar (`useVoltarNoCelular`, duas camadas) |
 | `components/media/PickerPanel.tsx` | painel de 424px ancorado 44px fora da tela à esquerda; a busca de GIF cortada dos dois lados (`gif-picker.png`) | **ok (com o #178)** — folha inferior de 60dvh |
 | `components/ui/ProfilePopover.tsx` | itens de menu com 31px e o "…" com 27px (`perfil-popover.png`) | **ok (com o #178)** — folha inferior |
-| `components/modals/*` (moldura `Dialog`) | o "X" de fechar em 23px e os botões de rodapé em 39px (`modal-convite.png`, `modal-criar-canal.png`, `modal-nova-conversa.png`, `modal-quem-votou.png`) | **quase, com o #178.** O `Dialog` ganhou `telaCheiaNoCelular`, e os modais de conteúdo (criar canal, enquete, convite, grupo, contas, emojis, som, adicionar pessoas) o pedem: no celular viram tela cheia, com cabeçalho de 56 e uma **seta de voltar de 44px no lugar do × de 24**, e rodapé colado na base com os botões esticados. **Fica de fora o que não pede tela cheia** — confirmar, prompt e "quem votou" continuam como cartão centrado, com o × de 24 e `PrimaryButton`/`SecondaryButton` em `h-10` (39px). É pouco, mas não é zero |
+| `components/modals/*` (moldura `Dialog`) | o "X" de fechar em 23px e os botões de rodapé em 39px (`modal-convite.png`, `modal-criar-canal.png`, `modal-nova-conversa.png`, `modal-quem-votou.png`) | **ok (com o #178).** Em duas partes: os modais de conteúdo (criar canal, enquete, convite, grupo, contas, emojis, som, adicionar pessoas) pedem `telaCheiaNoCelular` e no celular viram tela cheia, com cabeçalho de 56 e **seta de voltar de 44px no lugar do × de 24**. E o que continua sendo cartão centrado — confirmar, prompt, "quem votou", expulsar, banir — foi corrigido depois (`0acbc33`): × com alvo de 44×44 (glifo ainda 24, recuo compensado), `[&>button]:min-h-[44px]` no rodapé (pega até quem escreve o próprio `<button>`, como o link de convite, que nascia com 38) e `ALTURA_DE_TOQUE = "h-[44px]"` literal nos botões. Medido no iPhone 14 emulado, na confirmação de "Sair": × 44×44, "Sair" 93×44, "Cancelar" 93×44 |
 | `components/modals/CreatePollModal.tsx` | campos de pergunta e resposta com 22px de altura, botões de emoji com 31px (`criar-enquete.png`) | **ok (com o #178)** — está entre os que pedem tela cheia |
 | `components/chat/Composer.tsx` (compartilhado) | os três botões ("+", GIF, emoji) medem 39px | **ok (com o #178)** — 14 ramos `ehMobile`, e o menu do "+" ganhou "Galeria" e "Tirar foto" |
-| `components/mobile/telas-de-conversa.tsx` | o cabeçalho de 48px do canal só tem "voltar" e "membros" — **busca, fixados e threads não têm entrada nenhuma no celular** (§5) | **aberto.** É o único que sobra. Do dono do shell, registrado como pendência no #170 |
+| `components/mobile/telas-de-conversa.tsx` | o cabeçalho de 48px do canal só tem "voltar" e "membros" — **busca, fixados e threads não têm entrada nenhuma no celular** (§5) | **aberto — o único.** Do dono do shell, pendência conhecida do #170, e deixada aberta de propósito nesta rodada: meia entrada de busca é pior que nenhuma, e o lugar dela depende de medir a captura do cabeçalho do Discord, que o acervo só tem em GIF |
 | `components/voice/**` | o palco abre (depois do merge) e a grade cabe; eu tinha anotado que faltava a barra de controles | **ok (com o #180)** — `ControlesMobile` de 68pt. Chamada de DM e seletor de tela continuam não avaliados **por mim** |
 
 ## 7. O que este PR consertou
