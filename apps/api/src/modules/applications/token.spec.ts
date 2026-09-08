@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { ApplicationsService } from "./applications.service";
 import type { PrismaService } from "../../prisma/prisma.service";
+import type { StorageService } from "../storage/storage.service";
 import {
   gerarToken,
   hashDoToken,
@@ -92,6 +93,19 @@ describe("formato do token (D3)", () => {
 });
 
 describe("verificarToken", () => {
+  /**
+   * O `StorageService` entrou no construtor na F4 (ícone do aplicativo) e não
+   * participa de nada que este arquivo prova: nenhum caminho de
+   * `verificarToken` o toca, então um objeto vazio basta e uma chamada
+   * inesperada estoura em vez de passar em silêncio.
+   */
+  const semStorage = {} as unknown as StorageService;
+
+  /** O service com o Prisma de mentira — o construtor pede dois. */
+  function servico(prisma: PrismaService) {
+    return new ApplicationsService(prisma, semStorage);
+  }
+
   /** Um Prisma de mentira com uma linha só de `BotToken`. */
   function prismaCom(linha: Record<string, unknown> | null) {
     const update = vi.fn().mockResolvedValue({});
@@ -121,7 +135,7 @@ describe("verificarToken", () => {
       application,
     });
 
-    const achado = await new ApplicationsService(prisma).verificarToken(token);
+    const achado = await servico(prisma).verificarToken(token);
 
     expect(findUnique).toHaveBeenCalledWith(
       expect.objectContaining({ where: { tokenHash: hashDoToken(token) } }),
@@ -143,7 +157,7 @@ describe("verificarToken", () => {
       application,
     });
 
-    await new ApplicationsService(prisma).verificarToken(token);
+    await servico(prisma).verificarToken(token);
 
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: "bt_1" }, data: { lastUsedAt: expect.any(Date) } }),
@@ -156,7 +170,7 @@ describe("verificarToken", () => {
 
     // outro token, com a mesma parte 1: o que decide é o hash do token inteiro
     const outro = gerarToken(SNOWFLAKE_DO_BOT).token;
-    expect(await new ApplicationsService(prisma).verificarToken(outro)).toBeNull();
+    expect(await servico(prisma).verificarToken(outro)).toBeNull();
   });
 
   it("token revogado é o mesmo que token inexistente", async () => {
@@ -168,7 +182,7 @@ describe("verificarToken", () => {
       application,
     });
 
-    expect(await new ApplicationsService(prisma).verificarToken(token)).toBeNull();
+    expect(await servico(prisma).verificarToken(token)).toBeNull();
     // e não gasta um UPDATE por requisição de um bot já revogado
     expect(update).not.toHaveBeenCalled();
   });
