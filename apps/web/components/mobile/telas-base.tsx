@@ -217,7 +217,7 @@ export function TelaVoce() {
           type="button"
           onClick={() => ui.openModal({ kind: "settings" })}
           aria-label="Configurações do usuário"
-          className="absolute right-3 top-3 grid h-11 w-11 place-items-center rounded-full bg-black/45 text-white"
+          className="absolute right-3 top-3 grid h-[44px] w-[44px] place-items-center rounded-full bg-black/45 text-white"
         >
           <Settings size={22} />
         </button>
@@ -261,7 +261,7 @@ export function TelaVoce() {
             type="button"
             onClick={toggleMute}
             aria-pressed={muted}
-            className={`flex h-11 flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-medium transition ${
+            className={`flex h-[44px] flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-medium transition ${
               muted ? "bg-red/15 text-red" : "bg-chat text-txt-normal"
             }`}
           >
@@ -272,7 +272,7 @@ export function TelaVoce() {
             type="button"
             onClick={toggleDeafen}
             aria-pressed={deafened}
-            className={`flex h-11 flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-medium transition ${
+            className={`flex h-[44px] flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-medium transition ${
               deafened ? "bg-red/15 text-red" : "bg-chat text-txt-normal"
             }`}
           >

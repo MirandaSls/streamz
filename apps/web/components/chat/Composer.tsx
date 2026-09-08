@@ -80,6 +80,15 @@ const MAX_HEIGHT_PX = 200;
  * assume **sem perguntar ao layout** — ver `medir` no `useLayoutEffect`.
  */
 const ALTURA_UMA_LINHA = 58;
+/**
+ * A mesma coisa no celular: a cápsula do composer do Discord mede **40pt**
+ * (medido em `docs/Reference/mobile/discord-mobile-chat-canal-2024.png`,
+ * 1px=1pt, `MEDIDAS.md` §7), com 9px de respiro de cada lado de uma linha de
+ * 22. Sem esta constante o `min-h-[40px]` da classe não valia nada: quem
+ * escreve a altura do campo vazio é o `style.height` daqui, e ele mandava 58 —
+ * a cápsula media 58 num telefone, 45% mais alta que a do Discord.
+ */
+const ALTURA_UMA_LINHA_MOBILE = 40;
 /** A contagem de caracteres só aparece quando começa a importar (Discord: 1800). */
 const COUNTER_THRESHOLD = 0.9;
 /** Sugestões mostradas de uma vez em cada gatilho. */
@@ -137,7 +146,7 @@ function SideButton({
         onMouseEnter={onMouseEnter}
         aria-label={label}
         className={`grid w-10 place-items-center text-txt-secondary transition hover:text-txt-primary ${
-          baixo ? "h-10" : "h-[58px]"
+          baixo ? "h-[40px]" : "h-[58px]"
         }`}
       >
         {children}
@@ -215,6 +224,9 @@ export default function Composer({
    * ganha um **botão de enviar**, porque o Enter ali é quebra de linha.
    */
   const ehMobile = useEhMobile();
+  /** o `medir()` lê isto de dentro de um efeito que não depende do estado. */
+  const ehMobileRef = useRef(ehMobile);
+  ehMobileRef.current = ehMobile;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   /** só no celular: galeria de fotos e câmera (ver `abrirMenuMais`). */
@@ -260,7 +272,7 @@ export default function Composer({
       // rodava de novo quando o texto mudava — a caixa continuava alta depois
       // de alargar a janela, com o texto colado no topo e o resto morto.
       if (!draft) {
-        campo.style.height = `${ALTURA_UMA_LINHA}px`;
+        campo.style.height = `${ehMobileRef.current ? ALTURA_UMA_LINHA_MOBILE : ALTURA_UMA_LINHA}px`;
         return;
       }
       campo.style.height = "auto";
@@ -281,7 +293,7 @@ export default function Composer({
     });
     observador.observe(el);
     return () => observador.disconnect();
-  }, [draft]);
+  }, [draft, ehMobile]);
 
   // As prévias locais são URLs de objeto e precisam ser revogadas ao desmontar.
   // A lista vive numa ref porque a limpeza tem de rodar **só** no desmonte: com
@@ -720,7 +732,7 @@ export default function Composer({
             aria-autocomplete="list"
             placeholder={placeholder}
             className={`flex-1 resize-none bg-transparent text-txt-normal outline-none placeholder:text-txt-muted ${
-              ehMobile ? "min-h-10 py-[9px]" : "min-h-[58px] py-[18px]"
+              ehMobile ? "min-h-[40px] py-[9px]" : "min-h-[58px] py-[18px]"
             }`}
           />
 
@@ -801,7 +813,7 @@ export default function Composer({
                 type="submit"
                 disabled={enviando}
                 aria-label="Enviar mensagem"
-                className="mb-[9px] mr-[9px] mt-[9px] grid h-10 w-10 shrink-0 place-items-center self-end rounded-full bg-accent text-accent-ink transition disabled:opacity-50"
+                className="mb-[9px] mr-[9px] mt-[9px] grid h-[40px] w-[40px] shrink-0 place-items-center self-end rounded-full bg-accent text-accent-ink transition disabled:opacity-50"
               >
                 <SendHorizonal size={20} />
               </button>
