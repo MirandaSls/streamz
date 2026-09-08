@@ -43,6 +43,7 @@ import {
   mentionsEveryone,
   slowmodeLabel,
   type Attachment,
+  type ComandoDeApp,
   type Role,
   type Sticker,
 } from "@streamz/shared";
@@ -53,12 +54,13 @@ import Tooltip from "@/components/ui/Tooltip";
 import { formatBytes } from "@/lib/format";
 import { api } from "@/lib/api";
 import { aplicarEscolha, detectarGatilho, mover, type Gatilho } from "@/lib/composer-autocomplete";
-import { buscarComandos, interpretarComando } from "@/lib/comandos-barra";
+import { buscarComandos, interpretarComando, sugestoesDeComandosDeApp } from "@/lib/comandos-barra";
 import { buscarEmojisUnicode } from "@/lib/emojis-unicode";
 import { EVENTO_MENCAO, type DetalheMencao } from "@/lib/mencoes";
 import { lerRascunho, limparRascunho, salvarRascunho } from "@/lib/rascunhos";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
+import { useComandosDeApp } from "@/stores/comandos-de-app";
 import { aplicarEmojisPersonalizados, todosOsEmojis, useEmojis } from "@/stores/emojis";
 import { useGuilds } from "@/stores/guilds";
 import { useMessages } from "@/stores/messages";
@@ -209,6 +211,8 @@ export default function Composer({
   const emojisPorGuild = useEmojis((s) => s.guilds);
   // cargos do servidor aberto: os mencionáveis entram no autocomplete do "@"
   const cargos = usePermissions((s) => s.roles);
+  // ── j-bots ── os comandos de barra dos bots deste servidor
+  const comandosDeApp = useComandosDeApp((s) => s.comandos);
   // @everyone/@here é MENTION_EVERYONE na permissão efetiva do canal (ADR-0002)
   const podeMencionarTodos = useCan(Permission.MENTION_EVERYONE, channelId);
 
@@ -282,8 +286,8 @@ export default function Composer({
   const [selecionado, setSelecionado] = useState(0);
   const gatilho = useMemo<Gatilho | null>(() => detectarGatilho(draft, caret), [draft, caret]);
   const sugestoes = useMemo(
-    () => montarSugestoes(gatilho, { membros, canais, emojisPorGuild, cargos }),
-    [gatilho, membros, canais, emojisPorGuild, cargos],
+    () => montarSugestoes(gatilho, { membros, canais, emojisPorGuild, cargos, comandosDeApp }),
+    [gatilho, membros, canais, emojisPorGuild, cargos, comandosDeApp],
   );
   useEffect(() => setSelecionado(0), [gatilho?.tipo, gatilho?.termo]);
 
@@ -312,7 +316,32 @@ export default function Composer({
   async function submit() {
     if (!podeEnviar) return;
 
-    const comando = interpretarComando(draft.trim());
+    const comando = interpretarComando(draft.trim(), comandosDeApp);
+    // ── j-bots ── comando de bot: vira interação, **antes** do "desconhecido"
+    // (que engoliria o /play com um toast de comando inexistente). Nada é
+    // escrito no canal por quem digitou: uma interação não é uma mensagem — a
+    // resposta chega pelo socket, quando o bot responder.
+    if (comando.tipo === "faltaOpcao") {
+      ui.toast(`/${comando.comando} precisa de "${comando.opcao}".`, "error");
+      return;
+    }
+    if (comando.tipo === "interacao") {
+      if (!channelId) return;
+      setEnviando(true);
+      try {
+        await api.criarInteracao(channelId, {
+          commandId: comando.commandId,
+          options: comando.opcoes,
+        });
+        setDraft("");
+        if (chaveRascunho) limparRascunho(chaveRascunho);
+      } catch (e) {
+        ui.toast(errorMessage(e, "Não foi possível usar o comando"), "error");
+      } finally {
+        setEnviando(false);
+      }
+      return;
+    }
     if (comando.tipo === "desconhecido") {
       ui.toast(`Não conheço o comando /${comando.nome}.`, "error");
       return;
@@ -905,6 +934,8 @@ function montarSugestoes(
     canais: { id: string; name: string | null; type: string }[];
     emojisPorGuild: { emojis: { id: string; name: string; url: string }[] }[];
     cargos: readonly Role[];
+    /** ── j-bots ── comandos de barra dos bots do servidor aberto. */
+    comandosDeApp: readonly ComandoDeApp[];
   },
 ): ItemAutocomplete[] {
   if (!gatilho) return [];
@@ -994,7 +1025,7 @@ function montarSugestoes(
       }));
   }
 
-  return buscarComandos(gatilho.termo)
+  const nativos = buscarComandos(gatilho.termo)
     .slice(0, MAX_SUGESTOES)
     .map<ItemAutocomplete>((c) => ({
       chave: c.nome,
@@ -1002,5 +1033,17 @@ function montarSugestoes(
       rotulo: `/${c.nome}`,
       detalhe: c.descricao,
     }));
+  // ── j-bots ── os comandos dos bots vêm **depois** dos nativos, com o avatar
+  // do bot no lugar do ícone: é o que responde "de quem é este comando?"
+  const deApp = sugestoesDeComandosDeApp(gatilho.termo, fontes.comandosDeApp)
+    .slice(0, MAX_SUGESTOES - nativos.length)
+    .map<ItemAutocomplete>((c) => ({
+      chave: c.chave,
+      valor: c.valor,
+      rotulo: c.rotulo,
+      detalhe: c.detalhe,
+      icone: <Avatar user={c.botUser} size="sm" />,
+    }));
+  return [...nativos, ...deApp];
 }
 
