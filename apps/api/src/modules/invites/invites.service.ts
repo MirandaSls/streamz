@@ -13,6 +13,7 @@ import { RealtimeService } from "../realtime/realtime.service";
 import { isUniqueViolation } from "../../common/prisma-errors";
 import { Permission, WS_EVENTS } from "@streamz/shared";
 import type {
+  Guild,
   InviteDetail,
   InviteFullPreview,
   InviteInfo,
@@ -177,8 +178,15 @@ export class InvitesService {
     };
   }
 
-  /** Resgata o convite: adiciona o usuário como membro e conta o uso. */
-  async redeem(userId: string, code: string) {
+  /**
+   * Resgata o convite: adiciona o usuário como membro e conta o uso.
+   *
+   * Devolve o **DTO** do servidor, não a linha do Prisma: desde a coluna
+   * `snowflake` (`BigInt`, ver o cabeçalho do schema) a linha crua não é
+   * serializável em JSON. O cliente só lê `id` e `name` (`lib/api.ts`), que o
+   * DTO tem — e o `emit` logo abaixo já usava o conversor.
+   */
+  async redeem(userId: string, code: string): Promise<Guild> {
     const invite = await this.prisma.invite.findUnique({
       where: { code },
       include: { guild: true },
@@ -198,7 +206,7 @@ export class InvitesService {
     const already = await this.prisma.guildMember.findUnique({
       where: { userId_guildId: { userId, guildId: invite.guildId } },
     });
-    if (already) return invite.guild;
+    if (already) return toGuildDTO(invite.guild);
 
     await this.prisma.$transaction(async (tx) => {
       // 1. cria a associação. Se dois pedidos do mesmo usuário correm juntos, o
@@ -269,7 +277,7 @@ export class InvitesService {
     });
     // "X entrou no servidor" no canal de sistema, quando o servidor tem um
     await this.onboarding.announceJoin(invite.guildId, userId);
-    return invite.guild;
+    return toGuildDTO(invite.guild);
   }
 
   private checkValidity(invite: {
