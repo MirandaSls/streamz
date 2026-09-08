@@ -12,6 +12,7 @@ import MembrosTab from "@/components/settings/server/MembrosTab";
 import CargosTab from "@/components/settings/server/CargosTab";
 import ConvitesTab from "@/components/settings/server/ConvitesTab";
 import AcessoTab from "@/components/settings/server/AcessoTab";
+import AplicativosTab from "@/components/settings/server/AplicativosTab";
 import AuditLogTab from "@/components/settings/server/AuditLogTab";
 import BanimentosTab from "@/components/settings/server/BanimentosTab";
 import ReportsTab from "@/components/settings/server/ReportsTab";
@@ -51,6 +52,11 @@ const GRUPOS: { id: string; label?: string; abas: ServerSettingsTab[] }[] = [
   { id: "servidor", abas: ["overview", "engajamento"] },
   { id: "expressoes", label: "Expressões", abas: ["emoji", "soundboard"] },
   { id: "pessoas", label: "Pessoas", abas: ["members", "roles", "invites", "acesso"] },
+  /* ── j-bots ── "Aplicativos" ganhou grupo próprio, e não uma linha em
+     "Pessoas": um bot instalado é uma integração do servidor, não gente que
+     entrou nele, e o Discord também o tira dali (no menu dele são
+     "Integrações" e "Diretório de Apps", acima de "Moderação"). */
+  { id: "aplicativos", label: "Aplicativos", abas: ["aplicativos"] },
   { id: "moderacao", label: "Moderação", abas: ["audit", "bans", "reports"] },
 ];
 
@@ -133,6 +139,12 @@ export default function ServerSettingsModal({
       label: "Acesso",
       permission: Permission.MANAGE_GUILD,
       render: () => <AcessoTab guildId={guildId} />,
+    },
+    {
+      id: "aplicativos",
+      label: "Aplicativos",
+      permission: Permission.MANAGE_GUILD,
+      render: () => <AplicativosTab guildId={guildId} />,
     },
     {
       id: "audit",
