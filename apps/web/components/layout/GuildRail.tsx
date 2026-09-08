@@ -138,6 +138,7 @@ function RailItem({
   mentions = 0,
   emVoz = false,
   green = false,
+  lado = 40,
   onClick,
   onContextMenu,
   children,
@@ -149,11 +150,14 @@ function RailItem({
   /** você está numa call deste servidor. */
   emVoz?: boolean;
   green?: boolean;
+  /** lado do botão: 40 no desktop, 48 no celular (ver `GuildRail`). */
+  lado?: 40 | 48;
   /** recebe o evento porque o "+" ancora um menu no retângulo do botão. */
   onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
   children: React.ReactNode;
 }) {
+  const caixa = lado === 48 ? "h-12 w-12" : "h-10 w-10";
   return (
     <div className="group relative flex w-full justify-center" onContextMenu={onContextMenu}>
       <span
@@ -162,21 +166,21 @@ function RailItem({
           a auditoria dizia 36-38, e a medição em 7 prints do Discord deu 40 nos
           sete — a pílula vai de ponta a ponta do botão. */
         className={`absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r-full bg-paper transition-all duration-200 ${
-          active ? "h-10" : unread ? "h-2 group-hover:h-5" : "h-0 group-hover:h-5"
+          active ? (lado === 48 ? "h-12" : "h-10") : unread ? "h-2 group-hover:h-5" : "h-0 group-hover:h-5"
         }`}
       />
       {/* A caixa de 40 que **não** corta: é ela que ancora o badge. O selo de
           voz continua dentro do botão de propósito — ele é tangente às bordas
           de cima e da direita e não pode ultrapassar a caixa (ver `SeloDeVoz`);
           o badge, sim, transborda o canto de baixo. */}
-      <div className="relative h-10 w-10 shrink-0">
+      <div className={`relative shrink-0 ${caixa}`}>
         <Tooltip label={label} side="right">
           <button
             type="button"
             onClick={onClick}
             aria-label={unread && !active ? `${label} (não lido)` : label}
             aria-current={active ? "page" : undefined}
-            className={`relative grid h-10 w-10 place-items-center overflow-hidden rounded-xl text-[15px] font-semibold transition-all duration-200 ${
+            className={`relative grid place-items-center overflow-hidden rounded-xl text-[15px] font-semibold transition-all duration-200 ${caixa} ${
               active
                 ? "bg-accent text-accent-ink"
                 : green
@@ -194,8 +198,17 @@ function RailItem({
   );
 }
 
-/** Coluna 1: mensagens diretas, servidores e as duas formas de ganhar um novo. */
-export default function GuildRail() {
+/**
+ * Coluna 1: mensagens diretas, servidores e as duas formas de ganhar um novo.
+ *
+ * `compacto` é o rail do celular. As medidas vêm da captura oficial
+ * `docs/Reference/mobile/discord-mobile-servidor-2024.png` (1,9707 px/pt, ver
+ * `MEDIDAS.md` §4): rail de **72pt**, ícone de **48pt**, folga vertical de
+ * ~7–8pt — contra 80/40/10 do desktop. Não é enfeite: 40pt é um alvo de toque
+ * abaixo do piso das duas plataformas, e o rail do telefone é a única
+ * navegação entre servidores que existe ali.
+ */
+export default function GuildRail({ compacto = false }: { compacto?: boolean } = {}) {
   // de qual servidor é a call em curso, para o selo do ícone
   const vozGuildId = useVoice((s) => s.guildId);
   const guilds = useGuilds((s) => s.guilds);
@@ -339,7 +352,11 @@ export default function GuildRail() {
       /* sem `pt`: no Discord o topo do primeiro botão encosta na barra de
           título. Os nossos 12px de folga faziam a rail começar mais baixo que
           a coluna ao lado, e a diferença aparece na horizontal do topo. */
-      className="flex w-20 shrink-0 flex-col items-center gap-2.5 overflow-y-auto bg-panel pb-[78px] shadow-[inset_-1px_0_0_theme(colors.rail-divider)]"
+      className={`flex shrink-0 flex-col items-center overflow-y-auto bg-panel shadow-[inset_-1px_0_0_theme(colors.rail-divider)] ${
+        // no celular não há card de usuário flutuando por cima da rail: o
+        // respiro de 78px existe só para ele, e ali sobraria um buraco no fim
+        compacto ? "w-[72px] gap-2 pb-3" : "w-20 gap-2.5 pb-[78px]"
+      }`}
     >
       {/*
         Sem `mentions`: o botão de início **não** ganha badge vermelho.
@@ -358,12 +375,13 @@ export default function GuildRail() {
       */}
       <RailItem
         label="Mensagens diretas"
+        lado={compacto ? 48 : 40}
         active={view === "dm"}
         unread={dmUnread}
         onClick={irParaAmigos}
       >
         {/* o símbolo da marca no lugar onde o Discord põe o logo dele */}
-        <Marca size={22} />
+        <Marca size={compacto ? 26 : 22} />
       </RailItem>
 
       {/*
@@ -377,6 +395,7 @@ export default function GuildRail() {
         return (
           <RailItem
             key={dm.id}
+            lado={compacto ? 48 : 40}
             label={dmTitle(dm)}
             active={view === "dm" && activeDMId === dm.id}
             unread={naoLida}
@@ -404,6 +423,7 @@ export default function GuildRail() {
       {guilds.map((guild) => (
         <RailItem
           key={guild.id}
+          lado={compacto ? 48 : 40}
           label={guild.name}
           active={view === "guild" && activeGuildId === guild.id}
           unread={guild.unread}
@@ -429,8 +449,13 @@ export default function GuildRail() {
       {/* O "+" do Discord pergunta antes: criar o meu, ou entrar num que já
           existe. Aqui esse menu é o ÚNICO caminho para "entrar por convite" —
           a descoberta pública de servidores não existe neste produto. */}
-      <RailItem label="Adicionar um servidor" green onClick={abrirMenuDeServidor}>
-        <Plus size={20} />
+      <RailItem
+        label="Adicionar um servidor"
+        lado={compacto ? 48 : 40}
+        green
+        onClick={abrirMenuDeServidor}
+      >
+        <Plus size={compacto ? 24 : 20} />
       </RailItem>
     </nav>
   );

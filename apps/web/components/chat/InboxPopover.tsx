@@ -64,9 +64,12 @@ function rotuloDoCanal(c: Pick<InboxUnreadChannel, "channelName" | "channelType"
 export default function InboxPopover({
   tamanhoDoIcone = 20,
   anelDaSuperficie = "ring-chat",
+  modoTela = false,
 }: {
   /** o ícone é de 20px no cabeçalho e de 19px na barra de título do desktop. */
   tamanhoDoIcone?: number;
+  /** a caixa como **tela**: é a aba "Notificações" do celular (`HeaderPopover`). */
+  modoTela?: boolean;
   /**
    * Cor do anel do badge: é a **superfície atrás do ícone**, não uma cor nova
    * (`ring-chat` no cabeçalho de Amigos, `ring-void` na barra de título). O
@@ -137,7 +140,8 @@ export default function InboxPopover({
       badge={<BadgeDaCaixa estado={badge} anel={anelDaSuperficie} />}
       largura={LARGURA}
       altura={ALTURA}
-      evento={EVENTO_CAIXA_DE_ENTRADA}
+      modoTela={modoTela}
+      evento={modoTela ? undefined : EVENTO_CAIXA_DE_ENTRADA}
       corpoClassName="flex flex-col"
       onOpen={() => void load()}
       cabecalho={(fechar) => (

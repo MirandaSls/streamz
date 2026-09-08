@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
+import { useEhMobile } from "@/hooks/useEhMobile";
 
 /**
  * Caixa flutuante ancorada num botão — o popover de verdade, em portal.
@@ -60,11 +61,19 @@ export default function PopoverFlutuante({
 }) {
   const caixa = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  /**
+   * No celular esta caixa vira **folha inferior**: largura inteira, subindo do
+   * fundo. A conta de posição acima (sobe do botão, cresce para a direita) só
+   * faz sentido onde há espaço lateral sobrando e um ponteiro para mirar — num
+   * telefone de 390px uma caixa de 300 ancorada num botão do rodapé cobre a
+   * tela toda de qualquer jeito, e ainda por cima fica debaixo do dedo.
+   */
+  const ehMobile = useEhMobile();
 
   // medir antes de pintar: com a posição num efeito comum a caixa aparece um
   // quadro no canto superior esquerdo e "pula" para o lugar
   useLayoutEffect(() => {
-    if (!aberto) {
+    if (!aberto || ehMobile) {
       setPos(null);
       return;
     }
@@ -89,7 +98,7 @@ export default function PopoverFlutuante({
     calcular();
     window.addEventListener("resize", calcular);
     return () => window.removeEventListener("resize", calcular);
-  }, [aberto, ancora]);
+  }, [aberto, ancora, ehMobile]);
 
   // Fechar por clique fora e por Esc mora aqui, e não em quem abre: em portal a
   // caixa não é filha do botão, então um `contains` do lado de lá leria clique
@@ -121,6 +130,33 @@ export default function PopoverFlutuante({
   }, [aberto, onFechar, ancora]);
 
   if (!aberto || typeof document === "undefined") return null;
+
+  if (ehMobile) {
+    return createPortal(
+      <div
+        className="anim-overlay fixed inset-0 z-[90] flex flex-col justify-end bg-black/70"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) onFechar();
+        }}
+      >
+        <div
+          ref={caixa}
+          role="dialog"
+          aria-label={rotulo}
+          className={`anim-folha max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl bg-overlay pb-[env(safe-area-inset-bottom)] shadow-high ${
+            semRespiro ? "" : "p-3"
+          }`}
+        >
+          <span
+            aria-hidden="true"
+            className="mx-auto mb-2 block h-1 w-9 rounded-full bg-border-strong"
+          />
+          {children}
+        </div>
+      </div>,
+      document.body,
+    );
+  }
 
   return createPortal(
     <div

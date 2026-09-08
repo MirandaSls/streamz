@@ -41,7 +41,15 @@ import { useVoice } from "@/stores/voice";
  * de fora dela, aberta — quem só está vendo que existe uma call continua lendo
  * o histórico.
  */
-export default function DMView() {
+export default function DMView({
+  /**
+   * Sem o cabeçalho de 49px — o par do `incorporado` do `ChatView`. É o que o
+   * leiaute de celular usa: lá o cabeçalho é o de 48px com a seta de voltar
+   * (`components/mobile/pecas.tsx`), e dois empilhados comeriam metade da
+   * timeline num telefone. No desktop nada muda: o padrão é `false`.
+   */
+  semCabecalho = false,
+}: { semCabecalho?: boolean } = {}) {
   const user = useAuth((s) => s.user);
   const active = useActiveDM();
   const slice = useActiveSlice();
@@ -248,7 +256,11 @@ export default function DMView() {
       A busca e a thread continuam irmãs do `<main>` (montadas na página): elas
       têm cabeçalho próprio de 49px, que encosta no nosso e continua a linha.
     */
-    <main className="flex min-w-0 flex-1 flex-col bg-chat">
+    // `min-h-0` só sem cabeçalho (celular): ali este `main` é filho de uma
+    // coluna que já mede a tela, e sem ele a timeline empurraria o composer
+    // para fora. No desktop a classe fica exatamente como era.
+    <main className={`flex min-w-0 flex-1 flex-col bg-chat ${semCabecalho ? "min-h-0" : ""}`}>
+      {!semCabecalho && (
       <HeaderBar
         icon={
           other ? (
@@ -334,6 +346,7 @@ export default function DMView() {
           </>
         }
       />
+      )}
 
       {/* Embaixo do cabeçalho: a conversa à esquerda e a coluna 4 à direita. */}
       <div className="flex min-h-0 flex-1">

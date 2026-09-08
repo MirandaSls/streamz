@@ -13,6 +13,7 @@ import DMList from "@/components/layout/DMList";
 import GuildRail from "@/components/layout/GuildRail";
 import UserFooter from "@/components/layout/UserFooter";
 import BarraDeTitulo from "@/components/desktop/BarraDeTitulo";
+import ShellMobile from "@/components/mobile/ShellMobile";
 import ModalHost from "@/components/modals/ModalHost";
 import ContextMenuHost from "@/components/ui/ContextMenu";
 import ProfilePopoverHost from "@/components/ui/ProfilePopover";
@@ -22,6 +23,7 @@ import CallSplit from "@/components/voice/CallSplit";
 import { membrosVisiveis } from "@/components/voice/paineis-da-call";
 import VoiceLayer from "@/components/voice/VoiceLayer";
 import { chatDoCanalAberto } from "@/components/voice/vista-do-canal-de-voz";
+import { useEhMobile } from "@/hooks/useEhMobile";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useSettingsRoute } from "@/hooks/useSettingsRoute";
@@ -46,6 +48,11 @@ import { useVoice } from "@/stores/voice";
  */
 export default function AppPage() {
   const router = useRouter();
+  // Abaixo de 768px (e fora do app de desktop) o shell é outro: abas no rodapé
+  // e telas cheias, como o app do Discord no celular. Ver `hooks/useEhMobile` —
+  // a troca acontece antes da pintura, e o leiaute de colunas continua sendo o
+  // único que existe a partir de 768.
+  const ehMobile = useEhMobile();
   const user = useAuth((s) => s.user);
   const loadFromStorage = useAuth((s) => s.loadFromStorage);
 
@@ -100,12 +107,22 @@ export default function AppPage() {
     }
   }, [user, router]);
 
+  // Celular: o shell de abas toma o lugar do de colunas. Os hooks acima (sessão,
+  // tempo real, atalhos, ausente automático) já rodaram — são os mesmos nos dois
+  // leiautes, e é por isso que a decisão fica aqui embaixo e não numa rota.
+  if (ehMobile) return <ShellMobile />;
+
   // `min-w` no shell: abaixo de ~940px o cabeçalho da conversa quebrava — o
   // título espremia os ícones, sobrava um caractere solto à esquerda e o
   // placeholder do composer partia em três linhas. O Discord também tem um piso
   // de largura de janela; sem ele o leiaute de quatro colunas não cabe.
+  //
+  // `max-md:hidden` cobre o único quadro que o `useEhMobile` não alcança: o HTML
+  // estático que o navegador pinta **antes** do JS subir. Sem ele, quem abre o
+  // site no telefone vê meio segundo de leiaute de 940px com rolagem horizontal.
+  // A partir de 768px a classe não faz nada, e o desktop é o mesmo pixel.
   return (
-    <div className="flex h-full min-w-[940px] select-none">
+    <div className="flex h-full min-w-[940px] select-none max-md:hidden">
       {/*
         Rail e coluna dentro do mesmo bloco posicionado, e o card do usuário
         como irmão dos dois.

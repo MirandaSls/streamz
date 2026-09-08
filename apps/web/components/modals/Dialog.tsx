@@ -11,6 +11,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { X } from "@/components/ui/icones";
+import { useEhMobile } from "@/hooks/useEhMobile";
 
 /**
  * Caixa de diálogo acessível — a base de todos os modais do app.
@@ -71,6 +72,19 @@ export default function Dialog({
   className?: string;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  /**
+   * No celular a caixa ocupa a **largura inteira** e sobe o teto de altura.
+   *
+   * As larguras dos modais são medidas do Discord no desktop (480 na
+   * confirmação, 960 no seletor de tela, 1400 nas configurações) e nenhuma cabe
+   * num telefone de 390px. Em vez de uma largura por modal, uma regra só: no
+   * celular a largura é a da tela menos a folga, e o `max-h-[85vh]` vira
+   * `92dvh` — o `vh` do iOS conta a barra de endereço que já não está lá.
+   *
+   * A moldura continua sendo a mesma (título, X, corpo rolável, rodapé): o que
+   * muda é o tamanho da caixa, não o conteúdo dela.
+   */
+  const ehMobile = useEhMobile();
   const titleId = useId();
   const descriptionId = useId();
   // `document` não existe na pré-renderização; o portal só pode ser criado
@@ -125,8 +139,16 @@ export default function Dialog({
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-50 grid justify-items-center bg-black/85 p-4 anim-overlay ${
-        align === "top" ? "items-start pt-[10vh]" : "items-center"
+      className={`fixed inset-0 z-50 grid justify-items-center bg-black/85 anim-overlay ${
+        align === "top" ? "items-start" : "items-center"
+      } ${
+        ehMobile
+          ? // as áreas seguras entram como folga: o topo do modal não pode cair
+            // atrás do entalhe nem o rodapé atrás da barra de gestos
+            "px-2 pb-[calc(env(safe-area-inset-bottom)+8px)] pt-[calc(env(safe-area-inset-top)+8px)]"
+          : align === "top"
+            ? "p-4 pt-[10vh]"
+            : "p-4"
       }`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -140,7 +162,9 @@ export default function Dialog({
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         onKeyDown={handleKeyDown}
-        className={`relative flex max-h-[85vh] max-w-full flex-col overflow-hidden rounded-lg border border-border bg-chat shadow-high outline-none anim-modal ${className}`}
+        className={`relative flex max-w-full flex-col overflow-hidden rounded-lg border border-border bg-chat shadow-high outline-none anim-modal ${
+          ehMobile ? "max-h-[92dvh] w-full" : `max-h-[85vh] ${className}`
+        }`}
       >
         {/* cabeçalho fica fora da área rolável: no Discord ele não sobe junto */}
         {hideHeader ? (

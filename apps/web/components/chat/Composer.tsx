@@ -26,6 +26,7 @@ import {
   Paperclip,
   Pencil,
   Plus,
+  SendHorizonal,
   Smile,
   Sticker as StickerIcon,
   Upload,
@@ -57,6 +58,7 @@ import { buscarComandos, interpretarComando } from "@/lib/comandos-barra";
 import { buscarEmojisUnicode } from "@/lib/emojis-unicode";
 import { EVENTO_MENCAO, type DetalheMencao } from "@/lib/mencoes";
 import { lerRascunho, limparRascunho, salvarRascunho } from "@/lib/rascunhos";
+import { useEhMobile } from "@/hooks/useEhMobile";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { aplicarEmojisPersonalizados, todosOsEmojis, useEmojis } from "@/stores/emojis";
@@ -115,11 +117,14 @@ function SideButton({
   label,
   onClick,
   onMouseEnter,
+  baixo = false,
   children,
 }: {
   label: string;
   onClick?: () => void;
   onMouseEnter?: () => void;
+  /** 40px de altura em vez de 58: o composer do celular é uma cápsula de 40. */
+  baixo?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -129,7 +134,9 @@ function SideButton({
         onClick={onClick}
         onMouseEnter={onMouseEnter}
         aria-label={label}
-        className="grid h-[58px] w-10 place-items-center text-txt-secondary transition hover:text-txt-primary"
+        className={`grid w-10 place-items-center text-txt-secondary transition hover:text-txt-primary ${
+          baixo ? "h-10" : "h-[58px]"
+        }`}
       >
         {children}
       </button>
@@ -199,6 +206,13 @@ export default function Composer({
   const [termoGif, setTermoGif] = useState("");
   const [carinha, setCarinha] = useState(0);
   const sendMode = useSettings((s) => s.sendMode);
+  /**
+   * No celular o composer muda em duas coisas, e só nelas: a fileira de cinco
+   * ícones vira duas (não cabem cinco alvos de 40px ao lado de um campo de
+   * texto em 390px de tela — o rótulo do canal quebrava em três linhas), e
+   * ganha um **botão de enviar**, porque o Enter ali é quebra de linha.
+   */
+  const ehMobile = useEhMobile();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -398,6 +412,11 @@ export default function Composer({
     }
 
     if (event.key !== "Enter" || event.shiftKey) return;
+    // No celular o Enter do teclado da tela **quebra linha**, e quem envia é o
+    // botão ao lado. É a regra do Discord no telefone, e a razão é mecânica:
+    // no teclado virtual não existe Shift+Enter, então um Enter que enviasse
+    // tornaria impossível escrever duas linhas.
+    if (ehMobile && !(event.ctrlKey || event.metaKey)) return;
     // ── e-configuracoes ── quem prefere Ctrl+Enter usa o Enter para quebrar linha
     if (sendMode === "ctrl-enter" && !(event.ctrlKey || event.metaKey)) return;
     event.preventDefault();
@@ -533,11 +552,15 @@ export default function Composer({
             }
           : undefined
       }
-      className="relative shrink-0 px-2.5"
+      className={`relative shrink-0 ${ehMobile ? "px-3 pb-1" : "px-2.5"}`}
     >
       {dragging && <OverlayArrastar alvo={formRef.current} destino={destino} />}
 
-      <div className="rounded-lg bg-input">
+      {/* Cápsula de 40pt no celular (raio 20, margens de 12) — medido em
+          `docs/Reference/mobile/discord-mobile-chat-canal-2024.png`, 1px=1pt,
+          `MEDIDAS.md` §7. No desktop segue o retângulo de raio 8 e 58 de altura
+          medido no Discord do computador. */}
+      <div className={ehMobile ? "rounded-[20px] bg-input" : "rounded-lg bg-input"}>
         {(pendentes.length > 0 || prontos.length > 0) && (
           // uma linha só, com rolagem horizontal: quebrar em várias linhas
           // empurrava a timeline para cima a cada arquivo
@@ -605,7 +628,9 @@ export default function Composer({
                 // `ml-2.5` põe o glifo de 18 a 21px da borda esquerda da caixa,
                 // que é onde ele fica no Discord: 10 de margem + os 11 que
                 // sobram de cada lado dentro do alvo de 40
-                className="ml-2.5 mr-4 mt-[9px] grid h-10 w-10 shrink-0 place-items-center rounded-full text-txt-secondary transition hover:text-txt-primary"
+                className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-txt-secondary transition hover:text-txt-primary ${
+                  ehMobile ? "mx-0.5" : "ml-2.5 mr-4 mt-[9px]"
+                }`}
               >
                 {/* `+` liso, não o `CirclePlus`: o do Discord é marca de traço,
                     sem o círculo cheio em volta */}
@@ -637,7 +662,9 @@ export default function Composer({
             // anuncia a lista é o próprio popup, que é um `listbox` rotulado
             aria-autocomplete="list"
             placeholder={placeholder}
-            className="min-h-[58px] flex-1 resize-none bg-transparent py-[18px] text-txt-normal outline-none placeholder:text-txt-muted"
+            className={`flex-1 resize-none bg-transparent text-txt-normal outline-none placeholder:text-txt-muted ${
+              ehMobile ? "min-h-10 py-[9px]" : "min-h-[58px] py-[18px]"
+            }`}
           />
 
           <div className="flex items-center pr-2">
@@ -667,23 +694,35 @@ export default function Composer({
                 (`173327.png`, y≈992): presente, GIF, figurinha e apps com
                 18px, carinha com 16, passo de 40 entre centros — o mesmo
                 `w-10` do `SideButton`. */}
-            <SideButton label="Presente">
-              <Gift size={20} />
-            </SideButton>
-            <SideButton label="GIF" onClick={() => setAberto((a) => (a === "gif" ? null : "gif"))}>
+            {/* Presente e apps são os dois botões inertes da fileira (§6.6):
+                no celular, onde a fileira já não cabe inteira, são também os
+                dois primeiros a sair. */}
+            {!ehMobile && (
+              <SideButton label="Presente">
+                <Gift size={20} />
+              </SideButton>
+            )}
+            <SideButton
+              label="GIF"
+              baixo={ehMobile}
+              onClick={() => setAberto((a) => (a === "gif" ? null : "gif"))}
+            >
               {/* o ativo do Discord, não `<span>GIF</span>` com borda: texto
                   muda de peso com a fonte do sistema e nunca casa com os
                   vizinhos */}
               <Gif size={20} />
             </SideButton>
-            <SideButton
-              label="Figurinha"
-              onClick={() => setAberto((a) => (a === "figurinha" ? null : "figurinha"))}
-            >
-              <StickerIcon size={20} />
-            </SideButton>
+            {!ehMobile && (
+              <SideButton
+                label="Figurinha"
+                onClick={() => setAberto((a) => (a === "figurinha" ? null : "figurinha"))}
+              >
+                <StickerIcon size={20} />
+              </SideButton>
+            )}
             <SideButton
               label="Emoji"
+              baixo={ehMobile}
               onClick={() => setAberto((a) => (a === "emoji" ? null : "emoji"))}
               // o ícone troca de carinha a cada passada do mouse, como no Discord
               onMouseEnter={() => setCarinha((c) => (c + 1) % CARINHAS.length)}
@@ -693,9 +732,23 @@ export default function Composer({
                   do quadro (o nosso print media 14px com `size={16}`) */}
               <Carinha size={18} />
             </SideButton>
-            <SideButton label="Apps">
-              <Apps size={20} />
-            </SideButton>
+            {!ehMobile && (
+              <SideButton label="Apps">
+                <Apps size={20} />
+              </SideButton>
+            )}
+            {/* Enviar: só no celular, e só quando há o que enviar. No desktop o
+                Enter é o botão, e um ícone permanente ali seria ruído. */}
+            {ehMobile && (draft.trim().length > 0 || pendentes.length > 0 || prontos.length > 0) && (
+              <button
+                type="submit"
+                disabled={enviando}
+                aria-label="Enviar mensagem"
+                className="mb-[9px] mr-[9px] mt-[9px] grid h-10 w-10 shrink-0 place-items-center self-end rounded-full bg-accent text-accent-ink transition disabled:opacity-50"
+              >
+                <SendHorizonal size={20} />
+              </button>
+            )}
           </div>
         </div>
       </div>

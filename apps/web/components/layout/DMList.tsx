@@ -166,6 +166,9 @@ export default function DMList() {
         {/* ── d-social ── a home do modo DM, com o badge de pedidos pendentes */}
         <button
           type="button"
+          // marca sem pixel: o shell do celular ouve o toque na lista por
+          // delegação para empilhar a tela certa (ver `ShellMobile`)
+          data-amigos-button
           onClick={() => setFriendsOpen(true)}
           aria-current={friendsOpen ? "true" : undefined}
           className={"mx-2 flex h-10 w-[calc(100%-1rem)] items-center gap-3 rounded-lg pl-3 pr-2 text-left " + (friendsOpen ? "bg-sel text-txt-primary" : "text-txt-faint hover:bg-hov hover:text-txt-normal")}
@@ -192,6 +195,7 @@ export default function DMList() {
                 key={u.id}
                 type="button"
                 role="listitem"
+                data-dm-button
                 onClick={() => {
                   setQuery("");
                   void openWith(u.id);
@@ -256,6 +260,7 @@ export default function DMList() {
             >
               <button
                 type="button"
+                data-dm-button
                 onClick={() => select(dm)}
                 aria-current={active ? "true" : undefined}
                 aria-label={unread ? `${title} (não lida)` : title}

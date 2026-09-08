@@ -60,10 +60,33 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image", title: "Streamz" },
 };
 
-/** Void Ink: a cor que o navegador pinta na barra antes da página carregar. */
+/**
+ * Void Ink: a cor que o navegador pinta na barra antes da página carregar.
+ *
+ * As três linhas de baixo são do leiaute de celular, e cada uma resolve um
+ * defeito concreto:
+ *
+ * - `viewportFit: "cover"` faz a página ir até as bordas físicas do aparelho.
+ *   Sem ela o `env(safe-area-inset-*)` responde **zero** em todo lugar, e a
+ *   barra de abas do rodapé e o cabeçalho não têm como se afastar do entalhe e
+ *   da barra de gestos — o Safari simplesmente não conta as áreas seguras.
+ * - `interactiveWidget: "resizes-content"` diz ao navegador para **encolher o
+ *   leiaute** quando o teclado abre, em vez de empurrar a página para cima. Com
+ *   o padrão (`resizes-visual`) o composer some atrás do teclado e a lista de
+ *   mensagens continua medindo a tela inteira; com este, o `100dvh` do shell
+ *   passa a ser a altura acima do teclado e o composer fica encostado nele.
+ * - `maximumScale`/`userScalable` **não** aparecem aqui de propósito: travar o
+ *   zoom é a maneira mais fácil de tornar o app inacessível. O zoom automático
+ *   do iOS ao focar um campo é resolvido pelo tamanho da fonte (≥16px em
+ *   `globals.css`), que é a causa, e não pela proibição de ampliar.
+ */
 export const viewport: Viewport = {
   themeColor: "#0b0b0f",
   colorScheme: "dark",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({
