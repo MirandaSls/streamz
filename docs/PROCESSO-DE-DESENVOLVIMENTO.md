@@ -616,6 +616,55 @@ posição). Toda medida citada em PR tem que ter vindo daí. Se não dá para me
 com confiança, diga "não medido" em vez de chutar. Um número inventado vira um
 pixel errado no app.
 
+**E medir a referência não basta: meça o que o nosso código entrega.** Ler a
+classe do Tailwind e assumir o número dá errado aqui por dois motivos, os dois
+descobertos com o leiaute de celular (PRs #170/#177/#178/#180), e nenhum dos
+dois é pego por typecheck, lint ou teste:
+
+1. **A raiz do app é 15,5px** (`globals.css`, a escala de fonte que o usuário
+   pediu) e o Tailwind mede em `rem` — então todo tamanho nominal sai **3%
+   menor**: `h-6` é 23,25, `h-9` é 34,9, `h-10` é 38,75, `h-11` é 42,6, `h-12`
+   é 46,5, `h-14` é 54,25. Medidas tiradas de print e pisos de alvo de toque
+   ficaram todos 1 a 2px curtos em quatro branches ao mesmo tempo — o "44"
+   media 43, o rail "de 48" media 46,5. A regra que ficou: **px literal
+   (`h-[44px]`) onde o número significa alguma coisa** (medida da captura ou
+   piso de segurança), escala do Tailwind só onde não significa (respiro,
+   espaçamento, raio).
+2. **A classe pode estar certa e o valor vir de outro lugar.** A cápsula do
+   composer tinha `min-h-[40px]` e media **58** num telefone: quem escreve a
+   altura do campo vazio é o `style.height` do auto-ajuste, com a constante do
+   desktop. Classe certa, JS por cima, nenhum aviso.
+
+A régua é `getBoundingClientRect` no aparelho emulado, dentro do passeio de
+render — ver `scripts/e2e-mobile.mjs` e `scripts/medir-call-mobile.mjs`.
+
+E há um terceiro caso que **nenhuma régua pega: o comentário mentindo sobre o
+código que está certo.** Aconteceu duas vezes aqui — um arquivo prometendo 48
+onde a classe entregava 46,5, e outro citando uma margem de 31pt que era do
+leiaute de dois tiles do print, não do nosso (o código sempre usou 12). Script
+nenhum confere prosa; só releitura com a captura ao lado.
+
+**Provar que o desktop não mudou: compare o retângulo certo.** O par
+`scripts/e2e-desktop-diff.mjs` + `ImageChops.difference` do Pillow fotografa a
+mesma conta nos dois builds em 1300×900 e conta os pixels diferentes; o alvo é
+**zero**, e foi zero em todas as branches deste trabalho. Duas armadilhas, as
+duas custaram medição repetida:
+
+- **A tela inteira só serve para superfície que tapa a lista de mensagens.** Um
+  cartão de perfil ou um seletor de emoji não tapa, e a rolagem da lista muda a
+  cada execução: o mesmo build contra ele mesmo deu ~200 mil pixels nesses
+  quadros. Para esses, recorte o **retângulo do próprio elemento**
+  (`locator.screenshot` + `boundingBox`).
+- **Diferença grande nem sempre é leiaute.** Presença de voz que sobrou de um
+  passeio ("Em voz" na lista de membros), miniatura de embed que carregou de um
+  lado só, uma reação de teste — todos já apareceram como milhares de pixels.
+  Antes de culpar o CSS, limpe a semente e repita.
+
+A pergunta que economiza a hora não é *o que eu quebrei?*, é **qual é o ruído
+deste quadro?** — e ela se responde rodando o **mesmo build contra ele mesmo**.
+Se o piso de ruído daquele enquadramento é 200 mil pixels, uma diferença de 229
+não quer dizer nada; se é zero, um pixel já quer.
+
 ### 6.4 Paralelizar sem colidir
 Migração grande (83 arquivos) funcionou assim, e é o modelo:
 1. **Fase A, sequencial**: fechar o vocabulário inteiro (`icones.tsx`) e
