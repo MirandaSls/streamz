@@ -27,10 +27,11 @@ import { RealtimeService } from "../realtime/realtime.service";
  * Cargos, atribuição de cargo a membro e regras (overrides) por canal.
  *
  * A autorização mora em `GuildsService` (ponto único do projeto); aqui só se
- * escreve o dado. O que este service adiciona por conta própria é a
- * **hierarquia**: `MANAGE_ROLES` sem teto seria equivalente a `ADMINISTRATOR`,
- * porque bastaria criar um cargo com tudo ligado e vesti-lo. Por isso todo
- * caminho de escrita passa por `assertPodeMexerNoCargo` (ADR-0002).
+ * escreve o dado. Todo caminho de escrita passa por
+ * `guilds.assertPodeMexerNoCargo`: `MANAGE_ROLES` sem teto seria equivalente a
+ * `ADMINISTRATOR`, porque bastaria criar um cargo com tudo ligado e vesti-lo
+ * (ADR-0002). A hierarquia morou aqui até a regra ganhar um segundo cliente
+ * (as regras de categoria) — checagem de autorização duplicada diverge.
  */
 @Injectable()
 export class RolesService {
@@ -81,7 +82,7 @@ export class RolesService {
     input: RoleInput,
   ): Promise<Role> {
     await this.guilds.assertCanModerate(actorId, guildId, Permission.MANAGE_ROLES);
-    const alvo = await this.assertPodeMexerNoCargo(actorId, guildId, roleId);
+    const alvo = await this.guilds.assertPodeMexerNoCargo(actorId, guildId, roleId);
 
     // o @everyone só existe como padrão do servidor: nome, cor e hierarquia
     // dele não são editáveis — só o conjunto de permissões
@@ -105,7 +106,7 @@ export class RolesService {
 
   async remove(actorId: string, guildId: string, roleId: string) {
     await this.guilds.assertCanModerate(actorId, guildId, Permission.MANAGE_ROLES);
-    const alvo = await this.assertPodeMexerNoCargo(actorId, guildId, roleId);
+    const alvo = await this.guilds.assertPodeMexerNoCargo(actorId, guildId, roleId);
     if (alvo.isDefault) throw new BadRequestException("O @everyone não pode ser apagado");
 
     const membros = await this.prisma.guildMemberRole.findMany({
@@ -156,7 +157,7 @@ export class RolesService {
 
   async assign(actorId: string, guildId: string, userId: string, roleId: string) {
     await this.guilds.assertCanModerate(actorId, guildId, Permission.MANAGE_ROLES);
-    const alvo = await this.assertPodeMexerNoCargo(actorId, guildId, roleId);
+    const alvo = await this.guilds.assertPodeMexerNoCargo(actorId, guildId, roleId);
     if (alvo.isDefault) {
       throw new BadRequestException("O @everyone vale para todo membro — não se atribui");
     }
@@ -171,7 +172,7 @@ export class RolesService {
 
   async unassign(actorId: string, guildId: string, userId: string, roleId: string) {
     await this.guilds.assertCanModerate(actorId, guildId, Permission.MANAGE_ROLES);
-    await this.assertPodeMexerNoCargo(actorId, guildId, roleId);
+    await this.guilds.assertPodeMexerNoCargo(actorId, guildId, roleId);
     await this.prisma.guildMemberRole.deleteMany({ where: { guildId, userId, roleId } });
     return this.aposMudarCargosDoMembro(guildId, userId);
   }
@@ -241,7 +242,7 @@ export class RolesService {
     if (!hasPermission(minhas, mexidas)) {
       throw new ForbiddenException("Você não pode mexer numa permissão que não tem");
     }
-    if (roleId) await this.assertPodeMexerNoCargo(actorId, guildId, roleId);
+    if (roleId) await this.guilds.assertPodeMexerNoCargo(actorId, guildId, roleId);
     else await this.guilds.assertMember(userId!, guildId);
 
     // editar a permissão DENTRO do canal o tira da sincronia com a categoria
@@ -294,7 +295,7 @@ export class RolesService {
       select: { guildId: true },
     });
     if (cargo?.guildId === guildId) {
-      await this.assertPodeMexerNoCargo(actorId, guildId, targetId);
+      await this.guilds.assertPodeMexerNoCargo(actorId, guildId, targetId);
     }
     await this.guilds.dessincronizarDaCategoria(channelId);
     await this.prisma.channelOverride.deleteMany({
@@ -388,20 +389,6 @@ export class RolesService {
     await this.guilds.assertCanModerate(actorId, guildId, Permission.MANAGE_ROLES);
     await this.assertCanalDoServidor(guildId, channelId);
     await this.guilds.assertCanViewChannel(actorId, channelId);
-  }
-
-  /**
-   * Hierarquia: o ator só mexe em cargo **estritamente abaixo** do seu mais
-   * alto. Sem isso, `MANAGE_ROLES` daria a qualquer um o servidor inteiro.
-   */
-  private async assertPodeMexerNoCargo(actorId: string, guildId: string, roleId: string) {
-    const role = await this.prisma.role.findUnique({ where: { id: roleId } });
-    if (!role || role.guildId !== guildId) throw new NotFoundException("Cargo não encontrado");
-    const teto = await this.guilds.rank(guildId, actorId);
-    if (role.position >= teto) {
-      throw new ForbiddenException("Você não pode mexer num cargo igual ou acima do seu");
-    }
-    return role;
   }
 
   /** Não se edita a regra de um canal de outro servidor (nem de uma conversa). */

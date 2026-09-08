@@ -169,9 +169,10 @@ export class CategoriesService {
    * Grava a regra de um cargo ou de um usuário numa categoria e **propaga** aos
    * canais sincronizados.
    *
-   * As mesmas duas travas do override de canal: exige `MANAGE_ROLES`, e ninguém
-   * concede o que não tem — senão `MANAGE_ROLES` viraria `ADMINISTRATOR` por
-   * um caminho de duas telas.
+   * As mesmas travas do override de canal, porque a propagação faz desta rota
+   * um atalho para todos os canais sincronizados de uma vez: `MANAGE_ROLES`,
+   * enxergar a categoria, hierarquia, e ninguém concede o que não tem — senão
+   * `MANAGE_ROLES` viraria `ADMINISTRATOR` por um caminho de duas telas.
    */
   async setOverride(
     actorId: string,
@@ -179,8 +180,7 @@ export class CategoriesService {
     categoryId: string,
     input: ChannelOverrideInput,
   ): Promise<CategoryOverride[]> {
-    await this.guilds.assertCanModerate(actorId, guildId, Permission.MANAGE_ROLES);
-    await this.assertInGuild(categoryId, guildId);
+    await this.assertPodeMexerNasRegrasDaCategoria(actorId, guildId, categoryId);
     const roleId = input.roleId ?? null;
     const userId = input.userId ?? null;
     if ((roleId === null) === (userId === null)) {
@@ -193,11 +193,11 @@ export class CategoriesService {
     if (!hasPermission(minhas, mexidas)) {
       throw new ForbiddenException("Você não pode mexer numa permissão que não tem");
     }
+    // a checagem de "pertence a este servidor" virou a hierarquia inteira: sem
+    // ela, um moderador escrevia a regra de um cargo **acima** do seu e ela
+    // descia para todo canal sincronizado
     if (roleId) {
-      const cargo = await this.prisma.role.findUnique({ where: { id: roleId } });
-      if (!cargo || cargo.guildId !== guildId) {
-        throw new BadRequestException("Cargo não pertence a este servidor");
-      }
+      await this.guilds.assertPodeMexerNoCargo(actorId, guildId, roleId);
     } else {
       await this.guilds.assertMember(userId as string, guildId);
     }
@@ -220,14 +220,37 @@ export class CategoriesService {
     return this.aposMudarOverrides(guildId, categoryId);
   }
 
+  /**
+   * Apaga a regra de um cargo ou de um usuário na categoria — e, pela
+   * propagação, de todo canal sincronizado com ela.
+   *
+   * Mesmas checagens do `setOverride`, porque apagar regra é escrever
+   * permissão. Sem elas, apagar a regra do @everyone de uma categoria privada
+   * abria **todos** os canais sincronizados dela numa chamada só, e apagar a de
+   * um cargo acima do ator desfazia a restrição de quem está acima dele.
+   *
+   * Não repete a máscara "não se concede o que não se tem" do `PUT` de
+   * propósito: ela não acrescentaria trava nenhuma aqui, porque o mesmo estado
+   * final se alcança com um `PUT` de `allow: 0, deny: 0` — que passa pela
+   * máscara (não mexe em bit nenhum) e zera a regra. Uma checagem que só recusa
+   * o caminho curto do que o caminho longo permite não é segurança, é atrito.
+   */
   async removeOverride(
     actorId: string,
     guildId: string,
     categoryId: string,
     targetId: string,
   ): Promise<CategoryOverride[]> {
-    await this.guilds.assertCanModerate(actorId, guildId, Permission.MANAGE_ROLES);
-    await this.assertInGuild(categoryId, guildId);
+    await this.assertPodeMexerNasRegrasDaCategoria(actorId, guildId, categoryId);
+    // `targetId` é id de cargo **ou** de usuário; só o de cargo tem hierarquia a
+    // respeitar — o @everyone (posição 0) incluído, que é o caso que abre tudo
+    const cargo = await this.prisma.role.findUnique({
+      where: { id: targetId },
+      select: { guildId: true },
+    });
+    if (cargo?.guildId === guildId) {
+      await this.guilds.assertPodeMexerNoCargo(actorId, guildId, targetId);
+    }
     await this.prisma.categoryOverride.deleteMany({
       where: { categoryId, OR: [{ roleId: targetId }, { userId: targetId }] },
     });
@@ -296,6 +319,36 @@ export class CategoriesService {
       });
     }
     return overrides;
+  }
+
+  /**
+   * O portão das duas escritas de regra de categoria: `MANAGE_ROLES`,
+   * categoria deste servidor e **enxergar a categoria**.
+   *
+   * O par de `assertPodeMexerNasRegrasDoCanal` (`RolesService`), e por um
+   * motivo mais forte: `aposMudarOverrides` **copia** a regra da categoria para
+   * cada canal sincronizado. Sem a visibilidade, quem foi barrado dos canais de
+   * uma categoria privada gravava aqui
+   * `{ userId: <ele mesmo>, allow: VIEW_CHANNEL }` e entrava em **todos** eles
+   * de uma vez — a mesma escalada do canal, com o dobro do alcance e metade das
+   * chamadas.
+   *
+   * Continua não trancando ninguém para fora: `computePermissions` (ADR-0002)
+   * dá `ALL_PERMISSIONS` ao dono e a quem tem `ADMINISTRATOR` **antes** dos
+   * overrides, então uma categoria que negue tudo ao @everyone segue
+   * consertável por eles.
+   *
+   * A leitura (`listOverrides`) segue aberta a qualquer membro, como sempre
+   * foi: aqui se decide quem **escreve**.
+   */
+  private async assertPodeMexerNasRegrasDaCategoria(
+    actorId: string,
+    guildId: string,
+    categoryId: string,
+  ) {
+    await this.guilds.assertCanModerate(actorId, guildId, Permission.MANAGE_ROLES);
+    await this.assertInGuild(categoryId, guildId);
+    await this.guilds.assertCanViewCategory(actorId, guildId, categoryId);
   }
 
   private async assertInGuild(categoryId: string, guildId: string) {

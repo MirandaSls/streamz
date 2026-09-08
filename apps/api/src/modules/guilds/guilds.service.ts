@@ -489,6 +489,61 @@ export class GuildsService {
   }
 
   /**
+   * Pode ver a categoria: membro do servidor **e** com `VIEW_CHANNEL` na
+   * permissão efetiva calculada sobre as regras **da categoria**.
+   *
+   * Categoria não é `Channel` — é modelo à parte, sem linha em
+   * `ChannelOverride` —, então `assertCanViewChannel` não serve aqui. O sentido
+   * é o mesmo, e o alcance é maior: o deny de `VIEW_CHANNEL` na categoria é o
+   * que esconde **todos** os canais sincronizados com ela.
+   *
+   * Não confundir com `listOverrides` da categoria, que é aberto a qualquer
+   * membro de propósito (as regras não são segredo — a coluna já as deixa
+   * deduzir). Aqui se decide **escrita**, não leitura.
+   */
+  async assertCanViewCategory(
+    actorId: string,
+    guildId: string,
+    categoryId: string,
+  ): Promise<number> {
+    await this.assertMember(actorId, guildId);
+    const [ctx, roleIds, regras] = await Promise.all([
+      this.permissionContext(guildId),
+      this.roleIdsOf(guildId, actorId),
+      this.prisma.categoryOverride.findMany({ where: { categoryId } }),
+    ]);
+    const member: PermissionMember = { isOwner: ctx.ownerId === actorId, roleIds };
+    // só o override do próprio usuário interessa; os dos outros são ruído
+    const meus = regras.filter((o) => o.userId === null || o.userId === actorId);
+    const permissions = computePermissions(member, ctx.roles, meus);
+    if (!hasPermission(permissions, Permission.VIEW_CHANNEL)) {
+      throw new ForbiddenException("Categoria privada");
+    }
+    return permissions;
+  }
+
+  /**
+   * Hierarquia: o ator só mexe em cargo **estritamente abaixo** do seu mais
+   * alto. Sem isso, `MANAGE_ROLES` seria equivalente a `ADMINISTRATOR` — bastava
+   * criar um cargo com tudo ligado e vesti-lo (ADR-0002).
+   *
+   * Mora aqui, e não no `RolesService`, porque a regra passou a ter dois
+   * clientes: cargo/regra de canal (`RolesService`) e regra de categoria
+   * (`CategoriesService`). Duas cópias de uma checagem de autorização divergem —
+   * é exatamente assim que nasceu a assimetria que este arquivo já corrige entre
+   * ler e escrever regra de canal.
+   */
+  async assertPodeMexerNoCargo(actorId: string, guildId: string, roleId: string) {
+    const role = await this.prisma.role.findUnique({ where: { id: roleId } });
+    if (!role || role.guildId !== guildId) throw new NotFoundException("Cargo não encontrado");
+    const teto = await this.rank(guildId, actorId);
+    if (role.position >= teto) {
+      throw new ForbiddenException("Você não pode mexer num cargo igual ou acima do seu");
+    }
+    return role;
+  }
+
+  /**
    * Pode postar: view + `SEND_MESSAGES` na permissão efetiva do canal (é o que
    * "somente-leitura" virou: deny SEND_MESSAGES no @everyone). Em conversa
    * direta basta participar.
