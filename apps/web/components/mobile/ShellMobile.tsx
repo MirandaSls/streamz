@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type MouseEvent } from "react";
+import { TelaDeAplicativos } from "@/components/apps/DiretorioDeApps";
 import BarraDeAbas from "@/components/mobile/BarraDeAbas";
 import BarraDeVozMobile from "@/components/mobile/BarraDeVozMobile";
 import { TelaEmpilhada } from "@/components/mobile/pecas";
@@ -56,6 +57,7 @@ export default function ShellMobile() {
   const pilhas = useMobile((s) => s.pilhas);
   const topo = telaDoTopo({ aba, pilhas });
   const prof = useMobile(profundidade);
+  const voltar = useMobile((s) => s.voltar);
   /** já houve um toque nesta sessão? separa navegação de carga inicial. */
   const jaInteragiu = useRef(false);
 
@@ -122,6 +124,19 @@ export default function ShellMobile() {
     }
     if (alvo.closest("[data-amigos-button]")) {
       mobile.empilhar("amigos");
+      return;
+    }
+    /*
+      ── j-bots · F4 ── "Descobrir aplicativos" na rail.
+
+      Mesma regra dos três acima, e pela mesma razão: quem abre o diretório
+      continua sendo o botão do `GuildRail` e a store dele (`useAplicativos`);
+      este shell só percebe que houve um toque no item e empilha a tela cheia
+      por cima. Sem `setTimeout`: ao contrário do canal, aqui não é preciso
+      perguntar nada à store depois do `onClick` — a tela é sempre a mesma.
+    */
+    if (alvo.closest("[data-apps-button]")) {
+      mobile.empilhar("aplicativos");
     }
   }
 
@@ -208,6 +223,12 @@ export default function ShellMobile() {
         {topo === "voz" && (
           <TelaEmpilhada>
             <TelaDeVoz />
+          </TelaEmpilhada>
+        )}
+        {/* ── j-bots · F4 ── o diretório de aplicativos, empilhado pela rail */}
+        {topo === "aplicativos" && (
+          <TelaEmpilhada>
+            <TelaDeAplicativos aoSair={() => voltar()} />
           </TelaEmpilhada>
         )}
         </div>
