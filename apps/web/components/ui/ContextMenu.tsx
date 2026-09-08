@@ -290,7 +290,7 @@ function Painel({
           folha
             ? // `min-h-11` em cada item: 44px é o alvo de toque, e os itens do
               // menu do desktop têm 32 porque lá o ponteiro acerta 32
-              "anim-folha fixed inset-x-0 bottom-0 z-[80] max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl bg-overlay p-2 pb-[calc(env(safe-area-inset-bottom)+8px)] shadow-high [&_[role=menuitem]]:min-h-11 [&_[role=menuitemcheckbox]]:min-h-11 [&_[role=menuitemradio]]:min-h-11 [&_[role=group]]:gap-2 [&_[role=group]>button]:h-11 [&_[role=group]>button]:w-11 [&_[role=group]>button]:text-2xl"
+              "anim-folha fixed inset-x-0 bottom-0 z-[80] max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl bg-overlay p-2 pb-[calc(env(safe-area-inset-bottom)+8px)] shadow-high [&_[role=menuitem]]:min-h-[44px] [&_[role=menuitemcheckbox]]:min-h-[44px] [&_[role=menuitemradio]]:min-h-[44px] [&_[role=group]]:gap-2 [&_[role=group]>button]:h-[44px] [&_[role=group]>button]:w-[44px] [&_[role=group]>button]:text-2xl"
             : `fixed z-[80] rounded-lg border border-border/70 bg-overlay p-2 shadow-high anim-menu ${
                 pos ? "" : "invisible"
               }`

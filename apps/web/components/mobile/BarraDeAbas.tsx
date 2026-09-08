@@ -133,7 +133,7 @@ export default function BarraDeAbas() {
             aria-label={
               selo.contagem > 0 ? `${ROTULOS[id]} (${selo.contagem})` : ROTULOS[id]
             }
-            className={`flex h-12 flex-1 flex-col items-center justify-center gap-0.5 transition ${
+            className={`flex h-[48px] flex-1 flex-col items-center justify-center gap-0.5 transition ${
               ativa ? "text-txt-primary" : "text-txt-muted"
             }`}
           >

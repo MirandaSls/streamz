@@ -62,7 +62,7 @@ export default function BarraDeVozMobile() {
   }
 
   return (
-    <div className="relative z-20 flex h-12 shrink-0 items-center gap-1 border-t border-border bg-footer pl-3 pr-1">
+    <div className="relative z-20 flex h-[48px] shrink-0 items-center gap-1 border-t border-border bg-footer pl-3 pr-1">
       <button
         type="button"
         onClick={irParaCall}
@@ -93,7 +93,7 @@ export default function BarraDeVozMobile() {
         onClick={toggleMute}
         aria-label={muted ? "Desativar mudo" : "Silenciar"}
         aria-pressed={muted}
-        className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg transition ${
+        className={`grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg transition ${
           muted ? "text-red" : "text-txt-secondary"
         }`}
       >
@@ -103,7 +103,7 @@ export default function BarraDeVozMobile() {
         type="button"
         onClick={() => void disconnect()}
         aria-label="Desconectar"
-        className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-txt-secondary transition active:text-red"
+        className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg text-txt-secondary transition active:text-red"
       >
         <PhoneOff size={20} />
       </button>
