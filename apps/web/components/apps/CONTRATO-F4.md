@@ -546,14 +546,63 @@ parametrizado de fora; o arquivo do desktop fica intocado. É o que
 
 ## 6. Referências visuais
 
-`docs/Reference/apps/` (fora do git) tem as capturas do App Directory e do
-Developer Portal do Discord que o coordenador levantou, com `FONTES.md` (de
-onde veio cada uma) e `MEDIDAS.md` (medidas com Pillow, em px CSS). É o
-equivalente do que o mobile fez em `docs/Reference/mobile/`.
+`docs/Reference/apps/` (fora do git) tem **53 capturas** do App Directory e do
+Developer Portal do Discord, com `FONTES.md` (de onde veio cada uma, e o que
+**não** foi achado) e `MEDIDAS.md` + `medir.py` (as medidas com Pillow, e o
+script que as reproduz). É o equivalente do que o mobile fez em
+`docs/Reference/mobile/`.
 
-Meça de lá e reproduza. Onde a captura não der para medir com confiança,
-escreva "não medido" no PR em vez de chutar (§6.3 — "um número inventado vira
-um pixel errado no app").
+As mais úteis: `diretorio-grade.png`, `diretorio-busca.png`,
+`diretorio-pagina-do-app.png`, **`autorizar-permissoes.jpg`** (a lista de
+permissões em alta resolução), `autorizar-passo1-escopos-e-servidor.png` e
+`autorizar-passo2-permissoes.png` (os dois passos, oficiais),
+**`portal-bot-token.jpg`** (a aba Bot inteira, com o aviso de "só uma vez" e o
+Reset Token) e **`tag-app-na-mensagem.png`** (a pílula na mensagem e na lista de
+membros, na mesma imagem).
+
+**Aquele diretório está fora do git**, então os números de que o trabalho
+depende ficam registrados aqui. Todos em **px CSS**, com a escala determinada
+por âncoras canônicas (ícone de app 48, avatar de mensagem 40, modal small 440)
+— não por chute:
+
+| peça | medida |
+|---|---|
+| card do diretório | 244×164, gap 16, raio ≈8, ícone 48×48, padding 16 |
+| — confere com | `(1024 − 3×16)/4 = 244` |
+| linha de permissão do modal | passo 40; checkbox ≈27 |
+| modal de autorização | 400 no cliente / ≈440 na página web |
+| botão "Authorize" | ≈98×39 |
+| passo 1 (escopos) | bolinha 24, passo 40, `<select>` de 40 de altura |
+| página do app | ícone grande ≈118 (nominal 120); "Add to Server" ≈118×40 |
+| pílula APP/BOT | **altura 15–16**, nas duas gerações e nas três superfícies; largura ≈38 (BOT) → ≈43 (APP, que ganhou um ✓); `#5865F2` |
+| portal | toggle 42×24; "Reset Token" 108×33 |
+| cores do diretório | `#313338` fundo · `#2B2D31` card · `#1E1F22` busca · `#43444A` pílula ativa |
+| cores do portal | `#38393E` · `#323337` |
+
+Repare que a pílula tem a **mesma altura nas três superfícies**: ela não muda de
+tamanho por contexto.
+
+Três ressalvas que estão no `MEDIDAS.md` e que valem como regra:
+
+1. A `diretorio-pagina-do-app.png` usa a **paleta pré-2022**
+   (`#36393F`/`#2F3136`/`#202225`); há tabela de conversão no arquivo. Não tire
+   cor de captura antiga.
+2. Os hex do modal que veio de tutorial (`#111214`/`#08080A`) **não viram
+   token** — só as relações.
+3. **Cor e token são decisão já tomada** (§6.6 do processo): superfície nova usa
+   o token existente mais próximo, e o PR registra a diferença. Nenhum destes
+   hex entra no `tailwind.config.ts`.
+
+E o que **não** existe, para ninguém procurar: **o App Directory nativo no
+celular não existe no Discord** — eles dizem "desktop, browser e nosso site", e
+o equivalente móvel de lá é o App Launcher. Ou seja, para a tela do diretório no
+celular **não há referência a copiar**: desenhe no vocabulário do nosso próprio
+leiaute mobile (`pecas.tsx`, `CabecalhoMobile`, tela empilhada) e **diga isso no
+PR**, em vez de inventar uma referência que não existe.
+
+Meça e reproduza. Onde a captura não der para medir com confiança, escreva "não
+medido" no PR em vez de chutar (§6.3 — "um número inventado vira um pixel errado
+no app").
 
 ---
 
