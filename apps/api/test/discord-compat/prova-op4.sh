@@ -95,6 +95,18 @@ docker run --rm --network "$REDE" \
   "
 
 echo
+echo "== 11. compress=zlib-stream com o zlib-sync de verdade =="
+docker run --rm --network "$REDE" \
+  -e SEMENTE="$SEMENTE" \
+  -e API_URL="http://$API_CONTAINER:3333/api" \
+  -v "$AQUI:/prova:ro" -w /tmp \
+  node:22 bash -lc "
+    npm install --silent --no-audit --no-fund zlib-sync ws >/dev/null 2>&1
+    cp /prova/prova-zlib.mjs .
+    node prova-zlib.mjs
+  "
+
+echo
 echo "== o que a API registrou (o tamanho do JWT sai daqui) =="
 docker logs "$API_CONTAINER" 2>&1 | grep -E "VozDoGateway|JWT da ponte" | tail -10 || true
 
