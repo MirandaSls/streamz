@@ -20,24 +20,38 @@ import { corDoAvatar } from "@/components/ui/avatar-cores";
  *
  * | peça | px CSS |
  * |---|---|
- * | card | 244 × 164 |
+ * | card | 244 × **164** |
  * | intervalo da grade | 16 |
  * | raio | ≈8 |
- * | ícone | **48** |
+ * | ícone | **48**, à esquerda, com o nome ao lado |
  * | padding interno | 16 |
  *
- * **O §11 do documento pede "ícone 80"; o Discord usa 48.** Fui na medida, e
- * não no documento: 80 num card de 244 come metade da altura útil e não sobra
- * espaço para a descrição de uma linha que o mesmo parágrafo pede. A
- * divergência está no PR.
+ * ## Três divergências do §11, todas a favor da medida
  *
- * ## Por que o card é um `<button>` com um botão dentro
+ * 1. **"ícone 80"** → é **48**. O card do Discord tem 164 de altura e o ícone
+ *    fica na horizontal, ao lado do nome; 80 empilhado come metade da altura
+ *    útil e não sobra linha nenhuma para a descrição que o mesmo parágrafo
+ *    pede.
+ * 2. **"descrição de uma linha"** → são **duas**, que é o que a captura mostra
+ *    (`Connect your DeviantArt account / with Discord. Share your profile…`) e
+ *    o que o retângulo comporta com o ícone na horizontal.
+ * 3. **A altura sai de 164 para 204.** No Discord o card **não tem botão** — o
+ *    "Add to Server" mora só na página do app. O §11 pede o botão no card, e
+ *    ele custa 32 de altura mais 8 de folga. Largura, ícone, intervalo, raio e
+ *    padding continuam sendo os números medidos; o que muda é só a altura, e
+ *    só porque há uma peça a mais dentro.
  *
- * Não é: são dois irmãos. O card inteiro abre a página do app, e "Adicionar" é
- * um botão à parte — aninhar `<button>` em `<button>` é HTML inválido e o
- * navegador desfaz a árvore sozinho, de um jeito que muda de motor para motor.
- * O `<article>` guarda os dois, o primeiro `<button>` cobre a área do card com
- * `absolute inset-0`, e o de adicionar fica acima dele no empilhamento.
+ * ## Por que o card não é um `<button>` com um botão dentro
+ *
+ * São dois irmãos. O card inteiro abre a página do app, e "Adicionar" é um
+ * botão à parte — aninhar `<button>` em `<button>` é HTML inválido e cada
+ * motor desfaz a árvore de um jeito. O `<article>` guarda os dois, o primeiro
+ * `<button>` cobre a área com `absolute inset-0`, e o de adicionar fica acima
+ * dele no empilhamento.
+ *
+ * **Todo filho é `shrink-0`.** Sem isso o flex encolhe o texto para caber e o
+ * nome sobe por cima da descrição — foi o que a primeira captura mostrou, e é o
+ * tipo de coisa que nenhum typecheck pega (§3.3 do processo).
  */
 export default function CardDeApp({
   app,
@@ -50,10 +64,10 @@ export default function CardDeApp({
 }) {
   return (
     <article
-      /* 244×164 medidos. `h-[164px]` literal, e não `h-41`: a raiz do app é
-         15,5px e a escala do Tailwind mede em rem — todo número nominal sai 3%
-         menor, e 164 é uma medida da captura, não uma escolha de escala. */
-      className="relative flex h-[164px] w-[244px] flex-col rounded-[8px] bg-panel p-[16px] transition-colors hover:bg-hov celular:w-full"
+      /* px literais, e não a escala do Tailwind: a raiz do app é 15,5px e todo
+         número nominal em `rem` sai 3% menor — 244 e 16 são medidas da captura,
+         não escolhas de escala (a regra do §6.3 do processo). */
+      className="relative flex h-[204px] w-[244px] flex-col rounded-[8px] bg-panel p-[16px] transition-colors hover:bg-hov celular:w-full"
     >
       <button
         type="button"
@@ -62,24 +76,30 @@ export default function CardDeApp({
         className="absolute inset-0 rounded-[8px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
       />
 
-      <div className="pointer-events-none flex min-h-0 flex-1 flex-col">
+      {/* o cabeçalho do card: ícone à esquerda, nome ao lado — é o leiaute da
+          captura, e é o que faz 48 de ícone caberem sem comer a descrição */}
+      <div className="pointer-events-none flex shrink-0 items-center gap-3">
         <IconeDoApp app={app} lado={48} />
-        <h3 className="mt-2 truncate text-base font-semibold leading-tight text-txt-primary">
+        <h3 className="min-w-0 flex-1 truncate text-base font-semibold leading-tight text-txt-primary">
           {app.name}
         </h3>
-        {/* descrição de **uma** linha, como o §11 pede: `line-clamp-1` e não
-            `truncate`, para que uma descrição sem espaços também corte */}
-        <p className="mt-1 line-clamp-1 text-sm leading-tight text-txt-muted">
-          {app.description ?? "Sem descrição."}
-        </p>
-        <p className="mt-auto text-xs text-txt-muted">{textoDeServidores(app.servidores)}</p>
       </div>
+
+      {/* duas linhas, como na captura. `line-clamp-2` e não `truncate`: uma
+          descrição sem espaço nenhum também tem de cortar */}
+      <p className="pointer-events-none mt-3 line-clamp-2 shrink-0 text-sm leading-[18px] text-txt-muted">
+        {app.description ?? "Sem descrição."}
+      </p>
+
+      <p className="pointer-events-none mt-auto shrink-0 pt-2 text-xs leading-tight text-txt-muted">
+        {textoDeServidores(app.servidores)}
+      </p>
 
       <button
         type="button"
         onClick={aoAdicionar}
         data-adicionar-app={app.id}
-        className="relative mt-2 h-8 shrink-0 self-start rounded-[8px] bg-accent px-3 text-sm font-medium text-accent-ink transition-colors hover:brightness-110"
+        className="relative mt-2 h-[32px] shrink-0 self-start rounded-[8px] bg-accent px-3 text-sm font-medium text-accent-ink transition-colors hover:brightness-110"
       >
         Adicionar ao servidor
       </button>

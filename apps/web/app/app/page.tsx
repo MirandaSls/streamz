@@ -247,21 +247,26 @@ export default function AppPage() {
  * página Amigos.
  *
  * É um componente, e não um `useEffect` no corpo da página, porque assim o
- * efeito só existe **enquanto o diretório está aberto**: montado junto com ele,
- * ele nunca precisa da guarda de "ignore a primeira execução" que um efeito
- * permanente exigiria (o valor inicial de `activeChannel` não é uma navegação).
+ * efeito só existe **enquanto o diretório está aberto**: o valor de
+ * `activeChannel` no instante em que ele abriu não é uma navegação, e é dele
+ * que a comparação parte.
+ *
+ * **A guarda compara valores, e não "é a primeira execução".** A primeira
+ * versão contava execuções (`primeira.current = false; return;`) e o diretório
+ * fechava sozinho no mesmo quadro em que abria: o modo estrito do React roda
+ * cada efeito **duas vezes** em desenvolvimento, a segunda passada já achava a
+ * bandeira baixada e chamava `fechar()`. Guardar os ids e comparar é imune a
+ * isso — as duas passadas veem o mesmo canal, e só uma navegação de verdade
+ * muda o valor.
  */
 function FecharAoNavegar() {
   const fechar = useAplicativos((s) => s.fechar);
   const canalId = useActiveChannel()?.id ?? null;
   const dmId = useActiveDM()?.id ?? null;
-  const primeira = useRef(true);
+  const aoAbrir = useRef<{ canalId: string | null; dmId: string | null } | null>(null);
   useEffect(() => {
-    if (primeira.current) {
-      primeira.current = false;
-      return;
-    }
-    fechar();
+    aoAbrir.current ??= { canalId, dmId };
+    if (aoAbrir.current.canalId !== canalId || aoAbrir.current.dmId !== dmId) fechar();
   }, [canalId, dmId, fechar]);
   return null;
 }

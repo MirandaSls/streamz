@@ -134,8 +134,15 @@ export default function AdicionarAoServidor() {
       onClose={fechar}
       className="w-[440px]"
       footer={
+        /*
+          O primário vem **primeiro** no JSX: o rodapé do `Dialog` é
+          `flex-row-reverse`, e é essa inversão que põe "Autorizar" à direita e
+          "Cancelar" à esquerda, como no resto do app (`ConfirmDialog`,
+          `KickModal`). Escrito na ordem visual, sai trocado — e um "Cancelar"
+          onde a pessoa espera o botão que confirma é o pior lugar possível para
+          uma troca dessas.
+        */
         <>
-          <SecondaryButton onClick={fechar}>Cancelar</SecondaryButton>
           <PrimaryButton
             onClick={() => {
               if (guildId) void instalar(guildId, aConceder);
@@ -144,6 +151,7 @@ export default function AdicionarAoServidor() {
           >
             {autorizando ? "Autorizando…" : "Autorizar"}
           </PrimaryButton>
+          <SecondaryButton onClick={fechar}>Cancelar</SecondaryButton>
         </>
       }
     >
