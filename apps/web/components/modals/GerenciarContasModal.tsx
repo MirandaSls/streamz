@@ -117,6 +117,7 @@ export default function GerenciarContasModal() {
 
   return (
     <Dialog
+      telaCheiaNoCelular
       title="Gerenciar contas"
       description="Troque de contas, entre, saia, vai com tudo."
       onClose={closeModal}

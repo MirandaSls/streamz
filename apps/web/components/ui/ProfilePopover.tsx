@@ -34,6 +34,8 @@ import {
 import Avatar from "@/components/ui/Avatar";
 import IconeDeStatus from "@/components/ui/IconeDeStatus";
 import { MENU_WIDTH, MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
+import { useEhMobile } from "@/hooks/useEhMobile";
+import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
 import { api } from "@/lib/api";
 import { lerRascunho, salvarRascunho } from "@/lib/rascunhos";
 import { useAuth } from "@/stores/auth";
@@ -241,6 +243,17 @@ export default function ProfilePopoverHost() {
   const relacao = useRelationship(popover?.user.id, me?.id);
   const ref = useRef<HTMLDivElement>(null);
   const timerDoSubmenu = useRef<number | undefined>(undefined);
+  /**
+   * No celular o cartão vira **folha inferior**.
+   *
+   * Os 300px ancorados no avatar são a forma certa onde há ponteiro e tela
+   * sobrando ao lado; num telefone de 390 o cartão cobre quase a largura toda de
+   * qualquer jeito, e ancorado num avatar do topo da conversa ele nasce longe do
+   * polegar. Sobe do fundo, como todo popover ancorado do app faz no celular
+   * (`components/ui/PopoverFlutuante.tsx`). O cartão não ganha alça: ele começa
+   * com a faixa do banner, que precisa encostar nos cantos arredondados.
+   */
+  const ehMobile = useEhMobile();
   const [pos, setPos] = useState<Colocacao | null>(null);
   const [perfil, setPerfil] = useState<UserProfile | null>(null);
   const [rascunho, setRascunho] = useState("");
@@ -285,6 +298,8 @@ export default function ProfilePopoverHost() {
       window.removeEventListener("mousedown", onDown);
     };
   }, [popover, close]);
+
+  useVoltarNoCelular(ehMobile && popover !== null, close);
 
   if (!popover) return null;
   // cópia já estreitada: `abrirKebab` é declaração de função e não herda o
@@ -454,18 +469,30 @@ export default function ProfilePopoverHost() {
   }
 
   return (
-    <div
-      ref={ref}
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Perfil de ${displayNameOf(user)}`}
-      onKeyDown={prenderFoco}
-      style={{ left: pos?.x ?? 0, top: pos?.y ?? 0, width: LARGURA }}
-      className={`fixed z-[75] overflow-hidden rounded-lg bg-overlay shadow-high anim-menu ${
-        pos ? "" : "invisible"
-      }`}
-    >
-      <div className="relative">
+    <>
+      {ehMobile && (
+        <div
+          aria-hidden="true"
+          onMouseDown={close}
+          className="anim-overlay fixed inset-0 z-[74] bg-black/70"
+        />
+      )}
+      <div
+        ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Perfil de ${displayNameOf(user)}`}
+        onKeyDown={prenderFoco}
+        style={ehMobile ? undefined : { left: pos?.x ?? 0, top: pos?.y ?? 0, width: LARGURA }}
+        className={
+          ehMobile
+            ? "anim-folha fixed inset-x-0 bottom-0 z-[75] max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl bg-overlay pb-[env(safe-area-inset-bottom)] shadow-high"
+            : `fixed z-[75] overflow-hidden rounded-lg bg-overlay shadow-high anim-menu ${
+                pos ? "" : "invisible"
+              }`
+        }
+      >
+        <div className="relative">
         {banner ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={banner} alt="" className="h-[120px] w-full object-cover" />
@@ -745,8 +772,9 @@ export default function ProfilePopoverHost() {
             </button>
           </form>
         )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 

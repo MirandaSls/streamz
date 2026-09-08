@@ -96,116 +96,121 @@ export default function EmojiTab({ guildId }: { guildId: string }) {
         Emoji — {emojis.length}/{MAX_EMOJIS_PER_GUILD}
       </p>
 
-      <table className="w-full table-fixed">
-        <colgroup>
-          <col className="w-[72px]" />
-          <col />
-          <col className="w-[40%]" />
-          <col className="w-[88px]" />
-        </colgroup>
-        <thead>
-          <tr className={`h-10 ${TABELA_CABECALHO}`}>
-            <th scope="col" className="font-bold">
-              Imagem
-            </th>
-            <th scope="col" className="font-bold">
-              Nome
-            </th>
-            <th scope="col" className="font-bold">
-              Enviado por
-            </th>
-            <th scope="col">
-              <span className="sr-only">Ações</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {emojis.length === 0 && (
-            <tr className="h-[55px]">
-              <td colSpan={4} className="text-sm text-txt-muted">
-                Nenhum emoji ainda.
-              </td>
+      {/* A tabela rola por dentro no celular: `table-fixed` sem piso de
+          largura espremeria quatro colunas em 358px e nenhuma ficaria legível.
+          Em 660 (a coluna do desktop) o piso não tem efeito. */}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[520px] table-fixed">
+          <colgroup>
+            <col className="w-[72px]" />
+            <col />
+            <col className="w-[40%]" />
+            <col className="w-[88px]" />
+          </colgroup>
+          <thead>
+            <tr className={`h-10 ${TABELA_CABECALHO}`}>
+              <th scope="col" className="font-bold">
+                Imagem
+              </th>
+              <th scope="col" className="font-bold">
+                Nome
+              </th>
+              <th scope="col" className="font-bold">
+                Enviado por
+              </th>
+              <th scope="col">
+                <span className="sr-only">Ações</span>
+              </th>
             </tr>
-          )}
-          {emojis.map((emoji) => {
-            const autor = members.find((m) => m.user.id === emoji.createdById)?.user ?? null;
-            return (
-              <tr key={emoji.id} className="group h-[55px] border-b border-border align-middle">
-                <td>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={emoji.url}
-                    alt={`:${emoji.name}:`}
-                    className="h-8 w-8 object-contain"
-                  />
-                </td>
-                <td className="pr-2">
-                  <span className="truncate text-sm text-txt-primary">:{emoji.name}:</span>
-                  {emoji.animated && (
-                    <span className="ml-2 text-[10px] uppercase text-txt-faint">animado</span>
-                  )}
-                </td>
-                <td className="pr-2">
-                  {autor ? (
-                    <span className="flex min-w-0 items-center gap-2">
-                      <Avatar user={autor} size="sm" surface="border-chat" />
-                      <span className="truncate text-sm text-txt-normal">
-                        {displayNameOf(autor)}
-                      </span>
-                    </span>
-                  ) : (
-                    <span className="text-sm text-txt-muted">—</span>
-                  )}
-                </td>
-                <td>
-                  <span className="flex items-center justify-end gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
-                    <AcaoDaLinha
-                      label="Renomear"
-                      onClick={async () => {
-                        const nome = await ui.prompt({
-                          title: "Novo nome",
-                          message: AJUDA_NOME,
-                          initial: emoji.name,
-                          confirmLabel: "Renomear",
-                        });
-                        if (!nome || nome === emoji.name) return;
-                        try {
-                          await api.renameEmoji(guildId, emoji.id, nome);
-                        } catch (e) {
-                          ui.toast(errorMessage(e, "Não foi possível renomear"), "error");
-                        }
-                      }}
-                    >
-                      <Pencil size={16} />
-                    </AcaoDaLinha>
-                    <AcaoDaLinha
-                      label="Apagar"
-                      danger
-                      onClick={async () => {
-                        const ok = await ui.confirm({
-                          title: `Apagar :${emoji.name}:?`,
-                          message:
-                            "As mensagens que já o usaram passam a mostrar o nome em texto.",
-                          confirmLabel: "Apagar",
-                          danger: true,
-                        });
-                        if (!ok) return;
-                        try {
-                          await api.deleteEmoji(guildId, emoji.id);
-                        } catch (e) {
-                          ui.toast(errorMessage(e, "Não foi possível apagar"), "error");
-                        }
-                      }}
-                    >
-                      <Trash2 size={16} />
-                    </AcaoDaLinha>
-                  </span>
+          </thead>
+          <tbody>
+            {emojis.length === 0 && (
+              <tr className="h-[55px]">
+                <td colSpan={4} className="text-sm text-txt-muted">
+                  Nenhum emoji ainda.
                 </td>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            )}
+            {emojis.map((emoji) => {
+              const autor = members.find((m) => m.user.id === emoji.createdById)?.user ?? null;
+              return (
+                <tr key={emoji.id} className="group h-[55px] border-b border-border align-middle">
+                  <td>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={emoji.url}
+                      alt={`:${emoji.name}:`}
+                      className="h-8 w-8 object-contain"
+                    />
+                  </td>
+                  <td className="pr-2">
+                    <span className="truncate text-sm text-txt-primary">:{emoji.name}:</span>
+                    {emoji.animated && (
+                      <span className="ml-2 text-[10px] uppercase text-txt-faint">animado</span>
+                    )}
+                  </td>
+                  <td className="pr-2">
+                    {autor ? (
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Avatar user={autor} size="sm" surface="border-chat" />
+                        <span className="truncate text-sm text-txt-normal">
+                          {displayNameOf(autor)}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="text-sm text-txt-muted">—</span>
+                    )}
+                  </td>
+                  <td>
+                    <span className="flex items-center justify-end gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
+                      <AcaoDaLinha
+                        label="Renomear"
+                        onClick={async () => {
+                          const nome = await ui.prompt({
+                            title: "Novo nome",
+                            message: AJUDA_NOME,
+                            initial: emoji.name,
+                            confirmLabel: "Renomear",
+                          });
+                          if (!nome || nome === emoji.name) return;
+                          try {
+                            await api.renameEmoji(guildId, emoji.id, nome);
+                          } catch (e) {
+                            ui.toast(errorMessage(e, "Não foi possível renomear"), "error");
+                          }
+                        }}
+                      >
+                        <Pencil size={16} />
+                      </AcaoDaLinha>
+                      <AcaoDaLinha
+                        label="Apagar"
+                        danger
+                        onClick={async () => {
+                          const ok = await ui.confirm({
+                            title: `Apagar :${emoji.name}:?`,
+                            message:
+                              "As mensagens que já o usaram passam a mostrar o nome em texto.",
+                            confirmLabel: "Apagar",
+                            danger: true,
+                          });
+                          if (!ok) return;
+                          try {
+                            await api.deleteEmoji(guildId, emoji.id);
+                          } catch (e) {
+                            ui.toast(errorMessage(e, "Não foi possível apagar"), "error");
+                          }
+                        }}
+                      >
+                        <Trash2 size={16} />
+                      </AcaoDaLinha>
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }

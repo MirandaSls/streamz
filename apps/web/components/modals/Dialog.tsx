@@ -10,8 +10,9 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { X } from "@/components/ui/icones";
+import { ArrowLeft, X } from "@/components/ui/icones";
 import { useEhMobile } from "@/hooks/useEhMobile";
+import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
 
 /**
  * Caixa de diálogo acessível — a base de todos os modais do app.
@@ -51,6 +52,7 @@ export default function Dialog({
   align = "center",
   bodyClassName = "",
   semPadding = false,
+  telaCheiaNoCelular = false,
   className = "w-[480px]",
 }: {
   title: string;
@@ -68,6 +70,20 @@ export default function Dialog({
   /** o corpo sem padding nenhum: perfil e boas-vindas pintam a caixa inteira
    *  (faixa de cor até a borda) e cuidam do próprio respiro. */
   semPadding?: boolean;
+  /**
+   * No celular esta caixa vira **tela cheia**, com barra de 56 e seta de voltar.
+   *
+   * É um interruptor por modal, e não uma regra automática por largura, porque
+   * a diferença é de conteúdo e não de aritmética: os modais largos (criar
+   * canal, convite, perfil, recorte de imagem, emojis, enquete) são *tarefas* —
+   * no Discord do celular ocupam a tela inteira e têm um "voltar". Os pequenos
+   * (confirmar, prompt, expulsar, banir, castigo) são *perguntas de uma linha*:
+   * viram cartão centrado nas duas plataformas, e esticá-los até 844px de
+   * altura só afastaria a pergunta do botão que a responde.
+   *
+   * Só muda a moldura — o conteúdo de cada modal fica como está.
+   */
+  telaCheiaNoCelular?: boolean;
   /** largura da caixa: 480 medidos no Discord, borda de 1px incluída. */
   className?: string;
 }) {
@@ -85,6 +101,8 @@ export default function Dialog({
    * muda é o tamanho da caixa, não o conteúdo dela.
    */
   const ehMobile = useEhMobile();
+  /** tela cheia mesmo: sem véu à volta, com barra de voltar e áreas seguras. */
+  const cheio = ehMobile && telaCheiaNoCelular;
   const titleId = useId();
   const descriptionId = useId();
   // `document` não existe na pré-renderização; o portal só pode ser criado
@@ -92,6 +110,10 @@ export default function Dialog({
   const [montado, setMontado] = useState(false);
 
   useEffect(() => setMontado(true), []);
+
+  // o "voltar" do Android fecha a tela cheia, como fecharia qualquer tela do
+  // app; o cartão centrado continua só com o Esc e o toque no véu
+  useVoltarNoCelular(cheio && montado, onClose);
 
   useEffect(() => {
     if (!montado) return;
@@ -139,16 +161,19 @@ export default function Dialog({
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-50 grid justify-items-center bg-black/85 anim-overlay ${
-        align === "top" ? "items-start" : "items-center"
-      } ${
-        ehMobile
-          ? // as áreas seguras entram como folga: o topo do modal não pode cair
-            // atrás do entalhe nem o rodapé atrás da barra de gestos
-            "px-2 pb-[calc(env(safe-area-inset-bottom)+8px)] pt-[calc(env(safe-area-inset-top)+8px)]"
-          : align === "top"
-            ? "p-4 pt-[10vh]"
-            : "p-4"
+      className={`fixed inset-0 z-50 grid bg-black/85 anim-overlay ${
+        cheio
+          ? // sem véu à volta e sem folga: a caixa É a tela
+            "items-stretch justify-items-stretch"
+          : `justify-items-center ${align === "top" ? "items-start" : "items-center"} ${
+              ehMobile
+                ? // as áreas seguras entram como folga: o topo do modal não pode
+                  // cair atrás do entalhe nem o rodapé atrás da barra de gestos
+                  "px-2 pb-[calc(env(safe-area-inset-bottom)+8px)] pt-[calc(env(safe-area-inset-top)+8px)]"
+                : align === "top"
+                  ? "p-4 pt-[10vh]"
+                  : "p-4"
+            }`
       }`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -162,12 +187,37 @@ export default function Dialog({
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         onKeyDown={handleKeyDown}
-        className={`relative flex max-w-full flex-col overflow-hidden rounded-lg border border-border bg-chat shadow-high outline-none anim-modal ${
-          ehMobile ? "max-h-[92dvh] w-full" : `max-h-[85vh] ${className}`
+        className={`relative flex max-w-full flex-col overflow-hidden bg-chat outline-none anim-modal ${
+          cheio
+            ? "h-[100dvh] w-full pt-[env(safe-area-inset-top)]"
+            : `rounded-lg border border-border shadow-high ${
+                ehMobile ? "max-h-[92dvh] w-full" : `max-h-[85vh] ${className}`
+              }`
         }`}
       >
         {/* cabeçalho fica fora da área rolável: no Discord ele não sobe junto */}
-        {hideHeader ? (
+        {cheio ? (
+          /* barra de 56 com a seta de voltar à esquerda — o cabeçalho de tela
+             do app de celular (`components/mobile/pecas.tsx`), e não o título
+             de 20/700 com o × no canto, que é a forma do cartão. Vale também
+             para quem pediu `hideHeader`: sem barra não haveria como sair. */
+          <header className="flex h-14 shrink-0 items-center gap-1 border-b border-border bg-panel pl-1 pr-2">
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Voltar"
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-txt-secondary transition active:bg-hov"
+            >
+              <ArrowLeft size={24} />
+            </button>
+            <h2
+              id={titleId}
+              className="min-w-0 flex-1 truncate text-base font-semibold text-txt-primary"
+            >
+              {title}
+            </h2>
+          </header>
+        ) : hideHeader ? (
           <h2 id={titleId} className="sr-only">
             {title}
           </h2>
@@ -186,7 +236,12 @@ export default function Dialog({
             )}
           </div>
         )}
-        {showClose && (
+        {cheio && description && (
+          <p id={descriptionId} className="shrink-0 px-4 pt-4 text-base leading-5 text-txt-muted">
+            {description}
+          </p>
+        )}
+        {showClose && !cheio && (
           <button
             type="button"
             onClick={onClose}
@@ -204,7 +259,13 @@ export default function Dialog({
         {temCorpo && (
           <div
             className={`min-h-0 flex-1 overflow-y-auto ${
-              semPadding ? "" : hideHeader ? "p-4" : "px-6 py-4"
+              cheio
+                ? `overscroll-contain ${semPadding ? "" : "p-4"}`
+                : semPadding
+                  ? ""
+                  : hideHeader
+                    ? "p-4"
+                    : "px-6 py-4"
             } ${bodyClassName}`}
           >
             {children}
@@ -212,8 +273,12 @@ export default function Dialog({
         )}
         {footer && (
           <div
-            className={`flex shrink-0 flex-row-reverse items-center gap-2 px-6 pb-6 ${
-              temCorpo ? "pt-2" : "pt-6"
+            className={`flex shrink-0 flex-row-reverse items-center gap-2 ${
+              cheio
+                ? // rodapé colado no fim da tela, acima da barra de gestos, com
+                  // os botões esticados: é onde o polegar está
+                  "border-t border-border px-4 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-4 [&>button]:flex-1"
+                : `px-6 pb-6 ${temCorpo ? "pt-2" : "pt-6"}`
             }`}
           >
             {footer}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Image as ImageIcon,
   Smile,
@@ -16,6 +17,8 @@ import {
   LARGURA_PICKER,
   useFecharFora,
 } from "@/components/media/PickerChrome";
+import { useEhMobile } from "@/hooks/useEhMobile";
+import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
 
 export type PickerTab = "emoji" | "gif" | "figurinha";
 
@@ -40,6 +43,17 @@ const ABAS: { id: PickerTab; rotulo: string; Icone: Icone }[] = [
  * A caixa é dona do Escape e do clique fora; os seletores entram em modo
  * `embutido`, sem caixa e sem listener próprio — dois listeners concorrendo
  * fariam o clique numa aba fechar o painel inteiro.
+ *
+ * ## No celular: folha inferior
+ *
+ * No desktop o painel nasce colado no composer (`absolute bottom-full
+ * right-2.5`), porque é de lá que ele foi aberto e há tela sobrando à direita.
+ * Num telefone de 390px uma caixa de 424 já não cabe — e, ancorada no composer,
+ * ficaria justamente debaixo do teclado. Aqui ela vira **folha inferior**:
+ * largura da tela, subindo do fundo, com as abas no topo e a grade fluida
+ * (`EmojiPicker` troca as 9 colunas fixas por `auto-fill`). A altura é 60% da
+ * tela, não os 420 fixos: em 844 de altura são ~506, e o resto continua
+ * mostrando a conversa — que é o que diferencia uma folha de um modal.
  */
 export default function PickerPanel({
   tab,
@@ -64,7 +78,11 @@ export default function PickerPanel({
 }): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
   const baseId = useId();
+  const ehMobile = useEhMobile();
+  // vale nas duas formas: `ref` aponta para o nó da folha (que mora no portal),
+  // então o toque dentro dela continua sendo "dentro" e o véu é "fora"
   useFecharFora(ref, onClose);
+  useVoltarNoCelular(ehMobile, onClose);
 
   // a aba inicial já conta como visitada; as outras entram ao serem abertas
   const [visitadas, setVisitadas] = useState<PickerTab[]>([tab]);
@@ -74,14 +92,8 @@ export default function PickerPanel({
     onTab(destino);
   }
 
-  return (
-    <div
-      ref={ref}
-      role="dialog"
-      aria-label="Emoji, GIF e figurinha"
-      style={{ width: LARGURA_PICKER, height: ALTURA_PICKER }}
-      className={`anim-menu z-[70] flex flex-col overflow-hidden rounded-lg bg-panel shadow-high ${className}`}
-    >
+  const miolo = (
+    <>
       <div role="tablist" aria-label="Tipo de mídia" className="flex shrink-0 border-b border-black/30">
         {ABAS.map(({ id, rotulo, Icone }) => (
           <button
@@ -144,6 +156,44 @@ export default function PickerPanel({
           )}
         </div>
       ))}
+    </>
+  );
+
+  if (ehMobile) {
+    if (typeof document === "undefined") return <></>;
+    return createPortal(
+      <div
+        className="anim-overlay fixed inset-0 z-[95] flex flex-col justify-end bg-black/70"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
+        <div
+          ref={ref}
+          role="dialog"
+          aria-label="Emoji, GIF e figurinha"
+          className="anim-folha flex h-[60dvh] max-h-[85dvh] w-full flex-col overflow-hidden rounded-t-2xl bg-panel pb-[env(safe-area-inset-bottom)] shadow-high"
+        >
+          <span
+            aria-hidden="true"
+            className="mx-auto mb-1 mt-2.5 h-1 w-9 shrink-0 rounded-full bg-border-strong"
+          />
+          {miolo}
+        </div>
+      </div>,
+      document.body,
+    );
+  }
+
+  return (
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label="Emoji, GIF e figurinha"
+      style={{ width: LARGURA_PICKER, height: ALTURA_PICKER }}
+      className={`anim-menu z-[70] flex flex-col overflow-hidden rounded-lg bg-panel shadow-high ${className}`}
+    >
+      {miolo}
     </div>
   );
 }

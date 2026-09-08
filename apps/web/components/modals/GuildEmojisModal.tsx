@@ -42,6 +42,7 @@ export default function GuildEmojisModal({ guildId }: { guildId: string }) {
 
   return (
     <Dialog
+      telaCheiaNoCelular
       title={`Emojis de ${guild?.name ?? "servidor"}`}
       description="Emojis aparecem digitando :nome: em qualquer canal. Figurinhas vão sozinhas na mensagem."
       onClose={closeModal}
