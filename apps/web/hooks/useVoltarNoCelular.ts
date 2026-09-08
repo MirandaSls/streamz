@@ -32,6 +32,13 @@ import { useMobile } from "@/stores/mobile";
  * qual for a ordem). Sem camada nenhuma, nada é reposto: aí o "voltar" é do
  * shell mesmo, e ele está certo em desfazer.
  *
+ * O shell se protege do outro lado também: com `useUI.modals` cheio, o
+ * `useVoltarDoAndroid` dele nem chega a chamar `voltar()`. As duas guardas
+ * convivem de propósito e **não** são a mesma coisa — a de lá cobre o que passa
+ * pelo `ModalHost` (configurações, modais largos, visualizador de imagem); esta
+ * cobre também o que não é modal da store: a folha de emoji, o cartão de perfil
+ * e o painel de sons, que sobem por portal sem passar por `useUI.modals`.
+ *
  * O estado é de módulo, e não de componente, porque quem é dono da conta é o
  * **documento**: dois modais abertos ao mesmo tempo compartilham a mesma pilha
  * de histórico.
