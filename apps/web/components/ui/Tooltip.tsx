@@ -158,6 +158,21 @@ export default function Tooltip({
   const caixaRef = useRef<HTMLDivElement>(null);
   const timer = useRef<number | undefined>(undefined);
   const id = useId();
+  /**
+   * O tipo do último ponteiro que encostou no alvo.
+   *
+   * **Dedo não é cursor.** `pointerenter` dispara também no toque, e o
+   * `pointerleave` que o desfaria pode só chegar no próximo toque em outro
+   * lugar — no iOS foi assim: um toque no carimbo de hora deixava a caixa
+   * "terça-feira, 8 de setembro de 2026 às 17:14" parada sobre a conversa
+   * (visto em 390×844). E tocar num `<button>` no Chrome do Android dá foco a
+   * ele, que abriria a dica pelo outro caminho.
+   *
+   * Então: a dica só nasce de um ponteiro **do tipo mouse**, e o foco só a
+   * abre quando não veio de um toque — o que preserva o teclado (foco sem
+   * ponteiro nenhum) e o desktop inteiro.
+   */
+  const ultimoPonteiro = useRef<string>("");
 
   const abrir = useCallback((imediato: boolean) => {
     window.clearTimeout(timer.current);
@@ -206,9 +221,18 @@ export default function Tooltip({
       <span
         ref={alvoRef}
         className={`inline-flex ${className}`}
-        onPointerEnter={() => abrir(false)}
+        onPointerDownCapture={(e) => {
+          ultimoPonteiro.current = e.pointerType;
+        }}
+        onPointerEnter={(e) => {
+          ultimoPonteiro.current = e.pointerType;
+          if (e.pointerType === "mouse") abrir(false);
+        }}
         onPointerLeave={fechar}
-        onFocusCapture={() => abrir(true)}
+        onFocusCapture={() => {
+          if (ultimoPonteiro.current === "touch" || ultimoPonteiro.current === "pen") return;
+          abrir(true);
+        }}
         onBlurCapture={fechar}
       >
         {descrito}
