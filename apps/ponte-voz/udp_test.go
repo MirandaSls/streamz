@@ -278,8 +278,10 @@ func TestServidorUDPDescartaEmSilencio(t *testing.T) {
 	case <-time.After(300 * time.Millisecond):
 	}
 
-	// (d) agora a descoberta amarra **outro** socket, e o primeiro deixa de
-	//     poder falar por esta sessão.
+	// (d) a descoberta amarra **outro** socket. O endereço deixa de bater — mas
+	//     quem autentica o pacote é a tag AEAD, não o par IP:porta (ver
+	//     `tratar`). Com a tag corrompida, o pacote continua sendo descartado:
+	//     é esta metade da regra que impede um estranho de injetar áudio.
 	outro, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0})
 	if err != nil {
 		t.Fatalf("segundo socket: %v", err)
@@ -293,11 +295,68 @@ func TestServidorUDPDescartaEmSilencio(t *testing.T) {
 		t.Fatalf("o segundo socket não recebeu a descoberta: %v", err)
 	}
 
-	b.enviar(t, rtpDe(sessao.SSRC())) // do socket errado, agora
+	forjado := rtpDe(sessao.SSRC())
+	forjado[len(forjado)-6] ^= 0xff // estraga a tag, preserva o nonce do sufixo
+	b.enviar(t, forjado)
 	select {
 	case opus := <-sessao.publicados:
-		t.Fatalf("RTP de outro endereço foi publicado: %x", opus)
+		t.Fatalf("pacote com tag inválida de outro endereço foi publicado: %x", opus)
 	case <-time.After(300 * time.Millisecond):
+	}
+}
+
+// TestMidiaDeOutraPortaEhAceitaSeDecifra é o caso do **Lavalink**, medido no
+// degrau 4: ele faz a descoberta de IP num socket e manda a mídia de outro
+// (descoberta da porta 54865, RTP da 35159).
+//
+// Enquanto a ponte exigia o mesmo par IP:porta, todo pacote era descartado em
+// silêncio — o bot conectava, o Lavalink tocava, e não saía nem som nem log.
+// Este teste existe para que isso não volte.
+func TestMidiaDeOutraPortaEhAceitaSeDecifra(t *testing.T) {
+	b := montarBancada(t, ConfigDaPonte{})
+
+	chave, _ := SortearChave()
+	sessao := novaSessaoFalsa(t, b.registro.ProximoSSRC(), ModoAesGcm, chave)
+	b.registro.Registrar(sessao)
+	cifrador, _ := NovoCifrador(ModoAesGcm, chave)
+
+	cabecalho := make([]byte, 12)
+	cabecalho[0], cabecalho[1] = 0x80, 0x78
+	binary.BigEndian.PutUint32(cabecalho[8:12], sessao.SSRC())
+	rtp := cifrador.Cifrar(cabecalho, []byte{0xfc, 0x01}, 11)
+
+	// A descoberta vem do socket da bancada…
+	b.enviar(t, pedidoDeDescoberta(sessao.SSRC()))
+	prazo := time.Now().Add(2 * time.Second)
+	for sessao.Origem() == nil && time.Now().Before(prazo) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	descoberta := sessao.Origem()
+	if descoberta == nil {
+		t.Fatal("a descoberta não amarrou origem nenhuma")
+	}
+
+	// …e a mídia, de outro. É exatamente o que o Lavalink faz.
+	midia, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0})
+	if err != nil {
+		t.Fatalf("socket de mídia: %v", err)
+	}
+	defer midia.Close()
+	if _, err := midia.WriteToUDP(rtp, b.destino); err != nil {
+		t.Fatalf("envio da mídia: %v", err)
+	}
+
+	select {
+	case opus := <-sessao.publicados:
+		if len(opus) != 2 || opus[0] != 0xfc || opus[1] != 0x01 {
+			t.Fatalf("quadro publicado errado: %x", opus)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("a mídia veio de outra porta, decifrou, e mesmo assim não foi publicada")
+	}
+
+	if agora := sessao.Origem(); agora == nil || mesmaOrigem(descoberta, agora) {
+		t.Fatalf("a origem não foi reamarrada para o socket de mídia: %v", agora)
 	}
 }
 

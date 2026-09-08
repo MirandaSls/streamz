@@ -67,6 +67,8 @@ type ServidorUDP struct {
 	// avisouDescoberta evita repetir o aviso de descoberta com SSRC
 	// desconhecido. Chaveado por IP de origem — ver `avisarDescobertaSemSessao`.
 	avisouDescoberta map[string]bool
+	// avisouTroca evita repetir o aviso de que a mídia mudou de endereço.
+	avisouTroca map[uint32]bool
 	// dumps conta quantos pacotes de cada SSRC já saíram em hexdump.
 	dumps map[uint32]int
 
@@ -91,6 +93,7 @@ func NovoServidorUDP(cfg ConfigDaPonte, registro RegistroDeSessoes, log *slog.Lo
 		filas:            make(map[uint32]*FilaDeQuadros),
 		avisouSemOrigem:  make(map[uint32]bool),
 		avisouDescoberta: make(map[string]bool),
+		avisouTroca:      make(map[uint32]bool),
 		dumps:            make(map[uint32]int),
 		limitador:        novoLimitadorDeOrigem(LimiteDePacotesPorSegundo, TetoDeOrigens),
 	}, nil
@@ -158,18 +161,38 @@ func (s *ServidorUDP) tratar(pacote []byte, origem *net.UDPAddr) {
 
 	s.dump(ssrc, pacote, origem)
 
+	// **Quem autentica o pacote é a tag AEAD, não o endereço de origem.**
+	//
+	// A primeira versão disto exigia que o RTP viesse exatamente do endereço da
+	// descoberta de IP, porta inclusive, e descartava o resto em silêncio. O
+	// degrau 4 mostrou que isso não funciona com o mundo real: **o Lavalink faz
+	// a descoberta num socket e manda a mídia de outro** — descoberta da porta
+	// 54865, RTP da 35159, medido. Todo pacote era descartado, e o sintoma era
+	// o pior possível: o bot conecta, o Lavalink toca, o log não acusa nada e
+	// não sai som. (O `@discordjs/voice` usa um socket só, e por isso o degrau
+	// 3 passava.)
+	//
+	// A regra passou a ser: se o endereço não é o esperado, **tente decifrar
+	// assim mesmo**; se a tag bater, o remetente prova que tem a `secret_key`,
+	// que é uma garantia estritamente mais forte do que um par IP:porta — e o
+	// endereço é reamarrado. Se não bater, descarta. O custo de um pacote
+	// forjado é uma abertura AEAD, e o limitador por origem põe o teto nisso.
 	esperada := sessao.Origem()
 	if esperada == nil {
 		s.avisarSemOrigem(ssrc, origem)
 		return
 	}
-	if !mesmaOrigem(esperada, origem) {
-		return // SSRC certo, endereço errado: silêncio
-	}
 
 	opus, ok := sessao.Decifrar(pacote)
 	if !ok {
 		return // tag errada, sem chave ainda, cabeçalho impossível
+	}
+	if !mesmaOrigem(esperada, origem) {
+		// Decifrou vindo de outro endereço: é o socket de mídia do cliente se
+		// apresentando. Reamarra e avisa uma vez, porque é uma informação que
+		// muda a vida de quem depurar isto depois.
+		s.avisarTrocaDeOrigem(ssrc, esperada, origem)
+		sessao.FixarOrigem(origem)
 	}
 	s.filaDe(ssrc, sessao).Enfileirar(opus)
 }
@@ -246,6 +269,24 @@ func (s *ServidorUDP) avisarDescobertaSemSessao(ssrc uint32, origem *net.UDPAddr
 		s.log.Info("ponte-voz: descoberta de IP com SSRC desconhecido; ignorada "+
 			"(se você está conferindo o firewall, esta linha é a confirmação de que o pacote chegou)",
 			"ssrc", ssrc, "origem", origem.String())
+	}
+}
+
+// avisarTrocaDeOrigem registra, uma vez por SSRC, que a mídia chegou de um
+// endereço diferente do da descoberta — e decifrou.
+//
+// É o caso do Lavalink (dois sockets), e é uma linha que vale ouro para quem
+// for depurar áudio que não sai: diz que o pacote chegou, que a chave está
+// certa, e que o par IP:porta mudou.
+func (s *ServidorUDP) avisarTrocaDeOrigem(ssrc uint32, antes, agora *net.UDPAddr) {
+	s.mu.Lock()
+	novo := !s.avisouTroca[ssrc]
+	s.avisouTroca[ssrc] = true
+	s.mu.Unlock()
+	if novo {
+		s.log.Info("ponte-voz: a mídia veio de outro endereço e decifrou; reamarrando "+
+			"(é o que o Lavalink faz: descoberta num socket, mídia em outro)",
+			"ssrc", ssrc, "descoberta", antes.String(), "midia", agora.String())
 	}
 }
 

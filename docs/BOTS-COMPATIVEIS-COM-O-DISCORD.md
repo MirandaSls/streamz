@@ -1032,6 +1032,30 @@ mais um limite de pacotes/s por origem).
 > a linha aparece no log da ponte", e é assim que o passo a passo do §D5.5
 > manda conferir.
 
+> ### O erro mais caro da F2, e ele estava neste §
+>
+> Este § diz "amarramos `ssrc → (endereço de origem, sessão)` e todo RTP daquele
+> endereço com aquele SSRC vai para a sala certa". **Isso não funciona com o
+> Lavalink**, e a fase inteira quase morreu aqui.
+>
+> Medido no degrau 4: **o Lavalink faz a descoberta de IP num socket UDP e manda
+> a mídia de outro.** Descoberta da porta 54865, RTP da 35159, mesmo IP. Com a
+> amarração por `IP:porta`, todo pacote de áudio era descartado — e o sintoma
+> era o pior que existe: o bot conecta, o Lavalink diz que está tocando, o
+> LiveKit mostra a faixa publicada, o log não acusa nada, e **não sai som**. O
+> `@discordjs/voice` usa um socket só, então o degrau 3 passava e *escondia* o
+> defeito; foi preciso o degrau 4, com Lavalink de verdade, para revelá-lo.
+>
+> A regra correta, e a que a ponte implementa: **quem autentica o pacote é a tag
+> AEAD, não o endereço.** Se o endereço não é o esperado, tenta-se decifrar
+> assim mesmo; se a tag fecha, o remetente provou que tem a `secret_key` — uma
+> garantia estritamente mais forte do que um par IP:porta — e o endereço é
+> reamarrado, com uma linha de log. Se não fecha, descarta. O custo de um pacote
+> forjado é uma abertura AEAD, com teto pelo limitador por origem.
+>
+> A lição geral da fase, em uma frase: **a descoberta de IP revela o NAT do
+> cliente; ela não autoriza o socket dele.**
+
 `READY.ip` é o **IP público do servidor**, não um hostname:
 `PONTE_VOZ_IP_PUBLICO=143.95.161.17`. Cloudflare não entra na história — é UDP.
 
