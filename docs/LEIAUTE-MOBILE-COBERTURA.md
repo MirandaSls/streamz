@@ -88,7 +88,7 @@ que tem a sua.
 | Canal de texto | `chat/ChatView.tsx` + `MessageList` + `MessageItem` | parcial | **parcial** | a barra de ações do hover não existe no dedo — coberta pelo menu de toque longo (§4); busca, fixados e threads não têm entrada no celular (§5) |
 | **Conversa direta** | `chat/DMView.tsx` | **não** | **ok** | **o cartão de perfil de 320px era montado como coluna dentro da tela de 390 e espremia a conversa em 70px** — a timeline e o composer ficavam ilegíveis. A coluna 4 agora só existe no desktop; no celular ela é o painel deslizante |
 | **Amigos** | `friends/FriendsPage.tsx` | **não** | **ok** | **o cabeçalho media 553px numa tela de 390** e o shell o cortava: "Adicionar amigo" saía pela metade e as abas "Pendente" e "Bloqueado" ficavam inteiramente fora da tela, sem nenhum jeito de alcançá-las |
-| Palco da chamada | `components/mobile/telas-de-conversa.tsx` + `VoicePanel` | **não** (não chegava lá) | **parcial** | a base consertou o caminho: tocar num canal de voz agora abre o palco, com a grade e o botão para a conversa do canal no cabeçalho (`tela-de-voz-retrato.png`). O que falta é a **barra de controles**: com a tela empilhada a barra de abas sai de cena e junto com ela a `BarraDeVozMobile`, então no palco não há mudo, surdo nem desligar — o Discord põe uma barra de 68pt flutuando ali (`MEDIDAS.md` §12). Área do agente da call |
+| Palco da chamada | `components/mobile/telas-de-conversa.tsx` + `VoicePanel` | **não** (não chegava lá) | **ok** (com o #180) | a base consertou o caminho: tocar num canal de voz abre o palco, com a grade e o botão para a conversa do canal no cabeçalho (`tela-de-voz-retrato.png`). Medi o palco **sem** o trabalho da chamada e anotei que faltava a barra de controles — era o `VoiceControls` do desktop, que se esconde por inatividade. **Resolvido no #180**, que põe um `ControlesMobile` de 68pt com seis botões (mudo, fone, câmera, tela, sons, desligar), a medida do `MEDIDAS.md` §12. Não reabrir |
 
 ## 4. Mensagem (`components/MessageItem.tsx`)
 
@@ -168,9 +168,8 @@ alternado em vez de atribuído. As reações rápidas do menu-folha também fora
 | `components/modals/*` (moldura `Dialog`) | a caixa em si está certa (375px de largura, áreas seguras) — o que está pequeno é o conteúdo: o "X" de fechar em 23px e os botões de rodapé em 39px, em todos os modais (`modal-convite.png`, `modal-criar-canal.png`, `modal-nova-conversa.png`, `modal-quem-votou.png`) | agente dos modais |
 | `components/modals/CreatePollModal.tsx` | os campos de pergunta e resposta ficam com 22px de altura e os botões de emoji com 31px (`criar-enquete.png`) | agente dos modais |
 | `components/mobile/telas-de-conversa.tsx` | o cabeçalho de 48px do canal só tem "voltar" e "membros" — busca, fixados e threads não têm entrada nenhuma no celular (§5). Continua valendo depois do merge | dono do shell |
-| `components/mobile/ShellMobile.tsx` + `VoicePanel` | no palco da chamada não há barra de controles: a tela empilhada tira a barra de abas de cena e a `BarraDeVozMobile` vai junto, então mudo, surdo e desligar somem enquanto se olha a chamada | dono do shell / agente da call |
 | `components/chat/Composer.tsx` (compartilhado) | os três botões do composer ("+", GIF, emoji) medem 39px | combinar |
-| `components/voice/**` | o palco abre (depois do merge) e a grade cabe; barra de controles, chamada de DM e seletor de tela continuam não avaliados | agente da call |
+| `components/voice/**` | o palco abre (depois do merge) e a grade cabe. A barra de controles que eu tinha anotado como faltando **está no #180** (`ControlesMobile`, 68pt) — não é pendência. Chamada de DM e seletor de tela continuam não avaliados por mim | agente da call (#180) |
 
 ## 7. O que este PR consertou
 
