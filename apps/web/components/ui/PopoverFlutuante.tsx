@@ -34,6 +34,7 @@ export default function PopoverFlutuante({
   rotulo,
   largura = 300,
   denso = false,
+  semRespiro = false,
   children,
 }: {
   /** o botão que abriu — a caixa se posiciona por ele. */
@@ -45,6 +46,16 @@ export default function PopoverFlutuante({
   largura?: number;
   /** caixa que é lista de itens: o respiro vem dos itens, não da moldura. */
   denso?: boolean;
+  /**
+   * O filho pinta a caixa inteira, de borda a borda — sem respiro e com o
+   * fundo dele por cima do da moldura.
+   *
+   * É o caso do painel de efeitos sonoros: ele tem cabeçalho com respiro
+   * próprio, coluna lateral colada na borda esquerda e corpo rolável. Com o
+   * `p-3` da moldura, a coluna lateral flutuaria a 12px da borda e o cabeçalho
+   * ganharia respiro duas vezes.
+   */
+  semRespiro?: boolean;
   children: ReactNode;
 }) {
   const caixa = useRef<HTMLDivElement>(null);
@@ -116,7 +127,9 @@ export default function PopoverFlutuante({
         width: largura,
         visibility: pos ? "visible" : "hidden",
       }}
-      className={`anim-menu fixed z-[90] rounded-lg bg-overlay shadow-high ${denso ? "p-1.5" : "p-3"}`}
+      className={`anim-menu fixed z-[90] rounded-lg bg-overlay shadow-high ${
+        semRespiro ? "overflow-hidden" : denso ? "p-1.5" : "p-3"
+      }`}
     >
       {children}
     </div>,

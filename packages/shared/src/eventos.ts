@@ -80,6 +80,17 @@ export const WS_EVENTS = {
   VOICE_MOVED: "voice.moved",
   CALL_RING: "call.ring",
   CALL_ENDED: "call.ended",
+  /**
+   * Alguém apertou um som do painel de efeitos sonoros.
+   *
+   * Vai só para **quem está no canal de voz** (a lista vem do estado de voz,
+   * não da sala do servidor): o som é da chamada, e quem está lendo um canal de
+   * texto do mesmo servidor não deve ouvir nada. Cada cliente toca o arquivo
+   * localmente, no volume de efeitos dele — o áudio não passa pelo LiveKit.
+   */
+  SOUNDBOARD_PLAY: "soundboard.play",
+  /** servidor → cliente: a lista de sons do servidor mudou. */
+  SOUNDBOARD_UPDATED: "soundboard.updated",
   // ── c-cargos ──
   ROLE_CREATED: "role.created",
   ROLE_UPDATED: "role.updated",

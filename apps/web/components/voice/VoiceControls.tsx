@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Mic, MicOff, MoreHorizontal, PhoneOff, Settings, Video, VideoOff } from "@/components/ui/icones";
+import BotaoDeSons from "@/components/voice/BotaoDeSons";
 import ScreenShareButton from "@/components/voice/ScreenShareButton";
 import VoiceSettingsPanel from "@/components/voice/VoiceSettingsPanel";
 import {
@@ -115,6 +116,11 @@ export default function VoiceControls({
 
       <Capsula>
         <ScreenShareButton />
+
+        {/* Efeitos sonoros ao lado da tela: os dois são "o que eu acrescento à
+            sala", que é o critério desta cápsula. Na barra do palco o botão do
+            painel de sons é o segundo, como no Discord. */}
+        <BotaoDeSons />
 
         {/* A supressão de ruído **não** mora aqui: no Discord ela é o ícone de
             ondas do painel "Voz conectada", ao lado do desligar (ver

@@ -26,7 +26,11 @@ import type {
   GifCategoriesResponse,
   GifSearchResponse,
   GuildEmojis,
+  GuildSoundboard,
   GuildStickers,
+  SoundboardPlayEvent,
+  SoundboardPlayInput,
+  SoundboardSound,
   AuditAction,
   AuditLogPage,
   DiscoverableGuild,
@@ -563,6 +567,38 @@ export const api = {
     request<CustomEmoji>(`/guilds/${guildId}/emojis/${id}`, patch({ name })),
   deleteEmoji: (guildId: string, id: string) =>
     request<{ deleted: string }>(`/guilds/${guildId}/emojis/${id}`, { method: "DELETE" }),
+
+  // ── painel de efeitos sonoros ──
+  /** Sons de todos os meus servidores, agrupados — o que o painel mostra. */
+  mySoundboard: () => request<GuildSoundboard[]>("/soundboard"),
+  guildSoundboard: (guildId: string) =>
+    request<SoundboardSound[]>(`/guilds/${guildId}/soundboard`),
+  createSound: (guildId: string, name: string, emoji: string, file: File) => {
+    const form = new FormData();
+    form.append("name", name);
+    form.append("emoji", emoji);
+    form.append("file", file);
+    return request<SoundboardSound>(`/guilds/${guildId}/soundboard`, {
+      method: "POST",
+      body: form,
+    });
+  },
+  deleteSound: (guildId: string, id: string) =>
+    request<{ deleted: string }>(`/guilds/${guildId}/soundboard/${id}`, { method: "DELETE" }),
+  /**
+   * Toca um som para quem está na chamada daquele canal.
+   *
+   * Quem aperta **não** toca o som por conta própria: ele volta pelo
+   * `soundboard.play` como para todo mundo, e assim ninguém ouve o próprio som
+   * fora de sincronia com a sala. Para que serve a resposta, então: saber que
+   * foi recusado (fora da chamada, som de outro servidor, um por segundo) e
+   * mostrar o aviso.
+   */
+  tocarSom: (channelId: string, soundId: string) =>
+    request<SoundboardPlayEvent>(
+      `/voice/channels/${channelId}/soundboard/play`,
+      json({ soundId } satisfies SoundboardPlayInput),
+    ),
 
   myStickers: () => request<GuildStickers[]>("/stickers"),
   guildStickers: (guildId: string) => request<Sticker[]>(`/guilds/${guildId}/stickers`),

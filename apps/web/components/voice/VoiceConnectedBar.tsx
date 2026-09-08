@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { AudioLines, PhoneOff, RotateCw, Signal, SignalZero, Video, VideoOff } from "@/components/ui/icones";
 import Tooltip from "@/components/ui/Tooltip";
 import PopoverFlutuante from "@/components/ui/PopoverFlutuante";
+import BotaoDeSons from "@/components/voice/BotaoDeSons";
 import PopoverDeRuido from "@/components/voice/PopoverDeRuido";
 import ScreenShareButton from "@/components/voice/ScreenShareButton";
 import { useChannels } from "@/stores/channels";
@@ -232,6 +233,10 @@ export default function VoiceConnectedBar() {
           </button>
         </Tooltip>
         <ScreenShareButton variante="largo" />
+        {/* Terceiro botão da fileira, como no print `2026-09-08 103452` — lá o
+            terceiro é "atividades" e o quarto é o soundboard; atividades não
+            existe aqui (§6.6), então o painel de sons ocupa a vaga que sobra. */}
+        <BotaoDeSons variante="largo" />
       </div>
     </div>
   );

@@ -99,6 +99,7 @@ model User {
   // ── g-emojis-midia ──
   customEmojis     CustomEmoji[]   @relation("EmojiCreator")
   createdStickers  Sticker[]       @relation("StickerCreator")
+  createdSounds    SoundboardSound[] @relation("SoundboardCreator")
   // ── h-moderacao ──
   auditLogs       AuditLog[] @relation("AuditActor")
   pollVotes       PollVote[]
@@ -197,6 +198,7 @@ model Guild {
   notificationSettings NotificationSetting[]
   customEmojis CustomEmoji[] @relation("GuildEmojis")
   stickers     Sticker[]     @relation("GuildStickers")
+  soundboard   SoundboardSound[] @relation("GuildSoundboard")
 
   // ── h-moderacao ──
   // Canal onde entram as mensagens "X entrou no servidor"; null = desligado.
@@ -743,6 +745,34 @@ model Sticker {
   messages  Message[]
 
   @@unique([guildId, name])
+  @@index([guildId])
+}
+
+// Som do painel de efeitos sonoros de um servidor. Mesma mecânica de storage do
+// emoji e da figurinha (objeto no bucket, `key` única, permissão MANAGE_EMOJIS);
+// o que muda é o `volume`, um fator de referência do próprio som — os arquivos
+// chegam masterizados em níveis diferentes e sem ele um "airhorn" sai três
+// vezes mais alto que um "golf clap" no mesmo volume de efeitos.
+//
+// O nome **não** é único no servidor: dois "airhorn" enviados por pessoas
+// diferentes são dois sons, e recusar o segundo por causa do rótulo obrigaria a
+// renomear algo que ninguém digita em lugar nenhum (ao contrário de `:nome:`).
+model SoundboardSound {
+  id          String   @id @default(cuid())
+  guildId     String
+  name        String
+  // emoji do card; vazio quando não tem
+  emoji       String   @default("")
+  key         String   @unique
+  contentType String
+  size        Int
+  volume      Float    @default(1)
+  createdById String
+  createdAt   DateTime @default(now())
+
+  guild     Guild @relation("GuildSoundboard", fields: [guildId], references: [id], onDelete: Cascade)
+  createdBy User  @relation("SoundboardCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
   @@index([guildId])
 }
 

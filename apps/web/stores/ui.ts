@@ -52,6 +52,8 @@ export type Modal =
   | { kind: "galeria"; urls: string[]; alts: string[]; indice: number; messageId?: string }
   /** gerência de emojis e figurinhas de um servidor. */
   | { kind: "guildEmojis"; guildId: string }
+  /** "+ Adicionar som" do painel de efeitos sonoros. */
+  | { kind: "adicionarSom"; guildId: string }
   | {
       kind: "confirm";
       title: string;

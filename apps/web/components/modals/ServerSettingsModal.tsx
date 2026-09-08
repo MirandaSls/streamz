@@ -7,6 +7,7 @@ import JanelaDeConfiguracoes, { ItemPerigo } from "@/components/ui/JanelaDeConfi
 import PerfilDoServidorTab from "@/components/settings/server/PerfilDoServidorTab";
 import EngajamentoTab from "@/components/settings/server/EngajamentoTab";
 import EmojiTab from "@/components/settings/server/EmojiTab";
+import SoundboardTab from "@/components/settings/server/SoundboardTab";
 import MembrosTab from "@/components/settings/server/MembrosTab";
 import CargosTab from "@/components/settings/server/CargosTab";
 import ConvitesTab from "@/components/settings/server/ConvitesTab";
@@ -48,7 +49,7 @@ interface Aba {
  */
 const GRUPOS: { id: string; label?: string; abas: ServerSettingsTab[] }[] = [
   { id: "servidor", abas: ["overview", "engajamento"] },
-  { id: "expressoes", label: "Expressões", abas: ["emoji"] },
+  { id: "expressoes", label: "Expressões", abas: ["emoji", "soundboard"] },
   { id: "pessoas", label: "Pessoas", abas: ["members", "roles", "invites", "acesso"] },
   { id: "moderacao", label: "Moderação", abas: ["audit", "bans", "reports"] },
 ];
@@ -103,6 +104,12 @@ export default function ServerSettingsModal({
       label: "Emoji",
       permission: Permission.MANAGE_EMOJIS,
       render: () => <EmojiTab guildId={guildId} />,
+    },
+    {
+      id: "soundboard",
+      label: "Painel de efeitos sonoros",
+      permission: Permission.MANAGE_EMOJIS,
+      render: () => <SoundboardTab guildId={guildId} />,
     },
     {
       id: "members",

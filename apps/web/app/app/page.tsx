@@ -29,6 +29,7 @@ import { useAuth } from "@/stores/auth";
 import { useActiveChannel, useVoiceChannel } from "@/stores/channels";
 import { useActiveDM } from "@/stores/dms";
 import { useEmojis } from "@/stores/emojis";
+import { useSoundboard } from "@/stores/soundboard";
 import { useGuilds } from "@/stores/guilds";
 import { useMessages } from "@/stores/messages";
 // ── d-social ── ausente automático depois de 10 min sem interação
@@ -89,6 +90,9 @@ export default function AppPage() {
     if (!user) return;
     void useGuilds.getState().load();
     void useEmojis.getState().load();
+    // os sons do painel de efeitos sonoros vêm na mesma carga: o botão da
+    // chamada abre o painel pronto, sem uma volta ao servidor no clique
+    void useSoundboard.getState().load();
   }, [user]);
   useEffect(() => {
     if (!user && typeof window !== "undefined" && !localStorage.getItem("user")) {
