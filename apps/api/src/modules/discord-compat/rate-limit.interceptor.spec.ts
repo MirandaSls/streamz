@@ -1,6 +1,7 @@
 import type { CallHandler, ExecutionContext } from "@nestjs/common";
 import { firstValueFrom, of } from "rxjs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { traduzirExcecao } from "./erros";
 import { RateLimitDoDiscordInterceptor } from "./rate-limit.interceptor";
 
 /**
@@ -12,23 +13,12 @@ import { RateLimitDoDiscordInterceptor } from "./rate-limit.interceptor";
  * a chave da fila que a lib mantém.
  */
 
-/** `res` de mentira: guarda os cabeçalhos, o status e o corpo. */
+/** `res` de mentira: só o `setHeader`, que é tudo que o interceptor usa. */
 function resposta() {
   const cabecalhos = new Map<string, string>();
-  const capturado = { status: 0, corpo: undefined as unknown };
   return {
     cabecalhos,
-    capturado,
-    res: {
-      setHeader: (nome: string, valor: string) => cabecalhos.set(nome, valor),
-      status(codigo: number) {
-        capturado.status = codigo;
-        return this;
-      },
-      json: (corpo: unknown) => {
-        capturado.corpo = corpo;
-      },
-    },
+    res: { setHeader: (nome: string, valor: string) => cabecalhos.set(nome, valor) },
   };
 }
 
@@ -84,22 +74,28 @@ describe("RateLimitDoDiscordInterceptor", () => {
     // meio segundo depois: a janela ainda é a mesma
     vi.setSystemTime(new Date("2026-09-08T12:00:00.500Z"));
 
-    const { cabecalhos, capturado, res } = resposta();
+    const { cabecalhos, res } = resposta();
     const handle = vi.fn(() => of("ok"));
-    // `EMPTY` completa sem emitir: nada além do que escrevemos sai na resposta
-    const emitido = await firstValueFrom(interceptor.intercept(contexto(res), { handle }), {
-      defaultValue: "nada",
-    });
+    const erro = (() => {
+      try {
+        interceptor.intercept(contexto(res), { handle });
+        return null;
+      } catch (e) {
+        return e;
+      }
+    })();
 
-    expect(emitido).toBe("nada");
-    // o handler não roda: o 429 não pode ter efeito colateral
+    // o handler não roda: um 429 não pode ter efeito colateral
     expect(handle).not.toHaveBeenCalled();
-    expect(capturado.status).toBe(429);
-    expect(capturado.corpo).toEqual({
-      message: "You are being rate limited.",
-      // 0,5 s — em ms seriam 500 e o bot dormiria oito minutos
-      retry_after: 0.5,
-      global: false,
+    // o mesmo caminho de erro do resto: o filtro que os controllers já declaram
+    expect(traduzirExcecao(erro)).toEqual({
+      status: 429,
+      corpo: {
+        message: "You are being rate limited.",
+        // 0,5 s — em ms seriam 500 e o bot dormiria oito minutos
+        retry_after: 0.5,
+        global: false,
+      },
     });
     expect(cabecalhos.get("X-RateLimit-Remaining")).toBe("0");
     expect(cabecalhos.get("X-RateLimit-Scope")).toBe("user");
@@ -121,8 +117,9 @@ describe("RateLimitDoDiscordInterceptor", () => {
 
     vi.setSystemTime(new Date("2026-09-08T12:00:01.100Z"));
     const depois = resposta();
-    await firstValueFrom(interceptor.intercept(contexto(depois.res), proximo));
-    expect(depois.capturado.status).toBe(0);
+    await expect(
+      firstValueFrom(interceptor.intercept(contexto(depois.res), proximo)),
+    ).resolves.toBe("ok");
     expect(depois.cabecalhos.get("X-RateLimit-Remaining")).toBe("49");
   });
 });

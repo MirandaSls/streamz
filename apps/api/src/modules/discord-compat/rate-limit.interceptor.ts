@@ -1,6 +1,7 @@
-import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from "@nestjs/common";
+import { CallHandler, ExecutionContext, HttpStatus, Injectable, NestInterceptor } from "@nestjs/common";
 import { createHash } from "node:crypto";
-import { EMPTY, type Observable } from "rxjs";
+import type { Observable } from "rxjs";
+import { CODIGO, ErroDoDiscord } from "./erros";
 import type { RequisicaoDeBot } from "./tipos";
 
 /**
@@ -42,11 +43,12 @@ import type { RequisicaoDeBot } from "./tipos";
  * 2. **Custo.** O storage em memória agenda um `setTimeout` por acerto; a 50
  *    req/s por bot são 50 temporizadores vivos por bot, para contar o que uma
  *    subtração conta.
- * 3. **O corpo do 429.** O do Discord é `{message, retry_after, global}` —
- *    **sem** `code`. Ele não cabe em `ErroDoDiscord` (que sempre monta
- *    `{code, message}`) nem na `ThrottlerException`, e o `FiltroDeErrosDoDiscord`
- *    reescreveria qualquer `HttpException` que passasse por ele. Por isso a
- *    resposta do 429 é escrita direto aqui e o fluxo termina em `EMPTY`.
+ * 3. **O corpo do 429.** O do Discord é `{message, retry_after, global}` — e a
+ *    `ThrottlerException` produz o `{statusCode, message}` do Nest, que o
+ *    `FiltroDeErrosDoDiscord` traduziria para `{code: 0, message}`, perdendo o
+ *    `retry_after`. Aqui o 429 é uma `ErroDoDiscord` com o corpo ajustado
+ *    (`LimiteExcedido`, abaixo), então continua havendo **um só** caminho de
+ *    erro — o filtro que todo controller de compat já declara.
  *
  * **Dívida registrada:** a contagem é **desta instância**. Hoje a API roda num
  * contêiner só (a mesma ressalva do §7 para a ponte de eventos); com N
@@ -71,8 +73,32 @@ const TETO_DE_BALDES = 10_000;
 /** O mínimo do `Response` do Express que o interceptor usa. */
 interface RespostaHttp {
   setHeader(nome: string, valor: string): void;
-  status(codigo: number): RespostaHttp;
-  json(corpo: unknown): void;
+}
+
+/**
+ * O 429, no corpo exato do Discord.
+ *
+ * É uma `ErroDoDiscord` para cair no `FiltroDeErrosDoDiscord` como todo o
+ * resto — mas o corpo do 429 do Discord **não tem `code`** e tem `retry_after`,
+ * e o construtor de `ErroDoDiscord` só sabe montar `{code, message}`. Como
+ * `getResponse()` devolve o próprio objeto, ele é ajustado aqui, uma vez, na
+ * construção.
+ *
+ * A alternativa era escrever a resposta na mão dentro do interceptor e devolver
+ * `EMPTY` — e ela **quebra**: o Nest faz `lastValueFrom` do que o interceptor
+ * devolve, `EMPTY` levanta `EmptyError`, o filtro tenta responder por cima do
+ * que já foi escrito e o processo morre com `ERR_HTTP_HEADERS_SENT`. Um 429
+ * derrubava a API inteira; foi assim que se descobriu.
+ */
+class LimiteExcedido extends ErroDoDiscord {
+  constructor(retryAfterSegundos: number) {
+    super(HttpStatus.TOO_MANY_REQUESTS, CODIGO.GERAL, "You are being rate limited.");
+    const corpo = this.getResponse() as Record<string, unknown>;
+    delete corpo.code;
+    // segundos, com fração. Em milissegundos, o bot dormiria 700 vezes mais.
+    corpo.retry_after = retryAfterSegundos;
+    corpo.global = false;
+  }
 }
 
 /** Uma janela de contagem. */
@@ -113,15 +139,8 @@ export class RateLimitDoDiscordInterceptor implements NestInterceptor {
       // dorme com precisão é o `retry_after` do corpo.
       res.setHeader("Retry-After", String(Math.ceil(faltaMs / 1000)));
       res.setHeader("X-RateLimit-Scope", "user");
-      res.status(429).json({
-        message: "You are being rate limited.",
-        // segundos, com fração. Em milissegundos, o bot dormiria 700 vezes mais.
-        retry_after: Number(segundos(faltaMs)),
-        global: false,
-      });
-      // resposta já escrita: `EMPTY` completa sem emitir, então o Nest não
-      // chama o handler nem tenta serializar nada por cima
-      return EMPTY;
+      // os cabeçalhos acima sobrevivem: o filtro só escreve status e corpo
+      throw new LimiteExcedido(Number(segundos(faltaMs)));
     }
 
     balde.usadas += 1;
