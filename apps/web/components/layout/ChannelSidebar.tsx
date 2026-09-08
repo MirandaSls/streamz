@@ -21,6 +21,7 @@ import {
   MessageSquare,
   Pencil,
   Plus,
+  Search,
   Settings,
   Trash2,
   UserPlus,
@@ -31,13 +32,16 @@ import {
   Permission,
   channelLinkPath,
   channelNotificationScope,
+  guildBannerBackground,
   guildNotificationScope,
   isMuted,
   isUnread,
   type Category,
   type Channel,
+  type Guild,
 } from "@streamz/shared";
 import Tooltip from "@/components/ui/Tooltip";
+import { useEhMobile } from "@/hooks/useEhMobile";
 import { MENU_WIDTH, MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
 import Cronometro from "@/components/voice/Cronometro";
 import VoiceChannelMembers from "@/components/voice/VoiceChannelMembers";
@@ -129,6 +133,7 @@ function CategoryHeader({
   onEdit,
   onContextMenu,
   dragProps,
+  celular = false,
 }: {
   label: string;
   collapsed: boolean;
@@ -137,6 +142,14 @@ function CategoryHeader({
   onEdit?: () => void;
   onContextMenu?: (e: MouseEvent) => void;
   dragProps?: Record<string, unknown>;
+  /**
+   * No celular o cabeçalho é **caixa alta, com o chevron à esquerda** e sem
+   * botão nenhum na linha — medido em `discord-mobile-servidor-2024.png`
+   * ("FAVORITES", "CHAT", "COMMUNITY"). Criar canal e editar categoria moram no
+   * menu do servidor e no toque longo; uma fileira de alvos de 22px ao lado do
+   * rótulo não é tocável de qualquer modo.
+   */
+  celular?: boolean;
 }) {
   return (
     /*
@@ -145,7 +158,7 @@ function CategoryHeader({
       canal, que é irmã deste cabeçalho e não descendente dele.
     */
     <div
-      className="group mx-2 flex h-[22px] items-center pr-1"
+      className={`group mx-2 flex items-center pr-1 ${celular ? "h-[36px]" : "h-[22px]"}`}
       onContextMenu={onContextMenu}
       {...dragProps}
     >
@@ -160,21 +173,32 @@ function CategoryHeader({
           o nome do servidor acima e com o `#` dos canais abaixo. Com o chevron
           na frente, essa coluna de alinhamento se perdia.
         */
-        className="flex min-w-0 flex-1 items-center gap-1 pl-2.5 text-sm font-medium text-txt-muted hover:text-txt-normal"
+        className={`flex min-w-0 flex-1 items-center gap-1 pl-2.5 text-sm font-medium text-txt-muted hover:text-txt-normal ${
+          celular ? "gap-1.5 text-xs font-semibold uppercase tracking-wide" : ""
+        }`}
       >
+        {/* o chevron troca de lado no celular: na captura ele vem **antes** do
+            rótulo, e o rótulo é caixa alta */}
+        {celular &&
+          (collapsed ? (
+            <ChevronRight size={12} className="shrink-0" aria-hidden="true" />
+          ) : (
+            <ChevronDown size={12} className="shrink-0" aria-hidden="true" />
+          ))}
         <span className="truncate">{label}</span>
-        {collapsed ? (
-          <ChevronRight size={12} className="shrink-0" aria-hidden="true" />
-        ) : (
-          <ChevronDown size={12} className="shrink-0" aria-hidden="true" />
-        )}
+        {!celular &&
+          (collapsed ? (
+            <ChevronRight size={12} className="shrink-0" aria-hidden="true" />
+          ) : (
+            <ChevronDown size={12} className="shrink-0" aria-hidden="true" />
+          ))}
       </button>
       {/* A engrenagem da categoria abre o mesmo modal do item "Editar
           categoria" do menu de contexto. Ao contrário do "+", ela é de hover —
           as classes são as mesmas dos dois botões de hover do canal, para os
           três acenderem igual. Fica à esquerda do "+" para não mover o "+",
           cuja coluna (x=318) está medida na print. */}
-      {onEdit && (
+      {onEdit && !celular && (
         <Tooltip label="Editar categoria">
           <button
             type="button"
@@ -186,7 +210,7 @@ function CategoryHeader({
           </button>
         </Tooltip>
       )}
-      {onCreate && (
+      {onCreate && !celular && (
         <Tooltip label="Criar canal">
           <button
             type="button"
@@ -203,6 +227,89 @@ function CategoryHeader({
 }
 
 /**
+ * Cabeçalho da coluna do servidor **no celular**.
+ *
+ * Medido em `docs/Reference/mobile/discord-mobile-servidor-2024.png` (1,9707
+ * px/pt): faixa do servidor no topo da coluna, nome grande com o chevron `›`
+ * que abre o menu, a linha "N membros", e a pílula "Buscar" ocupando a largura
+ * com dois botões redondos à direita. Depois, uma divisória de 1px.
+ *
+ * Aqui a faixa é a **cor do perfil do servidor** (`bannerColor`, o degradê de
+ * `guildBannerBackground`), não uma imagem: o Streamz não tem banner de
+ * servidor, tem faixa de cor — e é o que o cartão de prévia já usa. Sem cor
+ * escolhida, fica a superfície neutra em vez de um buraco.
+ *
+ * A pílula de busca é **inerte por enquanto** (§6.6: botão sem função existe
+ * como visual, registrado): a busca de mensagens não tem tela no celular. O
+ * segundo botão redondo do print (eventos) não existe neste produto e não foi
+ * criado — sobra só o de convidar.
+ */
+function CabecalhoDoServidor({
+  guild,
+  membros,
+  onMenu,
+  onConvidar,
+}: {
+  guild: Guild | null;
+  membros: number;
+  onMenu: (e: MouseEvent<HTMLButtonElement>) => void;
+  onConvidar: () => void;
+}) {
+  const faixa = guildBannerBackground(guild?.bannerColor);
+  return (
+    <div className="shrink-0 border-b border-border">
+      {/* 74pt de faixa, medidos entre o topo da coluna e o fim do banner */}
+      <div
+        aria-hidden="true"
+        style={faixa ? { background: faixa } : undefined}
+        className={`h-[74px] w-full ${faixa ? "" : "bg-hov"}`}
+      />
+      <div className="px-4 pb-3 pt-2.5">
+        <button
+          type="button"
+          onClick={onMenu}
+          disabled={!guild}
+          aria-haspopup="menu"
+          className="flex min-h-[44px] w-full items-center gap-1 text-left disabled:cursor-default"
+        >
+          <span className="truncate font-display text-xl font-bold tracking-title text-txt-primary">
+            {guild?.name ?? "Selecione um servidor"}
+          </span>
+          {guild && (
+            <ChevronRight size={18} aria-hidden="true" className="shrink-0 text-txt-secondary" />
+          )}
+        </button>
+        {guild && (
+          <p className="text-sm text-txt-muted">
+            {membros === 1 ? "1 membro" : `${membros} membros`}
+          </p>
+        )}
+        <div className="mt-3 flex items-center gap-2">
+          <span
+            /* pílula de busca: visual, sem função — ver o comentário do topo */
+            aria-hidden="true"
+            className="flex h-[40px] min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-hov text-sm text-txt-muted"
+          >
+            <Search size={16} />
+            Buscar
+          </span>
+          {guild && (
+            <button
+              type="button"
+              onClick={onConvidar}
+              aria-label={`Convidar pessoas para ${guild.name}`}
+              className="grid h-[40px] w-[40px] shrink-0 place-items-center rounded-full bg-hov text-txt-secondary transition active:bg-border-strong"
+            >
+              <UserPlus size={20} />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Coluna 2 no modo servidor: cabeçalho com menu, categorias reais e canais.
  *
  * O arrastar-e-soltar usa o DnD nativo do HTML5 em vez de uma biblioteca
@@ -211,6 +318,13 @@ function CategoryHeader({
  * havia o que uma dependência a mais fosse resolver aqui.
  */
 export default function ChannelSidebar() {
+  /**
+   * No celular o cabeçalho desta coluna é outro — ver `CabecalhoDoServidor`.
+   * O do desktop (nome + chevron + convidar, 49px) é o medido no computador.
+   */
+  const celular = useEhMobile();
+  /** "N membros" do cabeçalho do celular; a lista já vem carregada pela store. */
+  const totalDeMembros = useGuilds((s) => s.members.length);
   const listRef = useRef<HTMLDivElement>(null);
   const [arrasto, setArrasto] = useState<Arrasto>(null);
   const [alvo, setAlvo] = useState<Alvo>(null);
@@ -807,6 +921,7 @@ export default function ChannelSidebar() {
                   ? () => openModal({ kind: "categorySettings", categoryId: category.id })
                   : undefined
               }
+              celular={celular}
               onContextMenu={category ? (e) => openCategoryMenu(e, category) : undefined}
               dragProps={
                 category
@@ -865,6 +980,14 @@ export default function ChannelSidebar() {
         Botão dentro de botão não é HTML válido, então o que era um vira dois
         irmãos: o do menu ocupa o espaço do nome, o de convidar fica ao lado.
       */}
+      {celular ? (
+        <CabecalhoDoServidor
+          guild={guild}
+          membros={totalDeMembros}
+          onMenu={openGuildMenu}
+          onConvidar={() => void createInvite()}
+        />
+      ) : (
       <div className="flex h-[49px] shrink-0 items-center border-b border-border pl-5 pr-3 shadow-header">
         <button
           type="button"
@@ -895,6 +1018,7 @@ export default function ChannelSidebar() {
           </Tooltip>
         )}
       </div>
+      )}
 
       <div
         ref={listRef}

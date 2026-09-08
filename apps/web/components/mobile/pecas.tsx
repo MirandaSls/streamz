@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ArrowLeft } from "@/components/ui/icones";
+import { ArrowLeft, ChevronRight } from "@/components/ui/icones";
 
 /**
  * As peças pequenas do leiaute de celular: alvo de toque, cabeçalho de tela e
@@ -64,6 +64,7 @@ export function CabecalhoMobile({
   titulo,
   subtitulo,
   aoTocarNoTitulo,
+  chevron = false,
   acoes,
 }: {
   /** ausente na base de uma aba: lá não há para onde voltar. */
@@ -73,6 +74,11 @@ export function CabecalhoMobile({
   subtitulo?: ReactNode;
   /** o título vira botão (menu do servidor, perfil do contato). */
   aoTocarNoTitulo?: () => void;
+  /**
+   * `›` depois do título, como no `# general ›` da captura do chat. É o sinal
+   * de que tocar ali abre alguma coisa — no nosso caso, quem está na conversa.
+   */
+  chevron?: boolean;
   acoes?: ReactNode;
 }) {
   const miolo = (
@@ -83,8 +89,13 @@ export function CabecalhoMobile({
         </span>
       )}
       <span className="flex min-w-0 flex-col">
-        <span className="truncate text-base font-semibold leading-tight text-txt-primary">
-          {titulo}
+        <span className="flex min-w-0 items-center gap-1">
+          <span className="truncate text-base font-semibold leading-tight text-txt-primary">
+            {titulo}
+          </span>
+          {chevron && (
+            <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-txt-secondary" />
+          )}
         </span>
         {subtitulo && (
           <span className="truncate text-xs leading-tight text-txt-muted">{subtitulo}</span>
