@@ -128,7 +128,7 @@ try {
 
   // ── os dois entram no canal de voz ──────────────────────────────────────
   const aba = (nome) => ana.locator(`nav[aria-label="Seções"] button`).filter({ hasText: nome });
-  await aba("Servidores").click();
+  await aba("Início").click();
   await ana.waitForTimeout(1000);
   await ana.click('nav[aria-label="Servidores"] button[aria-label^="Time de Produto"]');
   await ana.waitForTimeout(1200);
