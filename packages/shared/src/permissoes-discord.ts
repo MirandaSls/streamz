@@ -17,6 +17,9 @@
 // documento ser escrito. As duas **mapeiam** (`MOVE_MEMBERS` = 1<<24,
 // `STREAM` = 1<<9 no Discord) e saem da lista de apagadas.
 
+import { Permission } from "./permissoes";
+import type { PermissionName } from "./permissoes";
+
 /**
  * Bits do Discord que a tradução usa. Os valores vão até 1<<49, então o tipo é
  * `bigint` — `1 << 40` em JavaScript dá 256, não 2^40.
@@ -68,6 +71,9 @@ export const PERMISSAO_DO_DISCORD = {
   SEND_POLLS: 1n << 49n,
 } as const;
 
+/** Nome de um bit do Discord conhecido pela tradução. */
+export type PermissaoDoDiscord = keyof typeof PERMISSAO_DO_DISCORD;
+
 /**
  * Bits do Discord que **saem sempre ligados**, porque no Streamz essas coisas
  * simplesmente são permitidas — não há como negá-las.
@@ -87,14 +93,60 @@ export const SEMPRE_LIGADAS: readonly (keyof typeof PERMISSAO_DO_DISCORD)[] = [
 ];
 
 /**
+ * Os pares — as 21 permissões do Streamz e o bit do Discord de cada uma.
+ *
+ * A lista é a tabela do §6 do documento, com as duas linhas que faltavam lá
+ * (`MOVE_MEMBERS` e `STREAM`, acrescentadas ao Streamz depois). É exaustiva de
+ * propósito: o `Record<PermissionName, …>` faz o compilador cobrar a linha nova
+ * quando alguém acrescentar uma permissão em `permissoes.ts` — sem isso, a
+ * permissão nova sairia calada para os bots.
+ */
+export const PAR_NO_DISCORD: Record<PermissionName, PermissaoDoDiscord> = {
+  VIEW_CHANNEL: "VIEW_CHANNEL",
+  SEND_MESSAGES: "SEND_MESSAGES",
+  MANAGE_MESSAGES: "MANAGE_MESSAGES",
+  MANAGE_CHANNELS: "MANAGE_CHANNELS",
+  MANAGE_ROLES: "MANAGE_ROLES",
+  KICK_MEMBERS: "KICK_MEMBERS",
+  BAN_MEMBERS: "BAN_MEMBERS",
+  MANAGE_GUILD: "MANAGE_GUILD",
+  CREATE_INVITE: "CREATE_INSTANT_INVITE",
+  ATTACH_FILES: "ATTACH_FILES",
+  ADD_REACTIONS: "ADD_REACTIONS",
+  MENTION_EVERYONE: "MENTION_EVERYONE",
+  CONNECT: "CONNECT",
+  SPEAK: "SPEAK",
+  MUTE_MEMBERS: "MUTE_MEMBERS",
+  MODERATE_MEMBERS: "MODERATE_MEMBERS",
+  // não temos "expressões" separadas de emoji: o nosso MANAGE_EMOJIS é o guarda-chuva
+  MANAGE_EMOJIS: "MANAGE_GUILD_EXPRESSIONS",
+  VIEW_AUDIT_LOG: "VIEW_AUDIT_LOG",
+  ADMINISTRATOR: "ADMINISTRATOR",
+  MOVE_MEMBERS: "MOVE_MEMBERS",
+  STREAM: "STREAM",
+};
+
+const PARES = Object.entries(PAR_NO_DISCORD) as [PermissionName, PermissaoDoDiscord][];
+
+/**
  * Bitfield do Streamz → bitfield do Discord.
  *
  * Serializado sempre como **string decimal** por quem chama
  * (`"137411140374081"`), nunca como number: acima de 2^53 o `Number` perde
  * precisão em silêncio.
+ *
+ * `ADMINISTRATOR` **não** é expandido para "tudo ligado": no Discord ele já
+ * significa isso, e as libs (`PermissionsBitField#has`) fazem a expansão
+ * sozinhas. Expandir aqui só faria a ida-e-volta mentir.
  */
-export function paraBitfieldDoDiscord(_bits: number): bigint {
-  throw new Error("F1 lote C: paraBitfieldDoDiscord não implementado");
+export function paraBitfieldDoDiscord(bits: number): bigint {
+  let saida = 0n;
+  for (const [nosso, deles] of PARES) {
+    if ((bits & Permission[nosso]) !== 0) saida |= PERMISSAO_DO_DISCORD[deles];
+  }
+  for (const nome of SEMPRE_LIGADAS) saida |= PERMISSAO_DO_DISCORD[nome];
+  if ((bits & Permission.SEND_MESSAGES) !== 0) saida |= PERMISSAO_DO_DISCORD.SEND_POLLS;
+  return saida;
 }
 
 /**
@@ -105,6 +157,10 @@ export function paraBitfieldDoDiscord(_bits: number): bigint {
  * funcionalidade não existe e recusar a chamada inteira por causa dele deixaria
  * a tela de "Adicionar ao servidor" impossível de usar.
  */
-export function doBitfieldDoDiscord(_bits: bigint): number {
-  throw new Error("F1 lote C: doBitfieldDoDiscord não implementado");
+export function doBitfieldDoDiscord(bits: bigint): number {
+  let saida = 0;
+  for (const [nosso, deles] of PARES) {
+    if ((bits & PERMISSAO_DO_DISCORD[deles]) !== 0n) saida |= Permission[nosso];
+  }
+  return saida;
 }
