@@ -32,25 +32,18 @@ import { isTauri } from "@/lib/desktop";
  * (ver `app/app/page.tsx`), então abaixo de 768px ele já nasce escondido.
  */
 /**
- * ## O telefone deitado
+ * Duas condições, e a segunda existe por causa da **paisagem**.
  *
- * A largura sozinha não bastava. Um iPhone 14 **em paisagem** mede 844×390 pt:
- * 844 passa dos 767, e girar o aparelho durante uma chamada devolvia o shell de
- * quatro colunas — rail, lista de canais, palco e card do usuário espremidos em
- * 390pt de **altura** (visto e fotografado ao levantar a call do celular). Não é
- * um caso de borda: girar é o gesto de quem quer ver uma transmissão maior.
+ * Um iPhone deitado mede 844×390: a largura passa dos 767 e cairia no leiaute
+ * de colunas — que tem piso de 940px, ou seja, girar o telefone devolvia a
+ * rolagem horizontal que este trabalho veio tirar. O que não muda ao girar é o
+ * ponteiro (grosso) e a **altura** (390): daí o segundo termo.
  *
- * Por isso a consulta tem uma segunda alternativa: **pouca altura, deitado e com
- * dedo**. Os três juntos descrevem um telefone virado e mais nada — uma janela
- * de navegador baixinha num computador continua sendo desktop porque o ponteiro
- * dela é `fine`, e um tablet deitado tem altura de sobra.
- *
- * 500pt de teto: um iPhone Pro Max deitado chega a 430 e um Android grande a
- * ~412; um iPad mini deitado tem 744. O corte cai confortavelmente entre os
- * dois.
+ * Os 599px de teto de altura foram escolhidos para caber todo telefone deitado
+ * (o maior hoje tem ~430) e nenhum tablet (o iPad menor tem 768 de lado curto).
+ * Uma janela de computador de 844×390 não casa: lá o ponteiro é fino.
  */
-export const CONSULTA_MOBILE =
-  "(max-width: 767px), (max-height: 500px) and (orientation: landscape) and (pointer: coarse)";
+export const CONSULTA_MOBILE = "(max-width: 767px), (pointer: coarse) and (max-height: 599px)";
 
 /** `useLayoutEffect` no cliente; no servidor o React avisa que não roda. */
 const useEfeitoDeLeiaute = typeof window === "undefined" ? useEffect : useLayoutEffect;

@@ -11,6 +11,7 @@ import {
   TelaVoce,
 } from "@/components/mobile/telas-base";
 import {
+  AreaDeToqueLongo,
   TelaDeAmigos,
   TelaDeCanal,
   TelaDeDM,
@@ -22,6 +23,7 @@ import ProfilePopoverHost from "@/components/ui/ProfilePopover";
 import TelaDeAbertura from "@/components/ui/TelaDeAbertura";
 import Toasts from "@/components/ui/Toasts";
 import VoiceLayer from "@/components/voice/VoiceLayer";
+import { useChannels } from "@/stores/channels";
 import { useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
 import { mobile, profundidade, telaDoTopo, useMobile } from "@/stores/mobile";
@@ -58,8 +60,6 @@ export default function ShellMobile() {
   const pilhas = useMobile((s) => s.pilhas);
   const topo = telaDoTopo({ aba, pilhas });
   const prof = useMobile(profundidade);
-  const setMembersOpen = useUI((s) => s.toggleMembers);
-  const membersOpen = useUI((s) => s.membersOpen);
   /** já houve um toque nesta sessão? separa navegação de carga inicial. */
   const jaInteragiu = useRef(false);
 
@@ -69,9 +69,12 @@ export default function ShellMobile() {
    * lado. Sem isto o `DMView` montaria os dois ao mesmo tempo.
    */
   useEffect(() => {
-    if (membersOpen) setMembersOpen();
+    // **atribui**, não alterna: `toggleMembers` invertia o que estivesse lá, e
+    // qualquer caminho que ligasse a coluna de volta a trazia junto com o
+    // painel deslizante. A store não tem um setter, então o `setState` direto é
+    // o que diz "no celular esta coluna não existe" sem ambiguidade.
+    useUI.setState({ membersOpen: false });
     // só na montagem: depois disso quem manda é o painel deslizante
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useVoltarDoAndroid(prof);
@@ -90,8 +93,15 @@ export default function ShellMobile() {
     if (aba === "servidores") ui.setView("guild");
     else if (aba === "mensagens") ui.setView("dm");
   }, [aba]);
-  /** ...e o caminho inverso: o logo da rail volta para "dm" — logo, para a aba. */
+  /**
+   * ...e o caminho inverso: o logo da rail volta para "dm" — logo, para a aba.
+   *
+   * Só **depois do primeiro toque**, pela mesma razão dos efeitos abaixo: o
+   * `view` nasce `"dm"` (é o padrão da store), e sem essa condição o app abriria
+   * sempre na aba Mensagens, ignorando a aba inicial.
+   */
   useEffect(() => {
+    if (!jaInteragiu.current) return;
     if (view === "dm" && useMobile.getState().aba === "servidores") mobile.irParaAba("mensagens");
   }, [view]);
 
@@ -103,18 +113,28 @@ export default function ShellMobile() {
   function aoTocarNaLista(e: MouseEvent<HTMLDivElement>) {
     const alvo = e.target as HTMLElement | null;
     if (!alvo) return;
-    const botaoDeCanal = alvo.closest("[data-channel-button]");
-    if (botaoDeCanal) {
-      // Canal de voz: o clique entra na chamada (`voice-entrada.ts`), então a
-      // tela que interessa é o palco.
-      //
-      // O tipo vem do **próprio botão** (`data-channel-type`), e não da store:
-      // este ouvinte é de **captura**, roda antes do `onClick` que seleciona o
-      // canal, e perguntar à store aqui devolvia o canal *anterior*. Era isso
-      // que jogava quem tocava num canal de voz dentro do chat de texto do
-      // canal que estava aberto antes — a call subia e o palco não aparecia.
-      const tipo = botaoDeCanal.getAttribute("data-channel-type");
-      mobile.empilhar(tipo === "VOICE" ? "voz" : "canal");
+    if (alvo.closest("[data-channel-button]")) {
+      /*
+        Canal de voz: o clique já entrou na chamada (`voice-entrada.ts`), e a
+        tela que interessa é o palco, não a conversa de texto do canal.
+
+        A pergunta "que canal é este?" só pode ser feita **depois** do
+        `onClick` do botão. Esta escuta é de **captura**, para nunca perder um
+        toque, e a captura roda antes do botão — lendo a store aqui a resposta
+        era sempre o canal *anterior*, e tocar num canal de voz abria a tela de
+        texto dele.
+
+        `setTimeout(…, 0)`, e **não** `queueMicrotask`: o navegador roda um
+        ponto de verificação de microtarefas **depois de cada ouvinte**, não
+        depois do despacho inteiro — uma microtarefa enfileirada na captura
+        ainda corre antes do `onClick` do botão, e o defeito continuava igual.
+        Uma macrotarefa espera o despacho terminar, com o `select()` já feito.
+      */
+      window.setTimeout(() => {
+        const canal = useChannels.getState();
+        const ativo = canal.channels.find((c) => c.id === canal.activeChannelId);
+        mobile.empilhar(ativo?.type === "VOICE" ? "voz" : "canal");
+      }, 0);
       return;
     }
     if (alvo.closest("[data-dm-button]")) {
@@ -187,7 +207,11 @@ export default function ShellMobile() {
         jaInteragiu.current = true;
       }}
     >
-      <div className="relative min-h-0 flex-1" onClickCapture={aoTocarNaLista}>
+      {/* o toque longo vale no shell inteiro: é o botão direito do telefone, e
+          sem ele os menus de canal, servidor, conversa e membro não existiriam
+          (ver `AreaDeToqueLongo`) */}
+      <AreaDeToqueLongo>
+        <div className="relative min-h-0 flex-1" onClickCapture={aoTocarNaLista}>
         {base}
         {topo === "canal" && (
           <TelaEmpilhada>
@@ -209,16 +233,19 @@ export default function ShellMobile() {
             <TelaDeVoz />
           </TelaEmpilhada>
         )}
-      </div>
+        </div>
+      </AreaDeToqueLongo>
 
       <BarraDeVozMobile />
-      {/* **A barra de abas sai no palco da chamada.** É a única tela do app que
-          é uma imagem em movimento, e no Discord do celular ela ocupa o
-          aparelho inteiro — quem está numa call não troca de aba, sai dela (o
-          voltar do cabeçalho, que mantém a chamada de pé e devolve a barra
-          "Voz conectada"). Manter as abas custava 64pt de vídeo e um segundo
-          rodapé embaixo da cápsula de controles. */}
-      {topo !== "voz" && <BarraDeAbas />}
+      {/*
+        A barra de abas **some** quando há tela empilhada — é o que o Discord
+        faz, e dá para ver na captura `discord-mobile-chat-canal-2024.png`: a
+        conversa aberta vai do cabeçalho ao composer, sem barra nenhuma embaixo.
+        Não é só fidelidade: são 48px de timeline de volta num aparelho que tem
+        844 de altura, e trocar de seção com uma conversa aberta é justamente o
+        que a seta de voltar já resolve.
+      */}
+      {topo === null && <BarraDeAbas />}
 
       {/* os mesmos hospedeiros globais do shell de desktop */}
       <VoiceLayer />

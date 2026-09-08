@@ -647,13 +647,6 @@ export default function ChannelSidebar() {
           <button
             type="button"
             data-channel-button
-            // Só para o shell do celular: ele ouve este clique na **captura**
-            // (ver `ShellMobile`), ou seja *antes* do `select` abaixo, e por
-            // isso não pode perguntar à store que canal é. Sem isto, tocar num
-            // canal de voz empilhava a tela do canal anterior — quem entrava
-            // numa call caía no chat de texto dela. Nenhum pixel: é um
-            // atributo.
-            data-channel-type={channel.type}
             // `"clique"`: num canal de VOZ isto **entra na chamada**, sem
             // antessala nem prompt (ver `stores/voice-entrada.ts`)
             onClick={() => select(channel, "clique")}
