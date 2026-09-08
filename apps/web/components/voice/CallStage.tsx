@@ -11,6 +11,7 @@ import VoiceGrid from "@/components/voice/VoiceGrid";
 import { AoVivoIndicador } from "@/components/voice/ScreenShareButton";
 import { useTelaCheia } from "@/components/voice/fullscreen";
 import { useOcultarInativo } from "@/components/voice/useOcultarInativo";
+import { useEhMobile } from "@/hooks/useEhMobile";
 import { useDMs } from "@/stores/dms";
 import { ui } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
@@ -62,6 +63,7 @@ export default function CallStage({
   const palco = useRef<HTMLDivElement>(null);
   const { telaCheia, alternar } = useTelaCheia(palco);
   const { visivel, doPalco, daMoldura } = useOcultarInativo();
+  const ehMobile = useEhMobile();
 
   const chamando = call.phase === "outgoing" && call.channelId === channelId;
   const grupo = conversa ? isGroupChannel(conversa) : false;
@@ -152,7 +154,15 @@ export default function CallStage({
           transmissão para proteger uma faixa que nem sempre está na tela. O
           `pb-24` fica: os controles também flutuam, mas embaixo mora a tira de
           miniaturas, que precisa continuar clicável. */}
-      <div className="min-h-0 flex-1 px-4 pb-24">
+      <div
+        className={
+          // ver o mesmo trecho em `VoicePanel`: no celular as folgas são do
+          // `PalcoMobile`, porque a de baixo depende da orientação
+          ehMobile
+            ? "min-h-0 flex-1"
+            : "min-h-0 flex-1 px-4 pb-24"
+        }
+      >
         {chamando ? (
           <Chamando nome={destinatario ? displayNameOf(destinatario) : titulo} usuario={destinatario} />
         ) : conectadoAqui ? (
@@ -184,12 +194,16 @@ export default function CallStage({
             leaveLabel={chamando ? "Cancelar chamada" : "Desligar"}
             onLeave={() => void endCall()}
           />
-          <IconesDoCanto
-            telaCheia={telaCheia}
-            onTelaCheia={alternar}
-            visivel={visivel}
-            moldura={daMoldura}
-          />
+          {/* fora do celular: a tela cheia do palco inteiro não é o gesto do
+              telefone — lá se toca no tile (ver `PalcoMobile`) */}
+          {!ehMobile && (
+            <IconesDoCanto
+              telaCheia={telaCheia}
+              onTelaCheia={alternar}
+              visivel={visivel}
+              moldura={daMoldura}
+            />
+          )}
         </>
       )}
     </section>

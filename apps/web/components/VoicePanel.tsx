@@ -13,6 +13,7 @@ import VoiceGrid from "@/components/voice/VoiceGrid";
 import { AoVivoIndicador } from "@/components/voice/ScreenShareButton";
 import { useTelaCheia } from "@/components/voice/fullscreen";
 import { useOcultarInativo } from "@/components/voice/useOcultarInativo";
+import { useEhMobile } from "@/hooks/useEhMobile";
 import {
   isChannelMuted,
   levelForChannel,
@@ -77,6 +78,7 @@ export default function VoicePanel({
   const palco = useRef<HTMLDivElement>(null);
   const { telaCheia, alternar } = useTelaCheia(palco);
   const { visivel, doPalco, daMoldura } = useOcultarInativo();
+  const ehMobile = useEhMobile();
 
   const conectado = aqui && status === "connected";
   const nome = channel.name ?? "voz";
@@ -94,6 +96,13 @@ export default function VoicePanel({
       className="flex h-full flex-col bg-chat"
       data-voice-panel={channel.id}
     >
+      {/* **No celular este cabeçalho não existe.** A tela empilhada já tem o
+          `CabecalhoMobile` de 56px com o nome do canal e o voltar
+          (`telas-de-conversa.tsx`), e os dois somados comiam 105 dos 844pt de
+          um iPhone para dizer o mesmo nome duas vezes. O selo "Você está ao
+          vivo" — a única coisa daqui que o palco não repete — volta logo
+          abaixo, flutuando sobre o palco. */}
+      {!ehMobile && (
       <header
         {...daMoldura}
         // Na vista do canal o cabeçalho flutua sobre o degradê: na print não há
@@ -148,6 +157,7 @@ export default function VoicePanel({
               serve. */}
         </span>
       </header>
+      )}
 
       {aqui && status === "error" && erro && (
         // banner de largura total: uma falha de conexão não é nota de rodapé
@@ -175,7 +185,18 @@ export default function VoicePanel({
           // `pb-24` também durante o `connecting`: a barra de controles já está
           // na tela desde o clique, e reservar o espaço só no `connected` fazia
           // a grade dar um pulo de 96px no meio da entrada
-          <div className="h-full p-4 pb-24">
+          <div
+            className={
+              ehMobile
+                ? // No celular quem cuida das folgas é o `PalcoMobile`: a
+                  // lateral é dele (`px-3`; 16 de cada lado aqui roubariam 32
+                  // dos 390 sem nada a mostrar neles) e a de baixo depende da
+                  // orientação — deitado a cápsula de controles flutua sobre o
+                  // vídeo em vez de ocupar altura.
+                  "h-full"
+                : "h-full p-4 pb-24"
+            }
+          >
             {/* **A grade aparece no clique, não no `connected`.** Quem manda
                 nela é o estado de voz do servidor (`states`), que já chegou
                 pelos eventos `voice.state` — o LiveKit só acrescenta o vídeo.
@@ -196,7 +217,19 @@ export default function VoicePanel({
           />
         )}
 
-        {conectado && (
+        {/* No celular o selo de transmissão não tem cabeçalho onde morar: ele
+            flutua no alto do palco, que é onde o olho já está. */}
+        {ehMobile && aqui && (
+          <div className="pointer-events-none absolute inset-x-3 top-2 z-10 flex justify-center [&>*]:pointer-events-auto">
+            <AoVivoIndicador />
+          </div>
+        )}
+
+        {/* `IconesDoCanto` e o convite flutuante ficam fora do celular: o
+            primeiro é a tela cheia do palco inteiro (no telefone o gesto é
+            tocar no tile, ver `PalcoMobile`) e o segundo cairia debaixo da
+            cápsula de controles. Convidar continua no menu do servidor. */}
+        {conectado && !ehMobile && (
           <>
             {/* Convidar mora no canto inferior esquerdo do palco, alinhado com a
                 barra: é a ação de "esta sala está vazia demais", e no print ela

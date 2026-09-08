@@ -22,7 +22,6 @@ import ProfilePopoverHost from "@/components/ui/ProfilePopover";
 import TelaDeAbertura from "@/components/ui/TelaDeAbertura";
 import Toasts from "@/components/ui/Toasts";
 import VoiceLayer from "@/components/voice/VoiceLayer";
-import { useChannels } from "@/stores/channels";
 import { useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
 import { mobile, profundidade, telaDoTopo, useMobile } from "@/stores/mobile";
@@ -104,12 +103,18 @@ export default function ShellMobile() {
   function aoTocarNaLista(e: MouseEvent<HTMLDivElement>) {
     const alvo = e.target as HTMLElement | null;
     if (!alvo) return;
-    if (alvo.closest("[data-channel-button]")) {
-      // canal de voz: o clique já entrou na chamada (`voice-entrada.ts`), então
-      // a tela que interessa é o palco
-      const canal = useChannels.getState();
-      const ativo = canal.channels.find((c) => c.id === canal.activeChannelId);
-      mobile.empilhar(ativo?.type === "VOICE" ? "voz" : "canal");
+    const botaoDeCanal = alvo.closest("[data-channel-button]");
+    if (botaoDeCanal) {
+      // Canal de voz: o clique entra na chamada (`voice-entrada.ts`), então a
+      // tela que interessa é o palco.
+      //
+      // O tipo vem do **próprio botão** (`data-channel-type`), e não da store:
+      // este ouvinte é de **captura**, roda antes do `onClick` que seleciona o
+      // canal, e perguntar à store aqui devolvia o canal *anterior*. Era isso
+      // que jogava quem tocava num canal de voz dentro do chat de texto do
+      // canal que estava aberto antes — a call subia e o palco não aparecia.
+      const tipo = botaoDeCanal.getAttribute("data-channel-type");
+      mobile.empilhar(tipo === "VOICE" ? "voz" : "canal");
       return;
     }
     if (alvo.closest("[data-dm-button]")) {
@@ -207,7 +212,13 @@ export default function ShellMobile() {
       </div>
 
       <BarraDeVozMobile />
-      <BarraDeAbas />
+      {/* **A barra de abas sai no palco da chamada.** É a única tela do app que
+          é uma imagem em movimento, e no Discord do celular ela ocupa o
+          aparelho inteiro — quem está numa call não troca de aba, sai dela (o
+          voltar do cabeçalho, que mantém a chamada de pé e devolve a barra
+          "Voz conectada"). Manter as abas custava 64pt de vídeo e um segundo
+          rodapé embaixo da cápsula de controles. */}
+      {topo !== "voz" && <BarraDeAbas />}
 
       {/* os mesmos hospedeiros globais do shell de desktop */}
       <VoiceLayer />

@@ -121,8 +121,13 @@ export default function AppPage() {
   // estático que o navegador pinta **antes** do JS subir. Sem ele, quem abre o
   // site no telefone vê meio segundo de leiaute de 940px com rolagem horizontal.
   // A partir de 768px a classe não faz nada, e o desktop é o mesmo pixel.
+  //
+  // A segunda consulta é a do telefone **deitado** (ver `CONSULTA_MOBILE`):
+  // 844×390 passa dos 767 de largura, e sem ela girar o aparelho piscava o shell
+  // de colunas antes de o JS decidir. Ela só casa com pouca altura, em paisagem e
+  // com ponteiro grosso — nenhuma janela de computador entra nisso.
   return (
-    <div className="flex h-full min-w-[940px] select-none max-md:hidden">
+    <div className="flex h-full min-w-[940px] select-none max-md:hidden [@media(max-height:500px)_and_(orientation:landscape)_and_(pointer:coarse)]:hidden">
       {/*
         Rail e coluna dentro do mesmo bloco posicionado, e o card do usuário
         como irmão dos dois.

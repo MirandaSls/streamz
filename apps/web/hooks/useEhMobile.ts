@@ -31,7 +31,26 @@ import { isTauri } from "@/lib/desktop";
  * JS subir. Esse quadro é resolvido no CSS: o shell desktop leva `max-md:hidden`
  * (ver `app/app/page.tsx`), então abaixo de 768px ele já nasce escondido.
  */
-export const CONSULTA_MOBILE = "(max-width: 767px)";
+/**
+ * ## O telefone deitado
+ *
+ * A largura sozinha não bastava. Um iPhone 14 **em paisagem** mede 844×390 pt:
+ * 844 passa dos 767, e girar o aparelho durante uma chamada devolvia o shell de
+ * quatro colunas — rail, lista de canais, palco e card do usuário espremidos em
+ * 390pt de **altura** (visto e fotografado ao levantar a call do celular). Não é
+ * um caso de borda: girar é o gesto de quem quer ver uma transmissão maior.
+ *
+ * Por isso a consulta tem uma segunda alternativa: **pouca altura, deitado e com
+ * dedo**. Os três juntos descrevem um telefone virado e mais nada — uma janela
+ * de navegador baixinha num computador continua sendo desktop porque o ponteiro
+ * dela é `fine`, e um tablet deitado tem altura de sobra.
+ *
+ * 500pt de teto: um iPhone Pro Max deitado chega a 430 e um Android grande a
+ * ~412; um iPad mini deitado tem 744. O corte cai confortavelmente entre os
+ * dois.
+ */
+export const CONSULTA_MOBILE =
+  "(max-width: 767px), (max-height: 500px) and (orientation: landscape) and (pointer: coarse)";
 
 /** `useLayoutEffect` no cliente; no servidor o React avisa que não roda. */
 const useEfeitoDeLeiaute = typeof window === "undefined" ? useEffect : useLayoutEffect;
