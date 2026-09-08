@@ -1,4 +1,19 @@
-import { Controller } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  HttpCode,
+  Param,
+  Post,
+  UseFilters,
+  UseInterceptors,
+} from "@nestjs/common";
+import { SkipThrottle } from "@nestjs/throttler";
+import { zodBody } from "../../../common/zod.pipe";
+import { InteractionsService } from "../../interactions/interactions.service";
+import type { InteracaoAutenticada } from "../../interactions/tipos";
+import { FiltroDeErrosDoDiscord, interacaoDesconhecida } from "../erros";
+import { RateLimitDoDiscordInterceptor } from "../rate-limit.interceptor";
+import { corpoDeCallbackSchema, type CorpoDeCallback } from "./corpos-f3";
 
 /**
  * `POST /api/v10/interactions/:id/:token/callback` — a resposta do bot.
@@ -22,8 +37,41 @@ import { Controller } from "@nestjs/common";
  * `whitelist: true` apagaria `data.embeds`, `data.components` e `data.flags`
  * antes de o handler ver — o risco (b) do §12, que já mordeu na F1.
  */
-@Controller()
-export class InteractionCallbackCompatController {}
+@SkipThrottle()
+@UseFilters(FiltroDeErrosDoDiscord)
+@UseInterceptors(RateLimitDoDiscordInterceptor)
+@Controller("v10/interactions")
+export class InteractionCallbackCompatController {
+  constructor(protected readonly interacoes: InteractionsService) {}
 
-@Controller()
+  @Post(":id/:token/callback")
+  @HttpCode(204)
+  async callback(
+    @Param("id") id: string,
+    @Param("token") token: string,
+    // `data` fica intacto até o `responder`: é o único lugar onde `embeds`,
+    // `components` e `flags` existem, e o pipe global os comeria num DTO
+    @Body(zodBody(corpoDeCallbackSchema)) corpo: CorpoDeCallback,
+  ): Promise<void> {
+    const interacao = await this.resolver(id, token);
+    await this.interacoes.responder(interacao, corpo.type, corpo.data);
+  }
+
+  /**
+   * O `:token` do caminho → a interação, conferindo o `:id` junto.
+   *
+   * `porToken` já cuida do "não existe" e do "venceu". O que sobra para o
+   * controller é o par: um token válido apresentado com o id de outra interação
+   * leva **o mesmo** 404 `10062`, e não 403 — quem não tem o token não fica
+   * sabendo que a interação existe. (Na prática só acontece com bot com defeito,
+   * e o 404 é o que a lib sabe classificar.)
+   */
+  protected async resolver(id: string, token: string): Promise<InteracaoAutenticada> {
+    const interacao = await this.interacoes.porToken(token);
+    if (String(interacao.snowflake) !== id) throw interacaoDesconhecida();
+    return interacao;
+  }
+}
+
+@Controller("v9/interactions")
 export class InteractionCallbackCompatControllerV9 extends InteractionCallbackCompatController {}
