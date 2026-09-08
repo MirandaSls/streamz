@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { ApplicationsModule } from "../applications/applications.module";
 import { DiscordCompatModule } from "../discord-compat/discord-compat.module";
 import { GuildsModule } from "../guilds/guilds.module";
 import { MessagesModule } from "../messages/messages.module";
@@ -43,7 +44,19 @@ import { InteractionsService } from "./interactions.service";
  * diretório.
  */
 @Module({
-  imports: [DiscordCompatModule, GuildsModule, MessagesModule, RealtimeModule],
+  imports: [
+    DiscordCompatModule,
+    // O `BotTokenGuard` dos controllers de compat registrados aqui embaixo
+    // injeta o `ApplicationsService`, e o `DiscordCompatModule` importa o
+    // `ApplicationsModule` sem reexportá-lo — o guard não resolveria e o Nest
+    // morreria no bootstrap com "can't resolve dependencies of the
+    // BotTokenGuard". Importar deste lado é o conserto certo: um módulo não
+    // deve reexportar o que ele usa por dentro só porque um vizinho precisa.
+    ApplicationsModule,
+    GuildsModule,
+    MessagesModule,
+    RealtimeModule,
+  ],
   controllers: [
     InteractionsController,
     ApplicationCommandsCompatController,
