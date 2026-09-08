@@ -91,8 +91,15 @@ export default function ShellMobile() {
     if (aba === "servidores") ui.setView("guild");
     else if (aba === "mensagens") ui.setView("dm");
   }, [aba]);
-  /** ...e o caminho inverso: o logo da rail volta para "dm" — logo, para a aba. */
+  /**
+   * ...e o caminho inverso: o logo da rail volta para "dm" — logo, para a aba.
+   *
+   * Só **depois do primeiro toque**, pela mesma razão dos efeitos abaixo: o
+   * `view` nasce `"dm"` (é o padrão da store), e sem essa condição o app abriria
+   * sempre na aba Mensagens, ignorando a aba inicial.
+   */
   useEffect(() => {
+    if (!jaInteragiu.current) return;
     if (view === "dm" && useMobile.getState().aba === "servidores") mobile.irParaAba("mensagens");
   }, [view]);
 
@@ -207,7 +214,15 @@ export default function ShellMobile() {
       </div>
 
       <BarraDeVozMobile />
-      <BarraDeAbas />
+      {/*
+        A barra de abas **some** quando há tela empilhada — é o que o Discord
+        faz, e dá para ver na captura `discord-mobile-chat-canal-2024.png`: a
+        conversa aberta vai do cabeçalho ao composer, sem barra nenhuma embaixo.
+        Não é só fidelidade: são 48px de timeline de volta num aparelho que tem
+        844 de altura, e trocar de seção com uma conversa aberta é justamente o
+        que a seta de voltar já resolve.
+      */}
+      {topo === null && <BarraDeAbas />}
 
       {/* os mesmos hospedeiros globais do shell de desktop */}
       <VoiceLayer />

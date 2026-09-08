@@ -383,7 +383,13 @@ export default function DMView({
           conversa 1:1, o perfil do contato — uma lista de um nome só não
           acrescentava nada ao cabeçalho.
         */}
+        {/* `!semCabecalho`: no celular a quarta coluna não existe — a lista de
+            participantes e o cartão do contato são o painel deslizante do
+            cabeçalho (`components/mobile/telas-de-conversa.tsx`). Amarrar isso
+            ao `semCabecalho` em vez de a um booleano compartilhado é o que
+            garante que os dois nunca apareçam ao mesmo tempo. */}
         {membersOpen &&
+          !semCabecalho &&
           (group || !other ? <DMMemberList dm={active} /> : <DMProfilePanel user={other} />)}
       </div>
     </main>
