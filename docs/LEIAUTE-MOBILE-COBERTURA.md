@@ -109,22 +109,30 @@ que tem a sua.
 | Link de mensagem | `app/app/channels/.../[messageId]` | não avaliado | não avaliado | redireciona para `/app`; a tela final é a do canal |
 | Splash | `app/splash/page.tsx` | n/a | n/a | janela de 300×350 do Tauri |
 
-## 2. Shell de abas — as quatro bases
+## 2. Shell de abas — as três bases
+
+> **O esqueleto mudou no meio desta varredura** (`708038b`). Eram quatro abas
+> (Servidores · Mensagens · Notificações · Você); agora são **três** —
+> Início · Notificações · Você —, como em `discord-mobile-servidor-2024.png`.
+> As conversas voltaram para a **rail**: a bolha redonda do topo, separada por
+> um traço, troca a coluna da direita entre a lista de conversas e a lista de
+> canais do servidor. Refiz o passeio inteiro depois disso, nos dois sentidos;
+> as linhas abaixo descrevem o esqueleto novo.
 
 | tela | arquivo | estado | o que falta |
 |---|---|---|---|
-| Servidores (rail + canais) | `components/mobile/telas-base.tsx` + `layout/GuildRail.tsx` + `layout/ChannelSidebar.tsx` | parcial → **ok** | os botões por linha (convite, editar, abrir conversa) e a engrenagem da categoria continuam sendo de `hover`, mas **as mesmas ações estão no menu de toque longo**, que a base passou a ligar no shell inteiro (§6.1) — conferido: segurar a linha de `#geral` abre a folha com sete itens. A linha de canal mede 35px, contra os 36pt do Discord (`MEDIDAS.md` §5): é `h-9`, e cai na mesma armadilha do `rem` descrita no topo — 1px, não vale um PR sozinho, mas está anotado |
-| Mensagens (lista de conversas) | `layout/DMList.tsx` | parcial → **ok** | campo de busca de 31px e o "+" de nova conversa com 20×20 — os dois em 44 agora. O "X" de fechar conversa continua `opacity-0` até o hover, mas "Fechar conversa" está no menu de toque longo da linha (§6.1) |
-| Notificações (caixa de entrada) | `chat/InboxPopover.tsx` (`modoTela`) | parcial → **ok** | "Marcar tudo como lido" e a pílula de pedidos mediam 31px |
-| Você | `components/mobile/telas-base.tsx` | **ok** | — (os dois botões de microfone/áudio ficam em 43px, a convenção do shell) |
+| Início — rail + canais do servidor | `components/mobile/telas-base.tsx` + `layout/GuildRail.tsx` + `layout/ChannelSidebar.tsx` | **ok** | rail de 72 com ícones de 48×48 em x=12, batendo com o `MEDIDAS.md` §4 (72,1 / 49,2 → 48). Os botões por linha de canal e a engrenagem da categoria continuam de `hover`, mas **as mesmas ações estão no menu de toque longo** (§6.1) — conferido: segurar a linha de `#geral` abre a folha com sete itens. A linha de canal mede 35px contra os 36pt do §5: é `h-9`, e cai na armadilha do `rem` descrita no topo |
+| Início — rail + lista de conversas | `layout/DMList.tsx` | **ok** | cabeçalho "Mensagens" com busca em botão redondo, caixa de entrada e a pílula "Adicionar amigos" (40×40 e 40 de altura), lista de conversas em 47px e o flutuante de nova conversa em 56×56. Os três alvos de 40 estão abaixo do piso de 44 — mas 40 é a medida da captura, e a tensão está registrada na §6.2 |
+| Notificações (caixa de entrada) | `chat/InboxPopover.tsx` (`modoTela`) | **ok** | mediam 31px os dois botões do topo; **zero alvos abaixo de 44** nesta tela agora |
+| Você | `components/mobile/telas-base.tsx` | **parcial** | "Editar status" e "Editar perfil" medem 39px (`h-10`) — a mesma armadilha do `rem`, no arquivo do dono do shell |
 
 ## 3. Telas empilhadas
 
 | tela | arquivo | antes | agora | o que faltava |
 |---|---|---|---|---|
-| Canal de texto | `chat/ChatView.tsx` + `MessageList` + `MessageItem` | parcial | **parcial** | a barra de ações do hover não existe no dedo — coberta pelo menu de toque longo (§4); busca, fixados e threads não têm entrada no celular (§5) |
+| Canal de texto | `chat/ChatView.tsx` + `MessageList` + `MessageItem` | parcial | **parcial** | a barra de ações do hover não existe no dedo — coberta pelo menu de toque longo (§4); busca, fixados e threads não têm entrada no celular (§5). No esqueleto novo o cabeçalho é `# nome ›` e **é o título que abre os membros**, não um ícone à direita; o alvo do título mede 331×28 |
 | **Conversa direta** | `chat/DMView.tsx` | **não** | **ok** | **o cartão de perfil de 320px era montado como coluna dentro da tela de 390 e espremia a conversa em 70px** — a timeline e o composer ficavam ilegíveis. A coluna 4 agora só existe no desktop; no celular ela é o painel deslizante |
-| **Amigos** | `friends/FriendsPage.tsx` | **não** | **ok** | **o cabeçalho media 553px numa tela de 390** e o shell o cortava: "Adicionar amigo" saía pela metade e as abas "Pendente" e "Bloqueado" ficavam inteiramente fora da tela, sem nenhum jeito de alcançá-las |
+| **Amigos** | `friends/FriendsPage.tsx` | **não** | **ok** | **o cabeçalho media 553px numa tela de 390** e o shell o cortava: "Adicionar amigo" saía pela metade e as abas "Pendente" e "Bloqueado" ficavam inteiramente fora da tela, sem nenhum jeito de alcançá-las. Chega-se a ela pela pílula "Adicionar amigos" do cabeçalho de conversas (antes era uma linha na lista); a fileira de abas continua rolando, com alvos de 44 — reconferido depois da troca de esqueleto |
 | Palco da chamada | `components/mobile/telas-de-conversa.tsx` + `VoicePanel` | **não** (não chegava lá) | **ok** (com o #180) | a base consertou o caminho: tocar num canal de voz abre o palco, com a grade e o botão para a conversa do canal no cabeçalho (`tela-de-voz-retrato.png`). Medi o palco **sem** o trabalho da chamada e anotei que faltava a barra de controles — era o `VoiceControls` do desktop, que se esconde por inatividade. **Resolvido no #180**, que põe um `ControlesMobile` de 68pt com seis botões (mudo, fone, câmera, tela, sons, desligar), a medida do `MEDIDAS.md` §12. Não reabrir |
 
 ## 4. Mensagem (`components/MessageItem.tsx`)
@@ -192,7 +200,8 @@ sempre visível e a moderação continuou no menu.
 
 ### 6.2 Defeitos nos arquivos dos outros (relatados, não consertados)
 
-Esta lista encolheu três vezes, e hoje tem **um** item aberto.
+Esta lista encolheu três vezes e voltou a crescer uma: a troca de esqueleto
+(`708038b`) fechou duas coisas e abriu três, que estão no fim da tabela.
 
 **A base** consertou três coisas (`0b5209d` e `2c5d583`): o toque longo no shell
 inteiro (§6.1), o canal de voz que abria a tela de texto em vez do palco, e o
@@ -215,7 +224,10 @@ se mediu aberto.
 | `components/modals/*` (moldura `Dialog`) | o "X" de fechar em 23px e os botões de rodapé em 39px (`modal-convite.png`, `modal-criar-canal.png`, `modal-nova-conversa.png`, `modal-quem-votou.png`) | **ok (com o #178).** Em duas partes: os modais de conteúdo (criar canal, enquete, convite, grupo, contas, emojis, som, adicionar pessoas) pedem `telaCheiaNoCelular` e no celular viram tela cheia, com cabeçalho de 56 e **seta de voltar de 44px no lugar do × de 24**. E o que continua sendo cartão centrado — confirmar, prompt, "quem votou", expulsar, banir — foi corrigido depois (`0acbc33`): × com alvo de 44×44 (glifo ainda 24, recuo compensado), `[&>button]:min-h-[44px]` no rodapé (pega até quem escreve o próprio `<button>`, como o link de convite, que nascia com 38) e `ALTURA_DE_TOQUE = "h-[44px]"` literal nos botões. Medido no iPhone 14 emulado, na confirmação de "Sair": × 44×44, "Sair" 93×44, "Cancelar" 93×44 |
 | `components/modals/CreatePollModal.tsx` | campos de pergunta e resposta com 22px de altura, botões de emoji com 31px (`criar-enquete.png`) | **ok (com o #178)** — está entre os que pedem tela cheia |
 | `components/chat/Composer.tsx` (compartilhado) | os três botões ("+", GIF, emoji) medem 39px | **ok (com o #178)** — 14 ramos `ehMobile`, e o menu do "+" ganhou "Galeria" e "Tirar foto" |
-| `components/mobile/telas-de-conversa.tsx` | o cabeçalho de 56px do canal só tem "voltar" e "membros" — **busca, fixados e threads não têm entrada nenhuma no celular** (§5) | **aberto — o único que importa.** Do dono do shell, pendência conhecida do #170, e deixada aberta de propósito nesta rodada: meia entrada de busca é pior que nenhuma, e o lugar dela depende de medir a captura do cabeçalho do Discord, que o acervo só tem em GIF |
+| `components/mobile/telas-de-conversa.tsx` | **busca, fixados e threads não têm entrada nenhuma no celular** (§5). No esqueleto novo o cabeçalho é `# nome ›` e nem lupa tem — de propósito: §6.6 diz que botão inerte só existe quando o Discord o tem **e** nós temos o que ele faz | **aberto.** Do dono do shell, pendência conhecida do #170, e deixada aberta de propósito nesta rodada: meia entrada de busca é pior que nenhuma, e o lugar dela depende de medir a captura do cabeçalho do Discord, que o acervo só tem em GIF |
+| `components/mobile/telas-base.tsx` | "Editar status" e "Editar perfil" na aba Você medem 39px (`h-10`) — a mesma armadilha do `rem` que o resto do shell já corrigiu | dono do shell |
+| `layout/DMList.tsx` (celular) | os três alvos do cabeçalho de conversas — busca, caixa de entrada e "Adicionar amigos" — medem **40**, que é a medida da captura `discord-mobile-dms-2024.png`, mas fica abaixo do piso de toque de 44. É o único lugar do app onde as duas metades da regra do topo se contradizem: o número é medida **e** deveria ser piso. Não é meu para decidir; registrado para quem escolher | dono do shell |
+| `DMChannelView` (contrato) | na captura, cada conversa mostra a **última mensagem** embaixo do nome; o nosso DTO não traz esse texto. Não é leiaute: precisa de campo novo no contrato e no DTO, ou seja `apps/api` — fora do escopo deste trabalho | pendência de API |
 | miudezas de 1px do `rem` | sobraram dois lugares onde a classe ainda decide um número que significa algo: a linha de canal em 35 contra os 36pt do `MEDIDAS.md` §5 (`h-9`) e o avatar da mensagem em 39 contra 40pt (`ui/Avatar.tsx`) | anotado, não consertado — cada um é 1px e mora em arquivo compartilhado com o desktop. **Os botões do composer saíram desta lista**: eram 39 de largura, e o `c86e528` da base os levou a 40×40 |
 | `components/voice/**` | o palco abre (depois do merge) e a grade cabe; eu tinha anotado que faltava a barra de controles | **ok (com o #180)** — `ControlesMobile` de 68pt. Chamada de DM e seletor de tela continuam não avaliados **por mim** |
 
@@ -238,7 +250,7 @@ de diferença no desktop em 1300×900.**
 | `components/MemberList.tsx` | linha de 60px (MEDIDAS §10), "Mensagem" sempre visível em 44, moderação escondida no celular, alvo do perfil na altura toda da linha |
 | `components/chat/DMMemberList.tsx` | linha de 60px, "remover do grupo" e "adicionar pessoas" sempre visíveis em 44 |
 | `components/chat/DMProfilePanel.tsx` | discos do canto em 44px, "Ver Perfil Completo" em 48 com área segura |
-| `components/layout/DMList.tsx` | busca de 31 para 44px, "+" de nova conversa de 20 para 44, linha "Amigos" para 48, cabeçalho para 56 |
+| ~~`components/layout/DMList.tsx`~~ | busca de 31 para 44, "+" de 20 para 44 e linha "Amigos" para 48 — **superados**: o `708038b` reescreveu a coluna de conversas no celular e já entrega os alvos, sem a linha "Amigos" e sem o título de seção. O conflito do merge foi resolvido inteiramente com a versão da base |
 | `components/chat/InboxPopover.tsx` | botões do topo da caixa de entrada em 44px |
 | `components/MessageItem.tsx` | barra de ações do hover desligada no celular, chips de reação e "+" em 44, botão de thread em 44 |
 | `components/polls/PollCard.tsx` | opções em 48px, "Quem votou"/"Encerrar" em 44 |
