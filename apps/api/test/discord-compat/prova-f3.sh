@@ -68,8 +68,13 @@ docker run --rm --network "$REDE" \
 
 echo
 echo "== 3b. discord.py (app_commands: defer + edit_original_response) =="
-# o cuid do /play, que é o que o composer manda (o snowflake é do bot)
-ID_DO_COMANDO="$(docker exec "$API_CONTAINER" node -e '
+# O cuid do /play, que é o que o composer manda (o snowflake é do bot).
+#
+# O `-w /w/apps/api` não é enfeite: `node -e` não tem arquivo, então a resolução
+# de módulo parte do diretório de trabalho, e `@prisma/client` mora sob
+# `apps/api`. Da raiz do monorepo dá `MODULE_NOT_FOUND`; os outros scripts
+# escapam disso porque são arquivos dentro de `apps/api/`.
+ID_DO_COMANDO="$(docker exec -w /w/apps/api "$API_CONTAINER" node -e '
   const { PrismaClient } = require("@prisma/client");
   const p = new PrismaClient();
   p.applicationCommand.findFirst({ where: { name: "play" }, select: { id: true } })

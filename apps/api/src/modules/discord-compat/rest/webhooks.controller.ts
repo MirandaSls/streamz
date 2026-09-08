@@ -121,20 +121,49 @@ export class WebhooksCompatController {
   // eles, um `interaction.webhook.editMessage(id, …)` cairia no 404 do Nest, com
   // o corpo `{statusCode, message}` que a lib lê como `code: 0`. Com eles, o bot
   // recebe um 501 `20012` dizendo o que falta.
+  //
+  // **E eles também atendem o `@original`, porque o discord.js manda `%40`.**
+  // Isto custou a prova 3 da fase: o `editReply()` sai como
+  // `PATCH …/messages/%40original` — o `@` vai percent-encoded —, e o Express
+  // casa a rota pelo caminho **cru**, decodificando `req.params` só depois. A
+  // rota literal `messages/@original` declarada acima portanto **não** casa com
+  // o que o discord.js manda, e o pedido caía aqui e levava 501 no lugar da
+  // edição. As duas formas existem porque as duas aparecem na natureza: o
+  // discord.py manda `@original` cru.
+  //
+  // Decodificar antes de comparar é o conserto, e é o mesmo cuidado que o
+  // `lerEmoji` do `messages.controller.ts` já tomava com as reações.
 
   @Get("messages/:mid")
-  async lerFollowup(): Promise<never> {
-    throw naoImplementado("GET /webhooks/:app/:token/messages/:id");
+  async lerFollowup(
+    @Param("app") app: string,
+    @Param("token") token: string,
+    @Param("mid") mid: string,
+  ): Promise<MensagemDoDiscord> {
+    if (!ehOriginal(mid)) throw naoImplementado("GET /webhooks/:app/:token/messages/:id");
+    return this.lerOriginal(app, token);
   }
 
   @Patch("messages/:mid")
-  async editarFollowup(): Promise<never> {
-    throw naoImplementado("PATCH /webhooks/:app/:token/messages/:id");
+  async editarFollowup(
+    @Param("app") app: string,
+    @Param("token") token: string,
+    @Param("mid") mid: string,
+    @Body(zodBody(dadosDeRespostaSchema)) dados: DadosDeResposta,
+  ): Promise<MensagemDoDiscord> {
+    if (!ehOriginal(mid)) throw naoImplementado("PATCH /webhooks/:app/:token/messages/:id");
+    return this.editarOriginal(app, token, dados);
   }
 
   @Delete("messages/:mid")
-  async apagarFollowup(): Promise<never> {
-    throw naoImplementado("DELETE /webhooks/:app/:token/messages/:id");
+  @HttpCode(204)
+  async apagarFollowup(
+    @Param("app") app: string,
+    @Param("token") token: string,
+    @Param("mid") mid: string,
+  ): Promise<void> {
+    if (!ehOriginal(mid)) throw naoImplementado("DELETE /webhooks/:app/:token/messages/:id");
+    await this.apagarOriginal(app, token);
   }
 
   // ── internos ───────────────────────────────────────────────
@@ -171,3 +200,23 @@ export class WebhooksCompatController {
 
 @Controller("v9/webhooks/:app/:token")
 export class WebhooksCompatControllerV9 extends WebhooksCompatController {}
+
+/**
+ * O `:mid` do caminho é a mensagem original?
+ *
+ * Aceita `@original` e `%40original`. O discord.js manda a segunda forma (o
+ * `@discordjs/rest` monta a rota com o `@` já escapado) e o discord.py manda a
+ * primeira; o Express casa rota pelo caminho cru, então a declaração literal
+ * `messages/@original` só pega uma das duas. Decodificar o que já está
+ * decodificado é inofensivo — um `%` solto faria o `decodeURIComponent` lançar,
+ * e aí o valor cru é a resposta certa.
+ */
+function ehOriginal(mid: string): boolean {
+  let decodificado = mid;
+  try {
+    decodificado = decodeURIComponent(mid);
+  } catch {
+    // caminho com `%` inválido: não é o `@original`, e não é erro nosso
+  }
+  return decodificado === "@original";
+}

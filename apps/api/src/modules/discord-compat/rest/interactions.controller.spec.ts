@@ -5,6 +5,7 @@ import type { NestExpressApplication } from "@nestjs/platform-express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { InteractionsService } from "../../interactions/interactions.service";
 import type { InteracaoAutenticada } from "../../interactions/tipos";
+import { DadosDeCompatService } from "../dados.service";
 import { interacaoDesconhecida, interacaoJaRespondida } from "../erros";
 import { InteractionCallbackCompatController } from "./interactions.controller";
 
@@ -21,8 +22,14 @@ import { InteractionCallbackCompatController } from "./interactions.controller";
  * global e `whitelist: true` ligados, `data.embeds`, `data.components` e
  * `data.flags` **têm** que chegar ao `responder`.
  *
- * O `InteractionsService` é um duplo: o lote A ainda o está preenchendo, e o que
- * se prova aqui é a casca — quem é chamado, com o quê, e o que vira status HTTP.
+ * O terceiro motivo nasceu da prova 3b da fase, com discord.py de verdade: a
+ * lib manda **`?with_response=1`** e *parseia o corpo* — com o 204 vazio ela
+ * morre em `TypeError: string indices must be integers` lá dentro, e o bot fica
+ * pendurado no `defer()` sem uma linha de log. Os testes de `with_response`
+ * abaixo são o que impede isso de voltar.
+ *
+ * O `InteractionsService` é um duplo: o que se prova aqui é a casca — quem é
+ * chamado, com o quê, e o que vira status HTTP.
  */
 
 const TOKEN = "u".repeat(86);
@@ -47,9 +54,24 @@ const porToken = vi.fn(async (token: string) => {
 });
 const responder = vi.fn(async () => {});
 
+/** Depois de responder, a interação tem a mensagem — é o que o `with_response` lê. */
+const porTokenDepois = vi.fn(async (token: string) => {
+  if (token !== TOKEN) throw interacaoDesconhecida();
+  return { ...INTERACAO, responseMessageId: "msg_1", respondedAt: new Date() };
+});
+
+const mensagemPorCuid = vi.fn(async () => ({ snowflake: 555n }));
+
+vi.mock("../traducao/mensagem", () => ({
+  mensagemParaDiscord: (m: { snowflake: bigint }) => ({ id: String(m.snowflake) }),
+}));
+
 @Module({
   controllers: [InteractionCallbackCompatController],
-  providers: [{ provide: InteractionsService, useValue: { porToken, responder } }],
+  providers: [
+    { provide: InteractionsService, useValue: { porToken, responder } },
+    { provide: DadosDeCompatService, useValue: { mensagemPorCuid } },
+  ],
 })
 class ModuloDeProva {}
 
@@ -83,6 +105,71 @@ describe("POST /api/v10/interactions/:id/:token/callback", () => {
   beforeEach(() => {
     porToken.mockClear();
     responder.mockClear();
+    mensagemPorCuid.mockClear();
+  });
+
+  // ── o `?with_response` (o que a prova 3b da fase pegou) ──────
+
+  it("sem `with_response` continua sendo 204 sem corpo", async () => {
+    const resposta = await callback(`/${String(INTERACAO.snowflake)}/${TOKEN}/callback`, {
+      type: 5,
+    });
+
+    expect(resposta.status).toBe(204);
+    expect(await resposta.text()).toBe("");
+  });
+
+  it("com `?with_response=1` devolve 200 e o InteractionCallbackResponse", async () => {
+    porToken.mockImplementationOnce(porTokenDepois).mockImplementationOnce(porTokenDepois);
+
+    const resposta = await callback(
+      `/${String(INTERACAO.snowflake)}/${TOKEN}/callback?with_response=1`,
+      { type: 5 },
+    );
+
+    expect(resposta.status, "204 aqui trava o defer() do discord.py").toBe(200);
+    // o `Content-Type` sem charset é o §5: o `json_or_text` do discord.py
+    // compara o cabeçalho por igualdade exata
+    expect(resposta.headers.get("content-type")).toBe("application/json");
+
+    const corpo = await resposta.json();
+    // o `_update` do discord.py lê `data['interaction']` **sem `.get`**
+    expect(corpo).toMatchObject({
+      interaction: {
+        id: String(INTERACAO.snowflake),
+        type: 2,
+        response_message_id: "555",
+        // type 5 é o "pensando…": a mensagem está carregando
+        response_message_loading: true,
+        response_message_ephemeral: false,
+      },
+      resource: { type: 5, message: { id: "555" } },
+    });
+  });
+
+  it("`with_response` de um callback tipo 4 não vem como carregando", async () => {
+    porToken.mockImplementationOnce(porTokenDepois).mockImplementationOnce(porTokenDepois);
+
+    const resposta = await callback(
+      `/${String(INTERACAO.snowflake)}/${TOKEN}/callback?with_response=true`,
+      { type: 4, data: { content: "pong" } },
+    );
+
+    expect(resposta.status).toBe(200);
+    expect(await resposta.json()).toMatchObject({
+      interaction: { response_message_loading: false },
+      resource: { type: 4 },
+    });
+  });
+
+  it("`with_response=0` e `false` valem como ausente (204)", async () => {
+    for (const valor of ["0", "false", ""]) {
+      const resposta = await callback(
+        `/${String(INTERACAO.snowflake)}/${TOKEN}/callback?with_response=${valor}`,
+        { type: 5 },
+      );
+      expect(resposta.status, `with_response=${valor}`).toBe(204);
+    }
   });
 
   it("um deferReply() sem cabeçalho nenhum responde 204 sem corpo", async () => {

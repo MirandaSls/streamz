@@ -102,6 +102,44 @@ describe("/api/v10/webhooks/:app/:token", () => {
     }
   });
 
+  // O defeito que a prova 3 da fase pegou e que nenhum teste desta suíte
+  // pegava: o `@discordjs/rest` manda `%40original`, e o Express casa rota pelo
+  // caminho **cru** — a rota literal `messages/@original` não pega essa forma.
+  // O `editReply()` de todo bot discord.js caía no 501 dos followups nomeados.
+  it("PATCH /messages/%40original (o que o discord.js manda de verdade) edita igual", async () => {
+    const resposta = await chamar(`/42/${TOKEN}/messages/%40original`, {
+      method: "PATCH",
+      body: JSON.stringify({ content: "pong" }),
+    });
+
+    expect(resposta.status, "501 aqui é o `%40` caindo no followup nomeado").toBe(200);
+    expect(await resposta.json()).toEqual({ id: "555" });
+    expect(editarOriginal).toHaveBeenCalledWith(
+      INTERACAO,
+      expect.objectContaining({ content: "pong" }),
+    );
+  });
+
+  it("GET e DELETE também aceitam o `%40original`", async () => {
+    expect((await chamar(`/42/${TOKEN}/messages/%40original`)).status).toBe(200);
+    expect(lerOriginal).toHaveBeenCalledWith(INTERACAO);
+
+    const apagou = await chamar(`/42/${TOKEN}/messages/%40original`, { method: "DELETE" });
+    expect(apagou.status).toBe(204);
+    expect(apagarOriginal).toHaveBeenCalledWith(INTERACAO);
+  });
+
+  it("um followup nomeado de verdade continua levando 501", async () => {
+    const resposta = await chamar(`/42/${TOKEN}/messages/1546965150089609227`, {
+      method: "PATCH",
+      body: JSON.stringify({ content: "editar followup é F5" }),
+    });
+
+    expect(resposta.status).toBe(501);
+    expect(await resposta.json()).toMatchObject({ code: 20012 });
+    expect(editarOriginal).not.toHaveBeenCalled();
+  });
+
   it("PATCH /messages/@original edita, sem cabeçalho nenhum, e devolve a mensagem", async () => {
     const resposta = await chamar(`/42/${TOKEN}/messages/@original`, {
       method: "PATCH",
