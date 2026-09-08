@@ -27,7 +27,18 @@ const TERMO: Record<TipoGatilho, RegExp> = {
   ":": /^[a-z0-9_]*$/,
   "@": /^[A-Za-z0-9_.-]*$/,
   "#": /^[a-z0-9_-]*$/,
-  "/": /^[a-z]*$/,
+  // ── j-bots ── era `/^[a-z]*$/`, e alargou na F3.
+  //
+  // Os comandos nativos são todos de letras, mas o nome de um comando de barra
+  // do Discord aceita `[-_a-z0-9]`, e um bot é livre para registrar `/play-next`
+  // ou `/r6stats`. Com o padrão antigo o popup **sumia no meio da digitação** —
+  // no instante do hífen ou do dígito — e o comando existia, era enviável, e o
+  // autocomplete escondia.
+  //
+  // Alargar é seguro porque a regra do `i !== 0` continua valendo logo abaixo:
+  // o `/` só é gatilho na primeira posição da mensagem. O que muda é apenas o
+  // que conta como termo **depois** dessa barra inicial.
+  "/": /^[a-z0-9_-]*$/,
 };
 
 /**

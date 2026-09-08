@@ -177,6 +177,51 @@ function ReplyReference({ message }: { message: Message }) {
 }
 
 /**
+ * ── j-bots ── "fulano usou /play", acima da resposta do bot.
+ *
+ * A resposta de um bot a um comando de barra chega ao canal **sem** nenhuma
+ * mensagem de quem pediu antes dela — uma interação não é mensagem. Sem esta
+ * faixa o chat mostraria o bot falando sozinho, e ninguém saberia quem mandou.
+ *
+ * Ela sobrevive ao F5 porque o `interacao` vem do `include` da mensagem, e não
+ * do payload do socket. O traço em "L" é o mesmo da resposta: as duas faixas
+ * ocupam o mesmo lugar e amarram a mensagem ao que veio antes dela.
+ */
+function InteractionReference({ message }: { message: Message }) {
+  const interacao = message.interacao;
+  const cor = useAuthorColor(interacao?.user.id ?? "");
+  if (!interacao) return null;
+
+  return (
+    <div className="relative flex items-center gap-1.5 pb-0.5 text-[13px] leading-[18px] text-txt-muted">
+      <span
+        aria-hidden="true"
+        className="absolute -left-10 bottom-[8px] h-3 w-10 rounded-tl-[6px] border-l-2 border-t-2 border-border-strong"
+      />
+      <button
+        type="button"
+        onClick={(e) => ui.openProfile(interacao.user, anchorOf(e.currentTarget))}
+        aria-label={`Perfil de ${displayNameOf(interacao.user)}`}
+        className="shrink-0 rounded-full transition hover:brightness-110"
+      >
+        <Avatar user={interacao.user} size="xs" />
+      </button>
+      <button
+        type="button"
+        onClick={(e) => ui.openProfile(interacao.user, anchorOf(e.currentTarget))}
+        style={cor ? { color: cor } : undefined}
+        className="shrink-0 font-medium text-txt-secondary hover:underline"
+      >
+        @{displayNameOf(interacao.user)}
+      </button>
+      <span className="truncate">
+        usou <span className="font-medium text-txt-secondary">/{interacao.name}</span>
+      </span>
+    </div>
+  );
+}
+
+/**
  * Uma mensagem, no leiaute do Discord: avatar de 40px à esquerda, nome e hora na
  * primeira linha, corpo (markdown, menções, prévia de link) abaixo. Quando
  * `grouped`, é a continuação da anterior (mesmo autor, poucos minutos) e só
@@ -498,6 +543,10 @@ export default function MessageItem({
   // "@ ligado" — a regra mora no contrato para os dois lados não divergirem
   const mentionsMe = !!me && !isOwn && ehMencaoParaMim(message, { ...me, roleIds: meusCargos });
 
+  // ── j-bots ── a faixa de resposta ou de comando de barra ocupa a primeira
+  // linha do bloco: com ela, a mensagem nunca é desenhada como continuação
+  const temFaixa = !!message.replyTo || !!message.interacao;
+
   const fundo = highlighted
     ? "bg-accent/20 hover:bg-accent/25"
     : mentionsMe
@@ -524,7 +573,7 @@ export default function MessageItem({
       onContextMenu={openMenu}
       // o respiro entre grupos é preferência do usuário (aba Aparência)
       style={
-        grouped && !message.replyTo
+        grouped && !temFaixa
           ? undefined
           : { marginTop: "var(--espaco-entre-grupos, 17px)" }
       }
@@ -534,7 +583,7 @@ export default function MessageItem({
         compacto ? "gap-1.5 pl-4" : "gap-4 pl-[80px]"
       } ${fundo} ${message.pending ? "opacity-60" : ""}`}
     >
-      {compacto ? null : grouped && !message.replyTo ? (
+      {compacto ? null : grouped && !temFaixa ? (
         // hora na calha, alinhada à direita e só no hover — como o Discord faz
         // com mensagens agrupadas
         <span
@@ -550,7 +599,7 @@ export default function MessageItem({
           onClick={openProfile}
           aria-label={`Perfil de ${displayNameOf(author)}`}
           className={`absolute left-5 rounded-full transition hover:brightness-110 ${
-            message.replyTo ? "top-[26px]" : "top-0.5"
+            temFaixa ? "top-[26px]" : "top-0.5"
           }`}
         >
           <Avatar user={author} size="lg" />
@@ -559,8 +608,9 @@ export default function MessageItem({
 
       <div className="min-w-0 flex-1">
         <ReplyReference message={message} />
+        <InteractionReference message={message} />
 
-        {(!grouped || message.replyTo) && !compacto && (
+        {(!grouped || temFaixa) && !compacto && (
           <div className="flex items-baseline gap-1.5 leading-[22px]">
             <button
               type="button"

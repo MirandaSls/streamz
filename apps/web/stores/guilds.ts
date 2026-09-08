@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
 import { useChannels } from "@/stores/channels";
+import { useComandosDeApp } from "@/stores/comandos-de-app";
 import { useMessages } from "@/stores/messages";
 import { useModeration } from "@/stores/moderation";
 import { usePermissions } from "@/stores/permissions";
@@ -145,6 +146,8 @@ export const useGuilds = create<GuildsState>((set, get) => {
       void usePermissions.getState().load(guild.id);
       // h-moderacao: castigo, regras e boas-vindas são por servidor
       void useModeration.getState().loadMembership(guild.id);
+      // j-bots: os comandos de barra dos bots também são por servidor
+      void useComandosDeApp.getState().loadForGuild(guild.id);
     },
 
     create: async () => {

@@ -36,6 +36,7 @@ import { AdminModule } from "./modules/admin/admin.module";
 // ── j-bots ──
 import { ApplicationsModule } from "./modules/applications/applications.module";
 import { DiscordCompatModule } from "./modules/discord-compat/discord-compat.module";
+import { InteractionsModule } from "./modules/interactions/interactions.module";
 import { UpdatesModule } from "./modules/updates/updates.module";
 import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis";
 import { redisClient } from "./modules/realtime/redis";
@@ -101,6 +102,10 @@ import { validateEnv } from "./common/env";
     // a casca /api/v10 e /api/v9 que os bots do Discord falam; o REST de
     // sempre não muda em nada
     DiscordCompatModule,
+    // comandos de barra e interações (F3). Importa o DiscordCompatModule e
+    // registra os controllers de compat que dependem do InteractionsService —
+    // o porquê está no comentário do próprio módulo.
+    InteractionsModule,
   ],
   controllers: [HealthController],
   // guard global: o teto padrão vale para toda rota; ver common/throttle.ts

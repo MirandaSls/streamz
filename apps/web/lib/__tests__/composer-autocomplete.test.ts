@@ -28,6 +28,18 @@ describe("detectarGatilho", () => {
     expect(no("caminho /usr")).toBeNull();
   });
 
+  // ── j-bots ── o nome de um comando de barra do Discord aceita `[-_a-z0-9]`,
+  // e um bot pode registrar `/play-next`. Com o padrão antigo (`[a-z]*`) o
+  // popup sumia no instante do hífen ou do dígito, escondendo um comando que
+  // existe e que o composer aceita enviar.
+  it("aceita hífen, dígito e sublinhado no nome do comando (comandos de bot)", () => {
+    expect(no("/play-next")).toMatchObject({ tipo: "/", termo: "play-next" });
+    expect(no("/r6stats")).toMatchObject({ tipo: "/", termo: "r6stats" });
+    expect(no("/nota_fiscal")).toMatchObject({ tipo: "/", termo: "nota_fiscal" });
+    // o espaço continua fechando o popup: é onde o argumento começa
+    expect(no("/play never gonna")).toBeNull();
+  });
+
   it("não abre no meio de uma palavra", () => {
     expect(no("email@dominio")).toBeNull();
     expect(no("10:30:00")).toBeNull();

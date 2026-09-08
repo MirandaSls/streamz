@@ -49,6 +49,13 @@ export const CODIGO = {
   MEMBRO_DESCONHECIDO: 10007,
   CARGO_DESCONHECIDO: 10011,
   INTERACAO_DESCONHECIDA: 10062,
+  /**
+   * `Unknown application command` — o comando de barra que o bot pediu não
+   * existe naquele escopo. Entrou na integração da F3: sem ele o 404 saía com
+   * `code: 0`, e é justamente o código que a lib do bot usa para distinguir
+   * "esse comando eu apaguei" de "deu ruim no servidor".
+   */
+  COMANDO_DESCONHECIDO: 10063,
   INTERACAO_JA_RESPONDIDA: 40060,
   SEM_ACESSO: 50001,
   NAO_AUTENTICADO: 50014,
@@ -95,6 +102,35 @@ export const semPermissao = () =>
 
 export const corpoInvalido = (errors?: ErrosPorCampo) =>
   new ErroDoDiscord(HttpStatus.BAD_REQUEST, CODIGO.CORPO_INVALIDO, "Invalid Form Body", errors);
+
+/**
+ * ── F3 ── 404 `10062`: o token do caminho não achou interação nenhuma.
+ *
+ * É a resposta de **três** casos, e de propósito: token que não existe, token
+ * vencido (> 15 min) e token cujo `:id`/`:app` do caminho não bate com a linha.
+ * O terceiro poderia ser 403, e não é: para quem não tem o token, a interação
+ * não existe — dizer "existe, mas não é sua" já seria contar demais.
+ *
+ * O texto é o do Discord, letra por letra: o `interactionCreate` de muito bot
+ * loga `error.message` cru, e "Unknown interaction" é o que o dono do bot vai
+ * procurar no Google.
+ */
+export const interacaoDesconhecida = () =>
+  new ErroDoDiscord(HttpStatus.NOT_FOUND, CODIGO.INTERACAO_DESCONHECIDA, "Unknown interaction");
+
+/**
+ * ── F3 ── 400 `40060`: já houve um callback nesta interação.
+ *
+ * O discord.js classifica este código e transforma num
+ * `InteractionAlreadyReplied`; um bot que chama `reply()` depois de
+ * `deferReply()` tem um defeito, e é este erro que o diz.
+ */
+export const interacaoJaRespondida = () =>
+  new ErroDoDiscord(
+    HttpStatus.BAD_REQUEST,
+    CODIGO.INTERACAO_JA_RESPONDIDA,
+    "Interaction has already been acknowledged.",
+  );
 
 /**
  * O 401 do Discord, letra por letra.

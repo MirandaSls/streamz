@@ -40,6 +40,7 @@ import { toStickerDTO, type StickerRow } from "../emojis/dto";
 import { toAttachmentDTO, type AttachmentRow } from "../uploads/attachment-dto";
 import { EmojisService } from "../emojis/emojis.service";
 import { StickersService } from "../emojis/stickers.service";
+import { INTERACAO_DA_MENSAGEM_INCLUDE, toInteracaoDaMensagem } from "../interactions/dto";
 
 const MESSAGE_INCLUDE = {
   author: true,
@@ -64,6 +65,10 @@ const MESSAGE_INCLUDE = {
   thread: true,
   // h-moderacao: a enquete é uma face da mensagem, não uma mensagem à parte
   poll: { include: { votes: { select: { optionIndex: true, userId: true } } } },
+  // ── j-bots ── a faixa "@fulano usou /play" acima da resposta de um bot.
+  // Back-relation: a `Message` não tem coluna nenhuma para isto (ver
+  // `interactions/dto.ts`).
+  interacao: INTERACAO_DA_MENSAGEM_INCLUDE,
 } as const;
 
 type MessageRow = Prisma.MessageGetPayload<{ include: typeof MESSAGE_INCLUDE }>;
@@ -688,6 +693,9 @@ export class MessagesService {
       // DTO não conhece o espectador) e é preenchido por
       // GET /channels/:id/polls/votes — ver PollsService.
       poll: m.poll ? tallyPoll(m.poll, m.poll.votes) : null,
+      // ── j-bots ── null em toda mensagem que não veio de um comando de barra,
+      // que é quase todas
+      interacao: toInteracaoDaMensagem(m.interacao),
     };
   }
 
