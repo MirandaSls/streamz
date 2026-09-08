@@ -207,7 +207,9 @@ export default function TelaCheiaDeVideo({
           top: "calc(env(safe-area-inset-top, 0px) + 8px)",
           right: "calc(env(safe-area-inset-right, 0px) + 8px)",
         }}
-        className="absolute grid h-11 w-11 place-items-center rounded-full bg-black/60 text-white backdrop-blur transition active:bg-black/80"
+        // 44 entre colchetes, e não `h-11`: a raiz do app é 15,5px e a escala
+        // `rem` do Tailwind entregaria 42,6 — abaixo do piso de toque
+        className="absolute grid h-[44px] w-[44px] place-items-center rounded-full bg-black/60 text-white backdrop-blur transition active:bg-black/80"
       >
         <X size={24} />
       </button>

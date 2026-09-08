@@ -354,7 +354,10 @@ export function VoiceTile({
           movimento, e o rosto de hoje não é o de ontem. */}
       <span
         className={`pointer-events-none absolute flex items-center gap-1.5 rounded-lg bg-black/50 text-white transition-opacity ${
-          rotuloPequeno ? "h-5 px-1.5 text-[11px]" : "h-8 px-2 text-sm"
+          // 20px literal: `h-5` daria 19,4 com a raiz de 15,5. O ramo de 32
+          // continua em `h-8` porque é o do **desktop**, e mexer nele moveria
+          // um pixel numa tela que este trabalho não pode tocar.
+          rotuloPequeno ? "h-[20px] px-[6px] text-[11px]" : "h-8 px-2 text-sm"
         } ${
           compacto ? "bottom-1 left-1 max-w-[calc(100%-8px)]" : "bottom-3 left-3 max-w-[calc(100%-24px)]"
         } ${

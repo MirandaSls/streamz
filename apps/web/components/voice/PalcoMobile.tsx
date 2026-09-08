@@ -6,9 +6,11 @@ import { Maximize, RefreshCw } from "@/components/ui/icones";
 import TelaCheiaDeVideo from "@/components/voice/TelaCheiaDeVideo";
 import { VoiceTile, type AcoesDoTile, type Tile } from "@/components/voice/TileDeVoz";
 import {
+  ALVO_MINIMO,
   FAIXA_ALTURA_MOBILE,
   FAIXA_GAP_MOBILE,
   FAIXA_LARGURA_MOBILE,
+  PALCO_MARGEM,
   dividirPalco,
   podeAbrirEmTelaCheia,
 } from "@/components/voice/palco-mobile";
@@ -26,13 +28,14 @@ import { useVoiceDevices } from "@/stores/voiceDevices";
  * que todo aplicativo de chamada resolve, e é o que está aqui: **um** tile
  * ocupa a área útil e os outros viram miniaturas numa faixa que rola de lado.
  *
- * Medidas (`docs/Reference/mobile/MEDIDAS.md` §12, `discord-mobile-call.png` a
- * 1,8779 px/pt): margem lateral dos tiles ~32px de tela cheia = **16pt de cada
- * lado** no par empilhado; raio do tile **≈16**; fundo do palco **preto**
- * (`#000000` — aqui `bg-void`, que é o preto que o projeto já tem: §6.6, a
- * paleta não muda). O tamanho da faixa **não é medido** — não há print do
- * Discord com destaque + faixa no telefone —, e está registrado como tal em
- * `palco-mobile.ts`.
+ Medidas (`docs/Reference/mobile/MEDIDAS.md` §12, `discord-mobile-call.png` a
+ * 1,8779 px/pt): **raio do tile ≈16** e fundo do palco **preto** (`#000000` —
+ * aqui `bg-void`, o preto que o projeto já tem: §6.6, a paleta não muda). A
+ * margem lateral de ~31pt do print **não** vale aqui: ela é do leiaute de dois
+ * tiles empilhados, onde sobra largura; num destaque que já é o maior quadro
+ * possível ela custaria 62 dos 390. A nossa é 12 (`PALCO_MARGEM`), e o tamanho
+ * da faixa **não é medido** — não há print do Discord com destaque + faixa no
+ * telefone —, o que está registrado em `palco-mobile.ts`.
  *
  * ## O que um toque faz
  *
@@ -125,7 +128,10 @@ export default function PalcoMobile({
           type="button"
           onClick={() => setEmTelaCheia(principal.key)}
           aria-label={`Ver ${displayNameOf(principal.state.user)} em tela cheia`}
-          className="absolute left-2 top-2 grid h-11 w-11 place-items-center rounded-full bg-black/50 text-white backdrop-blur transition active:bg-black/70"
+          // 44 em px: `h-11` desenharia 42,6 com a raiz de 15,5 (ver
+          // `palco-mobile.ts`), e 42,6 fica **abaixo** do piso de toque
+          style={{ height: ALVO_MINIMO, width: ALVO_MINIMO }}
+          className="absolute left-2 top-2 grid place-items-center rounded-full bg-black/50 text-white backdrop-blur transition active:bg-black/70"
         >
           <Maximize size={20} />
         </button>
@@ -140,14 +146,21 @@ export default function PalcoMobile({
 
   const tira = faixa.length > 0 && (
     <div
-      // `-mx-3 px-3`: a rolagem chega às bordas da tela (o último tile não fica
-      // preso atrás de um padding), mas o primeiro nasce alinhado com o resto
-      className={`flex shrink-0 gap-2 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
+      className={`flex shrink-0 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
         paisagem
-          ? "pointer-events-auto absolute inset-x-0 bottom-0 z-10 px-3 pb-2"
-          : "-mx-3 px-3 pt-2"
+          ? "pointer-events-auto absolute inset-x-0 bottom-0 z-10 pb-2"
+          : "pt-2"
       }`}
-      style={{ height: paisagem ? FAIXA_ALTURA_MOBILE * 0.8 + 8 : FAIXA_ALTURA_MOBILE, gap: FAIXA_GAP_MOBILE }}
+      // `-mx`/`px` em px pelo mesmo motivo das alturas; a rolagem chega às
+      // bordas da tela e o primeiro tile nasce alinhado com o destaque
+      style={{
+        height: paisagem ? FAIXA_ALTURA_MOBILE * 0.8 + 8 : FAIXA_ALTURA_MOBILE,
+        gap: FAIXA_GAP_MOBILE,
+        marginLeft: paisagem ? 0 : -PALCO_MARGEM,
+        marginRight: paisagem ? 0 : -PALCO_MARGEM,
+        paddingLeft: PALCO_MARGEM,
+        paddingRight: PALCO_MARGEM,
+      }}
     >
       {faixa.map((t) => (
         <div
@@ -176,19 +189,21 @@ export default function PalcoMobile({
     <>
       <div
         data-palco-mobile
+        // a folga lateral em px (`px-3` daria 11,6 com a raiz de 15,5)
+        style={paisagem ? undefined : { paddingLeft: PALCO_MARGEM, paddingRight: PALCO_MARGEM }}
         className={
           paisagem
             ? // Deitado a cápsula de controles **flutua sobre o vídeo** e se
               // esconde sozinha: reservar 88pt embaixo numa tela de 390 de
               // altura deixava uma faixa morta de um quarto do aparelho.
               "relative h-full min-h-0 w-full bg-void"
-            : // Em pé a cápsula é fixa, então o palco lhe reserva a altura
-              // (68 da barra + 8 de folga + 12) mais a área segura. A reserva é
-              // daqui, e não do `VoicePanel`, porque ela depende da orientação.
-              // 88 sem `env(safe-area-inset-bottom)`: a área segura já é paga
-              // uma vez pela `TelaEmpilhada`, e somá-la de novo aqui roubaria
-              // 34pt de vídeo num iPhone.
-              "flex h-full min-h-0 w-full flex-col bg-void px-3 pb-[88px]"
+            : // Em pé a cápsula é fixa, então o palco lhe reserva a altura:
+              // 68 da barra + 8 do rodapé dela + 12 de respiro = 88, em px
+              // literais. A reserva mora aqui, e não no `VoicePanel`, porque
+              // depende da orientação — e **sem** `env(safe-area-inset-bottom)`,
+              // que a `TelaEmpilhada` já paga uma vez por toda tela do celular
+              // (somá-la de novo roubaria 34pt de vídeo num iPhone).
+              "flex h-full min-h-0 w-full flex-col bg-void pb-[88px]"
         }
       >
         {destaque}
@@ -253,7 +268,8 @@ function BotaoDeVirarCamera({ deslocado = false }: { deslocado?: boolean }) {
       type="button"
       onClick={() => void virarCamera()}
       aria-label={label}
-      className={`absolute top-2 grid h-11 w-11 place-items-center rounded-full bg-black/50 text-white backdrop-blur transition active:bg-black/70 ${
+      style={{ height: ALVO_MINIMO, width: ALVO_MINIMO }}
+      className={`absolute top-2 grid place-items-center rounded-full bg-black/50 text-white backdrop-blur transition active:bg-black/70 ${
         deslocado ? "left-[60px]" : "left-2"
       }`}
     >

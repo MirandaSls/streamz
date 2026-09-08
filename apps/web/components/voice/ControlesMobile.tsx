@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/icones";
 import PainelDeSons from "@/components/voice/PainelDeSons";
 import { microfoneAbrindo } from "@/components/voice/estado-do-microfone";
-import { BARRA_ALTURA, BARRA_MARGEM } from "@/components/voice/palco-mobile";
+import { BARRA_ALTURA, BARRA_MARGEM, BOTAO } from "@/components/voice/palco-mobile";
 import { useEhPaisagem } from "@/hooks/useOrientacao";
 import {
   SEM_CAPTURA_DE_TELA,
@@ -51,7 +51,8 @@ const useEfeitoDeLeiaute = typeof window === "undefined" ? useEffect : useLayout
  * - **44pt de alvo**, e não 42. É o piso do HIG e do Material e o mesmo número
  *   do resto do leiaute (`BotaoDeToque`); dois pontos não mudam o desenho e
  *   mudam o acerto do polegar. O círculo desenhado tem 48, dentro dos 68 da
- *   barra.
+ *   barra. Os dois saem de `palco-mobile.ts` em px, e não de `h-11`/`h-12`:
+ *   com a raiz de 15,5px a escala `rem` do Tailwind entrega 42,6 e 46,5.
  *
  * A barra fica **acima da área segura**: o print mede 34pt entre a base dela e
  * a base da tela, que é exatamente o indicador de home do iPhone. Quem paga
@@ -270,7 +271,11 @@ function BotaoDaBarra({
       aria-label={label}
       aria-pressed={pressionado}
       aria-disabled={apagado || undefined}
-      className={`grid h-12 w-12 shrink-0 place-items-center rounded-full transition ${TOM[tom]} ${
+      // `style`, e não `h-12`: a raiz do app é 15,5px e a escala do Tailwind é
+      // `rem`, então `h-12` desenha 46,5 e não 48 — 3% a menos que o número
+      // deste arquivo. Medida em px é px (ver `palco-mobile.ts`).
+      style={{ height: BOTAO, width: BOTAO }}
+      className={`grid shrink-0 place-items-center rounded-full transition ${TOM[tom]} ${
         apagado ? "opacity-40" : ""
       }`}
     >

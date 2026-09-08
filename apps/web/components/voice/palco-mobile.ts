@@ -83,10 +83,23 @@ export function podeAbrirEmTelaCheia(tile: Pick<TileDoPalco, "comVideo">): boole
  * o mesmo número que o resto do leiaute de celular já usa (`BotaoDeToque`).
  * Dois pontos a mais que o Discord em cima de uma barra de 68 não mudam o
  * desenho e mudam o acerto do polegar.
+ *
+ * **Estes números são px, e por isso são números.** A raiz do app é
+ * `font-size: 15.5px` (ver `globals.css`) e toda classe de tamanho do Tailwind
+ * é `rem`: `h-11` vale **42,6** e não 44; `h-12` vale **46,5** e não 48.
+ * Escrever uma medida como classe de escala é escrever um valor 3% menor que o
+ * do comentário ao lado. Então o que é **medida ou piso** sai daqui, por
+ * `style`, e não de `h-11`. Conferido com `getBoundingClientRect` no aparelho
+ * emulado, que é o único jeito de saber — ler a classe não é medir.
  */
 export const BARRA_ALTURA = 68;
 export const BARRA_MARGEM = 13;
-export const BOTAO = 44;
+/** O círculo desenhado dos botões da barra; cabe nos 68 com 10 de folga. */
+export const BOTAO = 48;
+/** Piso de alvo de toque (Apple HIG e Material); vale para todo botão do palco. */
+export const ALVO_MINIMO = 44;
+/** Folga lateral do palco. Ver `PalcoMobile` — não é a margem do print. */
+export const PALCO_MARGEM = 12;
 
 /**
  * A faixa de miniaturas. Não há print do Discord com ela no telefone (a captura
