@@ -28,6 +28,15 @@ export interface PublicUser {
   customStatusText: string | null;
   /** emoji do status personalizado. */
   customStatusEmoji: string | null;
+  /**
+   * Conta de bot: a pílula "BOT" ao lado do nome, e as regras de produto que
+   * caem dela. Ver `docs/BOTS-COMPATIVEIS-COM-O-DISCORD.md` §11.
+   *
+   * Opcional porque o campo nasceu depois do contrato: um payload antigo, em
+   * cache no cliente, não o traz, e `undefined` ali quer dizer "não é bot". A
+   * API sempre preenche (`toPublicUser`).
+   */
+  bot?: boolean;
 }
 
 /** Nome a mostrar na tela: displayName, senão username. */
