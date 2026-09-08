@@ -1,6 +1,9 @@
 import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
 import { ApplicationsService } from "../applications/applications.service";
+import { tokenDoCabecalho } from "../applications/token";
+import { naoAutenticado } from "./erros";
 import { IdsService } from "./ids.service";
+import type { RequisicaoDeBot } from "./tipos";
 
 /**
  * `Authorization: Bot <token>` → `req.bot` (`BotAutenticado`).
@@ -26,7 +29,33 @@ export class BotTokenGuard implements CanActivate {
     private readonly ids: IdsService,
   ) {}
 
-  async canActivate(_contexto: ExecutionContext): Promise<boolean> {
-    throw new Error("F1 lote A: BotTokenGuard não implementado");
+  async canActivate(contexto: ExecutionContext): Promise<boolean> {
+    const req = contexto.switchToHttp().getRequest<RequisicaoDeBot>();
+
+    // um `Authorization` repetido chega como array; token nenhum tem essa forma,
+    // e juntar dois valores só produziria um hash que não existe no banco
+    const cabecalho = req.headers?.authorization;
+    const token = tokenDoCabecalho(typeof cabecalho === "string" ? cabecalho : undefined);
+    if (!token) throw naoAutenticado();
+
+    const encontrado = await this.apps.verificarToken(token);
+    if (!encontrado) throw naoAutenticado();
+
+    // O snowflake do usuário-bot vem do `IdsService`, e **não** da parte 1 do
+    // token: aquela é informação pública escolhida por quem manda o cabeçalho, e
+    // lê-la aqui deixaria a resposta de `users/@me` sob controle do portador.
+    const botSnowflake = await this.ids.snowflakeDeUsuario(encontrado.botUserId);
+    // usuário-bot apagado com o token ainda de pé: 401, não 500 — para a lib é
+    // exatamente o que é, uma credencial que não vale mais
+    if (botSnowflake === null) throw naoAutenticado();
+
+    req.bot = {
+      applicationId: encontrado.application.id,
+      applicationSnowflake: encontrado.application.snowflake,
+      applicationName: encontrado.application.name,
+      botUserId: encontrado.botUserId,
+      botSnowflake,
+    };
+    return true;
   }
 }
