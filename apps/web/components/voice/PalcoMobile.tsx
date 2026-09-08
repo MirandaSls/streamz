@@ -185,7 +185,10 @@ export default function PalcoMobile({
             : // Em pé a cápsula é fixa, então o palco lhe reserva a altura
               // (68 da barra + 8 de folga + 12) mais a área segura. A reserva é
               // daqui, e não do `VoicePanel`, porque ela depende da orientação.
-              "flex h-full min-h-0 w-full flex-col bg-void px-3 pb-[calc(88px+env(safe-area-inset-bottom,0px))]"
+              // 88 sem `env(safe-area-inset-bottom)`: a área segura já é paga
+              // uma vez pela `TelaEmpilhada`, e somá-la de novo aqui roubaria
+              // 34pt de vídeo num iPhone.
+              "flex h-full min-h-0 w-full flex-col bg-void px-3 pb-[88px]"
         }
       >
         {destaque}

@@ -53,9 +53,10 @@ const useEfeitoDeLeiaute = typeof window === "undefined" ? useEffect : useLayout
  *   mudam o acerto do polegar. O círculo desenhado tem 48, dentro dos 68 da
  *   barra.
  *
- * A barra fica **acima da área segura** (`env(safe-area-inset-bottom)`): o
- * print mede 34pt entre a base dela e a base da tela, que é exatamente o
- * indicador de home do iPhone.
+ * A barra fica **acima da área segura**: o print mede 34pt entre a base dela e
+ * a base da tela, que é exatamente o indicador de home do iPhone. Quem paga
+ * esse `env(safe-area-inset-bottom)` é a `TelaEmpilhada` que envolve toda tela
+ * do celular — aqui sobra só a folga de 8.
  *
  * ## Retrato e paisagem
  *
@@ -93,7 +94,11 @@ export default function ControlesMobile({
         height: BARRA_ALTURA,
         left: BARRA_MARGEM,
         right: BARRA_MARGEM,
-        bottom: "calc(env(safe-area-inset-bottom, 0px) + 8px)",
+        // 8, e não `8 + env(safe-area-inset-bottom)`: a moldura da tela
+        // empilhada (`TelaEmpilhada`) já paga a área segura por todo mundo, e
+        // somá-la de novo aqui levantaria a cápsula 34pt acima do indicador de
+        // home num iPhone — o dobro da folga que o print mostra.
+        bottom: 8,
       }}
       className={`absolute z-20 flex items-center justify-between rounded-full bg-overlay/95 px-2.5 shadow-high backdrop-blur transition-opacity duration-200 ${
         escondida ? "pointer-events-none opacity-0" : "opacity-100"
