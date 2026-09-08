@@ -6,6 +6,7 @@ import { AppModule } from "./app.module";
 import { CORS_OPTIONS } from "./common/cors";
 import { StructuredLogger, requestIdMiddleware } from "./common/logger";
 import { metricsMiddleware } from "./common/metrics";
+import { GatewayCompatService } from "./modules/discord-compat/gateway/servidor";
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -42,6 +43,14 @@ async function bootstrap() {
   // 0.0.0.0 é obrigatório dentro do contêiner: preso ao loopback, o mapeamento
   // de porta do Docker não alcança o processo.
   await app.listen(port, process.env.API_HOST ?? "0.0.0.0");
+
+  // ── j-bots ── o gateway compatível com o Discord (`ws` cru) assume o
+  // `'upgrade'` de `/gateway` no MESMO servidor HTTP. O Socket.IO continua em
+  // `/socket.io` sem saber que existe outro; o Traefik roteia por Host, então
+  // nada muda em /opt/stack/traefik. Depois do `listen()` porque é aí que o
+  // servidor HTTP existe e já está escutando.
+  app.get(GatewayCompatService).ligar(app.getHttpServer());
+
   new Logger("Bootstrap").log(`API no ar em http://localhost:${port}/api`);
 }
 
