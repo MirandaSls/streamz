@@ -8,6 +8,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
+import { aplicarContentTypeDoDiscord } from "./content-type";
 
 /**
  * O mínimo do `Response` do Express que o filtro usa.
@@ -19,6 +20,7 @@ import {
 interface RespostaHttp {
   status(codigo: number): RespostaHttp;
   json(corpo: unknown): void;
+  setHeader(nome: string, valor: string): unknown;
 }
 
 /**
@@ -120,6 +122,10 @@ export const naoImplementado = (o_que: string) =>
 export class FiltroDeErrosDoDiscord implements ExceptionFilter {
   catch(excecao: unknown, host: ArgumentsHost) {
     const resposta = host.switchToHttp().getResponse<RespostaHttp>();
+    // Também aqui, e não só no interceptor: o guard corre **antes** do
+    // interceptor, então a recusa de token (o 401) nunca passaria por lá — e é
+    // justamente a primeira resposta que um bot recebe. Ver `content-type.ts`.
+    aplicarContentTypeDoDiscord(resposta);
     const { status, corpo } = traduzirExcecao(excecao);
     resposta.status(status).json(corpo);
   }

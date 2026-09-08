@@ -12,7 +12,12 @@ import { RateLimitDoDiscordInterceptor } from "./rate-limit.interceptor";
 import { PonteDeEventos } from "./gateway/dispatch";
 import { RegistroDeSessoes } from "./gateway/sessao";
 import { GatewayCompatService } from "./gateway/servidor";
-import { ApplicationsCompatController, ApplicationsCompatControllerV9 } from "./rest/applications.controller";
+import {
+  ApplicationsCompatController,
+  ApplicationsCompatControllerV9,
+  OAuth2ApplicationsCompatController,
+  OAuth2ApplicationsCompatControllerV9,
+} from "./rest/applications.controller";
 import { ChannelsCompatController, ChannelsCompatControllerV9 } from "./rest/channels.controller";
 import { GatewayCompatController, GatewayCompatControllerV9 } from "./rest/gateway.controller";
 import { GuildsCompatController, GuildsCompatControllerV9 } from "./rest/guilds.controller";
@@ -53,6 +58,9 @@ import { UsersCompatController, UsersCompatControllerV9 } from "./rest/users.con
     UsersCompatControllerV9,
     ApplicationsCompatController,
     ApplicationsCompatControllerV9,
+    // `/oauth2/applications/@me` é a rota que o discord.py chama no login
+    OAuth2ApplicationsCompatController,
+    OAuth2ApplicationsCompatControllerV9,
     GuildsCompatController,
     GuildsCompatControllerV9,
     ChannelsCompatController,

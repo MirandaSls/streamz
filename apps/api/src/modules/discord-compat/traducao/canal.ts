@@ -36,6 +36,9 @@ const TIPO_NO_DISCORD: Record<ChannelType, number> = {
   ANNOUNCEMENT: 5,
 };
 
+/** O padrão do Discord, em bits por segundo. Ver `canalParaDiscord`. */
+const BITRATE_PADRAO = 64_000;
+
 /** `GUILD_CATEGORY`. A categoria é tabela nossa e canal no Discord. */
 export const TIPO_DE_CATEGORIA_NO_DISCORD = 4;
 
@@ -73,6 +76,23 @@ export function canalParaDiscord(c: LinhaDeCanal): CanalDoDiscord {
     permission_overwrites: [],
   };
   if (c.guildSnowflake !== null) canal.guild_id = String(c.guildSnowflake);
+
+  // Canal de voz: `bitrate` e `user_limit` são **obrigatórios** no discord.py
+  // (`VocalGuildChannel._update` os lê sem `.get`), e sem eles o `GUILD_CREATE`
+  // inteiro levanta `KeyError` lá dentro — o bot conecta, não dá erro, e o
+  // `ready` nunca dispara. É o risco (a) do §12 acontecendo de verdade: a prova
+  // 4 da F1 falhou exatamente aqui.
+  //
+  // Os valores são fixos porque o Streamz não tem taxa nem lotação por canal: a
+  // qualidade quem decide é o LiveKit, e não há limite de gente. 64 kbps e 0
+  // ("sem limite") são os padrões do Discord, que é a tradução honesta de
+  // "não configurável".
+  if (c.type === "VOICE") {
+    canal.bitrate = BITRATE_PADRAO;
+    canal.user_limit = 0;
+    canal.rtc_region = null;
+  }
+
   return canal;
 }
 

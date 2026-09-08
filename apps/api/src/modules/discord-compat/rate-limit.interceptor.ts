@@ -1,6 +1,7 @@
 import { CallHandler, ExecutionContext, HttpStatus, Injectable, NestInterceptor } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import type { Observable } from "rxjs";
+import { aplicarContentTypeDoDiscord } from "./content-type";
 import { CODIGO, ErroDoDiscord } from "./erros";
 import type { RequisicaoDeBot } from "./tipos";
 
@@ -127,6 +128,11 @@ export class RateLimitDoDiscordInterceptor implements NestInterceptor {
 
     const restantesAntes = Math.max(0, TETO_POR_SEGUNDO - balde.usadas);
     const faltaMs = Math.max(0, balde.reiniciaEm - agora);
+
+    // `application/json` sem `; charset=utf-8`: o discord.py compara o cabeçalho
+    // por igualdade exata e, com o charset, entrega **todo** corpo como string.
+    // Ver `content-type.ts` — foi o que reprovou a prova 4 da F1.
+    aplicarContentTypeDoDiscord(res);
 
     res.setHeader("X-RateLimit-Limit", String(TETO_POR_SEGUNDO));
     res.setHeader("X-RateLimit-Bucket", bucketDaRota(contexto, req));

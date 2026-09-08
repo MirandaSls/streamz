@@ -69,6 +69,24 @@ export class RealtimeService {
     }
   }
 
+  /**
+   * Avisa os ouvintes **sem** emitir no Socket.IO.
+   *
+   * Existe para um caso só, e é melhor tê-lo explícito do que ver alguém
+   * "consertar" o outro: o `typing` do chat sai por `client.to(sala)`, que
+   * exclui de propósito quem está digitando — trocá-lo por `emitToChannel`
+   * faria o próprio autor receber o próprio "está digitando". Então o navegador
+   * continua sendo servido por `client.to`, e o gateway dos bots é avisado por
+   * aqui.
+   *
+   * Não use isto para nada mais: se o evento vai para o navegador, ele tem que
+   * passar por um dos `emit*` — é lá que a notificação anda junto sem ninguém
+   * precisar lembrar.
+   */
+  notificarOuvintes(alvo: AlvoDoEvento, evento: string, dado: unknown) {
+    this.notificar(alvo, evento, dado);
+  }
+
   bind(server: Server) {
     this.server = server;
     // Métrica de sockets: registrada aqui porque é onde o `Server` vive — o

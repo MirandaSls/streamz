@@ -214,6 +214,16 @@ export interface CanalDoDiscord {
   recipients?: UsuarioDoDiscord[];
   permission_overwrites?: JsonDoDiscord[];
   last_message_id?: string | null;
+  /**
+   * Só em canal de voz (tipo 2), e **obrigatórios**: o
+   * `VocalGuildChannel._update` do discord.py lê `data['bitrate']` e
+   * `data['user_limit']` sem `.get`. Faltando, o `GUILD_CREATE` inteiro
+   * levanta `KeyError` dentro da lib e o `ready` nunca dispara — foi assim que
+   * a prova 4 da F1 falhou.
+   */
+  bitrate?: number;
+  user_limit?: number;
+  rtc_region?: string | null;
 }
 
 export interface MembroDoDiscord {

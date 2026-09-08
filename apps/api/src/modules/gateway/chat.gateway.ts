@@ -276,9 +276,11 @@ export class ChatGateway
       );
       // eco do nonce: o autor usa para trocar a mensagem otimista pela real.
       // Não é persistido — só viaja de volta neste evento.
-      this.server
-        .to(this.room(payload.channelId))
-        .emit(WS_EVENTS.MESSAGE_NEW, payload.nonce ? { ...message, nonce: payload.nonce } : message);
+      this.realtime.emitToChannel(
+        payload.channelId,
+        WS_EVENTS.MESSAGE_NEW,
+        payload.nonce ? { ...message, nonce: payload.nonce } : message,
+      );
     } catch (e) {
       this.emitError(client, e);
     }
@@ -295,7 +297,7 @@ export class ChatGateway
         user.id,
         payload.content.trim(),
       );
-      this.server.to(this.room(message.channelId)).emit(WS_EVENTS.MESSAGE_UPDATED, message);
+      this.realtime.emitToChannel(message.channelId, WS_EVENTS.MESSAGE_UPDATED, message);
     } catch (e) {
       this.emitError(client, e);
     }
@@ -308,7 +310,7 @@ export class ChatGateway
     if (!user || !payload) return;
     try {
       const { channelId, parentId } = await this.messages.remove(payload.messageId, user.id);
-      this.server.to(this.room(channelId)).emit(WS_EVENTS.MESSAGE_DELETED, {
+      this.realtime.emitToChannel(channelId, WS_EVENTS.MESSAGE_DELETED, {
         messageId: payload.messageId,
         channelId,
         parentId,
@@ -329,7 +331,7 @@ export class ChatGateway
         user.id,
         payload.emoji,
       );
-      this.server.to(this.room(message.channelId)).emit(WS_EVENTS.MESSAGE_UPDATED, message);
+      this.realtime.emitToChannel(message.channelId, WS_EVENTS.MESSAGE_UPDATED, message);
     } catch (e) {
       this.emitError(client, e);
     }
@@ -346,7 +348,7 @@ export class ChatGateway
         user.id,
         payload.emoji,
       );
-      this.server.to(this.room(message.channelId)).emit(WS_EVENTS.MESSAGE_UPDATED, message);
+      this.realtime.emitToChannel(message.channelId, WS_EVENTS.MESSAGE_UPDATED, message);
     } catch (e) {
       this.emitError(client, e);
     }
@@ -368,7 +370,7 @@ export class ChatGateway
         user.id,
         payload.suppress,
       );
-      this.server.to(this.room(message.channelId)).emit(WS_EVENTS.MESSAGE_UPDATED, message);
+      this.realtime.emitToChannel(message.channelId, WS_EVENTS.MESSAGE_UPDATED, message);
     } catch (e) {
       this.emitError(client, e);
     }
@@ -384,9 +386,11 @@ export class ChatGateway
     if (!user || !payload) return;
     try {
       const message = await this.polls.create(user.id, payload);
-      this.server
-        .to(this.room(payload.channelId))
-        .emit(WS_EVENTS.MESSAGE_NEW, payload.nonce ? { ...message, nonce: payload.nonce } : message);
+      this.realtime.emitToChannel(
+        payload.channelId,
+        WS_EVENTS.MESSAGE_NEW,
+        payload.nonce ? { ...message, nonce: payload.nonce } : message,
+      );
     } catch (e) {
       this.emitError(client, e);
     }
@@ -493,7 +497,16 @@ export class ChatGateway
     const room = this.room(payload.channelId);
     if (!client.rooms.has(room)) return;
 
-    client.to(room).emit(WS_EVENTS.TYPING, { channelId: payload.channelId, user });
+    const evento = { channelId: payload.channelId, user };
+    // `client.to` e não `emitToChannel`: quem está digitando não pode receber o
+    // próprio "está digitando". O gateway dos bots, que não tem esse problema,
+    // é avisado à parte — ver `RealtimeService.notificarOuvintes`.
+    client.to(room).emit(WS_EVENTS.TYPING, evento);
+    this.realtime.notificarOuvintes(
+      { tipo: "canal", id: payload.channelId },
+      WS_EVENTS.TYPING,
+      evento,
+    );
   }
 
   private room(channelId: string) {

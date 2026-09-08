@@ -165,4 +165,24 @@ describe("serialização", () => {
     expect(() => JSON.stringify(payload)).not.toThrow();
     expect(JSON.stringify(payload)).toContain('"id":"1234567890123456789"');
   });
+
+  it("canal de voz sai com bitrate e user_limit — o discord.py os lê sem `.get`", () => {
+    // Regressão da prova 4 da F1: sem estes dois campos o `GUILD_CREATE`
+    // inteiro levanta `KeyError` dentro do `VocalGuildChannel._update`, o bot
+    // conecta sem erro nenhum e o `ready` nunca dispara. É o risco (a) do §12
+    // no seu melhor disfarce.
+    const voz = canalParaDiscord(canal({ type: "VOICE" }));
+
+    expect(voz.type).toBe(2);
+    expect(voz.bitrate).toBe(64_000);
+    expect(voz.user_limit).toBe(0);
+    expect(voz.rtc_region).toBeNull();
+  });
+
+  it("canal de texto não leva bitrate nem user_limit", () => {
+    const texto = canalParaDiscord(canal({ type: "TEXT" }));
+
+    expect(texto.bitrate).toBeUndefined();
+    expect(texto.user_limit).toBeUndefined();
+  });
 });

@@ -187,6 +187,40 @@ export class DadosDeCompatService {
     return this.prisma.user.findUnique({ where: { id }, select: SELECAO_DE_USUARIO });
   }
 
+  /**
+   * A `Application` com o dono e o usuário-bot juntos.
+   *
+   * Acrescentado na integração da F1, e por um motivo concreto: o `commands.Bot`
+   * do discord.py chama `GET /oauth2/applications/@me` para descobrir o dono, e
+   * o `AppInfo` dele lê `data['description']` e `data['owner']` **sem `.get`** —
+   * faltando qualquer um dos dois, o `login()` levanta `KeyError` lá dentro. O
+   * `BotAutenticado` do guard traz só id, snowflake e nome, que dá para o
+   * `/applications/@me` do discord.js e não dá para este.
+   */
+  async aplicacaoPorCuid(id: string): Promise<{
+    id: string;
+    snowflake: bigint;
+    name: string;
+    description: string | null;
+    dono: LinhaDeUsuario;
+    bot: LinhaDeUsuario;
+  } | null> {
+    const app = await this.prisma.application.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        snowflake: true,
+        name: true,
+        description: true,
+        owner: { select: SELECAO_DE_USUARIO },
+        botUser: { select: SELECAO_DE_USUARIO },
+      },
+    });
+    if (!app) return null;
+    const { owner, botUser, ...resto } = app;
+    return { ...resto, dono: owner, bot: botUser };
+  }
+
   async canalPorCuid(id: string): Promise<LinhaDeCanal | null> {
     const canal = await this.prisma.channel.findUnique({
       where: { id },
