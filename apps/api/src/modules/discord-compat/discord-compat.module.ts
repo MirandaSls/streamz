@@ -77,7 +77,11 @@ import { UsersCompatController, UsersCompatControllerV9 } from "./rest/users.con
     GatewayCompatService,
     PonteDeEventos,
   ],
-  exports: [GatewayCompatService],
+  // ── F3 ── o `InteractionsModule` importa este módulo e precisa destes três:
+  // `RegistroDeSessoes` para despachar o `INTERACTION_CREATE` direto na sessão
+  // do bot (sem passar pela ponte de eventos — uma interação não é um `emit` do
+  // tempo real), e os outros dois para os snowflakes das rotas de compat.
+  exports: [GatewayCompatService, RegistroDeSessoes, IdsService, DadosDeCompatService],
 })
 export class DiscordCompatModule implements OnModuleInit {
   constructor(private readonly ponte: PonteDeEventos) {}

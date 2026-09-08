@@ -7,6 +7,7 @@
 import { idSchema } from "./internos";
 
 import { z } from "zod";
+import type { InteracaoDaMensagem } from "./aplicativos";
 import type { Poll } from "./comunidade";
 import type { Channel, MemberRole, PublicUser, ReactionGroup } from "./dominio";
 import type { MessageReplyRef, MessageType, ThreadSummary } from "./mensagens";
@@ -78,6 +79,18 @@ export interface Message {
   pinned: boolean;
   /** h-moderacao: preenchido quando a mensagem é uma enquete. */
   poll?: Poll | null;
+  // ── j-bots ──
+  /**
+   * Preenchido quando esta mensagem é a resposta de um bot a um comando de
+   * barra: é a faixa "@fulano usou /play" que a tela desenha acima dela.
+   *
+   * Existe porque a resposta a um `/comando` chega ao canal **sem** nenhuma
+   * mensagem do usuário antes — sem a faixa, o bot pareceria falar sozinho.
+   *
+   * Opcional porque o campo nasceu na F3 e um payload em cache no cliente não
+   * o traz; `undefined` e `null` querem dizer a mesma coisa: mensagem normal.
+   */
+  interacao?: InteracaoDaMensagem | null;
 }
 
 export interface GuildMemberView {

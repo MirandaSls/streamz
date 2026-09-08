@@ -142,6 +142,18 @@ export const WS_EVENTS = {
   ACCOUNT_UPDATED: "account.updated",
   /** sessões encerradas: as abas atingidas caem para o login na hora. */
   SESSIONS_REVOKED: "sessions.revoked",
+  // ── j-bots ──
+  /**
+   * servidor → cliente (sala do servidor): os comandos de barra dos
+   * aplicativos daquele servidor mudaram.
+   *
+   * Sai quando um bot faz `PUT applications/:app/commands` ou
+   * `PUT applications/:app/guilds/:gid/commands` — o `deploy-commands.js` de
+   * todo tutorial. O payload é `{ guildId: string }` e nada mais: quem recebe
+   * recarrega `GET /api/guilds/:id/comandos-de-app`. Mandar a lista inteira
+   * aqui seria empurrar para todo mundo o que só quem abre o composer usa.
+   */
+  APPLICATION_COMMANDS_UPDATED: "application.commandsUpdated",
 } as const;
 
 

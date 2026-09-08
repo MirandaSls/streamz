@@ -1,0 +1,29 @@
+import { Controller } from "@nestjs/common";
+
+/**
+ * `POST /api/v10/interactions/:id/:token/callback` — a resposta do bot.
+ *
+ * ── Lote B (REST compat) implementa. ──
+ *
+ * **Esta rota não tem `BotTokenGuard`, e isso não é esquecimento.** O
+ * `@discordjs/rest` manda o callback com `auth: false` — sem cabeçalho
+ * `Authorization` nenhum —, e o discord.py faz o mesmo. Um guard aqui daria 401
+ * em todo `reply()` do planeta. O credencial é o `:token` do caminho, e quem o
+ * resolve é `InteractionsService.porToken` (que já devolve 404 `10062` para
+ * token inexistente ou vencido).
+ *
+ * Tipos implementados na F3: **4** `CHANNEL_MESSAGE_WITH_SOURCE` e **5**
+ * `DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE`. 6, 7, 8 e 9 são F5 → 501.
+ *
+ * Resposta: **204 sem corpo**, como o Discord. O discord.js não lê nada dela;
+ * mandar um JSON só faria a lib gastar um parse à toa.
+ *
+ * `@Body()` cru + zod, como manda o §5: o `ValidationPipe` global com
+ * `whitelist: true` apagaria `data.embeds`, `data.components` e `data.flags`
+ * antes de o handler ver — o risco (b) do §12, que já mordeu na F1.
+ */
+@Controller()
+export class InteractionCallbackCompatController {}
+
+@Controller()
+export class InteractionCallbackCompatControllerV9 extends InteractionCallbackCompatController {}
