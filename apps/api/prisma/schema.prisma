@@ -149,6 +149,8 @@ model User {
   /// a application de que este usuário é o bot (só quando isBot)
   botApplication Application?  @relation("AppBot")
   ownedApps      Application[] @relation("AppOwner")
+  /// as interações que esta pessoa disparou (a faixa "usou /play" sai daqui)
+  interactions   Interaction[]
 }
 
 // Até onde cada usuário leu cada canal. É o que decide "não lido" e o badge
@@ -238,6 +240,12 @@ model Guild {
   discoverable       Boolean    @default(false)
   auditLogs          AuditLog[]
   reports            Report[]
+
+  // ── j-bots ──
+  // Comandos de barra registrados **para este servidor** e as interações que
+  // nasceram aqui. Back-relations: nenhuma coluna nova em `Guild`.
+  applicationCommands ApplicationCommand[]
+  interactions        Interaction[]
 }
 
 model Ban {
@@ -360,6 +368,9 @@ model Channel {
   channelInvites Invite[] @relation("InviteChannel")
   reports        Report[]
 
+  // ── j-bots ── as interações disparadas neste canal (back-relation)
+  interactions   Interaction[]
+
   @@index([guildId])
   @@index([categoryId])
 }
@@ -425,6 +436,14 @@ model Message {
   stickerId      String?
   suppressEmbeds Boolean  @default(false)
   sticker        Sticker? @relation(fields: [stickerId], references: [id], onDelete: SetNull)
+
+  // ── j-bots ──
+  // A interação de que esta mensagem é a resposta — a faixa "usou /play".
+  // **Back-relation e nada mais: a `Message` não ganha coluna nenhuma.** A
+  // ligação mora do lado da `Interaction` (`responseMessageId @unique`), e é o
+  // `@unique` de lá que faz isto ser `Interaction?` e não `Interaction[]`.
+  // Foi de propósito: a `Message` é a maior tabela do banco.
+  interacao      Interaction?
 }
 
 // Arquivo enviado ao storage (R2). Criado no upload (messageId null) e
@@ -1035,6 +1054,10 @@ model Application {
   botUser User       @relation("AppBot", fields: [botUserId], references: [id], onDelete: Cascade)
   tokens  BotToken[]
 
+  // ── F3 ── comandos de barra e interações (back-relations)
+  commands     ApplicationCommand[]
+  interactions Interaction[]
+
   @@index([ownerId])
   @@index([publico])
 }
@@ -1059,4 +1082,76 @@ model BotToken {
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
   @@index([applicationId])
+}
+
+// ── j-bots · F3 ── comandos de barra e interações (migration 4)
+//
+// Ver `docs/BOTS-COMPATIVEIS-COM-O-DISCORD.md` §9 (D6) e §10, e o
+// `CONTRATO-F3.md` em `src/modules/interactions/`.
+
+/// Comando de barra. `guildId` null = global (vale em todo servidor instalado).
+model ApplicationCommand {
+  id            String   @id @default(cuid())
+  snowflake     BigInt   @unique @default(dbgenerated("streamz_snowflake()"))
+  applicationId String
+  guildId       String?
+  name          String
+  description   String
+  /// 1 CHAT_INPUT (só este na F3), 2 USER, 3 MESSAGE
+  type          Int      @default(1)
+  /// array de opções no formato do Discord, como veio no PUT
+  options       Json     @default("[]")
+  /// bitfield do Discord exigido de quem usa; null = todo mundo
+  defaultMemberPermissions String?
+  createdAt     DateTime @default(now())
+
+  application  Application   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  guild        Guild?        @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  interactions Interaction[]
+
+  /// Cuidado: no Postgres, `NULL` é distinto de `NULL` num índice único — dois
+  /// comandos **globais** de mesmo nome passariam por aqui. Quem garante a
+  /// unicidade do global é o `PUT` (sobrescrita em bloco, numa transação); o
+  /// índice fica como o §10 o desenha, e a redundância não faz mal.
+  @@unique([applicationId, guildId, name])
+  @@index([guildId])
+}
+
+/// Uma interação em voo. Some depois de expirar (faxina do MaintenanceService).
+model Interaction {
+  id            String   @id @default(cuid())
+  snowflake     BigInt   @unique @default(dbgenerated("streamz_snowflake()"))
+  applicationId String
+  /// 64 bytes em base64url (86 caracteres); é o único credencial do callback e
+  /// dos followups — o `@discordjs/rest` manda essas rotas com `auth: false`.
+  token         String   @unique
+  userId        String
+  channelId     String
+  guildId       String?
+  /// SetNull, e não Cascade: o `PUT` do `deploy-commands.js` apaga a linha do
+  /// comando, e uma interação antiga não pode sumir do histórico por isso.
+  commandId     String?
+  /// O nome do comando, copiado na hora. **Não é redundância**: sem ele a faixa
+  /// "usou /play" some quando o dono do bot re-registra os comandos.
+  commandName   String
+  /// o `data` do INTERACTION_CREATE, como foi enviado
+  data          Json
+  /// mensagem criada pelo callback tipo 4/5 — alvo do `@original`.
+  /// `@unique` de propósito: é o que faz a back-relation da `Message` ser
+  /// `Interaction?` em vez de `Interaction[]`.
+  responseMessageId String? @unique
+  respondedAt   DateTime?
+  createdAt     DateTime @default(now())
+  /// createdAt + 15 min
+  expiresAt     DateTime
+
+  application     Application         @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel         Channel             @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  guild           Guild?              @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  command         ApplicationCommand? @relation(fields: [commandId], references: [id], onDelete: SetNull)
+  responseMessage Message?            @relation(fields: [responseMessageId], references: [id], onDelete: SetNull)
+
+  @@index([expiresAt])
+  @@index([applicationId, createdAt])
 }
