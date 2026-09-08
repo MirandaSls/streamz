@@ -82,7 +82,7 @@ export function PainelDeslizante({
         aria-label={rotulo}
         className="anim-deslizar-direita flex h-full w-[86%] max-w-sm flex-col bg-panel pt-[env(safe-area-inset-top)] shadow-high"
       >
-        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border pl-4 pr-1">
+        <div className="flex h-[56px] shrink-0 items-center gap-2 border-b border-border pl-4 pr-1">
           <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-txt-primary">
             {titulo}
           </h2>

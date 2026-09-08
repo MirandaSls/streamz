@@ -12,6 +12,12 @@ import { ArrowLeft } from "@/components/ui/icones";
  * do clique; no dedo não existe nem precisão nem aviso, e 44px é o piso das
  * duas plataformas (Apple HIG e Material). O glifo continua do tamanho de
  * sempre — o que cresce é a área clicável em volta dele.
+ *
+ * **Os tamanhos daqui são literais (`h-[44px]`, `h-[56px]`), não `h-11`/`h-14`.**
+ * A raiz do app é 15,5px (ver `globals.css`), então todo `rem` do Tailwind sai
+ * 3% menor que o nominal: `h-11` mede **42,6px** e `h-14`, 54,25. Onde o número
+ * é um piso de segurança ou uma medida tirada da captura do Discord, ler a
+ * classe e assumir o valor dá errado — e dava: os alvos "de 44" mediam 43.
  */
 
 /** Botão de ícone do cabeçalho/rodapé: 44×44 de alvo, glifo no meio. */
@@ -34,7 +40,7 @@ export function BotaoDeToque({
       onClick={onClick}
       aria-label={label}
       aria-pressed={ativo || undefined}
-      className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg transition active:bg-hov ${
+      className={`grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg transition active:bg-hov ${
         ativo ? "text-txt-primary" : "text-txt-secondary"
       } ${className}`}
     >
@@ -90,7 +96,7 @@ export function CabecalhoMobile({
   return (
     /* 56pt de altura, medido em `discord-mobile-chat-canal-2024.png`
          (1px=1pt, MEDIDAS.md §6): a barra vai de y=44 a y=100. */
-    <header className="relative z-10 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-panel pl-1 pr-1 shadow-header">
+    <header className="relative z-10 flex h-[56px] shrink-0 items-center gap-2 border-b border-border bg-panel pl-1 pr-1 shadow-header">
       {aoVoltar && (
         <BotaoDeToque label="Voltar" onClick={aoVoltar}>
           <ArrowLeft size={24} />

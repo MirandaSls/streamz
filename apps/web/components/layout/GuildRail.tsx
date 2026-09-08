@@ -157,7 +157,7 @@ function RailItem({
   onContextMenu?: (e: React.MouseEvent) => void;
   children: React.ReactNode;
 }) {
-  const caixa = lado === 48 ? "h-12 w-12" : "h-10 w-10";
+  const caixa = lado === 48 ? "h-[48px] w-[48px]" : "h-10 w-10";
   return (
     <div className="group relative flex w-full justify-center" onContextMenu={onContextMenu}>
       <span
@@ -166,7 +166,7 @@ function RailItem({
           a auditoria dizia 36-38, e a medição em 7 prints do Discord deu 40 nos
           sete — a pílula vai de ponta a ponta do botão. */
         className={`absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r-full bg-paper transition-all duration-200 ${
-          active ? (lado === 48 ? "h-12" : "h-10") : unread ? "h-2 group-hover:h-5" : "h-0 group-hover:h-5"
+          active ? (lado === 48 ? "h-[48px]" : "h-10") : unread ? "h-2 group-hover:h-5" : "h-0 group-hover:h-5"
         }`}
       />
       {/* A caixa de 40 que **não** corta: é ela que ancora o badge. O selo de
