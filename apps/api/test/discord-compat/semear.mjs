@@ -1,6 +1,7 @@
-// Semeia o Streamz descartável com o que as provas da F1 precisam: um dono,
-// um servidor com um canal de texto, um aplicativo (com token de bot) e o
-// usuário-bot já como membro do servidor.
+// Semeia o Streamz descartável com o que as provas da compatibilidade com bots
+// precisam: um dono, um servidor com um canal de texto **e um canal de voz**
+// (F2), um aplicativo (com token de bot) e o usuário-bot já como membro do
+// servidor.
 //
 // Roda dentro do contêiner da API (que tem o repo montado e o Prisma gerado):
 //
@@ -63,6 +64,18 @@ if (!canalDeTexto) {
   throw new Error(`o servidor nasceu sem canal de texto: ${JSON.stringify(canais).slice(0, 300)}`);
 }
 
+// 2b. Um canal de **voz** — a F2 precisa dele para o op 4 ter onde entrar. O
+// servidor nasce só com canal de texto, então este é criado à mão. (Se um dia
+// o `create` do servidor passar a criar um canal de voz, este bloco vira um
+// `find` e o resto continua igual.)
+const canalDeVoz =
+  canais.find((c) => c.type === "VOICE") ??
+  (await chamar(`/guilds/${servidor.id}/channels`, {
+    metodo: "POST",
+    corpo: { name: "Sala de música", type: "VOICE" },
+    token: acesso,
+  }));
+
 // 3. O aplicativo. O token em claro sai **só** nesta resposta.
 const app = await chamar("/applications", {
   metodo: "POST",
@@ -80,13 +93,15 @@ try {
   });
 
   // 5. Os snowflakes, para os scripts não precisarem consultar o banco.
-  const [linhaDoServidor, linhaDoCanal, linhaDoBot, linhaDoDono, cargos] = await Promise.all([
-    prisma.guild.findUnique({ where: { id: servidor.id }, select: { snowflake: true } }),
-    prisma.channel.findUnique({ where: { id: canalDeTexto.id }, select: { snowflake: true } }),
-    prisma.user.findUnique({ where: { id: botUserId }, select: { snowflake: true, username: true } }),
-    prisma.user.findUnique({ where: { id: registro.user.id }, select: { id: true, snowflake: true } }),
-    prisma.role.findMany({ where: { guildId: servidor.id }, select: { id: true, name: true, snowflake: true, isDefault: true } }),
-  ]);
+  const [linhaDoServidor, linhaDoCanal, linhaDoCanalDeVoz, linhaDoBot, linhaDoDono, cargos] =
+    await Promise.all([
+      prisma.guild.findUnique({ where: { id: servidor.id }, select: { snowflake: true } }),
+      prisma.channel.findUnique({ where: { id: canalDeTexto.id }, select: { snowflake: true } }),
+      prisma.channel.findUnique({ where: { id: canalDeVoz.id }, select: { snowflake: true } }),
+      prisma.user.findUnique({ where: { id: botUserId }, select: { snowflake: true, username: true } }),
+      prisma.user.findUnique({ where: { id: registro.user.id }, select: { id: true, snowflake: true } }),
+      prisma.role.findMany({ where: { guildId: servidor.id }, select: { id: true, name: true, snowflake: true, isDefault: true } }),
+    ]);
 
   const saida = {
     api: API,
@@ -106,6 +121,12 @@ try {
       id: canalDeTexto.id,
       snowflake: linhaDoCanal.snowflake.toString(),
       name: canalDeTexto.name,
+    },
+    // F2: onde o op 4 entra.
+    canalDeVoz: {
+      id: canalDeVoz.id,
+      snowflake: linhaDoCanalDeVoz.snowflake.toString(),
+      name: canalDeVoz.name,
     },
     bot: {
       token: tokenDoBot,
