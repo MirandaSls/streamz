@@ -343,7 +343,8 @@ hash, índice usado direto.
 | GET | `/api/v10/gateway/bot` | `{url, shards: 1, session_start_limit:{total:1000,remaining:1000,reset_after:0,max_concurrency:1}}` |
 | GET | `/api/v10/users/@me` | o usuário-bot |
 | GET | `/api/v10/users/:id` | |
-| GET | `/api/v10/applications/@me` | id, name, flags, bot |
+| GET | `/api/v10/applications/@me` | id, name, description, flags, bot, owner |
+| GET | `/api/v10/oauth2/applications/@me` | **a rota que o discord.py chama no login** (§14); mesmo payload |
 | GET | `/api/v10/guilds/:id` | |
 | GET | `/api/v10/guilds/:id/channels` | inclui as categorias como tipo 4 |
 | GET | `/api/v10/guilds/:id/members/:uid` | |
@@ -421,6 +422,16 @@ dormir 700 segundos). O teto global do Discord é 50 req/s por bot; adotamos o
 mesmo, reaproveitando o `@nestjs/throttler` já configurado com storage Redis,
 com um `Throttler` nomeado e chave `bot:<applicationId>`.
 
+### `Content-Type`, e por que ele é `application/json` pelado
+
+Descoberto na prova 4 da F1, e não é preciosismo: o `json_or_text` do discord.py
+compara o cabeçalho por **igualdade exata** com `application/json`. O Express
+manda `application/json; charset=utf-8` — e aí **todo** corpo chega ao bot como
+string, com o `login()` morrendo em `discord/user.py` com `TypeError: string
+indices must be integers`, três camadas longe da causa. As rotas de compat
+gravam o cabeçalho sem o parâmetro. (Não basta pôr antes do corpo: o `res.send`
+do Express o reescreve com o charset depois.)
+
 ### Erros
 Formato do Discord, para as libs conseguirem classificar:
 
@@ -460,7 +471,10 @@ não implementa o CDN. Para bot de música é irrelevante.
 
 ## 6. D8 — Permissões
 
-As 19 do Streamz mapeiam, uma a uma:
+As do Streamz mapeiam, uma a uma. **Eram 19 quando este documento foi
+escrito; hoje são 21** — `MOVE_MEMBERS` (1<<19) e `STREAM` (1<<20) foram
+acrescentadas depois, têm par no Discord (1<<24 e 1<<9) e por isso **saem da
+lista de "sempre apagadas"** mais abaixo, onde ainda constavam:
 
 | Streamz (`1 << n`) | n | Discord | bit |
 |---|---|---|---|
@@ -483,6 +497,8 @@ As 19 do Streamz mapeiam, uma a uma:
 | `MANAGE_EMOJIS` | 16 | `MANAGE_GUILD_EXPRESSIONS` | 1<<30 |
 | `VIEW_AUDIT_LOG` | 17 | `VIEW_AUDIT_LOG` | 1<<7 |
 | `ADMINISTRATOR` | 18 | `ADMINISTRATOR` | 1<<3 |
+| `MOVE_MEMBERS` | 19 | `MOVE_MEMBERS` | 1<<24 |
+| `STREAM` | 20 | `STREAM` | 1<<9 |
 
 ### O que o Discord tem e nós não
 
@@ -503,8 +519,7 @@ essas coisas simplesmente são permitidas):
 **Sempre apagadas** (a funcionalidade não existe; um bot que a peça vai receber
 501 do REST, e é melhor que ele saiba antes):
 
-`STREAM` · `PRIORITY_SPEAKER` · `DEAFEN_MEMBERS` · `MOVE_MEMBERS` ·
-`MANAGE_NICKNAMES` · `MANAGE_WEBHOOKS` (até F5) · `VIEW_GUILD_INSIGHTS` ·
+`PRIORITY_SPEAKER` · `DEAFEN_MEMBERS` · `MANAGE_NICKNAMES` · `MANAGE_WEBHOOKS` (até F5) · `VIEW_GUILD_INSIGHTS` ·
 `REQUEST_TO_SPEAK` · `MANAGE_EVENTS` / `CREATE_EVENTS` · `MANAGE_THREADS` ·
 `CREATE_PUBLIC_THREADS` / `CREATE_PRIVATE_THREADS` / `SEND_MESSAGES_IN_THREADS` ·
 `USE_EMBEDDED_ACTIVITIES` · `VIEW_CREATOR_MONETIZATION_ANALYTICS` ·
@@ -513,7 +528,7 @@ essas coisas simplesmente são permitidas):
 `BYPASS_SLOWMODE` · `SEND_TTS_MESSAGES` · `AUTO_MODERATION_*`.
 
 **Na direção Discord→Streamz** (a UI de "Adicionar ao servidor" e o
-`PATCH /roles`): só os 19 bits com par são considerados; o resto é descartado em
+`PATCH /roles`): só os 21 bits com par são considerados; o resto é descartado em
 silêncio, e o `MANAGE_THREADS` etc. nunca vira nada.
 
 `packages/shared/src/permissoes-discord.ts` (novo, puro, testável):
@@ -597,8 +612,14 @@ tipo 4), `members[]` (nosso servidor é pequeno; mandamos todos),
 `afk_channel_id:null`, `afk_timeout:300`, `verification_level:0`,
 `default_message_notifications:0`, `explicit_content_filter:0`, `mfa_level:0`,
 `stickers:[]`, `guild_scheduled_events:[]`, `threads:[]`, `stage_instances:[]`.
-Campo obrigatório faltando quebra libs tipadas (discord.py levanta `KeyError`
-em `Guild._from_data` para alguns).
+Campo obrigatório faltando quebra libs tipadas — e **aconteceu**: canal de
+voz sem `bitrate` e `user_limit` faz o `VocalGuildChannel._update` do
+discord.py levantar `KeyError`, o que derruba o `GUILD_CREATE` inteiro. O bot
+conecta, não dá erro, e o `ready` nunca dispara. Os obrigatórios que a F1
+mediu, lendo a lib: canal de texto e categoria precisam de `name` e `position`;
+canal de voz, também de `bitrate` e `user_limit`; membro, de `user`, `roles`,
+`nick`, `pending` e `flags`; usuário, de `id`, `username`, `discriminator` e
+`avatar`.
 
 **RESUME**: `{token, session_id, seq}` → replay do buffer da sessão (últimos
 ~500 dispatches em memória, TTL 3 min) e `RESUMED`. Se a sessão não existe mais
@@ -703,8 +724,16 @@ A regra é: **o gateway compat não inventa evento — ele assina os mesmos que 
 web recebe e traduz.** O caminho mais barato e o menos acoplado é entrar como
 mais um cliente do Socket.IO, do lado de dentro:
 
+> **Correção da F1:** o diagrama abaixo dizia `MessagesService.create()` no
+> topo. **Ele não emite.** Quem emitia era o handler do `ChatGateway`, direto no
+> `this.server` do Socket.IO, sem passar pelo `RealtimeService` — e por isso a
+> mensagem escrita no navegador não chegava ao bot. A F1 passou as seis
+> emissões de mensagem do `ChatGateway` para o `RealtimeService`; o `typing`
+> continua em `client.to` (quem digita não pode receber o próprio "está
+> digitando") e avisa a ponte por `notificarOuvintes`.
+
 ```
-MessagesService.create()
+ChatGateway.onMessage() / a casca REST de compat
         │
         ├─► RealtimeService.emitToChannel("channel:<id>", "message.new", MessageDTO)
         │        │
@@ -1440,6 +1469,29 @@ processo.
 ficar mudo sem erro; depurar com `client.on('debug')`. (b) O `ValidationPipe`
 comendo campos; já previsto. (c) O `destroyUpgrade` do engine.io.
 
+**O que os três riscos deram, na prática** (a fase foi feita; isto é o
+resultado medido, não previsão):
+
+- **(a) aconteceu**, e do jeito pior: canal de voz sem `bitrate`/`user_limit`
+  fazia o `GUILD_CREATE` inteiro levantar `KeyError` dentro do discord.py. O
+  bot conectava, nada no log, e o `ready` nunca vinha. Só a prova 4 pegou —
+  nenhum teste unitário pegaria, porque o payload estava "certo" para o nosso
+  próprio tipo.
+- **(b) aconteceu como previsto** e a saída prevista funcionou (`@Body()` cru +
+  zod). Há um teste de integração, com o `ValidationPipe` global ligado, que
+  confere os sete campos que o discord.js manda.
+- **(c) não aconteceu.** O engine.io só destrói um upgrade órfão `if
+  (socket.writable && socket.bytesWritten <= 0)`, e o nosso handshake responde
+  na hora. Há um teste que espera 3 s (3× o `destroyUpgradeTimeout`) e confirma
+  o socket vivo. **Requisito que nasceu daí:** o handler de `'upgrade'` tem que
+  ser síncrono até o `handleUpgrade` — uma consulta ao banco antes dele faria a
+  conexão cair sozinha depois de um segundo, sem erro nenhum.
+- **Dois riscos que não estavam na lista** e custaram mais que os três acima: o
+  `Content-Type` com charset (§5) e a `DEFAULT_GATEWAY` do discord.py (§14).
+  Os dois só aparecem com uma lib de verdade do outro lado — o que é o
+  argumento para as quatro provas serem obrigatórias e automatizadas
+  (`apps/api/test/discord-compat/prova.sh`).
+
 **Esforço:** 8–12 dias com 3 agentes em paralelo.
 
 ---
@@ -1610,10 +1662,13 @@ Conferido no código da lib:
 ### discord.py
 
 ```python
-import discord
+import discord, yarl
 from discord.ext import commands
+from discord.gateway import DiscordWebSocket
 
-discord.http.Route.BASE = 'https://api.streamz.chat/api/v10'   # com a versão
+# São DUAS linhas, não uma — ver a correção abaixo.
+discord.http.Route.BASE = 'https://api.streamz.chat/api/v10'          # com a versão
+DiscordWebSocket.DEFAULT_GATEWAY = yarl.URL('wss://api.streamz.chat/gateway')
 
 bot = commands.Bot(command_prefix='!', intents=discord.Intents.all())
 
@@ -1624,14 +1679,26 @@ bot.run(os.environ['STREAMZ_BOT_TOKEN'])
 ```
 
 Conferido:
-- `class Route: BASE: ClassVar[str] = 'https://discord.com/api/v10'` — o
-  monkeypatch é uma linha, e tem que **incluir a versão** (ao contrário do
-  discord.js).
+- `class Route: BASE: ClassVar[str] = 'https://discord.com/api/v10'` — tem que
+  **incluir a versão** (ao contrário do discord.js).
 - O cabeçalho é `headers['Authorization'] = 'Bot ' + self.token`, sem validação.
-- A URL do gateway vem de `get_bot_gateway()` (nossa rota), e o
-  `DiscordWebSocket.from_client` acrescenta `?v=10&encoding=json&compress=…`,
-  com `compress=True` por padrão. **Nós ignoramos e mandamos texto** —
-  `received_message` só descomprime `if type(msg) is bytes`.
+- **Correção da F1 (medida no discord.py 2.7.1):** este § dizia que "a URL do
+  gateway vem de `get_bot_gateway()` (nossa rota)". **Não vem mais.**
+  `Client.connect` não chama `get_bot_gateway()`, e `DiscordWebSocket.from_client`
+  cai em `DEFAULT_GATEWAY`, que é a constante `wss://gateway.discord.gg/`. Sem a
+  segunda linha o bot faz o REST inteiro contra o Streamz e abre o WebSocket **no
+  Discord de verdade**, que recusa o nosso token com close 4004 — um erro que
+  parece nosso e não é. Foi a prova 4 da F1 que achou isto.
+- O `from_client` acrescenta `?v=10&encoding=json&compress=zlib-stream`, com
+  `compress=True` por padrão. **Nós ignoramos e mandamos texto** —
+  `received_message` só descomprime `if type(msg) is bytes`. Confirmado no ar.
+- **`GET /oauth2/applications/@me`** é chamada no login pelo `commands.Bot` (é
+  como `is_owner()` funciona) e **não estava no §5**. Entrou na F1. O `AppInfo`
+  lê `description`, `owner` e `verify_key` sem `.get`.
+- **`Content-Type: application/json` sem `; charset=utf-8`.** O `json_or_text`
+  compara o cabeçalho por igualdade exata; com o charset que o Express põe,
+  **todo** corpo chega como string e o `login()` morre com `TypeError: string
+  indices must be integers`, três camadas longe da causa.
 - Para o CDN de avatar: `discord.Asset.BASE` (fora de escopo).
 
 ### Lavalink
