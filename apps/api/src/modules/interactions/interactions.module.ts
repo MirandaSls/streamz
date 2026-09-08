@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ApplicationsModule } from "../applications/applications.module";
+import { AuthModule } from "../auth/auth.module";
 import { DiscordCompatModule } from "../discord-compat/discord-compat.module";
 import { GuildsModule } from "../guilds/guilds.module";
 import { MessagesModule } from "../messages/messages.module";
@@ -53,6 +54,10 @@ import { InteractionsService } from "./interactions.service";
     // BotTokenGuard". Importar deste lado é o conserto certo: um módulo não
     // deve reexportar o que ele usa por dentro só porque um vizinho precisa.
     ApplicationsModule,
+    // O `InteractionsController` é REST interno e usa `JwtGuard`, que injeta o
+    // `JwtService`: sem isto o Nest morre no bootstrap do mesmo jeito. É o que
+    // o `AdminModule` e o `DiscoveryModule` já fazem.
+    AuthModule,
     GuildsModule,
     MessagesModule,
     RealtimeModule,
