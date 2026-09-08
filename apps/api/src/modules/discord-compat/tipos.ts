@@ -245,6 +245,11 @@ export interface MensagemDoDiscord {
   mention_roles: string[];
   attachments: JsonDoDiscord[];
   embeds: JsonDoDiscord[];
+  /**
+   * Botões e selects. Sempre `[]` na F1 (componentes são F5), mas o campo tem
+   * que **existir**: o §5 o lista e algumas libs o leem sem default.
+   */
+  components: JsonDoDiscord[];
   reactions?: JsonDoDiscord[];
   pinned: boolean;
   type: number;

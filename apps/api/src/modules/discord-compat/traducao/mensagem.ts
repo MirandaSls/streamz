@@ -28,10 +28,7 @@ import { usuarioParaDiscord } from "./usuario";
  * `flags: 0` e `tts: false` fixos.
  */
 export function mensagemParaDiscord(m: LinhaDeMensagem): MensagemDoDiscord {
-  // `components` não está em `MensagemDoDiscord` (arquivo do coordenador, que
-  // não editamos) mas está na lista do §5 e o discord.py o lê. A interseção
-  // local acrescenta o campo sem tocar em `tipos.ts` — relatado no PR.
-  const mensagem: MensagemDoDiscord & { components: JsonDoDiscord[] } = {
+  const mensagem: MensagemDoDiscord = {
     id: String(m.snowflake),
     channel_id: String(m.channelSnowflake),
     author: usuarioParaDiscord(m.author),
