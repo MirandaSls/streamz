@@ -52,7 +52,10 @@ export default function AddFriend() {
     /* medido no print do Discord: título 20px bold em caixa mista com a caixa
        alta a 25px da borda do cabeçalho; subtítulo 16px/20; o campo 58px de
        altura (12px de respiro em volta do botão de 32) com raio 8 */
-    <div className="px-[30px] pt-5">
+    /* 16px de recuo no celular: com os 30 do desktop o campo e o botão de
+       enviar dividiam 330px e o rótulo "Enviar pedido de amizade" espremia o
+       campo a menos de 100px */
+    <div className="px-[30px] pt-5 max-md:px-4">
       <h2 className="font-display text-xl font-bold leading-6 text-txt-primary">Adicionar amigo</h2>
       <p className="mt-2 text-base leading-5 text-txt-normal">
         Você pode adicionar amigos com o nome de usuário do Streamz.
@@ -63,7 +66,11 @@ export default function AddFriend() {
           e.preventDefault();
           void enviar();
         }}
-        className={`mt-4 flex items-center gap-2 rounded-lg border bg-void p-3 ${borda} focus-within:border-accent`}
+        /* No celular a caixa vira duas linhas: o campo em cima e o botão
+           embaixo, os dois com 44px. Lado a lado numa tela de 390 o botão
+           ("Enviar pedido de amizade", 190px) deixava o campo com menos de
+           100px de largura útil, e os dois ficavam com 31px de altura. */
+        className={`mt-4 flex items-center gap-2 rounded-lg border bg-void p-3 ${borda} focus-within:border-accent max-md:flex-col max-md:items-stretch`}
       >
         <input
           value={nome}
@@ -76,14 +83,14 @@ export default function AddFriend() {
           aria-invalid={erro ? true : undefined}
           placeholder="Insira um nome de usuário"
           maxLength={33}
-          className="h-8 min-w-0 flex-1 bg-transparent text-base text-txt-normal outline-none placeholder:text-txt-muted"
+          className="h-8 min-w-0 flex-1 bg-transparent text-base text-txt-normal outline-none placeholder:text-txt-muted max-md:h-11"
         />
         {/* o botão mora DENTRO do campo, à direita: 32px de altura, raio 8, na
             cor accent. Era raio 3 com 36 de altura. */}
         <button
           type="submit"
           disabled={!valido || enviando}
-          className="h-8 shrink-0 rounded-lg bg-accent px-3 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-8 shrink-0 rounded-lg bg-accent px-3 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 max-md:h-11"
         >
           {enviando ? "Enviando…" : "Enviar pedido de amizade"}
         </button>
