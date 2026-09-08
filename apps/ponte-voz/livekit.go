@@ -75,7 +75,8 @@ func Conectar(rei Reivindicacao, log *slog.Logger) (*Publicador, error) {
 		return nil, fmt.Errorf("criar a faixa Opus: %w", err)
 	}
 
-	registro := log.With("sala", rei.Sala, "identidade", rei.Identidade, "lkUrl", rei.UrlLk)
+	// O logger que chega já traz `sala`, `bot` e `ssrc` da sessão.
+	registro := log.With("identidade", rei.Identidade, "lkUrl", rei.UrlLk)
 	sala := lksdk.NewRoom(&lksdk.RoomCallback{
 		OnDisconnected: func() {
 			registro.Warn("o LiveKit desconectou a ponte: o áudio deste bot parou de sair no navegador")
