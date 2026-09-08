@@ -73,6 +73,7 @@ import { usePolls } from "@/stores/polls";
 import { on, onReconnect, rejoinChannel } from "@/stores/socket-adapter";
 import { useCategories } from "@/stores/categories";
 import { useChannels } from "@/stores/channels";
+import { useComandosDeApp } from "@/stores/comandos-de-app";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
 import { useEmojis } from "@/stores/emojis";
@@ -416,6 +417,15 @@ export function useRealtime(currentUserId?: string): void {
         if (all || (meu && sessionIds.includes(meu))) expirarSessao();
       }),
 
+      /**
+       * ── j-bots ── um bot rodou o `deploy-commands.js`: os comandos de barra
+       * daquele servidor mudaram. O evento traz só o `guildId` — a lista mesmo
+       * vem por REST, e só para quem está com aquele servidor aberto.
+       */
+      on<{ guildId: string }>(WS_EVENTS.APPLICATION_COMMANDS_UPDATED, ({ guildId }) => {
+        useComandosDeApp.getState().aplicarAtualizacao(guildId);
+      }),
+
       onReconnect(() => {
         rejoinChannel();
         void useMessages.getState().resyncActive();
@@ -423,6 +433,8 @@ export function useRealtime(currentUserId?: string): void {
         void useDMs.getState().refreshList();
         const guildId = useGuilds.getState().activeGuildId;
         if (guildId) void usePermissions.getState().load(guildId);
+        // j-bots: um bot pode ter registrado comandos durante a queda
+        if (guildId) void useComandosDeApp.getState().loadForGuild(guildId);
         // quem estava na voz pode ter entrado/saído durante a queda: recarrega
         // o servidor ativo e a sala em que estou, e troca tudo de uma vez —
         // zerar antes da resposta esvaziava o palco da chamada em conversa

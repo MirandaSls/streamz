@@ -11,6 +11,7 @@ import type {
   AuthSession,
   AuthTokens,
   Category,
+  ComandoDeApp,
   ContaEncerrada,
   ContaOk,
   ContaRegistroInput,
@@ -50,6 +51,8 @@ import type {
   GuildWithChannels,
   InboxMention,
   InboxUnreadGroup,
+  InteracaoCriada,
+  InteracaoCriarInput,
   InviteInfo,
   InvitePreview,
   CallStartResponse,
@@ -711,6 +714,17 @@ export const api = {
     request<{ acceptedRulesAt: string }>(`/guilds/${guildId}/rules/accept`, { method: "POST" }),
   markWelcomeSeen: (guildId: string) =>
     request<{ ok: true }>(`/guilds/${guildId}/welcome/seen`, { method: "POST" }),
+
+  // ── j-bots ── comandos de barra dos aplicativos e as interações
+  comandosDeApp: (guildId: string) =>
+    request<ComandoDeApp[]>(`/guilds/${guildId}/comandos-de-app`),
+  /**
+   * Dispara o comando. **Não espera o bot**: a resposta dele chega pelo socket,
+   * como `message.new` — um bot que leve 8 s para resolver um link não pode
+   * segurar o composer.
+   */
+  criarInteracao: (channelId: string, body: InteracaoCriarInput) =>
+    request<InteracaoCriada>(`/channels/${channelId}/interactions`, json(body)),
 
   // descobrir servidores públicos
   discover: (q?: string) => request<DiscoverableGuild[]>(`/discover${query({ q })}`),
