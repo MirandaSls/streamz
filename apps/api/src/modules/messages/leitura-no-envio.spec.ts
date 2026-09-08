@@ -5,6 +5,7 @@ import { ReadStateService } from "../read-state/read-state.service";
 import type { PrismaService } from "../../prisma/prisma.service";
 import type { ChannelsService } from "../channels/channels.service";
 import type { EmojisService } from "../emojis/emojis.service";
+import type { FriendsService } from "../friends/friends.service";
 import type { GuildsService } from "../guilds/guilds.service";
 import type { OnboardingService } from "../onboarding/onboarding.service";
 import type { RealtimeService } from "../realtime/realtime.service";
@@ -62,11 +63,13 @@ function linhaDeMensagem() {
 function montar(readStateFalha = false) {
   const prisma = {
     message: { create: vi.fn().mockResolvedValue(linhaDeMensagem()) },
+    // d-social: o ramo DM procura o outro participante para checar o bloqueio
+    channelMember: { findFirst: vi.fn().mockResolvedValue({ userId: "bia" }) },
   } as unknown as PrismaService;
   const guilds = {
     assertCanPostChannel: vi.fn().mockResolvedValue({
       tipo: "dm",
-      channel: { id: CANAL, guildId: null, private: false },
+      channel: { id: CANAL, guildId: null, type: "DM", private: false },
       permissions: 0,
     }),
   } as unknown as GuildsService;
@@ -86,6 +89,7 @@ function montar(readStateFalha = false) {
     {} as OnboardingService,
     readState,
     realtime,
+    { async assertNotBlocked() {} } as unknown as FriendsService,
   );
   return { service, readState, realtime, prisma };
 }

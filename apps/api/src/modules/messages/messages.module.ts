@@ -11,6 +11,7 @@ import { PinsService } from "./pins.service";
 import { ThreadsService } from "./threads.service";
 import { AuthModule } from "../auth/auth.module";
 import { ChannelsModule } from "../channels/channels.module";
+import { FriendsModule } from "../friends/friends.module";
 import { GuildsModule } from "../guilds/guilds.module";
 import { RealtimeModule } from "../realtime/realtime.module";
 import { StorageModule } from "../storage/storage.module";
@@ -29,6 +30,9 @@ import { OnboardingModule } from "../onboarding/onboarding.module";
     EmojisModule,
     // h-moderacao: aceite de regras entra no caminho de escrita
     OnboardingModule,
+    // d-social: o bloqueio entra no caminho de escrita da conversa direta.
+    // Não fecha ciclo: o FriendsModule só depende de Auth e Realtime.
+    FriendsModule,
   ],
   controllers: [
     MessagesController,

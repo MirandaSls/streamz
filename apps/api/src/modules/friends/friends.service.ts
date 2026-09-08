@@ -239,6 +239,18 @@ export class FriendsService {
     const alvo = await this.prisma.user.findUnique({ where: { id: otherId } });
     if (!alvo) throw new NotFoundException("Usuário não encontrado");
 
+    // a DM 1-a-1 usa a mesma chave canônica do par (`Channel.pairKey`), então
+    // achá-la é uma consulta só. Ela sai da **minha** coluna junto com o
+    // bloqueio: o histórico continua (é dos dois lados, e `DMHidden` guarda o
+    // instante, não apaga nada), mas quem bloqueou não fica com a conversa do
+    // bloqueado na barra lateral. E ela não volta sozinha, porque a partir
+    // daqui ele não consegue mais escrever nela — ver
+    // `MessagesService.assertDMNaoBloqueada`.
+    const dm = await this.prisma.channel.findUnique({
+      where: { pairKey: this.pairKey(meId, otherId) },
+      select: { id: true },
+    });
+
     await this.prisma.$transaction([
       this.prisma.friendship.deleteMany({ where: { pairKey: this.pairKey(meId, otherId) } }),
       this.prisma.block.upsert({
@@ -246,10 +258,28 @@ export class FriendsService {
         create: { blockerId: meId, blockedId: otherId },
         update: {},
       }),
+      ...(dm
+        ? [
+            this.prisma.dMHidden.upsert({
+              where: { userId_channelId: { userId: meId, channelId: dm.id } },
+              create: { userId: meId, channelId: dm.id },
+              update: { hiddenAt: new Date() },
+            }),
+          ]
+        : []),
     ]);
 
     // o outro lado só vê a relação sumir — nunca que foi um bloqueio
     const dto = toPublicUser(alvo);
+    // a conversa some das minhas conexões na hora (o mesmo aviso do "fechar
+    // conversa" do DMsService); do outro lado nada muda, senão o sumiço
+    // entregaria o bloqueio
+    if (dm) {
+      this.realtime.emitToUser(meId, WS_EVENTS.CHANNEL_DELETED, {
+        channelId: dm.id,
+        guildId: null,
+      });
+    }
     this.realtime.emitToUser(otherId, WS_EVENTS.FRIEND_REMOVED, { userId: meId });
     this.realtime.emitToUser(meId, WS_EVENTS.USER_BLOCKED, {
       userId: otherId,
