@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import { CABECALHOS_DE_SEGURANCA } from "./cabecalhos-de-seguranca.mjs";
 
 /**
  * O app desktop (Tauri) empacota a web como **HTML estático** — `frontendDist`
@@ -64,6 +65,17 @@ const nextConfig = {
         experimental: { outputFileTracingRoot: raizDoMonorepo },
       }
     : {}),
+  // `headers()` depende de um servidor respondendo à requisição, então o Next
+  // recusa a chave junto de `output: "export"` — e no export ela não faria
+  // sentido mesmo: os arquivos do desktop saem do bundle do Tauri, que tem a
+  // própria CSP em `tauri.conf.json`. Por isso a lista só entra fora do export.
+  ...(exportarEstatico
+    ? {}
+    : {
+        async headers() {
+          return [{ source: "/:path*", headers: CABECALHOS_DE_SEGURANCA }];
+        },
+      }),
 };
 
 export default nextConfig;
