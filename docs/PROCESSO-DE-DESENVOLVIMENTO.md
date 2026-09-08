@@ -660,6 +660,11 @@ duas custaram medição repetida:
   lado só, uma reação de teste — todos já apareceram como milhares de pixels.
   Antes de culpar o CSS, limpe a semente e repita.
 
+A pergunta que economiza a hora não é *o que eu quebrei?*, é **qual é o ruído
+deste quadro?** — e ela se responde rodando o **mesmo build contra ele mesmo**.
+Se o piso de ruído daquele enquadramento é 200 mil pixels, uma diferença de 229
+não quer dizer nada; se é zero, um pixel já quer.
+
 ### 6.4 Paralelizar sem colidir
 Migração grande (83 arquivos) funcionou assim, e é o modelo:
 1. **Fase A, sequencial**: fechar o vocabulário inteiro (`icones.tsx`) e
