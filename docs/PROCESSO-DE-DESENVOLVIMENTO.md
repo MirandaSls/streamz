@@ -638,6 +638,22 @@ dois é pego por typecheck, lint ou teste:
 A régua é `getBoundingClientRect` no aparelho emulado, dentro do passeio de
 render — ver `scripts/e2e-mobile.mjs` e `scripts/medir-call-mobile.mjs`.
 
+**Provar que o desktop não mudou: compare o retângulo certo.** O par
+`scripts/e2e-desktop-diff.mjs` + `ImageChops.difference` do Pillow fotografa a
+mesma conta nos dois builds em 1300×900 e conta os pixels diferentes; o alvo é
+**zero**, e foi zero em todas as branches deste trabalho. Duas armadilhas, as
+duas custaram medição repetida:
+
+- **A tela inteira só serve para superfície que tapa a lista de mensagens.** Um
+  cartão de perfil ou um seletor de emoji não tapa, e a rolagem da lista muda a
+  cada execução: o mesmo build contra ele mesmo deu ~200 mil pixels nesses
+  quadros. Para esses, recorte o **retângulo do próprio elemento**
+  (`locator.screenshot` + `boundingBox`).
+- **Diferença grande nem sempre é leiaute.** Presença de voz que sobrou de um
+  passeio ("Em voz" na lista de membros), miniatura de embed que carregou de um
+  lado só, uma reação de teste — todos já apareceram como milhares de pixels.
+  Antes de culpar o CSS, limpe a semente e repita.
+
 ### 6.4 Paralelizar sem colidir
 Migração grande (83 arquivos) funcionou assim, e é o modelo:
 1. **Fase A, sequencial**: fechar o vocabulário inteiro (`icones.tsx`) e
