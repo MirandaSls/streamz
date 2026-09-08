@@ -145,8 +145,11 @@ function SideButton({
         onClick={onClick}
         onMouseEnter={onMouseEnter}
         aria-label={label}
-        className={`grid w-10 place-items-center text-txt-secondary transition hover:text-txt-primary ${
-          baixo ? "h-[40px]" : "h-[58px]"
+        /* no celular o lado é literal pelo mesmo motivo da altura: `w-10` sobre
+           a raiz de 15,5px dá 38,75, e o botão do composer do Discord mede 40pt
+           (`MEDIDAS.md` §7) */
+        className={`grid place-items-center text-txt-secondary transition hover:text-txt-primary ${
+          baixo ? "h-[40px] w-[40px]" : "h-[58px] w-10"
         }`}
       >
         {children}
@@ -697,8 +700,8 @@ export default function Composer({
                 // `ml-2.5` põe o glifo de 18 a 21px da borda esquerda da caixa,
                 // que é onde ele fica no Discord: 10 de margem + os 11 que
                 // sobram de cada lado dentro do alvo de 40
-                className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-txt-secondary transition hover:text-txt-primary ${
-                  ehMobile ? "mx-0.5" : "ml-2.5 mr-4 mt-[9px]"
+                className={`grid shrink-0 place-items-center rounded-full text-txt-secondary transition hover:text-txt-primary ${
+                  ehMobile ? "mx-0.5 h-[40px] w-[40px]" : "ml-2.5 mr-4 mt-[9px] h-10 w-10"
                 }`}
               >
                 {/* `+` liso, não o `CirclePlus`: o do Discord é marca de traço,
