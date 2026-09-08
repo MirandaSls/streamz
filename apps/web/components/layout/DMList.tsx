@@ -344,32 +344,45 @@ export default function DMList() {
           <h1 className="py-1 font-display text-2xl font-bold tracking-title text-txt-primary">
             Mensagens
           </h1>
-          <div className="mt-1 flex items-center gap-2">
+          <div className="mt-1 flex items-center gap-1.5">
             <button
               type="button"
               onClick={() => setBuscaAberta((v) => !v)}
               aria-label="Buscar conversa"
               aria-expanded={buscaAberta}
-              className="grid h-[40px] w-[40px] shrink-0 place-items-center rounded-full bg-hov text-txt-secondary transition active:bg-border-strong"
+              /* Alvo de 44 com **círculo de 40** dentro: 40 é a medida da
+                 captura e 44 é o piso de toque, e aqui os dois se contradizem.
+                 Em vez de escolher, o desenho fica com a medida e a área
+                 clicável cresce por fora — o pixel é o do Discord e o dedo tem
+                 o alvo do HIG. */
+              className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-full text-txt-secondary transition"
             >
-              <Search size={18} />
+              <span className="grid h-[40px] w-[40px] place-items-center rounded-full bg-hov transition active:bg-border-strong">
+                <Search size={18} />
+              </span>
             </button>
             <button
               type="button"
               onClick={() => window.dispatchEvent(new Event(EVENTO_CAIXA_DE_ENTRADA))}
               aria-label="Caixa de entrada"
-              className="relative grid h-[40px] w-[40px] shrink-0 place-items-center rounded-full bg-hov text-txt-secondary transition active:bg-border-strong"
+              /* mesmo alvo de 44 com desenho de 40 do botão de busca */
+              className="relative grid h-[44px] w-[44px] shrink-0 place-items-center rounded-full text-txt-secondary transition"
             >
-              <Inbox size={18} />
+              <span className="grid h-[40px] w-[40px] place-items-center rounded-full bg-hov transition active:bg-border-strong">
+                <Inbox size={18} />
+              </span>
             </button>
             <button
               type="button"
               onClick={() => setFriendsOpen(true)}
               data-amigos-button
+              /* A pílula fica nos 40 medidos: o piso de 44 existe para alvo
+                 pequeno, e este tem ~200px de largura — quem erra um botão
+                 desses não erra por 4px de altura. */
               className="flex h-[40px] min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-hov px-3 text-sm font-medium text-txt-normal transition active:bg-border-strong"
             >
-              <UserPlus size={18} aria-hidden="true" />
-              Adicionar amigos
+              <UserPlus size={18} aria-hidden="true" className="shrink-0" />
+              <span className="truncate whitespace-nowrap">Adicionar amigos</span>
               {pendentes > 0 && (
                 <span
                   aria-label={`${pendentes} pendentes`}

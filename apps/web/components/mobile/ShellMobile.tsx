@@ -18,6 +18,7 @@ import ProfilePopoverHost from "@/components/ui/ProfilePopover";
 import TelaDeAbertura from "@/components/ui/TelaDeAbertura";
 import Toasts from "@/components/ui/Toasts";
 import VoiceLayer from "@/components/voice/VoiceLayer";
+import { destravarSons } from "@/lib/ringtone";
 import { useChannels } from "@/stores/channels";
 import { useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
@@ -73,6 +74,7 @@ export default function ShellMobile() {
   }, []);
 
   useVoltarDoAndroid(prof);
+  useDestravarSons();
 
   /**
    * Não há ligação aba↔`view` para manter: a aba **Início** abriga os dois
@@ -279,3 +281,34 @@ function useVoltarDoAndroid(profundidadeAtual: number) {
 
 /** Há uma entrada nossa no histórico agora? Módulo, não estado: é do documento. */
 let sentinela = false;
+
+/**
+ * Destrava o áudio no **primeiro toque da sessão**.
+ *
+ * No iPhone nenhum `Audio.play()` funciona antes de um gesto do usuário, e a
+ * permissão é por elemento — então o som de mensagem nova e o toque de chamada
+ * recebida, que chegam de fora, sairiam mudos até alguém tocar na tela por
+ * outro motivo. O `toque-com-gesto.ts` só resolve o som **em curso** (o toque
+ * em loop); um som de uma vez só não tem o que retomar.
+ *
+ * `once` e `passive`: uma vez basta (o documento fica ativado para sempre), e
+ * o ouvinte não cancela nada — declarar `passive` evita que ele atrase a
+ * rolagem. Fica no shell do celular porque é lá que o problema existe: no
+ * desktop e no app do Windows o autoplay já é liberado (o WebView2 recebe
+ * `--autoplay-policy=no-user-gesture-required`).
+ *
+ * **Só um aparelho real prova isto.** O Chromium sem cabeça não aplica a
+ * política do iOS, então o render passa igual com e sem esta linha.
+ */
+function useDestravarSons() {
+  useEffect(() => {
+    const destravar = () => void destravarSons();
+    const opcoes = { once: true, passive: true } as const;
+    window.addEventListener("pointerdown", destravar, opcoes);
+    window.addEventListener("touchstart", destravar, opcoes);
+    return () => {
+      window.removeEventListener("pointerdown", destravar);
+      window.removeEventListener("touchstart", destravar);
+    };
+  }, []);
+}

@@ -659,6 +659,15 @@ duas custaram medição repetida:
   passeio ("Em voz" na lista de membros), miniatura de embed que carregou de um
   lado só, uma reação de teste — todos já apareceram como milhares de pixels.
   Antes de culpar o CSS, limpe a semente e repita.
+- **E estado sobrando nem sempre aparece como pixel.** Uma sessão viu o palco
+  da chamada **em branco** e o botão de sons "sumido"; não era regressão, era
+  presença de voz de um passeio anterior — a nova sessão entrava e o "voz em um
+  lugar só" a expulsava (`voz-em-um-lugar-so.ts`), com toast e tudo. Lixo de
+  semente também se disfarça de funcionalidade quebrada.
+- **`page.click()` do Playwright manda `pointerType: "mouse"`** mesmo num
+  contexto com `hasTouch`. Dica presa, estado de `hover` e fileira de ações
+  visível numa captura de celular são, portanto, suspeitos de harness: repita o
+  gesto com `Input.dispatchTouchEvent` (CDP) antes de reportar como defeito.
 
 A pergunta que economiza a hora não é *o que eu quebrei?*, é **qual é o ruído
 deste quadro?** — e ela se responde rodando o **mesmo build contra ele mesmo**.

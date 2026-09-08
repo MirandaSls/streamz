@@ -369,7 +369,9 @@ function BotaoDeCartao({
     <button
       type="button"
       onClick={onClick}
-      className="flex h-10 min-w-0 flex-1 items-center justify-center gap-2 rounded-lg bg-border-strong/60 px-3 text-sm font-medium text-txt-normal transition active:bg-border-strong"
+      // 44 literal, não `h-10`: sobre a raiz de 15,5px `h-10` mede 38,75, e
+      // estes são os dois primeiros botões da aba "Você"
+      className="flex h-[44px] min-w-0 flex-1 items-center justify-center gap-2 rounded-lg bg-border-strong/60 px-3 text-sm font-medium text-txt-normal transition active:bg-border-strong"
     >
       <span className="shrink-0 text-txt-secondary" aria-hidden="true">
         {icone}
