@@ -67,13 +67,17 @@ A regra que ficou, e que vale para o leiaute inteiro:
 > que expulsa ou bane, no chip de reação). **A escala do Tailwind só onde o
 > número não significa nada** — espaçamento, respiro, raio.
 
-Ela nasceu desta varredura e cobrou duas dívidas: o #178 passou a usar
-`ALTURA_DE_TOQUE = "h-[44px]"` nos modais, e a base (`cf33055`) descobriu que
-**as medidas que diziam vir das capturas oficiais estavam todas 3% erradas no
-código** — o rail "de 48" media 46,5, o cabeçalho "de 56" media 54,25, os alvos
-"de 44" mediam 43. O pior caso era a cápsula do composer, que media **58 num
-telefone** contra os 40pt do `MEDIDAS.md` §7, porque quem escrevia a altura era
-o `style.height` do auto-ajuste e não a classe.
+Ela nasceu desta varredura e cobrou três dívidas: o #178 passou a usar
+`ALTURA_DE_TOQUE = "h-[44px]"` nos modais, e a base descobriu, em duas rodadas
+(`cf33055` e `c86e528`), que **as medidas que diziam vir das capturas oficiais
+estavam todas 3% erradas no código** — o rail "de 48" media 46,5, o cabeçalho
+"de 56" media 54,25, os alvos "de 44" mediam 43, os botões do composer "de 40"
+mediam 39. O pior caso era a cápsula do composer, que media **58 num telefone**
+contra os 40pt do `MEDIDAS.md` §7: a classe dizia `min-h-[40px]` e quem
+escrevia a altura era o `style.height` do auto-ajuste. Daí a segunda metade da
+régua, que foi para o `docs/PROCESSO-DE-DESENVOLVIMENTO.md` §6.3: **medir a
+referência não basta — é preciso medir o que o nosso código entrega**, com
+`getBoundingClientRect` no aparelho emulado.
 
 **Os 43px sumiram.** Uma versão anterior deste documento tratava os 43 como
 convenção do shell e pedia para não criar um segundo padrão com 1px de
@@ -212,7 +216,7 @@ se mediu aberto.
 | `components/modals/CreatePollModal.tsx` | campos de pergunta e resposta com 22px de altura, botões de emoji com 31px (`criar-enquete.png`) | **ok (com o #178)** — está entre os que pedem tela cheia |
 | `components/chat/Composer.tsx` (compartilhado) | os três botões ("+", GIF, emoji) medem 39px | **ok (com o #178)** — 14 ramos `ehMobile`, e o menu do "+" ganhou "Galeria" e "Tirar foto" |
 | `components/mobile/telas-de-conversa.tsx` | o cabeçalho de 56px do canal só tem "voltar" e "membros" — **busca, fixados e threads não têm entrada nenhuma no celular** (§5) | **aberto — o único que importa.** Do dono do shell, pendência conhecida do #170, e deixada aberta de propósito nesta rodada: meia entrada de busca é pior que nenhuma, e o lugar dela depende de medir a captura do cabeçalho do Discord, que o acervo só tem em GIF |
-| miudezas de 1px do `rem` | sobraram alguns lugares onde a classe ainda decide um número que significa algo: a linha de canal em 35 contra 36pt (`h-9`), o avatar da mensagem em 39 contra 40pt (`Avatar`, compartilhado com o desktop) e os botões laterais do composer em 39 de largura (`w-10`) contra os 40pt do `MEDIDAS.md` §7 | anotado, não consertado — cada um é 1px e mora em arquivo compartilhado com o desktop |
+| miudezas de 1px do `rem` | sobraram dois lugares onde a classe ainda decide um número que significa algo: a linha de canal em 35 contra os 36pt do `MEDIDAS.md` §5 (`h-9`) e o avatar da mensagem em 39 contra 40pt (`ui/Avatar.tsx`) | anotado, não consertado — cada um é 1px e mora em arquivo compartilhado com o desktop. **Os botões do composer saíram desta lista**: eram 39 de largura, e o `c86e528` da base os levou a 40×40 |
 | `components/voice/**` | o palco abre (depois do merge) e a grade cabe; eu tinha anotado que faltava a barra de controles | **ok (com o #180)** — `ControlesMobile` de 68pt. Chamada de DM e seletor de tela continuam não avaliados **por mim** |
 
 ## 7. O que este PR consertou
