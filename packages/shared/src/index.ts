@@ -22,3 +22,4 @@ export * from "./eventos";
 // ── j-bots ──
 export * from "./snowflake";
 export * from "./aplicativos";
+export * from "./permissoes-discord";

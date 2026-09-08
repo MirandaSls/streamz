@@ -35,6 +35,7 @@ import { MailModule } from "./modules/mail/mail.module";
 import { AdminModule } from "./modules/admin/admin.module";
 // ── j-bots ──
 import { ApplicationsModule } from "./modules/applications/applications.module";
+import { DiscordCompatModule } from "./modules/discord-compat/discord-compat.module";
 import { UpdatesModule } from "./modules/updates/updates.module";
 import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis";
 import { redisClient } from "./modules/realtime/redis";
@@ -97,6 +98,9 @@ import { validateEnv } from "./common/env";
     AdminModule,
     // ── j-bots ──
     ApplicationsModule,
+    // a casca /api/v10 e /api/v9 que os bots do Discord falam; o REST de
+    // sempre não muda em nada
+    DiscordCompatModule,
   ],
   controllers: [HealthController],
   // guard global: o teto padrão vale para toda rota; ver common/throttle.ts
