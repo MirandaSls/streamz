@@ -683,7 +683,10 @@ function PainelDoToken({
           readOnly
           aria-label="Token do bot"
           onFocus={(e) => e.currentTarget.select()}
-          className="min-w-0 flex-1 bg-transparent font-mono text-xs text-txt-normal outline-none celular:h-[44px]"
+          // `celular:flex-none` antes do `h-[44px]`: em coluna, o `flex-1` põe
+          // a altura no eixo principal e come o `height` — medido em 21px no
+          // aparelho emulado antes desta linha (§6.3: meça, não leia a classe)
+          className="min-w-0 flex-1 bg-transparent font-mono text-xs text-txt-normal outline-none celular:h-[44px] celular:flex-none"
         />
         <button
           type="button"
@@ -706,7 +709,7 @@ function PainelDoToken({
         <button
           type="button"
           onClick={aoFechar}
-          className="flex h-[44px] items-center rounded-lg px-3 text-sm font-medium text-txt-secondary transition hover:bg-hov"
+          className="flex h-[44px] items-center rounded-lg border border-border px-3 text-sm font-medium text-txt-secondary transition hover:border-border-strong-hover hover:text-txt-primary"
         >
           Já copiei, fechar
         </button>
@@ -975,8 +978,11 @@ function Trecho({
         </button>
       </div>
       <p className="mb-2 text-xs leading-4 text-txt-muted">{nota}</p>
-      {/* o bloco rola dentro de si: a página nunca rola na horizontal */}
-      <pre className="overflow-x-auto rounded-lg bg-void p-3 text-xs leading-5 text-txt-normal">
+      {/* o bloco rola dentro de si: a página nunca rola na horizontal.
+          Ligadura desligada de propósito: com ela `===` vira `≡` e `=>` vira
+          `⇒` na tela, e quem lê o trecho para digitar à mão copia o glifo
+          errado — o botão manda o texto certo, mas os olhos vão no que veem. */}
+      <pre className="overflow-x-auto rounded-lg bg-void p-3 font-mono text-xs leading-5 text-txt-normal [font-variant-ligatures:none]">
         <code data-linguagem={linguagem}>{codigo}</code>
       </pre>
     </div>
