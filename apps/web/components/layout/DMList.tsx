@@ -142,7 +142,7 @@ export default function DMList() {
 
   return (
     <aside className="flex w-[294px] shrink-0 flex-col bg-panel">
-      <div className="flex h-[49px] shrink-0 items-center border-b border-border px-2.5 shadow-header max-md:h-14">
+      <div className="flex h-[49px] shrink-0 items-center border-b border-border px-2.5 shadow-header celular:h-14">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -159,7 +159,7 @@ export default function DMList() {
              com a fonte de 16px que o `globals.css` impõe abaixo de 768px (a
              regra que evita o zoom do iOS) o texto encostava nas bordas. */
           className={
-            "h-8 w-full rounded-lg bg-hov px-1.5 text-sm text-txt-normal outline-none placeholder:text-txt-muted max-md:h-11 max-md:px-3 " +
+            "h-8 w-full rounded-lg bg-hov px-1.5 text-sm text-txt-normal outline-none placeholder:text-txt-muted celular:h-11 celular:px-3 " +
             (buscaFocada || query ? "text-left" : "text-center")
           }
         />
@@ -174,7 +174,7 @@ export default function DMList() {
           data-amigos-button
           onClick={() => setFriendsOpen(true)}
           aria-current={friendsOpen ? "true" : undefined}
-          className={"mx-2 flex h-10 w-[calc(100%-1rem)] items-center gap-3 rounded-lg pl-3 pr-2 text-left max-md:h-12 " + (friendsOpen ? "bg-sel text-txt-primary" : "text-txt-faint hover:bg-hov hover:text-txt-normal")}
+          className={"mx-2 flex h-10 w-[calc(100%-1rem)] items-center gap-3 rounded-lg pl-3 pr-2 text-left celular:h-12 " + (friendsOpen ? "bg-sel text-txt-primary" : "text-txt-faint hover:bg-hov hover:text-txt-normal")}
         >
           <Amigos size={21} aria-hidden="true" className="shrink-0" />
           <span className="flex-1 font-medium">Amigos</span>
@@ -229,7 +229,7 @@ export default function DMList() {
               aria-label="Nova conversa"
               /* o "+" solto media 20×20; no celular ele ganha a caixa de 44 (o
                  recuo negativo mantém o glifo na mesma coluna do desktop) */
-              className="text-txt-muted transition hover:text-txt-primary max-md:-my-2.5 max-md:-mr-3 max-md:grid max-md:h-11 max-md:w-11 max-md:place-items-center"
+              className="text-txt-muted transition hover:text-txt-primary celular:-my-2.5 celular:-mr-3 celular:grid celular:h-11 celular:w-11 celular:place-items-center"
             >
               <Plus size={20} />
             </button>

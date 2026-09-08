@@ -60,7 +60,7 @@ export default function FriendRow({
     <div
       role="listitem"
       onContextMenu={abrirMenu}
-      className="group relative mx-6 flex h-[61px] items-center gap-3 rounded-lg border-t border-border px-[10px] first:border-t-0 hover:border-transparent hover:bg-hov max-md:mx-2 max-md:gap-2.5"
+      className="group relative mx-6 flex h-[61px] items-center gap-3 rounded-lg border-t border-border px-[10px] first:border-t-0 hover:border-transparent hover:bg-hov celular:mx-2 celular:gap-2.5"
     >
       <button
         type="button"
@@ -88,7 +88,7 @@ export default function FriendRow({
       </span>
 
       {/* 10px entre os círculos, medido no hover da linha do Discord */}
-      <div className="relative flex shrink-0 items-center gap-2.5 max-md:gap-0">
+      <div className="relative flex shrink-0 items-center gap-2.5 celular:gap-0">
         {actions}
         {menu && menu.length > 0 && (
           <Tooltip label="Mais">
@@ -96,7 +96,7 @@ export default function FriendRow({
               type="button"
               onClick={abrirMenu}
               aria-label={`Mais opções para ${nome}`}
-              className="grid h-9 w-9 place-items-center rounded-full text-txt-secondary transition hover:bg-sel hover:text-txt-primary max-md:h-11 max-md:w-11"
+              className="grid h-9 w-9 place-items-center rounded-full text-txt-secondary transition hover:bg-sel hover:text-txt-primary celular:h-11 celular:w-11"
             >
               {/* o "⋮" do Discord mede 16px de altura; o nosso caminho desenha
                   0,83 do `size`, então 20 → 16,7 (em 18 saía com 15) */}
@@ -140,7 +140,7 @@ export function RowAction({
         type="button"
         onClick={onClick}
         aria-label={label}
-        className={`grid h-9 w-9 place-items-center rounded-full text-txt-secondary transition hover:bg-sel max-md:h-11 max-md:w-11 ${
+        className={`grid h-9 w-9 place-items-center rounded-full text-txt-secondary transition hover:bg-sel celular:h-11 celular:w-11 ${
           danger ? "hover:text-red" : positive ? "hover:text-green" : "hover:text-txt-primary"
         }`}
       >

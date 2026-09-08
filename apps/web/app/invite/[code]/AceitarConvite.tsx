@@ -81,7 +81,7 @@ export default function AceitarConvite() {
        **sem** a barra de endereço, e o cartão nascia empurrado para baixo dela.
        As áreas seguras entram no padding para o cartão não encostar no entalhe
        nem na barra de gestos. */
-    <main className="grid min-h-[100dvh] place-items-center bg-void bg-[radial-gradient(ellipse_at_top_left,rgba(155,227,31,0.14),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(155,227,31,0.05),transparent_60%)] p-4 max-md:px-[max(1rem,env(safe-area-inset-left))] max-md:pb-[max(1rem,env(safe-area-inset-bottom))] max-md:pt-[max(1rem,env(safe-area-inset-top))]">
+    <main className="grid min-h-[100dvh] place-items-center bg-void bg-[radial-gradient(ellipse_at_top_left,rgba(155,227,31,0.14),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(155,227,31,0.05),transparent_60%)] p-4 celular:px-[max(1rem,env(safe-area-inset-left))] celular:pb-[max(1rem,env(safe-area-inset-bottom))] celular:pt-[max(1rem,env(safe-area-inset-top))]">
       {/*
         `w-full max-w-[420px]`, e não `w-[420px] max-w-full`: com `justify-items:
         center` o item da grade é dimensionado pelo conteúdo, e o `max-width:
@@ -89,7 +89,7 @@ export default function AceitarConvite() {
         já havia esticado. Medido em 390×844: a página rolava 436px na
         horizontal e o botão "Entrar para aceitar o convite" saía pela direita.
       */}
-      <div className="w-full max-w-[420px] rounded-[5px] bg-chat p-8 text-center shadow-high max-md:p-6">
+      <div className="w-full max-w-[420px] rounded-[5px] bg-chat p-8 text-center shadow-high celular:p-6">
         {preview === null && !erro && <p className="text-txt-muted">Carregando convite…</p>}
 
         {(preview || erro) && (
@@ -144,7 +144,7 @@ export default function AceitarConvite() {
                 <button
                   type="button"
                   onClick={() => router.replace(user ? "/app" : "/login")}
-                  className="mt-5 h-11 w-full rounded-[3px] bg-border-strong font-medium text-white transition hover:bg-border-strong-hover max-md:h-12"
+                  className="mt-5 h-11 w-full rounded-[3px] bg-border-strong font-medium text-white transition hover:bg-border-strong-hover celular:h-12"
                 >
                   {user ? "Voltar para o app" : "Ir para o login"}
                 </button>
@@ -154,7 +154,7 @@ export default function AceitarConvite() {
                 type="button"
                 disabled={entrando}
                 onClick={() => void aceitar()}
-                className="mt-6 h-11 w-full rounded-[3px] bg-accent font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-60 max-md:h-12"
+                className="mt-6 h-11 w-full rounded-[3px] bg-accent font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-60 celular:h-12"
                 autoFocus
               >
                 {preview?.member

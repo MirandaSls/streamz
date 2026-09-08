@@ -50,7 +50,7 @@ const MAX_CARAS = 3;
 // eles são o único caminho para "adicionar amigo" e para o menu de bloquear
 // dentro do painel deslizante do telefone.
 const CANTO =
-  "grid h-[30px] w-[30px] place-items-center rounded-full bg-black/[0.52] text-white transition hover:bg-black/70 max-md:h-11 max-md:w-11";
+  "grid h-[30px] w-[30px] place-items-center rounded-full bg-black/[0.52] text-white transition hover:bg-black/70 celular:h-11 celular:w-11";
 
 export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
   const me = useAuth((s) => s.user);
@@ -275,7 +275,7 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
         <button
           type="button"
           onClick={() => ui.openModal({ kind: "userProfile", userId: user.id })}
-          className="mx-4 mb-4 h-10 shrink-0 rounded-lg bg-border-strong text-base font-medium text-txt-primary transition hover:bg-border-strong-hover max-md:mb-[max(1rem,env(safe-area-inset-bottom))] max-md:h-12"
+          className="mx-4 mb-4 h-10 shrink-0 rounded-lg bg-border-strong text-base font-medium text-txt-primary transition hover:bg-border-strong-hover celular:mb-[max(1rem,env(safe-area-inset-bottom))] celular:h-12"
         >
           Ver Perfil Completo
         </button>

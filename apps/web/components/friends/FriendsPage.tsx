@@ -236,7 +236,7 @@ export default function FriendsPage() {
         numa tela de 390 e o shell do celular a cortava com `overflow-hidden` —
         "Adicionar amigo" saía pela metade e as abas "Pendente" e "Bloqueado",
         quando existiam, ficavam inteiramente fora da tela, sem nenhum jeito de
-        alcançá-las. Três decisões, todas atrás de `max-md:`:
+        alcançá-las. Três decisões, todas atrás de `celular:`:
 
         - **a identidade sai**: o título "Amigos" já está no cabeçalho de 48px
           da tela empilhada (`components/mobile/telas-de-conversa`), e repetido
@@ -250,21 +250,21 @@ export default function FriendsPage() {
         No desktop nada disto se aplica: a faixa continua sendo a linha única
         de 48px com identidade, abas e o grupo da direita.
       */}
-      <header className="relative z-10 flex h-12 shrink-0 items-center gap-[7px] border-b border-border pl-7 pr-5 max-md:h-14 max-md:gap-0 max-md:px-0">
-        <span className="text-txt-muted max-md:hidden" aria-hidden="true">
+      <header className="relative z-10 flex h-12 shrink-0 items-center gap-[7px] border-b border-border pl-7 pr-5 celular:h-14 celular:gap-0 celular:px-0">
+        <span className="text-txt-muted celular:hidden" aria-hidden="true">
           <Amigos size={21} />
         </span>
         {/* mesmo tamanho das abas e do botão: no Discord todo texto desta faixa
             mede o mesmo, e só a cor os separa. O nosso título era maior. */}
-        <h1 className="shrink-0 text-base font-semibold text-txt-primary max-md:hidden">Amigos</h1>
+        <h1 className="shrink-0 text-base font-semibold text-txt-primary celular:hidden">Amigos</h1>
         {/* ponto, não traço: no Discord o separador do cabeçalho de Amigos é uma
             bolinha de 4px centrada na faixa. O traço vertical lia como divisória
             de seção, que é outra coisa. */}
-        <span aria-hidden="true" className="mx-3 h-1 w-1 shrink-0 rounded-full bg-sel max-md:hidden" />
+        <span aria-hidden="true" className="mx-3 h-1 w-1 shrink-0 rounded-full bg-sel celular:hidden" />
 
         <nav
           aria-label="Filtrar amigos"
-          className="flex items-center gap-4 max-md:h-full max-md:min-w-0 max-md:flex-1 max-md:snap-x max-md:gap-2 max-md:overflow-x-auto max-md:px-3 max-md:[scrollbar-width:none]"
+          className="flex items-center gap-4 celular:h-full celular:min-w-0 celular:flex-1 celular:snap-x celular:gap-2 celular:overflow-x-auto celular:px-3 celular:[scrollbar-width:none]"
         >
           {abasVisiveis(pendentes, blocked.length).map((a) => (
             <button
@@ -272,7 +272,7 @@ export default function FriendsPage() {
               type="button"
               aria-pressed={tab === a.id}
               onClick={() => setTab(a.id)}
-              className={`flex h-8 items-center gap-1.5 rounded-lg px-3 text-base font-medium transition max-md:h-11 max-md:shrink-0 max-md:snap-start ${
+              className={`flex h-8 items-center gap-1.5 rounded-lg px-3 text-base font-medium transition celular:h-11 celular:shrink-0 celular:snap-start ${
                 tab === a.id ? "bg-sel text-txt-primary" : "text-txt-secondary hover:bg-hov hover:text-txt-primary"
               }`}
             >
@@ -289,7 +289,7 @@ export default function FriendsPage() {
             type="button"
             aria-pressed={tab === "adicionar"}
             onClick={() => setTab("adicionar")}
-            className={`h-8 rounded-lg px-3 text-base font-medium transition max-md:h-11 max-md:shrink-0 max-md:snap-start ${
+            className={`h-8 rounded-lg px-3 text-base font-medium transition celular:h-11 celular:shrink-0 celular:snap-start ${
               tab === "adicionar"
                 ? "bg-green/20 text-green"
                 : "bg-green text-accent-ink hover:bg-green/80"
@@ -299,7 +299,7 @@ export default function FriendsPage() {
           </button>
         </nav>
 
-        <div className="ml-auto flex shrink-0 items-center gap-4 max-md:hidden">
+        <div className="ml-auto flex shrink-0 items-center gap-4 celular:hidden">
           <HeaderIcon
             label="Nova mensagem de grupo"
             onClick={() => ui.openModal({ kind: "createGroupDM" })}
@@ -338,7 +338,7 @@ export default function FriendsPage() {
             <Search
               size={18}
               aria-hidden="true"
-              className="pointer-events-none absolute left-[42px] top-[22px] text-txt-muted max-md:top-[26px]"
+              className="pointer-events-none absolute left-[42px] top-[22px] text-txt-muted celular:top-[26px]"
             />
             <input
               value={busca}
@@ -346,7 +346,7 @@ export default function FriendsPage() {
               type="search"
               aria-label="Buscar amigos"
               placeholder="Buscar"
-              className="h-10 w-full rounded-lg bg-void pl-10 pr-3 text-base text-txt-normal outline-none placeholder:text-txt-muted max-md:h-12"
+              className="h-10 w-full rounded-lg bg-void pl-10 pr-3 text-base text-txt-normal outline-none placeholder:text-txt-muted celular:h-12"
             />
           </div>
         )}

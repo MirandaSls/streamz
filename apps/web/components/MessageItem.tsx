@@ -734,7 +734,7 @@ export default function MessageItem({
                        tamanho do emoji nas configurações continua com o chip
                        maior — e quem está no padrão ganha os 44px de alvo que
                        o dedo pede. */
-                    className={`flex items-center gap-1.5 rounded-lg border px-1.5 transition max-md:min-h-[44px] max-md:px-3 ${
+                    className={`flex items-center gap-1.5 rounded-lg border px-1.5 transition celular:min-h-[44px] celular:px-3 ${
                       mine
                         ? "border-accent bg-accent/20 text-txt-primary"
                         : "border-transparent bg-panel text-txt-normal hover:border-border-strong"
@@ -758,7 +758,7 @@ export default function MessageItem({
                    longo abre o menu com "Adicionar Reação", mas o "+" ao lado
                    das reações é o gesto direto, e some-se dele custava um menu
                    inteiro por reação. */
-                className="grid min-w-[2.375rem] place-items-center rounded-lg border border-transparent bg-panel px-1.5 text-txt-muted opacity-0 transition hover:border-border-strong hover:text-txt-primary group-hover:opacity-100 max-md:min-h-[44px] max-md:min-w-[44px] max-md:opacity-100"
+                className="grid min-w-[2.375rem] place-items-center rounded-lg border border-transparent bg-panel px-1.5 text-txt-muted opacity-0 transition hover:border-border-strong hover:text-txt-primary group-hover:opacity-100 celular:min-h-[44px] celular:min-w-[44px] celular:opacity-100"
               >
                 <SmilePlus size={16} />
               </button>
@@ -770,7 +770,7 @@ export default function MessageItem({
           <button
             type="button"
             onClick={() => onOpenThread(message)}
-            className="mt-1 flex w-fit items-center gap-1.5 rounded-[4px] py-0.5 text-sm font-medium text-txt-link hover:underline max-md:min-h-[44px] max-md:py-2"
+            className="mt-1 flex w-fit items-center gap-1.5 rounded-[4px] py-0.5 text-sm font-medium text-txt-link hover:underline celular:min-h-[44px] celular:py-2"
           >
             {message.thread && message.thread.participants.length > 0 && (
               <span className="flex -space-x-1.5" aria-hidden="true">
@@ -831,7 +831,7 @@ export default function MessageItem({
       */}
       {!unconfirmed && !editing && (
         <div
-          /* `max-md:!hidden`: no celular esta barra não existe. Ela é de
+          /* `celular:!hidden`: no celular esta barra não existe. Ela é de
              `hover`, que o dedo não tem — mas `group-focus-within` a fazia
              aparecer sozinha depois de qualquer toque que desse foco dentro da
              mensagem, com sete botões de 27px empilhados sobre o texto (medido
@@ -839,7 +839,7 @@ export default function MessageItem({
              onde elas pertencem no telefone. */
           className={`absolute right-3.5 ${
             primeiro ? "top-0.5" : "-top-[25px]"
-          } hidden rounded-lg border border-border bg-chat p-0.5 shadow-high group-focus-within:flex group-hover:flex max-md:!hidden`}
+          } hidden rounded-lg border border-border bg-chat p-0.5 shadow-high group-focus-within:flex group-hover:flex celular:!hidden`}
         >
           {frequentes.slice(0, RAPIDAS_NA_BARRA).map((emoji) => (
             <ActionButton

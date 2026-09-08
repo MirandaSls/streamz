@@ -28,7 +28,8 @@ export default function AuthCard({
 }) {
   return (
     /*
-      Celular (`max-md:`, o mesmo corte de 768px do `hooks/useEhMobile`):
+      Celular (`celular:`, a variante que repete a consulta do
+      `hooks/useEhMobile` — largura até 767 **ou** telefone deitado):
       - `min-h-[100dvh]` no lugar de `100vh` — `vh` é a janela **sem** a barra
         de endereço do navegador móvel, e com ela na tela sobrava uma faixa
         rolável embaixo do cartão;
@@ -38,17 +39,17 @@ export default function AuthCard({
       No desktop as duas são inertes: `100dvh` = `100vh` numa janela sem barra
       que some, e `env(safe-area-inset-*)` vale zero.
     */
-    <main className="relative grid min-h-[100dvh] place-items-center overflow-hidden bg-void p-4 max-md:px-[max(1rem,env(safe-area-inset-left))] max-md:pb-[max(1rem,env(safe-area-inset-bottom))] max-md:pt-[max(4.5rem,env(safe-area-inset-top))]">
+    <main className="relative grid min-h-[100dvh] place-items-center overflow-hidden bg-void p-4 celular:px-[max(1rem,env(safe-area-inset-left))] celular:pb-[max(1rem,env(safe-area-inset-bottom))] celular:pt-[max(4.5rem,env(safe-area-inset-top))]">
       <AuthBackground />
 
       <MarcaLockup
         size={26}
-        className="absolute left-6 top-6 text-txt-primary max-md:left-[max(1.5rem,env(safe-area-inset-left))] max-md:top-[max(1.5rem,env(safe-area-inset-top))] md:left-10 md:top-8"
+        className="absolute left-6 top-6 text-txt-primary celular:left-[max(1.5rem,env(safe-area-inset-left))] celular:top-[max(1.5rem,env(safe-area-inset-top))] md:left-10 md:top-8"
       />
 
       {/* 24px de respiro no celular: com os 32 do desktop sobram 294px de
           conteúdo numa tela de 390 */}
-      <div className="relative w-full max-w-[480px] rounded-[5px] bg-chat p-8 shadow-[0_16px_48px_rgba(0,0,0,.6),0_4px_12px_rgba(0,0,0,.45)] max-md:p-6">
+      <div className="relative w-full max-w-[480px] rounded-[5px] bg-chat p-8 shadow-[0_16px_48px_rgba(0,0,0,.6),0_4px_12px_rgba(0,0,0,.45)] celular:p-6">
         <h1 className="text-center font-display text-2xl font-semibold leading-8 tracking-title text-txt-primary">
           {title}
         </h1>
@@ -119,15 +120,15 @@ export function OptionalFieldLabel({
 // a borda escura é o que separa o campo do corpo do cartão: `bg-void` sozinho
 // encosta no `bg-chat` sem aresta e o campo some
 //
-// `max-md:h-12` nos dois: 40 e 43px são alvos de dedo curtos (o piso das
+// `celular:h-12` nos dois: 40 e 43px são alvos de dedo curtos (o piso das
 // diretrizes de toque é 44), e no celular o texto do campo passa a 16px por
 // causa da regra do `globals.css` que evita o zoom do iOS — numa caixa de 40px
 // ele fica encostado nas bordas. 48px acomoda os dois. No desktop nada muda.
 export const inputClass =
-  "mb-5 h-10 w-full rounded-[3px] border border-black/30 bg-void px-2.5 text-txt-normal outline-none placeholder:text-txt-muted disabled:opacity-60 max-md:h-12";
+  "mb-5 h-10 w-full rounded-[3px] border border-black/30 bg-void px-2.5 text-txt-normal outline-none placeholder:text-txt-muted disabled:opacity-60 celular:h-12";
 
 export const submitClass =
-  "h-11 w-full rounded-[3px] bg-accent font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60 max-md:h-12";
+  "h-11 w-full rounded-[3px] bg-accent font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60 celular:h-12";
 
 /** Link de apoio dos formulários de conta (voltar, ajuda, alternativas). */
 export const linkClass = "font-medium text-txt-link hover:underline";

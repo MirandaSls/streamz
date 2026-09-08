@@ -187,8 +187,8 @@ export default function EditorDePermissoes({
           /* No celular as duas colunas viram duas faixas empilhadas: a de
              cargos tem 180px fixos e a de permissões precisa de bem mais que os
              ~190 que sobrariam numa tela de 390. */
-          <div className="mt-4 flex gap-6 max-md:flex-col max-md:gap-4">
-            <div className="w-[180px] shrink-0 max-md:w-full">
+          <div className="mt-4 flex gap-6 celular:flex-col celular:gap-4">
+            <div className="w-[180px] shrink-0 celular:w-full">
               <div className="mb-1 flex items-center justify-between gap-2 px-2">
                 <h3 className="text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
                   Cargos/membros
@@ -201,7 +201,7 @@ export default function EditorDePermissoes({
                     aria-haspopup="dialog"
                     aria-expanded={popover}
                     onClick={() => setPopover((v) => !v)}
-                    className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-txt-muted transition hover:bg-hov hover:text-txt-primary max-md:-my-2 max-md:h-9 max-md:w-9"
+                    className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-txt-muted transition hover:bg-hov hover:text-txt-primary celular:-my-2 celular:h-9 celular:w-9"
                   >
                     <Plus size={14} />
                   </button>
@@ -215,7 +215,7 @@ export default function EditorDePermissoes({
                   return (
                     <li
                       key={alvo.chave}
-                      className={`group mb-0.5 flex h-8 items-center rounded-[4px] pr-1 transition max-md:h-11 ${
+                      className={`group mb-0.5 flex h-8 items-center rounded-[4px] pr-1 transition celular:h-11 ${
                         ativo ? "bg-sel" : "hover:bg-hov"
                       }`}
                     >
@@ -226,7 +226,7 @@ export default function EditorDePermissoes({
                         type="button"
                         aria-current={ativo ? "true" : undefined}
                         onClick={() => setSelecionado(alvo.chave)}
-                        className={`flex h-8 min-w-0 flex-1 items-center gap-2 rounded-[4px] px-2 text-left text-sm max-md:h-11 ${
+                        className={`flex h-8 min-w-0 flex-1 items-center gap-2 rounded-[4px] px-2 text-left text-sm celular:h-11 ${
                           ativo ? "text-txt-primary" : "text-txt-normal"
                         }`}
                       >
@@ -251,7 +251,7 @@ export default function EditorDePermissoes({
                           aria-label={`Remover regra de ${alvo.nome}`}
                           onClick={() => void onRemoverRegra(alvo.id)}
                           /* no dedo não há hover: sem isto "remover regra" não tinha caminho */
-                          className="grid h-5 w-5 shrink-0 place-items-center rounded text-txt-muted opacity-0 transition hover:text-red focus-visible:opacity-100 group-hover:opacity-100 max-md:h-9 max-md:w-9 max-md:opacity-100"
+                          className="grid h-5 w-5 shrink-0 place-items-center rounded text-txt-muted opacity-0 transition hover:text-red focus-visible:opacity-100 group-hover:opacity-100 celular:h-9 celular:w-9 celular:opacity-100"
                         >
                           <X size={12} />
                         </button>

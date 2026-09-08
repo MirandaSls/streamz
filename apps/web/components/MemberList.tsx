@@ -243,7 +243,7 @@ export default function MemberList() {
            59,9pt de passo entre linhas de membro). Os 42 do desktop nascem de
            uma coluna que se navega com o mouse; no dedo ficam abaixo do piso
            de 44 e a lista vira uma faixa de alvos colados. */
-        className={`group mx-2.5 flex h-[42px] items-center gap-3 rounded-lg px-2 hover:bg-hov max-md:h-[60px] ${
+        className={`group mx-2.5 flex h-[42px] items-center gap-3 rounded-lg px-2 hover:bg-hov celular:h-[60px] ${
           offline ? "opacity-30 hover:opacity-100" : ""
         }`}
       >
@@ -308,17 +308,17 @@ export default function MemberList() {
           No celular a fileira é **sempre visível** — o dedo não paira —, mas só
           com "Mensagem": as três de moderação levariam 132px de uma linha de
           335 e o nome truncava em "betoxip…" (medido em 390×844). Elas
-          continuam no menu de contexto, que no telefone ainda depende do toque
-          longo — ver o relatório de cobertura. No desktop nada muda.
+          continuam no menu de contexto, que no telefone abre pelo toque longo
+          (`AreaDeToqueLongo` envolve o shell inteiro). No desktop nada muda.
         */}
-        <div className="hidden shrink-0 gap-0.5 group-focus-within:flex group-hover:flex max-md:flex">
+        <div className="hidden shrink-0 gap-0.5 group-focus-within:flex group-hover:flex celular:flex">
           {!isMe && (
             <Tooltip label="Mensagem">
               <button
                 type="button"
                 onClick={() => void openWith(m.user.id)}
                 aria-label={`Abrir conversa com ${nome}`}
-                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-txt-primary max-md:h-11 max-md:w-11"
+                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-txt-primary celular:h-11 celular:w-11"
               >
                 <MessageSquare size={16} />
               </button>
@@ -333,7 +333,7 @@ export default function MemberList() {
                   isTimedOut(m.timeoutUntil) ? void removeTimeout(m.user.id) : timeout(m.user.id)
                 }
                 aria-label={`${isTimedOut(m.timeoutUntil) ? "Remover castigo de" : "Colocar de castigo"} ${nome}`}
-                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red max-md:hidden"
+                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red celular:hidden"
               >
                 {isTimedOut(m.timeoutUntil) ? <TimerOff size={16} /> : <Timer size={16} />}
               </button>
@@ -345,7 +345,7 @@ export default function MemberList() {
                 type="button"
                 onClick={() => kick(m.user.id)}
                 aria-label={`Expulsar ${nome}`}
-                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red max-md:hidden"
+                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red celular:hidden"
               >
                 <UserX size={16} />
               </button>
@@ -357,7 +357,7 @@ export default function MemberList() {
                 type="button"
                 onClick={() => ban(m.user.id)}
                 aria-label={`Banir ${nome}`}
-                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red max-md:hidden"
+                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red celular:hidden"
               >
                 <Gavel size={16} />
               </button>

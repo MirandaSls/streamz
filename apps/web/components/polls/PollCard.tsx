@@ -59,7 +59,7 @@ export default function PollCard({
               onClick={() => vote(poll.messageId, o.index)}
               /* 48px no celular: votar é um alvo de dedo, e 39px ficam abaixo
                  do piso de 44 */
-              className={`relative flex h-10 items-center gap-2 overflow-hidden rounded-[4px] border px-3 text-left transition max-md:h-12 ${
+              className={`relative flex h-10 items-center gap-2 overflow-hidden rounded-[4px] border px-3 text-left transition celular:h-12 ${
                 o.me ? "border-accent" : "border-border-strong"
               } ${encerrada ? "cursor-default opacity-80" : "hover:border-txt-muted"}`}
             >
@@ -90,7 +90,7 @@ export default function PollCard({
 
       {/* o rodapé no celular: os dois botões de texto ("Quem votou", "Encerrar")
           mediam 16px de altura — abaixo de qualquer alvo de dedo */}
-      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-txt-muted max-md:gap-x-3 max-md:[&_button]:min-h-[44px]">
+      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-txt-muted celular:gap-x-3 celular:[&_button]:min-h-[44px]">
         <span>
           {poll.totalVotes} {poll.totalVotes === 1 ? "voto" : "votos"}
         </span>
