@@ -246,6 +246,9 @@ model Guild {
   // nasceram aqui. Back-relations: nenhuma coluna nova em `Guild`.
   applicationCommands ApplicationCommand[]
   interactions        Interaction[]
+  // ── j-bots · F4 ── os aplicativos instalados neste servidor. Back-relation
+  // também: quem guarda o par (servidor, aplicativo) é a `GuildApplication`.
+  applications        GuildApplication[]
 }
 
 model Ban {
@@ -1058,8 +1061,37 @@ model Application {
   commands     ApplicationCommand[]
   interactions Interaction[]
 
+  // ── F4 ── onde este aplicativo está instalado (back-relation)
+  installs GuildApplication[]
+
   @@index([ownerId])
   @@index([publico])
+}
+
+/// Instalação de uma application num servidor: é o que autoriza o bot ali.
+/// Apagar = "remover o app do servidor" (o membro-bot sai junto).
+///
+/// `installedById` **não** tem relação declarada com `User` de propósito: o §10
+/// não a declarou, e uma FK com `onDelete: Cascade` faria a saída de quem
+/// instalou desinstalar o app do servidor. É um `String` que a leitura resolve
+/// à mão.
+model GuildApplication {
+  id            String   @id @default(cuid())
+  guildId       String
+  applicationId String
+  /// quem instalou (precisou de MANAGE_GUILD)
+  installedById String
+  /// bitfield de `Permission` concedido na instalação; vira o cargo gerenciado
+  permissions   Int      @default(0)
+  /// o cargo criado para o bot (apagado com a instalação)
+  roleId        String?
+  createdAt     DateTime @default(now())
+
+  guild       Guild       @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, applicationId])
+  @@index([applicationId])
 }
 
 /// Token do bot. Guardamos só o SHA-256 — quem lê o banco não vira o bot.

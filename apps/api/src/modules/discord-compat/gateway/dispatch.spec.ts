@@ -144,7 +144,12 @@ function ambiente() {
     },
   } as unknown as RealtimeService;
 
-  const registro = { todas: () => sessoes } as unknown as RegistroDeSessoes;
+  const registro = {
+    todas: () => sessoes,
+    // F4: é por aqui que a ponte descobre que o membro que entrou (ou saiu) é o
+    // usuário-bot de uma sessão viva. Mesmo corpo do `RegistroDeSessoes` real.
+    porBot: (botUserId: string) => sessoes.filter((s) => s.botUserId === botUserId),
+  } as unknown as RegistroDeSessoes;
 
   const dados = {
     async servidorCompleto(guildId: string) {
@@ -471,6 +476,150 @@ describe("PonteDeEventos — estrutura do servidor", () => {
     expect(evento.user_id).toBe("555444333222111000");
     // segundos, não milissegundos: o discord.js faz `new Date(ts * 1000)`
     expect(evento.timestamp).toBeLessThan(2_000_000_000);
+  });
+});
+
+/**
+ * F4 — instalar e remover um aplicativo, visto pelo gateway.
+ *
+ * O que estes testes prendem, e por que cada um existe:
+ *
+ * - o bot recebe o **servidor inteiro** ao entrar, e não um `GUILD_MEMBER_ADD`
+ *   sobre si mesmo: é do `GUILD_CREATE` que depende o `guildCreate` do
+ *   discord.js e, com ele, o servidor aparecer no `client.guilds`. Sem isso um
+ *   `!ping` no canal chega a uma sessão que não sabe que o canal existe;
+ * - **sem exigir o intent `GUILD_MEMBERS`**, que no Discord é privilegiado e a
+ *   maioria dos bots não pede (o `prova-discordjs.mjs` pede só `Guilds` e
+ *   `GuildMessages`). Filtrar por ele deixaria o bot comum sem saber que entrou
+ *   — o defeito mais caro possível, porque é silencioso;
+ * - o `GUILD_DELETE` sai **mesmo com a linha de `GuildMember` já apagada**, que
+ *   é o estado real no instante do `member.left`;
+ * - `unavailable: false`, que é o que faz a lib disparar `guildDelete` e limpar
+ *   o cache em vez de esperar o servidor voltar;
+ * - e os **outros** bots do servidor continuam vendo o membro entrar e sair
+ *   normalmente: a regra é sobre a sessão do próprio bot, não sobre o evento.
+ */
+describe("PonteDeEventos — o bot entra e sai do servidor (F4)", () => {
+  /** O `member.joined` como o `InstalacaoService` o emite. */
+  const entrou = (userId: string) => ({
+    guildId: "g1",
+    member: {
+      role: "MEMBER",
+      user: { id: userId },
+      roleIds: ["r_app"],
+      joinedAt: "2026-09-08T15:00:00.000Z",
+    },
+  });
+
+  it("o bot instalado recebe GUILD_CREATE, e não GUILD_MEMBER_ADD sobre si mesmo", async () => {
+    const a = ambiente();
+    a.ligar("s1", "bot1", INTENT.GUILDS | INTENT.GUILD_MEMBERS);
+
+    await a.emitir(SERVIDOR, WS_EVENTS.MEMBER_JOINED, entrou("bot1"));
+
+    expect(a.despachados.map((d) => d.evento)).toEqual(["GUILD_CREATE"]);
+    expect(a.despachados[0]?.dados).toMatchObject({
+      id: "111222333444555666",
+      unavailable: false,
+    });
+  });
+
+  it("o GUILD_CREATE sai sem o intent GUILD_MEMBERS (que é privilegiado)", async () => {
+    const a = ambiente();
+    // exatamente os intents do `prova-discordjs.mjs`
+    a.ligar("s1", "bot1", INTENT.GUILDS | INTENT.GUILD_MESSAGES);
+
+    await a.emitir(SERVIDOR, WS_EVENTS.MEMBER_JOINED, entrou("bot1"));
+
+    expect(a.despachados.map((d) => d.evento)).toEqual(["GUILD_CREATE"]);
+  });
+
+  it("as duas conexões do mesmo bot recebem o GUILD_CREATE", async () => {
+    const a = ambiente();
+    a.ligar("s1", "bot1", INTENT.GUILDS);
+    a.ligar("s2", "bot1", INTENT.GUILDS);
+
+    await a.emitir(SERVIDOR, WS_EVENTS.MEMBER_JOINED, entrou("bot1"));
+
+    expect(a.despachados.map((d) => d.sessao)).toEqual(["s1", "s2"]);
+    // e o servidor é montado UMA vez, não uma por conexão
+    expect(a.consultas.filter((c) => c === "servidorCompleto:g1")).toHaveLength(1);
+  });
+
+  it("outro bot do servidor vê o bot novo entrar como GUILD_MEMBER_ADD", async () => {
+    const a = ambiente();
+    a.ligar("s1", "bot1", INTENT.GUILDS); // o que entrou
+    a.ligar("s2", "bot2", INTENT.GUILD_MEMBERS); // o vizinho
+
+    await a.emitir(SERVIDOR, WS_EVENTS.MEMBER_JOINED, entrou("bot1"));
+
+    expect(a.despachados).toEqual([
+      { sessao: "s1", evento: "GUILD_CREATE", dados: expect.anything() },
+      { sessao: "s2", evento: "GUILD_MEMBER_ADD", dados: expect.anything() },
+    ]);
+  });
+
+  it("uma pessoa entrando continua sendo só GUILD_MEMBER_ADD", async () => {
+    const a = ambiente();
+    a.ligar("s1", "bot1", INTENT.GUILD_MEMBERS);
+
+    await a.emitir(SERVIDOR, WS_EVENTS.MEMBER_JOINED, entrou("u_ana"));
+
+    expect(a.despachados.map((d) => d.evento)).toEqual(["GUILD_MEMBER_ADD"]);
+  });
+
+  it("removido, o bot recebe GUILD_DELETE com unavailable: false", async () => {
+    const a = ambiente();
+    a.ligar("s1", "bot1", INTENT.GUILDS);
+    // a linha de `GuildMember` do bot já não existe: é o estado real no
+    // instante do `member.left`, e é o que `botsNoServidor` não alcança
+    a.membros.add("g1:u_ana");
+
+    await a.emitir(SERVIDOR, WS_EVENTS.MEMBER_LEFT, { guildId: "g1", userId: "bot1" });
+
+    expect(a.despachados.map((d) => d.evento)).toEqual(["GUILD_DELETE"]);
+    expect(a.despachados[0]?.dados).toEqual({
+      id: "111222333444555666",
+      unavailable: false,
+    });
+  });
+
+  it("o bot removido não recebe também um GUILD_MEMBER_REMOVE sobre si mesmo", async () => {
+    const a = ambiente();
+    a.ligar("s1", "bot1", INTENT.GUILDS | INTENT.GUILD_MEMBERS);
+    // aqui o bot ainda conta como membro (a corrida oposta): mesmo assim o
+    // dispatch sobre si mesmo é o GUILD_DELETE, e só ele
+    await a.emitir(SERVIDOR, WS_EVENTS.MEMBER_LEFT, { guildId: "g1", userId: "bot1" });
+
+    expect(a.despachados.map((d) => d.evento)).toEqual(["GUILD_DELETE"]);
+  });
+
+  it("outro bot do servidor vê a saída como GUILD_MEMBER_REMOVE", async () => {
+    const a = ambiente();
+    a.ligar("s1", "bot1", INTENT.GUILDS);
+    a.ligar("s2", "bot2", INTENT.GUILD_MEMBERS);
+
+    await a.emitir(SERVIDOR, WS_EVENTS.MEMBER_LEFT, { guildId: "g1", userId: "bot1" });
+
+    expect(a.despachados).toEqual([
+      { sessao: "s1", evento: "GUILD_DELETE", dados: expect.anything() },
+      { sessao: "s2", evento: "GUILD_MEMBER_REMOVE", dados: expect.anything() },
+    ]);
+  });
+
+  it("instalar num servidor que sumiu no meio não vira GUILD_MEMBER_ADD sobre si mesmo", async () => {
+    const a = ambiente();
+    a.ligar("s1", "bot1", INTENT.GUILDS | INTENT.GUILD_MEMBERS);
+
+    // `servidorCompleto` devolve null para qualquer coisa que não seja "g1"
+    await a.emitir(SERVIDOR, WS_EVENTS.MEMBER_JOINED, {
+      ...entrou("bot1"),
+      guildId: "g9",
+    });
+
+    // evento nenhum: um GUILD_MEMBER_ADD aqui faria a lib guardar um membro de
+    // um servidor que ela não conhece
+    expect(a.despachados).toEqual([]);
   });
 });
 
