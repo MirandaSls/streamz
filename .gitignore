@@ -63,11 +63,26 @@ e2e-shots*/
 # saída do graphify (grafo local do código, regenerável)
 graphify-out/
 
-# worktrees do Claude Code — cada uma carrega um node_modules inteiro
-.claude/worktrees/
+# Área de trabalho do Claude Code: worktrees (cada uma carrega um node_modules
+# inteiro) e saída dos builds do desktop (instaladores de ~13 MB por versão).
+# Ignora a pasta toda — nada que o agente escreve aqui é fonte.
+/.claude/
 
 # Instaladores servidos por /api/downloads — binário de release não entra no
 # repositório; a pasta é montada no contêiner como volume somente-leitura.
 # A barra inicial ancora na raiz: sem ela o padrão engoliria também
 # apps/api/src/modules/downloads/, que é código.
 /downloads/
+
+# Mesma coisa para a pasta que o updater do desktop serve.
+/updates/
+
+# Material de referência: capturas de tela reais do Discord (pt-BR) usadas só
+# para comparar a interface. São ~60 MB de PNG que mostram **dados pessoais de
+# terceiros** — foto de perfil, apelido e nome de servidor de gente real — e o
+# acervo de ícones do Discord, que é material com direitos de terceiros.
+# Nada disso pode ir para o GitHub, nem em repositório privado: basta um
+# `git add -A` distraído para publicar PII que não é nossa. Se algum documento
+# precisar de imagem, use captura da NOSSA interface, sem dados de ninguém.
+/docs/Reference/
+/docs/ref-ui/
