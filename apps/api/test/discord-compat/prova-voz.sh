@@ -58,15 +58,21 @@ LIVEKIT_API_SECRET="segredo-de-brinquedo-do-livekit-para-a-prova"
 PONTE_VOZ_SEGREDO="segredo-de-brinquedo-da-ponte-de-voz"
 SENHA_LAVALINK="senha-de-teste"
 
+# Recebe o sufixo em vez de ler as variáveis do escopo: no caminho
+# `./prova-voz.sh derrubar f2d` o `$1` é "derrubar", e os nomes já tinham sido
+# calculados com ele. A primeira versão apagava contêineres chamados
+# `streamz-voz-derrubar-*`, dizia "derrubado" e deixava tudo de pé.
 derrubar() {
-  docker rm -f "$PG" "$API" "$LK" "$PONTE" "$TLS" "$MUSICA" "$LAVA" >/dev/null 2>&1 || true
-  docker network rm "$REDE" >/dev/null 2>&1 || true
+  local s="${1:-$SUFIXO}"
+  docker rm -f "streamz-voz-$s-pg" "streamz-voz-$s-api" "streamz-voz-$s-livekit" \
+    "streamz-voz-$s-ponte" "streamz-voz-$s-tls" "streamz-voz-$s-musica" \
+    "streamz-voz-$s-lavalink" "streamz-voz-$s-ouvinte" >/dev/null 2>&1 || true
+  docker network rm "streamz-voz-$s" >/dev/null 2>&1 || true
 }
 
 if [ "${1:-}" = "derrubar" ]; then
-  SUFIXO="${2:-voz}"
-  derrubar
-  echo "[voz] derrubado."
+  derrubar "${2:-voz}"
+  echo "[voz] derrubado: ${2:-voz}"
   exit 0
 fi
 
