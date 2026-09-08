@@ -51,13 +51,13 @@ export default function BarraDeVozMobile() {
       ui.setView("guild");
       if (guild) useGuilds.getState().select(guild);
       if (canal) useChannels.getState().select(canal);
-      mobile.irParaAba("servidores");
+      mobile.irParaAba("inicio");
       mobile.empilhar("voz");
       return;
     }
     ui.setView("dm");
     if (conversa) useDMs.getState().select(conversa);
-    mobile.irParaAba("mensagens");
+    mobile.irParaAba("inicio");
     mobile.empilhar("conversa");
   }
 

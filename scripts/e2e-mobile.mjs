@@ -64,6 +64,12 @@ const composer = 'textarea[aria-label="Mensagem para #geral"]';
 
 const foto = async (page, nome) => {
   const file = resolve(outDir, `${nome}.png`);
+  // O clique do Playwright deixa o ponteiro em cima do alvo, e o tooltip do
+  // desktop nasce dali — num aparelho de verdade não existe ponteiro parado.
+  // Tirar o mouse de cena antes da foto é o que impede um balão de hover de
+  // aparecer numa captura de celular.
+  await page.mouse.move(1, 1);
+  await page.waitForTimeout(250);
   // termina as transições antes de fotografar: sem isso a captura pode pegar
   // uma tela no meio do slide de entrada
   await page.screenshot({ path: file, animations: "disabled" });
@@ -230,8 +236,20 @@ try {
     await aba(nome).click();
   }
 
-  // 01 — servidores: rail + lista de canais
-  await irParaAba("Servidores");
+  /** A bolha de conversas do topo da rail — é ela que abre a lista "Mensagens". */
+  async function irParaConversas() {
+    await irParaAba("Início");
+    await page.waitForTimeout(400);
+    await page.locator('nav[aria-label="Servidores"] button[aria-label^="Mensagens diretas"]').click();
+    await page.waitForTimeout(900);
+  }
+
+  // 01 — servidores: rail + lista de canais. O app abre na lista de conversas
+  // (o `view` nasce em "dm"), então o servidor é escolhido no rail — que é
+  // exatamente o gesto do Discord.
+  await irParaAba("Início");
+  await page.waitForTimeout(800);
+  await page.locator('nav[aria-label="Servidores"] button[aria-label^="Time de Produto"]').click();
   await page.waitForTimeout(1200);
   await foto(page, "01-servidores");
 
@@ -240,8 +258,9 @@ try {
   await page.waitForTimeout(1800);
   await foto(page, "02-chat-canal");
 
-  // 03 — lista de membros (painel deslizante)
-  await page.locator('button[aria-label="Membros"]').click();
+  // 03 — lista de membros: no celular ela abre pelo **título** do cabeçalho
+  // (`# geral ›`), como no Discord — não há ícone de membros ali
+  await page.locator("header button").filter({ hasText: "geral" }).first().click();
   await page.waitForTimeout(700);
   await foto(page, "03-membros");
   await page.locator('button[aria-label="Fechar"]').click();
@@ -264,8 +283,8 @@ try {
   await page.waitForTimeout(600);
   await page.locator("textarea").first().fill("");
 
-  // 04 — conversas
-  await irParaAba("Mensagens");
+  // 04 — conversas: pela bolha da rail, não por uma aba
+  await irParaConversas();
   await page.waitForTimeout(1000);
   await foto(page, "04-dms");
 

@@ -4,12 +4,7 @@ import { useEffect, useRef, type MouseEvent } from "react";
 import BarraDeAbas from "@/components/mobile/BarraDeAbas";
 import BarraDeVozMobile from "@/components/mobile/BarraDeVozMobile";
 import { TelaEmpilhada } from "@/components/mobile/pecas";
-import {
-  TelaMensagens,
-  TelaNotificacoes,
-  TelaServidores,
-  TelaVoce,
-} from "@/components/mobile/telas-base";
+import { TelaInicio, TelaNotificacoes, TelaVoce } from "@/components/mobile/telas-base";
 import {
   AreaDeToqueLongo,
   TelaDeAmigos,
@@ -80,30 +75,12 @@ export default function ShellMobile() {
   useVoltarDoAndroid(prof);
 
   /**
-   * A aba e o `view` das stores andam juntos.
-   *
-   * `view` ("guild" | "dm") é o que diz à `GuildRail` qual item está aceso e ao
-   * `DMList` se a conversa aberta é a da tela. No desktop ele muda quando se
-   * clica no rail ou no logo; aqui a aba é a mesma decisão, e sem esta ligação a
-   * rail acendia o botão de início enquanto a lista de canais de um servidor
-   * estava na frente.
+   * Não há ligação aba↔`view` para manter: a aba **Início** abriga os dois
+   * valores de `view`, e quem troca entre eles é a rail — a bolha de conversas
+   * põe `"dm"`, o ícone de um servidor põe `"guild"`, exatamente como no
+   * desktop. Foi a estrutura de quatro abas que precisava dessa costura.
    */
   const view = useUI((s) => s.view);
-  useEffect(() => {
-    if (aba === "servidores") ui.setView("guild");
-    else if (aba === "mensagens") ui.setView("dm");
-  }, [aba]);
-  /**
-   * ...e o caminho inverso: o logo da rail volta para "dm" — logo, para a aba.
-   *
-   * Só **depois do primeiro toque**, pela mesma razão dos efeitos abaixo: o
-   * `view` nasce `"dm"` (é o padrão da store), e sem essa condição o app abriria
-   * sempre na aba Mensagens, ignorando a aba inicial.
-   */
-  useEffect(() => {
-    if (!jaInteragiu.current) return;
-    if (view === "dm" && useMobile.getState().aba === "servidores") mobile.irParaAba("mensagens");
-  }, [view]);
 
   /**
    * Delegação do toque na lista da aba. Cada `data-*` abaixo já existia ou é um
@@ -165,8 +142,8 @@ export default function ShellMobile() {
     if (view !== "dm" || amigosAbertos) return;
     if (!dmAtiva) return;
     const estado = useMobile.getState();
-    if (estado.aba === "mensagens" && telaDoTopo(estado) === "conversa") return;
-    mobile.irParaAba("mensagens");
+    if (estado.aba === "inicio" && telaDoTopo(estado) === "conversa") return;
+    mobile.irParaAba("inicio");
     mobile.empilhar("conversa");
   }, [view, dmAtiva, amigosAbertos]);
 
@@ -174,16 +151,14 @@ export default function ShellMobile() {
   useEffect(() => {
     if (!jaInteragiu.current || !amigosAbertos) return;
     const estado = useMobile.getState();
-    if (estado.aba === "mensagens" && telaDoTopo(estado) === "amigos") return;
-    mobile.irParaAba("mensagens");
+    if (estado.aba === "inicio" && telaDoTopo(estado) === "amigos") return;
+    mobile.irParaAba("inicio");
     mobile.empilhar("amigos");
   }, [amigosAbertos]);
 
   const base =
-    aba === "servidores" ? (
-      <TelaServidores />
-    ) : aba === "mensagens" ? (
-      <TelaMensagens />
+    aba === "inicio" ? (
+      <TelaInicio />
     ) : aba === "notificacoes" ? (
       <TelaNotificacoes />
     ) : (

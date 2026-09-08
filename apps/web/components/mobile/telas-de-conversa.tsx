@@ -229,16 +229,22 @@ export function TelaDeCanal() {
 
   return (
     <>
+      {/*
+        `# nome ›`, e é **o título** que abre a lista de membros — é o que a
+        captura `discord-mobile-chat-canal-2024.png` mostra: seta de voltar,
+        `# general ›` e a lupa à direita. Não há ícone de membros ali.
+
+        A lupa fica de fora: a busca de mensagens não tem tela no celular, e
+        §6.6 é clara — botão inerte só existe quando o Discord o tem e nós
+        temos o que ele faz. Uma lupa que não busca seria pior que nenhuma.
+      */}
       <CabecalhoMobile
         aoVoltar={() => voltar()}
         icone={<Icone size={20} />}
         titulo={nome}
         subtitulo={canal.topic ?? undefined}
-        acoes={
-          <BotaoDeToque label="Membros" onClick={abrirMembros}>
-            <Users size={22} />
-          </BotaoDeToque>
-        }
+        aoTocarNoTitulo={abrirMembros}
+        chevron
       />
       <ChatView incorporado />
       {membrosAbertos && (
@@ -265,6 +271,7 @@ export function TelaDeDM() {
 
   return (
     <>
+      {/* mesmo padrão do canal: o título é que abre quem está na conversa */}
       <CabecalhoMobile
         aoVoltar={() => voltar()}
         icone={
@@ -275,11 +282,8 @@ export function TelaDeDM() {
           )
         }
         titulo={titulo}
-        acoes={
-          <BotaoDeToque label={grupo ? "Participantes" : "Perfil"} onClick={abrirMembros}>
-            {grupo ? <Users size={22} /> : <UserProfile size={22} />}
-          </BotaoDeToque>
-        }
+        aoTocarNoTitulo={abrirMembros}
+        chevron
       />
       <DMView semCabecalho />
       {membrosAbertos && (

@@ -5,6 +5,7 @@ import {
   Compass,
   LogOut,
   Plus,
+  MessageSquare,
   Settings,
   UserPlus,
   Users,
@@ -139,6 +140,7 @@ function RailItem({
   emVoz = false,
   green = false,
   lado = 40,
+  redondo = false,
   onClick,
   onContextMenu,
   children,
@@ -152,6 +154,13 @@ function RailItem({
   green?: boolean;
   /** lado do botão: 40 no desktop, 48 no celular (ver `GuildRail`). */
   lado?: 40 | 48;
+  /**
+   * Círculo em vez de squircle. É a **bolha de conversas** no topo da rail do
+   * celular: na captura `discord-mobile-dms-2024.png` ela é redonda e os
+   * ícones de servidor abaixo dela não são — a forma é o que separa "minhas
+   * conversas" de "um servidor".
+   */
+  redondo?: boolean;
   /** recebe o evento porque o "+" ancora um menu no retângulo do botão. */
   onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
@@ -180,7 +189,9 @@ function RailItem({
             onClick={onClick}
             aria-label={unread && !active ? `${label} (não lido)` : label}
             aria-current={active ? "page" : undefined}
-            className={`relative grid place-items-center overflow-hidden rounded-xl text-[15px] font-semibold transition-all duration-200 ${caixa} ${
+            className={`relative grid place-items-center overflow-hidden text-[15px] font-semibold transition-all duration-200 ${
+              redondo ? "rounded-full" : "rounded-xl"
+            } ${caixa} ${
               active
                 ? "bg-accent text-accent-ink"
                 : green
@@ -270,7 +281,11 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
   function irParaAmigos() {
     ui.setView("dm");
     sairDaColunaDeVoz();
-    fecharAmigos(true);
+    // No celular a bolha abre a **lista de conversas**, não a página Amigos:
+    // na captura, tocar nela mostra "Mensagens" com as conversas, e "Adicionar
+    // amigos" é um botão dentro dessa lista. No desktop o logo continua indo
+    // para Amigos, que é a home de lá.
+    fecharAmigos(!compacto);
     void atualizarConversas();
   }
 
@@ -376,12 +391,18 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
       <RailItem
         label="Mensagens diretas"
         lado={compacto ? 48 : 40}
+        redondo={compacto}
         active={view === "dm"}
         unread={dmUnread}
         onClick={irParaAmigos}
       >
-        {/* o símbolo da marca no lugar onde o Discord põe o logo dele */}
-        <Marca size={compacto ? 26 : 22} />
+        {/*
+          No desktop, o símbolo da marca, no lugar onde o Discord põe o logo
+          dele. No celular, o **balão**: ali esta bolha não é "a home do app", é
+          a entrada das conversas — tocá-la troca a coluna da direita pela lista
+          "Mensagens" (`discord-mobile-dms-2024.png`), com a rail à vista.
+        */}
+        {compacto ? <MessageSquare size={26} /> : <Marca size={22} />}
       </RailItem>
 
       {/*

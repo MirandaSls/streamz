@@ -1,6 +1,6 @@
 "use client";
 
-import { Inbox, MessageSquare } from "@/components/ui/icones";
+import { Bell } from "@/components/ui/icones";
 import Avatar from "@/components/ui/Avatar";
 import Marca from "@/components/ui/Marca";
 import { useAuth } from "@/stores/auth";
@@ -12,8 +12,9 @@ import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
 import { ABAS_MOBILE, useMobile, type AbaMobile } from "@/stores/mobile";
 
 /**
- * Barra de abas do rodapé — as quatro do app do Discord no celular:
- * **Servidores**, **Mensagens**, **Notificações** e **Você**.
+ * Barra de abas do rodapé — as **três** do app do Discord no celular, medidas
+ * em `docs/Reference/mobile/discord-mobile-servidor-2024.png`: **Início**,
+ * **Notificações** e **Você**.
  *
  * Ela é o único elemento fixo do leiaute: a pilha de telas acontece acima
  * dela, e trocar de aba nunca a esconde. Duas medidas fazem essa barra
@@ -26,10 +27,13 @@ import { ABAS_MOBILE, useMobile, type AbaMobile } from "@/stores/mobile";
  *   rótulo cabe com folga. Sem a área segura a fileira fica atrás da barra de
  *   gestos do iPhone e do Android — e o toque em "Você" vira "voltar para a
  *   tela inicial".
- * - **Quatro abas**, e não as três do Discord (Home / Notificações / Você): as
- *   conversas diretas ganham aba própria em vez de dividir a "Home" com os
- *   servidores. É uma diferença deliberada, pedida pelo usuário, e está
- *   registrada no PR.
+ * - **Não há aba de mensagens.** As conversas entram pela bolha no topo da
+ *   rail, e a coluna da direita troca de conteúdo com a rail ainda à vista —
+ *   ver `discord-mobile-dms-2024.png` e `components/mobile/telas-base.tsx`.
+ * - O ícone de "Início" é o **símbolo da marca**, e não uma casa: o acervo de
+ *   ativos do Discord (`docs/Reference/Discord assets icons/`) não tem glifo de
+ *   casa, e §6.2 do processo manda relatar o que falta em vez de desenhar. É
+ *   também o que a rail já usa para o mesmo destino.
  * - **Alvo da largura inteira da aba**, não do ícone. O dedo mira o meio da
  *   coluna; um alvo de 24px no meio de 90 erra por baixo e por cima.
  *
@@ -39,8 +43,7 @@ import { ABAS_MOBILE, useMobile, type AbaMobile } from "@/stores/mobile";
  */
 
 const ROTULOS: Record<AbaMobile, string> = {
-  servidores: "Servidores",
-  mensagens: "Mensagens",
+  inicio: "Início",
   notificacoes: "Notificações",
   voce: "Você",
 };
@@ -81,8 +84,11 @@ export default function BarraDeAbas() {
   const vivo = user ? resolveUser(profiles, user) : null;
 
   const selos: Record<AbaMobile, { contagem: number; ponto: boolean }> = {
-    servidores: { contagem: mencoesEmServidores, ponto: temServidorNaoLido },
-    mensagens: { contagem: naoLidasEmConversas, ponto: false },
+    // Início carrega servidores **e** conversas: as duas coisas moram nela
+    inicio: {
+      contagem: mencoesEmServidores + naoLidasEmConversas,
+      ponto: temServidorNaoLido,
+    },
     // pedidos de amizade e menções moram na caixa de entrada, que é esta aba
     notificacoes: { contagem: pedidos, ponto: mencoesEmServidores > 0 },
     voce: { contagem: 0, ponto: false },
@@ -90,12 +96,10 @@ export default function BarraDeAbas() {
 
   function icone(id: AbaMobile) {
     switch (id) {
-      case "servidores":
+      case "inicio":
         return <Marca size={22} />;
-      case "mensagens":
-        return <MessageSquare size={22} />;
       case "notificacoes":
-        return <Inbox size={22} />;
+        return <Bell size={22} />;
       case "voce":
         // como no Discord: a aba do usuário é a foto dele, com a bolinha de
         // status — é o atalho para "quem eu sou agora"
