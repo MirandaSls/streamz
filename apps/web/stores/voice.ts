@@ -182,6 +182,16 @@ interface VoiceStoreState {
 
   // ── mídia local ──
   camOn: boolean;
+  /**
+   * Que lado da câmera está no ar — só faz sentido em aparelho com duas.
+   *
+   * Fica aqui e não em `voiceDevices` porque não é *um dispositivo*: no celular
+   * o navegador entrega frontal e traseira como dois `videoinput` com ids
+   * opacos que **mudam entre sessões**, e guardar o id não sobrevive a um
+   * recarregamento. `facingMode` é a mesma escolha em termos que o `getUserMedia`
+   * entende em qualquer aparelho.
+   */
+  facingMode: "user" | "environment";
   screenOn: boolean;
   screenQuality: ScreenQuality;
   screenAudio: boolean;
@@ -267,6 +277,17 @@ interface VoiceStoreState {
   rejoinAposReconexao: () => Promise<void>;
 
   toggleCam: () => Promise<void>;
+  /**
+   * Troca frontal ↔ traseira **sem derrubar a sala**.
+   *
+   * `restartTrack` reabre a captura dentro da faixa que já está publicada: o
+   * `trackSid` não muda, ninguém do outro lado vê um `unpublish`/`publish` e a
+   * `Room` continua exatamente onde estava (§7: ninguém derruba a sala). Parar
+   * e republicar a câmera faria a imagem sumir e voltar para todo mundo — que
+   * é justamente o que o comentário do fim deste arquivo já dizia sobre trocar
+   * de câmera pelas configurações.
+   */
+  virarCamera: () => Promise<void>;
   /** Publica uma captura já obtida pelo botão do navegador (ver ScreenShareButton). */
   publicarTela: (stream: MediaStream) => Promise<void>;
   /**
@@ -587,6 +608,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     falando: NINGUEM,
     testandoMicrofone: false,
     camOn: false,
+    facingMode: "user",
     screenOn: false,
     screenQuality: SCREEN_QUALITY_PADRAO,
     screenAudio: true,
@@ -919,7 +941,11 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         // `videoCaptureDefaults` da sala em vez de completá-lo: sem isto, ligar
         // a câmera com um dispositivo escolhido cairia no padrão do navegador.
         await lp.setCameraEnabled(proximo, {
-          ...(cameraId ? { deviceId: cameraId } : {}),
+          // O lado escolhido no celular vale também ao **religar** a câmera:
+          // quem virou para a traseira e desligou não espera a frontal de volta.
+          // `deviceId` tem precedência quando existe (é escolha explícita das
+          // configurações, feita num computador); sem ele, manda o lado.
+          ...(cameraId ? { deviceId: cameraId } : { facingMode: get().facingMode }),
           resolution: {
             width: MEDIA_QUALITY.camera.width,
             height: MEDIA_QUALITY.camera.height,
@@ -932,6 +958,38 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         ui.toast(errorMessage(e, "Não foi possível ligar a câmera"), "error");
       }
       get().syncFlags();
+      rerender();
+    },
+
+    virarCamera: async () => {
+      const lp = sala?.localParticipant;
+      if (!lp) {
+        ui.toast(SEM_SALA, "error");
+        return;
+      }
+      const alvo = get().facingMode === "user" ? "environment" : "user";
+      const faixa = lp.getTrackPublication(Track.Source.Camera)?.videoTrack;
+      try {
+        if (faixa) {
+          await faixa.restartTrack({
+            facingMode: alvo,
+            resolution: {
+              width: MEDIA_QUALITY.camera.width,
+              height: MEDIA_QUALITY.camera.height,
+              frameRate: MEDIA_QUALITY.camera.frameRate,
+            },
+          });
+        }
+        // Escolher um lado desfaz a escolha por dispositivo: as duas mandam na
+        // mesma captura, e manter o `deviceId` faria o próximo `toggleCam`
+        // voltar para a câmera de antes sem ninguém ter pedido.
+        useVoiceDevicesStore.getState().setCamera(null);
+        set({ facingMode: alvo });
+      } catch (e) {
+        // aparelho com uma câmera só, ou o lado pedido indisponível: a faixa
+        // antiga continua no ar (o SDK não a derruba antes de conseguir a nova)
+        ui.toast(errorMessage(e, "Não foi possível trocar de câmera"), "error");
+      }
       rerender();
     },
 
