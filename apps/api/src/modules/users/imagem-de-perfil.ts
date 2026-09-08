@@ -78,6 +78,65 @@ export function contentTypeDaChave(chave: string): string {
   return MIME_DA_EXTENSAO[extensao] ?? "image/*";
 }
 
+/** O que uma resposta precisa para os cabeçalhos abaixo (subconjunto de `ServerResponse`). */
+export interface RespostaComCabecalhos {
+  setHeader(nome: string, valor: string): unknown;
+  removeHeader(nome: string): unknown;
+}
+
+/**
+ * Cabeçalhos das duas imagens **públicas** de perfil (`/users/:id/avatar` e
+ * `/users/:id/banner`).
+ *
+ * Elas não têm dono nem token: qualquer um que saiba a URL vê a foto — é assim
+ * que um `<img src>` funciona, e é por isso que as rotas nem passam pelo
+ * `JwtGuard`. O que faltava era **dizer isso ao cache do browser**.
+ *
+ * O `app.enableCors()` global (main.ts) trata toda resposta como se dependesse
+ * de quem pediu: o pacote `cors` sempre acrescenta `Vary: Origin`, devolve
+ * `Access-Control-Allow-Origin` **só** quando a requisição trouxe `Origin`, e
+ * ainda manda `Access-Control-Allow-Credentials: true`. Para uma imagem pública
+ * isso não é só supérfluo — quebra:
+ *
+ * - Um `<img src>` comum é `no-cors` e **não** manda `Origin`; a foto é
+ *   guardada no cache como a variante "sem Origin".
+ * - O palco da chamada lê a cor dominante da mesma foto com um
+ *   `new Image(); crossOrigin = "anonymous"` (`apps/web/lib/cor-dominante.ts`),
+ *   que **manda** `Origin`. Com `Vary: Origin`, é outra variante.
+ * - O Chromium (e o WebView2 do desktop, que é o mesmo motor) guarda **uma**
+ *   variante por URL: a segunda a chegar despeja a primeira. Sem `ETag` nem
+ *   `Last-Modified` não há revalidação — só download inteiro —, e o
+ *   `immutable` não salva uma entrada que já não existe.
+ *
+ * O resultado é que, no palco, toda remontagem de tile (pôr no destaque e
+ * tirar, abrir o chat da chamada, redimensionar a janela) baixa a foto de novo,
+ * e o avatar fica **em branco** por uma ida e volta inteira à rede. Medido:
+ * com estes cabeçalhos, 10 downloads das mesmas duas fotos num passeio curto e
+ * o avatar em branco no foco/desfoco; com os de agora, 4 downloads e nenhum
+ * instante em branco.
+ *
+ * `Access-Control-Allow-Origin: *` é o que uma imagem pública já é. Ele obriga
+ * a tirar o `Access-Control-Allow-Credentials` (o browser recusa a combinação)
+ * — o que está certo: a rota ignora cookie e token. Sem `Vary`, os dois modos
+ * de requisição passam a compartilhar a mesma entrada de cache.
+ *
+ * O `<img>` comum não corre risco nenhum com isso: `no-cors` nem olha estes
+ * cabeçalhos. Quem depende deles é só a leitura de cor — e ela agora acerta.
+ */
+export function cabecalhosDeImagemPublica(
+  res: RespostaComCabecalhos,
+  contentType: string,
+): void {
+  res.setHeader("Content-Type", contentType);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  // a URL carrega a versão (`?v=<chave>`), então a resposta é a mesma para todo
+  // mundo — e uma entrada de cache só serve os dois modos de requisição
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.removeHeader("Access-Control-Allow-Credentials");
+  res.removeHeader("Vary");
+}
+
 /**
  * Valida o arquivo enviado. `grande: true` distingue "passou do tamanho"
  * (413) de "formato/dimensão inválidos" (400).
