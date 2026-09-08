@@ -70,14 +70,20 @@ export default function PopoverFlutuante({
     }
     const calcular = () => {
       const alvo = ancora.current?.getBoundingClientRect();
-      const c = caixa.current?.getBoundingClientRect();
-      if (!alvo || !c) return;
-      const acima = alvo.top - c.height - FOLGA;
-      const top = acima >= FOLGA ? acima : Math.min(alvo.bottom + FOLGA, window.innerHeight - c.height - FOLGA);
-      const left = Math.max(
-        FOLGA,
-        Math.min(alvo.left, window.innerWidth - c.width - FOLGA),
-      );
+      const caixaEl = caixa.current;
+      if (!alvo || !caixaEl) return;
+      // **`offsetWidth`/`offsetHeight`, não `getBoundingClientRect`**: a caixa
+      // nasce com `anim-menu`, que é um `scale(0.95)` de 120ms, e o retângulo
+      // do `getBoundingClientRect` vem *escalado* no quadro em que medimos.
+      // Um painel de 522px era medido como 496 e subia 26px a menos — ou seja,
+      // quando a animação terminava ele cobria o próprio botão que o abriu.
+      // As duas propriedades de layout ignoram `transform`.
+      const largura = caixaEl.offsetWidth;
+      const altura = caixaEl.offsetHeight;
+      const acima = alvo.top - altura - FOLGA;
+      const top =
+        acima >= FOLGA ? acima : Math.min(alvo.bottom + FOLGA, window.innerHeight - altura - FOLGA);
+      const left = Math.max(FOLGA, Math.min(alvo.left, window.innerWidth - largura - FOLGA));
       setPos({ top: Math.max(FOLGA, top), left });
     };
     calcular();

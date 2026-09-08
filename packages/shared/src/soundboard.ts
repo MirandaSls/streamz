@@ -62,19 +62,23 @@ export const soundboardEmojiSchema = z
 
 // ── o som ────────────────────────────────────────────────────
 
+/**
+ * Um som do painel. **Todo som pertence a um servidor**: o Streamz não traz
+ * som nenhum de fábrica (os sintetizados do primeiro PR saíram — ver o
+ * histórico do PROCESSO-DE-DESENVOLVIMENTO), e por isso `guildId` e
+ * `createdById` não são mais anuláveis.
+ */
 export interface SoundboardSound {
   id: string;
-  /** null nos sons padrão do Streamz, que não pertencem a servidor nenhum. */
-  guildId: string | null;
+  guildId: string;
   name: string;
   /** emoji do card; string vazia quando não tem. */
   emoji: string;
-  /** URL do áudio (`GET /soundboard/:id/audio`, ou o arquivo estático do padrão). */
+  /** URL do áudio (`GET /soundboard/:id/audio`). */
   url: string;
   /** volume de referência do som, de 0 a 1 — multiplica o volume do ouvinte. */
   volume: number;
-  /** null nos sons padrão. */
-  createdById: string | null;
+  createdById: string;
 }
 
 /** Sons de um servidor, do jeito que o painel agrupa. */
@@ -113,52 +117,4 @@ export interface SoundboardPlayEvent {
 /** Corpo de `POST /voice/channels/:channelId/soundboard/play`. */
 export interface SoundboardPlayInput {
   soundId: string;
-}
-
-// ── os sons padrão ("Sons do Streamz") ───────────────────────
-
-/**
- * Prefixo do id dos sons padrão. É o que distingue, numa chamada de `play`, o
- * som que mora no bucket do que mora no `public/` do app — e o que impede um id
- * de servidor de se passar por padrão (`cuid` não tem dois-pontos).
- */
-export const PREFIXO_SOM_PADRAO = "padrao:";
-
-/** Pasta dos arquivos dos sons padrão, servida junto com o app. */
-export const PASTA_SONS_PADRAO = "/sons/soundboard";
-
-/**
- * Os sons que vêm com o app.
- *
- * Os **nomes** são os do Discord (é o vocabulário que quem chega já conhece);
- * os **arquivos** não são: são sintetizados, gerados por um script
- * (`scripts/gerar-sons-do-soundboard.py`, no PR). Trocar um deles depois é
- * substituir o arquivo em `apps/web/public/sons/soundboard/` — nada mais nesta
- * lista muda.
- */
-export const SONS_PADRAO: readonly SoundboardSound[] = [
-  { nome: "quack", emoji: "🦆", rotulo: "quack" },
-  { nome: "airhorn", emoji: "📢", rotulo: "airhorn" },
-  { nome: "cricket", emoji: "🦗", rotulo: "cricket" },
-  { nome: "golf-clap", emoji: "👏", rotulo: "golf clap" },
-  { nome: "sad-horn", emoji: "🎺", rotulo: "sad horn" },
-  { nome: "ba-dum-tss", emoji: "🥁", rotulo: "ba dum tss" },
-].map((s) => ({
-  id: `${PREFIXO_SOM_PADRAO}${s.nome}`,
-  guildId: null,
-  name: s.rotulo,
-  emoji: s.emoji,
-  url: `${PASTA_SONS_PADRAO}/${s.nome}.mp3`,
-  volume: 1,
-  createdById: null,
-}));
-
-/** O som padrão de um id, ou null se o id não for de um som padrão. */
-export function somPadraoPorId(id: string): SoundboardSound | null {
-  return SONS_PADRAO.find((s) => s.id === id) ?? null;
-}
-
-/** true quando o id é de um som padrão (e não de uma linha do banco). */
-export function ehSomPadrao(id: string): boolean {
-  return id.startsWith(PREFIXO_SOM_PADRAO);
 }

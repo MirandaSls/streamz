@@ -2,11 +2,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import {
-  SONS_PADRAO,
-  type GuildSoundboard,
-  type SoundboardSound,
-} from "@streamz/shared";
+import type { GuildSoundboard, SoundboardSound } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { tocarEfeitoSonoro } from "@/lib/soundboard-audio";
 
@@ -69,8 +65,8 @@ export const useSoundboard = create<SoundboardState>()(
       volume: 1,
 
       load: async () => {
-        // falha aqui não pode derrubar nada: sem os sons do servidor o painel
-        // continua com os do Streamz, que são arquivos do próprio app
+        // falha aqui não pode derrubar nada: sem a lista o painel abre com as
+        // seções vazias, e o "+ Adicionar som" continua no lugar
         const guilds = await api.mySoundboard().catch(() => [] as GuildSoundboard[]);
         set({ guilds, carregado: true });
       },
@@ -120,12 +116,12 @@ export const useSoundboard = create<SoundboardState>()(
 );
 
 /**
- * Todo som que eu posso tocar, em lista plana — os padrão do Streamz mais os
- * dos meus servidores.
+ * Todo som que eu posso tocar, em lista plana — os dos meus servidores. O app
+ * não traz som de fábrica.
  *
  * É por aqui que favoritos e frequentes resolvem um id em som: eles guardam id,
  * e o id pode ter deixado de existir (o som foi apagado, ou saí do servidor).
  */
 export function todosOsSons(guilds: GuildSoundboard[]): SoundboardSound[] {
-  return [...SONS_PADRAO, ...guilds.flatMap((g) => g.sounds)];
+  return guilds.flatMap((g) => g.sounds);
 }

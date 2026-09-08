@@ -18,8 +18,6 @@ import {
   SOUNDBOARD_INTERVALO_MS,
   WS_EVENTS,
   hasPermission,
-  ehSomPadrao,
-  somPadraoPorId,
   soundboardEmojiSchema,
   soundboardNomeSchema,
   type GuildSoundboard,
@@ -243,18 +241,13 @@ export class SoundboardService {
   /**
    * O som que aquele id representa naquele canal.
    *
-   * Padrão vale em qualquer lugar (o arquivo é do app, não do servidor). Som de
-   * servidor só vale no canal daquele servidor: numa conversa direta não há
-   * servidor a que pertencer, então só os padrão passam.
+   * Todo som é de um servidor e só vale no canal daquele servidor — não existe
+   * mais som de fábrica. Numa conversa direta não há servidor a que pertencer,
+   * então não há o que tocar.
    */
   private async resolverSom(soundId: string, guildId: string | null): Promise<SoundboardSound> {
-    if (ehSomPadrao(soundId)) {
-      const padrao = somPadraoPorId(soundId);
-      if (!padrao) throw new NotFoundException("Som não encontrado");
-      return padrao;
-    }
     if (!guildId) {
-      throw new BadRequestException("Numa conversa direta só dá para tocar os sons do Streamz");
+      throw new BadRequestException("Só dá para tocar um som num canal de voz de servidor");
     }
     const row = await this.prisma.soundboardSound.findUnique({ where: { id: soundId } });
     if (!row || row.guildId !== guildId) {
