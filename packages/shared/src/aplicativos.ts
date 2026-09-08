@@ -11,6 +11,7 @@
 import { z } from "zod";
 import type { PublicUser } from "./dominio";
 import { idSchema } from "./internos";
+import { ALL_PERMISSIONS } from "./permissoes";
 
 // ── limites ──────────────────────────────────────────────────
 
@@ -86,6 +87,144 @@ export const appCriarSchema = z.object({
 });
 
 export type AppCriarInput = z.infer<typeof appCriarSchema>;
+
+// ── j-bots · F4 · portal, diretório e instalação ─────────────
+//
+// Ver `docs/BOTS-COMPATIVEIS-COM-O-DISCORD.md` §11 (D7) e §10 (a tabela
+// `GuildApplication`), e `apps/web/components/apps/CONTRATO-F4.md`, que é onde
+// as rotas e a divisão de lotes estão escritas.
+//
+// Este bloco inteiro foi escrito **pelo coordenador da F4, antes dos lotes**,
+// exatamente para que os três lotes não editassem o mesmo arquivo em paralelo.
+// Quem precisar de um campo que não está aqui pede ao coordenador em vez de
+// acrescentar — um contrato que cada lote estende sozinho deixa de ser
+// contrato.
+
+/**
+ * Editar o aplicativo. Todos os campos são opcionais e **só o que vier é
+ * escrito** — mandar `{ publico: true }` não apaga a descrição.
+ *
+ * `description` aceita `null` explícito para limpar; `undefined` (ausente)
+ * quer dizer "não mexa". A distinção existe porque um `z.string().optional()`
+ * sozinho não tem como dizer "apague".
+ */
+export const appEditarSchema = z
+  .object({
+    name: z.string().trim().min(2, "Nome curto demais").max(MAX_APP_NAME, "Nome longo demais"),
+    description: z
+      .string()
+      .trim()
+      .max(MAX_APP_DESCRIPTION, "Descrição longa demais")
+      .nullable()
+      .transform((d) => (d === "" ? null : d)),
+    publico: z.boolean(),
+    /**
+     * Bitfield de `Permission` sugerido na tela de instalação. Não concede
+     * nada: é o que vem pré-marcado para quem instala, e quem instala pode
+     * desmarcar.
+     */
+    permissoesPadrao: z
+      .number()
+      .int()
+      .min(0)
+      .refine((p) => (p & ~ALL_PERMISSIONS) === 0, { message: "Permissão desconhecida" }),
+  })
+  .partial()
+  .refine((o) => Object.keys(o).length > 0, { message: "Nada para editar" });
+
+export type AppEditarInput = z.infer<typeof appEditarSchema>;
+
+/**
+ * Um aplicativo como o **diretório** o mostra — a visão pública, sem nada do
+ * dono.
+ *
+ * Não estende `AppView` de propósito: `AppView` é a linha do portal e carrega
+ * `publico` e `createdAt`, que não interessam a quem só vai instalar. O que
+ * entra aqui e não lá é `servidores`, a contagem de instalações que vira o
+ * "em N servidores" do card.
+ */
+export interface AppDoDiretorio {
+  id: string;
+  snowflake: string;
+  name: string;
+  description: string | null;
+  iconUrl: string | null;
+  /** o que a tela de instalação vem com marcado. */
+  permissoesPadrao: number;
+  /** em quantos servidores está instalado. É a contagem inteira, não a minha. */
+  servidores: number;
+  /** o usuário-bot, com `bot: true`. */
+  botUser: PublicUser;
+}
+
+/** Uma página do diretório. Cursor opaco, como o resto do repo. */
+export interface PaginaDoDiretorio {
+  itens: AppDoDiretorio[];
+  proximoCursor: string | null;
+}
+
+/**
+ * Uma instalação: o aplicativo X está no servidor Y, com estas permissões.
+ *
+ * É o DTO de `GET/POST /api/guilds/:id/aplicativos` (a aba "Aplicativos" das
+ * configurações do servidor) e o item da lista "Servidores" do portal.
+ */
+export interface AppInstalacao {
+  id: string;
+  guildId: string;
+  applicationId: string;
+  /** o aplicativo, para a linha da lista não precisar de uma segunda chamada. */
+  app: AppDoDiretorio;
+  /** bitfield de `Permission` concedido — é o que está no cargo gerenciado. */
+  permissions: number;
+  /** o cargo criado para o bot; `null` só em instalação sem permissão nenhuma. */
+  roleId: string | null;
+  /** quem instalou. Precisou de `MANAGE_GUILD`. */
+  instaladoPor: PublicUser;
+  createdAt: string;
+}
+
+/**
+ * A mesma instalação vista **do lado do dono do app**: o que interessa é o
+ * servidor, não o aplicativo (que é sempre o mesmo).
+ *
+ * É a tela 5 do §11 ("Servidores — onde está instalado, com Remover"). O dono
+ * não vê quem instalou: é gente de outro servidor, e o portal não é um
+ * diretório de pessoas.
+ */
+export interface ServidorComOApp {
+  guildId: string;
+  guildName: string;
+  guildIconUrl: string | null;
+  permissions: number;
+  createdAt: string;
+}
+
+/**
+ * Instalar: `POST /api/guilds/:id/aplicativos`.
+ *
+ * `permissions` é o bitfield de `Permission` **do Streamz** (não o do Discord):
+ * quem manda é a nossa tela, e a tradução para o bitfield do Discord acontece
+ * só na borda de compatibilidade (`paraBitfieldDoDiscord`).
+ *
+ * O teto de `ALL_PERMISSIONS` não é decoração: um bitfield com bits que não
+ * existem viraria um cargo com permissão fantasma, e o `~` de 32 bits com sinal
+ * do JavaScript faz de um número grande demais um negativo.
+ *
+ * **O que este schema não checa, e a API precisa checar:** que quem instala não
+ * está concedendo mais do que ele mesmo tem. Um schema não conhece o autor —
+ * ver a regra da escalada em `CONTRATO-F4.md`.
+ */
+export const appInstalarSchema = z.object({
+  applicationId: idSchema,
+  permissions: z
+    .number()
+    .int()
+    .min(0)
+    .refine((p) => (p & ~ALL_PERMISSIONS) === 0, { message: "Permissão desconhecida" }),
+});
+
+export type AppInstalarInput = z.infer<typeof appInstalarSchema>;
 
 // ── j-bots · F3 · comandos de barra e interações ─────────────
 //
