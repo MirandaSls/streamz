@@ -17,6 +17,7 @@ import {
 import type { TrackPublication } from "livekit-client";
 import { displayNameOf, type VoiceStateEvent } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
+import TagDeBot from "@/components/ui/TagDeBot";
 import Tooltip from "@/components/ui/Tooltip";
 import { corDoAvatar } from "@/components/ui/avatar-cores";
 import { alternarTelaCheiaDe } from "@/components/voice/fullscreen";
@@ -389,6 +390,16 @@ export function VoiceTile({
           {nome}
           {sou && !tela && " (você)"}
         </span>
+        {/* ── j-bots ── depois do nome, dentro do mesmo rótulo: um bot de música
+            no palco é um tile como os outros, e sem a pílula ele se passaria por
+            gente.
+            `caixaEstreita` no rótulo comprimido: ele tem 20px **fixos** nos dois
+            leiautes, e a pílula de 18 do celular sobrava dele em cima e embaixo
+            (medido em 390×844 — o pai media 20 e a pílula 18, com o raio
+            estourando a borda). Ali ela fica nos 15 do desktop, que é o que a
+            caixa comporta; no rótulo de 32 (`h-8`) ela cresce como em todo o
+            resto. */}
+        {state.user.bot && <TagDeBot caixaEstreita={rotuloPequeno} />}
       </span>
 
       {/* Ações do hover, no canto superior direito. Numa tela **já assistida** o

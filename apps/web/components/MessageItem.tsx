@@ -50,6 +50,7 @@ import PollCard from "@/components/polls/PollCard";
 import { emit } from "@/stores/socket-adapter";
 import Avatar from "@/components/ui/Avatar";
 import EmojiPicker from "@/components/ui/EmojiPicker";
+import TagDeBot from "@/components/ui/TagDeBot";
 import Tooltip from "@/components/ui/Tooltip";
 import { dataCompleta, hora, horaCompleta } from "@/lib/format";
 import { Markdown } from "@/lib/markdown";
@@ -150,6 +151,12 @@ function ReplyReference({ message }: { message: Message }) {
       >
         @{displayNameOf(ref.author)}
       </button>
+      {/* ── j-bots ── responder a um bot também tem que dizer que é um bot: sem
+          isto a barra de resposta seria a única superfície com nome de autor
+          sem a pílula, e é justamente ela que aparece quando alguém responde a
+          uma resposta de comando de barra. A linha é de 18px, e a pílula de 15
+          cabe centrada (o pai já é `items-center`). */}
+      {ref.author.bot && <TagDeBot />}
       <button
         type="button"
         onClick={() =>
@@ -623,6 +630,11 @@ export default function MessageItem({
             >
               {displayNameOf(author)}
             </button>
+            {/* ── j-bots ── entre o nome e a hora, como no Discord. A caixa é
+                `items-baseline`, e uma pílula alinhada pela linha de base
+                desceria abaixo dela; `self-center` a recentra na linha de 22px
+                sem mexer no alinhamento do nome nem no da hora. */}
+            {author.bot && <TagDeBot className="self-center" />}
             <Tooltip label={dataCompleta(message.createdAt)}>
               <span className="ml-1 text-xs text-txt-muted">{horaCompleta(message.createdAt)}</span>
             </Tooltip>
@@ -689,6 +701,10 @@ export default function MessageItem({
                   >
                     {displayNameOf(author)}
                   </button>
+                  {/* ── j-bots ── o modo compacto põe hora, nome e texto numa
+                      linha só de 22px; a pílula entra depois do nome, antes do
+                      conteúdo, e é centrada nessa linha. */}
+                  {author.bot && <TagDeBot className="mt-[3px] self-start" />}
                 </>
               )}
               <div className={compacto ? "min-w-0 flex-1" : undefined}>
