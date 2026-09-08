@@ -238,7 +238,12 @@ export default function MemberList() {
         key={m.user.id}
         role="listitem"
         onContextMenu={(e) => openMenu(e, m, e.currentTarget)}
-        className={`group mx-2.5 flex h-[42px] items-center gap-3 rounded-lg px-2 hover:bg-hov ${
+        /* 60px no celular: é a medida do Discord no telefone
+           (`docs/Reference/mobile/MEDIDAS.md` §10 — 118px a 1,9707 px/pt =
+           59,9pt de passo entre linhas de membro). Os 42 do desktop nascem de
+           uma coluna que se navega com o mouse; no dedo ficam abaixo do piso
+           de 44 e a lista vira uma faixa de alvos colados. */
+        className={`group mx-2.5 flex h-[42px] items-center gap-3 rounded-lg px-2 hover:bg-hov max-md:h-[60px] ${
           offline ? "opacity-30 hover:opacity-100" : ""
         }`}
       >
@@ -246,7 +251,7 @@ export default function MemberList() {
           type="button"
           onClick={(e) => ui.openProfile(m.user, anchorOf(e.currentTarget))}
           aria-label={`Perfil de ${nome}`}
-          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+          className="flex h-full min-w-0 flex-1 items-center gap-3 text-left"
         >
           {/* o anel verde de fala é o mesmo do palco e da lista do canal —
               no Discord ele acende aqui também, e não só lá dentro */}
@@ -299,14 +304,21 @@ export default function MemberList() {
           </span>
         </button>
 
-        <div className="hidden shrink-0 gap-0.5 group-focus-within:flex group-hover:flex">
+        {/*
+          No celular a fileira é **sempre visível** — o dedo não paira —, mas só
+          com "Mensagem": as três de moderação levariam 132px de uma linha de
+          335 e o nome truncava em "betoxip…" (medido em 390×844). Elas
+          continuam no menu de contexto, que no telefone ainda depende do toque
+          longo — ver o relatório de cobertura. No desktop nada muda.
+        */}
+        <div className="hidden shrink-0 gap-0.5 group-focus-within:flex group-hover:flex max-md:flex">
           {!isMe && (
             <Tooltip label="Mensagem">
               <button
                 type="button"
                 onClick={() => void openWith(m.user.id)}
                 aria-label={`Abrir conversa com ${nome}`}
-                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-txt-primary"
+                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-txt-primary max-md:h-11 max-md:w-11"
               >
                 <MessageSquare size={16} />
               </button>
@@ -321,7 +333,7 @@ export default function MemberList() {
                   isTimedOut(m.timeoutUntil) ? void removeTimeout(m.user.id) : timeout(m.user.id)
                 }
                 aria-label={`${isTimedOut(m.timeoutUntil) ? "Remover castigo de" : "Colocar de castigo"} ${nome}`}
-                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red"
+                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red max-md:hidden"
               >
                 {isTimedOut(m.timeoutUntil) ? <TimerOff size={16} /> : <Timer size={16} />}
               </button>
@@ -333,7 +345,7 @@ export default function MemberList() {
                 type="button"
                 onClick={() => kick(m.user.id)}
                 aria-label={`Expulsar ${nome}`}
-                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red"
+                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red max-md:hidden"
               >
                 <UserX size={16} />
               </button>
@@ -345,7 +357,7 @@ export default function MemberList() {
                 type="button"
                 onClick={() => ban(m.user.id)}
                 aria-label={`Banir ${nome}`}
-                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red"
+                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red max-md:hidden"
               >
                 <Gavel size={16} />
               </button>
