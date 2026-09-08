@@ -616,6 +616,28 @@ posição). Toda medida citada em PR tem que ter vindo daí. Se não dá para me
 com confiança, diga "não medido" em vez de chutar. Um número inventado vira um
 pixel errado no app.
 
+**E medir a referência não basta: meça o que o nosso código entrega.** Ler a
+classe do Tailwind e assumir o número dá errado aqui por dois motivos, os dois
+descobertos com o leiaute de celular (PRs #170/#177/#178/#180), e nenhum dos
+dois é pego por typecheck, lint ou teste:
+
+1. **A raiz do app é 15,5px** (`globals.css`, a escala de fonte que o usuário
+   pediu) e o Tailwind mede em `rem` — então todo tamanho nominal sai **3%
+   menor**: `h-6` é 23,25, `h-9` é 34,9, `h-10` é 38,75, `h-11` é 42,6, `h-12`
+   é 46,5, `h-14` é 54,25. Medidas tiradas de print e pisos de alvo de toque
+   ficaram todos 1 a 2px curtos em quatro branches ao mesmo tempo — o "44"
+   media 43, o rail "de 48" media 46,5. A regra que ficou: **px literal
+   (`h-[44px]`) onde o número significa alguma coisa** (medida da captura ou
+   piso de segurança), escala do Tailwind só onde não significa (respiro,
+   espaçamento, raio).
+2. **A classe pode estar certa e o valor vir de outro lugar.** A cápsula do
+   composer tinha `min-h-[40px]` e media **58** num telefone: quem escreve a
+   altura do campo vazio é o `style.height` do auto-ajuste, com a constante do
+   desktop. Classe certa, JS por cima, nenhum aviso.
+
+A régua é `getBoundingClientRect` no aparelho emulado, dentro do passeio de
+render — ver `scripts/e2e-mobile.mjs` e `scripts/medir-call-mobile.mjs`.
+
 ### 6.4 Paralelizar sem colidir
 Migração grande (83 arquivos) funcionou assim, e é o modelo:
 1. **Fase A, sequencial**: fechar o vocabulário inteiro (`icones.tsx`) e
