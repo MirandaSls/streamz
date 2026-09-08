@@ -16,6 +16,7 @@ import { usuarioParaDiscord } from "../traducao/usuario";
 import { PonteDeEventos } from "./dispatch";
 import { lerIdentify, lerResume, montarReady } from "./identify";
 import { RegistroDeSessoes, SessaoWs } from "./sessao";
+import { VozDoGateway } from "./voz";
 
 /**
  * O servidor WebSocket **cru** (`ws`) do gateway compatível, em `/gateway`.
@@ -47,8 +48,9 @@ import { RegistroDeSessoes, SessaoWs } from "./sessao";
  * Os quatro opcodes que fazem o `login()` chegar em `ready`: `10 HELLO`,
  * `11 HEARTBEAT_ACK`, `2 IDENTIFY` (→ READY) e `0 DISPATCH`. Mais `6 RESUME`
  * (replay do buffer + `RESUMED`; sessão que não existe mais → `op 9` com
- * `d: false`), `1 HEARTBEAT`, `3 PRESENCE_UPDATE` (aceita e ignora) e `4`
- * (F2 — na F1 aceita e ignora).
+ * `d: false`), `1 HEARTBEAT`, `3 PRESENCE_UPDATE` (aceita e ignora) e
+ * `4 VOICE_STATE_UPDATE`, que desde a F2 é roteado para `gateway/voz.ts` — é a
+ * porta de entrada da voz.
  */
 
 /** O caminho que assumimos no servidor HTTP do Nest. */
@@ -97,6 +99,8 @@ export class GatewayCompatService implements OnApplicationShutdown {
     private readonly aplicativos: ApplicationsService,
     private readonly dados: DadosDeCompatService,
     private readonly ponte: PonteDeEventos,
+    // F2: quem trata o op 4 (`gateway/voz.ts`).
+    private readonly voz: VozDoGateway,
   ) {}
 
   /**
@@ -264,13 +268,22 @@ export class GatewayCompatService implements OnApplicationShutdown {
         await this.retomar(conexao, d);
         return;
 
-      // Aceitos e ignorados de propósito. O op 3 é presence rica (§13: "aceitamos
-      // e ignoramos"), o op 4 é a porta da voz (F2) e o op 8 é F5. Fechar a
-      // conexão por causa deles derrubaria bots que funcionam.
-      case OPCODE.PRESENCE_UPDATE:
+      // F2: a porta de entrada da voz. Sem sessão é um op 4 antes do IDENTIFY —
+      // ignorado, como o Discord faz, em vez de fechar a conexão.
       case OPCODE.VOICE_STATE_UPDATE:
+        if (!conexao.sessao) {
+          this.logger.debug("op 4 antes do IDENTIFY: ignorado");
+          return;
+        }
+        await this.voz.tratarAtualizacaoDeVoz(conexao.sessao, d);
+        return;
+
+      // Aceitos e ignorados de propósito. O op 3 é presence rica (§13: "aceitamos
+      // e ignoramos") e o op 8 é F5. Fechar a conexão por causa deles
+      // derrubaria bots que funcionam.
+      case OPCODE.PRESENCE_UPDATE:
       case OPCODE.REQUEST_GUILD_MEMBERS:
-        this.logger.debug(`op ${op} aceito e ignorado na F1`);
+        this.logger.debug(`op ${op} aceito e ignorado`);
         return;
 
       default:

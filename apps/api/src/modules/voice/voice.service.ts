@@ -2,8 +2,10 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   ServiceUnavailableException,
 } from "@nestjs/common";
+import { createHmac } from "node:crypto";
 import { AccessToken, TrackSource } from "livekit-server-sdk";
 import {
   Permission,
@@ -28,6 +30,89 @@ import {
   type VoiceStateStore,
 } from "./voice-state.store";
 
+// ── j-bots ── a ponte de voz (F2) ────────────────────────────
+//
+// Estas constantes e as duas funções abaixo são a metade da API do contrato da
+// F2 (`apps/ponte-voz/CONTRATO-F2.md` §3). Os **nomes dos campos do JWT são
+// contrato com a ponte em Go** (`Reivindicacao`, em `sessao.go`) e não mudam de
+// um lado só.
+
+/**
+ * Validade do JWT da ponte: **15 minutos**, e não os 60 s do documento.
+ *
+ * O `@discordjs/voice` **reusa o mesmo token** ao reconectar o WS de voz (close
+ * 4015, queda de rede, reinício da ponte) sem pedir um `VOICE_SERVER_UPDATE`
+ * novo. Com 60 s, a primeira reconexão depois de um minuto de música morre com
+ * 4004 e o bot desiste. Divergência registrada no §3 do CONTRATO-F2.
+ */
+export const VALIDADE_DO_TOKEN_DA_PONTE_S = 15 * 60;
+
+/**
+ * TTL do token do **LiveKit** que viaja dentro do JWT da ponte: 6 h, e não a
+ * 1 h do `assinarToken` de hoje. O TTL do LiveKit vale na **entrada** na sala, e
+ * uma reconexão duas horas depois do `/play` precisa entrar de novo.
+ */
+export const TTL_DO_LIVEKIT_DA_PONTE = "6h";
+
+/** `endpoint` do `VOICE_SERVER_UPDATE` quando `PONTE_VOZ_ENDPOINT` não vier. */
+export const ENDPOINT_PADRAO_DA_PONTE = "voz.streamz.chat";
+
+/** O corpo do JWT da ponte, campo por campo (§3 do CONTRATO-F2). */
+export interface ReivindicacaoDaPonte {
+  iss: "streamz-api";
+  aud: "ponte-voz";
+  /** snowflake do BOT → `IDENTIFY.user_id` do gateway de voz. */
+  sub: string;
+  /** snowflake da GUILD → `IDENTIFY.server_id`. */
+  gid: string;
+  /** `session_id` do gateway compat → `IDENTIFY.session_id`. */
+  sid: string;
+  /** sala do LiveKit (`VoiceService.salaDe`). */
+  sala: string;
+  /** snowflake do canal de voz. */
+  canal: string;
+  /** nome do participante no LiveKit. */
+  nome: string;
+  /** identidade no LiveKit (§D5.6). */
+  ident: string;
+  /** token do LiveKit, já assinado pela API. */
+  lk: string;
+  lkUrl: string;
+  iat: number;
+  exp: number;
+}
+
+/**
+ * Assina um JWT HS256 com `node:crypto`.
+ *
+ * Dez linhas em vez de uma dependência: `jsonwebtoken` não está no
+ * `package.json` da API (só transitivamente, sob o `@nestjs/jwt`, e depender de
+ * dependência transitiva quebra no pnpm), e o que a ponte verifica com
+ * `golang-jwt/jwt/v5` é exatamente isto — base64url **sem padding** nas três
+ * partes, que é o que o `"base64url"` do Node produz.
+ */
+export function assinarHs256(reivindicacao: Record<string, unknown>, segredo: string): string {
+  const cabecalho = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+  const corpo = Buffer.from(JSON.stringify(reivindicacao)).toString("base64url");
+  const conteudo = `${cabecalho}.${corpo}`;
+  const assinatura = createHmac("sha256", segredo).update(conteudo).digest().toString("base64url");
+  return `${conteudo}.${assinatura}`;
+}
+
+/**
+ * O `endpoint` do `VOICE_SERVER_UPDATE`: **sem esquema e sem porta**.
+ *
+ * As libs montam `wss://<endpoint>/?v=8` sozinhas, e o §D5.8 (risco 3) avisa que
+ * algumas cortam `:80`/`:443` do que recebem. Aceitamos o valor configurado com
+ * esquema ou com porta e limpamos aqui, em vez de confiar no `.env`.
+ */
+export function endpointDaPonte(env: NodeJS.ProcessEnv = process.env): string {
+  const bruto = env.PONTE_VOZ_ENDPOINT?.trim();
+  if (!bruto) return ENDPOINT_PADRAO_DA_PONTE;
+  const semEsquema = bruto.replace(/^[a-z]+:\/\//i, "").replace(/\/.*$/, "");
+  return semEsquema.replace(/:\d+$/, "") || ENDPOINT_PADRAO_DA_PONTE;
+}
+
 /**
  * Voz: token do LiveKit e o **estado de quem está em cada sala**.
  *
@@ -39,6 +124,7 @@ import {
  */
 @Injectable()
 export class VoiceService {
+  private readonly logger = new Logger(VoiceService.name);
   /** Estado efêmero: em memória por padrão, no Redis quando há várias instâncias. */
   private readonly store: VoiceStateStore = (() => {
     const redis = redisClient();
@@ -204,6 +290,89 @@ export class VoiceService {
       canSubscribe: true,
     });
     return { token: await at.toJwt(), url: process.env.LIVEKIT_URL!, room };
+  }
+
+  // ── j-bots ── o token da ponte de voz (F2) ─────────────────
+
+  /**
+   * O JWT que vai no `VOICE_SERVER_UPDATE.token` (§3 do CONTRATO-F2).
+   *
+   * Dentro dele viaja o token do **LiveKit**, já assinado por nós — é assim que
+   * a ponte entra na sala sem nunca ver `LIVEKIT_API_KEY`/`SECRET` (§D5.6). Os
+   * grants são os do documento: `roomJoin`, `canPublish: true`,
+   * `canSubscribe: false` (bot de música não escuta) e `canPublishData: false`.
+   *
+   * Devolve o **tamanho** junto porque o §D5.8 lista "o `token` passar de 1 KB"
+   * como o risco nº 1 do Lavalink; medido e logado a cada assinatura, não
+   * estimado. A saída documentada, se algum cliente truncar, é o ticket opaco de
+   * 32 bytes — primeiro item de dívida da fase, não implementado aqui.
+   */
+  async assinarTokenDaPonte(dados: {
+    /** snowflake do usuário-bot, string decimal. */
+    botSnowflake: string;
+    guildSnowflake: string;
+    /** `session_id` da sessão do gateway compat. */
+    sessionId: string;
+    /** cuid do canal de voz — é dele que sai a sala do LiveKit. */
+    canalId: string;
+    canalSnowflake: string;
+    /** nome do participante no LiveKit (o nome da aplicação). */
+    nome: string;
+  }): Promise<{ token: string; tamanho: number; endpoint: string }> {
+    const segredo = process.env.PONTE_VOZ_SEGREDO?.trim();
+    if (!segredo) {
+      throw new ServiceUnavailableException(
+        "PONTE_VOZ_SEGREDO não configurado: a ponte de voz dos bots está desligada",
+      );
+    }
+    if (!this.isConfigured()) {
+      throw new ServiceUnavailableException("Voz (LiveKit) não configurada. Ver PENDENCIAS.md.");
+    }
+
+    const sala = this.salaDe("VOICE", dados.canalId);
+    const identidade = `bot:${dados.botSnowflake}`;
+
+    const lk = new AccessToken(process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!, {
+      identity: identidade,
+      name: dados.nome,
+      ttl: TTL_DO_LIVEKIT_DA_PONTE,
+    });
+    lk.addGrant({
+      room: sala,
+      roomJoin: true,
+      canPublish: true,
+      // Bot de música não escuta ninguém: sem isto ele baixaria o áudio da call
+      // inteira à toa, e um bot com `canSubscribe` é um gravador silencioso.
+      canSubscribe: false,
+      canPublishData: false,
+    });
+
+    const agora = Math.floor(Date.now() / 1000);
+    const reivindicacao: ReivindicacaoDaPonte = {
+      iss: "streamz-api",
+      aud: "ponte-voz",
+      sub: dados.botSnowflake,
+      gid: dados.guildSnowflake,
+      sid: dados.sessionId,
+      sala,
+      canal: dados.canalSnowflake,
+      nome: dados.nome,
+      ident: identidade,
+      lk: await lk.toJwt(),
+      lkUrl: process.env.LIVEKIT_URL!,
+      iat: agora,
+      exp: agora + VALIDADE_DO_TOKEN_DA_PONTE_S,
+    };
+
+    const token = assinarHs256(reivindicacao as unknown as Record<string, unknown>, segredo);
+    const endpoint = endpointDaPonte();
+    // O número que o PR da F2 reporta. `warn` acima de 1 KB porque é exatamente
+    // o limite que o §D5.8 aponta como risco nº 1.
+    const medida = `JWT da ponte para bot:${dados.botSnowflake} — ${token.length} bytes (LiveKit: ${reivindicacao.lk.length})`;
+    if (token.length > 1024) this.logger.warn(`${medida} — acima de 1 KB (§D5.8, risco 1)`);
+    else this.logger.log(medida);
+
+    return { token, tamanho: token.length, endpoint };
   }
 
   /** `CONNECT` — ver o canal de voz na coluna não é poder entrar nele. */
