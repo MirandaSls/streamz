@@ -44,9 +44,27 @@ import { useVoice } from "@/stores/voice";
  * | zona do alto-falante | 48 à direita do campo |
  * | coluna lateral | 48 de largura, item de 32×32, passo de 40 |
  * | avatar de servidor | 32 (ocupa o item inteiro) |
- * | cabeçalho de seção | linha de 32, ícone 16, texto 15 semibold, chevron 16 |
- * | card | 148×40, raio 8, emoji 20 e nome **centralizados** |
+ * | cabeçalho de seção | linha de 32, ícone 16, chevron 16 |
+ * | card | 148×40, raio 8, emoji e nome **centralizados** |
  * | vão entre cards | 8 na horizontal e na vertical |
+ *
+ * Tipografia, pela altura da tinta (`getpixel`, que é o que o olho lê — a
+ * largura não serve para comparar fontes diferentes):
+ *
+ * | texto | tinta no print | o que usamos |
+ * |---|---|---|
+ * | busca | 15 (`E` + descida do `p`) | 16px |
+ * | cabeçalho de seção | 10 (`F` maiúsculo), largura 69 | 13px semibold, `txt-secondary` — 10 de tinta e 75 de largura (a Noto Sans é ~10% mais larga que a gg sans; a fonte não muda, §6.6) |
+ * | nome do som | 11 (`golf clap`, subida + descida) | 13px semibold, `txt-primary` (brilho 251 no print) |
+ * | "Adicionar som" | 10, brilho 153 | 13px, `txt-muted` |
+ * | emoji do card | 18 a 21 de largura conforme o desenho | 18px |
+ *
+ * Duas coisas que **não** são como parecem à primeira vista, e por isso ficam
+ * escritas aqui: o card "+ Adicionar som" tem **borda tracejada** e fundo
+ * transparente (não é um card sólido como os de som), e o item ativo da coluna
+ * lateral **tem sim** um fundo quadrado de 32×32 no `#202024` — está medido
+ * (`linha y=336: x 252..283 em (32,32,36) sobre a coluna em (26,26,30)`) e
+ * visível no recorte ampliado.
  *
  * As cores do print (#202024 corpo, #1a1a1e coluna, #292a2d card) caem em cima
  * de tokens que já existem — `footer`, `chat` e `sel` —, então nenhum token
@@ -94,7 +112,9 @@ export default function PainelDeSons({
   const cargos = usePermissions((s) => s.roles);
 
   const [busca, setBusca] = useState("");
-  const [fechadas, setFechadas] = useState<Record<string, true>>({});
+  // só o que o usuário abriu ou fechou na mão; o resto segue o padrão de
+  // `nasceFechada` (ver ali por que Favoritos é o único que nasce fechado)
+  const [alternadas, setAlternadas] = useState<Record<string, boolean>>({});
   const [ativa, setAtiva] = useState("");
   const [volumeAberto, setVolumeAberto] = useState(false);
 
@@ -163,10 +183,7 @@ export default function PainelDeSons({
     const caixa = rolagem.current;
     if (!el || !caixa) return;
     // a seção fechada não tem para onde rolar: clicar no atalho a abre
-    setFechadas((f) => {
-      const { [id]: _fora, ...resto } = f;
-      return resto;
-    });
+    setAlternadas((a) => ({ ...a, [id]: false }));
     caixa.scrollTo({ top: el.offsetTop, behavior: "smooth" });
     setAtiva(id);
   }
@@ -322,16 +339,13 @@ export default function PainelDeSons({
                 <SecaoDeSons
                   key={secao.id}
                   secao={secao}
-                  fechada={!!fechadas[secao.id]}
+                  fechada={alternadas[secao.id] ?? nasceFechada(secao)}
                   onRegistrar={registrarSecao}
                   onAlternar={() =>
-                    setFechadas((f) => {
-                      if (f[secao.id]) {
-                        const { [secao.id]: _fora, ...resto } = f;
-                        return resto;
-                      }
-                      return { ...f, [secao.id]: true as const };
-                    })
+                    setAlternadas((a) => ({
+                      ...a,
+                      [secao.id]: !(a[secao.id] ?? nasceFechada(secao)),
+                    }))
                   }
                   onTocar={(s) => void tocar(s)}
                   onMenu={menuDoCard}
@@ -355,6 +369,18 @@ export default function PainelDeSons({
 }
 
 /**
+ * Uma seção nasce fechada?
+ *
+ * Só Favoritos, e só enquanto está vazia — é o estado do print, onde ela é a
+ * única com o chevron `>` enquanto as outras estão com `v`. Faz sentido: uma
+ * seção vazia aberta é um cabeçalho seguido de nada, e o `>` pelo menos diz
+ * que tem uma gaveta ali. Assim que o primeiro favorito entra, ela abre.
+ */
+function nasceFechada(secao: SecaoDoPainel): boolean {
+  return secao.tipo === "favoritos" && secao.sons.length === 0;
+}
+
+/**
  * O ícone da seção — o mesmo desenho na coluna da esquerda e no cabeçalho.
  *
  * Muda só o tamanho: 20 na coluna (e o avatar de servidor ocupa os 32 inteiros
@@ -368,7 +394,7 @@ function IconeDaSecao({
   tamanho: "coluna" | "cabecalho";
 }) {
   const naColuna = tamanho === "coluna";
-  const px = naColuna ? 20 : 16;
+  const px = naColuna ? 22 : 16;
   if (secao.tipo === "guild") {
     const lado = naColuna ? "h-[32px] w-[32px]" : "h-[16px] w-[16px]";
     if (secao.guildIconUrl) {
@@ -433,7 +459,7 @@ function SecaoDeSons({
           type="button"
           onClick={onAlternar}
           aria-expanded={!fechada}
-          className="flex h-[32px] w-full items-center gap-[6px] text-[15px] font-semibold text-txt-secondary transition hover:text-txt-primary"
+          className="flex h-[32px] w-full items-center gap-[6px] text-[13px] font-semibold text-txt-secondary transition hover:text-txt-primary"
         >
           <span className="grid h-[16px] w-[16px] shrink-0 place-items-center">
             <IconeDaSecao secao={secao} tamanho="cabecalho" />
@@ -461,7 +487,7 @@ function SecaoDeSons({
             <button
               type="button"
               onClick={onAdicionar}
-              className="flex h-[40px] items-center justify-center gap-[6px] rounded-[8px] border border-border bg-chat px-[8px] text-[15px] text-txt-normal transition hover:border-border-strong hover:bg-hov"
+              className="flex h-[40px] items-center justify-center gap-[6px] rounded-[8px] border border-dashed border-border-strong px-[8px] text-[13px] text-txt-muted transition hover:border-border-strong-hover hover:text-txt-normal"
             >
               <Plus size={16} aria-hidden="true" />
               Adicionar som
@@ -498,19 +524,19 @@ function CardDeSom({
       title={sound.name}
       className="flex h-[40px] min-w-0 items-center justify-center gap-[8px] rounded-[8px] bg-sel px-[8px] transition hover:bg-border-strong"
     >
-      <span aria-hidden="true" className="shrink-0 text-[20px] leading-none">
+      <span aria-hidden="true" className="shrink-0 text-[18px] leading-none">
         {sound.emoji || "🔊"}
       </span>
-      <span className="min-w-0 truncate text-[15px] text-txt-normal">{sound.name}</span>
+      <span className="min-w-0 truncate text-[13px] font-semibold text-txt-primary">{sound.name}</span>
     </button>
   );
 }
 
 /**
  * O mini-popover do deslizador, aberto pelo alto-falante ao lado da busca.
- * No print ele mede 199×76: título em negrito e um trilho, nada mais. Aqui ele
- * tem 224 porque a nossa Noto Sans é mais larga que a gg sans do Discord e
- * "Volume dos efeitos sonoros" quebrava em duas linhas dentro de 199.
+ * No print ele mede 199×76: título em semibold de 14 e um trilho de 4px com a
+ * bolinha branca de 16 — sem trecho preenchido, o trilho é cinza inteiro
+ * (`getpixel`: trilho #474851, bolinha #ffffff). O nosso tem os mesmos 199.
  */
 function PopoverDeVolume({
   ancora,
@@ -529,12 +555,12 @@ function PopoverDeVolume({
       aberto={aberto}
       onFechar={onFechar}
       rotulo="Volume dos efeitos sonoros"
-      largura={224}
+      largura={199}
     >
       {/* o `data-submenu-de-popover` é o que impede o painel de fechar junto
           quando o clique cai aqui dentro (ver `PopoverFlutuante`) */}
-      <div data-submenu-de-popover>
-        <p className="whitespace-nowrap text-[15px] font-bold text-txt-primary">
+      <div data-submenu-de-popover className="py-[4px]">
+        <p className="whitespace-nowrap text-[14px] font-semibold text-txt-primary">
           Volume dos efeitos sonoros
         </p>
         <input
@@ -546,7 +572,7 @@ function PopoverDeVolume({
           aria-label="Volume dos efeitos sonoros"
           aria-valuetext={`${Math.round(volume * 100)}%`}
           onChange={(e) => definirVolume(Number(e.target.value) / 100)}
-          className="mt-[12px] h-[6px] w-full cursor-pointer appearance-none rounded-full bg-void accent-accent"
+          className="mt-[12px] h-[4px] w-full cursor-pointer appearance-none rounded-full bg-border-strong-hover [&::-moz-range-thumb]:h-[16px] [&::-moz-range-thumb]:w-[16px] [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-paper [&::-webkit-slider-thumb]:h-[16px] [&::-webkit-slider-thumb]:w-[16px] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-paper"
         />
       </div>
     </PopoverFlutuante>
