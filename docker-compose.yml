@@ -34,6 +34,43 @@ services:
       - "7881:7881" # rtc/tcp fallback
       - "7882:7882/udp" # rtc/udp — porta única de mídia (mux), ver livekit.yaml
 
+  # ── j-bots ── a ponte de voz dos bots do Discord (F2, §D5.5) ───────────────
+  # Traduz o voice gateway do Discord (WS + RTP/UDP cifrado) para o LiveKit, de
+  # modo que um bot de música (Lavalink, @discordjs/voice) entre no canal e o
+  # som saia no navegador de quem está na call.
+  #
+  # Fica sob o profile "bots" para não subir junto do resto: sem `voz.streamz
+  # .chat` no DNS e sem 7883/udp aberto no firewall (do sistema **e** do
+  # provedor) ela não serve para nada, e essas duas coisas são ação do dono.
+  #   docker compose --profile bots up -d ponte-voz
+  ponte-voz:
+    build:
+      context: .
+      dockerfile: apps/ponte-voz/Dockerfile
+    container_name: streamz-ponte-voz
+    profiles: ["bots"]
+    restart: unless-stopped
+    environment:
+      PONTE_VOZ_PORTA_WS: "8080"
+      PONTE_VOZ_PORTA_UDP: "7883"
+      # O IP **público** do servidor, não um hostname: é o que vai no
+      # `READY.ip` do voice gateway, e o NAT do bot precisa de um número.
+      # Cloudflare não entra na história — é UDP (§D5.4).
+      PONTE_VOZ_IP_PUBLICO: ${PONTE_VOZ_IP_PUBLICO:-}
+      # O mesmo segredo que a API usa para assinar o JWT do
+      # VOICE_SERVER_UPDATE. Sem ele, a ponte recusa todo IDENTIFY com 4004 e
+      # a API responde 503 no op 4 — de propósito.
+      PONTE_VOZ_SEGREDO: ${PONTE_VOZ_SEGREDO:-}
+      LIVEKIT_URL: ${LIVEKIT_URL:-}
+      # Dentro da rede do compose a API é o serviço `api`, não localhost.
+      API_INTERNA_URL: http://api:3333
+    ports:
+      # A mídia do bot vai **direta**, sem Traefik: ele não faz UDP (§D5.5).
+      # Esta linha é repetida no override do Traefik, sob `ports: !override`.
+      - "7883:7883/udp"
+    depends_on:
+      - api
+
   # ── Aplicação ──────────────────────────────────────────────────────────────
   # `pnpm db:up` continua subindo só o Postgres (ele nomeia o serviço). Estes
   # dois só sobem quando pedidos: `docker compose up -d api web`.

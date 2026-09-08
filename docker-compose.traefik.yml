@@ -51,6 +51,29 @@ services:
       - traefik.http.routers.livekit.tls.certresolver=le
       - traefik.http.services.livekit.loadbalancer.server.port=7880
 
+  # ── j-bots ── a ponte de voz (F2, §D5.5) ───────────────────────────────────
+  # Só o **WS** passa pelo Traefik; a mídia é UDP e o Traefik não faz UDP.
+  # Sobe com `--profile bots`, e só depois de o DNS de ${VOZ_DOMAIN} apontar
+  # para cá (Cloudflare **cinza**, DNS only — o proxy derruba um WS que fica em
+  # silêncio entre faixas) e de 7883/udp estar aberto no firewall do sistema
+  # **e** no do provedor.
+  ponte-voz:
+    networks: [default, proxy]
+    # A mídia é o caminho quente e sensível a jitter, como a do LiveKit: os
+    # mesmos núcleos que já são dela.
+    cpuset: "2-5"
+    mem_limit: 512m
+    # !override: sem isso o Compose CONCATENA com a lista do base e a mesma
+    # porta apareceria duas vezes — a mesma pegadinha já documentada no LiveKit.
+    ports: !override
+      - "7883:7883/udp"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.voz.rule=Host(`${VOZ_DOMAIN}`)
+      - traefik.http.routers.voz.entrypoints=websecure
+      - traefik.http.routers.voz.tls.certresolver=le
+      - traefik.http.services.voz.loadbalancer.server.port=8080
+
   postgres:
     cpuset: "0,1"
     mem_limit: 2g

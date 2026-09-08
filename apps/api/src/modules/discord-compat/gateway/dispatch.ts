@@ -3,6 +3,7 @@ import { WS_EVENTS } from "@streamz/shared";
 import { GuildsService } from "../../guilds/guilds.service";
 import type { AlvoDoEvento } from "../../realtime/realtime.service";
 import { RealtimeService } from "../../realtime/realtime.service";
+import { VoiceService } from "../../voice/voice.service";
 import { DadosDeCompatService } from "../dados.service";
 import { IdsService } from "../ids.service";
 import { canalParaDiscord } from "../traducao/canal";
@@ -14,6 +15,7 @@ import { usuarioParaDiscord } from "../traducao/usuario";
 import type { JsonDoDiscord, LinhaDeServidor } from "../tipos";
 import { INTENT } from "../tipos";
 import { RegistroDeSessoes, type SessaoDoBot } from "./sessao";
+import { estadoDeVozParaDiscord } from "./voz";
 
 /**
  * A ponte entre o tempo real de hoje e os dispatches do gateway compat.
@@ -109,6 +111,23 @@ function cadeia(o: Registro | null, chave: string): string | null {
   return typeof valor === "string" && valor.length > 0 ? valor : null;
 }
 
+/**
+ * O `session_id` de quem **não** é bot.
+ *
+ * No Discord todo estado de voz tem uma sessão; aqui só o bot tem (é o
+ * `session_id` do gateway compat, e o `voz.ts` o preenche). Para uma pessoa no
+ * navegador não existe equivalente — e o campo não pode faltar: o discord.js lê
+ * `data.session_id` no `VoiceState._patch` e o discord.py o guarda direto.
+ *
+ * Usamos o **snowflake do próprio usuário**: é estável entre eventos (as libs
+ * comparam sessão para detectar reconexão), é opaco e não revela nada que o
+ * evento já não carregue — ao contrário do cuid interno, que a casca esconde de
+ * propósito.
+ */
+function sessaoSinteticaDe(snowflake: bigint): string {
+  return String(snowflake);
+}
+
 @Injectable()
 export class PonteDeEventos {
   private readonly logger = new Logger(PonteDeEventos.name);
@@ -128,6 +147,9 @@ export class PonteDeEventos {
     private readonly dados: DadosDeCompatService,
     private readonly ids: IdsService,
     private readonly guilds: GuildsService,
+    // F2: o `voice_states` do `GUILD_CREATE` sai daqui — é dele que o bot de
+    // música sabe quem já está no canal antes de o primeiro `voice.state` cair.
+    private readonly voz: VoiceService,
   ) {}
 
   /**
@@ -152,15 +174,73 @@ export class PonteDeEventos {
    * É o payload mais perigoso da fase: incompleto, o `ready` nunca dispara e o
    * bot fica mudo **sem erro** (risco (a) do §12).
    *
-   * O `botUserId` não entra no payload: na F1 nada dele é por bot (o
-   * `voice_states` é F2 e sai vazio, e `members` traz o servidor inteiro). Fica
-   * na assinatura porque é contrato do lote B e porque a F2 vai precisar dele.
+   * O `botUserId` era decorativo na F1; **na F2 ele é o que lê o estado de
+   * voz** — `VoiceService.statesForGuild` confere que quem pergunta é membro do
+   * servidor, e é essa a visão que vai no `voice_states`.
    */
-  async montarGuildCreate(guildId: string, _botUserId: string): Promise<JsonDoDiscord> {
+  async montarGuildCreate(guildId: string, botUserId: string): Promise<JsonDoDiscord> {
     const servidor = await this.dados.servidorCompleto(guildId);
     if (!servidor) throw new Error(`servidor ${guildId} não encontrado`);
     this.memorizarServidor(servidor);
-    return servidorParaDiscord(servidor, true);
+    const payload = servidorParaDiscord(servidor, true);
+    // A tradução é pura (sem Prisma, sem estado efêmero) e por isso deixa o
+    // `voice_states` vazio; quem tem a store de voz em mãos é a ponte.
+    payload.voice_states = await this.estadosDeVozDoServidor(servidor, botUserId);
+    return payload;
+  }
+
+  /**
+   * Quem já está nos canais de voz do servidor, no formato do Discord.
+   *
+   * É a peça que faz o bot de música saber, no `ready`, que existe gente numa
+   * call — sem ela um `!play` logo depois de o bot subir acharia o canal vazio.
+   *
+   * Falhar aqui **não** pode custar o `GUILD_CREATE` inteiro: um servidor a
+   * menos trava o `ready` do bot (risco (a) do §12), e ficar sem a lista de voz
+   * é só ficar sem ela até o primeiro `voice.state`.
+   */
+  private async estadosDeVozDoServidor(
+    g: LinhaDeServidor,
+    botUserId: string,
+  ): Promise<JsonDoDiscord[]> {
+    let estados;
+    try {
+      estados = await this.voz.statesForGuild(botUserId, g.id);
+    } catch (erro) {
+      this.logger.warn(
+        `voice_states de ${g.snowflake} ficou vazio: ${(erro as Error).message}`,
+      );
+      return [];
+    }
+
+    // Os snowflakes saem do que já está em mãos (é o mesmo `LinhaDeServidor` do
+    // payload): nenhuma consulta a mais por participante.
+    const canalPorCuid = new Map(g.canais.map((c) => [c.id, c.snowflake]));
+    const membroPorCuid = new Map(g.membros.map((m) => [m.user.id, m]));
+
+    const saida: JsonDoDiscord[] = [];
+    for (const estado of estados) {
+      const canalSnowflake = canalPorCuid.get(estado.channelId);
+      const membro = membroPorCuid.get(estado.user.id);
+      // Quem não é membro do servidor não tem estado de voz nele; canal fora da
+      // estrutura (apagado no meio) idem.
+      if (canalSnowflake === undefined || !membro) continue;
+      saida.push(
+        estadoDeVozParaDiscord({
+          // Dentro do `GUILD_CREATE` o Discord manda o estado sem `guild_id`.
+          guildSnowflake: null,
+          canalSnowflake: String(canalSnowflake),
+          usuarioSnowflake: String(membro.user.snowflake),
+          sessionId: sessaoSinteticaDe(membro.user.snowflake),
+          membro: membroParaDiscord(membro, true),
+          selfMute: estado.muted,
+          selfDeaf: estado.deafened,
+          selfVideo: estado.video,
+          selfStream: estado.screen,
+        }),
+      );
+    }
+    return saida;
   }
 
   // ── o fan-out ──────────────────────────────────────────────
@@ -197,10 +277,12 @@ export class PonteDeEventos {
           return await this.membro(dado, "GUILD_MEMBER_UPDATE");
         case WS_EVENTS.MEMBER_LEFT:
           return await this.membroSaiu(dado);
+        case WS_EVENTS.VOICE_STATE:
+          return await this.estadoDeVoz(dado);
         default:
-          // Os outros eventos do Streamz não têm par na F1 (voz é F2; presença,
-          // banimento e emoji são F5). Ignorar em silêncio é o certo: este
-          // ouvinte roda em **todo** `emit` da API.
+          // Os outros eventos do Streamz não têm par (presença, banimento e
+          // emoji são F5). Ignorar em silêncio é o certo: este ouvinte roda em
+          // **todo** `emit` da API.
           return;
       }
     } catch (erro) {
@@ -457,6 +539,70 @@ export class PonteDeEventos {
     };
     for (const sessoes of bots.values()) {
       for (const sessao of sessoes) sessao.despachar("GUILD_MEMBER_REMOVE", evento);
+    }
+  }
+
+  // ── voz (F2) ───────────────────────────────────────────────
+
+  /**
+   * `voice.state` → `VOICE_STATE_UPDATE`, filtrado por `GUILD_VOICE_STATES`.
+   *
+   * É por aqui que o bot de música vê a pessoa entrar e sair da call — inclusive
+   * o "ficou sozinho no canal", que é como quase todo bot decide se
+   * desconectar.
+   *
+   * **O estado do próprio bot não sai daqui**, e isso é deliberado: o
+   * `session_id` é obrigatório no evento e só a sessão do gateway o conhece, e
+   * a ordem `VOICE_STATE_UPDATE` → `VOICE_SERVER_UPDATE` do §8 tem de ser
+   * colada. Quem manda o do bot é o `voz.ts`, no op 4 e na rota interna da
+   * ponte. **Limitação registrada:** um bot **movido** por um moderador
+   * (`VoiceService.move`) não recebe evento nenhum — e não adiantaria receber,
+   * porque a ponte não tem como trocar de sala sem um `VOICE_SERVER_UPDATE`
+   * novo. É dívida da fase, não descuido.
+   *
+   * Conversa direta (`guildId` nulo) não gera evento: `VOICE_STATE_UPDATE` é de
+   * servidor, e a F2 não abre chamada em DM com bot.
+   */
+  private async estadoDeVoz(dado: unknown): Promise<void> {
+    const payload = objeto(dado);
+    const canalId = cadeia(payload, "channelId");
+    const servidorId = cadeia(payload, "guildId");
+    const usuarioId = cadeia(objeto(payload?.["user"]), "id");
+    if (!canalId || !servidorId || !usuarioId) return;
+
+    const bots = await this.botsComAcessoAoCanal(canalId, INTENT.GUILD_VOICE_STATES);
+    // Nada de consulta quando ninguém pediu o intent — este ouvinte roda em
+    // todo `voice.state` da instância, e eles são frequentes.
+    const destinatarios = [...bots].filter(([botUserId]) => botUserId !== usuarioId);
+    if (destinatarios.length === 0) return;
+
+    const lembrado = this.memoria.resolver("channel", canalId);
+    const [canalSnowflake, servidorSnowflake, membro] = await Promise.all([
+      lembrado !== null ? Promise.resolve(lembrado) : this.ids.snowflakeDeCanal(canalId),
+      this.snowflakeDoServidor(servidorId),
+      this.dados.membroDoServidor(servidorId, usuarioId),
+    ]);
+    if (canalSnowflake === null || servidorSnowflake === null || !membro) return;
+    this.memoria.lembrar("channel", canalId, canalSnowflake);
+    this.memoria.lembrar("user", usuarioId, membro.user.snowflake);
+
+    const conectado = payload?.["connected"] === true;
+    const evento = estadoDeVozParaDiscord({
+      guildSnowflake: String(servidorSnowflake),
+      // Desconectar é o mesmo evento com `channel_id: null` — é o que as libs
+      // leem para tirar a pessoa da call.
+      canalSnowflake: conectado ? String(canalSnowflake) : null,
+      usuarioSnowflake: String(membro.user.snowflake),
+      sessionId: sessaoSinteticaDe(membro.user.snowflake),
+      membro: membroParaDiscord(membro, true),
+      selfMute: payload?.["muted"] === true,
+      selfDeaf: payload?.["deafened"] === true,
+      selfVideo: payload?.["video"] === true,
+      selfStream: payload?.["screen"] === true,
+    });
+
+    for (const [, sessoes] of destinatarios) {
+      for (const sessao of sessoes) sessao.despachar("VOICE_STATE_UPDATE", evento);
     }
   }
 
