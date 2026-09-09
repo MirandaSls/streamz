@@ -1,4 +1,6 @@
 import BarraDeTituloMinima from "@/components/desktop/BarraDeTituloMinima";
+import AvisoDeInstalacao from "@/components/pwa/AvisoDeInstalacao";
+import RegistroDoServiceWorker from "@/components/pwa/RegistroDoServiceWorker";
 import PesoDosIcones from "@/components/ui/PesoDosIcones";
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
@@ -58,6 +60,32 @@ export const metadata: Metadata = {
     description: "Chat de comunidade — voz, vídeo e tela",
   },
   twitter: { card: "summary_large_image", title: "Streamz" },
+  /**
+   * As três metas `apple-mobile-web-app-*`, que são o que o Safari lê ao
+   * "Adicionar à Tela de Início" — o manifesto ele quase ignora.
+   *
+   * - `capable`: sem esta, o atalho do iPhone abre **dentro do Safari**, com
+   *   barra de endereço e barra de abas comendo ~110px da tela e o gesto de
+   *   voltar do navegador por cima da navegação do app. É a diferença entre um
+   *   ícone que abre um site e um ícone que abre o app.
+   * - `title`: o nome embaixo do ícone. Sem ela o iOS usa o `<title>` da
+   *   página, que muda com a rota — o mesmo app instalado duas vezes sairia
+   *   com dois nomes.
+   * - `statusBarStyle: "black-translucent"`: a barra de status fica
+   *   **transparente** e o conteúdo passa por baixo dela. É o par obrigatório
+   *   do `viewportFit: "cover"` logo abaixo: os dois juntos é que fazem o
+   *   `env(safe-area-inset-top)` do shell de celular valer alguma coisa. Com
+   *   `default` o iOS reserva a faixa e pinta de branco — texto preto sobre
+   *   branco no topo de um app escuro.
+   *
+   * Não há `<link rel="apple-touch-icon">` escrito na mão: `app/apple-icon.png`
+   * já faz o Next emitir a tag sozinho (conferido no HTML exportado).
+   */
+  appleWebApp: {
+    capable: true,
+    title: "Streamz",
+    statusBarStyle: "black-translucent",
+  },
 };
 
 /**
@@ -106,6 +134,21 @@ export default function RootLayout({
       <body className="font-sans">
         <BarraDeTituloMinima />
         <PesoDosIcones>{children}</PesoDosIcones>
+        {/*
+          As duas peças do PWA. Ficam aqui, e não no shell do celular, porque
+          valem em **toda** rota: quem chega por um link de convite ou pela
+          tela de login também tem de poder instalar, e essas telas não passam
+          pelo `ShellMobile`.
+
+          As duas são inertes fora do navegador de celular: o registrador não
+          registra nada dentro do Tauri nem em desenvolvimento
+          (`deveRegistrarServiceWorker`) e o aviso nasce sem desenhar nada,
+          decidindo só depois de montar (ver o cabeçalho de cada um). No HTML
+          exportado — o mesmo que o app de desktop empacota — os dois somem
+          para dois comentários vazios do React.
+        */}
+        <RegistroDoServiceWorker />
+        <AvisoDeInstalacao />
       </body>
     </html>
   );
