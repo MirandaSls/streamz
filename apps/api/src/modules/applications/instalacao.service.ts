@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
+import type { GuildApplication, Role } from "@prisma/client";
 import { Permission, WS_EVENTS, type AppInstalacao } from "@streamz/shared";
 import { toPublicUser, toRoleDTO, type PublicUserRow } from "../../common/dto";
+import { isUniqueViolation } from "../../common/prisma-errors";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { RealtimeService } from "../realtime/realtime.service";
@@ -149,28 +151,53 @@ export class InstalacaoService {
     });
     const position = Math.min((maior._max.position ?? 0) + 1, Math.max(teto, 1));
 
-    const { instalacao, cargo } = await this.prisma.$transaction(async (tx) => {
-      const cargo = await tx.role.create({
-        data: { guildId, name: app.name, position, permissions: concedidas },
+    // A leitura do `jaInstalado` e esta escrita não são atômicas entre si: duas
+    // autorizações do mesmo app no mesmo servidor, ao mesmo tempo, veem as duas
+    // "não instalado" e chegam as duas aqui. Quem impede a segunda linha é o
+    // `@@unique(guildId, applicationId)`, e a transação garante que a perdedora
+    // não deixe cargo nem membro para trás — mas o erro que sobe é um `P2002`
+    // cru, ou seja, um 500 para quem clicou em "Autorizar" duas vezes rápido.
+    //
+    // A saída é a mesma que o `criarUsuarioBot` da F0 usa para o username, e
+    // pelo mesmo motivo: **tentar e tratar a colisão** em vez de travar. Perdeu
+    // a corrida quer dizer que o app *está* instalado — e instalar o que já
+    // está instalado é reautorizar, que é justamente o caminho de cima.
+    let criada: { instalacao: GuildApplication; cargo: Role };
+    try {
+      criada = await this.prisma.$transaction(async (tx) => {
+        const cargo = await tx.role.create({
+          data: { guildId, name: app.name, position, permissions: concedidas },
+        });
+        // 5. o membro-bot e o cargo nele. `role: "MEMBER"`: o papel legado não é
+        //    o que dá poder ao bot — quem dá é o cargo que ele acabou de vestir.
+        await tx.guildMember.create({ data: { userId: app.botUserId, guildId, role: "MEMBER" } });
+        await tx.guildMemberRole.create({
+          data: { guildId, userId: app.botUserId, roleId: cargo.id },
+        });
+        // 6. a autorização em si.
+        const instalacao = await tx.guildApplication.create({
+          data: {
+            guildId,
+            applicationId,
+            installedById: actorId,
+            permissions: concedidas,
+            roleId: cargo.id,
+          },
+        });
+        return { instalacao, cargo };
       });
-      // 5. o membro-bot e o cargo nele. `role: "MEMBER"`: o papel legado não é
-      //    o que dá poder ao bot — quem dá é o cargo que ele acabou de vestir.
-      await tx.guildMember.create({ data: { userId: app.botUserId, guildId, role: "MEMBER" } });
-      await tx.guildMemberRole.create({
-        data: { guildId, userId: app.botUserId, roleId: cargo.id },
+    } catch (e) {
+      if (!isUniqueViolation(e)) throw e;
+      // a outra requisição chegou primeiro; a nossa transação já se desfez
+      // inteira. Relê e reautoriza — o resultado é o mesmo que se as duas
+      // tivessem chegado em ordem.
+      const agora = await this.prisma.guildApplication.findUnique({
+        where: { guildId_applicationId: { guildId, applicationId } },
       });
-      // 6. a autorização em si.
-      const instalacao = await tx.guildApplication.create({
-        data: {
-          guildId,
-          applicationId,
-          installedById: actorId,
-          permissions: concedidas,
-          roleId: cargo.id,
-        },
-      });
-      return { instalacao, cargo };
-    });
+      if (!agora) throw e;
+      return this.reautorizar(guildId, agora, app, concedidas);
+    }
+    const { instalacao, cargo } = criada;
 
     // 7. os eventos. O cargo primeiro: quem receber o `member.joined` já
     //    consegue resolver o `roleIds` dele para um cargo que a tela conhece.

@@ -1,4 +1,5 @@
 import { ForbiddenException, NotFoundException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { ALL_PERMISSIONS, Permission, WS_EVENTS } from "@streamz/shared";
 import { describe, expect, it } from "vitest";
 
@@ -73,10 +74,17 @@ interface Opcoes {
   minhasPermissoes?: number;
   app?: typeof APP | null;
   jaInstalado?: { id: string; roleId: string | null; installedById: string } | null;
+  /**
+   * A corrida: no instante do `findUnique` não havia instalação, e quando a
+   * transação foi escrever o `@@unique(guildId, applicationId)` já tinha sido
+   * ocupado por outra requisição. A releitura passa a enxergar a vencedora.
+   */
+  corrida?: boolean;
 }
 
 function ambiente(op: Opcoes = {}) {
   const passos: string[] = [];
+  let leiturasDaInstalacao = 0;
   const eventos: { guildId: string; evento: string; dado: unknown }[] = [];
   const minhas = op.minhasPermissoes ?? ALL_PERMISSIONS;
 
@@ -156,6 +164,13 @@ function ambiente(op: Opcoes = {}) {
     guildApplication: {
       async create({ data }: { data: Record<string, unknown> }) {
         passos.push(`guildApplication.create:${data.permissions}:${data.installedById}`);
+        if (op.corrida) {
+          throw new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+            code: "P2002",
+            clientVersion: "6",
+            meta: { target: ["guildId", "applicationId"] },
+          });
+        }
         return {
           id: "gapp1",
           guildId: "g1",
@@ -187,6 +202,20 @@ function ambiente(op: Opcoes = {}) {
     guildApplication: {
       async findUnique() {
         passos.push("guildApplication.findUnique");
+        // Na corrida a primeira leitura é a de antes da colisão (não havia
+        // nada) e a segunda é a releitura de depois — que é o ponto do teste.
+        if (op.corrida) {
+          leiturasDaInstalacao += 1;
+          if (leiturasDaInstalacao === 1) return null;
+          return {
+            id: "gapp_vencedora",
+            roleId: "r_vencedora",
+            installedById: "u_outro",
+            guildId: "g1",
+            applicationId: "app1",
+            application: APP,
+          };
+        }
         const j = op.jaInstalado ?? null;
         return j ? { ...j, guildId: "g1", applicationId: "app1", application: APP } : null;
       },
@@ -476,6 +505,65 @@ describe("InstalacaoService.instalar — instalar de novo é EDITAR", () => {
     await expect(
       a.servico.instalar("u_ana", "g1", "app1", Permission.ADMINISTRATOR),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+});
+
+/**
+ * A corrida que o PR do lote B sinalizou e não fechou.
+ *
+ * `instalar` lê `guildApplication.findUnique` para decidir entre "criar" e
+ * "reautorizar", e só depois escreve. As duas coisas não são atômicas entre si:
+ * dois cliques em "Autorizar" ao mesmo tempo (ou o mesmo clique repetido antes
+ * da resposta) fazem as duas requisições lerem "não instalado" e as duas
+ * seguirem para o caminho de criar. Quem impede a segunda linha é o
+ * `@@unique(guildId, applicationId)` — mas, sem tratamento, o que sobe é um
+ * `P2002` cru, ou seja, **500** para quem clicou duas vezes rápido.
+ *
+ * O conserto é o mesmo padrão do `criarUsuarioBot` da F0: tentar e tratar a
+ * colisão, em vez de travar a tabela. Perder a corrida quer dizer que o app
+ * *está* instalado, e instalar o que já está instalado é **reautorizar** — o
+ * caminho que já existe logo acima.
+ */
+describe("InstalacaoService.instalar — a corrida de duas instalações simultâneas", () => {
+  it("a perdedora não devolve 500: cai na reautorização e responde a instalação", async () => {
+    const a = ambiente({ corrida: true });
+    const r = await a.servico.instalar("u_ana", "g1", "app1", 3);
+
+    // não estourou, e o que voltou é a instalação vencedora — não uma segunda
+    expect(r.id).toBe("gapp_vencedora");
+    expect(r.permissions).toBe(3);
+  });
+
+  it("a criação foi tentada, colidiu, e a releitura levou à reautorização", async () => {
+    const a = ambiente({ corrida: true });
+    await a.servico.instalar("u_ana", "g1", "app1", 3);
+
+    // duas leituras: a de antes (não havia nada) e a releitura de depois
+    expect(a.passos.filter((p) => p === "guildApplication.findUnique")).toHaveLength(2);
+    // tentou criar…
+    expect(a.passos.some((p) => p.startsWith("guildApplication.create:"))).toBe(true);
+    // …e terminou editando a linha da vencedora, não criando uma segunda
+    expect(a.passos.some((p) => p.startsWith("guildApplication.update:gapp_vencedora"))).toBe(true);
+  });
+
+  it("a perdedora NÃO faz o bot entrar de novo: nada de ROLE_CREATED", async () => {
+    const a = ambiente({ corrida: true });
+    await a.servico.instalar("u_ana", "g1", "app1", 3);
+
+    // reautorizar é uma edição de permissões; o bot já está lá pela vencedora.
+    // Um ROLE_CREATED aqui seria um cargo duplicado na tela de cargos.
+    expect(a.eventos.map((e) => e.evento)).not.toContain(WS_EVENTS.ROLE_CREATED);
+    expect(a.eventos.map((e) => e.evento)).toContain(WS_EVENTS.ROLE_UPDATED);
+  });
+
+  it("um erro que NÃO é P2002 continua subindo", async () => {
+    const a = ambiente({ corrida: true });
+    // troca a colisão por um erro qualquer: o `catch` não pode engoli-lo
+    const prisma = (a.servico as unknown as { prisma: { $transaction: unknown } }).prisma;
+    prisma.$transaction = async () => {
+      throw new Error("o banco caiu");
+    };
+    await expect(a.servico.instalar("u_ana", "g1", "app1", 3)).rejects.toThrow("o banco caiu");
   });
 });
 
