@@ -1,4 +1,4 @@
-import type { DMChannelView } from "@streamz/shared";
+import type { DMChannelView, PreviaDeMensagem } from "@streamz/shared";
 
 /**
  * As regras de ordem da coluna "Mensagens diretas", separadas da store porque
@@ -31,4 +31,22 @@ export function comAConversaAberta(
   if (!activeId || doServidor.some((d) => d.id === activeId)) return doServidor;
   const aberta = locais.find((d) => d.id === activeId);
   return aberta ? [aberta, ...doServidor] : doServidor;
+}
+
+/**
+ * A prévia que a conversa passa a mostrar depois de uma mensagem chegar ou ser
+ * editada — `null` quando a linha não muda.
+ *
+ * O evento `message.updated` chega para qualquer mensagem do canal, não só
+ * para a última: sem esta comparação, editar uma mensagem de três dias atrás
+ * trocaria a prévia por ela e ainda jogaria a conversa para o topo.
+ */
+export function proximaPrevia(
+  atual: PreviaDeMensagem | null | undefined,
+  nova: PreviaDeMensagem,
+): PreviaDeMensagem | null {
+  if (!atual) return nova;
+  // editaram (ou reenviaram) justamente a que está na linha
+  if (nova.id === atual.id) return nova;
+  return nova.createdAt >= atual.createdAt ? nova : null;
 }
