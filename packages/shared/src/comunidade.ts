@@ -207,7 +207,11 @@ export interface DiscoverableGuild {
  * disfarçada de parâmetro, e a lista fechada elimina a categoria inteira de
  * ataque em vez de tentar filtrá-la.
  */
-export const DOWNLOAD_PLATAFORMAS = ["windows", "macos", "linux"] as const;
+export const DOWNLOAD_PLATAFORMAS = ["windows", "macos", "linux", "android"] as const;
+// `android` é o `.apk` que sai de `scripts/build-android-no-servidor.sh`, para
+// instalar à mão — não é a Google Play. Enquanto o app não estiver na loja,
+// esta página é o único jeito de pegá-lo, e é para cá que o card "Baixar
+// atualização" do app de celular manda o usuário.
 export type DownloadPlataforma = (typeof DOWNLOAD_PLATAFORMAS)[number];
 
 /**
@@ -258,5 +262,5 @@ export interface DownloadAutorizado {
 
 /** Rótulo de plataforma para a UI (o seletor e as mensagens de erro). */
 export function rotuloPlataforma(plataforma: DownloadPlataforma): string {
-  return { windows: "Windows", macos: "macOS", linux: "Linux" }[plataforma];
+  return { windows: "Windows", macos: "macOS", linux: "Linux", android: "Android" }[plataforma];
 }
