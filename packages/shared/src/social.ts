@@ -12,7 +12,9 @@
 
 import { z } from "zod";
 import type { MemberRole, PublicUser } from "./dominio";
-import type { Message } from "./midia";
+import { replySnippet } from "./mensagens";
+import type { MessageType } from "./mensagens";
+import type { Attachment, Message } from "./midia";
 
 /** Estado de uma amizade. `PENDING` = pedido enviado e ainda não respondido. */
 export type FriendshipStatus = "PENDING" | "ACCEPTED";
@@ -248,4 +250,119 @@ export function systemMessageText(m: Pick<Message, "type" | "content">, autor: s
     default:
       return m.content;
   }
+}
+
+// ── Prévia da última mensagem na lista de conversas ──────────
+//
+// A coluna "Mensagens" do Discord mostra, embaixo do nome da conversa, o que
+// foi dito por último ("graggle: Can someone explain #4?"). Medido em
+// `docs/Reference/mobile/discord-mobile-dms-2024.png` (1,9707 px/pt): nome de
+// ~16pt em cima, prévia de ~14pt embaixo, 4,5pt entre as duas, e a mesma cor
+// nas duas linhas — o que muda com o "não lido" é a cor da linha inteira
+// (#878997 lida → #FDFDFD não lida) e o peso do nome.
+//
+// Mora aqui, no contrato, porque a API preenche o campo e o cliente refaz a
+// prévia quando chega `message.new`/`message.updated`: se as duas pontas não
+// aparassem igual, a linha piscaria com outro texto a cada mensagem.
+
+/** Comprimento do trecho que a linha da conversa mostra (cabe numa linha só). */
+export const MAX_PREVIA_DM = 80;
+
+/** A última mensagem de uma conversa, do jeito que a lista de conversas mostra. */
+export interface PreviaDeMensagem {
+  /**
+   * Id da mensagem. É ele que diz se um `message.updated`/`message.deleted`
+   * acertou *esta* prévia ou uma mensagem antiga que não está na linha.
+   */
+  id: string;
+  /** quem escreveu — o nome sai de `others` (ou é "Você"), nunca do servidor. */
+  authorId: string;
+  /** já achatado, sem marcação e cortado em `MAX_PREVIA_DM`. */
+  content: string;
+  createdAt: string;
+  /**
+   * `DEFAULT` vira "autor: texto"; as `SYSTEM_*` viram a narração inteira
+   * (`systemMessageText`), sem o prefixo do autor — é o que o Discord faz com
+   * "Fulano adicionou Beltrano ao grupo".
+   */
+  tipo: MessageType;
+}
+
+/**
+ * Tira a marcação do Discord e achata em uma linha só.
+ *
+ * Não é o parser de `markdown-core` ao contrário: a prévia não precisa saber
+ * onde cada trecho começa, só entregar o texto que o usuário digitou. Bloco de
+ * código vira espaço (não cabe), spoiler é revelado (a linha é curta demais
+ * para o gesto de revelar) e a menção a cargo vira `@cargo`, porque o id cru
+ * (`<@&ckx…>`) não diz nada a ninguém.
+ */
+function semMarcacao(texto: string): string {
+  return texto
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/<:([a-z0-9_]{2,32}):[A-Za-z0-9_-]{1,64}>/g, ":$1:")
+    .replace(/<@&[A-Za-z0-9_-]{1,64}>/g, "@cargo")
+    .replace(/^[ \t]{0,3}(?:>\s?|#{1,3}[ \t]+)/gm, "")
+    .replace(/(?<!\\)(\*\*|__|~~|\|\||\*|_)/g, "")
+    .replace(/\\([*_~`|>#\\])/g, "$1");
+}
+
+/** Uma mensagem vista pela prévia — o mínimo que a API e o cliente têm em mãos. */
+export interface MensagemParaPrevia {
+  content: string;
+  type: MessageType;
+  attachments?: readonly Pick<Attachment, "contentType">[] | null;
+  /** figurinha no lugar do texto (g-emojis-midia). */
+  temFigurinha?: boolean;
+}
+
+/**
+ * O texto de uma mensagem na lista de conversas. Vazio só quando não há nada
+ * que valha uma linha (mensagem em branco sem anexo).
+ */
+export function textoDaPrevia(m: MensagemParaPrevia, limite = MAX_PREVIA_DM): string {
+  const texto = replySnippet(semMarcacao(m.content), limite);
+  if (texto) return texto;
+  if (m.temFigurinha) return "Enviou uma figurinha";
+  const anexo = m.attachments?.[0];
+  if (!anexo) return "";
+  return anexo.contentType.toLowerCase() === "image/gif" ? "Enviou um GIF" : "Enviou um anexo";
+}
+
+/** A prévia de uma mensagem inteira (o caminho do cliente, no `message.new`). */
+export function previaDaMensagem(
+  m: Pick<Message, "id" | "author" | "content" | "createdAt" | "type" | "attachments" | "sticker">,
+): PreviaDeMensagem {
+  return {
+    id: m.id,
+    authorId: m.author.id,
+    content: textoDaPrevia({
+      content: m.content,
+      type: m.type,
+      attachments: m.attachments,
+      temFigurinha: !!m.sticker,
+    }),
+    createdAt: m.createdAt,
+    tipo: m.type,
+  };
+}
+
+/**
+ * A linha que a lista desenha embaixo do nome da conversa.
+ *
+ * `emChamada` ganha de tudo: enquanto o telefone toca ou a chamada corre, a
+ * linha é "Chamada de voz" — a chamada não deixa mensagem no histórico, então
+ * é o único lugar onde ela pode aparecer.
+ */
+export function linhaDaPrevia(
+  previa: PreviaDeMensagem | null | undefined,
+  opcoes: { autor: string; emChamada?: boolean },
+): string {
+  if (opcoes.emChamada) return "Chamada de voz";
+  if (!previa) return "";
+  if (previa.tipo !== "DEFAULT") {
+    return systemMessageText({ type: previa.tipo, content: previa.content }, opcoes.autor);
+  }
+  return previa.content ? `${opcoes.autor}: ${previa.content}` : "";
 }

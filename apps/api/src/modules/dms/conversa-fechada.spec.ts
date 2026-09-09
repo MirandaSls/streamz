@@ -81,6 +81,9 @@ function servico(ultimaMensagem: Record<string, Date | undefined> = {}) {
           (c) => c.id === where.id && c.members.some((m) => m.userId === where.members.some.userId),
         ) ?? null,
     },
+    // a prévia da última mensagem (`DISTINCT ON`) — aqui não há mensagem nenhuma
+    $queryRaw: async () => [],
+    attachment: { findMany: async () => [] },
     dMHidden: {
       findMany: async ({ where }: { where: { userId: string } }) =>
         escondidas.filter((h) => h.userId === where.userId),

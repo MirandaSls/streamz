@@ -6,6 +6,7 @@ import {
   PayloadTooLargeException,
   ServiceUnavailableException,
 } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import {
@@ -18,8 +19,10 @@ import type {
   DMChannelView,
   DMLeaveResult,
   MessageType,
+  PreviaDeMensagem,
   PublicUser,
 } from "@streamz/shared";
+import { textoDaPrevia } from "@streamz/shared";
 import {
   toChannelDTO,
   toPublicUser,
@@ -45,6 +48,17 @@ import { sniffImage } from "../uploads/media";
  */
 
 type MemberWithUser = { userId: string; user: PublicUserRow };
+
+/** A última mensagem de um canal, como o `DISTINCT ON` a devolve. */
+type LinhaDaUltimaMensagem = {
+  channelId: string;
+  id: string;
+  authorId: string;
+  content: string;
+  createdAt: Date;
+  type: MessageType;
+  stickerId: string | null;
+};
 
 /** A linha de `Channel` (com participantes) que `toView` sabe traduzir. */
 type CanalComParticipantes = Parameters<typeof toChannelDTO>[0] & {
@@ -230,13 +244,11 @@ export class DMsService {
       include: WITH_MEMBERS,
       orderBy: { createdAt: "desc" },
     });
-    const [summaries, escondidas] = await Promise.all([
-      this.readState.summaries(
-        meId,
-        username,
-        channels.map((c) => c.id),
-      ),
+    const ids = channels.map((c) => c.id);
+    const [summaries, escondidas, previas] = await Promise.all([
+      this.readState.summaries(meId, username, ids),
       this.prisma.dMHidden.findMany({ where: { userId: meId }, select: { channelId: true, hiddenAt: true } }),
+      this.previas(ids),
     ]);
     const hiddenAt = new Map(escondidas.map((h) => [h.channelId, h.hiddenAt]));
     // conversa recém-criada (amizade nova) ainda sem mensagem fica no topo,
@@ -244,7 +256,7 @@ export class DMsService {
     const criadaEm = new Map(channels.map((c) => [c.id, c.createdAt.toISOString()]));
     const atividade = (c: DMChannelView) => c.lastMessageAt ?? criadaEm.get(c.id) ?? "";
     return channels
-      .map((c) => this.toView(c, meId, summaries.get(c.id)))
+      .map((c) => this.toView(c, meId, summaries.get(c.id), previas.get(c.id)))
       // conversa fechada volta sozinha quando chega mensagem depois do fechamento
       .filter((c) => {
         const at = hiddenAt.get(c.id);
@@ -281,8 +293,11 @@ export class DMsService {
     username?: string,
   ): Promise<DMChannelView> {
     if (!username) return this.toView(channel, meId);
-    const summaries = await this.readState.summaries(meId, username, [channel.id]);
-    return this.toView(channel, meId, summaries.get(channel.id));
+    const [summaries, previas] = await Promise.all([
+      this.readState.summaries(meId, username, [channel.id]),
+      this.previas([channel.id]),
+    ]);
+    return this.toView(channel, meId, summaries.get(channel.id), previas.get(channel.id));
   }
 
   /** Canonicaliza o par (ordem estável) para garantir 1 canal por dupla. */
@@ -294,6 +309,7 @@ export class DMsService {
     channel: CanalComParticipantes,
     meId: string,
     summary?: ChannelReadSummary,
+    previa?: PreviaDeMensagem | null,
   ): DMChannelView {
     const others = channel.members
       .filter((p) => p.userId !== meId)
@@ -304,7 +320,76 @@ export class DMsService {
       iconUrl: this.iconUrl(channel.id, channel.iconKey),
       ownerId: channel.ownerId,
       unreadCount: summary?.unreadCount ?? 0,
+      ultimaMensagem: previa ?? null,
     };
+  }
+
+  /**
+   * A última mensagem de cada conversa, já aparada para a linha de prévia.
+   *
+   * **Duas consultas, quaisquer que sejam as conversas.** O caminho óbvio —
+   * `include: { messages: { take: 1 } }` — não serve: com vários canais de uma
+   * vez o Prisma não empurra o `LIMIT` para o banco; ele traz **todas** as
+   * mensagens dos canais (`WHERE channelId IN (…) ORDER BY createdAt DESC`,
+   * sem `LIMIT`) e corta em memória. Numa conversa antiga isso é o histórico
+   * inteiro a cada `GET /dms` — pior que o N+1 que a gente queria evitar.
+   *
+   * O `DISTINCT ON` do Postgres devolve exatamente uma linha por canal e anda
+   * pelo índice `(channelId, parentId, createdAt)` que já existe. Raw como o
+   * `contarNaoLidas` do `ReadStateService`, e pelo mesmo motivo: é o que o
+   * cliente do Prisma não sabe expressar.
+   *
+   * Os anexos só são buscados para as mensagens **sem texto** — são elas que
+   * viram "Enviou um anexo"/"Enviou um GIF". Quando todo mundo escreveu algo,
+   * essa segunda consulta nem acontece.
+   */
+  private async previas(channelIds: string[]): Promise<Map<string, PreviaDeMensagem>> {
+    const out = new Map<string, PreviaDeMensagem>();
+    if (channelIds.length === 0) return out;
+
+    const ultimas = await this.prisma.$queryRaw<LinhaDaUltimaMensagem[]>`
+      SELECT DISTINCT ON (m."channelId")
+        m."channelId", m."id", m."authorId", m."content", m."createdAt",
+        m."type"::text AS "type", m."stickerId"
+      FROM "Message" m
+      WHERE m."channelId" IN (${Prisma.join(channelIds)})
+      ORDER BY m."channelId", m."createdAt" DESC, m."id" DESC
+    `;
+
+    const semTexto = ultimas.filter((m) => !m.content.trim()).map((m) => m.id);
+    const anexos = semTexto.length
+      ? await this.prisma.attachment.findMany({
+          where: { messageId: { in: semTexto } },
+          select: { messageId: true, contentType: true },
+        })
+      : [];
+    const porMensagem = new Map<string, { contentType: string }[]>();
+    for (const a of anexos) {
+      // `messageId` é anulável no esquema (anexo já enviado, mensagem ainda não)
+      if (!a.messageId) continue;
+      const lista = porMensagem.get(a.messageId) ?? [];
+      lista.push({ contentType: a.contentType });
+      porMensagem.set(a.messageId, lista);
+    }
+
+    for (const m of ultimas) {
+      out.set(m.channelId, {
+        id: m.id,
+        authorId: m.authorId,
+        // o texto é aparado aqui com a mesma função que o cliente usa no
+        // `message.new`: a lista e o tempo real não podem discordar sobre
+        // onde o "…" cai
+        content: textoDaPrevia({
+          content: m.content,
+          type: m.type,
+          attachments: porMensagem.get(m.id),
+          temFigurinha: !!m.stickerId,
+        }),
+        createdAt: m.createdAt.toISOString(),
+        tipo: m.type,
+      });
+    }
+    return out;
   }
 
   // ── d-social ────────────────────────────────────────────────
