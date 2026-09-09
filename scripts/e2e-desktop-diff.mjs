@@ -4,6 +4,9 @@
  *   node scripts/e2e-desktop-diff.mjs --usuario ana123 \
  *     --antes http://localhost:3002 --depois http://localhost:3001 --out /tmp/shots
  *
+ * `--senha`, `--servidor` e `--canal` existem para bancadas com semente própria
+ * (a da F4 é uma); sem eles valem os da bancada do leiaute móvel.
+ *
  * Fotografa `--antes` e `--depois` em 1300×900 e escreve o par
  * `00-desktop-antes.png` / `00-desktop-depois.png`. A comparação em si é feita
  * com Pillow (o host não tem outra coisa) — ver o `comparar.py` do PR.
@@ -24,7 +27,12 @@ const arg = (nome, padrao) => {
 const outDir = resolve(arg("--out", "./e2e-shots-desktop"));
 mkdirSync(outDir, { recursive: true });
 const USUARIO = arg("--usuario", null);
-const SENHA = "Xk9#vWq2pLm7!";
+// `--senha` e `--servidor` entraram na integração da F4: a bancada dela tem
+// semente própria (`semear-f4.mjs`), com outra senha e outro nome de servidor.
+// Os padrões são os de antes, então quem já chamava o script continua igual.
+const SENHA = arg("--senha", "Xk9#vWq2pLm7!");
+const SERVIDOR = arg("--servidor", "Time de Produto");
+const CANAL = arg("--canal", "geral");
 const ALVOS = [
   { nome: "00-desktop-antes", web: arg("--antes", "http://localhost:3002") },
   { nome: "00-desktop-depois", web: arg("--depois", "http://localhost:3001") },
@@ -55,10 +63,13 @@ try {
       await page.waitForURL("**/app", { timeout: 45_000 });
     }
     // o servidor, o canal e a conversa: a tela com as quatro colunas de pé
-    await page.click('nav[aria-label="Servidores"] button[aria-label^="Time de Produto"]', {
+    await page.click(
+      `nav[aria-label="Servidores"] button[aria-label^="${SERVIDOR}"]`,
+      { timeout: 30_000 },
+    );
+    await page.waitForSelector(`textarea[aria-label="Mensagem para #${CANAL}"]`, {
       timeout: 30_000,
     });
-    await page.waitForSelector('textarea[aria-label="Mensagem para #geral"]', { timeout: 30_000 });
     // o embed do link e as fontes precisam ter assentado antes da foto
     await page.waitForTimeout(6000);
     const file = resolve(outDir, `${alvo.nome}.png`);

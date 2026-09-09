@@ -9,10 +9,11 @@
  *
  * Os ids seguem a ordem do menu do Discord (print `docs/Reference/Captura de
  * tela 2026-09-04 100541.png`). Os que ele tem e nós não criamos — tag,
- * vantagens de impulso, figurinhas, integrações, diretório de apps, segurança,
- * comunidade, onboarding, análises e modelo do servidor — não entram: não
- * existe recurso por trás deles. "Painel de efeitos sonoros" **entra**: desde
- * o soundboard, existe recurso por trás dele.
+ * vantagens de impulso, figurinhas, segurança, comunidade, onboarding, análises
+ * e modelo do servidor — não entram: não existe recurso por trás deles.
+ * "Painel de efeitos sonoros" **entra**: desde o soundboard, existe recurso por
+ * trás dele. E **"Aplicativos" entra** desde a F4: é o "Integrações"/"Diretório
+ * de Apps" do menu dele, com o nome que usamos no resto do produto.
  */
 export type ServerSettingsTab =
   | "overview"
@@ -23,6 +24,7 @@ export type ServerSettingsTab =
   | "roles"
   | "invites"
   | "acesso"
+  | "aplicativos"
   | "audit"
   | "bans"
   | "reports";

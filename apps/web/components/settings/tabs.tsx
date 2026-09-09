@@ -3,6 +3,7 @@
 import {
   Accessibility,
   Bell,
+  Bot,
   Gauge,
   Keyboard,
   Languages,
@@ -25,6 +26,7 @@ import AdminServidoresTab from "@/components/settings/admin/AdminServidoresTab";
 import AdminUsuariosTab from "@/components/settings/admin/AdminUsuariosTab";
 import AdminVisaoGeralTab from "@/components/settings/admin/AdminVisaoGeralTab";
 import AparenciaTab from "@/components/settings/AparenciaTab";
+import AplicativosTab from "@/components/settings/AplicativosTab";
 import ContaTab from "@/components/settings/ContaTab";
 import IdiomaTab from "@/components/settings/IdiomaTab";
 import NotificacoesTab from "@/components/settings/NotificacoesTab";
@@ -91,6 +93,8 @@ export const SETTINGS_TABS: readonly SettingsTab[] = [
     Component: SegurancaTab,
   },
   { id: "dispositivos", group: "usuario", label: "aba.sessoes", icon: <Laptop size={20} />, Component: SessoesTab },
+  // ── j-bots · F4 ── o portal do desenvolvedor
+  { id: "aplicativos", group: "usuario", label: "aba.aplicativos", icon: <Bot size={20} />, Component: AplicativosTab },
 
   {
     id: "aparencia",

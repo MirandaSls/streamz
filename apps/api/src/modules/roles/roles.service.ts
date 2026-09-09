@@ -421,8 +421,20 @@ export class RolesService {
   /**
    * Não se concede o que não se tem. Sem isto, quem tem só `MANAGE_ROLES`
    * criaria um cargo com `ADMINISTRATOR` e o vestiria no passo seguinte.
+   *
+   * **Pública desde a F4** (era `private`), por um motivo idêntico ao de cima:
+   * instalar um aplicativo cria um cargo, e sem esta trava `MANAGE_GUILD`
+   * viraria `ADMINISTRATOR` de graça — bastaria instalar um bot que se controla
+   * com um cargo de administrador. O `InstalacaoService` chama **esta** função
+   * em vez de repetir a regra; uma segunda cópia de uma regra de autorização é
+   * exatamente como as duas divergem (ADR-0002: ponto único de autorização).
+   *
+   * `permissionsOf` já devolve `ALL_PERMISSIONS` para o dono e para quem tem
+   * `ADMINISTRATOR` (ver `computePermissions`), então esses dois concedem tudo
+   * sem nenhum caso especial aqui. Devolve o bitfield já mascarado por
+   * `ALL_PERMISSIONS`: quem chama grava o **retorno**, não a entrada.
    */
-  private async validarPermissoes(
+  async validarPermissoes(
     actorId: string,
     guildId: string,
     permissions: number,
