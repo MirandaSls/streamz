@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ApplicationsService, iconeDoApp } from "./applications.service";
 import type { PrismaService } from "../../prisma/prisma.service";
 import type { StorageService } from "../storage/storage.service";
+import type { InstalacaoService } from "./instalacao.service";
 import { appEditarSchema } from "@streamz/shared";
 
 /**
@@ -50,9 +51,23 @@ function bancada(linha: typeof LINHA | null = LINHA) {
     tokens: [{ prefixo: "MTM4Mjkx", createdAt: new Date("2026-09-08T12:00:00Z") }],
   }));
   const apagarUsuario = vi.fn(async () => ({}));
+  const instalacoesNoBanco = [
+    {
+      permissions: 3,
+      createdAt: new Date("2026-09-08T15:00:00Z"),
+      guild: { id: "g1", name: "Time de Produto", iconUrl: null as string | null },
+    },
+    {
+      permissions: 0,
+      createdAt: new Date("2026-09-08T16:00:00Z"),
+      guild: { id: "g2", name: "Amigos", iconUrl: "https://cdn/x.png" as string | null },
+    },
+  ];
+  const instalacoesFindMany = vi.fn(async (_args: { where: { applicationId: string } }) => instalacoesNoBanco);
   const prisma = {
     application: { findUnique, update },
     user: { delete: apagarUsuario },
+    guildApplication: { findMany: instalacoesFindMany },
   } as unknown as PrismaService;
 
   const apagarObjeto = vi.fn(async () => {});
@@ -62,12 +77,30 @@ function bancada(linha: typeof LINHA | null = LINHA) {
     delete: apagarObjeto,
   } as unknown as StorageService;
 
+  /**
+   * O `InstalacaoService` entrou no construtor na **integração** da F4: é a
+   * junção A↔B que o PR do lote A deixou anotada. Aqui ele devolve duas
+   * instalações, para o teste poder provar que apagar o aplicativo passa por
+   * cada uma **antes** de apagar o usuário-bot.
+   */
+  const desinstalar = vi.fn(async () => {});
+  const instalacoes = [
+    { id: "gapp_1", guildId: "g1", roleId: "r1" },
+    { id: "gapp_2", guildId: "g2", roleId: null as string | null },
+  ];
+  const instalacao = {
+    instalacoesDoApp: vi.fn(async () => instalacoes),
+    desinstalar,
+  } as unknown as InstalacaoService;
+
   return {
-    apps: new ApplicationsService(prisma, storage),
+    apps: new ApplicationsService(prisma, storage, instalacao),
     findUnique,
     update,
     apagarUsuario,
     apagarObjeto,
+    desinstalar,
+    instalacoesFindMany,
   };
 }
 
@@ -180,6 +213,38 @@ describe("apagar", () => {
     await apps.apagar("u_dono", "app_1");
     expect(apagarObjeto).not.toHaveBeenCalled();
   });
+
+  /**
+   * A junção A↔B, ligada na integração da F4.
+   *
+   * O cascade do banco (`User` → `GuildMember`, `Application` →
+   * `GuildApplication`) já deixava o **banco** consistente sozinho. O que ele
+   * não faz é o **evento**: sem este laço, as telas abertas continuariam
+   * mostrando o bot na lista de membros até alguém recarregar, e um bot
+   * conectado nunca receberia o `GUILD_DELETE`. É por isso que a prova é da
+   * *ordem*, e não só da chamada.
+   */
+  it("sai de cada servidor ANTES de apagar o usuário-bot", async () => {
+    const { apps, desinstalar, apagarUsuario } = bancada();
+    await apps.apagar("u_dono", "app_1");
+
+    expect(desinstalar).toHaveBeenCalledTimes(2);
+    expect(desinstalar).toHaveBeenNthCalledWith(1, "gapp_1", "g1", "u_bot", "r1");
+    // instalação sem cargo (nenhuma permissão concedida) passa `roleId: null`
+    expect(desinstalar).toHaveBeenNthCalledWith(2, "gapp_2", "g2", "u_bot", null);
+
+    expect(desinstalar.mock.invocationCallOrder[1]!).toBeLessThan(
+      apagarUsuario.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("usa o desinstalar do lote B, e não uma segunda implementação", async () => {
+    // duas rotinas que tiram o mesmo bot do mesmo servidor divergem no primeiro
+    // evento novo; o `apagar` não pode escrever em `GuildMember`/`Role` sozinho
+    const { apps, desinstalar } = bancada();
+    await apps.apagar("u_dono", "app_1");
+    expect(desinstalar).toHaveBeenCalled();
+  });
 });
 
 describe("ícone", () => {
@@ -187,7 +252,9 @@ describe("ícone", () => {
     const findUnique = vi.fn(async () => LINHA);
     const prisma = { application: { findUnique } } as unknown as PrismaService;
     const storage = { isConfigured: () => false } as unknown as StorageService;
-    const apps = new ApplicationsService(prisma, storage);
+    // nenhum caminho do ícone toca a instalação: um objeto vazio basta, e uma
+    // chamada inesperada estoura em vez de passar em silêncio
+    const apps = new ApplicationsService(prisma, storage, {} as unknown as InstalacaoService);
 
     await expect(
       apps.atualizarIcone("u_dono", "app_1", { buffer: Buffer.from("x"), size: 1 }),
@@ -267,13 +334,43 @@ describe("iconeDoApp", () => {
 
 describe("servidores", () => {
   /**
-   * TODO (lote B): quando `GuildApplication` existir, esta prova vira "devolve
-   * as instalações do app". Enquanto isso, o que se prova é que a rota **existe
-   * e checa o dono** — a tela do portal já a chama.
+   * Ligada na integração da F4, sobre a `GuildApplication` do lote B — era o
+   * `[]` que o PR do lote A deixou anotado como "inerte".
    */
-  it("responde vazio enquanto a tabela do lote B não existe", async () => {
+  it("devolve as instalações do app, no formato do contrato", async () => {
     const { apps } = bancada();
-    expect(await apps.servidoresComOApp("u_dono", "app_1")).toEqual([]);
+    expect(await apps.servidoresComOApp("u_dono", "app_1")).toEqual([
+      {
+        guildId: "g1",
+        guildName: "Time de Produto",
+        guildIconUrl: null,
+        permissions: 3,
+        createdAt: "2026-09-08T15:00:00.000Z",
+      },
+      {
+        guildId: "g2",
+        guildName: "Amigos",
+        guildIconUrl: "https://cdn/x.png",
+        permissions: 0,
+        createdAt: "2026-09-08T16:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("continua checando o dono antes de consultar", async () => {
+    const outro = bancada({ ...LINHA, ownerId: "u_outro" });
+    await expect(outro.apps.servidoresComOApp("u_dono", "app_1")).rejects.toMatchObject({
+      status: 403,
+    });
+    expect(outro.instalacoesFindMany).not.toHaveBeenCalled();
+  });
+
+  it("filtra pelo aplicativo, e não devolve a instalação de outro", async () => {
+    const { apps, instalacoesFindMany } = bancada();
+    await apps.servidoresComOApp("u_dono", "app_1");
+    expect(instalacoesFindMany.mock.calls[0]![0]).toMatchObject({
+      where: { applicationId: "app_1" },
+    });
   });
 });
 

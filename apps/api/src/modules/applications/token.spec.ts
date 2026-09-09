@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { ApplicationsService } from "./applications.service";
 import type { PrismaService } from "../../prisma/prisma.service";
 import type { StorageService } from "../storage/storage.service";
+import type { InstalacaoService } from "./instalacao.service";
 import {
   gerarToken,
   hashDoToken,
@@ -100,10 +101,12 @@ describe("verificarToken", () => {
    * inesperada estoura em vez de passar em silêncio.
    */
   const semStorage = {} as unknown as StorageService;
+  /** Idem para o `InstalacaoService`, que entrou na integração da F4. */
+  const semInstalacao = {} as unknown as InstalacaoService;
 
-  /** O service com o Prisma de mentira — o construtor pede dois. */
+  /** O service com o Prisma de mentira — o construtor pede três. */
   function servico(prisma: PrismaService) {
-    return new ApplicationsService(prisma, semStorage);
+    return new ApplicationsService(prisma, semStorage, semInstalacao);
   }
 
   /** Um Prisma de mentira com uma linha só de `BotToken`. */

@@ -20,6 +20,7 @@ import type {
 import { MAX_GUILD_ICON_SIZE } from "@streamz/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
+import { InstalacaoService } from "./instalacao.service";
 import { toPublicUser, type PublicUserRow } from "../../common/dto";
 import { isUniqueViolation } from "../../common/prisma-errors";
 import { sniffImage } from "../uploads/media";
@@ -74,6 +75,7 @@ export class ApplicationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly instalacao: InstalacaoService,
   ) {}
 
   /**
@@ -170,32 +172,35 @@ export class ApplicationsService {
    * — uma conta que não faz login, não tem dono e continua na lista de membros
    * de todo servidor onde entrou.
    *
-   * **TODO (lote B):** o passo 1 depende de `GuildApplication` e do
-   * `InstalacaoService`, que são do lote B e ainda não existem nesta árvore.
-   * Quando existirem, o gancho é aqui, **antes** do `user.delete`:
+   * **A junção A↔B, ligada na integração da F4.** O passo 1 chama o
+   * `InstalacaoService.desinstalar` do lote B, e não uma segunda
+   * implementação: duas rotinas que tiram o mesmo bot do mesmo servidor
+   * divergem no primeiro evento novo.
    *
-   * ```ts
-   * for (const inst of await this.prisma.guildApplication.findMany({
-   *   where: { applicationId: appId },
-   * })) {
-   *   await this.instalacao.desinstalar(inst.guildId, appId);
-   * }
-   * ```
+   * O `onDelete: Cascade` do banco (`User` → `GuildMember`,
+   * `Application` → `GuildApplication`) já deixava o **banco** consistente
+   * sozinho. O que ele não faz é o **evento**: sem o laço abaixo, as telas
+   * abertas continuariam mostrando o bot na lista de membros até alguém
+   * recarregar, e um bot conectado nunca receberia o `GUILD_DELETE`.
    *
-   * Não escrevemos uma segunda implementação da desinstalação: duas rotinas
-   * que tiram o mesmo bot do mesmo servidor divergem no primeiro evento novo.
-   * Enquanto o serviço não chega, o `onDelete: Cascade` do banco (`Guild` →
-   * `GuildApplication`, `User` → `GuildMember`) já deixa o banco consistente;
-   * o que falta é o **evento** — as telas abertas não veem o bot sair sem
-   * recarregar.
+   * Sem transação por cima do laço, de propósito. Cada `desinstalar` já é
+   * atômico no seu servidor e emite os eventos dele **depois** do commit; uma
+   * transação por fora só serviria para segurar N servidores reféns de uma
+   * falha no último, e não daria como desfazer os eventos que já saíram.
    */
   async apagar(donoId: string, appId: string): Promise<void> {
     const app = await this.doMeuApp(donoId, appId);
 
-    // o objeto do bucket sai antes: depois do `delete` não há mais linha que
-    // guarde a chave, e ela viraria um órfão que ninguém sabe nomear
+    // 1. sai de cada servidor onde está, com os eventos que isso implica
+    for (const inst of await this.instalacao.instalacoesDoApp(appId)) {
+      await this.instalacao.desinstalar(inst.id, inst.guildId, app.botUserId, inst.roleId);
+    }
+
+    // o objeto do bucket sai antes do banco: depois do `delete` não há mais
+    // linha que guarde a chave, e ela viraria um órfão que ninguém sabe nomear
     if (app.iconKey) await this.storage.delete(app.iconKey);
 
+    // 2. o usuário-bot. A `Application` cai junto pelo cascade de `botUser`.
     await this.prisma.user.delete({ where: { id: app.botUserId } });
   }
 
@@ -275,14 +280,34 @@ export class ApplicationsService {
   /**
    * Tela 5 do portal: em que servidores este aplicativo meu está instalado.
    *
-   * TODO (lote B): depende da tabela `GuildApplication`, que ainda não existe
-   * nesta árvore. Até ela chegar a rota existe e responde `[]` — a tela do
-   * portal já sabe desenhar a lista vazia, e trocar isto por uma consulta de
-   * verdade é substituir o corpo deste método.
+   * Ligada na integração da F4, sobre a `GuildApplication` do lote B.
+   *
+   * É a lista **do dono**, não a de quem instalou: `doMeuApp` já recusou o app
+   * de outra pessoa. Por isso ela mostra servidores em que o dono do app pode
+   * não estar — é justamente a pergunta que a tela faz ("onde este aplicativo
+   * meu está instalado?"), e o nome do servidor não é segredo de ninguém que
+   * já convive com o bot ali.
    */
   async servidoresComOApp(donoId: string, appId: string): Promise<ServidorComOApp[]> {
     await this.doMeuApp(donoId, appId);
-    return [];
+
+    const linhas = await this.prisma.guildApplication.findMany({
+      where: { applicationId: appId },
+      orderBy: { createdAt: "asc" },
+      select: {
+        permissions: true,
+        createdAt: true,
+        guild: { select: { id: true, name: true, iconUrl: true } },
+      },
+    });
+
+    return linhas.map((l) => ({
+      guildId: l.guild.id,
+      guildName: l.guild.name,
+      guildIconUrl: l.guild.iconUrl,
+      permissions: l.permissions,
+      createdAt: l.createdAt.toISOString(),
+    }));
   }
 
   /**
