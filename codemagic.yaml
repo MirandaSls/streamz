@@ -1,0 +1,191 @@
+# Build do Streamz para iOS numa máquina macOS alugada.
+#
+# Por que existe: o servidor é Linux e o usuário não tem Mac. `tauri ios init`
+# e `xcodebuild` só rodam em macOS, então o único caminho para sair um `.ipa`
+# é alugar um Mac por minuto. O Codemagic dá 500 min/mês de graça em Mac mini
+# M2 para **conta pessoal** (Team não tem cota gratuita); acima disso é
+# US$ 0,095/min. https://docs.codemagic.io/billing/pricing/
+#
+# NADA aqui roda antes de o usuário pagar os US$ 99/ano do Apple Developer
+# Program: sem conta não há certificado, não há perfil e não há App Store
+# Connect. O passo a passo da compra está em `docs/APPS-MOBILE.md`.
+#
+# NENHUM SEGREDO NESTE ARQUIVO. Só nomes de variáveis e de grupos; os valores
+# ficam no painel do Codemagic (Environment variables) e na integração de App
+# Store Connect. Ver a tabela de variáveis em `docs/APPS-MOBILE.md`.
+#
+# O que este arquivo NÃO prova: que compila. Ele nunca rodou — não há Mac nem
+# conta Apple. É YAML validado por parser e escrito contra a doc; o primeiro
+# build de verdade é que vai dizer.
+
+workflows:
+  ios-app-store:
+    name: Streamz iOS (TestFlight)
+    # Mac mini M2 — a máquina da cota gratuita.
+    instance_type: mac_mini_m2
+    # Teto por build. Com 500 min/mês, 60 min de teto garante pelo menos 8
+    # builds mesmo no pior caso; na prática o build deve ficar perto de 25 min
+    # (o crate `livekit`, que é o que demora, é `cfg(windows)` e não entra no
+    # iOS), o que dá ~20 builds por mês dentro da cota.
+    max_build_duration: 60
+
+    integrations:
+      # Nome da chave de App Store Connect cadastrada em
+      # Teams > Integrations > Developer Portal. O nome é escolha do usuário
+      # na hora de cadastrar; se ele usar outro, troque aqui.
+      app_store_connect: streamz-app-store-connect
+
+    environment:
+      # Com `distribution_type` + `bundle_identifier` o Codemagic busca
+      # certificado e perfil de provisionamento sozinho durante o build:
+      # "Initialize keychain & Add certificates to keychain scripts are not
+      # required as those are automatically fetched during the build process."
+      # https://docs.codemagic.io/yaml-code-signing/signing-ios/
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: chat.streamz.app
+      xcode: latest
+      cocoapods: default
+      node: 22
+      groups:
+        # Grupo de variáveis criado no painel do Codemagic. Guarda apenas
+        # APPLE_DEVELOPMENT_TEAM (o Team ID de 10 caracteres). Ver
+        # `docs/APPS-MOBILE.md` — o Team ID não entra no repositório.
+        - streamz-apple
+      vars:
+        # As mesmas três de `scripts/build-desktop-no-servidor.sh`: é o que o
+        # `next build` embute no bundle estático que o app carrega.
+        NEXT_PUBLIC_API_URL: "https://api.streamz.chat"
+        NEXT_PUBLIC_WS_URL: "https://api.streamz.chat"
+        NEXT_PUBLIC_LIVEKIT_URL: "wss://livekit.streamz.chat"
+        NEXT_TELEMETRY_DISABLED: "1"
+        # Onde o Tauri gera o projeto Xcode e onde ele larga o .ipa.
+        DIR_APPLE: "apps/desktop/src-tauri/gen/apple"
+        BUNDLE_ID: "chat.streamz.app"
+
+    triggering:
+      # Sem gatilho automático de propósito: cada build gasta minuto da cota,
+      # e a cota é pequena. Dispare pelo painel ou pela API do Codemagic.
+      events: []
+
+    scripts:
+      - name: Rust com o alvo do iPhone
+        script: |
+          set -euo pipefail
+          if ! command -v rustup >/dev/null; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
+          fi
+          source "$HOME/.cargo/env"
+          # O piso de 1.85 NÃO é firula, e quem "simplificar" isto perde uma
+          # hora: a árvore de dependências dos alvos móveis puxa o
+          # `getrandom 0.4`, que é `edition2024`, e a edição 2024 só existe a
+          # partir do Rust 1.85. Com um toolchain mais velho o build morre no
+          # meio da compilação com "feature `edition2024` is required" — foi o
+          # que aconteceu no build de Android (Bloco 2) com o 1.83. O iOS
+          # compartilha a mesma árvore de crates, então bate no mesmo muro.
+          # A imagem do Codemagic já vem com rustup, e a versão que ela traz
+          # não é escolha nossa: por isso instalar e fixar o `stable` aqui.
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add aarch64-apple-ios
+          # `aarch64-apple-ios` é o alvo do aparelho — o único que o .ipa usa.
+          # `aarch64-apple-ios-sim` só serviria para `tauri ios dev` no
+          # simulador, que este workflow não faz.
+          rustc --version && cargo --version
+          # Trava explícita. Sem ela o erro aparece 15 min depois, no meio do
+          # cargo, com uma mensagem que não fala em versão de toolchain.
+          # `sort -V` não é confiável no BSD sort do macOS, daí o awk.
+          MINIMO=1.85.0
+          VERSAO=$(rustc --version | awk '{print $2}' | cut -d- -f1)
+          printf '%s %s\n' "$MINIMO" "$VERSAO" | awk '{
+            split($1, m, "."); split($2, v, ".");
+            for (i = 1; i <= 3; i++) {
+              if (v[i] + 0 > m[i] + 0) exit 0;
+              if (v[i] + 0 < m[i] + 0) exit 1;
+            }
+            exit 0 }' || {
+              echo "ERRO: rustc $VERSAO é anterior ao mínimo $MINIMO." >&2
+              echo "A edição 2024 (getrandom 0.4, na árvore dos alvos móveis)" >&2
+              echo "exige Rust >= 1.85. Atualize o toolchain." >&2
+              exit 1
+            }
+          echo "ok: rustc $VERSAO >= $MINIMO"
+
+      - name: Dependências do monorepo (pnpm)
+        script: |
+          set -euo pipefail
+          # O repo fixa o pnpm em `packageManager` do package.json da raiz.
+          corepack enable
+          corepack prepare --activate
+          pnpm install --frozen-lockfile
+
+      - name: Build do @streamz/shared
+        script: |
+          set -euo pipefail
+          # O `next build` da web resolve `@streamz/shared` pelo `dist`; sem
+          # este passo o build da web quebra. Mesmo motivo do §3.2 do processo.
+          pnpm --filter @streamz/shared build
+
+      - name: Gerar o projeto Xcode (tauri ios init)
+        script: |
+          set -euo pipefail
+          source "$HOME/.cargo/env"
+          # `gen/apple/` não está no repositório (é gerado, como `gen/schemas`).
+          pnpm --filter @streamz/desktop exec tauri ios init
+
+      - name: Conferir o bundle identifier gerado
+        script: |
+          set -euo pipefail
+          # O identifier do desktop é `dev.streamz.app`; o do iOS tem que ser
+          # `chat.streamz.app`, que vem do `tauri.ios.conf.json` por JSON Merge
+          # Patch. Existe um relato de o `tauri ios init` ignorar o identifier
+          # do config (tauri-apps/tauri#9851), então isto aqui é uma trava: se
+          # o projeto sair com o bundle id errado, o build para agora e não
+          # depois, com o App Store Connect recusando o upload.
+          if ! grep -rq "$BUNDLE_ID" "$DIR_APPLE"/*.xcodeproj/project.pbxproj; then
+            echo "ERRO: o projeto Xcode gerado não usa $BUNDLE_ID." >&2
+            echo "PRODUCT_BUNDLE_IDENTIFIER encontrados:" >&2
+            grep -rho 'PRODUCT_BUNDLE_IDENTIFIER = [^;]*' "$DIR_APPLE"/*.xcodeproj/project.pbxproj | sort -u >&2
+            exit 1
+          fi
+          echo "ok: $BUNDLE_ID presente no projeto gerado"
+
+      - name: Aplicar os perfis de provisionamento no projeto
+        script: |
+          set -euo pipefail
+          # O `ios_signing` acima já baixou certificado e perfil para o
+          # keychain da máquina; este comando escreve o perfil no projeto que
+          # o `tauri ios init` acabou de gerar (assinatura manual). Sem ele o
+          # xcodebuild não sabe qual perfil usar.
+          xcode-project use-profiles --project "$DIR_APPLE"/*.xcodeproj
+
+      - name: Build do .ipa
+        script: |
+          set -euo pipefail
+          source "$HOME/.cargo/env"
+          # O `beforeBuildCommand` do tauri.conf.json já roda
+          # `pnpm --filter @streamz/web build`, e o next.config liga o
+          # `output: "export"` ao ver as TAURI_ENV_*. Por isso a web NÃO é
+          # buildada num passo separado: seriam dois builds do Next para nada.
+          pnpm --filter @streamz/desktop exec tauri ios build \
+            --export-method app-store-connect
+          ls -la "$DIR_APPLE"/build/arm64/
+
+    artifacts:
+      # Caminho documentado pelo Tauri: src-tauri/gen/apple/build/arm64/<App>.ipa
+      # https://v2.tauri.app/distribute/app-store/
+      - apps/desktop/src-tauri/gen/apple/build/arm64/*.ipa
+      - apps/desktop/src-tauri/gen/apple/build/arm64/*.dSYM
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      app_store_connect:
+        # `integration` = usa a chave cadastrada em `integrations` acima; o
+        # Codemagic sobe o .ipa que saiu em `artifacts`. É o que substitui o
+        # `xcrun altool --upload-app` que a doc do Tauri mostra para quem sobe
+        # na mão.
+        auth: integration
+        submit_to_testflight: true
+        # Revisão da App Store é passo manual, feito pelo painel: um envio
+        # errado custa dias de espera.
+        submit_to_app_store: false
