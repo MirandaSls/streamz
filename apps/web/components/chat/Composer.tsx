@@ -77,6 +77,28 @@ import { ui, type MenuItem } from "@/stores/ui";
 /** Altura máxima do campo antes de virar rolagem interna (~8 linhas). */
 const MAX_HEIGHT_PX = 200;
 /**
+ * No celular o teto é uma **fração da janela**, não os 200px do desktop.
+ *
+ * Com o teclado aberto a janela do telefone encolhe para ~460px de altura
+ * (`interactiveWidget: "resizes-content"`, ver `app/layout.tsx`), e um campo de
+ * 200 comia 200 dos 460: sobravam 190px de conversa, menos de duas mensagens.
+ * 30% deixa o campo crescer até ~6 linhas com o teclado aberto e continua
+ * batendo nos mesmos 200px com o teclado fechado (844 × 0,3 = 253, capado em
+ * 200) — ou seja, **nada muda no telefone em repouso**, só o caso do teclado.
+ */
+const FRACAO_MAX_MOBILE = 0.3;
+/** Piso do teto acima: três linhas, para o campo nunca virar uma fresta. */
+const MIN_MAX_MOBILE = 84;
+
+/** Até onde o campo pode crescer agora, na janela de agora. */
+function tetoDoCampo(ehMobile: boolean): number {
+  if (!ehMobile || typeof window === "undefined") return MAX_HEIGHT_PX;
+  return Math.max(
+    MIN_MAX_MOBILE,
+    Math.min(MAX_HEIGHT_PX, Math.round(window.innerHeight * FRACAO_MAX_MOBILE)),
+  );
+}
+/**
  * Altura da caixa com uma linha (medida no Discord): os 22px da linha mais os
  * 18px de respiro de cada lado do `py-[18px]`. É o valor que o campo vazio
  * assume **sem perguntar ao layout** — ver `medir` no `useLayoutEffect`.
@@ -97,6 +119,13 @@ const COUNTER_THRESHOLD = 0.9;
 const MAX_SUGESTOES = 10;
 /** Lado do cartão de prévia de anexo. */
 const LADO_PREVIA = 216;
+/**
+ * O mesmo cartão no celular. 216 é meia tela de um telefone de 390 — e, com o
+ * teclado aberto (janela de ~460), a faixa de prévia sozinha comia metade do
+ * que sobrava da conversa. 128 mostra três anexos na largura e deixa espaço
+ * para os três botões de ação, que aqui **não** podem depender de hover.
+ */
+const LADO_PREVIA_MOBILE = 128;
 /** Altura aproximada de um item do menu de contexto, para abri-lo para cima. */
 const ALTURA_ITEM = 32;
 const ALTURA_SEPARADOR = 9;
@@ -118,6 +147,20 @@ let seqAnexo = 0;
 
 /** Ícones que o botão de emoji alterna no hover (o easter egg do Discord). */
 const CARINHAS = [Smile, Laugh, Angry, Annoyed];
+
+/**
+ * Área de toque de 44px **sem mexer no desenho**.
+ *
+ * Os botões do composer do celular medem 40 × 40 porque é o que o Discord
+ * desenha (`MEDIDAS.md` §7: `y 732..771`, 40 pt) — medido, não deduzido. 40 é
+ * menos que os 44 que a diretriz de toque pede, e a saída não é engordar o
+ * botão (o que empurraria a cápsula e desalinharia a fileira) e sim **estender
+ * o alvo**: o pseudo-elemento acrescenta 2px acima e 2px abaixo, invisível,
+ * dentro do `pb-1` que o form já reserva. Na horizontal não é preciso: os
+ * botões da fileira são contíguos, então não há faixa morta entre eles.
+ */
+const ALVO_44 =
+  "relative after:absolute after:inset-x-0 after:top-[-2px] after:bottom-[-2px] after:content-['']";
 
 /**
  * Botão de ícone à direita do composer (presente, GIF, figurinha, emoji, apps).
@@ -151,7 +194,7 @@ function SideButton({
            a raiz de 15,5px dá 38,75, e o botão do composer do Discord mede 40pt
            (`MEDIDAS.md` §7) */
         className={`grid place-items-center text-txt-secondary transition hover:text-txt-primary ${
-          baixo ? "h-[40px] w-[40px]" : "h-[58px] w-10"
+          baixo ? `h-[40px] w-[40px] ${ALVO_44}` : "h-[58px] w-10"
         }`}
       >
         {children}
@@ -283,14 +326,23 @@ export default function Composer({
         return;
       }
       campo.style.height = "auto";
-      campo.style.height = `${Math.min(campo.scrollHeight, MAX_HEIGHT_PX)}px`;
+      campo.style.height = `${Math.min(campo.scrollHeight, tetoDoCampo(ehMobileRef.current))}px`;
     }
 
     medir();
 
+    // **O teclado abrindo é um `resize`, não um `resize` do campo.** A janela
+    // encolhe (a largura do composer não muda), então o `ResizeObserver` abaixo
+    // não dispara e o teto do celular ficaria congelado no valor da tela
+    // inteira: o campo continuava com 200px de altura dentro de uma janela de
+    // 460. Ver `tetoDoCampo`.
+    window.addEventListener("resize", medir);
+
     // Mudar de largura requebra o texto: sem remedir, a altura calculada na
     // largura antiga fica congelada até a próxima tecla.
-    if (typeof ResizeObserver === "undefined") return;
+    if (typeof ResizeObserver === "undefined") {
+      return () => window.removeEventListener("resize", medir);
+    }
     let larguraAnterior = -1;
     const observador = new ResizeObserver(([entrada]) => {
       // só a largura interessa — reagir à altura seria reagir ao próprio ajuste
@@ -299,7 +351,10 @@ export default function Composer({
       medir();
     });
     observador.observe(el);
-    return () => observador.disconnect();
+    return () => {
+      window.removeEventListener("resize", medir);
+      observador.disconnect();
+    };
   }, [draft, ehMobile]);
 
   // As prévias locais são URLs de objeto e precisam ser revogadas ao desmontar.
@@ -472,6 +527,20 @@ export default function Composer({
     void submit();
   }
 
+  /**
+   * Abre (ou fecha) a folha de emoji/GIF/figurinha.
+   *
+   * **No celular ela começa tirando o foco do campo.** A folha é `60dvh`, e
+   * `dvh` com o teclado aberto é a janela *encolhida*: tocar no emoji com o
+   * teclado na tela dava uma folha de ~276px, na qual cabiam três fileiras de
+   * emoji e mais nada. O `blur()` devolve a tela inteira antes de a folha
+   * medir. No desktop nada disso existe — o painel é um popover ancorado.
+   */
+  function alternarPainel(destino: PickerTab) {
+    if (ehMobile) textareaRef.current?.blur();
+    setAberto((a) => (a === destino ? null : destino));
+  }
+
   function inserirTexto(texto: string) {
     const el = textareaRef.current;
     const inicio = el?.selectionStart ?? draft.length;
@@ -602,6 +671,15 @@ export default function Composer({
   const Carinha = CARINHAS[carinha];
 
   /**
+   * Arrastar-e-soltar é do computador. No telefone não há de onde arrastar um
+   * arquivo, e os três manipuladores só serviam para o dia em que um WebView
+   * resolvesse emitir `dragover` num gesto de rolagem: aí o overlay
+   * "Arraste e solte para enviar" cobria a conversa inteira sem que ninguém
+   * tivesse arrastado nada. Quem envia arquivo no celular é o menu do "+".
+   */
+  const podeArrastar = allowAttachments && !ehMobile;
+
+  /**
    * O "+" das opções de envio. No desktop vive dentro da caixa do composer; no
    * celular, fora dela, à esquerda — é o leiaute da captura do Discord, e é
    * também o que devolve largura ao campo num telefone de 390px.
@@ -615,7 +693,7 @@ export default function Composer({
       // onde ele fica no Discord: 10 de margem + os 11 que sobram de cada lado
       // dentro do alvo de 40
       className={`grid shrink-0 place-items-center rounded-full text-txt-secondary transition hover:text-txt-primary ${
-        ehMobile ? "h-[40px] w-[40px] bg-hov" : "ml-2.5 mr-4 mt-[9px] h-10 w-10"
+        ehMobile ? `h-[40px] w-[40px] bg-hov ${ALVO_44}` : "ml-2.5 mr-4 mt-[9px] h-10 w-10"
       }`}
     >
       {/* `+` liso, não o `CirclePlus`: o do Discord é marca de traço, sem o
@@ -634,16 +712,16 @@ export default function Composer({
         void submit();
       }}
       onDragOver={
-        allowAttachments
+        podeArrastar
           ? (e) => {
               e.preventDefault();
               setDragging(true);
             }
           : undefined
       }
-      onDragLeave={allowAttachments ? () => setDragging(false) : undefined}
+      onDragLeave={podeArrastar ? () => setDragging(false) : undefined}
       onDrop={
-        allowAttachments
+        podeArrastar
           ? (e) => {
               e.preventDefault();
               setDragging(false);
@@ -669,11 +747,16 @@ export default function Composer({
         {(pendentes.length > 0 || prontos.length > 0) && (
           // uma linha só, com rolagem horizontal: quebrar em várias linhas
           // empurrava a timeline para cima a cada arquivo
-          <div className="flex gap-3 overflow-x-auto border-b border-black/20 px-4 py-4">
+          <div
+            className={`flex overflow-x-auto border-b border-black/20 ${
+              ehMobile ? "gap-2 p-2" : "gap-3 px-4 py-4"
+            }`}
+          >
             {pendentes.map((anexo) => (
               <PreviaAnexo
                 key={anexo.id}
                 anexo={anexo}
+                compacto={ehMobile}
                 onRemover={() => removerPendente(anexo.id)}
                 onRenomear={async () => {
                   const nome = await ui.prompt({
@@ -696,13 +779,23 @@ export default function Composer({
             {prontos.map((a) => (
               <div
                 key={a.id}
-                style={{ height: LADO_PREVIA, width: LADO_PREVIA }}
+                style={{
+                  height: ehMobile ? LADO_PREVIA_MOBILE : LADO_PREVIA,
+                  width: ehMobile ? LADO_PREVIA_MOBILE : LADO_PREVIA,
+                }}
                 className="group/anexo relative shrink-0 rounded-lg bg-panel p-2"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={a.url} alt={a.filename} className="h-full w-full rounded object-contain" />
-                <span className="absolute right-2 top-2 hidden group-hover/anexo:flex">
-                  <BotaoCartao label={`Remover ${a.filename}`} danger onClick={() => setProntos((prev) => prev.filter((x) => x.id !== a.id))}>
+                {/* no celular o X **fica**: `group-hover` num dedo é um botão
+                    que não existe, e sem ele o GIF escolhido por engano ia
+                    junto com a mensagem sem apelação */}
+                <span
+                  className={`absolute right-2 top-2 ${
+                    ehMobile ? "flex" : "hidden group-hover/anexo:flex"
+                  }`}
+                >
+                  <BotaoCartao label={`Remover ${a.filename}`} danger grande={ehMobile} onClick={() => setProntos((prev) => prev.filter((x) => x.id !== a.id))}>
                     <X size={16} />
                   </BotaoCartao>
                 </span>
@@ -825,7 +918,7 @@ export default function Composer({
             <SideButton
               label="GIF"
               baixo={ehMobile}
-              onClick={() => setAberto((a) => (a === "gif" ? null : "gif"))}
+              onClick={() => alternarPainel("gif")}
             >
               {/* o ativo do Discord, não `<span>GIF</span>` com borda: texto
                   muda de peso com a fonte do sistema e nunca casa com os
@@ -835,7 +928,7 @@ export default function Composer({
             {!ehMobile && (
               <SideButton
                 label="Figurinha"
-                onClick={() => setAberto((a) => (a === "figurinha" ? null : "figurinha"))}
+                onClick={() => alternarPainel("figurinha")}
               >
                 <StickerIcon size={20} />
               </SideButton>
@@ -843,7 +936,7 @@ export default function Composer({
             <SideButton
               label="Emoji"
               baixo={ehMobile}
-              onClick={() => setAberto((a) => (a === "emoji" ? null : "emoji"))}
+              onClick={() => alternarPainel("emoji")}
               // o ícone troca de carinha a cada passada do mouse, como no Discord
               onMouseEnter={() => setCarinha((c) => (c + 1) % CARINHAS.length)}
             >
@@ -864,7 +957,7 @@ export default function Composer({
                 type="submit"
                 disabled={enviando}
                 aria-label="Enviar mensagem"
-                className="mb-[9px] mr-[9px] mt-[9px] grid h-[40px] w-[40px] shrink-0 place-items-center self-end rounded-full bg-accent text-accent-ink transition disabled:opacity-50"
+                className={`mb-[9px] mr-[9px] mt-[9px] grid h-[40px] w-[40px] shrink-0 place-items-center self-end rounded-full bg-accent text-accent-ink transition disabled:opacity-50 ${ALVO_44}`}
               >
                 <SendHorizonal size={20} />
               </button>
@@ -969,11 +1062,14 @@ function BotaoCartao({
   label,
   onClick,
   danger = false,
+  grande = false,
   children,
 }: {
   label: string;
   onClick: () => void;
   danger?: boolean;
+  /** 31px (`h-8`) em vez de 27: no celular são o único jeito de agir. */
+  grande?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -982,9 +1078,9 @@ function BotaoCartao({
         type="button"
         onClick={onClick}
         aria-label={label}
-        className={`grid h-7 w-7 place-items-center rounded bg-void/90 transition hover:bg-hov ${
-          danger ? "text-red" : "text-txt-normal hover:text-txt-primary"
-        }`}
+        className={`grid place-items-center rounded bg-void/90 transition hover:bg-hov ${
+          grande ? "h-8 w-8" : "h-7 w-7"
+        } ${danger ? "text-red" : "text-txt-normal hover:text-txt-primary"}`}
       >
         {children}
       </button>
@@ -1001,18 +1097,22 @@ function BotaoCartao({
  */
 function PreviaAnexo({
   anexo,
+  compacto = false,
   onRemover,
   onRenomear,
   onSpoiler,
 }: {
   anexo: AnexoLocal;
+  /** celular: cartão de 128 e as três ações **sempre** visíveis (ver abaixo). */
+  compacto?: boolean;
   onRemover: () => void;
   onRenomear: () => void;
   onSpoiler: () => void;
 }) {
+  const lado = compacto ? LADO_PREVIA_MOBILE : LADO_PREVIA;
   return (
     <div
-      style={{ height: LADO_PREVIA, width: LADO_PREVIA }}
+      style={{ height: lado, width: lado }}
       className="group/anexo relative flex shrink-0 flex-col rounded-lg bg-panel p-2"
     >
       {anexo.previewUrl ? (
@@ -1028,8 +1128,14 @@ function PreviaAnexo({
         </div>
       )}
 
-      <span className="mt-2 truncate text-sm text-txt-normal">{anexo.nome}</span>
-      <span className="truncate text-[11px] text-txt-muted">{formatBytes(anexo.file.size)}</span>
+      <span className={`truncate text-txt-normal ${compacto ? "mt-1 text-xs" : "mt-2 text-sm"}`}>
+        {anexo.nome}
+      </span>
+      {/* o tamanho em bytes é a primeira coisa a sair num cartão de 128: sem
+          ele o nome e a barra de progresso ainda cabem */}
+      {!compacto && (
+        <span className="truncate text-[11px] text-txt-muted">{formatBytes(anexo.file.size)}</span>
+      )}
 
       {anexo.progresso >= 0 && (
         <div
@@ -1044,17 +1150,30 @@ function PreviaAnexo({
         </div>
       )}
 
-      <span className="absolute right-2 top-2 hidden gap-1 group-hover/anexo:flex">
+      {/*
+        **No celular estes três botões não se escondem.** `group-hover` é um
+        gesto que o dedo não tem: num telefone as três ações do anexo — marcar
+        spoiler, renomear e, principalmente, **remover** — simplesmente não
+        existiam, e um arquivo escolhido por engano ia junto com a mensagem.
+        Três alvos de 31 (`h-8` na raiz de 15,5px) com 4 de folga dão 101, que
+        cabe nos 112 úteis do cartão compacto (daí `LADO_PREVIA_MOBILE` ser 128).
+      */}
+      <span
+        className={`absolute right-2 top-2 gap-1 ${
+          compacto ? "flex" : "hidden group-hover/anexo:flex"
+        }`}
+      >
         <BotaoCartao
           label={anexo.spoiler ? "Não marcar como spoiler" : "Marcar como spoiler"}
+          grande={compacto}
           onClick={onSpoiler}
         >
           {anexo.spoiler ? <EyeOff size={16} /> : <Eye size={16} />}
         </BotaoCartao>
-        <BotaoCartao label="Renomear" onClick={onRenomear}>
+        <BotaoCartao label="Renomear" grande={compacto} onClick={onRenomear}>
           <Pencil size={16} />
         </BotaoCartao>
-        <BotaoCartao label={`Remover ${anexo.nome}`} danger onClick={onRemover}>
+        <BotaoCartao label={`Remover ${anexo.nome}`} danger grande={compacto} onClick={onRemover}>
           <X size={16} />
         </BotaoCartao>
       </span>
