@@ -90,55 +90,82 @@ export default function ControlesMobile({
   const escondida = paisagem && oculto;
 
   return (
-    <div
-      style={{
-        height: BARRA_ALTURA,
-        left: BARRA_MARGEM,
-        right: BARRA_MARGEM,
-        // 8, e não `8 + env(safe-area-inset-bottom)`: a moldura da tela
-        // empilhada (`TelaEmpilhada`) já paga a área segura por todo mundo, e
-        // somá-la de novo aqui levantaria a cápsula 34pt acima do indicador de
-        // home num iPhone — o dobro da folga que o print mostra.
-        bottom: 8,
-      }}
-      className={`absolute z-20 flex items-center justify-between rounded-full bg-overlay/95 px-2.5 shadow-high backdrop-blur transition-opacity duration-200 ${
-        escondida ? "pointer-events-none opacity-0" : "opacity-100"
-      }`}
-    >
-      <BotaoDaBarra
-        label={abrindoMicrofone ? "Ativando microfone…" : muted ? "Desativar mudo" : "Silenciar"}
-        onClick={toggleMute}
-        tom={muted || abrindoMicrofone ? "mudo" : "neutro"}
-        pressionado={muted}
+    <>
+      {/*
+        **O toque que acorda os controles não pode fazer mais nada.**
+
+        Com a cápsula escondida em paisagem ela é `pointer-events-none`, então o
+        toque atravessava até o palco: o `onPointerDown` da raiz acordava a
+        moldura *e* o `click` seguia para o destaque, que abre a tela cheia
+        (`PalcoMobile`) — ou para uma miniatura, que troca o foco. Quem só
+        queria ver onde estava o botão de desligar caía num player em tela
+        cheia, e precisava fechá-lo para tentar de novo.
+
+        Esta camada só existe enquanto a cápsula está escondida. Ela deixa o
+        `pointerdown` **subir** (é ele que o `useOcultarInativo` escuta na raiz
+        do palco, e é assim que a moldura volta) e segura o `click`, que é o
+        evento que os tiles usam. O primeiro toque mostra os controles; o
+        segundo faz o que a pessoa quiser.
+      */}
+      {escondida && (
+        <div
+          aria-hidden="true"
+          onClick={(e) => e.stopPropagation()}
+          onClickCapture={(e) => e.stopPropagation()}
+          className="absolute inset-0 z-10"
+        />
+      )}
+
+      <div
+        style={{
+          height: BARRA_ALTURA,
+          left: BARRA_MARGEM,
+          right: BARRA_MARGEM,
+          // 8, e não `8 + env(safe-area-inset-bottom)`: a moldura da tela
+          // empilhada (`TelaEmpilhada`) já paga a área segura por todo mundo, e
+          // somá-la de novo aqui levantaria a cápsula 34pt acima do indicador de
+          // home num iPhone — o dobro da folga que o print mostra.
+          bottom: 8,
+        }}
+        className={`absolute z-20 flex items-center justify-between rounded-full bg-overlay/95 px-2.5 shadow-high backdrop-blur transition-opacity duration-200 ${
+          escondida ? "pointer-events-none opacity-0" : "opacity-100"
+        }`}
       >
-        {muted || abrindoMicrofone ? <MicOff size={22} /> : <Mic size={22} />}
-      </BotaoDaBarra>
+        <BotaoDaBarra
+          label={abrindoMicrofone ? "Ativando microfone…" : muted ? "Desativar mudo" : "Silenciar"}
+          onClick={toggleMute}
+          tom={muted || abrindoMicrofone ? "mudo" : "neutro"}
+          pressionado={muted}
+        >
+          {muted || abrindoMicrofone ? <MicOff size={22} /> : <Mic size={22} />}
+        </BotaoDaBarra>
 
-      <BotaoDaBarra
-        label={deafened ? "Reativar áudio" : "Ficar surdo"}
-        onClick={toggleDeafen}
-        tom={deafened ? "mudo" : "neutro"}
-        pressionado={deafened}
-      >
-        {deafened ? <HeadphoneOff size={22} /> : <Headphones size={22} />}
-      </BotaoDaBarra>
+        <BotaoDaBarra
+          label={deafened ? "Reativar áudio" : "Ficar surdo"}
+          onClick={toggleDeafen}
+          tom={deafened ? "mudo" : "neutro"}
+          pressionado={deafened}
+        >
+          {deafened ? <HeadphoneOff size={22} /> : <Headphones size={22} />}
+        </BotaoDaBarra>
 
-      <BotaoDaBarra
-        label={camOn ? "Desligar câmera" : "Ligar câmera"}
-        onClick={() => void toggleCam()}
-        tom={camOn ? "ativo" : "neutro"}
-        pressionado={camOn}
-      >
-        {camOn ? <Video size={22} /> : <VideoOff size={22} />}
-      </BotaoDaBarra>
+        <BotaoDaBarra
+          label={camOn ? "Desligar câmera" : "Ligar câmera"}
+          onClick={() => void toggleCam()}
+          tom={camOn ? "ativo" : "neutro"}
+          pressionado={camOn}
+        >
+          {camOn ? <Video size={22} /> : <VideoOff size={22} />}
+        </BotaoDaBarra>
 
-      <BotaoDeTelaMobile />
-      <BotaoDeSonsMobile />
+        <BotaoDeTelaMobile />
+        <BotaoDeSonsMobile />
 
-      <BotaoDaBarra label={leaveLabel} onClick={onLeave} tom="desligar">
-        <PhoneOff size={24} />
-      </BotaoDaBarra>
-    </div>
+        <BotaoDaBarra label={leaveLabel} onClick={onLeave} tom="desligar">
+          <PhoneOff size={24} />
+        </BotaoDaBarra>
+      </div>
+    </>
   );
 }
 
