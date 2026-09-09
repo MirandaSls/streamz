@@ -269,8 +269,11 @@ export default function InboxPopover({
             <>
               {naoLidas.length === 0 && !soEsteServidor && (
                 <Vazio icone={<Inbox size={40} />} titulo="Você está por dentro!">
-                  Pressione Ctrl+I para abrir a caixa de entrada e Esc para marcar o canal
-                  aberto como lido.
+                  {/* no celular a dica não pode ser um atalho de teclado: a aba
+                      é a própria caixa de entrada, e não há Ctrl nem Esc */}
+                  {modoTela
+                    ? "O que estiver por ler aparece aqui, e o ✓✓ do topo limpa tudo de uma vez."
+                    : "Pressione Ctrl+I para abrir a caixa de entrada e Esc para marcar o canal aberto como lido."}
                 </Vazio>
               )}
               {(naoLidas.length > 0 || soEsteServidor) && (
