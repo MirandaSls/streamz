@@ -50,6 +50,7 @@ import PollCard from "@/components/polls/PollCard";
 import { emit } from "@/stores/socket-adapter";
 import Avatar from "@/components/ui/Avatar";
 import EmojiPicker from "@/components/ui/EmojiPicker";
+import TagDeBot from "@/components/ui/TagDeBot";
 import Tooltip from "@/components/ui/Tooltip";
 import { dataCompleta, hora, horaCompleta } from "@/lib/format";
 import { Markdown } from "@/lib/markdown";
@@ -150,6 +151,20 @@ function ReplyReference({ message }: { message: Message }) {
       >
         @{displayNameOf(ref.author)}
       </button>
+      {/* ── j-bots ── responder a um bot também tem que dizer que é um bot: sem
+          isto a barra de resposta seria a única superfície com nome de autor
+          sem a pílula, e é justamente ela que aparece quando alguém responde a
+          uma resposta de comando de barra.
+          `caixaEstreita` pela mesma regra do rótulo do tile de voz: esta linha
+          é `leading-[18px]` **fixo nos dois leiautes** (não há `celular:` aqui),
+          e a pílula de 18 do celular a preenchia de ponta a ponta — medido: pai
+          de 18px de conteúdo, pílula de 18, folga zero. Nos 15 do desktop sobra
+          1,5px de cada lado, a pílula volta a ter o porte do texto de 13px que
+          a cerca, e o trecho citado ganha 4px de volta antes de truncar.
+          Centrada sem margem: o pai é `items-center`, e a folga de 0,97px que
+          uma medida ingênua acusa é a metade do `pb-0.5` da linha — sobre a
+          caixa de conteúdo o desalinho é 0. */}
+      {ref.author.bot && <TagDeBot caixaEstreita />}
       <button
         type="button"
         onClick={() =>
@@ -623,6 +638,11 @@ export default function MessageItem({
             >
               {displayNameOf(author)}
             </button>
+            {/* ── j-bots ── entre o nome e a hora, como no Discord. A caixa é
+                `items-baseline`, e uma pílula alinhada pela linha de base
+                desceria abaixo dela; `self-center` a recentra na linha de 22px
+                sem mexer no alinhamento do nome nem no da hora. */}
+            {author.bot && <TagDeBot className="self-center" />}
             <Tooltip label={dataCompleta(message.createdAt)}>
               <span className="ml-1 text-xs text-txt-muted">{horaCompleta(message.createdAt)}</span>
             </Tooltip>
@@ -689,6 +709,19 @@ export default function MessageItem({
                   >
                     {displayNameOf(author)}
                   </button>
+                  {/* ── j-bots ── no modo compacto a hora, o nome e o texto
+                      dividem a **primeira** linha da mensagem — a hora é
+                      `leading-[22px]`, e é ela que fixa a linha em 22px nos dois
+                      leiautes. `self-start` (e não `self-center`) porque a caixa
+                      cresce com o texto: numa mensagem de três linhas ela mede
+                      64px, e centrar poria a pílula no meio do parágrafo, 20px
+                      abaixo do nome — medido.
+                      A margem é o que centra a pílula **naquela** primeira
+                      linha, e por isso muda com o tamanho dela:
+                      (22 − 15)/2 = 3,5 no desktop e (22 − 18)/2 = 2 no celular.
+                      Os 3px iguais para os dois que estavam aqui deixavam a
+                      pílula 0,5px alta no desktop e 1px baixa no celular. */}
+                  {author.bot && <TagDeBot className="mt-[3.5px] self-start celular:mt-[2px]" />}
                 </>
               )}
               <div className={compacto ? "min-w-0 flex-1" : undefined}>
