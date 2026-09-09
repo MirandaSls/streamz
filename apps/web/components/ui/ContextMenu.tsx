@@ -145,9 +145,12 @@ function proximo(items: MenuItem[], de: number, passo: number): number {
 function FileiraDeReacoes({
   item,
   onClose,
+  cedoDemais = () => false,
 }: {
   item: Extract<MenuItem, { reacoes: unknown[] }>;
   onClose: () => void;
+  /** carência do primeiro toque da folha — ver `nascidaEm` no `Painel`. */
+  cedoDemais?: () => boolean;
 }) {
   return (
     <div role="group" aria-label="Reações rápidas" className="mb-1 flex items-center gap-1 px-1 py-1">
@@ -158,6 +161,7 @@ function FileiraDeReacoes({
           role="menuitem"
           aria-label={`Reagir com ${r.rotulo}`}
           onClick={() => {
+            if (cedoDemais()) return;
             onClose();
             r.onSelect();
           }}
@@ -206,6 +210,21 @@ function Painel({
   const [aberto, setAberto] = useState<number | null>(null);
   const [ancora, setAncora] = useState<DOMRect | null>(null);
   const timer = useRef<number | undefined>(undefined);
+  /**
+   * Quando esta folha nasceu — a **carência do primeiro toque**.
+   *
+   * O toque longo abre a folha com o dedo ainda na tela, e a folha nasce
+   * debaixo dele: ao soltar, o `click` cai no item que por acaso ficou naquele
+   * ponto. Medido: segurar uma mensagem abria a folha e disparava "Criar
+   * Tópico" sozinho. Onde o ponto do dedo cai no véu, o efeito é o oposto e
+   * igualmente ruim — a folha fecha no mesmo gesto que a abriu.
+   *
+   * 400ms é a folga entre os 450ms do toque longo e um segundo toque de
+   * verdade. Vale só na folha: no desktop o menu nasce do `mouseup` do botão
+   * direito, e não há dedo em cena.
+   */
+  const nascidaEm = useRef(Date.now());
+  const cedoDemais = () => folha && Date.now() - nascidaEm.current < 400;
 
   useLayoutEffect(() => {
     const h = ref.current?.offsetHeight ?? 0;
@@ -279,7 +298,10 @@ function Painel({
         */
         <div
           aria-hidden="true"
-          onMouseDown={onClose}
+          onMouseDown={() => {
+            if (cedoDemais()) return;
+            onClose();
+          }}
           className="anim-overlay fixed inset-0 z-[79] bg-black/60"
         />
       )}
@@ -319,7 +341,10 @@ function Painel({
           */
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => {
+              if (cedoDemais()) return;
+              onClose();
+            }}
             aria-label="Fechar"
             className="sticky top-0 z-10 -mt-1 mb-1 flex h-[28px] w-full shrink-0 items-center justify-center bg-overlay"
           >
@@ -334,7 +359,9 @@ function Painel({
             return <ItemDeslizante key={i} item={item} />;
           }
           if (isReacoes(item)) {
-            return <FileiraDeReacoes key={i} item={item} onClose={onClose} />;
+            return (
+              <FileiraDeReacoes key={i} item={item} onClose={onClose} cedoDemais={cedoDemais} />
+            );
           }
           const filho = isSubmenu(item);
           const marcado = !filho && item.checked === true;
@@ -372,6 +399,9 @@ function Painel({
                 agendarSubmenu(i, e.currentTarget, filho && !item.disabled);
               }}
               onClick={(e) => {
+                // o `click` do dedo que ainda estava na tela quando a folha
+                // subiu não é escolha de ninguém (ver `nascidaEm`)
+                if (cedoDemais()) return;
                 if (filho) {
                   setAncora(e.currentTarget.getBoundingClientRect());
                   setAberto((a) => (a === i ? null : i));

@@ -151,14 +151,29 @@ export function AreaDeToqueLongo({ children }: { children: ReactNode }) {
       // conversa e do membro só existem por ele. Quem não tem menu não abre
       // nada — o evento sobe e ninguém o atende.
       if (!alvo || alvo.closest("input, textarea, [contenteditable='true']")) return;
+      /*
+        **Seleção viva no texto: o dedo ali é ajuste de alça, não pedido de
+        menu.** É o que faz "Selecionar Texto" (o item da folha da mensagem)
+        servir para alguma coisa: sem esta saída, o primeiro toque para arrastar
+        a alça reabria a folha por cima e apagava o que tinha acabado de ser
+        marcado.
+      */
+      const selecao = window.getSelection?.();
+      if (selecao && !selecao.isCollapsed) return;
       const { clientX: x, clientY: y } = e;
       origem.current = { x, y };
       cancelar();
       timer.current = window.setTimeout(() => {
         timer.current = null;
-        // a seleção que o sistema começou a desenhar sai de cena: quem pediu
-        // menu não pediu texto marcado
-        window.getSelection?.()?.removeAllRanges();
+        /*
+          A seleção **não** é mais apagada aqui. Esta linha era a razão de não
+          se conseguir marcar o texto de uma mensagem no celular: o sistema
+          começa a desenhar a seleção durante o toque longo e, aos 450ms, nós a
+          removíamos para abrir a folha. Quem chega com seleção viva já nem
+          arma o temporizador (ver `aoPressionar`), então não há duas coisas
+          disputando o mesmo gesto — e a cópia de um trecho passou a ter caminho
+          próprio, o item "Selecionar Texto" da folha.
+        */
         navigator.vibrate?.(10);
         alvo.dispatchEvent(
           new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: y }),
