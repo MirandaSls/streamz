@@ -84,13 +84,16 @@ async function medir(page, rotulo, seletor, indice = 0) {
  * O card do diretório — a caixa inteira, e não o botão dentro dela.
  *
  * O card não tem `data-*` próprio (o `data-adicionar-app` é do botão de
- * adicionar), então se chega nele subindo do botão até o ancestral posicionado.
- * Medir o botão por engano dá 161 × 32, que é a medida do botão e não do card.
+ * adicionar), então se chega nele subindo do botão até o `<article>` que é a
+ * raiz do `CardDeApp`. Medir o botão por engano dá 161 × 32, que é a medida do
+ * botão; subir até um `div` qualquer dá 390 × 844 no celular, que é a coluna.
  */
 async function medirCard(page, rotulo) {
   const r = await page.evaluate(() => {
     const b = document.querySelector("[data-adicionar-app]");
-    const card = b?.closest("div.relative");
+    // o `<article>` é a raiz do `CardDeApp`; `closest("div…")` pegava a coluna
+    // inteira no celular (390 × 844) e nada no desktop
+    const card = b?.closest("article");
     if (!card) return null;
     const c = card.getBoundingClientRect();
     return { w: Math.round(c.width * 10) / 10, h: Math.round(c.height * 10) / 10 };
@@ -124,6 +127,12 @@ async function recortarPilula(page, nome, escala = 6) {
 
 async function entrar(ctx, usuario, senha) {
   const page = await ctx.newPage();
+  // Teto curto de propósito: um passo que não acha o alvo é uma captura que
+  // não sai, e o padrão de 30 s por ação faz um passeio de seis passos com
+  // falha levar meia hora. Com 15 s a execução inteira cabe em minutos, e o
+  // `passo()` segue para a próxima tela em vez de segurar as outras.
+  page.setDefaultTimeout(15_000);
+  page.setDefaultNavigationTimeout(30_000);
   page.on("console", (m) => m.type() === "error" && console.log("[console]", m.text()));
   await page.goto(`${WEB}/login`);
   await page.fill((await page.$("#identificador")) ? "#identificador" : "#username", usuario);
@@ -234,6 +243,13 @@ async function passeio(page, p, celular) {
   await passo(`${p} portal`, async () => {
     await page.goto(`${WEB}/app?settings=aplicativos`);
     await page.waitForTimeout(3000);
+    // No celular a janela de configurações é mestre-detalhe: o que abre é a
+    // lista de seções em cartões, e a aba só aparece depois de tocá-la.
+    if (celular) {
+      await foto(page, `${p}-06-lista-de-secoes`);
+      await janela(page).getByText("Aplicativos", { exact: true }).first().click();
+      await page.waitForTimeout(1500);
+    }
     await foto(page, `${p}-07-portal-lista`);
     await janela(page).getByRole("button", { name: "Criar aplicativo" }).first().click();
     await page.waitForTimeout(800);
