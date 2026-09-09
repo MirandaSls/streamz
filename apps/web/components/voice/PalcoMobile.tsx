@@ -7,6 +7,7 @@ import TelaCheiaDeVideo from "@/components/voice/TelaCheiaDeVideo";
 import { VoiceTile, type AcoesDoTile, type Tile } from "@/components/voice/TileDeVoz";
 import {
   ALVO_MINIMO,
+  BARRA_ALTURA,
   FAIXA_ALTURA_MOBILE,
   FAIXA_GAP_MOBILE,
   FAIXA_LARGURA_MOBILE,
@@ -148,13 +149,29 @@ export default function PalcoMobile({
     <div
       className={`flex shrink-0 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
         paisagem
-          ? "pointer-events-auto absolute inset-x-0 bottom-0 z-10 pb-2"
+          ? "pointer-events-auto absolute inset-x-0 z-10 pb-2"
           : "pt-2"
       }`}
       // `-mx`/`px` em px pelo mesmo motivo das alturas; a rolagem chega às
       // bordas da tela e o primeiro tile nasce alinhado com o destaque
       style={{
-        height: paisagem ? FAIXA_ALTURA_MOBILE * 0.8 + 8 : FAIXA_ALTURA_MOBILE,
+        // **O `+ 8` vale nas duas orientações**, e faltava em pé. A caixa é
+        // `border-box`: com `height: 78` e `pt-2`, sobram 70 para um filho de
+        // 78, e o `overflow-x: auto` (que implica `overflow-y: auto`) corta os
+        // 8 restantes — a miniatura perdia a base, com o rótulo de nome cortado
+        // ao meio. Medido em 390×844: tira em y 678..756 e miniatura em 686..764.
+        height: (paisagem ? FAIXA_ALTURA_MOBILE * 0.8 : FAIXA_ALTURA_MOBILE) + 8,
+        // **Deitado a tira ficava embaixo de tudo — literalmente.** Ela era
+        // `bottom-0` com 70px de altura, e a cápsula de controles é
+        // `bottom: 8` com 68: as duas ocupavam a mesma fatia de tela, e a
+        // cápsula (`z-20`, de borda a borda menos 13 de margem) cobria as
+        // miniaturas inteiras. Quem quisesse trocar de foco em paisagem tinha
+        // de esperar os três segundos de inatividade que escondem os controles
+        // — e o toque que trocaria o foco acordava a cápsula de volta por cima.
+        // Agora a tira senta **acima** dela: 68 da barra + 8 do rodapé dela + 8
+        // de respiro. Ela não se esconde junto: miniatura é conteúdo, não
+        // moldura, e é o que diz quem mais está na sala.
+        bottom: paisagem ? BARRA_ALTURA + 16 : undefined,
         gap: FAIXA_GAP_MOBILE,
         marginLeft: paisagem ? 0 : -PALCO_MARGEM,
         marginRight: paisagem ? 0 : -PALCO_MARGEM,

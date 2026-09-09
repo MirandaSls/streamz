@@ -5,6 +5,8 @@ import { Phone, PhoneOff, Video } from "@/components/ui/icones";
 import { CALL_RING_TIMEOUT_MS, displayNameOf, isGroupChannel } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
+import { ALVO_MINIMO } from "@/components/voice/palco-mobile";
+import { useEhMobile } from "@/hooks/useEhMobile";
 import { pararToque, prepararToque, tocarToque, toqueDeChamadaUrl } from "@/lib/ringtone";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useVoice } from "@/stores/voice";
@@ -39,6 +41,10 @@ export default function IncomingCallModal() {
   const estados = useVoice((s) => s.statesOf(call.channelId ?? ""));
   const conversas = useDMs((s) => s.channels);
   const audio = useRef<HTMLAudioElement>(null);
+  const ehMobile = useEhMobile();
+  // já estou numa sala de voz: no celular a barra "Voz conectada" ocupa 48px
+  // logo acima da barra de abas, e o cartão tem de sentar em cima das duas
+  const emOutraSala = useVoice((s) => !!s.channelId);
 
   const tocando = call.phase === "incoming";
 
@@ -74,7 +80,25 @@ export default function IncomingCallModal() {
     <div
       role="alertdialog"
       aria-label={`Chamada recebida de ${nome}`}
-      className="fixed bottom-[76px] left-[84px] z-40 w-[248px] rounded-lg bg-overlay p-3 shadow-high anim-modal"
+      // **As duas medidas do ramo de desktop são do cromo do desktop**: 84 é a
+      // largura do rail de servidores e 76 a altura do painel do usuário, que
+      // no celular não existem. Num iPhone de 390 o cartão nascia colado à
+      // direita (84 + 248 = 332 de 390) e caía **sobre a barra de abas**, que
+      // mede 48 mais a área segura — o "Recusar" ficava debaixo do dedo que ia
+      // trocar de aba. Aqui ele atravessa a largura, com 12 de margem, e senta
+      // acima da barra: 48 dela + 8 de folga.
+      style={
+        ehMobile
+          ? {
+              // 48 da barra de abas + 8 de folga, mais os 48 da barra
+              // "Voz conectada" quando ela está na tela
+              bottom: `calc(env(safe-area-inset-bottom, 0px) + ${emOutraSala ? 104 : 56}px)`,
+            }
+          : undefined
+      }
+      className={`fixed z-40 rounded-lg bg-overlay p-3 shadow-high anim-modal ${
+        ehMobile ? "inset-x-3" : "bottom-[76px] left-[84px] w-[248px]"
+      }`}
     >
       <audio ref={audio} src={toqueDeChamadaUrl()} preload="auto" loop />
       <div className="flex items-center gap-3">
@@ -87,12 +111,19 @@ export default function IncomingCallModal() {
         </span>
       </div>
 
-      {/* o verde vem primeiro: no cartão pequeno a ordem é a hierarquia */}
+      {/* o verde vem primeiro: no cartão pequeno a ordem é a hierarquia.
+          Os 36px de `h-9` são de mouse; no telefone atender e recusar são os
+          dois botões mais caros de errar do app inteiro, e vão para os 44 de
+          `ALVO_MINIMO` — em px, porque `h-11` desenharia 42,6 com a raiz de
+          15,5 (ver `palco-mobile.ts`). */}
       <div className="mt-3 flex items-center gap-2">
         <button
           type="button"
           onClick={() => void atender(false)}
-          className="flex h-9 flex-1 items-center justify-center gap-2 rounded-[3px] bg-green text-sm font-semibold text-accent-ink transition hover:brightness-110"
+          style={ehMobile ? { height: ALVO_MINIMO } : undefined}
+          className={`flex flex-1 items-center justify-center gap-2 rounded-[3px] bg-green text-sm font-semibold text-accent-ink transition hover:brightness-110 ${
+            ehMobile ? "" : "h-9"
+          }`}
         >
           <Phone size={16} aria-hidden="true" />
           Atender
@@ -103,7 +134,10 @@ export default function IncomingCallModal() {
               type="button"
               onClick={() => void atender(true)}
               aria-label="Atender com vídeo"
-              className="grid h-9 w-9 place-items-center rounded-[3px] bg-green/20 text-green transition hover:bg-green/30"
+              style={ehMobile ? { height: ALVO_MINIMO, width: ALVO_MINIMO } : undefined}
+              className={`grid place-items-center rounded-[3px] bg-green/20 text-green transition hover:bg-green/30 ${
+                ehMobile ? "" : "h-9 w-9"
+              }`}
             >
               <Video size={16} />
             </button>
@@ -114,7 +148,10 @@ export default function IncomingCallModal() {
             type="button"
             onClick={decline}
             aria-label="Recusar chamada"
-            className="grid h-9 w-9 place-items-center rounded-[3px] bg-red text-white transition hover:bg-red-hover"
+            style={ehMobile ? { height: ALVO_MINIMO, width: ALVO_MINIMO } : undefined}
+            className={`grid place-items-center rounded-[3px] bg-red text-white transition hover:bg-red-hover ${
+              ehMobile ? "" : "h-9 w-9"
+            }`}
           >
             <PhoneOff size={16} />
           </button>

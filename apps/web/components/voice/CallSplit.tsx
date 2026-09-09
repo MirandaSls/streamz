@@ -25,6 +25,7 @@ import {
   tetoDoChat,
   tetoDoPalco,
 } from "@/components/voice/call-split-layout";
+import { useEhMobile } from "@/hooks/useEhMobile";
 import { useVoice } from "@/stores/voice";
 
 /**
@@ -58,15 +59,25 @@ const PASSO_TECLADO = 24;
 
 /** Proporção 0–1 da coluna (divisão vertical). */
 const CHAVE_PROPORCAO = "streamz:proporcao-chamada";
+/**
+ * A mesma preferência, **guardada à parte no celular**.
+ *
+ * Proporção viaja entre telas de propósito (é o ponto do #72), mas entre um
+ * monitor e um telefone ela vira outra coisa: a fração que num monitor de 900
+ * deixa a conversa confortável deixa a chamada com pouco mais de cem pixels num
+ * iPhone. São duas preferências, não uma — e o mesmo `localStorage` atende as
+ * duas com duas chaves.
+ */
+const CHAVE_PROPORCAO_MOBILE = "streamz:proporcao-chamada:celular";
 /** Chave antiga, em PIXEL absoluto — migrada na primeira medição. */
 const CHAVE_ALTURA_ANTIGA = "streamz:altura-chamada";
 /** Largura da conversa, em pixel (divisão horizontal). */
 const CHAVE_LARGURA = "streamz:largura-chamada";
 
-function lerProporcao(): number | null {
+function lerProporcao(chave: string): number | null {
   if (typeof window === "undefined") return null;
   try {
-    const n = Number(window.localStorage?.getItem(CHAVE_PROPORCAO));
+    const n = Number(window.localStorage?.getItem(chave));
     return Number.isFinite(n) && n > 0 && n < 1 ? n : null;
   } catch {
     return null;
@@ -126,12 +137,38 @@ export default function CallSplit({
   );
 }
 
+/**
+ * Metade da coluna para a chamada **no celular**.
+ *
+ * Os 199px de `ALTURA_PADRAO` são medidos, e são medidos num Discord de
+ * computador: numa janela de 900 eles são uma faixa sobre uma conversa inteira.
+ * Num iPhone a mesma faixa é quase a tela toda de conversa — e o que sobra para
+ * a chamada, depois dos 88 que o `PalcoMobile` reserva à cápsula de controles,
+ * são **111px de vídeo**, menos que o avatar de 80 que eles deveriam mostrar.
+ * Medido em 390×844: coluna de 788, palco de 199, destaque de 111.
+ *
+ * Metade não é medição (não há print de chamada de DM no Discord do celular com
+ * a conversa junto): é o menor número que deixa as duas coisas utilizáveis —
+ * ~306 de destaque e ~394 de conversa num iPhone. Quem quiser só o palco fecha
+ * a conversa pelo balão do cabeçalho, e o divisor continua arrastável.
+ */
+const PROPORCAO_PADRAO_MOBILE = 0.5;
+
+/** Área de pega do divisor no telefone: 1px de linha não se acerta com o dedo. */
+const PEGA_TOQUE = "border-y-[11px]";
+
 /** Conversa direta: faixa de chamada em cima, conversa embaixo. */
 function DivisaoVertical({ chamada, chat }: { chamada: ReactNode; chat: ReactNode }) {
   const raiz = useRef<HTMLDivElement>(null);
   /** Altura real da coluna; recalculada a cada mudança de tamanho, não só na montagem. */
   const [disponivel, setDisponivel] = useState(0);
   const [proporcao, setProporcao] = useState<number | null>(null);
+  const ehMobile = useEhMobile();
+  const chave = ehMobile ? CHAVE_PROPORCAO_MOBILE : CHAVE_PROPORCAO;
+  const ehMobileRef = useRef(ehMobile);
+  ehMobileRef.current = ehMobile;
+  const chaveRef = useRef(chave);
+  chaveRef.current = chave;
 
   // alguém transmitindo pede palco maior — mas só decide a proporção INICIAL:
   // quem já arrastou o divisor mandou, e ligar uma transmissão não pode
@@ -160,9 +197,14 @@ function DivisaoVertical({ chamada, chat }: { chamada: ReactNode; chat: ReactNod
   useEffect(() => {
     if (proporcao !== null || disponivel <= 0) return;
     setProporcao(
-      lerProporcao() ??
-        migrarAlturaAntiga(disponivel) ??
-        (transmitindoRef.current ? PROPORCAO_TRANSMISSAO : proporcaoPadrao(disponivel)),
+      lerProporcao(chaveRef.current) ??
+        // a chave em pixel é do desktop e sempre foi: no celular ela não migra
+        (ehMobileRef.current ? null : migrarAlturaAntiga(disponivel)) ??
+        (transmitindoRef.current
+          ? PROPORCAO_TRANSMISSAO
+          : ehMobileRef.current
+            ? PROPORCAO_PADRAO_MOBILE
+            : proporcaoPadrao(disponivel)),
     );
   }, [disponivel, proporcao]);
 
@@ -180,7 +222,7 @@ function DivisaoVertical({ chamada, chat }: { chamada: ReactNode; chat: ReactNod
     if (total <= 0) return;
     const nova = alturaDoPalco(px / total, total) / total;
     setProporcao(nova);
-    if (persistir) guardar(CHAVE_PROPORCAO, nova.toFixed(4));
+    if (persistir) guardar(chaveRef.current, nova.toFixed(4));
   }, []);
 
   const comecarArraste = useCallback(
@@ -236,7 +278,13 @@ function DivisaoVertical({ chamada, chat }: { chamada: ReactNode; chat: ReactNod
         tabIndex={0}
         onPointerDown={comecarArraste}
         onKeyDown={pelasTeclas}
-        className="h-px shrink-0 cursor-row-resize border-y-2 border-transparent bg-border bg-clip-content transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+        // A linha desenhada continua com 1px; o que muda no telefone é a **área
+        // de pega**: `border-y-2` dá 5px de alvo, e 5px não se acerta com o
+        // dedo — o divisor existia e não era arrastável. O `bg-clip-content`
+        // mantém a borda transparente, então nada disso aparece na tela.
+        className={`h-px shrink-0 cursor-row-resize border-transparent bg-border bg-clip-content transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none ${
+          ehMobile ? PEGA_TOQUE : "border-y-2"
+        }`}
       />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">{chat}</div>
