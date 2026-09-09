@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { ChevronRight, HeadphoneOff, MicOff, UserPlus, Video } from "@/components/ui/icones";
 import { displayNameOf } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
+import TagDeBot from "@/components/ui/TagDeBot";
 import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
 import { abrirMenuDeParticipante } from "@/components/voice/participant-menu";
 import PreviaDeTela, { type AlvoDaPrevia } from "@/components/voice/PreviaDeTela";
@@ -147,6 +148,17 @@ export default function VoiceChannelMembers({
                 {/* menor que o nome do canal, como no Discord: nosso texto era maior que o
                     do canal acima, o que invertia a hierarquia */}
                 <span className="min-w-0 flex-1 truncate text-[14px]">{nome}</span>
+                {/* ── j-bots ── a **sétima** superfície. O §11 do documento lista
+                    seis, e o lote C achou esta ao fotografar o tile de voz: um
+                    bot de música na sala aparece aqui, na coluna de canais, e
+                    era o único lugar com nome de bot sem a pílula.
+                    Sem `caixaEstreita`: a linha é `h-8` (31px medidos), e a
+                    pílula de 18 do celular cabe com 13px de sobra — ao
+                    contrário do rótulo comprimido do palco, que é `h-[20px]`.
+                    Vem depois do nome e **antes** dos selos de estado ("Ao
+                    vivo", câmera, mudo), pela mesma regra da lista de membros:
+                    a pílula é do nome, o selo é do que a pessoa está fazendo. */}
+                {e.user.bot && <TagDeBot />}
                 {e.screen ? (
                   <span className="shrink-0 rounded-[3px] bg-red px-1 text-[10px] font-bold uppercase leading-4 tracking-[0.02em] text-white">
                     Ao vivo

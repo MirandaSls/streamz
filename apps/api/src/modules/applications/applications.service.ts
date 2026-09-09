@@ -1,10 +1,29 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { randomBytes } from "node:crypto";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  PayloadTooLargeException,
+  ServiceUnavailableException,
+} from "@nestjs/common";
+import { randomBytes, randomUUID } from "node:crypto";
+import type { Readable } from "node:stream";
 import * as argon2 from "argon2";
-import type { AppCriado, AppDetalhe, AppView, TokenCriado } from "@streamz/shared";
+import type {
+  AppCriado,
+  AppDetalhe,
+  AppEditarInput,
+  AppView,
+  ServidorComOApp,
+  TokenCriado,
+} from "@streamz/shared";
+import { MAX_GUILD_ICON_SIZE } from "@streamz/shared";
 import { PrismaService } from "../../prisma/prisma.service";
+import { StorageService } from "../storage/storage.service";
+import { InstalacaoService } from "./instalacao.service";
 import { toPublicUser, type PublicUserRow } from "../../common/dto";
 import { isUniqueViolation } from "../../common/prisma-errors";
+import { sniffImage } from "../uploads/media";
 import { gerarToken, hashDoToken } from "./token";
 
 /** O que o service precisa de uma linha de `Application` para montar o DTO. */
@@ -13,10 +32,34 @@ interface LinhaDeApp {
   snowflake: bigint;
   name: string;
   description: string | null;
+  iconKey: string | null;
   publico: boolean;
   permissoesPadrao: number;
   createdAt: Date;
 }
+
+/**
+ * Extensões reconhecidas, por mime — a chave do bucket carrega a extensão para
+ * que um objeto baixado do R2 abra num visualizador sem adivinhação.
+ *
+ * O mime vem de `sniffImage` (magic bytes), nunca do que o cliente declarou:
+ * é a mesma regra do ícone de servidor e do anexo.
+ */
+const EXTENSAO_POR_MIME: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+};
+
+/**
+ * Só o token em vigor. Os revogados ficam na tabela para auditoria, mas não
+ * são o que a tela mostra — e `take: 1` sobre `createdAt desc` é o que faz o
+ * `AppDetalhe` ter um `tokenPrefixo` só.
+ */
+const INCLUI_TOKEN_EM_VIGOR = {
+  tokens: { where: { revokedAt: null }, orderBy: { createdAt: "desc" }, take: 1 },
+} as const;
 
 /**
  * Aplicativos (bots): criar, listar os meus e regenerar o token.
@@ -29,7 +72,11 @@ interface LinhaDeApp {
  */
 @Injectable()
 export class ApplicationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+    private readonly instalacao: InstalacaoService,
+  ) {}
 
   /**
    * Cria o aplicativo, o usuário-bot e o primeiro token, de uma vez.
@@ -52,22 +99,10 @@ export class ApplicationsService {
   async listarMinhas(donoId: string): Promise<AppDetalhe[]> {
     const rows = await this.prisma.application.findMany({
       where: { ownerId: donoId },
-      include: {
-        botUser: true,
-        // só o token em vigor: os revogados ficam na tabela para auditoria, mas
-        // não são o que a tela mostra
-        tokens: { where: { revokedAt: null }, orderBy: { createdAt: "desc" }, take: 1 },
-      },
+      include: { botUser: true, ...INCLUI_TOKEN_EM_VIGOR },
       orderBy: { createdAt: "desc" },
     });
-    return rows.map((a) => {
-      const t = a.tokens[0];
-      return this.paraDetalhe(
-        a,
-        a.botUser,
-        t ? { prefixo: t.prefixo, criadoEm: t.createdAt.toISOString() } : null,
-      );
-    });
+    return rows.map((a) => this.detalheDaLinha(a));
   }
 
   /**
@@ -89,6 +124,190 @@ export class ApplicationsService {
       data: { revokedAt: new Date() },
     });
     return this.emitirToken(app.id, app.botUser.snowflake);
+  }
+
+  // ── j-bots · F4 · portal do desenvolvedor ──────────────────
+
+  /**
+   * Edita nome, descrição, visibilidade no diretório e permissões sugeridas.
+   *
+   * **Só o que veio é escrito.** `appEditarSchema` é `.partial()`, e a
+   * diferença entre "não mandei" (`undefined`) e "apague" (`null`, só a
+   * descrição) é o que permite o interruptor "Publicar no diretório" salvar
+   * sozinho sem carregar o formulário inteiro junto.
+   *
+   * O nome **não** propaga para o `displayName` do usuário-bot de propósito: o
+   * bot já está em servidores com aquele nome na lista de membros, e renomear
+   * o aplicativo no portal não é renomear o membro. Quem quiser os dois iguais
+   * troca os dois — é o que o Discord faz.
+   */
+  async editar(donoId: string, appId: string, patch: AppEditarInput): Promise<AppDetalhe> {
+    await this.doMeuApp(donoId, appId);
+
+    const app = await this.prisma.application.update({
+      where: { id: appId },
+      data: {
+        ...(patch.name !== undefined ? { name: patch.name } : {}),
+        ...(patch.description !== undefined ? { description: patch.description } : {}),
+        ...(patch.publico !== undefined ? { publico: patch.publico } : {}),
+        ...(patch.permissoesPadrao !== undefined
+          ? { permissoesPadrao: patch.permissoesPadrao }
+          : {}),
+      },
+      include: { botUser: true, ...INCLUI_TOKEN_EM_VIGOR },
+    });
+    return this.detalheDaLinha(app);
+  }
+
+  /**
+   * Apaga o aplicativo — a rota perigosa do portal. A ordem importa:
+   *
+   * 1. desfaz cada instalação (tira o membro-bot, apaga o cargo, emite os
+   *    eventos, manda `GUILD_DELETE`);
+   * 2. só então apaga o **usuário-bot**. A `Application` cai junto pelo
+   *    `onDelete: Cascade` de `botUser`, e com ela tokens, comandos e
+   *    interações.
+   *
+   * Apagar a `Application` sozinha deixaria um `User` órfão com `isBot: true`
+   * — uma conta que não faz login, não tem dono e continua na lista de membros
+   * de todo servidor onde entrou.
+   *
+   * **A junção A↔B, ligada na integração da F4.** O passo 1 chama o
+   * `InstalacaoService.desinstalar` do lote B, e não uma segunda
+   * implementação: duas rotinas que tiram o mesmo bot do mesmo servidor
+   * divergem no primeiro evento novo.
+   *
+   * O `onDelete: Cascade` do banco (`User` → `GuildMember`,
+   * `Application` → `GuildApplication`) já deixava o **banco** consistente
+   * sozinho. O que ele não faz é o **evento**: sem o laço abaixo, as telas
+   * abertas continuariam mostrando o bot na lista de membros até alguém
+   * recarregar, e um bot conectado nunca receberia o `GUILD_DELETE`.
+   *
+   * Sem transação por cima do laço, de propósito. Cada `desinstalar` já é
+   * atômico no seu servidor e emite os eventos dele **depois** do commit; uma
+   * transação por fora só serviria para segurar N servidores reféns de uma
+   * falha no último, e não daria como desfazer os eventos que já saíram.
+   */
+  async apagar(donoId: string, appId: string): Promise<void> {
+    const app = await this.doMeuApp(donoId, appId);
+
+    // 1. sai de cada servidor onde está, com os eventos que isso implica
+    for (const inst of await this.instalacao.instalacoesDoApp(appId)) {
+      await this.instalacao.desinstalar(inst.id, inst.guildId, app.botUserId, inst.roleId);
+    }
+
+    // o objeto do bucket sai antes do banco: depois do `delete` não há mais
+    // linha que guarde a chave, e ela viraria um órfão que ninguém sabe nomear
+    if (app.iconKey) await this.storage.delete(app.iconKey);
+
+    // 2. o usuário-bot. A `Application` cai junto pelo cascade de `botUser`.
+    await this.prisma.user.delete({ where: { id: app.botUserId } });
+  }
+
+  /**
+   * Ícone do aplicativo — o padrão do **ícone de servidor**, não o do avatar.
+   *
+   * `Application` não tem coluna `iconUrl` (o §10 não a declarou): só a chave,
+   * e a URL é derivada em `iconUrl()` a cada leitura. Isso quer dizer que a
+   * troca do ícone não precisa reescrever URL nenhuma — mas quer dizer também
+   * que existe uma rota pública de leitura, `GET /applications/:id/icone`,
+   * pelo mesmo motivo de `GET /guilds/:id/icon`: `<img src>` não manda token.
+   */
+  async atualizarIcone(
+    donoId: string,
+    appId: string,
+    file: { buffer: Buffer; size: number },
+  ): Promise<AppDetalhe> {
+    const antes = await this.doMeuApp(donoId, appId);
+    if (!this.storage.isConfigured()) {
+      throw new ServiceUnavailableException(
+        "Armazenamento (R2) não configurado. Ver PENDENCIAS.md.",
+      );
+    }
+    if (!file?.buffer?.length) throw new BadRequestException("Arquivo vazio");
+    if (file.size > MAX_GUILD_ICON_SIZE) {
+      throw new PayloadTooLargeException(`Ícone acima de ${MAX_GUILD_ICON_SIZE / 1024 / 1024} MB`);
+    }
+    const image = sniffImage(file.buffer);
+    if (!image) {
+      throw new BadRequestException("O ícone precisa ser uma imagem (PNG, JPEG, GIF ou WebP)");
+    }
+
+    const key = `app-icons/${appId}/${randomUUID()}.${EXTENSAO_POR_MIME[image.mime] ?? "bin"}`;
+    await this.storage.put(key, file.buffer, image.mime);
+    const app = await this.prisma.application.update({
+      where: { id: appId },
+      data: { iconKey: key },
+      include: { botUser: true, ...INCLUI_TOKEN_EM_VIGOR },
+    });
+    // o arquivo antigo sai depois de o banco já apontar para o novo: se apagar
+    // falhar sobra um objeto órfão, não um ícone quebrado
+    if (antes.iconKey) await this.storage.delete(antes.iconKey);
+
+    return this.detalheDaLinha(app);
+  }
+
+  /** Remove o ícone (a lista volta para a inicial do nome). Só o dono. */
+  async removerIcone(donoId: string, appId: string): Promise<AppDetalhe> {
+    const antes = await this.doMeuApp(donoId, appId);
+    const app = await this.prisma.application.update({
+      where: { id: appId },
+      data: { iconKey: null },
+      include: { botUser: true, ...INCLUI_TOKEN_EM_VIGOR },
+    });
+    if (antes.iconKey) await this.storage.delete(antes.iconKey);
+    return this.detalheDaLinha(app);
+  }
+
+  /**
+   * Corpo + content-type do ícone para o proxy público
+   * (`GET /applications/:id/icone`).
+   *
+   * Público de propósito, como o ícone de servidor: a tag `<img>` não manda
+   * `Authorization`. O que ele revela é o ícone de um aplicativo — a mesma
+   * imagem que o diretório mostra a qualquer um.
+   */
+  async iconeStream(appId: string): Promise<{ body: Readable; contentType: string }> {
+    const app = await this.prisma.application.findUnique({
+      where: { id: appId },
+      select: { iconKey: true },
+    });
+    if (!app?.iconKey) throw new NotFoundException("Sem ícone");
+    // o content-type real foi validado no upload; o proxy sempre serve imagem
+    return { body: await this.storage.get(app.iconKey), contentType: "image/*" };
+  }
+
+  /**
+   * Tela 5 do portal: em que servidores este aplicativo meu está instalado.
+   *
+   * Ligada na integração da F4, sobre a `GuildApplication` do lote B.
+   *
+   * É a lista **do dono**, não a de quem instalou: `doMeuApp` já recusou o app
+   * de outra pessoa. Por isso ela mostra servidores em que o dono do app pode
+   * não estar — é justamente a pergunta que a tela faz ("onde este aplicativo
+   * meu está instalado?"), e o nome do servidor não é segredo de ninguém que
+   * já convive com o bot ali.
+   */
+  async servidoresComOApp(donoId: string, appId: string): Promise<ServidorComOApp[]> {
+    await this.doMeuApp(donoId, appId);
+
+    const linhas = await this.prisma.guildApplication.findMany({
+      where: { applicationId: appId },
+      orderBy: { createdAt: "asc" },
+      select: {
+        permissions: true,
+        createdAt: true,
+        guild: { select: { id: true, name: true, iconUrl: true } },
+      },
+    });
+
+    return linhas.map((l) => ({
+      guildId: l.guild.id,
+      guildName: l.guild.name,
+      guildIconUrl: l.guild.iconUrl,
+      permissions: l.permissions,
+      createdAt: l.createdAt.toISOString(),
+    }));
   }
 
   /**
@@ -120,6 +339,32 @@ export class ApplicationsService {
   }
 
   // ── internos ───────────────────────────────────────────────
+
+  /**
+   * O aplicativo, se ele existe **e** é de quem chamou.
+   *
+   * **404** para o que não existe, **403** para o de outra pessoa — é o que
+   * `regenerarToken` já fazia, e agora todas as rotas do portal passam por
+   * aqui em vez de repetir as duas linhas.
+   */
+  private async doMeuApp(donoId: string, appId: string) {
+    const app = await this.prisma.application.findUnique({ where: { id: appId } });
+    if (!app) throw new NotFoundException("Aplicativo não encontrado");
+    if (app.ownerId !== donoId) throw new ForbiddenException("Este aplicativo não é seu");
+    return app;
+  }
+
+  /** Linha com `botUser` e o token em vigor → `AppDetalhe`. */
+  private detalheDaLinha(
+    app: LinhaDeApp & { botUser: PublicUserRow; tokens: { prefixo: string; createdAt: Date }[] },
+  ): AppDetalhe {
+    const t = app.tokens[0];
+    return this.paraDetalhe(
+      app,
+      app.botUser,
+      t ? { prefixo: t.prefixo, criadoEm: t.createdAt.toISOString() } : null,
+    );
+  }
 
   /**
    * Cria o `User` do bot: `isBot`, sem e-mail e com uma senha que ninguém
@@ -185,9 +430,7 @@ export class ApplicationsService {
       snowflake: app.snowflake.toString(),
       name: app.name,
       description: app.description,
-      // o ícone do aplicativo é do portal do desenvolvedor (F4); até lá não há
-      // o que servir, e o cliente cai no mesmo padrão do avatar ausente
-      iconUrl: null,
+      iconUrl: iconeDoApp(app.id, app.iconKey),
       publico: app.publico,
       permissoesPadrao: app.permissoesPadrao,
       createdAt: app.createdAt.toISOString(),
@@ -199,6 +442,33 @@ export class ApplicationsService {
       tokenCriadoEm: token?.criadoEm ?? null,
     };
   }
+}
+
+/**
+ * Chave do ícone no bucket → a URL que o `<img>` do cliente usa.
+ *
+ * A `Application` **não tem coluna `iconUrl`** (o §10 do documento não a
+ * declarou, ao contrário da `Guild`): a URL é derivada aqui, a cada leitura.
+ * A decisão foi reaproveitar o proxy da própria API — `GET /applications/:id/icone`,
+ * irmão de `GET /guilds/:id/icon` — em vez de expor a base pública do bucket:
+ *
+ * - o bucket pode ser privado (`R2_PUBLIC_BASE_URL` é opcional), e uma URL de
+ *   objeto privado seria um `<img>` quebrado em produção;
+ * - o proxy já existe, já põe `nosniff` e `Cache-Control: immutable`, e é o
+ *   caminho que o resto do app usa para ícone de servidor.
+ *
+ * O UUID da chave vai na query como `v`: o `immutable` do proxy só é seguro
+ * porque a URL muda quando o ícone muda.
+ *
+ * Exportada porque o diretório (lote B) monta o mesmo `iconUrl` a partir da
+ * mesma chave — duas derivações divergentes dariam dois caches.
+ */
+export function iconeDoApp(appId: string, iconKey: string | null): string | null {
+  if (!iconKey) return null;
+  const api = (process.env.API_PUBLIC_URL ?? "http://localhost:3333").replace(/\/+$/, "");
+  // o nome do arquivo é o UUID+extensão; basta ele para a versão
+  const v = iconKey.split("/").pop() ?? "";
+  return `${api}/api/applications/${appId}/icone?v=${v}`;
 }
 
 /**

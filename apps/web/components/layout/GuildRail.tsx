@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Apps,
   CheckCheck,
   Compass,
   LogOut,
@@ -24,6 +25,7 @@ import Tooltip from "@/components/ui/Tooltip";
 import { MENU_WIDTH, MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
 import { useT } from "@/lib/i18n";
 import { submenuNotificacoes, submenuSilenciar } from "@/lib/notification-menu";
+import { useAplicativos } from "@/stores/aplicativos";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { dmTitle, useDMs } from "@/stores/dms";
@@ -141,6 +143,7 @@ function RailItem({
   green = false,
   lado = 40,
   redondo = false,
+  dados,
   onClick,
   onContextMenu,
   children,
@@ -161,6 +164,14 @@ function RailItem({
    * conversas" de "um servidor".
    */
   redondo?: boolean;
+  /**
+   * Atributos `data-*` no botão, para a **delegação de clique** do
+   * `ShellMobile` (`aoTocarNaLista`) reconhecer o item. É como
+   * `data-channel-button` e `data-dm-button` já funcionam nas outras colunas —
+   * um atributo sem pixel nenhum, em vez de um `if (ehMobile)` espalhado aqui
+   * dentro.
+   */
+  dados?: Record<string, string>;
   /** recebe o evento porque o "+" ancora um menu no retângulo do botão. */
   onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
@@ -187,6 +198,7 @@ function RailItem({
           <button
             type="button"
             onClick={onClick}
+            {...dados}
             aria-label={unread && !active ? `${label} (não lido)` : label}
             aria-current={active ? "page" : undefined}
             className={`relative grid place-items-center overflow-hidden text-[15px] font-semibold transition-all duration-200 ${
@@ -242,6 +254,10 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
   const sairDaColunaDeVoz = useChannels((s) => s.leaveVoice);
   const developerMode = useSettings((s) => s.developerMode);
   const meuId = useAuth((s) => s.user?.id);
+  // ── j-bots · F4 ── o diretório de aplicativos, que abre por cima da coluna 3
+  const appsAbertos = useAplicativos((s) => s.aberto);
+  const abrirApps = useAplicativos((s) => s.abrir);
+  const fecharApps = useAplicativos((s) => s.fechar);
 
   const dmUnread = dms.some((d) => d.lastMessageAt && (!d.lastReadAt || d.lastMessageAt > d.lastReadAt));
 
@@ -278,8 +294,25 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
    * continua tocando. A lista de conversas é atualizada porque estamos entrando
    * no modo DM — era o que o `openList` fazia por último.
    */
+  /**
+   * ── j-bots · F4 ── abre "Descobrir aplicativos".
+   *
+   * Não mexe em `ui.view`: o diretório não é um terceiro modo da coluna 1 (ver
+   * o cabeçalho de `stores/aplicativos.ts`). Ele abre por cima da coluna 3 e a
+   * coluna do lado continua sendo a que já estava — que é o que o Discord faz.
+   *
+   * No celular quem empilha a tela cheia é o `ShellMobile`, ouvindo o
+   * `data-apps-button` deste botão por delegação de clique.
+   */
+  function abrirDiretorioDeApps() {
+    abrirApps();
+  }
+
   function irParaAmigos() {
     ui.setView("dm");
+    // sair do diretório: senão ele continuaria cobrindo a coluna 3 e o clique
+    // no logo pareceria não ter feito nada
+    fecharApps();
     sairDaColunaDeVoz();
     // No celular a bolha abre a **lista de conversas**, não a página Amigos:
     // na captura, tocar nela mostra "Mensagens" com as conversas, e "Adicionar
@@ -426,6 +459,8 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
               // sair da página Amigos: sem isso a conversa é selecionada por
               // baixo e a tela continua mostrando a lista de amigos
               fecharAmigos(false);
+              // e do diretório, pelo mesmo motivo (F4)
+              fecharApps();
               selectDM(dm);
             }}
           >
@@ -450,7 +485,11 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
           unread={guild.unread}
           mentions={guild.mentionCount}
           emVoz={vozGuildId === guild.id}
-          onClick={() => select(guild)}
+          onClick={() => {
+            // o diretório cobre a coluna 3; entrar num servidor o fecha (F4)
+            fecharApps();
+            select(guild);
+          }}
           onContextMenu={(e) => openGuildIconMenu(e, guild)}
         >
           {guild.iconUrl ? (
@@ -477,6 +516,35 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
         onClick={abrirMenuDeServidor}
       >
         <Plus size={compacto ? 24 : 20} />
+      </RailItem>
+
+      {/*
+        ── j-bots · F4 ── "Descobrir aplicativos", abaixo do "+".
+
+        **Não é a descoberta de servidores voltando.** Aquela foi removida de
+        propósito (o comentário logo acima diz por quê) e continua removida.
+        Aplicativos são outra coisa: um catálogo do que roda **nesta**
+        instância, que é o que o §11 do documento chama de vista própria.
+
+        O ícone é o `Apps` — as quatro formas, que é o glifo do App Directory do
+        Discord. **Não é uma bússola**: o `Compass` do Phosphor é outra coisa, e
+        o `explore.svg` do acervo não é uma bússola (está escrito em
+        `icones.tsx`). O robô (`Bot`) é o do portal do desenvolvedor, nas
+        configurações do usuário, e não este.
+
+        `data-apps-button` é o que o `ShellMobile` escuta por delegação
+        (`aoTocarNaLista`) para empilhar a tela cheia no celular — o mesmo
+        caminho de `data-channel-button` e `data-dm-button`, em vez de um
+        `if (ehMobile)` aqui dentro.
+      */}
+      <RailItem
+        label="Descobrir aplicativos"
+        lado={compacto ? 48 : 40}
+        active={appsAbertos}
+        onClick={abrirDiretorioDeApps}
+        dados={{ "data-apps-button": "" }}
+      >
+        <Apps size={compacto ? 26 : 22} />
       </RailItem>
     </nav>
   );
