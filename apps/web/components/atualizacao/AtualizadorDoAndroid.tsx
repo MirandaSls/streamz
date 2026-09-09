@@ -77,36 +77,75 @@ export default function AtualizadorDoAndroid() {
   const dispensada = useRef<string | null>(null);
 
   /**
-   * Baixa e instala. **Nunca lança**: qualquer falha vira a fase `falhou`, que
-   * é um card com "Tentar de novo". Uma exceção solta aqui subiria para o
-   * `layout.tsx` e derrubaria o app inteiro por causa de uma atualização.
+   * Onde o `.apk` já conferido ficou no disco, quando já baixamos um.
+   *
+   * Existe para que o segundo toque **não baixe de novo**. Os dois caminhos em
+   * que ele importa são justamente os mais prováveis: o usuário volta dos
+   * Ajustes depois de liberar "instalar apps desconhecidos", ou ele fecha a
+   * tela de instalação sem querer. Nos dois casos o pacote certo já está aqui,
+   * e repetir 40 MB seria castigar quem seguiu a instrução.
    */
-  const atualizar = useCallback(async (alvo: NovidadeDeAtualizacao) => {
+  const baixado = useRef<string | null>(null);
+
+  /**
+   * Abre o instalador para um pacote já no disco. **Nunca lança.**
+   */
+  const instalar = useCallback(async (caminho: string) => {
     ocupado.current = true;
-    setNovidade(alvo);
-    setPorcentagem(null);
-    setFase("baixando");
+    setFase("instalando");
     try {
-      const caminho = await baixarAtualizacaoAndroid(alvo.url, alvo.sha256, ({ baixados, total }) => {
-        // `total` vem -1 quando o servidor não declara `Content-Length`: aí a
-        // barra fica indeterminada em vez de fingir uma porcentagem
-        setPorcentagem(total > 0 ? Math.min(100, Math.round((baixados / total) * 100)) : null);
-      });
-      setFase("instalando");
       const faltaPermissao = await instalarAtualizacaoAndroid(caminho);
-      // Quando falta a permissão, o lado nativo já abriu a tela de Ajustes; o
-      // card fica de pé explicando o que fazer, e o toque seguinte tenta de
-      // novo — o `.apk` já está no disco, então é instantâneo.
+      // Quando falta a permissão, o lado nativo já abriu a tela de Ajustes e o
+      // instalador não; o card fica de pé explicando o que fazer.
       setFase(faltaPermissao ? "permissao" : "instalando");
     } catch {
-      // digest que não bateu, rede que caiu, ponte que falhou: o usuário vê o
-      // motivo genérico e o botão de tentar de novo. O detalhe não ajudaria
-      // ninguém na tela, e o pacote ruim já foi apagado do disco.
+      // o arquivo pode ter sumido (o sistema limpa o cache quando o disco
+      // aperta): aí o "Tentar de novo" baixa outra vez, que é o certo
+      baixado.current = null;
       setFase("falhou");
     } finally {
       ocupado.current = false;
     }
   }, []);
+
+  /**
+   * Baixa e instala. **Nunca lança**: qualquer falha vira a fase `falhou`, que
+   * é um card com "Tentar de novo". Uma exceção solta aqui subiria para o
+   * `layout.tsx` e derrubaria o app inteiro por causa de uma atualização.
+   */
+  const atualizar = useCallback(
+    async (alvo: NovidadeDeAtualizacao) => {
+      // Já baixamos este pacote nesta sessão: pula direto para o instalador.
+      if (baixado.current) return instalar(baixado.current);
+
+      ocupado.current = true;
+      setNovidade(alvo);
+      setPorcentagem(null);
+      setFase("baixando");
+      try {
+        const caminho = await baixarAtualizacaoAndroid(
+          alvo.url,
+          alvo.sha256,
+          ({ baixados, total }) => {
+            // `total` vem -1 quando o servidor não declara `Content-Length`: aí
+            // a barra fica indeterminada em vez de fingir uma porcentagem
+            setPorcentagem(total > 0 ? Math.min(100, Math.round((baixados / total) * 100)) : null);
+          },
+        );
+        baixado.current = caminho;
+        ocupado.current = false;
+        await instalar(caminho);
+      } catch {
+        // digest que não bateu, rede que caiu, ponte que falhou: o usuário vê o
+        // motivo genérico e o botão de tentar de novo. O detalhe não ajudaria
+        // ninguém na tela, e o pacote ruim já foi apagado do disco.
+        baixado.current = null;
+        setFase("falhou");
+        ocupado.current = false;
+      }
+    },
+    [instalar],
+  );
 
   useEffect(() => {
     if (!ehAndroidNoTauri()) return;
@@ -204,7 +243,14 @@ export default function AtualizadorDoAndroid() {
         )}
       </div>
 
-      {(fase === "aviso" || fase === "falhou" || fase === "permissao") && (
+      {/* Tudo menos "baixando" tem botão. O caso que obriga a incluir
+          "instalando": o usuário fecha a tela de instalação do Android sem
+          querer (ou de propósito, para terminar uma frase antes). Sem o botão o
+          card ficaria de pé dizendo "toque em Atualizar" numa tela que não
+          existe mais, e a única saída seria fechar o app. Com ele, o toque
+          reabre o instalador — sem baixar de novo, porque o pacote está no
+          disco. */}
+      {fase !== "baixando" && (
         <button
           type="button"
           onClick={() => void atualizar(novidade)}
@@ -214,10 +260,9 @@ export default function AtualizadorDoAndroid() {
         </button>
       )}
 
-      {/* Baixando e instalando não têm "x": o download já começou e some
-          sozinho, e sumir com a barra deixaria o usuário sem saber por que a
-          rede está ocupada. */}
-      {(fase === "aviso" || fase === "falhou" || fase === "permissao") && (
+      {/* "Baixando" não tem "x": o download já começou, some sozinho, e sumir
+          com a barra deixaria o usuário sem saber por que a rede está ocupada. */}
+      {fase !== "baixando" && (
         <button
           type="button"
           aria-label="Dispensar aviso de atualização"
