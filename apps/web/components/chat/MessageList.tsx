@@ -183,6 +183,42 @@ export default function MessageList({
     return () => sair(channelId);
   }, [channelId, sair]);
 
+  /*
+    Grudar no fim quando a **caixa** muda de tamanho, e não só quando chega
+    mensagem nova.
+
+    Três casos, todos do telefone. (1) O teclado sobe e a área rolável encolhe:
+    o `scrollTop` continua onde estava e a última mensagem sai por baixo —
+    medido indo de 390×844 para 390×460, a distância do fim ia de 0 para 384px
+    (412×915 → 412×500: 0 → 415). (2) A cápsula do composer cresce ao digitar
+    várias linhas e come a mesma altura: 384 → 538 (Android 415 → 569). (3) Mídia sem
+    dimensão conhecida (prévia de link, GIF por URL, figurinha) só ocupa espaço
+    quando termina de carregar, e aí empurra o fim para baixo *depois* do
+    `useLayoutEffect` do `useStickyScroll`, que só reage a itens novos.
+
+    `load` na fase de **captura**: o `load` de `<img>`/`<video>` não borbulha,
+    então um ouvinte comum no container nunca o veria.
+
+    Só quando já se está no fim (`!showJump`): quem subiu para ler histórico não
+    pode ser arrancado de lá por um teclado nem por uma foto que carregou.
+  */
+  useEffect(() => {
+    const caixa = scrollRef.current;
+    if (!caixa || showJump) return;
+    const grudar = () => {
+      if (caixa.scrollHeight - caixa.scrollTop - caixa.clientHeight < 1) return;
+      caixa.scrollTop = caixa.scrollHeight;
+    };
+    caixa.addEventListener("load", grudar, true);
+    const observador =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(grudar);
+    observador?.observe(caixa);
+    return () => {
+      observador?.disconnect();
+      caixa.removeEventListener("load", grudar, true);
+    };
+  }, [scrollRef, showJump]);
+
   const medirDivisor = useCallback(() => {
     const caixa = scrollRef.current;
     const divisor = caixa?.querySelector(`#${ID_DIVISOR}`);

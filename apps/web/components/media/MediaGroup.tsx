@@ -257,7 +257,11 @@ function Arquivo({ anexo }: { anexo: Attachment }) {
         href={anexo.url}
         download={nome}
         aria-label={`Baixar ${nome}`}
-        className="grid h-8 w-8 shrink-0 place-items-center rounded text-txt-secondary hover:bg-hov hover:text-txt-primary"
+        /* `h-8 w-8` mede 31 (a raiz do app é 15,5px), e no telefone este é o
+           único jeito de guardar o arquivo: o menu de toque longo da mensagem
+           não tem "baixar anexo". 44 literais no celular, como o resto dos
+           alvos de dedo do app. */
+        className="grid h-8 w-8 shrink-0 place-items-center rounded text-txt-secondary hover:bg-hov hover:text-txt-primary celular:h-[44px] celular:w-[44px]"
       >
         <Download size={20} />
       </a>
