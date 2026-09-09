@@ -6,6 +6,7 @@ import type { AlvoDoEvento, RealtimeService } from "../../realtime/realtime.serv
 import type { VoiceService } from "../../voice/voice.service";
 import type { DadosDeCompatService } from "../dados.service";
 import type { IdsService } from "../ids.service";
+import type { ReacoesDeCompatService } from "../reacoes.service";
 import { CAMPOS_DO_SERVIDOR } from "../traducao/servidor";
 import type {
   LinhaDeMembro,
@@ -219,7 +220,15 @@ function ambiente() {
     },
   } as unknown as VoiceService;
 
-  const ponte = new PonteDeEventos(realtime, registro, dados, ids, guilds, voz);
+  // F5: a ponte resolve o emoji da reação por aqui. Nestes testes não há emoji
+  // personalizado nenhum, então o token cru já é o `name` do Discord.
+  const reacoes = {
+    async traduzirToken(token: string) {
+      return { id: null, name: token, animated: false };
+    },
+  } as unknown as ReacoesDeCompatService;
+
+  const ponte = new PonteDeEventos(realtime, registro, dados, ids, guilds, voz, reacoes);
   ponte.iniciar();
 
   function ligar(id: string, botUserId: string, intents: number) {

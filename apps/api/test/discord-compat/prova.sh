@@ -9,6 +9,9 @@
 #    **pelo socket.io** — é o que prova que a resposta aparece sem F5
 # 4. o mesmo com discord.py (`Route.BASE`), que prova a tolerância a
 #    `compress=zlib-stream`
+# 5. (F5) reagir pelo socket.io — como o navegador faz — chega ao bot como
+#    `messageReactionAdd`, e **não** como `messageUpdate`; o bot reage de volta
+#    pelo REST e a reação dele aparece no socket.io do dono, sem F5
 #
 # As libs de prova (discord.js, socket.io-client, discord.py) são instaladas em
 # contêineres descartáveis. Elas **não** entram no pnpm do monorepo: são
@@ -55,6 +58,19 @@ docker run --rm --network "$REDE" \
     pip install --quiet --disable-pip-version-check 'discord.py>=2.4' >/dev/null 2>&1
     cp /prova/prova-discordpy.py .
     python prova-discordpy.py
+  "
+
+echo
+echo "== 5. reações granulares (F5): messageReactionAdd + reagir pelo REST =="
+docker run --rm --network "$REDE" \
+  -e SEMENTE="$SEMENTE" \
+  -e API_URL="http://$API_CONTAINER:3333/api" \
+  -e DEBUG_DJS="${DEBUG_DJS:-0}" \
+  -v "$AQUI:/prova:ro" -w /tmp \
+  node:22 bash -lc "
+    npm install --silent --no-audit --no-fund discord.js@14 socket.io-client@4 >/dev/null 2>&1
+    cp /prova/prova-reacoes.mjs .
+    node prova-reacoes.mjs
   "
 
 echo

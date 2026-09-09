@@ -536,6 +536,71 @@ export class MessagesService {
   }
 
   /**
+   * ── j-bots ── Tira a reação de **outra pessoa**.
+   *
+   * É o `DELETE /channels/:c/messages/:m/reactions/:e/:uid` do Discord, e lá
+   * ele exige `MANAGE_MESSAGES`. Aqui também: tirar a reação alheia é
+   * moderação, não é desreagir.
+   *
+   * Tirar a própria continua sendo `removeReaction` — se o alvo for quem
+   * chamou, é para lá que vai, sem exigir permissão de moderação (é o que o
+   * Discord faz quando o bot manda o próprio id em vez de `@me`).
+   */
+  async removeReactionOf(
+    messageId: string,
+    actorId: string,
+    targetUserId: string,
+    emoji: string,
+  ): Promise<MessageDTO> {
+    if (actorId === targetUserId) return this.removeReaction(messageId, actorId, emoji);
+
+    const msg = await this.prisma.message.findUnique({ where: { id: messageId } });
+    if (!msg) throw new NotFoundException("Mensagem não encontrada");
+    await this.assertPodeModerarReacoes(msg.channelId, actorId);
+
+    await this.prisma.reaction
+      .delete({ where: { messageId_userId_emoji: { messageId, userId: targetUserId, emoji } } })
+      .catch(() => undefined); // idempotente: já não existia
+    return this.getDTO(messageId);
+  }
+
+  /**
+   * ── j-bots ── Limpa as reações de uma mensagem: todas, ou só as de um emoji.
+   *
+   * `emoji: null` = `DELETE .../reactions` (todas); preenchido =
+   * `DELETE .../reactions/:emoji`. As duas exigem `MANAGE_MESSAGES`, como no
+   * Discord — é o botão "remover todas as reações" da moderação.
+   */
+  async clearReactions(
+    messageId: string,
+    actorId: string,
+    emoji: string | null,
+  ): Promise<MessageDTO> {
+    const msg = await this.prisma.message.findUnique({ where: { id: messageId } });
+    if (!msg) throw new NotFoundException("Mensagem não encontrada");
+    await this.assertPodeModerarReacoes(msg.channelId, actorId);
+
+    await this.prisma.reaction.deleteMany({
+      where: { messageId, ...(emoji === null ? {} : { emoji }) },
+    });
+    return this.getDTO(messageId);
+  }
+
+  /**
+   * `MANAGE_MESSAGES` no canal — a permissão de mexer na reação dos outros.
+   *
+   * Em conversa direta não há moderação (é o mesmo motivo pelo qual
+   * `MANAGE_MESSAGES` fica de fora das permissões de DM, `permissoes.ts`): lá
+   * cada um só tira a própria reação.
+   */
+  private async assertPodeModerarReacoes(channelId: string, userId: string): Promise<void> {
+    const access = await this.guilds.assertCanViewChannel(userId, channelId);
+    if (access.tipo !== "guild" || !hasPermission(access.permissions, Permission.MANAGE_MESSAGES)) {
+      throw new ForbiddenException("Você não pode gerenciar as reações desta mensagem");
+    }
+  }
+
+  /**
    * Liga/desliga a prévia de link da mensagem ("remover prévia" do menu). Só o
    * autor ou quem modera o canal — é conteúdo da mensagem de outra pessoa
    * (g-emojis-midia).

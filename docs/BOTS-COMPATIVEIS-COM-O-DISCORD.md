@@ -374,13 +374,15 @@ hash, índice usado direto.
 | POST | `/api/v10/webhooks/:app/:token` (followup) |
 | GET/PATCH/DELETE | `/api/v10/webhooks/:app/:token/messages/@original` e `/:mid` |
 
-**F5 — o resto** (reações, membros, cargos, permissões de canal, bulk delete):
+**F5 — o resto** (membros, cargos, permissões de canal, bulk delete). As
+**reações já estão de pé** — as seis rotas, com o `@me` declarado antes do
+`:uid` e o emoji personalizado como `nome:snowflake` (§12, F5):
 
 | Método | Rota |
 |---|---|
-| PUT/DELETE | `/api/v10/channels/:id/messages/:mid/reactions/:emoji/@me` |
-| DELETE | `.../reactions/:emoji/:uid`, `.../reactions/:emoji`, `.../reactions` |
-| GET | `.../reactions/:emoji` (quem reagiu) |
+| PUT/DELETE | `/api/v10/channels/:id/messages/:mid/reactions/:emoji/@me` — **feito** |
+| DELETE | `.../reactions/:emoji/:uid`, `.../reactions/:emoji`, `.../reactions` — **feito** |
+| GET | `.../reactions/:emoji` (quem reagiu, `?limit&after`) — **feito** |
 | GET | `/api/v10/guilds/:id/members?limit&after` |
 | PATCH/PUT/DELETE | `/api/v10/guilds/:id/members/:uid[/roles/:rid]` |
 | DELETE | `/api/v10/guilds/:id/members/:uid` (kick) |
@@ -788,17 +790,52 @@ onEvent(cb: (alvo: Alvo, evento: string, dado: unknown) => void) { this.ouvintes
 | **F2** | **`VOICE_STATE_UPDATE`** | `voice.state` + a resposta ao op 4 do próprio bot |
 | **F2** | **`VOICE_SERVER_UPDATE`** | emitido por nós logo após o op 4 |
 | F3 | `INTERACTION_CREATE` | `InteractionsService` |
-| F5 | `MESSAGE_REACTION_ADD/REMOVE` | derivado de `message.updated` (ver abaixo) |
+| **F5** | **`MESSAGE_REACTION_ADD` / `_REMOVE`** | `reaction.added` / `reaction.removed` — **feito** |
+| **F5** | **`MESSAGE_REACTION_REMOVE_ALL` / `_REMOVE_EMOJI`** | `reactions.cleared` (`emoji` null ou preenchido) — **feito** |
 | F5 | `PRESENCE_UPDATE`, `GUILD_BAN_*`, `MESSAGE_DELETE_BULK`, `GUILD_EMOJIS_UPDATE` | `presence.update`, `messages.bulkDeleted`, `emoji.updated` |
 
-> **Reação é o ponto feio.** Hoje o Streamz não tem evento granular de reação:
-> `reaction.add` no WS resulta em **`message.updated` com a mensagem inteira**.
-> Para emitir `MESSAGE_REACTION_ADD` (que carrega `user_id` e `emoji`)
-> precisamos ou (i) diferenciar o estado anterior do novo dentro do
-> `CompatBridgeListener` — caro e sujeito a corrida — ou (ii) acrescentar um
-> evento interno `reaction.added`/`reaction.removed` no `MessagesService`, que
-> o web pode ignorar. **(ii)**, na F5, e é a única mudança no contrato existente
-> que este plano propõe.
+> **Reação era o ponto feio. Foi resolvido pela opção (ii), como previsto.**
+>
+> O defeito: `reaction.add` no WS resultava só em **`message.updated` com a
+> mensagem inteira**, sem `user_id`. Traduzido, virava um `MESSAGE_UPDATE` — a
+> lib do bot atualizava o cache da mensagem e **não disparava**
+> `messageReactionAdd`. Bot de *reaction roles* e de votação não funcionava.
+>
+> A saída foi a (ii): três eventos internos novos, em
+> `apps/api/src/modules/messages/eventos-de-reacao.ts`, emitidos por quem já
+> escrevia a reação (o `ChatGateway` e a REST de compat):
+>
+> | Evento interno | Payload | Vira |
+> |---|---|---|
+> | `reaction.added` | `ReactionEvent` (`messageId`, `channelId`, `guildId`, `userId`, `emoji`) | `MESSAGE_REACTION_ADD` |
+> | `reaction.removed` | idem | `MESSAGE_REACTION_REMOVE` |
+> | `reactions.cleared` | `ReactionClearedEvent` (`emoji: null` = todas) | `MESSAGE_REACTION_REMOVE_ALL` / `_REMOVE_EMOJI` |
+>
+> **O `message.updated` continua saindo junto**, com a mensagem inteira — é o
+> que o site e o desktop já instalado escutam, e trocar um pelo outro quebraria
+> cliente antigo. O que mudou é que ele sai por
+> `RealtimeService.emitToChannelSemOuvintes`, ou seja **sem** avisar a ponte:
+> se a ponte o visse, o bot receberia os dois, e o `MESSAGE_UPDATE` espúrio é
+> justamente o defeito. `emitToChannelSemOuvintes` é o espelho de
+> `notificarOuvintes` e existe só para isto; o par (grosso para o navegador,
+> fino para o bot) mora num arquivo só, para ninguém emitir metade.
+>
+> **O payload é o do Discord, campo por campo:** `user_id`, `channel_id`,
+> `message_id`, `guild_id` (ausente em DM), `member` (**só** no ADD e **só** em
+> servidor) e `emoji`. O filtro é o intent das reações —
+> `GUILD_MESSAGE_REACTIONS` em canal de servidor, `DIRECT_MESSAGE_REACTIONS` em
+> conversa direta —, não o das mensagens: um bot que pediu só `GUILD_MESSAGES`
+> não recebe reação, exatamente como no Discord.
+>
+> **Emoji:** `{ "id": null, "name": "👍", "animated": false }` no unicode e
+> `{ "id": "<snowflake>", "name": "festa", "animated": true }` no personalizado.
+> A tradução é única (`traducao/emoji.ts`) e vale também para o `reactions` do
+> objeto mensagem, que antes saía com o token interno (`<:festa:cm1x…>`) no
+> nome. O cuid nunca vaza.
+>
+> Ficou de fora, e é declarado: `message_author_id` (opcional, custaria uma
+> leitura da mensagem por evento) e as super-reações (`burst`, `burst_colors`),
+> que não existem no produto. Nenhuma lib depende deles.
 
 ---
 
@@ -1934,11 +1971,57 @@ apagar o **aplicativo** pelo portal tirando o bot de cada servidor onde está.
 ---
 
 ### F5 — O resto
-Reações granulares (com o evento interno novo), membros/cargos/bans/permissões
-de canal no REST, `MESSAGE_REACTION_*`, `PRESENCE_UPDATE`, componentes (botões e
-selects), modais, webhooks de entrada, embeds ricos, CDN de avatar no formato
-do Discord, DM com bot, `Request Guild Members`, mensagem efêmera de verdade.
-Sem estimativa — é uma fila, não uma fase.
+É uma fila, não uma fase: cada item entra sozinho, com a sua prova.
+
+#### Reações granulares — **feito**
+
+**Entrega:** uma reação chega ao bot como reação. Antes chegava como
+`MESSAGE_UPDATE`, e por isso bot de *reaction roles* e de votação não
+funcionava aqui.
+
+| Lote | Arquivos |
+|---|---|
+| Contrato | `packages/shared/src/eventos.ts` (`REACTION_ADDED`, `REACTION_REMOVED`, `REACTIONS_CLEARED`, `ReactionEvent`, `ReactionClearedEvent`) |
+| Tempo real | `modules/realtime/realtime.service.ts` (`emitToChannelSemOuvintes`), `modules/messages/eventos-de-reacao.ts` (o par grosso+fino), `modules/gateway/chat.gateway.ts` |
+| Escrita | `modules/messages/messages.service.ts` (`removeReactionOf`, `clearReactions`, `MANAGE_MESSAGES`) |
+| Casca | `discord-compat/traducao/emoji.ts` (tradução pura, nos dois sentidos), `discord-compat/reacoes.service.ts` (as idas ao banco), `gateway/dispatch.ts` (os 4 dispatches), `rest/messages.controller.ts` (as 6 rotas), `erros.ts` (10014) |
+
+**As rotas REST**, todas em `/channels/:id/messages/:mid`:
+
+| Método | Rota | Quem pode |
+|---|---|---|
+| PUT/DELETE | `.../reactions/:emoji/@me` | `ADD_REACTIONS` |
+| DELETE | `.../reactions/:emoji/:uid` | `MANAGE_MESSAGES` (`@me` cai na rota acima) |
+| GET | `.../reactions/:emoji?limit&after` | quem lê o canal |
+| DELETE | `.../reactions/:emoji` | `MANAGE_MESSAGES` |
+| DELETE | `.../reactions` | `MANAGE_MESSAGES` |
+
+O `:emoji` vem unicode **percent-encoded** (`%F0%9F%91%8D`) ou personalizado
+como **`nome:snowflake`** — e o `@me` é declarado **antes** do `:uid`, senão o
+Express casaria `@me` como id de usuário. Emoji personalizado que não existe
+aqui leva **10014** (`Unknown Emoji`), não um 404 mudo. O cursor do GET é o
+snowflake do usuário: `Reaction` não tem número próprio nem `createdAt`.
+
+**Prova** (`apps/api/test/discord-compat/prova.sh`, passo 5): o dono reage pelo
+socket.io, como o navegador faz → o bot emite `messageReactionAdd` com
+`user_id` e emoji certos e **zero** `messageUpdate`; o bot reage de volta pelo
+REST → a reação dele chega ao socket.io do dono sem F5;
+`reaction.users.fetch()` devolve quem reagiu; o dono desreage → o bot emite
+`messageReactionRemove`. Conferido à mão além disso: emoji personalizado
+(`festa:<snowflake>` na rota vira `<:festa:cuid>` no banco e volta com o
+snowflake no `emoji.id`), o 10014, e as três rotas de moderação com e sem
+`MANAGE_MESSAGES` (403 `50013` sem ela).
+
+**Limitação registrada:** a "reação de um bot em nome de outro" não existe (não
+há `MANAGE_MESSAGES` em DM, então lá cada um só tira a própria), e o
+`message_author_id`/`burst` do payload do Discord ficaram de fora (§7).
+
+#### Ainda na fila
+Membros/cargos/bans/permissões de canal no REST, `PRESENCE_UPDATE`,
+`GUILD_BAN_*`, `MESSAGE_DELETE_BULK`, `GUILD_EMOJIS_UPDATE`, componentes
+(botões e selects), modais, webhooks de entrada, embeds ricos, CDN de avatar no
+formato do Discord, DM com bot, `Request Guild Members`, mensagem efêmera de
+verdade. Sem estimativa.
 
 ---
 

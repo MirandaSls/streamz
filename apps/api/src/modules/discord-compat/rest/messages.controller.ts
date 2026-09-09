@@ -17,15 +17,25 @@ import { SkipThrottle } from "@nestjs/throttler";
 import { WS_EVENTS } from "@streamz/shared";
 import { zodBody } from "../../../common/zod.pipe";
 import { GuildsService } from "../../guilds/guilds.service";
+import { anunciarReacao, anunciarReacoesLimpas } from "../../messages/eventos-de-reacao";
 import { MessagesService } from "../../messages/messages.service";
 import { RealtimeService } from "../../realtime/realtime.service";
 import { BotTokenGuard } from "../bot-token.guard";
 import { DadosDeCompatService } from "../dados.service";
-import { canalDesconhecido, corpoInvalido, FiltroDeErrosDoDiscord, mensagemDesconhecida } from "../erros";
+import {
+  canalDesconhecido,
+  corpoInvalido,
+  emojiDesconhecido,
+  FiltroDeErrosDoDiscord,
+  mensagemDesconhecida,
+} from "../erros";
 import { IdsService } from "../ids.service";
 import { RateLimitDoDiscordInterceptor } from "../rate-limit.interceptor";
-import type { BotAutenticado, MensagemDoDiscord } from "../tipos";
+import { ReacoesDeCompatService } from "../reacoes.service";
+import type { BotAutenticado, MensagemDoDiscord, UsuarioDoDiscord } from "../tipos";
+import { lerEmojiDaRota } from "../traducao/emoji";
 import { mensagemParaDiscord } from "../traducao/mensagem";
+import { usuarioParaDiscord } from "../traducao/usuario";
 import { BotAtual } from "./bot-atual";
 import {
   corpoDeMensagemSchema,
@@ -72,8 +82,24 @@ import {
  * Como o service devolve o DTO (cuid, sem snowflake), a linha é relida por
  * `DadosDeCompatService.mensagemPorCuid` para montar a resposta.
  *
- * Reações: só o par mínimo do `@me` entra na F1 (o resto é F5). O emoji vem
- * **percent-encoded** na rota — `decodeURIComponent` antes de usar.
+ * **Reações (F5).** A F1 tinha só o par do `@me`; agora estão as seis rotas do
+ * Discord:
+ *
+ * | Método | Rota | Quem pode |
+ * |---|---|---|
+ * | PUT/DELETE | `.../reactions/:emoji/@me` | quem tem `ADD_REACTIONS` |
+ * | DELETE | `.../reactions/:emoji/:uid` | `MANAGE_MESSAGES` (`@me` cai na rota acima) |
+ * | GET | `.../reactions/:emoji?limit&after` | quem lê o canal |
+ * | DELETE | `.../reactions/:emoji` | `MANAGE_MESSAGES` |
+ * | DELETE | `.../reactions` | `MANAGE_MESSAGES` |
+ *
+ * O `:emoji` vem de dois jeitos e os dois passam por `lerEmojiDaRota`: unicode
+ * **percent-encoded** (`%F0%9F%91%8D`) e personalizado como **`nome:snowflake`**
+ * — nunca com o nosso cuid, que a casca esconde. Emoji personalizado que não
+ * existe aqui leva 10014, não 404 mudo.
+ *
+ * A ordem de declaração importa: `.../:emoji/@me` vem **antes** de
+ * `.../:emoji/:uid`, senão o `@me` casaria como se fosse um id de usuário.
  */
 @SkipThrottle()
 @UseFilters(FiltroDeErrosDoDiscord)
@@ -87,6 +113,7 @@ export class MessagesCompatController {
     private readonly guilds: GuildsService,
     private readonly mensagens: MessagesService,
     private readonly realtime: RealtimeService,
+    private readonly reacoes: ReacoesDeCompatService,
   ) {}
 
   @Get()
@@ -209,10 +236,11 @@ export class MessagesCompatController {
   ): Promise<void> {
     await this.cuidDoCanal(id);
     const mensagemId = await this.cuidDaMensagem(mid);
-    const mensagem = await this.mensagens.addReaction(mensagemId, bot.botUserId, lerEmoji(emoji));
-    // reação granular (`MESSAGE_REACTION_ADD`) é F5; hoje o tempo real do
-    // Streamz só sabe dizer "a mensagem mudou"
-    this.realtime.emitToChannel(mensagem.channelId, WS_EVENTS.MESSAGE_UPDATED, mensagem);
+    const token = await this.tokenDoEmoji(emoji);
+    const mensagem = await this.mensagens.addReaction(mensagemId, bot.botUserId, token);
+    // F5: o par `message.updated` (navegador) + `reaction.added` (ponte dos
+    // bots). Ver `messages/eventos-de-reacao.ts`.
+    anunciarReacao(this.realtime, "add", mensagem, bot.botUserId, token);
   }
 
   @Delete(":mid/reactions/:emoji/@me")
@@ -225,11 +253,125 @@ export class MessagesCompatController {
   ): Promise<void> {
     await this.cuidDoCanal(id);
     const mensagemId = await this.cuidDaMensagem(mid);
-    const mensagem = await this.mensagens.removeReaction(mensagemId, bot.botUserId, lerEmoji(emoji));
-    this.realtime.emitToChannel(mensagem.channelId, WS_EVENTS.MESSAGE_UPDATED, mensagem);
+    const token = await this.tokenDoEmoji(emoji);
+    const mensagem = await this.mensagens.removeReaction(mensagemId, bot.botUserId, token);
+    anunciarReacao(this.realtime, "remove", mensagem, bot.botUserId, token);
+  }
+
+  /**
+   * ── F5 ── Tira a reação de outra pessoa. `MANAGE_MESSAGES`.
+   *
+   * Declarada **depois** do `/@me` de propósito: o Express casa na ordem, e
+   * invertê-las faria `@me` chegar aqui como se fosse um id de usuário.
+   */
+  @Delete(":mid/reactions/:emoji/:uid")
+  @HttpCode(204)
+  async tirarReacaoDeAlguem(
+    @BotAtual() bot: BotAutenticado,
+    @Param("id") id: string,
+    @Param("mid") mid: string,
+    @Param("emoji") emoji: string,
+    @Param("uid") uid: string,
+  ): Promise<void> {
+    await this.cuidDoCanal(id);
+    const mensagemId = await this.cuidDaMensagem(mid);
+    const token = await this.tokenDoEmoji(emoji);
+    const alvo = await this.ids.cuidDeUsuario(uid);
+    // usuário que não existe: nada a tirar. O Discord devolve 204 nesse caso
+    // (a rota é idempotente), e é o que o `reaction.users.remove()` espera.
+    if (!alvo) return;
+
+    const mensagem = await this.mensagens.removeReactionOf(
+      mensagemId,
+      bot.botUserId,
+      alvo,
+      token,
+    );
+    anunciarReacao(this.realtime, "remove", mensagem, alvo, token);
+  }
+
+  /**
+   * ── F5 ── Quem reagiu com um emoji. `?limit` (1..100, padrão 25) e `?after`.
+   *
+   * É a rota do bot de votação: `reaction.users.fetch()`. O cursor é o
+   * snowflake do usuário, como no Discord.
+   */
+  @Get(":mid/reactions/:emoji")
+  async quemReagiu(
+    @BotAtual() bot: BotAutenticado,
+    @Param("id") id: string,
+    @Param("mid") mid: string,
+    @Param("emoji") emoji: string,
+    @Query() query: Record<string, string>,
+  ): Promise<UsuarioDoDiscord[]> {
+    await this.canalDoBot(bot, id);
+    const mensagemId = await this.cuidDaMensagem(mid);
+    await this.confereQueEDoCanal(mensagemId, id);
+    const token = await this.tokenDoEmoji(emoji);
+
+    const usuarios = await this.reacoes.quemReagiu(mensagemId, token, {
+      limit: query.limit === undefined ? undefined : Number(query.limit),
+      after: query.after,
+    });
+    return usuarios.map(usuarioParaDiscord);
+  }
+
+  /** ── F5 ── Limpa as reações de um emoji só. `MANAGE_MESSAGES`. */
+  @Delete(":mid/reactions/:emoji")
+  @HttpCode(204)
+  async limparEmoji(
+    @BotAtual() bot: BotAutenticado,
+    @Param("id") id: string,
+    @Param("mid") mid: string,
+    @Param("emoji") emoji: string,
+  ): Promise<void> {
+    await this.cuidDoCanal(id);
+    const mensagemId = await this.cuidDaMensagem(mid);
+    const token = await this.tokenDoEmoji(emoji);
+    const mensagem = await this.mensagens.clearReactions(mensagemId, bot.botUserId, token);
+    anunciarReacoesLimpas(this.realtime, mensagem, token);
+  }
+
+  /** ── F5 ── Limpa **todas** as reações da mensagem. `MANAGE_MESSAGES`. */
+  @Delete(":mid/reactions")
+  @HttpCode(204)
+  async limparTudo(
+    @BotAtual() bot: BotAutenticado,
+    @Param("id") id: string,
+    @Param("mid") mid: string,
+  ): Promise<void> {
+    await this.cuidDoCanal(id);
+    const mensagemId = await this.cuidDaMensagem(mid);
+    const mensagem = await this.mensagens.clearReactions(mensagemId, bot.botUserId, null);
+    anunciarReacoesLimpas(this.realtime, mensagem, null);
   }
 
   // ── internos ───────────────────────────────────────────────
+
+  /**
+   * O `:emoji` da rota → o token com que a reação é gravada aqui dentro.
+   *
+   * Unicode passa direto (só percent-decode); personalizado vira
+   * `<:nome:cuid>` depois de achar a linha pelo snowflake. Emoji personalizado
+   * que não existe neste Streamz leva **10014**, e não um 404 mudo: é o código
+   * que a lib do bot classifica.
+   */
+  private async tokenDoEmoji(cru: string): Promise<string> {
+    const token = await this.reacoes.tokenDaRota(lerEmojiDaRota(cru));
+    if (token === null) throw emojiDesconhecido();
+    return token;
+  }
+
+  /**
+   * A mensagem é mesmo deste canal?
+   *
+   * A mesma regra do `GET :mid`: o `:id` da rota é o que autoriza a leitura, e
+   * uma mensagem de outro canal, para o bot, é o mesmo que não existir.
+   */
+  private async confereQueEDoCanal(mensagemId: string, idDoCanal: string): Promise<void> {
+    const linha = await this.dados.mensagemPorCuid(mensagemId, null);
+    if (!linha || linha.channelSnowflake !== BigInt(idDoCanal)) throw mensagemDesconhecida();
+  }
 
   /** O `:id` da rota → cuid do canal. Categoria não tem mensagem. */
   private async cuidDoCanal(snowflake: string): Promise<string> {
@@ -292,17 +434,5 @@ export class MessagesCompatController {
 @Controller("v9/channels/:id/messages")
 export class MessagesCompatControllerV9 extends MessagesCompatController {}
 
-/**
- * O emoji vem percent-encoded na rota (`%F0%9F%91%8D`, ou `nome%3Aid` para os
- * personalizados). O Express já decodifica `req.params`, mas nem toda lib manda
- * o mesmo nível de escape — decodificar de novo o que já está decodificado é
- * inofensivo, e não decodificar deixaria a reação gravada com o `%`.
- */
-function lerEmoji(cru: string): string {
-  try {
-    return decodeURIComponent(cru);
-  } catch {
-    return cru;
-  }
-}
+
 

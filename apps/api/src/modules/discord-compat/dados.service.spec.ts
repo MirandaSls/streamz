@@ -127,8 +127,10 @@ describe("DadosDeCompatService.mensagensDoCanal", () => {
     });
 
     expect(mensagem.reactions).toEqual([
-      { emoji: "👍", count: 2, euReagi: true },
-      { emoji: "🎵", count: 1, euReagi: false },
+      // `personalizado` é null em emoji unicode (F5): só o `<:nome:cuid>` vai
+      // ao banco procurar a linha de `CustomEmoji`
+      { emoji: "👍", count: 2, euReagi: true, personalizado: null },
+      { emoji: "🎵", count: 1, euReagi: false, personalizado: null },
     ]);
   });
 });

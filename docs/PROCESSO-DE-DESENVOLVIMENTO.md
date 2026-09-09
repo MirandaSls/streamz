@@ -364,7 +364,8 @@ E do lado do cliente, duas exigências:
 | dar/tirar acesso a canal privado | `channel.created` / `.deleted` + entra/sai da sala | `user:<id>` de quem ganhou/perdeu | `handle*` | sim |
 | permissões de cargo e overrides de canal | `role.*`, `channel.overrides` | `guild:<id>` | `usePermissions.handle*` (+ recarrega a lista de canais) | sim |
 | **Mensagens** | | | | |
-| enviar, editar, apagar, reagir | `message.new` / `.updated` / `.deleted` | `channel:<id>` | `useMessages.handle*` (dedupe por id; o `nonce` só casa no autor) | sim |
+| enviar, editar, apagar | `message.new` / `.updated` / `.deleted` | `channel:<id>` | `useMessages.handle*` (dedupe por id; o `nonce` só casa no autor) | sim |
+| reagir, desreagir, limpar reações | `message.updated` (mensagem inteira, **só para o navegador**) **+** `reaction.added` / `.removed` / `reactions.cleared` (o delta, também para a ponte dos bots) | `channel:<id>` | `useMessages.handle*` pelo `message.updated`; o web ignora o delta de propósito | sim |
 | fixar/desafixar | `message.pinned` / `.unpinned` | `channel:<id>` | `usePins.handle*` | sim |
 | thread, enquete, exclusão em massa | `thread.updated`, `poll.updated`, `messages.bulkDeleted` | `channel:<id>` | stores correspondentes | sim |
 | emoji e figurinha do servidor | `emoji.updated` / `sticker.updated` | `guild:<id>` | `useEmojis.apply*` | sim |
