@@ -192,7 +192,9 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
           `wrap` não muda nada. */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {/* a busca ocupa a linha inteira quando a fileira quebra */}
-        <div className="relative min-w-0 flex-1 max-md:basis-full">
+        {/* `flex-none w-full` e não só `basis-full`: com o `flex-1` ao lado, o
+            `basis` perdia e a busca ficava com 110px mostrando "P…". */}
+        <div className="relative min-w-0 flex-1 max-md:basis-full celular:w-full celular:flex-none">
           <Search
             size={14}
             aria-hidden="true"
@@ -209,7 +211,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
             className={`${ESTILO_CAMPO} pl-8`}
           />
         </div>
-        <div className="w-[180px] shrink-0">
+        <div className="w-[180px] shrink-0 celular:w-full">
           <Select
             semDivisoria
             value={cargoId}
