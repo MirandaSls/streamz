@@ -1557,9 +1557,21 @@ aba da descoberta de servidores.**
   aplicativos". E nada de bússola: o `explore.svg` do acervo não é uma — está
   escrito no próprio `icones.tsx`, e o §3.3 do processo registra que isso já
   passou por typecheck e teste uma vez.
-- **Tela**: grade de cards (ícone 80, nome, descrição de uma linha, botão
+- **Tela**: grade de cards (ícone 48, nome, descrição de **duas** linhas, botão
   "Adicionar ao servidor"), busca no topo, exatamente o padrão do
   `DiscoverableGuild`. `GET /api/applications/publicas?q=`.
+
+  **Correção da F4, medida na captura.** Este § pedia "ícone 80" e "descrição de
+  uma linha". O card do Discord (`docs/Reference/apps/diretorio-grade.png`,
+  varrido com Pillow) mede **244 × 164** com o ícone de **48** *à esquerda*, o
+  nome ao lado e a descrição em **duas** linhas — não um ícone grande empilhado
+  em cima do nome. Com 80 empilhado não sobra linha para a descrição que este
+  mesmo parágrafo pede.
+
+  A altura que entregamos é **204**, e não 164, por uma escolha nossa: no
+  Discord o card **não tem botão** — o "Add to Server" mora só na página do app.
+  Este § pede o botão no card, e ele custa 32 de altura mais 8 de folga. Todo o
+  resto (largura, ícone, intervalo, raio, padding) é o número medido.
 
   **Cuidado do Nest:** `@Get("publicas")` tem que ser declarado **antes** de
   `@Get(":id")`. O Nest casa na ordem de declaração; ao contrário, `publicas`
@@ -1629,10 +1641,21 @@ Telas:
 5. **Servidores** — onde está instalado, com "Remover".
 
 **Nunca**, em nenhuma tela ou log: o token inteiro depois da criação. A UI
-mostra `prefixo` (8 caracteres). O `StructuredLogger` da API precisa de um
-redator para `Authorization` — hoje ele não loga cabeçalho, mas a rota de
-criação vai devolver o token no corpo e um log de erro genérico poderia
-carregá-lo.
+mostra `prefixo` (8 caracteres).
+
+**Correção da F4: o risco não é o cabeçalho.** Este § pedia um redator de
+`Authorization` no `StructuredLogger`. Conferido em `common/logger.ts`: ele
+**não loga cabeçalho nenhum**, não há middleware de log de requisição e o único
+`@Catch` do repo (`discord-compat/erros.ts`) monta o corpo do erro do Discord e
+não o registra. O risco real é outro, e mora no `descreve()`: qualquer objeto
+passado a `logger.*` vira `JSON.stringify(valor)` **inteiro**, e o mesmo vale
+para os `extra`. Um `this.logger.error("falhou", { resposta })` num caminho
+futuro levaria o token em claro para o agregador. **Não há chamada assim hoje** —
+conferido nas rotas de criar e de regenerar, que devolvem o `TokenCriado` e não
+o logam. O conserto certo é uma lista de chaves a redigir dentro de
+`descreve()`/`limpar()`, em `common/logger.ts` — arquivo de todo mundo, e por
+isso deixado para um PR próprio, com teste, em vez de entrar no meio de uma fase
+de três lotes paralelos.
 
 ### O membro-bot na interface
 

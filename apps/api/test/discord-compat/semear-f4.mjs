@@ -15,12 +15,17 @@
 // Imprime **uma linha de JSON** no stdout. O token do bot só existe aqui: o
 // banco guarda o sha256.
 //
-// Duas coisas são escritas direto no banco, e não por rota, porque as rotas que
-// as fariam são do **lote A** e ainda não existem:
+// **Na integração da F4 a semente passou a publicar pela rota.** Enquanto o
+// lote B rodava sozinho, `publico: true`, `description` e `permissoesPadrao`
+// eram escritos direto no banco, porque o `PATCH /applications/:id` que os
+// faria era do lote A e não existia naquela árvore. Agora existe — e a prova
+// (a) da fase é justamente "o dono cria o app **pela UI** e o publica", então
+// escrever isso por baixo da rota seria provar menos do que o documento pede.
 //
-//   * `publico: true` e `permissoesPadrao` (seriam `PATCH /applications/:id`);
-//   * o segundo membro do servidor (seria um convite — o que interessa dele é
-//     só não ter `MANAGE_GUILD`).
+// Sobra **uma** escrita direta, e ela é de conveniência, não de recurso: o
+// segundo membro do servidor. A rota que o poria lá é um convite, e o que
+// interessa dele para a prova é só **não ter `MANAGE_GUILD`** — aceitar um
+// convite não é o que a F4 entrega.
 
 import { PrismaClient } from "@prisma/client";
 
@@ -86,15 +91,17 @@ try {
       corpo: { name: item.name },
       token: acesso,
     });
-    // publicar e sugerir permissões — o `PATCH` é do lote A
-    await prisma.application.update({
-      where: { id: app.app.id },
-      data: {
+    // publicar e sugerir permissões, pelo `PATCH` do lote A — é o que o
+    // interruptor "Publicar no diretório" do portal faz
+    await chamar(`/applications/${app.app.id}`, {
+      metodo: "PATCH",
+      corpo: {
         publico: true,
         description: item.description,
         // VIEW_CHANNEL | SEND_MESSAGES | ADD_REACTIONS = 1 | 2 | 1024
         permissoesPadrao: 1 | 2 | 1024,
       },
+      token: acesso,
     });
     criados.push({ id: app.app.id, name: item.name, token: app.token.token, botUserId: app.app.botUser.id });
   }

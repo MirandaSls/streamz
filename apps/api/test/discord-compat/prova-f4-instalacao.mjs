@@ -18,7 +18,13 @@
 //   5. o cargo gerenciado existe, com **as permissões escolhidas**, e o
 //      usuário-bot o está vestindo;
 //   6. `DELETE` → `guildDelete` dispara, o membro sai e o cargo some;
-//   7. quem não tem `MANAGE_GUILD` leva **403** da rota.
+//   7. quem não tem `MANAGE_GUILD` leva **403** da rota;
+//   8. **a junção A↔B**, ligada na integração da fase: `GET
+//      /applications/:id/servidores` enxerga a instalação, e `DELETE
+//      /applications/:id` (apagar o aplicativo pelo portal) tira o bot de cada
+//      servidor onde ele está — com `GUILD_DELETE`, o cargo apagado e o membro
+//      fora da lista. Era o `[]` e o `TODO` que os PRs dos lotes A e B
+//      deixaram anotados como "inerte", e que só a integração podia fechar.
 //
 // Roda num contêiner `node:22` com `discord.js@14` e `socket.io-client`
 // instalados na hora (são ferramenta de prova, não dependência do produto).
@@ -329,6 +335,90 @@ let instalacao;
     cargosApagados.some((c) => c.roleId === instalacao?.roleId) &&
       membrosQueSairam.some((m) => m.userId === semente.bot.userId),
     `role.deleted=${cargosApagados.length} member.left=${membrosQueSairam.length}`,
+  );
+}
+
+// ── 8. a junção A↔B: o portal enxerga a instalação, e apagar o app desfaz ──
+//
+// Reinstala (o passo 6 acabou de remover) para haver o que desfazer, e então
+// apaga o **aplicativo** pelo portal — não a instalação. O cascade do banco
+// deixaria o banco consistente sozinho; o que esta prova observa é o que ele
+// **não** faz: o `GUILD_DELETE` no bot conectado e o `member.left` no
+// navegador.
+{
+  entrou.length = 0;
+  saiu.length = 0;
+  cargosApagados.length = 0;
+  membrosQueSairam.length = 0;
+
+  const r = await chamar(`/guilds/${semente.servidor.id}/aplicativos`, {
+    metodo: "POST",
+    corpo: { applicationId: semente.bot.applicationId, permissions: ESCOLHIDAS },
+    token: semente.dono.accessToken,
+  });
+  const reinstalada = r.corpo;
+  registrar(
+    "8. reinstalado, para haver o que desfazer",
+    r.status === 201 || r.status === 200,
+    `${r.status} — cargo=${reinstalada?.roleId}`,
+  );
+  await ate(() => entrou.length > 0, 20_000, "o guildCreate da reinstalação");
+
+  // 8b. a tela "Servidores" do portal (lote A) — era o `[]` com TODO
+  const servidores = await chamar(`/applications/${semente.bot.applicationId}/servidores`, {
+    token: semente.dono.accessToken,
+  });
+  const aqui = servidores.corpo?.find((g) => g.guildId === semente.servidor.id);
+  registrar(
+    "8b. GET /applications/:id/servidores enxerga a instalação (era `[]`)",
+    servidores.status === 200 && !!aqui && aqui.permissions === ESCOLHIDAS,
+    `${servidores.status} — ${JSON.stringify(servidores.corpo)}`,
+  );
+
+  // 8c. apagar o APLICATIVO pelo portal
+  const del = await chamar(`/applications/${semente.bot.applicationId}`, {
+    metodo: "DELETE",
+    token: semente.dono.accessToken,
+  });
+  registrar("8c. DELETE /applications/:id (apagar o aplicativo)", del.status === 204, `${del.status}`);
+
+  const foi = await ate(() => saiu.length > 0, 20_000, "o guildDelete de apagar o app");
+  registrar(
+    "8d. o bot conectado recebeu GUILD_DELETE ao app ser apagado",
+    foi && saiu[0]?.id === semente.servidor.snowflake,
+    `guildDelete=${JSON.stringify(saiu)} guilds.cache.size=${cliente.guilds.cache.size}`,
+  );
+
+  registrar(
+    "8e. o navegador viu o cargo sumir e o bot sair (o evento que o cascade NÃO dá)",
+    cargosApagados.some((c) => c.roleId === reinstalada?.roleId) &&
+      membrosQueSairam.some((m) => m.userId === semente.bot.userId),
+    `role.deleted=${cargosApagados.length} member.left=${membrosQueSairam.length}`,
+  );
+
+  const membros = await chamar(`/guilds/${semente.servidor.id}/members`, {
+    token: semente.dono.accessToken,
+  });
+  registrar(
+    "8f. o membro-bot não ficou órfão na lista de membros",
+    !membros.corpo?.some((m) => m.user?.id === semente.bot.userId),
+    `membros: ${membros.corpo?.map((m) => m.user?.username).join(", ")}`,
+  );
+
+  const cargos = await chamar(`/guilds/${semente.servidor.id}/roles`, {
+    token: semente.dono.accessToken,
+  });
+  registrar(
+    "8g. o cargo gerenciado sumiu junto",
+    !cargos.corpo?.some((c) => c.id === reinstalada?.roleId),
+    `cargos restantes: ${cargos.corpo?.map((c) => c.name).join(", ")}`,
+  );
+
+  const diretorio = await chamar("/applications/publicas", { token: semente.dono.accessToken });
+  registrar(
+    "8h. o aplicativo apagado saiu do diretório",
+    !diretorio.corpo?.itens?.some((a) => a.id === semente.bot.applicationId),
+    `${diretorio.corpo?.itens?.length} no diretório`,
   );
 }
 
