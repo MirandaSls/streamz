@@ -24,6 +24,7 @@ JSON e plist validados por parser — não com build.
 9. [Cadência de release dos quatro juntos](#9-cadência-de-release-dos-quatro-juntos)
 10. [O que este trabalho NÃO prova](#10-o-que-este-trabalho-não-prova)
 11. [Os três PRs](#11-os-três-prs)
+12. [A chamada em segundo plano no Android](#12-a-chamada-em-segundo-plano-no-android)
 
 ---
 
@@ -82,6 +83,11 @@ não estimados:
 
 O `.apk` é o dobro do `.aab` porque leva as bibliotecas nativas de todas as
 ABIs; a Play entrega só a do aparelho.
+
+O Bloco 2 deixou uma pendência declarada em voz alta: as permissões
+`FOREGROUND_SERVICE*` estavam no manifesto e **o serviço nativo não existia**,
+então minimizar o app durante uma chamada derrubava o áudio. Isso foi fechado
+depois, num PR próprio — ver §12.
 
 ### iOS — nada
 
@@ -293,7 +299,7 @@ valem, e o diretório é `src-tauri/` — o mesmo do `tauri.conf.json`, **não**
 Escolhemos a variante `.ios` porque `Info.plist` alcançaria também um eventual
 bundle de macOS, e `UIBackgroundModes` e as chaves `NS*UsageDescription` de
 câmera/microfone não são as mesmas no macOS. O
-`apps/desktop/CONTRATO-MOBILE.md` §7 dizia `Info.plist`; foi corrigido para
+`apps/desktop/CONTRATO-MOBILE.md` §8 dizia `Info.plist`; foi corrigido para
 `Info.ios.plist`.
 
 ### `UIBackgroundModes` tem `audio` e **não** tem `voip`
@@ -660,3 +666,134 @@ O `apps/desktop/CONTRATO-MOBILE.md` foi escrito pelo Bloco 2 (é ele que decide 
 montagem) e vai commitado no PR do Bloco 3 só porque o Bloco 3 é o último a
 entrar. A única correção feita nele aqui foi o nome do plist — `Info.ios.plist`
 em vez de `Info.plist` (§6).
+
+## 12. A chamada em segundo plano no Android
+
+### O problema, e por que ele não se resolve na web
+
+O Android não deixa um app em segundo plano segurar o microfone nem tocar áudio
+indefinidamente. Apertar Home no meio de uma call derruba a captura em alguns
+segundos e o WebView é estrangulado logo depois: o usuário some da sala sem
+nunca ter pedido para sair. Nenhuma configuração de webview, nenhum
+`wakeLock` de JavaScript e nenhum truque de `<audio>` contorna isso — o
+contrato do sistema é explícito e tem um preço único: **enquanto houver uma
+notificação persistente de um serviço de primeiro plano, o processo é
+intocável**.
+
+Por isso a notificação não é enfeite. Ela é a contrapartida.
+
+### As peças
+
+| arquivo | papel |
+|---|---|
+| `gen/android/…/dev/streamz/app/ChamadaService.kt` | o `Service`. Sobe com `ServiceCompat.startForeground`, escreve a notificação persistente e a derruba no `parar` |
+| `gen/android/…/dev/streamz/app/ChamadaPlugin.kt` | a ponte Kotlin, no formato de plugin Tauri 2 mobile (`@TauriPlugin`/`@Command`/`@InvokeArg`). É quem pede `POST_NOTIFICATIONS` |
+| `src-tauri/src/chamada.rs` | o lado Rust do plugin, **inteiro** atrás de `#[cfg(target_os = "android")]` |
+| `src-tauri/build.rs` | o `InlinedPlugin` que gera a ACL `chamada:default` que a `capabilities/mobile.json` lista |
+| `gen/android/…/res/drawable/ic_notificacao_chamada.xml` | o ícone pequeno, vazado — um PNG opaco viraria um quadrado branco na barra de status |
+| `apps/web/stores/servico-de-chamada.ts` | a decisão pura de quando ligar e desligar, com teste |
+
+A superfície de comandos está em `apps/desktop/CONTRATO-MOBILE.md` §7.
+
+### As três decisões que mais custaram
+
+1. **`foregroundServiceType="microphone|mediaPlayback"`, os dois.** A partir do
+   Android 14 (API 34) o serviço declara o *tipo* e o sistema confere contra a
+   permissão `FOREGROUND_SERVICE_*` correspondente — faltando uma, o app cai com
+   `SecurityException`. Uma call é as duas coisas: captura (microfone) e
+   reprodução (a voz dos outros). Declarar só `microphone` deixaria o áudio
+   remoto sujeito ao corte, que é metade do defeito de volta.
+2. **`startService`, não `startForegroundService`.** Quem liga o serviço é o
+   webview no instante em que a call conecta, ou seja, com o app na frente — e
+   aí a partida é permitida sem o contrato dos 5 segundos. Estourar aquele prazo
+   mata o app com `ForegroundServiceDidNotStartInTimeException`.
+3. **Negar a notificação não derruba a call.** No Android 13+ `POST_NOTIFICATIONS`
+   é permissão de tempo de execução, pedida na primeira chamada. Se o usuário
+   recusar, o serviço **sobe do mesmo jeito** e o que se perde é o aviso na tela.
+   A permissão governa a notificação, não o direito de continuar capturando.
+
+E uma quarta, do lado da web: **`status: "error"` não desliga o serviço.** A
+queda de mídia (`RoomEvent.Disconnected`) deixa o `channelId` de pé, com o
+`reconnect()` a caminho; desligar ali faria a notificação piscar a cada
+reconexão e — pior — entregaria o processo ao sistema justamente no momento em
+que ele precisa de fôlego para voltar. Quem desliga é o `channelId` zerar, que
+é por onde passam os sete motivos de saída de `voice-saida.ts`.
+
+### O que foi provado, e como
+
+Emulador **Android 14 (API 34)**, imagem `google_apis` x86_64, com `/dev/kvm`
+neste servidor — API 34 importa porque é a versão que passou a exigir o
+`foregroundServiceType`. O `.apk` é um **debug** do mesmo commit, apontado para
+uma API e um LiveKit **descartáveis** (containers `prova-*`, nada de produção);
+o `.apk` de release entregue neste PR aponta para `api.streamz.chat` como
+sempre. A saída completa está em
+`.claude/saida-android/1.1.1-1c19c00/prova-do-servico.txt` e os prints em
+`prints/` ao lado.
+
+1. **`POST_NOTIFICATIONS` é pedida em tempo de execução, na primeira chamada.**
+   A permissão foi *revogada* antes do teste; o diálogo do sistema apareceu
+   **por cima da call já conectada**, que é exatamente o momento em que o
+   plugin a pede (`prints/01-permissao-post-notifications.png`).
+
+2. **O serviço sobe com o tipo certo.** Com a call conectada:
+
+   ```
+   * ServiceRecord{a90399e u0 dev.streamz.app/.ChamadaService}
+     intent={act=dev.streamz.app.CHAMADA_INICIAR cmp=dev.streamz.app/.ChamadaService}
+     isForeground=true foregroundId=42 types=00000082
+     foregroundNoti=Notification(channel=chamada-em-andamento ... flags=0x6a
+                                 color=0xff9be31f category=call actions=1 ...)
+   ```
+
+   `types=00000082` é `0x80 | 0x02` — `MEDIA_PLAYBACK` **e** `MICROPHONE`, os
+   dois que o `<service>` do manifesto declara. `flags=0x6a` traz o
+   `ONGOING_EVENT` (não dá para dispensar deslizando) e `actions=1` é o "Sair
+   da chamada".
+
+3. **Minimizar não derruba mais a chamada.** `KEYCODE_HOME`, 60 s de espera com
+   o launcher em primeiro plano, e então:
+
+   ```
+   topResumedActivity=...nexuslauncher/.NexusLauncherActivity
+   * ServiceRecord{a90399e u0 dev.streamz.app/.ChamadaService}
+     isForeground=true foregroundId=42 types=00000082
+   LiveKit voice:cmtucr2n... | num_participants: 1 | num_publishers: 1
+   ```
+
+   O `num_publishers: 1` é o ponto: não é só a sinalização que sobreviveu — a
+   faixa de microfone continua publicada. A notificação na gaveta, com o app em
+   segundo plano, está em `prints/02-notificacao-em-segundo-plano.png`.
+
+4. **Voltar não reconecta.** De volta ao app, o cronômetro da call segue
+   correndo (`2:03` no print) e o `sid` do participante no LiveKit é o mesmo:
+   é a mesma sessão, não uma reconexão silenciosa
+   (`prints/03-de-volta-ainda-na-call.png`).
+
+5. **O botão da notificação sai pelo caminho normal.** Tocar em "Sair da
+   chamada" com o app em segundo plano:
+
+   ```
+   17:45:03  V Tauri/Plugin: pluginId: chamada, command: iniciarServicoDeChamada
+   17:45:36  V Tauri/Plugin: pluginId: chamada, command: pararServicoDeChamada
+   ChamadaService no dumpsys: 0
+   LiveKit ... | num_participants: 0     motivo: CLIENT_INITIATED
+   ```
+
+   `CLIENT_INITIATED` é a prova de que quem saiu foi o `disconnect()` da store
+   — o Kotlin avisou pelo `Channel`, a web decidiu, e só então a store mandou
+   `pararServicoDeChamada`. Se o Kotlin tivesse encerrado por conta própria, o
+   LiveKit teria registrado uma queda, não uma saída.
+
+### O que isto ainda não prova
+
+- **Que funciona em aparelho de verdade.** O emulador é `google_apis` x86_64;
+  fabricante nenhum entra nessa conta, e Xiaomi, Samsung e Huawei têm cada um a
+  sua camada de "otimização de bateria" que mata serviço de primeiro plano em
+  situações que o AOSP não mata. É a diferença entre "o Android permite" e "este
+  telefone permite".
+- **Que a Play aceita.** A partir de 2024 a Play pede justificativa de uso para
+  cada `foregroundServiceType` declarado na ficha da loja. É trabalho de
+  publicação, não de código.
+- **Áudio de verdade.** O emulador não tem microfone físico; o que se prova aqui
+  é que a **conexão** e o **serviço** sobrevivem ao segundo plano, não que a voz
+  chega do outro lado.

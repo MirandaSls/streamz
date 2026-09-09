@@ -32,9 +32,13 @@ import {
 import { api } from "@/lib/api";
 import {
   descartarTelaNativa as ponteDescartarTela,
+  ehAndroidNoTauri,
+  iniciarServicoDeChamada,
   iniciarTelaNativa,
   isTauri,
+  ouvirSaidaPelaNotificacao,
   ouvirTelaEncerrada,
+  pararServicoDeChamada,
   pararTelaNativa,
   prepararTelaNativa as pontePrepararTela,
 } from "@/lib/desktop";
@@ -65,6 +69,7 @@ import { iniciarMedicaoDePing, pararMedicaoDePing } from "@/stores/voice-ping";
 import { estadosAposReconexao, type Recarga } from "@/stores/voice-reconexao";
 import { chamadaARetomar, esquecerSala, lembrarSala, salaLembrada } from "@/stores/voice-retomada";
 import { decidirMovido } from "@/stores/voice-mover";
+import { chaveDaAcao, decidirServicoDeChamada } from "@/stores/servico-de-chamada";
 import { decidirSaida, type MotivoDeSaida } from "@/stores/voice-saida";
 import {
   NINGUEM,
@@ -1988,6 +1993,50 @@ if (typeof window !== "undefined") {
     // de microfone.
     void republicarMicrofone(useVoice.getState().audio);
     if (devices.outputId) void room.switchActiveDevice("audiooutput", devices.outputId).catch(() => {});
+  });
+}
+
+// ── Chamada em segundo plano no Android ────────────────────────────────────
+//
+// O serviço de primeiro plano (`ChamadaService.kt`) é o que impede o Android de
+// derrubar o áudio quando o app sai da frente. Ele é ligado quando a call
+// conecta e desligado quando ela acaba — e a ligação com a store é uma
+// **assinatura**, não uma chamada espalhada pelos sete caminhos de saída e
+// pelos três de entrada. Motivo: `reconnect()` passa por `fecharSala()` sem
+// passar por `sairDaSalaAtual`, e `RoomEvent.Disconnected` mexe no `status` sem
+// mexer no `channelId`; anotar cada um desses pontos à mão seria esquecer um.
+// Aqui a regra mora em `decidirServicoDeChamada` (pura e testada) e este bloco
+// só evita repetir a mesma ordem.
+//
+// A assinatura **só é criada no app Android**: no desktop, no iOS e no
+// navegador este `if` é falso e não há ouvinte nenhum pendurado na store.
+if (typeof window !== "undefined" && ehAndroidNoTauri()) {
+  let ultima = "";
+
+  const sincronizar = () => {
+    const s = useVoice.getState();
+    const acao = decidirServicoDeChamada({
+      ehAndroid: true,
+      status: s.status,
+      channelId: s.channelId,
+      guildId: s.guildId,
+      channelName: s.channelName,
+    });
+    const chave = chaveDaAcao(acao);
+    if (chave === ultima) return;
+    ultima = chave;
+    if (acao.acao === "iniciar") void iniciarServicoDeChamada(acao.titulo, acao.texto);
+    else if (acao.acao === "parar") void pararServicoDeChamada();
+  };
+
+  useVoice.subscribe(sincronizar);
+
+  // O botão "Sair da chamada" da notificação. `disconnect()` é o mesmo caminho
+  // do botão de desligar do rodapé — passa por `sairDaSalaAtual("usuario")`,
+  // avisa o gateway e zera o `channelId`, o que faz a assinatura acima parar o
+  // serviço. Ou seja: o Kotlin não desliga nada por conta própria.
+  ouvirSaidaPelaNotificacao(() => {
+    if (useVoice.getState().channelId) void useVoice.getState().disconnect();
   });
 }
 

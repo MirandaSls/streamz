@@ -626,10 +626,15 @@ dão** — para isso existe `bundle.android.versionCode`.
 **O que este build NÃO prova.** Que o app abre, que o microfone funciona, que a
 chamada entra. Isso é aparelho ou emulador; aqui se prova que o pacote existe,
 declara as permissões que dissemos que declara (`aapt dump badging`) e está
-assinado com a chave de release (`apksigner verify`). E, explicitamente: as
-permissões `FOREGROUND_SERVICE*` estão **declaradas e inertes** — o serviço
-nativo que mantém a chamada viva com o app em segundo plano ainda não existe,
-então minimizar o app durante uma call continua derrubando o áudio.
+assinado com a chave de release (`apksigner verify`).
+
+**A chamada em segundo plano.** As permissões `FOREGROUND_SERVICE*` já não são
+declaração vazia: o serviço nativo existe desde o PR do
+`feat/android-servico-de-chamada` — `ChamadaService.kt` (o `Service` com
+`foregroundServiceType="microphone|mediaPlayback"` e a notificação persistente)
+e `ChamadaPlugin.kt` (a ponte, no formato de plugin Tauri 2 mobile), ligados e
+desligados pela web em `stores/servico-de-chamada.ts`. Detalhe e a prova de
+emulador em `docs/APPS-MOBILE.md` §12.
 
 **Atualização.** O atualizador do Tauri não existe para Android. A rota
 `/api/updates` responde ao alvo `android` (`ANDROID_UPDATE_VERSION` e

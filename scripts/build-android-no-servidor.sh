@@ -15,10 +15,11 @@
 #     emulador; aqui se prova que o pacote existe, tem as permissões que
 #     dissemos que tem e está assinado com a chave de release. É a mesma
 #     ressalva do §5.3 para o instalador do Windows.
-#   - que a chamada continua em segundo plano. As permissões
-#     `FOREGROUND_SERVICE*` estão declaradas no `AndroidManifest.xml`, mas o
-#     serviço nativo que as usa **não existe ainda** — está escrito lá, em voz
-#     alta.
+#   - que a chamada continua em segundo plano. O serviço nativo que segura a
+#     call com o app minimizado existe (`ChamadaService.kt`, ver
+#     `docs/APPS-MOBILE.md` §12), e o `aapt dump badging` abaixo mostra as
+#     `FOREGROUND_SERVICE*` que ele usa — mas quem prova que **funciona** é o
+#     emulador, não este script.
 #   - que a Play aceita o `.aab`. Isso depende de conta de desenvolvedor, ficha
 #     da loja e política de privacidade, que são trabalho de fora do código.
 #
@@ -251,5 +252,6 @@ docker run --rm -v "$SAIDA:/s:ro" "$IMAGEM" bash -c "
 echo
 echo "O que isto prova: o pacote existe, declara as permissões acima e está"
 echo "assinado. O que NÃO prova: que o app abre, que o microfone funciona e"
-echo "que a chamada sobrevive em segundo plano (o serviço de primeiro plano"
-echo "ainda não existe — só a permissão). Ver o cabeçalho deste arquivo."
+echo "que a chamada sobrevive em segundo plano — o serviço de primeiro plano"
+echo "existe (ChamadaService.kt), mas quem prova que ele segura a call é o"
+echo "emulador (docs/APPS-MOBILE.md §12). Ver o cabeçalho deste arquivo."
