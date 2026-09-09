@@ -1,7 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissoes da janela principal do Streamz desktop: sem decoracao nativa (a barra de titulo e nossa), notificacao, checagem de atualizacao, a criacao da janelinha (splash) que baixa e instala, e as acoes da imagem em tela cheia (abrir no navegador do sistema, copiar o bitmap e Salvar como).",
+  "description": "Permissoes da janela principal do Streamz DESKTOP: sem decoracao nativa (a barra de titulo e nossa), notificacao, checagem de atualizacao, a criacao da janelinha (splash) que baixa e instala, e as acoes da imagem em tela cheia (abrir no navegador do sistema, copiar o bitmap e Salvar como). O campo platforms existe porque metade destas permissoes nao existe no Android/iOS (maximizar, arrastar a janela, atualizador): sem ele o build mobile falha ao resolver a ACL. As permissoes de celular estao em mobile.json.",
+  "platforms": ["windows", "linux", "macOS"],
   "windows": ["main"],
   "permissions": [
     "core:default",

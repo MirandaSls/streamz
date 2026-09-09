@@ -1,0 +1,17 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!--
+      O app é escuro nos dois modos do sistema (não há tema claro no Streamz),
+      então `values/` e `values-night/` são iguais de propósito: sem isto, o
+      aparelho no modo claro pintaria o fundo da janela de branco antes de o
+      WebView desenhar, e a abertura piscava.
+
+      `windowBackground` cobre o intervalo entre o toque no ícone e o primeiro
+      quadro; `statusBarColor`/`navigationBarColor` fazem as barras do sistema
+      combinarem com o app em vez de emoldurá-lo de branco.
+    -->
+    <style name="Theme.streamz_desktop" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/streamz_fundo</item>
+        <item name="android:statusBarColor">@color/streamz_fundo</item>
+        <item name="android:navigationBarColor">@color/streamz_fundo</item>
+    </style>
+</resources>
