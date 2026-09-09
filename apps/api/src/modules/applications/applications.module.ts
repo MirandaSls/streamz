@@ -9,6 +9,7 @@ import { AuthModule } from "../auth/auth.module";
 import { GuildsModule } from "../guilds/guilds.module";
 import { RealtimeModule } from "../realtime/realtime.module";
 import { RolesModule } from "../roles/roles.module";
+import { StorageModule } from "../storage/storage.module";
 
 /**
  * ── j-bots ── o registro de um bot.
@@ -16,6 +17,9 @@ import { RolesModule } from "../roles/roles.module";
  * `AuthModule` entra porque o `JwtGuard` depende do `JwtService` e do
  * `AccountStatusService` — é o mesmo import que todo módulo com rota
  * autenticada faz.
+ *
+ * `StorageModule` entra na F4, pelo ícone do aplicativo: é o mesmo import que
+ * `emojis` e `soundboard` fazem para guardar um objeto no R2.
  *
  * O `ApplicationsService` é exportado porque o `BotTokenGuard` da fase
  * seguinte precisa do `verificarToken`.
@@ -39,7 +43,7 @@ import { RolesModule } from "../roles/roles.module";
  * portal ganhe um `@Get(":id…")` depois.
  */
 @Module({
-  imports: [AuthModule, GuildsModule, RolesModule, RealtimeModule],
+  imports: [AuthModule, GuildsModule, RolesModule, RealtimeModule, StorageModule],
   controllers: [DiretorioController, ApplicationsController, InstalacaoController],
   providers: [ApplicationsService, DiretorioService, InstalacaoService],
   exports: [ApplicationsService, InstalacaoService],
