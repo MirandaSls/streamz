@@ -55,8 +55,11 @@ const GRUPOS: { id: string; label?: string; abas: ServerSettingsTab[] }[] = [
   /* ── j-bots ── "Aplicativos" ganhou grupo próprio, e não uma linha em
      "Pessoas": um bot instalado é uma integração do servidor, não gente que
      entrou nele, e o Discord também o tira dali (no menu dele são
-     "Integrações" e "Diretório de Apps", acima de "Moderação"). */
-  { id: "aplicativos", label: "Aplicativos", abas: ["aplicativos"] },
+     "Integrações" e "Diretório de Apps", acima de "Moderação").
+     **Sem `label`**, como o grupo do topo: o cabeçalho em caixa-alta repetiria
+     a palavra do único item embaixo dele — "APLICATIVOS / Aplicativos" —, e a
+     divisória entre grupos (`i > 0`, não depende do rótulo) já separa. */
+  { id: "aplicativos", abas: ["aplicativos"] },
   { id: "moderacao", label: "Moderação", abas: ["audit", "bans", "reports"] },
 ];
 

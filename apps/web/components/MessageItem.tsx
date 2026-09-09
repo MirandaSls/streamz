@@ -154,9 +154,17 @@ function ReplyReference({ message }: { message: Message }) {
       {/* ── j-bots ── responder a um bot também tem que dizer que é um bot: sem
           isto a barra de resposta seria a única superfície com nome de autor
           sem a pílula, e é justamente ela que aparece quando alguém responde a
-          uma resposta de comando de barra. A linha é de 18px, e a pílula de 15
-          cabe centrada (o pai já é `items-center`). */}
-      {ref.author.bot && <TagDeBot />}
+          uma resposta de comando de barra.
+          `caixaEstreita` pela mesma regra do rótulo do tile de voz: esta linha
+          é `leading-[18px]` **fixo nos dois leiautes** (não há `celular:` aqui),
+          e a pílula de 18 do celular a preenchia de ponta a ponta — medido: pai
+          de 18px de conteúdo, pílula de 18, folga zero. Nos 15 do desktop sobra
+          1,5px de cada lado, a pílula volta a ter o porte do texto de 13px que
+          a cerca, e o trecho citado ganha 4px de volta antes de truncar.
+          Centrada sem margem: o pai é `items-center`, e a folga de 0,97px que
+          uma medida ingênua acusa é a metade do `pb-0.5` da linha — sobre a
+          caixa de conteúdo o desalinho é 0. */}
+      {ref.author.bot && <TagDeBot caixaEstreita />}
       <button
         type="button"
         onClick={() =>
@@ -701,10 +709,19 @@ export default function MessageItem({
                   >
                     {displayNameOf(author)}
                   </button>
-                  {/* ── j-bots ── o modo compacto põe hora, nome e texto numa
-                      linha só de 22px; a pílula entra depois do nome, antes do
-                      conteúdo, e é centrada nessa linha. */}
-                  {author.bot && <TagDeBot className="mt-[3px] self-start" />}
+                  {/* ── j-bots ── no modo compacto a hora, o nome e o texto
+                      dividem a **primeira** linha da mensagem — a hora é
+                      `leading-[22px]`, e é ela que fixa a linha em 22px nos dois
+                      leiautes. `self-start` (e não `self-center`) porque a caixa
+                      cresce com o texto: numa mensagem de três linhas ela mede
+                      64px, e centrar poria a pílula no meio do parágrafo, 20px
+                      abaixo do nome — medido.
+                      A margem é o que centra a pílula **naquela** primeira
+                      linha, e por isso muda com o tamanho dela:
+                      (22 − 15)/2 = 3,5 no desktop e (22 − 18)/2 = 2 no celular.
+                      Os 3px iguais para os dois que estavam aqui deixavam a
+                      pílula 0,5px alta no desktop e 1px baixa no celular. */}
+                  {author.bot && <TagDeBot className="mt-[3.5px] self-start celular:mt-[2px]" />}
                 </>
               )}
               <div className={compacto ? "min-w-0 flex-1" : undefined}>

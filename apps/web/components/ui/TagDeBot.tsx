@@ -52,12 +52,20 @@
  * Discord por trás — foi decidida no aparelho emulado, e está no PR como
  * escolha nossa.
  *
- * `caixaEstreita` desliga esse crescimento, e existe por **uma** caixa medida:
- * o rótulo comprimido do tile de voz, que tem `h-[20px]` fixos nos dois
- * leiautes (a medida é do trabalho da chamada no celular, e mexer nela moveria
- * um pixel que não é deste lote). A pílula de 18 sobrava dela em cima e
- * embaixo — visível na captura, invisível para o typecheck. Onde a caixa não
- * cresce, a pílula também não cresce.
+ * `caixaEstreita` desliga esse crescimento. A regra é uma só: **onde a caixa
+ * em volta não cresce no celular, a pílula também não cresce.** Duas caixas se
+ * encaixam nela, ambas medidas em 390×844:
+ *
+ * | caixa | altura | pílula de 18 | pílula de 15 |
+ * |---|---|---|---|
+ * | rótulo comprimido do tile de voz (`h-[20px]`) | 20px | 1px de folga | 2,5px |
+ * | barra de resposta do `MessageItem` (`leading-[18px]`) | 18px | 0 | 1,5px |
+ *
+ * Nenhuma das duas *estoura* — o número diz que cabe. O que a captura mostra é
+ * outra coisa: a pílula encosta nas bordas da caixa, os cantos arredondados dos
+ * dois se cruzam e o selo lê como adesivo colado na beirada. As duas alturas
+ * são fixas nos dois leiautes (nenhuma tem `celular:`), e é isso que as separa
+ * das linhas que crescem com o dedo.
  */
 export default function TagDeBot({
   caixaEstreita = false,

@@ -393,12 +393,16 @@ export function VoiceTile({
         {/* ── j-bots ── depois do nome, dentro do mesmo rótulo: um bot de música
             no palco é um tile como os outros, e sem a pílula ele se passaria por
             gente.
-            `caixaEstreita` no rótulo comprimido: ele tem 20px **fixos** nos dois
-            leiautes, e a pílula de 18 do celular sobrava dele em cima e embaixo
-            (medido em 390×844 — o pai media 20 e a pílula 18, com o raio
-            estourando a borda). Ali ela fica nos 15 do desktop, que é o que a
-            caixa comporta; no rótulo de 32 (`h-8`) ela cresce como em todo o
-            resto. */}
+            `caixaEstreita` no rótulo comprimido (`rotuloPequeno`, que só o
+            `PalcoMobile` liga). **Medido** no palco de 390×844, com os dois
+            valores fotografados lado a lado:
+            - sem ela, a pílula de 18 dentro do rótulo de 20 deixa **1px** de
+              rótulo acima e abaixo — não estoura a borda, mas os cantos
+              arredondados dos dois encostam e a pílula lê como um adesivo
+              colado na beirada, e não como um selo dentro de um rótulo;
+            - com ela, a pílula fica nos 15 do desktop e sobram **2,5px** de
+              cada lado, que é a mesma folga que o rótulo de 32 (`h-8`) dá.
+            Onde a caixa não cresce, a pílula também não cresce. */}
         {state.user.bot && <TagDeBot caixaEstreita={rotuloPequeno} />}
       </span>
 
