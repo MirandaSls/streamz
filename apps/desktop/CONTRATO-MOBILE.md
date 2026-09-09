@@ -54,7 +54,10 @@ as remove:
 - `decorations: false` + a nossa barra de título (`BarraDeTituloMinima`). No
   celular não há barra de título para substituir.
 - a janela `splash` de 300×350. Ela existe para a checagem de atualização do
-  updater do Tauri, que **não cobre Android nem iOS** (§4).
+  updater do Tauri, que **não cobre Android nem iOS** (§4). O Android tem
+  atualização (§5, §7.1), mas sem janelinha: o download acontece em segundo
+  plano, atrás de um card, porque quem mostra a tela no fim é o instalador do
+  sistema — não nós.
 
 ## 3. Identificadores
 

@@ -255,7 +255,12 @@ a todo mundo que reinstale.
 
 O `tauri-plugin-updater` é desktop-only, e por isso ele e o `tauri-plugin-process`
 estão num bloco `[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]`
-do `Cargo.toml` — no `.apk` eles nem entram. Na loja quem atualiza é a loja;
-num `.apk` baixado à mão, é o usuário. O que existe no lugar é o card "Baixar
-atualização" da web (`apps/web/lib/atualizacao-mobile.ts`), que consulta a
-mesma rota `/api/updates` e abre `streamz.chat/download` no navegador.
+do `Cargo.toml` — no `.apk` eles nem entram. Na loja quem atualiza é a loja.
+
+Num `.apk` fora da loja quem atualiza é o **nosso** atualizador: o plugin
+`atualizador` (`src/atualizador.rs` + `AtualizadorPlugin.kt`), dirigido por
+`apps/web/lib/atualizacao-mobile.ts`. Ele consulta a mesma rota `/api/updates`
+(alvo `android`), baixa o `.apk`, confere o **sha256** — não há verificador de
+minisign no Android — e abre o instalador do sistema. O que não dá para fazer é
+pular a tela de confirmação do Android, e a interface diz isso. Ver
+`docs/APPS-MOBILE.md` §13.
