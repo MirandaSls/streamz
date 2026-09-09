@@ -276,7 +276,9 @@ export default function CargosTab({ guildId }: { guildId: string }) {
             <button
               type="button"
               onClick={() => setSelecionado(r.id)}
-              className="flex min-w-0 flex-1 items-center gap-2 text-left"
+              // a linha do cargo mede 61: no celular o botão do nome ocupa a
+              // altura toda dela em vez dos 19 do texto
+              className="flex min-w-0 flex-1 items-center gap-2 text-left celular:h-full"
             >
               <span
                 aria-hidden="true"
@@ -416,7 +418,7 @@ function RoleEditor({
             role="tab"
             aria-selected={aba === a.id}
             onClick={() => setAba(a.id)}
-            className={`-mb-px border-b-2 px-3 pb-2 text-sm font-medium transition ${
+            className={`-mb-px border-b-2 px-3 pb-2 text-sm font-medium transition celular:min-h-[44px] ${
               aba === a.id
                 ? "border-accent text-txt-primary"
                 : "border-transparent text-txt-muted hover:text-txt-normal"

@@ -173,7 +173,7 @@ export default function EditorDePermissoes({
           type="button"
           aria-expanded={avancadas}
           onClick={() => setAvancadas((v) => !v)}
-          className="flex items-center gap-2 text-base font-semibold text-txt-primary transition hover:text-txt-normal"
+          className="flex items-center gap-2 text-base font-semibold text-txt-primary transition hover:text-txt-normal celular:min-h-[44px]"
         >
           <span>Permissões avançadas</span>
           <ChevronDown

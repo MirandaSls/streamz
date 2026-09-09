@@ -270,7 +270,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
                   disabled={selecionaveis.length === 0}
                   onChange={alternarTodos}
                   aria-label="Selecionar todos os membros desta página"
-                  className="accent-accent"
+                  className="accent-accent celular:h-[22px] celular:w-[22px]"
                 />
               </th>
               <th scope="col" className="font-bold">
@@ -311,7 +311,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
                       disabled={!alvoValido(m)}
                       onChange={() => alternar(m.user.id)}
                       aria-label={`Selecionar ${displayNameOf(m.user)}`}
-                      className="accent-accent disabled:opacity-40"
+                      className="accent-accent disabled:opacity-40 celular:h-[22px] celular:w-[22px]"
                     />
                   </td>
                   <td className="pr-2">

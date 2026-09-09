@@ -337,7 +337,9 @@ export default function ChannelSettingsModal({
           onRemoverRegra={apagarRegra}
           aviso={
             channel.categoryId ? (
-              <div className="flex items-center justify-between gap-4 rounded-[4px] border border-border bg-panel px-3 py-2">
+              // no celular o aviso e o botão empilham: lado a lado, o texto
+              // ficava em quatro linhas de ~250px ao lado de um botão largo
+              <div className="flex items-center justify-between gap-4 rounded-[4px] border border-border bg-panel px-3 py-2 celular:flex-col celular:items-stretch celular:gap-2">
                 <p className="min-w-0 text-xs text-txt-muted">
                   {channel.syncedWithCategory
                     ? "Sincronizado com a categoria: as regras abaixo são as dela, e a primeira edição feita aqui desgruda o canal."
