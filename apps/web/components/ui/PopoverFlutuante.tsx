@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useEhMobile } from "@/hooks/useEhMobile";
+import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
 
 /**
  * Caixa flutuante ancorada num botão — o popover de verdade, em portal.
@@ -103,6 +104,14 @@ export default function PopoverFlutuante({
   // Fechar por clique fora e por Esc mora aqui, e não em quem abre: em portal a
   // caixa não é filha do botão, então um `contains` do lado de lá leria clique
   // dentro da caixa como clique fora e ela se fecharia ao primeiro toque.
+  /*
+    O "voltar" do Android desfaz a folha, como desfaz qualquer camada do
+    celular (o mesmo hook do cartão de perfil, do seletor de emoji e do menu de
+    contexto). Sem ele o voltar atravessava a folha aberta e desfazia a tela de
+    baixo.
+  */
+  useVoltarNoCelular(ehMobile && aberto, onFechar);
+
   useEffect(() => {
     if (!aberto) return;
     const fora = (e: MouseEvent) => {

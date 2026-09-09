@@ -10,6 +10,7 @@ import {
 } from "react";
 import { ChevronRight } from "@/components/ui/icones";
 import { useEhMobile } from "@/hooks/useEhMobile";
+import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
 import { isReacoes, isSlider, isSubmenu, useUI, type MenuItem } from "@/stores/ui";
 
 /**
@@ -267,10 +268,20 @@ function Painel({
   return (
     <>
       {folha && (
-        // o véu é o alvo de "fechar" mais fácil do telefone: tudo que não é a
-        // folha. `mousedown` fora já fecha (ver `ContextMenuHost`); isto só dá
-        // a ele a aparência de camada.
-        <div aria-hidden="true" className="anim-overlay fixed inset-0 z-[79] bg-black/60" />
+        /*
+          O véu é o alvo de "fechar" mais fácil do telefone: tudo que não é a
+          folha. **Ele fecha por conta própria**, e isso não é redundância com o
+          `mousedown` de fora do `ContextMenuHost`: o véu mora *dentro* da raiz
+          que aquele ouvinte usa como "dentro do menu", e cobre a tela inteira —
+          ou seja, sem este `onMouseDown` nenhum toque na tela era "fora", e a
+          folha só saía pelo Esc (que num telefone não existe) ou escolhendo um
+          item. Era o defeito de "abri o + e não consigo mais sair".
+        */
+        <div
+          aria-hidden="true"
+          onMouseDown={onClose}
+          className="anim-overlay fixed inset-0 z-[79] bg-black/60"
+        />
       )}
       <div
         ref={ref}
@@ -297,6 +308,24 @@ function Painel({
         }
         onContextMenu={(e) => e.preventDefault()}
       >
+        {folha && (
+          /*
+            A alça do topo, como na captura `discord-mobile-menu-mensagem.png`
+            — e aqui ela é **botão de verdade**, com rótulo "Fechar": é a saída
+            visível da folha, ao lado do véu e do voltar do Android. Fica
+            `sticky` porque a folha rola por dentro e a saída não pode subir
+            junto com a lista. Sem `role`, como a barra de volume logo abaixo:
+            não é um item de menu e não entra na navegação por setas.
+          */
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar"
+            className="sticky top-0 z-10 -mt-1 mb-1 flex h-[28px] w-full shrink-0 items-center justify-center bg-overlay"
+          >
+            <span aria-hidden="true" className="h-1 w-9 rounded-full bg-border-strong" />
+          </button>
+        )}
         {items.map((item, i) => {
           if ("separator" in item) {
             return <div key={i} role="separator" className="my-2 h-px bg-border" />;
@@ -475,6 +504,14 @@ export default function ContextMenuHost() {
   const raiz = useRef<HTMLDivElement>(null);
   // no celular o menu é folha inferior, e ela não é ancorada em nada
   const ehMobile = useEhMobile();
+
+  /*
+    O "voltar" do Android desfaz a folha, como desfaz qualquer camada do
+    celular (é o mesmo hook do cartão de perfil e do seletor de emoji). Sem
+    ele o voltar atravessava a folha e desfazia a tela **de baixo**, deixando
+    o menu aberto por cima de outra coisa.
+  */
+  useVoltarNoCelular(ehMobile && menu !== null, close);
 
   useEffect(() => {
     if (!menu) return;

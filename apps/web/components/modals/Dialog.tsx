@@ -114,9 +114,14 @@ export default function Dialog({
 
   useEffect(() => setMontado(true), []);
 
-  // o "voltar" do Android fecha a tela cheia, como fecharia qualquer tela do
-  // app; o cartão centrado continua só com o Esc e o toque no véu
-  useVoltarNoCelular(cheio && montado, onClose);
+  /*
+    O "voltar" do Android fecha **qualquer** modal do celular, e não só a tela
+    cheia. O cartão centrado saía pelo × e pelo toque no véu; o voltar, que é o
+    gesto mais usado do aparelho, atravessava a caixa e ia desfazer a camada de
+    baixo — a conversa fechava com o "Criar um servidor" ainda no ar. A regra do
+    celular é uma só: sai primeiro o que está por cima.
+  */
+  useVoltarNoCelular(ehMobile && montado, onClose);
 
   useEffect(() => {
     if (!montado) return;
