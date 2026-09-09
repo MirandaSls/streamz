@@ -25,6 +25,7 @@ JSON e plist validados por parser — não com build.
 10. [O que este trabalho NÃO prova](#10-o-que-este-trabalho-não-prova)
 11. [Os três PRs](#11-os-três-prs)
 12. [A chamada em segundo plano no Android](#12-a-chamada-em-segundo-plano-no-android)
+13. [O ícone do launcher no Android](#13-o-ícone-do-launcher-no-android)
 
 ---
 
@@ -797,3 +798,129 @@ sempre. A saída completa está em
 - **Áudio de verdade.** O emulador não tem microfone físico; o que se prova aqui
   é que a **conexão** e o **serviço** sobrevivem ao segundo plano, não que a voz
   chega do outro lado.
+
+---
+
+## 13. O ícone do launcher no Android
+
+Relato do usuário, em aparelho de verdade, com o `Streamz_1.1.1_android.apk` do
+commit `3e709bc`: *"o app está sem o ícone do Streamz, está com o ícone de
+conversa normal"* — um balão liso, sem o "Z".
+
+### O que se mediu antes de mexer
+
+A primeira coisa foi **não acreditar na hipótese**. O `.apk` publicado foi
+aberto com `apkanalyzer` e o `android:icon` do manifesto foi seguido até o
+bitmap:
+
+```
+android:icon="@ref/0x7f0d0000"          → mipmap/ic_launcher
+mipmap anydpi-v26 ic_launcher  → res/BW.xml   (adaptive-icon)
+  background → @0x7f050064   (color/ic_launcher_background = #FF0B0B0F)
+  foreground → @0x7f0d0001   (mipmap/ic_launcher_foreground)
+```
+
+Ou seja: o ícone **era o nosso**. O `foreground` do `.apk` bate pixel a pixel
+com o do repositório (diferença máxima de 1/255, que é a recompressão do
+`aapt`), e o desenho já estava reduzido para a zona segura — alfa de 72 a 360
+num quadro de 432, exatamente os 72dp centrais de 108dp.
+
+E, instalado num emulador **Android 14** com o Pixel Launcher, ele **aparecia
+certo**: balão limão com o "Z", em cima do Void Ink. As quatro suspeitas
+iniciais (adaptive icon apontando para drawable genérico, mipmaps de
+placeholder, manifesto no recurso errado, zona segura) estavam todas erradas.
+
+**Isto é o que ficou provado e é preciso dizer com todas as letras: no Android
+14 de estoque, o ícone do 1.1.1 já estava correto — o defeito relatado não foi
+reproduzido no emulador.**
+
+### A causa, e por que ela não aparece no emulador
+
+O que faltava é uma camada que só entra em cena fora do launcher de estoque: o
+**`monochrome`**, dos ícones temáticos do Android 13+.
+
+Quando o app declara essa camada, o launcher usa a silhueta que o app deu.
+Quando **não** declara, os launchers que implementam tema de ícone não desistem
+— One UI, Nothing OS e as ROMs que copiam o Pixel Launcher sintetizam a
+silhueta a partir do `foreground`, achatando tudo que é opaco. E o `foreground`
+que estava lá era o **tile inteiro do `.exe`**: um quadrado Void Ink de borda a
+borda, com o balão limão dentro e o "Z" pintado em Void Ink por cima do limão.
+Tudo opaco. Achatado, isso vira um borrão só — na melhor das hipóteses um balão
+liso, sem "Z". Que é, palavra por palavra, o relato.
+
+O Pixel Launcher do emulador `google_apis` não tem o tema de ícone ligável por
+`settings put secure theme_customization_overlay_packages` (foi tentado, com
+reinício e com `pm clear`: os ícones do Google continuaram coloridos), então
+**essa parte é inferência bem fundamentada, não medição**. O que se mediu é o
+resto: que a camada faltava, e que agora existe e desenha o "Z".
+
+### O que mudou
+
+| arquivo | mudança |
+|---|---|
+| `res/drawable/ic_launcher_monochrome.xml` | **novo**. A silhueta, com o "Z" vazado por `fillType="evenOdd"` |
+| `res/mipmap-anydpi-v26/ic_launcher.xml` | ganhou o `<monochrome>` |
+| `res/mipmap-anydpi-v26/ic_launcher_round.xml` | **novo**. O mesmo ícone adaptativo sob o segundo nome |
+| `AndroidManifest.xml` | ganhou `android:roundIcon="@mipmap/ic_launcher_round"` |
+| `res/mipmap-*/ic_launcher_foreground.png` | refeitos: **só o símbolo**, sobre alfa |
+| `res/mipmap-*/ic_launcher.png` e `_round.png` | refeitos nos tamanhos certos |
+| `res/drawable/ic_launcher_background.xml` | **apagado** (era a grade verde do template do Android) |
+| `res/drawable-v24/ic_launcher_foreground.xml` | **apagado** (era o robozinho do Android) |
+
+Quatro decisões que valem explicação:
+
+1. **O `foreground` deixou de carregar o fundo.** O contrato do ícone adaptativo
+   é que o chão vem da camada `background` — que aqui é a cor da marca, chapada.
+   Pôr o tile opaco na camada da frente quebra o efeito de profundidade (o
+   launcher move e amplia as duas camadas em ritmos diferentes ao tocar no
+   ícone) e, principalmente, é o que faz a silhueta sintetizada virar um bloco.
+   Agora o `foreground` é só o símbolo, com alfa em volta.
+
+2. **O tamanho do símbolo é o do tile da marca, não o da zona segura.** A
+   tentação é encher os 72dp garantidos. Não se deve: o launcher **amplia**
+   esses 72dp para preencher o espaço do ícone, então encher a zona segura
+   entrega um balão colado na borda da máscara. O ponto limão mais distante do
+   centro está a 37,73% da largura no `icon.png`; `0,3773 × 72 = 27,2dp` é o
+   raio que reproduz a mesma proporção — 76% do raio de 36dp da zona segura.
+
+3. **O "Z" do `monochrome` não são as três peças da marca empilhadas.** Sob
+   `evenOdd`, as sobreposições entre as duas barras e a diagonal voltariam a
+   ficar cheias e o "Z" sairia rendilhado. O que está no arquivo é o contorno da
+   união das três, calculado uma vez.
+
+4. **O `roundIcon` não é enfeite.** O One UI e boa parte das ROMs chinesas pedem
+   essa variante; sem o recurso, ela cai no PNG de legado — bitmap chapado, sem
+   máscara e **sem `monochrome`**, ou seja, exatamente o defeito de volta em
+   metade dos aparelhos. Por isso ele existe e aponta para o mesmo
+   `adaptive-icon`.
+
+O `mipmap-hdpi/ic_launcher.png` e o `_round.png` estavam em **49×49** em vez de
+72×72 (os outros quatro buckets estavam certos: 48/96/144/192). Não é o defeito
+relatado — hdpi hoje é aparelho de museu — mas era um borrão esperando um
+aparelho antigo, e saiu junto.
+
+### O que ficou de fora, de propósito
+
+- **`apps/desktop/src-tauri/icons/` não foi tocado.** É de onde sai o `.ico` do
+  instalador do Windows, e este PR não tem nada a dizer sobre o `.exe`. Fica
+  registrada uma dívida: o `icons/android/mipmap-*/ic_launcher_foreground.png`
+  ainda é o desenho antigo (o tile cheio), então **rodar `tauri icon` de novo
+  reintroduz o defeito** por cima do `gen/android`. Quem fizer isso precisa
+  refazer os `foreground` — o script que os gera está descrito acima e é
+  reprodutível a partir de `docs/branding/marca/icone-app-1024.svg`.
+- **O `ic_notificacao_chamada.xml` não mudou.** Foi rasterizado e conferido: já
+  é branco com alfa e com o "Z" vazado, que é o que a barra de status exige
+  (§12). Estava certo.
+- **O `manifest.webmanifest` do PWA não mudou.** As duas famílias (`any` e
+  `maskable`) já estão lá, com o símbolo dentro do círculo de 80% do spec —
+  a conta está comentada em `apps/web/app/manifest.ts`. Estava certo.
+
+### O que isto não prova
+
+- **Que o aparelho do usuário voltou ao normal.** O que se provou é o Android 14
+  de estoque, no emulador. A camada `monochrome` que fecha a hipótese do tema de
+  ícone não pôde ser exercitada aqui (o launcher do emulador não liga o tema), e
+  One UI/MIUI não entram em conta nenhuma deste servidor.
+- **Que o launcher do aparelho vai largar o ícone velho.** Launcher guarda
+  bitmap em cache. Se depois de instalar continuar errado, reinstalar ou
+  reiniciar o aparelho é parte do teste, não sinal de que o pacote está errado.

@@ -65,8 +65,15 @@
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
 
+    <!-- `icon` e `roundIcon` apontam para o **mesmo** ícone adaptativo
+         (`mipmap-anydpi-v26/`), e a máscara é escolha do aparelho. O
+         `roundIcon` não é enfeite: o One UI da Samsung e as ROMs que imitam o
+         Pixel pedem essa variante, e sem ela caem no PNG de legado — bitmap
+         chapado, sem a camada `monochrome`, que é o ícone errado nos temas do
+         Android 13+. -->
     <application
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:theme="@style/Theme.streamz_desktop"
         android:usesCleartextTraffic="${usesCleartextTraffic}">
