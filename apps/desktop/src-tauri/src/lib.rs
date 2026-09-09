@@ -18,6 +18,13 @@
 
 mod tela;
 
+// A chamada de voz em segundo plano: o serviço de primeiro plano do Android e
+// a notificação persistente. Só existe naquele alvo — no Windows quem segura a
+// call com a janela escondida é a bandeja, e no iOS é o `UIBackgroundModes` do
+// plist. Ver `src/chamada.rs`.
+#[cfg(target_os = "android")]
+mod chamada;
+
 // Só o WebView2 tem `PermissionRequested`; nos outros alvos o módulo nem
 // existe (ver o porquê dele no próprio arquivo).
 #[cfg(windows)]
@@ -199,6 +206,22 @@ pub fn run() {
     let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init());
+
+    // Chamada de voz em segundo plano: o serviço de primeiro plano do Android,
+    // com a notificação persistente e o botão "Sair da chamada". Quem o liga e
+    // desliga é a web, no instante em que a call conecta e em toda saída (ver
+    // `apps/web/lib/desktop.ts` e `apps/web/stores/voice.ts`).
+    //
+    // **Android apenas.** No Windows a janela escondida na bandeja já continua
+    // na chamada — é a promessa da bandeja, e os argumentos do WebView2 lá em
+    // cima são o que a sustentam. No iOS o equivalente é `UIBackgroundModes:
+    // audio` no `Info.ios.plist`, que é configuração e não código. Registrar
+    // este plugin nos outros alvos daria um comando que sempre falha.
+    //
+    // Pelo mesmo motivo do updater, o registro sai do encadeamento: um `#[cfg]`
+    // não se aplica a um `.metodo()` no meio de uma expressão.
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(chamada::init());
 
     #[cfg(desktop)]
     let builder = builder.on_window_event(|window, event| {

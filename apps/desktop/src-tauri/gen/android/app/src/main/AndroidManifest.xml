@@ -32,31 +32,28 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
-    <!-- ── Chamada em segundo plano ───────────────────────────────────────
-         DECLARADAS E HOJE INERTES. Ler antes de confiar nelas:
-
+    <!-- ── Chamada em segundo plano ───────────────────────────────────
          O Android mata o áudio de um app que sai da frente, a menos que exista
          um **serviço de primeiro plano** (aquela notificação fixa de "chamada
          em andamento"). Estas permissões são o direito de iniciar esse
-         serviço — mas o serviço em si é código Kotlin nativo (uma classe
-         `Service` com `startForeground` e um canal de notificação) que **não
-         faz parte desta entrega**.
-
-         Ou seja: hoje, minimizar o app durante uma chamada continua derrubando
-         o áudio depois de alguns segundos, exatamente como antes. As
-         permissões não mudam isso sozinhas; elas ficam aqui para que o serviço,
-         quando for escrito, não precise de uma atualização do manifesto
-         (mudança de permissão exige nova submissão à Play).
+         serviço, e o serviço existe: é o `<service>` `ChamadaService` lá
+         embaixo, ligado e desligado pelo `ChamadaPlugin` a mando da web.
 
          A partir do Android 14 (API 34) não basta FOREGROUND_SERVICE: cada
          serviço precisa declarar o **tipo**, e o tipo precisa da permissão
          correspondente. Uma call é microfone (o que capturamos) e reprodução
-         de mídia (o que tocamos), daí as duas.
-
-         Pendência registrada no PR. -->
+         de mídia (o que tocamos), daí as duas — e daí o
+         `foregroundServiceType="microphone|mediaPlayback"` do `<service>`,
+         que tem de casar com esta lista. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+    <!-- Android 13 (API 33) transformou "mostrar notificação" em permissão de
+         tempo de execução. É pedida na primeira chamada, pelo `ChamadaPlugin`.
+         Recusar não derruba a call: o serviço sobe do mesmo jeito, só fica sem
+         o aviso na tela. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- `required="false"` nas três: um aparelho sem câmera (ou sem microfone,
          que é raro mas existe em TV box) continua podendo instalar o app e usar
@@ -86,6 +83,21 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- O serviço que segura a chamada de voz com o app minimizado.
+             Ver `ChamadaService.kt` para o porquê de cada peça.
+
+             `exported="false"`: ninguém de fora do app tem o que dizer a ele —
+             quem o liga é o próprio processo, pelo `ChamadaPlugin`.
+
+             `foregroundServiceType` **tem de casar** com as permissões
+             `FOREGROUND_SERVICE_*` declaradas acima; no Android 14+ o sistema
+             confere par a par e derruba o app com SecurityException se faltar
+             uma. -->
+        <service
+            android:name=".ChamadaService"
+            android:exported="false"
+            android:foregroundServiceType="microphone|mediaPlayback" />
 
         <provider
           android:name="androidx.core.content.FileProvider"

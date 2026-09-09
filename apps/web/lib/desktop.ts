@@ -554,6 +554,88 @@ export function ouvirTelaEncerrada(ouvinte: (motivo: MotivoDeEncerramento) => vo
   };
 }
 
+// ── Chamada em segundo plano (Android) ─────────────────────────────────────
+
+/**
+ * `true` só dentro do app **Android**.
+ *
+ * A detecção é a mesma de `hooks/useEhMobile.ts` — `navigator.userAgent`, e não
+ * o `platform()` do `@tauri-apps/plugin-os`. O motivo está escrito lá e vale
+ * igual aqui: aquele plugin custaria um crate no `Cargo.toml` (que entraria
+ * também no `.exe` do Windows), um pacote npm, uma permissão em cada
+ * `capabilities/*.json` e uma inicialização no `lib.rs`, tudo para responder o
+ * que o webview já responde de graça.
+ *
+ * Por que Android e não "celular": o serviço de primeiro plano é uma API do
+ * Android. No iOS o papel equivalente é do `UIBackgroundModes: audio` do
+ * `Info.ios.plist`, que não se liga nem se desliga em tempo de execução.
+ */
+export function ehAndroidNoTauri(): boolean {
+  return isTauri() && typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
+}
+
+/**
+ * Liga o serviço de primeiro plano que segura a chamada com o app minimizado, e
+ * escreve a notificação persistente. Chamar de novo com outro texto reescreve a
+ * notificação sem derrubar o serviço.
+ *
+ * Best-effort: se a ponte falhar, a call continua — o que se perde é a
+ * sobrevivência em segundo plano, não a chamada.
+ */
+export async function iniciarServicoDeChamada(titulo: string, texto: string): Promise<void> {
+  if (!ehAndroidNoTauri()) return;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("plugin:chamada|iniciar_servico_de_chamada", { titulo, texto });
+  } catch {
+    // sem serviço, minimizar volta a derrubar o áudio: degradado, não quebrado
+  }
+}
+
+/** Desliga o serviço e tira a notificação. Parar o que já parou não é erro. */
+export async function pararServicoDeChamada(): Promise<void> {
+  if (!ehAndroidNoTauri()) return;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("plugin:chamada|parar_servico_de_chamada");
+  } catch {
+    // idem: o estado da store é quem manda
+  }
+}
+
+/**
+ * Ouve o botão **"Sair da chamada"** da notificação.
+ *
+ * O caminho é um `Channel` do Tauri e não um `listen()` de evento global (como
+ * o `tela:encerrada` logo acima) por uma razão de arquitetura do lado nativo: o
+ * `Channel` que sai daqui é serializado como `"__CHANNEL__:<id>"`, atravessa o
+ * Rust uma única vez, na hora do registro, e o Kotlin passa a escrever **direto
+ * no IPC do webview**. Um evento global exigiria o caminho de volta
+ * Kotlin → Rust, que o Tauri 2 não oferece pronto.
+ *
+ * Devolve a função que para de ouvir.
+ */
+export function ouvirSaidaPelaNotificacao(ouvinte: () => void): () => void {
+  if (!ehAndroidNoTauri()) return () => {};
+  let cancelado = false;
+  void (async () => {
+    try {
+      const { Channel, invoke } = await import("@tauri-apps/api/core");
+      const canal = new Channel<unknown>();
+      canal.onmessage = () => {
+        if (!cancelado) ouvinte();
+      };
+      await invoke("plugin:chamada|registrar_ouvinte_de_saida", { canal });
+    } catch {
+      // sem o canal, o botão da notificação some da conta — o usuário ainda
+      // sai pelo app, que é o caminho normal
+    }
+  })();
+  return () => {
+    cancelado = true;
+  };
+}
+
 // ── Imagem: abrir fora, copiar bitmap, salvar em disco ─────────────────────
 
 /**

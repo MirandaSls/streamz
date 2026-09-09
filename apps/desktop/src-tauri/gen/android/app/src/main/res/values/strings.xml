@@ -1,4 +1,16 @@
 <resources>
     <string name="app_name">"Streamz"</string>
     <string name="main_activity_title">"Streamz"</string>
+
+    <!--
+      Textos da notificação do serviço de chamada (ver `ChamadaService.kt`).
+
+      O título e o corpo da notificação **não** estão aqui: quem os escreve é a
+      web, que é a única parte que sabe o nome do canal ou da conversa. O que
+      fica em recurso é o que não depende da chamada — o rótulo do canal de
+      notificação (o que o usuário vê nas configurações do sistema) e o botão.
+    -->
+    <string name="chamada_canal_nome">Chamada em andamento</string>
+    <string name="chamada_canal_descricao">Mantém a chamada de voz viva enquanto o Streamz está em segundo plano.</string>
+    <string name="chamada_sair">Sair da chamada</string>
 </resources>

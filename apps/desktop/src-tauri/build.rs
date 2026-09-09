@@ -1,3 +1,30 @@
 fn main() {
-    tauri_build::build()
+    // O plugin `chamada` (o serviço de primeiro plano do Android) vive **dentro
+    // deste crate**, não num crate próprio. O `tauri-build` chama isso de
+    // *inlined plugin*, e é ele quem gera a ACL: para cada comando da lista
+    // nascem as permissões `allow-<comando>`/`deny-<comando>`, e
+    // `AllowAllCommands` junta as três num `chamada:default` — que é o que
+    // `capabilities/mobile.json` referencia.
+    //
+    // Sem isto os comandos existiriam em Rust e seriam **negados** pela ACL na
+    // primeira chamada, com um erro que diz "not allowed" e não diz onde
+    // consertar. Os nomes aqui são os identificadores dos `#[tauri::command]`
+    // de `src/chamada.rs`, em snake_case, e têm de acompanhar qualquer
+    // renomeação lá.
+    //
+    // A geração roda em **todos os alvos**, inclusive no Windows: a ACL é
+    // estática e ficar sem ela no desktop só faria o build de celular divergir
+    // do de desktop. O que é condicional é o registro do plugin em `lib.rs`.
+    let atributos = tauri_build::Attributes::new().plugin(
+        "chamada",
+        tauri_build::InlinedPlugin::new()
+            .commands(&[
+                "iniciar_servico_de_chamada",
+                "parar_servico_de_chamada",
+                "registrar_ouvinte_de_saida",
+            ])
+            .default_permission(tauri_build::DefaultPermissionRule::AllowAllCommands),
+    );
+
+    tauri_build::try_build(atributos).expect("erro ao preparar o build do Tauri")
 }

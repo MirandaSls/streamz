@@ -2169,6 +2169,48 @@
       "description": "Permission identifier",
       "oneOf": [
         {
+          "description": "Default plugin permissions.\n#### This default permission set includes:\n\n- `allow-iniciar-servico-de-chamada`\n- `allow-parar-servico-de-chamada`\n- `allow-registrar-ouvinte-de-saida`",
+          "type": "string",
+          "const": "chamada:default",
+          "markdownDescription": "Default plugin permissions.\n#### This default permission set includes:\n\n- `allow-iniciar-servico-de-chamada`\n- `allow-parar-servico-de-chamada`\n- `allow-registrar-ouvinte-de-saida`"
+        },
+        {
+          "description": "Enables the iniciar_servico_de_chamada command without any pre-configured scope.",
+          "type": "string",
+          "const": "chamada:allow-iniciar-servico-de-chamada",
+          "markdownDescription": "Enables the iniciar_servico_de_chamada command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the parar_servico_de_chamada command without any pre-configured scope.",
+          "type": "string",
+          "const": "chamada:allow-parar-servico-de-chamada",
+          "markdownDescription": "Enables the parar_servico_de_chamada command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the registrar_ouvinte_de_saida command without any pre-configured scope.",
+          "type": "string",
+          "const": "chamada:allow-registrar-ouvinte-de-saida",
+          "markdownDescription": "Enables the registrar_ouvinte_de_saida command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the iniciar_servico_de_chamada command without any pre-configured scope.",
+          "type": "string",
+          "const": "chamada:deny-iniciar-servico-de-chamada",
+          "markdownDescription": "Denies the iniciar_servico_de_chamada command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the parar_servico_de_chamada command without any pre-configured scope.",
+          "type": "string",
+          "const": "chamada:deny-parar-servico-de-chamada",
+          "markdownDescription": "Denies the parar_servico_de_chamada command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the registrar_ouvinte_de_saida command without any pre-configured scope.",
+          "type": "string",
+          "const": "chamada:deny-registrar-ouvinte-de-saida",
+          "markdownDescription": "Denies the registrar_ouvinte_de_saida command without any pre-configured scope."
+        },
+        {
           "description": "No features are enabled by default, as we believe\nthe clipboard can be inherently dangerous and it is \napplication specific if read and/or write access is needed.\n\nClipboard interaction needs to be explicitly enabled.\n",
           "type": "string",
           "const": "clipboard-manager:default",
