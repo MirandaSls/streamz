@@ -86,7 +86,7 @@ export default function AparenciaTab() {
         <button
           type="button"
           onClick={() => s.reset()}
-          className="h-9 rounded-[3px] border border-border-strong px-3 text-sm font-medium text-txt-normal transition hover:bg-hov"
+          className="h-9 celular:h-[44px] rounded-[3px] border border-border-strong px-3 text-sm font-medium text-txt-normal transition hover:bg-hov"
         >
           {t("config.restaurar")}
         </button>

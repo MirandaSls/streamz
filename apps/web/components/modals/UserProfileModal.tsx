@@ -129,7 +129,10 @@ export default function UserProfileModal({
           )}
 
           {/* ações sobre a faixa do banner, como no Discord — não no fim do cartão */}
-          <div className="absolute right-4 top-4 flex items-center gap-2">
+          {/* No celular a fileira ganha `left-4` e quebra: "Enviar mensagem" +
+              "Adicionar amigo" + o "⋯" somam ~370 e, ancorados só pela direita,
+              o primeiro botão saía pela borda esquerda da tela. */}
+          <div className="absolute right-4 top-4 flex items-center gap-2 celular:left-4 celular:flex-wrap celular:justify-end">
             {!euMesmo && (
               <>
                 <button
@@ -138,7 +141,7 @@ export default function UserProfileModal({
                     closeModal();
                     void openWith(user.id);
                   }}
-                  className="flex h-8 items-center gap-2 rounded-[3px] bg-accent px-3 text-sm font-medium text-accent-ink transition hover:bg-accent-hover"
+                  className="flex h-8 celular:h-[44px] items-center gap-2 rounded-[3px] bg-accent px-3 text-sm font-medium text-accent-ink transition hover:bg-accent-hover"
                 >
                   <MessageSquare size={16} aria-hidden="true" />
                   Enviar mensagem
@@ -147,7 +150,7 @@ export default function UserProfileModal({
                   <button
                     type="button"
                     onClick={() => void send(user.username)}
-                    className="flex h-8 items-center gap-2 rounded-[3px] bg-panel px-3 text-sm font-medium text-txt-normal transition hover:bg-hov"
+                    className="flex h-8 celular:h-[44px] items-center gap-2 rounded-[3px] bg-panel px-3 text-sm font-medium text-txt-normal transition hover:bg-hov"
                   >
                     <UserPlus size={16} aria-hidden="true" />
                     Adicionar amigo
@@ -158,7 +161,7 @@ export default function UserProfileModal({
                   onClick={(e) => abrirMenu(e.currentTarget)}
                   aria-label="Mais opções"
                   aria-haspopup="menu"
-                  className="grid h-8 w-8 place-items-center rounded-[3px] bg-panel text-txt-normal transition hover:bg-hov"
+                  className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded-[3px] bg-panel text-txt-normal transition hover:bg-hov"
                 >
                   <MoreHorizontal size={18} />
                 </button>
@@ -185,7 +188,9 @@ export default function UserProfileModal({
             <div
               role="tablist"
               aria-label="Seções do perfil"
-              className="mt-3 flex gap-4 border-b border-border"
+              // as três abas somam ~430 numa tela de 390: no celular a fileira
+              // rola na horizontal, como a de Amigos
+              className="mt-3 flex gap-4 border-b border-border celular:-mx-4 celular:gap-3 celular:overflow-x-auto celular:px-4 celular:[scrollbar-width:none]"
             >
               {abas.map((a) => (
                 <button
@@ -194,7 +199,7 @@ export default function UserProfileModal({
                   role="tab"
                   aria-selected={aba === a.id}
                   onClick={() => setAba(a.id)}
-                  className={`-mb-px border-b-2 pb-2 text-sm font-medium transition ${
+                  className={`-mb-px shrink-0 border-b-2 pb-2 text-sm font-medium transition celular:min-h-[44px] ${
                     aba === a.id
                       ? "border-accent text-txt-primary"
                       : "border-transparent text-txt-muted hover:text-txt-normal"

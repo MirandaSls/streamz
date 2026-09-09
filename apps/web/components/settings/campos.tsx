@@ -21,10 +21,10 @@
  * raio 8, borda de 1px. O raio 3 antigo era o das caixas de diálogo.
  */
 export const ESTILO_CAMPO =
-  "h-10 w-full rounded-lg border border-border bg-input px-2.5 text-sm text-txt-normal outline-none transition-colors placeholder:text-txt-muted focus:border-accent disabled:cursor-not-allowed disabled:opacity-60";
+  "h-10 w-full rounded-lg border border-border bg-input px-2.5 text-sm text-txt-normal outline-none transition-colors placeholder:text-txt-muted focus:border-accent disabled:cursor-not-allowed disabled:opacity-60 celular:h-[44px] celular:text-[max(16px,1em)]";
 
 export const ESTILO_AREA =
-  "w-full resize-none rounded-lg border border-border bg-input p-2.5 text-sm text-txt-normal outline-none transition-colors placeholder:text-txt-muted focus:border-accent disabled:cursor-not-allowed disabled:opacity-60";
+  "w-full resize-none rounded-lg border border-border bg-input p-2.5 text-sm text-txt-normal outline-none transition-colors placeholder:text-txt-muted focus:border-accent disabled:cursor-not-allowed disabled:opacity-60 celular:text-[max(16px,1em)]";
 
 /** Rótulo em caixa-alta acima de um campo. */
 export const ESTILO_ROTULO =

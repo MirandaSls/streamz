@@ -32,10 +32,10 @@ const COR_PADRAO = "#9be31f";
  * pessoa vem quando quer mexer em como o cartão dela aparece — e a foto é
  * metade desse cartão. Só aqui, porém, dá para **remover**.
  *
- * A prévia não é um extra de tela grande: ela é o objeto que se está editando.
- * Empilhá-la embaixo em telas estreitas quebrava o laço entre o campo e o
- * efeito — e os 740px do painel de configurações são fixos, então a coluna
- * cabe em qualquer janela que consiga abrir esta tela.
+ * A prévia não é um extra de tela grande: ela é o objeto que se está editando,
+ * e no desktop ela fica **ao lado** — os 740px do painel comportam as duas
+ * colunas. No celular não há 740px: as duas empilham (`celular:flex-col`), a
+ * prévia embaixo, porque a alternativa era o formulário em 62px de largura.
  *
  * Salvar é da barra de alterações não salvas do shell; o banner e a remoção
  * dele são upload, que acontece na hora (não há o que "desfazer" localmente).
@@ -183,7 +183,11 @@ export default function PerfilTab() {
   }
 
   return (
-    <div className="flex gap-6">
+    // No celular as duas colunas **empilham**: os 280px da prévia sobre os
+    // 358 de conteúdo deixavam 62 para o formulário — "Escolher foto"
+    // vazava do botão, o texto de ajuda saía uma palavra por linha e as 18
+    // amostras de cor viravam uma coluna de 18 linhas.
+    <div className="flex gap-6 celular:flex-col celular:gap-5">
       <div className="min-w-0 flex-1">
         <h3 className={ESTILO_ROTULO}>Foto do perfil</h3>
         <div className="flex flex-wrap items-center gap-3">
@@ -203,7 +207,7 @@ export default function PerfilTab() {
             type="button"
             disabled={enviandoFoto}
             onClick={() => fotoRef.current?.click()}
-            className="flex h-9 items-center gap-2 rounded-[3px] bg-accent px-3 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
+            className="flex h-9 celular:h-[44px] items-center gap-2 rounded-[3px] bg-accent px-3 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
           >
             <Camera size={16} aria-hidden="true" />
             {enviandoFoto ? "Enviando…" : user.avatarUrl ? "Trocar foto" : "Escolher foto"}
@@ -215,7 +219,7 @@ export default function PerfilTab() {
                 disabled={enviandoFoto}
                 onClick={() => void removerFoto()}
                 aria-label="Remover foto"
-                className="grid h-9 w-9 place-items-center rounded-[3px] text-txt-secondary transition hover:bg-hov hover:text-red disabled:opacity-50"
+                className="grid h-9 celular:h-[44px] w-9 celular:w-[44px] place-items-center rounded-[3px] text-txt-secondary transition hover:bg-hov hover:text-red disabled:opacity-50"
               >
                 <Trash2 size={16} />
               </button>
@@ -243,7 +247,7 @@ export default function PerfilTab() {
             type="button"
             disabled={enviando}
             onClick={() => fileRef.current?.click()}
-            className="flex h-9 items-center gap-2 rounded-[3px] bg-accent px-3 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
+            className="flex h-9 celular:h-[44px] items-center gap-2 rounded-[3px] bg-accent px-3 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
           >
             <ImageIcon size={16} aria-hidden="true" />
             {enviando ? "Enviando…" : "Trocar banner"}
@@ -254,7 +258,7 @@ export default function PerfilTab() {
                 type="button"
                 onClick={() => void removerBanner()}
                 aria-label="Remover banner"
-                className="grid h-9 w-9 place-items-center rounded-[3px] text-txt-secondary transition hover:bg-hov hover:text-red"
+                className="grid h-9 celular:h-[44px] w-9 celular:w-[44px] place-items-center rounded-[3px] text-txt-secondary transition hover:bg-hov hover:text-red"
               >
                 <Trash2 size={16} />
               </button>
@@ -303,7 +307,7 @@ export default function PerfilTab() {
       </div>
 
       {/* prévia: o mesmo cartão que os outros veem */}
-      <div className="w-[280px] shrink-0">
+      <div className="w-[280px] shrink-0 celular:w-full">
         <h3 className={ESTILO_ROTULO}>Prévia</h3>
         <div className="overflow-hidden rounded-lg bg-overlay">
           {bannerUrl ? (

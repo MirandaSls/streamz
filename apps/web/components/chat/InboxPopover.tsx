@@ -193,7 +193,7 @@ export default function InboxPopover({
                 role="tab"
                 aria-selected={aba === a.id}
                 onClick={() => setAba(a.id)}
-                className={`relative flex-1 text-sm font-medium transition ${
+                className={`relative h-full flex-1 text-sm font-medium transition celular:text-base ${
                   aba === a.id
                     ? "text-accent after:absolute after:inset-x-0 after:-bottom-px after:h-[2px] after:bg-accent"
                     : "text-txt-secondary hover:text-txt-normal"
@@ -287,7 +287,7 @@ export default function InboxPopover({
                         type="button"
                         onClick={() => setSoEsteServidor(valor)}
                         aria-pressed={soEsteServidor === valor}
-                        className={`rounded-[3px] px-2 py-1 text-xs font-medium transition ${
+                        className={`rounded-[3px] px-2 py-1 text-xs font-medium transition celular:min-h-[44px] celular:px-3 ${
                           soEsteServidor === valor
                             ? "bg-sel text-txt-primary"
                             : "text-txt-muted hover:text-txt-normal"
@@ -316,7 +316,9 @@ export default function InboxPopover({
                             fechar();
                             void goToChannel({ guildId: g.guildId, channelId: c.channelId });
                           }}
-                          className="flex w-full items-center gap-2 rounded-[3px] px-2 py-1.5 text-left hover:bg-hov"
+                          // 44 no celular: na aba Notificações esta linha é o
+                          // caminho para o canal, e 35px é alvo de mouse
+                          className="flex w-full items-center gap-2 rounded-[3px] px-2 py-1.5 text-left hover:bg-hov celular:min-h-[44px]"
                         >
                           {c.channelType === "DM" || c.channelType === "GROUP" ? (
                             <MessageCircle size={20} aria-hidden="true" className="text-txt-faint" />

@@ -136,7 +136,7 @@ function BlocoDeSons() {
               <button
                 type="button"
                 onClick={() => ouvir(som.nome)}
-                className="text-txt-link hover:underline"
+                className="text-txt-link hover:underline celular:inline-flex celular:min-h-[44px] celular:items-center"
               >
                 Prévia do som
               </button>
@@ -168,7 +168,7 @@ function BlocoDeSons() {
               aria-expanded={aberto}
               onClick={() => setAberto((v) => !v)}
               aria-label={aberto ? "Mostrar menos sons" : "Mostrar mais sons"}
-              className="grid h-8 w-8 place-items-center rounded-[4px] text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
+              className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded-[4px] text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
             >
               <ChevronRight
                 size={18}

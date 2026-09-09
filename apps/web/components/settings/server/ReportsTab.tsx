@@ -40,7 +40,7 @@ export default function ReportsTab({ guildId }: { guildId: string }) {
           type="button"
           aria-pressed={!resolvidas}
           onClick={() => setResolvidas(false)}
-          className={`h-9 rounded-[3px] px-3 text-sm font-medium transition ${
+          className={`h-9 celular:h-[44px] rounded-[3px] px-3 text-sm font-medium transition ${
             !resolvidas ? "bg-accent text-accent-ink" : "bg-void text-txt-normal hover:bg-hov"
           }`}
         >
@@ -50,7 +50,7 @@ export default function ReportsTab({ guildId }: { guildId: string }) {
           type="button"
           aria-pressed={resolvidas}
           onClick={() => setResolvidas(true)}
-          className={`h-9 rounded-[3px] px-3 text-sm font-medium transition ${
+          className={`h-9 celular:h-[44px] rounded-[3px] px-3 text-sm font-medium transition ${
             resolvidas ? "bg-accent text-accent-ink" : "bg-void text-txt-normal hover:bg-hov"
           }`}
         >
@@ -104,7 +104,7 @@ export default function ReportsTab({ guildId }: { guildId: string }) {
             <button
               type="button"
               onClick={() => void resolve(guildId, r.id, !r.resolved)}
-              className="flex h-8 shrink-0 items-center gap-1.5 self-start rounded-[3px] bg-void px-3 text-sm font-medium text-txt-normal transition hover:bg-hov"
+              className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 self-start rounded-[3px] bg-void px-3 text-sm font-medium text-txt-normal transition hover:bg-hov"
             >
               {r.resolved ? (
                 <>

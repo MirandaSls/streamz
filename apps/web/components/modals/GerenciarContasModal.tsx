@@ -179,7 +179,7 @@ export default function GerenciarContasModal() {
                     e.stopPropagation();
                     abrirMenu(conta, e.currentTarget);
                   }}
-                  className="mr-3 grid h-8 w-8 shrink-0 place-items-center rounded text-txt-secondary transition hover:text-txt-primary"
+                  className="mr-3 grid h-8 celular:h-[44px] w-8 celular:w-[44px] shrink-0 place-items-center rounded text-txt-secondary transition hover:text-txt-primary"
                 >
                   <MoreHorizontal size={20} />
                 </button>
@@ -194,7 +194,7 @@ export default function GerenciarContasModal() {
         disabled={cheio}
         onClick={() => openModal({ kind: "adicionarConta", voltar: true })}
         title={cheio ? `Limite de ${LIMITE_DE_CONTAS} contas por dispositivo` : undefined}
-        className="mt-7 h-10 w-full rounded-lg bg-border-strong text-base font-medium text-txt-primary transition hover:bg-border-strong-hover disabled:cursor-not-allowed disabled:opacity-50"
+        className="mt-7 h-10 celular:h-[44px] w-full rounded-lg bg-border-strong text-base font-medium text-txt-primary transition hover:bg-border-strong-hover disabled:cursor-not-allowed disabled:opacity-50"
       >
         Adicionar uma conta
       </button>

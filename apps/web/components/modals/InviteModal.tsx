@@ -180,7 +180,7 @@ export default function InviteModal({
           </p>
         )}
 
-        <div className="mx-6 mt-6 flex h-10 items-center gap-3 rounded-lg bg-void px-3">
+        <div className="mx-6 mt-6 flex h-10 items-center gap-3 rounded-lg bg-void px-3 celular:h-[48px]">
           <Search size={16} aria-hidden="true" className="shrink-0 text-txt-muted" />
           <input
             value={busca}
@@ -223,7 +223,7 @@ export default function InviteModal({
                     type="button"
                     disabled={convidado || !url}
                     onClick={() => void convidar(amigo)}
-                    className={`flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg px-3 text-sm font-medium transition ${
+                    className={`flex h-8 celular:h-[44px] shrink-0 items-center justify-center gap-1 rounded-lg px-3 text-sm font-medium transition ${
                       convidado
                         ? "cursor-default border border-border-strong text-txt-muted"
                         : "bg-border-strong text-txt-normal hover:bg-border-strong-hover disabled:opacity-50"
@@ -245,7 +245,9 @@ export default function InviteModal({
             Ou, envie um convite do servidor a um amigo
           </p>
           {/* input + botão num container só: no Discord os dois são uma peça */}
-          <div className="mt-2 flex h-10 items-center overflow-hidden rounded-lg bg-void pl-3 pr-1">
+          {/* 52 no celular: a cápsula tem `overflow-hidden` e o "Copiar" sobe
+              para os 44 do alvo de toque — em 40 ele saía cortado */}
+          <div className="mt-2 flex h-10 items-center overflow-hidden rounded-lg bg-void pl-3 pr-1 celular:h-[52px]">
             <input
               value={url || "gerando…"}
               readOnly
@@ -257,7 +259,7 @@ export default function InviteModal({
               type="button"
               disabled={!url}
               onClick={() => void copiar()}
-              className="flex h-8 shrink-0 items-center gap-1.5 rounded bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
+              className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
             >
               {copied && <Check size={16} aria-hidden="true" />}
               {copied ? "Copiado" : "Copiar"}
@@ -270,7 +272,7 @@ export default function InviteModal({
             <button
               type="button"
               onClick={() => setEditando(true)}
-              className="font-medium text-txt-link hover:underline"
+              className="font-medium text-txt-link hover:underline celular:inline-flex celular:min-h-[44px] celular:items-center"
             >
               Editar link de convite
             </button>

@@ -104,7 +104,7 @@ export default function SessoesTab() {
                 <button
                   type="button"
                   onClick={() => void encerrar(sessao.id)}
-                  className="flex h-8 shrink-0 items-center gap-1.5 rounded-[3px] px-2 text-sm font-medium text-red transition hover:bg-red hover:text-white"
+                  className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded-[3px] px-2 text-sm font-medium text-red transition hover:bg-red hover:text-white"
                 >
                   <LogOut size={16} aria-hidden="true" />
                   {t("sessoes.encerrar")}
@@ -117,7 +117,7 @@ export default function SessoesTab() {
             <button
               type="button"
               onClick={() => void encerrarTodas()}
-              className="mt-5 flex h-10 w-full items-center justify-center gap-2 rounded-[3px] bg-red text-sm font-medium text-white transition hover:bg-red-hover"
+              className="mt-5 flex h-10 celular:h-[44px] w-full items-center justify-center gap-2 rounded-[3px] bg-red text-sm font-medium text-white transition hover:bg-red-hover"
             >
               <LogOut size={16} aria-hidden="true" />
               {t("sessoes.encerrarTudo")}

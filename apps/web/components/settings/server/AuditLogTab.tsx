@@ -137,7 +137,7 @@ export default function AuditLogTab({ guildId }: { guildId: string }) {
           id="audit-user"
           value={userId}
           onChange={(e) => setUserId(e.target.value)}
-          className="h-9 rounded-[3px] bg-void px-2 text-sm text-txt-normal outline-none"
+          className="h-9 rounded-[3px] bg-void px-2 text-sm text-txt-normal outline-none celular:h-[44px] celular:text-[max(16px,1em)]"
         >
           <option value="">Todos os membros</option>
           {members.map((m) => (
@@ -154,7 +154,7 @@ export default function AuditLogTab({ guildId }: { guildId: string }) {
           id="audit-action"
           value={action}
           onChange={(e) => setAction(e.target.value as AuditAction | "")}
-          className="h-9 rounded-[3px] bg-void px-2 text-sm text-txt-normal outline-none"
+          className="h-9 rounded-[3px] bg-void px-2 text-sm text-txt-normal outline-none celular:h-[44px] celular:text-[max(16px,1em)]"
         >
           <option value="">Todas as ações</option>
           {AUDIT_ACTIONS.map((a) => (
@@ -182,7 +182,7 @@ export default function AuditLogTab({ guildId }: { guildId: string }) {
           type="button"
           disabled={loading}
           onClick={() => void load(true)}
-          className="mt-3 h-9 shrink-0 rounded-[3px] bg-void text-sm font-medium text-txt-normal transition hover:bg-hov disabled:opacity-50"
+          className="mt-3 h-9 celular:h-[44px] shrink-0 rounded-[3px] bg-void text-sm font-medium text-txt-normal transition hover:bg-hov disabled:opacity-50"
         >
           Carregar mais
         </button>

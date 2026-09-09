@@ -348,7 +348,7 @@ export default function ChannelSettingsModal({
                     type="button"
                     disabled={sincronizando}
                     onClick={() => void sincronizar()}
-                    className="h-8 shrink-0 rounded-[3px] border border-border-strong px-3 text-sm text-txt-normal transition hover:border-border-strong-hover disabled:opacity-50"
+                    className="h-8 celular:h-[44px] shrink-0 rounded-[3px] border border-border-strong px-3 text-sm text-txt-normal transition hover:border-border-strong-hover disabled:opacity-50"
                   >
                     {sincronizando ? "Sincronizando…" : "Sincronizar com a categoria"}
                   </button>

@@ -228,7 +228,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
           type="button"
           onClick={abrirOrdenacao}
           aria-haspopup="menu"
-          className={`flex h-10 items-center gap-2 ${BOTAO_SECUNDARIO}`}
+          className={`flex h-10 celular:h-[44px] items-center gap-2 ${BOTAO_SECUNDARIO}`}
         >
           {/* seta dupla vertical: o vocabulário só tem a horizontal, girada */}
           <ArrowLeftRight size={16} aria-hidden="true" className="rotate-90" />
@@ -239,7 +239,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
             type="button"
             disabled={marcados.length === 0}
             onClick={() => void removerMarcados()}
-            className={`h-10 ${BOTAO_PERIGO}`}
+            className={`h-10 celular:h-[44px] ${BOTAO_PERIGO}`}
           >
             Remover
           </button>
@@ -351,7 +351,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
                               // no print a pilha de cargos é só cor + nome; o "×"
                               // aparece com o mouse na linha (e com o foco, para
                               // quem navega pelo teclado)
-                              className="text-txt-muted opacity-0 transition hover:text-txt-primary focus-visible:opacity-100 group-hover:opacity-100"
+                              className="text-txt-muted opacity-0 transition hover:text-txt-primary focus-visible:opacity-100 group-hover:opacity-100 celular:opacity-100"
                             >
                               <X size={12} />
                             </button>
@@ -381,7 +381,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
                       aria-label={`Ações para ${displayNameOf(m.user)}`}
                       // sempre visível: é a coluna de ações da tabela do print,
                       // não uma ação escondida de hover
-                      className="grid h-8 w-8 place-items-center rounded text-txt-muted transition hover:bg-border-strong hover:text-txt-primary"
+                      className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded text-txt-muted transition hover:bg-border-strong hover:text-txt-primary"
                     >
                       <MoreHorizontal size={16} />
                     </button>
@@ -405,7 +405,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
               setPagina(1);
             }}
             aria-label="Membros por página"
-            className="h-9 rounded-lg border border-border bg-input px-2 text-sm text-txt-normal outline-none focus:border-accent"
+            className="h-9 rounded-lg border border-border bg-input px-2 text-sm text-txt-normal outline-none focus:border-accent celular:h-[44px] celular:text-[max(16px,1em)]"
           >
             {POR_PAGINA.map((n) => (
               <option key={n} value={n}>
@@ -422,7 +422,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
               type="button"
               disabled={pag.pagina === 1}
               onClick={() => setPagina(pag.pagina - 1)}
-              className="flex h-8 items-center gap-1 rounded-lg px-2 text-sm text-txt-muted transition hover:text-txt-primary disabled:opacity-40"
+              className="flex h-8 celular:h-[44px] items-center gap-1 rounded-lg px-2 text-sm text-txt-muted transition hover:text-txt-primary disabled:opacity-40"
             >
               <ChevronLeft size={16} aria-hidden="true" />
               Voltar
@@ -438,7 +438,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
                   type="button"
                   aria-current={n === pag.pagina ? "page" : undefined}
                   onClick={() => setPagina(n)}
-                  className={`grid h-8 w-8 place-items-center rounded-full text-sm transition ${
+                  className={`grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded-full text-sm transition ${
                     n === pag.pagina
                       ? "bg-accent font-medium text-accent-ink"
                       : "text-txt-normal hover:bg-hov"
@@ -452,7 +452,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
               type="button"
               disabled={pag.pagina === pag.paginas}
               onClick={() => setPagina(pag.pagina + 1)}
-              className="flex h-8 items-center gap-1 rounded-lg px-2 text-sm text-txt-muted transition hover:text-txt-primary disabled:opacity-40"
+              className="flex h-8 celular:h-[44px] items-center gap-1 rounded-lg px-2 text-sm text-txt-muted transition hover:text-txt-primary disabled:opacity-40"
             >
               Próximo
               <ChevronRight size={16} aria-hidden="true" />

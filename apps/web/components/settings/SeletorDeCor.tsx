@@ -73,7 +73,7 @@ export default function SeletorDeCor({
               role="tab"
               aria-selected={modo === m}
               onClick={() => setModo(m)}
-              className={`-mb-px border-b-2 px-3 pb-2 text-sm font-medium transition ${
+              className={`-mb-px border-b-2 px-3 pb-2 text-sm font-medium transition celular:min-h-[44px] ${
                 modo === m
                   ? "border-accent text-txt-primary"
                   : "border-transparent text-txt-muted hover:text-txt-normal"
@@ -98,7 +98,7 @@ export default function SeletorDeCor({
               onClick={() => onChange("")}
               aria-label="Sem cor"
               aria-pressed={value === ""}
-              className={`grid h-8 w-8 place-items-center rounded-[4px] bg-border-strong text-xs text-white transition ${
+              className={`grid h-8 w-8 place-items-center rounded-[4px] bg-border-strong text-xs text-white transition celular:h-[44px] celular:w-[44px] ${
                 value === "" ? "ring-2 ring-white" : "hover:opacity-80"
               }`}
             >
@@ -116,7 +116,7 @@ export default function SeletorDeCor({
                 aria-label={`Cor ${c}`}
                 aria-pressed={ativo}
                 style={{ backgroundColor: c }}
-                className={`grid h-8 w-8 place-items-center rounded-[4px] transition ${
+                className={`grid h-8 w-8 place-items-center rounded-[4px] transition celular:h-[44px] celular:w-[44px] ${
                   ativo ? "ring-2 ring-white" : "hover:opacity-80"
                 }`}
               >
@@ -130,7 +130,7 @@ export default function SeletorDeCor({
               type="button"
               onClick={() => void contaGotas()}
               aria-label="Escolher uma cor da tela"
-              className="grid h-8 w-8 place-items-center rounded-[4px] border border-border-strong text-txt-normal transition hover:bg-hov"
+              className="grid h-8 w-8 place-items-center rounded-[4px] border border-border-strong text-txt-normal transition hover:bg-hov celular:h-[44px] celular:w-[44px]"
             >
               <Pipette size={16} />
             </button>
@@ -141,7 +141,7 @@ export default function SeletorDeCor({
             onChange={(e) => onChange(e.target.value)}
             placeholder="#rrggbb"
             aria-label={`${rotulo} em hexadecimal`}
-            className="h-8 w-[104px] rounded-[3px] border border-border bg-input px-2 font-mono text-sm text-txt-normal outline-none transition-colors placeholder:text-txt-muted focus:border-accent"
+            className="h-8 w-[104px] rounded-[3px] border border-border bg-input px-2 font-mono text-sm text-txt-normal outline-none transition-colors placeholder:text-txt-muted focus:border-accent celular:h-[44px] celular:text-[max(16px,1em)]"
           />
         </div>
       )}

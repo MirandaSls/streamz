@@ -149,7 +149,7 @@ function BlocoDeDados({ conta }: { conta: MinhaConta | null }) {
           type="button"
           disabled={ocupado}
           onClick={() => void baixar()}
-          className="flex h-8 shrink-0 items-center gap-1.5 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover disabled:opacity-50"
+          className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover disabled:opacity-50"
         >
           <Download size={14} aria-hidden="true" />
           {ocupado ? "Montando…" : "Baixar"}
@@ -277,7 +277,7 @@ function BlocoDeMfa({
             <button
               type="button"
               onClick={() => (regerando ? limpar() : (setDesligando(false), setRegerando(true)))}
-              className="h-8 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
+              className="h-8 celular:h-[44px] rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
             >
               {regerando ? "Cancelar" : "Novos códigos"}
             </button>
@@ -286,7 +286,7 @@ function BlocoDeMfa({
             <button
               type="button"
               onClick={() => (desligando ? limpar() : (setRegerando(false), setDesligando(true)))}
-              className="h-8 rounded-[3px] border border-red px-3 text-sm font-medium text-red transition hover:bg-red hover:text-white"
+              className="h-8 celular:h-[44px] rounded-[3px] border border-red px-3 text-sm font-medium text-red transition hover:bg-red hover:text-white"
             >
               {desligando ? "Cancelar" : "Desativar"}
             </button>
@@ -295,7 +295,7 @@ function BlocoDeMfa({
               type="button"
               disabled={ocupado}
               onClick={() => (setup ? limpar() : void comecar())}
-              className="h-8 rounded-[3px] bg-accent px-3 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
+              className="h-8 celular:h-[44px] rounded-[3px] bg-accent px-3 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
             >
               {setup ? "Cancelar" : "Ativar"}
             </button>
@@ -435,7 +435,7 @@ function CodigosDeRecuperacao({
         <button
           type="button"
           onClick={baixar}
-          className="h-8 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
+          className="h-8 celular:h-[44px] rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
         >
           Baixar .txt
         </button>
@@ -459,7 +459,7 @@ function BotaoCopiar({ texto, rotulo }: { texto: string; rotulo: string }) {
           })
           .catch(() => ui.toast("Não foi possível copiar", "error"));
       }}
-      className="mt-2 flex h-8 items-center gap-1.5 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
+      className="mt-2 flex h-8 celular:h-[44px] items-center gap-1.5 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
     >
       <Copy size={14} aria-hidden="true" />
       {copiado ? "Copiado!" : rotulo}

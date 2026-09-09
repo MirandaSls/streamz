@@ -191,7 +191,7 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
               type="button"
               disabled={uploading}
               onClick={() => fileRef.current?.click()}
-              className={`h-8 ${BOTAO_ACENTO}`}
+              className={`h-8 celular:h-[44px] ${BOTAO_ACENTO}`}
             >
               {uploading ? "Enviando…" : "Altere o ícone do servidor"}
             </button>
@@ -202,7 +202,7 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
                 type="button"
                 disabled={uploading}
                 onClick={() => void removeIcon()}
-                className={`h-8 ${BOTAO_PERIGO}`}
+                className={`h-8 celular:h-[44px] ${BOTAO_PERIGO}`}
               >
                 Remover o ícone
               </button>

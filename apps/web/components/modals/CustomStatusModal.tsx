@@ -85,7 +85,7 @@ export default function CustomStatusModal() {
             type="button"
             onClick={() => setEscolhendo((v) => !v)}
             aria-label="Escolher emoji do status"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded text-txt-secondary hover:text-txt-primary"
+            className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] shrink-0 place-items-center rounded text-txt-secondary hover:text-txt-primary"
           >
             {emoji ? <span className="text-lg leading-none">{emoji}</span> : <SmilePlus size={18} />}
           </button>
@@ -109,7 +109,9 @@ export default function CustomStatusModal() {
             type="button"
             onClick={() => setEmoji(null)}
             aria-label="Remover emoji"
-            className="grid h-6 w-6 shrink-0 place-items-center rounded text-txt-muted hover:text-txt-primary"
+            // 24px sobre a cápsula de 40 (44 empurraria o campo); o alvo de
+            // toque cresce por um pseudo-elemento invisível
+            className="relative grid h-6 w-6 shrink-0 place-items-center rounded text-txt-muted hover:text-txt-primary celular:before:absolute celular:before:-inset-[10px] celular:before:content-['']"
           >
             <X size={14} />
           </button>

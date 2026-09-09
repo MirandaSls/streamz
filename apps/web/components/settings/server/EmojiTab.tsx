@@ -73,7 +73,7 @@ export default function EmojiTab({ guildId }: { guildId: string }) {
             type="button"
             disabled={enviando || emojis.length >= MAX_EMOJIS_PER_GUILD}
             onClick={() => inputRef.current?.click()}
-            className={`h-10 ${BOTAO_ACENTO}`}
+            className={`h-10 celular:h-[44px] ${BOTAO_ACENTO}`}
           >
             {enviando ? "Enviando…" : "Enviar emoji"}
           </button>
@@ -162,7 +162,7 @@ export default function EmojiTab({ guildId }: { guildId: string }) {
                     )}
                   </td>
                   <td>
-                    <span className="flex items-center justify-end gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
+                    <span className="flex items-center justify-end gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100 celular:opacity-100">
                       <AcaoDaLinha
                         label="Renomear"
                         onClick={async () => {
@@ -232,7 +232,7 @@ function AcaoDaLinha({
         type="button"
         onClick={onClick}
         aria-label={label}
-        className={`grid h-8 w-8 place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong ${
+        className={`grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong ${
           danger ? "hover:text-red" : "hover:text-txt-primary"
         }`}
       >

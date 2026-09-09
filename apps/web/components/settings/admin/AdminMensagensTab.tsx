@@ -119,7 +119,7 @@ function ListaDeCanais({ onAbrir }: { onAbrir: (c: AdminChannelView) => void }) 
             type="button"
             aria-pressed={escopo === e.id}
             onClick={() => setEscopo(e.id)}
-            className={`h-7 rounded-[3px] px-2.5 text-sm font-medium transition ${
+            className={`h-7 celular:h-[44px] rounded-[3px] px-2.5 text-sm font-medium transition ${
               escopo === e.id
                 ? "bg-sel text-txt-primary"
                 : "text-txt-faint hover:bg-hov hover:text-txt-normal"
@@ -175,7 +175,7 @@ function ListaDeCanais({ onAbrir }: { onAbrir: (c: AdminChannelView) => void }) 
             type="button"
             onClick={() => void carregarMais()}
             disabled={carregandoMais}
-            className="mt-3 h-9 w-full rounded-[3px] border border-border-strong text-sm font-medium text-txt-normal transition hover:border-border-strong-hover disabled:opacity-60"
+            className="mt-3 h-9 celular:h-[44px] w-full rounded-[3px] border border-border-strong text-sm font-medium text-txt-normal transition hover:border-border-strong-hover disabled:opacity-60"
           >
             {carregandoMais ? "Carregando…" : "Carregar mais"}
           </button>
@@ -241,7 +241,7 @@ function Historico({ canal, onVoltar }: { canal: AdminChannelView; onVoltar: () 
         <button
           type="button"
           onClick={onVoltar}
-          className="flex h-8 shrink-0 items-center gap-1.5 rounded-[3px] px-2 text-sm font-medium text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
+          className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded-[3px] px-2 text-sm font-medium text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
         >
           <ArrowLeft size={16} aria-hidden="true" />
           Canais
@@ -265,7 +265,7 @@ function Historico({ canal, onVoltar }: { canal: AdminChannelView; onVoltar: () 
             type="button"
             onClick={() => void carregarAntigas()}
             disabled={carregando}
-            className="mb-2 h-9 w-full rounded-[3px] border border-border-strong text-sm font-medium text-txt-normal transition hover:border-border-strong-hover disabled:opacity-60"
+            className="mb-2 h-9 celular:h-[44px] w-full rounded-[3px] border border-border-strong text-sm font-medium text-txt-normal transition hover:border-border-strong-hover disabled:opacity-60"
           >
             {carregando ? "Carregando…" : "Mensagens anteriores"}
           </button>
