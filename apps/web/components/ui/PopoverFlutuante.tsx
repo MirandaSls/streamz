@@ -156,10 +156,28 @@ export default function PopoverFlutuante({
             semRespiro ? "" : "p-3"
           }`}
         >
-          <span
-            aria-hidden="true"
-            className="mx-auto mb-2 block h-1 w-9 rounded-full bg-border-strong"
-          />
+          {/*
+            A alça é **botão de verdade**, com rótulo "Fechar" — a mesma saída
+            visível que a folha do menu de contexto ganhou. Um `span`
+            `aria-hidden` desenhava a alça e não fechava nada: quem não conhece
+            o gesto de tocar no véu (e quem usa leitor de tela) ficava com o
+            "voltar" do Android como única saída, e no navegador de iPhone esse
+            botão não existe.
+
+            `sticky` porque a folha rola por dentro e a saída não pode subir
+            junto com o conteúdo. `-mt-1` no caso com respiro devolve os 4px que
+            o `p-3` da moldura já dá em cima, para a alça não descer de lugar.
+          */}
+          <button
+            type="button"
+            onClick={onFechar}
+            aria-label="Fechar"
+            className={`sticky top-0 z-10 flex h-[28px] w-full shrink-0 items-center justify-center bg-overlay ${
+              semRespiro ? "" : "-mt-1 mb-1"
+            }`}
+          >
+            <span aria-hidden="true" className="h-1 w-9 rounded-full bg-border-strong" />
+          </button>
           {children}
         </div>
       </div>,

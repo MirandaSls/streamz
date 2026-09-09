@@ -94,6 +94,33 @@ function sincronizar() {
 }
 
 /**
+ * Há alguma camada de celular na tela agora?
+ *
+ * O `ShellMobile` pergunta isto antes de desfazer a navegação dele no
+ * `popstate`. A guarda que ele já tinha — `useUI.modals.length > 0` — só cobre
+ * o que passa pelo `ModalHost`, e as folhas que sobem por portal (emoji, cartão
+ * de perfil, menu de contexto, popover ancorado) não entram lá.
+ *
+ * **Por que a reposição do instantâneo não bastava.** A ideia era deixar o
+ * shell desfazer e repor a navegação no fim da fila. Ela funciona para uma
+ * camada montada *no shell* (o menu de contexto), e falha para uma montada
+ * *dentro da tela que o shell acabou de desfazer*: o ouvinte do shell é o
+ * primeiro (ele registra o dele ao montar, muito antes de existir camada), o
+ * React descarrega a tela ainda dentro do despacho do `popstate`, e a folha de
+ * emoji — que mora no `Composer`, dentro da tela de canal — some junto. Quando
+ * o nosso ouvinte roda, `camadas` já está vazio, `congelado` já é `null`, e não
+ * há o que repor. Medido em 390x844: um "voltar" com a folha de emoji aberta
+ * fechava a folha **e** saía do canal.
+ *
+ * Perguntar antes é mais barato e mais direto que consertar depois: com camada
+ * na tela o "voltar" é dela, e o shell não se mexe. A reposição continua onde
+ * está, para as ordens de ouvinte que esta guarda não cobre.
+ */
+export function haCamadaNoCelular(): boolean {
+  return camadas.length > 0;
+}
+
+/**
  * Registra uma camada enquanto `ligado` for verdadeiro.
  *
  * `voltar` é lido no momento do evento (fica numa `ref`), então pode fechar
