@@ -1,6 +1,8 @@
 "use client";
 
 import type { ScreenQuality } from "@streamz/shared";
+import { ALVO_MINIMO } from "@/components/voice/palco-mobile";
+import { useEhMobile } from "@/hooks/useEhMobile";
 import { RESOLUCOES, TAXAS, juntarPreset, separarPreset } from "@/lib/seletor-de-tela";
 
 /**
@@ -52,6 +54,12 @@ export function SegmentosDeQualidade({
  * mesma forma da barra de abas do seletor: sulco de 40px raio 8, segmentos de
  * 32px. Dois deles cabem lado a lado; o rótulo em versalete é o que os separa
  * sem precisar de moldura.
+ *
+ * **No celular os segmentos crescem para 44.** `h-8` desenha 31px com a raiz de
+ * 15,5 (a escala do Tailwind é `rem`), e 31 é menos que dois terços do piso de
+ * toque: no navegador é aqui que se escolhe a qualidade da transmissão (o
+ * seletor com rodapé só existe no app de desktop), então estes são os botões da
+ * escolha, não uma preferência escondida. O sulco acompanha, 44 + os 8 do `p-1`.
  */
 function Segmento({
   rotulo,
@@ -64,19 +72,26 @@ function Segmento({
   atual: string;
   onEscolher: (valor: string) => void;
 }) {
+  const ehMobile = useEhMobile();
   return (
     <div className="flex items-center gap-2">
       <span className="whitespace-nowrap text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">
         {rotulo}
       </span>
-      <div role="group" aria-label={rotulo} className="flex h-10 gap-1 rounded-lg bg-void p-1">
+      <div
+        role="group"
+        aria-label={rotulo}
+        style={ehMobile ? { height: ALVO_MINIMO + 8 } : undefined}
+        className={`flex gap-1 rounded-lg bg-void p-1 ${ehMobile ? "" : "h-10"}`}
+      >
         {opcoes.map((o) => (
           <button
             key={o.valor}
             type="button"
             aria-pressed={atual === o.valor}
             onClick={() => onEscolher(o.valor)}
-            className={`h-8 rounded-md px-3 text-sm font-semibold transition ${
+            style={ehMobile ? { height: ALVO_MINIMO } : undefined}
+            className={`rounded-md px-3 text-sm font-semibold transition ${ehMobile ? "" : "h-8"} ${
               atual === o.valor
                 ? "bg-accent text-accent-ink"
                 : "text-txt-muted hover:bg-hov hover:text-txt-primary"

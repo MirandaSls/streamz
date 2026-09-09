@@ -155,7 +155,12 @@ export default function PalcoMobile({
       // `-mx`/`px` em px pelo mesmo motivo das alturas; a rolagem chega às
       // bordas da tela e o primeiro tile nasce alinhado com o destaque
       style={{
-        height: paisagem ? FAIXA_ALTURA_MOBILE * 0.8 + 8 : FAIXA_ALTURA_MOBILE,
+        // **O `+ 8` vale nas duas orientações**, e faltava em pé. A caixa é
+        // `border-box`: com `height: 78` e `pt-2`, sobram 70 para um filho de
+        // 78, e o `overflow-x: auto` (que implica `overflow-y: auto`) corta os
+        // 8 restantes — a miniatura perdia a base, com o rótulo de nome cortado
+        // ao meio. Medido em 390×844: tira em y 678..756 e miniatura em 686..764.
+        height: (paisagem ? FAIXA_ALTURA_MOBILE * 0.8 : FAIXA_ALTURA_MOBILE) + 8,
         // **Deitado a tira ficava embaixo de tudo — literalmente.** Ela era
         // `bottom-0` com 70px de altura, e a cápsula de controles é
         // `bottom: 8` com 68: as duas ocupavam a mesma fatia de tela, e a
