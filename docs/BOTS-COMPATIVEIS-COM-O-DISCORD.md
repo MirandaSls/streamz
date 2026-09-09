@@ -1898,6 +1898,35 @@ no desktop **e no celular**, porque §3.3 do processo: typecheck não pega tag
 torta. O leiaute de celular entrou depois deste documento (PR #170) e tudo o que
 a F4 desenha existe nos dois leiautes.
 
+**Como ficou, na integração.** A prova roda por
+`apps/api/test/discord-compat/prova-f4-instalacao.mjs`, com semente em
+`semear-f4.mjs` e um bot **discord.js@14** de verdade, conectado **antes** da
+instalação e com os intents de um bot comum (`Guilds | GuildMessages |
+MessageContent` — **sem** o `GuildMembers`, que no Discord é privilegiado). São
+oito blocos: o diretório, o bot conectado e sem servidor, instalar → o
+`GUILD_CREATE` chegar **na sessão já aberta**, `!ping` → `pong` de volta pelo
+socket.io, o cargo gerenciado com **exatamente** as permissões escolhidas, o 403
+de quem não tem `MANAGE_GUILD` nas três rotas, remover → `GUILD_DELETE` com o
+cargo e o membro sumindo, e — o bloco que só a integração podia escrever —
+apagar o **aplicativo** pelo portal tirando o bot de cada servidor onde está.
+
+**Duas coisas que só a integração fecha, e por que elas não são detalhe.**
+
+1. **A junção A↔B.** Apagar um aplicativo tem de desfazer cada instalação
+   **antes** de apagar o usuário-bot. O `onDelete: Cascade` do banco já deixava
+   o banco consistente sozinho — o que ele não faz é o **evento**: sem o laço,
+   as telas abertas mostrariam o bot na lista de membros até alguém recarregar,
+   e um bot conectado nunca receberia o `GUILD_DELETE`. Cada lote via metade
+   disso e nenhum podia provar; é o caso geral de por que a integração é um
+   trabalho, e não um `git merge`.
+2. **A corrida da instalação.** `instalar` lê para decidir entre criar e
+   reautorizar, e só depois escreve; as duas coisas não são atômicas entre si.
+   Dois cliques em "Autorizar" ao mesmo tempo levavam um `P2002` cru — **500**
+   para quem clicou duas vezes rápido. O conserto é tentar e tratar a colisão
+   (o padrão que o `criarUsuarioBot` da F0 já usa), e não travar a tabela:
+   perder a corrida quer dizer que o app *está* instalado, e instalar o que já
+   está instalado é reautorizar.
+
 **Esforço:** 6–9 dias.
 
 ---

@@ -80,6 +80,26 @@ async function medir(page, rotulo, seletor, indice = 0) {
   return r;
 }
 
+/**
+ * O card do diretório — a caixa inteira, e não o botão dentro dela.
+ *
+ * O card não tem `data-*` próprio (o `data-adicionar-app` é do botão de
+ * adicionar), então se chega nele subindo do botão até o ancestral posicionado.
+ * Medir o botão por engano dá 161 × 32, que é a medida do botão e não do card.
+ */
+async function medirCard(page, rotulo) {
+  const r = await page.evaluate(() => {
+    const b = document.querySelector("[data-adicionar-app]");
+    const card = b?.closest("div.relative");
+    if (!card) return null;
+    const c = card.getBoundingClientRect();
+    return { w: Math.round(c.width * 10) / 10, h: Math.round(c.height * 10) / 10 };
+  });
+  medidas.push({ rotulo, seletor: "o card do diretório (ancestral do botão)", ...(r ?? { w: null, h: null }) });
+  console.log(`   ↳ ${rotulo}: ${r ? `${r.w} × ${r.h}` : "NÃO ACHOU"}`);
+  return r;
+}
+
 /** Recorta a pílula BOT ampliada, para dar para olhar em vez de acreditar. */
 async function recortarPilula(page, nome, escala = 6) {
   const caixa = await page.evaluate(() => {
@@ -173,10 +193,19 @@ async function passeio(page, p, celular) {
 
   // ── 2. o diretório ──────────────────────────────────────────────────────
   await passo(`${p} diretório`, async () => {
+    // No celular a rail não fica à vista dentro do canal: o canal é uma tela
+    // empilhada e a barra de abas some (ShellMobile). Voltar para `/app`
+    // devolve a base da aba "início", que é onde a rail vive. No desktop as
+    // quatro colunas estão sempre de pé e isto é inofensivo.
+    if (celular) {
+      await page.goto(`${WEB}/app`);
+      await page.waitForTimeout(2500);
+    }
     await page.locator("[data-apps-button]").first().click();
     await page.waitForTimeout(2500);
     await foto(page, `${p}-01-diretorio`);
-    await medir(page, `${p} card do diretório`, "[data-adicionar-app]");
+    await medirCard(page, `${p} card do diretório`);
+    await medir(page, `${p} botão "Adicionar ao servidor" do card`, "[data-adicionar-app]");
   });
 
   // ── 3. a página de um app ───────────────────────────────────────────────
