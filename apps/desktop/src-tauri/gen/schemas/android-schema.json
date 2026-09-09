@@ -2169,6 +2169,36 @@
       "description": "Permission identifier",
       "oneOf": [
         {
+          "description": "Default plugin permissions.\n#### This default permission set includes:\n\n- `allow-baixar-atualizacao`\n- `allow-instalar-atualizacao`",
+          "type": "string",
+          "const": "atualizador:default",
+          "markdownDescription": "Default plugin permissions.\n#### This default permission set includes:\n\n- `allow-baixar-atualizacao`\n- `allow-instalar-atualizacao`"
+        },
+        {
+          "description": "Enables the baixar_atualizacao command without any pre-configured scope.",
+          "type": "string",
+          "const": "atualizador:allow-baixar-atualizacao",
+          "markdownDescription": "Enables the baixar_atualizacao command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the instalar_atualizacao command without any pre-configured scope.",
+          "type": "string",
+          "const": "atualizador:allow-instalar-atualizacao",
+          "markdownDescription": "Enables the instalar_atualizacao command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the baixar_atualizacao command without any pre-configured scope.",
+          "type": "string",
+          "const": "atualizador:deny-baixar-atualizacao",
+          "markdownDescription": "Denies the baixar_atualizacao command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the instalar_atualizacao command without any pre-configured scope.",
+          "type": "string",
+          "const": "atualizador:deny-instalar-atualizacao",
+          "markdownDescription": "Denies the instalar_atualizacao command without any pre-configured scope."
+        },
+        {
           "description": "Default plugin permissions.\n#### This default permission set includes:\n\n- `allow-iniciar-servico-de-chamada`\n- `allow-parar-servico-de-chamada`\n- `allow-registrar-ouvinte-de-saida`",
           "type": "string",
           "const": "chamada:default",
