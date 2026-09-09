@@ -46,6 +46,9 @@ const EXTENSOES: Record<DownloadPlataforma, readonly string[]> = {
   windows: [".exe", ".msi"],
   macos: [".dmg", ".pkg"],
   linux: [".appimage", ".deb", ".rpm"],
+  // O `.aab` NÃO entra: ele é o formato de submissão à Play, não instala em
+  // aparelho nenhum. Oferecê-lo aqui seria entregar um arquivo que só dá erro.
+  android: [".apk"],
 };
 
 /**

@@ -4,6 +4,24 @@ version = "1.1.1"
 description = "Streamz desktop app"
 edition = "2021"
 
+# O crate é **biblioteca e binário** ao mesmo tempo, e não só binário.
+#
+# Por quê: no Android/iOS não há `main()`. O sistema carrega uma biblioteca
+# nativa (`.so` no Android, estática no iOS) e chama o ponto de entrada que o
+# `tauri::mobile_entry_point` gera — ou seja, o app precisa existir como
+# `cdylib`/`staticlib`. O `rlib` é o que o `main.rs` do desktop consome.
+# É o formato que a própria doc do Tauri 2 manda usar para suportar mobile:
+# <https://v2.tauri.app/start/migrate/from-tauri-1/>.
+#
+# O nome tem sufixo `_lib` porque um `[lib]` não pode ter o mesmo nome do
+# `[package]` quando os dois convivem no mesmo crate.
+#
+# Para o desktop nada muda: o `main.rs` continua gerando o mesmo executável,
+# com o mesmo código — só que agora o código mora em `lib.rs`.
+[lib]
+name = "streamz_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -16,11 +34,6 @@ serde_json = "1"
 
 # Plugins do Tauri 2 (a API v2 separou notificação/updater em crates próprias).
 tauri-plugin-notification = "2"
-# Auto-update: o `updater` baixa e instala; o `process` reinicia o app depois.
-# Sem os dois, "atualizar" pararia no meio — instalado, mas rodando a versão
-# velha até o usuário fechar por conta.
-tauri-plugin-updater = "2"
-tauri-plugin-process = "2"
 # Ações da imagem em tela cheia (ver `components/modals/ImageModal.tsx`):
 # `opener` abre no navegador do sistema — o WebView2 não tem abas e
 # `window.open`/`target="_blank"` morrem em silêncio dentro do app, que era o
@@ -32,6 +45,20 @@ tauri-plugin-opener = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
+
+# Auto-update: o `updater` baixa e instala; o `process` reinicia o app depois.
+# Sem os dois, "atualizar" pararia no meio — instalado, mas rodando a versão
+# velha até o usuário fechar por conta.
+#
+# **Fora do Android/iOS**, e por dois motivos que se somam: o atualizador do
+# Tauri simplesmente não tem implementação mobile (na loja quem atualiza é a
+# loja), e o `tauri-plugin-updater` arrasta `zip`/`tar`/`flate2` e o
+# instalador de cada sistema — peso morto num `.apk`. Para o desktop nada
+# muda: `cfg(not(any(android, ios)))` é verdade em Windows, macOS e Linux,
+# então as duas crates entram exatamente como antes.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

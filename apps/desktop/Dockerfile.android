@@ -1,0 +1,172 @@
+# Imagem que compila o **app Android** do Streamz neste servidor Linux.
+#
+# Por que ela existe: o mesmo motivo da `Dockerfile.xwin` — não há Actions
+# (§3.5 do processo) e o host não tem java, nem SDK do Android, nem rust
+# (memória `streamz-sem-node-no-host`). Tudo o que o build precisa mora aqui
+# dentro; o host só empresta o Docker, o disco e os volumes de cache.
+#
+# Diferença importante em relação ao Windows: **aqui não há cross-compile
+# exótico**. O Android é um alvo de primeira classe do Rust e o NDK traz o
+# clang certo para cada ABI; não existe `cargo-xwin`, não existe CRT da
+# Microsoft, não existe armadilha de UCRT. O trabalho todo é ter as peças
+# certas nas versões certas e deixá-las achar umas às outras pelas três
+# variáveis que o Tauri procura (`JAVA_HOME`, `ANDROID_HOME`, `NDK_HOME`).
+#
+# **O que esta imagem NÃO prova**: que o app abre e funciona num telefone. Ela
+# produz um `.apk`/`.aab` assinado e verificável (`apksigner`, `aapt`), o que é
+# uma prova de empacotamento, não de comportamento. Só um aparelho ou um
+# emulador diz o resto — ver `scripts/build-android-no-servidor.sh` e o §5 do
+# processo, que faz a mesma ressalva para o instalador do Windows.
+#
+# Uso: `scripts/build-android-no-servidor.sh` (constrói a imagem e roda tudo).
+FROM debian:bookworm-slim
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# `openjdk-17-jdk-headless`: 17 é a versão que o Android Gradle Plugin 8.x
+# exige (o projeto que o `tauri android init` gera usa AGP 8). O 21 também
+# passaria hoje, mas o 17 é o que a doc do Tauri e o Android Studio entregam,
+# e igualar o que a doc diz é o que evita perder uma tarde num erro de
+# "Unsupported class file major version".
+#   `-headless` porque não há tela: economiza ~200 MB de X11/awt.
+# `unzip`/`zip`: o sdkmanager vem em zip, e o `apksigner`/`zipalign` mexem em
+# zip o tempo todo.
+# `file`/`xxd`: são a prova no fim do build (o `.apk` é um zip; o `file` diz).
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        ca-certificates curl git unzip zip xz-utils file \
+        openjdk-17-jdk-headless \
+        build-essential pkg-config python3; \
+    rm -rf /var/lib/apt/lists/*
+
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+
+# --- Android SDK -------------------------------------------------------------
+# O SDK não vem do apt: a Google só publica o "command line tools" como zip, e
+# é o `sdkmanager` de dentro dele que baixa o resto. O caminho
+# `cmdline-tools/latest/` não é enfeite — o `sdkmanager` recusa rodar de
+# qualquer outro lugar ("Could not determine SDK root"), porque ele se localiza
+# subindo dois diretórios a partir do próprio jar.
+#
+# `ANDROID_HOME` é a variável que o Tauri lê (a doc cita `ANDROID_HOME`, não a
+# `ANDROID_SDK_ROOT` antiga, que o Gradle ainda aceita mas avisa que morreu).
+ENV ANDROID_HOME=/opt/android-sdk
+ARG CMDLINE_TOOLS_VERSION=11076708
+RUN set -eux; \
+    mkdir -p "$ANDROID_HOME/cmdline-tools"; \
+    curl -fsSL -o /tmp/cmdline-tools.zip \
+        "https://dl.google.com/android/repository/commandlinetools-linux-${CMDLINE_TOOLS_VERSION}_latest.zip"; \
+    unzip -q /tmp/cmdline-tools.zip -d /tmp/ct; \
+    mv /tmp/ct/cmdline-tools "$ANDROID_HOME/cmdline-tools/latest"; \
+    rm -rf /tmp/cmdline-tools.zip /tmp/ct
+
+ENV PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
+
+# As licenças têm de ser aceitas **antes** de qualquer instalação, senão cada
+# pacote para e pergunta. `yes |` é o jeito que a própria Google documenta.
+# O `> /dev/null` existe porque a saída são centenas de linhas de barra de
+# progresso com `\r`, que sujam o log do build sem informar nada.
+#
+# As versões abaixo são fixas de propósito. `sdkmanager "platforms;android-34"`
+# sem número pegaria "a mais nova de hoje", e o build deixaria de ser o mesmo
+# amanhã — que é justamente o que um build reprodutível não pode fazer.
+#
+#   platform-tools       → o `adb` (instalar no emulador).
+#   build-tools;36.0.0   → `aapt`/`aapt2`, `zipalign` e o `apksigner`, que são
+#                          as três ferramentas da PROVA no fim do build.
+#   platforms;android-36 → o `android.jar` contra o qual o app compila.
+#
+# **36 não é escolha nossa**: é o `compileSdk`/`targetSdk` que o
+# `tauri android init` escreve no `gen/android/app/build.gradle.kts`. Instalar
+# 34 aqui daria um erro do Gradle a meio build ("failed to find target with
+# hash string android-36"), que é caro de diagnosticar. Se um dia o Tauri
+# subir esse número, **este ARG sobe junto** — os dois têm de casar.
+ARG BUILD_TOOLS_VERSION=36.0.0
+ARG PLATFORM_VERSION=36
+# NDK r27c. O Tauri 2 não fixa versão ("NDK (Side by side)", diz a doc), mas
+# fixar aqui é o que impede o build de hoje e o de amanhã divergirem. r27 é a
+# série LTS atual e a primeira com `libc++` compartilhado por padrão; ela traz
+# o `clang` que o `cc`/`ring`/`aws-lc` das nossas dependências esperam.
+ARG NDK_VERSION=27.2.12479018
+RUN set -eux; \
+    yes | sdkmanager --licenses > /dev/null 2>&1 || true; \
+    sdkmanager --install \
+        "platform-tools" \
+        "build-tools;${BUILD_TOOLS_VERSION}" \
+        "platforms;android-${PLATFORM_VERSION}" \
+        "ndk;${NDK_VERSION}" > /dev/null; \
+    ls "$ANDROID_HOME/ndk/${NDK_VERSION}/source.properties"
+
+# `NDK_HOME` é a terceira variável da doc do Tauri. Ela precisa apontar para a
+# pasta **da versão**, não para `$ANDROID_HOME/ndk` — o `tauri-cli` monta o
+# caminho dos binários do toolchain a partir dela sem procurar subpasta.
+ENV NDK_HOME=${ANDROID_HOME}/ndk/${NDK_VERSION}
+# O `apksigner`, o `aapt` e o `zipalign` no PATH: são a prova do build, e
+# procurá-los à mão em `build-tools/<versão>/` a cada vez é ruído.
+ENV PATH=${ANDROID_HOME}/build-tools/${BUILD_TOOLS_VERSION}:$PATH
+
+# --- Rust --------------------------------------------------------------------
+# Instalado pelo rustup (e não pelo `rust:1-bookworm` como na imagem do
+# Windows) porque aqui a base precisava ser Debian puro para o JDK; trazer o
+# rustup é mais barato que trazer o JDK para dentro da imagem do Rust.
+#
+# Os quatro alvos são os quatro ABIs que a Play aceita. O `.apk` universal e o
+# `.aab` carregam os quatro:
+#   aarch64-linux-android    → arm64-v8a   (todo telefone moderno)
+#   armv7-linux-androideabi  → armeabi-v7a (aparelho antigo de 32 bits)
+#   i686-linux-android       → x86         (emulador antigo)
+#   x86_64-linux-android     → x86_64      (emulador e Chromebook)
+# Compilar os quatro é ~4× o tempo de um. O script tem `--alvos` para quem só
+# quer provar que compila.
+# 1.98.1 é a stable de 2026-09-01. **Não baixe deste número sem medir**: a
+# resolução de dependências do Android puxa crates que o desktop não usa (o
+# `getrandom` 0.4, por exemplo), e as novas já vêm em `edition2024` — um Rust
+# anterior à 1.85 falha com "feature `edition2024` is required" no meio da
+# compilação do primeiro ABI, o que custa 10 min para descobrir. A imagem do
+# Windows usa `rust:1-bookworm`, que é a stable flutuante; aqui o número é
+# fixo para o build de hoje e o de amanhã serem o mesmo.
+ARG RUST_VERSION=1.98.1
+ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME_INSTALL=/usr/local/cargo
+RUN set -eux; \
+    curl -fsSL https://sh.rustup.rs -o /tmp/rustup.sh; \
+    CARGO_HOME=/usr/local/cargo sh /tmp/rustup.sh -y --no-modify-path \
+        --default-toolchain "${RUST_VERSION}" --profile minimal; \
+    rm /tmp/rustup.sh; \
+    CARGO_HOME=/usr/local/cargo /usr/local/cargo/bin/rustup target add \
+        aarch64-linux-android \
+        armv7-linux-androideabi \
+        i686-linux-android \
+        x86_64-linux-android
+
+# --- Node --------------------------------------------------------------------
+# Mesma versão da imagem do Windows, pelo mesmo motivo: é o `@tauri-apps/cli`
+# do `package.json` que dirige o build, e o `beforeBuildCommand` do
+# `tauri.conf.json` roda o build da web (Next) por baixo.
+ARG NODE_VERSION=22.23.2
+RUN set -eux; \
+    curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
+        | tar -xJ -C /usr/local --strip-components=1; \
+    corepack enable; \
+    node -v
+
+# Caches que valem entre rodadas (montados como volumes nomeados pelo script;
+# nunca pastas do repositório, para não sujarem a worktree nem o `git status`):
+#   /cache/cargo   — registry + git do cargo
+#   /cache/gradle  — GRADLE_USER_HOME: a distribuição do Gradle e o cache de
+#                    dependências Maven. É o maior ganho da segunda rodada.
+#   /cache/pnpm    — store do pnpm
+#   /cache/xdg     — ~/.cache genérico
+#
+# `GRADLE_USER_HOME` fora de `$HOME` também resolve um detalhe chato: o
+# container roda como root e o Gradle grava lock em `~/.gradle`; apontar para o
+# volume mantém tudo num lugar só, inspecionável de fora.
+ENV CARGO_HOME=/cache/cargo \
+    GRADLE_USER_HOME=/cache/gradle \
+    PNPM_STORE_PATH=/cache/pnpm \
+    XDG_CACHE_HOME=/cache/xdg \
+    PATH=/cache/cargo/bin:/usr/local/cargo/bin:${ANDROID_HOME}/build-tools/${BUILD_TOOLS_VERSION}:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+WORKDIR /repo

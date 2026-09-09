@@ -1,7 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "splash",
-  "description": "Permissoes da janelinha de abertura/atualizacao: mostrar-se e fechar-se, mostrar e focar a janela principal, e o ciclo do atualizador (checar, baixar, instalar, reiniciar).",
+  "description": "Permissoes da janelinha de abertura/atualizacao: mostrar-se e fechar-se, mostrar e focar a janela principal, e o ciclo do atualizador (checar, baixar, instalar, reiniciar). DESKTOP apenas: no celular nao ha janelinha (a config de plataforma zera app.windows) e nao ha atualizador do Tauri.",
+  "platforms": ["windows", "linux", "macOS"],
   "windows": ["splash"],
   "permissions": [
     "core:default",

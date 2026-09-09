@@ -575,6 +575,66 @@ Diferenças conhecidas e aceitas em relação ao artefato do CI: o NSIS é o 3.0
 do Debian (no Windows o bundler baixa o 3.11), e o `.exe` sai sem assinatura
 Authenticode — igual ao do CI, que também não tem certificado.
 
+### 5.4 O app Android (mesmo crate, `.apk` e `.aab` no servidor)
+
+O app de celular **não é um projeto novo**: é o mesmo `apps/desktop/src-tauri`,
+o mesmo `tauri.conf.json` e o mesmo `apps/web/out` embutido. O que muda está em
+três lugares, e todos estão explicados em `apps/desktop/README.md`:
+
+- o crate virou **lib + bin** (`[lib] crate-type = ["staticlib", "cdylib",
+  "rlib"]`, o app em `src/lib.rs` com `tauri::mobile_entry_point`, o `main.rs`
+  de uma linha). No Android não há `main()`: o sistema carrega uma `.so`;
+- `tauri.android.conf.json` (JSON Merge Patch sobre o `tauri.conf.json`, com
+  **arrays substituindo arrays**) troca as duas janelas do desktop por uma. O
+  item que quebrava de verdade era a `main` nascer `"visible": false` — no
+  celular não há janelinha `splash` para mostrá-la, e o app abria preto;
+- `capabilities/` ganhou `platforms`: `default.json` e `splash.json` são
+  `["windows", "linux", "macOS"]`, e o celular tem o seu `mobile.json`.
+
+```bash
+scripts/build-android-no-servidor.sh             # origin/main, assinado
+scripts/build-android-no-servidor.sh <ref>
+scripts/build-android-no-servidor.sh --aqui      # esta worktree, para provar uma branch
+scripts/build-android-no-servidor.sh --sem-assinar
+```
+
+Sai em `.claude/saida-android/<versão>-<commit>/`: o `.apk` universal (instalar
+à mão, emulador) e o `.aab` (Play). A imagem é `apps/desktop/Dockerfile.android`
+— JDK 17, SDK 36, NDK r27c, Rust 1.98.1 com os quatro alvos Android, Node 22.
+
+**`gen/android/` é versionado**, e isso não é descuido: não existe chave no
+`tauri.conf.json` para permissão de Android. `RECORD_AUDIO`, `CAMERA`,
+`MODIFY_AUDIO_SETTINGS` e as `FOREGROUND_SERVICE*` só entram no
+`AndroidManifest.xml` gerado, e a assinatura de release só entra no
+`build.gradle.kts` gerado. Ignorar a pasta faria um clone novo produzir um
+`.apk` sem microfone, com o defeito aparecendo só no telefone.
+
+**O keystore.** `/root/.android/streamz.keystore`, senha em
+`/root/.android/streamz.keystore.senha` (chmod 600, nunca impressa). Perder o
+keystore é da mesma gravidade que perder `/root/.tauri/streamz.key`: a Play só
+aceita atualização assinada com a mesma chave, então sem ele **não há mais
+atualização** — só um app novo, com outro `applicationId`, e todo mundo
+reinstalando.
+
+**`versionCode`.** O Tauri o deriva da versão por
+`major * 1000000 + minor * 1000 + patch`; a 1.1.0 dá **1001000**. A Play recusa
+upload com `versionCode` repetido, então **duas publicações da mesma versão não
+dão** — para isso existe `bundle.android.versionCode`.
+
+**O que este build NÃO prova.** Que o app abre, que o microfone funciona, que a
+chamada entra. Isso é aparelho ou emulador; aqui se prova que o pacote existe,
+declara as permissões que dissemos que declara (`aapt dump badging`) e está
+assinado com a chave de release (`apksigner verify`). E, explicitamente: as
+permissões `FOREGROUND_SERVICE*` estão **declaradas e inertes** — o serviço
+nativo que mantém a chamada viva com o app em segundo plano ainda não existe,
+então minimizar o app durante uma call continua derrubando o áudio.
+
+**Atualização.** O atualizador do Tauri não existe para Android. A rota
+`/api/updates` responde ao alvo `android` (`ANDROID_UPDATE_VERSION` e
+`ANDROID_UPDATE_URL` no `.env`, sem assinatura — não há o que ela protegesse) e
+o app mostra um card que abre `streamz.chat/download` no navegador. Quem instala
+é o usuário.
+
 ## 6. Paridade visual com o Discord (o método)
 
 O objetivo do usuário é "idêntico ao Discord", com uma exceção fixa: **cores e

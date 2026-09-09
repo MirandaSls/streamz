@@ -15,6 +15,7 @@ import GuildRail from "@/components/layout/GuildRail";
 import UserFooter from "@/components/layout/UserFooter";
 import BarraDeTitulo from "@/components/desktop/BarraDeTitulo";
 import ShellMobile from "@/components/mobile/ShellMobile";
+import CardDeAtualizacaoMobile from "@/components/atualizacao/CardDeAtualizacaoMobile";
 import ModalHost from "@/components/modals/ModalHost";
 import ContextMenuHost from "@/components/ui/ContextMenu";
 import ProfilePopoverHost from "@/components/ui/ProfilePopover";
@@ -116,7 +117,17 @@ export default function AppPage() {
   // Celular: o shell de abas toma o lugar do de colunas. Os hooks acima (sessão,
   // tempo real, atalhos, ausente automático) já rodaram — são os mesmos nos dois
   // leiautes, e é por isso que a decisão fica aqui embaixo e não numa rota.
-  if (ehMobile) return <ShellMobile />;
+  // O card de "saiu versão nova" é irmão do shell, e não parte dele: ele é do
+  // app de celular (Tauri Android), não do site aberto num telefone — quem
+  // decide isso é o próprio card. No site e no desktop ele não renderiza nada.
+  if (ehMobile) {
+    return (
+      <>
+        <ShellMobile />
+        <CardDeAtualizacaoMobile />
+      </>
+    );
+  }
 
   // `min-w` no shell: abaixo de ~940px o cabeçalho da conversa quebrava — o
   // título espremia os ícones, sobrava um caractere solto à esquerda e o

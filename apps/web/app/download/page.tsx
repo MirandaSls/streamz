@@ -125,14 +125,17 @@ export default function DownloadPage() {
   return (
     <AuthCard
       title="Baixar o Streamz"
-      subtitle="O app de desktop ainda é fechado. Informe a senha de acesso para baixar."
+      subtitle="O app ainda é fechado. Informe a senha de acesso para baixar."
     >
       <form onSubmit={onSubmit} noValidate>
-        <FieldLabel htmlFor="plataforma-windows">Sistema operacional</FieldLabel>
+        <FieldLabel htmlFor="plataforma-windows">Sistema</FieldLabel>
         <div
           role="radiogroup"
           aria-label="Sistema operacional"
-          className="mb-5 grid grid-cols-3 gap-2"
+          // duas colunas desde que o Android entrou: quatro botões numa grade
+          // de três deixavam um sozinho na segunda linha, com o dobro da
+          // largura dos outros
+          className="mb-5 grid grid-cols-2 gap-2"
         >
           {DOWNLOAD_PLATAFORMAS.map((p) => {
             const ativo = p === plataforma;
@@ -202,9 +205,11 @@ function detectarPlataforma(): DownloadPlataforma | null {
   const ua = navigator.userAgent;
   if (/Windows/i.test(ua)) return "windows";
   if (/Mac OS X|Macintosh/i.test(ua)) return "macos";
-  // Android também casa com "Linux" no UA; não há build para ele, e chutar
-  // Linux num celular seria pior do que não pré-selecionar nada
-  if (/Android|iPhone|iPad|iPod/i.test(ua)) return null;
+  // Android **antes** de Linux: o UA de um Android também casa com "Linux", e
+  // trocar a ordem daria o instalador errado a todo telefone. O iPhone
+  // continua sem opção — não há `.ipa` para instalar à mão.
+  if (/Android/i.test(ua)) return "android";
+  if (/iPhone|iPad|iPod/i.test(ua)) return null;
   if (/Linux|X11/i.test(ua)) return "linux";
   return null;
 }

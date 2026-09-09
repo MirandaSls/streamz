@@ -55,39 +55,94 @@ export class UpdatesService {
     return Boolean(this.versao() && this.url() && this.assinatura());
   }
 
-  private versao(): string {
-    return this.config.get<string>("DESKTOP_UPDATE_VERSION")?.trim() ?? "";
+  private variavel(prefixo: string, nome: string): string {
+    return this.config.get<string>(`${prefixo}_UPDATE_${nome}`)?.trim() ?? "";
   }
 
-  private url(): string {
-    return this.config.get<string>("DESKTOP_UPDATE_URL")?.trim() ?? "";
+  private versao(prefixo = "DESKTOP"): string {
+    return this.variavel(prefixo, "VERSION");
+  }
+
+  private url(prefixo = "DESKTOP"): string {
+    return this.variavel(prefixo, "URL");
   }
 
   private assinatura(): string {
-    return this.config.get<string>("DESKTOP_UPDATE_SIGNATURE")?.trim() ?? "";
+    return this.variavel("DESKTOP", "SIGNATURE");
   }
 
   /**
    * O manifesto para quem está em `atual`, ou `null` quando não há nada a
    * oferecer — seja porque não configuramos, seja porque ele já está em dia.
    *
-   * `plataforma` chega do próprio Tauri como `<target>-<arch>` (ex.:
-   * `windows-x86_64`). Publicamos só Windows hoje; pedir de outra plataforma
-   * responde "nada" em vez de oferecer um `.exe` para um Mac.
+   * `plataforma` chega como `<target>-<arch>` (ex.: `windows-x86_64`). Dois
+   * clientes usam esta rota, e eles são bem diferentes:
+   *
+   * - **`windows-*`** é o atualizador do Tauri, um cliente cego que baixa e
+   *   instala sozinho. O formato da resposta é dele, a assinatura é
+   *   obrigatória e é ela — não o sigilo do endereço — que impede alguém que
+   *   assuma este endpoint de empurrar um executável qualquer.
+   * - **`android-*`** é o **nosso próprio código** (`lib/atualizacao-mobile.ts`),
+   *   que só compara versões e mostra um card "Baixar atualização". O
+   *   atualizador do Tauri não existe para Android, então **nada é baixado nem
+   *   instalado automaticamente**: o card abre `streamz.chat/download` no
+   *   navegador e quem instala o `.apk` é o usuário, à mão, com o Android
+   *   perguntando se confia na origem. Por isso a `signature` vai vazia —
+   *   não há nada que ela pudesse proteger aqui, e fingir que há seria pior.
+   *
+   * Pedir de qualquer outra plataforma (macOS, Linux) responde "nada" em vez
+   * de oferecer um `.exe` para um Mac.
    */
   manifesto(plataforma: string, atual: string): ManifestoDeAtualizacao | null {
+    if (plataforma.startsWith("windows-")) return this.manifestoDoDesktop(plataforma, atual);
+    if (plataforma.startsWith("android-")) return this.manifestoDoAndroid(plataforma, atual);
+    return null;
+  }
+
+  private manifestoDoDesktop(
+    plataforma: string,
+    atual: string,
+  ): ManifestoDeAtualizacao | null {
     if (!this.isConfigured()) return null;
-    if (!plataforma.startsWith("windows-")) return null;
 
     const versao = this.versao();
     if (!ehMaisNova(versao, atual)) return null;
 
     return {
       version: versao,
-      notes: this.config.get<string>("DESKTOP_UPDATE_NOTES")?.trim() || "Correções e melhorias.",
-      pub_date: this.config.get<string>("DESKTOP_UPDATE_DATE")?.trim() || new Date().toISOString(),
+      notes: this.variavel("DESKTOP", "NOTES") || "Correções e melhorias.",
+      pub_date: this.variavel("DESKTOP", "DATE") || new Date().toISOString(),
       platforms: {
         [plataforma]: { signature: this.assinatura(), url: this.url() },
+      },
+    };
+  }
+
+  /**
+   * O Android não tem assinatura no manifesto (ver acima) e por isso só precisa
+   * de duas variáveis: `ANDROID_UPDATE_VERSION` e `ANDROID_UPDATE_URL`. A URL
+   * é para onde mandar o usuário — hoje `https://streamz.chat/download`, não o
+   * `.apk` direto: a página é que pede a senha de acesso enquanto o app for
+   * fechado.
+   *
+   * Sem as duas, responde "não há atualização", como o desktop. É o mesmo
+   * padrão de dependência opcional do resto da API.
+   */
+  private manifestoDoAndroid(
+    plataforma: string,
+    atual: string,
+  ): ManifestoDeAtualizacao | null {
+    const versao = this.versao("ANDROID");
+    const url = this.url("ANDROID");
+    if (!versao || !url) return null;
+    if (!ehMaisNova(versao, atual)) return null;
+
+    return {
+      version: versao,
+      notes: this.variavel("ANDROID", "NOTES") || "Correções e melhorias.",
+      pub_date: this.variavel("ANDROID", "DATE") || new Date().toISOString(),
+      platforms: {
+        [plataforma]: { signature: "", url },
       },
     };
   }
