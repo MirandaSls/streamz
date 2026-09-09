@@ -58,12 +58,24 @@ const mensagemPorCuid = vi.fn(async (id: string) => ({
   snowflake: id === "msg_1" ? 555n : 556n,
 }));
 
+/** ── j-bots ── a releitura da efêmera, que não mora na `Message`. */
+const linhaEfemeraParaCompat = vi.fn(
+  async (_id: string): Promise<unknown> => ({ snowflake: 888n }),
+);
+
 @Module({
   controllers: [WebhooksCompatController],
   providers: [
     {
       provide: InteractionsService,
-      useValue: { porToken, editarOriginal, lerOriginal, apagarOriginal, followup },
+      useValue: {
+        porToken,
+        editarOriginal,
+        lerOriginal,
+        apagarOriginal,
+        followup,
+        linhaEfemeraParaCompat,
+      },
     },
     { provide: DadosDeCompatService, useValue: { mensagemPorCuid } },
   ],
@@ -100,6 +112,8 @@ describe("/api/v10/webhooks/:app/:token", () => {
     for (const espiao of [porToken, editarOriginal, lerOriginal, apagarOriginal, followup]) {
       espiao.mockClear();
     }
+    mensagemPorCuid.mockClear();
+    linhaEfemeraParaCompat.mockClear();
   });
 
   // O defeito que a prova 3 da fase pegou e que nenhum teste desta suíte
@@ -154,6 +168,36 @@ describe("/api/v10/webhooks/:app/:token", () => {
       INTERACAO,
       expect.objectContaining({ content: "pong" }),
     );
+  });
+
+  // ── j-bots: a mensagem efêmera ──────────────────────────────
+  it("editReply() de uma efêmera relê a tabela própria e devolve `flags: 64`", async () => {
+    // o lote A devolveu um DTO com `efemera: true`; a `Message` não tem esta
+    // linha, então `mensagemPorCuid` daria 404 — a releitura tem de ser a outra
+    editarOriginal.mockResolvedValueOnce({ id: "efem_1", efemera: true } as never);
+
+    const resposta = await chamar(`/42/${TOKEN}/messages/@original`, {
+      method: "PATCH",
+      body: JSON.stringify({ content: "só você vê", flags: 64 }),
+    });
+
+    expect(resposta.status).toBe(200);
+    // `flags: 64` de volta é como a lib do bot reconhece a efemeridade
+    expect(await resposta.json()).toEqual({ id: "888", flags: 64 });
+    expect(linhaEfemeraParaCompat).toHaveBeenCalledWith("efem_1");
+    expect(mensagemPorCuid).not.toHaveBeenCalled();
+  });
+
+  it("efêmera que sumiu (venceu, ou foi apagada) leva 404, e não 500", async () => {
+    editarOriginal.mockResolvedValueOnce({ id: "efem_1", efemera: true } as never);
+    linhaEfemeraParaCompat.mockResolvedValueOnce(null);
+
+    const resposta = await chamar(`/42/${TOKEN}/messages/@original`, {
+      method: "PATCH",
+      body: JSON.stringify({ content: "x", flags: 64 }),
+    });
+
+    expect(resposta.status).toBe(404);
   });
 
   it("o `data` do editReply() sobrevive ao ValidationPipe global", async () => {

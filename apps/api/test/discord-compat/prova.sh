@@ -10,6 +10,14 @@
 # 4. o mesmo com discord.py (`Route.BASE`), que prova a tolerância a
 #    `compress=zlib-stream`
 #
+# E, desde as mensagens efêmeras (§9), uma quinta:
+#
+# 5. o bot responde a um comando de barra com `ephemeral: true` e **só o cliente
+#    socket.io de quem invocou recebe**: um segundo usuário logado no mesmo
+#    canal fica em silêncio, e `GET /api/channels/:id/messages` não a lista.
+#    O passo tem um controle antes (uma resposta normal, que chega aos dois),
+#    senão o silêncio do segundo cliente não provaria nada.
+#
 # As libs de prova (discord.js, socket.io-client, discord.py) são instaladas em
 # contêineres descartáveis. Elas **não** entram no pnpm do monorepo: são
 # ferramenta de verificação, não dependência do produto.
@@ -55,6 +63,32 @@ docker run --rm --network "$REDE" \
     pip install --quiet --disable-pip-version-check 'discord.py>=2.4' >/dev/null 2>&1
     cp /prova/prova-discordpy.py .
     python prova-discordpy.py
+  "
+
+echo
+echo "== 5a. registro dos comandos de barra (o deploy-commands.js do guia) =="
+# a prova da efêmera precisa de um comando registrado; é o mesmo script da F3
+COMANDOS="$(docker run --rm --network "$REDE" \
+  -e SEMENTE="$SEMENTE" \
+  -e API_URL="http://$API_CONTAINER:3333/api" \
+  -v "$AQUI:/prova:ro" -w /tmp \
+  node:22 bash -lc "
+    npm install --silent --no-audit --no-fund discord.js@14 >/dev/null 2>&1
+    cp /prova/deploy-commands.mjs .
+    node deploy-commands.mjs
+  " | tail -1)"
+
+echo
+echo "== 5. mensagem efêmera (flags: 64) — só o invocador recebe =="
+docker run --rm --network "$REDE" \
+  -e SEMENTE="$SEMENTE" \
+  -e COMANDOS="$COMANDOS" \
+  -e API_URL="http://$API_CONTAINER:3333/api" \
+  -v "$AQUI:/prova:ro" -w /tmp \
+  node:22 bash -lc "
+    npm install --silent --no-audit --no-fund discord.js@14 socket.io-client@4 >/dev/null 2>&1
+    cp /prova/prova-efemera.mjs .
+    node prova-efemera.mjs
   "
 
 echo

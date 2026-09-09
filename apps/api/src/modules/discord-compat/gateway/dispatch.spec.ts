@@ -324,6 +324,27 @@ describe("PonteDeEventos — mensagens", () => {
     expect(a.despachados).toEqual([]);
   });
 
+  // ── j-bots: a mensagem efêmera ────────────────────────────
+  it("mensagem efêmera não atravessa a ponte — nem para o bot que a escreveu", async () => {
+    const a = ambiente();
+    a.ligar("s1", "bot1", INTENT.GUILDS | INTENT.GUILD_MESSAGES);
+
+    // a efêmera sai por `emitToUser`, e este ouvinte é chamado em **todo**
+    // `emit` da API — inclusive nesse
+    const doUsuario: AlvoDoEvento = { tipo: "usuario", id: "u_ana" };
+    for (const evento of [
+      WS_EVENTS.MESSAGE_NEW,
+      WS_EVENTS.MESSAGE_UPDATED,
+      WS_EVENTS.MESSAGE_DELETED,
+    ]) {
+      await a.emitir(doUsuario, evento, { ...MENSAGEM_NOVA, efemera: true });
+    }
+
+    expect(a.despachados).toEqual([]);
+    // e o banco nem é consultado: a guarda vem antes da tradução
+    expect(a.consultas).toEqual([]);
+  });
+
   it("message.updated vira MESSAGE_UPDATE (é também o que uma reação produz)", async () => {
     const a = ambiente();
     a.ligar("s1", "bot1", INTENT.GUILD_MESSAGES);

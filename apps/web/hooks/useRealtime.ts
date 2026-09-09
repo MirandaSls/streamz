@@ -80,6 +80,7 @@ import { useEmojis } from "@/stores/emojis";
 import { useSoundboard } from "@/stores/soundboard";
 import { useGuilds } from "@/stores/guilds";
 import { useMessages } from "@/stores/messages";
+import { contaComoNaoLida } from "@/stores/messages-core";
 import { goToChannel } from "@/stores/messages-navigate";
 import { somarNaoLidas } from "@/stores/nao-lidas";
 import { usePermissions } from "@/stores/permissions";
@@ -531,6 +532,12 @@ function lerCanalNaTela() {
 
 /** Não lido, menções, "subir a conversa" e notificação — para uma mensagem que chegou. */
 function onMessageArrived(message: Message, currentUserId?: string) {
+  // ── j-bots ── a mensagem efêmera não conta como não lida, não notifica e não
+  // toca som (a regra e o porquê estão em `contaComoNaoLida`). Quem a recebeu
+  // está olhando para a tela: foi ele quem acabou de apertar Enter num
+  // `/comando`.
+  if (!contaComoNaoLida(message)) return;
+
   const me = useAuth.getState().user;
   const mine = message.author.id === currentUserId;
   // menção = `@usuario`, um cargo meu (`<@&id>`) ou resposta a mim com o

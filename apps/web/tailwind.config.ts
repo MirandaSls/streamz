@@ -30,6 +30,14 @@ export default {
         chat: "#1A1A1E", // área de mensagens, cabeçalho, painel de membros, corpo de modal
         input: "#222327", // composer, campo de edição, cartão de perfil em DM
         msghov: "#17171A", // hover de mensagem — mais escuro que `chat` (não medido)
+        // ── j-bots ── fundo da mensagem efêmera. Medido na captura de
+        // referência do Discord (`docs/Reference/efemeras/`, `FONTES.md`): lá o
+        // bloco efêmero é `#333341` contra o `#313338` da mensagem comum — um
+        // passo **para cima e para o frio**, +2/+2/+9 em RGB. Aqui a mensagem
+        // comum é `chat` (#1A1A1E); o mesmo passo dá #1C1C27. Sutil é o ponto:
+        // marca o bloco sem virar um cartão.
+        efem: "#1C1C27",
+        efemhov: "#20202D", // o hover dela, um passo acima pelo mesmo critério
         hov: "#222225", // hover de item de lista e botão vazio da rail (sobre `panel`)
         sel: "#2C2C30", // item ativo
         // Void Ink: não é mais superfície de coluna, e sim o preto da marca —

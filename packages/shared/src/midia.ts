@@ -91,6 +91,19 @@ export interface Message {
    * o traz; `undefined` e `null` querem dizer a mesma coisa: mensagem normal.
    */
   interacao?: InteracaoDaMensagem | null;
+  /**
+   * `true` quando esta é uma **mensagem efêmera**: a resposta que o bot mandou
+   * com `flags: 64` e que **só quem invocou o comando vê**.
+   *
+   * Ela não existe na tabela `Message` e portanto não está no histórico do
+   * canal: chega uma vez pelo socket, na sala `user:<id>` de quem digitou o
+   * comando, e some ao recarregar. A tela desenha o rodapé "Somente você pode
+   * ver isso · Dispensar mensagem" e não a conta como não lida.
+   *
+   * Opcional pelo mesmo motivo de `interacao`: um payload antigo não o traz, e
+   * `undefined` quer dizer "mensagem normal".
+   */
+  efemera?: boolean;
 }
 
 export interface GuildMemberView {

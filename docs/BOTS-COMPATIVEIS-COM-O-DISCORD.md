@@ -1316,10 +1316,54 @@ E uma que o `INTERACTION_CREATE` ensinou: **`attachment_size_limit` é
 obrigatório** no payload — o discord.py 2.7 o lê sem `.get`, e sem ele o
 `on_interaction` nunca dispara.
 
-Mensagem efêmera (`flags: 64`): a F3 **aceita a flag e entrega a mensagem
-normal**, com um aviso no log. Efêmera de verdade exigiria "mensagem que só uma
-pessoa vê", que não existe no Streamz e é uma feature de produto, não de
-compatibilidade — fica para quando alguém pedir.
+### Mensagem efêmera (`flags: 64`)
+
+> Este bloco dizia que a F3 **aceitava a flag e entregava a mensagem normal**,
+> com um aviso no log, e que efêmera de verdade "fica para quando alguém pedir".
+> Alguém pediu. O que está abaixo é o que existe.
+
+`flags: 64` numa resposta de interação é a mensagem que **só quem invocou o
+comando vê** — no Discord, com o rótulo "Somente você pode ver isso · Dispensar
+mensagem" abaixo dela, um fundo levemente diferente, e o sumiço no F5.
+
+**O modelo: uma tabela à parte, `EphemeralMessage`.** É a decisão inteira, e o
+motivo é o vazamento. A alternativa era uma coluna `ephemeralFor` na `Message`,
+e ela transforma a privacidade num `where` que dezenas de consultas — histórico,
+busca, fixadas, threads, não lidas, a `GET channels/:id/messages` da compat —
+precisam lembrar de escrever. Numa tabela que nenhuma delas lê, esquecer não é
+possível. A `Message` não ganhou coluna nenhuma, como na migration 4.
+
+**Por que Postgres, e não memória nem Redis.** O bot tem 15 minutos para o
+`editReply()`, então a linha tem de sobreviver a um restart da API; e aqui o
+Redis é **opcional** (`REDIS_URL`; sem ela tudo cai para a memória do processo),
+o que faria a efêmera funcionar em algumas instalações e não em outras. A janela
+e a faxina são as mesmas da `Interaction`: `expiresAt = criação + 15 min`, com
+índice, apagada pelo `MaintenanceService` — que aqui não é só higiene de tabela,
+porque a linha guarda texto que uma pessoa só podia ver.
+
+**A entrega é `emitToUser`, nunca `emitToChannel`.** A sala `user:<id>` tem
+todas as conexões da conta de quem digitou (desktop e site) e mais ninguém. O
+DTO é o `Message` de sempre com um campo a mais, `efemera: true` — reaproveitar a
+forma é o que deixa o cliente desenhar markdown, agrupamento e a faixa "usou
+/play" sem uma segunda tela. `PATCH`/`DELETE @original` e followups com a flag
+seguem o mesmo caminho, e o `?with_response` passa a ecoar
+`response_message_ephemeral: true` com o snowflake da efêmera (é o que o
+discord.py guarda para o `edit_original_response()`).
+
+A ponte do gateway (§7) **descarta** qualquer evento com `efemera: true` antes
+de traduzir: uma efêmera é de uma pessoa, e o bot que a escreveu já recebeu o
+corpo na resposta HTTP.
+
+Na tela: rodapé com o olho, "Somente você pode ver isso", o `·` e o botão
+"Dispensar mensagem" (que é **local** — tirar da lista é tirar de onde ela
+existe); fundo `efem`/`efemhov`, um passo mais claro e mais frio que o do chat,
+na mesma proporção medida na captura de referência do Discord; **não** conta como
+não lida, não notifica e não toca som; e sem menu de contexto nem mini-barra,
+porque responder, reagir, fixar ou copiar link apontariam para uma mensagem que
+o canal não tem.
+
+O que ela **não** tem: reação, anexo, figurinha, enquete, thread e fixação. Nada
+disso teria onde ser gravado, e mostrar o botão seria mentir.
 
 ### O `/` no cliente
 
@@ -1488,6 +1532,32 @@ model Interaction {
 
   @@index([expiresAt])
   @@index([applicationId, createdAt])
+}
+
+/// A resposta **efêmera** (`flags: 64`): a mensagem que só quem invocou o
+/// comando vê. Tabela à parte, e não uma coluna na `Message`, porque assim
+/// nenhuma consulta do chat pode esquecer o `where` e vazá-la (§9).
+model EphemeralMessage {
+  id            String    @id @default(cuid())
+  snowflake     BigInt    @unique @default(dbgenerated("streamz_snowflake()"))
+  interactionId String
+  channelId     String
+  /// **quem pode ver.** É a coluna que define a regra inteira
+  ephemeralFor  String
+  /// o usuário-bot que respondeu
+  authorId      String
+  content       String
+  /// true na resposta do callback 4/5 — o alvo do `@original`
+  original      Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  editedAt      DateTime?
+  /// createdAt + 15 min: a mesma janela do token da interação
+  expiresAt     DateTime
+
+  interaction Interaction @relation(fields: [interactionId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@index([interactionId, original])
 }
 ```
 
@@ -1805,8 +1875,11 @@ typecheck não pega tag torta.
 Reações granulares (com o evento interno novo), membros/cargos/bans/permissões
 de canal no REST, `MESSAGE_REACTION_*`, `PRESENCE_UPDATE`, componentes (botões e
 selects), modais, webhooks de entrada, embeds ricos, CDN de avatar no formato
-do Discord, DM com bot, `Request Guild Members`, mensagem efêmera de verdade.
+do Discord, DM com bot, `Request Guild Members`.
 Sem estimativa — é uma fila, não uma fase.
+
+> A **mensagem efêmera** saiu desta fila: `flags: 64` é entregue de verdade
+> desde o PR das efêmeras (§9).
 
 ---
 
@@ -1826,7 +1899,6 @@ Sem estimativa — é uma fila, não uma fase.
 | **`zstd-stream`** | Nunca. `zlib-stream` talvez, na F5. |
 | **CDN no formato do Discord** (`cdn.discordapp.com/avatars/{id}/{hash}.png`) | O nosso avatar é uma rota autenticável, não um hash imutável. Devolvemos `avatar: null`; quem quiser configura `rest.cdn`. Irrelevante para bot de música. |
 | **Stickers e emojis do Discord** | Temos os nossos; o formato de resposta é traduzido, mas emoji do Discord de outro servidor não resolve. |
-| **Mensagem efêmera** (`flags: 64`) | Aceita e entregue como mensagem normal. "Só uma pessoa vê" é feature de produto. |
 | **Webhooks de entrada** (`POST /webhooks/{id}/{token}` de fora) | F5. Útil para CI/alertas, não para bot. |
 | **Presence rica / RPC / atividades** | Aceitamos o op 3 e ignoramos. |
 | **Verificação de bot, badges, "app verificado"** | Não faz sentido numa instância própria. |
