@@ -18,6 +18,7 @@ import CallBanner from "@/components/voice/CallBanner";
 import CallSplit from "@/components/voice/CallSplit";
 import CallStage from "@/components/voice/CallStage";
 import { api } from "@/lib/api";
+import { useEhPaisagem } from "@/hooks/useEhMobile";
 import { useAuth } from "@/stores/auth";
 import { botaoDeChamadaBloqueado, CHAMADA_EM_ANDAMENTO } from "@/stores/chamada-em-curso";
 import { dmTitle, useActiveDM } from "@/stores/dms";
@@ -100,7 +101,16 @@ export default function DMView({
   // obrigava a reabrir na mão toda vez. Quem quiser só o palco usa a tela cheia.
   const [chatManual, setChatManual] = useState<boolean | null>(null);
   useEffect(() => setChatManual(null), [active?.id, emChamada]);
-  const chatAberto = chatManual ?? true;
+  /*
+    **Menos o telefone deitado.** A regra acima — palco e conversa juntos — vale
+    onde os dois cabem. Num iPhone virado sobram 390pt de altura e 334 de
+    coluna: com a reserva mínima da conversa (180) e o piso do palco (199) o
+    palco saía com **154px**, ou seja, nem chamada nem conversa. Deitado a
+    conversa começa fechada e o botão "Mostrar conversa" continua lá para quem
+    quiser os dois.
+  */
+  const ehPaisagem = useEhPaisagem();
+  const chatAberto = chatManual ?? !ehPaisagem;
 
   const searchQuery = useMessages((s) => s.searchQuery);
   const setSearchQuery = useMessages((s) => s.setSearchQuery);

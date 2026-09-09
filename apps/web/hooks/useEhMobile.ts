@@ -63,17 +63,39 @@ export function ehMobileAgora(): boolean {
  * Acompanha rotação e redimensionamento (o `change` do `matchMedia`).
  */
 export function useEhMobile(): boolean {
-  const [ehMobile, setEhMobile] = useState(false);
+  return useConsulta(CONSULTA_MOBILE);
+}
+
+/**
+ * **Telefone deitado.** Não é o contrário de "retrato": é o caso em que a
+ * **altura** é o recurso escasso — 390pt num iPhone virado. Serve a quem precisa
+ * ceder espaço vertical, como a conversa ao lado do palco de uma chamada de DM,
+ * que deitada ficava com 154px de palco.
+ */
+export const CONSULTA_PAISAGEM =
+  "(pointer: coarse) and (max-height: 599px) and (orientation: landscape)";
+
+/** `true` num telefone deitado (e nunca no app de desktop). */
+export function useEhPaisagem(): boolean {
+  return useConsulta(CONSULTA_PAISAGEM);
+}
+
+/**
+ * O motor dos dois hooks acima: começa em `false` (é o que o servidor e o
+ * export estático renderizam) e troca num `useLayoutEffect`, antes da pintura.
+ */
+function useConsulta(consultaCSS: string): boolean {
+  const [resposta, setResposta] = useState(false);
 
   useEfeitoDeLeiaute(() => {
     // no Tauri nem chegamos a observar: a resposta é constante
     if (isTauri() || typeof window.matchMedia !== "function") return;
-    const consulta = window.matchMedia(CONSULTA_MOBILE);
-    const aplicar = () => setEhMobile(consulta.matches);
+    const consulta = window.matchMedia(consultaCSS);
+    const aplicar = () => setResposta(consulta.matches);
     aplicar();
     consulta.addEventListener("change", aplicar);
     return () => consulta.removeEventListener("change", aplicar);
-  }, []);
+  }, [consultaCSS]);
 
-  return ehMobile;
+  return resposta;
 }
