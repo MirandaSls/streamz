@@ -25,6 +25,13 @@ mod tela;
 #[cfg(target_os = "android")]
 mod chamada;
 
+// O auto-update do app Android: baixar o `.apk` novo, conferir o sha256 e
+// abrir o instalador do sistema. Só existe naquele alvo — no Windows quem
+// atualiza é o `tauri-plugin-updater` (assinatura minisign, instalação
+// silenciosa) e no iOS é a App Store. Ver `src/atualizador.rs`.
+#[cfg(target_os = "android")]
+mod atualizador;
+
 // Só o WebView2 tem `PermissionRequested`; nos outros alvos o módulo nem
 // existe (ver o porquê dele no próprio arquivo).
 #[cfg(windows)]
@@ -222,6 +229,12 @@ pub fn run() {
     // não se aplica a um `.metodo()` no meio de uma expressão.
     #[cfg(target_os = "android")]
     let builder = builder.plugin(chamada::init());
+
+    // O atualizador do Android, pelo mesmo motivo e com a mesma forma: o
+    // `tauri-plugin-updater` logo abaixo é desktop-only, e este é o que faz o
+    // papel dele no `.apk`. Ver `src/atualizador.rs`.
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(atualizador::init());
 
     #[cfg(desktop)]
     let builder = builder.on_window_event(|window, event| {

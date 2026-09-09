@@ -25,6 +25,7 @@ JSON e plist validados por parser — não com build.
 10. [O que este trabalho NÃO prova](#10-o-que-este-trabalho-não-prova)
 11. [Os três PRs](#11-os-três-prs)
 12. [A chamada em segundo plano no Android](#12-a-chamada-em-segundo-plano-no-android)
+13. [Atualização: como o app Android se atualiza sozinho](#13-atualização-como-o-app-android-se-atualiza-sozinho)
 
 ---
 
@@ -465,11 +466,15 @@ No PWA, o push do iOS existe desde o **iOS 16.4** e **exige** o site adicionado
 
 `tauri-plugin-updater` é desktop. Consequência, por caminho:
 
-- **APK fora da loja**: quem atualiza é o usuário, baixando o `.apk` novo em
-  `streamz.chat/download`. Vale avisar dentro do app quando houver versão nova.
+- **APK fora da loja**: o updater do Tauri não serve, mas o problema tem
+  solução — **escrevemos o nosso** (§13). O app baixa o `.apk` novo, confere o
+  sha256 e abre o instalador do sistema. O que continua impossível é pular a
+  tela de confirmação do Android; ver o §13 para o porquê.
 - **Play Store** e **App Store**: quem atualiza é a loja, sozinha.
 - **PWA**: o service worker atualiza no recarregamento — é o mais rápido dos
   quatro.
+- **iOS fora da loja**: continua sem caminho. Não existe equivalente de
+  `REQUEST_INSTALL_PACKAGES` no iOS; um app não instala outro, ponto.
 
 O `plugins.updater` continua no `tauri.conf.json` porque é o desktop que o usa;
 no iOS ele fica inerte, e a `capabilities/ios.json` não dá permissão para ele.
@@ -797,3 +802,134 @@ sempre. A saída completa está em
 - **Áudio de verdade.** O emulador não tem microfone físico; o que se prova aqui
   é que a **conexão** e o **serviço** sobrevivem ao segundo plano, não que a voz
   chega do outro lado.
+
+## 13. Atualização: como o app Android se atualiza sozinho
+
+### O problema
+
+O `.apk` é distribuído fora da Play, e o `tauri-plugin-updater` é desktop-only
+(§7). Até a versão 1.1.1, "saiu versão nova" terminava num card que abria
+`streamz.chat/download` no navegador: o usuário baixava 40 MB à mão, achava o
+arquivo no gerenciador e instalava. Na prática, quase ninguém atualiza assim — e
+um app de chat com metade da base numa versão de três meses atrás é um app com
+dois protocolos.
+
+### O limite, dito antes de tudo
+
+**Nenhum app Android instala outro sem a tela de confirmação do sistema.** Não
+é falta de permissão nossa nem de engenhosidade: pular esse passo exige ser a
+loja, ser *device owner* (aparelho gerenciado por uma empresa) ou estar assinado
+com a chave da plataforma. Não somos nenhum dos três, e não há como ser.
+
+Então "atualiza sozinho" quer dizer, com todas as letras:
+
+> o app percebe a versão nova, baixa em segundo plano, confere o pacote e abre
+> o instalador já com o arquivo pronto — resta ao usuário um toque em
+> "Atualizar".
+
+É exatamente o que Discord, Fortnite e todo APK fora da loja fazem. A interface
+diz isso antes de a tela aparecer ("O Android vai pedir sua confirmação"), e
+está escrito assim no `AtualizadorPlugin.kt` e no `AtualizadorDoAndroid.tsx`
+para ninguém "consertar" isso depois.
+
+### As peças
+
+| arquivo | papel |
+|---|---|
+| `apps/api/src/modules/updates/updates.service.ts` | o manifesto de `android-universal`, lendo as quatro `ANDROID_UPDATE_*`. Responde 204 sem elas |
+| `apps/api/src/modules/updates/arquivo.ts` | a rota `arquivo/:nome` que serve o `.apk` da pasta `updates/`; `.apk` entrou na lista de extensões aqui |
+| `apps/web/lib/atualizacao-mobile.ts` | as duas decisões puras: o manifesto presta? (`novidadeDoManifesto`) e abertura × app aberto (`decidirAtualizacao`). Testado em `atualizacao-mobile.test.ts` |
+| `apps/web/components/atualizacao/AtualizadorDoAndroid.tsx` | o efeito: checa na abertura e a cada 30 min, baixa com barrinha, instala. Mora no `layout.tsx` para valer também na tela de login |
+| `apps/web/lib/desktop.ts` | `baixarAtualizacaoAndroid`, `instalarAtualizacaoAndroid`, `versaoInstalada` |
+| `gen/android/…/dev/streamz/app/AtualizadorPlugin.kt` | o download com progresso, a conferência do sha256 e o `Intent` do instalador |
+| `src-tauri/src/atualizador.rs` | o lado Rust do plugin, **inteiro** atrás de `#[cfg(target_os = "android")]` |
+| `src-tauri/build.rs` | o `InlinedPlugin` que gera a ACL `atualizador:default` |
+| `scripts/publicar-android.sh` | copia o `.apk` para `updates/` e `downloads/` e imprime as quatro linhas do `.env` |
+
+A superfície de comandos está em `apps/desktop/CONTRATO-MOBILE.md` §7.1.
+
+### As três decisões que mais custaram
+
+1. **A integridade é o sha256, não minisign — e é obrigatória.** No Windows
+   quem recusa um pacote de estranho é a assinatura minisign, que o atualizador
+   do Tauri confere sozinho, com a chave pública embutida no `.exe`. No Android
+   não existe atualizador do Tauri nem verificador de minisign: para ter
+   assinatura, teríamos de **escrever a verificação**, e um verificador de
+   assinatura escrito às pressas é pior que nenhum — ele parece proteger.
+
+   Então a prova é o digest: a API publica `ANDROID_UPDATE_SHA256`, o Kotlin
+   calcula o sha256 no mesmo laço em que escreve o arquivo, e o instalador só é
+   chamado se os dois baterem. Se não baterem, **o arquivo é apagado** — um
+   `.apk` que não confere não fica no disco esperando alguém tocar nele. Sem o
+   digest configurado, a rota responde 204: um pacote que ninguém confere não é
+   oferecido.
+
+   Isso protege contra o arquivo corrompido e contra a troca no caminho (a
+   origem é HTTPS). **Não** protege contra quem consiga escrever no `.env`
+   **e** na pasta `updates/` do servidor, porque aí ele publica o digest do
+   próprio pacote. Contra esse, quem protege é o Android: o sistema só instala
+   por cima um `.apk` assinado com a mesma chave de release, e ela não está no
+   servidor de aplicação (§5).
+
+2. **Abertura baixa; app aberto avisa.** São dois momentos com custos
+   diferentes. Quem acabou de abrir o app não estava fazendo nada, e um download
+   em segundo plano com uma barrinha discreta não atrapalha ninguém. Quem já
+   está dentro pode estar numa chamada ou no meio de uma conversa, e aí começar
+   a puxar 40 MB por conta própria seria o app decidindo pelo usuário: mostra-se
+   o card "Versão X disponível — Instalar" e espera-se o toque. A regra é pura
+   (`decidirAtualizacao`) e tem três cuidados que valem mais que ela: um
+   download em curso não é reiniciado pela checagem de 30 minutos; dispensar o
+   card vale só para **aquela** versão; e dispensar **não sobrevive a reabrir o
+   app** — "agora não" não pode virar "nunca mais" sem o usuário saber.
+
+3. **`cacheDir`, e o arquivo não passa pelo IPC.** O `.apk` fica em
+   `cacheDir/atualizacao/`, que é privado do app: no armazenamento externo
+   outro processo poderia reescrever o arquivo entre a conferência e a
+   instalação, o que anularia o digest. E o que volta do Kotlin para a web é um
+   **caminho**, não bytes — 40 MB atravessando o IPC do webview seriam absurdos,
+   e é por isso que a conferência mora do lado nativo.
+
+   Também por isso o download usa `HttpURLConnection` e não `DownloadManager`
+   nem OkHttp: o `DownloadManager` escreve na pasta pública de Downloads (um
+   `.apk` visível, que o usuário pode abrir semanas depois já desatualizado) e
+   só dá progresso por *polling*; OkHttp faria bem e custaria ~1,5 MB de
+   dependência nova para um `GET`. O `HttpURLConnection` da plataforma lê em
+   blocos, conta bytes e deixa calcular o digest no mesmo laço.
+
+### A permissão que a Play não gosta
+
+`REQUEST_INSTALL_PACKAGES` está no `AndroidManifest.xml` e é o que permite
+**pedir** para instalar. Três coisas que ela não é:
+
+1. Não é permissão de instalar — é permissão de pedir. Quem instala é o
+   instalador do sistema, com a tela de confirmação.
+2. Não basta declará-la. Desde o Android 8 o usuário ainda precisa ligar
+   "instalar apps desconhecidos" **para este app**, e não existe diálogo para
+   pedir isso: o único caminho é abrir a tela de Ajustes daquele app, que é o
+   que o plugin faz quando `canRequestPackageInstalls()` diz que falta. O card
+   então explica "Permita a instalação nos Ajustes e toque de novo" — o `.apk`
+   já está no disco, e o segundo toque é instantâneo.
+3. Não é inofensiva aos olhos da Play, que a trata como sensível e pede
+   justificativa na ficha. Ela existe porque hoje o app é distribuído **fora**
+   da loja. No dia em que entrar na Play, quem atualiza é a loja: as variáveis
+   `ANDROID_UPDATE_*` ficam vazias, a rota responde 204 e a permissão sai junto
+   com o plugin.
+
+### Como publicar uma versão do Android
+
+```
+scripts/build-android-no-servidor.sh <commit>     # gera o .apk e imprime o sha256
+scripts/publicar-android.sh <pasta-da-saída>      # copia + imprime as 4 linhas do .env
+```
+
+O `publicar-android.sh` copia o `.apk` para as **duas** pastas — `updates/`
+(aberta, é de onde o atualizador baixa) e `downloads/` (protegida por senha, é
+o que o site serve a quem ainda não tem o app) — e imprime as quatro linhas
+para colar no `.env`. Depois é reiniciar a API com `STREAMZ_TAG` (a mesma
+armadilha do desktop, §5 do processo: `docker restart` não relê o `.env`).
+
+A confusão das duas pastas é a mesma do desktop e vale repetir: `downloads/` é
+o que o **site** serve, `updates/` é o que o **app** baixa. O atualizador não
+sabe autenticar — ele segue a URL do manifesto e pronto; o que garante que o
+pacote é nosso não é o sigilo do endereço, é o digest.
+

@@ -636,6 +636,79 @@ export function ouvirSaidaPelaNotificacao(ouvinte: () => void): () => void {
   };
 }
 
+// ── Atualização do app Android ─────────────────────────────────────────────
+
+/** O andamento do download, como o Kotlin o manda. `total` é `-1` quando o
+ *  servidor não declara `Content-Length`. */
+export interface ProgressoDeDownload {
+  baixados: number;
+  total: number;
+}
+
+/**
+ * Baixa o `.apk` da versão nova e devolve onde ele ficou no disco.
+ *
+ * **Lança** quando o download cai ou quando o sha256 não bate — e, nesse
+ * segundo caso, o arquivo já foi apagado do outro lado. Este é o único ponto
+ * desta ponte que não é best-effort: falhar em silêncio aqui significaria "não
+ * atualizou e ninguém soube", e o chamador precisa poder cair no card manual.
+ *
+ * O arquivo **não** atravessa o IPC: o que volta é um caminho. Quem tem os
+ * bytes é o Kotlin, e é lá que o digest é conferido, no mesmo laço da escrita
+ * (ver `AtualizadorPlugin.kt`).
+ */
+export async function baixarAtualizacaoAndroid(
+  url: string,
+  sha256: string,
+  aoProgredir?: (progresso: ProgressoDeDownload) => void,
+): Promise<string> {
+  if (!ehAndroidNoTauri()) throw new Error("só no app Android");
+  const { Channel, invoke } = await import("@tauri-apps/api/core");
+  const progresso = new Channel<ProgressoDeDownload>();
+  progresso.onmessage = (mensagem) => aoProgredir?.(mensagem);
+  const { caminho } = await invoke<{ caminho: string }>(
+    "plugin:atualizador|baixar_atualizacao",
+    { url, sha256, progresso },
+  );
+  return caminho;
+}
+
+/**
+ * Abre o instalador do sistema para o pacote já baixado.
+ *
+ * Devolve `true` quando faltava a permissão de "origens desconhecidas": nesse
+ * caso a tela de Ajustes **já foi aberta** pelo lado nativo e o instalador
+ * não, e quem chamou tem de explicar o passo em vez de dizer que instalou.
+ *
+ * Quando devolve `false`, o instalador do sistema está na frente — com a tela
+ * de confirmação que o Android sempre mostra fora da loja. Não existe caminho
+ * em que este app instale sem esse toque.
+ */
+export async function instalarAtualizacaoAndroid(caminho: string): Promise<boolean> {
+  if (!ehAndroidNoTauri()) throw new Error("só no app Android");
+  const { invoke } = await import("@tauri-apps/api/core");
+  const { permissaoNecessaria } = await invoke<{ permissaoNecessaria: boolean }>(
+    "plugin:atualizador|instalar_atualizacao",
+    { caminho },
+  );
+  return permissaoNecessaria;
+}
+
+/**
+ * A versão do `.apk` instalado — não a do bundle da web, que é sempre a que
+ * veio dentro dele. `null` fora do app (ou se a ponte falhar), e aí não há
+ * atualização a checar.
+ */
+export async function versaoInstalada(): Promise<string | null> {
+  if (!isTauri()) return null;
+  try {
+    const { getVersion } = await import("@tauri-apps/api/app");
+    return await getVersion();
+  } catch {
+    return null;
+  }
+}
+
 // ── Imagem: abrir fora, copiar bitmap, salvar em disco ─────────────────────
 
 /**

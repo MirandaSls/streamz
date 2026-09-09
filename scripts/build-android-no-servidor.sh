@@ -255,3 +255,20 @@ echo "assinado. O que NÃO prova: que o app abre, que o microfone funciona e"
 echo "que a chamada sobrevive em segundo plano — o serviço de primeiro plano"
 echo "existe (ChamadaService.kt), mas quem prova que ele segura a call é o"
 echo "emulador (docs/APPS-MOBILE.md §12). Ver o cabeçalho deste arquivo."
+
+# ---------------------------------------------------------------- publicação
+# O sha256 do `.apk`, sozinho e legível, porque ele deixou de ser conferência
+# de download e virou **parte do release**: é o que vai em
+# `ANDROID_UPDATE_SHA256` e é a única coisa que o app tem para separar o pacote
+# que publicamos do que chegou pelo fio (docs/APPS-MOBILE.md §13). Sai duas
+# vezes de propósito — na lista acima, junto do `.aab`, e aqui, isolado, para
+# quem vai copiar não pegar o digest errado por engano.
+DIGESTO=$(sha256sum "$APK" | cut -d' ' -f1)
+passo "sha256 do .apk (é ele que vai no ANDROID_UPDATE_SHA256)"
+echo "  arquivo: $(basename "$APK")"
+echo "  sha256:  $DIGESTO"
+echo
+echo "Próximo passo — publicar (copiar para updates/ e downloads/ e imprimir as"
+echo "quatro linhas do .env):"
+echo
+echo "    scripts/publicar-android.sh $SAIDA"

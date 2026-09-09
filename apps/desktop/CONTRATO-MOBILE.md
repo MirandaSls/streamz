@@ -99,10 +99,18 @@ da janela `splash` foram escolhidos (§5.2 do processo).
 
 O updater do Tauri (minisign + `/api/updates`) é **só desktop**. No celular:
 
-- **Android fora da Play**: o app mostra um card "Baixar atualização" que abre
-  `streamz.chat/download` no navegador. A versão nova é consultada pela mesma
-  rota `/api/updates`, com target `android`.
-- **Android na Play** e **iOS na App Store**: quem atualiza é a loja.
+- **Android fora da Play**: o app se atualiza sozinho, por código nosso — o
+  plugin `atualizador` (§7.1). A versão nova é consultada pela mesma rota
+  `/api/updates`, com target `android`; o que muda em relação ao desktop é a
+  prova de integridade (**sha256**, não minisign) e o fato de o Android sempre
+  mostrar a tela de confirmação de instalação. Ver `docs/APPS-MOBILE.md` §13.
+- **Android na Play** e **iOS na App Store**: quem atualiza é a loja. Quando
+  isso acontecer, as variáveis `ANDROID_UPDATE_*` ficam vazias, a rota responde
+  204 e o plugin vira código morto — junto com a permissão
+  `REQUEST_INSTALL_PACKAGES`, que a loja trata como sensível.
+- **iOS fora da loja**: não existe. Não há equivalente de
+  `REQUEST_INSTALL_PACKAGES` no iOS, e é por isso que este plugin é do Android
+  e não "do celular".
 
 Nada disso reaproveita a janela `splash`, e é por isso que ela sai da config do
 celular (§2).
@@ -176,6 +184,51 @@ A ACL: os comandos passam por permissão, e é por isso que
 `capabilities/mobile.json` lista `chamada:default` (§4). O `build.rs` gera
 `allow-<comando>`/`deny-<comando>` para cada um e junta os três no `default`.
 
+## 7.1. Atualizar o app: dois comandos, só no Android
+
+O `tauri-plugin-updater` é desktop-only. O que faz o papel dele no `.apk` é o
+plugin Tauri `atualizador` (`src/atualizador.rs` + `AtualizadorPlugin.kt`), no
+mesmo formato do `chamada` (§7). A superfície que a web enxerga são **dois
+comandos**:
+
+| comando | argumentos | o que faz |
+|---|---|---|
+| `plugin:atualizador\|baixar_atualizacao` | `{ url, sha256, progresso }` | baixa o `.apk` para `cacheDir/atualizacao/`, manda o andamento pelo `Channel` `progresso` (`{ baixados, total }`, `total = -1` sem `Content-Length`) e **confere o sha256**. Resolve com `{ caminho }`; **falha** se não bater, e o arquivo é apagado |
+| `plugin:atualizador\|instalar_atualizacao` | `{ caminho }` | abre o instalador do sistema (`FileProvider` + `ACTION_VIEW` + `FLAG_GRANT_READ_URI_PERMISSION`). Resolve com `{ permissaoNecessaria }`: quando `true`, faltava "instalar apps desconhecidos" e a tela de Ajustes **já foi aberta** em vez do instalador |
+
+Os dois estão embrulhados em `apps/web/lib/desktop.ts`
+(`baixarAtualizacaoAndroid`, `instalarAtualizacaoAndroid`), com a mesma guarda
+`ehAndroidNoTauri()` do §7 — e, ao contrário dos comandos de chamada, eles
+**lançam** em vez de virar no-op silencioso: falhar calado aqui é "não atualizou
+e ninguém soube".
+
+Três decisões que valem o contrato:
+
+1. **A integridade é o sha256, e ele é obrigatório.** No Windows quem recusa um
+   pacote de estranho é a assinatura minisign, que o atualizador do Tauri
+   confere sozinho. No Android não existe atualizador do Tauri nem verificador
+   de minisign — teríamos de escrever um, e um verificador de assinatura
+   escrito às pressas é pior que nenhum. Então a API publica o digest
+   (`ANDROID_UPDATE_SHA256`), o Kotlin o calcula **no mesmo laço da escrita** e
+   só chama o instalador se bater. Sem digest configurado, a rota responde 204:
+   um `.apk` que ninguém confere não é oferecido. A trava está em três lugares
+   (serviço, `novidadeDoManifesto`, plugin) de propósito — é a única coisa
+   entre "o pacote que publicamos" e "o que chegou pelo fio".
+2. **O arquivo não atravessa o IPC.** O que volta do Kotlin é um **caminho**,
+   não bytes: 40 MB pelo IPC do webview seriam absurdos, e é por isso que a
+   conferência mora do lado nativo e não em JavaScript.
+3. **"Sozinho" para no instalador, e a UI diz isso.** Fora da Play, nenhum app
+   Android instala outro sem a tela de confirmação do sistema — só a loja, um
+   *device owner* ou um app assinado com a chave da plataforma pulam esse
+   passo. O card fala "o Android vai pedir sua confirmação" **antes** de a tela
+   aparecer; prometer instalação silenciosa e entregar uma tela do sistema
+   treinaria o usuário a desconfiar do próprio app.
+
+A ACL: como no §7, o `build.rs` gera `atualizador:default` a partir da lista de
+comandos, e `capabilities/mobile.json` a referencia. O `atualizador:default`
+não dá acesso a arquivo nenhum do aparelho — os dois comandos só alcançam a
+pasta de cache do próprio app.
+
 ## 8. Fronteiras de arquivo (para os PRs não colidirem)
 
 | bloco | mexe em |
@@ -186,6 +239,14 @@ A ACL: os comandos passam por permissão, e é por isso que
 
 Ordem de merge: **1 → 2 → 3**. O PR do Bloco 3 só faz sentido depois do Bloco 2,
 que é quem traz o lib/bin (§1) e o `capabilities/mobile.json` (§4).
+
+O §7.1 (o auto-update) veio depois do §7, também num PR próprio, e os arquivos
+dele — `gen/android/app/src/main/java/dev/streamz/app/AtualizadorPlugin.kt`,
+`src/atualizador.rs`, `apps/web/components/atualizacao/AtualizadorDoAndroid.tsx`,
+`apps/web/lib/atualizacao-mobile.ts`, `scripts/publicar-android.sh` — encostam
+no `build.rs`, no `AndroidManifest.xml`, no `capabilities/mobile.json` e no
+`apps/web/lib/desktop.ts`, que são os mesmos quatro do §7: mexer nos dois ao
+mesmo tempo colide.
 
 O §7 (o serviço de chamada) veio **depois** dos três, num PR próprio: os Blocos
 2 e 3 deixaram as permissões `FOREGROUND_SERVICE*` declaradas e disseram, em voz

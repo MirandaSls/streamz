@@ -1,4 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  As pastas que o `FileProvider` do `AndroidManifest.xml` pode transformar em
+  `content://`. Nada fora daqui é alcançável por outro app, mesmo com a URI na
+  mão.
+
+  `cache-path path="."` cobre o `cacheDir` inteiro, e é por ele que o `.apk` do
+  auto-update chega ao instalador do sistema (`AtualizadorPlugin.baixar` grava
+  em `cacheDir/atualizacao/streamz.apk`). Não há uma segunda entrada para essa
+  pasta de propósito: dois `<cache-path>` com a mesma raiz deixam ambíguo qual
+  nome o `getUriForFile` escolhe, e o que se ganharia era um nome mais bonito
+  na URI.
+-->
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
   <external-path name="my_images" path="." />
   <cache-path name="my_cache_images" path="." />
