@@ -125,42 +125,42 @@ pub fn run() {
             // existe naquele alvo. O bloco inteiro é o mesmo de antes.
             #[cfg(desktop)]
             {
-            // Menu de contexto: "Abrir Streamz" e "Sair".
-            let abrir = MenuItem::with_id(app, "abrir", "Abrir Streamz", true, None::<&str>)?;
-            let sair = MenuItem::with_id(app, "sair", "Sair", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&abrir, &sair])?;
+                // Menu de contexto: "Abrir Streamz" e "Sair".
+                let abrir = MenuItem::with_id(app, "abrir", "Abrir Streamz", true, None::<&str>)?;
+                let sair = MenuItem::with_id(app, "sair", "Sair", true, None::<&str>)?;
+                let menu = Menu::with_items(app, &[&abrir, &sair])?;
 
-            let mut tray = TrayIconBuilder::with_id("streamz-tray")
-                .tooltip("Streamz")
-                .menu(&menu)
-                // No Windows o menu deve abrir só com o botão direito; o esquerdo
-                // reabre a janela (tratado em on_tray_icon_event).
-                .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| match event.id.as_ref() {
-                    "abrir" => mostrar_janela(app),
-                    "sair" => app.exit(0),
-                    _ => {}
-                })
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
-                    } = event
-                    {
-                        mostrar_janela(tray.app_handle());
-                    }
-                });
+                let mut tray = TrayIconBuilder::with_id("streamz-tray")
+                    .tooltip("Streamz")
+                    .menu(&menu)
+                    // No Windows o menu deve abrir só com o botão direito; o esquerdo
+                    // reabre a janela (tratado em on_tray_icon_event).
+                    .show_menu_on_left_click(false)
+                    .on_menu_event(|app, event| match event.id.as_ref() {
+                        "abrir" => mostrar_janela(app),
+                        "sair" => app.exit(0),
+                        _ => {}
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            mostrar_janela(tray.app_handle());
+                        }
+                    });
 
-            // O ícone da janela só existe se os PNGs de `bundle.icon` tiverem
-            // sido gerados (ver src-tauri/icons/README.md). Sem eles o antigo
-            // `.unwrap()` derrubava o app no boot; agora a bandeja sobe sem
-            // ícone — degradada, mas funcional.
-            if let Some(icone) = app.default_window_icon() {
-                tray = tray.icon(icone.clone());
-            }
+                // O ícone da janela só existe se os PNGs de `bundle.icon` tiverem
+                // sido gerados (ver src-tauri/icons/README.md). Sem eles o antigo
+                // `.unwrap()` derrubava o app no boot; agora a bandeja sobe sem
+                // ícone — degradada, mas funcional.
+                if let Some(icone) = app.default_window_icon() {
+                    tray = tray.icon(icone.clone());
+                }
 
-            tray.build(app)?;
+                tray.build(app)?;
             }
 
             Ok(())
