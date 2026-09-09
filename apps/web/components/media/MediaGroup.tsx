@@ -158,7 +158,7 @@ function Imagem({
           src={anexo.url}
           alt=""
           aria-hidden="true"
-          className={`blur-2xl ${sozinha ? "max-h-[350px] max-w-[550px]" : "h-full w-full"} object-cover`}
+          className={`blur-2xl ${sozinha ? "max-h-[350px] max-w-[min(550px,100%)]" : "h-full w-full"} object-cover`}
         />
         <span className="absolute inset-0 grid place-items-center">
           <span className="flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1 text-sm font-bold uppercase text-white">
@@ -187,7 +187,7 @@ function Imagem({
         loading="lazy"
         className={
           sozinha
-            ? "max-h-[350px] max-w-[550px] object-contain"
+            ? "max-h-[350px] max-w-[min(550px,100%)] object-contain"
             : "h-full w-full object-cover"
         }
       />
@@ -212,7 +212,7 @@ function Video({ anexo }: { anexo: Attachment }) {
         e.currentTarget.currentTime = 0;
       }}
       aria-label={attachmentDisplayName(anexo)}
-      className="max-h-[350px] max-w-[550px] rounded-lg bg-black"
+      className="max-h-[350px] max-w-[min(550px,100%)] rounded-lg bg-black"
     />
   );
 }
@@ -257,7 +257,11 @@ function Arquivo({ anexo }: { anexo: Attachment }) {
         href={anexo.url}
         download={nome}
         aria-label={`Baixar ${nome}`}
-        className="grid h-8 w-8 shrink-0 place-items-center rounded text-txt-secondary hover:bg-hov hover:text-txt-primary"
+        /* `h-8 w-8` mede 31 (a raiz do app é 15,5px), e no telefone este é o
+           único jeito de guardar o arquivo: o menu de toque longo da mensagem
+           não tem "baixar anexo". 44 literais no celular, como o resto dos
+           alvos de dedo do app. */
+        className="grid h-8 w-8 shrink-0 place-items-center rounded text-txt-secondary hover:bg-hov hover:text-txt-primary celular:h-[44px] celular:w-[44px]"
       >
         <Download size={20} />
       </a>

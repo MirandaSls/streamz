@@ -7,8 +7,10 @@ import {
   Lock,
   Megaphone,
   MessageSquare,
+  PhoneCall,
   Users,
   UserProfile,
+  Video,
   Volume2,
   X,
 } from "@/components/ui/icones";
@@ -27,6 +29,7 @@ import { useActiveDM } from "@/stores/dms";
 import { dmTitle } from "@/stores/dms";
 import { useMobile } from "@/stores/mobile";
 import { resolveStatus, usePresence } from "@/stores/presence";
+import { useVoice } from "@/stores/voice";
 
 /**
  * As telas cheias que entram por cima da base de uma aba: a conversa de um
@@ -151,14 +154,29 @@ export function AreaDeToqueLongo({ children }: { children: ReactNode }) {
       // conversa e do membro só existem por ele. Quem não tem menu não abre
       // nada — o evento sobe e ninguém o atende.
       if (!alvo || alvo.closest("input, textarea, [contenteditable='true']")) return;
+      /*
+        **Seleção viva no texto: o dedo ali é ajuste de alça, não pedido de
+        menu.** É o que faz "Selecionar Texto" (o item da folha da mensagem)
+        servir para alguma coisa: sem esta saída, o primeiro toque para arrastar
+        a alça reabria a folha por cima e apagava o que tinha acabado de ser
+        marcado.
+      */
+      const selecao = window.getSelection?.();
+      if (selecao && !selecao.isCollapsed) return;
       const { clientX: x, clientY: y } = e;
       origem.current = { x, y };
       cancelar();
       timer.current = window.setTimeout(() => {
         timer.current = null;
-        // a seleção que o sistema começou a desenhar sai de cena: quem pediu
-        // menu não pediu texto marcado
-        window.getSelection?.()?.removeAllRanges();
+        /*
+          A seleção **não** é mais apagada aqui. Esta linha era a razão de não
+          se conseguir marcar o texto de uma mensagem no celular: o sistema
+          começa a desenhar a seleção durante o toque longo e, aos 450ms, nós a
+          removíamos para abrir a folha. Quem chega com seleção viva já nem
+          arma o temporizador (ver `aoPressionar`), então não há duas coisas
+          disputando o mesmo gesto — e a cópia de um trecho passou a ter caminho
+          próprio, o item "Selecionar Texto" da folha.
+        */
         navigator.vibrate?.(10);
         alvo.dispatchEvent(
           new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: y }),
@@ -284,6 +302,30 @@ export function TelaDeDM() {
         titulo={titulo}
         aoTocarNoTitulo={abrirMembros}
         chevron
+        /*
+          Ligar para alguém **de dentro da conversa**. Os dois botões existem no
+          cabeçalho do `DMView`, que o celular não desenha (`semCabecalho`), e
+          sem eles o único caminho para uma chamada era o toque longo na lista
+          de conversas — medido: zero botões de chamada na tela de DM aberta.
+          No Discord do celular eles ficam exatamente aqui, no canto direito do
+          cabeçalho da conversa.
+        */
+        acoes={
+          <>
+            <BotaoDeToque
+              label="Iniciar chamada de voz"
+              onClick={() => void useVoice.getState().startCall(dm.id, false)}
+            >
+              <PhoneCall size={22} />
+            </BotaoDeToque>
+            <BotaoDeToque
+              label="Iniciar chamada de vídeo"
+              onClick={() => void useVoice.getState().startCall(dm.id, true)}
+            >
+              <Video size={22} />
+            </BotaoDeToque>
+          </>
+        }
       />
       <DMView semCabecalho />
       {membrosAbertos && (

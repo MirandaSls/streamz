@@ -17,6 +17,7 @@ import {
   Pencil,
   Pin,
   PinOff,
+  ScrollText,
   Smile,
   SmilePlus,
   Trash2,
@@ -37,6 +38,7 @@ import InviteEmbed from "@/components/chat/InviteEmbed";
 import { codigoDeConviteDaUrl } from "@/lib/links-de-convite";
 import { urlPublica } from "@/lib/links-do-app";
 import PainelFlutuante from "@/components/chat/PainelFlutuante";
+import { ehMobileAgora } from "@/hooks/useEhMobile";
 import TooltipReacao from "@/components/chat/TooltipReacao";
 import { useMarcadorNaoLido } from "@/components/chat/marcador-nao-lido";
 import { EmojiDaReacao, rotuloDaReacao } from "@/components/chat/EmojiDeReacao";
@@ -554,6 +556,37 @@ export default function MessageItem({
         disabled: !message.content,
         onSelect: () => void navigator.clipboard?.writeText(message.content),
       });
+      /*
+        **Selecionar um trecho** — o que no computador se faz arrastando o
+        mouse. No telefone o toque longo sobre a mensagem já tem dono (esta
+        folha, como no app do Discord: as capturas
+        `discord-mobile-menu-mensagem*.png` mostram a folha cobrindo a mensagem
+        e a cópia pelo item "Copy Text", sem seleção parcial nenhuma). Em vez de
+        disputar o gesto, a seleção ganha porta própria: o item marca o corpo da
+        mensagem e devolve a tela, com as alças nativas do sistema no lugar —
+        daí arrastar e copiar são os gestos de sempre.
+
+        `requestAnimationFrame` porque o `ContextMenu` fecha e chama o
+        `onSelect` no mesmo tique: sem esperar o quadro, a folha ainda está por
+        cima do texto que acabou de ser marcado.
+      */
+      if (ehMobileAgora()) {
+        items.push({
+          label: "Selecionar Texto",
+          icon: <ScrollText size={18} />,
+          disabled: !message.content,
+          onSelect: () =>
+            requestAnimationFrame(() => {
+              const corpo = document
+                .getElementById(`mensagem-${message.id}`)
+                ?.querySelector(".break-words");
+              if (!corpo) return;
+              const selecao = window.getSelection();
+              selecao?.removeAllRanges();
+              selecao?.selectAllChildren(corpo);
+            }),
+        });
+      }
     }
 
     items.push({ label: "Marcar Não Lida", icon: <MailOpen size={18} />, onSelect: marcarNaoLida });
@@ -651,8 +684,18 @@ export default function MessageItem({
       }
       // sem `transition-colors`: o Discord troca o fundo no mesmo quadro, e a
       // transição fazia o realce "arrastar" atrás do cursor ao correr a lista
-      className={`group relative flex py-0.5 pr-12 ${
-        compacto ? "gap-1.5 pl-4" : "gap-4 pl-[80px]"
+      /*
+        No celular a linha é mais estreita: `pl-[80px] pr-12` são medidas do
+        desktop, e o `pr-12` existe para reservar a faixa da barra de ações do
+        `hover` — que no telefone é `celular:!hidden`, ou seja, 46,5px de espaço
+        morto. Medido na captura `norm/discord-mobile-chat-canal.png` (390px): o
+        texto e a mídia vão de x=62 a x=376. Com `celular:pl-[64px]
+        celular:pr-3` a nossa coluna sai em 64 → 378, dentro de 2px da
+        referência — e é isso que dá ao GIF a mesma largura que ele tem lá.
+        Literal, não `rem`: a raiz do app é 15,5px.
+      */
+      className={`group relative flex py-0.5 pr-12 celular:pr-3 ${
+        compacto ? "gap-1.5 pl-4" : "gap-4 pl-[80px] celular:pl-[64px]"
       } ${fundo} ${message.pending ? "opacity-60" : ""}`}
     >
       {compacto ? null : grouped && !temFaixa ? (
@@ -670,7 +713,9 @@ export default function MessageItem({
           type="button"
           onClick={openProfile}
           aria-label={`Perfil de ${displayNameOf(author)}`}
-          className={`absolute left-5 rounded-full transition hover:brightness-110 ${
+          // o avatar acompanha a calha mais estreita do celular (x=12, contra
+          // os 12,4pt da captura)
+          className={`absolute left-5 celular:left-3 rounded-full transition hover:brightness-110 ${
             temFaixa ? "top-[26px]" : "top-0.5"
           }`}
         >
@@ -845,7 +890,7 @@ export default function MessageItem({
               src={imagemDireta}
               alt="Imagem do link"
               loading="lazy"
-              className="max-h-[350px] max-w-[550px] object-contain"
+              className="max-h-[350px] max-w-[min(550px,100%)] object-contain"
             />
           </button>
         )}

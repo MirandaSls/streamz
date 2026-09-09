@@ -5,6 +5,8 @@ import { MonitorUp, MonitorX, Radio } from "@/components/ui/icones";
 import Tooltip from "@/components/ui/Tooltip";
 import ScreenSharePicker from "@/components/voice/ScreenSharePicker";
 import { BotaoDeChamada } from "@/components/voice/controles-de-chamada";
+import { ALVO_MINIMO } from "@/components/voice/palco-mobile";
+import { useEhMobile } from "@/hooks/useEhMobile";
 import { SEM_CAPTURA_DE_TELA, capturarTelaNoNavegador } from "@/lib/captura-de-tela";
 import { isTauri } from "@/lib/desktop";
 import { ehCancelamento, mensagemDeErro } from "@/lib/seletor-de-tela";
@@ -124,6 +126,7 @@ export default function ScreenShareButton({
 export function AoVivoIndicador() {
   const screenOn = useVoice((s) => s.screenOn);
   const pararTela = useVoice((s) => s.pararTela);
+  const ehMobile = useEhMobile();
   if (!screenOn) return null;
 
   // `w-max` + `nowrap`: o mesmo selo é usado no cabeçalho do palco e no do
@@ -134,10 +137,20 @@ export function AoVivoIndicador() {
     <div className="flex w-max items-center gap-2 rounded-full bg-red/15 py-1 pl-3 pr-1 text-xs font-semibold text-red">
       <Radio size={14} className="shrink-0" aria-hidden="true" />
       <span className="whitespace-nowrap">Você está ao vivo</span>
+      {/* No telefone este é o botão que tira a sua tela do ar, e ele media 21px
+          de altura (`py-1` sobre 11px de texto): metade do piso de toque, em
+          cima de um palco onde tudo o mais tem 44 ou 48. Cresce para
+          `ALVO_MINIMO`, em px pelo motivo de sempre (a raiz é 15,5). O selo é a
+          única coisa que a barra de controles do celular não repete com folga —
+          o botão de tela dela também para a transmissão, mas quem lê "Você está
+          ao vivo" está olhando para cá. */}
       <button
         type="button"
         onClick={() => void pararTela()}
-        className="shrink-0 whitespace-nowrap rounded-full bg-red px-2 py-1 text-[11px] font-bold text-white transition hover:bg-red-hover"
+        style={ehMobile ? { height: ALVO_MINIMO } : undefined}
+        className={`shrink-0 whitespace-nowrap rounded-full bg-red px-2 text-[11px] font-bold text-white transition hover:bg-red-hover ${
+          ehMobile ? "" : "py-1"
+        }`}
       >
         Parar transmissão
       </button>

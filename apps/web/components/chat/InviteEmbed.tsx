@@ -103,7 +103,12 @@ export default function InviteEmbed({ code }: { code: string }) {
           ? `${displayNameOf(previa.inviter)} te convidou para entrar em um servidor`
           : "Você foi convidado para entrar em um servidor"}
       </p>
-      <div className="mt-3 flex items-center gap-4">
+      {/* No celular a linha não cabe em uma só: com 314px de coluna sobravam
+          146 para o meio, e o nome do servidor saía truncado ("Time de
+          Produ…") com "1 online"/"2 membros" quebrando em duas linhas. Com
+          `flex-wrap` o botão desce inteiro para baixo (é o padrão do cartão de
+          convite no telefone) e o nome recupera a largura do cartão. */}
+      <div className="mt-3 flex items-center gap-4 celular:flex-wrap">
         <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl bg-void text-sm font-semibold text-txt-primary">
           {previa.guild.iconUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -129,8 +134,10 @@ export default function InviteEmbed({ code }: { code: string }) {
           type="button"
           disabled={entrando}
           onClick={() => void acao()}
+          /* 31px de altura no telefone (`h-8` com a raiz de 15,5px) para o
+             único botão do cartão: 44 literais no celular. */
           className={
-            "h-8 shrink-0 rounded-[3px] px-4 text-sm font-medium transition disabled:opacity-60 " +
+            "h-8 shrink-0 rounded-[3px] px-4 text-sm font-medium transition disabled:opacity-60 celular:h-[44px] celular:w-full celular:px-5 " +
             // quem já é membro não precisa de chamada para ação: o botão vira
             // um atalho neutro para o servidor, como o "Entrou" do Discord
             (jaSouMembro

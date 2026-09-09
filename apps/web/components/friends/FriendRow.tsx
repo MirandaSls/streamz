@@ -73,7 +73,9 @@ export default function FriendRow({
         type="button"
         onClick={abrirPerfil}
         aria-label={`Perfil de ${nome}`}
-        className="relative shrink-0 rounded-full"
+        // o avatar mede 32 e não pode crescer sem empurrar a linha de 61: o que
+        // cresce é o alvo, por um pseudo-elemento invisível de 46
+        className="relative shrink-0 rounded-full celular:before:absolute celular:before:-inset-[7px] celular:before:content-['']"
       >
         <Avatar user={live} size="md" status={status} surface="border-chat" />
       </button>

@@ -277,7 +277,7 @@ function ListaFigurinhas({
                     ui.toast(errorMessage(e, "Não foi possível apagar"), "error");
                   }
                 }}
-                className="mt-1 text-xs text-red hover:underline"
+                className="mt-1 text-xs text-red hover:underline celular:inline-flex celular:min-h-[44px] celular:items-center celular:justify-center celular:px-3"
               >
                 Apagar
               </button>
@@ -304,7 +304,7 @@ function BotaoEnviar({
         type="button"
         disabled={disabled}
         onClick={onClick}
-        className="flex h-9 items-center gap-2 rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex h-9 celular:h-[44px] items-center gap-2 rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Upload size={16} aria-hidden="true" />
         Enviar
@@ -331,7 +331,7 @@ function IconeAcao({
         type="button"
         onClick={onClick}
         aria-label={label}
-        className={`grid h-7 w-7 place-items-center rounded text-txt-secondary transition hover:bg-sel ${
+        className={`grid h-7 celular:h-[44px] w-7 celular:w-[44px] place-items-center rounded text-txt-secondary transition hover:bg-sel ${
           danger ? "hover:text-red" : "hover:text-txt-primary"
         }`}
       >

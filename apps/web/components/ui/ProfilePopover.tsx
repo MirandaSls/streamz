@@ -510,6 +510,28 @@ export default function ProfilePopoverHost() {
             className={`h-[60px] ${perfil?.bannerColor ? "" : "bg-accent"}`}
           />
         )}
+        {ehMobile && (
+          /*
+            A saída visível da folha, no espelho do kebab.
+
+            No desktop o cartão sai com Esc e com um clique em qualquer lugar
+            fora dele, que é o gesto de sempre de um popover ancorado — e por
+            isso ele nunca teve um ×. No celular ele vira folha, e as duas
+            saídas que sobravam eram o véu (que ninguém garante que a pessoa
+            saiba tocar) e o "voltar" do Android (que não existe no navegador do
+            iPhone). O cartão continua começando pela faixa do banner, sem alça:
+            este botão flutua **sobre** a faixa, na mesma moldura escura do
+            kebab, então não empurra nada e não muda o desenho do cartão.
+          */
+          <button
+            type="button"
+            onClick={close}
+            aria-label="Fechar"
+            className="absolute left-2 top-2 grid h-[44px] w-[44px] place-items-center rounded bg-black/40 text-white/90 transition hover:bg-black/60"
+          >
+            <X size={20} />
+          </button>
+        )}
         <button
           type="button"
           onClick={(e) => {

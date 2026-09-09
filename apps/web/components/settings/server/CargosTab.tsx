@@ -226,7 +226,7 @@ export default function CargosTab({ guildId }: { guildId: string }) {
           type="button"
           disabled={busy}
           onClick={() => void criar()}
-          className="h-8 shrink-0 rounded-lg bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
+          className="h-8 celular:h-[44px] shrink-0 rounded-lg bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
         >
           Criar cargo
         </button>
@@ -276,7 +276,9 @@ export default function CargosTab({ guildId }: { guildId: string }) {
             <button
               type="button"
               onClick={() => setSelecionado(r.id)}
-              className="flex min-w-0 flex-1 items-center gap-2 text-left"
+              // a linha do cargo mede 61: no celular o botão do nome ocupa a
+              // altura toda dela em vez dos 19 do texto
+              className="flex min-w-0 flex-1 items-center gap-2 text-left celular:h-full"
             >
               <span
                 aria-hidden="true"
@@ -296,7 +298,7 @@ export default function CargosTab({ guildId }: { guildId: string }) {
               type="button"
               onClick={() => setSelecionado(r.id)}
               aria-label={`Editar o cargo ${r.name}`}
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong hover:text-txt-primary"
+              className="grid h-10 celular:h-[44px] w-10 celular:w-[44px] shrink-0 place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong hover:text-txt-primary"
             >
               <Pencil size={16} />
             </button>
@@ -307,7 +309,7 @@ export default function CargosTab({ guildId }: { guildId: string }) {
               // sempre visível, como no print: o lápis e o "…" são o par de
               // ações da linha, e um que some no hover parecia bug ao lado do
               // outro que não some
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong hover:text-txt-primary"
+              className="grid h-10 celular:h-[44px] w-10 celular:w-[44px] shrink-0 place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong hover:text-txt-primary"
             >
               <MoreHorizontal size={16} />
             </button>
@@ -393,7 +395,7 @@ function RoleEditor({
       <button
         type="button"
         onClick={aoVoltar}
-        className="mb-3 flex items-center gap-1.5 text-sm text-txt-muted transition hover:text-txt-primary"
+        className="mb-3 flex items-center gap-1.5 text-sm text-txt-muted transition hover:text-txt-primary celular:min-h-[44px]"
       >
         <ArrowLeft size={16} aria-hidden="true" />
         Voltar aos cargos
@@ -416,7 +418,7 @@ function RoleEditor({
             role="tab"
             aria-selected={aba === a.id}
             onClick={() => setAba(a.id)}
-            className={`-mb-px border-b-2 px-3 pb-2 text-sm font-medium transition ${
+            className={`-mb-px border-b-2 px-3 pb-2 text-sm font-medium transition celular:min-h-[44px] ${
               aba === a.id
                 ? "border-accent text-txt-primary"
                 : "border-transparent text-txt-muted hover:text-txt-normal"
@@ -513,7 +515,7 @@ function RoleEditor({
                       type="button"
                       onClick={() => void toggleRole(m.user.id, role.id, false)}
                       aria-label={`Remover ${role.name} de ${displayNameOf(m.user)}`}
-                      className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red"
+                      className="grid h-7 celular:h-[44px] w-7 celular:w-[44px] place-items-center rounded text-txt-muted hover:text-red"
                     >
                       <Trash2 size={16} />
                     </button>

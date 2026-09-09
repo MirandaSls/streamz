@@ -68,7 +68,7 @@ export default function AdicionarAlvoPopover({
           onChange={(e) => onFiltro(e.target.value)}
           placeholder="Cargo ou membro"
           aria-label="Buscar cargo ou membro"
-          className="h-8 w-full rounded-[4px] border border-border-strong bg-transparent pl-8 pr-2 text-sm text-txt-normal outline-none transition-colors placeholder:text-txt-muted focus:border-accent"
+          className="h-8 w-full rounded-[4px] border border-border-strong bg-transparent pl-8 pr-2 text-sm text-txt-normal outline-none transition-colors placeholder:text-txt-muted focus:border-accent celular:h-[44px] celular:text-[max(16px,1em)]"
         />
       </div>
 
@@ -83,7 +83,7 @@ export default function AdicionarAlvoPopover({
                 key={alvo.chave}
                 type="button"
                 onClick={() => onEscolher(alvo)}
-                className="flex h-8 w-full items-center gap-2 rounded-[3px] px-2 text-left text-sm text-txt-normal transition hover:bg-hov"
+                className="flex h-8 celular:h-[44px] w-full items-center gap-2 rounded-[3px] px-2 text-left text-sm text-txt-normal transition hover:bg-hov"
               >
                 {user ? (
                   <Avatar user={user} size="sm" surface="border-overlay" />

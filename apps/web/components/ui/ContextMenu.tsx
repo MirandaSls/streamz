@@ -10,6 +10,7 @@ import {
 } from "react";
 import { ChevronRight } from "@/components/ui/icones";
 import { useEhMobile } from "@/hooks/useEhMobile";
+import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
 import { isReacoes, isSlider, isSubmenu, useUI, type MenuItem } from "@/stores/ui";
 
 /**
@@ -144,9 +145,12 @@ function proximo(items: MenuItem[], de: number, passo: number): number {
 function FileiraDeReacoes({
   item,
   onClose,
+  cedoDemais = () => false,
 }: {
   item: Extract<MenuItem, { reacoes: unknown[] }>;
   onClose: () => void;
+  /** carência do primeiro toque da folha — ver `nascidaEm` no `Painel`. */
+  cedoDemais?: () => boolean;
 }) {
   return (
     <div role="group" aria-label="Reações rápidas" className="mb-1 flex items-center gap-1 px-1 py-1">
@@ -157,6 +161,7 @@ function FileiraDeReacoes({
           role="menuitem"
           aria-label={`Reagir com ${r.rotulo}`}
           onClick={() => {
+            if (cedoDemais()) return;
             onClose();
             r.onSelect();
           }}
@@ -205,8 +210,34 @@ function Painel({
   const [aberto, setAberto] = useState<number | null>(null);
   const [ancora, setAncora] = useState<DOMRect | null>(null);
   const timer = useRef<number | undefined>(undefined);
+  /**
+   * Quando esta folha nasceu — a **carência do primeiro toque**.
+   *
+   * O toque longo abre a folha com o dedo ainda na tela, e a folha nasce
+   * debaixo dele: ao soltar, o `click` cai no item que por acaso ficou naquele
+   * ponto. Medido: segurar uma mensagem abria a folha e disparava "Criar
+   * Tópico" sozinho. Onde o ponto do dedo cai no véu, o efeito é o oposto e
+   * igualmente ruim — a folha fecha no mesmo gesto que a abriu.
+   *
+   * 400ms é a folga entre os 450ms do toque longo e um segundo toque de
+   * verdade. Vale só na folha: no desktop o menu nasce do `mouseup` do botão
+   * direito, e não há dedo em cena.
+   *
+   * **O carimbo é renovado a cada menu, e não só na montagem.** `openContextMenu`
+   * *troca* o menu da store em vez de passar por `null` (ver `stores/ui.ts`), e
+   * um item que abre outro menu faz `onClose()` seguido de `openContextMenu()`
+   * no mesmo manipulador — o React junta os dois numa renderização só, o
+   * `Painel` não desmonta e o `useRef` guardaria a hora do menu *anterior*. Com
+   * o carimbo velho a carência já teria vencido e a folha nova nasceria
+   * desprotegida: era o toque que atravessa de volta, pelo caminho do kebab do
+   * cartão de perfil. Renovar no efeito que já mede a posição custa uma linha e
+   * vale para os dois casos, o de montar e o de reaproveitar.
+   */
+  const nascidaEm = useRef(Date.now());
+  const cedoDemais = () => folha && Date.now() - nascidaEm.current < 400;
 
   useLayoutEffect(() => {
+    nascidaEm.current = Date.now();
     const h = ref.current?.offsetHeight ?? 0;
     setPos(colocar(x, y, largura, h, alternativoX));
   }, [x, y, largura, alternativoX, items]);
@@ -267,10 +298,23 @@ function Painel({
   return (
     <>
       {folha && (
-        // o véu é o alvo de "fechar" mais fácil do telefone: tudo que não é a
-        // folha. `mousedown` fora já fecha (ver `ContextMenuHost`); isto só dá
-        // a ele a aparência de camada.
-        <div aria-hidden="true" className="anim-overlay fixed inset-0 z-[79] bg-black/60" />
+        /*
+          O véu é o alvo de "fechar" mais fácil do telefone: tudo que não é a
+          folha. **Ele fecha por conta própria**, e isso não é redundância com o
+          `mousedown` de fora do `ContextMenuHost`: o véu mora *dentro* da raiz
+          que aquele ouvinte usa como "dentro do menu", e cobre a tela inteira —
+          ou seja, sem este `onMouseDown` nenhum toque na tela era "fora", e a
+          folha só saía pelo Esc (que num telefone não existe) ou escolhendo um
+          item. Era o defeito de "abri o + e não consigo mais sair".
+        */
+        <div
+          aria-hidden="true"
+          onMouseDown={() => {
+            if (cedoDemais()) return;
+            onClose();
+          }}
+          className="anim-overlay fixed inset-0 z-[79] bg-black/60"
+        />
       )}
       <div
         ref={ref}
@@ -297,6 +341,27 @@ function Painel({
         }
         onContextMenu={(e) => e.preventDefault()}
       >
+        {folha && (
+          /*
+            A alça do topo, como na captura `discord-mobile-menu-mensagem.png`
+            — e aqui ela é **botão de verdade**, com rótulo "Fechar": é a saída
+            visível da folha, ao lado do véu e do voltar do Android. Fica
+            `sticky` porque a folha rola por dentro e a saída não pode subir
+            junto com a lista. Sem `role`, como a barra de volume logo abaixo:
+            não é um item de menu e não entra na navegação por setas.
+          */
+          <button
+            type="button"
+            onClick={() => {
+              if (cedoDemais()) return;
+              onClose();
+            }}
+            aria-label="Fechar"
+            className="sticky top-0 z-10 -mt-1 mb-1 flex h-[28px] w-full shrink-0 items-center justify-center bg-overlay"
+          >
+            <span aria-hidden="true" className="h-1 w-9 rounded-full bg-border-strong" />
+          </button>
+        )}
         {items.map((item, i) => {
           if ("separator" in item) {
             return <div key={i} role="separator" className="my-2 h-px bg-border" />;
@@ -305,7 +370,9 @@ function Painel({
             return <ItemDeslizante key={i} item={item} />;
           }
           if (isReacoes(item)) {
-            return <FileiraDeReacoes key={i} item={item} onClose={onClose} />;
+            return (
+              <FileiraDeReacoes key={i} item={item} onClose={onClose} cedoDemais={cedoDemais} />
+            );
           }
           const filho = isSubmenu(item);
           const marcado = !filho && item.checked === true;
@@ -343,6 +410,9 @@ function Painel({
                 agendarSubmenu(i, e.currentTarget, filho && !item.disabled);
               }}
               onClick={(e) => {
+                // o `click` do dedo que ainda estava na tela quando a folha
+                // subiu não é escolha de ninguém (ver `nascidaEm`)
+                if (cedoDemais()) return;
                 if (filho) {
                   setAncora(e.currentTarget.getBoundingClientRect());
                   setAberto((a) => (a === i ? null : i));
@@ -475,6 +545,14 @@ export default function ContextMenuHost() {
   const raiz = useRef<HTMLDivElement>(null);
   // no celular o menu é folha inferior, e ela não é ancorada em nada
   const ehMobile = useEhMobile();
+
+  /*
+    O "voltar" do Android desfaz a folha, como desfaz qualquer camada do
+    celular (é o mesmo hook do cartão de perfil e do seletor de emoji). Sem
+    ele o voltar atravessava a folha e desfazia a tela **de baixo**, deixando
+    o menu aberto por cima de outra coisa.
+  */
+  useVoltarNoCelular(ehMobile && menu !== null, close);
 
   useEffect(() => {
     if (!menu) return;

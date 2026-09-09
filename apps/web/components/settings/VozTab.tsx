@@ -169,7 +169,7 @@ export default function VozTab() {
             // `true`: este botão é o pedido explícito de tentar de novo, e tem
             // de furar a trava que impede um prompt por abertura de menu
             onClick={() => void devices.refresh(true)}
-            className="ml-auto flex items-center gap-1.5 text-xs text-txt-muted transition hover:text-txt-primary"
+            className="ml-auto flex items-center gap-1.5 text-xs text-txt-muted transition hover:text-txt-primary celular:min-h-[44px]"
           >
             <RefreshCw size={14} aria-hidden="true" />
             Atualizar lista
@@ -205,7 +205,7 @@ export default function VozTab() {
               }}
               onBlur={() => setCapturando(false)}
               aria-label={t("voz.gravarTecla")}
-              className={`flex h-9 items-center gap-1.5 rounded-[3px] px-3 text-sm transition ${
+              className={`flex h-9 celular:h-[44px] items-center gap-1.5 rounded-[3px] px-3 text-sm transition ${
                 capturando ? "bg-accent text-accent-ink" : "bg-void text-txt-normal hover:bg-hov"
               }`}
             >
@@ -252,7 +252,7 @@ export default function VozTab() {
           <button
             type="button"
             onClick={testarMicrofone}
-            className="flex h-9 shrink-0 items-center gap-2 rounded-[3px] bg-accent px-3 text-sm font-medium text-accent-ink hover:bg-accent-hover"
+            className="flex h-9 celular:h-[44px] shrink-0 items-center gap-2 rounded-[3px] bg-accent px-3 text-sm font-medium text-accent-ink hover:bg-accent-hover"
           >
             <Mic size={16} aria-hidden="true" />
             {testando ? t("voz.parar") : t("voz.testar")}
@@ -313,7 +313,7 @@ export default function VozTab() {
           <button
             type="button"
             onClick={() => void alternarCamera()}
-            className="h-9 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
+            className="h-9 celular:h-[44px] rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
           >
             {camera ? t("voz.desligarCamera") : t("voz.ligarCamera")}
           </button>

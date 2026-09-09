@@ -105,7 +105,7 @@ export default function TriEstado({
       role="radiogroup"
       aria-label={rotulo}
       onKeyDown={aoTeclar}
-      className={`inline-flex h-[28px] w-[96px] shrink-0 overflow-hidden rounded-[4px] ${
+      className={`inline-flex h-[28px] w-[96px] shrink-0 overflow-hidden rounded-[4px] celular:h-[44px] celular:w-[132px] ${
         disabled ? "opacity-50" : ""
       }`}
     >
@@ -123,7 +123,7 @@ export default function TriEstado({
             // setas andam dentro dele
             tabIndex={ativo ? 0 : -1}
             onClick={() => onChange(estado)}
-            className={`grid h-[28px] w-[32px] place-items-center transition disabled:cursor-not-allowed ${
+            className={`grid h-[28px] w-[32px] place-items-center transition disabled:cursor-not-allowed celular:h-[44px] celular:w-[44px] ${
               ativo ? `bg-sel ${COR_ATIVA[estado]}` : COR_HOVER[estado]
             }`}
           >

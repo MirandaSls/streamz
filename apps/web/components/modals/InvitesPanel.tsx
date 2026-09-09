@@ -84,7 +84,7 @@ export default function InvitesPanel({ guildId }: { guildId: string }) {
           type="button"
           disabled={busy}
           onClick={() => void create()}
-          className={`h-10 ${BOTAO_ACENTO}`}
+          className={`h-10 celular:h-[44px] ${BOTAO_ACENTO}`}
         >
           {busy ? "Criando…" : "Criar link de convite"}
         </button>
@@ -97,109 +97,118 @@ export default function InvitesPanel({ guildId }: { guildId: string }) {
         divisória. Sem a coluna "Cargos": convite não carrega cargo aqui. As
         ações (copiar, revogar) ocupam a última coluna e aparecem no hover.
       */}
-      <table className="w-full table-fixed border-collapse text-sm">
-        <colgroup>
-          <col className="w-[31%]" />
-          <col className="w-[25%]" />
-          <col className="w-[11%]" />
-          <col className="w-[18%]" />
-          <col />
-        </colgroup>
-        <thead>
-          <tr className="h-8 text-left text-base font-semibold text-txt-primary">
-            <th scope="col" className="pr-2 font-semibold">
-              Criado por
-            </th>
-            <th scope="col" className="pr-2 font-semibold">
-              Código do convite
-            </th>
-            <th scope="col" className="pr-2 font-semibold">
-              Usos
-            </th>
-            <th scope="col" className="pr-2 font-semibold">
-              Expira em
-            </th>
-            <th scope="col">
-              <span className="sr-only">Ações</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {invites === null ? (
-            <tr className="h-[62px] border-b border-border">
-              <td colSpan={5} className="text-txt-muted">
-                Carregando…
-              </td>
+      {/* como as outras tabelas do servidor (Membros, Emoji, Banimentos, Sons):
+          cinco colunas não cabem nos 358px do celular, então a tabela rola
+          **por dentro** em vez de espremer. No desktop os 660 da coluna passam
+          do piso e nada muda. */}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] table-fixed border-collapse text-sm">
+          <colgroup>
+            <col className="w-[31%]" />
+            <col className="w-[25%]" />
+            <col className="w-[11%]" />
+            <col className="w-[18%]" />
+            <col />
+          </colgroup>
+          <thead>
+            <tr className="h-8 text-left text-base font-semibold text-txt-primary">
+              <th scope="col" className="pr-2 font-semibold">
+                Criado por
+              </th>
+              <th scope="col" className="pr-2 font-semibold">
+                Código do convite
+              </th>
+              <th scope="col" className="pr-2 font-semibold">
+                Usos
+              </th>
+              <th scope="col" className="pr-2 font-semibold">
+                Expira em
+              </th>
+              <th scope="col">
+                <span className="sr-only">Ações</span>
+              </th>
             </tr>
-          ) : invites.length === 0 ? (
-            <tr className="h-[62px] border-b border-border">
-              <td colSpan={5} className="text-txt-muted">
-                Nenhum convite ativo.
-              </td>
-            </tr>
-          ) : (
-            invites.map((i) => (
-              <tr key={i.code} className="group h-[62px] border-b border-border transition hover:bg-hov">
-                <td className="pr-2">
-                  <span className="flex items-center gap-3">
-                    {i.creator ? (
-                      <Avatar user={i.creator} size="sm" surface="border-chat" />
-                    ) : (
-                      <span aria-hidden="true" className="h-6 w-6 shrink-0 rounded-full bg-panel" />
-                    )}
-                    <span className="min-w-0">
-                      <span className="block truncate text-base text-txt-primary">
-                        {i.creator ? displayNameOf(i.creator) : "Conta apagada"}
-                      </span>
-                      <span className="block truncate text-xs text-txt-muted">
-                        {i.channelName ? `#${i.channelName}` : "—"}
-                      </span>
-                    </span>
-                  </span>
-                </td>
-                <td className="pr-2">
-                  <code className="font-mono text-txt-primary">{i.code}</code>
-                </td>
-                <td className="pr-2 text-txt-primary">
-                  {i.uses}
-                  {i.maxUses ? `/${i.maxUses}` : ""}
-                </td>
-                <td className="pr-2 text-txt-primary">
-                  {i.expiresAt ? (
-                    <Contagem ate={i.expiresAt} agora={agora} />
-                  ) : (
-                    <span aria-label="Nunca expira">∞</span>
-                  )}
-                </td>
-                <td>
-                  <span className="flex items-center justify-end gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
-                    <Tooltip label="Copiar código">
-                      <button
-                        type="button"
-                        onClick={() => void navigator.clipboard?.writeText(i.code)}
-                        aria-label={`Copiar ${i.code}`}
-                        className="grid h-8 w-8 place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong hover:text-txt-primary"
-                      >
-                        <Copy size={16} />
-                      </button>
-                    </Tooltip>
-                    <Tooltip label="Revogar">
-                      <button
-                        type="button"
-                        onClick={() => void revoke(i.code)}
-                        aria-label={`Revogar ${i.code}`}
-                        className="grid h-8 w-8 place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong hover:text-red"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </Tooltip>
-                  </span>
+          </thead>
+          <tbody>
+            {invites === null ? (
+              <tr className="h-[62px] border-b border-border">
+                <td colSpan={5} className="text-txt-muted">
+                  Carregando…
                 </td>
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+            ) : invites.length === 0 ? (
+              <tr className="h-[62px] border-b border-border">
+                <td colSpan={5} className="text-txt-muted">
+                  Nenhum convite ativo.
+                </td>
+              </tr>
+            ) : (
+              invites.map((i) => (
+                <tr key={i.code} className="group h-[62px] border-b border-border transition hover:bg-hov">
+                  <td className="pr-2">
+                    <span className="flex items-center gap-3">
+                      {i.creator ? (
+                        <Avatar user={i.creator} size="sm" surface="border-chat" />
+                      ) : (
+                        <span aria-hidden="true" className="h-6 w-6 shrink-0 rounded-full bg-panel" />
+                      )}
+                      <span className="min-w-0">
+                        <span className="block truncate text-base text-txt-primary">
+                          {i.creator ? displayNameOf(i.creator) : "Conta apagada"}
+                        </span>
+                        <span className="block truncate text-xs text-txt-muted">
+                          {i.channelName ? `#${i.channelName}` : "—"}
+                        </span>
+                      </span>
+                    </span>
+                  </td>
+                  <td className="pr-2">
+                    <code className="font-mono text-txt-primary">{i.code}</code>
+                  </td>
+                  <td className="pr-2 text-txt-primary">
+                    {i.uses}
+                    {i.maxUses ? `/${i.maxUses}` : ""}
+                  </td>
+                  <td className="pr-2 text-txt-primary">
+                    {i.expiresAt ? (
+                      <Contagem ate={i.expiresAt} agora={agora} />
+                    ) : (
+                      <span aria-label="Nunca expira">∞</span>
+                    )}
+                  </td>
+                  <td>
+                    {/* No celular não existe hover: sem `celular:opacity-100` o "copiar" e o
+                        "revogar" ficavam invisíveis, e a lista de convites não tinha
+                        nenhuma ação alcançável pelo dedo. */}
+                    <span className="flex items-center justify-end gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100 celular:opacity-100">
+                      <Tooltip label="Copiar código">
+                        <button
+                          type="button"
+                          onClick={() => void navigator.clipboard?.writeText(i.code)}
+                          aria-label={`Copiar ${i.code}`}
+                          className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong hover:text-txt-primary"
+                        >
+                          <Copy size={16} />
+                        </button>
+                      </Tooltip>
+                      <Tooltip label="Revogar">
+                        <button
+                          type="button"
+                          onClick={() => void revoke(i.code)}
+                          aria-label={`Revogar ${i.code}`}
+                          className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong hover:text-red"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </Tooltip>
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

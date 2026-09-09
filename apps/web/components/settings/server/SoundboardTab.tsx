@@ -51,7 +51,7 @@ export default function SoundboardTab({ guildId }: { guildId: string }) {
             type="button"
             disabled={sons.length >= MAX_SOUNDBOARD_POR_GUILD}
             onClick={() => ui.openModal({ kind: "adicionarSom", guildId })}
-            className={`h-10 ${BOTAO_ACENTO}`}
+            className={`h-10 celular:h-[44px] ${BOTAO_ACENTO}`}
           >
             Adicionar som
           </button>
@@ -127,7 +127,7 @@ export default function SoundboardTab({ guildId }: { guildId: string }) {
                     )}
                   </td>
                   <td>
-                    <span className="flex items-center justify-end gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
+                    <span className="flex items-center justify-end gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100 celular:opacity-100">
                       <Tooltip label="Remover">
                         <button
                           type="button"
@@ -146,7 +146,7 @@ export default function SoundboardTab({ guildId }: { guildId: string }) {
                               ui.toast(errorMessage(e, "Não foi possível remover"), "error");
                             }
                           }}
-                          className="grid h-8 w-8 place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong hover:text-red"
+                          className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong hover:text-red"
                         >
                           <Trash2 size={16} />
                         </button>

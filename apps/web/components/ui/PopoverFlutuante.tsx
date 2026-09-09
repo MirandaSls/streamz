@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useEhMobile } from "@/hooks/useEhMobile";
+import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
 
 /**
  * Caixa flutuante ancorada num botão — o popover de verdade, em portal.
@@ -103,6 +104,14 @@ export default function PopoverFlutuante({
   // Fechar por clique fora e por Esc mora aqui, e não em quem abre: em portal a
   // caixa não é filha do botão, então um `contains` do lado de lá leria clique
   // dentro da caixa como clique fora e ela se fecharia ao primeiro toque.
+  /*
+    O "voltar" do Android desfaz a folha, como desfaz qualquer camada do
+    celular (o mesmo hook do cartão de perfil, do seletor de emoji e do menu de
+    contexto). Sem ele o voltar atravessava a folha aberta e desfazia a tela de
+    baixo.
+  */
+  useVoltarNoCelular(ehMobile && aberto, onFechar);
+
   useEffect(() => {
     if (!aberto) return;
     const fora = (e: MouseEvent) => {
@@ -147,10 +156,28 @@ export default function PopoverFlutuante({
             semRespiro ? "" : "p-3"
           }`}
         >
-          <span
-            aria-hidden="true"
-            className="mx-auto mb-2 block h-1 w-9 rounded-full bg-border-strong"
-          />
+          {/*
+            A alça é **botão de verdade**, com rótulo "Fechar" — a mesma saída
+            visível que a folha do menu de contexto ganhou. Um `span`
+            `aria-hidden` desenhava a alça e não fechava nada: quem não conhece
+            o gesto de tocar no véu (e quem usa leitor de tela) ficava com o
+            "voltar" do Android como única saída, e no navegador de iPhone esse
+            botão não existe.
+
+            `sticky` porque a folha rola por dentro e a saída não pode subir
+            junto com o conteúdo. `-mt-1` no caso com respiro devolve os 4px que
+            o `p-3` da moldura já dá em cima, para a alça não descer de lugar.
+          */}
+          <button
+            type="button"
+            onClick={onFechar}
+            aria-label="Fechar"
+            className={`sticky top-0 z-10 flex h-[28px] w-full shrink-0 items-center justify-center bg-overlay ${
+              semRespiro ? "" : "-mt-1 mb-1"
+            }`}
+          >
+            <span aria-hidden="true" className="h-1 w-9 rounded-full bg-border-strong" />
+          </button>
           {children}
         </div>
       </div>,

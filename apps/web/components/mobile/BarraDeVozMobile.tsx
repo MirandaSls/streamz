@@ -29,6 +29,7 @@ export default function BarraDeVozMobile() {
   const status = useVoice((s) => s.status);
   const disconnect = useVoice((s) => s.disconnect);
   const conversas = useDMs((s) => s.channels);
+  const conversaAberta = useDMs((s) => s.activeId);
   const guilds = useGuilds((s) => s.guilds);
   const muted = useVoicePrefs((s) => s.muted);
   const toggleMute = useVoicePrefs((s) => s.toggleMute);
@@ -36,8 +37,17 @@ export default function BarraDeVozMobile() {
   const pilhas = useMobile((s) => s.pilhas);
 
   if (!channelId) return null;
+
+  const topo = pilhas[aba][pilhas[aba].length - 1];
   // o palco já está na frente: a barra seria a mesma coisa duas vezes
-  if (pilhas[aba][pilhas[aba].length - 1] === "voz") return null;
+  if (topo === "voz") return null;
+  // **A chamada de conversa direta não tem tela "voz".** O palco dela mora
+  // dentro da própria tela de conversa (`DMView` monta o `CallStage` em cima da
+  // timeline), então numa DM em chamada esta barra aparecia logo abaixo do
+  // palco que ela anuncia: o mesmo nome, o mesmo mudo e o mesmo desligar duas
+  // vezes na mesma tela, custando 48px da conversa. É a mesma regra de cima,
+  // com o palco no lugar onde ele de fato está.
+  if (topo === "conversa" && !guildId && conversaAberta === channelId) return null;
 
   const conversa = conversas.find((d) => d.id === channelId);
   const titulo = guildId ? nomeDoCanal || "voz" : conversa ? dmTitle(conversa) : "Chamada";

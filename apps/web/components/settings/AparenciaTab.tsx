@@ -86,7 +86,7 @@ export default function AparenciaTab() {
         <button
           type="button"
           onClick={() => s.reset()}
-          className="h-9 rounded-[3px] border border-border-strong px-3 text-sm font-medium text-txt-normal transition hover:bg-hov"
+          className="h-9 celular:h-[44px] rounded-[3px] border border-border-strong px-3 text-sm font-medium text-txt-normal transition hover:bg-hov"
         >
           {t("config.restaurar")}
         </button>
@@ -129,7 +129,13 @@ function EscolhaDeTema() {
   ];
 
   return (
-    <div role="radiogroup" aria-label={t("aparencia.tema")} className="grid grid-cols-3 gap-3 py-3">
+    <div
+      role="radiogroup"
+      aria-label={t("aparencia.tema")}
+      // três colunas em 358px dão 113 cada, e "Sincronizar com o computador"
+      // saía como "Sincroni…" — no celular o rótulo quebra em vez de cortar
+      className="grid grid-cols-3 gap-3 py-3 celular:gap-2"
+    >
       {opcoes.map((o) => {
         const ativo = o.value === tema;
         return (
@@ -147,9 +153,9 @@ function EscolhaDeTema() {
             }`}
           >
             <MiniaturaDeTema variante={o.value} />
-            <span className="flex items-center gap-2 px-2.5 py-2">
+            <span className="flex items-center gap-2 px-2.5 py-2 celular:items-start celular:gap-1.5 celular:px-2">
               <PontoDeRadio ativo={ativo} />
-              <span className="min-w-0 truncate text-sm font-medium text-txt-primary">
+              <span className="min-w-0 truncate text-sm font-medium text-txt-primary celular:whitespace-normal">
                 {o.label}
               </span>
             </span>

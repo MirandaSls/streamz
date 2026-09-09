@@ -32,7 +32,7 @@ export default function AdminChamadasTab() {
         <button
           type="button"
           onClick={recarregar}
-          className="flex h-8 shrink-0 items-center gap-1.5 rounded-[3px] px-2 text-sm font-medium text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
+          className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded-[3px] px-2 text-sm font-medium text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
         >
           <RefreshCw size={14} aria-hidden="true" />
           Atualizar

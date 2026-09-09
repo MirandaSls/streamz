@@ -114,7 +114,7 @@ export default function AdminUsuariosTab() {
             type="button"
             onClick={() => void carregarMais()}
             disabled={carregandoMais}
-            className="mt-3 h-9 w-full rounded-[3px] border border-border-strong text-sm font-medium text-txt-normal transition hover:border-border-strong-hover disabled:opacity-60"
+            className="mt-3 h-9 celular:h-[44px] w-full rounded-[3px] border border-border-strong text-sm font-medium text-txt-normal transition hover:border-border-strong-hover disabled:opacity-60"
           >
             {carregandoMais ? "Carregando…" : "Carregar mais"}
           </button>
@@ -180,7 +180,7 @@ function Linha({ item }: { item: AdminUserView }) {
             onClick={() => setCompondo((aberto) => !aberto)}
             aria-expanded={compondo}
             title={`Mandar mensagem para @${user.username}`}
-            className="flex h-8 shrink-0 items-center gap-1.5 rounded-[3px] border border-border-strong px-2.5 text-xs font-medium text-txt-normal transition hover:border-border-strong-hover"
+            className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded-[3px] border border-border-strong px-2.5 text-xs font-medium text-txt-normal transition hover:border-border-strong-hover"
           >
             <MessageSquarePlus size={14} aria-hidden="true" />
             Mensagem
@@ -249,14 +249,14 @@ function Compositor({ user, onFim }: { user: AdminUserView["user"]; onFim: () =>
           type="button"
           onClick={() => void enviar()}
           disabled={enviando || texto.trim().length === 0}
-          className="h-8 rounded-[3px] bg-accent px-3 text-xs font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
+          className="h-8 celular:h-[44px] rounded-[3px] bg-accent px-3 text-xs font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
         >
           {enviando ? "Enviando…" : "Enviar"}
         </button>
         <button
           type="button"
           onClick={onFim}
-          className="h-8 rounded-[3px] px-2 text-xs text-txt-muted transition hover:text-txt-normal"
+          className="h-8 celular:h-[44px] rounded-[3px] px-2 text-xs text-txt-muted transition hover:text-txt-normal"
         >
           Cancelar
         </button>

@@ -10,8 +10,10 @@ import VoiceControls from "@/components/voice/VoiceControls";
 import VoiceGrid from "@/components/voice/VoiceGrid";
 import { AoVivoIndicador } from "@/components/voice/ScreenShareButton";
 import { useTelaCheia } from "@/components/voice/fullscreen";
+import { ALVO_MINIMO } from "@/components/voice/palco-mobile";
 import { useOcultarInativo } from "@/components/voice/useOcultarInativo";
 import { useEhMobile } from "@/hooks/useEhMobile";
+import { useEhPaisagem } from "@/hooks/useOrientacao";
 import { useDMs } from "@/stores/dms";
 import { ui } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
@@ -64,6 +66,24 @@ export default function CallStage({
   const { telaCheia, alternar } = useTelaCheia(palco);
   const { visivel, doPalco, daMoldura } = useOcultarInativo();
   const ehMobile = useEhMobile();
+  const paisagem = useEhPaisagem();
+
+  /**
+   * **No celular o dedo não paira, e o ponteiro não fica "se movendo".**
+   *
+   * `useOcultarInativo` conta três segundos de mouse parado e apaga a moldura.
+   * Num telefone esses três segundos começam a correr assim que a chamada abre:
+   * a faixa de cima — que é o único caminho para a conversa da DM e para
+   * "adicionar pessoas" num grupo — sumia sozinha, e o toque que a traria de
+   * volta **atravessa** para o tile debaixo dela (troca o foco, ou abre a tela
+   * cheia). Era um botão que só voltava depois de fazer outra coisa.
+   *
+   * A regra passa a ser a mesma da cápsula de controles (ver `ControlesMobile`):
+   * em pé a moldura fica **sempre**, porque é a única superfície de controle da
+   * tela; deitado ela some junto com os controles, que ali a tela é a
+   * transmissão e um toque traz tudo de volta.
+   */
+  const molduraVisivel = ehMobile ? !paisagem || visivel : visivel;
 
   const chamando = call.phase === "outgoing" && call.channelId === channelId;
   const grupo = conversa ? isGroupChannel(conversa) : false;
@@ -108,7 +128,7 @@ export default function CallStage({
       <div
         {...daMoldura}
         className={`absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 px-4 py-3 transition-opacity duration-200 ${
-          visivel ? "opacity-100" : "pointer-events-none opacity-0"
+          molduraVisivel ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
       >
         {/* Slots laterais iguais (`flex-1 basis-0`) em vez de 96px fixos: é o
@@ -135,6 +155,7 @@ export default function CallStage({
             <IconeDoPalco
               label="Adicionar pessoas"
               onClick={() => ui.openModal({ kind: "addGroupMembers", channelId })}
+              alvoDeToque={ehMobile}
             >
               <UserPlus size={20} />
             </IconeDoPalco>
@@ -143,6 +164,7 @@ export default function CallStage({
             label={chatAberto ? "Ocultar conversa" : "Mostrar conversa"}
             ativo={chatAberto}
             onClick={onToggleChat}
+            alvoDeToque={ehMobile}
           >
             <MessageSquare size={20} />
           </IconeDoPalco>
@@ -294,11 +316,20 @@ function IconeDoPalco({
   label,
   onClick,
   ativo,
+  alvoDeToque = false,
   children,
 }: {
   label: string;
   onClick: () => void;
   ativo?: boolean;
+  /**
+   * 44px em vez de 32 — o piso de toque do HIG e do Material, e o mesmo número
+   * do resto do leiaute de celular (`ALVO_MINIMO`). Em px, e não `h-11`: a raiz
+   * do app é 15,5px e a escala `rem` do Tailwind entregaria 42,6 (ver
+   * `palco-mobile.ts`). Só no telefone: no desktop o mouse acerta os 32 e mexer
+   * neles moveria um pixel de uma tela que este trabalho não pode tocar.
+   */
+  alvoDeToque?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -308,7 +339,10 @@ function IconeDoPalco({
         onClick={onClick}
         aria-pressed={ativo}
         aria-label={label}
-        className={`grid h-8 w-8 place-items-center rounded-[4px] transition ${
+        style={alvoDeToque ? { height: ALVO_MINIMO, width: ALVO_MINIMO } : undefined}
+        className={`grid place-items-center rounded-[4px] transition ${
+          alvoDeToque ? "" : "h-8 w-8"
+        } ${
           ativo ? "bg-sel text-txt-primary" : "text-txt-secondary hover:bg-hov hover:text-txt-primary"
         }`}
       >

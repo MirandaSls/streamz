@@ -197,7 +197,10 @@ export function Switch({
       aria-label={label}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative h-6 w-10 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+      // no celular o trilho continua com 40×24 (é o desenho do Discord), mas
+      // o **alvo** cresce para 44 por um pseudo-elemento invisível: aumentar a
+      // caixa mudaria o leiaute de toda linha de preferência
+      className={`relative h-6 w-10 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 celular:before:absolute celular:before:-inset-x-1.5 celular:before:-inset-y-[10px] celular:before:content-[''] ${
         checked ? "bg-green" : "bg-txt-faint"
       }`}
     >
@@ -367,7 +370,7 @@ export function RadioCards<T extends string>({
               aria-checked={ativo}
               disabled={opcao.disabled}
               onClick={() => onChange(opcao.value)}
-              className={`overflow-hidden rounded-[6px] border text-left transition ${
+              className={`overflow-hidden rounded-[6px] border text-left transition celular:min-h-[44px] ${
                 ativo ? "border-accent" : "border-border hover:border-border-strong-hover"
               } ${opcao.disabled ? "cursor-not-allowed opacity-50" : ""}`}
             >
@@ -415,7 +418,7 @@ export function RadioLinha({
 }) {
   return (
     <label
-      className={`flex cursor-pointer items-center gap-3 rounded-[4px] px-3 py-2.5 transition ${
+      className={`flex cursor-pointer items-center gap-3 rounded-[4px] px-3 py-2.5 transition celular:min-h-[44px] ${
         checked ? "bg-sel" : "bg-panel hover:bg-hov"
       }`}
     >
@@ -584,7 +587,7 @@ export function SliderMarcas<T>({
             type="button"
             onClick={() => onChange(i)}
             aria-pressed={i === indice}
-            className={`min-w-0 truncate text-[11px] font-medium transition ${
+            className={`min-w-0 truncate text-[11px] font-medium transition celular:min-h-[44px] ${
               i === indice ? "text-txt-primary" : "text-txt-muted hover:text-txt-normal"
             }`}
           >
@@ -668,7 +671,7 @@ export function Select({
               setAberto(false);
             }
           }}
-          className="flex h-10 w-full items-center gap-2 rounded-[3px] border border-border bg-input px-2.5 text-left text-sm text-txt-normal outline-none transition-colors hover:border-border-strong-hover focus:border-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-10 w-full items-center gap-2 rounded-[3px] border border-border bg-input px-2.5 text-left text-sm text-txt-normal outline-none transition-colors hover:border-border-strong-hover focus:border-accent disabled:cursor-not-allowed disabled:opacity-50 celular:h-[44px] celular:text-base"
         >
           <span className={`min-w-0 flex-1 truncate ${atual ? "" : "text-txt-muted"}`}>
             {atual?.label ?? emptyLabel}
@@ -729,7 +732,7 @@ function ItemDeLista({
       <button
         type="button"
         onClick={onSelect}
-        className={`flex h-8 w-full items-center gap-2 rounded-[3px] px-2 text-left text-sm transition ${
+        className={`flex h-8 w-full items-center gap-2 rounded-[3px] px-2 text-left text-sm transition celular:h-[44px] celular:text-base ${
           ativo ? "bg-sel text-txt-primary" : "text-txt-normal hover:bg-hov"
         }`}
       >

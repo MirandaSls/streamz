@@ -126,7 +126,10 @@ export default function ContaTab() {
                       disabled={uploading}
                       onClick={() => fileRef.current?.click()}
                       aria-label="Trocar avatar"
-                      className="absolute bottom-0 right-0 grid h-8 w-8 place-items-center rounded-full bg-panel text-txt-primary shadow-high hover:bg-hov disabled:opacity-50"
+                      // a pastilha continua com 32px sobre o avatar (44 cobriria
+                      // metade dele); quem cresce no celular é só o alvo, por
+                      // um pseudo-elemento invisível de 44
+                      className="absolute bottom-0 right-0 grid h-8 w-8 place-items-center rounded-full bg-panel text-txt-primary shadow-high hover:bg-hov disabled:opacity-50 celular:before:absolute celular:before:-inset-[6px] celular:before:content-['']"
                     >
                       <Camera size={16} />
                     </button>
@@ -179,12 +182,15 @@ function Linha({
 }) {
   return (
     <div className="border-b border-border py-3 last:border-b-0">
-      <div className="flex items-center justify-between gap-4">
+      {/* No celular a ação **desce**: o e-mail com "Reenviar" e "Editar" ao
+          lado sobrava 120px para o endereço, que virava "anaxi…". Empilhado,
+          o valor tem a linha inteira e os botões a de baixo. */}
+      <div className="flex items-center justify-between gap-4 celular:flex-col celular:items-stretch celular:gap-2">
         <div className="min-w-0">
           <p className="text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
             {rotulo}
           </p>
-          <div className="mt-0.5 truncate text-sm text-txt-primary">{valor}</div>
+          <div className="mt-0.5 truncate text-sm text-txt-primary celular:text-base">{valor}</div>
         </div>
         {acao && <div className="shrink-0">{acao}</div>}
       </div>
@@ -204,7 +210,7 @@ function BotaoDeLinha({
     <button
       type="button"
       onClick={onClick}
-      className="h-8 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal transition hover:bg-border-strong-hover"
+      className="h-8 celular:h-[44px] rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal transition hover:bg-border-strong-hover"
     >
       {children}
     </button>
@@ -342,7 +348,7 @@ function LinhaDeEmail({
               type="button"
               disabled={ocupado}
               onClick={() => void reenviar()}
-              className="h-8 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover disabled:opacity-50"
+              className="h-8 celular:h-[44px] rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover disabled:opacity-50"
             >
               Reenviar
             </button>
@@ -517,14 +523,14 @@ function BlocoDeEncerramento({ conta }: { conta: MinhaConta | null }) {
         <button
           type="button"
           onClick={() => setAcao(acao === "disable" ? null : "disable")}
-          className="h-8 rounded-[3px] border border-red px-3 text-sm font-medium text-red transition hover:bg-red hover:text-white"
+          className="h-8 celular:h-[44px] rounded-[3px] border border-red px-3 text-sm font-medium text-red transition hover:bg-red hover:text-white"
         >
           Desativar conta
         </button>
         <button
           type="button"
           onClick={() => setAcao(acao === "delete" ? null : "delete")}
-          className="h-8 rounded-[3px] bg-red px-3 text-sm font-medium text-white transition hover:bg-red-hover"
+          className="h-8 celular:h-[44px] rounded-[3px] bg-red px-3 text-sm font-medium text-white transition hover:bg-red-hover"
         >
           Excluir conta
         </button>

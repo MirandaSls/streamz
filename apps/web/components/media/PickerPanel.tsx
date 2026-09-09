@@ -178,10 +178,22 @@ export default function PickerPanel({
           aria-label="Emoji, GIF e figurinha"
           className="anim-folha flex h-[60dvh] max-h-[85dvh] w-full flex-col overflow-hidden rounded-t-2xl bg-panel pb-[env(safe-area-inset-bottom)] shadow-high"
         >
-          <span
-            aria-hidden="true"
-            className="mx-auto mb-1 mt-2.5 h-1 w-9 shrink-0 rounded-full bg-border-strong"
-          />
+          {/*
+            A alça é **botão de verdade**, com rótulo "Fechar" — o mesmo
+            contrato das outras folhas do celular (`PopoverFlutuante`,
+            `ProfilePopover`, menu de contexto). Como `span aria-hidden` ela
+            desenhava a saída sem ser saída: sobravam o véu, para quem conhece o
+            gesto, e o "voltar" do Android, que no navegador do iPhone não
+            existe.
+          */}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar"
+            className="flex h-[28px] w-full shrink-0 items-center justify-center pt-1"
+          >
+            <span aria-hidden="true" className="h-1 w-9 rounded-full bg-border-strong" />
+          </button>
           {miolo}
         </div>
       </div>,
