@@ -84,8 +84,13 @@ export default function AtualizadorDoAndroid() {
    * Ajustes depois de liberar "instalar apps desconhecidos", ou ele fecha a
    * tela de instalação sem querer. Nos dois casos o pacote certo já está aqui,
    * e repetir 40 MB seria castigar quem seguiu a instrução.
+   *
+   * Guarda a **versão** junto com o caminho, e não só o caminho: um app aberto
+   * o dia inteiro pode ver duas publicações, e reaproveitar o pacote da 1.2.0
+   * para instalar a 1.2.1 seria instalar a versão errada em silêncio — que é
+   * pior do que baixar de novo.
    */
-  const baixado = useRef<string | null>(null);
+  const baixado = useRef<{ versao: string; caminho: string } | null>(null);
 
   /**
    * Abre o instalador para um pacote já no disco. **Nunca lança.**
@@ -115,8 +120,8 @@ export default function AtualizadorDoAndroid() {
    */
   const atualizar = useCallback(
     async (alvo: NovidadeDeAtualizacao) => {
-      // Já baixamos este pacote nesta sessão: pula direto para o instalador.
-      if (baixado.current) return instalar(baixado.current);
+      // Já baixamos **este** pacote nesta sessão: pula direto para o instalador.
+      if (baixado.current?.versao === alvo.versao) return instalar(baixado.current.caminho);
 
       ocupado.current = true;
       setNovidade(alvo);
@@ -132,7 +137,7 @@ export default function AtualizadorDoAndroid() {
             setPorcentagem(total > 0 ? Math.min(100, Math.round((baixados / total) * 100)) : null);
           },
         );
-        baixado.current = caminho;
+        baixado.current = { versao: alvo.versao, caminho };
         ocupado.current = false;
         await instalar(caminho);
       } catch {
