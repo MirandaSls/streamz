@@ -25,6 +25,7 @@ JSON e plist validados por parser — não com build.
 10. [O que este trabalho NÃO prova](#10-o-que-este-trabalho-não-prova)
 11. [Os três PRs](#11-os-três-prs)
 12. [A chamada em segundo plano no Android](#12-a-chamada-em-segundo-plano-no-android)
+13. [O áudio no Android: por que não saía som](#13-o-áudio-no-android-por-que-não-saía-som)
 
 ---
 
@@ -797,3 +798,84 @@ sempre. A saída completa está em
 - **Áudio de verdade.** O emulador não tem microfone físico; o que se prova aqui
   é que a **conexão** e o **serviço** sobrevivem ao segundo plano, não que a voz
   chega do outro lado.
+
+---
+
+## 13. O áudio no Android: por que não saía som
+
+O relato foi curto — "o app mobile não está reproduzindo áudio", no aparelho
+real, com o `.apk` 1.1.1 do commit `3e709bc` — e podia ser duas coisas bem
+diferentes: a **voz dos outros** na chamada (WebRTC/LiveKit) ou os **sons do
+app** (`apps/web/public/sons/*`). As duas foram medidas, uma de cada vez, dentro
+do WebView de verdade.
+
+### Como se pergunta ao WebView (e não ao `dumpsys`)
+
+O `.apk` de depuração liga `setWebContentsDebuggingEnabled` — é o `wry` que
+faz isso, sob `#[cfg(debug_assertions)]`. Com ele de pé dá para falar com a
+página pelo protocolo do DevTools:
+
+```
+adb forward tcp:9222 localabstract:webview_devtools_remote_$(adb shell pidof dev.streamz.app)
+curl http://127.0.0.1:9222/json          # acha o alvo e o webSocketDebuggerUrl
+# e daí Runtime.evaluate no WebSocket
+```
+
+É assim que se responde "o `play()` foi aceito?", "`/sons/x.mp3` resolve?" e "o
+que os `<audio>` remotos estão fazendo?". Nenhum `dumpsys` responde isso, e sem
+isso a investigação vira adivinhação. O §12 provou o **serviço**; isto prova o
+**áudio**.
+
+### O que **não** era — e por que vale registrar
+
+| hipótese | resultado | como se sabe |
+|---|---|---|
+| Permissão de microfone no WebView (`onPermissionRequest`) | **o Tauri já trata** | `RustWebChromeClient.kt` do `wry` pede `RECORD_AUDIO` + `MODIFY_AUDIO_SETTINGS` e só então chama `request.grant(...)`. Com a permissão concedida, `getUserMedia({audio:true})` devolve faixa `live`. Com ela **negada**, o `getUserMedia` fica pendurado esperando o diálogo do sistema — que é o comportamento certo, não um defeito |
+| Autoplay recusado sem gesto | **não acontece** | o `wry` monta o webview com `settings.mediaPlaybackRequiresUserGesture = false` (`RustWebView.kt`). Medido na tela de login, **sem um toque sequer**: `play()` aceito, `paused=false`, `currentTime` andando, `readyState=4`. O `--autoplay-policy=no-user-gesture-required` do `lib.rs` é só do WebView2; no Android o equivalente já vem ligado |
+| `/sons/*.mp3` não resolve dentro do app | **resolve** | `fetch("/sons/mensagem.mp3")` na origem `http://tauri.localhost` → `200`, `audio/mpeg`, 19 688 bytes |
+| CSP bloqueando o LiveKit | **não bloqueia** | `tauri.android.conf.json` não redefine `app.security`: vale a CSP do `tauri.conf.json`, que já lista `wss://livekit.streamz.chat` em `connect-src` e `mediastream:`/`blob:` em `media-src` |
+| `AudioContext` suspenso | **não** | `state` = `running` |
+| `setSinkId` calando a saída | **não** | `aplicarSaida` já é no-op quando `setSinkId` não existe, que é o caso do WebView |
+| `AudioRemotoHost` não montado no shell do celular | **é montado** | `ShellMobile.tsx` renderiza `<VoiceLayer />`, e é ele que traz o `AudioRemotoHost` |
+
+Nenhuma dessas precisava de correção — e é por isso que estão aqui: quem ler
+"sem áudio no Android" da próxima vez não precisa refazer o caminho.
+
+### O que era: a **rota** de saída
+
+Sobrou o que nenhum dos sete arquivos do app tocava: o `AudioManager`. Uma
+chamada põe o aparelho em `MODE_IN_COMMUNICATION` — é o modo que liga o
+cancelamento de eco e o sensor de proximidade — e nesse modo, **sem ninguém
+escolher o dispositivo de saída**, o Android manda o som para o *alto-falante de
+conversa*: o furinho de encostar no ouvido. Com o telefone na mão, isso é
+indistinguível de "não tem áudio".
+
+O `AndroidManifest.xml` já previa exatamente isto quando declarou
+`MODIFY_AUDIO_SETTINGS` ("sem ela o áudio sai pelo alto-falante de chamada em
+vez do de mídia, que é o relato clássico"). O que faltava era **usar** a
+permissão: declarar o direito não muda rota nenhuma.
+
+A correção é `gen/android/…/dev/streamz/app/AudioDaChamada.kt`, ligada e
+desligada pelo `ChamadaPlugin` nos mesmos dois pontos do serviço de primeiro
+plano (§12) — que são, por construção, exatamente o começo e o fim da chamada
+(`decidirServicoDeChamada`).
+
+Três decisões dela:
+
+1. **A lista de rotas vem de `availableCommunicationDevices` (API 31+), não de
+   `getDevices`.** Um alto-falante Bluetooth pareado aparece em `getDevices`
+   como `TYPE_BLUETOOTH_A2DP`, mas A2DP **não é rota de voz**: em
+   `MODE_IN_COMMUNICATION` o sistema não o usa. Um app que olhasse `getDevices`
+   e concluísse "tem fone, não mexo" deixaria o som no ouvido justamente para
+   quem tem uma caixinha pareada. `availableCommunicationDevices` só lista o que
+   serve para conversa. Abaixo da API 31 sobra o `setSpeakerphoneOn`, e aí o
+   Bluetooth fica de fora da conta de propósito — sem a API nova não dá para
+   saber se o aparelho pareado fala SCO, e chutar que fala é o mesmo erro.
+2. **É reversível.** Modo e viva-voz anteriores são guardados e devolvidos no
+   `desligar`. O `AudioManager` é um recurso do aparelho inteiro: sair da
+   chamada deixando o telefone em modo de conversa estragaria o som do próximo
+   app. E o `desligar` é **no-op quando nunca ligamos** — a store manda
+   `pararServicoDeChamada` já na carga da web, com `channelId` nulo, e um
+   `clearCommunicationDevice()` ali apagaria a escolha de outro app.
+3. **Fica no plugin, não no serviço.** Quem tem `Activity` é a `Plugin`; o
+   `ChamadaService` continua só com a notificação, que é o que o §12 combinou.

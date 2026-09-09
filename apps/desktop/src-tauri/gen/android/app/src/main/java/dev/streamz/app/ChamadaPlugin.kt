@@ -107,6 +107,11 @@ class ChamadaPlugin(private val activity: Activity) : Plugin(activity) {
     @Command
     fun pararServicoDeChamada(invoke: Invoke) {
         ChamadaService.parar(activity)
+        // A rota volta ao que era **junto** com o serviço. Mexer no
+        // `AudioManager` é mexer num recurso do aparelho inteiro: sair da
+        // chamada deixando o telefone em modo de conversa estragaria o som do
+        // próximo app a tocar qualquer coisa.
+        AudioDaChamada.desligar(activity)
         invoke.resolve()
     }
 
@@ -127,6 +132,16 @@ class ChamadaPlugin(private val activity: Activity) : Plugin(activity) {
 
     private fun subir(args: ArgumentosDeInicio) {
         ChamadaService.iniciar(activity, args.titulo, args.texto)
+        // E, na mesma batida, a **rota de saída** do áudio: sem ela o som da
+        // chamada sai pelo alto-falante de conversa (o furinho de encostar no
+        // ouvido) em vez do de mídia, que com o telefone na mão é
+        // indistinguível de "não tem áudio". Ver `AudioDaChamada.kt`.
+        //
+        // Aqui e não no `ChamadaService`: quem tem `Activity` é a `Plugin`, e
+        // este é o mesmo ponto do ciclo de vida — a web só chama isto quando a
+        // call **conectou** (`decidirServicoDeChamada`), ou seja, depois de o
+        // WebView já ter aberto o microfone.
+        AudioDaChamada.ligar(activity)
     }
 }
 
