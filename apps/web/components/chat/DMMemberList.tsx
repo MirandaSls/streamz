@@ -4,6 +4,7 @@ import { useEffect, useState, type MouseEvent } from "react";
 import { AtSign, Crown, MessageSquare, User, UserMinus, UserPlus, UserX } from "@/components/ui/icones";
 import { displayNameOf, isGroupChannel, type DMChannelView, type PublicUser } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
+import TagDeBot from "@/components/ui/TagDeBot";
 import Tooltip from "@/components/ui/Tooltip";
 import { MENU_WIDTH } from "@/components/ui/ContextMenu";
 import { api } from "@/lib/api";
@@ -170,6 +171,9 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
                     <span className="truncate font-medium text-txt-faint group-hover:text-txt-normal">
                       {nome}
                     </span>
+                    {/* ── j-bots ── antes da coroa, como na lista de membros do
+                        servidor: a pílula é do nome, o selo é do papel. */}
+                    {user.bot && <TagDeBot />}
                     {dono && (
                       <Tooltip label="Criou o grupo">
                         <Crown size={14} className="shrink-0 text-yellow" aria-label="Criou o grupo" />

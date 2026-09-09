@@ -154,6 +154,33 @@ export const WS_EVENTS = {
    * aqui seria empurrar para todo mundo o que só quem abre o composer usa.
    */
   APPLICATION_COMMANDS_UPDATED: "application.commandsUpdated",
+  /**
+   * servidor → cliente (sala do canal): **uma** reação foi posta ou tirada.
+   *
+   * Nasceu para os bots. O Streamz sempre soube dizer só "a mensagem mudou"
+   * (`message.updated` com a mensagem inteira), e isso não basta para o
+   * `MESSAGE_REACTION_ADD` do Discord, que carrega **quem** reagiu e **com
+   * quê** — sem os dois, bot de "reaction roles" e de votação não funciona.
+   *
+   * O `message.updated` **continua saindo** junto, com a mensagem inteira: é
+   * ele que o navegador (e o desktop já instalado) escuta, e trocar um pelo
+   * outro quebraria cliente antigo. O par não é redundante — são duas leituras
+   * do mesmo fato, uma grossa (o estado novo) e uma fina (o delta).
+   *
+   * Payload: `ReactionEvent`.
+   */
+  REACTION_ADDED: "reaction.added",
+  /** O par de `reaction.added`: uma reação saiu. Payload: `ReactionEvent`. */
+  REACTION_REMOVED: "reaction.removed",
+  /**
+   * servidor → cliente (sala do canal): a moderação **limpou** as reações.
+   *
+   * `emoji: null` quer dizer "todas"; preenchido, só as daquele emoji. Vira
+   * `MESSAGE_REACTION_REMOVE_ALL` / `_REMOVE_EMOJI` no gateway dos bots.
+   *
+   * Payload: `ReactionClearedEvent`.
+   */
+  REACTIONS_CLEARED: "reactions.cleared",
 } as const;
 
 
@@ -206,6 +233,38 @@ export const reactionSchema = z.object({
     .max(64, "Emoji inválido"),
 });
 export type ReactionPayload = z.infer<typeof reactionSchema>;
+
+/**
+ * ── j-bots ── O delta de uma reação (`reaction.added` / `reaction.removed`).
+ *
+ * Só ids: quem escuta já tem a mensagem (o `message.updated` sai junto) e o
+ * gateway de compatibilidade resolve os snowflakes por conta própria. O
+ * `emoji` é o **token interno**: o caractere unicode, ou `<:nome:id>` quando é
+ * um emoji personalizado do servidor (`parseCustomEmoji`).
+ */
+export interface ReactionEvent {
+  messageId: string;
+  channelId: string;
+  /** servidor do canal, ou null em conversa direta. */
+  guildId: string | null;
+  /** quem pôs ou tirou a reação. */
+  userId: string;
+  emoji: string;
+}
+
+/**
+ * ── j-bots ── A moderação limpou reações de uma mensagem
+ * (`reactions.cleared`).
+ *
+ * `emoji: null` = todas as reações da mensagem; preenchido = só as daquele
+ * emoji (mesmo token interno de `ReactionEvent`).
+ */
+export interface ReactionClearedEvent {
+  messageId: string;
+  channelId: string;
+  guildId: string | null;
+  emoji: string | null;
+}
 
 export const typingSchema = z.object({ channelId: idSchema });
 export type TypingPayload = z.infer<typeof typingSchema>;

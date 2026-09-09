@@ -24,6 +24,7 @@ import {
   type Role,
 } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
+import TagDeBot from "@/components/ui/TagDeBot";
 import Tooltip from "@/components/ui/Tooltip";
 import { MENU_WIDTH } from "@/components/ui/ContextMenu";
 import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
@@ -278,6 +279,9 @@ export default function MemberList() {
               >
                 {nome}
               </span>
+              {/* ── j-bots ── a pílula vem **antes** dos selos: no Discord ela
+                  encosta no nome, e os selos de cargo ficam depois dela. */}
+              {m.user.bot && <TagDeBot />}
               {m.role === "OWNER" && (
                 <Tooltip label="Dono do servidor">
                   <Crown size={14} className="shrink-0 text-yellow" aria-label="Dono do servidor" />

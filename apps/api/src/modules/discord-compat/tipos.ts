@@ -124,11 +124,32 @@ export interface LinhaDeAnexo {
   url: string;
 }
 
+/**
+ * ── j-bots F5 ── Um emoji personalizado do servidor, com as duas identidades.
+ *
+ * `id` é o cuid (o que vai dentro do token interno `<:nome:cuid>`) e
+ * `snowflake` é o número que o bot vê. Ver `traducao/emoji.ts`.
+ */
+export interface LinhaDeEmojiPersonalizado {
+  id: string;
+  snowflake: bigint;
+  name: string;
+  animated: boolean;
+}
+
 export interface LinhaDeReacao {
+  /** o token interno: o caractere unicode, ou `<:nome:cuid>`. */
   emoji: string;
   count: number;
   /** o bot da sessão reagiu? */
   euReagi: boolean;
+  /**
+   * ── j-bots F5 ── a linha de `CustomEmoji`, quando `emoji` é `<:nome:cuid>`.
+   *
+   * `null` em emoji unicode **e** em emoji personalizado já apagado — a
+   * tradução trata os dois casos (`emojiParaDiscord`).
+   */
+  personalizado: LinhaDeEmojiPersonalizado | null;
 }
 
 export interface LinhaDeMensagem {

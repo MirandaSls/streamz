@@ -40,6 +40,7 @@ import {
 } from "./rate-limit";
 import { MemoryPresenceStore, RedisPresenceStore, type PresenceStore } from "./presence.store";
 import { conexoesAExpulsar } from "./voz-em-um-lugar-so";
+import { anunciarReacao } from "../messages/eventos-de-reacao";
 import { MessagesService } from "../messages/messages.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
@@ -331,7 +332,10 @@ export class ChatGateway
         user.id,
         payload.emoji,
       );
-      this.realtime.emitToChannel(message.channelId, WS_EVENTS.MESSAGE_UPDATED, message);
+      // ── j-bots ── `message.updated` (para o navegador) + `reaction.added`
+      // (para a ponte dos bots), sempre pelo mesmo par. Ver
+      // `messages/eventos-de-reacao.ts`.
+      anunciarReacao(this.realtime, "add", message, user.id, payload.emoji);
     } catch (e) {
       this.emitError(client, e);
     }
@@ -348,7 +352,7 @@ export class ChatGateway
         user.id,
         payload.emoji,
       );
-      this.realtime.emitToChannel(message.channelId, WS_EVENTS.MESSAGE_UPDATED, message);
+      anunciarReacao(this.realtime, "remove", message, user.id, payload.emoji);
     } catch (e) {
       this.emitError(client, e);
     }

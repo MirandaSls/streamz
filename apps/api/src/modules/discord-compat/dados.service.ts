@@ -1,10 +1,12 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
+import { parseCustomEmoji } from "@streamz/shared";
 import type {
   LinhaDeAnexo,
   LinhaDeCanal,
   LinhaDeCargo,
   LinhaDeCategoria,
+  LinhaDeEmojiPersonalizado,
   LinhaDeMembro,
   LinhaDeMensagem,
   LinhaDeReacao,
@@ -352,7 +354,12 @@ export class DadosDeCompatService {
       where: { id },
       select: SELECAO_DE_MENSAGEM,
     });
-    return mensagem ? this.paraLinhaDeMensagem(mensagem, paraBotUserId) : null;
+    if (!mensagem) return null;
+    return this.paraLinhaDeMensagem(
+      mensagem,
+      paraBotUserId,
+      await this.emojisDasReacoes([mensagem]),
+    );
   }
 
   /**
@@ -419,7 +426,8 @@ export class DadosDeCompatService {
       });
     }
 
-    return linhas.map((l) => this.paraLinhaDeMensagem(l, opcoes.paraBotUserId));
+    const personalizados = await this.emojisDasReacoes(linhas);
+    return linhas.map((l) => this.paraLinhaDeMensagem(l, opcoes.paraBotUserId, personalizados));
   }
 
   // ── internos ───────────────────────────────────────────────
@@ -456,7 +464,38 @@ export class DadosDeCompatService {
     };
   }
 
-  private paraLinhaDeMensagem(m: LinhaCrua, paraBotUserId: string | null): LinhaDeMensagem {
+  /**
+   * ── j-bots F5 ── Os emojis personalizados usados nas reações de um lote.
+   *
+   * Uma consulta para a página inteira, não uma por reação: o histórico traz
+   * cinquenta mensagens de uma vez. Sem isto o `emoji` do Discord sairia com o
+   * token cru (`<:festa:cm1x…>`) no `name` e `id: null` — e um bot de
+   * *reaction roles* compara justamente o `id` (ver `traducao/emoji.ts`).
+   */
+  private async emojisDasReacoes(
+    mensagens: { reactions: { emoji: string }[] }[],
+  ): Promise<Map<string, LinhaDeEmojiPersonalizado>> {
+    const cuids = new Set<string>();
+    for (const m of mensagens) {
+      for (const r of m.reactions) {
+        const custom = parseCustomEmoji(r.emoji);
+        if (custom) cuids.add(custom.id);
+      }
+    }
+    if (cuids.size === 0) return new Map();
+
+    const linhas = await this.prisma.customEmoji.findMany({
+      where: { id: { in: [...cuids] } },
+      select: { id: true, snowflake: true, name: true, animated: true },
+    });
+    return new Map(linhas.map((e) => [e.id, e]));
+  }
+
+  private paraLinhaDeMensagem(
+    m: LinhaCrua,
+    paraBotUserId: string | null,
+    personalizados: Map<string, LinhaDeEmojiPersonalizado>,
+  ): LinhaDeMensagem {
     return {
       id: m.id,
       snowflake: m.snowflake,
@@ -468,7 +507,7 @@ export class DadosDeCompatService {
       editedAt: m.editedAt,
       type: m.type,
       attachments: m.attachments.map(paraLinhaDeAnexo),
-      reactions: agruparReacoes(m.reactions, paraBotUserId),
+      reactions: agruparReacoes(m.reactions, paraBotUserId, personalizados),
       respostaA: m.replyTo
         ? { snowflake: m.replyTo.snowflake, channelSnowflake: m.replyTo.channel.snowflake }
         : null,
@@ -519,6 +558,7 @@ function semOEveryone(
 function agruparReacoes(
   linhas: { emoji: string; userId: string }[],
   paraBotUserId: string | null,
+  personalizados: Map<string, LinhaDeEmojiPersonalizado>,
 ): LinhaDeReacao[] {
   const grupos = new Map<string, LinhaDeReacao>();
   for (const linha of linhas) {
@@ -527,10 +567,12 @@ function agruparReacoes(
       grupo.count += 1;
       grupo.euReagi ||= linha.userId === paraBotUserId;
     } else {
+      const custom = parseCustomEmoji(linha.emoji);
       grupos.set(linha.emoji, {
         emoji: linha.emoji,
         count: 1,
         euReagi: paraBotUserId !== null && linha.userId === paraBotUserId,
+        personalizado: (custom && personalizados.get(custom.id)) || null,
       });
     }
   }

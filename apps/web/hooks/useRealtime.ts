@@ -134,10 +134,16 @@ export function useRealtime(currentUserId?: string): void {
 
       on<Message>(WS_EVENTS.MESSAGE_UPDATED, (message) => {
         useMessages.getState().handleUpdated(message);
+        // editar a última mensagem de uma conversa reescreve a linha de prévia
+        // da coluna; a store ignora a edição de qualquer outra
+        if (!message.guildId) useDMs.getState().aplicarPrevia(message);
       }),
 
       on<MessageDeletedEvent>(WS_EVENTS.MESSAGE_DELETED, (event) => {
         useMessages.getState().handleDeleted(event);
+        // o evento não diz se o canal é conversa; a store só age se for uma
+        // das minhas e se a apagada era justamente a da linha
+        useDMs.getState().removerPrevia(event.channelId, event.messageId);
       }),
 
       on<PresenceUpdatePayload>(WS_EVENTS.PRESENCE_UPDATE, ({ userId, status }) => {
@@ -569,6 +575,8 @@ function onMessageArrived(message: Message, currentUserId?: string) {
     const dms = useDMs.getState();
     if (dms.channels.some((d) => d.id === message.channelId)) {
       dms.bumpUnread(message.channelId, message.createdAt, mention, mine);
+      // a linha de prévia da coluna passa a ser esta mensagem
+      dms.aplicarPrevia(message);
       if (naTela) void dms.markRead(message.channelId);
     } else if (!mine) {
       // alguém abriu uma conversa comigo agora

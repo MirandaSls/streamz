@@ -48,6 +48,8 @@ export const CODIGO = {
   USUARIO_DESCONHECIDO: 10013,
   MEMBRO_DESCONHECIDO: 10007,
   CARGO_DESCONHECIDO: 10011,
+  /** ── F5 ── `Unknown Emoji`: o emoji personalizado da rota não existe aqui. */
+  EMOJI_DESCONHECIDO: 10014,
   INTERACAO_DESCONHECIDA: 10062,
   /**
    * `Unknown application command` — o comando de barra que o bot pediu não
@@ -93,6 +95,17 @@ export const usuarioDesconhecido = () =>
 
 export const membroDesconhecido = () =>
   new ErroDoDiscord(HttpStatus.NOT_FOUND, CODIGO.MEMBRO_DESCONHECIDO, "Unknown Member");
+
+/**
+ * ── F5 ── 404 `10014`: `PUT .../reactions/nome:123/@me` com um id de emoji
+ * que não é de nenhum emoji deste Streamz.
+ *
+ * É o código que o discord.js classifica para dizer ao dono do bot "esse
+ * emoji não existe (mais)" em vez de "deu ruim no servidor" — e o caso mais
+ * comum é copiar o id de um emoji do Discord para um bot que roda aqui.
+ */
+export const emojiDesconhecido = () =>
+  new ErroDoDiscord(HttpStatus.NOT_FOUND, CODIGO.EMOJI_DESCONHECIDO, "Unknown Emoji");
 
 export const semAcesso = () =>
   new ErroDoDiscord(HttpStatus.FORBIDDEN, CODIGO.SEM_ACESSO, "Missing Access");

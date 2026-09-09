@@ -30,6 +30,8 @@ const PT_BR = {
   "aba.perfil": "Perfil",
   "aba.privacidade": "Privacidade e segurança",
   "aba.sessoes": "Dispositivos",
+  // ── j-bots · F4 ── o portal do desenvolvedor
+  "aba.aplicativos": "Aplicativos",
   "aba.aparencia": "Aparência",
   "aba.acessibilidade": "Acessibilidade",
   "aba.voz": "Voz e vídeo",
@@ -191,6 +193,7 @@ const EN_US: Dicionario = {
   "aba.perfil": "Profile",
   "aba.privacidade": "Privacy & safety",
   "aba.sessoes": "Devices",
+  "aba.aplicativos": "Applications",
   "aba.aparencia": "Appearance",
   "aba.acessibilidade": "Accessibility",
   "aba.voz": "Voice & video",
