@@ -126,13 +126,70 @@ A parte que decide fica **pura e testada**, com casos para: Tauri desktop
 (`false`), Tauri Android (`true`), Tauri iOS (`true`), navegador estreito
 (`true`), navegador largo (`false`). Dono: **Bloco 2**.
 
-## 7. Fronteiras de arquivo (para os PRs não colidirem)
+## 7. Chamada em segundo plano: dois comandos, só no Android
+
+O Android corta a captura de microfone de um app que sai da frente. Quem
+impede isso é um **serviço de primeiro plano** com notificação persistente —
+`ChamadaService.kt`, exposto ao webview pelo plugin Tauri `chamada`
+(`src/chamada.rs` + `ChamadaPlugin.kt`). A superfície que a web enxerga são
+**dois comandos e um evento**:
+
+| comando | argumentos | o que faz |
+|---|---|---|
+| `plugin:chamada\|iniciar_servico_de_chamada` | `{ titulo, texto }` | sobe o serviço e escreve a notificação. Idempotente: chamar de novo com outro texto **reescreve** a notificação sem derrubar o serviço (é o caso de ser movido de canal sem sair da call). Pede `POST_NOTIFICATIONS` no Android 13+ na primeira vez, e sobe o serviço mesmo se for negada |
+| `plugin:chamada\|parar_servico_de_chamada` | — | desce o serviço e tira a notificação. Idempotente: parar o que já parou não é erro |
+| `plugin:chamada\|registrar_ouvinte_de_saida` | `{ canal }` | registra um `Channel` do Tauri por onde o botão **"Sair da chamada"** da notificação avisa a web. Registrar de novo substitui o anterior |
+
+Os três estão embrulhados em `apps/web/lib/desktop.ts`
+(`iniciarServicoDeChamada`, `pararServicoDeChamada`,
+`ouvirSaidaPelaNotificacao`), e **cada um deles é um no-op fora do app
+Android** — a guarda é `ehAndroidNoTauri()`, mesma detecção por
+`navigator.userAgent` do §6. Chamar do desktop, do iOS ou do navegador não
+custa nem um IPC.
+
+Três decisões que valem o contrato:
+
+1. **Android e não "celular".** O serviço de primeiro plano é uma API do
+   Android. O papel equivalente no iOS é `UIBackgroundModes: audio` no
+   `Info.ios.plist`, que é configuração e não se liga nem se desliga em tempo
+   de execução — não há comando para ele, nem faria sentido haver.
+2. **O Rust fica atrás de `#[cfg(target_os = "android")]`.** O módulo inteiro,
+   e o `.plugin(chamada::init())` do `lib.rs` junto. O que **não** é
+   condicional é a ACL gerada no `build.rs` (`InlinedPlugin`): ela é estática,
+   e gerá-la só no Android faria o `capabilities/mobile.json` referenciar uma
+   permissão que não existe quando se compila para Windows.
+
+   Medido, e vale dizer com número: no `streamz-desktop.exe` do alvo
+   `x86_64-pc-windows-msvc` **não há** `ChamadaService`, `ChamadaPlugin`,
+   `chamada:default` nem `plugin:chamada` — só os três **nomes** dos comandos
+   (`iniciar_servico_de_chamada`, `parar_servico_de_chamada`,
+   `registrar_ouvinte_de_saida`), uma vez cada, que são a metadata da ACL. São
+   ~75 bytes de texto; o código do plugin não entra. O tamanho do instalador
+   fica **dentro do ruído de build**: `origin/main` deu 13 125 648 bytes e a
+   branch deu 13 131 466 e 13 122 580 em duas rodadas da mesma árvore.
+3. **O Kotlin não decide saída.** O botão da notificação só escreve no canal;
+   quem sai é o `disconnect()` da store de voz, o mesmo do botão do rodapé.
+   Duplicar a regra de saída em Kotlin seria manter duas versões da mesma
+   decisão.
+
+A ACL: os comandos passam por permissão, e é por isso que
+`capabilities/mobile.json` lista `chamada:default` (§4). O `build.rs` gera
+`allow-<comando>`/`deny-<comando>` para cada um e junta os três no `default`.
+
+## 8. Fronteiras de arquivo (para os PRs não colidirem)
 
 | bloco | mexe em |
 |---|---|
 | 1 — PWA | `apps/web/app/layout.tsx`, `apps/web/app/manifest.ts`, `apps/web/public/`, `apps/web/components/mobile/`, `apps/web/cabecalhos-de-seguranca.mjs` |
-| 2 — Android | `apps/desktop/src-tauri/{Cargo.toml,src/,tauri.conf.json,tauri.android.conf.json,capabilities/}`, `apps/desktop/Dockerfile.android`, `scripts/build-android-no-servidor.sh`, `apps/web/hooks/useEhMobile.ts`, `packages/shared/src/comunidade.ts`, `apps/web/app/download/page.tsx`, `apps/api/src/modules/updates/`, `.gitignore` |
+| 2 — Android | `apps/desktop/src-tauri/{Cargo.toml,build.rs,src/,gen/android/,tauri.conf.json,tauri.android.conf.json,capabilities/}`, `apps/desktop/Dockerfile.android`, `scripts/build-android-no-servidor.sh`, `apps/web/hooks/useEhMobile.ts`, `packages/shared/src/comunidade.ts`, `apps/web/app/download/page.tsx`, `apps/api/src/modules/updates/`, `.gitignore` |
 | 3 — iOS | `apps/desktop/src-tauri/{tauri.ios.conf.json,Info.ios.plist,capabilities/ios.json}`, `codemagic.yaml`, `.github/workflows/ios.yml`, `docs/APPS-MOBILE.md`, este arquivo, e **uma linha** de ponteiro no §1 de `docs/PROCESSO-DE-DESENVOLVIMENTO.md` |
 
 Ordem de merge: **1 → 2 → 3**. O PR do Bloco 3 só faz sentido depois do Bloco 2,
 que é quem traz o lib/bin (§1) e o `capabilities/mobile.json` (§4).
+
+O §7 (o serviço de chamada) veio **depois** dos três, num PR próprio: os Blocos
+2 e 3 deixaram as permissões `FOREGROUND_SERVICE*` declaradas e disseram, em voz
+alta, que o serviço não existia. Os arquivos dele —
+`gen/android/app/src/main/java/dev/streamz/app/Chamada*.kt`, `src/chamada.rs`,
+`build.rs`, `apps/web/stores/servico-de-chamada.ts` — não colidem com nenhum dos
+três.
