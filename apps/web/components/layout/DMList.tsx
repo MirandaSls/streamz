@@ -254,14 +254,27 @@ export default function DMList() {
         const group = isGroupChannel(dm);
         const other = !group ? dm.others[0] : undefined;
         const unread = !active && isUnread(dm);
-        // ── prévia da última mensagem ── a segunda linha do Discord
-        // (`docs/Reference/mobile/discord-mobile-dms-2024.png`): "autor: texto"
-        // embaixo do nome, na cor da linha — a mesma calha que o "N membros" do
-        // grupo já ocupava, então a linha continua com 48px
-        const previa = linhaDaPrevia(dm.ultimaMensagem, {
-          autor: autorDaPrevia(dm, meuId),
-          emChamada: (emChamada[dm.id]?.length ?? 0) > 0,
-        });
+        /*
+          ── prévia da última mensagem ── "autor: texto" embaixo do nome, na cor
+          da linha, medido em `docs/Reference/mobile/discord-mobile-dms-2024.png`.
+
+          **Só no celular**, e isso é paridade, não economia: no Discord do
+          desktop a coluna de conversas tem o nome e nada mais — medido no print
+          `docs/Reference/Captura de tela 2026-09-04 102757.png`, onde as treze
+          conversas mostram só o nome e o grupo mostra "2 membros". A prévia é
+          um traço do aplicativo de celular. `DMChannelView.ultimaMensagem` chega
+          nas duas telas e a store a mantém em dia nas duas; se um dia o desktop
+          quiser a linha, é este `celular &&` que sai.
+
+          A calha é a mesma que o "N membros" do grupo já ocupava, então a linha
+          continua com 48px nos dois leiautes.
+        */
+        const previa = celular
+          ? linhaDaPrevia(dm.ultimaMensagem, {
+              autor: autorDaPrevia(dm, meuId),
+              emChamada: (emChamada[dm.id]?.length ?? 0) > 0,
+            })
+          : "";
         return (
           <div
             key={dm.id}
