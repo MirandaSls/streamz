@@ -154,16 +154,18 @@ describe("mensagemParaDiscord", () => {
   it("reações só aparecem quando existem", () => {
     expect("reactions" in mensagemParaDiscord(mensagem())).toBe(false);
     const m = mensagemParaDiscord(
-      mensagem({ reactions: [{ emoji: "🔥", count: 3, euReagi: true }] }),
+      mensagem({ reactions: [{ emoji: "🔥", count: 3, euReagi: true, personalizado: null }] }),
     );
-    expect(m.reactions).toEqual([{ count: 3, me: true, emoji: { id: null, name: "🔥" } }]);
+    expect(m.reactions).toEqual([
+      { count: 3, me: true, emoji: { id: null, name: "🔥", animated: false } },
+    ]);
   });
 
   it("nenhum bigint sobrevive ao JSON.stringify", () => {
     const m = mensagemParaDiscord(
       mensagem({
         respostaA: { snowflake: 1n, channelSnowflake: 2n },
-        reactions: [{ emoji: "👍", count: 1, euReagi: false }],
+        reactions: [{ emoji: "👍", count: 1, euReagi: false, personalizado: null }],
         attachments: [
           {
             id: "a",

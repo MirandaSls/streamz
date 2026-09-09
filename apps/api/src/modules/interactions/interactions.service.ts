@@ -18,7 +18,7 @@ import { CODIGO, ErroDoDiscord, corpoInvalido, naoImplementado } from "../discor
 import { DadosDeCompatService } from "../discord-compat/dados.service";
 import { RegistroDeSessoes } from "../discord-compat/gateway/sessao";
 import { IdsService } from "../discord-compat/ids.service";
-import type { JsonDoDiscord } from "../discord-compat/tipos";
+import type { JsonDoDiscord, LinhaDeMensagem } from "../discord-compat/tipos";
 import { canalParaDiscord } from "../discord-compat/traducao/canal";
 import { cargoParaDiscord } from "../discord-compat/traducao/cargo";
 import { membroParaDiscord } from "../discord-compat/traducao/membro";
@@ -26,6 +26,12 @@ import { usuarioParaDiscord } from "../discord-compat/traducao/usuario";
 import { GuildsService } from "../guilds/guilds.service";
 import { MessagesService } from "../messages/messages.service";
 import { RealtimeService } from "../realtime/realtime.service";
+import {
+  efemeraParaDTO,
+  efemeraParaLinhaDeMensagem,
+  type ContextoDaEfemera,
+  type LinhaEfemera,
+} from "./efemeras";
 import {
   BYTES_DO_TOKEN_DE_INTERACAO,
   FLAG_EFEMERA,
@@ -47,6 +53,24 @@ const TIPO_CHAT_INPUT = 1;
 
 /** As opções que resolvem um alvo e por isso **exigem** `resolved`. */
 const TIPOS_COM_ALVO = new Set([6, 7, 8]);
+
+/**
+ * As colunas da `EphemeralMessage` que saem da tabela.
+ *
+ * É um `select` fechado, e não um `include`: a linha guarda texto que **uma
+ * pessoa só** podia ver, e quanto menos lugares o carregam, menos há de onde
+ * ele pode escapar. `ephemeralFor` vem junto de propósito — é a coluna que diz
+ * para quem a mensagem é, e quem a emite tem de poder conferir.
+ */
+const SELECAO_EFEMERA = {
+  id: true,
+  snowflake: true,
+  channelId: true,
+  ephemeralFor: true,
+  content: true,
+  createdAt: true,
+  editedAt: true,
+} as const;
 
 /** 404 `10062`. O atalho em `erros.ts` é do lote B — ver `CONTRATO-F3.md` §2. */
 const interacaoDesconhecida = () =>
@@ -98,7 +122,15 @@ type DadosDaInteracao = JsonDoDiscord;
  *
  * **A casca não reimplementa permissão.** Quem escreve é o usuário-bot, por
  * `MessagesService.create`, e é ele que leva o 403 se o bot não vir o canal —
- * a prova 4 da fase depende exatamente disso.
+ * a prova 4 da fase depende exatamente disso. A única exceção é a efêmera, que
+ * não passa por lá e por isso repete o `assertCanPostChannel` explicitamente
+ * (ver `escreverEfemera`).
+ *
+ * **`flags: 64` é a mensagem efêmera**, e ela é o único caminho deste arquivo
+ * que **não** escreve na `Message`: ela vira uma linha de `EphemeralMessage` e
+ * sai por `emitToUser(invocador)`, com `efemera: true` no DTO. `@original`
+ * (editar, ler, apagar) e followups efêmeros seguem o mesmo caminho. Ver o
+ * bloco "j-bots: a mensagem efêmera" mais abaixo.
  *
  * Ver `docs/BOTS-COMPATIVEIS-COM-O-DISCORD.md` §9 e o `CONTRATO-F3.md`.
  */
@@ -376,6 +408,17 @@ export class InteractionsService {
   }
 
   /**
+   * `flags: 64` — a efêmera.
+   *
+   * Vale para o callback **e** para o `deferReply({ ephemeral: true })`: o
+   * discord.js manda a flag já no tipo 5, então o "pensando…" nasce efêmero e a
+   * edição seguinte encontra a linha efêmera à espera.
+   */
+  private ehEfemera(dados: CorpoDeResposta | undefined): boolean {
+    return ((dados?.flags ?? 0) & FLAG_EFEMERA) !== 0;
+  }
+
+  /**
    * `PATCH /webhooks/:app/:token/messages/@original` — o `editReply()`.
    *
    * Edita a mensagem que o callback criou. Sem callback antes (`respondedAt`
@@ -385,6 +428,21 @@ export class InteractionsService {
     interacao: InteracaoAutenticada,
     dados: CorpoDeResposta,
   ): Promise<MessageDTO> {
+    // ── j-bots ── a efêmera vem primeiro, e tem de vir: quando a resposta foi
+    // efêmera o `responseMessageId` é null (não há linha de `Message` para
+    // apontar), e o `exigirOriginal` abaixo daria 404 num `editReply()` que o
+    // Discord atende.
+    const efemera = await this.efemeraOriginal(interacao.id);
+    if (efemera) {
+      this.avisarDoQueNaoEntregamos(dados);
+      const linha = await this.prisma.ephemeralMessage.update({
+        where: { id: efemera.id },
+        data: { content: this.conteudoDe(dados), editedAt: new Date() },
+        select: SELECAO_EFEMERA,
+      });
+      return this.emitirEfemera(interacao, linha, WS_EVENTS.MESSAGE_UPDATED);
+    }
+
     const original = this.exigirOriginal(interacao);
     this.avisarDoQueNaoEntregamos(dados);
 
@@ -397,11 +455,27 @@ export class InteractionsService {
 
   /** `GET /webhooks/:app/:token/messages/@original` — o `fetchReply()`. */
   async lerOriginal(interacao: InteracaoAutenticada): Promise<MessageDTO> {
+    const efemera = await this.efemeraOriginal(interacao.id);
+    if (efemera) return efemeraParaDTO(efemera, await this.contextoDaEfemera(interacao));
     return this.mensagens.getDTO(this.exigirOriginal(interacao));
   }
 
   /** `DELETE /webhooks/:app/:token/messages/@original` — 204. */
   async apagarOriginal(interacao: InteracaoAutenticada): Promise<void> {
+    // ── j-bots ── apagar a efêmera é apagar a linha e avisar **só** o dono
+    // dela. Não há `emitToChannel` aqui, como não houve na criação: ninguém
+    // mais no canal chegou a saber que ela existia.
+    const efemera = await this.efemeraOriginal(interacao.id);
+    if (efemera) {
+      await this.prisma.ephemeralMessage.delete({ where: { id: efemera.id } });
+      this.realtime.emitToUser(interacao.usuarioId, WS_EVENTS.MESSAGE_DELETED, {
+        messageId: efemera.id,
+        channelId: efemera.channelId,
+        parentId: null,
+      });
+      return;
+    }
+
     const original = this.exigirOriginal(interacao);
     const { channelId, parentId } = await this.mensagens.remove(original, interacao.botUserId);
     // `Interaction.responseMessageId` é `ON DELETE SET NULL`: apagar a mensagem
@@ -424,7 +498,13 @@ export class InteractionsService {
   async followup(interacao: InteracaoAutenticada, dados: CorpoDeResposta): Promise<MessageDTO> {
     // vira a original só quando ainda não há uma; o segundo followup é uma
     // mensagem comum do bot, sem a faixa (é o que o Discord mostra também)
-    const viraOriginal = interacao.responseMessageId === null;
+    //
+    // ── j-bots ── o critério é `respondedAt`, e não `responseMessageId`: uma
+    // resposta **efêmera** não tem linha de `Message` e portanto deixa o
+    // `responseMessageId` null. Pelo critério antigo, um followup depois de um
+    // `reply({ ephemeral: true })` se declararia "a original" e sequestraria o
+    // `@original` da efêmera que já existe.
+    const viraOriginal = interacao.respondedAt === null;
     if (viraOriginal) {
       await this.prisma.interaction.updateMany({
         where: { id: interacao.id, respondedAt: null },
@@ -458,6 +538,11 @@ export class InteractionsService {
   ): Promise<MessageDTO> {
     if (dados) this.avisarDoQueNaoEntregamos(dados);
 
+    // ── j-bots ── `flags: 64`: a resposta não é do canal, é de uma pessoa.
+    if (this.ehEfemera(dados)) {
+      return this.escreverEfemera(interacao, conteudo, ehOriginal);
+    }
+
     // permissão, modo lento e castigo saem de graça daqui — e é daqui que vem
     // o 403 `50013` quando o bot não enxerga o canal (prova 4 da fase)
     const criada = await this.mensagens.create(interacao.canalId, interacao.botUserId, conteudo);
@@ -481,6 +566,156 @@ export class InteractionsService {
     return interacao.responseMessageId;
   }
 
+  // ── j-bots: a mensagem efêmera ─────────────────────────────
+  //
+  // O modelo inteiro em três frases:
+  //
+  // 1. **Ela não vai para o histórico do canal.** Não é uma `Message`: é uma
+  //    linha de `EphemeralMessage`, numa tabela que nenhuma consulta do chat lê.
+  //    Por isso `GET /channels/:id/messages` não a lista — não por um `where`
+  //    que alguém precisa lembrar de escrever.
+  // 2. **Ela sai uma vez, para uma sala só.** `emitToUser(invocador)`, que é a
+  //    sala com todas as conexões da conta de quem digitou o comando (desktop e
+  //    site) e mais ninguém. Nunca `emitToChannel`.
+  // 3. **Ela some ao recarregar.** Como não há rota que a devolva, o próximo
+  //    `fetchHistory` do cliente não a traz. A linha continua no banco só pelos
+  //    15 minutos em que o bot ainda pode editá-la, e a faxina a apaga.
+
+  /**
+   * Escreve a efêmera e a entrega ao invocador.
+   *
+   * **A checagem de permissão é explícita aqui**, e não sai de graça como no
+   * caminho normal: quem a fazia era o `MessagesService.create`, por onde a
+   * efêmera não passa. É o mesmo `assertCanPostChannel` que ele chama na
+   * primeira linha, e é dele que vem o 403 `50013` quando o bot não enxerga o
+   * canal — a prova 4 da fase vale igual para a efêmera.
+   *
+   * Modo lento e "escrever é ler" ficam de fora **de propósito**: a efêmera não
+   * ocupa o canal (não há o que atrasar) e ninguém a lê senão quem a pediu (não
+   * há o que marcar como lido).
+   */
+  private async escreverEfemera(
+    interacao: InteracaoAutenticada,
+    conteudo: string,
+    ehOriginal: boolean,
+  ): Promise<MessageDTO> {
+    await this.guilds.assertCanPostChannel(interacao.botUserId, interacao.canalId);
+
+    const linha = await this.prisma.ephemeralMessage.create({
+      data: {
+        interactionId: interacao.id,
+        channelId: interacao.canalId,
+        // a coluna que é a regra inteira
+        ephemeralFor: interacao.usuarioId,
+        authorId: interacao.botUserId,
+        content: conteudo,
+        original: ehOriginal,
+        // a mesma janela do token: passados os 15 min não há mais o que editar
+        expiresAt: interacao.expiresAt,
+      },
+      select: SELECAO_EFEMERA,
+    });
+
+    return this.emitirEfemera(interacao, linha, WS_EVENTS.MESSAGE_NEW);
+  }
+
+  /**
+   * O DTO da efêmera e o `emit` dela — **sempre** por `emitToUser`.
+   *
+   * Este é o único lugar do arquivo que emite uma efêmera, e é curto para que
+   * fique fácil de auditar: se algum dia aparecer um `emitToChannel` com uma
+   * efêmera dentro, é aqui que ele não está.
+   */
+  private async emitirEfemera(
+    interacao: InteracaoAutenticada,
+    linha: LinhaEfemera,
+    evento: string,
+  ): Promise<MessageDTO> {
+    const dto = efemeraParaDTO(linha, await this.contextoDaEfemera(interacao));
+    this.realtime.emitToUser(linha.ephemeralFor, evento, dto);
+    return dto;
+  }
+
+  /** A resposta efêmera original desta interação (o alvo do `@original`). */
+  private async efemeraOriginal(interactionId: string): Promise<LinhaEfemera | null> {
+    return this.prisma.ephemeralMessage.findFirst({
+      where: { interactionId, original: true },
+      select: SELECAO_EFEMERA,
+    });
+  }
+
+  /**
+   * Quem é o bot, quem é o invocador e qual o comando — o que a efêmera não
+   * guarda porque a interação já guarda.
+   *
+   * Uma consulta só, e não três: é a `Interaction` com os dois usuários
+   * embutidos.
+   */
+  private async contextoDaEfemera(interacao: InteracaoAutenticada): Promise<ContextoDaEfemera> {
+    const linha = await this.prisma.interaction.findUnique({
+      where: { id: interacao.id },
+      select: {
+        commandName: true,
+        guildId: true,
+        user: true,
+        application: { select: { botUser: true } },
+      },
+    });
+    if (!linha) throw interacaoDesconhecida();
+    return {
+      bot: toPublicUser(linha.application.botUser),
+      invocador: toPublicUser(linha.user),
+      interacaoId: interacao.id,
+      comando: linha.commandName,
+      guildId: linha.guildId,
+    };
+  }
+
+  /**
+   * A efêmera pelo cuid, no formato do Discord — o corpo que o `editReply()` e
+   * o `followUp()` recebem de volta.
+   *
+   * Devolve `null` quando o id não é de uma efêmera, e o lote B trata isso como
+   * "mensagem desconhecida". A rota **não** confere quem está pedindo, e não
+   * precisa: só quem tem o token da interação chega até aqui, e o token é o
+   * credencial da interação inteira.
+   */
+  async linhaEfemeraParaCompat(id: string): Promise<LinhaDeMensagem | null> {
+    const linha = await this.prisma.ephemeralMessage.findUnique({
+      where: { id },
+      select: { ...SELECAO_EFEMERA, authorId: true },
+    });
+    return linha ? this.linhaEfemeraDeCompat(linha, linha.authorId) : null;
+  }
+
+  /** A efêmera original da interação, no formato do Discord (o `with_response`). */
+  async linhaEfemeraOriginalParaCompat(
+    interactionId: string,
+  ): Promise<LinhaDeMensagem | null> {
+    const linha = await this.prisma.ephemeralMessage.findFirst({
+      where: { interactionId, original: true },
+      select: { ...SELECAO_EFEMERA, authorId: true },
+    });
+    return linha ? this.linhaEfemeraDeCompat(linha, linha.authorId) : null;
+  }
+
+  /** Os snowflakes que a tradução do Discord exige e a efêmera não guarda. */
+  private async linhaEfemeraDeCompat(
+    linha: LinhaEfemera,
+    autorId: string,
+  ): Promise<LinhaDeMensagem | null> {
+    const [canal, autor] = await Promise.all([
+      this.dados.canalPorCuid(linha.channelId),
+      this.dados.usuarioPorCuid(autorId),
+    ]);
+    if (!canal || !autor) return null;
+    return efemeraParaLinhaDeMensagem(linha, {
+      autor,
+      channelSnowflake: canal.snowflake,
+      guildSnowflake: canal.guildSnowflake,
+    });
+  }
+
   /**
    * O texto da resposta.
    *
@@ -498,12 +733,8 @@ export class InteractionsService {
     if (dados.components?.length) {
       this.log.warn(`components descartados (${dados.components.length}): F5`);
     }
-    // `flags: 64` é a efêmera. Aceitamos a flag e entregamos a mensagem
-    // **normal**: "mensagem que só uma pessoa vê" não existe no Streamz e é
-    // feature de produto, não de compatibilidade (§9 do documento).
-    if (((dados.flags ?? 0) & FLAG_EFEMERA) !== 0) {
-      this.log.warn("flags: 64 (efêmera): a mensagem foi entregue normal — o Streamz não tem efêmera");
-    }
+    // `flags: 64` (efêmera) **não** entra aqui: ela é entregue de verdade, por
+    // `escreverEfemera`. Ver o bloco "j-bots: a mensagem efêmera" abaixo.
   }
 
   /** As opções declaradas pelo comando, como o `PUT` do bot as gravou. */

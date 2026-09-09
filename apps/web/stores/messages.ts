@@ -187,6 +187,19 @@ interface MessagesState {
   handleNew: (message: Message) => void;
   handleUpdated: (message: Message) => void;
   handleDeleted: (event: MessageDeletedEvent) => void;
+  /**
+   * ── j-bots ── "Dispensar mensagem" numa efêmera.
+   *
+   * **Só local, e não há rota.** A efêmera não está no canal: tirá-la da lista
+   * é tirá-la de onde ela existe. Uma chamada ao servidor só serviria para
+   * apagar antes da hora uma linha que a faxina apaga sozinha, e daria ao
+   * cliente uma rota nova para escrever — sem nada em troca.
+   *
+   * Dispensar é definitivo dentro desta sessão: um `message.updated` posterior
+   * do bot não a traz de volta, porque `applyUpdate` só mexe no que já está na
+   * lista. É o que o Discord faz.
+   */
+  dispensarEfemera: (channelId: string, messageId: string) => void;
   clearAll: () => void;
 }
 
@@ -598,6 +611,10 @@ export const useMessages = create<MessagesState>((set, get) => {
       set((s) => ({ threadItems: applyDelete(s.threadItems, messageId, null) }));
       // apagaram a raiz da thread aberta → não há mais o que mostrar
       if (get().threadParentId === messageId) get().closeThread();
+    },
+
+    dispensarEfemera: (channelId, messageId) => {
+      mapItems(channelId, (items) => applyDelete(items, messageId, null));
     },
 
     clearAll: () => {

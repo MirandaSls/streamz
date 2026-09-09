@@ -11,6 +11,7 @@ import type { InteracaoDaMensagem } from "./aplicativos";
 import type { Poll } from "./comunidade";
 import type { Channel, MemberRole, PublicUser, ReactionGroup } from "./dominio";
 import type { MessageReplyRef, MessageType, ThreadSummary } from "./mensagens";
+import type { PreviaDeMensagem } from "./social";
 
 /** Teto de tamanho por arquivo (bytes). Espelhado na validação da API. */
 export const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024; // 25 MB
@@ -91,6 +92,19 @@ export interface Message {
    * o traz; `undefined` e `null` querem dizer a mesma coisa: mensagem normal.
    */
   interacao?: InteracaoDaMensagem | null;
+  /**
+   * `true` quando esta é uma **mensagem efêmera**: a resposta que o bot mandou
+   * com `flags: 64` e que **só quem invocou o comando vê**.
+   *
+   * Ela não existe na tabela `Message` e portanto não está no histórico do
+   * canal: chega uma vez pelo socket, na sala `user:<id>` de quem digitou o
+   * comando, e some ao recarregar. A tela desenha o rodapé "Somente você pode
+   * ver isso · Dispensar mensagem" e não a conta como não lida.
+   *
+   * Opcional pelo mesmo motivo de `interacao`: um payload antigo não o traz, e
+   * `undefined` quer dizer "mensagem normal".
+   */
+  efemera?: boolean;
 }
 
 export interface GuildMemberView {
@@ -140,6 +154,15 @@ export interface DMChannelView extends Channel {
    * menção). Por espectador.
    */
   unreadCount: number;
+  /**
+   * A última mensagem, aparada, para a linha de prévia embaixo do nome
+   * (`linhaDaPrevia`). `null` = conversa sem mensagem nenhuma.
+   *
+   * Opcional porque o campo nasceu depois: um payload em cache no cliente e as
+   * conversas montadas por rotas antigas não o trazem, e `undefined` quer
+   * dizer "não sei", não "não tem".
+   */
+  ultimaMensagem?: PreviaDeMensagem | null;
 }
 
 /** true para conversa de grupo (3+); false para DM 1-a-1. */

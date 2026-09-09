@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Manifesto do app Android do Streamz.
+
+  Este arquivo é **gerado** pelo `tauri android init` e depois **editado à
+  mão** — e por isso `gen/android/` é versionado (ver `apps/desktop/README.md`).
+  Não existe chave no `tauri.conf.json` para permissão de Android: é aqui ou
+  em lugar nenhum. Se esta pasta fosse ignorada, um clone novo geraria um
+  `.apk` sem microfone e o defeito só apareceria no telefone.
+
+  Ao regerar o projeto (`tauri android init` de novo), este arquivo é
+  sobrescrito. O `git diff` é a rede de segurança: confira antes de commitar.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Falar com api.streamz.chat e com o LiveKit. Sem ela o app abre e não
+         faz nada. Veio do template do Tauri. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- ── Voz e vídeo ────────────────────────────────────────────────────
+         O Streamz é chat de voz: sem RECORD_AUDIO o usuário entra na chamada
+         mudo e sem aviso. CAMERA é a câmera da call. MODIFY_AUDIO_SETTINGS é
+         o que deixa o WebRTC trocar o modo de áudio do aparelho (viva-voz,
+         fone, cancelamento de eco); sem ela o áudio sai pelo alto-falante de
+         chamada em vez do de mídia, que é o relato clássico de "o som está
+         baixíssimo".
+
+         Estas três são permissões de **tempo de execução** (dangerous): o
+         Android as pede ao usuário na primeira vez, e declará-las aqui só dá
+         ao app o direito de perguntar. Quem pergunta é o próprio WebView
+         quando o `getUserMedia` da web roda. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <!-- ── Chamada em segundo plano ───────────────────────────────────────
+         DECLARADAS E HOJE INERTES. Ler antes de confiar nelas:
+
+         O Android mata o áudio de um app que sai da frente, a menos que exista
+         um **serviço de primeiro plano** (aquela notificação fixa de "chamada
+         em andamento"). Estas permissões são o direito de iniciar esse
+         serviço — mas o serviço em si é código Kotlin nativo (uma classe
+         `Service` com `startForeground` e um canal de notificação) que **não
+         faz parte desta entrega**.
+
+         Ou seja: hoje, minimizar o app durante uma chamada continua derrubando
+         o áudio depois de alguns segundos, exatamente como antes. As
+         permissões não mudam isso sozinhas; elas ficam aqui para que o serviço,
+         quando for escrito, não precise de uma atualização do manifesto
+         (mudança de permissão exige nova submissão à Play).
+
+         A partir do Android 14 (API 34) não basta FOREGROUND_SERVICE: cada
+         serviço precisa declarar o **tipo**, e o tipo precisa da permissão
+         correspondente. Uma call é microfone (o que capturamos) e reprodução
+         de mídia (o que tocamos), daí as duas.
+
+         Pendência registrada no PR. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+    <!-- `required="false"` nas três: um aparelho sem câmera (ou sem microfone,
+         que é raro mas existe em TV box) continua podendo instalar o app e usar
+         o chat de texto. Sem isto a Play esconde o app desses aparelhos. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <!-- AndroidTV support -->
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+
+    <application
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.streamz_desktop"
+        android:usesCleartextTraffic="${usesCleartextTraffic}">
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+            android:launchMode="singleTask"
+            android:label="@string/main_activity_title"
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <!-- AndroidTV support -->
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <provider
+          android:name="androidx.core.content.FileProvider"
+          android:authorities="${applicationId}.fileprovider"
+          android:exported="false"
+          android:grantUriPermissions="true">
+          <meta-data
+            android:name="android.support.FILE_PROVIDER_PATHS"
+            android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+</manifest>

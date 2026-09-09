@@ -77,9 +77,31 @@ function mensagemDeMentira(id = "m_1"): MessageDTO {
   return { id, channelId: CANAL.id, content: "pong" } as unknown as MessageDTO;
 }
 
+/** ── j-bots ── uma linha de `EphemeralMessage`, como o `select` a devolve. */
+function efemeraDeMentira(ajustes: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: "e_1",
+    snowflake: 888n,
+    channelId: CANAL.id,
+    ephemeralFor: USUARIO.id,
+    content: "só você vê",
+    createdAt: new Date("2026-09-09T12:00:00.000Z"),
+    editedAt: null,
+    ...ajustes,
+  };
+}
+
 // ── a bancada ────────────────────────────────────────────────
 
-function montar(ajustes: { comando?: unknown; canal?: unknown; membroBot?: unknown } = {}) {
+function montar(
+  ajustes: {
+    comando?: unknown;
+    canal?: unknown;
+    membroBot?: unknown;
+    /** ── j-bots ── a efêmera original que a interação já tem, se tiver. */
+    efemeraOriginal?: unknown;
+  } = {},
+) {
   const sessao = { id: "s_1", botUserId: BOT.id, despachar: vi.fn(), fechar: vi.fn() };
 
   const prisma = {
@@ -100,9 +122,38 @@ function montar(ajustes: { comando?: unknown; canal?: unknown; membroBot?: unkno
     },
     interaction: {
       create: vi.fn(async (_argumentos: unknown) => ({ id: "i_1", snowflake: 777n })),
-      findUnique: vi.fn(async () => null),
+      // ── j-bots ── é o que o `contextoDaEfemera` lê: a interação com os dois
+      // usuários embutidos. Os testes de `porToken`, que são o outro uso do
+      // método, sobrescrevem este mock.
+      findUnique: vi.fn(
+        async (): Promise<unknown> => ({
+          commandName: "play",
+          guildId: CANAL.guildId,
+          user: USUARIO,
+          application: { botUser: BOT },
+        }),
+      ),
       update: vi.fn(async () => ({})),
       updateMany: vi.fn(async () => ({ count: 1 })),
+    },
+    // ── j-bots ── a tabela da mensagem efêmera
+    ephemeralMessage: {
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) =>
+        efemeraDeMentira({
+          channelId: data.channelId,
+          ephemeralFor: data.ephemeralFor,
+          content: data.content,
+        }),
+      ),
+      findFirst: vi.fn(
+        async (): Promise<unknown> =>
+          "efemeraOriginal" in ajustes ? ajustes.efemeraOriginal : null,
+      ),
+      findUnique: vi.fn(async (): Promise<unknown> => null),
+      update: vi.fn(async ({ data }: { data: Record<string, unknown> }) =>
+        efemeraDeMentira({ content: data.content, editedAt: new Date() }),
+      ),
+      delete: vi.fn(async () => ({})),
     },
   };
 
@@ -121,7 +172,7 @@ function montar(ajustes: { comando?: unknown; canal?: unknown; membroBot?: unkno
     remove: vi.fn(async () => ({ channelId: CANAL.id, parentId: null })),
   };
 
-  const realtime = { emitToChannel: vi.fn() };
+  const realtime = { emitToChannel: vi.fn(), emitToUser: vi.fn() };
   const ids = { snowflakeDeServidor: vi.fn(async () => CANAL.guildSnowflake) };
   const dados = {
     canalPorCuid: vi.fn(async () => CANAL),
@@ -464,16 +515,176 @@ describe("responder", () => {
     }
   });
 
-  it("aceita `flags: 64` e entrega a mensagem normal (efêmera não existe aqui)", async () => {
-    const { service, mensagens, realtime } = montar();
+});
+
+// ── j-bots: a mensagem efêmera ───────────────────────────────
+
+/**
+ * `flags: 64`.
+ *
+ * O que estes testes protegem é uma coisa só, e é a feature inteira: **a
+ * efêmera não pode chegar a mais ninguém**. Daí a forma deles ser sempre a
+ * mesma — o que foi chamado e, principalmente, o que **não** foi:
+ * `emitToChannel` nunca, `messages.create` nunca.
+ */
+describe("mensagem efêmera (flags: 64)", () => {
+  it("não vira `Message`: grava na tabela própria, com `ephemeralFor` = quem invocou", async () => {
+    const { service, prisma, mensagens } = montar();
 
     await service.responder(autenticada(), TIPO_DE_CALLBACK.CHANNEL_MESSAGE_WITH_SOURCE, {
       content: "só você vê",
       flags: 64,
     });
 
-    expect(mensagens.create).toHaveBeenCalledWith(CANAL.id, BOT.id, "só você vê");
+    // é isto que faz `GET /channels/:id/messages` não a listar: ela não está lá
+    expect(mensagens.create).not.toHaveBeenCalled();
+    expect(prisma.ephemeralMessage.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        interactionId: "i_1",
+        channelId: CANAL.id,
+        ephemeralFor: USUARIO.id,
+        authorId: BOT.id,
+        content: "só você vê",
+        original: true,
+      }),
+      select: expect.anything(),
+    });
+  });
+
+  it("sai por `emitToUser` do invocador, com `efemera: true` — e nunca pelo canal", async () => {
+    const { service, realtime } = montar();
+
+    await service.responder(autenticada(), TIPO_DE_CALLBACK.CHANNEL_MESSAGE_WITH_SOURCE, {
+      content: "só você vê",
+      flags: 64,
+    });
+
+    expect(realtime.emitToChannel).not.toHaveBeenCalled();
+    expect(realtime.emitToUser).toHaveBeenCalledWith(
+      USUARIO.id,
+      WS_EVENTS.MESSAGE_NEW,
+      expect.objectContaining({
+        efemera: true,
+        content: "só você vê",
+        // a faixa "@fulano usou /play" continua: a efêmera também chega sozinha
+        interacao: expect.objectContaining({ name: "play" }),
+      }),
+    );
+  });
+
+  it("o bot precisa poder escrever no canal: o 403 do caminho normal vale aqui", async () => {
+    const { service, guilds, prisma } = montar();
+    guilds.assertCanPostChannel.mockRejectedValue(new Error("50013"));
+
+    await expect(
+      service.responder(autenticada(), TIPO_DE_CALLBACK.CHANNEL_MESSAGE_WITH_SOURCE, {
+        content: "x",
+        flags: 64,
+      }),
+    ).rejects.toThrow();
+    expect(prisma.ephemeralMessage.create).not.toHaveBeenCalled();
+  });
+
+  it("`deferReply({ ephemeral: true })` nasce efêmero: o 'pensando…' já é privado", async () => {
+    const { service, mensagens, realtime } = montar();
+
+    await service.responder(autenticada(), TIPO_DE_CALLBACK.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, {
+      flags: 64,
+    });
+
+    expect(mensagens.create).not.toHaveBeenCalled();
+    expect(realtime.emitToUser).toHaveBeenCalledWith(
+      USUARIO.id,
+      WS_EVENTS.MESSAGE_NEW,
+      expect.objectContaining({ efemera: true, content: TEXTO_PENSANDO }),
+    );
+  });
+
+  it("`editReply()` edita a linha efêmera, mesmo sem `responseMessageId`", async () => {
+    // é o caso que o `exigirOriginal` sozinho quebraria: a resposta efêmera não
+    // tem linha de `Message`, então `responseMessageId` fica null
+    const { service, prisma, mensagens, realtime } = montar({
+      efemeraOriginal: efemeraDeMentira(),
+    });
+
+    await service.editarOriginal(autenticada({ respondedAt: new Date() }), { content: "pong" });
+
+    expect(mensagens.edit).not.toHaveBeenCalled();
+    expect(prisma.ephemeralMessage.update).toHaveBeenCalledWith({
+      where: { id: "e_1" },
+      data: { content: "pong", editedAt: expect.any(Date) },
+      select: expect.anything(),
+    });
+    expect(realtime.emitToChannel).not.toHaveBeenCalled();
+    expect(realtime.emitToUser).toHaveBeenCalledWith(
+      USUARIO.id,
+      WS_EVENTS.MESSAGE_UPDATED,
+      expect.objectContaining({ efemera: true, content: "pong" }),
+    );
+  });
+
+  it("`deleteReply()` apaga a linha e avisa só o dono dela", async () => {
+    const { service, prisma, realtime } = montar({ efemeraOriginal: efemeraDeMentira() });
+
+    await service.apagarOriginal(autenticada({ respondedAt: new Date() }));
+
+    expect(prisma.ephemeralMessage.delete).toHaveBeenCalledWith({ where: { id: "e_1" } });
+    expect(realtime.emitToChannel).not.toHaveBeenCalled();
+    expect(realtime.emitToUser).toHaveBeenCalledWith(USUARIO.id, WS_EVENTS.MESSAGE_DELETED, {
+      messageId: "e_1",
+      channelId: CANAL.id,
+      parentId: null,
+    });
+  });
+
+  it("followup com `flags: 64` também é efêmero, e não vira a original", async () => {
+    const { service, prisma, mensagens, realtime } = montar({
+      efemeraOriginal: efemeraDeMentira(),
+    });
+
+    await service.followup(autenticada({ respondedAt: new Date() }), {
+      content: "mais uma só para você",
+      flags: 64,
+    });
+
+    expect(mensagens.create).not.toHaveBeenCalled();
+    expect(prisma.ephemeralMessage.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ original: false }),
+      select: expect.anything(),
+    });
+    expect(realtime.emitToChannel).not.toHaveBeenCalled();
+  });
+
+  it("followup **sem** a flag depois de uma resposta efêmera é mensagem normal do canal", async () => {
+    // é o comportamento do Discord: a efemeridade não se herda, cada followup
+    // declara a dele
+    const { service, mensagens, realtime } = montar({ efemeraOriginal: efemeraDeMentira() });
+
+    await service.followup(autenticada({ respondedAt: new Date() }), { content: "agora todos" });
+
+    expect(mensagens.create).toHaveBeenCalledWith(CANAL.id, BOT.id, "agora todos");
     expect(realtime.emitToChannel).toHaveBeenCalled();
+  });
+
+  it("um followup depois de uma resposta efêmera não sequestra o `@original`", async () => {
+    // `responseMessageId` continua null numa interação já respondida com
+    // efêmera; o critério é `respondedAt`, senão o followup se declararia a
+    // original e o `editReply()` seguinte editaria a mensagem errada
+    const { service, mensagens } = montar({ efemeraOriginal: efemeraDeMentira() });
+
+    await service.followup(autenticada({ respondedAt: new Date() }), { content: "n" });
+
+    expect(mensagens.create).toHaveBeenCalled();
+    // `ehOriginal` é o terceiro argumento de `escreverComoBot`; o efeito
+    // observável dele é a ligação, que só acontece quando é a original
+    expect(mensagens.getDTO).not.toHaveBeenCalled();
+  });
+
+  it("a efêmera vencida não é ressuscitada: sem original efêmera, o 404 antigo vale", async () => {
+    const { service } = montar();
+    await expect(service.editarOriginal(autenticada(), { content: "x" })).rejects.toMatchObject({
+      response: { code: 10062 },
+    });
   });
 });
 
@@ -533,7 +744,12 @@ describe("followup", () => {
   it("depois da original, é mensagem nova e não mexe na ligação", async () => {
     const { service, prisma, realtime } = montar();
 
-    await service.followup(autenticada({ responseMessageId: "m_0" }), { content: "e mais" });
+    // `respondedAt` junto com `responseMessageId`: é como a linha fica de
+    // verdade depois de um callback, e desde as efêmeras é o `respondedAt` que
+    // decide se este followup é a original (ver `followup`)
+    await service.followup(autenticada({ responseMessageId: "m_0", respondedAt: new Date() }), {
+      content: "e mais",
+    });
 
     expect(prisma.interaction.update).not.toHaveBeenCalled();
     expect(realtime.emitToChannel).toHaveBeenCalledWith(

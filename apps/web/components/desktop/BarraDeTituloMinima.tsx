@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Marca from "@/components/ui/Marca";
 import { bloquearMenuNativo, isTauri } from "@/lib/desktop";
+import { ehMobileAgora } from "@/hooks/useEhMobile";
 import { ALTURA, ControlesDaJanela, useMaximizada } from "./BarraDeTitulo";
 
 /**
@@ -19,12 +20,19 @@ import { ALTURA, ControlesDaJanela, useMaximizada } from "./BarraDeTitulo";
  *
  * Montada no `layout` raiz e desligada nas rotas que têm a barra própria
  * (`/app`) ou não têm janela (`/splash`).
+ *
+ * **`isTauri()` sozinho deixou de bastar.** O mesmo export estático agora é
+ * embutido também no app de Android, e lá esta barra seria uma faixa de
+ * arrasto com um "minimizar/maximizar/fechar" que não existem — controles de
+ * janela num aparelho que não tem janelas. Por isso o gate é "Tauri **de
+ * desktop**": `ehMobileAgora()` é a mesma regra do `useEhMobile`, que dentro
+ * do Tauri responde pela plataforma.
  */
 export default function BarraDeTituloMinima() {
   const rota = usePathname();
   const [desktop, setDesktop] = useState(false);
   useEffect(() => {
-    setDesktop(isTauri());
+    setDesktop(isTauri() && !ehMobileAgora());
   }, []);
   const cabe = desktop && !!rota && !rota.startsWith("/app") && !rota.startsWith("/splash");
 

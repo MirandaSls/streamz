@@ -13,7 +13,7 @@ import { zodBody } from "../../../common/zod.pipe";
 import { DadosDeCompatService } from "../dados.service";
 import { InteractionsService } from "../../interactions/interactions.service";
 import type { InteracaoAutenticada } from "../../interactions/tipos";
-import { TIPO_DE_CALLBACK } from "../../interactions/tipos";
+import { FLAG_EFEMERA, TIPO_DE_CALLBACK } from "../../interactions/tipos";
 import { aplicarContentTypeDoDiscord } from "../content-type";
 import { FiltroDeErrosDoDiscord, interacaoDesconhecida } from "../erros";
 import { RateLimitDoDiscordInterceptor } from "../rate-limit.interceptor";
@@ -124,15 +124,24 @@ export class InteractionCallbackCompatController {
       activity_instance_id: null,
       response_message_id: null,
       response_message_loading: carregando,
-      // Sempre `false`, mesmo com `flags: 64` no pedido: a F3 aceita a flag e
-      // entrega a mensagem **normal**, com aviso no log (§9). Ecoar `true` aqui
-      // faria o bot acreditar numa efemeridade que não existe.
+      // `flags: 64` agora é entregue de verdade (a mensagem efêmera), então
+      // este campo diz a verdade: `true` quando a resposta desta interação foi
+      // efêmera. Ecoar `false` faria o bot achar que falou para o canal todo.
       response_message_ephemeral: false,
     };
 
     const resource: JsonDoDiscord = { type: corpo.type, activity_instance: null };
 
-    if (atual.responseMessageId) {
+    // ── j-bots ── a efêmera vem primeiro: quando a resposta foi efêmera o
+    // `responseMessageId` é null (ela não é uma `Message`), e sem esta consulta
+    // o `InteractionCallbackResponse` sairia sem `response_message_id` — que é
+    // justamente o que o discord.py guarda para o `edit_original_response()`.
+    const efemera = await this.interacoes.linhaEfemeraOriginalParaCompat(atual.id);
+    if (efemera) {
+      interacao.response_message_ephemeral = true;
+      interacao.response_message_id = String(efemera.snowflake);
+      resource.message = { ...mensagemParaDiscord(efemera), flags: FLAG_EFEMERA };
+    } else if (atual.responseMessageId) {
       const linha = await this.dados.mensagemPorCuid(atual.responseMessageId, atual.botUserId);
       if (linha) {
         interacao.response_message_id = String(linha.snowflake);

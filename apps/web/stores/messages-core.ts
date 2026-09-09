@@ -32,6 +32,22 @@ export const RETENTION_LIMIT = 500;
 /** Limite de caracteres por mensagem — o mesmo que o gateway valida. */
 export { MAX_MESSAGE_LENGTH };
 
+/**
+ * ── j-bots ── Esta mensagem entra na contabilidade de não lidas?
+ *
+ * A **efêmera** não entra, e a razão é o que ela é: uma mensagem que só eu
+ * recebi, que não está no canal e que some ao recarregar. Um badge é a promessa
+ * de que há algo esperando por mim lá — e depois de um F5 não haveria nada, só
+ * um contador teimando por uma mensagem que já não existe.
+ *
+ * A regra mora aqui, e não solta dentro do `useRealtime`, porque é decisão de
+ * produto e não detalhe de assinatura de evento: quem mexer nas não lidas
+ * amanhã encontra o "por quê" junto do "o quê".
+ */
+export function contaComoNaoLida(message: Pick<Message, "efemera">): boolean {
+  return message.efemera !== true;
+}
+
 /** Corta o excesso pelo topo (o mais antigo é o que dá para repaginar). */
 export function trim(items: ChatMessage[], limit = RETENTION_LIMIT): ChatMessage[] {
   return items.length > limit ? items.slice(items.length - limit) : items;

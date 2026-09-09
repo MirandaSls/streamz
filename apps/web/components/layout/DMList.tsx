@@ -18,6 +18,7 @@ import {
   displayNameOf,
   isGroupChannel,
   isUnread,
+  linhaDaPrevia,
   type DMChannelView,
   type PublicUser,
 } from "@streamz/shared";
@@ -29,7 +30,8 @@ import { useEhMobile } from "@/hooks/useEhMobile";
 import { EVENTO_CAIXA_DE_ENTRADA } from "@/lib/caixa-de-entrada";
 import { useT } from "@/lib/i18n";
 import { submenuSilenciar } from "@/lib/notification-menu";
-import { dmTitle, useDMs } from "@/stores/dms";
+import { autorDaPrevia, dmTitle, useDMs } from "@/stores/dms";
+import { useAuth } from "@/stores/auth";
 import { useFriends, usePendingCount } from "@/stores/friends";
 import { rotuloDoContador } from "@/stores/nao-lidas";
 import { useNotifications } from "@/stores/notifications";
@@ -67,6 +69,7 @@ export default function DMList() {
   const startCall = useVoice((s) => s.startCall);
   const porEscopo = useNotifications((s) => s.porEscopo);
   const developerMode = useSettings((s) => s.developerMode);
+  const meuId = useAuth((s) => s.user?.id);
   const t = useT();
 
   const q = query.trim().toLowerCase();
@@ -251,6 +254,27 @@ export default function DMList() {
         const group = isGroupChannel(dm);
         const other = !group ? dm.others[0] : undefined;
         const unread = !active && isUnread(dm);
+        /*
+          ── prévia da última mensagem ── "autor: texto" embaixo do nome, na cor
+          da linha, medido em `docs/Reference/mobile/discord-mobile-dms-2024.png`.
+
+          **Só no celular**, e isso é paridade, não economia: no Discord do
+          desktop a coluna de conversas tem o nome e nada mais — medido no print
+          `docs/Reference/Captura de tela 2026-09-04 102757.png`, onde as treze
+          conversas mostram só o nome e o grupo mostra "2 membros". A prévia é
+          um traço do aplicativo de celular. `DMChannelView.ultimaMensagem` chega
+          nas duas telas e a store a mantém em dia nas duas; se um dia o desktop
+          quiser a linha, é este `celular &&` que sai.
+
+          A calha é a mesma que o "N membros" do grupo já ocupava, então a linha
+          continua com 48px nos dois leiautes.
+        */
+        const previa = celular
+          ? linhaDaPrevia(dm.ultimaMensagem, {
+              autor: autorDaPrevia(dm, meuId),
+              emChamada: (emChamada[dm.id]?.length ?? 0) > 0,
+            })
+          : "";
         return (
           <div
             key={dm.id}
@@ -279,11 +303,15 @@ export default function DMList() {
               )}
               <span className="min-w-0">
                 <span className={`block truncate ${unread ? "font-semibold" : "font-medium"}`}>{title}</span>
-                {group && (
+                {previa ? (
+                  <span className={`block truncate text-xs ${unread ? "font-medium" : ""}`}>
+                    {previa}
+                  </span>
+                ) : group ? (
                   <span className="block truncate text-xs text-txt-muted">
                     {dm.others.length + 1} membros
                   </span>
-                )}
+                ) : null}
               </span>
             </button>
             {(emChamada[dm.id]?.length ?? 0) > 0 && (

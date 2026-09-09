@@ -33,6 +33,7 @@ import {
 } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import IconeDeStatus from "@/components/ui/IconeDeStatus";
+import TagDeBot from "@/components/ui/TagDeBot";
 import { MENU_WIDTH, MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
@@ -570,11 +571,24 @@ export default function ProfilePopoverHost() {
 
         <div className="rounded-lg bg-footer p-3">
           <div className="min-w-0">
-            <div
-              style={cor ? { color: cor } : undefined}
-              className="truncate text-xl font-bold leading-6 text-txt-primary"
-            >
-              {displayNameOf(user)}
+            {/* ── j-bots ── a pílula ao lado do nome grande, como em
+                `docs/Reference/apps/tag-bot-no-perfil-do-app.png` (medida ali a
+                2×: 30/2 = os mesmos 15px da lista de membros — o Discord não
+                aumenta a pílula porque o nome é maior).
+                A linha virou `flex` para a pílula não entrar no `truncate` do
+                nome e virar reticências. O `min-w-0` no nome é o que mantém o
+                corte funcionando: sem ele um item flex não encolhe abaixo do
+                conteúdo, e um nome de 32 caracteres estouraria o cartão. Sem
+                bot, o desenho é o mesmo de antes (um item só, alinhado à
+                esquerda, mesma altura de linha) — provado no diff de 0 pixel. */}
+            <div className="flex min-w-0 items-center gap-2">
+              <div
+                style={cor ? { color: cor } : undefined}
+                className="min-w-0 truncate text-xl font-bold leading-6 text-txt-primary"
+              >
+                {displayNameOf(user)}
+              </div>
+              {user.bot && <TagDeBot />}
             </div>
             <div className="flex items-center gap-2 text-sm text-txt-normal">
               <span className="truncate">@{user.username}</span>

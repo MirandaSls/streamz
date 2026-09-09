@@ -5,6 +5,7 @@ import {
   Copy,
   CornerUpLeft,
   CornerUpRight,
+  Eye,
   EyeOff,
   Flag,
   Hash,
@@ -52,6 +53,7 @@ import PollCard from "@/components/polls/PollCard";
 import { emit } from "@/stores/socket-adapter";
 import Avatar from "@/components/ui/Avatar";
 import EmojiPicker from "@/components/ui/EmojiPicker";
+import TagDeBot from "@/components/ui/TagDeBot";
 import Tooltip from "@/components/ui/Tooltip";
 import { dataCompleta, hora, horaCompleta } from "@/lib/format";
 import { Markdown } from "@/lib/markdown";
@@ -152,6 +154,20 @@ function ReplyReference({ message }: { message: Message }) {
       >
         @{displayNameOf(ref.author)}
       </button>
+      {/* ── j-bots ── responder a um bot também tem que dizer que é um bot: sem
+          isto a barra de resposta seria a única superfície com nome de autor
+          sem a pílula, e é justamente ela que aparece quando alguém responde a
+          uma resposta de comando de barra.
+          `caixaEstreita` pela mesma regra do rótulo do tile de voz: esta linha
+          é `leading-[18px]` **fixo nos dois leiautes** (não há `celular:` aqui),
+          e a pílula de 18 do celular a preenchia de ponta a ponta — medido: pai
+          de 18px de conteúdo, pílula de 18, folga zero. Nos 15 do desktop sobra
+          1,5px de cada lado, a pílula volta a ter o porte do texto de 13px que
+          a cerca, e o trecho citado ganha 4px de volta antes de truncar.
+          Centrada sem margem: o pai é `items-center`, e a folga de 0,97px que
+          uma medida ingênua acusa é a metade do `pb-0.5` da linha — sobre a
+          caixa de conteúdo o desalinho é 0. */}
+      {ref.author.bot && <TagDeBot caixaEstreita />}
       <button
         type="button"
         onClick={() =>
@@ -219,6 +235,52 @@ function InteractionReference({ message }: { message: Message }) {
       <span className="truncate">
         usou <span className="font-medium text-txt-secondary">/{interacao.name}</span>
       </span>
+    </div>
+  );
+}
+
+/**
+ * ── j-bots ── O rodapé da mensagem efêmera: "Somente você pode ver isso ·
+ * Dispensar mensagem".
+ *
+ * É a única coisa que distingue uma efêmera de uma resposta comum de bot na
+ * tela, e por isso ela tem de estar sempre visível — não no hover, não dentro
+ * de um menu. Sem ela a pessoa não tem como saber que o canal não viu aquilo, e
+ * responderia a uma conversa que ninguém está tendo.
+ *
+ * **Medidas da captura de referência** (`docs/Reference/efemeras/`, com fonte em
+ * `FONTES.md`; Discord em 1×, medido com Pillow): a linha fica **abaixo** do
+ * conteúdo, com o texto em `#949BA4` — o `txt-muted` daqui — e o "Dismiss
+ * message" em `#00A8FC`, que é exatamente o nosso `txt-link`. O tipo é ~12px
+ * contra os 16px do corpo, com um ícone de olho antes.
+ *
+ * "Dispensar" é local (ver `useMessages.dispensarEfemera`): a efêmera não está
+ * no canal, então tirá-la da lista é tirá-la de onde ela existe.
+ */
+function EphemeralFooter({ message }: { message: Message }) {
+  const dispensar = useMessages((s) => s.dispensarEfemera);
+
+  return (
+    /* `flex-wrap` + `whitespace-nowrap` nas duas partes: na coluna estreita do
+       celular a linha não cabe (262px úteis contra ~280px de texto), e sem isto
+       ela quebrava **no meio das frases** — "Somente você pode / ver isso". Com
+       as partes indivisíveis, a quebra cai entre elas, e o `·` some quando
+       deixa de separar coisa nenhuma. */
+    <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs leading-4 text-txt-muted">
+      <Eye size={16} aria-hidden="true" className="shrink-0" />
+      <span className="whitespace-nowrap">Somente você pode ver isso</span>
+      <span aria-hidden="true" className="celular:hidden">
+        ·
+      </span>
+      <button
+        type="button"
+        onClick={() => dispensar(message.channelId, message.id)}
+        /* `celular:min-h-[44px]`: no telefone este é o único gesto que a
+           efêmera tem, e um alvo de 16px de altura não é alvo. */
+        className="whitespace-nowrap font-medium text-txt-link hover:underline celular:min-h-[44px]"
+      >
+        Dispensar mensagem
+      </button>
     </div>
   );
 }
@@ -580,11 +642,18 @@ export default function MessageItem({
   // linha do bloco: com ela, a mensagem nunca é desenhada como continuação
   const temFaixa = !!message.replyTo || !!message.interacao;
 
+  // ── j-bots ── a mensagem efêmera: só eu a vejo, e a tela tem de dizer isso
+  const efemera = !!message.efemera;
+
   const fundo = highlighted
     ? "bg-accent/20 hover:bg-accent/25"
     : mentionsMe
       ? "border-l-2 border-yellow bg-yellow/10 hover:bg-yellow/15"
-      : "hover:bg-msghov";
+      : efemera
+        ? // fundo levemente diferente, como no Discord — ver os tokens `efem`/
+          // `efemhov` em `tailwind.config.ts`, medidos na captura de referência
+          "bg-efem hover:bg-efemhov"
+        : "hover:bg-msghov";
 
   // narração do canal (fixar, entrada de membro, eventos de grupo): é o mesmo
   // componente que a timeline usa, para não haver duas versões do mesmo texto
@@ -603,7 +672,10 @@ export default function MessageItem({
   return (
     <div
       id={`mensagem-${message.id}`}
-      onContextMenu={openMenu}
+      /* ── j-bots ── a efêmera não tem menu: responder, reagir, fixar, copiar
+         link, encaminhar e apagar apontariam todos para uma mensagem que não
+         existe no canal. O gesto que ela tem é o "Dispensar" do rodapé. */
+      onContextMenu={efemera ? undefined : openMenu}
       // o respiro entre grupos é preferência do usuário (aba Aparência)
       style={
         grouped && !temFaixa
@@ -668,6 +740,11 @@ export default function MessageItem({
             >
               {displayNameOf(author)}
             </button>
+            {/* ── j-bots ── entre o nome e a hora, como no Discord. A caixa é
+                `items-baseline`, e uma pílula alinhada pela linha de base
+                desceria abaixo dela; `self-center` a recentra na linha de 22px
+                sem mexer no alinhamento do nome nem no da hora. */}
+            {author.bot && <TagDeBot className="self-center" />}
             <Tooltip label={dataCompleta(message.createdAt)}>
               <span className="ml-1 text-xs text-txt-muted">{horaCompleta(message.createdAt)}</span>
             </Tooltip>
@@ -734,6 +811,19 @@ export default function MessageItem({
                   >
                     {displayNameOf(author)}
                   </button>
+                  {/* ── j-bots ── no modo compacto a hora, o nome e o texto
+                      dividem a **primeira** linha da mensagem — a hora é
+                      `leading-[22px]`, e é ela que fixa a linha em 22px nos dois
+                      leiautes. `self-start` (e não `self-center`) porque a caixa
+                      cresce com o texto: numa mensagem de três linhas ela mede
+                      64px, e centrar poria a pílula no meio do parágrafo, 20px
+                      abaixo do nome — medido.
+                      A margem é o que centra a pílula **naquela** primeira
+                      linha, e por isso muda com o tamanho dela:
+                      (22 − 15)/2 = 3,5 no desktop e (22 − 18)/2 = 2 no celular.
+                      Os 3px iguais para os dois que estavam aqui deixavam a
+                      pílula 0,5px alta no desktop e 1px baixa no celular. */}
+                  {author.bot && <TagDeBot className="mt-[3.5px] self-start celular:mt-[2px]" />}
                 </>
               )}
               <div className={compacto ? "min-w-0 flex-1" : undefined}>
@@ -889,6 +979,8 @@ export default function MessageItem({
           </button>
         )}
 
+        {efemera && <EphemeralFooter message={message} />}
+
         {message.failed && message.nonce && (
           <div className="mt-1 flex items-center gap-2 text-xs text-red">
             <span>Não foi possível enviar.</span>
@@ -924,7 +1016,7 @@ export default function MessageItem({
         token `border`, que já é a divisória do app; termina 14px antes da
         borda da linha e começa 25px acima do topo dela (entra 9 na linha).
       */}
-      {!unconfirmed && !editing && (
+      {!unconfirmed && !editing && !efemera && (
         <div
           /* `celular:!hidden`: no celular esta barra não existe. Ela é de
              `hover`, que o dedo não tem — mas `group-focus-within` a fazia

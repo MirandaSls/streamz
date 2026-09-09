@@ -3,7 +3,10 @@ import {
   displayNameOf,
   isDirectChannel,
   isGroupChannel,
+  previaDaMensagem,
   type DMChannelView,
+  type Message,
+  type PreviaDeMensagem,
   type PublicUser,
 } from "@streamz/shared";
 import { api } from "@/lib/api";
@@ -13,7 +16,7 @@ import { useChannels } from "@/stores/channels";
 import { useFriends } from "@/stores/friends";
 import { useMessages } from "@/stores/messages";
 import { aoChegarMensagem } from "@/stores/nao-lidas";
-import { comAConversaAberta, noTopo } from "@/stores/dms-lista";
+import { comAConversaAberta, noTopo, proximaPrevia } from "@/stores/dms-lista";
 import { conversaLida, listaLida } from "@/stores/leitura";
 
 /**
@@ -73,6 +76,18 @@ interface DMsState {
    * como não lida (e como menção, quando é). `propria` = eu mandei.
    */
   bumpUnread: (channelId: string, at: string, mention: boolean, propria: boolean) => void;
+  /**
+   * Refaz a linha de prévia com a mensagem que chegou ou foi editada
+   * (`message.new`/`message.updated`), e sobe a conversa quando ela é a mais
+   * nova. Ignora a edição de uma mensagem que não está na linha.
+   */
+  aplicarPrevia: (message: Message) => void;
+  /**
+   * Apagaram uma mensagem: se era a da linha, a prévia volta para a anterior
+   * que ainda estiver no histórico em memória (ou some, e o próximo
+   * `GET /dms` a traz de volta).
+   */
+  removerPrevia: (channelId: string, messageId: string) => void;
   handleDeleted: (channelId: string) => void;
   clear: () => void;
 }
@@ -286,11 +301,12 @@ export const useDMs = create<DMsState>((set, get) => {
                     ...d,
                     ...dm,
                     // a conversa atualizada (evento ou resposta de rename/membro)
-                    // vem sem a visão de leitura; a local é a boa
+                    // vem sem a visão de leitura nem a prévia; as locais são as boas
                     lastMessageAt: d.lastMessageAt,
                     lastReadAt: d.lastReadAt,
                     mentionCount: d.mentionCount,
                     unreadCount: d.unreadCount,
+                    ultimaMensagem: d.ultimaMensagem ?? dm.ultimaMensagem,
                   }
                 : d,
             )
@@ -326,6 +342,31 @@ export const useDMs = create<DMsState>((set, get) => {
         return { channels: noTopo(s.channels, next) };
       }),
 
+    aplicarPrevia: (message) =>
+      set((s) => {
+        const d = s.channels.find((x) => x.id === message.channelId);
+        if (!d) return s;
+        const previa = proximaPrevia(d.ultimaMensagem, previaDaMensagem(message));
+        if (!previa) return s;
+        const atualizada = { ...d, ultimaMensagem: previa };
+        // editar a que já estava na linha não reordena nada; mensagem nova sobe
+        return previa.id === d.ultimaMensagem?.id
+          ? { channels: s.channels.map((x) => (x.id === d.id ? atualizada : x)) }
+          : { channels: noTopo(s.channels, atualizada) };
+      }),
+
+    removerPrevia: (channelId, messageId) =>
+      set((s) => {
+        const d = s.channels.find((x) => x.id === channelId);
+        if (!d || d.ultimaMensagem?.id !== messageId) return s;
+        const anterior = previaAnterior(channelId, messageId);
+        return {
+          channels: s.channels.map((x) =>
+            x.id === d.id ? { ...x, ultimaMensagem: anterior } : x,
+          ),
+        };
+      }),
+
     handleDeleted: (channelId) => {
       set((s) => ({
         channels: s.channels.filter((d) => d.id !== channelId),
@@ -346,6 +387,37 @@ export const useDMs = create<DMsState>((set, get) => {
 /** Conversa aberta (objeto completo), ou null. */
 export function useActiveDM(): DMChannelView | null {
   return useDMs((s) => s.channels.find((d) => d.id === s.activeId) ?? null);
+}
+
+/**
+ * A mensagem anterior à apagada, quando o histórico do canal está em memória.
+ *
+ * Sem histórico carregado não há de onde tirá-la sem uma ida ao servidor, e a
+ * linha fica vazia até o próximo `GET /dms` — que é o que já acontecia antes
+ * de existir prévia nenhuma.
+ */
+function previaAnterior(channelId: string, apagada: string): PreviaDeMensagem | null {
+  const items = useMessages.getState().byChannel[channelId]?.items ?? [];
+  for (let i = items.length - 1; i >= 0; i--) {
+    const m = items[i];
+    // resposta de thread não é a "última do canal" que a lista mostra
+    if (m.id === apagada || m.parentId || m.pending) continue;
+    return previaDaMensagem(m);
+  }
+  return null;
+}
+
+/**
+ * Quem escreveu a última mensagem, na visão de quem olha a lista: "Você" para
+ * mim, o nome de exibição para os outros. "Alguém" só sobra para o autor que
+ * saiu do grupo — a conversa não guarda o retrato de quem não está mais nela.
+ */
+export function autorDaPrevia(dm: DMChannelView, meuId?: string): string {
+  const id = dm.ultimaMensagem?.authorId;
+  if (!id) return "";
+  if (id === meuId) return "Você";
+  const autor = dm.others.find((u) => u.id === id);
+  return autor ? displayNameOf(autor) : "Alguém";
 }
 
 /** Nome de exibição de uma conversa (grupo tem nome; 1-a-1 usa o outro). */

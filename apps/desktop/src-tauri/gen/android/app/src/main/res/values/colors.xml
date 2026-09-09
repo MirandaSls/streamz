@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Cores do template do Tauri (as `purple_*`/`teal_*` do assistente do Android
+  Studio) mais a nossa. `streamz_fundo` é o `panel` do `tailwind.config.ts`
+  (#121214) — o mesmo tom da rail e da coluna de canais.
+
+  Ela existe por causa da **tela de abertura**: entre o toque no ícone e o
+  primeiro quadro do WebView há alguns décimos de segundo em que o Android
+  pinta o `windowBackground` do tema. O padrão do Material é claro, e o
+  resultado era um flash branco antes de um app escuro. Não é uma splash com
+  logotipo (isso exigiria a API `SplashScreen` do Android 12 e arte própria) —
+  é o mínimo honesto: o app abre já na cor certa.
+-->
+<resources>
+    <color name="purple_200">#FFBB86FC</color>
+    <color name="purple_500">#FF6200EE</color>
+    <color name="purple_700">#FF3700B3</color>
+    <color name="teal_200">#FF03DAC5</color>
+    <color name="teal_700">#FF018786</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="streamz_fundo">#FF121214</color>
+    <!-- fundo do ícone adaptativo: a cor escura do próprio logotipo -->
+    <color name="ic_launcher_background">#FF0B0B0F</color>
+</resources>

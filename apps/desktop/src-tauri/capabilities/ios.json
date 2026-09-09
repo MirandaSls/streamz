@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "ios",
+  "description": "Permissoes do app no iPhone. So o que existe no celular: o nucleo do Tauri, a notificacao local e abrir link no Safari. De proposito ficaram de fora as permissoes que nao tem equivalente no iOS - a janelinha de abertura (splash) e todo o ciclo do atualizador (na App Store quem atualiza e a loja), o Salvar como via dialog+fs (o iOS nao tem $DOWNLOAD nem $PICTURE gravaveis pelo app) e a escrita de imagem na area de transferencia. Ver docs/APPS-MOBILE.md.",
+  "platforms": ["iOS"],
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "notification:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "http://*" }, { "url": "https://*" }]
+    }
+  ]
+}

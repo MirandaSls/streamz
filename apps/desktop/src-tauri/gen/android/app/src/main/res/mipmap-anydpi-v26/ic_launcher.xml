@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Ícone adaptativo (Android 8+). O launcher recorta o par fundo+frente com a
+  máscara do aparelho (círculo no Pixel, squircle no Samsung, quadrado
+  arredondado em outros), então o conteúdo precisa caber nos 72dp centrais de
+  um quadro de 108dp.
+
+  O `ic_launcher_foreground.png` que o `tauri icon` gerou ocupava os 108dp
+  inteiros e seria cortado em um terço de cada lado. O que está aqui é o mesmo
+  logotipo reduzido para a zona segura, sobre um fundo da cor escura do próprio
+  logotipo (#0B0B0F) — assim a máscara corta fundo com fundo e o balão verde
+  chega inteiro.
+
+  O `ic_launcher.png`/`_round.png` das pastas `mipmap-*` continuam sendo os
+  ícones do Android 7, que não tem máscara e usa o PNG como está.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>

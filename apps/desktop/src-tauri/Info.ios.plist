@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Este arquivo é mesclado com o Info.plist que o Tauri gera para o iOS.
+	  O nome e o diretório não são escolha nossa: o Tauri procura por
+	  `Info.plist` e `Info.ios.plist` na mesma pasta do `tauri.conf.json`
+	  (descrição do campo `bundle.iOS.infoPlist` em
+	  https://schema.tauri.app/config/2). Usamos a variante `.ios` para não
+	  atingir também um eventual bundle de macOS.
+
+	  Por que cada chave está aqui está no `docs/APPS-MOBILE.md`.
+	-->
+
+	<!-- Idioma de origem do app: os textos de permissão abaixo são pt-BR. -->
+	<key>CFBundleDevelopmentRegion</key>
+	<string>pt-BR</string>
+
+	<!--
+	  Manter a chamada de voz viva com o app em segundo plano ou a tela
+	  bloqueada. Só `audio`: `voip` é para *acordar* o app com uma chamada
+	  recebida via PushKit e, sem PushKit + CallKit de verdade, é motivo
+	  conhecido de rejeição no App Review. Ver `docs/APPS-MOBILE.md`.
+	-->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
+
+	<!-- Permissões de mídia. Sem estes textos o app é rejeitado e a chamada
+	     de `getUserMedia` falha em silêncio dentro do WKWebView. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>O Streamz usa o microfone para você falar nos canais de voz e nas chamadas.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>O Streamz usa a câmera para mostrar seu vídeo nas chamadas e para você enviar fotos nas conversas.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>O Streamz acessa suas fotos para você enviar imagens nas conversas e trocar seu avatar.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>O Streamz salva na sua galeria as imagens que você baixar das conversas.</string>
+
+	<!--
+	  O WebRTC enumera as interfaces de rede ao juntar candidatos ICE; no iOS
+	  isso pode disparar o pedido de acesso à rede local. Sem o texto, o
+	  sistema nega sem perguntar e a chamada não conecta.
+	-->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>O Streamz procura a melhor rota de rede para deixar sua chamada de voz mais estável.</string>
+
+	<!--
+	  Sem esta chave, toda submissão para a App Store para no formulário de
+	  conformidade de exportação. O app só usa HTTPS/WSS e a criptografia do
+	  próprio sistema, que é a isenção padrão.
+	-->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+</dict>
+</plist>

@@ -10,6 +10,7 @@ import {
 } from "@streamz/shared";
 import Dialog from "@/components/modals/Dialog";
 import Avatar from "@/components/ui/Avatar";
+import TagDeBot from "@/components/ui/TagDeBot";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
 import { useDMs } from "@/stores/dms";
@@ -178,6 +179,11 @@ export default function UserProfileModal({
           <div className="rounded-lg bg-footer p-4">
             <div className="flex items-baseline gap-2">
               <span className="truncate text-xl font-bold text-txt-primary">{nome}</span>
+              {/* ── j-bots ── a caixa é `items-baseline` por causa dos pronomes,
+                  que são texto e têm que assentar na mesma linha do nome. A
+                  pílula não é texto: pela linha de base ela desceria abaixo
+                  dela, então `self-center` a devolve ao meio da linha. */}
+              {user.bot && <TagDeBot className="self-center" />}
               {profile.pronouns && (
                 <span className="truncate text-sm text-txt-muted">{profile.pronouns}</span>
               )}

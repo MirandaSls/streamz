@@ -151,6 +151,10 @@ model User {
   ownedApps      Application[] @relation("AppOwner")
   /// as interações que esta pessoa disparou (a faixa "usou /play" sai daqui)
   interactions   Interaction[]
+  /// as respostas efêmeras que este usuário-bot escreveu
+  efemerasEscritas EphemeralMessage[] @relation("EfemeraAutor")
+  /// as respostas efêmeras que **só esta pessoa** pode ver
+  efemerasParaMim  EphemeralMessage[] @relation("EfemeraPara")
 }
 
 // Até onde cada usuário leu cada canal. É o que decide "não lido" e o badge
@@ -246,6 +250,9 @@ model Guild {
   // nasceram aqui. Back-relations: nenhuma coluna nova em `Guild`.
   applicationCommands ApplicationCommand[]
   interactions        Interaction[]
+  // ── j-bots · F4 ── os aplicativos instalados neste servidor. Back-relation
+  // também: quem guarda o par (servidor, aplicativo) é a `GuildApplication`.
+  applications        GuildApplication[]
 }
 
 model Ban {
@@ -370,6 +377,9 @@ model Channel {
 
   // ── j-bots ── as interações disparadas neste canal (back-relation)
   interactions   Interaction[]
+  // ── j-bots ── as respostas efêmeras que passaram por aqui sem entrar no
+  // histórico. Back-relation: `Channel` não ganha coluna nenhuma.
+  efemeras       EphemeralMessage[]
 
   @@index([guildId])
   @@index([categoryId])
@@ -1058,8 +1068,37 @@ model Application {
   commands     ApplicationCommand[]
   interactions Interaction[]
 
+  // ── F4 ── onde este aplicativo está instalado (back-relation)
+  installs GuildApplication[]
+
   @@index([ownerId])
   @@index([publico])
+}
+
+/// Instalação de uma application num servidor: é o que autoriza o bot ali.
+/// Apagar = "remover o app do servidor" (o membro-bot sai junto).
+///
+/// `installedById` **não** tem relação declarada com `User` de propósito: o §10
+/// não a declarou, e uma FK com `onDelete: Cascade` faria a saída de quem
+/// instalou desinstalar o app do servidor. É um `String` que a leitura resolve
+/// à mão.
+model GuildApplication {
+  id            String   @id @default(cuid())
+  guildId       String
+  applicationId String
+  /// quem instalou (precisou de MANAGE_GUILD)
+  installedById String
+  /// bitfield de `Permission` concedido na instalação; vira o cargo gerenciado
+  permissions   Int      @default(0)
+  /// o cargo criado para o bot (apagado com a instalação)
+  roleId        String?
+  createdAt     DateTime @default(now())
+
+  guild       Guild       @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, applicationId])
+  @@index([applicationId])
 }
 
 /// Token do bot. Guardamos só o SHA-256 — quem lê o banco não vira o bot.
@@ -1152,6 +1191,56 @@ model Interaction {
   command         ApplicationCommand? @relation(fields: [commandId], references: [id], onDelete: SetNull)
   responseMessage Message?            @relation(fields: [responseMessageId], references: [id], onDelete: SetNull)
 
+  /// as respostas efêmeras desta interação (a original e os followups)
+  efemeras        EphemeralMessage[]
+
   @@index([expiresAt])
   @@index([applicationId, createdAt])
+}
+
+/// A resposta **efêmera** de um bot: `flags: 64`, a mensagem que só quem
+/// invocou o comando vê ("Somente você pode ver isso · Dispensar mensagem").
+///
+/// **Tabela à parte, e não uma coluna `ephemeralFor` na `Message`.** É a
+/// decisão inteira desta feature, e o motivo é o vazamento: a `Message` é lida
+/// por dezenas de consultas — histórico, busca, fixadas, threads, não lidas, a
+/// `GET channels/:id/messages` da compat — e bastaria **uma** delas esquecer o
+/// `where` para uma mensagem privada aparecer para o canal todo. Numa tabela
+/// que ninguém mais lê, o vazamento não é improvável: é impossível.
+///
+/// Ela mora no Postgres, e não em memória nem no Redis, porque tem de
+/// sobreviver a um restart da API — o bot tem 15 minutos para `editReply()` — e
+/// aqui o Redis é **opcional** (`REDIS_URL`; sem ela tudo cai para a memória do
+/// processo), o que faria a efêmera funcionar em algumas instalações e não em
+/// outras. A janela e a faxina são as mesmas da `Interaction`: `expiresAt` com
+/// índice, apagada pelo `MaintenanceService`.
+///
+/// Nunca é servida por rota nenhuma: ela sai **uma vez**, pelo socket, para a
+/// sala `user:<ephemeralFor>`. Recarregar a página a faz sumir — que é
+/// exatamente o que o Discord faz.
+model EphemeralMessage {
+  id            String    @id @default(cuid())
+  snowflake     BigInt    @unique @default(dbgenerated("streamz_snowflake()"))
+  interactionId String
+  channelId     String
+  /// **Quem pode ver.** É a coluna que define a regra inteira.
+  ephemeralFor  String
+  /// o usuário-bot que respondeu
+  authorId      String
+  content       String
+  /// `true` na resposta do callback 4/5 — é o alvo do `@original`. Os followups
+  /// efêmeros são `false`, e nunca são editados por `@original`.
+  original      Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  editedAt      DateTime?
+  /// createdAt + 15 min: a mesma janela do token da interação
+  expiresAt     DateTime
+
+  interaction Interaction @relation(fields: [interactionId], references: [id], onDelete: Cascade)
+  channel     Channel     @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author      User        @relation("EfemeraAutor", fields: [authorId], references: [id], onDelete: Cascade)
+  paraUsuario User        @relation("EfemeraPara", fields: [ephemeralFor], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@index([interactionId, original])
 }

@@ -223,8 +223,9 @@ export const comandosParaRegistrarSchema = z
  *
  * `content` é o único campo que a F3 materializa; `embeds`, `components` e
  * `attachments` chegam inteiros (é para isso que o `@Body()` é cru) e o lote A
- * os descarta com aviso no log. `flags: 64` (efêmera) é aceita e a mensagem sai
- * normal, com aviso — §9 do documento.
+ * os descarta com aviso no log. `flags: 64` é a **mensagem efêmera**, e desde
+ * o PR das efêmeras é entregue de verdade: só o invocador a recebe, pelo
+ * socket, e ela não entra no histórico do canal — §9 do documento.
  *
  * A forma casa com `CorpoDeResposta` de `modules/interactions/tipos.ts`, que é
  * o que `responder`, `editarOriginal` e `followup` recebem.

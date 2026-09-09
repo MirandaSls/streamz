@@ -7,6 +7,7 @@ import type {
   LinhaDeReacao,
   MensagemDoDiscord,
 } from "../tipos";
+import { emojiParaDiscord } from "./emoji";
 import { usuarioParaDiscord } from "./usuario";
 
 /**
@@ -90,14 +91,15 @@ function anexoParaDiscord(a: LinhaDeAnexo): JsonDoDiscord {
 /**
  * `Reaction` → reação do Discord.
  *
- * `emoji.id` é sempre null (emoji unicode). Emoji personalizado nosso é um
- * nome, não um snowflake de emoji do Discord — a tradução dele é F5, junto com
- * `MESSAGE_REACTION_ADD`.
+ * O `emoji` sai pela tradução única de `traducao/emoji.ts`: unicode com
+ * `id: null`, personalizado com o **snowflake** e o `animated` da linha de
+ * `CustomEmoji`. Antes da F5 saía sempre `{id: null, name: <token cru>}`, o
+ * que punha `<:festa:cm1x…>` no nome de todo emoji de servidor.
  */
 function reacaoParaDiscord(r: LinhaDeReacao): JsonDoDiscord {
   return {
     count: r.count,
     me: r.euReagi,
-    emoji: { id: null, name: r.emoji },
+    emoji: emojiParaDiscord(r.emoji, r.personalizado),
   };
 }
