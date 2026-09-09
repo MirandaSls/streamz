@@ -42,7 +42,11 @@ export default function ReplyBar({
   if (!alvo || alvo.channelId !== channelId || alvo.threadId !== threadId) return null;
 
   return (
-    <div className="mx-4 -mb-2 flex h-12 items-center gap-2 rounded-t-lg bg-panel px-4 pb-2 text-xs text-txt-muted">
+    /* `celular:mx-3`: a barra tem que nascer alinhada com a cápsula do
+       composer, que no telefone usa `px-3` — com o `mx-4` do desktop ela ficava
+       4px para dentro de cada lado, e a diferença aparece porque as duas se
+       tocam. */
+    <div className="mx-4 celular:mx-3 -mb-2 flex h-12 items-center gap-2 rounded-t-lg bg-panel px-4 celular:px-3 pb-2 text-xs text-txt-muted">
       <span className="min-w-0 truncate">
         Respondendo a{" "}
         <span style={cor ? { color: cor } : undefined} className="font-medium text-txt-primary">
@@ -53,7 +57,11 @@ export default function ReplyBar({
         type="button"
         onClick={toggleReplyMention}
         aria-pressed={mention}
-        className={`ml-auto grid h-5 shrink-0 place-items-center rounded-[3px] px-1.5 text-[11px] font-bold uppercase leading-none transition ${
+        /* No celular o alvo vai a 44 de altura sem engordar a pílula: o
+           desenho continua o de 20px do Discord e quem cresce é a área de
+           toque (a mesma regra do `BotaoDeToque` de `components/mobile/
+           pecas.tsx`). Medido antes: 67×19. */
+        className={`ml-auto grid h-5 celular:h-[44px] shrink-0 place-items-center rounded-[3px] px-1.5 celular:px-3 text-[11px] font-bold uppercase leading-none transition ${
           mention
             ? "bg-accent text-accent-ink hover:bg-accent-hover"
             : "text-txt-muted hover:text-txt-primary"
@@ -65,7 +73,10 @@ export default function ReplyBar({
         type="button"
         onClick={cancelReply}
         aria-label="Cancelar resposta"
-        className="grid h-6 w-6 shrink-0 place-items-center rounded-[3px] text-txt-muted transition hover:bg-hov hover:text-txt-primary"
+        /* 23×23 no telefone, medido — e este × é o único jeito de desistir de
+           uma resposta com o dedo (o Esc do teclado externo não conta). O
+           glifo continua 16; cresce a área. */
+        className="grid h-6 w-6 celular:h-[44px] celular:w-[44px] shrink-0 place-items-center rounded-[3px] text-txt-muted transition hover:bg-hov hover:text-txt-primary"
       >
         <X size={16} />
       </button>
