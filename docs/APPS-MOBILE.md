@@ -70,6 +70,19 @@ Isso significa que **o app Android inteiro pode ser testado antes de o usuário
 decidir se quer pagar os US$ 25 da Play Store** — e a Play Store, se vier, é só
 distribuição.
 
+O Bloco 2 já gerou os dois pacotes neste servidor, e estes números são medidos,
+não estimados:
+
+| | |
+|---|---|
+| `.apk` universal | 55 244 528 bytes |
+| `.aab` (o formato da Play) | 23 869 802 bytes |
+| `apksigner verify` | `Verifies` (esquema v2) |
+| `versionCode` da versão 1.1.0 | 1001000 |
+
+O `.apk` é o dobro do `.aab` porque leva as bibliotecas nativas de todas as
+ABIs; a Play entrega só a do aparelho.
+
 ### iOS — nada
 
 Não há como rodar o app de iPhone sem a conta paga. Nem parcialmente:
@@ -337,6 +350,22 @@ Sem ela, **toda** submissão para no formulário de conformidade de exportação
 app só usa HTTPS/WSS e a criptografia do próprio sistema, que é a isenção
 padrão.
 
+### O Rust do build tem piso 1.85, e os dois pipelines travam nisso
+
+A árvore de dependências dos alvos móveis puxa o `getrandom 0.4`, que é
+`edition2024`, e a **edição 2024 só existe a partir do Rust 1.85**. Com um
+toolchain mais velho o build morre no meio do `cargo`, com
+`feature "edition2024" is required` — uma mensagem que não fala em versão de
+toolchain e custa uma hora até alguém ligar uma coisa na outra.
+
+Isto **não é teoria**: derrubou o build de Android do Bloco 2 com o Rust 1.83,
+neste servidor. O iOS compartilha a mesma árvore de crates, então bateria no
+mesmo muro. Por isso `codemagic.yaml` e `.github/workflows/ios.yml` fazem
+`rustup toolchain install stable` + `rustup default stable` — a versão que a
+imagem alugada traz não é escolha nossa — e logo depois **comparam a versão
+com 1.85 e derrubam o build na hora** se for menor. A comparação é em `awk`
+porque `sort -V` não é confiável no `sort` BSD do macOS.
+
 ### Os ícones foram refeitos
 
 Os 18 PNGs de `apps/desktop/src-tauri/icons/ios/` estavam completos em tamanho
@@ -514,7 +543,8 @@ repetir nem descer:
 5. **`versionCode` do Android** — inteiro. A Play recusa um `versionCode` já
    publicado. Pelo `apps/desktop/CONTRATO-MOBILE.md` §3 ele é **derivado** da
    versão semântica (`major*1000000 + minor*1000 + patch`), então sobe sozinho
-   com o bump — desde que a versão semântica nunca desça.
+   com o bump — desde que a versão semântica nunca desça. Confirmado no build
+   do Bloco 2: a versão 1.1.0 saiu com `versionCode` **1001000**.
 6. **`bundleVersion` do iOS** — `bundle.iOS.bundleVersion` no
    `tauri.ios.conf.json`, que vira o `CFBundleVersion`. É o "(3)" do
    `1.2.0 (3)` do TestFlight. **Dois uploads com o mesmo par

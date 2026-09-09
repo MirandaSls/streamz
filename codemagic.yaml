@@ -76,11 +76,40 @@ workflows:
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
           fi
           source "$HOME/.cargo/env"
+          # O piso de 1.85 NÃO é firula, e quem "simplificar" isto perde uma
+          # hora: a árvore de dependências dos alvos móveis puxa o
+          # `getrandom 0.4`, que é `edition2024`, e a edição 2024 só existe a
+          # partir do Rust 1.85. Com um toolchain mais velho o build morre no
+          # meio da compilação com "feature `edition2024` is required" — foi o
+          # que aconteceu no build de Android (Bloco 2) com o 1.83. O iOS
+          # compartilha a mesma árvore de crates, então bate no mesmo muro.
+          # A imagem do Codemagic já vem com rustup, e a versão que ela traz
+          # não é escolha nossa: por isso instalar e fixar o `stable` aqui.
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add aarch64-apple-ios
           # `aarch64-apple-ios` é o alvo do aparelho — o único que o .ipa usa.
           # `aarch64-apple-ios-sim` só serviria para `tauri ios dev` no
           # simulador, que este workflow não faz.
-          rustup target add aarch64-apple-ios
           rustc --version && cargo --version
+          # Trava explícita. Sem ela o erro aparece 15 min depois, no meio do
+          # cargo, com uma mensagem que não fala em versão de toolchain.
+          # `sort -V` não é confiável no BSD sort do macOS, daí o awk.
+          MINIMO=1.85.0
+          VERSAO=$(rustc --version | awk '{print $2}' | cut -d- -f1)
+          printf '%s %s\n' "$MINIMO" "$VERSAO" | awk '{
+            split($1, m, "."); split($2, v, ".");
+            for (i = 1; i <= 3; i++) {
+              if (v[i] + 0 > m[i] + 0) exit 0;
+              if (v[i] + 0 < m[i] + 0) exit 1;
+            }
+            exit 0 }' || {
+              echo "ERRO: rustc $VERSAO é anterior ao mínimo $MINIMO." >&2
+              echo "A edição 2024 (getrandom 0.4, na árvore dos alvos móveis)" >&2
+              echo "exige Rust >= 1.85. Atualize o toolchain." >&2
+              exit 1
+            }
+          echo "ok: rustc $VERSAO >= $MINIMO"
 
       - name: Dependências do monorepo (pnpm)
         script: |

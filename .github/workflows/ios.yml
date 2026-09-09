@@ -76,8 +76,30 @@ jobs:
       - name: Rust com o alvo do iPhone
         run: |
           set -euo pipefail
+          # Piso de 1.85 pelo mesmo motivo do `codemagic.yaml`: a árvore de
+          # dependências dos alvos móveis puxa o `getrandom 0.4`, que é
+          # `edition2024`, e a edição 2024 só existe a partir do Rust 1.85.
+          # Com toolchain mais velho o build morre no meio do cargo com
+          # "feature `edition2024` is required" — foi o que derrubou o build
+          # de Android (Bloco 2) com o 1.83. A versão que o runner do GitHub
+          # traz não é escolha nossa, então instalamos e fixamos o stable.
+          rustup toolchain install stable --profile minimal
+          rustup default stable
           rustup target add aarch64-apple-ios
           rustc --version
+          MINIMO=1.85.0
+          VERSAO=$(rustc --version | awk '{print $2}' | cut -d- -f1)
+          printf '%s %s\n' "$MINIMO" "$VERSAO" | awk '{
+            split($1, m, "."); split($2, v, ".");
+            for (i = 1; i <= 3; i++) {
+              if (v[i] + 0 > m[i] + 0) exit 0;
+              if (v[i] + 0 < m[i] + 0) exit 1;
+            }
+            exit 0 }' || {
+              echo "ERRO: rustc $VERSAO é anterior ao mínimo $MINIMO." >&2
+              exit 1
+            }
+          echo "ok: rustc $VERSAO >= $MINIMO"
 
       - name: Cache do cargo
         uses: actions/cache@v4
