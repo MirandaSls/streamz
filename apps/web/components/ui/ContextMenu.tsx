@@ -222,11 +222,22 @@ function Painel({
    * 400ms é a folga entre os 450ms do toque longo e um segundo toque de
    * verdade. Vale só na folha: no desktop o menu nasce do `mouseup` do botão
    * direito, e não há dedo em cena.
+   *
+   * **O carimbo é renovado a cada menu, e não só na montagem.** `openContextMenu`
+   * *troca* o menu da store em vez de passar por `null` (ver `stores/ui.ts`), e
+   * um item que abre outro menu faz `onClose()` seguido de `openContextMenu()`
+   * no mesmo manipulador — o React junta os dois numa renderização só, o
+   * `Painel` não desmonta e o `useRef` guardaria a hora do menu *anterior*. Com
+   * o carimbo velho a carência já teria vencido e a folha nova nasceria
+   * desprotegida: era o toque que atravessa de volta, pelo caminho do kebab do
+   * cartão de perfil. Renovar no efeito que já mede a posição custa uma linha e
+   * vale para os dois casos, o de montar e o de reaproveitar.
    */
   const nascidaEm = useRef(Date.now());
   const cedoDemais = () => folha && Date.now() - nascidaEm.current < 400;
 
   useLayoutEffect(() => {
+    nascidaEm.current = Date.now();
     const h = ref.current?.offsetHeight ?? 0;
     setPos(colocar(x, y, largura, h, alternativoX));
   }, [x, y, largura, alternativoX, items]);

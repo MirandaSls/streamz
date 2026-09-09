@@ -18,6 +18,7 @@ import ProfilePopoverHost from "@/components/ui/ProfilePopover";
 import TelaDeAbertura from "@/components/ui/TelaDeAbertura";
 import Toasts from "@/components/ui/Toasts";
 import VoiceLayer from "@/components/voice/VoiceLayer";
+import { haCamadaNoCelular } from "@/hooks/useVoltarNoCelular";
 import { destravarSons } from "@/lib/ringtone";
 import { useChannels } from "@/stores/channels";
 import { useDMs } from "@/stores/dms";
@@ -248,15 +249,32 @@ export default function ShellMobile() {
  * app de desktop também; inventar URLs para as telas do celular mudaria o
  * roteamento dos dois.
  *
- * **Com modal aberto, esta pilha não se mexe.** O modal tem a própria sentinela
- * (`hooks/useVoltarNoCelular`), e o `popstate` é um evento só: a ordem em que os
- * dois ouvintes rodam não é garantida, então sem esta guarda um "voltar" dentro
- * das configurações fechava a caixa **e** a conversa atrás dela.
+ * **Com qualquer camada por cima, esta pilha não se mexe.** A camada tem a
+ * própria sentinela (`hooks/useVoltarNoCelular`), e o `popstate` é um evento
+ * só: sem esta guarda um "voltar" dentro das configurações fechava a caixa
+ * **e** a conversa atrás dela.
+ *
+ * São **duas** perguntas porque são duas populações diferentes, e nenhuma
+ * contém a outra:
+ *
+ * - `useUI.modals` é o que passa pelo `ModalHost` — configurações, confirmação,
+ *   visualizador de imagem.
+ * - `haCamadaNoCelular()` é o que sobe por portal sem entrar na store: a folha
+ *   de emoji, o cartão de perfil, o painel de sons, a folha do menu de
+ *   contexto, o popover ancorado.
+ *
+ * A segunda foi acrescentada depois de medir: a folha de emoji mora no
+ * `Composer`, ou seja **dentro** da tela de canal. Com só a primeira guarda, o
+ * ouvinte daqui (que é o primeiro a rodar) desfazia a tela, o React descarregava
+ * o `Composer` junto e a folha sumia antes de o ouvinte da camada rodar — aí não
+ * havia mais camada nem instantâneo para repor a tela. Um "voltar" fechava a
+ * folha **e** saía do canal.
  */
 function useVoltarDoAndroid(profundidadeAtual: number) {
   useEffect(() => {
     const aoVoltar = () => {
       if (useUI.getState().modals.length > 0) return;
+      if (haCamadaNoCelular()) return;
       sentinela = false;
       useMobile.getState().voltar();
     };
