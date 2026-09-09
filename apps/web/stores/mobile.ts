@@ -40,7 +40,24 @@ export type TelaMobile =
   /** conversa direta ou grupo. */
   | "conversa"
   /** página de amigos. */
-  | "amigos";
+  | "amigos"
+  /**
+   * "Descobrir aplicativos" (── j-bots · F4 ──).
+   *
+   * No desktop o diretório abre **por cima da coluna 3**, com o rail e a coluna
+   * de canais intactos. Num telefone não existe coluna ao lado de nada, então
+   * ele entra como mais uma tela da pilha — o mesmo caminho da página de
+   * amigos, que no desktop também é um pedaço da coluna 3. Quem empilha é o
+   * `ShellMobile`, ouvindo o `data-apps-button` da rail por delegação de
+   * clique.
+   *
+   * **O App Directory nativo no celular não existe no Discord** — eles o
+   * oferecem no desktop, no navegador e no site deles. Não há captura a copiar,
+   * e por isso esta tela é desenhada no vocabulário do nosso próprio leiaute
+   * móvel (`CabecalhoMobile` de 56, `TelaEmpilhada`), e não numa referência
+   * inventada. Registrado no PR.
+   */
+  | "aplicativos";
 
 /** Folha inferior aberta (o equivalente móvel de um popover ancorado). */
 export type FolhaMobile =

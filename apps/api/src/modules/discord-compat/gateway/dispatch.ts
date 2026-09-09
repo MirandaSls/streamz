@@ -49,6 +49,16 @@ import { estadoDeVozParaDiscord } from "./voz";
  * | `GUILD_ROLE_CREATE/UPDATE/DELETE` | `role.created/updated/deleted` |
  * | `GUILD_MEMBER_ADD/REMOVE/UPDATE` | `member.joined/left/updated` |
  *
+ * E da F4, pelo **mesmo** gancho (nenhum evento interno novo):
+ *
+ * | Dispatch | Fonte |
+ * |---|---|
+ * | `GUILD_CREATE` | `member.joined` **do próprio usuário-bot da sessão** |
+ * | `GUILD_DELETE` | `member.left` idem |
+ *
+ * É assim que "instalar o app no servidor" chega ao bot conectado sem que
+ * `modules/applications/` importe uma linha daqui — ver `entrouNoServidor`.
+ *
  * E os da F5 (reações granulares):
  *
  * | Dispatch | Fonte |
@@ -654,7 +664,14 @@ export class PonteDeEventos {
       cadeia(payload, "userId") ?? cadeia(objeto(objeto(payload?.["member"])?.["user"]), "id");
     if (!servidorId || !usuarioId) return;
 
+    // F4: quem entrou é o **próprio bot** de uma sessão viva? Então o que ele
+    // precisa não é um `GUILD_MEMBER_ADD` sobre si mesmo — é o servidor inteiro.
+    // As sessões dele saem do fan-out comum logo abaixo.
+    const proprias =
+      dispatch === "GUILD_MEMBER_ADD" ? await this.entrouNoServidor(servidorId, usuarioId) : false;
+
     const bots = await this.botsNoServidor(servidorId, INTENT.GUILD_MEMBERS);
+    if (proprias) bots.delete(usuarioId);
     if (bots.size === 0) return;
 
     const linha = await this.dados.membroDoServidor(servidorId, usuarioId);
@@ -677,7 +694,14 @@ export class PonteDeEventos {
     const usuarioId = cadeia(payload, "userId");
     if (!servidorId || !usuarioId) return;
 
+    // F4: o espelho do `entrouNoServidor`. Quem saiu foi o próprio bot de uma
+    // sessão viva → `GUILD_DELETE`, e não um `GUILD_MEMBER_REMOVE` sobre si
+    // mesmo. Tem de vir **antes** do `botsNoServidor`: a linha de `GuildMember`
+    // já não existe, então aquele filtro não devolveria esta sessão nunca.
+    const proprias = await this.saiuDoServidor(servidorId, usuarioId);
+
     const bots = await this.botsNoServidor(servidorId, INTENT.GUILD_MEMBERS);
+    if (proprias) bots.delete(usuarioId);
     if (bots.size === 0) return;
 
     // O `User` continua existindo — quem saiu foi o `GuildMember` —, então o
@@ -693,6 +717,94 @@ export class PonteDeEventos {
     for (const sessoes of bots.values()) {
       for (const sessao of sessoes) sessao.despachar("GUILD_MEMBER_REMOVE", evento);
     }
+  }
+
+  // ── o bot entrou / saiu de um servidor (F4) ────────────────
+
+  /**
+   * O bot foi **instalado** num servidor: manda o `GUILD_CREATE` completo.
+   *
+   * É o que faz o `guildCreate` do discord.js disparar e o servidor aparecer no
+   * `client.guilds` sem reconectar — sem isto, um bot instalado pela tela só
+   * enxergaria o servidor no próximo IDENTIFY, e um `!ping` no canal chegaria a
+   * uma sessão que não sabe que o canal existe.
+   *
+   * ## Por que aqui, e não numa chamada de `modules/applications/`
+   *
+   * O §3.4 do `CONTRATO-F4.md` é explícito: **pelo gancho que já existe**. A
+   * ponte já ouve `member.joined`; a regra nova é só "quando o membro é o
+   * usuário-bot de uma sessão viva, o dispatch é outro". Assim
+   * `modules/applications/` não importa nada de `discord-compat/`, o
+   * acoplamento entre os dois fica em zero, e a regra vale de graça para o bot
+   * que entra por **qualquer** caminho — a instalação da F4, um convite, o
+   * `create` direto de `GuildMember` que a semente de teste da F1 faz.
+   *
+   * ## O que este método **não** filtra, de propósito
+   *
+   * Nem intent nem `botsNoServidor`:
+   *
+   * - `GUILD_CREATE` é do intent `GUILDS`, e não de `GUILD_MEMBERS` — que no
+   *   Discord é **privilegiado** e a maioria dos bots não pede. Filtrar pelo
+   *   intent do fan-out de membro deixaria justamente o bot comum (o
+   *   `IntentsBitField.Flags.Guilds` do `prova-discordjs.mjs`) sem saber que
+   *   entrou. Na prática o `GUILDS` também não é exigido: um bot que abriu
+   *   sessão e acabou de entrar num servidor precisa saber disso para
+   *   responder, e o Discord manda o `GUILD_CREATE` para a sessão em qualquer
+   *   caso.
+   * - `botsNoServidor` é redundante aqui: o membro **é** o bot, e a linha
+   *   acabou de nascer.
+   *
+   * Devolve `true` quando havia sessão viva — quem chama usa isso para tirar
+   * este bot do fan-out comum de membro.
+   */
+  private async entrouNoServidor(servidorId: string, usuarioId: string): Promise<boolean> {
+    const sessoes = this.registro.porBot(usuarioId);
+    if (sessoes.length === 0) return false;
+
+    let payload: JsonDoDiscord;
+    try {
+      // uma montagem por bot, e não por conexão: o payload é o mesmo nas duas
+      // pontas (é a mesma economia do `sessoesPorBot`)
+      payload = await this.montarGuildCreate(servidorId, usuarioId);
+    } catch (erro) {
+      // Um `GUILD_CREATE` que não monta não pode virar um `GUILD_MEMBER_ADD`
+      // sobre si mesmo: a lib guardaria um membro de um servidor que ela não
+      // conhece. Melhor evento nenhum, e o log alto.
+      this.logger.error(
+        `GUILD_CREATE de ${servidorId} para o bot ${usuarioId} falhou: ${(erro as Error).message}`,
+      );
+      return true;
+    }
+    for (const sessao of sessoes) sessao.despachar("GUILD_CREATE", payload);
+    return true;
+  }
+
+  /**
+   * O bot foi **removido** de um servidor: `GUILD_DELETE`.
+   *
+   * `unavailable: false` é o que diz "você foi removido" em vez de "o servidor
+   * caiu": com `unavailable: true` o discord.js marca o servidor como
+   * indisponível e **espera** ele voltar, mantendo tudo no cache; com `false`
+   * ele dispara `guildDelete` e limpa. É a diferença entre o bot achar que está
+   * num servidor de onde já saiu e o bot saber que saiu.
+   *
+   * O snowflake vem da memória da ponte, que o aprendeu no `GUILD_CREATE` —
+   * e do `IdsService` como segunda tentativa. Ao contrário do cargo e do canal,
+   * aqui a linha do `Guild` **continua existindo** (quem saiu foi o membro), e
+   * por isso a segunda tentativa quase sempre resolve.
+   */
+  private async saiuDoServidor(servidorId: string, usuarioId: string): Promise<boolean> {
+    const sessoes = this.registro.porBot(usuarioId);
+    if (sessoes.length === 0) return false;
+
+    const servidorSnowflake = await this.snowflakeDoServidor(servidorId);
+    if (servidorSnowflake === null) {
+      this.logger.debug(`GUILD_DELETE de ${servidorId} sem snowflake recuperável`);
+      return true;
+    }
+    const evento: JsonDoDiscord = { id: String(servidorSnowflake), unavailable: false };
+    for (const sessao of sessoes) sessao.despachar("GUILD_DELETE", evento);
+    return true;
   }
 
   // ── voz (F2) ───────────────────────────────────────────────

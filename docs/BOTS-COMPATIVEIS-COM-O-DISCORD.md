@@ -1553,6 +1553,13 @@ model User {
 Separadas de propósito: a 1 é a arriscada (backfill) e roda sozinha; as outras
 são aditivas puras e voltam com um `DROP`.
 
+**A ordem real trocou.** A F3 entrou antes da F4, então
+`20260908140000_bots_comandos` já estava na `main` quando a instalação foi
+escrita, e a `..._bots_instalacao` ficou com carimbo posterior. Como as duas são
+aditivas puras e não se tocam, a troca não muda nada além do nome — mas quem ler
+esta tabela procurando a ordem no diretório de migrations não vai achar 3 antes
+de 4.
+
 `packages/shared/src/aplicativos.ts` (novo) leva os tipos do contrato:
 `AppView`, `AppDetalhe`, `AppCriado`, `TokenCriado` e o schema zod de criação
 na F0; `AppInstalacao` e `ComandoDeApp` entram junto com as tabelas deles
@@ -1569,27 +1576,81 @@ consomem, lembre do `pnpm --filter @streamz/shared build` antes do typecheck.
 ### Descobrir aplicativos
 
 O "Descobrir servidores" foi **removido de propósito** e continua removido — o
-comentário em `GuildRail.tsx:407` diz que este é um produto onde se entra por
-convite. Aplicativos são outra coisa: um catálogo do que roda **nesta**
-instância. Então: **vista própria, não uma aba da descoberta de servidores.**
+comentário em `components/layout/GuildRail.tsx` (hoje nas linhas 469-472) diz
+que este é um produto onde se entra por convite. Aplicativos são outra coisa:
+um catálogo do que roda **nesta** instância. Então: **vista própria, não uma
+aba da descoberta de servidores.**
 
-- **Entrada**: um `RailItem` fixo logo abaixo da divisória da rail, ícone de
-  robô/peça, tooltip "Descobrir aplicativos". Um estado novo na store de UI
-  (`vista: "apps"`), como Amigos já faz — não é rota (o app é uma tela só).
-- **Tela**: grade de cards (ícone 80, nome, descrição de uma linha, botão
+- **Entrada**: um `RailItem` fixo no fim da rail, **abaixo do `+`**, com o
+  ícone `Apps` (as quatro formas — é o glifo do App Directory do Discord, e já
+  estava em `icones.tsx`) e tooltip "Descobrir aplicativos".
+
+  **Correção da F4:** este § dizia "ícone de robô/peça" e "um estado novo na
+  store de UI (`vista: "apps"`)". Não existe `vista` na store de UI — o campo é
+  `view: "guild" | "dm"`, e a página Amigos é um booleano em
+  `stores/friends.ts`. O que a frase quis dizer é o **padrão do Amigos**, e é
+  ele que o diretório copia: um `aberto: boolean` em `stores/aplicativos.ts`. O
+  robô (`Bot`) ficou na aba do portal, que é onde ele significa "os meus
+  aplicativos". E nada de bússola: o `explore.svg` do acervo não é uma — está
+  escrito no próprio `icones.tsx`, e o §3.3 do processo registra que isso já
+  passou por typecheck e teste uma vez.
+- **Tela**: grade de cards (ícone 48, nome, descrição de **duas** linhas, botão
   "Adicionar ao servidor"), busca no topo, exatamente o padrão do
   `DiscoverableGuild`. `GET /api/applications/publicas?q=`.
-- **"Adicionar ao servidor"**: modal com (i) `<select>` dos servidores em que
-  eu tenho `MANAGE_GUILD` — a lista sai de `useCan`, e a API repete a checagem
-  com `assertCanModerate(actor, guild, Permission.MANAGE_GUILD)`; (ii) a lista de
-  permissões com checkbox, pré-marcada com `permissoesPadrao`, usando o
-  `PERMISSION_INFO`/`PERMISSION_ORDER` que a tela de cargos já usa;
-  (iii) "Autorizar". Efeito: `POST /api/applications/:id/instalar {guildId,
-  permissions}` → cria `GuildApplication`, cria um `Role` gerenciado com o nome
-  da app e aquelas permissões, cria o `GuildMember` do usuário-bot com esse
-  cargo, emite `member.joined` e `role.created`, entra nas salas
-  (`joinGuildRoom` + `joinChannelRooms`) e — se o bot estiver conectado —
-  manda `GUILD_CREATE` na sessão dele.
+
+  **Correção da F4, medida na captura.** Este § pedia "ícone 80" e "descrição de
+  uma linha". O card do Discord (`docs/Reference/apps/diretorio-grade.png`,
+  varrido com Pillow) mede **244 × 164** com o ícone de **48** *à esquerda*, o
+  nome ao lado e a descrição em **duas** linhas — não um ícone grande empilhado
+  em cima do nome. Com 80 empilhado não sobra linha para a descrição que este
+  mesmo parágrafo pede.
+
+  A altura que entregamos é **204**, e não 164, por uma escolha nossa: no
+  Discord o card **não tem botão** — o "Add to Server" mora só na página do app.
+  Este § pede o botão no card, e ele custa 32 de altura mais 8 de folga. Todo o
+  resto (largura, ícone, intervalo, raio, padding) é o número medido.
+
+  **Cuidado do Nest:** `@Get("publicas")` tem que ser declarado **antes** de
+  `@Get(":id")`. O Nest casa na ordem de declaração; ao contrário, `publicas`
+  vira um id e o diretório inteiro responde 404.
+- **"Adicionar ao servidor"**: modal (folha no celular) com (i) os servidores em
+  que eu tenho `MANAGE_GUILD` — a lista sai de `useCan`, e a API repete a
+  checagem com `assertCanModerate(actor, guild, Permission.MANAGE_GUILD)`;
+  (ii) a lista de permissões com checkbox, pré-marcada com `permissoesPadrao`,
+  agrupada pelo campo `group` de `PERMISSION_INFO` na ordem de
+  `PERMISSION_ORDER` — o mesmo que o `CargosTab` usa, e **não** o
+  `secoesDePermissoes(escopo)`, que é do editor de overrides de canal (um cargo
+  de servidor não tem escopo de canal); (iii) "Autorizar".
+
+  **A rota mudou na F4:** o `POST /api/applications/:id/instalar {guildId,
+  permissions}` que este § previa virou a família de três verbos
+  `GET`/`POST`/`DELETE /api/guilds/:id/aplicativos`, com o corpo
+  `{applicationId, permissions}`. Motivo: a aba "Aplicativos" das configurações
+  do servidor precisa **listar** e **remover**, e as três operações são sobre o
+  mesmo recurso — o app instalado *naquele* servidor. Uma família numa rota só,
+  em vez de um `instalar` e duas rotas com outra grafia.
+
+  Efeito: cria `GuildApplication`, cria um `Role` gerenciado com o nome da app e
+  aquelas permissões, cria o `GuildMember` do usuário-bot com esse cargo, emite
+  `member.joined` e `role.created`, entra nas salas (`joinGuildRoom` +
+  `joinChannelRooms`) e — se o bot estiver conectado — manda `GUILD_CREATE` na
+  sessão dele. O `DELETE` desfaz tudo e manda `GUILD_DELETE`.
+- **A trava que este § não tinha, e que a F4 acrescentou:** quem instala **não
+  pode conceder ao bot o que ele mesmo não tem**. Sem isso, `MANAGE_GUILD` vira
+  `ADMINISTRATOR` de graça — instala-se um bot que se controla com um cargo de
+  administrador, e pronto. O `RolesService.validarPermissoes(actorId, guildId,
+  permissions)` já faz exatamente essa checagem, e é o que a instalação chama.
+  Na UI, a permissão que quem instala não tem aparece **desabilitada**, não
+  escondida, como o `EditorDePermissoes` já faz nos overrides de canal.
+- **Como o `GUILD_CREATE`/`GUILD_DELETE` sai, sem acoplar os módulos:** pelo
+  gancho que já existe. A `PonteDeEventos` (`discord-compat/gateway/dispatch.ts`)
+  ouve `RealtimeService.onEvent` e já traduz `member.joined`/`member.left`. A
+  regra acrescentada é: quando o membro que entrou ou saiu **é o usuário-bot de
+  uma sessão viva**, aquela sessão recebe `GUILD_CREATE` (por
+  `montarGuildCreate`, que já era público) ou `GUILD_DELETE` **em vez** do
+  `GUILD_MEMBER_ADD`/`REMOVE` sobre si mesma. Assim `modules/applications/` não
+  importa nada de `discord-compat/`, e a regra vale também para o bot que entra
+  por outro caminho.
 
 ### Portal do desenvolvedor
 
@@ -1605,18 +1666,33 @@ Telas:
    usuário-bot (`isBot: true`, username derivado, sem senha utilizável) e o
    primeiro `BotToken`, **mostrado uma vez** num painel de "copie agora; não
    mostramos de novo" com botão de copiar. Fechou, perdeu.
-3. **Editar** — nome, descrição, ícone (mesma rota de upload do avatar,
-   `UPLOAD_THROTTLE`), permissões sugeridas, e o interruptor
+3. **Editar** — nome, descrição, ícone, permissões sugeridas, e o interruptor
    **"Publicar no diretório"**.
+   **Correção da F4:** este § dizia "mesma rota de upload do avatar". O molde
+   certo é o **ícone de servidor** (`guilds.service.ts` `updateIcon`), não o
+   avatar: é o que já tem dono e checagem de permissão. E a `Application` só
+   guarda `iconKey` — não há coluna `iconUrl`; a URL é derivada na hora, como o
+   §10 previu.
 4. **Token** — "Regenerar" com confirmação dupla ("o bot atual vai parar de
    funcionar na hora"), mostra o novo uma vez, revoga o anterior.
 5. **Servidores** — onde está instalado, com "Remover".
 
 **Nunca**, em nenhuma tela ou log: o token inteiro depois da criação. A UI
-mostra `prefixo` (8 caracteres). O `StructuredLogger` da API precisa de um
-redator para `Authorization` — hoje ele não loga cabeçalho, mas a rota de
-criação vai devolver o token no corpo e um log de erro genérico poderia
-carregá-lo.
+mostra `prefixo` (8 caracteres).
+
+**Correção da F4: o risco não é o cabeçalho.** Este § pedia um redator de
+`Authorization` no `StructuredLogger`. Conferido em `common/logger.ts`: ele
+**não loga cabeçalho nenhum**, não há middleware de log de requisição e o único
+`@Catch` do repo (`discord-compat/erros.ts`) monta o corpo do erro do Discord e
+não o registra. O risco real é outro, e mora no `descreve()`: qualquer objeto
+passado a `logger.*` vira `JSON.stringify(valor)` **inteiro**, e o mesmo vale
+para os `extra`. Um `this.logger.error("falhou", { resposta })` num caminho
+futuro levaria o token em claro para o agregador. **Não há chamada assim hoje** —
+conferido nas rotas de criar e de regenerar, que devolvem o `TokenCriado` e não
+o logam. O conserto certo é uma lista de chaves a redigir dentro de
+`descreve()`/`limpar()`, em `common/logger.ts` — arquivo de todo mundo, e por
+isso deixado para um PR próprio, com teste, em vez de entrar no meio de uma fase
+de três lotes paralelos.
 
 ### O membro-bot na interface
 
@@ -1624,12 +1700,28 @@ carregá-lo.
 
 | Arquivo | Onde |
 |---|---|
-| `components/MemberList.tsx` | dentro de `renderMember`, no `<span>` das linhas 252-277, irmã dos selos de `OWNER`/`ADMIN`/castigo |
-| `components/MessageItem.tsx` | ao lado do nome do autor |
+| `components/MemberList.tsx` | dentro de `renderMember`, irmã dos selos de `OWNER`/`ADMIN`/castigo, no `<span className="flex … gap-1">` do nome |
+| `components/MessageItem.tsx` | ao lado do nome do autor — **três caminhos**: modo normal, modo compacto e a barra de resposta |
 | `components/ui/ProfilePopover.tsx`, `components/modals/UserProfileModal.tsx` | ao lado do nome |
-| `components/chat/DMMemberList.tsx`, `components/voice/VoiceGrid.tsx` | idem |
+| `components/chat/DMMemberList.tsx` | idem |
+| `components/voice/TileDeVoz.tsx` | ao lado do nome no tile — **corrigido na F4**: este § dizia `VoiceGrid.tsx`, mas o PR #170 extraiu o tile de participante, e o `VoiceGrid` não tem mais nenhum `displayNameOf` |
+| `components/voice/VoiceChannelMembers.tsx` | a **sétima**, achada na F4 ao fotografar o tile de voz: quem está na sala aparece também na coluna de canais, e era o único lugar com nome de bot sem a pílula |
 
-Uma `<TagDeBot />` em `components/ui/` para não repetir o estilo em seis lugares.
+Uma `<TagDeBot />` em `components/ui/` para não repetir o estilo em sete lugares.
+São **sete** superfícies (este § dizia seis; a lista de quem está na sala de voz,
+na coluna de canais, faltava), e mais edições do que superfícies, pelos três
+caminhos do `MessageItem`.
+
+**Antes de escrever JSX, confirme que o dado chega.** `toPublicUser` preenche
+`bot` a partir de `u.isBot ?? false`, e esse `?? false` quer dizer "a query não
+trouxe a coluna". As consultas internas usam `include: { user: true }` e trazem
+tudo, mas um `select:` que esqueça `isBot` faz a tag nunca aparecer, e nenhum
+teste pega.
+
+**A tag diz BOT, e é de propósito.** O Discord renomeou a pílula de **BOT** para
+**APP** em 2024. Ficamos com BOT — é o nome que este documento e a entrega da
+F4 usam, e trocar depois é uma linha.
+
 Regras de produto que caem de graça: bot não recebe pedido de amizade, não
 aparece na busca de usuários, não abre DM (F5, se pedirem).
 
@@ -1823,16 +1915,56 @@ medido, não previsão):
 
 | Lote | Arquivos |
 |---|---|
-| A | `components/settings/{tabs.tsx,AplicativosTab.tsx}`, `lib/i18n.ts`, `icones.tsx` |
-| B | `components/apps/{DiretorioDeApps,CardDeApp,AdicionarAoServidor}.tsx`, `GuildRail.tsx`, `stores/ui.ts` |
-| C | `components/ui/TagDeBot.tsx` + os 6 pontos de render do §11 |
+| A | `components/settings/{tabs.tsx,AplicativosTab.tsx}`, `lib/i18n.ts`, e o resto de `modules/applications/` (editar, apagar, ícone) |
+| B | `components/apps/{DiretorioDeApps,CardDeApp,AdicionarAoServidor}.tsx`, `GuildRail.tsx`, `stores/aplicativos.ts`, a migration, e o `GUILD_CREATE`/`GUILD_DELETE` no `dispatch.ts` |
+| C | `components/ui/TagDeBot.tsx` + os pontos de render do §11, e a aba "Aplicativos" das configurações do servidor |
 
 A e B tocam arquivos diferentes; C é mecânico e cabe num agente sozinho. O
 `GuildRail.tsx` é o único disputado — quem mexe nele avisa (§2.4 do processo).
 
+**O que a F4 aprendeu, e que vale para qualquer fase paralela daqui em diante:**
+três lotes editando os mesmos quatro arquivos compartilhados
+(`packages/shared/src/aplicativos.ts`, `lib/api.ts`, `icones.tsx` e o contrato)
+é conflito garantido. A saída foi o coordenador **escrever os quatro antes de
+lançar os lotes**, e proibir que qualquer um deles os estenda sozinho. O
+contrato ficou em `apps/web/components/apps/CONTRATO-F4.md`, no mesmo espírito
+do `CONTRATO-F1.md` da casca de compatibilidade. `stores/ui.ts` **não** entrou:
+o diretório copia o padrão do Amigos e mora em `stores/aplicativos.ts`.
+
 **Prova:** criar app, copiar token, apontar um bot, adicionar ao servidor,
-ver a tag BOT na lista de membros. E **prints**, porque §3.3 do processo:
-typecheck não pega tag torta.
+ver a tag BOT na lista de membros, e sem `MANAGE_GUILD` levar 403. E **prints**,
+no desktop **e no celular**, porque §3.3 do processo: typecheck não pega tag
+torta. O leiaute de celular entrou depois deste documento (PR #170) e tudo o que
+a F4 desenha existe nos dois leiautes.
+
+**Como ficou, na integração.** A prova roda por
+`apps/api/test/discord-compat/prova-f4-instalacao.mjs`, com semente em
+`semear-f4.mjs` e um bot **discord.js@14** de verdade, conectado **antes** da
+instalação e com os intents de um bot comum (`Guilds | GuildMessages |
+MessageContent` — **sem** o `GuildMembers`, que no Discord é privilegiado). São
+oito blocos: o diretório, o bot conectado e sem servidor, instalar → o
+`GUILD_CREATE` chegar **na sessão já aberta**, `!ping` → `pong` de volta pelo
+socket.io, o cargo gerenciado com **exatamente** as permissões escolhidas, o 403
+de quem não tem `MANAGE_GUILD` nas três rotas, remover → `GUILD_DELETE` com o
+cargo e o membro sumindo, e — o bloco que só a integração podia escrever —
+apagar o **aplicativo** pelo portal tirando o bot de cada servidor onde está.
+
+**Duas coisas que só a integração fecha, e por que elas não são detalhe.**
+
+1. **A junção A↔B.** Apagar um aplicativo tem de desfazer cada instalação
+   **antes** de apagar o usuário-bot. O `onDelete: Cascade` do banco já deixava
+   o banco consistente sozinho — o que ele não faz é o **evento**: sem o laço,
+   as telas abertas mostrariam o bot na lista de membros até alguém recarregar,
+   e um bot conectado nunca receberia o `GUILD_DELETE`. Cada lote via metade
+   disso e nenhum podia provar; é o caso geral de por que a integração é um
+   trabalho, e não um `git merge`.
+2. **A corrida da instalação.** `instalar` lê para decidir entre criar e
+   reautorizar, e só depois escreve; as duas coisas não são atômicas entre si.
+   Dois cliques em "Autorizar" ao mesmo tempo levavam um `P2002` cru — **500**
+   para quem clicou duas vezes rápido. O conserto é tentar e tratar a colisão
+   (o padrão que o `criarUsuarioBot` da F0 já usa), e não travar a tabela:
+   perder a corrida quer dizer que o app *está* instalado, e instalar o que já
+   está instalado é reautorizar.
 
 **Esforço:** 6–9 dias.
 

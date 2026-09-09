@@ -7,6 +7,11 @@ import type {
   AdminMessagesPage,
   AdminOverview,
   AdminUsersPage,
+  AppCriado,
+  AppDetalhe,
+  AppDoDiretorio,
+  AppEditarInput,
+  AppInstalacao,
   Attachment,
   AuthSession,
   AuthTokens,
@@ -82,7 +87,10 @@ import type {
   MfaAtivado,
   MfaSetup,
   MinhaConta,
+  PaginaDoDiretorio,
+  ServidorComOApp,
   SessaoView,
+  TokenCriado,
   UserStatus,
   VoiceMoveInput,
   VoiceStateEvent,
@@ -725,6 +733,58 @@ export const api = {
    */
   criarInteracao: (channelId: string, body: InteracaoCriarInput) =>
     request<InteracaoCriada>(`/channels/${channelId}/interactions`, json(body)),
+
+  // ── j-bots · F4 ── portal do desenvolvedor, diretório e instalação
+  //
+  // Este bloco inteiro foi escrito **pelo coordenador da F4, antes dos lotes**,
+  // para que A, B e C não editassem este arquivo em paralelo. É o espelho de
+  // `apps/web/components/apps/CONTRATO-F4.md`; quem precisar de uma rota que
+  // não está aqui pede ao coordenador.
+
+  /** Portal: os meus aplicativos. O token nunca vem aqui — só o prefixo. */
+  meusApps: () => request<AppDetalhe[]>("/applications"),
+  /** Cria o app, o usuário-bot e o primeiro token. **A única vez que o token existe.** */
+  criarApp: (name: string) => request<AppCriado>("/applications", json({ name })),
+  editarApp: (id: string, body: AppEditarInput) =>
+    request<AppDetalhe>(`/applications/${id}`, patch(body)),
+  apagarApp: (id: string) => request<void>(`/applications/${id}`, del()),
+  /** Regenera o token e revoga o anterior: o bot que roda com o velho cai na hora. */
+  regenerarTokenDoApp: (id: string) =>
+    request<TokenCriado>(`/applications/${id}/token`, { method: "POST" }),
+  atualizarIconeDoApp: (id: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<AppDetalhe>(`/applications/${id}/icone`, { method: "POST", body: form });
+  },
+  removerIconeDoApp: (id: string) => request<AppDetalhe>(`/applications/${id}/icone`, del()),
+  /** Portal, tela "Servidores": onde este app meu está instalado. */
+  servidoresDoApp: (id: string) => request<ServidorComOApp[]>(`/applications/${id}/servidores`),
+
+  /**
+   * O diretório: só os aplicativos com `publico: true`.
+   *
+   * A rota é `/applications/publicas` e **precisa ser declarada antes** de
+   * `GET /applications/:id` no controller, senão o Nest casa `publicas` como
+   * um id e devolve 404 para o diretório inteiro.
+   */
+  diretorioDeApps: (q?: string, cursor?: string) =>
+    request<PaginaDoDiretorio>(`/applications/publicas${query({ q, cursor })}`),
+  /** A página de um app no diretório. 404 se não for público e não for meu. */
+  appDoDiretorio: (id: string) => request<AppDoDiretorio>(`/applications/${id}`),
+
+  /** Os aplicativos instalados num servidor (aba "Aplicativos" — `MANAGE_GUILD`). */
+  appsDoServidor: (guildId: string) =>
+    request<AppInstalacao[]>(`/guilds/${guildId}/aplicativos`),
+  /**
+   * Instala o app: cria o cargo gerenciado, o membro-bot e o `GuildApplication`.
+   * `permissions` é o bitfield do **Streamz**, e a API recusa (403) o que quem
+   * instala não tem.
+   */
+  instalarApp: (guildId: string, applicationId: string, permissions: number) =>
+    request<AppInstalacao>(`/guilds/${guildId}/aplicativos`, json({ applicationId, permissions })),
+  /** Remove: o bot sai, o cargo some, o bot conectado recebe `GUILD_DELETE`. */
+  removerApp: (guildId: string, applicationId: string) =>
+    request<void>(`/guilds/${guildId}/aplicativos/${applicationId}`, del()),
 
   // descobrir servidores públicos
   discover: (q?: string) => request<DiscoverableGuild[]>(`/discover${query({ q })}`),
