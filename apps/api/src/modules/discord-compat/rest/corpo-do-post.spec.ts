@@ -9,6 +9,7 @@ import { IdsService } from "../ids.service";
 import { GuildsService } from "../../guilds/guilds.service";
 import { MessagesService } from "../../messages/messages.service";
 import { RealtimeService } from "../../realtime/realtime.service";
+import { ReacoesDeCompatService } from "../reacoes.service";
 import { corpoDeMensagemSchema } from "./corpos";
 import { MessagesCompatController } from "./messages.controller";
 
@@ -89,6 +90,9 @@ const emitToChannel = vi.fn();
     { provide: GuildsService, useValue: { assertCanViewChannel: async () => ({}) } },
     { provide: MessagesService, useValue: { create: criar } },
     { provide: RealtimeService, useValue: { emitToChannel } },
+    // F5: o controller resolve o emoji da reação por aqui. Este teste é do
+    // corpo do POST — nenhuma rota de reação passa por ele.
+    { provide: ReacoesDeCompatService, useValue: {} },
     {
       provide: DadosDeCompatService,
       useValue: { mensagemPorCuid: async () => ({ snowflake: 123n }) },

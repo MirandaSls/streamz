@@ -6,6 +6,7 @@ import { RealtimeService } from "../../realtime/realtime.service";
 import { VoiceService } from "../../voice/voice.service";
 import { DadosDeCompatService } from "../dados.service";
 import { IdsService } from "../ids.service";
+import { ReacoesDeCompatService } from "../reacoes.service";
 import { canalParaDiscord } from "../traducao/canal";
 import { cargoParaDiscord } from "../traducao/cargo";
 import { membroParaDiscord } from "../traducao/membro";
@@ -48,6 +49,13 @@ import { estadoDeVozParaDiscord } from "./voz";
  * | `GUILD_ROLE_CREATE/UPDATE/DELETE` | `role.created/updated/deleted` |
  * | `GUILD_MEMBER_ADD/REMOVE/UPDATE` | `member.joined/left/updated` |
  *
+ * E os da F5 (reações granulares):
+ *
+ * | Dispatch | Fonte |
+ * |---|---|
+ * | `MESSAGE_REACTION_ADD` / `_REMOVE` | `reaction.added` / `reaction.removed` |
+ * | `MESSAGE_REACTION_REMOVE_ALL` / `_REMOVE_EMOJI` | `reactions.cleared` (`emoji` null ou não) |
+ *
  * Três armadilhas:
  *
  * 1. **Filtre por intent** (`INTENT` em `../tipos`) e por acesso: uma sessão só
@@ -55,10 +63,17 @@ import { estadoDeVozParaDiscord } from "./voz";
  * 2. **Nunca mande de volta o que o próprio bot fez?** Não — o Discord *manda*.
  *    O bot recebe o `MESSAGE_CREATE` das mensagens dele mesmo, e as libs
  *    filtram por `message.author.bot`. Imitar o Discord aqui é o certo.
- * 3. **Reação é o ponto feio** (§7): hoje `reaction.add` resulta em
- *    `message.updated` com a mensagem inteira, sem `user_id`. `MESSAGE_REACTION_ADD`
- *    de verdade é F5, com um evento interno novo. Na F1, o que dá para fazer é
- *    o `MESSAGE_UPDATE` — e o PR deve **dizer isso**, em vez de fingir.
+ * 3. **Reação era o ponto feio, e deixou de ser** (§7). Na F1 `reaction.add`
+ *    resultava só em `message.updated` com a mensagem inteira, sem `user_id`,
+ *    e o bot recebia um `MESSAGE_UPDATE` — a lib atualizava o cache e **não**
+ *    disparava `messageReactionAdd`, então bot de "reaction roles" e de
+ *    votação não funcionava. A F5 pôs o evento interno fino que faltava
+ *    (`reaction.added`/`.removed`/`reactions.cleared`, em
+ *    `messages/eventos-de-reacao.ts`) e é ele que vira os quatro
+ *    `MESSAGE_REACTION_*`. O `message.updated` da reação **não chega mais
+ *    aqui** — ele sai por `emitToChannelSemOuvintes`, para o navegador só —,
+ *    de modo que `MESSAGE_UPDATE` voltou a querer dizer só uma coisa: a
+ *    mensagem foi editada.
  *
  * **Buraco conhecido, achado nesta branch e relatado no PR:** o `ChatGateway`
  * emite `message.new`, `message.updated`, `message.deleted` e `typing` direto
@@ -150,6 +165,8 @@ export class PonteDeEventos {
     // F2: o `voice_states` do `GUILD_CREATE` sai daqui — é dele que o bot de
     // música sabe quem já está no canal antes de o primeiro `voice.state` cair.
     private readonly voz: VoiceService,
+    // F5: quem resolve o emoji personalizado (token interno ↔ snowflake).
+    private readonly reacoes: ReacoesDeCompatService,
   ) {}
 
   /**
@@ -251,9 +268,9 @@ export class PonteDeEventos {
         case WS_EVENTS.MESSAGE_NEW:
           return await this.mensagem(dado, "MESSAGE_CREATE");
         case WS_EVENTS.MESSAGE_UPDATED:
-          // Inclui reação posta e tirada: hoje as duas viram `message.updated`
-          // com a mensagem inteira e **sem `user_id`**. O
-          // `MESSAGE_REACTION_ADD` de verdade é F5, com um evento interno novo.
+          // Só edição de verdade. O `message.updated` que a reação também
+          // dispara não passa por aqui: ele sai por
+          // `RealtimeService.emitToChannelSemOuvintes`, para o navegador só.
           return await this.mensagem(dado, "MESSAGE_UPDATE");
         case WS_EVENTS.MESSAGE_DELETED:
           return await this.mensagemApagada(dado);
@@ -279,6 +296,13 @@ export class PonteDeEventos {
           return await this.membroSaiu(dado);
         case WS_EVENTS.VOICE_STATE:
           return await this.estadoDeVoz(dado);
+        // ── F5: as reações granulares ──
+        case WS_EVENTS.REACTION_ADDED:
+          return await this.reacao(dado, "MESSAGE_REACTION_ADD");
+        case WS_EVENTS.REACTION_REMOVED:
+          return await this.reacao(dado, "MESSAGE_REACTION_REMOVE");
+        case WS_EVENTS.REACTIONS_CLEARED:
+          return await this.reacoesLimpas(dado);
         default:
           // Os outros eventos do Streamz não têm par (presença, banimento e
           // emoji são F5). Ignorar em silêncio é o certo: este ouvinte roda em
@@ -383,6 +407,135 @@ export class PonteDeEventos {
 
     for (const sessoes of bots.values()) {
       for (const sessao of sessoes) sessao.despachar("TYPING_START", evento);
+    }
+  }
+
+  // ── reações (F5) ───────────────────────────────────────────
+
+  /**
+   * `reaction.added` / `reaction.removed` → `MESSAGE_REACTION_ADD` / `_REMOVE`.
+   *
+   * O payload é o do Discord, campo por campo, porque é dele que vivem os bots
+   * de *reaction roles* e de votação:
+   *
+   * ```json
+   * { "user_id": "…", "channel_id": "…", "message_id": "…", "guild_id": "…",
+   *   "member": { … }, "emoji": { "id": null, "name": "👍", "animated": false } }
+   * ```
+   *
+   * Três detalhes que não são decorativos:
+   *
+   * 1. **`member` só no ADD**, e só em servidor — é o que o Discord manda, e é
+   *    o que faz `reaction.users`/`reaction.message.guild.members` já ter o
+   *    membro sem uma ida extra à REST. No REMOVE ele não vem (a pessoa pode
+   *    nem estar mais no servidor).
+   * 2. **O intent é o das reações**, não o das mensagens:
+   *    `GUILD_MESSAGE_REACTIONS` em canal de servidor,
+   *    `DIRECT_MESSAGE_REACTIONS` em conversa direta. Um bot que pediu só
+   *    `GUILD_MESSAGES` não recebe reação nenhuma — é exatamente assim no
+   *    Discord, e é a causa nº 1 de "meu bot não vê as reações".
+   * 3. **O emoji** sai pela tradução única (`traducao/emoji.ts`): unicode com
+   *    `id: null`, personalizado com o snowflake e o `animated`.
+   *
+   * O `MESSAGE_REACTION_ADD` do Discord ainda tem `message_author_id` e
+   * `burst`/`burst_colors` (as "super reações"). O primeiro é opcional e
+   * custaria uma leitura da mensagem por evento; as outras não existem aqui.
+   * Nenhuma lib depende dos três.
+   */
+  private async reacao(
+    dado: unknown,
+    dispatch: "MESSAGE_REACTION_ADD" | "MESSAGE_REACTION_REMOVE",
+  ): Promise<void> {
+    const payload = objeto(dado);
+    const mensagemId = cadeia(payload, "messageId");
+    const canalId = cadeia(payload, "channelId");
+    const usuarioId = cadeia(payload, "userId");
+    const emoji = cadeia(payload, "emoji");
+    if (!mensagemId || !canalId || !usuarioId || !emoji) return;
+
+    const servidorId = cadeia(payload, "guildId");
+    const bots = await this.botsComAcessoAoCanal(
+      canalId,
+      servidorId === null ? INTENT.DIRECT_MESSAGE_REACTIONS : INTENT.GUILD_MESSAGE_REACTIONS,
+    );
+    // ninguém pediu o intent: nem uma consulta a mais. Reação é frequente.
+    if (bots.size === 0) return;
+
+    const [mensagemSnowflake, canalSnowflake, usuarioSnowflake, emojiDoDiscord] = await Promise.all([
+      this.snowflakeDeMensagem(mensagemId),
+      this.snowflakeDeCanal(canalId),
+      this.ids.snowflakeDeUsuario(usuarioId),
+      this.reacoes.traduzirToken(emoji),
+    ]);
+    if (mensagemSnowflake === null || canalSnowflake === null || usuarioSnowflake === null) return;
+
+    const evento: JsonDoDiscord = {
+      user_id: String(usuarioSnowflake),
+      channel_id: String(canalSnowflake),
+      message_id: String(mensagemSnowflake),
+      emoji: emojiDoDiscord,
+    };
+
+    if (servidorId !== null) {
+      const servidorSnowflake = await this.snowflakeDoServidor(servidorId);
+      if (servidorSnowflake === null) return;
+      evento.guild_id = String(servidorSnowflake);
+      if (dispatch === "MESSAGE_REACTION_ADD") {
+        const membro = await this.dados.membroDoServidor(servidorId, usuarioId);
+        // `member` é opcional; sem ele o discord.js resolve pelo cache e o
+        // dispatch continua útil — melhor que engolir o evento inteiro
+        if (membro) evento.member = membroParaDiscord(membro, true);
+      }
+    }
+
+    for (const sessoes of bots.values()) {
+      for (const sessao of sessoes) sessao.despachar(dispatch, evento);
+    }
+  }
+
+  /**
+   * `reactions.cleared` → `MESSAGE_REACTION_REMOVE_ALL` / `_REMOVE_EMOJI`.
+   *
+   * Um evento interno só para os dois dispatches: `emoji: null` quer dizer
+   * "limparam tudo" e vira o `_REMOVE_ALL` (que não leva emoji nenhum);
+   * preenchido, vira o `_REMOVE_EMOJI` com o objeto do emoji. É o que a
+   * moderação dispara pelo `DELETE .../reactions` e
+   * `DELETE .../reactions/:emoji`.
+   */
+  private async reacoesLimpas(dado: unknown): Promise<void> {
+    const payload = objeto(dado);
+    const mensagemId = cadeia(payload, "messageId");
+    const canalId = cadeia(payload, "channelId");
+    if (!mensagemId || !canalId) return;
+
+    const servidorId = cadeia(payload, "guildId");
+    const emoji = cadeia(payload, "emoji");
+    const bots = await this.botsComAcessoAoCanal(
+      canalId,
+      servidorId === null ? INTENT.DIRECT_MESSAGE_REACTIONS : INTENT.GUILD_MESSAGE_REACTIONS,
+    );
+    if (bots.size === 0) return;
+
+    const [mensagemSnowflake, canalSnowflake] = await Promise.all([
+      this.snowflakeDeMensagem(mensagemId),
+      this.snowflakeDeCanal(canalId),
+    ]);
+    if (mensagemSnowflake === null || canalSnowflake === null) return;
+
+    const evento: JsonDoDiscord = {
+      channel_id: String(canalSnowflake),
+      message_id: String(mensagemSnowflake),
+    };
+    if (servidorId !== null) {
+      const servidorSnowflake = await this.snowflakeDoServidor(servidorId);
+      if (servidorSnowflake === null) return;
+      evento.guild_id = String(servidorSnowflake);
+    }
+    if (emoji !== null) evento.emoji = await this.reacoes.traduzirToken(emoji);
+
+    const dispatch = emoji === null ? "MESSAGE_REACTION_REMOVE_ALL" : "MESSAGE_REACTION_REMOVE_EMOJI";
+    for (const sessoes of bots.values()) {
+      for (const sessao of sessoes) sessao.despachar(dispatch, evento);
     }
   }
 
@@ -661,6 +814,24 @@ export class PonteDeEventos {
       if (membro) permitidos.set(botUserId, sessoes);
     }
     return permitidos;
+  }
+
+  /** O snowflake da mensagem: da memória (o `MESSAGE_CREATE` a viu), e só depois do banco. */
+  private async snowflakeDeMensagem(mensagemId: string): Promise<bigint | null> {
+    const lembrado = this.memoria.resolver("message", mensagemId);
+    if (lembrado !== null) return lembrado;
+    const buscado = await this.ids.snowflakeDeMensagem(mensagemId);
+    if (buscado !== null) this.memoria.lembrar("message", mensagemId, buscado);
+    return buscado;
+  }
+
+  /** O snowflake do canal: idem. */
+  private async snowflakeDeCanal(canalId: string): Promise<bigint | null> {
+    const lembrado = this.memoria.resolver("channel", canalId);
+    if (lembrado !== null) return lembrado;
+    const buscado = await this.ids.snowflakeDeCanal(canalId);
+    if (buscado !== null) this.memoria.lembrar("channel", canalId, buscado);
+    return buscado;
   }
 
   /** O snowflake do servidor: da memória, e só depois do banco. */

@@ -124,6 +124,28 @@ export class RealtimeService {
     this.notificar({ tipo: "canal", id: channelId }, event, payload);
   }
 
+  /**
+   * Emite para a sala de um canal **sem** avisar os ouvintes locais.
+   *
+   * O espelho de `notificarOuvintes`, e existe por um caso só, também: a
+   * reação. Pôr ou tirar uma reação continua mandando `message.updated` com a
+   * mensagem inteira para o navegador — é o que o site e o desktop já
+   * instalado escutam —, mas o gateway dos bots **não** pode ver esse evento:
+   * traduzido, ele viraria um `MESSAGE_UPDATE` do Discord por reação, que é
+   * justamente o defeito que o `reaction.added`/`reaction.removed` conserta
+   * (§7 de `docs/BOTS-COMPATIVEIS-COM-O-DISCORD.md`).
+   *
+   * Quem chama isto tem de emitir, logo em seguida, o evento fino pelo
+   * `emitToChannel` — senão o bot fica sem saber que algo aconteceu. O par
+   * está num lugar só: `messages/eventos-de-reacao.ts`.
+   *
+   * Não use para nada mais. Evento que o navegador recebe e o bot também tem
+   * que passar por `emitToChannel`.
+   */
+  emitToChannelSemOuvintes(channelId: string, event: string, payload: unknown) {
+    this.server?.to(`channel:${channelId}`).emit(event, payload);
+  }
+
   /** Emite para os membros de um servidor (`guild:<id>`). */
   emitToGuild(guildId: string, event: string, payload: unknown) {
     this.server?.to(`guild:${guildId}`).emit(event, payload);

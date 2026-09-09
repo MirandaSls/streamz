@@ -11,6 +11,7 @@ import { DadosDeCompatService } from "./dados.service";
 import { IdsService } from "./ids.service";
 import { PonteDeVozController } from "./ponte-voz.controller";
 import { RateLimitDoDiscordInterceptor } from "./rate-limit.interceptor";
+import { ReacoesDeCompatService } from "./reacoes.service";
 import { PonteDeEventos } from "./gateway/dispatch";
 import { RegistroDeSessoes } from "./gateway/sessao";
 import { GatewayCompatService } from "./gateway/servidor";
@@ -80,6 +81,8 @@ import { UsersCompatController, UsersCompatControllerV9 } from "./rest/users.con
   providers: [
     IdsService,
     DadosDeCompatService,
+    // F5: o emoji personalizado (snowflake ↔ `<:nome:cuid>`) e "quem reagiu".
+    ReacoesDeCompatService,
     BotTokenGuard,
     RateLimitDoDiscordInterceptor,
     RegistroDeSessoes,
