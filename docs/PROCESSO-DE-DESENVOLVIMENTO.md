@@ -26,6 +26,8 @@ dito.
   chave de assinatura do desktop em `/root/.tauri/streamz.key` (§5). Nunca
   copie nem imprima assinaturas e tokens em PR, mensagem ou log.
 - **O host não tem node**. Tudo de JS roda em `docker run node:22` (§3).
+- **Celular** (PWA, Android e iOS): `docs/APPS-MOBILE.md` — o que custa, o que
+  dá para testar de graça e o que só roda com conta paga.
 
 ## 2. Regras de convivência no servidor
 
