@@ -15,6 +15,7 @@ import type { Message as MessageDTO } from "@streamz/shared";
 import { zodBody } from "../../../common/zod.pipe";
 import { InteractionsService } from "../../interactions/interactions.service";
 import type { InteracaoAutenticada } from "../../interactions/tipos";
+import { FLAG_EFEMERA } from "../../interactions/tipos";
 import { DadosDeCompatService } from "../dados.service";
 import {
   FiltroDeErrosDoDiscord,
@@ -192,6 +193,16 @@ export class WebhooksCompatController {
     interacao: InteracaoAutenticada,
     mensagem: MessageDTO,
   ): Promise<MensagemDoDiscord> {
+    // ── j-bots ── a efêmera não está na `Message` (é a tabela `EphemeralMessage`,
+    // que nenhuma consulta do chat lê), então a releitura é outra — e a resposta
+    // volta com `flags: 64`, que é como a lib do bot reconhece a efemeridade da
+    // mensagem que acabou de mandar.
+    if (mensagem.efemera) {
+      const efemera = await this.interacoes.linhaEfemeraParaCompat(mensagem.id);
+      if (!efemera) throw mensagemDesconhecida();
+      return { ...mensagemParaDiscord(efemera), flags: FLAG_EFEMERA };
+    }
+
     const linha = await this.dados.mensagemPorCuid(mensagem.id, interacao.botUserId);
     if (!linha) throw mensagemDesconhecida();
     return mensagemParaDiscord(linha);

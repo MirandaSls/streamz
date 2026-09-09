@@ -105,6 +105,20 @@ apagarOriginal(i: InteracaoAutenticada): Promise<void>
 followup(i: InteracaoAutenticada, dados: CorpoDeResposta): Promise<MessageDTO>
 ```
 
+Duas assinaturas nasceram **depois** da fase, com a mensagem efêmera (`flags:
+64`, §9 do documento). A efêmera não é uma `Message` — mora na tabela
+`EphemeralMessage` —, então a releitura que o lote B faz para responder ao bot é
+outra:
+
+```ts
+linhaEfemeraParaCompat(id: string): Promise<LinhaDeMensagem | null>
+linhaEfemeraOriginalParaCompat(interactionId: string): Promise<LinhaDeMensagem | null>
+```
+
+O lote B as chama quando o DTO devolvido vem com `efemera: true` (no `reler` dos
+webhooks) e, no `?with_response`, sempre antes de olhar o `responseMessageId`.
+As formas puras da efêmera moram em `./efemeras.ts`.
+
 E, em `./dto.ts` (puro, sem Nest, para o `MessagesService` importar sem criar
 ciclo de módulo): `INTERACAO_DA_MENSAGEM_INCLUDE` e `toInteracaoDaMensagem`.
 

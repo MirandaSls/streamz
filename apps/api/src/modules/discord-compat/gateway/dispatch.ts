@@ -273,6 +273,15 @@ export class PonteDeEventos {
   // ── o fan-out ──────────────────────────────────────────────
 
   private async tratar(alvo: AlvoDoEvento, evento: string, dado: unknown): Promise<void> {
+    // ── j-bots ── a mensagem efêmera não atravessa a ponte. Ela é de uma pessoa
+    // só, e nem o bot que a escreveu precisa recebê-la de volta: ele acabou de
+    // mandá-la, e a resposta HTTP do callback já lhe devolveu o corpo.
+    //
+    // Na prática ela já não passaria (a tradução procura a linha na `Message` e
+    // não a encontra), mas "não vaza porque uma busca falha" é sorte, não
+    // desenho. Aqui é onde está escrito que não vaza.
+    if (objeto(dado)?.["efemera"] === true) return;
+
     try {
       switch (evento) {
         case WS_EVENTS.MESSAGE_NEW:

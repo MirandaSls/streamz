@@ -42,12 +42,31 @@ export class MaintenanceService {
     const emails = await this.limparTokensDeEmail(agora);
     const anexos = await this.limparAnexosOrfaos(agora);
     const status = await this.limparStatusPersonalizados(agora);
-    if (tokens || emails || anexos || status) {
+    const efemeras = await this.limparEfemerasVencidas(agora);
+    if (tokens || emails || anexos || status || efemeras) {
       this.logger.log(
         `Faxina: ${tokens} refresh token(s), ${emails} token(s) de e-mail, ` +
-          `${anexos} anexo(s) órfão(s) e ${status} status personalizado(s) vencido(s) removidos`,
+          `${anexos} anexo(s) órfão(s), ${status} status personalizado(s) vencido(s) e ` +
+          `${efemeras} mensagem(ns) efêmera(s) vencida(s) removidos`,
       );
     }
+  }
+
+  // ── j-bots ──
+  /**
+   * Apaga as mensagens efêmeras vencidas (`expiresAt` = criação + 15 min, a
+   * mesma janela do token da interação).
+   *
+   * Não é só higiene de tabela como o status personalizado: a linha guarda
+   * **texto que uma pessoa só podia ver**. Passados os 15 minutos ela não serve
+   * mais para nada — o `@original` já leva 404 `10062` — e o certo é não
+   * continuar guardando.
+   */
+  async limparEfemerasVencidas(agora: Date): Promise<number> {
+    const { count } = await this.prisma.ephemeralMessage.deleteMany({
+      where: { expiresAt: { lt: agora } },
+    });
+    return count;
   }
 
   // ── d-social ──

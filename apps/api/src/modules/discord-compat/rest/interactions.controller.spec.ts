@@ -62,6 +62,14 @@ const porTokenDepois = vi.fn(async (token: string) => {
 
 const mensagemPorCuid = vi.fn(async () => ({ snowflake: 555n }));
 
+/**
+ * ── j-bots ── a efêmera original da interação, quando a resposta foi efêmera.
+ *
+ * `null` por padrão: quase todo teste daqui é do caminho comum. Quem exercita a
+ * efemeridade sobrescreve com uma linha e cobra `response_message_ephemeral`.
+ */
+const linhaEfemeraOriginalParaCompat = vi.fn(async (): Promise<unknown> => null);
+
 vi.mock("../traducao/mensagem", () => ({
   mensagemParaDiscord: (m: { snowflake: bigint }) => ({ id: String(m.snowflake) }),
 }));
@@ -69,7 +77,10 @@ vi.mock("../traducao/mensagem", () => ({
 @Module({
   controllers: [InteractionCallbackCompatController],
   providers: [
-    { provide: InteractionsService, useValue: { porToken, responder } },
+    {
+      provide: InteractionsService,
+      useValue: { porToken, responder, linhaEfemeraOriginalParaCompat },
+    },
     { provide: DadosDeCompatService, useValue: { mensagemPorCuid } },
   ],
 })
@@ -106,6 +117,8 @@ describe("POST /api/v10/interactions/:id/:token/callback", () => {
     porToken.mockClear();
     responder.mockClear();
     mensagemPorCuid.mockClear();
+    linhaEfemeraOriginalParaCompat.mockClear();
+    linhaEfemeraOriginalParaCompat.mockResolvedValue(null);
   });
 
   // ── o `?with_response` (o que a prova 3b da fase pegou) ──────
@@ -160,6 +173,33 @@ describe("POST /api/v10/interactions/:id/:token/callback", () => {
       interaction: { response_message_loading: false },
       resource: { type: 4 },
     });
+  });
+
+  // ── j-bots: a mensagem efêmera ──────────────────────────────
+
+  it("resposta efêmera: `response_message_ephemeral: true` e o snowflake da efêmera", async () => {
+    // Aqui a interação **não** tem `responseMessageId` — a efêmera não é uma
+    // `Message` —, e é justamente por isso que o campo tem de sair da consulta
+    // à tabela própria. Sem ela o discord.py ficaria sem o
+    // `response_message_id` que ele guarda para o `edit_original_response()`.
+    linhaEfemeraOriginalParaCompat.mockResolvedValue({ snowflake: 888n });
+
+    const resposta = await callback(
+      `/${String(INTERACAO.snowflake)}/${TOKEN}/callback?with_response=1`,
+      { type: 4, data: { content: "só você vê", flags: 64 } },
+    );
+
+    expect(resposta.status).toBe(200);
+    expect(await resposta.json()).toMatchObject({
+      interaction: {
+        response_message_id: "888",
+        // ecoar `false` aqui faria o bot achar que falou para o canal todo
+        response_message_ephemeral: true,
+      },
+      // `flags: 64` de volta é como a lib reconhece a efemeridade
+      resource: { type: 4, message: { id: "888", flags: 64 } },
+    });
+    expect(mensagemPorCuid).not.toHaveBeenCalled();
   });
 
   it("`with_response=0` e `false` valem como ausente (204)", async () => {
