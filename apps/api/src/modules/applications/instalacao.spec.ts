@@ -146,6 +146,15 @@ function ambiente(op: Opcoes = {}) {
         passos.push(`guildMember.create:${data.userId}:${data.role}`);
         return {};
       },
+      async upsert({ create, update }: { create: Record<string, unknown>; update: Record<string, unknown> }) {
+        // o `upsert` de verdade não conta qual ramo correu; o teste conta o
+        // que **foi pedido**: criar como MEMBER, e não mexer em nada se já
+        // existe (`update` vazio)
+        passos.push(
+          `guildMember.upsert:${create.userId}:${create.role}:update=${JSON.stringify(update)}`,
+        );
+        return {};
+      },
       async deleteMany({ where }: { where: { userId?: string } }) {
         passos.push(`guildMember.deleteMany:${where.userId}`);
         return { count: 1 };
@@ -408,7 +417,8 @@ describe("InstalacaoService.instalar — os oito passos, em ordem", () => {
     );
     expect(dentro).toEqual([
       "role.create:Hydra:3:3",
-      "guildMember.create:u_bot:MEMBER",
+      // `upsert` e não `create`: o bot pode já ser membro por outro caminho
+      "guildMember.upsert:u_bot:MEMBER:update={}",
       "guildMemberRole.create:u_bot:r_app",
       "guildApplication.create:3:u_ana",
     ]);
@@ -524,6 +534,39 @@ describe("InstalacaoService.instalar — instalar de novo é EDITAR", () => {
  * *está* instalado, e instalar o que já está instalado é **reautorizar** — o
  * caminho que já existe logo acima.
  */
+/**
+ * O bot que **já está no servidor** por outro caminho.
+ *
+ * Achado pelo lote C ao provar a aba "Aplicativos": instalar um aplicativo cujo
+ * usuário-bot já é membro (entrou por convite, ou foi semeado — é o que o
+ * `semear.mjs` da F1 faz) dava **500**. O `create` batia no
+ * `@@unique([userId, guildId])`, e o `P2002` era classificado pelo `catch` da
+ * corrida; como não há `GuildApplication` para reler, o erro subia cru.
+ *
+ * O conserto é um `upsert` com `update: {}`: instalar concede permissão pelo
+ * cargo gerenciado, e **não** promove nem rebaixa quem já estava lá.
+ */
+describe("InstalacaoService.instalar — o bot já é membro por outro caminho", () => {
+  it("não recria o membro: pede upsert, e o upsert não mexe no que já existe", async () => {
+    const a = ambiente();
+    await a.servico.instalar("u_ana", "g1", "app1", 3);
+
+    // nada de `create` sobre `GuildMember` — era ele que estourava o P2002
+    expect(a.passos.some((p) => p.startsWith("guildMember.create:"))).toBe(false);
+    expect(a.passos).toContain("guildMember.upsert:u_bot:MEMBER:update={}");
+  });
+
+  it("o `update` do upsert é vazio: instalar não promove nem rebaixa o membro", async () => {
+    const a = ambiente();
+    await a.servico.instalar("u_ana", "g1", "app1", 3);
+
+    const linha = a.passos.find((p) => p.startsWith("guildMember.upsert:"));
+    // um `update` com `role` aqui seria a instalação reescrevendo o papel
+    // legado de um bot que já era, por exemplo, ADMIN naquele servidor
+    expect(linha).toMatch(/update=\{\}$/);
+  });
+});
+
 describe("InstalacaoService.instalar — a corrida de duas instalações simultâneas", () => {
   it("a perdedora não devolve 500: cai na reautorização e responde a instalação", async () => {
     const a = ambiente({ corrida: true });

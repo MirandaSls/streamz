@@ -263,18 +263,27 @@ async function passeio(page, p, celular) {
 
   // ── 6. a aba "Aplicativos" das configurações do servidor (lote C) ───────
   await passo(`${p} aba do servidor`, async () => {
-    await irParaOCanal(page, prep.servidor.name, prep.canal.name);
-    await page.evaluate(() => {
-      const b = [...document.querySelectorAll("button")].find((e) =>
-        /configurações do servidor/i.test(e.getAttribute("aria-label") ?? e.textContent ?? ""),
-      );
-      b?.click();
+    // O caminho é o menu do nome do servidor, no topo da coluna de canais —
+    // não existe botão "Configurações do servidor" solto na tela. É o mesmo
+    // par que o `e2e-mobile.mjs` usa para "Convidar pessoas".
+    //
+    // No celular a `ChannelSidebar` é a base da aba "início" (ver
+    // `mobile/telas-base.tsx`), e some atrás da tela empilhada do canal. Então
+    // aqui **não** se entra no canal: escolhe-se o servidor e para por aí.
+    await page.goto(`${WEB}/app`);
+    await page.waitForTimeout(2500);
+    await page.click(`nav[aria-label="Servidores"] button[aria-label^="${prep.servidor.name}"]`, {
+      timeout: 45_000,
     });
-    await page.waitForTimeout(1500);
-    const aba = page.getByRole("button", { name: "Aplicativos", exact: true }).last();
+    await page.waitForTimeout(2000);
+    await page.locator('button[aria-haspopup="menu"]').first().click();
+    await page.waitForTimeout(800);
+    await page.getByRole("menuitem", { name: /Configurações do servidor/ }).first().click();
+    await page.waitForTimeout(2000);
+    const aba = janela(page).getByRole("button", { name: "Aplicativos", exact: true }).last();
     if (await aba.count()) {
       await aba.click();
-      await page.waitForTimeout(1800);
+      await page.waitForTimeout(2000);
     }
     await foto(page, `${p}-09-servidor-aba-aplicativos`);
     await medir(page, `${p} pílula BOT (aba do servidor)`, '[aria-label="Conta de bot"]');

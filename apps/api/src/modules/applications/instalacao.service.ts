@@ -170,7 +170,27 @@ export class InstalacaoService {
         });
         // 5. o membro-bot e o cargo nele. `role: "MEMBER"`: o papel legado não é
         //    o que dá poder ao bot — quem dá é o cargo que ele acabou de vestir.
-        await tx.guildMember.create({ data: { userId: app.botUserId, guildId, role: "MEMBER" } });
+        //
+        // **`upsert`, e não `create`.** O usuário-bot pode já ser membro deste
+        // servidor por outro caminho — entrou por um convite, ou foi semeado
+        // (é o que o `semear.mjs` da F1 faz). Com `create`, o
+        // `@@unique([userId, guildId])` estourava um `P2002` que o `catch`
+        // abaixo classificava como corrida de instalação; como não há
+        // `GuildApplication` para reler, o erro subia: **500 ao instalar um
+        // app cujo bot já está na sala.**
+        //
+        // O `update: {}` é deliberado: se a linha já existe, a instalação
+        // **não** mexe no `role` legado de quem já estava lá. Instalar um
+        // aplicativo concede permissões pelo cargo gerenciado, e não promove
+        // nem rebaixa o membro.
+        await tx.guildMember.upsert({
+          where: { userId_guildId: { userId: app.botUserId, guildId } },
+          create: { userId: app.botUserId, guildId, role: "MEMBER" },
+          update: {},
+        });
+        // este continua `create`: o cargo nasceu três linhas acima, nesta mesma
+        // transação, então o `@@unique([userId, roleId])` não tem com o que
+        // colidir
         await tx.guildMemberRole.create({
           data: { guildId, userId: app.botUserId, roleId: cargo.id },
         });

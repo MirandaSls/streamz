@@ -1668,10 +1668,12 @@ de três lotes paralelos.
 | `components/ui/ProfilePopover.tsx`, `components/modals/UserProfileModal.tsx` | ao lado do nome |
 | `components/chat/DMMemberList.tsx` | idem |
 | `components/voice/TileDeVoz.tsx` | ao lado do nome no tile — **corrigido na F4**: este § dizia `VoiceGrid.tsx`, mas o PR #170 extraiu o tile de participante, e o `VoiceGrid` não tem mais nenhum `displayNameOf` |
+| `components/voice/VoiceChannelMembers.tsx` | a **sétima**, achada na F4 ao fotografar o tile de voz: quem está na sala aparece também na coluna de canais, e era o único lugar com nome de bot sem a pílula |
 
-Uma `<TagDeBot />` em `components/ui/` para não repetir o estilo em seis lugares.
-São seis **superfícies**, mas mais de seis edições, pelos três caminhos do
-`MessageItem`.
+Uma `<TagDeBot />` em `components/ui/` para não repetir o estilo em sete lugares.
+São **sete** superfícies (este § dizia seis; a lista de quem está na sala de voz,
+na coluna de canais, faltava), e mais edições do que superfícies, pelos três
+caminhos do `MessageItem`.
 
 **Antes de escrever JSX, confirme que o dado chega.** `toPublicUser` preenche
 `bot` a partir de `u.isBot ?? false`, e esse `?? false` quer dizer "a query não
