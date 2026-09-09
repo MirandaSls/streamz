@@ -104,7 +104,10 @@ export default function Autocomplete({
           </li>
         ))}
       </ul>
-      <p className="flex items-center gap-3 border-t border-black/20 px-3 py-1.5 text-[11px] text-txt-muted">
+      {/* No celular não há ↑↓, enter nem esc: a linha ensinaria três teclas que
+          o aparelho não tem, ocupando 24px do popup que já disputa a tela com o
+          teclado. Some com `celular:` — a mesma consulta do `useEhMobile`. */}
+      <p className="flex items-center gap-3 border-t border-black/20 px-3 py-1.5 text-[11px] text-txt-muted celular:hidden">
         <span>
           <kbd className="font-sans font-semibold">↑↓</kbd> navegar
         </span>
