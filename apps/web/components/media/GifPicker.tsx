@@ -6,6 +6,7 @@ import type { Attachment, GifCategory, GifResult } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
+import { ehMobileAgora } from "@/hooks/useEhMobile";
 import { BuscaPicker, CaixaPicker } from "@/components/media/PickerChrome";
 import { alternarGifFavorito, usePrefsPicker } from "@/components/media/preferencias-picker";
 
@@ -112,6 +113,23 @@ export default function GifPicker({
   const emCategoria = categoriaAberta !== null;
   const buscando = termo.trim().length > 0;
   const favoritos = prefs.gifsFavoritos;
+  /**
+   * **O foco automático na busca é do computador.** No celular o campo puxava
+   * o teclado no mesmo instante em que a folha subia: a folha é `60dvh` e
+   * `dvh` já contava a janela encolhida, então ela nascia com ~276px — três
+   * fileiras e o resto atrás do teclado. Quem quiser buscar toca no campo.
+   *
+   * `ehMobileAgora()` num inicializador de `useState`, e **não** o
+   * `useEhMobile()`: o hook começa em `false` por definição (ver o comentário
+   * dele sobre hidratação) e só vira `true` num `useLayoutEffect` — que roda
+   * *depois* do commit, ou seja, depois de o React já ter aplicado o
+   * `autoFocus` do primeiro render. Medido: com o hook, a busca do GIF
+   * continuava com o foco no telefone. Aqui a resposta é lida na hora do
+   * primeiro render, no cliente, que é quando o `autoFocus` importa — e ele
+   * vale uma vez, na montagem, então não precisa acompanhar rotação.
+   */
+  const [autoFocarBusca] = useState(() => !ehMobileAgora());
+
   const mostrandoFavoritos = subAba === "favoritos" && !buscando;
   const grade = mostrandoFavoritos ? favoritos : resultados;
 
@@ -125,7 +143,7 @@ export default function GifPicker({
         }}
         placeholder={emCategoria ? categoriaAberta.name : "Buscar GIF"}
         rotulo="Buscar GIF"
-        autoFocus
+        autoFocus={autoFocarBusca}
       >
         {(emCategoria || buscando) && (
           <button

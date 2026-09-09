@@ -7,6 +7,7 @@ import { useAuth } from "@/stores/auth";
 import { useEmojis } from "@/stores/emojis";
 import { useCanModerate, useGuilds } from "@/stores/guilds";
 import { ui } from "@/stores/ui";
+import { ehMobileAgora } from "@/hooks/useEhMobile";
 import {
   BotaoLateral,
   BuscaPicker,
@@ -168,6 +169,23 @@ export default function StickerPicker({
     setAtiva(id);
   }
 
+  /**
+   * **O foco automático na busca é do computador.** No celular o campo puxava
+   * o teclado no mesmo instante em que a folha subia: a folha é `60dvh` e
+   * `dvh` já contava a janela encolhida, então ela nascia com ~276px — três
+   * fileiras e o resto atrás do teclado. Quem quiser buscar toca no campo.
+   *
+   * `ehMobileAgora()` num inicializador de `useState`, e **não** o
+   * `useEhMobile()`: o hook começa em `false` por definição (ver o comentário
+   * dele sobre hidratação) e só vira `true` num `useLayoutEffect` — que roda
+   * *depois* do commit, ou seja, depois de o React já ter aplicado o
+   * `autoFocus` do primeiro render. Medido: com o hook, a busca do GIF
+   * continuava com o foco no telefone. Aqui a resposta é lida na hora do
+   * primeiro render, no cliente, que é quando o `autoFocus` importa — e ele
+   * vale uma vez, na montagem, então não precisa acompanhar rotação.
+   */
+  const [autoFocarBusca] = useState(() => !ehMobileAgora());
+
   const vazio = secoes.every((s) => s.itens.length === 0);
 
   const corpo = (
@@ -177,7 +195,7 @@ export default function StickerPicker({
         onChange={setBusca}
         placeholder="Buscar figurinha"
         rotulo="Buscar figurinha"
-        autoFocus
+        autoFocus={autoFocarBusca}
       />
 
       <div className="flex min-h-0 flex-1">
