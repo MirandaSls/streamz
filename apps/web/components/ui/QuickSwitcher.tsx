@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Hash, Lock, Megaphone, Server, Users, Volume2 } from "@/components/ui/icones";
 import { isGroupChannel, type Channel, type PublicUser, type UserStatus } from "@streamz/shared";
 import Dialog from "@/components/modals/Dialog";
+import { ehMobileAgora } from "@/hooks/useEhMobile";
 import Avatar, { GroupAvatar } from "@/components/ui/Avatar";
 import { api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -256,7 +257,9 @@ export default function QuickSwitcher() {
     <Dialog
       title={t("quick.titulo")}
       hideHeader
-      showClose={false}
+      // mesma razão do seletor de tela: no telefone o × é a saída visível, e o
+      // Esc que basta no computador não existe ali
+      showClose={ehMobileAgora()}
       align="top"
       onClose={closeModal}
       className="w-[570px]"

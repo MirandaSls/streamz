@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { ScreenQuality } from "@streamz/shared";
 import Dialog from "@/components/modals/Dialog";
+import { ehMobileAgora } from "@/hooks/useEhMobile";
 import { AppWindow, Monitor } from "@/components/ui/icones";
 import { SegmentosDeQualidade } from "@/components/voice/qualidade-de-tela";
 import {
@@ -119,7 +120,13 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
       title="Compartilhar sua tela"
       onClose={onClose}
       hideHeader
-      showClose={false}
+      /*
+        O × existe **no celular**: sem cabeçalho e sem ele, a única saída é o
+        toque no véu, que numa caixa que ocupa quase a tela inteira é uma faixa
+        estreita — e não há tecla Esc num telefone. No computador segue sem ×,
+        como estava (o Esc e o clique fora bastam, e o print do Discord não tem).
+      */
+      showClose={ehMobileAgora()}
       className="h-[888px] w-[min(1400px,max(75vw,880px))]"
       bodyClassName="flex flex-col px-6 pb-6 pt-6"
     >
