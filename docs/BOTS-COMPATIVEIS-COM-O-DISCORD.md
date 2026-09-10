@@ -427,9 +427,16 @@ o que o ADR-0002 proíbe):
    apagadas*. `PATCH` com `nick` de texto responde **50013**; `nick: null`
    (limpar) é um no-op que passa. Um 200 mudo diria que mudou algo que não
    mudou.
-2. **Banir exige `MODERATE_MEMBERS` além de `BAN_MEMBERS`**, porque o
-   `assertPodeAgirSobre` do `ModerationService` a pede antes de qualquer coisa.
-   No Discord `BAN_MEMBERS` basta.
+2. **Castigar e banir passam por uma segunda hierarquia.** O
+   `assertPodeAgirSobre` do `ModerationService` pede `MODERATE_MEMBERS` antes de
+   qualquer coisa (no Discord, banir só precisa de `BAN_MEMBERS`) **e** compara
+   o papel `OWNER`/`ADMIN`/`MEMBER` do `GuildMember`, que é uma coisa que o
+   Discord não tem — lá só existe a hierarquia de cargos. Consequência prática:
+   um bot com papel `MEMBER` não castiga nem bane outro `MEMBER`, por mais
+   permissão de cargo que tenha; o bot de moderação precisa entrar como `ADMIN`.
+   (É o que a semeadura de `prova-membros.sh` faz, e está escrito lá.) Expulsar
+   não sofre disso: `ModerationService.kick` delega direto ao `GuildsService`,
+   que compara só a posição do cargo.
 3. **Só se bane quem é membro.** O `guild.bans.create()` do Discord aceita o id
    de alguém que nunca entrou; aqui a regra age sobre um `GuildMember` e quem
    não é membro leva `10007`.
