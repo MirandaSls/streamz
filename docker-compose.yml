@@ -140,6 +140,38 @@ services:
       - lavalink
     mem_limit: 256m
 
+  # ── j-bots ── Streamz Cargos ───────────────────────────────────────────────
+  # Cargos por reação. Não usa Lavalink nem a ponte de voz — só o gateway (com
+  # o intent das reações) e o REST.
+  #
+  # O estado dele são arquivos JSON, um por servidor, num **volume próprio**:
+  # nenhuma tabela no banco do Streamz (ver `apps/bots/src/cargos/estado.ts`).
+  # O volume é nomeado e não um bind: assim `docker compose down` não leva os
+  # painéis junto, e ninguém precisa criar diretório no host antes de subir.
+  bot-cargos:
+    build:
+      context: .
+      dockerfile: apps/bots/Dockerfile
+    container_name: streamz-bot-cargos
+    profiles: ["bots"]
+    restart: unless-stopped
+    environment:
+      BOTS: cargos
+      # Dentro da rede do compose a API é o serviço `api`. **Sem** o /v10: o
+      # @discordjs/rest o acrescenta (§14 do documento).
+      STREAMZ_API_URL: http://api:3333/api
+      LOG_FORMATO: json
+      BOTS_DIR: /app/.bots
+      CARGOS_DIR: /dados
+    volumes:
+      # O token do bot, gravado pelo `provisionar` com chmod 600. Somente
+      # leitura: o container nunca escreve credencial.
+      - ./.bots:/app/.bots:ro
+      - cargos-dados:/dados
+    depends_on:
+      - api
+    mem_limit: 256m
+
   # ── Aplicação ──────────────────────────────────────────────────────────────
   # `pnpm db:up` continua subindo só o Postgres (ele nomeia o serviço). Estes
   # dois só sobem quando pedidos: `docker compose up -d api web`.
@@ -229,3 +261,5 @@ volumes:
   # Plugins do Lavalink (o source de YouTube). Sem o volume, cada `up` baixa
   # o jar do Maven de novo.
   lavalink-plugins:
+  # Os painéis do Streamz Cargos, um JSON por servidor. Pequeno e só dele.
+  cargos-dados:
