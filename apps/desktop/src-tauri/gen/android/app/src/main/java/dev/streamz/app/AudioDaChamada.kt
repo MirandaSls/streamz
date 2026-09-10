@@ -80,6 +80,36 @@ object AudioDaChamada {
                 it.type == AudioDeviceInfo.TYPE_USB_DEVICE
         }
 
+    /**
+     * O estado do áudio do aparelho, numa linha de `logcat`.
+     *
+     * Existe porque **os sons do app e a voz da chamada não andam no mesmo
+     * volume**, e nenhuma medição feita dentro do WebView enxerga isso. O
+     * `<audio>` do WebView é `USAGE_MEDIA`: em `MODE_IN_COMMUNICATION` o
+     * `Engine::remapStrategyFromContext` do AOSP troca a estratégia de mídia
+     * pela de **telefone** — o som passa a sair pela rota de voz que o
+     * [ligar] escolheu, mas continua medido pela régua de `STREAM_MUSIC`, que
+     * nesse modo o botão de volume do aparelho **não governa** (ele passa a
+     * mexer em `STREAM_VOICE_CALL`). Um `STREAM_MUSIC` baixo, então, cala todo
+     * som do app durante a chamada sem dar nenhum sinal na página.
+     *
+     * Com esta linha, um `adb logcat -s Streamz/Audio` responde de uma vez se
+     * a causa é a régua do aparelho ou o ganho do app — sem ela, a próxima
+     * investigação recomeça do zero.
+     */
+    private fun registrarEstado(am: AudioManager, quando: String) {
+        val musica = "${am.getStreamVolume(AudioManager.STREAM_MUSIC)}/" +
+            "${am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)}"
+        val voz = "${am.getStreamVolume(AudioManager.STREAM_VOICE_CALL)}/" +
+            "${am.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)}"
+        val rota = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            am.communicationDevice?.type?.toString() ?: "nenhuma"
+        } else {
+            "api<31"
+        }
+        Log.i(TAG, "$quando: modo=${am.mode} rota=$rota musica=$musica voz=$voz")
+    }
+
     fun ligar(contexto: Context) {
         val am = gerente(contexto)
         try {
@@ -95,6 +125,7 @@ object AudioDaChamada {
                 } else {
                     Log.w(TAG, "nenhuma rota de voz disponivel")
                 }
+                registrarEstado(am, "chamada de pe")
                 return
             }
 
@@ -104,6 +135,7 @@ object AudioDaChamada {
                 val comFone = temFoneComFio(am)
                 am.isSpeakerphoneOn = !comFone
                 Log.i(TAG, "caminho antigo: viva-voz=${!comFone}")
+                registrarEstado(am, "chamada de pe")
             }
         } catch (e: Exception) {
             // Ficar sem a rota certa é ruim; derrubar a chamada por causa dela
@@ -126,6 +158,7 @@ object AudioDaChamada {
             }
             modoAnterior?.let { am.mode = it }
             Log.i(TAG, "rota de audio devolvida ao que era")
+            registrarEstado(am, "chamada encerrada")
         } catch (e: Exception) {
             Log.w(TAG, "nao foi possivel devolver a rota de audio", e)
         } finally {
