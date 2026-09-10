@@ -61,8 +61,10 @@ naquele canal ainda deixa o `/limpar` passar. É dívida da casca, não deste bo
 
 ## O estado: um JSON por servidor
 
-`<MODERACAO_DIR>/<guildId>.json` (padrão `/dados`, um volume nomeado só deste
-container no compose). Guarda os avisos e o canal de registro.
+`/dados/<guildId>.json` — o caminho de estado comum a todos os bots, um volume
+nomeado só deste container no compose. Guarda os avisos e o canal de registro.
+A imagem já cria `/dados` com dono `node` (ver `apps/bots/CONTRATO.md` §7);
+`BOTS_DADOS_DIR` muda o diretório nos testes e na bancada.
 
 **Por que não uma tabela no banco:** a fundação dos bots oficiais não previu
 estado, e criar uma tabela significaria mexer em `apps/api` — `schema.prisma`,
@@ -108,7 +110,7 @@ unitário não.
 
 | Variável | Padrão | Para quê |
 |---|---|---|
-| `MODERACAO_DIR` | `/dados` | onde ficam os `<guildId>.json` |
+| `BOTS_DADOS_DIR` | `/dados` | onde ficam os `<guildId>.json` (comum a todos os bots) |
 
 O resto é do runtime (ver `apps/bots/README.md`).
 

@@ -41,7 +41,8 @@ apps/bots/scripts/gerar-icone-<seu-bot>.py
 ### Arquivos que um bot novo **não** toca
 
 `src/runtime/**`, `src/musica/**`, `Dockerfile`, `tsconfig.json`,
-`provisionar.ts`. Se você precisou mexer no runtime, o contrato está faltando
+`provisionar.ts`. O `Dockerfile` já cria `/dados` com dono `node` para todos
+(§5), então nem um bot com estado precisa dele. Se você precisou mexer no runtime, o contrato está faltando
 alguma coisa — abra a conversa em vez de acrescentar um caso especial.
 
 ---
@@ -122,7 +123,8 @@ ela chega com uma palavra só e o resto some em silêncio.
 4. Teste o que for lógica pura (`*.spec.ts`, vitest). O runtime não precisa de
    teste seu.
 5. Serviço no `docker-compose.yml`, copiando o `bot-musica` e trocando
-   `BOTS`/`container_name`.
+   `BOTS`/`container_name`. Se o seu bot guarda estado, siga o §5: `/dados`,
+   `BOTS_DADOS_DIR` e um volume nomeado só dele.
 6. Verificação, no docker (não há node no host):
    ```bash
    docker run --rm -v "$PWD":/w -w /w node:22 bash -lc "corepack enable; \
@@ -135,7 +137,61 @@ ela chega com uma palavra só e o resto some em silêncio.
 
 ---
 
-## 5. Provisionamento e token
+## 5. Estado: vai em `/dados`
+
+Um bot que precise guardar alguma coisa entre reinícios grava em **`/dados`**, e
+descobre o caminho por **`BOTS_DADOS_DIR`**. Um caminho e uma variável, iguais
+para todos os bots — o que é de cada bot é o **volume**, que o compose monta ali
+por container. É `apps/bots/src/runtime/dados.ts`:
+
+```ts
+import { diretorioDosDados } from "../runtime/dados";
+const arquivo = join(diretorioDosDados(), `${guildId}.json`);
+```
+
+**Não invente um caminho seu**, e este é o motivo — não é gosto:
+
+> O Docker cria o ponto de montagem de um volume nomeado com o dono que aquele
+> caminho tem **na imagem**. Para um caminho que a imagem não tem, isso é
+> `root:root`. A imagem dos bots roda como `USER node`.
+
+```bash
+$ docker run --rm -v vol:/qualquer -u node node:22-alpine touch /qualquer/x
+touch: /qualquer/x: Permission denied
+```
+
+O `Dockerfile` já faz `mkdir -p /dados && chown node:node /dados` antes do
+`USER node`, então **`/dados` — e só ele — nasce gravável**. Um bot que montasse
+`/estado` sobiria bem, conectaria bem, e falharia na primeira escrita de quem
+usa o bot: tarde, e provavelmente em silêncio.
+
+Duas consequências práticas:
+
+- no `docker-compose.yml`, o seu serviço ganha `BOTS_DADOS_DIR: /dados`, um
+  volume **nomeado** seu (`- <seu-bot>-dados:/dados`) e a entrada dele no bloco
+  `volumes:` do fim do arquivo. Volume nomeado e não bind: o estado é dado do
+  bot, não do repositório;
+- nos testes e na bancada, aponte `BOTS_DADOS_DIR` para uma pasta temporária —
+  é para isso que a variável existe, já que em produção o `ENV` da imagem
+  basta.
+
+Escreva **atomicamente** (temporário no mesmo diretório → `fsync` → `rename`) e
+serialize as escritas do mesmo servidor: os três bots que já têm estado fazem
+assim, e os dois defeitos que isso evita — JSON truncado por `docker stop` e
+comando simultâneo que some — estão explicados em
+`src/moderacao/estado.ts`.
+
+**Volume que já existe de antes desta regra** não é consertado pelo `mkdir` da
+imagem: o dono do volume foi gravado na criação. Se algum bot já rodou com o
+ponto de montagem `root`, o conserto é pontual e uma vez só:
+
+```bash
+docker run --rm -v <volume>:/dados alpine chown -R 1000:1000 /dados
+```
+
+---
+
+## 6. Provisionamento e token
 
 `pnpm --filter @streamz/bots provisionar` cria o que faltar. É idempotente e a
 chave é o `nome`. Ele:
@@ -160,7 +216,7 @@ produção viva, lido pela API e pela web.
 
 ---
 
-## 6. Voz
+## 7. Voz
 
 Só o bot de música precisa disso hoje, mas a regra vale para qualquer bot que
 entre numa call: **tocar exige a ponte de voz (`apps/ponte-voz`) no ar**. Sem

@@ -40,14 +40,16 @@
 
 import { mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
+import { DIRETORIO_PADRAO, diretorioDosDados } from "../runtime/dados";
 import { normalizarConfiguracao, type Configuracao } from "./configuracao";
 
-/** O volume padrão. O compose monta um volume nomeado aqui. */
-export const DIRETORIO_PADRAO = "/dados";
-
-export function diretorioDosDados(): string {
-  return process.env.BOAS_VINDAS_DIR?.trim() || DIRETORIO_PADRAO;
-}
+/**
+ * O diretório de estado é o comum a todos os bots (`/dados`, via
+ * `BOTS_DADOS_DIR`) — ver `../runtime/dados.ts` para o porquê de o caminho não
+ * ser escolha de cada bot. Reexportado aqui porque o resto do módulo e os
+ * testes já o chamavam por este nome.
+ */
+export { DIRETORIO_PADRAO, diretorioDosDados };
 
 /**
  * `<guildId>.json`, com o id conferido.

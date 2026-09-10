@@ -80,6 +80,7 @@ docker compose --profile bots up -d --build lavalink bot-musica
 | `STREAMZ_BOT_TOKEN` | — | o token, quando o container roda um bot só |
 | `STREAMZ_BOT_TOKEN_<ID>` | — | o token de um bot específico |
 | `BOTS_DIR` | `/opt/stack/streamz/.bots` | onde ficam os `<id>.token` (chmod 600) |
+| `BOTS_DADOS_DIR` | `/dados` | o estado dos bots que têm estado (§5 do `CONTRATO.md`) |
 | `BOTS_PREFIXO` | `!` | o prefixo da alternativa ao `/` |
 | `LOG_FORMATO` / `LOG_NIVEL` | `json` / `info` | log |
 | `BOTS_DEBUG` | — | `1` liga o `debug` do discord.js |

@@ -72,6 +72,19 @@ COPY --from=build /app/apps/bots/package.json apps/bots/
 # Os ícones: o `provisionar` os lê daqui quando roda dentro da imagem.
 COPY --from=build /app/apps/bots/assets apps/bots/assets
 
+# O diretório de estado dos bots (um JSON por servidor). **Tem de existir na
+# imagem, e ser do `node`.** Quando o compose monta um volume nomeado num
+# caminho que a imagem *não* tem, o Docker cria o ponto de montagem como
+# `root:root` — e a imagem roda como `USER node`, então a primeira escrita do
+# bot dá `Permission denied`, tarde e em silêncio (no primeiro `/aviso`, não na
+# subida). Com o diretório já criado aqui, o volume nasce herdando `node:node`.
+#
+# Confira o defeito e a correção com:
+#   docker run --rm -v v1:/dados -u node node:22-alpine touch /dados/x  # nega
+#   docker run --rm -v v2:/dados -u node streamz-bots touch /dados/x    # grava
+ENV BOTS_DADOS_DIR=/dados
+RUN mkdir -p /dados && chown node:node /dados
+
 USER node
 WORKDIR /app/apps/bots
 
