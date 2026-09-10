@@ -6,6 +6,10 @@
 #   ./ambiente.sh derrubar <sufixo>
 #   ./ambiente.sh logs     <sufixo>
 #
+# `PLATFORM_ADMIN_EMAILS` do ambiente é repassada à API: é o que permite a uma
+# prova exercitar as rotas do painel do administrador (as dos bots oficiais
+# precisam dela). Sem a variável, nada muda.
+#
 # O `sufixo` nomeia a rede e os contêineres — use um seu, porque há outras
 # sessões trabalhando neste servidor ao mesmo tempo (§2 do processo).
 #
@@ -49,6 +53,7 @@ subir)
     -e DATABASE_URL="$DATABASE_URL_INTERNA" \
     -e JWT_SECRET="$JWT_SECRET" -e JWT_REFRESH_SECRET="$JWT_REFRESH_SECRET" \
     -e THROTTLE_DISABLED=1 -e CI=1 \
+    -e PLATFORM_ADMIN_EMAILS="${PLATFORM_ADMIN_EMAILS:-}" \
     node:22 bash -lc "
       corepack enable
       pnpm install --frozen-lockfile

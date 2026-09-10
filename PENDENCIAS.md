@@ -53,6 +53,31 @@ só gera erro em runtime. Para religar:
 
 Passo a passo em `apps/desktop/README.md`, seção "Auto-update".
 
+### Bots oficiais: falta a ponte de voz para o Streamz Música tocar
+O bot de música (`apps/bots/src/musica`) já **sobe, conecta, registra os onze
+comandos, aparece no diretório e responde a tudo** — o que ele não faz é emitir
+som. O caminho do áudio depende da ponte de voz (`apps/ponte-voz`), e a ponte
+depende de duas coisas que só o dono do servidor pode fazer. Na ordem:
+
+1. **DNS**: `voz.streamz.chat` → 143.95.161.17, **nuvem cinza** (DNS only) na
+   Cloudflare — o mesmo motivo do LiveKit (§D5.5 de
+   `docs/BOTS-COMPATIVEIS-COM-O-DISCORD.md`).
+2. **Firewall**: abrir **7883/udp** no sistema **e** no painel do provedor,
+   como foi feito para o 7882 do LiveKit.
+3. `.env`: `PONTE_VOZ_SEGREDO` (32+ caracteres), `PONTE_VOZ_IP_PUBLICO`,
+   `VOZ_DOMAIN=voz.streamz.chat` e `LAVALINK_SENHA`.
+4. Subir: `docker compose --profile bots up -d --build ponte-voz lavalink bot-musica`
+   (com o override do Traefik em produção, para o WS da ponte ter TLS).
+5. Provisionar o bot: `BOTS_EMAIL=… BOTS_SENHA=… pnpm --filter @streamz/bots provisionar`
+   — a conta precisa estar em `PLATFORM_ADMIN_EMAILS`, com e-mail verificado,
+   para o aplicativo receber o selo de oficial.
+6. **R2**: sem armazenamento configurado o ícone do bot não sobe (a API responde
+   503 e o `provisionar` avisa); o aplicativo fica com a inicial do nome até lá.
+
+Enquanto (1) e (2) não existirem, `/tocar` responde "a voz ainda não está
+configurada neste servidor" — de propósito, e com prova na bancada
+(`apps/api/test/discord-compat/prova-botmus.sh`, passo 7).
+
 ### Assinatura do instalador Windows
 Sem Azure Trusted Signing, o `.exe` dispara o alerta do SmartScreen em quem
 baixa. O instalador em si já é gerado pelo workflow `Desktop (Windows)`.

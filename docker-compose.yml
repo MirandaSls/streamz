@@ -74,6 +74,72 @@ services:
     depends_on:
       - api
 
+  # ── j-bots ── Lavalink: o servidor de áudio dos bots oficiais (§D5.8) ──────
+  # Sob o mesmo profile "bots" da ponte: sem a ponte no ar o Lavalink não tem
+  # para onde mandar som, e subir um sem o outro só gasta memória.
+  #   docker compose --profile bots up -d lavalink bot-musica
+  lavalink:
+    image: ghcr.io/lavalink-devs/lavalink:4
+    container_name: streamz-lavalink
+    profiles: ["bots"]
+    restart: unless-stopped
+    environment:
+      LAVALINK_SERVER_PASSWORD: ${LAVALINK_SENHA:-streamz}
+      # A JVM, sem teto, reserva um quarto da RAM da máquina só para o heap.
+      # Este servidor tem 6 núcleos e já caiu por OOM: o teto não é enfeite.
+      _JAVA_OPTIONS: -Xmx512m -XX:+UseSerialGC
+    volumes:
+      - ./apps/bots/lavalink/application.yml:/opt/Lavalink/application.yml:ro
+      # Os plugins são baixados do Maven na primeira subida; o volume evita
+      # repetir o download a cada `up`.
+      - lavalink-plugins:/opt/Lavalink/plugins
+    # Sem `ports:` de propósito: o Lavalink só é falado de dentro da rede do
+    # compose (pelo bot). Publicá-lo seria expor um servidor de áudio com senha
+    # de arquivo à internet.
+    mem_limit: 768m
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- --header=\"Authorization: $${LAVALINK_SERVER_PASSWORD}\" http://127.0.0.1:2333/version >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      start_period: 60s
+      retries: 10
+
+  # ── j-bots ── Streamz Música ───────────────────────────────────────────────
+  # **Um container por bot**, todos com a mesma imagem; `BOTS` diz qual roda.
+  #
+  # Por que um por bot e não um processo com todos: um bot que estoura derruba
+  # só a si mesmo, o `restart` é por bot, o log já vem separado sem precisar
+  # filtrar, e o token de cada um fica no ambiente **do seu** container — um
+  # processo com cinco bots teria os cinco tokens na mesma tabela de ambiente.
+  # O custo é o runtime do Node repetido (~40 MB por container), que é barato
+  # perto de uma queda em cascata. O runtime aceita `BOTS=a,b` para quem quiser
+  # o contrário em desenvolvimento.
+  bot-musica:
+    build:
+      context: .
+      dockerfile: apps/bots/Dockerfile
+    container_name: streamz-bot-musica
+    profiles: ["bots"]
+    restart: unless-stopped
+    environment:
+      BOTS: musica
+      # Dentro da rede do compose a API é o serviço `api`. **Sem** o /v10: o
+      # @discordjs/rest o acrescenta (§14 do documento).
+      STREAMZ_API_URL: http://api:3333/api
+      LAVALINK_HOST: lavalink
+      LAVALINK_PORT: "2333"
+      LAVALINK_SENHA: ${LAVALINK_SENHA:-streamz}
+      LOG_FORMATO: json
+      BOTS_DIR: /app/.bots
+    volumes:
+      # O token do bot, gravado pelo `provisionar` com chmod 600. Somente
+      # leitura: o container nunca escreve credencial.
+      - ./.bots:/app/.bots:ro
+    depends_on:
+      - api
+      - lavalink
+    mem_limit: 256m
+
   # ── Aplicação ──────────────────────────────────────────────────────────────
   # `pnpm db:up` continua subindo só o Postgres (ele nomeia o serviço). Estes
   # dois só sobem quando pedidos: `docker compose up -d api web`.
@@ -160,3 +226,6 @@ services:
 
 volumes:
   pgdata:
+  # Plugins do Lavalink (o source de YouTube). Sem o volume, cada `up` baixa
+  # o jar do Maven de novo.
+  lavalink-plugins:
