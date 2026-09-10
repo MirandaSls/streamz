@@ -2,19 +2,29 @@
 <!--
   Ícone adaptativo (Android 8+). O launcher recorta o par fundo+frente com a
   máscara do aparelho (círculo no Pixel, squircle no Samsung, quadrado
-  arredondado em outros), então o conteúdo precisa caber nos 72dp centrais de
-  um quadro de 108dp.
+  arredondado em outros): das 108dp de cada camada, só o **círculo** de 72dp do
+  meio é garantido, e é ele que o sistema amplia para preencher o ícone.
 
-  O `ic_launcher_foreground.png` que o `tauri icon` gerou ocupava os 108dp
-  inteiros e seria cortado em um terço de cada lado. O que está aqui é o mesmo
-  logotipo reduzido para a zona segura, sobre um fundo da cor escura do próprio
-  logotipo (#0B0B0F) — assim a máscara corta fundo com fundo e o balão verde
-  chega inteiro.
+  As três camadas:
 
-  O `ic_launcher.png`/`_round.png` das pastas `mipmap-*` continuam sendo os
+  - `background`: a cor da marca (#0B0B0F, Void Ink), chapada. É ela que
+    preenche a moldura inteira, então a máscara corta fundo com fundo e nunca
+    aparece um canto transparente.
+  - `foreground`: **só o símbolo**, sobre alfa. O `tauri icon` gerava aqui o
+    tile inteiro do `.exe` esticado nas 108dp — que além de ser cortado em um
+    terço de cada lado, punha um quadrado opaco na camada que o launcher move e
+    amplia sozinha (o efeito de profundidade ao tocar no ícone). Agora o
+    desenho fica com o ponto mais distante a 27,2dp do centro: dentro do raio
+    de 36dp da zona segura, e na mesma proporção do tile da marca.
+  - `monochrome`: a silhueta para os ícones temáticos do Android 13+, com o
+    "Z" vazado. Ver `drawable/ic_launcher_monochrome.xml` — sem ela o launcher
+    inventa a silhueta a partir do `foreground` e o "Z", que é opaco, some.
+
+  Os `ic_launcher.png`/`_round.png` das pastas `mipmap-*` continuam sendo os
   ícones do Android 7, que não tem máscara e usa o PNG como está.
 -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@color/ic_launcher_background" />
     <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+    <monochrome android:drawable="@drawable/ic_launcher_monochrome" />
 </adaptive-icon>
