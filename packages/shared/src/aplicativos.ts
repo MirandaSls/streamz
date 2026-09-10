@@ -151,6 +151,14 @@ export interface AppDoDiretorio {
   iconUrl: string | null;
   /** o que a tela de instalação vem com marcado. */
   permissoesPadrao: number;
+  /**
+   * Aplicativo **oficial** desta instância (os bots de `apps/bots/`).
+   *
+   * O diretório põe os oficiais primeiro e pode desenhar um selo. Não é
+   * permissão nem verificação de terceiro: quer dizer "quem hospeda o Streamz
+   * também escreveu este bot". Só o administrador da instância liga o campo.
+   */
+  oficial: boolean;
   /** em quantos servidores está instalado. É a contagem inteira, não a minha. */
   servidores: number;
   /** o usuário-bot, com `bot: true`. */
@@ -225,6 +233,19 @@ export const appInstalarSchema = z.object({
 });
 
 export type AppInstalarInput = z.infer<typeof appInstalarSchema>;
+
+/**
+ * `POST /api/admin/applications/:id/oficial` — marcar (ou desmarcar) um
+ * aplicativo como **oficial da instância**.
+ *
+ * Fica fora do `appEditarSchema` de propósito: se o dono pudesse ligar o campo
+ * pelo portal, "oficial" passaria a querer dizer "quem marcou a caixinha".
+ * Quem chama é o administrador da instância — e, na prática, o
+ * `apps/bots/src/provisionar.ts`, que sobe os bots de `apps/bots/`.
+ */
+export const adminAppOficialSchema = z.object({ oficial: z.boolean() });
+
+export type AdminAppOficialInput = z.infer<typeof adminAppOficialSchema>;
 
 // ── j-bots · F3 · comandos de barra e interações ─────────────
 //

@@ -25,6 +25,7 @@ COPY packages/shared/package.json packages/shared/
 COPY apps/web/package.json apps/web/
 COPY apps/api/package.json apps/api/
 COPY apps/desktop/package.json apps/desktop/
+COPY apps/bots/package.json apps/bots/
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter @streamz/web... --filter @streamz/shared...
 

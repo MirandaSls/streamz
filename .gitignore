@@ -24,6 +24,10 @@ livekit.yaml
 # proxy de produção com os domínios reais (copiado de Caddyfile.example)
 Caddyfile
 
+# tokens dos bots oficiais (apps/bots). O `provisionar` grava um arquivo por
+# bot aqui, com chmod 600. Token de bot é credencial de conta: nunca no git.
+.bots/
+
 # prisma
 apps/api/prisma/*.db
 

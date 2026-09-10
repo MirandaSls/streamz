@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // CommonJS como a api e o shared: `@streamz/shared` é publicado como CJS
+    // (`main: dist/index.js`) e discord.js@14 é CJS. Um pacote ESM aqui só
+    // acrescentaria `.js` em todo import e um interop a mais para nada.
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "target": "ES2022",
+    "outDir": "dist",
+    "rootDir": "src",
+    "declaration": false,
+    "baseUrl": ".",
+    "paths": {}
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

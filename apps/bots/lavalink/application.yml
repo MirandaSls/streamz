@@ -1,0 +1,61 @@
+# Lavalink v4 — o servidor de áudio dos bots oficiais.
+#
+# Ver `docs/BOTS-COMPATIVEIS-COM-O-DISCORD.md` §D5.8: do lado do Lavalink
+# **nada muda** para falar com o Streamz. Ele nem sabe que existe Discord —
+# recebe `token`, `endpoint` e `sessionId` do bot e abre o WS de voz e o UDP
+# contra a nossa ponte (`apps/ponte-voz`).
+#
+# Este arquivo é montado em /opt/Lavalink/application.yml pelo docker-compose,
+# sob o profile `bots`.
+
+server:
+  port: 2333
+  address: 0.0.0.0
+
+lavalink:
+  # Plugins são baixados na subida, do Maven. Precisa de internet **na primeira
+  # vez**; depois ficam no volume `lavalink-plugins`.
+  plugins:
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.2"
+      repository: "https://maven.lavalink.dev/releases"
+  server:
+    # A senha vem do ambiente para não ficar em texto no repositório. O mesmo
+    # valor tem de chegar ao bot em `LAVALINK_SENHA`.
+    password: ${LAVALINK_SERVER_PASSWORD:streamz}
+    sources:
+      # O source de YouTube embutido saiu do Lavalink v4: quem toca YouTube
+      # hoje é o plugin abaixo. Deixar `youtube: true` aqui só produz um aviso
+      # e nenhuma faixa.
+      youtube: false
+      bandcamp: true
+      soundcloud: true
+      twitch: true
+      vimeo: true
+      http: true
+      local: false
+    # Opus a 48 kHz estéreo é exatamente o que a ponte repassa ao LiveKit sem
+    # transcodificar (§D5.6). Mexer nestes dois números desfaz essa vantagem.
+    opusEncodingQuality: 10
+    resamplingQuality: HIGH
+    bufferDurationMs: 400
+    frameBufferDurationMs: 5000
+    trackStuckThresholdMs: 10000
+    useSeekGhosting: true
+    youtubePlaylistLoadLimit: 6
+    playerUpdateInterval: 5
+    filters:
+      volume: true
+      equalizer: true
+
+plugins:
+  youtube:
+    enabled: true
+    # `MUSIC` e `WEB` são os clientes que ainda funcionam sem login; a ordem é
+    # a de tentativa. Sem nenhum deles, toda busca volta vazia — e é o erro
+    # nº 1 de quem sobe Lavalink v4 pela primeira vez.
+    clients: ["MUSIC", "ANDROID_VR", "WEB", "WEBEMBEDDED"]
+
+logging:
+  level:
+    root: INFO
+    lavalink: INFO

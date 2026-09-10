@@ -46,6 +46,7 @@ const SELECT_DO_APP = {
   iconKey: true,
   permissoesPadrao: true,
   publico: true,
+  oficial: true,
   ownerId: true,
   botUserId: true,
   botUser: true,
@@ -60,6 +61,7 @@ type LinhaDoApp = {
   iconKey: string | null;
   permissoesPadrao: number;
   publico: boolean;
+  oficial: boolean;
   ownerId: string;
   botUserId: string;
   botUser: PublicUserRow;
@@ -410,6 +412,7 @@ export class InstalacaoService {
         description: app.description,
         iconUrl: urlDoIconeDoApp(app.id, app.iconKey),
         permissoesPadrao: app.permissoesPadrao,
+        oficial: app.oficial,
         servidores: app._count.installs,
         botUser: toPublicUser(app.botUser),
       },

@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
-import { adminMensagemSchema } from "@streamz/shared";
+import { adminAppOficialSchema, adminMensagemSchema } from "@streamz/shared";
 import type {
+  AdminAppOficialInput,
   AdminCall,
   AdminChannelsPage,
   AdminGuildView,
@@ -105,6 +106,24 @@ export class AdminController {
     @Body(zodBody(adminMensagemSchema)) dto: AdminMensagemInput,
   ): Promise<AdminMensagemEnviada> {
     return this.admin.enviarMensagem(user.sub, id, dto.content);
+  }
+
+  /**
+   * Marca um aplicativo como **oficial da instância** (ou tira a marca).
+   *
+   * ── j-bots · bots oficiais ──
+   *
+   * É a rota que `apps/bots/src/provisionar.ts` chama depois de criar cada bot
+   * de `apps/bots/`. `POST` e não `PATCH` porque não é editar um recurso do
+   * painel: é uma ação sobre um recurso de outro módulo.
+   */
+  @UseGuards(JwtGuard, PlatformAdminGuard)
+  @Post("applications/:id/oficial")
+  oficial(
+    @Param("id") id: string,
+    @Body(zodBody(adminAppOficialSchema)) dto: AdminAppOficialInput,
+  ): Promise<{ oficial: boolean }> {
+    return this.admin.marcarOficial(id, dto.oficial);
   }
 }
 

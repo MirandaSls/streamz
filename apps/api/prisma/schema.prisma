@@ -1054,6 +1054,16 @@ model Application {
   iconKey     String?
   /// aparece em "Descobrir aplicativos". Opt-in do dono, como o `discoverable`.
   publico     Boolean  @default(false)
+  /// Aplicativo **oficial** desta instância (os bots de `apps/bots/`).
+  ///
+  /// Serve ao diretório: os oficiais vêm primeiro e podem ganhar um selo. Não
+  /// concede poder nenhum — não é permissão, é procedência.
+  ///
+  /// **Não entra no `appEditarSchema`** de propósito: se o dono pudesse ligar o
+  /// campo, "oficial" passaria a querer dizer "quem marcou a caixinha". Quem
+  /// liga é `POST /api/admin/applications/:id/oficial`, atrás do
+  /// `PlatformAdminGuard` — é o que o `apps/bots/src/provisionar.ts` chama.
+  oficial     Boolean  @default(false)
   /// bitfield de `Permission` que a tela de instalação sugere por padrão
   permissoesPadrao Int  @default(0)
   /// o usuário-bot: um User com isBot = true, criado junto e sem senha utilizável

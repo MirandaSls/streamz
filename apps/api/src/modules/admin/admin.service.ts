@@ -536,6 +536,34 @@ export class AdminService {
     return out;
   }
 
+  /**
+   * Marca (ou desmarca) um aplicativo como **oficial da instância**.
+   *
+   * ── j-bots · bots oficiais ──
+   *
+   * Mora no painel do administrador, e não no portal do desenvolvedor, porque
+   * é exatamente isso que o campo quer dizer: *quem hospeda esta instância
+   * também assina este bot*. Um interruptor no portal transformaria "oficial"
+   * em "quem marcou a caixinha", que é o contrário do que um selo serve.
+   *
+   * Não concede permissão nenhuma — o efeito é o diretório pôr o app na frente
+   * e poder desenhar o selo. Por isso não há evento nem revalidação: quem
+   * estiver com o diretório aberto vê na próxima carga.
+   */
+  async marcarOficial(applicationId: string, oficial: boolean): Promise<{ oficial: boolean }> {
+    const app = await this.prisma.application.findUnique({
+      where: { id: applicationId },
+      select: { id: true },
+    });
+    if (!app) throw new NotFoundException("Aplicativo não encontrado");
+    const atualizado = await this.prisma.application.update({
+      where: { id: applicationId },
+      data: { oficial },
+      select: { oficial: true },
+    });
+    return { oficial: atualizado.oficial };
+  }
+
   private async usuariosPorId(ids: string[]): Promise<Map<string, PublicUser>> {
     const unicos = [...new Set(ids)];
     if (unicos.length === 0) return new Map();

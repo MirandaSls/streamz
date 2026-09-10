@@ -1,0 +1,26 @@
+{
+  "name": "@streamz/bots",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Os bots oficiais do Streamz — runtime comum e um pacote por bot",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch --preserveWatchOutput",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint \"src/**/*.ts\"",
+    "test": "vitest run",
+    "provisionar": "pnpm run build && node dist/provisionar.js"
+  },
+  "dependencies": {
+    "@streamz/shared": "workspace:*",
+    "discord.js": "^14.27.0",
+    "lavalink-client": "^2.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.11"
+  }
+}

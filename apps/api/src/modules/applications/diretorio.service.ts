@@ -30,6 +30,7 @@ const SELECT_DO_DIRETORIO = {
   permissoesPadrao: true,
   ownerId: true,
   publico: true,
+  oficial: true,
   botUser: true,
   _count: { select: { installs: true } },
 } as const;
@@ -70,7 +71,12 @@ export class DiretorioService {
       // `id` no desempate: dois apps criados no mesmo milissegundo (a semente
       // faz isso) embaralhariam entre uma página e a seguinte, e o cursor
       // pularia ou repetiria uma linha.
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      // Os oficiais primeiro: quem abre "Descobrir aplicativos" numa instância
+      // nova está procurando os bots que a instância oferece, não o terceiro
+      // app que alguém publicou hoje. O `id` continua no fim como desempate do
+      // cursor (dois apps criados no mesmo milissegundo embaralhariam entre uma
+      // página e a seguinte).
+      orderBy: [{ oficial: "desc" }, { createdAt: "desc" }, { id: "desc" }],
       take: tamanho + 1,
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
     });
@@ -115,6 +121,7 @@ export class DiretorioService {
     description: string | null;
     iconKey: string | null;
     permissoesPadrao: number;
+    oficial: boolean;
     botUser: PublicUserRow;
     _count: { installs: number };
   }): AppDoDiretorio {
@@ -125,6 +132,7 @@ export class DiretorioService {
       description: app.description,
       iconUrl: urlDoIconeDoApp(app.id, app.iconKey),
       permissoesPadrao: app.permissoesPadrao,
+      oficial: app.oficial,
       servidores: app._count.installs,
       botUser: toPublicUser(app.botUser),
     };
