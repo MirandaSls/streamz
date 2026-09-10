@@ -204,6 +204,56 @@ services:
       - api
     mem_limit: 256m
 
+  # ── j-bots ── Streamz Níveis ───────────────────────────────────────────────
+  # XP por mensagem, ranking e cargos por nível. Entrou no fim do bloco de bots,
+  # que é onde o `CONTRATO.md` manda pôr um bot novo (o `bot-cargos` entrou
+  # depois e é quem está no fim agora).
+  #
+  # Sem Lavalink e sem `depends_on` além da API: níveis não tocam em voz.
+  #
+  # **O estado não vai para o Postgres**, e isso é decisão, não atalho: o bot
+  # fala com a instância por HTTP como qualquer bot de terceiro, e uma tabela
+  # nova seria uma migration — o arquivo mais compartilhado do repositório, que
+  # o `apps/bots/CONTRATO.md` existe para nenhum bot precisar tocar. O estado é
+  # um JSON por servidor num volume só dele, gravado em bloco (a cada 30 s ou
+  # 50 mudanças, mais um flush no SIGTERM). O porquê inteiro, e a migração para
+  # o banco quando ela fizer sentido, estão no cabeçalho de
+  # `apps/bots/src/niveis/estado.ts`.
+  bot-niveis:
+    build:
+      context: .
+      dockerfile: apps/bots/Dockerfile
+    container_name: streamz-bot-niveis
+    profiles: ["bots"]
+    restart: unless-stopped
+    environment:
+      BOTS: niveis
+      # Dentro da rede do compose a API é o serviço `api`. **Sem** o /v10: o
+      # @discordjs/rest o acrescenta (§14 do documento).
+      STREAMZ_API_URL: http://api:3333/api
+      # Onde os `<guildId>.json` moram. Ver o comentário do volume abaixo para
+      # o porquê de não ser `/dados` (que é o padrão do código).
+      NIVEIS_DIR: /home/node/dados
+      LOG_FORMATO: json
+      BOTS_DIR: /app/.bots
+    volumes:
+      # O token do bot, gravado pelo `provisionar` com chmod 600. Somente
+      # leitura: o container nunca escreve credencial.
+      - ./.bots:/app/.bots:ro
+      # **Por que em `/home/node` e não em `/dados`.** A imagem roda como
+      # `USER node`, e o Docker cria um volume nomeado com o dono do caminho
+      # correspondente **na imagem** — que para um caminho que a imagem não tem
+      # é `root:root`, e aí o processo não escreve nada (conferido:
+      # `docker run -v vol:/dados -u node node:22-alpine touch /dados/x` dá
+      # `Permission denied`). `/home/node` existe na imagem e é do `node`, então
+      # o volume nasce do `node` e o bot cria o `dados/` dentro. A alternativa
+      # seria um `mkdir`+`chown` no `apps/bots/Dockerfile` — que é comum a todos
+      # os bots e o CONTRATO não deixa mexer.
+      - niveis-dados:/home/node
+    depends_on:
+      - api
+    mem_limit: 256m
+
   # ── j-bots ── Streamz Cargos ───────────────────────────────────────────────
   # O último do bloco de bots — é onde o `CONTRATO.md` manda pôr um bot novo,
   # para dois PRs de bots diferentes não disputarem as mesmas linhas.
@@ -334,5 +384,8 @@ volumes:
   # Avisos e configuração por servidor do Streamz Moderação (um JSON por
   # servidor, escrita atômica). Ver `apps/bots/src/moderacao/estado.ts`.
   bot-moderacao-dados:
+  # O XP de cada servidor (`<guildId>.json`), do Streamz Níveis. Ver o comentário
+  # do serviço `bot-niveis` para o porquê de ele ser montado em `/home/node`.
+  niveis-dados:
   # Os painéis do Streamz Cargos, um JSON por servidor. Pequeno e só dele.
   cargos-dados:

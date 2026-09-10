@@ -95,6 +95,12 @@ services:
   bot-boas-vindas:
     cpuset: "0,1"
 
+  # Contar XP é somar um número e escrever um JSON de vez em quando: cabe de
+  # sobra nos mesmos dois núcleos. Sem esta linha ele flutuaria nos seis,
+  # inclusive nos 2-5 da mídia — que é o que o bloco acima existe para evitar.
+  bot-niveis:
+    cpuset: "0,1"
+
   postgres:
     cpuset: "0,1"
     mem_limit: 2g
