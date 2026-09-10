@@ -12,7 +12,7 @@ dá para fazer é escrever os nossos, e é isto.
 | | |
 |---|---|
 | **Runtime comum** | `src/runtime/` — conexão, registro de comandos, roteamento de `/` e `!`, log, reconexão, desligamento |
-| **Bots** | `src/musica/` (**Streamz Música**). Os próximos: moderação, níveis, boas-vindas, cargos por reação, tickets |
+| **Bots** | `src/musica/` (**Streamz Música**), `src/boas-vindas/`, `src/moderacao/`, `src/niveis/`, `src/cargos/` (**Streamz Cargos**). Os próximos: tickets |
 | **Como acrescentar um** | [`CONTRATO.md`](./CONTRATO.md) |
 | **Deploy** | `docker-compose.yml`, profile `bots`: um container por bot, mais o `lavalink` |
 
@@ -52,6 +52,14 @@ que a voz ainda não está configurada — em vez de pendurar esperando um
 
 ---
 
+## Streamz Cargos
+
+Cargos por reação: um painel, um emoji por cargo, e quem reage ganha o cargo.
+Quatro modos (`normal`, `unico`, `so-adicionar`, `travado`), estado em arquivo
+JSON por servidor e nada no banco. Ver [`src/cargos/README.md`](./src/cargos/README.md).
+
+---
+
 ## Rodar
 
 Não há node no host deste servidor: tudo em contêiner.
@@ -69,6 +77,10 @@ BOTS_EMAIL=… BOTS_SENHA=… STREAMZ_API_URL=https://api.streamz.chat/api \
 
 # subir
 docker compose --profile bots up -d --build lavalink bot-musica
+docker compose --profile bots up -d --build bot-cargos
+
+# a prova do Streamz Cargos, na bancada descartável (sobe e derruba tudo)
+./apps/bots/prova-cargos.sh
 ```
 
 ## Ambiente
@@ -86,4 +98,5 @@ docker compose --profile bots up -d --build lavalink bot-musica
 | `LAVALINK_HOST` / `LAVALINK_PORT` / `LAVALINK_SENHA` | `lavalink` / `2333` / `streamz` | o servidor de áudio |
 | `LAVALINK_BUSCA` | `ytsearch` | plataforma de busca padrão |
 | `MUSICA_VOLUME_PADRAO` | `60` | volume ao entrar |
+| `CARGOS_DIR` | `/dados` | onde o Streamz Cargos guarda os painéis (um JSON por servidor) |
 | `BOTS_EMAIL` / `BOTS_SENHA` / `BOTS_TOKEN` | — | só no `provisionar` |

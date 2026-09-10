@@ -205,8 +205,9 @@ services:
     mem_limit: 256m
 
   # ── j-bots ── Streamz Níveis ───────────────────────────────────────────────
-  # XP por mensagem, ranking e cargos por nível. **O último do bloco de bots**,
-  # que é onde o `CONTRATO.md` manda pôr um bot novo.
+  # XP por mensagem, ranking e cargos por nível. Entrou no fim do bloco de bots,
+  # que é onde o `CONTRATO.md` manda pôr um bot novo (o `bot-cargos` entrou
+  # depois e é quem está no fim agora).
   #
   # Sem Lavalink e sem `depends_on` além da API: níveis não tocam em voz.
   #
@@ -249,6 +250,42 @@ services:
       # seria um `mkdir`+`chown` no `apps/bots/Dockerfile` — que é comum a todos
       # os bots e o CONTRATO não deixa mexer.
       - niveis-dados:/home/node
+    depends_on:
+      - api
+    mem_limit: 256m
+
+  # ── j-bots ── Streamz Cargos ───────────────────────────────────────────────
+  # O último do bloco de bots — é onde o `CONTRATO.md` manda pôr um bot novo,
+  # para dois PRs de bots diferentes não disputarem as mesmas linhas.
+  #
+  # Cargos por reação. Não usa Lavalink nem a ponte de voz: só o gateway (com o
+  # intent das reações, que é o que a F5 destravou) e o REST.
+  bot-cargos:
+    build:
+      context: .
+      dockerfile: apps/bots/Dockerfile
+    container_name: streamz-bot-cargos
+    profiles: ["bots"]
+    restart: unless-stopped
+    environment:
+      BOTS: cargos
+      # Dentro da rede do compose a API é o serviço `api`. **Sem** o /v10: o
+      # @discordjs/rest o acrescenta (§14 do documento).
+      STREAMZ_API_URL: http://api:3333/api
+      LOG_FORMATO: json
+      BOTS_DIR: /app/.bots
+      # Os painéis: um JSON por servidor, com escrita atômica. Ver
+      # `apps/bots/src/cargos/estado.ts` para o porquê de ser arquivo e não
+      # tabela no banco do Streamz.
+      CARGOS_DIR: /dados
+    volumes:
+      # O token do bot, gravado pelo `provisionar` com chmod 600. Somente
+      # leitura: o container nunca escreve credencial.
+      - ./.bots:/app/.bots:ro
+      # **Volume nomeado, não bind**: os painéis são o único estado durável do
+      # bot, e um bind em `./` acabaria versionado no primeiro `git add -A`
+      # distraído.
+      - cargos-dados:/dados
     depends_on:
       - api
     mem_limit: 256m
@@ -350,3 +387,5 @@ volumes:
   # O XP de cada servidor (`<guildId>.json`), do Streamz Níveis. Ver o comentário
   # do serviço `bot-niveis` para o porquê de ele ser montado em `/home/node`.
   niveis-dados:
+  # Os painéis do Streamz Cargos, um JSON por servidor. Pequeno e só dele.
+  cargos-dados:
