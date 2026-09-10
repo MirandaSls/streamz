@@ -3,6 +3,7 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import {
   Amigos,
+  Apps,
   Inbox,
   LogOut,
   MessageSquarePlus,
@@ -30,6 +31,7 @@ import { useEhMobile } from "@/hooks/useEhMobile";
 import { EVENTO_CAIXA_DE_ENTRADA } from "@/lib/caixa-de-entrada";
 import { useT } from "@/lib/i18n";
 import { submenuSilenciar } from "@/lib/notification-menu";
+import { useAplicativos } from "@/stores/aplicativos";
 import { autorDaPrevia, dmTitle, useDMs } from "@/stores/dms";
 import { useAuth } from "@/stores/auth";
 import { useFriends, usePendingCount } from "@/stores/friends";
@@ -54,6 +56,17 @@ export default function DMList() {
   const friendsOpen = useFriends((s) => s.open);
   const setFriendsOpen = useFriends((s) => s.setOpen);
   const pendentes = usePendingCount();
+  // ── j-bots · F4 ── "Descobrir aplicativos" é um item desta lista
+  const appsAbertos = useAplicativos((s) => s.aberto);
+  const abrirApps = useAplicativos((s) => s.abrir);
+  /*
+    Só um item desta coluna fica marcado por vez, porque só um deles está na
+    coluna 3. O diretório **cobre** a coluna 3 (`app/app/page.tsx`) sem mexer no
+    `view` nem no `open` de amigos, então enquanto ele está aberto a página
+    Amigos e a conversa ativa continuam no estado, mas não na tela — e sem esta
+    conta duas linhas apareceriam selecionadas ao mesmo tempo.
+  */
+  const amigosSelecionado = friendsOpen && !appsAbertos;
   const openModal = useUI((s) => s.openModal);
   const statuses = usePresence((s) => s.statuses);
   const [query, setQuery] = useState("");
@@ -176,8 +189,8 @@ export default function DMList() {
         // delegação para empilhar a tela certa (ver `ShellMobile`)
         data-amigos-button
         onClick={() => setFriendsOpen(true)}
-        aria-current={friendsOpen ? "true" : undefined}
-        className={"mx-2 flex h-10 w-[calc(100%-1rem)] items-center gap-3 rounded-lg pl-3 pr-2 text-left " + (friendsOpen ? "bg-sel text-txt-primary" : "text-txt-faint hover:bg-hov hover:text-txt-normal")}
+        aria-current={amigosSelecionado ? "true" : undefined}
+        className={"mx-2 flex h-10 w-[calc(100%-1rem)] items-center gap-3 rounded-lg pl-3 pr-2 text-left " + (amigosSelecionado ? "bg-sel text-txt-primary" : "text-txt-faint hover:bg-hov hover:text-txt-normal")}
       >
         <Amigos size={21} aria-hidden="true" className="shrink-0" />
         <span className="flex-1 font-medium">Amigos</span>
@@ -191,6 +204,45 @@ export default function DMList() {
         )}
       </button>
       )}
+
+      {/*
+        ── j-bots · F4 ── "Descobrir aplicativos", logo abaixo de "Amigos".
+
+        Aqui, e não na rail de servidores onde nasceu: esta é a coluna em que o
+        Discord põe a navegação **da home** (Amigos, Nitro, Loja), e a rail é a
+        coluna de servidores. O item copia o botão "Amigos" linha por linha —
+        mesma altura de 40, mesmo recuo, ícone de 21 à esquerda, o mesmo `bg-sel`
+        de selecionado e o mesmo `hover:bg-hov` — porque é o mesmo tipo de item.
+
+        O ícone é o `Apps`, as quatro formas do App Directory. **Não é uma
+        bússola**: o `explore.svg` do acervo não é uma bússola, apesar do nome
+        (está escrito em `icones.tsx`), e o robô (`Bot`) é o do portal do
+        desenvolvedor, nas configurações.
+
+        `abrir()` não mexe em `ui.view`: o diretório não é um terceiro modo das
+        colunas 1 e 2 (ver o cabeçalho de `stores/aplicativos.ts`) — ele abre por
+        cima da coluna 3, com esta lista intacta ao lado, que é o que "Amigos"
+        também faz. Entrar num servidor o fecha pelo mesmo caminho de sempre (o
+        `fecharApps()` do `GuildRail` e o `FecharAoNavegar` de `app/app/page.tsx`).
+
+        **No celular ele fica no mesmo lugar da lista, mas o "Amigos" acima dele
+        não existe**: lá "Adicionar amigos" é a pílula do cabeçalho (a condição
+        `!celular` logo acima), então este item é a primeira linha da lista. É
+        por isso que ele não tem o `!celular` — o item vale nos dois leiautes, e
+        no telefone quem empilha a tela cheia é o `ShellMobile`, ouvindo o
+        `data-apps-button` por delegação de clique, o mesmo caminho de
+        `data-dm-button` e `data-amigos-button`.
+      */}
+      <button
+        type="button"
+        data-apps-button
+        onClick={() => abrirApps()}
+        aria-current={appsAbertos ? "true" : undefined}
+        className={"mx-2 flex h-10 w-[calc(100%-1rem)] items-center gap-3 rounded-lg pl-3 pr-2 text-left " + (appsAbertos ? "bg-sel text-txt-primary" : "text-txt-faint hover:bg-hov hover:text-txt-normal")}
+      >
+        <Apps size={21} aria-hidden="true" className="shrink-0" />
+        <span className="flex-1 truncate font-medium">Descobrir aplicativos</span>
+      </button>
 
       {novos.length > 0 && (
         <>
@@ -219,8 +271,17 @@ export default function DMList() {
         </>
       )}
 
-      {/* linha da largura do item (278px), logo antes do título da seção */}
-      {!celular && <div className="mx-2 mt-3 border-t border-border" />}
+      {/*
+        Linha da largura do item (278px), logo antes do título da seção.
+
+        **Também no celular**, agora que "Descobrir aplicativos" abre a lista
+        lá: sem ela o item de navegação encostava na primeira conversa e as duas
+        coisas viravam uma lista só. No desktop ela já existia por causa do
+        "Amigos" — é o mesmo papel, o de separar a navegação da home das
+        conversas. (Lá o título "Mensagens diretas" vem logo abaixo; no celular
+        o cabeçalho da tela já diz "Mensagens" e ele seria repetição.)
+      */}
+      <div className="mx-2 mt-3 border-t border-border" />
 
       {!celular && (
       <div className="group flex items-center justify-between pl-5 pr-3.5 pt-3 pb-0.5">
@@ -250,7 +311,7 @@ export default function DMList() {
       )}
       {visible.map((dm) => {
         const title = dmTitle(dm);
-        const active = activeId === dm.id && !friendsOpen;
+        const active = activeId === dm.id && !friendsOpen && !appsAbertos;
         const group = isGroupChannel(dm);
         const other = !group ? dm.others[0] : undefined;
         const unread = !active && isUnread(dm);
