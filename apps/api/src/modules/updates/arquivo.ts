@@ -11,8 +11,15 @@ import { basename, extname, join, resolve, sep } from "node:path";
  *   1. `basename` descarta qualquer diretório que venha no nome;
  *   2. só extensão de instalador passa;
  *   3. o caminho final tem de continuar **dentro** da pasta configurada.
+ *
+ * `.apk` entrou na lista quando o app Android passou a se atualizar sozinho
+ * (`ANDROID_UPDATE_URL` aponta para esta mesma rota). Ele é servido da mesma
+ * pasta aberta que o `.exe`, e pelo mesmo raciocínio: o que garante que o
+ * pacote é nosso não é o sigilo do endereço. No Windows é a assinatura
+ * minisign; no Android é o **sha256** que vai no manifesto e que o app confere
+ * antes de abrir o instalador do sistema (ver `UpdatesService`).
  */
-const EXTENSOES = [".exe", ".msi"];
+const EXTENSOES = [".exe", ".msi", ".apk"];
 
 export function caminhoDoInstalador(dir: string, nome: string): string | null {
   const limpo = basename(nome);
