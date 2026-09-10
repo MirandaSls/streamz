@@ -140,14 +140,76 @@ services:
       - lavalink
     mem_limit: 256m
 
-  # ── j-bots ── Streamz Cargos ───────────────────────────────────────────────
-  # Cargos por reação. Não usa Lavalink nem a ponte de voz — só o gateway (com
-  # o intent das reações) e o REST.
+  # ── j-bots ── Streamz Boas-vindas ──────────────────────────────────────────
+  # Recebe quem chega no servidor. Não precisa de Lavalink nem da ponte de voz:
+  # só do gateway da API. Depende só de `api`.
+  #   docker compose --profile bots up -d bot-boas-vindas
+  bot-boas-vindas:
+    build:
+      context: .
+      dockerfile: apps/bots/Dockerfile
+    container_name: streamz-bot-boas-vindas
+    profiles: ["bots"]
+    restart: unless-stopped
+    environment:
+      BOTS: boas-vindas
+      # Dentro da rede do compose a API é o serviço `api`. **Sem** o /v10: o
+      # @discordjs/rest o acrescenta (§14 do documento).
+      STREAMZ_API_URL: http://api:3333/api
+      LOG_FORMATO: json
+      BOTS_DIR: /app/.bots
+      # O estado do bot: um JSON por servidor. Ver apps/bots/src/boas-vindas/armazem.ts.
+      BOAS_VINDAS_DIR: /dados
+    volumes:
+      # O token do bot, gravado pelo `provisionar` com chmod 600. Somente
+      # leitura: o container nunca escreve credencial.
+      - ./.bots:/app/.bots:ro
+      # Volume **nomeado** e não um bind: a configuração de cada servidor é dado
+      # do bot, não do repositório, e um bind em `./` acabaria versionado por
+      # engano no primeiro `git add -A` distraído.
+      - boas-vindas-dados:/dados
+    depends_on:
+      - api
+    mem_limit: 192m
+
+  # ── j-bots ── Streamz Moderação ────────────────────────────────────────────
+  # O último do bloco de bots — é onde o `CONTRATO.md` manda pôr um bot novo,
+  # para dois PRs de bots diferentes não disputarem as mesmas linhas.
   #
-  # O estado dele são arquivos JSON, um por servidor, num **volume próprio**:
-  # nenhuma tabela no banco do Streamz (ver `apps/bots/src/cargos/estado.ts`).
-  # O volume é nomeado e não um bind: assim `docker compose down` não leva os
-  # painéis junto, e ninguém precisa criar diretório no host antes de subir.
+  # Sem Lavalink e sem `depends_on` além da API: este bot não toca em voz.
+  bot-moderacao:
+    build:
+      context: .
+      dockerfile: apps/bots/Dockerfile
+    container_name: streamz-bot-moderacao
+    profiles: ["bots"]
+    restart: unless-stopped
+    environment:
+      BOTS: moderacao
+      STREAMZ_API_URL: http://api:3333/api
+      LOG_FORMATO: json
+      BOTS_DIR: /app/.bots
+      # Onde ficam os avisos e a configuração de cada servidor (um JSON por
+      # servidor). Ver `apps/bots/src/moderacao/estado.ts` para o porquê de ser
+      # arquivo e não tabela, e para o caminho de migração.
+      MODERACAO_DIR: /dados
+    volumes:
+      - ./.bots:/app/.bots:ro
+      # **Volume nomeado, não bind**: este é o único estado durável do bot, e um
+      # `docker compose down -v` distraído levaria a ficha de moderação de todos
+      # os servidores junto. Num volume ele sobrevive a `down`, a `up --build` e
+      # à troca de imagem.
+      - bot-moderacao-dados:/dados
+    depends_on:
+      - api
+    mem_limit: 256m
+
+  # ── j-bots ── Streamz Cargos ───────────────────────────────────────────────
+  # O último do bloco de bots — é onde o `CONTRATO.md` manda pôr um bot novo,
+  # para dois PRs de bots diferentes não disputarem as mesmas linhas.
+  #
+  # Cargos por reação. Não usa Lavalink nem a ponte de voz: só o gateway (com o
+  # intent das reações, que é o que a F5 destravou) e o REST.
   bot-cargos:
     build:
       context: .
@@ -162,11 +224,17 @@ services:
       STREAMZ_API_URL: http://api:3333/api
       LOG_FORMATO: json
       BOTS_DIR: /app/.bots
+      # Os painéis: um JSON por servidor, com escrita atômica. Ver
+      # `apps/bots/src/cargos/estado.ts` para o porquê de ser arquivo e não
+      # tabela no banco do Streamz.
       CARGOS_DIR: /dados
     volumes:
       # O token do bot, gravado pelo `provisionar` com chmod 600. Somente
       # leitura: o container nunca escreve credencial.
       - ./.bots:/app/.bots:ro
+      # **Volume nomeado, não bind**: os painéis são o único estado durável do
+      # bot, e um bind em `./` acabaria versionado no primeiro `git add -A`
+      # distraído.
       - cargos-dados:/dados
     depends_on:
       - api
@@ -261,5 +329,10 @@ volumes:
   # Plugins do Lavalink (o source de YouTube). Sem o volume, cada `up` baixa
   # o jar do Maven de novo.
   lavalink-plugins:
+  # A configuração de boas-vindas de cada servidor (um JSON por servidor).
+  boas-vindas-dados:
+  # Avisos e configuração por servidor do Streamz Moderação (um JSON por
+  # servidor, escrita atômica). Ver `apps/bots/src/moderacao/estado.ts`.
+  bot-moderacao-dados:
   # Os painéis do Streamz Cargos, um JSON por servidor. Pequeno e só dele.
   cargos-dados:

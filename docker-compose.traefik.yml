@@ -74,6 +74,27 @@ services:
       - traefik.http.routers.voz.tls.certresolver=le
       - traefik.http.services.voz.loadbalancer.server.port=8080
 
+  # ── j-bots ── o servidor de áudio e os bots ────────────────────────────────
+  #
+  # Nem o Lavalink nem os bots entram na rede `proxy`: nenhum deles é falado de
+  # fora. O que eles precisam daqui é **teto de CPU**, e por um motivo concreto:
+  # todo serviço deste stack está fixado num conjunto de núcleos, e um container
+  # sem `cpuset` flutua nos **seis** — inclusive nos 2-5, que são da mídia. Um
+  # Lavalink codificando Opus em `opusEncodingQuality: 10` disputando núcleo com
+  # o LiveKit é exatamente o jitter que o `cpuset` dele existe para evitar, e
+  # jitter em SFU se ouve.
+  #
+  # Buscar uma música e responder um comando de barra cabem folgados nos mesmos
+  # dois núcleos da API e da web.
+  lavalink:
+    cpuset: "0,1"
+
+  bot-musica:
+    cpuset: "0,1"
+
+  bot-boas-vindas:
+    cpuset: "0,1"
+
   postgres:
     cpuset: "0,1"
     mem_limit: 2g
