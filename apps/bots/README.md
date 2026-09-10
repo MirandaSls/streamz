@@ -12,7 +12,7 @@ dá para fazer é escrever os nossos, e é isto.
 | | |
 |---|---|
 | **Runtime comum** | `src/runtime/` — conexão, registro de comandos, roteamento de `/` e `!`, log, reconexão, desligamento |
-| **Bots** | `src/musica/` (**Streamz Música**), `src/boas-vindas/`, `src/moderacao/`, `src/cargos/` (**Streamz Cargos**). Os próximos: níveis, tickets |
+| **Bots** | `src/musica/` (**Streamz Música**), `src/boas-vindas/`, `src/moderacao/`, `src/niveis/`, `src/cargos/` (**Streamz Cargos**). Os próximos: tickets |
 | **Como acrescentar um** | [`CONTRATO.md`](./CONTRATO.md) |
 | **Deploy** | `docker-compose.yml`, profile `bots`: um container por bot, mais o `lavalink` |
 
