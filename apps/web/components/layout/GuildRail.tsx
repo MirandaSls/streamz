@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Apps,
   CheckCheck,
   Compass,
   LogOut,
@@ -254,9 +253,10 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
   const sairDaColunaDeVoz = useChannels((s) => s.leaveVoice);
   const developerMode = useSettings((s) => s.developerMode);
   const meuId = useAuth((s) => s.user?.id);
-  // ── j-bots · F4 ── o diretório de aplicativos, que abre por cima da coluna 3
-  const appsAbertos = useAplicativos((s) => s.aberto);
-  const abrirApps = useAplicativos((s) => s.abrir);
+  // ── j-bots · F4 ── o diretório de aplicativos, que abre por cima da coluna 3.
+  // Quem o **abre** é o item "Descobrir aplicativos" da `DMList` (a lista da
+  // home); aqui o rail só o fecha, porque todo clique dele é uma navegação para
+  // outro lugar — servidor, conversa em destaque ou o logo.
   const fecharApps = useAplicativos((s) => s.fechar);
 
   const dmUnread = dms.some((d) => d.lastMessageAt && (!d.lastReadAt || d.lastMessageAt > d.lastReadAt));
@@ -294,20 +294,6 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
    * continua tocando. A lista de conversas é atualizada porque estamos entrando
    * no modo DM — era o que o `openList` fazia por último.
    */
-  /**
-   * ── j-bots · F4 ── abre "Descobrir aplicativos".
-   *
-   * Não mexe em `ui.view`: o diretório não é um terceiro modo da coluna 1 (ver
-   * o cabeçalho de `stores/aplicativos.ts`). Ele abre por cima da coluna 3 e a
-   * coluna do lado continua sendo a que já estava — que é o que o Discord faz.
-   *
-   * No celular quem empilha a tela cheia é o `ShellMobile`, ouvindo o
-   * `data-apps-button` deste botão por delegação de clique.
-   */
-  function abrirDiretorioDeApps() {
-    abrirApps();
-  }
-
   function irParaAmigos() {
     ui.setView("dm");
     // sair do diretório: senão ele continuaria cobrindo a coluna 3 e o clique
@@ -519,33 +505,27 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
       </RailItem>
 
       {/*
-        ── j-bots · F4 ── "Descobrir aplicativos", abaixo do "+".
+        ── j-bots · F4 ── "Descobrir aplicativos" **não fica mais aqui.**
 
-        **Não é a descoberta de servidores voltando.** Aquela foi removida de
-        propósito (o comentário logo acima diz por quê) e continua removida.
-        Aplicativos são outra coisa: um catálogo do que roda **nesta**
-        instância, que é o que o §11 do documento chama de vista própria.
+        Ele nasceu neste ponto, logo abaixo do "+", e mudou de lugar: agora é um
+        item da lista da home (`components/layout/DMList.tsx`), logo abaixo de
+        "Amigos". O motivo é o mesmo do Discord — a rail é a coluna de
+        *destinos* (os servidores e o "+" que cria um), enquanto Amigos, Nitro e
+        Loja, que são a navegação **da home**, moram na coluna 2. Um botão de
+        catálogo entre os ícones de servidor pedia para ser lido como a
+        descoberta de servidores, que foi removida de propósito (o comentário
+        acima do "+" diz por quê) e continua removida.
 
-        O ícone é o `Apps` — as quatro formas, que é o glifo do App Directory do
-        Discord. **Não é uma bússola**: o `Compass` do Phosphor é outra coisa, e
-        o `explore.svg` do acervo não é uma bússola (está escrito em
-        `icones.tsx`). O robô (`Bot`) é o do portal do desenvolvedor, nas
-        configurações do usuário, e não este.
+        O que veio junto na mudança e está lá, não aqui: o ícone `Apps` (as
+        quatro formas do App Directory — não uma bússola, ver `icones.tsx`) e o
+        atributo `data-apps-button`, que o `ShellMobile` escuta por delegação
+        para empilhar a tela cheia no celular.
 
-        `data-apps-button` é o que o `ShellMobile` escuta por delegação
-        (`aoTocarNaLista`) para empilhar a tela cheia no celular — o mesmo
-        caminho de `data-channel-button` e `data-dm-button`, em vez de um
-        `if (ehMobile)` aqui dentro.
+        O que ficou: o `fecharApps()` nos cliques do rail. O diretório cobre a
+        coluna 3, então entrar num servidor ou numa conversa por aqui precisa
+        tirá-lo da frente — como o `fecharAmigos(false)` faz com a página
+        Amigos.
       */}
-      <RailItem
-        label="Descobrir aplicativos"
-        lado={compacto ? 48 : 40}
-        active={appsAbertos}
-        onClick={abrirDiretorioDeApps}
-        dados={{ "data-apps-button": "" }}
-      >
-        <Apps size={compacto ? 26 : 22} />
-      </RailItem>
     </nav>
   );
 }
