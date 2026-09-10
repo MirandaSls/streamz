@@ -15,16 +15,28 @@ fn main() {
     // A geração roda em **todos os alvos**, inclusive no Windows: a ACL é
     // estática e ficar sem ela no desktop só faria o build de celular divergir
     // do de desktop. O que é condicional é o registro do plugin em `lib.rs`.
-    let atributos = tauri_build::Attributes::new().plugin(
-        "chamada",
-        tauri_build::InlinedPlugin::new()
-            .commands(&[
-                "iniciar_servico_de_chamada",
-                "parar_servico_de_chamada",
-                "registrar_ouvinte_de_saida",
-            ])
-            .default_permission(tauri_build::DefaultPermissionRule::AllowAllCommands),
-    );
+    let atributos = tauri_build::Attributes::new()
+        .plugin(
+            "chamada",
+            tauri_build::InlinedPlugin::new()
+                .commands(&[
+                    "iniciar_servico_de_chamada",
+                    "parar_servico_de_chamada",
+                    "registrar_ouvinte_de_saida",
+                ])
+                .default_permission(tauri_build::DefaultPermissionRule::AllowAllCommands),
+        )
+        // O atualizador do Android (`src/atualizador.rs`), pelo mesmo caminho:
+        // um segundo *inlined plugin*, com a ACL `atualizador:default` que a
+        // `capabilities/mobile.json` referencia. Sem esta entrada os dois
+        // comandos existiriam em Rust e seriam **negados** na primeira chamada,
+        // com um "not allowed" que não diz onde consertar.
+        .plugin(
+            "atualizador",
+            tauri_build::InlinedPlugin::new()
+                .commands(&["baixar_atualizacao", "instalar_atualizacao"])
+                .default_permission(tauri_build::DefaultPermissionRule::AllowAllCommands),
+        );
 
     tauri_build::try_build(atributos).expect("erro ao preparar o build do Tauri")
 }

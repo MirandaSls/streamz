@@ -1,13 +1,14 @@
 {
   "$schema": "../gen/schemas/mobile-schema.json",
   "identifier": "mobile",
-  "description": "Permissoes do app de celular (Android e iOS). Alem do plugin chamada (o servico de primeiro plano do Android, em src/chamada.rs), e deliberadamente menor que a do desktop: no celular nao ha bandeja, nao ha barra de titulo nossa para arrastar, nao ha maximizar e nao ha atualizador do Tauri. Sobra o nucleo (core:default, que ja traz app:version, event e webview), a notificacao nativa e o opener - este ultimo e o que faz o card Baixar atualizacao abrir streamz.chat/download no navegador do sistema, ja que dentro do webview o download nao teria para onde ir.",
+  "description": "Permissoes do app de celular (Android e iOS). Alem dos dois plugins proprios do Android - chamada (o servico de primeiro plano, em src/chamada.rs) e atualizador (baixar o .apk novo, conferir o sha256 e abrir o instalador do sistema, em src/atualizador.rs) -, e deliberadamente menor que a do desktop: no celular nao ha bandeja, nao ha barra de titulo nossa para arrastar, nao ha maximizar e nao ha atualizador do Tauri (aquele e desktop-only; o nosso o substitui). Sobra o nucleo (core:default, que ja traz app:version - de onde sai o getVersion que vai no manifesto -, event e webview), a notificacao nativa e o opener, que leva ao site quem precisa baixar o pacote a mao. O atualizador:default nao da acesso a arquivo nenhum do aparelho: os dois comandos so alcancam a pasta de cache do proprio app.",
   "platforms": ["android", "iOS"],
   "windows": ["main"],
   "permissions": [
     "core:default",
     "notification:default",
     "chamada:default",
+    "atualizador:default",
     {
       "identifier": "opener:allow-open-url",
       "allow": [{ "url": "http://*" }, { "url": "https://*" }]

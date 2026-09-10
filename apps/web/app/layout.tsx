@@ -1,3 +1,4 @@
+import AtualizadorDoAndroid from "@/components/atualizacao/AtualizadorDoAndroid";
 import BarraDeTituloMinima from "@/components/desktop/BarraDeTituloMinima";
 import AvisoDeInstalacao from "@/components/pwa/AvisoDeInstalacao";
 import RegistroDoServiceWorker from "@/components/pwa/RegistroDoServiceWorker";
@@ -149,6 +150,17 @@ export default function RootLayout({
         */}
         <RegistroDoServiceWorker />
         <AvisoDeInstalacao />
+        {/*
+          O auto-update do app Android, aqui pelo mesmo motivo das duas linhas
+          acima: vale em **toda** rota. Quem abre o app e para na tela de login
+          é justamente quem mais precisa de versão nova, e essa tela não passa
+          pelo `ShellMobile` nem pela rota `/app`.
+
+          Fora do app Android ele não desenha nada e não faz nenhuma chamada de
+          rede: no site atualizar é recarregar a página, e no app de desktop já
+          existe a setinha verde da barra de título, que faz mais.
+        */}
+        <AtualizadorDoAndroid />
       </body>
     </html>
   );

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Camada `monochrome` do ícone adaptativo — os "ícones temáticos" do Android 13+
+  (Material You), aquele modo em que o launcher repinta todos os ícones na cor
+  do papel de parede.
+
+  Por que ela precisa existir: quando o app **não** declara esta camada, o
+  launcher não desiste — vários (One UI, Nothing OS, e as ROMs que copiam o
+  Pixel Launcher) sintetizam uma silhueta a partir do `foreground`, achatando
+  tudo que é opaco num borrão só. No nosso desenho o "Z" é Void Ink (#0B0B0F)
+  sobre o limão, ou seja, **opaco** — na silhueta ele desaparece junto com o
+  resto, e o que sobra na tela é um balão de conversa liso, sem marca nenhuma.
+  É exatamente o relato de "está com o ícone de conversa normal".
+
+  O que está aqui é a silhueta feita à mão, com o "Z" **vazado**:
+  `fillType="evenOdd"` faz o subcaminho de dentro furar o de fora em vez de
+  pintar por cima, então o "Z" continua legível depois de o sistema jogar fora
+  as cores. Mesma técnica do `ic_notificacao_chamada.xml`.
+
+  Geometria: o símbolo do `docs/branding/marca/icone-app-1024.svg`, no espaço
+  local dele (balão de 24,24 a 216,232), posto num quadro de 108dp com o ponto
+  mais distante do centro a 27,2dp — 76% do raio de 36dp da zona segura. É a
+  mesma conta do `ic_launcher_foreground.png`, para as duas camadas ficarem
+  registradas uma sobre a outra.
+
+  O contorno do "Z" **não** são as três peças da marca (duas barras e a
+  diagonal) empilhadas: sob `evenOdd` as sobreposições delas voltariam a ficar
+  cheias e o "Z" sairia rendilhado. É o contorno da união das três, calculado
+  uma vez: as quinas em x=148,571/119,429 (aresta direita da diagonal em y=90 e
+  y=126) e x=120,571/91,429 (a esquerda, nos mesmos y).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:translateX="29.81"
+        android:translateY="28.197"
+        android:scaleX="0.20159"
+        android:scaleY="0.20159">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:fillType="evenOdd"
+            android:pathData="M40,24 H200 A16,16 0 0 1 216,40 V176 A16,16 0 0 1 200,192 H128 L84,232 V192 H40 A16,16 0 0 1 24,176 V40 A16,16 0 0 1 40,24 Z M72,66 H168 V90 H148.571 L119.429,126 H168 V150 H72 V126 H91.429 L120.571,90 H72 Z" />
+    </group>
+</vector>

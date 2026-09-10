@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  O mesmo ícone adaptativo, publicado também como `ic_launcher_round`.
+
+  Por que duplicar: o `android:roundIcon` do manifesto é um recurso à parte, e
+  quem o lê são os launchers que preferem a variante redonda — o One UI da
+  Samsung e boa parte das ROMs chinesas. Sem este arquivo, `@mipmap/
+  ic_launcher_round` resolveria para o **PNG de legado** das pastas de
+  densidade: um bitmap fixo, sem máscara, sem as camadas, e sem `monochrome`.
+  Com ele, os dois nomes chegam no mesmo ícone adaptativo e o aparelho decide a
+  máscara.
+
+  É de propósito que o conteúdo seja idêntico ao `ic_launcher.xml`: a diferença
+  entre redondo e quadrado é da máscara do sistema, não nossa.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+    <monochrome android:drawable="@drawable/ic_launcher_monochrome" />
+</adaptive-icon>

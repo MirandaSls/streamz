@@ -12,7 +12,23 @@ export interface ManifestoDeAtualizacao {
   version: string;
   notes: string;
   pub_date: string;
-  platforms: Record<string, { signature: string; url: string }>;
+  platforms: Record<string, PlataformaDoManifesto>;
+}
+
+/**
+ * O que cada plataforma traz. `signature` e `url` são do formato do Tauri;
+ * `sha256` é **nosso**, e só o Android o usa.
+ *
+ * O atualizador do Tauri ignora campo que não conhece, então acrescentar um
+ * aqui não quebra o cliente do Windows — e o Android, que é código nosso, é
+ * quem o lê. A alternativa (uma segunda rota, com outro formato) custaria um
+ * segundo contrato para dizer a mesma coisa.
+ */
+export interface PlataformaDoManifesto {
+  signature: string;
+  url: string;
+  /** Só no Android: o digest do `.apk`, minúsculo, 64 hexadecimais. */
+  sha256?: string;
 }
 
 /**
@@ -82,13 +98,13 @@ export class UpdatesService {
    *   instala sozinho. O formato da resposta é dele, a assinatura é
    *   obrigatória e é ela — não o sigilo do endereço — que impede alguém que
    *   assuma este endpoint de empurrar um executável qualquer.
-   * - **`android-*`** é o **nosso próprio código** (`lib/atualizacao-mobile.ts`),
-   *   que só compara versões e mostra um card "Baixar atualização". O
-   *   atualizador do Tauri não existe para Android, então **nada é baixado nem
-   *   instalado automaticamente**: o card abre `streamz.chat/download` no
-   *   navegador e quem instala o `.apk` é o usuário, à mão, com o Android
-   *   perguntando se confia na origem. Por isso a `signature` vai vazia —
-   *   não há nada que ela pudesse proteger aqui, e fingir que há seria pior.
+   * - **`android-*`** é o **nosso próprio código** (`lib/atualizacao-mobile.ts`
+   *   + o plugin `atualizador`), que baixa o `.apk`, confere o **sha256** e
+   *   abre o instalador do sistema. O atualizador do Tauri não existe para
+   *   Android, e não há como verificar minisign lá sem escrever a verificação
+   *   nós mesmos — então a integridade é o digest, e a origem é o HTTPS. Por
+   *   isso a `signature` vai **vazia** e o `sha256` vai preenchido: fingir uma
+   *   assinatura que ninguém confere seria pior que não ter nenhuma.
    *
    * Pedir de qualquer outra plataforma (macOS, Linux) responde "nada" em vez
    * de oferecer um `.exe` para um Mac.
@@ -119,14 +135,34 @@ export class UpdatesService {
   }
 
   /**
-   * O Android não tem assinatura no manifesto (ver acima) e por isso só precisa
-   * de duas variáveis: `ANDROID_UPDATE_VERSION` e `ANDROID_UPDATE_URL`. A URL
-   * é para onde mandar o usuário — hoje `https://streamz.chat/download`, não o
-   * `.apk` direto: a página é que pede a senha de acesso enquanto o app for
-   * fechado.
+   * O Android precisa de **três** variáveis: `ANDROID_UPDATE_VERSION`,
+   * `ANDROID_UPDATE_URL` e `ANDROID_UPDATE_SHA256`.
    *
-   * Sem as duas, responde "não há atualização", como o desktop. É o mesmo
-   * padrão de dependência opcional do resto da API.
+   * A URL é o **`.apk` direto** — hoje a rota `arquivo/:nome` desta mesma API,
+   * que serve a pasta `updates/` aberta. Não é mais a página `/download`: o app
+   * baixa sozinho, e uma página HTML não é um pacote instalável. (Quem continua
+   * mandando o usuário para a página é o site, para quem ainda não tem o app.)
+   *
+   * **O sha256 é obrigatório, e essa é a decisão de segurança do módulo.** No
+   * Windows quem recusa um pacote de estranho é a assinatura minisign, que o
+   * atualizador do Tauri confere sozinho. No Android não existe atualizador do
+   * Tauri e não existe verificador de minisign — teríamos de escrever um, e um
+   * verificador de assinatura escrito às pressas é pior que nenhum. O que
+   * sobra, e que dá para fazer certo, é o digest: a API publica o sha256 do
+   * arquivo, o app calcula o do que baixou e **só chama o instalador se os dois
+   * baterem**. Sem o digest configurado a resposta é 204 — o mesmo que o
+   * desktop faz sem assinatura. Um `.apk` que ninguém confere não é oferecido.
+   *
+   * Isso protege contra o arquivo corrompido e contra a troca no caminho; não
+   * protege contra quem consiga escrever no `.env` **e** na pasta `updates/`,
+   * porque aí ele publica o digest do próprio pacote. Contra esse, quem protege
+   * é o Android: o sistema só instala por cima um `.apk` assinado com a mesma
+   * chave de release, e ela não está neste servidor de aplicação (ver
+   * `docs/APPS-MOBILE.md` §5).
+   *
+   * Sem as três, responde "não há atualização". É o mesmo padrão de dependência
+   * opcional do resto da API — e é o estado em que a instalação fica quando o
+   * app passar a ser distribuído pela Play, que atualiza sozinha.
    */
   private manifestoDoAndroid(
     plataforma: string,
@@ -134,7 +170,17 @@ export class UpdatesService {
   ): ManifestoDeAtualizacao | null {
     const versao = this.versao("ANDROID");
     const url = this.url("ANDROID");
-    if (!versao || !url) return null;
+    const sha256 = this.variavel("ANDROID", "SHA256").toLowerCase();
+    if (!versao || !url || !sha256) return null;
+    if (!/^[0-9a-f]{64}$/.test(sha256)) {
+      // um digest truncado ou com lixo faria o app baixar 40 MB e recusar
+      // sempre, em silêncio; melhor não oferecer e deixar o motivo no log de
+      // quem publicou
+      this.logger.warn(
+        "ANDROID_UPDATE_SHA256 não é um sha256 (64 hexadecimais); a atualização do Android não será oferecida",
+      );
+      return null;
+    }
     if (!ehMaisNova(versao, atual)) return null;
 
     return {
@@ -142,7 +188,7 @@ export class UpdatesService {
       notes: this.variavel("ANDROID", "NOTES") || "Correções e melhorias.",
       pub_date: this.variavel("ANDROID", "DATE") || new Date().toISOString(),
       platforms: {
-        [plataforma]: { signature: "", url },
+        [plataforma]: { signature: "", url, sha256 },
       },
     };
   }

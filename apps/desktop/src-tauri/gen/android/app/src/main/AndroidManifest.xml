@@ -55,6 +55,29 @@
          o aviso na tela. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- ── Atualizar o app sozinho ────────────────────────────────────────
+         O direito de **pedir** para instalar um pacote. Ela é o que faz o
+         `AtualizadorPlugin` conseguir abrir o instalador do sistema com o
+         `.apk` que acabou de baixar; sem ela o `ACTION_VIEW` cai num aviso
+         genérico e a atualização morre ali.
+
+         Três coisas que ela NÃO é:
+
+         1. Não é permissão de instalar. É permissão de **pedir**. Quem instala
+            é o instalador do sistema, e ele sempre mostra a tela de
+            confirmação — não há como pular isso fora da Play (ver
+            `docs/APPS-MOBILE.md` §13).
+         2. Não basta declará-la. Desde o Android 8 o usuário ainda precisa
+            ligar "instalar apps desconhecidos" **para este app**, numa tela de
+            Ajustes que o plugin abre quando `canRequestPackageInstalls()` diz
+            que falta.
+         3. Não é inofensiva aos olhos da Play. A loja trata
+            REQUEST_INSTALL_PACKAGES como sensível e pede justificativa na
+            ficha — e ela existe justamente porque hoje o app é distribuído
+            FORA da loja. No dia em que ele entrar na Play, quem atualiza é a
+            loja, e esta linha (com o plugin inteiro) sai. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <!-- `required="false"` nas três: um aparelho sem câmera (ou sem microfone,
          que é raro mas existe em TV box) continua podendo instalar o app e usar
          o chat de texto. Sem isto a Play esconde o app desses aparelhos. -->
@@ -65,8 +88,15 @@
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
 
+    <!-- `icon` e `roundIcon` apontam para o **mesmo** ícone adaptativo
+         (`mipmap-anydpi-v26/`), e a máscara é escolha do aparelho. O
+         `roundIcon` não é enfeite: o One UI da Samsung e as ROMs que imitam o
+         Pixel pedem essa variante, e sem ela caem no PNG de legado — bitmap
+         chapado, sem a camada `monochrome`, que é o ícone errado nos temas do
+         Android 13+. -->
     <application
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:theme="@style/Theme.streamz_desktop"
         android:usesCleartextTraffic="${usesCleartextTraffic}">
@@ -99,6 +129,11 @@
             android:exported="false"
             android:foregroundServiceType="microphone|mediaPlayback" />
 
+        <!-- O `FileProvider` serve a dois clientes: o "salvar imagem" do
+             visualizador e, desde o auto-update, o instalador do sistema — que
+             recebe o `.apk` como `content://` porque passar um `file://` para
+             outro app lança `FileUriExposedException` desde o Android 7.
+             Os caminhos estão em `res/xml/file_paths.xml`. -->
         <provider
           android:name="androidx.core.content.FileProvider"
           android:authorities="${applicationId}.fileprovider"

@@ -636,11 +636,17 @@ e `ChamadaPlugin.kt` (a ponte, no formato de plugin Tauri 2 mobile), ligados e
 desligados pela web em `stores/servico-de-chamada.ts`. Detalhe e a prova de
 emulador em `docs/APPS-MOBILE.md` §12.
 
-**Atualização.** O atualizador do Tauri não existe para Android. A rota
-`/api/updates` responde ao alvo `android` (`ANDROID_UPDATE_VERSION` e
-`ANDROID_UPDATE_URL` no `.env`, sem assinatura — não há o que ela protegesse) e
-o app mostra um card que abre `streamz.chat/download` no navegador. Quem instala
-é o usuário.
+**Atualização.** O atualizador do Tauri não existe para Android; o que existe é
+o nosso, no plugin `atualizador`. A rota `/api/updates` responde ao alvo
+`android` com quatro variáveis no `.env` (`ANDROID_UPDATE_VERSION`, `_URL`,
+`_SHA256`, `_NOTES`) e o app baixa sozinho, confere o **sha256** e abre o
+instalador do sistema. Sem assinatura minisign: não há verificador dela no
+Android, e o digest é o que dá para fazer certo — sem ele configurado a rota
+responde 204. Na abertura o download começa sozinho; com o app já aberto
+aparece o card "Versão X disponível — Instalar". **A tela de confirmação do
+Android é inescapável fora da loja**, e a interface diz isso. Publicar é
+`scripts/publicar-android.sh`. Detalhe e a prova de emulador em
+`docs/APPS-MOBILE.md` §13.
 
 ## 6. Paridade visual com o Discord (o método)
 

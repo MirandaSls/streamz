@@ -25,6 +25,9 @@ JSON e plist validados por parser — não com build.
 10. [O que este trabalho NÃO prova](#10-o-que-este-trabalho-não-prova)
 11. [Os três PRs](#11-os-três-prs)
 12. [A chamada em segundo plano no Android](#12-a-chamada-em-segundo-plano-no-android)
+13. [O áudio no Android: por que não saía som](#13-o-áudio-no-android-por-que-não-saía-som)
+14. [O ícone do launcher no Android](#14-o-ícone-do-launcher-no-android)
+15. [Atualização: como o app Android se atualiza sozinho](#15-atualização-como-o-app-android-se-atualiza-sozinho)
 
 ---
 
@@ -465,11 +468,15 @@ No PWA, o push do iOS existe desde o **iOS 16.4** e **exige** o site adicionado
 
 `tauri-plugin-updater` é desktop. Consequência, por caminho:
 
-- **APK fora da loja**: quem atualiza é o usuário, baixando o `.apk` novo em
-  `streamz.chat/download`. Vale avisar dentro do app quando houver versão nova.
+- **APK fora da loja**: o updater do Tauri não serve, mas o problema tem
+  solução — **escrevemos o nosso** (§13). O app baixa o `.apk` novo, confere o
+  sha256 e abre o instalador do sistema. O que continua impossível é pular a
+  tela de confirmação do Android; ver o §13 para o porquê.
 - **Play Store** e **App Store**: quem atualiza é a loja, sozinha.
 - **PWA**: o service worker atualiza no recarregamento — é o mais rápido dos
   quatro.
+- **iOS fora da loja**: continua sem caminho. Não existe equivalente de
+  `REQUEST_INSTALL_PACKAGES` no iOS; um app não instala outro, ponto.
 
 O `plugins.updater` continua no `tauri.conf.json` porque é o desktop que o usa;
 no iOS ele fica inerte, e a `capabilities/ios.json` não dá permissão para ele.
@@ -797,3 +804,337 @@ sempre. A saída completa está em
 - **Áudio de verdade.** O emulador não tem microfone físico; o que se prova aqui
   é que a **conexão** e o **serviço** sobrevivem ao segundo plano, não que a voz
   chega do outro lado.
+
+---
+
+## 13. O áudio no Android: por que não saía som
+
+O relato foi curto — "o app mobile não está reproduzindo áudio", no aparelho
+real, com o `.apk` 1.1.1 do commit `3e709bc` — e podia ser duas coisas bem
+diferentes: a **voz dos outros** na chamada (WebRTC/LiveKit) ou os **sons do
+app** (`apps/web/public/sons/*`). As duas foram medidas, uma de cada vez, dentro
+do WebView de verdade.
+
+### Como se pergunta ao WebView (e não ao `dumpsys`)
+
+O `.apk` de depuração liga `setWebContentsDebuggingEnabled` — é o `wry` que
+faz isso, sob `#[cfg(debug_assertions)]`. Com ele de pé dá para falar com a
+página pelo protocolo do DevTools:
+
+```
+adb forward tcp:9222 localabstract:webview_devtools_remote_$(adb shell pidof dev.streamz.app)
+curl http://127.0.0.1:9222/json          # acha o alvo e o webSocketDebuggerUrl
+# e daí Runtime.evaluate no WebSocket
+```
+
+É assim que se responde "o `play()` foi aceito?", "`/sons/x.mp3` resolve?" e "o
+que os `<audio>` remotos estão fazendo?". Nenhum `dumpsys` responde isso, e sem
+isso a investigação vira adivinhação. O §12 provou o **serviço**; isto prova o
+**áudio**.
+
+### O que **não** era — e por que vale registrar
+
+| hipótese | resultado | como se sabe |
+|---|---|---|
+| Permissão de microfone no WebView (`onPermissionRequest`) | **o Tauri já trata** | `RustWebChromeClient.kt` do `wry` pede `RECORD_AUDIO` + `MODIFY_AUDIO_SETTINGS` e só então chama `request.grant(...)`. Com a permissão concedida, `getUserMedia({audio:true})` devolve faixa `live`. Com ela **negada**, o `getUserMedia` fica pendurado esperando o diálogo do sistema — que é o comportamento certo, não um defeito |
+| Autoplay recusado sem gesto | **não acontece** | o `wry` monta o webview com `settings.mediaPlaybackRequiresUserGesture = false` (`RustWebView.kt`). Medido na tela de login, **sem um toque sequer**: `play()` aceito, `paused=false`, `currentTime` andando, `readyState=4`. O `--autoplay-policy=no-user-gesture-required` do `lib.rs` é só do WebView2; no Android o equivalente já vem ligado |
+| `/sons/*.mp3` não resolve dentro do app | **resolve** | `fetch("/sons/mensagem.mp3")` na origem `http://tauri.localhost` → `200`, `audio/mpeg`, 19 688 bytes |
+| CSP bloqueando o LiveKit | **não bloqueia** | `tauri.android.conf.json` não redefine `app.security`: vale a CSP do `tauri.conf.json`, que já lista `wss://livekit.streamz.chat` em `connect-src` e `mediastream:`/`blob:` em `media-src` |
+| `AudioContext` suspenso | **não** | `state` = `running` |
+| `setSinkId` calando a saída | **não** | `aplicarSaida` já é no-op quando `setSinkId` não existe, que é o caso do WebView |
+| `AudioRemotoHost` não montado no shell do celular | **é montado** | `ShellMobile.tsx` renderiza `<VoiceLayer />`, e é ele que traz o `AudioRemotoHost` |
+
+Nenhuma dessas precisava de correção — e é por isso que estão aqui: quem ler
+"sem áudio no Android" da próxima vez não precisa refazer o caminho.
+
+### O que era: a **rota** de saída
+
+Sobrou o que nenhum dos sete arquivos do app tocava: o `AudioManager`. Uma
+chamada põe o aparelho em `MODE_IN_COMMUNICATION` — é o modo que liga o
+cancelamento de eco e o sensor de proximidade — e nesse modo, **sem ninguém
+escolher o dispositivo de saída**, o Android manda o som para o *alto-falante de
+conversa*: o furinho de encostar no ouvido. Com o telefone na mão, isso é
+indistinguível de "não tem áudio".
+
+O `AndroidManifest.xml` já previa exatamente isto quando declarou
+`MODIFY_AUDIO_SETTINGS` ("sem ela o áudio sai pelo alto-falante de chamada em
+vez do de mídia, que é o relato clássico"). O que faltava era **usar** a
+permissão: declarar o direito não muda rota nenhuma.
+
+A correção é `gen/android/…/dev/streamz/app/AudioDaChamada.kt`, ligada e
+desligada pelo `ChamadaPlugin` nos mesmos dois pontos do serviço de primeiro
+plano (§12) — que são, por construção, exatamente o começo e o fim da chamada
+(`decidirServicoDeChamada`).
+
+Três decisões dela:
+
+1. **A lista de rotas vem de `availableCommunicationDevices` (API 31+), não de
+   `getDevices`.** Um alto-falante Bluetooth pareado aparece em `getDevices`
+   como `TYPE_BLUETOOTH_A2DP`, mas A2DP **não é rota de voz**: em
+   `MODE_IN_COMMUNICATION` o sistema não o usa. Um app que olhasse `getDevices`
+   e concluísse "tem fone, não mexo" deixaria o som no ouvido justamente para
+   quem tem uma caixinha pareada. `availableCommunicationDevices` só lista o que
+   serve para conversa. Abaixo da API 31 sobra o `setSpeakerphoneOn`, e aí o
+   Bluetooth fica de fora da conta de propósito — sem a API nova não dá para
+   saber se o aparelho pareado fala SCO, e chutar que fala é o mesmo erro.
+2. **É reversível.** Modo e viva-voz anteriores são guardados e devolvidos no
+   `desligar`. O `AudioManager` é um recurso do aparelho inteiro: sair da
+   chamada deixando o telefone em modo de conversa estragaria o som do próximo
+   app. E o `desligar` é **no-op quando nunca ligamos** — a store manda
+   `pararServicoDeChamada` já na carga da web, com `channelId` nulo, e um
+   `clearCommunicationDevice()` ali apagaria a escolha de outro app.
+3. **Fica no plugin, não no serviço.** Quem tem `Activity` é a `Plugin`; o
+   `ChamadaService` continua só com a notificação, que é o que o §12 combinou.
+## 14. O ícone do launcher no Android
+
+Relato do usuário, em aparelho de verdade, com o `Streamz_1.1.1_android.apk` do
+commit `3e709bc`: *"o app está sem o ícone do Streamz, está com o ícone de
+conversa normal"* — um balão liso, sem o "Z".
+
+### O que se mediu antes de mexer
+
+A primeira coisa foi **não acreditar na hipótese**. O `.apk` publicado foi
+aberto com `apkanalyzer` e o `android:icon` do manifesto foi seguido até o
+bitmap:
+
+```
+android:icon="@ref/0x7f0d0000"          → mipmap/ic_launcher
+mipmap anydpi-v26 ic_launcher  → res/BW.xml   (adaptive-icon)
+  background → @0x7f050064   (color/ic_launcher_background = #FF0B0B0F)
+  foreground → @0x7f0d0001   (mipmap/ic_launcher_foreground)
+```
+
+Ou seja: o ícone **era o nosso**. O `foreground` do `.apk` bate pixel a pixel
+com o do repositório (diferença máxima de 1/255, que é a recompressão do
+`aapt`), e o desenho já estava reduzido para a zona segura — alfa de 72 a 360
+num quadro de 432, exatamente os 72dp centrais de 108dp.
+
+E, instalado num emulador **Android 14** com o Pixel Launcher, ele **aparecia
+certo**: balão limão com o "Z", em cima do Void Ink. As quatro suspeitas
+iniciais (adaptive icon apontando para drawable genérico, mipmaps de
+placeholder, manifesto no recurso errado, zona segura) estavam todas erradas.
+
+**Isto é o que ficou provado e é preciso dizer com todas as letras: no Android
+14 de estoque, o ícone do 1.1.1 já estava correto — o defeito relatado não foi
+reproduzido no emulador.**
+
+### A causa, e por que ela não aparece no emulador
+
+O que faltava é uma camada que só entra em cena fora do launcher de estoque: o
+**`monochrome`**, dos ícones temáticos do Android 13+.
+
+Quando o app declara essa camada, o launcher usa a silhueta que o app deu.
+Quando **não** declara, os launchers que implementam tema de ícone não desistem
+— One UI, Nothing OS e as ROMs que copiam o Pixel Launcher sintetizam a
+silhueta a partir do `foreground`, achatando tudo que é opaco. E o `foreground`
+que estava lá era o **tile inteiro do `.exe`**: um quadrado Void Ink de borda a
+borda, com o balão limão dentro e o "Z" pintado em Void Ink por cima do limão.
+Tudo opaco. Achatado, isso vira um borrão só — na melhor das hipóteses um balão
+liso, sem "Z". Que é, palavra por palavra, o relato.
+
+O Pixel Launcher do emulador `google_apis` não tem o tema de ícone ligável por
+`settings put secure theme_customization_overlay_packages` (foi tentado, com
+reinício e com `pm clear`: os ícones do Google continuaram coloridos), então
+**essa parte é inferência bem fundamentada, não medição**. O que se mediu é o
+resto: que a camada faltava, e que agora existe e desenha o "Z".
+
+### O que mudou
+
+| arquivo | mudança |
+|---|---|
+| `res/drawable/ic_launcher_monochrome.xml` | **novo**. A silhueta, com o "Z" vazado por `fillType="evenOdd"` |
+| `res/mipmap-anydpi-v26/ic_launcher.xml` | ganhou o `<monochrome>` |
+| `res/mipmap-anydpi-v26/ic_launcher_round.xml` | **novo**. O mesmo ícone adaptativo sob o segundo nome |
+| `AndroidManifest.xml` | ganhou `android:roundIcon="@mipmap/ic_launcher_round"` |
+| `res/mipmap-*/ic_launcher_foreground.png` | refeitos: **só o símbolo**, sobre alfa |
+| `res/mipmap-*/ic_launcher.png` e `_round.png` | refeitos nos tamanhos certos |
+| `res/drawable/ic_launcher_background.xml` | **apagado** (era a grade verde do template do Android) |
+| `res/drawable-v24/ic_launcher_foreground.xml` | **apagado** (era o robozinho do Android) |
+
+Quatro decisões que valem explicação:
+
+1. **O `foreground` deixou de carregar o fundo.** O contrato do ícone adaptativo
+   é que o chão vem da camada `background` — que aqui é a cor da marca, chapada.
+   Pôr o tile opaco na camada da frente quebra o efeito de profundidade (o
+   launcher move e amplia as duas camadas em ritmos diferentes ao tocar no
+   ícone) e, principalmente, é o que faz a silhueta sintetizada virar um bloco.
+   Agora o `foreground` é só o símbolo, com alfa em volta.
+
+2. **O tamanho do símbolo é o do tile da marca, não o da zona segura.** A
+   tentação é encher os 72dp garantidos. Não se deve: o launcher **amplia**
+   esses 72dp para preencher o espaço do ícone, então encher a zona segura
+   entrega um balão colado na borda da máscara. O ponto limão mais distante do
+   centro está a 37,73% da largura no `icon.png`; `0,3773 × 72 = 27,2dp` é o
+   raio que reproduz a mesma proporção — 76% do raio de 36dp da zona segura.
+
+3. **O "Z" do `monochrome` não são as três peças da marca empilhadas.** Sob
+   `evenOdd`, as sobreposições entre as duas barras e a diagonal voltariam a
+   ficar cheias e o "Z" sairia rendilhado. O que está no arquivo é o contorno da
+   união das três, calculado uma vez.
+
+4. **O `roundIcon` não é enfeite.** O One UI e boa parte das ROMs chinesas pedem
+   essa variante; sem o recurso, ela cai no PNG de legado — bitmap chapado, sem
+   máscara e **sem `monochrome`**, ou seja, exatamente o defeito de volta em
+   metade dos aparelhos. Por isso ele existe e aponta para o mesmo
+   `adaptive-icon`.
+
+O `mipmap-hdpi/ic_launcher.png` e o `_round.png` estavam em **49×49** em vez de
+72×72 (os outros quatro buckets estavam certos: 48/96/144/192). Não é o defeito
+relatado — hdpi hoje é aparelho de museu — mas era um borrão esperando um
+aparelho antigo, e saiu junto.
+
+### O que ficou de fora, de propósito
+
+- **`apps/desktop/src-tauri/icons/` não foi tocado.** É de onde sai o `.ico` do
+  instalador do Windows, e este PR não tem nada a dizer sobre o `.exe`. Fica
+  registrada uma dívida: o `icons/android/mipmap-*/ic_launcher_foreground.png`
+  ainda é o desenho antigo (o tile cheio), então **rodar `tauri icon` de novo
+  reintroduz o defeito** por cima do `gen/android`. Quem fizer isso precisa
+  refazer os `foreground` — o script que os gera está descrito acima e é
+  reprodutível a partir de `docs/branding/marca/icone-app-1024.svg`.
+- **O `ic_notificacao_chamada.xml` não mudou.** Foi rasterizado e conferido: já
+  é branco com alfa e com o "Z" vazado, que é o que a barra de status exige
+  (§12). Estava certo.
+- **O `manifest.webmanifest` do PWA não mudou.** As duas famílias (`any` e
+  `maskable`) já estão lá, com o símbolo dentro do círculo de 80% do spec —
+  a conta está comentada em `apps/web/app/manifest.ts`. Estava certo.
+
+### O que isto não prova
+
+- **Que o aparelho do usuário voltou ao normal.** O que se provou é o Android 14
+  de estoque, no emulador. A camada `monochrome` que fecha a hipótese do tema de
+  ícone não pôde ser exercitada aqui (o launcher do emulador não liga o tema), e
+  One UI/MIUI não entram em conta nenhuma deste servidor.
+- **Que o launcher do aparelho vai largar o ícone velho.** Launcher guarda
+  bitmap em cache. Se depois de instalar continuar errado, reinstalar ou
+  reiniciar o aparelho é parte do teste, não sinal de que o pacote está errado.
+## 15. Atualização: como o app Android se atualiza sozinho
+
+### O problema
+
+O `.apk` é distribuído fora da Play, e o `tauri-plugin-updater` é desktop-only
+(§7). Até a versão 1.1.1, "saiu versão nova" terminava num card que abria
+`streamz.chat/download` no navegador: o usuário baixava 40 MB à mão, achava o
+arquivo no gerenciador e instalava. Na prática, quase ninguém atualiza assim — e
+um app de chat com metade da base numa versão de três meses atrás é um app com
+dois protocolos.
+
+### O limite, dito antes de tudo
+
+**Nenhum app Android instala outro sem a tela de confirmação do sistema.** Não
+é falta de permissão nossa nem de engenhosidade: pular esse passo exige ser a
+loja, ser *device owner* (aparelho gerenciado por uma empresa) ou estar assinado
+com a chave da plataforma. Não somos nenhum dos três, e não há como ser.
+
+Então "atualiza sozinho" quer dizer, com todas as letras:
+
+> o app percebe a versão nova, baixa em segundo plano, confere o pacote e abre
+> o instalador já com o arquivo pronto — resta ao usuário um toque em
+> "Atualizar".
+
+É exatamente o que Discord, Fortnite e todo APK fora da loja fazem. A interface
+diz isso antes de a tela aparecer ("O Android vai pedir sua confirmação"), e
+está escrito assim no `AtualizadorPlugin.kt` e no `AtualizadorDoAndroid.tsx`
+para ninguém "consertar" isso depois.
+
+### As peças
+
+| arquivo | papel |
+|---|---|
+| `apps/api/src/modules/updates/updates.service.ts` | o manifesto de `android-universal`, lendo as quatro `ANDROID_UPDATE_*`. Responde 204 sem elas |
+| `apps/api/src/modules/updates/arquivo.ts` | a rota `arquivo/:nome` que serve o `.apk` da pasta `updates/`; `.apk` entrou na lista de extensões aqui |
+| `apps/web/lib/atualizacao-mobile.ts` | as duas decisões puras: o manifesto presta? (`novidadeDoManifesto`) e abertura × app aberto (`decidirAtualizacao`). Testado em `atualizacao-mobile.test.ts` |
+| `apps/web/components/atualizacao/AtualizadorDoAndroid.tsx` | o efeito: checa na abertura e a cada 30 min, baixa com barrinha, instala. Mora no `layout.tsx` para valer também na tela de login |
+| `apps/web/lib/desktop.ts` | `baixarAtualizacaoAndroid`, `instalarAtualizacaoAndroid`, `versaoInstalada` |
+| `gen/android/…/dev/streamz/app/AtualizadorPlugin.kt` | o download com progresso, a conferência do sha256 e o `Intent` do instalador |
+| `src-tauri/src/atualizador.rs` | o lado Rust do plugin, **inteiro** atrás de `#[cfg(target_os = "android")]` |
+| `src-tauri/build.rs` | o `InlinedPlugin` que gera a ACL `atualizador:default` |
+| `scripts/publicar-android.sh` | copia o `.apk` para `updates/` e `downloads/` e imprime as quatro linhas do `.env` |
+
+A superfície de comandos está em `apps/desktop/CONTRATO-MOBILE.md` §7.1.
+
+### As três decisões que mais custaram
+
+1. **A integridade é o sha256, não minisign — e é obrigatória.** No Windows
+   quem recusa um pacote de estranho é a assinatura minisign, que o atualizador
+   do Tauri confere sozinho, com a chave pública embutida no `.exe`. No Android
+   não existe atualizador do Tauri nem verificador de minisign: para ter
+   assinatura, teríamos de **escrever a verificação**, e um verificador de
+   assinatura escrito às pressas é pior que nenhum — ele parece proteger.
+
+   Então a prova é o digest: a API publica `ANDROID_UPDATE_SHA256`, o Kotlin
+   calcula o sha256 no mesmo laço em que escreve o arquivo, e o instalador só é
+   chamado se os dois baterem. Se não baterem, **o arquivo é apagado** — um
+   `.apk` que não confere não fica no disco esperando alguém tocar nele. Sem o
+   digest configurado, a rota responde 204: um pacote que ninguém confere não é
+   oferecido.
+
+   Isso protege contra o arquivo corrompido e contra a troca no caminho (a
+   origem é HTTPS). **Não** protege contra quem consiga escrever no `.env`
+   **e** na pasta `updates/` do servidor, porque aí ele publica o digest do
+   próprio pacote. Contra esse, quem protege é o Android: o sistema só instala
+   por cima um `.apk` assinado com a mesma chave de release, e ela não está no
+   servidor de aplicação (§5).
+
+2. **Abertura baixa; app aberto avisa.** São dois momentos com custos
+   diferentes. Quem acabou de abrir o app não estava fazendo nada, e um download
+   em segundo plano com uma barrinha discreta não atrapalha ninguém. Quem já
+   está dentro pode estar numa chamada ou no meio de uma conversa, e aí começar
+   a puxar 40 MB por conta própria seria o app decidindo pelo usuário: mostra-se
+   o card "Versão X disponível — Instalar" e espera-se o toque. A regra é pura
+   (`decidirAtualizacao`) e tem três cuidados que valem mais que ela: um
+   download em curso não é reiniciado pela checagem de 30 minutos; dispensar o
+   card vale só para **aquela** versão; e dispensar **não sobrevive a reabrir o
+   app** — "agora não" não pode virar "nunca mais" sem o usuário saber.
+
+3. **`cacheDir`, e o arquivo não passa pelo IPC.** O `.apk` fica em
+   `cacheDir/atualizacao/`, que é privado do app: no armazenamento externo
+   outro processo poderia reescrever o arquivo entre a conferência e a
+   instalação, o que anularia o digest. E o que volta do Kotlin para a web é um
+   **caminho**, não bytes — 40 MB atravessando o IPC do webview seriam absurdos,
+   e é por isso que a conferência mora do lado nativo.
+
+   Também por isso o download usa `HttpURLConnection` e não `DownloadManager`
+   nem OkHttp: o `DownloadManager` escreve na pasta pública de Downloads (um
+   `.apk` visível, que o usuário pode abrir semanas depois já desatualizado) e
+   só dá progresso por *polling*; OkHttp faria bem e custaria ~1,5 MB de
+   dependência nova para um `GET`. O `HttpURLConnection` da plataforma lê em
+   blocos, conta bytes e deixa calcular o digest no mesmo laço.
+
+### A permissão que a Play não gosta
+
+`REQUEST_INSTALL_PACKAGES` está no `AndroidManifest.xml` e é o que permite
+**pedir** para instalar. Três coisas que ela não é:
+
+1. Não é permissão de instalar — é permissão de pedir. Quem instala é o
+   instalador do sistema, com a tela de confirmação.
+2. Não basta declará-la. Desde o Android 8 o usuário ainda precisa ligar
+   "instalar apps desconhecidos" **para este app**, e não existe diálogo para
+   pedir isso: o único caminho é abrir a tela de Ajustes daquele app, que é o
+   que o plugin faz quando `canRequestPackageInstalls()` diz que falta. O card
+   então explica "Permita a instalação nos Ajustes e toque de novo" — o `.apk`
+   já está no disco, e o segundo toque é instantâneo.
+3. Não é inofensiva aos olhos da Play, que a trata como sensível e pede
+   justificativa na ficha. Ela existe porque hoje o app é distribuído **fora**
+   da loja. No dia em que entrar na Play, quem atualiza é a loja: as variáveis
+   `ANDROID_UPDATE_*` ficam vazias, a rota responde 204 e a permissão sai junto
+   com o plugin.
+
+### Como publicar uma versão do Android
+
+```
+scripts/build-android-no-servidor.sh <commit>     # gera o .apk e imprime o sha256
+scripts/publicar-android.sh <pasta-da-saída>      # copia + imprime as 4 linhas do .env
+```
+
+O `publicar-android.sh` copia o `.apk` para as **duas** pastas — `updates/`
+(aberta, é de onde o atualizador baixa) e `downloads/` (protegida por senha, é
+o que o site serve a quem ainda não tem o app) — e imprime as quatro linhas
+para colar no `.env`. Depois é reiniciar a API com `STREAMZ_TAG` (a mesma
+armadilha do desktop, §5 do processo: `docker restart` não relê o `.env`).
+
+A confusão das duas pastas é a mesma do desktop e vale repetir: `downloads/` é
+o que o **site** serve, `updates/` é o que o **app** baixa. O atualizador não
+sabe autenticar — ele segue a URL do manifesto e pronto; o que garante que o
+pacote é nosso não é o sigilo do endereço, é o digest.
+
