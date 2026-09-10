@@ -140,6 +140,38 @@ services:
       - lavalink
     mem_limit: 256m
 
+  # ── j-bots ── Streamz Boas-vindas ──────────────────────────────────────────
+  # Recebe quem chega no servidor. Não precisa de Lavalink nem da ponte de voz:
+  # só do gateway da API. Depende só de `api`.
+  #   docker compose --profile bots up -d bot-boas-vindas
+  bot-boas-vindas:
+    build:
+      context: .
+      dockerfile: apps/bots/Dockerfile
+    container_name: streamz-bot-boas-vindas
+    profiles: ["bots"]
+    restart: unless-stopped
+    environment:
+      BOTS: boas-vindas
+      # Dentro da rede do compose a API é o serviço `api`. **Sem** o /v10: o
+      # @discordjs/rest o acrescenta (§14 do documento).
+      STREAMZ_API_URL: http://api:3333/api
+      LOG_FORMATO: json
+      BOTS_DIR: /app/.bots
+      # O estado do bot: um JSON por servidor. Ver apps/bots/src/boas-vindas/armazem.ts.
+      BOAS_VINDAS_DIR: /dados
+    volumes:
+      # O token do bot, gravado pelo `provisionar` com chmod 600. Somente
+      # leitura: o container nunca escreve credencial.
+      - ./.bots:/app/.bots:ro
+      # Volume **nomeado** e não um bind: a configuração de cada servidor é dado
+      # do bot, não do repositório, e um bind em `./` acabaria versionado por
+      # engano no primeiro `git add -A` distraído.
+      - boas-vindas-dados:/dados
+    depends_on:
+      - api
+    mem_limit: 192m
+
   # ── j-bots ── Streamz Moderação ────────────────────────────────────────────
   # O último do bloco de bots — é onde o `CONTRATO.md` manda pôr um bot novo,
   # para dois PRs de bots diferentes não disputarem as mesmas linhas.
@@ -261,6 +293,8 @@ volumes:
   # Plugins do Lavalink (o source de YouTube). Sem o volume, cada `up` baixa
   # o jar do Maven de novo.
   lavalink-plugins:
+  # A configuração de boas-vindas de cada servidor (um JSON por servidor).
+  boas-vindas-dados:
   # Avisos e configuração por servidor do Streamz Moderação (um JSON por
   # servidor, escrita atômica). Ver `apps/bots/src/moderacao/estado.ts`.
   bot-moderacao-dados:
