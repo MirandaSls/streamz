@@ -383,14 +383,81 @@ hash, índice usado direto.
 | PUT/DELETE | `/api/v10/channels/:id/messages/:mid/reactions/:emoji/@me` — **feito** |
 | DELETE | `.../reactions/:emoji/:uid`, `.../reactions/:emoji`, `.../reactions` — **feito** |
 | GET | `.../reactions/:emoji` (quem reagiu, `?limit&after`) — **feito** |
+| PUT/DELETE | `/api/v10/guilds/:id/members/:uid/roles/:rid` — **feito** |
+| PATCH | `/api/v10/guilds/:id/members/:uid` — **feito** |
+| DELETE | `/api/v10/guilds/:id/members/:uid` (kick) — **feito** |
+| PUT/DELETE/GET | `/api/v10/guilds/:id/bans[/:uid]` — **feito** |
+| POST/PATCH | `/api/v10/guilds/:id/roles[/:rid]` — **feito** |
+| POST | `/api/v10/channels/:id/messages/bulk-delete` — **feito** |
+| POST | `/api/v10/users/@me/channels` (abrir DM) — **feito** |
 | GET | `/api/v10/guilds/:id/members?limit&after` |
-| PATCH/PUT/DELETE | `/api/v10/guilds/:id/members/:uid[/roles/:rid]` |
-| DELETE | `/api/v10/guilds/:id/members/:uid` (kick) |
-| PUT/DELETE | `/api/v10/guilds/:id/bans/:uid` |
-| POST/PATCH/DELETE | `/api/v10/guilds/:id/roles[/:rid]` |
+| DELETE | `/api/v10/guilds/:id/roles/:rid` |
 | PUT/DELETE | `/api/v10/channels/:id/permissions/:oid` |
-| POST | `/api/v10/channels/:id/messages/bulk-delete` |
-| POST | `/api/v10/users/@me/channels` (abrir DM) |
+
+#### Membros, cargos, banimento, DM e bulk delete — o que ficou de pé
+
+`rest/membros.controller.ts`, `rest/cargos.controller.ts`, o `POST
+/users/@me/channels` em `rest/users.controller.ts` e o `bulk-delete` em
+`rest/messages.controller.ts`. **Nenhum deles implementa regra**: chamam
+`RolesService.assign/unassign/create/update`, `ModerationService.timeout/
+removeTimeout/kick/ban/bulkDelete`, `GuildsService.unban/listBans/isBanned` e
+`DMsService.openWith` — os mesmos métodos que a tela do Streamz chama. É por
+isso que o tempo real sai de graça: `RolesService.assign` termina emitindo
+`member.updated`, o `useRealtime` do web já o escuta (a lista de membros muda
+**sem F5**) e a `PonteDeEventos` o traduz em `GUILD_MEMBER_UPDATE` para as
+outras sessões de bot.
+
+O que a casca acrescenta é a tradução e **o código de erro certo**, que é o que
+a lib do bot classifica: `10004` servidor, `10007` membro, `10011` cargo,
+`10026` banimento, `50013` permissão/hierarquia, `50028` cargo que não se veste
+à mão, `50034` mensagem com mais de 14 dias, `50035` corpo inválido. Sem isso um
+`NotFoundException` do service chegaria ao bot como `10003 Unknown Channel`.
+
+Permissões, uma a uma: cargo exige `MANAGE_ROLES` **e** hierarquia (o cargo alvo
+estritamente abaixo do mais alto do bot — sem isso `MANAGE_ROLES` valeria
+`ADMINISTRATOR` em duas chamadas); castigo, `MODERATE_MEMBERS`; expulsar,
+`KICK_MEMBERS`; banir/desbanir/listar, `BAN_MEMBERS`; `bulk-delete`,
+`MANAGE_MESSAGES` no canal.
+
+**Divergências declaradas** (todas por não duplicar regra de autorização, que é
+o que o ADR-0002 proíbe):
+
+1. **`nick` não existe.** Não há apelido por servidor no Streamz — nem coluna,
+   nem tela —, e o §6 já lista `MANAGE_NICKNAMES` entre as permissões *sempre
+   apagadas*. `PATCH` com `nick` de texto responde **50013**; `nick: null`
+   (limpar) é um no-op que passa. Um 200 mudo diria que mudou algo que não
+   mudou.
+2. **Banir exige `MODERATE_MEMBERS` além de `BAN_MEMBERS`**, porque o
+   `assertPodeAgirSobre` do `ModerationService` a pede antes de qualquer coisa.
+   No Discord `BAN_MEMBERS` basta.
+3. **Só se bane quem é membro.** O `guild.bans.create()` do Discord aceita o id
+   de alguém que nunca entrou; aqui a regra age sobre um `GuildMember` e quem
+   não é membro leva `10007`.
+4. **`GET /guilds/:id/bans` não pagina.** O Discord aceita `?limit&before&after`;
+   um servidor daqui tem dezenas de banidos e o `guild.bans.fetch()` lê a lista
+   inteira quando não passa cursor.
+5. **`managed` continua `false` para todo cargo** — não há cargo de integração
+   no esquema. O outro caso de `50028` do Discord (cargo gerenciado) portanto
+   nunca dispara; o que dispara é o `@everyone`.
+6. **`mute`/`deaf`/`channel_id` do `PATCH` do membro são ignorados**: são estado
+   da call, que no Streamz vive no `VoiceStateStore` (F2) e não no membro.
+   Ignorados em silêncio de propósito — o discord.js os manda junto num `edit()`
+   genérico, e recusá-los quebraria um PATCH que só queria mexer nos cargos.
+7. **Banir e desbanir não emitem `GUILD_BAN_ADD`/`GUILD_BAN_REMOVE`** para os
+   bots (o `member.left` vira `GUILD_MEMBER_REMOVE`, esse sim). O intent
+   `GUILD_MODERATION` fica na fila.
+8. **`DELETE /guilds/:id/roles/:rid` (apagar cargo) não entrou** neste lote:
+   `RolesService.remove` existe e a rota é meia dúzia de linhas, mas apagar
+   cargo por bot merece a sua própria prova de ponta a ponta.
+
+**Embed sozinho é mensagem válida.** O `POST /channels/:id/messages` exigia
+`content` e devolvia `50035 content[BASE_TYPE_REQUIRED]` a um corpo que só
+trazia `embeds` — o jeito como quase todo bot responde. Agora `embeds` (ou
+`components`) sozinhos bastam, e o embed é **achatado em texto**
+(`traducao/embed.ts`: título, descrição, campos, rodapé, imagem) porque o
+Streamz não tem embed rico e uma mensagem de conteúdo vazio chega ao navegador
+como uma linha em branco. No dia em que houver embed de verdade, o achatamento
+sai e o objeto é guardado.
 
 ### Rate limit — o que as libs exigem
 

@@ -8,6 +8,7 @@ import { DadosDeCompatService } from "../dados.service";
 import { IdsService } from "../ids.service";
 import { GuildsService } from "../../guilds/guilds.service";
 import { MessagesService } from "../../messages/messages.service";
+import { ModerationService } from "../../moderation/moderation.service";
 import { RealtimeService } from "../../realtime/realtime.service";
 import { ReacoesDeCompatService } from "../reacoes.service";
 import { corpoDeMensagemSchema } from "./corpos";
@@ -57,6 +58,19 @@ const CORPO_DO_DISCORD_JS = {
 
 const criar = vi.fn(async () => ({ id: "msg_novo", channelId: "canal_1" }));
 const emitToChannel = vi.fn();
+const apagarEmLote = vi.fn(async (..._a: unknown[]) => ({ deleted: [] as string[] }));
+
+/**
+ * Um snowflake de agora e um de 20 dias atrás, montados com o epoch do Discord.
+ *
+ * A idade do `bulk-delete` sai do **próprio id** (é assim que o Discord valida),
+ * então o teste dos 14 dias não precisa de banco nenhum: precisa de dois
+ * números.
+ */
+const snowflakeDe = (quandoMs: number) => String((BigInt(quandoMs) - 1420070400000n) << 22n);
+const RECENTE = snowflakeDe(Date.now() - 60_000);
+const OUTRA_RECENTE = snowflakeDe(Date.now() - 120_000);
+const ANTIGA = snowflakeDe(Date.now() - 20 * 24 * 60 * 60 * 1000);
 
 @Module({
   controllers: [MessagesCompatController],
@@ -84,11 +98,19 @@ const emitToChannel = vi.fn();
       useValue: {
         snowflakeDeUsuario: async () => BOT.botSnowflake,
         cuidDeCanalOuCategoria: async () => ({ id: "canal_1", tipo: "canal" }),
-        cuidDeMensagem: async (sf: string) => (sf === "1000000000000000000" ? "msg_citada" : null),
+        cuidDeMensagem: async (sf: string) => {
+          if (sf === "1000000000000000000") return "msg_citada";
+          if (sf === RECENTE) return "msg_a";
+          if (sf === OUTRA_RECENTE) return "msg_b";
+          if (sf === ANTIGA) return "msg_velha";
+          return null;
+        },
       },
     },
     { provide: GuildsService, useValue: { assertCanViewChannel: async () => ({}) } },
     { provide: MessagesService, useValue: { create: criar } },
+    // F5 membros: quem apaga o lote do `bulk-delete`.
+    { provide: ModerationService, useValue: { bulkDelete: apagarEmLote } },
     { provide: RealtimeService, useValue: { emitToChannel } },
     // F5: o controller resolve o emoji da reação por aqui. Este teste é do
     // corpo do POST — nenhuma rota de reação passa por ele.
@@ -189,5 +211,77 @@ describe("POST /api/v10/channels/:id/messages — o corpo sobrevive ao Validatio
     expect(resposta.status).toBe(400);
     expect(await resposta.json()).toMatchObject({ code: 50035, message: "Invalid Form Body" });
     expect(criar).not.toHaveBeenCalled();
+  });
+
+  // ── F5 membros: embed sozinho é mensagem válida ─────────────
+
+  // O defeito que quem tentou escrever um bot achou: o corpo `{ embeds: [...] }`
+  // — o jeito como quase todo bot responde — levava
+  // `50035 content[BASE_TYPE_REQUIRED]`. No Discord ele é válido.
+  it("corpo só com `embeds` é aceito, e o embed vira texto (não linha em branco)", async () => {
+    criar.mockClear();
+    const resposta = await fetch(`${url}/api/v10/channels/999/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bot a.b.c" },
+      body: JSON.stringify({
+        embeds: [{ title: "Nível 5", description: "Parabéns!", fields: [{ name: "XP", value: "1200" }] }],
+      }),
+    });
+
+    expect(resposta.status).toBe(201);
+    const [, , conteudo] = criar.mock.calls.at(-1) as unknown as [string, string, string];
+    expect(conteudo).toBe("**Nível 5**\nParabéns!\n**XP**: 1200");
+  });
+
+  it("corpo só com `components` também passa (a mensagem fica vazia, mas não é recusada)", async () => {
+    criar.mockClear();
+    const resposta = await fetch(`${url}/api/v10/channels/999/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bot a.b.c" },
+      body: JSON.stringify({ components: [{ type: 1, components: [] }] }),
+    });
+
+    expect(resposta.status).toBe(201);
+    expect(criar).toHaveBeenCalled();
+  });
+
+  // ── F5 membros: bulk-delete ─────────────────────────────────
+
+  it("POST /messages/bulk-delete apaga pelo ModerationService e responde 204", async () => {
+    apagarEmLote.mockClear();
+    const resposta = await fetch(`${url}/api/v10/channels/999/messages/bulk-delete`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bot a.b.c" },
+      body: JSON.stringify({ messages: [RECENTE, OUTRA_RECENTE] }),
+    });
+
+    expect(resposta.status).toBe(204);
+    expect(apagarEmLote).toHaveBeenCalledWith("user_bot", "canal_1", ["msg_a", "msg_b"]);
+  });
+
+  it("uma mensagem só leva 50035 (o Discord exige de 2 a 100)", async () => {
+    apagarEmLote.mockClear();
+    const resposta = await fetch(`${url}/api/v10/channels/999/messages/bulk-delete`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bot a.b.c" },
+      body: JSON.stringify({ messages: [RECENTE] }),
+    });
+
+    expect(resposta.status).toBe(400);
+    expect(await resposta.json()).toMatchObject({ code: 50035 });
+    expect(apagarEmLote).not.toHaveBeenCalled();
+  });
+
+  it("mensagem com mais de 14 dias leva 50034 — e o lote inteiro não é apagado", async () => {
+    apagarEmLote.mockClear();
+    const resposta = await fetch(`${url}/api/v10/channels/999/messages/bulk-delete`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bot a.b.c" },
+      body: JSON.stringify({ messages: [RECENTE, ANTIGA] }),
+    });
+
+    expect(resposta.status).toBe(400);
+    expect(await resposta.json()).toMatchObject({ code: 50034 });
+    expect(apagarEmLote).not.toHaveBeenCalled();
   });
 });
