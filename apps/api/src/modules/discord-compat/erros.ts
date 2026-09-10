@@ -50,6 +50,13 @@ export const CODIGO = {
   CARGO_DESCONHECIDO: 10011,
   /** ── F5 ── `Unknown Emoji`: o emoji personalizado da rota não existe aqui. */
   EMOJI_DESCONHECIDO: 10014,
+  /**
+   * ── F5 membros ── `Unknown Ban`: `DELETE /guilds/:id/bans/:uid` de alguém
+   * que não está banido. O `GuildsService.unban` é idempotente e engole o caso;
+   * o Discord devolve 404 com este código, e o `guild.bans.remove()` do
+   * discord.js o classifica para dizer "esse já não estava banido".
+   */
+  BANIMENTO_DESCONHECIDO: 10026,
   INTERACAO_DESCONHECIDA: 10062,
   /**
    * `Unknown application command` — o comando de barra que o bot pediu não
@@ -60,9 +67,23 @@ export const CODIGO = {
   COMANDO_DESCONHECIDO: 10063,
   INTERACAO_JA_RESPONDIDA: 40060,
   SEM_ACESSO: 50001,
+  /**
+   * ── F5 membros ── `Invalid Role`: o cargo existe, mas não é atribuível à
+   * mão. Aqui isso quer dizer o `@everyone` (`isDefault`) — que no Discord é
+   * implícito e não entra na lista de cargos de ninguém — e o cargo `managed`
+   * (o de uma integração), que o Streamz ainda não modela.
+   */
+  CARGO_INVALIDO: 50028,
   NAO_AUTENTICADO: 50014,
   SEM_PERMISSAO: 50013,
   CORPO_INVALIDO: 50035,
+  /**
+   * ── F5 membros ── `You can only bulk delete messages that are under 14 days
+   * old`. É a regra do `bulkDelete` do Discord, e o discord.js a espera: o
+   * `TextChannel#bulkDelete` com `filterOld: true` existe justamente para
+   * contorná-la.
+   */
+  MENSAGEM_ANTIGA_DEMAIS: 50034,
   NAO_IMPLEMENTADO: 20012,
 } as const;
 
@@ -106,6 +127,32 @@ export const membroDesconhecido = () =>
  */
 export const emojiDesconhecido = () =>
   new ErroDoDiscord(HttpStatus.NOT_FOUND, CODIGO.EMOJI_DESCONHECIDO, "Unknown Emoji");
+
+/**
+ * ── F5 membros ── 404 `10026`: desbanir quem não está banido.
+ */
+export const banimentoDesconhecido = () =>
+  new ErroDoDiscord(HttpStatus.NOT_FOUND, CODIGO.BANIMENTO_DESCONHECIDO, "Unknown Ban");
+
+/** ── F5 membros ── 404 `10011`: o `:roleId` da rota não é cargo deste servidor. */
+export const cargoDesconhecido = () =>
+  new ErroDoDiscord(HttpStatus.NOT_FOUND, CODIGO.CARGO_DESCONHECIDO, "Unknown Role");
+
+/**
+ * ── F5 membros ── 400 `50028`: cargo que não se atribui à mão.
+ *
+ * O `@everyone` e o cargo de integração (`managed`). O texto é o do Discord.
+ */
+export const cargoInvalido = () =>
+  new ErroDoDiscord(HttpStatus.BAD_REQUEST, CODIGO.CARGO_INVALIDO, "Invalid Role");
+
+/** ── F5 membros ── 400 `50034`: mensagem com mais de 14 dias no bulk delete. */
+export const mensagemAntigaDemais = () =>
+  new ErroDoDiscord(
+    HttpStatus.BAD_REQUEST,
+    CODIGO.MENSAGEM_ANTIGA_DEMAIS,
+    "You can only bulk delete messages that are under 14 days old.",
+  );
 
 export const semAcesso = () =>
   new ErroDoDiscord(HttpStatus.FORBIDDEN, CODIGO.SEM_ACESSO, "Missing Access");

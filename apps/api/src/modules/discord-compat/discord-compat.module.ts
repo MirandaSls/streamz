@@ -1,8 +1,10 @@
 import { Module, type OnModuleInit } from "@nestjs/common";
 import { ApplicationsModule } from "../applications/applications.module";
 import { ChannelsModule } from "../channels/channels.module";
+import { DMsModule } from "../dms/dms.module";
 import { GuildsModule } from "../guilds/guilds.module";
 import { MessagesModule } from "../messages/messages.module";
+import { ModerationModule } from "../moderation/moderation.module";
 import { RealtimeModule } from "../realtime/realtime.module";
 import { RolesModule } from "../roles/roles.module";
 import { VoiceModule } from "../voice/voice.module";
@@ -24,7 +26,14 @@ import {
 } from "./rest/applications.controller";
 import { ChannelsCompatController, ChannelsCompatControllerV9 } from "./rest/channels.controller";
 import { GatewayCompatController, GatewayCompatControllerV9 } from "./rest/gateway.controller";
+import { CargosCompatController, CargosCompatControllerV9 } from "./rest/cargos.controller";
 import { GuildsCompatController, GuildsCompatControllerV9 } from "./rest/guilds.controller";
+import {
+  BanimentosCompatController,
+  BanimentosCompatControllerV9,
+  MembrosCompatController,
+  MembrosCompatControllerV9,
+} from "./rest/membros.controller";
 import { MessagesCompatController, MessagesCompatControllerV9 } from "./rest/messages.controller";
 import { UsersCompatController, UsersCompatControllerV9 } from "./rest/users.controller";
 
@@ -54,6 +63,11 @@ import { UsersCompatController, UsersCompatControllerV9 } from "./rest/users.con
     MessagesModule,
     RolesModule,
     RealtimeModule,
+    // F5 membros: castigo, expulsão/banimento com motivo e remoção em lote —
+    // a regra é do `ModerationService`, a casca só traduz (§3).
+    ModerationModule,
+    // F5 membros: `POST /users/@me/channels` (a DM que o `user.send()` abre).
+    DMsModule,
     // F2: o `VoiceService` é quem grava o estado de voz do bot (§D5.7) e quem
     // assina o JWT da ponte (§3 do CONTRATO-F2).
     VoiceModule,
@@ -70,6 +84,15 @@ import { UsersCompatController, UsersCompatControllerV9 } from "./rest/users.con
     OAuth2ApplicationsCompatControllerV9,
     GuildsCompatController,
     GuildsCompatControllerV9,
+    // F5 membros — as rotas de escrita sobre membro, banimento e cargo. Vêm
+    // **depois** do `GuildsCompatController` porque o Express casa na ordem de
+    // registro e o `GET v10/guilds/:id/roles` da F1 mora lá.
+    MembrosCompatController,
+    MembrosCompatControllerV9,
+    BanimentosCompatController,
+    BanimentosCompatControllerV9,
+    CargosCompatController,
+    CargosCompatControllerV9,
     ChannelsCompatController,
     ChannelsCompatControllerV9,
     MessagesCompatController,

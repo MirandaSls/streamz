@@ -14,11 +14,12 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { SkipThrottle } from "@nestjs/throttler";
-import { WS_EVENTS } from "@streamz/shared";
+import { ehSnowflake, snowflakeParaData, WS_EVENTS } from "@streamz/shared";
 import { zodBody } from "../../../common/zod.pipe";
 import { GuildsService } from "../../guilds/guilds.service";
 import { anunciarReacao, anunciarReacoesLimpas } from "../../messages/eventos-de-reacao";
 import { MessagesService } from "../../messages/messages.service";
+import { ModerationService } from "../../moderation/moderation.service";
 import { RealtimeService } from "../../realtime/realtime.service";
 import { BotTokenGuard } from "../bot-token.guard";
 import { DadosDeCompatService } from "../dados.service";
@@ -27,6 +28,7 @@ import {
   corpoInvalido,
   emojiDesconhecido,
   FiltroDeErrosDoDiscord,
+  mensagemAntigaDemais,
   mensagemDesconhecida,
 } from "../erros";
 import { IdsService } from "../ids.service";
@@ -34,6 +36,7 @@ import { RateLimitDoDiscordInterceptor } from "../rate-limit.interceptor";
 import { ReacoesDeCompatService } from "../reacoes.service";
 import type { BotAutenticado, MensagemDoDiscord, UsuarioDoDiscord } from "../tipos";
 import { lerEmojiDaRota } from "../traducao/emoji";
+import { achatarEmbeds } from "../traducao/embed";
 import { mensagemParaDiscord } from "../traducao/mensagem";
 import { usuarioParaDiscord } from "../traducao/usuario";
 import { BotAtual } from "./bot-atual";
@@ -44,6 +47,7 @@ import {
   type CorpoDeMensagem,
   type EdicaoDeMensagem,
 } from "./corpos";
+import { remocaoEmLoteSchema, type CorpoDeRemocaoEmLote } from "./corpos-membros";
 
 /**
  * As mensagens: o que faz o `!ping` responder `pong`.
@@ -101,6 +105,9 @@ import {
  * A ordem de declaração importa: `.../:emoji/@me` vem **antes** de
  * `.../:emoji/:uid`, senão o `@me` casaria como se fosse um id de usuário.
  */
+/** O teto do `bulk-delete` do Discord: 14 dias, em milissegundos. */
+const DUAS_SEMANAS_EM_MS = 14 * 24 * 60 * 60 * 1000;
+
 @SkipThrottle()
 @UseFilters(FiltroDeErrosDoDiscord)
 @UseInterceptors(RateLimitDoDiscordInterceptor)
@@ -114,6 +121,7 @@ export class MessagesCompatController {
     private readonly mensagens: MessagesService,
     private readonly realtime: RealtimeService,
     private readonly reacoes: ReacoesDeCompatService,
+    private readonly moderacao: ModerationService,
   ) {}
 
   @Get()
@@ -142,11 +150,22 @@ export class MessagesCompatController {
   ): Promise<MensagemDoDiscord> {
     const canalId = await this.cuidDoCanal(id);
 
-    const content = (dados.content ?? "").trim();
     const anexos = dados.attachment_ids ?? [];
-    // o Discord recusa mensagem sem nada; a F1 não tem embed rico, então "nada"
-    // é texto vazio e nenhum anexo
-    if (content.length === 0 && anexos.length === 0) {
+    const embeds = dados.embeds ?? [];
+    // **No Discord, embed sozinho é mensagem válida** — é assim que quase todo
+    // bot responde. A F1 exigia `content` e devolvia
+    // `50035 content[BASE_TYPE_REQUIRED]` a um corpo que só trazia `embeds`,
+    // o que quebrava esses bots. O embed é achatado em texto porque o Streamz
+    // não tem embed rico e uma mensagem de conteúdo vazio chega ao navegador
+    // como uma linha em branco (ver `traducao/embed.ts`).
+    const content = (dados.content ?? "").trim() || achatarEmbeds(embeds);
+    // `components` sozinho (um botão sem texto) também é válido no Discord.
+    // Aqui ele não vira nada — não há componente interativo na mensagem —, mas
+    // recusar o corpo seria pior: o bot ficaria sem saber que a mensagem
+    // "chegou vazia" e não que "foi rejeitada".
+    const componentes = dados.components ?? [];
+    // vazio de verdade: sem texto, sem anexo, sem embed e sem componente
+    if (content.length === 0 && anexos.length === 0 && embeds.length === 0 && componentes.length === 0) {
       throw corpoInvalido({
         content: { _errors: [{ code: "BASE_TYPE_REQUIRED", message: "Cannot send an empty message" }] },
       });
@@ -172,6 +191,57 @@ export class MessagesCompatController {
     );
 
     return this.reler(mensagem.id, bot.botUserId);
+  }
+
+  /**
+   * ── F5 membros ── `POST /channels/:id/messages/bulk-delete`: apaga de 2 a
+   * 100 mensagens de uma vez. **204 sem corpo.** Exige `MANAGE_MESSAGES`.
+   *
+   * É a rota do `channel.bulkDelete(5)` do discord.js e do `/limpar` de todo
+   * bot de moderação. Declarada **antes** de `@Get(":mid")` só por clareza — o
+   * método é outro, então não haveria captura; o que importa de verdade é que
+   * `bulk-delete` não é um snowflake e nunca casaria com `:mid` num GET.
+   *
+   * Quem apaga é `ModerationService.bulkDelete`: ele confere
+   * `MANAGE_MESSAGES` no canal (`canModerateChannel`), recusa ids que são de
+   * **outro** canal (senão a rota seria um jeito de apagar onde o bot não
+   * modera), apaga numa consulta só e emite `messages.bulkDeleted` — o evento
+   * que o navegador já escuta, e por isso as mensagens somem da tela sem F5.
+   *
+   * As duas regras que são **do Discord** e não existem do lado de cá ficam
+   * aqui, antes de chamar o service:
+   *
+   * 1. **2..100** (`50035`) — o `bulkDelete` do Streamz aceita 1, o do Discord
+   *    não, e o discord.js conta com a recusa (é o que o faz cair para o
+   *    `DELETE` de uma mensagem só quando o lote tem uma).
+   * 2. **Nada com mais de 14 dias** (`50034`) — a idade sai do **próprio
+   *    snowflake** (`snowflakeParaData`), sem ir ao banco: o id do Discord
+   *    carrega o instante de criação, e é exatamente assim que o servidor deles
+   *    valida.
+   */
+  @Post("bulk-delete")
+  @HttpCode(204)
+  async apagarEmLote(
+    @BotAtual() bot: BotAutenticado,
+    @Param("id") id: string,
+    @Body(zodBody(remocaoEmLoteSchema)) dados: CorpoDeRemocaoEmLote,
+  ): Promise<void> {
+    const canalId = await this.cuidDoCanal(id);
+
+    const limite = Date.now() - DUAS_SEMANAS_EM_MS;
+    const cuids: string[] = [];
+    for (const snowflake of new Set(dados.messages)) {
+      if (!ehSnowflake(snowflake)) throw mensagemDesconhecida();
+      if (snowflakeParaData(BigInt(snowflake)).getTime() < limite) throw mensagemAntigaDemais();
+      const cuid = await this.ids.cuidDeMensagem(snowflake);
+      // mensagem que já não existe: o Discord ignora em silêncio dentro do
+      // lote (o bot costuma ter buscado a lista segundos antes), e não faz o
+      // lote inteiro falhar
+      if (cuid) cuids.push(cuid);
+    }
+    if (cuids.length === 0) throw mensagemDesconhecida();
+
+    await this.moderacao.bulkDelete(bot.botUserId, canalId, cuids);
   }
 
   @Get(":mid")
