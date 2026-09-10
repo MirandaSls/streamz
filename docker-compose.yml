@@ -172,6 +172,38 @@ services:
       - api
     mem_limit: 192m
 
+  # ── j-bots ── Streamz Moderação ────────────────────────────────────────────
+  # O último do bloco de bots — é onde o `CONTRATO.md` manda pôr um bot novo,
+  # para dois PRs de bots diferentes não disputarem as mesmas linhas.
+  #
+  # Sem Lavalink e sem `depends_on` além da API: este bot não toca em voz.
+  bot-moderacao:
+    build:
+      context: .
+      dockerfile: apps/bots/Dockerfile
+    container_name: streamz-bot-moderacao
+    profiles: ["bots"]
+    restart: unless-stopped
+    environment:
+      BOTS: moderacao
+      STREAMZ_API_URL: http://api:3333/api
+      LOG_FORMATO: json
+      BOTS_DIR: /app/.bots
+      # Onde ficam os avisos e a configuração de cada servidor (um JSON por
+      # servidor). Ver `apps/bots/src/moderacao/estado.ts` para o porquê de ser
+      # arquivo e não tabela, e para o caminho de migração.
+      MODERACAO_DIR: /dados
+    volumes:
+      - ./.bots:/app/.bots:ro
+      # **Volume nomeado, não bind**: este é o único estado durável do bot, e um
+      # `docker compose down -v` distraído levaria a ficha de moderação de todos
+      # os servidores junto. Num volume ele sobrevive a `down`, a `up --build` e
+      # à troca de imagem.
+      - bot-moderacao-dados:/dados
+    depends_on:
+      - api
+    mem_limit: 256m
+
   # ── Aplicação ──────────────────────────────────────────────────────────────
   # `pnpm db:up` continua subindo só o Postgres (ele nomeia o serviço). Estes
   # dois só sobem quando pedidos: `docker compose up -d api web`.
@@ -263,3 +295,6 @@ volumes:
   lavalink-plugins:
   # A configuração de boas-vindas de cada servidor (um JSON por servidor).
   boas-vindas-dados:
+  # Avisos e configuração por servidor do Streamz Moderação (um JSON por
+  # servidor, escrita atômica). Ver `apps/bots/src/moderacao/estado.ts`.
+  bot-moderacao-dados:
