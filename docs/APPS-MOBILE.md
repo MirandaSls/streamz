@@ -885,6 +885,128 @@ Três decisões dela:
    `clearCommunicationDevice()` ali apagaria a escolha de outro app.
 3. **Fica no plugin, não no serviço.** Quem tem `Activity` é a `Plugin`; o
    `ChamadaService` continua só com a notificação, que é o que o §12 combinou.
+### Segunda rodada (1.1.2): a voz volta, os sons do app não
+
+Com o `.apk` 1.1.2 do commit `6676e1b` — já com a correção da rota — o relato
+mudou de lugar: **a voz da chamada funciona; os sons do app não são ouvidos**.
+Mudo, desmudo, alguém entrou/saiu, movido de canal e o toque de chamada
+recebida. E o toque de chamada acontece com o `AudioManager` em modo **normal**,
+fora de qualquer chamada, o que parecia apontar para duas causas diferentes.
+
+**São a mesma causa.** E ela não é rota; é **nível**.
+
+#### O que o AOSP diz sobre a rota (e por que ela está certa)
+
+A primeira suspeita era que, em `MODE_IN_COMMUNICATION`, o `<audio>` do WebView
+(que é `USAGE_MEDIA`) ficasse no alto-falante do ouvido enquanto a voz vai para
+o de mídia. O código do serviço de política de áudio responde que não. Em
+`frameworks/av/services/audiopolicy/enginedefault/src/Engine.cpp`:
+
+```cpp
+product_strategy_t Engine::remapStrategyFromContext(product_strategy_t strategy,
+    const SwAudioOutputCollection &outputs) const {
+  ...
+  if (isInCall()) {
+    switch (legacyStrategy) {
+    case STRATEGY_ACCESSIBILITY:
+    case STRATEGY_DTMF:
+    case STRATEGY_MEDIA:
+    case STRATEGY_SONIFICATION:
+    case STRATEGY_SONIFICATION_RESPECTFUL:
+      legacyStrategy = STRATEGY_PHONE;
+```
+
+`isInCall()` é verdadeiro tanto em `MODE_IN_CALL` quanto em
+`MODE_IN_COMMUNICATION`. Ou seja: **durante a chamada, a mídia deixa de ser
+mídia** — ela passa a seguir a estratégia de telefone. E o remapeamento acontece
+*antes* da consulta ao dispositivo preferido, o que está dito no comentário do
+`getDevicesForProductStrategy` no mesmo arquivo:
+
+```cpp
+  // Take context into account to remap product strategy before
+  // checking preferred device for strategy and applying default routing rules
+  strategy = remapStrategyFromContext(strategy, outputs);
+  ...
+  DeviceVector preferredAvailableDevVec =
+    getPreferredAvailableDevicesForProductStrategy(availableOutputDevices, strategy);
+```
+
+Consequência prática: o `setCommunicationDevice(...)` do `AudioDaChamada.kt`
+vale **também** para o `<audio>` do WebView. Os sons do app saem pelo mesmo
+alto-falante que a voz. A rota está certa desde a 1.1.2.
+
+#### O que sobra: a régua, e o ganho que nós mesmos aplicamos
+
+O que o remapeamento **não** muda é a régua de volume: o som continua medido por
+`STREAM_MUSIC`. E aí se juntam três coisas:
+
+1. Em `MODE_IN_COMMUNICATION` o botão de volume do aparelho governa
+   `STREAM_VOICE_CALL`, não `STREAM_MUSIC`. Durante a chamada o usuário
+   **não tem como** levantar a régua que os sons do app usam.
+2. Fora da chamada, com nada tocando, o botão governa a régua de **toque** —
+   também não a de mídia. Quem não ouviu o telefone tocar e aperta "volume +"
+   está mexendo na régua errada.
+3. E o `FATOR` de `apps/web/lib/ringtone.ts` — calibrado no Windows, onde há
+   **três** volumes em série (mestre do sistema, mixer do app, o nosso) — aplica
+   0,08 em mudo/desmudo, 0,2 em entrar/sair/movido e 0,35 no toque. No telefone
+   só existem dois volumes na cadeia, e 0,08 é **22 dB abaixo** da voz do outro,
+   que chega em escala cheia pela rota de voz.
+
+É por isso que o §13 original não pegou nada: todas aquelas medições
+(`play()` aceito, `paused=false`, `currentTime` andando, `volume` honrado) são
+verdadeiras **e** compatíveis com "não se ouve nada". O WebView estava tocando o
+tempo todo; tocando baixo demais.
+
+#### A correção
+
+- `apps/web/lib/ringtone.ts` — `fatorNoAparelho()`: num aparelho de bolso
+  (`(pointer: coarse)`, o ponteiro **primário** — um notebook com tela sensível
+  ao toque continua respondendo `fine`) o `FATOR` sobe pela **raiz quadrada**,
+  o que é exatamente cortar a atenuação pela metade em dB: 0,08 → 0,28
+  (−22 dB → −11 dB), 0,35 → 0,59. A raiz preserva a ordem da mistura — mudo
+  continua o mais baixo, o toque o mais alto — e não pode passar de 1 por
+  construção. **O `outputVolume` continua linear**: em 0 o som é 0 no telefone
+  também.
+- `MainActivity.kt` — `volumeControlStream = AudioManager.STREAM_MUSIC`: o botão
+  de volume do aparelho passa a mexer na régua que os sons do app usam. Não
+  atrapalha a chamada, porque em `MODE_IN_COMMUNICATION` o `AudioService`
+  devolve o botão para `STREAM_VOICE_CALL` por conta própria.
+- `AudioDaChamada.kt` — `registrarEstado()`: uma linha de `logcat` com modo,
+  rota de comunicação e `STREAM_MUSIC`/`STREAM_VOICE_CALL` (índice/máximo) ao
+  começar e ao terminar a chamada. É a medição que faltava: um
+  `adb logcat -s Streamz/Audio` no aparelho de verdade separa "a régua do
+  aparelho está baixa" de "o ganho do app está baixo" sem mais nenhuma rodada
+  de adivinhação.
+
+**Nada da rota foi tocado** — a correção da 1.1.2 continua inteira.
+
+#### O que isto **não** prova
+
+Não houve emulador nem aparelho: este servidor não tem SDK do Android e o
+`.apk` não é gerado aqui. A cadeia de causa é lida do código do AOSP (citado
+acima, verbatim) e dos nossos próprios números; a **audibilidade** só o aparelho
+do usuário prova, e o `registrarEstado` existe justamente para que essa próxima
+rodada devolva um número em vez de uma impressão. Duas coisas ficam em aberto
+para ela:
+
+- Se o `logcat` mostrar `musica=0/15` (ou algo perto disso), a régua do aparelho
+  é a causa dominante e **não há mais nada a corrigir no código** — é o volume
+  de mídia do telefone.
+- Se mostrar a régua cheia e ainda assim não se ouvir, o próximo passo é tocar
+  os sons de interface **nativamente** (`SoundPool` com
+  `USAGE_VOICE_COMMUNICATION`), que é a única forma de um WebView colocar som na
+  régua de voz. É uma mudança grande e não se faz sem esse número.
+
+Uma observação de leitura, sem correção porque não há evidência de que morda:
+`destravarElementos` (`apps/web/lib/destravar-sons.ts`) põe **todos** os
+elementos em volume 0 de uma vez e só devolve o volume de cada um depois de
+`await` na promessa do `play()` correspondente, uma a uma. Se um `play()` ficar
+pendurado, os elementos seguintes ficam com o `pause()`/restauração atrasados —
+e um som real disparado nesse meio-tempo leva `pause()` na cara. O `volume` é
+reescrito a cada `tocarArquivo`, então **não** existe mudez permanente; a janela
+é só a da carga inicial. Mexer nisso sem medir arriscaria o destravamento do
+iOS, que é o que o módulo existe para fazer.
+
 ## 14. O ícone do launcher no Android
 
 Relato do usuário, em aparelho de verdade, com o `Streamz_1.1.1_android.apk` do

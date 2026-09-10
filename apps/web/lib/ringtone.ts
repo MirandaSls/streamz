@@ -54,7 +54,10 @@
  *   quanto sai: `outputVolume` das configurações × o fator do som (`FATOR`).
  *   Ninguém mais passa volume — antes eram quatro contas diferentes espalhadas
  *   (a mensagem tinha `1` como padrão, o toque em loop tinha outra), e o
- *   resultado era o "os sons ficam variando de volume do nada".
+ *   resultado era o "os sons ficam variando de volume do nada". O `FATOR` foi
+ *   calibrado no Windows e **não serve como está no telefone**, onde falta um
+ *   volume na cadeia e o de mídia fica travado durante a chamada: ver
+ *   `fatorNoAparelho`.
  */
 
 import { pararToqueEm, tocarToqueEm } from "@/lib/toque-com-gesto";
@@ -147,9 +150,53 @@ export function volumeDeSaida(): number {
   return useSettings.getState().outputVolume / 100;
 }
 
+/**
+ * Consulta que separa "alto-falante de telefone" de "caixa de computador".
+ * `(pointer: coarse)` é o ponteiro **primário** do aparelho: um notebook com
+ * tela sensível ao toque continua respondendo `fine`, porque o trackpad é o
+ * ponteiro principal.
+ */
+const PONTEIRO_GROSSO = "(pointer: coarse)";
+
+/**
+ * Estamos num aparelho de bolso? Sem DOM (SSR, export estático), `false` — o
+ * mesmo caminho e a mesma guarda do `typeof Audio` de `tocarArquivo`.
+ */
+export function ehAparelhoDeBolso(): boolean {
+  if (typeof matchMedia !== "function") return false;
+  return matchMedia(PONTEIRO_GROSSO).matches;
+}
+
+/**
+ * O `FATOR` de um som, ajustado ao aparelho: **metade da atenuação, em dB**,
+ * quando quem toca é um telefone.
+ *
+ * O `FATOR` foi calibrado no Windows, onde entre o arquivo e o ouvido existem
+ * **três** volumes em série: o mestre do sistema, o do app no mixer e o nosso.
+ * No telefone só existem dois — o volume de **mídia** e o nosso —, e o de mídia
+ * é justamente o que o usuário **não consegue mexer durante uma chamada**: em
+ * `MODE_IN_COMMUNICATION` o botão de volume passa a governar
+ * `STREAM_VOICE_CALL`. Resultado no aparelho: a voz do outro chega em escala
+ * cheia pela rota de voz e o "microfone mudo", em 0,08, chega 22 dB abaixo — o
+ * relato de "os sons do app não são ouvidos" (ver `docs/APPS-MOBILE.md` §13).
+ *
+ * A raiz quadrada é a compensação **inteira** desta função: ela corta a
+ * atenuação pela metade em dB (0,08 → 0,28, ou −22 dB → −11 dB) e preserva a
+ * ordem da mistura — mudo continua sendo o mais baixo e o toque o mais alto,
+ * que é o que o usuário pediu. Não pode passar de 1 por construção: a raiz de
+ * um número entre 0 e 1 continua entre 0 e 1.
+ *
+ * **Só o fator é ajustado, nunca o `outputVolume`.** O controle das
+ * configurações continua linear e honesto: em 0 o som é 0, no telefone também.
+ */
+export function fatorNoAparelho(fator: number, deBolso: boolean): number {
+  return deBolso ? Math.sqrt(fator) : fator;
+}
+
 /** Quanto este som sai, de 0 a 1. **Ninguém mais calcula volume de som.** */
 export function volumeDoSom(nome: NomeDeSom): number {
-  return Math.min(1, Math.max(0, volumeDeSaida() * FATOR[nome]));
+  const fator = fatorNoAparelho(FATOR[nome], ehAparelhoDeBolso());
+  return Math.min(1, Math.max(0, volumeDeSaida() * fator));
 }
 
 // ── o toque em loop (chamada recebida e ringback) ──────────────────────────

@@ -24,6 +24,8 @@ vi.mock("@/stores/voiceDevices", () => ({
 import {
   JANELA_SEM_REPETIR_MS,
   esquecerToquesRecentes,
+  ehAparelhoDeBolso,
+  fatorNoAparelho,
   tocarSom,
   volumeDoSom,
 } from "@/lib/ringtone";
@@ -39,6 +41,11 @@ class AudioFalso {
     AudioFalso.tocados.push({ src: this.src, volume: this.volume });
     return Promise.resolve();
   }
+}
+
+/** A lista está em ordem crescente? É o que a mistura promete preservar. */
+function crescente(valores: number[]): boolean {
+  return valores.every((v, i) => i === 0 || v >= valores[i - 1]);
 }
 
 beforeEach(() => {
@@ -119,6 +126,41 @@ describe("um dono só do volume", () => {
   it("nunca passa de 1, nem com um outputVolume fora da faixa", () => {
     settings.outputVolume = 500;
     expect(volumeDoSom("chamada")).toBe(1);
+  });
+
+  it("sem `matchMedia` (SSR, export estático) o aparelho não é de bolso", () => {
+    expect(ehAparelhoDeBolso()).toBe(false);
+  });
+
+  it("num telefone o fator sobe pela raiz — metade da atenuação em dB", () => {
+    // `(pointer: coarse)` é o que separa telefone de computador; o jsdom não
+    // traz `matchMedia`, então o teste o coloca.
+    vi.stubGlobal("matchMedia", (consulta: string) => ({
+      matches: consulta === "(pointer: coarse)",
+    }));
+    expect(ehAparelhoDeBolso()).toBe(true);
+    // 0,08 → 0,283: o "microfone mudo" sai 11 dB abaixo em vez de 22
+    expect(volumeDoSom("mudo")).toBeCloseTo(Math.sqrt(0.08));
+    expect(volumeDoSom("chamada")).toBeCloseTo(Math.sqrt(0.35));
+    vi.unstubAllGlobals();
+  });
+
+  it("a ordem da mistura é a mesma no telefone e no computador", () => {
+    // mudo < mensagem < entrar < chamada, os fatores de `FATOR` em ordem
+    const fatores = [0.08, 0.15, 0.2, 0.35];
+    expect(crescente(fatores.map((f) => fatorNoAparelho(f, false)))).toBe(true);
+    expect(crescente(fatores.map((f) => fatorNoAparelho(f, true)))).toBe(true);
+  });
+
+  it("no computador o fator não é tocado", () => {
+    expect(fatorNoAparelho(0.08, false)).toBe(0.08);
+  });
+
+  it("no telefone o controle de volume continua linear: em 0 é 0", () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    settings.outputVolume = 0;
+    expect(volumeDoSom("chamada")).toBe(0);
+    vi.unstubAllGlobals();
   });
 
   it("o elemento recebe exatamente esse volume — a mensagem não sai em 1", () => {
