@@ -20,12 +20,12 @@ let pasta: string;
 
 beforeEach(async () => {
   pasta = await mkdtemp(join(tmpdir(), "moderacao-"));
-  process.env.MODERACAO_DIR = pasta;
+  process.env.BOTS_DADOS_DIR = pasta;
   esquecer();
 });
 
 afterEach(() => {
-  delete process.env.MODERACAO_DIR;
+  delete process.env.BOTS_DADOS_DIR;
   esquecer();
 });
 

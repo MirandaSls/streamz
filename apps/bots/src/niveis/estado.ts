@@ -56,17 +56,18 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { open, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import type { Log } from "../runtime/tipos";
+import { DIRETORIO_PADRAO, diretorioDosDados } from "../runtime/dados";
 import { estadoVazio, sanearEstado, type EstadoDoServidor } from "./dados";
 
-/** O diretório do volume. O compose aponta `NIVEIS_DIR` para ele. */
-export const DIRETORIO_PADRAO = "/dados";
+/**
+ * O diretório do volume: `/dados`, o mesmo de todo bot com estado (a variável
+ * é `BOTS_DADOS_DIR`, e o volume nomeado é só deste container). Ver
+ * `../runtime/dados.ts`.
+ */
+export { DIRETORIO_PADRAO, diretorioDosDados };
 
 export const INTERVALO_PADRAO_MS = 30_000;
 export const MUDANCAS_PADRAO = 50;
-
-export function diretorioDosDados(): string {
-  return process.env.NIVEIS_DIR?.trim() || DIRETORIO_PADRAO;
-}
 
 /**
  * O id do servidor vira nome de arquivo, então ele **precisa** ser conferido.

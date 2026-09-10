@@ -15,7 +15,7 @@
  *
  * ## O formato
  *
- * `<DIR>/<guildSnowflake>.json`, com `DIR` em `MODERACAO_DIR` (padrão
+ * `<DIR>/<guildSnowflake>.json`, com `DIR` em `BOTS_DADOS_DIR` (padrão
  * `/dados`, que no compose é um volume só deste container). Um arquivo **por
  * servidor** e não um só: um servidor grande não trava a escrita dos outros, e
  * um arquivo corrompido custa um servidor, não todos.
@@ -45,6 +45,7 @@
 
 import { mkdir, open, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { diretorioDosDados } from "../runtime/dados";
 import type { AvisoGuardado } from "./formatar";
 
 /** A versão do formato gravado. Sobe quando o corpo mudar de forma. */
@@ -64,10 +65,12 @@ export function estadoVazio(): EstadoDoServidor {
   return { versao: VERSAO, canalDeRegistro: null, avisos: {}, proximoAviso: 1 };
 }
 
-/** O diretório do volume. Configurável para os testes e para a bancada. */
-export function diretorio(): string {
-  return process.env.MODERACAO_DIR?.trim() || "/dados";
-}
+/**
+ * O diretório do volume: `/dados`, o mesmo de todo bot com estado, lido de
+ * `BOTS_DADOS_DIR` (que os testes e a bancada apontam para uma pasta
+ * temporária). Ver `../runtime/dados.ts`.
+ */
+export const diretorio = diretorioDosDados;
 
 /**
  * O nome do arquivo, **sanitizado**.

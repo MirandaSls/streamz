@@ -158,8 +158,10 @@ services:
       STREAMZ_API_URL: http://api:3333/api
       LOG_FORMATO: json
       BOTS_DIR: /app/.bots
-      # O estado do bot: um JSON por servidor. Ver apps/bots/src/boas-vindas/armazem.ts.
-      BOAS_VINDAS_DIR: /dados
+      # O estado do bot: um JSON por servidor em `/dados`, o caminho comum a
+      # todos os bots com estado (a imagem já define `BOTS_DADOS_DIR=/dados` e
+      # cria o diretório com dono `node`). Ver apps/bots/CONTRATO.md §7.
+      BOTS_DADOS_DIR: /dados
     volumes:
       # O token do bot, gravado pelo `provisionar` com chmod 600. Somente
       # leitura: o container nunca escreve credencial.
@@ -190,9 +192,10 @@ services:
       LOG_FORMATO: json
       BOTS_DIR: /app/.bots
       # Onde ficam os avisos e a configuração de cada servidor (um JSON por
-      # servidor). Ver `apps/bots/src/moderacao/estado.ts` para o porquê de ser
-      # arquivo e não tabela, e para o caminho de migração.
-      MODERACAO_DIR: /dados
+      # servidor): `/dados`, o caminho comum a todos os bots com estado. Ver
+      # `apps/bots/src/moderacao/estado.ts` para o porquê de ser arquivo e não
+      # tabela, e para o caminho de migração.
+      BOTS_DADOS_DIR: /dados
     volumes:
       - ./.bots:/app/.bots:ro
       # **Volume nomeado, não bind**: este é o único estado durável do bot, e um
@@ -231,25 +234,22 @@ services:
       # Dentro da rede do compose a API é o serviço `api`. **Sem** o /v10: o
       # @discordjs/rest o acrescenta (§14 do documento).
       STREAMZ_API_URL: http://api:3333/api
-      # Onde os `<guildId>.json` moram. Ver o comentário do volume abaixo para
-      # o porquê de não ser `/dados` (que é o padrão do código).
-      NIVEIS_DIR: /home/node/dados
+      # Onde os `<guildId>.json` moram: `/dados`, o mesmo de todo bot com
+      # estado. A imagem cria o diretório com dono `node` (ver o Dockerfile),
+      # então o volume nomeado nasce gravável.
+      BOTS_DADOS_DIR: /dados
       LOG_FORMATO: json
       BOTS_DIR: /app/.bots
     volumes:
       # O token do bot, gravado pelo `provisionar` com chmod 600. Somente
       # leitura: o container nunca escreve credencial.
       - ./.bots:/app/.bots:ro
-      # **Por que em `/home/node` e não em `/dados`.** A imagem roda como
-      # `USER node`, e o Docker cria um volume nomeado com o dono do caminho
-      # correspondente **na imagem** — que para um caminho que a imagem não tem
-      # é `root:root`, e aí o processo não escreve nada (conferido:
-      # `docker run -v vol:/dados -u node node:22-alpine touch /dados/x` dá
-      # `Permission denied`). `/home/node` existe na imagem e é do `node`, então
-      # o volume nasce do `node` e o bot cria o `dados/` dentro. A alternativa
-      # seria um `mkdir`+`chown` no `apps/bots/Dockerfile` — que é comum a todos
-      # os bots e o CONTRATO não deixa mexer.
-      - niveis-dados:/home/node
+      # O XP de cada servidor. Em `/dados` como todo bot com estado: o
+      # `apps/bots/Dockerfile` cria esse diretório com dono `node` **antes** do
+      # `USER node`, o que faz o volume nomeado nascer gravável. Sem esse
+      # `mkdir` na imagem o Docker criaria o ponto de montagem `root:root` e o
+      # bot só descobriria no primeiro `Permission denied`.
+      - niveis-dados:/dados
     depends_on:
       - api
     mem_limit: 256m
@@ -384,8 +384,8 @@ volumes:
   # Avisos e configuração por servidor do Streamz Moderação (um JSON por
   # servidor, escrita atômica). Ver `apps/bots/src/moderacao/estado.ts`.
   bot-moderacao-dados:
-  # O XP de cada servidor (`<guildId>.json`), do Streamz Níveis. Ver o comentário
-  # do serviço `bot-niveis` para o porquê de ele ser montado em `/home/node`.
+  # O XP de cada servidor (`<guildId>.json`), do Streamz Níveis. Montado em
+  # `/dados`, como o de todo bot com estado.
   niveis-dados:
   # Os painéis do Streamz Cargos, um JSON por servidor. Pequeno e só dele.
   cargos-dados:

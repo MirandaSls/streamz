@@ -72,8 +72,10 @@ discord.js lançar. Ver `alvos.ts`.
 /dados/<guildId>.json
 ```
 
-`BOAS_VINDAS_DIR` muda o diretório (padrão `/dados`); o `docker-compose.yml`
-monta ali um volume nomeado, `boas-vindas-dados`.
+`/dados` é o caminho de estado comum a todos os bots (a imagem já o cria com
+dono `node`; ver `apps/bots/CONTRATO.md` §7). `BOTS_DADOS_DIR` muda o diretório,
+para os testes e para a bancada; o `docker-compose.yml` monta ali um volume
+nomeado, `boas-vindas-dados`.
 
 ```json
 {
