@@ -9,11 +9,11 @@ medidas, ícones, emoji e comportamento — é o do Discord de 2026-09-11, medid
 `/opt/stack/streamz/docs/Reference/`. A execução está em
 `docs/PLANO-PARIDADE-DISCORD.md`.
 
-> **Em transição (onda 0).** Princípios, tokens, tipografia e espaçamento já
-> descrevem o código. **Layout**, **Padrões de componente** e **Estados** ainda
-> descrevem o sistema anterior: as medidas de cada peça passam a morar no
-> cabeçalho do primitivo (`components/ui/primitivos/`), e as telas são refeitas
-> nas ondas 1–8. Na dúvida entre este arquivo e a ADR-0009, vale a ADR.
+> **Em transição (ondas 1–9).** Princípios, tokens, tipografia, forma e
+> primitivos já descrevem o código (onda 0 fechada). **Layout** e **Estados**
+> descrevem o app como ele está, e mudam tela a tela conforme as ondas 1–8
+> passam. A medida de cada peça mora no cabeçalho do primitivo, não aqui. Na
+> dúvida entre este arquivo e a ADR-0009, vale a ADR.
 
 ## Princípios
 
@@ -168,52 +168,40 @@ variantes `/semibold` de lá):
 - Medidas de cada peça: no cabeçalho do primitivo correspondente
   (`components/ui/primitivos/`), com a origem (seletor do CSS bruto ou print).
 
-## Padrões de componente
+## Primitivos
 
-- **Mensagem** (`MessageItem`): gutter de **72px**, avatar de 40px à esquerda
-  (`Avatar size="lg"`), nome + "Hoje às 14:03" na primeira linha, corpo abaixo,
-  anexos → link de thread → reações. **Agrupamento**: mensagem seguinte do mesmo
-  autor em até 7 min (`lib/format.continuaAnterior`) vem sem avatar/nome, com a
-  hora na margem só no hover. **Divisor de data** entre dias. Hover
-  `bg-msghov`; barra de ações flutuante (`-top-4 right-4`) com tooltips.
-  Botão direito → menu de contexto. Clique no avatar/nome → popover de perfil.
-- **Início do canal**: círculo de 68px com o ícone + "Bem-vindo a #canal!" quando
-  não há mais histórico.
-- **Anexos**: imagem inline até 550×350, clique abre lightbox (`ImageModal`);
-  outro arquivo vira card de 432px `bg-panel` com ícone `FileText` e nome em
-  `txt-link`.
-- **Reações**: pílula `h-[26px] rounded-lg bg-panel`; a minha `border-accent
-  bg-accent/20`; hover `border-border-strong`; "+" de reação aparece no hover.
-- **Composer**: caixa `bg-input rounded-lg` com `CirclePlus` (anexo) à esquerda e
-  presente / GIF / figurinha / emoji à direita; contador só a partir de 90% do
-  teto. Sem dica textual de teclado. Preview de anexo em cards de 184px.
-- **Modal** (`Dialog`, #59): caixa de 480 (borda de 1px incluída), raio 8,
-  `bg-chat`, padding de 24; título 20px 700, descrição 16px em linha de 20 a 8
-  do título, "×" de 24 a 16 do canto. Rodapé na mesma cor do corpo, sem faixa:
-  botões de 40 com raio 8 e 8 entre eles — primário `bg-accent` à direita
-  (`PrimaryButton`), "Cancelar" com fundo `border-strong` (`SecondaryButton`).
-  Overlay `bg-black/85`, Esc/clique fora fecham. `semPadding` para quem pinta a
-  caixa inteira (perfil, boas-vindas).
-- **Menu de contexto** (`ContextMenuHost`, #59): caixa de 220 (borda incluída),
-  raio 8, `bg-overlay` com `p-2`, itens de 32px, hover `bg-accent
-  text-accent-ink` (ou `bg-red` para destrutivo), separadores `border`.
-- **Popover de perfil** (`ProfilePopoverHost`): 300px, faixa `accent` de 60px,
-  avatar 80px sobreposto, card `bg-footer` com nome, @usuário, status e "Enviar
-  mensagem".
-- **Tooltip** (`Tooltip`, #59): 34 de altura (14px 600 em linha de 16, 8 de
-  respiro vertical, borda de 1px), raio 8, `bg-rail`, seta, hover e foco.
-- **Mensagem no hover** (#60): barra de ações com raio 8, botões de 28 e borda
-  clara; composer a 10px do fundo, sem faixa reservada para o "digitando…".
-- **Avatar** (`Avatar`): iniciais sobre uma das 5 cores do avatar — nenhuma
-  verde-limão, para não competir com o accent nem com o status (hash do id);
-  bolinha de status com borda na cor da superfície (`surface`).
-- **Login/registro** (`AuthCard`): fundo `bg-rail` com um brilho de limão em
-  radial, lockup da marca acima do título, card de 480px `bg-chat`, rótulos 12px
-  caixa-alta com asterisco vermelho, inputs `bg-rail h-10`, botão `h-11`
-  `bg-accent text-accent-ink`.
-- **Marca** (`Marca` / `MarcaLockup`): símbolo em `currentColor` com o "Z"
-  recortado por máscara; o lockup põe o wordmark como **texto real** em Archivo.
-  Desenho e regras de uso: `docs/branding/`.
+Peça de interface não se desenha de novo: ela vem de
+`components/ui/primitivos/`. **A medida de cada uma mora no cabeçalho do próprio
+arquivo**, com a origem (seletor do CSS bruto do Discord ou coordenada no print
+1:1) — é lá que se olha antes de mexer, não aqui.
+
+| Primitivo | O que resolve |
+|---|---|
+| `Button` | ação com texto: `primario` (limão, texto escuro), `secundario`, `critico`, `critico-secundario`, `positivo`, `neutro` (sem fundo) e `link`/`critico-link` (inline, sem caixa). Tamanhos 24/32/40 ou número; `href` desenha `<a>`; `carregando` troca o conteúdo pelos três pontos |
+| `BotaoDeIcone` | ícone clicável com dica: `rotulo` vira `aria-label` **e** `Tooltip`. `fundo` hover/sempre/nenhum, `forma` quadrado/disco, `tom` neutro/perigo/positivo/ativo |
+| `Tooltip` | dica: `--background-surface-high`, 14/16 peso 500, padding 8×12, raio 8, máx. 190, seta de base 10 |
+| `TextInput` / `TextArea` / `Campo` | campo com invólucro (o foco é a borda da caixa), rótulo **sem caixa-alta** 16/500, ajuda, erro com `aria-live` |
+| `Select` / `Switch` / `Checkbox` / `RadioGroup` / `LinhaDeControle` | controles de formulário e a linha de configuração |
+| `Popout` | **o único** painel flutuante: portal, colisão nos quatro lados, Esc em pilha, foco preso e devolvido, folha inferior no celular. Raio 8 (medido em três prints), `shadow-popout` |
+| `Modal` | 400/480/680/960 de largura (480 é o padrão, medido em três prints 1:1), raio 12, véu `--background-scrim`, foco preso, Esc e clique no véu |
+| `Tabs` / `Badge` / `Divider` | abas (sublinhado com indicador que desliza, ou pílula), contador de não lidas e divisória |
+
+`Dialog`, `PopoverFlutuante`, `HeaderPopover`, `PainelFlutuante`, `PickerPanel`,
+o `ProfilePopoverHost` e os controles de `controls.tsx` continuam existindo com a
+API de sempre — por dentro, todos são os primitivos acima.
+
+Fora dos primitivos, três coisas que a onda 0 mediu e valem para o app todo:
+
+- **Menu de contexto** (`ContextMenuHost`): caixa de 220, fundo
+  `--background-surface-higher`, raio 8, itens de 32 com raio 2 (4 no foco),
+  hover **cinza** (`--interactive-background-hover`) — o Discord não pinta item
+  de menu com a cor de marca —, ícone de 16 à direita, separador com 8 nos
+  quatro lados.
+- **Emoji**: `components/ui/Emoji.tsx` desenha Twemoji local; 1.375em no texto e
+  3rem quando a mensagem é só emoji. As classes precisam de `inline-block` (o
+  preflight do Tailwind põe `display: block` em `<img>`).
+- **Rolagem**: a global é a barra fina; `scroller-auto` + `scroller-fade` na
+  lista de mensagens (é assim que o Discord esconde a barra em repouso).
 
 ## Ícones
 

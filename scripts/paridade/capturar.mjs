@@ -570,10 +570,13 @@ const PASSOS = {
       async fazer(page) {
         await abrirServidor(page);
         await abrirCanal(page, "geral");
-        // mensagem do próprio dono: "Apagar Mensagem" pede confirmação (sem Shift)
+        // mensagem do próprio dono: "Apagar mensagem" pede confirmação (sem Shift).
+        // O nome vai sem caixa no meio da frase de propósito: a onda 0 passou os
+        // rótulos de menu para frase capitalizada, como o Discord — a regex é
+        // insensível a caixa para não quebrar de novo numa troca dessas.
         const alvo = await centralizar(page, "resposta");
         await alvo.click({ button: "right", position: { x: 400, y: 30 } });
-        await page.getByRole("menuitem", { name: /Apagar Mensagem/ }).click();
+        await page.getByRole("menuitem", { name: /apagar mensagem/i }).click();
         await page.locator('[role="dialog"]').first().waitFor();
       },
     },
