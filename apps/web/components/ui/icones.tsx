@@ -46,11 +46,58 @@ import {
  * ── O que ainda vem do Phosphor ───────────────────────────────────────────
  *
  * Não por princípio: **por falta de ativo**. Tudo o que existe no acervo do
- * Discord vem de lá; o que sobra aqui é o que ele não desenhou.
+ * Discord vem de lá; o que sobra aqui é o que ele não desenhou — conferido um
+ * a um em `docs/Reference/Discord assets icons/` na onda 0.5 (`ACERVO.md`,
+ * `svg/MAPA.md`), não só pelo nome do arquivo:
+ *
+ * - `Plane`, `Coffee`: ícones de categoria do seletor de emoji
+ *   (`travel_places`, `food_drink`). O acervo cobre chat, voz e servidor —
+ *   não achei as abas do picker em lugar nenhum das três pastas.
+ * - `Archive`: thread arquivada (`ThreadsPopover`). `cabecalho-do-canal/` tem
+ *   `threads`/`new-thread`/`pin-messages`, mas nenhum "caixa de arquivo".
+ * - `BellRing`: o nível "Tudo" do menu de notificação. O acervo só tem duas
+ *   variantes do sino — `notifications`/`no-notifications`, que já são o
+ *   `Bell`/`BellOff` abaixo —, sem uma terceira "tocando".
+ * - `Browser`: já investigado ao lado do `Laptop`/`Monitor`/`Smartphone` —
+ *   ver o comentário de `ICONE` em `SessoesTab.tsx`. Fica por decisão de lá,
+ *   não por falta de olhar.
+ * - `Camera`: "Tirar foto" do menu do composer no celular
+ *   (`capture="environment"`). É fluxo próprio do app; não tem tela
+ *   correspondente entre os prints de referência.
+ * - `FileText`: selo genérico de "isto é um arquivo, não uma imagem"
+ *   (`Composer`, `MediaGroup`). Não achei documento/papel solto — só os
+ *   compostos de upload que viraram `Paperclip`, abaixo.
+ * - `Gauge`: aba "Visão geral" do admin da **instância** (ADR-0008). Não
+ *   existe no Discord — não tem servidor nenhum ali —, então não tem ícone
+ *   dele pra copiar.
+ * - `Accessibility`, `Languages`, `UserCircle`, `ShieldCheck`: ícones do
+ *   **menu** de configurações do usuário. O acervo tem o *conteúdo* de várias
+ *   telas de `user-settings/` (conexões, dispositivos, central da família…)
+ *   mas não os rótulos do menu lateral que levam a elas — nem accessibility,
+ *   nem idioma, nem "meu perfil", nem o escudo de privacidade. `UserProfile`
+ *   (mais abaixo) é parecido de nome mas é outro desenho — cartão de perfil
+ *   da DM, não o círculo de "minha conta" — e trocar um pelo outro sem
+ *   renderizar seria chute, não medida.
+ * - `ShieldOff`, `ShieldAlert`: variam o `Shield` plano que já veio do acervo
+ *   (2FA desativado; aviso de moderação). O que achei de escudo foi só isso e
+ *   os 19 `role-icon-*` coloridos de cargo — nenhum com corte, barra ou alerta
+ *   dentro para diferenciar do liso.
+ * - `Paintbrush`: aba "Aparência". Tem um `collections/app-settings/appearance.svg`
+ *   de nome exato, mas o desenho são duas setas em laço (cara de
+ *   sincronizar/alternar tema, não de pincel) — sem renderizar para conferir,
+ *   trocar pelo nome do arquivo e não pelo traço seria o erro que o
+ *   `design.md` avisa (ver "Ícones" lá).
+ * - `PinOff`: "desafixar" no menu de uma mensagem. `Pin` já é do acervo
+ *   (`cabecalho-do-canal/pinned-message.svg`); `mensagem/` tem `pin` mas não
+ *   um "pin cortado" — a ação de desafixar no Discord real reusa o mesmo
+ *   ícone do fixar, só o rótulo muda.
+ * - `SmileyAngry as Angry`, `SmileyMeh as Annoyed` (e `Laugh`, do lucide,
+ *   logo abaixo): as caras do easter egg do botão de emoji (`CARINHAS` em
+ *   `Composer.tsx`). O acervo só desenhou **um** rosto — o mesmo arquivo em
+ *   `svg/diversos/emoji.svg` e `figma/.../message-bar/emojis.svg`, que já é
+ *   o `Smile` — sem as variações de expressão que o easter egg precisa.
  *
  * Estes são pictogramas, então herdam o `fill` do `IconContext` como o resto.
- * A última linha é do lucide, que é de contorno e vai destoar um pouco — é o preço de não ter equivalente em lugar nenhum, e some quando
- * aparecer ativo ou equivalente melhor.
  */
 export {
   Airplane as Plane,
@@ -60,15 +107,12 @@ export {
   // `AppWindow` do vocabulário é uma grade 2×2 de "aplicativos" — outro sinal
   Browser,
   Camera,
-  ChartBar as BarChart3,
   Coffee,
   FileText,
   Gauge,
   PaintBrush as Paintbrush,
-  Paperclip,
   PersonArmsSpread as Accessibility,
   PushPinSlash as PinOff,
-  Radio,
   ShieldCheck,
   ShieldSlash as ShieldOff,
   ShieldWarning as ShieldAlert,
@@ -78,6 +122,14 @@ export {
   UserCircle,
 } from "@phosphor-icons/react";
 
+/**
+ * `ArchiveRestore` faz par com o `Archive` acima — mesma falta de ativo.
+ * `TimerOff` quase teve um: `guilds-settings/members/timed-out.svg` existe,
+ * mas é o **selo** de "este membro está de castigo" (relógio + alerta,
+ * vermelho), não a ação "remover o castigo" que os dois usos daqui pedem
+ * (`MemberList.tsx`) — usar o selo de status como ícone de ação trocaria o
+ * sentido. `Laugh` é a quarta cara do easter egg do emoji, ver acima.
+ */
 export { ArchiveRestore, Laugh, TimerOff } from "lucide-react";
 
 /**
@@ -1080,3 +1132,49 @@ export const Soundboard = doDiscord(
   { d: CAMINHO_SOUNDBOARD_CORPO, vazado: true },
   CAMINHO_SOUNDBOARD_RAIOS,
 );
+
+/*
+ * Onda 0.5 — três que ainda vinham do Phosphor e tinham ativo.
+ */
+
+/**
+ * "Você está ao vivo" (`AoVivoIndicador`, tela dividida da chamada). Do
+ * `svg/palco/stage-live.svg` — **não** o `-filled`, que é um círculo sólido
+ * com o glifo recortado em branco por cima: achatado para `currentColor` ele
+ * vira uma mancha, o mesmo defeito do `CalendarDays`/`BadgeCheck` (ver acima).
+ * O `-live` simples é uma cor só nos três caminhos, então sobrevive.
+ */
+const CAMINHO_RADIO_1 =
+  "M75.3667 70.8333C74.8379 70.2267 74.5276 69.4604 74.4853 68.6569C74.443 67.8533 74.6711 67.0587 75.1333 66.3999C78.0897 61.8738 79.7681 56.633 79.9911 51.2315C80.2141 45.83 78.9734 40.4687 76.4001 35.7143C73.8269 30.9599 70.0167 26.9892 65.3726 24.222C60.7284 21.4549 55.4227 19.9941 50.0167 19.9941C44.6106 19.9941 39.305 21.4549 34.6608 24.222C30.0166 26.9892 26.2064 30.9599 23.6332 35.7143C21.0599 40.4687 19.8192 45.83 20.0422 51.2315C20.2652 56.633 21.9436 61.8738 24.9 66.3999C25.7667 67.7999 25.7333 69.6333 24.6333 70.8333L24.5667 70.8999C23.2 72.3666 20.8333 72.3333 19.7 70.6666C15.939 65.1571 13.7522 58.726 13.3752 52.0658C12.9983 45.4056 14.4454 38.7688 17.5608 32.8701C20.6761 26.9714 25.3416 22.0344 31.0548 18.5907C36.7681 15.147 43.3125 13.3271 49.9833 13.3271C56.6542 13.3271 63.1986 15.147 68.9118 18.5907C74.625 22.0344 79.2906 26.9714 82.4059 32.8701C85.5212 38.7688 86.9684 45.4056 86.5914 52.0658C86.2144 58.726 84.0277 65.1571 80.2667 70.6666C79.1667 72.3333 76.8 72.3666 75.4333 70.8999L75.3667 70.8333Z";
+const CAMINHO_RADIO_2 =
+  "M66.0999 60.7667C67.5332 62.3334 70.0332 62.1667 70.9332 60.3001C72.6777 56.7427 73.4875 52.7997 73.2865 48.8428C73.0855 44.8858 71.8802 41.0453 69.7842 37.683C67.6882 34.3208 64.7706 31.5476 61.3063 29.6249C57.8421 27.7022 53.9453 26.6934 49.9832 26.6934C46.0212 26.6934 42.1244 27.7022 38.6601 29.6249C35.1959 31.5476 32.2783 34.3208 30.1823 37.683C28.0863 41.0453 26.881 44.8858 26.68 48.8428C26.4789 52.7997 27.2888 56.7427 29.0332 60.3001C29.9666 62.1667 32.4666 62.3001 33.8999 60.7667L34.0666 60.5667C35.0666 59.4667 35.2332 57.8667 34.6332 56.4667C33.5487 53.9336 33.1118 51.1703 33.3619 48.4262C33.612 45.682 34.5413 43.0433 36.066 40.748C37.5907 38.4527 39.6628 36.5731 42.0953 35.2787C44.5279 33.9842 47.2444 33.3157 49.9999 33.3334C52.7465 33.3379 55.4495 34.0212 57.8683 35.3225C60.2871 36.6237 62.3469 38.5026 63.8644 40.792C65.3818 43.0814 66.31 45.7103 66.5662 48.445C66.8225 51.1797 66.3989 53.9353 65.3332 56.4667C64.7666 57.8667 64.8999 59.4667 65.9332 60.5667L66.0999 60.7667Z";
+const CAMINHO_RADIO_3 =
+  "M60.0001 50C60.0001 52.6522 58.9465 55.1957 57.0711 57.0711C55.1958 58.9464 52.6522 60 50.0001 60C47.3479 60 44.8044 58.9464 42.929 57.0711C41.0536 55.1957 40.0001 52.6522 40.0001 50C40.0001 47.3478 41.0536 44.8043 42.929 42.9289C44.8044 41.0536 47.3479 40 50.0001 40C52.6522 40 55.1958 41.0536 57.0711 42.9289C58.9465 44.8043 60.0001 47.3478 60.0001 50ZM31.1001 76.7667C30.2667 79.1667 31.5001 81.7667 33.7667 82.9C38.8079 85.3972 44.3576 86.6964 49.9834 86.6964C55.6092 86.6964 61.1589 85.3972 66.2001 82.9C67.3136 82.376 68.1984 81.4645 68.6891 80.3358C69.1799 79.2072 69.243 77.9385 68.8667 76.7667C67.4995 72.8485 64.9473 69.4527 61.5638 67.0498C58.1804 64.6469 54.1333 63.356 49.9834 63.356C45.8335 63.356 41.7864 64.6469 38.403 67.0498C35.0195 69.4527 32.4673 72.8485 31.1001 76.7667Z";
+
+export const Radio = doDiscord(QUADRO, CAMINHO_RADIO_1, CAMINHO_RADIO_2, CAMINHO_RADIO_3);
+
+/**
+ * "Enviar arquivo", dentro do menu do "+" do composer. Do
+ * `.../message-bar/upload-file.svg` — que não é o botão "+" em si (esse é um
+ * círculo com um `+` dentro, `message-bar/attachment.svg`, sem uso aqui: o
+ * `+` do nosso composer já é o `Plus` do acervo) e sim o item de menu
+ * "carregar um arquivo", com o mesmo papel do `Paperclip` que ele substitui.
+ */
+const CAMINHO_PAPERCLIP_1 =
+  "M39.4 65.6667C39.9667 65.8333 39.8667 66.6667 39.2667 66.6667L13.3333 66.6667C9.79711 66.6667 6.40573 65.2619 3.90524 62.7614C1.40476 60.2609 1.4803e-15 56.8696 0 53.3333L0 13.3333C0 9.79711 1.40476 6.40573 3.90524 3.90524C6.40573 1.40476 9.79711 4.44089e-15 13.3333 0L38.3333 0C39.2667 0 40 0.733333 40 1.66667L40 10C40 14.4203 41.7559 18.6595 44.8816 21.7851C48.0072 24.9107 52.2464 26.6667 56.6667 26.6667L65 26.6667C65.9333 26.6667 66.6667 27.4 66.6667 28.3333L66.6667 36C66.6567 36.2581 66.572 36.5078 66.4229 36.7187C66.2737 36.9296 66.0665 37.0927 65.8264 37.188C65.5863 37.2833 65.3236 37.3069 65.0704 37.2557C64.8172 37.2046 64.5843 37.081 64.4 36.9L63.7333 36.2333C61.8583 34.3607 59.3167 33.3088 56.6667 33.3088C54.0167 33.3088 51.475 34.3607 49.6 36.2333L36.2667 49.5667C35.3344 50.4957 34.5947 51.5996 34.09 52.8151C33.5853 54.0307 33.3254 55.3339 33.3254 56.65C33.3254 57.9661 33.5853 59.2693 34.09 60.4849C34.5947 61.7004 35.3344 62.8043 36.2667 63.7333C37.2667 64.7333 38.2667 65.2667 39.4 65.6667Z";
+const CAMINHO_PAPERCLIP_2 =
+  "M25.351 19.0186C25.451 19.0186 25.5177 18.9186 25.4843 18.8186C24.9981 17.8053 24.3445 16.8813 23.551 16.0853L9.41767 1.95196C8.62168 1.15849 7.69762 0.504892 6.68434 0.0186284C6.66273 0.0058221 6.63795 -0.00061922 6.61283 4.68989e-05C6.58772 0.000713018 6.56331 0.00845983 6.54241 0.0223939C6.52151 0.0363279 6.50497 0.0558828 6.49469 0.0788061C6.48442 0.101729 6.48083 0.127088 6.48434 0.151962L6.48434 9.01863C6.48434 11.6708 7.53791 14.2143 9.41327 16.0897C11.2886 17.9651 13.8322 19.0186 16.4843 19.0186L25.351 19.0186ZM14.151 40.0186C14.7741 39.4079 15.6118 39.0658 16.4843 39.0658C17.3569 39.0658 18.1946 39.4079 18.8177 40.0186L32.151 53.352C32.6324 53.9939 32.8662 54.7879 32.8093 55.5883C32.7524 56.3886 32.4087 57.1416 31.8414 57.709C31.274 58.2764 30.521 58.62 29.7206 58.6769C28.9203 58.7338 28.1262 58.5001 27.4843 58.0186L19.8177 50.4186L19.8177 69.0186C19.8177 69.9027 19.4665 70.7505 18.8414 71.3757C18.2162 72.0008 17.3684 72.352 16.4843 72.352C15.6003 72.352 14.7524 72.0008 14.1273 71.3757C13.5022 70.7505 13.151 69.9027 13.151 69.0186L13.151 50.3853L5.48434 58.052C4.84285 58.5938 4.02047 58.8736 3.1816 58.8354C2.34274 58.7972 1.54921 58.4438 0.959656 57.8458C0.370101 57.2478 0.0279622 56.4494 0.00163957 55.61C-0.024683 54.7707 0.26675 53.9524 0.817676 53.3186L14.151 39.9853L14.151 40.0186Z";
+
+export const Paperclip = doDiscord(
+  FIGMA,
+  { d: CAMINHO_PAPERCLIP_1, desloca: "matrix(1 0 0 1 6.6667 6.6667)" },
+  { d: CAMINHO_PAPERCLIP_2, desloca: "matrix(1 0 0 1 46.849 7.648)" },
+);
+
+/**
+ * O ícone de enquete, ao lado da pergunta em `PollCard.tsx`, é o mesmo glifo
+ * que o Discord usa no botão "Criar enquete" do composer — o `Vote` que já
+ * migrou (`message-bar/poll.svg`), não uma barra de gráfico. Alias, não outro
+ * `doDiscord`: são o mesmo arquivo, duas vezes seria dois nomes por acaso.
+ */
+export const BarChart3 = Vote;
