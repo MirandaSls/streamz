@@ -58,9 +58,10 @@ em "Sobre".
    "limão só sobre escuro" exige um accent alternativo, e isso é outra ADR.
 3. **Onde: no servidor** (`/opt/stack/streamz`, worktrees, `docker run node:22`,
    §2–§3). É onde estão o acervo de ícones (`docs/Reference/`) e o
-   `publicar-local.sh`. As referências coletadas no Mac
-   (`~/Documents/referencias-discord`, 3 GB) sobem por `rsync` para
-   `docs/Reference/discord-web/`, que já está no `.gitignore`.
+   `publicar-local.sh`. As referências coletadas estão **no próprio
+   repositório**, em `docs/referencias-discord/` (3 GB), por decisão do usuário:
+   todo agente as tem na worktree. Ficam fora do build das imagens pelo
+   `.dockerignore`.
 4. **Deploy: uma branch por onda.** As tarefas viram PR em
    `feat/paridade-discord`, que entra na `main` ao fim de cada onda, com os prints
    do usuário. Cada feature da trilha §4b tem PR próprio na `main`, porque é tela
@@ -96,7 +97,7 @@ Pode tocar: <lista fechada de arquivos>
 Proibido: tailwind.config.ts, globals.css, icones.tsx, components/ui/primitivos/*,
           app/app/page.tsx, design.md, packages/shared (salvo se o cartão disser)
 Referências Discord:
-  - imagens: <caminhos em referencias-discord/…, escolhidos no catalogo.json>
+  - imagens: <caminhos em docs/referencias-discord/…, escolhidos no catalogo.json>
   - CSS: <arquivos/classes em tokens/css-bruto/ com as medidas desta peça>
   - prints 1:1: <docs/Reference/Captura de tela …>, quando houver
 Medidas-alvo: <tabela preenchida pelo coordenador; o que faltar, o agente mede
@@ -232,7 +233,7 @@ da DM · DM em grupo.
 
 A régua de cada feature é o **comportamento** do Discord, não só a tela. A
 especificação sai dos artigos da central de ajuda, que estão inteiros em
-`referencias-discord/suporte/` (`api/artigos.json` tem o texto de todos os 512).
+`docs/referencias-discord/suporte/` (`api/artigos.json` tem o texto de todos os 512).
 Cada feature segue as regras do `CLAUDE.md`:
 - o contrato em `packages/shared` vem antes;
 - escrita de mensagem vai por WS;
@@ -288,12 +289,12 @@ paridade.
 
 | Material | Onde | Para quê |
 |---|---|---|
-| Galeria e catálogo (3.129 imagens, por tela e plataforma) | `referencias-discord/index.html`, `catalogo.json` | escolher a referência de cada cartão |
-| Cobertura e lacunas por tela | `referencias-discord/COBERTURA.md` | saber onde a referência é fraca |
-| Tokens do Discord (cor por tema, tipografia, raios, sombras, breakpoints) | `referencias-discord/tokens/` | onda 0.2–0.3 e medidas de toda peça |
-| CSS bruto do cliente logado (303 arquivos) | `referencias-discord/tokens/css-bruto/` | medida exata de padding, altura e fonte por classe, sem estimar |
-| Capturas próprias (login, registro, convite, descoberta), desktop e celular | `referencias-discord/publico/` | onda 7 |
-| Imagens de bots (componentes v2, embeds, modais, comandos) | `referencias-discord/desenvolvedores/` | ondas 2–3 |
+| Galeria e catálogo (3.129 imagens, por tela e plataforma) | `docs/referencias-discord/index.html`, `catalogo.json` | escolher a referência de cada cartão |
+| Cobertura e lacunas por tela | `docs/referencias-discord/COBERTURA.md` | saber onde a referência é fraca |
+| Tokens do Discord (cor por tema, tipografia, raios, sombras, breakpoints) | `docs/referencias-discord/tokens/` | onda 0.2–0.3 e medidas de toda peça |
+| CSS bruto do cliente logado (303 arquivos) | `docs/referencias-discord/tokens/css-bruto/` | medida exata de padding, altura e fonte por classe, sem estimar |
+| Capturas próprias (login, registro, convite, descoberta), desktop e celular | `docs/referencias-discord/publico/` | onda 7 |
+| Imagens de bots (componentes v2, embeds, modais, comandos) | `docs/referencias-discord/desenvolvedores/` | ondas 2–3 |
 | Prints 1:1 do usuário e acervo de ícones | `docs/Reference/` (só no servidor) | medir com `getpixel` (§6.3), ícones (§6.2) |
 
 ---
@@ -333,9 +334,10 @@ paridade.
 
 ## 7. Primeiros passos (depois da aprovação deste plano)
 
-1. `rsync` de `~/Documents/referencias-discord` → servidor, em
-   `docs/Reference/discord-web/`.
-2. Commitar este plano numa branch `docs/plano-paridade-discord` e abrir o PR.
+1. ~~Referências no repositório~~ e ~~plano commitado~~: feito no PR #223
+   (`docs/referencias-discord/` + este arquivo).
+2. Mergear o PR #223 na `main`, para toda worktree nova já nascer com o plano e
+   as referências.
 3. Onda 0.1: a ADR-0009 em rascunho, para o usuário aprovar. Ela é a autorização
    formal para mexer em cor e token.
 4. Ondas 0.2–0.7, em sequência, pelo Opus. O primeiro workflow paralelo é o 0.4
