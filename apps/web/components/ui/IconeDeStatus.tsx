@@ -30,11 +30,12 @@ import type { UserStatus } from "@streamz/shared";
  *
  * O `viewBox` é 16 para que essas frações caiam em números inteiros.
  */
+/** As cores de presença do Discord (`--icon-status-*`), que não são as de aviso e perigo. */
 export const COR_DO_STATUS: Record<UserStatus, string> = {
-  ONLINE: "text-status-positive",
-  IDLE: "text-status-warning",
-  DND: "text-status-danger",
-  OFFLINE: "text-channels-default",
+  ONLINE: "text-icon-status-online",
+  IDLE: "text-icon-status-idle",
+  DND: "text-icon-status-dnd",
+  OFFLINE: "text-icon-status-offline",
 };
 
 export default function IconeDeStatus({
