@@ -230,7 +230,7 @@ export function TelaVoce() {
       <div className="mt-11 px-3 pb-6">
         {/* cartão de identidade */}
         <div className="rounded-2xl bg-chat p-4">
-          <h1 className="truncate font-display text-xl font-bold tracking-title text-txt-primary">
+          <h1 className="truncate text-xl font-bold text-txt-primary">
             {displayNameOf(vivo)}
           </h1>
           <p className="truncate text-sm text-txt-muted">@{vivo.username}</p>

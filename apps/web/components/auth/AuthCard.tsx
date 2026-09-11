@@ -50,7 +50,7 @@ export default function AuthCard({
       {/* 24px de respiro no celular: com os 32 do desktop sobram 294px de
           conteúdo numa tela de 390 */}
       <div className="relative w-full max-w-[480px] rounded-[5px] bg-chat p-8 shadow-[0_16px_48px_rgba(0,0,0,.6),0_4px_12px_rgba(0,0,0,.45)] celular:p-6">
-        <h1 className="text-center font-display text-2xl font-semibold leading-8 tracking-title text-txt-primary">
+        <h1 className="text-center text-2xl font-semibold leading-8 text-txt-primary">
           {title}
         </h1>
         {subtitle && <p className="mt-2 text-center text-txt-muted">{subtitle}</p>}
@@ -75,7 +75,7 @@ export function FieldLabel({
   return (
     <label
       htmlFor={htmlFor}
-      className={`mb-2 block font-display text-xs font-bold uppercase tracking-[0.02em] ${
+      className={`mb-2 block text-xs font-bold uppercase tracking-[0.02em] ${
         invalid ? "text-red" : "text-txt-secondary"
       }`}
     >
@@ -107,7 +107,7 @@ export function OptionalFieldLabel({
   return (
     <label
       htmlFor={htmlFor}
-      className={`mb-2 block font-display text-xs font-bold uppercase tracking-[0.02em] ${
+      className={`mb-2 block text-xs font-bold uppercase tracking-[0.02em] ${
         invalid ? "text-red" : "text-txt-secondary"
       }`}
     >

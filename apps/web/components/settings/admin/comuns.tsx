@@ -110,7 +110,7 @@ export function Numero({
 }) {
   return (
     <div className="rounded-[6px] border border-border bg-panel px-3 py-3">
-      <p className="font-display text-2xl font-bold tabular-nums text-txt-primary">
+      <p className="text-2xl font-bold tabular-nums text-txt-primary">
         {valor.toLocaleString("pt-BR")}
       </p>
       <p className="mt-0.5 text-xs font-semibold uppercase tracking-[0.02em] text-txt-secondary">

@@ -261,7 +261,7 @@ function Chamando({
             </span>
           )}
         </span>
-        <p className="font-display text-xl font-bold text-txt-primary">{nome}</p>
+        <p className="text-xl font-bold text-txt-primary">{nome}</p>
         <p className="text-sm text-txt-muted">Chamando…</p>
       </div>
     </div>
@@ -298,7 +298,7 @@ function ConviteParaEntrar({
             <Avatar key={e.user.id} user={e.user} size="xl" surface="border-void" className="rounded-full ring-4 ring-void" />
           ))}
         </div>
-        <p className="font-display text-lg font-bold text-txt-primary">{texto}</p>
+        <p className="text-lg font-bold text-txt-primary">{texto}</p>
         <button
           type="button"
           onClick={onEntrar}

@@ -233,7 +233,7 @@ export default function Dialog({
           <div className="shrink-0 px-6 pt-6">
             <h2
               id={titleId}
-              className="pr-8 font-display text-xl font-bold tracking-title text-txt-primary"
+              className="pr-8 text-xl font-bold text-txt-primary"
             >
               {title}
             </h2>

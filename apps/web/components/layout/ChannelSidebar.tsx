@@ -272,7 +272,7 @@ function CabecalhoDoServidor({
           aria-haspopup="menu"
           className="flex min-h-[44px] w-full items-center gap-1 text-left disabled:cursor-default"
         >
-          <span className="truncate font-display text-xl font-bold tracking-title text-txt-primary">
+          <span className="truncate text-xl font-bold text-txt-primary">
             {guild?.name ?? "Selecione um servidor"}
           </span>
           {guild && (

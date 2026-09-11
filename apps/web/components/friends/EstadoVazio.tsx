@@ -103,7 +103,7 @@ export default function EstadoVazio({
   return (
     <div className="mt-10 grid place-items-center px-8 text-center">
       <Ilustracao arte={arte} className="w-[220px] max-w-full" />
-      <h3 className="mt-6 font-display text-lg font-semibold text-txt-primary">{titulo}</h3>
+      <h3 className="mt-6 text-lg font-semibold text-txt-primary">{titulo}</h3>
       <p className="mt-1 max-w-md text-sm text-txt-muted">{texto}</p>
       {children && <div className="mt-4">{children}</div>}
     </div>

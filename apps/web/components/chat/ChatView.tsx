@@ -139,7 +139,7 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
       <Raiz className="grid min-w-0 flex-1 place-items-center bg-chat px-8 text-center">
         <div className="max-w-md">
           <EyeOff size={64} strokeWidth={1} className="mx-auto text-txt-muted" aria-hidden="true" />
-          <h2 className="mt-4 font-display text-2xl font-extrabold tracking-wordmark text-txt-primary">
+          <h2 className="mt-4 font-headline text-2xl font-extrabold text-txt-primary">
             {prefixo}
             {name}
           </h2>

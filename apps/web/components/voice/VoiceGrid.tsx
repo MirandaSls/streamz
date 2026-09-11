@@ -179,7 +179,7 @@ export default function VoiceGrid({
     return (
       <div className="grid h-full place-items-center px-6 text-center">
         <div className="flex flex-col items-center gap-3">
-          <p className="font-display text-lg font-bold text-txt-primary">
+          <p className="text-lg font-bold text-txt-primary">
             {nomeDoCanal ? `Ninguém em ${nomeDoCanal}` : "Ninguém na sala"}
           </p>
           <p className="max-w-sm text-sm text-txt-muted">

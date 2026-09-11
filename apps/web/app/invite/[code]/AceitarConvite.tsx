@@ -108,7 +108,7 @@ export default function AceitarConvite() {
                 ? `${displayNameOf(preview.inviter)} convidou você para`
                 : "Você foi convidado para"}
             </p>
-            <h1 className="mt-1 font-display text-2xl font-extrabold tracking-wordmark text-txt-primary">
+            <h1 className="mt-1 font-headline text-2xl font-extrabold text-txt-primary">
               {preview?.guild.name ?? "Servidor"}
             </h1>
 

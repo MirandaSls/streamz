@@ -430,7 +430,7 @@ export default function DMList() {
     return (
       <aside className="flex w-[294px] shrink-0 flex-col bg-panel">
         <div className="shrink-0 border-b border-border px-4 pb-3 pt-2">
-          <h1 className="py-1 font-display text-2xl font-bold tracking-title text-txt-primary">
+          <h1 className="py-1 text-2xl font-bold text-txt-primary">
             Mensagens
           </h1>
           <div className="mt-1 flex items-center gap-1.5">

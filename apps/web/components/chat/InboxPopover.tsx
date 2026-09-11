@@ -149,7 +149,7 @@ export default function InboxPopover({
           {/* título a 19px do topo, 36px de linha, 21px das bordas */}
           <div className="flex h-9 items-center gap-2 px-[21px] pt-[19px] celular:h-[44px] celular:px-4">
             <Inbox size={20} aria-hidden="true" className="shrink-0 text-txt-secondary" />
-            <h2 className="min-w-0 truncate font-display text-xl font-bold tracking-title text-txt-primary">
+            <h2 className="min-w-0 truncate text-xl font-bold text-txt-primary">
               Caixa de Entrada
             </h2>
             <div className="ml-auto flex shrink-0 items-center gap-2">
@@ -487,7 +487,7 @@ function Vazio({
           <path d="M7 0L8.6 5.4L14 7L8.6 8.6L7 14L5.4 8.6L0 7L5.4 5.4Z" />
         </svg>
       </div>
-      <h3 className="mt-8 font-display text-2xl font-bold tracking-title text-txt-primary">
+      <h3 className="mt-8 text-2xl font-bold text-txt-primary">
         {titulo}
       </h3>
       <p className="mt-2 text-xs text-txt-muted">

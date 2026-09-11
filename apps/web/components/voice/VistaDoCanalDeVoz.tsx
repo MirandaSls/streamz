@@ -111,7 +111,7 @@ export default function VistaDoCanalDeVoz({
           {/* mesmo tratamento do "Bem-vindo(a) a Geral!" do painel ao lado
               (`MessageList`): nome de canal é conteúdo, e na print os dois
               "Geral" da tela são a mesma letra */}
-          <h2 className="max-w-2xl truncate font-display text-[32px] font-extrabold leading-10 tracking-wordmark text-txt-primary">
+          <h2 className="max-w-2xl truncate font-headline text-[32px] font-extrabold leading-10 text-txt-primary">
             {nome}
           </h2>
           <p className="mt-2 text-sm leading-5 text-txt-normal">

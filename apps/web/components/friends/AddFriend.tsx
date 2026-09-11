@@ -56,7 +56,7 @@ export default function AddFriend() {
        enviar dividiam 330px e o rótulo "Enviar pedido de amizade" espremia o
        campo a menos de 100px */
     <div className="px-[30px] pt-5 celular:px-4">
-      <h2 className="font-display text-xl font-bold leading-6 text-txt-primary">Adicionar amigo</h2>
+      <h2 className="text-xl font-bold leading-6 text-txt-primary">Adicionar amigo</h2>
       <p className="mt-2 text-base leading-5 text-txt-normal">
         Você pode adicionar amigos com o nome de usuário do Streamz.
       </p>

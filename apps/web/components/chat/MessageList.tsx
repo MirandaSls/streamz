@@ -301,7 +301,7 @@ export default function MessageList({
                 descontam a metade da entrelinha e a folga do ascendente de cada
                 fonte; sem app aberto, o resultado é aritmética, não render. */}
             {/* nome de canal é conteúdo: Archivo sim, caixa-alta não. */}
-            <h2 className="mt-2 font-display text-[32px] font-extrabold leading-10 tracking-wordmark text-txt-primary">
+            <h2 className="mt-2 font-headline text-[32px] font-extrabold leading-10 text-txt-primary">
               {welcome.title}
             </h2>
             {welcome.subtitle && (

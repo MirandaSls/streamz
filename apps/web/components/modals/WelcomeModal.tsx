@@ -53,14 +53,14 @@ export default function WelcomeModal({ guildId }: { guildId: string }) {
           ) : null}
           <span
             aria-hidden="true"
-            className="absolute inset-0 grid place-items-center font-display text-3xl font-extrabold tracking-title text-accent-ink"
+            className="absolute inset-0 grid place-items-center font-headline text-3xl font-extrabold text-accent-ink"
           >
             {guild?.name?.slice(0, 2).toUpperCase()}
           </span>
         </div>
 
         <div className="p-4">
-          <h2 className="font-display text-xl font-bold tracking-title text-txt-primary">
+          <h2 className="text-xl font-bold text-txt-primary">
             Bem-vindo a {guild?.name ?? "este servidor"}!
           </h2>
           <p className="mt-1 break-words text-sm text-txt-normal">
