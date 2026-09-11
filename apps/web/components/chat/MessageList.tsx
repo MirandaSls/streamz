@@ -281,7 +281,7 @@ export default function MessageList({
       <div
         ref={scrollRef}
         onScroll={aoRolar}
-        className={`scroller-auto flex-1 select-text overflow-y-auto ${className}`}
+        className={`scroller-auto scroller-fade flex-1 select-text overflow-y-auto ${className}`}
       >
         {loadingOlder && (
           <div className="grid place-items-center py-3" role="status" aria-label="Carregando mensagens">

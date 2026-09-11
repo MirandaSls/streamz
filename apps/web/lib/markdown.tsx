@@ -10,13 +10,18 @@ export type { Block, Inline } from "./markdown-core";
 // ── render ───────────────────────────────────────────────────
 
 export interface RenderOptions {
-  /** username de quem está lendo — a própria menção ganha destaque amarelo. */
+  /**
+   * username de quem está lendo. A pílula da própria menção não muda de cor
+   * por causa disso (no Discord ela é sempre a cor de marca, ver a pílula
+   * abaixo) — quem destaca "mencionou você" é a LINHA da mensagem
+   * (`--message-mentioned-background-default`, em MessageRow), não este componente.
+   */
   meUsername?: string;
   /** nomes de exibição por username, para mostrar @Nome em vez de @user. */
   displayNames?: Record<string, string>;
   /** cargos do servidor aberto, para desenhar `<@&id>` com nome e cor. */
   roles?: { id: string; name: string; color: string | null }[];
-  /** cargos de quem está lendo — a menção ao meu cargo ganha o mesmo destaque. */
+  /** cargos de quem está lendo — reservado para o mesmo uso futuro que `meUsername`. */
   myRoleIds?: readonly string[];
   /** mensagem só de emoji: renderiza grande, como no Discord. */
   jumbo?: boolean;
@@ -121,28 +126,30 @@ export function renderInline(nodes: Inline[], opts: RenderOptions = {}): ReactNo
         // cargo apagado (ou de outro servidor) vira "@cargo": o texto guarda o
         // id, então não há nome a mostrar — e sumir com a marcação seria pior
         const role = opts.roles?.find((r) => r.id === n.roleId);
-        const meu = opts.myRoleIds?.includes(n.roleId);
         return (
           <span
             key={i}
             style={role?.color ? { color: role.color } : undefined}
-            className={`rounded-[3px] px-0.5 font-medium ${
-              meu ? "bg-status-warning/30 text-text-strong" : "bg-brand-500/25 text-mention-foreground"
-            }`}
+            // pílula de menção é sempre a cor de marca (--mention-background +
+            // --mention-foreground), mencionar o próprio cargo não muda isso —
+            // css-bruto/334324.ba65a76e9632d279.css .wrapper_f61d60 não tem
+            // variante "próprio"; quem destaca é a linha da mensagem, em outro componente
+            className="rounded-[3px] bg-mention-background px-0.5 font-medium text-mention-foreground"
           >
             @{role?.name ?? "cargo"}
           </span>
         );
       }
       case "mention": {
-        const me = opts.meUsername && n.username.toLowerCase() === opts.meUsername.toLowerCase();
         const nome = opts.displayNames?.[n.username.toLowerCase()] ?? n.username;
         return (
           <span
             key={i}
-            className={`rounded-[3px] px-0.5 font-medium ${
-              me ? "bg-status-warning/30 text-text-strong" : "bg-brand-500/25 text-mention-foreground hover:bg-brand-500 hover:text-control-primary-text-default"
-            }`}
+            // idem: sem variante de cor para "menção a mim" (ver comentário do
+            // roleMention acima). O hover em brand-500 é o `.interactive:hover`
+            // do Discord (mesmo arquivo) — não existe --mention-background-hover
+            // em tokens.css, então o hover permanece com o token de marca
+            className="rounded-[3px] bg-mention-background px-0.5 font-medium text-mention-foreground hover:bg-brand-500 hover:text-control-primary-text-default"
           >
             @{nome}
           </span>

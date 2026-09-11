@@ -398,16 +398,20 @@ function Painel({
             `--text-feedback-critical` também no fundo `--background-feedback-
             critical` do hover/foco/pressionado — o token certo, não
             `--status-danger` (esse é a bolinha de status, outra coisa).
+
+            `highlight` (usado em "Convidar para o servidor") **não** vira cor
+            de marca: medido no print `124207` desse item, texto #f0f0f0 e
+            ícone #aaabb1 — a mesma cor de um item comum, sem destaque nenhum.
+            O Discord não pinta item de menu com o accent; o `text-brand-500`
+            que existia aqui foi tirado, e `highlight`/`forte` (status do
+            cartão de perfil) caem no mesmo texto e no mesmo hover do item
+            comum, que já eram idênticos entre si.
           */
           const cor = item.danger
             ? "text-text-feedback-critical hover:bg-background-feedback-critical focus:bg-background-feedback-critical active:bg-background-feedback-critical"
-            : !filho && item.highlight
-              ? "text-brand-500 hover:bg-interactive-background-hover focus:bg-interactive-background-hover active:bg-background-mod-subtle"
-              : forte
-                ? "text-text-strong hover:bg-interactive-background-hover focus:bg-interactive-background-hover active:bg-background-mod-subtle"
-                : // rótulo `--text-strong` (`.colorDefault_c1e9c4 .label_c1e9c4`),
-                  // não `--text-subtle` — o item comum já nasce no texto forte.
-                  "text-text-strong hover:bg-interactive-background-hover focus:bg-interactive-background-hover active:bg-background-mod-subtle";
+            : // rótulo `--text-strong` (`.colorDefault_c1e9c4 .label_c1e9c4`),
+              // não `--text-subtle` — o item comum já nasce no texto forte.
+              "text-text-strong hover:bg-interactive-background-hover focus:bg-interactive-background-hover active:bg-background-mod-subtle";
           // fundo do item-pai quando o submenu dele está aberto: o mesmo do
           // hover/foco de cada categoria, sem repintar o texto (a categoria já
           // define a cor certa em `cor`, inclusive a de perigo).
@@ -468,12 +472,22 @@ function Painel({
               }`}
             >
               {item.icon ? (
-                // caixa de 20px como a do Discord: o chamador manda o ícone no
-                // tamanho que quiser (18 ou 20) e ele sai sempre no mesmo quadro
+                // Quadro de 20px (`.iconContainer_c1e9c4{width:20px;height:20px}`,
+                // css-bruto/858942…) com o ícone desenhado em 16, não 20: medido
+                // no print `124207` ("Convidar para o servidor"), o traço do
+                // glifo cobre ~13px verticais dentro do quadro — consistente
+                // com 16, não com os 18/20 que saíam antes. Cor fixa
+                // `--interactive-icon-default` (#abacb2 medido ali, contra
+                // #f0f0f0 do rótulo ao lado): o ícone comum **não** segue a cor
+                // do item, fica sempre nesse cinza — antes herdava o
+                // `text-text-strong` do item a 80% de opacidade, daí "quase
+                // branco". Perigo (`item.danger`) continua herdando o vermelho
+                // do item (não é o que este cartão mediu); `forte` é o ícone à
+                // parte do seletor de status, com cor própria.
                 <span
                   aria-hidden="true"
-                  className={`grid h-5 w-5 shrink-0 place-items-center [&>svg]:h-5 [&>svg]:w-5 ${
-                    forte ? "" : "opacity-80"
+                  className={`grid h-5 w-5 shrink-0 place-items-center [&>svg]:h-4 [&>svg]:w-4 ${
+                    forte ? "" : item.danger ? "opacity-80" : "text-interactive-icon-default"
                   }`}
                 >
                   {item.icon as ReactNode}

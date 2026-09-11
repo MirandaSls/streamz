@@ -19,7 +19,7 @@ import InboxPopover from "@/components/chat/InboxPopover";
 import AddFriend from "@/components/friends/AddFriend";
 import EstadoVazio from "@/components/friends/EstadoVazio";
 import FriendRow, { RowAction } from "@/components/friends/FriendRow";
-import { TextInput } from "@/components/ui/primitivos";
+import { Button, TextInput } from "@/components/ui/primitivos";
 import { useDMs } from "@/stores/dms";
 import { useFriends, type FriendsTab } from "@/stores/friends";
 import { resolveStatus, usePresence } from "@/stores/presence";
@@ -287,19 +287,32 @@ export default function FriendsPage() {
               )}
             </button>
           ))}
-          {/* ação primária: 32px de altura e largura mínima, não um chip de aba */}
-          <button
-            type="button"
+          {/*
+            Botão primário do primitivo (limão, texto escuro), não um chip de
+            aba — o print real (`docs/Reference/Captura de tela 2026-08-31
+            101638.png`, aba Amigos) não muda a cor deste botão quando ele está
+            selecionado: em `…124052.png` (aba "Adicionar amigo" já ativa) ele
+            continua com o mesmo preenchimento sólido. Por isso não há mais
+            estado "ativo" em verde-de-status aqui — só o `Button` primário.
+
+            Altura: medida agora em `…101638.png`, coluna x=780 (miolo do
+            botão, longe de letra e canto) — sólido de y=47 a y=78 (32px, com
+            a borda de 1px de cada lado incluída); a mesma medida sai da pílula
+            selecionada "Disponível" ao lado (coluna x=520, mesmíssimo
+            y=47–78). 32px bate exato com o degrau `sm` do `Button` (já medido
+            e documentado no cabeçalho de `primitivos/Button.tsx` a partir de
+            outro print), não com os 28px que a revisão apontou — por isso
+            uso `sm`, não um número novo.
+          */}
+          <Button
+            variante="primario"
+            tamanho="sm"
             aria-pressed={tab === "adicionar"}
             onClick={() => setTab("adicionar")}
-            className={`h-8 rounded-lg px-3 text-base font-medium transition celular:h-[44px] celular:shrink-0 celular:snap-start ${
-              tab === "adicionar"
-                ? "bg-status-positive/20 text-status-positive"
-                : "bg-status-positive text-control-primary-text-default hover:bg-status-positive/80"
-            }`}
+            className="celular:h-[44px] celular:shrink-0 celular:snap-start"
           >
             Adicionar amigo
-          </button>
+          </Button>
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center gap-4 celular:hidden">

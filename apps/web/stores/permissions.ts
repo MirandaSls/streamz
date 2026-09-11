@@ -18,6 +18,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { useGuilds } from "@/stores/guilds";
+import { useUI } from "@/stores/ui";
 
 /**
  * Cargos e regras de canal do servidor ativo — e o cálculo de "o que eu posso".
@@ -246,14 +247,49 @@ export function useRoleColor(roleIds: readonly string[] | undefined): string | n
 }
 
 /**
- * Cor do nome de um membro do servidor ativo, pelo id. É o que o autor da
- * mensagem usa: a lista de membros já traz os cargos de todo mundo.
+ * A regra da cor do nome, sem React: **cor de cargo só existe em canal de
+ * servidor**.
+ *
+ * Conversa direta e grupo são `Channel` com `guildId` null (ADR-0001) e não
+ * têm cargo nenhum — no Discord o nome, ali, é a cor padrão de texto. Sem esta
+ * pergunta o nome saía com a cor do cargo do **último servidor aberto**, que é
+ * o que esta store continua tendo carregado enquanto a conversa está na tela
+ * (um grupo sem cargo nenhum aparecia com quatro cores diferentes).
+ *
+ * `guildIdCarregado` é o par da pergunta: cargo de outro servidor não vale
+ * aqui. Enquanto a troca de servidor não termina, `roles` ainda é do anterior,
+ * e pintar com ele seria a mesma mentira em outra roupa.
  */
-export function useAuthorColor(userId: string): string | null {
-  const roles = usePermissions((s) => s.roles);
-  const roleIds = useGuilds((s) => s.members.find((m) => m.user.id === userId)?.roleIds ?? EMPTY);
+export function corDeCargoNoCanal(
+  guildIdDoCanal: string | null,
+  guildIdCarregado: string | null,
+  roleIds: readonly string[],
+  roles: readonly Role[],
+): string | null {
+  if (!guildIdDoCanal || guildIdDoCanal !== guildIdCarregado) return null;
   if (roleIds.length === 0) return null;
   return colorRoleOf(roleIds, roles)?.color ?? null;
+}
+
+/**
+ * Cor do nome de um membro do servidor ativo, pelo id. É o que o autor da
+ * mensagem usa: a lista de membros já traz os cargos de todo mundo.
+ *
+ * `guildIdDoCanal` é o `Message.guildId` — o canal **em que a mensagem está**,
+ * null em conversa direta e em grupo. É ele que decide se há cargo (ver
+ * `corDeCargoNoCanal`).
+ *
+ * Omitir o argumento quer dizer "este nome é do canal **aberto**" — é o caso
+ * da barra "Respondendo a…", que só existe em cima do composer. No modo
+ * conversa não há servidor aberto, então também não há cor.
+ */
+export function useAuthorColor(userId: string, guildIdDoCanal?: string | null): string | null {
+  const roles = usePermissions((s) => s.roles);
+  const carregado = usePermissions((s) => s.guildId);
+  const emServidor = useUI((s) => s.view === "guild");
+  const roleIds = useGuilds((s) => s.members.find((m) => m.user.id === userId)?.roleIds ?? EMPTY);
+  const doCanal = guildIdDoCanal === undefined ? (emServidor ? carregado : null) : guildIdDoCanal;
+  return corDeCargoNoCanal(doCanal, carregado, roleIds, roles);
 }
 
 /** Cargos de um membro para exibir como chips (do mais alto para o mais baixo). */

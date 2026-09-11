@@ -8,7 +8,9 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent as KeyboardEventDoReact,
+  type MutableRefObject,
   type ReactNode,
+  type Ref,
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
@@ -49,6 +51,17 @@ import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
  * - Padding é do conteúdo (`semRespiro`, padrão verdadeiro); quem quer respiro
  *   passa `semRespiro={false}` e ganha 16 (`.layer__95d7b`, `.popout_ab4223`:
  *   `padding: var(--space-16)`).
+ * - `superficie` escolhe entre essa caixa (`alta`), a do menu de contexto
+ *   (`mais-alta`, `--background-surface-higher`, `.menu_c1e9c4`) e **nenhuma**,
+ *   em que a caixa é só posicionador e quem desenha é o filho.
+ *
+ * ## Camada
+ *
+ * `Z_BASE` (90) mais um degrau por popout aberto por cima. Acima está o app
+ * inteiro, mas **não** as camadas que o próprio popout abre e que vivem fora
+ * desta pilha: o `ContextMenu` (véu 79, menu 80) e o `Modal`/`Dialog` (50), que
+ * são `fixed` com z fixo em classe. Quem abre uma dessas de dentro de si baixa a
+ * própria camada com `camada` (`{ abaixo: 40 }`, `{ acima: 80 }` ou um número).
  *
  * ## Posição
  *
@@ -57,7 +70,11 @@ import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
  * preferido, espelhado se não couber, depois os dois lados perpendiculares; no
  * eixo cruzado o alinhamento também espelha (start ↔ end) antes de deslizar
  * para caber a 8 da borda. Reposiciona em resize, em scroll de qualquer
- * ancestral e quando a caixa ou a âncora mudam de tamanho (`ResizeObserver`).
+ * ancestral, quando a caixa ou a âncora mudam de tamanho (`ResizeObserver`) e,
+ * enquanto aberta, quando a âncora **muda de lugar** sem mudar de tamanho
+ * (`seguirAncora`, um `getBoundingClientRect` por quadro): nenhum observador do
+ * navegador avisa que um elemento andou, e é o que acontece com o marco do
+ * `PickerPanel` quando o composer cresce.
  *
  * ## Entrada
  *
@@ -77,17 +94,36 @@ import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
  *
  * ## Fechar e foco
  *
- * Esc (só o popout do topo da pilha, para um submenu aberto não levar o pai
- * junto), clique fora — `mousedown` em captura, ignorando a âncora, os
+ * Esc, clique fora — `mousedown` em captura, ignorando a âncora, os
  * `[data-submenu-de-popout]`, o atributo antigo `[data-submenu-de-popover]` e
  * qualquer popout aberto depois deste —, e `aoFechar`. Foco vai para
  * `[data-autofocus]` ou o primeiro focável, Tab fica preso dentro e o foco volta
- * a quem o tinha quando o popout fecha.
+ * a quem o tinha quando o popout fecha. `refDaCaixa` entrega a caixa a quem
+ * precisa do DOM dela, e `pedidoDeFoco` leva o foco para dentro de uma caixa já
+ * aberta.
+ *
+ * **A regra do Esc** tem duas condições, e as duas são necessárias:
+ *
+ * 1. ser o **topo da pilha** de popouts — senão um submenu aberto levaria o pai
+ *    junto;
+ * 2. não haver **camada visível acima na tela** — nenhum `[data-popout]`,
+ *    `[role=dialog|alertdialog|menu]` ou `[data-camada]` fora desta caixa com
+ *    z-index maior que o dela (`existeCamadaAcima`).
+ *
+ * A condição 2 existe porque o handler é em captura no `window` e chama
+ * `stopPropagation`: sem ela, um popout rebaixado por `camada` (o painel do
+ * cabeçalho na 39, o cartão de perfil na 75) engolia o Esc do `ContextMenu`
+ * (80) e do `Dialog` (50) que ele mesmo abriu por cima — eles ouvem o Esc no
+ * borbulhar, que nunca chegava. Só o z é comparado; empate fica com a pilha
+ * (condição 1). Tooltip não entra na conta: é `pointer-events-none` e não tem
+ * nada a fechar.
  *
  * ## Celular
  *
  * Com `useEhMobile` vira folha inferior com véu, alça que é botão de verdade e
- * `useVoltarNoCelular` — a mesma folha que o `PopoverFlutuante` desenhava.
+ * `useVoltarNoCelular` — a mesma folha que o `PopoverFlutuante` desenhava. O
+ * fundo da folha (e o da faixa da alça, que é `sticky` por cima do conteúdo)
+ * sai de `fundoDaFolha`; a alça some com `alcaNaFolha={false}`.
  *
  * `usePosicaoFlutuante` e `calcularPosicaoFlutuante` são exportados para o
  * `ContextMenu` usar a mesma conta de colisão, em vez da sua (`colocar`).
@@ -97,6 +133,18 @@ export type AlinhamentoDoPopout = "start" | "center" | "end";
 export type Retangulo = { x: number; y: number; width: number; height: number };
 /** Elemento âncora (ref) ou retângulo fixo (clique do botão direito, seleção). */
 export type AncoraDoPopout = RefObject<HTMLElement | null> | Retangulo | DOMRect;
+/**
+ * Camada da caixa: um z-index cru, ou relativo ao de outra camada — `{ abaixo:
+ * 40 }` é 39 e `{ acima: 80 }` é 81. As duas formas relativas existem para o
+ * número na tela ficar ligado à camada que o justifica, em vez de virar uma
+ * constante solta que ninguém sabe mais por que é aquela.
+ */
+export type CamadaDoPopout = number | { acima: number } | { abaixo: number };
+/**
+ * A superfície da caixa no desktop (na folha do celular a superfície é sempre a
+ * folha; ver `fundoDaFolha`).
+ */
+export type SuperficieDoPopout = "alta" | "mais-alta" | "nenhuma";
 
 export interface PopoutProps {
   aberto: boolean;
@@ -131,8 +179,41 @@ export interface PopoutProps {
   /**
    * Papel ARIA da caixa. Padrão `dialog`; um submenu de itens usa `menu`, uma
    * lista de escolha usa `listbox`.
+   *
+   * `presentation` é para quando a caixa é **só posicionador** e o papel é do
+   * filho: o `PainelFlutuante` embrulha a `CaixaPicker`, que já é
+   * `role="dialog"` (`components/media/PickerChrome.tsx`), e um diálogo dentro
+   * do outro dá dois nomes e dois `aria-modal` para a mesma coisa. Com
+   * `presentation` o `rotulo` **não** vira `aria-label` (o papel apaga o nome do
+   * elemento) — ele continua obrigatório porque nomeia a caixa para quem lê o
+   * código, e porque trocar `papel` não pode fazer o rótulo sumir do arquivo.
    */
-  papel?: "dialog" | "menu" | "listbox";
+  papel?: "dialog" | "menu" | "listbox" | "presentation";
+  /**
+   * Camada (z-index) da caixa. Sem ela, `Z_BASE` (90), acima de tudo que o app
+   * desenha. Passe quando a caixa precisar ficar **abaixo** de camadas que não
+   * entram na pilha do `Popout` e que ela mesma abre — o `ContextMenu` (véu 79,
+   * menu 80) e o `Modal`/`Dialog` (50): na 90 o menu do kebab nasceria atrás do
+   * cartão que o chamou. O degrau da pilha continua somando por cima da camada
+   * escolhida, então um popout aberto dentro de outro fica sempre acima do pai.
+   */
+  camada?: CamadaDoPopout;
+  /**
+   * Superfície da caixa no desktop. Padrão `alta`
+   * (`--background-surface-high`, raio 8, `shadow-popout` — a do popout do
+   * Discord, medida no cabeçalho deste arquivo). `mais-alta` troca **só a cor**
+   * pela do menu (`--background-surface-higher`, `.menu_c1e9c4` em
+   * `css-bruto/858942…`) — a borda 1px cheia e o `--shadow-high` sem
+   * `--shadow-border` que o menu de lá também tem continuam sendo do
+   * `ContextMenu`, que os desenha por conta própria. `nenhuma` tira
+   * fundo, sombra, raio **e a animação de entrada**: quem desenha e anima é o
+   * filho. Sem isso as duas superfícies se somam — a sombra dobra, o
+   * `--background-surface-high` aparece em volta do filho enquanto ele escala e
+   * as duas entradas se multiplicam (.95 × .95).
+   *
+   * Não vale na folha do celular: lá a superfície é a folha (`fundoDaFolha`).
+   */
+  superficie?: SuperficieDoPopout;
   /** Padrão `true`. Tab fica preso dentro da caixa. */
   prenderFoco?: boolean;
   /**
@@ -141,8 +222,28 @@ export interface PopoutProps {
    * no item do pai); aberto pela seta →, `true`.
    */
   focarAoAbrir?: boolean;
+  /**
+   * Foco sob demanda, com a caixa **já aberta**: cada mudança de valor (um
+   * contador que o chamador incrementa) leva o foco para dentro pela mesma regra
+   * do `focarAoAbrir`. `focarAoAbrir` só age na abertura, e o submenu do menu de
+   * áudio precisa disto: aberto pelo hover, o foco fica no item do pai, e a seta
+   * → tem de levá-lo para dentro sem reabrir nada.
+   *
+   * Um pedido feito antes de a caixa estar posicionada fica pendente e é
+   * aplicado quando ela aparece — enquanto ela é `visibility: hidden`, o
+   * `focus()` não pega.
+   */
+  pedidoDeFoco?: number;
   /** Padrão `true`: ao fechar, o foco volta a quem o tinha quando abriu. */
   devolverFoco?: boolean;
+  /**
+   * A caixa por fora: recebe o `div` do popout (no celular, o miolo da folha —
+   * o mesmo nó que leva `role` e `data-popout`). Serve a quem precisa do DOM
+   * dela: achar os itens de um menu para as setas andarem, medir, rolar até um
+   * item. Prefira um ref estável (`useRef`) a um callback recriado a cada
+   * render, que o React desfaz e refaz em toda atualização.
+   */
+  refDaCaixa?: Ref<HTMLDivElement>;
   /**
    * Padrão `true`, menos em submenu: o submenu é desmontado junto com o pai, e
    * fechar no clique fora faria um clique no pai piscar o submenu.
@@ -156,6 +257,20 @@ export interface PopoutProps {
    */
   fecharAoRolar?: boolean;
   /**
+   * Padrão `true`: enquanto aberta, a caixa acompanha a âncora quadro a quadro
+   * (um `getBoundingClientRect` por quadro), e não só em resize, scroll e
+   * mudança de **tamanho**. Nenhum observador do navegador avisa que um elemento
+   * andou sem mudar de tamanho, e é justamente o caso do `PickerPanel`: o marco
+   * dele tem tamanho zero e desce quando o composer cresce (a faixa do modo
+   * lento sumindo, um anexo terminando de subir).
+   *
+   * Só vale para âncora por `ref` — retângulo passado à mão não anda sozinho. É
+   * um laço de `requestAnimationFrame` que só recalcula quando o retângulo muda,
+   * mas mantém a página acordada enquanto a caixa está aberta: desligue em
+   * popout de vida longa cuja âncora comprovadamente não se move.
+   */
+  seguirAncora?: boolean;
+  /**
    * Um clique fora da caixa que ainda conta como de dentro. A âncora por ref já
    * é ignorada sozinha; isto serve a quem ancora por retângulo e tem um botão
    * que alterna o popout — sem isto o `mousedown` fechava e o `click` reabria.
@@ -163,6 +278,23 @@ export interface PopoutProps {
   ehDeDentro?: (alvo: Element) => boolean;
   /** Padrão `true`. No celular vira folha inferior. */
   folhaNoCelular?: boolean;
+  /**
+   * Classe de fundo da folha do celular. Padrão `bg-background-surface-higher`
+   * (a folha do `PopoverFlutuante`; o Discord mobile não foi medido). Vale
+   * **também** para a faixa da alça, que é `sticky` por cima do conteúdo: com
+   * cores diferentes ela lê como uma barra de outra peça em cima da folha. Quem
+   * pinta o próprio miolo (`classeNaFolha`) passa a mesma cor aqui.
+   */
+  fundoDaFolha?: string;
+  /**
+   * Padrão `true`: a folha tem a alça, que é o botão "Fechar" de verdade.
+   * Desligue só quando o conteúdo desenhar a própria saída visível — sem alça,
+   * quem não conhece o gesto de tocar no véu fica com o "voltar" do Android, que
+   * no navegador do iPhone não existe. Sem alça o foco de abertura também deixa
+   * de cair nela e vai para o primeiro focável do conteúdo, que numa busca
+   * levanta o teclado virtual em cima da folha que acabou de subir.
+   */
+  alcaNaFolha?: boolean;
   /** Padrão `true` (o conteúdo decide o padding). `false` dá 16. */
   semRespiro?: boolean;
   /** Marca o popout como submenu de outro (o pai não fecha ao clicar aqui). */
@@ -197,6 +329,70 @@ const DURACAO_DO_DESLIZE = 200;
 const DURACAO_DA_ESCALA = 120;
 /** Camada do popout; cada popout aberto por cima de outro sobe um degrau. */
 const Z_BASE = 90;
+/** Fundo da folha do celular quando o chamador não escolhe outro. */
+const FUNDO_DA_FOLHA = "bg-background-surface-higher";
+
+/**
+ * A superfície da caixa no desktop, por `superficie`. Raio 8 e `shadow-popout`
+ * são a medida do popout do Discord (ver o cabeçalho); `mais-alta` só troca a
+ * cor pela do menu (`.menu_c1e9c4`, `--background-surface-higher`).
+ */
+const SUPERFICIE: Record<SuperficieDoPopout, string> = {
+  alta: "rounded-lg bg-background-surface-high shadow-popout",
+  "mais-alta": "rounded-lg bg-background-surface-higher shadow-popout",
+  nenhuma: "",
+};
+
+function resolverCamada(camada: CamadaDoPopout | undefined): number {
+  if (camada === undefined) return Z_BASE;
+  if (typeof camada === "number") return camada;
+  return "acima" in camada ? camada.acima + 1 : camada.abaixo - 1;
+}
+
+/**
+ * O que conta como "camada na tela" para a regra do Esc (ver o cabeçalho).
+ * `data-camada` é a porta de entrada de quem não tem papel ARIA: uma camada
+ * nova marca o próprio nó com ela em vez de vir mexer neste arquivo.
+ */
+const SELETOR_DE_CAMADA =
+  '[data-popout],[data-camada],[role="dialog"],[role="alertdialog"],[role="menu"]';
+
+/**
+ * O z-index que de fato empilha `el`: o dele, ou o do primeiro ancestral que
+ * tenha um. O véu do `Modal` é quem carrega o `z-50`, e o `role="dialog"` dentro
+ * dele é `auto` — perguntar só ao próprio nó daria 0.
+ *
+ * Aproximação conhecida: um `z-index` em elemento `position: static` não
+ * empilha nada, mas ainda aparece no estilo computado. Vale para esta conta
+ * porque os nós com papel de camada do app são todos `fixed`.
+ */
+function zIndexEfetivo(el: Element): number {
+  let no: Element | null = el;
+  while (no && no !== document.body) {
+    const z = Number.parseInt(getComputedStyle(no).zIndex, 10);
+    if (Number.isFinite(z)) return z;
+    no = no.parentElement;
+  }
+  return 0;
+}
+
+/**
+ * Há alguma camada visível acima de `z` que não seja a própria caixa nem parte
+ * do conteúdo dela? É a condição 2 da regra do Esc. A varredura só roda no Esc
+ * (uma vez por tecla, não a cada tecla), e sobre um seletor curto.
+ */
+function existeCamadaAcima(z: number, caixa: HTMLElement | null): boolean {
+  if (typeof document === "undefined") return false;
+  for (const el of Array.from(document.querySelectorAll<HTMLElement>(SELETOR_DE_CAMADA))) {
+    if (el === caixa || caixa?.contains(el)) continue;
+    // `display:none` não tem retângulo; `visibility:hidden` tem, e isso é o que
+    // queremos — o menu de contexto recém-aberto fica `invisible` até medir, e
+    // já é ele quem deve receber o Esc
+    if (el.getClientRects().length === 0) continue;
+    if (zIndexEfetivo(el) > z) return true;
+  }
+  return false;
+}
 
 const OPOSTO: Record<LadoDoPopout, LadoDoPopout> = {
   top: "bottom",
@@ -258,6 +454,12 @@ export interface OpcoesDePosicao {
   deslocamento?: number;
   /** Distância mínima até a borda da janela. Padrão 8. */
   margem?: number;
+  /**
+   * Padrão `true`: acompanha a âncora (por `ref`) quadro a quadro enquanto
+   * aberta, para pegar a âncora que **anda** sem mudar de tamanho — o que
+   * nenhum observador do navegador avisa. Ver `PopoutProps.seguirAncora`.
+   */
+  seguirAncora?: boolean;
 }
 
 function limitar(v: number, min: number, max: number): number {
@@ -416,7 +618,12 @@ export function usePosicaoFlutuante(
   distancia = 8,
   opcoes: OpcoesDePosicao = {},
 ): PosicaoFlutuante & { reposicionar: () => void } {
-  const { alinhamento = "start", deslocamento = 0, margem = MARGEM_DA_JANELA } = opcoes;
+  const {
+    alinhamento = "start",
+    deslocamento = 0,
+    margem = MARGEM_DA_JANELA,
+    seguirAncora = true,
+  } = opcoes;
   const [pos, setPos] = useState<PosicaoFlutuante>(NAO_POSICIONADO);
 
   // a âncora é lida no momento da conta; retângulo novo a cada render do pai
@@ -483,13 +690,38 @@ export function usePosicaoFlutuante(
       if (ancoraEl) observador.observe(ancoraEl);
     }
 
+    /*
+      A âncora que ANDA sem mudar de tamanho: `ResizeObserver` não vê, `scroll`
+      não dispara (o pai cresceu, ninguém rolou) e `IntersectionObserver` só
+      avisa ao cruzar um limiar. Sobra ler o retângulo por quadro e recalcular
+      quando ele muda — a leitura é uma por quadro e a escrita só na mudança.
+      Retângulo passado à mão não anda sozinho, então o laço nem começa.
+    */
+    let laco = 0;
+    if (seguirAncora && ehRef(ancoraAtual.current)) {
+      let ultimo: string | null = null;
+      const acompanhar = () => {
+        const el = ehRef(ancoraAtual.current) ? ancoraAtual.current.current : null;
+        if (el) {
+          const r = el.getBoundingClientRect();
+          const chave = `${r.x}|${r.y}|${r.width}|${r.height}`;
+          // a primeira volta só anota: a medida de abertura já foi feita acima
+          if (ultimo !== null && chave !== ultimo) calcular();
+          ultimo = chave;
+        }
+        laco = requestAnimationFrame(acompanhar);
+      };
+      laco = requestAnimationFrame(acompanhar);
+    }
+
     return () => {
       cancelAnimationFrame(quadro);
+      cancelAnimationFrame(laco);
       window.removeEventListener("resize", agendar);
       window.removeEventListener("scroll", aoRolar, true);
       observador?.disconnect();
     };
-  }, [aberto, chaveDaAncora, calcular, caixa]);
+  }, [aberto, chaveDaAncora, calcular, caixa, seguirAncora]);
 
   return { ...pos, reposicionar: calcular };
 }
@@ -505,18 +737,18 @@ export function usePosicaoFlutuante(
  * submenu) não conta como "fora" para o pai — os dois moram em portais
  * irmãos, e o DOM não sabe que um é filho do outro.
  */
-interface Camada {
+interface CamadaDaPilha {
   /** Tudo que é do popout na tela: a caixa no desktop, o véu na folha. */
   raiz: () => HTMLElement | null;
 }
 
-let pilha: Camada[] = [];
+let pilha: CamadaDaPilha[] = [];
 
-function ehTopo(camada: Camada): boolean {
+function ehTopo(camada: CamadaDaPilha): boolean {
   return pilha[pilha.length - 1] === camada;
 }
 
-function dentroDeCamadaAcima(camada: Camada, alvo: Node): boolean {
+function dentroDeCamadaAcima(camada: CamadaDaPilha, alvo: Node): boolean {
   const i = pilha.indexOf(camada);
   return pilha.slice(i + 1).some((c) => c.raiz()?.contains(alvo) ?? false);
 }
@@ -530,6 +762,21 @@ function focaveis(dentro: HTMLElement | null): HTMLElement[] {
   return Array.from(dentro.querySelectorAll<HTMLElement>(FOCALIZAVEL)).filter(
     (el) => el.getClientRects().length > 0,
   );
+}
+
+/**
+ * Leva o foco para dentro da caixa — na abertura e a cada `pedidoDeFoco`.
+ *
+ * Na folha o foco vai para a alça ("Fechar"), não para um campo: um
+ * `[data-autofocus]` de busca levantaria o teclado virtual por cima da folha que
+ * acabou de subir. No desktop vale a regra do diálogo.
+ */
+function focarDentro(el: HTMLElement | null, comoFolha: boolean): void {
+  if (!el) return;
+  const alvo = comoFolha
+    ? focaveis(el)[0]
+    : (el.querySelector<HTMLElement>("[data-autofocus]") ?? focaveis(el)[0]);
+  (alvo ?? el).focus({ preventScroll: true });
 }
 
 function semMovimento(): boolean {
@@ -555,14 +802,21 @@ export function Popout({
   largura,
   rotulo,
   papel = "dialog",
+  camada,
+  superficie = "alta",
   prenderFoco = true,
   focarAoAbrir = true,
+  pedidoDeFoco = 0,
   devolverFoco = true,
+  refDaCaixa,
   ehSubmenu = false,
   fecharAoClicarFora = !ehSubmenu,
   fecharAoRolar = false,
+  seguirAncora = true,
   ehDeDentro,
   folhaNoCelular = true,
+  fundoDaFolha = FUNDO_DA_FOLHA,
+  alcaNaFolha = true,
   semRespiro = true,
   aoTeclar,
   aoEntrarComPonteiro,
@@ -574,15 +828,36 @@ export function Popout({
   const ehMobile = useEhMobile();
   const comoFolha = folhaNoCelular && ehMobile;
 
-  const caixa = useRef<HTMLDivElement>(null);
+  // mutável (e não `useRef<HTMLDivElement>(null)`, cujo `current` é somente
+  // leitura nos tipos do React 18) porque quem preenche é o ref de callback que
+  // também repassa o nó para `refDaCaixa`
+  const caixa = useRef<HTMLDivElement | null>(null);
   const veu = useRef<HTMLDivElement>(null);
+
+  const definirCaixa = useCallback(
+    (el: HTMLDivElement | null) => {
+      caixa.current = el;
+      if (typeof refDaCaixa === "function") refDaCaixa(el);
+      // `RefObject.current` é `readonly` nos tipos do React 18, e é assim que o
+      // próprio React preenche um ref de objeto
+      else if (refDaCaixa) (refDaCaixa as MutableRefObject<HTMLDivElement | null>).current = el;
+    },
+    [refDaCaixa],
+  );
 
   // na folha não há conta de posição: ela é presa ao fundo pelo CSS
   const pos = usePosicaoFlutuante(aberto && !comoFolha, ancora, caixa, lado, distancia, {
     alinhamento,
     deslocamento,
+    seguirAncora,
   });
   const pronto = comoFolha || pos.pronto;
+  /*
+    A caixa é só posicionador (`superficie="nenhuma"`): quem desenha é o filho, e
+    animar os dois somaria as escalas (.95 × .95) e faria a sombra piscar por
+    baixo do filho enquanto ele cresce.
+  */
+  const animar = superficie !== "nenhuma";
 
   // as funções do chamador mudam a cada render; os ouvintes leem a última
   const fechar = useRef(aoFechar);
@@ -602,19 +877,24 @@ export function Popout({
   // ── pilha ────────────────────────────────────────────────────────────
   const naFolha = useRef(comoFolha);
   naFolha.current = comoFolha;
-  const [camada] = useState<Camada>(() => ({
+  // `daPilha` e não `camada`: `camada` é a prop de z-index. Este é o lugar deste
+  // popout na pilha de popouts abertos, que é outra coisa
+  const [daPilha] = useState<CamadaDaPilha>(() => ({
     raiz: () => (naFolha.current ? veu.current : caixa.current),
   }));
   const [nivel, setNivel] = useState(0);
+  // o degrau da pilha soma por cima da camada escolhida, para um popout aberto
+  // dentro de outro ficar sempre acima do pai, seja qual for a base dele
+  const zIndex = resolverCamada(camada) + nivel;
 
   useLayoutEffect(() => {
     if (!aberto) return;
     setNivel(pilha.length);
-    pilha = [...pilha, camada];
+    pilha = [...pilha, daPilha];
     return () => {
-      pilha = pilha.filter((c) => c !== camada);
+      pilha = pilha.filter((c) => c !== daPilha);
     };
-  }, [aberto, camada]);
+  }, [aberto, daPilha]);
 
   // ── Esc, clique fora, rolagem ────────────────────────────────────────
   useEffect(() => {
@@ -622,7 +902,16 @@ export function Popout({
 
     const aoTeclarNaJanela = (e: KeyboardEvent) => {
       // Esc no meio de uma composição (IME) cancela a composição, não a caixa
-      if (e.key !== "Escape" || e.isComposing || !ehTopo(camada)) return;
+      if (e.key !== "Escape" || e.isComposing || !ehTopo(daPilha)) return;
+      /*
+        Condição 2 da regra do Esc (ver o cabeçalho): ser o topo da pilha de
+        popouts não é o mesmo que ser o que está mais acima na TELA. O
+        `ContextMenu` (80) e o `Dialog` (50) não entram nesta pilha, e um popout
+        rebaixado por `camada` fica embaixo deles — engolir o Esc aqui (o
+        handler é em captura e para a propagação) deixava esses dois sem saída
+        pelo teclado, porque os dois ouvem no borbulhar.
+      */
+      if (existeCamadaAcima(zIndex, caixa.current)) return;
       // o Esc global do app também fecha coisas; parar aqui evita fechar duas
       // de uma vez (o painel de thread atrás do popout, por exemplo)
       e.stopPropagation();
@@ -640,7 +929,7 @@ export function Popout({
       // o botão que abriu alterna o popout no próprio `click`; se o
       // `mousedown` fechasse antes, o `click` reabriria
       if (ehRef(a) && a.current?.contains(alvo)) return;
-      if (dentroDeCamadaAcima(camada, alvo)) return;
+      if (dentroDeCamadaAcima(daPilha, alvo)) return;
       // o véu da folha fecha pelo próprio `onMouseDown` (ver abaixo)
       if (alvo === veu.current) return;
       if (alvo instanceof Element) {
@@ -655,7 +944,7 @@ export function Popout({
     const aoRolar = (e: Event) => {
       const alvo = e.target;
       // a lista de dentro da caixa rolando não é a âncora saindo do lugar
-      if (alvo instanceof Node && (caixa.current?.contains(alvo) || dentroDeCamadaAcima(camada, alvo))) return;
+      if (alvo instanceof Node && (caixa.current?.contains(alvo) || dentroDeCamadaAcima(daPilha, alvo))) return;
       fechar.current();
     };
     const aoRedimensionar = () => fechar.current();
@@ -676,7 +965,7 @@ export function Popout({
         window.removeEventListener("resize", aoRedimensionar);
       }
     };
-  }, [aberto, camada, fecharAoClicarFora, fecharAoRolar, comoFolha]);
+  }, [aberto, daPilha, fecharAoClicarFora, fecharAoRolar, comoFolha, zIndex]);
 
   // ── foco ─────────────────────────────────────────────────────────────
   // quem tinha o foco ao abrir recebe de volta ao fechar — mas só se o foco
@@ -703,18 +992,33 @@ export function Popout({
     }
     if (!pronto || focou.current || !focarAoAbrir) return;
     focou.current = true;
-    const el = caixa.current;
-    if (!el) return;
-    /*
-      Na folha o foco vai para a alça ("Fechar"), não para um campo: um
-      `[data-autofocus]` de busca levantaria o teclado virtual por cima da
-      folha que acabou de subir. No desktop vale a regra do diálogo.
-    */
-    const alvo = comoFolha
-      ? focaveis(el)[0]
-      : (el.querySelector<HTMLElement>("[data-autofocus]") ?? focaveis(el)[0]);
-    (alvo ?? el).focus({ preventScroll: true });
+    focarDentro(caixa.current, comoFolha);
   }, [aberto, pronto, focarAoAbrir, comoFolha]);
+
+  /*
+    Foco sob demanda com a caixa já aberta (a seta → no submenu que o hover
+    abriu). Só a MUDANÇA de valor conta: o contador do chamador vive mais que
+    uma abertura, e reagir ao valor em si roubaria o foco na próxima vez que a
+    caixa abrisse — justo o caso do submenu aberto pelo hover, que tem
+    `focarAoAbrir={false}` de propósito. Pedido feito antes de a caixa estar
+    posicionada fica pendente: em `visibility: hidden` o `focus()` não pega.
+  */
+  const pedidoAnterior = useRef(pedidoDeFoco);
+  const pedidoPendente = useRef(false);
+  useEffect(() => {
+    if (!aberto) {
+      pedidoAnterior.current = pedidoDeFoco;
+      pedidoPendente.current = false;
+      return;
+    }
+    if (pedidoDeFoco !== pedidoAnterior.current) {
+      pedidoAnterior.current = pedidoDeFoco;
+      pedidoPendente.current = true;
+    }
+    if (!pedidoPendente.current || !pronto) return;
+    pedidoPendente.current = false;
+    focarDentro(caixa.current, comoFolha);
+  }, [aberto, pronto, pedidoDeFoco, comoFolha]);
 
   function aoTeclarNaCaixa(e: KeyboardEventDoReact<HTMLDivElement>) {
     aoTeclar?.(e);
@@ -746,7 +1050,7 @@ export function Popout({
       setFase("inicio");
       return;
     }
-    if (comoFolha || !pos.pronto) return;
+    if (comoFolha || !animar || !pos.pronto) return;
     if (fase === "inicio") {
       if (semMovimento()) {
         setFase("parado");
@@ -766,14 +1070,15 @@ export function Popout({
       const t = window.setTimeout(() => setFase("parado"), DURACAO_DO_DESLIZE + 50);
       return () => window.clearTimeout(t);
     }
-  }, [aberto, comoFolha, pos.pronto, fase]);
+  }, [aberto, comoFolha, animar, pos.pronto, fase]);
 
   if (!aberto || typeof document === "undefined") return null;
 
-  const zIndex = Z_BASE + nivel;
   const comum = {
     role: papel,
-    "aria-label": rotulo,
+    // `presentation` apaga a semântica do elemento: um nome ali é ignorado pelo
+    // leitor de tela, e quem tem papel (e nome) é o filho
+    "aria-label": papel === "presentation" ? undefined : rotulo,
     "aria-modal": papel === "dialog" && prenderFoco ? true : undefined,
     tabIndex: -1,
     "data-popout": "",
@@ -796,29 +1101,33 @@ export function Popout({
         className="anim-overlay fixed inset-0 flex flex-col justify-end bg-background-scrim"
       >
         <div
-          ref={caixa}
+          ref={definirCaixa}
           {...comum}
-          className="anim-folha max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl bg-background-surface-higher pb-[env(safe-area-inset-bottom)] shadow-popout outline-none"
+          className={`anim-folha max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl ${fundoDaFolha} pb-[env(safe-area-inset-bottom)] shadow-popout outline-none`}
         >
           {/*
             A alça é **botão de verdade**, com rótulo "Fechar": quem não
             conhece o gesto de tocar no véu (e quem usa leitor de tela) ficaria
             com o "voltar" do Android como única saída, e no navegador do
             iPhone esse botão não existe. `sticky` porque a folha rola por
-            dentro e a saída não pode subir junto com o conteúdo.
+            dentro e a saída não pode subir junto com o conteúdo — e, sendo
+            `sticky`, ela precisa do **mesmo fundo da folha**, senão passa a ler
+            como uma barra de outra peça por cima do conteúdo que corre atrás.
 
             A folha é a do `PopoverFlutuante` de antes (véu, raio 16 em cima,
             85% da altura, alça de 28 com barra de 36×4); o Discord mobile não
             foi medido.
           */}
-          <button
-            type="button"
-            onClick={aoFechar}
-            aria-label="Fechar"
-            className="sticky top-0 z-10 flex h-[28px] w-full shrink-0 items-center justify-center bg-background-surface-higher"
-          >
-            <span aria-hidden="true" className="h-1 w-9 rounded-full bg-border-normal" />
-          </button>
+          {alcaNaFolha && (
+            <button
+              type="button"
+              onClick={aoFechar}
+              aria-label="Fechar"
+              className={`sticky top-0 z-10 flex h-[28px] w-full shrink-0 items-center justify-center ${fundoDaFolha}`}
+            >
+              <span aria-hidden="true" className="h-1 w-9 rounded-full bg-border-normal" />
+            </button>
+          )}
           <div className={`${semRespiro ? "" : "px-4 pb-4"} ${classeNaFolha ?? className}`}>{children}</div>
         </div>
       </div>,
@@ -826,8 +1135,10 @@ export function Popout({
     );
   }
 
-  const estiloDeEntrada: CSSProperties =
-    fase === "inicio"
+  const estiloDeEntrada: CSSProperties = !animar
+    ? // `superficie="nenhuma"`: a entrada é do filho (ver `superficie`)
+      {}
+    : fase === "inicio"
       ? { translate: ENTRADA[pos.ladoFinal], scale: "0.95", opacity: 0 }
       : fase === "entrando"
         ? {
@@ -843,7 +1154,7 @@ export function Popout({
 
   return createPortal(
     <div
-      ref={caixa}
+      ref={definirCaixa}
       {...comum}
       data-lado={pos.ladoFinal}
       onTransitionEnd={(e) => {
@@ -858,9 +1169,7 @@ export function Popout({
         visibility: pos.pronto ? "visible" : "hidden",
         ...estiloDeEntrada,
       }}
-      className={`fixed rounded-lg bg-background-surface-high shadow-popout outline-none ${
-        semRespiro ? "" : "p-4"
-      } ${className}`}
+      className={`fixed outline-none ${SUPERFICIE[superficie]} ${semRespiro ? "" : "p-4"} ${className}`}
     >
       {children}
     </div>,

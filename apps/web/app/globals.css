@@ -76,7 +76,7 @@ body {
  * (`--border-focus`), que lá não é cor de marca e por isso não vira limão
  * (ADR-0009, item 3.2).
  */
-:focus-visible:not(input):not(textarea):not([contenteditable="true"]) {
+:focus-visible:not(input):not(textarea):not([contenteditable="true"]):not([tabindex="-1"]):not([data-sem-anel]) {
   outline: 2px solid var(--border-focus);
   outline-offset: 2px;
   border-radius: 2px;
@@ -89,12 +89,29 @@ body {
  * de um campo é a própria borda mudando de cor, 1px, colada e seguindo o raio
  * do campo — por isso o offset negativo e nenhum raio imposto aqui.
  */
-input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus-visible,
-textarea:focus-visible,
-[contenteditable="true"]:focus-visible {
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus-visible:not([data-sem-anel]),
+textarea:focus-visible:not([data-sem-anel]),
+[contenteditable="true"]:focus-visible:not([data-sem-anel]) {
   /* o campo em foco é marca no Discord (`--input-border-active`): limão */
   outline: 1px solid var(--input-border-active);
   outline-offset: -1px;
+}
+
+/*
+ * `data-sem-anel` desliga as duas regras acima. Existe por dois motivos, os
+ * dois vistos na captura da bancada:
+ *
+ * 1. Campo com invólucro (o `TextInput` dos primitivos): a borda visível é a da
+ *    caixa, e o `<input>` mora dentro dela, com padding. O anel caía no input e
+ *    aparecia como um retângulo limão FLUTUANDO a 10px de dentro da borda. Quem
+ *    muda de cor no foco é a caixa (`has-[:focus-visible]` lá), não o campo.
+ *    A regra global ganha do `outline-none` do primitivo por especificidade —
+ *    por isso não dá para desligar só com classe.
+ * 2. Caixa de mensagem: o Discord não marca o composer em foco (o cursor é o
+ *    indicador), e o anel de 1px em volta de toda a cápsula não existe lá.
+ */
+[data-sem-anel] {
+  outline: none;
 }
 
 /*
@@ -142,10 +159,16 @@ textarea:focus-visible,
   border-radius: 4px;
   min-height: 40px;
 }
+/*
+ * O trilho fica TRANSPARENTE. O par de tokens do Firefox
+ * (`--scrollbar-auto-scrollbar-color-track`) é opaco (`#0e0e10`), e o Chromium
+ * agora entende `scrollbar-color` — o resultado era uma faixa escura permanente
+ * de 15px ao lado da lista de mensagens, que o Discord não tem (medido no print
+ * 1:1: o fundo do chat segue contínuo até a borda).
+ */
 .scroller-auto {
   scrollbar-width: auto;
-  scrollbar-color: var(--scrollbar-auto-scrollbar-color-thumb, var(--scrollbar-auto-thumb))
-    var(--scrollbar-auto-scrollbar-color-track, transparent);
+  scrollbar-color: var(--scrollbar-auto-thumb) transparent;
 }
 .scroller-auto::-webkit-scrollbar {
   width: 16px;

@@ -358,11 +358,16 @@ export function Modal({
         aria-describedby={subtitulo ? idSubtitulo : undefined}
         tabIndex={-1}
         onKeyDown={aoTeclar}
-        className={`anim-modal relative flex max-w-full flex-col overflow-hidden bg-background-surface-high text-text-default outline-none ${
+        /* `max-w-full` NÃO entra aqui: ele e o `max-w-[…]` do tamanho são a
+           mesma propriedade, e quem vence é a ordem no CSS gerado, não a ordem
+           no atributo — com os dois juntos a caixa esticava para a janela
+           inteira (1872px na captura da bancada, contra os 480 medidos no
+           print). Cada ramo declara o seu teto. */
+        className={`anim-modal relative flex flex-col overflow-hidden bg-background-surface-high text-text-default outline-none ${
           cheio
             ? "h-[100dvh] w-full pt-[env(safe-area-inset-top)]"
             : `rounded-xl border border-border-subtle ${comSombra ? "shadow-shadow-high" : ""} ${
-                ehMobile ? "max-h-[92dvh] w-full" : `${ALTURA_MAXIMA[tamanho]} ${LARGURA[tamanho]} ${className}`
+                ehMobile ? "max-h-[92dvh] w-full max-w-full" : `${ALTURA_MAXIMA[tamanho]} ${LARGURA[tamanho]} ${className}`
               }`
         }`}
       >

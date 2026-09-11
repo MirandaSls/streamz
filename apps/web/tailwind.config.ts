@@ -28,6 +28,12 @@ const mensagemEfemera = {
 };
 
 export default {
+  /**
+   * `hover:` só onde existe ponteiro fino. Sem isto o celular mantém o último
+   * elemento tocado com fundo de hover — na captura da bancada uma mensagem, um
+   * item de menu e uma linha de membro ficaram "acesos" sozinhos.
+   */
+  future: { hoverOnlyWhenSupported: true },
   // lib/ entra porque o markdown (lib/markdown.tsx) escreve classe; hooks/ e stores/ pelo mesmo motivo
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./lib/**/*.{ts,tsx}", "./hooks/**/*.{ts,tsx}", "./stores/**/*.{ts,tsx}"],
   theme: {

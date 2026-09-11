@@ -60,7 +60,15 @@ export default function AuthCard({
   );
 }
 
-/** Rótulo em caixa-alta com o asterisco vermelho de obrigatório. */
+/**
+ * Rótulo de campo (cartão c5-rotulos): a refresh 2025 do Discord aboliu a
+ * caixa-alta do rótulo de formulário — 16px peso 500 `--text-strong`, sem
+ * transformação de caixa (mesma medida que o cabeçalho de
+ * `primitivos/TextInput.tsx` documenta para `Campo`, `.legend_b717a1`). O
+ * asterisco de obrigatório vem DEPOIS do rótulo em `--text-feedback-critical`,
+ * com 4px de recuo (`pl-1`) — não é vermelho de erro do campo (`invalid` só
+ * troca a cor do próprio rótulo, que é outra situação).
+ */
 export function FieldLabel({
   htmlFor,
   children,
@@ -75,16 +83,15 @@ export function FieldLabel({
   return (
     <label
       htmlFor={htmlFor}
-      className={`mb-2 block text-xs font-bold uppercase tracking-[0.02em] ${
-        invalid ? "text-status-danger" : "text-text-subtle"
+      className={`mb-2 block text-text-md font-medium ${
+        invalid ? "text-status-danger" : "text-text-strong"
       }`}
     >
       {children}
       {hint ? (
-        <span className="normal-case italic"> - {hint}</span>
+        <span className="italic"> - {hint}</span>
       ) : (
-        <span className="text-status-danger" aria-hidden="true">
-          {" "}
+        <span className="pl-1 text-text-feedback-critical" aria-hidden="true">
           *
         </span>
       )}
@@ -107,12 +114,12 @@ export function OptionalFieldLabel({
   return (
     <label
       htmlFor={htmlFor}
-      className={`mb-2 block text-xs font-bold uppercase tracking-[0.02em] ${
-        invalid ? "text-status-danger" : "text-text-subtle"
+      className={`mb-2 block text-text-md font-medium ${
+        invalid ? "text-status-danger" : "text-text-strong"
       }`}
     >
       {children}
-      {hint && <span className="normal-case italic"> - {hint}</span>}
+      {hint && <span className="italic"> - {hint}</span>}
     </label>
   );
 }

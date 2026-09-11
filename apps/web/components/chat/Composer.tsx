@@ -862,6 +862,9 @@ export default function Composer({
 
           <textarea
             ref={textareaRef}
+            /* o Discord não marca o composer em foco — o cursor é o indicador
+               (ver `data-sem-anel` no globals.css) */
+            data-sem-anel
             rows={1}
             value={draft}
             maxLength={MAX_MESSAGE_LENGTH}

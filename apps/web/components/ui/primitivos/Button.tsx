@@ -1,6 +1,14 @@
 "use client";
 
-import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import Link from "next/link";
+import {
+  forwardRef,
+  type AnchorHTMLAttributes,
+  type ButtonHTMLAttributes,
+  type CSSProperties,
+  type ReactNode,
+  type Ref,
+} from "react";
 
 /**
  * Botão do Discord (refresh 2025): o módulo único `.button_a22cb0` de
@@ -71,7 +79,66 @@ import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
  * - `larguraTotal` só vale com texto, como no Discord
  *   (`.fullWidth_a22cb0.hasText_a22cb0`) — ignorado num botão só-ícone.
  * - Foco de teclado: **não** reimplementado aqui — o `:focus-visible` global de
- *   `globals.css` cobre o `<button>` sem precisar de classe local.
+ *   `globals.css` cobre o `<button>` sem precisar de classe local. Ele casa por
+ *   pseudo-classe, não por seletor de tag, então cobre o `<a>` do `href` igual.
+ *
+ * ---
+ * Rodada de correção (cartão c1-button): o que a migração da onda 0 precisou e
+ * não existia. Nada abaixo muda o comportamento de quem já usa o componente.
+ *
+ * - **`href` (link com cara de botão).** O Discord desenha o mesmo botão em
+ *   `<a>`: `.button_a22cb0` não tem nenhum seletor de tag (é `.button_a22cb0`
+ *   puro, e a regra de reset `background:initial;border:1px solid transparent;
+ *   color:inherit;margin:0;padding:0` existe justamente para servir aos dois),
+ *   e `.lookBlank__201d5,.lookLink__201d5{border:none}` no módulo antigo é
+ *   aplicada em `<a>` e `<button>` sem distinção. Ou seja: **visual idêntico,
+ *   zero medida nova**. Rota interna (começa com `/` e não com `//`) sai em
+ *   `next/link` para não recarregar o app; o resto sai em `<a>` cru.
+ *   Desabilitado num `<a>` não existe em HTML — o próprio Discord resolve por
+ *   `[aria-disabled=true]` (`.button__201d5:disabled,.button__201d5[aria-
+ *   disabled=true]{cursor:not-allowed;opacity:.5}`), então o `href` some (um
+ *   `<a>` sem `href` sai da ordem de tabulação) e o par `pointer-events-none
+ *   opacity-50` entra por classe, já que a variante `disabled:` do Tailwind não
+ *   pega em `<a>`.
+ * - **`neutro` (o terciário/"ghost").** Base em `.lookBlank__201d5{background:
+ *   transparent;border:0;color:currentColor;margin:0;padding:0}` — sem fundo,
+ *   sem borda e **sem padding**; por isso `neutro` também não recebe o
+ *   `min-width` de 60/100, que só faz sentido para caixa preenchida. A cor o
+ *   `lookBlank` não fixa (`color:currentColor`): o par é o do ghost de texto do
+ *   Discord, `--text-muted` em repouso e `--text-strong` no hover, medido em
+ *   `.nonGroupSectionHeaderHideButton__606e9{color:var(--text-muted)}` +
+ *   `:hover{color:var(--text-strong)}` (`274972.3ce052fc3fb980e8.css`), o mesmo
+ *   par de `.sectionCollapsible__606e9` e `.sortTrigger__31004`. Sem sublinhado
+ *   (nenhuma dessas regras tem `text-decoration`). A **altura** continua a do
+ *   `tamanho` (alvo de clique) — isso o `lookBlank` não diz, é decisão nossa,
+ *   ver "nao_verificado".
+ * - **`link`/`critico-link` agora são inline.** Antes `link` herdava altura,
+ *   `min-width` e padding de botão e não cabia dentro de uma frase. O Discord
+ *   tem exatamente esse caso e ele é um *tamanho*, não uma variante:
+ *   `.sizeMin__201d5{display:inline;height:auto;padding:0 4px;width:auto}` +
+ *   `.sizeMin__201d5 .contents__201d5{display:inline}`. Como `link` no nosso
+ *   componente **só** serve a esse caso (as caixas são `secundario`/`neutro`),
+ *   a variante já entra com `sizeMin`: `inline`, altura automática, sem
+ *   `min-width`, sem borda. **Divergência consciente:** o padding lateral de
+ *   4px do `sizeMin` fica em 0 aqui, porque todos os presos deste cartão são
+ *   link no meio de uma frase, onde 4px de cada lado lê como espaço de palavra
+ *   (no Discord o `sizeMin` aparece isolado). Está em "faltando" para o
+ *   coordenador decidir. Cor: `link` = `--text-link` e `critico-link` =
+ *   `--text-feedback-critical`, medidos em `.lookLink__201d5.colorLink__201d5
+ *   {color:var(--text-link)}` e `.lookLink__201d5.colorRed__201d5{color:var(
+ *   --text-feedback-critical)}`. O sublinhado do hover é o mesmo dos dois
+ *   (`--button--underline-color` no hover) — aqui `hover:underline`.
+ * - **`tamanho` numérico** (altura em px): para as peças fora de 24/32/40, que
+ *   o Discord não tem. A altura vem do chamador (via `style`, porque o JIT do
+ *   Tailwind não enxerga classe montada em tempo de execução) e **não** traz
+ *   `min-width`; raio, fonte e padding saem do degrau medido mais próximo por
+ *   baixo (≤24 → `xs`, ≤32 → `sm`, senão `md`). Essa interpolação é derivada,
+ *   **não medida** — não existe degrau intermediário no CSS do Discord.
+ * - **`data-*` passa pelo `...resto`.** Vale para `<Button data-teste="x">`: o
+ *   TypeScript não confere atributo JSX com hífen contra as props do
+ *   componente (nomes hifenizados ficam fora da checagem de excesso), e o
+ *   atributo cai no `...resto` e é cuspido no `<button>`/`<a>` como qualquer
+ *   outro. Não é preciso `<button>` nativo para pendurar seletor de e2e.
  */
 export type VarianteDeBotao =
   | "primario"
@@ -79,13 +146,19 @@ export type VarianteDeBotao =
   | "critico"
   | "critico-secundario"
   | "positivo"
-  | "link";
-export type TamanhoDeBotao = "xs" | "sm" | "md";
+  | "neutro"
+  | "link"
+  | "critico-link";
+
+/** Os três degraus que o Discord define (24/32/40 de altura total). */
+export type TamanhoNomeadoDeBotao = "xs" | "sm" | "md";
+/** Um degrau do Discord, ou uma altura em px para o que está fora deles. */
+export type TamanhoDeBotao = TamanhoNomeadoDeBotao | number;
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Padrão `primario`. */
   variante?: VarianteDeBotao;
-  /** Padrão `md` (40px). */
+  /** Padrão `md` (40px). Número = altura em px, sem `min-width`. */
   tamanho?: TamanhoDeBotao;
   /** Ícone à esquerda do texto. Sem `children`, o botão vira quadrado. */
   icone?: ReactNode;
@@ -97,6 +170,15 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   larguraTotal?: boolean;
   /** Raio de pílula (`--radius-round`). */
   pilula?: boolean;
+  /**
+   * Desenha um `<a>` com o mesmo visual (rota interna vira `next/link`).
+   * `disabled`/`carregando` tiram o `href`, o que já tira o link do Tab.
+   */
+  href?: string;
+  /** `target` do `<a>` (só com `href`). Com `_blank`, o `rel` ganha um padrão. */
+  alvo?: string;
+  /** `rel` do `<a>` (só com `href`). */
+  rel?: string;
 }
 
 // Fundo / texto+ícone (herdado por `color`) / borda, por estado — na ordem que
@@ -112,25 +194,52 @@ const VARIANTES: Record<VarianteDeBotao, string> = {
     "bg-control-critical-secondary-background-default text-control-critical-secondary-text-default border-control-critical-secondary-border-default hover:bg-control-critical-secondary-background-hover hover:text-control-critical-secondary-text-hover hover:border-control-critical-secondary-border-hover active:bg-control-critical-secondary-background-active active:text-control-critical-secondary-text-active active:border-control-critical-secondary-border-active",
   positivo:
     "bg-control-connected-background-default text-control-connected-text-default border-control-connected-border-default hover:bg-control-connected-background-hover hover:text-control-connected-text-hover hover:border-control-connected-border-hover active:bg-control-connected-background-active active:text-control-connected-text-active active:border-control-connected-border-active",
+  // `lookBlank` + o par muted→strong do ghost de texto (ver cabeçalho).
+  neutro: "bg-transparent border-transparent text-text-muted hover:text-text-strong",
   link: "bg-transparent border-transparent text-text-link hover:underline",
+  "critico-link": "bg-transparent border-transparent text-text-feedback-critical hover:underline",
 };
+
+/** Variantes sem caixa nenhuma (`sizeMin__201d5`): vivem dentro de uma frase. */
+const VARIANTES_INLINE: readonly VarianteDeBotao[] = ["link", "critico-link"];
+/** Variantes com caixa, mas sem preenchimento: perdem padding e `min-width`. */
+const VARIANTES_SEM_PREENCHIMENTO: readonly VarianteDeBotao[] = ["neutro"];
 
 // Altura total (borda incluída), padding do miolo e largura mínima com texto —
 // ver o cabeçalho para a origem de cada número.
-const TAMANHOS: Record<TamanhoDeBotao, { altura: string; raio: string; textoIcone: string; comTexto: string; semTexto: string }> = {
-  xs: { altura: "h-[24px]", raio: "rounded", textoIcone: "text-text-sm", comTexto: "min-w-[60px] py-[3px] px-[7px]", semTexto: "w-[24px]" },
-  sm: { altura: "h-[32px]", raio: "rounded-lg", textoIcone: "text-text-sm", comTexto: "min-w-[60px] py-[3px] px-[11px]", semTexto: "w-[32px]" },
-  md: { altura: "h-[40px]", raio: "rounded-lg", textoIcone: "text-text-md", comTexto: "min-w-[100px] py-[7px] px-[15px]", semTexto: "w-[40px]" },
+const TAMANHOS: Record<
+  TamanhoNomeadoDeBotao,
+  { altura: string; raio: string; textoIcone: string; larguraMinima: string; padding: string; quadrado: string }
+> = {
+  xs: { altura: "h-[24px]", raio: "rounded", textoIcone: "text-text-sm", larguraMinima: "min-w-[60px]", padding: "py-[3px] px-[7px]", quadrado: "w-[24px]" },
+  sm: { altura: "h-[32px]", raio: "rounded-lg", textoIcone: "text-text-sm", larguraMinima: "min-w-[60px]", padding: "py-[3px] px-[11px]", quadrado: "w-[32px]" },
+  md: { altura: "h-[40px]", raio: "rounded-lg", textoIcone: "text-text-md", larguraMinima: "min-w-[100px]", padding: "py-[7px] px-[15px]", quadrado: "w-[40px]" },
 };
+
+/**
+ * Traduz o `tamanho` em classes. No caso numérico a altura sai por `style` (o
+ * JIT do Tailwind lê o código-fonte, não enxerga `h-[${n}px]` montado em tempo
+ * de execução) e o `min-width` some — quem pede altura fora dos degraus está
+ * encaixando o botão em algo, não desenhando um botão de diálogo.
+ */
+function medidasDoTamanho(tamanho: TamanhoDeBotao) {
+  if (typeof tamanho !== "number") {
+    return { ...TAMANHOS[tamanho], alturaEmPx: null as number | null };
+  }
+  const degrau = tamanho <= 24 ? TAMANHOS.xs : tamanho <= 32 ? TAMANHOS.sm : TAMANHOS.md;
+  return { ...degrau, altura: "", larguraMinima: "", quadrado: "", alturaEmPx: tamanho };
+}
 
 /**
  * Três pontos que substituem o conteúdo em `carregando`. Cor = `currentColor`
  * (herda do texto da variante); medidas e tempo em `spinner-pulsing-ellipsis__
- * 46696` (ver cabeçalho do arquivo).
+ * 46696` (ver cabeçalho do arquivo). `inline-flex` (e não `flex`) porque nas
+ * variantes inline ele é filho de um elemento `display:inline` — um flex de
+ * nível de bloco ali quebraria a linha da frase.
  */
 function TresPontos() {
   return (
-    <span className="flex items-center gap-0.5" role="status" aria-label="Carregando">
+    <span className="inline-flex items-center gap-0.5" role="status" aria-label="Carregando">
       {[0, 1, 2].map((i) => (
         <span
           key={i}
@@ -151,8 +260,12 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     carregando = false,
     larguraTotal = false,
     pilula = false,
+    href,
+    alvo,
+    rel,
     type = "button",
     className = "",
+    style,
     disabled,
     children,
     ...resto
@@ -160,23 +273,45 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   ref,
 ) {
   const temTexto = children != null && children !== false;
-  const t = TAMANHOS[tamanho];
+  const ehInline = VARIANTES_INLINE.includes(variante);
+  const semPreenchimento = ehInline || VARIANTES_SEM_PREENCHIMENTO.includes(variante);
+  const desativado = disabled === true || carregando;
+  const m = medidasDoTamanho(tamanho);
 
-  return (
-    <button
-      ref={ref}
-      type={type}
-      disabled={disabled || carregando}
-      aria-busy={carregando || undefined}
-      className={`relative box-border inline-flex items-center justify-center overflow-hidden border font-medium transition-colors duration-150 ease-out disabled:pointer-events-none disabled:opacity-50 ${VARIANTES[variante]} ${t.altura} ${pilula ? "rounded-full" : t.raio} ${t.textoIcone} ${
-        temTexto && larguraTotal
-          ? `${t.comTexto} w-full flex-1`
-          : temTexto
-            ? `${t.comTexto} flex-none`
-            : `${t.semTexto} flex-none p-0`
-      } ${className}`}
-      {...resto}
-    >
+  // Altura (e, no botão só-ícone, largura) do tamanho numérico. O `style` do
+  // chamador vem depois de propósito: quem passa medida explícita manda.
+  const estiloDaCaixa: CSSProperties | undefined =
+    m.alturaEmPx !== null && !ehInline
+      ? temTexto
+        ? { height: m.alturaEmPx, minHeight: m.alturaEmPx, ...style }
+        : { height: m.alturaEmPx, minHeight: m.alturaEmPx, width: m.alturaEmPx, minWidth: m.alturaEmPx, ...style }
+      : style;
+
+  const classeDoMiolo = temTexto
+    ? `${semPreenchimento ? "p-0" : `${m.padding} ${m.larguraMinima}`} ${larguraTotal ? "w-full flex-1" : "flex-none"}`
+    : `${m.quadrado} flex-none p-0`;
+
+  const classes = ehInline
+    ? // `sizeMin__201d5`: nenhuma caixa. Sem altura, sem largura mínima, sem
+      // padding e sem borda — o link ocupa o que a frase dá a ele.
+      `inline h-auto min-h-0 w-auto min-w-0 border-0 p-0 text-left align-baseline font-medium transition-colors duration-150 ease-out ${VARIANTES[variante]} ${desativado ? "pointer-events-none opacity-50" : ""} ${className}`
+    : `relative box-border inline-flex items-center justify-center overflow-hidden border font-medium transition-colors duration-150 ease-out disabled:pointer-events-none disabled:opacity-50 ${VARIANTES[variante]} ${m.altura} ${pilula ? "rounded-full" : m.raio} ${m.textoIcone} ${classeDoMiolo} ${className}`;
+
+  const conteudo = ehInline ? (
+    // Inline não tem caixa fixa para o spinner sobrepor: em `carregando` os três
+    // pontos entram no lugar do texto mesmo (a frase muda de largura, e é o
+    // certo aqui — o botão de caixa é que não pode pular).
+    carregando ? (
+      <TresPontos />
+    ) : (
+      <>
+        {icone}
+        {temTexto ? children : null}
+        {iconeDireita}
+      </>
+    )
+  ) : (
+    <>
       {/* Conteúdo: sobe e some em `carregando` (translateY -100% + opacidade 0),
           nunca muda a caixa do botão porque ela é fixada pelo `<button>` (altura
           + min-width acima), não por este miolo. */}
@@ -199,6 +334,67 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       >
         {carregando ? <TresPontos /> : null}
       </span>
+    </>
+  );
+
+  if (href !== undefined) {
+    // `resto` está tipado como atributo de `<button>` (a interface estende
+    // `ButtonHTMLAttributes` e continua estendendo, para não quebrar quem já
+    // usa). Sobra `form`/`name`/`value`, que não existem em `<a>`; a conversão
+    // dupla é o preço de manter a API antiga intacta em vez de tornar o
+    // componente polimórfico por genérico.
+    const props = resto as unknown as AnchorHTMLAttributes<HTMLAnchorElement>;
+    const refDoLink = ref as unknown as Ref<HTMLAnchorElement>;
+    // `_blank` sem `noopener` dá à aba nova acesso a `window.opener`. Padrão de
+    // segurança, não medida do Discord — o chamador ainda pode sobrepor.
+    const relFinal = rel ?? (alvo === "_blank" ? "noopener noreferrer" : undefined);
+    const comuns = {
+      ...props,
+      ref: refDoLink,
+      className: classes,
+      style: estiloDaCaixa,
+      target: alvo,
+      rel: relFinal,
+      "aria-busy": carregando || undefined,
+      // Sem `href` o `<a>` já sai da ordem de tabulação; o `aria-disabled` é o
+      // que o Discord usa para anunciar e apagar (`[aria-disabled=true]`).
+      "aria-disabled": desativado || undefined,
+    };
+
+    if (desativado) {
+      return <a {...comuns}>{conteudo}</a>;
+    }
+    // Rota interna pelo roteador (sem recarregar o app); `//`, `http(s)://`,
+    // `mailto:` e `#` continuam `<a>` cru.
+    const rotaInterna = href.startsWith("/") && !href.startsWith("//");
+    if (rotaInterna) {
+      // `href` depois do spread de propósito: `AnchorHTMLAttributes` declara um
+      // `href?` opcional, e deixá-lo por último tira qualquer dúvida sobre quem
+      // vence (aqui, sempre o `href` da prop).
+      return (
+        <Link {...comuns} href={href}>
+          {conteudo}
+        </Link>
+      );
+    }
+    return (
+      <a {...comuns} href={href}>
+        {conteudo}
+      </a>
+    );
+  }
+
+  return (
+    <button
+      ref={ref}
+      type={type}
+      disabled={desativado}
+      aria-busy={carregando || undefined}
+      className={classes}
+      style={estiloDaCaixa}
+      {...resto}
+    >
+      {conteudo}
     </button>
   );
 });

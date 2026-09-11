@@ -147,7 +147,14 @@ export function Row({
   return <LinhaDeControle rotulo={label} descricao={hint} htmlFor={htmlFor} controle={control} />;
 }
 
-/** Rótulo em caixa-alta acima de um campo, com contador opcional à direita. */
+/**
+ * Rótulo acima de um campo, com contador opcional à direita (cartão
+ * c5-rotulos): a refresh 2025 do Discord aboliu a caixa-alta do rótulo de
+ * formulário — 16px peso 500 `--text-strong`, sem transformação de caixa
+ * (mesma medida que o cabeçalho de `primitivos/TextInput.tsx` documenta para
+ * `Campo`, `.legend_b717a1`; era a mesma caixa-alta 12px que o `FieldLabel` de
+ * `auth/AuthCard.tsx` também abandonou nessa rodada).
+ */
 export function Rotulo({
   children,
   htmlFor,
@@ -160,10 +167,7 @@ export function Rotulo({
 }) {
   return (
     <div className="mb-2 flex items-baseline justify-between gap-2">
-      <label
-        htmlFor={htmlFor}
-        className="text-xs font-bold uppercase tracking-[0.02em] text-text-subtle"
-      >
+      <label htmlFor={htmlFor} className="text-text-md font-medium text-text-strong">
         {children}
       </label>
       {contador && <span className="text-xs text-text-muted">{contador}</span>}

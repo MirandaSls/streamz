@@ -112,7 +112,9 @@ function ActionButton({
  */
 function ReplyReference({ message }: { message: Message }) {
   const ref = message.replyTo;
-  const cor = useAuthorColor(ref?.author.id ?? "");
+  // a citada está no mesmo canal da resposta: é o `guildId` dela que diz se há
+  // cargo (null em conversa e em grupo — ver `corDeCargoNoCanal`)
+  const cor = useAuthorColor(ref?.author.id ?? "", message.guildId);
   if (!ref) return null;
 
   function realcar(ligado: boolean) {
@@ -205,7 +207,7 @@ function ReplyReference({ message }: { message: Message }) {
  */
 function InteractionReference({ message }: { message: Message }) {
   const interacao = message.interacao;
-  const cor = useAuthorColor(interacao?.user.id ?? "");
+  const cor = useAuthorColor(interacao?.user.id ?? "", message.guildId);
   if (!interacao) return null;
 
   return (
@@ -294,7 +296,7 @@ const SEM_CARGOS: string[] = [];
 
 /** Reações rápidas da mini-barra (o Discord mostra três). */
 const RAPIDAS_NA_BARRA = 3;
-/** Reações rápidas dentro do submenu "Adicionar Reação". */
+/** Reações rápidas dentro do submenu "Adicionar reação". */
 const RAPIDAS_NO_MENU = 6;
 /** Quantas cabem na fileira horizontal do topo do menu (é o número do print). */
 const RAPIDAS_NA_FILEIRA = 4;
@@ -340,8 +342,9 @@ export default function MessageItem({
   const [picker, setPicker] = useState<{ alvo: "reacao" | "edicao"; ancora: Anchor } | null>(null);
 
   const author = useLiveUser(message.author);
-  // nome do autor na cor do seu cargo mais alto, como no Discord
-  const corDoAutor = useAuthorColor(message.author.id);
+  // nome do autor na cor do seu cargo mais alto, como no Discord — só em canal
+  // de servidor: conversa e grupo não têm cargo, e o nome fica na cor padrão
+  const corDoAutor = useAuthorColor(message.author.id, message.guildId);
   const me = useAuth((s) => s.user);
   // ── c-cargos ── cargos do servidor (para desenhar `<@&id>`) e os meus
   const roles = usePermissions((s) => s.roles);
@@ -523,14 +526,14 @@ export default function MessageItem({
         })),
       });
       items.push({
-        label: "Adicionar Reação",
+        label: "Adicionar reação",
         icon: <SmilePlus size={18} />,
         submenu: submenuDeReacao(ancora),
       });
-      if (isOwn) items.push({ label: "Editar Mensagem", icon: <Pencil size={18} />, onSelect: startEdit });
+      if (isOwn) items.push({ label: "Editar mensagem", icon: <Pencil size={18} />, onSelect: startEdit });
       if (canPin) {
         items.push({
-          label: message.pinned ? "Desafixar Mensagem" : "Fixar Mensagem",
+          label: message.pinned ? "Desafixar mensagem" : "Fixar mensagem",
           icon: message.pinned ? <PinOff size={18} /> : <Pin size={18} />,
           onSelect: alternarFixada,
         });
@@ -542,14 +545,14 @@ export default function MessageItem({
       }
       if (onOpenThread) {
         items.push({
-          label: message.thread ? "Ver Tópico" : "Criar Tópico",
+          label: message.thread ? "Ver tópico" : "Criar tópico",
           icon: <MessageSquare size={18} />,
           onSelect: () => (message.thread ? onOpenThread(message) : void criarThread()),
         });
       }
       items.push({ separator: true });
       items.push({
-        label: "Copiar Texto",
+        label: "Copiar texto",
         icon: <Copy size={18} />,
         disabled: !message.content,
         onSelect: () => void navigator.clipboard?.writeText(message.content),
@@ -570,7 +573,7 @@ export default function MessageItem({
       */
       if (ehMobileAgora()) {
         items.push({
-          label: "Selecionar Texto",
+          label: "Selecionar texto",
           icon: <ScrollText size={18} />,
           disabled: !message.content,
           onSelect: () =>
@@ -587,12 +590,12 @@ export default function MessageItem({
       }
     }
 
-    items.push({ label: "Marcar Não Lida", icon: <MailOpen size={18} />, onSelect: marcarNaoLida });
-    items.push({ label: "Copiar Link", icon: <Link2 size={18} />, onSelect: copiarLink });
+    items.push({ label: "Marcar não lida", icon: <MailOpen size={18} />, onSelect: marcarNaoLida });
+    items.push({ label: "Copiar link", icon: <Link2 size={18} />, onSelect: copiarLink });
     // só faz sentido quando há link, e só o autor/moderação pode mexer
     if (!sistema && (isOwn || canModerate) && extractFirstUrl(message.content)) {
       items.push({
-        label: message.suppressEmbeds ? "Mostrar Prévia do Link" : "Remover Prévia do Link",
+        label: message.suppressEmbeds ? "Mostrar prévia do link" : "Remover prévia do link",
         icon: <EyeOff size={18} />,
         onSelect: () =>
           emit(WS_EVENTS.MESSAGE_SUPPRESS_EMBEDS, {
@@ -605,7 +608,7 @@ export default function MessageItem({
     if (canDelete || !isOwn) items.push({ separator: true });
     if (canDelete) {
       items.push({
-        label: "Apagar Mensagem",
+        label: "Apagar mensagem",
         icon: <Trash2 size={18} />,
         danger: true,
         // Shift pula a confirmação, como no Discord
@@ -615,7 +618,7 @@ export default function MessageItem({
     // ── h-moderacao ──
     if (!isOwn) {
       items.push({
-        label: "Denunciar Mensagem",
+        label: "Denunciar mensagem",
         icon: <Flag size={18} />,
         onSelect: () =>
           ui.openModal({ kind: "report", messageId: message.id, preview: message.content }),
@@ -625,7 +628,7 @@ export default function MessageItem({
     if (modoDesenvolvedor) {
       items.push({ separator: true });
       items.push({
-        label: "Copiar ID da Mensagem",
+        label: "Copiar ID da mensagem",
         onSelect: () => void navigator.clipboard?.writeText(message.id),
       });
     }
@@ -941,7 +944,7 @@ export default function MessageItem({
                 style={{ height: alturaDoChipDeReacao(tamanhoEmoji) }}
                 /* No celular ele é **opaco desde sempre**: era `opacity-0` até
                    o hover, e no dedo isso quer dizer "não existe". O toque
-                   longo abre o menu com "Adicionar Reação", mas o "+" ao lado
+                   longo abre o menu com "Adicionar reação", mas o "+" ao lado
                    das reações é o gesto direto, e some-se dele custava um menu
                    inteiro por reação. */
                 className="grid min-w-[2.375rem] place-items-center rounded-lg border border-transparent bg-background-base-lowest px-1.5 text-text-muted opacity-0 transition hover:border-border-normal hover:text-text-strong group-hover:opacity-100 celular:min-h-[44px] celular:min-w-[44px] celular:opacity-100"
