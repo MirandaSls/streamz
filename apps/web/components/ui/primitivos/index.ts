@@ -19,10 +19,15 @@ export { LinhaDeControle, type LinhaDeControleProps } from "./LinhaDeControle";
 export {
   Popout,
   usePosicaoFlutuante,
+  calcularPosicaoFlutuante,
   type PopoutProps,
   type LadoDoPopout,
   type AlinhamentoDoPopout,
   type Retangulo,
+  type AncoraDoPopout,
+  type PosicaoCalculada,
+  type PosicaoFlutuante,
+  type OpcoesDePosicao,
 } from "./Popout";
 export { Modal, type ModalProps, type TamanhoDeModal } from "./Modal";
 export { Tabs, type TabsProps, type AbaDeTabs } from "./Tabs";

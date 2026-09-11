@@ -18,7 +18,9 @@ const MAX_AVATARES = 6;
  *
  * Não usa o `Tooltip` comum porque aquele só aceita texto, e o que informa aqui
  * é justamente **quem** reagiu: uma fileira de rostos é reconhecível de relance,
- * uma lista de nomes não.
+ * uma lista de nomes não. Mas a superfície é a mesma dica medida no cartão
+ * 0.4-tooltip (fundo `--background-surface-high`, borda 1px `--border-subtle`,
+ * raio 8, sombra `--shadow-high`) — só o conteúdo diverge.
  */
 export default function TooltipReacao({
   emoji,
@@ -93,7 +95,7 @@ export default function TooltipReacao({
               left: pos?.left ?? 0,
               visibility: pos ? "visible" : "hidden",
             }}
-            className="pointer-events-none fixed z-[100] w-[220px] rounded-lg bg-input-background-default p-3 text-center shadow-popout anim-menu"
+            className="pointer-events-none fixed z-[100] w-[220px] rounded-lg border border-border-subtle bg-background-surface-high p-3 text-center shadow-shadow-high anim-menu"
           >
             <span className="mx-auto block h-12 w-12">
               {custom ? (
@@ -110,18 +112,18 @@ export default function TooltipReacao({
             <span className="mt-2 flex items-center justify-center -space-x-1.5">
               {visiveis.map((u, i) =>
                 u ? (
-                  <Avatar key={u.id} user={u} size="sm" className="ring-2 ring-input-background-default" />
+                  <Avatar key={u.id} user={u} size="sm" className="ring-2 ring-background-surface-high" />
                 ) : (
                   <span
                     key={`x${i}`}
-                    className="grid h-6 w-6 place-items-center rounded-full bg-background-base-lowest text-[10px] text-text-muted ring-2 ring-input-background-default"
+                    className="grid h-6 w-6 place-items-center rounded-full bg-background-base-lowest text-[10px] text-text-muted ring-2 ring-background-surface-high"
                   >
                     ?
                   </span>
                 ),
               )}
               {sobra > 0 && (
-                <span className="grid h-6 w-6 place-items-center rounded-full bg-background-base-lowest text-[10px] font-semibold text-text-muted ring-2 ring-input-background-default">
+                <span className="grid h-6 w-6 place-items-center rounded-full bg-background-base-lowest text-[10px] font-semibold text-text-muted ring-2 ring-background-surface-high">
                   +{sobra}
                 </span>
               )}

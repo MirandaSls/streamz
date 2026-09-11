@@ -1,7 +1,12 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { Check, ChevronDown, ChevronRight, X } from "@/components/ui/icones";
+import { useId, type ReactNode } from "react";
+import { ChevronRight } from "@/components/ui/icones";
+import {
+  LinhaDeControle,
+  Select as SelectDiscord,
+  Switch as SwitchDiscord,
+} from "@/components/ui/primitivos";
 
 /**
  * Vocabulário de formulário do app — um só, para configurações e modais.
@@ -16,6 +21,17 @@ import { Check, ChevronDown, ChevronRight, X } from "@/components/ui/icones";
  * `Slider`/`SliderMarcas` resolvem problemas diferentes (linha de preferência
  * com divisória x linha solta com ícone; escala numérica contínua x paradas
  * nomeadas). O comentário de cada um diz quando usar qual.
+ *
+ * ADR-0009 (onda 0.4-controls-antigos): por dentro, `Switch`/`Toggle`/
+ * `ToggleLinha` chamam `primitivos/Switch`, `Row` chama `primitivos/
+ * LinhaDeControle`, e `Select` chama `primitivos/Select` — os exports e as
+ * assinaturas daqui continuam os mesmos, só o miolo trocou. `PontoDeRadio` e
+ * `RadioLinha` não têm um primitivo equivalente para delegar (o `RadioGroup`
+ * de `primitivos/Radio` não exporta o indicador sozinho), então ficam com o
+ * desenho próprio, mas nos tokens `--radio-*` que o cabeçalho desse primitivo
+ * documenta. `RadioCards` e `Slider`/`SliderMarcas` continuam componente
+ * próprio pela mesma razão que o cartão já previa: cartão em grade e trilho
+ * numérico não cabem no vocabulário atual dos primitivos.
  */
 
 /* ─────────────────────────── estrutura ─────────────────────────── */
@@ -106,7 +122,17 @@ export function ConfiguracoesRelacionadas({
   );
 }
 
-/** Linha rótulo + descrição + controle à direita, com divisória. */
+/**
+ * Linha rótulo + descrição + controle à direita, com divisória.
+ *
+ * Invólucro fino sobre `primitivos/LinhaDeControle` — mesma assinatura de
+ * sempre (`label`/`hint`/`control`, em vez de `rotulo`/`descricao`/
+ * `controle`), miolo do primitivo. A folga vertical passa de `py-3` (12px)
+ * para o `py-4` (16px) do primitivo: é a medida que o cabeçalho dele fixa
+ * para "a forma das telas de Configurações", a mesma forma que este `Row`
+ * sempre serviu — não é redesenho de tela, é o `Row` parar de ter medida
+ * própria.
+ */
 export function Row({
   label,
   hint,
@@ -118,17 +144,7 @@ export function Row({
   htmlFor?: string;
   control: ReactNode;
 }) {
-  return (
-    <div className="flex items-center justify-between gap-4 border-b border-border-subtle py-3 last:border-b-0">
-      <div className="min-w-0">
-        <label htmlFor={htmlFor} className="block text-sm font-medium text-text-strong">
-          {label}
-        </label>
-        {hint && <p className="mt-0.5 text-xs text-text-muted">{hint}</p>}
-      </div>
-      <div className="shrink-0">{control}</div>
-    </div>
-  );
+  return <LinhaDeControle rotulo={label} descricao={hint} htmlFor={htmlFor} controle={control} />;
 }
 
 /** Rótulo em caixa-alta acima de um campo, com contador opcional à direita. */
@@ -167,12 +183,15 @@ export function EmBreve({ children }: { children: ReactNode }) {
 /* ─────────────────────────── liga/desliga ─────────────────────────── */
 
 /**
- * O interruptor do Discord: trilho de 40×24 com o polegar desenhando ✕ quando
- * desligado e ✓ quando ligado.
+ * O interruptor do Discord — trilho de 48×24 em tokens `--switch-*` (limão
+ * quando ligado, escuro sobre o polegar quando o ícone entrar).
  *
- * O glifo não é enfeite: sem ele o estado depende só da cor do trilho, e quem
- * não distingue verde de cinza (ou está com a saturação em 0, que as próprias
- * configurações permitem) não tem como saber se a preferência está ligada.
+ * Invólucro sobre `primitivos/Switch`: mantém a assinatura antiga
+ * (`checked`/`onChange`, em vez de `marcado`/`aoMudar`) porque é a que o resto
+ * do app já chama; o desenho (trilho 40×24, ✕/✓ dentro do polegar) era daqui
+ * e virou responsabilidade do primitivo — o polegar ainda não tem o glifo
+ * (a "implementação provisória" do cabeçalho dele), e não é este cartão que
+ * mexe em `primitivos/Switch.tsx` (fora da lista) para adiantar isso.
  */
 export function Switch({
   id,
@@ -188,36 +207,7 @@ export function Switch({
   label?: string;
   disabled?: boolean;
 }) {
-  return (
-    <button
-      id={id}
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      // no celular o trilho continua com 40×24 (é o desenho do Discord), mas
-      // o **alvo** cresce para 44 por um pseudo-elemento invisível: aumentar a
-      // caixa mudaria o leiaute de toda linha de preferência
-      className={`relative h-6 w-10 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 celular:before:absolute celular:before:-inset-x-1.5 celular:before:-inset-y-[10px] celular:before:content-[''] ${
-        checked ? "bg-status-positive" : "bg-channels-default"
-      }`}
-    >
-      <span
-        aria-hidden="true"
-        className={`absolute left-[3px] top-[3px] grid h-[18px] w-[18px] place-items-center rounded-full bg-white transition-transform ${
-          checked ? "translate-x-4" : "translate-x-0"
-        }`}
-      >
-        {checked ? (
-          <Check size={11} strokeWidth={3.5} className="text-status-positive" />
-        ) : (
-          <X size={11} strokeWidth={3.5} className="text-channels-default" />
-        )}
-      </span>
-    </button>
-  );
+  return <SwitchDiscord id={id} marcado={checked} aoMudar={onChange} rotulo={label} desabilitado={disabled} />;
 }
 
 /**
@@ -298,17 +288,29 @@ export function ToggleLinha({
 
 /* ─────────────────────────── escolha única ─────────────────────────── */
 
-/** A bolinha de rádio — desenhada, porque o `input` nativo não aceita a cor do
- *  tema em todos os navegadores. */
+/**
+ * A bolinha de rádio — desenhada, porque o `input` nativo não aceita a cor do
+ * tema em todos os navegadores.
+ *
+ * `primitivos/Radio.tsx` não exporta o indicador sozinho (só o `RadioGroup`
+ * inteiro, com `<input>` nativo por baixo), então não há para onde delegar; o
+ * que este cartão faz é adotar os tokens de papel que o cabeçalho daquele
+ * primitivo documenta como a especificação medida — `--radio-background-*`
+ * preenche o círculo inteiro (limão quando marcado) e
+ * `--radio-thumb-background-active` é o ponto interno, escuro sobre o limão
+ * pela regra do accent. Tamanho (16px, ponto 8px) não mudou: o cabeçalho do
+ * primitivo registra "não medido" e diz que o app hoje usa 20/8 — aqui já era
+ * 16/8 antes desta migração, então sem print não há base para alterar.
+ */
 export function PontoDeRadio({ ativo }: { ativo: boolean }) {
   return (
     <span
       aria-hidden="true"
       className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 transition ${
-        ativo ? "border-brand-500" : "border-channels-default"
+        ativo ? "border-radio-border-selected-default bg-radio-background-selected-default" : "border-radio-border-default bg-radio-background-default"
       }`}
     >
-      {ativo && <span className="h-2 w-2 rounded-full bg-brand-500" />}
+      {ativo && <span className="h-2 w-2 rounded-full bg-radio-thumb-background-active" />}
     </span>
   );
 }
@@ -441,10 +443,10 @@ export function RadioLinha({
       <span
         aria-hidden="true"
         className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition ${
-          checked ? "border-brand-500" : "border-channels-default"
+          checked ? "border-radio-border-selected-default bg-radio-background-selected-default" : "border-radio-border-default bg-radio-background-default"
         }`}
       >
-        {checked && <span className="h-2.5 w-2.5 rounded-full bg-brand-500" />}
+        {checked && <span className="h-2.5 w-2.5 rounded-full bg-radio-thumb-background-active" />}
       </span>
     </label>
   );
@@ -461,6 +463,16 @@ export function RadioLinha({
  * O `<input type="range">` continua existindo por baixo (teclado e leitor de
  * tela vêm de graça); o que muda é que trilho, marcas e polegar são pintados
  * por nós, porque o `accent-color` nativo não desenha nada disso.
+ *
+ * Sem primitivo de trilho numérico para delegar (ADR-0009: "mantenha o
+ * componente e troque só tokens/medidas"), a base cinza do trilho passa de
+ * `--input-background-default` (emprestado do campo de texto) para
+ * `--slider-track-background`, o token próprio que existe em `tokens.css` —
+ * o preenchido continua `--brand-500` (limão), que já era o certo. O grabber
+ * branco (`bg-white` abaixo, nos dois motores) e sua sombra
+ * `rgba(0,0,0,.45)` ficam cor crua: não há `--slider-handle-*`/sombra em
+ * `tokens.css` para substituir, e sem essa medida não dá para inventar um
+ * token — ver "faltando".
  */
 export function Slider({
   label,
@@ -500,7 +512,7 @@ export function Slider({
       {hint && <p className="mt-0.5 text-xs text-text-muted">{hint}</p>}
 
       <div className="relative mt-3 h-5">
-        <div className="absolute inset-x-0 top-1.5 h-2 rounded-full bg-input-background-default" aria-hidden="true" />
+        <div className="absolute inset-x-0 top-1.5 h-2 rounded-full bg-slider-track-background" aria-hidden="true" />
         <div
           className="absolute left-0 top-1.5 h-2 rounded-full bg-brand-500"
           style={{ width: `${pct}%` }}
@@ -578,7 +590,10 @@ export function SliderMarcas<T>({
         value={indice}
         aria-valuetext={opcoes[indice]?.label}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-input-background-default accent-brand-500"
+        // mesma troca do `Slider`: trilho é `--slider-track-background`, não
+        // `--input-background-default` (não é campo de texto); o progresso
+        // nativo (`accent-*`) já era o limão certo
+        className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-slider-track-background accent-brand-500"
       />
       <div className="mt-1.5 flex justify-between gap-1">
         {opcoes.map((o, i) => (
@@ -605,13 +620,22 @@ export function SliderMarcas<T>({
 /**
  * Lista suspensa própria (dispositivos, canais, duração, motivo).
  *
- * O `<select>` nativo abre um popup do sistema operacional, que não aceita a
- * paleta do app: no meio de uma tela escura ele aparece branco no Windows. Aqui
- * o popover é nosso, com a mesma superfície dos menus de contexto.
+ * Invólucro sobre `primitivos/Select`: assinatura antiga por fora
+ * (`value`/`options: {value,label}[]`), miolo do primitivo por dentro
+ * (`valor`/`opcoes: {valor,rotulo}[]`). O popover próprio que existia aqui —
+ * `<ul role="listbox">`, `ItemDeLista`, fechar no clique fora — morre com a
+ * troca: `primitivos/Select` hoje é a "implementação provisória" do
+ * cabeçalho dele, um `<select>` nativo, e perde o popover com a paleta do app
+ * até o cartão que mede o Select do Discord preencher o miolo do primitivo.
+ * Este `Select` melhora de graça quando isso acontecer, sem tocar aqui de
+ * novo — é o ponto de programar contra o tipo, não contra a implementação de
+ * hoje.
  *
- * `emptyLabel` só existe quando "nenhum" é uma escolha válida (canal de regras,
- * filtro de cargo): sem ele a lista não ganha a linha vazia, que é o caso dos
- * modais, onde toda opção tem valor.
+ * `emptyLabel` (canal de regras, filtro de cargo: "nenhum" como escolha
+ * válida) não existe na API do primitivo — vira a primeira opção da lista,
+ * de valor `""`, escolhível como qualquer outra. O comportamento visto de
+ * fora não muda (`onChange("")` quando a pessoa escolhe "nenhum"); só passa a
+ * ser dado (uma opção a mais) em vez de um branch de UI à parte.
  */
 export function Select({
   label,
@@ -633,112 +657,25 @@ export function Select({
   semDivisoria?: boolean;
 }) {
   const id = useId();
-  const [aberto, setAberto] = useState(false);
-  const caixaRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!aberto) return;
-    function fora(e: MouseEvent) {
-      if (!caixaRef.current?.contains(e.target as Node)) setAberto(false);
-    }
-    document.addEventListener("mousedown", fora);
-    return () => document.removeEventListener("mousedown", fora);
-  }, [aberto]);
-
-  const atual = options.find((o) => o.value === value);
+  const mapeadas = options.map((o) => ({ valor: o.value, rotulo: o.label }));
+  const opcoes = emptyLabel !== undefined ? [{ valor: "", rotulo: emptyLabel }, ...mapeadas] : mapeadas;
 
   return (
     <div className={semDivisoria ? "" : "border-b border-border-subtle py-3 last:border-b-0"}>
       {label && (
-        <label
-          htmlFor={id}
-          className="mb-1.5 block text-xs font-bold uppercase tracking-[0.02em] text-text-subtle"
-        >
+        <label htmlFor={id} className="mb-1.5 block text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
           {label}
         </label>
       )}
-      <div ref={caixaRef} className="relative">
-        <button
-          id={id}
-          type="button"
-          disabled={disabled}
-          aria-haspopup="listbox"
-          aria-expanded={aberto}
-          onClick={() => setAberto((v) => !v)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape" && aberto) {
-              e.stopPropagation();
-              setAberto(false);
-            }
-          }}
-          className="flex h-10 w-full items-center gap-2 rounded-[3px] border border-border-subtle bg-chat-background-default px-2.5 text-left text-sm text-text-default outline-none transition-colors hover:border-border-strong focus:border-brand-500 disabled:cursor-not-allowed disabled:opacity-50 celular:h-[44px] celular:text-base"
-        >
-          <span className={`min-w-0 flex-1 truncate ${atual ? "" : "text-text-muted"}`}>
-            {atual?.label ?? emptyLabel}
-          </span>
-          <ChevronDown
-            size={16}
-            aria-hidden="true"
-            className={`shrink-0 text-text-muted transition-transform ${aberto ? "rotate-180" : ""}`}
-          />
-        </button>
-
-        {aberto && (
-          <ul
-            role="listbox"
-            aria-label={typeof label === "string" ? label : undefined}
-            className="anim-menu absolute left-0 right-0 top-[calc(100%+4px)] z-30 max-h-[240px] overflow-y-auto rounded-[4px] bg-background-surface-higher p-1 shadow-popout"
-          >
-            {emptyLabel !== undefined && (
-              <ItemDeLista
-                rotulo={emptyLabel}
-                ativo={!atual}
-                onSelect={() => {
-                  onChange("");
-                  setAberto(false);
-                }}
-              />
-            )}
-            {options.map((o) => (
-              <ItemDeLista
-                key={o.value}
-                rotulo={o.label}
-                ativo={o.value === value}
-                onSelect={() => {
-                  onChange(o.value);
-                  setAberto(false);
-                }}
-              />
-            ))}
-          </ul>
-        )}
-      </div>
+      <SelectDiscord
+        id={id}
+        valor={value}
+        opcoes={opcoes}
+        aoMudar={onChange}
+        desabilitado={disabled}
+        rotulo={typeof label === "string" ? label : undefined}
+      />
       {hint && <p className="mt-1 text-xs text-text-muted">{hint}</p>}
     </div>
-  );
-}
-
-function ItemDeLista({
-  rotulo,
-  ativo,
-  onSelect,
-}: {
-  rotulo: string;
-  ativo: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <li role="option" aria-selected={ativo}>
-      <button
-        type="button"
-        onClick={onSelect}
-        className={`flex h-8 w-full items-center gap-2 rounded-[3px] px-2 text-left text-sm transition celular:h-[44px] celular:text-base ${
-          ativo ? "bg-interactive-background-selected text-text-strong" : "text-text-default hover:bg-interactive-background-hover"
-        }`}
-      >
-        <span className="min-w-0 flex-1 truncate">{rotulo}</span>
-        {ativo && <Check size={14} aria-hidden="true" className="shrink-0 text-brand-500" />}
-      </button>
-    </li>
   );
 }

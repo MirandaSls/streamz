@@ -335,7 +335,13 @@ function Painel({
             ? // `min-h-11` em cada item: 44px é o alvo de toque, e os itens do
               // menu do desktop têm 32 porque lá o ponteiro acerta 32
               "anim-folha fixed inset-x-0 bottom-0 z-[80] max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl bg-background-surface-higher p-2 pb-[calc(env(safe-area-inset-bottom)+8px)] shadow-popout [&_[role=menuitem]]:min-h-[44px] [&_[role=menuitemcheckbox]]:min-h-[44px] [&_[role=menuitemradio]]:min-h-[44px] [&_[role=group]]:gap-2 [&_[role=group]>button]:h-[44px] [&_[role=group]>button]:w-[44px] [&_[role=group]>button]:text-2xl"
-            : `fixed z-[80] rounded-lg border border-border-subtle/70 bg-background-surface-higher p-2 shadow-popout anim-menu ${
+            : // `.menu_c1e9c4` (css-bruto/858942…): fundo, borda 1px cheia (sem
+              // opacidade extra — o token já carrega o alfa) e `box-shadow:
+              // var(--shadow-high)` só, sem o `--shadow-border` do `shadow-popout`
+              // (aqui a borda já é real). `max-height: calc(100vh - 32px)` é
+              // `--custom-menu-viewport-padding` (16px) nos dois lados; o padding
+              // 8×8 sai daqui e vai para o rolador interno (`.scroller_c1e9c4`).
+              `fixed z-[80] flex max-h-[calc(100vh-32px)] flex-col overflow-hidden rounded-lg border border-border-subtle bg-background-surface-higher shadow-shadow-high anim-menu ${
                 pos ? "" : "invisible"
               }`
         }
@@ -362,9 +368,13 @@ function Painel({
             <span aria-hidden="true" className="h-1 w-9 rounded-full bg-border-normal" />
           </button>
         )}
-        {items.map((item, i) => {
+        {(() => {
+          const linhas = items.map((item, i) => {
           if ("separator" in item) {
-            return <div key={i} role="separator" className="my-2 h-px bg-border-subtle" />;
+            // `.separator_c1e9c4`: 1px `--border-subtle`, margem de 8 nos
+            // quatro lados (`margin: var(--custom-menu-separator-margin, 8px)`,
+            // não só vertical — o padding do rolador já dá o resto do respiro).
+            return <div key={i} role="separator" className="m-2 h-px bg-border-subtle" />;
           }
           if (isSlider(item)) {
             return <ItemDeslizante key={i} item={item} />;
@@ -379,13 +389,31 @@ function Painel({
           const controle = !filho ? item.control : undefined;
           const descricao = !filho ? item.description : undefined;
           const forte = !filho && item.forte === true;
+          /*
+            `.colorDefault_c1e9c4`/`.colorDanger_c1e9c4` (css-bruto/858942…): o
+            limão saiu do hover comum — hoje é `--interactive-background-hover`
+            (cinza translúcido, igual ao `.focused_c1e9c4`), com
+            `--background-mod-subtle` no `:active` (pressionado), igual ao
+            `.item_c1e9c4:hover`/`:active` de lá. Perigo continua com o texto
+            `--text-feedback-critical` também no fundo `--background-feedback-
+            critical` do hover/foco/pressionado — o token certo, não
+            `--status-danger` (esse é a bolinha de status, outra coisa).
+          */
           const cor = item.danger
-            ? "text-status-danger hover:bg-status-danger hover:text-white focus:bg-status-danger focus:text-white"
+            ? "text-text-feedback-critical hover:bg-background-feedback-critical focus:bg-background-feedback-critical active:bg-background-feedback-critical"
             : !filho && item.highlight
-              ? "text-brand-500 hover:bg-brand-500 hover:text-control-primary-text-default focus:bg-brand-500 focus:text-control-primary-text-default"
+              ? "text-brand-500 hover:bg-interactive-background-hover focus:bg-interactive-background-hover active:bg-background-mod-subtle"
               : forte
-                ? "text-text-strong hover:bg-brand-500 hover:text-control-primary-text-default focus:bg-brand-500 focus:text-control-primary-text-default"
-                : "text-text-subtle hover:bg-brand-500 hover:text-control-primary-text-default focus:bg-brand-500 focus:text-control-primary-text-default";
+                ? "text-text-strong hover:bg-interactive-background-hover focus:bg-interactive-background-hover active:bg-background-mod-subtle"
+                : // rótulo `--text-strong` (`.colorDefault_c1e9c4 .label_c1e9c4`),
+                  // não `--text-subtle` — o item comum já nasce no texto forte.
+                  "text-text-strong hover:bg-interactive-background-hover focus:bg-interactive-background-hover active:bg-background-mod-subtle";
+          // fundo do item-pai quando o submenu dele está aberto: o mesmo do
+          // hover/foco de cada categoria, sem repintar o texto (a categoria já
+          // define a cor certa em `cor`, inclusive a de perigo).
+          const corAberta = item.danger
+            ? "bg-background-feedback-critical"
+            : "bg-interactive-background-hover";
           return (
             <button
               key={i}
@@ -422,15 +450,21 @@ function Painel({
                 item.onSelect();
               }}
               /*
-                `min-h-9 py-2` mantém o item de uma linha do tamanho de antes
-                (8 + entrelinha + 8 dá exatamente o `h-9` que estava aqui) e
-                deixa o de duas linhas crescer. No print `2026-09-03 180020` a
-                escada é 36 / 52 / 68 (uma linha, com uma linha de descrição,
-                com duas); aqui sai 34,9 / 50,4 / 65,9, porque a raiz do app é
-                de 15,5px e todo o `rem` do Tailwind encolhe 3%.
+                `.labelContainer_c1e9c4`: `min-height:32px; padding:8px` — o
+                item de uma linha fecha em exatamente 32 (`min-h-8` + `p-2`) e
+                cresce para o de duas linhas (rótulo + descrição). A escada de
+                duas/três linhas do 15,5px antigo (36/52/68) não foi remedida
+                na base de 16px — não medido.
+
+                Raio: `.item_c1e9c4{border-radius:2px}` em repouso,
+                `.focused_c1e9c4{border-radius:4px}` no hover/foco (e travado
+                em 4 enquanto o submenu do item está aberto). Desabilitado:
+                `.disabled_c1e9c4{opacity:.5}`, não .4.
               */
-              className={`flex min-h-9 w-full items-center gap-2 whitespace-nowrap rounded-[4px] px-2 py-2 text-left text-sm outline-none disabled:opacity-40 ${cor} ${
-                aberto === i ? "bg-brand-500 text-control-primary-text-default" : ""
+              className={`flex min-h-8 w-full items-center gap-2 whitespace-nowrap p-2 text-left text-sm outline-none disabled:opacity-50 ${cor} ${
+                aberto === i
+                  ? `${corAberta} rounded-[4px]`
+                  : "rounded-[2px] hover:rounded-[4px] focus:rounded-[4px]"
               }`}
             >
               {item.icon ? (
@@ -457,18 +491,22 @@ function Painel({
                   {item.label}
                 </span>
                 {descricao && (
-                  // 12/16 e apagada, como no print; `whitespace-normal` porque a
-                  // descrição do "Não perturbar" ocupa duas linhas
-                  <span className="block whitespace-normal text-xs font-normal leading-4 opacity-60">
+                  // `.subtext_c1e9c4`: `margin-top:2px`, cor `--text-muted`
+                  // fixa (não opacidade sobre a cor do item — herdaria o
+                  // `text-strong` do rótulo). `whitespace-normal` porque a
+                  // descrição do "Não perturbar" ocupa duas linhas.
+                  <span className="mt-0.5 block whitespace-normal text-xs font-normal leading-4 text-text-muted">
                     {descricao}
                   </span>
                 )}
               </span>
               {controle === "checkbox" && (
+                // marcado: `--text-brand`, não a cor do item (`current`) — é o
+                // que `.check_c1e9c4{color:var(--text-brand)}` faz no focado
                 <span
                   aria-hidden="true"
                   className={`grid h-5 w-5 shrink-0 place-items-center rounded-[4px] border ${
-                    marcado ? "border-current bg-current" : "border-current opacity-60"
+                    marcado ? "border-text-brand bg-text-brand" : "border-current opacity-60"
                   }`}
                 >
                   {marcado && (
@@ -486,13 +524,14 @@ function Painel({
                 </span>
               )}
               {controle === "radio" && (
+                // mesma regra do checkbox: marcado usa `--text-brand`, não `current`
                 <span
                   aria-hidden="true"
-                  className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 border-current ${
-                    marcado ? "" : "opacity-60"
+                  className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${
+                    marcado ? "border-text-brand" : "border-current opacity-60"
                   }`}
                 >
-                  {marcado && <span className="h-2 w-2 rounded-full bg-current" />}
+                  {marcado && <span className="h-2 w-2 rounded-full bg-text-brand" />}
                 </span>
               )}
               {/*
@@ -507,7 +546,17 @@ function Painel({
               )}
             </button>
           );
-        })}
+          });
+          // `.scroller_c1e9c4{padding-block:8px;padding-inline:8px}`: o padding
+          // do menu fixo mora no rolador interno, não na caixa — é o que deixa
+          // a caixa cortar em `max-h-[calc(100vh-32px)]` sem cortar o padding
+          // junto. A folha já rola sozinha (mobile, fora do escopo daqui).
+          return folha ? (
+            linhas
+          ) : (
+            <div className="min-h-0 flex-1 overflow-y-auto p-2">{linhas}</div>
+          );
+        })()}
       </div>
       {aberto !== null && ancora && isSubmenu(items[aberto]) && (
         <Painel
@@ -527,14 +576,22 @@ function Painel({
 }
 
 /**
- * Menu de contexto (botão direito) no estilo do Discord: caixa escura de 220
- * com raio 8 e padding 8, itens de 36px com o ícone de 20 à esquerda do rótulo,
- * hover cheio, submenus com chevron. Item com `description` vira de duas
- * linhas (rótulo 14/20 + descrição 12/16) e cresce para 52 ou 68 — é o
- * formato do seletor de status do cartão do usuário. Um só na tela, aberto por
- * `ui.openContextMenu(x, y, items, largura)`. Medidas dos prints `124207` e
- * `124022`: separador de 1px com 8 de folga de cada lado, item de 204x36
- * (raio 4), caixa de marcar de 20 à direita.
+ * Menu de contexto (botão direito) no estilo do Discord: caixa de 220 em
+ * `--background-surface-higher`, borda 1px `--border-subtle`, raio 8, sombra
+ * `--shadow-high`, com o padding de 8×8 no rolador interno (`max-height:
+ * calc(100vh - 32px)`, `.menu_c1e9c4`/`.scroller_c1e9c4` em
+ * `css-bruto/858942.086f3345af1722be.css`). Item de uma linha com
+ * `min-height:32px` e `padding:8px` (`.labelContainer_c1e9c4`), rótulo
+ * `--text-strong`, hover/foco em `--interactive-background-hover` (cinza —
+ * o limão saiu daqui), pressionado `--background-mod-subtle`, raio 2 em
+ * repouso e 4 no hover/foco. Item com `description` vira de duas linhas
+ * (rótulo 14/20 + descrição 12/16, `--text-muted`, 2px acima) — a escada de
+ * altura de duas/três linhas não foi remedida na base de 16px, não medido.
+ * Separador 1px `--border-subtle` com margem de 8 nos quatro lados; grupo
+ * (título 14/20 peso 500 `--text-muted`) não existe no modelo de itens hoje.
+ * Um só na tela, aberto por `ui.openContextMenu(x, y, items, largura)`.
+ * Medidas de layout gerais (largura 220, caixa de marcar de 20 à direita)
+ * confirmadas também nos prints `124207` e `124022`.
  *
  * Fecha com Esc, clique fora, rolagem ou redimensionamento — qualquer coisa que
  * deixaria o menu solto longe do que o abriu.
