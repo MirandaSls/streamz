@@ -40,6 +40,7 @@ import {
   registrarUsoEmoji,
   usePrefsPicker,
 } from "@/components/media/preferencias-picker";
+import Emoji from "@/components/ui/Emoji";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { useAuth } from "@/stores/auth";
 import { useEmojisOrdenados } from "@/stores/emojis";
@@ -58,7 +59,15 @@ const ICONE_CATEGORIA: Record<string, Icone> = {
   flags: Flag,
 };
 
-/** 9 por linha em 424px de painel; célula de 40px, emoji de 32px. */
+/**
+ * 9 por linha em 424px de painel; célula de 40px, emoji de 32px.
+ *
+ * O Discord usa célula de 48 e emoji de 40 (print 2026-08-31 120846: fundo do
+ * hover em x 1009–1056 × y 489–536, 😍 em x 1061–1100 × y 493–532). A grade não
+ * muda aqui porque 9 × 48 não cabe nos 424px da caixa do `PickerChrome` — é a
+ * onda 2 (tela `seletor-emoji`) que redesenha a caixa e a grade juntas. O emoji
+ * Unicode fica com os 32px do personalizado, para os dois dividirem a grade.
+ */
 const COLUNAS = 9;
 const CELULA = 40;
 
@@ -477,7 +486,11 @@ function BotaoEmoji({
           className="h-8 w-8 object-contain"
         />
       ) : (
-        <span className="text-[28px] leading-none">{comTomDePele(alvo.item, tom)}</span>
+        // Twemoji dos arquivos locais, como a mensagem: o que se escolhe aqui
+        // tem de ter a cara do que vai aparecer no chat. O `emoji-picker-react`
+        // tem `emojiStyle`/`getEmojiUrl`, mas só no componente pronto dele, que
+        // este seletor não usa (daquele pacote só vem o catálogo em JSON)
+        <Emoji emoji={comTomDePele(alvo.item, tom)} tamanho={32} />
       )}
     </button>
   );
@@ -511,8 +524,11 @@ function Previa({ item, tom }: { item: ItemGrade | null; tom: TomDePele }) {
         // eslint-disable-next-line @next/next/no-img-element
         <img src={item.emoji.url} alt="" className="h-7 w-7 shrink-0 object-contain" />
       ) : (
-        <span aria-hidden="true" className="shrink-0 text-2xl leading-none">
-          {comTomDePele(item.item, tom)}
+        // 28px, o mesmo do personalizado ao lado: no print 2026-08-31 120846 o
+        // 👍 do rodapé tem 28px de altura (y 860–887), contra 40 na grade (y
+        // 493–532), onde ele ocupa a altura inteira da caixa
+        <span aria-hidden="true" className="flex shrink-0">
+          <Emoji emoji={comTomDePele(item.item, tom)} tamanho={28} />
         </span>
       )}
       <span className="flex min-w-0 items-baseline gap-1.5 truncate">
