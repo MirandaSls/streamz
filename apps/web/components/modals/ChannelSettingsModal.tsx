@@ -14,6 +14,7 @@ import {
 import EditorDePermissoes from "@/components/permissoes/EditorDePermissoes";
 import JanelaDeConfiguracoes, { ItemPerigo, type ItemDeMenu } from "@/components/ui/JanelaDeConfiguracoes";
 import { Rotulo, SliderMarcas, ToggleLinha } from "@/components/ui/controls";
+import { Button, TextArea, TextInput } from "@/components/ui/primitivos";
 import { RegistrarAlteracoes, useControleDeAlteracoes } from "@/components/ui/alteracoes";
 import { api } from "@/lib/api";
 import { useChannels, type UpdateChannelInput } from "@/stores/channels";
@@ -251,12 +252,11 @@ export default function ChannelSettingsModal({
         <div className="space-y-6">
           <div>
             <Rotulo htmlFor="canal-nome">Nome do canal</Rotulo>
-            <input
+            <TextInput
               id="canal-nome"
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={64}
-              className="h-10 w-full rounded-[3px] bg-input-background-default px-2.5 text-text-default outline-none"
             />
           </div>
 
@@ -265,13 +265,12 @@ export default function ChannelSettingsModal({
               <Rotulo htmlFor="canal-topico" contador={`${topic.length}/${MAX_CHANNEL_TOPIC}`}>
                 Tópico do canal
               </Rotulo>
-              <textarea
+              <TextArea
                 id="canal-topico"
                 value={topic}
                 onChange={(e) => setTopic(e.target.value.slice(0, MAX_CHANNEL_TOPIC))}
                 rows={3}
                 placeholder="Sobre o que é este canal?"
-                className="w-full resize-none rounded-[3px] bg-input-background-default px-2.5 py-2 text-text-default outline-none placeholder:text-text-muted"
               />
             </div>
           )}
@@ -346,14 +345,15 @@ export default function ChannelSettingsModal({
                     : "Este canal tem regras próprias — elas não seguem mais a categoria."}
                 </p>
                 {!channel.syncedWithCategory && (
-                  <button
-                    type="button"
+                  <Button
+                    variante="secundario"
+                    tamanho="sm"
                     disabled={sincronizando}
                     onClick={() => void sincronizar()}
-                    className="h-8 celular:h-[44px] shrink-0 rounded-[3px] border border-border-normal px-3 text-sm text-text-default transition hover:border-border-strong disabled:opacity-50"
+                    className="shrink-0 celular:h-[44px]"
                   >
                     {sincronizando ? "Sincronizando…" : "Sincronizar com a categoria"}
-                  </button>
+                  </Button>
                 )}
               </div>
             ) : null

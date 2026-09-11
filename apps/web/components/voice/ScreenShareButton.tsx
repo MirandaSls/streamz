@@ -140,7 +140,7 @@ export function AoVivoIndicador() {
       {/* No telefone este é o botão que tira a sua tela do ar, e ele media 21px
           de altura (`py-1` sobre 11px de texto): metade do piso de toque, em
           cima de um palco onde tudo o mais tem 44 ou 48. Cresce para
-          `ALVO_MINIMO`, em px pelo motivo de sempre (a raiz é 15,5). O selo é a
+          `ALVO_MINIMO`, em px pelo motivo de sempre (a raiz é 16). O selo é a
           única coisa que a barra de controles do celular não repete com folga —
           o botão de tela dela também para a transmissão, mas quem lê "Você está
           ao vivo" está olhando para cá. */}
@@ -148,7 +148,7 @@ export function AoVivoIndicador() {
         type="button"
         onClick={() => void pararTela()}
         style={ehMobile ? { height: ALVO_MINIMO } : undefined}
-        className={`shrink-0 whitespace-nowrap rounded-full bg-status-danger px-2 text-[11px] font-bold text-white transition hover:bg-control-critical-primary-background-hover ${
+        className={`shrink-0 whitespace-nowrap rounded-full bg-status-danger px-2 text-[11px] font-bold text-control-critical-primary-text-default transition hover:bg-control-critical-primary-background-hover ${
           ehMobile ? "" : "py-1"
         }`}
       >

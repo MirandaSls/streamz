@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Keyboard, RotateCcw } from "@/components/ui/icones";
+import { BotaoDeIcone, Button } from "@/components/ui/primitivos";
 import { atalhosEfetivos, conflitoDe, useAtalhos } from "@/stores/atalhos";
 import { useT, type ChaveDeTexto } from "@/lib/i18n";
 import { formatShortcut, shortcutFromEvent, type ShortcutAction } from "@/lib/shortcuts";
@@ -67,17 +68,18 @@ export default function TecladoTab() {
               </span>
               <span className="flex shrink-0 items-center gap-1.5">
                 {emGravacao ? (
-                  <button
-                    type="button"
+                  <Button
+                    variante="primario"
+                    tamanho="sm"
                     autoFocus
                     onKeyDown={(e) => capturar(e, spec.action)}
                     onBlur={() => setGravando(null)}
                     aria-label={`Gravando atalho de ${t(spec.label as ChaveDeTexto)}`}
-                    className="flex h-8 celular:h-[44px] items-center gap-1.5 rounded-[3px] bg-brand-500 px-3 text-xs font-semibold text-control-primary-text-default"
+                    icone={<Keyboard size={14} aria-hidden="true" />}
+                    className="celular:h-[44px]"
                   >
-                    <Keyboard size={14} aria-hidden="true" />
                     Aperte a combinação (Esc cancela)
-                  </button>
+                  </Button>
                 ) : (
                   <>
                     {spec.combos.map((combo) => (
@@ -88,23 +90,21 @@ export default function TecladoTab() {
                         {formatShortcut(combo)}
                       </kbd>
                     ))}
-                    <button
-                      type="button"
+                    <BotaoDeIcone
+                      rotulo={`Regravar o atalho de ${t(spec.label as ChaveDeTexto)}`}
                       onClick={() => setGravando(spec.action)}
-                      aria-label={`Regravar o atalho de ${t(spec.label as ChaveDeTexto)}`}
-                      className="grid h-7 celular:h-[44px] w-7 celular:w-[44px] place-items-center rounded-[3px] text-text-muted transition hover:bg-interactive-background-hover hover:text-text-strong"
-                    >
-                      <Keyboard size={16} />
-                    </button>
+                      tamanho="sm"
+                      icone={<Keyboard size={16} />}
+                      className="celular:h-[44px] celular:w-[44px]"
+                    />
                     {alterado && (
-                      <button
-                        type="button"
+                      <BotaoDeIcone
+                        rotulo={`Voltar ao atalho padrão de ${t(spec.label as ChaveDeTexto)}`}
                         onClick={() => restaurar(spec.action)}
-                        aria-label={`Voltar ao atalho padrão de ${t(spec.label as ChaveDeTexto)}`}
-                        className="grid h-7 celular:h-[44px] w-7 celular:w-[44px] place-items-center rounded-[3px] text-text-muted transition hover:bg-interactive-background-hover hover:text-text-strong"
-                      >
-                        <RotateCcw size={14} />
-                      </button>
+                        tamanho="sm"
+                        icone={<RotateCcw size={14} />}
+                        className="celular:h-[44px] celular:w-[44px]"
+                      />
                     )}
                   </>
                 )}
@@ -115,13 +115,14 @@ export default function TecladoTab() {
       </ul>
 
       {Object.keys(regravados).length > 0 && (
-        <button
-          type="button"
+        <Button
+          variante="secundario"
+          tamanho="sm"
           onClick={() => restaurarTudo()}
-          className="mt-4 h-9 celular:h-[44px] rounded-[3px] border border-border-normal px-3 text-sm font-medium text-text-default transition hover:bg-interactive-background-hover"
+          className="mt-4 celular:h-[44px]"
         >
           {t("config.restaurar")}
-        </button>
+        </Button>
       )}
     </>
   );

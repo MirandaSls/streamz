@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Keyboard, Mic, Video } from "@/components/ui/icones";
+import { Button } from "@/components/ui/primitivos";
 import { pttRotulo } from "@/stores/ptt-core";
 import { BarraDeNivel, Chave, SliderDeVolume as Slider } from "@/components/voice/pecas-de-voz";
 import { useTesteDeMicrofone } from "@/components/voice/useTesteDeMicrofone";
@@ -99,14 +100,15 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
             : "Com problemas? Comece uma verificação e diga algo divertido — você vai se ouvir, e a barra se mexe se a gente estiver ouvindo você. Enquanto durar, você fica mudo e surdo."}
         </p>
         <div className="flex items-center gap-3">
-          <button
-            type="button"
+          <Button
+            variante="secundario"
+            tamanho="sm"
+            icone={<Mic size={14} aria-hidden="true" />}
             onClick={alternarTeste}
-            className="flex h-8 shrink-0 items-center gap-1.5 rounded-[3px] bg-border-normal px-3 text-xs font-semibold text-text-strong transition hover:bg-border-strong"
+            className="shrink-0"
           >
-            <Mic size={14} aria-hidden="true" />
             {testandoMic ? "Parar" : "Vamos verificar"}
-          </button>
+          </Button>
           <BarraDeNivel nivel={nivel} />
         </div>
         {erroDoTeste && <p className="text-xs text-status-danger">{erroDoTeste}</p>}
@@ -154,8 +156,10 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
           <div className="space-y-3 pl-6">
             <div className="flex items-center gap-2">
               <span className="text-text-muted">Tecla:</span>
-              <button
-                type="button"
+              <Button
+                variante={capturando ? "primario" : "secundario"}
+                tamanho="sm"
+                icone={<Keyboard size={16} aria-hidden="true" />}
                 onClick={() => setCapturando(true)}
                 onKeyDown={(e) => {
                   if (!capturando) return;
@@ -166,13 +170,9 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
                 }}
                 onBlur={() => setCapturando(false)}
                 aria-label="Definir a tecla de push-to-talk"
-                className={`flex h-8 items-center gap-1.5 rounded-[3px] px-3 text-sm transition ${
-                  capturando ? "bg-brand-500 text-control-primary-text-default" : "bg-input-background-default text-text-default hover:bg-interactive-background-hover"
-                }`}
               >
-                <Keyboard size={16} aria-hidden="true" />
                 {capturando ? "Aperte uma tecla (Esc limpa)" : pttRotulo(pttKey)}
-              </button>
+              </Button>
             </div>
             <label className="block">
               <span className="mb-1 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.02em] text-text-muted">
@@ -228,14 +228,14 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
           onChange={devices.setCamera}
           vazio="Nenhuma câmera encontrada"
         />
-        <button
-          type="button"
+        <Button
+          variante="secundario"
+          tamanho="sm"
+          icone={<Video size={14} aria-hidden="true" />}
           onClick={() => setTestandoCam((v) => !v)}
-          className="flex h-8 items-center gap-1.5 rounded-[3px] bg-border-normal px-3 text-xs font-semibold text-text-strong transition hover:bg-border-strong"
         >
-          <Video size={14} aria-hidden="true" />
           {testandoCam ? "Parar vídeo" : "Testar vídeo"}
-        </button>
+        </Button>
         {testandoCam && <PreviaDaCamera deviceId={devices.cameraId} />}
       </section>
     </div>

@@ -74,7 +74,7 @@ export function PainelDeslizante({
 
   return createPortal(
     <div
-      className="anim-overlay fixed inset-0 z-[85] flex justify-end bg-black/60"
+      className="anim-overlay fixed inset-0 z-[85] flex justify-end bg-background-scrim"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onFechar();
       }}

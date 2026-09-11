@@ -6,9 +6,9 @@ import { MAX_DM_GROUP_NAME, displayNameOf } from "@streamz/shared";
 import Dialog from "@/components/modals/Dialog";
 import JanelaDeConfiguracoes, { type ItemDeMenu } from "@/components/ui/JanelaDeConfiguracoes";
 import { Rotulo } from "@/components/ui/controls";
+import { BotaoDeIcone, Button, Campo, TextInput } from "@/components/ui/primitivos";
 import { RegistrarAlteracoes, useControleDeAlteracoes } from "@/components/ui/alteracoes";
 import Avatar, { GroupAvatar } from "@/components/ui/Avatar";
-import Tooltip from "@/components/ui/Tooltip";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { ui, useUI } from "@/stores/ui";
 
@@ -94,17 +94,14 @@ export default function GroupSettingsModal({ channelId }: { channelId: string })
                   e.target.value = "";
                 }}
               />
-              <Tooltip label="Trocar ícone">
-                <button
-                  type="button"
-                  disabled={enviando}
-                  onClick={() => fileRef.current?.click()}
-                  aria-label="Trocar ícone do grupo"
-                  className="absolute bottom-0 right-0 grid h-8 w-8 place-items-center rounded-full bg-background-base-lowest text-text-strong shadow-popout hover:bg-interactive-background-hover disabled:opacity-50"
-                >
-                  <Camera size={16} />
-                </button>
-              </Tooltip>
+              <BotaoDeIcone
+                rotulo="Trocar ícone do grupo"
+                icone={<Camera size={16} />}
+                disabled={enviando}
+                comFundo
+                onClick={() => fileRef.current?.click()}
+                className="absolute bottom-0 right-0 rounded-full bg-background-base-lowest text-text-strong shadow-popout"
+              />
             </div>
             <div className="min-w-0">
               <p className="truncate font-semibold text-text-strong">{dmTitle(dm)}</p>
@@ -117,21 +114,21 @@ export default function GroupSettingsModal({ channelId }: { channelId: string })
           </div>
 
           <div className="mt-6">
-            <Rotulo htmlFor="groupName">Nome do grupo</Rotulo>
-            <input
-              id="groupName"
-              value={name}
-              maxLength={MAX_DM_GROUP_NAME}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void salvar();
-                }
-              }}
-              placeholder={dm.others.map((u) => u.username).join(", ")}
-              className="h-10 w-full rounded-[3px] bg-input-background-default px-2.5 text-text-default outline-none placeholder:text-text-muted"
-            />
+            <Campo rotulo="Nome do grupo" htmlFor="groupName">
+              <TextInput
+                id="groupName"
+                value={name}
+                maxLength={MAX_DM_GROUP_NAME}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void salvar();
+                  }
+                }}
+                placeholder={dm.others.map((u) => u.username).join(", ")}
+              />
+            </Campo>
             <p className="mt-1 text-xs text-text-muted">
               Vazio = usar os nomes dos participantes.
             </p>
@@ -144,14 +141,13 @@ export default function GroupSettingsModal({ channelId }: { channelId: string })
           <p className="mb-4 text-sm text-text-muted">
             Grupos não têm link de convite: quem entra é adicionado por alguém que já está dentro.
           </p>
-          <button
-            type="button"
+          <Button
+            variante="primario"
+            icone={<UserPlus size={18} aria-hidden="true" />}
             onClick={() => ui.openModal({ kind: "addGroupMembers", channelId })}
-            className="flex h-10 items-center gap-2 rounded-[3px] bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover"
           >
-            <UserPlus size={18} aria-hidden="true" />
             Adicionar amigos ao grupo
-          </button>
+          </Button>
 
           <div className="mt-6">
             <Rotulo>Participantes</Rotulo>

@@ -10,10 +10,10 @@ import {
 } from "@streamz/shared";
 import AuthCard, {
   FieldLabel,
-  inputClass,
   linkClass,
   submitClass,
 } from "@/components/auth/AuthCard";
+import { Button, TextInput } from "@/components/ui/primitivos";
 import { api, isApiError } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 
@@ -102,13 +102,16 @@ export default function DownloadPage() {
         title="O download começou"
         subtitle={`Se nada aconteceu, o navegador pode ter bloqueado — informe a senha de novo para gerar um link novo (${baixando}).`}
       >
-        <button
+        <Button
           type="button"
+          variante="primario"
+          tamanho="md"
+          larguraTotal
           onClick={() => setBaixando(null)}
-          className={submitClass}
+          className="celular:h-[48px]"
         >
           Baixar de novo
-        </button>
+        </Button>
         <p className="mt-4 text-center text-sm">
           <Link href="/" className={linkClass}>
             Voltar ao início
@@ -164,7 +167,7 @@ export default function DownloadPage() {
         <FieldLabel htmlFor="senha" invalid={!!erro} hint={erro ?? undefined}>
           Senha de acesso
         </FieldLabel>
-        <input
+        <TextInput
           id="senha"
           name="senha"
           type="password"
@@ -172,8 +175,8 @@ export default function DownloadPage() {
           value={senha}
           onChange={(e) => setSenha(e.target.value)}
           disabled={loading}
-          aria-invalid={erro ? true : undefined}
-          className={inputClass}
+          erro={!!erro}
+          classeDaCaixa="mb-5"
           autoFocus
         />
 
@@ -181,13 +184,17 @@ export default function DownloadPage() {
           {erro}
         </p>
 
-        <button
+        <Button
           type="submit"
-          disabled={loading || !senha.trim() || !plataforma}
-          className={submitClass}
+          variante="primario"
+          tamanho="md"
+          larguraTotal
+          carregando={loading}
+          disabled={!senha.trim() || !plataforma}
+          className="celular:h-[48px]"
         >
-          {loading ? "Verificando…" : "Baixar"}
-        </button>
+          Baixar
+        </Button>
 
         {escolhido && (
           <p className="mt-3 text-center text-sm text-text-muted">

@@ -6,7 +6,8 @@ import { BadgeCheck, Camera, TriangleAlert } from "@/components/ui/icones";
 import { ACCEPT_IMAGEM_DE_PERFIL, MAX_DISPLAY_NAME, displayNameOf } from "@streamz/shared";
 import type { MinhaConta } from "@streamz/shared";
 import { Section } from "@/components/ui/controls";
-import { CampoDeTexto, ESTILO_CAMPO, Erro } from "@/components/settings/campos";
+import { Button, TextInput } from "@/components/ui/primitivos";
+import { CampoDeTexto, Erro } from "@/components/settings/campos";
 import { useAlteracoesNaoSalvas } from "@/components/ui/alteracoes";
 import { PrimaryButton } from "@/components/modals/Dialog";
 import Avatar from "@/components/ui/Avatar";
@@ -207,13 +208,9 @@ function BotaoDeLinha({
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="h-8 celular:h-[44px] rounded-[3px] bg-border-normal px-3 text-sm font-medium text-text-default transition hover:bg-border-strong"
-    >
+    <Button variante="secundario" tamanho="sm" onClick={onClick} className="celular:h-[44px]">
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -261,14 +258,13 @@ function LinhaDeNomeDeExibicao() {
       abaixo={
         editando && (
           <div className="pt-3">
-            <input
+            <TextInput
               value={valor}
               maxLength={MAX_DISPLAY_NAME}
               autoFocus
               onChange={(e) => setValor(e.target.value)}
               placeholder={user?.username}
               aria-label="Nome de exibição"
-              className={ESTILO_CAMPO}
             />
             <p className="mt-1 text-xs text-text-muted">
               É o nome que aparece nas mensagens. Vazio = usar @{user?.username}.
@@ -344,14 +340,15 @@ function LinhaDeEmail({
       acao={
         <div className="flex gap-2">
           {conta && !conta.emailVerified && conta.email && (
-            <button
-              type="button"
+            <Button
+              variante="secundario"
+              tamanho="sm"
               disabled={ocupado}
               onClick={() => void reenviar()}
-              className="h-8 celular:h-[44px] rounded-[3px] bg-border-normal px-3 text-sm font-medium text-text-default hover:bg-border-strong disabled:opacity-50"
+              className="celular:h-[44px]"
             >
               Reenviar
-            </button>
+            </Button>
           )}
           <BotaoDeLinha onClick={() => setEditando((v) => !v)}>
             {editando ? "Cancelar" : "Editar"}
@@ -520,20 +517,22 @@ function BlocoDeEncerramento({ conta }: { conta: MinhaConta | null }) {
         usuário para sempre.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
-        <button
-          type="button"
+        <Button
+          variante="critico-secundario"
+          tamanho="sm"
           onClick={() => setAcao(acao === "disable" ? null : "disable")}
-          className="h-8 celular:h-[44px] rounded-[3px] border border-status-danger px-3 text-sm font-medium text-status-danger transition hover:bg-status-danger hover:text-white"
+          className="celular:h-[44px]"
         >
           Desativar conta
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variante="critico"
+          tamanho="sm"
           onClick={() => setAcao(acao === "delete" ? null : "delete")}
-          className="h-8 celular:h-[44px] rounded-[3px] bg-status-danger px-3 text-sm font-medium text-white transition hover:bg-control-critical-primary-background-hover"
+          className="celular:h-[44px]"
         >
           Excluir conta
-        </button>
+        </Button>
       </div>
 
       {acao && (

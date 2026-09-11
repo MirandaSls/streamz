@@ -120,13 +120,13 @@ export function OptionalFieldLabel({
 // a borda escura é o que separa o campo do corpo do cartão: `bg-input-background-default` sozinho
 // encosta no `bg-background-base-lower` sem aresta e o campo some
 //
-// `celular:h-[48px]` nos dois, e o **48 é literal**: a raiz do app é 15,5px, e
-// `h-12` mediria 46,5 (todo `rem` do Tailwind sai 3% menor aqui — ver
-// `components/mobile/pecas.tsx`). No desktop os campos ficam com `h-10`, que
-// mede 38,75, e o botão com `h-11`, 42,6: alvos de dedo curtos para o piso de
-// 44 das duas diretrizes. Além disso, no celular o texto do campo passa a 16px
-// por causa da regra do `globals.css` que evita o zoom do iOS — numa caixa de
-// 39px ele fica encostado nas bordas. 48 acomoda os dois. No desktop nada muda.
+// `celular:h-[48px]` nos dois, e o **48 é literal**: com a raiz do app em 16px
+// (ADR-0009), `h-10` mede 40px e `h-11` mede 44px — o campo fica abaixo do piso
+// de 44 das duas diretrizes de alvo de toque, e o botão bate em cima dele sem
+// sobra. Além disso, no celular o texto do campo passa a 16px por causa da
+// regra do `globals.css` que evita o zoom do iOS — numa caixa de 40px ele fica
+// encostado nas bordas. 48 dá a folga que falta nos dois sem furar o piso. No
+// desktop nada muda.
 export const inputClass =
   "mb-5 h-10 w-full rounded-[3px] border border-black/30 bg-input-background-default px-2.5 text-text-default outline-none placeholder:text-text-muted disabled:opacity-60 celular:h-[48px]";
 

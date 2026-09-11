@@ -245,8 +245,9 @@ function EscolhaDeServidor({
             role="radio"
             aria-checked={ativo}
             onClick={() => aoEscolher(s.id)}
-            /* 44px de alvo de toque, literal: a raiz é 15,5px e `h-11` mediria
-               42,6 (ver o cabeçalho de `components/mobile/pecas.tsx`) */
+            /* 44px de alvo de toque, literal — fixa a medida independente da
+               raiz (16px, ADR-0009; ver o cabeçalho de
+               `components/mobile/pecas.tsx`) */
             className={`flex h-[44px] w-full items-center gap-2.5 px-3 text-left text-sm transition-colors ${
               ativo ? "bg-interactive-background-hover text-text-strong" : "text-text-default hover:bg-interactive-background-hover/60"
             }`}

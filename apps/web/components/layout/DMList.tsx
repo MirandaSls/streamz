@@ -25,6 +25,7 @@ import {
 } from "@streamz/shared";
 import Avatar, { GroupAvatar } from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
+import { BotaoDeIcone, TextInput } from "@/components/ui/primitivos";
 import { MENU_WIDTH } from "@/components/ui/ContextMenu";
 import { api } from "@/lib/api";
 import { useEhMobile } from "@/hooks/useEhMobile";
@@ -197,7 +198,7 @@ export default function DMList() {
         {pendentes > 0 && (
           <span
             aria-label={pendentes === 1 ? "1 pedido de amizade" : `${pendentes} pedidos de amizade`}
-            className="grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[11px] font-bold leading-none text-white"
+            className="grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[11px] font-bold leading-none text-control-critical-primary-text-default"
           >
             {pendentes}
           </span>
@@ -288,16 +289,12 @@ export default function DMList() {
         <h3 className="text-xs font-semibold text-text-muted group-hover:text-text-default">
           Mensagens diretas
         </h3>
-        <Tooltip label="Nova conversa">
-          <button
-            type="button"
-            onClick={() => openModal({ kind: "createGroupDM" })}
-            aria-label="Nova conversa"
-            className="text-text-muted transition hover:text-text-strong"
-          >
-            <Plus size={20} />
-          </button>
-        </Tooltip>
+        <BotaoDeIcone
+          rotulo="Nova conversa"
+          icone={<Plus size={20} />}
+          tamanho="md"
+          onClick={() => openModal({ kind: "createGroupDM" })}
+        />
       </div>
       )}
 
@@ -396,21 +393,18 @@ export default function DMList() {
               {dm.unreadCount > 0 && !active && (
                 <span
                   aria-label={`${dm.unreadCount} não lidas`}
-                  className="absolute grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[12px] font-bold leading-none text-white group-hover:hidden group-focus-within:hidden"
+                  className="absolute grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[12px] font-bold leading-none text-control-critical-primary-text-default group-hover:hidden group-focus-within:hidden"
                 >
                   {rotuloDoContador(dm.unreadCount)}
                 </span>
               )}
-              <Tooltip label={group ? "Sair do grupo" : "Fechar conversa"}>
-                <button
-                  type="button"
-                  onClick={() => (group ? void leaveGroup(dm.id) : void hide(dm.id))}
-                  aria-label={group ? `Sair do grupo ${title}` : `Fechar conversa com ${title}`}
-                  className="grid h-6 w-6 place-items-center rounded text-text-muted opacity-0 transition hover:text-text-strong group-hover:opacity-100 focus-visible:opacity-100"
-                >
-                  {group ? <LogOut size={16} /> : <X size={16} />}
-                </button>
-              </Tooltip>
+              <BotaoDeIcone
+                rotulo={group ? `Sair do grupo ${title}` : `Fechar conversa com ${title}`}
+                icone={group ? <LogOut size={16} /> : <X size={16} />}
+                tamanho="sm"
+                onClick={() => (group ? void leaveGroup(dm.id) : void hide(dm.id))}
+                className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+              />
             </span>
           </div>
         );
@@ -475,7 +469,7 @@ export default function DMList() {
               {pendentes > 0 && (
                 <span
                   aria-label={`${pendentes} pendentes`}
-                  className="grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[11px] font-bold leading-none text-white"
+                  className="grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[11px] font-bold leading-none text-control-critical-primary-text-default"
                 >
                   {pendentes}
                 </span>
@@ -483,14 +477,16 @@ export default function DMList() {
             </button>
           </div>
           {buscaAberta && (
-            <input
+            <TextInput
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               type="search"
               aria-label="Encontrar ou começar uma conversa"
               placeholder="Encontrar ou começar uma conversa"
-              className="mt-2 h-[40px] w-full rounded-full bg-interactive-background-hover px-4 text-sm text-text-default outline-none placeholder:text-text-muted"
+              tamanho="sm"
+              classeDaCaixa="mt-2 w-full !h-[40px] !rounded-full !bg-interactive-background-hover !border-transparent !px-4"
+              className="!text-sm !text-text-default placeholder:!text-text-muted"
             />
           )}
         </div>
@@ -514,7 +510,7 @@ export default function DMList() {
   return (
     <aside className="flex w-[294px] shrink-0 flex-col bg-background-base-lowest">
       <div className="flex h-[49px] shrink-0 items-center border-b border-border-subtle px-2.5 shadow-elevation-low">
-        <input
+        <TextInput
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setBuscaFocada(true)}
@@ -522,12 +518,14 @@ export default function DMList() {
           type="search"
           aria-label="Encontrar ou começar uma conversa"
           placeholder="Encontrar ou começar uma conversa"
+          tamanho="sm"
           /* o campo é `hov` (#222225) e não `void`: medido no print do Discord
              `2026-09-04 102757` (x 46-77, y 42-71), lá ele CLAREIA sobre a
              coluna em vez de escurecer — e com a coluna em #121214 um campo
              Void Ink sumiria dentro dela */
+          classeDaCaixa="w-full !bg-interactive-background-hover !border-transparent !px-1.5"
           className={
-            "h-8 w-full rounded-lg bg-interactive-background-hover px-1.5 text-sm text-text-default outline-none placeholder:text-text-muted " +
+            "!text-sm !text-text-default placeholder:!text-text-muted " +
             (buscaFocada || query ? "text-left" : "text-center")
           }
         />

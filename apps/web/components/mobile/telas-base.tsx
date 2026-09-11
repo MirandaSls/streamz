@@ -27,6 +27,7 @@ import DMList from "@/components/layout/DMList";
 import GuildRail from "@/components/layout/GuildRail";
 import Avatar from "@/components/ui/Avatar";
 import IconeDeStatus from "@/components/ui/IconeDeStatus";
+import { Button } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { useAuth } from "@/stores/auth";
@@ -214,7 +215,11 @@ export function TelaVoce() {
           type="button"
           onClick={() => ui.openModal({ kind: "settings" })}
           aria-label="Configurações do usuário"
-          className="absolute right-3 top-3 grid h-[44px] w-[44px] place-items-center rounded-full bg-black/45 text-white"
+          // fica sobre o banner/imagem: o par bg/texto de "overlay secundário"
+          // (fundo escuro translúcido + ícone claro) é o token pensado para
+          // isso — diferente do `BotaoDeIcone`, aqui o fundo é permanente, não
+          // só no hover, e o primitivo não cobre esse caso
+          className="absolute right-3 top-3 grid h-[44px] w-[44px] place-items-center rounded-full bg-control-overlay-secondary-background-default text-control-overlay-secondary-icon-default"
         >
           <Settings size={22} />
         </button>
@@ -254,28 +259,26 @@ export function TelaVoce() {
         {/* microfone e áudio: os mesmos interruptores do card do desktop, aqui
             em botões largos porque não há hover que explique um ícone de 32px */}
         <div className="mt-3 flex gap-2">
-          <button
-            type="button"
+          <Button
+            variante={muted ? "critico-secundario" : "secundario"}
+            tamanho="md"
+            icone={muted ? <MicOff size={20} /> : <Mic size={20} />}
             onClick={toggleMute}
             aria-pressed={muted}
-            className={`flex h-[44px] flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-medium transition ${
-              muted ? "bg-status-danger/15 text-status-danger" : "bg-background-base-lower text-text-default"
-            }`}
+            className="h-[44px] flex-1 rounded-2xl"
           >
-            {muted ? <MicOff size={20} /> : <Mic size={20} />}
             {muted ? "Mudo" : "Microfone"}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variante={deafened ? "critico-secundario" : "secundario"}
+            tamanho="md"
+            icone={deafened ? <HeadphoneOff size={20} /> : <Headphones size={20} />}
             onClick={toggleDeafen}
             aria-pressed={deafened}
-            className={`flex h-[44px] flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-medium transition ${
-              deafened ? "bg-status-danger/15 text-status-danger" : "bg-background-base-lower text-text-default"
-            }`}
+            className="h-[44px] flex-1 rounded-2xl"
           >
-            {deafened ? <HeadphoneOff size={20} /> : <Headphones size={20} />}
             {deafened ? "Sem áudio" : "Áudio"}
-          </button>
+          </Button>
         </div>
 
         <h2 className="px-2 pb-1 pt-5 text-xs font-semibold uppercase tracking-wide text-text-muted">
@@ -366,17 +369,17 @@ function BotaoDeCartao({
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
+    <Button
+      variante="secundario"
+      tamanho="md"
+      icone={icone}
       onClick={onClick}
-      // 44 literal, não `h-10`: sobre a raiz de 15,5px `h-10` mede 38,75, e
-      // estes são os dois primeiros botões da aba "Você"
-      className="flex h-[44px] min-w-0 flex-1 items-center justify-center gap-2 rounded-lg bg-border-normal/60 px-3 text-sm font-medium text-text-default transition active:bg-border-normal"
+      // 44 literal, não `md` puro (40px): a raiz do app é 16px agora, então
+      // `md` já bate com o nominal, mas estes são os dois primeiros botões da
+      // aba "Você" e o alvo de toque pedido é 44
+      className="h-[44px] min-w-0 flex-1"
     >
-      <span className="shrink-0 text-text-subtle" aria-hidden="true">
-        {icone}
-      </span>
       <span className="truncate">{rotulo}</span>
-    </button>
+    </Button>
   );
 }

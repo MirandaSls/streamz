@@ -31,9 +31,10 @@
  * a falta dele.
  *
  * Tudo em px literal, e não na escala do Tailwind, porque **todo número aqui
- * significa alguma coisa**: a raiz do app é 15,5px e `h-4` entregaria 15,5 —
- * perto, mas por acidente, e `text-[10px]` viraria 10,3. Regra do §6.3 do
- * processo.
+ * significa alguma coisa**: a raiz do app é 16px (ADR-0009) e `h-4` entregaria
+ * 16px — perto do nosso 15 medido, mas por acidente, sem relação com a
+ * medida; `text-xs` da escala do Tailwind daria 12px, não os 10 medidos.
+ * Regra do §6.3 do processo.
  *
  * A cor é a de destaque do produto (`accent` sobre `accent-ink`), que é o que o
  * blurple `#5865F2` é lá: a única mancha saturada de uma coluna cinza.

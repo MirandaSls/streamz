@@ -2,6 +2,7 @@
 
 import { displayNameOf, type VoiceStateEvent } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
+import { Button } from "@/components/ui/primitivos";
 import {
   LIMITE_DE_AVATARES,
   alemDosAvatares,
@@ -118,13 +119,14 @@ export default function VistaDoCanalDeVoz({
             {textoDePresenca(estados.length)}
           </p>
 
-          <button
-            type="button"
-            onClick={onEntrar}
-            className="mt-6 h-10 rounded-lg bg-paper px-[18px] text-base font-medium text-input-background-default transition hover:brightness-90"
-          >
+          {/* Sem variante branca no primitivo: o botão do Discord aqui foge de
+              propósito da cor de marca (branco, não blurple/limão), mas o
+              conjunto de `Button` só tem primario/secundario/crítico/positivo/
+              link — `secundario` é o mais próximo (neutro, não citado como
+              marca). Ver "faltando" no cartão m57. */}
+          <Button variante="secundario" tamanho="md" onClick={onEntrar} className="mt-6">
             Entrar na chamada de voz
-          </button>
+          </Button>
         </div>
       </div>
     </div>

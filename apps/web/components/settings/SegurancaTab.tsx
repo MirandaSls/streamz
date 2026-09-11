@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Copy, Download, ShieldCheck, ShieldOff } from "@/components/ui/icones";
 import type { MfaSetup, MinhaConta } from "@streamz/shared";
 import { RadioCards, Section } from "@/components/ui/controls";
+import { Button } from "@/components/ui/primitivos";
 import { CampoDeTexto, Erro } from "@/components/settings/campos";
 import {
   usePrivacidade,
@@ -145,15 +146,16 @@ function BlocoDeDados({ conta }: { conta: MinhaConta | null }) {
             Um arquivo com a sua conta, o seu perfil e as suas sessões ativas.
           </p>
         </div>
-        <button
-          type="button"
+        <Button
+          variante="secundario"
+          tamanho="sm"
+          icone={<Download size={14} aria-hidden="true" />}
           disabled={ocupado}
           onClick={() => void baixar()}
-          className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded-[3px] bg-border-normal px-3 text-sm font-medium text-text-default hover:bg-border-strong disabled:opacity-50"
+          className="shrink-0 celular:h-[44px]"
         >
-          <Download size={14} aria-hidden="true" />
           {ocupado ? "Montando…" : "Baixar"}
-        </button>
+        </Button>
       </div>
     </Section>
   );
@@ -274,31 +276,34 @@ function BlocoDeMfa({
         </div>
         <div className="flex shrink-0 gap-2">
           {ligado && (
-            <button
-              type="button"
+            <Button
+              variante="secundario"
+              tamanho="sm"
               onClick={() => (regerando ? limpar() : (setDesligando(false), setRegerando(true)))}
-              className="h-8 celular:h-[44px] rounded-[3px] bg-border-normal px-3 text-sm font-medium text-text-default hover:bg-border-strong"
+              className="celular:h-[44px]"
             >
               {regerando ? "Cancelar" : "Novos códigos"}
-            </button>
+            </Button>
           )}
           {ligado ? (
-            <button
-              type="button"
+            <Button
+              variante="critico-secundario"
+              tamanho="sm"
               onClick={() => (desligando ? limpar() : (setRegerando(false), setDesligando(true)))}
-              className="h-8 celular:h-[44px] rounded-[3px] border border-status-danger px-3 text-sm font-medium text-status-danger transition hover:bg-status-danger hover:text-white"
+              className="celular:h-[44px]"
             >
               {desligando ? "Cancelar" : "Desativar"}
-            </button>
+            </Button>
           ) : (
-            <button
-              type="button"
+            <Button
+              variante="primario"
+              tamanho="sm"
               disabled={ocupado}
               onClick={() => (setup ? limpar() : void comecar())}
-              className="h-8 celular:h-[44px] rounded-[3px] bg-brand-500 px-3 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:opacity-50"
+              className="celular:h-[44px]"
             >
               {setup ? "Cancelar" : "Ativar"}
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -432,13 +437,9 @@ function CodigosDeRecuperacao({
       </ul>
       <div className="flex flex-wrap items-center gap-2">
         <BotaoCopiar texto={texto} rotulo="Copiar todos" />
-        <button
-          type="button"
-          onClick={baixar}
-          className="h-8 celular:h-[44px] rounded-[3px] bg-border-normal px-3 text-sm font-medium text-text-default hover:bg-border-strong"
-        >
+        <Button variante="secundario" tamanho="sm" onClick={baixar} className="celular:h-[44px]">
           Baixar .txt
-        </button>
+        </Button>
         <SecondaryButton onClick={aoFechar}>Já guardei</SecondaryButton>
       </div>
     </div>
@@ -448,8 +449,10 @@ function CodigosDeRecuperacao({
 function BotaoCopiar({ texto, rotulo }: { texto: string; rotulo: string }) {
   const [copiado, setCopiado] = useState(false);
   return (
-    <button
-      type="button"
+    <Button
+      variante="secundario"
+      tamanho="sm"
+      icone={<Copy size={14} aria-hidden="true" />}
       onClick={() => {
         void navigator.clipboard
           .writeText(texto)
@@ -459,10 +462,9 @@ function BotaoCopiar({ texto, rotulo }: { texto: string; rotulo: string }) {
           })
           .catch(() => ui.toast("Não foi possível copiar", "error"));
       }}
-      className="mt-2 flex h-8 celular:h-[44px] items-center gap-1.5 rounded-[3px] bg-border-normal px-3 text-sm font-medium text-text-default hover:bg-border-strong"
+      className="mt-2 celular:h-[44px]"
     >
-      <Copy size={14} aria-hidden="true" />
       {copiado ? "Copiado!" : rotulo}
-    </button>
+    </Button>
   );
 }

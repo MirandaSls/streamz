@@ -120,7 +120,7 @@ function Badge({ count }: { count: number }) {
   return (
     <span
       aria-label={`${count} ${count === 1 ? "menção" : "menções"}`}
-      className="pointer-events-none absolute -bottom-0.5 -right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[12px] font-bold leading-none text-white ring-[3px] ring-background-base-lowest"
+      className="pointer-events-none absolute -bottom-0.5 -right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[12px] font-bold leading-none text-control-critical-primary-text-default ring-[3px] ring-background-base-lowest"
     >
       {count > 99 ? "99+" : count}
     </span>

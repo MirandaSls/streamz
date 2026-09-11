@@ -2,7 +2,8 @@
 
 import { MAX_WELCOME_CHANNELS, MAX_WELCOME_DESCRIPTION } from "@streamz/shared";
 import { Select } from "@/components/ui/controls";
-import { ESTILO_AREA, ESTILO_ROTULO } from "@/components/settings/campos";
+import { Campo, Checkbox, TextArea } from "@/components/ui/primitivos";
+import { ESTILO_ROTULO } from "@/components/settings/campos";
 import { TituloDaPagina } from "@/components/settings/server/pagina";
 import { useOnboarding } from "@/components/settings/server/onboarding-form";
 import { useChannels } from "@/stores/channels";
@@ -76,18 +77,16 @@ export default function EngajamentoTab({ guildId }: { guildId: string }) {
       <div aria-hidden="true" className="mt-10 h-px bg-border-subtle" />
 
       <h2 className="mt-10 text-base font-semibold text-text-strong">Tela de boas-vindas</h2>
-      <label htmlFor="welcome-description" className={`${ESTILO_ROTULO} mt-4`}>
-        Mensagem de abertura
-      </label>
-      <textarea
-        id="welcome-description"
-        rows={3}
-        value={form.welcomeDescription ?? ""}
-        maxLength={MAX_WELCOME_DESCRIPTION}
-        onChange={(e) => patch({ welcomeDescription: e.target.value })}
-        placeholder="Conte em uma frase do que é este servidor."
-        className={ESTILO_AREA}
-      />
+      <Campo rotulo="Mensagem de abertura" htmlFor="welcome-description" className="mt-4">
+        <TextArea
+          id="welcome-description"
+          rows={3}
+          value={form.welcomeDescription ?? ""}
+          maxLength={MAX_WELCOME_DESCRIPTION}
+          onChange={(e) => patch({ welcomeDescription: e.target.value })}
+          placeholder="Conte em uma frase do que é este servidor."
+        />
+      </Campo>
 
       <p className={`${ESTILO_ROTULO} mt-6`}>Canais em destaque (até {MAX_WELCOME_CHANNELS})</p>
       <div className="flex flex-col gap-1">
@@ -95,18 +94,13 @@ export default function EngajamentoTab({ guildId }: { guildId: string }) {
           <p className="text-sm text-text-muted">Nenhum canal de texto ainda.</p>
         )}
         {textos.map((c) => (
-          <label
+          <Checkbox
             key={c.id}
-            className="flex h-9 cursor-pointer items-center gap-2 rounded-lg px-2 text-sm text-text-default hover:bg-interactive-background-hover"
-          >
-            <input
-              type="checkbox"
-              checked={form.welcomeChannelIds.includes(c.id)}
-              onChange={() => alternarDestaque(c.id)}
-              className="accent-brand-500"
-            />
-            #{c.name}
-          </label>
+            marcado={form.welcomeChannelIds.includes(c.id)}
+            aoMudar={() => alternarDestaque(c.id)}
+            rotulo={`#${c.name}`}
+            className="rounded-lg px-2 py-1.5 hover:bg-interactive-background-hover"
+          />
         ))}
       </div>
     </>

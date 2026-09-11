@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Soundboard } from "@/components/ui/icones";
-import Tooltip from "@/components/ui/Tooltip";
+import { BotaoDeIcone } from "@/components/ui/primitivos";
 import PainelDeSons from "@/components/voice/PainelDeSons";
 import { BotaoDeChamada } from "@/components/voice/controles-de-chamada";
 
@@ -42,23 +42,20 @@ export default function BotaoDeSons({
   return (
     <>
       {variante === "largo" ? (
-        <Tooltip label={label} className="min-w-0 flex-1">
-          <div ref={caixa} className="flex min-w-0 flex-1">
-            <button
-              type="button"
-              onClick={alternar}
-              aria-label={label}
-              aria-expanded={aberto}
-              className={`grid h-8 w-full place-items-center rounded-lg transition ${
-                aberto
-                  ? "bg-border-strong text-text-strong"
-                  : "bg-border-normal/60 text-text-subtle hover:bg-border-normal hover:text-text-strong"
-              }`}
-            >
-              <Soundboard size={20} />
-            </button>
-          </div>
-        </Tooltip>
+        // o wrapper continua sendo o retângulo do popover; o botão vira largura
+        // total via className (BotaoDeIcone por si é sempre quadrado)
+        <div ref={caixa} className="flex min-w-0 flex-1">
+          <BotaoDeIcone
+            rotulo={label}
+            icone={<Soundboard size={20} />}
+            onClick={alternar}
+            aria-expanded={aberto}
+            ativo={aberto}
+            comFundo
+            tamanho="md"
+            className="h-8 w-full"
+          />
+        </div>
       ) : (
         <div ref={caixa} className="flex">
           <BotaoDeChamada

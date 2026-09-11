@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { ArrowLeft, ChevronRight } from "@/components/ui/icones";
+import { BotaoDeIcone } from "@/components/ui/primitivos";
 
 /**
  * As peças pequenas do leiaute de celular: alvo de toque, cabeçalho de tela e
@@ -14,10 +15,11 @@ import { ArrowLeft, ChevronRight } from "@/components/ui/icones";
  * sempre — o que cresce é a área clicável em volta dele.
  *
  * **Os tamanhos daqui são literais (`h-[44px]`, `h-[56px]`), não `h-11`/`h-14`.**
- * A raiz do app é 15,5px (ver `globals.css`), então todo `rem` do Tailwind sai
- * 3% menor que o nominal: `h-11` mede **42,6px** e `h-14`, 54,25. Onde o número
- * é um piso de segurança ou uma medida tirada da captura do Discord, ler a
- * classe e assumir o valor dá errado — e dava: os alvos "de 44" mediam 43.
+ * A raiz do app é 16px (ver `globals.css`, ADR-0009) — com ela `h-11` já mede
+ * 44px e `h-14`, 56 —, mas o literal fica: o número aqui não é um passo da
+ * escala do Tailwind, é o piso de toque (HIG/Material) ou uma medida tirada
+ * da captura do Discord, e ler a classe genérica e assumir o valor continua
+ * errado se a raiz mudar de novo.
  */
 
 /** Botão de ícone do cabeçalho/rodapé: 44×44 de alvo, glifo no meio. */
@@ -35,17 +37,16 @@ export function BotaoDeToque({
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
+    <BotaoDeIcone
+      rotulo={label}
+      icone={children}
+      tamanho="lg"
+      ativo={ativo}
+      comFundo
       onClick={onClick}
-      aria-label={label}
-      aria-pressed={ativo || undefined}
-      className={`grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg transition active:bg-interactive-background-hover ${
-        ativo ? "text-text-strong" : "text-text-subtle"
-      } ${className}`}
-    >
-      {children}
-    </button>
+      // 44 literal (ver comentário do arquivo) sobre a caixa de 40 do `lg`
+      className={`h-[44px] w-[44px] ${className}`}
+    />
   );
 }
 

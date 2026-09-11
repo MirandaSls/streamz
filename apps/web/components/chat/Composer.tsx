@@ -53,7 +53,7 @@ import {
 import Autocomplete, { type ItemAutocomplete } from "@/components/chat/Autocomplete";
 import PickerPanel, { type PickerTab } from "@/components/media/PickerPanel";
 import Avatar from "@/components/ui/Avatar";
-import Tooltip from "@/components/ui/Tooltip";
+import { BotaoDeIcone, Tooltip } from "@/components/ui/primitivos";
 import { formatBytes } from "@/lib/format";
 import { api } from "@/lib/api";
 import { aplicarEscolha, detectarGatilho, mover, type Gatilho } from "@/lib/composer-autocomplete";
@@ -184,22 +184,18 @@ function SideButton({
   children: React.ReactNode;
 }) {
   return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        onClick={onClick}
-        onMouseEnter={onMouseEnter}
-        aria-label={label}
-        /* no celular o lado é literal pelo mesmo motivo da altura: `w-10` sobre
-           a raiz de 15,5px dá 38,75, e o botão do composer do Discord mede 40pt
-           (`MEDIDAS.md` §7) */
-        className={`grid place-items-center text-text-subtle transition hover:text-text-strong ${
-          baixo ? `h-[40px] w-[40px] ${ALVO_44}` : "h-[58px] w-10"
-        }`}
-      >
-        {children}
-      </button>
-    </Tooltip>
+    <BotaoDeIcone
+      rotulo={label}
+      icone={children}
+      onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      // `lg` já dá os 40×40 do celular; no desktop a fileira mede 58 de altura
+      // (medido no composer do Discord, `MEDIDAS.md` §7) — maior que qualquer
+      // tamanho do primitivo, daí o `!h-` para vencer de fora (mesmo recurso
+      // de `components/mobile/telas-base.tsx`)
+      tamanho="lg"
+      className={baixo ? ALVO_44 : "!h-[58px]"}
+    />
   );
 }
 
@@ -685,23 +681,26 @@ export default function Composer({
    * também o que devolve largura ao campo num telefone de 390px.
    */
   const botaoMais = (
-    <button
-      type="button"
+    <BotaoDeIcone
+      rotulo="Mais opções de envio"
+      icone={
+        // `+` liso, não o `CirclePlus`: o do Discord é marca de traço, sem o
+        // círculo cheio em volta. O `+` do Discord é desenhado pequeno dentro do
+        // próprio ativo: a tinta ocupa 58% do quadro, contra ~83% dos vizinhos —
+        // 30 × 0,58 ≈ 17,5, que é o glifo de 18 medido no composer.
+        <Plus size={30} />
+      }
       onClick={abrirMenuMais}
-      aria-label="Mais opções de envio"
-      // `ml-2.5` põe o glifo de 18 a 21px da borda esquerda da caixa, que é
-      // onde ele fica no Discord: 10 de margem + os 11 que sobram de cada lado
-      // dentro do alvo de 40
-      className={`grid shrink-0 place-items-center rounded-full text-text-subtle transition hover:text-text-strong ${
-        ehMobile ? `h-[40px] w-[40px] bg-interactive-background-hover ${ALVO_44}` : "ml-2.5 mr-4 mt-[9px] h-10 w-10"
+      // `lg` já dá os 40×40 dos dois leiautes; só o raio muda (o Discord usa
+      // círculo cheio aqui, não os 8px do primitivo) e por isso vence de fora
+      // com `!`. `ml-2.5` põe o glifo de 18 a 21px da borda esquerda da caixa,
+      // que é onde ele fica no Discord: 10 de margem + os 11 que sobram de
+      // cada lado dentro do alvo de 40.
+      tamanho="lg"
+      className={`!rounded-full ${
+        ehMobile ? `bg-interactive-background-hover ${ALVO_44}` : "ml-2.5 mr-4 mt-[9px]"
       }`}
-    >
-      {/* `+` liso, não o `CirclePlus`: o do Discord é marca de traço, sem o
-          círculo cheio em volta. O `+` do Discord é desenhado pequeno dentro do
-          próprio ativo: a tinta ocupa 58% do quadro, contra ~83% dos vizinhos —
-          30 × 0,58 ≈ 17,5, que é o glifo de 18 medido no composer. */}
-      <Plus size={30} />
-    </button>
+    />
   );
 
   return (
@@ -748,7 +747,7 @@ export default function Composer({
           // uma linha só, com rolagem horizontal: quebrar em várias linhas
           // empurrava a timeline para cima a cada arquivo
           <div
-            className={`flex overflow-x-auto border-b border-black/20 ${
+            className={`flex overflow-x-auto border-b border-border-subtle ${
               ehMobile ? "gap-2 p-2" : "gap-3 px-4 py-4"
             }`}
           >
@@ -882,7 +881,7 @@ export default function Composer({
 
           <div className="flex items-center pr-2">
             {modoLento && (
-              <Tooltip label={`Modo lento ligado (${slowmodeLabel(modoLento.segundos)})`}>
+              <Tooltip rotulo={`Modo lento ligado (${slowmodeLabel(modoLento.segundos)})`}>
                 <span
                   aria-live="polite"
                   className={`px-2 text-xs tabular-nums ${
@@ -953,14 +952,17 @@ export default function Composer({
             {/* Enviar: só no celular, e só quando há o que enviar. No desktop o
                 Enter é o botão, e um ícone permanente ali seria ruído. */}
             {ehMobile && (draft.trim().length > 0 || pendentes.length > 0 || prontos.length > 0) && (
-              <button
+              <BotaoDeIcone
+                rotulo="Enviar mensagem"
+                icone={<SendHorizonal size={20} />}
                 type="submit"
                 disabled={enviando}
-                aria-label="Enviar mensagem"
-                className={`mb-[9px] mr-[9px] mt-[9px] grid h-[40px] w-[40px] shrink-0 place-items-center self-end rounded-full bg-brand-500 text-control-primary-text-default transition disabled:opacity-50 ${ALVO_44}`}
-              >
-                <SendHorizonal size={20} />
-              </button>
+                tamanho="lg"
+                // fundo limão fixo (não é o hover do primitivo): vence de fora com
+                // `!`, e o texto sobre ele é escuro (`control-primary-text-default`,
+                // a regra de contraste do ADR-0009 para conteúdo sobre `brand-500`)
+                className={`mb-[9px] mr-[9px] mt-[9px] self-end !rounded-full !bg-brand-500 !text-control-primary-text-default ${ALVO_44}`}
+              />
             )}
           </div>
         </div>
@@ -1041,9 +1043,9 @@ function OverlayArrastar({ alvo, destino }: { alvo: HTMLElement | null; destino?
       className="pointer-events-none fixed z-[65] grid place-items-center rounded-lg border-2 border-dashed border-brand-500 bg-brand-500/20"
     >
       <span className="flex flex-col items-center gap-3 text-center">
-        <Upload size={56} strokeWidth={1.5} aria-hidden="true" className="text-white" />
-        <span className="text-2xl font-extrabold text-white">Arraste e solte para enviar</span>
-        {destino && <span className="text-sm text-white/80">em {destino}</span>}
+        <Upload size={56} strokeWidth={1.5} aria-hidden="true" className="text-icon-overlay-light" />
+        <span className="text-2xl font-extrabold text-text-overlay-light">Arraste e solte para enviar</span>
+        {destino && <span className="text-sm text-text-overlay-light/80">em {destino}</span>}
       </span>
     </div>,
     document.body,
@@ -1073,7 +1075,7 @@ function BotaoCartao({
   children: React.ReactNode;
 }) {
   return (
-    <Tooltip label={label}>
+    <Tooltip rotulo={label}>
       <button
         type="button"
         onClick={onClick}
@@ -1155,8 +1157,8 @@ function PreviaAnexo({
         gesto que o dedo não tem: num telefone as três ações do anexo — marcar
         spoiler, renomear e, principalmente, **remover** — simplesmente não
         existiam, e um arquivo escolhido por engano ia junto com a mensagem.
-        Três alvos de 31 (`h-8` na raiz de 15,5px) com 4 de folga dão 101, que
-        cabe nos 112 úteis do cartão compacto (daí `LADO_PREVIA_MOBILE` ser 128).
+        Três alvos de 32 (`h-8`) com 4 de folga dão 104, que cabe nos 112
+        úteis do cartão compacto (daí `LADO_PREVIA_MOBILE` ser 128).
       */}
       <span
         className={`absolute right-2 top-2 gap-1 ${

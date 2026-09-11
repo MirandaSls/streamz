@@ -332,7 +332,7 @@ export default function InboxPopover({
                             {c.channelName ?? "Conversa"}
                           </span>
                           {c.mentionCount > 0 && (
-                            <span className="grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[11px] font-bold text-white">
+                            <span className="grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[11px] font-bold text-control-critical-primary-text-default">
                               {c.mentionCount}
                             </span>
                           )}
@@ -405,7 +405,7 @@ function BadgeDaCaixa({
   return (
     <span
       aria-hidden="true"
-      className={`pointer-events-none absolute -right-2 top-0 grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[12px] font-bold leading-none text-white ring-[3px] ${anel}`}
+      className={`pointer-events-none absolute -right-2 top-0 grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[12px] font-bold leading-none text-control-critical-primary-text-default ring-[3px] ${anel}`}
     >
       {rotuloDoContador(estado.total)}
     </span>

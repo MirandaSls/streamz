@@ -4,9 +4,8 @@ import { useEffect, useState } from "react";
 import { Copy, Trash2 } from "@/components/ui/icones";
 import { displayNameOf, type InviteDetail } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
-import Tooltip from "@/components/ui/Tooltip";
+import { BotaoDeIcone, Button, Tooltip } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
-import { BOTAO_ACENTO } from "@/components/settings/server/pagina";
 import { horaCompleta } from "@/lib/format";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
@@ -80,14 +79,15 @@ export default function InvitesPanel({ guildId }: { guildId: string }) {
         <h3 className="text-xs font-bold uppercase tracking-[0.02em] text-text-muted">
           Links de convite ativos
         </h3>
-        <button
-          type="button"
+        <Button
+          variante="primario"
+          tamanho="md"
           disabled={busy}
           onClick={() => void create()}
-          className={`h-10 celular:h-[44px] ${BOTAO_ACENTO}`}
+          className="celular:h-[44px]"
         >
           {busy ? "Criando…" : "Criar link de convite"}
-        </button>
+        </Button>
       </div>
 
       {/*
@@ -181,26 +181,21 @@ export default function InvitesPanel({ guildId }: { guildId: string }) {
                         "revogar" ficavam invisíveis, e a lista de convites não tinha
                         nenhuma ação alcançável pelo dedo. */}
                     <span className="flex items-center justify-end gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100 celular:opacity-100">
-                      <Tooltip label="Copiar código">
-                        <button
-                          type="button"
-                          onClick={() => void navigator.clipboard?.writeText(i.code)}
-                          aria-label={`Copiar ${i.code}`}
-                          className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded-lg text-text-muted transition hover:bg-border-normal hover:text-text-strong"
-                        >
-                          <Copy size={16} />
-                        </button>
-                      </Tooltip>
-                      <Tooltip label="Revogar">
-                        <button
-                          type="button"
-                          onClick={() => void revoke(i.code)}
-                          aria-label={`Revogar ${i.code}`}
-                          className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded-lg text-text-muted transition hover:bg-border-normal hover:text-status-danger"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </Tooltip>
+                      <BotaoDeIcone
+                        rotulo={`Copiar ${i.code}`}
+                        icone={<Copy size={16} />}
+                        comFundo
+                        onClick={() => void navigator.clipboard?.writeText(i.code)}
+                        className="celular:h-[44px] celular:w-[44px]"
+                      />
+                      <BotaoDeIcone
+                        rotulo={`Revogar ${i.code}`}
+                        icone={<Trash2 size={16} />}
+                        comFundo
+                        perigo
+                        onClick={() => void revoke(i.code)}
+                        className="celular:h-[44px] celular:w-[44px]"
+                      />
                     </span>
                   </td>
                 </tr>
@@ -230,8 +225,10 @@ function Contagem({ ate, agora }: { ate: string; agora: number }) {
   const minutos = Math.floor((restante % 3600) / 60);
   const segundos = restante % 60;
   return (
-    <time dateTime={ate} title={horaCompleta(ate)} className="font-mono tabular-nums">
-      {dd(dias)}:{dd(horas)}:{dd(minutos)}:{dd(segundos)}
-    </time>
+    <Tooltip rotulo={horaCompleta(ate)}>
+      <time dateTime={ate} className="font-mono tabular-nums">
+        {dd(dias)}:{dd(horas)}:{dd(minutos)}:{dd(segundos)}
+      </time>
+    </Tooltip>
   );
 }

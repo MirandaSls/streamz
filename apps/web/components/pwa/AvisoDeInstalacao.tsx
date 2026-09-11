@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { BotaoDeToque } from "@/components/mobile/pecas";
 import Marca from "@/components/ui/Marca";
 import { Upload, X } from "@/components/ui/icones";
+import { Button } from "@/components/ui/primitivos";
 import { isTauri } from "@/lib/desktop";
 import {
   avisoDeInstalacao,
@@ -185,13 +186,9 @@ export default function AvisoDeInstalacao() {
           )}
         </div>
         {qual === "chrome" && (
-          <button
-            type="button"
-            onClick={() => void instalar()}
-            className="h-[36px] shrink-0 rounded-lg bg-brand-500 px-3 text-sm font-semibold text-control-primary-text-default transition active:bg-control-primary-background-active"
-          >
+          <Button variante="primario" tamanho="sm" onClick={() => void instalar()} className="shrink-0">
             Instalar
-          </button>
+          </Button>
         )}
         <BotaoDeToque label="Dispensar" onClick={dispensar} className="-mr-1">
           <X size={18} />

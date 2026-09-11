@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Browser, Laptop, LogOut, Monitor, Smartphone, type Icone } from "@/components/ui/icones";
 import { classificarDispositivo, type SessaoView, type TipoDeDispositivo } from "@streamz/shared";
 import { EmBreve, Section } from "@/components/ui/controls";
+import { Button } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { isApiError } from "@/lib/api-error";
 import { useT } from "@/lib/i18n";
@@ -101,27 +102,30 @@ export default function SessoesTab() {
                 className="flex items-center gap-3 border-b border-border-subtle py-3 last:border-b-0"
               >
                 <LinhaDeSessao sessao={sessao} />
-                <button
-                  type="button"
+                <Button
+                  variante="critico-secundario"
+                  tamanho="sm"
+                  icone={<LogOut size={16} aria-hidden="true" />}
                   onClick={() => void encerrar(sessao.id)}
-                  className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded-[3px] px-2 text-sm font-medium text-status-danger transition hover:bg-status-danger hover:text-white"
+                  className="shrink-0 celular:h-[44px]"
                 >
-                  <LogOut size={16} aria-hidden="true" />
                   {t("sessoes.encerrar")}
-                </button>
+                </Button>
               </div>
             ))
           )}
 
           {outras.length > 0 && (
-            <button
-              type="button"
+            <Button
+              variante="critico"
+              tamanho="md"
+              larguraTotal
+              icone={<LogOut size={16} aria-hidden="true" />}
               onClick={() => void encerrarTodas()}
-              className="mt-5 flex h-10 celular:h-[44px] w-full items-center justify-center gap-2 rounded-[3px] bg-status-danger text-sm font-medium text-white transition hover:bg-control-critical-primary-background-hover"
+              className="mt-5 celular:h-[44px]"
             >
-              <LogOut size={16} aria-hidden="true" />
               {t("sessoes.encerrarTudo")}
-            </button>
+            </Button>
           )}
         </Section>
       )}

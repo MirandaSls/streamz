@@ -4,6 +4,7 @@ import { useState } from "react";
 import Dialog from "@/components/modals/Dialog";
 import Avatar from "@/components/ui/Avatar";
 import { LogOut, MoreHorizontal, Trash2 } from "@/components/ui/icones";
+import { BotaoDeIcone, Button, Tooltip } from "@/components/ui/primitivos";
 import { LIMITE_DE_CONTAS, cabeMaisUma, lerCofreDoDisco, type ContaGuardada } from "@/lib/contas";
 import { esquecerConta, sairDaConta, trocarDeConta } from "@/lib/troca-de-contas";
 import { useVoice } from "@/stores/voice";
@@ -23,10 +24,11 @@ import { ui, useUI } from "@/stores/ui";
  *   cartão 538×78 → 430×62, raio 8, avatar de 40 com 11 de folga em volta;
  *   nome a 12 do avatar; "..." com o centro a 39 da borda direita do cartão;
  *   botão largo 538×47 → 430×38, a 27 abaixo do cartão.
- * Os `p-3`/`gap-2.5`/`h-10` do Tailwind caem em 11,6/9,7/38,8 porque a raiz do
- * app é de 15,5px (todo `rem` encolhe 3%) — é a mesma correção registrada no
- * `ProfilePopover`, e é por ela que os tokens batem com o print em vez de
- * precisarem de valores fixos.
+ * Os `p-3`/`gap-2.5`/`h-10` do Tailwind caíam em 11,6/9,7/38,8 porque a raiz do
+ * app era de 15,5px no print (todo `rem` encolhia 3%) — a raiz subiu para 16px
+ * depois (ADR-0009), mas os números abaixo continuam os do recorte original;
+ * é a mesma correção registrada no `ProfilePopover`, e é por ela que os tokens
+ * batiam com o print em vez de precisarem de valores fixos.
  *
  * O recorte foi reamostrado antes de chegar aqui (os dois campos idênticos do
  * print irmão medem 55 e 50), então cada número tem ±1 de incerteza.
@@ -171,33 +173,38 @@ export default function GerenciarContasModal() {
                     </p>
                   )}
                 </div>
-                <button
-                  type="button"
-                  aria-label={`Opções de ${conta.user.username}`}
+                <BotaoDeIcone
+                  rotulo={`Opções de ${conta.user.username}`}
+                  icone={<MoreHorizontal size={20} />}
                   aria-haspopup="menu"
                   onClick={(e) => {
                     e.stopPropagation();
                     abrirMenu(conta, e.currentTarget);
                   }}
-                  className="mr-3 grid h-8 celular:h-[44px] w-8 celular:w-[44px] shrink-0 place-items-center rounded text-text-subtle transition hover:text-text-strong"
-                >
-                  <MoreHorizontal size={20} />
-                </button>
+                  className="mr-3 celular:h-[44px] celular:w-[44px]"
+                />
               </div>
             </li>
           );
         })}
       </ul>
 
-      <button
-        type="button"
-        disabled={cheio}
-        onClick={() => openModal({ kind: "adicionarConta", voltar: true })}
-        title={cheio ? `Limite de ${LIMITE_DE_CONTAS} contas por dispositivo` : undefined}
-        className="mt-7 h-10 celular:h-[44px] w-full rounded-lg bg-border-normal text-base font-medium text-text-strong transition hover:bg-border-strong disabled:cursor-not-allowed disabled:opacity-50"
+      <Tooltip
+        rotulo={`Limite de ${LIMITE_DE_CONTAS} contas por dispositivo`}
+        desabilitado={!cheio}
+        className="w-full"
       >
-        Adicionar uma conta
-      </button>
+        <Button
+          variante="secundario"
+          tamanho="md"
+          larguraTotal
+          disabled={cheio}
+          onClick={() => openModal({ kind: "adicionarConta", voltar: true })}
+          className="mt-7 celular:h-[44px]"
+        >
+          Adicionar uma conta
+        </Button>
+      </Tooltip>
     </Dialog>
   );
 }

@@ -9,9 +9,8 @@ import {
   displayNameOf,
 } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
-import Tooltip from "@/components/ui/Tooltip";
+import { BotaoDeIcone, Button } from "@/components/ui/primitivos";
 import {
-  BOTAO_ACENTO,
   TABELA_CABECALHO,
   TituloDaPagina,
 } from "@/components/settings/server/pagina";
@@ -69,14 +68,16 @@ export default function EmojiTab({ guildId }: { guildId: string }) {
         titulo="Emoji"
         subtitulo={`Emojis aparecem digitando :nome: em qualquer canal. Até ${MAX_EMOJIS_PER_GUILD} por servidor; PNG, GIF ou WebP de até ${Math.round(MAX_CUSTOM_EMOJI_SIZE / 1024)} KB e ${MAX_CUSTOM_EMOJI_DIMENSION}×${MAX_CUSTOM_EMOJI_DIMENSION}px.`}
         acao={
-          <button
-            type="button"
-            disabled={enviando || emojis.length >= MAX_EMOJIS_PER_GUILD}
+          <Button
+            variante="primario"
+            tamanho="md"
+            carregando={enviando}
+            disabled={emojis.length >= MAX_EMOJIS_PER_GUILD}
             onClick={() => inputRef.current?.click()}
-            className={`h-10 celular:h-[44px] ${BOTAO_ACENTO}`}
+            className="celular:h-[44px]"
           >
-            {enviando ? "Enviando…" : "Enviar emoji"}
-          </button>
+            Enviar emoji
+          </Button>
         }
       />
 
@@ -163,8 +164,12 @@ export default function EmojiTab({ guildId }: { guildId: string }) {
                   </td>
                   <td>
                     <span className="flex items-center justify-end gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100 celular:opacity-100">
-                      <AcaoDaLinha
-                        label="Renomear"
+                      <BotaoDeIcone
+                        rotulo="Renomear"
+                        icone={<Pencil size={16} />}
+                        tamanho="md"
+                        comFundo
+                        className="celular:h-[44px] celular:w-[44px]"
                         onClick={async () => {
                           const nome = await ui.prompt({
                             title: "Novo nome",
@@ -179,12 +184,14 @@ export default function EmojiTab({ guildId }: { guildId: string }) {
                             ui.toast(errorMessage(e, "Não foi possível renomear"), "error");
                           }
                         }}
-                      >
-                        <Pencil size={16} />
-                      </AcaoDaLinha>
-                      <AcaoDaLinha
-                        label="Apagar"
-                        danger
+                      />
+                      <BotaoDeIcone
+                        rotulo="Apagar"
+                        icone={<Trash2 size={16} />}
+                        tamanho="md"
+                        comFundo
+                        perigo
+                        className="celular:h-[44px] celular:w-[44px]"
                         onClick={async () => {
                           const ok = await ui.confirm({
                             title: `Apagar :${emoji.name}:?`,
@@ -200,9 +207,7 @@ export default function EmojiTab({ guildId }: { guildId: string }) {
                             ui.toast(errorMessage(e, "Não foi possível apagar"), "error");
                           }
                         }}
-                      >
-                        <Trash2 size={16} />
-                      </AcaoDaLinha>
+                      />
                     </span>
                   </td>
                 </tr>
@@ -212,32 +217,5 @@ export default function EmojiTab({ guildId }: { guildId: string }) {
         </table>
       </div>
     </>
-  );
-}
-
-function AcaoDaLinha({
-  label,
-  onClick,
-  danger = false,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  danger?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        onClick={onClick}
-        aria-label={label}
-        className={`grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded-lg text-text-muted transition hover:bg-border-normal ${
-          danger ? "hover:text-status-danger" : "hover:text-text-strong"
-        }`}
-      >
-        {children}
-      </button>
-    </Tooltip>
   );
 }

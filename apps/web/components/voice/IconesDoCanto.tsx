@@ -1,7 +1,7 @@
 "use client";
 
 import { Maximize, Minimize } from "@/components/ui/icones";
-import Tooltip from "@/components/ui/Tooltip";
+import { BotaoDeIcone } from "@/components/ui/primitivos";
 
 /**
  * Os ícones do canto inferior direito do palco.
@@ -34,17 +34,13 @@ export default function IconesDoCanto({
         visivel ? "opacity-100" : "pointer-events-none opacity-0"
       }`}
     >
-      <Tooltip label={telaCheia ? "Sair da tela cheia" : "Tela cheia"}>
-        <button
-          type="button"
-          onClick={onTelaCheia}
-          aria-label={telaCheia ? "Sair da tela cheia" : "Tela cheia"}
-          aria-pressed={telaCheia}
-          className="grid h-9 w-9 place-items-center rounded-[4px] text-text-subtle transition hover:bg-white/10 hover:text-text-strong"
-        >
-          {telaCheia ? <Minimize size={22} /> : <Maximize size={22} />}
-        </button>
-      </Tooltip>
+      <BotaoDeIcone
+        rotulo={telaCheia ? "Sair da tela cheia" : "Tela cheia"}
+        icone={telaCheia ? <Minimize size={22} /> : <Maximize size={22} />}
+        ativo={telaCheia}
+        comFundo
+        onClick={onTelaCheia}
+      />
     </div>
   );
 }

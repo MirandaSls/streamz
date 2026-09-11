@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import { Mic, MicOff, Monitor, RefreshCw, Video, VideoOff, VolumeX, Wifi } from "@/components/ui/icones";
 import type { AdminCallParticipant } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
+import { Button, Tooltip } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { Estado, LocalDaChamada, NomeDoUsuario, duracao, usePainel } from "./comuns";
 
@@ -29,14 +30,15 @@ export default function AdminChamadasTab() {
         <p className="text-sm text-text-muted">
           Atualiza sozinho a cada 5 segundos. Sai da lista quem desliga.
         </p>
-        <button
-          type="button"
+        <Button
+          variante="secundario"
+          tamanho="sm"
+          icone={<RefreshCw size={14} aria-hidden="true" />}
           onClick={recarregar}
-          className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded-[3px] px-2 text-sm font-medium text-text-subtle transition hover:bg-interactive-background-hover hover:text-text-strong"
+          className="celular:h-[44px]"
         >
-          <RefreshCw size={14} aria-hidden="true" />
           Atualizar
-        </button>
+        </Button>
       </div>
 
       <Estado
@@ -118,9 +120,11 @@ function Sinais({ p }: { p: AdminCallParticipant }) {
 
 function Sinal({ icone, rotulo, tom }: { icone: React.ReactNode; rotulo: string; tom: string }) {
   return (
-    <span className={tom} title={rotulo}>
-      <span className="sr-only">{rotulo}</span>
-      <span aria-hidden="true">{icone}</span>
-    </span>
+    <Tooltip rotulo={rotulo}>
+      <span className={tom}>
+        <span className="sr-only">{rotulo}</span>
+        <span aria-hidden="true">{icone}</span>
+      </span>
+    </Tooltip>
   );
 }

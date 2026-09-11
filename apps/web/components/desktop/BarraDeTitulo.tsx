@@ -5,7 +5,7 @@ import HeaderIcon from "@/components/chat/HeaderIcon";
 import InboxPopover from "@/components/chat/InboxPopover";
 import { Amigos, ArrowLeft, ArrowRight, Download, HelpCircle } from "@/components/ui/icones";
 import Marca from "@/components/ui/Marca";
-import Tooltip from "@/components/ui/Tooltip";
+import { Tooltip } from "@/components/ui/primitivos";
 import { bloquearMenuNativo, isTauri } from "@/lib/desktop";
 import { useFriends } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
@@ -220,7 +220,9 @@ export function Controle({
       onMouseDown={(e) => e.preventDefault()}
       tabIndex={-1}
       className={`grid h-full w-8 place-items-center outline-none transition ${
-        fechar ? "hover:bg-status-danger hover:text-white" : "hover:bg-interactive-background-hover hover:text-text-strong"
+        fechar
+          ? "hover:bg-status-danger hover:text-control-critical-primary-text-default"
+          : "hover:bg-interactive-background-hover hover:text-text-strong"
       }`}
     >
       <svg
@@ -251,7 +253,7 @@ export function Controle({
 function BotaoDeAtualizacao({ atualizacao }: { atualizacao: Atualizacao }) {
   const rotulo = `Atualização disponível: v${atualizacao.versao ?? "?"}`;
   return (
-    <Tooltip label={rotulo} side="bottom">
+    <Tooltip rotulo={rotulo} lado="bottom">
       <button
         type="button"
         aria-label={rotulo}

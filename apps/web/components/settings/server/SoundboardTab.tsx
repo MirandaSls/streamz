@@ -8,9 +8,8 @@ import {
   displayNameOf,
 } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
-import Tooltip from "@/components/ui/Tooltip";
+import { Button, BotaoDeIcone } from "@/components/ui/primitivos";
 import {
-  BOTAO_ACENTO,
   TABELA_CABECALHO,
   TituloDaPagina,
 } from "@/components/settings/server/pagina";
@@ -47,14 +46,15 @@ export default function SoundboardTab({ guildId }: { guildId: string }) {
         titulo="Painel de efeitos sonoros"
         subtitulo={`Sons que qualquer um da chamada toca para todo mundo ouvir. Até ${MAX_SOUNDBOARD_POR_GUILD} por servidor; MP3, OGG ou WAV de até ${KILOBYTES} KB e ${SEGUNDOS} segundos.`}
         acao={
-          <button
-            type="button"
+          <Button
+            variante="primario"
+            tamanho="md"
             disabled={sons.length >= MAX_SOUNDBOARD_POR_GUILD}
             onClick={() => ui.openModal({ kind: "adicionarSom", guildId })}
-            className={`h-10 celular:h-[44px] ${BOTAO_ACENTO}`}
+            className="celular:h-[44px]"
           >
             Adicionar som
-          </button>
+          </Button>
         }
       />
 
@@ -128,29 +128,28 @@ export default function SoundboardTab({ guildId }: { guildId: string }) {
                   </td>
                   <td>
                     <span className="flex items-center justify-end gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100 celular:opacity-100">
-                      <Tooltip label="Remover">
-                        <button
-                          type="button"
-                          aria-label="Remover"
-                          onClick={async () => {
-                            const ok = await ui.confirm({
-                              title: `Remover "${som.name}"?`,
-                              message: "O som sai do painel de todo mundo do servidor.",
-                              confirmLabel: "Remover",
-                              danger: true,
-                            });
-                            if (!ok) return;
-                            try {
-                              await api.deleteSound(guildId, som.id);
-                            } catch (e) {
-                              ui.toast(errorMessage(e, "Não foi possível remover"), "error");
-                            }
-                          }}
-                          className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded-lg text-text-muted transition hover:bg-border-normal hover:text-status-danger"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </Tooltip>
+                      <BotaoDeIcone
+                        rotulo="Remover"
+                        icone={<Trash2 size={16} />}
+                        tamanho="md"
+                        comFundo
+                        perigo
+                        onClick={async () => {
+                          const ok = await ui.confirm({
+                            title: `Remover "${som.name}"?`,
+                            message: "O som sai do painel de todo mundo do servidor.",
+                            confirmLabel: "Remover",
+                            danger: true,
+                          });
+                          if (!ok) return;
+                          try {
+                            await api.deleteSound(guildId, som.id);
+                          } catch (e) {
+                            ui.toast(errorMessage(e, "Não foi possível remover"), "error");
+                          }
+                        }}
+                        className="celular:h-[44px] celular:w-[44px]"
+                      />
                     </span>
                   </td>
                 </tr>

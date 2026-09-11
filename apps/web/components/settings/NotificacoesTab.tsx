@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ChevronRight } from "@/components/ui/icones";
 import { type NotificationLevel } from "@streamz/shared";
 import { RadioCards, Row, Section, Switch, Toggle } from "@/components/ui/controls";
+import { BotaoDeIcone, Button } from "@/components/ui/primitivos";
 import { SONS, useSons, type NomeDeSom } from "@/stores/sons";
 import { useT } from "@/lib/i18n";
 import { tocarSom } from "@/lib/ringtone";
@@ -133,13 +134,14 @@ function BlocoDeSons() {
             key={som.nome}
             label={som.rotulo}
             hint={
-              <button
-                type="button"
+              <Button
+                variante="link"
+                tamanho="xs"
                 onClick={() => ouvir(som.nome)}
-                className="text-text-link hover:underline celular:inline-flex celular:min-h-[44px] celular:items-center"
+                className="!h-auto !min-w-0 !px-0 celular:!inline-flex celular:!min-h-[44px] celular:items-center"
               >
                 Prévia do som
-              </button>
+              </Button>
             }
             control={
               <Switch
@@ -163,19 +165,23 @@ function BlocoDeSons() {
             .join(", ")
             .concat(escondidos.length > 3 ? " e mais" : "")}
           control={
-            <button
-              type="button"
+            <BotaoDeIcone
+              rotulo={aberto ? "Mostrar menos sons" : "Mostrar mais sons"}
               aria-expanded={aberto}
               onClick={() => setAberto((v) => !v)}
-              aria-label={aberto ? "Mostrar menos sons" : "Mostrar mais sons"}
-              className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded-[4px] text-text-subtle transition hover:bg-interactive-background-hover hover:text-text-strong"
-            >
-              <ChevronRight
-                size={18}
-                aria-hidden="true"
-                className={`transition-transform ${aberto ? "-rotate-90" : "rotate-90"}`}
-              />
-            </button>
+              tamanho="md"
+              comFundo
+              // a linha já diz "mostrar mais/menos sons" — dica repetiria o óbvio
+              semDica
+              className="celular:h-[44px] celular:w-[44px]"
+              icone={
+                <ChevronRight
+                  size={18}
+                  aria-hidden="true"
+                  className={`transition-transform ${aberto ? "-rotate-90" : "rotate-90"}`}
+                />
+              }
+            />
           }
         />
       )}

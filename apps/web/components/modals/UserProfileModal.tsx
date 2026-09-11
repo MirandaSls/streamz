@@ -10,6 +10,7 @@ import {
 } from "@streamz/shared";
 import Dialog from "@/components/modals/Dialog";
 import Avatar from "@/components/ui/Avatar";
+import { BotaoDeIcone, Button } from "@/components/ui/primitivos";
 import TagDeBot from "@/components/ui/TagDeBot";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
@@ -125,7 +126,7 @@ export default function UserProfileModal({
           ) : (
             <div
               className="h-[120px] w-full"
-              style={{ backgroundColor: profile.bannerColor ?? "#9be31f" }}
+              style={{ backgroundColor: profile.bannerColor ?? "var(--brand-500)" }}
             />
           )}
 
@@ -136,36 +137,38 @@ export default function UserProfileModal({
           <div className="absolute right-4 top-4 flex items-center gap-2 celular:left-4 celular:flex-wrap celular:justify-end">
             {!euMesmo && (
               <>
-                <button
-                  type="button"
+                <Button
+                  variante="primario"
+                  tamanho="sm"
+                  icone={<MessageSquare size={16} aria-hidden="true" />}
                   onClick={() => {
                     closeModal();
                     void openWith(user.id);
                   }}
-                  className="flex h-8 celular:h-[44px] items-center gap-2 rounded-[3px] bg-brand-500 px-3 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover"
+                  className="celular:h-[44px]"
                 >
-                  <MessageSquare size={16} aria-hidden="true" />
                   Enviar mensagem
-                </button>
+                </Button>
                 {profile.relationship === "none" && (
-                  <button
-                    type="button"
+                  <Button
+                    variante="secundario"
+                    tamanho="sm"
+                    icone={<UserPlus size={16} aria-hidden="true" />}
                     onClick={() => void send(user.username)}
-                    className="flex h-8 celular:h-[44px] items-center gap-2 rounded-[3px] bg-background-base-lowest px-3 text-sm font-medium text-text-default transition hover:bg-interactive-background-hover"
+                    className="celular:h-[44px]"
                   >
-                    <UserPlus size={16} aria-hidden="true" />
                     Adicionar amigo
-                  </button>
+                  </Button>
                 )}
-                <button
-                  type="button"
-                  onClick={(e) => abrirMenu(e.currentTarget)}
-                  aria-label="Mais opções"
+                <BotaoDeIcone
+                  rotulo="Mais opções"
+                  icone={<MoreHorizontal size={18} />}
+                  tamanho="md"
+                  comFundo
                   aria-haspopup="menu"
-                  className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded-[3px] bg-background-base-lowest text-text-default transition hover:bg-interactive-background-hover"
-                >
-                  <MoreHorizontal size={18} />
-                </button>
+                  onClick={(e) => abrirMenu(e.currentTarget)}
+                  className="bg-background-base-lowest celular:h-[44px] celular:w-[44px]"
+                />
               </>
             )}
           </div>

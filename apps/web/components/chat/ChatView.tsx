@@ -15,6 +15,7 @@ import ReplyBar from "@/components/chat/ReplyBar";
 import ThreadsPopover from "@/components/chat/ThreadsPopover";
 import TypingIndicator from "@/components/chat/TypingIndicator";
 import { ultimaMinhaMensagem } from "@/components/chat/ultima-minha";
+import { Button, Tooltip } from "@/components/ui/primitivos";
 import { useSlowmode } from "@/hooks/useSlowmode";
 import { useAuth } from "@/stores/auth";
 import { useActiveChannel } from "@/stores/channels";
@@ -147,16 +148,16 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
             Este canal foi marcado como sensível. O conteúdo pode não ser apropriado
             para todo mundo.
           </p>
-          <button
-            type="button"
+          <Button
+            variante="primario"
             onClick={() => {
               confirmar(channel.id);
               setLiberado((ids) => [...ids, channel.id]);
             }}
-            className="mt-6 h-[38px] rounded-[3px] bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover"
+            className="mt-6"
           >
             Continuar mesmo assim
-          </button>
+          </Button>
         </div>
       </Raiz>
     );
@@ -175,14 +176,15 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
         title={name}
         subtitle={
           channel.topic ? (
-            <button
-              type="button"
-              onClick={() => ui.openModal({ kind: "channelTopic", channelId: channel.id })}
-              title="Ver o tópico completo"
-              className="max-w-[40vw] truncate text-left hover:text-text-default"
-            >
-              {channel.topic}
-            </button>
+            <Tooltip rotulo="Ver o tópico completo">
+              <button
+                type="button"
+                onClick={() => ui.openModal({ kind: "channelTopic", channelId: channel.id })}
+                className="max-w-[40vw] truncate text-left hover:text-text-default"
+              >
+                {channel.topic}
+              </button>
+            </Tooltip>
           ) : undefined
         }
         searchLabel={`Buscar mensagens em ${name}`}

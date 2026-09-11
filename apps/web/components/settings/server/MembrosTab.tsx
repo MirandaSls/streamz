@@ -19,13 +19,14 @@ import {
   type GuildMemberView,
 } from "@streamz/shared";
 import { Select } from "@/components/ui/controls";
-import { ESTILO_CAMPO } from "@/components/settings/campos";
 import {
-  BOTAO_PERIGO,
-  BOTAO_SECUNDARIO,
-  TABELA_CABECALHO,
-  TituloDaPagina,
-} from "@/components/settings/server/pagina";
+  BotaoDeIcone,
+  Button,
+  Checkbox,
+  Select as SelectPrimitivo,
+  TextInput,
+} from "@/components/ui/primitivos";
+import { TABELA_CABECALHO, TituloDaPagina } from "@/components/settings/server/pagina";
 import {
   ORDENS,
   POR_PAGINA,
@@ -194,13 +195,8 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
         {/* a busca ocupa a linha inteira quando a fileira quebra */}
         {/* `flex-none w-full` e não só `basis-full`: com o `flex-1` ao lado, o
             `basis` perdia e a busca ficava com 110px mostrando "P…". */}
-        <div className="relative min-w-0 flex-1 max-md:basis-full celular:w-full celular:flex-none">
-          <Search
-            size={14}
-            aria-hidden="true"
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted"
-          />
-          <input
+        <div className="min-w-0 flex-1 max-md:basis-full celular:w-full celular:flex-none">
+          <TextInput
             value={busca}
             onChange={(e) => {
               setBusca(e.target.value);
@@ -208,7 +204,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
             }}
             placeholder="Pesquisar pelo nome de usuário"
             aria-label="Pesquisar membros"
-            className={`${ESTILO_CAMPO} pl-8`}
+            prefixo={<Search size={14} aria-hidden="true" className="text-text-muted" />}
           />
         </div>
         <div className="w-[180px] shrink-0 celular:w-full">
@@ -226,25 +222,25 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
             emptyLabel="Todos os cargos"
           />
         </div>
-        <button
-          type="button"
+        <Button
+          variante="secundario"
           onClick={abrirOrdenacao}
           aria-haspopup="menu"
-          className={`flex h-10 celular:h-[44px] items-center gap-2 ${BOTAO_SECUNDARIO}`}
+          // seta dupla vertical: o vocabulário só tem a horizontal, girada
+          icone={<ArrowLeftRight size={16} aria-hidden="true" className="rotate-90" />}
+          className="celular:h-[44px]"
         >
-          {/* seta dupla vertical: o vocabulário só tem a horizontal, girada */}
-          <ArrowLeftRight size={16} aria-hidden="true" className="rotate-90" />
           Ordenar
-        </button>
+        </Button>
         {podeExpulsar && (
-          <button
-            type="button"
+          <Button
+            variante="critico-secundario"
             disabled={marcados.length === 0}
             onClick={() => void removerMarcados()}
-            className={`h-10 celular:h-[44px] ${BOTAO_PERIGO}`}
+            className="celular:h-[44px]"
           >
             Remover
-          </button>
+          </Button>
         )}
       </div>
 
@@ -266,13 +262,11 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
           <thead>
             <tr className={`h-[57px] ${TABELA_CABECALHO}`}>
               <th scope="col">
-                <input
-                  type="checkbox"
-                  checked={todosMarcados}
-                  disabled={selecionaveis.length === 0}
-                  onChange={alternarTodos}
-                  aria-label="Selecionar todos os membros desta página"
-                  className="accent-brand-500 celular:h-[22px] celular:w-[22px]"
+                <Checkbox
+                  marcado={todosMarcados}
+                  desabilitado={selecionaveis.length === 0}
+                  aoMudar={alternarTodos}
+                  rotuloAcessivel="Selecionar todos os membros desta página"
                 />
               </th>
               <th scope="col" className="font-bold">
@@ -307,13 +301,11 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
               return (
                 <tr key={m.user.id} className="group h-[55px] border-b border-border-subtle align-middle">
                   <td>
-                    <input
-                      type="checkbox"
-                      checked={marcados.includes(m.user.id)}
-                      disabled={!alvoValido(m)}
-                      onChange={() => alternar(m.user.id)}
-                      aria-label={`Selecionar ${displayNameOf(m.user)}`}
-                      className="accent-brand-500 disabled:opacity-40 celular:h-[22px] celular:w-[22px]"
+                    <Checkbox
+                      marcado={marcados.includes(m.user.id)}
+                      desabilitado={!alvoValido(m)}
+                      aoMudar={() => alternar(m.user.id)}
+                      rotuloAcessivel={`Selecionar ${displayNameOf(m.user)}`}
                     />
                   </td>
                   <td className="pr-2">
@@ -377,16 +369,15 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
                     </div>
                   </td>
                   <td className="text-right">
-                    <button
-                      type="button"
+                    {/* sempre visível: é a coluna de ações da tabela do print,
+                        não uma ação escondida de hover */}
+                    <BotaoDeIcone
+                      rotulo={`Ações para ${displayNameOf(m.user)}`}
+                      icone={<MoreHorizontal size={16} />}
+                      comFundo
                       onClick={(e) => abrirMenu(e, m)}
-                      aria-label={`Ações para ${displayNameOf(m.user)}`}
-                      // sempre visível: é a coluna de ações da tabela do print,
-                      // não uma ação escondida de hover
-                      className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded text-text-muted transition hover:bg-border-normal hover:text-text-strong"
-                    >
-                      <MoreHorizontal size={16} />
-                    </button>
+                      className="celular:h-[44px] celular:w-[44px]"
+                    />
                   </td>
                 </tr>
               );
@@ -400,21 +391,16 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <p className="flex items-center gap-2 text-sm text-text-muted">
           Mostrando
-          <select
-            value={porPagina}
-            onChange={(e) => {
-              setPorPagina(Number(e.target.value));
+          <SelectPrimitivo
+            tamanho="sm"
+            valor={String(porPagina)}
+            opcoes={POR_PAGINA.map((n) => ({ valor: String(n), rotulo: String(n) }))}
+            aoMudar={(v) => {
+              setPorPagina(Number(v));
               setPagina(1);
             }}
-            aria-label="Membros por página"
-            className="h-9 rounded-lg border border-border-subtle bg-chat-background-default px-2 text-sm text-text-default outline-none focus:border-brand-500 celular:h-[44px] celular:text-[max(16px,1em)]"
-          >
-            {POR_PAGINA.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
+            rotulo="Membros por página"
+          />
           membros de {lista.length}
         </p>
 

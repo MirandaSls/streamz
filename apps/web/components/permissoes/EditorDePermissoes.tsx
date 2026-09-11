@@ -16,7 +16,7 @@ import {
 } from "@streamz/shared";
 import { ChevronDown, Lock, Plus, X } from "@/components/ui/icones";
 import Avatar from "@/components/ui/Avatar";
-import Tooltip from "@/components/ui/Tooltip";
+import { BotaoDeIcone } from "@/components/ui/primitivos";
 import { Switch } from "@/components/ui/controls";
 import AdicionarAlvoPopover, {
   useFiltroDeAlvo,
@@ -193,19 +193,17 @@ export default function EditorDePermissoes({
                 <h3 className="text-xs font-bold uppercase tracking-[0.02em] text-text-muted">
                   Cargos/membros
                 </h3>
-                <Tooltip label="Adicionar cargo ou membro">
-                  <button
-                    ref={botaoMais}
-                    type="button"
-                    aria-label="Adicionar cargo ou membro"
-                    aria-haspopup="dialog"
-                    aria-expanded={popover}
-                    onClick={() => setPopover((v) => !v)}
-                    className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-text-muted transition hover:bg-interactive-background-hover hover:text-text-strong celular:-my-2 celular:h-[44px] celular:w-[44px]"
-                  >
-                    <Plus size={14} />
-                  </button>
-                </Tooltip>
+                <BotaoDeIcone
+                  ref={botaoMais}
+                  rotulo="Adicionar cargo ou membro"
+                  icone={<Plus size={14} />}
+                  tamanho="sm"
+                  comFundo
+                  aria-haspopup="dialog"
+                  aria-expanded={popover}
+                  onClick={() => setPopover((v) => !v)}
+                  className="h-5 w-5 shrink-0 rounded-full celular:-my-2 celular:h-[44px] celular:w-[44px]"
+                />
               </div>
 
               <ul>
@@ -246,15 +244,15 @@ export default function EditorDePermissoes({
                       {/* o @everyone não sai: é o padrão do canal, e sem ele não
                           haveria onde dizer o que vale para todo mundo */}
                       {!alvo.padrao && (
-                        <button
-                          type="button"
-                          aria-label={`Remover regra de ${alvo.nome}`}
+                        <BotaoDeIcone
+                          rotulo={`Remover regra de ${alvo.nome}`}
+                          icone={<X size={12} />}
                           onClick={() => void onRemoverRegra(alvo.id)}
+                          perigo
+                          tamanho="sm"
                           /* no dedo não há hover: sem isto "remover regra" não tinha caminho */
-                          className="grid h-5 w-5 shrink-0 place-items-center rounded text-text-muted opacity-0 transition hover:text-status-danger focus-visible:opacity-100 group-hover:opacity-100 celular:h-[44px] celular:w-[44px] celular:opacity-100"
-                        >
-                          <X size={12} />
-                        </button>
+                          className="h-5 w-5 shrink-0 rounded opacity-0 transition focus-visible:opacity-100 group-hover:opacity-100 celular:h-[44px] celular:w-[44px] celular:opacity-100"
+                        />
                       )}
                     </li>
                   );

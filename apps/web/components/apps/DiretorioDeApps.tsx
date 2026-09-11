@@ -6,6 +6,7 @@ import CardDeApp from "@/components/apps/CardDeApp";
 import PaginaDeApp from "@/components/apps/PaginaDeApp";
 import { CabecalhoMobile } from "@/components/mobile/pecas";
 import { Apps, Search } from "@/components/ui/icones";
+import { Button, TextInput } from "@/components/ui/primitivos";
 import { useAplicativos } from "@/stores/aplicativos";
 
 /**
@@ -99,14 +100,14 @@ export default function DiretorioDeApps({ semCabecalho = false }: { semCabecalho
 
               {proximoCursor && (
                 <div className="mt-6 flex justify-center">
-                  <button
-                    type="button"
+                  <Button
+                    variante="secundario"
+                    tamanho="md"
                     onClick={() => void carregarMais()}
                     disabled={carregando}
-                    className="h-[40px] rounded-[8px] bg-background-base-lowest px-4 text-sm font-medium text-text-default transition-colors hover:bg-interactive-background-hover disabled:opacity-60"
                   >
                     {carregando ? "Carregando…" : "Ver mais"}
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
@@ -184,20 +185,14 @@ export function TelaDeAplicativos({ aoSair }: { aoSair: () => void }) {
  */
 function CampoDeBusca({ valor, aoMudar }: { valor: string; aoMudar: (v: string) => void }) {
   return (
-    <div className="relative mb-5">
-      <Search
-        size={18}
-        aria-hidden="true"
-        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
-      />
-      <input
-        value={valor}
-        onChange={(e) => aoMudar(e.target.value)}
-        type="search"
-        placeholder="Buscar aplicativos"
-        aria-label="Buscar aplicativos"
-        className="h-[40px] w-full rounded-[8px] bg-input-background-default pl-9 pr-3 text-sm text-text-default outline-none placeholder:text-text-muted"
-      />
-    </div>
+    <TextInput
+      value={valor}
+      onChange={(e) => aoMudar(e.target.value)}
+      type="search"
+      placeholder="Buscar aplicativos"
+      aria-label="Buscar aplicativos"
+      prefixo={<Search size={18} aria-hidden="true" className="shrink-0 text-text-muted" />}
+      classeDaCaixa="mb-5"
+    />
   );
 }

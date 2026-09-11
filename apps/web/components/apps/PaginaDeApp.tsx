@@ -32,10 +32,17 @@ export default function PaginaDeApp({ app }: { app: AppDoDiretorio }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto w-full max-w-[1024px] px-6 py-6 celular:px-4">
+        {/*
+          Continua `<button>`: é um link de navegação fantasma (sem fundo,
+          cor muda no hover) — não cabe em nenhuma variante do `<Button>`
+          (`link` teria cor de destaque e sublinhado, mudando a cara; as
+          outras têm fundo). Cor já é token.
+        */}
         <button
           type="button"
           onClick={voltar}
-          /* 44 de alvo de toque, literal (a raiz é 15,5px) */
+          /* 44 de alvo de toque, literal — fixa a medida independente da
+             raiz (16px, ADR-0009) */
           className="mb-4 flex h-[44px] items-center gap-1.5 text-sm font-medium text-text-muted transition-colors hover:text-text-strong celular:-ml-2"
         >
           <ArrowLeft size={18} aria-hidden="true" />
@@ -54,6 +61,13 @@ export default function PaginaDeApp({ app }: { app: AppDoDiretorio }) {
               {app.name}
             </h1>
             <p className="mt-1 text-sm text-text-muted">{textoDeServidores(app.servidores)}</p>
+            {/*
+              Continua `<button>`, não `<Button>`: `data-adicionar-app` é
+              seletor do e2e (`scripts/e2e-f4-integracao.mjs`) e `ButtonProps`
+              não aceita `data-*` (sem índice na `ButtonHTMLAttributes` desta
+              versão de `@types/react`) — passar quebraria o typecheck. Cor
+              já é token.
+            */}
             <button
               type="button"
               onClick={() => abrirInstalacao(app)}

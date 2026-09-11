@@ -12,9 +12,9 @@ import {
 } from "@streamz/shared";
 import { useAlteracoesNaoSalvas } from "@/components/ui/alteracoes";
 import SeletorDeCor, { ehHex } from "@/components/settings/SeletorDeCor";
-import { ESTILO_AREA, ESTILO_CAMPO, ESTILO_ROTULO } from "@/components/settings/campos";
+import { ESTILO_ROTULO } from "@/components/settings/campos";
+import { BotaoDeIcone, Button, TextArea, TextInput } from "@/components/ui/primitivos";
 import Avatar from "@/components/ui/Avatar";
-import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
 import { errorMessage } from "@/stores/socket-adapter";
@@ -203,27 +203,27 @@ export default function PerfilTab() {
               e.target.value = "";
             }}
           />
-          <button
-            type="button"
+          <Button
+            variante="primario"
+            tamanho="sm"
+            icone={<Camera size={16} aria-hidden="true" />}
             disabled={enviandoFoto}
             onClick={() => fotoRef.current?.click()}
-            className="flex h-9 celular:h-[44px] items-center gap-2 rounded-[3px] bg-brand-500 px-3 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:opacity-50"
+            className="celular:h-[44px]"
           >
-            <Camera size={16} aria-hidden="true" />
             {enviandoFoto ? "Enviando…" : user.avatarUrl ? "Trocar foto" : "Escolher foto"}
-          </button>
+          </Button>
           {user.avatarUrl && (
-            <Tooltip label="Remover foto">
-              <button
-                type="button"
-                disabled={enviandoFoto}
-                onClick={() => void removerFoto()}
-                aria-label="Remover foto"
-                className="grid h-9 celular:h-[44px] w-9 celular:w-[44px] place-items-center rounded-[3px] text-text-subtle transition hover:bg-interactive-background-hover hover:text-status-danger disabled:opacity-50"
-              >
-                <Trash2 size={16} />
-              </button>
-            </Tooltip>
+            <BotaoDeIcone
+              rotulo="Remover foto"
+              icone={<Trash2 size={16} />}
+              tamanho="lg"
+              comFundo
+              perigo
+              disabled={enviandoFoto}
+              onClick={() => void removerFoto()}
+              className="celular:h-[44px] celular:w-[44px]"
+            />
           )}
         </div>
         <p className="mt-2 text-xs text-text-muted">
@@ -243,26 +243,26 @@ export default function PerfilTab() {
               e.target.value = "";
             }}
           />
-          <button
-            type="button"
+          <Button
+            variante="primario"
+            tamanho="sm"
+            icone={<ImageIcon size={16} aria-hidden="true" />}
             disabled={enviando}
             onClick={() => fileRef.current?.click()}
-            className="flex h-9 celular:h-[44px] items-center gap-2 rounded-[3px] bg-brand-500 px-3 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:opacity-50"
+            className="celular:h-[44px]"
           >
-            <ImageIcon size={16} aria-hidden="true" />
             {enviando ? "Enviando…" : "Trocar banner"}
-          </button>
+          </Button>
           {bannerUrl && (
-            <Tooltip label="Remover banner">
-              <button
-                type="button"
-                onClick={() => void removerBanner()}
-                aria-label="Remover banner"
-                className="grid h-9 celular:h-[44px] w-9 celular:w-[44px] place-items-center rounded-[3px] text-text-subtle transition hover:bg-interactive-background-hover hover:text-status-danger"
-              >
-                <Trash2 size={16} />
-              </button>
-            </Tooltip>
+            <BotaoDeIcone
+              rotulo="Remover banner"
+              icone={<Trash2 size={16} />}
+              tamanho="lg"
+              comFundo
+              perigo
+              onClick={() => void removerBanner()}
+              className="celular:h-[44px] celular:w-[44px]"
+            />
           )}
         </div>
 
@@ -280,26 +280,24 @@ export default function PerfilTab() {
         <label htmlFor="pronouns" className={`${ESTILO_ROTULO} mt-5`}>
           Pronomes
         </label>
-        <input
+        <TextInput
           id="pronouns"
           value={pronouns}
           maxLength={MAX_PRONOUNS}
           onChange={(e) => setPronouns(e.target.value)}
           placeholder="ele/dele, ela/dela, elu/delu…"
-          className={ESTILO_CAMPO}
         />
 
         <label htmlFor="aboutMe" className={`${ESTILO_ROTULO} mt-5`}>
           Sobre mim
         </label>
-        <textarea
+        <TextArea
           id="aboutMe"
           value={aboutMe}
           maxLength={MAX_ABOUT_ME}
           rows={4}
           onChange={(e) => setAboutMe(e.target.value)}
           placeholder="Fale um pouco sobre você."
-          className={ESTILO_AREA}
         />
         <p className="mt-1 text-xs text-text-muted">
           {aboutMe.length}/{MAX_ABOUT_ME}

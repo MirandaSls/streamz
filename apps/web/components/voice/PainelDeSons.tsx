@@ -13,6 +13,7 @@ import {
   VolumeX,
 } from "@/components/ui/icones";
 import PopoverFlutuante from "@/components/ui/PopoverFlutuante";
+import { TextInput, Tooltip } from "@/components/ui/primitivos";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
@@ -275,13 +276,8 @@ export default function PainelDeSons({
             do alto-falante colada na direita (sem respiro ali) — é o que dá os
             471 de campo medidos no print */}
         <div className="flex h-[64px] shrink-0 items-center py-[12px] pl-[12px]">
-          <div className="relative min-w-0 flex-1">
-            <Search
-              size={16}
-              aria-hidden="true"
-              className="pointer-events-none absolute left-[12px] top-1/2 -translate-y-1/2 text-text-muted"
-            />
-            <input
+          <div className="min-w-0 flex-1">
+            <TextInput
               // no celular o foco automático sobe o teclado por cima da folha
               // antes de a pessoa ver um som sequer
               autoFocus={!ehMobile}
@@ -289,24 +285,26 @@ export default function PainelDeSons({
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Encontre o som perfeito"
               aria-label="Encontre o som perfeito"
-              className="h-[40px] w-full rounded-[8px] border border-border-subtle bg-background-base-lower pl-[40px] pr-[12px] text-[16px] text-text-default outline-none placeholder:text-text-muted"
+              prefixo={<Search size={16} aria-hidden="true" className="text-text-muted" />}
+              classeDaCaixa="w-full border-border-subtle bg-background-base-lower"
             />
           </div>
           <div className="grid w-[48px] shrink-0 place-items-center">
-            <button
-              ref={botaoDoVolume}
-              type="button"
-              onClick={() => setVolumeAberto((v) => !v)}
-              aria-expanded={volumeAberto}
-              aria-label="Volume dos efeitos sonoros"
-              title="Volume dos efeitos sonoros"
-              className={`flex h-[32px] items-center gap-[2px] rounded-[4px] px-[4px] transition hover:bg-interactive-background-hover ${
-                mudo ? "text-status-danger" : "text-text-subtle hover:text-text-strong"
-              }`}
-            >
-              {mudo ? <VolumeX size={20} /> : <Volume2 size={20} />}
-              <ChevronDown size={10} aria-hidden="true" />
-            </button>
+            <Tooltip rotulo="Volume dos efeitos sonoros">
+              <button
+                ref={botaoDoVolume}
+                type="button"
+                onClick={() => setVolumeAberto((v) => !v)}
+                aria-expanded={volumeAberto}
+                aria-label="Volume dos efeitos sonoros"
+                className={`flex h-[32px] items-center gap-[2px] rounded-[4px] px-[4px] transition hover:bg-interactive-background-hover ${
+                  mudo ? "text-status-danger" : "text-text-subtle hover:text-text-strong"
+                }`}
+              >
+                {mudo ? <VolumeX size={20} /> : <Volume2 size={20} />}
+                <ChevronDown size={10} aria-hidden="true" />
+              </button>
+            </Tooltip>
           </div>
         </div>
 
@@ -318,21 +316,21 @@ export default function PainelDeSons({
             className="flex shrink-0 flex-col items-center gap-[8px] overflow-y-auto bg-background-base-lower py-[8px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {secoes.map((secao) => (
-              <button
-                key={secao.id}
-                type="button"
-                title={secao.titulo}
-                aria-label={secao.titulo}
-                aria-current={(ativa || secoes[0]?.id) === secao.id || undefined}
-                onClick={() => irPara(secao.id)}
-                className={`grid h-[32px] w-[32px] shrink-0 place-items-center overflow-hidden rounded-[8px] transition ${
-                  (ativa || secoes[0]?.id) === secao.id
-                    ? "bg-background-base-low text-text-strong"
-                    : "text-text-subtle hover:bg-interactive-background-hover hover:text-text-strong"
-                }`}
-              >
-                <IconeDaSecao secao={secao} tamanho="coluna" />
-              </button>
+              <Tooltip key={secao.id} rotulo={secao.titulo}>
+                <button
+                  type="button"
+                  aria-label={secao.titulo}
+                  aria-current={(ativa || secoes[0]?.id) === secao.id || undefined}
+                  onClick={() => irPara(secao.id)}
+                  className={`grid h-[32px] w-[32px] shrink-0 place-items-center overflow-hidden rounded-[8px] transition ${
+                    (ativa || secoes[0]?.id) === secao.id
+                      ? "bg-background-base-low text-text-strong"
+                      : "text-text-subtle hover:bg-interactive-background-hover hover:text-text-strong"
+                  }`}
+                >
+                  <IconeDaSecao secao={secao} tamanho="coluna" />
+                </button>
+              </Tooltip>
             ))}
           </nav>
 
@@ -534,18 +532,19 @@ function CardDeSom({
   onMenu: (e: React.MouseEvent) => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onTocar}
-      onContextMenu={onMenu}
-      title={sound.name}
-      className="flex h-[40px] min-w-0 items-center justify-center gap-[8px] rounded-[8px] bg-interactive-background-selected px-[8px] transition hover:bg-border-normal"
-    >
-      <span aria-hidden="true" className="shrink-0 text-[18px] leading-none">
-        {sound.emoji || "🔊"}
-      </span>
-      <span className="min-w-0 truncate text-[13px] font-semibold text-text-strong">{sound.name}</span>
-    </button>
+    <Tooltip rotulo={sound.name}>
+      <button
+        type="button"
+        onClick={onTocar}
+        onContextMenu={onMenu}
+        className="flex h-[40px] min-w-0 items-center justify-center gap-[8px] rounded-[8px] bg-interactive-background-selected px-[8px] transition hover:bg-border-normal"
+      >
+        <span aria-hidden="true" className="shrink-0 text-[18px] leading-none">
+          {sound.emoji || "🔊"}
+        </span>
+        <span className="min-w-0 truncate text-[13px] font-semibold text-text-strong">{sound.name}</span>
+      </button>
+    </Tooltip>
   );
 }
 

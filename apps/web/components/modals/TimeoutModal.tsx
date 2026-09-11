@@ -9,6 +9,7 @@ import {
 } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { RadioLinha, Select } from "@/components/ui/controls";
+import { TextInput } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui, useUI } from "@/stores/ui";
@@ -100,13 +101,13 @@ export default function TimeoutModal({ guildId, user }: { guildId: string; user:
       </div>
 
       {outro && (
-        <input
+        <TextInput
           value={reason}
           maxLength={MAX_MODERATION_REASON}
           onChange={(e) => setReason(e.target.value)}
           aria-label="Motivo do modo de espera"
           placeholder="Ex.: spam no canal geral"
-          className="mt-2 h-10 w-full rounded-[3px] bg-input-background-default px-2.5 text-text-default outline-none placeholder:text-text-muted"
+          classeDaCaixa="mt-2"
         />
       )}
 

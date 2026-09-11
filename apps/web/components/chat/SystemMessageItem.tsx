@@ -20,7 +20,7 @@ import {
 } from "@streamz/shared";
 import PainelFlutuante from "@/components/chat/PainelFlutuante";
 import EmojiPicker from "@/components/ui/EmojiPicker";
-import Tooltip from "@/components/ui/Tooltip";
+import { BotaoDeIcone } from "@/components/ui/primitivos";
 import { API_URL } from "@/lib/config";
 import { horaCompleta } from "@/lib/format";
 import { goToMessage } from "@/stores/messages-navigate";
@@ -173,28 +173,15 @@ export default function SystemMessageItem({
       {(onToggleReaction || onMenu) && (
         <div className="absolute -top-4 right-4 hidden rounded border border-black/20 bg-background-base-lower p-0.5 shadow-popout group-focus-within:flex group-hover:flex">
           {onToggleReaction && (
-            <Tooltip label="Adicionar reação">
-              <button
-                type="button"
-                onClick={(e) => setAncora(anchorOf(e.currentTarget))}
-                aria-label="Adicionar reação"
-                className="grid h-8 w-8 place-items-center rounded-[3px] text-text-subtle transition hover:bg-interactive-background-hover hover:text-text-strong"
-              >
-                <SmilePlus size={20} />
-              </button>
-            </Tooltip>
+            <BotaoDeIcone
+              rotulo="Adicionar reação"
+              icone={<SmilePlus size={20} />}
+              comFundo
+              onClick={(e) => setAncora(anchorOf(e.currentTarget))}
+            />
           )}
           {onMenu && (
-            <Tooltip label="Mais">
-              <button
-                type="button"
-                onClick={onMenu}
-                aria-label="Mais"
-                className="grid h-8 w-8 place-items-center rounded-[3px] text-text-subtle transition hover:bg-interactive-background-hover hover:text-text-strong"
-              >
-                <MoreHorizontal size={20} />
-              </button>
-            </Tooltip>
+            <BotaoDeIcone rotulo="Mais" icone={<MoreHorizontal size={20} />} comFundo onClick={onMenu} />
           )}
         </div>
       )}

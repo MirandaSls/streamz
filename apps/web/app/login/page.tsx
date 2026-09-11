@@ -4,9 +4,10 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { exigeMfa } from "@streamz/shared";
-import AuthCard, { FieldLabel, inputClass, linkClass, submitClass } from "@/components/auth/AuthCard";
+import AuthCard, { FieldLabel, linkClass } from "@/components/auth/AuthCard";
 import { api } from "@/lib/api";
 import { mensagemDeAuth, validarLogin } from "@/lib/auth-mensagens";
+import { Button, TextInput } from "@/components/ui/primitivos";
 import { useAuth } from "@/stores/auth";
 
 /**
@@ -92,7 +93,7 @@ function LoginForm() {
           <FieldLabel htmlFor="code" invalid={!!error} hint={error ?? undefined}>
             {backup ? "Código de recuperação" : "Digite o código de autenticação"}
           </FieldLabel>
-          <input
+          <TextInput
             id="code"
             name="code"
             inputMode="text"
@@ -100,9 +101,10 @@ function LoginForm() {
             value={code}
             onChange={(e) => setCode(e.target.value)}
             disabled={loading}
-            aria-invalid={error ? true : undefined}
+            erro={!!error}
             aria-describedby="apoio-2fa"
-            className={`${inputClass} mb-2 tracking-[0.3em]`}
+            classeDaCaixa="mb-2"
+            className="tracking-[0.3em]"
             autoFocus
           />
           <p id="apoio-2fa" className="mb-5 text-sm text-text-muted">
@@ -115,22 +117,29 @@ function LoginForm() {
             {error}
           </p>
 
-          <button type="submit" disabled={loading || !code.trim()} className={submitClass}>
+          <Button
+            type="submit"
+            variante="primario"
+            tamanho="md"
+            larguraTotal
+            disabled={loading || !code.trim()}
+            className="celular:h-[48px]"
+          >
             {loading ? "Verificando…" : "Entrar"}
-          </button>
+          </Button>
 
           <p className="mt-4 text-sm">
-            <button
-              type="button"
+            <Button
+              variante="link"
+              tamanho="sm"
               onClick={() => {
                 setBackup((v) => !v);
                 setCode("");
                 setError(null);
               }}
-              className={linkClass}
             >
               {backup ? "Usar o app autenticador" : "Usar código de backup"}
-            </button>
+            </Button>
           </p>
           <p className="mt-2 text-sm">
             {/* sem central de ajuda: para quem perdeu o segundo fator, redefinir
@@ -140,18 +149,20 @@ function LoginForm() {
             </Link>
           </p>
 
-          <button
-            type="button"
+          <Button
+            variante="link"
+            tamanho="sm"
+            larguraTotal
             onClick={() => {
               setTicket(null);
               setCode("");
               setBackup(false);
               setError(null);
             }}
-            className={`mt-4 w-full text-sm ${linkClass}`}
+            className="mt-4"
           >
             Voltar
-          </button>
+          </Button>
         </form>
       </AuthCard>
     );
@@ -166,22 +177,22 @@ function LoginForm() {
         <FieldLabel htmlFor="identificador" invalid={!!error} hint={error ?? undefined}>
           E-mail ou usuário
         </FieldLabel>
-        <input
+        <TextInput
           id="identificador"
           name="identificador"
           autoComplete="username"
           value={identificador}
           onChange={(e) => setIdentificador(e.target.value)}
           disabled={loading}
-          aria-invalid={error ? true : undefined}
-          className={inputClass}
+          erro={!!error}
+          classeDaCaixa="mb-5"
           autoFocus
         />
 
         <FieldLabel htmlFor="password" invalid={!!error}>
           Senha
         </FieldLabel>
-        <input
+        <TextInput
           id="password"
           name="password"
           type="password"
@@ -189,8 +200,8 @@ function LoginForm() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           disabled={loading}
-          aria-invalid={error ? true : undefined}
-          className={`${inputClass} mb-2`}
+          erro={!!error}
+          classeDaCaixa="mb-2"
         />
         <p className="mb-5 text-sm">
           <Link href="/forgot-password" className={linkClass}>
@@ -203,9 +214,16 @@ function LoginForm() {
           {error}
         </p>
 
-        <button type="submit" disabled={loading} className={submitClass}>
+        <Button
+          type="submit"
+          variante="primario"
+          tamanho="md"
+          larguraTotal
+          disabled={loading}
+          className="celular:h-[48px]"
+        >
           {loading ? "Entrando…" : "Entrar"}
-        </button>
+        </Button>
 
         <p className="mt-2 text-sm text-text-muted">
           Precisando de uma conta?{" "}

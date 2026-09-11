@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { X } from "@/components/ui/icones";
+import { BotaoDeIcone } from "@/components/ui/primitivos";
 import { displayNameOf } from "@streamz/shared";
 import { useMessages } from "@/stores/messages";
 import { useAuthorColor } from "@/stores/permissions";
@@ -69,17 +70,17 @@ export default function ReplyBar({
       >
         @ {mention ? "ligado" : "desligado"}
       </button>
-      <button
-        type="button"
+      <BotaoDeIcone
+        rotulo="Cancelar resposta"
+        icone={<X size={16} />}
         onClick={cancelReply}
-        aria-label="Cancelar resposta"
+        tamanho="sm"
+        comFundo
         /* 23×23 no telefone, medido — e este × é o único jeito de desistir de
            uma resposta com o dedo (o Esc do teclado externo não conta). O
            glifo continua 16; cresce a área. */
-        className="grid h-6 w-6 celular:h-[44px] celular:w-[44px] shrink-0 place-items-center rounded-[3px] text-text-muted transition hover:bg-interactive-background-hover hover:text-text-strong"
-      >
-        <X size={16} />
-      </button>
+        className="celular:h-[44px] celular:w-[44px]"
+      />
     </div>
   );
 }

@@ -27,8 +27,9 @@ import {
   Server,
   Trash2,
 } from "@/components/ui/icones";
-import { ESTILO_AREA, ESTILO_CAMPO, ESTILO_ROTULO } from "@/components/settings/campos";
+import { ESTILO_ROTULO } from "@/components/settings/campos";
 import { Section, ToggleLinha } from "@/components/ui/controls";
+import { BotaoDeIcone, Button, TextArea, TextInput } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { API_URL } from "@/lib/config";
 import { dataCompleta } from "@/lib/format";
@@ -245,14 +246,14 @@ export default function AplicativosTab() {
           </ul>
         )}
 
-        <button
-          type="button"
+        <Button
+          variante="primario"
+          icone={<Plus size={18} aria-hidden="true" />}
           onClick={() => setTela({ nome: "criar" })}
-          className="mt-4 flex h-[44px] items-center gap-2 rounded-lg bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover"
+          className="mt-4"
         >
-          <Plus size={18} aria-hidden="true" />
           Criar aplicativo
-        </button>
+        </Button>
       </Section>
 
       <ComoApontarSeuBot />
@@ -303,7 +304,7 @@ function TelaDeCriar({
       <label htmlFor={id} className={ESTILO_ROTULO}>
         Nome
       </label>
-      <input
+      <TextInput
         id={id}
         value={nome}
         maxLength={MAX_APP_NAME}
@@ -313,28 +314,18 @@ function TelaDeCriar({
         onKeyDown={(e) => {
           if (e.key === "Enter") void enviar();
         }}
-        className={ESTILO_CAMPO}
       />
       <p className="mt-1 text-xs text-text-muted">
         Vira também o nome do usuário-bot na lista de membros. {nome.trim().length}/{MAX_APP_NAME}
       </p>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={!valido || salvando}
-          onClick={() => void enviar()}
-          className="flex h-[44px] items-center rounded-lg bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:opacity-50"
-        >
+        <Button variante="primario" disabled={!valido || salvando} onClick={() => void enviar()}>
           {salvando ? "Criando…" : "Criar"}
-        </button>
-        <button
-          type="button"
-          onClick={aoVoltar}
-          className="flex h-[44px] items-center rounded-lg px-4 text-sm font-medium text-text-subtle transition hover:underline"
-        >
+        </Button>
+        <Button variante="link" onClick={aoVoltar}>
           Cancelar
-        </button>
+        </Button>
       </div>
     </Section>
   );
@@ -453,7 +444,7 @@ function TelaDeEditar({
         <label htmlFor={idNome} className={ESTILO_ROTULO}>
           Nome
         </label>
-        <input
+        <TextInput
           id={idNome}
           value={nome}
           maxLength={MAX_APP_NAME}
@@ -461,13 +452,12 @@ function TelaDeEditar({
             setNome(e.target.value);
             setSalvo(false);
           }}
-          className={ESTILO_CAMPO}
         />
 
         <label htmlFor={idDescricao} className={`${ESTILO_ROTULO} mt-4`}>
           Descrição
         </label>
-        <textarea
+        <TextArea
           id={idDescricao}
           value={descricao}
           rows={3}
@@ -477,21 +467,15 @@ function TelaDeEditar({
             setDescricao(e.target.value);
             setSalvo(false);
           }}
-          className={ESTILO_AREA}
         />
         <p className="mt-1 text-xs text-text-muted">
           {descricao.trim().length}/{MAX_APP_DESCRIPTION}
         </p>
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            disabled={!sujo || salvando}
-            onClick={() => void salvar()}
-            className="flex h-[44px] items-center rounded-lg bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:opacity-50"
-          >
+          <Button variante="primario" disabled={!sujo || salvando} onClick={() => void salvar()}>
             {salvando ? "Salvando…" : "Salvar"}
-          </button>
+          </Button>
           {salvo && !sujo && (
             <span aria-live="polite" className="flex items-center gap-1 text-xs text-status-positive">
               <Check size={14} aria-hidden="true" /> Salvo
@@ -514,25 +498,24 @@ function TelaDeEditar({
               e.target.value = "";
             }}
           />
-          <button
-            type="button"
+          <Button
+            variante="primario"
+            icone={<ImageIcon size={16} aria-hidden="true" />}
             disabled={enviandoIcone}
             onClick={() => arquivoRef.current?.click()}
-            className="flex h-[44px] items-center gap-2 rounded-lg bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:opacity-50"
           >
-            <ImageIcon size={16} aria-hidden="true" />
             {enviandoIcone ? "Enviando…" : app.iconUrl ? "Trocar ícone" : "Escolher ícone"}
-          </button>
+          </Button>
           {app.iconUrl && (
-            <button
-              type="button"
+            <BotaoDeIcone
+              rotulo="Remover ícone"
+              icone={<Trash2 size={18} />}
+              tamanho="lg"
+              comFundo
+              perigo
               disabled={enviandoIcone}
               onClick={() => void removerIcone()}
-              aria-label="Remover ícone"
-              className="grid h-[44px] w-[44px] place-items-center rounded-lg text-text-subtle transition hover:bg-interactive-background-hover hover:text-status-danger disabled:opacity-50"
-            >
-              <Trash2 size={18} />
-            </button>
+            />
           )}
         </div>
         <p className="mt-2 text-xs text-text-muted">
@@ -582,25 +565,20 @@ function TelaDeEditar({
           O prefixo identifica <strong>o bot</strong>, não o token: ele sai do id do usuário-bot e
           não muda quando você regenera. Quem distingue um token do outro é a data.
         </p>
-        <button
-          type="button"
-          onClick={aoRegenerar}
-          className="flex h-[44px] items-center gap-2 rounded-lg bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover"
-        >
-          <RefreshCw size={16} aria-hidden="true" />
+        <Button variante="primario" icone={<RefreshCw size={16} aria-hidden="true" />} onClick={aoRegenerar}>
           Regenerar token
-        </button>
+        </Button>
       </Section>
 
       <Section title="Servidores">
-        <button
-          type="button"
+        <Button
+          variante="secundario"
+          larguraTotal
+          icone={<Server size={16} aria-hidden="true" />}
           onClick={aoVerServidores}
-          className="flex h-[44px] w-full items-center gap-2 rounded-lg border border-border-subtle px-4 text-sm font-medium text-text-strong transition hover:border-border-strong"
         >
-          <Server size={16} aria-hidden="true" />
           Ver onde este aplicativo está instalado
-        </button>
+        </Button>
       </Section>
 
       <Section title="Zona de perigo" semDivisoria>
@@ -608,14 +586,9 @@ function TelaDeEditar({
           Apagar remove o aplicativo, o usuário-bot, o token e a presença dele em todos os
           servidores. Não dá para desfazer.
         </p>
-        <button
-          type="button"
-          onClick={aoApagar}
-          className="flex h-[44px] items-center gap-2 rounded-lg bg-status-danger px-4 text-sm font-medium text-white transition hover:opacity-90"
-        >
-          <Trash2 size={16} aria-hidden="true" />
+        <Button variante="critico" icone={<Trash2 size={16} aria-hidden="true" />} onClick={aoApagar}>
           Apagar aplicativo
-        </button>
+        </Button>
       </Section>
     </>
   );
@@ -688,14 +661,15 @@ function PainelDoToken({
           // aparelho emulado antes desta linha (§6.3: meça, não leia a classe)
           className="min-w-0 flex-1 bg-transparent font-mono text-xs text-text-default outline-none celular:h-[44px] celular:flex-none"
         />
-        <button
-          type="button"
+        <Button
+          variante="primario"
+          tamanho="sm"
+          icone={copiado ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
           onClick={() => void copiar()}
-          className="flex h-[36px] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover celular:h-[44px]"
+          className="shrink-0 celular:h-[44px]"
         >
-          {copiado ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
           {copiado ? "Copiado" : "Copiar"}
-        </button>
+        </Button>
       </div>
       <p aria-live="polite" className="sr-only">
         {copiado ? "Token copiado para a área de transferência." : ""}
@@ -706,13 +680,9 @@ function PainelDoToken({
           Prefixo <span className="font-mono">{token.prefixo}…</span> · emitido em{" "}
           {dataCompleta(token.criadoEm)}
         </p>
-        <button
-          type="button"
-          onClick={aoFechar}
-          className="flex h-[44px] items-center rounded-lg border border-border-subtle px-3 text-sm font-medium text-text-subtle transition hover:border-border-strong hover:text-text-strong"
-        >
+        <Button variante="secundario" onClick={aoFechar}>
           Já copiei, fechar
-        </button>
+        </Button>
       </div>
     </div>
   );

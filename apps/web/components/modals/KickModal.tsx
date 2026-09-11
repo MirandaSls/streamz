@@ -4,6 +4,7 @@ import { useState } from "react";
 import { MAX_MODERATION_REASON, displayNameOf, type PublicUser } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { Rotulo } from "@/components/ui/controls";
+import { TextInput } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { useGuilds } from "@/stores/guilds";
 import { errorMessage } from "@/stores/socket-adapter";
@@ -49,13 +50,12 @@ export default function KickModal({ guildId, user }: { guildId: string; user: Pu
       }
     >
       <Rotulo htmlFor="kick-reason">Motivo para expulsar</Rotulo>
-      <input
+      <TextInput
         id="kick-reason"
         value={reason}
         maxLength={MAX_MODERATION_REASON}
         onChange={(e) => setReason(e.target.value)}
         placeholder="Ex.: comportamento fora das regras"
-        className="h-10 w-full rounded-[3px] bg-input-background-default px-2.5 text-text-default outline-none placeholder:text-text-muted"
         autoFocus
       />
       <p className="mt-1 text-xs text-text-muted">

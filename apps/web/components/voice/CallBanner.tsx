@@ -2,6 +2,7 @@
 
 import { Phone } from "@/components/ui/icones";
 import Avatar from "@/components/ui/Avatar";
+import { Button } from "@/components/ui/primitivos";
 import { useVoice } from "@/stores/voice";
 
 /**
@@ -53,14 +54,15 @@ export default function CallBanner({ channelId }: { channelId: string }) {
 
       <span className="min-w-0 flex-1 truncate text-sm font-medium text-text-default">{texto}</span>
 
-      <button
-        type="button"
+      <Button
+        variante="positivo"
+        tamanho="sm"
+        icone={<Phone size={14} aria-hidden="true" />}
         onClick={() => void startCall(channelId, false)}
-        className="flex h-8 shrink-0 items-center gap-1.5 rounded-[3px] bg-status-positive px-3 text-sm font-semibold text-control-primary-text-default transition hover:brightness-110"
+        className="shrink-0"
       >
-        <Phone size={14} aria-hidden="true" />
         Entrar
-      </button>
+      </Button>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { displayNameOf, type PublicUser } from "@streamz/shared";
 import Dialog, { SecondaryButton } from "@/components/modals/Dialog";
 import Avatar from "@/components/ui/Avatar";
+import { Button, TextInput } from "@/components/ui/primitivos";
 import { useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
 import { useUI } from "@/stores/ui";
@@ -46,13 +47,13 @@ export default function AddGroupMembersModal({ channelId }: { channelId: string 
       className="w-[440px]"
       footer={<SecondaryButton onClick={closeModal}>Fechar</SecondaryButton>}
     >
-      <input
+      <TextInput
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         type="search"
         placeholder="Buscar entre seus amigos"
         aria-label="Buscar amigo"
-        className="mb-2 h-10 w-full rounded-[3px] bg-input-background-default px-2.5 text-text-default outline-none placeholder:text-text-muted"
+        classeDaCaixa="mb-2"
       />
 
       <div className="max-h-64 overflow-y-auto rounded bg-input-background-default/50">
@@ -73,14 +74,15 @@ export default function AddGroupMembersModal({ channelId }: { channelId: string 
                 <span className="block truncate">{displayNameOf(u)}</span>
                 <span className="block truncate text-xs text-text-muted">@{u.username}</span>
               </span>
-              <button
-                type="button"
+              <Button
+                variante="primario"
+                tamanho="sm"
                 disabled={ocupado === u.id}
                 onClick={() => void adicionar(u)}
-                className="h-8 shrink-0 rounded-[3px] border border-brand-500 px-3 text-sm font-medium text-text-strong transition hover:bg-brand-500 hover:text-control-primary-text-default disabled:opacity-50"
+                className="shrink-0"
               >
                 {ocupado === u.id ? "Adicionando…" : "Adicionar"}
-              </button>
+              </Button>
             </div>
           ))
         )}

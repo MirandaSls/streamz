@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Plus, UserPlus, Volume2 } from "@/components/ui/icones";
 import Tooltip from "@/components/ui/Tooltip";
+import { Button } from "@/components/ui/primitivos";
 import PalcoMobile from "@/components/voice/PalcoMobile";
 import {
   AvatarDeChamada,
@@ -186,14 +187,15 @@ export default function VoiceGrid({
             Chame alguém e a conversa começa aqui — quem entrar aparece nesta tela.
           </p>
           {guildId && (
-            <button
-              type="button"
+            <Button
+              variante="primario"
+              tamanho="sm"
+              icone={<UserPlus size={16} aria-hidden="true" />}
               onClick={() => ui.openModal({ kind: "invite", guildId })}
-              className="mt-1 flex h-9 items-center gap-2 rounded-[3px] bg-brand-500 px-4 text-sm font-semibold text-control-primary-text-default transition hover:bg-control-primary-background-hover"
+              className="mt-1"
             >
-              <UserPlus size={16} aria-hidden="true" />
               Convidar pessoas
-            </button>
+            </Button>
           )}
         </div>
       </div>

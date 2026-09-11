@@ -207,9 +207,9 @@ export default function TelaCheiaDeVideo({
           top: "calc(env(safe-area-inset-top, 0px) + 8px)",
           right: "calc(env(safe-area-inset-right, 0px) + 8px)",
         }}
-        // 44 entre colchetes, e não `h-11`: a raiz do app é 15,5px e a escala
-        // `rem` do Tailwind entregaria 42,6 — abaixo do piso de toque
-        className="absolute grid h-[44px] w-[44px] place-items-center rounded-full bg-black/60 text-white backdrop-blur transition active:bg-black/80"
+        // 44 entre colchetes, e não `h-11`: alvo de toque em px, como o resto
+        // do leiaute de celular (a raiz do app é 16px, ADR-0009)
+        className="absolute grid h-[44px] w-[44px] place-items-center rounded-full bg-control-overlay-secondary-background-default text-control-overlay-secondary-icon-default backdrop-blur transition active:bg-control-overlay-secondary-background-active"
       >
         <X size={24} />
       </button>
@@ -219,7 +219,7 @@ export default function TelaCheiaDeVideo({
       {ehOriginal(ajuste) && (
         <span
           style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)" }}
-          className="pointer-events-none absolute rounded-full bg-black/50 px-3 py-1.5 text-xs text-white/80"
+          className="pointer-events-none absolute rounded-full bg-background-scrim/50 px-3 py-1.5 text-xs text-text-overlay-light/80"
         >
           Pinça para ampliar · toque duas vezes para voltar
         </span>

@@ -21,7 +21,7 @@ import {
   X,
 } from "@/components/ui/icones";
 import type { PublicUser } from "@streamz/shared";
-import Tooltip from "@/components/ui/Tooltip";
+import { BotaoDeIcone, Tooltip } from "@/components/ui/primitivos";
 import EmojiPicker from "@/components/ui/EmojiPicker";
 import PainelFlutuante from "@/components/chat/PainelFlutuante";
 import TooltipReacao from "@/components/chat/TooltipReacao";
@@ -200,7 +200,9 @@ export default function ImageModal({
       aria-modal="true"
       aria-label={alt}
       className={`fixed inset-0 z-50 grid anim-overlay ${
-        ehMobile ? "grid-rows-1 bg-black" : "place-items-center bg-black/90"
+        ehMobile
+          ? "grid-rows-1 bg-mobile-background-scrim-opaque"
+          : "place-items-center bg-background-scrim-lightbox"
       }`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) closeModal();
@@ -222,7 +224,7 @@ export default function ImageModal({
         {total > 1 && (
           <span
             aria-live="polite"
-            className={`text-sm font-medium text-white/70 ${ehMobile ? "mr-auto pl-3" : "mr-1"}`}
+            className={`text-sm font-medium text-text-overlay-light/70 ${ehMobile ? "mr-auto pl-3" : "mr-1"}`}
           >
             {i + 1} de {total}
           </span>
@@ -240,16 +242,18 @@ export default function ImageModal({
           </div>
         )}
 
-        <button
-          type="button"
+        <BotaoDeIcone
+          rotulo="Fechar"
+          icone={<X size={24} />}
+          tamanho="lg"
+          comFundo
           onClick={closeModal}
-          aria-label="Fechar"
-          className={`grid place-items-center rounded-lg border border-border-subtle bg-background-base-lower text-text-subtle transition hover:bg-interactive-background-hover hover:text-text-strong ${
-            ehMobile ? "h-[44px] w-[44px]" : "h-[40px] w-[40px]"
-          }`}
-        >
-          <X size={24} />
-        </button>
+          // pílula própria (fundo + borda sempre visível), diferente do ícone
+          // "flutuante" padrão do primitivo — a caixa é a medida no print
+          // (40 no desktop, 44 de alvo de toque no celular).
+          style={{ height: ehMobile ? 44 : 40, width: ehMobile ? 44 : 40 }}
+          className="border border-border-subtle bg-background-base-lower"
+        />
       </div>
 
       {total > 1 && (
@@ -467,17 +471,15 @@ function BotaoDaBarra({
   children: ReactNode;
 }) {
   return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        onClick={onClick}
-        aria-label={label}
-        style={{ height: tamanho, width: tamanho }}
-        className="grid place-items-center rounded-md text-text-subtle transition hover:bg-interactive-background-hover hover:text-text-strong"
-      >
-        {children}
-      </button>
-    </Tooltip>
+    <BotaoDeIcone
+      rotulo={label}
+      icone={children}
+      comFundo
+      onClick={onClick}
+      // 36/44 medidos (ver o comentário do componente) não batem com nenhum
+      // dos tamanhos padrão do primitivo (24/32/40): a caixa vem por style.
+      style={{ height: tamanho, width: tamanho }}
+    />
   );
 }
 
@@ -493,15 +495,15 @@ function Seta({
 }) {
   const label = lado === "esquerda" ? "Imagem anterior" : "Próxima imagem";
   return (
-    <Tooltip label={label}>
+    <Tooltip rotulo={label}>
       <button
         type="button"
         onClick={onClick}
         aria-label={label}
         className={`absolute top-1/2 z-20 grid -translate-y-1/2 place-items-center transition ${
           grande
-            ? "h-[48px] w-[48px] rounded-full bg-black/50 text-white/80 active:bg-black/70"
-            : "h-16 w-16 text-white/60 hover:text-white"
+            ? "h-[48px] w-[48px] rounded-full bg-control-overlay-secondary-background-default text-control-overlay-secondary-icon-default active:bg-control-overlay-secondary-background-active"
+            : "h-16 w-16 text-icon-overlay-light/60 hover:text-icon-overlay-light"
         } ${lado === "esquerda" ? (grande ? "left-2" : "left-0") : grande ? "right-2" : "right-0"}`}
       >
         {lado === "esquerda" ? (

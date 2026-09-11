@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Keyboard, Mic, RefreshCw, Video } from "@/components/ui/icones";
 import { PTT_RELEASE_MS } from "@streamz/shared";
 import { RadioCards, Section, Select, Slider, ToggleLinha } from "@/components/ui/controls";
+import { Button } from "@/components/ui/primitivos";
 import { SegmentosDeQualidade } from "@/components/voice/qualidade-de-tela";
 import { useTesteDeMicrofone } from "@/components/voice/useTesteDeMicrofone";
 import { useT } from "@/lib/i18n";
@@ -164,16 +165,17 @@ export default function VozTab() {
                 "Conceda acesso ao microfone para ver o nome dos dispositivos."}
             </p>
           )}
-          <button
-            type="button"
+          <Button
+            variante="link"
+            tamanho="xs"
+            icone={<RefreshCw size={14} aria-hidden="true" />}
             // `true`: este botão é o pedido explícito de tentar de novo, e tem
             // de furar a trava que impede um prompt por abertura de menu
             onClick={() => void devices.refresh(true)}
-            className="ml-auto flex items-center gap-1.5 text-xs text-text-muted transition hover:text-text-strong celular:min-h-[44px]"
+            className="ml-auto celular:min-h-[44px]"
           >
-            <RefreshCw size={14} aria-hidden="true" />
             Atualizar lista
-          </button>
+          </Button>
         </div>
       </Section>
 
@@ -193,8 +195,10 @@ export default function VozTab() {
             <p className="mb-1.5 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
               {t("voz.pttTecla")}
             </p>
-            <button
-              type="button"
+            <Button
+              variante={capturando ? "primario" : "secundario"}
+              tamanho="md"
+              icone={<Keyboard size={16} aria-hidden="true" />}
               onClick={() => setCapturando(true)}
               onKeyDown={(e) => {
                 if (!capturando) return;
@@ -205,13 +209,10 @@ export default function VozTab() {
               }}
               onBlur={() => setCapturando(false)}
               aria-label={t("voz.gravarTecla")}
-              className={`flex h-9 celular:h-[44px] items-center gap-1.5 rounded-[3px] px-3 text-sm transition ${
-                capturando ? "bg-brand-500 text-control-primary-text-default" : "bg-input-background-default text-text-default hover:bg-interactive-background-hover"
-              }`}
+              className="celular:h-[44px]"
             >
-              <Keyboard size={16} aria-hidden="true" />
               {capturando ? t("voz.apertePara") : pttRotulo(pttKey)}
-            </button>
+            </Button>
             <p className="mt-1.5 text-xs text-text-muted">
               O microfone continua aberto por {PTT_RELEASE_MS} ms depois de soltar, para a última
               sílaba não sumir.
@@ -249,14 +250,15 @@ export default function VozTab() {
 
       <Section id="testar" title={t("voz.testarMic")}>
         <div className="flex items-center gap-3 py-3">
-          <button
-            type="button"
+          <Button
+            variante="primario"
+            tamanho="md"
+            icone={<Mic size={16} aria-hidden="true" />}
             onClick={testarMicrofone}
-            className="flex h-9 celular:h-[44px] shrink-0 items-center gap-2 rounded-[3px] bg-brand-500 px-3 text-sm font-medium text-control-primary-text-default hover:bg-control-primary-background-hover"
+            className="shrink-0 celular:h-[44px]"
           >
-            <Mic size={16} aria-hidden="true" />
             {testando ? t("voz.parar") : t("voz.testar")}
-          </button>
+          </Button>
           <MedidorDeMicrofone nivel={nivel} rotulo={t("voz.volumeEntrada")} />
         </div>
         {/* O que o teste faz, dito antes de a pessoa estranhar o silêncio (e
@@ -310,13 +312,14 @@ export default function VozTab() {
             />
             {!camera && <Video size={40} className="text-channels-default" aria-hidden="true" />}
           </div>
-          <button
-            type="button"
+          <Button
+            variante="secundario"
+            tamanho="md"
             onClick={() => void alternarCamera()}
-            className="h-9 celular:h-[44px] rounded-[3px] bg-border-normal px-3 text-sm font-medium text-text-default hover:bg-border-strong"
+            className="celular:h-[44px]"
           >
             {camera ? t("voz.desligarCamera") : t("voz.ligarCamera")}
-          </button>
+          </Button>
         </div>
       </Section>
 

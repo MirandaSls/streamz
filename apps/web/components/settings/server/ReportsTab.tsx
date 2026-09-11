@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Check, Flag, RotateCcw } from "@/components/ui/icones";
 import { REPORT_REASONS, displayNameOf, type ReportView } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
+import { Button } from "@/components/ui/primitivos";
 import { TituloDaPagina } from "@/components/settings/server/pagina";
 import { horaCompleta } from "@/lib/format";
 import { useModeration } from "@/stores/moderation";
@@ -101,23 +102,15 @@ export default function ReportsTab({ guildId }: { guildId: string }) {
               )}
             </div>
 
-            <button
-              type="button"
+            <Button
+              variante="secundario"
+              tamanho="sm"
+              icone={r.resolved ? <RotateCcw size={16} aria-hidden="true" /> : <Check size={16} aria-hidden="true" />}
               onClick={() => void resolve(guildId, r.id, !r.resolved)}
-              className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 self-start rounded-[3px] bg-input-background-default px-3 text-sm font-medium text-text-default transition hover:bg-interactive-background-hover"
+              className="self-start celular:h-[44px]"
             >
-              {r.resolved ? (
-                <>
-                  <RotateCcw size={16} aria-hidden="true" />
-                  Reabrir
-                </>
-              ) : (
-                <>
-                  <Check size={16} aria-hidden="true" />
-                  Resolver
-                </>
-              )}
-            </button>
+              {r.resolved ? "Reabrir" : "Resolver"}
+            </Button>
           </div>
         ))}
       </div>

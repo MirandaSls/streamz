@@ -19,6 +19,7 @@ import InboxPopover from "@/components/chat/InboxPopover";
 import AddFriend from "@/components/friends/AddFriend";
 import EstadoVazio from "@/components/friends/EstadoVazio";
 import FriendRow, { RowAction } from "@/components/friends/FriendRow";
+import { TextInput } from "@/components/ui/primitivos";
 import { useDMs } from "@/stores/dms";
 import { useFriends, type FriendsTab } from "@/stores/friends";
 import { resolveStatus, usePresence } from "@/stores/presence";
@@ -278,7 +279,9 @@ export default function FriendsPage() {
             >
               {a.label}
               {a.id === "pendentes" && pendentes > 0 && (
-                <span className="grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[11px] font-bold leading-none text-white">
+                // texto claro sobre o vermelho de aviso: mesmo token que o botão
+                // "crítico" usa para o par fundo/texto (rule 6 — nada de branco cru)
+                <span className="grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[11px] font-bold leading-none text-control-critical-primary-text-default">
                   {pendentes}
                 </span>
               )}
@@ -332,21 +335,17 @@ export default function FriendsPage() {
 
         {tab !== "adicionar" && (
           /* 12px entre a borda do cabeçalho e a busca (medido); era 16 */
-          <div className="relative px-6 pt-3">
-            {/* lupa à esquerda: é onde o print põe, e é onde o olho procura o
-                que a caixa faz antes de começar a digitar */}
-            <Search
-              size={18}
-              aria-hidden="true"
-              className="pointer-events-none absolute left-[42px] top-[22px] text-text-muted celular:top-[26px]"
-            />
-            <input
+          <div className="px-6 pt-3">
+            <TextInput
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               type="search"
               aria-label="Buscar amigos"
               placeholder="Buscar"
-              className="h-10 w-full rounded-lg bg-input-background-default pl-10 pr-3 text-base text-text-default outline-none placeholder:text-text-muted celular:h-[48px]"
+              classeDaCaixa="w-full"
+              // lupa à esquerda: é onde o print põe, e é onde o olho procura o
+              // que a caixa faz antes de começar a digitar
+              prefixo={<Search size={18} aria-hidden="true" className="shrink-0 text-text-muted" />}
             />
           </div>
         )}

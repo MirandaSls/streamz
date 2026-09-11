@@ -38,7 +38,7 @@ export default function PollCard({
   const mostrarResultado = votei || encerrada;
 
   return (
-    <div className="mt-1 w-[432px] max-w-full rounded-lg border border-black/30 bg-background-base-lowest p-4">
+    <div className="mt-1 w-[432px] max-w-full rounded-lg border border-border-subtle bg-background-base-lowest p-4">
       <div className="flex items-start gap-2">
         <BarChart3 size={18} className="mt-0.5 shrink-0 text-text-muted" aria-hidden="true" />
         <h3 className="min-w-0 flex-1 break-words font-semibold text-text-strong">{poll.question}</h3>

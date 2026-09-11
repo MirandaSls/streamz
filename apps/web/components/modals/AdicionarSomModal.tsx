@@ -8,6 +8,7 @@ import {
 } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { Rotulo } from "@/components/ui/controls";
+import { BotaoDeIcone, Campo, TextInput } from "@/components/ui/primitivos";
 import { Upload } from "@/components/ui/icones";
 import EmojiPicker from "@/components/ui/EmojiPicker";
 import PopoverFlutuante from "@/components/ui/PopoverFlutuante";
@@ -133,19 +134,8 @@ export default function AdicionarSomModal({ guildId }: { guildId: string }) {
       </button>
 
       <div className="mt-5">
-        <Rotulo htmlFor="novo-som-nome">Nome</Rotulo>
-        <div className="flex h-10 items-center gap-1 rounded-[3px] bg-input-background-default px-2.5">
-          <button
-            ref={botaoDoEmoji}
-            type="button"
-            onClick={() => setEmojiAberto((v) => !v)}
-            aria-label="Escolher emoji do som"
-            aria-expanded={emojiAberto}
-            className="grid h-7 w-7 shrink-0 place-items-center rounded text-base leading-none transition hover:bg-interactive-background-hover"
-          >
-            {emoji || "🔊"}
-          </button>
-          <input
+        <Campo rotulo="Nome" htmlFor="novo-som-nome">
+          <TextInput
             id="novo-som-nome"
             value={nome}
             onChange={(e) => setNome(e.target.value)}
@@ -157,9 +147,18 @@ export default function AdicionarSomModal({ guildId }: { guildId: string }) {
             }}
             maxLength={32}
             placeholder="airhorn"
-            className="min-w-0 flex-1 bg-transparent text-text-default outline-none placeholder:text-text-muted"
+            prefixo={
+              <BotaoDeIcone
+                ref={botaoDoEmoji}
+                rotulo="Escolher emoji do som"
+                icone={<span className="text-base leading-none">{emoji || "🔊"}</span>}
+                tamanho="sm"
+                aria-expanded={emojiAberto}
+                onClick={() => setEmojiAberto((v) => !v)}
+              />
+            }
           />
-        </div>
+        </Campo>
         <p className="mt-1 text-xs text-text-muted">
           O emoji é o que aparece no card, ao lado do nome.
         </p>

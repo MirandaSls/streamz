@@ -55,9 +55,9 @@ export function SegmentosDeQualidade({
  * 32px. Dois deles cabem lado a lado; o rótulo em versalete é o que os separa
  * sem precisar de moldura.
  *
- * **No celular os segmentos crescem para 44.** `h-8` desenha 31px com a raiz de
- * 15,5 (a escala do Tailwind é `rem`), e 31 é menos que dois terços do piso de
- * toque: no navegador é aqui que se escolhe a qualidade da transmissão (o
+ * **No celular os segmentos crescem para 44.** `h-8` desenha 32px com a raiz de
+ * 16 (a escala do Tailwind é `rem`), bem menos que o piso de toque de 44: no
+ * navegador é aqui que se escolhe a qualidade da transmissão (o
  * seletor com rodapé só existe no app de desktop), então estes são os botões da
  * escolha, não uma preferência escondida. O sulco acompanha, 44 + os 8 do `p-1`.
  */

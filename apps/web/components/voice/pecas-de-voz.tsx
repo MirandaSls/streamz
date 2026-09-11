@@ -87,7 +87,7 @@ export function Chave({
         }`}
       >
         <span
-          className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-all ${
+          className={`absolute top-1 h-4 w-4 rounded-full bg-switch-thumb-background-default transition-all ${
             ligado ? "left-5" : "left-1"
           }`}
         />

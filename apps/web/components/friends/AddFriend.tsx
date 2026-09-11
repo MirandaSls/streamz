@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import EstadoVazio from "@/components/friends/EstadoVazio";
+import { Button } from "@/components/ui/primitivos";
 import { useFriends } from "@/stores/friends";
 
 /**
@@ -87,13 +88,15 @@ export default function AddFriend() {
         />
         {/* o botão mora DENTRO do campo, à direita: 32px de altura, raio 8, na
             cor accent. Era raio 3 com 36 de altura. */}
-        <button
+        <Button
           type="submit"
+          variante="primario"
+          tamanho="sm"
           disabled={!valido || enviando}
-          className="h-8 shrink-0 rounded-lg bg-brand-500 px-3 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:cursor-not-allowed disabled:opacity-50 celular:h-[44px]"
+          className="shrink-0 celular:h-[44px]"
         >
           {enviando ? "Enviando…" : "Enviar pedido de amizade"}
-        </button>
+        </Button>
       </form>
 
       {(erro || sucesso) && (

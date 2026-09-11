@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Play } from "@/components/ui/icones";
 import { displayNameOf, type PublicUser } from "@streamz/shared";
+import { Button } from "@/components/ui/primitivos";
 import { VideoDaFaixa } from "@/components/voice/TileDeVoz";
 import { telaPublicadaDe, useVoice } from "@/stores/voice";
 
@@ -90,7 +91,7 @@ export default function PreviaDeTela({
             Carregando a transmissão…
           </span>
         )}
-        <span className="pointer-events-none absolute left-1.5 top-1.5 rounded-[4px] bg-status-danger px-1 py-0.5 text-[9px] font-bold uppercase leading-none tracking-[0.02em] text-white">
+        <span className="pointer-events-none absolute left-1.5 top-1.5 rounded-[4px] bg-status-danger px-1 py-0.5 text-[9px] font-bold uppercase leading-none tracking-[0.02em] text-control-critical-primary-text-default">
           Ao vivo
         </span>
       </div>
@@ -99,14 +100,9 @@ export default function PreviaDeTela({
         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-text-strong">
           {nome}
         </span>
-        <button
-          type="button"
-          onClick={onAssistir}
-          className="flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-brand-500 px-3 text-[13px] font-semibold text-control-primary-text-default transition hover:bg-control-primary-background-hover"
-        >
-          <Play size={14} aria-hidden="true" />
+        <Button variante="primario" tamanho="sm" pilula icone={<Play size={14} aria-hidden="true" />} onClick={onAssistir}>
           Assistir
-        </button>
+        </Button>
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ import type { ScreenQuality } from "@streamz/shared";
 import Dialog from "@/components/modals/Dialog";
 import { ehMobileAgora } from "@/hooks/useEhMobile";
 import { AppWindow, Monitor } from "@/components/ui/icones";
+import { Checkbox } from "@/components/ui/primitivos";
 import { SegmentosDeQualidade } from "@/components/voice/qualidade-de-tela";
 import {
   capacidadesDeTela,
@@ -409,15 +410,7 @@ function Rodape({
       <div className="min-w-0">
         {/* O som vem do loopback do Windows (tudo o que está tocando), pelo
             WASAPI do Rust — não da fonte escolhida. */}
-        <label className="flex w-max cursor-pointer items-center gap-2 text-sm leading-5 text-text-default">
-          <input
-            type="checkbox"
-            checked={audio}
-            onChange={(e) => onAudio(e.target.checked)}
-            className="accent-brand-500"
-          />
-          Compartilhar áudio do sistema
-        </label>
+        <Checkbox marcado={audio} aoMudar={onAudio} rotulo="Compartilhar áudio do sistema" />
         {/* O custo de subida é a única coisa que o usuário não consegue deduzir
             sozinho, e é o que decide se 1440p vai funcionar na conexão dele. */}
         <p className="truncate text-xs leading-4 text-text-muted">

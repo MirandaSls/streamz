@@ -2,7 +2,7 @@
 
 import { useRef, type KeyboardEvent } from "react";
 import { Check, Slash, X } from "@/components/ui/icones";
-import Tooltip from "@/components/ui/Tooltip";
+import { Tooltip } from "@/components/ui/primitivos";
 import type { EstadoDaRegra } from "@streamz/shared";
 
 /**
@@ -19,9 +19,10 @@ import type { EstadoDaRegra } from "@streamz/shared";
  * Medidas do print `docs/Reference/Captura de tela 2026-09-04 102249.png`:
  * grupo de 96×28 com cantos externos de ~4px, três botões de 32×28 colados
  * (sem vão entre eles), glifo de 18. As medidas vão em **pixel** (`w-[96px]`,
- * não `w-24`): o `globals.css` põe a raiz em 15,5px, então toda escala em `rem`
- * do Tailwind sai a 96,9% — `w-24` renderizava 93, e o desenho aqui é medido,
- * não proporcional (conferido no Chromium com o CSS compilado). O botão ativo é uma superfície um passo
+ * não `w-24`): a raiz do app é 16px (ADR-0009), então a escala em `rem` do
+ * Tailwind já bate com o pixel, mas o desenho aqui é medido, não proporcional
+ * (conferido no Chromium com o CSS compilado), e por isso ficou em pixel
+ * literal mesmo assim. O botão ativo é uma superfície um passo
  * mais clara que o fundo, e o grupo em si **não tem fundo**: no print o vão dos
  * dois botões inativos é exatamente a cor da página (medido: `#202024` nos dois),
  * e só o ativo se destaca (`#38383D`). O ativo usa `bg-interactive-background-selected`, que é o token de
@@ -137,7 +138,7 @@ export default function TriEstado({
   // o tooltip só entra quando há o que explicar: envolver sempre acrescentaria
   // um `<span>` e um listener de ponteiro em cada uma das ~20 linhas da lista
   return disabled && motivoDesabilitado ? (
-    <Tooltip label={motivoDesabilitado} side="left">
+    <Tooltip rotulo={motivoDesabilitado} lado="left">
       {grupo}
     </Tooltip>
   ) : (

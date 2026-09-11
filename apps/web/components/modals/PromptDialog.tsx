@@ -3,6 +3,7 @@
 import { useId, useState } from "react";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { Rotulo } from "@/components/ui/controls";
+import { TextInput } from "@/components/ui/primitivos";
 import type { Modal } from "@/stores/ui";
 
 /** Substitui o `prompt()` do browser. Enter confirma, Esc cancela. */
@@ -35,7 +36,7 @@ export default function PromptDialog({
       }
     >
       <Rotulo htmlFor={campoId}>{modal.label ?? modal.title}</Rotulo>
-      <input
+      <TextInput
         id={campoId}
         value={value}
         onChange={(e) => setValue(e.target.value)}
@@ -46,7 +47,6 @@ export default function PromptDialog({
           }
         }}
         placeholder={modal.placeholder}
-        className="h-10 w-full rounded-[3px] bg-input-background-default px-2.5 text-text-default outline-none placeholder:text-text-muted"
       />
     </Dialog>
   );

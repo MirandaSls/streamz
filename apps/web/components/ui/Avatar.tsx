@@ -137,7 +137,11 @@ export default function Avatar({
         <span
           aria-hidden="true"
           style={{ backgroundColor: hashColor(user.id) }}
-          className={`${s.box} grid place-items-center rounded-full font-semibold text-white`}
+          // fundo é uma cor arbitrária do hash (nunca sabemos se é clara ou
+          // escura) — mesmo caso do texto sobre imagem/vídeo, por isso o token
+          // de overlay (branco garantido), não `text-white` cru; ver
+          // `CardDeApp.tsx`, que já usa o mesmo padrão para as iniciais de app.
+          className={`${s.box} grid place-items-center rounded-full font-semibold text-text-overlay-light`}
         >
           {username.slice(0, 2).toUpperCase()}
         </span>
@@ -147,7 +151,9 @@ export default function Avatar({
         <span
           role="img"
           aria-label={voz === "surdo" ? "Sem áudio" : "Mudo"}
-          className={`absolute grid place-items-center rounded-full bg-status-danger text-white ${surface} ${s.dot}`}
+          // ícone branco sobre o disco de perigo — mesmo raciocínio do papel
+          // "overlay": é ícone sobre mancha de cor saturada, não texto de botão
+          className={`absolute grid place-items-center rounded-full bg-status-danger text-icon-overlay-light ${surface} ${s.dot}`}
         >
           {voz === "surdo" ? <HeadphoneOff size={s.icone} /> : <MicOff size={s.icone} />}
         </span>

@@ -15,6 +15,7 @@ import JanelaDeConfiguracoes, {
   type ItemDeMenu,
 } from "@/components/ui/JanelaDeConfiguracoes";
 import { Rotulo } from "@/components/ui/controls";
+import { TextInput } from "@/components/ui/primitivos";
 import { RegistrarAlteracoes, useControleDeAlteracoes } from "@/components/ui/alteracoes";
 import { api } from "@/lib/api";
 import { useCategories } from "@/stores/categories";
@@ -192,12 +193,11 @@ export default function CategorySettingsModal({
       {aba === "geral" && (
         <div>
           <Rotulo htmlFor="categoria-nome">Nome da categoria</Rotulo>
-          <input
+          <TextInput
             id="categoria-nome"
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={MAX_CATEGORY_NAME}
-            className="h-10 w-full rounded-[3px] bg-input-background-default px-2.5 text-text-default outline-none"
           />
         </div>
       )}

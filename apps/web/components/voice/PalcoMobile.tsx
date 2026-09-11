@@ -129,10 +129,10 @@ export default function PalcoMobile({
           type="button"
           onClick={() => setEmTelaCheia(principal.key)}
           aria-label={`Ver ${displayNameOf(principal.state.user)} em tela cheia`}
-          // 44 em px: `h-11` desenharia 42,6 com a raiz de 15,5 (ver
-          // `palco-mobile.ts`), e 42,6 fica **abaixo** do piso de toque
+          // 44 em px literal, e não `h-11`, para bater com a constante
+          // `ALVO_MINIMO` que o botão de virar câmera também usa
           style={{ height: ALVO_MINIMO, width: ALVO_MINIMO }}
-          className="absolute left-2 top-2 grid place-items-center rounded-full bg-black/50 text-white backdrop-blur transition active:bg-black/70"
+          className="absolute left-2 top-2 grid place-items-center rounded-full bg-control-overlay-secondary-background-default text-control-overlay-secondary-icon-default backdrop-blur transition hover:bg-control-overlay-secondary-background-hover active:bg-control-overlay-secondary-background-active"
         >
           <Maximize size={20} />
         </button>
@@ -206,7 +206,8 @@ export default function PalcoMobile({
     <>
       <div
         data-palco-mobile
-        // a folga lateral em px (`px-3` daria 11,6 com a raiz de 15,5)
+        // a folga lateral em px literal para bater com `PALCO_MARGEM`, a
+        // mesma constante usada nas margens negativas da tira abaixo
         style={paisagem ? undefined : { paddingLeft: PALCO_MARGEM, paddingRight: PALCO_MARGEM }}
         className={
           paisagem
@@ -286,7 +287,7 @@ function BotaoDeVirarCamera({ deslocado = false }: { deslocado?: boolean }) {
       onClick={() => void virarCamera()}
       aria-label={label}
       style={{ height: ALVO_MINIMO, width: ALVO_MINIMO }}
-      className={`absolute top-2 grid place-items-center rounded-full bg-black/50 text-white backdrop-blur transition active:bg-black/70 ${
+      className={`absolute top-2 grid place-items-center rounded-full bg-control-overlay-secondary-background-default text-control-overlay-secondary-icon-default backdrop-blur transition hover:bg-control-overlay-secondary-background-hover active:bg-control-overlay-secondary-background-active ${
         deslocado ? "left-[60px]" : "left-2"
       }`}
     >

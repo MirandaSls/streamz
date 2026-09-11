@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { RefreshCw } from "@/components/ui/icones";
 import { Section } from "@/components/ui/controls";
+import { Button } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { Estado, LocalDaChamada, Numero, duracao, usePainel } from "./comuns";
 
@@ -31,14 +32,15 @@ export default function AdminVisaoGeralTab() {
           Tudo o que acontece nesta instância, sem entrar em servidor nenhum. O painel é só
           leitura.
         </p>
-        <button
-          type="button"
+        <Button
+          variante="secundario"
+          tamanho="sm"
           onClick={recarregar}
-          className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded-[3px] px-2 text-sm font-medium text-text-subtle transition hover:bg-interactive-background-hover hover:text-text-strong"
+          icone={<RefreshCw size={14} aria-hidden="true" />}
+          className="shrink-0 celular:h-[44px]"
         >
-          <RefreshCw size={14} aria-hidden="true" />
           Atualizar
-        </button>
+        </Button>
       </div>
 
       <Estado erro={erro} carregando={carregando && !dados}>

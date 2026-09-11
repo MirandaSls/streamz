@@ -160,7 +160,7 @@ export default function VoiceChannelMembers({
                     a pílula é do nome, o selo é do que a pessoa está fazendo. */}
                 {e.user.bot && <TagDeBot />}
                 {e.screen ? (
-                  <span className="shrink-0 rounded-[3px] bg-status-danger px-1 text-[10px] font-bold uppercase leading-4 tracking-[0.02em] text-white">
+                  <span className="shrink-0 rounded-[3px] bg-status-danger px-1 text-[10px] font-bold uppercase leading-4 tracking-[0.02em] text-control-critical-primary-text-default">
                     Ao vivo
                   </span>
                 ) : (

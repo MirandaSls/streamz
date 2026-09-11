@@ -26,11 +26,12 @@ import {
 } from "@streamz/shared";
 import { useAlteracoesNaoSalvas } from "@/components/ui/alteracoes";
 import { Section, Toggle } from "@/components/ui/controls";
-import { ESTILO_CAMPO, ESTILO_ROTULO } from "@/components/settings/campos";
+import { ESTILO_ROTULO } from "@/components/settings/campos";
 import { TituloDaPagina } from "@/components/settings/server/pagina";
 import SeletorDeCor from "@/components/settings/SeletorDeCor";
 import { MENU_WIDTH } from "@/components/ui/ContextMenu";
 import Tooltip from "@/components/ui/Tooltip";
+import { BotaoDeIcone, Button, Campo, TextInput } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { useGuilds } from "@/stores/guilds";
 import { usePermissions } from "@/stores/permissions";
@@ -207,29 +208,25 @@ export default function CargosTab({ guildId }: { guildId: string }) {
       )}
 
       <div className="flex items-center gap-4">
-        <div className="relative min-w-0 flex-1">
-          <Search
-            size={14}
-            aria-hidden="true"
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted"
-          />
-          <input
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar cargos"
-            aria-label="Buscar cargos"
-            className={`${ESTILO_CAMPO} pl-8`}
-          />
-        </div>
+        <TextInput
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Buscar cargos"
+          aria-label="Buscar cargos"
+          tamanho="sm"
+          prefixo={<Search size={14} aria-hidden="true" className="text-text-muted" />}
+          classeDaCaixa="min-w-0 flex-1"
+        />
         {/* 32 de altura, raio 8, sem ícone: o "Criar cargo" do print. */}
-        <button
-          type="button"
+        <Button
+          variante="primario"
+          tamanho="sm"
           disabled={busy}
           onClick={() => void criar()}
-          className="h-8 celular:h-[44px] shrink-0 rounded-lg bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:opacity-50"
+          className="shrink-0 celular:h-[44px]"
         >
           Criar cargo
-        </button>
+        </Button>
       </div>
       <p className="mt-2 text-sm text-text-default">
         Os membros usam a cor do cargo mais alto que eles possuem nesta lista. Arraste os
@@ -294,25 +291,25 @@ export default function CargosTab({ guildId }: { guildId: string }) {
             {/* O lápis do print, sempre visível: no Discord ele é a ação
                 principal da linha e não espera o hover — o "…" ao lado é que
                 guarda o resto. */}
-            <button
-              type="button"
+            <BotaoDeIcone
+              rotulo={`Editar o cargo ${r.name}`}
+              icone={<Pencil size={16} />}
+              tamanho="lg"
+              comFundo
               onClick={() => setSelecionado(r.id)}
-              aria-label={`Editar o cargo ${r.name}`}
-              className="grid h-10 celular:h-[44px] w-10 celular:w-[44px] shrink-0 place-items-center rounded-lg text-text-muted transition hover:bg-border-normal hover:text-text-strong"
-            >
-              <Pencil size={16} />
-            </button>
-            <button
-              type="button"
+              className="shrink-0 celular:h-[44px] celular:w-[44px]"
+            />
+            {/* sempre visível, como no print: o lápis e o "…" são o par de
+                ações da linha, e um que some no hover parecia bug ao lado do
+                outro que não some */}
+            <BotaoDeIcone
+              rotulo={`Ações do cargo ${r.name}`}
+              icone={<MoreHorizontal size={16} />}
+              tamanho="lg"
+              comFundo
               onClick={(e) => abrirMenu(e, r)}
-              aria-label={`Ações do cargo ${r.name}`}
-              // sempre visível, como no print: o lápis e o "…" são o par de
-              // ações da linha, e um que some no hover parecia bug ao lado do
-              // outro que não some
-              className="grid h-10 celular:h-[44px] w-10 celular:w-[44px] shrink-0 place-items-center rounded-lg text-text-muted transition hover:bg-border-normal hover:text-text-strong"
-            >
-              <MoreHorizontal size={16} />
-            </button>
+              className="shrink-0 celular:h-[44px] celular:w-[44px]"
+            />
           </div>
         ))}
       </div>
@@ -438,16 +435,14 @@ function RoleEditor({
 
       {aba === "exibir" && (
         <>
-          <label htmlFor="roleName" className={ESTILO_ROTULO}>
-            Nome do cargo
-          </label>
-          <input
-            id="roleName"
-            value={name}
-            maxLength={MAX_ROLE_NAME}
-            onChange={(e) => setName(e.target.value)}
-            className={ESTILO_CAMPO}
-          />
+          <Campo rotulo="Nome do cargo" htmlFor="roleName">
+            <TextInput
+              id="roleName"
+              value={name}
+              maxLength={MAX_ROLE_NAME}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </Campo>
 
           <div className={`${ESTILO_ROTULO} mt-5`}>Cor do cargo</div>
           <SeletorDeCor
@@ -510,16 +505,14 @@ function RoleEditor({
                   <span className="min-w-0 flex-1 truncate text-text-default">
                     {displayNameOf(m.user)}
                   </span>
-                  <Tooltip label="Remover cargo">
-                    <button
-                      type="button"
-                      onClick={() => void toggleRole(m.user.id, role.id, false)}
-                      aria-label={`Remover ${role.name} de ${displayNameOf(m.user)}`}
-                      className="grid h-7 celular:h-[44px] w-7 celular:w-[44px] place-items-center rounded text-text-muted hover:text-status-danger"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </Tooltip>
+                  <BotaoDeIcone
+                    rotulo={`Remover ${role.name} de ${displayNameOf(m.user)}`}
+                    icone={<Trash2 size={16} />}
+                    tamanho="sm"
+                    perigo
+                    onClick={() => void toggleRole(m.user.id, role.id, false)}
+                    className="celular:h-[44px] celular:w-[44px]"
+                  />
                 </div>
               ))
             )}

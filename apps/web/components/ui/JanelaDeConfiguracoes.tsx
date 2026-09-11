@@ -7,6 +7,7 @@ import {
   ProvedorDeAlteracoes,
   type ControleDeAlteracoes,
 } from "@/components/ui/alteracoes";
+import { BotaoDeIcone, TextInput, Tooltip } from "@/components/ui/primitivos";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
 
@@ -43,8 +44,8 @@ import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
  * posições diferentes).
  *
  * Não usa `Dialog` de propósito: `Dialog` é a caixa de 380–480px com rodapé de
- * botões. O que se repete de lá é a casca (véu `bg-black`, `rounded-lg border
- * border-border-subtle bg-background-base-lower`) e o contrato de acessibilidade — `role="dialog"`,
+ * botões. O que se repete de lá é a casca (véu `bg-background-scrim`,
+ * `rounded-lg border border-border-subtle bg-background-base-lower`) e o contrato de acessibilidade — `role="dialog"`,
  * `aria-modal`, Esc fecha, o foco começa dentro e **volta para quem abriu**.
  *
  * ## No celular: mestre-detalhe em tela cheia
@@ -76,11 +77,13 @@ import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
  *
  * **Os tamanhos do ramo de celular são literais** — `h-[56px]` no cabeçalho,
  * `h-[44px]` nos alvos, `min-h-[48px]` na linha —, e não `h-14`/`h-11`/`h-12`:
- * a raiz do app é 15,5px e todo `rem` do Tailwind sai 3% menor que o nominal
- * (`h-14` mede 54,25; `h-11`, 42,6). Onde o número é medida da captura ou piso
- * de toque, ler a classe e assumir o valor dá errado — é a mesma regra do
- * `components/mobile/pecas.tsx`. O que não é medida nem alvo (a caixa de 24 do
- * ícone da linha, os respiros) fica na escala de propósito.
+ * mesmo com a raiz do app em 16px (ADR-0009 — `rem` do Tailwind já bate exato
+ * com o nominal: `h-14` = 56px, `h-11` = 44px, `h-12` = 48px), o número aqui é
+ * medida de captura ou piso de toque, não escala do tema, e fica literal para
+ * não depender de um múltiplo de 4 que pode não sobreviver à próxima medição —
+ * é a mesma regra do `components/mobile/pecas.tsx`. O que não é medida nem
+ * alvo (a caixa de 24 do ícone da linha, os respiros) fica na escala de
+ * propósito.
  */
 
 export interface ItemDeMenu {
@@ -306,14 +309,18 @@ export default function JanelaDeConfiguracoes({
         {emDetalhe ? (
           <>
             <header className="flex h-[56px] shrink-0 items-center gap-1 border-b border-border-subtle bg-background-base-lowest pl-1 pr-2">
-              <button
-                type="button"
+              {/* 44px de alvo é medida do celular, não um tamanho do primitivo
+                  (24/32/40) — mesma razão do `style` em vez de className, ver
+                  `BotaoDeIcone`. */}
+              <BotaoDeIcone
+                rotulo="Voltar"
+                icone={<ArrowLeft size={24} />}
+                tamanho="lg"
+                comFundo
                 onClick={voltarParaALista}
-                aria-label="Voltar"
-                className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg text-text-subtle transition active:bg-interactive-background-hover"
-              >
-                <ArrowLeft size={24} />
-              </button>
+                className="shrink-0"
+                style={{ height: 44, width: 44 }}
+              />
               <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-text-strong">
                 {tituloAba ?? itemAtivo?.label ?? titulo}
               </h1>
@@ -335,14 +342,15 @@ export default function JanelaDeConfiguracoes({
               <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-text-strong">
                 {titulo}
               </h1>
-              <button
-                type="button"
+              <BotaoDeIcone
+                rotulo={rotuloFechar}
+                icone={<X size={22} />}
+                tamanho="lg"
+                comFundo
                 onClick={fechar}
-                aria-label={rotuloFechar}
-                className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg text-text-subtle transition active:bg-interactive-background-hover"
-              >
-                <X size={22} />
-              </button>
+                className="shrink-0"
+                style={{ height: 44, width: 44 }}
+              />
             </header>
 
             <nav
@@ -371,20 +379,19 @@ export default function JanelaDeConfiguracoes({
               {cabecalhoRico && <div className="mb-3">{cabecalhoRico}</div>}
 
               {busca && (
-                <div className="relative mb-4">
-                  <Search
-                    size={16}
-                    aria-hidden="true"
-                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
-                  />
-                  <input
-                    value={busca.valor}
-                    onChange={(e) => busca.onChange(e.target.value)}
-                    placeholder={busca.placeholder ?? "Buscar"}
-                    aria-label={busca.rotulo}
-                    className="h-[44px] w-full rounded-lg bg-chat-background-default pl-10 pr-3 text-base text-text-default outline-none transition-colors placeholder:text-text-muted focus:ring-1 focus:ring-brand-500"
-                  />
-                </div>
+                // Caixa própria (sem borda, fundo `chat`) em vez do
+                // `input-background-default` padrão do `TextInput`: é o
+                // campo de busca "dentro do menu", não um formulário — o
+                // `border-none` apaga a borda que o primitivo sempre inclui
+                // no wrapper (o foco em si é global, ver `TextInput`).
+                <TextInput
+                  value={busca.valor}
+                  onChange={(e) => busca.onChange(e.target.value)}
+                  placeholder={busca.placeholder ?? "Buscar"}
+                  aria-label={busca.rotulo}
+                  prefixo={<Search size={16} aria-hidden="true" className="text-text-muted" />}
+                  classeDaCaixa="mb-4 border-none bg-chat-background-default"
+                />
               )}
 
               {grupos.map((grupo) => {
@@ -459,7 +466,7 @@ export default function JanelaDeConfiguracoes({
       // `flex` e não `grid`: numa grade o trilho automático cresce até o
       // max-content do modal (1400px), e aí `max-w-full` mede 100% de 1400 em
       // vez da janela — numa janela de 1100px o conteúdo saía pela direita
-      className="anim-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+      className="anim-overlay fixed inset-0 z-50 flex items-center justify-center bg-background-scrim p-4"
       onMouseDown={(e) => {
         // só o clique que **começa** no véu fecha: arrastar um controle de
         // dentro e soltar aqui fora não pode derrubar a tela
@@ -506,22 +513,19 @@ export default function JanelaDeConfiguracoes({
             {cabecalhoRico}
 
             {busca && (
-              <div className="relative mb-3">
-                <Search
-                  size={16}
-                  aria-hidden="true"
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
-                />
-                {/* 40 de altura e borda no lugar de fundo: é o campo do print,
-                    que tem a mesma altura dos itens do menu logo abaixo. */}
-                <input
-                  value={busca.valor}
-                  onChange={(e) => busca.onChange(e.target.value)}
-                  placeholder={busca.placeholder ?? "Buscar"}
-                  aria-label={busca.rotulo}
-                  className="h-10 w-full rounded-[4px] border border-border-normal bg-transparent pl-10 pr-3 text-base text-text-default outline-none transition-colors placeholder:text-text-muted focus:border-brand-500"
-                />
-              </div>
+              // 40 de altura é o próprio `md` do `TextInput` — bate com a
+              // altura dos itens do menu logo abaixo, como no print. O raio
+              // (--radius-sm, 8) e a borda/fundo passam a ser os do
+              // primitivo (medidos do Discord), no lugar do raio de 4 e do
+              // fundo transparente de antes — ver "medidas" da entrega.
+              <TextInput
+                value={busca.valor}
+                onChange={(e) => busca.onChange(e.target.value)}
+                placeholder={busca.placeholder ?? "Buscar"}
+                aria-label={busca.rotulo}
+                prefixo={<Search size={16} aria-hidden="true" className="text-text-muted" />}
+                classeDaCaixa="mb-3"
+              />
             )}
           </div>
 
@@ -624,15 +628,19 @@ export default function JanelaDeConfiguracoes({
               <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-text-strong">
                 {tituloAba}
               </h1>
-              <button
-                type="button"
+              {/* `atalho="Esc"` é o `title="… (Esc)"` de antes, como dica —
+                  `md` (32) já é a caixa medida; só o raio vira pílula
+                  (`rounded-full`), que o Discord usa neste X e não no
+                  cabeçalho normal (ver `BotaoDeIcone`). */}
+              <BotaoDeIcone
+                rotulo={rotuloFechar}
+                icone={<X size={16} />}
+                tamanho="md"
+                comFundo
+                atalho="Esc"
                 onClick={fechar}
-                aria-label={rotuloFechar}
-                title={`${rotuloFechar} (Esc)`}
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-text-muted transition hover:bg-interactive-background-hover hover:text-text-strong"
-              >
-                <X size={16} />
-              </button>
+                className="shrink-0 rounded-full"
+              />
             </header>
           )}
 
@@ -655,24 +663,30 @@ export default function JanelaDeConfiguracoes({
               e recua para a borda do painel quando a janela é estreita demais
               para os dois caberem lado a lado. */}
           {fecharComoEsc && (
-            <button
-              type="button"
-              onClick={fechar}
-              aria-label={rotuloFechar}
-              title={`${rotuloFechar} (Esc)`}
-              style={{ left: "min(780px, calc(100% - 52px))" }}
-              className="absolute top-9 flex w-9 flex-col items-center gap-[9px] text-text-subtle transition hover:text-text-strong"
-            >
-              <span
-                aria-hidden="true"
-                className="grid h-9 w-9 place-items-center rounded-full border-2 border-current"
+            // Fica `<button>`: é o círculo + rótulo "ESC" em duas linhas, uma
+            // composição que `BotaoDeIcone` não cobre (ele só desenha um
+            // ícone centrado numa caixa). O `title="… (Esc)"` de antes vira
+            // `Tooltip` — regra 4 da migração — com `atalho` mostrando o
+            // "Esc" que aqui já está escrito no próprio botão.
+            <Tooltip rotulo={rotuloFechar} atalho="Esc">
+              <button
+                type="button"
+                onClick={fechar}
+                aria-label={rotuloFechar}
+                style={{ left: "min(780px, calc(100% - 52px))" }}
+                className="absolute top-9 flex w-9 flex-col items-center gap-[9px] text-text-subtle transition hover:text-text-strong"
               >
-                <X size={16} />
-              </span>
-              <span aria-hidden="true" className="text-[11px] font-bold tracking-[0.02em]">
-                ESC
-              </span>
-            </button>
+                <span
+                  aria-hidden="true"
+                  className="grid h-9 w-9 place-items-center rounded-full border-2 border-current"
+                >
+                  <X size={16} />
+                </span>
+                <span aria-hidden="true" className="text-[11px] font-bold tracking-[0.02em]">
+                  ESC
+                </span>
+              </button>
+            </Tooltip>
           )}
         </div>
       </div>
@@ -694,7 +708,7 @@ export function ItemPerigo({
     <button
       type="button"
       onClick={onClick}
-      className={`${ITEM_BASE} text-status-danger hover:bg-status-danger hover:text-white`}
+      className={`${ITEM_BASE} text-status-danger hover:bg-status-danger hover:text-control-critical-primary-text-default`}
     >
       {icon && (
         <span aria-hidden="true" className="shrink-0">

@@ -2,6 +2,7 @@
 
 import { BarraDeNivel, Chave } from "@/components/voice/pecas-de-voz";
 import { useTesteDeMicrofone } from "@/components/voice/useTesteDeMicrofone";
+import { Button } from "@/components/ui/primitivos";
 import { useVoice } from "@/stores/voice";
 
 /**
@@ -49,13 +50,9 @@ export default function PopoverDeRuido() {
       <div className="space-y-2">
         <p className="text-sm font-semibold text-text-strong">Teste do microfone</p>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={alternar}
-            className="h-8 shrink-0 rounded-[3px] bg-border-normal px-3 text-sm font-medium text-text-strong transition hover:bg-border-strong"
-          >
+          <Button variante="secundario" tamanho="sm" onClick={alternar} className="shrink-0">
             {testando ? "Parar" : "Testar"}
-          </button>
+          </Button>
           <span className="min-w-0 flex-1">
             <BarraDeNivel nivel={nivel} />
           </span>

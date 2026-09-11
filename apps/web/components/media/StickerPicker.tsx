@@ -8,6 +8,7 @@ import { useEmojis } from "@/stores/emojis";
 import { useCanModerate, useGuilds } from "@/stores/guilds";
 import { ui } from "@/stores/ui";
 import { ehMobileAgora } from "@/hooks/useEhMobile";
+import { BotaoDeIcone } from "@/components/ui/primitivos";
 import {
   BotaoLateral,
   BuscaPicker,
@@ -264,18 +265,16 @@ export default function StickerPicker({
           <span className="flex-1 text-sm text-text-muted">Escolha uma figurinha</span>
         )}
         {podeGerenciar && guildIdAtivo && (
-          <button
-            type="button"
-            title="Gerenciar figurinhas do servidor"
-            aria-label="Gerenciar figurinhas do servidor"
+          <BotaoDeIcone
+            rotulo="Gerenciar figurinhas do servidor"
+            icone={<Settings2 size={16} aria-hidden="true" />}
+            tamanho="sm"
+            comFundo
             onClick={() => {
               onClose();
               ui.openModal({ kind: "guildEmojis", guildId: guildIdAtivo });
             }}
-            className="grid h-7 w-7 shrink-0 place-items-center rounded text-text-muted transition hover:bg-interactive-background-hover hover:text-text-default"
-          >
-            <Settings2 size={16} aria-hidden="true" />
-          </button>
+          />
         )}
       </RodapePicker>
     </div>

@@ -7,6 +7,7 @@ import Avatar from "@/components/ui/Avatar";
 import TagDeBot from "@/components/ui/TagDeBot";
 import Tooltip from "@/components/ui/Tooltip";
 import { MENU_WIDTH } from "@/components/ui/ContextMenu";
+import { BotaoDeIcone } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { mencionar } from "@/lib/mencoes";
 import { useAuth } from "@/stores/auth";
@@ -129,16 +130,13 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
             {grupo ? "Participantes" : "Conversa"} — {members.length}
           </h3>
           {grupo && (
-            <Tooltip label="Adicionar pessoas">
-              <button
-                type="button"
-                onClick={() => ui.openModal({ kind: "addGroupMembers", channelId: dm.id })}
-                aria-label="Adicionar pessoas ao grupo"
-                className="text-text-muted transition hover:text-text-strong celular:-mr-2 celular:grid celular:h-[44px] celular:w-[44px] celular:place-items-center"
-              >
-                <UserPlus size={16} />
-              </button>
-            </Tooltip>
+            <BotaoDeIcone
+              rotulo="Adicionar pessoas ao grupo"
+              icone={<UserPlus size={16} />}
+              tamanho="sm"
+              onClick={() => ui.openModal({ kind: "addGroupMembers", channelId: dm.id })}
+              className="celular:-mr-2 celular:h-[44px] celular:w-[44px]"
+            />
           )}
         </div>
 

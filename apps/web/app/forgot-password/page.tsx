@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import AuthCard, { FieldLabel, inputClass, submitClass } from "@/components/auth/AuthCard";
+import AuthCard, { FieldLabel, submitClass } from "@/components/auth/AuthCard";
+import { Button, TextInput } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { mensagemDeAuth } from "@/lib/auth-mensagens";
 
@@ -56,7 +57,7 @@ export default function ForgotPasswordPage() {
         <FieldLabel htmlFor="email" invalid={!!error} hint={error ?? undefined}>
           E-mail
         </FieldLabel>
-        <input
+        <TextInput
           id="email"
           name="email"
           type="email"
@@ -64,8 +65,8 @@ export default function ForgotPasswordPage() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           disabled={loading}
-          aria-invalid={error ? true : undefined}
-          className={inputClass}
+          erro={!!error}
+          classeDaCaixa="mb-5 w-full"
           autoFocus
         />
 
@@ -73,9 +74,16 @@ export default function ForgotPasswordPage() {
           {error}
         </p>
 
-        <button type="submit" disabled={loading || !email.trim()} className={submitClass}>
+        <Button
+          type="submit"
+          variante="primario"
+          tamanho="md"
+          larguraTotal
+          disabled={loading || !email.trim()}
+          className="celular:h-[48px]"
+        >
           {loading ? "Enviando…" : "Enviar link"}
-        </button>
+        </Button>
 
         <p className="mt-2 text-sm">
           <Link href="/login" className="font-medium text-text-link hover:underline">

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Download, X } from "@/components/ui/icones";
+import { BotaoDeIcone, Button } from "@/components/ui/primitivos";
 import {
   baixarAtualizacaoAndroid,
   ehAndroidNoTauri,
@@ -256,26 +257,21 @@ export default function AtualizadorDoAndroid() {
           reabre o instalador — sem baixar de novo, porque o pacote está no
           disco. */}
       {fase !== "baixando" && (
-        <button
-          type="button"
-          onClick={() => void atualizar(novidade)}
-          className="shrink-0 rounded-[3px] bg-brand-500 px-3 py-2 text-sm font-medium text-control-primary-text-default"
-        >
+        <Button variante="primario" tamanho="sm" onClick={() => void atualizar(novidade)} className="shrink-0">
           {fase === "falhou" ? "Tentar de novo" : "Instalar"}
-        </button>
+        </Button>
       )}
 
       {/* "Baixando" não tem "x": o download já começou, some sozinho, e sumir
           com a barra deixaria o usuário sem saber por que a rede está ocupada. */}
       {fase !== "baixando" && (
-        <button
-          type="button"
-          aria-label="Dispensar aviso de atualização"
+        <BotaoDeIcone
+          rotulo="Dispensar aviso de atualização"
+          icone={<X size={16} />}
+          tamanho="sm"
+          className="shrink-0"
           onClick={dispensar}
-          className="shrink-0 p-1 text-text-muted"
-        >
-          <X size={16} />
-        </button>
+        />
       )}
     </div>
   );

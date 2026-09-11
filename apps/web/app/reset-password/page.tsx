@@ -3,11 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import AuthCard, {
-  FieldLabel,
-  inputClass,
-  submitClass,
-} from "@/components/auth/AuthCard";
+import AuthCard, { submitClass } from "@/components/auth/AuthCard";
+import { Button, Campo, TextInput } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { mensagemDeAuth, validarSenha } from "@/lib/auth-mensagens";
 import { useAuth } from "@/stores/auth";
@@ -59,14 +56,17 @@ export default function ResetPasswordPage() {
         title="Senha alterada"
         subtitle="Todas as sessões foram encerradas. Entre de novo com a senha nova."
       >
-        <button
+        <Button
           type="button"
           onClick={() => router.replace("/login")}
-          className={submitClass}
+          variante="primario"
+          tamanho="md"
+          larguraTotal
+          className="celular:h-[48px]"
           autoFocus
         >
           Ir para o login
-        </button>
+        </Button>
       </AuthCard>
     );
   }
@@ -87,29 +87,37 @@ export default function ResetPasswordPage() {
   return (
     <AuthCard title="Criar uma senha nova">
       <form onSubmit={onSubmit} noValidate>
-        <FieldLabel htmlFor="password" invalid={!!error} hint={error ?? undefined}>
-          Nova senha
-        </FieldLabel>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="new-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          disabled={loading}
-          aria-invalid={error ? true : undefined}
-          className={`${inputClass} mb-2`}
-          autoFocus
-        />
+        <Campo rotulo="Nova senha" htmlFor="password" obrigatorio erro={error} className="mb-2">
+          <TextInput
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={loading}
+            erro={!!error}
+            autoFocus
+          />
+        </Campo>
 
+        {/* Campo mostra o erro visualmente mas sem aria-live; este parágrafo
+            garante o anúncio imediato pro leitor de tela, como antes. */}
         <p role="alert" aria-live="polite" className="sr-only">
           {error}
         </p>
 
-        <button type="submit" disabled={loading || !password} className={submitClass}>
-          {loading ? "Salvando…" : "Salvar senha"}
-        </button>
+        <Button
+          type="submit"
+          disabled={!password}
+          carregando={loading}
+          variante="primario"
+          tamanho="md"
+          larguraTotal
+          className="celular:h-[48px]"
+        >
+          Salvar senha
+        </Button>
 
         <p className="mt-2 text-sm">
           <Link href="/login" className="font-medium text-text-link hover:underline">

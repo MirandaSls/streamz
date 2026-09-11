@@ -13,6 +13,7 @@ import { displayNameOf, type ThreadView } from "@streamz/shared";
 import HeaderPopover from "@/components/chat/HeaderPopover";
 import Avatar from "@/components/ui/Avatar";
 import { MENU_WIDTH } from "@/components/ui/ContextMenu";
+import { Button } from "@/components/ui/primitivos";
 import { horaCompleta } from "@/lib/format";
 import { normalize } from "@/lib/quick-switcher";
 import { useAuth } from "@/stores/auth";
@@ -126,18 +127,18 @@ export default function ThreadsPopover({
         </button>
       )}
       action={
-        <button
-          type="button"
+        <Button
+          variante="primario"
+          tamanho="xs"
+          icone={<Plus size={14} aria-hidden="true" />}
           disabled={!ultimaMensagem}
           onClick={() => {
             if (!ultimaMensagem) return;
             void criar(channelId, ultimaMensagem.id, ultimaMensagem.content);
           }}
-          className="flex h-6 items-center gap-1 rounded-[3px] bg-brand-500 px-2 text-xs font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <Plus size={14} aria-hidden="true" />
           Criar Thread
-        </button>
+        </Button>
       }
     >
       {(fechar) => (

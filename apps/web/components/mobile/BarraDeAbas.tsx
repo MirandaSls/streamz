@@ -62,7 +62,7 @@ function Selo({ contagem, ponto }: { contagem: number; ponto: boolean }) {
   return (
     <span
       aria-hidden="true"
-      className="absolute -right-2.5 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[11px] font-bold leading-none text-white ring-[3px] ring-background-base-lowest"
+      className="absolute -right-2.5 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[11px] font-bold leading-none text-control-critical-primary-text-default ring-[3px] ring-background-base-lowest"
     >
       {rotuloDoContador(contagem)}
     </span>

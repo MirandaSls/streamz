@@ -6,6 +6,7 @@ import { customStatusOf, displayNameOf } from "@streamz/shared";
 import Avatar, { STATUS_LABEL } from "@/components/ui/Avatar";
 import PopoverFlutuante from "@/components/ui/PopoverFlutuante";
 import Tooltip from "@/components/ui/Tooltip";
+import { BotaoDeIcone } from "@/components/ui/primitivos";
 import VoiceConnectedBar from "@/components/voice/VoiceConnectedBar";
 import {
   LARGURA_DO_MENU_DE_AUDIO,
@@ -27,18 +28,7 @@ function FooterButton({
   onClick: () => void;
   children: React.ReactNode;
 }) {
-  return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        onClick={onClick}
-        aria-label={label}
-        className="grid h-8 w-8 place-items-center rounded-[4px] text-text-subtle transition hover:bg-interactive-background-hover hover:text-text-strong"
-      >
-        {children}
-      </button>
-    </Tooltip>
-  );
+  return <BotaoDeIcone rotulo={label} icone={children} tamanho="md" comFundo onClick={onClick} />;
 }
 
 /**

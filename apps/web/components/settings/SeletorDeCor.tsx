@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Check, Pipette } from "@/components/ui/icones";
+import { BotaoDeIcone, TextInput } from "@/components/ui/primitivos";
 
 /**
  * Seletor de cor das configurações — paleta de amostras, hexadecimal digitável
@@ -98,8 +99,8 @@ export default function SeletorDeCor({
               onClick={() => onChange("")}
               aria-label="Sem cor"
               aria-pressed={value === ""}
-              className={`grid h-8 w-8 place-items-center rounded-[4px] bg-border-normal text-xs text-white transition celular:h-[44px] celular:w-[44px] ${
-                value === "" ? "ring-2 ring-white" : "hover:opacity-80"
+              className={`grid h-8 w-8 place-items-center rounded-[4px] bg-border-normal text-xs text-text-overlay-light transition celular:h-[44px] celular:w-[44px] ${
+                value === "" ? "ring-2 ring-brand-500 ring-offset-[3px] ring-offset-background-base-lower" : "hover:opacity-80"
               }`}
             >
               —
@@ -117,31 +118,35 @@ export default function SeletorDeCor({
                 aria-pressed={ativo}
                 style={{ backgroundColor: c }}
                 className={`grid h-8 w-8 place-items-center rounded-[4px] transition celular:h-[44px] celular:w-[44px] ${
-                  ativo ? "ring-2 ring-white" : "hover:opacity-80"
+                  ativo
+                    ? "ring-2 ring-brand-500 ring-offset-[3px] ring-offset-background-base-lower"
+                    : "hover:opacity-80"
                 }`}
               >
-                {ativo && <Check size={14} className="text-white drop-shadow" aria-hidden="true" />}
+                {ativo && <Check size={14} className="text-icon-overlay-light drop-shadow" aria-hidden="true" />}
               </button>
             );
           })}
 
           {temContaGotas && (
-            <button
-              type="button"
+            <BotaoDeIcone
+              rotulo="Escolher uma cor da tela"
+              icone={<Pipette size={16} />}
+              tamanho="md"
+              comFundo
               onClick={() => void contaGotas()}
-              aria-label="Escolher uma cor da tela"
-              className="grid h-8 w-8 place-items-center rounded-[4px] border border-border-normal text-text-default transition hover:bg-interactive-background-hover celular:h-[44px] celular:w-[44px]"
-            >
-              <Pipette size={16} />
-            </button>
+              className="border border-border-normal celular:h-[44px] celular:w-[44px]"
+            />
           )}
 
-          <input
+          <TextInput
             value={value}
             onChange={(e) => onChange(e.target.value)}
             placeholder="#rrggbb"
             aria-label={`${rotulo} em hexadecimal`}
-            className="h-8 w-[104px] rounded-[3px] border border-border-subtle bg-chat-background-default px-2 font-mono text-sm text-text-default outline-none transition-colors placeholder:text-text-muted focus:border-brand-500 celular:h-[44px] celular:text-[max(16px,1em)]"
+            tamanho="sm"
+            classeDaCaixa="w-[104px] celular:h-[44px]"
+            className="font-mono celular:text-[max(16px,1em)]"
           />
         </div>
       )}

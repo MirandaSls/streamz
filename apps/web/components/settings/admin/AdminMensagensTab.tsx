@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, Search } from "@/components/ui/icones";
 import type { AdminChannelView, AdminChannelsPage, Message } from "@streamz/shared";
 import MessagePreview from "@/components/chat/MessagePreview";
-import { ESTILO_CAMPO } from "@/components/settings/campos";
+import { Button, TextInput } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { dataCompleta } from "@/lib/format";
 import { errorMessage } from "@/stores/socket-adapter";
@@ -97,20 +97,14 @@ function ListaDeCanais({ onAbrir }: { onAbrir: (c: AdminChannelView) => void }) 
         servidor.
       </p>
 
-      <div className="relative mb-2">
-        <Search
-          size={16}
-          aria-hidden="true"
-          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted"
-        />
-        <input
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          placeholder="Buscar por canal, servidor ou participante"
-          aria-label="Buscar canais"
-          className={`${ESTILO_CAMPO} pl-8`}
-        />
-      </div>
+      <TextInput
+        value={busca}
+        onChange={(e) => setBusca(e.target.value)}
+        placeholder="Buscar por canal, servidor ou participante"
+        aria-label="Buscar canais"
+        prefixo={<Search size={16} aria-hidden="true" className="shrink-0 text-text-muted" />}
+        classeDaCaixa="mb-2"
+      />
 
       <div role="group" aria-label="Filtrar por tipo" className="mb-4 flex gap-1">
         {ESCOPOS.map((e) => (
@@ -171,14 +165,16 @@ function ListaDeCanais({ onAbrir }: { onAbrir: (c: AdminChannelView) => void }) 
         </ul>
 
         {pagina?.proximoCursor && (
-          <button
-            type="button"
+          <Button
+            variante="secundario"
+            tamanho="sm"
+            larguraTotal
             onClick={() => void carregarMais()}
-            disabled={carregandoMais}
-            className="mt-3 h-9 celular:h-[44px] w-full rounded-[3px] border border-border-normal text-sm font-medium text-text-default transition hover:border-border-strong disabled:opacity-60"
+            carregando={carregandoMais}
+            className="mt-3 celular:h-[44px]"
           >
-            {carregandoMais ? "Carregando…" : "Carregar mais"}
-          </button>
+            Carregar mais
+          </Button>
         )}
       </Estado>
     </>
@@ -261,14 +257,16 @@ function Historico({ canal, onVoltar }: { canal: AdminChannelView; onVoltar: () 
         vazio={!carregando && itens.length === 0 ? "Este canal não tem mensagens." : undefined}
       >
         {!fim && cursor && (
-          <button
-            type="button"
+          <Button
+            variante="secundario"
+            tamanho="sm"
+            larguraTotal
             onClick={() => void carregarAntigas()}
-            disabled={carregando}
-            className="mb-2 h-9 celular:h-[44px] w-full rounded-[3px] border border-border-normal text-sm font-medium text-text-default transition hover:border-border-strong disabled:opacity-60"
+            carregando={carregando}
+            className="mb-2 celular:h-[44px]"
           >
-            {carregando ? "Carregando…" : "Mensagens anteriores"}
-          </button>
+            Mensagens anteriores
+          </Button>
         )}
         {fim && <p className="mb-2 text-center text-xs text-channels-default">Começo do canal.</p>}
 

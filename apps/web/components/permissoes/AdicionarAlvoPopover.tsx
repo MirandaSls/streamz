@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { Search } from "@/components/ui/icones";
 import Avatar from "@/components/ui/Avatar";
 import PopoverFlutuante from "@/components/ui/PopoverFlutuante";
+import { TextInput } from "@/components/ui/primitivos";
 import type { PublicUser } from "@streamz/shared";
 import type { Alvo } from "@/components/permissoes/alvos";
 
@@ -56,21 +57,17 @@ export default function AdicionarAlvoPopover({
       largura={260}
       denso
     >
-      <div className="relative mb-1">
-        <Search
-          size={14}
-          aria-hidden="true"
-          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted"
-        />
-        <input
-          ref={campoRef}
-          value={filtro}
-          onChange={(e) => onFiltro(e.target.value)}
-          placeholder="Cargo ou membro"
-          aria-label="Buscar cargo ou membro"
-          className="h-8 w-full rounded-[4px] border border-border-normal bg-transparent pl-8 pr-2 text-sm text-text-default outline-none transition-colors placeholder:text-text-muted focus:border-brand-500 celular:h-[44px] celular:text-[max(16px,1em)]"
-        />
-      </div>
+      <TextInput
+        ref={campoRef}
+        value={filtro}
+        onChange={(e) => onFiltro(e.target.value)}
+        placeholder="Cargo ou membro"
+        aria-label="Buscar cargo ou membro"
+        tamanho="sm"
+        prefixo={<Search size={14} aria-hidden="true" className="text-text-muted" />}
+        classeDaCaixa="mb-1 celular:h-[44px]"
+        className="celular:text-[max(16px,1em)]"
+      />
 
       <div className="max-h-[220px] overflow-y-auto">
         {alvos.length === 0 ? (

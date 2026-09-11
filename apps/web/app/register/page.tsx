@@ -4,15 +4,10 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { MAX_DISPLAY_NAME } from "@streamz/shared";
-import AuthCard, {
-  FieldLabel,
-  OptionalFieldLabel,
-  inputClass,
-  linkClass,
-  submitClass,
-} from "@/components/auth/AuthCard";
+import AuthCard, { FieldLabel, OptionalFieldLabel, linkClass } from "@/components/auth/AuthCard";
 import { api } from "@/lib/api";
 import { mensagemDeAuth, validarRegistro } from "@/lib/auth-mensagens";
+import { Button, TextInput } from "@/components/ui/primitivos";
 import { useAuth } from "@/stores/auth";
 import { ui } from "@/stores/ui";
 
@@ -109,7 +104,7 @@ function RegisterForm() {
         >
           E-mail
         </FieldLabel>
-        <input
+        <TextInput
           id="email"
           name="email"
           type="email"
@@ -117,13 +112,13 @@ function RegisterForm() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           disabled={loading}
-          aria-invalid={campo === "email" ? true : undefined}
-          className={inputClass}
+          erro={campo === "email"}
+          classeDaCaixa="mb-5"
           autoFocus
         />
 
         <OptionalFieldLabel htmlFor="displayName">Nome de exibição</OptionalFieldLabel>
-        <input
+        <TextInput
           id="displayName"
           name="displayName"
           autoComplete="nickname"
@@ -132,7 +127,7 @@ function RegisterForm() {
           disabled={loading}
           maxLength={MAX_DISPLAY_NAME}
           aria-describedby="dica-exibicao"
-          className={`${inputClass} mb-2`}
+          classeDaCaixa="mb-2"
         />
         <p id="dica-exibicao" className="mb-5 text-xs text-text-muted">
           É como as pessoas vão te ver. Sem isso, mostramos o seu nome de usuário.
@@ -145,16 +140,16 @@ function RegisterForm() {
         >
           Nome de usuário
         </FieldLabel>
-        <input
+        <TextInput
           id="username"
           name="username"
           autoComplete="username"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           disabled={loading}
-          aria-invalid={campo === "username" ? true : undefined}
+          erro={campo === "username"}
           aria-describedby="dica-usuario"
-          className={`${inputClass} mb-2`}
+          classeDaCaixa="mb-2"
         />
         <p id="dica-usuario" className="mb-5 text-xs text-text-muted">
           3 a 32 caracteres — letras, números, _ . e -
@@ -167,7 +162,7 @@ function RegisterForm() {
         >
           Senha
         </FieldLabel>
-        <input
+        <TextInput
           id="password"
           name="password"
           type="password"
@@ -175,9 +170,9 @@ function RegisterForm() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           disabled={loading}
-          aria-invalid={campo === "password" ? true : undefined}
+          erro={campo === "password"}
           aria-describedby="dica-senha"
-          className={`${inputClass} mb-2`}
+          classeDaCaixa="mb-2"
         />
         <p id="dica-senha" className="mb-5 text-xs text-text-muted">
           Ao menos 6 caracteres.
@@ -206,9 +201,16 @@ function RegisterForm() {
           <span className="font-medium text-text-default">Política de Privacidade</span> do Streamz.
         </p>
 
-        <button type="submit" disabled={loading} className={submitClass}>
+        <Button
+          type="submit"
+          variante="primario"
+          tamanho="md"
+          larguraTotal
+          disabled={loading}
+          className="celular:h-[48px]"
+        >
           {loading ? "Criando…" : "Continuar"}
-        </button>
+        </Button>
       </form>
     </AuthCard>
   );

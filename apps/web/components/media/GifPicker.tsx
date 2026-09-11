@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
 import { ehMobileAgora } from "@/hooks/useEhMobile";
+import { BotaoDeIcone } from "@/components/ui/primitivos";
 import { BuscaPicker, CaixaPicker } from "@/components/media/PickerChrome";
 import { alternarGifFavorito, usePrefsPicker } from "@/components/media/preferencias-picker";
 
@@ -146,14 +147,14 @@ export default function GifPicker({
         autoFocus={autoFocarBusca}
       >
         {(emCategoria || buscando) && (
-          <button
-            type="button"
+          <BotaoDeIcone
+            rotulo="Voltar"
+            icone={<ChevronLeft size={18} aria-hidden="true" />}
             onClick={voltar}
-            aria-label="Voltar"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded text-text-muted transition hover:bg-interactive-background-hover hover:text-text-default"
-          >
-            <ChevronLeft size={18} aria-hidden="true" />
-          </button>
+            tamanho="md"
+            comFundo
+            semDica
+          />
         )}
       </BuscaPicker>
 
@@ -204,7 +205,7 @@ export default function GifPicker({
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={c.previewUrl} alt="" className="h-full w-full object-cover" />
-                    <span className="absolute inset-0 grid place-items-center bg-black/40 text-sm font-bold text-white">
+                    <span className="absolute inset-0 grid place-items-center bg-background-scrim text-sm font-bold text-text-overlay-light">
                       {c.name}
                     </span>
                   </button>
@@ -332,8 +333,8 @@ function CartaoGif({
         onClick={onFavoritar}
         aria-label={favorito ? "Remover dos favoritos" : "Favoritar GIF"}
         aria-pressed={favorito}
-        className={`absolute right-1 top-1 grid h-7 w-7 place-items-center rounded bg-black/60 transition focus-visible:opacity-100 group-hover:opacity-100 ${
-          favorito ? "text-brand-500 opacity-100" : "text-white opacity-0"
+        className={`absolute right-1 top-1 grid h-7 w-7 place-items-center rounded bg-background-scrim transition focus-visible:opacity-100 group-hover:opacity-100 ${
+          favorito ? "text-brand-500 opacity-100" : "text-text-overlay-light opacity-0"
         }`}
       >
         <Star size={15} aria-hidden="true" fill={favorito ? "currentColor" : "none"} />

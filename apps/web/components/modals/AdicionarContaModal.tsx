@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { exigeMfa, type AuthSession } from "@streamz/shared";
-import { FieldLabel, inputClass, linkClass } from "@/components/auth/AuthCard";
+import { FieldLabel, linkClass } from "@/components/auth/AuthCard";
 import Dialog, { PrimaryButton } from "@/components/modals/Dialog";
+import { Button, TextInput } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { mensagemDeAuth, validarLogin } from "@/lib/auth-mensagens";
 import { cabeMaisUma, lerCofreDoDisco, LIMITE_DE_CONTAS } from "@/lib/contas";
@@ -126,13 +127,14 @@ export default function AdicionarContaModal({ voltar }: { voltar: boolean }) {
             >
               {enviando ? "Verificando…" : "Continuar"}
             </PrimaryButton>
-            <button
-              type="button"
+            <Button
+              variante="link"
+              tamanho="sm"
               onClick={() => setTicket(null)}
-              className="mr-auto text-base text-text-default transition hover:underline"
+              className="mr-auto"
             >
               Voltar
-            </button>
+            </Button>
           </>
         }
       >
@@ -140,7 +142,7 @@ export default function AdicionarContaModal({ voltar }: { voltar: boolean }) {
           <FieldLabel htmlFor="conta-code" invalid={!!erro} hint={erro ?? undefined}>
             Código de autenticação
           </FieldLabel>
-          <input
+          <TextInput
             id="conta-code"
             name="code"
             inputMode="text"
@@ -148,8 +150,8 @@ export default function AdicionarContaModal({ voltar }: { voltar: boolean }) {
             value={code}
             onChange={(e) => setCode(e.target.value)}
             disabled={enviando}
-            aria-invalid={erro ? true : undefined}
-            className={`${inputClass} tracking-[0.3em]`}
+            erro={!!erro}
+            className="tracking-[0.3em]"
             autoFocus
           />
         </form>
@@ -172,13 +174,9 @@ export default function AdicionarContaModal({ voltar }: { voltar: boolean }) {
             "Voltar" na ponta esquerda: o rodapé da Dialog é `row-reverse`, então
             quem empurra para longe do primário é `mr-auto`, não `ml-auto`.
           */}
-          <button
-            type="button"
-            onClick={fechar}
-            className="mr-auto text-base text-text-default transition hover:underline"
-          >
+          <Button variante="link" tamanho="sm" onClick={fechar} className="mr-auto">
             Voltar
-          </button>
+          </Button>
         </>
       }
     >
@@ -190,22 +188,21 @@ export default function AdicionarContaModal({ voltar }: { voltar: boolean }) {
         <FieldLabel htmlFor="conta-identificador" invalid={!!erro} hint={erro ?? undefined}>
           E-mail ou usuário
         </FieldLabel>
-        <input
+        <TextInput
           id="conta-identificador"
           name="identificador"
           autoComplete="username"
           value={identificador}
           onChange={(e) => setIdentificador(e.target.value)}
           disabled={enviando}
-          aria-invalid={erro ? true : undefined}
-          className={inputClass}
+          erro={!!erro}
           autoFocus
         />
 
         <FieldLabel htmlFor="conta-password" invalid={!!erro}>
           Senha
         </FieldLabel>
-        <input
+        <TextInput
           id="conta-password"
           name="password"
           type="password"
@@ -213,8 +210,8 @@ export default function AdicionarContaModal({ voltar }: { voltar: boolean }) {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           disabled={enviando}
-          aria-invalid={erro ? true : undefined}
-          className={`${inputClass} mb-2`}
+          erro={!!erro}
+          classeDaCaixa="mb-2"
         />
         <p className="text-sm">
           <Link href="/forgot-password" className={linkClass}>

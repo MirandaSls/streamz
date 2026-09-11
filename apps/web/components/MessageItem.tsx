@@ -54,7 +54,7 @@ import { emit } from "@/stores/socket-adapter";
 import Avatar from "@/components/ui/Avatar";
 import EmojiPicker from "@/components/ui/EmojiPicker";
 import TagDeBot from "@/components/ui/TagDeBot";
-import Tooltip from "@/components/ui/Tooltip";
+import { BotaoDeIcone, Button, TextArea, Tooltip } from "@/components/ui/primitivos";
 import { dataCompleta, hora, horaCompleta } from "@/lib/format";
 import { Markdown } from "@/lib/markdown";
 import { useAuth } from "@/stores/auth";
@@ -85,21 +85,19 @@ function ActionButton({
   children: React.ReactNode;
 }) {
   return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        onClick={onClick}
-        aria-label={label}
-        // 28px com raio 6, medido no botão "…" da barra do Discord
-        // (`2026-08-31 124022.png`, x 1222..1249, y 394..421; canto sobe
-        // 4, 2, 1, 1, 0 px). Era 32 com raio 3.
-        className={`grid h-7 w-7 place-items-center rounded-md text-text-subtle transition hover:bg-interactive-background-hover ${
-          danger ? "hover:text-status-danger" : "hover:text-text-strong"
-        }`}
-      >
-        {children}
-      </button>
-    </Tooltip>
+    <BotaoDeIcone
+      rotulo={label}
+      icone={children}
+      onClick={onClick}
+      tamanho="sm"
+      comFundo
+      perigo={danger}
+      // 28px com raio 6, medido no botão "…" da barra do Discord
+      // (`2026-08-31 124022.png`, x 1222..1249, y 394..421; canto sobe
+      // 4, 2, 1, 1, 0 px). Era 32 com raio 3. O `sm` do primitivo é 24 —
+      // a barra pede 28, por isso a medida vem por className.
+      className="h-7 w-7 rounded-md"
+    />
   );
 }
 
@@ -692,7 +690,7 @@ export default function MessageItem({
         texto e a mídia vão de x=62 a x=376. Com `celular:pl-[64px]
         celular:pr-3` a nossa coluna sai em 64 → 378, dentro de 2px da
         referência — e é isso que dá ao GIF a mesma largura que ele tem lá.
-        Literal, não `rem`: a raiz do app é 15,5px.
+        Literal, não `rem`: a raiz do app é 16px (ADR-0009).
       */
       className={`group relative flex py-0.5 pr-12 celular:pr-3 ${
         compacto ? "gap-1.5 pl-4" : "gap-4 pl-[80px] celular:pl-[64px]"
@@ -745,7 +743,7 @@ export default function MessageItem({
                 desceria abaixo dela; `self-center` a recentra na linha de 22px
                 sem mexer no alinhamento do nome nem no da hora. */}
             {author.bot && <TagDeBot className="self-center" />}
-            <Tooltip label={dataCompleta(message.createdAt)}>
+            <Tooltip rotulo={dataCompleta(message.createdAt)}>
               <span className="ml-1 text-xs text-text-muted">{horaCompleta(message.createdAt)}</span>
             </Tooltip>
           </div>
@@ -760,7 +758,7 @@ export default function MessageItem({
             className="mt-1"
           >
             <div className="relative">
-              <textarea
+              <TextArea
                 autoFocus
                 rows={Math.min(8, Math.max(1, draft.split("\n").length))}
                 value={draft}
@@ -773,17 +771,20 @@ export default function MessageItem({
                   }
                 }}
                 aria-label="Editar mensagem"
-                className="w-full resize-none rounded-lg bg-chat-background-default py-[11px] pl-4 pr-12 text-text-default outline-none"
+                // a caixa de edição usa o fundo do composer, sem borda — a
+                // borda e o padding padrão do primitivo (pensado para
+                // formulário) não são o desenho daqui
+                classeDaCaixa="rounded-lg border-transparent bg-chat-background-default"
+                className="py-[11px] pl-4 pr-12 text-text-default"
               />
               {/* o Discord mantém o emoji também na caixa de edição */}
-              <button
-                type="button"
+              <BotaoDeIcone
+                rotulo="Emoji"
+                icone={<Smile size={22} />}
+                tamanho="md"
                 onClick={(e) => setPicker({ alvo: "edicao", ancora: anchorOf(e.currentTarget) })}
-                aria-label="Emoji"
-                className="absolute right-2 top-1.5 grid h-8 w-8 place-items-center text-text-subtle transition hover:text-text-strong"
-              >
-                <Smile size={22} />
-              </button>
+                className="absolute right-2 top-1.5"
+              />
             </div>
             <div className="mt-1 text-xs text-text-muted">
               escape para{" "}
@@ -835,9 +836,9 @@ export default function MessageItem({
                   myRoleIds={meusCargos}
                 />
                 {message.editedAt && (
-                  <span className="ml-1 text-[10px] text-text-muted" title={horaCompleta(message.editedAt)}>
-                    (editado)
-                  </span>
+                  <Tooltip rotulo={horaCompleta(message.editedAt)}>
+                    <span className="ml-1 text-[10px] text-text-muted">(editado)</span>
+                  </Tooltip>
                 )}
               </div>
             </div>
@@ -931,7 +932,7 @@ export default function MessageItem({
                 </TooltipReacao>
               );
             })}
-            <Tooltip label="Adicionar reação">
+            <Tooltip rotulo="Adicionar reação">
               <button
                 type="button"
                 onClick={abrirSeletorDeReacao}
@@ -984,20 +985,12 @@ export default function MessageItem({
         {message.failed && message.nonce && (
           <div className="mt-1 flex items-center gap-2 text-xs text-status-danger">
             <span>Não foi possível enviar.</span>
-            <button
-              type="button"
-              onClick={() => onRetry?.(message.nonce as string)}
-              className="rounded-[3px] bg-background-base-lowest px-2 py-0.5 font-medium text-text-default hover:text-text-strong"
-            >
+            <Button variante="secundario" tamanho="xs" onClick={() => onRetry?.(message.nonce as string)}>
               Reenviar
-            </button>
-            <button
-              type="button"
-              onClick={() => onDiscard?.(message.nonce as string)}
-              className="rounded-[3px] px-1 py-0.5 text-text-muted hover:text-text-strong"
-            >
+            </Button>
+            <Button variante="link" tamanho="xs" onClick={() => onDiscard?.(message.nonce as string)}>
               Descartar
-            </button>
+            </Button>
           </div>
         )}
       </div>

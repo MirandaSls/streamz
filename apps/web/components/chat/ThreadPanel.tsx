@@ -11,6 +11,7 @@ import TypingIndicator from "@/components/chat/TypingIndicator";
 import { ultimaMinhaMensagem } from "@/components/chat/ultima-minha";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
+import { BotaoDeIcone } from "@/components/ui/primitivos";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { useCanModerate } from "@/stores/guilds";
@@ -154,36 +155,9 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
           </Tooltip>
         )}
 
-        <Tooltip label="Notificações">
-          <button
-            type="button"
-            onClick={abrirNotificacoes}
-            aria-label="Notificações do tópico"
-            className="shrink-0 text-text-subtle transition hover:text-text-strong"
-          >
-            <Bell size={20} />
-          </button>
-        </Tooltip>
-        <Tooltip label="Mais">
-          <button
-            type="button"
-            onClick={abrirMenu}
-            aria-label="Mais opções do tópico"
-            className="shrink-0 text-text-subtle transition hover:text-text-strong"
-          >
-            <MoreHorizontal size={20} />
-          </button>
-        </Tooltip>
-        <Tooltip label="Fechar tópico">
-          <button
-            type="button"
-            onClick={closeThread}
-            aria-label="Fechar thread"
-            className="shrink-0 text-text-subtle transition hover:text-text-strong"
-          >
-            <X size={24} />
-          </button>
-        </Tooltip>
+        <BotaoDeIcone rotulo="Notificações do tópico" icone={<Bell size={20} />} onClick={abrirNotificacoes} />
+        <BotaoDeIcone rotulo="Mais opções do tópico" icone={<MoreHorizontal size={20} />} onClick={abrirMenu} />
+        <BotaoDeIcone rotulo="Fechar tópico" icone={<X size={24} />} onClick={closeThread} />
       </div>
 
       <MessageList

@@ -8,8 +8,9 @@ import {
   type AppInstalacao,
 } from "@streamz/shared";
 import { Bot } from "@/components/ui/icones";
-import { BOTAO_PERIGO, TituloDaPagina } from "@/components/settings/server/pagina";
+import { TituloDaPagina } from "@/components/settings/server/pagina";
 import Avatar from "@/components/ui/Avatar";
+import { Button, Tooltip } from "@/components/ui/primitivos";
 import TagDeBot from "@/components/ui/TagDeBot";
 import { api } from "@/lib/api";
 import { horaCompleta } from "@/lib/format";
@@ -150,18 +151,19 @@ function LinhaDeApp({ item, aoRemover }: { item: AppInstalacao; aoRemover: () =>
           </div>
         </div>
 
-        <button
-          type="button"
+        <Button
+          variante="critico-secundario"
+          tamanho="sm"
           onClick={aoRemover}
           aria-label={`Remover ${item.app.name} do servidor`}
           /* 32px é a altura dos botões desta família de páginas (`h-8` em
              "Perfil do servidor" e "Cargos"); no celular ele sobe para o piso
              de toque de 44 e ocupa a linha inteira, porque uma ação destrutiva
              encolhida num canto é a que mais se aperta por engano. */
-          className={`${BOTAO_PERIGO} h-8 celular:h-[44px] celular:w-full`}
+          className="celular:h-[44px] celular:w-full"
         >
           Remover
-        </button>
+        </Button>
       </div>
 
       <div className="mt-3 border-t border-border-subtle pt-2">
@@ -175,12 +177,12 @@ function LinhaDeApp({ item, aoRemover }: { item: AppInstalacao; aoRemover: () =>
         ) : (
           <ul className="flex flex-wrap gap-1.5">
             {concedidas.map((nome) => (
-              <li
-                key={nome}
-                title={PERMISSION_INFO[nome].description}
-                className="rounded-[3px] bg-input-background-default px-1.5 py-0.5 text-xs text-text-default"
-              >
-                {PERMISSION_INFO[nome].label}
+              <li key={nome}>
+                <Tooltip rotulo={PERMISSION_INFO[nome].description}>
+                  <span className="rounded-[3px] bg-input-background-default px-1.5 py-0.5 text-xs text-text-default">
+                    {PERMISSION_INFO[nome].label}
+                  </span>
+                </Tooltip>
               </li>
             ))}
           </ul>

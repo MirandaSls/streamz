@@ -6,6 +6,7 @@ import { isSystemMessage, type Message } from "@streamz/shared";
 import MessageItem from "@/components/MessageItem";
 import BlockedMessages from "@/components/chat/BlockedMessages";
 import { useFronteiraNaoLida, useMarcadorNaoLido } from "@/components/chat/marcador-nao-lido";
+import { Button } from "@/components/ui/primitivos";
 import { useStickyScroll } from "@/hooks/useStickyScroll";
 import { continuaAnterior, mesmoDia, rotuloDoDia } from "@/lib/format";
 import { agruparBloqueadas, primeiraDoBloco } from "@/lib/timeline";
@@ -44,7 +45,7 @@ function UnreadDivider() {
       className="pointer-events-none relative mt-3 flex items-center"
     >
       <span className="h-px flex-1 bg-status-danger" />
-      <span className="rounded-b-sm bg-status-danger px-1 py-px text-[10px] font-bold uppercase leading-[13px] tracking-wide text-white">
+      <span className="rounded-b-sm bg-status-danger px-1 py-px text-[10px] font-bold uppercase leading-[13px] tracking-wide text-control-critical-primary-text-default">
         Novo
       </span>
     </div>
@@ -81,9 +82,12 @@ export interface Welcome {
 }
 
 /**
- * Botão da fileira do início do canal/conversa, medido no Discord: 32px de
- * altura, raio 8, 12px de padding lateral, texto 14/600, lápis de 16px com 6px
- * até o texto.
+ * Botão da fileira do início do canal/conversa ("Editar canal", "Bloquear",
+ * "Desfazer amizade"): o chip neutro do Discord — `<Button variante="secundario"
+ * tamanho="sm">`, sem variante de perigo mesmo para "Bloquear", porque no print
+ * de referência a fileira inteira é neutra. O ícone continua envolto em
+ * `aria-hidden`: quem chama (`ChatView`) passa o `Pencil` sem marcar isso
+ * sozinho, e é este componente que sempre escondeu o desenho do leitor de tela.
  */
 export function BotaoBoasVindas({
   icon,
@@ -95,18 +99,17 @@ export function BotaoBoasVindas({
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
+    <Button
+      variante="secundario"
+      tamanho="sm"
+      icone={icon && <span aria-hidden="true">{icon}</span>}
       onClick={onClick}
-      /* 44 literal no celular: `h-8` mede 31 (a raiz do app é 15,5px e todo
-         `rem` do Tailwind sai 3% menor — ver `components/mobile/pecas.tsx`), e
-         estes botões das boas-vindas ("Editar canal", "Bloquear", "Desfazer
-         amizade") são os primeiros alvos de quem abre uma conversa vazia. */
-      className="flex h-8 items-center gap-1.5 rounded-lg bg-background-base-lowest px-3 text-sm font-semibold text-text-default transition hover:bg-interactive-background-hover hover:text-text-strong celular:h-[44px] celular:px-4"
+      /* 44 literal no celular: estes botões das boas-vindas são os primeiros
+         alvos de quem abre uma conversa vazia. */
+      className="celular:h-[44px] celular:px-4"
     >
-      {icon && <span aria-hidden="true">{icon}</span>}
       {label}
-    </button>
+    </Button>
   );
 }
 
@@ -264,7 +267,7 @@ export default function MessageList({
     <div className="relative flex min-h-0 flex-1 flex-col">
       {/* barra superior: há não lido acima do que está na tela */}
       {channelId && posicaoDivisor === "acima" && (
-        <div className="absolute inset-x-0 top-0 z-20 flex h-6 items-center justify-between bg-status-danger px-4 text-xs font-semibold text-white">
+        <div className="absolute inset-x-0 top-0 z-20 flex h-6 items-center justify-between bg-status-danger px-4 text-xs font-semibold text-control-critical-primary-text-default">
           <span>Você tem mensagens não lidas</span>
           <button type="button" onClick={() => marcarLidas(channelId)} className="hover:underline">
             Marcar como lidas
@@ -278,7 +281,7 @@ export default function MessageList({
       <div
         ref={scrollRef}
         onScroll={aoRolar}
-        className={`flex-1 select-text overflow-y-auto ${className}`}
+        className={`scroller-auto flex-1 select-text overflow-y-auto ${className}`}
       >
         {loadingOlder && (
           <div className="grid place-items-center py-3" role="status" aria-label="Carregando mensagens">

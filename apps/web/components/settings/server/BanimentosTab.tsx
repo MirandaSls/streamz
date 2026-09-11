@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { Search } from "@/components/ui/icones";
 import { displayNameOf, type PublicUser } from "@streamz/shared";
-import { ESTILO_CAMPO } from "@/components/settings/campos";
 import { TituloDaPagina } from "@/components/settings/server/pagina";
 import Avatar from "@/components/ui/Avatar";
+import { TextInput } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { horaCompleta } from "@/lib/format";
 import { errorMessage } from "@/stores/socket-adapter";
@@ -72,18 +72,14 @@ export default function BanimentosTab({ guildId }: { guildId: string }) {
     <div>
       <TituloDaPagina titulo="Banimentos" />
 
-      <div className="relative mb-4">
-        <Search
-          size={14}
-          aria-hidden="true"
-          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted"
-        />
-        <input
+      <div className="mb-4">
+        <TextInput
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           placeholder="Buscar banidos"
           aria-label="Buscar banidos"
-          className={`${ESTILO_CAMPO} pl-8`}
+          tamanho="sm"
+          prefixo={<Search size={14} aria-hidden="true" className="text-text-muted" />}
         />
       </div>
 

@@ -69,7 +69,7 @@ export default function FolhaInferior({
 
   return createPortal(
     <div
-      className="anim-overlay fixed inset-0 z-[95] flex flex-col justify-end bg-black/70"
+      className="anim-overlay fixed inset-0 z-[95] flex flex-col justify-end bg-background-scrim"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onFechar();
       }}

@@ -10,9 +10,10 @@ import {
   type InviteInfo,
   type PublicUser,
 } from "@streamz/shared";
-import Dialog from "@/components/modals/Dialog";
+import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { Select, ToggleLinha } from "@/components/ui/controls";
 import Avatar from "@/components/ui/Avatar";
+import { Button, TextInput } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { urlDeConvite } from "@/lib/links-de-convite";
 import { useChannels } from "@/stores/channels";
@@ -49,9 +50,10 @@ function faltamAte(iso: string, agora = Date.now()): string {
  * embaixo (12), botão de 32 com raio 8 e ~78 de largura, alinhado à direita do
  * conteúdo; divisória de 1px **de ponta a ponta**; rótulo de 16/600 a 24 dela;
  * campo do link de 40 com o botão embutido a 4 das bordas (raio 4); rodapé
- * de 12 a 16 do campo. Diferenças anotadas no PR: o botão da linha usa o cinza
- * do `SecondaryButton` da casa (`border-strong`), o "Copiar" segue no `accent`
- * do Streamz (o do Discord é o blurple da marca dele) e o subtítulo fica em
+ * de 12 a 16 do campo. Diferenças anotadas no PR: o botão da linha usa o
+ * `Button` `secundario` (cinza translúcido do primitivo, não mais
+ * `border-strong` cru), o "Copiar" é o `Button` `primario` no `accent` do
+ * Streamz (o do Discord é o blurple da marca dele) e o subtítulo fica em
  * `txt-muted`, como a descrição dos outros modais.
  */
 export default function InviteModal({
@@ -180,16 +182,14 @@ export default function InviteModal({
           </p>
         )}
 
-        <div className="mx-6 mt-6 flex h-10 items-center gap-3 rounded-lg bg-input-background-default px-3 celular:h-[48px]">
-          <Search size={16} aria-hidden="true" className="shrink-0 text-text-muted" />
-          <input
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            aria-label="Buscar amigo"
-            placeholder="Buscar amigos"
-            className="min-w-0 flex-1 bg-transparent text-text-default outline-none placeholder:text-text-muted"
-          />
-        </div>
+        <TextInput
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          aria-label="Buscar amigo"
+          placeholder="Buscar amigos"
+          prefixo={<Search size={16} aria-hidden="true" className="shrink-0 text-text-muted" />}
+          classeDaCaixa="mx-6 mt-6"
+        />
 
         {/* a barra de rolagem fica a 4 da borda da caixa (por isso o `mr-1`) e
             as linhas param 12 antes dela */}
@@ -219,19 +219,16 @@ export default function InviteModal({
                       {amigo.username}
                     </span>
                   </span>
-                  <button
-                    type="button"
+                  <Button
+                    variante="secundario"
+                    tamanho="sm"
                     disabled={convidado || !url}
                     onClick={() => void convidar(amigo)}
-                    className={`flex h-8 celular:h-[44px] shrink-0 items-center justify-center gap-1 rounded-lg px-3 text-sm font-medium transition ${
-                      convidado
-                        ? "cursor-default border border-border-normal text-text-muted"
-                        : "bg-border-normal text-text-default hover:bg-border-strong disabled:opacity-50"
-                    }`}
+                    icone={convidado ? <Check size={14} aria-hidden="true" /> : undefined}
+                    className="shrink-0 celular:h-[44px]"
                   >
-                    {convidado && <Check size={14} aria-hidden="true" />}
                     {convidado ? "Convidado" : "Convidar"}
-                  </button>
+                  </Button>
                 </div>
               );
             })
@@ -244,27 +241,27 @@ export default function InviteModal({
           <p className="text-base font-semibold leading-5 text-text-strong">
             Ou, envie um convite do servidor a um amigo
           </p>
-          {/* input + botão num container só: no Discord os dois são uma peça */}
-          {/* 52 no celular: a cápsula tem `overflow-hidden` e o "Copiar" sobe
-              para os 44 do alvo de toque — em 40 ele saía cortado */}
-          <div className="mt-2 flex h-10 items-center overflow-hidden rounded-lg bg-input-background-default pl-3 pr-1 celular:h-[52px]">
-            <input
-              value={url || "gerando…"}
-              readOnly
-              aria-label="Link do convite"
-              onFocus={(e) => e.currentTarget.select()}
-              className="min-w-0 flex-1 bg-transparent text-text-default outline-none"
-            />
-            <button
-              type="button"
-              disabled={!url}
-              onClick={() => void copiar()}
-              className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:opacity-50"
-            >
-              {copied && <Check size={16} aria-hidden="true" />}
-              {copied ? "Copiado" : "Copiar"}
-            </button>
-          </div>
+          {/* input + botão num container só: no Discord os dois são uma peça —
+              o `sufixo` do `TextInput` é a mesma caixa */}
+          <TextInput
+            value={url || "gerando…"}
+            readOnly
+            aria-label="Link do convite"
+            onFocus={(e) => e.currentTarget.select()}
+            classeDaCaixa="mt-2"
+            sufixo={
+              <Button
+                variante="primario"
+                tamanho="sm"
+                disabled={!url}
+                onClick={() => void copiar()}
+                icone={copied ? <Check size={16} aria-hidden="true" /> : undefined}
+                className="shrink-0 celular:h-[44px]"
+              >
+                {copied ? "Copiado" : "Copiar"}
+              </Button>
+            }
+          />
           <p aria-live="polite" className="mt-4 text-xs leading-4 text-text-muted">
             {invite?.expiresAt
               ? `Seu link de convite expira em ${faltamAte(invite.expiresAt)}. `
@@ -288,20 +285,8 @@ export default function InviteModal({
           onClose={() => setEditando(false)}
           footer={
             <>
-              <button
-                type="button"
-                onClick={() => void regerar()}
-                className="h-[38px] min-w-24 rounded-[3px] bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover"
-              >
-                Gerar novo link
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditando(false)}
-                className="h-[38px] min-w-24 rounded-[3px] px-4 text-sm font-medium text-text-default transition hover:underline"
-              >
-                Cancelar
-              </button>
+              <PrimaryButton onClick={() => void regerar()}>Gerar novo link</PrimaryButton>
+              <SecondaryButton onClick={() => setEditando(false)}>Cancelar</SecondaryButton>
             </>
           }
         >

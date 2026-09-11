@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { AudioLines, PhoneOff, RotateCw, Signal, SignalZero, Video, VideoOff } from "@/components/ui/icones";
 import Tooltip from "@/components/ui/Tooltip";
 import PopoverFlutuante from "@/components/ui/PopoverFlutuante";
+import { BotaoDeIcone } from "@/components/ui/primitivos";
 import BotaoDeSons from "@/components/voice/BotaoDeSons";
 import PopoverDeRuido from "@/components/voice/PopoverDeRuido";
 import ScreenShareButton from "@/components/voice/ScreenShareButton";
@@ -160,20 +161,16 @@ export default function VoiceConnectedBar() {
           </span>
         </span>
 
-        <Tooltip label="Supressão de ruído">
-          <button
-            ref={botaoDoRuido}
-            type="button"
-            onClick={() => setRuidoAberto((v) => !v)}
-            aria-expanded={ruidoAberto}
-            aria-label="Supressão de ruído"
-            className={`grid h-8 w-8 shrink-0 place-items-center rounded-[4px] transition hover:bg-interactive-background-hover ${
-              ruidoAvancado ? "text-brand-500" : "text-text-subtle hover:text-text-strong"
-            }`}
-          >
-            <AudioLines size={20} />
-          </button>
-        </Tooltip>
+        <BotaoDeIcone
+          ref={botaoDoRuido}
+          rotulo="Supressão de ruído"
+          icone={<AudioLines size={20} />}
+          tamanho="md"
+          comFundo
+          ativo={ruidoAvancado}
+          aria-expanded={ruidoAberto}
+          onClick={() => setRuidoAberto((v) => !v)}
+        />
 
         <PopoverFlutuante
           ancora={botaoDoRuido}
@@ -186,16 +183,14 @@ export default function VoiceConnectedBar() {
 
         {/* sem botão de chat aqui: o nome do canal logo acima já leva à call, e
             o chat do canal de voz tem o próprio alternador no cabeçalho dele */}
-        <Tooltip label="Desconectar">
-          <button
-            type="button"
-            onClick={() => void disconnect()}
-            aria-label="Desconectar"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-[4px] text-text-subtle transition hover:bg-interactive-background-hover hover:text-status-danger"
-          >
-            <PhoneOff size={20} />
-          </button>
-        </Tooltip>
+        <BotaoDeIcone
+          rotulo="Desconectar"
+          icone={<PhoneOff size={20} />}
+          tamanho="md"
+          comFundo
+          perigo
+          onClick={() => void disconnect()}
+        />
       </div>
 
       {falhou && (

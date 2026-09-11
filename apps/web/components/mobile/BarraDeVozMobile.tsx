@@ -1,6 +1,7 @@
 "use client";
 
 import { Mic, MicOff, PhoneOff, Signal, SignalZero } from "@/components/ui/icones";
+import { BotaoDeIcone } from "@/components/ui/primitivos";
 import { useChannels } from "@/stores/channels";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useGuilds } from "@/stores/guilds";
@@ -98,25 +99,24 @@ export default function BarraDeVozMobile() {
         </span>
       </button>
 
-      <button
-        type="button"
+      <BotaoDeIcone
+        rotulo={muted ? "Desativar mudo" : "Silenciar"}
+        icone={muted ? <MicOff size={20} /> : <Mic size={20} />}
+        tamanho="md"
+        ativo={muted}
         onClick={toggleMute}
-        aria-label={muted ? "Desativar mudo" : "Silenciar"}
-        aria-pressed={muted}
-        className={`grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg transition ${
-          muted ? "text-status-danger" : "text-text-subtle"
-        }`}
-      >
-        {muted ? <MicOff size={20} /> : <Mic size={20} />}
-      </button>
-      <button
-        type="button"
+        // alvo de 44 no celular, e mudo fica em vermelho persistente (não só
+        // no hover, que é tudo que o `perigo` do primitivo cobre)
+        className={`h-[44px] w-[44px] ${muted ? "!text-status-danger" : ""}`}
+      />
+      <BotaoDeIcone
+        rotulo="Desconectar"
+        icone={<PhoneOff size={20} />}
+        tamanho="md"
+        perigo
         onClick={() => void disconnect()}
-        aria-label="Desconectar"
-        className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg text-text-subtle transition active:text-status-danger"
-      >
-        <PhoneOff size={20} />
-      </button>
+        className="h-[44px] w-[44px]"
+      />
     </div>
   );
 }

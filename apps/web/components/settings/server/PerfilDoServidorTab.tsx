@@ -7,8 +7,8 @@ import {
   guildBannerBackground,
 } from "@streamz/shared";
 import { useAlteracoesNaoSalvas } from "@/components/ui/alteracoes";
-import { ESTILO_AREA, ESTILO_CAMPO } from "@/components/settings/campos";
-import { BOTAO_ACENTO, BOTAO_PERIGO, TituloDaPagina } from "@/components/settings/server/pagina";
+import { TituloDaPagina } from "@/components/settings/server/pagina";
+import { Button, TextArea, TextInput } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { useGuilds } from "@/stores/guilds";
 import { errorMessage } from "@/stores/socket-adapter";
@@ -159,12 +159,11 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
           <label htmlFor="guildName" className={ROTULO_DE_BLOCO}>
             Nome
           </label>
-          <input
+          <TextInput
             id="guildName"
             value={name}
             maxLength={64}
             onChange={(e) => setName(e.target.value)}
-            className={ESTILO_CAMPO}
           />
 
           {/* Medidas do print: divisória 40 abaixo do campo, título 41 abaixo
@@ -187,25 +186,27 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
             }}
           />
           <div className="mt-2 flex items-center gap-2">
-            <button
-              type="button"
-              disabled={uploading}
+            <Button
+              variante="primario"
+              tamanho="sm"
+              carregando={uploading}
               onClick={() => fileRef.current?.click()}
-              className={`h-8 celular:h-[44px] ${BOTAO_ACENTO}`}
+              className="celular:h-[44px]"
             >
-              {uploading ? "Enviando…" : "Altere o ícone do servidor"}
-            </button>
+              Altere o ícone do servidor
+            </Button>
             {/* Só aparece quando há o que remover, como no Discord. Compartilha
                 o `uploading` com a troca: as duas mexem no mesmo arquivo. */}
             {guild.iconUrl && (
-              <button
-                type="button"
+              <Button
+                variante="critico"
+                tamanho="sm"
                 disabled={uploading}
                 onClick={() => void removeIcon()}
-                className={`h-8 celular:h-[44px] ${BOTAO_PERIGO}`}
+                className="celular:h-[44px]"
               >
                 Remover o ícone
-              </button>
+              </Button>
             )}
           </div>
 
@@ -251,14 +252,13 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
           <p className="mb-2 mt-1.5 text-sm text-text-muted">
             Como seu servidor começou? Por que as pessoas devem participar?
           </p>
-          <textarea
+          <TextArea
             id="guildDescription"
             value={description}
             maxLength={MAX_GUILD_DESCRIPTION}
             rows={3}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Do que é este servidor?"
-            className={ESTILO_AREA}
           />
           <p className="mt-1 text-xs text-text-muted">
             {description.length}/{MAX_GUILD_DESCRIPTION} caracteres.

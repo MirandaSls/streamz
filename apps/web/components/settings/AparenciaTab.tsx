@@ -11,6 +11,7 @@ import {
 import { useIrParaAba } from "@/components/settings/navegacao";
 import PreviaDeMensagens from "@/components/settings/PreviaDeMensagens";
 import { Accessibility } from "@/components/ui/icones";
+import { Button } from "@/components/ui/primitivos";
 import { useT } from "@/lib/i18n";
 import { useAuth } from "@/stores/auth";
 import { FONT_SCALE, GROUP_SPACING, ZOOM, useSettings } from "@/stores/settings";
@@ -83,13 +84,9 @@ export default function AparenciaTab() {
       </Section>
 
       <Section semDivisoria>
-        <button
-          type="button"
-          onClick={() => s.reset()}
-          className="h-9 celular:h-[44px] rounded-[3px] border border-border-normal px-3 text-sm font-medium text-text-default transition hover:bg-interactive-background-hover"
-        >
+        <Button variante="secundario" tamanho="md" onClick={() => s.reset()} className="celular:h-[44px]">
           {t("config.restaurar")}
-        </button>
+        </Button>
       </Section>
     
       <ConfiguracoesRelacionadas

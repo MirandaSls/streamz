@@ -5,6 +5,7 @@ import { displayNameOf, extractFirstUrl, type Message } from "@streamz/shared";
 import LinkEmbedCard, { useLinkEmbed } from "@/components/chat/LinkEmbedCard";
 import MediaGroup from "@/components/media/MediaGroup";
 import Avatar from "@/components/ui/Avatar";
+import { BotaoDeIcone } from "@/components/ui/primitivos";
 import { horaCompleta } from "@/lib/format";
 import { Markdown } from "@/lib/markdown";
 
@@ -96,19 +97,7 @@ export function AcaoDoCartao({
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      className={`grid h-7 w-7 place-items-center rounded transition ${
-        danger
-          ? "text-text-subtle hover:bg-status-danger hover:text-white"
-          : "text-text-subtle hover:bg-interactive-background-hover hover:text-text-strong"
-      }`}
-    >
-      {children}
-    </button>
+    <BotaoDeIcone rotulo={label} icone={children} tamanho="sm" comFundo perigo={danger} onClick={onClick} />
   );
 }
 

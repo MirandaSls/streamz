@@ -40,7 +40,7 @@ import {
   type Channel,
   type Guild,
 } from "@streamz/shared";
-import Tooltip from "@/components/ui/Tooltip";
+import { BotaoDeIcone } from "@/components/ui/primitivos";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { MENU_WIDTH, MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
 import Cronometro from "@/components/voice/Cronometro";
@@ -199,28 +199,24 @@ function CategoryHeader({
           três acenderem igual. Fica à esquerda do "+" para não mover o "+",
           cuja coluna (x=318) está medida na print. */}
       {onEdit && !celular && (
-        <Tooltip label="Editar categoria">
-          <button
-            type="button"
-            onClick={onEdit}
-            aria-label={`Editar ${label}`}
-            className="grid h-[22px] w-6 shrink-0 place-items-center rounded text-text-muted opacity-0 transition hover:text-text-strong group-hover:opacity-100 focus-visible:opacity-100"
-          >
-            <Settings size={18} />
-          </button>
-        </Tooltip>
+        <BotaoDeIcone
+          rotulo="Editar categoria"
+          icone={<Settings size={18} />}
+          tamanho="sm"
+          onClick={onEdit}
+          aria-label={`Editar ${label}`}
+          className="shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+        />
       )}
       {onCreate && !celular && (
-        <Tooltip label="Criar canal">
-          <button
-            type="button"
-            onClick={onCreate}
-            aria-label={`Criar canal em ${label}`}
-            className="grid h-[22px] w-6 shrink-0 place-items-center rounded text-text-muted transition hover:text-text-strong"
-          >
-            <Plus size={20} />
-          </button>
-        </Tooltip>
+        <BotaoDeIcone
+          rotulo="Criar canal"
+          icone={<Plus size={20} />}
+          tamanho="sm"
+          onClick={onCreate}
+          aria-label={`Criar canal em ${label}`}
+          className="shrink-0"
+        />
       )}
     </div>
   );
@@ -756,7 +752,7 @@ export default function ChannelSidebar() {
         >
           {unread && (
             // ponto branco na margem esquerda, como o Discord marca canal não lido
-            <span aria-hidden="true" className="absolute -left-2 top-1/2 h-2 w-1 -translate-y-1/2 rounded-r-full bg-white" />
+            <span aria-hidden="true" className="absolute -left-2 top-1/2 h-2 w-1 -translate-y-1/2 rounded-r-full bg-switch-thumb-background-default" />
           )}
           <button
             type="button"
@@ -778,7 +774,7 @@ export default function ChannelSidebar() {
           {channel.mentionCount > 0 && !active && (
             <span
               aria-label={`${channel.mentionCount} menções`}
-              className="grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[11px] font-bold leading-none text-white"
+              className="grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[11px] font-bold leading-none text-control-critical-primary-text-default"
             >
               {channel.mentionCount}
             </span>
@@ -804,43 +800,37 @@ export default function ChannelSidebar() {
                 Só existe em canal de voz — no de texto a conversa é a própria
                 coluna, e o botão não teria o que abrir. */}
             {channel.type === "VOICE" && (
-              <Tooltip label="Abrir conversa">
-                <button
-                  type="button"
-                  onClick={() => {
-                    // `"balao"`: abre o canal **sem** entrar — é aqui que a
-                    // `VistaDoCanalDeVoz` aparece, com a conversa ao lado
-                    select(channel, "balao");
-                    abrirVoiceChat();
-                  }}
-                  aria-label={`Abrir a conversa de ${name}`}
-                  className="grid h-6 w-6 place-items-center rounded text-text-muted opacity-0 transition hover:text-text-strong group-hover:opacity-100 focus-visible:opacity-100"
-                >
-                  <MessageSquare size={18} />
-                </button>
-              </Tooltip>
+              <BotaoDeIcone
+                rotulo="Abrir conversa"
+                icone={<MessageSquare size={18} />}
+                tamanho="sm"
+                onClick={() => {
+                  // `"balao"`: abre o canal **sem** entrar — é aqui que a
+                  // `VistaDoCanalDeVoz` aparece, com a conversa ao lado
+                  select(channel, "balao");
+                  abrirVoiceChat();
+                }}
+                aria-label={`Abrir a conversa de ${name}`}
+                className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+              />
             )}
-            <Tooltip label="Criar convite">
-              <button
-                type="button"
-                onClick={() => void createInvite()}
-                aria-label={`Criar convite para ${name}`}
-                className="grid h-6 w-6 place-items-center rounded text-text-muted opacity-0 transition hover:text-text-strong group-hover:opacity-100 focus-visible:opacity-100"
-              >
-                <UserPlus size={18} />
-              </button>
-            </Tooltip>
+            <BotaoDeIcone
+              rotulo="Criar convite"
+              icone={<UserPlus size={18} />}
+              tamanho="sm"
+              onClick={() => void createInvite()}
+              aria-label={`Criar convite para ${name}`}
+              className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+            />
             {podeGerenciarCanais && (
-              <Tooltip label="Editar canal">
-                <button
-                  type="button"
-                  onClick={() => openModal({ kind: "channelSettings", channelId: channel.id })}
-                  aria-label={`Editar ${name}`}
-                  className="grid h-6 w-6 place-items-center rounded text-text-muted opacity-0 transition hover:text-text-strong group-hover:opacity-100 focus-visible:opacity-100"
-                >
-                  <Settings size={18} />
-                </button>
-              </Tooltip>
+              <BotaoDeIcone
+                rotulo="Editar canal"
+                icone={<Settings size={18} />}
+                tamanho="sm"
+                onClick={() => openModal({ kind: "channelSettings", channelId: channel.id })}
+                aria-label={`Editar ${name}`}
+                className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+              />
             )}
           </span>
         </div>
@@ -1006,16 +996,15 @@ export default function ChannelSidebar() {
             ))}
         </button>
         {guild && (
-          <Tooltip label="Convidar pessoas">
-            <button
-              type="button"
-              onClick={() => void createInvite()}
-              aria-label={`Convidar pessoas para ${guild.name}`}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-[4px] text-text-subtle transition hover:bg-interactive-background-hover hover:text-text-strong"
-            >
-              <UserPlus size={20} />
-            </button>
-          </Tooltip>
+          <BotaoDeIcone
+            rotulo="Convidar pessoas"
+            icone={<UserPlus size={20} />}
+            tamanho="md"
+            comFundo
+            onClick={() => void createInvite()}
+            aria-label={`Convidar pessoas para ${guild.name}`}
+            className="shrink-0"
+          />
         )}
       </div>
       )}

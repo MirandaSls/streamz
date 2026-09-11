@@ -20,6 +20,7 @@ import {
   type AuditLogEntry,
 } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
+import { Button, Select } from "@/components/ui/primitivos";
 import { TituloDaPagina } from "@/components/settings/server/pagina";
 import { api } from "@/lib/api";
 import { horaCompleta } from "@/lib/format";
@@ -133,36 +134,32 @@ export default function AuditLogTab({ guildId }: { guildId: string }) {
         <label className="sr-only" htmlFor="audit-user">
           Filtrar por moderador
         </label>
-        <select
+        <Select<string>
           id="audit-user"
-          value={userId}
-          onChange={(e) => setUserId(e.target.value)}
-          className="h-9 rounded-[3px] bg-input-background-default px-2 text-sm text-text-default outline-none celular:h-[44px] celular:text-[max(16px,1em)]"
-        >
-          <option value="">Todos os membros</option>
-          {members.map((m) => (
-            <option key={m.user.id} value={m.user.id}>
-              {displayNameOf(m.user)}
-            </option>
-          ))}
-        </select>
+          tamanho="sm"
+          valor={userId}
+          aoMudar={setUserId}
+          opcoes={[
+            { valor: "", rotulo: "Todos os membros" },
+            ...members.map((m) => ({ valor: m.user.id, rotulo: displayNameOf(m.user) })),
+          ]}
+          className="celular:h-[44px] celular:text-[max(16px,1em)]"
+        />
 
         <label className="sr-only" htmlFor="audit-action">
           Filtrar por ação
         </label>
-        <select
+        <Select<AuditAction | "">
           id="audit-action"
-          value={action}
-          onChange={(e) => setAction(e.target.value as AuditAction | "")}
-          className="h-9 rounded-[3px] bg-input-background-default px-2 text-sm text-text-default outline-none celular:h-[44px] celular:text-[max(16px,1em)]"
-        >
-          <option value="">Todas as ações</option>
-          {AUDIT_ACTIONS.map((a) => (
-            <option key={a} value={a}>
-              {AUDIT_ACTION_LABELS[a]}
-            </option>
-          ))}
-        </select>
+          tamanho="sm"
+          valor={action}
+          aoMudar={setAction}
+          opcoes={[
+            { valor: "", rotulo: "Todas as ações" },
+            ...AUDIT_ACTIONS.map((a) => ({ valor: a, rotulo: AUDIT_ACTION_LABELS[a] })),
+          ]}
+          className="celular:h-[44px] celular:text-[max(16px,1em)]"
+        />
       </div>
 
       <div role="list" className="min-h-0 flex-1 overflow-y-auto rounded bg-input-background-default/40">
@@ -178,14 +175,15 @@ export default function AuditLogTab({ guildId }: { guildId: string }) {
       </div>
 
       {cursor && (
-        <button
-          type="button"
+        <Button
+          variante="secundario"
+          tamanho="sm"
           disabled={loading}
           onClick={() => void load(true)}
-          className="mt-3 h-9 celular:h-[44px] shrink-0 rounded-[3px] bg-input-background-default text-sm font-medium text-text-default transition hover:bg-interactive-background-hover disabled:opacity-50"
+          className="mt-3 shrink-0 celular:h-[44px]"
         >
           Carregar mais
-        </button>
+        </Button>
       )}
     </div>
   );

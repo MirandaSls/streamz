@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { MessageSquare, X } from "@/components/ui/icones";
-import Tooltip from "@/components/ui/Tooltip";
+import { BotaoDeIcone } from "@/components/ui/primitivos";
 
 /**
  * A casca da conversa da chamada — a coluna que abre à direita do palco.
@@ -62,16 +62,13 @@ export default function PainelDeChatDaCall({
         <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-text-strong">
           {titulo}
         </h2>
-        <Tooltip label="Fechar">
-          <button
-            type="button"
-            onClick={onFechar}
-            aria-label="Fechar a conversa da chamada"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-[4px] text-text-subtle transition hover:bg-interactive-background-hover hover:text-text-strong"
-          >
-            <X size={18} />
-          </button>
-        </Tooltip>
+        <BotaoDeIcone
+          rotulo="Fechar a conversa da chamada"
+          icone={<X size={18} />}
+          onClick={onFechar}
+          comFundo
+          tamanho="md"
+        />
       </header>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>

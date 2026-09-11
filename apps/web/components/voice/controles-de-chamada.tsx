@@ -30,14 +30,22 @@ type Tom = "neutro" | "ativo" | "aoVivo" | "mudo" | "desligar";
 /** Onde o botão está dentro de um par: sozinho, ou colado ao vizinho. */
 type Borda = "sozinho" | "esquerda" | "direita";
 
+// migração 0.8: as cores cruas (`text-white`, `bg-white`) viraram o par
+// `control-overlay-*` — o mesmo contrato que `TelaCheiaDeVideo`/`ImageModal`
+// já usam para "controle flutuando sobre vídeo": `secondary` (ícone branco,
+// sem fundo próprio aqui — o fundo é da cápsula) para `neutro`,
+// `primary` (fundo branco, texto/ícone escuro) para `ativo`. O tingimento de
+// hover do `neutro` (`bg-white/10`, translúcido) não tem par no contrato —
+// preto/branco cru continuam aí, ver "faltando".
 const TOM: Record<Tom, string> = {
-  neutro: "text-white hover:bg-white/10",
-  ativo: "bg-white text-input-background-default hover:bg-white/90",
+  neutro: "text-control-overlay-secondary-icon-default hover:bg-white/10",
+  ativo:
+    "bg-control-overlay-primary-background-default text-control-overlay-primary-text-default hover:bg-control-overlay-primary-background-hover",
   // transmitir é o único "ligado" que o Discord pinta de verde, e não de
   // branco: é o estado que continua valendo quando você olha para outra aba
   aoVivo: "bg-status-positive text-control-primary-text-default hover:brightness-110",
   mudo: "bg-status-danger/15 text-status-danger hover:bg-status-danger/25",
-  desligar: "bg-status-danger text-white hover:bg-control-critical-primary-background-hover",
+  desligar: "bg-status-danger text-control-critical-primary-text-default hover:bg-control-critical-primary-background-hover",
 };
 
 // o raio grande é sempre a metade da altura do botão (44/2): é o que mantém a
@@ -120,7 +128,7 @@ export function BotaoDeDesligar({
         type="button"
         onClick={onClick}
         aria-label={label}
-        className="grid h-14 w-[70px] place-items-center rounded-full bg-status-danger text-white shadow-popout transition hover:bg-control-critical-primary-background-hover"
+        className="grid h-14 w-[70px] place-items-center rounded-full bg-status-danger text-control-critical-primary-text-default shadow-popout transition hover:bg-control-critical-primary-background-hover"
       >
         {children}
       </button>
@@ -170,8 +178,11 @@ export function SplitDeDispositivo({
           onClick={() => setAberto((v) => !v)}
           aria-label={labelDaSeta}
           aria-expanded={aberto}
+          // mesmos dois tons do `TOM` acima — referenciar em vez de duplicar o
+          // literal, senão um ajuste de cor (como o da migração 0.8) precisa
+          // lembrar de mexer aqui também
           className={`grid h-11 w-[26px] place-items-center rounded-l-[4px] rounded-r-[22px] transition ${
-            tom === "mudo" ? "bg-status-danger/15 text-status-danger hover:bg-status-danger/25" : "text-white hover:bg-white/10"
+            tom === "mudo" ? TOM.mudo : TOM.neutro
           }`}
         >
           <ChevronDown size={18} />

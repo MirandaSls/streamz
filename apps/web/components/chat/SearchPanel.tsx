@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, CornerUpRight, Search, X } from "@/component
 import { parseSearchQuery } from "@streamz/shared";
 import type { Message } from "@streamz/shared";
 import MessagePreview, { AcaoDoCartao } from "@/components/chat/MessagePreview";
+import { BotaoDeIcone } from "@/components/ui/primitivos";
 import { useChannels } from "@/stores/channels";
 import { useMessages } from "@/stores/messages";
 import { goToMessage } from "@/stores/messages-navigate";
@@ -95,14 +96,7 @@ export default function SearchPanel({ guildId }: { guildId: string | null }) {
         <span className="min-w-0 flex-1 truncate font-semibold text-text-strong">
           {searching ? "Buscando…" : `${total} ${total === 1 ? "resultado" : "resultados"}`}
         </span>
-        <button
-          type="button"
-          onClick={clearSearch}
-          aria-label="Fechar a busca"
-          className="text-text-subtle transition hover:text-text-strong"
-        >
-          <X size={20} />
-        </button>
+        <BotaoDeIcone rotulo="Fechar a busca" icone={<X size={20} />} onClick={clearSearch} />
       </div>
 
       {/* ordenação: a barra fica acima dos resultados, como no Discord */}
@@ -185,27 +179,23 @@ export default function SearchPanel({ guildId }: { guildId: string | null }) {
 
       {total > POR_PAGINA && (
         <div className="flex shrink-0 items-center justify-center gap-3 border-t border-border-subtle px-3 py-2">
-          <button
-            type="button"
+          <BotaoDeIcone
+            rotulo="Página anterior"
+            icone={<ChevronLeft size={18} />}
+            tamanho="sm"
             onClick={() => setPagina((p) => Math.max(0, p - 1))}
             disabled={pagina === 0}
-            aria-label="Página anterior"
-            className="grid h-6 w-6 place-items-center rounded text-text-subtle transition hover:text-text-strong disabled:opacity-40"
-          >
-            <ChevronLeft size={18} />
-          </button>
+          />
           <span className="text-xs text-text-muted">
             {pagina + 1} de {paginas}
           </span>
-          <button
-            type="button"
+          <BotaoDeIcone
+            rotulo="Próxima página"
+            icone={<ChevronRight size={18} />}
+            tamanho="sm"
             onClick={() => setPagina((p) => Math.min(paginas - 1, p + 1))}
             disabled={pagina >= paginas - 1}
-            aria-label="Próxima página"
-            className="grid h-6 w-6 place-items-center rounded text-text-subtle transition hover:text-text-strong disabled:opacity-40"
-          >
-            <ChevronRight size={18} />
-          </button>
+          />
         </div>
       )}
     </aside>

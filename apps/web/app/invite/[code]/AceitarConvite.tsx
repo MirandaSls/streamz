@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Hash } from "@/components/ui/icones";
+import { Button } from "@/components/ui/primitivos";
 import { displayNameOf, type InviteFullPreview } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
@@ -141,20 +142,26 @@ export default function AceitarConvite() {
                 <p role="alert" className="mt-5 text-sm text-status-danger">
                   {recado}
                 </p>
-                <button
+                <Button
                   type="button"
+                  variante="secundario"
+                  tamanho="md"
+                  larguraTotal
                   onClick={() => router.replace(user ? "/app" : "/login")}
-                  className="mt-5 h-11 w-full rounded-[3px] bg-border-normal font-medium text-white transition hover:bg-border-strong celular:h-[48px]"
+                  className="mt-5 celular:h-[48px]"
                 >
                   {user ? "Voltar para o app" : "Ir para o login"}
-                </button>
+                </Button>
               </>
             ) : (
-              <button
+              <Button
                 type="button"
+                variante="primario"
+                tamanho="md"
+                larguraTotal
                 disabled={entrando}
                 onClick={() => void aceitar()}
-                className="mt-6 h-11 w-full rounded-[3px] bg-brand-500 font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:opacity-60 celular:h-[48px]"
+                className="mt-6 celular:h-[48px]"
                 autoFocus
               >
                 {preview?.member
@@ -164,7 +171,7 @@ export default function AceitarConvite() {
                     : user
                       ? "Aceitar convite"
                       : "Entrar para aceitar o convite"}
-              </button>
+              </Button>
             )}
           </>
         )}

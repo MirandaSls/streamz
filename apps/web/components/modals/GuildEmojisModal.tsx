@@ -14,7 +14,7 @@ import {
 } from "@streamz/shared";
 import Dialog, { SecondaryButton } from "@/components/modals/Dialog";
 import { AJUDA_NOME, sugerirNome } from "@/components/settings/server/emojis-nome";
-import Tooltip from "@/components/ui/Tooltip";
+import { BotaoDeIcone, Button } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { useEmojis } from "@/stores/emojis";
@@ -49,7 +49,7 @@ export default function GuildEmojisModal({ guildId }: { guildId: string }) {
       className="w-[520px]"
       footer={<SecondaryButton onClick={closeModal}>Fechar</SecondaryButton>}
     >
-      <div className="mb-3 flex gap-1 border-b border-black/30" role="tablist">
+      <div className="mb-3 flex gap-1 border-b border-border-subtle" role="tablist">
         <AbaBotao ativa={aba === "emojis"} onClick={() => setAba("emojis")}>
           Emojis ({emojis.length}/{MAX_EMOJIS_PER_GUILD})
         </AbaBotao>
@@ -300,15 +300,16 @@ function BotaoEnviar({
 }) {
   return (
     <div className="flex items-center gap-3">
-      <button
-        type="button"
+      <Button
+        variante="primario"
+        tamanho="sm"
         disabled={disabled}
         onClick={onClick}
-        className="flex h-9 celular:h-[44px] items-center gap-2 rounded-[3px] bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:cursor-not-allowed disabled:opacity-50"
+        icone={<Upload size={16} aria-hidden="true" />}
+        className="celular:h-[44px]"
       >
-        <Upload size={16} aria-hidden="true" />
         Enviar
-      </button>
+      </Button>
       <span className="text-xs text-text-muted">{dica}</span>
     </div>
   );
@@ -326,18 +327,15 @@ function IconeAcao({
   children: React.ReactNode;
 }) {
   return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        onClick={onClick}
-        aria-label={label}
-        className={`grid h-7 celular:h-[44px] w-7 celular:w-[44px] place-items-center rounded text-text-subtle transition hover:bg-interactive-background-selected ${
-          danger ? "hover:text-status-danger" : "hover:text-text-strong"
-        }`}
-      >
-        {children}
-      </button>
-    </Tooltip>
+    <BotaoDeIcone
+      rotulo={label}
+      icone={children}
+      tamanho="sm"
+      perigo={danger}
+      comFundo
+      onClick={onClick}
+      className="celular:h-[44px] celular:w-[44px]"
+    />
   );
 }
 

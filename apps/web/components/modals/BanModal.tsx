@@ -9,6 +9,7 @@ import {
 } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { Rotulo, SliderMarcas } from "@/components/ui/controls";
+import { TextInput } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { useGuilds } from "@/stores/guilds";
 import { errorMessage } from "@/stores/socket-adapter";
@@ -77,13 +78,12 @@ export default function BanModal({ guildId, user }: { guildId: string; user: Pub
       }
     >
       <Rotulo htmlFor="ban-reason">Motivo do banimento</Rotulo>
-      <input
+      <TextInput
         id="ban-reason"
         value={reason}
         maxLength={MAX_MODERATION_REASON}
         onChange={(e) => setReason(e.target.value)}
         placeholder="Ex.: divulgação em massa"
-        className="h-10 w-full rounded-[3px] bg-input-background-default px-2.5 text-text-default outline-none placeholder:text-text-muted"
         autoFocus
       />
       <p className="mt-1 text-xs text-text-muted">

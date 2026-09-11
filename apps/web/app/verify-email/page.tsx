@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import AuthCard, { FieldLabel, inputClass, submitClass } from "@/components/auth/AuthCard";
+import AuthCard, { FieldLabel, submitClass } from "@/components/auth/AuthCard";
 import { api } from "@/lib/api";
 import { mensagemDeAuth } from "@/lib/auth-mensagens";
 import { lerAccessToken } from "@/lib/session";
+import { Button, TextInput } from "@/components/ui/primitivos";
 
 type Estado =
   | { fase: "aguardando" }
@@ -136,14 +137,14 @@ function PedirNovoLink({
       {!autenticado && (
         <>
           <FieldLabel htmlFor="email">E-mail da conta</FieldLabel>
-          <input
+          <TextInput
             id="email"
             type="email"
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             disabled={enviando}
-            className={inputClass}
+            classeDaCaixa="mb-5 w-full"
           />
         </>
       )}
@@ -154,13 +155,16 @@ function PedirNovoLink({
         </p>
       )}
 
-      <button
+      <Button
         type="submit"
+        variante="primario"
+        tamanho="md"
+        larguraTotal
         disabled={enviando || (!autenticado && !email.trim())}
-        className={submitClass}
+        className="celular:h-[48px]"
       >
         {enviando ? "Enviando…" : "Reenviar link de confirmação"}
-      </button>
+      </Button>
     </form>
   );
 }

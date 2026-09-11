@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { Search } from "@/components/ui/icones";
+import { Tooltip } from "@/components/ui/primitivos";
 
 export { default as HeaderIcon } from "@/components/chat/HeaderIcon";
 
@@ -70,23 +71,29 @@ export default function HeaderBar({
           }}
           className="relative"
         >
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            type="search"
-            aria-label={searchLabel}
-            placeholder={searchPlaceholder ?? "Buscar"}
-            title="Filtros: from:@usuário in:#canal has:link|image|file before:AAAA-MM-DD after:AAAA-MM-DD mentions:@usuário"
-            /* fixa, não mais expansível: no Discord a caixa já nasce do tamanho
-               final. A busca que cresce ao focar empurrava os ícones vizinhos e
-               fazia a barra inteira dançar a cada clique.
-               O preenchimento medido no Discord é (23,23,26) = `#17171A`, e
-               `border` é o mais perto da borda (48,48,53). Com a escala remedida
-               (2026-09-04) nenhum token cai exatamente ali: `bg-background-base-lowest` (#121214)
-               é o mais próximo por baixo, 5 níveis abaixo do medido. Registrado
-               em vez de criar um token de um uso só. */
-            className="h-8 w-[244px] rounded-lg border border-border-subtle bg-background-base-lowest pl-2 pr-[30px] text-sm text-text-default outline-none placeholder:text-text-muted"
-          />
+          {/* continua <input> nativo, não `TextInput`: a caixa usa
+              `bg-background-base-lowest`/`border-border-subtle` por uma decisão
+              medida (comentário abaixo) que o invólucro do primitivo, com fundo e
+              borda fixos em `--input-*`, não deixa preservar — ver cartão m14 em
+              "faltando". */}
+          <Tooltip rotulo="Filtros: from:@usuário in:#canal has:link|image|file before:AAAA-MM-DD after:AAAA-MM-DD mentions:@usuário">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              type="search"
+              aria-label={searchLabel}
+              placeholder={searchPlaceholder ?? "Buscar"}
+              /* fixa, não mais expansível: no Discord a caixa já nasce do tamanho
+                 final. A busca que cresce ao focar empurrava os ícones vizinhos e
+                 fazia a barra inteira dançar a cada clique.
+                 O preenchimento medido no Discord é (23,23,26) = `#17171A`, e
+                 `border` é o mais perto da borda (48,48,53). Com a escala remedida
+                 (2026-09-04) nenhum token cai exatamente ali: `bg-background-base-lowest` (#121214)
+                 é o mais próximo por baixo, 5 níveis abaixo do medido. Registrado
+                 em vez de criar um token de um uso só. */
+              className="h-8 w-[244px] rounded-lg border border-border-subtle bg-background-base-lowest pl-2 pr-[30px] text-sm text-text-default outline-none placeholder:text-text-muted"
+            />
+          </Tooltip>
           <Search
             size={17}
             aria-hidden="true"

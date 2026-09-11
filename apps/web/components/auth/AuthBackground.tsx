@@ -37,11 +37,16 @@ export default function AuthBackground() {
             patternUnits="userSpaceOnUse"
             patternTransform="rotate(-12)"
           >
-            <path d={BALAO_TILE} fill="none" stroke="#9BE31F" strokeWidth="3" />
+            <path
+              d={BALAO_TILE}
+              fill="none"
+              style={{ stroke: "var(--brand-500)" }}
+              strokeWidth="3"
+            />
           </pattern>
           <radialGradient id={brilho}>
-            <stop offset="0%" stopColor="#9BE31F" stopOpacity="0.28" />
-            <stop offset="100%" stopColor="#9BE31F" stopOpacity="0" />
+            <stop offset="0%" style={{ stopColor: "var(--brand-500)" }} stopOpacity="0.28" />
+            <stop offset="100%" style={{ stopColor: "var(--brand-500)" }} stopOpacity="0" />
           </radialGradient>
           <radialGradient id={vinheta}>
             <stop offset="55%" stopColor="#0B0B0F" stopOpacity="0" />

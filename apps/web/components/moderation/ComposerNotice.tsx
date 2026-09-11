@@ -1,6 +1,7 @@
 "use client";
 
 import { ScrollText, Timer } from "@/components/ui/icones";
+import { Button } from "@/components/ui/primitivos";
 import { horaCompleta } from "@/lib/format";
 import { useChannels } from "@/stores/channels";
 import { useModeration } from "@/stores/moderation";
@@ -53,13 +54,9 @@ export function RulesNotice({ rulesChannelId }: { rulesChannelId: string | null 
         )}{" "}
         antes de escrever neste servidor.
       </span>
-      <button
-        type="button"
-        onClick={() => void accept()}
-        className="h-8 rounded-[3px] bg-brand-500 px-3 font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover"
-      >
+      <Button variante="primario" tamanho="sm" onClick={() => void accept()}>
         Li e aceito as regras
-      </button>
+      </Button>
     </div>
   );
 }

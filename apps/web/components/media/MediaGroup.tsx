@@ -161,7 +161,7 @@ function Imagem({
           className={`blur-2xl ${sozinha ? "max-h-[350px] max-w-[min(550px,100%)]" : "h-full w-full"} object-cover`}
         />
         <span className="absolute inset-0 grid place-items-center">
-          <span className="flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1 text-sm font-bold uppercase text-white">
+          <span className="flex items-center gap-1.5 rounded-full bg-background-scrim px-3 py-1 text-sm font-bold uppercase text-text-overlay-light">
             <EyeOff size={16} aria-hidden="true" />
             Spoiler
           </span>
@@ -219,7 +219,7 @@ function Video({ anexo }: { anexo: Attachment }) {
 
 function Audio({ anexo }: { anexo: Attachment }) {
   return (
-    <div className="w-[432px] max-w-full rounded-lg border border-black/30 bg-background-base-lowest p-3">
+    <div className="w-[432px] max-w-full rounded-lg border border-border-subtle bg-background-base-lowest p-3">
       <span className="mb-2 block truncate text-sm font-medium text-text-default">
         {attachmentDisplayName(anexo)}
       </span>
@@ -232,7 +232,7 @@ function Audio({ anexo }: { anexo: Attachment }) {
 function Arquivo({ anexo }: { anexo: Attachment }) {
   const nome = attachmentDisplayName(anexo);
   return (
-    <div className="flex w-[432px] max-w-full items-center gap-3 rounded-lg border border-black/30 bg-background-base-lowest p-4">
+    <div className="flex w-[432px] max-w-full items-center gap-3 rounded-lg border border-border-subtle bg-background-base-lowest p-4">
       <FileText
         size={40}
         strokeWidth={1.25}
@@ -257,10 +257,12 @@ function Arquivo({ anexo }: { anexo: Attachment }) {
         href={anexo.url}
         download={nome}
         aria-label={`Baixar ${nome}`}
-        /* `h-8 w-8` mede 31 (a raiz do app é 15,5px), e no telefone este é o
-           único jeito de guardar o arquivo: o menu de toque longo da mensagem
-           não tem "baixar anexo". 44 literais no celular, como o resto dos
-           alvos de dedo do app. */
+        /* `h-8 w-8` mede 32 (a raiz do app é 16px, ADR-0009), e no telefone
+           este é o único jeito de guardar o arquivo: o menu de toque longo da
+           mensagem não tem "baixar anexo". 44 literais no celular, como o
+           resto dos alvos de dedo do app.
+           Fica `<a download>`, não `BotaoDeIcone`: o download nativo do
+           navegador exige uma âncora, e o primitivo só renderiza `<button>`. */
         className="grid h-8 w-8 shrink-0 place-items-center rounded text-text-subtle hover:bg-interactive-background-hover hover:text-text-strong celular:h-[44px] celular:w-[44px]"
       >
         <Download size={20} />

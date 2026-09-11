@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { MAX_REPORT_DETAILS, REPORT_REASONS, type ReportReason } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
+import { Campo, TextArea } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui, useUI } from "@/stores/ui";
@@ -84,21 +85,16 @@ export default function ReportModal({
         </div>
       </fieldset>
 
-      <label
-        htmlFor="report-details"
-        className="mb-2 mt-5 block text-xs font-bold uppercase tracking-[0.02em] text-text-subtle"
-      >
-        Detalhes (opcional)
-      </label>
-      <textarea
-        id="report-details"
-        rows={3}
-        value={details}
-        maxLength={MAX_REPORT_DETAILS}
-        onChange={(e) => setDetails(e.target.value)}
-        placeholder="Conte o que aconteceu, se ajudar."
-        className="w-full resize-none rounded-[3px] bg-input-background-default px-2.5 py-2 text-text-default outline-none placeholder:text-text-muted"
-      />
+      <Campo rotulo="Detalhes (opcional)" htmlFor="report-details" className="mt-5">
+        <TextArea
+          id="report-details"
+          rows={3}
+          value={details}
+          maxLength={MAX_REPORT_DETAILS}
+          onChange={(e) => setDetails(e.target.value)}
+          placeholder="Conte o que aconteceu, se ajudar."
+        />
+      </Campo>
     </Dialog>
   );
 }

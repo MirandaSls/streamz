@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { displayNameOf, type InviteFullPreview } from "@streamz/shared";
+import { Button } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { useGuilds } from "@/stores/guilds";
 
@@ -130,23 +131,19 @@ export default function InviteEmbed({ code }: { code: string }) {
             </span>
           </div>
         </div>
-        <button
-          type="button"
+        <Button
           disabled={entrando}
           onClick={() => void acao()}
-          /* 31px de altura no telefone (`h-8` com a raiz de 15,5px) para o
-             único botão do cartão: 44 literais no celular. */
-          className={
-            "h-8 shrink-0 rounded-[3px] px-4 text-sm font-medium transition disabled:opacity-60 celular:h-[44px] celular:w-full celular:px-5 " +
-            // quem já é membro não precisa de chamada para ação: o botão vira
-            // um atalho neutro para o servidor, como o "Entrou" do Discord
-            (jaSouMembro
-              ? "bg-border-normal text-white hover:bg-border-strong"
-              : "bg-brand-500 text-control-primary-text-default hover:bg-control-primary-background-hover")
-          }
+          // quem já é membro não precisa de chamada para ação: o botão vira
+          // um atalho neutro para o servidor, como o "Entrou" do Discord
+          variante={jaSouMembro ? "secundario" : "primario"}
+          tamanho="sm"
+          /* 32px de altura no desktop (tamanho `sm`, raiz de 16px): 44
+             literais no celular, único botão do cartão. */
+          className="shrink-0 celular:h-[44px] celular:w-full celular:px-5"
         >
           {jaSouMembro ? "Entrou" : entrando ? "Entrando…" : "Entrar"}
-        </button>
+        </Button>
       </div>
     </div>
   );

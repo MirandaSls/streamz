@@ -19,6 +19,7 @@ import { displayNameOf, type VoiceStateEvent } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import TagDeBot from "@/components/ui/TagDeBot";
 import Tooltip from "@/components/ui/Tooltip";
+import { Button } from "@/components/ui/primitivos";
 import { corDoAvatar } from "@/components/ui/avatar-cores";
 import { alternarTelaCheiaDe } from "@/components/voice/fullscreen";
 import { abrirMenuDeParticipante, abrirVolumeDe } from "@/components/voice/participant-menu";
@@ -80,14 +81,18 @@ export function TileDeConvite({ guildId }: { guildId: string }) {
         aria-hidden="true"
         className="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-brand-500/10 blur-3xl"
       />
-      <button
-        type="button"
+      {/* migração 0.8: botão de ação com texto → `Button`. `secundario`/`md` é o
+          mesmo par que `VistaDoCanalDeVoz` usa para "Entrar" — outro convite
+          dentro de um tile de voz vazio. */}
+      <Button
+        variante="secundario"
+        tamanho="md"
+        icone={<UserPlus size={16} aria-hidden="true" />}
         onClick={() => ui.openModal({ kind: "invite", guildId })}
-        className="relative flex h-9 items-center gap-2 rounded-[3px] bg-border-normal px-4 text-sm font-semibold text-text-strong transition hover:bg-border-strong"
+        className="relative"
       >
-        <UserPlus size={16} aria-hidden="true" />
         Convidar para voz
-      </button>
+      </Button>
     </div>
   );
 }
@@ -257,7 +262,7 @@ export function VoiceTile({
         // servidor de mídia, e um retângulo mudo nesse intervalo é
         // indistinguível de uma transmissão quebrada (foi como a tela preta
         // apareceu na print da 0.0.18).
-        <span className="grid h-full w-full place-items-center px-3 text-center text-xs text-white/70">
+        <span className="grid h-full w-full place-items-center px-3 text-center text-xs text-text-overlay-light/70">
           {assistindo ? "Carregando a transmissão…" : null}
         </span>
       ) : (
@@ -292,7 +297,7 @@ export function VoiceTile({
           só se não voltar. Esmaecer em vez de remover é o que evita a grade
           piscar a cada oscilação de rede de alguém. */}
       {state.reconnecting && (
-        <span className="absolute inset-0 grid place-items-center bg-black/60 text-xs font-semibold text-white">
+        <span className="absolute inset-0 grid place-items-center bg-background-scrim text-xs font-semibold text-text-overlay-light">
           Reconectando…
         </span>
       )}
@@ -333,7 +338,7 @@ export function VoiceTile({
         // selo diz "isto é uma transmissão", que é informação de relance — no
         // hover a pergunta já é outra
         <span
-          className={`pointer-events-none absolute rounded-[4px] bg-status-danger font-bold uppercase leading-none tracking-[0.02em] text-white transition-opacity ${
+          className={`pointer-events-none absolute rounded-[4px] bg-status-danger font-bold uppercase leading-none tracking-[0.02em] text-control-critical-primary-text-default transition-opacity ${
             semAcoes ? "" : "group-hover:opacity-0 group-focus-within:opacity-0"
           } ${compacto ? "right-1.5 top-1.5 px-1 py-0.5 text-[9px]" : "right-3 top-3 px-1.5 py-1 text-[10px]"}`}
         >
@@ -354,10 +359,16 @@ export function VoiceTile({
           nome. Com vídeo ela fica sempre: aí o quadro é uma imagem em
           movimento, e o rosto de hoje não é o de ontem. */}
       <span
-        className={`pointer-events-none absolute flex items-center gap-1.5 rounded-lg bg-black/50 text-white transition-opacity ${
-          // 20px literal: `h-5` daria 19,4 com a raiz de 15,5. O ramo de 32
-          // continua em `h-8` porque é o do **desktop**, e mexer nele moveria
-          // um pixel numa tela que este trabalho não pode tocar.
+        // migração 0.8: sem token para este preto a 50% (`--background-scrim` é
+        // 72%, fixo, e escureceria a pílula mais que o desenho pede) — mesmo
+        // caso de `DMProfilePanel`/`PalcoMobile`, preto cru fica; só o texto
+        // vira `text-overlay-light` (branco sobre imagem/vídeo) — ver "faltando"
+        className={`pointer-events-none absolute flex items-center gap-1.5 rounded-lg bg-black/50 text-text-overlay-light transition-opacity ${
+          // 20px literal: sob a raiz de 16px (ADR-0009) `h-5` já bate certinho
+          // em 20px — não é mais o motivo de usar o literal aqui, só sobrou
+          // porque trocar não muda nada hoje. O ramo de 32 continua em `h-8`
+          // porque é o do **desktop**, e mexer nele moveria um pixel numa tela
+          // que este trabalho não pode tocar.
           rotuloPequeno ? "h-[20px] px-[6px] text-[11px]" : "h-8 px-2 text-sm"
         } ${
           compacto ? "bottom-1 left-1 max-w-[calc(100%-8px)]" : "bottom-3 left-3 max-w-[calc(100%-24px)]"
@@ -478,6 +489,12 @@ function AcaoDoTile({
 }) {
   return (
     <Tooltip label={label}>
+      {/* migração 0.8: fica `<button>` — `BotaoDeIcone` não tem tamanho 28
+          (só 24/32/40) nem fundo permanente (`comFundo` só pinta no
+          hover/active); aqui o fundo escuro é o **repouso**, para o ícone se
+          ler sobre o vídeo mesmo sem hover. Cor pelo par que o próprio
+          contrato já usa para "botão redondo flutuando sobre vídeo"
+          (`TelaCheiaDeVideo`, `ImageModal`): `control-overlay-secondary`. */}
       <button
         type="button"
         onClick={(e) => {
@@ -487,7 +504,7 @@ function AcaoDoTile({
           onClick(e);
         }}
         aria-label={label}
-        className="grid h-7 w-7 place-items-center rounded bg-black/60 text-white transition hover:bg-black/80"
+        className="grid h-7 w-7 place-items-center rounded bg-control-overlay-secondary-background-default text-control-overlay-secondary-icon-default transition hover:bg-control-overlay-secondary-background-hover"
       >
         {children}
       </button>

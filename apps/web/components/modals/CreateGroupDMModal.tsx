@@ -5,6 +5,7 @@ import { Check, X } from "@/components/ui/icones";
 import { displayNameOf, MAX_DM_GROUP_INVITEES, type PublicUser } from "@streamz/shared";
 import Dialog from "@/components/modals/Dialog";
 import Avatar from "@/components/ui/Avatar";
+import { Button, TextInput } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { contactsFromDMs, useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
@@ -127,21 +128,18 @@ export default function CreateGroupDMModal() {
       bodyClassName="pt-6"
       footer={
         <>
-          <button
-            type="button"
+          <Button
+            variante="primario"
+            tamanho="md"
             disabled={picks.length === 0 || saving}
             onClick={submit}
-            className="h-10 flex-1 rounded-lg bg-brand-500 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex-1"
           >
             {saving ? "Abrindo…" : "Criar mensagem"}
-          </button>
-          <button
-            type="button"
-            onClick={closeModal}
-            className="h-10 flex-1 rounded-lg bg-border-normal text-sm font-medium text-text-default transition hover:bg-border-strong"
-          >
+          </Button>
+          <Button variante="secundario" tamanho="md" onClick={closeModal} className="flex-1">
             Cancelar
-          </button>
+          </Button>
         </>
       }
     >
@@ -162,14 +160,12 @@ export default function CreateGroupDMModal() {
         </div>
       )}
 
-      {/* a borda em accent no foco vem do estilo global de campos */}
-      <input
+      <TextInput
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         type="search"
         placeholder="Buscar"
         aria-label="Buscar usuário"
-        className="h-10 w-full rounded-lg bg-input-background-default px-3 text-text-default outline-none placeholder:text-text-muted"
       />
       <p className="mt-2 text-xs text-text-muted">
         Adicione amigos, ou busque alguém pelo nome de usuário, a grupos privados.

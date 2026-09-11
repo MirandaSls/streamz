@@ -5,6 +5,7 @@ import { Phone, PhoneOff, Video } from "@/components/ui/icones";
 import { CALL_RING_TIMEOUT_MS, displayNameOf, isGroupChannel } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
+import { Button } from "@/components/ui/primitivos";
 import { ALVO_MINIMO } from "@/components/voice/palco-mobile";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { pararToque, prepararToque, tocarToque, toqueDeChamadaUrl } from "@/lib/ringtone";
@@ -112,22 +113,23 @@ export default function IncomingCallModal() {
       </div>
 
       {/* o verde vem primeiro: no cartão pequeno a ordem é a hierarquia.
-          Os 36px de `h-9` são de mouse; no telefone atender e recusar são os
+          Os 36px de altura são de mouse; no telefone atender e recusar são os
           dois botões mais caros de errar do app inteiro, e vão para os 44 de
-          `ALVO_MINIMO` — em px, porque `h-11` desenharia 42,6 com a raiz de
-          15,5 (ver `palco-mobile.ts`). */}
+          `ALVO_MINIMO` — em px, direto (a raiz do app é 16px desde a
+          ADR-0009, então um `h-11` já bateria exato em 44; o número fica em
+          `ALVO_MINIMO` para não duplicar entre arquivos — ver
+          `palco-mobile.ts`). */}
       <div className="mt-3 flex items-center gap-2">
-        <button
-          type="button"
+        <Button
+          variante="positivo"
+          tamanho="sm"
+          larguraTotal
+          icone={<Phone size={16} aria-hidden="true" />}
           onClick={() => void atender(false)}
-          style={ehMobile ? { height: ALVO_MINIMO } : undefined}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-[3px] bg-status-positive text-sm font-semibold text-control-primary-text-default transition hover:brightness-110 ${
-            ehMobile ? "" : "h-9"
-          }`}
+          style={ehMobile ? { height: ALVO_MINIMO } : { height: 36 }}
         >
-          <Phone size={16} aria-hidden="true" />
           Atender
-        </button>
+        </Button>
         {comVideo && (
           <Tooltip label="Atender com vídeo">
             <button
@@ -144,17 +146,14 @@ export default function IncomingCallModal() {
           </Tooltip>
         )}
         <Tooltip label="Recusar">
-          <button
-            type="button"
+          <Button
+            variante="critico"
+            tamanho="sm"
+            icone={<PhoneOff size={16} />}
             onClick={decline}
             aria-label="Recusar chamada"
-            style={ehMobile ? { height: ALVO_MINIMO, width: ALVO_MINIMO } : undefined}
-            className={`grid place-items-center rounded-[3px] bg-status-danger text-white transition hover:bg-control-critical-primary-background-hover ${
-              ehMobile ? "" : "h-9 w-9"
-            }`}
-          >
-            <PhoneOff size={16} />
-          </button>
+            style={ehMobile ? { height: ALVO_MINIMO, width: ALVO_MINIMO } : { height: 36, width: 36 }}
+          />
         </Tooltip>
       </div>
     </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { Search } from "@/components/ui/icones";
+import { TextInput, Tooltip } from "@/components/ui/primitivos";
 
 /**
  * Peças que os três seletores (emoji, GIF, figurinha) desenham igual: a caixa
@@ -89,21 +90,16 @@ export function BuscaPicker({
   return (
     <div className="flex items-center gap-2 p-2">
       {children}
-      <div className="relative flex-1">
-        <Search
-          size={14}
-          aria-hidden="true"
-          className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-text-muted"
-        />
-        <input
-          autoFocus={autoFocus}
-          value={valor}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          aria-label={rotulo}
-          className="h-8 w-full rounded bg-input-background-default pl-7 pr-2 text-sm text-text-default outline-none placeholder:text-text-muted"
-        />
-      </div>
+      <TextInput
+        tamanho="sm"
+        classeDaCaixa="flex-1"
+        autoFocus={autoFocus}
+        value={valor}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        aria-label={rotulo}
+        prefixo={<Search size={14} aria-hidden="true" className="text-text-muted" />}
+      />
     </div>
   );
 }
@@ -113,7 +109,7 @@ export function ColunaLateral({ children, rotulo }: { children: ReactNode; rotul
   return (
     <nav
       aria-label={rotulo}
-      className="flex w-11 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-black/30 py-2"
+      className="flex w-11 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-border-subtle py-2"
     >
       {children}
     </nav>
@@ -132,18 +128,19 @@ export function BotaoLateral({
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      title={rotulo}
-      aria-label={rotulo}
-      aria-current={ativo || undefined}
-      onClick={onClick}
-      className={`grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded transition ${
-        ativo ? "bg-interactive-background-selected text-brand-500" : "text-text-muted hover:bg-interactive-background-hover hover:text-text-default"
-      }`}
-    >
-      {children}
-    </button>
+    <Tooltip rotulo={rotulo} lado="right">
+      <button
+        type="button"
+        aria-label={rotulo}
+        aria-current={ativo || undefined}
+        onClick={onClick}
+        className={`grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded transition ${
+          ativo ? "bg-interactive-background-selected text-brand-500" : "text-text-muted hover:bg-interactive-background-hover hover:text-text-default"
+        }`}
+      >
+        {children}
+      </button>
+    </Tooltip>
   );
 }
 
@@ -179,7 +176,7 @@ export function DivisoriaLateral() {
 
 export function RodapePicker({ children }: { children: ReactNode }) {
   return (
-    <footer className="flex h-11 shrink-0 items-center gap-2 border-t border-black/30 bg-input-background-default/40 px-3">
+    <footer className="flex h-11 shrink-0 items-center gap-2 border-t border-border-subtle bg-input-background-default/40 px-3">
       {children}
     </footer>
   );

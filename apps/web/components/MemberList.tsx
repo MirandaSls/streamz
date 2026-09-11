@@ -25,8 +25,8 @@ import {
 } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import TagDeBot from "@/components/ui/TagDeBot";
-import Tooltip from "@/components/ui/Tooltip";
 import { MENU_WIDTH } from "@/components/ui/ContextMenu";
+import { BotaoDeIcone, Tooltip } from "@/components/ui/primitivos";
 import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
 import { mencionar as inserirMencao } from "@/lib/mencoes";
 import { useAuth } from "@/stores/auth";
@@ -283,18 +283,18 @@ export default function MemberList() {
                   encosta no nome, e os selos de cargo ficam depois dela. */}
               {m.user.bot && <TagDeBot />}
               {m.role === "OWNER" && (
-                <Tooltip label="Dono do servidor">
+                <Tooltip rotulo="Dono do servidor">
                   <Crown size={14} className="shrink-0 text-status-warning" aria-label="Dono do servidor" />
                 </Tooltip>
               )}
               {m.role === "ADMIN" && (
-                <Tooltip label="Administrador">
+                <Tooltip rotulo="Administrador">
                   <ShieldCheck size={14} className="shrink-0 text-brand-500" aria-label="Administrador" />
                 </Tooltip>
               )}
               {/* h-moderacao: relógio marca quem está de castigo agora */}
               {isTimedOut(m.timeoutUntil) && (
-                <Tooltip label="De castigo — não pode enviar mensagens">
+                <Tooltip rotulo="De castigo — não pode enviar mensagens">
                   <Timer size={14} className="shrink-0 text-status-danger" aria-label="De castigo" />
                 </Tooltip>
               )}
@@ -317,55 +317,50 @@ export default function MemberList() {
         */}
         <div className="hidden shrink-0 gap-0.5 group-focus-within:flex group-hover:flex celular:flex">
           {!isMe && (
-            <Tooltip label="Mensagem">
-              <button
-                type="button"
-                onClick={() => void openWith(m.user.id)}
-                aria-label={`Abrir conversa com ${nome}`}
-                className="grid h-7 w-7 place-items-center rounded text-text-muted hover:text-text-strong celular:h-[44px] celular:w-[44px]"
-              >
-                <MessageSquare size={16} />
-              </button>
-            </Tooltip>
+            <BotaoDeIcone
+              rotulo="Mensagem"
+              icone={<MessageSquare size={16} />}
+              tamanho="sm"
+              aria-label={`Abrir conversa com ${nome}`}
+              onClick={() => void openWith(m.user.id)}
+              className="celular:h-[44px] celular:w-[44px]"
+            />
           )}
           {podeAgirSobre(m) && podeCastigar && (
             /* h-moderacao: castigo é a ação de moderação mais usada — fica no hover */
-            <Tooltip label={isTimedOut(m.timeoutUntil) ? "Remover castigo" : "Colocar de castigo"}>
-              <button
-                type="button"
-                onClick={() =>
-                  isTimedOut(m.timeoutUntil) ? void removeTimeout(m.user.id) : timeout(m.user.id)
-                }
-                aria-label={`${isTimedOut(m.timeoutUntil) ? "Remover castigo de" : "Colocar de castigo"} ${nome}`}
-                className="grid h-7 w-7 place-items-center rounded text-text-muted hover:text-status-danger celular:hidden"
-              >
-                {isTimedOut(m.timeoutUntil) ? <TimerOff size={16} /> : <Timer size={16} />}
-              </button>
-            </Tooltip>
+            <BotaoDeIcone
+              rotulo={isTimedOut(m.timeoutUntil) ? "Remover castigo" : "Colocar de castigo"}
+              icone={isTimedOut(m.timeoutUntil) ? <TimerOff size={16} /> : <Timer size={16} />}
+              tamanho="sm"
+              perigo
+              aria-label={`${isTimedOut(m.timeoutUntil) ? "Remover castigo de" : "Colocar de castigo"} ${nome}`}
+              onClick={() =>
+                isTimedOut(m.timeoutUntil) ? void removeTimeout(m.user.id) : timeout(m.user.id)
+              }
+              className="celular:hidden"
+            />
           )}
           {podeAgirSobre(m) && podeExpulsar && (
-            <Tooltip label="Expulsar">
-              <button
-                type="button"
-                onClick={() => kick(m.user.id)}
-                aria-label={`Expulsar ${nome}`}
-                className="grid h-7 w-7 place-items-center rounded text-text-muted hover:text-status-danger celular:hidden"
-              >
-                <UserX size={16} />
-              </button>
-            </Tooltip>
+            <BotaoDeIcone
+              rotulo="Expulsar"
+              icone={<UserX size={16} />}
+              tamanho="sm"
+              perigo
+              aria-label={`Expulsar ${nome}`}
+              onClick={() => kick(m.user.id)}
+              className="celular:hidden"
+            />
           )}
           {podeAgirSobre(m) && podeBanir && (
-            <Tooltip label="Banir">
-              <button
-                type="button"
-                onClick={() => ban(m.user.id)}
-                aria-label={`Banir ${nome}`}
-                className="grid h-7 w-7 place-items-center rounded text-text-muted hover:text-status-danger celular:hidden"
-              >
-                <Gavel size={16} />
-              </button>
-            </Tooltip>
+            <BotaoDeIcone
+              rotulo="Banir"
+              icone={<Gavel size={16} />}
+              tamanho="sm"
+              perigo
+              aria-label={`Banir ${nome}`}
+              onClick={() => ban(m.user.id)}
+              className="celular:hidden"
+            />
           )}
         </div>
       </div>

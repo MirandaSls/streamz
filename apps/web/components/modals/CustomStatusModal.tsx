@@ -8,9 +8,9 @@ import {
   type CustomStatusDuration,
 } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
-import { Rotulo, Select } from "@/components/ui/controls";
+import { Select } from "@/components/ui/controls";
+import { BotaoDeIcone, Campo, TextInput } from "@/components/ui/primitivos";
 import EmojiPicker from "@/components/ui/EmojiPicker";
-import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
 import { errorMessage } from "@/stores/socket-adapter";
@@ -78,55 +78,55 @@ export default function CustomStatusModal() {
         </>
       }
     >
-      <Rotulo htmlFor="statusText">Status personalizado</Rotulo>
-      <div className="relative flex items-center gap-2 rounded-[3px] bg-input-background-default px-2">
-        <Tooltip label="Escolher emoji">
-          <button
-            type="button"
-            onClick={() => setEscolhendo((v) => !v)}
-            aria-label="Escolher emoji do status"
-            className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] shrink-0 place-items-center rounded text-text-subtle hover:text-text-strong"
-          >
-            {emoji ? <span className="text-lg leading-none">{emoji}</span> : <SmilePlus size={18} />}
-          </button>
-        </Tooltip>
-        <input
-          id="statusText"
-          value={text}
-          maxLength={MAX_CUSTOM_STATUS}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              void salvar();
-            }
-          }}
-          placeholder="O que está acontecendo?"
-          className="h-10 min-w-0 flex-1 bg-transparent text-text-default outline-none placeholder:text-text-muted"
-        />
-        {emoji && (
-          <button
-            type="button"
-            onClick={() => setEmoji(null)}
-            aria-label="Remover emoji"
-            // 24px sobre a cápsula de 40 (44 empurraria o campo); o alvo de
-            // toque cresce por um pseudo-elemento invisível
-            className="relative grid h-6 w-6 shrink-0 place-items-center rounded text-text-muted hover:text-text-strong celular:before:absolute celular:before:-inset-[10px] celular:before:content-['']"
-          >
-            <X size={14} />
-          </button>
-        )}
-        {escolhendo && (
-          <EmojiPicker
-            className="absolute left-0 top-11 z-10"
-            onClose={() => setEscolhendo(false)}
-            onPick={(e) => {
-              setEmoji(e);
-              setEscolhendo(false);
+      <Campo rotulo="Status personalizado" htmlFor="statusText">
+        <div className="relative">
+          <TextInput
+            id="statusText"
+            value={text}
+            maxLength={MAX_CUSTOM_STATUS}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void salvar();
+              }
             }}
+            placeholder="O que está acontecendo?"
+            prefixo={
+              <BotaoDeIcone
+                rotulo="Escolher emoji do status"
+                icone={emoji ? <span className="text-lg leading-none">{emoji}</span> : <SmilePlus size={18} />}
+                tamanho="md"
+                className="celular:h-[44px] celular:w-[44px]"
+                onClick={() => setEscolhendo((v) => !v)}
+              />
+            }
+            sufixo={
+              emoji ? (
+                // 24px sobre a cápsula de 40 (44 empurraria o campo); o alvo de
+                // toque cresce por um pseudo-elemento invisível
+                <BotaoDeIcone
+                  rotulo="Remover emoji"
+                  icone={<X size={14} />}
+                  tamanho="sm"
+                  className="celular:before:absolute celular:before:-inset-[10px] celular:before:content-['']"
+                  onClick={() => setEmoji(null)}
+                />
+              ) : undefined
+            }
           />
-        )}
-      </div>
+          {escolhendo && (
+            <EmojiPicker
+              className="absolute left-0 top-11 z-10"
+              onClose={() => setEscolhendo(false)}
+              onPick={(e) => {
+                setEmoji(e);
+                setEscolhendo(false);
+              }}
+            />
+          )}
+        </div>
+      </Campo>
       <p className="mt-1 text-xs text-text-muted">
         {text.length}/{MAX_CUSTOM_STATUS}
       </p>

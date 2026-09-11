@@ -6,6 +6,7 @@ import { Permission, type Channel, type GuildChannelType } from "@streamz/shared
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { ChannelAccessList } from "@/components/modals/ChannelAccessModal";
 import { RadioLinha, Rotulo, ToggleLinha } from "@/components/ui/controls";
+import { TextInput } from "@/components/ui/primitivos";
 import { useGuilds } from "@/stores/guilds";
 import { useCan } from "@/stores/permissions";
 import { useCategories } from "@/stores/categories";
@@ -182,25 +183,24 @@ export default function CreateChannelModal({
 
       <div className="mt-5">
         <Rotulo htmlFor="novo-canal-nome">Nome do canal</Rotulo>
-        <div className="flex h-10 items-center gap-1 rounded-[3px] bg-input-background-default px-2.5">
-          <span aria-hidden="true" className="shrink-0 text-text-muted">
-            {type === "VOICE" ? <Volume2 size={18} /> : "#"}
-          </span>
-          <input
-            id="novo-canal-nome"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                void submit();
-              }
-            }}
-            maxLength={64}
-            placeholder="novo-canal"
-            className="min-w-0 flex-1 bg-transparent text-text-default outline-none placeholder:text-text-muted"
-          />
-        </div>
+        <TextInput
+          id="novo-canal-nome"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void submit();
+            }
+          }}
+          maxLength={64}
+          placeholder="novo-canal"
+          prefixo={
+            <span aria-hidden="true" className="shrink-0 text-text-muted">
+              {type === "VOICE" ? <Volume2 size={18} /> : "#"}
+            </span>
+          }
+        />
       </div>
 
       {podeGerenciarCanais && !anuncio && (

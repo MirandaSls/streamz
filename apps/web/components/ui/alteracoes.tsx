@@ -11,6 +11,7 @@ import {
   type MutableRefObject,
 } from "react";
 import { useSettings } from "@/stores/settings";
+import { Button } from "@/components/ui/primitivos";
 
 /**
  * A barra flutuante de "alterações não salvas" das configurações.
@@ -186,21 +187,26 @@ export function BarraDeAlteracoes({ controle }: { controle: ControleDeAlteracoes
       <p className="min-w-0 flex-1 text-sm text-text-strong celular:basis-full">
         Cuidado — você tem alterações não salvas!
       </p>
-      <button
-        type="button"
+      {/* "Redefinir" é neutro (sem cor de marca nem de risco) — bucket
+          `secundario` da migração 0.8, mesmo sem a caixa antiga desenhar borda
+          visível: é o par de "Salvar alterações", não um link de navegação. */}
+      <Button
+        variante="secundario"
+        tamanho="sm"
         onClick={() => controle.acoes.current?.redefinir()}
-        className="h-8 shrink-0 rounded-[3px] px-3 text-sm text-text-default underline-offset-2 transition hover:underline celular:h-[44px]"
+        className="shrink-0 celular:h-[44px]"
       >
         Redefinir
-      </button>
-      <button
-        type="button"
-        disabled={salvando}
+      </Button>
+      <Button
+        variante="primario"
+        tamanho="sm"
+        carregando={salvando}
         onClick={() => void salvar()}
-        className="h-8 shrink-0 rounded-[3px] bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:opacity-50 celular:h-[44px] celular:flex-1"
+        className="shrink-0 celular:h-[44px] celular:flex-1"
       >
-        {salvando ? "Salvando…" : "Salvar alterações"}
-      </button>
+        Salvar alterações
+      </Button>
     </div>
   );
 }

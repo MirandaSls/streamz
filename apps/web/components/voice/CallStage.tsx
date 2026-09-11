@@ -4,7 +4,7 @@ import { useRef } from "react";
 import { AlertTriangle, MessageSquare, Phone, RotateCw, UserPlus } from "@/components/ui/icones";
 import { displayNameOf, isGroupChannel } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
-import Tooltip from "@/components/ui/Tooltip";
+import { BotaoDeIcone, Button } from "@/components/ui/primitivos";
 import IconesDoCanto from "@/components/voice/IconesDoCanto";
 import VoiceControls from "@/components/voice/VoiceControls";
 import VoiceGrid from "@/components/voice/VoiceGrid";
@@ -110,18 +110,19 @@ export default function CallStage({
       {erro && conectadoAqui && status === "error" && (
         <div
           role="alert"
-          className="z-20 flex shrink-0 items-center gap-2 bg-status-danger px-4 py-2 text-sm font-medium text-white"
+          className="z-20 flex shrink-0 items-center gap-2 bg-status-danger px-4 py-2 text-sm font-medium text-control-critical-primary-text-default"
         >
           <AlertTriangle size={16} className="shrink-0" aria-hidden="true" />
           <span className="min-w-0 flex-1">{erro}</span>
-          <button
-            type="button"
+          <Button
+            variante="secundario"
+            tamanho="xs"
+            icone={<RotateCw size={12} aria-hidden="true" />}
             onClick={() => void reconnect()}
-            className="flex shrink-0 items-center gap-1.5 rounded-[3px] bg-white/15 px-2 py-1 text-xs font-semibold transition hover:bg-white/25"
+            className="shrink-0"
           >
-            <RotateCw size={12} aria-hidden="true" />
             Tentar novamente
-          </button>
+          </Button>
         </div>
       )}
 
@@ -152,22 +153,25 @@ export default function CallStage({
 
         <span className="flex min-w-0 flex-1 basis-0 justify-end gap-1">
           {grupo && (
-            <IconeDoPalco
-              label="Adicionar pessoas"
+            <BotaoDeIcone
+              rotulo="Adicionar pessoas"
+              icone={<UserPlus size={20} />}
               onClick={() => ui.openModal({ kind: "addGroupMembers", channelId })}
-              alvoDeToque={ehMobile}
-            >
-              <UserPlus size={20} />
-            </IconeDoPalco>
+              tamanho="md"
+              // 44 no celular (piso de toque do HIG/Material, `ALVO_MINIMO`), 32
+              // (o tamanho `md` do primitivo) no desktop — só o `style` muda o
+              // alvo sem tocar o raio/cor que o primitivo já resolve
+              style={ehMobile ? { height: ALVO_MINIMO, width: ALVO_MINIMO } : undefined}
+            />
           )}
-          <IconeDoPalco
-            label={chatAberto ? "Ocultar conversa" : "Mostrar conversa"}
+          <BotaoDeIcone
+            rotulo={chatAberto ? "Ocultar conversa" : "Mostrar conversa"}
             ativo={chatAberto}
+            icone={<MessageSquare size={20} />}
             onClick={onToggleChat}
-            alvoDeToque={ehMobile}
-          >
-            <MessageSquare size={20} />
-          </IconeDoPalco>
+            tamanho="md"
+            style={ehMobile ? { height: ALVO_MINIMO, width: ALVO_MINIMO } : undefined}
+          />
         </span>
       </div>
 
@@ -299,55 +303,15 @@ function ConviteParaEntrar({
           ))}
         </div>
         <p className="text-lg font-bold text-text-strong">{texto}</p>
-        <button
-          type="button"
+        <Button
+          variante="positivo"
+          tamanho="md"
+          icone={<Phone size={18} aria-hidden="true" />}
           onClick={onEntrar}
-          className="flex h-11 items-center gap-2 rounded-[3px] bg-status-positive px-6 text-base font-semibold text-control-primary-text-default transition hover:brightness-110"
         >
-          <Phone size={18} aria-hidden="true" />
           Entrar na chamada
-        </button>
+        </Button>
       </div>
     </div>
-  );
-}
-
-function IconeDoPalco({
-  label,
-  onClick,
-  ativo,
-  alvoDeToque = false,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  ativo?: boolean;
-  /**
-   * 44px em vez de 32 — o piso de toque do HIG e do Material, e o mesmo número
-   * do resto do leiaute de celular (`ALVO_MINIMO`). Em px, e não `h-11`: a raiz
-   * do app é 15,5px e a escala `rem` do Tailwind entregaria 42,6 (ver
-   * `palco-mobile.ts`). Só no telefone: no desktop o mouse acerta os 32 e mexer
-   * neles moveria um pixel de uma tela que este trabalho não pode tocar.
-   */
-  alvoDeToque?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        onClick={onClick}
-        aria-pressed={ativo}
-        aria-label={label}
-        style={alvoDeToque ? { height: ALVO_MINIMO, width: ALVO_MINIMO } : undefined}
-        className={`grid place-items-center rounded-[4px] transition ${
-          alvoDeToque ? "" : "h-8 w-8"
-        } ${
-          ativo ? "bg-interactive-background-selected text-text-strong" : "text-text-subtle hover:bg-interactive-background-hover hover:text-text-strong"
-        }`}
-      >
-        {children}
-      </button>
-    </Tooltip>
   );
 }
