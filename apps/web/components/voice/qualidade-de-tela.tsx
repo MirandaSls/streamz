@@ -75,14 +75,14 @@ function Segmento({
   const ehMobile = useEhMobile();
   return (
     <div className="flex items-center gap-2">
-      <span className="whitespace-nowrap text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">
+      <span className="whitespace-nowrap text-xs font-semibold uppercase tracking-[0.02em] text-text-muted">
         {rotulo}
       </span>
       <div
         role="group"
         aria-label={rotulo}
         style={ehMobile ? { height: ALVO_MINIMO + 8 } : undefined}
-        className={`flex gap-1 rounded-lg bg-void p-1 ${ehMobile ? "" : "h-10"}`}
+        className={`flex gap-1 rounded-lg bg-input-background-default p-1 ${ehMobile ? "" : "h-10"}`}
       >
         {opcoes.map((o) => (
           <button
@@ -93,8 +93,8 @@ function Segmento({
             style={ehMobile ? { height: ALVO_MINIMO } : undefined}
             className={`rounded-md px-3 text-sm font-semibold transition ${ehMobile ? "" : "h-8"} ${
               atual === o.valor
-                ? "bg-accent text-accent-ink"
-                : "text-txt-muted hover:bg-hov hover:text-txt-primary"
+                ? "bg-brand-500 text-control-primary-text-default"
+                : "text-text-muted hover:bg-interactive-background-hover hover:text-text-strong"
             }`}
           >
             {o.texto}

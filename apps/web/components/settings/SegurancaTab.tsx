@@ -103,7 +103,7 @@ function BlocoDeMensagens() {
           { value: "amigos", label: "Apenas meus amigos" },
         ]}
       />
-      <p className="pt-3 text-xs text-txt-muted">
+      <p className="pt-3 text-xs text-text-muted">
         Bloquear alguém encerra a conversa dos dois lados, independente desta escolha.
       </p>
     </Section>
@@ -140,8 +140,8 @@ function BlocoDeDados({ conta }: { conta: MinhaConta | null }) {
     <Section title="Dados e privacidade" semDivisoria>
       <div className="flex items-center justify-between gap-4 py-3">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-txt-primary">Baixar meus dados</p>
-          <p className="mt-0.5 text-xs text-txt-muted">
+          <p className="text-sm font-medium text-text-strong">Baixar meus dados</p>
+          <p className="mt-0.5 text-xs text-text-muted">
             Um arquivo com a sua conta, o seu perfil e as suas sessões ativas.
           </p>
         </div>
@@ -149,7 +149,7 @@ function BlocoDeDados({ conta }: { conta: MinhaConta | null }) {
           type="button"
           disabled={ocupado}
           onClick={() => void baixar()}
-          className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover disabled:opacity-50"
+          className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded-[3px] bg-border-normal px-3 text-sm font-medium text-text-default hover:bg-border-strong disabled:opacity-50"
         >
           <Download size={14} aria-hidden="true" />
           {ocupado ? "Montando…" : "Baixar"}
@@ -256,17 +256,17 @@ function BlocoDeMfa({
 
   return (
     <Section title="Segurança da conta">
-      <div className="flex items-center justify-between gap-4 border-b border-border py-3">
+      <div className="flex items-center justify-between gap-4 border-b border-border-subtle py-3">
         <div className="min-w-0">
-          <p className="flex items-center gap-2 text-sm font-medium text-txt-primary">
+          <p className="flex items-center gap-2 text-sm font-medium text-text-strong">
             {ligado ? (
-              <ShieldCheck size={16} className="text-green" aria-hidden="true" />
+              <ShieldCheck size={16} className="text-status-positive" aria-hidden="true" />
             ) : (
-              <ShieldOff size={16} className="text-txt-muted" aria-hidden="true" />
+              <ShieldOff size={16} className="text-text-muted" aria-hidden="true" />
             )}
             {ligado ? "Ativa" : "Desativada"}
           </p>
-          <p className="mt-0.5 text-xs text-txt-muted">
+          <p className="mt-0.5 text-xs text-text-muted">
             {ligado
               ? `${conta?.recoveryCodesLeft ?? 0} código(s) de recuperação restante(s).`
               : "Um código de 6 dígitos do seu app autenticador, além da senha."}
@@ -277,7 +277,7 @@ function BlocoDeMfa({
             <button
               type="button"
               onClick={() => (regerando ? limpar() : (setDesligando(false), setRegerando(true)))}
-              className="h-8 celular:h-[44px] rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
+              className="h-8 celular:h-[44px] rounded-[3px] bg-border-normal px-3 text-sm font-medium text-text-default hover:bg-border-strong"
             >
               {regerando ? "Cancelar" : "Novos códigos"}
             </button>
@@ -286,7 +286,7 @@ function BlocoDeMfa({
             <button
               type="button"
               onClick={() => (desligando ? limpar() : (setRegerando(false), setDesligando(true)))}
-              className="h-8 celular:h-[44px] rounded-[3px] border border-red px-3 text-sm font-medium text-red transition hover:bg-red hover:text-white"
+              className="h-8 celular:h-[44px] rounded-[3px] border border-status-danger px-3 text-sm font-medium text-status-danger transition hover:bg-status-danger hover:text-white"
             >
               {desligando ? "Cancelar" : "Desativar"}
             </button>
@@ -295,7 +295,7 @@ function BlocoDeMfa({
               type="button"
               disabled={ocupado}
               onClick={() => (setup ? limpar() : void comecar())}
-              className="h-8 celular:h-[44px] rounded-[3px] bg-accent px-3 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
+              className="h-8 celular:h-[44px] rounded-[3px] bg-brand-500 px-3 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:opacity-50"
             >
               {setup ? "Cancelar" : "Ativar"}
             </button>
@@ -305,7 +305,7 @@ function BlocoDeMfa({
 
       {setup && (
         <form onSubmit={ativar} noValidate className="pt-3">
-          <p className="mb-3 text-sm text-txt-normal">
+          <p className="mb-3 text-sm text-text-default">
             Leia o QR no seu app autenticador (Google Authenticator, Authy, 1Password…) e digite o
             código que ele mostrar.
           </p>
@@ -319,10 +319,10 @@ function BlocoDeMfa({
               className="rounded-[4px] bg-white p-2"
             />
             <div className="min-w-0">
-              <p className="mb-1 text-xs font-bold uppercase text-txt-secondary">
+              <p className="mb-1 text-xs font-bold uppercase text-text-subtle">
                 Ou digite o segredo
               </p>
-              <code className="block break-all rounded-[3px] bg-void px-2 py-1 text-sm text-txt-normal">
+              <code className="block break-all rounded-[3px] bg-input-background-default px-2 py-1 text-sm text-text-default">
                 {setup.secret}
               </code>
               <BotaoCopiar texto={setup.secret} rotulo="Copiar segredo" />
@@ -345,7 +345,7 @@ function BlocoDeMfa({
 
       {regerando && (
         <form onSubmit={regerar} noValidate className="pt-3">
-          <p className="mb-3 text-sm text-txt-normal">
+          <p className="mb-3 text-sm text-text-default">
             Os códigos atuais deixam de valer assim que os novos forem gerados.
           </p>
           <CampoDeTexto
@@ -421,11 +421,11 @@ function CodigosDeRecuperacao({
   }
 
   return (
-    <div className="mt-4 rounded-[4px] border border-yellow bg-panel p-3">
-      <p className="mb-2 text-sm font-medium text-txt-primary">
+    <div className="mt-4 rounded-[4px] border border-status-warning bg-background-base-lowest p-3">
+      <p className="mb-2 text-sm font-medium text-text-strong">
         Guarde estes códigos agora — eles não aparecem de novo.
       </p>
-      <ul className="mb-3 grid grid-cols-2 gap-1 font-mono text-sm text-txt-normal">
+      <ul className="mb-3 grid grid-cols-2 gap-1 font-mono text-sm text-text-default">
         {codigos.map((codigo) => (
           <li key={codigo}>{codigo}</li>
         ))}
@@ -435,7 +435,7 @@ function CodigosDeRecuperacao({
         <button
           type="button"
           onClick={baixar}
-          className="h-8 celular:h-[44px] rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
+          className="h-8 celular:h-[44px] rounded-[3px] bg-border-normal px-3 text-sm font-medium text-text-default hover:bg-border-strong"
         >
           Baixar .txt
         </button>
@@ -459,7 +459,7 @@ function BotaoCopiar({ texto, rotulo }: { texto: string; rotulo: string }) {
           })
           .catch(() => ui.toast("Não foi possível copiar", "error"));
       }}
-      className="mt-2 flex h-8 celular:h-[44px] items-center gap-1.5 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
+      className="mt-2 flex h-8 celular:h-[44px] items-center gap-1.5 rounded-[3px] bg-border-normal px-3 text-sm font-medium text-text-default hover:bg-border-strong"
     >
       <Copy size={14} aria-hidden="true" />
       {copiado ? "Copiado!" : rotulo}

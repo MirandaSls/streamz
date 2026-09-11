@@ -53,13 +53,13 @@ export default function PainelDeChatDaCall({
     <section
       aria-label={`Conversa de ${titulo}`}
       style={largura ? { width: largura } : undefined}
-      className={`flex min-h-0 shrink-0 flex-col border-l border-border bg-chat ${
+      className={`flex min-h-0 shrink-0 flex-col border-l border-border-subtle bg-background-base-lower ${
         largura ? "" : "w-[450px]"
       }`}
     >
-      <header className="flex h-[49px] shrink-0 items-center gap-[13px] border-b border-border pl-5 pr-2">
-        <MessageSquare size={18} className="shrink-0 text-txt-muted" aria-hidden="true" />
-        <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-txt-primary">
+      <header className="flex h-[49px] shrink-0 items-center gap-[13px] border-b border-border-subtle pl-5 pr-2">
+        <MessageSquare size={18} className="shrink-0 text-text-muted" aria-hidden="true" />
+        <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-text-strong">
           {titulo}
         </h2>
         <Tooltip label="Fechar">
@@ -67,7 +67,7 @@ export default function PainelDeChatDaCall({
             type="button"
             onClick={onFechar}
             aria-label="Fechar a conversa da chamada"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-[4px] text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-[4px] text-text-subtle transition hover:bg-interactive-background-hover hover:text-text-strong"
           >
             <X size={18} />
           </button>

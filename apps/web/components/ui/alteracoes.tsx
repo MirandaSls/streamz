@@ -181,15 +181,15 @@ export function BarraDeAlteracoes({ controle }: { controle: ControleDeAlteracoes
       // No celular a barra quebra em duas linhas — o aviso em cima, os dois
       // botões embaixo: numa tela de 390 os três lado a lado deixavam ~110px
       // para o texto, que virava cinco linhas. É a barra que salva todas as abas.
-      className="sticky bottom-5 z-20 mt-6 flex items-center gap-4 rounded-[8px] border border-border bg-overlay px-4 py-2.5 shadow-high celular:flex-wrap celular:gap-2"
+      className="sticky bottom-5 z-20 mt-6 flex items-center gap-4 rounded-[8px] border border-border-subtle bg-background-surface-higher px-4 py-2.5 shadow-popout celular:flex-wrap celular:gap-2"
     >
-      <p className="min-w-0 flex-1 text-sm text-txt-primary celular:basis-full">
+      <p className="min-w-0 flex-1 text-sm text-text-strong celular:basis-full">
         Cuidado — você tem alterações não salvas!
       </p>
       <button
         type="button"
         onClick={() => controle.acoes.current?.redefinir()}
-        className="h-8 shrink-0 rounded-[3px] px-3 text-sm text-txt-normal underline-offset-2 transition hover:underline celular:h-[44px]"
+        className="h-8 shrink-0 rounded-[3px] px-3 text-sm text-text-default underline-offset-2 transition hover:underline celular:h-[44px]"
       >
         Redefinir
       </button>
@@ -197,7 +197,7 @@ export function BarraDeAlteracoes({ controle }: { controle: ControleDeAlteracoes
         type="button"
         disabled={salvando}
         onClick={() => void salvar()}
-        className="h-8 shrink-0 rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50 celular:h-[44px] celular:flex-1"
+        className="h-8 shrink-0 rounded-[3px] bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:opacity-50 celular:h-[44px] celular:flex-1"
       >
         {salvando ? "Salvando…" : "Salvar alterações"}
       </button>

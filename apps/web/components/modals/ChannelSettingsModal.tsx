@@ -256,7 +256,7 @@ export default function ChannelSettingsModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={64}
-              className="h-10 w-full rounded-[3px] bg-void px-2.5 text-txt-normal outline-none"
+              className="h-10 w-full rounded-[3px] bg-input-background-default px-2.5 text-text-default outline-none"
             />
           </div>
 
@@ -271,7 +271,7 @@ export default function ChannelSettingsModal({
                 onChange={(e) => setTopic(e.target.value.slice(0, MAX_CHANNEL_TOPIC))}
                 rows={3}
                 placeholder="Sobre o que é este canal?"
-                className="w-full resize-none rounded-[3px] bg-void px-2.5 py-2 text-txt-normal outline-none placeholder:text-txt-muted"
+                className="w-full resize-none rounded-[3px] bg-input-background-default px-2.5 py-2 text-text-default outline-none placeholder:text-text-muted"
               />
             </div>
           )}
@@ -287,7 +287,7 @@ export default function ChannelSettingsModal({
           )}
 
           {!voz && (
-            <div className="border-t border-border pt-1">
+            <div className="border-t border-border-subtle pt-1">
               <ToggleLinha
                 checked={nsfw}
                 onChange={setNsfw}
@@ -306,7 +306,7 @@ export default function ChannelSettingsModal({
           )}
 
           {anuncio && (
-            <p className="rounded-[4px] bg-panel px-3 py-2 text-xs text-txt-muted">
+            <p className="rounded-[4px] bg-background-base-lowest px-3 py-2 text-xs text-text-muted">
               Canal de anúncios: só a moderação publica. Seguir o canal em outro servidor ainda não
               está disponível.
             </p>
@@ -339,8 +339,8 @@ export default function ChannelSettingsModal({
             channel.categoryId ? (
               // no celular o aviso e o botão empilham: lado a lado, o texto
               // ficava em quatro linhas de ~250px ao lado de um botão largo
-              <div className="flex items-center justify-between gap-4 rounded-[4px] border border-border bg-panel px-3 py-2 celular:flex-col celular:items-stretch celular:gap-2">
-                <p className="min-w-0 text-xs text-txt-muted">
+              <div className="flex items-center justify-between gap-4 rounded-[4px] border border-border-subtle bg-background-base-lowest px-3 py-2 celular:flex-col celular:items-stretch celular:gap-2">
+                <p className="min-w-0 text-xs text-text-muted">
                   {channel.syncedWithCategory
                     ? "Sincronizado com a categoria: as regras abaixo são as dela, e a primeira edição feita aqui desgruda o canal."
                     : "Este canal tem regras próprias — elas não seguem mais a categoria."}
@@ -350,7 +350,7 @@ export default function ChannelSettingsModal({
                     type="button"
                     disabled={sincronizando}
                     onClick={() => void sincronizar()}
-                    className="h-8 celular:h-[44px] shrink-0 rounded-[3px] border border-border-strong px-3 text-sm text-txt-normal transition hover:border-border-strong-hover disabled:opacity-50"
+                    className="h-8 celular:h-[44px] shrink-0 rounded-[3px] border border-border-normal px-3 text-sm text-text-default transition hover:border-border-strong disabled:opacity-50"
                   >
                     {sincronizando ? "Sincronizando…" : "Sincronizar com a categoria"}
                   </button>

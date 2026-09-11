@@ -70,8 +70,8 @@ const LIMIAR_DE_FECHO = 110;
  * o ícone dentro medindo 13 a 14px de tinta. Ao lado dela, separado por 12px,
  * o **X sozinho num quadrado de 40 (x 1856..1895) com o mesmo raio 8**, a 24px
  * da borda direita da janela. O fundo da pílula é #1E1F22 com borda 1px mais
- * clara (#313137); usamos os tokens mais próximos que já existem — `bg-chat`
- * com `border-border`, a mesma dupla da mini-barra da mensagem.
+ * clara (#313137); usamos os tokens mais próximos que já existem — `bg-background-base-lower`
+ * com `border-border-subtle`, a mesma dupla da mini-barra da mensagem.
  *
  * As **ações** não são as mesmas do Discord (lá a pílula tem zoom, encaminhar,
  * abrir e "…", com copiar e salvar escondidos dentro do "…"): aqui as cinco
@@ -229,7 +229,7 @@ export default function ImageModal({
         )}
 
         {!ehMobile && (
-          <div className="flex h-[40px] items-center rounded-lg border border-border bg-chat">
+          <div className="flex h-[40px] items-center rounded-lg border border-border-subtle bg-background-base-lower">
             <BarraDeAcoes
               url={url}
               alt={alt}
@@ -244,7 +244,7 @@ export default function ImageModal({
           type="button"
           onClick={closeModal}
           aria-label="Fechar"
-          className={`grid place-items-center rounded-lg border border-border bg-chat text-txt-secondary transition hover:bg-hov hover:text-txt-primary ${
+          className={`grid place-items-center rounded-lg border border-border-subtle bg-background-base-lower text-text-subtle transition hover:bg-interactive-background-hover hover:text-text-strong ${
             ehMobile ? "h-[44px] w-[44px]" : "h-[40px] w-[40px]"
           }`}
         >
@@ -291,8 +291,8 @@ export default function ImageModal({
                     style={{ height: alturaDoChipDeReacao(tamanhoEmoji) }}
                     className={`flex items-center gap-1.5 rounded-lg border px-1.5 ${
                       minha
-                        ? "border-accent bg-accent/20 text-txt-primary"
-                        : "border-transparent bg-panel text-txt-normal"
+                        ? "border-brand-500 bg-brand-500/20 text-text-strong"
+                        : "border-transparent bg-background-base-lowest text-text-default"
                     }`}
                   >
                     <EmojiDaReacao emoji={r.emoji} tamanho={tamanhoEmoji} />
@@ -302,7 +302,7 @@ export default function ImageModal({
               })}
             </div>
           )}
-          <div className="flex items-center rounded-2xl border border-border bg-chat/95 px-1">
+          <div className="flex items-center rounded-2xl border border-border-subtle bg-background-base-lower/95 px-1">
             <BarraDeAcoes
               url={url}
               alt={alt}
@@ -373,8 +373,8 @@ export default function ImageModal({
                     style={{ height: alturaDoChipDeReacao(tamanhoEmoji) }}
                     className={`flex items-center gap-1.5 rounded-lg border px-1.5 transition ${
                       minha
-                        ? "border-accent bg-accent/20 text-txt-primary"
-                        : "border-transparent bg-panel text-txt-normal hover:border-border-strong"
+                        ? "border-brand-500 bg-brand-500/20 text-text-strong"
+                        : "border-transparent bg-background-base-lowest text-text-default hover:border-border-normal"
                     }`}
                   >
                     <EmojiDaReacao emoji={r.emoji} tamanho={tamanhoEmoji} />
@@ -473,7 +473,7 @@ function BotaoDaBarra({
         onClick={onClick}
         aria-label={label}
         style={{ height: tamanho, width: tamanho }}
-        className="grid place-items-center rounded-md text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
+        className="grid place-items-center rounded-md text-text-subtle transition hover:bg-interactive-background-hover hover:text-text-strong"
       >
         {children}
       </button>

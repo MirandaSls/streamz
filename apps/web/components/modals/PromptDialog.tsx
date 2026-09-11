@@ -46,7 +46,7 @@ export default function PromptDialog({
           }
         }}
         placeholder={modal.placeholder}
-        className="h-10 w-full rounded-[3px] bg-void px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
+        className="h-10 w-full rounded-[3px] bg-input-background-default px-2.5 text-text-default outline-none placeholder:text-text-muted"
       />
     </Dialog>
   );

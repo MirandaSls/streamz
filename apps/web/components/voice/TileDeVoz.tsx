@@ -75,15 +75,15 @@ export interface AcoesDoTile {
  */
 export function TileDeConvite({ guildId }: { guildId: string }) {
   return (
-    <div className="relative grid h-full w-full place-items-center overflow-hidden rounded-lg bg-input">
+    <div className="relative grid h-full w-full place-items-center overflow-hidden rounded-lg bg-chat-background-default">
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-accent/10 blur-3xl"
+        className="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-brand-500/10 blur-3xl"
       />
       <button
         type="button"
         onClick={() => ui.openModal({ kind: "invite", guildId })}
-        className="relative flex h-9 items-center gap-2 rounded-[3px] bg-border-strong px-4 text-sm font-semibold text-txt-primary transition hover:bg-border-strong-hover"
+        className="relative flex h-9 items-center gap-2 rounded-[3px] bg-border-normal px-4 text-sm font-semibold text-text-strong transition hover:bg-border-strong"
       >
         <UserPlus size={16} aria-hidden="true" />
         Convidar para voz
@@ -140,7 +140,7 @@ export function AvatarDeChamada({
         <Avatar
           user={state.user}
           size="xl"
-          surface="border-void"
+          surface="border-input-background-default"
           voz={state.deafened ? "surdo" : state.muted ? "mudo" : null}
           className={`transition-transform ${ativo ? ENCOLHE_AO_FALAR : ""}`}
         />
@@ -276,7 +276,7 @@ export function VoiceTile({
             <Avatar
               user={state.user}
               size="xl"
-              surface="border-input"
+              surface="border-chat-background-default"
               className={`transition-transform ${ativo ? ENCOLHE_AO_FALAR : ""} ${
                 compacto
                   ? "h-16 w-16 [&>img]:h-16 [&>img]:w-16 [&>span]:h-16 [&>span]:w-16 [&>span]:text-xl"
@@ -313,7 +313,7 @@ export function VoiceTile({
           className="absolute inset-0 grid place-items-center"
         >
           <span
-            className={`flex h-8 items-center rounded-full bg-accent font-semibold text-accent-ink shadow-high transition group-hover:brightness-110 ${
+            className={`flex h-8 items-center rounded-full bg-brand-500 font-semibold text-control-primary-text-default shadow-popout transition group-hover:brightness-110 ${
               compacto ? "w-8 justify-center" : "gap-2 px-3 text-[13px]"
             }`}
           >
@@ -333,7 +333,7 @@ export function VoiceTile({
         // selo diz "isto é uma transmissão", que é informação de relance — no
         // hover a pergunta já é outra
         <span
-          className={`pointer-events-none absolute rounded-[4px] bg-red font-bold uppercase leading-none tracking-[0.02em] text-white transition-opacity ${
+          className={`pointer-events-none absolute rounded-[4px] bg-status-danger font-bold uppercase leading-none tracking-[0.02em] text-white transition-opacity ${
             semAcoes ? "" : "group-hover:opacity-0 group-focus-within:opacity-0"
           } ${compacto ? "right-1.5 top-1.5 px-1 py-0.5 text-[9px]" : "right-3 top-3 px-1.5 py-1 text-[10px]"}`}
         >
@@ -436,7 +436,7 @@ export function VoiceTile({
                     label={silenciado ? `Reativar ${nome}` : `Silenciar ${nome}`}
                     onClick={() => toggleSilenciado(state.user.id)}
                   >
-                    <VolumeX size={14} className={silenciado ? "text-red" : undefined} />
+                    <VolumeX size={14} className={silenciado ? "text-status-danger" : undefined} />
                   </AcaoDoTile>
                 </>
               )}

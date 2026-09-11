@@ -52,8 +52,8 @@ export function TituloDaPagina({
       }`}
     >
       <div className="min-w-0">
-        <h1 className={ehMobile ? "sr-only" : "text-xl font-semibold text-txt-primary"}>{titulo}</h1>
-        {subtitulo && <p className="mt-1.5 text-sm text-txt-muted">{subtitulo}</p>}
+        <h1 className={ehMobile ? "sr-only" : "text-xl font-semibold text-text-strong"}>{titulo}</h1>
+        {subtitulo && <p className="mt-1.5 text-sm text-text-muted">{subtitulo}</p>}
       </div>
       {acao && <div className="shrink-0">{acao}</div>}
     </div>
@@ -62,11 +62,11 @@ export function TituloDaPagina({
 
 /** Botão de ação primário (o azul do print). A altura vem de quem chama. */
 export const BOTAO_ACENTO =
-  "shrink-0 rounded-lg bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50";
+  "shrink-0 rounded-lg bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:cursor-not-allowed disabled:opacity-50";
 
 /** Botão secundário: cinza, para a ação que acompanha a primária. */
 export const BOTAO_SECUNDARIO =
-  "shrink-0 rounded-lg bg-border-strong px-4 text-sm font-medium text-txt-normal transition hover:bg-border-strong-hover disabled:cursor-not-allowed disabled:opacity-50";
+  "shrink-0 rounded-lg bg-border-normal px-4 text-sm font-medium text-text-default transition hover:bg-border-strong disabled:cursor-not-allowed disabled:opacity-50";
 
 /**
  * Botão de ação destrutiva no desenho do print: fundo cinza e **texto**
@@ -74,7 +74,7 @@ export const BOTAO_SECUNDARIO =
  * confirmação, que é onde o estrago acontece de verdade.
  */
 export const BOTAO_PERIGO =
-  "shrink-0 rounded-lg bg-border-strong px-4 text-sm font-medium text-red transition hover:bg-border-strong-hover disabled:cursor-not-allowed disabled:opacity-50";
+  "shrink-0 rounded-lg bg-border-normal px-4 text-sm font-medium text-status-danger transition hover:bg-border-strong disabled:cursor-not-allowed disabled:opacity-50";
 
 /**
  * Cabeçalho de coluna das tabelas do servidor (membros, convites, banimentos):
@@ -82,4 +82,4 @@ export const BOTAO_PERIGO =
  * `100649` (linha de 1px em `#2E2E33`, cabeçalho de 57 de altura).
  */
 export const TABELA_CABECALHO =
-  "border-b border-border text-left text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary";
+  "border-b border-border-subtle text-left text-xs font-bold uppercase tracking-[0.02em] text-text-subtle";

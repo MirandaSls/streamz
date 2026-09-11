@@ -173,21 +173,21 @@ export default function InviteModal({
       >
         {/* o subtítulo do Discord diz para onde a pessoa cai, não só o canal */}
         {destino && (
-          <p className="flex items-center gap-1 px-6 text-base leading-5 text-txt-muted">
+          <p className="flex items-center gap-1 px-6 text-base leading-5 text-text-muted">
             <span className="shrink-0">Os destinatários chegarão em</span>
             <Hash size={16} aria-hidden="true" className="shrink-0" />
             <span className="truncate">{destino.name}</span>
           </p>
         )}
 
-        <div className="mx-6 mt-6 flex h-10 items-center gap-3 rounded-lg bg-void px-3 celular:h-[48px]">
-          <Search size={16} aria-hidden="true" className="shrink-0 text-txt-muted" />
+        <div className="mx-6 mt-6 flex h-10 items-center gap-3 rounded-lg bg-input-background-default px-3 celular:h-[48px]">
+          <Search size={16} aria-hidden="true" className="shrink-0 text-text-muted" />
           <input
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             aria-label="Buscar amigo"
             placeholder="Buscar amigos"
-            className="min-w-0 flex-1 bg-transparent text-txt-normal outline-none placeholder:text-txt-muted"
+            className="min-w-0 flex-1 bg-transparent text-text-default outline-none placeholder:text-text-muted"
           />
         </div>
 
@@ -195,7 +195,7 @@ export default function InviteModal({
             as linhas param 12 antes dela */}
         <div role="list" className="ml-6 mr-1 mt-3 max-h-[31.5rem] overflow-y-auto pr-3">
           {lista.length === 0 ? (
-            <p className="py-3 text-sm text-txt-muted">
+            <p className="py-3 text-sm text-text-muted">
               {friends.length === 0
                 ? "Você ainda não tem amigos aqui. Copie o link abaixo e mande do jeito que preferir."
                 : "Nenhum amigo com esse nome."}
@@ -210,12 +210,12 @@ export default function InviteModal({
                   className="flex h-12 items-center gap-2.5 rounded-lg"
                 >
                   {/* sem bolinha de status: o Discord não a mostra nesta lista */}
-                  <Avatar user={amigo} size="md" surface="border-chat" />
+                  <Avatar user={amigo} size="md" surface="border-background-base-lower" />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-base font-semibold leading-5 text-txt-primary">
+                    <span className="block truncate text-base font-semibold leading-5 text-text-strong">
                       {displayNameOf(amigo)}
                     </span>
-                    <span className="block truncate text-xs leading-4 text-txt-muted">
+                    <span className="block truncate text-xs leading-4 text-text-muted">
                       {amigo.username}
                     </span>
                   </span>
@@ -225,8 +225,8 @@ export default function InviteModal({
                     onClick={() => void convidar(amigo)}
                     className={`flex h-8 celular:h-[44px] shrink-0 items-center justify-center gap-1 rounded-lg px-3 text-sm font-medium transition ${
                       convidado
-                        ? "cursor-default border border-border-strong text-txt-muted"
-                        : "bg-border-strong text-txt-normal hover:bg-border-strong-hover disabled:opacity-50"
+                        ? "cursor-default border border-border-normal text-text-muted"
+                        : "bg-border-normal text-text-default hover:bg-border-strong disabled:opacity-50"
                     }`}
                   >
                     {convidado && <Check size={14} aria-hidden="true" />}
@@ -240,39 +240,39 @@ export default function InviteModal({
 
         {/* a divisória do Discord vai de ponta a ponta da caixa: por isso a
             borda mora no bloco de baixo, que não tem o padding lateral */}
-        <div className="border-t border-border px-6 pb-4 pt-6">
-          <p className="text-base font-semibold leading-5 text-txt-primary">
+        <div className="border-t border-border-subtle px-6 pb-4 pt-6">
+          <p className="text-base font-semibold leading-5 text-text-strong">
             Ou, envie um convite do servidor a um amigo
           </p>
           {/* input + botão num container só: no Discord os dois são uma peça */}
           {/* 52 no celular: a cápsula tem `overflow-hidden` e o "Copiar" sobe
               para os 44 do alvo de toque — em 40 ele saía cortado */}
-          <div className="mt-2 flex h-10 items-center overflow-hidden rounded-lg bg-void pl-3 pr-1 celular:h-[52px]">
+          <div className="mt-2 flex h-10 items-center overflow-hidden rounded-lg bg-input-background-default pl-3 pr-1 celular:h-[52px]">
             <input
               value={url || "gerando…"}
               readOnly
               aria-label="Link do convite"
               onFocus={(e) => e.currentTarget.select()}
-              className="min-w-0 flex-1 bg-transparent text-txt-normal outline-none"
+              className="min-w-0 flex-1 bg-transparent text-text-default outline-none"
             />
             <button
               type="button"
               disabled={!url}
               onClick={() => void copiar()}
-              className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
+              className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:opacity-50"
             >
               {copied && <Check size={16} aria-hidden="true" />}
               {copied ? "Copiado" : "Copiar"}
             </button>
           </div>
-          <p aria-live="polite" className="mt-4 text-xs leading-4 text-txt-muted">
+          <p aria-live="polite" className="mt-4 text-xs leading-4 text-text-muted">
             {invite?.expiresAt
               ? `Seu link de convite expira em ${faltamAte(invite.expiresAt)}. `
               : "Seu link de convite não expira. "}
             <button
               type="button"
               onClick={() => setEditando(true)}
-              className="font-medium text-txt-link hover:underline celular:inline-flex celular:min-h-[44px] celular:items-center"
+              className="font-medium text-text-link hover:underline celular:inline-flex celular:min-h-[44px] celular:items-center"
             >
               Editar link de convite
             </button>
@@ -291,14 +291,14 @@ export default function InviteModal({
               <button
                 type="button"
                 onClick={() => void regerar()}
-                className="h-[38px] min-w-24 rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover"
+                className="h-[38px] min-w-24 rounded-[3px] bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover"
               >
                 Gerar novo link
               </button>
               <button
                 type="button"
                 onClick={() => setEditando(false)}
-                className="h-[38px] min-w-24 rounded-[3px] px-4 text-sm font-medium text-txt-normal transition hover:underline"
+                className="h-[38px] min-w-24 rounded-[3px] px-4 text-sm font-medium text-text-default transition hover:underline"
               >
                 Cancelar
               </button>
@@ -339,7 +339,7 @@ export default function InviteModal({
             </div>
           )}
 
-          <div className="mt-2 border-t border-border pt-1">
+          <div className="mt-2 border-t border-border-subtle pt-1">
             <ToggleLinha
               checked={temporary}
               onChange={setTemporary}

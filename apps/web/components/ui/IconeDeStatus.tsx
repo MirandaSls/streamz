@@ -31,10 +31,10 @@ import type { UserStatus } from "@streamz/shared";
  * O `viewBox` é 16 para que essas frações caiam em números inteiros.
  */
 export const COR_DO_STATUS: Record<UserStatus, string> = {
-  ONLINE: "text-green",
-  IDLE: "text-yellow",
-  DND: "text-red",
-  OFFLINE: "text-txt-faint",
+  ONLINE: "text-status-positive",
+  IDLE: "text-status-warning",
+  DND: "text-status-danger",
+  OFFLINE: "text-channels-default",
 };
 
 export default function IconeDeStatus({

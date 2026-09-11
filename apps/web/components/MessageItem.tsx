@@ -93,8 +93,8 @@ function ActionButton({
         // 28px com raio 6, medido no botão "…" da barra do Discord
         // (`2026-08-31 124022.png`, x 1222..1249, y 394..421; canto sobe
         // 4, 2, 1, 1, 0 px). Era 32 com raio 3.
-        className={`grid h-7 w-7 place-items-center rounded-md text-txt-secondary transition hover:bg-hov ${
-          danger ? "hover:text-red" : "hover:text-txt-primary"
+        className={`grid h-7 w-7 place-items-center rounded-md text-text-subtle transition hover:bg-interactive-background-hover ${
+          danger ? "hover:text-status-danger" : "hover:text-text-strong"
         }`}
       >
         {children}
@@ -132,11 +132,11 @@ function ReplyReference({ message }: { message: Message }) {
     <div
       onMouseEnter={() => realcar(true)}
       onMouseLeave={() => realcar(false)}
-      className="relative flex items-center gap-1.5 pb-0.5 text-[13px] leading-[18px] text-txt-muted"
+      className="relative flex items-center gap-1.5 pb-0.5 text-[13px] leading-[18px] text-text-muted"
     >
       <span
         aria-hidden="true"
-        className="absolute -left-10 bottom-[8px] h-3 w-10 rounded-tl-[6px] border-l-2 border-t-2 border-border-strong"
+        className="absolute -left-10 bottom-[8px] h-3 w-10 rounded-tl-[6px] border-l-2 border-t-2 border-border-normal"
       />
       <button
         type="button"
@@ -150,7 +150,7 @@ function ReplyReference({ message }: { message: Message }) {
         type="button"
         onClick={abrirPerfil}
         style={cor ? { color: cor } : undefined}
-        className="shrink-0 font-medium text-txt-secondary hover:underline"
+        className="shrink-0 font-medium text-text-subtle hover:underline"
       >
         @{displayNameOf(ref.author)}
       </button>
@@ -177,7 +177,7 @@ function ReplyReference({ message }: { message: Message }) {
             messageId: ref.id,
           })
         }
-        className="flex min-w-0 items-center gap-1 truncate text-left hover:text-txt-normal"
+        className="flex min-w-0 items-center gap-1 truncate text-left hover:text-text-default"
       >
         {ref.content ? (
           ref.content
@@ -187,7 +187,7 @@ function ReplyReference({ message }: { message: Message }) {
             <span className="italic">Clique para ver o anexo</span>
           </>
         ) : (
-          <span className="italic text-txt-faint">Mensagem apagada</span>
+          <span className="italic text-channels-default">Mensagem apagada</span>
         )}
       </button>
     </div>
@@ -211,10 +211,10 @@ function InteractionReference({ message }: { message: Message }) {
   if (!interacao) return null;
 
   return (
-    <div className="relative flex items-center gap-1.5 pb-0.5 text-[13px] leading-[18px] text-txt-muted">
+    <div className="relative flex items-center gap-1.5 pb-0.5 text-[13px] leading-[18px] text-text-muted">
       <span
         aria-hidden="true"
-        className="absolute -left-10 bottom-[8px] h-3 w-10 rounded-tl-[6px] border-l-2 border-t-2 border-border-strong"
+        className="absolute -left-10 bottom-[8px] h-3 w-10 rounded-tl-[6px] border-l-2 border-t-2 border-border-normal"
       />
       <button
         type="button"
@@ -228,12 +228,12 @@ function InteractionReference({ message }: { message: Message }) {
         type="button"
         onClick={(e) => ui.openProfile(interacao.user, anchorOf(e.currentTarget))}
         style={cor ? { color: cor } : undefined}
-        className="shrink-0 font-medium text-txt-secondary hover:underline"
+        className="shrink-0 font-medium text-text-subtle hover:underline"
       >
         @{displayNameOf(interacao.user)}
       </button>
       <span className="truncate">
-        usou <span className="font-medium text-txt-secondary">/{interacao.name}</span>
+        usou <span className="font-medium text-text-subtle">/{interacao.name}</span>
       </span>
     </div>
   );
@@ -266,7 +266,7 @@ function EphemeralFooter({ message }: { message: Message }) {
        ela quebrava **no meio das frases** — "Somente você pode / ver isso". Com
        as partes indivisíveis, a quebra cai entre elas, e o `·` some quando
        deixa de separar coisa nenhuma. */
-    <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs leading-4 text-txt-muted">
+    <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs leading-4 text-text-muted">
       <Eye size={16} aria-hidden="true" className="shrink-0" />
       <span className="whitespace-nowrap">Somente você pode ver isso</span>
       <span aria-hidden="true" className="celular:hidden">
@@ -277,7 +277,7 @@ function EphemeralFooter({ message }: { message: Message }) {
         onClick={() => dispensar(message.channelId, message.id)}
         /* `celular:min-h-[44px]`: no telefone este é o único gesto que a
            efêmera tem, e um alvo de 16px de altura não é alvo. */
-        className="whitespace-nowrap font-medium text-txt-link hover:underline celular:min-h-[44px]"
+        className="whitespace-nowrap font-medium text-text-link hover:underline celular:min-h-[44px]"
       >
         Dispensar mensagem
       </button>
@@ -646,14 +646,14 @@ export default function MessageItem({
   const efemera = !!message.efemera;
 
   const fundo = highlighted
-    ? "bg-accent/20 hover:bg-accent/25"
+    ? "bg-brand-500/20 hover:bg-brand-500/25"
     : mentionsMe
-      ? "border-l-2 border-yellow bg-yellow/10 hover:bg-yellow/15"
+      ? "border-l-2 border-status-warning bg-status-warning/10 hover:bg-status-warning/15"
       : efemera
         ? // fundo levemente diferente, como no Discord — ver os tokens `efem`/
           // `efemhov` em `tailwind.config.ts`, medidos na captura de referência
           "bg-efem hover:bg-efemhov"
-        : "hover:bg-msghov";
+        : "hover:bg-message-background-hover";
 
   // narração do canal (fixar, entrada de membro, eventos de grupo): é o mesmo
   // componente que a timeline usa, para não haver duas versões do mesmo texto
@@ -702,7 +702,7 @@ export default function MessageItem({
         // hora na calha, alinhada à direita e só no hover — como o Discord faz
         // com mensagens agrupadas
         <span
-          className={`absolute left-0 top-1 w-14 select-none pr-0 text-right text-[11px] leading-[22px] text-txt-muted ${
+          className={`absolute left-0 top-1 w-14 select-none pr-0 text-right text-[11px] leading-[22px] text-text-muted ${
             sempreHora ? "" : "opacity-0"
           } group-hover:opacity-100`}
         >
@@ -736,7 +736,7 @@ export default function MessageItem({
               // 600, não 500: no print da DM (`142337.png`) a haste do "d"
               // de "Md" tem 2,1px contra 1,45px do "l" do corpo — a razão do
               // semibold (0,13em contra 0,09em em 16px); o medium daria ~1,75
-              className="font-semibold text-txt-primary hover:underline"
+              className="font-semibold text-text-strong hover:underline"
             >
               {displayNameOf(author)}
             </button>
@@ -746,7 +746,7 @@ export default function MessageItem({
                 sem mexer no alinhamento do nome nem no da hora. */}
             {author.bot && <TagDeBot className="self-center" />}
             <Tooltip label={dataCompleta(message.createdAt)}>
-              <span className="ml-1 text-xs text-txt-muted">{horaCompleta(message.createdAt)}</span>
+              <span className="ml-1 text-xs text-text-muted">{horaCompleta(message.createdAt)}</span>
             </Tooltip>
           </div>
         )}
@@ -773,41 +773,41 @@ export default function MessageItem({
                   }
                 }}
                 aria-label="Editar mensagem"
-                className="w-full resize-none rounded-lg bg-input py-[11px] pl-4 pr-12 text-txt-normal outline-none"
+                className="w-full resize-none rounded-lg bg-chat-background-default py-[11px] pl-4 pr-12 text-text-default outline-none"
               />
               {/* o Discord mantém o emoji também na caixa de edição */}
               <button
                 type="button"
                 onClick={(e) => setPicker({ alvo: "edicao", ancora: anchorOf(e.currentTarget) })}
                 aria-label="Emoji"
-                className="absolute right-2 top-1.5 grid h-8 w-8 place-items-center text-txt-secondary transition hover:text-txt-primary"
+                className="absolute right-2 top-1.5 grid h-8 w-8 place-items-center text-text-subtle transition hover:text-text-strong"
               >
                 <Smile size={22} />
               </button>
             </div>
-            <div className="mt-1 text-xs text-txt-muted">
+            <div className="mt-1 text-xs text-text-muted">
               escape para{" "}
-              <button type="button" onClick={stopEditing} className="text-txt-link hover:underline">
+              <button type="button" onClick={stopEditing} className="text-text-link hover:underline">
                 cancelar
               </button>{" "}
               • enter para{" "}
-              <button type="submit" className="text-txt-link hover:underline">
+              <button type="submit" className="text-text-link hover:underline">
                 salvar
               </button>
             </div>
           </form>
         ) : (
           message.content && (
-            <div className={`break-words text-txt-normal ${compacto ? "flex gap-1.5" : ""}`}>
+            <div className={`break-words text-text-default ${compacto ? "flex gap-1.5" : ""}`}>
               {compacto && (
                 <>
-                  <span className="shrink-0 text-[11px] leading-[22px] text-txt-muted">
+                  <span className="shrink-0 text-[11px] leading-[22px] text-text-muted">
                     {hora(message.createdAt)}
                   </span>
                   <button
                     type="button"
                     onClick={openProfile}
-                    className="shrink-0 font-medium text-txt-primary hover:underline"
+                    className="shrink-0 font-medium text-text-strong hover:underline"
                   >
                     {displayNameOf(author)}
                   </button>
@@ -835,7 +835,7 @@ export default function MessageItem({
                   myRoleIds={meusCargos}
                 />
                 {message.editedAt && (
-                  <span className="ml-1 text-[10px] text-txt-muted" title={horaCompleta(message.editedAt)}>
+                  <span className="ml-1 text-[10px] text-text-muted" title={horaCompleta(message.editedAt)}>
                     (editado)
                   </span>
                 )}
@@ -921,8 +921,8 @@ export default function MessageItem({
                        o dedo pede. */
                     className={`flex items-center gap-1.5 rounded-lg border px-1.5 transition celular:min-h-[44px] celular:px-3 ${
                       mine
-                        ? "border-accent bg-accent/20 text-txt-primary"
-                        : "border-transparent bg-panel text-txt-normal hover:border-border-strong"
+                        ? "border-brand-500 bg-brand-500/20 text-text-strong"
+                        : "border-transparent bg-background-base-lowest text-text-default hover:border-border-normal"
                     }`}
                   >
                     <EmojiDaReacao emoji={r.emoji} tamanho={tamanhoEmoji} />
@@ -943,7 +943,7 @@ export default function MessageItem({
                    longo abre o menu com "Adicionar Reação", mas o "+" ao lado
                    das reações é o gesto direto, e some-se dele custava um menu
                    inteiro por reação. */
-                className="grid min-w-[2.375rem] place-items-center rounded-lg border border-transparent bg-panel px-1.5 text-txt-muted opacity-0 transition hover:border-border-strong hover:text-txt-primary group-hover:opacity-100 celular:min-h-[44px] celular:min-w-[44px] celular:opacity-100"
+                className="grid min-w-[2.375rem] place-items-center rounded-lg border border-transparent bg-background-base-lowest px-1.5 text-text-muted opacity-0 transition hover:border-border-normal hover:text-text-strong group-hover:opacity-100 celular:min-h-[44px] celular:min-w-[44px] celular:opacity-100"
               >
                 <SmilePlus size={16} />
               </button>
@@ -955,46 +955,46 @@ export default function MessageItem({
           <button
             type="button"
             onClick={() => onOpenThread(message)}
-            className="mt-1 flex w-fit items-center gap-1.5 rounded-[4px] py-0.5 text-sm font-medium text-txt-link hover:underline celular:min-h-[44px] celular:py-2"
+            className="mt-1 flex w-fit items-center gap-1.5 rounded-[4px] py-0.5 text-sm font-medium text-text-link hover:underline celular:min-h-[44px] celular:py-2"
           >
             {message.thread && message.thread.participants.length > 0 && (
               <span className="flex -space-x-1.5" aria-hidden="true">
                 {message.thread.participants.map((p) => (
-                  <Avatar key={p.id} user={p} size="xs" className="ring-2 ring-chat" />
+                  <Avatar key={p.id} user={p} size="xs" className="ring-2 ring-background-base-lower" />
                 ))}
               </span>
             )}
             <MessageSquare size={16} aria-hidden="true" />
             {message.thread ? (
               <>
-                <span className="text-txt-primary">{message.thread.name}</span>
+                <span className="text-text-strong">{message.thread.name}</span>
                 {message.thread.archived && (
-                  <span className="text-xs font-normal text-txt-muted">(arquivada)</span>
+                  <span className="text-xs font-normal text-text-muted">(arquivada)</span>
                 )}
               </>
             ) : (
               `${message.replyCount} ${message.replyCount === 1 ? "resposta" : "respostas"}`
             )}
-            <span className="font-normal text-txt-muted">›</span>
+            <span className="font-normal text-text-muted">›</span>
           </button>
         )}
 
         {efemera && <EphemeralFooter message={message} />}
 
         {message.failed && message.nonce && (
-          <div className="mt-1 flex items-center gap-2 text-xs text-red">
+          <div className="mt-1 flex items-center gap-2 text-xs text-status-danger">
             <span>Não foi possível enviar.</span>
             <button
               type="button"
               onClick={() => onRetry?.(message.nonce as string)}
-              className="rounded-[3px] bg-panel px-2 py-0.5 font-medium text-txt-normal hover:text-txt-primary"
+              className="rounded-[3px] bg-background-base-lowest px-2 py-0.5 font-medium text-text-default hover:text-text-strong"
             >
               Reenviar
             </button>
             <button
               type="button"
               onClick={() => onDiscard?.(message.nonce as string)}
-              className="rounded-[3px] px-1 py-0.5 text-txt-muted hover:text-txt-primary"
+              className="rounded-[3px] px-1 py-0.5 text-text-muted hover:text-text-strong"
             >
               Descartar
             </button>
@@ -1026,7 +1026,7 @@ export default function MessageItem({
              onde elas pertencem no telefone. */
           className={`absolute right-3.5 ${
             primeiro ? "top-0.5" : "-top-[25px]"
-          } hidden rounded-lg border border-border bg-chat p-0.5 shadow-high group-focus-within:flex group-hover:flex celular:!hidden`}
+          } hidden rounded-lg border border-border-subtle bg-background-base-lower p-0.5 shadow-popout group-focus-within:flex group-hover:flex celular:!hidden`}
         >
           {frequentes.slice(0, RAPIDAS_NA_BARRA).map((emoji) => (
             <ActionButton

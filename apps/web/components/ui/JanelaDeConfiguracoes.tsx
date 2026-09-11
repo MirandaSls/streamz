@@ -44,7 +44,7 @@ import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
  *
  * Não usa `Dialog` de propósito: `Dialog` é a caixa de 380–480px com rodapé de
  * botões. O que se repete de lá é a casca (véu `bg-black`, `rounded-lg border
- * border-border bg-chat`) e o contrato de acessibilidade — `role="dialog"`,
+ * border-border-subtle bg-background-base-lower`) e o contrato de acessibilidade — `role="dialog"`,
  * `aria-modal`, Esc fecha, o foco começa dentro e **volta para quem abriu**.
  *
  * ## No celular: mestre-detalhe em tela cheia
@@ -118,7 +118,7 @@ export interface BuscaDoMenu {
 /** Classes de um item do menu lateral, compartilhadas com o rodapé ("Sair", "Apagar…"). */
 const ITEM_BASE =
   "mb-1 flex h-10 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-base transition";
-const ITEM_REPOUSO = "text-txt-faint hover:bg-hov hover:text-txt-normal";
+const ITEM_REPOUSO = "text-channels-default hover:bg-interactive-background-hover hover:text-text-default";
 
 export default function JanelaDeConfiguracoes({
   titulo,
@@ -301,20 +301,20 @@ export default function JanelaDeConfiguracoes({
         aria-label={titulo}
         tabIndex={-1}
         onKeyDown={onKeyDown}
-        className="anim-overlay fixed inset-0 z-50 flex h-[100dvh] flex-col overflow-hidden bg-chat pt-[env(safe-area-inset-top)] outline-none"
+        className="anim-overlay fixed inset-0 z-50 flex h-[100dvh] flex-col overflow-hidden bg-background-base-lower pt-[env(safe-area-inset-top)] outline-none"
       >
         {emDetalhe ? (
           <>
-            <header className="flex h-[56px] shrink-0 items-center gap-1 border-b border-border bg-panel pl-1 pr-2">
+            <header className="flex h-[56px] shrink-0 items-center gap-1 border-b border-border-subtle bg-background-base-lowest pl-1 pr-2">
               <button
                 type="button"
                 onClick={voltarParaALista}
                 aria-label="Voltar"
-                className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg text-txt-secondary transition active:bg-hov"
+                className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg text-text-subtle transition active:bg-interactive-background-hover"
               >
                 <ArrowLeft size={24} />
               </button>
-              <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-txt-primary">
+              <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-text-strong">
                 {tituloAba ?? itemAtivo?.label ?? titulo}
               </h1>
             </header>
@@ -331,15 +331,15 @@ export default function JanelaDeConfiguracoes({
           </>
         ) : (
           <>
-            <header className="flex h-[56px] shrink-0 items-center gap-1 border-b border-border bg-panel pl-4 pr-1">
-              <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-txt-primary">
+            <header className="flex h-[56px] shrink-0 items-center gap-1 border-b border-border-subtle bg-background-base-lowest pl-4 pr-1">
+              <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-text-strong">
                 {titulo}
               </h1>
               <button
                 type="button"
                 onClick={fechar}
                 aria-label={rotuloFechar}
-                className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg text-txt-secondary transition active:bg-hov"
+                className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg text-text-subtle transition active:bg-interactive-background-hover"
               >
                 <X size={22} />
               </button>
@@ -355,15 +355,15 @@ export default function JanelaDeConfiguracoes({
                     type="button"
                     onClick={onCabecalho}
                     aria-haspopup="menu"
-                    className="mb-2 flex h-[44px] w-full items-center gap-1 rounded-lg px-1 text-left transition active:bg-hov"
+                    className="mb-2 flex h-[44px] w-full items-center gap-1 rounded-lg px-1 text-left transition active:bg-interactive-background-hover"
                   >
-                    <span className="min-w-0 flex-1 truncate text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
+                    <span className="min-w-0 flex-1 truncate text-xs font-bold uppercase tracking-[0.02em] text-text-muted">
                       {cabecalho}
                     </span>
-                    <ChevronDown size={16} aria-hidden="true" className="shrink-0 text-txt-muted" />
+                    <ChevronDown size={16} aria-hidden="true" className="shrink-0 text-text-muted" />
                   </button>
                 ) : (
-                  <h2 className="mb-2 truncate px-1 text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
+                  <h2 className="mb-2 truncate px-1 text-xs font-bold uppercase tracking-[0.02em] text-text-muted">
                     {cabecalho}
                   </h2>
                 ))}
@@ -375,14 +375,14 @@ export default function JanelaDeConfiguracoes({
                   <Search
                     size={16}
                     aria-hidden="true"
-                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-txt-muted"
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
                   />
                   <input
                     value={busca.valor}
                     onChange={(e) => busca.onChange(e.target.value)}
                     placeholder={busca.placeholder ?? "Buscar"}
                     aria-label={busca.rotulo}
-                    className="h-[44px] w-full rounded-lg bg-input pl-10 pr-3 text-base text-txt-normal outline-none transition-colors placeholder:text-txt-muted focus:ring-1 focus:ring-accent"
+                    className="h-[44px] w-full rounded-lg bg-chat-background-default pl-10 pr-3 text-base text-text-default outline-none transition-colors placeholder:text-text-muted focus:ring-1 focus:ring-brand-500"
                   />
                 </div>
               )}
@@ -395,31 +395,31 @@ export default function JanelaDeConfiguracoes({
                 return (
                   <div key={grupo.id} className="mb-5 last:mb-0">
                     {grupo.label && (
-                      <h2 className="mb-1.5 px-1 text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
+                      <h2 className="mb-1.5 px-1 text-xs font-bold uppercase tracking-[0.02em] text-text-muted">
                         {grupo.label}
                       </h2>
                     )}
                     {/* cartão de cantos arredondados com as linhas dentro, e a
                         divisória recuada até a coluna do rótulo — é o desenho
                         das duas referências */}
-                    <div className="overflow-hidden rounded-xl bg-panel">
+                    <div className="overflow-hidden rounded-xl bg-background-base-lowest">
                       {grupo.itens.map((item, i) => (
                         <div key={item.id}>
                           {i > 0 && (
                             <div
                               aria-hidden="true"
-                              className={`h-px bg-border ${comIcone ? "ml-[52px]" : "ml-4"}`}
+                              className={`h-px bg-border-subtle ${comIcone ? "ml-[52px]" : "ml-4"}`}
                             />
                           )}
                           <button
                             type="button"
                             onClick={() => irPara(item.id)}
-                            className="flex min-h-[48px] w-full items-center gap-3 px-4 py-2 text-left text-base text-txt-normal transition active:bg-hov"
+                            className="flex min-h-[48px] w-full items-center gap-3 px-4 py-2 text-left text-base text-text-default transition active:bg-interactive-background-hover"
                           >
                             {comIcone && (
                               <span
                                 aria-hidden="true"
-                                className="grid h-6 w-6 shrink-0 place-items-center text-txt-secondary"
+                                className="grid h-6 w-6 shrink-0 place-items-center text-text-subtle"
                               >
                                 {item.icon}
                               </span>
@@ -428,7 +428,7 @@ export default function JanelaDeConfiguracoes({
                             <ChevronRight
                               size={20}
                               aria-hidden="true"
-                              className="shrink-0 text-txt-muted"
+                              className="shrink-0 text-text-muted"
                             />
                           </button>
                         </div>
@@ -443,7 +443,7 @@ export default function JanelaDeConfiguracoes({
               {rodapeMenu && (
                 // os itens do rodapé vêm com os 40px do desktop (`ITEM_BASE`);
                 // aqui sobem para o alvo de toque de 44
-                <div className="mt-5 overflow-hidden rounded-xl bg-panel p-1 [&_button]:h-[44px] [&_button]:mb-0">
+                <div className="mt-5 overflow-hidden rounded-xl bg-background-base-lowest p-1 [&_button]:h-[44px] [&_button]:mb-0">
                   {rodapeMenu}
                 </div>
               )}
@@ -473,11 +473,11 @@ export default function JanelaDeConfiguracoes({
         aria-label={titulo}
         tabIndex={-1}
         onKeyDown={onKeyDown}
-        className="anim-settings flex h-[888px] max-h-full w-[1400px] max-w-full overflow-hidden rounded-lg border border-border bg-chat shadow-high outline-none"
+        className="anim-settings flex h-[888px] max-h-full w-[1400px] max-w-full overflow-hidden rounded-lg border border-border-subtle bg-background-base-lower shadow-popout outline-none"
       >
         <nav
           aria-label="Seções das configurações"
-          className="flex w-[252px] shrink-0 flex-col overflow-hidden bg-panel"
+          className="flex w-[252px] shrink-0 flex-col overflow-hidden bg-background-base-lowest"
         >
           {/* Cartão de perfil e busca ficam parados; só a lista rola. 252 de
               coluna com 16 de cada lado: o item do Discord mede 220×40 (print
@@ -490,15 +490,15 @@ export default function JanelaDeConfiguracoes({
                   type="button"
                   onClick={onCabecalho}
                   aria-haspopup="menu"
-                  className="mb-2 flex h-8 w-full items-center gap-1 rounded-[4px] px-2.5 text-left transition hover:bg-hov"
+                  className="mb-2 flex h-8 w-full items-center gap-1 rounded-[4px] px-2.5 text-left transition hover:bg-interactive-background-hover"
                 >
-                  <span className="min-w-0 flex-1 truncate text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
+                  <span className="min-w-0 flex-1 truncate text-xs font-bold uppercase tracking-[0.02em] text-text-muted">
                     {cabecalho}
                   </span>
-                  <ChevronDown size={14} aria-hidden="true" className="shrink-0 text-txt-muted" />
+                  <ChevronDown size={14} aria-hidden="true" className="shrink-0 text-text-muted" />
                 </button>
               ) : (
-                <h2 className="mb-1 truncate px-2.5 text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
+                <h2 className="mb-1 truncate px-2.5 text-xs font-bold uppercase tracking-[0.02em] text-text-muted">
                   {cabecalho}
                 </h2>
               ))}
@@ -510,7 +510,7 @@ export default function JanelaDeConfiguracoes({
                 <Search
                   size={16}
                   aria-hidden="true"
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-txt-muted"
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
                 />
                 {/* 40 de altura e borda no lugar de fundo: é o campo do print,
                     que tem a mesma altura dos itens do menu logo abaixo. */}
@@ -519,7 +519,7 @@ export default function JanelaDeConfiguracoes({
                   onChange={(e) => busca.onChange(e.target.value)}
                   placeholder={busca.placeholder ?? "Buscar"}
                   aria-label={busca.rotulo}
-                  className="h-10 w-full rounded-[4px] border border-border-strong bg-transparent pl-10 pr-3 text-base text-txt-normal outline-none transition-colors placeholder:text-txt-muted focus:border-accent"
+                  className="h-10 w-full rounded-[4px] border border-border-normal bg-transparent pl-10 pr-3 text-base text-text-default outline-none transition-colors placeholder:text-text-muted focus:border-brand-500"
                 />
               </div>
             )}
@@ -538,9 +538,9 @@ export default function JanelaDeConfiguracoes({
                       114404`, acima de "Jogos e apps"). Sem ela os cabeçalhos em
                       caixa-alta eram a única separação, e grupo de um item só
                       encostava no anterior. */}
-                  {i > 0 && <div aria-hidden="true" className="mb-2 mt-1 h-px bg-border" />}
+                  {i > 0 && <div aria-hidden="true" className="mb-2 mt-1 h-px bg-border-subtle" />}
                   {grupo.label && (
-                    <h2 className="mb-1 px-2.5 text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
+                    <h2 className="mb-1 px-2.5 text-xs font-bold uppercase tracking-[0.02em] text-text-muted">
                       {grupo.label}
                     </h2>
                   )}
@@ -553,7 +553,7 @@ export default function JanelaDeConfiguracoes({
                           aria-current={ativo ? "page" : undefined}
                           onClick={() => irPara(item.id)}
                           className={`${ITEM_BASE} ${
-                            ativo ? "bg-sel text-txt-primary" : ITEM_REPOUSO
+                            ativo ? "bg-interactive-background-selected text-text-strong" : ITEM_REPOUSO
                           }`}
                         >
                           {item.icon && (
@@ -568,7 +568,7 @@ export default function JanelaDeConfiguracoes({
                             navegáveis daqui, e listá-las faria um menu de
                             cinquenta linhas. */}
                         {ativo && item.secoes && item.secoes.length > 0 && (
-                          <div className="mb-1 ml-3 border-l border-border pl-2">
+                          <div className="mb-1 ml-3 border-l border-border-subtle pl-2">
                             {item.secoes.map((secao) => {
                               const aqui = secao.id === secaoVisivel;
                               return (
@@ -579,14 +579,14 @@ export default function JanelaDeConfiguracoes({
                                   onClick={() => irParaSecao(secao.id)}
                                   className={`relative mb-0.5 flex h-7 w-full items-center rounded-[4px] px-2.5 text-left text-sm transition ${
                                     aqui
-                                      ? "text-txt-primary"
-                                      : "text-txt-faint hover:bg-hov hover:text-txt-normal"
+                                      ? "text-text-strong"
+                                      : "text-channels-default hover:bg-interactive-background-hover hover:text-text-default"
                                   }`}
                                 >
                                   {aqui && (
                                     <span
                                       aria-hidden="true"
-                                      className="absolute -left-[9px] top-1 h-5 w-0.5 rounded-full bg-txt-primary"
+                                      className="absolute -left-[9px] top-1 h-5 w-0.5 rounded-full bg-text-strong"
                                     />
                                   )}
                                   <span className="truncate">{secao.label}</span>
@@ -606,7 +606,7 @@ export default function JanelaDeConfiguracoes({
 
             {rodapeMenu && (
               <>
-                <div aria-hidden="true" className="my-2 h-px bg-border" />
+                <div aria-hidden="true" className="my-2 h-px bg-border-subtle" />
                 {rodapeMenu}
               </>
             )}
@@ -620,8 +620,8 @@ export default function JanelaDeConfiguracoes({
               que no Discord de hoje só aparece nas telas do **servidor**
               (`fecharComoEsc`). */}
           {!fecharComoEsc && (
-            <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border pl-4 pr-2">
-              <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-txt-primary">
+            <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border-subtle pl-4 pr-2">
+              <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-text-strong">
                 {tituloAba}
               </h1>
               <button
@@ -629,7 +629,7 @@ export default function JanelaDeConfiguracoes({
                 onClick={fechar}
                 aria-label={rotuloFechar}
                 title={`${rotuloFechar} (Esc)`}
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-txt-muted transition hover:bg-hov hover:text-txt-primary"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-text-muted transition hover:bg-interactive-background-hover hover:text-text-strong"
               >
                 <X size={16} />
               </button>
@@ -661,7 +661,7 @@ export default function JanelaDeConfiguracoes({
               aria-label={rotuloFechar}
               title={`${rotuloFechar} (Esc)`}
               style={{ left: "min(780px, calc(100% - 52px))" }}
-              className="absolute top-9 flex w-9 flex-col items-center gap-[9px] text-txt-secondary transition hover:text-txt-primary"
+              className="absolute top-9 flex w-9 flex-col items-center gap-[9px] text-text-subtle transition hover:text-text-strong"
             >
               <span
                 aria-hidden="true"
@@ -694,7 +694,7 @@ export function ItemPerigo({
     <button
       type="button"
       onClick={onClick}
-      className={`${ITEM_BASE} text-red hover:bg-red hover:text-white`}
+      className={`${ITEM_BASE} text-status-danger hover:bg-status-danger hover:text-white`}
     >
       {icon && (
         <span aria-hidden="true" className="shrink-0">

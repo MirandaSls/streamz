@@ -37,28 +37,28 @@ export default function PollVotersModal({ messageId }: { messageId: string }) {
       footer={<SecondaryButton full onClick={closeModal}>Fechar</SecondaryButton>}
     >
       {voters === null ? (
-        <p className="text-sm text-txt-muted">Carregando…</p>
+        <p className="text-sm text-text-muted">Carregando…</p>
       ) : voters.byOption.length === 0 ? (
-        <p className="text-sm text-txt-muted">Nenhum voto ainda.</p>
+        <p className="text-sm text-text-muted">Nenhum voto ainda.</p>
       ) : (
         <div className="flex flex-col gap-4">
           {voters.byOption.map((o) => (
             <div key={o.index}>
-              <h3 className="mb-1 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+              <h3 className="mb-1 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
                 Opção {o.index + 1} — {o.users.length} {o.users.length === 1 ? "voto" : "votos"}
               </h3>
               {o.users.length === 0 ? (
-                <p className="px-2 text-sm text-txt-muted">Ninguém votou nesta opção.</p>
+                <p className="px-2 text-sm text-text-muted">Ninguém votou nesta opção.</p>
               ) : (
                 <div role="list" className="flex flex-col">
                   {o.users.map((u) => (
                     <div
                       key={u.id}
                       role="listitem"
-                      className="flex h-[42px] items-center gap-3 rounded px-2 hover:bg-hov"
+                      className="flex h-[42px] items-center gap-3 rounded px-2 hover:bg-interactive-background-hover"
                     >
-                      <Avatar user={u} size="md" surface="border-chat" />
-                      <span className="truncate text-sm text-txt-normal">{displayNameOf(u)}</span>
+                      <Avatar user={u} size="md" surface="border-background-base-lower" />
+                      <span className="truncate text-sm text-text-default">{displayNameOf(u)}</span>
                     </div>
                   ))}
                 </div>

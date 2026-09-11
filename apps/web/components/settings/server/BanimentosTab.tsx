@@ -76,7 +76,7 @@ export default function BanimentosTab({ guildId }: { guildId: string }) {
         <Search
           size={14}
           aria-hidden="true"
-          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-txt-muted"
+          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted"
         />
         <input
           value={busca}
@@ -87,7 +87,7 @@ export default function BanimentosTab({ guildId }: { guildId: string }) {
         />
       </div>
 
-      <p className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+      <p className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
         Banimentos — {(bans ?? []).length}
       </p>
 
@@ -97,7 +97,7 @@ export default function BanimentosTab({ guildId }: { guildId: string }) {
       <div className="overflow-x-auto">
         <table className="w-full min-w-[520px] table-fixed">
           <thead>
-            <tr className="border-b border-border text-left text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+            <tr className="border-b border-border-subtle text-left text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
               <th scope="col" className="w-[45%] pb-2 font-bold">
                 Usuário
               </th>
@@ -109,14 +109,14 @@ export default function BanimentosTab({ guildId }: { guildId: string }) {
           <tbody>
             {bans === null && (
               <tr>
-                <td colSpan={2} className="py-3 text-sm text-txt-muted">
+                <td colSpan={2} className="py-3 text-sm text-text-muted">
                   Carregando…
                 </td>
               </tr>
             )}
             {bans !== null && lista.length === 0 && (
               <tr>
-                <td colSpan={2} className="py-3 text-sm text-txt-muted">
+                <td colSpan={2} className="py-3 text-sm text-text-muted">
                   {bans.length === 0 ? "Ninguém banido por aqui." : "Ninguém com esse nome."}
                 </td>
               </tr>
@@ -134,22 +134,22 @@ export default function BanimentosTab({ guildId }: { guildId: string }) {
                   }
                 }}
                 aria-label={`Revogar o banimento de ${displayNameOf(b.user)}`}
-                className="cursor-pointer border-b border-border align-middle outline-none transition hover:bg-hov focus-visible:bg-hov"
+                className="cursor-pointer border-b border-border-subtle align-middle outline-none transition hover:bg-interactive-background-hover focus-visible:bg-interactive-background-hover"
               >
                 <td className="py-2 pr-2">
                   <div className="flex min-w-0 items-center gap-2">
-                    <Avatar user={b.user} size="sm" surface="border-chat" />
+                    <Avatar user={b.user} size="sm" surface="border-background-base-lower" />
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-txt-primary">
+                      <div className="truncate text-sm font-medium text-text-strong">
                         {displayNameOf(b.user)}
                       </div>
-                      <div className="truncate text-xs text-txt-muted">
+                      <div className="truncate text-xs text-text-muted">
                         {horaCompleta(b.createdAt)}
                       </div>
                     </div>
                   </div>
                 </td>
-                <td className="py-2 text-sm text-txt-normal">
+                <td className="py-2 text-sm text-text-default">
                   <span className="line-clamp-2">{b.reason || "Sem motivo registrado"}</span>
                 </td>
               </tr>

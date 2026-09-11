@@ -202,7 +202,7 @@ export default function AplicativosTab() {
           />
         )}
 
-        <p className="mb-3 text-sm leading-5 text-txt-secondary">
+        <p className="mb-3 text-sm leading-5 text-text-subtle">
           Um aplicativo é o registro de um bot nesta instância: ele ganha uma conta própria, um
           token e um lugar em &ldquo;Descobrir aplicativos&rdquo; quando você quiser.
         </p>
@@ -210,11 +210,11 @@ export default function AplicativosTab() {
         {erro && <Aviso tom="erro">{erro}</Aviso>}
 
         {apps === null ? (
-          <p className="py-6 text-sm text-txt-muted">Carregando…</p>
+          <p className="py-6 text-sm text-text-muted">Carregando…</p>
         ) : apps.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
-            <Bot size={40} aria-hidden="true" className="mx-auto mb-2 text-txt-muted" />
-            <p className="text-sm text-txt-secondary">Você ainda não criou nenhum aplicativo.</p>
+          <div className="rounded-lg border border-dashed border-border-subtle px-4 py-8 text-center">
+            <Bot size={40} aria-hidden="true" className="mx-auto mb-2 text-text-muted" />
+            <p className="text-sm text-text-subtle">Você ainda não criou nenhum aplicativo.</p>
           </div>
         ) : (
           // 244×164 é a medida do card do Discord (docs/Reference/apps/MEDIDAS.md
@@ -228,14 +228,14 @@ export default function AplicativosTab() {
                 <button
                   type="button"
                   onClick={() => setTela({ nome: "editar", id: app.id })}
-                  className="flex w-full items-center gap-3 rounded-lg border border-border bg-panel p-3 text-left transition hover:border-border-strong-hover celular:min-h-[60px]"
+                  className="flex w-full items-center gap-3 rounded-lg border border-border-subtle bg-background-base-lowest p-3 text-left transition hover:border-border-strong celular:min-h-[60px]"
                 >
                   <IconeDoApp app={app} tamanho={48} />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-txt-primary">
+                    <span className="block truncate text-sm font-medium text-text-strong">
                       {app.name}
                     </span>
-                    <span className="block text-xs text-txt-muted">
+                    <span className="block text-xs text-text-muted">
                       {app.publico ? "Publicado" : "Privado"}
                     </span>
                   </span>
@@ -248,7 +248,7 @@ export default function AplicativosTab() {
         <button
           type="button"
           onClick={() => setTela({ nome: "criar" })}
-          className="mt-4 flex h-[44px] items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover"
+          className="mt-4 flex h-[44px] items-center gap-2 rounded-lg bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover"
         >
           <Plus size={18} aria-hidden="true" />
           Criar aplicativo
@@ -292,8 +292,8 @@ function TelaDeCriar({
   return (
     <Section title={undefined} semDivisoria>
       <Voltar onClick={aoVoltar}>Meus aplicativos</Voltar>
-      <h2 className="mb-1 text-lg font-semibold text-txt-primary">Criar aplicativo</h2>
-      <p className="mb-4 text-sm leading-5 text-txt-secondary">
+      <h2 className="mb-1 text-lg font-semibold text-text-strong">Criar aplicativo</h2>
+      <p className="mb-4 text-sm leading-5 text-text-subtle">
         Só o nome. Descrição, ícone e visibilidade se editam depois — o token aparece assim que o
         aplicativo existir, uma única vez.
       </p>
@@ -315,7 +315,7 @@ function TelaDeCriar({
         }}
         className={ESTILO_CAMPO}
       />
-      <p className="mt-1 text-xs text-txt-muted">
+      <p className="mt-1 text-xs text-text-muted">
         Vira também o nome do usuário-bot na lista de membros. {nome.trim().length}/{MAX_APP_NAME}
       </p>
 
@@ -324,14 +324,14 @@ function TelaDeCriar({
           type="button"
           disabled={!valido || salvando}
           onClick={() => void enviar()}
-          className="flex h-[44px] items-center rounded-lg bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
+          className="flex h-[44px] items-center rounded-lg bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:opacity-50"
         >
           {salvando ? "Criando…" : "Criar"}
         </button>
         <button
           type="button"
           onClick={aoVoltar}
-          className="flex h-[44px] items-center rounded-lg px-4 text-sm font-medium text-txt-secondary transition hover:underline"
+          className="flex h-[44px] items-center rounded-lg px-4 text-sm font-medium text-text-subtle transition hover:underline"
         >
           Cancelar
         </button>
@@ -441,8 +441,8 @@ function TelaDeEditar({
         <div className="mb-4 flex items-center gap-3">
           <IconeDoApp app={app} tamanho={48} />
           <div className="min-w-0">
-            <h2 className="truncate text-lg font-semibold text-txt-primary">{app.name}</h2>
-            <p className="text-xs text-txt-muted">
+            <h2 className="truncate text-lg font-semibold text-text-strong">{app.name}</h2>
+            <p className="text-xs text-text-muted">
               @{app.botUser.username} · {app.publico ? "Publicado" : "Privado"}
             </p>
           </div>
@@ -479,7 +479,7 @@ function TelaDeEditar({
           }}
           className={ESTILO_AREA}
         />
-        <p className="mt-1 text-xs text-txt-muted">
+        <p className="mt-1 text-xs text-text-muted">
           {descricao.trim().length}/{MAX_APP_DESCRIPTION}
         </p>
 
@@ -488,12 +488,12 @@ function TelaDeEditar({
             type="button"
             disabled={!sujo || salvando}
             onClick={() => void salvar()}
-            className="flex h-[44px] items-center rounded-lg bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
+            className="flex h-[44px] items-center rounded-lg bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:opacity-50"
           >
             {salvando ? "Salvando…" : "Salvar"}
           </button>
           {salvo && !sujo && (
-            <span aria-live="polite" className="flex items-center gap-1 text-xs text-green">
+            <span aria-live="polite" className="flex items-center gap-1 text-xs text-status-positive">
               <Check size={14} aria-hidden="true" /> Salvo
             </span>
           )}
@@ -518,7 +518,7 @@ function TelaDeEditar({
             type="button"
             disabled={enviandoIcone}
             onClick={() => arquivoRef.current?.click()}
-            className="flex h-[44px] items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
+            className="flex h-[44px] items-center gap-2 rounded-lg bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:opacity-50"
           >
             <ImageIcon size={16} aria-hidden="true" />
             {enviandoIcone ? "Enviando…" : app.iconUrl ? "Trocar ícone" : "Escolher ícone"}
@@ -529,13 +529,13 @@ function TelaDeEditar({
               disabled={enviandoIcone}
               onClick={() => void removerIcone()}
               aria-label="Remover ícone"
-              className="grid h-[44px] w-[44px] place-items-center rounded-lg text-txt-secondary transition hover:bg-hov hover:text-red disabled:opacity-50"
+              className="grid h-[44px] w-[44px] place-items-center rounded-lg text-text-subtle transition hover:bg-interactive-background-hover hover:text-status-danger disabled:opacity-50"
             >
               <Trash2 size={18} />
             </button>
           )}
         </div>
-        <p className="mt-2 text-xs text-txt-muted">
+        <p className="mt-2 text-xs text-text-muted">
           Sem ícone, a lista usa a inicial do nome. PNG, JPEG, GIF ou WebP, até 4 MB.
         </p>
       </Section>
@@ -550,7 +550,7 @@ function TelaDeEditar({
       </Section>
 
       <Section title="Permissões sugeridas">
-        <p className="mb-3 text-sm leading-5 text-txt-secondary">
+        <p className="mb-3 text-sm leading-5 text-text-subtle">
           O que vem <strong>pré-marcado</strong> na tela de instalação. Não concede nada: quem
           instala pode desmarcar, e a API recusa o que a pessoa não tem.
         </p>
@@ -564,28 +564,28 @@ function TelaDeEditar({
       </Section>
 
       <Section title="Token">
-        <p className="mb-1 text-sm leading-5 text-txt-secondary">
+        <p className="mb-1 text-sm leading-5 text-text-subtle">
           Por segurança, o token só é visto <strong>uma vez</strong>, quando é criado. Se você o
           perdeu, regenere — e lembre que isso derruba o bot que estiver usando o antigo.
         </p>
         <dl className="mb-3 mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-          <dt className="text-txt-muted">Prefixo</dt>
-          <dd className="font-mono text-txt-primary">
+          <dt className="text-text-muted">Prefixo</dt>
+          <dd className="font-mono text-text-strong">
             {app.tokenPrefixo ? `${app.tokenPrefixo}…` : "sem token em vigor"}
           </dd>
-          <dt className="text-txt-muted">Emitido em</dt>
-          <dd className="text-txt-primary">
+          <dt className="text-text-muted">Emitido em</dt>
+          <dd className="text-text-strong">
             {app.tokenCriadoEm ? dataCompleta(app.tokenCriadoEm) : "—"}
           </dd>
         </dl>
-        <p className="mb-3 text-xs leading-4 text-txt-muted">
+        <p className="mb-3 text-xs leading-4 text-text-muted">
           O prefixo identifica <strong>o bot</strong>, não o token: ele sai do id do usuário-bot e
           não muda quando você regenera. Quem distingue um token do outro é a data.
         </p>
         <button
           type="button"
           onClick={aoRegenerar}
-          className="flex h-[44px] items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover"
+          className="flex h-[44px] items-center gap-2 rounded-lg bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover"
         >
           <RefreshCw size={16} aria-hidden="true" />
           Regenerar token
@@ -596,7 +596,7 @@ function TelaDeEditar({
         <button
           type="button"
           onClick={aoVerServidores}
-          className="flex h-[44px] w-full items-center gap-2 rounded-lg border border-border px-4 text-sm font-medium text-txt-primary transition hover:border-border-strong-hover"
+          className="flex h-[44px] w-full items-center gap-2 rounded-lg border border-border-subtle px-4 text-sm font-medium text-text-strong transition hover:border-border-strong"
         >
           <Server size={16} aria-hidden="true" />
           Ver onde este aplicativo está instalado
@@ -604,14 +604,14 @@ function TelaDeEditar({
       </Section>
 
       <Section title="Zona de perigo" semDivisoria>
-        <p className="mb-3 text-sm leading-5 text-txt-secondary">
+        <p className="mb-3 text-sm leading-5 text-text-subtle">
           Apagar remove o aplicativo, o usuário-bot, o token e a presença dele em todos os
           servidores. Não dá para desfazer.
         </p>
         <button
           type="button"
           onClick={aoApagar}
-          className="flex h-[44px] items-center gap-2 rounded-lg bg-red px-4 text-sm font-medium text-white transition hover:opacity-90"
+          className="flex h-[44px] items-center gap-2 rounded-lg bg-status-danger px-4 text-sm font-medium text-white transition hover:opacity-90"
         >
           <Trash2 size={16} aria-hidden="true" />
           Apagar aplicativo
@@ -660,15 +660,15 @@ function PainelDoToken({
     <div
       role="group"
       aria-label={`Token de ${nomeDoApp}`}
-      className="mb-4 rounded-lg border border-yellow bg-panel p-4"
+      className="mb-4 rounded-lg border border-status-warning bg-background-base-lowest p-4"
     >
       <div className="mb-2 flex items-start gap-2">
-        <AlertTriangle size={18} aria-hidden="true" className="mt-0.5 shrink-0 text-yellow" />
+        <AlertTriangle size={18} aria-hidden="true" className="mt-0.5 shrink-0 text-status-warning" />
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-txt-primary">
+          <h3 className="text-sm font-semibold text-text-strong">
             Copie o token de {nomeDoApp} agora
           </h3>
-          <p className="mt-0.5 text-xs leading-4 text-txt-secondary">
+          <p className="mt-0.5 text-xs leading-4 text-text-subtle">
             Ele aparece <strong>uma única vez</strong>. Se você fechar este painel sem copiar, o
             valor se perde — a saída passa a ser regenerar, o que derruba o bot.
           </p>
@@ -677,7 +677,7 @@ function PainelDoToken({
 
       {/* o input e o botão em blocos separados no celular: 358px de largura útil
           não comportam um campo de 59 caracteres e um botão na mesma linha */}
-      <div className="mt-3 flex items-center gap-2 rounded-lg bg-void p-1 pl-3 celular:flex-col celular:items-stretch celular:gap-1 celular:p-2">
+      <div className="mt-3 flex items-center gap-2 rounded-lg bg-input-background-default p-1 pl-3 celular:flex-col celular:items-stretch celular:gap-1 celular:p-2">
         <input
           value={token.token}
           readOnly
@@ -686,12 +686,12 @@ function PainelDoToken({
           // `celular:flex-none` antes do `h-[44px]`: em coluna, o `flex-1` põe
           // a altura no eixo principal e come o `height` — medido em 21px no
           // aparelho emulado antes desta linha (§6.3: meça, não leia a classe)
-          className="min-w-0 flex-1 bg-transparent font-mono text-xs text-txt-normal outline-none celular:h-[44px] celular:flex-none"
+          className="min-w-0 flex-1 bg-transparent font-mono text-xs text-text-default outline-none celular:h-[44px] celular:flex-none"
         />
         <button
           type="button"
           onClick={() => void copiar()}
-          className="flex h-[36px] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover celular:h-[44px]"
+          className="flex h-[36px] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover celular:h-[44px]"
         >
           {copiado ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
           {copiado ? "Copiado" : "Copiar"}
@@ -702,14 +702,14 @@ function PainelDoToken({
       </p>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-txt-muted">
+        <p className="text-xs text-text-muted">
           Prefixo <span className="font-mono">{token.prefixo}…</span> · emitido em{" "}
           {dataCompleta(token.criadoEm)}
         </p>
         <button
           type="button"
           onClick={aoFechar}
-          className="flex h-[44px] items-center rounded-lg border border-border px-3 text-sm font-medium text-txt-secondary transition hover:border-border-strong-hover hover:text-txt-primary"
+          className="flex h-[44px] items-center rounded-lg border border-border-subtle px-3 text-sm font-medium text-text-subtle transition hover:border-border-strong hover:text-text-strong"
         >
           Já copiei, fechar
         </button>
@@ -738,8 +738,8 @@ function TelaDeServidores({ app, aoVoltar }: { app: AppDetalhe; aoVoltar: () => 
   return (
     <Section title={undefined} semDivisoria>
       <Voltar onClick={aoVoltar}>{app.name}</Voltar>
-      <h2 className="mb-1 text-lg font-semibold text-txt-primary">Servidores</h2>
-      <p className="mb-4 text-sm leading-5 text-txt-secondary">
+      <h2 className="mb-1 text-lg font-semibold text-text-strong">Servidores</h2>
+      <p className="mb-4 text-sm leading-5 text-text-subtle">
         Onde <strong>{app.name}</strong> está instalado. Quem instalou não aparece: é gente de
         outro servidor, e o portal não é um diretório de pessoas.
       </p>
@@ -747,11 +747,11 @@ function TelaDeServidores({ app, aoVoltar }: { app: AppDetalhe; aoVoltar: () => 
       {erro && <Aviso tom="erro">{erro}</Aviso>}
 
       {itens === null ? (
-        <p className="py-6 text-sm text-txt-muted">Carregando…</p>
+        <p className="py-6 text-sm text-text-muted">Carregando…</p>
       ) : itens.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
-          <Server size={40} aria-hidden="true" className="mx-auto mb-2 text-txt-muted" />
-          <p className="text-sm text-txt-secondary">
+        <div className="rounded-lg border border-dashed border-border-subtle px-4 py-8 text-center">
+          <Server size={40} aria-hidden="true" className="mx-auto mb-2 text-text-muted" />
+          <p className="text-sm text-text-subtle">
             Este aplicativo ainda não foi adicionado a nenhum servidor.
           </p>
         </div>
@@ -760,7 +760,7 @@ function TelaDeServidores({ app, aoVoltar }: { app: AppDetalhe; aoVoltar: () => 
           {itens.map((s) => (
             <li
               key={s.guildId}
-              className="flex items-center gap-3 rounded-lg border border-border p-3 celular:min-h-[60px]"
+              className="flex items-center gap-3 rounded-lg border border-border-subtle p-3 celular:min-h-[60px]"
             >
               {s.guildIconUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -770,15 +770,15 @@ function TelaDeServidores({ app, aoVoltar }: { app: AppDetalhe; aoVoltar: () => 
                   className="h-10 w-10 shrink-0 rounded-full object-cover"
                 />
               ) : (
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-void text-sm font-semibold text-txt-secondary">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-input-background-default text-sm font-semibold text-text-subtle">
                   {s.guildName.slice(0, 1).toUpperCase()}
                 </span>
               )}
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-txt-primary">
+                <span className="block truncate text-sm font-medium text-text-strong">
                   {s.guildName}
                 </span>
-                <span className="block text-xs text-txt-muted">
+                <span className="block text-xs text-text-muted">
                   Instalado em {dataCompleta(s.createdAt)}
                 </span>
               </span>
@@ -822,7 +822,7 @@ function EditorDePermissoesSugeridas({
         return (
           <fieldset key={grupo.id}>
             <legend className={ESTILO_ROTULO}>{grupo.label}</legend>
-            <div className="flex flex-col divide-y divide-border">
+            <div className="flex flex-col divide-y divide-border-subtle">
               {nomes.map((nome: PermissionName) => (
                 <ToggleLinha
                   key={nome}
@@ -872,7 +872,7 @@ function ComoApontarSeuBot() {
 
   return (
     <Section id="apontar" title="Como apontar seu bot" semDivisoria>
-      <p className="mb-4 text-sm leading-5 text-txt-secondary">
+      <p className="mb-4 text-sm leading-5 text-text-subtle">
         O bot que você já escreveu para o Discord roda aqui sem mudar de biblioteca: o que muda é
         o endereço. Os trechos abaixo já vêm com o endereço <strong>desta</strong> instância.
       </p>
@@ -929,7 +929,7 @@ bot.run(os.environ['STREAMZ_BOT_TOKEN'])`}
 { "voice": { "token": "…", "endpoint": "…", "sessionId": "…" } }`}
       />
 
-      <p className="mt-4 text-xs leading-4 text-txt-muted">
+      <p className="mt-4 text-xs leading-4 text-text-muted">
         O token vai no cabeçalho como <code className="font-mono">Authorization: Bot &lt;token&gt;</code>
         , exatamente como no Discord — as bibliotecas põem o prefixo sozinhas.
       </p>
@@ -966,23 +966,23 @@ function Trecho({
   return (
     <div className="mb-4 last:mb-0">
       <div className="mb-1 flex items-center justify-between gap-2">
-        <h4 className="text-sm font-semibold text-txt-primary">{titulo}</h4>
+        <h4 className="text-sm font-semibold text-text-strong">{titulo}</h4>
         <button
           type="button"
           onClick={() => void copiar()}
           aria-label={`Copiar o trecho de ${titulo}`}
-          className="flex h-[44px] shrink-0 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
+          className="flex h-[44px] shrink-0 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-text-subtle transition hover:bg-interactive-background-hover hover:text-text-strong"
         >
           {copiado ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
           {copiado ? "Copiado" : "Copiar"}
         </button>
       </div>
-      <p className="mb-2 text-xs leading-4 text-txt-muted">{nota}</p>
+      <p className="mb-2 text-xs leading-4 text-text-muted">{nota}</p>
       {/* o bloco rola dentro de si: a página nunca rola na horizontal.
           Ligadura desligada de propósito: com ela `===` vira `≡` e `=>` vira
           `⇒` na tela, e quem lê o trecho para digitar à mão copia o glifo
           errado — o botão manda o texto certo, mas os olhos vão no que veem. */}
-      <pre className="overflow-x-auto rounded-lg bg-void p-3 font-mono text-xs leading-5 text-txt-normal [font-variant-ligatures:none]">
+      <pre className="overflow-x-auto rounded-lg bg-input-background-default p-3 font-mono text-xs leading-5 text-text-default [font-variant-ligatures:none]">
         <code data-linguagem={linguagem}>{codigo}</code>
       </pre>
     </div>
@@ -1001,7 +1001,7 @@ function IconeDoApp({ app, tamanho }: { app: AppDetalhe; tamanho: number }) {
         src={app.iconUrl}
         alt=""
         style={lado}
-        className="shrink-0 rounded-lg bg-void object-cover"
+        className="shrink-0 rounded-lg bg-input-background-default object-cover"
       />
     );
   }
@@ -1009,7 +1009,7 @@ function IconeDoApp({ app, tamanho }: { app: AppDetalhe; tamanho: number }) {
     <span
       aria-hidden="true"
       style={lado}
-      className="grid shrink-0 place-items-center rounded-lg bg-void font-semibold text-txt-secondary"
+      className="grid shrink-0 place-items-center rounded-lg bg-input-background-default font-semibold text-text-subtle"
     >
       {app.name.slice(0, 1).toUpperCase()}
     </span>
@@ -1022,7 +1022,7 @@ function Voltar({ onClick, children }: { onClick: () => void; children: React.Re
     <button
       type="button"
       onClick={onClick}
-      className="-ml-2 mb-2 flex h-[44px] items-center gap-1.5 rounded-lg px-2 text-sm font-medium text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
+      className="-ml-2 mb-2 flex h-[44px] items-center gap-1.5 rounded-lg px-2 text-sm font-medium text-text-subtle transition hover:bg-interactive-background-hover hover:text-text-strong"
     >
       <ArrowLeft size={16} aria-hidden="true" />
       {children}
@@ -1035,7 +1035,7 @@ function Aviso({ tom, children }: { tom: "erro"; children: React.ReactNode }) {
     <p
       role="alert"
       className={`mb-3 rounded-lg px-3 py-2 text-sm ${
-        tom === "erro" ? "bg-red/10 text-red" : "bg-hov text-txt-secondary"
+        tom === "erro" ? "bg-status-danger/10 text-status-danger" : "bg-interactive-background-hover text-text-subtle"
       }`}
     >
       {children}

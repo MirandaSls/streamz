@@ -494,8 +494,8 @@ export default function ProfilePopoverHost() {
         style={ehMobile ? undefined : { left: pos?.x ?? 0, top: pos?.y ?? 0, width: LARGURA }}
         className={
           ehMobile
-            ? "anim-folha fixed inset-x-0 bottom-0 z-[75] max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl bg-overlay pb-[env(safe-area-inset-bottom)] shadow-high"
-            : `fixed z-[75] overflow-hidden rounded-lg bg-overlay shadow-high anim-menu ${
+            ? "anim-folha fixed inset-x-0 bottom-0 z-[75] max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl bg-background-surface-higher pb-[env(safe-area-inset-bottom)] shadow-popout"
+            : `fixed z-[75] overflow-hidden rounded-lg bg-background-surface-higher shadow-popout anim-menu ${
                 pos ? "" : "invisible"
               }`
         }
@@ -507,7 +507,7 @@ export default function ProfilePopoverHost() {
         ) : (
           <div
             style={perfil?.bannerColor ? { backgroundColor: perfil.bannerColor } : undefined}
-            className={`h-[60px] ${perfil?.bannerColor ? "" : "bg-accent"}`}
+            className={`h-[60px] ${perfil?.bannerColor ? "" : "bg-brand-500"}`}
           />
         )}
         {ehMobile && (
@@ -549,8 +549,8 @@ export default function ProfilePopoverHost() {
 
       <div className="px-4 pb-4">
         <div className="-mt-10 mb-3 flex items-end justify-between">
-          <div className="w-fit rounded-full border-[6px] border-overlay">
-            <Avatar user={user} size="xl" status={status} surface="border-overlay" />
+          <div className="w-fit rounded-full border-[6px] border-background-surface-higher">
+            <Avatar user={user} size="xl" status={status} surface="border-background-surface-higher" />
           </div>
           {/*
             Caixa de emblemas (Nitro, impulso, HypeSquad, desenvolvedor). O
@@ -559,7 +559,7 @@ export default function ProfilePopoverHost() {
             campo.
           */}
           {EMBLEMAS.length > 0 && (
-            <div className="mb-1 flex items-center gap-1 rounded-lg bg-footer px-2 py-1">
+            <div className="mb-1 flex items-center gap-1 rounded-lg bg-background-base-low px-2 py-1">
               {EMBLEMAS.map((b) => (
                 <span key={b.id} title={b.label} aria-label={b.label}>
                   {b.icon}
@@ -569,7 +569,7 @@ export default function ProfilePopoverHost() {
           )}
         </div>
 
-        <div className="rounded-lg bg-footer p-3">
+        <div className="rounded-lg bg-background-base-low p-3">
           <div className="min-w-0">
             {/* ── j-bots ── a pílula ao lado do nome grande, como em
                 `docs/Reference/apps/tag-bot-no-perfil-do-app.png` (medida ali a
@@ -584,26 +584,26 @@ export default function ProfilePopoverHost() {
             <div className="flex min-w-0 items-center gap-2">
               <div
                 style={cor ? { color: cor } : undefined}
-                className="min-w-0 truncate text-xl font-bold leading-6 text-txt-primary"
+                className="min-w-0 truncate text-xl font-bold leading-6 text-text-strong"
               >
                 {displayNameOf(user)}
               </div>
               {user.bot && <TagDeBot />}
             </div>
-            <div className="flex items-center gap-2 text-sm text-txt-normal">
+            <div className="flex items-center gap-2 text-sm text-text-default">
               <span className="truncate">@{user.username}</span>
               {perfil?.pronouns && (
-                <span className="shrink-0 text-txt-muted">{perfil.pronouns}</span>
+                <span className="shrink-0 text-text-muted">{perfil.pronouns}</span>
               )}
             </div>
             {customStatusOf(user) && (
-              <div className="mt-1 truncate text-sm text-txt-normal">{customStatusOf(user)}</div>
+              <div className="mt-1 truncate text-sm text-text-default">{customStatusOf(user)}</div>
             )}
           </div>
 
           {perfil?.aboutMe && (
             <Secao titulo="Sobre mim">
-              <p className="whitespace-pre-wrap break-words text-sm text-txt-normal">
+              <p className="whitespace-pre-wrap break-words text-sm text-text-default">
                 {perfil.aboutMe}
               </p>
             </Secao>
@@ -611,8 +611,8 @@ export default function ProfilePopoverHost() {
 
           {atividade && (
             <Secao titulo="Atividade">
-              <p className="text-sm text-txt-normal">{atividade.nome}</p>
-              {atividade.detalhe && <p className="text-xs text-txt-muted">{atividade.detalhe}</p>}
+              <p className="text-sm text-text-default">{atividade.nome}</p>
+              {atividade.detalhe && <p className="text-xs text-text-muted">{atividade.detalhe}</p>}
             </Secao>
           )}
 
@@ -620,8 +620,8 @@ export default function ProfilePopoverHost() {
             <Secao titulo="Membro desde">
               {/* a entrada no servidor exigiria um `joinedAt` em GuildMemberView;
                   enquanto não existe, só a criação da conta é verdade */}
-              <span className="flex items-center gap-2 text-sm text-txt-normal">
-                <CalendarDays size={16} aria-hidden="true" className="text-txt-muted" />
+              <span className="flex items-center gap-2 text-sm text-text-default">
+                <CalendarDays size={16} aria-hidden="true" className="text-text-muted" />
                 {DATA.format(new Date(perfil.createdAt))}
               </span>
             </Secao>
@@ -633,7 +633,7 @@ export default function ProfilePopoverHost() {
                 {chips.map((r) => (
                   <span
                     key={r.id}
-                    className="flex items-center gap-1.5 rounded-[4px] bg-void py-1 pl-2 pr-1 text-xs text-txt-normal"
+                    className="flex items-center gap-1.5 rounded-[4px] bg-input-background-default py-1 pl-2 pr-1 text-xs text-text-default"
                   >
                     <span
                       aria-hidden="true"
@@ -646,7 +646,7 @@ export default function ProfilePopoverHost() {
                         type="button"
                         onClick={() => void toggleRole(user.id, r.id, false)}
                         aria-label={`Remover o cargo ${r.name}`}
-                        className="grid h-4 w-4 place-items-center rounded text-txt-muted transition hover:bg-red hover:text-white"
+                        className="grid h-4 w-4 place-items-center rounded text-text-muted transition hover:bg-status-danger hover:text-white"
                       >
                         <X size={12} />
                       </button>
@@ -671,7 +671,7 @@ export default function ProfilePopoverHost() {
                       );
                     }}
                     aria-label="Adicionar cargo"
-                    className="grid h-[26px] w-6 place-items-center rounded-[4px] bg-void text-txt-muted transition hover:text-txt-primary"
+                    className="grid h-[26px] w-6 place-items-center rounded-[4px] bg-input-background-default text-text-muted transition hover:text-text-strong"
                   >
                     <Plus size={14} />
                   </button>
@@ -682,7 +682,7 @@ export default function ProfilePopoverHost() {
 
           {perfil && perfil.mutualGuilds.length > 0 && !isMe && (
             <Secao titulo={`${perfil.mutualGuilds.length} servidores em comum`}>
-              <div className="flex items-center gap-1 text-xs text-txt-muted">
+              <div className="flex items-center gap-1 text-xs text-text-muted">
                 <Users size={14} aria-hidden="true" />
                 {perfil.mutualGuilds
                   .slice(0, 3)
@@ -706,7 +706,7 @@ export default function ProfilePopoverHost() {
                 close();
                 openModal({ kind: "settings", tab: "perfil" });
               }}
-              className={`mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-accent text-sm font-medium text-accent-ink transition hover:bg-accent-hover ${
+              className={`mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover ${
                 ehMobile ? "h-[44px]" : "h-8"
               }`}
             >
@@ -743,7 +743,7 @@ export default function ProfilePopoverHost() {
                 }, ATRASO_DO_SUBMENU);
               }}
               onPointerLeave={() => window.clearTimeout(timerDoSubmenu.current)}
-              className={`mt-2 flex w-full items-center gap-2 rounded-lg bg-footer px-2 text-left text-sm font-semibold text-txt-primary transition hover:bg-hov ${
+              className={`mt-2 flex w-full items-center gap-2 rounded-lg bg-background-base-low px-2 text-left text-sm font-semibold text-text-strong transition hover:bg-interactive-background-hover ${
                 ehMobile ? "h-[44px]" : "h-8"
               }`}
             >
@@ -756,7 +756,7 @@ export default function ProfilePopoverHost() {
             </button>
 
             {/* ordem do Discord: status → separador → personalizado → conta */}
-            <div className="mt-3 flex flex-col gap-0.5 border-t border-border pt-3">
+            <div className="mt-3 flex flex-col gap-0.5 border-t border-border-subtle pt-3">
               <ItemDeMenu
                 icon={<SmilePlus size={16} />}
                 onClick={() => {
@@ -802,20 +802,20 @@ export default function ProfilePopoverHost() {
               e.preventDefault();
               void enviar();
             }}
-            className="mt-3 flex items-center gap-1 rounded-lg bg-input px-2"
+            className="mt-3 flex items-center gap-1 rounded-lg bg-chat-background-default px-2"
           >
             <input
               value={rascunho}
               onChange={(e) => setRascunho(e.target.value)}
               aria-label={`Mensagem para @${user.username}`}
               placeholder={`Mensagem @${user.username}`}
-              className="h-10 min-w-0 flex-1 bg-transparent text-sm text-txt-normal outline-none placeholder:text-txt-muted"
+              className="h-10 min-w-0 flex-1 bg-transparent text-sm text-text-default outline-none placeholder:text-text-muted"
             />
             <button
               type="submit"
               disabled={!rascunho.trim()}
               aria-label="Enviar mensagem"
-              className={`grid shrink-0 place-items-center rounded text-txt-secondary transition hover:text-txt-primary disabled:opacity-40 ${
+              className={`grid shrink-0 place-items-center rounded text-text-subtle transition hover:text-text-strong disabled:opacity-40 ${
                 ehMobile ? "h-[44px] w-[44px]" : "h-7 w-7"
               }`}
             >
@@ -852,8 +852,8 @@ function atividadeDe(_user: { id: string }): Atividade | null {
 /** Bloco titulado do cartão ("Sobre mim", "Cargos", "Membro desde"). */
 function Secao({ titulo, children }: { titulo: string; children: ReactNode }) {
   return (
-    <div className="mt-3 border-t border-border pt-3">
-      <h3 className="mb-2 text-xs font-bold uppercase text-txt-secondary">{titulo}</h3>
+    <div className="mt-3 border-t border-border-subtle pt-3">
+      <h3 className="mb-2 text-xs font-bold uppercase text-text-subtle">{titulo}</h3>
       {children}
     </div>
   );
@@ -880,8 +880,8 @@ function ItemDeMenu({
         ehMobile ? "h-[44px]" : "h-8"
       } ${
         danger
-          ? "text-red hover:bg-red hover:text-white"
-          : "text-txt-normal hover:bg-hov hover:text-txt-primary"
+          ? "text-status-danger hover:bg-status-danger hover:text-white"
+          : "text-text-default hover:bg-interactive-background-hover hover:text-text-strong"
       }`}
     >
       <span aria-hidden="true">{icon}</span>

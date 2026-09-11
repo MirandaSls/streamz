@@ -195,10 +195,10 @@ export default function Dialog({
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         onKeyDown={handleKeyDown}
-        className={`relative flex max-w-full flex-col overflow-hidden bg-chat outline-none anim-modal ${
+        className={`relative flex max-w-full flex-col overflow-hidden bg-background-base-lower outline-none anim-modal ${
           cheio
             ? "h-[100dvh] w-full pt-[env(safe-area-inset-top)]"
-            : `rounded-lg border border-border shadow-high ${
+            : `rounded-lg border border-border-subtle shadow-popout ${
                 ehMobile ? "max-h-[92dvh] w-full" : `max-h-[85vh] ${className}`
               }`
         }`}
@@ -209,18 +209,18 @@ export default function Dialog({
              do app de celular (`components/mobile/pecas.tsx`), e não o título
              de 20/700 com o × no canto, que é a forma do cartão. Vale também
              para quem pediu `hideHeader`: sem barra não haveria como sair. */
-          <header className="flex h-[56px] shrink-0 items-center gap-1 border-b border-border bg-panel pl-1 pr-2">
+          <header className="flex h-[56px] shrink-0 items-center gap-1 border-b border-border-subtle bg-background-base-lowest pl-1 pr-2">
             <button
               type="button"
               onClick={onClose}
               aria-label="Voltar"
-              className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg text-txt-secondary transition active:bg-hov"
+              className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg text-text-subtle transition active:bg-interactive-background-hover"
             >
               <ArrowLeft size={24} />
             </button>
             <h2
               id={titleId}
-              className="min-w-0 flex-1 truncate text-base font-semibold text-txt-primary"
+              className="min-w-0 flex-1 truncate text-base font-semibold text-text-strong"
             >
               {title}
             </h2>
@@ -233,19 +233,19 @@ export default function Dialog({
           <div className="shrink-0 px-6 pt-6">
             <h2
               id={titleId}
-              className="pr-8 text-xl font-bold text-txt-primary"
+              className="pr-8 text-xl font-bold text-text-strong"
             >
               {title}
             </h2>
             {description && (
-              <p id={descriptionId} className="mt-2 text-base leading-5 text-txt-muted">
+              <p id={descriptionId} className="mt-2 text-base leading-5 text-text-muted">
                 {description}
               </p>
             )}
           </div>
         )}
         {cheio && description && (
-          <p id={descriptionId} className="shrink-0 px-4 pt-4 text-base leading-5 text-txt-muted">
+          <p id={descriptionId} className="shrink-0 px-4 pt-4 text-base leading-5 text-text-muted">
             {description}
           </p>
         )}
@@ -266,7 +266,7 @@ export default function Dialog({
             type="button"
             onClick={onClose}
             aria-label="Fechar"
-            className={`absolute z-10 grid place-items-center rounded text-txt-muted transition hover:text-txt-primary ${
+            className={`absolute z-10 grid place-items-center rounded text-text-muted transition hover:text-text-strong ${
               ehMobile ? "right-[6px] top-[6px] h-[44px] w-[44px]" : "right-4 top-4 h-6 w-6"
             }`}
           >
@@ -308,7 +308,7 @@ export default function Dialog({
               cheio
                 ? // rodapé colado no fim da tela, acima da barra de gestos, com
                   // os botões esticados: é onde o polegar está
-                  "border-t border-border px-4 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-4 [&>button]:flex-1"
+                  "border-t border-border-subtle px-4 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-4 [&>button]:flex-1"
                 : `px-6 pb-6 ${temCorpo ? "pt-2" : "pt-6"}`
             }`}
           >
@@ -363,8 +363,8 @@ export function PrimaryButton({
         ehMobile ? ALTURA_DE_TOQUE : "h-10"
       } min-w-24 rounded-lg px-4 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
         danger
-          ? "bg-red text-white hover:bg-red-hover"
-          : "bg-accent text-accent-ink hover:bg-accent-hover"
+          ? "bg-status-danger text-white hover:bg-control-critical-primary-background-hover"
+          : "bg-brand-500 text-control-primary-text-default hover:bg-control-primary-background-hover"
       }`}
     >
       {children}
@@ -393,7 +393,7 @@ export function SecondaryButton({
       data-autofocus={autoFocus ? "" : undefined}
       className={`${
         ehMobile ? ALTURA_DE_TOQUE : "h-10"
-      } min-w-24 rounded-lg bg-border-strong px-4 text-sm font-medium text-txt-normal transition hover:bg-border-strong-hover ${
+      } min-w-24 rounded-lg bg-border-normal px-4 text-sm font-medium text-text-default transition hover:bg-border-strong ${
         full ? "w-full" : ""
       }`}
     >

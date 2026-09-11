@@ -33,15 +33,15 @@ const hashColor = corDoAvatar;
  * essa mesma cor — não é branco nem uma versão escura do vermelho.
  */
 const FUNDO_DO_SELO: Record<string, string> = {
-  "border-panel": "bg-panel",
-  "border-chat": "bg-chat",
-  "border-footer": "bg-footer",
-  "border-overlay": "bg-overlay",
-  "border-void": "bg-void",
-  "border-input": "bg-input",
-  "border-sel": "bg-sel",
-  "border-hov": "bg-hov",
-  "border-msghov": "bg-msghov",
+  "border-background-base-lowest": "bg-background-base-lowest",
+  "border-background-base-lower": "bg-background-base-lower",
+  "border-background-base-low": "bg-background-base-low",
+  "border-background-surface-higher": "bg-background-surface-higher",
+  "border-input-background-default": "bg-input-background-default",
+  "border-chat-background-default": "bg-chat-background-default",
+  "border-interactive-background-selected": "bg-interactive-background-selected",
+  "border-interactive-background-hover": "bg-interactive-background-hover",
+  "border-message-background-hover": "bg-message-background-hover",
 };
 
 /**
@@ -92,7 +92,7 @@ export default function Avatar({
   size = "md",
   status,
   voz,
-  surface = "border-panel",
+  surface = "border-background-base-lowest",
   className = "",
 }: {
   user: { id: string; username: string; avatarUrl?: string | null };
@@ -147,7 +147,7 @@ export default function Avatar({
         <span
           role="img"
           aria-label={voz === "surdo" ? "Sem áudio" : "Mudo"}
-          className={`absolute grid place-items-center rounded-full bg-red text-white ${surface} ${s.dot}`}
+          className={`absolute grid place-items-center rounded-full bg-status-danger text-white ${surface} ${s.dot}`}
         >
           {voz === "surdo" ? <HeadphoneOff size={s.icone} /> : <MicOff size={s.icone} />}
         </span>
@@ -233,7 +233,7 @@ export function GroupAvatar({
   return (
     <span
       aria-hidden="true"
-      className={`${box} grid shrink-0 place-items-center rounded-full bg-accent text-accent-ink ${className}`}
+      className={`${box} grid shrink-0 place-items-center rounded-full bg-brand-500 text-control-primary-text-default ${className}`}
     >
       <Users size={GROUP_ICON[size]} />
     </span>

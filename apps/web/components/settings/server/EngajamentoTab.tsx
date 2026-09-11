@@ -34,7 +34,7 @@ export default function EngajamentoTab({ guildId }: { guildId: string }) {
     return (
       <>
         <TituloDaPagina titulo="Engajamento" />
-        <p className="text-sm text-txt-muted">Carregando…</p>
+        <p className="text-sm text-text-muted">Carregando…</p>
       </>
     );
   }
@@ -60,7 +60,7 @@ export default function EngajamentoTab({ guildId }: { guildId: string }) {
         subtitulo="O que o servidor mostra e diz sozinho para quem acabou de chegar."
       />
 
-      <h2 className="text-base font-semibold text-txt-primary">Mensagens do sistema</h2>
+      <h2 className="text-base font-semibold text-text-strong">Mensagens do sistema</h2>
       <div className="mt-2">
         <Select
           semDivisoria
@@ -73,9 +73,9 @@ export default function EngajamentoTab({ guildId }: { guildId: string }) {
         />
       </div>
 
-      <div aria-hidden="true" className="mt-10 h-px bg-border" />
+      <div aria-hidden="true" className="mt-10 h-px bg-border-subtle" />
 
-      <h2 className="mt-10 text-base font-semibold text-txt-primary">Tela de boas-vindas</h2>
+      <h2 className="mt-10 text-base font-semibold text-text-strong">Tela de boas-vindas</h2>
       <label htmlFor="welcome-description" className={`${ESTILO_ROTULO} mt-4`}>
         Mensagem de abertura
       </label>
@@ -92,18 +92,18 @@ export default function EngajamentoTab({ guildId }: { guildId: string }) {
       <p className={`${ESTILO_ROTULO} mt-6`}>Canais em destaque (até {MAX_WELCOME_CHANNELS})</p>
       <div className="flex flex-col gap-1">
         {textos.length === 0 && (
-          <p className="text-sm text-txt-muted">Nenhum canal de texto ainda.</p>
+          <p className="text-sm text-text-muted">Nenhum canal de texto ainda.</p>
         )}
         {textos.map((c) => (
           <label
             key={c.id}
-            className="flex h-9 cursor-pointer items-center gap-2 rounded-lg px-2 text-sm text-txt-normal hover:bg-hov"
+            className="flex h-9 cursor-pointer items-center gap-2 rounded-lg px-2 text-sm text-text-default hover:bg-interactive-background-hover"
           >
             <input
               type="checkbox"
               checked={form.welcomeChannelIds.includes(c.id)}
               onChange={() => alternarDestaque(c.id)}
-              className="accent-accent"
+              className="accent-brand-500"
             />
             #{c.name}
           </label>

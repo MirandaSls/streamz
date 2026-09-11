@@ -88,25 +88,25 @@ export default function SearchPanel({ guildId }: { guildId: string | null }) {
   return (
     <aside
       aria-label="Resultados da busca"
-      className="flex w-[26rem] shrink-0 flex-col border-l border-black/20 bg-panel"
+      className="flex w-[26rem] shrink-0 flex-col border-l border-black/20 bg-background-base-lowest"
     >
-      <div className="flex h-[49px] shrink-0 items-center gap-2 border-b border-border px-4 shadow-header">
-        <Search size={18} aria-hidden="true" className="text-txt-muted" />
-        <span className="min-w-0 flex-1 truncate font-semibold text-txt-primary">
+      <div className="flex h-[49px] shrink-0 items-center gap-2 border-b border-border-subtle px-4 shadow-elevation-low">
+        <Search size={18} aria-hidden="true" className="text-text-muted" />
+        <span className="min-w-0 flex-1 truncate font-semibold text-text-strong">
           {searching ? "Buscando…" : `${total} ${total === 1 ? "resultado" : "resultados"}`}
         </span>
         <button
           type="button"
           onClick={clearSearch}
           aria-label="Fechar a busca"
-          className="text-txt-secondary transition hover:text-txt-primary"
+          className="text-text-subtle transition hover:text-text-strong"
         >
           <X size={20} />
         </button>
       </div>
 
       {/* ordenação: a barra fica acima dos resultados, como no Discord */}
-      <div className="flex shrink-0 items-center gap-1 border-b border-border px-3 py-1.5">
+      <div className="flex shrink-0 items-center gap-1 border-b border-border-subtle px-3 py-1.5">
         {(
           [
             ["novas", "Novas"],
@@ -119,7 +119,7 @@ export default function SearchPanel({ guildId }: { guildId: string | null }) {
             onClick={() => setOrdem(valor)}
             aria-pressed={ordem === valor}
             className={`rounded-[3px] px-2 py-0.5 text-xs font-semibold uppercase transition ${
-              ordem === valor ? "bg-sel text-txt-primary" : "text-txt-muted hover:text-txt-normal"
+              ordem === valor ? "bg-interactive-background-selected text-text-strong" : "text-text-muted hover:text-text-default"
             }`}
           >
             {rotulo}
@@ -148,7 +148,7 @@ export default function SearchPanel({ guildId }: { guildId: string | null }) {
 
         {!searching && total === 0 && (
           <div className="p-4 text-center">
-            <p className="text-sm text-txt-muted">Nada encontrado.</p>
+            <p className="text-sm text-text-muted">Nada encontrado.</p>
             <div className="mt-4 flex flex-wrap justify-center gap-1">
               {FILTROS.map(([prefixo, o]) => (
                 <Ficha key={prefixo} rotulo={`${prefixo} ${o}`} />
@@ -165,7 +165,7 @@ export default function SearchPanel({ guildId }: { guildId: string | null }) {
             contexto={contextoDe(m)}
             className="mb-2 last:mb-0"
             acima={
-              <div className="mb-1 truncate pr-10 text-xs font-medium text-txt-secondary">
+              <div className="mb-1 truncate pr-10 text-xs font-medium text-text-subtle">
                 {nomeDoCanal(m.channelId)}
               </div>
             }
@@ -184,17 +184,17 @@ export default function SearchPanel({ guildId }: { guildId: string | null }) {
       </div>
 
       {total > POR_PAGINA && (
-        <div className="flex shrink-0 items-center justify-center gap-3 border-t border-border px-3 py-2">
+        <div className="flex shrink-0 items-center justify-center gap-3 border-t border-border-subtle px-3 py-2">
           <button
             type="button"
             onClick={() => setPagina((p) => Math.max(0, p - 1))}
             disabled={pagina === 0}
             aria-label="Página anterior"
-            className="grid h-6 w-6 place-items-center rounded text-txt-secondary transition hover:text-txt-primary disabled:opacity-40"
+            className="grid h-6 w-6 place-items-center rounded text-text-subtle transition hover:text-text-strong disabled:opacity-40"
           >
             <ChevronLeft size={18} />
           </button>
-          <span className="text-xs text-txt-muted">
+          <span className="text-xs text-text-muted">
             {pagina + 1} de {paginas}
           </span>
           <button
@@ -202,7 +202,7 @@ export default function SearchPanel({ guildId }: { guildId: string | null }) {
             onClick={() => setPagina((p) => Math.min(paginas - 1, p + 1))}
             disabled={pagina >= paginas - 1}
             aria-label="Próxima página"
-            className="grid h-6 w-6 place-items-center rounded text-txt-secondary transition hover:text-txt-primary disabled:opacity-40"
+            className="grid h-6 w-6 place-items-center rounded text-text-subtle transition hover:text-text-strong disabled:opacity-40"
           >
             <ChevronRight size={18} />
           </button>
@@ -217,7 +217,7 @@ function Ficha({ rotulo, ativo = false }: { rotulo: string; ativo?: boolean }) {
   return (
     <span
       className={`rounded-[3px] px-1.5 py-0.5 text-xs font-medium ${
-        ativo ? "bg-accent/20 text-txt-primary" : "bg-void text-txt-muted"
+        ativo ? "bg-brand-500/20 text-text-strong" : "bg-input-background-default text-text-muted"
       }`}
     >
       {rotulo}

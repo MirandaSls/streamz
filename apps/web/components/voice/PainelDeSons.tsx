@@ -267,8 +267,8 @@ export default function PainelDeSons({
     >
       <div
         style={ehMobile ? undefined : { height: ALTURA_PAINEL }}
-        className={`flex flex-col overflow-hidden bg-footer ${
-          ehMobile ? "h-[60dvh]" : "rounded-lg border border-border"
+        className={`flex flex-col overflow-hidden bg-background-base-low ${
+          ehMobile ? "h-[60dvh]" : "rounded-lg border border-border-subtle"
         }`}
       >
         {/* cabeçalho de 64: campo de 40 a 12 da borda esquerda, e a zona de 48
@@ -279,7 +279,7 @@ export default function PainelDeSons({
             <Search
               size={16}
               aria-hidden="true"
-              className="pointer-events-none absolute left-[12px] top-1/2 -translate-y-1/2 text-txt-muted"
+              className="pointer-events-none absolute left-[12px] top-1/2 -translate-y-1/2 text-text-muted"
             />
             <input
               // no celular o foco automático sobe o teclado por cima da folha
@@ -289,7 +289,7 @@ export default function PainelDeSons({
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Encontre o som perfeito"
               aria-label="Encontre o som perfeito"
-              className="h-[40px] w-full rounded-[8px] border border-border bg-chat pl-[40px] pr-[12px] text-[16px] text-txt-normal outline-none placeholder:text-txt-muted"
+              className="h-[40px] w-full rounded-[8px] border border-border-subtle bg-background-base-lower pl-[40px] pr-[12px] text-[16px] text-text-default outline-none placeholder:text-text-muted"
             />
           </div>
           <div className="grid w-[48px] shrink-0 place-items-center">
@@ -300,8 +300,8 @@ export default function PainelDeSons({
               aria-expanded={volumeAberto}
               aria-label="Volume dos efeitos sonoros"
               title="Volume dos efeitos sonoros"
-              className={`flex h-[32px] items-center gap-[2px] rounded-[4px] px-[4px] transition hover:bg-hov ${
-                mudo ? "text-red" : "text-txt-secondary hover:text-txt-primary"
+              className={`flex h-[32px] items-center gap-[2px] rounded-[4px] px-[4px] transition hover:bg-interactive-background-hover ${
+                mudo ? "text-status-danger" : "text-text-subtle hover:text-text-strong"
               }`}
             >
               {mudo ? <VolumeX size={20} /> : <Volume2 size={20} />}
@@ -315,7 +315,7 @@ export default function PainelDeSons({
           <nav
             aria-label="Seções de sons"
             style={{ width: LARGURA_COLUNA }}
-            className="flex shrink-0 flex-col items-center gap-[8px] overflow-y-auto bg-chat py-[8px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="flex shrink-0 flex-col items-center gap-[8px] overflow-y-auto bg-background-base-lower py-[8px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {secoes.map((secao) => (
               <button
@@ -327,8 +327,8 @@ export default function PainelDeSons({
                 onClick={() => irPara(secao.id)}
                 className={`grid h-[32px] w-[32px] shrink-0 place-items-center overflow-hidden rounded-[8px] transition ${
                   (ativa || secoes[0]?.id) === secao.id
-                    ? "bg-footer text-txt-primary"
-                    : "text-txt-secondary hover:bg-hov hover:text-txt-primary"
+                    ? "bg-background-base-low text-text-strong"
+                    : "text-text-subtle hover:bg-interactive-background-hover hover:text-text-strong"
                 }`}
               >
                 <IconeDaSecao secao={secao} tamanho="coluna" />
@@ -344,7 +344,7 @@ export default function PainelDeSons({
             className="relative min-h-0 flex-1 overflow-y-auto pb-[8px] pl-[8px] pr-[14px]"
           >
             {buscando && secoes[0]?.sons.length === 0 ? (
-              <p className="px-1 py-10 text-center text-sm text-txt-muted">
+              <p className="px-1 py-10 text-center text-sm text-text-muted">
                 Nenhum som com esse nome.
               </p>
             ) : (
@@ -418,9 +418,9 @@ function IconeDaSecao({
     }
     return (
       <span
-        className={`${lado} grid place-items-center rounded-full bg-void ${
+        className={`${lado} grid place-items-center rounded-full bg-input-background-default ${
           naColuna ? "text-[10px]" : "text-[7px]"
-        } font-semibold text-txt-normal`}
+        } font-semibold text-text-default`}
       >
         {sigla(secao.titulo)}
       </span>
@@ -473,7 +473,7 @@ function SecaoDeSons({
           type="button"
           onClick={onAlternar}
           aria-expanded={!fechada}
-          className="flex h-[32px] w-full items-center gap-[6px] text-[13px] font-semibold text-txt-secondary transition hover:text-txt-primary"
+          className="flex h-[32px] w-full items-center gap-[6px] text-[13px] font-semibold text-text-subtle transition hover:text-text-strong"
         >
           <span className="grid h-[16px] w-[16px] shrink-0 place-items-center">
             <IconeDaSecao secao={secao} tamanho="cabecalho" />
@@ -504,7 +504,7 @@ function SecaoDeSons({
             <button
               type="button"
               onClick={onAdicionar}
-              className="flex h-[40px] items-center justify-center gap-[6px] rounded-[8px] border border-dashed border-border-strong px-[8px] text-[13px] text-txt-muted transition hover:border-border-strong-hover hover:text-txt-normal"
+              className="flex h-[40px] items-center justify-center gap-[6px] rounded-[8px] border border-dashed border-border-normal px-[8px] text-[13px] text-text-muted transition hover:border-border-strong hover:text-text-default"
             >
               <Plus size={16} aria-hidden="true" />
               Adicionar som
@@ -539,12 +539,12 @@ function CardDeSom({
       onClick={onTocar}
       onContextMenu={onMenu}
       title={sound.name}
-      className="flex h-[40px] min-w-0 items-center justify-center gap-[8px] rounded-[8px] bg-sel px-[8px] transition hover:bg-border-strong"
+      className="flex h-[40px] min-w-0 items-center justify-center gap-[8px] rounded-[8px] bg-interactive-background-selected px-[8px] transition hover:bg-border-normal"
     >
       <span aria-hidden="true" className="shrink-0 text-[18px] leading-none">
         {sound.emoji || "🔊"}
       </span>
-      <span className="min-w-0 truncate text-[13px] font-semibold text-txt-primary">{sound.name}</span>
+      <span className="min-w-0 truncate text-[13px] font-semibold text-text-strong">{sound.name}</span>
     </button>
   );
 }
@@ -577,7 +577,7 @@ function PopoverDeVolume({
       {/* o `data-submenu-de-popover` é o que impede o painel de fechar junto
           quando o clique cai aqui dentro (ver `PopoverFlutuante`) */}
       <div data-submenu-de-popover className="py-[4px]">
-        <p className="whitespace-nowrap text-[14px] font-semibold text-txt-primary">
+        <p className="whitespace-nowrap text-[14px] font-semibold text-text-strong">
           Volume dos efeitos sonoros
         </p>
         <input
@@ -589,7 +589,7 @@ function PopoverDeVolume({
           aria-label="Volume dos efeitos sonoros"
           aria-valuetext={`${Math.round(volume * 100)}%`}
           onChange={(e) => definirVolume(Number(e.target.value) / 100)}
-          className="mt-[12px] h-[4px] w-full cursor-pointer appearance-none rounded-full bg-border-strong-hover [&::-moz-range-thumb]:h-[16px] [&::-moz-range-thumb]:w-[16px] [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-paper [&::-webkit-slider-thumb]:h-[16px] [&::-webkit-slider-thumb]:w-[16px] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-paper"
+          className="mt-[12px] h-[4px] w-full cursor-pointer appearance-none rounded-full bg-border-strong [&::-moz-range-thumb]:h-[16px] [&::-moz-range-thumb]:w-[16px] [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-paper [&::-webkit-slider-thumb]:h-[16px] [&::-webkit-slider-thumb]:w-[16px] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-paper"
         />
       </div>
     </PopoverFlutuante>

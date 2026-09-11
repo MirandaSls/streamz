@@ -137,8 +137,8 @@ export default function GerenciarContasModal() {
                 nada é pior que nenhum.
               */}
               <div
-                className={`flex items-center gap-2.5 rounded-lg bg-border-strong p-3 ${
-                  ativa || ocupada ? "" : "cursor-pointer transition hover:bg-border-strong-hover"
+                className={`flex items-center gap-2.5 rounded-lg bg-border-normal p-3 ${
+                  ativa || ocupada ? "" : "cursor-pointer transition hover:bg-border-strong"
                 }`}
                 role={ativa ? undefined : "button"}
                 tabIndex={ativa ? undefined : 0}
@@ -162,11 +162,11 @@ export default function GerenciarContasModal() {
                   distinguir contas, e é o username que é único.
                 */}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-base font-semibold leading-5 text-txt-primary">
+                  <p className="truncate text-base font-semibold leading-5 text-text-strong">
                     {conta.user.username}
                   </p>
                   {legenda && (
-                    <p className={`truncate text-sm leading-5 ${ativa ? "text-green" : "text-red"}`}>
+                    <p className={`truncate text-sm leading-5 ${ativa ? "text-status-positive" : "text-status-danger"}`}>
                       {legenda}
                     </p>
                   )}
@@ -179,7 +179,7 @@ export default function GerenciarContasModal() {
                     e.stopPropagation();
                     abrirMenu(conta, e.currentTarget);
                   }}
-                  className="mr-3 grid h-8 celular:h-[44px] w-8 celular:w-[44px] shrink-0 place-items-center rounded text-txt-secondary transition hover:text-txt-primary"
+                  className="mr-3 grid h-8 celular:h-[44px] w-8 celular:w-[44px] shrink-0 place-items-center rounded text-text-subtle transition hover:text-text-strong"
                 >
                   <MoreHorizontal size={20} />
                 </button>
@@ -194,7 +194,7 @@ export default function GerenciarContasModal() {
         disabled={cheio}
         onClick={() => openModal({ kind: "adicionarConta", voltar: true })}
         title={cheio ? `Limite de ${LIMITE_DE_CONTAS} contas por dispositivo` : undefined}
-        className="mt-7 h-10 celular:h-[44px] w-full rounded-lg bg-border-strong text-base font-medium text-txt-primary transition hover:bg-border-strong-hover disabled:cursor-not-allowed disabled:opacity-50"
+        className="mt-7 h-10 celular:h-[44px] w-full rounded-lg bg-border-normal text-base font-medium text-text-strong transition hover:bg-border-strong disabled:cursor-not-allowed disabled:opacity-50"
       >
         Adicionar uma conta
       </button>

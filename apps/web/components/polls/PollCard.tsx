@@ -38,12 +38,12 @@ export default function PollCard({
   const mostrarResultado = votei || encerrada;
 
   return (
-    <div className="mt-1 w-[432px] max-w-full rounded-lg border border-black/30 bg-panel p-4">
+    <div className="mt-1 w-[432px] max-w-full rounded-lg border border-black/30 bg-background-base-lowest p-4">
       <div className="flex items-start gap-2">
-        <BarChart3 size={18} className="mt-0.5 shrink-0 text-txt-muted" aria-hidden="true" />
-        <h3 className="min-w-0 flex-1 break-words font-semibold text-txt-primary">{poll.question}</h3>
+        <BarChart3 size={18} className="mt-0.5 shrink-0 text-text-muted" aria-hidden="true" />
+        <h3 className="min-w-0 flex-1 break-words font-semibold text-text-strong">{poll.question}</h3>
       </div>
-      <p className="mb-3 ml-6 text-xs text-txt-muted">
+      <p className="mb-3 ml-6 text-xs text-text-muted">
         {poll.multi ? "Escolha quantas quiser" : "Escolha uma opção"}
       </p>
 
@@ -60,13 +60,13 @@ export default function PollCard({
               /* 48px no celular: votar é um alvo de dedo, e 39px ficam abaixo
                  do piso de 44 */
               className={`relative flex h-10 items-center gap-2 overflow-hidden rounded-[4px] border px-3 text-left transition celular:h-[48px] ${
-                o.me ? "border-accent" : "border-border-strong"
-              } ${encerrada ? "cursor-default opacity-80" : "hover:border-txt-muted"}`}
+                o.me ? "border-brand-500" : "border-border-normal"
+              } ${encerrada ? "cursor-default opacity-80" : "hover:border-text-muted"}`}
             >
               {mostrarResultado && (
                 <span
                   aria-hidden="true"
-                  className={`absolute inset-y-0 left-0 ${o.me ? "bg-accent/30" : "bg-hov"}`}
+                  className={`absolute inset-y-0 left-0 ${o.me ? "bg-brand-500/30" : "bg-interactive-background-hover"}`}
                   style={{ width: `${pct}%` }}
                 />
               )}
@@ -75,13 +75,13 @@ export default function PollCard({
                 // caixa quadrada para múltipla escolha, redonda para escolha única
                 className={`relative grid h-4 w-4 shrink-0 place-items-center border ${
                   poll.multi ? "rounded-[3px]" : "rounded-full"
-                } ${o.me ? "border-accent bg-accent text-accent-ink" : "border-txt-muted"}`}
+                } ${o.me ? "border-brand-500 bg-brand-500 text-control-primary-text-default" : "border-text-muted"}`}
               >
                 {o.me && <Check size={12} strokeWidth={3} />}
               </span>
-              <span className="relative min-w-0 flex-1 truncate text-sm text-txt-normal">{o.text}</span>
+              <span className="relative min-w-0 flex-1 truncate text-sm text-text-default">{o.text}</span>
               {mostrarResultado && (
-                <span className="relative shrink-0 text-xs font-medium text-txt-muted">{pct}%</span>
+                <span className="relative shrink-0 text-xs font-medium text-text-muted">{pct}%</span>
               )}
             </button>
           );
@@ -90,7 +90,7 @@ export default function PollCard({
 
       {/* o rodapé no celular: os dois botões de texto ("Quem votou", "Encerrar")
           mediam 16px de altura — abaixo de qualquer alvo de dedo */}
-      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-txt-muted celular:gap-x-3 celular:[&_button]:min-h-[44px]">
+      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-muted celular:gap-x-3 celular:[&_button]:min-h-[44px]">
         <span>
           {poll.totalVotes} {poll.totalVotes === 1 ? "voto" : "votos"}
         </span>
@@ -109,7 +109,7 @@ export default function PollCard({
               <button
                 type="button"
                 onClick={() => ui.openModal({ kind: "pollVoters", messageId: poll.messageId })}
-                className="flex items-center gap-1 font-medium text-txt-link hover:underline"
+                className="flex items-center gap-1 font-medium text-text-link hover:underline"
               >
                 <Users size={12} aria-hidden="true" />
                 Quem votou
@@ -123,7 +123,7 @@ export default function PollCard({
             <button
               type="button"
               onClick={() => void close(poll.messageId)}
-              className="font-medium text-txt-link hover:underline"
+              className="font-medium text-text-link hover:underline"
             >
               Encerrar
             </button>

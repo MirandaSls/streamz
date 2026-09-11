@@ -95,8 +95,8 @@ export default function ScreenShareButton({
             aria-pressed={screenOn}
             className={`grid h-8 w-full place-items-center rounded-lg transition ${
               screenOn
-                ? "bg-green/20 text-green hover:bg-green/30"
-                : "bg-border-strong/60 text-txt-secondary hover:bg-border-strong hover:text-txt-primary"
+                ? "bg-status-positive/20 text-status-positive hover:bg-status-positive/30"
+                : "bg-border-normal/60 text-text-subtle hover:bg-border-normal hover:text-text-strong"
             }`}
           >
             {screenOn ? <MonitorX size={24} /> : <MonitorUp size={20} />}
@@ -134,7 +134,7 @@ export function AoVivoIndicador() {
   // deixava espremer, quebrava "Você está ao vivo" uma palavra por linha e o
   // botão subia por cima do texto.
   return (
-    <div className="flex w-max items-center gap-2 rounded-full bg-red/15 py-1 pl-3 pr-1 text-xs font-semibold text-red">
+    <div className="flex w-max items-center gap-2 rounded-full bg-status-danger/15 py-1 pl-3 pr-1 text-xs font-semibold text-status-danger">
       <Radio size={14} className="shrink-0" aria-hidden="true" />
       <span className="whitespace-nowrap">Você está ao vivo</span>
       {/* No telefone este é o botão que tira a sua tela do ar, e ele media 21px
@@ -148,7 +148,7 @@ export function AoVivoIndicador() {
         type="button"
         onClick={() => void pararTela()}
         style={ehMobile ? { height: ALVO_MINIMO } : undefined}
-        className={`shrink-0 whitespace-nowrap rounded-full bg-red px-2 text-[11px] font-bold text-white transition hover:bg-red-hover ${
+        className={`shrink-0 whitespace-nowrap rounded-full bg-status-danger px-2 text-[11px] font-bold text-white transition hover:bg-control-critical-primary-background-hover ${
           ehMobile ? "" : "py-1"
         }`}
       >

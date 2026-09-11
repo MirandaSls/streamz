@@ -193,7 +193,7 @@ function SideButton({
         /* no celular o lado é literal pelo mesmo motivo da altura: `w-10` sobre
            a raiz de 15,5px dá 38,75, e o botão do composer do Discord mede 40pt
            (`MEDIDAS.md` §7) */
-        className={`grid place-items-center text-txt-secondary transition hover:text-txt-primary ${
+        className={`grid place-items-center text-text-subtle transition hover:text-text-strong ${
           baixo ? `h-[40px] w-[40px] ${ALVO_44}` : "h-[58px] w-10"
         }`}
       >
@@ -692,8 +692,8 @@ export default function Composer({
       // `ml-2.5` põe o glifo de 18 a 21px da borda esquerda da caixa, que é
       // onde ele fica no Discord: 10 de margem + os 11 que sobram de cada lado
       // dentro do alvo de 40
-      className={`grid shrink-0 place-items-center rounded-full text-txt-secondary transition hover:text-txt-primary ${
-        ehMobile ? `h-[40px] w-[40px] bg-hov ${ALVO_44}` : "ml-2.5 mr-4 mt-[9px] h-10 w-10"
+      className={`grid shrink-0 place-items-center rounded-full text-text-subtle transition hover:text-text-strong ${
+        ehMobile ? `h-[40px] w-[40px] bg-interactive-background-hover ${ALVO_44}` : "ml-2.5 mr-4 mt-[9px] h-10 w-10"
       }`}
     >
       {/* `+` liso, não o `CirclePlus`: o do Discord é marca de traço, sem o
@@ -741,7 +741,7 @@ export default function Composer({
       {ehMobile && allowAttachments && botaoMais}
       <div
         className={
-          ehMobile ? "min-w-0 flex-1 rounded-[20px] bg-input" : "rounded-lg bg-input"
+          ehMobile ? "min-w-0 flex-1 rounded-[20px] bg-chat-background-default" : "rounded-lg bg-chat-background-default"
         }
       >
         {(pendentes.length > 0 || prontos.length > 0) && (
@@ -783,7 +783,7 @@ export default function Composer({
                   height: ehMobile ? LADO_PREVIA_MOBILE : LADO_PREVIA,
                   width: ehMobile ? LADO_PREVIA_MOBILE : LADO_PREVIA,
                 }}
-                className="group/anexo relative shrink-0 rounded-lg bg-panel p-2"
+                className="group/anexo relative shrink-0 rounded-lg bg-background-base-lowest p-2"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={a.url} alt={a.filename} className="h-full w-full rounded object-contain" />
@@ -875,7 +875,7 @@ export default function Composer({
             // anuncia a lista é o próprio popup, que é um `listbox` rotulado
             aria-autocomplete="list"
             placeholder={placeholder}
-            className={`flex-1 resize-none bg-transparent text-txt-normal outline-none placeholder:text-txt-muted ${
+            className={`flex-1 resize-none bg-transparent text-text-default outline-none placeholder:text-text-muted ${
               ehMobile ? "min-h-[40px] py-[9px] pl-4" : "min-h-[58px] py-[18px]"
             }`}
           />
@@ -886,7 +886,7 @@ export default function Composer({
                 <span
                   aria-live="polite"
                   className={`px-2 text-xs tabular-nums ${
-                    modoLento.bloqueado ? "text-txt-normal" : "text-txt-muted"
+                    modoLento.bloqueado ? "text-text-default" : "text-text-muted"
                   }`}
                 >
                   {modoLento.bloqueado
@@ -957,7 +957,7 @@ export default function Composer({
                 type="submit"
                 disabled={enviando}
                 aria-label="Enviar mensagem"
-                className={`mb-[9px] mr-[9px] mt-[9px] grid h-[40px] w-[40px] shrink-0 place-items-center self-end rounded-full bg-accent text-accent-ink transition disabled:opacity-50 ${ALVO_44}`}
+                className={`mb-[9px] mr-[9px] mt-[9px] grid h-[40px] w-[40px] shrink-0 place-items-center self-end rounded-full bg-brand-500 text-control-primary-text-default transition disabled:opacity-50 ${ALVO_44}`}
               >
                 <SendHorizonal size={20} />
               </button>
@@ -1016,7 +1016,7 @@ export default function Composer({
         <span
           aria-live="polite"
           className={`absolute bottom-1.5 right-[26px] text-xs tabular-nums ${
-            restante <= 0 ? "text-red" : "text-txt-muted"
+            restante <= 0 ? "text-status-danger" : "text-text-muted"
           }`}
         >
           {restante}
@@ -1038,7 +1038,7 @@ function OverlayArrastar({ alvo, destino }: { alvo: HTMLElement | null; destino?
   return createPortal(
     <div
       style={{ top: area.top + 8, left: area.left + 8, width: area.width - 16, height: area.height - 16 }}
-      className="pointer-events-none fixed z-[65] grid place-items-center rounded-lg border-2 border-dashed border-accent bg-accent/20"
+      className="pointer-events-none fixed z-[65] grid place-items-center rounded-lg border-2 border-dashed border-brand-500 bg-brand-500/20"
     >
       <span className="flex flex-col items-center gap-3 text-center">
         <Upload size={56} strokeWidth={1.5} aria-hidden="true" className="text-white" />
@@ -1078,9 +1078,9 @@ function BotaoCartao({
         type="button"
         onClick={onClick}
         aria-label={label}
-        className={`grid place-items-center rounded bg-void/90 transition hover:bg-hov ${
+        className={`grid place-items-center rounded bg-input-background-default/90 transition hover:bg-interactive-background-hover ${
           grande ? "h-8 w-8" : "h-7 w-7"
-        } ${danger ? "text-red" : "text-txt-normal hover:text-txt-primary"}`}
+        } ${danger ? "text-status-danger" : "text-text-default hover:text-text-strong"}`}
       >
         {children}
       </button>
@@ -1113,7 +1113,7 @@ function PreviaAnexo({
   return (
     <div
       style={{ height: lado, width: lado }}
-      className="group/anexo relative flex shrink-0 flex-col rounded-lg bg-panel p-2"
+      className="group/anexo relative flex shrink-0 flex-col rounded-lg bg-background-base-lowest p-2"
     >
       {anexo.previewUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -1123,18 +1123,18 @@ function PreviaAnexo({
           className={`min-h-0 flex-1 rounded object-contain ${anexo.spoiler ? "blur-lg" : ""}`}
         />
       ) : (
-        <div className="grid min-h-0 flex-1 place-items-center text-txt-muted" aria-hidden="true">
+        <div className="grid min-h-0 flex-1 place-items-center text-text-muted" aria-hidden="true">
           <FileText size={64} strokeWidth={1} />
         </div>
       )}
 
-      <span className={`truncate text-txt-normal ${compacto ? "mt-1 text-xs" : "mt-2 text-sm"}`}>
+      <span className={`truncate text-text-default ${compacto ? "mt-1 text-xs" : "mt-2 text-sm"}`}>
         {anexo.nome}
       </span>
       {/* o tamanho em bytes é a primeira coisa a sair num cartão de 128: sem
           ele o nome e a barra de progresso ainda cabem */}
       {!compacto && (
-        <span className="truncate text-[11px] text-txt-muted">{formatBytes(anexo.file.size)}</span>
+        <span className="truncate text-[11px] text-text-muted">{formatBytes(anexo.file.size)}</span>
       )}
 
       {anexo.progresso >= 0 && (
@@ -1144,9 +1144,9 @@ function PreviaAnexo({
           aria-valuemin={0}
           aria-valuemax={100}
           aria-label={`Enviando ${anexo.nome}`}
-          className="mt-1 h-1 overflow-hidden rounded bg-void"
+          className="mt-1 h-1 overflow-hidden rounded bg-input-background-default"
         >
-          <div className="h-full bg-accent transition-all" style={{ width: `${anexo.progresso}%` }} />
+          <div className="h-full bg-brand-500 transition-all" style={{ width: `${anexo.progresso}%` }} />
         </div>
       )}
 
@@ -1286,7 +1286,7 @@ function montarSugestoes(
         chave: c.id,
         valor: `#${c.name}`,
         rotulo: `#${c.name}`,
-        icone: <Hash size={16} className="text-txt-faint" />,
+        icone: <Hash size={16} className="text-channels-default" />,
       }));
   }
 

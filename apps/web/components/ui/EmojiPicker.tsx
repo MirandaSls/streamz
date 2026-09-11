@@ -305,7 +305,7 @@ export default function EmojiPicker({
           className="relative min-h-0 flex-1 overflow-y-auto px-2 pb-2"
         >
           {secoes.every((s) => s.itens.length === 0) ? (
-            <p className="px-2 py-10 text-center text-sm text-txt-muted">
+            <p className="px-2 py-10 text-center text-sm text-text-muted">
               {buscando ? "Nenhum emoji com esse nome." : "Nenhum emoji por aqui."}
             </p>
           ) : (
@@ -344,7 +344,7 @@ export default function EmojiPicker({
               onClose();
               ui.openModal({ kind: "guildEmojis", guildId: guildIdAtivo });
             }}
-            className="grid h-7 w-7 shrink-0 place-items-center rounded text-txt-muted transition hover:bg-hov hover:text-txt-normal"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded text-text-muted transition hover:bg-interactive-background-hover hover:text-text-default"
           >
             <Settings2 size={16} aria-hidden="true" />
           </button>
@@ -408,7 +408,7 @@ function SecaoEmoji({
 
   return (
     <section ref={ref} className="mb-1">
-      <h3 className="sticky top-0 z-10 flex items-center gap-1.5 bg-panel px-1 py-1.5 text-xs font-semibold uppercase tracking-wide text-txt-muted">
+      <h3 className="sticky top-0 z-10 flex items-center gap-1.5 bg-background-base-lowest px-1 py-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
         {secao.icone.tipo === "servidor" ? (
           <IconeServidor nome={secao.icone.nome} iconUrl={secao.icone.url} />
         ) : (
@@ -466,7 +466,7 @@ function BotaoEmoji({
       onClick={() => onEscolher(alvo)}
       onPointerEnter={() => onFocar(alvo)}
       onFocus={() => onFocar(alvo)}
-      className="grid h-10 w-10 place-items-center rounded transition hover:bg-hov"
+      className="grid h-10 w-10 place-items-center rounded transition hover:bg-interactive-background-hover"
     >
       {alvo.tipo === "custom" ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -493,7 +493,7 @@ function BotaoEmoji({
  */
 function Previa({ item, tom }: { item: ItemGrade | null; tom: TomDePele }) {
   if (!item) {
-    return <span className="flex-1 text-sm text-txt-muted">Escolha um emoji</span>;
+    return <span className="flex-1 text-sm text-text-muted">Escolha um emoji</span>;
   }
   const nome = item.tipo === "custom" ? item.emoji.name : item.item.nome;
   // emoji de servidor não tem apelido: ali o que informa é de qual servidor ele é
@@ -516,8 +516,8 @@ function Previa({ item, tom }: { item: ItemGrade | null; tom: TomDePele }) {
         </span>
       )}
       <span className="flex min-w-0 items-baseline gap-1.5 truncate">
-        <span className="shrink-0 text-sm font-semibold text-txt-primary">{`:${nome}:`}</span>
-        {detalhe && <span className="truncate text-sm text-txt-muted">{detalhe}</span>}
+        <span className="shrink-0 text-sm font-semibold text-text-strong">{`:${nome}:`}</span>
+        {detalhe && <span className="truncate text-sm text-text-muted">{detalhe}</span>}
       </span>
     </span>
   );
@@ -548,7 +548,7 @@ function SeletorDeTom({
         aria-label={`Tom de pele: ${atual.rotulo}`}
         aria-expanded={aberto}
         onClick={() => onAbrir(!aberto)}
-        className="grid h-7 w-7 place-items-center rounded transition hover:bg-hov"
+        className="grid h-7 w-7 place-items-center rounded transition hover:bg-interactive-background-hover"
       >
         <span
           aria-hidden="true"
@@ -560,7 +560,7 @@ function SeletorDeTom({
         <div
           role="listbox"
           aria-label="Tom de pele"
-          className="anim-menu absolute bottom-full right-0 mb-1 flex gap-1 rounded bg-void p-1 shadow-high"
+          className="anim-menu absolute bottom-full right-0 mb-1 flex gap-1 rounded bg-input-background-default p-1 shadow-popout"
         >
           {TONS_DE_PELE.map((t) => (
             <button
@@ -570,8 +570,8 @@ function SeletorDeTom({
               aria-selected={t.id === tom}
               aria-label={t.rotulo}
               onClick={() => onEscolher(t.id)}
-              className={`grid h-7 w-7 place-items-center rounded transition hover:bg-hov ${
-                t.id === tom ? "bg-hov" : ""
+              className={`grid h-7 w-7 place-items-center rounded transition hover:bg-interactive-background-hover ${
+                t.id === tom ? "bg-interactive-background-hover" : ""
               }`}
             >
               <span

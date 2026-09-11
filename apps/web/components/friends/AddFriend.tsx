@@ -46,7 +46,7 @@ export default function AddFriend() {
     }
   }
 
-  const borda = erro ? "border-red" : sucesso ? "border-green" : "border-border";
+  const borda = erro ? "border-status-danger" : sucesso ? "border-status-positive" : "border-border-subtle";
 
   return (
     /* medido no print do Discord: título 20px bold em caixa mista com a caixa
@@ -56,8 +56,8 @@ export default function AddFriend() {
        enviar dividiam 330px e o rótulo "Enviar pedido de amizade" espremia o
        campo a menos de 100px */
     <div className="px-[30px] pt-5 celular:px-4">
-      <h2 className="text-xl font-bold leading-6 text-txt-primary">Adicionar amigo</h2>
-      <p className="mt-2 text-base leading-5 text-txt-normal">
+      <h2 className="text-xl font-bold leading-6 text-text-strong">Adicionar amigo</h2>
+      <p className="mt-2 text-base leading-5 text-text-default">
         Você pode adicionar amigos com o nome de usuário do Streamz.
       </p>
 
@@ -70,7 +70,7 @@ export default function AddFriend() {
            embaixo, os dois com 44px. Lado a lado numa tela de 390 o botão
            ("Enviar pedido de amizade", 190px) deixava o campo com menos de
            100px de largura útil, e os dois ficavam com 31px de altura. */
-        className={`mt-4 flex items-center gap-2 rounded-lg border bg-void p-3 ${borda} focus-within:border-accent celular:flex-col celular:items-stretch`}
+        className={`mt-4 flex items-center gap-2 rounded-lg border bg-input-background-default p-3 ${borda} focus-within:border-brand-500 celular:flex-col celular:items-stretch`}
       >
         <input
           value={nome}
@@ -83,14 +83,14 @@ export default function AddFriend() {
           aria-invalid={erro ? true : undefined}
           placeholder="Insira um nome de usuário"
           maxLength={33}
-          className="h-8 min-w-0 flex-1 bg-transparent text-base text-txt-normal outline-none placeholder:text-txt-muted celular:h-[44px]"
+          className="h-8 min-w-0 flex-1 bg-transparent text-base text-text-default outline-none placeholder:text-text-muted celular:h-[44px]"
         />
         {/* o botão mora DENTRO do campo, à direita: 32px de altura, raio 8, na
             cor accent. Era raio 3 com 36 de altura. */}
         <button
           type="submit"
           disabled={!valido || enviando}
-          className="h-8 shrink-0 rounded-lg bg-accent px-3 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 celular:h-[44px]"
+          className="h-8 shrink-0 rounded-lg bg-brand-500 px-3 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:cursor-not-allowed disabled:opacity-50 celular:h-[44px]"
         >
           {enviando ? "Enviando…" : "Enviar pedido de amizade"}
         </button>
@@ -100,7 +100,7 @@ export default function AddFriend() {
         <p
           role={erro ? "alert" : "status"}
           aria-live="polite"
-          className={`mt-2 text-sm ${erro ? "text-red" : "text-green"}`}
+          className={`mt-2 text-sm ${erro ? "text-status-danger" : "text-status-positive"}`}
         >
           {erro ?? sucesso}
         </p>

@@ -31,7 +31,7 @@ import { useVoiceDevices } from "@/stores/voiceDevices";
  *
  Medidas (`docs/Reference/mobile/MEDIDAS.md` §12, `discord-mobile-call.png` a
  * 1,8779 px/pt): **raio do tile ≈16** e fundo do palco **preto** (`#000000` —
- * aqui `bg-void`, o preto que o projeto já tem: §6.6, a paleta não muda). A
+ * aqui `bg-input-background-default`, o preto que o projeto já tem: §6.6, a paleta não muda). A
  * margem lateral de ~31pt do print **não** vale aqui: ela é do leiaute de dois
  * tiles empilhados, onde sobra largura; num destaque que já é o maior quadro
  * possível ela custaria 62 dos 390. A nossa é 12 (`PALCO_MARGEM`), e o tamanho
@@ -213,14 +213,14 @@ export default function PalcoMobile({
             ? // Deitado a cápsula de controles **flutua sobre o vídeo** e se
               // esconde sozinha: reservar 88pt embaixo numa tela de 390 de
               // altura deixava uma faixa morta de um quarto do aparelho.
-              "relative h-full min-h-0 w-full bg-void"
+              "relative h-full min-h-0 w-full bg-input-background-default"
             : // Em pé a cápsula é fixa, então o palco lhe reserva a altura:
               // 68 da barra + 8 do rodapé dela + 12 de respiro = 88, em px
               // literais. A reserva mora aqui, e não no `VoicePanel`, porque
               // depende da orientação — e **sem** `env(safe-area-inset-bottom)`,
               // que a `TelaEmpilhada` já paga uma vez por toda tela do celular
               // (somá-la de novo roubaria 34pt de vídeo num iPhone).
-              "flex h-full min-h-0 w-full flex-col bg-void pb-[88px]"
+              "flex h-full min-h-0 w-full flex-col bg-input-background-default pb-[88px]"
         }
       >
         {destaque}

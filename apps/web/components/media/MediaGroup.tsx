@@ -219,8 +219,8 @@ function Video({ anexo }: { anexo: Attachment }) {
 
 function Audio({ anexo }: { anexo: Attachment }) {
   return (
-    <div className="w-[432px] max-w-full rounded-lg border border-black/30 bg-panel p-3">
-      <span className="mb-2 block truncate text-sm font-medium text-txt-normal">
+    <div className="w-[432px] max-w-full rounded-lg border border-black/30 bg-background-base-lowest p-3">
+      <span className="mb-2 block truncate text-sm font-medium text-text-default">
         {attachmentDisplayName(anexo)}
       </span>
       <audio src={anexo.url} controls preload="metadata" className="w-full" />
@@ -232,11 +232,11 @@ function Audio({ anexo }: { anexo: Attachment }) {
 function Arquivo({ anexo }: { anexo: Attachment }) {
   const nome = attachmentDisplayName(anexo);
   return (
-    <div className="flex w-[432px] max-w-full items-center gap-3 rounded-lg border border-black/30 bg-panel p-4">
+    <div className="flex w-[432px] max-w-full items-center gap-3 rounded-lg border border-black/30 bg-background-base-lowest p-4">
       <FileText
         size={40}
         strokeWidth={1.25}
-        className={`shrink-0 ${isPdfAttachment(anexo) ? "text-red" : "text-txt-muted"}`}
+        className={`shrink-0 ${isPdfAttachment(anexo) ? "text-status-danger" : "text-text-muted"}`}
         aria-hidden="true"
       />
       <span className="min-w-0 flex-1">
@@ -244,11 +244,11 @@ function Arquivo({ anexo }: { anexo: Attachment }) {
           href={anexo.url}
           target="_blank"
           rel="noreferrer"
-          className="block truncate font-medium text-txt-link hover:underline"
+          className="block truncate font-medium text-text-link hover:underline"
         >
           {nome}
         </a>
-        <span className="text-xs text-txt-muted">
+        <span className="text-xs text-text-muted">
           {isPdfAttachment(anexo) ? "PDF · " : ""}
           {formatBytes(anexo.size)}
         </span>
@@ -261,7 +261,7 @@ function Arquivo({ anexo }: { anexo: Attachment }) {
            único jeito de guardar o arquivo: o menu de toque longo da mensagem
            não tem "baixar anexo". 44 literais no celular, como o resto dos
            alvos de dedo do app. */
-        className="grid h-8 w-8 shrink-0 place-items-center rounded text-txt-secondary hover:bg-hov hover:text-txt-primary celular:h-[44px] celular:w-[44px]"
+        className="grid h-8 w-8 shrink-0 place-items-center rounded text-text-subtle hover:bg-interactive-background-hover hover:text-text-strong celular:h-[44px] celular:w-[44px]"
       >
         <Download size={20} />
       </a>

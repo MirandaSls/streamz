@@ -121,7 +121,7 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
     <aside
       aria-label="Thread"
       style={{ width: largura }}
-      className="relative flex shrink-0 flex-col border-l border-black/20 bg-chat"
+      className="relative flex shrink-0 flex-col border-l border-black/20 bg-background-base-lower"
     >
       <div
         role="separator"
@@ -131,9 +131,9 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
         className="absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize"
       />
 
-      <div className="flex h-[49px] shrink-0 items-center gap-2 border-b border-border px-4 shadow-header">
-        <MessageSquare size={20} aria-hidden="true" className="shrink-0 text-txt-secondary" />
-        <span className="min-w-0 flex-1 truncate font-semibold text-txt-primary">
+      <div className="flex h-[49px] shrink-0 items-center gap-2 border-b border-border-subtle px-4 shadow-elevation-low">
+        <MessageSquare size={20} aria-hidden="true" className="shrink-0 text-text-subtle" />
+        <span className="min-w-0 flex-1 truncate font-semibold text-text-strong">
           {nome ?? "Tópico"}
         </span>
 
@@ -143,11 +143,11 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
               .map((p) => displayNameOf(p))
               .join(", ")}`}
           >
-            <span className="flex shrink-0 items-center gap-1 text-txt-secondary">
+            <span className="flex shrink-0 items-center gap-1 text-text-subtle">
               <Users size={16} aria-hidden="true" />
               <span className="flex -space-x-1.5" aria-hidden="true">
                 {participantes.slice(0, 3).map((p) => (
-                  <Avatar key={p.id} user={p} size="xs" className="ring-2 ring-chat" />
+                  <Avatar key={p.id} user={p} size="xs" className="ring-2 ring-background-base-lower" />
                 ))}
               </span>
             </span>
@@ -159,7 +159,7 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
             type="button"
             onClick={abrirNotificacoes}
             aria-label="Notificações do tópico"
-            className="shrink-0 text-txt-secondary transition hover:text-txt-primary"
+            className="shrink-0 text-text-subtle transition hover:text-text-strong"
           >
             <Bell size={20} />
           </button>
@@ -169,7 +169,7 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
             type="button"
             onClick={abrirMenu}
             aria-label="Mais opções do tópico"
-            className="shrink-0 text-txt-secondary transition hover:text-txt-primary"
+            className="shrink-0 text-text-subtle transition hover:text-text-strong"
           >
             <MoreHorizontal size={20} />
           </button>
@@ -179,7 +179,7 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
             type="button"
             onClick={closeThread}
             aria-label="Fechar thread"
-            className="shrink-0 text-txt-secondary transition hover:text-txt-primary"
+            className="shrink-0 text-text-subtle transition hover:text-text-strong"
           >
             <X size={24} />
           </button>
@@ -204,11 +204,11 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
         firstSeparator={
           // mesmo desenho do divisor de data: antes ficava mais apertado que ele
           <div className="mx-4 mt-6 flex items-center" role="separator">
-            <span className="h-px flex-1 bg-border" />
-            <span className="px-1 text-xs font-semibold text-txt-muted">
+            <span className="h-px flex-1 bg-border-subtle" />
+            <span className="px-1 text-xs font-semibold text-text-muted">
               {replies} {replies === 1 ? "resposta" : "respostas"}
             </span>
-            <span className="h-px flex-1 bg-border" />
+            <span className="h-px flex-1 bg-border-subtle" />
           </div>
         }
       />

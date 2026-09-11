@@ -194,7 +194,7 @@ export default function ShellMobile() {
          `overflow-hidden` + `overscroll-none`: quem rola é a lista de dentro. Sem
          isto o "puxar para atualizar" do Chrome dispara ao rolar a conversa
          para cima. */
-      className="flex h-[100dvh] w-full flex-col overflow-hidden overscroll-none bg-chat pt-[env(safe-area-inset-top)]"
+      className="flex h-[100dvh] w-full flex-col overflow-hidden overscroll-none bg-background-base-lower pt-[env(safe-area-inset-top)]"
       data-shell-mobile
       onPointerDownCapture={() => {
         jaInteragiu.current = true;

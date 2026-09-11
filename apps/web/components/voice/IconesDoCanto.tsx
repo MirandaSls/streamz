@@ -40,7 +40,7 @@ export default function IconesDoCanto({
           onClick={onTelaCheia}
           aria-label={telaCheia ? "Sair da tela cheia" : "Tela cheia"}
           aria-pressed={telaCheia}
-          className="grid h-9 w-9 place-items-center rounded-[4px] text-txt-secondary transition hover:bg-white/10 hover:text-txt-primary"
+          className="grid h-9 w-9 place-items-center rounded-[4px] text-text-subtle transition hover:bg-white/10 hover:text-text-strong"
         >
           {telaCheia ? <Minimize size={22} /> : <Maximize size={22} />}
         </button>

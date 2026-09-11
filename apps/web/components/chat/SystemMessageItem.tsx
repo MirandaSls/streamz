@@ -34,14 +34,14 @@ import { registrarUsoDeReacao } from "@/components/chat/reacoes-rapidas";
  * `ArrowRight` genérico que ficava aqui não existe em lugar nenhum do Discord.
  */
 const ICONE: Partial<Record<MessageType, React.ReactNode>> = {
-  SYSTEM_PIN: <Pin size={18} className="text-txt-muted" />,
-  SYSTEM_JOIN: <ArrowRight size={18} className="text-green" />,
-  SYSTEM_MOD_NOTICE: <ShieldAlert size={18} className="text-red" />,
-  SYSTEM_MEMBER_ADDED: <ArrowRight size={18} className="text-green" />,
-  SYSTEM_MEMBER_REMOVED: <ArrowLeft size={18} className="text-red" />,
-  SYSTEM_MEMBER_LEFT: <ArrowLeft size={18} className="text-red" />,
-  SYSTEM_GROUP_RENAMED: <Pencil size={18} className="text-txt-muted" />,
-  SYSTEM_GROUP_ICON: <ImagePlus size={18} className="text-txt-muted" />,
+  SYSTEM_PIN: <Pin size={18} className="text-text-muted" />,
+  SYSTEM_JOIN: <ArrowRight size={18} className="text-status-positive" />,
+  SYSTEM_MOD_NOTICE: <ShieldAlert size={18} className="text-status-danger" />,
+  SYSTEM_MEMBER_ADDED: <ArrowRight size={18} className="text-status-positive" />,
+  SYSTEM_MEMBER_REMOVED: <ArrowLeft size={18} className="text-status-danger" />,
+  SYSTEM_MEMBER_LEFT: <ArrowLeft size={18} className="text-status-danger" />,
+  SYSTEM_GROUP_RENAMED: <Pencil size={18} className="text-text-muted" />,
+  SYSTEM_GROUP_ICON: <ImagePlus size={18} className="text-text-muted" />,
 };
 
 /**
@@ -87,7 +87,7 @@ export default function SystemMessageItem({
       id={`mensagem-${message.id}`}
       onContextMenu={onMenu}
       style={grouped ? undefined : { marginTop: "var(--espaco-entre-grupos, 17px)" }}
-      className="group relative py-0.5 pl-[80px] pr-12 text-sm text-txt-muted hover:bg-msghov"
+      className="group relative py-0.5 pl-[80px] pr-12 text-sm text-text-muted hover:bg-message-background-hover"
     >
       {/* o ícone fica no centro da calha do avatar (x≈46), não colado no texto */}
       <span aria-hidden="true" className="absolute left-[37px] top-1">
@@ -101,7 +101,7 @@ export default function SystemMessageItem({
             <button
               type="button"
               onClick={abrirPerfil}
-              className="font-medium text-txt-primary hover:underline"
+              className="font-medium text-text-strong hover:underline"
             >
               {nome}
             </button>
@@ -120,7 +120,7 @@ export default function SystemMessageItem({
                     messageId: message.replyTo!.id,
                   })
                 }
-                className="text-txt-link hover:underline"
+                className="text-text-link hover:underline"
               >
                 Ver mensagem
               </button>
@@ -130,7 +130,7 @@ export default function SystemMessageItem({
         {/* mesmo cinza do resto da frase: dois níveis de cinza na mesma linha
             faziam a hora parecer outro tipo de informação */}
         <span
-          className={`shrink-0 text-xs text-txt-muted ${grouped ? "opacity-0 group-hover:opacity-100" : ""}`}
+          className={`shrink-0 text-xs text-text-muted ${grouped ? "opacity-0 group-hover:opacity-100" : ""}`}
         >
           {horaCompleta(message.createdAt)}
         </span>
@@ -149,8 +149,8 @@ export default function SystemMessageItem({
                 onClick={() => reagir(r.emoji)}
                 className={`flex h-6 items-center gap-1.5 rounded-lg border px-1.5 transition ${
                   mine
-                    ? "border-accent bg-accent/20 text-txt-primary"
-                    : "border-transparent bg-panel text-txt-normal hover:border-border-strong"
+                    ? "border-brand-500 bg-brand-500/20 text-text-strong"
+                    : "border-transparent bg-background-base-lowest text-text-default hover:border-border-normal"
                 }`}
               >
                 {custom ? (
@@ -171,14 +171,14 @@ export default function SystemMessageItem({
       )}
 
       {(onToggleReaction || onMenu) && (
-        <div className="absolute -top-4 right-4 hidden rounded border border-black/20 bg-chat p-0.5 shadow-high group-focus-within:flex group-hover:flex">
+        <div className="absolute -top-4 right-4 hidden rounded border border-black/20 bg-background-base-lower p-0.5 shadow-popout group-focus-within:flex group-hover:flex">
           {onToggleReaction && (
             <Tooltip label="Adicionar reação">
               <button
                 type="button"
                 onClick={(e) => setAncora(anchorOf(e.currentTarget))}
                 aria-label="Adicionar reação"
-                className="grid h-8 w-8 place-items-center rounded-[3px] text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
+                className="grid h-8 w-8 place-items-center rounded-[3px] text-text-subtle transition hover:bg-interactive-background-hover hover:text-text-strong"
               >
                 <SmilePlus size={20} />
               </button>
@@ -190,7 +190,7 @@ export default function SystemMessageItem({
                 type="button"
                 onClick={onMenu}
                 aria-label="Mais"
-                className="grid h-8 w-8 place-items-center rounded-[3px] text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
+                className="grid h-8 w-8 place-items-center rounded-[3px] text-text-subtle transition hover:bg-interactive-background-hover hover:text-text-strong"
               >
                 <MoreHorizontal size={20} />
               </button>

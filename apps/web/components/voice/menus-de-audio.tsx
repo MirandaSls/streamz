@@ -201,7 +201,7 @@ function Submenu({
         transformOrigin: pos?.origem ?? "left top",
         visibility: pos ? "visible" : "hidden",
       }}
-      className="anim-menu fixed z-[95] rounded-lg bg-overlay p-1.5 shadow-high"
+      className="anim-menu fixed z-[95] rounded-lg bg-background-surface-higher p-1.5 shadow-popout"
     >
       {children}
     </div>,
@@ -256,14 +256,14 @@ function LinhaComSubmenu({
           ctrl.abrir(chave, e.currentTarget);
         }}
         className={`flex w-full items-center gap-2 rounded-[3px] px-2 py-2 text-left transition ${
-          aberto ? "bg-hov" : "hover:bg-hov"
+          aberto ? "bg-interactive-background-hover" : "hover:bg-interactive-background-hover"
         }`}
       >
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold text-txt-primary">{titulo}</span>
-          <span className="block truncate text-xs text-txt-muted">{valor}</span>
+          <span className="block text-sm font-semibold text-text-strong">{titulo}</span>
+          <span className="block truncate text-xs text-text-muted">{valor}</span>
         </span>
-        <ChevronRight size={16} className="shrink-0 text-txt-muted" aria-hidden="true" />
+        <ChevronRight size={16} className="shrink-0 text-text-muted" aria-hidden="true" />
       </button>
       {aberto && ctrl.ancora && (
         <Submenu
@@ -300,7 +300,7 @@ function Escolha({
       aria-checked={marcada}
       onClick={onSelect}
       className={`flex w-full items-center gap-2 rounded-[3px] px-2 py-2 text-left text-sm transition ${
-        marcada ? "bg-sel text-txt-primary" : "text-txt-normal hover:bg-hov"
+        marcada ? "bg-interactive-background-selected text-text-strong" : "text-text-default hover:bg-interactive-background-hover"
       }`}
     >
       <span aria-hidden="true" className="grid h-4 w-4 shrink-0 place-items-center">
@@ -314,13 +314,13 @@ function Escolha({
 /** Recado de rodapé do submenu (sem permissão, sem `setSinkId`…). */
 function Aviso({ texto }: { texto: string | null }) {
   if (!texto) return null;
-  return <p className="px-2 pb-1 pt-2 text-xs text-txt-muted">{texto}</p>;
+  return <p className="px-2 pb-1 pt-2 text-xs text-text-muted">{texto}</p>;
 }
 
 function AtalhoDeConfiguracoes({ ctrl }: { ctrl: Submenus }) {
   return (
     <>
-      <div aria-hidden="true" className="my-1 h-px bg-border" />
+      <div aria-hidden="true" className="my-1 h-px bg-border-subtle" />
       <button
         type="button"
         role="menuitem"
@@ -328,7 +328,7 @@ function AtalhoDeConfiguracoes({ ctrl }: { ctrl: Submenus }) {
         // de "sair do item" que o `ContextMenu` já trata
         onPointerEnter={() => ctrl.agendar(null, null)}
         onClick={() => ui.openModal({ kind: "settings", tab: "voz" })}
-        className="flex w-full items-center gap-2 rounded-[3px] px-2 py-2 text-left text-sm text-txt-normal transition hover:bg-hov hover:text-txt-primary"
+        className="flex w-full items-center gap-2 rounded-[3px] px-2 py-2 text-left text-sm text-text-default transition hover:bg-interactive-background-hover hover:text-text-strong"
       >
         <Settings size={16} className="shrink-0" aria-hidden="true" />
         Configurações de voz

@@ -93,7 +93,7 @@ export default function TooltipReacao({
               left: pos?.left ?? 0,
               visibility: pos ? "visible" : "hidden",
             }}
-            className="pointer-events-none fixed z-[100] w-[220px] rounded-lg bg-void p-3 text-center shadow-high anim-menu"
+            className="pointer-events-none fixed z-[100] w-[220px] rounded-lg bg-input-background-default p-3 text-center shadow-popout anim-menu"
           >
             <span className="mx-auto block h-12 w-12">
               {custom ? (
@@ -110,23 +110,23 @@ export default function TooltipReacao({
             <span className="mt-2 flex items-center justify-center -space-x-1.5">
               {visiveis.map((u, i) =>
                 u ? (
-                  <Avatar key={u.id} user={u} size="sm" className="ring-2 ring-void" />
+                  <Avatar key={u.id} user={u} size="sm" className="ring-2 ring-input-background-default" />
                 ) : (
                   <span
                     key={`x${i}`}
-                    className="grid h-6 w-6 place-items-center rounded-full bg-panel text-[10px] text-txt-muted ring-2 ring-void"
+                    className="grid h-6 w-6 place-items-center rounded-full bg-background-base-lowest text-[10px] text-text-muted ring-2 ring-input-background-default"
                   >
                     ?
                   </span>
                 ),
               )}
               {sobra > 0 && (
-                <span className="grid h-6 w-6 place-items-center rounded-full bg-panel text-[10px] font-semibold text-txt-muted ring-2 ring-void">
+                <span className="grid h-6 w-6 place-items-center rounded-full bg-background-base-lowest text-[10px] font-semibold text-text-muted ring-2 ring-input-background-default">
                   +{sobra}
                 </span>
               )}
             </span>
-            <span className="mt-2 block text-sm font-semibold text-txt-primary">
+            <span className="mt-2 block text-sm font-semibold text-text-strong">
               {frase(pessoas)}
             </span>
           </div>,

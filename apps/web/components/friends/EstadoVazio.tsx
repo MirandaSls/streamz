@@ -27,7 +27,7 @@ export function Ilustracao({
     <svg
       viewBox="0 0 240 160"
       aria-hidden="true"
-      className={`text-txt-faint ${className}`}
+      className={`text-channels-default ${className}`}
       fill="none"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -46,7 +46,7 @@ export function Ilustracao({
       <path d={BALAO} stroke="currentColor" strokeOpacity="0.65" strokeWidth="6" />
 
       {arte === "amigos" && (
-        <g className="text-accent" stroke="currentColor" strokeWidth="7">
+        <g className="text-brand-500" stroke="currentColor" strokeWidth="7">
           <path d="M96 72 H136" />
           <path d="M116 52 V92" />
         </g>
@@ -54,7 +54,7 @@ export function Ilustracao({
 
       {arte === "online" && (
         <>
-          <circle cx="76" cy="72" r="11" className="text-accent" fill="currentColor" />
+          <circle cx="76" cy="72" r="11" className="text-brand-500" fill="currentColor" />
           <g stroke="currentColor" strokeOpacity="0.45" strokeWidth="7">
             <path d="M104 62 H176" />
             <path d="M104 84 H148" />
@@ -64,7 +64,7 @@ export function Ilustracao({
 
       {arte === "pendentes" && (
         <g fill="currentColor">
-          <circle cx="82" cy="72" r="9" className="text-accent" />
+          <circle cx="82" cy="72" r="9" className="text-brand-500" />
           <circle cx="112" cy="72" r="9" fillOpacity="0.45" />
           <circle cx="142" cy="72" r="9" fillOpacity="0.25" />
         </g>
@@ -78,7 +78,7 @@ export function Ilustracao({
       )}
 
       {arte === "busca" && (
-        <g className="text-accent" stroke="currentColor" strokeWidth="7">
+        <g className="text-brand-500" stroke="currentColor" strokeWidth="7">
           <circle cx="112" cy="66" r="26" />
           <path d="M131 85 L152 106" />
         </g>
@@ -103,8 +103,8 @@ export default function EstadoVazio({
   return (
     <div className="mt-10 grid place-items-center px-8 text-center">
       <Ilustracao arte={arte} className="w-[220px] max-w-full" />
-      <h3 className="mt-6 text-lg font-semibold text-txt-primary">{titulo}</h3>
-      <p className="mt-1 max-w-md text-sm text-txt-muted">{texto}</p>
+      <h3 className="mt-6 text-lg font-semibold text-text-strong">{titulo}</h3>
+      <p className="mt-1 max-w-md text-sm text-text-muted">{texto}</p>
       {children && <div className="mt-4">{children}</div>}
     </div>
   );

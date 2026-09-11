@@ -47,10 +47,10 @@ export default function HeaderIcon({
       aria-pressed={active || undefined}
       className={`grid h-6 w-6 place-items-center transition ${
         disabled
-          ? "cursor-not-allowed text-txt-secondary opacity-50"
+          ? "cursor-not-allowed text-text-subtle opacity-50"
           : active
-            ? "text-txt-primary"
-            : "text-txt-secondary hover:text-txt-primary"
+            ? "text-text-strong"
+            : "text-text-subtle hover:text-text-strong"
       }`}
     >
       {children}

@@ -52,15 +52,15 @@ export default function DiretorioDeApps({ semCabecalho = false }: { semCabecalho
   }, [carregar]);
 
   return (
-    <main className="flex min-w-0 flex-1 flex-col bg-chat">
+    <main className="flex min-w-0 flex-1 flex-col bg-background-base-lower">
       {selecionado ? (
         <PaginaDeApp app={selecionado} />
       ) : (
         <>
           {!semCabecalho && (
-            <header className="flex h-[49px] shrink-0 items-center gap-2 border-b border-border px-4 shadow-header">
-              <Apps size={20} aria-hidden="true" className="shrink-0 text-txt-muted" />
-              <h1 className="text-base font-semibold text-txt-primary">
+            <header className="flex h-[49px] shrink-0 items-center gap-2 border-b border-border-subtle px-4 shadow-elevation-low">
+              <Apps size={20} aria-hidden="true" className="shrink-0 text-text-muted" />
+              <h1 className="text-base font-semibold text-text-strong">
                 Descobrir aplicativos
               </h1>
             </header>
@@ -71,7 +71,7 @@ export default function DiretorioDeApps({ semCabecalho = false }: { semCabecalho
               <CampoDeBusca valor={busca} aoMudar={definirBusca} />
 
               {itens.length === 0 ? (
-                <p className="py-10 text-center text-sm text-txt-muted">
+                <p className="py-10 text-center text-sm text-text-muted">
                   {carregando || !carregado
                     ? "Carregando aplicativos…"
                     : busca.trim()
@@ -103,7 +103,7 @@ export default function DiretorioDeApps({ semCabecalho = false }: { semCabecalho
                     type="button"
                     onClick={() => void carregarMais()}
                     disabled={carregando}
-                    className="h-[40px] rounded-[8px] bg-panel px-4 text-sm font-medium text-txt-normal transition-colors hover:bg-hov disabled:opacity-60"
+                    className="h-[40px] rounded-[8px] bg-background-base-lowest px-4 text-sm font-medium text-text-default transition-colors hover:bg-interactive-background-hover disabled:opacity-60"
                   >
                     {carregando ? "Carregando…" : "Ver mais"}
                   </button>
@@ -188,7 +188,7 @@ function CampoDeBusca({ valor, aoMudar }: { valor: string; aoMudar: (v: string) 
       <Search
         size={18}
         aria-hidden="true"
-        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-txt-muted"
+        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
       />
       <input
         value={valor}
@@ -196,7 +196,7 @@ function CampoDeBusca({ valor, aoMudar }: { valor: string; aoMudar: (v: string) 
         type="search"
         placeholder="Buscar aplicativos"
         aria-label="Buscar aplicativos"
-        className="h-[40px] w-full rounded-[8px] bg-void pl-9 pr-3 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
+        className="h-[40px] w-full rounded-[8px] bg-input-background-default pl-9 pr-3 text-sm text-text-default outline-none placeholder:text-text-muted"
       />
     </div>
   );

@@ -130,7 +130,7 @@ export default function DMView({
 
   if (!active) {
     return (
-      <main className="grid min-w-0 flex-1 place-items-center bg-chat text-txt-muted">
+      <main className="grid min-w-0 flex-1 place-items-center bg-background-base-lower text-text-muted">
         Selecione uma conversa
       </main>
     );
@@ -190,7 +190,7 @@ export default function DMView({
                 description: (
                   <>
                     Este é o começo do seu histórico de mensagens diretas com{" "}
-                    <strong className="font-semibold text-txt-primary">{title}</strong>.
+                    <strong className="font-semibold text-text-strong">{title}</strong>.
                   </>
                 ),
                 // descrição → topo dos botões: 25px medidos (8 de margem + a folga
@@ -200,14 +200,14 @@ export default function DMView({
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     {servidoresEmComum !== null && (
                       <>
-                        <span className="text-sm text-txt-muted">
+                        <span className="text-sm text-text-muted">
                           {servidoresEmComum === 0
                             ? "Nenhum servidor em comum"
                             : servidoresEmComum === 1
                               ? "1 servidor em comum"
                               : `${servidoresEmComum} servidores em comum`}
                         </span>
-                        <span aria-hidden="true" className="mx-1 h-1 w-1 rounded-full bg-txt-muted" />
+                        <span aria-hidden="true" className="mx-1 h-1 w-1 rounded-full bg-text-muted" />
                       </>
                     )}
                     {relacao === "friend" && (
@@ -269,12 +269,12 @@ export default function DMView({
     // `min-h-0` só sem cabeçalho (celular): ali este `main` é filho de uma
     // coluna que já mede a tela, e sem ele a timeline empurraria o composer
     // para fora. No desktop a classe fica exatamente como era.
-    <main className={`flex min-w-0 flex-1 flex-col bg-chat ${semCabecalho ? "min-h-0" : ""}`}>
+    <main className={`flex min-w-0 flex-1 flex-col bg-background-base-lower ${semCabecalho ? "min-h-0" : ""}`}>
       {!semCabecalho && (
       <HeaderBar
         icon={
           other ? (
-            <Avatar user={other} size="sm" status={resolveStatus(statuses, other)} surface="border-chat" />
+            <Avatar user={other} size="sm" status={resolveStatus(statuses, other)} surface="border-background-base-lower" />
           ) : (
             <GroupAvatar iconUrl={active.iconUrl} size="sm" />
           )

@@ -53,7 +53,7 @@ function Spoiler({ children }: { children: ReactNode }) {
       tabIndex={0}
       role="button"
       aria-label="Spoiler — clique para revelar"
-      className="group/sp rounded bg-rail px-0.5 text-transparent focus:text-txt-normal [&.open]:text-txt-normal"
+      className="group/sp rounded bg-spoiler-hidden-background px-0.5 text-transparent focus:text-text-default [&.open]:text-text-default"
       onClick={(e) => e.currentTarget.classList.add("open")}
       onKeyDown={(e) => e.key === "Enter" && e.currentTarget.classList.add("open")}
     >
@@ -77,7 +77,7 @@ export function renderInline(nodes: Inline[], opts: RenderOptions = {}): ReactNo
         return <s key={i}>{renderInline(n.c, opts)}</s>;
       case "code":
         return (
-          <code key={i} className="rounded-[3px] bg-rail px-1 py-0.5 font-mono text-[0.85em]">
+          <code key={i} className="rounded-[3px] bg-background-code px-1 py-0.5 font-mono text-[0.85em]">
             {n.v}
           </code>
         );
@@ -85,7 +85,7 @@ export function renderInline(nodes: Inline[], opts: RenderOptions = {}): ReactNo
         return <Spoiler key={i}>{renderInline(n.c, opts)}</Spoiler>;
       case "link":
         return (
-          <a key={i} href={n.href} target="_blank" rel="noreferrer" className="text-txt-link hover:underline">
+          <a key={i} href={n.href} target="_blank" rel="noreferrer" className="text-text-link hover:underline">
             {n.href}
           </a>
         );
@@ -101,7 +101,7 @@ export function renderInline(nodes: Inline[], opts: RenderOptions = {}): ReactNo
             key={i}
             style={role?.color ? { color: role.color } : undefined}
             className={`rounded-[3px] px-0.5 font-medium ${
-              meu ? "bg-yellow/30 text-txt-primary" : "bg-accent/25 text-mention"
+              meu ? "bg-status-warning/30 text-text-strong" : "bg-brand-500/25 text-mention-foreground"
             }`}
           >
             @{role?.name ?? "cargo"}
@@ -115,7 +115,7 @@ export function renderInline(nodes: Inline[], opts: RenderOptions = {}): ReactNo
           <span
             key={i}
             className={`rounded-[3px] px-0.5 font-medium ${
-              me ? "bg-yellow/30 text-txt-primary" : "bg-accent/25 text-mention hover:bg-accent hover:text-accent-ink"
+              me ? "bg-status-warning/30 text-text-strong" : "bg-brand-500/25 text-mention-foreground hover:bg-brand-500 hover:text-control-primary-text-default"
             }`}
           >
             @{nome}
@@ -145,7 +145,7 @@ export function Markdown({ text, ...opts }: { text: string } & RenderOptions) {
             return b.c.length === 0 ? <br key={i} /> : <div key={i}>{renderInline(b.c, render)}</div>;
           case "quote":
             return (
-              <div key={i} className="my-0.5 border-l-4 border-border-strong pl-3">
+              <div key={i} className="my-0.5 border-l-4 border-border-normal pl-3">
                 {renderInline(b.c, render)}
               </div>
             );
@@ -159,7 +159,7 @@ export function Markdown({ text, ...opts }: { text: string } & RenderOptions) {
             return (
               <pre
                 key={i}
-                className="my-1 max-w-[90%] overflow-x-auto rounded border border-rail bg-panel p-2 font-mono text-[0.875em] text-txt-normal"
+                className="my-1 max-w-[90%] overflow-x-auto rounded border border-border-subtle bg-background-code p-2 font-mono text-[0.875em] text-text-default"
               >
                 {b.v}
               </pre>

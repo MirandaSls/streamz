@@ -285,15 +285,15 @@ export default function QuickSwitcher() {
         aria-label={t("quick.placeholder")}
         aria-controls="quick-switcher-resultados"
         placeholder={t("quick.placeholder")}
-        className="h-14 w-full bg-transparent px-4 text-xl text-txt-primary outline-none placeholder:text-txt-muted"
+        className="h-14 w-full bg-transparent px-4 text-xl text-text-strong outline-none placeholder:text-text-muted"
       />
 
       {/* as pílulas de prefixo saem de cena assim que se digita, como no Discord */}
       {vazia && (
-        <ul className="flex flex-wrap gap-x-4 gap-y-1 px-4 pb-3 text-xs text-txt-muted">
+        <ul className="flex flex-wrap gap-x-4 gap-y-1 px-4 pb-3 text-xs text-text-muted">
           {PREFIXOS.map(([prefixo, o]) => (
             <li key={prefixo} className="flex items-center gap-1.5">
-              <kbd className="rounded bg-void px-1.5 py-0.5 font-mono text-[11px] font-semibold text-txt-normal">
+              <kbd className="rounded bg-input-background-default px-1.5 py-0.5 font-mono text-[11px] font-semibold text-text-default">
                 {prefixo}
               </kbd>
               {o}
@@ -303,7 +303,7 @@ export default function QuickSwitcher() {
       )}
 
       {vazia && resultados.length > 0 && (
-        <p className="px-4 pb-1 text-xs font-semibold uppercase text-txt-muted">
+        <p className="px-4 pb-1 text-xs font-semibold uppercase text-text-muted">
           {t("quick.recentes")}
         </p>
       )}
@@ -317,7 +317,7 @@ export default function QuickSwitcher() {
         className="max-h-[400px] overflow-y-auto px-2 pb-2"
       >
         {resultados.length === 0 && (
-          <li className="py-6 text-center text-sm text-txt-muted">{t("quick.vazio")}</li>
+          <li className="py-6 text-center text-sm text-text-muted">{t("quick.vazio")}</li>
         )}
         {resultados.map((item, indice) => {
           const selecionado = indice === cursor;
@@ -331,7 +331,7 @@ export default function QuickSwitcher() {
                 onMouseEnter={() => !tecladoNoComando && setCursor(indice)}
                 onClick={() => escolher(item)}
                 className={`flex h-10 w-full items-center gap-2 rounded-[4px] px-2 text-left ${
-                  selecionado ? "bg-accent text-accent-ink" : "text-txt-normal"
+                  selecionado ? "bg-brand-500 text-control-primary-text-default" : "text-text-default"
                 }`}
               >
                 <ItemIcon detalhe={detalhe} statuses={statuses} selecionado={selecionado} />
@@ -339,7 +339,7 @@ export default function QuickSwitcher() {
                 {item.hint && (
                   <span
                     className={`shrink-0 truncate text-xs ${
-                      selecionado ? "text-accent-ink/70" : "text-txt-muted"
+                      selecionado ? "text-control-primary-text-default/70" : "text-text-muted"
                     }`}
                   >
                     {item.hint}
@@ -351,8 +351,8 @@ export default function QuickSwitcher() {
         })}
       </ul>
 
-      <p className="border-t border-border px-4 py-2 text-xs text-txt-muted">
-        <span className="font-semibold uppercase text-txt-secondary">Protip:</span> ↑ ↓ para
+      <p className="border-t border-border-subtle px-4 py-2 text-xs text-text-muted">
+        <span className="font-semibold uppercase text-text-subtle">Protip:</span> ↑ ↓ para
         navegar · ↵ para abrir · Esc para fechar
       </p>
     </Dialog>
@@ -369,7 +369,7 @@ function ItemIcon({
   statuses: Record<string, UserStatus>;
   selecionado: boolean;
 }) {
-  const cls = `shrink-0 ${selecionado ? "text-accent-ink" : "text-txt-muted"}`;
+  const cls = `shrink-0 ${selecionado ? "text-control-primary-text-default" : "text-text-muted"}`;
   if (!detalhe) return <Hash size={20} className={cls} aria-hidden="true" />;
 
   if (detalhe.kind === "guild") {
@@ -380,7 +380,7 @@ function ItemIcon({
     ) : name ? (
       <span
         aria-hidden="true"
-        className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-void text-[10px] font-semibold text-txt-normal"
+        className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-input-background-default text-[10px] font-semibold text-text-default"
       >
         {name.slice(0, 2).toUpperCase()}
       </span>
@@ -406,7 +406,7 @@ function ItemIcon({
           user={detalhe.user}
           size="sm"
           status={resolveStatus(statuses, detalhe.user)}
-          surface="border-chat"
+          surface="border-background-base-lower"
         />
       );
     }

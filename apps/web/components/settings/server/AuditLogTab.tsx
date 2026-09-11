@@ -29,7 +29,7 @@ import { ui } from "@/stores/ui";
 
 /** Ícone por família de ação — o registro é lido de relance, não palavra a palavra. */
 function ActionIcon({ action }: { action: AuditAction }) {
-  const cls = "shrink-0 text-txt-muted";
+  const cls = "shrink-0 text-text-muted";
   if (action === "MEMBER_BAN" || action === "MEMBER_UNBAN") return <Gavel size={18} className={cls} aria-hidden="true" />;
   if (action === "MEMBER_KICK") return <UserX size={18} className={cls} aria-hidden="true" />;
   if (action.startsWith("MEMBER_TIMEOUT")) return <Timer size={18} className={cls} aria-hidden="true" />;
@@ -52,31 +52,31 @@ function valor(v: unknown): string {
 function Entry({ entry }: { entry: AuditLogEntry }) {
   const ator = entry.actor ? displayNameOf(entry.actor) : "Conta removida";
   return (
-    <div role="listitem" className="flex gap-3 border-b border-border px-3 py-3 last:border-b-0">
+    <div role="listitem" className="flex gap-3 border-b border-border-subtle px-3 py-3 last:border-b-0">
       {entry.actor ? (
-        <Avatar user={entry.actor} size="md" surface="border-chat" />
+        <Avatar user={entry.actor} size="md" surface="border-background-base-lower" />
       ) : (
-        <span aria-hidden="true" className="h-8 w-8 shrink-0 rounded-full bg-void" />
+        <span aria-hidden="true" className="h-8 w-8 shrink-0 rounded-full bg-input-background-default" />
       )}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
           <ActionIcon action={entry.action} />
-          <span className="font-medium text-txt-primary">{ator}</span>
-          <span className="text-txt-normal">{AUDIT_ACTION_LABELS[entry.action].toLowerCase()}</span>
-          {entry.targetName && <span className="font-medium text-txt-primary">{entry.targetName}</span>}
+          <span className="font-medium text-text-strong">{ator}</span>
+          <span className="text-text-default">{AUDIT_ACTION_LABELS[entry.action].toLowerCase()}</span>
+          {entry.targetName && <span className="font-medium text-text-strong">{entry.targetName}</span>}
         </div>
         {entry.changes.length > 0 && (
           <ul className="mt-1 flex flex-col gap-0.5">
             {entry.changes.map((c, i) => (
-              <li key={`${c.field}-${i}`} className="text-xs text-txt-muted">
+              <li key={`${c.field}-${i}`} className="text-xs text-text-muted">
                 {c.field}: {valor(c.before)} → {valor(c.after)}
               </li>
             ))}
           </ul>
         )}
-        {entry.reason && <p className="mt-1 text-xs text-txt-muted">Motivo: {entry.reason}</p>}
+        {entry.reason && <p className="mt-1 text-xs text-text-muted">Motivo: {entry.reason}</p>}
       </div>
-      <time className="shrink-0 text-xs text-txt-muted" dateTime={entry.createdAt}>
+      <time className="shrink-0 text-xs text-text-muted" dateTime={entry.createdAt}>
         {horaCompleta(entry.createdAt)}
       </time>
     </div>
@@ -137,7 +137,7 @@ export default function AuditLogTab({ guildId }: { guildId: string }) {
           id="audit-user"
           value={userId}
           onChange={(e) => setUserId(e.target.value)}
-          className="h-9 rounded-[3px] bg-void px-2 text-sm text-txt-normal outline-none celular:h-[44px] celular:text-[max(16px,1em)]"
+          className="h-9 rounded-[3px] bg-input-background-default px-2 text-sm text-text-default outline-none celular:h-[44px] celular:text-[max(16px,1em)]"
         >
           <option value="">Todos os membros</option>
           {members.map((m) => (
@@ -154,7 +154,7 @@ export default function AuditLogTab({ guildId }: { guildId: string }) {
           id="audit-action"
           value={action}
           onChange={(e) => setAction(e.target.value as AuditAction | "")}
-          className="h-9 rounded-[3px] bg-void px-2 text-sm text-txt-normal outline-none celular:h-[44px] celular:text-[max(16px,1em)]"
+          className="h-9 rounded-[3px] bg-input-background-default px-2 text-sm text-text-default outline-none celular:h-[44px] celular:text-[max(16px,1em)]"
         >
           <option value="">Todas as ações</option>
           {AUDIT_ACTIONS.map((a) => (
@@ -165,16 +165,16 @@ export default function AuditLogTab({ guildId }: { guildId: string }) {
         </select>
       </div>
 
-      <div role="list" className="min-h-0 flex-1 overflow-y-auto rounded bg-void/40">
+      <div role="list" className="min-h-0 flex-1 overflow-y-auto rounded bg-input-background-default/40">
         {entries.length === 0 && !loading && (
-          <p className="px-3 py-4 text-sm text-txt-muted">
+          <p className="px-3 py-4 text-sm text-text-muted">
             Nada registrado ainda. Ações de moderação aparecem aqui automaticamente.
           </p>
         )}
         {entries.map((e) => (
           <Entry key={e.id} entry={e} />
         ))}
-        {loading && <p className="px-3 py-3 text-sm text-txt-muted">Carregando…</p>}
+        {loading && <p className="px-3 py-3 text-sm text-text-muted">Carregando…</p>}
       </div>
 
       {cursor && (
@@ -182,7 +182,7 @@ export default function AuditLogTab({ guildId }: { guildId: string }) {
           type="button"
           disabled={loading}
           onClick={() => void load(true)}
-          className="mt-3 h-9 celular:h-[44px] shrink-0 rounded-[3px] bg-void text-sm font-medium text-txt-normal transition hover:bg-hov disabled:opacity-50"
+          className="mt-3 h-9 celular:h-[44px] shrink-0 rounded-[3px] bg-input-background-default text-sm font-medium text-text-default transition hover:bg-interactive-background-hover disabled:opacity-50"
         >
           Carregar mais
         </button>

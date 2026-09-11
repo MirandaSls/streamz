@@ -86,14 +86,14 @@ export default function CreatePollModal({ channelId }: { channelId: string }) {
       }
     >
       <Rotulo htmlFor="poll-question">Pergunta</Rotulo>
-      <div className="relative flex h-10 items-center gap-1 rounded-[3px] bg-void px-1.5">
+      <div className="relative flex h-10 items-center gap-1 rounded-[3px] bg-input-background-default px-1.5">
         <input
           id="poll-question"
           value={question}
           maxLength={MAX_POLL_QUESTION}
           onChange={(e) => setQuestion(e.target.value)}
           placeholder="Ex.: Qual dia fica melhor?"
-          className="min-w-0 flex-1 bg-transparent px-1 text-txt-normal outline-none placeholder:text-txt-muted"
+          className="min-w-0 flex-1 bg-transparent px-1 text-text-default outline-none placeholder:text-text-muted"
           autoFocus
         />
         <BotaoEmoji
@@ -110,12 +110,12 @@ export default function CreatePollModal({ channelId }: { channelId: string }) {
         )}
       </div>
 
-      <p className="mb-2 mt-5 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+      <p className="mb-2 mt-5 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
         Respostas
       </p>
       <div className="flex flex-col gap-2">
         {options.map((o, i) => (
-          <div key={i} className="relative flex h-10 items-center gap-1 rounded-[3px] bg-void px-1.5">
+          <div key={i} className="relative flex h-10 items-center gap-1 rounded-[3px] bg-input-background-default px-1.5">
             <BotaoEmoji
               aberto={escolhendo === i}
               emoji={emojis[i]}
@@ -128,7 +128,7 @@ export default function CreatePollModal({ channelId }: { channelId: string }) {
               onChange={(e) => setOption(i, e.target.value)}
               aria-label={`Resposta ${i + 1}`}
               placeholder={`Resposta ${i + 1}`}
-              className="min-w-0 flex-1 bg-transparent text-txt-normal outline-none placeholder:text-txt-muted"
+              className="min-w-0 flex-1 bg-transparent text-text-default outline-none placeholder:text-text-muted"
             />
             {options.length > MIN_POLL_OPTIONS && (
               <Tooltip label="Remover resposta">
@@ -139,7 +139,7 @@ export default function CreatePollModal({ channelId }: { channelId: string }) {
                     setEmojis((prev) => prev.filter((_, j) => j !== i));
                   }}
                   aria-label={`Remover resposta ${i + 1}`}
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded text-txt-muted hover:text-red"
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded text-text-muted hover:text-status-danger"
                 >
                   <X size={18} />
                 </button>
@@ -162,7 +162,7 @@ export default function CreatePollModal({ channelId }: { channelId: string }) {
             setOptions((prev) => [...prev, ""]);
             setEmojis((prev) => [...prev, null]);
           }}
-          className="mt-2 flex items-center gap-1.5 text-sm font-medium text-txt-link hover:underline"
+          className="mt-2 flex items-center gap-1.5 text-sm font-medium text-text-link hover:underline"
         >
           <Plus size={16} aria-hidden="true" />
           Adicionar resposta
@@ -182,7 +182,7 @@ export default function CreatePollModal({ channelId }: { channelId: string }) {
         />
       </div>
 
-      <div className="mt-2 border-t border-border pt-1">
+      <div className="mt-2 border-t border-border-subtle pt-1">
         <ToggleLinha
           checked={multi}
           onChange={setMulti}
@@ -211,7 +211,7 @@ function BotaoEmoji({
         onClick={onToggle}
         aria-label={label}
         aria-expanded={aberto}
-        className="grid h-8 w-8 shrink-0 place-items-center rounded text-txt-secondary transition hover:text-txt-primary"
+        className="grid h-8 w-8 shrink-0 place-items-center rounded text-text-subtle transition hover:text-text-strong"
       >
         {emoji ? <span className="text-lg leading-none">{emoji}</span> : <SmilePlus size={18} />}
       </button>

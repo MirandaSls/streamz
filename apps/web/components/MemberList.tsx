@@ -49,7 +49,7 @@ function Section({ label, count, color }: { label: string; count: number; color?
   return (
     <h3
       style={color ? { color } : undefined}
-      className="mt-6 pb-1 pl-5 pr-2 text-sm font-semibold leading-5 text-txt-muted"
+      className="mt-6 pb-1 pl-5 pr-2 text-sm font-semibold leading-5 text-text-muted"
     >
       {label} — {count}
     </h3>
@@ -244,7 +244,7 @@ export default function MemberList() {
            59,9pt de passo entre linhas de membro). Os 42 do desktop nascem de
            uma coluna que se navega com o mouse; no dedo ficam abaixo do piso
            de 44 e a lista vira uma faixa de alvos colados. */
-        className={`group mx-2.5 flex h-[42px] items-center gap-3 rounded-lg px-2 hover:bg-hov celular:h-[60px] ${
+        className={`group mx-2.5 flex h-[42px] items-center gap-3 rounded-lg px-2 hover:bg-interactive-background-hover celular:h-[60px] ${
           offline ? "opacity-30 hover:opacity-100" : ""
         }`}
       >
@@ -261,7 +261,7 @@ export default function MemberList() {
               user={m.user}
               size="md"
               status={status}
-              surface="border-panel"
+              surface="border-background-base-lowest"
               className={`transition-transform ${falando.has(m.user.id) ? ENCOLHE_AO_FALAR : ""}`}
             />
             {falando.has(m.user.id) && <AnelDeFala />}
@@ -274,7 +274,7 @@ export default function MemberList() {
               <span
                 style={cor ? { color: cor } : undefined}
                 className={`truncate font-medium ${
-                  destaque ? "text-txt-primary" : "text-txt-muted group-hover:text-txt-normal"
+                  destaque ? "text-text-strong" : "text-text-muted group-hover:text-text-default"
                 }`}
               >
                 {nome}
@@ -284,24 +284,24 @@ export default function MemberList() {
               {m.user.bot && <TagDeBot />}
               {m.role === "OWNER" && (
                 <Tooltip label="Dono do servidor">
-                  <Crown size={14} className="shrink-0 text-yellow" aria-label="Dono do servidor" />
+                  <Crown size={14} className="shrink-0 text-status-warning" aria-label="Dono do servidor" />
                 </Tooltip>
               )}
               {m.role === "ADMIN" && (
                 <Tooltip label="Administrador">
-                  <ShieldCheck size={14} className="shrink-0 text-accent" aria-label="Administrador" />
+                  <ShieldCheck size={14} className="shrink-0 text-brand-500" aria-label="Administrador" />
                 </Tooltip>
               )}
               {/* h-moderacao: relógio marca quem está de castigo agora */}
               {isTimedOut(m.timeoutUntil) && (
                 <Tooltip label="De castigo — não pode enviar mensagens">
-                  <Timer size={14} className="shrink-0 text-red" aria-label="De castigo" />
+                  <Timer size={14} className="shrink-0 text-status-danger" aria-label="De castigo" />
                 </Tooltip>
               )}
             </span>
             {emVoz.has(m.user.id) && (
-              <span className="flex items-center gap-1 text-xs leading-4 text-txt-muted">
-                <Volume2 size={12} className="shrink-0 text-green" aria-hidden="true" />
+              <span className="flex items-center gap-1 text-xs leading-4 text-text-muted">
+                <Volume2 size={12} className="shrink-0 text-status-positive" aria-hidden="true" />
                 Em voz
               </span>
             )}
@@ -322,7 +322,7 @@ export default function MemberList() {
                 type="button"
                 onClick={() => void openWith(m.user.id)}
                 aria-label={`Abrir conversa com ${nome}`}
-                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-txt-primary celular:h-[44px] celular:w-[44px]"
+                className="grid h-7 w-7 place-items-center rounded text-text-muted hover:text-text-strong celular:h-[44px] celular:w-[44px]"
               >
                 <MessageSquare size={16} />
               </button>
@@ -337,7 +337,7 @@ export default function MemberList() {
                   isTimedOut(m.timeoutUntil) ? void removeTimeout(m.user.id) : timeout(m.user.id)
                 }
                 aria-label={`${isTimedOut(m.timeoutUntil) ? "Remover castigo de" : "Colocar de castigo"} ${nome}`}
-                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red celular:hidden"
+                className="grid h-7 w-7 place-items-center rounded text-text-muted hover:text-status-danger celular:hidden"
               >
                 {isTimedOut(m.timeoutUntil) ? <TimerOff size={16} /> : <Timer size={16} />}
               </button>
@@ -349,7 +349,7 @@ export default function MemberList() {
                 type="button"
                 onClick={() => kick(m.user.id)}
                 aria-label={`Expulsar ${nome}`}
-                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red celular:hidden"
+                className="grid h-7 w-7 place-items-center rounded text-text-muted hover:text-status-danger celular:hidden"
               >
                 <UserX size={16} />
               </button>
@@ -361,7 +361,7 @@ export default function MemberList() {
                 type="button"
                 onClick={() => ban(m.user.id)}
                 aria-label={`Banir ${nome}`}
-                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red celular:hidden"
+                className="grid h-7 w-7 place-items-center rounded text-text-muted hover:text-status-danger celular:hidden"
               >
                 <Gavel size={16} />
               </button>
@@ -382,10 +382,10 @@ export default function MemberList() {
   }
 
   return (
-    <aside aria-label="Membros" className="flex w-[267px] shrink-0 flex-col bg-panel">
+    <aside aria-label="Membros" className="flex w-[267px] shrink-0 flex-col bg-background-base-lowest">
       <div role="list" className="flex-1 overflow-y-auto pb-4">
         {members.length === 0 && (
-          <p className="px-4 py-3 text-sm text-txt-muted">Nenhum membro por aqui.</p>
+          <p className="px-4 py-3 text-sm text-text-muted">Nenhum membro por aqui.</p>
         )}
         {secoes.map((s) => renderSecao(s.role, s.gente))}
         {restoOnline.length > 0 && <Section label="Disponível" count={restoOnline.length} />}

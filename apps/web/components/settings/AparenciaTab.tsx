@@ -86,7 +86,7 @@ export default function AparenciaTab() {
         <button
           type="button"
           onClick={() => s.reset()}
-          className="h-9 celular:h-[44px] rounded-[3px] border border-border-strong px-3 text-sm font-medium text-txt-normal transition hover:bg-hov"
+          className="h-9 celular:h-[44px] rounded-[3px] border border-border-normal px-3 text-sm font-medium text-text-default transition hover:bg-interactive-background-hover"
         >
           {t("config.restaurar")}
         </button>
@@ -149,13 +149,13 @@ function EscolhaDeTema() {
               ui.toast("O tema claro ainda está a caminho — por enquanto só o escuro.");
             }}
             className={`overflow-hidden rounded-[6px] border text-left transition ${
-              ativo ? "border-accent" : "border-border hover:border-border-strong-hover"
+              ativo ? "border-brand-500" : "border-border-subtle hover:border-border-strong"
             }`}
           >
             <MiniaturaDeTema variante={o.value} />
             <span className="flex items-center gap-2 px-2.5 py-2 celular:items-start celular:gap-1.5 celular:px-2">
               <PontoDeRadio ativo={ativo} />
-              <span className="min-w-0 truncate text-sm font-medium text-txt-primary celular:whitespace-normal">
+              <span className="min-w-0 truncate text-sm font-medium text-text-strong celular:whitespace-normal">
                 {o.label}
               </span>
             </span>

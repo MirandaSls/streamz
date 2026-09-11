@@ -47,11 +47,11 @@ export function Section({
       // `scroll-mt`: sem margem, rolar até a seção encosta o título no topo do
       // scroller e ele fica rente demais para ler como começo de bloco
       className={`scroll-mt-4 ${
-        semDivisoria ? "mb-6" : "mb-6 border-b border-border pb-6 last:mb-0 last:border-b-0 last:pb-0"
+        semDivisoria ? "mb-6" : "mb-6 border-b border-border-subtle pb-6 last:mb-0 last:border-b-0 last:pb-0"
       }`}
     >
       {title && (
-        <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+        <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
           {title}
         </h3>
       )}
@@ -78,7 +78,7 @@ export function ConfiguracoesRelacionadas({
 }) {
   return (
     <section className="mt-8">
-      <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+      <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
         {titulo}
       </h3>
       <div className="space-y-2">
@@ -87,18 +87,18 @@ export function ConfiguracoesRelacionadas({
             key={item.id}
             type="button"
             onClick={item.onSelect}
-            className="flex w-full items-center gap-3 rounded-lg bg-panel p-3 text-left transition hover:bg-hov"
+            className="flex w-full items-center gap-3 rounded-lg bg-background-base-lowest p-3 text-left transition hover:bg-interactive-background-hover"
           >
-            <span aria-hidden="true" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-void text-txt-secondary">
+            <span aria-hidden="true" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-input-background-default text-text-subtle">
               {item.icon}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-semibold text-txt-primary">
+              <span className="block truncate text-sm font-semibold text-text-strong">
                 {item.label}
               </span>
-              <span className="block truncate text-xs text-txt-muted">{item.hint}</span>
+              <span className="block truncate text-xs text-text-muted">{item.hint}</span>
             </span>
-            <ChevronRight size={18} aria-hidden="true" className="shrink-0 text-txt-muted" />
+            <ChevronRight size={18} aria-hidden="true" className="shrink-0 text-text-muted" />
           </button>
         ))}
       </div>
@@ -119,12 +119,12 @@ export function Row({
   control: ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-border py-3 last:border-b-0">
+    <div className="flex items-center justify-between gap-4 border-b border-border-subtle py-3 last:border-b-0">
       <div className="min-w-0">
-        <label htmlFor={htmlFor} className="block text-sm font-medium text-txt-primary">
+        <label htmlFor={htmlFor} className="block text-sm font-medium text-text-strong">
           {label}
         </label>
-        {hint && <p className="mt-0.5 text-xs text-txt-muted">{hint}</p>}
+        {hint && <p className="mt-0.5 text-xs text-text-muted">{hint}</p>}
       </div>
       <div className="shrink-0">{control}</div>
     </div>
@@ -146,11 +146,11 @@ export function Rotulo({
     <div className="mb-2 flex items-baseline justify-between gap-2">
       <label
         htmlFor={htmlFor}
-        className="text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary"
+        className="text-xs font-bold uppercase tracking-[0.02em] text-text-subtle"
       >
         {children}
       </label>
-      {contador && <span className="text-xs text-txt-muted">{contador}</span>}
+      {contador && <span className="text-xs text-text-muted">{contador}</span>}
     </div>
   );
 }
@@ -158,7 +158,7 @@ export function Rotulo({
 /** Aviso de "isto ainda não existe" nas abas delegadas. */
 export function EmBreve({ children }: { children: ReactNode }) {
   return (
-    <p className="rounded-[4px] border border-border bg-panel px-3 py-2 text-sm text-txt-muted">
+    <p className="rounded-[4px] border border-border-subtle bg-background-base-lowest px-3 py-2 text-sm text-text-muted">
       {children}
     </p>
   );
@@ -201,7 +201,7 @@ export function Switch({
       // o **alvo** cresce para 44 por um pseudo-elemento invisível: aumentar a
       // caixa mudaria o leiaute de toda linha de preferência
       className={`relative h-6 w-10 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 celular:before:absolute celular:before:-inset-x-1.5 celular:before:-inset-y-[10px] celular:before:content-[''] ${
-        checked ? "bg-green" : "bg-txt-faint"
+        checked ? "bg-status-positive" : "bg-channels-default"
       }`}
     >
       <span
@@ -211,9 +211,9 @@ export function Switch({
         }`}
       >
         {checked ? (
-          <Check size={11} strokeWidth={3.5} className="text-green" />
+          <Check size={11} strokeWidth={3.5} className="text-status-positive" />
         ) : (
-          <X size={11} strokeWidth={3.5} className="text-txt-faint" />
+          <X size={11} strokeWidth={3.5} className="text-channels-default" />
         )}
       </span>
     </button>
@@ -280,15 +280,15 @@ export function ToggleLinha({
     <div className="flex items-center justify-between gap-4 py-2">
       <div className="flex min-w-0 items-start gap-2">
         {icon && (
-          <span aria-hidden="true" className="mt-0.5 shrink-0 text-txt-secondary">
+          <span aria-hidden="true" className="mt-0.5 shrink-0 text-text-subtle">
             {icon}
           </span>
         )}
         <div className="min-w-0">
-          <label htmlFor={id} className="block cursor-pointer text-sm font-medium text-txt-primary">
+          <label htmlFor={id} className="block cursor-pointer text-sm font-medium text-text-strong">
             {titulo}
           </label>
-          {hint && <p className="mt-0.5 text-xs text-txt-muted">{hint}</p>}
+          {hint && <p className="mt-0.5 text-xs text-text-muted">{hint}</p>}
         </div>
       </div>
       <Switch id={id} checked={checked} onChange={onChange} />
@@ -305,10 +305,10 @@ export function PontoDeRadio({ ativo }: { ativo: boolean }) {
     <span
       aria-hidden="true"
       className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 transition ${
-        ativo ? "border-accent" : "border-txt-faint"
+        ativo ? "border-brand-500" : "border-channels-default"
       }`}
     >
-      {ativo && <span className="h-2 w-2 rounded-full bg-accent" />}
+      {ativo && <span className="h-2 w-2 rounded-full bg-brand-500" />}
     </span>
   );
 }
@@ -348,9 +348,9 @@ export function RadioCards<T extends string>({
   columns?: number;
 }) {
   return (
-    <fieldset className="border-b border-border py-3 last:border-b-0">
+    <fieldset className="border-b border-border-subtle py-3 last:border-b-0">
       <legend
-        className={legendaOculta ? "sr-only" : "mb-2 text-sm font-medium text-txt-primary"}
+        className={legendaOculta ? "sr-only" : "mb-2 text-sm font-medium text-text-strong"}
       >
         {legend}
       </legend>
@@ -371,16 +371,16 @@ export function RadioCards<T extends string>({
               disabled={opcao.disabled}
               onClick={() => onChange(opcao.value)}
               className={`overflow-hidden rounded-[6px] border text-left transition celular:min-h-[44px] ${
-                ativo ? "border-accent" : "border-border hover:border-border-strong-hover"
+                ativo ? "border-brand-500" : "border-border-subtle hover:border-border-strong"
               } ${opcao.disabled ? "cursor-not-allowed opacity-50" : ""}`}
             >
               {opcao.preview}
               <span className="flex items-start gap-2 px-3 py-2">
                 <PontoDeRadio ativo={ativo} />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium text-txt-primary">{opcao.label}</span>
+                  <span className="block text-sm font-medium text-text-strong">{opcao.label}</span>
                   {opcao.hint && (
-                    <span className="mt-0.5 block text-xs text-txt-muted">{opcao.hint}</span>
+                    <span className="mt-0.5 block text-xs text-text-muted">{opcao.hint}</span>
                   )}
                 </span>
               </span>
@@ -419,17 +419,17 @@ export function RadioLinha({
   return (
     <label
       className={`flex cursor-pointer items-center gap-3 rounded-[4px] px-3 py-2.5 transition celular:min-h-[44px] ${
-        checked ? "bg-sel" : "bg-panel hover:bg-hov"
+        checked ? "bg-interactive-background-selected" : "bg-background-base-lowest hover:bg-interactive-background-hover"
       }`}
     >
       {icon && (
-        <span aria-hidden="true" className="shrink-0 text-txt-secondary">
+        <span aria-hidden="true" className="shrink-0 text-text-subtle">
           {icon}
         </span>
       )}
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-medium text-txt-primary">{titulo}</span>
-        {hint && <span className="mt-0.5 block text-xs text-txt-muted">{hint}</span>}
+        <span className="block text-sm font-medium text-text-strong">{titulo}</span>
+        {hint && <span className="mt-0.5 block text-xs text-text-muted">{hint}</span>}
       </span>
       <input
         type="radio"
@@ -441,10 +441,10 @@ export function RadioLinha({
       <span
         aria-hidden="true"
         className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition ${
-          checked ? "border-accent" : "border-txt-faint"
+          checked ? "border-brand-500" : "border-channels-default"
         }`}
       >
-        {checked && <span className="h-2.5 w-2.5 rounded-full bg-accent" />}
+        {checked && <span className="h-2.5 w-2.5 rounded-full bg-brand-500" />}
       </span>
     </label>
   );
@@ -491,18 +491,18 @@ export function Slider({
   const centro = `calc(${pct}% + ${(0.5 - pct / 100) * 20}px)`;
 
   return (
-    <div className="border-b border-border py-3 last:border-b-0">
+    <div className="border-b border-border-subtle py-3 last:border-b-0">
       {label && (
-        <label htmlFor={id} className="block text-sm font-medium text-txt-primary">
+        <label htmlFor={id} className="block text-sm font-medium text-text-strong">
           {label}
         </label>
       )}
-      {hint && <p className="mt-0.5 text-xs text-txt-muted">{hint}</p>}
+      {hint && <p className="mt-0.5 text-xs text-text-muted">{hint}</p>}
 
       <div className="relative mt-3 h-5">
-        <div className="absolute inset-x-0 top-1.5 h-2 rounded-full bg-void" aria-hidden="true" />
+        <div className="absolute inset-x-0 top-1.5 h-2 rounded-full bg-input-background-default" aria-hidden="true" />
         <div
-          className="absolute left-0 top-1.5 h-2 rounded-full bg-accent"
+          className="absolute left-0 top-1.5 h-2 rounded-full bg-brand-500"
           style={{ width: `${pct}%` }}
           aria-hidden="true"
         />
@@ -511,7 +511,7 @@ export function Slider({
             {Array.from({ length: marcas - 1 }, (_, i) => (
               <span
                 key={i}
-                className="absolute top-1/2 h-2 w-px -translate-x-1/2 -translate-y-1/2 bg-chat/60"
+                className="absolute top-1/2 h-2 w-px -translate-x-1/2 -translate-y-1/2 bg-background-base-lower/60"
                 style={{ left: `${((i + 1) / marcas) * 100}%` }}
               />
             ))}
@@ -533,7 +533,7 @@ export function Slider({
         <output
           htmlFor={id}
           style={{ left: centro }}
-          className="absolute -translate-x-1/2 text-xs font-semibold text-txt-secondary"
+          className="absolute -translate-x-1/2 text-xs font-semibold text-text-subtle"
         >
           {format(value)}
         </output>
@@ -578,7 +578,7 @@ export function SliderMarcas<T>({
         value={indice}
         aria-valuetext={opcoes[indice]?.label}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-void accent-accent"
+        className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-input-background-default accent-brand-500"
       />
       <div className="mt-1.5 flex justify-between gap-1">
         {opcoes.map((o, i) => (
@@ -588,14 +588,14 @@ export function SliderMarcas<T>({
             onClick={() => onChange(i)}
             aria-pressed={i === indice}
             className={`min-w-0 truncate text-[11px] font-medium transition celular:min-h-[44px] ${
-              i === indice ? "text-txt-primary" : "text-txt-muted hover:text-txt-normal"
+              i === indice ? "text-text-strong" : "text-text-muted hover:text-text-default"
             }`}
           >
             {o.label}
           </button>
         ))}
       </div>
-      {hint && <p className="mt-2 text-xs text-txt-muted">{hint}</p>}
+      {hint && <p className="mt-2 text-xs text-text-muted">{hint}</p>}
     </div>
   );
 }
@@ -648,11 +648,11 @@ export function Select({
   const atual = options.find((o) => o.value === value);
 
   return (
-    <div className={semDivisoria ? "" : "border-b border-border py-3 last:border-b-0"}>
+    <div className={semDivisoria ? "" : "border-b border-border-subtle py-3 last:border-b-0"}>
       {label && (
         <label
           htmlFor={id}
-          className="mb-1.5 block text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary"
+          className="mb-1.5 block text-xs font-bold uppercase tracking-[0.02em] text-text-subtle"
         >
           {label}
         </label>
@@ -671,15 +671,15 @@ export function Select({
               setAberto(false);
             }
           }}
-          className="flex h-10 w-full items-center gap-2 rounded-[3px] border border-border bg-input px-2.5 text-left text-sm text-txt-normal outline-none transition-colors hover:border-border-strong-hover focus:border-accent disabled:cursor-not-allowed disabled:opacity-50 celular:h-[44px] celular:text-base"
+          className="flex h-10 w-full items-center gap-2 rounded-[3px] border border-border-subtle bg-chat-background-default px-2.5 text-left text-sm text-text-default outline-none transition-colors hover:border-border-strong focus:border-brand-500 disabled:cursor-not-allowed disabled:opacity-50 celular:h-[44px] celular:text-base"
         >
-          <span className={`min-w-0 flex-1 truncate ${atual ? "" : "text-txt-muted"}`}>
+          <span className={`min-w-0 flex-1 truncate ${atual ? "" : "text-text-muted"}`}>
             {atual?.label ?? emptyLabel}
           </span>
           <ChevronDown
             size={16}
             aria-hidden="true"
-            className={`shrink-0 text-txt-muted transition-transform ${aberto ? "rotate-180" : ""}`}
+            className={`shrink-0 text-text-muted transition-transform ${aberto ? "rotate-180" : ""}`}
           />
         </button>
 
@@ -687,7 +687,7 @@ export function Select({
           <ul
             role="listbox"
             aria-label={typeof label === "string" ? label : undefined}
-            className="anim-menu absolute left-0 right-0 top-[calc(100%+4px)] z-30 max-h-[240px] overflow-y-auto rounded-[4px] bg-overlay p-1 shadow-high"
+            className="anim-menu absolute left-0 right-0 top-[calc(100%+4px)] z-30 max-h-[240px] overflow-y-auto rounded-[4px] bg-background-surface-higher p-1 shadow-popout"
           >
             {emptyLabel !== undefined && (
               <ItemDeLista
@@ -713,7 +713,7 @@ export function Select({
           </ul>
         )}
       </div>
-      {hint && <p className="mt-1 text-xs text-txt-muted">{hint}</p>}
+      {hint && <p className="mt-1 text-xs text-text-muted">{hint}</p>}
     </div>
   );
 }
@@ -733,11 +733,11 @@ function ItemDeLista({
         type="button"
         onClick={onSelect}
         className={`flex h-8 w-full items-center gap-2 rounded-[3px] px-2 text-left text-sm transition celular:h-[44px] celular:text-base ${
-          ativo ? "bg-sel text-txt-primary" : "text-txt-normal hover:bg-hov"
+          ativo ? "bg-interactive-background-selected text-text-strong" : "text-text-default hover:bg-interactive-background-hover"
         }`}
       >
         <span className="min-w-0 flex-1 truncate">{rotulo}</span>
-        {ativo && <Check size={14} aria-hidden="true" className="shrink-0 text-accent" />}
+        {ativo && <Check size={14} aria-hidden="true" className="shrink-0 text-brand-500" />}
       </button>
     </li>
   );

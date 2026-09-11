@@ -60,10 +60,10 @@ function abasVisiveis(pendentes: number, bloqueados: number) {
 function Secao({ label, count }: { label: string; count: number }) {
   return (
     <>
-      <h3 className="mx-6 mt-6 text-sm font-semibold leading-5 text-txt-primary">
+      <h3 className="mx-6 mt-6 text-sm font-semibold leading-5 text-text-strong">
         {label} — {count}
       </h3>
-      <div aria-hidden="true" className="mx-[30px] mt-3.5 h-px bg-border" />
+      <div aria-hidden="true" className="mx-[30px] mt-3.5 h-px bg-border-subtle" />
     </>
   );
 }
@@ -225,8 +225,8 @@ export default function FriendsPage() {
   }
 
   return (
-    <main className="flex min-w-0 flex-1 flex-col bg-chat">
-      {/* sem `shadow-header`: o cabeçalho do Discord tem borda e mais nada. Nós
+    <main className="flex min-w-0 flex-1 flex-col bg-background-base-lower">
+      {/* sem `shadow-elevation-low`: o cabeçalho do Discord tem borda e mais nada. Nós
           tínhamos a borda **e** 2px de sombra por baixo, o que engrossa a linha
           e faz a faixa parecer flutuar sobre o conteúdo. */}
       {/*
@@ -250,17 +250,17 @@ export default function FriendsPage() {
         No desktop nada disto se aplica: a faixa continua sendo a linha única
         de 48px com identidade, abas e o grupo da direita.
       */}
-      <header className="relative z-10 flex h-12 shrink-0 items-center gap-[7px] border-b border-border pl-7 pr-5 celular:h-[56px] celular:gap-0 celular:px-0">
-        <span className="text-txt-muted celular:hidden" aria-hidden="true">
+      <header className="relative z-10 flex h-12 shrink-0 items-center gap-[7px] border-b border-border-subtle pl-7 pr-5 celular:h-[56px] celular:gap-0 celular:px-0">
+        <span className="text-text-muted celular:hidden" aria-hidden="true">
           <Amigos size={21} />
         </span>
         {/* mesmo tamanho das abas e do botão: no Discord todo texto desta faixa
             mede o mesmo, e só a cor os separa. O nosso título era maior. */}
-        <h1 className="shrink-0 text-base font-semibold text-txt-primary celular:hidden">Amigos</h1>
+        <h1 className="shrink-0 text-base font-semibold text-text-strong celular:hidden">Amigos</h1>
         {/* ponto, não traço: no Discord o separador do cabeçalho de Amigos é uma
             bolinha de 4px centrada na faixa. O traço vertical lia como divisória
             de seção, que é outra coisa. */}
-        <span aria-hidden="true" className="mx-3 h-1 w-1 shrink-0 rounded-full bg-sel celular:hidden" />
+        <span aria-hidden="true" className="mx-3 h-1 w-1 shrink-0 rounded-full bg-interactive-background-selected celular:hidden" />
 
         <nav
           aria-label="Filtrar amigos"
@@ -273,12 +273,12 @@ export default function FriendsPage() {
               aria-pressed={tab === a.id}
               onClick={() => setTab(a.id)}
               className={`flex h-8 items-center gap-1.5 rounded-lg px-3 text-base font-medium transition celular:h-[44px] celular:shrink-0 celular:snap-start ${
-                tab === a.id ? "bg-sel text-txt-primary" : "text-txt-secondary hover:bg-hov hover:text-txt-primary"
+                tab === a.id ? "bg-interactive-background-selected text-text-strong" : "text-text-subtle hover:bg-interactive-background-hover hover:text-text-strong"
               }`}
             >
               {a.label}
               {a.id === "pendentes" && pendentes > 0 && (
-                <span className="grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[11px] font-bold leading-none text-white">
+                <span className="grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[11px] font-bold leading-none text-white">
                   {pendentes}
                 </span>
               )}
@@ -291,8 +291,8 @@ export default function FriendsPage() {
             onClick={() => setTab("adicionar")}
             className={`h-8 rounded-lg px-3 text-base font-medium transition celular:h-[44px] celular:shrink-0 celular:snap-start ${
               tab === "adicionar"
-                ? "bg-green/20 text-green"
-                : "bg-green text-accent-ink hover:bg-green/80"
+                ? "bg-status-positive/20 text-status-positive"
+                : "bg-status-positive text-control-primary-text-default hover:bg-status-positive/80"
             }`}
           >
             Adicionar amigo
@@ -328,7 +328,7 @@ export default function FriendsPage() {
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto pb-6">
-        {loading && !loaded && <p className="px-6 py-6 text-sm text-txt-muted">Carregando…</p>}
+        {loading && !loaded && <p className="px-6 py-6 text-sm text-text-muted">Carregando…</p>}
 
         {tab !== "adicionar" && (
           /* 12px entre a borda do cabeçalho e a busca (medido); era 16 */
@@ -338,7 +338,7 @@ export default function FriendsPage() {
             <Search
               size={18}
               aria-hidden="true"
-              className="pointer-events-none absolute left-[42px] top-[22px] text-txt-muted celular:top-[26px]"
+              className="pointer-events-none absolute left-[42px] top-[22px] text-text-muted celular:top-[26px]"
             />
             <input
               value={busca}
@@ -346,7 +346,7 @@ export default function FriendsPage() {
               type="search"
               aria-label="Buscar amigos"
               placeholder="Buscar"
-              className="h-10 w-full rounded-lg bg-void pl-10 pr-3 text-base text-txt-normal outline-none placeholder:text-txt-muted celular:h-[48px]"
+              className="h-10 w-full rounded-lg bg-input-background-default pl-10 pr-3 text-base text-text-default outline-none placeholder:text-text-muted celular:h-[48px]"
             />
           </div>
         )}

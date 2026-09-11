@@ -137,7 +137,7 @@ export default function EditorDePermissoes({
 
   if (!podeGerenciar) {
     return (
-      <p className="rounded-[4px] border border-border bg-panel px-3 py-2 text-sm text-txt-muted">
+      <p className="rounded-[4px] border border-border-subtle bg-background-base-lowest px-3 py-2 text-sm text-text-muted">
         Só quem tem “Gerenciar cargos” pode mudar as permissões{" "}
         {escopo === "categoria" ? "desta categoria" : "deste canal"}.
       </p>
@@ -152,34 +152,34 @@ export default function EditorDePermissoes({
           título, interruptor), mas montada aqui porque no print a explicação
           ocupa a largura inteira do cartão, embaixo dos dois — e não a coluna
           da esquerda, que é onde a `ToggleLinha` a coloca. */}
-      <div className="rounded-[4px] bg-panel p-4">
+      <div className="rounded-[4px] bg-background-base-lowest p-4">
         <div className="flex items-center justify-between gap-4">
           <span className="flex min-w-0 items-center gap-2">
-            <Lock size={18} aria-hidden="true" className="shrink-0 text-txt-secondary" />
+            <Lock size={18} aria-hidden="true" className="shrink-0 text-text-subtle" />
             <label
               htmlFor={idPrivado}
-              className="cursor-pointer truncate text-sm font-bold text-txt-primary"
+              className="cursor-pointer truncate text-sm font-bold text-text-strong"
             >
               {privadoLabel}
             </label>
           </span>
           <Switch id={idPrivado} checked={privado} onChange={onPrivado} />
         </div>
-        <p className="mt-2 text-xs leading-4 text-txt-muted">{privadoDescricao}</p>
+        <p className="mt-2 text-xs leading-4 text-text-muted">{privadoDescricao}</p>
       </div>
 
-      <div className="border-t border-border pt-4">
+      <div className="border-t border-border-subtle pt-4">
         <button
           type="button"
           aria-expanded={avancadas}
           onClick={() => setAvancadas((v) => !v)}
-          className="flex items-center gap-2 text-base font-semibold text-txt-primary transition hover:text-txt-normal celular:min-h-[44px]"
+          className="flex items-center gap-2 text-base font-semibold text-text-strong transition hover:text-text-default celular:min-h-[44px]"
         >
           <span>Permissões avançadas</span>
           <ChevronDown
             size={18}
             aria-hidden="true"
-            className={`text-txt-muted transition-transform ${avancadas ? "" : "-rotate-90"}`}
+            className={`text-text-muted transition-transform ${avancadas ? "" : "-rotate-90"}`}
           />
         </button>
 
@@ -190,7 +190,7 @@ export default function EditorDePermissoes({
           <div className="mt-4 flex gap-6 celular:flex-col celular:gap-4">
             <div className="w-[180px] shrink-0 celular:w-full">
               <div className="mb-1 flex items-center justify-between gap-2 px-2">
-                <h3 className="text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
+                <h3 className="text-xs font-bold uppercase tracking-[0.02em] text-text-muted">
                   Cargos/membros
                 </h3>
                 <Tooltip label="Adicionar cargo ou membro">
@@ -201,7 +201,7 @@ export default function EditorDePermissoes({
                     aria-haspopup="dialog"
                     aria-expanded={popover}
                     onClick={() => setPopover((v) => !v)}
-                    className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-txt-muted transition hover:bg-hov hover:text-txt-primary celular:-my-2 celular:h-[44px] celular:w-[44px]"
+                    className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-text-muted transition hover:bg-interactive-background-hover hover:text-text-strong celular:-my-2 celular:h-[44px] celular:w-[44px]"
                   >
                     <Plus size={14} />
                   </button>
@@ -216,7 +216,7 @@ export default function EditorDePermissoes({
                     <li
                       key={alvo.chave}
                       className={`group mb-0.5 flex h-8 items-center rounded-[4px] pr-1 transition celular:h-[44px] ${
-                        ativo ? "bg-sel" : "hover:bg-hov"
+                        ativo ? "bg-interactive-background-selected" : "hover:bg-interactive-background-hover"
                       }`}
                     >
                       {/* linha e "remover" são irmãos, não aninhados: botão
@@ -227,15 +227,15 @@ export default function EditorDePermissoes({
                         aria-current={ativo ? "true" : undefined}
                         onClick={() => setSelecionado(alvo.chave)}
                         className={`flex h-8 min-w-0 flex-1 items-center gap-2 rounded-[4px] px-2 text-left text-sm celular:h-[44px] ${
-                          ativo ? "text-txt-primary" : "text-txt-normal"
+                          ativo ? "text-text-strong" : "text-text-default"
                         }`}
                       >
                         {user ? (
-                          <Avatar user={user} size="sm" surface="border-chat" />
+                          <Avatar user={user} size="sm" surface="border-background-base-lower" />
                         ) : (
                           <span
                             aria-hidden="true"
-                            className="h-2.5 w-2.5 shrink-0 rounded-full bg-txt-muted"
+                            className="h-2.5 w-2.5 shrink-0 rounded-full bg-text-muted"
                             // cor de cargo é dado do servidor, não token de tema
                             style={alvo.cor ? { backgroundColor: alvo.cor } : undefined}
                           />
@@ -251,7 +251,7 @@ export default function EditorDePermissoes({
                           aria-label={`Remover regra de ${alvo.nome}`}
                           onClick={() => void onRemoverRegra(alvo.id)}
                           /* no dedo não há hover: sem isto "remover regra" não tinha caminho */
-                          className="grid h-5 w-5 shrink-0 place-items-center rounded text-txt-muted opacity-0 transition hover:text-red focus-visible:opacity-100 group-hover:opacity-100 celular:h-[44px] celular:w-[44px] celular:opacity-100"
+                          className="grid h-5 w-5 shrink-0 place-items-center rounded text-text-muted opacity-0 transition hover:text-status-danger focus-visible:opacity-100 group-hover:opacity-100 celular:h-[44px] celular:w-[44px] celular:opacity-100"
                         >
                           <X size={12} />
                         </button>
@@ -261,7 +261,7 @@ export default function EditorDePermissoes({
                 })}
               </ul>
 
-              <p className="mt-3 px-2 text-xs leading-4 text-txt-muted">
+              <p className="mt-3 px-2 text-xs leading-4 text-text-muted">
                 As regras valem na hora — não dependem do botão salvar.
               </p>
 
@@ -280,7 +280,7 @@ export default function EditorDePermissoes({
             <div className="min-w-0 flex-1">
               {secoesDePermissoes(escopo).map((secao) => (
                 <section key={secao.id} className="mb-6 last:mb-0">
-                  <h3 className="mb-2 text-base font-semibold text-txt-primary">{secao.label}</h3>
+                  <h3 className="mb-2 text-base font-semibold text-text-strong">{secao.label}</h3>
                   {secao.permissions.map((nome) => {
                     const bit = Permission[nome];
                     // a API recusa conceder um bit que quem edita não tem; a
@@ -289,13 +289,13 @@ export default function EditorDePermissoes({
                     return (
                       <div
                         key={nome}
-                        className="flex items-start justify-between gap-4 border-b border-border py-3 last:border-b-0"
+                        className="flex items-start justify-between gap-4 border-b border-border-subtle py-3 last:border-b-0"
                       >
                         <div className="min-w-0">
-                          <p className="text-sm font-bold text-txt-primary">
+                          <p className="text-sm font-bold text-text-strong">
                             {PERMISSION_INFO[nome].label}
                           </p>
-                          <p className="mt-0.5 text-xs leading-4 text-txt-muted">
+                          <p className="mt-0.5 text-xs leading-4 text-text-muted">
                             {PERMISSION_INFO[nome].description}
                           </p>
                         </div>

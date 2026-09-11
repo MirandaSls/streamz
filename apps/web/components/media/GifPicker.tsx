@@ -150,7 +150,7 @@ export default function GifPicker({
             type="button"
             onClick={voltar}
             aria-label="Voltar"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded text-txt-muted transition hover:bg-hov hover:text-txt-normal"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded text-text-muted transition hover:bg-interactive-background-hover hover:text-text-default"
           >
             <ChevronLeft size={18} aria-hidden="true" />
           </button>
@@ -175,8 +175,8 @@ export default function GifPicker({
       {configurado === false ? (
         <div className="grid flex-1 place-items-center px-8 text-center">
           <div>
-            <p className="font-medium text-txt-normal">GIFs indisponíveis</p>
-            <p className="mt-1 text-sm text-txt-muted">
+            <p className="font-medium text-text-default">GIFs indisponíveis</p>
+            <p className="mt-1 text-sm text-text-muted">
               A busca de GIFs não está disponível agora. Você ainda pode anexar um GIF do seu
               computador.
             </p>
@@ -186,7 +186,7 @@ export default function GifPicker({
         <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
           {!buscando && subAba === "tendencias" && categorias.length > 0 && (
             <section className="mb-2">
-              <h3 className="sticky top-0 z-10 bg-panel px-1 py-1.5 text-xs font-semibold uppercase tracking-wide text-txt-muted">
+              <h3 className="sticky top-0 z-10 bg-background-base-lowest px-1 py-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
                 Categorias
               </h3>
               {/* a lista inteira, rolável: cortar em oito escondia justamente as
@@ -214,13 +214,13 @@ export default function GifPicker({
           )}
 
           {mostrandoFavoritos && favoritos.length === 0 ? (
-            <p className="py-10 text-center text-sm text-txt-muted">
+            <p className="py-10 text-center text-sm text-text-muted">
               Nenhum GIF favoritado ainda. Passe o mouse num GIF e toque na estrela.
             </p>
           ) : carregando && grade.length === 0 && !mostrandoFavoritos ? (
-            <p className="py-8 text-center text-sm text-txt-muted">Carregando…</p>
+            <p className="py-8 text-center text-sm text-text-muted">Carregando…</p>
           ) : grade.length === 0 ? (
-            <p className="py-8 text-center text-sm text-txt-muted">
+            <p className="py-8 text-center text-sm text-text-muted">
               {buscando ? "Nenhum GIF para esse termo." : "Nada por aqui ainda."}
             </p>
           ) : (
@@ -243,7 +243,7 @@ export default function GifPicker({
       {/* Atribuição exigida pelos termos da API do Giphy — some junto com a
           busca quando não há chave, porque aí nada veio deles. */}
       {configurado !== false && (
-        <p className="shrink-0 px-3 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-wide text-txt-muted">
+        <p className="shrink-0 px-3 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-wide text-text-muted">
           Powered by GIPHY
         </p>
       )}
@@ -274,7 +274,7 @@ function SubAbaBotao({
       aria-selected={ativa}
       onClick={onClick}
       className={`rounded px-2.5 py-1 text-sm font-medium transition ${
-        ativa ? "bg-sel text-txt-primary" : "text-txt-muted hover:bg-hov hover:text-txt-normal"
+        ativa ? "bg-interactive-background-selected text-text-strong" : "text-text-muted hover:bg-interactive-background-hover hover:text-text-default"
       }`}
     >
       {rotulo}
@@ -333,7 +333,7 @@ function CartaoGif({
         aria-label={favorito ? "Remover dos favoritos" : "Favoritar GIF"}
         aria-pressed={favorito}
         className={`absolute right-1 top-1 grid h-7 w-7 place-items-center rounded bg-black/60 transition focus-visible:opacity-100 group-hover:opacity-100 ${
-          favorito ? "text-accent opacity-100" : "text-white opacity-0"
+          favorito ? "text-brand-500 opacity-100" : "text-white opacity-0"
         }`}
       >
         <Star size={15} aria-hidden="true" fill={favorito ? "currentColor" : "none"} />

@@ -33,7 +33,7 @@ export default function CallBanner({ channelId }: { channelId: string }) {
   return (
     <div
       data-call-banner={channelId}
-      className="flex shrink-0 items-center gap-3 bg-green/15 px-4 py-2"
+      className="flex shrink-0 items-center gap-3 bg-status-positive/15 px-4 py-2"
     >
       <span className="flex shrink-0 items-center -space-x-2">
         {estados.slice(0, 3).map((e) => (
@@ -41,22 +41,22 @@ export default function CallBanner({ channelId }: { channelId: string }) {
             key={e.user.id}
             user={e.user}
             size="sm"
-            className="rounded-full ring-2 ring-chat"
+            className="rounded-full ring-2 ring-background-base-lower"
           />
         ))}
         {excedente > 0 && (
-          <span className="grid h-6 w-6 place-items-center rounded-full bg-panel text-[10px] font-bold text-txt-normal ring-2 ring-chat">
+          <span className="grid h-6 w-6 place-items-center rounded-full bg-background-base-lowest text-[10px] font-bold text-text-default ring-2 ring-background-base-lower">
             +{excedente}
           </span>
         )}
       </span>
 
-      <span className="min-w-0 flex-1 truncate text-sm font-medium text-txt-normal">{texto}</span>
+      <span className="min-w-0 flex-1 truncate text-sm font-medium text-text-default">{texto}</span>
 
       <button
         type="button"
         onClick={() => void startCall(channelId, false)}
-        className="flex h-8 shrink-0 items-center gap-1.5 rounded-[3px] bg-green px-3 text-sm font-semibold text-accent-ink transition hover:brightness-110"
+        className="flex h-8 shrink-0 items-center gap-1.5 rounded-[3px] bg-status-positive px-3 text-sm font-semibold text-control-primary-text-default transition hover:brightness-110"
       >
         <Phone size={14} aria-hidden="true" />
         Entrar

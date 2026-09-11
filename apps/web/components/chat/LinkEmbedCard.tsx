@@ -80,24 +80,24 @@ export default function LinkEmbedCard({ embed }: { embed: LinkEmbed }) {
       // `border-y border-r`, sem borda à esquerda: lá fica a barra, encostada
       // no canto como no Discord. `border` é o token de divisória que já
       // existe; sobre `panel` dá o mesmo "um tom acima" da borda do Discord
-      className="mt-1 grid grid-cols-[auto_1fr] overflow-hidden rounded border-y border-r border-border"
+      className="mt-1 grid grid-cols-[auto_1fr] overflow-hidden rounded border-y border-r border-border-subtle"
       style={{ maxWidth: LARGURA }}
     >
-      <div className="w-1 bg-panel" style={{ backgroundColor: corDoDominio(embed.url) }} aria-hidden="true" />
-      <div className="min-w-0 bg-panel" style={{ padding: "8px 16px 16px 12px" }}>
-        {embed.siteName && <div className="text-xs text-txt-muted">{embed.siteName}</div>}
+      <div className="w-1 bg-background-base-lowest" style={{ backgroundColor: corDoDominio(embed.url) }} aria-hidden="true" />
+      <div className="min-w-0 bg-background-base-lowest" style={{ padding: "8px 16px 16px 12px" }}>
+        {embed.siteName && <div className="text-xs text-text-muted">{embed.siteName}</div>}
         {embed.title && (
           <a
             href={embed.url}
             target="_blank"
             rel="noreferrer"
-            className="mt-2 block font-semibold leading-[22px] text-txt-link hover:underline"
+            className="mt-2 block font-semibold leading-[22px] text-text-link hover:underline"
           >
             {embed.title}
           </a>
         )}
         {embed.description && (
-          <p className="mt-2 whitespace-pre-line text-sm leading-[18px] text-txt-normal">
+          <p className="mt-2 whitespace-pre-line text-sm leading-[18px] text-text-default">
             {embed.description}
           </p>
         )}

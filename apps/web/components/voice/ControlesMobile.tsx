@@ -127,7 +127,7 @@ export default function ControlesMobile({
           // home num iPhone — o dobro da folga que o print mostra.
           bottom: 8,
         }}
-        className={`absolute z-20 flex items-center justify-between rounded-full bg-overlay/95 px-2.5 shadow-high backdrop-blur transition-opacity duration-200 ${
+        className={`absolute z-20 flex items-center justify-between rounded-full bg-background-surface-higher/95 px-2.5 shadow-popout backdrop-blur transition-opacity duration-200 ${
           escondida ? "pointer-events-none opacity-0" : "opacity-100"
         }`}
       >
@@ -264,10 +264,10 @@ type Tom = "neutro" | "ativo" | "aoVivo" | "mudo" | "desligar";
  */
 const TOM: Record<Tom, string> = {
   neutro: "bg-white/10 text-white active:bg-white/20",
-  ativo: "bg-white text-void",
-  aoVivo: "bg-green text-accent-ink",
-  mudo: "bg-red/15 text-red",
-  desligar: "bg-red text-white",
+  ativo: "bg-white text-input-background-default",
+  aoVivo: "bg-status-positive text-control-primary-text-default",
+  mudo: "bg-status-danger/15 text-status-danger",
+  desligar: "bg-status-danger text-white",
 };
 
 /** Círculo de 48 com alvo de 44 garantido; ver o cabeçalho do arquivo. */

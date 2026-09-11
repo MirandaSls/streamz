@@ -43,7 +43,7 @@ export default function YouTubeEmbed({ videoId, title }: { videoId: string; titl
         className="h-full w-full object-cover"
       />
       <span className="absolute inset-0 grid place-items-center bg-black/25 transition group-hover/yt:bg-black/40">
-        <span className="grid h-14 w-14 place-items-center rounded-full bg-red text-white">
+        <span className="grid h-14 w-14 place-items-center rounded-full bg-status-danger text-white">
           <Play size={26} fill="currentColor" aria-hidden="true" />
         </span>
       </span>

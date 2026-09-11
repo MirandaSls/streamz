@@ -68,8 +68,8 @@ export default function Autocomplete({
   const cabecalho = gatilho ? `${base} ${gatilho}${termo ?? ""}` : base;
 
   return (
-    <div className="absolute bottom-full left-4 right-4 z-[60] overflow-hidden rounded-t-lg bg-panel shadow-high">
-      <p className="px-3 py-2 text-xs font-semibold uppercase text-txt-muted">{cabecalho}</p>
+    <div className="absolute bottom-full left-4 right-4 z-[60] overflow-hidden rounded-t-lg bg-background-base-lowest shadow-popout">
+      <p className="px-3 py-2 text-xs font-semibold uppercase text-text-muted">{cabecalho}</p>
       <ul ref={listaRef} role="listbox" aria-label={cabecalho} className="max-h-[360px] overflow-y-auto pb-1">
         {itens.map((item, i) => (
           <li key={item.chave}>
@@ -87,18 +87,18 @@ export default function Autocomplete({
                 onEscolher(item);
               }}
               className={`flex w-full items-center gap-2 px-3 py-1.5 text-left ${
-                i === selecionado ? "bg-sel" : ""
+                i === selecionado ? "bg-interactive-background-selected" : ""
               }`}
             >
               {item.icone && <span className="grid h-6 w-6 shrink-0 place-items-center">{item.icone}</span>}
               <span
                 style={item.cor ? { color: item.cor } : undefined}
-                className="truncate text-sm font-medium text-txt-normal"
+                className="truncate text-sm font-medium text-text-default"
               >
                 {item.rotulo}
               </span>
               {item.detalhe && (
-                <span className="ml-auto truncate pl-2 text-xs text-txt-muted">{item.detalhe}</span>
+                <span className="ml-auto truncate pl-2 text-xs text-text-muted">{item.detalhe}</span>
               )}
             </button>
           </li>
@@ -107,7 +107,7 @@ export default function Autocomplete({
       {/* No celular não há ↑↓, enter nem esc: a linha ensinaria três teclas que
           o aparelho não tem, ocupando 24px do popup que já disputa a tela com o
           teclado. Some com `celular:` — a mesma consulta do `useEhMobile`. */}
-      <p className="flex items-center gap-3 border-t border-black/20 px-3 py-1.5 text-[11px] text-txt-muted celular:hidden">
+      <p className="flex items-center gap-3 border-t border-black/20 px-3 py-1.5 text-[11px] text-text-muted celular:hidden">
         <span>
           <kbd className="font-sans font-semibold">↑↓</kbd> navegar
         </span>

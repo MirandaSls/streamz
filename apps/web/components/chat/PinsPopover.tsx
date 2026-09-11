@@ -38,15 +38,15 @@ export default function PinsPopover({
     >
       {(fechar) => (
         <>
-          {loading && <p className="p-4 text-center text-sm text-txt-muted">Carregando…</p>}
+          {loading && <p className="p-4 text-center text-sm text-text-muted">Carregando…</p>}
 
           {!loading && items.length === 0 && (
             <div className="p-6 text-center">
-              <Pin size={32} aria-hidden="true" className="mx-auto mb-2 text-txt-faint" />
-              <p className="text-sm text-txt-muted">
+              <Pin size={32} aria-hidden="true" className="mx-auto mb-2 text-channels-default" />
+              <p className="text-sm text-text-muted">
                 Este canal ainda não tem mensagens fixadas.
               </p>
-              <p className="mt-2 text-xs text-txt-faint">
+              <p className="mt-2 text-xs text-channels-default">
                 Você pode fixar uma mensagem pelo menu de contexto dela.
               </p>
             </div>

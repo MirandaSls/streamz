@@ -230,7 +230,7 @@ export default function StickerPicker({
           className="relative min-h-0 flex-1 overflow-y-auto px-2 pb-2"
         >
           {vazio ? (
-            <p className="px-2 py-10 text-center text-sm text-txt-muted">
+            <p className="px-2 py-10 text-center text-sm text-text-muted">
               {buscando
                 ? "Nenhuma figurinha com esse nome."
                 : "Seus servidores ainda não têm figurinhas."}
@@ -255,13 +255,13 @@ export default function StickerPicker({
       <RodapePicker>
         {foco ? (
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-semibold text-txt-primary">
+            <span className="block truncate text-sm font-semibold text-text-strong">
               {foco.sticker.name}
             </span>
-            <span className="block truncate text-[11px] text-txt-muted">{foco.pack}</span>
+            <span className="block truncate text-[11px] text-text-muted">{foco.pack}</span>
           </span>
         ) : (
-          <span className="flex-1 text-sm text-txt-muted">Escolha uma figurinha</span>
+          <span className="flex-1 text-sm text-text-muted">Escolha uma figurinha</span>
         )}
         {podeGerenciar && guildIdAtivo && (
           <button
@@ -272,7 +272,7 @@ export default function StickerPicker({
               onClose();
               ui.openModal({ kind: "guildEmojis", guildId: guildIdAtivo });
             }}
-            className="grid h-7 w-7 shrink-0 place-items-center rounded text-txt-muted transition hover:bg-hov hover:text-txt-normal"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded text-text-muted transition hover:bg-interactive-background-hover hover:text-text-default"
           >
             <Settings2 size={16} aria-hidden="true" />
           </button>
@@ -309,7 +309,7 @@ function SecaoGrade({
 
   return (
     <section ref={ref} className="mb-1">
-      <h3 className="sticky top-0 z-10 flex items-center gap-1.5 bg-panel px-1 py-1.5 text-xs font-semibold uppercase tracking-wide text-txt-muted">
+      <h3 className="sticky top-0 z-10 flex items-center gap-1.5 bg-background-base-lowest px-1 py-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
         {secao.icone.tipo === "servidor" && (
           <IconeServidor nome={secao.icone.nome} iconUrl={secao.icone.url} />
         )}
@@ -328,7 +328,7 @@ function SecaoGrade({
             onPointerEnter={() => onFocar({ sticker, pack })}
             onFocus={() => onFocar({ sticker, pack })}
             style={{ height: CELULA }}
-            className="grid place-items-center rounded transition hover:bg-hov"
+            className="grid place-items-center rounded transition hover:bg-interactive-background-hover"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img

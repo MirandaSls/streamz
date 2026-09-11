@@ -84,8 +84,8 @@ function AbaBotao({
       onClick={onClick}
       className={`border-b-2 px-3 py-2 text-sm font-medium transition ${
         ativa
-          ? "border-accent text-txt-primary"
-          : "border-transparent text-txt-muted hover:text-txt-normal"
+          ? "border-brand-500 text-text-strong"
+          : "border-transparent text-text-muted hover:text-text-default"
       }`}
     >
       {children}
@@ -137,20 +137,20 @@ function ListaEmojis({ guildId, emojis }: { guildId: string; emojis: CustomEmoji
       />
 
       {emojis.length === 0 ? (
-        <p className="py-6 text-center text-sm text-txt-muted">Nenhum emoji ainda.</p>
+        <p className="py-6 text-center text-sm text-text-muted">Nenhum emoji ainda.</p>
       ) : (
         <ul className="mt-3 flex flex-col">
           {emojis.map((emoji) => (
             <li
               key={emoji.id}
-              className="flex items-center gap-3 rounded px-2 py-1.5 hover:bg-hov"
+              className="flex items-center gap-3 rounded px-2 py-1.5 hover:bg-interactive-background-hover"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={emoji.url} alt={`:${emoji.name}:`} className="h-8 w-8 object-contain" />
-              <span className="min-w-0 flex-1 truncate text-sm text-txt-normal">
+              <span className="min-w-0 flex-1 truncate text-sm text-text-default">
                 :{emoji.name}:
               </span>
-              {emoji.animated && <span className="text-[10px] text-txt-faint">animado</span>}
+              {emoji.animated && <span className="text-[10px] text-channels-default">animado</span>}
               <IconeAcao
                 label="Renomear"
                 onClick={async () => {
@@ -253,14 +253,14 @@ function ListaFigurinhas({
       />
 
       {figurinhas.length === 0 ? (
-        <p className="py-6 text-center text-sm text-txt-muted">Nenhuma figurinha ainda.</p>
+        <p className="py-6 text-center text-sm text-text-muted">Nenhuma figurinha ainda.</p>
       ) : (
         <ul className="mt-3 grid grid-cols-3 gap-2">
           {figurinhas.map((s) => (
-            <li key={s.id} className="rounded bg-panel p-2 text-center">
+            <li key={s.id} className="rounded bg-background-base-lowest p-2 text-center">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={s.url} alt={s.name} className="mx-auto h-20 w-20 object-contain" />
-              <span className="mt-1 block truncate text-xs text-txt-normal">{s.name}</span>
+              <span className="mt-1 block truncate text-xs text-text-default">{s.name}</span>
               <button
                 type="button"
                 onClick={async () => {
@@ -277,7 +277,7 @@ function ListaFigurinhas({
                     ui.toast(errorMessage(e, "Não foi possível apagar"), "error");
                   }
                 }}
-                className="mt-1 text-xs text-red hover:underline celular:inline-flex celular:min-h-[44px] celular:items-center celular:justify-center celular:px-3"
+                className="mt-1 text-xs text-status-danger hover:underline celular:inline-flex celular:min-h-[44px] celular:items-center celular:justify-center celular:px-3"
               >
                 Apagar
               </button>
@@ -304,12 +304,12 @@ function BotaoEnviar({
         type="button"
         disabled={disabled}
         onClick={onClick}
-        className="flex h-9 celular:h-[44px] items-center gap-2 rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex h-9 celular:h-[44px] items-center gap-2 rounded-[3px] bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Upload size={16} aria-hidden="true" />
         Enviar
       </button>
-      <span className="text-xs text-txt-muted">{dica}</span>
+      <span className="text-xs text-text-muted">{dica}</span>
     </div>
   );
 }
@@ -331,8 +331,8 @@ function IconeAcao({
         type="button"
         onClick={onClick}
         aria-label={label}
-        className={`grid h-7 celular:h-[44px] w-7 celular:w-[44px] place-items-center rounded text-txt-secondary transition hover:bg-sel ${
-          danger ? "hover:text-red" : "hover:text-txt-primary"
+        className={`grid h-7 celular:h-[44px] w-7 celular:w-[44px] place-items-center rounded text-text-subtle transition hover:bg-interactive-background-selected ${
+          danger ? "hover:text-status-danger" : "hover:text-text-strong"
         }`}
       >
         {children}

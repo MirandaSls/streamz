@@ -102,7 +102,7 @@ export default function VerifyEmailPage() {
         aviso={aviso}
       />
       <p className="mt-4 text-center text-sm">
-        <Link href="/app" className="font-medium text-txt-link hover:underline">
+        <Link href="/app" className="font-medium text-text-link hover:underline">
           Continuar sem confirmar agora
         </Link>
       </p>
@@ -149,7 +149,7 @@ function PedirNovoLink({
       )}
 
       {aviso && (
-        <p role="status" aria-live="polite" className="mb-3 text-sm text-txt-muted">
+        <p role="status" aria-live="polite" className="mb-3 text-sm text-text-muted">
           {aviso}
         </p>
       )}

@@ -112,7 +112,7 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
 
   if (!channel) {
     return (
-      <Raiz className="grid min-w-0 flex-1 place-items-center bg-chat text-txt-muted">
+      <Raiz className="grid min-w-0 flex-1 place-items-center bg-background-base-lower text-text-muted">
         Escolha um canal
       </Raiz>
     );
@@ -136,14 +136,14 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
   // conteúdo sensível: o canal só abre depois do aviso
   if (channel.nsfw && !liberado.includes(channel.id) && !jaConfirmou(channel.id)) {
     return (
-      <Raiz className="grid min-w-0 flex-1 place-items-center bg-chat px-8 text-center">
+      <Raiz className="grid min-w-0 flex-1 place-items-center bg-background-base-lower px-8 text-center">
         <div className="max-w-md">
-          <EyeOff size={64} strokeWidth={1} className="mx-auto text-txt-muted" aria-hidden="true" />
-          <h2 className="mt-4 font-headline text-2xl font-extrabold text-txt-primary">
+          <EyeOff size={64} strokeWidth={1} className="mx-auto text-text-muted" aria-hidden="true" />
+          <h2 className="mt-4 font-headline text-2xl font-extrabold text-text-strong">
             {prefixo}
             {name}
           </h2>
-          <p className="mt-2 text-txt-muted">
+          <p className="mt-2 text-text-muted">
             Este canal foi marcado como sensível. O conteúdo pode não ser apropriado
             para todo mundo.
           </p>
@@ -153,7 +153,7 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
               confirmar(channel.id);
               setLiberado((ids) => [...ids, channel.id]);
             }}
-            className="mt-6 h-[38px] rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover"
+            className="mt-6 h-[38px] rounded-[3px] bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover"
           >
             Continuar mesmo assim
           </button>
@@ -163,7 +163,7 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
   }
 
   return (
-    <Raiz className="flex min-h-0 min-w-0 flex-1 flex-col bg-chat">
+    <Raiz className="flex min-h-0 min-w-0 flex-1 flex-col bg-background-base-lower">
       {/* Incorporado ao palco de uma chamada, o cabeçalho é o do
           `PainelDeChatDaCall` (balão + nome + X, 49px): na print do Discord a
           coluna da conversa da call **não** tem busca, alfinete nem lista de
@@ -179,7 +179,7 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
               type="button"
               onClick={() => ui.openModal({ kind: "channelTopic", channelId: channel.id })}
               title="Ver o tópico completo"
-              className="max-w-[40vw] truncate text-left hover:text-txt-normal"
+              className="max-w-[40vw] truncate text-left hover:text-text-default"
             >
               {channel.topic}
             </button>
@@ -259,7 +259,7 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
       {readOnly ? (
         // mantém a forma do composer (mesma altura e raio): o parágrafo cinza
         // centralizado que ficava aqui tirava o chão da coluna
-        <div className="mx-2.5 mb-6 flex min-h-[58px] items-center gap-2 rounded-lg bg-input px-4 text-sm text-txt-muted">
+        <div className="mx-2.5 mb-6 flex min-h-[58px] items-center gap-2 rounded-lg bg-chat-background-default px-4 text-sm text-text-muted">
           <Lock size={18} aria-hidden="true" className="shrink-0" />
           <span>Você não tem permissão para enviar mensagens neste canal.</span>
         </div>

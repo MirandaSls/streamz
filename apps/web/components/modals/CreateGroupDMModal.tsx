@@ -131,14 +131,14 @@ export default function CreateGroupDMModal() {
             type="button"
             disabled={picks.length === 0 || saving}
             onClick={submit}
-            className="h-10 flex-1 rounded-lg bg-accent text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+            className="h-10 flex-1 rounded-lg bg-brand-500 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {saving ? "Abrindo…" : "Criar mensagem"}
           </button>
           <button
             type="button"
             onClick={closeModal}
-            className="h-10 flex-1 rounded-lg bg-border-strong text-sm font-medium text-txt-normal transition hover:bg-border-strong-hover"
+            className="h-10 flex-1 rounded-lg bg-border-normal text-sm font-medium text-text-default transition hover:bg-border-strong"
           >
             Cancelar
           </button>
@@ -153,10 +153,10 @@ export default function CreateGroupDMModal() {
               type="button"
               onClick={() => toggle(u)}
               aria-label={`Remover ${displayNameOf(u)}`}
-              className="flex items-center gap-1 rounded-[4px] bg-void px-2 py-1 text-sm text-txt-primary transition hover:bg-hov"
+              className="flex items-center gap-1 rounded-[4px] bg-input-background-default px-2 py-1 text-sm text-text-strong transition hover:bg-interactive-background-hover"
             >
               {displayNameOf(u)}
-              <X size={14} aria-hidden="true" className="text-txt-muted" />
+              <X size={14} aria-hidden="true" className="text-text-muted" />
             </button>
           ))}
         </div>
@@ -169,15 +169,15 @@ export default function CreateGroupDMModal() {
         type="search"
         placeholder="Buscar"
         aria-label="Buscar usuário"
-        className="h-10 w-full rounded-lg bg-void px-3 text-txt-normal outline-none placeholder:text-txt-muted"
+        className="h-10 w-full rounded-lg bg-input-background-default px-3 text-text-default outline-none placeholder:text-text-muted"
       />
-      <p className="mt-2 text-xs text-txt-muted">
+      <p className="mt-2 text-xs text-text-muted">
         Adicione amigos, ou busque alguém pelo nome de usuário, a grupos privados.
       </p>
 
       <div className="-mx-2 mt-4 max-h-[480px] overflow-y-auto">
         {candidates.length === 0 ? (
-          <p className="px-3 py-3 text-sm text-txt-muted">
+          <p className="px-3 py-3 text-sm text-text-muted">
             {q
               ? "Ninguém com esse nome."
               : "Você ainda não tem amigos. Busque alguém pelo nome de usuário acima."}
@@ -192,20 +192,20 @@ export default function CreateGroupDMModal() {
                 role="checkbox"
                 aria-checked={marcado}
                 onClick={() => toggle(u)}
-                className="flex h-12 w-full items-center gap-3 rounded-lg px-2 text-left hover:bg-hov"
+                className="flex h-12 w-full items-center gap-3 rounded-lg px-2 text-left hover:bg-interactive-background-hover"
               >
-                <Avatar user={u} size="md" status={resolveStatus(statuses, u)} surface="border-chat" />
+                <Avatar user={u} size="md" status={resolveStatus(statuses, u)} surface="border-background-base-lower" />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-base font-semibold leading-5 text-txt-primary">
+                  <span className="block truncate text-base font-semibold leading-5 text-text-strong">
                     {displayNameOf(u)}
                   </span>
-                  <span className="block truncate text-xs leading-4 text-txt-muted">{u.username}</span>
+                  <span className="block truncate text-xs leading-4 text-text-muted">{u.username}</span>
                 </span>
                 {/* o quadrado de 20px do Discord; o checkbox nativo não segue o tema */}
                 <span
                   aria-hidden="true"
                   className={`grid h-5 w-5 shrink-0 place-items-center rounded-[4px] border transition ${
-                    marcado ? "border-accent bg-accent text-accent-ink" : "border-txt-faint"
+                    marcado ? "border-brand-500 bg-brand-500 text-control-primary-text-default" : "border-channels-default"
                   }`}
                 >
                   {marcado && <Check size={14} />}

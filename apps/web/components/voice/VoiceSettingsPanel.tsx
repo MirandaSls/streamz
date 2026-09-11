@@ -52,7 +52,7 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
   } = useTesteDeMicrofone();
 
   return (
-    <div className="space-y-5 text-sm text-txt-normal">
+    <div className="space-y-5 text-sm text-text-default">
       <section className="space-y-3">
         <Dropdown
           label="Dispositivo de entrada"
@@ -69,7 +69,7 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
           vazio="Nenhuma saída encontrada"
         />
         {!devices.autorizado && (
-          <p className="text-xs text-yellow">
+          <p className="text-xs text-status-warning">
             {explicarMidia(devices.motivo) ??
               "Conceda acesso ao microfone para ver o nome dos dispositivos."}
           </p>
@@ -89,11 +89,11 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
         />
       </section>
 
-      <section className="space-y-2 border-t border-border pt-4">
-        <h3 className="text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">
+      <section className="space-y-2 border-t border-border-subtle pt-4">
+        <h3 className="text-xs font-semibold uppercase tracking-[0.02em] text-text-muted">
           Teste de microfone
         </h3>
-        <p className="text-xs text-txt-muted">
+        <p className="text-xs text-text-muted">
           {testandoMic
             ? "Você está se ouvindo. Enquanto o teste durar você fica mudo e surdo — a sala não te ouve e você não ouve ninguém."
             : "Com problemas? Comece uma verificação e diga algo divertido — você vai se ouvir, e a barra se mexe se a gente estiver ouvindo você. Enquanto durar, você fica mudo e surdo."}
@@ -102,18 +102,18 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
           <button
             type="button"
             onClick={alternarTeste}
-            className="flex h-8 shrink-0 items-center gap-1.5 rounded-[3px] bg-border-strong px-3 text-xs font-semibold text-txt-primary transition hover:bg-border-strong-hover"
+            className="flex h-8 shrink-0 items-center gap-1.5 rounded-[3px] bg-border-normal px-3 text-xs font-semibold text-text-strong transition hover:bg-border-strong"
           >
             <Mic size={14} aria-hidden="true" />
             {testandoMic ? "Parar" : "Vamos verificar"}
           </button>
           <BarraDeNivel nivel={nivel} />
         </div>
-        {erroDoTeste && <p className="text-xs text-red">{erroDoTeste}</p>}
+        {erroDoTeste && <p className="text-xs text-status-danger">{erroDoTeste}</p>}
       </section>
 
-      <section className="space-y-3 border-t border-border pt-4">
-        <h3 className="text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">
+      <section className="space-y-3 border-t border-border-subtle pt-4">
+        <h3 className="text-xs font-semibold uppercase tracking-[0.02em] text-text-muted">
           Modo de entrada
         </h3>
         <Radio
@@ -131,12 +131,12 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
 
         {!pushToTalk ? (
           <div className="space-y-2 pl-6">
-            <span className="block text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">
+            <span className="block text-xs font-semibold uppercase tracking-[0.02em] text-text-muted">
               Sensibilidade de entrada
             </span>
             <BarraDeNivel nivel={nivel} limiar={audio.sensibilidade} />
             {!testandoMic && (
-              <p className="text-xs text-txt-muted">
+              <p className="text-xs text-text-muted">
                 Comece a verificação acima para ver seu nível na barra.
               </p>
             )}
@@ -147,13 +147,13 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
               value={Math.round(audio.sensibilidade * 100)}
               onChange={(e) => setAudioPref({ sensibilidade: Number(e.target.value) / 100 })}
               aria-label="Sensibilidade de entrada"
-              className="w-full accent-accent"
+              className="w-full accent-brand-500"
             />
           </div>
         ) : (
           <div className="space-y-3 pl-6">
             <div className="flex items-center gap-2">
-              <span className="text-txt-muted">Tecla:</span>
+              <span className="text-text-muted">Tecla:</span>
               <button
                 type="button"
                 onClick={() => setCapturando(true)}
@@ -167,7 +167,7 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
                 onBlur={() => setCapturando(false)}
                 aria-label="Definir a tecla de push-to-talk"
                 className={`flex h-8 items-center gap-1.5 rounded-[3px] px-3 text-sm transition ${
-                  capturando ? "bg-accent text-accent-ink" : "bg-void text-txt-normal hover:bg-hov"
+                  capturando ? "bg-brand-500 text-control-primary-text-default" : "bg-input-background-default text-text-default hover:bg-interactive-background-hover"
                 }`}
               >
                 <Keyboard size={16} aria-hidden="true" />
@@ -175,7 +175,7 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
               </button>
             </div>
             <label className="block">
-              <span className="mb-1 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">
+              <span className="mb-1 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.02em] text-text-muted">
                 Atraso de liberação
                 <span className="tabular-nums normal-case tracking-normal">
                   {audio.pttAtrasoMs} ms
@@ -189,10 +189,10 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
                 value={audio.pttAtrasoMs}
                 onChange={(e) => setAudioPref({ pttAtrasoMs: Number(e.target.value) })}
                 aria-label="Atraso de liberação do push-to-talk"
-                className="w-full accent-accent"
+                className="w-full accent-brand-500"
               />
             </label>
-            <p className="text-xs text-txt-muted">
+            <p className="text-xs text-text-muted">
               O microfone continua aberto por esse tempo depois de soltar, para a última sílaba não
               sumir.
             </p>
@@ -200,8 +200,8 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
         )}
       </section>
 
-      <section className="space-y-2 border-t border-border pt-4">
-        <h3 className="text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">
+      <section className="space-y-2 border-t border-border-subtle pt-4">
+        <h3 className="text-xs font-semibold uppercase tracking-[0.02em] text-text-muted">
           Processamento de voz
         </h3>
         <Chave
@@ -220,7 +220,7 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
         />
       </section>
 
-      <section className="space-y-3 border-t border-border pt-4">
+      <section className="space-y-3 border-t border-border-subtle pt-4">
         <Dropdown
           label="Câmera"
           value={devices.cameraId}
@@ -231,7 +231,7 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
         <button
           type="button"
           onClick={() => setTestandoCam((v) => !v)}
-          className="flex h-8 items-center gap-1.5 rounded-[3px] bg-border-strong px-3 text-xs font-semibold text-txt-primary transition hover:bg-border-strong-hover"
+          className="flex h-8 items-center gap-1.5 rounded-[3px] bg-border-normal px-3 text-xs font-semibold text-text-strong transition hover:bg-border-strong"
         >
           <Video size={14} aria-hidden="true" />
           {testandoCam ? "Parar vídeo" : "Testar vídeo"}
@@ -269,7 +269,7 @@ function PreviaDaCamera({ deviceId }: { deviceId: string | null }) {
     };
   }, [deviceId]);
 
-  if (erro) return <p className="text-xs text-yellow">Não foi possível abrir a câmera.</p>;
+  if (erro) return <p className="text-xs text-status-warning">Não foi possível abrir a câmera.</p>;
   return (
     <video
       ref={video}
@@ -277,7 +277,7 @@ function PreviaDaCamera({ deviceId }: { deviceId: string | null }) {
       playsInline
       muted
       // espelhado: é assim que a pessoa se reconhece na prévia
-      className="aspect-video w-full -scale-x-100 rounded-lg bg-void object-cover"
+      className="aspect-video w-full -scale-x-100 rounded-lg bg-input-background-default object-cover"
     />
   );
 }
@@ -300,7 +300,7 @@ function Radio({
         name={nome}
         checked={marcado}
         onChange={onSelect}
-        className="accent-accent"
+        className="accent-brand-500"
       />
       {rotulo}
     </label>
@@ -330,7 +330,7 @@ function NivelDeRuidoControle({
   ];
   return (
     <div className="py-1">
-      <p className="pb-1.5 text-sm text-txt-normal">Redução de ruído</p>
+      <p className="pb-1.5 text-sm text-text-default">Redução de ruído</p>
       <div role="radiogroup" aria-label="Redução de ruído" className="flex flex-col gap-0.5">
         {opcoes.map((o) => (
           <button
@@ -340,11 +340,11 @@ function NivelDeRuidoControle({
             aria-checked={valor === o.valor}
             onClick={() => onChange(o.valor)}
             className={`flex items-center justify-between rounded-[3px] px-2 py-1.5 text-left text-sm transition ${
-              valor === o.valor ? "bg-sel text-txt-primary" : "text-txt-normal hover:bg-hov"
+              valor === o.valor ? "bg-interactive-background-selected text-text-strong" : "text-text-default hover:bg-interactive-background-hover"
             }`}
           >
             <span className="font-medium">{o.rotulo}</span>
-            <span className="text-xs text-txt-muted">{o.ajuda}</span>
+            <span className="text-xs text-text-muted">{o.ajuda}</span>
           </button>
         ))}
       </div>
@@ -393,7 +393,7 @@ function Dropdown({
 
   return (
     <div ref={caixa} className="relative">
-      <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">
+      <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.02em] text-text-muted">
         {label}
       </span>
       <button
@@ -402,17 +402,17 @@ function Dropdown({
         aria-haspopup="listbox"
         aria-expanded={aberto}
         onClick={() => setAberto((v) => !v)}
-        className="flex h-9 w-full items-center justify-between gap-2 rounded-[3px] bg-void px-3 text-left text-sm text-txt-normal transition hover:bg-hov disabled:opacity-50"
+        className="flex h-9 w-full items-center justify-between gap-2 rounded-[3px] bg-input-background-default px-3 text-left text-sm text-text-default transition hover:bg-interactive-background-hover disabled:opacity-50"
       >
         <span className="truncate">{texto}</span>
-        <ChevronDown size={16} className="shrink-0 text-txt-muted" aria-hidden="true" />
+        <ChevronDown size={16} className="shrink-0 text-text-muted" aria-hidden="true" />
       </button>
 
       {aberto && (
         <ul
           role="listbox"
           aria-label={label}
-          className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-[4px] bg-overlay p-1 shadow-high anim-menu"
+          className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-[4px] bg-background-surface-higher p-1 shadow-popout anim-menu"
         >
           <OpcaoDoDropdown
             marcada={value === null}
@@ -457,7 +457,7 @@ function OpcaoDoDropdown({
         role="option"
         aria-selected={marcada}
         onClick={onSelect}
-        className="flex w-full items-center gap-2 rounded-[3px] px-2 py-1.5 text-left text-sm text-txt-normal transition hover:bg-accent hover:text-accent-ink"
+        className="flex w-full items-center gap-2 rounded-[3px] px-2 py-1.5 text-left text-sm text-text-default transition hover:bg-brand-500 hover:text-control-primary-text-default"
       >
         <Check size={14} className={marcada ? "" : "invisible"} aria-hidden="true" />
         <span className="truncate">{children}</span>

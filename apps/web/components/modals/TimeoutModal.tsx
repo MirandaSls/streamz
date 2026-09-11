@@ -73,7 +73,7 @@ export default function TimeoutModal({ guildId, user }: { guildId: string; user:
       }
     >
       <fieldset>
-        <legend className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+        <legend className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
           Duração
         </legend>
         <div className="flex flex-col gap-1">
@@ -106,11 +106,11 @@ export default function TimeoutModal({ guildId, user }: { guildId: string; user:
           onChange={(e) => setReason(e.target.value)}
           aria-label="Motivo do modo de espera"
           placeholder="Ex.: spam no canal geral"
-          className="mt-2 h-10 w-full rounded-[3px] bg-void px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
+          className="mt-2 h-10 w-full rounded-[3px] bg-input-background-default px-2.5 text-text-default outline-none placeholder:text-text-muted"
         />
       )}
 
-      <p className="mt-2 text-xs text-txt-muted">
+      <p className="mt-2 text-xs text-text-muted">
         O motivo fica registrado no registro de auditoria do servidor.
       </p>
     </Dialog>

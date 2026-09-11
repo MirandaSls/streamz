@@ -47,17 +47,17 @@ export default function HeaderBar({
   const [query, setQuery] = useState(searchValue ?? "");
 
   return (
-    <header className="relative z-10 flex h-[49px] shrink-0 items-center gap-2 border-b border-border px-4 shadow-header">
-      <span className="text-txt-muted" aria-hidden="true">
+    <header className="relative z-10 flex h-[49px] shrink-0 items-center gap-2 border-b border-border-subtle px-4 shadow-elevation-low">
+      <span className="text-text-muted" aria-hidden="true">
         {icon}
       </span>
       {/* `min-w-0` é o que faz o `truncate` valer dentro de um flex: sem ele o
           título empurra a toolbar para fora em vez de cortar o próprio texto */}
-      <h1 className="min-w-0 truncate font-semibold text-txt-primary">{title}</h1>
+      <h1 className="min-w-0 truncate font-semibold text-text-strong">{title}</h1>
       {subtitle && (
         <>
-          <span aria-hidden="true" className="mx-2 h-6 w-px bg-border" />
-          <span className="truncate text-sm text-txt-muted">{subtitle}</span>
+          <span aria-hidden="true" className="mx-2 h-6 w-px bg-border-subtle" />
+          <span className="truncate text-sm text-text-muted">{subtitle}</span>
         </>
       )}
 
@@ -82,15 +82,15 @@ export default function HeaderBar({
                fazia a barra inteira dançar a cada clique.
                O preenchimento medido no Discord é (23,23,26) = `#17171A`, e
                `border` é o mais perto da borda (48,48,53). Com a escala remedida
-               (2026-09-04) nenhum token cai exatamente ali: `bg-panel` (#121214)
+               (2026-09-04) nenhum token cai exatamente ali: `bg-background-base-lowest` (#121214)
                é o mais próximo por baixo, 5 níveis abaixo do medido. Registrado
                em vez de criar um token de um uso só. */
-            className="h-8 w-[244px] rounded-lg border border-border bg-panel pl-2 pr-[30px] text-sm text-txt-normal outline-none placeholder:text-txt-muted"
+            className="h-8 w-[244px] rounded-lg border border-border-subtle bg-background-base-lowest pl-2 pr-[30px] text-sm text-text-default outline-none placeholder:text-text-muted"
           />
           <Search
             size={17}
             aria-hidden="true"
-            className="pointer-events-none absolute right-[5px] top-1/2 -translate-y-1/2 text-txt-muted"
+            className="pointer-events-none absolute right-[5px] top-1/2 -translate-y-1/2 text-text-muted"
           />
         </form>
       </div>

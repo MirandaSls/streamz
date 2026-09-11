@@ -152,7 +152,7 @@ export default function PopoverFlutuante({
           ref={caixa}
           role="dialog"
           aria-label={rotulo}
-          className={`anim-folha max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl bg-overlay pb-[env(safe-area-inset-bottom)] shadow-high ${
+          className={`anim-folha max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl bg-background-surface-higher pb-[env(safe-area-inset-bottom)] shadow-popout ${
             semRespiro ? "" : "p-3"
           }`}
         >
@@ -172,11 +172,11 @@ export default function PopoverFlutuante({
             type="button"
             onClick={onFechar}
             aria-label="Fechar"
-            className={`sticky top-0 z-10 flex h-[28px] w-full shrink-0 items-center justify-center bg-overlay ${
+            className={`sticky top-0 z-10 flex h-[28px] w-full shrink-0 items-center justify-center bg-background-surface-higher ${
               semRespiro ? "" : "-mt-1 mb-1"
             }`}
           >
-            <span aria-hidden="true" className="h-1 w-9 rounded-full bg-border-strong" />
+            <span aria-hidden="true" className="h-1 w-9 rounded-full bg-border-normal" />
           </button>
           {children}
         </div>
@@ -196,7 +196,7 @@ export default function PopoverFlutuante({
         width: largura,
         visibility: pos ? "visible" : "hidden",
       }}
-      className={`anim-menu fixed z-[90] rounded-lg bg-overlay shadow-high ${
+      className={`anim-menu fixed z-[90] rounded-lg bg-background-surface-higher shadow-popout ${
         semRespiro ? "overflow-hidden" : denso ? "p-1.5" : "p-3"
       }`}
     >

@@ -33,11 +33,11 @@ export function ChannelAccessList({ channelId }: { channelId: string }) {
   const ready = access.channelId === channelId && !access.loading;
 
   return (
-    <div className="max-h-56 overflow-y-auto rounded bg-void/50">
+    <div className="max-h-56 overflow-y-auto rounded bg-input-background-default/50">
       {!ready ? (
-        <p className="px-3 py-3 text-sm text-txt-muted">Carregando…</p>
+        <p className="px-3 py-3 text-sm text-text-muted">Carregando…</p>
       ) : plainMembers.length === 0 ? (
-        <p className="px-3 py-3 text-sm text-txt-muted">
+        <p className="px-3 py-3 text-sm text-text-muted">
           Nenhum membro comum neste servidor.
         </p>
       ) : (
@@ -50,16 +50,16 @@ export function ChannelAccessList({ channelId }: { channelId: string }) {
               role="checkbox"
               aria-checked={marcado}
               onClick={() => guildId && toggleAccess(guildId, channelId, m.user.id)}
-              className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-txt-normal hover:bg-hov"
+              className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-text-default hover:bg-interactive-background-hover"
             >
-              <Avatar user={m.user} size="sm" surface="border-chat" />
+              <Avatar user={m.user} size="sm" surface="border-background-base-lower" />
               <span className="min-w-0 flex-1 truncate">{m.user.username}</span>
               {/* mesmo círculo do "selecionar amigos": o checkbox nativo não
                   segue o tema */}
               <span
                 aria-hidden="true"
                 className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition ${
-                  marcado ? "border-accent bg-accent text-accent-ink" : "border-txt-faint"
+                  marcado ? "border-brand-500 bg-brand-500 text-control-primary-text-default" : "border-channels-default"
                 }`}
               >
                 {marcado && <Check size={14} strokeWidth={3} />}

@@ -41,7 +41,7 @@ export default function ReportsTab({ guildId }: { guildId: string }) {
           aria-pressed={!resolvidas}
           onClick={() => setResolvidas(false)}
           className={`h-9 celular:h-[44px] rounded-[3px] px-3 text-sm font-medium transition ${
-            !resolvidas ? "bg-accent text-accent-ink" : "bg-void text-txt-normal hover:bg-hov"
+            !resolvidas ? "bg-brand-500 text-control-primary-text-default" : "bg-input-background-default text-text-default hover:bg-interactive-background-hover"
           }`}
         >
           Pendentes
@@ -51,17 +51,17 @@ export default function ReportsTab({ guildId }: { guildId: string }) {
           aria-pressed={resolvidas}
           onClick={() => setResolvidas(true)}
           className={`h-9 celular:h-[44px] rounded-[3px] px-3 text-sm font-medium transition ${
-            resolvidas ? "bg-accent text-accent-ink" : "bg-void text-txt-normal hover:bg-hov"
+            resolvidas ? "bg-brand-500 text-control-primary-text-default" : "bg-input-background-default text-text-default hover:bg-interactive-background-hover"
           }`}
         >
           Resolvidas
         </button>
       </div>
 
-      <div role="list" className="min-h-0 flex-1 overflow-y-auto rounded bg-void/40">
-        {loading && <p className="px-3 py-4 text-sm text-txt-muted">Carregando…</p>}
+      <div role="list" className="min-h-0 flex-1 overflow-y-auto rounded bg-input-background-default/40">
+        {loading && <p className="px-3 py-4 text-sm text-text-muted">Carregando…</p>}
         {!loading && reports.length === 0 && (
-          <p className="px-3 py-4 text-sm text-txt-muted">
+          <p className="px-3 py-4 text-sm text-text-muted">
             {resolvidas ? "Nenhuma denúncia resolvida ainda." : "Nenhuma denúncia pendente. Tudo em paz."}
           </p>
         )}
@@ -70,17 +70,17 @@ export default function ReportsTab({ guildId }: { guildId: string }) {
           <div
             key={r.id}
             role="listitem"
-            className="flex gap-3 border-b border-border px-3 py-3 last:border-b-0"
+            className="flex gap-3 border-b border-border-subtle px-3 py-3 last:border-b-0"
           >
-            <Flag size={18} className="mt-1 shrink-0 text-red" aria-hidden="true" />
+            <Flag size={18} className="mt-1 shrink-0 text-status-danger" aria-hidden="true" />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-x-1.5 text-sm">
-                <span className="font-medium text-txt-primary">{rotuloDoMotivo(r.reason)}</span>
-                {r.channelName && <span className="text-txt-muted">em #{r.channelName}</span>}
+                <span className="font-medium text-text-strong">{rotuloDoMotivo(r.reason)}</span>
+                {r.channelName && <span className="text-text-muted">em #{r.channelName}</span>}
               </div>
 
-              <div className="mt-1 flex items-center gap-2 text-xs text-txt-muted">
-                {r.reporter && <Avatar user={r.reporter} size="sm" surface="border-chat" />}
+              <div className="mt-1 flex items-center gap-2 text-xs text-text-muted">
+                {r.reporter && <Avatar user={r.reporter} size="sm" surface="border-background-base-lower" />}
                 <span>
                   Denunciado por {r.reporter ? displayNameOf(r.reporter) : "conta removida"}
                   {r.target ? ` · autor: ${displayNameOf(r.target)}` : ""} · {horaCompleta(r.createdAt)}
@@ -88,13 +88,13 @@ export default function ReportsTab({ guildId }: { guildId: string }) {
               </div>
 
               {r.messageContent && (
-                <blockquote className="mt-2 max-h-24 overflow-y-auto break-words rounded-[3px] border-l-2 border-border-strong bg-void px-3 py-2 text-sm text-txt-normal">
+                <blockquote className="mt-2 max-h-24 overflow-y-auto break-words rounded-[3px] border-l-2 border-border-normal bg-input-background-default px-3 py-2 text-sm text-text-default">
                   {r.messageContent}
                 </blockquote>
               )}
-              {r.details && <p className="mt-1 text-xs text-txt-muted">Detalhes: {r.details}</p>}
+              {r.details && <p className="mt-1 text-xs text-text-muted">Detalhes: {r.details}</p>}
               {r.resolved && r.resolvedBy && (
-                <p className="mt-1 text-xs text-txt-muted">
+                <p className="mt-1 text-xs text-text-muted">
                   Resolvida por {displayNameOf(r.resolvedBy)}
                   {r.resolvedAt ? ` · ${horaCompleta(r.resolvedAt)}` : ""}
                 </p>
@@ -104,7 +104,7 @@ export default function ReportsTab({ guildId }: { guildId: string }) {
             <button
               type="button"
               onClick={() => void resolve(guildId, r.id, !r.resolved)}
-              className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 self-start rounded-[3px] bg-void px-3 text-sm font-medium text-txt-normal transition hover:bg-hov"
+              className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 self-start rounded-[3px] bg-input-background-default px-3 text-sm font-medium text-text-default transition hover:bg-interactive-background-hover"
             >
               {r.resolved ? (
                 <>

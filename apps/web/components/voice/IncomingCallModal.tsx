@@ -96,16 +96,16 @@ export default function IncomingCallModal() {
             }
           : undefined
       }
-      className={`fixed z-40 rounded-lg bg-overlay p-3 shadow-high anim-modal ${
+      className={`fixed z-40 rounded-lg bg-background-surface-higher p-3 shadow-popout anim-modal ${
         ehMobile ? "inset-x-3" : "bottom-[76px] left-[84px] w-[248px]"
       }`}
     >
       <audio ref={audio} src={toqueDeChamadaUrl()} preload="auto" loop />
       <div className="flex items-center gap-3">
-        <Avatar user={call.from} size="lg" surface="border-overlay" />
+        <Avatar user={call.from} size="lg" surface="border-background-surface-higher" />
         <span className="min-w-0">
-          <span className="block truncate font-semibold text-txt-primary">{nome}</span>
-          <span className="block truncate text-xs text-txt-muted">
+          <span className="block truncate font-semibold text-text-strong">{nome}</span>
+          <span className="block truncate text-xs text-text-muted">
             {onde ? `Chamada recebida em ${onde}` : "Chamada recebida"}
           </span>
         </span>
@@ -121,7 +121,7 @@ export default function IncomingCallModal() {
           type="button"
           onClick={() => void atender(false)}
           style={ehMobile ? { height: ALVO_MINIMO } : undefined}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-[3px] bg-green text-sm font-semibold text-accent-ink transition hover:brightness-110 ${
+          className={`flex flex-1 items-center justify-center gap-2 rounded-[3px] bg-status-positive text-sm font-semibold text-control-primary-text-default transition hover:brightness-110 ${
             ehMobile ? "" : "h-9"
           }`}
         >
@@ -135,7 +135,7 @@ export default function IncomingCallModal() {
               onClick={() => void atender(true)}
               aria-label="Atender com vídeo"
               style={ehMobile ? { height: ALVO_MINIMO, width: ALVO_MINIMO } : undefined}
-              className={`grid place-items-center rounded-[3px] bg-green/20 text-green transition hover:bg-green/30 ${
+              className={`grid place-items-center rounded-[3px] bg-status-positive/20 text-status-positive transition hover:bg-status-positive/30 ${
                 ehMobile ? "" : "h-9 w-9"
               }`}
             >
@@ -149,7 +149,7 @@ export default function IncomingCallModal() {
             onClick={decline}
             aria-label="Recusar chamada"
             style={ehMobile ? { height: ALVO_MINIMO, width: ALVO_MINIMO } : undefined}
-            className={`grid place-items-center rounded-[3px] bg-red text-white transition hover:bg-red-hover ${
+            className={`grid place-items-center rounded-[3px] bg-status-danger text-white transition hover:bg-control-critical-primary-background-hover ${
               ehMobile ? "" : "h-9 w-9"
             }`}
           >

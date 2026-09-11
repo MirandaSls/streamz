@@ -26,13 +26,13 @@ export default function AdminChamadasTab() {
   return (
     <>
       <div className="mb-4 flex items-start justify-between gap-3">
-        <p className="text-sm text-txt-muted">
+        <p className="text-sm text-text-muted">
           Atualiza sozinho a cada 5 segundos. Sai da lista quem desliga.
         </p>
         <button
           type="button"
           onClick={recarregar}
-          className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded-[3px] px-2 text-sm font-medium text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
+          className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded-[3px] px-2 text-sm font-medium text-text-subtle transition hover:bg-interactive-background-hover hover:text-text-strong"
         >
           <RefreshCw size={14} aria-hidden="true" />
           Atualizar
@@ -48,11 +48,11 @@ export default function AdminChamadasTab() {
           {dados?.map((chamada) => (
             <section
               key={chamada.local.channelId}
-              className="rounded-[6px] border border-border bg-panel"
+              className="rounded-[6px] border border-border-subtle bg-background-base-lowest"
             >
-              <header className="flex items-center justify-between gap-3 border-b border-border px-3 py-2.5">
+              <header className="flex items-center justify-between gap-3 border-b border-border-subtle px-3 py-2.5">
                 <LocalDaChamada local={chamada.local} comAvatares />
-                <span className="shrink-0 text-xs text-txt-muted">
+                <span className="shrink-0 text-xs text-text-muted">
                   {chamada.participantes.length} na chamada · {duracao(chamada.desde)}
                 </span>
               </header>
@@ -60,11 +60,11 @@ export default function AdminChamadasTab() {
               <ul className="px-3 py-1.5">
                 {chamada.participantes.map((p) => (
                   <li key={p.user.id} className="flex items-center gap-2.5 py-1.5">
-                    <Avatar user={p.user} size="sm" status={p.user.status} surface="border-panel" />
+                    <Avatar user={p.user} size="sm" status={p.user.status} surface="border-background-base-lowest" />
                     <NomeDoUsuario user={p.user} />
                     <span className="ml-auto flex shrink-0 items-center gap-1.5">
                       <Sinais p={p} />
-                      <span className="w-[92px] text-right text-xs tabular-nums text-txt-muted">
+                      <span className="w-[92px] text-right text-xs tabular-nums text-text-muted">
                         {duracao(p.entrouEm)}
                       </span>
                     </span>
@@ -77,7 +77,7 @@ export default function AdminChamadasTab() {
                   atendeu" — e um canal de servidor não tem essa lista */}
               {chamada.local.tipo !== "guild" &&
                 chamada.local.participantes.length > chamada.participantes.length && (
-                  <p className="border-t border-border px-3 py-2 text-xs text-txt-muted">
+                  <p className="border-t border-border-subtle px-3 py-2 text-xs text-text-muted">
                     Fora da chamada:{" "}
                     {chamada.local.participantes
                       .filter((p) => !chamada.participantes.some((q) => q.user.id === p.id))
@@ -98,20 +98,20 @@ function Sinais({ p }: { p: AdminCallParticipant }) {
   return (
     <>
       {p.reconnecting && (
-        <Sinal icone={<Wifi size={14} />} rotulo="Reconectando" tom="text-yellow" />
+        <Sinal icone={<Wifi size={14} />} rotulo="Reconectando" tom="text-status-warning" />
       )}
       <Sinal
         icone={p.muted ? <MicOff size={14} /> : <Mic size={14} />}
         rotulo={p.muted ? "Microfone mudo" : "Microfone aberto"}
-        tom={p.muted ? "text-red" : "text-txt-faint"}
+        tom={p.muted ? "text-status-danger" : "text-channels-default"}
       />
-      {p.deafened && <Sinal icone={<VolumeX size={14} />} rotulo="Surdo" tom="text-red" />}
+      {p.deafened && <Sinal icone={<VolumeX size={14} />} rotulo="Surdo" tom="text-status-danger" />}
       <Sinal
         icone={p.video ? <Video size={14} /> : <VideoOff size={14} />}
         rotulo={p.video ? "Câmera ligada" : "Câmera desligada"}
-        tom={p.video ? "text-accent" : "text-txt-faint"}
+        tom={p.video ? "text-brand-500" : "text-channels-default"}
       />
-      {p.screen && <Sinal icone={<Monitor size={14} />} rotulo="Compartilhando a tela" tom="text-accent" />}
+      {p.screen && <Sinal icone={<Monitor size={14} />} rotulo="Compartilhando a tela" tom="text-brand-500" />}
     </>
   );
 }

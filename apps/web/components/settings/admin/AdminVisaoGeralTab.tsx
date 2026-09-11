@@ -27,14 +27,14 @@ export default function AdminVisaoGeralTab() {
   return (
     <>
       <div className="mb-4 flex items-start justify-between gap-3">
-        <p className="text-sm text-txt-muted">
+        <p className="text-sm text-text-muted">
           Tudo o que acontece nesta instância, sem entrar em servidor nenhum. O painel é só
           leitura.
         </p>
         <button
           type="button"
           onClick={recarregar}
-          className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded-[3px] px-2 text-sm font-medium text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
+          className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded-[3px] px-2 text-sm font-medium text-text-subtle transition hover:bg-interactive-background-hover hover:text-text-strong"
         >
           <RefreshCw size={14} aria-hidden="true" />
           Atualizar
@@ -62,15 +62,15 @@ export default function AdminVisaoGeralTab() {
 
             <Section title="Chamadas em curso">
               {dados.chamadas.length === 0 ? (
-                <p className="py-1 text-sm text-txt-muted">Ninguém está em chamada agora.</p>
+                <p className="py-1 text-sm text-text-muted">Ninguém está em chamada agora.</p>
               ) : (
                 dados.chamadas.map((c) => (
                   <div
                     key={c.local.channelId}
-                    className="flex items-center justify-between gap-3 border-b border-border py-2.5 last:border-b-0"
+                    className="flex items-center justify-between gap-3 border-b border-border-subtle py-2.5 last:border-b-0"
                   >
                     <LocalDaChamada local={c.local} comAvatares />
-                    <span className="shrink-0 text-xs text-txt-muted">
+                    <span className="shrink-0 text-xs text-text-muted">
                       {c.participantes.length} · {duracao(c.desde)}
                     </span>
                   </div>

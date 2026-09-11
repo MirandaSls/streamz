@@ -51,7 +51,7 @@ export default function TecladoTab() {
 
   return (
     <>
-      <p className="mb-3 text-sm text-txt-muted">{t("teclado.intro")}</p>
+      <p className="mb-3 text-sm text-text-muted">{t("teclado.intro")}</p>
 
       <ul>
         {specs.map((spec) => {
@@ -60,9 +60,9 @@ export default function TecladoTab() {
           return (
             <li
               key={spec.action}
-              className="flex items-center justify-between gap-4 border-b border-border py-2.5 last:border-b-0"
+              className="flex items-center justify-between gap-4 border-b border-border-subtle py-2.5 last:border-b-0"
             >
-              <span className="min-w-0 text-sm text-txt-normal">
+              <span className="min-w-0 text-sm text-text-default">
                 {t(spec.label as ChaveDeTexto)}
               </span>
               <span className="flex shrink-0 items-center gap-1.5">
@@ -73,7 +73,7 @@ export default function TecladoTab() {
                     onKeyDown={(e) => capturar(e, spec.action)}
                     onBlur={() => setGravando(null)}
                     aria-label={`Gravando atalho de ${t(spec.label as ChaveDeTexto)}`}
-                    className="flex h-8 celular:h-[44px] items-center gap-1.5 rounded-[3px] bg-accent px-3 text-xs font-semibold text-accent-ink"
+                    className="flex h-8 celular:h-[44px] items-center gap-1.5 rounded-[3px] bg-brand-500 px-3 text-xs font-semibold text-control-primary-text-default"
                   >
                     <Keyboard size={14} aria-hidden="true" />
                     Aperte a combinação (Esc cancela)
@@ -83,7 +83,7 @@ export default function TecladoTab() {
                     {spec.combos.map((combo) => (
                       <kbd
                         key={combo}
-                        className="rounded-[3px] bg-void px-2 py-1 text-xs font-semibold text-txt-primary"
+                        className="rounded-[3px] bg-input-background-default px-2 py-1 text-xs font-semibold text-text-strong"
                       >
                         {formatShortcut(combo)}
                       </kbd>
@@ -92,7 +92,7 @@ export default function TecladoTab() {
                       type="button"
                       onClick={() => setGravando(spec.action)}
                       aria-label={`Regravar o atalho de ${t(spec.label as ChaveDeTexto)}`}
-                      className="grid h-7 celular:h-[44px] w-7 celular:w-[44px] place-items-center rounded-[3px] text-txt-muted transition hover:bg-hov hover:text-txt-primary"
+                      className="grid h-7 celular:h-[44px] w-7 celular:w-[44px] place-items-center rounded-[3px] text-text-muted transition hover:bg-interactive-background-hover hover:text-text-strong"
                     >
                       <Keyboard size={16} />
                     </button>
@@ -101,7 +101,7 @@ export default function TecladoTab() {
                         type="button"
                         onClick={() => restaurar(spec.action)}
                         aria-label={`Voltar ao atalho padrão de ${t(spec.label as ChaveDeTexto)}`}
-                        className="grid h-7 celular:h-[44px] w-7 celular:w-[44px] place-items-center rounded-[3px] text-txt-muted transition hover:bg-hov hover:text-txt-primary"
+                        className="grid h-7 celular:h-[44px] w-7 celular:w-[44px] place-items-center rounded-[3px] text-text-muted transition hover:bg-interactive-background-hover hover:text-text-strong"
                       >
                         <RotateCcw size={14} />
                       </button>
@@ -118,7 +118,7 @@ export default function TecladoTab() {
         <button
           type="button"
           onClick={() => restaurarTudo()}
-          className="mt-4 h-9 celular:h-[44px] rounded-[3px] border border-border-strong px-3 text-sm font-medium text-txt-normal transition hover:bg-hov"
+          className="mt-4 h-9 celular:h-[44px] rounded-[3px] border border-border-normal px-3 text-sm font-medium text-text-default transition hover:bg-interactive-background-hover"
         >
           {t("config.restaurar")}
         </button>

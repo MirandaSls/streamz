@@ -112,18 +112,18 @@ function Linha({
     <button
       type="button"
       onClick={onClick}
-      className={`flex min-h-[52px] w-full items-center gap-3 rounded-lg px-3 text-left transition active:bg-hov ${
-        perigo ? "text-red" : "text-txt-normal"
+      className={`flex min-h-[52px] w-full items-center gap-3 rounded-lg px-3 text-left transition active:bg-interactive-background-hover ${
+        perigo ? "text-status-danger" : "text-text-default"
       }`}
     >
-      <span className="shrink-0 text-txt-secondary" aria-hidden="true">
+      <span className="shrink-0 text-text-subtle" aria-hidden="true">
         {icone}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate font-medium">{rotulo}</span>
-        {detalhe && <span className="block truncate text-xs text-txt-muted">{detalhe}</span>}
+        {detalhe && <span className="block truncate text-xs text-text-muted">{detalhe}</span>}
       </span>
-      {!perigo && <ChevronRight size={18} aria-hidden="true" className="shrink-0 text-txt-faint" />}
+      {!perigo && <ChevronRight size={18} aria-hidden="true" className="shrink-0 text-channels-default" />}
     </button>
   );
 }
@@ -197,13 +197,13 @@ export function TelaVoce() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-panel">
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-background-base-lowest">
       {/* Banner de 106pt com a engrenagem por cima, como na captura. Sem imagem,
           a cor de destaque do perfil; sem ela, a superfície do app. */}
       <div className="relative shrink-0">
         <div
           style={perfil?.bannerColor ? { backgroundColor: perfil.bannerColor } : undefined}
-          className="h-[106px] w-full overflow-hidden bg-hov"
+          className="h-[106px] w-full overflow-hidden bg-interactive-background-hover"
         >
           {perfil?.bannerUrl && (
             // eslint-disable-next-line @next/next/no-img-element
@@ -221,21 +221,21 @@ export function TelaVoce() {
         {/* o avatar transborda a borda de baixo do banner, com o anel da
             superfície de trás — é assim na captura */}
         <div className="absolute -bottom-8 left-4">
-          <span className="block rounded-full ring-[6px] ring-panel">
-            <Avatar user={vivo} size="xl" status={status} surface="ring-panel" />
+          <span className="block rounded-full ring-[6px] ring-background-base-lowest">
+            <Avatar user={vivo} size="xl" status={status} surface="ring-background-base-lowest" />
           </span>
         </div>
       </div>
 
       <div className="mt-11 px-3 pb-6">
         {/* cartão de identidade */}
-        <div className="rounded-2xl bg-chat p-4">
-          <h1 className="truncate text-xl font-bold text-txt-primary">
+        <div className="rounded-2xl bg-background-base-lower p-4">
+          <h1 className="truncate text-xl font-bold text-text-strong">
             {displayNameOf(vivo)}
           </h1>
-          <p className="truncate text-sm text-txt-muted">@{vivo.username}</p>
+          <p className="truncate text-sm text-text-muted">@{vivo.username}</p>
           {personalizado && (
-            <p className="mt-2 break-words text-sm text-txt-normal">{personalizado}</p>
+            <p className="mt-2 break-words text-sm text-text-default">{personalizado}</p>
           )}
           <div className="mt-3 flex gap-2">
             <BotaoDeCartao
@@ -259,7 +259,7 @@ export function TelaVoce() {
             onClick={toggleMute}
             aria-pressed={muted}
             className={`flex h-[44px] flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-medium transition ${
-              muted ? "bg-red/15 text-red" : "bg-chat text-txt-normal"
+              muted ? "bg-status-danger/15 text-status-danger" : "bg-background-base-lower text-text-default"
             }`}
           >
             {muted ? <MicOff size={20} /> : <Mic size={20} />}
@@ -270,7 +270,7 @@ export function TelaVoce() {
             onClick={toggleDeafen}
             aria-pressed={deafened}
             className={`flex h-[44px] flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-medium transition ${
-              deafened ? "bg-red/15 text-red" : "bg-chat text-txt-normal"
+              deafened ? "bg-status-danger/15 text-status-danger" : "bg-background-base-lower text-text-default"
             }`}
           >
             {deafened ? <HeadphoneOff size={20} /> : <Headphones size={20} />}
@@ -278,10 +278,10 @@ export function TelaVoce() {
           </button>
         </div>
 
-        <h2 className="px-2 pb-1 pt-5 text-xs font-semibold uppercase tracking-wide text-txt-muted">
+        <h2 className="px-2 pb-1 pt-5 text-xs font-semibold uppercase tracking-wide text-text-muted">
           Status
         </h2>
-        <div className="overflow-hidden rounded-2xl bg-chat">
+        <div className="overflow-hidden rounded-2xl bg-background-base-lower">
           {STATUS.map((o) => {
             const escolhido = o.valor === null ? status === "ONLINE" : status === o.valor;
             return (
@@ -290,15 +290,15 @@ export function TelaVoce() {
                 type="button"
                 onClick={() => void aplicarStatus(o.valor)}
                 aria-pressed={escolhido}
-                className={`flex min-h-[48px] w-full items-center gap-3 px-4 text-left transition active:bg-hov ${
-                  escolhido ? "bg-sel text-txt-primary" : "text-txt-normal"
+                className={`flex min-h-[48px] w-full items-center gap-3 px-4 text-left transition active:bg-interactive-background-hover ${
+                  escolhido ? "bg-interactive-background-selected text-text-strong" : "text-text-default"
                 }`}
               >
                 <span className="block h-2.5 w-2.5 shrink-0">
                   <IconeDeStatus status={o.ponto} className="h-full w-full" />
                 </span>
                 <span className="flex-1 font-medium">{o.rotulo}</span>
-                {escolhido && <Check size={18} className="shrink-0 text-accent" />}
+                {escolhido && <Check size={18} className="shrink-0 text-brand-500" />}
               </button>
             );
           })}
@@ -306,19 +306,19 @@ export function TelaVoce() {
 
         {perfil?.aboutMe && (
           <>
-            <h2 className="px-2 pb-1 pt-5 text-xs font-semibold uppercase tracking-wide text-txt-muted">
+            <h2 className="px-2 pb-1 pt-5 text-xs font-semibold uppercase tracking-wide text-text-muted">
               Sobre mim
             </h2>
-            <p className="whitespace-pre-wrap break-words rounded-2xl bg-chat p-4 text-sm text-txt-normal">
+            <p className="whitespace-pre-wrap break-words rounded-2xl bg-background-base-lower p-4 text-sm text-text-default">
               {perfil.aboutMe}
             </p>
           </>
         )}
 
-        <h2 className="px-2 pb-1 pt-5 text-xs font-semibold uppercase tracking-wide text-txt-muted">
+        <h2 className="px-2 pb-1 pt-5 text-xs font-semibold uppercase tracking-wide text-text-muted">
           Conta
         </h2>
-        <div className="overflow-hidden rounded-2xl bg-chat">
+        <div className="overflow-hidden rounded-2xl bg-background-base-lower">
           <Linha
             icone={<User size={20} />}
             rotulo="Meu perfil"
@@ -371,9 +371,9 @@ function BotaoDeCartao({
       onClick={onClick}
       // 44 literal, não `h-10`: sobre a raiz de 15,5px `h-10` mede 38,75, e
       // estes são os dois primeiros botões da aba "Você"
-      className="flex h-[44px] min-w-0 flex-1 items-center justify-center gap-2 rounded-lg bg-border-strong/60 px-3 text-sm font-medium text-txt-normal transition active:bg-border-strong"
+      className="flex h-[44px] min-w-0 flex-1 items-center justify-center gap-2 rounded-lg bg-border-normal/60 px-3 text-sm font-medium text-text-default transition active:bg-border-normal"
     >
-      <span className="shrink-0 text-txt-secondary" aria-hidden="true">
+      <span className="shrink-0 text-text-subtle" aria-hidden="true">
         {icone}
       </span>
       <span className="truncate">{rotulo}</span>

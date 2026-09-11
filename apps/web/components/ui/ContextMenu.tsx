@@ -31,12 +31,12 @@ function ItemDeslizante({ item }: { item: Extract<MenuItem, { slider: object }> 
       // o menu-pai fecha no mousedown de fora; aqui o arraste é "dentro"
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <div className="mb-1 flex items-center justify-between gap-2 text-sm font-medium text-txt-secondary">
+      <div className="mb-1 flex items-center justify-between gap-2 text-sm font-medium text-text-subtle">
         <span className="flex items-center gap-2">
           {item.icon ? <span className="shrink-0 opacity-80">{item.icon as ReactNode}</span> : null}
           {item.label}
         </span>
-        <span className="tabular-nums text-txt-muted">
+        <span className="tabular-nums text-text-muted">
           {format ? format(value) : String(value)}
         </span>
       </div>
@@ -52,7 +52,7 @@ function ItemDeslizante({ item }: { item: Extract<MenuItem, { slider: object }> 
           setValue(v);
           onChange(v);
         }}
-        className="h-1 w-full cursor-pointer appearance-none rounded-full bg-border accent-accent"
+        className="h-1 w-full cursor-pointer appearance-none rounded-full bg-border-subtle accent-brand-500"
       />
     </div>
   );
@@ -165,7 +165,7 @@ function FileiraDeReacoes({
             onClose();
             r.onSelect();
           }}
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-[3px] outline-none transition hover:bg-hov focus-visible:bg-hov"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-[3px] outline-none transition hover:bg-interactive-background-hover focus-visible:bg-interactive-background-hover"
         >
           {r.nodo as React.ReactNode}
         </button>
@@ -334,8 +334,8 @@ function Painel({
           folha
             ? // `min-h-11` em cada item: 44px é o alvo de toque, e os itens do
               // menu do desktop têm 32 porque lá o ponteiro acerta 32
-              "anim-folha fixed inset-x-0 bottom-0 z-[80] max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl bg-overlay p-2 pb-[calc(env(safe-area-inset-bottom)+8px)] shadow-high [&_[role=menuitem]]:min-h-[44px] [&_[role=menuitemcheckbox]]:min-h-[44px] [&_[role=menuitemradio]]:min-h-[44px] [&_[role=group]]:gap-2 [&_[role=group]>button]:h-[44px] [&_[role=group]>button]:w-[44px] [&_[role=group]>button]:text-2xl"
-            : `fixed z-[80] rounded-lg border border-border/70 bg-overlay p-2 shadow-high anim-menu ${
+              "anim-folha fixed inset-x-0 bottom-0 z-[80] max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl bg-background-surface-higher p-2 pb-[calc(env(safe-area-inset-bottom)+8px)] shadow-popout [&_[role=menuitem]]:min-h-[44px] [&_[role=menuitemcheckbox]]:min-h-[44px] [&_[role=menuitemradio]]:min-h-[44px] [&_[role=group]]:gap-2 [&_[role=group]>button]:h-[44px] [&_[role=group]>button]:w-[44px] [&_[role=group]>button]:text-2xl"
+            : `fixed z-[80] rounded-lg border border-border-subtle/70 bg-background-surface-higher p-2 shadow-popout anim-menu ${
                 pos ? "" : "invisible"
               }`
         }
@@ -357,14 +357,14 @@ function Painel({
               onClose();
             }}
             aria-label="Fechar"
-            className="sticky top-0 z-10 -mt-1 mb-1 flex h-[28px] w-full shrink-0 items-center justify-center bg-overlay"
+            className="sticky top-0 z-10 -mt-1 mb-1 flex h-[28px] w-full shrink-0 items-center justify-center bg-background-surface-higher"
           >
-            <span aria-hidden="true" className="h-1 w-9 rounded-full bg-border-strong" />
+            <span aria-hidden="true" className="h-1 w-9 rounded-full bg-border-normal" />
           </button>
         )}
         {items.map((item, i) => {
           if ("separator" in item) {
-            return <div key={i} role="separator" className="my-2 h-px bg-border" />;
+            return <div key={i} role="separator" className="my-2 h-px bg-border-subtle" />;
           }
           if (isSlider(item)) {
             return <ItemDeslizante key={i} item={item} />;
@@ -380,12 +380,12 @@ function Painel({
           const descricao = !filho ? item.description : undefined;
           const forte = !filho && item.forte === true;
           const cor = item.danger
-            ? "text-red hover:bg-red hover:text-white focus:bg-red focus:text-white"
+            ? "text-status-danger hover:bg-status-danger hover:text-white focus:bg-status-danger focus:text-white"
             : !filho && item.highlight
-              ? "text-accent hover:bg-accent hover:text-accent-ink focus:bg-accent focus:text-accent-ink"
+              ? "text-brand-500 hover:bg-brand-500 hover:text-control-primary-text-default focus:bg-brand-500 focus:text-control-primary-text-default"
               : forte
-                ? "text-txt-primary hover:bg-accent hover:text-accent-ink focus:bg-accent focus:text-accent-ink"
-                : "text-txt-secondary hover:bg-accent hover:text-accent-ink focus:bg-accent focus:text-accent-ink";
+                ? "text-text-strong hover:bg-brand-500 hover:text-control-primary-text-default focus:bg-brand-500 focus:text-control-primary-text-default"
+                : "text-text-subtle hover:bg-brand-500 hover:text-control-primary-text-default focus:bg-brand-500 focus:text-control-primary-text-default";
           return (
             <button
               key={i}
@@ -430,7 +430,7 @@ function Painel({
                 de 15,5px e todo o `rem` do Tailwind encolhe 3%.
               */
               className={`flex min-h-9 w-full items-center gap-2 whitespace-nowrap rounded-[4px] px-2 py-2 text-left text-sm outline-none disabled:opacity-40 ${cor} ${
-                aberto === i ? "bg-accent text-accent-ink" : ""
+                aberto === i ? "bg-brand-500 text-control-primary-text-default" : ""
               }`}
             >
               {item.icon ? (
@@ -472,7 +472,7 @@ function Painel({
                   }`}
                 >
                   {marcado && (
-                    <svg viewBox="0 0 12 12" className="h-3.5 w-3.5 text-overlay">
+                    <svg viewBox="0 0 12 12" className="h-3.5 w-3.5 text-background-surface-higher">
                       <path
                         d="M2.5 6.2 4.8 8.5 9.5 3.8"
                         fill="none"

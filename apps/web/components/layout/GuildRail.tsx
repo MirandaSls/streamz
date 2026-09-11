@@ -91,9 +91,9 @@ function SeloDeVoz() {
   return (
     <span
       aria-label="Você está em voz neste servidor"
-      className="absolute right-0 top-0 grid h-4 w-4 place-items-center rounded-full bg-green ring-[2.5px] ring-panel"
+      className="absolute right-0 top-0 grid h-4 w-4 place-items-center rounded-full bg-status-positive ring-[2.5px] ring-background-base-lowest"
     >
-      <Volume2 size={12} className="text-accent-ink" aria-hidden="true" />
+      <Volume2 size={12} className="text-control-primary-text-default" aria-hidden="true" />
     </span>
   );
 }
@@ -120,7 +120,7 @@ function Badge({ count }: { count: number }) {
   return (
     <span
       aria-label={`${count} ${count === 1 ? "menção" : "menções"}`}
-      className="pointer-events-none absolute -bottom-0.5 -right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[12px] font-bold leading-none text-white ring-[3px] ring-panel"
+      className="pointer-events-none absolute -bottom-0.5 -right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[12px] font-bold leading-none text-white ring-[3px] ring-background-base-lowest"
     >
       {count > 99 ? "99+" : count}
     </span>
@@ -204,10 +204,10 @@ function RailItem({
               redondo ? "rounded-full" : "rounded-xl"
             } ${caixa} ${
               active
-                ? "bg-accent text-accent-ink"
+                ? "bg-brand-500 text-control-primary-text-default"
                 : green
-                  ? "bg-hov text-green group-hover:bg-green group-hover:text-accent-ink"
-                  : "bg-hov text-txt-normal group-hover:bg-accent group-hover:text-accent-ink"
+                  ? "bg-interactive-background-hover text-status-positive group-hover:bg-status-positive group-hover:text-control-primary-text-default"
+                  : "bg-interactive-background-hover text-text-default group-hover:bg-brand-500 group-hover:text-control-primary-text-default"
             }`}
           >
             {children}
@@ -386,7 +386,7 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
       /* sem `pt`: no Discord o topo do primeiro botão encosta na barra de
           título. Os nossos 12px de folga faziam a rail começar mais baixo que
           a coluna ao lado, e a diferença aparece na horizontal do topo. */
-      className={`flex shrink-0 flex-col items-center overflow-y-auto bg-panel shadow-[inset_-1px_0_0_theme(colors.rail-divider)] ${
+      className={`flex shrink-0 flex-col items-center overflow-y-auto bg-background-base-lowest shadow-[inset_-1px_0_0_theme(colors.rail-divider)] ${
         // no celular não há card de usuário flutuando por cima da rail: o
         // respiro de 78px existe só para ele, e ali sobraria um buraco no fim
         compacto ? "w-[72px] gap-2 pb-3" : "w-20 gap-2.5 pb-[78px]"
@@ -460,7 +460,7 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
       {/* 1px, e a folga de 10 vem do `gap-2.5` do container — tínhamos 2px com
           mais 2 de margem de cada lado, o que engrossava a linha e afastava os
           grupos */}
-      <div aria-hidden="true" className="h-px w-8 shrink-0 bg-rail-divider" />
+      <div aria-hidden="true" className="h-px w-8 shrink-0 bg-app-frame-border" />
 
       {guilds.map((guild) => (
         <RailItem

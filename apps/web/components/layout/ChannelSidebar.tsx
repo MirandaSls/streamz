@@ -65,7 +65,7 @@ import { ui, useUI, type MenuItem } from "@/stores/ui";
 
 /** Ícone do canal: voz, anúncio (somente leitura), privado ou texto. */
 function ChannelIcon({ channel }: { channel: Channel }) {
-  const cls = "shrink-0 text-txt-faint";
+  const cls = "shrink-0 text-channels-default";
   if (channel.type === "VOICE") return <Volume2 size={20} className={cls} aria-hidden="true" />;
   if (channel.type === "ANNOUNCEMENT" || channel.readOnly) {
     return <Megaphone size={20} className={cls} aria-hidden="true" />;
@@ -97,7 +97,7 @@ function LinhaDeSolta({ ativa }: { ativa: boolean }) {
   return (
     <div
       aria-hidden="true"
-      className={`mx-2 h-0.5 rounded-full transition ${ativa ? "bg-accent" : "bg-transparent"}`}
+      className={`mx-2 h-0.5 rounded-full transition ${ativa ? "bg-brand-500" : "bg-transparent"}`}
     />
   );
 }
@@ -123,7 +123,7 @@ function LinhaDeSolta({ ativa }: { ativa: boolean }) {
  * | próximo canal | 42 abaixo do canal anterior | 16+2+22+2 = 42 |
  *
  * A cor é a mesma do rótulo e a mesma dos nomes de canal não lidos — na print
- * os três picam no mesmo valor (129,130,138), o que é `text-txt-muted`.
+ * os três picam no mesmo valor (129,130,138), o que é `text-text-muted`.
  */
 function CategoryHeader({
   label,
@@ -173,7 +173,7 @@ function CategoryHeader({
           o nome do servidor acima e com o `#` dos canais abaixo. Com o chevron
           na frente, essa coluna de alinhamento se perdia.
         */
-        className={`flex min-w-0 flex-1 items-center gap-1 pl-2.5 text-sm font-medium text-txt-muted hover:text-txt-normal ${
+        className={`flex min-w-0 flex-1 items-center gap-1 pl-2.5 text-sm font-medium text-text-muted hover:text-text-default ${
           celular ? "gap-1.5 text-xs font-semibold uppercase tracking-wide" : ""
         }`}
       >
@@ -204,7 +204,7 @@ function CategoryHeader({
             type="button"
             onClick={onEdit}
             aria-label={`Editar ${label}`}
-            className="grid h-[22px] w-6 shrink-0 place-items-center rounded text-txt-muted opacity-0 transition hover:text-txt-primary group-hover:opacity-100 focus-visible:opacity-100"
+            className="grid h-[22px] w-6 shrink-0 place-items-center rounded text-text-muted opacity-0 transition hover:text-text-strong group-hover:opacity-100 focus-visible:opacity-100"
           >
             <Settings size={18} />
           </button>
@@ -216,7 +216,7 @@ function CategoryHeader({
             type="button"
             onClick={onCreate}
             aria-label={`Criar canal em ${label}`}
-            className="grid h-[22px] w-6 shrink-0 place-items-center rounded text-txt-muted transition hover:text-txt-primary"
+            className="grid h-[22px] w-6 shrink-0 place-items-center rounded text-text-muted transition hover:text-text-strong"
           >
             <Plus size={20} />
           </button>
@@ -257,12 +257,12 @@ function CabecalhoDoServidor({
 }) {
   const faixa = guildBannerBackground(guild?.bannerColor);
   return (
-    <div className="shrink-0 border-b border-border">
+    <div className="shrink-0 border-b border-border-subtle">
       {/* 74pt de faixa, medidos entre o topo da coluna e o fim do banner */}
       <div
         aria-hidden="true"
         style={faixa ? { background: faixa } : undefined}
-        className={`h-[74px] w-full ${faixa ? "" : "bg-hov"}`}
+        className={`h-[74px] w-full ${faixa ? "" : "bg-interactive-background-hover"}`}
       />
       <div className="px-4 pb-3 pt-2.5">
         <button
@@ -272,15 +272,15 @@ function CabecalhoDoServidor({
           aria-haspopup="menu"
           className="flex min-h-[44px] w-full items-center gap-1 text-left disabled:cursor-default"
         >
-          <span className="truncate text-xl font-bold text-txt-primary">
+          <span className="truncate text-xl font-bold text-text-strong">
             {guild?.name ?? "Selecione um servidor"}
           </span>
           {guild && (
-            <ChevronRight size={18} aria-hidden="true" className="shrink-0 text-txt-secondary" />
+            <ChevronRight size={18} aria-hidden="true" className="shrink-0 text-text-subtle" />
           )}
         </button>
         {guild && (
-          <p className="text-sm text-txt-muted">
+          <p className="text-sm text-text-muted">
             {membros === 1 ? "1 membro" : `${membros} membros`}
           </p>
         )}
@@ -288,7 +288,7 @@ function CabecalhoDoServidor({
           <span
             /* pílula de busca: visual, sem função — ver o comentário do topo */
             aria-hidden="true"
-            className="flex h-[40px] min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-hov text-sm text-txt-muted"
+            className="flex h-[40px] min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-interactive-background-hover text-sm text-text-muted"
           >
             <Search size={16} />
             Buscar
@@ -298,7 +298,7 @@ function CabecalhoDoServidor({
               type="button"
               onClick={onConvidar}
               aria-label={`Convidar pessoas para ${guild.name}`}
-              className="grid h-[40px] w-[40px] shrink-0 place-items-center rounded-full bg-hov text-txt-secondary transition active:bg-border-strong"
+              className="grid h-[40px] w-[40px] shrink-0 place-items-center rounded-full bg-interactive-background-hover text-text-subtle transition active:bg-border-normal"
             >
               <UserPlus size={20} />
             </button>
@@ -746,12 +746,12 @@ export default function ChannelSidebar() {
           onContextMenu={(e) => openChannelMenu(e, channel)}
           className={`group relative mx-2 flex h-9 items-center rounded-lg pl-[10px] pr-1 ${
             arrastando ? "opacity-40" : ""
-          } ${alvoDeMembro ? "bg-hov ring-2 ring-inset ring-accent" : ""} ${
+          } ${alvoDeMembro ? "bg-interactive-background-hover ring-2 ring-inset ring-brand-500" : ""} ${
             active
-              ? "bg-sel text-txt-primary"
+              ? "bg-interactive-background-selected text-text-strong"
               : unread
-                ? "text-txt-primary hover:bg-hov"
-                : "text-txt-faint hover:bg-hov hover:text-txt-normal"
+                ? "text-text-strong hover:bg-interactive-background-hover"
+                : "text-channels-default hover:bg-interactive-background-hover hover:text-text-default"
           } ${silenciado && !active ? "opacity-50" : ""}`}
         >
           {unread && (
@@ -778,7 +778,7 @@ export default function ChannelSidebar() {
           {channel.mentionCount > 0 && !active && (
             <span
               aria-label={`${channel.mentionCount} menções`}
-              className="grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[11px] font-bold leading-none text-white"
+              className="grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[11px] font-bold leading-none text-white"
             >
               {channel.mentionCount}
             </span>
@@ -789,7 +789,7 @@ export default function ChannelSidebar() {
           {vozAqui === channel.id && vozDesde !== null && (
             <Cronometro
               desde={vozDesde}
-              className="ml-auto mr-1.5 shrink-0 text-xs text-green group-hover:hidden"
+              className="ml-auto mr-1.5 shrink-0 text-xs text-status-positive group-hover:hidden"
             />
           )}
 
@@ -814,7 +814,7 @@ export default function ChannelSidebar() {
                     abrirVoiceChat();
                   }}
                   aria-label={`Abrir a conversa de ${name}`}
-                  className="grid h-6 w-6 place-items-center rounded text-txt-muted opacity-0 transition hover:text-txt-primary group-hover:opacity-100 focus-visible:opacity-100"
+                  className="grid h-6 w-6 place-items-center rounded text-text-muted opacity-0 transition hover:text-text-strong group-hover:opacity-100 focus-visible:opacity-100"
                 >
                   <MessageSquare size={18} />
                 </button>
@@ -825,7 +825,7 @@ export default function ChannelSidebar() {
                 type="button"
                 onClick={() => void createInvite()}
                 aria-label={`Criar convite para ${name}`}
-                className="grid h-6 w-6 place-items-center rounded text-txt-muted opacity-0 transition hover:text-txt-primary group-hover:opacity-100 focus-visible:opacity-100"
+                className="grid h-6 w-6 place-items-center rounded text-text-muted opacity-0 transition hover:text-text-strong group-hover:opacity-100 focus-visible:opacity-100"
               >
                 <UserPlus size={18} />
               </button>
@@ -836,7 +836,7 @@ export default function ChannelSidebar() {
                   type="button"
                   onClick={() => openModal({ kind: "channelSettings", channelId: channel.id })}
                   aria-label={`Editar ${name}`}
-                  className="grid h-6 w-6 place-items-center rounded text-txt-muted opacity-0 transition hover:text-txt-primary group-hover:opacity-100 focus-visible:opacity-100"
+                  className="grid h-6 w-6 place-items-center rounded text-text-muted opacity-0 transition hover:text-text-strong group-hover:opacity-100 focus-visible:opacity-100"
                 >
                   <Settings size={18} />
                 </button>
@@ -970,7 +970,7 @@ export default function ChannelSidebar() {
   }
 
   return (
-    <aside className="flex w-[294px] shrink-0 flex-col bg-panel">
+    <aside className="flex w-[294px] shrink-0 flex-col bg-background-base-lowest">
       {/*
         O cabeçalho deixa de ser um botão só. No Discord o chevron fica **colado
         ao nome**, não na extremidade, e sobra a ponta direita para o botão de
@@ -988,21 +988,21 @@ export default function ChannelSidebar() {
           onConvidar={() => void createInvite()}
         />
       ) : (
-      <div className="flex h-[49px] shrink-0 items-center border-b border-border pl-5 pr-3 shadow-header">
+      <div className="flex h-[49px] shrink-0 items-center border-b border-border-subtle pl-5 pr-3 shadow-elevation-low">
         <button
           type="button"
           onClick={openGuildMenu}
           disabled={!guild}
           aria-haspopup="menu"
           aria-expanded={menuAberto}
-          className="-ml-1 flex min-w-0 flex-1 items-center gap-1.5 rounded-[4px] py-1 pl-1 pr-2 text-left font-semibold text-txt-primary transition hover:bg-hov disabled:cursor-default disabled:hover:bg-transparent"
+          className="-ml-1 flex min-w-0 flex-1 items-center gap-1.5 rounded-[4px] py-1 pl-1 pr-2 text-left font-semibold text-text-strong transition hover:bg-interactive-background-hover disabled:cursor-default disabled:hover:bg-transparent"
         >
           <span className="truncate">{guild?.name ?? "Selecione um servidor"}</span>
           {guild &&
             (menuAberto ? (
-              <X size={14} aria-hidden="true" className="shrink-0 text-txt-secondary" />
+              <X size={14} aria-hidden="true" className="shrink-0 text-text-subtle" />
             ) : (
-              <ChevronDown size={14} aria-hidden="true" className="shrink-0 text-txt-secondary" />
+              <ChevronDown size={14} aria-hidden="true" className="shrink-0 text-text-subtle" />
             ))}
         </button>
         {guild && (
@@ -1011,7 +1011,7 @@ export default function ChannelSidebar() {
               type="button"
               onClick={() => void createInvite()}
               aria-label={`Convidar pessoas para ${guild.name}`}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-[4px] text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-[4px] text-text-subtle transition hover:bg-interactive-background-hover hover:text-text-strong"
             >
               <UserPlus size={20} />
             </button>
@@ -1027,9 +1027,9 @@ export default function ChannelSidebar() {
         onKeyDown={handleKeyDown}
         className="flex-1 overflow-y-auto pb-[78px] pt-2"
       >
-        {loading && <p className="px-4 py-1 text-sm text-txt-muted">Carregando canais…</p>}
+        {loading && <p className="px-4 py-1 text-sm text-text-muted">Carregando canais…</p>}
         {!loading && channels.length === 0 && categories.length === 0 && (
-          <p className="px-4 py-1 text-sm text-txt-muted">
+          <p className="px-4 py-1 text-sm text-text-muted">
             {guild ? "Nenhum canal ainda. Crie um pelo menu do servidor." : "Escolha um servidor no rail."}
           </p>
         )}

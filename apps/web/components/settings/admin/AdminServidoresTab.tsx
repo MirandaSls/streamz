@@ -19,7 +19,7 @@ export default function AdminServidoresTab() {
 
   return (
     <>
-      <p className="mb-4 text-sm text-txt-muted">
+      <p className="mb-4 text-sm text-text-muted">
         Todo servidor criado nesta instância, inclusive os privados.
       </p>
 
@@ -30,15 +30,15 @@ export default function AdminServidoresTab() {
       >
         <ul>
           {dados?.map((g) => (
-            <li key={g.id} className="border-b border-border py-2.5 last:border-b-0">
-              <p className="truncate text-sm font-medium text-txt-primary">{g.name}</p>
-              <p className="mt-0.5 truncate text-xs text-txt-muted">
+            <li key={g.id} className="border-b border-border-subtle py-2.5 last:border-b-0">
+              <p className="truncate text-sm font-medium text-text-strong">{g.name}</p>
+              <p className="mt-0.5 truncate text-xs text-text-muted">
                 Dono: {g.owner ? `@${g.owner.username}` : "conta excluída"}
                 {" · "}
                 {g.membros} membro(s) · {g.canais} canal(is) ·{" "}
                 {g.mensagens.toLocaleString("pt-BR")} mensagem(ns)
               </p>
-              <p className="mt-0.5 text-xs text-txt-faint">Criado em {dataCompleta(g.createdAt)}</p>
+              <p className="mt-0.5 text-xs text-channels-default">Criado em {dataCompleta(g.createdAt)}</p>
             </li>
           ))}
         </ul>

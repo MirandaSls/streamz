@@ -191,7 +191,7 @@ export default function PerfilTab() {
       <div className="min-w-0 flex-1">
         <h3 className={ESTILO_ROTULO}>Foto do perfil</h3>
         <div className="flex flex-wrap items-center gap-3">
-          <Avatar user={user} size="xl" surface="border-panel" />
+          <Avatar user={user} size="xl" surface="border-background-base-lowest" />
           <input
             ref={fotoRef}
             type="file"
@@ -207,7 +207,7 @@ export default function PerfilTab() {
             type="button"
             disabled={enviandoFoto}
             onClick={() => fotoRef.current?.click()}
-            className="flex h-9 celular:h-[44px] items-center gap-2 rounded-[3px] bg-accent px-3 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
+            className="flex h-9 celular:h-[44px] items-center gap-2 rounded-[3px] bg-brand-500 px-3 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:opacity-50"
           >
             <Camera size={16} aria-hidden="true" />
             {enviandoFoto ? "Enviando…" : user.avatarUrl ? "Trocar foto" : "Escolher foto"}
@@ -219,14 +219,14 @@ export default function PerfilTab() {
                 disabled={enviandoFoto}
                 onClick={() => void removerFoto()}
                 aria-label="Remover foto"
-                className="grid h-9 celular:h-[44px] w-9 celular:w-[44px] place-items-center rounded-[3px] text-txt-secondary transition hover:bg-hov hover:text-red disabled:opacity-50"
+                className="grid h-9 celular:h-[44px] w-9 celular:w-[44px] place-items-center rounded-[3px] text-text-subtle transition hover:bg-interactive-background-hover hover:text-status-danger disabled:opacity-50"
               >
                 <Trash2 size={16} />
               </button>
             </Tooltip>
           )}
         </div>
-        <p className="mt-2 text-xs text-txt-muted">
+        <p className="mt-2 text-xs text-text-muted">
           Sem foto, o perfil usa as iniciais do seu nome.
         </p>
 
@@ -247,7 +247,7 @@ export default function PerfilTab() {
             type="button"
             disabled={enviando}
             onClick={() => fileRef.current?.click()}
-            className="flex h-9 celular:h-[44px] items-center gap-2 rounded-[3px] bg-accent px-3 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
+            className="flex h-9 celular:h-[44px] items-center gap-2 rounded-[3px] bg-brand-500 px-3 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:opacity-50"
           >
             <ImageIcon size={16} aria-hidden="true" />
             {enviando ? "Enviando…" : "Trocar banner"}
@@ -258,7 +258,7 @@ export default function PerfilTab() {
                 type="button"
                 onClick={() => void removerBanner()}
                 aria-label="Remover banner"
-                className="grid h-9 celular:h-[44px] w-9 celular:w-[44px] place-items-center rounded-[3px] text-txt-secondary transition hover:bg-hov hover:text-red"
+                className="grid h-9 celular:h-[44px] w-9 celular:w-[44px] place-items-center rounded-[3px] text-text-subtle transition hover:bg-interactive-background-hover hover:text-status-danger"
               >
                 <Trash2 size={16} />
               </button>
@@ -273,7 +273,7 @@ export default function PerfilTab() {
           onChange={setBannerColor}
           cores={ROLE_COLORS}
         />
-        <p className="mt-2 text-xs text-txt-muted">
+        <p className="mt-2 text-xs text-text-muted">
           Sem imagem, o perfil usa a cor. O envio precisa do armazenamento configurado.
         </p>
 
@@ -301,7 +301,7 @@ export default function PerfilTab() {
           placeholder="Fale um pouco sobre você."
           className={ESTILO_AREA}
         />
-        <p className="mt-1 text-xs text-txt-muted">
+        <p className="mt-1 text-xs text-text-muted">
           {aboutMe.length}/{MAX_ABOUT_ME}
         </p>
       </div>
@@ -309,7 +309,7 @@ export default function PerfilTab() {
       {/* prévia: o mesmo cartão que os outros veem */}
       <div className="w-[280px] shrink-0 celular:w-full">
         <h3 className={ESTILO_ROTULO}>Prévia</h3>
-        <div className="overflow-hidden rounded-lg bg-overlay">
+        <div className="overflow-hidden rounded-lg bg-background-surface-higher">
           {bannerUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={bannerUrl} alt="" className="h-[60px] w-full object-cover" />
@@ -317,26 +317,26 @@ export default function PerfilTab() {
             <div className="h-[60px] w-full" style={{ backgroundColor: bannerColor }} />
           )}
           <div className="px-4 pb-4">
-            <div className="-mt-10 mb-3 w-fit rounded-full border-[6px] border-overlay">
-              <Avatar user={user} size="xl" status={user.status} surface="border-overlay" />
+            <div className="-mt-10 mb-3 w-fit rounded-full border-[6px] border-background-surface-higher">
+              <Avatar user={user} size="xl" status={user.status} surface="border-background-surface-higher" />
             </div>
-            <div className="rounded-lg bg-footer p-3">
+            <div className="rounded-lg bg-background-base-low p-3">
               <div className="flex items-baseline gap-2">
-                <span className="truncate text-xl font-bold leading-6 text-txt-primary">
+                <span className="truncate text-xl font-bold leading-6 text-text-strong">
                   {displayNameOf(user)}
                 </span>
                 {pronouns.trim() && (
-                  <span className="truncate text-xs text-txt-muted">{pronouns.trim()}</span>
+                  <span className="truncate text-xs text-text-muted">{pronouns.trim()}</span>
                 )}
               </div>
-              <div className="truncate text-sm text-txt-normal">@{user.username}</div>
-              {personalizado && <div className="mt-1 text-sm text-txt-normal">{personalizado}</div>}
+              <div className="truncate text-sm text-text-default">@{user.username}</div>
+              {personalizado && <div className="mt-1 text-sm text-text-default">{personalizado}</div>}
               {aboutMe.trim() && (
                 <>
-                  <div className="mt-3 border-t border-border pt-3 text-xs font-bold uppercase text-txt-secondary">
+                  <div className="mt-3 border-t border-border-subtle pt-3 text-xs font-bold uppercase text-text-subtle">
                     Sobre mim
                   </div>
-                  <p className="mt-1 whitespace-pre-wrap break-words text-sm text-txt-normal">
+                  <p className="mt-1 whitespace-pre-wrap break-words text-sm text-text-default">
                     {aboutMe}
                   </p>
                 </>

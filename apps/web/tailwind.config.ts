@@ -18,54 +18,23 @@ import { coresDoDiscord, sombrasDoDiscord } from "./tokens.gerados";
 const cor = (n: string) => `rgb(var(--${n}-rgb) / calc(var(--${n}-a) * <alpha-value>))`;
 
 /**
- * Nomes antigos, apontando para o token do Discord que faz o mesmo papel.
- * **Temporários**: saem ao fim da onda 0, quando a migração (0.8) tiver trocado
- * cada uso pelo nome do Discord. Não use em código novo.
+ * Mensagem efêmera: o Discord não tem token próprio. No print de referência
+ * (`docs/Reference/efemeras/`) o bloco é a mensagem comum + (2, 2, 9) em RGB,
+ * que é o blurple a 4% por cima; aqui, o limão a 4%. O hover não foi medido.
  */
-const apelidosDaMigracao = {
-  panel: cor("background-base-lowest"), // rail, coluna de canais/DMs, barra de título
-  footer: cor("background-base-low"), // painel do usuário
-  chat: cor("background-base-lower"), // mensagens, cabeçalho, membros
-  input: cor("chat-background-default"), // composer
-  msghov: cor("message-background-hover"),
-  // Mensagem efêmera: o Discord não tem token próprio. No print de referência
-  // (`docs/Reference/efemeras/`) o bloco é a mensagem comum + (2, 2, 9) em RGB,
-  // que é o blurple a 4% por cima; aqui, o limão a 4%. O hover não foi medido.
+const mensagemEfemera = {
   efem: "rgb(var(--brand-500-rgb) / 0.04)",
   efemhov: "rgb(var(--brand-500-rgb) / 0.08)",
-  hov: cor("interactive-background-hover"),
-  sel: cor("interactive-background-selected"),
-  void: cor("input-background-default"), // campo escuro (90% dos usos)
-  border: cor("border-subtle"),
-  "border-strong": cor("border-normal"),
-  "border-strong-hover": cor("border-strong"),
-  overlay: cor("background-surface-higher"), // menu: no Discord é MAIS claro que o app
-  "rail-divider": cor("app-frame-border"),
-  scroll: cor("scrollbar-thin-thumb"),
-  accent: cor("brand-500"),
-  "accent-hover": cor("control-primary-background-hover"), // escurece, como no Discord
-  "accent-press": cor("control-primary-background-active"),
-  "accent-ink": cor("control-primary-text-default"), // texto SOBRE o limão
-  mention: cor("mention-foreground"),
-  green: cor("status-positive"),
-  yellow: cor("status-warning"),
-  red: cor("status-danger"),
-  "red-hover": cor("control-critical-primary-background-hover"),
-  "txt-primary": cor("text-strong"),
-  "txt-normal": cor("text-default"),
-  "txt-secondary": cor("text-subtle"),
-  "txt-muted": cor("text-muted"),
-  "txt-faint": cor("channels-default"),
-  "txt-link": cor("text-link"),
 };
 
 export default {
-  content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
+  // lib/ entra porque o markdown (lib/markdown.tsx) escreve classe; hooks/ e stores/ pelo mesmo motivo
+  content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./lib/**/*.{ts,tsx}", "./hooks/**/*.{ts,tsx}", "./stores/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
         ...coresDoDiscord,
-        ...apelidosDaMigracao,
+        ...mensagemEfemera,
         // Paper: cor de MARCA (wordmark, assets), nunca superfície nem texto de UI.
         paper: "#FDFDFB",
       },
@@ -120,9 +89,8 @@ export default {
       boxShadow: {
         // `shadow-shadow-high`, `shadow-elevation-low`… — as do Discord, pelo nome
         ...sombrasDoDiscord,
-        // apelidos da migração (saem com os de cor)
-        header: "var(--elevation-low)", // cabeçalho de 48px sobre a lista
-        high: "var(--shadow-border), var(--shadow-high)", // popout: a combinação mais usada no Discord
+        // popout, menu, tooltip: a combinação mais usada no CSS do Discord (×74)
+        popout: "var(--shadow-border), var(--shadow-high)",
       },
       screens: {
         /**

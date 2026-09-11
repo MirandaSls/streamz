@@ -187,7 +187,7 @@ export default function AppPage() {
             // conversa direta, e quem decide é o `orientacaoDaChamada`, dentro
             // do `CallSplit`, pelo `guildId`. A coluna nasce ABERTA (é assim na
             // print `2026-09-04 102429`) e o balão é lembrado canal a canal.
-            <main className="flex min-w-0 flex-1 bg-chat">
+            <main className="flex min-w-0 flex-1 bg-background-base-lower">
               {voiceChatOpen ? (
                 <CallSplit
                   guildId={voiceChannel.guildId}

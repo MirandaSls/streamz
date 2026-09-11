@@ -78,7 +78,7 @@ export default function FolhaInferior({
         role="dialog"
         aria-modal="true"
         aria-label={rotulo}
-        className="anim-folha flex max-h-[85dvh] flex-col overflow-hidden rounded-t-2xl bg-overlay pb-[env(safe-area-inset-bottom)] shadow-high"
+        className="anim-folha flex max-h-[85dvh] flex-col overflow-hidden rounded-t-2xl bg-background-surface-higher pb-[env(safe-area-inset-bottom)] shadow-popout"
       >
         {/* a alça: não arrasta (ainda), mas é o sinal de "isto sobe do fundo e
             fecha para baixo" que todo mundo já conhece de outros apps — e é
@@ -89,10 +89,10 @@ export default function FolhaInferior({
           aria-label="Fechar"
           className="flex h-[28px] w-full shrink-0 items-center justify-center pt-2.5"
         >
-          <span aria-hidden="true" className="h-1 w-9 rounded-full bg-border-strong" />
+          <span aria-hidden="true" className="h-1 w-9 rounded-full bg-border-normal" />
         </button>
         {titulo && (
-          <h2 className="shrink-0 px-5 pb-1 pt-3 text-base font-semibold text-txt-primary">
+          <h2 className="shrink-0 px-5 pb-1 pt-3 text-base font-semibold text-text-strong">
             {titulo}
           </h2>
         )}

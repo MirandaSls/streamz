@@ -51,7 +51,7 @@ import {
  * centro em (50%, 100%), pico `rgb(116,131,225)` e queda quase linear até o
  * fundo escuro num raio de ~960px (85% do raio até o canto mais distante deste
  * palco). Aqui o mesmo desenho sai do **nosso** acento (Volt Lime) sobre
- * `bg-chat`, sem token novo.
+ * `bg-background-base-lower`, sem token novo.
  *
  * A força saiu de medida, não de gosto: com o **campo inteiro** do palco
  * medido em luminância relativa média, a print do Discord dá 0,0438 (0,0762 na
@@ -74,13 +74,13 @@ export default function VistaDoCanalDeVoz({
   const restante = alemDosAvatares(estados.length);
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-chat">
+    <div className="relative h-full w-full overflow-hidden bg-background-base-lower">
       {/* O brilho é uma camada própria, e não o fundo do bloco de texto: assim
           ele cobre o palco inteiro (a print o mostra subindo por trás do
           cabeçalho) sem que a centralização do conteúdo mexa nele. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_100%,var(--tw-gradient-stops))] from-accent/40 from-0% to-transparent to-[85%]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_100%,var(--tw-gradient-stops))] from-brand-500/40 from-0% to-transparent to-[85%]"
       />
 
       <div className="relative grid h-full place-items-center px-8 py-6">
@@ -92,8 +92,8 @@ export default function VistaDoCanalDeVoz({
             <ul className="mb-7 flex max-w-3xl flex-wrap items-start justify-center gap-x-4 gap-y-3">
               {visiveis.map((estado) => (
                 <li key={estado.user.id} className="flex w-24 flex-col items-center gap-1.5">
-                  <Avatar user={estado.user} size="xl" surface="border-chat" />
-                  <span className="max-w-full truncate text-xs text-txt-normal">
+                  <Avatar user={estado.user} size="xl" surface="border-background-base-lower" />
+                  <span className="max-w-full truncate text-xs text-text-default">
                     {displayNameOf(estado.user)}
                   </span>
                 </li>
@@ -101,7 +101,7 @@ export default function VistaDoCanalDeVoz({
               {restante > 0 && (
                 // o "+N" ocupa o lugar de um avatar, sem nome embaixo: por isso
                 // a fileira alinha pelo TOPO, e não pelo meio
-                <li className="grid h-20 w-20 place-items-center rounded-full bg-chat/60 text-xl font-semibold text-txt-primary">
+                <li className="grid h-20 w-20 place-items-center rounded-full bg-background-base-lower/60 text-xl font-semibold text-text-strong">
                   +{restante}
                 </li>
               )}
@@ -111,17 +111,17 @@ export default function VistaDoCanalDeVoz({
           {/* mesmo tratamento do "Bem-vindo(a) a Geral!" do painel ao lado
               (`MessageList`): nome de canal é conteúdo, e na print os dois
               "Geral" da tela são a mesma letra */}
-          <h2 className="max-w-2xl truncate font-headline text-[32px] font-extrabold leading-10 text-txt-primary">
+          <h2 className="max-w-2xl truncate font-headline text-[32px] font-extrabold leading-10 text-text-strong">
             {nome}
           </h2>
-          <p className="mt-2 text-sm leading-5 text-txt-normal">
+          <p className="mt-2 text-sm leading-5 text-text-default">
             {textoDePresenca(estados.length)}
           </p>
 
           <button
             type="button"
             onClick={onEntrar}
-            className="mt-6 h-10 rounded-lg bg-paper px-[18px] text-base font-medium text-void transition hover:brightness-90"
+            className="mt-6 h-10 rounded-lg bg-paper px-[18px] text-base font-medium text-input-background-default transition hover:brightness-90"
           >
             Entrar na chamada de voz
           </button>

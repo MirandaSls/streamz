@@ -14,13 +14,13 @@ import { useModeration } from "@/stores/moderation";
  */
 
 const CAIXA =
-  "mx-4 mb-6 flex items-center justify-center gap-2 rounded-lg bg-input px-4 py-3 text-center text-sm text-txt-muted";
+  "mx-4 mb-6 flex items-center justify-center gap-2 rounded-lg bg-chat-background-default px-4 py-3 text-center text-sm text-text-muted";
 
 /** Aviso de castigo, com a hora em que ele acaba. */
 export function TimeoutNotice({ until }: { until: string }) {
   return (
     <p className={CAIXA} role="status">
-      <Timer size={18} className="shrink-0 text-red" aria-hidden="true" />
+      <Timer size={18} className="shrink-0 text-status-danger" aria-hidden="true" />
       Você está de castigo neste servidor até {horaCompleta(until)}. Dá para ler tudo, mas não para
       enviar mensagens nem reagir.
     </p>
@@ -36,7 +36,7 @@ export function RulesNotice({ rulesChannelId }: { rulesChannelId: string | null 
 
   return (
     <div className={`${CAIXA} flex-wrap`} role="status">
-      <ScrollText size={18} className="shrink-0 text-yellow" aria-hidden="true" />
+      <ScrollText size={18} className="shrink-0 text-status-warning" aria-hidden="true" />
       <span>
         Leia as regras
         {canal && (
@@ -45,7 +45,7 @@ export function RulesNotice({ rulesChannelId }: { rulesChannelId: string | null 
             <button
               type="button"
               onClick={() => select(canal)}
-              className="font-medium text-txt-link hover:underline"
+              className="font-medium text-text-link hover:underline"
             >
               #{canal.name}
             </button>
@@ -56,7 +56,7 @@ export function RulesNotice({ rulesChannelId }: { rulesChannelId: string | null 
       <button
         type="button"
         onClick={() => void accept()}
-        className="h-8 rounded-[3px] bg-accent px-3 font-medium text-accent-ink transition hover:bg-accent-hover"
+        className="h-8 rounded-[3px] bg-brand-500 px-3 font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover"
       >
         Li e aceito as regras
       </button>

@@ -186,23 +186,23 @@ export default function CargosTab({ guildId }: { guildId: string }) {
         <button
           type="button"
           onClick={() => setSelecionado(padrao.id)}
-          className="mb-8 flex h-[74px] w-full items-center gap-4 rounded border border-border bg-input pl-4 pr-6 text-left transition hover:bg-hov"
+          className="mb-8 flex h-[74px] w-full items-center gap-4 rounded border border-border-subtle bg-chat-background-default pl-4 pr-6 text-left transition hover:bg-interactive-background-hover"
         >
           <span
             aria-hidden="true"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-chat text-txt-normal"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-background-base-lower text-text-default"
           >
             <Users size={20} />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-base font-semibold text-txt-primary">
+            <span className="block truncate text-base font-semibold text-text-strong">
               Permissões padrão
             </span>
-            <span className="mt-1 block truncate text-xs text-txt-muted">
+            <span className="mt-1 block truncate text-xs text-text-muted">
               @everyone • vale para todos os membros do servidor
             </span>
           </span>
-          <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-txt-muted" />
+          <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-text-muted" />
         </button>
       )}
 
@@ -211,7 +211,7 @@ export default function CargosTab({ guildId }: { guildId: string }) {
           <Search
             size={14}
             aria-hidden="true"
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-txt-muted"
+            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted"
           />
           <input
             value={busca}
@@ -226,17 +226,17 @@ export default function CargosTab({ guildId }: { guildId: string }) {
           type="button"
           disabled={busy}
           onClick={() => void criar()}
-          className="h-8 celular:h-[44px] shrink-0 rounded-lg bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
+          className="h-8 celular:h-[44px] shrink-0 rounded-lg bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:opacity-50"
         >
           Criar cargo
         </button>
       </div>
-      <p className="mt-2 text-sm text-txt-normal">
+      <p className="mt-2 text-sm text-text-default">
         Os membros usam a cor do cargo mais alto que eles possuem nesta lista. Arraste os
         cargos para reordenar.
       </p>
 
-      <div className="mt-8 flex items-center gap-2 border-b border-border pb-2 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+      <div className="mt-8 flex items-center gap-2 border-b border-border-subtle pb-2 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
         <span className="w-6 shrink-0" aria-hidden="true" />
         <span className="min-w-0 flex-1">Cargos — {editaveis.length}</span>
         <span className="w-[92px] shrink-0 text-right">Membros</span>
@@ -245,7 +245,7 @@ export default function CargosTab({ guildId }: { guildId: string }) {
 
       <div role="list">
         {lista.length === 0 && (
-          <p className="py-3 text-sm text-txt-muted">
+          <p className="py-3 text-sm text-text-muted">
             {editaveis.length === 0 ? "Ainda não há cargos além do @everyone." : "Nenhum cargo com esse nome."}
           </p>
         )}
@@ -260,11 +260,11 @@ export default function CargosTab({ guildId }: { guildId: string }) {
             }}
             onDrop={() => void soltarEm(r)}
             onDragEnd={() => setArrastando(null)}
-            className={`group flex h-[61px] items-center gap-2 border-b border-border transition ${
-              arrastando === r.id ? "opacity-40" : "hover:bg-hov"
+            className={`group flex h-[61px] items-center gap-2 border-b border-border-subtle transition ${
+              arrastando === r.id ? "opacity-40" : "hover:bg-interactive-background-hover"
             }`}
           >
-            <span className="w-6 shrink-0 text-txt-faint">
+            <span className="w-6 shrink-0 text-channels-default">
               <Tooltip label="Arraste para reordenar">
                 <GripVertical
                   size={16}
@@ -285,11 +285,11 @@ export default function CargosTab({ guildId }: { guildId: string }) {
                 style={{ backgroundColor: r.color ?? "#8a8a8e" }}
                 className="h-3 w-3 shrink-0 rounded-full"
               />
-              <span className="min-w-0 flex-1 truncate text-sm text-txt-primary">{r.name}</span>
+              <span className="min-w-0 flex-1 truncate text-sm text-text-strong">{r.name}</span>
             </button>
-            <span className="flex w-[92px] shrink-0 items-center justify-end gap-1.5 text-sm text-txt-normal">
+            <span className="flex w-[92px] shrink-0 items-center justify-end gap-1.5 text-sm text-text-default">
               {quantosTem(r)}
-              <User size={16} aria-hidden="true" className="text-txt-muted" />
+              <User size={16} aria-hidden="true" className="text-text-muted" />
             </span>
             {/* O lápis do print, sempre visível: no Discord ele é a ação
                 principal da linha e não espera o hover — o "…" ao lado é que
@@ -298,7 +298,7 @@ export default function CargosTab({ guildId }: { guildId: string }) {
               type="button"
               onClick={() => setSelecionado(r.id)}
               aria-label={`Editar o cargo ${r.name}`}
-              className="grid h-10 celular:h-[44px] w-10 celular:w-[44px] shrink-0 place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong hover:text-txt-primary"
+              className="grid h-10 celular:h-[44px] w-10 celular:w-[44px] shrink-0 place-items-center rounded-lg text-text-muted transition hover:bg-border-normal hover:text-text-strong"
             >
               <Pencil size={16} />
             </button>
@@ -309,7 +309,7 @@ export default function CargosTab({ guildId }: { guildId: string }) {
               // sempre visível, como no print: o lápis e o "…" são o par de
               // ações da linha, e um que some no hover parecia bug ao lado do
               // outro que não some
-              className="grid h-10 celular:h-[44px] w-10 celular:w-[44px] shrink-0 place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong hover:text-txt-primary"
+              className="grid h-10 celular:h-[44px] w-10 celular:w-[44px] shrink-0 place-items-center rounded-lg text-text-muted transition hover:bg-border-normal hover:text-text-strong"
             >
               <MoreHorizontal size={16} />
             </button>
@@ -395,13 +395,13 @@ function RoleEditor({
       <button
         type="button"
         onClick={aoVoltar}
-        className="mb-3 flex items-center gap-1.5 text-sm text-txt-muted transition hover:text-txt-primary celular:min-h-[44px]"
+        className="mb-3 flex items-center gap-1.5 text-sm text-text-muted transition hover:text-text-strong celular:min-h-[44px]"
       >
         <ArrowLeft size={16} aria-hidden="true" />
         Voltar aos cargos
       </button>
 
-      <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-txt-primary">
+      <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-text-strong">
         <span
           aria-hidden="true"
           style={{ backgroundColor: color || "#8a8a8e" }}
@@ -410,7 +410,7 @@ function RoleEditor({
         <span className="min-w-0 truncate">{name}</span>
       </h2>
 
-      <div role="tablist" aria-label="Seções do cargo" className="mb-5 flex gap-1 border-b border-border">
+      <div role="tablist" aria-label="Seções do cargo" className="mb-5 flex gap-1 border-b border-border-subtle">
         {abas.map((a) => (
           <button
             key={a.id}
@@ -420,8 +420,8 @@ function RoleEditor({
             onClick={() => setAba(a.id)}
             className={`-mb-px border-b-2 px-3 pb-2 text-sm font-medium transition celular:min-h-[44px] ${
               aba === a.id
-                ? "border-accent text-txt-primary"
-                : "border-transparent text-txt-muted hover:text-txt-normal"
+                ? "border-brand-500 text-text-strong"
+                : "border-transparent text-text-muted hover:text-text-default"
             }`}
           >
             {a.label}
@@ -430,7 +430,7 @@ function RoleEditor({
       </div>
 
       {role.isDefault && (
-        <p className="mb-4 rounded bg-void/50 px-3 py-2 text-sm text-txt-muted">
+        <p className="mb-4 rounded bg-input-background-default/50 px-3 py-2 text-sm text-text-muted">
           O @everyone vale para todo membro do servidor. Ele não tem nome, cor nem posição —
           só o conjunto de permissões que todo mundo recebe por padrão.
         </p>
@@ -498,16 +498,16 @@ function RoleEditor({
       {aba === "membros" && (
         <>
           <h3 className={ESTILO_ROTULO}>Membros com este cargo — {doCargo.length}</h3>
-          <div className="rounded bg-void/50">
+          <div className="rounded bg-input-background-default/50">
             {doCargo.length === 0 ? (
-              <p className="px-3 py-2 text-sm text-txt-muted">Ninguém tem este cargo ainda.</p>
+              <p className="px-3 py-2 text-sm text-text-muted">Ninguém tem este cargo ainda.</p>
             ) : (
               doCargo.map((m) => (
                 <div
                   key={m.user.id}
-                  className="flex items-center gap-3 px-3 py-2 text-sm hover:bg-hov"
+                  className="flex items-center gap-3 px-3 py-2 text-sm hover:bg-interactive-background-hover"
                 >
-                  <span className="min-w-0 flex-1 truncate text-txt-normal">
+                  <span className="min-w-0 flex-1 truncate text-text-default">
                     {displayNameOf(m.user)}
                   </span>
                   <Tooltip label="Remover cargo">
@@ -515,7 +515,7 @@ function RoleEditor({
                       type="button"
                       onClick={() => void toggleRole(m.user.id, role.id, false)}
                       aria-label={`Remover ${role.name} de ${displayNameOf(m.user)}`}
-                      className="grid h-7 celular:h-[44px] w-7 celular:w-[44px] place-items-center rounded text-txt-muted hover:text-red"
+                      className="grid h-7 celular:h-[44px] w-7 celular:w-[44px] place-items-center rounded text-text-muted hover:text-status-danger"
                     >
                       <Trash2 size={16} />
                     </button>

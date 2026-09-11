@@ -121,14 +121,14 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
       // separam a caixa de escrever do cartão no Discord. Largura em px, não
       // `w-80`: o `html` deste app tem 15,5px de base, então `rem` aqui daria
       // 310.
-      className="flex w-[320px] shrink-0 flex-col bg-chat p-[7px]"
+      className="flex w-[320px] shrink-0 flex-col bg-background-base-lower p-[7px]"
     >
       {/* Raio 8, e não os 10 de antes: a rampa de antisserrilhado do canto no
           print (26 → 32, 37, 42, 44) bate com a de um `border-radius: 8px`
           renderizado no mesmo Chromium (26 → 34, 38, 42, 44); com 10 a rampa
           começa um pixel mais tarde. Em px porque `rounded-lg` é `rem`, e a
           base deste app é 15,5px. */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[8px] border border-border bg-input">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[8px] border border-border-subtle bg-chat-background-default">
         <div className="relative shrink-0">
           {perfil?.bannerUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -139,7 +139,7 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
               // superfície neutra do tema — pôr a cor da marca aqui faria o
               // painel afirmar algo sobre a pessoa que ninguém disse
               style={perfil?.bannerColor ? { backgroundColor: perfil.bannerColor } : undefined}
-              className={`h-[105px] w-full ${perfil?.bannerColor ? "" : "bg-panel"}`}
+              className={`h-[105px] w-full ${perfil?.bannerColor ? "" : "bg-background-base-lowest"}`}
             />
           )}
 
@@ -206,7 +206,7 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
             avatar, e o `10px` da esquerda deixa o **avatar** nos 16px de recuo
             em que os textos também começam.
           */}
-          <div className="relative -mt-[55px] ml-[10px] w-fit rounded-full border-[6px] border-input">
+          <div className="relative -mt-[55px] ml-[10px] w-fit rounded-full border-[6px] border-chat-background-default">
             <Avatar user={user} size="xl" />
             {/*
               O selo do `Avatar` fica no canto da caixa; aqui ele precisa pousar
@@ -214,12 +214,12 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
               `2026-09-03 161607` para o avatar de 80: disco de 16 dentro de um
               anel de 6 (caixa de 28), com o centro em 0,84375 × 80 = 67,5 —
               `-right-px` sobre a caixa de recheio (o avatar) põe o centro em 67.
-              O fundo `bg-input` é o que aparece pelos recortes vazados.
+              O fundo `bg-chat-background-default` é o que aparece pelos recortes vazados.
             */}
             <span
               role="img"
               aria-label={STATUS_LABEL[status]}
-              className="absolute -bottom-px -right-px h-7 w-7 rounded-full border-[6px] border-input bg-input"
+              className="absolute -bottom-px -right-px h-7 w-7 rounded-full border-[6px] border-chat-background-default bg-chat-background-default"
             >
               <IconeDeStatus status={status} className="h-full w-full" />
             </span>
@@ -228,12 +228,12 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
           {/* tudo alinhado nos mesmos 16px do avatar; sem divisória entre seções */}
           <div className="px-4">
             {/* 21px do avatar até o nome — 6px deles já são o anel */}
-            <h2 className="mt-[15px] truncate text-[20px] font-bold leading-[21px] text-txt-primary">
+            <h2 className="mt-[15px] truncate text-[20px] font-bold leading-[21px] text-text-strong">
               {nome}
             </h2>
             {/* o username é branco, não apagado; os 21px de topo a topo saem da
                 entrelinha do nome, não de uma margem */}
-            <p className="truncate text-sm leading-[21px] text-txt-primary">{user.username}</p>
+            <p className="truncate text-sm leading-[21px] text-text-strong">{user.username}</p>
 
             {/* some inteira quando não há amigos em comum: zero não é um fato a
                 mostrar, e sem a resposta do servidor não há contagem nenhuma */}
@@ -247,11 +247,11 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
                       size="xs"
                       // 3px de sobreposição; o `ring` é box-shadow e não entra
                       // no leiaute, então ele recorta sem empurrar a pilha
-                      className="-ml-[3px] rounded-full ring-2 ring-input first:ml-0"
+                      className="-ml-[3px] rounded-full ring-2 ring-chat-background-default first:ml-0"
                     />
                   ))}
                 </span>
-                <span className="truncate text-sm text-txt-secondary">
+                <span className="truncate text-sm text-text-subtle">
                   {mutuos.length === 1 ? "1 amigo mútuo" : `${mutuos.length} amigos mútuos`}
                 </span>
               </div>
@@ -259,11 +259,11 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
 
             {perfil?.createdAt && (
               <>
-                <h3 className="mt-[25px] text-xs font-bold leading-4 text-txt-primary">
+                <h3 className="mt-[25px] text-xs font-bold leading-4 text-text-strong">
                   Membro desde
                 </h3>
                 {/* 26px de topo a topo com a linha de 16px acima */}
-                <p className="mt-[10px] text-sm leading-[18px] text-txt-normal">
+                <p className="mt-[10px] text-sm leading-[18px] text-text-default">
                   {DATA.format(new Date(perfil.createdAt))}
                 </p>
               </>
@@ -275,7 +275,7 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
         <button
           type="button"
           onClick={() => ui.openModal({ kind: "userProfile", userId: user.id })}
-          className="mx-4 mb-4 h-10 shrink-0 rounded-lg bg-border-strong text-base font-medium text-txt-primary transition hover:bg-border-strong-hover celular:mb-[max(1rem,env(safe-area-inset-bottom))] celular:h-[48px]"
+          className="mx-4 mb-4 h-10 shrink-0 rounded-lg bg-border-normal text-base font-medium text-text-strong transition hover:bg-border-strong celular:mb-[max(1rem,env(safe-area-inset-bottom))] celular:h-[48px]"
         >
           Ver Perfil Completo
         </button>

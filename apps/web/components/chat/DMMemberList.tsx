@@ -122,10 +122,10 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
   }
 
   return (
-    <aside aria-label="Participantes da conversa" className="flex w-[267px] shrink-0 flex-col bg-panel">
+    <aside aria-label="Participantes da conversa" className="flex w-[267px] shrink-0 flex-col bg-background-base-lowest">
       <div className="flex-1 overflow-y-auto pb-4">
         <div className="flex items-center justify-between px-4 pb-1 pt-4">
-          <h3 className="text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">
+          <h3 className="text-xs font-semibold uppercase tracking-[0.02em] text-text-muted">
             {grupo ? "Participantes" : "Conversa"} — {members.length}
           </h3>
           {grupo && (
@@ -134,7 +134,7 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
                 type="button"
                 onClick={() => ui.openModal({ kind: "addGroupMembers", channelId: dm.id })}
                 aria-label="Adicionar pessoas ao grupo"
-                className="text-txt-muted transition hover:text-txt-primary celular:-mr-2 celular:grid celular:h-[44px] celular:w-[44px] celular:place-items-center"
+                className="text-text-muted transition hover:text-text-strong celular:-mr-2 celular:grid celular:h-[44px] celular:w-[44px] celular:place-items-center"
               >
                 <UserPlus size={16} />
               </button>
@@ -156,7 +156,7 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
                 /* 60px no celular, como na lista de membros do servidor:
                    `docs/Reference/mobile/MEDIDAS.md` §10 mede 59,9pt no
                    Discord do telefone. */
-                className={`group mx-2 flex h-[42px] items-center gap-3 rounded px-2 hover:bg-hov celular:h-[60px] ${
+                className={`group mx-2 flex h-[42px] items-center gap-3 rounded px-2 hover:bg-interactive-background-hover celular:h-[60px] ${
                   status === "OFFLINE" ? "opacity-30 hover:opacity-100" : ""
                 }`}
               >
@@ -166,9 +166,9 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
                   aria-label={`Perfil de ${nome}`}
                   className="flex min-w-0 flex-1 items-center gap-3 text-left"
                 >
-                  <Avatar user={user} size="md" status={status} surface="border-panel" />
+                  <Avatar user={user} size="md" status={status} surface="border-background-base-lowest" />
                   <span className="flex min-w-0 items-center gap-1">
-                    <span className="truncate font-medium text-txt-faint group-hover:text-txt-normal">
+                    <span className="truncate font-medium text-channels-default group-hover:text-text-default">
                       {nome}
                     </span>
                     {/* ── j-bots ── antes da coroa, como na lista de membros do
@@ -176,7 +176,7 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
                     {user.bot && <TagDeBot />}
                     {dono && (
                       <Tooltip label="Criou o grupo">
-                        <Crown size={14} className="shrink-0 text-yellow" aria-label="Criou o grupo" />
+                        <Crown size={14} className="shrink-0 text-status-warning" aria-label="Criou o grupo" />
                       </Tooltip>
                     )}
                   </span>
@@ -190,7 +190,7 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
                       aria-label={`Remover ${nome} do grupo`}
                       /* sempre à mostra no celular: sem hover e sem botão direito, "remover
                          do grupo" não tinha caminho nenhum a partir daqui */
-                      className="hidden h-7 w-7 place-items-center rounded text-txt-muted hover:text-red group-focus-within:grid group-hover:grid celular:grid celular:h-[44px] celular:w-[44px]"
+                      className="hidden h-7 w-7 place-items-center rounded text-text-muted hover:text-status-danger group-focus-within:grid group-hover:grid celular:grid celular:h-[44px] celular:w-[44px]"
                     >
                       <UserMinus size={16} />
                     </button>

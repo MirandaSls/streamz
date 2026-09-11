@@ -190,14 +190,14 @@ export default function DMList() {
         data-amigos-button
         onClick={() => setFriendsOpen(true)}
         aria-current={amigosSelecionado ? "true" : undefined}
-        className={"mx-2 flex h-10 w-[calc(100%-1rem)] items-center gap-3 rounded-lg pl-3 pr-2 text-left " + (amigosSelecionado ? "bg-sel text-txt-primary" : "text-txt-faint hover:bg-hov hover:text-txt-normal")}
+        className={"mx-2 flex h-10 w-[calc(100%-1rem)] items-center gap-3 rounded-lg pl-3 pr-2 text-left " + (amigosSelecionado ? "bg-interactive-background-selected text-text-strong" : "text-channels-default hover:bg-interactive-background-hover hover:text-text-default")}
       >
         <Amigos size={21} aria-hidden="true" className="shrink-0" />
         <span className="flex-1 font-medium">Amigos</span>
         {pendentes > 0 && (
           <span
             aria-label={pendentes === 1 ? "1 pedido de amizade" : `${pendentes} pedidos de amizade`}
-            className="grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[11px] font-bold leading-none text-white"
+            className="grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[11px] font-bold leading-none text-white"
           >
             {pendentes}
           </span>
@@ -211,8 +211,8 @@ export default function DMList() {
         Aqui, e não na rail de servidores onde nasceu: esta é a coluna em que o
         Discord põe a navegação **da home** (Amigos, Nitro, Loja), e a rail é a
         coluna de servidores. O item copia o botão "Amigos" linha por linha —
-        mesma altura de 40, mesmo recuo, ícone de 21 à esquerda, o mesmo `bg-sel`
-        de selecionado e o mesmo `hover:bg-hov` — porque é o mesmo tipo de item.
+        mesma altura de 40, mesmo recuo, ícone de 21 à esquerda, o mesmo `bg-interactive-background-selected`
+        de selecionado e o mesmo `hover:bg-interactive-background-hover` — porque é o mesmo tipo de item.
 
         O ícone é o `Apps`, as quatro formas do App Directory. **Não é uma
         bússola**: o `explore.svg` do acervo não é uma bússola, apesar do nome
@@ -238,7 +238,7 @@ export default function DMList() {
         data-apps-button
         onClick={() => abrirApps()}
         aria-current={appsAbertos ? "true" : undefined}
-        className={"mx-2 flex h-10 w-[calc(100%-1rem)] items-center gap-3 rounded-lg pl-3 pr-2 text-left " + (appsAbertos ? "bg-sel text-txt-primary" : "text-txt-faint hover:bg-hov hover:text-txt-normal")}
+        className={"mx-2 flex h-10 w-[calc(100%-1rem)] items-center gap-3 rounded-lg pl-3 pr-2 text-left " + (appsAbertos ? "bg-interactive-background-selected text-text-strong" : "text-channels-default hover:bg-interactive-background-hover hover:text-text-default")}
       >
         <Apps size={21} aria-hidden="true" className="shrink-0" />
         <span className="flex-1 truncate font-medium">Descobrir aplicativos</span>
@@ -246,7 +246,7 @@ export default function DMList() {
 
       {novos.length > 0 && (
         <>
-          <h3 className="pl-5 pr-5 pt-3 pb-0.5 text-xs font-semibold text-txt-muted">
+          <h3 className="pl-5 pr-5 pt-3 pb-0.5 text-xs font-semibold text-text-muted">
             Pessoas
           </h3>
           {novos.map((u) => (
@@ -259,12 +259,12 @@ export default function DMList() {
                 setQuery("");
                 void openWith(u.id);
               }}
-              className="mx-2 mb-0.5 flex h-12 w-[calc(100%-1rem)] items-center gap-3 rounded-lg pl-[10px] pr-2 text-left text-txt-faint hover:bg-hov hover:text-txt-normal"
+              className="mx-2 mb-0.5 flex h-12 w-[calc(100%-1rem)] items-center gap-3 rounded-lg pl-[10px] pr-2 text-left text-channels-default hover:bg-interactive-background-hover hover:text-text-default"
             >
-              <Avatar user={u} size="md" status={resolveStatus(statuses, u)} surface="border-panel" />
+              <Avatar user={u} size="md" status={resolveStatus(statuses, u)} surface="border-background-base-lowest" />
               <span className="min-w-0">
                 <span className="block truncate font-medium">{displayNameOf(u)}</span>
-                <span className="block truncate text-xs text-txt-muted">@{u.username}</span>
+                <span className="block truncate text-xs text-text-muted">@{u.username}</span>
               </span>
             </button>
           ))}
@@ -281,11 +281,11 @@ export default function DMList() {
         conversas. (Lá o título "Mensagens diretas" vem logo abaixo; no celular
         o cabeçalho da tela já diz "Mensagens" e ele seria repetição.)
       */}
-      <div className="mx-2 mt-3 border-t border-border" />
+      <div className="mx-2 mt-3 border-t border-border-subtle" />
 
       {!celular && (
       <div className="group flex items-center justify-between pl-5 pr-3.5 pt-3 pb-0.5">
-        <h3 className="text-xs font-semibold text-txt-muted group-hover:text-txt-normal">
+        <h3 className="text-xs font-semibold text-text-muted group-hover:text-text-default">
           Mensagens diretas
         </h3>
         <Tooltip label="Nova conversa">
@@ -293,7 +293,7 @@ export default function DMList() {
             type="button"
             onClick={() => openModal({ kind: "createGroupDM" })}
             aria-label="Nova conversa"
-            className="text-txt-muted transition hover:text-txt-primary"
+            className="text-text-muted transition hover:text-text-strong"
           >
             <Plus size={20} />
           </button>
@@ -302,10 +302,10 @@ export default function DMList() {
       )}
 
       {loading && channels.length === 0 && (
-        <p className="px-4 py-1 text-sm text-txt-muted">Carregando conversas…</p>
+        <p className="px-4 py-1 text-sm text-text-muted">Carregando conversas…</p>
       )}
       {!loading && channels.length === 0 && (
-        <p className="px-4 py-1 text-sm text-txt-muted">
+        <p className="px-4 py-1 text-sm text-text-muted">
           Nenhuma conversa. Busque alguém acima para começar.
         </p>
       )}
@@ -343,10 +343,10 @@ export default function DMList() {
             onContextMenu={(e) => openMenu(e, dm, e.currentTarget)}
             className={`group mx-2 mb-0.5 flex h-12 items-center rounded-lg pl-[10px] pr-2 ${
               active
-                ? "bg-sel text-txt-primary"
+                ? "bg-interactive-background-selected text-text-strong"
                 : unread
-                  ? "text-txt-primary hover:bg-hov"
-                  : "text-txt-faint hover:bg-hov hover:text-txt-normal"
+                  ? "text-text-strong hover:bg-interactive-background-hover"
+                  : "text-channels-default hover:bg-interactive-background-hover hover:text-text-default"
             }`}
           >
             <button
@@ -358,7 +358,7 @@ export default function DMList() {
               className="flex h-full min-w-0 flex-1 items-center gap-3 text-left"
             >
               {other ? (
-                <Avatar user={other} size="md" status={resolveStatus(statuses, other)} surface={active ? "border-sel" : "border-panel"} />
+                <Avatar user={other} size="md" status={resolveStatus(statuses, other)} surface={active ? "border-interactive-background-selected" : "border-background-base-lowest"} />
               ) : (
                 <GroupAvatar iconUrl={dm.iconUrl} size="md" />
               )}
@@ -369,7 +369,7 @@ export default function DMList() {
                     {previa}
                   </span>
                 ) : group ? (
-                  <span className="block truncate text-xs text-txt-muted">
+                  <span className="block truncate text-xs text-text-muted">
                     {dm.others.length + 1} membros
                   </span>
                 ) : null}
@@ -380,7 +380,7 @@ export default function DMList() {
                 <span
                   data-dm-call={dm.id}
                   aria-label={`Chamada em andamento em ${title}`}
-                  className="grid h-6 w-6 place-items-center text-green"
+                  className="grid h-6 w-6 place-items-center text-status-positive"
                 >
                   <Phone size={16} />
                 </span>
@@ -396,7 +396,7 @@ export default function DMList() {
               {dm.unreadCount > 0 && !active && (
                 <span
                   aria-label={`${dm.unreadCount} não lidas`}
-                  className="absolute grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[12px] font-bold leading-none text-white group-hover:hidden group-focus-within:hidden"
+                  className="absolute grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[12px] font-bold leading-none text-white group-hover:hidden group-focus-within:hidden"
                 >
                   {rotuloDoContador(dm.unreadCount)}
                 </span>
@@ -406,7 +406,7 @@ export default function DMList() {
                   type="button"
                   onClick={() => (group ? void leaveGroup(dm.id) : void hide(dm.id))}
                   aria-label={group ? `Sair do grupo ${title}` : `Fechar conversa com ${title}`}
-                  className="grid h-6 w-6 place-items-center rounded text-txt-muted opacity-0 transition hover:text-txt-primary group-hover:opacity-100 focus-visible:opacity-100"
+                  className="grid h-6 w-6 place-items-center rounded text-text-muted opacity-0 transition hover:text-text-strong group-hover:opacity-100 focus-visible:opacity-100"
                 >
                   {group ? <LogOut size={16} /> : <X size={16} />}
                 </button>
@@ -428,9 +428,9 @@ export default function DMList() {
       custa uma linha inteira que a lista quer.
     */
     return (
-      <aside className="flex w-[294px] shrink-0 flex-col bg-panel">
-        <div className="shrink-0 border-b border-border px-4 pb-3 pt-2">
-          <h1 className="py-1 text-2xl font-bold text-txt-primary">
+      <aside className="flex w-[294px] shrink-0 flex-col bg-background-base-lowest">
+        <div className="shrink-0 border-b border-border-subtle px-4 pb-3 pt-2">
+          <h1 className="py-1 text-2xl font-bold text-text-strong">
             Mensagens
           </h1>
           <div className="mt-1 flex items-center gap-1.5">
@@ -444,9 +444,9 @@ export default function DMList() {
                  Em vez de escolher, o desenho fica com a medida e a área
                  clicável cresce por fora — o pixel é o do Discord e o dedo tem
                  o alvo do HIG. */
-              className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-full text-txt-secondary transition"
+              className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-full text-text-subtle transition"
             >
-              <span className="grid h-[40px] w-[40px] place-items-center rounded-full bg-hov transition active:bg-border-strong">
+              <span className="grid h-[40px] w-[40px] place-items-center rounded-full bg-interactive-background-hover transition active:bg-border-normal">
                 <Search size={18} />
               </span>
             </button>
@@ -455,9 +455,9 @@ export default function DMList() {
               onClick={() => window.dispatchEvent(new Event(EVENTO_CAIXA_DE_ENTRADA))}
               aria-label="Caixa de entrada"
               /* mesmo alvo de 44 com desenho de 40 do botão de busca */
-              className="relative grid h-[44px] w-[44px] shrink-0 place-items-center rounded-full text-txt-secondary transition"
+              className="relative grid h-[44px] w-[44px] shrink-0 place-items-center rounded-full text-text-subtle transition"
             >
-              <span className="grid h-[40px] w-[40px] place-items-center rounded-full bg-hov transition active:bg-border-strong">
+              <span className="grid h-[40px] w-[40px] place-items-center rounded-full bg-interactive-background-hover transition active:bg-border-normal">
                 <Inbox size={18} />
               </span>
             </button>
@@ -468,14 +468,14 @@ export default function DMList() {
               /* A pílula fica nos 40 medidos: o piso de 44 existe para alvo
                  pequeno, e este tem ~200px de largura — quem erra um botão
                  desses não erra por 4px de altura. */
-              className="flex h-[40px] min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-hov px-3 text-sm font-medium text-txt-normal transition active:bg-border-strong"
+              className="flex h-[40px] min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-interactive-background-hover px-3 text-sm font-medium text-text-default transition active:bg-border-normal"
             >
               <UserPlus size={18} aria-hidden="true" className="shrink-0" />
               <span className="truncate whitespace-nowrap">Adicionar amigos</span>
               {pendentes > 0 && (
                 <span
                   aria-label={`${pendentes} pendentes`}
-                  className="grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[11px] font-bold leading-none text-white"
+                  className="grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[11px] font-bold leading-none text-white"
                 >
                   {pendentes}
                 </span>
@@ -490,7 +490,7 @@ export default function DMList() {
               type="search"
               aria-label="Encontrar ou começar uma conversa"
               placeholder="Encontrar ou começar uma conversa"
-              className="mt-2 h-[40px] w-full rounded-full bg-hov px-4 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
+              className="mt-2 h-[40px] w-full rounded-full bg-interactive-background-hover px-4 text-sm text-text-default outline-none placeholder:text-text-muted"
             />
           )}
         </div>
@@ -503,7 +503,7 @@ export default function DMList() {
           type="button"
           onClick={() => openModal({ kind: "createGroupDM" })}
           aria-label="Nova conversa"
-          className="absolute bottom-5 right-5 z-10 grid h-[56px] w-[56px] place-items-center rounded-full bg-accent text-accent-ink shadow-high transition active:bg-accent-hover"
+          className="absolute bottom-5 right-5 z-10 grid h-[56px] w-[56px] place-items-center rounded-full bg-brand-500 text-control-primary-text-default shadow-popout transition active:bg-control-primary-background-hover"
         >
           <MessageSquarePlus size={24} />
         </button>
@@ -512,8 +512,8 @@ export default function DMList() {
   }
 
   return (
-    <aside className="flex w-[294px] shrink-0 flex-col bg-panel">
-      <div className="flex h-[49px] shrink-0 items-center border-b border-border px-2.5 shadow-header">
+    <aside className="flex w-[294px] shrink-0 flex-col bg-background-base-lowest">
+      <div className="flex h-[49px] shrink-0 items-center border-b border-border-subtle px-2.5 shadow-elevation-low">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -527,7 +527,7 @@ export default function DMList() {
              coluna em vez de escurecer — e com a coluna em #121214 um campo
              Void Ink sumiria dentro dela */
           className={
-            "h-8 w-full rounded-lg bg-hov px-1.5 text-sm text-txt-normal outline-none placeholder:text-txt-muted " +
+            "h-8 w-full rounded-lg bg-interactive-background-hover px-1.5 text-sm text-text-default outline-none placeholder:text-text-muted " +
             (buscaFocada || query ? "text-left" : "text-center")
           }
         />

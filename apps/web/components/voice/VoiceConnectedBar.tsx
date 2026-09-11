@@ -45,9 +45,9 @@ import { rotuloDoPing, useVoicePing, type QualidadeDeVoz } from "@/stores/voice-
 
 /** Cor do selo do sinal pela qualidade; sem medida, o verde de "conectado". */
 const COR_DO_SINAL: Record<QualidadeDeVoz, string> = {
-  excelente: "bg-green/15 text-green",
-  boa: "bg-yellow/15 text-yellow",
-  ruim: "bg-red/15 text-red",
+  excelente: "bg-status-positive/15 text-status-positive",
+  boa: "bg-status-warning/15 text-status-warning",
+  ruim: "bg-status-danger/15 text-status-danger",
 };
 export default function VoiceConnectedBar() {
   const channelId = useVoice((s) => s.channelId);
@@ -102,7 +102,7 @@ export default function VoiceConnectedBar() {
         chamada ou fora dela ela ocupa a mesma faixa, e é a seção de voz que
         cresce para cima. Por isso o respiro fixo das listas continua valendo.
       */
-      className="flex shrink-0 flex-col gap-3 border-b border-border px-3.5 pb-[14px] pt-[15px]" data-voice-bar>
+      className="flex shrink-0 flex-col gap-3 border-b border-border-subtle px-3.5 pb-[14px] pt-[15px]" data-voice-bar>
       <div className="flex items-center gap-1">
         {/*
           O selo sai de dentro da linha do título e vira irmão dela: no Discord
@@ -125,9 +125,9 @@ export default function VoiceConnectedBar() {
                  e num círculo elas não existiriam. */
               className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${
                 falhou
-                  ? "bg-red/15 text-red"
+                  ? "bg-status-danger/15 text-status-danger"
                   : status === "connecting"
-                    ? "bg-hov text-txt-muted"
+                    ? "bg-interactive-background-hover text-text-muted"
                     : COR_DO_SINAL[qualidade ?? "excelente"]
               }`}
             >
@@ -144,7 +144,7 @@ export default function VoiceConnectedBar() {
                 corta sem reticências */}
             <span
               className={`truncate text-sm font-semibold ${
-                falhou ? "text-red" : status === "connecting" ? "text-txt-muted" : "text-green"
+                falhou ? "text-status-danger" : status === "connecting" ? "text-text-muted" : "text-status-positive"
               }`}
             >
               {falhou ? "Erro de voz" : status === "connecting" ? "Conectando…" : "Voz conectada"}
@@ -152,10 +152,10 @@ export default function VoiceConnectedBar() {
             <button
               type="button"
               onClick={irParaCall}
-              className="block max-w-full truncate text-left text-xs text-txt-muted hover:underline"
+              className="block max-w-full truncate text-left text-xs text-text-muted hover:underline"
             >
               {titulo}
-              {servidor && <span className="text-txt-faint"> / {servidor}</span>}
+              {servidor && <span className="text-channels-default"> / {servidor}</span>}
             </button>
           </span>
         </span>
@@ -167,8 +167,8 @@ export default function VoiceConnectedBar() {
             onClick={() => setRuidoAberto((v) => !v)}
             aria-expanded={ruidoAberto}
             aria-label="Supressão de ruído"
-            className={`grid h-8 w-8 shrink-0 place-items-center rounded-[4px] transition hover:bg-hov ${
-              ruidoAvancado ? "text-accent" : "text-txt-secondary hover:text-txt-primary"
+            className={`grid h-8 w-8 shrink-0 place-items-center rounded-[4px] transition hover:bg-interactive-background-hover ${
+              ruidoAvancado ? "text-brand-500" : "text-text-subtle hover:text-text-strong"
             }`}
           >
             <AudioLines size={20} />
@@ -191,7 +191,7 @@ export default function VoiceConnectedBar() {
             type="button"
             onClick={() => void disconnect()}
             aria-label="Desconectar"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-[4px] text-txt-secondary transition hover:bg-hov hover:text-red"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-[4px] text-text-subtle transition hover:bg-interactive-background-hover hover:text-status-danger"
           >
             <PhoneOff size={20} />
           </button>
@@ -201,7 +201,7 @@ export default function VoiceConnectedBar() {
       {falhou && (
         // erro real (a queda da mídia), não "não configurado": só aqui faz
         // sentido gastar vermelho e oferecer a repetição
-        <div className="flex items-center gap-2 rounded-[4px] bg-red/15 px-2 py-1.5 text-xs text-red">
+        <div className="flex items-center gap-2 rounded-[4px] bg-status-danger/15 px-2 py-1.5 text-xs text-status-danger">
           <span className="min-w-0 flex-1 truncate">{erro}</span>
           <button
             type="button"
@@ -225,8 +225,8 @@ export default function VoiceConnectedBar() {
             aria-label={camOn ? "Desligar câmera" : "Ligar câmera"}
             className={`grid h-8 w-full place-items-center rounded-lg transition ${
               camOn
-                ? "bg-border-strong-hover text-txt-primary"
-                : "bg-border-strong/60 text-txt-secondary hover:bg-border-strong hover:text-txt-primary"
+                ? "bg-border-strong text-text-strong"
+                : "bg-border-normal/60 text-text-subtle hover:bg-border-normal hover:text-text-strong"
             }`}
           >
             {camOn ? <Video size={20} /> : <VideoOff size={18} />}

@@ -39,21 +39,21 @@ export default function AuthCard({
       No desktop as duas são inertes: `100dvh` = `100vh` numa janela sem barra
       que some, e `env(safe-area-inset-*)` vale zero.
     */
-    <main className="relative grid min-h-[100dvh] place-items-center overflow-hidden bg-void p-4 celular:px-[max(1rem,env(safe-area-inset-left))] celular:pb-[max(1rem,env(safe-area-inset-bottom))] celular:pt-[max(4.5rem,env(safe-area-inset-top))]">
+    <main className="relative grid min-h-[100dvh] place-items-center overflow-hidden bg-input-background-default p-4 celular:px-[max(1rem,env(safe-area-inset-left))] celular:pb-[max(1rem,env(safe-area-inset-bottom))] celular:pt-[max(4.5rem,env(safe-area-inset-top))]">
       <AuthBackground />
 
       <MarcaLockup
         size={26}
-        className="absolute left-6 top-6 text-txt-primary celular:left-[max(1.5rem,env(safe-area-inset-left))] celular:top-[max(1.5rem,env(safe-area-inset-top))] md:left-10 md:top-8"
+        className="absolute left-6 top-6 text-text-strong celular:left-[max(1.5rem,env(safe-area-inset-left))] celular:top-[max(1.5rem,env(safe-area-inset-top))] md:left-10 md:top-8"
       />
 
       {/* 24px de respiro no celular: com os 32 do desktop sobram 294px de
           conteúdo numa tela de 390 */}
-      <div className="relative w-full max-w-[480px] rounded-[5px] bg-chat p-8 shadow-[0_16px_48px_rgba(0,0,0,.6),0_4px_12px_rgba(0,0,0,.45)] celular:p-6">
-        <h1 className="text-center text-2xl font-semibold leading-8 text-txt-primary">
+      <div className="relative w-full max-w-[480px] rounded-[5px] bg-background-base-lower p-8 shadow-[0_16px_48px_rgba(0,0,0,.6),0_4px_12px_rgba(0,0,0,.45)] celular:p-6">
+        <h1 className="text-center text-2xl font-semibold leading-8 text-text-strong">
           {title}
         </h1>
-        {subtitle && <p className="mt-2 text-center text-txt-muted">{subtitle}</p>}
+        {subtitle && <p className="mt-2 text-center text-text-muted">{subtitle}</p>}
         <div className="mt-5">{children}</div>
       </div>
     </main>
@@ -76,14 +76,14 @@ export function FieldLabel({
     <label
       htmlFor={htmlFor}
       className={`mb-2 block text-xs font-bold uppercase tracking-[0.02em] ${
-        invalid ? "text-red" : "text-txt-secondary"
+        invalid ? "text-status-danger" : "text-text-subtle"
       }`}
     >
       {children}
       {hint ? (
         <span className="normal-case italic"> - {hint}</span>
       ) : (
-        <span className="text-red" aria-hidden="true">
+        <span className="text-status-danger" aria-hidden="true">
           {" "}
           *
         </span>
@@ -108,7 +108,7 @@ export function OptionalFieldLabel({
     <label
       htmlFor={htmlFor}
       className={`mb-2 block text-xs font-bold uppercase tracking-[0.02em] ${
-        invalid ? "text-red" : "text-txt-secondary"
+        invalid ? "text-status-danger" : "text-text-subtle"
       }`}
     >
       {children}
@@ -117,8 +117,8 @@ export function OptionalFieldLabel({
   );
 }
 
-// a borda escura é o que separa o campo do corpo do cartão: `bg-void` sozinho
-// encosta no `bg-chat` sem aresta e o campo some
+// a borda escura é o que separa o campo do corpo do cartão: `bg-input-background-default` sozinho
+// encosta no `bg-background-base-lower` sem aresta e o campo some
 //
 // `celular:h-[48px]` nos dois, e o **48 é literal**: a raiz do app é 15,5px, e
 // `h-12` mediria 46,5 (todo `rem` do Tailwind sai 3% menor aqui — ver
@@ -128,10 +128,10 @@ export function OptionalFieldLabel({
 // por causa da regra do `globals.css` que evita o zoom do iOS — numa caixa de
 // 39px ele fica encostado nas bordas. 48 acomoda os dois. No desktop nada muda.
 export const inputClass =
-  "mb-5 h-10 w-full rounded-[3px] border border-black/30 bg-void px-2.5 text-txt-normal outline-none placeholder:text-txt-muted disabled:opacity-60 celular:h-[48px]";
+  "mb-5 h-10 w-full rounded-[3px] border border-black/30 bg-input-background-default px-2.5 text-text-default outline-none placeholder:text-text-muted disabled:opacity-60 celular:h-[48px]";
 
 export const submitClass =
-  "h-11 w-full rounded-[3px] bg-accent font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60 celular:h-[48px]";
+  "h-11 w-full rounded-[3px] bg-brand-500 font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:cursor-not-allowed disabled:opacity-60 celular:h-[48px]";
 
 /** Link de apoio dos formulários de conta (voltar, ajuda, alternativas). */
-export const linkClass = "font-medium text-txt-link hover:underline";
+export const linkClass = "font-medium text-text-link hover:underline";

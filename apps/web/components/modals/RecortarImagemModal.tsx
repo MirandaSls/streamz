@@ -197,7 +197,7 @@ export default function RecortarImagemModal({
       }
     >
       {erro ? (
-        <p className="rounded-[5px] border border-border p-3 text-sm text-txt-muted">
+        <p className="rounded-[5px] border border-border-subtle p-3 text-sm text-text-muted">
           Não foi possível abrir esta imagem. Tente outro arquivo (PNG, JPEG, GIF ou WebP).
         </p>
       ) : (
@@ -213,7 +213,7 @@ export default function RecortarImagemModal({
             onPointerCancel={aoSoltar}
             onKeyDown={aoTeclar}
             style={{ width: moldura.largura, height: moldura.altura }}
-            className="relative touch-none select-none overflow-hidden rounded-[4px] bg-black/60 outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="relative touch-none select-none overflow-hidden rounded-[4px] bg-black/60 outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
           >
             {url && (
               // eslint-disable-next-line @next/next/no-img-element
@@ -253,7 +253,7 @@ export default function RecortarImagemModal({
               }}
             />
             {!natural && (
-              <p className="absolute inset-0 grid place-items-center text-sm text-txt-muted">
+              <p className="absolute inset-0 grid place-items-center text-sm text-text-muted">
                 Carregando imagem…
               </p>
             )}

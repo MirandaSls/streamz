@@ -40,8 +40,8 @@ export function BotaoDeToque({
       onClick={onClick}
       aria-label={label}
       aria-pressed={ativo || undefined}
-      className={`grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg transition active:bg-hov ${
-        ativo ? "text-txt-primary" : "text-txt-secondary"
+      className={`grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg transition active:bg-interactive-background-hover ${
+        ativo ? "text-text-strong" : "text-text-subtle"
       } ${className}`}
     >
       {children}
@@ -84,21 +84,21 @@ export function CabecalhoMobile({
   const miolo = (
     <>
       {icone && (
-        <span className="shrink-0 text-txt-muted" aria-hidden="true">
+        <span className="shrink-0 text-text-muted" aria-hidden="true">
           {icone}
         </span>
       )}
       <span className="flex min-w-0 flex-col">
         <span className="flex min-w-0 items-center gap-1">
-          <span className="truncate text-base font-semibold leading-tight text-txt-primary">
+          <span className="truncate text-base font-semibold leading-tight text-text-strong">
             {titulo}
           </span>
           {chevron && (
-            <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-txt-secondary" />
+            <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-text-subtle" />
           )}
         </span>
         {subtitulo && (
-          <span className="truncate text-xs leading-tight text-txt-muted">{subtitulo}</span>
+          <span className="truncate text-xs leading-tight text-text-muted">{subtitulo}</span>
         )}
       </span>
     </>
@@ -107,7 +107,7 @@ export function CabecalhoMobile({
   return (
     /* 56pt de altura, medido em `discord-mobile-chat-canal-2024.png`
          (1px=1pt, MEDIDAS.md §6): a barra vai de y=44 a y=100. */
-    <header className="relative z-10 flex h-[56px] shrink-0 items-center gap-2 border-b border-border bg-panel pl-1 pr-1 shadow-header">
+    <header className="relative z-10 flex h-[56px] shrink-0 items-center gap-2 border-b border-border-subtle bg-background-base-lowest pl-1 pr-1 shadow-elevation-low">
       {aoVoltar && (
         <BotaoDeToque label="Voltar" onClick={aoVoltar}>
           <ArrowLeft size={24} />
@@ -146,7 +146,7 @@ export function TelaEmpilhada({ children }: { children: ReactNode }) {
     /* a área segura de baixo vem para cá: com uma tela empilhada a barra de
        abas sai de cena (ver `ShellMobile`), e sem isto o composer encostaria na
        barra de gestos do aparelho */
-    <div className="anim-empilhar absolute inset-0 z-10 flex flex-col bg-chat pb-[env(safe-area-inset-bottom)]">
+    <div className="anim-empilhar absolute inset-0 z-10 flex flex-col bg-background-base-lower pb-[env(safe-area-inset-bottom)]">
       {children}
     </div>
   );

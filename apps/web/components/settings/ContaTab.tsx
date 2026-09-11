@@ -95,20 +95,20 @@ export default function ContaTab() {
     <>
       <Section id="minha-conta" title={t("conta.secMinhaConta")}>
         {user && (
-          <div className="overflow-hidden rounded-lg bg-footer">
+          <div className="overflow-hidden rounded-lg bg-background-base-low">
             {banner.url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={banner.url} alt="" className="h-[60px] w-full object-cover" />
             ) : (
               <div
-                className="h-[60px] w-full bg-accent"
+                className="h-[60px] w-full bg-brand-500"
                 style={banner.cor ? { backgroundColor: banner.cor } : undefined}
               />
             )}
             <div className="px-4 pb-4">
               <div className="-mt-8 flex items-end gap-3">
-                <div className="relative rounded-full border-[6px] border-footer">
-                  <Avatar user={user} size="xl" surface="border-footer" />
+                <div className="relative rounded-full border-[6px] border-background-base-low">
+                  <Avatar user={user} size="xl" surface="border-background-base-low" />
                   <input
                     ref={fileRef}
                     type="file"
@@ -129,25 +129,25 @@ export default function ContaTab() {
                       // a pastilha continua com 32px sobre o avatar (44 cobriria
                       // metade dele); quem cresce no celular é só o alvo, por
                       // um pseudo-elemento invisível de 44
-                      className="absolute bottom-0 right-0 grid h-8 w-8 place-items-center rounded-full bg-panel text-txt-primary shadow-high hover:bg-hov disabled:opacity-50 celular:before:absolute celular:before:-inset-[6px] celular:before:content-['']"
+                      className="absolute bottom-0 right-0 grid h-8 w-8 place-items-center rounded-full bg-background-base-lowest text-text-strong shadow-popout hover:bg-interactive-background-hover disabled:opacity-50 celular:before:absolute celular:before:-inset-[6px] celular:before:content-['']"
                     >
                       <Camera size={16} />
                     </button>
                   </Tooltip>
                 </div>
                 <div className="min-w-0 pb-2">
-                  <div className="truncate text-xl font-bold text-txt-primary">
+                  <div className="truncate text-xl font-bold text-text-strong">
                     {displayNameOf(user)}
                   </div>
-                  <div className="truncate text-sm text-txt-muted">@{user.username}</div>
+                  <div className="truncate text-sm text-text-muted">@{user.username}</div>
                 </div>
               </div>
-              {uploading && <p className="mt-2 text-xs text-txt-muted">Enviando avatar…</p>}
+              {uploading && <p className="mt-2 text-xs text-text-muted">Enviando avatar…</p>}
             </div>
           </div>
         )}
 
-        <div className="mt-4 rounded-lg bg-footer px-4 py-1">
+        <div className="mt-4 rounded-lg bg-background-base-low px-4 py-1">
           <LinhaDeNomeDeExibicao />
           <Linha
             rotulo="Nome de usuário"
@@ -181,16 +181,16 @@ function Linha({
   abaixo?: ReactNode;
 }) {
   return (
-    <div className="border-b border-border py-3 last:border-b-0">
+    <div className="border-b border-border-subtle py-3 last:border-b-0">
       {/* No celular a ação **desce**: o e-mail com "Reenviar" e "Editar" ao
           lado sobrava 120px para o endereço, que virava "anaxi…". Empilhado,
           o valor tem a linha inteira e os botões a de baixo. */}
       <div className="flex items-center justify-between gap-4 celular:flex-col celular:items-stretch celular:gap-2">
         <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+          <p className="text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
             {rotulo}
           </p>
-          <div className="mt-0.5 truncate text-sm text-txt-primary celular:text-base">{valor}</div>
+          <div className="mt-0.5 truncate text-sm text-text-strong celular:text-base">{valor}</div>
         </div>
         {acao && <div className="shrink-0">{acao}</div>}
       </div>
@@ -210,7 +210,7 @@ function BotaoDeLinha({
     <button
       type="button"
       onClick={onClick}
-      className="h-8 celular:h-[44px] rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal transition hover:bg-border-strong-hover"
+      className="h-8 celular:h-[44px] rounded-[3px] bg-border-normal px-3 text-sm font-medium text-text-default transition hover:bg-border-strong"
     >
       {children}
     </button>
@@ -270,7 +270,7 @@ function LinhaDeNomeDeExibicao() {
               aria-label="Nome de exibição"
               className={ESTILO_CAMPO}
             />
-            <p className="mt-1 text-xs text-txt-muted">
+            <p className="mt-1 text-xs text-text-muted">
               É o nome que aparece nas mensagens. Vazio = usar @{user?.username}.
             </p>
           </div>
@@ -331,11 +331,11 @@ function LinhaDeEmail({
           <span className="truncate">{conta?.email ?? "Nenhum e-mail cadastrado"}</span>
           {conta &&
             (conta.emailVerified ? (
-              <span className="flex shrink-0 items-center gap-1 text-xs text-green">
+              <span className="flex shrink-0 items-center gap-1 text-xs text-status-positive">
                 <BadgeCheck size={14} aria-hidden="true" /> Confirmado
               </span>
             ) : (
-              <span className="flex shrink-0 items-center gap-1 text-xs text-yellow">
+              <span className="flex shrink-0 items-center gap-1 text-xs text-status-warning">
                 <TriangleAlert size={14} aria-hidden="true" /> Não confirmado
               </span>
             ))}
@@ -348,7 +348,7 @@ function LinhaDeEmail({
               type="button"
               disabled={ocupado}
               onClick={() => void reenviar()}
-              className="h-8 celular:h-[44px] rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover disabled:opacity-50"
+              className="h-8 celular:h-[44px] rounded-[3px] bg-border-normal px-3 text-sm font-medium text-text-default hover:bg-border-strong disabled:opacity-50"
             >
               Reenviar
             </button>
@@ -427,8 +427,8 @@ function BlocoDeSenha() {
     <Section id="senha" title={t("conta.secSenha")}>
       <div className="flex items-center justify-between gap-4 py-3">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-txt-primary">Senha da conta</p>
-          <p className="mt-0.5 text-xs text-txt-muted">
+          <p className="text-sm font-medium text-text-strong">Senha da conta</p>
+          <p className="mt-0.5 text-xs text-text-muted">
             Trocar a senha encerra as sessões dos outros aparelhos.
           </p>
         </div>
@@ -515,7 +515,7 @@ function BlocoDeEncerramento({ conta }: { conta: MinhaConta | null }) {
 
   return (
     <Section id="encerrar" title={t("conta.secEncerrar")} semDivisoria>
-      <p className="text-sm text-txt-muted">
+      <p className="text-sm text-text-muted">
         Desativar é reversível: a conta volta quando você entra de novo. Excluir anonimiza o
         usuário para sempre.
       </p>
@@ -523,14 +523,14 @@ function BlocoDeEncerramento({ conta }: { conta: MinhaConta | null }) {
         <button
           type="button"
           onClick={() => setAcao(acao === "disable" ? null : "disable")}
-          className="h-8 celular:h-[44px] rounded-[3px] border border-red px-3 text-sm font-medium text-red transition hover:bg-red hover:text-white"
+          className="h-8 celular:h-[44px] rounded-[3px] border border-status-danger px-3 text-sm font-medium text-status-danger transition hover:bg-status-danger hover:text-white"
         >
           Desativar conta
         </button>
         <button
           type="button"
           onClick={() => setAcao(acao === "delete" ? null : "delete")}
-          className="h-8 celular:h-[44px] rounded-[3px] bg-red px-3 text-sm font-medium text-white transition hover:bg-red-hover"
+          className="h-8 celular:h-[44px] rounded-[3px] bg-status-danger px-3 text-sm font-medium text-white transition hover:bg-control-critical-primary-background-hover"
         >
           Excluir conta
         </button>

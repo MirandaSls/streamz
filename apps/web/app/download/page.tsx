@@ -151,8 +151,8 @@ export default function DownloadPage() {
                 onClick={() => setPlataforma(p)}
                 className={`h-10 rounded-[3px] border text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 celular:h-[48px] ${
                   ativo
-                    ? "border-accent bg-accent text-accent-ink"
-                    : "border-border-strong bg-void text-txt-normal hover:border-border-strong-hover"
+                    ? "border-brand-500 bg-brand-500 text-control-primary-text-default"
+                    : "border-border-normal bg-input-background-default text-text-default hover:border-border-strong"
                 }`}
               >
                 {rotuloPlataforma(p)}
@@ -190,7 +190,7 @@ export default function DownloadPage() {
         </button>
 
         {escolhido && (
-          <p className="mt-3 text-center text-sm text-txt-muted">
+          <p className="mt-3 text-center text-sm text-text-muted">
             {rotuloPlataforma(escolhido.plataforma)} · {formatBytes(escolhido.tamanho)}
           </p>
         )}

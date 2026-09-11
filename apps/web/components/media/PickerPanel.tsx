@@ -111,8 +111,8 @@ export default function PickerPanel({
               ehMobile ? "min-h-[44px]" : ""
             } ${
               tab === id
-                ? "border-accent text-txt-primary"
-                : "border-transparent text-txt-muted hover:text-txt-normal"
+                ? "border-brand-500 text-text-strong"
+                : "border-transparent text-text-muted hover:text-text-default"
             }`}
           >
             <Icone size={16} aria-hidden="true" />
@@ -176,7 +176,7 @@ export default function PickerPanel({
           ref={ref}
           role="dialog"
           aria-label="Emoji, GIF e figurinha"
-          className="anim-folha flex h-[60dvh] max-h-[85dvh] w-full flex-col overflow-hidden rounded-t-2xl bg-panel pb-[env(safe-area-inset-bottom)] shadow-high"
+          className="anim-folha flex h-[60dvh] max-h-[85dvh] w-full flex-col overflow-hidden rounded-t-2xl bg-background-base-lowest pb-[env(safe-area-inset-bottom)] shadow-popout"
         >
           {/*
             A alça é **botão de verdade**, com rótulo "Fechar" — o mesmo
@@ -192,7 +192,7 @@ export default function PickerPanel({
             aria-label="Fechar"
             className="flex h-[28px] w-full shrink-0 items-center justify-center pt-1"
           >
-            <span aria-hidden="true" className="h-1 w-9 rounded-full bg-border-strong" />
+            <span aria-hidden="true" className="h-1 w-9 rounded-full bg-border-normal" />
           </button>
           {miolo}
         </div>
@@ -207,7 +207,7 @@ export default function PickerPanel({
       role="dialog"
       aria-label="Emoji, GIF e figurinha"
       style={{ width: LARGURA_PICKER, height: ALTURA_PICKER }}
-      className={`anim-menu z-[70] flex flex-col overflow-hidden rounded-lg bg-panel shadow-high ${className}`}
+      className={`anim-menu z-[70] flex flex-col overflow-hidden rounded-lg bg-background-base-lowest shadow-popout ${className}`}
     >
       {miolo}
     </div>

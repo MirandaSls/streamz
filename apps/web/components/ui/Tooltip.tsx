@@ -249,12 +249,12 @@ export default function Tooltip({
               left: pos?.left ?? 0,
               visibility: pos ? "visible" : "hidden",
             }}
-            className="pointer-events-none fixed z-[100] max-w-[280px] rounded-lg border border-border bg-void px-3 py-2 text-sm font-semibold leading-4 text-txt-primary shadow-high anim-menu"
+            className="pointer-events-none fixed z-[100] max-w-[280px] rounded-lg border border-border-subtle bg-input-background-default px-3 py-2 text-sm font-semibold leading-4 text-text-strong shadow-popout anim-menu"
           >
             <span className="flex items-center gap-2">
               <span>{label}</span>
               {shortcut && (
-                <kbd className="rounded bg-panel px-1.5 py-0.5 font-sans text-[11px] font-semibold leading-none text-txt-muted">
+                <kbd className="rounded bg-background-base-lowest px-1.5 py-0.5 font-sans text-[11px] font-semibold leading-none text-text-muted">
                   {shortcut}
                 </kbd>
               )}

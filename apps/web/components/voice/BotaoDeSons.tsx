@@ -51,8 +51,8 @@ export default function BotaoDeSons({
               aria-expanded={aberto}
               className={`grid h-8 w-full place-items-center rounded-lg transition ${
                 aberto
-                  ? "bg-border-strong-hover text-txt-primary"
-                  : "bg-border-strong/60 text-txt-secondary hover:bg-border-strong hover:text-txt-primary"
+                  ? "bg-border-strong text-text-strong"
+                  : "bg-border-normal/60 text-text-subtle hover:bg-border-normal hover:text-text-strong"
               }`}
             >
               <Soundboard size={20} />

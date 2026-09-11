@@ -78,13 +78,13 @@ export default function SessoesTab() {
 
   return (
     <>
-      <p className="mb-4 text-sm text-txt-muted">{t("sessoes.intro")}</p>
+      <p className="mb-4 text-sm text-text-muted">{t("sessoes.intro")}</p>
 
-      {carregando && <p className="text-sm text-txt-muted">Carregando…</p>}
+      {carregando && <p className="text-sm text-text-muted">Carregando…</p>}
 
       {atual && (
         <Section title={t("sessoes.atual")}>
-          <div className="rounded-[6px] border border-border bg-panel px-3 py-3">
+          <div className="rounded-[6px] border border-border-subtle bg-background-base-lowest px-3 py-3">
             <LinhaDeSessao sessao={atual} />
           </div>
         </Section>
@@ -93,18 +93,18 @@ export default function SessoesTab() {
       {!carregando && (
         <Section title="Outros dispositivos" semDivisoria>
           {outras.length === 0 ? (
-            <p className="py-1 text-sm text-txt-muted">{t("sessoes.vazio")}</p>
+            <p className="py-1 text-sm text-text-muted">{t("sessoes.vazio")}</p>
           ) : (
             outras.map((sessao) => (
               <div
                 key={sessao.id}
-                className="flex items-center gap-3 border-b border-border py-3 last:border-b-0"
+                className="flex items-center gap-3 border-b border-border-subtle py-3 last:border-b-0"
               >
                 <LinhaDeSessao sessao={sessao} />
                 <button
                   type="button"
                   onClick={() => void encerrar(sessao.id)}
-                  className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded-[3px] px-2 text-sm font-medium text-red transition hover:bg-red hover:text-white"
+                  className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded-[3px] px-2 text-sm font-medium text-status-danger transition hover:bg-status-danger hover:text-white"
                 >
                   <LogOut size={16} aria-hidden="true" />
                   {t("sessoes.encerrar")}
@@ -117,7 +117,7 @@ export default function SessoesTab() {
             <button
               type="button"
               onClick={() => void encerrarTodas()}
-              className="mt-5 flex h-10 celular:h-[44px] w-full items-center justify-center gap-2 rounded-[3px] bg-red text-sm font-medium text-white transition hover:bg-red-hover"
+              className="mt-5 flex h-10 celular:h-[44px] w-full items-center justify-center gap-2 rounded-[3px] bg-status-danger text-sm font-medium text-white transition hover:bg-control-critical-primary-background-hover"
             >
               <LogOut size={16} aria-hidden="true" />
               {t("sessoes.encerrarTudo")}
@@ -156,10 +156,10 @@ function LinhaDeSessao({ sessao }: { sessao: SessaoView }) {
   const Icone = ICONE[dispositivo.tipo];
   return (
     <div className="flex min-w-0 flex-1 items-center gap-3">
-      <Icone size={20} className="shrink-0 text-txt-muted" aria-hidden="true" />
+      <Icone size={20} className="shrink-0 text-text-muted" aria-hidden="true" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-txt-primary">{dispositivo.rotulo}</p>
-        <p className="truncate text-xs text-txt-muted">
+        <p className="truncate text-sm font-medium text-text-strong">{dispositivo.rotulo}</p>
+        <p className="truncate text-xs text-text-muted">
           {sessao.ip ? `${sessao.ip} · ` : ""}
           {t("sessoes.desde")} {dataCurta(sessao.createdAt)} · {t("sessoes.expira")}{" "}
           {dataCurta(sessao.expiresAt)}

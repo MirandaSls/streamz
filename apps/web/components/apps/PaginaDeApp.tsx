@@ -18,7 +18,7 @@ import { useAplicativos } from "@/stores/aplicativos";
  * ⚠️ Daquela captura eu copiei **só o leiaute**. Ela é anterior ao refresh de
  * cor do Discord de julho/2022 (`#36393F`/`#2F3136`/`#202225`), e os hex de lá
  * não viram token nenhum aqui — a superfície usa os tokens que o app já tem
- * (`bg-chat`, `bg-panel`, `text-txt-*`), que é a regra do §6.6 do processo.
+ * (`bg-background-base-lower`, `bg-background-base-lowest`, `text-txt-*`), que é a regra do §6.6 do processo.
  *
  * Não é uma rota: o diretório é uma tela só, e esta página é um estado dela
  * (`useAplicativos.selecionado`). O "voltar" é o mesmo botão nas duas
@@ -36,7 +36,7 @@ export default function PaginaDeApp({ app }: { app: AppDoDiretorio }) {
           type="button"
           onClick={voltar}
           /* 44 de alvo de toque, literal (a raiz é 15,5px) */
-          className="mb-4 flex h-[44px] items-center gap-1.5 text-sm font-medium text-txt-muted transition-colors hover:text-txt-primary celular:-ml-2"
+          className="mb-4 flex h-[44px] items-center gap-1.5 text-sm font-medium text-text-muted transition-colors hover:text-text-strong celular:-ml-2"
         >
           <ArrowLeft size={18} aria-hidden="true" />
           Voltar aos aplicativos
@@ -50,17 +50,17 @@ export default function PaginaDeApp({ app }: { app: AppDoDiretorio }) {
         <div className="flex items-start gap-6 celular:flex-col celular:items-center celular:gap-4 celular:text-center">
           <IconeDoApp app={app} lado={120} />
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-3xl font-bold leading-tight text-txt-primary">
+            <h1 className="truncate text-3xl font-bold leading-tight text-text-strong">
               {app.name}
             </h1>
-            <p className="mt-1 text-sm text-txt-muted">{textoDeServidores(app.servidores)}</p>
+            <p className="mt-1 text-sm text-text-muted">{textoDeServidores(app.servidores)}</p>
             <button
               type="button"
               onClick={() => abrirInstalacao(app)}
               data-adicionar-app={app.id}
               /* 118×40 medidos; 118 é o número da captura, e a folga lateral
                  do texto é o que faz o botão crescer se o rótulo crescer */
-              className="mt-4 h-[40px] min-w-[118px] rounded-[8px] bg-accent px-4 text-sm font-medium text-accent-ink transition-colors hover:brightness-110"
+              className="mt-4 h-[40px] min-w-[118px] rounded-[8px] bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition-colors hover:brightness-110"
             >
               Adicionar ao servidor
             </button>
@@ -68,25 +68,25 @@ export default function PaginaDeApp({ app }: { app: AppDoDiretorio }) {
         </div>
 
         <section className="mt-8">
-          <h2 className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+          <h2 className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
             Sobre
           </h2>
           {/* `whitespace-pre-line`: a descrição é texto livre do dono do app e
               pode ter quebras. Nada de markdown — o campo não é markdown em
               lugar nenhum do contrato, e interpretá-lo aqui e não no card faria
               a mesma descrição ter duas caras. */}
-          <p className="whitespace-pre-line text-sm leading-relaxed text-txt-normal">
+          <p className="whitespace-pre-line text-sm leading-relaxed text-text-default">
             {app.description ?? "Este aplicativo ainda não tem descrição."}
           </p>
         </section>
 
         <section className="mt-6">
-          <h2 className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+          <h2 className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
             Como ele aparece
           </h2>
-          <p className="text-sm text-txt-normal">
+          <p className="text-sm text-text-default">
             Na lista de membros como{" "}
-            <strong className="font-semibold text-txt-primary">
+            <strong className="font-semibold text-text-strong">
               {app.botUser.displayName || app.botUser.username}
             </strong>
             , com a etiqueta de bot.

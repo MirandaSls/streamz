@@ -82,7 +82,7 @@ export default function TagDeBot({
       // vez de ser lido depois dele.
       role="img"
       aria-label="Conta de bot"
-      className={`inline-grid h-[15px] shrink-0 select-none place-items-center rounded-[3px] bg-accent px-[4px] text-[10px] font-bold uppercase leading-none tracking-[0.02em] text-accent-ink ${
+      className={`inline-grid h-[15px] shrink-0 select-none place-items-center rounded-[3px] bg-brand-500 px-[4px] text-[10px] font-bold uppercase leading-none tracking-[0.02em] text-control-primary-text-default ${
         caixaEstreita ? "" : "celular:h-[18px] celular:px-[5px] celular:text-[11px]"
       } ${className}`}
     >

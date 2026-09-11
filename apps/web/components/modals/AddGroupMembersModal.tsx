@@ -52,12 +52,12 @@ export default function AddGroupMembersModal({ channelId }: { channelId: string 
         type="search"
         placeholder="Buscar entre seus amigos"
         aria-label="Buscar amigo"
-        className="mb-2 h-10 w-full rounded-[3px] bg-void px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
+        className="mb-2 h-10 w-full rounded-[3px] bg-input-background-default px-2.5 text-text-default outline-none placeholder:text-text-muted"
       />
 
-      <div className="max-h-64 overflow-y-auto rounded bg-void/50">
+      <div className="max-h-64 overflow-y-auto rounded bg-input-background-default/50">
         {candidatos.length === 0 ? (
-          <p className="px-3 py-3 text-sm text-txt-muted">
+          <p className="px-3 py-3 text-sm text-text-muted">
             {friends.length === 0
               ? "Você ainda não tem amigos para adicionar."
               : "Todos os seus amigos já estão neste grupo."}
@@ -66,18 +66,18 @@ export default function AddGroupMembersModal({ channelId }: { channelId: string 
           candidatos.map((u) => (
             <div
               key={u.id}
-              className="flex items-center gap-3 px-3 py-2 text-sm text-txt-normal hover:bg-hov"
+              className="flex items-center gap-3 px-3 py-2 text-sm text-text-default hover:bg-interactive-background-hover"
             >
               <Avatar user={u} size="sm" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate">{displayNameOf(u)}</span>
-                <span className="block truncate text-xs text-txt-muted">@{u.username}</span>
+                <span className="block truncate text-xs text-text-muted">@{u.username}</span>
               </span>
               <button
                 type="button"
                 disabled={ocupado === u.id}
                 onClick={() => void adicionar(u)}
-                className="h-8 shrink-0 rounded-[3px] border border-accent px-3 text-sm font-medium text-txt-primary transition hover:bg-accent hover:text-accent-ink disabled:opacity-50"
+                className="h-8 shrink-0 rounded-[3px] border border-brand-500 px-3 text-sm font-medium text-text-strong transition hover:bg-brand-500 hover:text-control-primary-text-default disabled:opacity-50"
               >
                 {ocupado === u.id ? "Adicionando…" : "Adicionar"}
               </button>

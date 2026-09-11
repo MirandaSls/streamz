@@ -56,27 +56,27 @@ export default function ReportModal({
       }
     >
       {preview && (
-        <blockquote className="mb-4 max-h-24 overflow-y-auto break-words rounded-[3px] border-l-2 border-border-strong bg-void px-3 py-2 text-sm text-txt-muted">
+        <blockquote className="mb-4 max-h-24 overflow-y-auto break-words rounded-[3px] border-l-2 border-border-normal bg-input-background-default px-3 py-2 text-sm text-text-muted">
           {preview}
         </blockquote>
       )}
 
       <fieldset>
-        <legend className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+        <legend className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
           Motivo
         </legend>
         <div className="flex flex-col gap-1">
           {REPORT_REASONS.map((r) => (
             <label
               key={r.value}
-              className="flex h-9 cursor-pointer items-center gap-2 rounded-[3px] px-2 text-sm text-txt-normal hover:bg-hov"
+              className="flex h-9 cursor-pointer items-center gap-2 rounded-[3px] px-2 text-sm text-text-default hover:bg-interactive-background-hover"
             >
               <input
                 type="radio"
                 name="report-reason"
                 checked={reason === r.value}
                 onChange={() => setReason(r.value)}
-                className="accent-accent"
+                className="accent-brand-500"
               />
               {r.label}
             </label>
@@ -86,7 +86,7 @@ export default function ReportModal({
 
       <label
         htmlFor="report-details"
-        className="mb-2 mt-5 block text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary"
+        className="mb-2 mt-5 block text-xs font-bold uppercase tracking-[0.02em] text-text-subtle"
       >
         Detalhes (opcional)
       </label>
@@ -97,7 +97,7 @@ export default function ReportModal({
         maxLength={MAX_REPORT_DETAILS}
         onChange={(e) => setDetails(e.target.value)}
         placeholder="Conte o que aconteceu, se ajudar."
-        className="w-full resize-none rounded-[3px] bg-void px-2.5 py-2 text-txt-normal outline-none placeholder:text-txt-muted"
+        className="w-full resize-none rounded-[3px] bg-input-background-default px-2.5 py-2 text-text-default outline-none placeholder:text-text-muted"
       />
     </Dialog>
   );

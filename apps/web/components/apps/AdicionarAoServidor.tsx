@@ -158,8 +158,8 @@ export default function AdicionarAoServidor() {
       <div className="mb-4 flex items-center gap-3">
         <IconeDoApp app={app} lado={48} />
         <div className="min-w-0">
-          <p className="truncate text-base font-semibold text-txt-primary">{app.name}</p>
-          <p className="truncate text-sm text-txt-muted">
+          <p className="truncate text-base font-semibold text-text-strong">{app.name}</p>
+          <p className="truncate text-sm text-text-muted">
             {app.description ?? "Sem descrição."}
           </p>
         </div>
@@ -167,10 +167,10 @@ export default function AdicionarAoServidor() {
 
       <Section title="Adicionar a">
         {carregandoServidores ? (
-          <p className="py-2 text-sm text-txt-muted">Vendo onde você pode adicionar…</p>
+          <p className="py-2 text-sm text-text-muted">Vendo onde você pode adicionar…</p>
         ) : semServidores ? (
-          <p className="py-2 text-sm text-txt-muted">
-            Você precisa de <strong className="text-txt-normal">Gerenciar servidor</strong> em
+          <p className="py-2 text-sm text-text-muted">
+            Você precisa de <strong className="text-text-default">Gerenciar servidor</strong> em
             algum servidor para adicionar um aplicativo.
           </p>
         ) : (
@@ -235,7 +235,7 @@ function EscolhaDeServidor({
   aoEscolher: (id: string) => void;
 }) {
   return (
-    <div role="radiogroup" aria-label="Servidor" className="max-h-52 overflow-y-auto rounded bg-void/50">
+    <div role="radiogroup" aria-label="Servidor" className="max-h-52 overflow-y-auto rounded bg-input-background-default/50">
       {servidores.map((s) => {
         const ativo = s.id === escolhido;
         return (
@@ -248,7 +248,7 @@ function EscolhaDeServidor({
             /* 44px de alvo de toque, literal: a raiz é 15,5px e `h-11` mediria
                42,6 (ver o cabeçalho de `components/mobile/pecas.tsx`) */
             className={`flex h-[44px] w-full items-center gap-2.5 px-3 text-left text-sm transition-colors ${
-              ativo ? "bg-hov text-txt-primary" : "text-txt-normal hover:bg-hov/60"
+              ativo ? "bg-interactive-background-hover text-text-strong" : "text-text-default hover:bg-interactive-background-hover/60"
             }`}
           >
             <IconeDoServidor servidor={s} />
@@ -256,10 +256,10 @@ function EscolhaDeServidor({
             <span
               aria-hidden="true"
               className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${
-                ativo ? "border-accent" : "border-txt-muted"
+                ativo ? "border-brand-500" : "border-text-muted"
               }`}
             >
-              {ativo && <span className="h-2 w-2 rounded-full bg-accent" />}
+              {ativo && <span className="h-2 w-2 rounded-full bg-brand-500" />}
             </span>
           </button>
         );
@@ -277,7 +277,7 @@ function IconeDoServidor({ servidor }: { servidor: ServidorParaInstalar }) {
   return (
     <span
       aria-hidden="true"
-      className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-hov text-[10px] font-semibold text-txt-normal"
+      className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-interactive-background-hover text-[10px] font-semibold text-text-default"
     >
       {servidor.name
         .split(/\s+/)

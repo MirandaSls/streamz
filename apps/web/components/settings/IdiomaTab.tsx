@@ -42,18 +42,18 @@ export default function IdiomaTab() {
               aria-checked={ativo}
               onClick={() => set({ locale: l })}
               className={`flex items-center gap-3 rounded-[6px] border px-3 py-2.5 text-left transition ${
-                ativo ? "border-accent bg-hov" : "border-border hover:border-border-strong-hover"
+                ativo ? "border-brand-500 bg-interactive-background-hover" : "border-border-subtle hover:border-border-strong"
               }`}
             >
               <span aria-hidden="true" className="text-2xl leading-none">
                 {info?.bandeira ?? "🏳️"}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-txt-primary">
+                <span className="block truncate text-sm font-medium text-text-strong">
                   {info?.nativo ?? NOMES_DE_IDIOMA[l]}
                 </span>
                 {info && info.ingles !== info.nativo && (
-                  <span className="block truncate text-xs text-txt-muted">{info.ingles}</span>
+                  <span className="block truncate text-xs text-text-muted">{info.ingles}</span>
                 )}
               </span>
               <PontoDeRadio ativo={ativo} />
@@ -61,7 +61,7 @@ export default function IdiomaTab() {
           );
         })}
       </div>
-      <p className="pt-3 text-xs text-txt-muted">{t("idioma.ajuda")}</p>
+      <p className="pt-3 text-xs text-text-muted">{t("idioma.ajuda")}</p>
     </>
   );
 }

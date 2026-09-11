@@ -81,7 +81,7 @@ export default function AceitarConvite() {
        **sem** a barra de endereço, e o cartão nascia empurrado para baixo dela.
        As áreas seguras entram no padding para o cartão não encostar no entalhe
        nem na barra de gestos. */
-    <main className="grid min-h-[100dvh] place-items-center bg-void bg-[radial-gradient(ellipse_at_top_left,rgba(155,227,31,0.14),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(155,227,31,0.05),transparent_60%)] p-4 celular:px-[max(1rem,env(safe-area-inset-left))] celular:pb-[max(1rem,env(safe-area-inset-bottom))] celular:pt-[max(1rem,env(safe-area-inset-top))]">
+    <main className="grid min-h-[100dvh] place-items-center bg-input-background-default bg-[radial-gradient(ellipse_at_top_left,rgba(155,227,31,0.14),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(155,227,31,0.05),transparent_60%)] p-4 celular:px-[max(1rem,env(safe-area-inset-left))] celular:pb-[max(1rem,env(safe-area-inset-bottom))] celular:pt-[max(1rem,env(safe-area-inset-top))]">
       {/*
         `w-full max-w-[420px]`, e não `w-[420px] max-w-full`: com `justify-items:
         center` o item da grade é dimensionado pelo conteúdo, e o `max-width:
@@ -89,12 +89,12 @@ export default function AceitarConvite() {
         já havia esticado. Medido em 390×844: a página rolava 436px na
         horizontal e o botão "Entrar para aceitar o convite" saía pela direita.
       */}
-      <div className="w-full max-w-[420px] rounded-[5px] bg-chat p-8 text-center shadow-high celular:p-6">
-        {preview === null && !erro && <p className="text-txt-muted">Carregando convite…</p>}
+      <div className="w-full max-w-[420px] rounded-[5px] bg-background-base-lower p-8 text-center shadow-popout celular:p-6">
+        {preview === null && !erro && <p className="text-text-muted">Carregando convite…</p>}
 
         {(preview || erro) && (
           <>
-            <div className="mx-auto grid h-20 w-20 place-items-center overflow-hidden rounded-3xl bg-void text-xl font-semibold text-txt-primary">
+            <div className="mx-auto grid h-20 w-20 place-items-center overflow-hidden rounded-3xl bg-input-background-default text-xl font-semibold text-text-strong">
               {preview?.guild.iconUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={preview.guild.iconUrl} alt="" className="h-full w-full object-cover" />
@@ -103,34 +103,34 @@ export default function AceitarConvite() {
               )}
             </div>
 
-            <p className="mt-4 text-sm text-txt-muted">
+            <p className="mt-4 text-sm text-text-muted">
               {preview?.inviter
                 ? `${displayNameOf(preview.inviter)} convidou você para`
                 : "Você foi convidado para"}
             </p>
-            <h1 className="mt-1 font-headline text-2xl font-extrabold text-txt-primary">
+            <h1 className="mt-1 font-headline text-2xl font-extrabold text-text-strong">
               {preview?.guild.name ?? "Servidor"}
             </h1>
 
             {preview?.description && (
-              <p className="mt-2 break-words text-sm text-txt-muted">{preview.description}</p>
+              <p className="mt-2 break-words text-sm text-text-muted">{preview.description}</p>
             )}
 
             {preview && (
-              <p className="mt-3 flex items-center justify-center gap-4 text-sm text-txt-muted">
+              <p className="mt-3 flex items-center justify-center gap-4 text-sm text-text-muted">
                 <span className="flex items-center gap-1.5">
-                  <span aria-hidden="true" className="h-2 w-2 rounded-full bg-green" />
+                  <span aria-hidden="true" className="h-2 w-2 rounded-full bg-status-positive" />
                   {preview.onlineCount} online
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span aria-hidden="true" className="h-2 w-2 rounded-full bg-txt-faint" />
+                  <span aria-hidden="true" className="h-2 w-2 rounded-full bg-channels-default" />
                   {preview.memberCount} membros
                 </span>
               </p>
             )}
 
             {preview?.channelName && (
-              <p className="mt-2 flex items-center justify-center gap-1 text-sm text-txt-muted">
+              <p className="mt-2 flex items-center justify-center gap-1 text-sm text-text-muted">
                 <Hash size={14} aria-hidden="true" />
                 {preview.channelName}
               </p>
@@ -138,13 +138,13 @@ export default function AceitarConvite() {
 
             {invalido ? (
               <>
-                <p role="alert" className="mt-5 text-sm text-red">
+                <p role="alert" className="mt-5 text-sm text-status-danger">
                   {recado}
                 </p>
                 <button
                   type="button"
                   onClick={() => router.replace(user ? "/app" : "/login")}
-                  className="mt-5 h-11 w-full rounded-[3px] bg-border-strong font-medium text-white transition hover:bg-border-strong-hover celular:h-[48px]"
+                  className="mt-5 h-11 w-full rounded-[3px] bg-border-normal font-medium text-white transition hover:bg-border-strong celular:h-[48px]"
                 >
                   {user ? "Voltar para o app" : "Ir para o login"}
                 </button>
@@ -154,7 +154,7 @@ export default function AceitarConvite() {
                 type="button"
                 disabled={entrando}
                 onClick={() => void aceitar()}
-                className="mt-6 h-11 w-full rounded-[3px] bg-accent font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-60 celular:h-[48px]"
+                className="mt-6 h-11 w-full rounded-[3px] bg-brand-500 font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:opacity-60 celular:h-[48px]"
                 autoFocus
               >
                 {preview?.member

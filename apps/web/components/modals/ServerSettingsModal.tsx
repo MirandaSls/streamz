@@ -249,7 +249,7 @@ export default function ServerSettingsModal({
       {aba ? (
         aba.render()
       ) : (
-        <p className="text-sm text-txt-muted">
+        <p className="text-sm text-text-muted">
           Você não tem permissão para gerenciar este servidor.
         </p>
       )}

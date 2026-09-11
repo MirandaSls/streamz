@@ -24,7 +24,7 @@ function frase(nomes: string[]): React.ReactNode {
   if (nomes.length > 3) return <>Várias pessoas estão digitando</>;
   const negrito = nomes.map((n, i) => (
     <span key={n}>
-      <strong className="font-semibold text-txt-primary">{n}</strong>
+      <strong className="font-semibold text-text-strong">{n}</strong>
       {i < nomes.length - 2 ? ", " : i === nomes.length - 2 ? " e " : ""}
     </span>
   ));
@@ -105,7 +105,7 @@ export default function TypingIndicator({ channelId }: { channelId: string }) {
     <div ref={raiz} aria-live="polite" className="relative shrink-0" style={{ height: RESPIRO }}>
       {nomes.length > 0 && (
         <div
-          className="absolute inset-x-0 bottom-full flex h-6 items-center gap-1.5 bg-chat px-4 text-[13px] text-txt-normal"
+          className="absolute inset-x-0 bottom-full flex h-6 items-center gap-1.5 bg-background-base-lower px-4 text-[13px] text-text-default"
           style={{ marginBottom: alturaDoComposer }}
         >
           <style>{ANIMACAO}</style>
@@ -117,7 +117,7 @@ export default function TypingIndicator({ channelId }: { channelId: string }) {
                   animation: "streamz-digitando 1.2s infinite ease-in-out",
                   animationDelay: `${i * 0.16}s`,
                 }}
-                className="h-[7px] w-[7px] rounded-full bg-txt-normal"
+                className="h-[7px] w-[7px] rounded-full bg-text-default"
               />
             ))}
           </span>

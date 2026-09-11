@@ -198,7 +198,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
           <Search
             size={14}
             aria-hidden="true"
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-txt-muted"
+            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted"
           />
           <input
             value={busca}
@@ -272,7 +272,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
                   disabled={selecionaveis.length === 0}
                   onChange={alternarTodos}
                   aria-label="Selecionar todos os membros desta página"
-                  className="accent-accent celular:h-[22px] celular:w-[22px]"
+                  className="accent-brand-500 celular:h-[22px] celular:w-[22px]"
                 />
               </th>
               <th scope="col" className="font-bold">
@@ -295,7 +295,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
           <tbody>
             {pag.itens.length === 0 && (
               <tr className="h-[55px]">
-                <td colSpan={6} className="text-sm text-txt-muted">
+                <td colSpan={6} className="text-sm text-text-muted">
                   {members.length === 0 ? "Ninguém aqui ainda." : "Ninguém com esses filtros."}
                 </td>
               </tr>
@@ -305,7 +305,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
               const chips = rolesOf(m.roleIds, roles);
               const castigado = !!m.timeoutUntil && new Date(m.timeoutUntil).getTime() > Date.now();
               return (
-                <tr key={m.user.id} className="group h-[55px] border-b border-border align-middle">
+                <tr key={m.user.id} className="group h-[55px] border-b border-border-subtle align-middle">
                   <td>
                     <input
                       type="checkbox"
@@ -313,31 +313,31 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
                       disabled={!alvoValido(m)}
                       onChange={() => alternar(m.user.id)}
                       aria-label={`Selecionar ${displayNameOf(m.user)}`}
-                      className="accent-accent disabled:opacity-40 celular:h-[22px] celular:w-[22px]"
+                      className="accent-brand-500 disabled:opacity-40 celular:h-[22px] celular:w-[22px]"
                     />
                   </td>
                   <td className="pr-2">
                     <div className="flex min-w-0 items-center gap-2">
-                      <Avatar user={m.user} size="sm" surface="border-chat" />
+                      <Avatar user={m.user} size="sm" surface="border-background-base-lower" />
                       <div className="min-w-0">
                         <div
                           style={cor ? { color: cor } : undefined}
-                          className="truncate text-sm font-medium text-txt-primary"
+                          className="truncate text-sm font-medium text-text-strong"
                         >
                           {displayNameOf(m.user)}
                         </div>
-                        <div className="truncate text-xs text-txt-muted">@{m.user.username}</div>
+                        <div className="truncate text-xs text-text-muted">@{m.user.username}</div>
                       </div>
                     </div>
                   </td>
-                  <td className="pr-2 text-sm text-txt-normal">{haQuantoTempo(m.joinedAt)}</td>
+                  <td className="pr-2 text-sm text-text-default">{haQuantoTempo(m.joinedAt)}</td>
                   <td className="pr-2">
                     <div className="flex flex-wrap items-center gap-1">
-                      {chips.length === 0 && <span className="text-xs text-txt-muted">—</span>}
+                      {chips.length === 0 && <span className="text-xs text-text-muted">—</span>}
                       {chips.map((r) => (
                         <span
                           key={r.id}
-                          className="flex items-center gap-1 rounded-[4px] bg-panel py-0.5 pl-1.5 pr-1 text-xs text-txt-normal"
+                          className="flex items-center gap-1 rounded-[4px] bg-background-base-lowest py-0.5 pl-1.5 pr-1 text-xs text-text-default"
                         >
                           <span
                             aria-hidden="true"
@@ -353,7 +353,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
                               // no print a pilha de cargos é só cor + nome; o "×"
                               // aparece com o mouse na linha (e com o foco, para
                               // quem navega pelo teclado)
-                              className="text-txt-muted opacity-0 transition hover:text-txt-primary focus-visible:opacity-100 group-hover:opacity-100 celular:opacity-100"
+                              className="text-text-muted opacity-0 transition hover:text-text-strong focus-visible:opacity-100 group-hover:opacity-100 celular:opacity-100"
                             >
                               <X size={12} />
                             </button>
@@ -366,12 +366,12 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
                     <div className="flex items-center gap-1.5">
                       {m.role === "OWNER" && (
                         <Tooltip label="Dono do servidor">
-                          <Crown size={14} className="text-yellow" aria-label="Dono" />
+                          <Crown size={14} className="text-status-warning" aria-label="Dono" />
                         </Tooltip>
                       )}
                       {castigado && (
                         <Tooltip label="De castigo">
-                          <ShieldAlert size={14} className="text-red" aria-label="De castigo" />
+                          <ShieldAlert size={14} className="text-status-danger" aria-label="De castigo" />
                         </Tooltip>
                       )}
                     </div>
@@ -383,7 +383,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
                       aria-label={`Ações para ${displayNameOf(m.user)}`}
                       // sempre visível: é a coluna de ações da tabela do print,
                       // não uma ação escondida de hover
-                      className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded text-txt-muted transition hover:bg-border-strong hover:text-txt-primary"
+                      className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded text-text-muted transition hover:bg-border-normal hover:text-text-strong"
                     >
                       <MoreHorizontal size={16} />
                     </button>
@@ -398,7 +398,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
       {/* Rodapé do print: "Mostrando [12] membros de 61" à esquerda e a
           paginação à direita, com a página atual em pílula de acento. */}
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="flex items-center gap-2 text-sm text-txt-muted">
+        <p className="flex items-center gap-2 text-sm text-text-muted">
           Mostrando
           <select
             value={porPagina}
@@ -407,7 +407,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
               setPagina(1);
             }}
             aria-label="Membros por página"
-            className="h-9 rounded-lg border border-border bg-input px-2 text-sm text-txt-normal outline-none focus:border-accent celular:h-[44px] celular:text-[max(16px,1em)]"
+            className="h-9 rounded-lg border border-border-subtle bg-chat-background-default px-2 text-sm text-text-default outline-none focus:border-brand-500 celular:h-[44px] celular:text-[max(16px,1em)]"
           >
             {POR_PAGINA.map((n) => (
               <option key={n} value={n}>
@@ -424,14 +424,14 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
               type="button"
               disabled={pag.pagina === 1}
               onClick={() => setPagina(pag.pagina - 1)}
-              className="flex h-8 celular:h-[44px] items-center gap-1 rounded-lg px-2 text-sm text-txt-muted transition hover:text-txt-primary disabled:opacity-40"
+              className="flex h-8 celular:h-[44px] items-center gap-1 rounded-lg px-2 text-sm text-text-muted transition hover:text-text-strong disabled:opacity-40"
             >
               <ChevronLeft size={16} aria-hidden="true" />
               Voltar
             </button>
             {numerosDePagina(pag.pagina, pag.paginas).map((n, i) =>
               n === null ? (
-                <span key={`e${i}`} aria-hidden="true" className="px-1 text-txt-muted">
+                <span key={`e${i}`} aria-hidden="true" className="px-1 text-text-muted">
                   …
                 </span>
               ) : (
@@ -442,8 +442,8 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
                   onClick={() => setPagina(n)}
                   className={`grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded-full text-sm transition ${
                     n === pag.pagina
-                      ? "bg-accent font-medium text-accent-ink"
-                      : "text-txt-normal hover:bg-hov"
+                      ? "bg-brand-500 font-medium text-control-primary-text-default"
+                      : "text-text-default hover:bg-interactive-background-hover"
                   }`}
                 >
                   {n}
@@ -454,7 +454,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
               type="button"
               disabled={pag.pagina === pag.paginas}
               onClick={() => setPagina(pag.pagina + 1)}
-              className="flex h-8 celular:h-[44px] items-center gap-1 rounded-lg px-2 text-sm text-txt-muted transition hover:text-txt-primary disabled:opacity-40"
+              className="flex h-8 celular:h-[44px] items-center gap-1 rounded-lg px-2 text-sm text-text-muted transition hover:text-text-strong disabled:opacity-40"
             >
               Próximo
               <ChevronRight size={16} aria-hidden="true" />

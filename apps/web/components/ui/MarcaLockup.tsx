@@ -19,7 +19,7 @@ export default function MarcaLockup({
   return (
     <span className={`inline-flex items-center gap-3 ${className ?? ""}`}>
       {/* limão no símbolo, wordmark na cor do contexto: é o lockup escuro do pacote */}
-      <Marca size={size} className="text-accent" />
+      <Marca size={size} className="text-brand-500" />
       <span
         className="font-display font-extrabold uppercase leading-none tracking-wordmark"
         style={{ fontSize: size * 0.86 }}

@@ -23,37 +23,37 @@ export default function PreviaDeMensagens() {
   const nome = user?.displayName || user?.username || "você";
 
   return (
-    <div className="rounded-lg bg-chat p-3">
+    <div className="rounded-lg bg-background-base-lower p-3">
       {s.compactMode ? (
         <>
-          <p className="text-txt-normal">
+          <p className="text-text-default">
             <Hora s={s} valor="14:03" />
-            <span className="mr-1 font-medium text-txt-primary">{nome}</span>
+            <span className="mr-1 font-medium text-text-strong">{nome}</span>
             Assim ficam as mensagens no modo compacto.
           </p>
-          <p className="text-txt-normal" style={{ marginTop: `${s.groupSpacing}px` }}>
+          <p className="text-text-default" style={{ marginTop: `${s.groupSpacing}px` }}>
             <Hora s={s} valor="14:04" />
-            <span className="mr-1 font-medium text-txt-primary">streamz</span>
+            <span className="mr-1 font-medium text-text-strong">streamz</span>
             E este é o respiro entre grupos.
           </p>
         </>
       ) : (
         <>
           <div className="flex gap-3">
-            {user && <Avatar user={user} size="lg" surface="border-chat" />}
+            {user && <Avatar user={user} size="lg" surface="border-background-base-lower" />}
             <div className="min-w-0">
-              <span className="font-medium text-txt-primary">{nome}</span>
-              <span className="ml-1.5 text-xs text-txt-muted">Hoje às 14:03</span>
-              <p className="text-txt-normal">Assim ficam as mensagens no modo padrão.</p>
+              <span className="font-medium text-text-strong">{nome}</span>
+              <span className="ml-1.5 text-xs text-text-muted">Hoje às 14:03</span>
+              <p className="text-text-default">Assim ficam as mensagens no modo padrão.</p>
               <Reacao tamanho={s.emojiSize} />
             </div>
           </div>
           <div className="flex gap-3" style={{ marginTop: `${s.groupSpacing}px` }}>
-            <div className="h-10 w-10 shrink-0 rounded-full bg-accent" aria-hidden="true" />
+            <div className="h-10 w-10 shrink-0 rounded-full bg-brand-500" aria-hidden="true" />
             <div className="min-w-0">
-              <span className="font-medium text-txt-primary">streamz</span>
-              <span className="ml-1.5 text-xs text-txt-muted">Hoje às 14:04</span>
-              <p className="text-txt-normal">E este é o respiro entre grupos.</p>
+              <span className="font-medium text-text-strong">streamz</span>
+              <span className="ml-1.5 text-xs text-text-muted">Hoje às 14:04</span>
+              <p className="text-text-default">E este é o respiro entre grupos.</p>
             </div>
           </div>
         </>
@@ -68,7 +68,7 @@ export default function PreviaDeMensagens() {
  */
 function Hora({ s, valor }: { s: { alwaysShowTime: boolean }; valor: string }) {
   if (!s.alwaysShowTime) return null;
-  return <span className="mr-2 text-[11px] text-txt-muted">{valor}</span>;
+  return <span className="mr-2 text-[11px] text-text-muted">{valor}</span>;
 }
 
 /**
@@ -83,7 +83,7 @@ function Reacao({ tamanho }: { tamanho: number }) {
   return (
     <span
       style={{ height: alturaDoChipDeReacao(tamanho) }}
-      className="mt-1 inline-flex items-center gap-1.5 rounded-lg border border-accent bg-accent/20 px-1.5"
+      className="mt-1 inline-flex items-center gap-1.5 rounded-lg border border-brand-500 bg-brand-500/20 px-1.5"
     >
       <span
         aria-hidden="true"
@@ -92,7 +92,7 @@ function Reacao({ tamanho }: { tamanho: number }) {
       >
         👍
       </span>
-      <span className="text-sm font-semibold leading-none text-txt-primary">3</span>
+      <span className="text-sm font-semibold leading-none text-text-strong">3</span>
     </span>
   );
 }

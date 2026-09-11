@@ -60,7 +60,7 @@ export default function FriendRow({
     <div
       role="listitem"
       onContextMenu={abrirMenu}
-      className="group relative mx-6 flex h-[61px] items-center gap-3 rounded-lg border-t border-border px-[10px] first:border-t-0 hover:border-transparent hover:bg-hov celular:mx-2 celular:gap-2.5"
+      className="group relative mx-6 flex h-[61px] items-center gap-3 rounded-lg border-t border-border-subtle px-[10px] first:border-t-0 hover:border-transparent hover:bg-interactive-background-hover celular:mx-2 celular:gap-2.5"
     >
       <button
         type="button"
@@ -77,16 +77,16 @@ export default function FriendRow({
         // cresce é o alvo, por um pseudo-elemento invisível de 46
         className="relative shrink-0 rounded-full celular:before:absolute celular:before:-inset-[7px] celular:before:content-['']"
       >
-        <Avatar user={live} size="md" status={status} surface="border-chat" />
+        <Avatar user={live} size="md" status={status} surface="border-background-base-lower" />
       </button>
 
       {/* o texto deixa o clique passar para o botão que cobre a linha */}
       <span className="pointer-events-none relative min-w-0 flex-1">
         <span className="flex items-baseline gap-1.5">
-          <span className="truncate text-base font-semibold text-txt-primary">{nome}</span>
-          <span className="truncate text-base text-txt-muted">@{live.username}</span>
+          <span className="truncate text-base font-semibold text-text-strong">{nome}</span>
+          <span className="truncate text-base text-text-muted">@{live.username}</span>
         </span>
-        <span className="block truncate text-sm text-txt-muted">{rodape}</span>
+        <span className="block truncate text-sm text-text-muted">{rodape}</span>
       </span>
 
       {/* 10px entre os círculos, medido no hover da linha do Discord */}
@@ -98,7 +98,7 @@ export default function FriendRow({
               type="button"
               onClick={abrirMenu}
               aria-label={`Mais opções para ${nome}`}
-              className="grid h-9 w-9 place-items-center rounded-full text-txt-secondary transition hover:bg-sel hover:text-txt-primary celular:h-[44px] celular:w-[44px]"
+              className="grid h-9 w-9 place-items-center rounded-full text-text-subtle transition hover:bg-interactive-background-selected hover:text-text-strong celular:h-[44px] celular:w-[44px]"
             >
               {/* o "⋮" do Discord mede 16px de altura; o nosso caminho desenha
                   0,83 do `size`, então 20 → 16,7 (em 18 saía com 15) */}
@@ -142,8 +142,8 @@ export function RowAction({
         type="button"
         onClick={onClick}
         aria-label={label}
-        className={`grid h-9 w-9 place-items-center rounded-full text-txt-secondary transition hover:bg-sel celular:h-[44px] celular:w-[44px] ${
-          danger ? "hover:text-red" : positive ? "hover:text-green" : "hover:text-txt-primary"
+        className={`grid h-9 w-9 place-items-center rounded-full text-text-subtle transition hover:bg-interactive-background-selected celular:h-[44px] celular:w-[44px] ${
+          danger ? "hover:text-status-danger" : positive ? "hover:text-status-positive" : "hover:text-text-strong"
         }`}
       >
         {children}

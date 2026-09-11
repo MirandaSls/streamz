@@ -92,7 +92,7 @@ function ListaDeCanais({ onAbrir }: { onAbrir: (c: AdminChannelView) => void }) 
 
   return (
     <>
-      <p className="mb-3 text-sm text-txt-muted">
+      <p className="mb-3 text-sm text-text-muted">
         Abra qualquer canal ou conversa desta instância. Cada leitura fica registrada no log do
         servidor.
       </p>
@@ -101,7 +101,7 @@ function ListaDeCanais({ onAbrir }: { onAbrir: (c: AdminChannelView) => void }) 
         <Search
           size={16}
           aria-hidden="true"
-          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-txt-muted"
+          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted"
         />
         <input
           value={busca}
@@ -121,8 +121,8 @@ function ListaDeCanais({ onAbrir }: { onAbrir: (c: AdminChannelView) => void }) 
             onClick={() => setEscopo(e.id)}
             className={`h-7 celular:h-[44px] rounded-[3px] px-2.5 text-sm font-medium transition ${
               escopo === e.id
-                ? "bg-sel text-txt-primary"
-                : "text-txt-faint hover:bg-hov hover:text-txt-normal"
+                ? "bg-interactive-background-selected text-text-strong"
+                : "text-channels-default hover:bg-interactive-background-hover hover:text-text-default"
             }`}
           >
             {e.label}
@@ -131,7 +131,7 @@ function ListaDeCanais({ onAbrir }: { onAbrir: (c: AdminChannelView) => void }) 
       </div>
 
       {pagina && !carregando && (
-        <p className="mb-2 text-xs text-txt-muted">
+        <p className="mb-2 text-xs text-text-muted">
           {itens.length} de {pagina.total.toLocaleString("pt-BR")} canal(is)
         </p>
       )}
@@ -147,18 +147,18 @@ function ListaDeCanais({ onAbrir }: { onAbrir: (c: AdminChannelView) => void }) 
               <button
                 type="button"
                 onClick={() => onAbrir(c)}
-                className="flex w-full items-center gap-2 border-b border-border py-2.5 text-left transition last:border-b-0 hover:bg-hov"
+                className="flex w-full items-center gap-2 border-b border-border-subtle py-2.5 text-left transition last:border-b-0 hover:bg-interactive-background-hover"
               >
                 <IconeDeCanal tipo={c.type} privado={c.privado} />
                 <span className="min-w-0 flex-1">
                   <span className="flex min-w-0 items-center gap-1.5">
-                    <span className="truncate text-sm font-medium text-txt-primary">{c.nome}</span>
+                    <span className="truncate text-sm font-medium text-text-strong">{c.nome}</span>
                     {c.privado && <Etiqueta>privado</Etiqueta>}
                     {!c.guildId && (
                       <Etiqueta tom="alerta">{c.type === "GROUP" ? "grupo" : "privada"}</Etiqueta>
                     )}
                   </span>
-                  <span className="mt-0.5 block truncate text-xs text-txt-muted">
+                  <span className="mt-0.5 block truncate text-xs text-text-muted">
                     {c.guildName ?? c.participantes.map((p) => `@${p.username}`).join(", ")}
                     {" · "}
                     {c.mensagens.toLocaleString("pt-BR")} mensagem(ns)
@@ -175,7 +175,7 @@ function ListaDeCanais({ onAbrir }: { onAbrir: (c: AdminChannelView) => void }) 
             type="button"
             onClick={() => void carregarMais()}
             disabled={carregandoMais}
-            className="mt-3 h-9 celular:h-[44px] w-full rounded-[3px] border border-border-strong text-sm font-medium text-txt-normal transition hover:border-border-strong-hover disabled:opacity-60"
+            className="mt-3 h-9 celular:h-[44px] w-full rounded-[3px] border border-border-normal text-sm font-medium text-text-default transition hover:border-border-strong disabled:opacity-60"
           >
             {carregandoMais ? "Carregando…" : "Carregar mais"}
           </button>
@@ -241,15 +241,15 @@ function Historico({ canal, onVoltar }: { canal: AdminChannelView; onVoltar: () 
         <button
           type="button"
           onClick={onVoltar}
-          className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded-[3px] px-2 text-sm font-medium text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
+          className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded-[3px] px-2 text-sm font-medium text-text-subtle transition hover:bg-interactive-background-hover hover:text-text-strong"
         >
           <ArrowLeft size={16} aria-hidden="true" />
           Canais
         </button>
         <span className="flex min-w-0 items-center gap-1.5">
           <IconeDeCanal tipo={canal.type} privado={canal.privado} />
-          <span className="truncate text-sm font-medium text-txt-primary">{canal.nome}</span>
-          <span className="truncate text-xs text-txt-muted">
+          <span className="truncate text-sm font-medium text-text-strong">{canal.nome}</span>
+          <span className="truncate text-xs text-text-muted">
             {canal.guildName ?? canal.participantes.map((p) => `@${p.username}`).join(", ")}
           </span>
         </span>
@@ -265,17 +265,17 @@ function Historico({ canal, onVoltar }: { canal: AdminChannelView; onVoltar: () 
             type="button"
             onClick={() => void carregarAntigas()}
             disabled={carregando}
-            className="mb-2 h-9 celular:h-[44px] w-full rounded-[3px] border border-border-strong text-sm font-medium text-txt-normal transition hover:border-border-strong-hover disabled:opacity-60"
+            className="mb-2 h-9 celular:h-[44px] w-full rounded-[3px] border border-border-normal text-sm font-medium text-text-default transition hover:border-border-strong disabled:opacity-60"
           >
             {carregando ? "Carregando…" : "Mensagens anteriores"}
           </button>
         )}
-        {fim && <p className="mb-2 text-center text-xs text-txt-faint">Começo do canal.</p>}
+        {fim && <p className="mb-2 text-center text-xs text-channels-default">Começo do canal.</p>}
 
-        {/* o `MessagePreview` é um cartão `bg-chat`, e o fundo da tela de
-            configurações é `bg-chat` também: sem esta moldura as mensagens
+        {/* o `MessagePreview` é um cartão `bg-background-base-lower`, e o fundo da tela de
+            configurações é `bg-background-base-lower` também: sem esta moldura as mensagens
             ficariam sem contorno nenhum, coladas umas nas outras */}
-        <div className="flex flex-col gap-0.5 rounded-[6px] border border-border bg-panel p-1.5">
+        <div className="flex flex-col gap-0.5 rounded-[6px] border border-border-subtle bg-background-base-lowest p-1.5">
           {itens.map((m) => (
             <MessagePreview key={m.id} message={m} />
           ))}

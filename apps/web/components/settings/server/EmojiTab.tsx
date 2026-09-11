@@ -92,7 +92,7 @@ export default function EmojiTab({ guildId }: { guildId: string }) {
         }}
       />
 
-      <p className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+      <p className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
         Emoji — {emojis.length}/{MAX_EMOJIS_PER_GUILD}
       </p>
 
@@ -126,7 +126,7 @@ export default function EmojiTab({ guildId }: { guildId: string }) {
           <tbody>
             {emojis.length === 0 && (
               <tr className="h-[55px]">
-                <td colSpan={4} className="text-sm text-txt-muted">
+                <td colSpan={4} className="text-sm text-text-muted">
                   Nenhum emoji ainda.
                 </td>
               </tr>
@@ -134,7 +134,7 @@ export default function EmojiTab({ guildId }: { guildId: string }) {
             {emojis.map((emoji) => {
               const autor = members.find((m) => m.user.id === emoji.createdById)?.user ?? null;
               return (
-                <tr key={emoji.id} className="group h-[55px] border-b border-border align-middle">
+                <tr key={emoji.id} className="group h-[55px] border-b border-border-subtle align-middle">
                   <td>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
@@ -144,21 +144,21 @@ export default function EmojiTab({ guildId }: { guildId: string }) {
                     />
                   </td>
                   <td className="pr-2">
-                    <span className="truncate text-sm text-txt-primary">:{emoji.name}:</span>
+                    <span className="truncate text-sm text-text-strong">:{emoji.name}:</span>
                     {emoji.animated && (
-                      <span className="ml-2 text-[10px] uppercase text-txt-faint">animado</span>
+                      <span className="ml-2 text-[10px] uppercase text-channels-default">animado</span>
                     )}
                   </td>
                   <td className="pr-2">
                     {autor ? (
                       <span className="flex min-w-0 items-center gap-2">
-                        <Avatar user={autor} size="sm" surface="border-chat" />
-                        <span className="truncate text-sm text-txt-normal">
+                        <Avatar user={autor} size="sm" surface="border-background-base-lower" />
+                        <span className="truncate text-sm text-text-default">
                           {displayNameOf(autor)}
                         </span>
                       </span>
                     ) : (
-                      <span className="text-sm text-txt-muted">—</span>
+                      <span className="text-sm text-text-muted">—</span>
                     )}
                   </td>
                   <td>
@@ -232,8 +232,8 @@ function AcaoDaLinha({
         type="button"
         onClick={onClick}
         aria-label={label}
-        className={`grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong ${
-          danger ? "hover:text-red" : "hover:text-txt-primary"
+        className={`grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded-lg text-text-muted transition hover:bg-border-normal ${
+          danger ? "hover:text-status-danger" : "hover:text-text-strong"
         }`}
       >
         {children}

@@ -159,7 +159,7 @@ export default function CreateChannelModal({
       }
     >
       <fieldset>
-        <legend className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+        <legend className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
           Tipo de canal
         </legend>
         <div className="flex flex-col gap-1">
@@ -182,8 +182,8 @@ export default function CreateChannelModal({
 
       <div className="mt-5">
         <Rotulo htmlFor="novo-canal-nome">Nome do canal</Rotulo>
-        <div className="flex h-10 items-center gap-1 rounded-[3px] bg-void px-2.5">
-          <span aria-hidden="true" className="shrink-0 text-txt-muted">
+        <div className="flex h-10 items-center gap-1 rounded-[3px] bg-input-background-default px-2.5">
+          <span aria-hidden="true" className="shrink-0 text-text-muted">
             {type === "VOICE" ? <Volume2 size={18} /> : "#"}
           </span>
           <input
@@ -198,13 +198,13 @@ export default function CreateChannelModal({
             }}
             maxLength={64}
             placeholder="novo-canal"
-            className="min-w-0 flex-1 bg-transparent text-txt-normal outline-none placeholder:text-txt-muted"
+            className="min-w-0 flex-1 bg-transparent text-text-default outline-none placeholder:text-text-muted"
           />
         </div>
       </div>
 
       {podeGerenciarCanais && !anuncio && (
-        <div className="mt-4 border-t border-border pt-1">
+        <div className="mt-4 border-t border-border-subtle pt-1">
           <ToggleLinha
             checked={isPrivate}
             onChange={setPrivate}

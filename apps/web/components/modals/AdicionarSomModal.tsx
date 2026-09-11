@@ -98,7 +98,7 @@ export default function AdicionarSomModal({ guildId }: { guildId: string }) {
       }
     >
       {cheio && (
-        <p className="mb-4 rounded-[3px] bg-red/15 px-3 py-2 text-sm text-red">
+        <p className="mb-4 rounded-[3px] bg-status-danger/15 px-3 py-2 text-sm text-status-danger">
           Este servidor já tem {MAX_SOUNDBOARD_POR_GUILD} sons. Remova um antes de enviar outro.
         </p>
       )}
@@ -119,14 +119,14 @@ export default function AdicionarSomModal({ guildId }: { guildId: string }) {
       <button
         type="button"
         onClick={() => arquivoRef.current?.click()}
-        className="flex h-10 w-full items-center gap-2 rounded-[3px] bg-void px-2.5 text-left text-sm text-txt-normal transition hover:bg-hov"
+        className="flex h-10 w-full items-center gap-2 rounded-[3px] bg-input-background-default px-2.5 text-left text-sm text-text-default transition hover:bg-interactive-background-hover"
       >
-        <Upload size={18} className="shrink-0 text-txt-muted" aria-hidden="true" />
+        <Upload size={18} className="shrink-0 text-text-muted" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate">
           {file ? file.name : "Escolher um arquivo de áudio"}
         </span>
         {file && (
-          <span className="shrink-0 text-xs text-txt-muted">
+          <span className="shrink-0 text-xs text-text-muted">
             {Math.round(file.size / 1024)} KB
           </span>
         )}
@@ -134,14 +134,14 @@ export default function AdicionarSomModal({ guildId }: { guildId: string }) {
 
       <div className="mt-5">
         <Rotulo htmlFor="novo-som-nome">Nome</Rotulo>
-        <div className="flex h-10 items-center gap-1 rounded-[3px] bg-void px-2.5">
+        <div className="flex h-10 items-center gap-1 rounded-[3px] bg-input-background-default px-2.5">
           <button
             ref={botaoDoEmoji}
             type="button"
             onClick={() => setEmojiAberto((v) => !v)}
             aria-label="Escolher emoji do som"
             aria-expanded={emojiAberto}
-            className="grid h-7 w-7 shrink-0 place-items-center rounded text-base leading-none transition hover:bg-hov"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded text-base leading-none transition hover:bg-interactive-background-hover"
           >
             {emoji || "🔊"}
           </button>
@@ -157,10 +157,10 @@ export default function AdicionarSomModal({ guildId }: { guildId: string }) {
             }}
             maxLength={32}
             placeholder="airhorn"
-            className="min-w-0 flex-1 bg-transparent text-txt-normal outline-none placeholder:text-txt-muted"
+            className="min-w-0 flex-1 bg-transparent text-text-default outline-none placeholder:text-text-muted"
           />
         </div>
-        <p className="mt-1 text-xs text-txt-muted">
+        <p className="mt-1 text-xs text-text-muted">
           O emoji é o que aparece no card, ao lado do nome.
         </p>
       </div>
@@ -176,7 +176,7 @@ export default function AdicionarSomModal({ guildId }: { guildId: string }) {
         {/* `embutido`: quem é a caixa, o Escape e o clique fora é o
             `PopoverFlutuante`. Sem isso o seletor registraria um **segundo**
             ouvinte de `mousedown` e o primeiro clique fecharia tudo. */}
-        <div className="h-[420px] overflow-hidden rounded-lg bg-panel">
+        <div className="h-[420px] overflow-hidden rounded-lg bg-background-base-lowest">
           {/* só o emoji unicode interessa aqui: o card do som é um `<span>` de
               texto, não um `<img>` — um emoji personalizado não caberia */}
           <EmojiPicker

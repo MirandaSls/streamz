@@ -34,7 +34,7 @@ export default function AcessoTab({ guildId }: { guildId: string }) {
     return (
       <>
         <TituloDaPagina titulo="Acesso" />
-        <p className="text-sm text-txt-muted">Carregando…</p>
+        <p className="text-sm text-text-muted">Carregando…</p>
       </>
     );
   }
@@ -43,14 +43,14 @@ export default function AcessoTab({ guildId }: { guildId: string }) {
     <>
       <TituloDaPagina titulo="Acesso" />
 
-      <h2 className="text-base font-semibold text-txt-primary">
+      <h2 className="text-base font-semibold text-text-strong">
         Como as pessoas podem entrar no seu servidor?
       </h2>
-      <p className="mt-1.5 text-sm text-txt-muted">
+      <p className="mt-1.5 text-sm text-text-muted">
         Mantenha seu servidor privado, ou abra-o para mais pessoas se juntarem.
       </p>
 
-      <div className="mt-4 grid grid-cols-2 gap-2 rounded-lg bg-panel p-2">
+      <div className="mt-4 grid grid-cols-2 gap-2 rounded-lg bg-background-base-lowest p-2">
         <CartaoDeAcesso
           icone={<Lock size={24} />}
           titulo="Apenas por convite"
@@ -67,12 +67,12 @@ export default function AcessoTab({ guildId }: { guildId: string }) {
         />
       </div>
 
-      <div aria-hidden="true" className="mt-8 h-px bg-border" />
+      <div aria-hidden="true" className="mt-8 h-px bg-border-subtle" />
 
       <div className="mt-8 flex items-start justify-between gap-6">
         <div className="min-w-0">
-          <h2 className="text-base font-semibold text-txt-primary">Regras do servidor</h2>
-          <p className="mt-1.5 text-sm text-txt-muted">
+          <h2 className="text-base font-semibold text-text-strong">Regras do servidor</h2>
+          <p className="mt-1.5 text-sm text-text-muted">
             Os membros devem concordar com as regras antes de poderem conversar ou interagir no
             servidor. Quem administra o servidor não fica preso por elas.
           </p>
@@ -92,7 +92,7 @@ export default function AcessoTab({ guildId }: { guildId: string }) {
           das regras é um canal — quem escreve as frases é a mensagem fixada
           nele —, então o painel guarda a escolha do canal. */}
       {form.rulesChannelId && (
-        <div className="mt-4 rounded-lg bg-panel p-4">
+        <div className="mt-4 rounded-lg bg-background-base-lowest p-4">
           <Select
             semDivisoria
             label="Canal de regras"
@@ -136,17 +136,17 @@ function CartaoDeAcesso({
       onClick={onSelect}
       className={`flex h-[132px] flex-col items-center justify-center gap-1.5 rounded-lg border px-4 text-center transition ${
         ativo
-          ? "border-border-strong bg-sel"
-          : "border-transparent text-txt-muted hover:bg-hov"
+          ? "border-border-normal bg-interactive-background-selected"
+          : "border-transparent text-text-muted hover:bg-interactive-background-hover"
       }`}
     >
-      <span aria-hidden="true" className={ativo ? "text-txt-primary" : "text-txt-secondary"}>
+      <span aria-hidden="true" className={ativo ? "text-text-strong" : "text-text-subtle"}>
         {icone}
       </span>
-      <span className={`text-sm font-semibold ${ativo ? "text-txt-primary" : "text-txt-normal"}`}>
+      <span className={`text-sm font-semibold ${ativo ? "text-text-strong" : "text-text-default"}`}>
         {titulo}
       </span>
-      <span className="text-xs leading-4 text-txt-muted">{descricao}</span>
+      <span className="text-xs leading-4 text-text-muted">{descricao}</span>
     </button>
   );
 }

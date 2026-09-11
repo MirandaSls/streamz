@@ -95,15 +95,15 @@ export default function AplicativosTab({ guildId }: { guildId: string }) {
       />
 
       {semRota && (
-        <p className="mb-4 rounded-lg border border-border bg-panel p-3 text-sm text-txt-muted">
+        <p className="mb-4 rounded-lg border border-border-subtle bg-background-base-lowest p-3 text-sm text-text-muted">
           A instalação de aplicativos ainda não está disponível nesta instância.
         </p>
       )}
 
-      {apps === null && <p className="text-sm text-txt-muted">Carregando…</p>}
+      {apps === null && <p className="text-sm text-text-muted">Carregando…</p>}
 
       {apps !== null && apps.length === 0 && !semRota && (
-        <p className="text-sm text-txt-muted">
+        <p className="text-sm text-text-muted">
           Nenhum aplicativo instalado. Encontre um em “Descobrir aplicativos” e adicione-o aqui.
         </p>
       )}
@@ -128,20 +128,20 @@ export default function AplicativosTab({ guildId }: { guildId: string }) {
 function LinhaDeApp({ item, aoRemover }: { item: AppInstalacao; aoRemover: () => void }) {
   const concedidas = permissionNames(item.permissions);
   return (
-    <li className="rounded-lg border border-border bg-panel p-3">
+    <li className="rounded-lg border border-border-subtle bg-background-base-lowest p-3">
       <div className="flex items-start gap-3 celular:flex-col">
         <div className="flex min-w-0 flex-1 items-start gap-3">
           <IconeDoApp url={item.app.iconUrl} nome={item.app.name} />
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate font-semibold text-txt-primary">{item.app.name}</span>
+              <span className="truncate font-semibold text-text-strong">{item.app.name}</span>
               <TagDeBot />
             </div>
             {item.app.description && (
-              <p className="mt-0.5 line-clamp-2 text-sm text-txt-muted">{item.app.description}</p>
+              <p className="mt-0.5 line-clamp-2 text-sm text-text-muted">{item.app.description}</p>
             )}
-            <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-txt-muted">
-              <Avatar user={item.instaladoPor} size="xs" surface="border-panel" />
+            <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-text-muted">
+              <Avatar user={item.instaladoPor} size="xs" surface="border-background-base-lowest" />
               <span className="truncate">
                 Instalado por {displayNameOf(item.instaladoPor)} em{" "}
                 {horaCompleta(item.createdAt)}
@@ -164,12 +164,12 @@ function LinhaDeApp({ item, aoRemover }: { item: AppInstalacao; aoRemover: () =>
         </button>
       </div>
 
-      <div className="mt-3 border-t border-border pt-2">
-        <p className="mb-1.5 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+      <div className="mt-3 border-t border-border-subtle pt-2">
+        <p className="mb-1.5 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
           Permissões concedidas
         </p>
         {concedidas.length === 0 ? (
-          <p className="text-sm text-txt-muted">
+          <p className="text-sm text-text-muted">
             Nenhuma. O bot só faz o que qualquer membro faria.
           </p>
         ) : (
@@ -178,7 +178,7 @@ function LinhaDeApp({ item, aoRemover }: { item: AppInstalacao; aoRemover: () =>
               <li
                 key={nome}
                 title={PERMISSION_INFO[nome].description}
-                className="rounded-[3px] bg-void px-1.5 py-0.5 text-xs text-txt-normal"
+                className="rounded-[3px] bg-input-background-default px-1.5 py-0.5 text-xs text-text-default"
               >
                 {PERMISSION_INFO[nome].label}
               </li>
@@ -198,7 +198,7 @@ function LinhaDeApp({ item, aoRemover }: { item: AppInstalacao; aoRemover: () =>
  */
 function IconeDoApp({ url, nome }: { url: string | null; nome: string }) {
   return (
-    <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg bg-void text-txt-muted">
+    <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg bg-input-background-default text-text-muted">
       {url ? (
         /* eslint-disable-next-line @next/next/no-img-element */
         <img src={url} alt="" className="h-full w-full object-cover" />

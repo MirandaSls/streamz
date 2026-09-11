@@ -46,24 +46,24 @@ export default function WelcomeModal({ guildId }: { guildId: string }) {
     >
       <div>
         {/* arte do servidor no topo, no lugar do ícone decorativo de antes */}
-        <div className="relative h-[120px] bg-accent">
+        <div className="relative h-[120px] bg-brand-500">
           {guild?.iconUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={guild.iconUrl} alt="" className="h-full w-full object-cover opacity-60" />
           ) : null}
           <span
             aria-hidden="true"
-            className="absolute inset-0 grid place-items-center font-headline text-3xl font-extrabold text-accent-ink"
+            className="absolute inset-0 grid place-items-center font-headline text-3xl font-extrabold text-control-primary-text-default"
           >
             {guild?.name?.slice(0, 2).toUpperCase()}
           </span>
         </div>
 
         <div className="p-4">
-          <h2 className="text-xl font-bold text-txt-primary">
+          <h2 className="text-xl font-bold text-text-strong">
             Bem-vindo a {guild?.name ?? "este servidor"}!
           </h2>
-          <p className="mt-1 break-words text-sm text-txt-normal">
+          <p className="mt-1 break-words text-sm text-text-default">
             {membership?.onboarding.welcomeDescription ||
               "Dê uma olhada nos canais e apresente-se quando quiser."}
           </p>
@@ -115,19 +115,19 @@ function Cartao({
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-3 rounded-[8px] bg-panel p-3 text-left transition hover:bg-hov"
+      className="flex items-center gap-3 rounded-[8px] bg-background-base-lowest p-3 text-left transition hover:bg-interactive-background-hover"
     >
       <span
         aria-hidden="true"
-        className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-void text-txt-secondary"
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-input-background-default text-text-subtle"
       >
         {icone}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate font-medium text-txt-primary">{titulo}</span>
-        <span className="block truncate text-sm text-txt-muted">{descricao}</span>
+        <span className="block truncate font-medium text-text-strong">{titulo}</span>
+        <span className="block truncate text-sm text-text-muted">{descricao}</span>
       </span>
-      <ChevronRight size={20} aria-hidden="true" className="shrink-0 text-txt-muted" />
+      <ChevronRight size={20} aria-hidden="true" className="shrink-0 text-text-muted" />
     </button>
   );
 }

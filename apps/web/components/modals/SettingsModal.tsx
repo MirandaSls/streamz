@@ -116,14 +116,14 @@ export default function SettingsModal({ tab }: { tab?: string }) {
           <button
             type="button"
             onClick={() => setAbaId("perfil")}
-            className="mb-3 flex w-full items-center gap-2 rounded-[4px] p-1 text-left transition hover:bg-hov"
+            className="mb-3 flex w-full items-center gap-2 rounded-[4px] p-1 text-left transition hover:bg-interactive-background-hover"
           >
-            <Avatar user={user} size="lg" surface="border-panel" />
+            <Avatar user={user} size="lg" surface="border-background-base-lowest" />
             <span className="min-w-0">
-              <span className="block truncate text-base font-semibold text-txt-primary">
+              <span className="block truncate text-base font-semibold text-text-strong">
                 {user.displayName || user.username}
               </span>
-              <span className="block truncate text-xs text-txt-muted">{t("config.editarPerfil")}</span>
+              <span className="block truncate text-xs text-text-muted">{t("config.editarPerfil")}</span>
             </span>
           </button>
         ) : undefined
@@ -131,7 +131,7 @@ export default function SettingsModal({ tab }: { tab?: string }) {
       grupos={grupos}
       abaId={aba.id}
       onAba={setAbaId}
-      menuVazio={<p className="px-2.5 text-sm text-txt-muted">Nada com esse nome.</p>}
+      menuVazio={<p className="px-2.5 text-sm text-text-muted">Nada com esse nome.</p>}
       tituloAba={t(aba.label)}
       rotuloFechar={t("config.fechar")}
       controle={alteracoes}
@@ -147,7 +147,7 @@ export default function SettingsModal({ tab }: { tab?: string }) {
           {/* no Discord web não existe linha de versão — ela só faz sentido no
               instalador, onde o usuário não atualiza recarregando a página */}
           {isTauri() && (
-            <p className="px-2.5 py-3 text-[11px] text-txt-faint">
+            <p className="px-2.5 py-3 text-[11px] text-channels-default">
               {t("config.versao")} {VERSAO}
             </p>
           )}

@@ -62,7 +62,7 @@ export function CaixaPicker({
       role="dialog"
       aria-label={rotulo}
       style={{ width: LARGURA_PICKER, height: ALTURA_PICKER }}
-      className={`anim-menu z-[70] flex flex-col overflow-hidden rounded-lg bg-panel shadow-high ${className}`}
+      className={`anim-menu z-[70] flex flex-col overflow-hidden rounded-lg bg-background-base-lowest shadow-popout ${className}`}
     >
       {children}
     </div>
@@ -93,7 +93,7 @@ export function BuscaPicker({
         <Search
           size={14}
           aria-hidden="true"
-          className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-txt-muted"
+          className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-text-muted"
         />
         <input
           autoFocus={autoFocus}
@@ -101,7 +101,7 @@ export function BuscaPicker({
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           aria-label={rotulo}
-          className="h-8 w-full rounded bg-void pl-7 pr-2 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
+          className="h-8 w-full rounded bg-input-background-default pl-7 pr-2 text-sm text-text-default outline-none placeholder:text-text-muted"
         />
       </div>
     </div>
@@ -139,7 +139,7 @@ export function BotaoLateral({
       aria-current={ativo || undefined}
       onClick={onClick}
       className={`grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded transition ${
-        ativo ? "bg-sel text-accent" : "text-txt-muted hover:bg-hov hover:text-txt-normal"
+        ativo ? "bg-interactive-background-selected text-brand-500" : "text-text-muted hover:bg-interactive-background-hover hover:text-text-default"
       }`}
     >
       {children}
@@ -156,7 +156,7 @@ export function IconeServidor({ nome, iconUrl }: { nome: string; iconUrl: string
     );
   }
   return (
-    <span className="grid h-6 w-6 place-items-center rounded-full bg-void text-[9px] font-semibold text-txt-normal">
+    <span className="grid h-6 w-6 place-items-center rounded-full bg-input-background-default text-[9px] font-semibold text-text-default">
       {sigla(nome)}
     </span>
   );
@@ -174,12 +174,12 @@ export function sigla(nome: string): string {
 
 /** Divisória fina entre os grupos da coluna lateral. */
 export function DivisoriaLateral() {
-  return <div aria-hidden="true" className="my-1 h-px w-6 shrink-0 rounded bg-border" />;
+  return <div aria-hidden="true" className="my-1 h-px w-6 shrink-0 rounded bg-border-subtle" />;
 }
 
 export function RodapePicker({ children }: { children: ReactNode }) {
   return (
-    <footer className="flex h-11 shrink-0 items-center gap-2 border-t border-black/30 bg-void/40 px-3">
+    <footer className="flex h-11 shrink-0 items-center gap-2 border-t border-black/30 bg-input-background-default/40 px-3">
       {children}
     </footer>
   );

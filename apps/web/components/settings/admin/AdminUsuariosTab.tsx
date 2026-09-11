@@ -81,7 +81,7 @@ export default function AdminUsuariosTab() {
         <Search
           size={16}
           aria-hidden="true"
-          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-txt-muted"
+          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted"
         />
         <input
           value={busca}
@@ -93,7 +93,7 @@ export default function AdminUsuariosTab() {
       </div>
 
       {pagina && !carregando && (
-        <p className="mb-2 text-xs text-txt-muted">
+        <p className="mb-2 text-xs text-text-muted">
           {itens.length} de {pagina.total.toLocaleString("pt-BR")} conta(s)
         </p>
       )}
@@ -114,7 +114,7 @@ export default function AdminUsuariosTab() {
             type="button"
             onClick={() => void carregarMais()}
             disabled={carregandoMais}
-            className="mt-3 h-9 celular:h-[44px] w-full rounded-[3px] border border-border-strong text-sm font-medium text-txt-normal transition hover:border-border-strong-hover disabled:opacity-60"
+            className="mt-3 h-9 celular:h-[44px] w-full rounded-[3px] border border-border-normal text-sm font-medium text-text-default transition hover:border-border-strong disabled:opacity-60"
           >
             {carregandoMais ? "Carregando…" : "Carregar mais"}
           </button>
@@ -133,9 +133,9 @@ function Linha({ item }: { item: AdminUserView }) {
   const podeEscrever = !item.deletedAt && user.id !== meuId;
 
   return (
-    <li className="border-b border-border py-2.5 last:border-b-0">
+    <li className="border-b border-border-subtle py-2.5 last:border-b-0">
       <div className="flex items-center gap-3">
-        <Avatar user={user} size="md" status={user.status} surface="border-chat" />
+        <Avatar user={user} size="md" status={user.status} surface="border-background-base-lower" />
 
         <div className="min-w-0 flex-1">
           <span className="flex min-w-0 items-center gap-1.5">
@@ -150,7 +150,7 @@ function Linha({ item }: { item: AdminUserView }) {
             {!item.deletedAt && item.disabledAt && <Etiqueta tom="alerta">desativada</Etiqueta>}
           </span>
 
-          <p className="mt-0.5 truncate text-xs text-txt-muted">
+          <p className="mt-0.5 truncate text-xs text-text-muted">
             {item.email ?? "sem e-mail"}
             {item.email && !item.emailVerified && " (não verificado)"}
             {" · "}
@@ -162,13 +162,13 @@ function Linha({ item }: { item: AdminUserView }) {
           {/* a linha que o painel existe para mostrar */}
           {item.chamada ? (
             <span className="mt-1 flex min-w-0 items-center gap-1.5">
-              <span className="shrink-0 text-xs font-semibold uppercase tracking-[0.02em] text-accent">
+              <span className="shrink-0 text-xs font-semibold uppercase tracking-[0.02em] text-brand-500">
                 em chamada
               </span>
               <LocalDaChamada local={item.chamada} />
             </span>
           ) : (
-            <p className="mt-1 text-xs text-txt-faint">
+            <p className="mt-1 text-xs text-channels-default">
               {item.lastSeenAt ? `Visto por último em ${dataCompleta(item.lastSeenAt)}` : "Nunca se conectou"}
             </p>
           )}
@@ -180,7 +180,7 @@ function Linha({ item }: { item: AdminUserView }) {
             onClick={() => setCompondo((aberto) => !aberto)}
             aria-expanded={compondo}
             title={`Mandar mensagem para @${user.username}`}
-            className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded-[3px] border border-border-strong px-2.5 text-xs font-medium text-txt-normal transition hover:border-border-strong-hover"
+            className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded-[3px] border border-border-normal px-2.5 text-xs font-medium text-text-default transition hover:border-border-strong"
           >
             <MessageSquarePlus size={14} aria-hidden="true" />
             Mensagem
@@ -249,18 +249,18 @@ function Compositor({ user, onFim }: { user: AdminUserView["user"]; onFim: () =>
           type="button"
           onClick={() => void enviar()}
           disabled={enviando || texto.trim().length === 0}
-          className="h-8 celular:h-[44px] rounded-[3px] bg-accent px-3 text-xs font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
+          className="h-8 celular:h-[44px] rounded-[3px] bg-brand-500 px-3 text-xs font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:opacity-50"
         >
           {enviando ? "Enviando…" : "Enviar"}
         </button>
         <button
           type="button"
           onClick={onFim}
-          className="h-8 celular:h-[44px] rounded-[3px] px-2 text-xs text-txt-muted transition hover:text-txt-normal"
+          className="h-8 celular:h-[44px] rounded-[3px] px-2 text-xs text-text-muted transition hover:text-text-default"
         >
           Cancelar
         </button>
-        <span className="ml-auto text-[11px] text-txt-faint">
+        <span className="ml-auto text-[11px] text-channels-default">
           {texto.length}/{MAX_MESSAGE_LENGTH}
         </span>
       </div>

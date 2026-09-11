@@ -152,7 +152,7 @@ export default function VoiceControls({
             <div
               role="menu"
               aria-label="Mais opções"
-              className="absolute bottom-[52px] left-1/2 w-56 -translate-x-1/2 rounded-lg bg-overlay p-1.5 shadow-high anim-menu"
+              className="absolute bottom-[52px] left-1/2 w-56 -translate-x-1/2 rounded-lg bg-background-surface-higher p-1.5 shadow-popout anim-menu"
             >
               {/* tela cheia saiu daqui: no print ela é ícone solto no canto do
                   palco, junto do pop-out — ver `IconesDoCanto` */}
@@ -168,7 +168,7 @@ export default function VoiceControls({
             <div
               role="dialog"
               aria-label="Ajustes de voz"
-              className="absolute bottom-[52px] left-1/2 max-h-[60vh] w-[380px] -translate-x-1/2 overflow-y-auto rounded-lg bg-overlay p-4 shadow-high anim-menu"
+              className="absolute bottom-[52px] left-1/2 max-h-[60vh] w-[380px] -translate-x-1/2 overflow-y-auto rounded-lg bg-background-surface-higher p-4 shadow-popout anim-menu"
             >
               <VoiceSettingsPanel compacto />
             </div>
@@ -197,7 +197,7 @@ function ItemDoMenu({
       type="button"
       role="menuitem"
       onClick={onSelect}
-      className="flex w-full items-center gap-2 rounded-[3px] px-2 py-2 text-left text-sm text-txt-normal transition hover:bg-accent hover:text-accent-ink"
+      className="flex w-full items-center gap-2 rounded-[3px] px-2 py-2 text-left text-sm text-text-default transition hover:bg-brand-500 hover:text-control-primary-text-default"
     >
       {icone}
       {children}

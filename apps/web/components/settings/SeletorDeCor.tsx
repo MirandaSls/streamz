@@ -65,7 +65,7 @@ export default function SeletorDeCor({
   return (
     <div>
       {abas && (
-        <div role="tablist" aria-label={rotulo} className="mb-3 flex gap-1 border-b border-border">
+        <div role="tablist" aria-label={rotulo} className="mb-3 flex gap-1 border-b border-border-subtle">
           {(["solida", "gradiente"] as const).map((m) => (
             <button
               key={m}
@@ -75,8 +75,8 @@ export default function SeletorDeCor({
               onClick={() => setModo(m)}
               className={`-mb-px border-b-2 px-3 pb-2 text-sm font-medium transition celular:min-h-[44px] ${
                 modo === m
-                  ? "border-accent text-txt-primary"
-                  : "border-transparent text-txt-muted hover:text-txt-normal"
+                  ? "border-brand-500 text-text-strong"
+                  : "border-transparent text-text-muted hover:text-text-default"
               }`}
             >
               {m === "solida" ? "Cor sólida" : "Gradiente"}
@@ -86,7 +86,7 @@ export default function SeletorDeCor({
       )}
 
       {modo === "gradiente" ? (
-        <p className="rounded-[4px] border border-border bg-panel px-3 py-2 text-sm text-txt-muted">
+        <p className="rounded-[4px] border border-border-subtle bg-background-base-lowest px-3 py-2 text-sm text-text-muted">
           Cargo com gradiente precisa de duas cores, e o contrato guarda só uma
           (`Role.color`). Enquanto isso não muda, a cor sólida é a única possível.
         </p>
@@ -98,7 +98,7 @@ export default function SeletorDeCor({
               onClick={() => onChange("")}
               aria-label="Sem cor"
               aria-pressed={value === ""}
-              className={`grid h-8 w-8 place-items-center rounded-[4px] bg-border-strong text-xs text-white transition celular:h-[44px] celular:w-[44px] ${
+              className={`grid h-8 w-8 place-items-center rounded-[4px] bg-border-normal text-xs text-white transition celular:h-[44px] celular:w-[44px] ${
                 value === "" ? "ring-2 ring-white" : "hover:opacity-80"
               }`}
             >
@@ -130,7 +130,7 @@ export default function SeletorDeCor({
               type="button"
               onClick={() => void contaGotas()}
               aria-label="Escolher uma cor da tela"
-              className="grid h-8 w-8 place-items-center rounded-[4px] border border-border-strong text-txt-normal transition hover:bg-hov celular:h-[44px] celular:w-[44px]"
+              className="grid h-8 w-8 place-items-center rounded-[4px] border border-border-normal text-text-default transition hover:bg-interactive-background-hover celular:h-[44px] celular:w-[44px]"
             >
               <Pipette size={16} />
             </button>
@@ -141,7 +141,7 @@ export default function SeletorDeCor({
             onChange={(e) => onChange(e.target.value)}
             placeholder="#rrggbb"
             aria-label={`${rotulo} em hexadecimal`}
-            className="h-8 w-[104px] rounded-[3px] border border-border bg-input px-2 font-mono text-sm text-txt-normal outline-none transition-colors placeholder:text-txt-muted focus:border-accent celular:h-[44px] celular:text-[max(16px,1em)]"
+            className="h-8 w-[104px] rounded-[3px] border border-border-subtle bg-chat-background-default px-2 font-mono text-sm text-text-default outline-none transition-colors placeholder:text-text-muted focus:border-brand-500 celular:h-[44px] celular:text-[max(16px,1em)]"
           />
         </div>
       )}

@@ -70,7 +70,7 @@ export default function CustomStatusModal() {
             <button
               type="button"
               onClick={() => void salvar(true)}
-              className="mr-auto h-[38px] rounded-[3px] px-2 text-sm font-medium text-red transition hover:underline"
+              className="mr-auto h-[38px] rounded-[3px] px-2 text-sm font-medium text-status-danger transition hover:underline"
             >
               Limpar status
             </button>
@@ -79,13 +79,13 @@ export default function CustomStatusModal() {
       }
     >
       <Rotulo htmlFor="statusText">Status personalizado</Rotulo>
-      <div className="relative flex items-center gap-2 rounded-[3px] bg-void px-2">
+      <div className="relative flex items-center gap-2 rounded-[3px] bg-input-background-default px-2">
         <Tooltip label="Escolher emoji">
           <button
             type="button"
             onClick={() => setEscolhendo((v) => !v)}
             aria-label="Escolher emoji do status"
-            className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] shrink-0 place-items-center rounded text-txt-secondary hover:text-txt-primary"
+            className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] shrink-0 place-items-center rounded text-text-subtle hover:text-text-strong"
           >
             {emoji ? <span className="text-lg leading-none">{emoji}</span> : <SmilePlus size={18} />}
           </button>
@@ -102,7 +102,7 @@ export default function CustomStatusModal() {
             }
           }}
           placeholder="O que está acontecendo?"
-          className="h-10 min-w-0 flex-1 bg-transparent text-txt-normal outline-none placeholder:text-txt-muted"
+          className="h-10 min-w-0 flex-1 bg-transparent text-text-default outline-none placeholder:text-text-muted"
         />
         {emoji && (
           <button
@@ -111,7 +111,7 @@ export default function CustomStatusModal() {
             aria-label="Remover emoji"
             // 24px sobre a cápsula de 40 (44 empurraria o campo); o alvo de
             // toque cresce por um pseudo-elemento invisível
-            className="relative grid h-6 w-6 shrink-0 place-items-center rounded text-txt-muted hover:text-txt-primary celular:before:absolute celular:before:-inset-[10px] celular:before:content-['']"
+            className="relative grid h-6 w-6 shrink-0 place-items-center rounded text-text-muted hover:text-text-strong celular:before:absolute celular:before:-inset-[10px] celular:before:content-['']"
           >
             <X size={14} />
           </button>
@@ -127,7 +127,7 @@ export default function CustomStatusModal() {
           />
         )}
       </div>
-      <p className="mt-1 text-xs text-txt-muted">
+      <p className="mt-1 text-xs text-text-muted">
         {text.length}/{MAX_CUSTOM_STATUS}
       </p>
 

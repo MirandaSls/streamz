@@ -72,7 +72,7 @@ export default function BarraDeVozMobile() {
   }
 
   return (
-    <div className="relative z-20 flex h-[48px] shrink-0 items-center gap-1 border-t border-border bg-footer pl-3 pr-1">
+    <div className="relative z-20 flex h-[48px] shrink-0 items-center gap-1 border-t border-border-subtle bg-background-base-low pl-3 pr-1">
       <button
         type="button"
         onClick={irParaCall}
@@ -80,7 +80,7 @@ export default function BarraDeVozMobile() {
       >
         <span
           className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${
-            falhou ? "bg-red/15 text-red" : status === "connecting" ? "bg-hov text-txt-muted" : "bg-green/15 text-green"
+            falhou ? "bg-status-danger/15 text-status-danger" : status === "connecting" ? "bg-interactive-background-hover text-text-muted" : "bg-status-positive/15 text-status-positive"
           }`}
           aria-hidden="true"
         >
@@ -89,12 +89,12 @@ export default function BarraDeVozMobile() {
         <span className="flex min-w-0 flex-col">
           <span
             className={`truncate text-xs font-semibold leading-tight ${
-              falhou ? "text-red" : status === "connecting" ? "text-txt-muted" : "text-green"
+              falhou ? "text-status-danger" : status === "connecting" ? "text-text-muted" : "text-status-positive"
             }`}
           >
             {falhou ? "Erro de voz" : status === "connecting" ? "Conectando…" : "Voz conectada"}
           </span>
-          <span className="truncate text-xs leading-tight text-txt-muted">{titulo}</span>
+          <span className="truncate text-xs leading-tight text-text-muted">{titulo}</span>
         </span>
       </button>
 
@@ -104,7 +104,7 @@ export default function BarraDeVozMobile() {
         aria-label={muted ? "Desativar mudo" : "Silenciar"}
         aria-pressed={muted}
         className={`grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg transition ${
-          muted ? "text-red" : "text-txt-secondary"
+          muted ? "text-status-danger" : "text-text-subtle"
         }`}
       >
         {muted ? <MicOff size={20} /> : <Mic size={20} />}
@@ -113,7 +113,7 @@ export default function BarraDeVozMobile() {
         type="button"
         onClick={() => void disconnect()}
         aria-label="Desconectar"
-        className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg text-txt-secondary transition active:text-red"
+        className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg text-text-subtle transition active:text-status-danger"
       >
         <PhoneOff size={20} />
       </button>

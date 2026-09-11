@@ -81,7 +81,7 @@ function Barra() {
         data-tauri-drag-region
         aria-label="Barra de título"
         style={{ height: ALTURA }}
-        className="fixed inset-x-0 top-0 z-40 flex select-none items-center bg-panel text-txt-secondary"
+        className="fixed inset-x-0 top-0 z-40 flex select-none items-center bg-background-base-lowest text-text-subtle"
       >
         {/* ← → : o histórico interno do app, esmaecidas quando não há para onde ir */}
         <div data-tauri-drag-region className="flex items-center pl-4">
@@ -97,7 +97,7 @@ function Barra() {
             clique, para o arrasto passar por ele */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-center gap-2 px-64 text-sm font-semibold text-txt-primary"
+          className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-center gap-2 px-64 text-sm font-semibold text-text-strong"
           style={{ height: ALTURA }}
         >
           <span className="grid h-4 w-4 shrink-0 place-items-center">{titulo.icone}</span>
@@ -106,8 +106,8 @@ function Barra() {
 
         <div data-tauri-drag-region className="ml-auto flex h-full items-center">
           <div data-tauri-drag-region className="flex items-center gap-3 pr-4">
-            {/* o anel do badge é o fundo da barra (`bg-panel`), não uma cor nova */}
-            <InboxPopover tamanhoDoIcone={19} anelDaSuperficie="ring-panel" />
+            {/* o anel do badge é o fundo da barra (`bg-background-base-lowest`), não uma cor nova */}
+            <InboxPopover tamanhoDoIcone={19} anelDaSuperficie="ring-background-base-lowest" />
             {/* sem central de ajuda no MVP: o mesmo botão da página Amigos */}
             <HeaderIcon label="Ajuda" disabled>
               <HelpCircle size={18} />
@@ -119,7 +119,7 @@ function Barra() {
 
           {/* 1×20 no print, (34,34,37) sobre (18,18,20): +16 de contraste. O
               `border` sobre `rail` dá +31 — mais visível que o original */}
-          <span aria-hidden="true" className="h-5 w-px bg-border" />
+          <span aria-hidden="true" className="h-5 w-px bg-border-subtle" />
 
           <ControlesDaJanela maximizada={maximizada} />
         </div>
@@ -191,7 +191,7 @@ function Seta({
       onMouseDown={(e) => e.preventDefault()}
       tabIndex={-1}
       className={`grid h-6 w-6 place-items-center outline-none transition ${
-        ativa ? "text-txt-secondary hover:text-txt-primary" : "cursor-default opacity-30"
+        ativa ? "text-text-subtle hover:text-text-strong" : "cursor-default opacity-30"
       }`}
     >
       {children}
@@ -220,7 +220,7 @@ export function Controle({
       onMouseDown={(e) => e.preventDefault()}
       tabIndex={-1}
       className={`grid h-full w-8 place-items-center outline-none transition ${
-        fechar ? "hover:bg-red hover:text-white" : "hover:bg-hov hover:text-txt-primary"
+        fechar ? "hover:bg-status-danger hover:text-white" : "hover:bg-interactive-background-hover hover:text-text-strong"
       }`}
     >
       <svg
@@ -256,7 +256,7 @@ function BotaoDeAtualizacao({ atualizacao }: { atualizacao: Atualizacao }) {
         type="button"
         aria-label={rotulo}
         onClick={() => void atualizacao.abrir()}
-        className="relative grid h-6 w-6 place-items-center text-green transition hover:opacity-80"
+        className="relative grid h-6 w-6 place-items-center text-status-positive transition hover:opacity-80"
       >
         <Download size={15} />
       </button>
@@ -321,7 +321,7 @@ function useTitulo(): { icone: ReactNode; nome: string } {
         /* eslint-disable-next-line @next/next/no-img-element */
         <img src={guild.iconUrl} alt="" className="h-4 w-4 rounded-full object-cover" />
       ) : (
-        <span className="grid h-4 w-4 place-items-center rounded-full bg-hov text-[8px] font-bold leading-none text-txt-secondary">
+        <span className="grid h-4 w-4 place-items-center rounded-full bg-interactive-background-hover text-[8px] font-bold leading-none text-text-subtle">
           {sigla(guild.name)}
         </span>
       ),

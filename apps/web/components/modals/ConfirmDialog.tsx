@@ -42,7 +42,7 @@ export default function ConfirmDialog({
             Cancelar
           </SecondaryButton>
           {modal.preview && (
-            <p className="mr-auto max-w-[240px] text-xs leading-tight text-txt-muted">
+            <p className="mr-auto max-w-[240px] text-xs leading-tight text-text-muted">
               Dica: você pode segurar shift ao clicar em apagar mensagem para pular esta
               confirmação.
             </p>
@@ -54,12 +54,12 @@ export default function ConfirmDialog({
         (mensagem ? (
           // o mesmo cartão dos painéis de fixadas/busca: não existe uma segunda
           // versão da mensagem para envelhecer sozinha
-          <div className="max-h-[240px] overflow-y-auto rounded-[5px] border border-border">
+          <div className="max-h-[240px] overflow-y-auto rounded-[5px] border border-border-subtle">
             <MessagePreview message={mensagem} />
           </div>
         ) : (
           // a mensagem pode ter saído da janela de retenção enquanto o modal abria
-          <p className="rounded-[5px] border border-border p-3 text-sm text-txt-muted">
+          <p className="rounded-[5px] border border-border-subtle p-3 text-sm text-text-muted">
             Não foi possível carregar a prévia desta mensagem.
           </p>
         ))}

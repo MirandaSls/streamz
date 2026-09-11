@@ -15,7 +15,7 @@ import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
 
 /** Rótulo de bloco desta página: 16px semibold, como "Ícone" e "Faixa". */
-const ROTULO_DE_BLOCO = "mb-2 block text-base font-semibold text-txt-primary";
+const ROTULO_DE_BLOCO = "mb-2 block text-base font-semibold text-text-strong";
 
 /** Sigla do servidor, o mesmo fallback do rail quando não há ícone. */
 function acronym(name: string): string {
@@ -169,10 +169,10 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
 
           {/* Medidas do print: divisória 40 abaixo do campo, título 41 abaixo
               dela, dica 6 abaixo do título, botões 9 abaixo da dica. */}
-          <div aria-hidden="true" className="mt-10 h-px bg-border" />
+          <div aria-hidden="true" className="mt-10 h-px bg-border-subtle" />
 
-          <h2 className="mt-10 text-base font-semibold text-txt-primary">Ícone</h2>
-          <p className="mt-1.5 text-sm text-txt-muted">
+          <h2 className="mt-10 text-base font-semibold text-text-strong">Ícone</h2>
+          <p className="mt-1.5 text-sm text-text-muted">
             Recomendamos uma imagem de, pelo menos, 512x512.
           </p>
           <input
@@ -209,9 +209,9 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
             )}
           </div>
 
-          <div aria-hidden="true" className="mt-10 h-px bg-border" />
+          <div aria-hidden="true" className="mt-10 h-px bg-border-subtle" />
 
-          <h2 className="mt-10 text-base font-semibold text-txt-primary">Faixa</h2>
+          <h2 className="mt-10 text-base font-semibold text-text-strong">Faixa</h2>
           {/* 5 colunas de 105×64 com 8 de espaço: `grid-cols-5` sobre a coluna
               de 560 dá exatamente isso (5×105 + 4×8 = 557). */}
           <div
@@ -232,23 +232,23 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
                   style={{ background: `linear-gradient(to bottom, ${cor.de}, ${cor.ate})` }}
                   className={`h-16 rounded-lg transition ${
                     ativo
-                      ? "ring-2 ring-accent ring-offset-[3px] ring-offset-chat"
+                      ? "ring-2 ring-brand-500 ring-offset-[3px] ring-offset-background-base-lower"
                       : "hover:opacity-90"
                   }`}
                 />
               );
             })}
           </div>
-          <p className="mt-2 text-xs text-txt-muted">
+          <p className="mt-2 text-xs text-text-muted">
             Clique de novo na amostra escolhida para ficar sem faixa.
           </p>
 
-          <div aria-hidden="true" className="mt-10 h-px bg-border" />
+          <div aria-hidden="true" className="mt-10 h-px bg-border-subtle" />
 
           <label htmlFor="guildDescription" className={`${ROTULO_DE_BLOCO} mt-10`}>
             Descrição
           </label>
-          <p className="mb-2 mt-1.5 text-sm text-txt-muted">
+          <p className="mb-2 mt-1.5 text-sm text-text-muted">
             Como seu servidor começou? Por que as pessoas devem participar?
           </p>
           <textarea
@@ -260,7 +260,7 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
             placeholder="Do que é este servidor?"
             className={ESTILO_AREA}
           />
-          <p className="mt-1 text-xs text-txt-muted">
+          <p className="mt-1 text-xs text-text-muted">
             {description.length}/{MAX_GUILD_DESCRIPTION} caracteres.
           </p>
         </div>
@@ -275,14 +275,14 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
           e o cartão de 300 não cabem lado a lado, e o print não mostra essa
           largura — empilhar seria invenção.
         */}
-        <div className="hidden w-[300px] shrink-0 overflow-hidden rounded-lg bg-panel xl:block">
+        <div className="hidden w-[300px] shrink-0 overflow-hidden rounded-lg bg-background-base-lowest xl:block">
           <div
             aria-hidden="true"
-            className="h-[118px] w-full bg-void"
+            className="h-[118px] w-full bg-input-background-default"
             style={faixa ? { background: faixa } : undefined}
           />
           <div className="px-4 pb-4">
-            <div className="-mt-8 grid h-[68px] w-[68px] place-items-center overflow-hidden rounded-2xl bg-void text-xl font-semibold text-txt-normal ring-4 ring-panel">
+            <div className="-mt-8 grid h-[68px] w-[68px] place-items-center overflow-hidden rounded-2xl bg-input-background-default text-xl font-semibold text-text-default ring-4 ring-background-base-lowest">
               {guild.iconUrl ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img src={guild.iconUrl} alt="" className="h-full w-full object-cover" />
@@ -290,12 +290,12 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
                 acronym(nomeNaPrevia)
               )}
             </div>
-            <p className="mt-3 truncate text-base font-bold text-txt-primary">{nomeNaPrevia}</p>
-            <p className="mt-1 flex items-center gap-1.5 text-sm text-txt-muted">
-              <span aria-hidden="true" className="h-2 w-2 rounded-full bg-txt-muted" />
+            <p className="mt-3 truncate text-base font-bold text-text-strong">{nomeNaPrevia}</p>
+            <p className="mt-1 flex items-center gap-1.5 text-sm text-text-muted">
+              <span aria-hidden="true" className="h-2 w-2 rounded-full bg-text-muted" />
               {members.length} {members.length === 1 ? "membro" : "membros"}
             </p>
-            <p className="mt-0.5 text-sm text-txt-muted">{desde(guild.createdAt)}</p>
+            <p className="mt-0.5 text-sm text-text-muted">{desde(guild.createdAt)}</p>
           </div>
         </div>
       </div>

@@ -19,7 +19,7 @@ export default function ChannelTopicModal({ channelId }: { channelId: string }) 
       className="w-[440px]"
       footer={<SecondaryButton full onClick={closeModal}>Fechar</SecondaryButton>}
     >
-      <p className="whitespace-pre-wrap break-words text-sm text-txt-normal">
+      <p className="whitespace-pre-wrap break-words text-sm text-text-default">
         {channel?.topic || "Este canal ainda não tem tópico."}
       </p>
     </Dialog>

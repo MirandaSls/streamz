@@ -58,7 +58,7 @@ export default function SoundboardTab({ guildId }: { guildId: string }) {
         }
       />
 
-      <p className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+      <p className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
         Sons — {sons.length}/{MAX_SOUNDBOARD_POR_GUILD}
       </p>
 
@@ -92,7 +92,7 @@ export default function SoundboardTab({ guildId }: { guildId: string }) {
           <tbody>
             {sons.length === 0 && (
               <tr className="h-[55px]">
-                <td colSpan={4} className="text-sm text-txt-muted">
+                <td colSpan={4} className="text-sm text-text-muted">
                   Nenhum som ainda.
                 </td>
               </tr>
@@ -100,7 +100,7 @@ export default function SoundboardTab({ guildId }: { guildId: string }) {
             {sons.map((som) => {
               const autor = members.find((m) => m.user.id === som.createdById)?.user ?? null;
               return (
-                <tr key={som.id} className="group h-[55px] border-b border-border align-middle">
+                <tr key={som.id} className="group h-[55px] border-b border-border-subtle align-middle">
                   <td className="pr-2">
                     {/* sem legenda de propósito: é um efeito sonoro de meio
                         segundo, não fala — o nome ao lado é a descrição dele */}
@@ -111,19 +111,19 @@ export default function SoundboardTab({ guildId }: { guildId: string }) {
                       <span aria-hidden="true" className="shrink-0 text-base leading-none">
                         {som.emoji || "🔊"}
                       </span>
-                      <span className="truncate text-sm text-txt-primary">{som.name}</span>
+                      <span className="truncate text-sm text-text-strong">{som.name}</span>
                     </span>
                   </td>
                   <td className="pr-2">
                     {autor ? (
                       <span className="flex min-w-0 items-center gap-2">
-                        <Avatar user={autor} size="sm" surface="border-chat" />
-                        <span className="truncate text-sm text-txt-normal">
+                        <Avatar user={autor} size="sm" surface="border-background-base-lower" />
+                        <span className="truncate text-sm text-text-default">
                           {displayNameOf(autor)}
                         </span>
                       </span>
                     ) : (
-                      <span className="text-sm text-txt-muted">—</span>
+                      <span className="text-sm text-text-muted">—</span>
                     )}
                   </td>
                   <td>
@@ -146,7 +146,7 @@ export default function SoundboardTab({ guildId }: { guildId: string }) {
                               ui.toast(errorMessage(e, "Não foi possível remover"), "error");
                             }
                           }}
-                          className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong hover:text-red"
+                          className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded-lg text-text-muted transition hover:bg-border-normal hover:text-status-danger"
                         >
                           <Trash2 size={16} />
                         </button>

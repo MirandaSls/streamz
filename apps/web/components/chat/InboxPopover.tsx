@@ -63,7 +63,7 @@ function rotuloDoCanal(c: Pick<InboxUnreadChannel, "channelName" | "channelType"
 
 export default function InboxPopover({
   tamanhoDoIcone = 20,
-  anelDaSuperficie = "ring-chat",
+  anelDaSuperficie = "ring-background-base-lower",
   modoTela = false,
 }: {
   /** o ícone é de 20px no cabeçalho e de 19px na barra de título do desktop. */
@@ -72,7 +72,7 @@ export default function InboxPopover({
   modoTela?: boolean;
   /**
    * Cor do anel do badge: é a **superfície atrás do ícone**, não uma cor nova
-   * (`ring-chat` no cabeçalho de Amigos, `ring-void` na barra de título). O
+   * (`ring-background-base-lower` no cabeçalho de Amigos, `ring-input-background-default` na barra de título). O
    * anel existe para descolar o vermelho do ícone, e só funciona se for
    * exatamente o fundo — ver o badge do rail em `GuildRail`.
    */
@@ -148,8 +148,8 @@ export default function InboxPopover({
         <header className="shrink-0">
           {/* título a 19px do topo, 36px de linha, 21px das bordas */}
           <div className="flex h-9 items-center gap-2 px-[21px] pt-[19px] celular:h-[44px] celular:px-4">
-            <Inbox size={20} aria-hidden="true" className="shrink-0 text-txt-secondary" />
-            <h2 className="min-w-0 truncate text-xl font-bold text-txt-primary">
+            <Inbox size={20} aria-hidden="true" className="shrink-0 text-text-subtle" />
+            <h2 className="min-w-0 truncate text-xl font-bold text-text-strong">
               Caixa de Entrada
             </h2>
             <div className="ml-auto flex shrink-0 items-center gap-2">
@@ -169,10 +169,10 @@ export default function InboxPopover({
                   type="button"
                   onClick={() => verPedidos(fechar)}
                   aria-label={`Ver pedidos de amizade (${pedidos})`}
-                  className="flex h-8 w-[58px] items-center justify-center gap-1 rounded-lg bg-hov text-txt-secondary transition hover:bg-sel hover:text-txt-primary celular:h-[44px] celular:w-[66px]"
+                  className="flex h-8 w-[58px] items-center justify-center gap-1 rounded-lg bg-interactive-background-hover text-text-subtle transition hover:bg-interactive-background-selected hover:text-text-strong celular:h-[44px] celular:w-[66px]"
                 >
                   <PedidoDeAmizade size={20} aria-hidden="true" />
-                  <span className="grid h-5 min-w-5 place-items-center rounded-full bg-overlay px-1 text-xs font-bold leading-none text-txt-normal">
+                  <span className="grid h-5 min-w-5 place-items-center rounded-full bg-background-surface-higher px-1 text-xs font-bold leading-none text-text-default">
                     {pedidos}
                   </span>
                 </button>
@@ -184,7 +184,7 @@ export default function InboxPopover({
           <div
             role="tablist"
             aria-label="Caixa de entrada"
-            className="mx-1 mt-[22px] flex h-[50px] gap-2.5 border-b border-border"
+            className="mx-1 mt-[22px] flex h-[50px] gap-2.5 border-b border-border-subtle"
           >
             {ABAS.map((a) => (
               <button
@@ -195,8 +195,8 @@ export default function InboxPopover({
                 onClick={() => setAba(a.id)}
                 className={`relative h-full flex-1 text-sm font-medium transition celular:text-base ${
                   aba === a.id
-                    ? "text-accent after:absolute after:inset-x-0 after:-bottom-px after:h-[2px] after:bg-accent"
-                    : "text-txt-secondary hover:text-txt-normal"
+                    ? "text-brand-500 after:absolute after:inset-x-0 after:-bottom-px after:h-[2px] after:bg-brand-500"
+                    : "text-text-subtle hover:text-text-default"
                 }`}
               >
                 {a.rotulo}
@@ -208,7 +208,7 @@ export default function InboxPopover({
     >
       {(fechar) => (
         <div role="tabpanel" className="flex min-h-0 flex-1 flex-col">
-          {loading && <p className="p-4 text-center text-sm text-txt-muted">Carregando…</p>}
+          {loading && <p className="p-4 text-center text-sm text-text-muted">Carregando…</p>}
 
           {!loading && aba === "mencoes" && (
             <>
@@ -225,8 +225,8 @@ export default function InboxPopover({
                       message={m.message}
                       className="mb-1 last:mb-0"
                       acima={
-                        <div className="mb-1 flex items-center gap-1.5 pr-16 text-xs text-txt-muted">
-                          <span className="truncate font-medium text-txt-secondary">
+                        <div className="mb-1 flex items-center gap-1.5 pr-16 text-xs text-text-muted">
+                          <span className="truncate font-medium text-text-subtle">
                             {m.guildName ?? "Mensagens diretas"}
                           </span>
                           <span aria-hidden="true">›</span>
@@ -292,8 +292,8 @@ export default function InboxPopover({
                         aria-pressed={soEsteServidor === valor}
                         className={`rounded-[3px] px-2 py-1 text-xs font-medium transition celular:min-h-[44px] celular:px-3 ${
                           soEsteServidor === valor
-                            ? "bg-sel text-txt-primary"
-                            : "text-txt-muted hover:text-txt-normal"
+                            ? "bg-interactive-background-selected text-text-strong"
+                            : "text-text-muted hover:text-text-default"
                         }`}
                       >
                         {rotulo}
@@ -302,13 +302,13 @@ export default function InboxPopover({
                   </div>
 
                   {naoLidas.length === 0 && (
-                    <p className="p-4 text-center text-sm text-txt-muted">
+                    <p className="p-4 text-center text-sm text-text-muted">
                       Nada por ler neste servidor.
                     </p>
                   )}
                   {naoLidas.map((g) => (
                     <section key={g.guildId ?? "@me"} className="mb-2 last:mb-0">
-                      <h3 className="px-2 py-1 text-xs font-semibold uppercase text-txt-muted">
+                      <h3 className="px-2 py-1 text-xs font-semibold uppercase text-text-muted">
                         {g.guildName}
                       </h3>
                       {g.channels.map((c) => (
@@ -321,18 +321,18 @@ export default function InboxPopover({
                           }}
                           // 44 no celular: na aba Notificações esta linha é o
                           // caminho para o canal, e 35px é alvo de mouse
-                          className="flex w-full items-center gap-2 rounded-[3px] px-2 py-1.5 text-left hover:bg-hov celular:min-h-[44px]"
+                          className="flex w-full items-center gap-2 rounded-[3px] px-2 py-1.5 text-left hover:bg-interactive-background-hover celular:min-h-[44px]"
                         >
                           {c.channelType === "DM" || c.channelType === "GROUP" ? (
-                            <MessageCircle size={20} aria-hidden="true" className="text-txt-faint" />
+                            <MessageCircle size={20} aria-hidden="true" className="text-channels-default" />
                           ) : (
-                            <Hash size={20} aria-hidden="true" className="text-txt-faint" />
+                            <Hash size={20} aria-hidden="true" className="text-channels-default" />
                           )}
-                          <span className="min-w-0 flex-1 truncate text-txt-normal">
+                          <span className="min-w-0 flex-1 truncate text-text-default">
                             {c.channelName ?? "Conversa"}
                           </span>
                           {c.mentionCount > 0 && (
-                            <span className="grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[11px] font-bold text-white">
+                            <span className="grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[11px] font-bold text-white">
                               {c.mentionCount}
                             </span>
                           )}
@@ -398,14 +398,14 @@ function BadgeDaCaixa({
     return (
       <span
         aria-hidden="true"
-        className={`pointer-events-none absolute -right-1 top-0.5 h-2 w-2 rounded-full bg-red ring-[3px] ${anel}`}
+        className={`pointer-events-none absolute -right-1 top-0.5 h-2 w-2 rounded-full bg-status-danger ring-[3px] ${anel}`}
       />
     );
   }
   return (
     <span
       aria-hidden="true"
-      className={`pointer-events-none absolute -right-2 top-0 grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[12px] font-bold leading-none text-white ring-[3px] ${anel}`}
+      className={`pointer-events-none absolute -right-2 top-0 grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[12px] font-bold leading-none text-white ring-[3px] ${anel}`}
     >
       {rotuloDoContador(estado.total)}
     </span>
@@ -434,10 +434,10 @@ function BotaoDoCabecalho({
         aria-disabled={inerte || undefined}
         /* 44px no celular: na aba Notificações (`modoTela`) estes são os únicos
            botões do topo da tela, e 31px não são alvo de dedo */
-        className={`grid h-8 w-8 place-items-center rounded-lg bg-hov transition celular:h-[44px] celular:w-[44px] ${
+        className={`grid h-8 w-8 place-items-center rounded-lg bg-interactive-background-hover transition celular:h-[44px] celular:w-[44px] ${
           inerte
-            ? "cursor-default text-txt-secondary opacity-50"
-            : "text-txt-secondary hover:bg-sel hover:text-txt-primary"
+            ? "cursor-default text-text-subtle opacity-50"
+            : "text-text-subtle hover:bg-interactive-background-selected hover:text-text-strong"
         }`}
       >
         {children}
@@ -464,13 +464,13 @@ function Vazio({
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-10 text-center">
       <div className="relative h-20 w-20">
-        <div className="grid h-20 w-20 place-items-center rounded-full bg-void text-txt-secondary">
+        <div className="grid h-20 w-20 place-items-center rounded-full bg-input-background-default text-text-subtle">
           {icone}
         </div>
         <svg
           aria-hidden="true"
           viewBox="0 0 12 12"
-          className="absolute left-[75px] top-0.5 h-3 w-3 text-txt-link"
+          className="absolute left-[75px] top-0.5 h-3 w-3 text-text-link"
           fill="currentColor"
         >
           <circle cx="6" cy="1.5" r="1.5" />
@@ -481,17 +481,17 @@ function Vazio({
         <svg
           aria-hidden="true"
           viewBox="0 0 14 14"
-          className="absolute left-[-10px] top-16 h-3.5 w-3.5 text-yellow"
+          className="absolute left-[-10px] top-16 h-3.5 w-3.5 text-status-warning"
           fill="currentColor"
         >
           <path d="M7 0L8.6 5.4L14 7L8.6 8.6L7 14L5.4 8.6L0 7L5.4 5.4Z" />
         </svg>
       </div>
-      <h3 className="mt-8 text-2xl font-bold text-txt-primary">
+      <h3 className="mt-8 text-2xl font-bold text-text-strong">
         {titulo}
       </h3>
-      <p className="mt-2 text-xs text-txt-muted">
-        <span className="font-bold text-green">FICA A DICA: </span>
+      <p className="mt-2 text-xs text-text-muted">
+        <span className="font-bold text-status-positive">FICA A DICA: </span>
         {children}
       </p>
     </div>

@@ -69,7 +69,7 @@ export default function InviteEmbed({ code }: { code: string }) {
   if (previa === null || !previa.valid) {
     return (
       <div
-        className="mt-1 rounded-lg bg-panel p-4 text-sm text-txt-muted"
+        className="mt-1 rounded-lg bg-background-base-lowest p-4 text-sm text-text-muted"
         style={{ maxWidth: LARGURA }}
       >
         Convite inválido ou expirado
@@ -97,8 +97,8 @@ export default function InviteEmbed({ code }: { code: string }) {
   }
 
   return (
-    <div className="mt-1 rounded-lg bg-panel p-4" style={{ maxWidth: LARGURA }}>
-      <p className="text-xs font-bold uppercase tracking-wide text-txt-muted">
+    <div className="mt-1 rounded-lg bg-background-base-lowest p-4" style={{ maxWidth: LARGURA }}>
+      <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
         {previa.inviter
           ? `${displayNameOf(previa.inviter)} te convidou para entrar em um servidor`
           : "Você foi convidado para entrar em um servidor"}
@@ -109,7 +109,7 @@ export default function InviteEmbed({ code }: { code: string }) {
           `flex-wrap` o botão desce inteiro para baixo (é o padrão do cartão de
           convite no telefone) e o nome recupera a largura do cartão. */}
       <div className="mt-3 flex items-center gap-4 celular:flex-wrap">
-        <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl bg-void text-sm font-semibold text-txt-primary">
+        <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl bg-input-background-default text-sm font-semibold text-text-strong">
           {previa.guild.iconUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={previa.guild.iconUrl} alt="" className="h-full w-full object-cover" />
@@ -118,14 +118,14 @@ export default function InviteEmbed({ code }: { code: string }) {
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate font-semibold text-txt-primary">{previa.guild.name}</div>
-          <div className="mt-0.5 flex items-center gap-3 text-xs text-txt-muted">
+          <div className="truncate font-semibold text-text-strong">{previa.guild.name}</div>
+          <div className="mt-0.5 flex items-center gap-3 text-xs text-text-muted">
             <span className="flex items-center gap-1.5">
-              <span aria-hidden="true" className="h-2 w-2 rounded-full bg-green" />
+              <span aria-hidden="true" className="h-2 w-2 rounded-full bg-status-positive" />
               {previa.onlineCount} online
             </span>
             <span className="flex items-center gap-1.5">
-              <span aria-hidden="true" className="h-2 w-2 rounded-full bg-txt-faint" />
+              <span aria-hidden="true" className="h-2 w-2 rounded-full bg-channels-default" />
               {previa.memberCount} membros
             </span>
           </div>
@@ -141,8 +141,8 @@ export default function InviteEmbed({ code }: { code: string }) {
             // quem já é membro não precisa de chamada para ação: o botão vira
             // um atalho neutro para o servidor, como o "Entrou" do Discord
             (jaSouMembro
-              ? "bg-border-strong text-white hover:bg-border-strong-hover"
-              : "bg-accent text-accent-ink hover:bg-accent-hover")
+              ? "bg-border-normal text-white hover:bg-border-strong"
+              : "bg-brand-500 text-control-primary-text-default hover:bg-control-primary-background-hover")
           }
         >
           {jaSouMembro ? "Entrou" : entrando ? "Entrando…" : "Entrar"}

@@ -88,13 +88,13 @@ export function Estado({
 }) {
   if (erro) {
     return (
-      <p role="alert" className="rounded-[6px] bg-panel px-3 py-3 text-sm text-red">
+      <p role="alert" className="rounded-[6px] bg-background-base-lowest px-3 py-3 text-sm text-status-danger">
         {erro}
       </p>
     );
   }
-  if (carregando) return <p className="text-sm text-txt-muted">Carregando…</p>;
-  if (vazio) return <p className="py-1 text-sm text-txt-muted">{vazio}</p>;
+  if (carregando) return <p className="text-sm text-text-muted">Carregando…</p>;
+  if (vazio) return <p className="py-1 text-sm text-text-muted">{vazio}</p>;
   return <>{children}</>;
 }
 
@@ -109,14 +109,14 @@ export function Numero({
   detalhe?: string;
 }) {
   return (
-    <div className="rounded-[6px] border border-border bg-panel px-3 py-3">
-      <p className="text-2xl font-bold tabular-nums text-txt-primary">
+    <div className="rounded-[6px] border border-border-subtle bg-background-base-lowest px-3 py-3">
+      <p className="text-2xl font-bold tabular-nums text-text-strong">
         {valor.toLocaleString("pt-BR")}
       </p>
-      <p className="mt-0.5 text-xs font-semibold uppercase tracking-[0.02em] text-txt-secondary">
+      <p className="mt-0.5 text-xs font-semibold uppercase tracking-[0.02em] text-text-subtle">
         {rotulo}
       </p>
-      {detalhe && <p className="mt-1 text-xs text-txt-muted">{detalhe}</p>}
+      {detalhe && <p className="mt-1 text-xs text-text-muted">{detalhe}</p>}
     </div>
   );
 }
@@ -130,10 +130,10 @@ export function Etiqueta({
   tom?: "neutro" | "accent" | "alerta" | "perigo";
 }) {
   const cores = {
-    neutro: "bg-sel text-txt-secondary",
-    accent: "bg-accent text-accent-ink",
-    alerta: "bg-yellow/15 text-yellow",
-    perigo: "bg-red/15 text-red",
+    neutro: "bg-interactive-background-selected text-text-subtle",
+    accent: "bg-brand-500 text-control-primary-text-default",
+    alerta: "bg-status-warning/15 text-status-warning",
+    perigo: "bg-status-danger/15 text-status-danger",
   }[tom];
   return (
     <span
@@ -146,11 +146,11 @@ export function Etiqueta({
 
 /** Ícone que diz de que espécie é o canal, sem depender só do texto. */
 export function IconeDeCanal({ tipo, privado }: { tipo: ChannelType; privado?: boolean }) {
-  if (privado) return <Lock size={14} aria-hidden="true" className="shrink-0 text-txt-muted" />;
-  if (tipo === "VOICE") return <Volume2 size={14} aria-hidden="true" className="shrink-0 text-txt-muted" />;
-  if (tipo === "GROUP") return <Users size={14} aria-hidden="true" className="shrink-0 text-txt-muted" />;
-  if (tipo === "DM") return <MessagesSquare size={14} aria-hidden="true" className="shrink-0 text-txt-muted" />;
-  return <Hash size={14} aria-hidden="true" className="shrink-0 text-txt-muted" />;
+  if (privado) return <Lock size={14} aria-hidden="true" className="shrink-0 text-text-muted" />;
+  if (tipo === "VOICE") return <Volume2 size={14} aria-hidden="true" className="shrink-0 text-text-muted" />;
+  if (tipo === "GROUP") return <Users size={14} aria-hidden="true" className="shrink-0 text-text-muted" />;
+  if (tipo === "DM") return <MessagesSquare size={14} aria-hidden="true" className="shrink-0 text-text-muted" />;
+  return <Hash size={14} aria-hidden="true" className="shrink-0 text-text-muted" />;
 }
 
 /**
@@ -168,12 +168,12 @@ export function LocalDaChamada({
   if (local.tipo === "guild") {
     return (
       <span className="flex min-w-0 items-center gap-1.5 text-sm">
-        <span className="truncate font-medium text-txt-primary">{local.guildName}</span>
-        <span aria-hidden="true" className="text-txt-faint">
+        <span className="truncate font-medium text-text-strong">{local.guildName}</span>
+        <span aria-hidden="true" className="text-channels-default">
           ›
         </span>
-        <Volume2 size={13} aria-hidden="true" className="shrink-0 text-txt-muted" />
-        <span className="truncate text-txt-normal">{local.channelName}</span>
+        <Volume2 size={13} aria-hidden="true" className="shrink-0 text-text-muted" />
+        <span className="truncate text-text-default">{local.channelName}</span>
       </span>
     );
   }
@@ -183,11 +183,11 @@ export function LocalDaChamada({
       {comAvatares && (
         <span className="flex shrink-0 -space-x-1.5">
           {local.participantes.slice(0, 4).map((p) => (
-            <Avatar key={p.id} user={p} size="xs" surface="border-panel" />
+            <Avatar key={p.id} user={p} size="xs" surface="border-background-base-lowest" />
           ))}
         </span>
       )}
-      <span className="truncate text-txt-normal">{local.nome}</span>
+      <span className="truncate text-text-default">{local.nome}</span>
     </span>
   );
 }
@@ -201,9 +201,9 @@ export function NomeDoUsuario({
   const nome = displayNameOf(user);
   return (
     <span className="flex min-w-0 items-baseline gap-1.5">
-      <span className="truncate font-medium text-txt-primary">{nome}</span>
+      <span className="truncate font-medium text-text-strong">{nome}</span>
       {nome !== user.username && (
-        <span className="truncate text-xs text-txt-muted">@{user.username}</span>
+        <span className="truncate text-xs text-text-muted">@{user.username}</span>
       )}
     </span>
   );

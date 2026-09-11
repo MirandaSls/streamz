@@ -32,12 +32,12 @@ type Borda = "sozinho" | "esquerda" | "direita";
 
 const TOM: Record<Tom, string> = {
   neutro: "text-white hover:bg-white/10",
-  ativo: "bg-white text-void hover:bg-white/90",
+  ativo: "bg-white text-input-background-default hover:bg-white/90",
   // transmitir é o único "ligado" que o Discord pinta de verde, e não de
   // branco: é o estado que continua valendo quando você olha para outra aba
-  aoVivo: "bg-green text-accent-ink hover:brightness-110",
-  mudo: "bg-red/15 text-red hover:bg-red/25",
-  desligar: "bg-red text-white hover:bg-red-hover",
+  aoVivo: "bg-status-positive text-control-primary-text-default hover:brightness-110",
+  mudo: "bg-status-danger/15 text-status-danger hover:bg-status-danger/25",
+  desligar: "bg-status-danger text-white hover:bg-control-critical-primary-background-hover",
 };
 
 // o raio grande é sempre a metade da altura do botão (44/2): é o que mantém a
@@ -57,7 +57,7 @@ export function Capsula({ children }: { children: React.ReactNode }) {
   // assim, então a fileira toda subiu ~10% a partir daquela paridade — não é
   // correção de desvio, é escolha, e por isso está escrita aqui.
   return (
-    <div className="flex items-center gap-1 rounded-full bg-overlay/90 p-1 shadow-high backdrop-blur">
+    <div className="flex items-center gap-1 rounded-full bg-background-surface-higher/90 p-1 shadow-popout backdrop-blur">
       {children}
     </div>
   );
@@ -120,7 +120,7 @@ export function BotaoDeDesligar({
         type="button"
         onClick={onClick}
         aria-label={label}
-        className="grid h-14 w-[70px] place-items-center rounded-full bg-red text-white shadow-high transition hover:bg-red-hover"
+        className="grid h-14 w-[70px] place-items-center rounded-full bg-status-danger text-white shadow-popout transition hover:bg-control-critical-primary-background-hover"
       >
         {children}
       </button>
@@ -171,7 +171,7 @@ export function SplitDeDispositivo({
           aria-label={labelDaSeta}
           aria-expanded={aberto}
           className={`grid h-11 w-[26px] place-items-center rounded-l-[4px] rounded-r-[22px] transition ${
-            tom === "mudo" ? "bg-red/15 text-red hover:bg-red/25" : "text-white hover:bg-white/10"
+            tom === "mudo" ? "bg-status-danger/15 text-status-danger hover:bg-status-danger/25" : "text-white hover:bg-white/10"
           }`}
         >
           <ChevronDown size={18} />

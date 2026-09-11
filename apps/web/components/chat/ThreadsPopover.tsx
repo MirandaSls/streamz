@@ -119,7 +119,7 @@ export default function ThreadsPopover({
             const r = e.currentTarget.getBoundingClientRect();
             abrirSeletor(r.left, r.bottom + 4);
           }}
-          className="flex min-w-0 items-center gap-1 font-semibold text-txt-primary hover:text-accent"
+          className="flex min-w-0 items-center gap-1 font-semibold text-text-strong hover:text-brand-500"
         >
           <span className="truncate">{ROTULO_DA_ABA[aba]}</span>
           <ChevronDown size={16} aria-hidden="true" />
@@ -133,7 +133,7 @@ export default function ThreadsPopover({
             if (!ultimaMensagem) return;
             void criar(channelId, ultimaMensagem.id, ultimaMensagem.content);
           }}
-          className="flex h-6 items-center gap-1 rounded-[3px] bg-accent px-2 text-xs font-medium text-accent-ink transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-6 items-center gap-1 rounded-[3px] bg-brand-500 px-2 text-xs font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Plus size={14} aria-hidden="true" />
           Criar Thread
@@ -142,12 +142,12 @@ export default function ThreadsPopover({
     >
       {(fechar) => (
         <>
-          {loading && <p className="p-4 text-center text-sm text-txt-muted">Carregando…</p>}
+          {loading && <p className="p-4 text-center text-sm text-text-muted">Carregando…</p>}
 
           {!loading && lista.length === 0 && (
             <div className="p-6 text-center">
-              <MessagesSquare size={32} aria-hidden="true" className="mx-auto mb-2 text-txt-faint" />
-              <p className="text-sm text-txt-muted">
+              <MessagesSquare size={32} aria-hidden="true" className="mx-auto mb-2 text-channels-default" />
+              <p className="text-sm text-text-muted">
                 {busca
                   ? "Nenhuma thread com esse nome."
                   : aba === "ativas"
@@ -164,7 +164,7 @@ export default function ThreadsPopover({
                 e.preventDefault();
                 abrirMenuDaThread(t, e.clientX, e.clientY);
               }}
-              className="mb-1 rounded-[5px] last:mb-0 hover:bg-hov"
+              className="mb-1 rounded-[5px] last:mb-0 hover:bg-interactive-background-hover"
             >
               <button
                 type="button"
@@ -174,20 +174,20 @@ export default function ThreadsPopover({
                 }}
                 className="w-full rounded-[5px] p-2 text-left"
               >
-                <span className="block truncate font-medium text-txt-primary">{t.name}</span>
-                <span className="mt-0.5 flex items-center gap-2 text-xs text-txt-muted">
+                <span className="block truncate font-medium text-text-strong">{t.name}</span>
+                <span className="mt-0.5 flex items-center gap-2 text-xs text-text-muted">
                   <span className="flex -space-x-1.5" aria-hidden="true">
                     {t.participants.map((p) => (
-                      <Avatar key={p.id} user={p} size="xs" className="ring-2 ring-overlay" />
+                      <Avatar key={p.id} user={p} size="xs" className="ring-2 ring-background-surface-higher" />
                     ))}
                   </span>
-                  <span className="shrink-0 font-medium text-txt-secondary">
+                  <span className="shrink-0 font-medium text-text-subtle">
                     {displayNameOf(t.createdBy)}
                   </span>
                   <span className="shrink-0">
                     {t.messageCount} {t.messageCount === 1 ? "mensagem" : "mensagens"}
                   </span>
-                  <span className="ml-auto shrink-0 text-txt-faint">
+                  <span className="ml-auto shrink-0 text-channels-default">
                     {t.lastMessageAt ? horaCompleta(t.lastMessageAt) : horaCompleta(t.createdAt)}
                   </span>
                 </span>

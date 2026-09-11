@@ -46,10 +46,10 @@ export default function ReplyBar({
        composer, que no telefone usa `px-3` — com o `mx-4` do desktop ela ficava
        4px para dentro de cada lado, e a diferença aparece porque as duas se
        tocam. */
-    <div className="mx-4 celular:mx-3 -mb-2 flex h-12 items-center gap-2 rounded-t-lg bg-panel px-4 celular:px-3 pb-2 text-xs text-txt-muted">
+    <div className="mx-4 celular:mx-3 -mb-2 flex h-12 items-center gap-2 rounded-t-lg bg-background-base-lowest px-4 celular:px-3 pb-2 text-xs text-text-muted">
       <span className="min-w-0 truncate">
         Respondendo a{" "}
-        <span style={cor ? { color: cor } : undefined} className="font-medium text-txt-primary">
+        <span style={cor ? { color: cor } : undefined} className="font-medium text-text-strong">
           {displayNameOf(alvo.message.author)}
         </span>
       </span>
@@ -63,8 +63,8 @@ export default function ReplyBar({
            pecas.tsx`). Medido antes: 67×19. */
         className={`ml-auto grid h-5 celular:h-[44px] shrink-0 place-items-center rounded-[3px] px-1.5 celular:px-3 text-[11px] font-bold uppercase leading-none transition ${
           mention
-            ? "bg-accent text-accent-ink hover:bg-accent-hover"
-            : "text-txt-muted hover:text-txt-primary"
+            ? "bg-brand-500 text-control-primary-text-default hover:bg-control-primary-background-hover"
+            : "text-text-muted hover:text-text-strong"
         }`}
       >
         @ {mention ? "ligado" : "desligado"}
@@ -76,7 +76,7 @@ export default function ReplyBar({
         /* 23×23 no telefone, medido — e este × é o único jeito de desistir de
            uma resposta com o dedo (o Esc do teclado externo não conta). O
            glifo continua 16; cresce a área. */
-        className="grid h-6 w-6 celular:h-[44px] celular:w-[44px] shrink-0 place-items-center rounded-[3px] text-txt-muted transition hover:bg-hov hover:text-txt-primary"
+        className="grid h-6 w-6 celular:h-[44px] celular:w-[44px] shrink-0 place-items-center rounded-[3px] text-text-muted transition hover:bg-interactive-background-hover hover:text-text-strong"
       >
         <X size={16} />
       </button>

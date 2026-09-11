@@ -80,29 +80,29 @@ export default function PreviaDeTela({
       onPointerEnter={onManter}
       onPointerLeave={onFechar}
       style={{ left: rect.right + FOLGA, top: topo, width: LARGURA }}
-      className="fixed z-50 overflow-hidden rounded-lg bg-overlay shadow-high anim-menu"
+      className="fixed z-50 overflow-hidden rounded-lg bg-background-surface-higher shadow-popout anim-menu"
     >
       <div style={{ height: ALTURA }} className="relative w-full bg-black">
         {publicacao?.track ? (
           <VideoDaFaixa publication={publicacao} ajuste="object-cover" />
         ) : (
-          <span className="grid h-full w-full place-items-center text-xs text-txt-muted">
+          <span className="grid h-full w-full place-items-center text-xs text-text-muted">
             Carregando a transmissão…
           </span>
         )}
-        <span className="pointer-events-none absolute left-1.5 top-1.5 rounded-[4px] bg-red px-1 py-0.5 text-[9px] font-bold uppercase leading-none tracking-[0.02em] text-white">
+        <span className="pointer-events-none absolute left-1.5 top-1.5 rounded-[4px] bg-status-danger px-1 py-0.5 text-[9px] font-bold uppercase leading-none tracking-[0.02em] text-white">
           Ao vivo
         </span>
       </div>
 
       <div className="flex items-center gap-2 p-2">
-        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-txt-primary">
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-text-strong">
           {nome}
         </span>
         <button
           type="button"
           onClick={onAssistir}
-          className="flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-accent px-3 text-[13px] font-semibold text-accent-ink transition hover:bg-accent-hover"
+          className="flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-brand-500 px-3 text-[13px] font-semibold text-control-primary-text-default transition hover:bg-control-primary-background-hover"
         >
           <Play size={14} aria-hidden="true" />
           Assistir

@@ -159,7 +159,7 @@ export default function VozTab() {
           {!devices.autorizado && (
             // o motivo real, e não sempre "conceda a permissão": no desktop a
             // captura é aceita e mesmo assim os nomes não vêm
-            <p className="min-w-0 flex-1 text-xs text-yellow">
+            <p className="min-w-0 flex-1 text-xs text-status-warning">
               {explicarMidia(devices.motivo) ??
                 "Conceda acesso ao microfone para ver o nome dos dispositivos."}
             </p>
@@ -169,7 +169,7 @@ export default function VozTab() {
             // `true`: este botão é o pedido explícito de tentar de novo, e tem
             // de furar a trava que impede um prompt por abertura de menu
             onClick={() => void devices.refresh(true)}
-            className="ml-auto flex items-center gap-1.5 text-xs text-txt-muted transition hover:text-txt-primary celular:min-h-[44px]"
+            className="ml-auto flex items-center gap-1.5 text-xs text-text-muted transition hover:text-text-strong celular:min-h-[44px]"
           >
             <RefreshCw size={14} aria-hidden="true" />
             Atualizar lista
@@ -190,7 +190,7 @@ export default function VozTab() {
         />
         {pushToTalk && (
           <div className="py-3">
-            <p className="mb-1.5 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+            <p className="mb-1.5 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
               {t("voz.pttTecla")}
             </p>
             <button
@@ -206,13 +206,13 @@ export default function VozTab() {
               onBlur={() => setCapturando(false)}
               aria-label={t("voz.gravarTecla")}
               className={`flex h-9 celular:h-[44px] items-center gap-1.5 rounded-[3px] px-3 text-sm transition ${
-                capturando ? "bg-accent text-accent-ink" : "bg-void text-txt-normal hover:bg-hov"
+                capturando ? "bg-brand-500 text-control-primary-text-default" : "bg-input-background-default text-text-default hover:bg-interactive-background-hover"
               }`}
             >
               <Keyboard size={16} aria-hidden="true" />
               {capturando ? t("voz.apertePara") : pttRotulo(pttKey)}
             </button>
-            <p className="mt-1.5 text-xs text-txt-muted">
+            <p className="mt-1.5 text-xs text-text-muted">
               O microfone continua aberto por {PTT_RELEASE_MS} ms depois de soltar, para a última
               sílaba não sumir.
             </p>
@@ -234,7 +234,7 @@ export default function VozTab() {
             { value: "avancada", label: t("voz.ruidoAvancada") },
           ]}
         />
-        <p className="-mt-1 pb-3 text-xs text-txt-muted">{t("voz.ruidoAjuda")}</p>
+        <p className="-mt-1 pb-3 text-xs text-text-muted">{t("voz.ruidoAjuda")}</p>
         <ToggleLinha
           titulo={t("voz.eco")}
           checked={processamento.eco}
@@ -252,7 +252,7 @@ export default function VozTab() {
           <button
             type="button"
             onClick={testarMicrofone}
-            className="flex h-9 celular:h-[44px] shrink-0 items-center gap-2 rounded-[3px] bg-accent px-3 text-sm font-medium text-accent-ink hover:bg-accent-hover"
+            className="flex h-9 celular:h-[44px] shrink-0 items-center gap-2 rounded-[3px] bg-brand-500 px-3 text-sm font-medium text-control-primary-text-default hover:bg-control-primary-background-hover"
           >
             <Mic size={16} aria-hidden="true" />
             {testando ? t("voz.parar") : t("voz.testar")}
@@ -262,12 +262,12 @@ export default function VozTab() {
         {/* O que o teste faz, dito antes de a pessoa estranhar o silêncio (e
             os dois ícones acesos no rodapé): o Discord também ensurdece, e sem
             o aviso parece que a call caiu. */}
-        <p className="-mt-1 pb-3 text-xs text-txt-muted">
+        <p className="-mt-1 pb-3 text-xs text-text-muted">
           {testando
             ? "Você está se ouvindo. Enquanto o teste durar você fica mudo e surdo — a sala não te ouve e você não ouve ninguém."
             : "Você vai se ouvir; enquanto o teste durar você fica mudo e surdo, e a chamada fica em silêncio dos dois lados."}
         </p>
-        {erroDoTeste && <p className="pb-3 text-xs text-red">{erroDoTeste}</p>}
+        {erroDoTeste && <p className="pb-3 text-xs text-status-danger">{erroDoTeste}</p>}
       </Section>
 
       <Section id="tela" title={t("voz.tela")}>
@@ -276,7 +276,7 @@ export default function VozTab() {
         </div>
         {/* O custo de subida é a única coisa que o usuário não consegue deduzir
             sozinho, e é o que decide se 1440p vai funcionar na conexão dele. */}
-        <p className="-mt-1 pb-3 text-xs text-txt-muted">
+        <p className="-mt-1 pb-3 text-xs text-text-muted">
           Usa cerca de {estimativaDeBanda(screenQuality)} da sua internet de subida
         </p>
         <ToggleLinha
@@ -298,7 +298,7 @@ export default function VozTab() {
             emptyLabel={t("voz.padraoSistema")}
             disabled={devices.cameras.length === 0}
           />
-          <div className="my-3 grid aspect-video w-full max-w-[420px] place-items-center overflow-hidden rounded-lg bg-void">
+          <div className="my-3 grid aspect-video w-full max-w-[420px] place-items-center overflow-hidden rounded-lg bg-input-background-default">
             {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
             <video
               ref={videoRef}
@@ -308,19 +308,19 @@ export default function VozTab() {
               aria-label={t("voz.previaCamera")}
               className={`h-full w-full object-cover ${camera ? "" : "hidden"}`}
             />
-            {!camera && <Video size={40} className="text-txt-faint" aria-hidden="true" />}
+            {!camera && <Video size={40} className="text-channels-default" aria-hidden="true" />}
           </div>
           <button
             type="button"
             onClick={() => void alternarCamera()}
-            className="h-9 celular:h-[44px] rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
+            className="h-9 celular:h-[44px] rounded-[3px] bg-border-normal px-3 text-sm font-medium text-text-default hover:bg-border-strong"
           >
             {camera ? t("voz.desligarCamera") : t("voz.ligarCamera")}
           </button>
         </div>
       </Section>
 
-      {erro && <p className="text-sm text-red">{erro}</p>}
+      {erro && <p className="text-sm text-status-danger">{erro}</p>}
     </>
   );
 }
@@ -350,7 +350,7 @@ function MedidorDeMicrofone({ nivel, rotulo }: { nivel: number; rotulo: string }
           key={i}
           aria-hidden="true"
           className={`h-full flex-1 rounded-[1px] transition-colors duration-75 ${
-            i < acesos ? "bg-green" : "bg-void"
+            i < acesos ? "bg-status-positive" : "bg-input-background-default"
           }`}
         />
       ))}

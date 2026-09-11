@@ -134,7 +134,7 @@ function RegisterForm() {
           aria-describedby="dica-exibicao"
           className={`${inputClass} mb-2`}
         />
-        <p id="dica-exibicao" className="mb-5 text-xs text-txt-muted">
+        <p id="dica-exibicao" className="mb-5 text-xs text-text-muted">
           É como as pessoas vão te ver. Sem isso, mostramos o seu nome de usuário.
         </p>
 
@@ -156,7 +156,7 @@ function RegisterForm() {
           aria-describedby="dica-usuario"
           className={`${inputClass} mb-2`}
         />
-        <p id="dica-usuario" className="mb-5 text-xs text-txt-muted">
+        <p id="dica-usuario" className="mb-5 text-xs text-text-muted">
           3 a 32 caracteres — letras, números, _ . e -
         </p>
 
@@ -179,7 +179,7 @@ function RegisterForm() {
           aria-describedby="dica-senha"
           className={`${inputClass} mb-2`}
         />
-        <p id="dica-senha" className="mb-5 text-xs text-txt-muted">
+        <p id="dica-senha" className="mb-5 text-xs text-text-muted">
           Ao menos 6 caracteres.
         </p>
 
@@ -200,10 +200,10 @@ function RegisterForm() {
           </Link>
         </p>
 
-        <p className="mb-4 text-xs leading-4 text-txt-muted">
+        <p className="mb-4 text-xs leading-4 text-text-muted">
           Ao se registrar, você concorda com os{" "}
-          <span className="font-medium text-txt-normal">Termos de Serviço</span> e com a{" "}
-          <span className="font-medium text-txt-normal">Política de Privacidade</span> do Streamz.
+          <span className="font-medium text-text-default">Termos de Serviço</span> e com a{" "}
+          <span className="font-medium text-text-default">Política de Privacidade</span> do Streamz.
         </p>
 
         <button type="submit" disabled={loading} className={submitClass}>

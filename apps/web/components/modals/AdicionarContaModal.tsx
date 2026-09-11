@@ -129,7 +129,7 @@ export default function AdicionarContaModal({ voltar }: { voltar: boolean }) {
             <button
               type="button"
               onClick={() => setTicket(null)}
-              className="mr-auto text-base text-txt-normal transition hover:underline"
+              className="mr-auto text-base text-text-default transition hover:underline"
             >
               Voltar
             </button>
@@ -175,7 +175,7 @@ export default function AdicionarContaModal({ voltar }: { voltar: boolean }) {
           <button
             type="button"
             onClick={fechar}
-            className="mr-auto text-base text-txt-normal transition hover:underline"
+            className="mr-auto text-base text-text-default transition hover:underline"
           >
             Voltar
           </button>

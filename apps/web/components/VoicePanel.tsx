@@ -93,7 +93,7 @@ export default function VoicePanel({
       ref={palco}
       {...doPalco}
       // a tela cheia é a do navegador (ver `fullscreen.ts`), não um `fixed inset-0`
-      className="flex h-full flex-col bg-chat"
+      className="flex h-full flex-col bg-background-base-lower"
       data-voice-panel={channel.id}
     >
       {/* **No celular este cabeçalho não existe.** A tela empilhada já tem o
@@ -108,11 +108,11 @@ export default function VoicePanel({
         // Na vista do canal o cabeçalho flutua sobre o degradê: na print não há
         // filete nenhum cruzando o palco, e o brilho sobe por trás do nome.
         className={`flex h-[49px] shrink-0 items-center justify-between gap-2 px-4 transition-opacity duration-200 ${
-          aqui ? "border-b border-border shadow-header" : ""
+          aqui ? "border-b border-border-subtle shadow-elevation-low" : ""
         } ${molduraVisivel ? "opacity-100" : "pointer-events-none opacity-0"}`}
       >
-        <span className="flex min-w-0 items-center gap-2 font-semibold text-txt-primary">
-          <Volume2 size={24} className="shrink-0 text-txt-muted" aria-hidden="true" />
+        <span className="flex min-w-0 items-center gap-2 font-semibold text-text-strong">
+          <Volume2 size={24} className="shrink-0 text-text-muted" aria-hidden="true" />
           <span className="truncate">{nome}</span>
         </span>
         <span className="flex shrink-0 items-center gap-1">
@@ -163,7 +163,7 @@ export default function VoicePanel({
         // banner de largura total: uma falha de conexão não é nota de rodapé
         <div
           role="alert"
-          className="flex shrink-0 items-center gap-2 bg-red px-4 py-2 text-sm font-medium text-white"
+          className="flex shrink-0 items-center gap-2 bg-status-danger px-4 py-2 text-sm font-medium text-white"
         >
           <AlertTriangle size={16} className="shrink-0" aria-hidden="true" />
           <span className="min-w-0 flex-1">{erro}</span>
@@ -322,8 +322,8 @@ function IconeDeCabecalho({
         onClick={onClick}
         aria-label={label}
         aria-pressed={active || undefined}
-        className={`grid h-8 w-8 place-items-center rounded-[4px] transition hover:bg-hov hover:text-txt-primary ${
-          active ? "text-txt-primary" : "text-txt-secondary"
+        className={`grid h-8 w-8 place-items-center rounded-[4px] transition hover:bg-interactive-background-hover hover:text-text-strong ${
+          active ? "text-text-strong" : "text-text-subtle"
         }`}
       >
         {children}

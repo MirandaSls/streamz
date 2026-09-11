@@ -77,7 +77,7 @@ export default function InvitesPanel({ guildId }: { guildId: string }) {
           convites", que no print fica à esquerda dele, não existe aqui — a API
           não sabe suspender convite. */}
       <div className="mb-4 flex items-center justify-between gap-4">
-        <h3 className="text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
+        <h3 className="text-xs font-bold uppercase tracking-[0.02em] text-text-muted">
           Links de convite ativos
         </h3>
         <button
@@ -111,7 +111,7 @@ export default function InvitesPanel({ guildId }: { guildId: string }) {
             <col />
           </colgroup>
           <thead>
-            <tr className="h-8 text-left text-base font-semibold text-txt-primary">
+            <tr className="h-8 text-left text-base font-semibold text-text-strong">
               <th scope="col" className="pr-2 font-semibold">
                 Criado por
               </th>
@@ -131,45 +131,45 @@ export default function InvitesPanel({ guildId }: { guildId: string }) {
           </thead>
           <tbody>
             {invites === null ? (
-              <tr className="h-[62px] border-b border-border">
-                <td colSpan={5} className="text-txt-muted">
+              <tr className="h-[62px] border-b border-border-subtle">
+                <td colSpan={5} className="text-text-muted">
                   Carregando…
                 </td>
               </tr>
             ) : invites.length === 0 ? (
-              <tr className="h-[62px] border-b border-border">
-                <td colSpan={5} className="text-txt-muted">
+              <tr className="h-[62px] border-b border-border-subtle">
+                <td colSpan={5} className="text-text-muted">
                   Nenhum convite ativo.
                 </td>
               </tr>
             ) : (
               invites.map((i) => (
-                <tr key={i.code} className="group h-[62px] border-b border-border transition hover:bg-hov">
+                <tr key={i.code} className="group h-[62px] border-b border-border-subtle transition hover:bg-interactive-background-hover">
                   <td className="pr-2">
                     <span className="flex items-center gap-3">
                       {i.creator ? (
-                        <Avatar user={i.creator} size="sm" surface="border-chat" />
+                        <Avatar user={i.creator} size="sm" surface="border-background-base-lower" />
                       ) : (
-                        <span aria-hidden="true" className="h-6 w-6 shrink-0 rounded-full bg-panel" />
+                        <span aria-hidden="true" className="h-6 w-6 shrink-0 rounded-full bg-background-base-lowest" />
                       )}
                       <span className="min-w-0">
-                        <span className="block truncate text-base text-txt-primary">
+                        <span className="block truncate text-base text-text-strong">
                           {i.creator ? displayNameOf(i.creator) : "Conta apagada"}
                         </span>
-                        <span className="block truncate text-xs text-txt-muted">
+                        <span className="block truncate text-xs text-text-muted">
                           {i.channelName ? `#${i.channelName}` : "—"}
                         </span>
                       </span>
                     </span>
                   </td>
                   <td className="pr-2">
-                    <code className="font-mono text-txt-primary">{i.code}</code>
+                    <code className="font-mono text-text-strong">{i.code}</code>
                   </td>
-                  <td className="pr-2 text-txt-primary">
+                  <td className="pr-2 text-text-strong">
                     {i.uses}
                     {i.maxUses ? `/${i.maxUses}` : ""}
                   </td>
-                  <td className="pr-2 text-txt-primary">
+                  <td className="pr-2 text-text-strong">
                     {i.expiresAt ? (
                       <Contagem ate={i.expiresAt} agora={agora} />
                     ) : (
@@ -186,7 +186,7 @@ export default function InvitesPanel({ guildId }: { guildId: string }) {
                           type="button"
                           onClick={() => void navigator.clipboard?.writeText(i.code)}
                           aria-label={`Copiar ${i.code}`}
-                          className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong hover:text-txt-primary"
+                          className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded-lg text-text-muted transition hover:bg-border-normal hover:text-text-strong"
                         >
                           <Copy size={16} />
                         </button>
@@ -196,7 +196,7 @@ export default function InvitesPanel({ guildId }: { guildId: string }) {
                           type="button"
                           onClick={() => void revoke(i.code)}
                           aria-label={`Revogar ${i.code}`}
-                          className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong hover:text-red"
+                          className="grid h-8 celular:h-[44px] w-8 celular:w-[44px] place-items-center rounded-lg text-text-muted transition hover:bg-border-normal hover:text-status-danger"
                         >
                           <Trash2 size={16} />
                         </button>

@@ -83,10 +83,10 @@ export function PainelDeslizante({
         role="dialog"
         aria-modal="true"
         aria-label={rotulo}
-        className="anim-deslizar-direita flex h-full w-[86%] max-w-sm flex-col bg-panel pt-[env(safe-area-inset-top)] shadow-high"
+        className="anim-deslizar-direita flex h-full w-[86%] max-w-sm flex-col bg-background-base-lowest pt-[env(safe-area-inset-top)] shadow-popout"
       >
-        <div className="flex h-[56px] shrink-0 items-center gap-2 border-b border-border pl-4 pr-1">
-          <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-txt-primary">
+        <div className="flex h-[56px] shrink-0 items-center gap-2 border-b border-border-subtle pl-4 pr-1">
+          <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-text-strong">
             {titulo}
           </h2>
           <BotaoDeToque label="Fechar" onClick={onFechar}>
@@ -294,7 +294,7 @@ export function TelaDeDM() {
         aoVoltar={() => voltar()}
         icone={
           outro ? (
-            <Avatar user={outro} size="sm" status={resolveStatus(statuses, outro)} surface="border-panel" />
+            <Avatar user={outro} size="sm" status={resolveStatus(statuses, outro)} surface="border-background-base-lowest" />
           ) : (
             <GroupAvatar iconUrl={dm.iconUrl} size="sm" />
           )

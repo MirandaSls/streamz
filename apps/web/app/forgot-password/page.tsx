@@ -78,7 +78,7 @@ export default function ForgotPasswordPage() {
         </button>
 
         <p className="mt-2 text-sm">
-          <Link href="/login" className="font-medium text-txt-link hover:underline">
+          <Link href="/login" className="font-medium text-text-link hover:underline">
             Voltar ao login
           </Link>
         </p>

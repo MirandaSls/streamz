@@ -219,7 +219,7 @@ export default function HeaderPopover({
             tabIndex={-1}
             onKeyDown={prenderFoco}
             style={{ width: largura, height: altura, top: `calc(100% + ${FOLGA}px)` }}
-            className={`absolute z-30 flex max-h-[calc(100vh-80px)] flex-col overflow-hidden rounded-lg bg-overlay shadow-high outline-none anim-menu ${
+            className={`absolute z-30 flex max-h-[calc(100vh-80px)] flex-col overflow-hidden rounded-lg bg-background-surface-higher shadow-popout outline-none anim-menu ${
               alinharEsquerda ? "left-0" : "right-0"
             }`}
           >
@@ -265,18 +265,18 @@ function CabecalhoPadrao({
   fechar: () => void;
 }) {
   return (
-    <header className="shrink-0 shadow-header">
+    <header className="shrink-0 shadow-elevation-low">
       <div className="flex h-12 items-center gap-2 px-4">
-        <span aria-hidden="true" className="shrink-0 text-txt-secondary">
+        <span aria-hidden="true" className="shrink-0 text-text-subtle">
           {icon}
         </span>
         {tituloControle ? (
           tituloControle(fechar)
         ) : (
-          <h2 className="min-w-0 truncate font-semibold text-txt-primary">{title}</h2>
+          <h2 className="min-w-0 truncate font-semibold text-text-strong">{title}</h2>
         )}
         {contagem !== undefined && contagem > 0 && (
-          <span className="shrink-0 rounded-full bg-void px-1.5 text-xs font-semibold text-txt-muted">
+          <span className="shrink-0 rounded-full bg-input-background-default px-1.5 text-xs font-semibold text-text-muted">
             {contagem}
           </span>
         )}
@@ -291,7 +291,7 @@ function CabecalhoPadrao({
             type="search"
             aria-label={busca.placeholder}
             placeholder={busca.placeholder}
-            className="h-7 w-full rounded-[4px] bg-void px-2 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
+            className="h-7 w-full rounded-[4px] bg-input-background-default px-2 text-sm text-text-default outline-none placeholder:text-text-muted"
           />
         </div>
       )}
@@ -338,7 +338,7 @@ function ComoTela({
   const fechar = useCallback(() => {}, []);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-panel" role="region" aria-label={title}>
+    <div className="flex h-full min-h-0 flex-col bg-background-base-lowest" role="region" aria-label={title}>
       {cabecalho ? (
         cabecalho(fechar)
       ) : (

@@ -33,7 +33,7 @@ function FooterButton({
         type="button"
         onClick={onClick}
         aria-label={label}
-        className="grid h-8 w-8 place-items-center rounded-[4px] text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
+        className="grid h-8 w-8 place-items-center rounded-[4px] text-text-subtle transition hover:bg-interactive-background-hover hover:text-text-strong"
       >
         {children}
       </button>
@@ -77,8 +77,8 @@ function FooterSplit({
   const par = useRef<HTMLDivElement>(null);
 
   const cor = off
-    ? "bg-red/15 text-red hover:bg-red/25"
-    : "text-txt-secondary hover:bg-hov hover:text-txt-primary";
+    ? "bg-status-danger/15 text-status-danger hover:bg-status-danger/25"
+    : "text-text-subtle hover:bg-interactive-background-hover hover:text-text-strong";
 
   return (
     <div ref={par} className="flex items-center gap-px">
@@ -164,7 +164,7 @@ export default function UserFooter() {
      */
     <div
       ref={painel}
-      className="pointer-events-auto absolute inset-x-2.5 bottom-2.5 z-20 flex flex-col overflow-hidden rounded-lg border border-border bg-footer"
+      className="pointer-events-auto absolute inset-x-2.5 bottom-2.5 z-20 flex flex-col overflow-hidden rounded-lg border border-border-subtle bg-background-base-low"
     >
       {/* f-voz: a barra da call sobe junto, como parte da mesma pilha flutuante */}
       <VoiceConnectedBar />
@@ -180,16 +180,16 @@ export default function UserFooter() {
           */
           onClick={(e) => openProfile(user, anchorOf(painel.current ?? e.currentTarget), true)}
           aria-label="Meu perfil"
-          className="-ml-1 flex min-w-0 flex-1 items-center gap-2 rounded-[4px] py-1 pl-1 pr-2 text-left transition hover:bg-hov"
+          className="-ml-1 flex min-w-0 flex-1 items-center gap-2 rounded-[4px] py-1 pl-1 pr-2 text-left transition hover:bg-interactive-background-hover"
         >
-          <Avatar user={vivo} size="md" status={status} surface="border-footer" />
+          <Avatar user={vivo} size="md" status={status} surface="border-background-base-low" />
           <span className="min-w-0">
-            <span className="block truncate text-base font-semibold leading-[19px] text-txt-primary">
+            <span className="block truncate text-base font-semibold leading-[19px] text-text-strong">
               {displayNameOf(user)}
             </span>
             {/* o status personalizado tem prioridade sobre o rótulo do estado:
                 é o que o Discord mostra quando a pessoa escreveu algo */}
-            <span className="block truncate text-xs leading-[13px] text-txt-muted">
+            <span className="block truncate text-xs leading-[13px] text-text-muted">
               {customStatusOf(vivo) ?? STATUS_LABEL[status]}
             </span>
           </span>

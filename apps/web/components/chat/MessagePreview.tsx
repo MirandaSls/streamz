@@ -49,20 +49,20 @@ export default function MessagePreview({
 
   return (
     <article
-      className={`group/msg relative rounded-[5px] bg-chat p-3 hover:bg-msghov ${className}`}
+      className={`group/msg relative rounded-[5px] bg-background-base-lower p-3 hover:bg-message-background-hover ${className}`}
     >
       {acima}
       {contexto?.antes && <Vizinha message={contexto.antes} />}
       <div className="flex items-center gap-2">
         <Avatar user={message.author} size="sm" />
-        <span className="min-w-0 truncate font-medium text-txt-primary">
+        <span className="min-w-0 truncate font-medium text-text-strong">
           {displayNameOf(message.author)}
         </span>
-        <span className="shrink-0 text-xs text-txt-muted">{horaCompleta(message.createdAt)}</span>
+        <span className="shrink-0 text-xs text-text-muted">{horaCompleta(message.createdAt)}</span>
       </div>
       {/* o teto de largura da timeline (550px) estoura num painel: as mídias
           são obrigadas a caber na coluna */}
-      <div className="mt-1 break-words text-sm text-txt-normal [&_img]:max-w-full [&_video]:max-w-full [&_video]:h-auto">
+      <div className="mt-1 break-words text-sm text-text-default [&_img]:max-w-full [&_video]:max-w-full [&_video]:h-auto">
         {message.content &&
           (realce ? (
             <Realcado texto={message.content} termo={realce} />
@@ -71,11 +71,11 @@ export default function MessagePreview({
           ))}
         {message.attachments.length > 0 && <MediaGroup attachments={message.attachments} />}
         {embed && <LinkEmbedCard embed={embed} />}
-        {vazia && <span className="italic text-txt-muted">(mensagem vazia)</span>}
+        {vazia && <span className="italic text-text-muted">(mensagem vazia)</span>}
       </div>
       {contexto?.depois && <Vizinha message={contexto.depois} />}
       {acoes && (
-        <div className="absolute right-2 top-2 hidden gap-0.5 rounded bg-overlay p-0.5 shadow-high group-focus-within/msg:flex group-hover/msg:flex">
+        <div className="absolute right-2 top-2 hidden gap-0.5 rounded bg-background-surface-higher p-0.5 shadow-popout group-focus-within/msg:flex group-hover/msg:flex">
           {acoes}
         </div>
       )}
@@ -103,8 +103,8 @@ export function AcaoDoCartao({
       title={label}
       className={`grid h-7 w-7 place-items-center rounded transition ${
         danger
-          ? "text-txt-secondary hover:bg-red hover:text-white"
-          : "text-txt-secondary hover:bg-hov hover:text-txt-primary"
+          ? "text-text-subtle hover:bg-status-danger hover:text-white"
+          : "text-text-subtle hover:bg-interactive-background-hover hover:text-text-strong"
       }`}
     >
       {children}
@@ -115,7 +115,7 @@ export function AcaoDoCartao({
 /** Mensagem vizinha da busca: uma linha, apagada, só para dar contexto. */
 function Vizinha({ message }: { message: Message }) {
   return (
-    <div className="flex items-center gap-1.5 py-0.5 text-xs text-txt-faint">
+    <div className="flex items-center gap-1.5 py-0.5 text-xs text-channels-default">
       <Avatar user={message.author} size="xs" />
       <span className="shrink-0 font-medium">{displayNameOf(message.author)}</span>
       <span className="min-w-0 truncate">
@@ -140,7 +140,7 @@ function Realcado({ texto, termo }: { texto: string; termo: string }) {
     <span className="whitespace-pre-wrap">
       {partes.map((parte, i) =>
         parte.toLowerCase() === alvo.toLowerCase() ? (
-          <mark key={i} className="rounded-[2px] bg-accent/30 text-txt-primary">
+          <mark key={i} className="rounded-[2px] bg-brand-500/30 text-text-strong">
             {parte}
           </mark>
         ) : (

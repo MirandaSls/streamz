@@ -55,14 +55,14 @@ function Selo({ contagem, ponto }: { contagem: number; ponto: boolean }) {
     return (
       <span
         aria-hidden="true"
-        className="absolute -right-1 -top-0.5 h-2.5 w-2.5 rounded-full bg-red ring-[3px] ring-panel"
+        className="absolute -right-1 -top-0.5 h-2.5 w-2.5 rounded-full bg-status-danger ring-[3px] ring-background-base-lowest"
       />
     );
   }
   return (
     <span
       aria-hidden="true"
-      className="absolute -right-2.5 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[11px] font-bold leading-none text-white ring-[3px] ring-panel"
+      className="absolute -right-2.5 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[11px] font-bold leading-none text-white ring-[3px] ring-background-base-lowest"
     >
       {rotuloDoContador(contagem)}
     </span>
@@ -108,10 +108,10 @@ export default function BarraDeAbas() {
             user={vivo}
             size="sm"
             status={resolveStatus(statuses, vivo)}
-            surface="border-panel"
+            surface="border-background-base-lowest"
           />
         ) : (
-          <span className="h-6 w-6 rounded-full bg-hov" aria-hidden="true" />
+          <span className="h-6 w-6 rounded-full bg-interactive-background-hover" aria-hidden="true" />
         );
     }
   }
@@ -121,9 +121,9 @@ export default function BarraDeAbas() {
       aria-label="Seções"
       /* `pb` com a área segura: no iPhone e no Android com gestos há uma faixa
          embaixo que o sistema reserva, e o conteúdo que cair nela não recebe
-         toque. `bg-panel` até a borda de baixo para a faixa não virar um
+         toque. `bg-background-base-lowest` até a borda de baixo para a faixa não virar um
          retângulo de outra cor. */
-      className="relative z-30 flex shrink-0 border-t border-border bg-panel pb-[env(safe-area-inset-bottom)]"
+      className="relative z-30 flex shrink-0 border-t border-border-subtle bg-background-base-lowest pb-[env(safe-area-inset-bottom)]"
     >
       {ABAS_MOBILE.map((id) => {
         const ativa = aba === id;
@@ -138,7 +138,7 @@ export default function BarraDeAbas() {
               selo.contagem > 0 ? `${ROTULOS[id]} (${selo.contagem})` : ROTULOS[id]
             }
             className={`flex h-[48px] flex-1 flex-col items-center justify-center gap-0.5 transition ${
-              ativa ? "text-txt-primary" : "text-txt-muted"
+              ativa ? "text-text-strong" : "text-text-muted"
             }`}
           >
             <span className="relative grid h-6 w-6 place-items-center">

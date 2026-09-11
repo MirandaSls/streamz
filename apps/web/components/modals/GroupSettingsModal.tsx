@@ -40,7 +40,7 @@ export default function GroupSettingsModal({ channelId }: { channelId: string })
   if (!dm) {
     return (
       <Dialog title="Grupo" onClose={closeModal}>
-        <p className="text-sm text-txt-muted">Conversa não encontrada.</p>
+        <p className="text-sm text-text-muted">Conversa não encontrada.</p>
       </Dialog>
     );
   }
@@ -100,19 +100,19 @@ export default function GroupSettingsModal({ channelId }: { channelId: string })
                   disabled={enviando}
                   onClick={() => fileRef.current?.click()}
                   aria-label="Trocar ícone do grupo"
-                  className="absolute bottom-0 right-0 grid h-8 w-8 place-items-center rounded-full bg-panel text-txt-primary shadow-high hover:bg-hov disabled:opacity-50"
+                  className="absolute bottom-0 right-0 grid h-8 w-8 place-items-center rounded-full bg-background-base-lowest text-text-strong shadow-popout hover:bg-interactive-background-hover disabled:opacity-50"
                 >
                   <Camera size={16} />
                 </button>
               </Tooltip>
             </div>
             <div className="min-w-0">
-              <p className="truncate font-semibold text-txt-primary">{dmTitle(dm)}</p>
-              <p className="flex items-center gap-1 text-sm text-txt-muted">
+              <p className="truncate font-semibold text-text-strong">{dmTitle(dm)}</p>
+              <p className="flex items-center gap-1 text-sm text-text-muted">
                 <Users size={14} aria-hidden="true" />
                 {dm.others.length + 1} participantes
               </p>
-              {enviando && <p className="mt-1 text-xs text-txt-muted">Enviando ícone…</p>}
+              {enviando && <p className="mt-1 text-xs text-text-muted">Enviando ícone…</p>}
             </div>
           </div>
 
@@ -130,9 +130,9 @@ export default function GroupSettingsModal({ channelId }: { channelId: string })
                 }
               }}
               placeholder={dm.others.map((u) => u.username).join(", ")}
-              className="h-10 w-full rounded-[3px] bg-void px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
+              className="h-10 w-full rounded-[3px] bg-input-background-default px-2.5 text-text-default outline-none placeholder:text-text-muted"
             />
-            <p className="mt-1 text-xs text-txt-muted">
+            <p className="mt-1 text-xs text-text-muted">
               Vazio = usar os nomes dos participantes.
             </p>
           </div>
@@ -141,13 +141,13 @@ export default function GroupSettingsModal({ channelId }: { channelId: string })
 
       {aba === "convites" && (
         <>
-          <p className="mb-4 text-sm text-txt-muted">
+          <p className="mb-4 text-sm text-text-muted">
             Grupos não têm link de convite: quem entra é adicionado por alguém que já está dentro.
           </p>
           <button
             type="button"
             onClick={() => ui.openModal({ kind: "addGroupMembers", channelId })}
-            className="flex h-10 items-center gap-2 rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover"
+            className="flex h-10 items-center gap-2 rounded-[3px] bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover"
           >
             <UserPlus size={18} aria-hidden="true" />
             Adicionar amigos ao grupo
@@ -158,12 +158,12 @@ export default function GroupSettingsModal({ channelId }: { channelId: string })
             <ul className="flex flex-col">
               {dm.others.map((u) => (
                 <li key={u.id} className="flex items-center gap-3 rounded-[3px] px-2 py-1.5">
-                  <Avatar user={u} size="md" surface="border-chat" />
+                  <Avatar user={u} size="md" surface="border-background-base-lower" />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm text-txt-primary">
+                    <span className="block truncate text-sm text-text-strong">
                       {displayNameOf(u)}
                     </span>
-                    <span className="block truncate text-xs text-txt-muted">@{u.username}</span>
+                    <span className="block truncate text-xs text-text-muted">@{u.username}</span>
                   </span>
                 </li>
               ))}

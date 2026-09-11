@@ -105,7 +105,7 @@ function LoginForm() {
             className={`${inputClass} mb-2 tracking-[0.3em]`}
             autoFocus
           />
-          <p id="apoio-2fa" className="mb-5 text-sm text-txt-muted">
+          <p id="apoio-2fa" className="mb-5 text-sm text-text-muted">
             {backup
               ? "Use um dos códigos que você guardou ao ligar a verificação em duas etapas. Cada um vale uma vez só."
               : "Abra o seu app autenticador e informe o código de 6 dígitos da conta do Streamz."}
@@ -207,7 +207,7 @@ function LoginForm() {
           {loading ? "Entrando…" : "Entrar"}
         </button>
 
-        <p className="mt-2 text-sm text-txt-muted">
+        <p className="mt-2 text-sm text-text-muted">
           Precisando de uma conta?{" "}
           <Link
             href={destino === "/app" ? "/register" : `/register?next=${encodeURIComponent(destino)}`}

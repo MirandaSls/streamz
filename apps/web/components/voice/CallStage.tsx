@@ -105,12 +105,12 @@ export default function CallStage({
       aria-label={`Chamada em ${titulo}`}
       // a tela cheia é a do navegador (ver `fullscreen.ts`): o elemento é promovido
       // pelo compositor, então não há classe de posicionamento a aplicar aqui
-      className="relative flex min-w-0 flex-1 flex-col bg-void"
+      className="relative flex min-w-0 flex-1 flex-col bg-input-background-default"
     >
       {erro && conectadoAqui && status === "error" && (
         <div
           role="alert"
-          className="z-20 flex shrink-0 items-center gap-2 bg-red px-4 py-2 text-sm font-medium text-white"
+          className="z-20 flex shrink-0 items-center gap-2 bg-status-danger px-4 py-2 text-sm font-medium text-white"
         >
           <AlertTriangle size={16} className="shrink-0" aria-hidden="true" />
           <span className="min-w-0 flex-1">{erro}</span>
@@ -143,10 +143,10 @@ export default function CallStage({
             atenção para fora das pessoas. Na faixa ele não existe — ver `faixa`. */}
         {!faixa && (
           <span className="flex min-w-0 flex-col items-center text-center">
-            <span className="max-w-full truncate text-sm font-semibold text-txt-primary">
+            <span className="max-w-full truncate text-sm font-semibold text-text-strong">
               {titulo}
             </span>
-            <span className="text-xs text-txt-muted">{subtitulo}</span>
+            <span className="text-xs text-text-muted">{subtitulo}</span>
           </span>
         )}
 
@@ -251,18 +251,18 @@ function Chamando({
         <span className="relative grid place-items-center">
           <span
             aria-hidden="true"
-            className="absolute h-[132px] w-[132px] animate-ping rounded-full bg-green/20"
+            className="absolute h-[132px] w-[132px] animate-ping rounded-full bg-status-positive/20"
           />
           {usuario ? (
-            <Avatar user={usuario} size="xxl" surface="border-void" />
+            <Avatar user={usuario} size="xxl" surface="border-input-background-default" />
           ) : (
-            <span className="grid h-[120px] w-[120px] place-items-center rounded-full bg-panel">
-              <Phone size={44} className="text-txt-muted" aria-hidden="true" />
+            <span className="grid h-[120px] w-[120px] place-items-center rounded-full bg-background-base-lowest">
+              <Phone size={44} className="text-text-muted" aria-hidden="true" />
             </span>
           )}
         </span>
-        <p className="text-xl font-bold text-txt-primary">{nome}</p>
-        <p className="text-sm text-txt-muted">Chamando…</p>
+        <p className="text-xl font-bold text-text-strong">{nome}</p>
+        <p className="text-sm text-text-muted">Chamando…</p>
       </div>
     </div>
   );
@@ -295,14 +295,14 @@ function ConviteParaEntrar({
       <div className="flex flex-col items-center gap-5 text-center">
         <div className="flex items-center justify-center -space-x-4">
           {estados.slice(0, 3).map((e) => (
-            <Avatar key={e.user.id} user={e.user} size="xl" surface="border-void" className="rounded-full ring-4 ring-void" />
+            <Avatar key={e.user.id} user={e.user} size="xl" surface="border-input-background-default" className="rounded-full ring-4 ring-input-background-default" />
           ))}
         </div>
-        <p className="text-lg font-bold text-txt-primary">{texto}</p>
+        <p className="text-lg font-bold text-text-strong">{texto}</p>
         <button
           type="button"
           onClick={onEntrar}
-          className="flex h-11 items-center gap-2 rounded-[3px] bg-green px-6 text-base font-semibold text-accent-ink transition hover:brightness-110"
+          className="flex h-11 items-center gap-2 rounded-[3px] bg-status-positive px-6 text-base font-semibold text-control-primary-text-default transition hover:brightness-110"
         >
           <Phone size={18} aria-hidden="true" />
           Entrar na chamada
@@ -343,7 +343,7 @@ function IconeDoPalco({
         className={`grid place-items-center rounded-[4px] transition ${
           alvoDeToque ? "" : "h-8 w-8"
         } ${
-          ativo ? "bg-sel text-txt-primary" : "text-txt-secondary hover:bg-hov hover:text-txt-primary"
+          ativo ? "bg-interactive-background-selected text-text-strong" : "text-text-subtle hover:bg-interactive-background-hover hover:text-text-strong"
         }`}
       >
         {children}

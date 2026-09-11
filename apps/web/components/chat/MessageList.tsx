@@ -27,9 +27,9 @@ const ID_DIVISOR = "divisor-nao-lido";
 function DateDivider({ iso }: { iso: string }) {
   return (
     <div role="separator" className="mx-4 mt-6 flex items-center">
-      <span className="h-px flex-1 bg-border" />
-      <span className="px-1 text-xs font-semibold text-txt-muted">{rotuloDoDia(iso)}</span>
-      <span className="h-px flex-1 bg-border" />
+      <span className="h-px flex-1 bg-border-subtle" />
+      <span className="px-1 text-xs font-semibold text-text-muted">{rotuloDoDia(iso)}</span>
+      <span className="h-px flex-1 bg-border-subtle" />
     </div>
   );
 }
@@ -43,8 +43,8 @@ function UnreadDivider() {
       aria-label="Mensagens não lidas a partir daqui"
       className="pointer-events-none relative mt-3 flex items-center"
     >
-      <span className="h-px flex-1 bg-red" />
-      <span className="rounded-b-sm bg-red px-1 py-px text-[10px] font-bold uppercase leading-[13px] tracking-wide text-white">
+      <span className="h-px flex-1 bg-status-danger" />
+      <span className="rounded-b-sm bg-status-danger px-1 py-px text-[10px] font-bold uppercase leading-[13px] tracking-wide text-white">
         Novo
       </span>
     </div>
@@ -102,7 +102,7 @@ export function BotaoBoasVindas({
          `rem` do Tailwind sai 3% menor — ver `components/mobile/pecas.tsx`), e
          estes botões das boas-vindas ("Editar canal", "Bloquear", "Desfazer
          amizade") são os primeiros alvos de quem abre uma conversa vazia. */
-      className="flex h-8 items-center gap-1.5 rounded-lg bg-panel px-3 text-sm font-semibold text-txt-normal transition hover:bg-hov hover:text-txt-primary celular:h-[44px] celular:px-4"
+      className="flex h-8 items-center gap-1.5 rounded-lg bg-background-base-lowest px-3 text-sm font-semibold text-text-default transition hover:bg-interactive-background-hover hover:text-text-strong celular:h-[44px] celular:px-4"
     >
       {icon && <span aria-hidden="true">{icon}</span>}
       {label}
@@ -264,7 +264,7 @@ export default function MessageList({
     <div className="relative flex min-h-0 flex-1 flex-col">
       {/* barra superior: há não lido acima do que está na tela */}
       {channelId && posicaoDivisor === "acima" && (
-        <div className="absolute inset-x-0 top-0 z-20 flex h-6 items-center justify-between bg-red px-4 text-xs font-semibold text-white">
+        <div className="absolute inset-x-0 top-0 z-20 flex h-6 items-center justify-between bg-status-danger px-4 text-xs font-semibold text-white">
           <span>Você tem mensagens não lidas</span>
           <button type="button" onClick={() => marcarLidas(channelId)} className="hover:underline">
             Marcar como lidas
@@ -282,7 +282,7 @@ export default function MessageList({
       >
         {loadingOlder && (
           <div className="grid place-items-center py-3" role="status" aria-label="Carregando mensagens">
-            <span className="h-5 w-5 animate-spin rounded-full border-2 border-border-strong border-t-txt-muted" />
+            <span className="h-5 w-5 animate-spin rounded-full border-2 border-border-normal border-t-text-muted" />
           </div>
         )}
 
@@ -291,7 +291,7 @@ export default function MessageList({
             {welcome.semCirculo ? (
               welcome.icon
             ) : (
-              <div className="grid h-[68px] w-[68px] place-items-center rounded-full bg-border text-txt-primary">
+              <div className="grid h-[68px] w-[68px] place-items-center rounded-full bg-border-subtle text-text-strong">
                 {welcome.icon}
               </div>
             )}
@@ -301,13 +301,13 @@ export default function MessageList({
                 descontam a metade da entrelinha e a folga do ascendente de cada
                 fonte; sem app aberto, o resultado é aritmética, não render. */}
             {/* nome de canal é conteúdo: Archivo sim, caixa-alta não. */}
-            <h2 className="mt-2 font-headline text-[32px] font-extrabold leading-10 text-txt-primary">
+            <h2 className="mt-2 font-headline text-[32px] font-extrabold leading-10 text-text-strong">
               {welcome.title}
             </h2>
             {welcome.subtitle && (
-              <p className="mt-1.5 text-xl font-semibold leading-7 text-txt-primary">{welcome.subtitle}</p>
+              <p className="mt-1.5 text-xl font-semibold leading-7 text-text-strong">{welcome.subtitle}</p>
             )}
-            <p className={`${welcome.subtitle ? "mt-5" : "mt-1.5"} text-txt-muted`}>
+            <p className={`${welcome.subtitle ? "mt-5" : "mt-1.5"} text-text-muted`}>
               {welcome.description}
             </p>
             {welcome.actions}
@@ -316,11 +316,11 @@ export default function MessageList({
 
         {loading && items.length === 0 && (
           <div className="grid place-items-center py-6" role="status" aria-label="Carregando mensagens">
-            <span className="h-6 w-6 animate-spin rounded-full border-2 border-border-strong border-t-txt-muted" />
+            <span className="h-6 w-6 animate-spin rounded-full border-2 border-border-normal border-t-text-muted" />
           </div>
         )}
         {!loading && items.length === 0 && !welcome && (
-          <div className="py-6 text-center text-sm text-txt-muted">{emptyText}</div>
+          <div className="py-6 text-center text-sm text-text-muted">{emptyText}</div>
         )}
 
         {blocos.map((bloco, index) => {
@@ -384,7 +384,7 @@ export default function MessageList({
 
       {/* barra de largura total colada ao composer: há não lido abaixo da tela */}
       {channelId && posicaoDivisor === "abaixo" && (
-        <div className="flex h-6 shrink-0 items-center justify-between bg-accent px-4 text-xs font-semibold text-accent-ink">
+        <div className="flex h-6 shrink-0 items-center justify-between bg-brand-500 px-4 text-xs font-semibold text-control-primary-text-default">
           <span>Mensagens novas desde {rotuloDoDia(fronteira ?? new Date().toISOString())}</span>
           <button type="button" onClick={() => marcarLidas(channelId)} className="hover:underline">
             Marcar como lidas
@@ -400,7 +400,7 @@ export default function MessageList({
           aria-label="Ir para as mensagens mais recentes"
           /* 39×39 com `h-10 w-10`; no celular vai a 44 literal, e sobe um pouco
              para não encostar na cápsula do composer */
-          className="absolute bottom-4 right-6 grid h-10 w-10 place-items-center rounded-full bg-panel text-txt-normal shadow-high transition hover:bg-hov hover:text-txt-primary celular:bottom-5 celular:right-4 celular:h-[44px] celular:w-[44px]"
+          className="absolute bottom-4 right-6 grid h-10 w-10 place-items-center rounded-full bg-background-base-lowest text-text-default shadow-popout transition hover:bg-interactive-background-hover hover:text-text-strong celular:bottom-5 celular:right-4 celular:h-[44px] celular:w-[44px]"
         >
           <ArrowDown size={20} aria-hidden="true" />
         </button>
