@@ -43,6 +43,7 @@ import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
 import { useSettings } from "@/stores/settings";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui, useUI, type MenuItem } from "@/stores/ui";
+import { COR_DE_CARGO_SEM_COR } from "@/lib/cor-de-cargo";
 
 /**
  * Cartão de perfil que abre ao clicar num avatar ou nome — a "popout" do
@@ -591,7 +592,7 @@ export default function ProfilePopoverHost() {
                           existir (registrado no cartão 0.4-adaptar-perfil) */}
                       <span
                         aria-hidden="true"
-                        style={{ backgroundColor: r.color ?? "#8a8a8e" }}
+                        style={{ backgroundColor: r.color ?? COR_DE_CARGO_SEM_COR }}
                         className="h-3 w-3 rounded-full"
                       />
                       {r.name}

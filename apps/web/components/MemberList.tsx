@@ -377,7 +377,7 @@ export default function MemberList() {
   }
 
   return (
-    <aside aria-label="Membros" className="flex w-[267px] shrink-0 flex-col bg-background-base-lowest">
+    <aside aria-label="Membros" className="flex w-[267px] shrink-0 flex-col bg-background-base-lower">
       <div role="list" className="flex-1 overflow-y-auto pb-4">
         {members.length === 0 && (
           <p className="px-4 py-3 text-sm text-text-muted">Nenhum membro por aqui.</p>

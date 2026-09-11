@@ -37,6 +37,7 @@ import { useGuilds } from "@/stores/guilds";
 import { usePermissions } from "@/stores/permissions";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui, type MenuItem } from "@/stores/ui";
+import { COR_DE_CARGO_SEM_COR } from "@/lib/cor-de-cargo";
 
 const GRUPOS: { id: "geral" | "membros" | "mensagens" | "voz"; label: string }[] = [
   { id: "geral", label: "Permissões gerais do servidor" },
@@ -279,7 +280,7 @@ export default function CargosTab({ guildId }: { guildId: string }) {
             >
               <span
                 aria-hidden="true"
-                style={{ backgroundColor: r.color ?? "#8a8a8e" }}
+                style={{ backgroundColor: r.color ?? COR_DE_CARGO_SEM_COR }}
                 className="h-3 w-3 shrink-0 rounded-full"
               />
               <span className="min-w-0 flex-1 truncate text-sm text-text-strong">{r.name}</span>
@@ -401,7 +402,7 @@ function RoleEditor({
       <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-text-strong">
         <span
           aria-hidden="true"
-          style={{ backgroundColor: color || "#8a8a8e" }}
+          style={{ backgroundColor: color || COR_DE_CARGO_SEM_COR }}
           className="h-3 w-3 shrink-0 rounded-full"
         />
         <span className="min-w-0 truncate">{name}</span>

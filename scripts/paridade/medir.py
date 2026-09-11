@@ -112,6 +112,8 @@ def main(argv):
     cmd, caminho = argv[1], argv[2]
     img = Imagem(caminho)
     n = [int(v) for v in argv[3:]]
+    # coordenadas fora da imagem são presas à borda (x1 = largura não estoura)
+    lim = lambda v, m: max(0, min(v, m - 1))
     if cmd == "tamanho":
         print(f"{img.largura}x{img.altura} ({img.canais} canais)")
     elif cmd == "pixel":
@@ -119,11 +121,11 @@ def main(argv):
     elif cmd in ("linha", "coluna"):
         tol = n[3] if len(n) > 3 else 0
         if cmd == "linha":
-            y, x0, x1 = n[0], n[1], n[2]
+            y, x0, x1 = lim(n[0], img.altura), lim(n[1], img.largura), lim(n[2], img.largura)
             cores = [img.rgb(x, y) for x in range(x0, x1 + 1)]
             base = x0
         else:
-            x, y0, y1 = n[0], n[1], n[2]
+            x, y0, y1 = lim(n[0], img.largura), lim(n[1], img.altura), lim(n[2], img.altura)
             cores = [img.rgb(x, y) for y in range(y0, y1 + 1)]
             base = y0
         for a, b, c in trechos(cores, base, tol):

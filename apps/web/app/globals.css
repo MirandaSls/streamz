@@ -24,7 +24,7 @@ html {
    * Desliga o "aumento automático de fonte" dos navegadores móveis. Sem esta
    * linha o Chrome do Android (e o WebView) inflam o texto de blocos largos por
    * conta própria — medido no render de 390×844: o cabeçalho do servidor saía
-   * com 23px onde o CSS pede 15,5, e cada tela ficava com duas escalas de
+   * com 23px onde o CSS pede 16, e cada tela ficava com duas escalas de
    * tipografia convivendo. A escala da fonte do app continua sendo a das
    * configurações; o navegador é que não opina.
    *
@@ -241,6 +241,26 @@ textarea:focus-visible,
 /* o `transform-origin` vem do style inline: menu cresce a partir do cursor */
 .anim-menu {
   animation: menu-in 0.12s ease-out;
+}
+
+/*
+ * Os três pontos do botão em `carregando` (`primitivos/Button`): pulso de
+ * opacidade e escala, cor herdada do texto da variante. Medidas e tempo são os
+ * do `spinner-pulsing-ellipsis__46696` do Discord — ver o cabeçalho do Button.
+ */
+@keyframes pulso-do-botao {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+}
+.anim-pulso-do-botao {
+  animation: pulso-do-botao 1.4s ease-in-out infinite;
 }
 
 /* Indicador de "digitando…": três pontos pulsando. */

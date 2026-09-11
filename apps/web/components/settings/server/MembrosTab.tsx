@@ -44,6 +44,7 @@ import { useAuth } from "@/stores/auth";
 import { useGuilds, useIsOwner } from "@/stores/guilds";
 import { useCan, usePermissions } from "@/stores/permissions";
 import { ui, type MenuItem } from "@/stores/ui";
+import { COR_DE_CARGO_SEM_COR } from "@/lib/cor-de-cargo";
 
 /**
  * Aba "Membros": a tabela do print `docs/Reference/Captura de tela 2026-09-04
@@ -333,7 +334,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
                         >
                           <span
                             aria-hidden="true"
-                            style={{ backgroundColor: r.color ?? "#8a8a8e" }}
+                            style={{ backgroundColor: r.color ?? COR_DE_CARGO_SEM_COR }}
                             className="h-2.5 w-2.5 rounded-full"
                           />
                           {r.name}

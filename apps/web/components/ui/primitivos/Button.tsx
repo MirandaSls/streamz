@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useId, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 
 /**
  * Botão do Discord (refresh 2025): o módulo único `.button_a22cb0` de
@@ -128,24 +128,17 @@ const TAMANHOS: Record<TamanhoDeBotao, { altura: string; raio: string; textoIcon
  * (herda do texto da variante); medidas e tempo em `spinner-pulsing-ellipsis__
  * 46696` (ver cabeçalho do arquivo).
  */
-function TresPontos({ prefixo }: { prefixo: string }) {
+function TresPontos() {
   return (
-    <>
-      {/* Keyframe local: sem acesso a `globals.css` neste cartão (fora da
-          lista de arquivos), então o `@keyframes` vai junto do componente em
-          vez de virar utilitário do Tailwind. Só existe enquanto algum botão
-          está `carregando`. */}
-      <style>{`@keyframes ${prefixo}{0%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.8)}100%{opacity:1;transform:scale(1)}}`}</style>
-      <span className="flex items-center gap-0.5" role="status" aria-label="Carregando">
-        {[0, 1, 2].map((i) => (
-          <span
-            key={i}
-            className="h-[6px] w-[6px] rounded-[3px] bg-current"
-            style={{ animation: `${prefixo} 1.4s ease-in-out infinite`, animationDelay: `${i * 0.2}s` }}
-          />
-        ))}
-      </span>
-    </>
+    <span className="flex items-center gap-0.5" role="status" aria-label="Carregando">
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="h-[6px] w-[6px] rounded-[3px] bg-current anim-pulso-do-botao"
+          style={{ animationDelay: `${i * 0.2}s` }}
+        />
+      ))}
+    </span>
   );
 }
 
@@ -168,7 +161,6 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
 ) {
   const temTexto = children != null && children !== false;
   const t = TAMANHOS[tamanho];
-  const idSpinner = useId().replace(/:/g, "");
 
   return (
     <button
@@ -205,7 +197,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
           carregando ? "translate-y-0 opacity-100" : "translate-y-full opacity-0"
         }`}
       >
-        {carregando ? <TresPontos prefixo={`streamz-botao-pulso-${idSpinner}`} /> : null}
+        {carregando ? <TresPontos /> : null}
       </span>
     </button>
   );

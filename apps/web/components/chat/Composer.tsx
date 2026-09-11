@@ -73,6 +73,7 @@ import { useSettings } from "@/stores/settings";
 import { errorMessage } from "@/stores/socket-adapter";
 import { emitTyping } from "@/stores/typing";
 import { ui, type MenuItem } from "@/stores/ui";
+import { COR_DE_CARGO_SEM_COR } from "@/lib/cor-de-cargo";
 
 /** Altura máxima do campo antes de virar rolagem interna (~8 linhas). */
 const MAX_HEIGHT_PX = 200;
@@ -1254,7 +1255,7 @@ function montarSugestoes(
         icone: (
           <span
             aria-hidden="true"
-            style={{ backgroundColor: r.color ?? "#8a8a8e" }}
+            style={{ backgroundColor: r.color ?? COR_DE_CARGO_SEM_COR }}
             className="h-3 w-3 rounded-full"
           />
         ),

@@ -26,10 +26,14 @@ export type TamanhoDoEmoji = "inline" | "jumbo" | number;
  * VARIAVEIS.md) e o texto de 1rem, a imagem de 1.375em tem a altura exata da
  * linha e encosta embaixo — não sobra meia-linha para acertar à mão.
  * `object-fit: contain` vem da mesma regra.
+ *
+ * **`inline-block` é obrigatório**: o preflight do Tailwind põe `display: block`
+ * em toda `<img>`, e sem isto cada emoji quebra a linha — o texto some para cima
+ * e uma mensagem de três emoji vira três linhas (visto na captura da bancada).
  */
-export const CLASSE_EMOJI_INLINE = "h-[1.375em] w-[1.375em] object-contain align-bottom";
+export const CLASSE_EMOJI_INLINE = "inline-block h-[1.375em] w-[1.375em] object-contain align-bottom";
 /** `.emoji.jumboable`: 3rem, com `min-height` para a linha não o espremer. */
-export const CLASSE_EMOJI_JUMBO = "h-[3rem] min-h-[3rem] w-[3rem] object-contain align-bottom";
+export const CLASSE_EMOJI_JUMBO = "inline-block h-[3rem] min-h-[3rem] w-[3rem] object-contain align-bottom";
 
 /**
  * Emoji Unicode desenhado com o Twemoji local (`/twemoji/<codepoints>.svg`),
