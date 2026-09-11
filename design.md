@@ -9,10 +9,11 @@ medidas, ícones, emoji e comportamento — é o do Discord de 2026-09-11, medid
 `/opt/stack/streamz/docs/Reference/`. A execução está em
 `docs/PLANO-PARIDADE-DISCORD.md`.
 
-> **Em transição (onda 0).** Os princípios abaixo já valem. As seções de tokens,
-> tipografia e componentes ainda descrevem o sistema anterior e são reescritas
-> quando o código mudar: tokens na onda 0.2, tipografia na 0.3, primitivos na 0.4.
-> Até lá, na dúvida entre este arquivo e a ADR-0009, vale a ADR.
+> **Em transição (onda 0).** Princípios, tokens, tipografia e espaçamento já
+> descrevem o código. **Layout**, **Padrões de componente** e **Estados** ainda
+> descrevem o sistema anterior: as medidas de cada peça passam a morar no
+> cabeçalho do primitivo (`components/ui/primitivos/`), e as telas são refeitas
+> nas ondas 1–8. Na dúvida entre este arquivo e a ADR-0009, vale a ADR.
 
 ## Princípios
 
@@ -75,92 +76,97 @@ App de **3 colunas** fixas sobre a área principal (`app/app/page.tsx`):
   ou painel de thread (`w-[26rem]`, `bg-chat`) — nunca as duas ao mesmo tempo.
   O botão de membros do cabeçalho alterna a lista.
 
-## Tokens de cor (classes Tailwind)
+## Tokens de cor
 
-A escala de superfícies preserva os mesmos deltas de luminância que a escala
-Discord tinha — é o que mantém a hierarquia de profundidade sem mexer no
-leiaute.
+Os tokens são as **variáveis semânticas do Discord**, com o nome dele, geradas
+por `scripts/paridade/gerar-tokens.mjs` a partir de
+`docs/referencias-discord/tokens/variaveis-resolvidas.json` (tema Dark,
+2026-09-11). Saem em `apps/web/app/tokens.css` (hex, canais `-rgb` e alfa `-a`
+de cada um) e em `apps/web/tokens.gerados.ts` (o mapa do Tailwind). **Nenhum
+hex é escrito à mão**: faltando um valor, ele sai do gerador.
 
-| Classe | Hex | Uso |
-|---|---|---|
-| `rail` | `#0B0B0F` | Void Ink puro: rail, inputs escuros, tooltips |
-| `footer` | `#101015` | painel do usuário |
-| `panel` | `#141419` | colunas laterais, rodapé de modal |
-| `chat` | `#1A1A20` | área de mensagens, corpo de modal |
-| `input` | `#23232B` | composer, campo de edição |
-| `msghov` | `#17171D` | hover de mensagem — **mais escuro** que `chat` |
-| `hov` | `#1E1E23` | hover de item de lista |
-| `sel` | `#29292E` | item ativo |
-| `border` | `#2A2A33` | divisórias e linhas de seção |
-| `border-strong` | `#35353F` | borda de botão secundário |
-| `border-strong-hover` | `#4C4C58` | hover dessa borda |
-| `overlay` | `#050507` | menu de contexto, popover, toast |
-| `rail-divider` | `#1C1C22` | separador de 2px do rail |
-| `scroll` | `#2A2A33` | thumb da rolagem (clareia, não escurece) |
-| `accent` / `accent-hover` / `accent-press` | `#9BE31F` / `#B4EE4D` / `#86C91A` | Volt Lime: ativo e ação primária. No escuro o hover **clareia** |
-| `accent-ink` | `#0B0B0F` | texto e ícone **sobre** o accent |
-| `paper` | `#FDFDFB` | cor de marca; nunca superfície |
-| `mention` | `#D9F5A8` | texto de @menção sobre véu de `accent/25` |
-| `green` | `#1FB86B` | online, botões "novo" — afastado do limão em matiz |
-| `yellow` | `#FF9F1C` | ausente, coroa do dono — âmbar, longe do limão |
-| `red` / `red-hover` | `#FF4D4F` / `#E23A3D` | não perturbe, destrutivo |
-| `txt-primary` | `#FDFDFB` | títulos, nome do autor — 15,8:1 sobre `chat` |
-| `txt-normal` | `#D8D8D4` | corpo da mensagem — 11,9:1 |
-| `txt-secondary` | `#A9A9A6` | ícones de toolbar — 7,4:1 |
-| `txt-muted` | `#8A8A8E` | timestamps, categorias — 5,0:1 |
-| `txt-faint` | `#6E6E76` | canal em repouso, offline — 3,4:1, **abaixo de AA** (dívida registrada na ADR-0004) |
-| `txt-link` | `#00a8fc` | links, "N respostas" — ciano, não compete com o limão |
+**A classe é o utilitário + o nome do token sem o `--`.** O prefixo repetido é o
+preço de um nome que se procura no CSS do Discord sem tradução:
 
-**Não escreva hexadecimal no JSX.** Faltando um valor, o token entra aqui e no
-`tailwind.config.ts` primeiro. O único hex que restou no código é o do
-`EmojiPicker`, que é de terceiro e só aceita CSS vars.
+| Papel | Classe |
+|---|---|
+| rail, coluna de canais/DMs, barra de título | `bg-background-base-lowest` |
+| mensagens, cabeçalho do canal, membros | `bg-background-base-lower` |
+| painel do usuário, conteúdo de configurações | `bg-background-base-low` |
+| popout, menu, dica, cartão | `bg-background-surface-high` / `-higher` / `-highest` |
+| composer | `bg-chat-background-default` |
+| hover / selecionado de item de lista | `bg-interactive-background-hover` / `-selected` |
+| texto: título / corpo / secundário / apagado | `text-text-strong` / `text-text-default` / `text-text-subtle` / `text-text-muted` |
+| nome de canal em repouso | `text-channels-default` (4,89:1 — fechou a dívida AA da ADR-0004) |
+| link | `text-text-link` (azul: não é marca no Discord) |
+| divisória | `border-border-subtle` (normal, strong: mais fortes) |
+| botão primário | `bg-control-primary-background-default` + `text-control-primary-text-default` |
+| perigo / sucesso / aviso | `status-danger` / `status-positive` / `status-warning` |
+| presença | `text-icon-status-online` / `-idle` / `-dnd` / `-offline` |
+| menção | `bg-mention-background` + `text-mention-foreground` |
+| véu de modal | `bg-background-scrim` |
+
+**O limão no lugar do blurple, por regra mecânica** (ADR-0009, item 3): todo
+token cuja cor vem da família blurple (matiz 224–238°, saturação ≥ 40%) virou o
+passo equivalente da escala `--brand-*` do limão — 65 trocas, listadas em
+`scripts/paridade/tokens-de-marca.json`. Consequências que se veem:
+
+- **Texto e ícone sobre o limão são escuros** (`#0B0B0F`): o próprio token
+  (`control-primary-text-default`, `checkbox-icon-active`…) já é escuro. 12,5:1
+  no limão, 7,6:1 no hover, 5,9:1 no pressionado.
+- **O hover do primário escurece**, como no Discord (`#7BB129`).
+- **Link, anel de foco de teclado e cores ANSI continuam azuis** — no Discord
+  não são marca. O campo em foco (`input-border-active`) é marca: limão.
+
+Duas exceções que não são do Discord: `efem`/`efemhov` (fundo da mensagem
+efêmera: o limão a 4%, medido no print — o Discord não tem token) e `paper`
+(`#FDFDFB`, cor de **marca**, nunca de interface).
+
+**Sombras**: as do Discord pelo nome (`shadow-shadow-high`, `shadow-elevation-low`…)
+e `shadow-popout`, a combinação `--shadow-border` + `--shadow-high` que o CSS do
+Discord usa em 74 popouts. **Rolagem**: a regra global é a barra `thin`;
+`scroller-auto` (chat), `scroller-none` (carrosséis) e `scroller-fade` estão no
+`globals.css`.
 
 ## Tipografia
 
-Três famílias, todas por `next/font` — que as serve do próprio domínio e por
-isso passam na CSP do Tauri (`font-src 'self' data:`). **Nunca** importar
-`fonts.googleapis.com` por URL: quebraria o desktop.
+A pilha de fallback que o CSS do Discord declara (ADR-0009, item 4), toda por
+`next/font` — que serve os arquivos do próprio domínio e por isso passa na CSP do
+Tauri (`font-src 'self' data:`). **Nunca** importar `fonts.googleapis.com` por URL.
 
-| Papel | Família | Variável | Onde |
-|---|---|---|---|
-| corpo e densidade | **Noto Sans** 400/500/600/700 | `--font-sans` | mensagem, listas, botões, formulário |
-| título e marca | **Archivo** 700/800 | `--font-display` | wordmark, títulos de auth e de modal, categorias |
-| rótulo técnico | **JetBrains Mono** 400/700 | `--font-mono` | código, código de convite, IDs, atalhos |
+| Papel no Discord | Família | Classe |
+|---|---|---|
+| `--font-primary` (gg sans) | **Noto Sans** 400–800, com itálico | `font-sans` (padrão) |
+| `--font-headline` (ABC Ginto Nord) | **Noto Sans 800** | `font-headline font-extrabold` |
+| `--font-code` (gg mono) | **Source Code Pro** 400/700 | `font-mono` |
+| wordmark (marca) | Archivo 800 | `font-display` — **só** no `MarcaLockup` |
 
-Uso da Archivo (`font-display`):
+**Base de 16px** (`html { font-size }`), a do Discord; a escala por preferência
+continua em Aparência (`stores/settings.ts`). Com 16 a escala do Tailwind cai
+exatamente na grade: `h-10` = 40, `rounded-lg` = 8.
 
-- **Marca e telas de conta** — 800, caixa-alta, `tracking-wordmark` (−4,5%).
-- **Títulos de modal e de seção** — 700, caixa normal, `tracking-title` (−2%).
-- **Categorias e rótulos de campo** — 700, caixa-alta 12px, tracking
-  **positivo** `[0.02em]`.
+A escala de texto do Discord, com o nome dele (o peso vai à parte, como as
+variantes `/semibold` de lá):
 
-Duas regras que o pacote de marca não escreve e o produto precisa:
-
-- **Tracking −4,5% só a partir de 24px.** Em caixa-alta pequena ele cola as
-  letras; por isso as categorias levam tracking positivo.
-- **Caixa-alta só onde o texto é da interface.** Nome de canal, de servidor e de
-  usuário são conteúdo: ganham Archivo, não ganham caixa-alta.
-
-- Corpo **16px / 1.375** (`text-base`); metadados 12px (`text-xs`); hora na
-  margem 11px; categorias 12px caixa-alta 700; título de modal 20px 700; título
-  de boas-vindas do canal 32px 800.
-- Nome do autor `font-medium text-txt-primary`; corpo `text-txt-normal`.
-- `font-mono` (JetBrains Mono) só para código e valor literal.
+| Classe | Tamanho / linha |
+|---|---|
+| `text-text-xxs` | 10 / 1.2 |
+| `text-text-xs` | 12 / 1.333 |
+| `text-text-sm` | 14 / 1.286 |
+| `text-text-md` | 16 / 1.25 |
+| `text-text-lg` | 20 / 1.2 |
+| `text-heading-sm` / `-md` / `-lg` / `-xl` / `-xxl` | 14 / 16 / 20 / 24 / 32 |
 
 ## Espaçamento e forma
 
-- Grid base de 4px. Cabeçalhos 48px; itens de lista 36px (canal) / 42px (DM,
-  membro); botões de ícone 24–32px; composer 44px de altura mínima.
-- **Botões de ação**: 32 de altura nas configurações (#57) e 40 nos modais
-  (#59), raio 8 (`rounded-lg`), 12/16 de respiro lateral. **Campos**: 40 de
-  altura, raio 8, borda de 1px `border` que vira `accent` no foco
-  (`settings/campos.tsx`, #57).
-- Raios: raio 8 (`rounded-lg`) em botões, campos, itens de lista, cards,
-  composer, modal, menu e tooltip; rail `rounded-2xl`; avatares
-  `rounded-full`. Sobras de `rounded-[3px]`/`rounded-[4px]` em pílulas e chips
-  antigos ainda existem e saem tela a tela, nunca em massa.
-- Sombras: `shadow-header` sob cabeçalhos de 48px; `shadow-high` em menus,
-  popovers, tooltips e modais.
+- Grade de 4px, que é a do Discord (`--space-*`) e a do Tailwind com a base de 16.
+- Raios do Discord = raios do Tailwind: `rounded` 4 (`--radius-xs`),
+  `rounded-lg` 8 (`--radius-sm`), `rounded-xl` 12 (`--radius-md`),
+  `rounded-2xl` 16 (`--radius-lg`), `rounded-full` (pílula).
+- **px literal onde o número significa alguma coisa** (medida de print, piso de
+  alvo de toque), escala do Tailwind onde não significa.
+- Medidas de cada peça: no cabeçalho do primitivo correspondente
+  (`components/ui/primitivos/`), com a origem (seletor do CSS bruto ou print).
 
 ## Padrões de componente
 
