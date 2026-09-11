@@ -1,44 +1,47 @@
 # Streamz — sistema de design
 
-Identidade própria desde a **ADR-0004**: paleta ancorada no Void Ink, Volt Lime
-como accent, Archivo nos títulos. O pacote de marca está em `docs/branding/`,
-onde também estão a origem de cada asset e como regenerar.
+**Meta (ADR-0009, 2026-09-11): idêntico ao Discord, exceto a marca.** Fica nosso
+o símbolo e o wordmark (`Marca`/`MarcaLockup`, `docs/branding/`) e o **Volt Lime
+`#9BE31F`** no lugar do blurple, com texto escuro sobre ele. Todo o resto —
+superfícies, textos, bordas, elevação, status, tipografia, raios, sombras,
+medidas, ícones, emoji e comportamento — é o do Discord de 2026-09-11, medido em
+`docs/referencias-discord/` (tokens e CSS) e nos prints 1:1 de
+`/opt/stack/streamz/docs/Reference/`. A execução está em
+`docs/PLANO-PARIDADE-DISCORD.md`.
 
-O **Discord continua como referência**, mas só de **leiaute e densidade**: três
-colunas, alturas, gutter da mensagem, ação no hover. Paridade de paleta,
-tipografia e marca deixou de ser meta. Fonte da verdade dos tokens:
-`apps/web/tailwind.config.ts` e `apps/web/app/globals.css`.
+> **Em transição (onda 0).** Os princípios abaixo já valem. As seções de tokens,
+> tipografia e componentes ainda descrevem o sistema anterior e são reescritas
+> quando o código mudar: tokens na onda 0.2, tipografia na 0.3, primitivos na 0.4.
+> Até lá, na dúvida entre este arquivo e a ADR-0009, vale a ADR.
 
 ## Princípios
 
-1. **Escuro por padrão.** `color-scheme: dark`. Sem tema claro no MVP — o Paper
-   `#FDFDFB` é cor de texto e de marca, nunca superfície.
-2. **Densidade sobre respiro.** Muitas mensagens/canais na tela; padding curto,
-   linhas próximas. Não é uma landing page.
-3. **Ação no hover, não no layout.** Editar, apagar, reagir, responder aparecem no
+1. **O Discord é a régua, e a régua é medida.** Cor e token saem das variáveis
+   semânticas do Discord (`--background-base-lower`, `--text-default`…), geradas
+   de `tokens/variaveis-resolvidas.json`; medida sai do print 1:1 ou do CSS bruto.
+   Número que não veio de lá é "não medido", nunca chute (§6.3 do PROCESSO).
+2. **O limão só substitui o que no Discord é marca**, por regra mecânica: todo
+   token que o Discord pinta com o blurple vira o passo equivalente da escala do
+   limão. Link e anel de foco de teclado são azuis no Discord e continuam azuis;
+   o hover do botão primário escurece, como lá.
+3. **Três regras do accent, que não são preferência:**
+   - **limão só sobre escuro** — nunca como texto sobre fundo claro;
+   - **texto e ícone sobre o limão são `accent-ink` `#0B0B0F`**, nunca branco
+     (branco sobre Volt Lime dá 1,57:1). É regra dos primitivos (`Button`,
+     `Switch`, `Checkbox`, `Badge`), não de tela;
+   - **bolinha de status nunca sobre superfície limão.**
+4. **Archivo só no wordmark.** Corpo e títulos em Noto Sans (a fallback do gg sans
+   e do ABC Ginto no próprio CSS do Discord); código em Source Code Pro (a
+   fallback do gg mono). Base de 16px.
+5. **Escuro por padrão.** Tema Dark agora; Ash e Onyx na onda 9; Light fora
+   (exige um accent alternativo, que é outra ADR).
+6. **Ação no hover, não no layout.** Editar, apagar, reagir, responder aparecem no
    hover da mensagem (`group-hover`) — a linha em repouso mostra só conteúdo.
-4. **Cor com parcimônia, e o limão é a mais cara de todas.** O Volt Lime marca
-   estado ativo e ação primária; o resto é a escala Void Ink. Texto colorido =
-   link ou ação. Três regras que não são preferência, são o sistema:
-   - **limão só sobre escuro** — nunca como texto sobre Paper;
-   - **texto e ícone sobre `accent` são `accent-ink`**, nunca branco (branco
-     sobre Volt Lime dá 1,57:1). Vale também para `green` e `yellow`, que são
-     claros; `red` continua com branco. Sobre **véu** (`bg-accent/25`) o fundo
-     efetivo ainda é escuro, então ali o texto é claro;
-   - **bolinha de status nunca sobre superfície limão** — verde e limão a 10px
-     de distância é o choque mais provável desta paleta.
-5. **Ícone é SVG, nunca emoji.** Todo ícone entra por
-   `components/ui/icones.tsx`, que é o único ponto de importação do app.
-   Preenchido, não de traço: o desenho vem do **ativo do próprio Discord**
-   (`docs/Reference/Discord assets icons/`, ver `ACERVO.md`) quando existe, e do
-   Phosphor com o mesmo nome quando não existe. Emoji só como *conteúdo*
-   (reações, texto do usuário).
-
-   Não há mais exceção para marca utilitária. Ela existiu — lupa, `+`, chevrons e
-   pontinhos ficavam no Phosphor "porque no Discord são de traço" — e caiu ao
-   abrir os arquivos: **os ativos do Discord para essas são de traço**. Dava para
-   ter o desenho dele e o peso certo ao mesmo tempo. Hoje fica no Phosphor só o
-   que o acervo não tem: o `×` (lá só existe dentro de círculo) e as setas.
+7. **Ícone é SVG do acervo oficial do Discord**, sempre por
+   `components/ui/icones.tsx`, que é o único ponto de importação do app, nos
+   tamanhos do Discord (16/20/24). Phosphor só onde o acervo não tem o desenho.
+   **Emoji é Twemoji**, empacotado localmente — só como conteúdo (reações, texto
+   do usuário), nunca como ícone de interface.
 
 ## Layout
 

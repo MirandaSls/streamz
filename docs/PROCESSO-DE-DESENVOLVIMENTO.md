@@ -650,8 +650,11 @@ Android é inescapável fora da loja**, e a interface diz isso. Publicar é
 
 ## 6. Paridade visual com o Discord (o método)
 
-O objetivo do usuário é "idêntico ao Discord", com uma exceção fixa: **cores e
-tokens de paleta não mudam**. Só forma, tamanho, espaçamento e ícone.
+O objetivo do usuário é "idêntico ao Discord", **exceto a marca** (ADR-0009,
+2026-09-11): o símbolo, o wordmark e o Volt Lime `#9BE31F` no lugar do blurple,
+com texto escuro sobre ele. Todo o resto — cor, token, tipografia, forma,
+tamanho, espaçamento, ícone e emoji — é o do Discord, medido. A execução está no
+`docs/PLANO-PARIDADE-DISCORD.md`.
 
 ### 6.1 Fontes de verdade
 - Prints do Discord e do nosso app em `docs/Reference/Captura de tela *.png`,
@@ -784,18 +787,20 @@ Migração grande (83 arquivos) funcionou assim, e é o modelo:
   de perfil, modais menores, e o fluxo da call em dois dispositivos.
 
 ### 6.6 Decisões já tomadas (não reabrir sem o usuário)
-- Cores e tokens: intocados. Nova superfície usa o token existente mais próximo
-  e o PR registra a diferença. **Exceção aberta pelo usuário em 2026-09-04**: a
-  escala de superfícies foi remedida no Discord e passou a valer o cinza dele
-  (rail = coluna = barra de título = `#121214`); ver "Emenda 1" da ADR-0004. O
-  accent limão e os textos continuam sendo nossos, e a regra volta a valer.
-- Nitro, Loja, Missões e o painel "Ativo agora": não criar.
+- **Cores e tokens: os do Discord (ADR-0009).** A regra antiga ("intocados", com a
+  exceção das superfícies na Emenda 1 da ADR-0004) caiu em 2026-09-11. Os tokens são
+  as variáveis semânticas do Discord, geradas de
+  `docs/referencias-discord/tokens/variaveis-resolvidas.json`; o blurple vira a
+  escala do limão por regra mecânica (ADR-0009, item 3), e texto sobre o limão é
+  `accent-ink`. Nenhum hex à mão: faltando um valor, ele sai do gerador.
+- Nitro, Loja, Missões, o painel "Ativo agora" e toda monetização: não criar.
 - Botões sem função no nosso app (presente e apps no composer, filtros na caixa
   de entrada): existem como visual, inertes, com tooltip, registrados no PR.
 - Barra de título e caixa de entrada/ajuda: no desktop moram na barra; no
   navegador ficam no cabeçalho de Amigos (como o Discord web).
-- Foco: anel afastado de 2px para botões/links; campos de texto focam com 1px
-  colado, no verde do `design.md`.
+- Foco: anel de teclado afastado de 2px para botões/links, no azul do Discord
+  (`--border-focus`, que lá não é cor de marca); campos de texto focam com 1px
+  colado no limão (`--input-border-active`, que lá é marca). ADR-0009, item 3.2.
 - **Cabeçalho de categoria** (medido na print `2026-09-03 201805`, coluna de
   294, 1:1 pelo `h-9` do canal): o "+" de criar canal é **sempre visível**, não
   de hover — na print o cursor está sobre outro canal e os três cabeçalhos
