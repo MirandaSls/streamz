@@ -1,118 +1,128 @@
 import type { Config } from "tailwindcss";
+import { coresDoDiscord, sombrasDoDiscord } from "./tokens.gerados";
 
 /**
- * Tokens visuais da marca Streamz (ADR-0004). A escala de superfícies deixou de
- * ser derivada do Void Ink e passou a ser o **cinza neutro do Discord medido nos
- * prints** (`docs/Reference/Captura de tela 2026-09-04 102422, 102757 e
- * 100527.png`, getpixel em área plana): a nossa escala descia mais fundo que
- * a dele e a rail ficava quase preta ao lado do resto do app. A marca (Volt Lime) e os textos
- * (Paper e derivados) não mudaram. Ver a Emenda 1 da ADR-0004.
+ * Cor = token do Discord (ADR-0009). Os valores moram em `app/tokens.css` e o
+ * mapa em `tokens.gerados.ts`, os dois gerados por
+ * `scripts/paridade/gerar-tokens.mjs` — não se escreve hex aqui.
  *
- * Quatro regras não são preferência, são o sistema:
- *   1. No Discord a **rail de servidores, a coluna de canais/DMs e a barra de
- *      título são a MESMA superfície** (`#121214`), separadas por uma linha de
- *      1px `#222225` — não por uma diferença de cor. Por isso não existe mais
- *      um token `rail`: é `panel`, e quem separa é `rail-divider`.
- *   2. Limão só sobre escuro — nunca como texto sobre `paper`.
- *   3. Texto e ícone sobre `accent` são `accent-ink`, nunca branco
- *      (branco sobre Volt Lime dá 1,57:1).
- *   4. `green` e `yellow` ficam afastados do limão em matiz, e bolinha de
- *      status nunca vai sobre superfície limão.
+ * A classe é o utilitário + o nome do token sem o `--`:
+ * `bg-background-base-lower`, `text-text-muted`, `border-border-subtle`,
+ * `bg-control-primary-background-default`. O prefixo repetido é o preço de um
+ * nome que dá para procurar no CSS do Discord sem tradução.
+ *
+ * O limão entrou no lugar do blurple por regra mecânica (`--brand-*` e todo
+ * token que derivava dele), e o texto sobre ele é escuro — nunca branco. Ver
+ * `scripts/paridade/tokens-de-marca.json` para a lista do que foi trocado.
  */
+const cor = (n: string) => `rgb(var(--${n}-rgb) / calc(var(--${n}-a) * <alpha-value>))`;
+
+/**
+ * Nomes antigos, apontando para o token do Discord que faz o mesmo papel.
+ * **Temporários**: saem ao fim da onda 0, quando a migração (0.8) tiver trocado
+ * cada uso pelo nome do Discord. Não use em código novo.
+ */
+const apelidosDaMigracao = {
+  panel: cor("background-base-lowest"), // rail, coluna de canais/DMs, barra de título
+  footer: cor("background-base-low"), // painel do usuário
+  chat: cor("background-base-lower"), // mensagens, cabeçalho, membros
+  input: cor("chat-background-default"), // composer
+  msghov: cor("message-background-hover"),
+  // Mensagem efêmera: o Discord não tem token próprio. No print de referência
+  // (`docs/Reference/efemeras/`) o bloco é a mensagem comum + (2, 2, 9) em RGB,
+  // que é o blurple a 4% por cima; aqui, o limão a 4%. O hover não foi medido.
+  efem: "rgb(var(--brand-500-rgb) / 0.04)",
+  efemhov: "rgb(var(--brand-500-rgb) / 0.08)",
+  hov: cor("interactive-background-hover"),
+  sel: cor("interactive-background-selected"),
+  void: cor("input-background-default"), // campo escuro (90% dos usos)
+  border: cor("border-subtle"),
+  "border-strong": cor("border-normal"),
+  "border-strong-hover": cor("border-strong"),
+  overlay: cor("background-surface-higher"), // menu: no Discord é MAIS claro que o app
+  "rail-divider": cor("app-frame-border"),
+  scroll: cor("scrollbar-thin-thumb"),
+  accent: cor("brand-500"),
+  "accent-hover": cor("control-primary-background-hover"), // escurece, como no Discord
+  "accent-press": cor("control-primary-background-active"),
+  "accent-ink": cor("control-primary-text-default"), // texto SOBRE o limão
+  mention: cor("mention-foreground"),
+  green: cor("status-positive"),
+  yellow: cor("status-warning"),
+  red: cor("status-danger"),
+  "red-hover": cor("control-critical-primary-background-hover"),
+  "txt-primary": cor("text-strong"),
+  "txt-normal": cor("text-default"),
+  "txt-secondary": cor("text-subtle"),
+  "txt-muted": cor("text-muted"),
+  "txt-faint": cor("channels-default"),
+  "txt-link": cor("text-link"),
+};
+
 export default {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        // superfícies — hex medidos nos prints do Discord (getpixel)
-        panel: "#121214", // rail, coluna de canais/DMs, barra de título, rodapé de modal
-        footer: "#202024", // card do usuário — no Discord ele CLAREIA sobre a coluna
-        chat: "#1A1A1E", // área de mensagens, cabeçalho, painel de membros, corpo de modal
-        input: "#222327", // composer, campo de edição, cartão de perfil em DM
-        msghov: "#17171A", // hover de mensagem — mais escuro que `chat` (não medido)
-        // ── j-bots ── fundo da mensagem efêmera. Medido na captura de
-        // referência do Discord (`docs/Reference/efemeras/`, `FONTES.md`): lá o
-        // bloco efêmero é `#333341` contra o `#313338` da mensagem comum — um
-        // passo **para cima e para o frio**, +2/+2/+9 em RGB. Aqui a mensagem
-        // comum é `chat` (#1A1A1E); o mesmo passo dá #1C1C27. Sutil é o ponto:
-        // marca o bloco sem virar um cartão.
-        efem: "#1C1C27",
-        efemhov: "#20202D", // o hover dela, um passo acima pelo mesmo critério
-        hov: "#222225", // hover de item de lista e botão vazio da rail (sobre `panel`)
-        sel: "#2C2C30", // item ativo
-        // Void Ink: não é mais superfície de coluna, e sim o preto da marca —
-        // campos escuros, tooltips, palco de chamada e trilhos. Era `rail`.
-        void: "#0B0B0F",
-        // bordas e sobreposições (antes eram hex soltos no JSX)
-        border: "#2A2A33", // divisórias e linhas de seção
-        "border-strong": "#35353F", // borda de botão secundário
-        "border-strong-hover": "#4C4C58", // hover dessa borda
-        // menu de contexto, popover, toast. O Discord usa `#28282D` (menu MAIS
-        // claro que o app); aqui continua o nosso preto — fora do escopo deste PR.
-        overlay: "#050507",
-        "rail-divider": "#222225", // linha de 1px: rail|coluna e separador dentro da rail
-        scroll: "#2A2A33", // thumb da rolagem — precisa clarear, não escurecer
-        // marca e semântica
-        accent: "#9BE31F", // Volt Lime
-        "accent-hover": "#B4EE4D", // sobre fundo escuro o hover clareia
-        "accent-press": "#86C91A",
-        "accent-ink": "#0B0B0F", // texto e ícone SOBRE o accent
-        paper: "#FDFDFB", // Paper: cor de marca, nunca superfície (ADR-0004)
-        mention: "#D9F5A8", // texto de @menção sobre o véu de accent
-        green: "#1FB86B", // afastado do limão em matiz
-        yellow: "#FF9F1C", // âmbar, longe do limão
-        red: "#FF4D4F",
-        "red-hover": "#E23A3D",
-        // texto (ancorado no Paper)
-        "txt-primary": "#FDFDFB", // títulos, nome do autor — 17,0:1 sobre chat
-        "txt-normal": "#D8D8D4", // corpo da mensagem — 12,1:1
-        "txt-secondary": "#A9A9A6", // ícones de toolbar — 7,4:1
-        "txt-muted": "#8A8A8E", // timestamps, categorias — 5,1:1
-        // canal em repouso e offline. 3,4:1 sobre `chat` (o novo `#1A1A1E` dá o
-        // mesmo 3,43): abaixo de AA, mesma folga que o `#80848e` do Discord
-        // tinha. Dívida registrada na ADR-0004.
-        "txt-faint": "#6E6E76",
-        "txt-link": "#00a8fc", // ciano: não compete com o limão
+        ...coresDoDiscord,
+        ...apelidosDaMigracao,
+        // Paper: cor de MARCA (wordmark, assets), nunca superfície nem texto de UI.
+        paper: "#FDFDFB",
       },
       fontFamily: {
-        sans: [
-          "var(--font-sans)",
-          "Noto Sans",
-          "Helvetica Neue",
-          "Helvetica",
-          "Arial",
-          "sans-serif",
-        ],
-        // Archivo: títulos e wordmark. Peso 800 caixa-alta com tracking -4,5%
-        // SÓ a partir de 24px — em caixa-alta pequena o tracking é positivo.
-        display: [
-          "var(--font-display)",
-          "Archivo",
-          "Helvetica Neue",
-          "Helvetica",
-          "Arial",
-          "sans-serif",
-        ],
+        // `--font-primary` do Discord: gg sans → Noto Sans
+        sans: ["var(--font-sans)", "Noto Sans", "Helvetica Neue", "Helvetica", "Arial", "sans-serif"],
+        // `--font-headline`: ABC Ginto Nord → Noto Sans (use com `font-extrabold`)
+        headline: ["var(--font-sans)", "Noto Sans", "Helvetica Neue", "Helvetica", "Arial", "sans-serif"],
+        // `--font-code`: gg mono → Source Code Pro, com o resto da pilha do Discord
         mono: [
           "var(--font-mono)",
-          "JetBrains Mono",
-          "ui-monospace",
-          "SFMono-Regular",
-          "Menlo",
+          "Source Code Pro",
           "Consolas",
+          "Andale Mono WT",
+          "Andale Mono",
+          "Lucida Console",
+          "Lucida Sans Typewriter",
+          "DejaVu Sans Mono",
+          "Bitstream Vera Sans Mono",
+          "Liberation Mono",
+          "Nimbus Mono L",
+          "Monaco",
+          "Courier New",
+          "Courier",
           "monospace",
         ],
+        // Archivo: SÓ o wordmark (`MarcaLockup`). Marca, não interface.
+        display: ["var(--font-display)", "Archivo", "Helvetica Neue", "Helvetica", "Arial", "sans-serif"],
+      },
+      /**
+       * A escala de texto do Discord (`tipografia-e-formas.json`, `escalaTexto`),
+       * com o nome dele: `text-text-sm`, `text-heading-lg`… O peso vai à parte
+       * (`font-semibold`), como as variantes `/semibold` dele. Em `rem` para
+       * acompanhar a escala da fonte das configurações, como lá.
+       */
+      fontSize: {
+        "text-xxs": ["0.625rem", { lineHeight: "1.2" }], // 10
+        "text-xs": ["0.75rem", { lineHeight: "1.3333" }], // 12
+        "text-sm": ["0.875rem", { lineHeight: "1.2857" }], // 14
+        "text-md": ["1rem", { lineHeight: "1.25" }], // 16
+        "text-lg": ["1.25rem", { lineHeight: "1.2" }], // 20
+        "heading-sm": ["0.875rem", { lineHeight: "1.2857" }], // 14
+        "heading-md": ["1rem", { lineHeight: "1.25" }], // 16
+        "heading-lg": ["1.25rem", { lineHeight: "1.2" }], // 20
+        "heading-xl": ["1.5rem", { lineHeight: "1.25" }], // 24
+        "heading-xxl": ["2rem", { lineHeight: "1.25" }], // 32
       },
       letterSpacing: {
-        // tracking do wordmark e dos títulos de display (>= 24px)
+        // tracking do wordmark (Archivo 800 caixa-alta, >= 24px)
         wordmark: "-0.045em",
-        title: "-0.02em",
       },
       boxShadow: {
-        // elevação do cabeçalho de 48px sobre a lista
-        header: "0 1px 0 rgba(0,0,0,.28), 0 1.5px 0 rgba(0,0,0,.08), 0 2px 0 rgba(0,0,0,.06)",
-        // menus, popovers e tooltips
-        high: "0 8px 16px rgba(0,0,0,.4)",
+        // `shadow-shadow-high`, `shadow-elevation-low`… — as do Discord, pelo nome
+        ...sombrasDoDiscord,
+        // apelidos da migração (saem com os de cor)
+        header: "var(--elevation-low)", // cabeçalho de 48px sobre a lista
+        high: "var(--shadow-border), var(--shadow-high)", // popout: a combinação mais usada no Discord
       },
       screens: {
         /**

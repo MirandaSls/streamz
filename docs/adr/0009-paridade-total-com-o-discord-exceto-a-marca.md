@@ -90,7 +90,7 @@ de comandos de barra e mensagens de bot; e o leiaute mobile.
 
 1. **Substituição por origem do valor.** Todo token cujo valor resolvido vem da
    família blurple passa a vir da escala do limão. Família blurple, para esta
-   regra, é **matiz entre 224° e 236° com saturação de 40% ou mais**. Isso inclui a
+   regra, é **matiz entre 224° e 238° com saturação de 40% ou mais**. Isso inclui a
    escala `--brand-*`/`--blurple-*`, as variantes por alfa e por `color-mix`
    (`--mention-background`, `--message-highlight-background-*`,
    `--reaction-background-reacted-*`, `--background-code`) e os vizinhos que não

@@ -12,15 +12,14 @@ body {
 }
 
 /*
- * Base do texto e de todo `rem` do Tailwind. 15,5px é o padrão do controle
- * "Escala da fonte" (`stores/settings.ts`, FONT_SCALE.default): 3,1% abaixo dos
- * 16px do Discord, a pedido do usuário. Fica aqui também — e não só no JS — para
- * que o primeiro quadro (export estático, antes da store rehidratar) já nasça no
- * tamanho certo, sem o pulo de 16 para 15,5. Depois de hidratar, a store
- * sobrescreve com a preferência guardada.
+ * Base do texto e de todo `rem` do Tailwind: 16px, o padrão do Discord e do
+ * controle "Escala da fonte" (`stores/settings.ts`, FONT_SCALE.default). Fica
+ * aqui também — e não só no JS — para que o primeiro quadro (export estático,
+ * antes da store rehidratar) já nasça no tamanho certo. Depois de hidratar, a
+ * store sobrescreve com a preferência guardada.
  */
 html {
-  font-size: 15.5px;
+  font-size: 16px;
   /*
    * Desliga o "aumento automático de fonte" dos navegadores móveis. Sem esta
    * linha o Chrome do Android (e o WebView) inflam o texto de blocos largos por
@@ -48,11 +47,11 @@ body {
 
 body {
   margin: 0;
-  /* mesmos valores de `chat` e `txt-normal` do tailwind.config.ts (ADR-0004) */
-  background: #1a1a1e;
-  color: #d8d8d4;
+  /* tokens do Discord (`app/tokens.css`, ADR-0009) */
+  background: var(--background-base-lower);
+  color: var(--text-default);
   /*
-   * Corpo em `1rem` (15,5px por padrão): é o tamanho do texto da mensagem e de
+   * Corpo em `1rem` (16px por padrão): é o tamanho do texto da mensagem e de
    * tudo que não traz `text-*`, como o título do cabeçalho. Em px fixo esse
    * texto ignorava o controle de escala da fonte — o deslizador mexia no resto
    * do app e deixava a mensagem do mesmo tamanho. A família vem do next/font
@@ -73,10 +72,12 @@ body {
 /*
  * Foco sempre visível. O app é navegável por teclado (setas nos canais, Tab nos
  * modais, ações da mensagem no group-focus-within) e o anel padrão do browser
- * praticamente some sobre o tema escuro.
+ * praticamente some sobre o tema escuro. O anel de teclado é o azul do Discord
+ * (`--border-focus`), que lá não é cor de marca e por isso não vira limão
+ * (ADR-0009, item 3.2).
  */
 :focus-visible:not(input):not(textarea):not([contenteditable="true"]) {
-  outline: 2px solid #9be31f;
+  outline: 2px solid var(--border-focus);
   outline-offset: 2px;
   border-radius: 2px;
 }
@@ -91,24 +92,24 @@ body {
 input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus-visible,
 textarea:focus-visible,
 [contenteditable="true"]:focus-visible {
-  outline: 1px solid #9be31f;
+  /* o campo em foco é marca no Discord (`--input-border-active`): limão */
+  outline: 1px solid var(--input-border-active);
   outline-offset: -1px;
 }
 
 /*
- * Barras de rolagem finas (8px, sem setas). Sobre o Void Ink o thumb precisa
- * CLAREAR, não escurecer: o `#1a1b1e` de antes sumiria sobre a rail `#121214`.
+ * Barras de rolagem finas (8px, sem setas), na cor da barra fina do Discord.
  */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #2a2a33 transparent;
+  scrollbar-color: var(--scrollbar-thin-thumb) transparent;
 }
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 *::-webkit-scrollbar-thumb {
-  background: #2a2a33;
+  background: var(--scrollbar-thin-thumb);
   border-radius: 4px;
   border: 2px solid transparent;
   background-clip: padding-box;
@@ -333,9 +334,9 @@ html.cores-ajustadas {
    * **16px em todo campo de texto.** É a causa (não o sintoma) do zoom que o
    * Safari do iOS dá ao focar um campo: abaixo de 16px ele amplia a página
    * inteira e não volta, e a pessoa fica com o app fora de escala pelo resto da
-   * sessão. Nossa base é 15,5px (`html { font-size: 15.5px }`), então quase
-   * todo campo caía nessa regra. `max(16px, 1em)` mantém quem já era maior —
-   * inclusive quando a pessoa aumenta a escala da fonte nas configurações.
+   * sessão. A base é 16px, mas campo com `text-sm` (14) e escala de fonte
+   * reduzida nas configurações ainda cairiam nessa regra. `max(16px, 1em)`
+   * mantém quem já era maior — inclusive quando a pessoa aumenta a escala.
    */
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
   textarea,

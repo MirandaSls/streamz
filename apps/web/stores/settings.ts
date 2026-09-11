@@ -21,15 +21,14 @@ export type SendMode = "enter" | "ctrl-enter";
 
 /**
  * Escala da fonte: px escritos em `html { font-size }`, de onde sai todo `rem`
- * do Tailwind (texto e espaçamento). O padrão é **15,5px**, 3,1% abaixo dos 16
- * do Discord — o pedido foi "um pouco menor", e é o único ponto do app que
- * encolhe o texto inteiro de uma vez. Superfície medida em px (cabeçalho de 49,
- * linha de conversa, ícone) não muda: por isso a redução é pequena.
+ * do Tailwind (texto e espaçamento). O padrão é **16px**, o do Discord
+ * (`font-size-16` no `<html>` dele), desde a ADR-0009: com 16 a escala do
+ * Tailwind cai exatamente na grade de 4px e nos raios do Discord (`rounded-lg`
+ * = 8 = `--radius-sm`), e medida de print volta a ser medida de classe.
  *
- * O passo é de meio pixel porque 15,5 precisa estar na grade do deslizador —
- * um padrão que o próprio controle não alcança não volta depois de arrastado.
+ * O passo continua de meio pixel: quem escolheu 15,5 antes não perde a escolha.
  */
-export const FONT_SCALE = { min: 12, max: 24, step: 0.5, default: 15.5 };
+export const FONT_SCALE = { min: 12, max: 24, step: 0.5, default: 16 };
 // 17px é o respiro que o Discord usa entre grupos de mensagens
 export const GROUP_SPACING = { min: 0, max: 24, step: 1, default: 17 };
 // 20px é o emoji do chip de reação do Discord, medido no print
@@ -151,21 +150,22 @@ export const useSettings = create<SettingsState>()(
     }),
     {
       name: "settings",
-      version: 2,
+      version: 3,
       /**
-       * v1 → v2: o padrão da escala da fonte caiu de 16px para 15,5px.
+       * v1 → v2 baixou o padrão da escala da fonte de 16px para 15,5px; v2 → v3
+       * (ADR-0009) devolve os 16 do Discord.
        *
        * `partialize` grava todos os valores no primeiro uso, então quem nunca
-       * tocou no controle tem `fontScale: 16` guardado e ficaria no tamanho
-       * antigo para sempre. Quem está **exatamente** no padrão antigo vai para o
-       * novo; quem escolheu outro número mantém a escolha (16 escolhido de
-       * propósito é indistinguível de 16 nunca tocado, e o preço de errar é um
-       * meio pixel).
+       * tocou no controle tem o padrão da época guardado e ficaria nele para
+       * sempre. Quem está **exatamente** no padrão antigo vai para o novo; quem
+       * escolheu outro número mantém a escolha (o padrão escolhido de propósito
+       * é indistinguível do nunca tocado, e o preço de errar é meio pixel).
+       * Quem vem da v1 com 16 já está no padrão de hoje.
        */
       migrate: (persistido, versao) => {
         const valores = persistido as Partial<SettingsValues> | undefined;
         if (!valores) return valores;
-        if (versao < 2 && valores.fontScale === 16) {
+        if (versao === 2 && valores.fontScale === 15.5) {
           return { ...valores, fontScale: FONT_SCALE.default };
         }
         return valores;
