@@ -119,6 +119,69 @@ textarea:focus-visible,
 }
 
 /*
+ * As três barras do Discord (`.thin_`/`.auto_`/`.none_` + `.fade_`,
+ * `css-bruto/362698.047b6f205fd7bdc1.css`). A regra global acima já é a
+ * `thin` (listas laterais, menus, modais); estas classes são para quem diverge:
+ * `scroller-auto` na lista de mensagens (barra de 16 com polegar de 8 e raio 8),
+ * `scroller-none` nos carrosséis e abas roláveis, `scroller-fade` onde a barra
+ * só aparece no hover. No Firefox o `auto` usa o par de tokens próprio dele,
+ * porque lá o trilho é opaco.
+ */
+.scroller-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thin-thumb) var(--scrollbar-thin-track);
+}
+.scroller-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroller-thin::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thin-thumb);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  min-height: 40px;
+}
+.scroller-auto {
+  scrollbar-width: auto;
+  scrollbar-color: var(--scrollbar-auto-scrollbar-color-thumb, var(--scrollbar-auto-thumb))
+    var(--scrollbar-auto-scrollbar-color-track, transparent);
+}
+.scroller-auto::-webkit-scrollbar {
+  width: 16px;
+  height: 16px;
+}
+.scroller-auto::-webkit-scrollbar-track {
+  background-color: var(--scrollbar-auto-track);
+  background-clip: padding-box;
+  border: 4px solid transparent;
+  border-radius: 8px;
+}
+.scroller-auto::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-auto-thumb);
+  background-clip: padding-box;
+  border: 4px solid transparent;
+  border-radius: 8px;
+  min-height: 40px;
+}
+.scroller-none {
+  scrollbar-width: none;
+}
+.scroller-none::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+.scroller-fade::-webkit-scrollbar-thumb,
+.scroller-fade::-webkit-scrollbar-track {
+  visibility: hidden;
+}
+.scroller-fade:hover::-webkit-scrollbar-thumb,
+.scroller-fade:hover::-webkit-scrollbar-track,
+.scroller-fade:focus-within::-webkit-scrollbar-thumb {
+  visibility: visible;
+}
+
+/*
  * Entrada de modal, tela de configurações, menu e tooltip.
  *
  * O Discord anima tudo que aparece por cima da interface, e a curva é a mesma em
