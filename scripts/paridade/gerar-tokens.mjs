@@ -50,6 +50,27 @@ const PREFIXOS_FORA = [
   "orange", "red", "brand", "blurple", "opacity", "white", "black", "bg",
   "custom", "logo", "theme", "brightness", "contrast", "experimental",
 ];
+/**
+ * Fora dos prefixos acima, estes entram assim mesmo. São da paleta crua (não
+ * dependem de tema), mas o próprio Discord os usa direto em componente:
+ * - `--white`/`--black`: texto sobre cor, fundo de mídia, QR code;
+ * - `--primary-*`: o cinza das dicas (`tooltipGrey`) e de ícone sobre imagem;
+ * - `--green-360`: a dica verde;
+ * - `--opacity-black-*`/`--opacity-white-*`: preto e branco com alfa, que é como
+ *   o Discord faz véu de vídeo, capa de botão sobre mídia e máscara de recorte —
+ *   o `--background-scrim` tem alfa fixo de 72% e não serve para isso.
+ */
+const EXTRAS = [/^--(white|black)$/, /^--primary-(230|330|700)$/, /^--green-360$/, /^--opacity-(black|white)-\d+$/];
+
+/**
+ * O que o Discord não tem e o app precisa. Cada um aponta para um token dele:
+ * é apelido com papel próprio, não cor nova.
+ */
+const NOSSOS = {
+  // cor do cargo sem cor (`Role.color` nulo) — o cinza do que não tem cor própria
+  "--role-default": "--channels-default",
+};
+
 /** Blurple que é conteúdo e não marca (regra 3). */
 const CONTEUDO_AZUL = [/^--ansi-/];
 /**
@@ -196,8 +217,9 @@ for (const { coluna, seletor } of TEMAS) {
     coresTema.push([n, hex]);
   }
 
-  for (const nome of [...nomesDeTema].sort()) {
-    if (ehFora(nome)) continue;
+  const extras = Object.keys(vals).filter((n) => EXTRAS.some((re) => re.test(n)));
+  for (const nome of [...new Set([...nomesDeTema, ...extras])].sort()) {
+    if (ehFora(nome) && !EXTRAS.some((re) => re.test(nome))) continue;
     const v = vals[nome];
     if (!v) {
       semValor.push(nome);
@@ -221,6 +243,11 @@ for (const { coluna, seletor } of TEMAS) {
       hex = novo;
     }
     coresTema.push([nome, hex]);
+  }
+
+  for (const [nosso, alvo] of Object.entries(NOSSOS)) {
+    const base = coresTema.find(([n]) => n === alvo);
+    if (base) coresTema.push([nosso, base[1]]);
   }
 
   for (const [nome, hex] of coresTema) {
