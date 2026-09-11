@@ -43,3 +43,7 @@ Thumbs.db
 # e um importer ausente é motivo de recusa.
 apps/desktop
 !apps/desktop/package.json
+
+# referências visuais do Discord (3 GB de imagens) — material de trabalho do
+# plano de paridade, nunca entra em imagem
+docs/referencias-discord

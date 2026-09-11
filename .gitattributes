@@ -4,3 +4,10 @@
 *.sh text eol=lf
 Dockerfile text eol=lf
 *.Dockerfile text eol=lf
+
+# Referências do Discord: 3 GB de imagem e ~60 MB de JSON/HTML coletados. Fora
+# das estatísticas de linguagem do GitHub, e sem diff textual nos dados gerados.
+docs/referencias-discord/** linguist-documentation
+docs/referencias-discord/**/*.json -diff
+docs/referencias-discord/**/*.html -diff
+docs/referencias-discord/**/*.css -diff
