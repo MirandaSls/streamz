@@ -21,6 +21,7 @@ import {
 import { corDoAvatar } from "@/components/ui/avatar-cores";
 import Marca from "@/components/ui/Marca";
 import Tooltip from "@/components/ui/Tooltip";
+import { Badge } from "@/components/ui/primitivos";
 import { MENU_WIDTH, MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
 import { useT } from "@/lib/i18n";
 import { submenuNotificacoes, submenuSilenciar } from "@/lib/notification-menu";
@@ -70,7 +71,10 @@ function ImagemDaConversa({ dm }: { dm: DMChannelView }) {
     <span
       aria-hidden="true"
       style={{ backgroundColor: corDoAvatar(outro.id) }}
-      className="grid h-full w-full place-items-center font-semibold text-white"
+      // fundo é uma cor arbitrária do hash — nunca sabemos se é clara ou
+      // escura — então o texto usa o token de overlay (branco garantido), não
+      // `text-white` cru: mesmo padrão do `Avatar.tsx`/`CardDeApp.tsx`.
+      className="grid h-full w-full place-items-center font-semibold text-text-overlay-light"
     >
       {displayNameOf(outro).slice(0, 2).toUpperCase()}
     </span>
@@ -99,39 +103,13 @@ function SeloDeVoz() {
 }
 
 /**
- * Badge de menção/não lidas, canto **inferior** direito (o selo de voz mora no
- * superior — ver `SeloDeVoz`).
- *
- * Miolo de 16px com o número em 12px, e o anel escuro de 3px fica **por fora**
- * (`ring`, não `border`): com borda, o anel comia o miolo — sobravam 12px para
- * um número de 11px, e o "1" saía cortado embaixo, como na print. É a medida
- * do Discord: pílula de 16 de altura, mínimo 16 de largura, 4px de folga
- * lateral.
- *
- * Mora **fora** do botão. O botão precisa de `overflow-hidden` (é ele que faz
- * a foto seguir o raio 12), e enquanto o badge era filho dele o pedaço que
- * passa da caixa de 40 — os 2px de canto e os 3px de anel — sumia recortado.
- * Quem ancora agora é a caixa de 40 sem corte do `RailItem`. `pointer-events-
- * none` porque ele cobre o canto do botão: o clique tem que continuar caindo
- * no servidor, não no número.
- */
-function Badge({ count }: { count: number }) {
-  if (count <= 0) return null;
-  return (
-    <span
-      aria-label={`${count} ${count === 1 ? "menção" : "menções"}`}
-      className="pointer-events-none absolute -bottom-0.5 -right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[12px] font-bold leading-none text-control-critical-primary-text-default ring-[3px] ring-background-base-lowest"
-    >
-      {count > 99 ? "99+" : count}
-    </span>
-  );
-}
-
-/**
- * Um item do rail: quadrado arredondado de raio 12 — a mesma forma em repouso,
- * hover e ativo, como no Discord; o que muda é só a cor e a "pílula" branca à
- * esquerda (ponto se há não lido, curta no hover, alta quando ativo). Mais o
- * tooltip.
+ * Um item do rail: círculo em repouso que vira squircle (raio 16,
+ * `--radius-lg`, `rounded-2xl`) no hover e quando ativo — o morfo do Discord
+ * (cartão 1b-rail; o CSS bruto animava o blob por SVG, não achamos o par
+ * exato de `border-radius`, então a aproximação é a troca de classe Tailwind
+ * pedida pelo cartão, não um valor medido em `.css`). O que muda junto é a
+ * cor e a "pílula" branca à esquerda (ponto se há não lido, curta no hover,
+ * alta quando ativo). Mais o tooltip.
  */
 function RailItem({
   label,
@@ -183,8 +161,12 @@ function RailItem({
         aria-hidden="true"
         /* 4px de largura, medido. A **altura** de 40 no ativo já estava certa:
           a auditoria dizia 36-38, e a medição em 7 prints do Discord deu 40 nos
-          sete — a pílula vai de ponta a ponta do botão. */
-        className={`absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r-full bg-paper transition-all duration-200 ${
+          sete — a pílula vai de ponta a ponta do botão. Cor `--interactive-
+          text-active` (#fbfbfb): era `bg-paper` (#fdfdfb), a cor de MARCA do
+          Streamz (wordmark/assets) — não é o mesmo token, e pílula de rail não
+          é marca (cartão 1b-rail, origem: `unreadPill__972a0` no CSS bruto e
+          medir.py rail-tooltip.png×101733.png linha 182). */
+        className={`absolute left-0 top-1/2 w-1 -translate-y-1/2 rounded-r-full bg-interactive-text-active transition-all duration-200 ${
           active ? (lado === 48 ? "h-[48px]" : "h-10") : unread ? "h-2 group-hover:h-5" : "h-0 group-hover:h-5"
         }`}
       />
@@ -200,8 +182,19 @@ function RailItem({
             {...dados}
             aria-label={unread && !active ? `${label} (não lido)` : label}
             aria-current={active ? "page" : undefined}
+            // `redondo` (a bolha de conversas do celular) é círculo sempre —
+            // é a forma que a separa de "servidor" (ver o comentário da prop).
+            // Todo o resto nasce círculo e vira squircle (`--radius-lg`,
+            // `rounded-2xl`) no hover e quando ativo, como no Discord: aqui o
+            // `rounded-xl` fixo (12px, `--radius-md`) desenhava sempre a forma
+            // do estado ativo, e o ícone de servidor em repouso nunca era
+            // círculo.
             className={`relative grid place-items-center overflow-hidden text-[15px] font-semibold transition-all duration-200 ${
-              redondo ? "rounded-full" : "rounded-xl"
+              redondo
+                ? "rounded-full"
+                : active
+                  ? "rounded-2xl"
+                  : "rounded-full group-hover:rounded-2xl focus-visible:rounded-2xl"
             } ${caixa} ${
               active
                 ? "bg-brand-500 text-control-primary-text-default"
@@ -214,7 +207,25 @@ function RailItem({
             {emVoz && <SeloDeVoz />}
           </button>
         </Tooltip>
-        <Badge count={mentions} />
+        {/*
+          Badge de menção/não lidas — o primitivo `Badge` (`tipo="numero"`,
+          `recorte`) é a mesma medida que este componente desenhava à mão
+          (miolo 16, anel de 3px na superfície de baixo), mas com o token
+          certo de texto (`--badge-text-default` #fbfbfb, não o branco puro
+          que estava aqui). O primitivo não tem `aria-label` nem posição — por
+          isso o wrapper, que mora **fora** do botão (ele tem
+          `overflow-hidden`, é o que faz a foto seguir o raio; o badge
+          transborda o canto) com `pointer-events-none`: o clique tem que
+          continuar caindo no servidor, não no número.
+        */}
+        {mentions > 0 && (
+          <span
+            aria-label={`${mentions} ${mentions === 1 ? "menção" : "menções"}`}
+            className="pointer-events-none absolute -bottom-0.5 -right-0.5"
+          >
+            <Badge tipo="numero" valor={mentions} recorte />
+          </span>
+        )}
       </div>
     </div>
   );
@@ -226,7 +237,8 @@ function RailItem({
  * `compacto` é o rail do celular. As medidas vêm da captura oficial
  * `docs/Reference/mobile/discord-mobile-servidor-2024.png` (1,9707 px/pt, ver
  * `MEDIDAS.md` §4): rail de **72pt**, ícone de **48pt**, folga vertical de
- * ~7–8pt — contra 80/40/10 do desktop. Não é enfeite: 40pt é um alvo de toque
+ * ~7–8pt — contra 72/40/10 **px** do desktop (`--custom-guild-list-width`,
+ * unidade diferente, coincidência de valor). Não é enfeite: 40pt é um alvo de toque
  * abaixo do piso das duas plataformas, e o rail do telefone é a única
  * navegação entre servidores que existe ali.
  */
@@ -385,11 +397,22 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
       aria-label="Servidores"
       /* sem `pt`: no Discord o topo do primeiro botão encosta na barra de
           título. Os nossos 12px de folga faziam a rail começar mais baixo que
-          a coluna ao lado, e a diferença aparece na horizontal do topo. */
-      className={`flex shrink-0 flex-col items-center overflow-y-auto bg-background-base-lowest shadow-[inset_-1px_0_0_theme(colors.rail-divider)] ${
+          a coluna ao lado, e a diferença aparece na horizontal do topo.
+
+          Largura 72px = `--custom-guild-list-width` (avatar 40 + padding 16
+          dos dois lados, `.wrapper_ef3116`) — media 80px (`w-20`) sobrava
+          8px de padding. A borda de 1px entre a rail e a coluna de canais é
+          `var(--app-frame-border)` direto (não `theme(colors.app-frame-
+          border)`): a função de opacidade do token só resolve `<alpha-value>`
+          dentro do pipeline de cor do Tailwind, e o `theme(colors.rail-
+          divider)` antigo referenciava um nome que não existe mais em
+          `tokens.gerados.ts` desde a migração da ADR-0009 — a classe inteira
+          não compilava e a rail ficava sem nenhuma linha (cartão 1b-rail,
+          divergência "amigos-online"). */
+      className={`flex shrink-0 flex-col items-center overflow-y-auto bg-background-base-lowest shadow-[inset_-1px_0_0_var(--app-frame-border)] ${
         // no celular não há card de usuário flutuando por cima da rail: o
         // respiro de 78px existe só para ele, e ali sobraria um buraco no fim
-        compacto ? "w-[72px] gap-2 pb-3" : "w-20 gap-2.5 pb-[78px]"
+        compacto ? "w-[72px] gap-2 pb-3" : "w-[72px] gap-2.5 pb-[78px]"
       }`}
     >
       {/*
