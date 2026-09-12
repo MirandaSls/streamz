@@ -126,6 +126,30 @@ export default function AppPage() {
     return <ShellMobile />;
   }
 
+  // ── Coluna 4 do modo servidor: busca, thread OU lista de membros, uma por vez.
+  //
+  // As três não moram no mesmo lugar do leiaute, e é isto que a onda 1 mudou.
+  // No Discord o cabeçalho do canal **atravessa a área de conteúdo inteira** e a
+  // lista de membros começa embaixo dele (print 1:1 `2026-09-02 180835`: em
+  // y=57 a barra é #1a1a1e contínuo até a borda da janela, com a busca em
+  // x1662–1905 sobre a coluna de membros, e a divisória da coluna, #29292d em
+  // x=1651, só aparece a partir de y=82). Então a lista de membros entra
+  // **dentro** da região do cabeçalho, com 49px de recuo no topo.
+  //
+  // Busca e thread continuam irmãs: elas têm cabeçalho próprio de 49px que
+  // encosta no da conversa e continua a linha — é a mesma regra já escrita para
+  // o modo DM no §6.6 do PROCESSO, e por isso o cabeçalho para na borda delas.
+  const buscaOuThread = !activeChannel ? null : buscaAberta ? (
+    <SearchPanel guildId={activeChannel.guildId} />
+  ) : threadParentId ? (
+    <ThreadPanel channelId={activeChannel.id} />
+  ) : null;
+  // O canal de voz é um canal aberto como outro qualquer: busca e thread da
+  // conversa dele e a mesma lista de membros do servidor — que ali cede a vez à
+  // conversa da call quando as duas estão ligadas (`paineis-da-call.ts`).
+  const membros =
+    activeChannel && !buscaAberta && !threadParentId && listaDeMembros ? <MemberList /> : null;
+
   // `min-w` no shell: abaixo de ~940px o cabeçalho da conversa quebrava — o
   // título espremia os ícones, sobrava um caractere solto à esquerda e o
   // placeholder do composer partia em três linhas. O Discord também tem um piso
@@ -174,13 +198,28 @@ export default function AppPage() {
         </>
       ) : view === "dm" ? (
         <>
-          <DMView />
+          {/*
+            Região de conteúdo do modo DM. O `relative` é a âncora do cabeçalho
+            do `HeaderBar`, que atravessa a área inteira; a coluna 4 da conversa
+            (perfil em 1:1, participantes em grupo) é montada dentro do `DMView`,
+            embaixo dele, como o §6.6 do PROCESSO descreve. A geometria não muda:
+            o `<main>` do `DMView` continua sendo o único filho que cresce.
+          */}
+          <div className="relative flex min-w-0 flex-1">
+            <DMView />
+          </div>
           {activeDM && buscaAberta && <SearchPanel guildId={null} />}
           {/* thread funciona em DM como em qualquer canal (ADR-0001) */}
           {activeDM && !buscaAberta && threadParentId && <ThreadPanel channelId={activeDM.id} />}
         </>
       ) : (
         <>
+          {/*
+            Região de conteúdo do modo servidor: a conversa e a lista de
+            membros, com o `relative` que ancora o `HeaderBar` por cima das
+            duas. Busca e thread ficam fora dela (ver `buscaOuThread`).
+          */}
+          <div className="relative flex min-w-0 flex-1">
           {voiceChannel ? (
             // No canal de voz o palco ocupa a área e a conversa do canal abre
             // numa **coluna à direita** — o oposto do que o Discord faz em
@@ -211,20 +250,22 @@ export default function AppPage() {
           ) : (
             <ChatView />
           )}
-
-          {/* Coluna 4: busca, thread OU lista de membros — uma por vez. Não há
-              caso especial de voz: o canal de voz é um canal aberto como outro
-              qualquer, com busca e thread na conversa dele, e a mesma lista de
-              membros do servidor — que ali cede a vez à conversa da call quando
-              as duas estão ligadas (`paineis-da-call.ts`). */}
-          {activeChannel &&
-            (buscaAberta ? (
-              <SearchPanel guildId={activeChannel.guildId} />
-            ) : threadParentId ? (
-              <ThreadPanel channelId={activeChannel.id} />
-            ) : (
-              listaDeMembros && <MemberList />
-            ))}
+          {membros && (
+            /*
+              O recuo de 49px é o lugar do cabeçalho, e só existe quando há
+              cabeçalho: o palco do canal de voz não tem `HeaderBar`, e ali a
+              lista continua começando no topo, como antes.
+              A borda é a divisória do print `180835` (#29292d em x=1651, de
+              y=82 para baixo): `--border-subtle` (#94949c a 12%) sobre o
+              `#1a1a1e` da coluna dá #29292a. Ela fica no invólucro, e não na
+              `MemberList`, para começar embaixo do cabeçalho junto com a lista.
+            */
+            <div className={`flex shrink-0 ${voiceChannel ? "" : "pt-[49px]"}`}>
+              <div className="flex border-l border-border-subtle">{membros}</div>
+            </div>
+          )}
+          </div>
+          {buscaOuThread}
         </>
       )}
 
