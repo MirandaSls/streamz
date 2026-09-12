@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ChevronDown, Headphones, HeadphoneOff, Mic, MicOff, Settings } from "@/components/ui/icones";
+import { ChevronDown, Headphones, HeadphoneOff, Mic, MicOff, Phone, Settings, Volume2 } from "@/components/ui/icones";
 import { customStatusOf, displayNameOf } from "@streamz/shared";
 import Avatar, { STATUS_LABEL } from "@/components/ui/Avatar";
 import PopoverFlutuante from "@/components/ui/PopoverFlutuante";
@@ -16,6 +16,7 @@ import {
 import { useAuth } from "@/stores/auth";
 import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
 import { anchorOf, useUI } from "@/stores/ui";
+import { useVoice } from "@/stores/voice";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 
 /** Botão de ícone do rodapé (32px, hover claro). */
@@ -129,6 +130,12 @@ export default function UserFooter() {
   const deafened = useVoicePrefs((s) => s.deafened);
   const toggleMute = useVoicePrefs((s) => s.toggleMute);
   const toggleDeafen = useVoicePrefs((s) => s.toggleDeafen);
+  // mesma leitura que `VoiceConnectedBar`: `channelId` é "estou numa chamada
+  // agora"; `guildId` distingue canal de voz de servidor (guildId) de call de
+  // DM (guildId nulo).
+  const vozChannelId = useVoice((s) => s.channelId);
+  const vozGuildId = useVoice((s) => s.guildId);
+  const emVoz = Boolean(vozChannelId);
 
   if (!user) return null;
   // o status personalizado chega por presença, não pelo `user` da sessão
@@ -140,10 +147,21 @@ export default function UserFooter() {
      * O card **flutua**: sai do fluxo da coluna e a lista rola por trás dele.
      *
      * Era um rodapé em fluxo, encostado nas três bordas e da largura inteira da
-     * coluna. Medido no print do Discord, o card de lá tem 58px de altura, raio
-     * de 8px, borda de 1px e 10px de recuo dos três lados — e a lista continua
-     * atrás: dá para ver um avatar cortado pela borda de cima do card, e o
-     * divisor da coluna reaparece embaixo dele.
+     * coluna. `.panels__5e434` (css-bruto/307314.9ca6eb41da8da923.css) é este
+     * mesmo cartão no Discord: `background: var(--background-gradient-highest,
+     * var(--background-base-low))`, `border: 1px solid var(--border-muted)`,
+     * `border-radius: var(--radius-sm)` (8px), posição absoluta com
+     * `--custom-panels-spacing` (= `min(var(--space-xs), var(--space-8))` =
+     * 8px, os dois iguais) como `bottom`/`inset-inline-start`, e a largura
+     * `calc(100% - var(--custom-panels-spacing)*2)` — 8px de recuo dos três
+     * lados, não 10 (era `border-subtle` e `2.5` = 10px antes; a régua desta
+     * onda é o CSS, e VARIAVEIS.md:153 documenta a mesma dupla borda/recuo). A
+     * lista continua atrás: dá para ver um avatar cortado pela borda de cima do
+     * card, e o divisor da coluna reaparece embaixo dele.
+     *
+     * A altura de 58px da linha principal (abaixo) é medida em print (ver
+     * `medidas` da entrega): o CSS não fixa altura, o cartão cresce com o
+     * conteúdo.
      *
      * A diferença não é enfeite. Encostado nas bordas, o painel lê como o fim da
      * coluna; recuado, lê como uma peça por cima dela — que é o que ele é, já
@@ -154,7 +172,7 @@ export default function UserFooter() {
      */
     <div
       ref={painel}
-      className="pointer-events-auto absolute inset-x-2.5 bottom-2.5 z-20 flex flex-col overflow-hidden rounded-lg border border-border-subtle bg-background-base-low"
+      className="pointer-events-auto absolute inset-x-2 bottom-2 z-20 flex flex-col overflow-hidden rounded-lg border border-border-muted bg-background-base-low"
     >
       {/* f-voz: a barra da call sobe junto, como parte da mesma pilha flutuante */}
       <VoiceConnectedBar />
@@ -177,11 +195,34 @@ export default function UserFooter() {
             <span className="block truncate text-base font-semibold leading-[19px] text-text-strong">
               {displayNameOf(user)}
             </span>
-            {/* o status personalizado tem prioridade sobre o rótulo do estado:
-                é o que o Discord mostra quando a pessoa escreveu algo */}
-            <span className="block truncate text-xs leading-[13px] text-text-muted">
-              {customStatusOf(vivo) ?? STATUS_LABEL[status]}
-            </span>
+            {/*
+              Conectado à voz **substitui** o status (custom incluso): medido
+              em `2026-08-31 101842.png` ("🔊 Em voz", canal de servidor) e
+              `2026-08-31 160106.png` ("📞 Em uma chamada", call de DM) — as
+              duas em verde, no lugar da linha de status de sempre. O ícone
+              muda com `guildId` (canal de voz vs. chamada de DM), como
+              `VoiceConnectedBar` já distingue os dois pelo mesmo campo.
+
+              Cor `text-feedback-positive` (`#5eb479`), não `status-positive`
+              (`#3d9e60`, a bolinha "Disponível") — são tokens vizinhos, mas
+              não o mesmo; herdado do cartão 1i, que já tinha isolado os dois.
+            */}
+            {emVoz ? (
+              <span className="flex items-center gap-1 truncate text-xs leading-[13px] text-text-feedback-positive">
+                {vozGuildId ? (
+                  <Volume2 size={12} className="shrink-0" aria-hidden="true" />
+                ) : (
+                  <Phone size={12} className="shrink-0" aria-hidden="true" />
+                )}
+                <span className="truncate">{vozGuildId ? "Em voz" : "Em uma chamada"}</span>
+              </span>
+            ) : (
+              // o status personalizado tem prioridade sobre o rótulo do estado:
+              // é o que o Discord mostra quando a pessoa escreveu algo
+              <span className="block truncate text-xs leading-[13px] text-text-muted">
+                {customStatusOf(vivo) ?? STATUS_LABEL[status]}
+              </span>
+            )}
           </span>
         </button>
 

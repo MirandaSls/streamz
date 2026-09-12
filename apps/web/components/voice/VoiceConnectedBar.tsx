@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { AudioLines, PhoneOff, RotateCw, Signal, SignalZero, Video, VideoOff } from "@/components/ui/icones";
+import { AudioLines, Gamepad2, PhoneOff, RotateCw, Signal, SignalZero, Video, VideoOff } from "@/components/ui/icones";
 import Tooltip from "@/components/ui/Tooltip";
 import PopoverFlutuante from "@/components/ui/PopoverFlutuante";
 import { BotaoDeIcone } from "@/components/ui/primitivos";
@@ -35,18 +35,35 @@ import { rotuloDoPing, useVoicePing, type QualidadeDeVoz } from "@/stores/voice-
  * alterna direto: quem clica ali está em dúvida, e a dúvida se responde falando
  * e vendo a barra mexer.
  *
- * A fileira de baixo é só ícone, sem rótulo. Dois botões com texto ("Vídeo",
- * "Tela") pareciam mais claros e são menos: o rótulo empurra o alvo clicável
- * para menos da metade da largura e obriga a abreviar quando a coluna encolhe.
+ * A fileira de baixo é **quatro cápsulas de tamanho fixo**, não mais
+ * `flex-1` esticando para preencher a barra. Medido nas prints `2026-08-31
+ * 101842` (linha y=819 e coluna x=200 y=804–833) e `160106` (repete as
+ * mesmas quatro): câmera, tela, atividade, soundboard, 74×30 cada, 10px de
+ * vão, ocupando x=24–349. Tínhamos 3 controles esticados (101 e 102px, e um
+ * terceiro sem cápsula em x≈250–259, porque `flex-1` cresce até a barra
+ * acabar). "Atividade" não existe no produto (§6.6): fica visível a 50%,
+ * com a dica "(em breve)", em vez de sumir e a fileira virar 3 outra vez.
+ *
+ * Sem rótulo de texto: dois botões com texto ("Vídeo", "Tela") pareciam mais
+ * claros e são menos: o rótulo empurra o alvo clicável para menos da metade
+ * da largura e obriga a abreviar quando a coluna encolhe.
  *
  * O ícone de sinal responde ao **ping** (`useVoicePing`, medido a cada 2 s):
- * tooltip "Ping: N ms" no hover e a cor pela qualidade, como no Discord —
- * verde (o da barra), amarelo e vermelho são os tokens que já existem.
+ * tooltip "Ping: N ms" no hover e a cor pela qualidade — o verde de
+ * "conectado" é `--icon-feedback-positive` (#5eb479), medido no miolo do
+ * ícone e no selo da print `101842` (linha y=774, x=39 e x=44); amarelo e
+ * vermelho são os tokens de aviso/perigo que já existiam (não remedidos
+ * nesta rodada).
  */
 
-/** Cor do selo do sinal pela qualidade; sem medida, o verde de "conectado". */
+/** Cor do selo do sinal pela qualidade; "excelente" = verde de "conectado"
+ *  medido (ver comentário do componente); boa/ruim sem medida nesta rodada.
+ *  O fundo do selo também estava errado por tabela: `bg-status-positive/15`
+ *  sobre `#202024` dava `#24332c`, e o medido é `#1d2726` (print `101842`,
+ *  linha y=774 x=28–36) — a mesma opacidade sobre `icon-feedback-positive`
+ *  chega mais perto (a opacidade exata de 15% não foi remedida, só o token). */
 const COR_DO_SINAL: Record<QualidadeDeVoz, string> = {
-  excelente: "bg-status-positive/15 text-status-positive",
+  excelente: "bg-icon-feedback-positive/15 text-icon-feedback-positive",
   boa: "bg-status-warning/15 text-status-warning",
   ruim: "bg-status-danger/15 text-status-danger",
 };
@@ -102,6 +119,13 @@ export default function VoiceConnectedBar() {
         O que torna a junção segura: a seção do usuário **não se move** — em
         chamada ou fora dela ela ocupa a mesma faixa, e é a seção de voz que
         cresce para cima. Por isso o respiro fixo das listas continua valendo.
+
+        Altura: Discord 163px (coluna x=200 do #202024, y=744–906 na print
+        `101842`); a fileira de ações caindo de 32 para os 30 medidos (ver
+        abaixo) tira 2px daqui, mas não fecha os 170 medidos antes (`coluna
+        x=200 y=900–1069` em `painel-usuario-voz.png`) até 163 — o resto do
+        respiro (`pt-[15px]`/`pb-[14px]`/`gap-3`) não tem número medido
+        próprio, só o total, então não mexi nele: ver "faltando".
       */
       className="flex shrink-0 flex-col gap-3 border-b border-border-subtle px-3.5 pb-[14px] pt-[15px]" data-voice-bar>
       <div className="flex items-center gap-1">
@@ -145,7 +169,11 @@ export default function VoiceConnectedBar() {
                 corta sem reticências */}
             <span
               className={`truncate text-sm font-semibold ${
-                falhou ? "text-status-danger" : status === "connecting" ? "text-text-muted" : "text-status-positive"
+                // verde medido `#5eb479` = `--text-feedback-positive` (mesmo
+                // par que `CanalDeVoz.tsx` já usa para "Em voz"); tínhamos
+                // `--status-positive` (`#3d9e60`, o mesmo do bolinha "online",
+                // mais escuro e menos saturado — print `101842` linha y=774).
+                falhou ? "text-status-danger" : status === "connecting" ? "text-text-muted" : "text-text-feedback-positive"
               }`}
             >
               {falhou ? "Erro de voz" : status === "connecting" ? "Conectando…" : "Voz conectada"}
@@ -209,16 +237,21 @@ export default function VoiceConnectedBar() {
         </div>
       )}
 
-      {/* vão de 10px entre os botões, como no Discord — tínhamos 4, e com o raio
-          de 8 eles quase se encostavam */}
-      <div className="flex items-stretch gap-2.5">
-        <Tooltip label={camOn ? "Desligar câmera" : "Ligar câmera"} className="min-w-0 flex-1">
+      {/* Quatro cápsulas de 74×30 com 10px de vão (`gap-2.5`), medidas nas
+          prints `101842`/`160106` — ver o comentário do componente. Nada mais
+          cresce por `flex-1`: cada slot tem o tamanho medido, e o que sobra
+          de largura na coluna fica vazio à direita, como no Discord (a
+          fileira não "estica" para preencher o painel). */}
+      <div className="flex items-center gap-2.5">
+        {/* Câmera: única das quatro que é só deste arquivo, então o tamanho
+            vai direto na classe (74×30, sem wrapper). */}
+        <Tooltip label={camOn ? "Desligar câmera" : "Ligar câmera"} className="h-[30px] w-[74px] shrink-0">
           <button
             type="button"
             onClick={() => void toggleCam()}
             aria-pressed={camOn}
             aria-label={camOn ? "Desligar câmera" : "Ligar câmera"}
-            className={`grid h-8 w-full place-items-center rounded-lg transition ${
+            className={`grid h-full w-full place-items-center rounded-lg transition ${
               camOn
                 ? "bg-border-strong text-text-strong"
                 : "bg-border-normal/60 text-text-subtle hover:bg-border-normal hover:text-text-strong"
@@ -227,11 +260,37 @@ export default function VoiceConnectedBar() {
             {camOn ? <Video size={20} /> : <VideoOff size={18} />}
           </button>
         </Tooltip>
-        <ScreenShareButton variante="largo" />
-        {/* Terceiro botão da fileira, como no print `2026-09-08 103452` — lá o
-            terceiro é "atividades" e o quarto é o soundboard; atividades não
-            existe aqui (§6.6), então o painel de sons ocupa a vaga que sobra. */}
-        <BotaoDeSons variante="largo" />
+
+        {/* `ScreenShareButton`/`BotaoDeSons` não estão na lista deste cartão
+            (§ escopo): a `variante="largo"` de cada um cresce por `flex-1`
+            **próprio**, hardcoded no arquivo deles. O invólucro `flex` de
+            74×30 abaixo dá a esse `flex-1` um pai de largura fixa para
+            preencher — 74 de largura sai certo — mas a **altura** dos dois é
+            `h-8` (32px) escrita lá dentro, 2px acima dos 30 medidos aqui:
+            não dá para consertar sem tocar nos dois arquivos. Ver "faltando". */}
+        <div className="flex h-[30px] w-[74px] shrink-0">
+          <ScreenShareButton variante="largo" />
+        </div>
+
+        {/* "Atividade": terceiro botão do Discord nesta fileira (`101842`/
+            `160106`: câmera, tela, atividade, soundboard) e o único que o
+            Streamz não tem — não existe palco de atividade no produto, e
+            simular uma função que não existe é pior que a ausência (§6.6,
+            mesma regra do "presente"/"apps" do composer). Fica visível a 50%
+            (via `desabilitado`), com a dica explicando o motivo, no lugar do
+            terceiro ícone solto que virava a vaga do soundboard. */}
+        <BotaoDeIcone
+          rotulo="Atividades"
+          motivoDesabilitado="Atividades (em breve)"
+          desabilitado
+          icone={<Gamepad2 size={20} aria-hidden="true" />}
+          fundo="sempre"
+          style={{ width: 74, height: 30 }}
+        />
+
+        <div className="flex h-[30px] w-[74px] shrink-0">
+          <BotaoDeSons variante="largo" />
+        </div>
       </div>
     </div>
   );

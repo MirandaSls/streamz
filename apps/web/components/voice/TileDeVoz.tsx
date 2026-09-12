@@ -163,8 +163,19 @@ export function AvatarDeChamada({
  *
  * O fundo é a **cor dominante da foto** (ver `lib/cor-dominante.ts`), como no
  * Discord: medido na print `203909`, o fundo do tile e o fundo do avatar são o
- * mesmo pixel. Quem não tem foto fica na cor do avatar sem imagem, que já é
- * estável por id.
+ * mesmo pixel — mas **só quando há vídeo ao vivo**. Sem vídeo (ninguém com
+ * câmera aberta), o Discord tem tile escuro e avatar redondo centrado
+ * (~80px), como a loja mostra (`lojas/appstore-iphone-pt-br/03.png`; proporção
+ * e presença, não px — é imagem de catálogo). O tile inteiro pintado com
+ * `corDoAvatar(userId)` era o bug: a `Avatar` de baixo, sem foto, cai no
+ * **mesmo** hash da **mesma** pessoa (`corDoAvatar` de novo) — as duas cores
+ * saem idênticas e o círculo do avatar desaparece contra o próprio fundo,
+ * lendo como "iniciais gigantes boiando num retângulo colorido" em vez de um
+ * avatar normal num tile escuro (visto em `m-voz.png`: `#1c9330` em 366×614,
+ * linha y=400 e coluna x=195). Por isso `usaFundoDaFoto` só é `true` com
+ * `video` — aí a cor dominante existe para preencher a moldura atrás do
+ * `object-contain`; sem vídeo o tile some no neutro que o `TileDeConvite`
+ * (vazio) já usa, e só a `Avatar` fica colorida.
  */
 export function VoiceTile({
   tile,
@@ -226,6 +237,10 @@ export function VoiceTile({
   const fundo = useCorDominante((perfil ?? state.user).avatarUrl, corDoAvatar(state.user.id));
   /** só mostra vídeo quando há faixa: tela fechada não tem o que desenhar. */
   const video = publication?.track ? publication : null;
+  /** ver o comentário do componente: a cor dominante só pinta o tile quando
+   *  há vídeo de verdade atrás dela; sem vídeo o tile fica no neutro do
+   *  palco, senão ele se camufla com a cor da `Avatar` sem foto. */
+  const usaFundoDaFoto = Boolean(video);
 
   return (
     <div
@@ -241,17 +256,21 @@ export function VoiceTile({
         abrirMenuDeParticipante(e.clientX, e.clientY, state.user, { sou, channelId });
       }}
       aria-label={`${nome}${tela ? " — tela compartilhada" : ""}`}
-      // O tile **emerge** do palco na cor da pessoa (ver o comentário do
-      // componente). Sem foto, `corDoAvatar` — e com vídeo o `<video>` cobre
-      // tudo, então a cor só aparece nas bordas do `object-contain`.
+      // O tile **emerge** do palco na cor da pessoa só quando há vídeo (ver o
+      // comentário do componente): o `<video>` cobre tudo, e a cor dominante
+      // só aparece nas bordas do `object-contain`. Sem vídeo o fundo é o
+      // neutro do palco — a `Avatar` de baixo é quem fica na cor do hash.
       //
       // Moldura que não existe mais: nem a linha preta, nem a borda verde de
       // quem fala. No Discord o tile não tem borda em estado nenhum — o sinal
       // de fala mora no anel do avatar, que é onde o olho já está.
-      style={{ backgroundColor: fundo, ...(raio === undefined ? {} : { borderRadius: raio }) }}
+      style={{
+        ...(usaFundoDaFoto ? { backgroundColor: fundo } : {}),
+        ...(raio === undefined ? {} : { borderRadius: raio }),
+      }}
       className={`group relative h-full w-full overflow-hidden transition ${
         raio === undefined ? "rounded-lg" : ""
-      }`}
+      } ${usaFundoDaFoto ? "" : "bg-chat-background-default"}`}
     >
       {video ? (
         <VideoDaFaixa publication={video} espelhar={sou && !tela} ajuste={ajusteDoVideo} />
