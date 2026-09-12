@@ -41,16 +41,20 @@ import { useVoice } from "@/stores/voice";
 /**
  * Título de seção da lista ("Disponível — 1").
  *
- * Medido no print do Discord: 14px, caixa mista, semibold, na cor muted, com o
- * texto a 20px da borda do painel (o avatar das linhas fica a 18). Era 12px em
- * caixa alta, o que dava um rótulo de categoria de canal, e não o do Discord.
+ * Medido no print 1:1 do Discord (180835, x1668–1790 y232–248 e x1668–1790
+ * y26–42 na captura canal-texto): 14px, caixa mista, semibold, SEMPRE
+ * `--channels-default` (#81828a) — inclusive na seção de um cargo hoisted
+ * ("Administrador — 1" no nosso app saía na cor do cargo, #e74c3c; no Discord
+ * o cabeçalho fica cinza igual ao de "Offline"; só o NOME do membro dentro da
+ * seção herda a cor do cargo). Por isso este componente não recebe mais cor:
+ * era `text-text-muted` (#96979e, tom errado) com a cor do cargo passada por
+ * fora — as duas coisas divergiam do print. Texto a 20px da borda do painel
+ * (o avatar das linhas fica a 18). Era 12px em caixa alta, o que dava um
+ * rótulo de categoria de canal, e não o do Discord.
  */
-function Section({ label, count, color }: { label: string; count: number; color?: string | null }) {
+function Section({ label, count }: { label: string; count: number }) {
   return (
-    <h3
-      style={color ? { color } : undefined}
-      className="mt-6 pb-1 pl-5 pr-2 text-sm font-semibold leading-5 text-text-muted"
-    >
+    <h3 className="mt-6 pb-1 pl-5 pr-2 text-sm font-semibold leading-5 text-channels-default">
       {label} — {count}
     </h3>
   );
@@ -266,16 +270,17 @@ export default function MemberList() {
             />
             {falando.has(m.user.id) && <AnelDeFala />}
           </span>
-          {/* nome em 16px na cor muted (medido: o mesmo cinza do título da
-              seção), e a sub-linha "Em voz" em 12px com o alto-falante verde.
-              Sem atividade/jogo: não existe aqui. */}
+          {/* nome em 16px: em repouso já é `text-default` (#efeff1), medido
+              pixel a pixel no print 1:1 ("Md", x1710 y172–178 do 180835) — não
+              é um cinza "muted" que clareia só no hover, como o item de canal.
+              O hover, então, não muda a cor do nome (só o fundo da linha). A
+              sub-linha "Em voz" em 12px com o alto-falante verde continua; sem
+              atividade/jogo, que não existe aqui (ADR-0009 §8). */}
           <span className="flex min-w-0 flex-col">
             <span className="flex min-w-0 items-center gap-1 text-base leading-5">
               <span
                 style={cor ? { color: cor } : undefined}
-                className={`truncate font-medium ${
-                  destaque ? "text-text-strong" : "text-text-muted group-hover:text-text-default"
-                }`}
+                className={`truncate font-medium ${destaque ? "text-text-strong" : "text-text-default"}`}
               >
                 {nome}
               </span>
@@ -309,13 +314,17 @@ export default function MemberList() {
         </button>
 
         {/*
-          No celular a fileira é **sempre visível** — o dedo não paira —, mas só
-          com "Mensagem": as três de moderação levariam 132px de uma linha de
-          335 e o nome truncava em "betoxip…" (medido em 390×844). Elas
-          continuam no menu de contexto, que no telefone abre pelo toque longo
+          Era "sempre visível" no celular (com só "Mensagem" — as três de
+          moderação levariam 132px de uma linha de 335 e o nome truncava em
+          "betoxip…", medido em 390×844): a revisão mediu o m-membros.png
+          contra a referência do Discord (blog "New Version" e ref desktop) e
+          achou o oposto — nenhum botão fica fixo na linha, nem "Mensagem".
+          Sem `celular:flex`, a fileira só aparece no hover/foco (mouse ou
+          teclado), que no toque não acontece: no celular a ação vira perfil
+          (toque no nome) ou o menu de contexto, que abre por toque longo
           (`AreaDeToqueLongo` envolve o shell inteiro). No desktop nada muda.
         */}
-        <div className="hidden shrink-0 gap-0.5 group-focus-within:flex group-hover:flex celular:flex">
+        <div className="hidden shrink-0 gap-0.5 group-focus-within:flex group-hover:flex">
           {!isMe && (
             <BotaoDeIcone
               rotulo="Mensagem"
@@ -323,7 +332,6 @@ export default function MemberList() {
               tamanho="sm"
               aria-label={`Abrir conversa com ${nome}`}
               onClick={() => void openWith(m.user.id)}
-              className="celular:h-[44px] celular:w-[44px]"
             />
           )}
           {podeAgirSobre(m) && podeCastigar && (
@@ -370,14 +378,19 @@ export default function MemberList() {
   function renderSecao(role: Role, gente: Linha[]) {
     return (
       <div key={role.id}>
-        <Section label={role.name} count={gente.length} color={role.color} />
+        {/* sem `color`: o cabeçalho de grupo de cargo é cinza igual aos
+            demais — ver comentário de Section */}
+        <Section label={role.name} count={gente.length} />
         {gente.map(renderMember)}
       </div>
     );
   }
 
   return (
-    <aside aria-label="Membros" className="flex w-[267px] shrink-0 flex-col bg-background-base-lower">
+    // 264px = `--custom-member-list-width` (VARIAVEIS.md); era 267 (contagem
+    // solta de pixel no print, sem token — a régua de tudo que o Discord
+    // define é a variável, não o resultado de antisserrilhado na borda).
+    <aside aria-label="Membros" className="flex w-[264px] shrink-0 flex-col bg-background-base-lower">
       <div role="list" className="flex-1 overflow-y-auto pb-4">
         {members.length === 0 && (
           <p className="px-4 py-3 text-sm text-text-muted">Nenhum membro por aqui.</p>
