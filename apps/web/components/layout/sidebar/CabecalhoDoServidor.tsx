@@ -3,21 +3,16 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import {
   ChevronDown,
-  ChevronRight,
   FolderPlus,
   LogOut,
+  MoreHorizontal,
   Plus,
   Search,
   Settings,
   UserPlus,
   X,
 } from "@/components/ui/icones";
-import {
-  Permission,
-  guildBannerBackground,
-  guildNotificationScope,
-  type Guild,
-} from "@streamz/shared";
+import { Permission, guildNotificationScope, type Guild } from "@streamz/shared";
 import { BotaoDeIcone } from "@/components/ui/primitivos";
 import { MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
 import { useAuth } from "@/stores/auth";
@@ -38,14 +33,13 @@ import { submenuNotificacoes, submenuSilenciar } from "@/lib/notification-menu";
  * precisa do servidor e das ações de servidor. O único fio entre os dois é o
  * `celular`, que o pai já calcula para o cabeçalho de categoria.
  *
- * As medidas são as que estavam na `ChannelSidebar`; esta passagem não mudou um
- * pixel (as peças são redesenhadas nos cartões seguintes da onda 1).
+ * Redesenhado no cartão 1c-sidebar-cabecalho contra `docs/Reference` (ver o
+ * comentário de cada peça, `BarraDoDesktop` e `FaixaDoCelular`, para a origem
+ * de cada medida).
  */
 export function CabecalhoDoServidor({ celular }: { celular: boolean }) {
   const t = useT();
   const guild = useGuilds((s) => s.guilds.find((g) => g.id === s.activeGuildId) ?? null);
-  /** "N membros" do cabeçalho do celular; a lista já vem carregada pela store. */
-  const totalDeMembros = useGuilds((s) => s.members.length);
   // ── e-configuracoes ── silenciar canal/servidor
   const porEscopo = useNotifications((s) => s.porEscopo);
   const createInvite = useGuilds((s) => s.createInvite);
@@ -100,17 +94,26 @@ export function CabecalhoDoServidor({ celular }: { celular: boolean }) {
     const r = e.currentTarget.getBoundingClientRect();
     const escopo = porEscopo[guildNotificationScope(guild.id)];
     const items: MenuItem[] = [
-      // único item destacado do menu, como no Discord
+      /*
+        Rótulo exato do print `101733` (linha do topo do menu): "Convidar para
+        o servidor", não "Convidar pessoas" — esse é o texto do botão solto do
+        cabeçalho, não o do item de menu. Sem `highlight`: o mesmo print mede
+        texto #f0f0f0 e ícone #aaabb1, a cor de qualquer item comum — o Discord
+        não pinta nenhum item de menu com o accent (ver o comentário de
+        `ContextMenu.tsx` sobre o campo, que ficou sem efeito de propósito).
+      */
       {
-        label: "Convidar pessoas",
+        label: "Convidar para o servidor",
         icon: <UserPlus size={18} />,
-        highlight: true,
         onSelect: () => void createInvite(),
       },
     ];
     if (canModerate) {
       items.push({
-        label: "Configurações do servidor",
+        // rótulo abreviado, medido no mesmo print (linha y=250): "Config. do
+        // servidor", não o nome completo — é o que faz o menu de 220px caber
+        // sem precisar de barra de rolagem horizontal.
+        label: "Config. do servidor",
         icon: <Settings size={18} />,
         onSelect: () => openModal({ kind: "serverSettings", guildId: guild.id }),
       });
@@ -159,14 +162,7 @@ export function CabecalhoDoServidor({ celular }: { celular: boolean }) {
   }
 
   if (celular) {
-    return (
-      <FaixaDoCelular
-        guild={guild}
-        membros={totalDeMembros}
-        onMenu={openGuildMenu}
-        onConvidar={() => void createInvite()}
-      />
-    );
+    return <FaixaDoCelular guild={guild} onMenu={openGuildMenu} onConvidar={() => void createInvite()} />;
   }
   return (
     <BarraDoDesktop
@@ -201,6 +197,11 @@ function BarraDoDesktop({
   onConvidar: () => void;
 }) {
   return (
+    // 49px + borda de 1px: medido em `101733` (coluna x=95, y 34–82 de
+    // conteúdo + linha de borda em 33 e em 83) — a mesma altura do cabeçalho
+    // do canal ao lado (`.container__9293f`, `--custom-channel-header-height`
+    // resolve no mesmo valor nos dois). `shadow-elevation-low` é o
+    // `shadow-header` de antes da onda 0.8: renomeação mecânica, mesmo CSS.
     <div className="flex h-[49px] shrink-0 items-center border-b border-border-subtle pl-5 pr-3 shadow-elevation-low">
       <button
         type="button"
@@ -208,7 +209,7 @@ function BarraDoDesktop({
         disabled={!guild}
         aria-haspopup="menu"
         aria-expanded={menuAberto}
-        className="-ml-1 flex min-w-0 flex-1 items-center gap-1.5 rounded-[4px] py-1 pl-1 pr-2 text-left font-semibold text-text-strong transition hover:bg-interactive-background-hover disabled:cursor-default disabled:hover:bg-transparent"
+        className="-ml-1 flex min-w-0 flex-1 items-center gap-1.5 rounded-[4px] py-1 pl-1 pr-2 text-left text-heading-md font-semibold text-text-strong transition hover:bg-interactive-background-hover disabled:cursor-default disabled:hover:bg-transparent"
       >
         <span className="truncate">{guild?.name ?? "Selecione um servidor"}</span>
         {guild &&
@@ -236,81 +237,78 @@ function BarraDoDesktop({
 /**
  * Cabeçalho da coluna do servidor **no celular**.
  *
- * Medido em `docs/Reference/mobile/discord-mobile-servidor-2024.png` (1,9707
- * px/pt): faixa do servidor no topo da coluna, nome grande com o chevron `›`
- * que abre o menu, a linha "N membros", e a pílula "Buscar" ocupando a largura
- * com dois botões redondos à direita. Depois, uma divisória de 1px.
+ * Redesenhado contra a captura de loja `lojas/imagens/appstore-iphone-pt-br/05.png`
+ * ("Esquadrão da Espada", catálogo — escala desconhecida, então o que sai daqui
+ * é presença, ordem e proporção, nunca px; ver §7 da ADR-0009) e a divergência
+ * `m-inicio` já registrada pelo revisor visual. Duas correções de forma, não só
+ * de vocabulário:
  *
- * Aqui a faixa é a **cor do perfil do servidor** (`bannerColor`, o degradê de
- * `guildBannerBackground`), não uma imagem: o Streamz não tem banner de
- * servidor, tem faixa de cor — e é o que o cartão de prévia já usa. Sem cor
- * escolhida, fica a superfície neutra em vez de um buraco.
+ * 1. **Sem faixa de cor.** A coluna do celular no Discord começa direto no nome
+ *    do servidor — não há banner acima dele nessa tela (banner de servidor é
+ *    outra superfície, o topo do perfil). A versão anterior desenhava um bloco
+ *    de 74px em `guildBannerBackground(bannerColor)`; caiu inteiro, e com ele a
+ *    única leitura de `bannerColor` que existia neste arquivo.
+ * 2. **`...` no lugar do chevron, sem a linha de membros.** O print mostra nome
+ *    + botão de reticências (`MoreHorizontal`) na ponta direita da linha — não
+ *    o chevron `›` colado ao nome — e nada de contagem de membros abaixo: essa
+ *    informação mora em outra tela (lista de membros), não no cabeçalho.
  *
- * A pílula de busca é **inerte por enquanto** (§6.6: botão sem função existe
- * como visual, registrado): a busca de mensagens não tem tela no celular. O
- * segundo botão redondo do print (eventos) não existe neste produto e não foi
- * criado — sobra só o de convidar.
+ * A pílula de busca continua **inerte por enquanto** (§6.6: botão sem função
+ * existe como visual, registrado): a busca de mensagens não tem tela no
+ * celular. O segundo botão redondo do print (eventos) não existe neste produto
+ * e não foi criado — sobra só o de convidar (ver "faltando" na entrega do
+ * cartão 1c-sidebar-cabecalho).
  */
 function FaixaDoCelular({
   guild,
-  membros,
   onMenu,
   onConvidar,
 }: {
   guild: Guild | null;
-  membros: number;
   onMenu: (e: MouseEvent<HTMLButtonElement>) => void;
   onConvidar: () => void;
 }) {
-  const faixa = guildBannerBackground(guild?.bannerColor);
   return (
-    <div className="shrink-0 border-b border-border-subtle">
-      {/* 74pt de faixa, medidos entre o topo da coluna e o fim do banner */}
-      <div
-        aria-hidden="true"
-        style={faixa ? { background: faixa } : undefined}
-        className={`h-[74px] w-full ${faixa ? "" : "bg-interactive-background-hover"}`}
-      />
-      <div className="px-4 pb-3 pt-2.5">
-        <button
-          type="button"
-          onClick={onMenu}
-          disabled={!guild}
-          aria-haspopup="menu"
-          className="flex min-h-[44px] w-full items-center gap-1 text-left disabled:cursor-default"
-        >
-          <span className="truncate text-xl font-bold text-text-strong">
-            {guild?.name ?? "Selecione um servidor"}
-          </span>
-          {guild && (
-            <ChevronRight size={18} aria-hidden="true" className="shrink-0 text-text-subtle" />
-          )}
-        </button>
+    <div className="shrink-0 border-b border-border-subtle px-4 pb-3 pt-2.5">
+      <button
+        type="button"
+        onClick={onMenu}
+        disabled={!guild}
+        aria-haspopup="menu"
+        className="flex min-h-[44px] w-full items-center justify-between gap-2 text-left disabled:cursor-default"
+      >
+        <span className="min-w-0 truncate text-xl font-bold text-text-strong">
+          {guild?.name ?? "Selecione um servidor"}
+        </span>
+        {/*
+          `MoreHorizontal` solto, não `BotaoDeIcone`: o botão inteiro da linha
+          já é este `<button>` (abre o mesmo menu do desktop), e o primitivo
+          renderizaria um `<button>` filho — inválido dentro de outro. Mesma
+          razão que já valia para o chevron que ele substitui.
+        */}
         {guild && (
-          <p className="text-sm text-text-muted">
-            {membros === 1 ? "1 membro" : `${membros} membros`}
-          </p>
+          <MoreHorizontal size={20} aria-hidden="true" className="shrink-0 text-text-subtle" />
         )}
-        <div className="mt-3 flex items-center gap-2">
-          <span
-            /* pílula de busca: visual, sem função — ver o comentário do topo */
-            aria-hidden="true"
-            className="flex h-[40px] min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-interactive-background-hover text-sm text-text-muted"
+      </button>
+      <div className="mt-3 flex items-center gap-2">
+        <span
+          /* pílula de busca: visual, sem função — ver o comentário do topo */
+          aria-hidden="true"
+          className="flex h-[40px] min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-interactive-background-hover text-sm text-text-muted"
+        >
+          <Search size={16} />
+          Buscar
+        </span>
+        {guild && (
+          <button
+            type="button"
+            onClick={onConvidar}
+            aria-label={`Convidar pessoas para ${guild.name}`}
+            className="grid h-[40px] w-[40px] shrink-0 place-items-center rounded-full bg-interactive-background-hover text-text-subtle transition active:bg-border-normal"
           >
-            <Search size={16} />
-            Buscar
-          </span>
-          {guild && (
-            <button
-              type="button"
-              onClick={onConvidar}
-              aria-label={`Convidar pessoas para ${guild.name}`}
-              className="grid h-[40px] w-[40px] shrink-0 place-items-center rounded-full bg-interactive-background-hover text-text-subtle transition active:bg-border-normal"
-            >
-              <UserPlus size={20} />
-            </button>
-          )}
-        </div>
+            <UserPlus size={20} />
+          </button>
+        )}
       </div>
     </div>
   );

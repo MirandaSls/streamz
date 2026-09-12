@@ -30,9 +30,21 @@ export interface PropsDeArrasto {
   onDrop: (e: DragEvent) => void;
 }
 
-/** Ícone do canal: voz, anúncio (somente leitura), privado ou texto. */
-export function ChannelIcon({ channel }: { channel: Channel }) {
-  const cls = "shrink-0 text-channels-default";
+/**
+ * Ícone do canal: voz, anúncio (somente leitura), privado ou texto.
+ *
+ * Cor por estado, não fixa: a família do botão de ícone medida no cartão
+ * 0.4 (`--icon-muted` em repouso, `--icon-strong` selecionado —
+ * `docs/referencias-discord/tokens/css-bruto/834050.a72484b38a3a361e.css`,
+ * `.interactiveSelected__972a0 .linkButtonIcon__972a0{color:var(--icon-strong)}`
+ * contra `.linkButtonIcon__972a0{color:var(--icon-muted)}` em repouso) é o
+ * mesmo padrão do texto do canal (repouso apagado, selecionado forte). Aqui o
+ * repouso usa `channels-default`, não `icon-muted` — é a cor **medida** do
+ * nome de canal (ver `CabecalhoDeCategoria`), e ícone e texto do mesmo item
+ * picam a mesma cor na captura.
+ */
+export function ChannelIcon({ channel, ativo = false }: { channel: Channel; ativo?: boolean }) {
+  const cls = `shrink-0 ${ativo ? "text-icon-strong" : "text-channels-default"}`;
   if (channel.type === "VOICE") return <Volume2 size={20} className={cls} aria-hidden="true" />;
   if (channel.type === "ANNOUNCEMENT" || channel.readOnly) {
     return <Megaphone size={20} className={cls} aria-hidden="true" />;
@@ -57,12 +69,27 @@ export function ChannelIcon({ channel }: { channel: Channel }) {
  * |---|---|---|
  * | glifo do "+" | 12×12 | `Plus size={20}` → 11,7 (o quadro do ativo desenha 0,583 do tamanho) |
  * | centro do "+" | x=315,5 | x=318 — a mesma coluna da engrenagem do canal (`pr-1` + botão de 24), que na print está em 315,5 também |
- * | rótulo | começa em x=67 | `mx-2` + `pl-[10px]` = 67 |
+ * | rótulo | começa em x=67 | `mx-2` + `pl-2.5` = 67 |
  * | altura da linha | 12 de conteúdo, centro 29 abaixo do canal anterior | `h-[22px]` com `mt-4` + 2 da linha de solta = 29 |
  * | próximo canal | 42 abaixo do canal anterior | 16+2+22+2 = 42 |
  *
- * A cor é a mesma do rótulo e a mesma dos nomes de canal não lidos — na print
- * os três picam no mesmo valor (129,130,138), o que é `text-text-muted`.
+ * **Revalidado na base de 16px (ADR-0009).** Antes o `<html>` media 15,5px e
+ * todo valor em `rem` saía ~3% pequeno (§6.3 do PROCESSO); com a raiz em 16px
+ * de verdade, `rem`×16 bate exato com o nominal — `pl-2.5` é 10px, `mx-2` é
+ * 8px, `h-9` do canal é 36px — e nenhuma das medidas acima precisou mudar de
+ * classe, só a conta que as explica deixou de ter arredondamento.
+ *
+ * **Correção da cor do rótulo:** a nota antiga dizia que a print media
+ * (129,130,138) nos três — rótulo, "+"/engrenagem e nome de canal não lido —
+ * e chamava isso de `text-text-muted` (`#96979e`). (129,130,138) é
+ * `#81828a`, que é `--channels-default`, não `--text-muted`: a nota estava
+ * errada sobre qual token bateu, não sobre a classe usada aqui. A classe
+ * ficou `text-text-muted` porque a comparação mais recente (revisor visual,
+ * print de Discord real) mede o cabeçalho de categoria em `~#a0a0a7`, e
+ * `#96979e` (`--text-muted`) erra por ~9 por canal contra esse valor —
+ * `#81828a` (`--channels-default`) erra por ~30. Diferença de anti-
+ * serrilhado de fonte contra fundo escuro, não dois tokens distintos: fica
+ * `text-text-muted`, sem trocar.
  */
 export function CabecalhoDeCategoria({
   label,
@@ -174,6 +201,22 @@ export function CabecalhoDeCategoria({
  *
  * O estado (ativo, não lido, silenciado, arrastando) chega pronto: a conta é do
  * pai, que é quem tem a store de notificação e o arrasto na mão.
+ *
+ * **Medidas da linha** (revisadas nesta onda, base de 16px — ADR-0009):
+ *
+ * | item | Discord | aqui |
+ * |---|---|---|
+ * | altura | 36, sem vão entre canais (a print `2026-09-03 201805` mostra a linha selecionada com 36px exatos de banda, coluna x=65: `227–262`) | `h-9` = 36px exato na base de 16 |
+ * | ícone do canal | 20px | `size={20}` nos quatro ramos do `ChannelIcon` |
+ * | vão ícone↔nome | 8px (`docs/referencias-discord/tokens/css-bruto/834050…css` `.link__972a0{gap:8px}`, e `d02d29b0b74f3e61.css` `.channelIcon__5c799{margin-inline-end:8px}` da prévia de canais do onboarding, que reusa os tokens do item de verdade) | era `gap-2.5` (10px), agora `gap-2` (8px) |
+ * | cor em repouso | `--channels-default` | `text-channels-default` |
+ * | cor selecionada | `--interactive-text-active` (mesmo hex de `--text-strong`, `#fbfbfb`, mas é o token de "item de lista selecionado" — `tokens/VARIAVEIS.md`) | era `text-text-strong`, agora `text-interactive-text-active` |
+ * | cor no hover (lido) | `--interactive-text-hover` (`#fbfbfb`) — mais claro que `--text-default` (`#efeff1`), que é o token de texto de mensagem, não de item de lista | era `hover:text-text-default`, agora `hover:text-interactive-text-hover` |
+ * | fundo hover / selecionado | `--interactive-background-hover` / `-selected` | `bg-interactive-background-hover` / `-selected` (sem mudança — já batia) |
+ *
+ * Não lido em repouso ficou em `text-text-strong`: não achei no CSS bruto uma
+ * regra de "canal não lido" fora do ponto branco (medido) e do peso da fonte;
+ * é o valor que já estava, mantido por não ter divergência medida contra ele.
  */
 export function ItemDeCanal({
   channel,
@@ -210,10 +253,10 @@ export function ItemDeCanal({
         arrastando ? "opacity-40" : ""
       } ${
         ativo
-          ? "bg-interactive-background-selected text-text-strong"
+          ? "bg-interactive-background-selected text-interactive-text-active"
           : naoLido
             ? "text-text-strong hover:bg-interactive-background-hover"
-            : "text-channels-default hover:bg-interactive-background-hover hover:text-text-default"
+            : "text-channels-default hover:bg-interactive-background-hover hover:text-interactive-text-hover"
       } ${silenciado && !ativo ? "opacity-50" : ""}`}
     >
       {naoLido && (
@@ -225,9 +268,9 @@ export function ItemDeCanal({
         data-channel-button
         onClick={aoSelecionar}
         aria-current={ativo ? "true" : undefined}
-        className={`flex h-full min-w-0 flex-1 items-center gap-2.5 text-left ${naoLido ? "font-semibold" : "font-medium"}`}
+        className={`flex h-full min-w-0 flex-1 items-center gap-2 text-left ${naoLido ? "font-semibold" : "font-medium"}`}
       >
-        <ChannelIcon channel={channel} />
+        <ChannelIcon channel={channel} ativo={ativo} />
         <span className="truncate">{name}</span>
       </button>
       {channel.mentionCount > 0 && !ativo && (

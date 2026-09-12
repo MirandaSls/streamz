@@ -100,7 +100,16 @@ export function CanalDeVoz({
           aria-current={ativo ? "true" : undefined}
           className={`flex h-full min-w-0 flex-1 items-center gap-2.5 text-left ${naoLido ? "font-semibold" : "font-medium"}`}
         >
-          <Volume2 size={20} className="shrink-0 text-channels-default" aria-hidden="true" />
+          {/* Conectado = ícone verde (`--icon-feedback-positive` #5eb479, medido
+              em 101842.png linha y=368 x=102–109): é o único sinal de "você está
+              aqui" no ícone — o Discord não pinta o nome do canal (medido na
+              mesma linha, x=161 y=368–372: #fbfbed, branco, igual a qualquer
+              canal ativo). Fora da chamada o ícone continua neutro. */}
+          <Volume2
+            size={20}
+            className={`shrink-0 ${conectado ? "text-icon-feedback-positive" : "text-channels-default"}`}
+            aria-hidden="true"
+          />
           <span className="truncate">{name}</span>
         </button>
         {channel.mentionCount > 0 && !ativo && (
@@ -117,7 +126,13 @@ export function CanalDeVoz({
         {conectado && vozDesde !== null && (
           <Cronometro
             desde={vozDesde}
-            className="ml-auto mr-1.5 shrink-0 text-xs text-status-positive group-hover:hidden"
+            // mesmo verde do ícone (`--text-feedback-positive`, igual a
+            // `--icon-feedback-positive`, #5eb479): medido no "0:00" da
+            // 101842.png, linha y=368 x=320–356 — os traços cheios saem
+            // #3eaf5c/#43b45c, a mesma tinta sobre o fundo #121214.
+            // `text-status-positive` (#3d9e60) é outro token, de outro
+            // contexto (bolinha "Disponível"): próximo, mas não é este.
+            className="ml-auto mr-1.5 shrink-0 text-xs text-text-feedback-positive group-hover:hidden"
           />
         )}
 

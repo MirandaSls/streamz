@@ -17,9 +17,9 @@ import { useVoice } from "@/stores/voice";
  * Quem está num canal de voz, listado sob ele na barra lateral.
  *
  * É a leitura do `voice.state` do gateway — o mesmo evento que a barra lateral
- * consome. Fica num componente próprio para que a `ChannelSidebar` precise
- * apenas montá-lo: a regra de quem aparece (e com quais ícones) mora aqui,
- * junto do resto da voz.
+ * consome. Fica num componente próprio para que a `CanalDeVoz` precise apenas
+ * montá-lo: a regra de quem aparece (e com quais ícones) mora aqui, junto do
+ * resto da voz.
  *
  * Três detalhes que parecem cosméticos e não são:
  *
@@ -39,9 +39,9 @@ import { useVoice } from "@/stores/voice";
  *
  * Arrastar um participante daqui para outro canal de voz é de quem tem
  * `MOVE_MEMBERS`; quem guarda o estado do arrasto e desenha o realce no canal
- * alvo é a `ChannelSidebar`, que já faz isso para canais e categorias. Este
- * componente só marca o `li` como arrastável e avisa quem começou e quando
- * acabou — não decide nada.
+ * alvo é a `CanalDeVoz` (por cima, a coluna que a monta), que já faz isso para
+ * canais e categorias. Este componente só marca o `li` como arrastável e avisa
+ * quem começou e quando acabou — não decide nada.
  */
 export default function VoiceChannelMembers({
   channelId,

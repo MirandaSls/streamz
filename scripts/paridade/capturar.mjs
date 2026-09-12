@@ -241,7 +241,9 @@ async function abrirMenuDoServidor(page) {
 async function abrirConfigDoServidor(page, aba) {
   await abrirServidor(page);
   await abrirMenuDoServidor(page);
-  await page.getByRole("menuitem", { name: "Configurações do servidor" }).click();
+  // "Config. do servidor" é o rótulo do Discord (print `101733`) desde a onda 1;
+  // o nome longo fica aceito para o passeio ainda rodar sobre a árvore antiga
+  await page.getByRole("menuitem", { name: /^Config(\.|urações) do servidor$/ }).click();
   await page.locator('[role="dialog"]').first().waitFor();
   await page.getByText(aba, { exact: true }).first().click();
   await rede(page);
