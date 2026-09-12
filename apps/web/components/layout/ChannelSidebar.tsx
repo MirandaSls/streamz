@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  useEffect,
   useRef,
   useState,
   type DragEvent,
@@ -10,48 +9,38 @@ import {
 } from "react";
 import {
   CheckCheck,
-  ChevronDown,
-  ChevronRight,
-  FolderPlus,
-  Hash,
   Link2,
-  Lock,
-  LogOut,
-  Megaphone,
-  MessageSquare,
   Pencil,
   Plus,
-  Search,
   Settings,
   Trash2,
   UserPlus,
-  Volume2,
-  X,
 } from "@/components/ui/icones";
 import {
   Permission,
   channelLinkPath,
   channelNotificationScope,
-  guildBannerBackground,
   guildNotificationScope,
   isMuted,
   isUnread,
   type Category,
   type Channel,
-  type Guild,
 } from "@streamz/shared";
-import { BotaoDeIcone } from "@/components/ui/primitivos";
 import { useEhMobile } from "@/hooks/useEhMobile";
-import { MENU_WIDTH, MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
-import Cronometro from "@/components/voice/Cronometro";
-import VoiceChannelMembers from "@/components/voice/VoiceChannelMembers";
-import { useAuth } from "@/stores/auth";
+import { MENU_WIDTH } from "@/components/ui/ContextMenu";
+import { CabecalhoDoServidor } from "@/components/layout/sidebar/CabecalhoDoServidor";
+import {
+  CabecalhoDeCategoria,
+  ItemDeCanal,
+  type PropsDeArrasto,
+} from "@/components/layout/sidebar/CategoriaEItemDeCanal";
+import { CanalDeVoz } from "@/components/layout/sidebar/CanalDeVoz";
 import { urlPublica } from "@/lib/links-do-app";
 import { canalVisivel } from "@/stores/categoria-colapso";
 import { useCategories } from "@/stores/categories";
 import { groupByCategory, type CategoryGroup } from "@/stores/channel-order";
 import { useChannels } from "@/stores/channels";
-import { useCanModerate, useGuilds, useIsOwner } from "@/stores/guilds";
+import { useGuilds } from "@/stores/guilds";
 import { useCan } from "@/stores/permissions";
 import { podeSoltarEm } from "@/stores/voice-mover";
 import { useT } from "@/lib/i18n";
@@ -59,20 +48,9 @@ import { submenuNotificacoes, submenuSilenciar } from "@/lib/notification-menu";
 import { errorMessage } from "@/stores/socket-adapter";
 import { useNotifications } from "@/stores/notifications";
 import { api } from "@/lib/api";
-import { preaquecerCadeiaDeVoz, useVoice } from "@/stores/voice";
+import { useVoice } from "@/stores/voice";
 import { useSettings } from "@/stores/settings";
 import { ui, useUI, type MenuItem } from "@/stores/ui";
-
-/** Ícone do canal: voz, anúncio (somente leitura), privado ou texto. */
-function ChannelIcon({ channel }: { channel: Channel }) {
-  const cls = "shrink-0 text-channels-default";
-  if (channel.type === "VOICE") return <Volume2 size={20} className={cls} aria-hidden="true" />;
-  if (channel.type === "ANNOUNCEMENT" || channel.readOnly) {
-    return <Megaphone size={20} className={cls} aria-hidden="true" />;
-  }
-  if (channel.private) return <Lock size={20} className={cls} aria-hidden="true" />;
-  return <Hash size={20} className={cls} aria-hidden="true" />;
-}
 
 /**
  * O que está sendo arrastado agora (só moderação arrasta).
@@ -103,210 +81,14 @@ function LinhaDeSolta({ ativa }: { ativa: boolean }) {
 }
 
 /**
- * Cabeçalho de categoria: nome + chevron (14px, caixa mista) e o "+" de criar
- * canal dentro dela.
+ * Coluna 2 no modo servidor: dados, ordem, arrastar-e-soltar e rolagem.
  *
- * **O "+" não é de hover.** Medido na print `2026-09-03 201805`: o cursor está
- * sobre o canal "warframe" (os dois botões dele estão acesos) e mesmo assim os
- * três cabeçalhos mostram o "+". Ele era `opacity-0` aqui, e só aparecia quando
- * o ponteiro passava por cima do próprio cabeçalho.
- *
- * Medidas da mesma print (coluna de 294, 1:1 pelo `h-9` do canal, que lá mede
- * 36 exatos):
- *
- * | item | Discord | aqui |
- * |---|---|---|
- * | glifo do "+" | 12×12 | `Plus size={20}` → 11,7 (o quadro do ativo desenha 0,583 do tamanho) |
- * | centro do "+" | x=315,5 | x=318 — a mesma coluna da engrenagem do canal (`pr-1` + botão de 24), que na print está em 315,5 também |
- * | rótulo | começa em x=67 | `mx-2` + `pl-[10px]` = 67 |
- * | altura da linha | 12 de conteúdo, centro 29 abaixo do canal anterior | `h-[22px]` com `mt-4` + 2 da linha de solta = 29 |
- * | próximo canal | 42 abaixo do canal anterior | 16+2+22+2 = 42 |
- *
- * A cor é a mesma do rótulo e a mesma dos nomes de canal não lidos — na print
- * os três picam no mesmo valor (129,130,138), o que é `text-text-muted`.
- */
-function CategoryHeader({
-  label,
-  collapsed,
-  onToggle,
-  onCreate,
-  onEdit,
-  onContextMenu,
-  dragProps,
-  celular = false,
-}: {
-  label: string;
-  collapsed: boolean;
-  onToggle: () => void;
-  onCreate?: () => void;
-  onEdit?: () => void;
-  onContextMenu?: (e: MouseEvent) => void;
-  dragProps?: Record<string, unknown>;
-  /**
-   * No celular o cabeçalho é **caixa alta, com o chevron à esquerda** e sem
-   * botão nenhum na linha — medido em `discord-mobile-servidor-2024.png`
-   * ("FAVORITES", "CHAT", "COMMUNITY"). Criar canal e editar categoria moram no
-   * menu do servidor e no toque longo; uma fileira de alvos de 22px ao lado do
-   * rótulo não é tocável de qualquer modo.
-   */
-  celular?: boolean;
-}) {
-  return (
-    /*
-      O `group` existe só pela engrenagem, que é de hover (o "+" não é). Ele não
-      mexe no hover dos canais: as regras `group-hover` deles estão na linha do
-      canal, que é irmã deste cabeçalho e não descendente dele.
-    */
-    <div
-      className={`group mx-2 flex items-center pr-1 ${celular ? "h-[36px]" : "h-[22px]"}`}
-      onContextMenu={onContextMenu}
-      {...dragProps}
-    >
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={!collapsed}
-        /*
-          Fonte do corpo e peso médio, não a de display em negrito: medido, o
-          Discord usa a mesma família do resto da coluna aqui. E o chevron vem
-          **depois** do texto, não antes — o texto começa em x=100, alinhado com
-          o nome do servidor acima e com o `#` dos canais abaixo. Com o chevron
-          na frente, essa coluna de alinhamento se perdia.
-        */
-        className={`flex min-w-0 flex-1 items-center gap-1 pl-2.5 text-sm font-medium text-text-muted hover:text-text-default ${
-          celular ? "gap-1.5 text-xs font-semibold uppercase tracking-wide" : ""
-        }`}
-      >
-        {/* o chevron troca de lado no celular: na captura ele vem **antes** do
-            rótulo, e o rótulo é caixa alta */}
-        {celular &&
-          (collapsed ? (
-            <ChevronRight size={12} className="shrink-0" aria-hidden="true" />
-          ) : (
-            <ChevronDown size={12} className="shrink-0" aria-hidden="true" />
-          ))}
-        <span className="truncate">{label}</span>
-        {!celular &&
-          (collapsed ? (
-            <ChevronRight size={12} className="shrink-0" aria-hidden="true" />
-          ) : (
-            <ChevronDown size={12} className="shrink-0" aria-hidden="true" />
-          ))}
-      </button>
-      {/* A engrenagem da categoria abre o mesmo modal do item "Editar
-          categoria" do menu de contexto. Ao contrário do "+", ela é de hover —
-          as classes são as mesmas dos dois botões de hover do canal, para os
-          três acenderem igual. Fica à esquerda do "+" para não mover o "+",
-          cuja coluna (x=318) está medida na print. */}
-      {onEdit && !celular && (
-        <BotaoDeIcone
-          rotulo="Editar categoria"
-          icone={<Settings size={18} />}
-          tamanho="sm"
-          onClick={onEdit}
-          aria-label={`Editar ${label}`}
-          className="shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-        />
-      )}
-      {onCreate && !celular && (
-        <BotaoDeIcone
-          rotulo="Criar canal"
-          icone={<Plus size={20} />}
-          tamanho="sm"
-          onClick={onCreate}
-          aria-label={`Criar canal em ${label}`}
-          className="shrink-0"
-        />
-      )}
-    </div>
-  );
-}
-
-/**
- * Cabeçalho da coluna do servidor **no celular**.
- *
- * Medido em `docs/Reference/mobile/discord-mobile-servidor-2024.png` (1,9707
- * px/pt): faixa do servidor no topo da coluna, nome grande com o chevron `›`
- * que abre o menu, a linha "N membros", e a pílula "Buscar" ocupando a largura
- * com dois botões redondos à direita. Depois, uma divisória de 1px.
- *
- * Aqui a faixa é a **cor do perfil do servidor** (`bannerColor`, o degradê de
- * `guildBannerBackground`), não uma imagem: o Streamz não tem banner de
- * servidor, tem faixa de cor — e é o que o cartão de prévia já usa. Sem cor
- * escolhida, fica a superfície neutra em vez de um buraco.
- *
- * A pílula de busca é **inerte por enquanto** (§6.6: botão sem função existe
- * como visual, registrado): a busca de mensagens não tem tela no celular. O
- * segundo botão redondo do print (eventos) não existe neste produto e não foi
- * criado — sobra só o de convidar.
- */
-function CabecalhoDoServidor({
-  guild,
-  membros,
-  onMenu,
-  onConvidar,
-}: {
-  guild: Guild | null;
-  membros: number;
-  onMenu: (e: MouseEvent<HTMLButtonElement>) => void;
-  onConvidar: () => void;
-}) {
-  const faixa = guildBannerBackground(guild?.bannerColor);
-  return (
-    <div className="shrink-0 border-b border-border-subtle">
-      {/* 74pt de faixa, medidos entre o topo da coluna e o fim do banner */}
-      <div
-        aria-hidden="true"
-        style={faixa ? { background: faixa } : undefined}
-        className={`h-[74px] w-full ${faixa ? "" : "bg-interactive-background-hover"}`}
-      />
-      <div className="px-4 pb-3 pt-2.5">
-        <button
-          type="button"
-          onClick={onMenu}
-          disabled={!guild}
-          aria-haspopup="menu"
-          className="flex min-h-[44px] w-full items-center gap-1 text-left disabled:cursor-default"
-        >
-          <span className="truncate text-xl font-bold text-text-strong">
-            {guild?.name ?? "Selecione um servidor"}
-          </span>
-          {guild && (
-            <ChevronRight size={18} aria-hidden="true" className="shrink-0 text-text-subtle" />
-          )}
-        </button>
-        {guild && (
-          <p className="text-sm text-text-muted">
-            {membros === 1 ? "1 membro" : `${membros} membros`}
-          </p>
-        )}
-        <div className="mt-3 flex items-center gap-2">
-          <span
-            /* pílula de busca: visual, sem função — ver o comentário do topo */
-            aria-hidden="true"
-            className="flex h-[40px] min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-interactive-background-hover text-sm text-text-muted"
-          >
-            <Search size={16} />
-            Buscar
-          </span>
-          {guild && (
-            <button
-              type="button"
-              onClick={onConvidar}
-              aria-label={`Convidar pessoas para ${guild.name}`}
-              className="grid h-[40px] w-[40px] shrink-0 place-items-center rounded-full bg-interactive-background-hover text-text-subtle transition active:bg-border-normal"
-            >
-              <UserPlus size={20} />
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Coluna 2 no modo servidor: cabeçalho com menu, categorias reais e canais.
+ * As três peças que ela desenha moram em `components/layout/sidebar/` — o
+ * cabeçalho do servidor, o cabeçalho de categoria com o item de canal de texto,
+ * e o canal de voz. A divisão é por peça de tela, não por camada: cada uma é
+ * redesenhada em separado na onda 1 (ADR-0009), e o que fica aqui é só o que
+ * nenhuma delas pode decidir sozinha (quem está arrastando o quê, qual é o
+ * canal ativo, qual linha de solta acende).
  *
  * O arrastar-e-soltar usa o DnD nativo do HTML5 em vez de uma biblioteca
  * (`@dnd-kit` e afins): a lista é vertical, curta e sem colisão complexa, e o
@@ -319,8 +101,6 @@ export default function ChannelSidebar() {
    * O do desktop (nome + chevron + convidar, 49px) é o medido no computador.
    */
   const celular = useEhMobile();
-  /** "N membros" do cabeçalho do celular; a lista já vem carregada pela store. */
-  const totalDeMembros = useGuilds((s) => s.members.length);
   const listRef = useRef<HTMLDivElement>(null);
   const [arrasto, setArrasto] = useState<Arrasto>(null);
   const [alvo, setAlvo] = useState<Alvo>(null);
@@ -330,21 +110,13 @@ export default function ChannelSidebar() {
   // ── e-configuracoes ── silenciar canal/servidor
   const porEscopo = useNotifications((s) => s.porEscopo);
   const createInvite = useGuilds((s) => s.createInvite);
-  const leaveGuild = useGuilds((s) => s.leave);
   const developerMode = useSettings((s) => s.developerMode);
-  const user = useAuth((s) => s.user);
-  const canModerate = useCanModerate(user?.id);
-  const isOwner = useIsOwner(user?.id);
   /*
-    `canModerate` é "tenho **alguma** permissão de gestão" — quem só expulsa
-    membros passava por ele e via o "+" e o "Criar canal", que a API recusa com
-    403 (`channels.service` e `categories.service` exigem `MANAGE_CHANNELS` nas
-    dez rotas). Criar, editar, apagar e reordenar canal e categoria passam a
-    perguntar **a mesma** permissão que a API, pelo `useCan` — que roda a
-    `computePermissions` do `@streamz/shared`, a mesma função do servidor. O
-    dono continua vendo tudo: para ele `computePermissions` devolve
-    `ALL_PERMISSIONS`. `canModerate` fica onde ele é certo: o item
-    "Configurações do servidor", que é o guarda-chuva de gestão.
+    Criar, editar, apagar e reordenar canal e categoria perguntam **a mesma**
+    permissão que a API, pelo `useCan` — que roda a `computePermissions` do
+    `@streamz/shared`, a mesma função do servidor. `canModerate` ("tenho
+    **alguma** permissão de gestão") não serve aqui: quem só expulsa membros
+    passava por ele e via ações que a API recusa com 403.
   */
   const podeGerenciarCanais = useCan(Permission.MANAGE_CHANNELS);
   /** Arrastar alguém de um canal de voz para outro (bit novo, ver ADR-0002). */
@@ -357,26 +129,17 @@ export default function ChannelSidebar() {
   const vozDesde = useVoice((s) => s.desde);
   const voiceChannelId = useChannels((s) => s.voiceChannelId);
   const select = useChannels((s) => s.select);
-  const rename = useChannels((s) => s.rename);
   const removeChannel = useChannels((s) => s.remove);
   const dropChannel = useChannels((s) => s.dropChannel);
   const dropCategory = useChannels((s) => s.dropCategory);
 
   const openModal = useUI((s) => s.openModal);
   const abrirVoiceChat = useUI((s) => s.abrirVoiceChat);
-  // o chevron do cabeçalho vira X enquanto o dropdown está aberto, como no
-  // Discord; quem fecha o menu é o host, então o estado espelha a store
-  const contextMenu = useUI((s) => s.contextMenu);
-  const [menuAberto, setMenuAberto] = useState(false);
-  useEffect(() => {
-    if (!contextMenu) setMenuAberto(false);
-  }, [contextMenu]);
 
   const categories = useCategories((s) => s.categories);
   const collapsed = useCategories((s) => s.collapsed);
   const toggleCollapsed = useCategories((s) => s.toggleCollapsed);
   const setAllCollapsed = useCategories((s) => s.setAllCollapsed);
-  const criarCategoria = useCategories((s) => s.create);
   const apagarCategoria = useCategories((s) => s.remove);
 
   /*
@@ -393,88 +156,6 @@ export default function ChannelSidebar() {
     aparecem, se renomeiam e se apagam como qualquer outra.
   */
   const grupos = groupByCategory(channels, categories);
-
-  /**
-   * Menu do cabeçalho do servidor (o chevron do Discord).
-   *
-   * "Convites", "Registro de auditoria" e "Denúncias" saíram daqui: no Discord
-   * eles moram dentro de Configurações do Servidor, e o dropdown fica com as
-   * ações do dia a dia. "Marcar servidor como lido" pertence ao menu do ÍCONE
-   * no rail, não a este.
-   */
-  function openGuildMenu(e: MouseEvent<HTMLButtonElement>) {
-    if (!guild) return;
-    const r = e.currentTarget.getBoundingClientRect();
-    const escopo = porEscopo[guildNotificationScope(guild.id)];
-    const items: MenuItem[] = [
-      // único item destacado do menu, como no Discord
-      {
-        label: "Convidar pessoas",
-        icon: <UserPlus size={18} />,
-        highlight: true,
-        onSelect: () => void createInvite(),
-      },
-    ];
-    if (canModerate) {
-      items.push({
-        label: "Configurações do servidor",
-        icon: <Settings size={18} />,
-        onSelect: () => openModal({ kind: "serverSettings", guildId: guild.id }),
-      });
-    }
-    /*
-      Ordem da print `2026-09-03 201809`: Convidar, Config. do servidor, Criar
-      canal, Criar categoria, e só então o bloco de notificações. Os itens que
-      não existem no Streamz (Impulso, Criar evento, Diretório de Apps) ficam de
-      fora — o Discord nunca mostra item morto, e criar um botão inerte aqui
-      seria pior que não ter. Os dois de criar exigem `MANAGE_CHANNELS`.
-    */
-    if (podeGerenciarCanais) {
-      items.push({
-        label: "Criar canal",
-        icon: <Plus size={18} />,
-        onSelect: () => openModal({ kind: "createChannel" }),
-      });
-      items.push({
-        label: "Criar categoria",
-        icon: <FolderPlus size={18} />,
-        onSelect: () => void novaCategoria(),
-      });
-    }
-    items.push({ separator: true });
-    items.push(submenuSilenciar("Silenciar servidor", { tipo: "servidor", guildId: guild.id }, escopo, t));
-    items.push(submenuNotificacoes({ tipo: "servidor", guildId: guild.id }, escopo, t));
-    // o dono não vê "sair" nem "apagar" aqui: apagar mora em Configurações
-    if (!isOwner) {
-      items.push({ separator: true });
-      items.push({
-        label: "Sair do servidor",
-        icon: <LogOut size={18} />,
-        danger: true,
-        onSelect: () => void leaveGuild(guild.id),
-      });
-    }
-    if (developerMode) {
-      items.push({ separator: true });
-      items.push({
-        label: "Copiar ID do servidor",
-        onSelect: () => void navigator.clipboard?.writeText(guild.id),
-      });
-    }
-    setMenuAberto(true);
-    ui.openContextMenu(r.left + 10, r.bottom + 4, items, MENU_WIDTH_WIDE);
-  }
-
-  async function novaCategoria() {
-    if (!guild) return;
-    const nome = await ui.prompt({
-      title: "Criar categoria",
-      message: "Nome da categoria.",
-      placeholder: "Ex.: Assuntos gerais",
-      confirmLabel: "Criar",
-    });
-    if (nome?.trim()) await criarCategoria(guild.id, nome.trim());
-  }
 
   /**
    * Botão direito num canal.
@@ -718,132 +399,60 @@ export default function ChannelSidebar() {
     // um só destaque para os dois tipos: canal de voz agora também é canal
     // aberto (ele tem chat de texto), e continua marcado depois de desligar
     const active = activeChannelId === channel.id;
-    const name = channel.name ?? "canal";
     const silenciado = estaSilenciado(channel);
     // canal de voz entra na conta do não lido como qualquer outro: o chat de
     // texto dele é real, e mensagem lá não pode passar despercebida
     const unread = !active && !silenciado && isUnread(channel);
-    // conectado à voz **deste** canal: no Discord ganha ícone verde e nome branco
-    const conectadoAqui = vozAqui === channel.id;
     const arrastando = arrasto?.tipo === "canal" && arrasto.id === channel.id;
-    // alvo do arrasto de um participante: realce no canal inteiro. Linha de
-    // inserção não serve aqui — não há "entre dois" numa sala de voz
-    const alvoDeMembro = alvo?.tipo === "membro-voz" && alvo.channelId === channel.id;
+    const dragProps: PropsDeArrasto = {
+      draggable: podeGerenciarCanais,
+      onDragStart: (e: DragEvent) => inicioArrasto(e, "canal", channel.id),
+      onDragEnd: fimArrasto,
+      onDragOver: (e: DragEvent) => sobreCanal(e, grupo, index, channel),
+      onDrop: soltar,
+    };
+    /** O que as duas linhas (texto e voz) têm em comum. */
+    const comuns = {
+      channel,
+      ativo: active,
+      naoLido: unread,
+      silenciado,
+      arrastando,
+      podeGerenciarCanais,
+      arrasto: dragProps,
+      aoAbrirMenu: (e: MouseEvent) => openChannelMenu(e, channel),
+      aoConvidar: () => void createInvite(),
+      aoEditar: () => openModal({ kind: "channelSettings", channelId: channel.id }),
+    };
     return (
       <div key={channel.id}>
         <LinhaDeSolta ativa={alvoDeCanal(grupo.category?.id ?? null, index)} />
-        <div
-          role="listitem"
-          draggable={podeGerenciarCanais}
-          onDragStart={(e) => inicioArrasto(e, "canal", channel.id)}
-          onDragEnd={fimArrasto}
-          onDragOver={(e) => sobreCanal(e, grupo, index, channel)}
-          onDrop={soltar}
-          onContextMenu={(e) => openChannelMenu(e, channel)}
-          className={`group relative mx-2 flex h-9 items-center rounded-lg pl-[10px] pr-1 ${
-            arrastando ? "opacity-40" : ""
-          } ${alvoDeMembro ? "bg-interactive-background-hover ring-2 ring-inset ring-brand-500" : ""} ${
-            active
-              ? "bg-interactive-background-selected text-text-strong"
-              : unread
-                ? "text-text-strong hover:bg-interactive-background-hover"
-                : "text-channels-default hover:bg-interactive-background-hover hover:text-text-default"
-          } ${silenciado && !active ? "opacity-50" : ""}`}
-        >
-          {unread && (
-            // ponto branco na margem esquerda, como o Discord marca canal não lido
-            <span aria-hidden="true" className="absolute -left-2 top-1/2 h-2 w-1 -translate-y-1/2 rounded-r-full bg-switch-thumb-background-default" />
-          )}
-          <button
-            type="button"
-            data-channel-button
-            // `"clique"`: num canal de VOZ isto **entra na chamada**, sem
-            // antessala nem prompt (ver `stores/voice-entrada.ts`)
-            onClick={() => select(channel, "clique")}
-            // passar o mouse por um canal de voz é o aviso mais barato de que o
-            // clique pode vir: aproveita para pagar o chunk e o `.wasm` da
-            // supressão avançada antes da hora (ver `preaquecerCadeiaDeVoz`,
-            // que não faz nada para quem não a escolheu)
-            onPointerEnter={channel.type === "VOICE" ? preaquecerCadeiaDeVoz : undefined}
-            aria-current={active ? "true" : undefined}
-            className={`flex h-full min-w-0 flex-1 items-center gap-2.5 text-left ${unread ? "font-semibold" : "font-medium"}`}
-          >
-            <ChannelIcon channel={channel} />
-            <span className="truncate">{name}</span>
-          </button>
-          {channel.mentionCount > 0 && !active && (
-            <span
-              aria-label={`${channel.mentionCount} menções`}
-              className="grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[11px] font-bold leading-none text-control-critical-primary-text-default"
-            >
-              {channel.mentionCount}
-            </span>
-          )}
-          {/* Cronômetro da call: alinhado à direita, a 10px da borda da linha,
-              como no Discord. Some no hover, que é quando os dois botões do
-              canal tomam o lugar dele. */}
-          {vozAqui === channel.id && vozDesde !== null && (
-            <Cronometro
-              desde={vozDesde}
-              className="ml-auto mr-1.5 shrink-0 text-xs text-status-positive group-hover:hidden"
-            />
-          )}
-
-          {/* O hover do canal no Discord mostra DOIS botões: convite e editar.
-              Ficam **fora do fluxo** (`absolute`): invisíveis eles ainda
-              ocupavam 48px, e era isso que empurrava o cronômetro para longe
-              da borda. Só aparecem no hover ou com foco de teclado. */}
-          <span className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center">
-            {/* O balão do canal de VOZ, que a print `image (1).png` mostra à
-                esquerda do convite e da engrenagem: ele abre a conversa **da
-                call** (a coluna de 450 da direita, ver `PainelDeChatDaCall`).
-                Só existe em canal de voz — no de texto a conversa é a própria
-                coluna, e o botão não teria o que abrir. */}
-            {channel.type === "VOICE" && (
-              <BotaoDeIcone
-                rotulo="Abrir conversa"
-                icone={<MessageSquare size={18} />}
-                tamanho="sm"
-                onClick={() => {
-                  // `"balao"`: abre o canal **sem** entrar — é aqui que a
-                  // `VistaDoCanalDeVoz` aparece, com a conversa ao lado
-                  select(channel, "balao");
-                  abrirVoiceChat();
-                }}
-                aria-label={`Abrir a conversa de ${name}`}
-                className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-              />
-            )}
-            <BotaoDeIcone
-              rotulo="Criar convite"
-              icone={<UserPlus size={18} />}
-              tamanho="sm"
-              onClick={() => void createInvite()}
-              aria-label={`Criar convite para ${name}`}
-              className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-            />
-            {podeGerenciarCanais && (
-              <BotaoDeIcone
-                rotulo="Editar canal"
-                icone={<Settings size={18} />}
-                tamanho="sm"
-                onClick={() => openModal({ kind: "channelSettings", channelId: channel.id })}
-                aria-label={`Editar ${name}`}
-                className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-              />
-            )}
-          </span>
-        </div>
-        {channel.type === "VOICE" && (
-          <VoiceChannelMembers
-            channelId={channel.id}
-            guildId={channel.guildId}
-            podeMover={podeMoverMembros}
-            onArrastarMembro={(userId) =>
+        {channel.type === "VOICE" ? (
+          <CanalDeVoz
+            {...comuns}
+            // realce no canal inteiro quando é ele que recebe o participante
+            // arrastado; linha de inserção não serve aqui — não há "entre
+            // dois" numa sala de voz
+            alvoDeMembro={alvo?.tipo === "membro-voz" && alvo.channelId === channel.id}
+            // conectado à voz **deste** canal: no Discord ganha ícone verde e
+            // nome branco
+            conectado={vozAqui === channel.id}
+            vozDesde={vozDesde}
+            podeMoverMembros={podeMoverMembros}
+            aoEntrar={() => select(channel, "clique")}
+            aoAbrirConversa={() => {
+              // `"balao"`: abre o canal **sem** entrar — é aqui que a
+              // `VistaDoCanalDeVoz` aparece, com a conversa ao lado
+              select(channel, "balao");
+              abrirVoiceChat();
+            }}
+            aoArrastarMembro={(userId) =>
               setArrasto({ tipo: "membro-voz", userId, deChannelId: channel.id })
             }
-            onFimDoArrasto={fimArrasto}
+            aoFimDoArrasto={fimArrasto}
           />
+        ) : (
+          <ItemDeCanal {...comuns} aoSelecionar={() => select(channel, "clique")} />
         )}
       </div>
     );
@@ -894,7 +503,7 @@ export default function ChannelSidebar() {
             <LinhaDeSolta
               ativa={alvo?.tipo === "categoria" && alvo.index === indexCategoria}
             />
-            <CategoryHeader
+            <CabecalhoDeCategoria
               label={rotulo}
               collapsed={fechada}
               onToggle={() => toggleCollapsed(chave)}
@@ -913,7 +522,7 @@ export default function ChannelSidebar() {
               }
               celular={celular}
               onContextMenu={category ? (e) => openCategoryMenu(e, category) : undefined}
-              dragProps={
+              arrasto={
                 category
                   ? {
                       draggable: podeGerenciarCanais,
@@ -961,53 +570,7 @@ export default function ChannelSidebar() {
 
   return (
     <aside className="flex w-[294px] shrink-0 flex-col bg-background-base-lowest">
-      {/*
-        O cabeçalho deixa de ser um botão só. No Discord o chevron fica **colado
-        ao nome**, não na extremidade, e sobra a ponta direita para o botão de
-        convidar — que a gente não tinha em lugar nenhum visível, só enterrado
-        no menu de contexto.
-
-        Botão dentro de botão não é HTML válido, então o que era um vira dois
-        irmãos: o do menu ocupa o espaço do nome, o de convidar fica ao lado.
-      */}
-      {celular ? (
-        <CabecalhoDoServidor
-          guild={guild}
-          membros={totalDeMembros}
-          onMenu={openGuildMenu}
-          onConvidar={() => void createInvite()}
-        />
-      ) : (
-      <div className="flex h-[49px] shrink-0 items-center border-b border-border-subtle pl-5 pr-3 shadow-elevation-low">
-        <button
-          type="button"
-          onClick={openGuildMenu}
-          disabled={!guild}
-          aria-haspopup="menu"
-          aria-expanded={menuAberto}
-          className="-ml-1 flex min-w-0 flex-1 items-center gap-1.5 rounded-[4px] py-1 pl-1 pr-2 text-left font-semibold text-text-strong transition hover:bg-interactive-background-hover disabled:cursor-default disabled:hover:bg-transparent"
-        >
-          <span className="truncate">{guild?.name ?? "Selecione um servidor"}</span>
-          {guild &&
-            (menuAberto ? (
-              <X size={14} aria-hidden="true" className="shrink-0 text-text-subtle" />
-            ) : (
-              <ChevronDown size={14} aria-hidden="true" className="shrink-0 text-text-subtle" />
-            ))}
-        </button>
-        {guild && (
-          <BotaoDeIcone
-            rotulo="Convidar pessoas"
-            icone={<UserPlus size={20} />}
-            tamanho="md"
-            comFundo
-            onClick={() => void createInvite()}
-            aria-label={`Convidar pessoas para ${guild.name}`}
-            className="shrink-0"
-          />
-        )}
-      </div>
-      )}
+      <CabecalhoDoServidor celular={celular} />
 
       <div
         ref={listRef}
