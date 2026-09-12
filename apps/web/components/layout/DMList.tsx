@@ -18,6 +18,7 @@ import {
   channelNotificationScope,
   displayNameOf,
   isGroupChannel,
+  isMuted,
   isUnread,
   linhaDaPrevia,
   type DMChannelView,
@@ -191,9 +192,16 @@ export default function DMList() {
         data-amigos-button
         onClick={() => setFriendsOpen(true)}
         aria-current={amigosSelecionado ? "true" : undefined}
-        className={"mx-2 flex h-10 w-[calc(100%-1rem)] items-center gap-3 rounded-lg pl-3 pr-2 text-left " + (amigosSelecionado ? "bg-interactive-background-selected text-text-strong" : "text-channels-default hover:bg-interactive-background-hover hover:text-text-default")}
+        /* 36 (`h-9`), não 40: `.channel__972a0:not(.dm__972a0) .link__972a0`
+           tem `padding-block:8px 8px` (CSS bruto, `834050.a72484b38a3a361e.css`)
+           em cima de um ícone de 20 (`.linkButtonIcon__972a0{height:20px}`)
+           — 8+20+8=36. `pl-2 pr-4` é o mesmo `padding-inline:8px 16px`
+           (`var(--space-xs) var(--space-16)`) daquela regra, e `gap-2` é o
+           `gap:8px` de `.link__972a0` (não 12 — não é a escala de espaçamento
+           do resto do app, é medida do Discord). */
+        className={"mx-2 flex h-9 w-[calc(100%-1rem)] items-center gap-2 rounded-lg pl-2 pr-4 text-left " + (amigosSelecionado ? "bg-interactive-background-selected text-text-strong" : "text-channels-default hover:bg-interactive-background-hover hover:text-text-default")}
       >
-        <Amigos size={21} aria-hidden="true" className="shrink-0" />
+        <Amigos size={20} aria-hidden="true" className="shrink-0" />
         <span className="flex-1 font-medium">Amigos</span>
         {pendentes > 0 && (
           <span
@@ -212,7 +220,7 @@ export default function DMList() {
         Aqui, e não na rail de servidores onde nasceu: esta é a coluna em que o
         Discord põe a navegação **da home** (Amigos, Nitro, Loja), e a rail é a
         coluna de servidores. O item copia o botão "Amigos" linha por linha —
-        mesma altura de 40, mesmo recuo, ícone de 21 à esquerda, o mesmo `bg-interactive-background-selected`
+        mesma altura de 36, mesmo recuo, ícone de 20 à esquerda, o mesmo `bg-interactive-background-selected`
         de selecionado e o mesmo `hover:bg-interactive-background-hover` — porque é o mesmo tipo de item.
 
         O ícone é o `Apps`, as quatro formas do App Directory. **Não é uma
@@ -239,9 +247,10 @@ export default function DMList() {
         data-apps-button
         onClick={() => abrirApps()}
         aria-current={appsAbertos ? "true" : undefined}
-        className={"mx-2 flex h-10 w-[calc(100%-1rem)] items-center gap-3 rounded-lg pl-3 pr-2 text-left " + (appsAbertos ? "bg-interactive-background-selected text-text-strong" : "text-channels-default hover:bg-interactive-background-hover hover:text-text-default")}
+        // mesma medida do "Amigos" acima (h-9, pl-2 pr-4, gap-2, ícone 20)
+        className={"mx-2 flex h-9 w-[calc(100%-1rem)] items-center gap-2 rounded-lg pl-2 pr-4 text-left " + (appsAbertos ? "bg-interactive-background-selected text-text-strong" : "text-channels-default hover:bg-interactive-background-hover hover:text-text-default")}
       >
-        <Apps size={21} aria-hidden="true" className="shrink-0" />
+        <Apps size={20} aria-hidden="true" className="shrink-0" />
         <span className="flex-1 truncate font-medium">Descobrir aplicativos</span>
       </button>
 
@@ -260,7 +269,8 @@ export default function DMList() {
                 setQuery("");
                 void openWith(u.id);
               }}
-              className="mx-2 mb-0.5 flex h-12 w-[calc(100%-1rem)] items-center gap-3 rounded-lg pl-[10px] pr-2 text-left text-channels-default hover:bg-interactive-background-hover hover:text-text-default"
+              // pl-2/gap-2: `.link__972a0{padding-inline:8px 0;gap:8px}` (CSS bruto)
+              className="mx-2 mb-0.5 flex h-12 w-[calc(100%-1rem)] items-center gap-2 rounded-lg pl-2 pr-2 text-left text-channels-default hover:bg-interactive-background-hover hover:text-text-default"
             >
               <Avatar user={u} size="md" status={resolveStatus(statuses, u)} surface="border-background-base-lowest" />
               <span className="min-w-0">
@@ -282,10 +292,16 @@ export default function DMList() {
         conversas. (Lá o título "Mensagens diretas" vem logo abaixo; no celular
         o cabeçalho da tela já diz "Mensagens" e ele seria repetição.)
       */}
-      <div className="mx-2 mt-3 border-t border-border-subtle" />
+      {/* `.sectionDivider_e6b769{margin:12px 8px}` (CSS bruto): 12 em cima
+          E embaixo, não só em cima — por isso `my-3`, não `mt-3`. */}
+      <div className="mx-2 my-3 border-t border-border-subtle" />
 
       {!celular && (
-      <div className="group flex items-center justify-between pl-5 pr-3.5 pt-3 pb-0.5">
+      /* `.directMessagesHeader_e6b769` (CSS bruto): 48 de altura fixa,
+         `padding:8px 16px` com `padding-inline-end:8px` (16 só na esquerda,
+         8 nos outros três lados) e borda inferior — não a altura automática
+         com `pl-5 pr-3.5 pt-3 pb-0.5` de antes. */
+      <div className="group flex h-12 items-center justify-between border-b border-border-subtle pl-4 pr-2 py-2">
         <h3 className="text-xs font-semibold text-text-muted group-hover:text-text-default">
           Mensagens diretas
         </h3>
@@ -338,7 +354,9 @@ export default function DMList() {
             key={dm.id}
             role="listitem"
             onContextMenu={(e) => openMenu(e, dm, e.currentTarget)}
-            className={`group mx-2 mb-0.5 flex h-12 items-center rounded-lg pl-[10px] pr-2 ${
+            // pl-2: `.link__972a0{padding-inline:8px 0}` (CSS bruto); `relative`
+            // é o âncora da pílula de não lida logo abaixo
+            className={`group relative mx-2 mb-0.5 flex h-12 items-center rounded-lg pl-2 pr-2 ${
               active
                 ? "bg-interactive-background-selected text-text-strong"
                 : unread
@@ -346,13 +364,27 @@ export default function DMList() {
                   : "text-channels-default hover:bg-interactive-background-hover hover:text-text-default"
             }`}
           >
+            {unread && (
+              /* `.unreadPill__972a0`: barra de 4×8 encostada FORA da linha,
+                 8px para fora da borda esquerda (`inset-inline-start:-8px`)
+                 — cai exatamente na margem de 8 (`mx-2`) que separa a linha
+                 do bordo da coluna. `.muted__972a0{opacity:.3}` quando a
+                 conversa está silenciada. */
+              <span
+                aria-hidden="true"
+                className={`absolute -left-2 top-1/2 h-2 w-1 -translate-y-1/2 rounded-r bg-interactive-text-active ${
+                  isMuted(porEscopo[channelNotificationScope(dm.id)]) ? "opacity-30" : ""
+                }`}
+              />
+            )}
             <button
               type="button"
               data-dm-button
               onClick={() => select(dm)}
               aria-current={active ? "true" : undefined}
               aria-label={unread ? `${title} (não lida)` : title}
-              className="flex h-full min-w-0 flex-1 items-center gap-3 text-left"
+              // gap-2: `.link__972a0{gap:8px}` (CSS bruto, não 12)
+              className="flex h-full min-w-0 flex-1 items-center gap-2 text-left"
             >
               {other ? (
                 <Avatar user={other} size="md" status={resolveStatus(statuses, other)} surface={active ? "border-interactive-background-selected" : "border-background-base-lowest"} />
@@ -484,9 +516,13 @@ export default function DMList() {
               type="search"
               aria-label="Encontrar ou começar uma conversa"
               placeholder="Encontrar ou começar uma conversa"
-              tamanho="sm"
-              classeDaCaixa="mt-2 w-full !h-[40px] !rounded-full !bg-interactive-background-hover !border-transparent !px-4"
-              className="!text-sm !text-text-default placeholder:!text-text-muted"
+              /* 40 é medida própria da pílula do celular, não o `sm` de 32
+                 — `tamanho` numérico vira `style.height` (inline), que já
+                 ganha de qualquer classe sem precisar de `!important`. */
+              tamanho={40}
+              semCaixa
+              classeDaCaixa="mt-2 w-full rounded-full bg-interactive-background-hover border-transparent px-4"
+              className="text-text-sm text-text-default placeholder:text-text-muted"
             />
           )}
         </div>
@@ -509,7 +545,9 @@ export default function DMList() {
 
   return (
     <aside className="flex w-[294px] shrink-0 flex-col bg-background-base-lowest">
-      <div className="flex h-[49px] shrink-0 items-center border-b border-border-subtle px-2.5 shadow-elevation-low">
+      {/* `.searchBar_e6b769{height:var(--custom-channel-header-height)}` = 49
+          (`VARIAVEIS.md`); `px-2` é `padding:0 var(--space-xs)` (8, não 10) */}
+      <div className="flex h-[49px] shrink-0 items-center border-b border-border-subtle px-2 shadow-elevation-low">
         <TextInput
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -522,10 +560,21 @@ export default function DMList() {
           /* o campo é `hov` (#222225) e não `void`: medido no print do Discord
              `2026-09-04 102757` (x 46-77, y 42-71), lá ele CLAREIA sobre a
              coluna em vez de escurecer — e com a coluna em #121214 um campo
-             Void Ink sumiria dentro dela */
-          classeDaCaixa="w-full !bg-interactive-background-hover !border-transparent !px-1.5"
+             Void Ink sumiria dentro dela. `semCaixa` tira o fundo/borda
+             padrão do primitivo para não competir com os daqui — sem
+             `!important` (cartão 1f-dm-lista). `px-3` (12) é
+             `.searchBarComponent_e6b769{padding:10px 12px}` (CSS bruto,
+             valor literal, não var). */
+          semCaixa
+          classeDaCaixa="w-full bg-interactive-background-hover border-transparent px-3"
           className={
-            "!text-sm !text-text-default placeholder:!text-text-muted " +
+            /* 14px `--text-muted` é o que o CSS mede aqui
+               (`font-size:14px;color:var(--text-muted)`), mas `TextInput`
+               não tem prop para o texto do `<input>` — só `classeDaCaixa`
+               cobre a caixa. Sem `!important`, estas classes podem perder
+               para as do primitivo pela ordem do stylesheet gerado (ver
+               cabeçalho de `TextInput`) — ver "faltando" da entrega. */
+            "text-text-sm text-text-default placeholder:text-text-muted " +
             (buscaFocada || query ? "text-left" : "text-center")
           }
         />
