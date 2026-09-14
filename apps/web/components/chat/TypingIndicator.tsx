@@ -8,15 +8,17 @@ import { useGuilds } from "@/stores/guilds";
 import { typersOf, useTyping } from "@/stores/typing";
 
 /**
- * Animação dos três pontos.
- *
- * Fica aqui, e não em `globals.css`, porque só este componente a usa e a
- * amplitude (6px) é parte do desenho: com os 3px de antes o movimento sumia no
- * meio do texto e a linha parecia estática.
+ * Pulso dos três pontos: o Discord não os faz saltar, ele os faz pulsar —
+ * `scale .8→1` e `opacity .32→1`, sem `translateY`. Fica aqui, e não em
+ * `globals.css`, porque só este componente usa este keyframe.
+ * Origem: css-bruto/sob-demanda/132839.8777680fa22a03e5.css `.dot_b88801` /
+ * `@keyframes typing-dot-pulse_b88801` (duração 1.2s,
+ * `cubic-bezier(.45,0,.55,1)`, atraso de 0,15s entre pontos — os -1.2s/-1.05s/
+ * -0.9s de lá viram, no mesmo ciclo de 1,2s, 0/0,15s/0,3s aqui).
  */
 const ANIMACAO = `@keyframes streamz-digitando {
-  0%, 60%, 100% { transform: translateY(0); opacity: .6 }
-  30% { transform: translateY(-6px); opacity: 1 }
+  0%, 50%, 100% { opacity: .32; scale: .8 }
+  25% { opacity: 1; scale: 1 }
 }`;
 
 function frase(nomes: string[]): React.ReactNode {
@@ -24,7 +26,10 @@ function frase(nomes: string[]): React.ReactNode {
   if (nomes.length > 3) return <>Várias pessoas estão digitando</>;
   const negrito = nomes.map((n, i) => (
     <span key={n}>
-      <strong className="font-semibold text-text-strong">{n}</strong>
+      {/* `.text_b88801>strong{color:var(--text-default);font-weight:
+          var(--font-weight-semibold)}` — o nome é `text-default`, não
+          `text-strong` (esse é o título das boas-vindas, outra escala). */}
+      <strong className="font-semibold text-text-default">{n}</strong>
       {i < nomes.length - 2 ? ", " : i === nomes.length - 2 ? " e " : ""}
     </span>
   ));
@@ -104,18 +109,32 @@ export default function TypingIndicator({ channelId }: { channelId: string }) {
   return (
     <div ref={raiz} aria-live="polite" className="relative shrink-0" style={{ height: RESPIRO }}>
       {nomes.length > 0 && (
+        /*
+          Medidas — css-bruto/sob-demanda/132839.8777680fa22a03e5.css
+          `.base_b88801`/`.inTextChannel_b88801`: `font-size:12px;
+          line-height:16px` (a nossa escala `text-text-xs`, 12/16 batendo
+          exato), `font-weight:500` (`font-medium`), `color:var(--text-subtle)`
+          — não `text-default`, que é só a cor do nome em negrito
+          (`.text_b88801>strong`) e dos pontos (`.dots_b88801`). Sem
+          `background-color` na regra: a faixa é transparente, não uma barra
+          opaca. Padding: `inset-inline:0` com `padding-inline-start:
+          var(--space-md)` (16px) — só a esquerda, não `px-4` nos dois lados.
+        */
         <div
-          className="absolute inset-x-0 bottom-full flex h-6 items-center gap-1.5 bg-background-base-lower px-4 text-[13px] text-text-default"
+          className="absolute inset-x-0 bottom-full flex h-6 items-center gap-1.5 pl-4 text-text-xs font-medium text-text-subtle"
           style={{ marginBottom: alturaDoComposer }}
         >
           <style>{ANIMACAO}</style>
-          <span aria-hidden="true" className="flex items-center gap-[3px]">
+          {/* `.dots_b88801`: `gap:2px` (não 3), cor `--text-default` (herdada
+              pelos pontos via `currentColor`, por isso o `bg-text-default`
+              abaixo em vez de repetir o token no `<span>` pai). */}
+          <span aria-hidden="true" className="flex items-center gap-0.5">
             {[0, 1, 2].map((i) => (
               <span
                 key={i}
                 style={{
-                  animation: "streamz-digitando 1.2s infinite ease-in-out",
-                  animationDelay: `${i * 0.16}s`,
+                  animation: "streamz-digitando 1.2s cubic-bezier(.45,0,.55,1) infinite",
+                  animationDelay: `${i * 0.15}s`,
                 }}
                 className="h-[7px] w-[7px] rounded-full bg-text-default"
               />

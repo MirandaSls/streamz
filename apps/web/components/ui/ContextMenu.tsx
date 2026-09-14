@@ -369,6 +369,30 @@ function Painel({
           </button>
         )}
         {(() => {
+          /*
+            Estado vazio: nenhum print/CSS documenta isso (o Discord nunca
+            abre um menu sem item), mas um chamador que monta a lista de
+            forma assíncrona (ex.: um submenu de cargos enquanto a permissão
+            ainda não resolveu) pode passar `items: []` antes de preenchê-la.
+            Sem isto a caixa aparecia como uma tira vazia (só o padding do
+            rolador), o que parece quebrado. Fallback contido aqui — não muda
+            a API de quem chama. Texto não é do Discord: não medido.
+          */
+          if (items.length === 0) {
+            const vazio = (
+              <div
+                role="presentation"
+                className="px-2 py-3 text-center text-xs text-text-muted"
+              >
+                Nada por aqui
+              </div>
+            );
+            return folha ? (
+              vazio
+            ) : (
+              <div className="min-h-0 flex-1 overflow-y-auto p-2">{vazio}</div>
+            );
+          }
           const linhas = items.map((item, i) => {
           if ("separator" in item) {
             // `.separator_c1e9c4`: 1px `--border-subtle`, margem de 8 nos
@@ -464,8 +488,22 @@ function Painel({
                 `.focused_c1e9c4{border-radius:4px}` no hover/foco (e travado
                 em 4 enquanto o submenu do item está aberto). Desabilitado:
                 `.disabled_c1e9c4{opacity:.5}`, não .4.
+
+                Anel de foco: `.keyboard-mode .colorDefault_c1e9c4.focused_c1e9c4
+                {outline:2px solid var(--border-focus);outline-offset:-2px}`
+                (css-bruto/858942…) — só existe para o item comum navegado por
+                teclado, não para o item de perigo (o arquivo não tem a regra
+                equivalente para `.colorDanger_c1e9c4`) nem para o hover de
+                mouse (por isso `focus-visible`, não `focus`). `border-focus`
+                é o azul do anel de teclado do Discord, que a ADR-0009 mantém
+                azul — não é marca. `group`: o ícone do item (abaixo) clareia
+                junto no hover/foco do botão.
               */
-              className={`flex min-h-8 w-full items-center gap-2 whitespace-nowrap p-2 text-left text-sm outline-none disabled:opacity-50 ${cor} ${
+              className={`group flex min-h-8 w-full items-center gap-2 whitespace-nowrap p-2 text-left text-sm outline-none disabled:opacity-50 ${cor} ${
+                item.danger
+                  ? ""
+                  : "focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-border-focus"
+              } ${
                 aberto === i
                   ? `${corAberta} rounded-[4px]`
                   : "rounded-[2px] hover:rounded-[4px] focus:rounded-[4px]"
@@ -481,13 +519,22 @@ function Painel({
                 // #f0f0f0 do rótulo ao lado): o ícone comum **não** segue a cor
                 // do item, fica sempre nesse cinza — antes herdava o
                 // `text-text-strong` do item a 80% de opacidade, daí "quase
-                // branco". Perigo (`item.danger`) continua herdando o vermelho
-                // do item (não é o que este cartão mediu); `forte` é o ícone à
-                // parte do seletor de status, com cor própria.
+                // branco". No hover/foco ele clareia para `--interactive-text-
+                // active` (#fbfbfb): `.colorDefault_c1e9c4.focused_c1e9c4:not(
+                // .checkboxContainer_c1e9c4) path{fill:var(--interactive-text-
+                // active)}` (css-bruto/858942…) — daí `group-hover`/`group-
+                // focus` (o `group` está no `<button>`, acima). Perigo
+                // (`item.danger`) continua herdando o vermelho do item (não é
+                // o que este cartão mediu); `forte` é o ícone à parte do
+                // seletor de status, com cor própria.
                 <span
                   aria-hidden="true"
                   className={`grid h-5 w-5 shrink-0 place-items-center [&>svg]:h-4 [&>svg]:w-4 ${
-                    forte ? "" : item.danger ? "opacity-80" : "text-interactive-icon-default"
+                    forte
+                      ? ""
+                      : item.danger
+                        ? "opacity-80"
+                        : "text-interactive-icon-default group-hover:text-interactive-text-active group-focus:text-interactive-text-active"
                   }`}
                 >
                   {item.icon as ReactNode}

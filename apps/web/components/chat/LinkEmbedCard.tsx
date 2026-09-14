@@ -61,14 +61,36 @@ const LARGURA = 432;
  * esquerda, nome do site, título em azul, descrição inteira e imagem na
  * proporção real.
  *
- * Medidas do print (`173327.png`, cartão da Perplexity): raio 4 (canto sobe
- * 3, 1, 0 px nas três primeiras linhas; raio 8 subiria 5, 3, 2); borda de 1px
- * mais clara que o fundo no topo, à direita e embaixo (y=91 e 433, x=886), e
- * nenhuma à esquerda, onde está a barra; texto começa em x=471 (4 de barra +
- * 12 de recuo); nome do site com a tinta 13px abaixo do topo, que é o que o
- * `padding-top` de 8 dá com 12px/16px; título 16/600, 25px abaixo do nome
- * (8 de margem com linha de 22); descrição 14 com passo de 18 entre linhas;
- * imagem com a largura do conteúdo (399) e raio 4.
+ * Medidas, print 1:1 (`173327.png`, cartões da Perplexity/Comet) × CSS bruto
+ * (`.embedFull__623de`/`.grid__623de` de
+ * `docs/referencias-discord/tokens/css-bruto/198496.7ea2af35bfe94977.css`):
+ * - **Fundo `background-surface-high`, não `background-base-lowest`.** A
+ *   caixa mede `#242429` no print (coluna x=670, y=92–162) — é exatamente
+ *   `--background-surface-high` (`VARIAVEIS.md`), um tom **mais claro** que o
+ *   chat (`#1a1a1e`, `--background-base-lower`). `background-base-lowest`
+ *   (`#121214`) é mais escuro que o chat, direção invertida da do Discord.
+ * - Raio 4 (`.embed__623de{border-radius:4px}`, e o canto do print sobe 3, 1,
+ *   0px nas três primeiras linhas — raio 8 subiria 5, 3, 2).
+ * - Borda 1px `border-subtle` no topo/direita/baixo, nenhuma à esquerda
+ *   (onde fica a barra).
+ * - Padding do conteúdo (`.grid__623de{padding-block:.5rem 1rem;
+ *   padding-inline:.75rem 1rem;padding-top:.125rem}`, a última regra vence a
+ *   primeira no topo): **2px topo, 16px direita, 16px baixo, 12px esquerda**
+ *   — bate com o texto começando em x=471 (barra em 455–458 + 12).
+ * - Nome do site (`embedProvider`): sem `color`/`font-size` próprios no CSS,
+ *   então herda do texto do embed; o pico de tinta no print (`#dedee1`,
+ *   linha y=109) fica muito acima de `text-muted` (`#96979e`) e perto de
+ *   `text-default` (`#efeff1`, o mesmo pico que a descrição bate exatamente
+ *   em y=165) — por isso `text-default`, não `text-muted`. Tamanho 14
+ *   (`embedAuthorName` — mesma família de texto do embed — é `.875rem`).
+ * - Título: `font-size:1rem` (16), `font-weight:var(--font-weight-semibold)`,
+ *   cor `text-strong` quando não é link e `text-link` quando é (sempre é,
+ *   aqui) — `#4d96ee` bate pixel a pixel no print (y=136).
+ * - `embedTitle`/`embedDescription`/`embedProvider` não têm `margin` no CSS:
+ *   o espaço entre eles vem só da entrelinha de cada um, não de uma margem
+ *   somada — por isso não há `mt-2` extra entre as linhas aqui.
+ * - Imagem: `.embedFull__623de .embedMedia__623de{margin-top:16px}` e
+ *   `.embedMedia__623de{border-radius:4px}`.
  *
  * A descrição **não** é truncada: o Discord mostra o texto completo com as
  * quebras de linha do Open Graph, e o `line-clamp-3` cortava justamente o
@@ -79,25 +101,26 @@ export default function LinkEmbedCard({ embed }: { embed: LinkEmbed }) {
     <div
       // `border-y border-r`, sem borda à esquerda: lá fica a barra, encostada
       // no canto como no Discord. `border` é o token de divisória que já
-      // existe; sobre `panel` dá o mesmo "um tom acima" da borda do Discord
+      // existe; sobre `background-surface-high` dá o mesmo "um tom acima" do
+      // chat que o Discord tem.
       className="mt-1 grid grid-cols-[auto_1fr] overflow-hidden rounded border-y border-r border-border-subtle"
       style={{ maxWidth: LARGURA }}
     >
-      <div className="w-1 bg-background-base-lowest" style={{ backgroundColor: corDoDominio(embed.url) }} aria-hidden="true" />
-      <div className="min-w-0 bg-background-base-lowest" style={{ padding: "8px 16px 16px 12px" }}>
-        {embed.siteName && <div className="text-xs text-text-muted">{embed.siteName}</div>}
+      <div className="w-1 bg-background-surface-high" style={{ backgroundColor: corDoDominio(embed.url) }} aria-hidden="true" />
+      <div className="min-w-0 bg-background-surface-high" style={{ padding: "2px 16px 16px 12px" }}>
+        {embed.siteName && <div className="text-sm font-medium text-text-default">{embed.siteName}</div>}
         {embed.title && (
           <a
             href={embed.url}
             target="_blank"
             rel="noreferrer"
-            className="mt-2 block font-semibold leading-[22px] text-text-link hover:underline"
+            className="block font-semibold leading-[22px] text-text-link hover:underline"
           >
             {embed.title}
           </a>
         )}
         {embed.description && (
-          <p className="mt-2 whitespace-pre-line text-sm leading-[18px] text-text-default">
+          <p className="whitespace-pre-line text-sm leading-[18px] text-text-default">
             {embed.description}
           </p>
         )}

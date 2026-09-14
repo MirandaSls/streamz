@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode, type UIEvent } from "react";
+import { useEffect, type ReactNode } from "react";
 import { ArrowDown } from "@/components/ui/icones";
 import { isSystemMessage, type Message } from "@streamz/shared";
 import MessageItem from "@/components/MessageItem";
@@ -24,18 +24,40 @@ const ID_DIVISOR = "divisor-nao-lido";
  * Sem margem inferior: o respiro abaixo é o `--espaco-entre-grupos` que a
  * primeira mensagem do dia já traz. Somar os dois abria um buraco que o Discord
  * não tem.
+ *
+ * O rótulo é a mesma peça `.content` do divisor de não lidas — só sem a cor de
+ * perigo: `background: var(--background-gradient-chat, --background-base-lower)`,
+ * `border-radius: 8px`, `color: var(--text-muted)`, `padding: 2px 4px`,
+ * `font-size: 12px` (`line-height: 13px`, perto o bastante da nossa escala
+ * `text-text-xs` de 12/16 para não abrir uma classe só para isto — a diferença
+ * de 3px de entrelinha não se vê numa etiqueta de uma linha).
+ * Origem: css-bruto/59565.8f14bd4f00233666.css `.content__908e2`.
  */
 function DateDivider({ iso }: { iso: string }) {
   return (
     <div role="separator" className="mx-4 mt-6 flex items-center">
       <span className="h-px flex-1 bg-border-subtle" />
-      <span className="px-1 text-xs font-semibold text-text-muted">{rotuloDoDia(iso)}</span>
+      <span className="rounded-lg px-1 py-0.5 text-text-xs font-semibold text-text-muted">
+        {rotuloDoDia(iso)}
+      </span>
       <span className="h-px flex-1 bg-border-subtle" />
     </div>
   );
 }
 
-/** A linha vermelha com o rótulo NOVO, acima da primeira mensagem não lida. */
+/**
+ * A linha vermelha com o rótulo NOVO, acima da primeira mensagem não lida.
+ *
+ * A etiqueta é o `.endCap` do Discord: só o lado direito arredondado
+ * (`border-radius: 0 4px 4px 0`, o nosso `rounded` de 4px — não os 2px de
+ * `rounded-b-sm` que estava aqui), `height: 13px`, `padding-inline: 1px 4px`
+ * sem padding vertical, `line-height: 9px` (não 13 — o texto sobra menor que a
+ * caixa e o flex centraliza). Cor: fundo `--background-feedback-notification`
+ * = `--status-danger` (`#da3e44`, mesmo valor) e texto branco
+ * (`--control-critical-primary-text-default`), os dois já batendo com o que
+ * tínhamos. Sem `letter-spacing`: o Discord não abre tracking aqui.
+ * Origem: css-bruto/59565.8f14bd4f00233666.css `.endCap__908e2`.
+ */
 function UnreadDivider() {
   return (
     <div
@@ -45,7 +67,7 @@ function UnreadDivider() {
       className="pointer-events-none relative mt-3 flex items-center"
     >
       <span className="h-px flex-1 bg-status-danger" />
-      <span className="rounded-b-sm bg-status-danger px-1 py-px text-[10px] font-bold uppercase leading-[13px] tracking-wide text-control-critical-primary-text-default">
+      <span className="flex h-[13px] items-center justify-center rounded-r bg-status-danger pl-px pr-1 text-[10px] font-bold uppercase leading-[9px] text-control-critical-primary-text-default">
         Novo
       </span>
     </div>
@@ -113,9 +135,6 @@ export function BotaoBoasVindas({
   );
 }
 
-/** Onde está o divisor de não lidas em relação à parte visível da lista. */
-type PosicaoDivisor = "acima" | "visivel" | "abaixo" | null;
-
 /**
  * Área rolável de mensagens, com paginação para trás, divisor de não lidas,
  * agrupamento por autor (Discord: 7 min), divisores de data e o cabeçalho de
@@ -128,6 +147,7 @@ export default function MessageList({
   hasMore,
   loading,
   loadingOlder,
+  loadingOlderError,
   onLoadOlder,
   currentUserId,
   canModerate,
@@ -151,6 +171,14 @@ export default function MessageList({
   hasMore: boolean;
   loading: boolean;
   loadingOlder?: boolean;
+  /**
+   * A paginação para trás falhou (hoje `messages.ts:378` só avisa por toast).
+   * Opcional e ainda não passada por nenhum chamador — ver "faltando" do
+   * cartão 2e-lista-mensagens: falta o fio de `ChatView`/`DMView`/
+   * `ThreadPanel` até aqui. Sem isto, o card de erro nunca aparece, mas também
+   * não quebra ninguém que já usa o componente sem o prop.
+   */
+  loadingOlderError?: boolean;
   onLoadOlder?: () => void;
   currentUserId?: string;
   canModerate?: boolean;
@@ -177,7 +205,6 @@ export default function MessageList({
   const bloqueados = useBlockedIds();
   const fronteira = useFronteiraNaoLida(channelId);
   const sair = useMarcadorNaoLido((s) => s.sair);
-  const [posicaoDivisor, setPosicaoDivisor] = useState<PosicaoDivisor>(null);
 
   // sair do canal fecha a decisão desta visita: voltar depois recalcula onde a
   // leitura parou, em vez de reaproveitar um divisor velho
@@ -222,27 +249,6 @@ export default function MessageList({
     };
   }, [scrollRef, showJump]);
 
-  const medirDivisor = useCallback(() => {
-    const caixa = scrollRef.current;
-    const divisor = caixa?.querySelector(`#${ID_DIVISOR}`);
-    if (!caixa || !divisor) {
-      setPosicaoDivisor(null);
-      return;
-    }
-    const a = caixa.getBoundingClientRect();
-    const b = divisor.getBoundingClientRect();
-    setPosicaoDivisor(b.bottom < a.top ? "acima" : b.top > a.bottom ? "abaixo" : "visivel");
-  }, [scrollRef]);
-
-  useEffect(() => {
-    medirDivisor();
-  }, [medirDivisor, items, fronteira]);
-
-  function aoRolar(event: UIEvent<HTMLDivElement>) {
-    handleScroll(event);
-    medirDivisor();
-  }
-
   // o "ir para a mensagem" corre depois do layout da lista (useLayoutEffect da
   // rolagem grudenta), então este efeito é quem tem a última palavra na posição
   useEffect(() => {
@@ -265,10 +271,29 @@ export default function MessageList({
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
-      {/* barra superior: há não lido acima do que está na tela */}
-      {channelId && posicaoDivisor === "acima" && (
-        <div className="absolute inset-x-0 top-0 z-20 flex h-6 items-center justify-between bg-status-danger px-4 text-xs font-semibold text-control-critical-primary-text-default">
-          <span>Você tem mensagens não lidas</span>
+      {/*
+        Barra "mensagens novas desde…", presa ao topo da área rolável — não do
+        composer, e não em duas versões por posição de rolagem. O que tínhamos
+        antes (barra vermelha no topo quando o divisor ficava acima da tela,
+        barra verde colada ao composer quando ficava abaixo) não existe no
+        Discord: lá é UMA barra só, verde, sempre no topo enquanto houver algo
+        não lido nesta visita — some só ao "Marcar como lidas" ou ao sair do
+        canal (`marcador-nao-lido.ts`). A versão colada ao composer era também
+        a origem da faixa oliva de 7px que a revisão viu em thread-painel
+        (na verdade o fundo do bloco de código, `--background-code`: a
+        investigação deste cartão descartou a hipótese de bug ali — ver
+        "medidas").
+        Medidas — css-bruto/554669.2db5a96a8c197f0c.css `.newMessagesBar__0f481`:
+        height 32px (h-8), border-radius "0 0 8px 8px" (rounded-b-lg),
+        box-shadow var(--elevation-low) (shadow-elevation-low), padding-inline
+        var(--space-16) (px-4), bg var(--brand-500) (bg-brand-500 — a mesma
+        variável, não o alias `control-primary`). Texto: o Discord usa
+        `color:var(--white)`, mas a regra 2 da ADR-0009 barra branco sobre
+        marca — vira `text-control-primary-text-default` (accent-ink).
+      */}
+      {channelId && idPrimeiraNaoLida && (
+        <div className="absolute inset-x-0 top-0 z-20 flex h-8 items-center justify-between rounded-b-lg bg-brand-500 px-4 text-xs font-semibold text-control-primary-text-default shadow-elevation-low">
+          <span>Mensagens novas desde {rotuloDoDia(fronteira ?? new Date().toISOString())}</span>
           <button type="button" onClick={() => marcarLidas(channelId)} className="hover:underline">
             Marcar como lidas
           </button>
@@ -280,13 +305,33 @@ export default function MessageList({
           2026-09-04: não dava para selecionar mensagem nem no site nem no app. */}
       <div
         ref={scrollRef}
-        onScroll={aoRolar}
+        onScroll={handleScroll}
         className={`scroller-auto scroller-fade flex-1 select-text overflow-y-auto ${className}`}
       >
-        {loadingOlder && (
-          <div className="grid place-items-center py-3" role="status" aria-label="Carregando mensagens">
-            <span className="h-5 w-5 animate-spin rounded-full border-2 border-border-normal border-t-text-muted" />
+        {loadingOlderError ? (
+          /* `.messagesErrorBar` do Discord (mesmo arquivo, extends `.barBase`):
+             bg `--notice-background-critical`, borda `--border-feedback-critical`,
+             texto `--notice-text-critical`, `padding: var(--space-4) var(--space-8)`
+             (py-1 px-2). Aqui embutido no fluxo, não flutuante — não há ainda um
+             `onLoadOlder` de "tentar de novo" separado do de paginar, então o
+             botão reusa o mesmo callback. */
+          <div
+            role="alert"
+            className="mx-4 my-3 flex items-center justify-between gap-3 rounded border border-border-feedback-critical bg-notice-background-critical px-2 py-1 text-xs text-notice-text-critical"
+          >
+            <span>Não foi possível carregar mensagens mais antigas.</span>
+            {onLoadOlder && (
+              <button type="button" onClick={onLoadOlder} className="font-semibold hover:underline">
+                Tentar novamente
+              </button>
+            )}
           </div>
+        ) : (
+          loadingOlder && (
+            <div className="grid place-items-center py-3" role="status" aria-label="Carregando mensagens">
+              <span className="h-5 w-5 animate-spin rounded-full border-2 border-border-normal border-t-text-muted" />
+            </div>
+          )
         )}
 
         {atStart && welcome && (
@@ -385,27 +430,28 @@ export default function MessageList({
         })}
       </div>
 
-      {/* barra de largura total colada ao composer: há não lido abaixo da tela */}
-      {channelId && posicaoDivisor === "abaixo" && (
-        <div className="flex h-6 shrink-0 items-center justify-between bg-brand-500 px-4 text-xs font-semibold text-control-primary-text-default">
-          <span>Mensagens novas desde {rotuloDoDia(fronteira ?? new Date().toISOString())}</span>
-          <button type="button" onClick={() => marcarLidas(channelId)} className="hover:underline">
-            Marcar como lidas
-          </button>
-        </div>
-      )}
-
-      {/* voltar ao presente: um botão redondo no canto, não uma pílula no meio */}
+      {/*
+        Voltar ao presente: botão redondo no canto, não uma pílula no meio —
+        o `.jumpToPresentButton` do Discord, não o `.newMessagesPill` (esse é
+        a versão com "X" de dispensar, que não temos). Medidas —
+        css-bruto/554669.2db5a96a8c197f0c.css `.jumpToPresentButtonContainer`
+        (bottom:16px, inset-inline:0 16px → `bottom-4 right-4`) e
+        `.jumpToPresentButton`/`Icon` (padding 6px + ícone 24px = 36px, ou
+        seja `h-9 w-9` com raio total — não os 40px de `h-10 w-10` — ícone
+        `size={24}`, não 20; fundo `--background-surface-high`, hover
+        `--background-base-lowest` — o par estava invertido — sem sombra e
+        sem troca de cor do ícone no hover, que o Discord não tem aqui).
+        No celular o alvo de toque sobe a 44 literal — isso é nosso, não do
+        Discord: alvo de toque tem piso de acessibilidade, não medida dele.
+      */}
       {showJump && (
         <button
           type="button"
           onClick={jumpToLatest}
           aria-label="Ir para as mensagens mais recentes"
-          /* 39×39 com `h-10 w-10`; no celular vai a 44 literal, e sobe um pouco
-             para não encostar na cápsula do composer */
-          className="absolute bottom-4 right-6 grid h-10 w-10 place-items-center rounded-full bg-background-base-lowest text-text-default shadow-popout transition hover:bg-interactive-background-hover hover:text-text-strong celular:bottom-5 celular:right-4 celular:h-[44px] celular:w-[44px]"
+          className="absolute bottom-4 right-4 grid h-9 w-9 place-items-center rounded-full bg-background-surface-high text-text-default transition hover:bg-background-base-lowest celular:bottom-5 celular:right-4 celular:h-[44px] celular:w-[44px]"
         >
-          <ArrowDown size={20} aria-hidden="true" />
+          <ArrowDown size={24} aria-hidden="true" />
         </button>
       )}
     </div>
