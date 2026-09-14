@@ -17,10 +17,13 @@ import { useEhMobile } from "@/hooks/useEhMobile";
 
 export type PickerTab = "emoji" | "gif" | "figurinha";
 
+// ordem GIF · Figurinha · Emoji: a mesma ordem, da esquerda para a direita, dos
+// três botões que abrem cada seletor na barra do composer (GIF, figurinha,
+// emoji — o de emoji é o mais próximo do texto, o último antes de enviar).
 const ABAS: { id: PickerTab; rotulo: string; Icone: Icone }[] = [
-  { id: "emoji", rotulo: "Emoji", Icone: Smile },
   { id: "gif", rotulo: "GIF", Icone: ImageIcon },
   { id: "figurinha", rotulo: "Figurinha", Icone: StickerIcon },
+  { id: "emoji", rotulo: "Emoji", Icone: Smile },
 ];
 
 /**
@@ -37,7 +40,8 @@ const ALCA_DA_FOLHA = 28;
  * Antes eram três popovers independentes, cada um aberto por um botão do
  * composer: trocar de mídia fechava um e abria outro, de tamanho diferente, e
  * perdia a busca que já tinha sido digitada. Aqui a caixa é sempre a mesma
- * (424 × 420) e cada aba só é montada na primeira visita — mas, uma vez
+ * (500 × 510, `LARGURA_PICKER`/`ALTURA_PICKER` — cartão 2j-seletor-gif-figurinha,
+ * medido no print 1:1 do seletor) e cada aba só é montada na primeira visita — mas, uma vez
  * montada, **fica montada** e apenas some da tela. É isso que preserva os
  * resultados do Giphy e o termo digitado ao ir e voltar entre as abas, sem
  * pagar a busca de GIF de quem só queria um emoji.
@@ -78,17 +82,22 @@ const ALCA_DA_FOLHA = 28;
  * novo (a mesma referência ao mesmo nó): a âncora por `ref` é dependência pelo
  * objeto, e objeto novo é conta nova.
  *
- * ### 2. A superfície continua a de antes
+ * ### 2. A superfície agora é a do Discord
  *
- * Fundo `--background-base-lowest`, e não o `--background-surface-high` do
- * `Popout`. O Discord pinta este painel com `--background-surface-high`
- * (`.contentWrapper__08434` em `css-bruto/678906.8d928f079d6635f0.css`), mas os
- * cabeçalhos fixos das seções dentro dos três seletores (`h3.sticky` em
- * `EmojiPicker`, `GifPicker` e `StickerPicker`) são pintados com
- * `--background-base-lowest`: trocar só a caixa deixaria cada cabeçalho como
- * uma faixa escura sobre o painel. A troca é da onda que refizer os seletores,
- * e as duas pontas precisam mudar juntas. Raio 8 e `shadow-popout` são os do
- * `Popout`, que já eram os daqui.
+ * Fundo `--background-surface-high` (`#242429`, `.contentWrapper__08434` em
+ * `css-bruto/678906.8d928f079d6635f0.css`) — que por acaso é também o padrão
+ * do `Popout` (`superficie="alta"`); a classe fica explícita aqui mesmo assim,
+ * porque este painel depende do valor certo e um padrão que muda por outro
+ * consumidor não pode arrastar este junto. Antes era `--background-base-lowest`
+ * (`#121214`, a superfície de baixo do app, não a do popout), e os cabeçalhos
+ * fixos das seções (`h3.sticky`) tinham que trocar **junto**, senão cada um
+ * viraria uma faixa escura sobre o painel novo — é por isso que a troca
+ * esperou o cartão que redesenha os seletores (2j-seletor-gif-figurinha).
+ * `GifPicker` e `StickerPicker` já mudaram; o `EmojiPicker`
+ * (`components/ui/EmojiPicker.tsx:420`, fora da lista deste cartão) continua
+ * com `--background-base-lowest` no cabeçalho — ver "faltando" no relatório
+ * do cartão. Raio 8 e `shadow-popout` são os do `Popout`, que já eram os
+ * daqui.
  *
  * ### 3. O foco vai para a busca da aba aberta
  *
@@ -104,11 +113,11 @@ const ALCA_DA_FOLHA = 28;
  *
  * ## No celular: folha inferior
  *
- * Num telefone de 390px uma caixa de 424 já não cabe — e, ancorada no composer,
+ * Num telefone de 390px uma caixa de 500 já não cabe — e, ancorada no composer,
  * ficaria justamente debaixo do teclado. Aqui ela vira a **folha inferior** do
  * `Popout`: largura da tela, subindo do fundo, com as abas no topo e a grade
  * fluida (`EmojiPicker` troca as 9 colunas fixas por `auto-fill`). A altura é
- * 60% da tela, não os 420 fixos: em 844 de altura são ~506, e o resto continua
+ * 60% da tela, não os 510 fixos: em 844 de altura são ~506, e o resto continua
  * mostrando a conversa — que é o que diferencia uma folha de um modal. O miolo
  * desconta a alça e a área segura para a folha inteira medir esses 60%, como
  * antes. Na folha o `Popout` foca a alça, não a busca: o teclado virtual
@@ -193,9 +202,11 @@ export default function PickerPanel({
         largura={LARGURA_PICKER}
         rotulo="Emoji, GIF e figurinha"
         // `!`: a superfície do `Popout` vem antes na mesma string, e sem a
-        // marca a ordem das regras no CSS gerado é que decidiria o fundo
-        className="overflow-hidden !bg-background-base-lowest"
-        classeNaFolha="bg-background-base-lowest"
+        // marca a ordem das regras no CSS gerado é que decidiria o fundo.
+        // `--background-surface-high`: ver "A superfície agora é a do
+        // Discord" acima.
+        className="overflow-hidden !bg-background-surface-high"
+        classeNaFolha="bg-background-surface-high"
       >
         <div
           ref={miolo}

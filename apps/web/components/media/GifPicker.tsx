@@ -14,10 +14,14 @@ import { alternarGifFavorito, usePrefsPicker } from "@/components/media/preferen
 /** Espera antes de buscar enquanto se digita (o provedor cobra por chamada). */
 const DEBOUNCE_MS = 350;
 
-type SubAba = "favoritos" | "tendencias";
-
 /**
- * Seletor de GIF (Giphy), com as sub-abas "Favoritos" e "Tendências".
+ * Seletor de GIF (Giphy): uma grade só, rolável, em alvenaria — como o
+ * `EmojiPicker` e o `StickerPicker`, e não mais um alternador de sub-abas
+ * "Favoritos"/"Tendências" que escondia uma lista atrás da outra. Sem busca,
+ * a ordem das seções é **Favoritos** (se houver algum), **Categorias** (as
+ * capas por tema, para navegar sem saber o termo) e **Em alta** (o resultado
+ * de uma busca vazia, que o provedor já devolve como tendências). Com busca,
+ * as seções somem e sobra só **Resultados**.
  *
  * Sem `GIPHY_API_KEY` no servidor a resposta vem com `configured: false` e a
  * caixa mostra um aviso neutro em vez de um erro — o mesmo tratamento que voz
@@ -26,6 +30,22 @@ type SubAba = "favoritos" | "tendencias";
  *
  * O GIF escolhido vira anexo por URL: nada é copiado para o nosso storage
  * (ver `POST /uploads/external`), então este caminho funciona mesmo sem R2.
+ *
+ * ## Estados (cartão 2j-seletor-gif-figurinha)
+ *
+ * Vazio ("Nada por aqui ainda"/"Nenhum GIF para esse termo"/favoritos vazio),
+ * carregando ("Carregando…", só enquanto a seção que depende da resposta
+ * ainda não tem nada — as outras seções continuam na tela), erro (falha de
+ * rede na busca: mensagem própria, distinta de "nenhum resultado", que antes
+ * não existia — um `catch` silencioso virava lista vazia sem avisar que foi
+ * falha), sem chave (`configurado === false`, sem barra de rolagem desenhada
+ * sobre o aviso — o `div` daquele ramo não tem `overflow-y-auto`), hover (a
+ * prévia anima e a estrela aparece), foco (o anel azul global de
+ * `globals.css` alcança os cartões e botões daqui sem nada extra neste
+ * arquivo) e desabilitado (os cartões da grade ficam `disabled:opacity-50`
+ * enquanto o GIF escolhido está sendo anexado, para não deixar escolher dois
+ * ao mesmo tempo). "Sem permissão" não se aplica: qualquer membro que pode
+ * escrever no canal pode anexar um GIF, não há papel que restrinja só isso.
  */
 export default function GifPicker({
   onEscolher,
@@ -44,12 +64,12 @@ export default function GifPicker({
 }) {
   const prefs = usePrefsPicker();
   const [termo, setTermo] = useState(termoInicial);
-  const [subAba, setSubAba] = useState<SubAba>("tendencias");
   const [categoriaAberta, setCategoriaAberta] = useState<GifCategory | null>(null);
   const [resultados, setResultados] = useState<GifResult[]>([]);
   const [categorias, setCategorias] = useState<GifCategory[]>([]);
   const [configurado, setConfigurado] = useState<boolean | null>(null);
   const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState(false);
   const [anexando, setAnexando] = useState(false);
 
   // categorias abrem a caixa; a busca substitui a grade quando há termo
@@ -68,10 +88,12 @@ export default function GifPicker({
     };
   }, []);
 
+  // termo vazio busca as "tendências": é o que preenche a seção "Em alta"
+  // assim que o painel abre, sem precisar de uma chamada separada para isso.
   useEffect(() => {
-    if (subAba === "favoritos" && !termo.trim()) return;
     let vivo = true;
     setCarregando(true);
+    setErro(false);
     const timer = setTimeout(() => {
       void api
         .searchGifs(termo.trim())
@@ -80,14 +102,18 @@ export default function GifPicker({
           setConfigurado(r.configured);
           setResultados(r.results);
         })
-        .catch(() => vivo && setResultados([]))
+        .catch(() => {
+          if (!vivo) return;
+          setResultados([]);
+          setErro(true);
+        })
         .finally(() => vivo && setCarregando(false));
     }, DEBOUNCE_MS);
     return () => {
       vivo = false;
       clearTimeout(timer);
     };
-  }, [termo, subAba]);
+  }, [termo]);
 
   async function escolher(gif: GifResult) {
     setAnexando(true);
@@ -131,8 +157,11 @@ export default function GifPicker({
    */
   const [autoFocarBusca] = useState(() => !ehMobileAgora());
 
-  const mostrandoFavoritos = subAba === "favoritos" && !buscando;
-  const grade = mostrandoFavoritos ? favoritos : resultados;
+  const mensagemVazio = erro
+    ? "Não foi possível carregar os GIFs agora."
+    : buscando
+      ? "Nenhum GIF para esse termo."
+      : "Nada por aqui ainda.";
 
   const corpo = (
     <div className="flex h-full min-h-0 flex-col">
@@ -158,21 +187,6 @@ export default function GifPicker({
         )}
       </BuscaPicker>
 
-      {!buscando && configurado !== false && (
-        <div className="flex gap-1 px-2 pb-2" role="tablist" aria-label="Origem dos GIFs">
-          <SubAbaBotao
-            ativa={subAba === "favoritos"}
-            onClick={() => setSubAba("favoritos")}
-            rotulo="Favoritos"
-          />
-          <SubAbaBotao
-            ativa={subAba === "tendencias"}
-            onClick={() => setSubAba("tendencias")}
-            rotulo="Tendências"
-          />
-        </div>
-      )}
-
       {configurado === false ? (
         <div className="grid flex-1 place-items-center px-8 text-center">
           <div>
@@ -185,58 +199,82 @@ export default function GifPicker({
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-          {!buscando && subAba === "tendencias" && categorias.length > 0 && (
-            <section className="mb-2">
-              <h3 className="sticky top-0 z-10 bg-background-base-lowest px-1 py-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
-                Categorias
-              </h3>
-              {/* a lista inteira, rolável: cortar em oito escondia justamente as
-                  categorias que ninguém alcança pela busca por não saber o nome */}
-              <div className="grid grid-cols-2 gap-2">
-                {categorias.map((c) => (
-                  <button
-                    key={c.searchTerm}
-                    type="button"
-                    onClick={() => {
-                      setCategoriaAberta(c);
-                      setTermo(c.searchTerm);
-                    }}
-                    className="relative h-20 overflow-hidden rounded"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={c.previewUrl} alt="" className="h-full w-full object-cover" />
-                    <span className="absolute inset-0 grid place-items-center bg-background-scrim text-sm font-bold text-text-overlay-light">
-                      {c.name}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {mostrandoFavoritos && favoritos.length === 0 ? (
-            <p className="py-10 text-center text-sm text-text-muted">
-              Nenhum GIF favoritado ainda. Passe o mouse num GIF e toque na estrela.
-            </p>
-          ) : carregando && grade.length === 0 && !mostrandoFavoritos ? (
-            <p className="py-8 text-center text-sm text-text-muted">Carregando…</p>
-          ) : grade.length === 0 ? (
-            <p className="py-8 text-center text-sm text-text-muted">
-              {buscando ? "Nenhum GIF para esse termo." : "Nada por aqui ainda."}
-            </p>
+          {buscando ? (
+            erro ? (
+              <p className="py-8 text-center text-sm text-text-muted">{mensagemVazio}</p>
+            ) : carregando && resultados.length === 0 ? (
+              <p className="py-8 text-center text-sm text-text-muted">Carregando…</p>
+            ) : resultados.length === 0 ? (
+              <p className="py-8 text-center text-sm text-text-muted">{mensagemVazio}</p>
+            ) : (
+              <SecaoGifs
+                titulo="Resultados"
+                itens={resultados}
+                favoritos={favoritos}
+                desabilitado={anexando}
+                onEscolher={(gif) => void escolher(gif)}
+                onFavoritar={alternarGifFavorito}
+              />
+            )
           ) : (
-            <div className="columns-2 gap-2">
-              {grade.map((gif) => (
-                <CartaoGif
-                  key={gif.id}
-                  gif={gif}
-                  favorito={favoritos.some((g) => g.id === gif.id)}
+            <>
+              {favoritos.length > 0 && (
+                <SecaoGifs
+                  titulo="Favoritos"
+                  itens={favoritos}
+                  favoritos={favoritos}
                   desabilitado={anexando}
-                  onEscolher={() => void escolher(gif)}
-                  onFavoritar={() => alternarGifFavorito(gif)}
+                  onEscolher={(gif) => void escolher(gif)}
+                  onFavoritar={alternarGifFavorito}
                 />
-              ))}
-            </div>
+              )}
+
+              {categorias.length > 0 && (
+                <section className="mb-2">
+                  <h3 className="sticky top-0 z-10 bg-background-surface-high px-1 py-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                    Categorias
+                  </h3>
+                  {/* a lista inteira, rolável: cortar em oito escondia justamente as
+                      categorias que ninguém alcança pela busca por não saber o nome */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {categorias.map((c) => (
+                      <button
+                        key={c.searchTerm}
+                        type="button"
+                        onClick={() => {
+                          setCategoriaAberta(c);
+                          setTermo(c.searchTerm);
+                        }}
+                        className="relative h-20 overflow-hidden rounded"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={c.previewUrl} alt="" className="h-full w-full object-cover" />
+                        <span className="absolute inset-0 grid place-items-center bg-background-scrim text-sm font-bold text-text-overlay-light">
+                          {c.name}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {erro ? (
+                <p className="py-8 text-center text-sm text-text-muted">{mensagemVazio}</p>
+              ) : carregando && resultados.length === 0 ? (
+                <p className="py-8 text-center text-sm text-text-muted">Carregando…</p>
+              ) : resultados.length > 0 ? (
+                <SecaoGifs
+                  titulo="Em alta"
+                  itens={resultados}
+                  favoritos={favoritos}
+                  desabilitado={anexando}
+                  onEscolher={(gif) => void escolher(gif)}
+                  onFavoritar={alternarGifFavorito}
+                />
+              ) : favoritos.length === 0 && categorias.length === 0 ? (
+                <p className="py-8 text-center text-sm text-text-muted">{mensagemVazio}</p>
+              ) : null}
+            </>
           )}
         </div>
       )}
@@ -259,27 +297,44 @@ export default function GifPicker({
   );
 }
 
-function SubAbaBotao({
-  ativa,
-  onClick,
-  rotulo,
+/**
+ * Uma seção rotulada da grade: cabeçalho grudado (mesma superfície da caixa,
+ * `--background-surface-high` — ver o comentário em `PickerPanel.tsx`) e a
+ * alvenaria de dois em dois (`columns-2`) embaixo.
+ */
+function SecaoGifs({
+  titulo,
+  itens,
+  favoritos,
+  desabilitado,
+  onEscolher,
+  onFavoritar,
 }: {
-  ativa: boolean;
-  onClick: () => void;
-  rotulo: string;
+  titulo: string;
+  itens: GifResult[];
+  favoritos: GifResult[];
+  desabilitado: boolean;
+  onEscolher: (gif: GifResult) => void;
+  onFavoritar: (gif: GifResult) => void;
 }) {
   return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={ativa}
-      onClick={onClick}
-      className={`rounded px-2.5 py-1 text-sm font-medium transition ${
-        ativa ? "bg-interactive-background-selected text-text-strong" : "text-text-muted hover:bg-interactive-background-hover hover:text-text-default"
-      }`}
-    >
-      {rotulo}
-    </button>
+    <section className="mb-2">
+      <h3 className="sticky top-0 z-10 bg-background-surface-high px-1 py-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
+        {titulo}
+      </h3>
+      <div className="columns-2 gap-2">
+        {itens.map((gif) => (
+          <CartaoGif
+            key={`${titulo}-${gif.id}`}
+            gif={gif}
+            favorito={favoritos.some((g) => g.id === gif.id)}
+            desabilitado={desabilitado}
+            onEscolher={() => onEscolher(gif)}
+            onFavoritar={() => onFavoritar(gif)}
+          />
+        ))}
+      </div>
+    </section>
   );
 }
 

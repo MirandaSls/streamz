@@ -17,10 +17,14 @@ import { TextInput, Tooltip } from "@/components/ui/primitivos";
  * listeners concorrendo é exatamente como o clique numa aba fecharia o painel.
  */
 
-/** Largura do painel, igual à do Discord. */
-export const LARGURA_PICKER = 424;
-/** Altura do painel inteiro (abas incluídas). */
-export const ALTURA_PICKER = 420;
+/**
+ * Largura e altura do painel, medidas no print 1:1 do seletor real
+ * (`docs/Reference/Captura de tela 2026-08-31 120846.png`, x952–1451 ×
+ * y388–897 = 499 × 509). Antes eram 424 × 420, um número que não batia com
+ * nenhuma das três fontes de medida (cartão 2j-seletor-gif-figurinha).
+ */
+export const LARGURA_PICKER = 500;
+export const ALTURA_PICKER = 510;
 
 /** Fecha ao apertar Escape ou clicar fora — só quando o seletor é o dono da caixa. */
 export function useFecharFora(
@@ -63,7 +67,13 @@ export function CaixaPicker({
       role="dialog"
       aria-label={rotulo}
       style={{ width: LARGURA_PICKER, height: ALTURA_PICKER }}
-      className={`anim-menu z-[70] flex flex-col overflow-hidden rounded-lg bg-background-base-lowest shadow-popout ${className}`}
+      // `--background-surface-high` (`#242429`, medido no mesmo print acima em
+      // y=650 x1001–1450 e y=430 x1342–1451) — era `background-base-lowest`
+      // (`#121214`), a superfície de baixo do app, não a do popout. Os
+      // cabeçalhos grudados de dentro de `GifPicker`/`StickerPicker` mudaram
+      // junto (ver o comentário deles): as duas pontas precisavam mudar
+      // juntas, como o `PickerPanel` já registrava.
+      className={`anim-menu z-[70] flex flex-col overflow-hidden rounded-lg bg-background-surface-high shadow-popout ${className}`}
     >
       {children}
     </div>
@@ -91,7 +101,10 @@ export function BuscaPicker({
     <div className="flex items-center gap-2 p-2">
       {children}
       <TextInput
-        tamanho="sm"
+        // `md` = 40px, o que o print mede (borda 2px em y404–405/442–443,
+        // caixa 40 de altura). Era `sm` (32), que dava uma caixa de ~30px de
+        // fora — 10px mais baixa que a do Discord.
+        tamanho="md"
         classeDaCaixa="flex-1"
         autoFocus={autoFocus}
         value={valor}
@@ -104,12 +117,20 @@ export function BuscaPicker({
   );
 }
 
-/** Coluna vertical de atalhos à esquerda da grade. */
+/**
+ * Coluna vertical de atalhos à esquerda da grade — 48px
+ * (`docs/Reference/Captura de tela 2026-08-31 120846.png`, coluna em y=650:
+ * rail `#1a1a1e` de x953 a x1000 = 48). Era `w-11` (44).
+ */
 export function ColunaLateral({ children, rotulo }: { children: ReactNode; rotulo: string }) {
   return (
     <nav
       aria-label={rotulo}
-      className="flex w-11 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-border-subtle py-2"
+      // `--background-base-lower` (`#1a1a1e`, mesma coluna acima): o rail é
+      // MAIS ESCURO que o conteúdo (`--background-surface-high`, `#242429`),
+      // não transparente sobre ele — sem fundo próprio herdava o da caixa e
+      // ficava claro demais.
+      className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-border-subtle bg-background-base-lower py-2"
     >
       {children}
     </nav>
@@ -176,7 +197,11 @@ export function DivisoriaLateral() {
 
 export function RodapePicker({ children }: { children: ReactNode }) {
   return (
-    <footer className="flex h-11 shrink-0 items-center gap-2 border-t border-border-subtle bg-input-background-default/40 px-3">
+    // 47px e `--background-base-lower` sólido (`#1a1a1e`, medido no mesmo
+    // print: coluna x=1440, y850–896) — era `h-11` (44) com
+    // `bg-input-background-default/40`, uma cor translúcida que não existe
+    // no Discord (o rodapé é opaco, mais escuro que o corpo do painel).
+    <footer className="flex h-[47px] shrink-0 items-center gap-2 border-t border-border-subtle bg-background-base-lower px-3">
       {children}
     </footer>
   );

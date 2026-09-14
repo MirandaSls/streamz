@@ -24,7 +24,12 @@ import {
   usePrefsPicker,
 } from "@/components/media/preferencias-picker";
 
-/** 4 por linha no painel de 424px, com a coluna de packs à esquerda. */
+/**
+ * 4 por linha no painel (500px de largura, `LARGURA_PICKER`, menos os 48 da
+ * `ColunaLateral` de packs) — a contagem de colunas em si não está medida em
+ * nenhum print 1:1 do seletor de figurinha aberto; o grid é fluido
+ * (`minmax(0, 1fr)`), então continua correto se a medida mudar de novo.
+ */
 const COLUNAS = 4;
 const CELULA = 88;
 
@@ -45,6 +50,21 @@ interface SecaoFigurinha {
  *
  * A busca olha nome **e** palavras-chave — é para isso que a figurinha guarda
  * `tags`; procurar só pelo nome obrigaria a lembrar como quem subiu a batizou.
+ *
+ * ## Estados (cartão 2j-seletor-gif-figurinha)
+ *
+ * Vazio (sem figurinha, com ou sem busca), carregando (a resposta de
+ * `useEmojis().load()` ainda não chegou — `carregado`), hover (fundo da
+ * célula e do item da coluna lateral), foco (o anel azul global de
+ * `globals.css`, `:focus-visible`, alcança os botões daqui sem nada extra
+ * neste arquivo) e desabilitado não se aplicam ao botão de escolher (nunca
+ * fica desabilitado). **Sem permissão**: o botão de gerenciar figurinhas do
+ * servidor só aparece com `podeGerenciar` — sem a permissão ele **some**, não
+ * fica desabilitado, porque é assim que o Discord trata (e o rodapé não tem
+ * onde pôr uma dica "(em breve)" para um botão que nem é dele). Não há erro
+ * distinto de "vazio" porque `useEmojis().load()` engole a falha de rede e
+ * devolve lista vazia (`stores/emojis.ts`, fora da lista deste cartão) — ver
+ * "faltando" no relatório do cartão.
  */
 export default function StickerPicker({
   onEscolher,
@@ -67,6 +87,11 @@ export default function StickerPicker({
   const guildIdAtivoStore = useGuilds((s) => s.activeGuildId);
   const guildIdAtivo = guildId !== undefined ? guildId : guildIdAtivoStore;
   const packs = useEmojis((s) => s.stickerGuilds);
+  // `carregado` distingue "ainda buscando" de "não tem nenhuma": os dois
+  // dão `packs = []`, e sem essa bandeira o painel mostraria "Seus servidores
+  // ainda não têm figurinhas" no primeiro instante depois do login, antes da
+  // resposta chegar.
+  const carregado = useEmojis((s) => s.carregado);
   const me = useAuth((s) => s.user);
   const podeGerenciar = useCanModerate(me?.id);
   const prefs = usePrefsPicker();
@@ -230,7 +255,9 @@ export default function StickerPicker({
           // da coluna lateral usa para rolar até o pack certo
           className="relative min-h-0 flex-1 overflow-y-auto px-2 pb-2"
         >
-          {vazio ? (
+          {!carregado ? (
+            <p className="px-2 py-10 text-center text-sm text-text-muted">Carregando…</p>
+          ) : vazio ? (
             <p className="px-2 py-10 text-center text-sm text-text-muted">
               {buscando
                 ? "Nenhuma figurinha com esse nome."
@@ -308,7 +335,10 @@ function SecaoGrade({
 
   return (
     <section ref={ref} className="mb-1">
-      <h3 className="sticky top-0 z-10 flex items-center gap-1.5 bg-background-base-lowest px-1 py-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
+      {/* `--background-surface-high`: a mesma superfície da caixa (`CaixaPicker`),
+          para o cabeçalho grudado não virar uma faixa escura por cima do
+          painel — ver "A superfície agora é a do Discord" em PickerPanel.tsx. */}
+      <h3 className="sticky top-0 z-10 flex items-center gap-1.5 bg-background-surface-high px-1 py-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
         {secao.icone.tipo === "servidor" && (
           <IconeServidor nome={secao.icone.nome} iconUrl={secao.icone.url} />
         )}
