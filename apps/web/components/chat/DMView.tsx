@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PhoneCall, Settings, UserPlus, UserProfile, Users, Video } from "@/components/ui/icones";
+import { Clock, PhoneCall, Settings, UserCheck, UserPlus, UserProfile, Users, Video } from "@/components/ui/icones";
 import { isGroupChannel } from "@streamz/shared";
 import Composer from "@/components/chat/Composer";
 import DMMemberList from "@/components/chat/DMMemberList";
@@ -14,6 +14,7 @@ import TypingIndicator from "@/components/chat/TypingIndicator";
 import { ultimaMinhaMensagem } from "@/components/chat/ultima-minha";
 import FriendsPage from "@/components/friends/FriendsPage";
 import Avatar, { GroupAvatar } from "@/components/ui/Avatar";
+import { Button } from "@/components/ui/primitivos";
 import CallBanner from "@/components/voice/CallBanner";
 import CallSplit from "@/components/voice/CallSplit";
 import CallStage from "@/components/voice/CallStage";
@@ -80,6 +81,14 @@ export default function DMView({
   const removerAmigo = useFriends((s) => s.remove);
   const bloquear = useFriends((s) => s.block);
   const desbloquear = useFriends((s) => s.unblock);
+  // "outgoing"/"incoming" (pedido de amizade sem resposta) também abrem DM —
+  // basta ter servidor em comum. Mesmas ações e palavras do popover de perfil
+  // e do modal de perfil completo (`ProfilePopover`, `UserProfileModal`):
+  // recusar/cancelar são destrutivos e por isso não têm botão aqui, só existem
+  // no "…" das outras telas — esta fileira, como no Discord, é só a neutra.
+  const enviarPedido = useFriends((s) => s.send);
+  const aceitarPedido = useFriends((s) => s.accept);
+  const pedidosRecebidos = useFriends((s) => s.incoming);
   const [servidoresEmComum, setServidoresEmComum] = useState<number | null>(null);
   useEffect(() => {
     setServidoresEmComum(null);
@@ -212,6 +221,45 @@ export default function DMView({
                     )}
                     {relacao === "friend" && (
                       <BotaoBoasVindas label="Desfazer amizade" onClick={() => void removerAmigo(other)} />
+                    )}
+                    {/* sem relação nenhuma: ainda dá para pedir amizade daqui,
+                        sem abrir o perfil — mesma ação do popover */}
+                    {relacao === "none" && (
+                      <BotaoBoasVindas
+                        icon={<UserPlus size={16} />}
+                        label="Adicionar amigo"
+                        onClick={() => void enviarPedido(other.username)}
+                      />
+                    )}
+                    {/* pedido meu, ainda sem resposta: mostra o estado, não
+                        some — cancelar é destrutivo, então mora no "…" do
+                        perfil, não nesta fileira neutra */}
+                    {relacao === "outgoing" && (
+                      <Button
+                        variante="secundario"
+                        tamanho="sm"
+                        disabled
+                        icone={<Clock size={16} aria-hidden="true" />}
+                        className="celular:h-[44px] celular:px-4"
+                      >
+                        Pedido enviado
+                      </Button>
+                    )}
+                    {/* pedido da outra pessoa: aceitar fica à mão aqui;
+                        recusar é destrutivo e mora no "…" do perfil */}
+                    {relacao === "incoming" && (
+                      <Button
+                        variante="positivo"
+                        tamanho="sm"
+                        icone={<UserCheck size={16} aria-hidden="true" />}
+                        onClick={() => {
+                          const pedido = pedidosRecebidos.find((r) => r.user.id === other.id);
+                          if (pedido) void aceitarPedido(pedido.id);
+                        }}
+                        className="celular:h-[44px] celular:px-4"
+                      >
+                        Aceitar pedido
+                      </Button>
                     )}
                     {relacao === "blocked" ? (
                       <BotaoBoasVindas label="Desbloquear" onClick={() => void desbloquear(other.id)} />
