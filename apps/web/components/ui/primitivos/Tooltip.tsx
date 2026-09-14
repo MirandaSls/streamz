@@ -11,6 +11,7 @@ import {
   useState,
   type CSSProperties,
   type ReactElement,
+  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 
@@ -26,6 +27,24 @@ export interface TooltipProps {
   cor?: CorDaDica;
   /** Atalho de teclado mostrado ao lado do texto. */
   atalho?: string;
+  /**
+   * Linha secundária abaixo do `rotulo`, como "2 membros" na dica de uma
+   * conversa em grupo do rail. Fica numa linha própria, a 4px do rótulo:
+   * `.tooltipWithShortcut_fa450d` e `.navigationTooltip_edbb22` empilham as
+   * linhas da dica com `flex-direction:column;gap:var(--space-4)`
+   * (`css-bruto/909091.*.css` e `995941.*.css`). O texto continua alinhado à
+   * esquerda (`.guildTooltipWrapper_b1f768{text-align:start}`), e o
+   * `max-width` de 190 vale para as duas linhas.
+   *
+   * **Tamanho, peso e cor da linha não foram medidos.** Nenhum print 1:1 do
+   * acervo mostra dica de duas linhas, e o CSS não traz a classe da linha
+   * (o Discord pinta com um `Text` de variante no JS). Até haver medida, usa o
+   * mesmo par de texto secundário do resto dos primitivos (`Campo.ajuda`:
+   * 12px, peso normal, `--text-muted`). Nas cores que não são `primaria` a
+   * linha herda a tinta da caixa: cinza sobre limão ou sobre vermelho ficaria
+   * ilegível.
+   */
+  subtitulo?: ReactNode;
   /** Um elemento só, que recebe os eventos de hover e foco. */
   children: ReactElement;
   className?: string;
@@ -53,6 +72,7 @@ export function Tooltip({
   desabilitado = false,
   cor = "primaria",
   atalho,
+  subtitulo,
   children,
   className = "",
 }: TooltipProps) {
@@ -104,7 +124,8 @@ export function Tooltip({
     const caixa = caixaRef.current?.getBoundingClientRect();
     if (!alvo || !caixa) return;
     setPos(posicionar(alvo, caixa, lado));
-  }, [aberto, lado, rotulo]);
+    // a segunda linha muda a altura da caixa, então também reposiciona
+  }, [aberto, lado, rotulo, subtitulo]);
 
   // rolar ou redimensionar deixaria a caixa parada longe do alvo
   useEffect(() => {
@@ -171,6 +192,13 @@ export function Tooltip({
                 </kbd>
               )}
             </span>
+            {subtitulo != null && subtitulo !== false && subtitulo !== "" ? (
+              // `mt-1` = o `gap:var(--space-4)` das dicas de duas linhas; o
+              // resto da linha é "não medido" (ver a prop)
+              <span className={`mt-1 block text-text-xs font-normal ${cor === "primaria" ? "text-text-muted" : ""}`}>
+                {subtitulo}
+              </span>
+            ) : null}
             {pos && <span aria-hidden="true" style={estiloSeta(pos, variante.seta)} />}
           </div>,
           document.body,

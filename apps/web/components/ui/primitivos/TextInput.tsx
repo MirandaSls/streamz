@@ -80,8 +80,39 @@ import { X } from "@/components/ui/icones";
  *   classe Tailwind pronta; vira `style.height`, não `h-[Npx]` calculado em
  *   runtime (o scanner do Tailwind só gera a utility que aparece literal no
  *   código-fonte, não um valor que só existe depois de renderizado).
+ *
+ * Rodada 2p-primitivos (onda 2, só aditiva: nenhuma prop antiga mudou):
+ * - `classeDoTexto` e `tamanhoDoTexto` existem porque o `className` do
+ *   `<input>` **soma** às classes daqui. Uma `text-text-sm` ou uma
+ *   `placeholder:text-text-muted` vinda da tela empatava com a `text-text-md`
+ *   e a `placeholder:text-input-placeholder-text-default` do primitivo, e quem
+ *   vencia era a ordem do stylesheet gerado. Por isso `layout/DMList.tsx`
+ *   escrevia a cor e o tamanho sabendo que podiam perder, e o cabeçalho do
+ *   canal (`chat/HeaderBar.tsx`) nem usava o primitivo. As duas props
+ *   **trocam** a classe padrão em vez de empilhar outra. Medida do caso que as
+ *   motivou: `.searchBar_e6b769 .searchBarComponent_e6b769{color:var(--text-muted);
+ *   font-size:14px;font-weight:var(--font-weight-medium);padding:10px 12px}`
+ *   (`css-bruto/398929.40a41*.css`).
+ * - `paddingLateral` pelo mesmo motivo: `px-3` em `classeDaCaixa` contra o
+ *   `px-2.5` daqui é outro empate de ordem. Vai em `style`, e com ele o
+ *   `px-2.5` nem é emitido.
+ * - **Não mudou**: o `celular:h-[48px]` do `md`. A revisão mediu 40 no login
+ *   do Discord web no iOS (`publico/web-mobile-ios/01-login-viewport.png`,
+ *   escala 3, coluna x=590: campo de senha em y 810–929 = 120/3 = 40), mas o
+ *   campo focado da mesma imagem mede 44 (y 534–665 = 132/3). E 48 é a regra
+ *   de alvo de toque do app de celular (onda 8). Trocar aqui muda a altura de
+ *   todo campo do celular; quem decide é o dono do celular.
  */
 export type TamanhoDeCampo = "sm" | "md";
+
+/** Tamanho da fonte do campo: `md` 16px (padrão), `sm` 14px. */
+const TAMANHO_DO_TEXTO: Record<TamanhoDeCampo, string> = {
+  sm: "text-text-sm",
+  md: "text-text-md",
+};
+
+/** Tinta padrão do texto e do placeholder, trocada inteira por `classeDoTexto`. */
+const TINTA_DO_TEXTO = "text-input-text-default placeholder:text-input-placeholder-text-default";
 
 export interface TextInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "size" | "prefix"> {
   /**
@@ -114,19 +145,71 @@ export interface TextInputProps extends Omit<InputHTMLAttributes<HTMLInputElemen
    * stylesheet gerado, não pela ordem no atributo `className`).
    */
   semCaixa?: boolean;
+  /**
+   * Tamanho da fonte do `<input>`: `md` 16px (padrão, o de sempre) ou `sm`
+   * 14px, a busca da lista de conversas do Discord
+   * (`.searchBarComponent_e6b769{font-size:14px}`, `css-bruto/398929.*.css`).
+   * **Troca** a classe de tamanho do primitivo; um `text-text-sm` no
+   * `className` empataria com ela (ver cabeçalho). Independe de `tamanho`,
+   * que é a altura da caixa.
+   */
+  tamanhoDoTexto?: TamanhoDeCampo;
+  /**
+   * Cor (e, se a tela quiser, peso) do texto e do placeholder do `<input>`,
+   * **no lugar** do par padrão `text-input-text-default` +
+   * `placeholder:text-input-placeholder-text-default`, que deixa de ser
+   * emitido. É o jeito de trocar a tinta sem `!important`. O `className`
+   * continua indo para o `<input>` e continua **somando**: layout (alinhamento,
+   * largura) vai lá; cor e placeholder vêm aqui.
+   *
+   * Ex. da busca de DMs (`.searchBarComponent_e6b769`: `--text-muted`, peso
+   * 500): `classeDoTexto="font-medium text-text-default placeholder:text-text-muted"`.
+   * String vazia = nenhuma tinta, o `<input>` herda a cor do pai.
+   */
+  classeDoTexto?: string;
+  /**
+   * Padding lateral da caixa em px, no lugar dos 10 padrão (`px-2.5`, que
+   * deixa de ser emitido). Vai em `style` (`padding-inline`): um `px-3` em
+   * `classeDaCaixa` empatava com o `px-2.5` pela ordem do CSS gerado. Medida
+   * conhecida: 12 (`.searchBarComponent_e6b769{padding:10px 12px}`).
+   */
+  paddingLateral?: number;
 }
 
 export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function TextInput(
-  { tamanho = "md", erro = false, prefixo, sufixo, aoLimpar, classeDaCaixa = "", semCaixa = false, className = "", ...resto },
+  {
+    tamanho = "md",
+    erro = false,
+    prefixo,
+    sufixo,
+    aoLimpar,
+    classeDaCaixa = "",
+    semCaixa = false,
+    tamanhoDoTexto = "md",
+    classeDoTexto,
+    paddingLateral,
+    className = "",
+    ...resto
+  },
   ref,
 ) {
+  const alturaEmPx = typeof tamanho === "number" ? tamanho : null;
+  // Sem nenhuma das duas medidas em px o invólucro sai sem `style`, igual a
+  // antes; com uma delas, só a propriedade pedida entra.
+  const estiloDaCaixa =
+    alturaEmPx === null && paddingLateral == null
+      ? undefined
+      : {
+          ...(alturaEmPx === null ? {} : { height: alturaEmPx }),
+          ...(paddingLateral == null ? {} : { paddingInline: paddingLateral }),
+        };
   return (
     <div
-      style={typeof tamanho === "number" ? { height: tamanho } : undefined}
+      style={estiloDaCaixa}
       /* o foco é a borda DA CAIXA mudando de cor (o `<input>` é só o miolo, e o
          anel nele aparecia flutuando por dentro — ver `data-sem-anel` no
          globals.css) */
-      className={`flex items-center gap-2 rounded-lg px-2.5 has-[:focus-visible]:border-input-border-active has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60 ${
+      className={`flex items-center gap-2 rounded-lg ${paddingLateral == null ? "px-2.5" : ""} has-[:focus-visible]:border-input-border-active has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60 ${
         semCaixa ? "" : "border"
       } ${
         typeof tamanho === "number" ? "" : tamanho === "sm" ? "h-[32px]" : "h-[40px] celular:h-[48px]"
@@ -143,7 +226,7 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function T
         ref={ref}
         data-sem-anel
         aria-invalid={erro || undefined}
-        className={`min-w-0 flex-1 bg-transparent text-text-md text-input-text-default outline-none placeholder:text-input-placeholder-text-default ${className}`}
+        className={`min-w-0 flex-1 bg-transparent outline-none ${TAMANHO_DO_TEXTO[tamanhoDoTexto]} ${classeDoTexto ?? TINTA_DO_TEXTO} ${className}`}
         {...resto}
       />
       {aoLimpar && resto.value ? (
@@ -170,10 +253,24 @@ export interface TextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaElemen
   classeDaCaixa?: string;
   /** Não desenha fundo nem borda própria — ver `TextInputProps.semCaixa`. */
   semCaixa?: boolean;
+  /** Tamanho da fonte do `<textarea>` (padrão `md`); ver `TextInputProps.tamanhoDoTexto`. */
+  tamanhoDoTexto?: TamanhoDeCampo;
+  /** Tinta do texto e do placeholder no lugar da padrão; ver `TextInputProps.classeDoTexto`. */
+  classeDoTexto?: string;
 }
 
 export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function TextArea(
-  { erro = false, contador = false, redimensionavel = false, classeDaCaixa = "", semCaixa = false, className = "", ...resto },
+  {
+    erro = false,
+    contador = false,
+    redimensionavel = false,
+    classeDaCaixa = "",
+    semCaixa = false,
+    tamanhoDoTexto = "md",
+    classeDoTexto,
+    className = "",
+    ...resto
+  },
   ref,
 ) {
   const n = typeof resto.value === "string" ? resto.value.length : 0;
@@ -194,7 +291,7 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function 
         ref={ref}
         data-sem-anel
         aria-invalid={erro || undefined}
-        className={`block w-full bg-transparent px-2.5 py-3 text-text-md text-input-text-default outline-none placeholder:text-input-placeholder-text-default ${
+        className={`block w-full bg-transparent px-2.5 py-3 outline-none ${TAMANHO_DO_TEXTO[tamanhoDoTexto]} ${classeDoTexto ?? TINTA_DO_TEXTO} ${
           redimensionavel ? "resize-y" : "resize-none"
         } ${className}`}
         {...resto}

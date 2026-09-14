@@ -21,15 +21,30 @@ import type { ReactNode } from "react";
  *   arredondado (`rounded-b-sm`, não a escala de raio do Discord — é a forma
  *   que o Discord usa ali, "colada" no topo da primeira mensagem não lida) em
  *   `--status-danger`, texto 10px peso 700 caixa-alta.
+ * - `margem` (rodada 2p-primitivos): o separador de menu do Discord não ocupa
+ *   a largura toda, tem 8 de folga em volta
+ *   (`.separator_c1e9c4{border-bottom:1px solid var(--border-subtle);
+ *   margin:var(--custom-menu-separator-margin,8px)}`, `css-bruto/858942.*.css`).
+ *   A revisão mediu 202px com 8 de cada lado no menu do servidor (print
+ *   `2026-08-31 101733`, linha y=141, x127–328), contra 16 no nosso. Com
+ *   `w-full`, uma margem lateral vinda de `className` estouraria a caixa
+ *   (100% + 16), e por isso a folga é prop: ela tira o `w-full` e deixa o
+ *   `<hr>` de bloco ocupar o que sobra.
  */
 export interface DividerProps {
   orientacao?: "horizontal" | "vertical";
   rotulo?: ReactNode;
   tom?: "sutil" | "normal" | "perigo";
+  /**
+   * Folga em px nos quatro lados da linha horizontal sem rótulo, no lugar da
+   * largura total: `8` é o separador de menu do Discord (`.separator_c1e9c4`).
+   * Vai em `style`. Ignorada na vertical e com `rotulo`.
+   */
+  margem?: number;
   className?: string;
 }
 
-export function Divider({ orientacao = "horizontal", rotulo, tom = "sutil", className = "" }: DividerProps) {
+export function Divider({ orientacao = "horizontal", rotulo, tom = "sutil", margem, className = "" }: DividerProps) {
   const cor = tom === "perigo" ? "bg-status-danger" : tom === "normal" ? "bg-border-normal" : "bg-border-subtle";
 
   if (orientacao === "vertical") {
@@ -37,6 +52,9 @@ export function Divider({ orientacao = "horizontal", rotulo, tom = "sutil", clas
   }
 
   if (!rotulo) {
+    if (margem != null) {
+      return <hr style={{ margin: margem }} className={`h-px border-0 ${cor} ${className}`} />;
+    }
     return <hr className={`h-px w-full border-0 ${cor} ${className}`} />;
   }
 

@@ -121,13 +121,54 @@ import { Tooltip, type LadoDaDica } from "./Tooltip";
  *    Por isso `desabilitado` usa `aria-disabled` e **não** o atributo nativo: o
  *    clique some no componente, a dica fica. O `disabled` nativo continua
  *    passando por `...resto` para quem quiser o comportamento antigo.
+ *
+ * ── Rodada 2p-primitivos (onda 2; só aditiva) ──────────────────────────────
+ *
+ * A onda 1 desenhou à mão o que o primitivo não cobria: o `HeaderIcon` do
+ * cabeçalho do canal e os três controles da barra de título do desktop
+ * (`desktop/BarraDeTitulo.tsx`, `Controle`). O que faltava:
+ *
+ * 9. **Sem raio** (`forma="reto"`). Nem `.iconWrapper__9293f` (cabeçalho do
+ *    canal, `858942.086f3345af1722be.css`) nem `.winButton_c38106` (barra de
+ *    título) declaram `border-radius`. No cabeçalho não aparece (não há
+ *    fundo); na barra de título aparece, porque o hover pinta a caixa inteira
+ *    e o canto tem de ser vivo.
+ * 10. **Hover sólido crítico** (`fundo="hover-critico"`), o "fechar" da barra
+ *    de título: `.winButtonClose_c38106:hover{background-color:var(
+ *    --control-critical-primary-background-default);color:var(
+ *    --control-critical-primary-icon-default)}`. Repouso `.winButtons_c38106
+ *    {color:var(--interactive-text-default)}`. É um vermelho opaco, e não o
+ *    cinza translúcido `--interactive-background-hover` de `fundo="hover"`
+ *    (que é o do minimizar/maximizar, `.winButtonMinMax_c38106:hover`).
+ *    Existe uma segunda família antiga, `.winButtonClose__421ed:hover`
+ *    (`--background-feedback-critical` a 8% com texto `--white`, caixa 28×22);
+ *    a `c38106` é a que casa com a altura de 32 da barra
+ *    (`.winButton_c38106{height:var(--custom-app-top-bar-height);width:var(
+ *    --custom-app-top-bar-height)}`, 32px em VARIAVEIS.md), por isso é ela.
+ * 11. **Opacidade do desabilitado por família** (`opacidadeDesabilitado`): 50
+ *    (`.bannerButton_fb7f94.disabled_fb7f94`, o padrão de sempre), 60
+ *    (`.iconDisabled__9293f{opacity:.6}`, cabeçalho do canal) e 30
+ *    (`.actionButton_f8fa06.disabled_f8fa06{opacity:.3}`; é também o que
+ *    `desktop/BarraDeTitulo.tsx` mediu nas setas apagadas e hoje escreve como
+ *    `className="opacity-30"`).
+ * 12. **Receitas** (`variante`): as combinações acima com nome, para a tela não
+ *    remontar o quarteto a cada uso. `cabecalho` = caixa 32 (`--space-32`),
+ *    sem raio, sem fundo, glifo 20 (`--chat-input-icon-size`), desabilitado a
+ *    60. `janela` = 32×32 sem raio, `fundo="hover"`, sem dica. `janela-fechar`
+ *    = igual, com `fundo="hover-critico"`. "Sem dica" nas duas de janela
+ *    porque o Discord não mostra dica nesses controles (registrado no
+ *    cabeçalho de `BarraDeTitulo.tsx`). Prop escrita sempre vence a receita.
  */
 export type TamanhoDeBotaoDeIcone = "sm" | "md" | "lg";
 /** Lado da caixa: um degrau nomeado, ou o número em px que veio de medida. */
 export type LadoDeBotaoDeIcone = TamanhoDeBotaoDeIcone | number;
-export type FormaDeBotaoDeIcone = "quadrado" | "disco";
-export type FundoDeBotaoDeIcone = "nenhum" | "hover" | "sempre";
+export type FormaDeBotaoDeIcone = "quadrado" | "disco" | "reto";
+export type FundoDeBotaoDeIcone = "nenhum" | "hover" | "sempre" | "hover-critico";
 export type TomDeBotaoDeIcone = "neutro" | "perigo" | "positivo" | "ativo";
+/** Receitas de família medidas (item 12 do cabeçalho). */
+export type VarianteDeBotaoDeIcone = "cabecalho" | "janela" | "janela-fechar";
+/** Opacidade do desabilitado, em %, pelas famílias medidas (item 11). */
+export type OpacidadeDeBotaoDesabilitado = 30 | 50 | 60;
 
 export interface BotaoDeIconeProps
   extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "title">,
@@ -155,13 +196,19 @@ export interface BotaoDeIconeProps
    * do ícone (CSS ganha de atributo de largura/altura do SVG).
    */
   tamanhoDoIcone?: number;
-  /** `quadrado` usa o raio do tamanho; `disco` é círculo (`border-radius:50%`). */
+  /**
+   * `quadrado` usa o raio do tamanho; `disco` é círculo (`border-radius:50%`);
+   * `reto` não tem raio nenhum, como a toolbar do cabeçalho do canal e os
+   * controles da barra de título (item 9 do cabeçalho).
+   */
   forma?: FormaDeBotaoDeIcone;
   /**
    * `nenhum` sem retângulo em estado algum (cabeçalho do canal). `hover` só
    * pinta ao passar o ponteiro (barra da mensagem, painel de voz). `sempre`
    * nasce pintado (botões sobre a faixa do perfil, "voltar ao presente" da
-   * lista, discos do painel de voz). Padrão: o que `comFundo` disser.
+   * lista, discos do painel de voz). `hover-critico` pinta um vermelho sólido
+   * só no hover, com o ícone claro por cima: o "fechar" da barra de título
+   * (item 10). Padrão: o que `comFundo` disser.
    *
    * **Falta uma quarta família, de propósito:** botão sobre *imagem* (a faixa
    * do perfil, o palco de vídeo) não é `--background-base-lower`, que é opaco —
@@ -210,7 +257,51 @@ export interface BotaoDeIconeProps
   semDica?: boolean;
   /** Atalho mostrado na dica (ex.: "Ctrl+F"). */
   atalho?: string;
+  /**
+   * Receita de uma família do Discord; qualquer prop escrita vence a receita.
+   * - `cabecalho`: toolbar do cabeçalho do canal (`.iconWrapper__9293f`):
+   *   caixa 32, sem raio, sem fundo, glifo 20, desabilitado a 60%.
+   * - `janela`: minimizar/maximizar da barra de título
+   *   (`.winButtonMinMax_c38106`): 32×32, sem raio, hover
+   *   `--interactive-background-hover`, sem dica.
+   * - `janela-fechar`: o fechar (`.winButtonClose_c38106`): igual, com o hover
+   *   sólido `--control-critical-primary-background-default`.
+   *
+   * Ver item 12 do cabeçalho.
+   */
+  variante?: VarianteDeBotaoDeIcone;
+  /**
+   * Opacidade do `desabilitado` em %: `50` (padrão), `60` (cabeçalho do canal,
+   * `.iconDisabled__9293f`) ou `30` (`.actionButton_f8fa06.disabled_f8fa06`, e
+   * as setas apagadas da barra de título). Sem efeito se `desabilitado` for
+   * falso. Ver item 11 do cabeçalho.
+   */
+  opacidadeDesabilitado?: OpacidadeDeBotaoDesabilitado;
 }
+
+interface ReceitaDeBotaoDeIcone {
+  tamanho: LadoDeBotaoDeIcone;
+  forma: FormaDeBotaoDeIcone;
+  fundo: FundoDeBotaoDeIcone;
+  tamanhoDoIcone?: number;
+  opacidadeDesabilitado?: OpacidadeDeBotaoDesabilitado;
+  semDica?: boolean;
+}
+
+// Origem de cada número no item 12 do cabeçalho. Os controles de janela não
+// forçam o glifo: o desenho de 10px da barra de título vem do chamador.
+const RECEITAS: Record<VarianteDeBotaoDeIcone, ReceitaDeBotaoDeIcone> = {
+  cabecalho: { tamanho: "md", forma: "reto", fundo: "nenhum", tamanhoDoIcone: 20, opacidadeDesabilitado: 60 },
+  janela: { tamanho: "md", forma: "reto", fundo: "hover", semDica: true },
+  "janela-fechar": { tamanho: "md", forma: "reto", fundo: "hover-critico", semDica: true },
+};
+
+/** Classe literal por opacidade (o Tailwind só gera o que aparece no código). */
+const OPACIDADE_DESABILITADO: Record<OpacidadeDeBotaoDesabilitado, string> = {
+  30: "opacity-30",
+  50: "opacity-50",
+  60: "opacity-60",
+};
 
 // Caixas medidas (ver cabeçalho): 24 e 32 saem de CSS+print; 40 é progressão,
 // não medido. Px literal porque o número vem de medida, não da escala do tema.
@@ -264,6 +355,15 @@ const PALETA: Record<FundoDeBotaoDeIcone, { repouso: string; hover: string; ativ
     caixa: "bg-background-base-lower",
     caixaHover: "hover:bg-interactive-background-hover active:bg-interactive-background-active",
   },
+  // `.winButtons_c38106` (repouso) + `.winButtonClose_c38106:hover`. O CSS
+  // não tem `:active` para o fechar, então não há degrau de pressionado.
+  "hover-critico": {
+    repouso: "text-interactive-text-default",
+    hover: "hover:text-control-critical-primary-icon-default",
+    ativo: "text-interactive-text-active",
+    caixa: "",
+    caixaHover: "hover:bg-control-critical-primary-background-default",
+  },
 };
 
 /** Hover tingido dos dois tons de feedback (`.actionAccept_`/`.actionDeny_`). */
@@ -278,10 +378,14 @@ export const BotaoDeIcone = forwardRef<HTMLButtonElement, BotaoDeIconeProps>(fun
   {
     rotulo,
     icone,
-    tamanho = "md",
-    tamanhoDoIcone,
-    forma = "quadrado",
+    // Sem padrão na desestruturação: a receita (`variante`) entra entre a prop
+    // escrita e o padrão de sempre, resolvida logo abaixo.
+    tamanho: tamanhoPedido,
+    tamanhoDoIcone: iconePedido,
+    forma: formaPedida,
     fundo,
+    variante,
+    opacidadeDesabilitado,
     tom,
     ativo = false,
     perigo = false,
@@ -295,7 +399,7 @@ export const BotaoDeIcone = forwardRef<HTMLButtonElement, BotaoDeIconeProps>(fun
     desabilitado = false,
     motivoDesabilitado,
     ladoDaDica = "top",
-    semDica = false,
+    semDica: semDicaPedido,
     atalho,
     type = "button",
     className = "",
@@ -308,8 +412,15 @@ export const BotaoDeIcone = forwardRef<HTMLButtonElement, BotaoDeIconeProps>(fun
   // Compatibilidade: `comFundo`/`perigo` são as props antigas, e o padrão sem
   // nenhuma delas continua sendo "sem retângulo, tom neutro" — exatamente o
   // que os ~50 consumidores já montados esperam. As props novas vencem quando
-  // vêm escritas.
-  const familia: FundoDeBotaoDeIcone = fundo ?? (comFundo ? "hover" : "nenhum");
+  // vêm escritas. A receita só preenche o que ninguém escreveu: sem `variante`
+  // cada linha abaixo cai no mesmo padrão de antes.
+  const receita = variante ? RECEITAS[variante] : null;
+  const tamanho: LadoDeBotaoDeIcone = tamanhoPedido ?? receita?.tamanho ?? "md";
+  const tamanhoDoIcone = iconePedido ?? receita?.tamanhoDoIcone;
+  const forma: FormaDeBotaoDeIcone = formaPedida ?? receita?.forma ?? "quadrado";
+  const semDica = semDicaPedido ?? receita?.semDica ?? false;
+  const opacidade = OPACIDADE_DESABILITADO[opacidadeDesabilitado ?? receita?.opacidadeDesabilitado ?? 50];
+  const familia: FundoDeBotaoDeIcone = fundo ?? (comFundo ? "hover" : (receita?.fundo ?? "nenhum"));
   const tonalidade: TomDeBotaoDeIcone = tom ?? (perigo ? "perigo" : "neutro");
   const paleta = PALETA[familia];
 
@@ -328,7 +439,9 @@ export const BotaoDeIcone = forwardRef<HTMLButtonElement, BotaoDeIconeProps>(fun
   const classeDoGlifo = ladoIcone == null ? "" : "[&>svg]:h-[var(--icone-do-botao)] [&>svg]:w-[var(--icone-do-botao)]";
 
   const caixa = ladoEmPx === null ? CAIXA[degrau] : "";
-  const raio = forma === "disco" ? "rounded-full" : ladoEmPx === null ? RAIO[degrau] : RAIO_NUMERICO;
+  // `reto` não emite classe de raio nenhuma (item 9 do cabeçalho)
+  const raio =
+    forma === "disco" ? "rounded-full" : forma === "reto" ? "" : ladoEmPx === null ? RAIO[degrau] : RAIO_NUMERICO;
 
   // `tom="ativo"` é o ligado com retângulo persistente: ele troca o fundo
   // inteiro, então vence a família. Hover desse estado não foi medido — fica
@@ -345,7 +458,7 @@ export const BotaoDeIcone = forwardRef<HTMLButtonElement, BotaoDeIconeProps>(fun
   // Desabilitado congela o hover (o ponteiro continua chegando, senão a dica
   // sumiria — ver item 8 do cabeçalho), e o `disabled` nativo, se alguém ainda
   // o passar por `...resto`, continua com o par `disabled:` de sempre.
-  const reativo = desabilitado ? "cursor-not-allowed opacity-50" : `${hoverDeTinta} ${paleta.caixaHover}`;
+  const reativo = desabilitado ? `cursor-not-allowed ${opacidade}` : `${hoverDeTinta} ${paleta.caixaHover}`;
 
   const classes = `grid shrink-0 place-items-center transition-colors disabled:pointer-events-none disabled:opacity-50 ${caixa} ${raio} ${classeDoGlifo} ${tinta} ${preenchimento} ${reativo} ${className}`;
   const estilo = medidas || glifo ? { ...medidas, ...glifo, ...style } : style;

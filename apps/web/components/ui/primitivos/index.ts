@@ -8,9 +8,27 @@
  * props em português, como o resto do app.
  */
 export { Button, type ButtonProps, type VarianteDeBotao, type TamanhoDeBotao } from "./Button";
-export { BotaoDeIcone, type BotaoDeIconeProps, type TamanhoDeBotaoDeIcone } from "./BotaoDeIcone";
+export {
+  BotaoDeIcone,
+  type BotaoDeIconeProps,
+  type TamanhoDeBotaoDeIcone,
+  type LadoDeBotaoDeIcone,
+  type FormaDeBotaoDeIcone,
+  type FundoDeBotaoDeIcone,
+  type TomDeBotaoDeIcone,
+  type VarianteDeBotaoDeIcone,
+  type OpacidadeDeBotaoDesabilitado,
+} from "./BotaoDeIcone";
 export { Tooltip, type TooltipProps, type LadoDaDica, type CorDaDica } from "./Tooltip";
-export { TextInput, TextArea, Campo, type TextInputProps, type TextAreaProps, type CampoProps } from "./TextInput";
+export {
+  TextInput,
+  TextArea,
+  Campo,
+  type TextInputProps,
+  type TextAreaProps,
+  type CampoProps,
+  type TamanhoDeCampo,
+} from "./TextInput";
 export { Select, MultiSelect, type SelectProps, type MultiSelectProps, type OpcaoDeSelect } from "./Select";
 export { Switch, type SwitchProps } from "./Switch";
 export { Checkbox, type CheckboxProps } from "./Checkbox";

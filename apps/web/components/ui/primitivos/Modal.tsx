@@ -165,6 +165,20 @@ export interface ModalProps {
    */
   telaCheiaNoCelular?: boolean;
   /**
+   * Título e subtítulo centrados, como no "Criar um servidor" do Discord:
+   * `.headerCentered__8a031{text-align:center}` e
+   * `.headerCentered__8a031 .headerSubtitleWrapper__8a031{justify-content:center}`
+   * (`css-bruto/362698.047b6f205fd7bdc1.css`).
+   *
+   * Com o ×, o recuo de 60 vale **dos dois lados**. O Discord monta o
+   * cabeçalho com um `.headerLeadingSpacer__8a031` à esquerda, com as mesmas
+   * regras do `.headerTrailing__8a031` da direita (o `max-height:0` do
+   * centrado só achata a altura dele), e assim o texto fica no centro da
+   * caixa e não no centro do espaço que o × deixou. Só vale no cartão; na tela
+   * cheia do celular o título é o da barra de 56. Padrão `false`.
+   */
+  cabecalhoCentralizado?: boolean;
+  /**
    * Classe da caixa no desktop (largura livre, altura). No celular é ignorada:
    * lá a largura é sempre a da tela (ver o cabeçalho).
    */
@@ -250,6 +264,7 @@ export function Modal({
   comSombra = true,
   alinhamento = "centro",
   telaCheiaNoCelular = false,
+  cabecalhoCentralizado = false,
   className = "",
   classeDoCorpo = "",
   children,
@@ -401,9 +416,9 @@ export function Modal({
              `.headerTrailing__8a031` ocupa (12 de recuo + 40 do botão − 16 de
              margem negativa) = 60 */
           <header
-            className={`shrink-0 pl-6 pt-6 ${mostrarFechar ? "pr-[60px]" : "pr-6"} ${
-              temCorpo || temRodape ? "pb-2" : "pb-6"
-            }`}
+            className={`shrink-0 pt-6 ${mostrarFechar ? "pr-[60px]" : "pr-6"} ${
+              cabecalhoCentralizado ? `text-center ${mostrarFechar ? "pl-[60px]" : "pl-6"}` : "pl-6"
+            } ${temCorpo || temRodape ? "pb-2" : "pb-6"}`}
           >
             <h2 id={idTitulo} className="text-heading-lg font-bold text-text-strong">
               {titulo}
