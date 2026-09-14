@@ -136,8 +136,11 @@ export default function EditorDePermissoes({
   const usuarioDe = (id: string) => membros.find((m) => m.user.id === id)?.user ?? null;
 
   if (!podeGerenciar) {
+    // mesma superfície do cartão "privado" abaixo (bg-background-surface-higher,
+    // ver comentário na linha do cartão): não há print do Discord para este
+    // aviso específico, mas os dois são o mesmo "cartão de explicação" da tela
     return (
-      <p className="rounded-[4px] border border-border-subtle bg-background-base-lowest px-3 py-2 text-sm text-text-muted">
+      <p className="rounded-[4px] border border-border-subtle bg-background-surface-higher px-3 py-2 text-sm text-text-muted">
         Só quem tem “Gerenciar cargos” pode mudar as permissões{" "}
         {escopo === "categoria" ? "desta categoria" : "deste canal"}.
       </p>
@@ -151,8 +154,15 @@ export default function EditorDePermissoes({
       {/* O cartão do topo. A linha é a `ToggleLinha` do app em espírito (ícone,
           título, interruptor), mas montada aqui porque no print a explicação
           ocupa a largura inteira do cartão, embaixo dos dois — e não a coluna
-          da esquerda, que é onde a `ToggleLinha` a coloca. */}
-      <div className="rounded-[4px] bg-background-base-lowest p-4">
+          da esquerda, que é onde a `ToggleLinha` a coloca.
+
+          Fundo medido no print `docs/Reference/Captura de tela 2026-09-04
+          102249.png`: o cartão é `#29292d` (x 732–1389, y ~151–247) sobre a
+          página `#202024` — mais CLARO que a página, não mais escuro. É
+          `--background-surface-higher` (`#28282d`, diferença de 1 por
+          antialiasing/compressão), não `--background-base-lowest` (`#121214`,
+          que ficaria quase preto e é o oposto do que o print mostra). */}
+      <div className="rounded-[4px] bg-background-surface-higher p-4">
         <div className="flex items-center justify-between gap-4">
           <span className="flex min-w-0 items-center gap-2">
             <Lock size={18} aria-hidden="true" className="shrink-0 text-text-subtle" />
@@ -185,10 +195,16 @@ export default function EditorDePermissoes({
 
         {avancadas && (
           /* No celular as duas colunas viram duas faixas empilhadas: a de
-             cargos tem 180px fixos e a de permissões precisa de bem mais que os
-             ~190 que sobrariam numa tela de 390. */
+             cargos tem 208px fixos e a de permissões precisa de bem mais que os
+             ~182 que sobrariam numa tela de 390. */
           <div className="mt-4 flex gap-6 celular:flex-col celular:gap-4">
-            <div className="w-[180px] shrink-0 celular:w-full">
+            {/* 208px medido no mesmo print (linha da pílula "@everyone",
+                `#38383d` de ponta a ponta da coluna: x 731–939, 209px — a linha
+                da pílula ativa é a coluna inteira, sem sobra à direita para o
+                "+"). O `gap-6` (24px) bate com a distância até o texto da
+                coluna de permissões, que começa em x=964 (939+25). Era 180px
+                sem medida — chute que sobrava ~29px da coluna real. */}
+            <div className="w-[208px] shrink-0 celular:w-full">
               <div className="mb-1 flex items-center justify-between gap-2 px-2">
                 <h3 className="text-xs font-bold uppercase tracking-[0.02em] text-text-muted">
                   Cargos/membros

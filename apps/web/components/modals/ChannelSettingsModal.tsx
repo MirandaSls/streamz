@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Hash, Lock, Megaphone, Shield, Trash2, Volume2 } from "@/components/ui/icones";
 import {
   MAX_CHANNEL_TOPIC,
+  Permission,
   SLOWMODE_PRESETS,
   overridesEfetivos,
   slowmodeLabel,
@@ -19,7 +20,7 @@ import { RegistrarAlteracoes, useControleDeAlteracoes } from "@/components/ui/al
 import { api } from "@/lib/api";
 import { useChannels, type UpdateChannelInput } from "@/stores/channels";
 import { useGuilds } from "@/stores/guilds";
-import { useCategoryOverrides, useChannelOverrides, usePermissions } from "@/stores/permissions";
+import { useCan, useCategoryOverrides, useChannelOverrides, usePermissions } from "@/stores/permissions";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui, useUI } from "@/stores/ui";
 
@@ -82,6 +83,13 @@ export default function ChannelSettingsModal({
   const handleOverrides = usePermissions((s) => s.handleOverrides);
   const overrides = useChannelOverrides(channelId);
   const daCategoria = useCategoryOverrides(channel?.categoryId ?? null);
+  /**
+   * A engrenagem que abre esta tela já exige isto (`ChannelSidebar.tsx`); o
+   * hook de novo aqui é para a permissão que muda **depois** de aberta — outro
+   * moderador tira o cargo enquanto esta janela está na tela. Sem isto, o
+   * `salvar()` só falharia no clique, calado até o toast de erro do `update`.
+   */
+  const podeGerenciar = useCan(Permission.MANAGE_CHANNELS, channelId);
 
   const [aba, setAba] = useState<Aba>(tab);
   const [name, setName] = useState(channel?.name ?? "");
@@ -117,6 +125,27 @@ export default function ChannelSettingsModal({
     };
   }, [guildId, channelId, handleOverrides]);
 
+  const existiuRef = useRef(false);
+  useEffect(() => {
+    if (channel) existiuRef.current = true;
+  }, [channel]);
+
+  /**
+   * Canal apagado por outro moderador com esta tela ainda aberta: a store
+   * perde a linha (evento `channel.deleted` do gateway) e `channel` vira
+   * `undefined` no meio da edição. Sem isto a tela some em silêncio — sem
+   * `channel` não há nome para o cabeçalho nem `<JanelaDeConfiguracoes>` para
+   * mostrar, então o retorno abaixo já teria de ser `null` mesmo; o toast é o
+   * que impede o desaparecimento de parecer um bug.
+   */
+  useEffect(() => {
+    if (existiuRef.current && !channel) {
+      existiuRef.current = false;
+      ui.toast("Este canal não existe mais.", "error");
+      closeModal();
+    }
+  }, [channel, closeModal]);
+
   if (!channel) return null;
   const voz = channel.type === "VOICE";
   const anuncio = channel.type === "ANNOUNCEMENT";
@@ -142,6 +171,12 @@ export default function ChannelSettingsModal({
 
   async function salvar() {
     if (!dirty || saving) return;
+    // clique preso na barra de "alterações não salvas": sem o toast, a barra
+    // continua ali e parece que o clique não fez nada
+    if (!podeGerenciar) {
+      ui.toast("Você não tem mais permissão para salvar este canal.", "error");
+      return;
+    }
     setSaving(true);
     await update(channelId, patch);
     setSaving(false);
@@ -234,82 +269,110 @@ export default function ChannelSettingsModal({
       controle={alteracoes}
       onClose={closeModal}
       rodapeMenu={
-        <ItemPerigo
-          icon={<Trash2 size={18} />}
-          onClick={async () => {
-            // o `remove` da store já pergunta antes; a tela só fecha se apagou
-            await remove(channel);
-            if (!useChannels.getState().channels.some((c) => c.id === channelId)) closeModal();
-          }}
-        >
-          Apagar canal
-        </ItemPerigo>
+        // some com a permissão junto: sem `MANAGE_CHANNELS` não dá para apagar
+        // canal no Discord, e um botão vermelho que abre confirmação para
+        // devolver um 403 no fim é peor do que não mostrá-lo
+        podeGerenciar ? (
+          <ItemPerigo
+            icon={<Trash2 size={18} />}
+            onClick={async () => {
+              // o `remove` da store já pergunta antes; a tela só fecha se apagou
+              await remove(channel);
+              if (!useChannels.getState().channels.some((c) => c.id === channelId)) closeModal();
+            }}
+          >
+            Apagar canal
+          </ItemPerigo>
+        ) : undefined
       }
     >
       <RegistrarAlteracoes dirty={dirty} salvar={salvar} redefinir={redefinir} />
 
       {aba === "geral" && (
         <div className="space-y-6">
-          <div>
-            <Rotulo htmlFor="canal-nome">Nome do canal</Rotulo>
-            <TextInput
-              id="canal-nome"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={64}
-            />
-          </div>
-
-          {!voz && (
-            <div>
-              <Rotulo htmlFor="canal-topico" contador={`${topic.length}/${MAX_CHANNEL_TOPIC}`}>
-                Tópico do canal
-              </Rotulo>
-              <TextArea
-                id="canal-topico"
-                value={topic}
-                onChange={(e) => setTopic(e.target.value.slice(0, MAX_CHANNEL_TOPIC))}
-                rows={3}
-                placeholder="Sobre o que é este canal?"
-              />
-            </div>
-          )}
-
-          {!voz && (
-            <SliderMarcas
-              legenda="Modo lento"
-              opcoes={PARADAS}
-              indice={paradaAtual}
-              onChange={(i) => setSlowmode(PARADAS[i].valor)}
-              hint="Membros só podem enviar uma mensagem a cada intervalo. Moderadores não são afetados."
-            />
-          )}
-
-          {!voz && (
-            <div className="border-t border-border-subtle pt-1">
-              <ToggleLinha
-                checked={nsfw}
-                onChange={setNsfw}
-                titulo="Canal com conteúdo sensível"
-                hint="Quem abrir o canal vê um aviso e precisa confirmar a entrada."
-              />
-              {!anuncio && (
-                <ToggleLinha
-                  checked={readOnly}
-                  onChange={setReadOnly}
-                  titulo="Somente leitura"
-                  hint="Só moderadores enviam mensagens."
-                />
-              )}
-            </div>
-          )}
-
-          {anuncio && (
+          {!podeGerenciar && (
             <p className="rounded-[4px] bg-background-base-lowest px-3 py-2 text-xs text-text-muted">
-              Canal de anúncios: só a moderação publica. Seguir o canal em outro servidor ainda não
-              está disponível.
+              Você perdeu a permissão de gerenciar este canal enquanto esta tela estava aberta. Os
+              campos abaixo ficam só para consulta.
             </p>
           )}
+
+          {/*
+            `pointer-events-none` cobre o mouse nos três campos; o `disabled`
+            do nome e do tópico cobre teclado e leitor de tela também.
+            `SliderMarcas` (modo lento) e `ToggleLinha` (NSFW, somente leitura)
+            não têm prop de desabilitar — nada aqui pode tocar
+            `components/ui/controls.tsx` — então uma tecla com foco neles
+            ainda muda o valor local; só o `salvar()` (guardado por
+            `podeGerenciar`) impede a gravação. Ver "faltando" do cartão.
+          */}
+          <div
+            className={podeGerenciar ? "space-y-6" : "space-y-6 pointer-events-none opacity-60"}
+            aria-disabled={podeGerenciar ? undefined : true}
+          >
+            <div>
+              <Rotulo htmlFor="canal-nome">Nome do canal</Rotulo>
+              <TextInput
+                id="canal-nome"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={64}
+                disabled={!podeGerenciar}
+              />
+            </div>
+
+            {!voz && (
+              <div>
+                <Rotulo htmlFor="canal-topico" contador={`${topic.length}/${MAX_CHANNEL_TOPIC}`}>
+                  Tópico do canal
+                </Rotulo>
+                <TextArea
+                  id="canal-topico"
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value.slice(0, MAX_CHANNEL_TOPIC))}
+                  rows={3}
+                  placeholder="Sobre o que é este canal?"
+                  disabled={!podeGerenciar}
+                />
+              </div>
+            )}
+
+            {!voz && (
+              <SliderMarcas
+                legenda="Modo lento"
+                opcoes={PARADAS}
+                indice={paradaAtual}
+                onChange={(i) => setSlowmode(PARADAS[i].valor)}
+                hint="Membros só podem enviar uma mensagem a cada intervalo. Moderadores não são afetados."
+              />
+            )}
+
+            {!voz && (
+              <div className="border-t border-border-subtle pt-1">
+                <ToggleLinha
+                  checked={nsfw}
+                  onChange={setNsfw}
+                  titulo="Canal com conteúdo sensível"
+                  hint="Quem abrir o canal vê um aviso e precisa confirmar a entrada."
+                />
+                {!anuncio && (
+                  <ToggleLinha
+                    checked={readOnly}
+                    onChange={setReadOnly}
+                    titulo="Somente leitura"
+                    hint="Só moderadores enviam mensagens."
+                  />
+                )}
+              </div>
+            )}
+
+            {anuncio && (
+              <p className="rounded-[4px] bg-background-base-lowest px-3 py-2 text-xs text-text-muted">
+                Canal de anúncios: só a moderação publica. Seguir o canal em outro servidor ainda não
+                está disponível.
+              </p>
+            )}
+          </div>
         </div>
       )}
 

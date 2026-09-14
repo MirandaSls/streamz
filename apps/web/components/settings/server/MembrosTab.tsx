@@ -48,12 +48,53 @@ import { COR_DE_CARGO_SEM_COR } from "@/lib/cor-de-cargo";
 
 /**
  * Aba "Membros": a tabela do print `docs/Reference/Captura de tela 2026-09-04
- * 100649.png` — caixa de seleção, nome com @usuário embaixo, "Membro desde",
- * cargos, sinais e o "…" da linha; busca, "Ordenar" e "Remover" no topo;
- * "Mostrando N membros de M" com a paginação embaixo.
+ * 100649.png` — cartão "Membros recentes" com caixa de seleção, nome com
+ * @usuário embaixo, "Membro desde", cargos, sinais e o "…" da linha; busca,
+ * "Ordenar" e "Remover" no topo; "Mostrando N membros de M" com a paginação
+ * embaixo.
  *
- * Medidas (janela 1522×957 do print, `getpixel`): cabeçalho de 57 com divisória
- * de 1px `#2E2E33`, linhas de 55, o mesmo 1px entre elas.
+ * Medidas (janela 1522×957 do print, `medir.py`):
+ * - **cartão**: borda 1px `#2E2E33` = `border-border-subtle` (é o
+ *   `--border-subtle` `#94949c1f` resolvido sobre o fundo do cartão) em
+ *   x=10/y=61/y≈920, fundo `#202024` = `--background-base-low` — a mesma
+ *   receita `rounded-lg border border-border-subtle bg-background-base-low`
+ *   de `ContaTab.tsx`/`SeletorDeCor.tsx`, contra o fundo da página `#1a1a1e`
+ *   (`--background-base-lower`, o `<body>` das configurações).
+ * - **título do cartão** "Membros recentes": recuo de 16px da borda
+ *   (x=11→28) = `p-4`, na mesma linha da busca/"Ordenar"/"Remover" (ambos em
+ *   y≈62–113, `justify-between`).
+ * - **divisória cartão→tabela**: 1px `#2E2E33` em y=114, embaixo do bloco de
+ *   título+busca — diferente da divisória de 57 do `TABELA_CABECALHO` (essa é
+ *   a de baixo da própria linha "NOME…").
+ * - **linhas**: `coluna x=1000 y90-900` dá o passo de 55 (54 de conteúdo + 1px
+ *   `#2E2E33`) confirmado por 12 repetições — é o `h-[55px]` já usado abaixo.
+ *
+ * Estados (cartão 6q-membros):
+ * - **carregando** — `membersLoading` da store; uma linha "Carregando…" como
+ *   `BanimentosTab.tsx`/`AuditLogTab.tsx` já fazem nas tabelas vizinhas, sem
+ *   pular para "Ninguém aqui ainda." enquanto o primeiro fetch não voltou.
+ * - **vazio** — "Ninguém aqui ainda." (servidor sem gente) ou "Ninguém com
+ *   esses filtros." (busca/cargo sem resultado).
+ * - **erro** — **sem sinal para mostrar**: `stores/guilds.ts:96-104`
+ *   (`loadMembers`) engole a falha num `catch` mudo e devolve `members: []`,
+ *   indistinguível de "servidor sem gente" — o mesmo defeito que
+ *   `GuildEmojisModal.tsx`/`EmojiTab.tsx` documentam para `stores/emojis.ts`.
+ *   `stores/*` está fora da lista deste cartão; ver "faltando".
+ * - **sem permissão** — a aba some inteira do menu de configurações para quem
+ *   não tem `MANAGE_ROLES` (`ServerSettingsModal.tsx`), então quem abre esta
+ *   tela sempre pode ver a lista e atribuir cargo (`podeCargos` é sempre
+ *   verdadeiro aqui). Expulsar/banir continuam **por ação**, escondidos (não
+ *   desabilitados) quando falta `KICK_MEMBERS`/`BAN_MEMBERS` — o padrão que
+ *   `EmojiTab.tsx`/`GuildEmojisModal.tsx` citam desta tela.
+ * - **hover** — linha: `bg-interactive-background-hover` (Discord,
+ *   `.memberRowContainer:hover td`, `css-bruto/sob-demanda/bf71acb…06.css`);
+ *   "×" de cargo: já existia (`opacity-0 group-hover:opacity-100`), é o
+ *   `.addRoleContainer:hover{opacity:1}` da mesma classe.
+ * - **selecionada** — `bg-interactive-background-selected` quando a linha
+ *   está marcada (`.selected td` da mesma classe do Discord), no lugar do
+ *   hover.
+ * - **foco/desabilitado** — dos primitivos (`Checkbox`, `Button`,
+ *   `BotaoDeIcone`, `Select`): nenhum estilo próprio aqui.
  *
  * Colunas do print que **não** existem aqui: "Ingressou no Discord" (o
  * `PublicUser` não carrega a data da conta) e "Forma de adesão" (não guardamos
@@ -66,6 +107,7 @@ import { COR_DE_CARGO_SEM_COR } from "@/lib/cor-de-cargo";
 export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
   const me = useAuth((s) => s.user);
   const members = useGuilds((s) => s.members);
+  const membersLoading = useGuilds((s) => s.membersLoading);
   const kick = useGuilds((s) => s.kick);
   const ban = useGuilds((s) => s.ban);
   const toggleRole = useGuilds((s) => s.toggleRole);
@@ -185,73 +227,88 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
     <>
       <TituloDaPagina titulo="Membros" />
 
-      {/* Linha de comando da tabela: busca à esquerda, "Ordenar" e "Remover" à
-          direita — a ordem do print, com o vermelho só no destrutivo.
+      {/* O cartão "Membros recentes" do print: borda+fundo medidos no
+          cabeçalho da função (`border-border-subtle` / `background-base-low`),
+          contra o `background-base-lower` da página atrás. */}
+      <div className="rounded-lg border border-border-subtle bg-background-base-low">
+        {/* Linha de comando: título à esquerda, busca+filtro+"Ordenar"+
+            "Remover" à direita — a ordem do print, com o vermelho só no
+            destrutivo. Título e bloco de controles são dois itens do mesmo
+            `flex-wrap`: no celular, sem espaço para os dois lado a lado, o
+            bloco de controles cai para a linha de baixo sozinho e mantém
+            intacto o próprio `flex-wrap` interno dele (busca/filtro em cima,
+            "Ordenar"/"Remover" embaixo) — nada mudou aí. */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle p-4">
+          <h2 className="shrink-0 text-base font-semibold text-text-strong">
+            Membros recentes
+          </h2>
 
-          `flex-wrap` por causa do celular: busca + filtro de cargo + "Ordenar"
-          + "Remover" somam ~560, e numa tela de 390 o "Remover" ficava cortado
-          pela borda. Na coluna de 660 do desktop tudo cabe numa linha e o
-          `wrap` não muda nada. */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        {/* a busca ocupa a linha inteira quando a fileira quebra */}
-        {/* `flex-none w-full` e não só `basis-full`: com o `flex-1` ao lado, o
-            `basis` perdia e a busca ficava com 110px mostrando "P…". */}
-        <div className="min-w-0 flex-1 max-md:basis-full celular:w-full celular:flex-none">
-          <TextInput
-            value={busca}
-            onChange={(e) => {
-              setBusca(e.target.value);
-              setPagina(1);
-            }}
-            placeholder="Pesquisar pelo nome de usuário"
-            aria-label="Pesquisar membros"
-            prefixo={<Search size={14} aria-hidden="true" className="text-text-muted" />}
-          />
+          {/* `flex-wrap` por causa do celular: busca + filtro de cargo +
+              "Ordenar" + "Remover" somam ~560, e numa tela de 390 o "Remover"
+              ficava cortado pela borda. Na coluna de 660 do desktop tudo cabe
+              numa linha e o `wrap` não muda nada. */}
+          <div className="flex flex-1 flex-wrap items-center gap-2 celular:w-full">
+            {/* a busca ocupa a linha inteira quando a fileira quebra */}
+            {/* `flex-none w-full` e não só `basis-full`: com o `flex-1` ao
+                lado, o `basis` perdia e a busca ficava com 110px mostrando
+                "P…". */}
+            <div className="min-w-0 flex-1 max-md:basis-full celular:w-full celular:flex-none">
+              <TextInput
+                value={busca}
+                onChange={(e) => {
+                  setBusca(e.target.value);
+                  setPagina(1);
+                }}
+                placeholder="Pesquisar pelo nome de usuário"
+                aria-label="Pesquisar membros"
+                prefixo={<Search size={14} aria-hidden="true" className="text-text-muted" />}
+              />
+            </div>
+            <div className="w-[180px] shrink-0 celular:w-full">
+              <Select
+                semDivisoria
+                value={cargoId}
+                options={roles
+                  .filter((r) => !r.isDefault)
+                  .sort((a, b) => b.position - a.position)
+                  .map((r) => ({ value: r.id, label: r.name }))}
+                onChange={(v) => {
+                  setCargoId(v);
+                  setPagina(1);
+                }}
+                emptyLabel="Todos os cargos"
+              />
+            </div>
+            <Button
+              variante="secundario"
+              onClick={abrirOrdenacao}
+              aria-haspopup="menu"
+              // seta dupla vertical: o vocabulário só tem a horizontal, girada
+              icone={<ArrowLeftRight size={16} aria-hidden="true" className="rotate-90" />}
+              className="celular:h-[44px]"
+            >
+              Ordenar
+            </Button>
+            {podeExpulsar && (
+              <Button
+                variante="critico-secundario"
+                disabled={marcados.length === 0}
+                onClick={() => void removerMarcados()}
+                className="celular:h-[44px]"
+              >
+                Remover
+              </Button>
+            )}
+          </div>
         </div>
-        <div className="w-[180px] shrink-0 celular:w-full">
-          <Select
-            semDivisoria
-            value={cargoId}
-            options={roles
-              .filter((r) => !r.isDefault)
-              .sort((a, b) => b.position - a.position)
-              .map((r) => ({ value: r.id, label: r.name }))}
-            onChange={(v) => {
-              setCargoId(v);
-              setPagina(1);
-            }}
-            emptyLabel="Todos os cargos"
-          />
-        </div>
-        <Button
-          variante="secundario"
-          onClick={abrirOrdenacao}
-          aria-haspopup="menu"
-          // seta dupla vertical: o vocabulário só tem a horizontal, girada
-          icone={<ArrowLeftRight size={16} aria-hidden="true" className="rotate-90" />}
-          className="celular:h-[44px]"
-        >
-          Ordenar
-        </Button>
-        {podeExpulsar && (
-          <Button
-            variante="critico-secundario"
-            disabled={marcados.length === 0}
-            onClick={() => void removerMarcados()}
-            className="celular:h-[44px]"
-          >
-            Remover
-          </Button>
-        )}
-      </div>
 
-      {/* A tabela rola por dentro no celular: `table-fixed` sem piso de
-          largura espremeria seis colunas em 358px. O piso é 720 e não 520
-          porque a coluna de cargos leva 38%: abaixo disso o nome sobrava com
-          46px. Na coluna de 660 do desktop a tabela já era mais larga que a
-          área útil e rolava do mesmo jeito. */}
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] table-fixed">
+        {/* A tabela rola por dentro no celular: `table-fixed` sem piso de
+            largura espremeria seis colunas em 358px. O piso é 720 e não 520
+            porque a coluna de cargos leva 38%: abaixo disso o nome sobrava com
+            46px. Na coluna de 660 do desktop a tabela já era mais larga que a
+            área útil e rolava do mesmo jeito. */}
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] table-fixed">
           <colgroup>
             <col className="w-10" />
             <col />
@@ -288,22 +345,44 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
             </tr>
           </thead>
           <tbody>
-            {pag.itens.length === 0 && (
+            {/* "carregando": `membersLoading` da store, antes de decidir entre
+                a lista e o vazio — sem isto, trocar de servidor mostrava
+                "Ninguém aqui ainda." por um instante mesmo em servidor cheio. */}
+            {membersLoading && (
+              <tr className="h-[55px]">
+                <td colSpan={6} className="text-sm text-text-muted">
+                  Carregando…
+                </td>
+              </tr>
+            )}
+            {!membersLoading && pag.itens.length === 0 && (
               <tr className="h-[55px]">
                 <td colSpan={6} className="text-sm text-text-muted">
                   {members.length === 0 ? "Ninguém aqui ainda." : "Ninguém com esses filtros."}
                 </td>
               </tr>
             )}
-            {pag.itens.map((m) => {
+            {!membersLoading &&
+              pag.itens.map((m) => {
               const cor = colorRoleOf(m.roleIds, roles)?.color ?? null;
               const chips = rolesOf(m.roleIds, roles);
               const castigado = !!m.timeoutUntil && new Date(m.timeoutUntil).getTime() > Date.now();
+              // Discord (`.memberRowContainer`, css-bruto/sob-demanda/
+              // bf71acb83cb26f06.css): linha marcada usa
+              // `--interactive-background-selected` (mais forte, 0.2 de alfa)
+              // em vez do hover; as duas somem no `disabled` porque aí a
+              // marcação nem existe.
+              const marcada = marcados.includes(m.user.id);
               return (
-                <tr key={m.user.id} className="group h-[55px] border-b border-border-subtle align-middle">
+                <tr
+                  key={m.user.id}
+                  className={`group h-[55px] border-b border-border-subtle align-middle transition-colors ${
+                    marcada ? "bg-interactive-background-selected" : "hover:bg-interactive-background-hover"
+                  }`}
+                >
                   <td>
                     <Checkbox
-                      marcado={marcados.includes(m.user.id)}
+                      marcado={marcada}
                       desabilitado={!alvoValido(m)}
                       aoMudar={() => alternar(m.user.id)}
                       rotuloAcessivel={`Selecionar ${displayNameOf(m.user)}`}
@@ -384,12 +463,12 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
               );
             })}
           </tbody>
-        </table>
-      </div>
+          </table>
+        </div>
 
-      {/* Rodapé do print: "Mostrando [12] membros de 61" à esquerda e a
-          paginação à direita, com a página atual em pílula de acento. */}
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        {/* Rodapé do print: "Mostrando [12] membros de 61" à esquerda e a
+            paginação à direita, com a página atual em pílula de acento. */}
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4">
         <p className="flex items-center gap-2 text-sm text-text-muted">
           Mostrando
           <SelectPrimitivo
@@ -448,6 +527,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
             </button>
           </nav>
         )}
+        </div>
       </div>
     </>
   );

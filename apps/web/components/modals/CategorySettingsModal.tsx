@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   MAX_CATEGORY_NAME,
   Permission,
@@ -84,6 +84,25 @@ export default function CategorySettingsModal({
       vivo = false;
     };
   }, [guildId, categoryId, handleCategoryOverrides]);
+
+  const existiuRef = useRef(false);
+  useEffect(() => {
+    if (category) existiuRef.current = true;
+  }, [category]);
+
+  /**
+   * Categoria apagada por outro moderador com esta tela ainda aberta (irmã do
+   * mesmo cuidado em `ChannelSettingsModal`): sem isto ela só desaparece —
+   * `category` fica `undefined`, o retorno abaixo já teria de ser `null`, e o
+   * toast é o que diz por quê.
+   */
+  useEffect(() => {
+    if (existiuRef.current && !category) {
+      existiuRef.current = false;
+      ui.toast("Esta categoria não existe mais.", "error");
+      closeModal();
+    }
+  }, [category, closeModal]);
 
   if (!category || !guildId) return null;
 

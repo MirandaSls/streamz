@@ -11,6 +11,7 @@ import { TituloDaPagina } from "@/components/settings/server/pagina";
 import { Button, TextArea, TextInput } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { useGuilds } from "@/stores/guilds";
+import { resolveStatus, usePresence } from "@/stores/presence";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
 
@@ -41,24 +42,40 @@ function desde(iso: string): string {
  *
  * É a antiga "Visão geral" reorganizada na ordem do print
  * `docs/Reference/Captura de tela 2026-09-04 100541.png` (janela 1919×1079,
- * medido com `getpixel`):
+ * a mesma largura da nossa bancada de captura — medido com `medir.py`):
  *
  * | item | medida |
  * |---|---|
  * | coluna do formulário | 560 (x 732→1291) |
- * | campo "Nome" | 560×47 |
- * | botões do ícone | 32 de altura; "Altere…" 198, "Remover…" 117, 8 entre eles |
- * | amostra da faixa | 105×64, 5 por linha, 8 de espaço, duas linhas |
+ * | campo "Nome" | 560×40 (borda em y=228 e y=267) |
+ * | botões do ícone | 32 de altura; "Altere…" 198, "Remover…" 117, 8 entre eles. "Altere…" é preenchido (`#5865f2` medido → `primario`); "Remover…" é fundo quase invisível + texto `#f87e7a` (linha y=415: bg `#2e2e33`, exatamente `control-critical-secondary-background-default` 12% sobre a página) → `critico-secundario`, não `critico` (que pintaria fundo `#d22d39` sólido) |
+ * | amostra da faixa | 106×64, 5 por linha, 8 de espaço, duas linhas (linha y=571: 732–837, 846–950, 959–1064, 1073–1177, 1186–1291) |
  * | anel da amostra escolhida | 2px do acento, 3px afastado |
- * | cartão de prévia | 300×238, faixa de 118 no topo |
+ * | cartão de prévia | 300×238 (borda em x=1332/1631 e y=92/329), faixa de 120 no topo (91→210) |
+ * | corpo do cartão | `#2c2d32` = `--background-surface-highest`, com borda 1px `#393a3f` ≈ `--border-normal` (`#9696a033`) sobre o fundo da página — mesmo par que `BalaoDeStatus.tsx` usa para a bolha de status |
+ * | anel do ícone sobre a faixa | `#2c2d32`, igual ao corpo do cartão, não ao `background-base-lowest` da página (coluna x=1480 do print: o furo ao redor da foto é `#2c2d32`) |
+ *
+ * O outro print da mesma tela, `Captura de tela 2026-09-01 113634.png`
+ * (1284×714, janela mais estreita), mostra a mesma "Faixa" com só 3 colunas —
+ * é o grid reagindo à largura menor da janela naquele dia, não uma medida
+ * diferente: as duas telas têm janela em zoom 100% (regra 1 da ADR-0009), e a
+ * nossa bancada de captura usa 1920×1080, a largura do outro print. Por isso
+ * o grid de 5 colunas abaixo já está certo — a divergência "3 colunas de
+ * 133×64" do `divergencias.py` é a mesma peça medida na janela estreita.
  *
  * A **faixa** é dado do servidor, não token de tema: o par de cores de cada
  * amostra está em `GUILD_BANNER_COLORS`, e o que fica gravado em
  * `Guild.bannerColor` é o topo do degradê.
  *
+ * A contagem "N online" ao lado de "M membros" na prévia usa o mesmo status
+ * ao vivo do `MemberList.tsx` (`resolveStatus` sobre `usePresence`), não o
+ * `user.status` estático da lista — é dado que o produto já tem, só não
+ * aparecia aqui.
+ *
  * O que o print tem e nós não criamos, porque não existe no produto:
  * "Características" (cinco caixas de emoji), a tag do servidor e o distintivo
- * de comunidade ao lado do nome na prévia.
+ * (parceiro/comunidade) ao lado do nome na prévia — não é "N online"/"M
+ * membros", é um selo de programa que o Streamz não tem.
  *
  * Salvar é da barra de alterações não salvas do shell. O ícone é a exceção:
  * upload não tem "desfazer" local, então ele vale no instante em que o arquivo
@@ -69,6 +86,10 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
   const guild = useGuilds((s) => s.guilds.find((g) => g.id === guildId) ?? null);
   const handleGuildUpdated = useGuilds((s) => s.handleGuildUpdated);
   const members = useGuilds((s) => s.members);
+  // status ao vivo, a mesma fonte do MemberList — não o `user.status` estático
+  // da lista, que fica velho enquanto a aba de configurações está aberta.
+  const statuses = usePresence((s) => s.statuses);
+  const online = members.filter((m) => resolveStatus(statuses, m.user) !== "OFFLINE").length;
   const [name, setName] = useState(guild?.name ?? "");
   const [description, setDescription] = useState(guild?.description ?? "");
   const [bannerColor, setBannerColor] = useState(guild?.bannerColor ?? "");
@@ -199,7 +220,7 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
                 o `uploading` com a troca: as duas mexem no mesmo arquivo. */}
             {guild.iconUrl && (
               <Button
-                variante="critico"
+                variante="critico-secundario"
                 tamanho="sm"
                 disabled={uploading}
                 onClick={() => void removeIcon()}
@@ -233,7 +254,11 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
                   style={{ background: `linear-gradient(to bottom, ${cor.de}, ${cor.ate})` }}
                   className={`h-16 rounded-lg transition ${
                     ativo
-                      ? "ring-2 ring-brand-500 ring-offset-[3px] ring-offset-background-base-lower"
+                      // o vão do anel é o fundo da PÁGINA de configurações
+                      // (`#202024` medido em volta da grade), que é
+                      // `--background-base-low` — não o `-lower` (`#1a1a1e`),
+                      // um tom mais escuro que nunca aparece aqui.
+                      ? "ring-2 ring-brand-500 ring-offset-[3px] ring-offset-background-base-low"
                       : "hover:opacity-90"
                   }`}
                 />
@@ -266,23 +291,26 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
         </div>
 
         {/*
-          O cartão de prévia do print: 300 de largura, faixa de 118 no topo,
-          ícone de 68 com raio 16 e um anel de 4 na cor do cartão atravessando a
-          faixa, nome em negrito, a contagem de membros e o "Desde …". O nome e
-          a faixa acompanham o formulário enquanto se edita, como lá.
+          O cartão de prévia do print: 300×238 com borda de 1px sobre o fundo
+          da página (`border-border-normal`, ver cabeçalho), corpo
+          `background-surface-highest`, faixa de 120 no topo, ícone de 68 com
+          raio 16 e um anel de 4 na cor do CORPO do cartão (não da página)
+          atravessando a faixa, nome em negrito, "N online"/"M membros" e o
+          "Desde …". O nome e a faixa acompanham o formulário enquanto se
+          edita, como lá.
 
           Escondido em janela estreita (`xl:`): abaixo disso o formulário de 560
           e o cartão de 300 não cabem lado a lado, e o print não mostra essa
           largura — empilhar seria invenção.
         */}
-        <div className="hidden w-[300px] shrink-0 overflow-hidden rounded-lg bg-background-base-lowest xl:block">
+        <div className="hidden w-[300px] shrink-0 overflow-hidden rounded-lg border border-border-normal bg-background-surface-highest xl:block">
           <div
             aria-hidden="true"
-            className="h-[118px] w-full bg-input-background-default"
+            className="h-[120px] w-full bg-input-background-default"
             style={faixa ? { background: faixa } : undefined}
           />
           <div className="px-4 pb-4">
-            <div className="-mt-8 grid h-[68px] w-[68px] place-items-center overflow-hidden rounded-2xl bg-input-background-default text-xl font-semibold text-text-default ring-4 ring-background-base-lowest">
+            <div className="-mt-8 grid h-[68px] w-[68px] place-items-center overflow-hidden rounded-2xl bg-input-background-default text-xl font-semibold text-text-default ring-4 ring-background-surface-highest">
               {guild.iconUrl ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img src={guild.iconUrl} alt="" className="h-full w-full object-cover" />
@@ -291,9 +319,18 @@ export default function PerfilDoServidorTab({ guildId }: { guildId: string }) {
               )}
             </div>
             <p className="mt-3 truncate text-base font-bold text-text-strong">{nomeNaPrevia}</p>
-            <p className="mt-1 flex items-center gap-1.5 text-sm text-text-muted">
-              <span aria-hidden="true" className="h-2 w-2 rounded-full bg-text-muted" />
-              {members.length} {members.length === 1 ? "membro" : "membros"}
+            {/* gap-3 entre os dois grupos: não medido no print (a régua não
+                tirava a distância exata entre "N online" e "M membros"),
+                usa a escala de espaço existente mais próxima. */}
+            <p className="mt-1 flex items-center gap-3 text-sm text-text-muted">
+              <span className="flex items-center gap-1.5">
+                <span aria-hidden="true" className="h-2 w-2 rounded-full bg-icon-status-online" />
+                {online} online
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span aria-hidden="true" className="h-2 w-2 rounded-full bg-text-muted" />
+                {members.length} {members.length === 1 ? "membro" : "membros"}
+              </span>
             </p>
             <p className="mt-0.5 text-sm text-text-muted">{desde(guild.createdAt)}</p>
           </div>
