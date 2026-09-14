@@ -46,6 +46,17 @@ import BarraDeAcoes from "@/components/chat/mensagem/BarraDeAcoes";
 import { fundoDaLinha } from "@/components/chat/mensagem/fundo";
 import { ReferenciaDeInteracao, ReferenciaDeResposta } from "@/components/chat/mensagem/ReferenciaDaMensagem";
 import RodapeEfemero from "@/components/chat/mensagem/RodapeEfemero";
+// ── onda 3 ── mensagens de bot
+import PensandoDoBot from "@/components/chat/mensagem/PensandoDoBot";
+import EmbedDeBot from "@/components/chat/bot/EmbedDeBot";
+import ComponentesDaMensagem from "@/components/chat/bot/ComponentesDaMensagem";
+import {
+  anexosVisiveis,
+  ehComponentsV2,
+  embedsSuprimidos,
+  embedsVisiveis,
+  estaPensando,
+} from "@/components/chat/bot/embed-layout";
 import MediaGroup from "@/components/media/MediaGroup";
 import { itensDaImagem } from "@/components/media/menu-da-imagem";
 import StickerView from "@/components/media/StickerView";
@@ -226,12 +237,23 @@ export default function MessageItem({
   // em conversa direta não há moderação: qualquer participante fixa (como no Discord)
   const canPin = message.guildId === null || Boolean(canModerate);
 
+  // ── onda 3 ── o que as flags do bot mudam na tela (contrato, §1.3):
+  // `LOADING` troca o texto provisório por "<bot> está pensando…"; v2 é só
+  // componentes (sem texto, embed, prévia nem anexo solto); `SUPPRESS_EMBEDS`
+  // (flag ou coluna) desliga o embed rico **e** a prévia de link.
+  const pensando = estaPensando(message);
+  const componentsV2 = ehComponentsV2(message);
+  const embedsDoBot = embedsVisiveis(message);
+  const temComponentes = !pensando && (message.components?.length ?? 0) > 0;
+
   // Prévia de link: uma URL só, a primeira. `suppressEmbeds` desliga a prévia
   // desta mensagem (item do menu, para o autor e a moderação); vídeo do YouTube
   // vira player e imagem direta vira a própria imagem — nos dois casos o card
   // de Open Graph não acrescentaria nada.
   const url =
-    unconfirmed || sistema || message.suppressEmbeds ? null : extractFirstUrl(message.content);
+    unconfirmed || sistema || pensando || componentsV2 || embedsSuprimidos(message)
+      ? null
+      : extractFirstUrl(message.content);
   const videoId = url ? youtubeVideoId(url) : null;
   const imagemDireta = url && !videoId && isDirectImageUrl(url) ? url : null;
   // convite do nosso servidor vira cartão com botão "Entrar", não prévia de
@@ -539,7 +561,11 @@ export default function MessageItem({
     </Tooltip>
   );
 
-  const corpo = message.content ? (
+  // ── onda 3 ── "pensando" ignora o `content` (é o `TEXTO_PENSANDO` do
+  // servidor); v2 não tem texto nenhum, mesmo que um payload velho traga
+  const corpo = pensando ? (
+    <PensandoDoBot nome={displayNameOf(author)} />
+  ) : message.content && !componentsV2 ? (
     <Markdown
       text={message.content}
       meUsername={me?.username}
@@ -752,10 +778,27 @@ export default function MessageItem({
         {message.poll && (
           <PollCard poll={message.poll} canModerate={Boolean(canModerate)} isAuthor={isOwn} />
         )}
+        {/* ── onda 3 ── em v2 nenhum anexo solto (o componente que o cita é
+            quem desenha), e o anexo que um embed usa por `attachment://` não
+            aparece duas vezes — ver `anexosVisiveis` */}
         <MediaGroup
-          attachments={message.attachments}
+          attachments={anexosVisiveis(message)}
           mensagemId={unconfirmed ? undefined : message.id}
         />
+        {/* ── onda 3 ── Embeds ricos do bot, em sequência, antes da prévia de
+            link (no Discord os dois são `embeds` da mesma mensagem, e os do bot
+            vêm primeiro). A caixa é o `.container_b7e1cb` dos acessórios da
+            mensagem (`css-bruto/653383.9d407f1fef76e564.css`): grade de uma
+            coluna com `grid-row-gap:.25rem` (4px) e `padding-block:.125rem`
+            (2px). `minmax(0,1fr)` deixa o embed encolher no celular.
+            A efêmera passa por aqui também: é este mesmo componente. */}
+        {embedsDoBot.length > 0 && (
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-1 py-0.5">
+            {embedsDoBot.map((e, i) => (
+              <EmbedDeBot key={i} embed={e} message={message} />
+            ))}
+          </div>
+        )}
         {videoId && <YouTubeEmbed videoId={videoId} title={message.content} />}
         {imagemDireta && (
           <button
@@ -798,6 +841,19 @@ export default function MessageItem({
         )}
         {codigoDeConvite && <InviteEmbed code={codigoDeConvite} />}
         {embed && <LinkEmbedCard embed={embed} />}
+
+        {/* ── onda 3 ── Componentes do bot (action rows e, com
+            `IS_COMPONENTS_V2`, os de leiaute), abaixo dos embeds e antes das
+            reações, como no Discord. O despacho v1/v2, os estados de carregando
+            e o "Esta interação falhou" são do `ComponentesDaMensagem` (cartão
+            3c); aqui só a caixa dos acessórios, a mesma dos embeds.
+            `empty:hidden` (`.container_b7e1cb:empty{display:none}`): se o
+            componente não desenhar nada, a caixa não deixa os 4px de respiro. */}
+        {temComponentes && (
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-1 py-0.5 empty:hidden">
+            <ComponentesDaMensagem message={message} />
+          </div>
+        )}
 
         {message.reactions.length > 0 && (
           <div className="mt-1 flex flex-wrap gap-1">
