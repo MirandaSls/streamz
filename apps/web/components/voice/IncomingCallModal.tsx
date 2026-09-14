@@ -103,11 +103,31 @@ export default function IncomingCallModal() {
     >
       <audio ref={audio} src={toqueDeChamadaUrl()} preload="auto" loop />
       <div className="flex items-center gap-3">
-        <Avatar user={call.from} size="lg" surface="border-background-surface-higher" />
+        {/* O avatar pulsa enquanto toca — é o que faz o cartão ler como "chamada
+            AO VIVO" e não como um aviso parado. Medido em
+            `ringingIncoming_f910d0` (`css-bruto/401425.298f1ba0a6e8b19c.css`):
+            anel de 1px em `--interactive-text-active` (branco — não é marca,
+            é o mesmo token do item selecionado; o Discord usa isso, não o
+            blurple, então some do escopo da ADR-0009), crescendo e sumindo em
+            `--custom-call-avatar-incoming-duration` = 5,407s
+            (`variaveis-resolvidas.json`). O `@keyframes` de origem
+            (`incoming-call-pulse_f910d0`) não pode entrar em `globals.css`
+            neste cartão (fica de outra lista); o `ping` que o Tailwind já
+            embute faz o mesmo gesto — opacidade caindo enquanto a escala
+            cresce —, só que numa curva `ease-out` genérica, não a do Discord
+            (ver "faltando"). `prefers-reduced-motion`/`reduzir-movimento` já
+            zeram qualquer `animation`, este incluso — nada extra a fazer aqui. */}
+        <span className="relative inline-flex shrink-0 rounded-full">
+          <Avatar user={call.from} size="lg" surface="border-background-surface-higher" />
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute -inset-px rounded-full border border-interactive-text-active animate-[ping_5.407s_ease-out_infinite]"
+          />
+        </span>
         <span className="min-w-0">
           <span className="block truncate font-semibold text-text-strong">{nome}</span>
           <span className="block truncate text-xs text-text-muted">
-            {onde ? `Chamada recebida em ${onde}` : "Chamada recebida"}
+            {onde ? `Chamada recebida em ${onde}…` : "Chamada recebida…"}
           </span>
         </span>
       </div>
@@ -137,7 +157,11 @@ export default function IncomingCallModal() {
               onClick={() => void atender(true)}
               aria-label="Atender com vídeo"
               style={ehMobile ? { height: ALVO_MINIMO, width: ALVO_MINIMO } : undefined}
-              className={`grid place-items-center rounded-[3px] bg-status-positive/20 text-status-positive transition hover:bg-status-positive/30 ${
+              // `rounded-[3px]` não é um dos quatro raios do design.md (a peça
+              // mais próxima em medida é o botão de ícone quadrado de 36px do
+              // rodapé de voz — `--radius-sm`/`rounded-lg`, ver o cabeçalho de
+              // `BotaoDeIcone.tsx`, família 3): trocado por `rounded-lg`.
+              className={`grid place-items-center rounded-lg bg-status-positive/20 text-status-positive transition hover:bg-status-positive/30 ${
                 ehMobile ? "" : "h-9 w-9"
               }`}
             >

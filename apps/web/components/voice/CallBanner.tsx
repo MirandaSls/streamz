@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Phone } from "@/components/ui/icones";
 import Avatar from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/primitivos";
@@ -19,8 +20,24 @@ export default function CallBanner({ channelId }: { channelId: string }) {
   const estados = useVoice((s) => s.statesOf(channelId));
   const conectadoAqui = useVoice((s) => s.channelId === channelId);
   const startCall = useVoice((s) => s.startCall);
+  // `startCall` negocia o token de voz antes de ligar — não é instantâneo como
+  // atender (que já muda de fase antes da rede responder). Sem isto o botão
+  // ficava mudo entre o clique e a sala abrir, e um clique duplo emitia dois
+  // pedidos de entrada. `startCall` já mostra erro por toast (mesmo caminho de
+  // quem entra por um canal de voz) — aqui só falta não travar o botão se a
+  // tentativa falhar.
+  const [entrando, setEntrando] = useState(false);
 
   if (conectadoAqui || estados.length === 0) return null;
+
+  async function entrar() {
+    setEntrando(true);
+    try {
+      await startCall(channelId, false);
+    } finally {
+      setEntrando(false);
+    }
+  }
 
   const nomes = estados.map((e) => e.user.username);
   const texto =
@@ -58,7 +75,8 @@ export default function CallBanner({ channelId }: { channelId: string }) {
         variante="positivo"
         tamanho="sm"
         icone={<Phone size={14} aria-hidden="true" />}
-        onClick={() => void startCall(channelId, false)}
+        onClick={() => void entrar()}
+        carregando={entrando}
         className="shrink-0"
       >
         Entrar

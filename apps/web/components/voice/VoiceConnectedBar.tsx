@@ -284,7 +284,9 @@ export default function VoiceConnectedBar() {
           motivoDesabilitado="Atividades (em breve)"
           desabilitado
           icone={<Gamepad2 size={20} aria-hidden="true" />}
-          fundo="sempre"
+          // mesma cápsula de câmera e tela — ver o comentário em `BotaoDeSons`
+          fundo="hover"
+          className="bg-border-normal/60"
           style={{ width: 74, height: 30 }}
         />
 

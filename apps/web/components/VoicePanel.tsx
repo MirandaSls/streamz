@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import { AlertTriangle, MessageSquare, RotateCw, UserPlus, Users, Volume2 } from "@/components/ui/icones";
-import type { Channel, NotificationLevel } from "@streamz/shared";
+import { Permission, type Channel, type NotificationLevel } from "@streamz/shared";
 import { BotaoDeIcone } from "@/components/ui/primitivos";
 import IconesDoCanto from "@/components/voice/IconesDoCanto";
 import { membrosVisiveis } from "@/components/voice/paineis-da-call";
@@ -19,6 +19,7 @@ import {
   levelForChannel,
   useNotifications,
 } from "@/stores/notifications";
+import { useCan } from "@/stores/permissions";
 import { ui, useUI, type MenuItem } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
 
@@ -74,6 +75,16 @@ export default function VoicePanel({
     membrosVisiveis(chatDoCanalAberto(s.chatDaCallPorCanal, channel.id), s.membersOpen, aqui),
   );
   const alternarMembros = useUI((s) => s.alternarMembrosNaCall);
+
+  // `CONNECT` — ver o canal na coluna não é poder entrar nele (mesmo bit que a
+  // API confere em `voice.service.ts:assertPodeConectar`; a UI só esconde o
+  // que ela recusaria, como em qualquer outro `useCan` do projeto). DM/grupo
+  // (`guildId` nulo) não tem cargo nem bitfield — lá quem decide é já ser
+  // participante da conversa, e `useCan` sempre devolveria `false` sem
+  // servidor, então o hook roda (regra dos hooks) mas o resultado só conta
+  // para canal de servidor.
+  const podeConectarNoServidor = useCan(Permission.CONNECT, channel.id);
+  const podeConectar = channel.guildId ? podeConectarNoServidor : true;
 
   const palco = useRef<HTMLDivElement>(null);
   const { telaCheia, alternar } = useTelaCheia(palco);
@@ -216,6 +227,7 @@ export default function VoicePanel({
           <VistaDoCanalDeVoz
             nome={nome}
             estados={estados}
+            podeConectar={podeConectar}
             onEntrar={() => void connect(channel)}
           />
         )}

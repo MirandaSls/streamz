@@ -3,6 +3,7 @@
 import { displayNameOf, type VoiceStateEvent } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/primitivos";
+import Tooltip from "@/components/ui/Tooltip";
 import {
   LIMITE_DE_AVATARES,
   alemDosAvatares,
@@ -61,14 +62,41 @@ import {
  * campo verde-oliva, porque o verde pesa 0,7152 na luminância e o azul 0,0722:
  * a mesma luminância de pico espalha muito mais brilho pelo meio-tom. Quem
  * manda é o campo.
+ *
+ * **Estados** (cartão 4f):
+ * - **vazio** (`estados.length === 0`) e **com gente** são os dois cobertos
+ *   acima, os únicos com print.
+ * - **carregando**: não existe janela para mostrar — `connect` (`stores/
+ *   voice.ts`) grava `channelId`/`status:"connecting"` na MESMA volta síncrona
+ *   do clique, antes do primeiro `await`; o `VoicePanel` já troca esta tela
+ *   pela grade no próximo render. Quem mostra "Conectando…" é a barra "Voz
+ *   conectada" (fora da lista deste cartão).
+ * - **erro**: também não é desta tela — só existe depois de `aqui` (dentro da
+ *   call), e o banner mora em `VoicePanel.tsx` (bloco `status === "error"`).
+ * - **sem permissão** (`podeConectar === false`, `Permission.CONNECT` — a
+ *   mesma checagem que `voice.service.ts:assertPodeConectar` faz no servidor,
+ *   lida aqui do lado do cliente por `useCan`, como em qualquer outro canto do
+ *   app: "a UI esconde o que a API recusaria"). **Não há print** deste estado
+ *   em nenhuma referência (nem catálogo, nem CSS bruto têm o Discord com um
+ *   canal de voz visível-mas-sem-`Connect`) — em vez de inventar um texto de
+ *   tela novo, o botão vira o mesmo botão **desabilitado** (o `Button` já
+ *   cobre a forma: opacidade 50%, sem clique) com um `Tooltip` explicando o
+ *   motivo, que é o padrão que o resto do app já usa para isso.
+ * - **hover / foco / desabilitado** do botão: de graça pelo `Button`
+ *   primitivo (`--control-secondary-*-hover`, `:focus-visible` global,
+ *   `opacity .5; pointer-events: none` — ver o cabeçalho de `Button.tsx`).
+ *   Nada disso é reimplementado aqui.
  */
 export default function VistaDoCanalDeVoz({
   nome,
   estados,
+  podeConectar = true,
   onEntrar,
 }: {
   nome: string;
   estados: VoiceStateEvent[];
+  /** `Permission.CONNECT` no canal — default `true` p/ quem ainda não passa a prop (DM/grupo). */
+  podeConectar?: boolean;
   onEntrar: () => void;
 }) {
   const visiveis = estados.slice(0, LIMITE_DE_AVATARES);
@@ -124,9 +152,19 @@ export default function VistaDoCanalDeVoz({
               conjunto de `Button` só tem primario/secundario/crítico/positivo/
               link — `secundario` é o mais próximo (neutro, não citado como
               marca). Ver "faltando" no cartão m57. */}
-          <Button variante="secundario" tamanho="md" onClick={onEntrar} className="mt-6">
-            Entrar na chamada de voz
-          </Button>
+          {podeConectar ? (
+            <Button variante="secundario" tamanho="md" onClick={onEntrar} className="mt-6">
+              Entrar na chamada de voz
+            </Button>
+          ) : (
+            // sem `Permission.CONNECT`: mesma forma, desabilitado, com o motivo
+            // no tooltip — ver "Estados" no cabeçalho do arquivo
+            <Tooltip label="Você não tem permissão para entrar neste canal de voz" side="top">
+              <Button variante="secundario" tamanho="md" disabled className="mt-6">
+                Entrar na chamada de voz
+              </Button>
+            </Tooltip>
+          )}
         </div>
       </div>
     </div>

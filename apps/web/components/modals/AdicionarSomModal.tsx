@@ -35,6 +35,25 @@ const KILOBYTES = Math.round(MAX_SOUNDBOARD_SIZE / 1024);
  * Se o navegador não conseguir ler a duração (arquivo estranho, formato que ele
  * não toca), o envio **segue**: recusar por não conseguir medir seria barrar
  * arquivos válidos por causa de um `<audio>` que não quis colaborar.
+ *
+ * **Estados** (cartão 4e): carregando e erro já existiam (`enviando` desabilita
+ * o rodapé e troca o rótulo; o `catch` de `enviar` e de `escolher` vira toast).
+ * Ganharam agora: **desabilitado** durante o envio nos três campos (arquivo,
+ * nome, emoji — trocar o som no meio do upload confundia qual arquivo ia
+ * subir), com `desabilitado` no `BotaoDeIcone` (não `disabled` — ele já lida
+ * com manter hover/tooltip vivos) em vez de `disabled` cru só no botão de
+ * emoji, e a mensagem de teto de servidor (`cheio`) já cobria "sem permissão
+ * de continuar", embora a permissão de **abrir** este modal (`MANAGE_EMOJIS`)
+ * seja checada por quem chama (`PainelDeSons`/`SoundboardTab`), não aqui.
+ *
+ * **Fora desta peça**: o modal do Discord tem um controle "Sound Volume" (ver
+ * `docs/referencias-discord/.../07.png`) — e `SoundboardSound.volume`
+ * (`packages/shared/src/soundboard.ts:80`) já existe no contrato para isso.
+ * Não dá para ligar aqui: `api.createSound` (`lib/api.ts:587`) só manda
+ * `name`/`emoji`/`file`, e o controller (`POST /guilds/:guildId/soundboard`,
+ * `apps/api/.../soundboard.controller.ts:57`) só lê esses dois campos do
+ * corpo — o volume de todo som novo nasce no padrão do servidor. Os dois
+ * arquivos estão fora da lista deste cartão; ver "faltando".
  */
 export default function AdicionarSomModal({ guildId }: { guildId: string }) {
   const closeModal = useUI((s) => s.closeModal);
@@ -119,8 +138,9 @@ export default function AdicionarSomModal({ guildId }: { guildId: string }) {
       <Rotulo>Arquivo</Rotulo>
       <button
         type="button"
+        disabled={enviando}
         onClick={() => arquivoRef.current?.click()}
-        className="flex h-10 w-full items-center gap-2 rounded-[3px] bg-input-background-default px-2.5 text-left text-sm text-text-default transition hover:bg-interactive-background-hover"
+        className="flex h-10 w-full items-center gap-2 rounded-[3px] bg-input-background-default px-2.5 text-left text-sm text-text-default transition hover:bg-interactive-background-hover disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-input-background-default"
       >
         <Upload size={18} className="shrink-0 text-text-muted" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate">
@@ -138,6 +158,7 @@ export default function AdicionarSomModal({ guildId }: { guildId: string }) {
           <TextInput
             id="novo-som-nome"
             value={nome}
+            disabled={enviando}
             onChange={(e) => setNome(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
@@ -153,6 +174,7 @@ export default function AdicionarSomModal({ guildId }: { guildId: string }) {
                 rotulo="Escolher emoji do som"
                 icone={<span className="text-base leading-none">{emoji || "🔊"}</span>}
                 tamanho="sm"
+                desabilitado={enviando}
                 aria-expanded={emojiAberto}
                 onClick={() => setEmojiAberto((v) => !v)}
               />

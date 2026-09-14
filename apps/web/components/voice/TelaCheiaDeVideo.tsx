@@ -208,8 +208,11 @@ export default function TelaCheiaDeVideo({
           right: "calc(env(safe-area-inset-right, 0px) + 8px)",
         }}
         // 44 entre colchetes, e não `h-11`: alvo de toque em px, como o resto
-        // do leiaute de celular (a raiz do app é 16px, ADR-0009)
-        className="absolute grid h-[44px] w-[44px] place-items-center rounded-full bg-control-overlay-secondary-background-default text-control-overlay-secondary-icon-default backdrop-blur transition active:bg-control-overlay-secondary-background-active"
+        // do leiaute de celular (a raiz do app é 16px, ADR-0009). Hover e foco
+        // igual aos irmãos do mesmo botão sobre vídeo (`PalcoMobile`,
+        // `ImageModal`): faltavam aqui — sem eles um tablet com mouse/teclado
+        // não tinha nenhuma pista de que o botão reagiu antes do toque.
+        className="absolute grid h-[44px] w-[44px] place-items-center rounded-full bg-control-overlay-secondary-background-default text-control-overlay-secondary-icon-default backdrop-blur transition hover:bg-control-overlay-secondary-background-hover active:bg-control-overlay-secondary-background-active focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus"
       >
         <X size={24} />
       </button>

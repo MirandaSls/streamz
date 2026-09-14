@@ -64,8 +64,15 @@ export function Capsula({ children }: { children: React.ReactNode }) {
   // de 48, botão de 40, ícone de 18 de tinta). O usuário pediu maior mesmo
   // assim, então a fileira toda subiu ~10% a partir daquela paridade — não é
   // correção de desvio, é escolha, e por isso está escrita aqui.
+  //
+  // Fundo: medido no mesmo print, `#131416` (linha y=866, trechos 1035–1052 e
+  // 1101–1244) — quase idêntico a `--background-base-lowest` (`#121214`), não
+  // a `--background-surface-higher` (`#28282d`) que estava aqui antes. A conta
+  // fecha: `background-base-lowest` a 90% sobre o vazio do palco (`#17171a`,
+  // medido no nosso print) dá ~`#131416`, o valor medido — a divergência era
+  // de token, não de opacidade ou blur.
   return (
-    <div className="flex items-center gap-1 rounded-full bg-background-surface-higher/90 p-1 shadow-popout backdrop-blur">
+    <div className="flex items-center gap-1 rounded-full bg-background-base-lowest/90 p-1 shadow-popout backdrop-blur">
       {children}
     </div>
   );
@@ -112,6 +119,13 @@ export function BotaoDeChamada({
  *
  * Mais alto e mais largo que os outros de propósito: é o único botão
  * irreversível da fileira, e o tamanho faz parte de não errar o clique.
+ *
+ * 66×50 e `#d22d39`, medidos no print 2026-08-31 101857 (linha y=866
+ * x=1258–1323; coluna x=1290 y=841–890) — eram 70×56 com `bg-status-danger`
+ * (`#da3e44`, o vermelho de *badge* e de notificação). `#d22d39` é
+ * `--control-critical-primary-background-default` (`tokens.css`), o mesmo tom
+ * do nosso botão "Apagar" (`modal-confirmacao.png` coluna x=1820 y=618–655) —
+ * é o vermelho de botão de perigo, não o de notificação.
  */
 export function BotaoDeDesligar({
   label,
@@ -128,7 +142,7 @@ export function BotaoDeDesligar({
         type="button"
         onClick={onClick}
         aria-label={label}
-        className="grid h-14 w-[70px] place-items-center rounded-full bg-status-danger text-control-critical-primary-text-default shadow-popout transition hover:bg-control-critical-primary-background-hover"
+        className="grid h-[50px] w-[66px] place-items-center rounded-full bg-control-critical-primary-background-default text-control-critical-primary-text-default shadow-popout transition hover:bg-control-critical-primary-background-hover"
       >
         {children}
       </button>

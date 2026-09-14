@@ -195,7 +195,11 @@ function BarraDeAbas({ aba, onAba }: { aba: Aba; onAba: (aba: Aba) => void }) {
           role="tab"
           aria-selected={aba === id}
           onClick={() => onAba(id)}
-          className={`flex h-8 flex-1 items-center justify-center gap-2 rounded-md text-sm font-semibold transition ${
+          // Anel de foco azul (`border-focus`), o mesmo token dos primitivos
+          // (`Tabs`, `Checkbox`, `Radio`) — estava faltando aqui: a barra era
+          // navegável por teclado sem nenhuma marca visível de onde o foco
+          // estava.
+          className={`flex h-8 flex-1 items-center justify-center gap-2 rounded-md text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus ${
             aba === id
               ? "bg-background-base-lower text-text-strong"
               : "text-text-subtle hover:bg-interactive-background-hover hover:text-text-strong"
@@ -366,7 +370,12 @@ function Miniatura({
       disabled={disabled}
       className="group flex w-full flex-col text-left outline-none disabled:cursor-wait"
     >
-      <div className="grid aspect-video w-full place-items-center overflow-hidden rounded-lg bg-black transition group-hover:ring-2 group-hover:ring-border-strong group-focus-visible:ring-2 group-focus-visible:ring-brand-500">
+      {/* Anel de foco azul (`border-focus`), não limão: no Discord o anel de
+          foco de teclado não é marca (ADR-0009 §3.2, `design.md` "Link, anel
+          de foco de teclado e cores ANSI continuam azuis"). Só o hover do
+          mouse usa `border-strong`, a mesma vizinhança neutra do resto do
+          seletor. */}
+      <div className="grid aspect-video w-full place-items-center overflow-hidden rounded-lg bg-black transition group-hover:ring-2 group-hover:ring-border-strong group-focus-visible:ring-2 group-focus-visible:ring-border-focus">
         {children}
       </div>
       <div className="mt-2 flex h-6 w-full items-center gap-2">

@@ -104,8 +104,11 @@ export default function CallStage({
       data-call-stage={channelId}
       aria-label={`Chamada em ${titulo}`}
       // a tela cheia é a do navegador (ver `fullscreen.ts`): o elemento é promovido
-      // pelo compositor, então não há classe de posicionamento a aplicar aqui
-      className="relative flex min-w-0 flex-1 flex-col bg-input-background-default"
+      // pelo compositor, então não há classe de posicionamento a aplicar aqui.
+      // Fundo preto puro, que é o token `--black` do Discord (não o preto do
+      // Tailwind): prints 1:1 `2026-08-31 160106` (pixels 600,250 e 1200,150) e
+      // `101857` (1000,100 e todo o vão entre tiles) dão `#000000`.
+      className="relative flex min-w-0 flex-1 flex-col bg-black"
     >
       {erro && conectadoAqui && status === "error" && (
         <div
@@ -186,7 +189,8 @@ export default function CallStage({
           // `PalcoMobile`, porque a de baixo depende da orientação
           ehMobile
             ? "min-h-0 flex-1"
-            : "min-h-0 flex-1 px-4 pb-24"
+            : // `px-2` = `FOLGA_DO_PALCO` (8px, print 101857 x=1911–1918)
+              "min-h-0 flex-1 px-2 pb-24"
         }
       >
         {chamando ? (
@@ -258,7 +262,9 @@ function Chamando({
             className="absolute h-[132px] w-[132px] animate-ping rounded-full bg-status-positive/20"
           />
           {usuario ? (
-            <Avatar user={usuario} size="xxl" surface="border-input-background-default" />
+            // `border-background-base-lowest` (#121214) é a superfície mais
+            // escura que o `Avatar` sabe recortar; o palco é `--black` — ver "faltando"
+            <Avatar user={usuario} size="xxl" surface="border-background-base-lowest" />
           ) : (
             <span className="grid h-[120px] w-[120px] place-items-center rounded-full bg-background-base-lowest">
               <Phone size={44} className="text-text-muted" aria-hidden="true" />
@@ -299,7 +305,8 @@ function ConviteParaEntrar({
       <div className="flex flex-col items-center gap-5 text-center">
         <div className="flex items-center justify-center -space-x-4">
           {estados.slice(0, 3).map((e) => (
-            <Avatar key={e.user.id} user={e.user} size="xl" surface="border-input-background-default" className="rounded-full ring-4 ring-input-background-default" />
+            // o anel é a cor do palco (`--black`), que é o que "recorta" um avatar do outro
+            <Avatar key={e.user.id} user={e.user} size="xl" surface="border-background-base-lowest" className="rounded-full ring-4 ring-black" />
           ))}
         </div>
         <p className="text-lg font-bold text-text-strong">{texto}</p>

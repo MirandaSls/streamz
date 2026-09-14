@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Permission, hasPermission, type SoundboardSound } from "@streamz/shared";
+import {
+  MAX_SOUNDBOARD_POR_GUILD,
+  Permission,
+  hasPermission,
+  type SoundboardSound,
+} from "@streamz/shared";
 import {
   ChevronDown,
   ChevronRight,
@@ -56,9 +61,9 @@ import { useVoice } from "@/stores/voice";
  * | texto | tinta no print | o que usamos |
  * |---|---|---|
  * | busca | 15 (`E` + descida do `p`) | 16px |
- * | cabeçalho de seção | 10 (`F` maiúsculo), largura 69 | 13px semibold, `txt-secondary` — 10 de tinta e 75 de largura (a Noto Sans é ~10% mais larga que a gg sans; a fonte não muda, §6.6) |
- * | nome do som | 11 (`golf clap`, subida + descida) | 13px semibold, `txt-primary` (brilho 251 no print) |
- * | "Adicionar som" | 10, brilho 153 | 13px, `txt-muted` |
+ * | cabeçalho de seção | 10 (`F` maiúsculo), largura 69 | 13px semibold, `text-text-subtle` — 10 de tinta e 75 de largura (a Noto Sans é ~10% mais larga que a gg sans; a fonte não muda, §6.6) |
+ * | nome do som | 11 (`golf clap`, subida + descida) | 13px semibold, `text-text-strong` (brilho 251 no print) |
+ * | "Adicionar som" | 10, brilho 153 | 13px, `text-text-muted` |
  * | emoji do card | 18 a 21 de largura conforme o desenho | 18px |
  *
  * Duas coisas que **não** são como parecem à primeira vista, e por isso ficam
@@ -69,12 +74,48 @@ import { useVoice } from "@/stores/voice";
  * visível no recorte ampliado.
  *
  * As cores do print (#202024 corpo, #1a1a1e coluna, #292a2d card) caem em cima
- * de tokens que já existem — `footer`, `chat` e `sel` —, então nenhum token
- * novo foi criado (§6.6).
+ * de tokens que já existem no Discord — `background-base-low`,
+ * `background-base-lower` e `interactive-background-selected` —, então nenhum
+ * token novo foi criado (§6.6). (Antes da migração da onda 0 este parágrafo
+ * citava os apelidos `footer`/`chat`/`sel`; eles saíram do código, e a
+ * referência aqui ficaria enganosa se não acompanhasse.)
  *
  * O que o Discord tem aqui e nós não: Nitro. Não há som bloqueado, cadeado, nem
  * a faixa "Faça um pouco de barulho com Nitro". E não há a seção "Sons do
- * Discord": o Streamz não traz som de fábrica.
+ * Discord": o Streamz não traz som de fábrica. Também não existe uma permissão
+ * "Usar soundboard" por canal — o guia do Discord cita uma (`Use Soundboard`,
+ * ver `docs/referencias-discord/.../08.png`), mas `@streamz/shared` não tem
+ * esse bit (só `MANAGE_EMOJIS`, que já cobre quem pode *adicionar* som): não
+ * inventamos o bit aqui (§6.6).
+ *
+ * **Estados cobertos nesta peça** (o pedido do cartão 4e):
+ * - **carregando**: `useSoundboard().carregado` começa `false` — a store só
+ *   marca `true` depois do primeiro `GET /me/soundboard` (`stores/soundboard.ts`).
+ *   Enquanto isso o corpo do painel mostra um esqueleto (`PainelCarregando`),
+ *   em vez de desenhar "Favoritos"/"Frequentes" vazios como se já soubéssemos
+ *   que não há nada — o que aconteceria se a gente só olhasse `guilds.length`.
+ * - **vazio**: sem resultado de busca, mensagem central (já existia). Sem
+ *   busca e com `carregado`, as seções Favoritos/Frequentes aparecem mesmo
+ *   vazias — é assim no Discord (ver `secoesDoPainel`), não uma lacuna.
+ * - **erro**: tocar um som (`tocar`) e criar um som (`AdicionarSomModal`) já
+ *   mostravam toast de erro. O que **não** dá para cobrir aqui: `load()` em
+ *   `stores/soundboard.ts:69` despeja a falha num `.catch(() => [])` — quem
+ *   abre o painel sem internet vê "vazio", não "erro ao carregar". Corrigir
+ *   isso pede expor um campo de erro na store, fora da lista deste cartão
+ *   (ver "faltando" no retorno do cartão).
+ * - **sem permissão**: quem não tem `MANAGE_EMOJIS` no servidor não vê o card
+ *   "+ Adicionar som" (já existia). Quem tem, mas o servidor já está no teto
+ *   de `MAX_SOUNDBOARD_POR_GUILD`, agora vê o card **desabilitado** com
+ *   tooltip, em vez de descobrir o limite só depois de abrir o modal.
+ * - **hover/foco**: cards e coluna já tinham hover. Foco por teclado no
+ *   `<input type=range>` do volume **não** tinha anel — `app/globals.css`
+ *   exclui `type="range"` das duas regras globais de foco (é pensado para
+ *   quem substitui o nativo por um polegar próprio, como `Checkbox`/`Radio`;
+ *   aqui o nativo é o próprio controle visível), então ficava só o anel do
+ *   navegador, "quase invisível no escuro" — a razão que o próprio CSS dá para
+ *   as regras existirem. Ganhou `focus-visible:outline-border-focus`, como
+ *   `ScreenSharePicker`/`Tabs` já fazem para o mesmo caso.
+ * - **desabilitado**: card "+ Adicionar som" no teto do servidor (acima).
  */
 
 /** Caixa inteira, borda incluída. */
@@ -93,6 +134,7 @@ export default function PainelDeSons({
   onFechar: () => void;
 }) {
   const guilds = useSoundboard((s) => s.guilds);
+  const carregado = useSoundboard((s) => s.carregado);
   const favoritos = useSoundboard((s) => s.favoritos);
   const usos = useSoundboard((s) => s.usos);
   const volume = useSoundboard((s) => s.volume);
@@ -315,23 +357,24 @@ export default function PainelDeSons({
             style={{ width: LARGURA_COLUNA }}
             className="flex shrink-0 flex-col items-center gap-[8px] overflow-y-auto bg-background-base-lower py-[8px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
-            {secoes.map((secao) => (
-              <Tooltip key={secao.id} rotulo={secao.titulo}>
-                <button
-                  type="button"
-                  aria-label={secao.titulo}
-                  aria-current={(ativa || secoes[0]?.id) === secao.id || undefined}
-                  onClick={() => irPara(secao.id)}
-                  className={`grid h-[32px] w-[32px] shrink-0 place-items-center overflow-hidden rounded-[8px] transition ${
-                    (ativa || secoes[0]?.id) === secao.id
-                      ? "bg-background-base-low text-text-strong"
-                      : "text-text-subtle hover:bg-interactive-background-hover hover:text-text-strong"
-                  }`}
-                >
-                  <IconeDaSecao secao={secao} tamanho="coluna" />
-                </button>
-              </Tooltip>
-            ))}
+            {carregado &&
+              secoes.map((secao) => (
+                <Tooltip key={secao.id} rotulo={secao.titulo}>
+                  <button
+                    type="button"
+                    aria-label={secao.titulo}
+                    aria-current={(ativa || secoes[0]?.id) === secao.id || undefined}
+                    onClick={() => irPara(secao.id)}
+                    className={`grid h-[32px] w-[32px] shrink-0 place-items-center overflow-hidden rounded-[8px] transition ${
+                      (ativa || secoes[0]?.id) === secao.id
+                        ? "bg-background-base-low text-text-strong"
+                        : "text-text-subtle hover:bg-interactive-background-hover hover:text-text-strong"
+                    }`}
+                  >
+                    <IconeDaSecao secao={secao} tamanho="coluna" />
+                  </button>
+                </Tooltip>
+              ))}
           </nav>
 
           <div
@@ -341,7 +384,9 @@ export default function PainelDeSons({
             // sem isso o "pular para a seção" erra o alvo (ver `EmojiPicker`)
             className="relative min-h-0 flex-1 overflow-y-auto pb-[8px] pl-[8px] pr-[14px]"
           >
-            {buscando && secoes[0]?.sons.length === 0 ? (
+            {!carregado ? (
+              <PainelCarregando />
+            ) : buscando && secoes[0]?.sons.length === 0 ? (
               <p className="px-1 py-10 text-center text-sm text-text-muted">
                 Nenhum som com esse nome.
               </p>
@@ -376,6 +421,34 @@ export default function PainelDeSons({
         onFechar={() => setVolumeAberto(false)}
       />
     </PopoverFlutuante>
+  );
+}
+
+/**
+ * Estado de carregamento — antes do primeiro `GET /me/soundboard` responder.
+ *
+ * Duas fileiras fantasmas de card (mesmos 148×40, raio 8) sob uma barra de
+ * título (96×14): a forma da seção que vai aparecer, sem prometer nomes. Um
+ * spinner central diria a mesma coisa com menos informação sobre o que está
+ * por vir. `animate-pulse` é utilitário do Tailwind, não anima
+ * `globals.css` — não há keyframe de esqueleto na lista de animações desta
+ * base (`anim-overlay`/`anim-modal`/`anim-menu`/`anim-folha`/`anim-empilhar`)
+ * e criar um está fora da lista de arquivos deste cartão.
+ */
+function PainelCarregando() {
+  return (
+    <div aria-hidden="true" className="animate-pulse px-[8px] pt-[2px]">
+      {[0, 1].map((i) => (
+        <div key={i} className="mb-[16px] last:mb-0">
+          <div className="mb-[8px] h-[14px] w-[96px] rounded bg-background-mod-muted" />
+          <div className="grid grid-cols-3 gap-[8px]">
+            {Array.from({ length: 6 }).map((_, j) => (
+              <div key={j} className="h-[40px] rounded-lg bg-background-mod-muted" />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -498,16 +571,35 @@ function SecaoDeSons({
               onMenu={(e) => onMenu(e, sound)}
             />
           ))}
-          {secao.podeAdicionar && (
-            <button
-              type="button"
-              onClick={onAdicionar}
-              className="flex h-[40px] items-center justify-center gap-[6px] rounded-[8px] border border-dashed border-border-normal px-[8px] text-[13px] text-text-muted transition hover:border-border-strong hover:text-text-default"
-            >
-              <Plus size={16} aria-hidden="true" />
-              Adicionar som
-            </button>
-          )}
+          {secao.podeAdicionar &&
+            (secao.sons.length >= MAX_SOUNDBOARD_POR_GUILD ? (
+              // desabilitado: o servidor já está no teto — dizer isso aqui
+              // poupa abrir o modal só para descobrir lá (ele mostra o mesmo
+              // teto, ver `AdicionarSomModal`, mas só depois de escolher um
+              // arquivo). `aria-disabled`, não o `disabled` nativo: no
+              // Chromium um botão `disabled` não dispara evento de ponteiro
+              // nenhum, e a dica do `Tooltip` sumiria com o mouse em cima —
+              // o mesmo motivo documentado em `BotaoDeIcone` (item 8).
+              <Tooltip rotulo={`Este servidor já tem ${MAX_SOUNDBOARD_POR_GUILD} sons`}>
+                <button
+                  type="button"
+                  aria-disabled="true"
+                  className="flex h-[40px] cursor-not-allowed items-center justify-center gap-[6px] rounded-[8px] border border-dashed border-border-subtle px-[8px] text-[13px] text-text-muted opacity-50"
+                >
+                  <Plus size={16} aria-hidden="true" />
+                  Adicionar som
+                </button>
+              </Tooltip>
+            ) : (
+              <button
+                type="button"
+                onClick={onAdicionar}
+                className="flex h-[40px] items-center justify-center gap-[6px] rounded-[8px] border border-dashed border-border-normal px-[8px] text-[13px] text-text-muted transition hover:border-border-strong hover:text-text-default"
+              >
+                <Plus size={16} aria-hidden="true" />
+                Adicionar som
+              </button>
+            ))}
         </div>
       )}
     </section>
@@ -553,6 +645,17 @@ function CardDeSom({
  * No print ele mede 199×76: título em semibold de 14 e um trilho de 4px com a
  * bolinha branca de 16 — sem trecho preenchido, o trilho é cinza inteiro
  * (`getpixel`: trilho #474851, bolinha #ffffff). O nosso tem os mesmos 199.
+ *
+ * A bolinha era `bg-paper` — o branco de MARCA (`#FDFDFB`, símbolo/wordmark),
+ * nunca superfície nem texto de UI (`tailwind.config.ts`, comentário do
+ * token). Virou `bg-white` (o `--white` `#ffffff` do próprio Discord, medido
+ * no print), o mesmo token que `components/ui/controls.tsx` já usa no
+ * polegar do range da barra de fala. E ganhou o anel de foco por teclado:
+ * `type="range"` está fora das duas regras globais de `:focus-visible` do
+ * `app/globals.css` (pensadas para quem substitui o nativo por um polegar
+ * próprio; aqui o nativo é o controle visível), então sem isto o Tab parava
+ * no trilho sem indicação nenhuma. `outline-border-focus`, como
+ * `ScreenSharePicker`/`Tabs`/`Checkbox` já fazem.
  */
 function PopoverDeVolume({
   ancora,
@@ -588,7 +691,7 @@ function PopoverDeVolume({
           aria-label="Volume dos efeitos sonoros"
           aria-valuetext={`${Math.round(volume * 100)}%`}
           onChange={(e) => definirVolume(Number(e.target.value) / 100)}
-          className="mt-[12px] h-[4px] w-full cursor-pointer appearance-none rounded-full bg-border-strong [&::-moz-range-thumb]:h-[16px] [&::-moz-range-thumb]:w-[16px] [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-paper [&::-webkit-slider-thumb]:h-[16px] [&::-webkit-slider-thumb]:w-[16px] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-paper"
+          className="mt-[12px] h-[4px] w-full cursor-pointer appearance-none rounded-full bg-border-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus [&::-moz-range-thumb]:h-[16px] [&::-moz-range-thumb]:w-[16px] [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-white [&::-webkit-slider-thumb]:h-[16px] [&::-webkit-slider-thumb]:w-[16px] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
         />
       </div>
     </PopoverFlutuante>

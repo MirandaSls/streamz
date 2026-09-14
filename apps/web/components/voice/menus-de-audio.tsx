@@ -41,14 +41,26 @@ import { explicarMidia, nomeEscolhido, opcoesDe, useVoiceDevices } from "@/store
  * Sem cabeçalho no submenu: ele é uma lista de escolhas com a marca (✓) na que
  * vale, porque o título já está no item que ficou aceso ao lado.
  *
- * **Medidas.** Não há print do Discord com este menu aberto em
- * `docs/Reference` (procurados os de 2026-09-02 15:xx–18:xx e os de 09-03), e
- * por isso as medidas são as do próprio app: caixa de 288 (medida nos prints
- * `191405`, `191402`, `191339` e `191344`: x 206..493 e 261..548, 288 de
- * largura em todos), linha de 35px (bg do selecionado em `191339`, y 235..269),
- * respiro de 6 (`p-1.5`) — e do `ContextMenu`, os 4px de sobreposição do
- * submenu sobre o item. O espelhamento na borda da janela agora é o do `Popout`
- * (ver `Submenu`).
+ * **Medidas.** O submenu (a lista de aparelhos) não tem print 1:1 do Discord
+ * em `docs/Reference` — só do próprio app (`191405`, `191402`, `191339` e
+ * `191344`), e é de lá que vêm caixa de 288 (x 206..493 e 261..548, 288 de
+ * largura em todos), linha de 35px (bg do selecionado em `191339`, y
+ * 235..269) e respiro de 6 (`p-1.5`) — e do `ContextMenu`, os 4px de
+ * sobreposição do submenu sobre o item. O espelhamento na borda da janela
+ * agora é o do `Popout` (ver `Submenu`).
+ *
+ * **O menu-pai em si tem print real do Discord: `2026-09-03 201137`**
+ * (achado depois da primeira medida, resolução 3439×1360 — fora do padrão
+ * 1919×1079 do resto do acervo, então vale só para **ordem e presença**, não
+ * para px). Ele mostra "Dispositivo de entrada" e "Perfil de entrada" (o
+ * Krisp deles) seguidos de uma **divisória**, "Volume de entrada" com o
+ * slider, **outra divisória**, e só então "Configurações de voz" — três
+ * blocos, não dois. A divisória que faltava (entre o bloco dos dois itens com
+ * submenu e o slider) foi a correção que este print trouxe: antes só havia a
+ * de baixo (`AtalhoDeConfiguracoes`). "Perfil de entrada"/Isolamento de Voz é
+ * Krisp e não é portado (o cartão pede "Krisp não; o nosso supressor com o
+ * texto certo"): o lugar equivalente aqui é a "Redução de ruído" com os
+ * níveis que o supressor próprio (RNNoise, `PopoverDeRuido`) realmente tem.
  */
 
 /**
@@ -347,10 +359,19 @@ function Aviso({ texto }: { texto: string | null }) {
   return <p className="px-2 pb-1 pt-2 text-xs text-text-muted">{texto}</p>;
 }
 
+/**
+ * A divisória entre blocos do menu. No print real (`201137`) o menu tem três
+ * blocos — itens com submenu, volume, atalho de configurações —, cada um
+ * separado por uma dessas; antes só existia a de baixo.
+ */
+function Divisoria() {
+  return <div aria-hidden="true" className="my-1 h-px bg-border-subtle" />;
+}
+
 function AtalhoDeConfiguracoes({ ctrl }: { ctrl: Submenus }) {
   return (
     <>
-      <div aria-hidden="true" className="my-1 h-px bg-border-subtle" />
+      <Divisoria />
       <button
         type="button"
         role="menuitem"
@@ -459,6 +480,7 @@ export function MenuDeEntrada() {
         ))}
       </LinhaComSubmenu>
 
+      <Divisoria />
       <div className="px-2 py-2" onPointerEnter={() => ctrl.agendar(null)}>
         <SliderDeVolume
           label="Volume de entrada"
@@ -500,6 +522,7 @@ export function MenuDeSaida() {
         />
       </LinhaComSubmenu>
 
+      <Divisoria />
       <div className="px-2 py-2" onPointerEnter={() => ctrl.agendar(null)}>
         <SliderDeVolume
           label="Volume de saída"

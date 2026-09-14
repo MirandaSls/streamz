@@ -2,11 +2,13 @@
 
 import { useEffect, useRef } from "react";
 import {
+  Apps,
   HeadphoneOff,
   Maximize,
   Maximize2,
   MicOff,
   Minimize2,
+  Monitor,
   MonitorX,
   MoreHorizontal,
   Play,
@@ -71,8 +73,12 @@ export interface AcoesDoTile {
  * **papel** do tile — ocupar a vaga com uma ação em vez de com vazio —, não o
  * desenho. O nosso é o brilho do accent no canto, que é o que a marca tem.
  *
- * Sem "Escolher atividade" ao lado: atividade não existe no produto, e um botão
- * que abre um "em breve" é pior que a ausência dele.
+ * Os dois botões da print `2026-08-31 101857` (1:1): "Convidar para voz" e
+ * "Escolher atividade", cada um com **40px** de altura contando a borda
+ * (coluna x=1355, y=573–612) e **8px** entre eles (linha y=580, x=1524–1531),
+ * fundo translúcido sobre a arte (`#18181b` sobre `#070709`) — o `secundario`
+ * `md` do primitivo. Atividade não existe no Streamz: pelo §6.6 do PROCESSO o
+ * botão fica **visível e desabilitado** com "(em breve)" na dica.
  */
 export function TileDeConvite({ guildId }: { guildId: string }) {
   return (
@@ -81,18 +87,32 @@ export function TileDeConvite({ guildId }: { guildId: string }) {
         aria-hidden="true"
         className="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-brand-500/10 blur-3xl"
       />
-      {/* migração 0.8: botão de ação com texto → `Button`. `secundario`/`md` é o
-          mesmo par que `VistaDoCanalDeVoz` usa para "Entrar" — outro convite
-          dentro de um tile de voz vazio. */}
-      <Button
-        variante="secundario"
-        tamanho="md"
-        icone={<UserPlus size={16} aria-hidden="true" />}
-        onClick={() => ui.openModal({ kind: "invite", guildId })}
-        className="relative"
-      >
-        Convidar para voz
-      </Button>
+      <div className="relative flex flex-wrap items-center justify-center gap-2 px-3">
+        <Button
+          variante="secundario"
+          tamanho="md"
+          icone={<UserPlus size={16} aria-hidden="true" />}
+          onClick={() => ui.openModal({ kind: "invite", guildId })}
+        >
+          Convidar para voz
+        </Button>
+        {/* O `span` focável carrega a dica: botão `disabled` não recebe
+            ponteiro nem foco, e a dica "(em breve)" nunca abriria nele. */}
+        <Tooltip label="Escolher atividade (em breve)">
+          <span tabIndex={0} aria-label="Escolher atividade (em breve)" className="inline-flex rounded-lg">
+            <Button
+              variante="secundario"
+              tamanho="md"
+              icone={<Apps size={16} aria-hidden="true" />}
+              disabled
+              tabIndex={-1}
+              className="pointer-events-none"
+            >
+              Escolher atividade
+            </Button>
+          </span>
+        </Tooltip>
+      </div>
     </div>
   );
 }
@@ -145,7 +165,9 @@ export function AvatarDeChamada({
         <Avatar
           user={state.user}
           size="xl"
-          surface="border-input-background-default"
+          // o palco de avatares só existe no `CallStage`, que é `--black`; esta é
+          // a superfície mais escura que o `Avatar` sabe recortar (ver "faltando")
+          surface="border-background-base-lowest"
           voz={state.deafened ? "surdo" : state.muted ? "mudo" : null}
           className={`transition-transform ${ativo ? ENCOLHE_AO_FALAR : ""}`}
         />
@@ -261,9 +283,9 @@ export function VoiceTile({
       // só aparece nas bordas do `object-contain`. Sem vídeo o fundo é o
       // neutro do palco — a `Avatar` de baixo é quem fica na cor do hash.
       //
-      // Moldura que não existe mais: nem a linha preta, nem a borda verde de
-      // quem fala. No Discord o tile não tem borda em estado nenhum — o sinal
-      // de fala mora no anel do avatar, que é onde o olho já está.
+      // Sem linha preta em volta. Sem câmera, o sinal de fala mora no anel do
+      // avatar, que é onde o olho já está; com câmera não há avatar, e aí a
+      // moldura verde entra (ver o `span` logo depois do vídeo).
       style={{
         ...(usaFundoDaFoto ? { backgroundColor: fundo } : {}),
         ...(raio === undefined ? {} : { borderRadius: raio }),
@@ -312,6 +334,21 @@ export function VoiceTile({
         </span>
       )}
 
+      {/* Quem fala com a câmera aberta não tem avatar onde pendurar o anel: o
+          sinal vira a moldura do tile. A geometria é a da única moldura de tile
+          que o CSS capturado define — `.border__2f4f7.voiceChannelEffect__2f4f7
+          {box-shadow:inset 0 0 0 2px …,inset 0 0 0 3px var(--black)}`
+          (`sob-demanda/655282.7b25cb505483f3c7.css`), com o raio do tile
+          (`--custom-base-tile-border-radius` = 8) —, na cor de fala de todo o
+          app (`--status-positive`). A classe de "falando" do tile não está no
+          CSS capturado: a cor é a regra, não medida. */}
+      {video && ativo && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-[inset_0_0_0_2px_rgb(var(--status-positive-rgb)),inset_0_0_0_3px_rgb(var(--black-rgb))]"
+        />
+      )}
+
       {/* Carência do servidor correndo: a pessoa ainda está na chamada, e some
           só se não voltar. Esmaecer em vez de remover é o que evita a grade
           piscar a cada oscilação de rede de alguém. */}
@@ -355,11 +392,23 @@ export function VoiceTile({
         // some no hover: as ações do tile moram neste mesmo canto, e as duas
         // coisas empilhadas viravam um borrão vermelho com botões por cima. O
         // selo diz "isto é uma transmissão", que é informação de relance — no
-        // hover a pergunta já é outra
+        // hover a pergunta já é outra.
+        //
+        // Medido na print `2026-08-31 123917` (1:1): selo de **16px** de altura
+        // (coluna x=610, y=125–140), 59 de largura para "AO VIVO"
+        // (linha y=128, x=604–662), a **8px** do topo do tile (tile em y=117) e
+        // ~8 da borda direita — `.indicators__2f4f7{inset-inline-end:8px;top:8px}`
+        // no CSS. Pílula: `.liveShapeRound_a7acae{border-radius:
+        // var(--custom-live-indicator-border-radius)}` = 16; respiro lateral
+        // `.live_a7acae{padding:0 6px}`; caixa alta `.liveSmall_a7acae`. O corpo
+        // de 12px **não** está no CSS: é o que fecha os 59px com 6+6 de respiro.
+        // O vermelho da print (`#a83035`–`#b63439`) sai de `--status-danger`
+        // sobre a transmissão escura. No tile compacto a margem cai para 4,
+        // como o `.overlayContainer__2f4f7.compact__2f4f7{margin:4px}`.
         <span
-          className={`pointer-events-none absolute rounded-[4px] bg-status-danger font-bold uppercase leading-none tracking-[0.02em] text-control-critical-primary-text-default transition-opacity ${
+          className={`pointer-events-none absolute flex h-[16px] items-center rounded-full bg-status-danger px-[6px] text-[12px] font-bold uppercase leading-[16px] text-control-critical-primary-text-default transition-opacity ${
             semAcoes ? "" : "group-hover:opacity-0 group-focus-within:opacity-0"
-          } ${compacto ? "right-1.5 top-1.5 px-1 py-0.5 text-[9px]" : "right-3 top-3 px-1.5 py-1 text-[10px]"}`}
+          } ${compacto ? "right-1 top-1" : "right-2 top-2"}`}
         >
           Ao vivo
         </span>
@@ -368,53 +417,59 @@ export function VoiceTile({
       {/* O rótulo de nome — que é também onde o mudo mora.
           O Discord não desenha selo circular de microfone no avatar do tile: o
           próprio rótulo vira o aviso, com o glifo cortado ANTES do nome.
-          Pílula de 32px de altura, a 12px da borda esquerda e da de baixo —
-          medida nas duas prints: 101857 a 1:1 dá 32 e 12; 203909 dá 26px e
-          8–9px de folga, que na escala de 0,8075 são os mesmos 32 e 12. Na
-          faixa de miniaturas a folga cai para 4px, que é o que a print mostra.
-          Ela só existe quando tem o que dizer: no tile sem mudo e sem vídeo o
-          Discord não desenha rótulo nenhum. Volta quando há estado a informar —
-          mudo, surdo, transmissão — e no hover, para quem quiser conferir o
-          nome. Com vídeo ela fica sempre: aí o quadro é uma imagem em
-          movimento, e o rosto de hoje não é o de ontem. */}
+
+          Medidas, print `2026-08-31 101857` (1:1) e CSS
+          `.overlayTitle__2f4f7` (`sob-demanda/655282.7b25cb505483f3c7.css`):
+          - fundo `--control-overlay-secondary-background-default` (preto a
+            52%): sobre o tile `#272324` dá exatamente o `#131111` da print
+            (linha y=653, x=395–452);
+          - **32px** de altura (coluna x=430, y=638–669) = `padding:6px` + linha
+            de 20; a **12px** da borda esquerda (395 − 383) e da de baixo
+            (681 − 669), que é o `.overlayContainer__2f4f7{margin:12px}`; 4 no
+            compacto (`.compact{margin:4px}`);
+          - raio `--custom-base-tile-border-radius` = **8**;
+          - sem glifo, `padding-inline:12px`; com glifo, o glifo começa a **8**
+            da borda (x=403) e o nome a 6 dele (x=423), e a direita continua 12
+            (`.videoDisabledTitle__2f4f7{padding-inline:0 12px}`); o glifo mora
+            numa caixa de **16** (`.titleIcon__2f4f7{height:16px;width:16px}`);
+          - texto e glifo `--control-overlay-secondary-text-default` (branco:
+            pixel x=406, y=653 `#ffffff`).
+
+          **Sempre visível.** Nas prints `2026-09-03 203909` (tile sem vídeo e
+          sem mudo: "Puff Daddy") e `2026-08-31 123917` (tile "Md" sem vídeo e
+          sem mudo) o rótulo está lá em repouso; o que o esconde no Discord é
+          `.overlayTitle__2f4f7.idle{opacity:0}` — o ponteiro parado, que no
+          palco já é a moldura inteira que some. */}
       <span
-        // migração 0.8: sem token para este preto a 50% (`--background-scrim` é
-        // 72%, fixo, e escureceria a pílula mais que o desenho pede) — mesmo
-        // caso de `DMProfilePanel`/`PalcoMobile`, preto cru fica; só o texto
-        // vira `text-overlay-light` (branco sobre imagem/vídeo) — ver "faltando"
-        className={`pointer-events-none absolute flex items-center gap-1.5 rounded-lg bg-black/50 text-text-overlay-light transition-opacity ${
-          // 20px literal: sob a raiz de 16px (ADR-0009) `h-5` já bate certinho
-          // em 20px — não é mais o motivo de usar o literal aqui, só sobrou
-          // porque trocar não muda nada hoje. O ramo de 32 continua em `h-8`
-          // porque é o do **desktop**, e mexer nele moveria um pixel numa tela
-          // que este trabalho não pode tocar.
-          rotuloPequeno ? "h-[20px] px-[6px] text-[11px]" : "h-8 px-2 text-sm"
+        className={`pointer-events-none absolute flex items-center rounded-lg bg-control-overlay-secondary-background-default text-control-overlay-secondary-text-default ${
+          // o ramo de 20px é o do celular (`PalcoMobile`), medido lá
+          rotuloPequeno
+            ? "h-[20px] gap-1.5 px-[6px] text-[11px]"
+            : `h-8 gap-1.5 pr-3 text-sm ${tela || state.muted || state.deafened ? "pl-2" : "pl-3"}`
         } ${
           compacto ? "bottom-1 left-1 max-w-[calc(100%-8px)]" : "bottom-3 left-3 max-w-[calc(100%-24px)]"
-        } ${
-          video || tela || state.muted || state.deafened
-            ? ""
-            : semAcoes
-              ? // no celular não há hover para revelar o nome: ou ele está na
-                // tela, ou não existe caminho para lê-lo
-                ""
-              : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
         }`}
       >
         {/* surdo implica mudo: mostrar os dois glifos contaria duas vezes a
             mesma coisa. "Silenciado por você" não entra — é estado meu, não
             dele, e vive no menu de contexto.
-            Branco, e não vermelho: no Discord o alarme é a presença do glifo,
-            não a cor dele — e o vermelho sobre preto a 50% é o que menos se lê
-            de perto. */}
-        {(state.deafened || state.muted) && !tela && (
+            Branco, e não vermelho: é o que a print 101857 mostra. Na tela
+            compartilhada o glifo é o monitor (print 123917, tile "Md" com a
+            transmissão), porque o que o rótulo anuncia ali é a tela, não a voz. */}
+        {tela ? (
           <span className="grid h-4 w-4 shrink-0 place-items-center">
-            {state.deafened ? (
-              <HeadphoneOff size={14} role="img" aria-label="Sem áudio" />
-            ) : (
-              <MicOff size={14} role="img" aria-label="Mudo" />
-            )}
+            <Monitor size={16} role="img" aria-label="Tela compartilhada" />
           </span>
+        ) : (
+          (state.deafened || state.muted) && (
+            <span className="grid h-4 w-4 shrink-0 place-items-center">
+              {state.deafened ? (
+                <HeadphoneOff size={16} role="img" aria-label="Sem áudio" />
+              ) : (
+                <MicOff size={16} role="img" aria-label="Mudo" />
+              )}
+            </span>
+          )
         )}
         <span className="truncate">
           {nome}

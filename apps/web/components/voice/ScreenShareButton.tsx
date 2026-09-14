@@ -87,13 +87,17 @@ export default function ScreenShareButton({
         // Só ícone, como no painel do Discord: o rótulo comia mais da metade da
         // largura do botão e ainda precisava ser abreviado ("Tela") para caber
         // na largura de meio cartão. O nome inteiro vive no tooltip.
+        //
+        // `h-[30px]`, não `h-8` (32): o invólucro de `VoiceConnectedBar` já é
+        // 74×30 (medido nos prints 101842/160106), e os 32 daqui vazavam 2px
+        // por baixo dele — ver o comentário lá ("faltando" do cartão anterior).
         <Tooltip label={label} className="min-w-0 flex-1">
           <button
             type="button"
             onClick={acionar}
             aria-label={label}
             aria-pressed={screenOn}
-            className={`grid h-8 w-full place-items-center rounded-lg transition ${
+            className={`grid h-[30px] w-full place-items-center rounded-lg transition ${
               screenOn
                 ? "bg-status-positive/20 text-status-positive hover:bg-status-positive/30"
                 : "bg-border-normal/60 text-text-subtle hover:bg-border-normal hover:text-text-strong"

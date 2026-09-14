@@ -74,6 +74,14 @@ function ListaDeFontes({
   );
 }
 
+/**
+ * O Discord não pinta item de menu com a cor de marca (design.md, "Menu de
+ * contexto"): hover e selecionado são cinza (`--interactive-background-hover`
+ * / `-selected`), como em `Escolha` de `menus-de-audio.tsx` — a mesma peça,
+ * repetida aqui porque a lista de câmeras vive num componente à parte. Antes
+ * este botão pintava `bg-brand-500` no hover, o que teria acendido a lista
+ * inteira de limão a cada passada do mouse.
+ */
 function Opcao({
   rotulo,
   escolhida,
@@ -89,7 +97,11 @@ function Opcao({
       role="menuitemradio"
       aria-checked={escolhida}
       onClick={onSelect}
-      className="flex w-full items-center gap-2 rounded-[3px] px-2 py-2 text-left text-sm text-text-default transition hover:bg-brand-500 hover:text-control-primary-text-default"
+      className={`flex w-full items-center gap-2 rounded-[3px] px-2 py-2 text-left text-sm transition ${
+        escolhida
+          ? "bg-interactive-background-selected text-text-strong"
+          : "text-text-default hover:bg-interactive-background-hover"
+      }`}
     >
       <span className="w-4 shrink-0">{escolhida && <Check size={16} />}</span>
       <span className="min-w-0 flex-1 truncate">{rotulo}</span>
