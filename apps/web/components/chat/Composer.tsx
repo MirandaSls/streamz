@@ -6,63 +6,60 @@ import {
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type ClipboardEvent,
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
-import { createPortal } from "react-dom";
 import {
   Angry,
   Annoyed,
   Apps,
   Camera,
-  Eye,
-  EyeOff,
-  FileText,
   Gif,
   Gift,
-  Hash,
   Image as ImageIcon,
   Laugh,
   MessageSquarePlus,
   Paperclip,
-  Pencil,
-  Plus,
-  SendHorizonal,
   Smile,
   Sticker as StickerIcon,
-  Upload,
   Vote,
-  X,
 } from "@/components/ui/icones";
 import {
   MAX_ATTACHMENTS_PER_MESSAGE,
   MAX_ATTACHMENT_SIZE,
   MAX_MESSAGE_LENGTH,
   Permission,
-  SPOILER_PREFIX,
-  colorRoleOf,
-  displayNameOf,
   mentionsEveryone,
-  slowmodeLabel,
   type Attachment,
-  type ComandoDeApp,
-  type Role,
+  type OpcaoDeComando,
   type Sticker,
 } from "@streamz/shared";
 import Autocomplete, { type ItemAutocomplete } from "@/components/chat/Autocomplete";
+import { AreaDeAnexos, comNomeFinal, type AnexoLocal } from "@/components/chat/composer/anexos";
+import AvisoDeModoLento from "@/components/chat/composer/AvisoDeModoLento";
+import BarraDoComando from "@/components/chat/composer/BarraDoComando";
+import { BotaoEnviar, BotaoLateral, BotaoMais } from "@/components/chat/composer/BotoesDoComposer";
+import OverlayArrastar from "@/components/chat/composer/OverlayArrastar";
+import SeletorDeComandos from "@/components/chat/composer/SeletorDeComandos";
+import { TITULO_GATILHO, montarSugestoes, sugestoesDeOpcao } from "@/components/chat/composer/sugestoes";
 import PickerPanel, { type PickerTab } from "@/components/media/PickerPanel";
-import Avatar from "@/components/ui/Avatar";
-import { BotaoDeIcone, Tooltip } from "@/components/ui/primitivos";
 import { formatBytes } from "@/lib/format";
 import { api } from "@/lib/api";
-import { aplicarEscolha, detectarGatilho, mover, type Gatilho } from "@/lib/composer-autocomplete";
-import { buscarComandos, interpretarComando, sugestoesDeComandosDeApp } from "@/lib/comandos-barra";
-import { buscarEmojisUnicode } from "@/lib/emojis-unicode";
+import { aplicarEscolha, detectarGatilho, mover } from "@/lib/composer-autocomplete";
+import {
+  acrescentarOpcao,
+  agruparComandos,
+  aplicarValorDeOpcao,
+  estadoDoComando,
+  interpretarComando,
+  textoAoEscolherComando,
+  type ComandoListavel,
+} from "@/lib/comandos-barra";
 import { EVENTO_MENCAO, type DetalheMencao } from "@/lib/mencoes";
 import { lerRascunho, limparRascunho, salvarRascunho } from "@/lib/rascunhos";
 import { useEhMobile } from "@/hooks/useEhMobile";
-import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { useComandosDeApp } from "@/stores/comandos-de-app";
 import { aplicarEmojisPersonalizados, todosOsEmojis, useEmojis } from "@/stores/emojis";
@@ -73,19 +70,16 @@ import { useSettings } from "@/stores/settings";
 import { errorMessage } from "@/stores/socket-adapter";
 import { emitTyping } from "@/stores/typing";
 import { ui, type MenuItem } from "@/stores/ui";
-import { COR_DE_CARGO_SEM_COR } from "@/lib/cor-de-cargo";
 
-/** Altura máxima do campo antes de virar rolagem interna (~8 linhas). */
+/** Altura máxima do campo antes de virar rolagem interna (~8 linhas). Não medido. */
 const MAX_HEIGHT_PX = 200;
 /**
  * No celular o teto é uma **fração da janela**, não os 200px do desktop.
  *
  * Com o teclado aberto a janela do telefone encolhe para ~460px de altura
  * (`interactiveWidget: "resizes-content"`, ver `app/layout.tsx`), e um campo de
- * 200 comia 200 dos 460: sobravam 190px de conversa, menos de duas mensagens.
- * 30% deixa o campo crescer até ~6 linhas com o teclado aberto e continua
- * batendo nos mesmos 200px com o teclado fechado (844 × 0,3 = 253, capado em
- * 200) — ou seja, **nada muda no telefone em repouso**, só o caso do teclado.
+ * 200 comia 200 dos 460. 30% deixa o campo crescer até ~6 linhas com o teclado
+ * aberto e continua batendo nos mesmos 200px com o teclado fechado.
  */
 const FRACAO_MAX_MOBILE = 0.3;
 /** Piso do teto acima: três linhas, para o campo nunca virar uma fresta. */
@@ -94,55 +88,30 @@ const MIN_MAX_MOBILE = 84;
 /** Até onde o campo pode crescer agora, na janela de agora. */
 function tetoDoCampo(ehMobile: boolean): number {
   if (!ehMobile || typeof window === "undefined") return MAX_HEIGHT_PX;
-  return Math.max(
-    MIN_MAX_MOBILE,
-    Math.min(MAX_HEIGHT_PX, Math.round(window.innerHeight * FRACAO_MAX_MOBILE)),
-  );
+  return Math.max(MIN_MAX_MOBILE, Math.min(MAX_HEIGHT_PX, Math.round(window.innerHeight * FRACAO_MAX_MOBILE)));
 }
 /**
- * Altura da caixa com uma linha (medida no Discord): os 22px da linha mais os
- * 18px de respiro de cada lado do `py-[18px]`. É o valor que o campo vazio
- * assume **sem perguntar ao layout** — ver `medir` no `useLayoutEffect`.
+ * Altura do campo com uma linha: **56**, não 58.
+ *
+ * Print 1:1 `docs/Reference/Captura de tela 2026-09-02 180835.png`, coluna
+ * x=700: borda 1px em y=964, miolo `#222327` de y=965 a 1020 (56), borda em
+ * y=1021. Os 58 que tínhamos eram a caixa inteira sem borda. Bate com o CSS:
+ * `--custom-channel-textarea-text-area-height:56px` e
+ * `.textArea__74017{padding:calc((56px - var(--chat-markup-line-height))/2) 0}`
+ * = (56 − 22) / 2 = 17 em cima e embaixo.
  */
-const ALTURA_UMA_LINHA = 58;
+const ALTURA_UMA_LINHA = 56;
 /**
  * A mesma coisa no celular: a cápsula do composer do Discord mede **40pt**
- * (medido em `docs/Reference/mobile/discord-mobile-chat-canal-2024.png`,
- * 1px=1pt, `MEDIDAS.md` §7), com 9px de respiro de cada lado de uma linha de
- * 22. Sem esta constante o `min-h-[40px]` da classe não valia nada: quem
- * escreve a altura do campo vazio é o `style.height` daqui, e ele mandava 58 —
- * a cápsula media 58 num telefone, 45% mais alta que a do Discord.
+ * (`docs/Reference/mobile/discord-mobile-chat-canal-2024.png`, `MEDIDAS.md` §7),
+ * com 9px de respiro de cada lado de uma linha de 22.
  */
 const ALTURA_UMA_LINHA_MOBILE = 40;
 /** A contagem de caracteres só aparece quando começa a importar (Discord: 1800). */
 const COUNTER_THRESHOLD = 0.9;
-/** Sugestões mostradas de uma vez em cada gatilho. */
-const MAX_SUGESTOES = 10;
-/** Lado do cartão de prévia de anexo. */
-const LADO_PREVIA = 216;
-/**
- * O mesmo cartão no celular. 216 é meia tela de um telefone de 390 — e, com o
- * teclado aberto (janela de ~460), a faixa de prévia sozinha comia metade do
- * que sobrava da conversa. 128 mostra três anexos na largura e deixa espaço
- * para os três botões de ação, que aqui **não** podem depender de hover.
- */
-const LADO_PREVIA_MOBILE = 128;
 /** Altura aproximada de um item do menu de contexto, para abri-lo para cima. */
 const ALTURA_ITEM = 32;
 const ALTURA_SEPARADOR = 9;
-
-/** Um arquivo escolhido, ainda não enviado — dá para renomear e marcar spoiler. */
-interface AnexoLocal {
-  id: string;
-  file: File;
-  /** nome editável, sem o prefixo de spoiler (que entra na hora do envio). */
-  nome: string;
-  spoiler: boolean;
-  /** URL local para a prévia de imagem (revogada ao remover). */
-  previewUrl?: string;
-  /** 0–100 enquanto sobe; -1 antes de começar. */
-  progresso: number;
-}
 
 let seqAnexo = 0;
 
@@ -150,73 +119,36 @@ let seqAnexo = 0;
 const CARINHAS = [Smile, Laugh, Angry, Annoyed];
 
 /**
- * Área de toque de 44px **sem mexer no desenho**.
- *
- * Os botões do composer do celular medem 40 × 40 porque é o que o Discord
- * desenha (`MEDIDAS.md` §7: `y 732..771`, 40 pt) — medido, não deduzido. 40 é
- * menos que os 44 que a diretriz de toque pede, e a saída não é engordar o
- * botão (o que empurraria a cápsula e desalinharia a fileira) e sim **estender
- * o alvo**: o pseudo-elemento acrescenta 2px acima e 2px abaixo, invisível,
- * dentro do `pb-1` que o form já reserva. Na horizontal não é preciso: os
- * botões da fileira são contíguos, então não há faixa morta entre eles.
- */
-const ALVO_44 =
-  "relative after:absolute after:inset-x-0 after:top-[-2px] after:bottom-[-2px] after:content-['']";
-
-/**
- * Botão de ícone à direita do composer (presente, GIF, figurinha, emoji, apps).
- *
- * `onClick` é opcional porque presente e apps **não fazem nada**: existem para
- * a fileira ter os cinco ícones do Discord, e um botão que abrisse um aviso de
- * "indisponível" seria pior que um botão calado.
- */
-function SideButton({
-  label,
-  onClick,
-  onMouseEnter,
-  baixo = false,
-  children,
-}: {
-  label: string;
-  onClick?: () => void;
-  onMouseEnter?: () => void;
-  /** 40px de altura em vez de 58: o composer do celular é uma cápsula de 40. */
-  baixo?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <BotaoDeIcone
-      rotulo={label}
-      icone={children}
-      onClick={onClick}
-      onMouseEnter={onMouseEnter}
-      // `lg` já dá os 40×40 do celular; no desktop a fileira mede 58 de altura
-      // (medido no composer do Discord, `MEDIDAS.md` §7) — maior que qualquer
-      // tamanho do primitivo, daí o `!h-` para vencer de fora (mesmo recurso
-      // de `components/mobile/telas-base.tsx`)
-      tamanho="lg"
-      className={baixo ? ALVO_44 : "!h-[58px]"}
-    />
-  );
-}
-
-/**
  * Campo de envio de mensagem, no leiaute do Discord.
+ *
+ * Caixa (print 1:1 `180835.png` + `css-bruto/962953.69892aacbc3b8e17.css`,
+ * módulo `__74017`):
+ * - 58 de altura com a borda de 1px `--border-subtle` (`#27282b` sobre
+ *   `#1a1a1e`; `.refresh-fast-follow-distinct-borders .channelTextArea__74017`),
+ *   raio 8 (`--radius-sm`), fundo `--chat-background-default`;
+ * - a 10px das bordas da coluna (caixa em x 385–1640, coluna 375–1650);
+ * - **sem anel de foco**: `.channelTextArea__74017:focus-within{border-color:
+ *   var(--border-subtle);box-shadow:none}` — a borda nem muda de cor (o
+ *   `--app-frame-border` da variante nova resolve o mesmo `#94949c1f`). O campo
+ *   leva `data-sem-anel` para o anel limão genérico do `globals.css` não
+ *   desenhar em volta da caixa, que era o que a revisão visual registrou;
+ * - com barra empilhada acima (resposta), perde o raio de cima
+ *   (`.hasStackedBar__74017`);
+ * - com o contador visível, o miolo cresce para 56 + 32
+ *   (`.charCountShowing__74017 .inner__74017`), e o número vai no canto:
+ *   `.characterCount_fcde1f{bottom:12px;inset-inline-end:14px;font-family:
+ *   var(--font-code);font-size:12px;color:var(--text-muted)}`.
  *
  * Além do texto, é daqui que saem anexo, GIF, figurinha, emoji e os comandos de
  * barra. Três decisões que valem registro:
  *
  * - **O arquivo só sobe no envio.** Enquanto está na prévia dá para renomear e
  *   marcar como spoiler, e o nome é justamente o que carrega essa marca
- *   (`SPOILER_`, como no Discord) — subir antes obrigaria a reenviar o arquivo
- *   a cada mudança de ideia. A barra de progresso aparece nesse momento.
+ *   (`SPOILER_`, como no Discord).
  * - **O rascunho é por canal e sobrevive à troca de canal e ao reload**
- *   (`localStorage`), porque o componente é remontado a cada canal e perder o
- *   que estava escrito por clicar no canal errado é o tipo de coisa que só se
- *   percebe quando acontece.
+ *   (`localStorage`), porque o componente é remontado a cada canal.
  * - **O `↑` não edita aqui dentro.** Ele abre a edição *na própria mensagem*, na
- *   timeline: no Discord o composer não muda de papel, e trocar o campo de envio
- *   por um campo de edição fazia sumir o que estava escrito.
+ *   timeline: no Discord o composer não muda de papel.
  */
 export default function Composer({
   channelId,
@@ -231,6 +163,7 @@ export default function Composer({
   onCreateThread,
   onCreatePoll,
   modoLento,
+  desabilitado,
 }: {
   /** canal em que se está digitando — para o aviso de "digitando…". */
   channelId?: string;
@@ -250,8 +183,14 @@ export default function Composer({
   onCreateThread?: () => void;
   /** menu do "+": criar enquete (h-moderacao). */
   onCreatePoll?: () => void;
-  /** modo lento do canal: o aviso e a contagem vivem dentro do composer. */
+  /** modo lento do canal: o aviso e a contagem vivem colados na caixa. */
   modoLento?: { segundos: number; restante: number; bloqueado: boolean };
+  /**
+   * Motivo para o campo estar desabilitado. A caixa continua na tela, como a
+   * `.channelTextAreaDisabled__74017` do Discord, com o motivo no lugar do
+   * placeholder e o cursor de proibido (`.innerDisabled__74017`).
+   */
+  desabilitado?: string;
 }) {
   const [draft, setDraft] = useState("");
   const [pendentes, setPendentes] = useState<AnexoLocal[]>([]);
@@ -265,8 +204,8 @@ export default function Composer({
   /**
    * No celular o composer muda em duas coisas, e só nelas: a fileira de cinco
    * ícones vira duas (não cabem cinco alvos de 40px ao lado de um campo de
-   * texto em 390px de tela — o rótulo do canal quebrava em três linhas), e
-   * ganha um **botão de enviar**, porque o Enter ali é quebra de linha.
+   * texto em 390px de tela), e ganha um **botão de enviar**, porque o Enter ali
+   * é quebra de linha.
    */
   const ehMobile = useEhMobile();
   /** o `medir()` lê isto de dentro de um efeito que não depende do estado. */
@@ -279,7 +218,6 @@ export default function Composer({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
-  const me = useAuth((s) => s.user);
   const membros = useGuilds((s) => s.members);
   const canais = useChannels((s) => s.channels);
   const emojisPorGuild = useEmojis((s) => s.guilds);
@@ -289,6 +227,7 @@ export default function Composer({
   const comandosDeApp = useComandosDeApp((s) => s.comandos);
   // @everyone/@here é MENTION_EVERYONE na permissão efetiva do canal (ADR-0002)
   const podeMencionarTodos = useCan(Permission.MENTION_EVERYONE, channelId);
+  const bloqueado = Boolean(desabilitado);
 
   // ── rascunho por canal ──
   const chaveRascunho = draftKey ?? channelId;
@@ -311,13 +250,9 @@ export default function Composer({
     function medir() {
       const campo = textareaRef.current;
       if (!campo) return;
-      // **Campo vazio tem altura fixa de uma linha.** Não dá para perguntar ao
-      // `scrollHeight`: com o valor vazio quem o Chrome mede é o
-      // **placeholder**, e um placeholder que quebra em duas ou três linhas
-      // (composer estreito, janela pequena, lista de membros aberta) devolvia
-      // 80 ou 102px no lugar de 58. Pior: a medida ficava, porque isto só
-      // rodava de novo quando o texto mudava — a caixa continuava alta depois
-      // de alargar a janela, com o texto colado no topo e o resto morto.
+      // **Campo vazio tem altura fixa de uma linha.** Com o valor vazio quem o
+      // Chrome mede no `scrollHeight` é o **placeholder**, e um placeholder que
+      // quebra em duas linhas (composer estreito) devolvia 80 ou 102px.
       if (!draft) {
         campo.style.height = `${ehMobileRef.current ? ALTURA_UMA_LINHA_MOBILE : ALTURA_UMA_LINHA}px`;
         return;
@@ -328,11 +263,7 @@ export default function Composer({
 
     medir();
 
-    // **O teclado abrindo é um `resize`, não um `resize` do campo.** A janela
-    // encolhe (a largura do composer não muda), então o `ResizeObserver` abaixo
-    // não dispara e o teto do celular ficaria congelado no valor da tela
-    // inteira: o campo continuava com 200px de altura dentro de uma janela de
-    // 460. Ver `tetoDoCampo`.
+    // **O teclado abrindo é um `resize` da janela, não do campo** — ver `tetoDoCampo`.
     window.addEventListener("resize", medir);
 
     // Mudar de largura requebra o texto: sem remedir, a altura calculada na
@@ -355,9 +286,7 @@ export default function Composer({
   }, [draft, ehMobile]);
 
   // As prévias locais são URLs de objeto e precisam ser revogadas ao desmontar.
-  // A lista vive numa ref porque a limpeza tem de rodar **só** no desmonte: com
-  // `pendentes` na lista de dependências, cada anexo novo revogaria as prévias
-  // dos anteriores e elas virariam imagem quebrada.
+  // A lista vive numa ref porque a limpeza tem de rodar **só** no desmonte.
   const pendentesRef = useRef<AnexoLocal[]>([]);
   pendentesRef.current = pendentes;
   useEffect(
@@ -367,20 +296,69 @@ export default function Composer({
     [],
   );
 
-  // ── autocomplete ──
+  // ── listas acima do campo ──
+  //
+  // Três listas disputam o mesmo lugar, e só uma aparece por vez: o seletor de
+  // comandos (`/` no começo), o autocomplete de `:` `@` `#`, e os valores da
+  // opção de comando que se está preenchendo (escolhas, usuário, canal, cargo).
+  // As teclas são sempre do campo; a lista só desenha.
   const [caret, setCaret] = useState(0);
   const [selecionado, setSelecionado] = useState(0);
-  const gatilho = useMemo<Gatilho | null>(() => detectarGatilho(draft, caret), [draft, caret]);
-  const sugestoes = useMemo(
-    () => montarSugestoes(gatilho, { membros, canais, emojisPorGuild, cargos, comandosDeApp }),
-    [gatilho, membros, canais, emojisPorGuild, cargos, comandosDeApp],
+  /** o Esc fecha a lista **neste** texto e cursor; digitar reabre. */
+  const [fechadaEm, setFechadaEm] = useState<string | null>(null);
+  /** a obrigatória que ficou em branco no último Enter — pinta o chip de erro. */
+  const [opcaoComErro, setOpcaoComErro] = useState<string | null>(null);
+
+  const gatilho = useMemo(() => detectarGatilho(draft, caret), [draft, caret]);
+  const grupos = useMemo(
+    () => (gatilho?.tipo === "/" ? agruparComandos(gatilho.termo, comandosDeApp) : []),
+    [gatilho, comandosDeApp],
   );
-  useEffect(() => setSelecionado(0), [gatilho?.tipo, gatilho?.termo]);
+  const comandosPlanos = useMemo(() => grupos.flatMap((g) => g.comandos), [grupos]);
+  const sugestoes = useMemo(
+    () => montarSugestoes(gatilho, { membros, canais, emojisPorGuild, cargos }),
+    [gatilho, membros, canais, emojisPorGuild, cargos],
+  );
+  const estado = useMemo(
+    () => (gatilho?.tipo === "/" ? null : estadoDoComando(draft, caret, comandosDeApp)),
+    [gatilho, draft, caret, comandosDeApp],
+  );
+  const sugestoesOpcao = useMemo(
+    () =>
+      !gatilho && estado?.ativa ? sugestoesDeOpcao(estado.ativa, estado.termoAtivo, { membros, canais, cargos }) : [],
+    [gatilho, estado, membros, canais, cargos],
+  );
+
+  const chaveDaLista = `${draft} ${caret}`;
+  const lista: "comandos" | "gatilho" | "opcao" | null =
+    fechadaEm === chaveDaLista || bloqueado
+      ? null
+      : comandosPlanos.length > 0
+        ? "comandos"
+        : sugestoes.length > 0
+          ? "gatilho"
+          : sugestoesOpcao.length > 0
+            ? "opcao"
+            : null;
+  const tamanhoDaLista =
+    lista === "comandos"
+      ? comandosPlanos.length
+      : lista === "gatilho"
+        ? sugestoes.length
+        : lista === "opcao"
+          ? sugestoesOpcao.length
+          : 0;
+
+  useEffect(
+    () => setSelecionado(0),
+    [lista, gatilho?.tipo, gatilho?.termo, estado?.ativa?.name, estado?.termoAtivo],
+  );
+  useEffect(() => setOpcaoComErro(null), [draft]);
 
   const restante = MAX_MESSAGE_LENGTH - draft.length;
   const mostrarContador = draft.length >= MAX_MESSAGE_LENGTH * COUNTER_THRESHOLD;
   const totalAnexos = pendentes.length + prontos.length;
-  const podeEnviar = (draft.trim().length > 0 || totalAnexos > 0) && !enviando;
+  const podeEnviar = (draft.trim().length > 0 || totalAnexos > 0) && !enviando && !bloqueado;
 
   function atualizarTexto(valor: string, novoCaret?: number) {
     setDraft(valor);
@@ -388,14 +366,39 @@ export default function Composer({
     if (channelId && valor.trim()) emitTyping(channelId);
   }
 
+  function focar(posicao: number) {
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(posicao, posicao);
+    });
+  }
+
   function escolherSugestao(item: ItemAutocomplete) {
     if (!gatilho) return;
     const r = aplicarEscolha(draft, gatilho, item.valor);
     atualizarTexto(r.texto, r.caret);
-    requestAnimationFrame(() => {
-      textareaRef.current?.focus();
-      textareaRef.current?.setSelectionRange(r.caret, r.caret);
-    });
+    focar(r.caret);
+  }
+
+  function escolherComando(comando: ComandoListavel) {
+    if (!gatilho) return;
+    const inserido = textoAoEscolherComando(comando);
+    const novo = inserido + draft.slice(gatilho.fim).replace(/^\s+/, "");
+    atualizarTexto(novo, inserido.length);
+    focar(inserido.length);
+  }
+
+  function escolherValorDeOpcao(item: ItemAutocomplete) {
+    if (!estado) return;
+    const r = aplicarValorDeOpcao(draft, caret, estado, item.valor);
+    atualizarTexto(r.texto, r.caret);
+    focar(r.caret);
+  }
+
+  function acrescentar(opcao: OpcaoDeComando) {
+    const r = acrescentarOpcao(draft, opcao);
+    atualizarTexto(r.texto, r.caret);
+    focar(r.caret);
   }
 
   // ── envio ──
@@ -403,11 +406,12 @@ export default function Composer({
     if (!podeEnviar) return;
 
     const comando = interpretarComando(draft.trim(), comandosDeApp);
-    // ── j-bots ── comando de bot: vira interação, **antes** do "desconhecido"
-    // (que engoliria o /play com um toast de comando inexistente). Nada é
-    // escrito no canal por quem digitou: uma interação não é uma mensagem — a
-    // resposta chega pelo socket, quando o bot responder.
+    // ── j-bots ── comando de bot: vira interação, **antes** do "desconhecido".
+    // Nada é escrito no canal por quem digitou: a resposta chega pelo socket.
     if (comando.tipo === "faltaOpcao") {
+      // o chip da opção fica vermelho (`.error_a19535`); o toast diz qual é,
+      // para quem não está olhando a barra
+      setOpcaoComErro(comando.opcao);
       ui.toast(`/${comando.comando} precisa de "${comando.opcao}".`, "error");
       return;
     }
@@ -483,21 +487,37 @@ export default function Composer({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    // com o popup aberto, as setas e o Enter pertencem à lista
-    if (gatilho && sugestoes.length > 0) {
+    // com uma lista aberta, as setas, o Enter, o Tab e o Esc pertencem a ela
+    if (lista && tamanhoDaLista > 0) {
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
-        setSelecionado((i) => mover(i, event.key === "ArrowDown" ? 1 : -1, sugestoes.length));
+        setSelecionado((i) => mover(i, event.key === "ArrowDown" ? 1 : -1, tamanhoDaLista));
         return;
       }
       if (event.key === "Enter" || event.key === "Tab") {
         event.preventDefault();
-        escolherSugestao(sugestoes[selecionado]);
+        const i = Math.min(selecionado, tamanhoDaLista - 1);
+        if (lista === "comandos") escolherComando(comandosPlanos[i]);
+        else if (lista === "gatilho") escolherSugestao(sugestoes[i]);
+        else escolherValorDeOpcao(sugestoesOpcao[i]);
         return;
       }
       if (event.key === "Escape") {
         event.preventDefault();
-        setCaret(-1); // fecha o popup sem mexer no texto
+        setFechadaEm(chaveDaLista); // fecha a lista sem mexer no texto
+        return;
+      }
+    }
+
+    // Tab dentro de um comando de bot pula para a próxima opção que ainda não
+    // está no campo — obrigatória antes de opcional —, como no Discord
+    if (event.key === "Tab" && !event.shiftKey && estado && !estado.comando.nativo) {
+      const falta = (o: OpcaoDeComando) => !estado.marcadas.has(o.name.toLowerCase());
+      const proxima =
+        estado.comando.opcoes.find((o) => o.required && falta(o)) ?? estado.comando.opcoes.find(falta);
+      if (proxima) {
+        event.preventDefault();
+        acrescentar(proxima);
         return;
       }
     }
@@ -514,9 +534,7 @@ export default function Composer({
 
     if (event.key !== "Enter" || event.shiftKey) return;
     // No celular o Enter do teclado da tela **quebra linha**, e quem envia é o
-    // botão ao lado. É a regra do Discord no telefone, e a razão é mecânica:
-    // no teclado virtual não existe Shift+Enter, então um Enter que enviasse
-    // tornaria impossível escrever duas linhas.
+    // botão ao lado: no teclado virtual não existe Shift+Enter.
     if (ehMobile && !(event.ctrlKey || event.metaKey)) return;
     // ── e-configuracoes ── quem prefere Ctrl+Enter usa o Enter para quebrar linha
     if (sendMode === "ctrl-enter" && !(event.ctrlKey || event.metaKey)) return;
@@ -525,17 +543,13 @@ export default function Composer({
   }
 
   /**
-   * Abre (ou fecha) a folha de emoji/GIF/figurinha.
-   *
-   * **No celular ela começa tirando o foco do campo.** A folha é `60dvh`, e
-   * `dvh` com o teclado aberto é a janela *encolhida*: tocar no emoji com o
-   * teclado na tela dava uma folha de ~276px, na qual cabiam três fileiras de
-   * emoji e mais nada. O `blur()` devolve a tela inteira antes de a folha
-   * medir. No desktop nada disso existe — o painel é um popover ancorado.
+   * Abre (ou fecha) a folha de emoji/GIF/figurinha. **No celular ela começa
+   * tirando o foco do campo**: a folha é `60dvh`, e `dvh` com o teclado aberto
+   * é a janela encolhida.
    */
-  function alternarPainel(destino: PickerTab) {
+  function alternarPainel(destinoDoPainel: PickerTab) {
     if (ehMobile) textareaRef.current?.blur();
-    setAberto((a) => (a === destino ? null : destino));
+    setAberto((a) => (a === destinoDoPainel ? null : destinoDoPainel));
   }
 
   function inserirTexto(texto: string) {
@@ -545,15 +559,11 @@ export default function Composer({
     const proximo = draft.slice(0, inicio) + texto + draft.slice(fim);
     atualizarTexto(proximo, inicio + texto.length);
     setAberto(null);
-    requestAnimationFrame(() => {
-      el?.focus();
-      el?.setSelectionRange(inicio + texto.length, inicio + texto.length);
-    });
+    focar(inicio + texto.length);
   }
 
-  // "Mencionar" dos menus de contexto (lista de membros, participantes de voz,
-  // cabeçalho de mensagem): quem menciona não sabe qual composer está montado,
-  // então o evento é global e quem está na tela resolve. Ver `lib/mencoes`.
+  // "Mencionar" dos menus de contexto: quem menciona não sabe qual composer
+  // está montado, então o evento é global e quem está na tela resolve.
   useEffect(() => {
     function aoMencionar(e: Event) {
       const detalhe = (e as CustomEvent<DetalheMencao>).detail;
@@ -567,20 +577,17 @@ export default function Composer({
   });
 
   function adicionarArquivos(files: FileList | File[]) {
-    const lista = Array.from(files);
-    if (lista.length === 0) return;
+    const arquivos = Array.from(files);
+    if (arquivos.length === 0) return;
     const espaco = MAX_ATTACHMENTS_PER_MESSAGE - totalAnexos;
     if (espaco <= 0) {
       ui.toast(`Máximo de ${MAX_ATTACHMENTS_PER_MESSAGE} anexos por mensagem.`, "error");
       return;
     }
     const novos: AnexoLocal[] = [];
-    for (const file of lista.slice(0, espaco)) {
+    for (const file of arquivos.slice(0, espaco)) {
       if (file.size > MAX_ATTACHMENT_SIZE) {
-        ui.toast(
-          `${file.name} tem ${formatBytes(file.size)} — o limite é ${formatBytes(MAX_ATTACHMENT_SIZE)}.`,
-          "error",
-        );
+        ui.toast(`${file.name} tem ${formatBytes(file.size)} — o limite é ${formatBytes(MAX_ATTACHMENT_SIZE)}.`, "error");
         continue;
       }
       novos.push({
@@ -603,8 +610,14 @@ export default function Composer({
     });
   }
 
+  async function renomearPendente(anexo: AnexoLocal) {
+    const nome = await ui.prompt({ title: "Nome do arquivo", initial: anexo.nome, confirmLabel: "Renomear" });
+    if (!nome) return;
+    setPendentes((prev) => prev.map((a) => (a.id === anexo.id ? { ...a, nome } : a)));
+  }
+
   function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
-    if (!allowAttachments) return;
+    if (!allowAttachments || bloqueado) return;
     const files = Array.from(event.clipboardData.files);
     if (files.length === 0) return;
     event.preventDefault();
@@ -616,93 +629,46 @@ export default function Composer({
     /*
       No celular, os dois caminhos que o sistema oferece e o `<input type=file>`
       cru não pede: a **galeria** (`accept="image/*"`) e a **câmera**
-      (`capture="environment"`, que faz o Android e o iOS abrirem a traseira
-      direto, sem passar pelo seletor de arquivos).
-
-      São inputs separados, e não atributos ligados e desligados no mesmo:
-      `capture` é lido quando o seletor abre, e alternar o atributo do input
-      compartilhado deixava a próxima escolha com o modo da anterior em alguns
-      WebViews. Três inputs escondidos custam nada e cada um só sabe uma coisa.
-
-      "Enviar arquivo" continua embaixo, e no desktop continua sendo o único —
-      lá `capture` não existe e `accept` só atrapalharia quem quer mandar um zip.
+      (`capture="environment"`). São inputs separados porque `capture` é lido
+      quando o seletor abre, e alternar o atributo do input compartilhado deixava
+      a próxima escolha com o modo da anterior em alguns WebViews.
     */
     if (ehMobile) {
-      items.push({
-        label: "Galeria",
-        icon: <ImageIcon size={18} />,
-        onSelect: () => galeriaInputRef.current?.click(),
-      });
-      items.push({
-        label: "Tirar foto",
-        icon: <Camera size={18} />,
-        onSelect: () => cameraInputRef.current?.click(),
-      });
+      items.push({ label: "Galeria", icon: <ImageIcon size={18} />, onSelect: () => galeriaInputRef.current?.click() });
+      items.push({ label: "Tirar foto", icon: <Camera size={18} />, onSelect: () => cameraInputRef.current?.click() });
     }
-    items.push({
-      label: "Enviar arquivo",
-      icon: <Paperclip size={18} />,
-      onSelect: () => fileInputRef.current?.click(),
-    });
+    items.push({ label: "Enviar arquivo", icon: <Paperclip size={18} />, onSelect: () => fileInputRef.current?.click() });
     if (onCreateThread) {
-      items.push({
-        label: "Criar thread",
-        icon: <MessageSquarePlus size={18} />,
-        onSelect: onCreateThread,
-      });
+      items.push({ label: "Criar thread", icon: <MessageSquarePlus size={18} />, onSelect: onCreateThread });
     }
-    // "Criar enquete" só entra quando há para onde ir; o Discord nunca mostra
-    // item morto — o mesmo motivo pelo qual "Mensagem de voz" e "Criar evento"
-    // ainda não aparecem aqui (não há backend para nenhum dos dois)
+    // "Criar enquete" só entra quando há para onde ir; "Mensagem de voz" e
+    // "Criar evento" ainda não aparecem (não há backend para nenhum dos dois)
     if (onCreatePoll) {
       items.push({ label: "Criar enquete", icon: <Vote size={18} />, onSelect: onCreatePoll });
     }
     const r = event.currentTarget.getBoundingClientRect();
-    // abre **para cima**, alinhado à borda esquerda do botão: para baixo o menu
-    // cairia por cima do próprio composer
-    const altura =
-      items.reduce((h, i) => h + ("separator" in i ? ALTURA_SEPARADOR : ALTURA_ITEM), 0) + 16;
+    // abre **para cima**, alinhado à borda esquerda do botão
+    const altura = items.reduce((h, i) => h + ("separator" in i ? ALTURA_SEPARADOR : ALTURA_ITEM), 0) + 16;
     ui.openContextMenu(r.left, Math.max(8, r.top - 8 - altura), items);
   }
 
   const Carinha = CARINHAS[carinha];
 
   /**
-   * Arrastar-e-soltar é do computador. No telefone não há de onde arrastar um
-   * arquivo, e os três manipuladores só serviam para o dia em que um WebView
-   * resolvesse emitir `dragover` num gesto de rolagem: aí o overlay
-   * "Arraste e solte para enviar" cobria a conversa inteira sem que ninguém
-   * tivesse arrastado nada. Quem envia arquivo no celular é o menu do "+".
+   * Arrastar-e-soltar é do computador. No telefone não há de onde arrastar, e um
+   * WebView que emitisse `dragover` num gesto de rolagem cobria a conversa com o
+   * overlay sem ninguém ter arrastado nada.
    */
-  const podeArrastar = allowAttachments && !ehMobile;
+  const podeArrastar = allowAttachments && !ehMobile && !bloqueado;
+  const temAnexos = pendentes.length > 0 || prontos.length > 0;
+  const temTexto = draft.trim().length > 0 || temAnexos;
 
-  /**
-   * O "+" das opções de envio. No desktop vive dentro da caixa do composer; no
-   * celular, fora dela, à esquerda — é o leiaute da captura do Discord, e é
-   * também o que devolve largura ao campo num telefone de 390px.
-   */
-  const botaoMais = (
-    <BotaoDeIcone
-      rotulo="Mais opções de envio"
-      icone={
-        // `+` liso, não o `CirclePlus`: o do Discord é marca de traço, sem o
-        // círculo cheio em volta. O `+` do Discord é desenhado pequeno dentro do
-        // próprio ativo: a tinta ocupa 58% do quadro, contra ~83% dos vizinhos —
-        // 30 × 0,58 ≈ 17,5, que é o glifo de 18 medido no composer.
-        <Plus size={30} />
-      }
-      onClick={abrirMenuMais}
-      // `lg` já dá os 40×40 dos dois leiautes; só o raio muda (o Discord usa
-      // círculo cheio aqui, não os 8px do primitivo) e por isso vence de fora
-      // com `!`. `ml-2.5` põe o glifo de 18 a 21px da borda esquerda da caixa,
-      // que é onde ele fica no Discord: 10 de margem + os 11 que sobram de
-      // cada lado dentro do alvo de 40.
-      tamanho="lg"
-      className={`!rounded-full ${
-        ehMobile ? `bg-interactive-background-hover ${ALVO_44}` : "ml-2.5 mr-4 mt-[9px]"
-      }`}
-    />
-  );
+  const botaoMais = <BotaoMais ehMobile={ehMobile} onClick={abrirMenuMais} desabilitado={bloqueado} />;
+
+  function aoEscolherArquivos(e: ChangeEvent<HTMLInputElement>) {
+    if (e.target.files?.length) adicionarArquivos(e.target.files);
+    e.target.value = "";
+  }
 
   return (
     <form
@@ -729,252 +695,192 @@ export default function Composer({
             }
           : undefined
       }
+      // `px-2.5`: a caixa a 10px das bordas da coluna (print 1:1 `180835.png`,
+      // x 385 numa coluna que começa em 375 e 1640 numa que acaba em 1650)
       className={`relative shrink-0 ${ehMobile ? "px-3 pb-1" : "px-2.5"}`}
     >
       {dragging && <OverlayArrastar alvo={formRef.current} destino={destino} />}
 
-      {/* Cápsula de 40pt no celular (raio 20, margens de 12) — medido em
-          `docs/Reference/mobile/discord-mobile-chat-canal-2024.png`, 1px=1pt,
-          `MEDIDAS.md` §7. No desktop segue o retângulo de raio 8 e 58 de altura
-          medido no Discord do computador. */}
-      <div className={ehMobile ? "flex items-end gap-2" : ""}>
-      {ehMobile && allowAttachments && botaoMais}
-      <div
-        className={
-          ehMobile ? "min-w-0 flex-1 rounded-[20px] bg-chat-background-default" : "rounded-lg bg-chat-background-default"
-        }
-      >
-        {(pendentes.length > 0 || prontos.length > 0) && (
-          // uma linha só, com rolagem horizontal: quebrar em várias linhas
-          // empurrava a timeline para cima a cada arquivo
-          <div
-            className={`flex overflow-x-auto border-b border-border-subtle ${
-              ehMobile ? "gap-2 p-2" : "gap-3 px-4 py-4"
-            }`}
-          >
-            {pendentes.map((anexo) => (
-              <PreviaAnexo
-                key={anexo.id}
-                anexo={anexo}
-                compacto={ehMobile}
-                onRemover={() => removerPendente(anexo.id)}
-                onRenomear={async () => {
-                  const nome = await ui.prompt({
-                    title: "Nome do arquivo",
-                    initial: anexo.nome,
-                    confirmLabel: "Renomear",
-                  });
-                  if (!nome) return;
-                  setPendentes((prev) =>
-                    prev.map((a) => (a.id === anexo.id ? { ...a, nome } : a)),
-                  );
-                }}
-                onSpoiler={() =>
-                  setPendentes((prev) =>
-                    prev.map((a) => (a.id === anexo.id ? { ...a, spoiler: !a.spoiler } : a)),
-                  )
-                }
-              />
-            ))}
-            {prontos.map((a) => (
-              <div
-                key={a.id}
-                style={{
-                  height: ehMobile ? LADO_PREVIA_MOBILE : LADO_PREVIA,
-                  width: ehMobile ? LADO_PREVIA_MOBILE : LADO_PREVIA,
-                }}
-                className="group/anexo relative shrink-0 rounded-lg bg-background-base-lowest p-2"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={a.url} alt={a.filename} className="h-full w-full rounded object-contain" />
-                {/* no celular o X **fica**: `group-hover` num dedo é um botão
-                    que não existe, e sem ele o GIF escolhido por engano ia
-                    junto com a mensagem sem apelação */}
-                <span
-                  className={`absolute right-2 top-2 ${
-                    ehMobile ? "flex" : "hidden group-hover/anexo:flex"
-                  }`}
-                >
-                  <BotaoCartao label={`Remover ${a.filename}`} danger grande={ehMobile} onClick={() => setProntos((prev) => prev.filter((x) => x.id !== a.id))}>
-                    <X size={16} />
-                  </BotaoCartao>
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
+      {/* a aba do modo lento divide o espaço acima da caixa com as listas e a
+          barra do comando; enquanto elas estão abertas, a aba sai */}
+      {modoLento && !lista && !estado && (
+        <AvisoDeModoLento segundos={modoLento.segundos} restante={modoLento.restante} bloqueado={modoLento.bloqueado} />
+      )}
 
-        <div className="flex items-start">
-          {allowAttachments ? (
-            <>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                hidden
-                onChange={(e) => {
-                  if (e.target.files?.length) adicionarArquivos(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-              {/* Os dois caminhos de imagem do celular. Ficam aqui, e não ao
-                  lado do "+" (que no telefone mora fora da cápsula): o que
-                  importa é montar os inputs enquanto `allowAttachments` valer,
-                  porque quem os aciona é o menu que o "+" abre, pela `ref`. */}
-              {ehMobile && (
-                <>
-                  <input
-                    ref={galeriaInputRef}
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    hidden
-                    onChange={(e) => {
-                      if (e.target.files?.length) adicionarArquivos(e.target.files);
-                      e.target.value = "";
-                    }}
-                  />
-                  {/* sem `multiple`: uma foto por vez é o que a câmera devolve */}
-                  <input
-                    ref={cameraInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    hidden
-                    onChange={(e) => {
-                      if (e.target.files?.length) adicionarArquivos(e.target.files);
-                      e.target.value = "";
-                    }}
-                  />
-                </>
-              )}
-              {/* No celular o "+" mora **fora** da cápsula, à esquerda dela
-                  (ver `discord-mobile-chat-canal-2024.png`); no desktop ele fica
-                  dentro da caixa. O botão é o mesmo — muda onde é montado. */}
-              {!ehMobile && botaoMais}
-            </>
-          ) : (
-            // mesmo recuo do canal: sem isso o composer da thread ficava
-            // desalinhado do resto da coluna. No celular não há recuo a imitar:
-            // o "+" está fora da cápsula.
-            !ehMobile && <span className="w-14 shrink-0" aria-hidden="true" />
+      <div className={ehMobile ? "flex items-end gap-2" : ""}>
+        {ehMobile && allowAttachments && botaoMais}
+        {/* Cápsula de 40pt no celular (raio 20, sem borda, margens de 12 —
+            `discord-mobile-chat-canal-2024.png`). No desktop, a caixa medida
+            descrita no cabeçalho do componente. */}
+        <div
+          className={
+            ehMobile
+              ? "min-w-0 flex-1 rounded-[20px] bg-chat-background-default"
+              : `rounded-lg border border-border-subtle bg-chat-background-default [.barra-empilhada~*_&]:rounded-t-none ${
+                  bloqueado ? "cursor-not-allowed" : ""
+                }`
+          }
+        >
+          {temAnexos && (
+            <AreaDeAnexos
+              pendentes={pendentes}
+              prontos={prontos}
+              compacto={ehMobile}
+              onRemoverPendente={removerPendente}
+              onRenomear={(anexo) => void renomearPendente(anexo)}
+              onSpoiler={(id) =>
+                setPendentes((prev) => prev.map((a) => (a.id === id ? { ...a, spoiler: !a.spoiler } : a)))
+              }
+              onRemoverPronto={(id) => setProntos((prev) => prev.filter((x) => x.id !== id))}
+            />
           )}
 
-          <textarea
-            ref={textareaRef}
-            /* o Discord não marca o composer em foco — o cursor é o indicador
-               (ver `data-sem-anel` no globals.css) */
-            data-sem-anel
-            rows={1}
-            value={draft}
-            maxLength={MAX_MESSAGE_LENGTH}
-            onChange={(e) => atualizarTexto(e.target.value, e.target.selectionStart)}
-            onKeyUp={(e) => setCaret(e.currentTarget.selectionStart)}
-            onClick={(e) => setCaret(e.currentTarget.selectionStart)}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            aria-label={ariaLabel}
-            // `aria-autocomplete` vale para textbox; `aria-expanded` não — quem
-            // anuncia a lista é o próprio popup, que é um `listbox` rotulado
-            aria-autocomplete="list"
-            placeholder={placeholder}
-            className={`flex-1 resize-none bg-transparent text-text-default outline-none placeholder:text-text-muted ${
-              ehMobile ? "min-h-[40px] py-[9px] pl-4" : "min-h-[58px] py-[18px]"
-            }`}
-          />
+          <div className={`relative flex items-start ${!ehMobile && mostrarContador ? "min-h-[88px]" : ""}`}>
+            {allowAttachments ? (
+              <>
+                <input ref={fileInputRef} type="file" multiple hidden onChange={aoEscolherArquivos} />
+                {/* Os dois caminhos de imagem do celular. Montados aqui (e não
+                    ao lado do "+", que no telefone mora fora da cápsula) porque
+                    quem os aciona é o menu do "+", pela `ref`. */}
+                {ehMobile && (
+                  <>
+                    <input
+                      ref={galeriaInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      hidden
+                      onChange={aoEscolherArquivos}
+                    />
+                    {/* sem `multiple`: uma foto por vez é o que a câmera devolve */}
+                    <input
+                      ref={cameraInputRef}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      hidden
+                      onChange={aoEscolherArquivos}
+                    />
+                  </>
+                )}
+                {!ehMobile && botaoMais}
+              </>
+            ) : (
+              // sem o "+": `.sansAttachButton__74017{padding-inline-start:
+              // calc(var(--space-16) - 1px)}` = 15. No celular o "+" já está fora.
+              !ehMobile && <span className="w-[15px] shrink-0" aria-hidden="true" />
+            )}
 
-          <div className="flex items-center pr-2">
-            {modoLento && (
-              <Tooltip rotulo={`Modo lento ligado (${slowmodeLabel(modoLento.segundos)})`}>
-                <span
-                  aria-live="polite"
-                  className={`px-2 text-xs tabular-nums ${
-                    modoLento.bloqueado ? "text-text-default" : "text-text-muted"
-                  }`}
-                >
-                  {modoLento.bloqueado
-                    ? `${modoLento.restante}s`
-                    : slowmodeLabel(modoLento.segundos)}
-                </span>
-              </Tooltip>
-            )}
-            {/* Ordem do Discord, os cinco: presente → GIF → figurinha → emoji
-                → apps. **Presente e apps são inertes de propósito**: não há o
-                que presentear nem o que abrir, e eles estão aqui só para a
-                fileira ter a forma da do Discord. Sem `onClick`, portanto — e
-                sem inventar um modal que não existe. */}
-            {/* GIF e figurinha existem também na thread: o composer da thread do
-                Discord tem os mesmos botões do canal */}
-            {/* `size={20}` para 18px de tinta: os ativos de `figma/` desenham
-                o glifo em 83% do quadro. Medido no composer do Discord
-                (`173327.png`, y≈992): presente, GIF, figurinha e apps com
-                18px, carinha com 16, passo de 40 entre centros — o mesmo
-                `w-10` do `SideButton`. */}
-            {/* Presente e apps são os dois botões inertes da fileira (§6.6):
-                no celular, onde a fileira já não cabe inteira, são também os
-                dois primeiros a sair. */}
-            {!ehMobile && (
-              <SideButton label="Presente">
-                <Gift size={20} />
-              </SideButton>
-            )}
-            <SideButton
-              label="GIF"
-              baixo={ehMobile}
-              onClick={() => alternarPainel("gif")}
+            <textarea
+              ref={textareaRef}
+              /* o Discord não marca o composer em foco — ver o cabeçalho */
+              data-sem-anel
+              rows={1}
+              value={draft}
+              disabled={bloqueado}
+              maxLength={MAX_MESSAGE_LENGTH}
+              onChange={(e) => atualizarTexto(e.target.value, e.target.selectionStart)}
+              onKeyUp={(e) => setCaret(e.currentTarget.selectionStart)}
+              onClick={(e) => setCaret(e.currentTarget.selectionStart)}
+              onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              aria-label={ariaLabel}
+              // `aria-autocomplete` vale para textbox; quem anuncia a lista é o
+              // próprio popup, que é um `listbox` rotulado
+              aria-autocomplete="list"
+              aria-busy={enviando || undefined}
+              placeholder={desabilitado ?? placeholder}
+              // `.textArea__74017`: 16px, entrelinha 22, `--text-default`,
+              // placeholder `--text-muted`, `padding-inline: 0 10px`
+              className={`min-w-0 flex-1 resize-none bg-transparent text-[1rem] leading-[1.375rem] text-text-default outline-none placeholder:text-text-muted disabled:cursor-not-allowed ${
+                ehMobile ? "min-h-[40px] py-[9px] pl-4" : "min-h-[56px] py-[17px] pr-2.5"
+              }`}
+            />
+
+            {/* `.buttons__74017{display:flex;gap:var(--space-8);height:56px;
+                position:sticky;top:0}`. O recuo da direita sai do print: o
+                centro do último ícone está a 27,5px da borda externa da caixa
+                (1612,5 contra 1640) → 11px de folga dentro da borda. */}
+            <div
+              className={
+                ehMobile ? "flex items-center pr-2" : "sticky top-0 flex h-[56px] shrink-0 items-center gap-2 pr-[11px]"
+              }
             >
-              {/* o ativo do Discord, não `<span>GIF</span>` com borda: texto
-                  muda de peso com a fonte do sistema e nunca casa com os
-                  vizinhos */}
-              <Gif size={20} />
-            </SideButton>
-            {!ehMobile && (
-              <SideButton
-                label="Figurinha"
-                onClick={() => alternarPainel("figurinha")}
-              >
-                <StickerIcon size={20} />
-              </SideButton>
-            )}
-            <SideButton
-              label="Emoji"
-              baixo={ehMobile}
-              onClick={() => alternarPainel("emoji")}
-              // o ícone troca de carinha a cada passada do mouse, como no Discord
-              onMouseEnter={() => setCarinha((c) => (c + 1) % CARINHAS.length)}
-            >
-              {/* menor que os vizinhos: a carinha é o único glifo de 16px da
-                  fileira no Discord. `size={18}` porque o círculo ocupa 92%
-                  do quadro (o nosso print media 14px com `size={16}`) */}
-              <Carinha size={18} />
-            </SideButton>
-            {!ehMobile && (
-              <SideButton label="Apps">
-                <Apps size={20} />
-              </SideButton>
-            )}
-            {/* Enviar: só no celular, e só quando há o que enviar. No desktop o
-                Enter é o botão, e um ícone permanente ali seria ruído. */}
-            {ehMobile && (draft.trim().length > 0 || pendentes.length > 0 || prontos.length > 0) && (
-              <BotaoDeIcone
-                rotulo="Enviar mensagem"
-                icone={<SendHorizonal size={20} />}
-                type="submit"
-                disabled={enviando}
-                tamanho="lg"
-                // fundo limão fixo (não é o hover do primitivo): vence de fora com
-                // `!`, e o texto sobre ele é escuro (`control-primary-text-default`,
-                // a regra de contraste do ADR-0009 para conteúdo sobre `brand-500`)
-                className={`mb-[9px] mr-[9px] mt-[9px] self-end !rounded-full !bg-brand-500 !text-control-primary-text-default ${ALVO_44}`}
+              {/* Ordem do Discord, os cinco: presente → GIF → figurinha → emoji
+                  → apps. No celular a fileira não cabe inteira e presente,
+                  figurinha e apps são os que saem. */}
+              {!ehMobile && <BotaoLateral rotulo="Presente" icone={<Gift size={20} />} emBreve />}
+              <BotaoLateral
+                rotulo="GIF"
+                baixo={ehMobile}
+                desabilitado={bloqueado}
+                aberto={aberto === "gif"}
+                onClick={() => alternarPainel("gif")}
+                // o ativo do Discord, não `<span>GIF</span>` com borda: texto
+                // muda de peso com a fonte do sistema e nunca casa com os vizinhos
+                icone={<Gif size={20} />}
               />
+              {!ehMobile && (
+                <BotaoLateral
+                  rotulo="Figurinha"
+                  desabilitado={bloqueado}
+                  aberto={aberto === "figurinha"}
+                  onClick={() => alternarPainel("figurinha")}
+                  icone={<StickerIcon size={20} />}
+                />
+              )}
+              <BotaoLateral
+                rotulo="Emoji"
+                baixo={ehMobile}
+                desabilitado={bloqueado}
+                aberto={aberto === "emoji"}
+                onClick={() => alternarPainel("emoji")}
+                // o ícone troca de carinha a cada passada do mouse, como no Discord
+                onMouseEnter={() => setCarinha((c) => (c + 1) % CARINHAS.length)}
+                // 16: a carinha tem 16px de tinta no print (x 1564–1579 na
+                // linha do centro, y=992); com 18 a nossa media 18 (1568–1585)
+                //
+                // `pointer-events-none` no invólucro: cada carinha é um `<svg>`
+                // novo, e com o ponteiro caindo nele a troca do `onMouseEnter`
+                // arrancava do DOM o nó do `mousedown` antes do `mouseup` — o
+                // navegador então não dispara `click`, e o seletor não abria
+                // (reproduzido na bancada em 2026-09-14: `click()` por JS abria,
+                // o clique do mouse parado sobre o botão não)
+                icone={
+                  <span className="pointer-events-none grid place-items-center">
+                    <Carinha size={16} />
+                  </span>
+                }
+              />
+              {!ehMobile && <BotaoLateral rotulo="Apps" icone={<Apps size={20} />} emBreve />}
+              {ehMobile && temTexto && !bloqueado && <BotaoEnviar ocupado={enviando} />}
+            </div>
+
+            {mostrarContador && (
+              <span
+                aria-live="polite"
+                className={`pointer-events-none absolute bottom-3 right-[14px] font-mono text-text-xs tabular-nums ${
+                  restante <= 0 ? "text-text-feedback-critical" : "text-text-muted"
+                }`}
+              >
+                {restante}
+              </span>
             )}
           </div>
         </div>
       </div>
 
-      </div>
+      {lista === "comandos" && (
+        <SeletorDeComandos
+          grupos={grupos}
+          selecionado={selecionado}
+          onEscolher={escolherComando}
+          onPassarMouse={setSelecionado}
+        />
+      )}
 
-      {gatilho && sugestoes.length > 0 && (
+      {lista === "gatilho" && gatilho && (
         <Autocomplete
           titulo={TITULO_GATILHO[gatilho.tipo]}
           termo={gatilho.termo}
@@ -984,6 +890,20 @@ export default function Composer({
           onEscolher={escolherSugestao}
           onPassarMouse={setSelecionado}
         />
+      )}
+
+      {estado && lista !== "comandos" && lista !== "gatilho" && (
+        <BarraDoComando estado={estado} opcaoComErro={opcaoComErro} onAcrescentarOpcao={acrescentar}>
+          {lista === "opcao" && estado.ativa && (
+            <Autocomplete
+              titulo={`Valores para ${estado.ativa.name}`}
+              itens={sugestoesOpcao}
+              selecionado={selecionado}
+              onEscolher={escolherValorDeOpcao}
+              onPassarMouse={setSelecionado}
+            />
+          )}
+        </BarraDoComando>
       )}
 
       {/* emoji, GIF e figurinha são um painel só, com abas */}
@@ -1011,310 +931,6 @@ export default function Composer({
           }}
         />
       )}
-
-      {/* No canto inferior direito da caixa, como o `characterCount` do
-          Discord. Antes ficava na faixa de 24px abaixo do composer, que não
-          existe mais (o "digitando…" flutua por cima da lista e o composer
-          termina a 10px do fundo). Não colide com os botões: o contador só
-          aparece a partir de 1800 caracteres, e com esse texto a caixa está
-          na altura máxima, com a fileira de ícones presa ao topo. */}
-      {mostrarContador && (
-        <span
-          aria-live="polite"
-          className={`absolute bottom-1.5 right-[26px] text-xs tabular-nums ${
-            restante <= 0 ? "text-status-danger" : "text-text-muted"
-          }`}
-        >
-          {restante}
-        </span>
-      )}
     </form>
   );
 }
-
-/**
- * Overlay de arrastar: cobre **a área do chat inteira**, e não um retângulo
- * arbitrário acima do composer. A caixa é medida a partir do `<main>` que
- * contém o composer e desenhada em portal, porque um `absolute` dentro do form
- * nunca alcançaria a timeline.
- */
-function OverlayArrastar({ alvo, destino }: { alvo: HTMLElement | null; destino?: string }) {
-  const area = (alvo?.closest("main") ?? alvo)?.getBoundingClientRect();
-  if (!area || typeof document === "undefined") return null;
-  return createPortal(
-    <div
-      style={{ top: area.top + 8, left: area.left + 8, width: area.width - 16, height: area.height - 16 }}
-      className="pointer-events-none fixed z-[65] grid place-items-center rounded-lg border-2 border-dashed border-brand-500 bg-brand-500/20"
-    >
-      <span className="flex flex-col items-center gap-3 text-center">
-        <Upload size={56} strokeWidth={1.5} aria-hidden="true" className="text-icon-overlay-light" />
-        <span className="text-2xl font-extrabold text-text-overlay-light">Arraste e solte para enviar</span>
-        {destino && <span className="text-sm text-text-overlay-light/80">em {destino}</span>}
-      </span>
-    </div>,
-    document.body,
-  );
-}
-
-const TITULO_GATILHO: Record<Gatilho["tipo"], string> = {
-  ":": "Emojis",
-  "@": "Membros",
-  "#": "Canais de texto",
-  "/": "Comandos",
-};
-
-/** Botão de ícone no canto do cartão de prévia — só aparece no hover. */
-function BotaoCartao({
-  label,
-  onClick,
-  danger = false,
-  grande = false,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  danger?: boolean;
-  /** 31px (`h-8`) em vez de 27: no celular são o único jeito de agir. */
-  grande?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <Tooltip rotulo={label}>
-      <button
-        type="button"
-        onClick={onClick}
-        aria-label={label}
-        className={`grid place-items-center rounded bg-input-background-default/90 transition hover:bg-interactive-background-hover ${
-          grande ? "h-8 w-8" : "h-7 w-7"
-        } ${danger ? "text-status-danger" : "text-text-default hover:text-text-strong"}`}
-      >
-        {children}
-      </button>
-    </Tooltip>
-  );
-}
-
-/**
- * Prévia de um arquivo ainda não enviado.
- *
- * As três ações (spoiler, renomear, remover) são ícones no canto superior
- * direito e só aparecem no hover, como no Discord — o checkbox com a palavra
- * "spoiler" e o X sempre visível pesavam mais que a própria imagem.
- */
-function PreviaAnexo({
-  anexo,
-  compacto = false,
-  onRemover,
-  onRenomear,
-  onSpoiler,
-}: {
-  anexo: AnexoLocal;
-  /** celular: cartão de 128 e as três ações **sempre** visíveis (ver abaixo). */
-  compacto?: boolean;
-  onRemover: () => void;
-  onRenomear: () => void;
-  onSpoiler: () => void;
-}) {
-  const lado = compacto ? LADO_PREVIA_MOBILE : LADO_PREVIA;
-  return (
-    <div
-      style={{ height: lado, width: lado }}
-      className="group/anexo relative flex shrink-0 flex-col rounded-lg bg-background-base-lowest p-2"
-    >
-      {anexo.previewUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={anexo.previewUrl}
-          alt={anexo.nome}
-          className={`min-h-0 flex-1 rounded object-contain ${anexo.spoiler ? "blur-lg" : ""}`}
-        />
-      ) : (
-        <div className="grid min-h-0 flex-1 place-items-center text-text-muted" aria-hidden="true">
-          <FileText size={64} strokeWidth={1} />
-        </div>
-      )}
-
-      <span className={`truncate text-text-default ${compacto ? "mt-1 text-xs" : "mt-2 text-sm"}`}>
-        {anexo.nome}
-      </span>
-      {/* o tamanho em bytes é a primeira coisa a sair num cartão de 128: sem
-          ele o nome e a barra de progresso ainda cabem */}
-      {!compacto && (
-        <span className="truncate text-[11px] text-text-muted">{formatBytes(anexo.file.size)}</span>
-      )}
-
-      {anexo.progresso >= 0 && (
-        <div
-          role="progressbar"
-          aria-valuenow={anexo.progresso}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label={`Enviando ${anexo.nome}`}
-          className="mt-1 h-1 overflow-hidden rounded bg-input-background-default"
-        >
-          <div className="h-full bg-brand-500 transition-all" style={{ width: `${anexo.progresso}%` }} />
-        </div>
-      )}
-
-      {/*
-        **No celular estes três botões não se escondem.** `group-hover` é um
-        gesto que o dedo não tem: num telefone as três ações do anexo — marcar
-        spoiler, renomear e, principalmente, **remover** — simplesmente não
-        existiam, e um arquivo escolhido por engano ia junto com a mensagem.
-        Três alvos de 32 (`h-8`) com 4 de folga dão 104, que cabe nos 112
-        úteis do cartão compacto (daí `LADO_PREVIA_MOBILE` ser 128).
-      */}
-      <span
-        className={`absolute right-2 top-2 gap-1 ${
-          compacto ? "flex" : "hidden group-hover/anexo:flex"
-        }`}
-      >
-        <BotaoCartao
-          label={anexo.spoiler ? "Não marcar como spoiler" : "Marcar como spoiler"}
-          grande={compacto}
-          onClick={onSpoiler}
-        >
-          {anexo.spoiler ? <EyeOff size={16} /> : <Eye size={16} />}
-        </BotaoCartao>
-        <BotaoCartao label="Renomear" grande={compacto} onClick={onRenomear}>
-          <Pencil size={16} />
-        </BotaoCartao>
-        <BotaoCartao label={`Remover ${anexo.nome}`} danger grande={compacto} onClick={onRemover}>
-          <X size={16} />
-        </BotaoCartao>
-      </span>
-    </div>
-  );
-}
-
-/** Arquivo com o nome final: o prefixo de spoiler é parte do nome, como no Discord. */
-function comNomeFinal(anexo: AnexoLocal): File {
-  const nome = anexo.spoiler ? `${SPOILER_PREFIX}${anexo.nome}` : anexo.nome;
-  if (nome === anexo.file.name) return anexo.file;
-  return new File([anexo.file], nome, { type: anexo.file.type });
-}
-
-/** Candidatos do popup, conforme o gatilho ativo. */
-function montarSugestoes(
-  gatilho: Gatilho | null,
-  fontes: {
-    membros: {
-      user: { id: string; username: string; displayName: string | null; avatarUrl: string | null; status: string };
-      roleIds: readonly string[];
-    }[];
-    canais: { id: string; name: string | null; type: string }[];
-    emojisPorGuild: { emojis: { id: string; name: string; url: string }[] }[];
-    cargos: readonly Role[];
-    /** ── j-bots ── comandos de barra dos bots do servidor aberto. */
-    comandosDeApp: readonly ComandoDeApp[];
-  },
-): ItemAutocomplete[] {
-  if (!gatilho) return [];
-  const q = gatilho.termo.toLowerCase();
-
-  if (gatilho.tipo === ":") {
-    const custom = fontes.emojisPorGuild
-      .flatMap((g) => g.emojis)
-      .filter((e) => e.name.includes(q))
-      .slice(0, MAX_SUGESTOES)
-      .map<ItemAutocomplete>((e) => ({
-        chave: `c${e.id}`,
-        valor: `:${e.name}:`,
-        rotulo: `:${e.name}:`,
-        detalhe: "do servidor",
-        icone: (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={e.url} alt="" className="h-5 w-5 object-contain" />
-        ),
-      }));
-    const unicode = buscarEmojisUnicode(q, MAX_SUGESTOES - custom.length).map<ItemAutocomplete>(
-      (e) => ({
-        chave: `u${e.nome}`,
-        valor: e.char,
-        rotulo: `:${e.nome}:`,
-        icone: <span className="text-lg">{e.char}</span>,
-      }),
-    );
-    return [...custom, ...unicode];
-  }
-
-  if (gatilho.tipo === "@") {
-    const alcance: ItemAutocomplete[] = [
-      { chave: "everyone", valor: "@everyone", rotulo: "@everyone", detalhe: "avisa todo mundo" },
-      { chave: "here", valor: "@here", rotulo: "@here", detalhe: "avisa quem está online" },
-    ].filter((i) => i.rotulo.slice(1).startsWith(q));
-
-    // ── c-cargos ── só cargo com `mentionable` aparece; o texto grava o id,
-    // porque cargo é renomeável e o nome quebraria a menção depois
-    const cargos = fontes.cargos
-      .filter((r) => r.mentionable && r.name.toLowerCase().includes(q))
-      .slice(0, MAX_SUGESTOES - alcance.length)
-      .map<ItemAutocomplete>((r) => ({
-        chave: `r${r.id}`,
-        valor: `<@&${r.id}>`,
-        rotulo: `@${r.name}`,
-        detalhe: "cargo",
-        cor: r.color ?? undefined,
-        icone: (
-          <span
-            aria-hidden="true"
-            style={{ backgroundColor: r.color ?? COR_DE_CARGO_SEM_COR }}
-            className="h-3 w-3 rounded-full"
-          />
-        ),
-      }));
-
-    const pessoas = fontes.membros
-      .filter(
-        (m) =>
-          m.user.username.toLowerCase().includes(q) ||
-          displayNameOf(m.user).toLowerCase().includes(q),
-      )
-      .slice(0, MAX_SUGESTOES - alcance.length - cargos.length)
-      .map<ItemAutocomplete>((m) => ({
-        chave: m.user.id,
-        // a menção grava o username: é o que o `mentionsUser` do contrato casa
-        valor: `@${m.user.username}`,
-        rotulo: displayNameOf(m.user),
-        detalhe: m.user.username,
-        // o nome do membro sai na cor do cargo mais alto, como na timeline
-        cor: colorRoleOf(m.roleIds, fontes.cargos)?.color ?? undefined,
-        icone: <Avatar user={m.user as never} size="sm" />,
-      }));
-    return [...alcance, ...cargos, ...pessoas];
-  }
-
-  if (gatilho.tipo === "#") {
-    return fontes.canais
-      .filter((c) => c.type === "TEXT" && (c.name ?? "").toLowerCase().includes(q))
-      .slice(0, MAX_SUGESTOES)
-      .map<ItemAutocomplete>((c) => ({
-        chave: c.id,
-        valor: `#${c.name}`,
-        rotulo: `#${c.name}`,
-        icone: <Hash size={16} className="text-channels-default" />,
-      }));
-  }
-
-  const nativos = buscarComandos(gatilho.termo)
-    .slice(0, MAX_SUGESTOES)
-    .map<ItemAutocomplete>((c) => ({
-      chave: c.nome,
-      valor: `/${c.nome}`,
-      rotulo: `/${c.nome}`,
-      detalhe: c.descricao,
-    }));
-  // ── j-bots ── os comandos dos bots vêm **depois** dos nativos, com o avatar
-  // do bot no lugar do ícone: é o que responde "de quem é este comando?"
-  const deApp = sugestoesDeComandosDeApp(gatilho.termo, fontes.comandosDeApp)
-    .slice(0, MAX_SUGESTOES - nativos.length)
-    .map<ItemAutocomplete>((c) => ({
-      chave: c.chave,
-      valor: c.valor,
-      rotulo: c.rotulo,
-      detalhe: c.detalhe,
-      icone: <Avatar user={c.botUser} size="sm" />,
-    }));
-  return [...nativos, ...deApp];
-}
-

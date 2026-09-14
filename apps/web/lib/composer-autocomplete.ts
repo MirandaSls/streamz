@@ -88,8 +88,31 @@ export function aplicarEscolha(
   return { texto: novo, caret: gatilho.inicio + valor.length + sufixo.length };
 }
 
-/** Move a seleção circularmente dentro da lista (setas ↑ ↓). */
-export function mover(indice: number, delta: number, total: number): number {
+/**
+ * Move a seleção circularmente dentro da lista (setas ↑ ↓).
+ *
+ * `podeSelecionar` é opcional e pula linhas desabilitadas (`ItemAutocomplete.
+ * desabilitado`, ver `components/chat/Autocomplete.tsx`) — sem ele o
+ * comportamento é o de sempre (qualquer índice serve), então nenhuma chamada
+ * existente quebra. Hoje **nenhum chamador passa o predicado**: é o
+ * `Composer.tsx` (fora da lista deste cartão) quem decide o que é
+ * selecionável, e ele ainda não sabe que um item pode estar desabilitado —
+ * ver "faltando" no cartão 2d-autocomplete.
+ */
+export function mover(
+  indice: number,
+  delta: number,
+  total: number,
+  podeSelecionar?: (indice: number) => boolean,
+): number {
   if (total === 0) return 0;
-  return (indice + delta + total) % total;
+  let proximo = (indice + delta + total) % total;
+  if (!podeSelecionar) return proximo;
+  // no pior caso (todo mundo desabilitado) dá uma volta inteira e desiste,
+  // devolvendo o índice de onde começou em vez de girar para sempre
+  for (let tentativas = 0; tentativas < total; tentativas++) {
+    if (podeSelecionar(proximo)) return proximo;
+    proximo = (proximo + delta + total) % total;
+  }
+  return indice;
 }

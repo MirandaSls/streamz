@@ -35,6 +35,13 @@ export type ShortcutAction =
   | "alternarSurdo"
   | "quickSwitcher"
   | "caixaDeEntrada"
+  | "busca"
+  | "fixadas"
+  | "alternarMembros"
+  | "anexar"
+  | "emoji"
+  | "gif"
+  | "figurinha"
   | "configuracoes"
   | "mostrarAtalhos"
   | "zoomMais"
@@ -53,6 +60,23 @@ export interface ShortcutSpec {
 export const SHORTCUTS: readonly ShortcutSpec[] = [
   { action: "quickSwitcher", combos: ["Ctrl+K"], label: "atalho.quickSwitcher" },
   { action: "caixaDeEntrada", combos: ["Ctrl+I"], label: "atalho.caixaDeEntrada" },
+  // Atalhos da seção "Chat" da própria grade do Discord (overlay de Ctrl+/,
+  // rótulos e combinações lidos quadro a quadro do GIF oficial do blog dele,
+  // "04-referencia-de-atalhos-de-teclado.gif" — nenhum print 1:1 nosso nem CSS
+  // bruto cobre atalho, só tela; catálogo é a fonte que existe). Cada rótulo
+  // abaixo é exatamente o que aparece no cartão do Discord.
+  { action: "busca", combos: ["Ctrl+F"], label: "atalho.busca" },
+  { action: "fixadas", combos: ["Ctrl+P"], label: "atalho.fixadas" },
+  // "Toggle channel member list or voice text chat": é o Ctrl+U de verdade —
+  // o cartão original pedia Ctrl+U para "anexar", mas no quadro do Discord
+  // Ctrl+U alterna a lista de membros e quem sobe arquivo é Ctrl+Shift+U (ver
+  // "medidas" no retorno deste cartão). Sem esta linha o Ctrl+U ficaria livre
+  // e a correção do anexo ficaria pela metade.
+  { action: "alternarMembros", combos: ["Ctrl+U"], label: "atalho.alternarMembros" },
+  { action: "anexar", combos: ["Ctrl+Shift+U"], label: "atalho.anexar" },
+  { action: "emoji", combos: ["Ctrl+E"], label: "atalho.emoji" },
+  { action: "gif", combos: ["Ctrl+G"], label: "atalho.gif" },
+  { action: "figurinha", combos: ["Ctrl+S"], label: "atalho.figurinha" },
   { action: "canalProximo", combos: ["Alt+ArrowDown"], label: "atalho.canalProximo" },
   { action: "canalAnterior", combos: ["Alt+ArrowUp"], label: "atalho.canalAnterior" },
   { action: "naoLidoProximo", combos: ["Alt+Shift+ArrowDown"], label: "atalho.naoLidoProximo" },
