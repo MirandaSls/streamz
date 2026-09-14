@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarDays, MessageSquare, MoreHorizontal, UserPlus } from "@/components/ui/icones";
+import { Clock, MessageSquare, MoreHorizontal, UserCheck, UserPlus } from "@/components/ui/icones";
 import {
   customStatusOf,
   displayNameOf,
@@ -10,7 +10,7 @@ import {
 } from "@streamz/shared";
 import Dialog from "@/components/modals/Dialog";
 import Avatar from "@/components/ui/Avatar";
-import { BotaoDeIcone, Button } from "@/components/ui/primitivos";
+import { BotaoDeIcone, Button, Tabs, type AbaDeTabs } from "@/components/ui/primitivos";
 import TagDeBot from "@/components/ui/TagDeBot";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
@@ -63,10 +63,23 @@ export default function UserProfileModal({
   const remove = useFriends((s) => s.remove);
   const block = useFriends((s) => s.block);
   const unblock = useFriends((s) => s.unblock);
+  // pedidos pendentes: o `relationship` do perfil diz "incoming"/"outgoing",
+  // mas aceitar/recusar pede o id do PEDIDO, não do usuário — só a página
+  // Amigos carrega essas duas listas, então o modal também precisa (idempotente:
+  // `load` sem `force` não repete a chamada se já veio de lá).
+  const loadFriends = useFriends((s) => s.load);
+  const incoming = useFriends((s) => s.incoming);
+  const outgoing = useFriends((s) => s.outgoing);
+  const accept = useFriends((s) => s.accept);
+  const dismiss = useFriends((s) => s.dismiss);
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [aba, setAba] = useState<Aba>("sobre");
+
+  useEffect(() => {
+    void loadFriends();
+  }, [loadFriends]);
 
   useEffect(() => {
     let vivo = true;
@@ -86,6 +99,15 @@ export default function UserProfileModal({
   const nome = displayNameOf(user);
   const personalizado = customStatusOf(user);
   const euMesmo = profile.relationship === "self" || user.id === me?.id;
+  const bloqueado = profile.relationship === "blocked";
+  // o pedido pendente, achado pelo id do outro lado — `undefined` enquanto as
+  // listas de amigos ainda não chegaram (a store carrega em paralelo).
+  const meuPedido =
+    profile.relationship === "incoming"
+      ? incoming.find((r) => r.user.id === user.id)
+      : profile.relationship === "outgoing"
+        ? outgoing.find((r) => r.user.id === user.id)
+        : undefined;
 
   function abrirMenu(alvo: HTMLElement) {
     if (!profile) return;
@@ -93,8 +115,22 @@ export default function UserProfileModal({
     if (profile.relationship === "friend") {
       itens.push({ label: "Remover amigo", danger: true, onSelect: () => void remove(user) });
     }
+    if (profile.relationship === "incoming" && meuPedido) {
+      itens.push({
+        label: "Recusar pedido",
+        danger: true,
+        onSelect: () => void dismiss(meuPedido.id),
+      });
+    }
+    if (profile.relationship === "outgoing" && meuPedido) {
+      itens.push({
+        label: "Cancelar pedido",
+        danger: true,
+        onSelect: () => void dismiss(meuPedido.id),
+      });
+    }
     itens.push(
-      profile.relationship === "blocked"
+      bloqueado
         ? { label: "Desbloquear", onSelect: () => void unblock(user.id) }
         : { label: "Bloquear", danger: true, onSelect: () => void block(user) },
     );
@@ -102,10 +138,13 @@ export default function UserProfileModal({
     ui.openContextMenu(r.x, r.y + r.height + 4, itens);
   }
 
-  const abas: { id: Aba; label: string }[] = [
-    { id: "sobre", label: "Sobre mim" },
-    { id: "servidores", label: `Servidores mútuos — ${profile.mutualGuilds.length}` },
-    { id: "amigos", label: `Amigos mútuos — ${profile.mutualFriends.length}` },
+  // rótulo exatamente como no cartão ("Sobre mim" / "Servidores em comum" /
+  // "Amigos em comum"); o contador vai no `Badge` do próprio `Tabs`, não mais
+  // costurado no texto do rótulo.
+  const abas: AbaDeTabs<Aba>[] = [
+    { valor: "sobre", rotulo: "Sobre mim" },
+    { valor: "servidores", rotulo: "Servidores em comum", contador: profile.mutualGuilds.length },
+    { valor: "amigos", rotulo: "Amigos em comum", contador: profile.mutualFriends.length },
   ];
 
   return (
@@ -130,7 +169,13 @@ export default function UserProfileModal({
             />
           )}
 
-          {/* ações sobre a faixa do banner, como no Discord — não no fim do cartão */}
+          {/* ações sobre a faixa do banner, como no Discord — não no fim do cartão.
+              Ordem e posição (canto superior direito, sobre o banner) vêm do
+              popover 1:1 (`docs/Reference/Captura de tela 2026-08-31
+              101804.png`) e do popout de outra pessoa em
+              `blog/2026-02-how-to-customize-your-discord-profile/
+              04-popout-com-cores-nitro.png`: os dois têm a ação principal e o
+              "…" nesse canto, nunca no rodapé do cartão. */}
           {/* No celular a fileira ganha `left-4` e quebra: "Enviar mensagem" +
               "Adicionar amigo" + o "⋯" somam ~370 e, ancorados só pela direita,
               o primeiro botão saía pela borda esquerda da tela. */}
@@ -141,6 +186,11 @@ export default function UserProfileModal({
                   variante="primario"
                   tamanho="sm"
                   icone={<MessageSquare size={16} aria-hidden="true" />}
+                  // bloqueado: mandar mensagem exige desbloquear primeiro — o
+                  // Discord também não abre DM para quem está bloqueado. Não é
+                  // "sem permissão" do servidor (a rota de perfil não checa
+                  // nada disso, ver "faltando"), é a relação local mesmo.
+                  disabled={bloqueado}
                   onClick={() => {
                     closeModal();
                     void openWith(user.id);
@@ -158,6 +208,32 @@ export default function UserProfileModal({
                     className="celular:h-[44px]"
                   >
                     Adicionar amigo
+                  </Button>
+                )}
+                {/* pedido meu, ainda sem resposta: mostra o estado, não some —
+                    cancelar é uma ação destrutiva, então mora no "…", não aqui */}
+                {profile.relationship === "outgoing" && (
+                  <Button
+                    variante="secundario"
+                    tamanho="sm"
+                    disabled
+                    icone={<Clock size={16} aria-hidden="true" />}
+                    className="celular:h-[44px]"
+                  >
+                    Pedido enviado
+                  </Button>
+                )}
+                {/* pedido da outra pessoa: aceitar fica à mão; recusar é
+                    destrutivo e mora no "…", como cancelar */}
+                {profile.relationship === "incoming" && meuPedido && (
+                  <Button
+                    variante="positivo"
+                    tamanho="sm"
+                    icone={<UserCheck size={16} aria-hidden="true" />}
+                    onClick={() => void accept(meuPedido.id)}
+                    className="celular:h-[44px]"
+                  >
+                    Aceitar pedido
                   </Button>
                 )}
                 <BotaoDeIcone
@@ -179,7 +255,16 @@ export default function UserProfileModal({
             <Avatar user={user} size="xl" status={status} surface="border-background-base-lower" />
           </div>
 
-          <div className="rounded-lg bg-background-base-low p-4">
+          {/* Sem cartão por dentro do cartão: nos dois prints 1:1 (popover
+              101804) e no popout de outra pessoa (blog 2026-02, acima), nome,
+              usuário, bio e "Member Since" assentam direto no fundo do modal
+              (`bg-background-surface-high`, herdado do `Modal`) — não há uma
+              segunda superfície atrás deles. Era isso que a revisão mediu como
+              "#202024 no miolo com faixas de #242429 nas laterais": o
+              `bg-background-base-low` daqui por cima do `bg-background-
+              surface-high` do modal, um desvio de superfície que o Discord não
+              tem. */}
+          <div>
             <div className="flex items-baseline gap-2">
               <span className="truncate text-xl font-bold text-text-strong">{nome}</span>
               {/* ── j-bots ── a caixa é `items-baseline` por causa dos pronomes,
@@ -194,30 +279,13 @@ export default function UserProfileModal({
             <div className="truncate text-sm text-text-default">@{user.username}</div>
             {personalizado && <div className="mt-1 text-sm text-text-default">{personalizado}</div>}
 
-            <div
-              role="tablist"
-              aria-label="Seções do perfil"
-              // as três abas somam ~430 numa tela de 390: no celular a fileira
-              // rola na horizontal, como a de Amigos
-              className="mt-3 flex gap-4 border-b border-border-subtle celular:-mx-4 celular:gap-3 celular:overflow-x-auto celular:px-4 celular:[scrollbar-width:none]"
-            >
-              {abas.map((a) => (
-                <button
-                  key={a.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={aba === a.id}
-                  onClick={() => setAba(a.id)}
-                  className={`-mb-px shrink-0 border-b-2 pb-2 text-sm font-medium transition celular:min-h-[44px] ${
-                    aba === a.id
-                      ? "border-brand-500 text-text-strong"
-                      : "border-transparent text-text-muted hover:text-text-default"
-                  }`}
-                >
-                  {a.label}
-                </button>
-              ))}
-            </div>
+            <Tabs
+              valor={aba}
+              aoMudar={setAba}
+              abas={abas}
+              rotulo="Seções do perfil"
+              className="mt-3 celular:-mx-4 celular:px-4 celular:[scrollbar-width:none]"
+            />
 
             <div className="mt-3 max-h-[280px] overflow-y-auto text-sm text-text-default">
               {aba === "sobre" && (
@@ -228,13 +296,13 @@ export default function UserProfileModal({
                     <p className="text-text-muted">Esta pessoa ainda não escreveu nada por aqui.</p>
                   )}
 
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <Selo
+                  <div className="mt-4 flex flex-wrap gap-6">
+                    <InfoDoPerfil
                       titulo="Membro do Streamz desde"
                       valor={DATA_SELO.format(new Date(profile.createdAt))}
                     />
                     {guild && profile.guildRole && (
-                      <Selo titulo={`Em ${guild.name}`} valor={PAPEL[profile.guildRole]} />
+                      <InfoDoPerfil titulo={`Em ${guild.name}`} valor={PAPEL[profile.guildRole]} />
                     )}
                   </div>
                 </>
@@ -292,17 +360,20 @@ export default function UserProfileModal({
   );
 }
 
-/** Selo com ícone de calendário: "Membro do Streamz desde 25 de agosto de 2026". */
-function Selo({ titulo, valor }: { titulo: string; valor: string }) {
+/**
+ * Rótulo + valor empilhados, sem cartão, sem borda e sem caixa alta —
+ * "Member Since" no popout de OUTRA pessoa em `blog/2026-02-how-to-
+ * customize-your-discord-profile/05-widgets-de-perfil.png` (dark, 2026) é
+ * exatamente isso: título em peso maior sobre o valor em cor apagada, direto
+ * no fundo do cartão. A versão anterior (cartão com borda, ícone de
+ * calendário e CAIXA ALTA) foi a divergência medida pela revisão de
+ * 2026-09-11 — aquele visual não aparece em nenhuma referência.
+ */
+function InfoDoPerfil({ titulo, valor }: { titulo: string; valor: string }) {
   return (
-    <div className="flex min-w-0 items-center gap-2 rounded-[4px] bg-background-base-lower px-2.5 py-1.5">
-      <CalendarDays size={16} aria-hidden="true" className="shrink-0 text-text-muted" />
-      <div className="min-w-0">
-        <div className="truncate text-[11px] font-bold uppercase tracking-[0.02em] text-text-muted">
-          {titulo}
-        </div>
-        <div className="truncate text-xs text-text-default">{valor}</div>
-      </div>
+    <div className="min-w-0">
+      <div className="truncate text-text-sm font-semibold text-text-default">{titulo}</div>
+      <div className="truncate text-text-sm text-text-muted">{valor}</div>
     </div>
   );
 }
@@ -311,9 +382,17 @@ function Selo({ titulo, valor }: { titulo: string; valor: string }) {
  * Esqueleto do próprio cartão enquanto o perfil carrega (e quando ele falha).
  *
  * Trocar o cartão por uma caixinha com "Carregando…" fazia o modal mudar de
- * tamanho e de forma no meio do caminho — o Discord mantém a moldura e preenche.
+ * tamanho e de forma no meio do caminho — o Discord mantém a moldura e
+ * preenche. Sem cartão aninhado por dentro (mesmo ajuste do corpo carregado):
+ * os retângulos assentam direto no fundo do modal.
+ *
+ * **Carregando** pulsa (`animate-pulse`); **erro** não — pulsar ali sugeriria
+ * que a busca ainda está em andamento, quando já falhou e não vai se resolver
+ * sozinha. A moldura (banner e avatar) fica parada e cinza nos dois estados;
+ * só o texto muda.
  */
 function Esqueleto({ erro, onClose }: { erro: string | null; onClose: () => void }) {
+  const pulsar = erro ? "" : "animate-pulse";
   return (
     <Dialog
       title="Perfil"
@@ -324,23 +403,23 @@ function Esqueleto({ erro, onClose }: { erro: string | null; onClose: () => void
       className="w-[600px]"
     >
       <div>
-        <div className="h-[120px] w-full animate-pulse bg-background-base-lowest" />
+        <div className={`h-[120px] w-full bg-background-base-lowest ${pulsar}`} />
         <div className="px-4 pb-4">
           <div className="-mt-12 mb-3 w-fit rounded-full border-[6px] border-background-base-lower">
-            <span className="block h-20 w-20 animate-pulse rounded-full bg-background-base-lowest" />
+            <span className={`block h-20 w-20 rounded-full bg-background-base-lowest ${pulsar}`} />
           </div>
-          <div className="rounded-lg bg-background-base-low p-4">
-            {erro ? (
-              <p className="text-sm text-text-muted">{erro}</p>
-            ) : (
-              <div className="flex flex-col gap-2">
-                <span className="h-5 w-40 animate-pulse rounded bg-background-base-lowest" />
-                <span className="h-4 w-24 animate-pulse rounded bg-background-base-lowest" />
-                <span className="mt-3 h-3 w-full animate-pulse rounded bg-background-base-lowest" />
-                <span className="h-3 w-2/3 animate-pulse rounded bg-background-base-lowest" />
-              </div>
-            )}
-          </div>
+          {erro ? (
+            <p role="alert" className="text-text-sm text-text-muted">
+              {erro}
+            </p>
+          ) : (
+            <div className="flex flex-col gap-2" aria-hidden="true">
+              <span className="h-5 w-40 animate-pulse rounded bg-background-base-lowest" />
+              <span className="h-4 w-24 animate-pulse rounded bg-background-base-lowest" />
+              <span className="mt-3 h-3 w-full animate-pulse rounded bg-background-base-lowest" />
+              <span className="h-3 w-2/3 animate-pulse rounded bg-background-base-lowest" />
+            </div>
+          )}
         </div>
       </div>
     </Dialog>

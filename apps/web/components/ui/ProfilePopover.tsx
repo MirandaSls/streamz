@@ -1,34 +1,22 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
-import {
-  CalendarDays,
-  ChevronRight,
-  LogOut,
-  MoreVertical,
-  Pencil,
-  Plus,
-  SendHorizonal,
-  SmilePlus,
-  UserCircle,
-  Users,
-  X,
-} from "@/components/ui/icones";
+import { Pencil, SendHorizonal } from "@/components/ui/icones";
 import { BotaoDeIcone, Button, Popout, Tooltip } from "@/components/ui/primitivos";
 import {
   Permission,
-  colorRoleOf,
   customStatusOf,
   displayNameOf,
   rolesOf,
   type UserProfile,
   type UserStatus,
 } from "@streamz/shared";
-import Avatar from "@/components/ui/Avatar";
 import IconeDeStatus from "@/components/ui/IconeDeStatus";
 import TagDeBot from "@/components/ui/TagDeBot";
 import { MENU_WIDTH, MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
+import { CabecalhoDoPerfil } from "@/components/ui/perfil/CabecalhoDoPerfil";
+import { PainelDaMinhaConta } from "@/components/ui/perfil/PainelDaMinhaConta";
+import { PilulasDeCargo } from "@/components/ui/perfil/PilulasDeCargo";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { api } from "@/lib/api";
 import { lerRascunho, salvarRascunho } from "@/lib/rascunhos";
@@ -43,61 +31,73 @@ import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
 import { useSettings } from "@/stores/settings";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui, useUI, type MenuItem } from "@/stores/ui";
-import { COR_DE_CARGO_SEM_COR } from "@/lib/cor-de-cargo";
 
 /**
  * Cartão de perfil que abre ao clicar num avatar ou nome — a "popout" do
- * Discord.
+ * Discord (onda 5, cartão 5a).
  *
- * O que a comparação com o original mudou aqui:
+ * ## Forma (medida)
  *
- * - O rodapé é um **campo de texto** ("Mensagem @fulano"), não um botão que
- *   troca de tela: a popout existe justamente para falar com alguém sem sair de
- *   onde se está.
- * - Tudo que é ação de relação (adicionar amigo, bloquear, ver perfil completo,
- *   copiar id) foi para o **kebab** do canto do banner. Empilhadas como linhas
- *   de menu, elas faziam o cartão crescer mais que o conteúdo do perfil.
- * - Não existe bloco "STATUS" com o rótulo escrito: o status é a bolinha do
- *   avatar, e só.
+ * A caixa é a do `Popout`: 300 de largura (`--custom-user-profile-popout-width`,
+ * `css-bruto/253781.d118af6e4f0bc056.css`; x=1343–1643 no print 1:1
+ * `2026-08-31 101804`), `--background-surface-high` (#242429 no print), raio 8
+ * e `var(--shadow-border), var(--shadow-high)`. O cartão é pintado **com a cor
+ * da caixa** (`.outer_c0bea0`), sem miolo de outra cor.
  *
- * Um só na tela, aberto por `ui.openProfile(user, anchor)`.
+ * Por dentro, três blocos em coluna com 8 entre eles e 4 embaixo
+ * (`.user-profile-popout .inner_c0bea0`):
  *
- * A mecânica — posição e colisão com a janela, Esc, clique fora, foco preso e
- * devolvido, folha no celular, entrada animada — é do `Popout` único
- * (`components/ui/primitivos/Popout.tsx`, onda 0.4). Este arquivo fica só com
- * o conteúdo e com o que é do cartão: onde ele encosta na âncora, a camada
- * abaixo do `ContextMenu` e o Esc que também leva o menu do cartão (ver
- * `ProfilePopoverHost`).
+ * 1. **cabeçalho** — banner, avatar, balão (`perfil/CabecalhoDoPerfil`);
+ * 2. **corpo** — respiro 4 · 16 · 8 e 12 entre as peças (`.body__5be3e`,
+ *    `css-bruto/352421.53a7850ecf997a57.css`): nome, usuário e pronomes, bio,
+ *    atividade, cargos e, no meu cartão aberto pelo rodapé, os painéis;
+ * 3. **rodapé** — respiro 0 · 16 · 12, que some quando vazio (`.footer__5be3e`
+ *    e `.footer__5be3e:empty`): "Editar perfil" no meu cartão, o campo de
+ *    mensagem no dos outros.
+ *
+ * A conta fecha com os prints. Em `101804` o botão "Editar perfil" começa em
+ * y=497, 8 + 8 abaixo da linha de cargo (y=457–480), e acaba em 528, com 16 + 1
+ * até a base da caixa (545). Em `2026-09-03 180020`, sem rodapé, o último painel
+ * acaba em 1175 e a caixa em 1196: 8 do corpo + 8 do espaço + 4 + 1. O pixel a
+ * mais nos dois é da borda (`--shadow-border`).
+ *
+ * **O corpo é contínuo**: sem traços entre as seções e sem rótulos em caixa
+ * alta. Nenhum dos prints 1:1 (`101804`, `113603`, `113533`, `180020`) tem
+ * "SOBRE MIM", "MEMBRO DESDE" ou "CARGOS"; a bio vem solta e o que é cartão
+ * (atividade, "Coleção de jogos") é um bloco de `--background-surface-highest`
+ * com respiro 12 (`.card__5be3e`; 40 de altura em y=403–442 no `101804`). Por
+ * isso "Membro desde" e "Servidores em comum" saíram do cartão: continuam no
+ * perfil completo (`UserProfileModal`), que abre pelo avatar.
+ *
+ * **O nome não leva a cor do cargo.** No print `113603` o "Md" é verde na lista
+ * de membros e #dadadb no cartão; em `101804` o traço do "M" é #efeff1 cheio
+ * (coluna x=1365, y=300–313), o `--text-default`, em 20px negrito
+ * (`text-heading-lg`). O usuário vem sem "@" (mesmo print, "mdsls").
+ *
+ * ## Mecânica
+ *
+ * Posição, colisão, Esc, clique fora, foco preso e devolvido, folha no celular
+ * e entrada animada são do `Popout` único (`components/ui/primitivos/Popout.tsx`).
+ * Este arquivo fica com o conteúdo, com onde o cartão encosta na âncora, com a
+ * camada abaixo do `ContextMenu` e com o Esc que também leva o menu do cartão.
  */
 
-/** 300 no print `2026-09-01 113533` (x=700..999); o conteúdo fica com 268. */
+/** 300 no print `2026-08-31 101804` (x=1343..1643) e no CSS do Discord. */
 const LARGURA = 300;
 /**
  * Folga entre o elemento que abriu e o cartão, quando ele nasce **ao lado**.
  * Não medido: é o número da implementação anterior, igual ao padrão do Popout.
  */
 const FOLGA = 8;
-/** base do cartão até o topo do rodapé, medida no print (1196,5 → 1202). */
+/** base do cartão até o topo do rodapé, medida no print `180020` (1196,5 → 1202). */
 const FOLGA_DO_RODAPE = 6;
 
-/** "25 de agosto de 2026" — o "membro desde" não precisa da hora. */
-const DATA = new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "long", year: "numeric" });
-
 /**
- * O seletor de status do Discord, medido no print `2026-09-03 180020`.
- *
- * São **duas** peças, e antes eram uma só (quatro botões empilhados dentro do
- * cartão):
- *
- * 1. uma **linha** no cartão — ponto de status, o rótulo do estado atual e um
- *    chevron —, 32px de altura e raio 8, num fundo levemente mais claro;
- * 2. um **submenu** de 300 que nasce à direita dela, com as quatro escolhas.
- *
- * **Não há mais "por quanto tempo".** O Discord não pergunta duração aqui: os
- * chevrons de "Ausente", "Não perturbar" e "Invisível" existem no desenho, mas
- * o clique aplica o status na hora. Por isso eles são `chevron` (enfeite) e não
- * `submenu` — e o antigo menu de "Por 30 minutos… Até eu mudar", junto com o
- * `setTimeout` que desfazia a escolha, saiu inteiro.
+ * O submenu de status do Discord, medido no print `2026-09-03 180020`: 300 de
+ * largura, nascendo à direita da linha de status. **Não há "por quanto
+ * tempo"**: os chevrons de "Ausente", "Não perturbar" e "Invisível" existem no
+ * desenho, mas o clique aplica o status na hora — por isso são `chevron`
+ * (enfeite) e não `submenu`.
  */
 const OPCOES_DE_STATUS: {
   /** `null` = automático (o servidor devolve ONLINE). */
@@ -105,7 +105,6 @@ const OPCOES_DE_STATUS: {
   dot: UserStatus;
   label: string;
   description?: string;
-  /** o Discord desenha a setinha em três das quatro. */
   chevron?: boolean;
 }[] = [
   { value: null, dot: "ONLINE", label: "Disponível" },
@@ -126,17 +125,6 @@ const OPCOES_DE_STATUS: {
   },
 ];
 
-/**
- * Rótulo do **meu** status na linha do cartão. Difere do `STATUS_LABEL` geral
- * em OFFLINE: para os outros é "Offline"; para mim, que escolhi, é "Invisível".
- */
-const ROTULO_DO_MEU_STATUS: Record<UserStatus, string> = {
-  ONLINE: "Disponível",
-  IDLE: "Ausente",
-  DND: "Não perturbar",
-  OFFLINE: "Invisível",
-};
-
 /** Largura do submenu de status: 300 no print (x=298..597, borda inclusa). */
 const LARGURA_DO_SUBMENU = 300;
 /** o submenu encosta na linha e entra 12px por cima do cartão, como no print. */
@@ -145,6 +133,12 @@ const SOBREPOSICAO_DO_SUBMENU = 12;
 const TOPO_DO_SUBMENU = 9;
 /** mesma pausa dos submenus do `ContextMenu`: passar o mouse por cima não abre. */
 const ATRASO_DO_SUBMENU = 120;
+/**
+ * Camada do cartão: **abaixo** do `ContextMenu` (véu 79, menu 80), porque o
+ * kebab, o "+" de cargo e o submenu de status abrem um menu que tem de ficar
+ * por cima dele. Na camada padrão do Popout (90) o menu nasceria atrás.
+ */
+const CAMADA = 75;
 
 /**
  * Aplica o status escolhido.
@@ -170,25 +164,23 @@ async function aplicarStatus(value: UserStatus | null) {
  *
  * **No celular o cartão cede o lugar** (`manter` falso). A folha do `Popout`
  * mora na camada 90 e o `ContextMenu` na 79/80: mantido, o cartão cobriria a
- * folha do menu com o próprio véu, e o toque no kebab pareceria não fazer
- * nada. O estado final é o de antes: lá qualquer toque no menu — item ou véu —
- * já caía fora do cartão e o fechava.
+ * folha do menu com o próprio véu, e o toque no kebab pareceria não fazer nada.
  */
 function abrirMenuDoCartao(x: number, y: number, itens: MenuItem[], largura: number, manter: boolean) {
   ui.openContextMenu(x, y, itens, largura, manter);
 }
 
+type EstadoDoPerfil = "carregando" | "pronto" | "erro";
+
 export default function ProfilePopoverHost() {
-  const router = useRouter();
   const popover = useUI((s) => s.popover);
   const close = useUI((s) => s.closePopover);
   const openModal = useUI((s) => s.openModal);
   const me = useAuth((s) => s.user);
-  const logout = useAuth((s) => s.logout);
   const statuses = usePresence((s) => s.statuses);
   const profiles = usePresence((s) => s.profiles);
   const developerMode = useSettings((s) => s.developerMode);
-  // cargos do membro no servidor aberto: cor do nome e chips abaixo dele
+  // cargos do membro no servidor aberto: as pílulas do corpo
   const roles = usePermissions((s) => s.roles);
   const membros = useGuilds((s) => s.members);
   const guildAtiva = useGuilds((s) => s.activeGuildId);
@@ -207,52 +199,56 @@ export default function ProfilePopoverHost() {
   const ref = useRef<HTMLDivElement>(null);
   const timerDoSubmenu = useRef<number | undefined>(undefined);
   /**
-   * No celular o cartão vira **folha inferior** — a do `Popout`.
-   *
-   * Os 300px ancorados no avatar são a forma certa onde há ponteiro e tela
-   * sobrando ao lado; num telefone de 390 o cartão cobre quase a largura toda de
-   * qualquer jeito, e ancorado num avatar do topo da conversa ele nasce longe do
-   * polegar. Sobe do fundo, como todo popout ancorado do app faz no celular.
-   *
-   * Virar folha não bastava. As linhas do cartão são `h-8` (32px) e o kebab é
-   * `h-7` (28). No ponteiro isso é confortável; no dedo é bem abaixo do piso de
-   * 44. Só no celular eles sobem para `h-[44px]`, em px literal porque o número
-   * é o piso de toque, não um passo da escala.
+   * No celular o cartão vira **folha inferior** — a do `Popout`. Os alvos de
+   * toque sobem para 44 (`celular:h-[44px]` nas peças), em px literal porque o
+   * número é o piso de toque, não um passo da escala.
    */
   const ehMobile = useEhMobile();
   const [perfil, setPerfil] = useState<UserProfile | null>(null);
+  const [estado, setEstado] = useState<EstadoDoPerfil>("carregando");
+  /** Soma um a cada "Tentar de novo": é a dependência que refaz o pedido. */
+  const [tentativa, setTentativa] = useState(0);
   const [rascunho, setRascunho] = useState("");
 
   const userId = popover?.user.id;
 
-  // o perfil rico (sobre mim, banner, "membro desde") não cabe no PublicUser
+  // o rascunho é da pessoa, não do pedido: "Tentar de novo" não o apaga
+  useEffect(() => {
+    setRascunho("");
+  }, [userId]);
+
+  // o perfil rico (bio, banner, pronomes) não cabe no PublicUser
   useEffect(() => {
     setPerfil(null);
-    setRascunho("");
+    setEstado("carregando");
     if (!userId) return;
     let vivo = true;
     void api
       .profile(userId, guildAtiva ?? undefined)
-      .then((p) => vivo && setPerfil(p))
-      .catch(() => undefined);
+      .then((p) => {
+        if (!vivo) return;
+        setPerfil(p);
+        setEstado("pronto");
+      })
+      .catch(() => {
+        if (vivo) setEstado("erro");
+      });
     return () => {
       vivo = false;
     };
-  }, [userId, guildAtiva]);
+  }, [userId, guildAtiva, tentativa]);
 
   useEffect(() => () => window.clearTimeout(timerDoSubmenu.current), []);
 
   /*
     Esc com um menu do cartão aberto (kebab, "+" de cargo, submenu de status)
-    fecha os dois, como antes da migração.
+    fecha os dois.
 
-    O `Popout` ouve o Esc na **captura** da `window` e para a propagação ali,
-    para o Esc global do app não fechar outra camada junto. O `ContextMenuHost`
-    ouve na fase de borbulhar da mesma `window`, que o `stopPropagation` da
-    captura já cortou: sem este ouvinte o cartão fechava e o menu ficava órfão
-    na tela. Ele também é de captura na `window` — ouvinte do mesmo nó e da
-    mesma fase ainda roda depois de um `stopPropagation` (só o
-    `stopImmediatePropagation` o cortaria) —, então a ordem de registro entre
+    O `Popout` ouve o Esc na **captura** da `window` e para a propagação ali. O
+    `ContextMenuHost` ouve na fase de borbulhar, que o `stopPropagation` da
+    captura já cortou: sem este ouvinte o cartão fechava e o menu ficava órfão.
+    Ele também é de captura na `window` — ouvinte do mesmo nó e da mesma fase
+    ainda roda depois de um `stopPropagation` —, então a ordem de registro entre
     os dois não importa.
   */
   const aberto = popover !== null;
@@ -271,12 +267,13 @@ export default function ProfilePopoverHost() {
   const isMe = me?.id === popover.user.id;
   const user = isMe && me ? me : resolveUser(profiles, popover.user);
   const status = resolveStatus(statuses, user);
+  const nome = displayNameOf(user);
   const meusCargos = membros.find((m) => m.user.id === user.id)?.roleIds ?? [];
-  const cor = colorRoleOf(meusCargos, roles)?.color ?? null;
   const chips = rolesOf(meusCargos, roles);
   const atribuiveis = roles.filter((r) => !r.isDefault && !meusCargos.includes(r.id));
-  const banner = perfil?.bannerUrl ?? null;
-
+  const statusPersonalizado = customStatusOf(user) || null;
+  /** Aberto pelo painel do usuário: o meu cartão ganha os painéis do print `180020`. */
+  const peloRodape = Boolean(popover.acima);
   const atividade = atividadeDe(user);
 
   /** Envia a mensagem sem sair da popout — o rodapé do cartão do Discord. */
@@ -308,10 +305,19 @@ export default function ProfilePopoverHost() {
     close();
   }
 
+  function abrirPerfilCompleto() {
+    close();
+    openModal({ kind: "userProfile", userId: user.id, guildId: guildAtiva ?? undefined });
+  }
+
+  function editarPerfil() {
+    close();
+    openModal({ kind: "settings", tab: "perfil" });
+  }
+
   /**
-   * Submenu de status, à direita da linha. `manterPopover` (via
-   * `abrirMenuDoCartao`) é o que impede o cartão de sumir quando ele abre —
-   * no desktop; no celular o cartão cede o lugar (ver `abrirMenuDoCartao`).
+   * Submenu de status, à direita da linha. `manter` (via `abrirMenuDoCartao`)
+   * é o que impede o cartão de sumir quando ele abre — no desktop.
    */
   function abrirSubmenuDeStatus(linha: HTMLElement) {
     const r = linha.getBoundingClientRect();
@@ -340,70 +346,68 @@ export default function ProfilePopoverHost() {
     );
   }
 
-  function abrirKebab(x: number, y: number) {
+  function passarNoStatus(linha: HTMLElement) {
+    window.clearTimeout(timerDoSubmenu.current);
+    timerDoSubmenu.current = window.setTimeout(() => {
+      // com um menu já aberto o hover não faz nada: reabrir o mesmo submenu
+      // remontaria o painel e ele reapareceria piscando a cada ida e volta
+      if (useUI.getState().contextMenu) return;
+      abrirSubmenuDeStatus(linha);
+    }, ATRASO_DO_SUBMENU);
+  }
+
+  /** O kebab só existe no cartão dos outros (ver `CabecalhoDoPerfil`). */
+  function abrirKebab(botao: HTMLElement) {
+    const r = botao.getBoundingClientRect();
     const itens: MenuItem[] = [
-      {
-        label: "Perfil",
-        onSelect: () => {
-          close();
-          openModal({ kind: "userProfile", userId: user.id, guildId: guildAtiva ?? undefined });
-        },
-      },
+      { label: "Perfil", onSelect: abrirPerfilCompleto },
+      { label: "Mencionar", onSelect: mencionar },
+      // a nota sobre a pessoa é do Discord e não existe no app (§6.6)
+      { label: "Adicionar nota (em breve)", disabled: true, onSelect: () => {} },
+      { separator: true },
     ];
-    if (isMe) {
+    if (relacao === "none") {
+      itens.push({ label: "Adicionar amigo", onSelect: () => void send(user.username) });
+    }
+    if (relacao === "outgoing") {
+      itens.push({ label: "Pedido de amizade enviado", disabled: true, onSelect: () => {} });
+    }
+    if (relacao === "incoming") {
+      const pedido = incoming.find((p) => p.user.id === user.id);
       itens.push({
-        label: "Editar perfil",
+        label: "Aceitar pedido de amizade",
+        disabled: !pedido,
+        onSelect: () => pedido && void accept(pedido.id),
+      });
+      itens.push({
+        label: "Recusar pedido",
+        danger: true,
+        disabled: !pedido,
+        onSelect: () => pedido && void dismiss(pedido.id),
+      });
+    }
+    if (relacao === "friend") {
+      itens.push({
+        label: "Remover amigo",
+        danger: true,
         onSelect: () => {
           close();
-          openModal({ kind: "settings", tab: "perfil" });
+          void removeFriend(user);
         },
       });
-    } else {
-      itens.push({ label: "Mencionar", onSelect: mencionar });
-      itens.push({ separator: true });
-      if (relacao === "none") {
-        itens.push({ label: "Adicionar amigo", onSelect: () => void send(user.username) });
-      }
-      if (relacao === "outgoing") {
-        itens.push({ label: "Pedido de amizade enviado", disabled: true, onSelect: () => {} });
-      }
-      if (relacao === "incoming") {
-        const pedido = incoming.find((r) => r.user.id === user.id);
-        itens.push({
-          label: "Aceitar pedido de amizade",
-          disabled: !pedido,
-          onSelect: () => pedido && void accept(pedido.id),
-        });
-        itens.push({
-          label: "Recusar pedido",
-          danger: true,
-          disabled: !pedido,
-          onSelect: () => pedido && void dismiss(pedido.id),
-        });
-      }
-      if (relacao === "friend") {
-        itens.push({
-          label: "Remover amigo",
-          danger: true,
-          onSelect: () => {
-            close();
-            void removeFriend(user);
-          },
-        });
-      }
-      itens.push(
-        relacao === "blocked"
-          ? { label: "Desbloquear", onSelect: () => void unblock(user.id) }
-          : {
-              label: "Bloquear",
-              danger: true,
-              onSelect: () => {
-                close();
-                void block(user);
-              },
-            },
-      );
     }
+    itens.push(
+      relacao === "blocked"
+        ? { label: "Desbloquear", onSelect: () => void unblock(user.id) }
+        : {
+            label: "Bloquear",
+            danger: true,
+            onSelect: () => {
+              close();
+              void block(user);
+            },
+          },
+    );
     if (developerMode) {
       itens.push({ separator: true });
       itens.push({
@@ -411,8 +415,25 @@ export default function ProfilePopoverHost() {
         onSelect: () => void navigator.clipboard?.writeText(user.id),
       });
     }
-    abrirMenuDoCartao(x, y, itens, MENU_WIDTH_WIDE, !ehMobile);
+    abrirMenuDoCartao(r.right - MENU_WIDTH_WIDE, r.bottom + 4, itens, MENU_WIDTH_WIDE, !ehMobile);
   }
+
+  function abrirMenuDeCargos(botao: HTMLElement) {
+    const r = botao.getBoundingClientRect();
+    abrirMenuDoCartao(
+      r.left,
+      r.bottom + 4,
+      atribuiveis.map((cargo) => ({
+        label: cargo.name,
+        dot: cargo.color ?? undefined,
+        onSelect: () => void toggleRole(user.id, cargo.id, true),
+      })),
+      MENU_WIDTH,
+      !ehMobile,
+    );
+  }
+
+  const podeMexerNosCargos = podeCargos && !isMe;
 
   return (
     <Popout
@@ -421,341 +442,148 @@ export default function ProfilePopoverHost() {
       ancora={popover.anchor}
       /*
         Ao lado do elemento que abriu, alinhado pelo topo dele; o Popout
-        espelha para a esquerda e para o alinhamento pelo rodapé quando não
-        cabe, que é a regra que o cartão já tinha.
+        espelha quando não cabe.
 
         Cartão do rodapé (`acima`): **em cima** do painel do usuário e alinhado
         pela borda esquerda dele. Medido no print `2026-09-03 180020`: cartão em
-        x=10 (a mesma folga de 10 do rodapé, ou seja colado na borda da janela)
-        e base 6px acima do topo do rodapé.
+        x=10 e base 6px acima do topo do rodapé.
       */
       lado={popover.acima ? "top" : "right"}
       alinhamento="start"
       distancia={popover.acima ? FOLGA_DO_RODAPE : FOLGA}
       largura={LARGURA}
-      rotulo={`Perfil de ${displayNameOf(user)}`}
-      /*
-        `overflow-hidden`: a faixa do banner respeita o raio da caixa.
-
-        `!z-[75]`: a camada que o cartão tinha, **abaixo** do `ContextMenu`
-        (z-80). O Popout põe a caixa na 90, por estilo em linha — e o kebab, o
-        "+" de cargo e o submenu de status abrem um `ContextMenu` que tem de
-        ficar por cima do cartão: na 90 o menu do kebab nasceria inteiro atrás
-        dele. O `!` é o que vence o estilo em linha. Sai quando o menu entrar
-        na pilha do Popout (ver a entrega do cartão 0.4-adaptar-perfil). A
-        folha do celular não usa esta classe (`classeNaFolha` vazio) e fica na
-        camada do Popout; lá o cartão cede o lugar ao menu
-        (`abrirMenuDoCartao`).
-      */
-      className="overflow-hidden !z-[75]"
+      rotulo={`Perfil de ${nome}`}
+      camada={CAMADA}
+      // `overflow-hidden`: o banner respeita o raio da caixa
+      className="overflow-hidden"
       classeNaFolha=""
+      // a folha usa a mesma superfície do cartão: o anel do avatar e o furo do
+      // selo são dessa cor, e numa folha de outra cor eles apareceriam
+      fundoDaFolha="bg-background-surface-high"
     >
-      {/*
-        O fundo do cartão continua `--background-surface-higher` num miolo
-        próprio, por cima do `--background-surface-high` da caixa do Popout.
-        O Discord pinta o cartão com o da caixa (`.outer_c0bea0`, arquivo
-        `253781.d118af6e4f0bc056.css`), mas o anel do avatar e o furo do selo
-        de status são desta cor, e o `Avatar` só tem o par de selo para
-        `surface-higher` — trocar agora vazaria a foto pelos recortes do selo.
-        A troca é da onda 5, que redesenha o conteúdo.
-      */}
-      <div ref={ref} className="bg-background-surface-higher">
-        <div className="relative">
-          {banner ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={banner} alt="" className="h-[120px] w-full object-cover" />
-          ) : (
-            <div
-              style={perfil?.bannerColor ? { backgroundColor: perfil.bannerColor } : undefined}
-              className={`h-[60px] ${perfil?.bannerColor ? "" : "bg-brand-500"}`}
-            />
-          )}
-          {/*
-            No celular a saída visível da folha é a alça "Fechar" do Popout, por
-            cima da faixa — o × que flutuava sobre o banner saiu com a folha
-            própria.
+      <div ref={ref} className="flex flex-col gap-2 pb-1">
+        <CabecalhoDoPerfil
+          user={user}
+          nome={nome}
+          status={status}
+          bannerUrl={perfil?.bannerUrl ?? null}
+          bannerCor={perfil?.bannerColor ?? null}
+          carregando={estado === "carregando"}
+          statusPersonalizado={statusPersonalizado}
+          aoEditarStatus={
+            isMe
+              ? () => {
+                  close();
+                  openModal({ kind: "customStatus" });
+                }
+              : undefined
+          }
+          aoAbrirPerfil={abrirPerfilCompleto}
+          aoAbrirKebab={isMe ? undefined : abrirKebab}
+          ehMobile={ehMobile}
+        />
 
-            O kebab continua `<button>`: é peça desenhada sobre a imagem, não um
-            botão de ícone da interface. As cores são as do botão do banner do
-            Discord (`.bannerButton_fb7f94`, arquivo
-            `865647.edc0e98a1a191647.css`): fundo
-            `--control-overlay-secondary-background-default`, que no hover e no
-            clique vai para `...-background-active`, e ícone branco (`--white`;
-            aqui `--icon-overlay-light`, o mesmo branco). A forma (redondo, com
-            borda) fica para a onda 5.
-          */}
-          <button
-            type="button"
-            onClick={(e) => {
-              const r = e.currentTarget.getBoundingClientRect();
-              abrirKebab(r.right - MENU_WIDTH_WIDE, r.bottom + 4);
-            }}
-            aria-label="Mais opções"
-            className={`absolute right-2 top-2 grid place-items-center rounded bg-control-overlay-secondary-background-default text-icon-overlay-light transition hover:bg-control-overlay-secondary-background-active active:bg-control-overlay-secondary-background-active ${
-              ehMobile ? "h-[44px] w-[44px]" : "h-7 w-7"
-            }`}
-          >
-            <MoreVertical size={16} />
-          </button>
-        </div>
-
-        <div className="px-4 pb-4">
-          <div className="-mt-10 mb-3 flex items-end justify-between">
-            <div className="w-fit rounded-full border-[6px] border-background-surface-higher">
-              <Avatar user={user} size="xl" status={status} surface="border-background-surface-higher" />
+        <div aria-busy={estado === "carregando"} className="flex flex-col gap-3 px-4 pb-2 pt-1">
+          <div className="flex min-w-0 flex-col gap-0.5">
+            {/* ── j-bots ── a pílula ao lado do nome grande, como em
+                `docs/Reference/apps/tag-bot-no-perfil-do-app.png`. O `min-w-0`
+                no nome mantém o corte: sem ele um item flex não encolhe abaixo
+                do conteúdo e um nome de 32 caracteres estouraria o cartão. */}
+            <div className="flex min-w-0 items-center gap-2">
+              <h2 className="min-w-0 truncate text-heading-lg font-bold text-text-default">{nome}</h2>
+              {user.bot && <TagDeBot />}
             </div>
-            {/*
-              Caixa de emblemas (Nitro, impulso, HypeSquad, desenvolvedor). O
-              contrato não tem emblemas ainda — a caixa só aparece quando houver
-              algum, para o leiaute já estar pronto quando `PublicUser` ganhar o
-              campo.
-            */}
-            {EMBLEMAS.length > 0 && (
-              <div className="mb-1 flex items-center gap-1 rounded-lg bg-background-base-low px-2 py-1">
-                {EMBLEMAS.map((b) => (
-                  <Tooltip key={b.id} rotulo={b.label}>
-                    <span aria-label={b.label}>{b.icon}</span>
-                  </Tooltip>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-lg bg-background-base-low p-3">
-            <div className="min-w-0">
-              {/* ── j-bots ── a pílula ao lado do nome grande, como em
-                  `docs/Reference/apps/tag-bot-no-perfil-do-app.png` (medida ali a
-                  2×: 30/2 = os mesmos 15px da lista de membros — o Discord não
-                  aumenta a pílula porque o nome é maior).
-                  A linha virou `flex` para a pílula não entrar no `truncate` do
-                  nome e virar reticências. O `min-w-0` no nome é o que mantém o
-                  corte funcionando: sem ele um item flex não encolhe abaixo do
-                  conteúdo, e um nome de 32 caracteres estouraria o cartão. Sem
-                  bot, o desenho é o mesmo de antes (um item só, alinhado à
-                  esquerda, mesma altura de linha) — provado no diff de 0 pixel. */}
-              <div className="flex min-w-0 items-center gap-2">
-                <div
-                  style={cor ? { color: cor } : undefined}
-                  className="min-w-0 truncate text-xl font-bold leading-6 text-text-strong"
-                >
-                  {displayNameOf(user)}
-                </div>
-                {user.bot && <TagDeBot />}
-              </div>
-              <div className="flex items-center gap-2 text-sm text-text-default">
-                <span className="truncate">@{user.username}</span>
-                {perfil?.pronouns && (
-                  <span className="shrink-0 text-text-muted">{perfil.pronouns}</span>
-                )}
-              </div>
-              {customStatusOf(user) && (
-                <div className="mt-1 truncate text-sm text-text-default">{customStatusOf(user)}</div>
+            <div className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-text-sm text-text-default">
+              <span className="min-w-0 truncate">{user.username}</span>
+              {perfil?.pronouns && (
+                <>
+                  <span aria-hidden="true" className="text-text-muted">
+                    •
+                  </span>
+                  <span className="min-w-0 truncate text-text-muted">{perfil.pronouns}</span>
+                </>
               )}
+              {/*
+                Emblemas (Nitro, impulso, HypeSquad…) ficam na linha do usuário,
+                como no print `101804`. O contrato não tem emblemas: a lista é
+                vazia e nada é desenhado.
+              */}
+              {EMBLEMAS.map((b) => (
+                <Tooltip key={b.id} rotulo={b.label}>
+                  <span aria-label={b.label}>{b.icon}</span>
+                </Tooltip>
+              ))}
             </div>
-
-            {perfil?.aboutMe && (
-              <Secao titulo="Sobre mim">
-                <p className="whitespace-pre-wrap break-words text-sm text-text-default">
-                  {perfil.aboutMe}
-                </p>
-              </Secao>
-            )}
-
-            {atividade && (
-              <Secao titulo="Atividade">
-                <p className="text-sm text-text-default">{atividade.nome}</p>
-                {atividade.detalhe && <p className="text-xs text-text-muted">{atividade.detalhe}</p>}
-              </Secao>
-            )}
-
-            {perfil?.createdAt && (
-              <Secao titulo="Membro desde">
-                {/* a entrada no servidor exigiria um `joinedAt` em GuildMemberView;
-                    enquanto não existe, só a criação da conta é verdade */}
-                <span className="flex items-center gap-2 text-sm text-text-default">
-                  <CalendarDays size={16} aria-hidden="true" className="text-text-muted" />
-                  {DATA.format(new Date(perfil.createdAt))}
-                </span>
-              </Secao>
-            )}
-
-            {(chips.length > 0 || (podeCargos && atribuiveis.length > 0)) && (
-              <Secao titulo={chips.length === 1 ? "Cargo" : "Cargos"}>
-                <div className="flex flex-wrap gap-1">
-                  {chips.map((r) => (
-                    <span
-                      key={r.id}
-                      className="flex items-center gap-1.5 rounded-[4px] bg-input-background-default py-1 pl-2 pr-1 text-xs text-text-default"
-                    >
-                      {/* cargo sem cor: o Discord pinta com `--role-default`, que
-                          não foi gerado em `tokens.css`; o cinza cru fica até ele
-                          existir (registrado no cartão 0.4-adaptar-perfil) */}
-                      <span
-                        aria-hidden="true"
-                        style={{ backgroundColor: r.color ?? COR_DE_CARGO_SEM_COR }}
-                        className="h-3 w-3 rounded-full"
-                      />
-                      {r.name}
-                      {podeCargos && !isMe && (
-                        <button
-                          type="button"
-                          onClick={() => void toggleRole(user.id, r.id, false)}
-                          aria-label={`Remover o cargo ${r.name}`}
-                          className="grid h-4 w-4 place-items-center rounded text-text-muted transition hover:bg-status-danger hover:text-control-critical-primary-text-default"
-                        >
-                          <X size={12} />
-                        </button>
-                      )}
-                    </span>
-                  ))}
-                  {podeCargos && !isMe && atribuiveis.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        const r = e.currentTarget.getBoundingClientRect();
-                        abrirMenuDoCartao(
-                          r.left,
-                          r.bottom + 4,
-                          atribuiveis.map((cargo) => ({
-                            label: cargo.name,
-                            dot: cargo.color ?? undefined,
-                            onSelect: () => void toggleRole(user.id, cargo.id, true),
-                          })),
-                          MENU_WIDTH,
-                          !ehMobile,
-                        );
-                      }}
-                      aria-label="Adicionar cargo"
-                      className="grid h-[26px] w-6 place-items-center rounded-[4px] bg-input-background-default text-text-muted transition hover:text-text-strong"
-                    >
-                      <Plus size={14} />
-                    </button>
-                  )}
-                </div>
-              </Secao>
-            )}
-
-            {perfil && perfil.mutualGuilds.length > 0 && !isMe && (
-              <Secao titulo={`${perfil.mutualGuilds.length} servidores em comum`}>
-                <div className="flex items-center gap-1 text-xs text-text-muted">
-                  <Users size={14} aria-hidden="true" />
-                  {perfil.mutualGuilds
-                    .slice(0, 3)
-                    .map((g) => g.name)
-                    .join(", ")}
-                </div>
-              </Secao>
-            )}
           </div>
 
-          {isMe && (
-            <>
-              {/*
-                O botão do print `113533`: 268x32, raio 8, 16 de folga das bordas
-                do cartão — o `Button` primário `sm` (32, raio 8) na largura
-                toda. Fica fora do cartão interno, como no Discord, e as opções
-                de status e de conta vêm depois dele.
+          {perfil?.aboutMe && (
+            <p className="whitespace-pre-wrap break-words text-text-sm text-text-default">{perfil.aboutMe}</p>
+          )}
 
-                O invólucro `flex` existe porque o `Button` é `inline-flex`: solto
-                num bloco ele entraria numa linha de texto, e a entrelinha do pai
-                poderia somar folga embaixo dele. 44 no celular é o piso de toque.
-              */}
-              <div className="mt-3 flex">
-                <Button
-                  variante="primario"
-                  tamanho="sm"
-                  larguraTotal
-                  icone={<Pencil size={16} aria-hidden="true" />}
-                  onClick={() => {
-                    close();
-                    openModal({ kind: "settings", tab: "perfil" });
-                  }}
-                  className="celular:h-[44px]"
-                >
-                  Editar perfil
-                </Button>
-              </div>
-              {/*
-                A linha de status do print `2026-09-03 180020` (x=34..285,
-                y=1076..1107): 32 de altura, raio 8, fundo levemente mais claro
-                que o cartão, ponto de 12 num quadro de 16 com 8 de folga até o
-                rótulo (14, negrito) e o chevron no canto. Abre no clique e no
-                hover, como no Discord.
-
-                Uma diferença registrada: lá a linha mora dentro de um painel de
-                268 junto com "Editar perfil", e por isso mede 252 com 8 de folga
-                de cada lado; aqui "Editar perfil" continua sendo o botão de
-                accent medido no #44, então a linha usa os 268 inteiros do miolo
-                do cartão. (Com a raiz de 16px da ADR-0009, `h-8` agora mede os
-                32 do print.)
-              */}
+          {estado === "erro" && (
+            <p role="status" className="text-text-xs text-text-muted">
+              Não foi possível carregar o perfil.{" "}
               <button
                 type="button"
-                aria-haspopup="menu"
-                onClick={(e) => abrirSubmenuDeStatus(e.currentTarget)}
-                onPointerEnter={(e) => {
-                  const el = e.currentTarget;
-                  window.clearTimeout(timerDoSubmenu.current);
-                  timerDoSubmenu.current = window.setTimeout(() => {
-                    // com um menu já aberto o hover não faz nada: reabrir o mesmo
-                    // submenu remontaria o painel e ele reapareceria piscando a
-                    // cada ida e volta do mouse
-                    if (useUI.getState().contextMenu) return;
-                    abrirSubmenuDeStatus(el);
-                  }, ATRASO_DO_SUBMENU);
-                }}
-                onPointerLeave={() => window.clearTimeout(timerDoSubmenu.current)}
-                className={`mt-2 flex w-full items-center gap-2 rounded-lg bg-background-base-low px-2 text-left text-sm font-semibold text-text-strong transition hover:bg-interactive-background-hover ${
-                  ehMobile ? "h-[44px]" : "h-8"
-                }`}
+                onClick={() => setTentativa((t) => t + 1)}
+                className="font-medium text-text-default hover:underline"
               >
-                <span aria-hidden="true" className="grid h-4 w-4 shrink-0 place-items-center">
-                  <IconeDeStatus status={status} className="h-3 w-3" />
-                </span>
-                <span className="flex-1 truncate">{ROTULO_DO_MEU_STATUS[status]}</span>
-                {/* 5x10 de tinta no print → 20 no nosso ativo (ver `ContextMenu`) */}
-                <ChevronRight size={20} aria-hidden="true" className="shrink-0 opacity-80" />
+                Tentar de novo
               </button>
+            </p>
+          )}
 
-              {/* ordem do Discord: status → separador → personalizado → conta */}
-              <div className="mt-3 flex flex-col gap-0.5 border-t border-border-subtle pt-3">
-                <ItemDeMenu
-                  icon={<SmilePlus size={16} />}
-                  onClick={() => {
-                    close();
-                    openModal({ kind: "customStatus" });
-                  }}
-                >
-                  {customStatusOf(user) ? "Editar status personalizado" : "Status personalizado"}
-                </ItemDeMenu>
-                {/*
-                  "Mudar de conta" é a palavra do print `2026-09-03 202926`, e o
-                  ícone é o pictograma de pessoa em círculo que aparece nele. A
-                  linha deixou de deslogar: agora abre "Gerenciar contas", com as
-                  contas do aparelho (`lib/contas.ts`).
-                */}
-                <ItemDeMenu
-                  icon={<UserCircle size={16} />}
-                  onClick={() => {
-                    close();
-                    openModal({ kind: "gerenciarContas" });
-                  }}
-                >
-                  Mudar de conta
-                </ItemDeMenu>
-                <ItemDeMenu
-                  icon={<LogOut size={16} />}
-                  danger
-                  onClick={() => {
-                    close();
-                    logout();
-                    router.replace("/login");
-                  }}
-                >
-                  Sair
-                </ItemDeMenu>
-              </div>
-            </>
+          {atividade && (
+            <div className="rounded-lg bg-background-surface-highest p-3">
+              <p className="text-text-xs font-semibold text-text-default">{atividade.nome}</p>
+              {atividade.detalhe && <p className="text-text-xs text-text-muted">{atividade.detalhe}</p>}
+            </div>
+          )}
+
+          <PilulasDeCargo
+            cargos={chips}
+            podeRemover={podeMexerNosCargos}
+            podeAdicionar={podeMexerNosCargos && atribuiveis.length > 0}
+            aoRemover={(cargoId) => void toggleRole(user.id, cargoId, false)}
+            aoAdicionar={abrirMenuDeCargos}
+          />
+
+          {isMe && peloRodape && (
+            <PainelDaMinhaConta
+              status={status}
+              aoEditarPerfil={editarPerfil}
+              aoAbrirStatus={abrirSubmenuDeStatus}
+              aoPassarNoStatus={passarNoStatus}
+              aoSairDoStatus={() => window.clearTimeout(timerDoSubmenu.current)}
+              aoMudarDeConta={() => {
+                close();
+                openModal({ kind: "gerenciarContas" });
+              }}
+            />
+          )}
+        </div>
+
+        {/* `empty:p-0`: o `.footer__5be3e:empty` do Discord zera o respiro */}
+        <div className="flex flex-col px-4 pb-3 empty:p-0">
+          {isMe && !peloRodape && (
+            /*
+              O botão dos prints `101804` e `113603`: 268 × 32 (x=1360–1627,
+              y=497–528), raio 8 — o `Button` primário `sm` na largura toda. O
+              invólucro `flex` existe porque o `Button` é `inline-flex`: solto num
+              bloco ele entraria numa linha de texto e a entrelinha somaria folga.
+            */
+            <div className="flex">
+              <Button
+                variante="primario"
+                tamanho="sm"
+                larguraTotal
+                icone={<Pencil size={16} aria-hidden="true" />}
+                onClick={editarPerfil}
+                className="celular:h-[44px]"
+              >
+                Editar perfil
+              </Button>
+            </div>
           )}
 
           {!isMe && relacao !== "blocked" && (
@@ -764,24 +592,23 @@ export default function ProfilePopoverHost() {
                 e.preventDefault();
                 void enviar();
               }}
-              className="mt-3 flex items-center gap-1 rounded-lg bg-chat-background-default px-2"
+              /*
+                Não há print 1:1 do cartão de outra pessoa: altura (40), raio (8)
+                e fundo (`--chat-background-default`) são os da implementação
+                anterior, não medidos.
+              */
+              className="flex items-center gap-1 rounded-lg bg-chat-background-default px-2"
             >
-              {/*
-                O campo continua `<input>` nativo: é peça interna do controle
-                composto (o fundo e o arredondado são do `<form>`, que divide a
-                moldura com o botão de enviar), não um `TextInput` com moldura
-                própria.
-              */}
+              {/* peça interna do controle composto (o fundo e o raio são do
+                  `<form>`, que divide a moldura com o botão de enviar), não um
+                  `TextInput` com moldura própria */}
               <input
                 value={rascunho}
                 onChange={(e) => setRascunho(e.target.value)}
                 aria-label={`Mensagem para @${user.username}`}
                 placeholder={`Mensagem @${user.username}`}
-                className="h-10 min-w-0 flex-1 bg-transparent text-sm text-text-default outline-none placeholder:text-text-muted"
+                className="h-10 min-w-0 flex-1 bg-transparent text-text-sm text-text-default outline-none placeholder:text-text-muted celular:h-[44px]"
               />
-              {/* `sm` (24) é a caixa do `BotaoDeIcone` para ícone de 16 em canto
-                  de cartão; o botão antigo tinha 28, que não é passo do
-                  primitivo. 44 no celular é o piso de toque. */}
               <BotaoDeIcone
                 type="submit"
                 rotulo="Enviar mensagem"
@@ -800,7 +627,7 @@ export default function ProfilePopoverHost() {
 
 /**
  * Emblemas do perfil. Vazio enquanto o contrato não tiver `badges` no
- * `PublicUser`/`UserProfile` — a caixa só é desenhada quando houver algum.
+ * `PublicUser`/`UserProfile`.
  */
 const EMBLEMAS: { id: string; label: string; icon: ReactNode }[] = [];
 
@@ -812,49 +639,8 @@ interface Atividade {
 /**
  * Atividade ("Jogando…") de alguém. Sempre null: o contrato não tem presença
  * rica. Fica como função para o cartão já saber se desenhar quando `PublicUser`
- * ganhar o campo — é só devolver a atividade aqui.
+ * ganhar o campo.
  */
 function atividadeDe(_user: { id: string }): Atividade | null {
   return null;
-}
-
-/** Bloco titulado do cartão ("Sobre mim", "Cargos", "Membro desde"). */
-function Secao({ titulo, children }: { titulo: string; children: ReactNode }) {
-  return (
-    <div className="mt-3 border-t border-border-subtle pt-3">
-      <h3 className="mb-2 text-xs font-bold uppercase text-text-subtle">{titulo}</h3>
-      {children}
-    </div>
-  );
-}
-
-/** Linha de menu do próprio perfil (status personalizado, conta, sair). */
-function ItemDeMenu({
-  icon,
-  onClick,
-  danger = false,
-  children,
-}: {
-  icon: ReactNode;
-  onClick: () => void;
-  danger?: boolean;
-  children: ReactNode;
-}) {
-  const ehMobile = useEhMobile();
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex w-full items-center gap-2 rounded-[3px] px-2 text-left text-sm transition ${
-        ehMobile ? "h-[44px]" : "h-8"
-      } ${
-        danger
-          ? "text-status-danger hover:bg-status-danger hover:text-control-critical-primary-text-default"
-          : "text-text-default hover:bg-interactive-background-hover hover:text-text-strong"
-      }`}
-    >
-      <span aria-hidden="true">{icon}</span>
-      {children}
-    </button>
-  );
 }
