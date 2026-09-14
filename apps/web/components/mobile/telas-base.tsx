@@ -224,15 +224,43 @@ export function TelaVoce() {
           <Settings size={22} />
         </button>
         {/* o avatar transborda a borda de baixo do banner, com o anel da
-            superfície de trás — é assim na captura */}
-        <div className="absolute -bottom-8 left-4">
+            superfície de trás — é assim na captura.
+
+            Medido em `discord-mobile-voce.png` (375×812, 1px=1pt — escala
+            §1 do MEDIDAS.md): o topo do anel (onde o verde do banner é
+            interrompido) fica em `y=110` nas colunas `x=60..63`, que é onde
+            o círculo é mais largo (centro horizontal ≈61,5, condizente com
+            a borda esquerda/direita do avatar em `x=22..101`, 80px = a
+            mesma medida do nosso `size="xl"`). O avatar (sem o anel, que é
+            `box-shadow` e não desloca a caixa) some do verde em `y=116`
+            (110+6 do anel) e volta ao fundo da página em `y=196`
+            (116+80) — avatar-caixa 80px alto, e o fundo do banner some em
+            `y=149` (medido limpo em `x=10`, longe do avatar).
+            `-bottom` é a distância da base da CAIXA do avatar (sem anel) até
+            a base do banner: 196 (base da caixa) − 149 (base do banner) =
+            **47px**, não os 32 (`-bottom-8`) de antes — o avatar ficava alto
+            demais, mordendo o banner em vez de pender sobre o conteúdo.
+            `left`: a caixa (sem anel) começa em `x=22`, não em `x=16`
+            (`left-4`). */}
+        <div className="absolute -bottom-[47px] left-[22px]">
           <span className="block rounded-full ring-[6px] ring-background-base-lowest">
             <Avatar user={vivo} size="xl" status={status} surface="ring-background-base-lowest" />
           </span>
         </div>
       </div>
 
-      <div className="mt-11 px-3 pb-6">
+      {/* Distância medida direto na captura, longe do avatar (`x=150..345`,
+          fora da sombra dele): o fundo da página (`#f2f3f5`) some e o
+          cartão branco (`#ffffff`) começa em `y=212`, sempre — contra o fim
+          do banner em `y=149` (medido limpo em `x=10`). 212−149 = **63px**,
+          não os 44 (`mt-11`) de antes, que datavam de quando o avatar
+          transbordava menos. */}
+      {/* `px-4` (16px), não `px-3` (12px): na captura a margem lateral do
+          cartão branco é 16px dos dois lados (`x=16..358` numa tela de
+          375, longe do avatar) — e 16 é também a borda de fora do anel do
+          avatar (22 do box − 6 do anel), ou seja o cartão se alinha com a
+          borda externa do anel, não com a caixa do avatar. */}
+      <div className="mt-[63px] px-4 pb-6">
         {/* cartão de identidade */}
         <div className="rounded-2xl bg-background-base-lower p-4">
           <h1 className="truncate text-xl font-bold text-text-strong">

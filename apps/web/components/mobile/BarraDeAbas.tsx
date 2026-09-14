@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Bell } from "@/components/ui/icones";
 import Avatar from "@/components/ui/Avatar";
 import Marca from "@/components/ui/Marca";
@@ -17,30 +18,100 @@ import { ABAS_MOBILE, useMobile, type AbaMobile } from "@/stores/mobile";
  * **Notificações** e **Você**.
  *
  * Ela é o único elemento fixo do leiaute: a pilha de telas acontece acima
- * dela, e trocar de aba nunca a esconde. Duas medidas fazem essa barra
- * funcionar num telefone:
+ * dela, e trocar de aba nunca a esconde (exceto as duas vezes que ela mesma
+ * some — ver os dois últimos itens). Medidas e comportamento que fazem essa
+ * barra funcionar num telefone:
  *
- * - **48px de altura útil**, mais o `env(safe-area-inset-bottom)` embaixo. A
+ * - **44px de altura útil**, mais o `env(safe-area-inset-bottom)` embaixo. A
  *   barra do Discord mede **78pt no total, com 34 de área segura e 44 de faixa
- *   útil** (medido em `docs/Reference/mobile/discord-mobile-voce.png`, 1px=1pt,
- *   `MEDIDAS.md` §2); ficamos em 48 porque o alvo de toque mínimo é 44 e o
- *   rótulo cabe com folga. Sem a área segura a fileira fica atrás da barra de
- *   gestos do iPhone e do Android — e o toque em "Você" vira "voltar para a
- *   tela inicial".
+ *   útil** (medido em `docs/Reference/mobile/discord-mobile-voce.png`,
+ *   1px=1pt, confirmado em `-notificacoes.png` e, a 1,97×, em
+ *   `-servidor-2024.png`; `MEDIDAS.md` §2). Antes esta barra usava 48 —
+ *   pensando em dar folga acima do piso de toque de 44 —, mas 44 **é** a
+ *   medida do Discord e já é o piso: não havia tensão para resolver com folga.
+ *   Sem a área segura a fileira fica atrás da barra de gestos do iPhone e do
+ *   Android — e o toque em "Você" vira "voltar para a tela inicial".
  * - **Não há aba de mensagens.** As conversas entram pela bolha no topo da
  *   rail, e a coluna da direita troca de conteúdo com a rail ainda à vista —
  *   ver `discord-mobile-dms-2024.png` e `components/mobile/telas-base.tsx`.
  * - O ícone de "Início" é o **símbolo da marca**, e não uma casa: o acervo de
  *   ativos do Discord (`docs/Reference/Discord assets icons/`) não tem glifo de
  *   casa, e §6.2 do processo manda relatar o que falta em vez de desenhar. É
- *   também o que a rail já usa para o mesmo destino.
+ *   também o que a rail já usa para o mesmo destino. **24px** — um dos três
+ *   tamanhos padrão do acervo (16/20/24) e o mais próximo da caixa nominal
+ *   `~24pt` que o glifo do Discord ocupa (`MEDIDAS.md` §2: 21×20 em "Home",
+ *   19×22 no sino).
  * - **Alvo da largura inteira da aba**, não do ícone. O dedo mira o meio da
  *   coluna; um alvo de 24px no meio de 90 erra por baixo e por cima.
+ * - **Toque com `active:`**, nunca `hover:` — no dedo não existe "passar o
+ *   mouse", e `hover:` deixaria o último item tocado aceso até o próximo
+ *   toque em qualquer lugar da tela.
+ * - **Some com uma tela empilhada em cima** (conversa, canal, voz, amigos):
+ *   isso já é decisão de `components/mobile/ShellMobile.tsx`
+ *   (`{topo === null && <BarraDeAbas />}`), não deste arquivo — é exatamente o
+ *   que `discord-mobile-chat-canal-2024.png` mostra: a conversa aberta vai do
+ *   cabeçalho ao composer, sem barra nenhuma embaixo.
+ * - **Some quando o teclado abre**, mesmo dentro de uma aba-base sem tela
+ *   empilhada — a busca de conversas da aba Início (`layout/DMList.tsx`) tem
+ *   campo de texto, e o Discord recolhe a barra para devolver a faixa ao
+ *   conteúdo em vez de empurrá-la para cima do teclado. Ver `useTecladoAberto`
+ *   abaixo.
  *
  * O selo de não lidas de cada aba reaproveita as mesmas contas do desktop
  * (`stores/nao-lidas.ts`): número em Mensagens (mensagem não lida em conversa
  * conta uma a uma) e ponto/número nas outras.
  */
+
+/**
+ * O teclado virtual está aberto?
+ *
+ * `app/layout.tsx` já usa `interactiveWidget: "resizes-content"`, que encolhe
+ * o `100dvh` do shell para caber acima do teclado — sem isso o composer
+ * ficaria atrás dele. Mas encolher o layout não é o mesmo que **esconder**
+ * esta barra: o Discord recolhe a barra de abas quando o teclado sobe (é a
+ * diferença entre "dá para rolar até ver" e "a lista de resultados da busca
+ * tem 44px extra"), e nada no shell faz isso — é esta barra que decide sair.
+ *
+ * A técnica: observar `visualViewport.height` e comparar com o maior valor
+ * visto **desde a última mudança de largura**. O teclado tira bem mais de
+ * 120px de altura útil; a barra de endereço do navegador que aparece/some ao
+ * rolar tira menos que isso. Resetar ao mudar a largura é o que impede o giro
+ * do aparelho (que também troca a altura do `visualViewport`) de ser lido como
+ * teclado abrindo.
+ *
+ * **Não visto num teclado de verdade** (nenhum agente tem celular físico nem
+ * emulador com IME neste passeio) — só a lógica, que é pura e testável. Se o
+ * `visualViewport` não existir (SSR, navegador antigo), a resposta é sempre
+ * `false` e a barra nunca some por este motivo.
+ */
+function useTecladoAberto(): boolean {
+  const [aberto, setAberto] = useState(false);
+
+  useEffect(() => {
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    if (!vv) return;
+    let largura = vv.width;
+    let alturaCheia = vv.height;
+
+    function medir() {
+      if (vv!.width !== largura) {
+        // girou o aparelho: a referência de "sem teclado" desta largura não
+        // existe ainda — não é teclado abrindo, é orientação trocando
+        largura = vv!.width;
+        alturaCheia = vv!.height;
+        setAberto(false);
+        return;
+      }
+      alturaCheia = Math.max(alturaCheia, vv!.height);
+      setAberto(alturaCheia - vv!.height > 120);
+    }
+
+    vv.addEventListener("resize", medir);
+    return () => vv.removeEventListener("resize", medir);
+  }, []);
+
+  return aberto;
+}
 
 const ROTULOS: Record<AbaMobile, string> = {
   inicio: "Início",
@@ -70,6 +141,7 @@ function Selo({ contagem, ponto }: { contagem: number; ponto: boolean }) {
 }
 
 export default function BarraDeAbas() {
+  const tecladoAberto = useTecladoAberto();
   const aba = useMobile((s) => s.aba);
   const irParaAba = useMobile((s) => s.irParaAba);
   const user = useAuth((s) => s.user);
@@ -80,6 +152,10 @@ export default function BarraDeAbas() {
   const temServidorNaoLido = useGuilds((s) => s.guilds.some((g) => g.unread));
   const pedidos = useFriends((s) => s.incoming.length);
   const naoLidasEmConversas = somarNaoLidas(dms);
+
+  // depois de todos os hooks (regra do React): o teclado aberto tira a barra
+  // por inteiro, como o Discord faz — não é um estado visual, é ela sumindo
+  if (tecladoAberto) return null;
 
   const vivo = user ? resolveUser(profiles, user) : null;
 
@@ -97,9 +173,9 @@ export default function BarraDeAbas() {
   function icone(id: AbaMobile) {
     switch (id) {
       case "inicio":
-        return <Marca size={22} />;
+        return <Marca size={24} />;
       case "notificacoes":
-        return <Bell size={22} />;
+        return <Bell size={24} />;
       case "voce":
         // como no Discord: a aba do usuário é a foto dele, com a bolinha de
         // status — é o atalho para "quem eu sou agora"
@@ -137,7 +213,7 @@ export default function BarraDeAbas() {
             aria-label={
               selo.contagem > 0 ? `${ROTULOS[id]} (${selo.contagem})` : ROTULOS[id]
             }
-            className={`flex h-[48px] flex-1 flex-col items-center justify-center gap-0.5 transition ${
+            className={`flex h-[44px] flex-1 flex-col items-center justify-center gap-0.5 transition active:bg-interactive-background-hover ${
               ativa ? "text-text-strong" : "text-text-muted"
             }`}
           >
