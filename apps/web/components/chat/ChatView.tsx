@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { EyeOff, Hash, Lock, Megaphone, Pencil, Users, Volume2 } from "@/components/ui/icones";
+import { Bell, EyeOff, Hash, Lock, Megaphone, Pencil, Users, Volume2 } from "@/components/ui/icones";
+import { channelNotificationScope, isMuted } from "@streamz/shared";
 import Composer from "@/components/chat/Composer";
 // ── h-moderacao ──
 import { RulesNotice, TimeoutNotice } from "@/components/moderation/ComposerNotice";
@@ -15,11 +16,15 @@ import ReplyBar from "@/components/chat/ReplyBar";
 import ThreadsPopover from "@/components/chat/ThreadsPopover";
 import TypingIndicator from "@/components/chat/TypingIndicator";
 import { ultimaMinhaMensagem } from "@/components/chat/ultima-minha";
+import { MENU_WIDTH } from "@/components/ui/ContextMenu";
 import { Button, Tooltip } from "@/components/ui/primitivos";
 import { useSlowmode } from "@/hooks/useSlowmode";
+import { useT } from "@/lib/i18n";
+import { submenuNotificacoes, submenuSilenciar } from "@/lib/notification-menu";
 import { useAuth } from "@/stores/auth";
 import { useActiveChannel } from "@/stores/channels";
 import { useGuilds } from "@/stores/guilds";
+import { useNotifications } from "@/stores/notifications";
 import {
   useCanManageActiveChannel,
   useCanModerateActiveChannel,
@@ -84,6 +89,10 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
   const slice = useActiveSlice();
   const membersOpen = useUI((s) => s.membersOpen);
   const toggleMembers = useUI((s) => s.toggleMembers);
+  // o sino do cabeçalho: mesmo par (config. de silêncio + nível) do menu de
+  // contexto do canal na barra lateral (`ChannelSidebar.openChannelMenu`)
+  const t = useT();
+  const porEscopo = useNotifications((s) => s.porEscopo);
   // ── h-moderacao ──
   const timeoutUntil = useMyTimeout();
   const mustAcceptRules = useMustAcceptRules();
@@ -196,12 +205,42 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
           void runSearch({ channelId: channel.id, guildId: channel.guildId });
         }}
         tools={
-          // a ordem do Discord: threads → (sino) → alfinete → membros → busca.
-          // O sino (notificações do canal) não existe aqui e não foi criado.
-          // Tinta medida no print: 18×18 em cada glifo; `size` por ícone
-          // porque cada desenho ocupa uma fração diferente do quadro.
+          // a ordem do Discord, medida no `HeaderBar` (passo de 42px, print
+          // `180835`): threads → sino → alfinete → membros → busca. Tinta
+          // medida no print: 18×18 em cada glifo; `size` por ícone porque cada
+          // desenho ocupa uma fração diferente do quadro (Threads e Pin a 21
+          // já dão os 18px; o sino usa o mesmo 21 pelo mesmo motivo).
           <>
             <ThreadsPopover channelId={channel.id} canManage={canModerate} />
+            <HeaderIcon
+              // rótulo muda com o estado, como o de membros logo abaixo — o
+              // Discord não escreve "(silenciado)" no tooltip do sino, mas sem
+              // pista nenhuma o botão que abre "Silenciar canal" e já mudo
+              // pareceria quebrado
+              label={
+                isMuted(porEscopo[channelNotificationScope(channel.id)])
+                  ? "Notificações do canal (silenciado)"
+                  : "Notificações do canal"
+              }
+              onClick={(e) => {
+                const r = e.currentTarget.getBoundingClientRect();
+                const escopo = { tipo: "canal" as const, channelId: channel.id };
+                const setting = porEscopo[channelNotificationScope(channel.id)];
+                // alinhado pela borda direita do botão, 4px abaixo — o mesmo
+                // cálculo do menu do cabeçalho do servidor
+                // (`CabecalhoDoServidor`, linha 161) e do canal
+                // (`ChannelSidebar.openChannelMenu`), cujos dois primeiros
+                // itens são estes dois submenus
+                ui.openContextMenu(
+                  r.right - MENU_WIDTH,
+                  r.bottom + 4,
+                  [submenuSilenciar("Silenciar canal", escopo, setting, t), submenuNotificacoes(escopo, setting, t)],
+                  MENU_WIDTH,
+                );
+              }}
+            >
+              <Bell size={21} />
+            </HeaderIcon>
             <PinsPopover channelId={channel.id} guildId={channel.guildId} canPin={canModerate} />
             <HeaderIcon
               label={membersOpen ? "Ocultar lista de membros" : "Mostrar lista de membros"}

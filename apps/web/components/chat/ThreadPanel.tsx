@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Bell, MessageSquare, MoreHorizontal, Users, X } from "@/components/ui/icones";
-import { displayNameOf, messageLinkPath, type NotificationLevel } from "@streamz/shared";
+import { Bell, Lock, MessageSquare, MoreHorizontal, Users, X } from "@/components/ui/icones";
+import { displayNameOf, messageLinkPath, Permission, type NotificationLevel } from "@streamz/shared";
 import { urlPublica } from "@/lib/links-do-app";
 import Composer from "@/components/chat/Composer";
 import MessageList from "@/components/chat/MessageList";
@@ -17,9 +17,21 @@ import { useChannels } from "@/stores/channels";
 import { useCanModerate } from "@/stores/guilds";
 import { useMessages } from "@/stores/messages";
 import { useChannelSetting, useNotifications } from "@/stores/notifications";
+import { useCan } from "@/stores/permissions";
 import { ui, type MenuItem } from "@/stores/ui";
 
-/** Largura inicial e limites do painel de thread. */
+/**
+ * Largura inicial e limites do painel de thread.
+ *
+ * **Não medido**: a única referência da visão dividida é um GIF de blog
+ * (`12-visao-dividida-de-threads.gif`, escala desconhecida) cujo primeiro
+ * quadro mostra o tópico em tela cheia, não a coluna ao lado do canal — e não
+ * há print 1:1 nem CSS bruto do `<aside>` da visão dividida no acervo. 480
+ * fica entre a lista de canais (240) e a de membros (240 também, mas o
+ * conteúdo de uma thread — mensagens, não uma lista de nomes — pede mais
+ * fôlego); redimensionável para quem discordar, com o valor lembrado por
+ * canal do navegador (ver `larguraSalva`).
+ */
 const LARGURA_PADRAO = 480;
 const LARGURA_MIN = 340;
 const LARGURA_MAX = 720;
@@ -55,6 +67,10 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
   const guildId = useChannels((s) => s.guildId);
   const preferencia = useChannelSetting(channelId);
   const setChannelLevel = useNotifications((s) => s.setChannelLevel);
+  // a thread não tem permissão própria: quem não pode postar no canal também
+  // não posta no tópico dele (ADR-0002, o mesmo `SEND_MESSAGES` efetivo que
+  // bloqueia o composer principal em `ChatView.tsx`)
+  const podePostar = useCan(Permission.SEND_MESSAGES, channelId);
 
   const [largura, setLargura] = useState(LARGURA_PADRAO);
   useEffect(() => setLargura(larguraSalva()), []);
@@ -187,28 +203,36 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
         }
       />
 
-      {user && (
-        <>
-          <ReplyBar channelId={channelId} threadId={parentId} />
-          <Composer
-            key={`composer-${parentId}`}
-            channelId={channelId}
-            guildId={guildId}
-            // o composer da thread é o mesmo do canal: "+", GIF e figurinha
-            // inclusive — o recuo diferente era o que denunciava a diferença
-            allowAttachments
-            draftKey={`thread:${parentId}`}
-            placeholder="Responder na thread…"
-            ariaLabel="Responder na thread"
-            destino={nome ?? "este tópico"}
-            ultimaMinhaMensagem={() => ultimaMinhaMensagem(items, user.id)}
-            onSend={(content, attachments, sticker) =>
-              send({ channelId, author: user, content, attachments, sticker, parentId })
-            }
-          />
-          <TypingIndicator channelId={channelId} />
-        </>
-      )}
+      {user &&
+        (podePostar ? (
+          <>
+            <ReplyBar channelId={channelId} threadId={parentId} />
+            <Composer
+              key={`composer-${parentId}`}
+              channelId={channelId}
+              guildId={guildId}
+              // o composer da thread é o mesmo do canal: "+", GIF e figurinha
+              // inclusive — o recuo diferente era o que denunciava a diferença
+              allowAttachments
+              draftKey={`thread:${parentId}`}
+              placeholder="Responder na thread…"
+              ariaLabel="Responder na thread"
+              destino={nome ?? "este tópico"}
+              ultimaMinhaMensagem={() => ultimaMinhaMensagem(items, user.id)}
+              onSend={(content, attachments, sticker) =>
+                send({ channelId, author: user, content, attachments, sticker, parentId })
+              }
+            />
+            <TypingIndicator channelId={channelId} />
+          </>
+        ) : (
+          // mesmo aviso, mesma forma (altura e raio do composer) do canal
+          // principal sem permissão — ver `ChatView.tsx`
+          <div className="mx-2.5 mb-6 flex min-h-[58px] items-center gap-2 rounded-lg bg-chat-background-default px-4 text-sm text-text-muted">
+            <Lock size={18} aria-hidden="true" className="shrink-0" />
+            <span>Você não tem permissão para enviar mensagens neste canal.</span>
+          </div>
+        ))}
     </aside>
   );
 }

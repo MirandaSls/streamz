@@ -1,13 +1,15 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { displayNameOf, extractFirstUrl, type Message } from "@streamz/shared";
 import LinkEmbedCard, { useLinkEmbed } from "@/components/chat/LinkEmbedCard";
+import { ReferenciaDeResposta } from "@/components/chat/mensagem/ReferenciaDaMensagem";
 import MediaGroup from "@/components/media/MediaGroup";
 import Avatar from "@/components/ui/Avatar";
-import { BotaoDeIcone } from "@/components/ui/primitivos";
-import { horaCompleta } from "@/lib/format";
+import { BotaoDeIcone, Tooltip } from "@/components/ui/primitivos";
+import { dataCompleta, horaCompleta } from "@/lib/format";
 import { Markdown } from "@/lib/markdown";
+import { useAuthorColor } from "@/stores/permissions";
 
 /**
  * Uma mensagem como ela aparece **dentro de um painel** (fixadas, caixa de
@@ -23,6 +25,9 @@ import { Markdown } from "@/lib/markdown";
  * As ações do cartão ("saltar", "desafixar", "marcar como lida") só aparecem no
  * hover/foco, no canto superior direito — não como links de texto empilhados no
  * rodapé, que empurravam o conteúdo para baixo.
+ *
+ * `variante="resultado"` é o cartão do painel de busca (cartão 2m-busca), que
+ * no Discord é outra peça — ver `CartaoDeResultado`.
  */
 export default function MessagePreview({
   message,
@@ -30,6 +35,8 @@ export default function MessagePreview({
   acima,
   acoes,
   contexto,
+  variante = "cartao",
+  aoAbrir,
   className = "",
 }: {
   message: Message;
@@ -41,12 +48,33 @@ export default function MessagePreview({
   acoes?: ReactNode;
   /** mensagens vizinhas mostradas em cinza, como o contexto da busca. */
   contexto?: { antes?: Message | null; depois?: Message | null };
+  /**
+   * `cartao` (padrão): fixadas, caixa de entrada, confirmação e admin, como
+   * sempre foi. `resultado`: a mensagem inteira no leiaute da timeline, dentro
+   * da caixa de resultado de busca do Discord.
+   */
+  variante?: "cartao" | "resultado";
+  /** só em `resultado`: clicar no cartão (ou em "Pular") leva à mensagem. */
+  aoAbrir?: () => void;
   className?: string;
 }) {
   // mesma regra da timeline: uma prévia de link só, a da primeira URL
   const url = message.suppressEmbeds ? null : extractFirstUrl(message.content);
   const embed = useLinkEmbed(url);
   const vazia = !message.content && message.attachments.length === 0;
+  const corpoRef = useRef<HTMLDivElement>(null);
+  useRealceDaBusca(corpoRef, realce, message.content);
+
+  if (variante === "resultado") {
+    return (
+      <CartaoDeResultado message={message} aoAbrir={aoAbrir} className={className} corpoRef={corpoRef}>
+        {message.content && <Markdown text={message.content} />}
+        {message.attachments.length > 0 && <MediaGroup attachments={message.attachments} />}
+        {embed && <LinkEmbedCard embed={embed} />}
+        {vazia && <span className="italic text-text-muted">(mensagem vazia)</span>}
+      </CartaoDeResultado>
+    );
+  }
 
   return (
     <article
@@ -63,13 +91,11 @@ export default function MessagePreview({
       </div>
       {/* o teto de largura da timeline (550px) estoura num painel: as mídias
           são obrigadas a caber na coluna */}
-      <div className="mt-1 break-words text-sm text-text-default [&_img]:max-w-full [&_video]:max-w-full [&_video]:h-auto">
-        {message.content &&
-          (realce ? (
-            <Realcado texto={message.content} termo={realce} />
-          ) : (
-            <Markdown text={message.content} />
-          ))}
+      <div
+        ref={corpoRef}
+        className="mt-1 break-words text-sm text-text-default [&_img]:max-w-full [&_video]:max-w-full [&_video]:h-auto"
+      >
+        {message.content && <Markdown text={message.content} />}
         {message.attachments.length > 0 && <MediaGroup attachments={message.attachments} />}
         {embed && <LinkEmbedCard embed={embed} />}
         {vazia && <span className="italic text-text-muted">(mensagem vazia)</span>}
@@ -115,31 +141,166 @@ function Vizinha({ message }: { message: Message }) {
 }
 
 /**
- * Texto com o termo buscado realçado.
+ * Resultado de busca do Discord (`.searchResult__80bf8` e `.container__80bf8`,
+ * no mesmo módulo do CSS bruto):
  *
- * Aqui o conteúdo vai como texto puro, e não pelo `Markdown`: realçar dentro da
- * árvore já formatada exigiria atravessar cada nó inline, e o resultado da
- * busca vale mais legível que negrito-perfeito.
+ * - caixa: `background-color: var(--background-base-lower)`, `border: 1px
+ *   solid var(--border-subtle)`, `border-radius: 8px`, `margin-bottom: 8px`
+ *   (quem dá é o painel), `overflow: hidden`, `cursor: pointer`;
+ * - "Pular": `.buttonsContainer__80bf8` em `top: 8px; inset-inline-end: 8px`,
+ *   só no `:hover`/`:focus-within`; `.button__80bf8` com `height: 24px`,
+ *   `padding: 4px`, `border-radius: 3px`, fundo `--background-base-lowest`,
+ *   texto `--text-default`, hover `--interactive-text-hover` e `:active` 1px
+ *   abaixo. O tamanho da letra não está no CSS (vem do JS): 12px, "não medido".
+ *   Escondido com opacidade, não com `display:none` como lá — assim o Tab
+ *   alcança o botão, e é o foco nele que o revela.
+ * - dentro, a mensagem é a da timeline em cozy (GIFs de suporte
+ *   `how-to-use-search-on-discord/01.gif` e `05.gif`: avatar, nome colorido,
+ *   hora, resposta com espinha, markdown, mídia). Por isso as medidas são as do
+ *   `MessageItem` — calha de 80, avatar de 40 a 20 da borda, nome semibold,
+ *   hora 12px `--chat-text-muted`, linha de 22, 24 à direita
+ *   (`.message__5126c{padding-inline-end:var(--space-xl)}`) — e a
+ *   `ReferenciaDeResposta` é a mesma, com a espinha na mesma geometria.
+ * - respiro vertical da mensagem dentro da caixa: **não medido** (nenhum print
+ *   1:1 com resultados; no GIF, em proporção, dá perto de 8) — usamos 8.
  */
-function Realcado({ texto, termo }: { texto: string; termo: string }) {
-  const alvo = termo.trim();
-  if (!alvo) return <span className="whitespace-pre-wrap">{texto}</span>;
-  const partes = texto.split(new RegExp(`(${escaparRegex(alvo)})`, "gi"));
+function CartaoDeResultado({
+  message,
+  aoAbrir,
+  className,
+  corpoRef,
+  children,
+}: {
+  message: Message;
+  aoAbrir?: () => void;
+  className: string;
+  corpoRef: RefObject<HTMLDivElement>;
+  children: ReactNode;
+}) {
+  const cor = useAuthorColor(message.author.id, message.guildId);
+  const temResposta = Boolean(message.replyTo);
+
   return (
-    <span className="whitespace-pre-wrap">
-      {partes.map((parte, i) =>
-        parte.toLowerCase() === alvo.toLowerCase() ? (
-          <mark key={i} className="rounded-[2px] bg-brand-500/30 text-text-strong">
-            {parte}
-          </mark>
-        ) : (
-          parte
-        ),
+    <article
+      onClick={(e) => {
+        // clique num link, botão, mídia ou na seleção de texto é deles, não "pular"
+        const alvo = e.target as HTMLElement;
+        if (alvo.closest("a, button, video, audio, [role=button]")) return;
+        if (window.getSelection()?.toString()) return;
+        aoAbrir?.();
+      }}
+      className={`group/msg relative cursor-pointer overflow-hidden rounded-lg border border-border-subtle bg-background-base-lower py-2 pl-[80px] pr-6 ${className}`}
+    >
+      {/* mesma geometria do avatar da timeline: no topo da linha, ou 24 abaixo
+          quando há a linha da resposta (18 + 4 de margem + 2) */}
+      <span className={`absolute left-5 ${temResposta ? "top-[32px]" : "top-2"}`}>
+        <Avatar user={message.author} size="lg" />
+      </span>
+      <ReferenciaDeResposta message={message} compacto={false} />
+      <div className="flex items-baseline gap-1.5 leading-[22px]">
+        <span
+          style={cor ? { color: cor } : undefined}
+          className="min-w-0 truncate font-semibold text-text-strong"
+        >
+          {displayNameOf(message.author)}
+        </span>
+        <Tooltip rotulo={dataCompleta(message.createdAt)}>
+          <span className="ml-1 shrink-0 text-xs font-medium text-chat-text-muted">
+            {horaCompleta(message.createdAt)}
+          </span>
+        </Tooltip>
+      </div>
+      {/* o teto de largura da timeline (550px) estoura na coluna de 418: as
+          mídias são obrigadas a caber */}
+      <div
+        ref={corpoRef}
+        className="break-words text-text-default [&_img]:max-w-full [&_video]:h-auto [&_video]:max-w-full"
+      >
+        {children}
+      </div>
+      {aoAbrir && (
+        <div className="pointer-events-none absolute right-2 top-2 flex opacity-0 group-focus-within/msg:pointer-events-auto group-focus-within/msg:opacity-100 group-hover/msg:pointer-events-auto group-hover/msg:opacity-100">
+          <button
+            type="button"
+            onClick={aoAbrir}
+            className="ml-1.5 h-[24px] rounded-[3px] bg-background-base-lowest p-1 text-xs font-medium leading-4 text-text-default hover:text-interactive-text-hover active:translate-y-px"
+          >
+            Pular
+          </button>
+        </div>
       )}
-    </span>
+    </article>
   );
 }
 
-function escaparRegex(texto: string): string {
-  return texto.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** Nome do realce no registro `CSS.highlights` — o `::highlight()` usa o mesmo. */
+export const NOME_DO_REALCE_DA_BUSCA = "streamz-busca";
+
+/**
+ * A regra do realce. `.highlight{background:hsl(var(--yellow-300-hsl)/.3)}` é o
+ * termo achado no resultado de busca do Discord (CSS bruto); `--yellow-300` é
+ * #fdb833, o mesmo valor do `--status-warning` que já existe nos nossos tokens.
+ * Não é a cor de marca: antes pintávamos com o limão a 30%, e o Discord não
+ * pinta com o blurple aqui.
+ *
+ * Vai num `<style>` porque o Tailwind não gera `::highlight()`; o lugar certo é
+ * o `globals.css`, que não é deste cartão (ver "faltando" do 2m-busca). Quem
+ * mostra resultados renderiza isto uma vez.
+ */
+export function EstiloDoRealceDaBusca() {
+  return (
+    <style>{`::highlight(${NOME_DO_REALCE_DA_BUSCA}){background-color:rgb(var(--status-warning-rgb) / 0.3);color:inherit}`}</style>
+  );
+}
+
+type RegistroDeRealce = { get(nome: string): Set<Range> | undefined; set(nome: string, h: Set<Range>): void };
+
+/**
+ * Realça cada palavra do termo **dentro do markdown já renderizado**.
+ *
+ * Antes o conteúdo ia como texto puro quando havia termo, porque realçar
+ * dentro da árvore formatada exigia atravessar cada nó inline — e o resultado
+ * do Discord mostra a mensagem formatada, com bloco de código e lista. A CSS
+ * Custom Highlight API resolve sem tocar no DOM do React: marca `Range`s sobre
+ * os nós de texto e o navegador pinta. Onde a API não existe (Firefox antes do
+ * 140) a mensagem sai formatada e sem realce — nunca quebrada.
+ */
+function useRealceDaBusca(ref: RefObject<HTMLElement | null>, termo: string | undefined, conteudo: string) {
+  useEffect(() => {
+    const el = ref.current;
+    const palavras = (termo ?? "")
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean);
+    const registro = typeof CSS !== "undefined" ? (CSS as unknown as { highlights?: RegistroDeRealce }).highlights : undefined;
+    const Construtor = (globalThis as unknown as { Highlight?: new () => Set<Range> }).Highlight;
+    if (!el || palavras.length === 0 || !registro || !Construtor) return;
+
+    const faixas: Range[] = [];
+    const andador = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let no = andador.nextNode(); no; no = andador.nextNode()) {
+      const texto = (no.nodeValue ?? "").toLowerCase();
+      for (const palavra of palavras) {
+        for (let i = texto.indexOf(palavra); i >= 0; i = texto.indexOf(palavra, i + palavra.length)) {
+          const faixa = document.createRange();
+          faixa.setStart(no, i);
+          faixa.setEnd(no, i + palavra.length);
+          faixas.push(faixa);
+        }
+      }
+    }
+    if (faixas.length === 0) return;
+
+    // um realce só para o app inteiro: cada cartão põe e tira as suas faixas
+    let realce = registro.get(NOME_DO_REALCE_DA_BUSCA);
+    if (!realce) {
+      realce = new Construtor();
+      registro.set(NOME_DO_REALCE_DA_BUSCA, realce);
+    }
+    for (const f of faixas) realce.add(f);
+    const doRegistro = realce;
+    return () => {
+      for (const f of faixas) doRegistro.delete(f);
+    };
+  }, [ref, termo, conteudo]);
 }

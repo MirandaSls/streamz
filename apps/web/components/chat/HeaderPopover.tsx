@@ -75,6 +75,7 @@ export default function HeaderPopover({
   busca,
   largura = 420,
   altura = 600,
+  distancia = FOLGA,
   cabecalho,
   corpoClassName = "p-2",
   evento,
@@ -104,6 +105,16 @@ export default function HeaderPopover({
   largura?: number;
   /** altura fixa do painel (600 nas fixadas e threads; 466 na caixa de entrada). */
   altura?: number;
+  /**
+   * Distância entre o botão e o painel — o padrão é o `FOLGA` de sempre (8,
+   * não medido). A caixa de entrada da barra de título passa 0: no print 1:1
+   * (`Captura de tela 2026-09-02 152351.png`) o painel começa em y=36 com o
+   * ícone saindo em y≈31 da barra de título, sem folga nenhuma; com o FOLGA
+   * padrão o nosso painel nascia 8px mais baixo que o Discord (y=44), embora
+   * largura, altura, abas e sublinhado batessem pixel a pixel com o resto do
+   * mesmo print.
+   */
+  distancia?: number;
   /**
    * Substitui o cabeçalho padrão (ícone + título) pelo que o chamador
    * desenhar — a caixa de entrada tem controles e abas próprios.
@@ -142,9 +153,11 @@ export default function HeaderPopover({
   const medirAlturaMaxima = useCallback(() => {
     const r = ancoraRef.current?.getBoundingClientRect();
     // `floor`: o `Popout` compara com a altura em px inteiros (`offsetHeight`),
-    // e meio pixel arredondado para cima já contaria como "não cabe embaixo"
-    setAlturaMaxima(r ? Math.max(0, Math.floor(window.innerHeight - r.bottom - FOLGA - BORDA)) : undefined);
-  }, []);
+    // e meio pixel arredondado para cima já contaria como "não cabe embaixo".
+    // `distancia`, não o `FOLGA` fixo: o teto tem que descontar o mesmo vão
+    // que o `Popout` vai usar de verdade (a caixa de entrada passa 0).
+    setAlturaMaxima(r ? Math.max(0, Math.floor(window.innerHeight - r.bottom - distancia - BORDA)) : undefined);
+  }, [distancia]);
 
   // o teto é medido no mesmo evento que abre, e não num efeito depois: o
   // `Popout` escolhe o lado pela altura do primeiro quadro, e um painel que
@@ -215,7 +228,7 @@ export default function HeaderPopover({
         ancora={ancoraRef}
         lado="bottom"
         alinhamento="end"
-        distancia={FOLGA}
+        distancia={distancia}
         largura={largura}
         rotulo={title}
         focarAoAbrir={ehMobile}

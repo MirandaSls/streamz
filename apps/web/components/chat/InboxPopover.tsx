@@ -79,11 +79,8 @@ export default function InboxPopover({
   anelDaSuperficie?: string;
 } = {}) {
   const [aba, setAba] = useState<Aba>("naoLidas");
-  /** "este servidor" filtra os não-lidos pelo servidor aberto. */
-  const [soEsteServidor, setSoEsteServidor] = useState(false);
   /** menções já resolvidas nesta sessão do painel (o contrato não tem "ler uma"). */
   const [lidas, setLidas] = useState<Set<string>>(new Set());
-  const guildAtiva = useGuilds((s) => s.activeGuildId);
   const mentions = useInbox((s) => s.mentions);
   const unread = useInbox((s) => s.unread);
   const loading = useInbox((s) => s.loading);
@@ -106,10 +103,20 @@ export default function InboxPopover({
     () => mentions.filter((m) => !lidas.has(m.message.id)),
     [mentions, lidas],
   );
-  const naoLidas = useMemo(
-    () => (soEsteServidor ? unread.filter((g) => g.guildId === guildAtiva) : unread),
-    [unread, soEsteServidor, guildAtiva],
-  );
+  const naoLidas = unread;
+  /**
+   * Vão até o painel: o padrão do `HeaderPopover` (8, não medido) serve o
+   * cabeçalho de Amigos no navegador (sem barra de título, sem print de
+   * referência). Na barra de título do desktop (`tamanhoDoIcone={19}`, ver
+   * `BarraDeTitulo`) o print 1:1 mede painel a 0 do ícone (`Captura de tela
+   * 2026-09-02 152351.png`: painel começa em y=36 com o ícone saindo em
+   * y≈31 da barra, sem folga) — com o 8 padrão o nosso nascia em y=44, 8px
+   * mais baixo, enquanto largura, altura, abas e sublinhado já batiam pixel a
+   * pixel com o mesmo print. `tamanhoDoIcone` já é o sinal que distingue os
+   * dois consumidores (ver o comentário do parâmetro), então não precisa de
+   * uma prop nova só para isto.
+   */
+  const distancia = tamanhoDoIcone === 19 ? 0 : undefined;
 
   /** Marca o canal da menção como lido e tira o cartão da lista. */
   function marcarComoLida(m: InboxMention) {
@@ -140,6 +147,7 @@ export default function InboxPopover({
       badge={<BadgeDaCaixa estado={badge} anel={anelDaSuperficie} />}
       largura={LARGURA}
       altura={ALTURA}
+      distancia={distancia}
       modoTela={modoTela}
       evento={modoTela ? undefined : EVENTO_CAIXA_DE_ENTRADA}
       corpoClassName="flex flex-col"
@@ -267,7 +275,7 @@ export default function InboxPopover({
 
           {!loading && aba === "naoLidas" && (
             <>
-              {naoLidas.length === 0 && !soEsteServidor && (
+              {naoLidas.length === 0 && (
                 <Vazio icone={<Inbox size={40} />} titulo="Você está por dentro!">
                   {/* no celular a dica não pode ser um atalho de teclado: a aba
                       é a própria caixa de entrada, e não há Ctrl nem Esc */}
@@ -276,36 +284,8 @@ export default function InboxPopover({
                     : "Pressione Ctrl+I para abrir a caixa de entrada e Esc para marcar o canal aberto como lido."}
                 </Vazio>
               )}
-              {(naoLidas.length > 0 || soEsteServidor) && (
+              {naoLidas.length > 0 && (
                 <div className="px-[21px] py-3">
-                  <div className="mb-2 flex items-center gap-1">
-                    {(
-                      [
-                        [true, "Este servidor"],
-                        [false, "Todos os servidores"],
-                      ] as const
-                    ).map(([valor, rotulo]) => (
-                      <button
-                        key={rotulo}
-                        type="button"
-                        onClick={() => setSoEsteServidor(valor)}
-                        aria-pressed={soEsteServidor === valor}
-                        className={`rounded-[3px] px-2 py-1 text-xs font-medium transition celular:min-h-[44px] celular:px-3 ${
-                          soEsteServidor === valor
-                            ? "bg-interactive-background-selected text-text-strong"
-                            : "text-text-muted hover:text-text-default"
-                        }`}
-                      >
-                        {rotulo}
-                      </button>
-                    ))}
-                  </div>
-
-                  {naoLidas.length === 0 && (
-                    <p className="p-4 text-center text-sm text-text-muted">
-                      Nada por ler neste servidor.
-                    </p>
-                  )}
                   {naoLidas.map((g) => (
                     <section key={g.guildId ?? "@me"} className="mb-2 last:mb-0">
                       <h3 className="px-2 py-1 text-xs font-semibold uppercase text-text-muted">

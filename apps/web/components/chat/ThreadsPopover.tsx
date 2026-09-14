@@ -113,6 +113,11 @@ export default function ThreadsPopover({
       icon={<MessagesSquare size={21} />}
       onOpen={() => void load(channelId)}
       busca={{ valor: busca, aoMudar: setBusca, placeholder: "Buscar threads" }}
+      // CSS bruto do painel de threads (`sob-demanda/5d422a2a31e6e553.css`):
+      // `.list_c441f0{padding:0 16px}` e `.activeThreadsList_c441f0{padding-top:16px;padding-bottom:8px}`
+      // — 16px nas laterais e no topo, 8 embaixo; o `p-2` (8 uniforme) do
+      // painel de fábrica não vem daqui, é só o padrão de quem não mede.
+      corpoClassName="px-4 pb-2 pt-4"
       tituloControle={() => (
         <button
           type="button"
