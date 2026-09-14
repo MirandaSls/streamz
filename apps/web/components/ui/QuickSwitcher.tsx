@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Hash, Lock, Megaphone, Server, Users, Volume2 } from "@/components/ui/icones";
 import { isGroupChannel, type Channel, type PublicUser, type UserStatus } from "@streamz/shared";
 import Dialog from "@/components/modals/Dialog";
-import { ehMobileAgora } from "@/hooks/useEhMobile";
+import { useEhMobile } from "@/hooks/useEhMobile";
 import Avatar, { GroupAvatar } from "@/components/ui/Avatar";
 import { api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -59,6 +59,20 @@ function registrarRecente(id: string) {
   }
 }
 
+/**
+ * Abre a busca rápida — o mesmo modal do Ctrl+K, de qualquer lugar.
+ *
+ * Existe para o **celular**, onde o gatilho de teclado não existe
+ * (`docs/LEIAUTE-MOBILE-COBERTURA.md` §6: "não há como abri-lo no celular").
+ * No Discord do celular a busca global mora na pílula "Search" do topo da lista
+ * de canais (`docs/Reference/mobile/discord-mobile-servidor-2024.png`), que no
+ * nosso app é a pílula "Buscar" de `layout/sidebar/CabecalhoDoServidor.tsx` —
+ * hoje inerte, e em arquivo de outro cartão: quem a ligar chama isto.
+ */
+export function abrirTrocadorRapido() {
+  ui.openModal({ kind: "quickSwitcher" });
+}
+
 /** O que cada resultado precisa para se desenhar (ícone, avatar, caminho). */
 interface Detalhe {
   kind: QuickKind;
@@ -83,6 +97,7 @@ export default function QuickSwitcher() {
   const amigos = useFriends((s) => s.friends);
   const activeGuildId = useGuilds((s) => s.activeGuildId);
   const statuses = usePresence((s) => s.statuses);
+  const ehMobile = useEhMobile();
 
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState(0);
@@ -264,9 +279,21 @@ export default function QuickSwitcher() {
     <Dialog
       title={t("quick.titulo")}
       hideHeader
-      // mesma razão do seletor de tela: no telefone o × é a saída visível, e o
-      // Esc que basta no computador não existe ali
-      showClose={ehMobileAgora()}
+      /*
+        **No celular, tela cheia** (barra de 56 com a seta de voltar, áreas
+        seguras e o voltar do sistema, tudo da moldura `Modal`). Antes era o
+        cartão de 570 encolhido para a largura da tela, com o × no canto por
+        cima do campo e a lista presa num teto de 262px — metade de um telefone
+        deitado. É a forma das buscas do Discord no celular: a busca ocupa a tela
+        toda, com o campo no topo e o teclado aberto embaixo
+        (`suporte/.../how-to-use-search-on-discord/03.gif`, quadro 20). Os
+        tamanhos da caixa de lá não têm escala (GIF) e não foram copiados.
+
+        Na tela cheia o `hideHeader` não vale (sem barra não haveria saída) e o
+        × do cartão não é desenhado — a seta faz o papel dele.
+      */
+      telaCheiaNoCelular
+      showClose={false}
       align="top"
       onClose={closeModal}
       className="w-[570px]"
@@ -284,7 +311,9 @@ export default function QuickSwitcher() {
        *  marca aparece, pela regra 2 da ADR-0009 ("o campo em foco é marca").
        *  22px não tem classe nomeada na escala (`text-lg` é 20, `heading-xl`
        *  é 24) — arbitrário porque o número vem de medida, não de escolha. */}
-      <div className="px-5 pt-3">
+      {/* No celular o campo fica **preso no topo** da área que rola: a lista
+          passa por baixo dele, e o que se digita continua à vista. */}
+      <div className={ehMobile ? "sticky top-0 z-10 bg-background-surface-high px-4 pb-2 pt-4" : "px-5 pt-3"}>
         <input
           autoFocus
           value={query}
@@ -304,12 +333,25 @@ export default function QuickSwitcher() {
           aria-label={t("quick.placeholder")}
           aria-controls="quick-switcher-resultados"
           placeholder={t("quick.placeholder")}
-          className="h-[70px] w-full rounded-lg border border-input-border-default bg-input-background-default px-3 text-[22px] leading-[70px] text-text-default outline-none placeholder:text-input-placeholder-text-default focus:border-input-border-active"
+          // só no celular: o teclado virtual corrigiria e capitalizaria nomes de
+          // canal; no desktop o campo continua exatamente como era
+          enterKeyHint={ehMobile ? "go" : undefined}
+          autoComplete={ehMobile ? "off" : undefined}
+          autoCapitalize={ehMobile ? "none" : undefined}
+          spellCheck={ehMobile ? false : undefined}
+          /* No celular, 48 de altura e 16px: os 70/22 do `.input_ac6cb0` são a
+             caixa do desktop. 48 é a altura dos campos do app de celular
+             (`TextInput` `md` com `celular:h-[48px]`, o campo do login), e 16 é
+             o mínimo que impede o zoom automático do iOS ao focar. A caixa do
+             Discord no celular não está medida no acervo. Tokens iguais. */
+          className={`w-full rounded-lg border border-input-border-default bg-input-background-default px-3 text-text-default outline-none placeholder:text-input-placeholder-text-default focus:border-input-border-active ${
+            ehMobile ? "h-[48px] text-text-md" : "h-[70px] text-[22px] leading-[70px]"
+          }`}
         />
       </div>
 
       {/* `margin-top:16px` do `.scroller_ac6cb0` antes da lista de resultados. */}
-      <div className="mt-4">
+      <div className={ehMobile ? "mt-2" : "mt-4"}>
         {/* cor do rótulo: não achamos CSS específico do quick switcher para
          *  este cabeçalho, então reaproveitamos o mesmo token da lista irmã
          *  (`.contentTitle__13533{color:var(--interactive-text-default)}` em
@@ -356,7 +398,8 @@ export default function QuickSwitcher() {
           role="listbox"
           aria-label={t("quick.titulo")}
           onMouseMove={() => setTecladoNoComando(false)}
-          className="max-h-[262px] overflow-y-auto px-2 pb-3"
+          /* no celular sem teto: a lista rola com a tela cheia inteira */
+          className={ehMobile ? "px-2 pb-3" : "max-h-[262px] overflow-y-auto px-2 pb-3"}
         >
           {resultados.length === 0 && (
             <li className="px-3 py-10 text-center">
@@ -366,7 +409,9 @@ export default function QuickSwitcher() {
             </li>
           )}
           {resultados.map((item, indice) => {
-            const selecionado = indice === cursor;
+            // no dedo não há seta nem Enter para "a linha escolhida" apontar: a
+            // primeira linha acesa ali pareceria já tocada
+            const selecionado = !ehMobile && indice === cursor;
             const detalhe = detalhes.get(item.id);
             return (
               <li key={`${item.kind}-${item.id}`} role="option" aria-selected={selecionado}>
@@ -374,15 +419,20 @@ export default function QuickSwitcher() {
                   type="button"
                   data-indice={indice}
                   // mover o mouse não rouba a seleção de quem está no teclado
-                  onMouseEnter={() => !tecladoNoComando && setCursor(indice)}
+                  // o `mouseenter` sintético do toque moveria o cursor à toa
+                  onMouseEnter={() => !ehMobile && !tecladoNoComando && setCursor(indice)}
                   onClick={() => escolher(item)}
                   // linha selecionada: cinza neutro (`interactive-background-hover`),
                   // nunca o limão — é a mesma correção que `Autocomplete.tsx` já fez
                   // (comentário lá: "era bg-interactive-background-selected, a cor
                   // errada"); aqui o erro era pior (brand-500 sólido).
-                  className={`flex h-10 w-full items-center gap-2 rounded px-2 text-left text-text-default ${
-                    selecionado ? "bg-interactive-background-hover" : ""
-                  }`}
+                  /* No celular, 48: o passo da lista de conversas do Discord no
+                     celular (`MEDIDAS.md` §9, 47,7pt), a lista de nomes com
+                     avatar mais parecida que o acervo mede — acima do piso de
+                     44. O toque acende com `active:`, não com o cursor. */
+                  className={`flex w-full items-center gap-2 rounded px-2 text-left text-text-default ${
+                    ehMobile ? "h-[48px] active:bg-interactive-background-hover" : "h-10"
+                  } ${selecionado ? "bg-interactive-background-hover" : ""}`}
                 >
                   <ItemIcon detalhe={detalhe} statuses={statuses} selecionado={selecionado} />
                   <span className="min-w-0 flex-1 truncate font-medium">{item.label}</span>
