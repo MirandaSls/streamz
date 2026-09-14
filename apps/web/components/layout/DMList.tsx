@@ -491,21 +491,30 @@ export default function DMList() {
               type="button"
               onClick={() => setFriendsOpen(true)}
               data-amigos-button
-              /* A pílula fica nos 40 medidos: o piso de 44 existe para alvo
-                 pequeno, e este tem ~200px de largura — quem erra um botão
-                 desses não erra por 4px de altura. */
-              className="flex h-[40px] min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-interactive-background-hover px-3 text-sm font-medium text-text-default transition active:bg-border-normal"
+              /* mesma decisão dos dois botões redondos acima (cartão
+                 8j-dms-no-celular, LEIAUTE-MOBILE-COBERTURA.md §6.2): a
+                 pílula visual fica nos 40 medidos em `discord-mobile-dms-
+                 2024.png`, mas o alvo de toque cresce por fora até o piso de
+                 44 — não só nos dois círculos, nas três peças do cabeçalho, a
+                 mesma regra aplicada por igual. Antes esta era a exceção (a
+                 pílula ficava com o alvo de 40 puro, com a justificativa de
+                 que ~200px de largura já bastam); a tensão era do dono do
+                 shell decidir, e este cartão decide: caixa visual medida,
+                 área de toque de 44 — sem exceção por peça. */
+              className="flex h-[44px] min-w-0 flex-1 items-center"
             >
-              <UserPlus size={18} aria-hidden="true" className="shrink-0" />
-              <span className="truncate whitespace-nowrap">Adicionar amigos</span>
-              {pendentes > 0 && (
-                <span
-                  aria-label={`${pendentes} pendentes`}
-                  className="grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[11px] font-bold leading-none text-control-critical-primary-text-default"
-                >
-                  {pendentes}
-                </span>
-              )}
+              <span className="flex h-[40px] w-full min-w-0 items-center justify-center gap-2 rounded-full bg-interactive-background-hover px-3 text-sm font-medium text-text-default transition active:bg-border-normal">
+                <UserPlus size={18} aria-hidden="true" className="shrink-0" />
+                <span className="truncate whitespace-nowrap">Adicionar amigos</span>
+                {pendentes > 0 && (
+                  <span
+                    aria-label={`${pendentes} pendentes`}
+                    className="grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[11px] font-bold leading-none text-control-critical-primary-text-default"
+                  >
+                    {pendentes}
+                  </span>
+                )}
+              </span>
             </button>
           </div>
           {buscaAberta && (

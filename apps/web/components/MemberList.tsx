@@ -332,6 +332,12 @@ export default function MemberList() {
               tamanho="sm"
               aria-label={`Abrir conversa com ${nome}`}
               onClick={() => void openWith(m.user.id)}
+              /* mesma trava das três de baixo: sem isto, um `:hover` que
+                 gruda depois do toque (nota do cartão — "o último item tocado
+                 fica aceso") deixava só ESTE botão de 32px flutuando sobre a
+                 linha, único dos quatro sem a trava. No celular a ação é o
+                 toque no nome (perfil) ou o menu de toque longo. */
+              className="celular:hidden"
             />
           )}
           {podeAgirSobre(m) && podeCastigar && (

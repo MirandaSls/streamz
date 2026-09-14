@@ -257,11 +257,27 @@ export default function DMMemberList({ dm }: { dm: DMChannelView }) {
                   type="button"
                   onClick={(e) => ui.openProfile(user, anchorOf(e.currentTarget))}
                   aria-label={`Perfil de ${nome}`}
-                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                  /* `celular:h-full`: sem altura própria o botão só é tão alto
+                     quanto o avatar (32px, `size="md"`) dentro de uma linha de
+                     60 (`celular:h-[60px]` embaixo) — o alvo de toque real
+                     ficava abaixo do piso de 44, com ~14px mortos acima e
+                     abaixo dentro da própria linha. `MemberList.tsx` (lista do
+                     servidor) já tem `h-full` no botão irmão; aqui só faltava
+                     no celular, sem mexer no desktop (onde a caixa não pinta
+                     nada — é só a área de clique, invisível). */
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left celular:h-full"
                 >
                   <Avatar user={user} size="md" status={status} surface="border-background-base-lower" />
                   <span className="flex min-w-0 items-center gap-1">
-                    <span className="truncate font-medium text-channels-default group-hover:text-text-default">
+                    {/* no celular não existe `:hover` que dure — o nome ficava
+                        preso no cinza `channels-default` (#81828a) para
+                        sempre, cor de item de lista "em repouso", nunca o
+                        `text-default` que o Discord usa pro nome do membro
+                        (ver o mesmo ajuste, já feito sem depender de hover, em
+                        `MemberList.tsx`). `celular:text-text-default` força o
+                        tom de repouso certo só no telefone; o desktop continua
+                        cinza-até-o-hover. */}
+                    <span className="truncate font-medium text-channels-default group-hover:text-text-default celular:text-text-default">
                       {nome}
                     </span>
                     {/* ── j-bots ── antes da coroa, como na lista de membros do

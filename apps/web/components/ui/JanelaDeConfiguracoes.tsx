@@ -93,9 +93,24 @@ import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
  * o que o Discord faz — **duas telas**, não duas colunas:
  *
  * 1. a lista de seções, agrupada em cartões de cantos arredondados, com um
- *    cabeçalho ("Configurações") e um X;
- * 2. tocar num item **empurra a seção em tela cheia**, com seta de voltar e o
- *    nome da seção no cabeçalho próprio.
+ *    cabeçalho **centralizado** e o fechar sempre à **esquerda** (nunca à
+ *    direita: as duas capturas trazem o glifo colado na borda esquerda e o
+ *    título no centro da tela — `discord-mobile-config-usuario.png` e
+ *    `-config-servidor.png`, MEDIDAS.md §11);
+ * 2. tocar num item **empurra a seção em tela cheia**, com seta de voltar
+ *    **e o título ao lado dela, à esquerda** (não centralizado — diferente da
+ *    lista: `medir.py linha config-usuario-aparencia.png 92 0 719` acha a
+ *    seta em x 40–68 e "Appearance" logo depois, em x 101–257 — centro 179
+ *    contra o centro real 360 da tela de 720, ou seja **colado à seta**, não
+ *    no meio).
+ *
+ * O glifo do fechar da lista muda com a `variante`: as configurações do
+ * **usuário** (`janela`) abrem com **seta** (`config-usuario.png`: "←
+ * Settings" — é a mesma pilha da aba Você, "voltar" faz sentido); as do
+ * **servidor** (`tela-cheia`) abrem com **X** (`config-servidor.png`: "✕
+ * Server Settings" — vem de um menu, não tem para onde "voltar"). O detalhe
+ * empurrado é sempre seta, nas duas variantes: dentro da seção sempre existe
+ * uma lista para onde voltar.
  *
  * O Esc e o "voltar" do Android desfazem **uma camada por vez**: detalhe →
  * lista → fechado (`useVoltarNoCelular`). O ramo do celular é da onda 8; este
@@ -103,11 +118,19 @@ import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
  *
  * Medidas das referências (`docs/Reference/mobile/`,
  * `discord-mobile-config-usuario.png` e `config-servidor.png`, `MEDIDAS.md`
- * §11): passo de linha de **37 pt**. A linha aqui tem **48px**, não 37: 37 fica
- * abaixo do alvo de toque de 44px que vale para todo o leiaute mobile
- * (`components/mobile/pecas.tsx`). Os tamanhos do ramo de celular são literais
- * (`h-[56px]`, `h-[44px]`, `min-h-[48px]`) porque são medida de captura ou piso
- * de toque, não escala do tema.
+ * §11):
+ *
+ * | item | medida | origem |
+ * |---|---|---|
+ * | passo de linha (divisória a divisória) | **55pt** | §11 tinha "37pt" até a correção de 2026-09-09 (o número velho media a altura do *conteúdo* da linha, não o passo — a `panel` errava a linha em quase metade). Confirmado em duas capturas de escala diferente: `config-servidor.png` (738×1600, y=212/315/418/521 → 103px) e `config-usuario.png` (769×1600, y=296/403/511/620 → 108px); as duas batem em 55pt. **55 já passa do piso de 44** — a linha usa a medida, não o piso |
+ * | folga entre cartões de grupo | 34pt | §11, "Folga entre seções": 63–64px em `config-servidor.png` |
+ * | fundo do cartão | mais **claro** que a página atrás | §11: cartão `#26272F` sobre página `#1B1C22` — por isso o cartão usa `background-base-lower` (mais claro) e a tela `background-base-lowest` (mais escura), a ordem oposta da versão anterior deste arquivo, que pintava o cartão mais escuro que a página |
+ * | cabeçalho de grupo ("Account Settings", "Community"…) | **caixa mista**, não caixa-alta | as duas capturas: nenhum cabeçalho de grupo está em maiúsculas, diferente do `EXPRESSÕES` em caixa-alta da barra lateral `tela-cheia` do desktop |
+ * | título do cabeçalho da lista | **centralizado na tela cheia**, não na área livre depois do ícone | `medir.py linha config-servidor.png 138 0 737`: X em x 43–51, texto "Server Settings" em x 268–468 → centro 368 (tela 738, centro real 369); `medir.py linha config-usuario.png 59 0 768`: seta em x 43–72, "Settings" em x 334–440 → centro 387 (tela 769, centro real 384). As duas fecham a ±1–3px — daí o espaçador de 44px do lado direito, do mesmo tamanho do ícone da esquerda |
+ *
+ * Os tamanhos do ramo de celular são literais (`h-[56px]`, `h-[44px]`,
+ * `min-h-[55px]`) porque são medida de captura ou piso de toque, não escala do
+ * tema.
  */
 
 export interface ItemDeMenu {
@@ -387,7 +410,9 @@ export default function JanelaDeConfiguracoes({
         // `:focus-visible` global desenhava o anel azul em volta da tela toda
         data-sem-anel
         onKeyDown={onKeyDown}
-        className="anim-overlay fixed inset-0 z-50 flex h-[100dvh] flex-col overflow-hidden bg-background-base-lower pt-[env(safe-area-inset-top)] outline-none"
+        // a página é mais escura que os cartões de dentro (MEDIDAS.md §11:
+        // #1B1C22 atrás de #26272F) — `lowest`, não `lower`
+        className="anim-overlay fixed inset-0 z-50 flex h-[100dvh] flex-col overflow-hidden bg-background-base-lowest pt-[env(safe-area-inset-top)] outline-none"
       >
         {emDetalhe ? (
           <>
@@ -421,19 +446,28 @@ export default function JanelaDeConfiguracoes({
           </>
         ) : (
           <>
-            <header className="flex h-[56px] shrink-0 items-center gap-1 border-b border-border-subtle bg-background-base-lowest pl-4 pr-1">
-              <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-text-strong">
-                {titulo}
-              </h1>
+            <header className="flex h-[56px] shrink-0 items-center gap-1 border-b border-border-subtle bg-background-base-lowest pl-1 pr-1">
+              {/* Nas duas capturas o glifo mora à ESQUERDA e o título fica no
+                  centro da tela — nunca título à esquerda com o X à direita,
+                  que era o que este cabeçalho fazia antes. Seta na `janela`
+                  (config-usuario.png: "← Settings"), X na `tela-cheia`
+                  (config-servidor.png: "✕ Server Settings"). */}
               <BotaoDeIcone
                 rotulo={rotuloFechar}
-                icone={<X size={22} />}
+                icone={variante === "tela-cheia" ? <X size={22} /> : <ArrowLeft size={24} />}
                 tamanho="lg"
                 comFundo
                 onClick={fechar}
                 className="shrink-0"
                 style={{ height: 44, width: 44 }}
               />
+              <h1 className="min-w-0 flex-1 truncate text-center text-base font-semibold text-text-strong">
+                {titulo}
+              </h1>
+              {/* espaçador do mesmo tamanho do botão: sem ele o título centra
+                  na largura toda e não na área livre, e fica puxado para a
+                  direita do centro real da tela */}
+              <span aria-hidden="true" className="w-[44px] shrink-0" />
             </header>
 
             <nav
@@ -483,16 +517,24 @@ export default function JanelaDeConfiguracoes({
                 // ficava com 36px de coluna vazia antes de cada rótulo
                 const comIcone = grupo.itens.some((i) => i.icon);
                 return (
-                  <div key={grupo.id} className="mb-5 last:mb-0">
+                  // 34pt de folga entre cartões — MEDIDAS.md §11 "Folga entre
+                  // seções" (63–64px em config-servidor.png)
+                  <div key={grupo.id} className="mb-[34px] last:mb-0">
                     {grupo.label && (
-                      <h2 className="mb-1.5 px-1 text-xs font-bold uppercase tracking-[0.02em] text-text-muted">
+                      // sem `uppercase`: as duas capturas mostram "Account
+                      // Settings", "Community" em caixa mista, não em
+                      // maiúsculas — diferente do cabeçalho de grupo da barra
+                      // lateral `tela-cheia` do desktop, que é caixa-alta
+                      <h2 className="mb-1.5 px-1 text-xs font-bold text-text-muted">
                         {grupo.label}
                       </h2>
                     )}
                     {/* cartão de cantos arredondados com as linhas dentro, e a
                         divisória recuada até a coluna do rótulo — é o desenho
-                        das duas referências */}
-                    <div className="overflow-hidden rounded-xl bg-background-base-lowest">
+                        das duas referências. `background-base-lower`: o
+                        cartão é mais CLARO que a página atrás dele
+                        (`#26272F` sobre `#1B1C22`, MEDIDAS.md §11) */}
+                    <div className="overflow-hidden rounded-xl bg-background-base-lower">
                       {grupo.itens.map((item, i) => (
                         <div key={item.id}>
                           {i > 0 && (
@@ -505,7 +547,9 @@ export default function JanelaDeConfiguracoes({
                             type="button"
                             aria-disabled={item.desabilitado || undefined}
                             onClick={() => !item.desabilitado && irPara(item.id)}
-                            className={`flex min-h-[48px] w-full items-center gap-3 px-4 py-2 text-left text-base transition active:bg-interactive-background-hover ${
+                            // 55px: passo de linha medido (ver cabeçalho do
+                            // arquivo) — não é o piso de 44, é a medida
+                            className={`flex min-h-[55px] w-full items-center gap-3 px-4 py-2 text-left text-base transition active:bg-interactive-background-hover ${
                               item.desabilitado ? "text-text-muted opacity-50" : "text-text-default"
                             }`}
                           >
@@ -535,8 +579,10 @@ export default function JanelaDeConfiguracoes({
 
               {rodapeMenu && (
                 // os itens do rodapé vêm com os 40px do desktop; aqui sobem
-                // para o alvo de toque de 44
-                <div className="mt-5 overflow-hidden rounded-xl bg-background-base-lowest p-1 [&>div]:mb-0 [&_button]:min-h-[44px]">
+                // para o mesmo passo de linha do resto da lista (55px, não o
+                // piso de 44 — ver a tabela do cabeçalho). Mesmo cartão claro
+                // sobre página escura que os grupos acima.
+                <div className="mt-5 overflow-hidden rounded-xl bg-background-base-lower p-1 [&>div]:mb-0 [&_button]:min-h-[55px]">
                   {rodapeMenu}
                 </div>
               )}
