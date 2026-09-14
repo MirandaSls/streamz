@@ -272,6 +272,13 @@ export interface OpcaoDeComando {
   required: boolean;
   /** escolhas fixas, quando o comando as declara. */
   choices?: { name: string; value: string | number }[];
+  /**
+   * ── onda 3 ── a opção pede sugestões ao bot enquanto a pessoa digita
+   * (interação tipo 4, resposta pelo callback 8). Só vale para 3, 4 e 10, e
+   * nunca junto de `choices` — é a regra do Discord. Ver
+   * `pedidoDeAutocompleteSchema` em `mensagens-de-bot.ts`.
+   */
+  autocomplete?: boolean;
 }
 
 /**

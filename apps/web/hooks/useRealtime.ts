@@ -56,6 +56,13 @@ import type {
   ReportView,
 } from "@streamz/shared";
 import { shouldNotifyMessage } from "@streamz/shared";
+// ── onda 3 ── interações de componente, modal e autocomplete
+import type {
+  AutocompleteDeBotEvent,
+  InteracaoConcluidaEvent,
+  InteracaoFalhouEvent,
+  ModalDeBotAbertoEvent,
+} from "@streamz/shared";
 import { definirContadorNoIcone, janelaTemFoco, notify, observarFoco, prepararNotificacoes } from "@/lib/desktop";
 import {
   canalExibidoAgora,
@@ -74,6 +81,7 @@ import { on, onReconnect, rejoinChannel } from "@/stores/socket-adapter";
 import { useCategories } from "@/stores/categories";
 import { useChannels } from "@/stores/channels";
 import { useComandosDeApp } from "@/stores/comandos-de-app";
+import { useInteracoesDeBot } from "@/stores/interacoes-de-bot";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
 import { useEmojis } from "@/stores/emojis";
@@ -431,6 +439,25 @@ export function useRealtime(currentUserId?: string): void {
        */
       on<{ guildId: string }>(WS_EVENTS.APPLICATION_COMMANDS_UPDATED, ({ guildId }) => {
         useComandosDeApp.getState().aplicarAtualizacao(guildId);
+      }),
+
+      /**
+       * ── onda 3 ── as respostas de um bot a um botão, select, modal ou
+       * autocomplete. Vêm pela sala do usuário e são casadas pelo `nonce` na
+       * store (só a sessão que disparou reage). A mensagem que o bot escreve ou
+       * edita **não** vem aqui: é `message.new`/`message.updated`, lá em cima.
+       */
+      on<InteracaoConcluidaEvent>(WS_EVENTS.INTERACTION_SUCCESS, (evento) => {
+        useInteracoesDeBot.getState().aoConcluir(evento);
+      }),
+      on<InteracaoFalhouEvent>(WS_EVENTS.INTERACTION_FAILED, (evento) => {
+        useInteracoesDeBot.getState().aoFalhar(evento);
+      }),
+      on<ModalDeBotAbertoEvent>(WS_EVENTS.INTERACTION_MODAL, (evento) => {
+        useInteracoesDeBot.getState().aoAbrirModal(evento);
+      }),
+      on<AutocompleteDeBotEvent>(WS_EVENTS.INTERACTION_AUTOCOMPLETE, (evento) => {
+        useInteracoesDeBot.getState().aoReceberAutocomplete(evento);
       }),
 
       onReconnect(() => {

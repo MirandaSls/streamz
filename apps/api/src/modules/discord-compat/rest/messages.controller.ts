@@ -14,7 +14,13 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { SkipThrottle } from "@nestjs/throttler";
-import { ehSnowflake, snowflakeParaData, WS_EVENTS } from "@streamz/shared";
+import {
+  ehSnowflake,
+  FLAGS_DE_MENSAGEM,
+  snowflakeParaData,
+  WS_EVENTS,
+  type Message as MessageDTO,
+} from "@streamz/shared";
 import { zodBody } from "../../../common/zod.pipe";
 import { GuildsService } from "../../guilds/guilds.service";
 import { anunciarReacao, anunciarReacoesLimpas } from "../../messages/eventos-de-reacao";
@@ -36,7 +42,7 @@ import { RateLimitDoDiscordInterceptor } from "../rate-limit.interceptor";
 import { ReacoesDeCompatService } from "../reacoes.service";
 import type { BotAutenticado, MensagemDoDiscord, UsuarioDoDiscord } from "../tipos";
 import { lerEmojiDaRota } from "../traducao/emoji";
-import { achatarEmbeds } from "../traducao/embed";
+import { lerPayloadDeBot } from "../traducao/embed";
 import { mensagemParaDiscord } from "../traducao/mensagem";
 import { usuarioParaDiscord } from "../traducao/usuario";
 import { BotAtual } from "./bot-atual";
@@ -72,7 +78,8 @@ import { remocaoEmLoteSchema, type CorpoDeRemocaoEmLote } from "./corpos-membros
  * `@Body()` sem classe não é validável — e há um teste de integração, com o pipe
  * global ligado, provando que os campos chegam (`corpo-do-post.spec.ts`).
  *
- * Escrever é `MessagesService.create(canal, botUserId, content, …)`: a
+ * Escrever é `MessagesService.criarComoBot(canal, botUserId, …)` (onda 3; antes
+ * `create`): a
  * permissão, o modo lento, o castigo e o "escrever é ler" saem todos de graça. A
  * casca **não** reimplementa nada disso.
  *
@@ -135,7 +142,10 @@ export class MessagesCompatController {
       ...lerQueryDoHistorico(query),
       paraBotUserId: bot.botUserId,
     });
-    return linhas.map(mensagemParaDiscord);
+    // ── onda 3 ── embeds/componentes/flags numa consulta só para a página: a
+    // linha do `DadosDeCompatService` ainda não os traz
+    const payloads = await this.mensagens.payloadsDeBot(linhas.map((l) => l.id));
+    return linhas.map((l) => mensagemParaDiscord({ ...l, payloadDeBot: payloads.get(l.id) ?? null }));
   }
 
   @Post()
@@ -151,35 +161,25 @@ export class MessagesCompatController {
     const canalId = await this.cuidDoCanal(id);
 
     const anexos = dados.attachment_ids ?? [];
-    const embeds = dados.embeds ?? [];
-    // **No Discord, embed sozinho é mensagem válida** — é assim que quase todo
-    // bot responde. A F1 exigia `content` e devolvia
-    // `50035 content[BASE_TYPE_REQUIRED]` a um corpo que só trazia `embeds`,
-    // o que quebrava esses bots. O embed é achatado em texto porque o Streamz
-    // não tem embed rico e uma mensagem de conteúdo vazio chega ao navegador
-    // como uma linha em branco (ver `traducao/embed.ts`).
-    const content = (dados.content ?? "").trim() || achatarEmbeds(embeds);
-    // `components` sozinho (um botão sem texto) também é válido no Discord.
-    // Aqui ele não vira nada — não há componente interativo na mensagem —, mas
-    // recusar o corpo seria pior: o bot ficaria sem saber que a mensagem
-    // "chegou vazia" e não que "foi rejeitada".
-    const componentes = dados.components ?? [];
-    // vazio de verdade: sem texto, sem anexo, sem embed e sem componente
-    if (content.length === 0 && anexos.length === 0 && embeds.length === 0 && componentes.length === 0) {
-      throw corpoInvalido({
-        content: { _errors: [{ code: "BASE_TYPE_REQUIRED", message: "Cannot send an empty message" }] },
-      });
-    }
+    // ── onda 3 ── embeds e componentes são **guardados** no formato do Discord
+    // (até aqui o embed era achatado em texto e o componente, descartado). A
+    // validação é a do Discord, com os limites dele: corpo inválido leva
+    // `50035` com o detalhe por campo, e mensagem sem texto, embed, componente
+    // nem anexo continua levando `content[BASE_TYPE_REQUIRED]`.
+    const lido = lerPayloadDeBot(dados, { temAnexos: anexos.length > 0 });
+    if (!lido.ok) throw corpoInvalido(lido.erros);
 
     const resposta = await this.resposta(dados);
-    const mensagem = await this.mensagens.create(
-      canalId,
-      bot.botUserId,
-      content,
-      undefined,
-      anexos,
-      resposta,
-    );
+    const mensagem = await this.mensagens.criarComoBot(canalId, bot.botUserId, {
+      content: lido.payload.content ?? "",
+      embeds: lido.payload.embeds ?? [],
+      components: lido.payload.components ?? [],
+      // `EPHEMERAL` só vale em resposta de interação; numa mensagem de canal o
+      // Discord a ignora, e aqui também
+      flags: (lido.payload.flags ?? 0) & ~FLAGS_DE_MENSAGEM.EPHEMERAL,
+      attachmentIds: anexos,
+      reply: resposta,
+    });
 
     // o gateway do web faz este emit no `onMessage`; o bot não tem socket, então
     // é aqui. O `nonce` é ecoado como lá — o cliente troca a mensagem otimista.
@@ -190,7 +190,7 @@ export class MessagesCompatController {
       nonce ? { ...mensagem, nonce } : mensagem,
     );
 
-    return this.reler(mensagem.id, bot.botUserId);
+    return this.reler(mensagem.id, bot.botUserId, mensagem);
   }
 
   /**
@@ -256,7 +256,8 @@ export class MessagesCompatController {
     // mensagem que existe mas é de outro canal: para o bot é o mesmo que não
     // existir — o `:id` da rota é que diz o que ele tem autorização de ler
     if (!linha || linha.channelSnowflake !== BigInt(id)) throw mensagemDesconhecida();
-    return mensagemParaDiscord(linha);
+    const payloads = await this.mensagens.payloadsDeBot([linha.id]);
+    return mensagemParaDiscord({ ...linha, payloadDeBot: payloads.get(linha.id) ?? null });
   }
 
   @Patch(":mid")
@@ -269,13 +270,19 @@ export class MessagesCompatController {
     await this.cuidDoCanal(id);
     const mensagemId = await this.cuidDaMensagem(mid);
 
-    // `content` ausente no PATCH do Discord quer dizer "não mexe no texto"; a
-    // F1 não tem outro campo editável, então é um no-op que devolve a mensagem
-    if (dados.content === undefined) return this.reler(mensagemId, bot.botUserId);
+    // ── onda 3 ── `content`, `embeds`, `components` e `flags` são editáveis, com
+    // a semântica do PATCH do Discord: ausente não mexe, presente substitui. Um
+    // corpo sem nenhum dos quatro é um no-op que devolve a mensagem.
+    const lido = lerPayloadDeBot(dados);
+    if (!lido.ok) throw corpoInvalido(lido.erros);
+    const p = lido.payload;
+    if (p.content === undefined && p.embeds === undefined && p.components === undefined && p.flags === undefined) {
+      return this.reler(mensagemId, bot.botUserId);
+    }
 
-    const mensagem = await this.mensagens.edit(mensagemId, bot.botUserId, dados.content.trim());
+    const mensagem = await this.mensagens.editarComoBot(mensagemId, bot.botUserId, p);
     this.realtime.emitToChannel(mensagem.channelId, WS_EVENTS.MESSAGE_UPDATED, mensagem);
-    return this.reler(mensagemId, bot.botUserId);
+    return this.reler(mensagemId, bot.botUserId, mensagem);
   }
 
   @Delete(":mid")
@@ -468,11 +475,21 @@ export class MessagesCompatController {
    *
    * `MessagesService` devolve o DTO de `@streamz/shared` (cuid, sem snowflake) —
    * a resposta do Discord precisa do número, e ele está na linha.
+   *
+   * ── onda 3 ── embeds/componentes/flags saem do DTO quando quem chama já o
+   * tem (acabou de criar ou editar), e de `payloadsDeBot` quando não.
    */
-  private async reler(mensagemId: string, botUserId: string): Promise<MensagemDoDiscord> {
+  private async reler(
+    mensagemId: string,
+    botUserId: string,
+    dto?: MessageDTO,
+  ): Promise<MensagemDoDiscord> {
     const linha = await this.dados.mensagemPorCuid(mensagemId, botUserId);
     if (!linha) throw mensagemDesconhecida();
-    return mensagemParaDiscord(linha);
+    const payloadDeBot = dto
+      ? { embeds: dto.embeds ?? [], components: dto.components ?? [], flags: dto.flags ?? 0 }
+      : ((await this.mensagens.payloadsDeBot([mensagemId])).get(mensagemId) ?? null);
+    return mensagemParaDiscord({ ...linha, payloadDeBot });
   }
 
   /**

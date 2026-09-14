@@ -17,6 +17,7 @@ import { RealtimeService } from "../realtime/realtime.service";
 import type {
   Attachment,
   Message as MessageDTO,
+  PayloadDeBot,
   MessageReplyRef,
   MessageType,
   PublicUser,
@@ -41,6 +42,19 @@ import { toAttachmentDTO, type AttachmentRow } from "../uploads/attachment-dto";
 import { EmojisService } from "../emojis/emojis.service";
 import { StickersService } from "../emojis/stickers.service";
 import { INTERACAO_DA_MENSAGEM_INCLUDE, toInteracaoDaMensagem } from "../interactions/dto";
+import {
+  camposDeBotDoDTO,
+  gravacaoDaEdicao,
+  gravacaoDaMensagemNova,
+  MAPAS_VAZIOS,
+  nenhumCitado,
+  resumoDosErros,
+  snowflakesCitados,
+  type ColunasDeBot,
+  type MapasDeIds,
+  type GravacaoDeBot,
+  type MensagemDeBotNova,
+} from "./payload-de-bot";
 
 const MESSAGE_INCLUDE = {
   author: true,
@@ -59,6 +73,9 @@ const MESSAGE_INCLUDE = {
       content: true,
       author: true,
       _count: { select: { attachments: true } },
+      // ── onda 3 ── o trecho de uma resposta a uma mensagem só de embed sai do
+      // texto achatado; sem isto a linha de referência ficaria em branco
+      botPayload: { select: { flatText: true } },
     },
   },
   pin: { select: { messageId: true } },
@@ -69,6 +86,10 @@ const MESSAGE_INCLUDE = {
   // Back-relation: a `Message` não tem coluna nenhuma para isto (ver
   // `interactions/dto.ts`).
   interacao: INTERACAO_DA_MENSAGEM_INCLUDE,
+  // ── onda 3 ── embeds, componentes e flags de mensagem de bot. Tabela 1:1 que
+  // quase nenhuma mensagem tem: o `include` custa uma consulta por página
+  // contra uma tabela pequena, e a `Message` segue sem coluna nova.
+  botPayload: true,
 } as const;
 
 type MessageRow = Prisma.MessageGetPayload<{ include: typeof MESSAGE_INCLUDE }>;
@@ -108,6 +129,9 @@ export class MessagesService {
     attachmentIds?: string[],
     reply?: { replyToId?: string; replyMention?: boolean },
     stickerId?: string,
+    // ── onda 3 ── só `criarComoBot` passa isto, e só depois de conferir que o
+    // autor é bot e de validar o conjunto (ver `payload-de-bot.ts`)
+    deBot?: GravacaoDeBot,
   ): Promise<MessageDTO> {
     // valida canal + associação + permissão de postar (privado/somente-leitura)
     const access = await this.guilds.assertCanPostChannel(authorId, channelId);
@@ -166,6 +190,15 @@ export class MessagesService {
         // "@ ligado" é o padrão do Discord; só vale quando há citação
         replyMention: replyToId ? (reply?.replyMention ?? true) : false,
         stickerId: stickerId ?? null,
+        // ── onda 3 ── a linha 1:1 nasce no mesmo `INSERT` (escrita aninhada do
+        // Prisma, numa transação): não existe janela em que a mensagem do bot
+        // esteja no banco sem os embeds dela
+        ...(deBot
+          ? {
+              suppressEmbeds: deBot.suppressEmbeds,
+              ...(deBot.payload ? { botPayload: { create: jsonDeBot(deBot.payload) } } : {}),
+            }
+          : {}),
       },
       include: MESSAGE_INCLUDE,
     });
@@ -214,6 +247,124 @@ export class MessagesService {
       } satisfies ChannelReadEvent);
     } catch {
       // a mensagem já existe; o badge se resolve no próximo `markRead`
+    }
+  }
+
+  /**
+   * ── onda 3 ── Mensagem de **bot**: texto, embeds, componentes e flags.
+   *
+   * É o único caminho que grava embed e componente. O composer do Streamz não
+   * chega aqui (o `message.create` do socket nem tem esses campos), e a checagem
+   * de `isBot` garante que ninguém mais chegue: um humano mandando embed é uma
+   * regra do Discord que o Streamz copia (ADR-0009 e decisão 5 do cartão).
+   *
+   * O corpo chega **validado e normalizado** (`validarPayloadDeBot`, na casca
+   * ou no domínio das interações); aqui é conferido o conjunto
+   * (`conferirMensagemDeBot`) e a mensagem é gravada pelo `create` de sempre —
+   * permissão, castigo, modo lento e "escrever é ler" continuam de graça.
+   *
+   * Não emite nada: como em `create`, quem emite `message.new` é quem chamou.
+   */
+  async criarComoBot(
+    channelId: string,
+    botUserId: string,
+    entrada: MensagemDeBotNova & {
+      attachmentIds?: string[];
+      reply?: { replyToId?: string; replyMention?: boolean };
+    },
+  ): Promise<MessageDTO> {
+    await this.assertAutorBot(botUserId);
+    const r = gravacaoDaMensagemNova(entrada, { temAnexos: (entrada.attachmentIds?.length ?? 0) > 0 });
+    if (!r.ok) throw new BadRequestException(resumoDosErros(r.erros));
+    return this.create(
+      channelId,
+      botUserId,
+      r.gravacao.content,
+      undefined,
+      entrada.attachmentIds,
+      entrada.reply,
+      undefined,
+      r.gravacao,
+    );
+  }
+
+  /**
+   * ── onda 3 ── Edição de mensagem de bot, com a semântica do `PATCH` do
+   * Discord (campo ausente não muda; ver `gravacaoDaEdicao`).
+   *
+   * As mesmas recusas de `edit` (autor, acesso ao canal, mensagem de sistema).
+   * A primeira edição de um "pensando…" (`LOADING`) **não** marca
+   * `editedAt` — a resposta adiada do Discord também não aparece como editada.
+   */
+  async editarComoBot(messageId: string, botUserId: string, patch: PayloadDeBot): Promise<MessageDTO> {
+    const msg = await this.prisma.message.findUnique({
+      where: { id: messageId },
+      include: { botPayload: true, _count: { select: { attachments: true } } },
+    });
+    if (!msg) throw new NotFoundException("Mensagem não encontrada");
+    await this.guilds.assertCanViewChannel(botUserId, msg.channelId);
+    if (msg.authorId !== botUserId) throw new ForbiddenException("Você só pode editar suas mensagens");
+    if (msg.type !== "DEFAULT") throw new BadRequestException("Mensagem do sistema não é editável");
+
+    const r = gravacaoDaEdicao(
+      {
+        content: msg.content,
+        suppressEmbeds: msg.suppressEmbeds,
+        payload: msg.botPayload,
+        temAnexos: msg._count.attachments > 0 || msg.stickerId !== null,
+      },
+      patch,
+    );
+    if (!r.ok) throw new BadRequestException(resumoDosErros(r.erros));
+    const { payload } = r.gravacao;
+
+    await this.prisma.$transaction([
+      payload
+        ? this.prisma.messageBotPayload.upsert({
+            where: { messageId },
+            create: { messageId, ...jsonDeBot(payload) },
+            update: jsonDeBot(payload),
+          })
+        : this.prisma.messageBotPayload.deleteMany({ where: { messageId } }),
+      this.prisma.message.update({
+        where: { id: messageId },
+        data: {
+          content: r.gravacao.content,
+          suppressEmbeds: r.gravacao.suppressEmbeds,
+          editedAt: r.gravacao.eraCarregando ? msg.editedAt : new Date(),
+        },
+      }),
+    ]);
+    return this.getDTO(messageId);
+  }
+
+  /**
+   * ── onda 3 ── Embeds, componentes e flags de várias mensagens, no formato que
+   * a tradução do Discord (`traducao/mensagem.ts`) consome — o `payloadDeBot` da
+   * linha. Uma consulta para a página inteira do `GET /channels/:id/messages`.
+   *
+   * Sem `attachment://` resolvido: o bot recebe de volta o que mandou.
+   */
+  async payloadsDeBot(
+    messageIds: readonly string[],
+  ): Promise<Map<string, { embeds: ColunasDeBot["embeds"]; components: ColunasDeBot["components"]; flags: number }>> {
+    const saida = new Map<string, { embeds: ColunasDeBot["embeds"]; components: ColunasDeBot["components"]; flags: number }>();
+    if (messageIds.length === 0) return saida;
+    const linhas = await this.prisma.message.findMany({
+      where: { id: { in: [...messageIds] } },
+      select: { id: true, suppressEmbeds: true, botPayload: { select: { embeds: true, components: true, flags: true } } },
+    });
+    for (const l of linhas) {
+      saida.set(l.id, camposDeBotDoDTO({ suppressEmbeds: l.suppressEmbeds, payload: l.botPayload }, []));
+    }
+    return saida;
+  }
+
+  /** ── onda 3 ── Embed e componente são coisa de bot; ver `criarComoBot`. */
+  private async assertAutorBot(userId: string): Promise<void> {
+    const autor = await this.prisma.user.findUnique({ where: { id: userId }, select: { isBot: true } });
+    if (!autor?.isBot) {
+      throw new ForbiddenException("Só aplicativos podem enviar embeds e componentes");
     }
   }
 
@@ -416,7 +567,16 @@ export class MessagesService {
     ];
 
     const texto = filters.text.trim();
-    if (texto) and.push({ content: { contains: texto, mode: "insensitive" } });
+    if (texto) {
+      and.push({
+        OR: [
+          { content: { contains: texto, mode: "insensitive" } },
+          // ── onda 3 ── mensagem de bot só com embed tem `content` vazio: o que
+          // ela diz está no texto achatado da linha 1:1
+          { botPayload: { is: { flatText: { contains: texto, mode: "insensitive" } } } },
+        ],
+      });
+    }
 
     if (filters.from) {
       const autor = await this.prisma.user.findUnique({
@@ -733,6 +893,7 @@ export class MessagesService {
    * (URL com expiração; ver StorageService.attachmentUrl).
    */
   private async toDTO(m: MessageRow, participantes?: ParticipantsByRoot): Promise<MessageDTO> {
+    const attachments = await Promise.all(m.attachments.map((a) => toAttachmentDTO(this.storage, a)));
     return {
       id: m.id,
       channelId: m.channelId,
@@ -745,9 +906,7 @@ export class MessagesService {
       author: toPublicUser(m.author),
       type: m.type,
       reactions: this.groupReactions(m.reactions),
-      attachments: await Promise.all(
-        m.attachments.map((a) => toAttachmentDTO(this.storage, a)),
-      ),
+      attachments,
       sticker: m.sticker ? toStickerDTO(m.sticker) : null,
       suppressEmbeds: m.suppressEmbeds,
       replyTo: this.toReplyRef(m.replyTo),
@@ -761,7 +920,45 @@ export class MessagesService {
       // ── j-bots ── null em toda mensagem que não veio de um comando de barra,
       // que é quase todas
       interacao: toInteracaoDaMensagem(m.interacao),
+      // ── onda 3 ── sempre presentes (listas vazias e `flags` 0 numa mensagem
+      // comum), com as mídias `attachment://` já trocadas pela URL do anexo.
+      // O `?? null` cobre linha montada à mão sem o `include` (testes).
+      ...camposDeBotDoDTO(
+        { suppressEmbeds: m.suppressEmbeds, payload: m.botPayload ?? null },
+        attachments,
+        await this.idsDosComponentes(m.botPayload?.components),
+      ),
     };
+  }
+
+  /**
+   * ── onda 3 ── snowflake → cuid do que os componentes de um bot citam: emoji
+   * personalizado (botão, opção de select) e `default_values` dos selects de
+   * usuário/cargo/canal. A web só conhece cuid; o bot manda snowflake (ver
+   * `snowflakesCitados`). Sem nada citado — quase toda mensagem — não há
+   * consulta nenhuma.
+   */
+  private async idsDosComponentes(componentsJson: unknown): Promise<MapasDeIds> {
+    const citados = snowflakesCitados(componentsJson);
+    if (nenhumCitado(citados)) return MAPAS_VAZIOS;
+    const emBigInt = (ids: string[]) => ids.map((sf) => BigInt(sf));
+    const [emojis, usuarios, cargos, canais] = await Promise.all([
+      citados.emojis.length
+        ? this.prisma.customEmoji.findMany({ where: { snowflake: { in: emBigInt(citados.emojis) } }, select: { id: true, snowflake: true } })
+        : [],
+      citados.usuarios.length
+        ? this.prisma.user.findMany({ where: { snowflake: { in: emBigInt(citados.usuarios) } }, select: { id: true, snowflake: true } })
+        : [],
+      citados.cargos.length
+        ? this.prisma.role.findMany({ where: { snowflake: { in: emBigInt(citados.cargos) } }, select: { id: true, snowflake: true } })
+        : [],
+      citados.canais.length
+        ? this.prisma.channel.findMany({ where: { snowflake: { in: emBigInt(citados.canais) } }, select: { id: true, snowflake: true } })
+        : [],
+    ]);
+    const mapa = (linhas: { id: string; snowflake: bigint }[]) =>
+      new Map<string, string>(linhas.map((l): [string, string] => [String(l.snowflake), l.id]));
+    return { emojis: mapa(emojis), usuarios: mapa(usuarios), cargos: mapa(cargos), canais: mapa(canais) };
   }
 
   private toReplyRef(
@@ -770,13 +967,14 @@ export class MessagesService {
       content: string;
       author: PublicUserRow;
       _count: { attachments: number };
+      botPayload?: { flatText: string } | null;
     } | null,
   ): MessageReplyRef | null {
     if (!r) return null;
     return {
       id: r.id,
       author: toPublicUser(r.author),
-      content: replySnippet(r.content),
+      content: replySnippet(r.content || r.botPayload?.flatText || ""),
       hasAttachments: r._count.attachments > 0,
     };
   }
@@ -804,4 +1002,25 @@ export class MessagesService {
     }
     return Array.from(map.values());
   }
+}
+
+/**
+ * ── onda 3 ── As colunas de `MessageBotPayload` no tipo que o Prisma aceita.
+ *
+ * O `as unknown as` é só a ponte entre o tipo do zod (objetos com campos
+ * opcionais) e o `InputJsonValue` do Prisma, que não os reconhece como JSON;
+ * o conteúdo já passou por `validarPayloadDeBot` e é JSON puro.
+ */
+function jsonDeBot(p: ColunasDeBot): {
+  embeds: Prisma.InputJsonValue;
+  components: Prisma.InputJsonValue;
+  flags: number;
+  flatText: string;
+} {
+  return {
+    embeds: p.embeds as unknown as Prisma.InputJsonValue,
+    components: p.components as unknown as Prisma.InputJsonValue,
+    flags: p.flags,
+    flatText: p.flatText,
+  };
 }

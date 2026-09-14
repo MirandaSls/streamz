@@ -200,12 +200,24 @@ export class WebhooksCompatController {
     if (mensagem.efemera) {
       const efemera = await this.interacoes.linhaEfemeraParaCompat(mensagem.id);
       if (!efemera) throw mensagemDesconhecida();
-      return { ...mensagemParaDiscord(efemera), flags: FLAG_EFEMERA };
+      // ── onda 3 ── o `|` e não `=`: a efêmera também pode ter
+      // `IS_COMPONENTS_V2`, e a lib do bot precisa ver as duas
+      const traduzida = mensagemParaDiscord(efemera);
+      return { ...traduzida, flags: traduzida.flags | FLAG_EFEMERA };
     }
 
     const linha = await this.dados.mensagemPorCuid(mensagem.id, interacao.botUserId);
     if (!linha) throw mensagemDesconhecida();
-    return mensagemParaDiscord(linha);
+    // ── onda 3 ── embeds, componentes e flags vêm do DTO que o service acabou
+    // de devolver: a linha da compat ainda não os traz, e o DTO já os tem
+    return mensagemParaDiscord({
+      ...linha,
+      payloadDeBot: {
+        embeds: mensagem.embeds ?? [],
+        components: mensagem.components ?? [],
+        flags: mensagem.flags ?? 0,
+      },
+    });
   }
 }
 

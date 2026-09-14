@@ -181,6 +181,22 @@ export const WS_EVENTS = {
    * Payload: `ReactionClearedEvent`.
    */
   REACTIONS_CLEARED: "reactions.cleared",
+  // ── onda 3 ── interações de componente, modal e autocomplete
+  //
+  // Todos vão para a **sala do usuário** que disparou a interação
+  // (`user:<id>`), nunca para a do canal: o "carregando", o "Esta interação
+  // falhou", o modal e as sugestões são de uma pessoa só. A mensagem que o bot
+  // escreve ou edita **não** vem aqui: continua saindo por `message.new` e
+  // `message.updated` (callback 7 incluído), na sala de sempre. Payloads em
+  // `mensagens-de-bot.ts`; contrato inteiro em `docs/CONTRATO-ONDA-3.md`.
+  /** O bot respondeu dentro do prazo (callback 4, 5, 6, 7 ou 9). Payload: `InteracaoConcluidaEvent`. */
+  INTERACTION_SUCCESS: "interaction.success",
+  /** "Esta interação falhou": sem callback em 3 s, ou bot offline. Payload: `InteracaoFalhouEvent`. */
+  INTERACTION_FAILED: "interaction.failed",
+  /** O bot abriu um modal (callback 9). Payload: `ModalDeBotAbertoEvent`. */
+  INTERACTION_MODAL: "interaction.modal",
+  /** Sugestões para a opção em foco (callback 8). Payload: `AutocompleteDeBotEvent`. */
+  INTERACTION_AUTOCOMPLETE: "interaction.autocomplete",
 } as const;
 
 

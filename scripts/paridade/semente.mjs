@@ -473,38 +473,141 @@ const ROTEIROS_CANAIS = {
   equipe: [{ h: "15:40", a: "bia", k: "equipe", t: "Canal privado da equipe de moderação 🔒" }],
 };
 
-/** A mensagem do bot: embed rico + botões, no formato do Discord (a casca achata hoje). */
-const MENSAGEM_DO_BOT = {
-  h: "15:30:30",
-  k: "bot",
-  corpo: {
-    content: "",
-    embeds: [
-      {
-        title: "Status do servidor",
-        url: "https://example.com/status",
-        description: "Tudo funcionando ✅",
-        color: 0x9be31f,
-        fields: [
-          { name: "Membros", value: "9", inline: true },
-          { name: "Canais", value: "10", inline: true },
-          { name: "Latência", value: "42 ms", inline: true },
-        ],
-        footer: { text: "Pixel • atualizado agora" },
-      },
-    ],
-    components: [
-      {
-        type: 1,
-        components: [
-          { type: 2, style: 1, label: "Atualizar", custom_id: "status:atualizar" },
-          { type: 2, style: 2, label: "Detalhes", custom_id: "status:detalhes" },
-          { type: 2, style: 5, label: "Abrir painel", url: "https://example.com/painel" },
-        ],
-      },
-    ],
+/**
+ * As mensagens do bot no #bots, no formato da API do Discord — é o corpo que um
+ * `channel.send()` do discord.js manda. Desde a onda 3 elas são **guardadas**
+ * (embeds, componentes e flags) e a web as desenha como o Discord; antes o embed
+ * era achatado em texto e os componentes, descartados.
+ *
+ * As três cobrem o que os cartões 3b–3g desenham (ver `docs/CONTRATO-ONDA-3.md`):
+ *
+ * 1. `bot` — embed rico **completo**: autor com ícone, título com link,
+ *    descrição com markdown, cor, 3 campos inline + 1 não inline, imagem,
+ *    thumbnail, rodapé com ícone e timestamp. A chave continua `bot` porque o
+ *    passo `mensagem-bot` do `capturar.mjs` centraliza por ela.
+ * 2. `bot-componentes` — duas action rows: botões nos 5 estilos com `custom_id`/
+ *    `url` (primary, secondary, success, danger, link), um desabilitado e um com
+ *    emoji; e um select de texto.
+ * 3. `bot-v2` — `IS_COMPONENTS_V2` (1 << 15): container com cor, section com
+ *    thumbnail, text display, separator, media gallery e file. O file referencia
+ *    um anexo da própria mensagem por `attachment://`, que é a única forma que o
+ *    Discord aceita para ele.
+ *
+ * As imagens são arquivos que a web da bancada já serve (`apps/web/public/`):
+ * nada sai da máquina e a foto é sempre a mesma.
+ */
+const IMAGEM_GRANDE = `${WEB_PUBLICA}/icone-512.png`;
+const IMAGEM_PEQUENA = `${WEB_PUBLICA}/icone-192.png`;
+const IMAGEM_MASCARAVEL = `${WEB_PUBLICA}/icone-maskable-512.png`;
+
+/** O anexo que o `File` da mensagem v2 cita (é criado em nome do usuário-bot). */
+const ANEXO_DO_BOT = { ...ANEXOS.pdf, filename: "relatorio-do-servidor.pdf" };
+
+const MENSAGENS_DO_BOT = [
+  {
+    h: "15:30:30",
+    k: "bot",
+    corpo: {
+      embeds: [
+        {
+          author: { name: "Pixel · monitor", url: "https://example.com/pixel", icon_url: IMAGEM_PEQUENA },
+          title: "Status do servidor",
+          url: "https://example.com/status",
+          description:
+            "Tudo funcionando ✅\n**3 serviços** no ar, _nenhum_ incidente hoje.\n> Próxima manutenção: `sexta, 02:00`",
+          color: 0x5865f2,
+          fields: [
+            { name: "Membros", value: "9", inline: true },
+            { name: "Canais", value: "10", inline: true },
+            { name: "Latência", value: "42 ms", inline: true },
+            { name: "Últimos avisos", value: "• Backup concluído\n• Certificado renovado" },
+          ],
+          image: { url: IMAGEM_GRANDE },
+          thumbnail: { url: IMAGEM_PEQUENA },
+          footer: { text: "Pixel • atualizado automaticamente", icon_url: IMAGEM_MASCARAVEL },
+          timestamp: quando("15:30").toISOString(),
+        },
+      ],
+    },
   },
-};
+  {
+    h: "15:31",
+    k: "bot-componentes",
+    corpo: {
+      content: "O que você quer fazer com o servidor?",
+      components: [
+        {
+          type: 1,
+          components: [
+            { type: 2, style: 1, label: "Atualizar", custom_id: "status:atualizar", emoji: { name: "🔄" } },
+            { type: 2, style: 2, label: "Detalhes", custom_id: "status:detalhes" },
+            { type: 2, style: 3, label: "Confirmar", custom_id: "status:confirmar" },
+            { type: 2, style: 4, label: "Reiniciar", custom_id: "status:reiniciar", disabled: true },
+            { type: 2, style: 5, label: "Abrir painel", url: "https://example.com/painel" },
+          ],
+        },
+        {
+          type: 1,
+          components: [
+            {
+              type: 3,
+              custom_id: "status:servico",
+              placeholder: "Escolha um serviço",
+              options: [
+                { label: "API", value: "api", description: "REST e gateway", emoji: { name: "🛰️" } },
+                { label: "Web", value: "web", description: "Site e desktop", default: true },
+                { label: "Voz", value: "voz", description: "LiveKit" },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    h: "15:32",
+    k: "bot-v2",
+    anexoDoBot: true,
+    corpo: {
+      flags: 1 << 15,
+      components: [
+        {
+          type: 17,
+          accent_color: 0xf0b232,
+          components: [
+            {
+              type: 9,
+              components: [
+                { type: 10, content: "## Relatório semanal" },
+                { type: 10, content: "O servidor cresceu **12%** esta semana e ninguém caiu da call." },
+              ],
+              accessory: { type: 11, media: { url: IMAGEM_PEQUENA }, description: "Ícone do Streamz" },
+            },
+            { type: 10, content: "Os destaques, em fotos:" },
+            { type: 14, divider: true, spacing: 2 },
+            {
+              type: 12,
+              items: [
+                { media: { url: IMAGEM_GRANDE }, description: "Tela do canal" },
+                { media: { url: IMAGEM_MASCARAVEL } },
+                { media: { url: IMAGEM_PEQUENA }, spoiler: true },
+              ],
+            },
+            { type: 13, file: { url: `attachment://${ANEXO_DO_BOT.filename}` } },
+            {
+              type: 1,
+              components: [
+                { type: 2, style: 1, label: "Ver o relatório", custom_id: "relatorio:abrir" },
+                { type: 2, style: 5, label: "Histórico", url: "https://example.com/historico" },
+              ],
+            },
+          ],
+        },
+        { type: 10, content: "-# Gerado pelo Pixel" },
+      ],
+    },
+  },
+];
 
 const ROTEIRO_DM_BIA = [
   { h: "16:00", a: "bia", k: "dm-bia-1", t: "Oi! Viu o mockup que mandei no #geral?" },
@@ -1047,23 +1150,43 @@ async function escreverMensagens() {
     for (const item of roteiro) await mensagemDoRoteiro(canal, item);
   }
 
-  etapa("12. mensagem do bot (casca de compatibilidade do Discord)");
+  etapa("12. mensagens do bot: embed rico, componentes e Components v2 (casca do Discord)");
   const bots = c.canais.bots;
   const linha = await prisma.channel.findUniqueOrThrow({ where: { id: bots.id }, select: { snowflake: true } });
-  const eco = esperarEvento(
-    c.u.dono.sock,
-    WS_EVENTS.MESSAGE_NEW,
-    (m) => m?.channelId === bots.id && m?.author?.id === c.aplicativo.botUserId,
-  );
-  await http("POST", `/v10/channels/${linha.snowflake.toString()}/messages`, {
-    bot: tokenDoBot,
-    corpo: MENSAGEM_DO_BOT.corpo,
-  });
-  const doBot = await eco;
-  registrar(MENSAGEM_DO_BOT.k, doBot.id, quando(MENSAGEM_DO_BOT.h));
-  // o embed chega achatado em texto com a URL do título: sem isto o cliente
-  // buscaria a prévia de example.com, e a foto dependeria da rede
-  await suprimirPrevia(doBot.id);
+  for (const item of MENSAGENS_DO_BOT) {
+    const corpo = { ...item.corpo };
+    if (item.anexoDoBot) {
+      // em nome do usuário-bot, e solto: o `MessagesService` só vincula anexo do
+      // próprio autor que ainda não está em mensagem nenhuma
+      const anexo = await prisma.attachment.create({
+        data: {
+          uploaderId: c.aplicativo.botUserId,
+          key: `paridade/${item.k}/${ANEXO_DO_BOT.filename}`,
+          filename: ANEXO_DO_BOT.filename,
+          contentType: ANEXO_DO_BOT.contentType,
+          size: ANEXO_DO_BOT.size,
+          width: ANEXO_DO_BOT.width,
+          height: ANEXO_DO_BOT.height,
+          externalUrl: `${WEB_PUBLICA}${ANEXO_DO_BOT.caminho}`,
+        },
+      });
+      // `attachment_ids` é a extensão do Streamz (sem upload multipart na casca);
+      // o `File` acha o anexo pelo nome, como o `attachment://` do Discord
+      corpo.attachment_ids = [anexo.id];
+    }
+    // uma de cada vez: o eco da anterior já foi consumido quando esta escuta
+    const eco = esperarEvento(
+      c.u.dono.sock,
+      WS_EVENTS.MESSAGE_NEW,
+      (m) => m?.channelId === bots.id && m?.author?.id === c.aplicativo.botUserId,
+    );
+    await http("POST", `/v10/channels/${linha.snowflake.toString()}/messages`, { bot: tokenDoBot, corpo });
+    const doBot = await eco;
+    registrar(item.k, doBot.id, quando(item.h));
+    // sem "remover prévia": o embed agora é guardado e desenhado, e suprimi-lo
+    // (SUPPRESS_EMBEDS) o esconderia. O `content` não tem URL, então não há
+    // prévia de link de rede para deixar a foto instável.
+  }
 
   etapa("13. conversas diretas e o segundo servidor");
   for (const item of ROTEIRO_DM_BIA) await mensagemDoRoteiro("bia", item);

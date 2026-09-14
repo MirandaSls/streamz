@@ -16,9 +16,14 @@ import { z } from "zod";
  * nenhum garante.
  *
  * Os schemas são **permissivos de propósito** (`passthrough`): campo que ainda
- * não implementamos (embed rico, componente) é ignorado, não recusado. Recusar
- * faria um bot escrito para o Discord parar de funcionar por causa de um campo
- * que ele sempre manda.
+ * não implementamos é ignorado, não recusado. Recusar faria um bot escrito para
+ * o Discord parar de funcionar por causa de um campo que ele sempre manda.
+ *
+ * ── onda 3 ── `embeds`, `components` e `flags` continuam `unknown` **aqui** e
+ * são validados com as regras do Discord logo depois, no controller, por
+ * `lerPayloadDeBot` (`traducao/embed.ts`): é ele que devolve o `50035` com o
+ * caminho do campo (`embeds[0].title`), coisa que o `zodBody` — que só conhece
+ * a primeira falha e responde no formato do Nest — não sabe fazer.
  */
 
 /** `message_reference` do Discord — o que nos interessa é o `message_id`. */
@@ -59,7 +64,7 @@ export const corpoDeMensagemSchema = z
 
 export type CorpoDeMensagem = z.infer<typeof corpoDeMensagemSchema>;
 
-/** O `PATCH` só mexe no texto na F1; o resto passa e é ignorado. */
+/** O `PATCH`: `content`, `embeds`, `components` e `flags` (onda 3); o resto passa e é ignorado. */
 export const edicaoDeMensagemSchema = z
   .object({
     content: z.string().max(MAX_MESSAGE_LENGTH).optional(),

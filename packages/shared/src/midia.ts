@@ -11,6 +11,7 @@ import type { InteracaoDaMensagem } from "./aplicativos";
 import type { Poll } from "./comunidade";
 import type { Channel, MemberRole, PublicUser, ReactionGroup } from "./dominio";
 import type { MessageReplyRef, MessageType, ThreadSummary } from "./mensagens";
+import type { ComponenteDeMensagem, Embed } from "./mensagens-de-bot";
 import type { PreviaDeMensagem } from "./social";
 
 /** Teto de tamanho por arquivo (bytes). Espelhado na validação da API. */
@@ -105,6 +106,30 @@ export interface Message {
    * `undefined` quer dizer "mensagem normal".
    */
   efemera?: boolean;
+  // ── onda 3 ── mensagens de bot
+  /**
+   * Embeds ricos, no formato do Discord (`Embed` de `mensagens-de-bot.ts`).
+   * Só mensagem de **bot** tem: o composer do Streamz não manda embed. As
+   * mídias `attachment://<nome>` já chegam resolvidas para a URL do anexo.
+   *
+   * Opcional pelo mesmo motivo de `interacao`: payload antigo não o traz;
+   * `undefined` e `[]` querem dizer a mesma coisa. A API atual manda sempre.
+   */
+  embeds?: Embed[];
+  /**
+   * Componentes (action rows, botões, selects e, com `IS_COMPONENTS_V2`, os de
+   * leiaute), no formato do Discord, com `id` numérico em todos.
+   */
+  components?: ComponenteDeMensagem[];
+  /**
+   * `FLAGS_DE_MENSAGEM` do Discord. As que a tela lê: `SUPPRESS_EMBEDS` (não
+   * desenha embed nenhum — é a coluna `suppressEmbeds` refletida aqui),
+   * `EPHEMERAL` (igual a `efemera: true`), `LOADING` (o "está pensando…" do
+   * callback 5: desenhe o estado de carregando e ignore o `content`),
+   * `SUPPRESS_NOTIFICATIONS` (não notifica nem toca som) e `IS_COMPONENTS_V2`
+   * (sem `content` nem embeds; anexos só aparecem se um componente os citar).
+   */
+  flags?: number;
 }
 
 export interface GuildMemberView {

@@ -6,6 +6,7 @@ import MemberList from "@/components/MemberList";
 import VoicePanel from "@/components/VoicePanel";
 import DiretorioDeApps from "@/components/apps/DiretorioDeApps";
 import ChatView from "@/components/chat/ChatView";
+import HostDeModalDeBot from "@/components/chat/bot/HostDeModalDeBot";
 import DMView from "@/components/chat/DMView";
 import SearchPanel from "@/components/chat/SearchPanel";
 import ThreadPanel from "@/components/chat/ThreadPanel";
@@ -123,7 +124,13 @@ export default function AppPage() {
   // entrou na conta também tem de poder atualizar, e a tela de login não passa
   // por esta rota.
   if (ehMobile) {
-    return <ShellMobile />;
+    // ── onda 3 ── o modal de bot também existe no celular; o host é o mesmo
+    return (
+      <>
+        <ShellMobile />
+        <HostDeModalDeBot />
+      </>
+    );
   }
 
   // ── Coluna 4 do modo servidor: busca, thread OU lista de membros, uma por vez.
@@ -271,6 +278,8 @@ export default function AppPage() {
 
       <VoiceLayer />
       <ModalHost />
+      {/* onda 3: o modal que um bot abre (callback 9) — ver HostDeModalDeBot */}
+      <HostDeModalDeBot />
       <ContextMenuHost />
       <ProfilePopoverHost />
       <Toasts />

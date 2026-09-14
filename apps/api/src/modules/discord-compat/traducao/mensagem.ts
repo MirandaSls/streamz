@@ -1,4 +1,4 @@
-import { mentionsEveryone } from "@streamz/shared";
+import { mentionsEveryone, type ComponenteDeMensagem, type Embed } from "@streamz/shared";
 
 import type {
   JsonDoDiscord,
@@ -11,6 +11,26 @@ import { emojiParaDiscord } from "./emoji";
 import { usuarioParaDiscord } from "./usuario";
 
 /**
+ * ── onda 3 ── Embeds, componentes e flags de uma mensagem de bot, como a
+ * tradução os consome.
+ *
+ * Não está em `LinhaDeMensagem` (`tipos.ts` é do coordenador): quem monta a
+ * linha acrescenta este campo por conta própria — o `MessagesService.
+ * payloadsDeBot` no histórico, o DTO da mensagem nos controllers, a efêmera em
+ * `interactions/efemeras.ts`. Ausente (ou null) = mensagem sem nada disso, e a
+ * saída é a de sempre: `embeds: []`, `components: []`, `flags: 0`.
+ */
+export interface PayloadDeBotDaLinha {
+  embeds: readonly Embed[];
+  components: readonly ComponenteDeMensagem[];
+  /** `FLAGS_DE_MENSAGEM`, já com `SUPPRESS_EMBEDS` e `EPHEMERAL` quando for o caso. */
+  flags: number;
+}
+
+/** A linha da mensagem, com o payload de bot quando houver. */
+export type LinhaDeMensagemDeBot = LinhaDeMensagem & { payloadDeBot?: PayloadDeBotDaLinha | null };
+
+/**
  * `Message` → objeto `message` do Discord.
  *
  * ── Lote C (tradução) implementa. Puro. ──
@@ -21,14 +41,15 @@ import { usuarioParaDiscord } from "./usuario";
  *   nenhuma delas sabe renderizar os nossos tipos de sistema. O texto do
  *   sistema já vai achatado em `content`.
  * - `timestamp`/`edited_timestamp` em ISO-8601.
- * - `embeds: []` e `components: []` — a F1 não tem embed rico.
+ * - `embeds` e `components` — os do bot, guardados no formato do Discord desde a
+ *   onda 3 (`payloadDeBot`); listas vazias para mensagem de gente.
  * - `mention_everyone` sai de `mentionsEveryone(content)` (`@streamz/shared`);
  *   `mentions`/`mention_roles` podem sair vazios na F1 (o bot lê o `content`).
  * - `message_reference` quando é resposta: `{message_id, channel_id, guild_id}`.
  *
- * `flags: 0` e `tts: false` fixos.
+ * `tts: false` fixo; `flags` sai do `payloadDeBot` (0 sem ele).
  */
-export function mensagemParaDiscord(m: LinhaDeMensagem): MensagemDoDiscord {
+export function mensagemParaDiscord(m: LinhaDeMensagemDeBot): MensagemDoDiscord {
   const mensagem: MensagemDoDiscord = {
     id: String(m.snowflake),
     channel_id: String(m.channelSnowflake),
@@ -44,14 +65,16 @@ export function mensagemParaDiscord(m: LinhaDeMensagem): MensagemDoDiscord {
     mentions: [],
     mention_roles: [],
     attachments: m.attachments.map(anexoParaDiscord),
-    embeds: [],
-    components: [],
+    // cópias rasas: o objeto do Discord é JSON puro, e a lista guardada não pode
+    // ser mutada por quem recebe a tradução
+    embeds: (m.payloadDeBot?.embeds ?? []).map((e) => ({ ...e })),
+    components: (m.payloadDeBot?.components ?? []).map((c) => ({ ...c })),
     pinned: m.pinned,
     // Todo tipo nosso vira 0 (`DEFAULT`): as `SYSTEM_*` já chegam com o texto
     // achatado em `content`, e um número que a lib não conhece faz
     // `MessageType[x]` virar `undefined` em algumas.
     type: 0,
-    flags: 0,
+    flags: m.payloadDeBot?.flags ?? 0,
   };
 
   if (m.guildSnowflake !== null) mensagem.guild_id = String(m.guildSnowflake);

@@ -58,6 +58,10 @@ import type {
   InboxUnreadGroup,
   InteracaoCriada,
   InteracaoCriarInput,
+  CliqueEmComponenteInput,
+  EnvioDeModalInput,
+  InteracaoDeBotCriada,
+  PedidoDeAutocompleteInput,
   InviteInfo,
   InvitePreview,
   CallStartResponse,
@@ -733,6 +737,25 @@ export const api = {
    */
   criarInteracao: (channelId: string, body: InteracaoCriarInput) =>
     request<InteracaoCriada>(`/channels/${channelId}/interactions`, json(body)),
+
+  // ── onda 3 ── interações de componente, modal e autocomplete
+  //
+  // Escritas pelo cartão 3.0 (contrato); quem implementa as rotas na API é o
+  // 3a. As três devolvem na hora (`InteracaoDeBotCriada`) e **não esperam o
+  // bot**: a resposta chega pelo socket (`interaction.success`/`failed`/
+  // `modal`/`autocomplete`, e `message.new`/`message.updated`), casada pelo
+  // `nonce` que o navegador gera — o evento pode chegar antes desta resposta.
+  // Ver `docs/CONTRATO-ONDA-3.md` e `stores/interacoes-de-bot.ts`.
+
+  /** Clicar num botão ou escolher num select de uma mensagem de bot (interação tipo 3). */
+  clicarComponente: (channelId: string, body: CliqueEmComponenteInput) =>
+    request<InteracaoDeBotCriada>(`/channels/${channelId}/interactions/componente`, json(body)),
+  /** Enviar o modal que o bot abriu com o callback 9 (interação tipo 5). */
+  enviarModalDeBot: (channelId: string, body: EnvioDeModalInput) =>
+    request<InteracaoDeBotCriada>(`/channels/${channelId}/interactions/modal`, json(body)),
+  /** Pedir sugestões para a opção em foco de um comando (interação tipo 4). */
+  pedirAutocompleteDeComando: (channelId: string, body: PedidoDeAutocompleteInput) =>
+    request<InteracaoDeBotCriada>(`/channels/${channelId}/interactions/autocomplete`, json(body)),
 
   // ── j-bots · F4 ── portal do desenvolvedor, diretório e instalação
   //

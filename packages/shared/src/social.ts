@@ -13,6 +13,7 @@
 import { z } from "zod";
 import type { MemberRole, PublicUser } from "./dominio";
 import { replySnippet } from "./mensagens";
+import { achatarPayloadDeBot } from "./mensagens-de-bot";
 import type { MessageType } from "./mensagens";
 import type { Attachment, Message } from "./midia";
 
@@ -315,6 +316,12 @@ export interface MensagemParaPrevia {
   attachments?: readonly Pick<Attachment, "contentType">[] | null;
   /** figurinha no lugar do texto (g-emojis-midia). */
   temFigurinha?: boolean;
+  /**
+   * ── onda 3 ── o texto achatado de embeds e text displays de uma mensagem de
+   * bot (`achatarPayloadDeBot`). Entra só quando `content` está vazio — é a
+   * mensagem de bot que responde só com embed.
+   */
+  textoDeBot?: string;
 }
 
 /**
@@ -322,7 +329,7 @@ export interface MensagemParaPrevia {
  * que valha uma linha (mensagem em branco sem anexo).
  */
 export function textoDaPrevia(m: MensagemParaPrevia, limite = MAX_PREVIA_DM): string {
-  const texto = replySnippet(semMarcacao(m.content), limite);
+  const texto = replySnippet(semMarcacao(m.content || m.textoDeBot || ""), limite);
   if (texto) return texto;
   if (m.temFigurinha) return "Enviou uma figurinha";
   const anexo = m.attachments?.[0];
@@ -332,7 +339,8 @@ export function textoDaPrevia(m: MensagemParaPrevia, limite = MAX_PREVIA_DM): st
 
 /** A prévia de uma mensagem inteira (o caminho do cliente, no `message.new`). */
 export function previaDaMensagem(
-  m: Pick<Message, "id" | "author" | "content" | "createdAt" | "type" | "attachments" | "sticker">,
+  m: Pick<Message, "id" | "author" | "content" | "createdAt" | "type" | "attachments" | "sticker"> &
+    Partial<Pick<Message, "embeds" | "components">>,
 ): PreviaDeMensagem {
   return {
     id: m.id,
@@ -342,6 +350,8 @@ export function previaDaMensagem(
       type: m.type,
       attachments: m.attachments,
       temFigurinha: !!m.sticker,
+      // ── onda 3 ── bot que responde só com embed não vira linha em branco
+      textoDeBot: m.embeds?.length || m.components?.length ? achatarPayloadDeBot(m) : undefined,
     }),
     createdAt: m.createdAt,
     tipo: m.type,

@@ -98,6 +98,8 @@ const opcaoSchema = z
     type: z.number().int(),
     required: z.boolean().optional(),
     choices: z.array(escolhaSchema).max(MAX_ESCOLHAS).optional(),
+    // ── onda 3 ── a opção pede sugestões ao bot (interação 4, callback 8)
+    autocomplete: z.boolean().optional(),
   })
   .passthrough()
   .superRefine((opcao, ctx) => {
@@ -187,6 +189,10 @@ export function normalizarComando(comando: ComandoParaRegistrar): ComandoNormali
       type: opcao.type as OpcaoDeComando["type"],
       required: opcao.required ?? false,
       ...(opcao.choices ? { choices: opcao.choices } : {}),
+      // ── onda 3 ── guardado para o composer saber que deve pedir sugestões
+      // (`POST /api/channels/:id/interactions/autocomplete`); só quando `true`,
+      // para o JSON das opções antigas não mudar
+      ...(opcao.autocomplete === true ? { autocomplete: true } : {}),
     })),
     defaultMemberPermissions: comando.default_member_permissions ?? null,
   };
@@ -221,9 +227,11 @@ export const comandosParaRegistrarSchema = z
 /**
  * O `data` de uma resposta de interação, e o corpo inteiro de um followup.
  *
- * `content` é o único campo que a F3 materializa; `embeds`, `components` e
- * `attachments` chegam inteiros (é para isso que o `@Body()` é cru) e o lote A
- * os descarta com aviso no log. `flags: 64` é a **mensagem efêmera**, e desde
+ * `embeds`, `components` e `flags` chegam inteiros (é para isso que o `@Body()`
+ * é cru) e, desde a onda 3, são **guardados**: o domínio das interações os valida
+ * com `validarPayloadDeBot` (`@streamz/shared`) e responde `50035` com o
+ * detalhe por campo quando não passam. `attachments` segue descartado (não há
+ * upload multipart nesta rota). `flags: 64` é a **mensagem efêmera**, e desde
  * o PR das efêmeras é entregue de verdade: só o invocador a recebe, pelo
  * socket, e ela não entra no histórico do canal — §9 do documento.
  *
