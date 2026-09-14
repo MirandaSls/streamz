@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { forwardRef, type ReactNode } from "react";
 import { ArrowLeft, ChevronRight } from "@/components/ui/icones";
 import { BotaoDeIcone } from "@/components/ui/primitivos";
 
@@ -141,14 +141,25 @@ export function CabecalhoMobile({
  * depois de a tela sair da pilha, e uma conversa desmontando com a lista de
  * mensagens dentro custa mais do que os 200ms de polimento valem. Está
  * registrado no PR.
+ *
+ * A `ref` é do arrasto (`ShellMobile`): quem acompanha o dedo escreve o
+ * `transform` direto no nó, sem passar por estado do React — um render por
+ * quadro de gesto faria a conversa inteira reconciliar sessenta vezes por
+ * segundo. `className` soma o que só vale com a gaveta aberta (o canto).
  */
-export function TelaEmpilhada({ children }: { children: ReactNode }) {
+export const TelaEmpilhada = forwardRef<
+  HTMLDivElement,
+  { className?: string; children: ReactNode }
+>(function TelaEmpilhada({ className = "", children }, ref) {
   return (
     /* a área segura de baixo vem para cá: com uma tela empilhada a barra de
        abas sai de cena (ver `ShellMobile`), e sem isto o composer encostaria na
        barra de gestos do aparelho */
-    <div className="anim-empilhar absolute inset-0 z-10 flex flex-col bg-background-base-lower pb-[env(safe-area-inset-bottom)]">
+    <div
+      ref={ref}
+      className={`anim-empilhar absolute inset-0 z-10 flex flex-col bg-background-base-lower pb-[env(safe-area-inset-bottom)] ${className}`}
+    >
       {children}
     </div>
   );
-}
+});
