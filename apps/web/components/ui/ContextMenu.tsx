@@ -333,8 +333,21 @@ function Painel({
         className={
           folha
             ? // `min-h-11` em cada item: 44px é o alvo de toque, e os itens do
-              // menu do desktop têm 32 porque lá o ponteiro acerta 32
-              "anim-folha fixed inset-x-0 bottom-0 z-[80] max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl bg-background-surface-higher p-2 pb-[calc(env(safe-area-inset-bottom)+8px)] shadow-popout [&_[role=menuitem]]:min-h-[44px] [&_[role=menuitemcheckbox]]:min-h-[44px] [&_[role=menuitemradio]]:min-h-[44px] [&_[role=group]]:gap-2 [&_[role=group]>button]:h-[44px] [&_[role=group]>button]:w-[44px] [&_[role=group]>button]:text-2xl"
+              // menu do desktop têm 32 porque lá o ponteiro acerta 32.
+              //
+              // A fileira de reações (`[role=group]>button`) ganha, só aqui,
+              // três coisas que o botão de 32px do desktop não tem: alvo de
+              // 44 (idem acima), `rounded-full` e o fundo
+              // `--background-surface-highest` — círculo preenchido, como os
+              // sete alvos de `discord-mobile-menu-mensagem.png` (o desktop
+              // é `rounded-[3px]` sem fundo em repouso, e continua assim: o
+              // seletor abaixo só existe dentro da classe da folha, então o
+              // botão do menu ancorado nunca o recebe). A especificidade do
+              // seletor composto (classe + atributo + tipo) supera a classe
+              // solta `h-8`/`w-8`/`rounded-[3px]` escrita no próprio botão em
+              // `FileiraDeReacoes`, então não foi preciso tocar naquele
+              // componente nem no menu de desktop que ele também atende.
+              "anim-folha fixed inset-x-0 bottom-0 z-[80] max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl bg-background-surface-higher p-2 pb-[calc(env(safe-area-inset-bottom)+8px)] shadow-popout [&_[role=menuitem]]:min-h-[44px] [&_[role=menuitemcheckbox]]:min-h-[44px] [&_[role=menuitemradio]]:min-h-[44px] [&_[role=group]]:gap-2 [&_[role=group]>button]:h-[44px] [&_[role=group]>button]:w-[44px] [&_[role=group]>button]:rounded-full [&_[role=group]>button]:bg-background-surface-highest [&_[role=group]>button]:text-2xl"
             : // `.menu_c1e9c4` (css-bruto/858942…): fundo, borda 1px cheia (sem
               // opacidade extra — o token já carrega o alfa) e `box-shadow:
               // var(--shadow-high)` só, sem o `--shadow-border` do `shadow-popout`
@@ -625,11 +638,25 @@ function Painel({
           largura={largura}
           // submenu encosta no item, com 4px de sobreposição, como no Discord;
           // sobe o padding (8) e a borda (1) para o primeiro filho alinhar com o pai
+          // (x/y/alternativoX são ignorados por `Painel` quando `folha` é true,
+          // abaixo — a folha nunca é ancorada)
           x={ancora.right - 4}
           y={ancora.top - 9}
           alternativoX={ancora.left + 4}
           onClose={onClose}
           autoFoco={false}
+          /*
+            **O bug que este cartão fecha.** Sem propagar `folha`, o parâmetro
+            caía no padrão (`false`) e o submenu nascia como caixa flutuante de
+            220px ancorada no ponto do toque — no meio da tela, longe do
+            polegar, do jeito que o desktop abre e o celular nunca deveria (as
+            capturas `discord-mobile-menu-mensagem*.png` não têm menu nenhum
+            flutuando: todo submenu é outra folha inteira, do mesmo tipo,
+            simplesmente empilhada por cima da primeira — o `z-[80]`/`z-[79]`
+            de cada `Painel` novo nasce depois do anterior na árvore, então
+            pinta por cima sem precisar de nada além de repetir `folha`).
+          */
+          folha={folha}
         />
       )}
     </>

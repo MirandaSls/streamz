@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Pencil, SendHorizonal } from "@/components/ui/icones";
+import {
+  Clock,
+  MessageSquare,
+  Pencil,
+  PhoneCall,
+  SendHorizonal,
+  UserCheck,
+  UserPlus,
+} from "@/components/ui/icones";
 import { BotaoDeIcone, Button, Popout, Tooltip } from "@/components/ui/primitivos";
 import {
   Permission,
@@ -11,6 +19,7 @@ import {
   type UserProfile,
   type UserStatus,
 } from "@streamz/shared";
+import Avatar from "@/components/ui/Avatar";
 import IconeDeStatus from "@/components/ui/IconeDeStatus";
 import TagDeBot from "@/components/ui/TagDeBot";
 import { MENU_WIDTH, MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
@@ -30,7 +39,8 @@ import { useCan, usePermissions } from "@/stores/permissions";
 import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
 import { useSettings } from "@/stores/settings";
 import { errorMessage } from "@/stores/socket-adapter";
-import { ui, useUI, type MenuItem } from "@/stores/ui";
+import { anchorOf, ui, useUI, type MenuItem } from "@/stores/ui";
+import { useVoice } from "@/stores/voice";
 
 /**
  * Cartão de perfil que abre ao clicar num avatar ou nome — a "popout" do
@@ -66,8 +76,15 @@ import { ui, useUI, type MenuItem } from "@/stores/ui";
  * "SOBRE MIM", "MEMBRO DESDE" ou "CARGOS"; a bio vem solta e o que é cartão
  * (atividade, "Coleção de jogos") é um bloco de `--background-surface-highest`
  * com respiro 12 (`.card__5be3e`; 40 de altura em y=403–442 no `101804`). Por
- * isso "Membro desde" e "Servidores em comum" saíram do cartão: continuam no
- * perfil completo (`UserProfileModal`), que abre pelo avatar.
+ * isso, **no desktop**, "Membro desde" e "Servidores em comum" saíram do
+ * cartão: continuam no perfil completo (`UserProfileModal`), que abre pelo
+ * avatar. **No celular é diferente** (cartão 8g, onda 8): não há um perfil
+ * completo separado — o mesmo `Popout` vira a folha inteira, e
+ * `discord-mobile-perfil.png` mostra "DISCORD MEMBER SINCE", "Mutual Servers"
+ * e "Mutual Friends" direto nela, com legenda em caixa alta. Essas seções, a
+ * fileira de ações (Mensagem/Ligar/Adicionar amigo) e o "SOBRE MIM" em caixa
+ * alta entram só em `ehMobile`, mais abaixo — o desktop não ganha nenhum
+ * pixel novo.
  *
  * **O nome não leva a cor do cargo.** No print `113603` o "Md" é verde na lista
  * de membros e #dadadb no cartão; em `101804` o traço do "M" é #efeff1 cheio
@@ -139,6 +156,18 @@ const ATRASO_DO_SUBMENU = 120;
  * por cima dele. Na camada padrão do Popout (90) o menu nasceria atrás.
  */
 const CAMADA = 75;
+
+/**
+ * "25 de agosto de 2026" — a mesma formatação de "membro desde" do perfil
+ * completo (`UserProfileModal.DATA_SELO`), copiada aqui porque aquele const
+ * não é exportado e os dois arquivos não podem depender um do outro sem sair
+ * da lista de arquivos deste cartão.
+ */
+const DATA_MEMBRO_DESDE = new Intl.DateTimeFormat("pt-BR", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
 
 /**
  * Aplica o status escolhido.
@@ -291,6 +320,42 @@ export default function ProfilePopoverHost() {
     } catch (e) {
       setRascunho(texto);
       ui.toast(errorMessage(e, "Não foi possível enviar a mensagem"), "error");
+    }
+  }
+
+  /**
+   * Botão "Mensagem" da fileira de ações do celular (`discord-mobile-perfil.png`):
+   * fecha a folha e leva para a conversa — o mesmo par `closeModal` + `openWith`
+   * que o botão "Enviar mensagem" do perfil completo já usa
+   * (`UserProfileModal.tsx`). No desktop este cartão não tem esse botão (o
+   * rodapé já é o campo de mensagem embutido, `enviar()` acima); a fileira só
+   * existe em `ehMobile`.
+   */
+  function abrirConversa() {
+    close();
+    void useDMs.getState().openWith(user.id);
+  }
+
+  /**
+   * Botão "Ligar" da mesma fileira: liga a chamada de voz da conversa, como o
+   * telefone do cabeçalho de `DMView.tsx` (`startCall(dm.id, false)`) — a
+   * capacidade já existe no app, só não tinha entrada no cartão de perfil.
+   * Sem vídeo: o cartão desta onda só pede "ligar" (ver "faltando" na
+   * entrega) — a captura mostra também "Video Call", que fica para outra
+   * rodada.
+   *
+   * `startCall` já tem a guarda de "já estou nesta chamada?" por dentro
+   * (`jaNaChamada`, `stores/chamada-em-curso.ts`), então um clique duplo aqui
+   * não abre uma segunda sala.
+   */
+  async function ligar() {
+    try {
+      const dm = await api.openDM(user.id);
+      useDMs.getState().registrar(dm);
+      close();
+      await useVoice.getState().startCall(dm.id, false);
+    } catch (e) {
+      ui.toast(errorMessage(e, "Não foi possível iniciar a chamada"), "error");
     }
   }
 
@@ -516,6 +581,66 @@ export default function ProfilePopoverHost() {
             </div>
           </div>
 
+          {/*
+            Fileira de ações do celular — `discord-mobile-perfil.png` (escala
+            ≈2,0 ±4%, MEDIDAS.md §1): a foto mostra três botões de ícone-sobre-
+            rótulo (Message/Voice Call/Video Call), evenly distribuídos, com um
+            traço acima separando do bloco de nome. A ±4% da captura não dá px
+            fino, mas presença/ordem são robustas a ela (é a regra da própria
+            MEDIDAS.md: "medi só o que é robusto a esse erro"), e é isso que
+            fica: dois botões (sem vídeo, ver "faltando" na entrega), largura
+            igual, alvo de 44 (`BotaoDeAcaoDoPerfil`, min-h-[44px] literal — piso
+            de toque, não medida). No desktop este cartão não tinha fileira de
+            ações; ela só existe em `ehMobile`, então nenhum pixel do desktop
+            muda. Some com a pessoa bloqueada, como o composer embutido do
+            desktop já fazia.
+          */}
+          {ehMobile && !isMe && relacao !== "blocked" && (
+            <div className="grid grid-cols-2 gap-1 border-t border-border-subtle pt-3">
+              <BotaoDeAcaoDoPerfil
+                icone={<MessageSquare size={20} aria-hidden="true" />}
+                rotulo="Mensagem"
+                onClick={abrirConversa}
+              />
+              {relacao === "friend" && (
+                <BotaoDeAcaoDoPerfil icone={<PhoneCall size={20} aria-hidden="true" />} rotulo="Ligar" onClick={() => void ligar()} />
+              )}
+              {relacao === "none" && (
+                <BotaoDeAcaoDoPerfil
+                  icone={<UserPlus size={20} aria-hidden="true" />}
+                  rotulo="Adicionar amigo"
+                  onClick={() => void send(user.username)}
+                />
+              )}
+              {relacao === "outgoing" && (
+                <BotaoDeAcaoDoPerfil icone={<Clock size={20} aria-hidden="true" />} rotulo="Pedido enviado" disabled />
+              )}
+              {relacao === "incoming" && (
+                <BotaoDeAcaoDoPerfil
+                  icone={<UserCheck size={20} aria-hidden="true" />}
+                  rotulo="Aceitar pedido"
+                  onClick={() => {
+                    const pedido = incoming.find((p) => p.user.id === user.id);
+                    if (pedido) void accept(pedido.id);
+                  }}
+                />
+              )}
+            </div>
+          )}
+
+          {/*
+            "SOBRE MIM" só no celular: nenhum dos quatro prints 1:1 do cartão
+            desktop tem rótulo de seção (cabeçalho do arquivo, acima), mas a
+            tela do celular usa a legenda em caixa alta como padrão de seção —
+            é a mesma classe já usada em `DMMemberList.tsx`/`GifPicker.tsx`
+            (`text-xs font-bold uppercase tracking-[0.02em]`, a "eyebrow" do
+            CSS do Discord `font-size:12px;font-weight:700;letter-spacing:
+            .02em;text-transform:uppercase`), não um número tirado desta
+            captura.
+          */}
+          {ehMobile && perfil?.aboutMe && (
+            <p className="text-text-xs font-bold uppercase tracking-[0.02em] text-text-muted">Sobre mim</p>
+          )}
           {perfil?.aboutMe && (
             <p className="whitespace-pre-wrap break-words text-text-sm text-text-default">{perfil.aboutMe}</p>
           )}
@@ -547,6 +672,85 @@ export default function ProfilePopoverHost() {
             aoRemover={(cargoId) => void toggleRole(user.id, cargoId, false)}
             aoAdicionar={abrirMenuDeCargos}
           />
+
+          {/*
+            "DISCORD MEMBER SINCE" / "Mutual Servers" / "Mutual Friends" —
+            `discord-mobile-perfil.png` tem as três, direto no perfil de outra
+            pessoa, sem aba: no cartão desktop elas ficam só no perfil completo
+            (`UserProfileModal.tsx`, ver o comentário do cabeçalho deste
+            arquivo), porque nenhum dos quatro prints 1:1 do popout as mostra.
+            No celular o cartão dos outros vira a tela inteira (a folha do
+            `Popout`), e a captura mostra as três juntas — por isso elas entram
+            aqui só em `ehMobile`. Conteúdo (rótulo, ordem, "Nenhum … em
+            comum.") copiado do `UserProfileModal` para não inventar um
+            segundo texto para a mesma coisa; a diferença é a ausência de abas
+            (a captura rola tudo numa coluna só) e de "Invite to Servers" (o
+            app não tem essa ação — §6.6/§8 do processo: botão inerte só
+            existe quando o Discord o tem E nós temos o que ele faz). "NOTE"
+            também fica de fora: já não existe no app (ver `abrirKebab` acima,
+            "Adicionar nota (em breve)").
+          */}
+          {ehMobile && !isMe && perfil && (
+            <div className="flex flex-col gap-0.5">
+              <p className="text-text-xs font-bold uppercase tracking-[0.02em] text-text-muted">Membro desde</p>
+              <p className="text-text-sm text-text-default">{DATA_MEMBRO_DESDE.format(new Date(perfil.createdAt))}</p>
+            </div>
+          )}
+
+          {ehMobile && !isMe && perfil && (
+            <div className="flex flex-col gap-1">
+              <p className="text-text-xs font-bold uppercase tracking-[0.02em] text-text-muted">
+                Servidores em comum
+              </p>
+              {perfil.mutualGuilds.length === 0 ? (
+                <p className="text-text-sm text-text-muted">Nenhum servidor em comum.</p>
+              ) : (
+                <ul className="flex flex-col gap-0.5">
+                  {perfil.mutualGuilds.map((g) => (
+                    <li key={g.id} className="flex min-h-[44px] min-w-0 items-center gap-2 px-1">
+                      {g.iconUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={g.iconUrl} alt="" className="h-6 w-6 shrink-0 rounded-full object-cover" />
+                      ) : (
+                        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-input-background-default text-[10px] font-semibold text-text-strong">
+                          {g.name.slice(0, 2).toUpperCase()}
+                        </span>
+                      )}
+                      <span className="min-w-0 truncate text-text-sm text-text-default">{g.name}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {ehMobile && !isMe && perfil && (
+            <div className="flex flex-col gap-1">
+              <p className="text-text-xs font-bold uppercase tracking-[0.02em] text-text-muted">Amigos em comum</p>
+              {perfil.mutualFriends.length === 0 ? (
+                <p className="text-text-sm text-text-muted">Nenhum amigo em comum.</p>
+              ) : (
+                <ul className="flex flex-col gap-0.5">
+                  {perfil.mutualFriends.map((f) => (
+                    <li key={f.id}>
+                      {/* troca o cartão para o do amigo em comum, como o
+                          `UserProfileModal` já faz na mesma lista — o `Popout`
+                          é uma folha só, então reabrir aqui só troca o
+                          conteúdo dela, sem empilhar uma segunda */}
+                      <button
+                        type="button"
+                        onClick={(e) => ui.openProfile(f, anchorOf(e.currentTarget))}
+                        className="flex min-h-[44px] w-full min-w-0 items-center gap-2 rounded px-1 text-left active:bg-interactive-background-hover"
+                      >
+                        <Avatar user={f} size="sm" surface="border-background-base-low" />
+                        <span className="min-w-0 truncate text-text-sm text-text-default">{displayNameOf(f)}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           {isMe && peloRodape && (
             <PainelDaMinhaConta
@@ -586,7 +790,16 @@ export default function ProfilePopoverHost() {
             </div>
           )}
 
-          {!isMe && relacao !== "blocked" && (
+          {/*
+            No celular este composer embutido sai: `discord-mobile-perfil.png`
+            não tem campo de mensagem no cartão da outra pessoa — "Mensagem" é
+            um botão que leva para a conversa (a fileira de ações acima,
+            `abrirConversa`), não um mini-composer aqui dentro. `!ehMobile`
+            entra na frente da condição de sempre; as classes `celular:`
+            internas ficam paradas (o `<form>` nem monta), documentadas para
+            quem procurar por que "não disparam".
+          */}
+          {!ehMobile && !isMe && relacao !== "blocked" && (
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -622,6 +835,42 @@ export default function ProfilePopoverHost() {
         </div>
       </div>
     </Popout>
+  );
+}
+
+/**
+ * Um botão da fileira de ações do cartão no celular: ícone em cima, rótulo
+ * embaixo, os dois centrados — a forma de "Message"/"Voice Call"/"Video Call"
+ * em `discord-mobile-perfil.png`. Não é o `Button` de `primitivos` (que só
+ * sabe ícone-ao-lado-do-texto): esta pilha vertical não tem outro uso no app,
+ * então fica local em vez de virar mais uma variante do primitivo.
+ *
+ * `min-h-[44px]` é o piso de toque (§ celular do cartão), não uma medida da
+ * captura — a foto não dá px fino (escala ≈2,0 **±4%**, `MEDIDAS.md` §1).
+ */
+function BotaoDeAcaoDoPerfil({
+  icone,
+  rotulo,
+  onClick,
+  disabled,
+}: {
+  icone: ReactNode;
+  rotulo: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex min-h-[44px] min-w-0 flex-col items-center justify-center gap-1 rounded-lg py-2 text-text-muted transition-colors active:bg-interactive-background-hover active:text-text-default disabled:pointer-events-none disabled:opacity-50"
+    >
+      <span aria-hidden="true" className="pointer-events-none">
+        {icone}
+      </span>
+      <span className="truncate text-text-xs font-medium">{rotulo}</span>
+    </button>
   );
 }
 
