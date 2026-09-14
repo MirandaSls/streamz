@@ -12,6 +12,7 @@ import {
   Paintbrush,
   PhoneCall,
   Server,
+  Settings2,
   ShieldCheck,
   User,
   UserCircle,
@@ -26,6 +27,7 @@ import AdminServidoresTab from "@/components/settings/admin/AdminServidoresTab";
 import AdminUsuariosTab from "@/components/settings/admin/AdminUsuariosTab";
 import AdminVisaoGeralTab from "@/components/settings/admin/AdminVisaoGeralTab";
 import AparenciaTab from "@/components/settings/AparenciaTab";
+import AvancadoTab from "@/components/settings/AvancadoTab";
 import AplicativosTab from "@/components/settings/AplicativosTab";
 import ContaTab from "@/components/settings/ContaTab";
 import IdiomaTab from "@/components/settings/IdiomaTab";
@@ -36,6 +38,18 @@ import SessoesTab from "@/components/settings/SessoesTab";
 import TecladoTab from "@/components/settings/TecladoTab";
 import VozTab from "@/components/settings/VozTab";
 import type { ChaveDeTexto } from "@/lib/i18n";
+
+/**
+ * O rótulo de uma aba: a chave do dicionário ou, enquanto a chave não existe
+ * em `lib/i18n.ts`, o texto em pt-BR. Existe por causa do "Avançado" (cartão
+ * 6a): a aba precisava entrar e o dicionário não é deste cartão — quando
+ * `aba.avancado` chegar lá, a aba volta a usar a chave e isto pode sair.
+ */
+export type RotuloDeAba = ChaveDeTexto | { texto: string };
+
+export function rotuloDaAba(t: (chave: ChaveDeTexto) => string, rotulo: RotuloDeAba): string {
+  return typeof rotulo === "string" ? t(rotulo) : rotulo.texto;
+}
 
 /**
  * O índice das configurações: id (que é o valor de `?settings=`), grupo, ícone
@@ -57,7 +71,7 @@ export type SettingsGroup = "usuario" | "app" | "admin";
 export interface SettingsTab {
   id: string;
   group: SettingsGroup;
-  label: ChaveDeTexto;
+  label: RotuloDeAba;
   icon: ReactNode;
   Component: ComponentType;
   /**
@@ -149,6 +163,17 @@ export const SETTINGS_TABS: readonly SettingsTab[] = [
   },
   { id: "teclado", group: "app", label: "aba.teclado", icon: <Keyboard size={20} />, Component: TecladoTab },
   { id: "idioma", group: "app", label: "aba.idioma", icon: <Languages size={20} />, Component: IdiomaTab },
+  // O `developerMode` existia sem interruptor (só dava para ligar editando o
+  // localStorage). No Discord ele mora em "Avançado", depois de Idioma, no
+  // grupo do app (imagem de catálogo `suporte/imagens/safety-privacy-and-policy/
+  // 4407571667351-how-to-find-user-ids-for-law-enforcement/01.png`).
+  {
+    id: "avancado",
+    group: "app",
+    label: { texto: "Avançado" },
+    icon: <Settings2 size={20} />,
+    Component: AvancadoTab,
+  },
 
   // ── j-painel-admin ── só aparecem para o administrador da instância
   {

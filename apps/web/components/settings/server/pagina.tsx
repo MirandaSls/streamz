@@ -8,25 +8,25 @@ import { useEhMobile } from "@/hooks/useEhMobile";
  * elas repetem.
  *
  * Existe porque, nas configurações do **servidor**, o título não mora na barra
- * do shell: a `JanelaDeConfiguracoes` entra em `fecharComoEsc` (o X redondo com
- * "ESC" ao lado da coluna) e quem escreve o `<h1>` é a página. Sem um lugar só,
- * nove páginas escreveriam nove tamanhos de título.
+ * do shell: a `JanelaDeConfiguracoes` entra em `variante="tela-cheia"` (o
+ * círculo com "ESC" ao lado da coluna) e quem escreve o `<h1>` é a página. Sem
+ * um lugar só, nove páginas escreveriam nove tamanhos de título.
  *
- * Medidas (prints `docs/Reference/Captura de tela 2026-09-04 100541`,
- * `100700`, `100706`, `100713`; janela 1919×1079, lidas com `getpixel`):
+ * Medidas (prints `docs/Reference/Captura de tela 2026-09-04 100541` e
+ * `100700`, janela 1919×1079):
  *
  * | item | print |
  * |---|---|
- * | coluna de conteúdo | 660 (x 732→1391) |
- * | título | caixa de 18px de altura com descida ("Cargos") → 20px semibold |
- * | subtítulo | 13px de altura → 14px, cor apagada, 6px abaixo do título |
- * | primeiro bloco | 18px abaixo do subtítulo |
+ * | coluna de conteúdo | 660 (x 732→1391), que é a coluna de 740 com 40 de recuo da moldura |
+ * | título | glifo de 15px com ascendente ("Perfil do servidor", y 96–110) → 20px semibold, `#fbfbfb` = `--text-strong` |
+ * | subtítulo | linhas de 18 (y 128–140 e 146–158) → 14px/18; tinta `#efeff1` = `--text-default` nos dois prints (era `--text-muted`) |
+ * | título → subtítulo | **muda por página**: ≈8 em "Perfil do servidor", ≈0 em "Cargos" (linha de base a 28 e a 19). Fica o meio-termo de 6 de antes |
  *
- * Os botões: acento do produto no primário e cinza no secundário — é o azul do
- * Discord no print e o acento é o equivalente aqui. A **altura** muda de página
- * para página no próprio Discord (32 em "Perfil do servidor" e "Cargos", 40 em
- * "Convites"), então ela não entra na constante: quem chama passa `h-8`/`h-10`
- * com a medida do seu print.
+ * Os botões: as receitas abaixo são as mesmas do `Button` dos primitivos, em
+ * string, para as páginas que ainda montam `<button>` na mão. A **altura** muda
+ * de página para página no próprio Discord (32 em "Perfil do servidor" e
+ * "Cargos", 40 em "Convites"), então ela não entra na constante: quem chama
+ * passa `h-8`/`h-10` com a medida do seu print.
  */
 export function TituloDaPagina({
   titulo,
@@ -52,29 +52,35 @@ export function TituloDaPagina({
       }`}
     >
       <div className="min-w-0">
-        <h1 className={ehMobile ? "sr-only" : "text-xl font-semibold text-text-strong"}>{titulo}</h1>
-        {subtitulo && <p className="mt-1.5 text-sm text-text-muted">{subtitulo}</p>}
+        <h1 className={ehMobile ? "sr-only" : "text-heading-lg font-semibold text-text-strong"}>{titulo}</h1>
+        {subtitulo && <p className="mt-1.5 text-text-sm text-text-default">{subtitulo}</p>}
       </div>
       {acao && <div className="shrink-0">{acao}</div>}
     </div>
   );
 }
 
-/** Botão de ação primário (o azul do print). A altura vem de quem chama. */
+/**
+ * Botão de ação primário (o blurple do print, que aqui é o limão): as cores do
+ * `primario` de `primitivos/Button` (`--control-primary-*`, texto escuro). A
+ * altura vem de quem chama.
+ */
 export const BOTAO_ACENTO =
-  "shrink-0 rounded-lg bg-brand-500 px-4 text-sm font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:cursor-not-allowed disabled:opacity-50";
+  "shrink-0 rounded-lg border border-control-primary-border-default bg-control-primary-background-default px-4 text-text-sm font-medium text-control-primary-text-default transition-colors hover:bg-control-primary-background-hover active:bg-control-primary-background-active disabled:cursor-not-allowed disabled:opacity-50";
 
-/** Botão secundário: cinza, para a ação que acompanha a primária. */
+/** Botão secundário: o `secundario` de `primitivos/Button` (`--control-secondary-*`). */
 export const BOTAO_SECUNDARIO =
-  "shrink-0 rounded-lg bg-border-normal px-4 text-sm font-medium text-text-default transition hover:bg-border-strong disabled:cursor-not-allowed disabled:opacity-50";
+  "shrink-0 rounded-lg border border-control-secondary-border-default bg-control-secondary-background-default px-4 text-text-sm font-medium text-control-secondary-text-default transition-colors hover:bg-control-secondary-background-hover active:bg-control-secondary-background-active disabled:cursor-not-allowed disabled:opacity-50";
 
 /**
  * Botão de ação destrutiva no desenho do print: fundo cinza e **texto**
- * vermelho ("Remover o ícone", "Remover"). Fundo vermelho fica reservado para a
- * confirmação, que é onde o estrago acontece de verdade.
+ * vermelho ("Remover o Ícone", print 100541). É o `critico-secundario` do
+ * `Button` (`--control-critical-secondary-*`, texto `#f87e7a`) — era
+ * `--status-danger` (`#da3e44`), o mesmo vermelho errado que a revisão mediu
+ * no "Apagar servidor". Fundo vermelho fica reservado para a confirmação.
  */
 export const BOTAO_PERIGO =
-  "shrink-0 rounded-lg bg-border-normal px-4 text-sm font-medium text-status-danger transition hover:bg-border-strong disabled:cursor-not-allowed disabled:opacity-50";
+  "shrink-0 rounded-lg border border-control-critical-secondary-border-default bg-control-critical-secondary-background-default px-4 text-text-sm font-medium text-control-critical-secondary-text-default transition-colors hover:bg-control-critical-secondary-background-hover active:bg-control-critical-secondary-background-active disabled:cursor-not-allowed disabled:opacity-50";
 
 /**
  * Cabeçalho de coluna das tabelas do servidor (membros, convites, banimentos):

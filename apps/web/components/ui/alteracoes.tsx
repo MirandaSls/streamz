@@ -137,7 +137,38 @@ export function RegistrarAlteracoes(props: {
   return null;
 }
 
-export function BarraDeAlteracoes({ controle }: { controle: ControleDeAlteracoes }) {
+/**
+ * A barra em si. Medidas do único registro que existe dela, a imagem de
+ * catálogo `suporte/imagens/server-settings/30715364399511-server-profile/04.png`
+ * (1400×106, escala desconhecida — **só proporção**):
+ *
+ * - o botão ocupa 64 dos 104px de altura útil da barra; com o botão `sm` (32)
+ *   do primitivo, a barra fecha em 52: 10 em cima e embaixo;
+ * - o texto começa a 30/1400 da borda esquerda (≈ 16 na mesma escala) e o
+ *   botão termina a 24/1400 da direita (≈ 10 + a borda);
+ * - "Reset" é texto sem caixa, mais apagado que o aviso (`#9a9b9d` contra
+ *   `#b3b3b3`), a ≈ 23 do botão — o par `neutro` do primitivo;
+ * - "Save Changes" é **verde** com texto branco: é o `positivo` do primitivo
+ *   (`--control-connected-*`), não a cor de marca. O limão só entra onde o
+ *   Discord pinta blurple (ADR-0009).
+ *
+ * Fundo, borda, raio e sombra não saem da imagem (recortada e com o destaque
+ * vermelho do artigo por cima): continuam `--background-surface-higher`, que
+ * o VARIAVEIS.md descreve como "barra flutuante", borda sutil e `shadow-popout`
+ * — "não medido".
+ *
+ * A **posição** é do `.noticeRegion__23e6b` (`css-bruto/sob-demanda/
+ * 98259d2dbb54535f.css`): presa a 20px da borda de baixo do conteúdo. Na
+ * `tela-cheia` ela é 20px mais larga que a coluna de cada lado, e quem sabe
+ * disso é a moldura — por isso o `className`.
+ */
+export function BarraDeAlteracoes({
+  controle,
+  className = "",
+}: {
+  controle: ControleDeAlteracoes;
+  className?: string;
+}) {
   const reduzirMovimento = useSettings((s) => s.reduceMotion);
   const barraRef = useRef<HTMLDivElement>(null);
   const [salvando, setSalvando] = useState(false);
@@ -146,6 +177,9 @@ export function BarraDeAlteracoes({ controle }: { controle: ControleDeAlteracoes
     controle.sacudir.current = () => {
       const el = barraRef.current;
       if (!el || reduzirMovimento) return;
+      // A sacudida não tem medida (é movimento; nenhum print a pega): ida e
+      // volta de 8px que amortece em 320ms. O Discord também a pula com
+      // movimento reduzido.
       el.animate(
         [
           { transform: "translateX(0)" },
@@ -157,6 +191,9 @@ export function BarraDeAlteracoes({ controle }: { controle: ControleDeAlteracoes
         ],
         { duration: 320, easing: "ease-in-out" },
       );
+      // quem tentou sair com a barra fora da vista (página rolada) precisa
+      // enxergar por que não saiu
+      el.scrollIntoView?.({ block: "nearest" });
     };
     return () => {
       controle.sacudir.current = null;
@@ -182,24 +219,24 @@ export function BarraDeAlteracoes({ controle }: { controle: ControleDeAlteracoes
       // No celular a barra quebra em duas linhas — o aviso em cima, os dois
       // botões embaixo: numa tela de 390 os três lado a lado deixavam ~110px
       // para o texto, que virava cinco linhas. É a barra que salva todas as abas.
-      className="sticky bottom-5 z-20 mt-6 flex items-center gap-4 rounded-[8px] border border-border-subtle bg-background-surface-higher px-4 py-2.5 shadow-popout celular:flex-wrap celular:gap-2"
+      className={`sticky bottom-5 z-20 mt-6 flex items-center gap-[10px] rounded-lg border border-border-subtle bg-background-surface-higher py-2.5 pl-4 pr-2.5 shadow-popout celular:flex-wrap celular:gap-2 celular:pr-4 ${className}`}
     >
-      <p className="min-w-0 flex-1 text-sm text-text-strong celular:basis-full">
-        Cuidado — você tem alterações não salvas!
+      <p className="min-w-0 flex-1 text-text-md text-text-default celular:basis-full">
+        Cuidado — você tem alterações que não foram salvas!
       </p>
-      {/* "Redefinir" é neutro (sem cor de marca nem de risco) — bucket
-          `secundario` da migração 0.8, mesmo sem a caixa antiga desenhar borda
-          visível: é o par de "Salvar alterações", não um link de navegação. */}
+      {/* Texto sem caixa, com os 12 de respiro de cada lado que separam a
+          palavra do botão verde na imagem (≈23 até ele, somando o `gap`). */}
       <Button
-        variante="secundario"
+        variante="neutro"
         tamanho="sm"
+        disabled={salvando}
         onClick={() => controle.acoes.current?.redefinir()}
-        className="shrink-0 celular:h-[44px]"
+        className="shrink-0 px-3 celular:h-[44px]"
       >
         Redefinir
       </Button>
       <Button
-        variante="primario"
+        variante="positivo"
         tamanho="sm"
         carregando={salvando}
         onClick={() => void salvar()}
