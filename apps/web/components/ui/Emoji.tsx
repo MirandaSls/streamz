@@ -32,8 +32,21 @@ export type TamanhoDoEmoji = "inline" | "jumbo" | number;
  * e uma mensagem de três emoji vira três linhas (visto na captura da bancada).
  */
 export const CLASSE_EMOJI_INLINE = "inline-block h-[1.375em] w-[1.375em] object-contain align-bottom";
-/** `.emoji.jumboable`: 3rem, com `min-height` para a linha não o espremer. */
-export const CLASSE_EMOJI_JUMBO = "inline-block h-[3rem] min-h-[3rem] w-[3rem] object-contain align-bottom";
+/**
+ * `.emoji.jumboable`: 3rem, com `min-height` para a linha não o espremer.
+ *
+ * `inline-block`, como o inline: vários jumbo ficam **lado a lado** na mesma
+ * linha (o Discord embrulha cada um em `.emojiContainer__75abc{display:inline-block}`,
+ * css-bruto/992956.*.css), e não empilhados.
+ *
+ * `py-1` + `box-content`: `.messageContentWrapper_d3c698 .emoji.jumboable{padding:4px 0}`
+ * (css-bruto, mesma regra do sticker). Nenhum CSS do Discord põe
+ * `box-sizing:border-box` universal — procurado em `*`, `img` e `html` nos 303
+ * + 850 arquivos —, então a imagem continua com 48px e a caixa fica com 56px.
+ * Com o `border-box` do preflight do Tailwind o padding comeria o desenho.
+ */
+export const CLASSE_EMOJI_JUMBO =
+  "inline-block box-content h-[3rem] min-h-[3rem] w-[3rem] py-1 object-contain align-bottom";
 
 /**
  * Emoji Unicode desenhado com o Twemoji local (`/twemoji/<codepoints>.svg`),
