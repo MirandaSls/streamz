@@ -34,8 +34,8 @@ medidas, ícones, emoji e comportamento — é o do Discord de 2026-09-11, medid
 4. **Archivo só no wordmark.** Corpo e títulos em Noto Sans (a fallback do gg sans
    e do ABC Ginto no próprio CSS do Discord); código em Source Code Pro (a
    fallback do gg mono). Base de 16px.
-5. **Escuro por padrão.** Tema Dark agora; Ash e Onyx na onda 9; Light fora
-   (exige um accent alternativo, que é outra ADR).
+5. **Escuro sempre.** Três temas do Discord — Dark (padrão), Ash e Onyx (onda
+   9, ver "Temas"); Light fora (exige um accent alternativo, que é outra ADR).
 6. **Ação no hover, não no layout.** Editar, apagar, reagir, responder aparecem no
    hover da mensagem (`group-hover`) — a linha em repouso mostra só conteúdo.
 7. **Ícone é SVG do acervo oficial do Discord**, sempre por
@@ -80,9 +80,9 @@ App de **3 colunas** fixas sobre a área principal (`app/app/page.tsx`):
 
 Os tokens são as **variáveis semânticas do Discord**, com o nome dele, geradas
 por `scripts/paridade/gerar-tokens.mjs` a partir de
-`docs/referencias-discord/tokens/variaveis-resolvidas.json` (tema Dark,
-2026-09-11). Saem em `apps/web/app/tokens.css` (hex, canais `-rgb` e alfa `-a`
-de cada um) e em `apps/web/tokens.gerados.ts` (o mapa do Tailwind). **Nenhum
+`docs/referencias-discord/tokens/variaveis-resolvidas.json` (temas Dark, Ash e
+Onyx, 2026-09-11). Saem em `apps/web/app/tokens.css` (hex, canais `-rgb` e alfa
+`-a` de cada um) e em `apps/web/tokens.gerados.ts` (o mapa do Tailwind). **Nenhum
 hex é escrito à mão**: faltando um valor, ele sai do gerador.
 
 **A classe é o utilitário + o nome do token sem o `--`.** O prefixo repetido é o
@@ -121,6 +121,42 @@ passo equivalente da escala `--brand-*` do limão — 65 trocas, listadas em
 Duas exceções que não são do Discord: `efem`/`efemhov` (fundo da mensagem
 efêmera: o limão a 4%, medido no print — o Discord não tem token) e `paper`
 (`#FDFDFB`, cor de **marca**, nunca de interface).
+
+### Temas
+
+Dark, Ash e Onyx são as colunas `escuro` (`theme-dark theme-darker`), `cinza`
+(`theme-dark`) e `onyx` (`theme-dark theme-midnight`) de
+`docs/referencias-discord/tokens/VARIAVEIS.md`. **A classe não muda com o tema**:
+`bg-background-base-lower` é `#1a1a1e` no Dark, `#323339` no Ash e `#000000` no
+Onyx, porque o que muda é a variável.
+
+- **Dark é o `:root`** de `tokens.css`, e é a base. **Ash e Onyx** são blocos
+  `:root[data-tema="ash"]` / `:root[data-tema="onyx"]` com **só** as variáveis
+  que diferem do Dark (328 e 500 declarações); o resto herda. Translúcidos
+  (`#rrggbbaa`) mantêm o alfa, que sai no `-a`.
+- **O limão vale nos três**, pela mesma regra mecânica: a escala `--brand-*` é
+  a mesma, e os tokens que no Discord mudam de blurple por tema (`text-brand`,
+  `icon-brand`, `mention-foreground`, `tabs-indicator-default`,
+  `reaction-text-reacted-default`, `text-code-title`) viram o passo do limão
+  correspondente em cada um — `trocasPorTema` em
+  `scripts/paridade/tokens-de-marca.json`. Contraste conferido: limão como
+  texto/borda ≥ 6,57:1 na superfície mais clara do Ash (`#3f4048`) e ≥ 11,33:1
+  no Onyx; texto escuro sobre o limão 12,54:1 (hover 7,64, pressionado 5,87)
+  nos três.
+- **Onde se escolhe**: Configurações > Aparência > Temas padrão
+  (`AparenciaTab.tsx`). As amostras são a paleta crua do Discord, iguais em
+  qualquer tema ativo: Ash `bg-primary-600`, Dark `bg-plum-20`, Onyx `bg-black`
+  (e o Claro, `bg-white`, desabilitado "em breve").
+- **Onde se guarda**: `theme: "dark" | "ash" | "onyx"` em `stores/settings.ts`
+  (`localStorage`, preferência de dispositivo). A store escreve `data-tema` no
+  `<html>` (nada no Dark) e o `<meta name="theme-color">` com o
+  `--background-base-lowest` do tema.
+- **Sem piscar**: o script inline `TEMA_ANTES_DA_PINTURA` do `app/layout.tsx`
+  lê o `localStorage` e escreve o atributo no `<head>`, antes do `<body>` — no
+  site, no desktop e no celular, que usam a mesma web.
+- **Cor fora de token quebra tema.** Hex, `rgba()` e `bg-black`/`text-white` em
+  classe só onde a cor é a mesma em qualquer tema no Discord (mídia sobre
+  fundo preto, véu, polegar de slider, conteúdo como cor de avatar).
 
 **Sombras**: as do Discord pelo nome (`shadow-shadow-high`, `shadow-elevation-low`…)
 e `shadow-popout`, a combinação `--shadow-border` + `--shadow-high` que o CSS do

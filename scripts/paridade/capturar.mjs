@@ -256,6 +256,22 @@ async function digitarNoComposer(page, texto) {
   await page.locator('[role="listbox"]').first().waitFor();
 }
 
+/**
+ * Troca o tema pelo mesmo lugar em que o app o guarda (o `persist` da store de
+ * configurações) e recarrega: é o caminho de quem abre o app já em Ash/Onyx,
+ * que é também o que o script do `<head>` precisa pintar sem piscar o Dark.
+ */
+async function escolherTema(page, tema) {
+  await page.evaluate((t) => {
+    const cru = localStorage.getItem("settings");
+    const salvo = cru ? JSON.parse(cru) : { state: {}, version: 4 };
+    salvo.state = { ...(salvo.state ?? {}), theme: t };
+    localStorage.setItem("settings", JSON.stringify(salvo));
+  }, tema);
+  await page.reload();
+  await esperarShell(page);
+}
+
 async function perfilDe(page, chave) {
   const nome = s.usuarios[chave].displayName;
   await page.locator(`aside[aria-label="Membros"] button[aria-label="Perfil de ${nome}"]`).first().click();
@@ -617,6 +633,20 @@ const PASSOS = {
         await page.getByRole("button", { name: /^Baixar para / }).first().click();
         await page.locator('[role="dialog"]').first().waitFor();
         await dormir(400);
+      },
+    },
+    "tema-ash": {
+      async fazer(page) {
+        await escolherTema(page, "ash");
+        await abrirServidor(page);
+        await abrirCanal(page, "geral");
+      },
+    },
+    "tema-onyx": {
+      async fazer(page) {
+        await escolherTema(page, "onyx");
+        await abrirServidor(page);
+        await abrirCanal(page, "geral");
       },
     },
   },

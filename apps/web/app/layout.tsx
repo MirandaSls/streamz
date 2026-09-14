@@ -97,7 +97,10 @@ export const metadata: Metadata = {
 /**
  * A cor que o navegador pinta na barra antes da página carregar: a
  * `--background-base-lowest` do Discord (rail, coluna e barra de título).
- * Literal porque o metadado vira `<meta>` e não enxerga variável CSS.
+ * Literal porque o metadado vira `<meta>` e não enxerga variável CSS. É a do
+ * Dark; em Ash e Onyx o script `TEMA_ANTES_DA_PINTURA` e depois
+ * `stores/settings.ts#aplicarTema` reescrevem o `content` com a do tema, lida
+ * do CSS aplicado.
  *
  * As três linhas de baixo são do leiaute de celular, e cada uma resolve um
  * defeito concreto:
@@ -125,6 +128,29 @@ export const viewport: Viewport = {
   interactiveWidget: "resizes-content",
 };
 
+/**
+ * Aplica o tema salvo **antes da primeira pintura**: sem isto, quem usa Ash ou
+ * Onyx veria o Dark (o `:root` de `tokens.css`) até o bundle carregar e a
+ * store escrever o atributo — um piscar a cada abertura, pior no app de
+ * celular, que carrega mais devagar.
+ *
+ * Roda síncrono no `<head>`, antes do `<body>` existir. Lê direto o que o
+ * `persist` do zustand grava em `localStorage["settings"]`
+ * (`{"state": {...}, "version": n}`) e só aceita `ash`/`onyx`: qualquer outra
+ * coisa (Dark, versão antiga, JSON quebrado, `localStorage` bloqueado) deixa o
+ * `<html>` sem atributo, que é o Dark. A normalização de verdade continua na
+ * store (`temaValido`); isto só antecipa o que ela vai escrever.
+ *
+ * A barra do sistema (`<meta name="theme-color">`) é trocada quando o documento
+ * termina de ser lido — antes disso o `<meta>` pode ainda não existir no DOM e
+ * o CSS pode não ter carregado; valor vazio não escreve nada.
+ *
+ * Inline de propósito, e por isso vale igual no site, no export do Tauri (a CSP
+ * de lá aceita script inline) e no app de celular. Qualquer mudança no formato
+ * salvo da store tem de passar por aqui.
+ */
+const TEMA_ANTES_DA_PINTURA = `(function(){try{var d=document.documentElement;var s=JSON.parse(localStorage.getItem("settings")||"null");var t=s&&s.state&&s.state.theme;if(t!=="ash"&&t!=="onyx")return;d.setAttribute("data-tema",t);document.addEventListener("DOMContentLoaded",function(){var c=getComputedStyle(d).getPropertyValue("--background-base-lowest").trim();if(!c)return;var m=document.querySelectorAll('meta[name="theme-color"]');for(var i=0;i<m.length;i++)m[i].setAttribute("content",c)})}catch(e){}})();`;
+
 export default function RootLayout({
   children,
 }: {
@@ -132,13 +158,17 @@ export default function RootLayout({
 }) {
   return (
     // ── e-configuracoes ── `stores/settings` escreve style/class/lang no <html>
-    // antes da hidratação (a preferência tem de valer no primeiro quadro), e é
-    // exatamente a divergência que o React reclamaria aqui.
+    // antes da hidratação (a preferência tem de valer no primeiro quadro), e o
+    // script do tema escreve `data-tema` antes até disso: é exatamente a
+    // divergência que o React reclamaria aqui.
     <html
       lang="pt-BR"
       className={`${fonteSans.variable} ${fonteDisplay.variable} ${fonteMono.variable}`}
       suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: TEMA_ANTES_DA_PINTURA }} />
+      </head>
       <body className="font-sans">
         <BarraDeTituloMinima />
         <PesoDosIcones>{children}</PesoDosIcones>

@@ -39,7 +39,9 @@
     { "id": "troca-rapida", "onda": 7, "o_que": "troca rápida (Ctrl+K)" },
     { "id": "visualizador-imagem", "onda": 7, "o_que": "visualizador de imagem em tela cheia" },
     { "id": "download", "onda": 8, "o_que": "página de download pública, sem login" },
-    { "id": "download-senha", "onda": 8, "o_que": "página de download com a etapa da senha aberta" }
+    { "id": "download-senha", "onda": 8, "o_que": "página de download com a etapa da senha aberta" },
+    { "id": "tema-ash", "onda": 9, "o_que": "canal de texto no tema Ash" },
+    { "id": "tema-onyx", "onda": 9, "o_que": "canal de texto no tema Onyx" }
   ]},
   "celular": { "largura": 390, "altura": 844, "telas": [
     { "id": "m-inicio", "onda": 8, "o_que": "aba Início: rail + canais do servidor" },

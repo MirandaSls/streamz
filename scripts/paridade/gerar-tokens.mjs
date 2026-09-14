@@ -11,7 +11,8 @@
  * então ali passe o caminho da worktree de referências.
  *
  * Saídas (todas commitadas, todas com o aviso "gerado"):
- *   apps/web/app/tokens.css          variáveis por tema (`:root` = Dark)
+ *   apps/web/app/tokens.css          variáveis por tema (`:root` = Dark; Ash e Onyx
+ *                                    por `data-tema` no <html>, só o que difere)
  *   apps/web/tokens.gerados.ts       mapa nome → cor para o tailwind.config.ts
  *   scripts/paridade/tokens-de-marca.json   o que o limão substituiu, para revisão
  *
@@ -35,9 +36,23 @@ const REFS = resolve(
 const LIMAO = "#9be31f";
 const ACCENT_INK = "#0b0b0f";
 
-// Temas: a coluna de `variaveis-resolvidas.json` e o seletor em que ela sai.
-// Dark é o `:root`; Ash e Onyx entram na onda 9 como classes no <html>.
-const TEMAS = [{ coluna: "escuro", seletor: ":root" }];
+/**
+ * Temas: o nome do app (`stores/settings.ts#Tema`), a coluna de
+ * `variaveis-resolvidas.json` e o seletor em que ela sai (onda 9).
+ *
+ * O Dark é o `:root` e vem **primeiro**: é a base. Ash e Onyx saem num bloco
+ * por `data-tema` no <html> (escrito antes da primeira pintura pelo script de
+ * `app/layout.tsx`) com **só** as variáveis cujo valor difere do Dark — o que
+ * não aparece no bloco herda o `:root`. As colunas são as de `VARIAVEIS.md`:
+ * `cinza` = `theme-dark` (Ash), `onyx` = `theme-dark theme-midnight` (Onyx).
+ * O Light (`claro`) fica fora: o limão só vai sobre escuro, e um accent para
+ * fundo claro é outra ADR.
+ */
+const TEMAS = [
+  { nome: "dark", coluna: "escuro", seletor: ":root" },
+  { nome: "ash", coluna: "cinza", seletor: ':root[data-tema="ash"]' },
+  { nome: "onyx", coluna: "onyx", seletor: ':root[data-tema="onyx"]' },
+];
 
 /**
  * Famílias que não entram: gráficos, Nitro, missões, perfis com gradiente, a
@@ -55,12 +70,22 @@ const PREFIXOS_FORA = [
  * dependem de tema), mas o próprio Discord os usa direto em componente:
  * - `--white`/`--black`: texto sobre cor, fundo de mídia, QR code;
  * - `--primary-*`: o cinza das dicas (`tooltipGrey`) e de ícone sobre imagem;
+ *   o `--primary-600` é a amostra do Ash em Aparência > Temas padrão
+ *   (`.darkIcon__36dee`);
+ * - `--plum-20`: a amostra do Dark na mesma grade (`.darkerIcon__36dee`) — as
+ *   amostras são da paleta crua de propósito: iguais em qualquer tema ativo;
  * - `--green-360`: a dica verde;
  * - `--opacity-black-*`/`--opacity-white-*`: preto e branco com alfa, que é como
  *   o Discord faz véu de vídeo, capa de botão sobre mídia e máscara de recorte —
  *   o `--background-scrim` tem alfa fixo de 72% e não serve para isso.
  */
-const EXTRAS = [/^--(white|black)$/, /^--primary-(230|330|700)$/, /^--green-360$/, /^--opacity-(black|white)-\d+$/];
+const EXTRAS = [
+  /^--(white|black)$/,
+  /^--primary-(230|330|600|700)$/,
+  /^--plum-20$/,
+  /^--green-360$/,
+  /^--opacity-(black|white)-\d+$/,
+];
 
 /**
  * O que o Discord não tem e o app precisa. Cada um aponta para um token dele:
@@ -199,15 +224,21 @@ function paraOLimao(hex) {
 const ehFora = (nome) => PREFIXOS_FORA.includes(nome.slice(2).split("-")[0]);
 const ehSombra = (nome) => /^--(shadow|elevation)-/.test(nome) && !nome.endsWith("-filter");
 
-const trocasDeMarca = [];
+/** O que a regra da marca trocou, por tema (`dark`, `ash`, `onyx`). */
+const trocasPorTema = {};
+/** Cor final de cada token, por tema: é daqui que sai o relatório de contraste. */
+const coresPorTema = {};
 const semValor = [];
 const blocos = [];
 let cores = [];
 let sombras = [];
+/** Declarações do Dark, `variável → valor`: os outros temas só escrevem o que difere. */
+const doDark = new Map();
 
-for (const { coluna, seletor } of TEMAS) {
+for (const { nome: tema, coluna, seletor } of TEMAS) {
+  const ehDark = seletor === ":root";
   const vals = resolvidas.valores[coluna];
-  const linhas = [];
+  const trocasDeMarca = (trocasPorTema[tema] = []);
   const coresTema = [];
   const sombrasTema = [];
 
@@ -222,7 +253,7 @@ for (const { coluna, seletor } of TEMAS) {
     if (ehFora(nome) && !EXTRAS.some((re) => re.test(nome))) continue;
     const v = vals[nome];
     if (!v) {
-      semValor.push(nome);
+      if (ehDark) semValor.push(nome);
       continue;
     }
     if (ehSombra(nome)) {
@@ -250,15 +281,23 @@ for (const { coluna, seletor } of TEMAS) {
     if (base) coresTema.push([nosso, base[1]]);
   }
 
+  const decls = [];
   for (const [nome, hex] of coresTema) {
     const { r, g, b, a } = hexParaRgba(hex);
-    linhas.push(`  ${nome}: ${hex};`);
-    linhas.push(`  ${nome}-rgb: ${Math.round(r * 255)} ${Math.round(g * 255)} ${Math.round(b * 255)};`);
-    linhas.push(`  ${nome}-a: ${+a.toFixed(4)};`);
+    decls.push([nome, hex]);
+    decls.push([`${nome}-rgb`, `${Math.round(r * 255)} ${Math.round(g * 255)} ${Math.round(b * 255)}`]);
+    decls.push([`${nome}-a`, `${+a.toFixed(4)}`]);
   }
-  for (const [nome, valor] of sombrasTema) linhas.push(`  ${nome}: ${valor};`);
+  for (const [nome, valor] of sombrasTema) decls.push([nome, valor]);
+  if (ehDark) for (const [nome, valor] of decls) doDark.set(nome, valor);
+  // Ash/Onyx: só o que difere do Dark, e só variável que o Dark tem — nome novo
+  // aqui ficaria fora do `tokens.gerados.ts`, que sai do Dark
+  const linhas = decls
+    .filter(([nome, valor]) => ehDark || (doDark.has(nome) && doDark.get(nome) !== valor))
+    .map(([nome, valor]) => `  ${nome}: ${valor};`);
   blocos.push(`${seletor} {\n${linhas.join("\n")}\n}`);
-  if (coluna === "escuro") {
+  coresPorTema[tema] = Object.fromEntries(coresTema);
+  if (ehDark) {
     cores = coresTema.map(([n]) => n);
     sombras = sombrasTema.map(([n]) => n);
   }
@@ -271,7 +310,7 @@ const AVISO = `Gerado por scripts/paridade/gerar-tokens.mjs a partir de
 
 writeFileSync(
   join(RAIZ, "apps/web/app/tokens.css"),
-  `/*\n * ${AVISO}\n *\n * Cada cor sai em três variáveis: o hex, os canais (\`-rgb\`) e o alfa (\`-a\`).\n * As duas últimas existem para o modificador de opacidade do Tailwind\n * (\`bg-x/20\`) multiplicar o alfa que o token do Discord já tem.\n */\n${blocos.join("\n\n")}\n`,
+  `/*\n * ${AVISO}\n *\n * Cada cor sai em três variáveis: o hex, os canais (\`-rgb\`) e o alfa (\`-a\`).\n * As duas últimas existem para o modificador de opacidade do Tailwind\n * (\`bg-x/20\`) multiplicar o alfa que o token do Discord já tem.\n *\n * \`:root\` é o tema Dark. Ash e Onyx (\`data-tema\` no <html>) sobrescrevem só\n * as variáveis cujo valor muda; o resto herda o Dark.\n */\n${blocos.join("\n\n")}\n`,
 );
 
 const chave = (n) => n.slice(2);
@@ -297,11 +336,21 @@ writeFileSync(
   join(RAIZ, "scripts/paridade/tokens-de-marca.json"),
   JSON.stringify(
     {
-      aviso: "Gerado por gerar-tokens.mjs. O que a regra da ADR-0009 (item 3) trocou no tema Dark.",
+      aviso:
+        "Gerado por gerar-tokens.mjs. O que a regra da ADR-0009 (item 3) trocou: `trocas` no tema Dark; `trocasPorTema`, só as trocas de Ash e Onyx que diferem das do Dark.",
       limao: LIMAO,
       accentInk: ACCENT_INK,
       escala: Object.fromEntries(PASSOS.map((n) => [n, n === "--brand-500" ? LIMAO : paraOLimao(escuro[n].cor)])),
-      trocas: trocasDeMarca,
+      trocas: trocasPorTema.dark,
+      trocasPorTema: Object.fromEntries(
+        TEMAS.filter((t) => t.seletor !== ":root").map((t) => [
+          t.nome,
+          trocasPorTema[t.nome].filter((x) => {
+            const d = trocasPorTema.dark.find((y) => y.nome === x.nome);
+            return !d || d.discord !== x.discord || d.streamz !== x.streamz;
+          }),
+        ]),
+      ),
     },
     null,
     2,
@@ -309,16 +358,22 @@ writeFileSync(
 );
 
 // ── relatório ────────────────────────────────────────────────────────────────
-const cor = (n) => {
-  const t = trocasDeMarca.find((x) => x.nome === n);
-  return t ? t.streamz : escuro[n]?.cor;
-};
 console.log(`tokens de tema: ${nomesDeTema.size}; cores emitidas: ${cores.length}; sombras: ${sombras.length}`);
-console.log(`trocas pela marca: ${trocasDeMarca.length}; sem valor no Dark (pulados): ${semValor.length}`);
+console.log(
+  `trocas pela marca (Dark): ${trocasPorTema.dark.length}; sem valor no Dark (pulados): ${semValor.length}; ` +
+    `variáveis sobrescritas: ${blocos.slice(1).map((b, i) => `${TEMAS[i + 1].nome} ${b.split("\n").length - 2}`).join(", ")}`,
+);
 console.log("escala do limão:", PASSOS.map((n) => `${n.slice(8)} ${n === "--brand-500" ? LIMAO : paraOLimao(escuro[n].cor)}`).join(" · "));
-for (const n of ["--control-primary-background-default", "--control-primary-background-hover", "--control-primary-background-active"]) {
-  console.log(`accent-ink sobre ${n} (${cor(n)}): ${contraste(ACCENT_INK, cor(n).slice(0, 7)).toFixed(2)}:1`);
-}
-for (const n of ["--mention-foreground", "--text-brand"]) {
-  console.log(`${n} (${cor(n)}) sobre --background-base-lower: ${contraste(cor(n).slice(0, 7), escuro["--background-base-lower"].cor).toFixed(2)}:1`);
+// AA: 4,5:1 texto normal, 3:1 texto grande, ícone e borda. Cores com alfa são
+// comparadas pelo RGB (o limão e o texto escuro são opacos).
+for (const { nome: tema } of TEMAS) {
+  const c = coresPorTema[tema];
+  for (const n of ["--control-primary-background-default", "--control-primary-background-hover", "--control-primary-background-active"]) {
+    console.log(`[${tema}] accent-ink sobre ${n} (${c[n]}): ${contraste(ACCENT_INK, c[n].slice(0, 7)).toFixed(2)}:1`);
+  }
+  for (const n of ["--mention-foreground", "--text-brand", "--brand-500"]) {
+    for (const fundo of ["--background-base-lowest", "--background-base-lower", "--background-surface-highest"]) {
+      console.log(`[${tema}] ${n} (${c[n]}) sobre ${fundo} (${c[fundo]}): ${contraste(c[n].slice(0, 7), c[fundo].slice(0, 7)).toFixed(2)}:1`);
+    }
+  }
 }

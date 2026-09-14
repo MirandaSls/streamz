@@ -1,5 +1,5 @@
 {
-  "aviso": "Gerado por gerar-tokens.mjs. O que a regra da ADR-0009 (item 3) trocou no tema Dark.",
+  "aviso": "Gerado por gerar-tokens.mjs. O que a regra da ADR-0009 (item 3) trocou: `trocas` no tema Dark; `trocasPorTema`, só as trocas de Ash e Onyx que diferem das do Dark.",
   "limao": "#9be31f",
   "accentInk": "#0b0b0f",
   "escala": {
@@ -421,5 +421,83 @@
       "discord": "#5865f2",
       "streamz": "#9be31f"
     }
-  ]
+  ],
+  "trocasPorTema": {
+    "ash": [
+      {
+        "nome": "--icon-brand",
+        "regra": "família blurple",
+        "discord": "#94a8ff",
+        "streamz": "#beeb8b"
+      },
+      {
+        "nome": "--mention-foreground",
+        "regra": "família blurple",
+        "discord": "#cdd7ff",
+        "streamz": "#daeec6"
+      },
+      {
+        "nome": "--reaction-text-reacted-default",
+        "regra": "família blurple",
+        "discord": "#dfe4ff",
+        "streamz": "#e2efd4"
+      },
+      {
+        "nome": "--tabs-indicator-default",
+        "regra": "família blurple",
+        "discord": "#94a8ff",
+        "streamz": "#beeb8b"
+      },
+      {
+        "nome": "--text-brand",
+        "regra": "família blurple",
+        "discord": "#94a8ff",
+        "streamz": "#beeb8b"
+      },
+      {
+        "nome": "--text-code-title",
+        "regra": "família blurple",
+        "discord": "#bccaff",
+        "streamz": "#d2edb6"
+      }
+    ],
+    "onyx": [
+      {
+        "nome": "--icon-brand",
+        "regra": "família blurple",
+        "discord": "#6374f4",
+        "streamz": "#a3e545"
+      },
+      {
+        "nome": "--mention-foreground",
+        "regra": "família blurple",
+        "discord": "#8ca0fd",
+        "streamz": "#b9ea83"
+      },
+      {
+        "nome": "--reaction-text-reacted-default",
+        "regra": "família blurple",
+        "discord": "#9aadff",
+        "streamz": "#c1eb92"
+      },
+      {
+        "nome": "--tabs-indicator-default",
+        "regra": "família blurple",
+        "discord": "#6374f4",
+        "streamz": "#a3e545"
+      },
+      {
+        "nome": "--text-brand",
+        "regra": "família blurple",
+        "discord": "#6374f4",
+        "streamz": "#a3e545"
+      },
+      {
+        "nome": "--text-code-title",
+        "regra": "família blurple",
+        "discord": "#8195fb",
+        "streamz": "#b4e975"
+      }
+    ]
+  }
 }
