@@ -14,6 +14,7 @@ import {
   type ComandoDeApp,
   type OpcaoDeComando,
   type OpcaoDeInteracao,
+  type PedidoDeAutocompleteInput,
   type PublicUser,
 } from "@streamz/shared";
 
@@ -72,6 +73,7 @@ export function separarComando(
 export function interpretarComando(
   texto: string,
   comandosDeApp: readonly ComandoDeApp[] = [],
+  escolhasFeitas?: EscolhasFeitas,
 ): ResultadoComando {
   const partes = separarComando(texto.trim());
   if (!partes) return { tipo: "nenhum" };
@@ -99,7 +101,7 @@ export function interpretarComando(
 
   // ── j-bots ── nenhum nativo com esse nome: pode ser comando de bot
   const doApp = comandosDeApp.find((c) => c.name === partes.nome);
-  if (doApp) return interpretarComandoDeApp(doApp, arg);
+  if (doApp) return interpretarComandoDeApp(doApp, arg, escolhasFeitas);
 
   return { tipo: "desconhecido", nome: partes.nome };
 }
@@ -223,6 +225,111 @@ function repartirNomeadas(
 }
 
 /**
+ * O texto cru de cada opção (chave em minúsculas), nas duas formas que
+ * `interpretarComandoDeApp` aceita: nomeadas, ou o resto livre quando o comando
+ * tem uma opção só. Opção sem marca no campo não entra no mapa.
+ */
+function valoresBrutos(argumento: string, opcoes: readonly OpcaoDeComando[]): Map<string, string> {
+  const nomeadas = repartirNomeadas(argumento, opcoes);
+  if (nomeadas) return nomeadas;
+  const brutos = new Map<string, string>();
+  if (opcoes.length === 1 && argumento.trim()) brutos.set(opcoes[0].name.toLowerCase(), semAspas(argumento));
+  return brutos;
+}
+
+// ── onda 3 · autocomplete de opção (callback 8) ─────────────────────────────
+
+/**
+ * Uma escolha que a pessoa pegou na lista que o **bot** devolveu. No Discord o
+ * chip mostra o `name` e o bot recebe o `value` — e os dois costumam diferir
+ * (`name: "Never Gonna Give You Up"`, `value: "dQw4w9WgXcQ"`). O nosso campo é
+ * um `<textarea>` e só guarda texto, então o `name` vai para o campo (é o que a
+ * pessoa lê) e o par fica guardado no composer até o envio.
+ */
+export interface EscolhaFeita {
+  name: string;
+  value: string | number;
+}
+
+/** Escolhas feitas, por `chaveDeEscolha(commandId, nomeDaOpção)`. */
+export type EscolhasFeitas = ReadonlyMap<string, EscolhaFeita>;
+
+export function chaveDeEscolha(commandId: string, opcao: string): string {
+  return `${commandId}:${opcao.toLowerCase()}`;
+}
+
+/**
+ * Troca o texto do campo pelo `value` da escolha feita — **só** se o texto
+ * ainda é exatamente o `name` escolhido. Se a pessoa editou depois de escolher,
+ * vale o que ela escreveu, como no Discord, onde o valor de uma opção com
+ * autocomplete é texto livre e a lista é só sugestão.
+ */
+function comEscolhaFeita(
+  commandId: string,
+  opcao: OpcaoDeComando,
+  bruto: string,
+  escolhasFeitas: EscolhasFeitas | undefined,
+): string {
+  const escolha = escolhasFeitas?.get(chaveDeEscolha(commandId, opcao.name));
+  return escolha && bruto.trim() === escolha.name.trim() ? String(escolha.value) : bruto;
+}
+
+/** A opção pede sugestões ao bot? Escolhas fixas (`choices`) continuam locais. */
+export function opcaoPedeAutocomplete(opcao: OpcaoDeComando | null | undefined): opcao is OpcaoDeComando {
+  return Boolean(opcao?.autocomplete) && !(opcao?.choices && opcao.choices.length > 0);
+}
+
+/** O que o composer precisa para chamar `pedirAutocomplete` da store. */
+export interface PedidoDeAutocompleteDaOpcao {
+  commandId: string;
+  /** a mesma chave que a store guarda em `autocomplete.chave` (`commandId:opção`). */
+  chave: string;
+  options: PedidoDeAutocompleteInput["options"];
+}
+
+/**
+ * Monta o pedido de autocomplete da opção sob o cursor, ou null quando não há o
+ * que pedir (nativo, nenhuma opção ativa, opção sem `autocomplete: true`, ou
+ * com `choices`, que são locais).
+ *
+ * É o `data.options` do `APPLICATION_COMMAND_AUTOCOMPLETE` do Discord:
+ * - a opção em foco vai com `focused: true` e o `value` **em texto**, qualquer
+ *   que seja o tipo dela (um `4` meio digitado é `"1"`, não `1`) — é a regra do
+ *   Discord, e o `pedidoDeAutocompleteSchema` a repete;
+ * - as outras vão só se já têm valor, convertidas como no envio
+ *   (`converterOpcao`), com a escolha feita trocada pelo `value`. Número que
+ *   ainda não é número e escolha fixa que não bate ficam de fora, pelo mesmo
+ *   motivo do envio: mandar lixo ao bot é pior que não mandar.
+ */
+export function pedidoDeAutocomplete(
+  texto: string,
+  estado: EstadoDoComando,
+  escolhasFeitas?: EscolhasFeitas,
+): PedidoDeAutocompleteDaOpcao | null {
+  const { comando, ativa } = estado;
+  if (comando.nativo || !comando.commandId || !opcaoPedeAutocomplete(ativa)) return null;
+  const commandId = comando.commandId;
+  const brutos = valoresBrutos(texto.slice(1 + comando.nome.length), comando.opcoes);
+  const emFoco = ativa.name.toLowerCase();
+
+  const options: PedidoDeAutocompleteInput["options"] = [];
+  for (const opcao of comando.opcoes) {
+    const nome = opcao.name.toLowerCase();
+    const bruto = brutos.get(nome);
+    if (nome === emFoco) {
+      // aspas abertas e ainda não fechadas (`termo:"never gon`) não são parte
+      // do que se procura
+      options.push({ name: opcao.name, type: opcao.type, value: (bruto ?? "").replace(/^"/, ""), focused: true });
+      continue;
+    }
+    if (bruto === undefined || !bruto.trim()) continue;
+    const convertida = converterOpcao(opcao, comEscolhaFeita(commandId, opcao, bruto, escolhasFeitas));
+    if (convertida) options.push(convertida);
+  }
+  return { commandId, chave: `${commandId}:${ativa.name}`, options };
+}
+
+/**
  * Monta as opções de uma interação a partir do que foi digitado.
  *
  * Duas formas, nesta ordem:
@@ -236,16 +343,16 @@ function repartirNomeadas(
  * Opção obrigatória em branco volta como `faltaOpcao`, e o composer mostra o
  * aviso em vez de gastar um 400 na API.
  */
-export function interpretarComandoDeApp(comando: ComandoDeApp, argumento: string): ResultadoComando {
-  const nomeadas = repartirNomeadas(argumento, comando.options);
+export function interpretarComandoDeApp(
+  comando: ComandoDeApp,
+  argumento: string,
+  escolhasFeitas?: EscolhasFeitas,
+): ResultadoComando {
+  const brutos = valoresBrutos(argumento, comando.options);
   const opcoes: OpcaoDeInteracao[] = [];
 
   for (const opcao of comando.options) {
-    const bruto = nomeadas
-      ? (nomeadas.get(opcao.name.toLowerCase()) ?? "")
-      : comando.options.length === 1
-        ? semAspas(argumento)
-        : "";
+    const bruto = comEscolhaFeita(comando.id, opcao, brutos.get(opcao.name.toLowerCase()) ?? "", escolhasFeitas);
     const preenchida = converterOpcao(opcao, bruto);
     if (preenchida) opcoes.push(preenchida);
     else if (opcao.required) return { tipo: "faltaOpcao", comando: comando.name, opcao: opcao.name };
@@ -310,6 +417,12 @@ export interface ComandoListavel {
    */
   opcoes: readonly OpcaoDeComando[];
   nativo: boolean;
+  /**
+   * ── onda 3 ── cuid do `ApplicationCommand` (o `commandId` das rotas de
+   * interação); ausente nos nativos. Opcional para não obrigar quem monta um
+   * `ComandoListavel` à mão (teste, história) a inventar um.
+   */
+  commandId?: string;
   /** o app dono; null nos nativos. */
   app: { id: string; nome: string; botUser: PublicUser } | null;
 }
@@ -356,6 +469,7 @@ function deAppListavel(c: ComandoDeApp): ComandoListavel {
     descricao: c.description,
     opcoes: c.options,
     nativo: false,
+    commandId: c.id,
     app: { id: c.applicationId, nome: c.applicationName, botUser: c.botUser },
   };
 }

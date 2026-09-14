@@ -3,6 +3,7 @@
 import {
   colorRoleOf,
   displayNameOf,
+  type EscolhaDeAutocomplete,
   type OpcaoDeComando,
   type Role,
 } from "@streamz/shared";
@@ -29,6 +30,13 @@ export interface FontesDeSugestao {
   canais: { id: string; name: string | null; type: string }[];
   emojisPorGuild: { emojis: { id: string; name: string; url: string }[] }[];
   cargos: readonly Role[];
+  /**
+   * `MENTION_EVERYONE` no canal. Sem ela, `@everyone` e `@here` **não entram**
+   * na lista: o Discord não sugere a menção que a pessoa não pode fazer (e o
+   * envio, no `Composer`, já a escaparia para texto). Ausente = pode, para quem
+   * monta sugestões fora de um canal (não há hoje) não perder as duas linhas.
+   */
+  podeMencionarTodos?: boolean;
 }
 
 export const TITULO_GATILHO: Record<Gatilho["tipo"], string> = {
@@ -71,10 +79,13 @@ export function montarSugestoes(gatilho: Gatilho | null, fontes: FontesDeSugesta
   }
 
   if (gatilho.tipo === "@") {
-    const alcance: ItemAutocomplete[] = [
-      { chave: "everyone", valor: "@everyone", rotulo: "@everyone", detalhe: "avisa todo mundo" },
-      { chave: "here", valor: "@here", rotulo: "@here", detalhe: "avisa quem está online" },
-    ].filter((i) => i.rotulo.slice(1).startsWith(q));
+    const alcance: ItemAutocomplete[] =
+      fontes.podeMencionarTodos === false
+        ? []
+        : [
+            { chave: "everyone", valor: "@everyone", rotulo: "@everyone", detalhe: "avisa todo mundo" },
+            { chave: "here", valor: "@here", rotulo: "@here", detalhe: "avisa quem está online" },
+          ].filter((i) => i.rotulo.slice(1).startsWith(q));
 
     // ── c-cargos ── só cargo com `mentionable` aparece; o texto grava o id,
     // porque cargo é renomeável e o nome quebraria a menção depois
@@ -103,7 +114,9 @@ export function montarSugestoes(gatilho: Gatilho | null, fontes: FontesDeSugesta
  * É o seletor de alvo do Discord: escolhas fixas (`choices`), sim/não, e
  * usuário, canal e cargo **do servidor** — o valor que entra no campo é a menção
  * (`<@id>`, `<#id>`, `<@&id>`), que `converterOpcao` devolve ao bot como id.
- * Texto livre e número não têm lista: não há o que sugerir.
+ * Texto livre e número não têm lista local: não há o que sugerir. Quando a
+ * opção declara `autocomplete: true`, quem sugere é o bot (`sugestoesDoBot`), e
+ * o `Composer` nem chama esta função.
  */
 export function sugestoesDeOpcao(
   opcao: OpcaoDeComando,
@@ -148,6 +161,32 @@ export function sugestoesDeOpcao(
   }
 }
 
+/**
+ * ── onda 3 ── as escolhas que o **bot** devolveu (callback 8) para a opção com
+ * `autocomplete: true`, na ordem em que vieram. Até 25, o limite do Discord
+ * (`LIMITES_DE_COMPONENTE.ESCOLHAS_DE_AUTOCOMPLETE`) — a API já recusa mais que
+ * isso, o corte aqui é só para uma lista nunca crescer além do que o bot pode
+ * mandar.
+ *
+ * Sem filtro local: quem filtra pelo que foi digitado é o bot, que recebeu o
+ * texto em `focused`. A linha mostra só o nome (o Discord não mostra o `value`),
+ * no idioma do app quando o bot mandou `name_localizations`.
+ *
+ * A chave leva o índice porque dois `value` iguais são aceitos pelo Discord, e
+ * a mesma chave em duas linhas quebraria a lista do React.
+ */
+export function sugestoesDoBot(escolhas: readonly EscolhaDeAutocomplete[]): ItemAutocomplete[] {
+  return escolhas.slice(0, MAX_ESCOLHAS).map((c, i) => {
+    const nome = nomeDaEscolha(c);
+    return { chave: `bot:${i}:${c.value}`, valor: nome, rotulo: nome };
+  });
+}
+
+/** O nome que a pessoa vê — e que entra no campo — de uma escolha do bot. */
+export function nomeDaEscolha(c: EscolhaDeAutocomplete): string {
+  return c.name_localizations?.["pt-BR"] ?? c.name;
+}
+
 function itemDeMembro(
   m: FontesDeSugestao["membros"][number],
   valor: string,
@@ -160,7 +199,9 @@ function itemDeMembro(
     detalhe: m.user.username,
     // o nome do membro sai na cor do cargo mais alto, como na timeline
     cor: colorRoleOf(m.roleIds, cargos)?.color ?? undefined,
-    icone: <Avatar user={m.user as never} size="sm" />,
+    // `md` = 32: o slot do ícone do `Autocomplete` é `h-8 w-8`, o mesmo lado
+    // do avatar do app no `SeletorDeComandos` (ver o cabeçalho do Autocomplete)
+    icone: <Avatar user={m.user as never} size="md" />,
   };
 }
 

@@ -31,8 +31,11 @@ import {
   MAX_ATTACHMENT_SIZE,
   MAX_MESSAGE_LENGTH,
   Permission,
+  WS_EVENTS,
   mentionsEveryone,
   type Attachment,
+  type AutocompleteDeBotEvent,
+  type EscolhaDeAutocomplete,
   type OpcaoDeComando,
   type Sticker,
 } from "@streamz/shared";
@@ -43,19 +46,34 @@ import BarraDoComando from "@/components/chat/composer/BarraDoComando";
 import { BotaoEnviar, BotaoLateral, BotaoMais } from "@/components/chat/composer/BotoesDoComposer";
 import OverlayArrastar from "@/components/chat/composer/OverlayArrastar";
 import SeletorDeComandos from "@/components/chat/composer/SeletorDeComandos";
-import { TITULO_GATILHO, montarSugestoes, sugestoesDeOpcao } from "@/components/chat/composer/sugestoes";
+import {
+  TITULO_GATILHO,
+  montarSugestoes,
+  nomeDaEscolha,
+  sugestoesDeOpcao,
+  sugestoesDoBot,
+} from "@/components/chat/composer/sugestoes";
 import PickerPanel, { type PickerTab } from "@/components/media/PickerPanel";
 import { formatBytes } from "@/lib/format";
 import { api } from "@/lib/api";
-import { aplicarEscolha, detectarGatilho, mover } from "@/lib/composer-autocomplete";
+import {
+  ESPERA_DO_AUTOCOMPLETE_MS,
+  aplicarEscolha,
+  detectarGatilho,
+  estadoDaListaDoBot,
+  mover,
+} from "@/lib/composer-autocomplete";
 import {
   acrescentarOpcao,
   agruparComandos,
   aplicarValorDeOpcao,
+  chaveDeEscolha,
   estadoDoComando,
   interpretarComando,
+  pedidoDeAutocomplete,
   textoAoEscolherComando,
   type ComandoListavel,
+  type EscolhaFeita,
 } from "@/lib/comandos-barra";
 import { EVENTO_MENCAO, type DetalheMencao } from "@/lib/mencoes";
 import { lerRascunho, limparRascunho, salvarRascunho } from "@/lib/rascunhos";
@@ -64,10 +82,11 @@ import { useChannels } from "@/stores/channels";
 import { useComandosDeApp } from "@/stores/comandos-de-app";
 import { aplicarEmojisPersonalizados, todosOsEmojis, useEmojis } from "@/stores/emojis";
 import { useGuilds } from "@/stores/guilds";
+import { useInteracoesDeBot } from "@/stores/interacoes-de-bot";
 import { useMessages } from "@/stores/messages";
 import { useCan, usePermissions } from "@/stores/permissions";
 import { useSettings } from "@/stores/settings";
-import { errorMessage } from "@/stores/socket-adapter";
+import { errorMessage, on } from "@/stores/socket-adapter";
 import { emitTyping } from "@/stores/typing";
 import { ui, type MenuItem } from "@/stores/ui";
 
@@ -114,6 +133,23 @@ const ALTURA_ITEM = 32;
 const ALTURA_SEPARADOR = 9;
 
 let seqAnexo = 0;
+
+/** Lista vazia estável, para o `useMemo` das sugestões do bot não recalcular à toa. */
+const NENHUMA_ESCOLHA: readonly EscolhaDeAutocomplete[] = [];
+/**
+ * Quantos `nonce` de `interaction.autocomplete` recebidos o composer lembra. Só
+ * o do pedido em curso importa; os anteriores ficam para o caso de a resposta
+ * do pedido velho chegar depois da do novo.
+ */
+const RESPOSTAS_LEMBRADAS = 16;
+/**
+ * Textos do popout de valores quando quem sugere é o bot. **Não medidos**: não
+ * há print nem imagem do autocomplete de opção do Discord nas referências
+ * (`desenvolvedores/README.md` lista a lacuna), então são as palavras do
+ * Streamz para os mesmos estados. O "Carregando…" é o do próprio `Autocomplete`.
+ */
+const TEXTO_FALHOU_AUTOCOMPLETE = "Não foi possível carregar as opções.";
+const TEXTO_VAZIO_AUTOCOMPLETE = "Nenhuma opção corresponde à sua pesquisa.";
 
 /** Ícones que o botão de emoji alterna no hover (o easter egg do Discord). */
 const CARINHAS = [Smile, Laugh, Angry, Annoyed];
@@ -316,8 +352,8 @@ export default function Composer({
   );
   const comandosPlanos = useMemo(() => grupos.flatMap((g) => g.comandos), [grupos]);
   const sugestoes = useMemo(
-    () => montarSugestoes(gatilho, { membros, canais, emojisPorGuild, cargos }),
-    [gatilho, membros, canais, emojisPorGuild, cargos],
+    () => montarSugestoes(gatilho, { membros, canais, emojisPorGuild, cargos, podeMencionarTodos }),
+    [gatilho, membros, canais, emojisPorGuild, cargos, podeMencionarTodos],
   );
   const estado = useMemo(
     () => (gatilho?.tipo === "/" ? null : estadoDoComando(draft, caret, comandosDeApp)),
@@ -330,28 +366,121 @@ export default function Composer({
   );
 
   const chaveDaLista = `${draft} ${caret}`;
-  const lista: "comandos" | "gatilho" | "opcao" | null =
-    fechadaEm === chaveDaLista || bloqueado
-      ? null
-      : comandosPlanos.length > 0
-        ? "comandos"
-        : sugestoes.length > 0
-          ? "gatilho"
-          : sugestoesOpcao.length > 0
-            ? "opcao"
-            : null;
+  const listaFechada = fechadaEm === chaveDaLista || bloqueado;
+
+  // ── onda 3 · opção com `autocomplete: true` (callback 8) ──
+  //
+  // Quem sugere é o bot: o campo pede (`pedirAutocomplete` da store, com a
+  // opção em foco e as já preenchidas), a resposta volta pelo socket e a store
+  // descarta a de pedido velho. Escolhas fixas (`choices`) continuam locais,
+  // em `sugestoesOpcao`. Com a lista fechada (Esc, ou logo depois de escolher)
+  // não se pede nada: seria uma interação e um `INTERACTION_CREATE` para uma
+  // lista que ninguém vai ver.
+  /** escolhas pegas na lista do bot: o campo mostra o `name`, o envio manda o `value`. */
+  const [escolhasFeitas, setEscolhasFeitas] = useState<ReadonlyMap<string, EscolhaFeita>>(() => new Map());
+  const autocompleteDoBot = useInteracoesDeBot((s) => s.autocomplete);
+  const pedido = useMemo(
+    () =>
+      !gatilho && estado && channelId && !listaFechada ? pedidoDeAutocomplete(draft, estado, escolhasFeitas) : null,
+    [gatilho, estado, channelId, listaFechada, draft, escolhasFeitas],
+  );
+  /**
+   * Os `nonce` cujo `interaction.autocomplete` chegou. A store zera as escolhas
+   * tanto na resposta vazia quanto na falha, sem distinguir as duas; é isto que
+   * separa "o bot não achou nada" de "falhou" (ver `estadoDaListaDoBot`). O
+   * listener só lê: quem aplica o evento continua sendo o `useRealtime`.
+   */
+  const [respondidos, setRespondidos] = useState<readonly string[]>([]);
+  useEffect(
+    () =>
+      on<AutocompleteDeBotEvent>(WS_EVENTS.INTERACTION_AUTOCOMPLETE, (evento) =>
+        setRespondidos((prev) => [evento.nonce, ...prev].slice(0, RESPOSTAS_LEMBRADAS)),
+      ),
+    [],
+  );
+  const listaDoBot = pedido
+    ? estadoDaListaDoBot(pedido.chave, autocompleteDoBot, (nonce) => respondidos.includes(nonce))
+    : null;
+  const escolhasDoBot =
+    listaDoBot === "pronto" && autocompleteDoBot ? autocompleteDoBot.escolhas : NENHUMA_ESCOLHA;
+  const opcaoDoBot = pedido !== null;
+  const itensDaOpcao = useMemo(
+    () => (opcaoDoBot ? sugestoesDoBot(escolhasDoBot) : sugestoesOpcao),
+    [opcaoDoBot, escolhasDoBot, sugestoesOpcao],
+  );
+
+  // O pedido em si, com *debounce*. A assinatura é o corpo inteiro: mover o
+  // cursor dentro do mesmo valor não pede de novo, e mudar outra opção já
+  // preenchida pede (o bot recebe as duas). Trocar de opção pede **na hora** —
+  // a lista abre em "Carregando…" e não há digitação para esperar. Pedido
+  // anterior em voo não é abortado (o `api.pedirAutocompleteDeComando` não
+  // aceita `AbortSignal`, e o servidor já criou a interação): a store troca o
+  // `nonce` e a resposta velha é descartada ao chegar.
+  const assinaturaDoPedido = pedido ? JSON.stringify(pedido) : null;
+  const pedidoRef = useRef(pedido);
+  pedidoRef.current = pedido;
+  /** o `nonce` do último pedido **deste** composer: só ele pode ser limpo daqui. */
+  const nonceDoPedidoRef = useRef<string | null>(null);
+  useEffect(() => {
+    const atual = pedidoRef.current;
+    const loja = useInteracoesDeBot.getState();
+    if (!atual || !channelId) {
+      if (nonceDoPedidoRef.current && loja.autocomplete?.nonce === nonceDoPedidoRef.current) {
+        loja.limparAutocomplete();
+      }
+      nonceDoPedidoRef.current = null;
+      return;
+    }
+    const trocouDeOpcao = loja.autocomplete?.chave !== atual.chave;
+    const relogio = setTimeout(
+      () => {
+        void useInteracoesDeBot.getState().pedirAutocomplete(channelId, atual.commandId, atual.options);
+        // `pedirAutocomplete` grava o nonce novo antes do primeiro `await`
+        nonceDoPedidoRef.current = useInteracoesDeBot.getState().autocomplete?.nonce ?? null;
+      },
+      trocouDeOpcao ? 0 : ESPERA_DO_AUTOCOMPLETE_MS,
+    );
+    return () => clearTimeout(relogio);
+  }, [assinaturaDoPedido, channelId]);
+  // desmontar (trocar de canal, fechar a thread) não deixa lista órfã na store
+  useEffect(
+    () => () => {
+      const loja = useInteracoesDeBot.getState();
+      if (nonceDoPedidoRef.current && loja.autocomplete?.nonce === nonceDoPedidoRef.current) {
+        loja.limparAutocomplete();
+      }
+    },
+    [],
+  );
+  // campo vazio (enviou, apagou tudo): as escolhas de antes não valem mais
+  useEffect(() => {
+    if (!draft) setEscolhasFeitas((m) => (m.size > 0 ? new Map() : m));
+  }, [draft]);
+
+  const lista: "comandos" | "gatilho" | "opcao" | null = listaFechada
+    ? null
+    : comandosPlanos.length > 0
+      ? "comandos"
+      : sugestoes.length > 0
+        ? "gatilho"
+        : // a opção do bot abre a lista mesmo sem itens: é onde moram o
+          // "Carregando…", o vazio e a falha
+          itensDaOpcao.length > 0 || opcaoDoBot
+          ? "opcao"
+          : null;
   const tamanhoDaLista =
     lista === "comandos"
       ? comandosPlanos.length
       : lista === "gatilho"
         ? sugestoes.length
         : lista === "opcao"
-          ? sugestoesOpcao.length
+          ? itensDaOpcao.length
           : 0;
 
   useEffect(
     () => setSelecionado(0),
-    [lista, gatilho?.tipo, gatilho?.termo, estado?.ativa?.name, estado?.termoAtivo],
+    // `escolhasDoBot`: resposta nova do bot é lista nova, a seleção volta ao topo
+    [lista, gatilho?.tipo, gatilho?.termo, estado?.ativa?.name, estado?.termoAtivo, escolhasDoBot],
   );
   useEffect(() => setOpcaoComErro(null), [draft]);
 
@@ -389,8 +518,21 @@ export default function Composer({
   }
 
   function escolherValorDeOpcao(item: ItemAutocomplete) {
-    if (!estado) return;
+    if (!estado || item.desabilitado) return;
     const r = aplicarValorDeOpcao(draft, caret, estado, item.valor);
+    if (pedido && estado.ativa) {
+      const escolha = escolhasDoBot[itensDaOpcao.indexOf(item)];
+      if (escolha) {
+        const chave = chaveDeEscolha(pedido.commandId, estado.ativa.name);
+        setEscolhasFeitas((m) => new Map(m).set(chave, { name: nomeDaEscolha(escolha), value: escolha.value }));
+      }
+      // Texto livre continua ativo depois do espaço (`estadoDoComando`): sem
+      // fechar, a lista reabriria sobre o nome recém-escolhido e o Enter
+      // seguinte escolheria de novo em vez de enviar. Digitar reabre. Se a
+      // escolha já levou o cursor à próxima obrigatória, a lista dela abre.
+      const ativaDepois = estadoDoComando(r.texto, r.caret, comandosDeApp)?.ativa;
+      if (ativaDepois?.name === estado.ativa.name) setFechadaEm(`${r.texto} ${r.caret}`);
+    }
     atualizarTexto(r.texto, r.caret);
     focar(r.caret);
   }
@@ -405,7 +547,7 @@ export default function Composer({
   async function submit() {
     if (!podeEnviar) return;
 
-    const comando = interpretarComando(draft.trim(), comandosDeApp);
+    const comando = interpretarComando(draft.trim(), comandosDeApp, escolhasFeitas);
     // ── j-bots ── comando de bot: vira interação, **antes** do "desconhecido".
     // Nada é escrito no canal por quem digitou: a resposta chega pelo socket.
     if (comando.tipo === "faltaOpcao") {
@@ -489,24 +631,30 @@ export default function Composer({
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     // com uma lista aberta, as setas, o Enter, o Tab e o Esc pertencem a ela
     if (lista && tamanhoDaLista > 0) {
+      // linha desabilitada (`ItemAutocomplete.desabilitado`) não recebe seleção
+      const itens = lista === "gatilho" ? sugestoes : lista === "opcao" ? itensDaOpcao : null;
+      const selecionavel = itens ? (j: number) => !itens[j]?.desabilitado : undefined;
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
-        setSelecionado((i) => mover(i, event.key === "ArrowDown" ? 1 : -1, tamanhoDaLista));
+        setSelecionado((i) => mover(i, event.key === "ArrowDown" ? 1 : -1, tamanhoDaLista, selecionavel));
         return;
       }
       if (event.key === "Enter" || event.key === "Tab") {
         event.preventDefault();
         const i = Math.min(selecionado, tamanhoDaLista - 1);
         if (lista === "comandos") escolherComando(comandosPlanos[i]);
-        else if (lista === "gatilho") escolherSugestao(sugestoes[i]);
-        else escolherValorDeOpcao(sugestoesOpcao[i]);
+        else if (lista === "gatilho") {
+          if (!sugestoes[i].desabilitado) escolherSugestao(sugestoes[i]);
+        } else escolherValorDeOpcao(itensDaOpcao[i]);
         return;
       }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setFechadaEm(chaveDaLista); // fecha a lista sem mexer no texto
-        return;
-      }
+    }
+    // o Esc vale também com a lista do bot ainda sem itens (carregando, vazia,
+    // falhou) — senão ela só sumiria apagando o que foi digitado
+    if (lista && event.key === "Escape") {
+      event.preventDefault();
+      setFechadaEm(chaveDaLista); // fecha a lista sem mexer no texto
+      return;
     }
 
     // Tab dentro de um comando de bot pula para a próxima opção que ainda não
@@ -897,10 +1045,13 @@ export default function Composer({
           {lista === "opcao" && estado.ativa && (
             <Autocomplete
               titulo={`Valores para ${estado.ativa.name}`}
-              itens={sugestoesOpcao}
+              itens={itensDaOpcao}
               selecionado={selecionado}
               onEscolher={escolherValorDeOpcao}
               onPassarMouse={setSelecionado}
+              carregando={listaDoBot === "carregando"}
+              erro={listaDoBot === "falhou" ? TEXTO_FALHOU_AUTOCOMPLETE : undefined}
+              mensagemVazia={opcaoDoBot ? TEXTO_VAZIO_AUTOCOMPLETE : undefined}
             />
           )}
         </BarraDoComando>

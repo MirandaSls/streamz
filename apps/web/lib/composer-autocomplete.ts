@@ -94,10 +94,8 @@ export function aplicarEscolha(
  * `podeSelecionar` é opcional e pula linhas desabilitadas (`ItemAutocomplete.
  * desabilitado`, ver `components/chat/Autocomplete.tsx`) — sem ele o
  * comportamento é o de sempre (qualquer índice serve), então nenhuma chamada
- * existente quebra. Hoje **nenhum chamador passa o predicado**: é o
- * `Composer.tsx` (fora da lista deste cartão) quem decide o que é
- * selecionável, e ele ainda não sabe que um item pode estar desabilitado —
- * ver "faltando" no cartão 2d-autocomplete.
+ * existente quebra. O `Composer.tsx` passa o predicado nas listas de `:` `@`
+ * `#` e de valor de opção (cartão 3g).
  */
 export function mover(
   indice: number,
@@ -115,4 +113,46 @@ export function mover(
     proximo = (proximo + delta + total) % total;
   }
   return indice;
+}
+
+// ── onda 3 · autocomplete de opção pedido ao bot (callback 8) ──────────────
+
+/**
+ * Espera entre a última tecla e o pedido ao bot. **Não medido**: o valor que o
+ * cliente do Discord usa não está em nenhuma das referências (o CSS não diz, e
+ * não há print do autocomplete de opção). É uma escolha — curta o bastante para
+ * a lista acompanhar a digitação, longa o bastante para uma palavra digitada de
+ * uma vez virar um pedido só, e não um por letra (cada pedido é uma interação
+ * nova no servidor e um `INTERACTION_CREATE` para o bot).
+ */
+export const ESPERA_DO_AUTOCOMPLETE_MS = 250;
+
+/** Em que pé está a lista de sugestões que o bot devolve. */
+export type EstadoDaListaDoBot = "carregando" | "falhou" | "vazio" | "pronto";
+
+/**
+ * Decide o que o popout mostra, a partir do pedido que o campo quer
+ * (`chaveEsperada`) e do que a store tem (`useInteracoesDeBot().autocomplete`).
+ *
+ * - **carregando** enquanto a store ainda não tem a opção certa (o *debounce*
+ *   não disparou, ou a lista é de outra opção) ou está esperando o bot **sem**
+ *   nada para mostrar. Com a lista anterior da mesma opção na mão, ela continua
+ *   na tela durante o pedido novo em vez de piscar "Carregando…" a cada letra
+ *   (a store guarda as escolhas de propósito, ver `pedirAutocomplete`).
+ * - **falhou** quando o pedido terminou sem que o bot tenha respondido: a rota
+ *   recusou, o servidor mandou `interaction.failed`, ou o relógio de segurança
+ *   da store venceu. A store zera as escolhas nos três casos **sem** marcar
+ *   falha — por isso quem chama diz se o `interaction.autocomplete` daquele
+ *   `nonce` chegou (`respondeu`).
+ * - **vazio** quando o bot respondeu com `choices: []`.
+ */
+export function estadoDaListaDoBot(
+  chaveEsperada: string,
+  atual: { chave: string; nonce: string; carregando: boolean; escolhas: readonly unknown[] } | null,
+  respondeu: (nonce: string) => boolean,
+): EstadoDaListaDoBot {
+  if (!atual || atual.chave !== chaveEsperada) return "carregando";
+  if (atual.escolhas.length > 0) return "pronto";
+  if (atual.carregando) return "carregando";
+  return respondeu(atual.nonce) ? "vazio" : "falhou";
 }
