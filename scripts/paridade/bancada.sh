@@ -114,6 +114,14 @@ garantir_segredos() {
 
 escrever_env_da_api() {
   garantir_segredos
+  # instaladores de mentira para a página /download ter catálogo: o tamanho é
+  # real para a página mostrar "MB", mas o conteúdo é zero (`truncate` cria o
+  # arquivo esparso, sem ocupar disco). macOS fica de fora de propósito, para a
+  # página também mostrar uma plataforma "em breve"
+  mkdir -p "$ESTADO/downloads"
+  truncate -s 92M "$ESTADO/downloads/Streamz_1.3.0_x64-setup.exe"
+  truncate -s 104M "$ESTADO/downloads/Streamz_1.3.0_amd64.AppImage"
+  truncate -s 61M "$ESTADO/downloads/Streamz_1.3.0.apk"
   # shellcheck disable=SC1091
   . "$ESTADO/segredos.env"
   touch "$ESTADO/api.env"
@@ -130,6 +138,8 @@ CORS_ORIGIN=$WEB_LOCAL
 WEB_PUBLIC_URL=$WEB_LOCAL
 API_PUBLIC_URL=$API_LOCAL
 APP_VERSION=paridade
+DOWNLOAD_PASSWORD=paridade
+DOWNLOAD_DIR=/w/.claude/paridade/downloads
 LOG_FORMAT=pretty
 LOG_LEVEL=info
 REDIS_URL=

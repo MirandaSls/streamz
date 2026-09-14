@@ -388,6 +388,22 @@
         "data": "2026-08",
         "escala": "1:1"
       }
+    ],
+    "download": [
+      {
+        "arquivo": "publico/desktop/15-download-viewport.png",
+        "nota": "página de download real do Discord, pt-BR, topo",
+        "data": null,
+        "escala": "desconhecida"
+      }
+    ],
+    "download-senha": [
+      {
+        "arquivo": "publico/desktop/15-download-viewport.png",
+        "nota": "o Discord não tem etapa de senha; comparar só a linguagem visual do topo",
+        "data": null,
+        "escala": "desconhecida"
+      }
     ]
   },
   "celular": {
@@ -460,6 +476,54 @@
       {
         "arquivo": "publico/web-mobile-ios/01-login-viewport.png",
         "nota": "captura própria do login real em viewport de iPhone, pt-BR, tema escuro",
+        "data": null,
+        "escala": "desconhecida"
+      }
+    ],
+    "m-download": [
+      {
+        "arquivo": "publico/web-mobile-ios/15-download-viewport.png",
+        "nota": "página de download do Discord no navegador do iPhone",
+        "data": null,
+        "escala": "desconhecida"
+      }
+    ],
+    "m-gaveta": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/mobile/discord-mobile-servidor-2024.png",
+        "nota": "lista de canais com a conversa estacionada à direita",
+        "data": null,
+        "escala": "1,9707 px/pt"
+      }
+    ],
+    "m-detalhes-canal": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/mobile/discord-mobile-membros.png",
+        "nota": "membros do canal no celular",
+        "data": null,
+        "escala": "ver MEDIDAS.md"
+      }
+    ],
+    "m-detalhes-fixadas": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/mobile/discord-mobile-membros.png",
+        "nota": "sem captura das fixadas no celular; mesma moldura dos detalhes do canal",
+        "data": null,
+        "escala": "desconhecida"
+      }
+    ],
+    "m-busca": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/mobile/discord-mobile-chat-canal-2024.png",
+        "nota": "sem captura da busca no celular; cabeçalho do canal para a entrada",
+        "data": null,
+        "escala": "1,9707 px/pt"
+      }
+    ],
+    "m-config": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/mobile/discord-mobile-config-usuario.png",
+        "nota": "configurações do usuário no celular",
         "data": null,
         "escala": "desconhecida"
       }

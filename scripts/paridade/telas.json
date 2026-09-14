@@ -37,7 +37,9 @@
     { "id": "modal-convite", "onda": 7, "o_que": "modal de convidar pessoas" },
     { "id": "modal-confirmacao", "onda": 7, "o_que": "modal de confirmação (apagar mensagem)" },
     { "id": "troca-rapida", "onda": 7, "o_que": "troca rápida (Ctrl+K)" },
-    { "id": "visualizador-imagem", "onda": 7, "o_que": "visualizador de imagem em tela cheia" }
+    { "id": "visualizador-imagem", "onda": 7, "o_que": "visualizador de imagem em tela cheia" },
+    { "id": "download", "onda": 8, "o_que": "página de download pública, sem login" },
+    { "id": "download-senha", "onda": 8, "o_que": "página de download com a etapa da senha aberta" }
   ]},
   "celular": { "largura": 390, "altura": 844, "telas": [
     { "id": "m-inicio", "onda": 8, "o_que": "aba Início: rail + canais do servidor" },
@@ -48,6 +50,12 @@
     { "id": "m-perfil-folha", "onda": 8, "o_que": "perfil de outra pessoa em folha inferior" },
     { "id": "m-membros", "onda": 8, "o_que": "lista de membros do canal" },
     { "id": "m-voz", "onda": 8, "o_que": "chamada de voz no celular" },
-    { "id": "m-login", "onda": 7, "o_que": "login no celular" }
+    { "id": "m-login", "onda": 7, "o_que": "login no celular" },
+    { "id": "m-download", "onda": 8, "o_que": "página de download no celular" },
+    { "id": "m-gaveta", "onda": 8, "o_que": "conversa arrastada a meio caminho, revelando rail e canais" },
+    { "id": "m-detalhes-canal", "onda": 8, "o_que": "detalhes do canal (título do cabeçalho), aba de membros" },
+    { "id": "m-detalhes-fixadas", "onda": 8, "o_que": "detalhes do canal, aba Fixadas" },
+    { "id": "m-busca", "onda": 8, "o_que": "busca no canal pelo celular" },
+    { "id": "m-config", "onda": 8, "o_que": "configurações do usuário no celular (lista de seções)" }
   ]}
 }

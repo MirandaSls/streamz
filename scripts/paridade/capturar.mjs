@@ -600,6 +600,25 @@ const PASSOS = {
         await rede(page);
       },
     },
+    download: {
+      logado: false,
+      async fazer(page) {
+        await ir(page, "/download");
+        await page.locator("#download-titulo").waitFor({ timeout: 20_000 });
+        await rede(page);
+      },
+    },
+    "download-senha": {
+      logado: false,
+      async fazer(page) {
+        await ir(page, "/download");
+        await page.locator("#download-titulo").waitFor({ timeout: 20_000 });
+        await rede(page);
+        await page.getByRole("button", { name: /^Baixar para / }).first().click();
+        await page.locator('[role="dialog"]').first().waitFor();
+        await dormir(400);
+      },
+    },
   },
 
   celular: {
@@ -659,9 +678,10 @@ const PASSOS = {
       async fazer(page) {
         await abrirServidor(page);
         await abrirCanal(page, "geral");
-        // no celular a lista de membros abre pelo título do cabeçalho
+        // no celular o título do cabeçalho abre os detalhes do canal, que
+        // começam na aba Membros (onda 8; antes era um diálogo só de membros)
         await page.locator("header button").filter({ hasText: s.canais.geral.nome }).first().tap();
-        await page.locator('[role="dialog"][aria-label="Membros"]').waitFor();
+        await page.getByRole("tab", { name: "Membros" }).first().waitFor();
         await rede(page);
       },
     },
@@ -670,6 +690,73 @@ const PASSOS = {
       async fazer(page) {
         await abrirServidor(page);
         await entrarNaVoz(page);
+        await dormir(800);
+      },
+    },
+    "m-download": {
+      logado: false,
+      async fazer(page) {
+        await ir(page, "/download");
+        await page.locator("#download-titulo").waitFor({ timeout: 20_000 });
+        await rede(page);
+      },
+    },
+    "m-gaveta": {
+      async fazer(page) {
+        await abrirServidor(page);
+        await abrirCanal(page, "geral");
+        // a conversa entra animada (`anim-empilhar`, 220ms): antes disso o ponto
+        // do dedo ainda cai na rail por baixo, e o gesto (com razão) não começa
+        await dormir(700);
+        // arrasto de DEDO parado no meio: a foto sai antes de soltar. Toque de
+        // verdade pelo CDP — o mouse do Playwright seleciona texto no caminho, e
+        // o gesto (com razão) não começa com seleção ativa
+        const v = page.viewportSize();
+        const y = Math.round(v.height / 2);
+        const cdp = await page.context().newCDPSession(page);
+        const toque = (type, x) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints: type === "touchEnd" ? [] : [{ x, y, id: 1 }] });
+        await toque("touchStart", 60);
+        for (let x = 60; x <= 60 + Math.round(v.width * 0.45); x += 8) {
+          await toque("touchMove", x);
+          await dormir(16);
+        }
+      },
+    },
+    "m-detalhes-canal": {
+      async fazer(page) {
+        await abrirServidor(page);
+        await abrirCanal(page, "geral");
+        await page.locator("header button").filter({ hasText: s.canais.geral.nome }).first().tap();
+        await page.getByRole("tablist", { name: "Seções do canal" }).waitFor();
+        await rede(page);
+      },
+    },
+    "m-detalhes-fixadas": {
+      async fazer(page) {
+        await abrirServidor(page);
+        await abrirCanal(page, "geral");
+        await page.locator("header button").filter({ hasText: s.canais.geral.nome }).first().tap();
+        await page.getByRole("tab", { name: "Fixadas" }).first().tap();
+        await rede(page);
+        await dormir(400);
+      },
+    },
+    "m-busca": {
+      async fazer(page) {
+        await abrirServidor(page);
+        await abrirCanal(page, "geral");
+        await page.getByRole("button", { name: /^Buscar em / }).first().tap();
+        await dormir(600);
+        await page.keyboard.type("paridade");
+        await page.keyboard.press("Enter");
+        await rede(page);
+        await dormir(600);
+      },
+    },
+    "m-config": {
+      async fazer(page) {
+        await page.locator('nav[aria-label="Seções"] button').filter({ hasText: "Você" }).first().tap();
+        await page.getByRole("button", { name: "Configurações do usuário" }).first().tap();
         await dormir(800);
       },
     },
