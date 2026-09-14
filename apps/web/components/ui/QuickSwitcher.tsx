@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Hash, Lock, Megaphone, Server, Users, Volume2 } from "@/components/ui/icones";
+import { AlertTriangle, Hash, Lock, Megaphone, Server, Users, Volume2 } from "@/components/ui/icones";
 import { isGroupChannel, type Channel, type PublicUser, type UserStatus } from "@streamz/shared";
 import Dialog from "@/components/modals/Dialog";
 import { ehMobileAgora } from "@/hooks/useEhMobile";
@@ -32,14 +32,6 @@ const RECENTES_KEY = "quickSwitcher.recentes";
 const MAX_RECENTES = 5;
 /** Prefixo dos itens que ainda não têm conversa aberta (`user:<id>`). */
 const PREFIXO_USUARIO = "user:";
-
-/** Prefixos de filtro mostrados como pílulas com o campo vazio. */
-const PREFIXOS = [
-  ["*", "servidores"],
-  ["@", "usuários"],
-  ["#", "canais de texto"],
-  ["!", "canais de voz"],
-];
 
 /**
  * Canais por servidor, buscados uma vez por sessão da aba. O quick switcher é
@@ -99,6 +91,11 @@ export default function QuickSwitcher() {
   const [canaisPorServidor, setCanaisPorServidor] = useState<Map<string, Channel[]>>(
     () => new Map(cacheDeCanais),
   );
+  /** estado "carregando": a busca dos canais dos outros servidores está em voo. */
+  const [carregando, setCarregando] = useState(false);
+  /** estado "erro": pelo menos um servidor não respondeu — os resultados que já
+   *  temos continuam de pé, só avisamos que a lista pode estar incompleta. */
+  const [erroAoCarregar, setErroAoCarregar] = useState(false);
   const listaRef = useRef<HTMLUListElement>(null);
   const recentes = useMemo(lerRecentes, []);
 
@@ -107,14 +104,24 @@ export default function QuickSwitcher() {
     let vivo = true;
     const faltando = guilds.filter((g) => !cacheDeCanais.has(g.id) && g.id !== activeGuildId);
     if (faltando.length === 0) return;
+    setCarregando(true);
+    setErroAoCarregar(false);
     void Promise.all(
       faltando.map((g) =>
         api
           .getGuild(g.id)
-          .then((cheio) => cacheDeCanais.set(g.id, cheio.channels ?? []))
-          .catch(() => undefined),
+          .then((cheio) => {
+            cacheDeCanais.set(g.id, cheio.channels ?? []);
+            return true;
+          })
+          .catch(() => false),
       ),
-    ).then(() => vivo && setCanaisPorServidor(new Map(cacheDeCanais)));
+    ).then((sucessos) => {
+      if (!vivo) return;
+      setCanaisPorServidor(new Map(cacheDeCanais));
+      setCarregando(false);
+      setErroAoCarregar(sucessos.some((ok) => !ok));
+    });
     return () => {
       vivo = false;
     };
@@ -265,95 +272,141 @@ export default function QuickSwitcher() {
       className="w-[570px]"
       bodyClassName="!p-0"
     >
-      {/* o campo é o primeiro elemento: no Discord o quick switcher não tem título */}
-      <input
-        autoFocus
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "ArrowDown") {
-            e.preventDefault();
-            navegar(1);
-          } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            navegar(-1);
-          } else if (e.key === "Enter") {
-            e.preventDefault();
-            escolher(resultados[cursor]);
-          }
-        }}
-        aria-label={t("quick.placeholder")}
-        aria-controls="quick-switcher-resultados"
-        placeholder={t("quick.placeholder")}
-        className="h-14 w-full bg-transparent px-4 text-xl text-text-strong outline-none placeholder:text-text-muted"
-      />
+      {/* Campo: 70px de altura, texto 22px, fundo `input-background-default`
+       *  (mais escuro que a caixa `background-surface-high` do modal, não o
+       *  mesmo tom) e borda de 1px — `.input_ac6cb0` em `css-bruto/599266.
+       *  ab3918065004d411.css`: `height:70px;line-height:70px;font-size:22px;
+       *  padding:0 12px;border:1px solid var(--input-border-default);
+       *  border-radius:var(--radius-sm)`. O recuo do campo em relação à borda
+       *  do modal (12px em cima, 20px nas laterais) é o `padding:12px 20px 0`
+       *  do `.quickswitcher_ac6cb0` que envolve o campo. Em foco a borda vira
+       *  limão (`--input-border-active`): é o único lugar da peça em que a
+       *  marca aparece, pela regra 2 da ADR-0009 ("o campo em foco é marca").
+       *  22px não tem classe nomeada na escala (`text-lg` é 20, `heading-xl`
+       *  é 24) — arbitrário porque o número vem de medida, não de escolha. */}
+      <div className="px-5 pt-3">
+        <input
+          autoFocus
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              navegar(1);
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              navegar(-1);
+            } else if (e.key === "Enter") {
+              e.preventDefault();
+              escolher(resultados[cursor]);
+            }
+          }}
+          aria-label={t("quick.placeholder")}
+          aria-controls="quick-switcher-resultados"
+          placeholder={t("quick.placeholder")}
+          className="h-[70px] w-full rounded-lg border border-input-border-default bg-input-background-default px-3 text-[22px] leading-[70px] text-text-default outline-none placeholder:text-input-placeholder-text-default focus:border-input-border-active"
+        />
+      </div>
 
-      {/* as pílulas de prefixo saem de cena assim que se digita, como no Discord */}
-      {vazia && (
-        <ul className="flex flex-wrap gap-x-4 gap-y-1 px-4 pb-3 text-xs text-text-muted">
-          {PREFIXOS.map(([prefixo, o]) => (
-            <li key={prefixo} className="flex items-center gap-1.5">
-              <kbd className="rounded bg-input-background-default px-1.5 py-0.5 font-mono text-[11px] font-semibold text-text-default">
-                {prefixo}
-              </kbd>
-              {o}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {vazia && resultados.length > 0 && (
-        <p className="px-4 pb-1 text-xs font-semibold uppercase text-text-muted">
-          {t("quick.recentes")}
-        </p>
-      )}
-
-      <ul
-        id="quick-switcher-resultados"
-        ref={listaRef}
-        role="listbox"
-        aria-label={t("quick.titulo")}
-        onMouseMove={() => setTecladoNoComando(false)}
-        className="max-h-[400px] overflow-y-auto px-2 pb-2"
-      >
-        {resultados.length === 0 && (
-          <li className="py-6 text-center text-sm text-text-muted">{t("quick.vazio")}</li>
+      {/* `margin-top:16px` do `.scroller_ac6cb0` antes da lista de resultados. */}
+      <div className="mt-4">
+        {/* cor do rótulo: não achamos CSS específico do quick switcher para
+         *  este cabeçalho, então reaproveitamos o mesmo token da lista irmã
+         *  (`.contentTitle__13533{color:var(--interactive-text-default)}` em
+         *  `Autocomplete.tsx`) — mesma família de lista, mesmo papel visual. */}
+        {vazia && resultados.length > 0 && (
+          <p className="px-5 pb-1 text-text-xs font-semibold uppercase text-interactive-text-default">
+            {t("quick.recentes")}
+          </p>
         )}
-        {resultados.map((item, indice) => {
-          const selecionado = indice === cursor;
-          const detalhe = detalhes.get(item.id);
-          return (
-            <li key={`${item.kind}-${item.id}`} role="option" aria-selected={selecionado}>
-              <button
-                type="button"
-                data-indice={indice}
-                // mover o mouse não rouba a seleção de quem está no teclado
-                onMouseEnter={() => !tecladoNoComando && setCursor(indice)}
-                onClick={() => escolher(item)}
-                className={`flex h-10 w-full items-center gap-2 rounded-[4px] px-2 text-left ${
-                  selecionado ? "bg-brand-500 text-control-primary-text-default" : "text-text-default"
-                }`}
-              >
-                <ItemIcon detalhe={detalhe} statuses={statuses} selecionado={selecionado} />
-                <span className="min-w-0 flex-1 truncate font-medium">{item.label}</span>
-                {item.hint && (
-                  <span
-                    className={`shrink-0 truncate text-xs ${
-                      selecionado ? "text-control-primary-text-default/70" : "text-text-muted"
-                    }`}
-                  >
-                    {item.hint}
-                  </span>
-                )}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
 
-      <p className="border-t border-border-subtle px-4 py-2 text-xs text-text-muted">
-        <span className="font-semibold uppercase text-text-subtle">Protip:</span> ↑ ↓ para
-        navegar · ↵ para abrir · Esc para fechar
+        {/* estado "carregando": os canais dos servidores que não são o ativo
+         *  só chegam depois de uma busca — sem aviso, sumiam da lista sem
+         *  explicação até a resposta voltar. Mesmo spinner de `MessageList.
+         *  tsx` (`border-border-normal border-t-text-muted`), pela consistência. */}
+        {carregando && (
+          <p
+            role="status"
+            aria-label="Carregando outros servidores"
+            className="flex items-center gap-2 px-5 pb-2 text-text-xs text-text-muted"
+          >
+            <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-border-normal border-t-text-muted" />
+            Carregando outros servidores…
+          </p>
+        )}
+
+        {/* estado "erro": a busca dos outros servidores falhou parcialmente —
+         *  os resultados que já temos continuam de pé, só avisamos que a
+         *  lista pode estar incompleta (o erro por servidor já era engolido
+         *  antes; agora só vira aviso, não trava a busca). */}
+        {!carregando && erroAoCarregar && (
+          <p className="flex items-center gap-2 px-5 pb-2 text-text-xs text-text-feedback-critical">
+            <AlertTriangle size={14} className="shrink-0" aria-hidden="true" />
+            Alguns servidores não responderam — a lista pode estar incompleta.
+          </p>
+        )}
+
+        {/* `.resultsArea_ac6cb0{height:262px}` mede a caixa cheia (com a
+         *  ilustração do estado vazio, que não temos — ver "faltando"); aqui
+         *  vira teto (`max-h`), não altura fixa, para não sobrar caixa cinza
+         *  vazia atrás de uma linha de texto só. */}
+        <ul
+          id="quick-switcher-resultados"
+          ref={listaRef}
+          role="listbox"
+          aria-label={t("quick.titulo")}
+          onMouseMove={() => setTecladoNoComando(false)}
+          className="max-h-[262px] overflow-y-auto px-2 pb-3"
+        >
+          {resultados.length === 0 && (
+            <li className="px-3 py-10 text-center">
+              {/* `.emptyStateNote_ac6cb0{color:var(--text-muted);font-size:16px;
+               *  line-height:20px}` = exatamente `text-text-md`. */}
+              <p className="text-text-md font-medium text-text-default">{t("quick.vazio")}</p>
+            </li>
+          )}
+          {resultados.map((item, indice) => {
+            const selecionado = indice === cursor;
+            const detalhe = detalhes.get(item.id);
+            return (
+              <li key={`${item.kind}-${item.id}`} role="option" aria-selected={selecionado}>
+                <button
+                  type="button"
+                  data-indice={indice}
+                  // mover o mouse não rouba a seleção de quem está no teclado
+                  onMouseEnter={() => !tecladoNoComando && setCursor(indice)}
+                  onClick={() => escolher(item)}
+                  // linha selecionada: cinza neutro (`interactive-background-hover`),
+                  // nunca o limão — é a mesma correção que `Autocomplete.tsx` já fez
+                  // (comentário lá: "era bg-interactive-background-selected, a cor
+                  // errada"); aqui o erro era pior (brand-500 sólido).
+                  className={`flex h-10 w-full items-center gap-2 rounded px-2 text-left text-text-default ${
+                    selecionado ? "bg-interactive-background-hover" : ""
+                  }`}
+                >
+                  <ItemIcon detalhe={detalhe} statuses={statuses} selecionado={selecionado} />
+                  <span className="min-w-0 flex-1 truncate font-medium">{item.label}</span>
+                  {item.hint && (
+                    <span className="shrink-0 truncate text-text-xs text-text-muted">
+                      {item.hint}
+                    </span>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      {/* Rodapé: uma linha só, como `.protip_ac6cb0` mede — as dicas de
+       *  prefixo (`@ # ! *`) moram aqui, não numa faixa própria (ver
+       *  divergência "faixa de dicas de prefixo"). "PROTIP" é verde
+       *  (`--text-feedback-positive`, medido no catálogo — ver "medidas"). */}
+      <p className="border-t border-border-subtle px-5 py-2.5 text-text-xs text-text-muted">
+        <span className="font-semibold uppercase text-text-feedback-positive">Protip:</span>{" "}
+        comece a busca com <kbd className="font-mono">@</kbd> <kbd className="font-mono">#</kbd>{" "}
+        <kbd className="font-mono">!</kbd> <kbd className="font-mono">*</kbd> para restringir os
+        resultados.
       </p>
     </Dialog>
   );
@@ -369,7 +422,10 @@ function ItemIcon({
   statuses: Record<string, UserStatus>;
   selecionado: boolean;
 }) {
-  const cls = `shrink-0 ${selecionado ? "text-control-primary-text-default" : "text-text-muted"}`;
+  // a linha não tem mais fundo colorido (ver divergência da linha
+  // selecionada): o ícone só clareia um pouco, como `interactive-icon-hover`
+  // em qualquer outra lista da casa, em vez de virar `accent-ink`.
+  const cls = `shrink-0 ${selecionado ? "text-interactive-icon-hover" : "text-interactive-icon-default"}`;
   if (!detalhe) return <Hash size={20} className={cls} aria-hidden="true" />;
 
   if (detalhe.kind === "guild") {

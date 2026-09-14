@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
-import { Slider } from "@/components/ui/controls";
+import { Image as IconeImagem } from "@/components/ui/icones";
+import { Button } from "@/components/ui/primitivos";
 import {
   FORMATOS,
   ZOOM_MAX,
@@ -180,6 +181,15 @@ export default function RecortarImagemModal({
 
   const tela = natural ? tamanhoNaTela(moldura, natural, enquadramento.zoom) : null;
 
+  // "Reset" do Discord (16.png, "Edit Image"): volta ao enquadramento inicial
+  // — zoom 1 (o "cobrir" exato) centralizado — e some quando não há nada para
+  // desfazer, mesmo comportamento do zoom desabilitado em nao_verificado.
+  const podeRedefinir =
+    !!natural && (enquadramento.zoom !== 1 || enquadramento.x !== 0 || enquadramento.y !== 0);
+  function redefinir() {
+    ajustar({ zoom: 1, x: 0, y: 0 });
+  }
+
   return (
     <Dialog
       telaCheiaNoCelular
@@ -188,16 +198,25 @@ export default function RecortarImagemModal({
       onClose={() => resolve(null)}
       className="w-[520px]"
       footer={
-        <>
-          <PrimaryButton onClick={() => void aplicar()} disabled={!natural || erro || gerando}>
-            {gerando ? "Aplicando…" : "Aplicar"}
-          </PrimaryButton>
-          <SecondaryButton onClick={() => resolve(null)}>Cancelar</SecondaryButton>
-        </>
+        // "Redefinir" na ponta esquerda, Cancelar/Aplicar na direita — o
+        // `flex-row-reverse` do `Modal` só empacota os filhos do lado direito,
+        // então o layout de duas pontas do Discord (16.png) precisa do
+        // próprio `justify-between` aqui dentro, num único filho.
+        <div className="flex w-full items-center justify-between">
+          <Button variante="neutro" tamanho="sm" className="px-3" disabled={!podeRedefinir} onClick={redefinir}>
+            Redefinir
+          </Button>
+          <div className="flex items-center gap-2">
+            <SecondaryButton onClick={() => resolve(null)}>Cancelar</SecondaryButton>
+            <PrimaryButton onClick={() => void aplicar()} disabled={!natural || erro || gerando}>
+              {gerando ? "Aplicando…" : "Aplicar"}
+            </PrimaryButton>
+          </div>
+        </div>
       }
     >
       {erro ? (
-        <p className="rounded-[5px] border border-border-subtle p-3 text-sm text-text-muted">
+        <p className="rounded border border-border-subtle p-3 text-sm text-text-muted">
           Não foi possível abrir esta imagem. Tente outro arquivo (PNG, JPEG, GIF ou WebP).
         </p>
       ) : (
@@ -213,7 +232,7 @@ export default function RecortarImagemModal({
             onPointerCancel={aoSoltar}
             onKeyDown={aoTeclar}
             style={{ width: moldura.largura, height: moldura.altura }}
-            className="relative touch-none select-none overflow-hidden rounded-[4px] bg-black/60 outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+            className="relative touch-none select-none overflow-hidden rounded bg-background-scrim outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
           >
             {url && (
               // eslint-disable-next-line @next/next/no-img-element
@@ -259,16 +278,38 @@ export default function RecortarImagemModal({
             )}
           </div>
 
-          <div className="mt-3 w-full max-w-[420px]">
-            <Slider
-              label="Zoom"
-              value={enquadramento.zoom}
-              min={ZOOM_MIN}
-              max={ZOOM_MAX}
-              step={0.01}
-              format={(v) => `${Math.round(v * 100)}%`}
-              onChange={(zoom) => ajustar({ zoom })}
-            />
+          {/*
+            Deslizador de zoom sem rótulo, ladeado pelo ícone de imagem em dois
+            tamanhos (o "diminuir"/"aumentar" do Discord: mesmo glifo, 16 e
+            20 — 16.png, "Edit Image"). Diferente do `Slider` de
+            `ui/controls.tsx` (rótulo, marcas, borda embaixo, feito para lista
+            de preferência): aqui é só o trilho, como no catálogo — sem texto
+            "Zoom" nem número embaixo. Reaproveita o trilho/polegar do
+            `Slider` (mesmas classes, ver o cabeçalho de lá) para não abrir um
+            terceiro desenho de slider no app; só a moldura ao redor muda.
+          */}
+          <div className="mt-3 flex w-full max-w-[420px] items-center gap-3">
+            <IconeImagem size={16} aria-hidden="true" className="shrink-0 text-text-muted" />
+            <div className="relative h-5 flex-1">
+              <div className="absolute inset-x-0 top-1.5 h-2 rounded-full bg-slider-track-background" aria-hidden="true" />
+              <div
+                className="absolute left-0 top-1.5 h-2 rounded-full bg-brand-500"
+                style={{ width: `${((enquadramento.zoom - ZOOM_MIN) / (ZOOM_MAX - ZOOM_MIN)) * 100}%` }}
+                aria-hidden="true"
+              />
+              <input
+                type="range"
+                min={ZOOM_MIN}
+                max={ZOOM_MAX}
+                step={0.01}
+                value={enquadramento.zoom}
+                onChange={(e) => ajustar({ zoom: Number(e.target.value) })}
+                disabled={!natural}
+                aria-label="Zoom"
+                className="absolute inset-0 w-full cursor-pointer appearance-none bg-transparent outline-none disabled:cursor-not-allowed [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:cursor-grab [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-white [&::-moz-range-track]:bg-transparent [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-[0_2px_6px_rgba(0,0,0,0.45)]"
+              />
+            </div>
+            <IconeImagem size={20} aria-hidden="true" className="shrink-0 text-text-muted" />
           </div>
         </div>
       )}

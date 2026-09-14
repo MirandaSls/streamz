@@ -8,7 +8,7 @@ import {
   type PublicUser,
 } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
-import { RadioLinha, Select } from "@/components/ui/controls";
+import { RadioCards, Select } from "@/components/ui/controls";
 import { TextInput } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
@@ -73,32 +73,31 @@ export default function TimeoutModal({ guildId, user }: { guildId: string; user:
         </>
       }
     >
-      <fieldset>
-        <legend className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
-          Duração
-        </legend>
-        <div className="flex flex-col gap-1">
-          {TIMEOUT_PRESETS.map((p) => (
-            <RadioLinha
-              key={p.minutes}
-              name="duracao-espera"
-              checked={minutes === p.minutes}
-              onChange={() => setMinutes(p.minutes)}
-              titulo={p.label}
-            />
-          ))}
-        </div>
-      </fieldset>
+      {/*
+       * Durações em cartões, não em lista: o Discord mostra as seis paradas
+       * lado a lado, duas por linha (cartão 7g-modais-de-moderacao). O valor
+       * viaja como string porque `RadioCards<T extends string>` é genérico em
+       * texto — a conversão de volta a minutos fica só no `onChange`.
+       */}
+      <RadioCards
+        legend="Duração"
+        value={String(minutes)}
+        options={TIMEOUT_PRESETS.map((p) => ({ value: String(p.minutes), label: p.label }))}
+        onChange={(v) => setMinutes(Number(v))}
+      />
 
-      <div className="mt-5">
-        <Select
-          semDivisoria
-          label="Motivo"
-          value={motivo}
-          options={MOTIVOS.map((m) => ({ value: m, label: m }))}
-          onChange={setMotivo}
-        />
-      </div>
+      {/*
+       * Sem `mt-5` aqui: o `fieldset` do `RadioCards` já fecha com `py-3` e
+       * uma divisória (o mesmo respiro que `Section`/`Row` usam entre blocos
+       * do formulário) — outro `mt-5` por cima duplicaria o vão.
+       */}
+      <Select
+        semDivisoria
+        label="Motivo"
+        value={motivo}
+        options={MOTIVOS.map((m) => ({ value: m, label: m }))}
+        onChange={setMotivo}
+      />
 
       {outro && (
         <TextInput

@@ -5,13 +5,16 @@ import { Hash, Lock, Megaphone, Volume2 } from "@/components/ui/icones";
 import { Permission, type Channel, type GuildChannelType } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { ChannelAccessList } from "@/components/modals/ChannelAccessModal";
-import { RadioLinha, Rotulo, ToggleLinha } from "@/components/ui/controls";
-import { TextInput } from "@/components/ui/primitivos";
+import { RadioLinha, ToggleLinha } from "@/components/ui/controls";
+import { Button, Campo, TextInput } from "@/components/ui/primitivos";
+import { useEhMobile } from "@/hooks/useEhMobile";
+import { api } from "@/lib/api";
+import { errorMessage } from "@/stores/socket-adapter";
+import { ui, useUI } from "@/stores/ui";
 import { useGuilds } from "@/stores/guilds";
 import { useCan } from "@/stores/permissions";
 import { useCategories } from "@/stores/categories";
 import { useChannels } from "@/stores/channels";
-import { useUI } from "@/stores/ui";
 
 /** Tipos criáveis dentro de um servidor, com a descrição que o Discord mostra. */
 const TIPOS: {
@@ -41,6 +44,16 @@ const TIPOS: {
 ];
 
 /**
+ * Altura de toque do rodapé no celular: mesmos 44px que `Dialog.tsx`
+ * (`ALTURA_DE_TOQUE`) já documenta como o piso de toque contra os 40 do `md`
+ * do Discord — este cartão não mede de novo, só repete o valor porque o
+ * rodapé daqui usa `Button` direto (para o `carregando`/`erro` abaixo, ver a
+ * função `submit`), não o `PrimaryButton`/`SecondaryButton` que já o aplicam
+ * sozinhos.
+ */
+const ALTURA_DE_TOQUE = "!h-[44px]";
+
+/**
  * Criação de canal, na ordem do Discord: **tipo → nome → privacidade**.
  *
  * A categoria não é um campo: ela vem do "+" que foi clicado e aparece no
@@ -53,6 +66,22 @@ const TIPOS: {
  * corrigir a escolha que ela acabou de fazer. Vem `undefined` do "+" de uma
  * categoria de verdade (que aceita os dois) e do "Criar canal" do menu do
  * servidor — aí a pergunta continua de pé, começando em Texto.
+ *
+ * **Fórum não entra.** O Discord tem um quarto tipo aqui; o Streamz não tem
+ * fórum (nem o contrato em `packages/shared` — `GUILD_CHANNEL_TYPES` só lista
+ * TEXT/VOICE/ANNOUNCEMENT). A regra do §6.6 pede a opção visível e desabilitada
+ * com "(em breve)" para o que falta, mas isso exige um ícone de fórum em
+ * `icones.tsx`, fora da lista deste cartão — ver "faltando".
+ *
+ * **Sem captura do diálogo real.** `referencias.json` marca
+ * `modal-criar-canal` como lacuna (nenhum print 1:1 do formulário de criação,
+ * só do resultado pós-criação). As medidas de espaçamento abaixo vêm do CSS
+ * bruto do Discord para o padrão `RadioBar`/`radioGroupContainer`
+ * (`radioGroupContainer__71ec0 { gap: var(--space-8) }`,
+ * `docs/referencias-discord/tokens/css-bruto/sob-demanda/ceefc5c2d0e6b094.css`)
+ * — a atribuição desse CSS a ESTE modal específico não é certa (a classe é
+ * genérica, reaproveitada em outras telas), então fica registrado como medida
+ * de origem incerta, não como confirmação de paridade.
  */
 export default function CreateChannelModal({
   categoryId = null,
@@ -66,18 +95,22 @@ export default function CreateChannelModal({
   // a mesma permissão que a API exige em `channels.service` (MANAGE_CHANNELS):
   // o antigo `canModerate` deixava passar quem só expulsa membros, e o POST dava 403
   const podeGerenciarCanais = useCan(Permission.MANAGE_CHANNELS);
-  const create = useChannels((s) => s.create);
   // `select` abre a **vista** do canal sem entrar na call: quem conecta é o
   // `connect` da store de voz, e ele não é chamado aqui (ver `abrirCanalNovo`)
   const select = useChannels((s) => s.select);
   const expandirCategoria = useCategories((s) => s.expandir);
   const categoria = useCategories((s) => s.categories.find((c) => c.id === categoryId) ?? null);
+  const ehMobile = useEhMobile();
 
   const [name, setName] = useState("");
   const [type, setType] = useState<GuildChannelType>(tipo ?? "TEXT");
   const [isPrivate, setPrivate] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
   const [saving, setSaving] = useState(false);
+  // erro por campo, como `CriarServidorModal.tsx` (cartão 7a): o texto vem do
+  // backend (nome duplicado, por exemplo) em vez de um aviso genérico, e some
+  // assim que a pessoa mexe no nome de novo.
+  const [erro, setErro] = useState<string | null>(null);
   /** id do canal recém-criado: enquanto for null estamos no primeiro passo. */
   const [criadoId, setCriadoId] = useState<string | null>(null);
 
@@ -103,31 +136,41 @@ export default function CreateChannelModal({
     select(novo);
   }
 
+  /**
+   * Chama a API direto, como `CriarServidorModal.tsx` — o `create` de
+   * `stores/channels.ts` só devolve um booleano e já resolve o erro num toast,
+   * e este cartão pede o estado de erro **dentro** da caixa (rótulo abaixo do
+   * campo), não só um aviso que passa. `handleCreated` é a mesma função que o
+   * evento de socket usa para inserir o canal na lista, então o estado fica
+   * igual ao de antes (dedup por id incluído).
+   */
   async function submit() {
-    if (!guildId || !name.trim() || saving) return;
+    const nomeLimpo = name.trim();
+    if (!guildId || !nomeLimpo || saving) return;
     setSaving(true);
-    // o `create` da store devolve só um booleano; comparar os ids de antes e
-    // depois é o que dá o canal novo para o segundo passo
-    const antes = new Set(useChannels.getState().channels.map((c) => c.id));
-    const ok = await create(guildId, {
-      name,
-      type,
-      isPrivate,
-      readOnly,
-      memberIds: [],
-      categoryId,
-    });
-    setSaving(false);
-    if (!ok) return;
-    const novo = useChannels.getState().channels.find((c) => !antes.has(c.id));
-    // navega para o canal novo mesmo no caso privado: o segundo passo continua
-    // por cima, e ao fechá-lo a pessoa já cai dentro do canal que acabou de criar
-    if (novo) abrirCanalNovo(novo);
-    if (isPrivate && novo) {
-      setCriadoId(novo.id);
-      return;
+    setErro(null);
+    try {
+      const novo = await api.createChannel(guildId, nomeLimpo, type, {
+        isPrivate,
+        readOnly,
+        memberIds: [],
+        categoryId,
+      });
+      useChannels.getState().handleCreated(novo);
+      // navega para o canal novo mesmo no caso privado: o segundo passo continua
+      // por cima, e ao fechá-lo a pessoa já cai dentro do canal que acabou de criar
+      abrirCanalNovo(novo);
+      ui.toast(`Canal ${novo.name ?? nomeLimpo} criado`);
+      if (isPrivate) {
+        setCriadoId(novo.id);
+        return;
+      }
+      closeModal();
+    } catch (e) {
+      setErro(errorMessage(e, "Não foi possível criar o canal"));
+    } finally {
+      setSaving(false);
     }
-    closeModal();
   }
 
   if (criadoId) {
@@ -152,18 +195,33 @@ export default function CreateChannelModal({
       onClose={closeModal}
       footer={
         <>
-          <PrimaryButton disabled={!name.trim() || saving} onClick={submit}>
-            {saving ? "Criando…" : "Criar canal"}
-          </PrimaryButton>
+          <Button
+            variante="primario"
+            tamanho="md"
+            type="button"
+            carregando={saving}
+            disabled={!name.trim()}
+            onClick={() => void submit()}
+            className={ehMobile ? ALTURA_DE_TOQUE : ""}
+          >
+            Criar canal
+          </Button>
           <SecondaryButton onClick={closeModal}>Cancelar</SecondaryButton>
         </>
       }
     >
-      <fieldset>
+      {/* `disabled` no fieldset cascateia para os `<input type="radio">` de
+          dentro (nativo do HTML, sem precisar de uma prop de `RadioLinha` que
+          não existe) — trava a escolha de tipo enquanto o POST está em voo,
+          como o resto do formulário. */}
+      <fieldset disabled={saving}>
         <legend className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
           Tipo de canal
         </legend>
-        <div className="flex flex-col gap-1">
+        {/* gap 8px: `--space-8` do `radioGroupContainer` medido no CSS bruto do
+            Discord (ver o comentário do arquivo) — trocado do gap-1 (4px) que
+            não tinha origem nenhuma. */}
+        <div className="flex flex-col gap-2">
           {tipos.map((option) => {
             const Icone = option.icone;
             return (
@@ -181,12 +239,17 @@ export default function CreateChannelModal({
         </div>
       </fieldset>
 
-      <div className="mt-5">
-        <Rotulo htmlFor="novo-canal-nome">Nome do canal</Rotulo>
+      <Campo rotulo="Nome do canal" htmlFor="novo-canal-nome" erro={erro} className="mt-5">
         <TextInput
           id="novo-canal-nome"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          autoFocus
+          disabled={saving}
+          erro={!!erro}
+          onChange={(e) => {
+            setName(e.target.value);
+            setErro(null);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
@@ -201,24 +264,29 @@ export default function CreateChannelModal({
             </span>
           }
         />
-      </div>
+      </Campo>
 
       {podeGerenciarCanais && !anuncio && (
         <div className="mt-4 border-t border-border-subtle pt-1">
-          <ToggleLinha
-            checked={isPrivate}
-            onChange={setPrivate}
-            icon={<Lock size={18} />}
-            titulo="Canal privado"
-            hint="Só os membros e cargos escolhidos conseguem ver este canal."
-          />
-          <ToggleLinha
-            checked={readOnly}
-            onChange={setReadOnly}
-            icon={<Megaphone size={18} />}
-            titulo="Somente leitura"
-            hint="Todo mundo lê; só a moderação envia mensagens."
-          />
+          {/* mesmo truque do fieldset acima: `contents` tira a caixa própria
+              (sem isto o border-0/padding-0 default do fieldset some com a
+              margem/borda deste bloco), só a cascata de `disabled` fica. */}
+          <fieldset disabled={saving} className="contents">
+            <ToggleLinha
+              checked={isPrivate}
+              onChange={setPrivate}
+              icon={<Lock size={18} />}
+              titulo="Canal privado"
+              hint="Só os membros e cargos escolhidos conseguem ver este canal."
+            />
+            <ToggleLinha
+              checked={readOnly}
+              onChange={setReadOnly}
+              icon={<Megaphone size={18} />}
+              titulo="Somente leitura"
+              hint="Todo mundo lê; só a moderação envia mensagens."
+            />
+          </fieldset>
         </div>
       )}
     </Dialog>

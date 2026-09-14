@@ -16,6 +16,14 @@ import { useEhMobile } from "@/hooks/useEhMobile";
  * `Modal`) e, por coincidência, o `w-[480px]` que este arquivo já usava. Com
  * `className` a largura é a de quem chamou (`tamanho="livre"`): os modais de
  * largura própria (440, 520, 570, o seletor de tela) continuam como estavam.
+ *
+ * **Estados.** Este arquivo é casca: o corpo/rodapé variam por quem chama, os
+ * estados do quadro (véu, foco preso, Esc, portal, rolagem, tela cheia no
+ * celular) moram no `Modal` (medidos lá), e hover/foco/desabilitado dos
+ * botões do rodapé (`PrimaryButton`/`SecondaryButton`, abaixo) vêm do
+ * `Button`. O único estado próprio daqui é o alvo de toque no celular
+ * (`ALTURA_DE_TOQUE`, ver comentário abaixo) — o resto é herdado, não
+ * redesenhado de novo por arquivo.
  */
 export default function Dialog({
   title,

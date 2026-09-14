@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { Check } from "@/components/ui/icones";
+import { displayNameOf } from "@streamz/shared";
 import Dialog, { SecondaryButton } from "@/components/modals/Dialog";
 import Avatar from "@/components/ui/Avatar";
 import { useChannels } from "@/stores/channels";
@@ -14,6 +15,17 @@ import { useUI } from "@/stores/ui";
  * A lista é um componente à parte porque ela aparece em dois lugares: neste
  * modal (atalho do menu de contexto) e como a aba "Permissões" das
  * configurações do canal — mesma allowlist, mesma store, um código só.
+ *
+ * A linha e o indicador de marcado são os de `CreateGroupDMModal.tsx`
+ * ("Selecionar amigos", o único multi-seletor de pessoas com referência
+ * medida no app — ver o cabeçalho de lá): avatar `md`, nome de exibição em
+ * negrito com o username embaixo em `text-xs`, quadrado de 20px raio 4
+ * (`.checkboxOption__714a9`, o mesmo do `Checkbox` de `primitivos`, redesenhado
+ * aqui à mão pelo mesmo motivo de lá — "o checkbox nativo não segue o tema").
+ * O círculo com borda de 2px que estava aqui não tinha essa origem: nenhum
+ * outro seletor de pessoas do app usa círculo, e o comentário que o justificava
+ * ("mesmo círculo do 'selecionar amigos'") não batia com o `CreateGroupDMModal`
+ * real, que é quadrado — era engano, não uma segunda convenção.
  */
 export function ChannelAccessList({ channelId }: { channelId: string }) {
   const guildId = useGuilds((s) => s.activeGuildId);
@@ -33,7 +45,7 @@ export function ChannelAccessList({ channelId }: { channelId: string }) {
   const ready = access.channelId === channelId && !access.loading;
 
   return (
-    <div className="max-h-56 overflow-y-auto rounded bg-input-background-default/50">
+    <div className="max-h-64 overflow-y-auto rounded-lg bg-background-base-lowest p-1">
       {!ready ? (
         <p className="px-3 py-3 text-sm text-text-muted">Carregando…</p>
       ) : plainMembers.length === 0 ? (
@@ -50,19 +62,23 @@ export function ChannelAccessList({ channelId }: { channelId: string }) {
               role="checkbox"
               aria-checked={marcado}
               onClick={() => guildId && toggleAccess(guildId, channelId, m.user.id)}
-              className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-text-default hover:bg-interactive-background-hover"
+              className="flex h-12 w-full items-center gap-3 rounded-lg px-2 text-left transition hover:bg-interactive-background-hover"
             >
-              <Avatar user={m.user} size="sm" surface="border-background-base-lower" />
-              <span className="min-w-0 flex-1 truncate">{m.user.username}</span>
-              {/* mesmo círculo do "selecionar amigos": o checkbox nativo não
-                  segue o tema */}
+              <Avatar user={m.user} size="md" surface="border-background-base-lower" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-base font-semibold leading-5 text-text-strong">
+                  {displayNameOf(m.user)}
+                </span>
+                <span className="block truncate text-xs leading-4 text-text-muted">{m.user.username}</span>
+              </span>
+              {/* o quadrado de 20px do Discord; o checkbox nativo não segue o tema */}
               <span
                 aria-hidden="true"
-                className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition ${
+                className={`grid h-5 w-5 shrink-0 place-items-center rounded-[4px] border transition ${
                   marcado ? "border-brand-500 bg-brand-500 text-control-primary-text-default" : "border-channels-default"
                 }`}
               >
-                {marcado && <Check size={14} strokeWidth={3} />}
+                {marcado && <Check size={14} />}
               </span>
             </button>
           );

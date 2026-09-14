@@ -18,18 +18,29 @@ import type { MenuItem } from "@/stores/ui";
  * sobre uma imagem não fazia nada lá. Quem monta os itens chama
  * `ui.openContextMenu` com o resultado.
  *
- * `onReagir` só é passado quando a imagem pertence a uma mensagem: reagir é
- * sobre a **mensagem**, não sobre o arquivo, e uma imagem de prévia de link
- * fora de mensagem não tem a que reagir.
+ * `onReagir` só é passado quando a imagem pertence a uma mensagem **e** quem
+ * clicou tem `ADD_REACTIONS` no canal — é o estado "sem permissão" do
+ * visualizador (`ImageModal.tsx`): o item some, não aparece cinza, porque é a
+ * mesma convenção que `MessageItem.tsx` já usa para o "+" de reação.
+ * Sem mensagem (galeria do canal, prévia de link solta) também não há a que
+ * reagir.
  */
 export function itensDaImagem({
   url,
   alt,
   onReagir,
+  indisponivel,
 }: {
   url: string;
   alt?: string | null;
   onReagir?: () => void;
+  /**
+   * Estado "erro" do visualizador: a imagem não carregou, então não há bytes
+   * para copiar ou salvar — os dois itens ficam **desabilitados** (cinza,
+   * clique inerte), sem sumir do menu. "Copiar Link" e "Abrir no Navegador"
+   * continuam ativos: não dependem do `<img>` ter decodificado nada.
+   */
+  indisponivel?: boolean;
 }): MenuItem[] {
   const itens: MenuItem[] = [];
 
@@ -42,11 +53,13 @@ export function itensDaImagem({
     label: "Copiar Imagem",
     icon: <Copy size={18} />,
     onSelect: () => void copiarImagem(url),
+    disabled: indisponivel,
   });
   itens.push({
     label: "Salvar Imagem",
     icon: <Download size={18} />,
     onSelect: () => void salvarImagem(url, alt),
+    disabled: indisponivel,
   });
   itens.push({ separator: true });
   itens.push({

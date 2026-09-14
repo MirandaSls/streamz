@@ -36,6 +36,13 @@ export type Modal =
   | { kind: "createChannel"; categoryId?: string | null; tipo?: GuildChannelType }
   | { kind: "channelAccess"; channelId: string }
   | { kind: "invite"; guildId: string; code?: string }
+  /**
+   * "Criar servidor" / "Entrar em um servidor" — o mesmo modal do "+" da rail
+   * (cartão 7a-criar-servidor), com as duas portas do Discord.
+   * `tela` escolhe onde ele abre: sem ela, começa em "Crie seu servidor"; o
+   * "Entrar com um convite" do menu do "+" já abre direto no campo de código.
+   */
+  | { kind: "criarServidor"; tela?: "criar" | "entrar" }
   | { kind: "createGroupDM" }
   | { kind: "settings"; tab?: string }
   | { kind: "invites"; guildId: string }

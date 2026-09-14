@@ -248,8 +248,6 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
   const guilds = useGuilds((s) => s.guilds);
   const activeGuildId = useGuilds((s) => s.activeGuildId);
   const select = useGuilds((s) => s.select);
-  const create = useGuilds((s) => s.create);
-  const joinByCode = useGuilds((s) => s.joinByCode);
   const createInvite = useGuilds((s) => s.createInvite);
   const leaveGuild = useGuilds((s) => s.leave);
   const atualizarConversas = useDMs((s) => s.refreshList);
@@ -320,18 +318,29 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
     void atualizarConversas();
   }
 
-  /** Menu do "+": criar um servidor ou entrar com um código de convite. */
+  /**
+   * Menu do "+": criar um servidor ou entrar com um código de convite.
+   *
+   * As duas linhas abrem o mesmo `CriarServidorModal` (cartão
+   * 7a-criar-servidor) — a criação era um `prompt()` genérico e a entrada por
+   * convite, outro; agora as duas portas do modal do Discord, cada uma na
+   * tela certa (`tela: "entrar"` pula direto para o campo de código).
+   */
   function abrirMenuDeServidor(e: React.MouseEvent<HTMLButtonElement>) {
     const r = e.currentTarget.getBoundingClientRect();
     ui.openContextMenu(
       r.right + 12,
       r.top,
       [
-        { label: "Criar um servidor", icon: <Plus size={18} />, onSelect: () => void create() },
+        {
+          label: "Criar um servidor",
+          icon: <Plus size={18} />,
+          onSelect: () => ui.openModal({ kind: "criarServidor" }),
+        },
         {
           label: "Entrar com um convite",
           icon: <Compass size={18} />,
-          onSelect: () => void joinByCode(),
+          onSelect: () => ui.openModal({ kind: "criarServidor", tela: "entrar" }),
         },
       ],
       MENU_WIDTH,

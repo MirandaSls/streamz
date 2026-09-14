@@ -7,6 +7,7 @@ import ConfirmDialog from "@/components/modals/ConfirmDialog";
 import CategorySettingsModal from "@/components/modals/CategorySettingsModal";
 import CreateChannelModal from "@/components/modals/CreateChannelModal";
 import CreateGroupDMModal from "@/components/modals/CreateGroupDMModal";
+import CriarServidorModal from "@/components/modals/CriarServidorModal";
 import AdicionarSomModal from "@/components/modals/AdicionarSomModal";
 import GuildEmojisModal from "@/components/modals/GuildEmojisModal";
 import ImageModal from "@/components/modals/ImageModal";
@@ -72,6 +73,8 @@ function renderModal(modal: Modal) {
       return <InviteModal guildId={modal.guildId} code={modal.code} />;
     case "createGroupDM":
       return <CreateGroupDMModal />;
+    case "criarServidor":
+      return <CriarServidorModal tela={modal.tela} />;
     // ── multiconta ──
     case "gerenciarContas":
       return <GerenciarContasModal />;

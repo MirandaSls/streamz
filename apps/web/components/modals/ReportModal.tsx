@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { MAX_REPORT_DETAILS, REPORT_REASONS, type ReportReason } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
+import { RadioLinha } from "@/components/ui/controls";
 import { Campo, TextArea } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
@@ -62,25 +63,28 @@ export default function ReportModal({
         </blockquote>
       )}
 
+      {/*
+       * `RadioLinha` (`components/ui/controls.tsx`) no lugar do
+       * `<input type="radio">` cru que estava aqui: o indicador nativo só
+       * ganha a cor da marca (`accent-brand-500`), não o círculo de 20×20 com
+       * o miolo de 10 nos tokens `--radio-border-selected-default`/
+       * `--radio-background-selected-default`/`--radio-thumb-background-active`
+       * que o Discord desenha para uma lista de opções exclusivas com título e
+       * círculo à direita — a mesma forma desta lista de motivos.
+       */}
       <fieldset>
         <legend className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
           Motivo
         </legend>
         <div className="flex flex-col gap-1">
           {REPORT_REASONS.map((r) => (
-            <label
+            <RadioLinha
               key={r.value}
-              className="flex h-9 cursor-pointer items-center gap-2 rounded-[3px] px-2 text-sm text-text-default hover:bg-interactive-background-hover"
-            >
-              <input
-                type="radio"
-                name="report-reason"
-                checked={reason === r.value}
-                onChange={() => setReason(r.value)}
-                className="accent-brand-500"
-              />
-              {r.label}
-            </label>
+              name="report-reason"
+              checked={reason === r.value}
+              onChange={() => setReason(r.value)}
+              titulo={r.label}
+            />
           ))}
         </div>
       </fieldset>

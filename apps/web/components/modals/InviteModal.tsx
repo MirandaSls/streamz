@@ -5,8 +5,10 @@ import { Check, Hash, Search } from "@/components/ui/icones";
 import {
   INVITE_EXPIRY_OPTIONS,
   INVITE_USES_OPTIONS,
+  Permission,
   WS_EVENTS,
   displayNameOf,
+  hasPermission,
   type InviteInfo,
   type PublicUser,
 } from "@streamz/shared";
@@ -19,6 +21,7 @@ import { urlDeConvite } from "@/lib/links-de-convite";
 import { useChannels } from "@/stores/channels";
 import { useFriends } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
+import { useMyPermissions } from "@/stores/permissions";
 import { emit, errorMessage } from "@/stores/socket-adapter";
 import { ui, useUI } from "@/stores/ui";
 
@@ -55,6 +58,37 @@ function faltamAte(iso: string, agora = Date.now()): string {
  * `border-strong` cru), o "Copiar" é o `Button` `primario` no `accent` do
  * Streamz (o do Discord é o blurple da marca dele) e o subtítulo fica em
  * `txt-muted`, como a descrição dos outros modais.
+ *
+ * As duas divergências que `divergencias.py` reportava (rótulo em caixa alta e
+ * botão "Convidar" verde) vieram de imagens de catálogo — item **3** (o mais
+ * baixo) da regra de autoridade da ADR-0009 §7, "só para proporção, nunca para
+ * px". O print 1:1 (item 1, o mais alto) já citado acima mostra o rótulo em
+ * caixa de frase (não alta) e o botão "Convidar" cinza neutro (`#323237`,
+ * medido com `medir.py` na linha do botão), contra o nosso `secundario`
+ * `#313137` — a mesma cor a menos de 1 unidade por canal. Nenhuma mudança de
+ * cor ou de caixa entrou por causa das duas divergências.
+ *
+ * **Estados** (cartão 7b-convite):
+ * - **carregando** a lista de amigos: `useFriends().loading && !loaded` — texto
+ *   `text-text-muted`, mesma linha das outras listas do app
+ *   (`InvitesPanel`/`ChannelAccessModal`, "Carregando…").
+ * - **erro** ao carregar: `!loading && !loaded` (a store zera `loading` e só
+ *   avisa por toast, que é passageiro — sem um estado inline a lista ficava
+ *   vazia para sempre, indistinguível de "sem amigos"), com "Tentar de novo"
+ *   chamando `loadFriends()` de novo.
+ * - **vazio**: sem amigos vs. busca sem resultado, como já existia.
+ * - **enviando** por linha: `Button carregando` no clique de "Convidar",
+ *   contra clique duplo enquanto a mensagem direta ainda está a caminho.
+ * - **sem permissão**: `Permission.CREATE_INVITE` é o "Criar convite" do
+ *   próprio `permissoes.ts` (concedida ao `@everyone` por padrão, revogável por
+ *   cargo ou canal — a mesma conta que decide se o servidor mostra "Convidar
+ *   Amigos" no menu). Sem ela, o convite não é criado sozinho ao abrir o modal,
+ *   e o rodapé do link vira o aviso — o mesmo padrão de texto do
+ *   `ServerSettingsModal` ("Você não tem permissão para..."). Um link que já
+ *   existia (`code` veio por prop) continua visível: só a criação/edição fica
+ *   fechada, não o que já está pronto.
+ * - **hover/foco/desabilitado**: dos primitivos (`Button`, `TextInput`) — nada
+ *   redesenhado aqui, é a regra do vocabulário.
  */
 export default function InviteModal({
   guildId,
@@ -66,6 +100,8 @@ export default function InviteModal({
   const closeModal = useUI((s) => s.closeModal);
   const guild = useGuilds((s) => s.guilds.find((g) => g.id === guildId) ?? null);
   const friends = useFriends((s) => s.friends);
+  const friendsLoading = useFriends((s) => s.loading);
+  const friendsLoaded = useFriends((s) => s.loaded);
   const loadFriends = useFriends((s) => s.load);
   const channels = useChannels((s) => s.channels);
 
@@ -74,6 +110,7 @@ export default function InviteModal({
   const [copied, setCopied] = useState(false);
   const [editando, setEditando] = useState(false);
   const [convidados, setConvidados] = useState<string[]>([]);
+  const [enviando, setEnviando] = useState<string[]>([]);
   const [busca, setBusca] = useState("");
 
   // opções (o valor 0 é "nunca"/"sem limite", como nas listas do contrato)
@@ -85,13 +122,24 @@ export default function InviteModal({
   const textos = channels.filter((c) => c.type === "TEXT");
   const destino = textos.find((c) => c.id === channelId) ?? textos[0] ?? null;
 
+  // "Criar convite" (`permissoes.ts`) — concedida ao @everyone por padrão,
+  // revogável por cargo ou canal. `useMyPermissions(guildId, …)` explícito, e
+  // não `useCan` (que assume o servidor **ativo**): este modal também abre a
+  // partir do painel de voz de um canal, que pode não ser o servidor que a
+  // pessoa está olhando agora. Sem a permissão não criamos convite sozinhos;
+  // um link que já veio pronto (`code`) continua valendo, só não é recriável.
+  const podeConvidar = hasPermission(
+    useMyPermissions(guildId, destino?.id ?? null),
+    Permission.CREATE_INVITE,
+  );
+
   useEffect(() => {
     void loadFriends();
   }, [loadFriends]);
 
   // cria um convite assim que o modal abre (sem código pronto), como o Discord
   useEffect(() => {
-    if (initialCode) return;
+    if (initialCode || !podeConvidar) return;
     let ativo = true;
     void api
       .createInvite(guildId, { expiresInMinutes: INVITE_EXPIRY_OPTIONS[5].minutes })
@@ -104,7 +152,7 @@ export default function InviteModal({
     return () => {
       ativo = false;
     };
-  }, [guildId, initialCode]);
+  }, [guildId, initialCode, podeConvidar]);
 
   // sempre o endereço público (`WEB_URL`), nunca o `tauri.localhost` do desktop
   const url = useMemo(() => (code ? urlDeConvite(code) : ""), [code]);
@@ -146,13 +194,16 @@ export default function InviteModal({
    * onde estava.
    */
   async function convidar(amigo: PublicUser) {
-    if (!url) return;
+    if (!url || enviando.includes(amigo.id)) return;
+    setEnviando((prev) => [...prev, amigo.id]);
     try {
       const dm = await api.openDM(amigo.id);
       emit(WS_EVENTS.MESSAGE_CREATE, { channelId: dm.id, content: url });
       setConvidados((prev) => [...prev, amigo.id]);
     } catch (e) {
       ui.toast(errorMessage(e, "Não foi possível enviar o convite"), "error");
+    } finally {
+      setEnviando((prev) => prev.filter((id) => id !== amigo.id));
     }
   }
 
@@ -194,7 +245,20 @@ export default function InviteModal({
         {/* a barra de rolagem fica a 4 da borda da caixa (por isso o `mr-1`) e
             as linhas param 12 antes dela */}
         <div role="list" className="ml-6 mr-1 mt-3 max-h-[31.5rem] overflow-y-auto pr-3">
-          {lista.length === 0 ? (
+          {friendsLoading && !friendsLoaded ? (
+            <p className="py-3 text-sm text-text-muted">Carregando amigos…</p>
+          ) : !friendsLoaded ? (
+            <p className="py-3 text-sm text-text-muted">
+              Não foi possível carregar seus amigos.{" "}
+              <button
+                type="button"
+                onClick={() => void loadFriends()}
+                className="font-medium text-text-link hover:underline celular:inline-flex celular:min-h-[44px] celular:items-center"
+              >
+                Tentar de novo
+              </button>
+            </p>
+          ) : lista.length === 0 ? (
             <p className="py-3 text-sm text-text-muted">
               {friends.length === 0
                 ? "Você ainda não tem amigos aqui. Copie o link abaixo e mande do jeito que preferir."
@@ -203,6 +267,7 @@ export default function InviteModal({
           ) : (
             lista.map((amigo) => {
               const convidado = convidados.includes(amigo.id);
+              const mandando = enviando.includes(amigo.id);
               return (
                 <div
                   key={amigo.id}
@@ -223,6 +288,7 @@ export default function InviteModal({
                     variante="secundario"
                     tamanho="sm"
                     disabled={convidado || !url}
+                    carregando={mandando}
                     onClick={() => void convidar(amigo)}
                     icone={convidado ? <Check size={14} aria-hidden="true" /> : undefined}
                     className="shrink-0 celular:h-[44px]"
@@ -241,40 +307,58 @@ export default function InviteModal({
           <p className="text-base font-semibold leading-5 text-text-strong">
             Ou, envie um convite do servidor a um amigo
           </p>
-          {/* input + botão num container só: no Discord os dois são uma peça —
-              o `sufixo` do `TextInput` é a mesma caixa */}
-          <TextInput
-            value={url || "gerando…"}
-            readOnly
-            aria-label="Link do convite"
-            onFocus={(e) => e.currentTarget.select()}
-            classeDaCaixa="mt-2"
-            sufixo={
-              <Button
-                variante="primario"
-                tamanho="sm"
-                disabled={!url}
-                onClick={() => void copiar()}
-                icone={copied ? <Check size={16} aria-hidden="true" /> : undefined}
-                className="shrink-0 celular:h-[44px]"
-              >
-                {copied ? "Copiado" : "Copiar"}
-              </Button>
-            }
-          />
-          <p aria-live="polite" className="mt-4 text-xs leading-4 text-text-muted">
-            {invite?.expiresAt
-              ? `Seu link de convite expira em ${faltamAte(invite.expiresAt)}. `
-              : "Seu link de convite não expira. "}
-            <button
-              type="button"
-              onClick={() => setEditando(true)}
-              className="font-medium text-text-link hover:underline celular:inline-flex celular:min-h-[44px] celular:items-center"
-            >
-              Editar link de convite
-            </button>
-            .
-          </p>
+          {!url && !podeConvidar ? (
+            // sem `CREATE_INVITE` e sem link pronto (não veio por `code`): nada
+            // para copiar nem para editar, só o aviso — como o resto do app
+            // resolve "sem permissão" (`ServerSettingsModal`).
+            <p className="mt-2 text-sm text-text-muted">
+              Você não tem permissão para criar um convite para este servidor.
+            </p>
+          ) : (
+            <>
+              {/* input + botão num container só: no Discord os dois são uma
+                  peça — o `sufixo` do `TextInput` é a mesma caixa */}
+              <TextInput
+                value={url || "gerando…"}
+                readOnly
+                aria-label="Link do convite"
+                onFocus={(e) => e.currentTarget.select()}
+                classeDaCaixa="mt-2"
+                sufixo={
+                  <Button
+                    variante="primario"
+                    tamanho="sm"
+                    disabled={!url}
+                    onClick={() => void copiar()}
+                    icone={copied ? <Check size={16} aria-hidden="true" /> : undefined}
+                    className="shrink-0 celular:h-[44px]"
+                  >
+                    {copied ? "Copiado" : "Copiar"}
+                  </Button>
+                }
+              />
+              <p aria-live="polite" className="mt-4 text-xs leading-4 text-text-muted">
+                {invite?.expiresAt
+                  ? `Seu link de convite expira em ${faltamAte(invite.expiresAt)}. `
+                  : "Seu link de convite não expira. "}
+                {/* editar recria o convite (mesma chamada da criação): sem
+                    `CREATE_INVITE` o link que já existe continua visível, só
+                    deixa de ser editável */}
+                {podeConvidar && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setEditando(true)}
+                      className="font-medium text-text-link hover:underline celular:inline-flex celular:min-h-[44px] celular:items-center"
+                    >
+                      Editar link de convite
+                    </button>
+                    .
+                  </>
+                )}
+              </p>
+            </>
+          )}
         </div>
       </Dialog>
 
