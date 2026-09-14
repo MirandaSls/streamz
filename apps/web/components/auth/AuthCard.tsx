@@ -42,18 +42,64 @@ export default function AuthCard({
     <main className="relative grid min-h-[100dvh] place-items-center overflow-hidden bg-input-background-default p-4 celular:px-[max(1rem,env(safe-area-inset-left))] celular:pb-[max(1rem,env(safe-area-inset-bottom))] celular:pt-[max(4.5rem,env(safe-area-inset-top))]">
       <AuthBackground />
 
+      {/* `.logoWithText_eb4069` (`css-bruto/890901.ff4cf3f72bd01165.css`):
+          `inset-inline-start: 48px; top: 48px` — o logo da página (fora do
+          cartão) fica a 48px dos dois lados no desktop, não 40/32 como
+          tínhamos. Tamanho: medido 24×124 no print 1:1 (`01-login-viewport.png`,
+          caixa clara x 96-343 y 96-143 em 2x) contra os 23×145 que
+          renderizávamos — `size` desce de 26 para 24. A largura continua
+          maior que a do Discord porque "STREAMZ" tem mais glifos que
+          "Discord" no mesmo peso/tracking: não é uma medida de forma errada,
+          é o texto da marca sendo diferente. */}
       <MarcaLockup
-        size={26}
-        className="absolute left-6 top-6 text-text-strong celular:left-[max(1.5rem,env(safe-area-inset-left))] celular:top-[max(1.5rem,env(safe-area-inset-top))] md:left-10 md:top-8"
+        size={24}
+        className="absolute left-6 top-6 text-text-strong celular:left-[max(1.5rem,env(safe-area-inset-left))] celular:top-[max(1.5rem,env(safe-area-inset-top))] md:left-12 md:top-12"
       />
 
-      {/* 24px de respiro no celular: com os 32 do desktop sobram 294px de
-          conteúdo numa tela de 390 */}
-      <div className="relative w-full max-w-[480px] rounded-[5px] bg-background-base-lower p-8 shadow-[0_16px_48px_rgba(0,0,0,.6),0_4px_12px_rgba(0,0,0,.45)] celular:p-6">
-        <h1 className="text-center text-2xl font-semibold leading-8 text-text-strong">
+      {/*
+        `.authBox__921c5` (`css-bruto/858942.086f3345af1722be.css`):
+        `background-color: var(--modal-background); border-radius:
+        var(--radius-sm); box-shadow: var(--legacy-elevation-high); padding:
+        var(--custom-auth-box-auth-box-padding) [32px]; width: 480px`.
+
+        A largura de 480 já era a nossa — bate: é o valor BASE do
+        componente, não o `.authBoxExpanded__921c5` de 784px, que só existe
+        para acomodar a coluna de "Entrar com código QR"/passkey (exige um
+        app móvel companheiro para escanear, que o Streamz não tem — não
+        inventado aqui, ver §6.6 do PROCESSO). O que estava errado:
+        - fundo `bg-background-base-lower` (#1a1a1e, medido) → agora
+          `bg-modal-background` (#242429 — mesmo valor de
+          `--card-background-default`, `tokens.css:335`). O campo por cima
+          (`bg-input-background-default`, `#0000001f`, no `TextInput`
+          primitivo) não precisa mudar de classe: compondo sobre o novo
+          fundo ele já cai perto do `#202024` medido no print;
+        - raio `rounded-[5px]` → `rounded-lg` (8 = `--radius-sm` na escala do
+          Tailwind daqui, tabela de Raios do design.md — bate com o
+          `~7-8px` medido no canto do print 1:1);
+        - sombra: `--legacy-elevation-high` resolve para
+          `0 2px 10px 0 hsl(0 0% 0%/.2)` (`variaveis-resolvidas.json`, tema
+          escuro) — sem token gerado pra ela ainda (só este componente a
+          usa), então o valor entra literal; falta ao gerador de tokens
+          (`scripts/paridade/gerar-tokens.mjs`, fora desta lista)
+          `--shadow-legacy-elevation-high` para isto sair de literal solto.
+
+        Título: `.title__921c5` é `heading-xl/semibold` com `color:
+        var(--text-strong)` (visto no HTML capturado de `01-login.html`) —
+        troca de `text-2xl leading-8` avulso pela classe nomeada
+        `text-heading-xl` (24/1.25, `tailwind.config.ts`), peso à parte.
+
+        24px de respiro no celular: com os 32 do desktop sobram 294px de
+        conteúdo numa tela de 390.
+      */}
+      <div className="relative w-full max-w-[480px] rounded-lg bg-modal-background p-8 shadow-[0_2px_10px_0_rgba(0,0,0,.2)] celular:p-6">
+        <h1 className="text-center text-heading-xl font-semibold text-text-strong">
           {title}
         </h1>
-        {subtitle && <p className="mt-2 text-center text-text-muted">{subtitle}</p>}
+        {/* Discord: `.text-md/normal_cf4812` do subtítulo tem `color:
+            var(--text-default)` (visto no HTML capturado), não
+            `--text-muted` — confirmado por cor dominante: #efeff1
+            (= `--text-default`) contra os #96979e que tínhamos. */}
+        {subtitle && <p className="mt-2 text-center text-text-default">{subtitle}</p>}
         <div className="mt-5">{children}</div>
       </div>
     </main>
@@ -124,21 +170,19 @@ export function OptionalFieldLabel({
   );
 }
 
-// a borda escura é o que separa o campo do corpo do cartão: `bg-input-background-default` sozinho
-// encosta no `bg-background-base-lower` sem aresta e o campo some
+// Link estilizado como o botão primário (páginas de resultado — confirmar
+// e-mail, redefinir senha — que só têm "Voltar para o app" como `<Link>`,
+// sem `<button>` de verdade; por isso não é o primitivo `Button`, que espera
+// um clique, não uma navegação). Raio `rounded-lg` (8 = `--radius-sm`,
+// `.button_a22cb0` em `css-bruto/362698.047b6f205fd7bdc1.css`), não os 3px de
+// antes.
 //
-// `celular:h-[48px]` nos dois, e o **48 é literal**: com a raiz do app em 16px
-// (ADR-0009), `h-10` mede 40px e `h-11` mede 44px — o campo fica abaixo do piso
-// de 44 das duas diretrizes de alvo de toque, e o botão bate em cima dele sem
-// sobra. Além disso, no celular o texto do campo passa a 16px por causa da
-// regra do `globals.css` que evita o zoom do iOS — numa caixa de 40px ele fica
-// encostado nas bordas. 48 dá a folga que falta nos dois sem furar o piso. No
-// desktop nada muda.
-export const inputClass =
-  "mb-5 h-10 w-full rounded-[3px] border border-black/30 bg-input-background-default px-2.5 text-text-default outline-none placeholder:text-text-muted disabled:opacity-60 celular:h-[48px]";
-
+// `celular:h-[48px]`, e o **48 é literal**: com a raiz do app em 16px
+// (ADR-0009), `h-10` mede 40px e `h-11` mede 44px — abaixo do piso de 44 das
+// diretrizes de alvo de toque. 48 dá a folga que falta sem furar o piso. No
+// desktop nada muda (`h-11` = 44, o mesmo botão primário do resto do app).
 export const submitClass =
-  "h-11 w-full rounded-[3px] bg-brand-500 font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:cursor-not-allowed disabled:opacity-60 celular:h-[48px]";
+  "h-11 w-full rounded-lg bg-brand-500 font-medium text-control-primary-text-default transition hover:bg-control-primary-background-hover disabled:cursor-not-allowed disabled:opacity-60 celular:h-[48px]";
 
 /** Link de apoio dos formulários de conta (voltar, ajuda, alternativas). */
 export const linkClass = "font-medium text-text-link hover:underline";

@@ -107,7 +107,7 @@ function LoginForm() {
             className="tracking-[0.3em]"
             autoFocus
           />
-          <p id="apoio-2fa" className="mb-5 text-sm text-text-muted">
+          <p id="apoio-2fa" className="mb-5 text-text-sm text-text-muted">
             {backup
               ? "Use um dos códigos que você guardou ao ligar a verificação em duas etapas. Cada um vale uma vez só."
               : "Abra o seu app autenticador e informe o código de 6 dígitos da conta do Streamz."}
@@ -128,7 +128,7 @@ function LoginForm() {
             {loading ? "Verificando…" : "Entrar"}
           </Button>
 
-          <p className="mt-4 text-sm">
+          <p className="mt-4 text-text-sm">
             <Button
               variante="link"
               tamanho="sm"
@@ -141,7 +141,7 @@ function LoginForm() {
               {backup ? "Usar o app autenticador" : "Usar código de backup"}
             </Button>
           </p>
-          <p className="mt-2 text-sm">
+          <p className="mt-2 text-text-sm">
             {/* sem central de ajuda: para quem perdeu o segundo fator, redefinir
                 a senha é o caminho que existe hoje */}
             <Link href="/forgot-password" className={linkClass}>
@@ -170,10 +170,20 @@ function LoginForm() {
 
   return (
     <AuthCard
-      title="Que bom te ver de novo!"
+      // Título do Discord real: "Boas-vindas de volta!" (print 1:1
+      // publico/desktop/01-login-viewport.png e o HTML capturado
+      // 01-login.html, <h1> antes do formulário). O subtítulo já batia
+      // palavra por palavra com o mesmo print.
+      title="Boas-vindas de volta!"
       subtitle="Estamos muito animados em te ver novamente!"
     >
       <form onSubmit={onSubmit} noValidate>
+        {/* Discord: "E-mail ou número de telefone" — divergência funcional, não
+            de forma: o Streamz não tem cadastro por telefone e a API aceita
+            e-mail OU usuário (`contaLoginSchema`, mensagem 401 "Usuário ou
+            senha incorretos"). O rótulo segue trocando só a parte que não
+            existe aqui, mantendo a medida do Discord (16px, peso 500,
+            asterisco vermelho depois — `AuthCard.tsx`/`FieldLabel`). */}
         <FieldLabel htmlFor="identificador" invalid={!!error} hint={error ?? undefined}>
           E-mail ou usuário
         </FieldLabel>
@@ -203,7 +213,7 @@ function LoginForm() {
           erro={!!error}
           classeDaCaixa="mb-2"
         />
-        <p className="mb-5 text-sm">
+        <p className="mb-5 text-text-sm">
           <Link href="/forgot-password" className={linkClass}>
             Esqueceu sua senha?
           </Link>
@@ -225,7 +235,7 @@ function LoginForm() {
           {loading ? "Entrando…" : "Entrar"}
         </Button>
 
-        <p className="mt-2 text-sm text-text-muted">
+        <p className="mt-2 text-text-sm text-text-muted">
           Precisando de uma conta?{" "}
           <Link
             href={destino === "/app" ? "/register" : `/register?next=${encodeURIComponent(destino)}`}

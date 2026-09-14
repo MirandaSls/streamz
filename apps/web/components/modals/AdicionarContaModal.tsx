@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { exigeMfa, type AuthSession } from "@streamz/shared";
 import { FieldLabel, linkClass } from "@/components/auth/AuthCard";
-import Dialog, { PrimaryButton } from "@/components/modals/Dialog";
+import Dialog from "@/components/modals/Dialog";
 import { Button, TextInput } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { mensagemDeAuth, validarLogin } from "@/lib/auth-mensagens";
@@ -37,6 +37,27 @@ import { useUI } from "@/stores/ui";
  * nos tokens, e é `assumirSessao` — a última linha do caminho feliz — que grava
  * o par novo, registra no cofre e recarrega o app já como a outra conta. Se a
  * senha estiver errada, a conta de antes segue aberta atrás do modal.
+ *
+ * Estados (rodada de redesenho, cartão 7i-contas):
+ * - **carregando**: era texto trocado dentro do botão ("Entrando…"/
+ *   "Verificando…"), o que o Discord não faz — o `.button_a22cb0` dele troca
+ *   o conteúdo por três pontos pulsantes **sem** mudar de tamanho nem de
+ *   texto (medido no cabeçalho de `Button.tsx`, `--spinner-pulsing-ellipsis`).
+ *   Trocado por `carregando` do `Button` direto (por isso este arquivo não
+ *   usa mais o atalho `PrimaryButton` do `Dialog` — ele não expõe esse prop) e
+ *   pelo mesmo `celular:h-[44px]` que `PrimaryButton` aplicava por baixo dos
+ *   panos (ver `Dialog.tsx`), então a altura no celular não muda.
+ * - **erro**: já era `FieldLabel` com `hint`/borda vermelha (`erro` do
+ *   `TextInput`) + `role="alert"` `sr-only` para o leitor de tela — sem
+ *   redesenho aqui, é o padrão de formulário do app inteiro.
+ * - **vazio**: não é uma tela de lista, é um formulário — o "vazio" dela é
+ *   campo em branco, e isso já é o que `validarLogin` barra no submit.
+ * - **sem permissão**: o limite de 5 contas é conferido só **depois** do
+ *   login (`concluir`, abaixo) e vira a mesma mensagem de erro do formulário
+ *   — não é um estado à parte, é o motivo de um erro que já existe.
+ * - **hover/foco/desabilitado**: herdados do `Button`/`TextInput` (o campo
+ *   desabilita durante `enviando`, e o foco continua no anel global de
+ *   `globals.css` — nenhum dos dois muda aqui).
  */
 export default function AdicionarContaModal({ voltar }: { voltar: boolean }) {
   const closeModal = useUI((s) => s.closeModal);
@@ -121,12 +142,17 @@ export default function AdicionarContaModal({ voltar }: { voltar: boolean }) {
         onClose={fechar}
         footer={
           <>
-            <PrimaryButton
-              disabled={enviando || !code.trim()}
+            <Button
+              variante="primario"
+              tamanho="md"
+              type="button"
+              disabled={!code.trim()}
+              carregando={enviando}
               onClick={() => void enviarCodigo()}
+              className="celular:h-[44px]"
             >
-              {enviando ? "Verificando…" : "Continuar"}
-            </PrimaryButton>
+              Continuar
+            </Button>
             <Button
               variante="link"
               tamanho="sm"
@@ -167,9 +193,16 @@ export default function AdicionarContaModal({ voltar }: { voltar: boolean }) {
       onClose={fechar}
       footer={
         <>
-          <PrimaryButton disabled={enviando} onClick={() => void entrar()}>
-            {enviando ? "Entrando…" : "Continuar"}
-          </PrimaryButton>
+          <Button
+            variante="primario"
+            tamanho="md"
+            type="button"
+            carregando={enviando}
+            onClick={() => void entrar()}
+            className="celular:h-[44px]"
+          >
+            Continuar
+          </Button>
           {/*
             "Voltar" na ponta esquerda: o rodapé da Dialog é `row-reverse`, então
             quem empurra para longe do primário é `mr-auto`, não `ml-auto`.

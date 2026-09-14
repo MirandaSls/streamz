@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import AuthCard, { FieldLabel, submitClass } from "@/components/auth/AuthCard";
+import AuthCard, { linkClass } from "@/components/auth/AuthCard";
 import { api } from "@/lib/api";
 import { mensagemDeAuth } from "@/lib/auth-mensagens";
 import { lerAccessToken } from "@/lib/session";
-import { Button, TextInput } from "@/components/ui/primitivos";
+import { Button, Campo, TextInput } from "@/components/ui/primitivos";
 
 type Estado =
   | { fase: "aguardando" }
@@ -24,6 +24,30 @@ type Estado =
  * O token é lido de `window.location` em vez de `useSearchParams` porque a web
  * também é exportada como HTML estático para o desktop, e ali o hook exigiria
  * uma fronteira de Suspense só para ler uma query string.
+ *
+ * **Sem tela equivalente no Discord** (cartão 7m-senha-e-verificacao): a
+ * verificação de e-mail dele é um banner dentro do app autenticado, não uma
+ * rota pública própria — não há print 1:1 nem CSS bruto desta tela para medir
+ * contra (§7 da ADR-0009: sem as três fontes, o número que fica é o que já
+ * tínhamos, não um chute). O redesenho aqui é usar os primitivos certos, no
+ * padrão que as telas medidas do mesmo cartão (`/forgot-password`,
+ * `/reset-password`) já fixaram, para as quatro fases não divergirem entre
+ * si por terem sido escritas em momentos diferentes:
+ * - Campo de e-mail: `FieldLabel` (erro dentro do rótulo) → `Campo`
+ *   (obrigatório, erro abaixo do controle com `role="alert"` embutido) — a
+ *   mesma troca do cartão em `/forgot-password`, pelo mesmo motivo.
+ * - Botão "Reenviar…": texto fixo + `carregando` no lugar de trocar para
+ *   "Enviando…" — usa o carregamento do `Button` (três pontos,
+ *   `.spinnerItem_a22cb0`, cabeçalho de `primitivos/Button.tsx`) em vez de
+ *   reimplementar com texto.
+ * - "Ir para o app" (fase `ok`): `<Link className={submitClass}>` → `<Button
+ *   href>`, que já desenha `<a>` com o visual do botão (rodada c1-button).
+ * - Links de apoio: `linkClass` de `AuthCard`, como as outras duas telas do
+ *   cartão.
+ * - **Não mudou** (fora do que este cartão pede): a fase `verificando` só
+ *   tem texto, sem spinner — não existe um primitivo de spinner de página no
+ *   projeto (`components/ui/icones.tsx` não tem um, e criar um sairia da
+ *   lista de arquivos deste cartão); ver "não_verificado".
  */
 export default function VerifyEmailPage() {
   const [estado, setEstado] = useState<Estado>({ fase: "aguardando" });
@@ -67,9 +91,9 @@ export default function VerifyEmailPage() {
         title={estado.jaEstava ? "Este e-mail já estava confirmado" : "E-mail confirmado!"}
         subtitle={estado.email}
       >
-        <Link href="/app" className={`${submitClass} grid place-items-center`}>
+        <Button href="/app" variante="primario" tamanho="md" larguraTotal className="celular:h-[48px]">
           Ir para o app
-        </Link>
+        </Button>
       </AuthCard>
     );
   }
@@ -103,7 +127,7 @@ export default function VerifyEmailPage() {
         aviso={aviso}
       />
       <p className="mt-4 text-center text-sm">
-        <Link href="/app" className="font-medium text-text-link hover:underline">
+        <Link href="/app" className={linkClass}>
           Continuar sem confirmar agora
         </Link>
       </p>
@@ -135,8 +159,7 @@ function PedirNovoLink({
       noValidate
     >
       {!autenticado && (
-        <>
-          <FieldLabel htmlFor="email">E-mail da conta</FieldLabel>
+        <Campo rotulo="E-mail da conta" htmlFor="email" obrigatorio className="mb-5">
           <TextInput
             id="email"
             type="email"
@@ -144,9 +167,8 @@ function PedirNovoLink({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             disabled={enviando}
-            classeDaCaixa="mb-5 w-full"
           />
-        </>
+        </Campo>
       )}
 
       {aviso && (
@@ -160,10 +182,11 @@ function PedirNovoLink({
         variante="primario"
         tamanho="md"
         larguraTotal
-        disabled={enviando || (!autenticado && !email.trim())}
+        disabled={!autenticado && !email.trim()}
+        carregando={enviando}
         className="celular:h-[48px]"
       >
-        {enviando ? "Enviando…" : "Reenviar link de confirmação"}
+        Reenviar link de confirmação
       </Button>
     </form>
   );
