@@ -18,7 +18,7 @@ import HeaderIcon from "@/components/chat/HeaderIcon";
 import InboxPopover from "@/components/chat/InboxPopover";
 import AddFriend from "@/components/friends/AddFriend";
 import EstadoVazio from "@/components/friends/EstadoVazio";
-import FriendRow, { RowAction } from "@/components/friends/FriendRow";
+import FriendRow, { FriendRowEsqueleto, RowAction } from "@/components/friends/FriendRow";
 import { Button, TextInput } from "@/components/ui/primitivos";
 import { useDMs } from "@/stores/dms";
 import { useFriends, type FriendsTab } from "@/stores/friends";
@@ -57,6 +57,14 @@ function abasVisiveis(pendentes: number, bloqueados: number) {
  * títulos, a 24px da borda (onde a busca começa); a linha de 1px fica 14px
  * abaixo da caixa do texto, começa 6px mais para dentro que o texto, e a
  * primeira linha de amigo vem colada nela. Era 12px em caixa alta e muted.
+ *
+ * A margem da linha é **assimétrica**, não `mx-[30px]`: `.divider_cc6179`
+ * (`docs/referencias-discord/tokens/css-bruto/979862.64f198e8e991d925.css`)
+ * é `margin-inline:30px 20px` — 30 à esquerda (os "6px mais para dentro" do
+ * texto acima, que já estavam certos), **20** à direita, não 30. O nosso
+ * `mx-[30px]` empurrava a ponta direita 10px além da borda da linha de amigo
+ * (que termina 20px do próprio limite, `.peopleListItem_cc6179`, ver
+ * `FriendRow.tsx`).
  */
 function Secao({ label, count }: { label: string; count: number }) {
   return (
@@ -64,7 +72,7 @@ function Secao({ label, count }: { label: string; count: number }) {
       <h3 className="mx-6 mt-6 text-sm font-semibold leading-5 text-text-strong">
         {label} — {count}
       </h3>
-      <div aria-hidden="true" className="mx-[30px] mt-3.5 h-px bg-border-subtle" />
+      <div aria-hidden="true" className="ml-[30px] mr-5 mt-3.5 h-px bg-border-subtle" />
     </>
   );
 }
@@ -344,7 +352,13 @@ export default function FriendsPage() {
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto pb-6">
-        {loading && !loaded && <p className="px-6 py-6 text-sm text-text-muted">Carregando…</p>}
+        {loading && !loaded && (
+          <div role="list" aria-label="Carregando amigos">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <FriendRowEsqueleto key={i} />
+            ))}
+          </div>
+        )}
 
         {tab !== "adicionar" && (
           /* 12px entre a borda do cabeçalho e a busca (medido); era 16 */
