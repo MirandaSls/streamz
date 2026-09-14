@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Prisma } from "@prisma/client";
 import { TEXTO_PENSANDO, WS_EVENTS, type Message as MessageDTO } from "@streamz/shared";
 import type { PrismaService } from "../../prisma/prisma.service";
 import type { DadosDeCompatService } from "../discord-compat/dados.service";
@@ -91,6 +92,46 @@ function efemeraDeMentira(ajustes: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+// ── onda 3 · 3a: a mensagem de bot com componentes ───────────
+
+/** Os componentes gravados da mensagem clicada (já com `id`, como a gravação deixa). */
+const COMPONENTES_DA_MENSAGEM = [
+  {
+    type: 1,
+    id: 1,
+    components: [
+      { type: 2, id: 2, style: 1, label: "Tocar", custom_id: "tocar" },
+      { type: 2, id: 3, style: 4, label: "Parar", custom_id: "parar", disabled: true },
+    ],
+  },
+  { type: 1, id: 4, components: [{ type: 5, id: 5, custom_id: "quem" }] },
+];
+
+/** A linha de `Message` que `origemDoClique` lê. */
+const MENSAGEM_DO_BOT = {
+  id: "m_bot",
+  channelId: CANAL.id,
+  authorId: BOT.id,
+  botPayload: { components: COMPONENTES_DA_MENSAGEM },
+};
+
+/** A mesma mensagem no formato da compat (`DadosDeCompatService.mensagemPorCuid`). */
+const LINHA_DA_ORIGEM = {
+  id: "m_bot",
+  snowflake: 901n,
+  channelSnowflake: CANAL.snowflake,
+  guildSnowflake: CANAL.guildSnowflake,
+  author: BOT,
+  content: "Escolha",
+  createdAt: new Date("2026-09-14T12:00:00.000Z"),
+  editedAt: null,
+  type: "DEFAULT",
+  attachments: [],
+  reactions: [],
+  respostaA: null,
+  pinned: false,
+};
+
 // ── a bancada ────────────────────────────────────────────────
 
 function montar(
@@ -119,6 +160,23 @@ function montar(
         "membroBot" in ajustes ? ajustes.membroBot : { userId: BOT.id },
       ),
       findMany: vi.fn(async () => [{ userId: BOT.id }]),
+    },
+    // ── onda 3 · 3a ── a mensagem clicada, o aplicativo do autor e os anexos do
+    // upload do modal. Os testes de componente sobrescrevem o que precisam.
+    message: {
+      findUnique: vi.fn(async (_argumentos: unknown): Promise<unknown> => null),
+    },
+    application: {
+      findUnique: vi.fn(
+        async (_argumentos: unknown): Promise<unknown> => ({
+          id: "app_1",
+          snowflake: 666n,
+          botUser: BOT,
+        }),
+      ),
+    },
+    attachment: {
+      findMany: vi.fn(async (_argumentos: unknown): Promise<unknown[]> => []),
     },
     interaction: {
       create: vi.fn(async (_argumentos: unknown) => ({ id: "i_1", snowflake: 777n })),
@@ -159,23 +217,34 @@ function montar(
 
   const guilds = {
     assertCanPostChannel: vi.fn(async () => ({})),
+    // ── onda 3 · 3a ── clicar exige ver o canal
+    assertCanViewChannel: vi.fn(async (..._a: unknown[]) => ({})),
     assertMember: vi.fn(async () => ({})),
     // SEND_MESSAGES | VIEW_CHANNEL, o que quer que sejam os bits — o teste só
     // cobra que o valor saia como **string**
     permissionsInChannel: vi.fn(async () => 3),
   };
 
+  // ── onda 3 ── o bot escreve e edita por `criarComoBot`/`editarComoBot`
+  // (embeds, componentes e flags junto do texto)
   const mensagens = {
-    create: vi.fn(async () => mensagemDeMentira()),
+    criarComoBot: vi.fn(async (..._a: unknown[]) => mensagemDeMentira()),
     getDTO: vi.fn(async () => mensagemDeMentira()),
-    edit: vi.fn(async () => mensagemDeMentira()),
+    editarComoBot: vi.fn(async (..._a: unknown[]) => mensagemDeMentira()),
     remove: vi.fn(async () => ({ channelId: CANAL.id, parentId: null })),
+    // ── onda 3 · 3a ── os componentes da mensagem de origem, para o bot
+    payloadsDeBot: vi.fn(
+      async (ids: readonly string[]) =>
+        new Map<string, unknown>(ids.map((id): [string, unknown] => [id, { embeds: [], components: [], flags: 0 }])),
+    ),
   };
 
   const realtime = { emitToChannel: vi.fn(), emitToUser: vi.fn() };
   const ids = { snowflakeDeServidor: vi.fn(async () => CANAL.guildSnowflake) };
   const dados = {
-    canalPorCuid: vi.fn(async () => CANAL),
+    canalPorCuid: vi.fn(async (..._a: unknown[]): Promise<unknown> => CANAL),
+    // ── onda 3 · 3a ── a mensagem de origem no formato da compat
+    mensagemPorCuid: vi.fn(async (..._a: unknown[]): Promise<unknown> => LINHA_DA_ORIGEM),
     membroDoServidor: vi.fn(async () => MEMBRO),
     usuarioPorCuid: vi.fn(async () => USUARIO),
     cargosDoServidor: vi.fn(async () => []),
@@ -454,7 +523,12 @@ describe("responder", () => {
 
     await service.responder(autenticada(), TIPO_DE_CALLBACK.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, {});
 
-    expect(mensagens.create).toHaveBeenCalledWith(CANAL.id, BOT.id, TEXTO_PENSANDO);
+    expect(mensagens.criarComoBot).toHaveBeenCalledWith(
+      CANAL.id,
+      BOT.id,
+      // ── onda 3 ── o texto provisório fica, e `carregando` liga `LOADING`
+      expect.objectContaining({ content: TEXTO_PENSANDO, carregando: true }),
+    );
     // a mensagem é ligada à interação **antes** do emit, e relida: sem isso a
     // faixa "usou /play" só apareceria depois de um F5
     expect(prisma.interaction.update).toHaveBeenCalledWith({
@@ -476,7 +550,11 @@ describe("responder", () => {
       content: "  Tocando **Never Gonna…**  ",
     });
 
-    expect(mensagens.create).toHaveBeenCalledWith(CANAL.id, BOT.id, "Tocando **Never Gonna…**");
+    expect(mensagens.criarComoBot).toHaveBeenCalledWith(
+      CANAL.id,
+      BOT.id,
+      expect.objectContaining({ content: "Tocando **Never Gonna…**" }),
+    );
   });
 
   it("a tomada da resposta é escrita condicional (`respondedAt: null`), não `if`", async () => {
@@ -486,8 +564,10 @@ describe("responder", () => {
       content: "oi",
     });
 
+    // ── onda 3 ── e **não vencida**: o relógio dos 3 s vence o token, e o
+    // callback atrasado não pode escrever depois de a web mostrar "falhou"
     expect(prisma.interaction.updateMany).toHaveBeenCalledWith({
-      where: { id: "i_1", respondedAt: null },
+      where: { id: "i_1", respondedAt: null, expiresAt: { gt: expect.any(Date) } },
       data: { respondedAt: expect.any(Date) },
     });
   });
@@ -496,22 +576,43 @@ describe("responder", () => {
     const { service, prisma, mensagens } = montar();
     // é o que o banco devolve quando o outro callback chegou primeiro
     prisma.interaction.updateMany.mockResolvedValue({ count: 0 });
+    prisma.interaction.findUnique.mockResolvedValue({ respondedAt: new Date() });
 
     await expect(
       service.responder(autenticada(), TIPO_DE_CALLBACK.CHANNEL_MESSAGE_WITH_SOURCE, { content: "b" }),
     ).rejects.toMatchObject({ response: { code: 40060 }, status: 400 });
 
-    expect(mensagens.create).not.toHaveBeenCalled();
+    expect(mensagens.criarComoBot).not.toHaveBeenCalled();
   });
 
-  it("tipos 6, 7, 8 e 9 são 501 20012 — e não gastam a resposta da interação", async () => {
-    for (const tipo of [6, 7, 8, 9]) {
+  it("── onda 3 ── 6, 7 e 8 num comando de barra são 50035 — e não gastam a resposta", async () => {
+    for (const tipo of [6, 7, 8]) {
       const { service, prisma } = montar();
       await expect(service.responder(autenticada(), tipo, {})).rejects.toMatchObject({
-        response: { code: 20012 },
-        status: 501,
+        response: { code: 50035 },
+        status: 400,
       });
       expect(prisma.interaction.updateMany).not.toHaveBeenCalled();
+    }
+  });
+
+  it("── onda 3 ── callback atrasado (o relógio dos 3 s já venceu o token) é 404 10062", async () => {
+    const { service, prisma, mensagens } = montar();
+    prisma.interaction.updateMany.mockResolvedValue({ count: 0 });
+    prisma.interaction.findUnique.mockResolvedValue({ respondedAt: null });
+
+    await expect(
+      service.responder(autenticada(), TIPO_DE_CALLBACK.CHANNEL_MESSAGE_WITH_SOURCE, { content: "tarde" }),
+    ).rejects.toMatchObject({ response: { code: 10062 }, status: 404 });
+    expect(mensagens.criarComoBot).not.toHaveBeenCalled();
+  });
+
+  it("PONG (1) e tipo desconhecido são 50035", async () => {
+    for (const tipo of [1, 12]) {
+      const { service } = montar();
+      await expect(service.responder(autenticada(), tipo, {})).rejects.toMatchObject({
+        response: { code: 50035 },
+      });
     }
   });
 
@@ -537,7 +638,7 @@ describe("mensagem efêmera (flags: 64)", () => {
     });
 
     // é isto que faz `GET /channels/:id/messages` não a listar: ela não está lá
-    expect(mensagens.create).not.toHaveBeenCalled();
+    expect(mensagens.criarComoBot).not.toHaveBeenCalled();
     expect(prisma.ephemeralMessage.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         interactionId: "i_1",
@@ -592,7 +693,7 @@ describe("mensagem efêmera (flags: 64)", () => {
       flags: 64,
     });
 
-    expect(mensagens.create).not.toHaveBeenCalled();
+    expect(mensagens.criarComoBot).not.toHaveBeenCalled();
     expect(realtime.emitToUser).toHaveBeenCalledWith(
       USUARIO.id,
       WS_EVENTS.MESSAGE_NEW,
@@ -609,10 +710,11 @@ describe("mensagem efêmera (flags: 64)", () => {
 
     await service.editarOriginal(autenticada({ respondedAt: new Date() }), { content: "pong" });
 
-    expect(mensagens.edit).not.toHaveBeenCalled();
+    expect(mensagens.editarComoBot).not.toHaveBeenCalled();
     expect(prisma.ephemeralMessage.update).toHaveBeenCalledWith({
       where: { id: "e_1" },
-      data: { content: "pong", editedAt: expect.any(Date) },
+      // ── onda 3 ── as colunas de bot vão junto (vazias: o corpo só trouxe texto)
+      data: { content: "pong", embeds: [], components: [], flags: 0, editedAt: expect.any(Date) },
       select: expect.anything(),
     });
     expect(realtime.emitToChannel).not.toHaveBeenCalled();
@@ -647,7 +749,7 @@ describe("mensagem efêmera (flags: 64)", () => {
       flags: 64,
     });
 
-    expect(mensagens.create).not.toHaveBeenCalled();
+    expect(mensagens.criarComoBot).not.toHaveBeenCalled();
     expect(prisma.ephemeralMessage.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ original: false }),
       select: expect.anything(),
@@ -662,7 +764,11 @@ describe("mensagem efêmera (flags: 64)", () => {
 
     await service.followup(autenticada({ respondedAt: new Date() }), { content: "agora todos" });
 
-    expect(mensagens.create).toHaveBeenCalledWith(CANAL.id, BOT.id, "agora todos");
+    expect(mensagens.criarComoBot).toHaveBeenCalledWith(
+      CANAL.id,
+      BOT.id,
+      expect.objectContaining({ content: "agora todos" }),
+    );
     expect(realtime.emitToChannel).toHaveBeenCalled();
   });
 
@@ -674,7 +780,7 @@ describe("mensagem efêmera (flags: 64)", () => {
 
     await service.followup(autenticada({ respondedAt: new Date() }), { content: "n" });
 
-    expect(mensagens.create).toHaveBeenCalled();
+    expect(mensagens.criarComoBot).toHaveBeenCalled();
     // `ehOriginal` é o terceiro argumento de `escreverComoBot`; o efeito
     // observável dele é a ligação, que só acontece quando é a original
     expect(mensagens.getDTO).not.toHaveBeenCalled();
@@ -703,7 +809,7 @@ describe("@original", () => {
 
     await service.editarOriginal(autenticada({ responseMessageId: "m_1" }), { content: "pong" });
 
-    expect(mensagens.edit).toHaveBeenCalledWith("m_1", BOT.id, "pong");
+    expect(mensagens.editarComoBot).toHaveBeenCalledWith("m_1", BOT.id, { content: "pong" });
     expect(realtime.emitToChannel).toHaveBeenCalledWith(
       CANAL.id,
       WS_EVENTS.MESSAGE_UPDATED,
@@ -807,5 +913,721 @@ describe("comandosDoServidor", () => {
 
     await expect(service.comandosDoServidor("g_1", USUARIO.id)).resolves.toEqual([]);
     expect(prisma.applicationCommand.findMany).not.toHaveBeenCalled();
+  });
+});
+
+// ── onda 3: embeds, componentes e flags nas respostas ────────
+
+describe("onda 3 — o corpo do bot é guardado, não descartado", () => {
+  it("callback 4 com embed e botão chega ao `criarComoBot` normalizado", async () => {
+    const { service, mensagens } = montar();
+
+    await service.responder(autenticada(), TIPO_DE_CALLBACK.CHANNEL_MESSAGE_WITH_SOURCE, {
+      embeds: [{ title: "  Tocando  " }],
+      components: [{ type: 1, components: [{ type: 2, style: 1, label: "Pular", custom_id: "pular" }] }],
+    });
+
+    expect(mensagens.criarComoBot).toHaveBeenCalledWith(
+      CANAL.id,
+      BOT.id,
+      expect.objectContaining({
+        content: "",
+        embeds: [{ type: "rich", title: "Tocando" }],
+        components: [
+          { type: 1, id: 1, components: [{ type: 2, id: 2, style: 1, label: "Pular", custom_id: "pular" }] },
+        ],
+      }),
+    );
+  });
+
+  it("corpo inválido é 50035 e **não** gasta a resposta da interação", async () => {
+    const { service, prisma, mensagens } = montar();
+
+    await expect(
+      service.responder(autenticada(), TIPO_DE_CALLBACK.CHANNEL_MESSAGE_WITH_SOURCE, {
+        embeds: [{ title: "x".repeat(300) }],
+      }),
+    ).rejects.toMatchObject({ response: { code: 50035 }, status: 400 });
+    expect(prisma.interaction.updateMany).not.toHaveBeenCalled();
+    expect(mensagens.criarComoBot).not.toHaveBeenCalled();
+  });
+
+  it("callback 4 vazio (sem texto, embed nem componente) é 50035, como no Discord", async () => {
+    const { service, prisma } = montar();
+
+    await expect(
+      service.responder(autenticada(), TIPO_DE_CALLBACK.CHANNEL_MESSAGE_WITH_SOURCE, {}),
+    ).rejects.toMatchObject({ response: { code: 50035 } });
+    expect(prisma.interaction.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("a efêmera guarda embeds e flags nas próprias colunas", async () => {
+    const { service, prisma } = montar();
+
+    await service.responder(autenticada(), TIPO_DE_CALLBACK.CHANNEL_MESSAGE_WITH_SOURCE, {
+      flags: 64 | 4,
+      embeds: [{ description: "segredo" }],
+    });
+
+    expect(prisma.ephemeralMessage.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        embeds: [{ type: "rich", description: "segredo" }],
+        components: [],
+        // EPHEMERAL não é guardado (é a tabela); SUPPRESS_EMBEDS é, porque a
+        // efêmera não tem a coluna `suppressEmbeds`
+        flags: 4,
+      }),
+      select: expect.anything(),
+    });
+  });
+
+  it("editReply() passa o corpo inteiro ao `editarComoBot` (ausente não mexe)", async () => {
+    const { service, mensagens } = montar();
+
+    await service.editarOriginal(autenticada({ responseMessageId: "m_1" }), {
+      components: [],
+    });
+
+    expect(mensagens.editarComoBot).toHaveBeenCalledWith("m_1", BOT.id, { components: [] });
+  });
+});
+
+// ── onda 3 · cartão 3a: interações de componente, modal e autocomplete ──
+
+/** Uma interação de componente já autenticada pelo token (o clique em "Tocar"). */
+function deComponente(ajustes: Partial<InteracaoAutenticada> = {}): InteracaoAutenticada {
+  return autenticada({
+    tipo: 3,
+    nonce: "n_1",
+    customId: "tocar",
+    messageId: "m_bot",
+    ephemeralMessageId: null,
+    ...ajustes,
+  });
+}
+
+const CLIQUE = {
+  canalId: CANAL.id,
+  usuarioId: USUARIO.id,
+  messageId: "m_bot",
+  customId: "tocar",
+  componentType: 2,
+  nonce: "n_1",
+};
+
+describe("onda 3 — clicarComponente (interação 3)", () => {
+  it("grava a interação 3 e despacha INTERACTION_CREATE com `message` e `data`", async () => {
+    const { service, prisma, sessao, mensagens } = montar();
+    prisma.message.findUnique.mockResolvedValue(MENSAGEM_DO_BOT);
+    mensagens.payloadsDeBot.mockResolvedValue(
+      new Map<string, unknown>([["m_bot", { embeds: [], components: COMPONENTES_DA_MENSAGEM, flags: 0 }]]),
+    );
+
+    const criada = await service.clicarComponente(CLIQUE);
+
+    expect(criada).toEqual({ id: "i_1", nonce: "n_1", expiresAt: expect.any(String) });
+    const gravado = (prisma.interaction.create.mock.calls[0]?.[0] as { data: Record<string, unknown> }).data;
+    expect(gravado).toMatchObject({
+      type: 3,
+      customId: "tocar",
+      componentType: 2,
+      messageId: "m_bot",
+      ephemeralMessageId: null,
+      nonce: "n_1",
+      commandName: null,
+      commandId: null,
+      applicationId: "app_1",
+    });
+
+    const [evento, payload] = sessao.despachar.mock.calls[0] as [string, Record<string, unknown>];
+    expect(evento).toBe("INTERACTION_CREATE");
+    expect(payload.type).toBe(3);
+    // botão: sem `values` e sem `resolved`, como o Discord manda
+    expect(payload.data).toEqual({ custom_id: "tocar", component_type: 2 });
+    // a mensagem de origem com os componentes: é o que o `update()` do bot reaproveita
+    expect(payload.message).toMatchObject({
+      id: "901",
+      flags: 0,
+      components: [expect.objectContaining({ type: 1 }), expect.objectContaining({ type: 1 })],
+    });
+  });
+
+  it("select de usuário: `values` em snowflake e o `resolved` com os quatro mapas", async () => {
+    const { service, prisma, sessao } = montar();
+    prisma.message.findUnique.mockResolvedValue(MENSAGEM_DO_BOT);
+
+    await service.clicarComponente({ ...CLIQUE, customId: "quem", componentType: 5, values: [USUARIO.id] });
+
+    const payload = sessao.despachar.mock.calls[0]?.[1] as { data: Record<string, unknown> };
+    expect(payload.data).toMatchObject({
+      custom_id: "quem",
+      component_type: 5,
+      values: ["111"],
+      resolved: {
+        users: { "111": expect.objectContaining({ id: "111" }) },
+        members: expect.any(Object),
+        roles: {},
+        channels: {},
+      },
+    });
+  });
+
+  it("quem não vê o canal leva 403 **antes** de a mensagem ser procurada", async () => {
+    const { service, prisma, guilds } = montar();
+    guilds.assertCanViewChannel.mockRejectedValue(new Error("403"));
+
+    await expect(service.clicarComponente(CLIQUE)).rejects.toThrow("403");
+    expect(prisma.message.findUnique).not.toHaveBeenCalled();
+    expect(prisma.interaction.create).not.toHaveBeenCalled();
+  });
+
+  it("mensagem de outro canal é 404", async () => {
+    const { service, prisma } = montar();
+    prisma.message.findUnique.mockResolvedValue({ ...MENSAGEM_DO_BOT, channelId: "c_outro" });
+    await expect(service.clicarComponente(CLIQUE)).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.interaction.create).not.toHaveBeenCalled();
+  });
+
+  it("componente desabilitado é 400, e nada é gravado nem despachado", async () => {
+    const { service, prisma, sessao } = montar();
+    prisma.message.findUnique.mockResolvedValue(MENSAGEM_DO_BOT);
+
+    await expect(service.clicarComponente({ ...CLIQUE, customId: "parar" })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(prisma.interaction.create).not.toHaveBeenCalled();
+    expect(sessao.despachar).not.toHaveBeenCalled();
+  });
+
+  it("`custom_id` que a mensagem não tem é 404", async () => {
+    const { service, prisma } = montar();
+    prisma.message.findUnique.mockResolvedValue(MENSAGEM_DO_BOT);
+    await expect(service.clicarComponente({ ...CLIQUE, customId: "sumiu" })).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it("autor que não é bot de aplicativo é 404", async () => {
+    const { service, prisma } = montar();
+    prisma.message.findUnique.mockResolvedValue({ ...MENSAGEM_DO_BOT, authorId: USUARIO.id });
+    prisma.application.findUnique.mockResolvedValue(null);
+    await expect(service.clicarComponente(CLIQUE)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("conversa direta é 404: DM com bot é F5", async () => {
+    const { service } = montar({ canal: { id: CANAL.id, guildId: null } });
+    await expect(service.clicarComponente(CLIQUE)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("efêmera de **outra pessoa** é 404 — só o dono clica", async () => {
+    const { service, prisma } = montar();
+    prisma.ephemeralMessage.findUnique.mockResolvedValue({
+      id: "e_9",
+      channelId: CANAL.id,
+      ephemeralFor: "u_outra",
+      authorId: BOT.id,
+      components: COMPONENTES_DA_MENSAGEM,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    await expect(service.clicarComponente({ ...CLIQUE, messageId: "e_9" })).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(prisma.interaction.create).not.toHaveBeenCalled();
+  });
+
+  it("efêmera do próprio usuário: grava `ephemeralMessageId` e o `message` vai com `flags` 64", async () => {
+    const { service, prisma, sessao } = montar();
+    prisma.ephemeralMessage.findUnique.mockResolvedValue({
+      ...efemeraDeMentira({ id: "e_9" }),
+      authorId: BOT.id,
+      embeds: [],
+      components: COMPONENTES_DA_MENSAGEM,
+      flags: 0,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    await service.clicarComponente({ ...CLIQUE, messageId: "e_9" });
+
+    const gravado = (prisma.interaction.create.mock.calls[0]?.[0] as { data: Record<string, unknown> }).data;
+    expect(gravado).toMatchObject({ messageId: null, ephemeralMessageId: "e_9" });
+    const payload = sessao.despachar.mock.calls[0]?.[1] as { message: { flags: number } };
+    expect(payload.message.flags & 64).toBe(64);
+  });
+
+  it("bot sem sessão de gateway: `interaction.failed` com `bot_offline` na hora, só para quem clicou", async () => {
+    const { service, prisma, sessoes, realtime } = montar();
+    prisma.message.findUnique.mockResolvedValue(MENSAGEM_DO_BOT);
+    sessoes.porBot.mockReturnValue([]);
+
+    await service.clicarComponente(CLIQUE);
+
+    expect(realtime.emitToChannel).not.toHaveBeenCalled();
+    expect(realtime.emitToUser).toHaveBeenCalledWith(USUARIO.id, WS_EVENTS.INTERACTION_FAILED, {
+      interactionId: "i_1",
+      nonce: "n_1",
+      channelId: CANAL.id,
+      messageId: "m_bot",
+      customId: "tocar",
+      motivo: "bot_offline",
+    });
+  });
+});
+
+describe("onda 3 — o prazo dos 3 s", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  /** O relógio dispara uma função `async`: deixa as promessas dela andarem. */
+  const esvaziar = async () => {
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+  };
+
+  it("sem callback: vence o token (escrita condicional) e avisa `sem_resposta`", async () => {
+    const { service, prisma, realtime } = montar();
+    prisma.message.findUnique.mockResolvedValue(MENSAGEM_DO_BOT);
+
+    await service.clicarComponente(CLIQUE);
+    expect(realtime.emitToUser).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(3_000);
+    await esvaziar();
+
+    expect(prisma.interaction.updateMany).toHaveBeenCalledWith({
+      where: { id: "i_1", respondedAt: null },
+      data: { expiresAt: expect.any(Date) },
+    });
+    expect(realtime.emitToUser).toHaveBeenCalledWith(
+      USUARIO.id,
+      WS_EVENTS.INTERACTION_FAILED,
+      expect.objectContaining({ nonce: "n_1", motivo: "sem_resposta" }),
+    );
+  });
+
+  it("callback a tempo desarma o relógio: sai `success`, e nunca `failed`", async () => {
+    const { service, prisma, realtime } = montar();
+    prisma.message.findUnique.mockResolvedValue(MENSAGEM_DO_BOT);
+
+    await service.clicarComponente(CLIQUE);
+    await service.responder(deComponente(), TIPO_DE_CALLBACK.DEFERRED_UPDATE_MESSAGE, undefined);
+    await vi.advanceTimersByTimeAsync(5_000);
+    await esvaziar();
+
+    const eventos = realtime.emitToUser.mock.calls.map((c) => c[1]);
+    expect(eventos).toContain(WS_EVENTS.INTERACTION_SUCCESS);
+    expect(eventos).not.toContain(WS_EVENTS.INTERACTION_FAILED);
+  });
+
+  it("o banco decide: callback gravado por outra instância (`count` 0) não vira `failed`", async () => {
+    const { service, prisma, realtime } = montar();
+    prisma.message.findUnique.mockResolvedValue(MENSAGEM_DO_BOT);
+    await service.clicarComponente(CLIQUE);
+    prisma.interaction.updateMany.mockResolvedValue({ count: 0 });
+
+    await vi.advanceTimersByTimeAsync(3_000);
+    await esvaziar();
+
+    expect(realtime.emitToUser).not.toHaveBeenCalled();
+  });
+});
+
+describe("onda 3 — callbacks 6, 7, 8 e 9", () => {
+  it("6 DEFERRED_UPDATE_MESSAGE: toma a resposta, não mexe em mensagem e emite `success`", async () => {
+    const { service, prisma, mensagens, realtime } = montar();
+
+    await service.responder(deComponente(), TIPO_DE_CALLBACK.DEFERRED_UPDATE_MESSAGE, undefined);
+
+    expect(prisma.interaction.updateMany).toHaveBeenCalledTimes(1);
+    expect(mensagens.criarComoBot).not.toHaveBeenCalled();
+    expect(mensagens.editarComoBot).not.toHaveBeenCalled();
+    expect(realtime.emitToUser).toHaveBeenCalledWith(USUARIO.id, WS_EVENTS.INTERACTION_SUCCESS, {
+      interactionId: "i_1",
+      nonce: "n_1",
+      channelId: CANAL.id,
+      messageId: "m_bot",
+      customId: "tocar",
+    });
+  });
+
+  it("7 UPDATE_MESSAGE: edita a mensagem de origem, emite `message.updated` no canal e `success`", async () => {
+    const { service, prisma, mensagens, realtime } = montar();
+    prisma.message.findUnique.mockResolvedValue({
+      content: "antes",
+      suppressEmbeds: false,
+      stickerId: null,
+      botPayload: { embeds: [], components: COMPONENTES_DA_MENSAGEM, flags: 0 },
+      _count: { attachments: 0 },
+    });
+    mensagens.editarComoBot.mockResolvedValue({ id: "m_bot", channelId: CANAL.id } as MessageDTO);
+
+    await service.responder(deComponente(), TIPO_DE_CALLBACK.UPDATE_MESSAGE, {
+      content: "depois",
+      components: [],
+    });
+
+    expect(mensagens.editarComoBot).toHaveBeenCalledWith("m_bot", BOT.id, { content: "depois", components: [] });
+    expect(realtime.emitToChannel).toHaveBeenCalledWith(
+      CANAL.id,
+      WS_EVENTS.MESSAGE_UPDATED,
+      expect.objectContaining({ id: "m_bot" }),
+    );
+    expect(realtime.emitToUser).toHaveBeenCalledWith(
+      USUARIO.id,
+      WS_EVENTS.INTERACTION_SUCCESS,
+      expect.objectContaining({ nonce: "n_1" }),
+    );
+  });
+
+  it("7 que quebra o conjunto (v2 com `content`) é 50035 **antes** da tomada", async () => {
+    const { service, prisma, mensagens } = montar();
+    prisma.message.findUnique.mockResolvedValue({
+      content: "",
+      suppressEmbeds: false,
+      stickerId: null,
+      botPayload: { embeds: [], components: [{ type: 10, id: 1, content: "oi" }], flags: 1 << 15 },
+      _count: { attachments: 0 },
+    });
+
+    await expect(
+      service.responder(deComponente(), TIPO_DE_CALLBACK.UPDATE_MESSAGE, { content: "não pode" }),
+    ).rejects.toMatchObject({ response: { code: 50035 } });
+    expect(prisma.interaction.updateMany).not.toHaveBeenCalled();
+    expect(mensagens.editarComoBot).not.toHaveBeenCalled();
+  });
+
+  it("7 numa efêmera de origem: edita a linha e avisa **só** o dono, com a faixa da interação dona", async () => {
+    const { service, prisma, realtime } = montar();
+    prisma.ephemeralMessage.findUnique.mockResolvedValue({
+      ...efemeraDeMentira(),
+      embeds: [],
+      components: COMPONENTES_DA_MENSAGEM,
+      flags: 0,
+      interactionId: "i_cmd",
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    await service.responder(
+      deComponente({ messageId: null, ephemeralMessageId: "e_1" }),
+      TIPO_DE_CALLBACK.UPDATE_MESSAGE,
+      { content: "atualizada" },
+    );
+
+    expect(prisma.ephemeralMessage.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "e_1" }, data: expect.objectContaining({ content: "atualizada" }) }),
+    );
+    // a faixa "usou /play" é da interação que criou a efêmera, não do clique
+    expect(prisma.interaction.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "i_cmd" } }));
+    expect(realtime.emitToChannel).not.toHaveBeenCalled();
+    expect(realtime.emitToUser).toHaveBeenCalledWith(
+      USUARIO.id,
+      WS_EVENTS.MESSAGE_UPDATED,
+      expect.objectContaining({ efemera: true, content: "atualizada" }),
+    );
+  });
+
+  it("7 com a efêmera de origem já vencida é 404 10008, sem gastar a resposta", async () => {
+    const { service, prisma } = montar();
+    prisma.ephemeralMessage.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.responder(
+        deComponente({ messageId: null, ephemeralMessageId: "e_1" }),
+        TIPO_DE_CALLBACK.UPDATE_MESSAGE,
+        { content: "x" },
+      ),
+    ).rejects.toMatchObject({ response: { code: 10008 } });
+    expect(prisma.interaction.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("4 num componente escreve a mensagem nova e também emite `success`", async () => {
+    const { service, mensagens, realtime } = montar();
+
+    await service.responder(deComponente(), TIPO_DE_CALLBACK.CHANNEL_MESSAGE_WITH_SOURCE, { content: "ok" });
+
+    expect(mensagens.criarComoBot).toHaveBeenCalled();
+    expect(realtime.emitToUser).toHaveBeenCalledWith(
+      USUARIO.id,
+      WS_EVENTS.INTERACTION_SUCCESS,
+      expect.objectContaining({ customId: "tocar" }),
+    );
+  });
+
+  it("escrita que falha **depois** da tomada vira `failed` para quem clicou", async () => {
+    const { service, mensagens, realtime } = montar();
+    mensagens.criarComoBot.mockRejectedValue(new Error("50013"));
+
+    await expect(
+      service.responder(deComponente(), TIPO_DE_CALLBACK.CHANNEL_MESSAGE_WITH_SOURCE, { content: "ok" }),
+    ).rejects.toThrow("50013");
+    expect(realtime.emitToUser).toHaveBeenCalledWith(
+      USUARIO.id,
+      WS_EVENTS.INTERACTION_FAILED,
+      expect.objectContaining({ motivo: "sem_resposta" }),
+    );
+  });
+
+  it("8 AUTOCOMPLETE_RESULT: as `choices` vão só para quem pediu, casadas pelo `nonce`", async () => {
+    const { service, realtime } = montar();
+
+    await service.responder(autenticada({ tipo: 4, nonce: "n_ac" }), TIPO_DE_CALLBACK.APPLICATION_COMMAND_AUTOCOMPLETE_RESULT, {
+      choices: [{ name: "Never Gonna Give You Up", value: "never" }],
+    } as never);
+
+    expect(realtime.emitToChannel).not.toHaveBeenCalled();
+    expect(realtime.emitToUser).toHaveBeenCalledWith(USUARIO.id, WS_EVENTS.INTERACTION_AUTOCOMPLETE, {
+      interactionId: "i_1",
+      nonce: "n_ac",
+      choices: [{ name: "Never Gonna Give You Up", value: "never" }],
+    });
+  });
+
+  it("8 com mais de 25 escolhas é 50035, sem gastar a resposta; 8 fora de autocomplete também", async () => {
+    const { service, prisma } = montar();
+    const muitas = Array.from({ length: 26 }, (_, i) => ({ name: `op ${i}`, value: i }));
+
+    await expect(
+      service.responder(autenticada({ tipo: 4, nonce: "n" }), 8, { choices: muitas } as never),
+    ).rejects.toMatchObject({ response: { code: 50035 } });
+    await expect(service.responder(deComponente(), 8, { choices: [] } as never)).rejects.toMatchObject({
+      response: { code: 50035 },
+    });
+    expect(prisma.interaction.updateMany).not.toHaveBeenCalled();
+  });
+
+  const MODAL_DO_BOT = {
+    custom_id: "cadastro",
+    title: "Cadastro",
+    components: [{ type: 18, label: "Nome", component: { type: 4, custom_id: "nome", style: 1 } }],
+  };
+
+  it("9 MODAL: grava o modal na mesma escrita da tomada e o entrega só a quem clicou", async () => {
+    const { service, prisma, realtime } = montar();
+
+    await service.responder(deComponente(), TIPO_DE_CALLBACK.MODAL, MODAL_DO_BOT as never);
+
+    expect(prisma.interaction.updateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({ id: "i_1", respondedAt: null }),
+      data: {
+        respondedAt: expect.any(Date),
+        // numerado: é contra estes `id` que o envio confere
+        modal: expect.objectContaining({
+          custom_id: "cadastro",
+          components: [expect.objectContaining({ id: 1, component: expect.objectContaining({ id: 2 }) })],
+        }),
+      },
+    });
+    expect(realtime.emitToChannel).not.toHaveBeenCalled();
+    expect(realtime.emitToUser).toHaveBeenCalledWith(
+      USUARIO.id,
+      WS_EVENTS.INTERACTION_MODAL,
+      expect.objectContaining({
+        interactionId: "i_1",
+        nonce: "n_1",
+        channelId: CANAL.id,
+        applicationId: "app_1",
+        bot: expect.objectContaining({ id: BOT.id }),
+        modal: expect.objectContaining({ title: "Cadastro" }),
+      }),
+    );
+    // o modal substitui o `success`: o botão sai do "carregando" quando o modal abre
+    expect(realtime.emitToUser.mock.calls.map((c) => c[1])).not.toContain(WS_EVENTS.INTERACTION_SUCCESS);
+  });
+
+  it("9 com título acima de 45 é 50035; 9 num envio de modal (5) também", async () => {
+    const { service, prisma } = montar();
+    await expect(
+      service.responder(deComponente(), 9, { ...MODAL_DO_BOT, title: "x".repeat(46) } as never),
+    ).rejects.toMatchObject({ response: { code: 50035 } });
+    await expect(
+      service.responder(deComponente({ tipo: 5, customId: "cadastro" }), 9, MODAL_DO_BOT as never),
+    ).rejects.toMatchObject({ response: { code: 50035 } });
+    expect(prisma.interaction.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("onda 3 — `@original` de uma interação de componente", () => {
+  it("respondida com 6, o `editReply()` edita a mensagem de origem", async () => {
+    const { service, mensagens } = montar();
+
+    await service.editarOriginal(deComponente({ respondedAt: new Date() }), { content: "tocando" });
+
+    expect(mensagens.editarComoBot).toHaveBeenCalledWith("m_bot", BOT.id, { content: "tocando" });
+  });
+
+  it("sem callback antes continua 404 10062", async () => {
+    const { service } = montar();
+    await expect(service.editarOriginal(deComponente(), { content: "x" })).rejects.toMatchObject({
+      response: { code: 10062 },
+    });
+  });
+
+  it("comando de barra sem resposta não cai na origem (não tem)", async () => {
+    const { service, mensagens } = montar();
+    await expect(
+      service.editarOriginal(autenticada({ respondedAt: new Date() }), { content: "x" }),
+    ).rejects.toMatchObject({ response: { code: 10062 } });
+    expect(mensagens.editarComoBot).not.toHaveBeenCalled();
+  });
+});
+
+describe("onda 3 — enviarModal (interação 5)", () => {
+  /** O modal como `validarModalDeBot` o gravou (numerado). */
+  const MODAL_GRAVADO = {
+    custom_id: "cadastro",
+    title: "Cadastro",
+    components: [
+      { type: 18, id: 1, label: "Nome", component: { type: 4, id: 2, custom_id: "nome", style: 1 } },
+      { type: 18, id: 3, label: "Quem", component: { type: 5, id: 4, custom_id: "quem", required: false } },
+    ],
+  };
+
+  const ORIGEM = {
+    id: "i_orig",
+    userId: USUARIO.id,
+    channelId: CANAL.id,
+    guildId: CANAL.guildId,
+    modal: MODAL_GRAVADO,
+    expiresAt: new Date(Date.now() + 60_000),
+    messageId: "m_bot",
+    ephemeralMessageId: null,
+    application: { botUserId: BOT.id },
+  };
+
+  const ENVIO = {
+    canalId: CANAL.id,
+    usuarioId: USUARIO.id,
+    interactionId: "i_orig",
+    customId: "cadastro",
+    nonce: "n_modal",
+    components: [
+      { type: 18 as const, id: 1, component: { type: 4 as const, id: 2, custom_id: "nome", value: "Zé" } },
+      { type: 18 as const, id: 3, component: { type: 5 as const, id: 4, custom_id: "quem", values: [USUARIO.id] } },
+    ],
+  };
+
+  it("confere contra o modal, zera-o (um envio só) e despacha o MODAL_SUBMIT com `message`", async () => {
+    const { service, prisma, sessao } = montar();
+    prisma.interaction.findUnique.mockResolvedValue(ORIGEM);
+
+    const criada = await service.enviarModal(ENVIO);
+
+    expect(criada).toMatchObject({ id: "i_1", nonce: "n_modal" });
+    expect(prisma.interaction.updateMany).toHaveBeenCalledWith({
+      where: { id: "i_orig", userId: USUARIO.id, modal: { not: Prisma.DbNull } },
+      data: { modal: Prisma.DbNull },
+    });
+    const gravado = (prisma.interaction.create.mock.calls[0]?.[0] as { data: Record<string, unknown> }).data;
+    expect(gravado).toMatchObject({ type: 5, customId: "cadastro", messageId: "m_bot", nonce: "n_modal", commandName: null });
+
+    const payload = sessao.despachar.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(payload.type).toBe(5);
+    expect(payload.data).toEqual({
+      custom_id: "cadastro",
+      components: [
+        { type: 18, id: 1, component: { type: 4, id: 2, custom_id: "nome", value: "Zé" } },
+        // cuid → snowflake, e o usuário no `resolved`
+        { type: 18, id: 3, component: { type: 5, id: 4, custom_id: "quem", values: ["111"] } },
+      ],
+      resolved: expect.objectContaining({ users: { "111": expect.anything() }, attachments: {} }),
+    });
+    expect(payload.message).toMatchObject({ id: "901" });
+  });
+
+  it("modal de outra pessoa, de outro `custom_id`, vencido ou já enviado é 404", async () => {
+    const casos: unknown[] = [
+      { ...ORIGEM, userId: "u_outra" },
+      { ...ORIGEM, modal: { ...MODAL_GRAVADO, custom_id: "outro" } },
+      { ...ORIGEM, expiresAt: new Date(Date.now() - 1) },
+      { ...ORIGEM, modal: null },
+      null,
+    ];
+    for (const origem of casos) {
+      const { service, prisma } = montar();
+      prisma.interaction.findUnique.mockResolvedValue(origem);
+      await expect(service.enviarModal(ENVIO)).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.interaction.create).not.toHaveBeenCalled();
+    }
+  });
+
+  it("dois envios quase juntos: o que perde a escrita condicional leva 404", async () => {
+    const { service, prisma } = montar();
+    prisma.interaction.findUnique.mockResolvedValue(ORIGEM);
+    prisma.interaction.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(service.enviarModal(ENVIO)).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.interaction.create).not.toHaveBeenCalled();
+  });
+
+  it("obrigatório vazio é 400, e o modal **não** é consumido", async () => {
+    const { service, prisma } = montar();
+    prisma.interaction.findUnique.mockResolvedValue(ORIGEM);
+
+    await expect(
+      service.enviarModal({ ...ENVIO, components: [ENVIO.components[1]!] }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.interaction.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("onda 3 — pedirAutocomplete (interação 4)", () => {
+  const COMANDO_COM_AUTOCOMPLETE = {
+    ...COMANDO,
+    options: [
+      { name: "url", description: "o link", type: 3, required: true, autocomplete: true },
+      { name: "volume", description: "0–100", type: 4, required: false },
+    ],
+  };
+
+  it("grava a interação 4 e manda a opção em foco com `focused` e o `value` em texto", async () => {
+    const { service, prisma, sessao } = montar({ comando: COMANDO_COM_AUTOCOMPLETE });
+
+    const criada = await service.pedirAutocomplete({
+      canalId: CANAL.id,
+      usuarioId: USUARIO.id,
+      commandId: COMANDO.id,
+      nonce: "n_ac",
+      options: [{ name: "url", type: 3, value: "never", focused: true }],
+    });
+
+    expect(criada).toMatchObject({ id: "i_1", nonce: "n_ac" });
+    const gravado = (prisma.interaction.create.mock.calls[0]?.[0] as { data: Record<string, unknown> }).data;
+    expect(gravado).toMatchObject({ type: 4, commandId: COMANDO.id, commandName: "play", nonce: "n_ac", customId: null });
+    const payload = sessao.despachar.mock.calls[0]?.[1] as { type: number; data: Record<string, unknown> };
+    expect(payload.type).toBe(4);
+    expect(payload.data).toMatchObject({
+      name: "play",
+      options: [{ name: "url", type: 3, value: "never", focused: true }],
+    });
+  });
+
+  it("opção em foco sem `autocomplete: true` é 400, e nada é gravado", async () => {
+    const { service, prisma } = montar({ comando: COMANDO_COM_AUTOCOMPLETE });
+
+    await expect(
+      service.pedirAutocomplete({
+        canalId: CANAL.id,
+        usuarioId: USUARIO.id,
+        commandId: COMANDO.id,
+        nonce: "n",
+        options: [{ name: "volume", type: 4, value: 5, focused: true }],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.interaction.create).not.toHaveBeenCalled();
+  });
+
+  it("quem não pode escrever no canal leva o 403 do `assertCanPostChannel`", async () => {
+    const { service, guilds, prisma } = montar({ comando: COMANDO_COM_AUTOCOMPLETE });
+    guilds.assertCanPostChannel.mockRejectedValue(new Error("403"));
+
+    await expect(
+      service.pedirAutocomplete({
+        canalId: CANAL.id,
+        usuarioId: USUARIO.id,
+        commandId: COMANDO.id,
+        nonce: "n",
+        options: [{ name: "url", type: 3, value: "a", focused: true }],
+      }),
+    ).rejects.toThrow("403");
+    expect(prisma.interaction.create).not.toHaveBeenCalled();
   });
 });

@@ -41,8 +41,10 @@ export const TIPO_DE_INTERACAO = {
 /**
  * Tipos de resposta ao callback.
  *
- * A F3 implementa **4** e **5**. Os outros são F5 e levam 501 — explícito, e
- * não um 204 mentiroso que deixaria o bot achar que respondeu.
+ * A F3 implementou **4** e **5**. ── onda 3 (cartão 3a) ── **6**, **7**, **8** e
+ * **9** passaram a existir; qual vale para qual tipo de interação está em
+ * `callbackPermitido` (`componentes.ts`). O `PONG` (1) só existe no modelo de
+ * webhook HTTP, que o Streamz não tem: leva 50035.
  */
 export const TIPO_DE_CALLBACK = {
   PONG: 1,
@@ -105,10 +107,11 @@ export interface InteracaoEmVoo {
 /**
  * O corpo de uma resposta ou followup, já normalizado.
  *
- * `content` é o único campo que a F3 materializa. `embeds` e `components`
- * chegam (o `@Body()` cru os preserva — risco (b) do §12) e são **descartados
- * com aviso no log**: embed rico e botão são F5, e fingir que funcionaram seria
- * pior do que dizer que não.
+ * ── onda 3 ── `content`, `embeds`, `components` e `flags` são materializados:
+ * o `InteractionsService` os valida com `validarPayloadDeBot` (`@streamz/shared`)
+ * e os guarda (`MessageBotPayload` ou as colunas da `EphemeralMessage`). Só
+ * `attachments` segue descartado com aviso — não há upload nestas rotas. Ver
+ * `docs/CONTRATO-ONDA-3.md`.
  */
 export interface CorpoDeResposta {
   content?: string;
@@ -138,4 +141,18 @@ export interface InteracaoAutenticada {
   responseMessageId: string | null;
   respondedAt: Date | null;
   expiresAt: Date;
+  // ── onda 3 (cartão 3a) ── o que a interação de componente, de autocomplete e
+  // de envio de modal acrescentam. `porToken` sempre os preenche; são opcionais
+  // só porque os testes das rotas de compat montam este objeto à mão, e
+  // ausente vale o mesmo que a F3: comando (`tipo` 2) sem mensagem de origem.
+  /** `type` da interação do Discord: 2 comando, 3 componente, 4 autocomplete, 5 envio de modal. */
+  tipo?: number;
+  /** `custom_id` do componente (3) ou do modal (5). */
+  customId?: string | null;
+  /** cuid da mensagem de origem (normal) — alvo do callback 7 e do `@original` sem resposta própria. */
+  messageId?: string | null;
+  /** cuid da mensagem de origem quando ela é efêmera. */
+  ephemeralMessageId?: string | null;
+  /** o `nonce` do navegador; volta em todo `interaction.*`. */
+  nonce?: string | null;
 }
