@@ -49,7 +49,17 @@ export default function PreviaDeMensagens() {
             </div>
           </div>
           <div className="flex gap-3" style={{ marginTop: `${s.groupSpacing}px` }}>
-            <div className="h-10 w-10 shrink-0 rounded-full bg-brand-500" aria-hidden="true" />
+            {/* achado da revisão visual: era um `div` só `bg-brand-500`, sem
+                glifo — limão sobre limão, ilegível. `Avatar` sem `avatarUrl`
+                já resolve isso sozinho (iniciais sobre uma cor de hash, com o
+                token de contraste garantido `text-text-overlay-light`), então
+                a segunda mensagem da prévia usa o mesmo componente da
+                primeira em vez de reimplementar o círculo */}
+            <Avatar
+              user={{ id: "previa-streamz", username: "streamz", avatarUrl: null }}
+              size="lg"
+              surface="border-background-base-lower"
+            />
             <div className="min-w-0">
               <span className="font-medium text-text-strong">streamz</span>
               <span className="ml-1.5 text-xs text-text-muted">Hoje às 14:04</span>

@@ -65,6 +65,8 @@ export default function VozTab() {
   const [erro, setErro] = useState<string | null>(null);
   const [camera, setCamera] = useState(false);
   const [capturando, setCapturando] = useState(false);
+  const [atualizandoLista, setAtualizandoLista] = useState(false);
+  const [abrindoCamera, setAbrindoCamera] = useState(false);
   const { testando, nivel, erro: erroDoTeste, alternar: alternarTeste } = useTesteDeMicrofone();
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -91,11 +93,25 @@ export default function VozTab() {
     void refresh();
   }
 
+  // "Atualizar lista" é o pedido explícito de tentar de novo a permissão
+  // (ver o comentário no botão); o estado `carregando` do `Button` é o único
+  // aviso de que o clique pegou — sem ele, uma permissão que demora parece um
+  // botão morto.
+  async function atualizarLista() {
+    setAtualizandoLista(true);
+    try {
+      await devices.refresh(true);
+    } finally {
+      setAtualizandoLista(false);
+    }
+  }
+
   async function alternarCamera() {
     if (camera) {
       pararCamera();
       return;
     }
+    setAbrindoCamera(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: devices.cameraId ? { deviceId: { exact: devices.cameraId } } : true,
@@ -108,6 +124,8 @@ export default function VozTab() {
     } catch {
       setErro(explicarMidia(motivoDaFalha()) ?? t("voz.semPermissao"));
       pararCamera();
+    } finally {
+      setAbrindoCamera(false);
     }
   }
 
@@ -171,7 +189,11 @@ export default function VozTab() {
             icone={<RefreshCw size={14} aria-hidden="true" />}
             // `true`: este botão é o pedido explícito de tentar de novo, e tem
             // de furar a trava que impede um prompt por abertura de menu
-            onClick={() => void devices.refresh(true)}
+            onClick={() => void atualizarLista()}
+            // estado "carregando": o próprio primitivo troca o rótulo pelos
+            // três pontos (`Button.tsx`) — sem isso, um pedido de permissão
+            // que demora parece um clique que não pegou
+            carregando={atualizandoLista}
             className="ml-auto celular:min-h-[44px]"
           >
             Atualizar lista
@@ -249,27 +271,47 @@ export default function VozTab() {
       </Section>
 
       <Section id="testar" title={t("voz.testarMic")}>
-        <div className="flex items-center gap-3 py-3">
+        {/*
+          Grade `auto 1fr`, não `flex`: é o leiaute medido do "Mic Test" do
+          Discord (`.micTest__011b7{display:grid;grid-template-columns:auto
+          1fr;column-gap:var(--space-16);align-items:center}`,
+          `docs/referencias-discord/tokens/css-bruto/333008.90c167df50b44f04.css`)
+          — o botão fica na primeira
+          coluna, o medidor ocupa o resto, e a legenda embaixo (`.micTestCaption
+          __011b7{grid-column:2;min-height:var(--space-32)}`) começa alinhada
+          com o medidor, não com o botão. `gap-4` = 16px (`--space-16`).
+        */}
+        <div className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-1 py-3">
           <Button
             variante="primario"
-            tamanho="md"
-            icone={<Mic size={16} aria-hidden="true" />}
+            // 32px: medido no mesmo print (`Captura de tela 2026-09-01
+            // 113445.png`, botão "Testar" em x175–236/y448–479 = 61×32),
+            // igual ao botão do popover de supressão (`PopoverDeRuido.tsx`)
+            // — os dois testes são o mesmo hook, então o mesmo botão.
+            tamanho="sm"
+            icone={<Mic size={14} aria-hidden="true" />}
             onClick={testarMicrofone}
             className="shrink-0 celular:h-[44px]"
           >
             {testando ? t("voz.parar") : t("voz.testar")}
           </Button>
           <MedidorDeMicrofone nivel={nivel} rotulo={t("voz.volumeEntrada")} />
+          {/* `min-h-8` (32px) reserva a altura da legenda antes de ela trocar
+              de texto — sem a reserva, o erro do teste empurra o resto da
+              seção para baixo quando aparece. `col-start-2`: por baixo do
+              medidor, como no `.micTestCaption__011b7` medido acima. */}
+          <p className="col-start-2 min-h-8 text-xs text-text-muted">
+            {/* O que o teste faz, dito antes de a pessoa estranhar o silêncio
+                (e os dois ícones acesos no rodapé): o Discord também
+                ensurdece, e sem o aviso parece que a call caiu. */}
+            {testando
+              ? "Você está se ouvindo. Enquanto o teste durar você fica mudo e surdo — a sala não te ouve e você não ouve ninguém."
+              : "Você vai se ouvir; enquanto o teste durar você fica mudo e surdo, e a chamada fica em silêncio dos dois lados."}
+          </p>
+          {erroDoTeste && (
+            <p className="col-start-2 text-xs text-status-danger">{erroDoTeste}</p>
+          )}
         </div>
-        {/* O que o teste faz, dito antes de a pessoa estranhar o silêncio (e
-            os dois ícones acesos no rodapé): o Discord também ensurdece, e sem
-            o aviso parece que a call caiu. */}
-        <p className="-mt-1 pb-3 text-xs text-text-muted">
-          {testando
-            ? "Você está se ouvindo. Enquanto o teste durar você fica mudo e surdo — a sala não te ouve e você não ouve ninguém."
-            : "Você vai se ouvir; enquanto o teste durar você fica mudo e surdo, e a chamada fica em silêncio dos dois lados."}
-        </p>
-        {erroDoTeste && <p className="pb-3 text-xs text-status-danger">{erroDoTeste}</p>}
       </Section>
 
       <Section id="tela" title={t("voz.tela")}>
@@ -316,6 +358,7 @@ export default function VozTab() {
             variante="secundario"
             tamanho="md"
             onClick={() => void alternarCamera()}
+            carregando={abrindoCamera}
             className="celular:h-[44px]"
           >
             {camera ? t("voz.desligarCamera") : t("voz.ligarCamera")}
@@ -336,6 +379,17 @@ const BLOCOS = 20;
  * Não é decoração: com blocos discretos dá para ver *quantos* acendem e voltar
  * ao mesmo ponto depois de mexer no volume — uma barra contínua a 40% e a 45%
  * é a mesma imagem.
+ *
+ * As duas cores vêm do mesmo print, medidas em repouso (nenhum bloco aceso):
+ * `linha 463, x175–420` de `Captura de tela 2026-09-01 113445.png` dá o traço
+ * em `#46474f`, que bate exato com `--neutral-56` e quase exato (dist. 6, a
+ * antisserrilhado) com `--slider-track-background` (`#474851`) — o mesmo
+ * trilho que o `Slider`/`SliderMarcas` de `ui/controls.tsx` já usa para "sem
+ * valor". O aceso não aparece em nenhum print parado; fica `--brand-500`, o
+ * preenchido desses dois sliders (e do `accent-brand-500` do `<input
+ * type=range>` do modo PTT/sensibilidade) — não `--status-positive` (verde):
+ * essa é a cor do anel de quem fala (`AnelDeFala`) e da bolinha "on-line", não
+ * de medidor de volume, e o Discord não mistura as duas.
  */
 function MedidorDeMicrofone({ nivel, rotulo }: { nivel: number; rotulo: string }) {
   const acesos = Math.round(nivel * BLOCOS);
@@ -353,7 +407,7 @@ function MedidorDeMicrofone({ nivel, rotulo }: { nivel: number; rotulo: string }
           key={i}
           aria-hidden="true"
           className={`h-full flex-1 rounded-[1px] transition-colors duration-75 ${
-            i < acesos ? "bg-status-positive" : "bg-input-background-default"
+            i < acesos ? "bg-brand-500" : "bg-slider-track-background"
           }`}
         />
       ))}

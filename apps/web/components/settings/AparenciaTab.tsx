@@ -1,21 +1,18 @@
 "use client";
 
-import Avatar from "@/components/ui/Avatar";
 import {
   ConfiguracoesRelacionadas,
-  PontoDeRadio,
+  Rotulo,
   Section,
   Slider,
   Toggle,
 } from "@/components/ui/controls";
 import { useIrParaAba } from "@/components/settings/navegacao";
 import PreviaDeMensagens from "@/components/settings/PreviaDeMensagens";
-import { Accessibility } from "@/components/ui/icones";
-import { Button } from "@/components/ui/primitivos";
+import { Accessibility, Check } from "@/components/ui/icones";
+import { Button, LinhaDeControle, Switch, Tooltip } from "@/components/ui/primitivos";
 import { useT } from "@/lib/i18n";
-import { useAuth } from "@/stores/auth";
 import { FONT_SCALE, GROUP_SPACING, ZOOM, useSettings } from "@/stores/settings";
-import { ui } from "@/stores/ui";
 
 /**
  * Aparência: tema, escala da fonte, respiro entre grupos, modo compacto e zoom.
@@ -30,7 +27,6 @@ import { ui } from "@/stores/ui";
  */
 export default function AparenciaTab() {
   const t = useT();
-  const user = useAuth((s) => s.user);
   const s = useSettings();
   const irParaAba = useIrParaAba();
 
@@ -105,96 +101,123 @@ export default function AparenciaTab() {
   );
 }
 
-type Tema = "dark" | "light" | "sync";
-
 /**
- * Os três temas do Discord como miniaturas ilustradas com bolinha de rádio.
+ * "Tema": linha "Mesmo tema do dispositivo" + grade "Temas padrão", como no
+ * Discord (print `docs/Reference/Captura de tela 2026-09-01 114135.png`,
+ * Configurações de usuário > Aparência > Tema — Md, 2026-09-01). Cartão
+ * c6f-aparencia: redesenho, não só troca de vocabulário — a peça antiga (3
+ * cartões 224×105 com miniatura de app, rádio e rótulo) não existe no Discord;
+ * o dele são quadrados **48×48 sem rótulo**, com o selecionado marcado por um
+ * selo de check no canto (medido na régua de pixel: linha y=270, quadrados em
+ * x 420–465/476–521/533–576/588–633/644–689, cada um com ~46px de tinta e 1px
+ * de borda `#abacb2` — sólida, não bate exatamente com nenhum token
+ * `--border-*` alfa que temos; fica `border-border-subtle`, o mesmo resto
+ * usado nas outras grades de cartão do arquivo (`controls.tsx#RadioCards`),
+ * já que aqui não há hover para subir a `-strong` —, vão de 8px entre eles; o
+ * selecionado troca a borda por um anel de 4px na cor de marca, aqui limão
+ * pela regra mecânica do item 3 da ADR — no Discord o anel é blurple
+ * `#5865f2`, a cor exata do `--brand-500` dele).
  *
- * Só o escuro está implementado (a paleta clara não existe em `globals.css`),
- * mas as três opções aparecem: o MVP é escuro por decisão de design, não por
- * incapacidade da tela, e esconder as outras faria a aba parecer quebrada. Quem
- * escolhe uma delas recebe o aviso em vez de uma interface meio pintada.
+ * `stores/settings.ts` define `theme: "dark"` como **literal único** — não
+ * existe valor "light" nem "sync" para gravar, então:
+ * - "Mesmo tema do dispositivo" (rótulo e descrição do print) fica desabilitado.
+ *   Não é "ainda não fizemos": o tema Claro está **fora da ADR-0009** (precisa
+ *   de um accent alternativo para fundo claro — "limão só sobre escuro" não
+ *   tem para onde ir —, isso pede outra ADR, ver "Fora desta decisão" da
+ *   0009). Sincronizar com o dispositivo não tem o que sincronizar até lá.
+ * - Em "Temas padrão" só o cartão Escuro funciona (é o único tema que existe).
+ *   Ash e Onyx (onda 9, das mesmas variáveis do Discord) aparecem visíveis e
+ *   desabilitados com a dica "(em breve)" — §6.6 do PROCESSO: o controle não
+ *   some, mas também não inventa a cor real do tema (não existe em
+ *   `variaveis-resolvidas.json` ainda), por isso o preenchimento é neutro.
+ * - Sem o tema Claro, a grade de 3 colunas que cortava "Sincronizar com o
+ *   comp…" (achado da revisão) não existe mais — o rótulo do Discord nem
+ *   aparece nos cartões (ele é só a dica de acessibilidade).
  */
 function EscolhaDeTema() {
   const t = useT();
-  const tema = useSettings((s) => s.theme) as Tema;
-
-  const opcoes: { value: Tema; label: string }[] = [
-    { value: "dark", label: t("aparencia.escuro") },
-    { value: "light", label: t("aparencia.claro") },
-    { value: "sync", label: "Sincronizar com o computador" },
-  ];
 
   return (
-    <div
-      role="radiogroup"
-      aria-label={t("aparencia.tema")}
-      // três colunas em 358px dão 113 cada, e "Sincronizar com o computador"
-      // saía como "Sincroni…" — no celular o rótulo quebra em vez de cortar
-      className="grid grid-cols-3 gap-3 py-3 celular:gap-2"
-    >
-      {opcoes.map((o) => {
-        const ativo = o.value === tema;
-        return (
+    <div className="flex flex-col gap-6">
+      <LinhaDeControle
+        rotulo="Mesmo tema do dispositivo"
+        descricao="Iguale ao modo (claro ou escuro) do seu dispositivo."
+        semDivisoria
+        controle={<InterruptorEmBreve nome="Mesmo tema do dispositivo" />}
+      />
+
+      <div>
+        <Rotulo>Temas padrão</Rotulo>
+        <div role="radiogroup" aria-label="Temas padrão" className="flex gap-2">
           <button
-            key={o.value}
             type="button"
             role="radio"
-            aria-checked={ativo}
-            onClick={() => {
-              if (o.value === "dark") return;
-              ui.toast("O tema claro ainda está a caminho — por enquanto só o escuro.");
-            }}
-            className={`overflow-hidden rounded-[6px] border text-left transition ${
-              ativo ? "border-brand-500" : "border-border-subtle hover:border-border-strong"
-            }`}
+            aria-checked={true}
+            // único tema real (o `theme` da store trava em "dark") — clicar
+            // não muda nada, mas continua radio de verdade para o leitor de
+            // tela, igual ao Discord com um só tema selecionável
+            onClick={() => {}}
+            // sem `overflow-hidden`: o selo de check do canto pisa a borda de
+            // propósito (como no print), e um preenchimento sólido não tem
+            // nada para vazar por cima
+            className="relative h-12 w-12 shrink-0 rounded-[6px] border-4 border-brand-500 bg-background-base-lower transition"
           >
-            <MiniaturaDeTema variante={o.value} />
-            <span className="flex items-center gap-2 px-2.5 py-2 celular:items-start celular:gap-1.5 celular:px-2">
-              <PontoDeRadio ativo={ativo} />
-              <span className="min-w-0 truncate text-sm font-medium text-text-strong celular:whitespace-normal">
-                {o.label}
-              </span>
+            <span className="sr-only">{t("aparencia.escuro")}</span>
+            <span
+              aria-hidden="true"
+              className="absolute -right-1 -top-1 grid h-4 w-4 place-items-center rounded-full bg-brand-500"
+            >
+              {/* ícone escuro sobre o selo limão — regra do accent (nunca
+                  branco); `control-primary-text-default` é o token que
+                  `Button`/`Badge` já usam para texto/ícone sobre superfície
+                  de marca (não existe um `accent-ink` genérico nos tokens
+                  gerados, só tokens por componente) */}
+              <Check size={10} className="text-control-primary-text-default" />
             </span>
           </button>
-        );
-      })}
+          <CartaoDeTemaFuturo nome="Ash" />
+          <CartaoDeTemaFuturo nome="Onyx" />
+        </div>
+      </div>
     </div>
   );
 }
 
-/** Um app de três colunas em miniatura — o mesmo desenho que o Discord usa. */
-function MiniaturaDeTema({ variante }: { variante: Tema }) {
-  const claro = variante === "light";
-  const fundo = claro ? "#FFFFFF" : "#1A1A1E";
-  const painel = claro ? "#E8E8EC" : "#121214";
-  const rail = claro ? "#D2D2DA" : "#121214";
-  const linha = claro ? "#B8B8C2" : "#35353F";
-
+/**
+ * Interruptor "(em breve)" — mesmo padrão de `ContaTab.tsx`
+ * (`LinhaDeTelefone`): o `<button disabled>` do `Switch` não recebe ponteiro
+ * nem foco, então quem carrega a dica e o `tabIndex` é o `span` por fora.
+ */
+function InterruptorEmBreve({ nome }: { nome: string }) {
+  const t = useT();
+  const dica = `${nome} (${t("aparencia.emBreve")})`;
   return (
-    <span
-      aria-hidden="true"
-      className="relative flex h-[68px] w-full overflow-hidden"
-      style={{ backgroundColor: fundo }}
-    >
-      <span className="h-full w-[14%]" style={{ backgroundColor: rail }} />
-      <span className="h-full w-[26%]" style={{ backgroundColor: painel }} />
-      <span className="flex flex-1 flex-col justify-center gap-1.5 px-2">
-        <span className="block h-1.5 w-full rounded-full" style={{ backgroundColor: linha }} />
-        <span className="block h-1.5 w-3/4 rounded-full" style={{ backgroundColor: linha }} />
-        <span className="block h-1.5 w-1/2 rounded-full" style={{ backgroundColor: linha }} />
+    <Tooltip rotulo={dica}>
+      <span tabIndex={0} aria-label={dica} className="inline-flex rounded-2xl">
+        <Switch marcado={false} aoMudar={() => {}} desabilitado className="pointer-events-none" />
       </span>
-      {/* "sincronizar" é a metade clara sobreposta à escura, como o Discord */}
-      {variante === "sync" && (
-        <span
-          className="absolute inset-y-0 right-0 w-1/2"
-          style={{
-            backgroundColor: "#FFFFFF",
-            clipPath: "polygon(100% 0, 100% 100%, 0 100%)",
-            opacity: 0.9,
-          }}
-        />
-      )}
-    </span>
+    </Tooltip>
+  );
+}
+
+/**
+ * Cartão de tema que ainda não existe (Ash/Onyx, onda 9): visível e
+ * desabilitado, sem chutar a cor real do tema — só um `span`, não um botão
+ * desabilitado, então ele mesmo já recebe ponteiro/foco para a dica.
+ */
+function CartaoDeTemaFuturo({ nome }: { nome: string }) {
+  const t = useT();
+  const dica = `${nome} (${t("aparencia.emBreve")})`;
+  return (
+    <Tooltip rotulo={dica}>
+      <span
+        role="radio"
+        aria-checked={false}
+        aria-disabled="true"
+        tabIndex={0}
+        aria-label={dica}
+        className="h-12 w-12 shrink-0 cursor-not-allowed rounded-[6px] border border-border-subtle bg-background-base-lowest opacity-50"
+      />
+    </Tooltip>
   );
 }
