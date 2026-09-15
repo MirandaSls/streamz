@@ -358,7 +358,23 @@ workflows:
           if [ -n "${APPLE_CERTIFICATE:-}" ]; then
             [ -n "${APPLE_CERTIFICATE_PASSWORD+x}" ] || { echo "ERRO: APPLE_CERTIFICATE sem APPLE_CERTIFICATE_PASSWORD." >&2; exit 1; }
             TMP_ASSINATURA=$(mktemp -d)
-            printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$TMP_ASSINATURA/cert.p12"
+            # Colar no painel costuma trazer espaço, quebra de linha ou aspas
+            # junto — e o `base64 --decode` do macOS recusa tudo isso com uma
+            # mensagem que não diz qual variável estava errada. Limpa o que é
+            # inofensivo e, se sobrar caractere fora do alfabeto do base64
+            # (ex.: o COMANDO `base64 -i … | pbcopy` colado no lugar do
+            # resultado), para dizendo o que colar.
+            CERT_B64=$(printf '%s' "$APPLE_CERTIFICATE" | tr -d ' \t\r\n"')
+            case "$CERT_B64" in
+              ''|*[!A-Za-z0-9+/=]*)
+                echo "ERRO: APPLE_CERTIFICATE não é base64 válido (${#CERT_B64} caracteres depois de limpar espaços)." >&2
+                echo "      O valor certo tem ~3400 caracteres, uma linha só, e começa com MII. No Mac, rode:" >&2
+                echo "        base64 -i ~/.streamz/certificado-mac/streamz-mac.p12 | pbcopy" >&2
+                echo "      e cole (Cmd+V) o RESULTADO no campo — não o comando." >&2
+                exit 1 ;;
+            esac
+            printf '%s' "$CERT_B64" | base64 --decode > "$TMP_ASSINATURA/cert.p12" \
+              || { echo "ERRO: APPLE_CERTIFICATE tem só caracteres de base64 mas não decodifica (cortado no meio da cópia?)." >&2; exit 1; }
             # `-legacy` como segunda tentativa: OpenSSL 3 (se for o do PATH)
             # recusa .p12 com RC2-40 sem o provider legado; o LibreSSL do
             # macOS nem conhece a opção.
@@ -440,6 +456,15 @@ workflows:
           fi
           CONFIG_RELEASE=()
           if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            # Mesmo tropeço do certificado: o valor é o CONTEÚDO de
+            # /root/.tauri/streamz.key (uma linha de base64), não o comando
+            # que o mostra. Espaço/quebra de linha nas pontas não atrapalha.
+            case "$(printf '%s' "$TAURI_SIGNING_PRIVATE_KEY" | tr -d ' \t\r\n')" in
+              *[!A-Za-z0-9+/=]*)
+                echo "ERRO: TAURI_SIGNING_PRIVATE_KEY não é o conteúdo da chave (tem caractere fora do base64)." >&2
+                echo "      No servidor rode 'cat /root/.tauri/streamz.key' e cole só a linha que ele imprime." >&2
+                exit 1 ;;
+            esac
             echo "TAURI_SIGNING_PRIVATE_KEY presente: gerando também os artefatos do atualizador (.app.tar.gz + .sig)"
             # A chave do servidor (/root/.tauri/streamz.key) não tem senha, e o
             # build do Windows passa a senha vazia explícita pelo mesmo motivo:
