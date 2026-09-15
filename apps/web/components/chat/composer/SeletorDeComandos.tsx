@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { ChevronDown } from "@/components/ui/icones";
 import Avatar from "@/components/ui/Avatar";
 import Marca from "@/components/ui/Marca";
 import { BotaoDeIcone } from "@/components/ui/primitivos";
@@ -27,7 +28,12 @@ import ChipDeOpcao from "./ChipDeOpcao";
  * - lista `.autocomplete__13533` fundo `--background-surface-high`; cabeçalho
  *   `.categoryHeader_d1405b{position:sticky;top:0;padding:0 8px}` com
  *   `.contentTitle__13533{color:var(--interactive-text-default);padding:4px 0;
- *   text-transform:uppercase}`; seção `margin-bottom:16px`;
+ *   text-transform:uppercase}` — módulo antigo (`116815…css`); o refresh atual
+ *   do Discord (`862735.30278509527ce174.css`, mesma classe) já pinta
+ *   `font-size:14px;font-weight:var(--font-weight-medium);text-transform:none`,
+ *   confirmado no print 1:1 `124022.png` ("Mensagens diretas", caixa normal) —
+ *   é essa a versão usada aqui (`text-text-sm font-medium`, sem `uppercase`);
+ *   seção `margin-bottom:16px`;
  * - linha `.autocompleteRow__13533{font-size:14px;font-weight:500;line-height:16px;
  *   padding:0 8px}` > `.base__13533{border-radius:3px;padding:8px}`, selecionada
  *   ou em hover `--interactive-background-hover`; ícone `margin-inline-end:8px`;
@@ -36,11 +42,13 @@ import ChipDeOpcao from "./ChipDeOpcao";
  * - opções `.option__920ab{margin-inline-start:8px}`, bloco das opcionais
  *   `.optionals__920ab{border-inline-start:1px solid var(--border-subtle);
  *   margin-inline-start:8px}` com `.optionalHeader__920ab{color:var(--text-muted);
- *   padding-inline-start:8px;text-transform:uppercase}`; descrição
+ *   padding-inline-start:8px;text-transform:uppercase}` — mesmo caso do
+ *   cabeçalho de seção: o módulo atual (`862735…css`) já é `text-transform:none`
+ *   ("Opcional", caixa normal, sem o `uppercase`); descrição
  *   `.description__920ab{margin-top:4px;white-space:nowrap;text-overflow:ellipsis}`.
  *
  * Não medido: o lado do avatar do app na linha (32 aqui, o do ícone do
- * trilho), o tamanho da letra do cabeçalho e o padding de cima do trilho.
+ * trilho) e o padding de cima do trilho.
  *
  * Só desenha. As setas, o Enter e o Esc são do composer, que continua dono do
  * foco — o mesmo contrato do `Autocomplete`.
@@ -93,7 +101,11 @@ export default function SeletorDeComandos({
                 tamanho="lg"
                 fundo="hover"
                 ativo={grupoAtual === grupo.id}
-                className={grupoAtual === grupo.id ? "bg-background-base-low" : ""}
+                // `selecionado`, não `className`: o `bg-` por `className`
+                // perdia para o `hover:bg-` da família na cascata (a classe do
+                // primitivo entra depois no template) — ver item 15 do
+                // cabeçalho de `BotaoDeIcone.tsx`.
+                selecionado={grupoAtual === grupo.id}
                 icone={<IconeDoGrupo grupo={grupo} lado={32} />}
                 onClick={() => {
                   secoesRef.current.get(grupo.id)?.scrollIntoView({ block: "start" });
@@ -124,9 +136,18 @@ export default function SeletorDeComandos({
               className="mb-4 last:mb-0"
             >
               <div className="sticky top-0 z-[1] bg-background-surface-high px-2">
-                <p className="flex items-center gap-2 px-2 py-1 text-text-xs font-semibold uppercase text-interactive-text-default">
+                {/* `.contentTitle__13533{font-size:14px;font-weight:var(--font-weight-
+                    medium);text-transform:none}` — caixa normal, não caixa-alta
+                    (o refresh do Discord atual já não usa caixa-alta aqui; ver
+                    a entrega do cartão). */}
+                <p className="flex items-center gap-2 px-2 py-1 text-text-sm font-medium text-interactive-text-default">
                   <IconeDoGrupo grupo={grupo} lado={16} />
                   <span className="truncate">{grupo.nome}</span>
+                  {/* Seta de recolher: glifo visto no catálogo
+                      (`lancador-de-comandos-desktop.png`), tamanho não medido —
+                      usa o das categorias da coluna de canais. Não há recolher
+                      de verdade ainda: só o desenho. */}
+                  <ChevronDown size={16} className="shrink-0" aria-hidden="true" />
                 </p>
               </div>
               {linhas.map(({ comando, indice }) => (
@@ -135,6 +156,12 @@ export default function SeletorDeComandos({
                   comando={comando}
                   indice={indice}
                   selecionada={indice === selecionado}
+                  // Toda seção hoje é de um só app (ou os integrados) — nunca
+                  // mista (`agruparComandos` em comandos-barra.ts) —, então o
+                  // ícone do cabeçalho já basta; repeti-lo em cada linha seria
+                  // redundante (ver a entrega do cartão). `mostrarIcone` fica
+                  // pronta para o dia em que houver seção mista.
+                  mostrarIcone={false}
                   onEscolher={onEscolher}
                   onPassarMouse={onPassarMouse}
                 />
@@ -151,12 +178,15 @@ function LinhaDeComando({
   comando,
   indice,
   selecionada,
+  mostrarIcone,
   onEscolher,
   onPassarMouse,
 }: {
   comando: ComandoListavel;
   indice: number;
   selecionada: boolean;
+  /** falso numa seção do próprio app ou dos integrados: o cabeçalho já mostra o ícone. */
+  mostrarIcone: boolean;
   onEscolher: (comando: ComandoListavel) => void;
   onPassarMouse: (indice: number) => void;
 }) {
@@ -182,15 +212,17 @@ function LinhaDeComando({
           selecionada ? "bg-interactive-background-hover" : ""
         }`}
       >
-        <span className="mr-2 shrink-0">
-          {comando.app ? (
-            <Avatar user={comando.app.botUser} size="md" />
-          ) : (
-            <span className="grid h-8 w-8 place-items-center rounded-full bg-background-base-lowest">
-              <Marca size={16} />
-            </span>
-          )}
-        </span>
+        {mostrarIcone && (
+          <span className="mr-2 shrink-0">
+            {comando.app ? (
+              <Avatar user={comando.app.botUser} size="md" />
+            ) : (
+              <span className="grid h-8 w-8 place-items-center rounded-full bg-background-base-lowest">
+                <Marca size={16} />
+              </span>
+            )}
+          </span>
+        )}
 
         <div className="min-w-[10ch] shrink overflow-hidden">
           <div className="flex min-w-0 items-center">
@@ -200,7 +232,7 @@ function LinhaDeComando({
             ))}
             {opcionais.length > 0 && (
               <span className="ml-2 flex min-w-0 items-center border-l border-border-subtle">
-                <span className="shrink-0 pl-2 uppercase text-text-muted">Opcional</span>
+                <span className="shrink-0 pl-2 text-text-muted">Opcional</span>
                 {opcionais.map((o) => (
                   <ChipDeOpcao key={o.name} nome={o.name} className="ml-2" />
                 ))}

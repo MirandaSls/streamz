@@ -2,9 +2,9 @@
 
 import { useId, useState } from "react";
 import { MAX_APP_NAME, appCriarSchema } from "@streamz/shared";
-import { Button, Campo, TextInput } from "@/components/ui/primitivos";
+import { Button, Campo, MensagemDeAjuda, TextInput } from "@/components/ui/primitivos";
 import { errorMessage } from "@/stores/socket-adapter";
-import { MensagemDeAjuda, TituloDaTela, Voltar } from "./pecas";
+import { TituloDaTela, Voltar } from "./pecas";
 
 /**
  * Criar aplicativo: só o nome.

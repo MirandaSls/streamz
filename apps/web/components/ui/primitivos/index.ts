@@ -51,3 +51,4 @@ export { Modal, type ModalProps, type TamanhoDeModal } from "./Modal";
 export { Tabs, type TabsProps, type AbaDeTabs } from "./Tabs";
 export { Badge, type BadgeProps, type TomDoBadge } from "./Badge";
 export { Divider, type DividerProps } from "./Divider";
+export { MensagemDeAjuda } from "./MensagemDeAjuda";

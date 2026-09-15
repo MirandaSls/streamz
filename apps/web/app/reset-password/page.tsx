@@ -36,6 +36,10 @@ import { useAuth } from "@/stores/auth";
  *   removido: o cabeçalho de `Campo`
  *   (`primitivos/TextInput.tsx`) já registra que o `role="alert"` embutido
  *   no primitivo tornou esta linha morta, e ela não tinha saído daqui ainda.
+ * - Erro com `estiloDoErro="ajuda"` (cartão textinput-e-telas-de-auth): o
+ *   ícone de alerta de 16 + 12px peso normal do `.helperTextContainer__5a838`
+ *   das telas de conta do Discord, não o itálico dos formulários do app
+ *   (medidas no cabeçalho de `primitivos/TextInput.tsx`).
  * - **Falta** (não reproduzido): acima do título, o Discord tem uma
  *   ilustração própria (`<img class="marginBottom20_fd297e"
  *   src="/assets/e61405de377a632d.svg">`, 20px de respiro até o `<h1>`) — um
@@ -124,7 +128,14 @@ export default function ResetPasswordPage() {
   return (
     <AuthCard title="Alterar sua senha">
       <form onSubmit={onSubmit} noValidate>
-        <Campo rotulo="Nova senha" htmlFor="password" obrigatorio erro={error} className="mb-2">
+        <Campo
+          rotulo="Nova senha"
+          htmlFor="password"
+          obrigatorio
+          erro={error}
+          estiloDoErro="ajuda"
+          className="mb-2"
+        >
           <TextInput
             id="password"
             name="password"
@@ -150,7 +161,7 @@ export default function ResetPasswordPage() {
           Mudar senha
         </Button>
 
-        <p className="mt-2 text-sm">
+        <p className="mt-2 text-text-sm">
           <Link href="/login" className={linkClass}>
             Voltar ao login
           </Link>

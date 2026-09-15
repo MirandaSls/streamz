@@ -6,9 +6,11 @@ import {
   type AnchorHTMLAttributes,
   type ButtonHTMLAttributes,
   type CSSProperties,
+  type MouseEvent,
   type ReactNode,
   type Ref,
 } from "react";
+import { Tooltip } from "./Tooltip";
 
 /**
  * Botão do Discord (refresh 2025): o módulo único `.button_a22cb0` de
@@ -139,6 +141,44 @@ import {
  *   componente (nomes hifenizados ficam fora da checagem de excesso), e o
  *   atributo cai no `...resto` e é cuspido no `<button>`/`<a>` como qualquer
  *   outro. Não é preciso `<button>` nativo para pendurar seletor de e2e.
+ *
+ * ---
+ * Rodada de correção (cartão button-primitivo):
+ *
+ * - **`overlay-primario`.** O botão branco sobre palco/imagem (o "Entrar na
+ *   chamada de voz" da tela do canal de voz). Classe e tokens medidos em
+ *   `362698.047b6f205fd7bdc1.css`: `.overlay-primary_a22cb0{background-color:
+ *   var(--control-overlay-primary-background-default);border-color:var(
+ *   --control-overlay-primary-border-default);color:var(
+ *   --control-overlay-primary-text-default)}` e os mesmos três pares em
+ *   `:hover`/`:active`. Nos tokens escuros o fundo é branco (hover `#e0e0e3`,
+ *   active `#c2c2c7`) e o texto preto — não é cor de marca, então fica igual
+ *   ao Discord (a regra do limão da ADR-0009 não se aplica a ele).
+ * - **`motivoDesabilitado`.** O Discord desabilita com `.button_a22cb0:disabled
+ *   {opacity:.5;pointer-events:none}` e, quando precisa explicar, põe a dica
+ *   num invólucro por fora, porque `<button disabled>` não recebe ponteiro nem
+ *   foco e a dica nunca abriria nele. Aqui é o mesmo formato do `BotaoDeIcone`
+ *   (item 8 do cabeçalho dele): com `disabled` **e** motivo, o botão troca o
+ *   `disabled` nativo por `aria-disabled` (continua na ordem do Tab, e o
+ *   leitor de tela anuncia "indisponível"), mantém o `opacity-50` +
+ *   `pointer-events-none` do Discord e fica dentro do `Tooltip`, cujo `<span>`
+ *   recebe o ponteiro no lugar dele (o filho sem ponteiro deixa o hit-test cair
+ *   no pai) e abre a dica no foco. O `pointer-events-none` também congela o
+ *   `hover:`/`active:` da variante, sem precisar de outra lista de classes.
+ *   Enter/Espaço no botão focado ainda disparariam `click` — por isso o
+ *   clique vira `preventDefault` (que também impede o `submit` de formulário).
+ *   Sem motivo, nada muda: `disabled` nativo como antes.
+ * - **`larguraTotal` sem `flex-1`.** O Discord tem `.fullWidth_a22cb0.hasText_
+ *   a22cb0{flex:1;width:100%}`, mas o `.button_a22cb0` dele também declara
+ *   `max-height:min-content`, que segura o `flex:1` num pai em coluna. Aqui
+ *   não havia esse teto e o botão esticava na vertical (o `DMProfilePanel`
+ *   teve de deixar de pedir `larguraTotal`). Agora é `w-full min-w-0`: num pai
+ *   em coluna ou em bloco ocupa a largura sem crescer na altura; numa fileira,
+ *   irmãos com `w-full` partem da mesma base e encolhem por igual. O
+ *   `min-width` de 60/100 sai junto (o `min-w-0` competiria com ele na mesma
+ *   propriedade): a largura mínima de um botão que já ocupa o pai inteiro só
+ *   importava para ele não sumir numa fileira espremida, e o `truncate` do
+ *   texto cobre isso.
  */
 export type VarianteDeBotao =
   | "primario"
@@ -146,6 +186,7 @@ export type VarianteDeBotao =
   | "critico"
   | "critico-secundario"
   | "positivo"
+  | "overlay-primario"
   | "neutro"
   | "link"
   | "critico-link";
@@ -168,6 +209,11 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   carregando?: boolean;
   /** Ocupa a largura do pai (só com texto). */
   larguraTotal?: boolean;
+  /**
+   * Por que o botão está desabilitado. Só vale com `disabled`: o botão fica
+   * focável (`aria-disabled`) e a dica mostra o motivo. Ver cabeçalho.
+   */
+  motivoDesabilitado?: string;
   /** Raio de pílula (`--radius-round`). */
   pilula?: boolean;
   /**
@@ -194,6 +240,9 @@ const VARIANTES: Record<VarianteDeBotao, string> = {
     "bg-control-critical-secondary-background-default text-control-critical-secondary-text-default border-control-critical-secondary-border-default hover:bg-control-critical-secondary-background-hover hover:text-control-critical-secondary-text-hover hover:border-control-critical-secondary-border-hover active:bg-control-critical-secondary-background-active active:text-control-critical-secondary-text-active active:border-control-critical-secondary-border-active",
   positivo:
     "bg-control-connected-background-default text-control-connected-text-default border-control-connected-border-default hover:bg-control-connected-background-hover hover:text-control-connected-text-hover hover:border-control-connected-border-hover active:bg-control-connected-background-active active:text-control-connected-text-active active:border-control-connected-border-active",
+  // `.overlay-primary_a22cb0` (ver cabeçalho, rodada button-primitivo).
+  "overlay-primario":
+    "bg-control-overlay-primary-background-default text-control-overlay-primary-text-default border-control-overlay-primary-border-default hover:bg-control-overlay-primary-background-hover hover:text-control-overlay-primary-text-hover hover:border-control-overlay-primary-border-hover active:bg-control-overlay-primary-background-active active:text-control-overlay-primary-text-active active:border-control-overlay-primary-border-active",
   // `lookBlank` + o par muted→strong do ghost de texto (ver cabeçalho).
   neutro: "bg-transparent border-transparent text-text-muted hover:text-text-strong",
   link: "bg-transparent border-transparent text-text-link hover:underline",
@@ -259,6 +308,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     iconeDireita,
     carregando = false,
     larguraTotal = false,
+    motivoDesabilitado,
     pilula = false,
     href,
     alvo,
@@ -267,6 +317,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     className = "",
     style,
     disabled,
+    onClick,
     children,
     ...resto
   },
@@ -276,6 +327,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   const ehInline = VARIANTES_INLINE.includes(variante);
   const semPreenchimento = ehInline || VARIANTES_SEM_PREENCHIMENTO.includes(variante);
   const desativado = disabled === true || carregando;
+  // Desabilitado que explica o porquê: sai do `disabled` nativo para continuar
+  // focável e ganha a dica por fora (ver cabeçalho, rodada button-primitivo).
+  const comMotivo = disabled === true && !!motivoDesabilitado;
   const m = medidasDoTamanho(tamanho);
 
   // Altura (e, no botão só-ícone, largura) do tamanho numérico. O `style` do
@@ -288,14 +342,19 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       : style;
 
   const classeDoMiolo = temTexto
-    ? `${semPreenchimento ? "p-0" : `${m.padding} ${m.larguraMinima}`} ${larguraTotal ? "w-full flex-1" : "flex-none"}`
+    ? `${semPreenchimento ? "p-0" : m.padding} ${larguraTotal ? "w-full min-w-0" : `${semPreenchimento ? "" : m.larguraMinima} flex-none`}`
     : `${m.quadrado} flex-none p-0`;
 
   const classes = ehInline
     ? // `sizeMin__201d5`: nenhuma caixa. Sem altura, sem largura mínima, sem
       // padding e sem borda — o link ocupa o que a frase dá a ele.
       `inline h-auto min-h-0 w-auto min-w-0 border-0 p-0 text-left align-baseline font-medium transition-colors duration-150 ease-out ${VARIANTES[variante]} ${desativado ? "pointer-events-none opacity-50" : ""} ${className}`
-    : `relative box-border inline-flex items-center justify-center overflow-hidden border font-medium transition-colors duration-150 ease-out disabled:pointer-events-none disabled:opacity-50 ${VARIANTES[variante]} ${m.altura} ${pilula ? "rounded-full" : m.raio} ${m.textoIcone} ${classeDoMiolo} ${className}`;
+    : `relative box-border inline-flex items-center justify-center overflow-hidden border font-medium transition-colors duration-150 ease-out disabled:pointer-events-none disabled:opacity-50 ${comMotivo ? "pointer-events-none opacity-50" : ""} ${VARIANTES[variante]} ${m.altura} ${pilula ? "rounded-full" : m.raio} ${m.textoIcone} ${classeDoMiolo} ${className}`;
+
+  // O `<span>` da dica vira o item de layout no lugar do botão: com
+  // `larguraTotal` ele também precisa ocupar a largura, senão o botão de dentro
+  // ocupa 100% de um invólucro do tamanho do texto.
+  const classeDoInvolucro = larguraTotal && temTexto ? "w-full min-w-0" : "";
 
   const conteudo = ehInline ? (
     // Inline não tem caixa fixa para o spinner sobrepor: em `carregando` os três
@@ -350,6 +409,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     const relFinal = rel ?? (alvo === "_blank" ? "noopener noreferrer" : undefined);
     const comuns = {
       ...props,
+      onClick: onClick as unknown as AnchorHTMLAttributes<HTMLAnchorElement>["onClick"],
       ref: refDoLink,
       className: classes,
       style: estiloDaCaixa,
@@ -362,7 +422,17 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     };
 
     if (desativado) {
-      return <a {...comuns}>{conteudo}</a>;
+      // Sem `href` o `<a>` sai do Tab; com motivo ele volta (`tabIndex` 0) para
+      // a dica abrir no foco, e o clique não chega a quem chamou.
+      return comMotivo ? (
+        <Tooltip rotulo={motivoDesabilitado ?? ""} className={classeDoInvolucro}>
+          <a {...comuns} onClick={(e) => e.preventDefault()} tabIndex={0}>
+            {conteudo}
+          </a>
+        </Tooltip>
+      ) : (
+        <a {...comuns}>{conteudo}</a>
+      );
     }
     // Rota interna pelo roteador (sem recarregar o app); `//`, `http(s)://`,
     // `mailto:` e `#` continuam `<a>` cru.
@@ -384,17 +454,28 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     );
   }
 
-  return (
+  const botao = (
     <button
       ref={ref}
       type={type}
-      disabled={desativado}
+      disabled={comMotivo ? undefined : desativado}
+      aria-disabled={comMotivo || undefined}
       aria-busy={carregando || undefined}
       className={classes}
       style={estiloDaCaixa}
+      // Com motivo o botão é focável, e Enter/Espaço disparariam o clique (e o
+      // `submit`): o `preventDefault` segura os dois.
+      onClick={comMotivo ? (e: MouseEvent<HTMLButtonElement>) => e.preventDefault() : onClick}
       {...resto}
     >
       {conteudo}
     </button>
+  );
+
+  if (!comMotivo) return botao;
+  return (
+    <Tooltip rotulo={motivoDesabilitado ?? ""} className={classeDoInvolucro}>
+      {botao}
+    </Tooltip>
   );
 });

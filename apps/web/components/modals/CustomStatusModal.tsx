@@ -62,9 +62,10 @@ import { ui, useUI, type MenuItem } from "@/stores/ui";
  *   ícone 24 (`.emoji_dbc4b7{height:24px;width:24px}`); botão de limpar 40×46,
  *   ícone 16 (`.clearIcon_dbc4b7{height:16px;width:16px}`, cor
  *   `--interactive-text-default`, opacidade .6 → 1 no hover/foco — sem fundo
- *   em nenhum estado). `BotaoDeIcone` não tem um par `fundo`/tinta que dê ao
- *   mesmo tempo "sem retângulo" e a cor `--interactive-text-default`: ficou
- *   `fundo="nenhum"` (a cor exata vira "não verificado"; ver entrega).
+ *   em nenhum estado). `BotaoDeIcone` ganhou a família `fundo="nenhum-
+ *   interativo"` nesta rodada — sem retângulo, tinta em `interactive-text-*`
+ *   (repouso/hover/ativo) — exatamente o par que faltava: os dois botões usam
+ *   ela agora; a opacidade .6→1 continua por `className`, à parte da família.
  * - **Raio**: `var(--radius-sm)` = 8px nos dois botões (`VARIAVEIS.md`) —
  *   `rounded-lg` no vocabulário deste app, o mesmo que o `tamanho="md"` do
  *   `BotaoDeIcone` já usa por padrão.
@@ -204,9 +205,11 @@ export default function CustomStatusModal() {
       }
     >
       {/* Avatar de prévia — `.profilePreview_dbc4b7`: centralizado, 8 acima, 36
-          abaixo. Tamanho não medido (ver cabeçalho do arquivo). */}
+          abaixo. Tamanho não medido (ver cabeçalho do arquivo). `surface`: o
+          selo de status precisa da cor do fundo onde o avatar pousa, que aqui
+          é o corpo do `Dialog` (`--background-surface-high`). */}
       <div className="mb-9 mt-2 flex w-full items-center justify-center">
-        <Avatar user={me} size="xl" status={meuStatus} />
+        <Avatar user={me} size="xl" status={meuStatus} surface="border-background-surface-high" />
       </div>
 
       <Campo
@@ -260,6 +263,7 @@ export default function CustomStatusModal() {
                 // toque do celular — sem precisar de variante `celular:`,
                 // que o `style` inline venceria de qualquer jeito).
                 style={{ width: 42, height: 46 }}
+                fundo="nenhum-interativo"
                 disabled={salvando}
                 className={emoji ? "" : "opacity-60 hover:opacity-100 focus-visible:opacity-100"}
                 onClick={() => setEscolhendo((v) => !v)}
@@ -272,6 +276,7 @@ export default function CustomStatusModal() {
                   icone={<X size={16} />}
                   tamanhoDoIcone={16}
                   style={{ width: 40, height: 46 }}
+                  fundo="nenhum-interativo"
                   disabled={salvando}
                   className="opacity-60 hover:opacity-100 focus-visible:opacity-100"
                   onClick={() => setEmoji(null)}

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AppDetalhe, TokenCriado } from "@streamz/shared";
 import { Bot, Plus, Search } from "@/components/ui/icones";
-import { Button, TextInput } from "@/components/ui/primitivos";
+import { Button, MensagemDeAjuda, TextInput } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
@@ -13,12 +13,7 @@ import { PainelDoToken } from "@/components/settings/aplicativos/PainelDoToken";
 import { TelaDeCriar } from "@/components/settings/aplicativos/TelaDeCriar";
 import { TelaDeEditar } from "@/components/settings/aplicativos/TelaDeEditar";
 import { TelaDeServidores } from "@/components/settings/aplicativos/TelaDeServidores";
-import {
-  CaixaDeApresentacao,
-  CartaoEsqueleto,
-  ErroComNovaTentativa,
-  MensagemDeAjuda,
-} from "@/components/settings/aplicativos/pecas";
+import { CaixaDeApresentacao, CartaoEsqueleto, ErroComNovaTentativa } from "@/components/settings/aplicativos/pecas";
 
 /**
  * "Configurações → Aplicativos": o portal do desenvolvedor do Streamz (F4,
@@ -38,7 +33,8 @@ import {
  * 1. caixa de apresentação (a "Applications"), com o "Criar aplicativo";
  * 2. **40** até a busca (y 400–479 = 80px);
  * 3. busca de **44** de altura (y 480–567 = 88px, borda incluída; o `sm`/`md`
- *    do `TextInput` são 32/40, por isso o número); texto 16px ("S" 22px) —
+ *    do `TextInput` são 32/40 — por isso o `lg` de 44/48 no celular); texto
+ *    16px ("S" 22px) —
  *    `.searchContainer{margin-bottom:16px}` até o primeiro cartão;
  * 4. os cartões, 16 entre eles (`.authedAppV2{margin-bottom:16px}`).
  * A seção "Como apontar seu bot" vem depois, e não tem par no Discord.
@@ -282,7 +278,7 @@ export default function AplicativosTab() {
                   aoLimpar={() => setBusca("")}
                   placeholder="Buscar aplicativos"
                   aria-label="Buscar aplicativos"
-                  tamanho={44}
+                  tamanho="lg"
                   prefixo={<Search size={16} aria-hidden="true" className="shrink-0 text-icon-muted" />}
                 />
               </div>

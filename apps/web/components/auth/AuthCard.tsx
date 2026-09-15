@@ -90,6 +90,21 @@ export default function AuthCard({
 
         24px de respiro no celular: com os 32 do desktop sobram 294px de
         conteúdo numa tela de 390.
+
+        **Sem `min-height` de propósito** (cartão textinput-e-telas-de-auth
+        pediu `min-h-[540px]` no miolo, fora do celular, e não entrou): a
+        regra `.authBox__921c5 .centeringWrapper__921c5{min-height:540px}` do
+        mesmo `css-bruto/858942.*.css` mora dentro de `@media
+        (max-width:485px)`, junto com o `authBox` de tela cheia com gradiente
+        (e repete em `.is-mobile`) — no desktop o miolo só tem
+        `text-align:center; width:100%`. Os prints 1:1 confirmam, escala 2:
+        o cartão do login mede 864px de dispositivo = 432 CSS
+        (`publico/desktop/04-esqueci-senha-erro-SIMULADO-viewport.png`, coluna
+        x=700, y 468–1331) e o do reset 698 = 349 CSS
+        (`03-esqueci-senha-reset-viewport.png`, coluna x=1000, y 552–1249) —
+        os dois abaixo de 540, e diferentes entre si: no Discord a altura
+        também muda de uma fase para outra. No celular o nosso é cartão, não
+        tela cheia, então 540 ali deixaria faixa vazia visível dentro dele.
       */}
       <div className="relative w-full max-w-[480px] rounded-lg bg-modal-background p-8 shadow-[0_2px_10px_0_rgba(0,0,0,.2)] celular:p-6">
         <h1 className="text-center text-heading-xl font-semibold text-text-strong">

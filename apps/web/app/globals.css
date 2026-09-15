@@ -83,18 +83,24 @@ body {
 }
 
 /*
- * Campos de texto: uma borda só. O anel afastado de 2px em cima de um campo
- * que já tem fundo e raio próprios lia como duas bordas (e o `border-radius:
- * 2px` acima ainda achatava o canto do campo no foco). Como no Discord, o foco
- * de um campo é a própria borda mudando de cor, 1px, colada e seguindo o raio
- * do campo — por isso o offset negativo e nenhum raio imposto aqui.
+ * Campos de texto: um anel só, por DENTRO da caixa. O anel afastado de 2px em
+ * cima de um campo que já tem fundo e raio próprios lia como duas bordas (e o
+ * `border-radius: 2px` acima ainda achatava o canto do campo no foco).
+ *
+ * Espessura medida no print 1:1 `Captura de tela 2026-08-31 120846.png` (campo
+ * de 40px de altura em foco): `medir.py coluna` em x=1100 dá a cor do anel em
+ * y404-405 e y442-443, e `medir.py linha` em y=424 dá x968-969 — são **2px**
+ * colados na borda, do lado de dentro. Por isso `2px` com `outline-offset:
+ * -2px` (o anel cobre a própria borda de 1px e mais 1px para dentro) e nenhum
+ * raio imposto aqui: o outline segue o raio do campo. O invólucro do
+ * `TextInput` faz a mesma conta por conta própria (borda + 1px interno).
  */
 input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus-visible:not([data-sem-anel]),
 textarea:focus-visible:not([data-sem-anel]),
 [contenteditable="true"]:focus-visible:not([data-sem-anel]) {
   /* o campo em foco é marca no Discord (`--input-border-active`): limão */
-  outline: 1px solid var(--input-border-active);
-  outline-offset: -1px;
+  outline: 2px solid var(--input-border-active);
+  outline-offset: -2px;
 }
 
 /*
@@ -108,7 +114,7 @@ textarea:focus-visible:not([data-sem-anel]),
  *    A regra global ganha do `outline-none` do primitivo por especificidade —
  *    por isso não dá para desligar só com classe.
  * 2. Caixa de mensagem: o Discord não marca o composer em foco (o cursor é o
- *    indicador), e o anel de 1px em volta de toda a cápsula não existe lá.
+ *    indicador), e o anel de 2px em volta de toda a cápsula não existe lá.
  */
 [data-sem-anel] {
   outline: none;
@@ -361,6 +367,165 @@ textarea:focus-visible:not([data-sem-anel]),
   .icone-animado-sombra {
     animation: none;
     transform: none;
+  }
+}
+
+/*
+ * Termo achado no resultado de busca (`MessagePreview`, `useRealceDaBusca`).
+ * O nome `streamz-busca` é o `NOME_DO_REALCE_DA_BUSCA` registrado em
+ * `CSS.highlights` — os dois precisam bater.
+ *
+ * `.highlight{background:hsl(var(--yellow-300-hsl)/.3)}` é o termo achado no
+ * resultado de busca do Discord (CSS bruto); `--yellow-300` é #fdb833, o mesmo
+ * valor do `--status-warning` que já existe nos nossos tokens. Não é a cor de
+ * marca: o Discord não pinta com o blurple aqui, então não vira limão.
+ *
+ * Mora aqui porque o Tailwind não gera `::highlight()`; antes ia num `<style>`
+ * que cada painel de resultados precisava lembrar de renderizar.
+ */
+::highlight(streamz-busca) {
+  background-color: rgb(var(--status-warning-rgb) / 0.3);
+  color: inherit;
+}
+
+/*
+ * Anel do avatar da chamada recebida (`voice/IncomingCallModal`).
+ *
+ * Cópia de `@keyframes incoming-call-pulse_f910d0`
+ * (`css-bruto/401425.298f1ba0a6e8b19c.css`): três ondas por ciclo, cada uma
+ * acendendo e crescendo 10% enquanto some, e um recomeço seco (os pares
+ * 25.54/25.55%, 49.98/49.99%, 74.69/74.70% voltam a escala sem transição). O
+ * `scaleX(1)` do original é identidade e fica como está. A regra de uso lá é
+ * `.ringingIncoming_f910d0:after{animation:incoming-call-pulse_f910d0
+ * var(--custom-call-avatar-incoming-duration) infinite ease-out}`, com a
+ * variável resolvida em 5,407s (`variaveis-resolvidas.json`).
+ * `reduzir-movimento` (no fim do arquivo) corta para uma iteração instantânea,
+ * e `prefers-reduced-motion` do sistema deixa o anel parado.
+ */
+@keyframes toque-recebido {
+  0% {
+    opacity: 0;
+    transform: scaleX(1);
+  }
+  0.7% {
+    opacity: 1;
+  }
+  25.54% {
+    opacity: 0;
+    transform: scale3d(1.1, 1.1, 1);
+  }
+  25.55% {
+    transform: scaleX(1);
+  }
+  25.56% {
+    opacity: 1;
+  }
+  49.98% {
+    opacity: 0;
+    transform: scale3d(1.1, 1.1, 1);
+  }
+  49.99% {
+    transform: scaleX(1);
+  }
+  50% {
+    opacity: 1;
+  }
+  74.69% {
+    opacity: 0;
+    transform: scale3d(1.1, 1.1, 1);
+  }
+  74.7% {
+    transform: scaleX(1);
+  }
+  74.71% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: scale3d(1.1, 1.1, 1);
+  }
+}
+.anim-toque-recebido {
+  transform-origin: center;
+  animation: toque-recebido 5.407s ease-out infinite;
+}
+
+/*
+ * Caixa que grava um atalho novo (`settings/TecladoTab`, estado "gravando").
+ *
+ * `.recorderContainer__2636e.recording__2636e{animation:shadowPulse__2636e 1s
+ * ease-in infinite; box-shadow:0 0 6px hsl(var(--red-400-hsl)/.3)}` e
+ * `@keyframes shadowPulse__2636e{0%{box-shadow:0 0 6px …/.3}50%{0 0 10px
+ * …/.6}to{0 0 6px …/.3}}` (`css-bruto/sob-demanda/7a89de758a772c46.css`).
+ * `--red-400` é #da3e44 (VARIAVEIS.md), o valor do nosso `--status-danger`,
+ * por isso a sombra usa o canal rgb desse token. O `box-shadow` fora da
+ * animação é o de repouso do Discord: com `reduzir-movimento` a caixa fica com
+ * a sombra de 6px, parada, em vez de sem sombra nenhuma.
+ */
+@keyframes gravando-atalho {
+  0% {
+    box-shadow: 0 0 6px rgb(var(--status-danger-rgb) / 0.3);
+  }
+  50% {
+    box-shadow: 0 0 10px rgb(var(--status-danger-rgb) / 0.6);
+  }
+  to {
+    box-shadow: 0 0 6px rgb(var(--status-danger-rgb) / 0.3);
+  }
+}
+.anim-gravando-atalho {
+  box-shadow: 0 0 6px rgb(var(--status-danger-rgb) / 0.3);
+  animation: gravando-atalho 1s ease-in infinite;
+}
+
+/*
+ * Seção de configurações que acabou de receber o salto do menu lateral
+ * (`ui/JanelaDeConfiguracoes`, `irParaSecao`).
+ *
+ * `.container__75920.flash__75920{background:var(--message-mentioned-background-default)}`,
+ * `.full-motion .container__75920.flash__75920{animation:settingNavAnchorFlash__75920
+ * 2.25s ease;background:transparent}` e `@keyframes
+ * settingNavAnchorFlash__75920{0%,11.11%{background:transparent}33.33%,77.78%{background:var(--message-mentioned-background-default)}to{background:transparent}}`
+ * (`css-bruto/sob-demanda/48832ff684019b72.css`). A classe sai no
+ * `animationend`.
+ *
+ * Sem movimento o Discord troca a animação por fundo parado enquanto a classe
+ * dura. Aqui é igual: com `reduzir-movimento` (ou `prefers-reduced-motion`) o
+ * nome da animação vira `none` e o fundo fica aceso — e como aí não existe
+ * `animationend`, quem aplica a classe também a tira depois dos mesmos 2,25s.
+ */
+@keyframes flash-da-secao {
+  0%,
+  11.11% {
+    background: transparent;
+  }
+  33.33%,
+  77.78% {
+    background: var(--message-mentioned-background-default);
+  }
+  to {
+    background: transparent;
+  }
+}
+.anim-flash-da-secao {
+  animation: flash-da-secao 2.25s ease;
+}
+html.reduzir-movimento .anim-flash-da-secao {
+  animation-name: none !important;
+  background: var(--message-mentioned-background-default);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-toque-recebido,
+  .anim-gravando-atalho {
+    animation: none;
+  }
+  .anim-toque-recebido {
+    opacity: 0;
+  }
+  .anim-flash-da-secao {
+    animation: none;
+    background: var(--message-mentioned-background-default);
   }
 }
 

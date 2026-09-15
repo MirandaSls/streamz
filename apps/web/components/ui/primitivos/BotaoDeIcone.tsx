@@ -158,12 +158,48 @@ import { Tooltip, type LadoDaDica } from "./Tooltip";
  *    = igual, com `fundo="hover-critico"`. "Sem dica" nas duas de janela
  *    porque o Discord não mostra dica nesses controles (registrado no
  *    cabeçalho de `BarraDeTitulo.tsx`). Prop escrita sempre vence a receita.
+ *
+ * ── Rodada de correção (cartão botao-de-icone-familias) ────────────────────
+ *
+ * 13. **Fundo `hover-selecionado`** — `.emojiButton__74017`/`.attachButton__36c1b`
+ *    do composer (`css-bruto/962953…css`): repouso `--interactive-text-default`,
+ *    hover pinta `background-color:var(--interactive-background-selected)` com
+ *    a tinta subindo a `--interactive-text-active` — um degrau mais forte que
+ *    `fundo="hover"` (que pinta `--interactive-background-hover`/
+ *    `--interactive-text-hover`). Os dois eram tratados como a mesma família;
+ *    não são.
+ * 14. **Fundo `nenhum-interativo`** — o par que faltava para "sem retângulo em
+ *    estado algum" (como `fundo="nenhum"`) mas com a tinta de `interactive-text-*`
+ *    em vez de `icon-*` — o caso do botão de emoji do status personalizado
+ *    (`.clearIcon_dbc4b7{color:var(--interactive-text-default)}`, sem fundo em
+ *    nenhum estado).
+ * 15. **Prop `selecionado`** — preenchimento fixo e mais fraco que `tom="ativo"`
+ *    (`bg-background-base-low`, o "selecionado" do trilho vertical do
+ *    `SeletorDeComandos`, `.wrapper_ca5f52` no CSS: hover
+ *    `--interactive-background-hover`, selecionado `--background-base-low`),
+ *    sem hover por cima (o mesmo raciocínio de `tom="ativo"`, item 7: o
+ *    preenchimento persistente não é um estado que o hover deva riscar). Ao
+ *    contrário de `tom="ativo"`, não é sobre feedback (aceitar/recusar) nem
+ *    sobre a tinta do ícone — só o fundo; por isso vira prop própria, e não
+ *    mais um `tom`.
+ * 16. **Degrau `acao`** (`tamanho="acao"`) — `.actionButton_f8fa06{height:36px;
+ *    width:36px}` (item 6 do cabeçalho já cita o módulo): a linha de amigos
+ *    passava esse valor por `className` (`h-9 w-9`), que o `CAIXA[degrau]` do
+ *    tamanho nomeado vencia (32, não 36) por entrar depois no template de
+ *    classes — precisa ser um degrau de verdade, não um `className` que perde
+ *    a competição de cascata.
  */
-export type TamanhoDeBotaoDeIcone = "sm" | "md" | "lg";
+export type TamanhoDeBotaoDeIcone = "sm" | "md" | "lg" | "acao";
 /** Lado da caixa: um degrau nomeado, ou o número em px que veio de medida. */
 export type LadoDeBotaoDeIcone = TamanhoDeBotaoDeIcone | number;
 export type FormaDeBotaoDeIcone = "quadrado" | "disco" | "reto";
-export type FundoDeBotaoDeIcone = "nenhum" | "hover" | "sempre" | "hover-critico";
+export type FundoDeBotaoDeIcone =
+  | "nenhum"
+  | "hover"
+  | "hover-selecionado"
+  | "sempre"
+  | "hover-critico"
+  | "nenhum-interativo";
 export type TomDeBotaoDeIcone = "neutro" | "perigo" | "positivo" | "ativo";
 /** Receitas de família medidas (item 12 do cabeçalho). */
 export type VarianteDeBotaoDeIcone = "cabecalho" | "janela" | "janela-fechar";
@@ -181,7 +217,8 @@ export interface BotaoDeIconeProps
    * canto de cartão (`AcaoDoCartao`, que hoje passa ícone de 16px; os dois
    * cabem na mesma caixa). `md` 32 (ícone 20, padrão — cabeçalho do canal e
    * painel "Voz conectada"). `lg` 40 (ícone 24 — não medido, ver cabeçalho do
-   * arquivo).
+   * arquivo). `acao` 36 (`.actionButton_f8fa06`, item 16 do cabeçalho) — os
+   * botões redondos de ação de linha (conversar/mais da lista de amigos).
    *
    * **Número** = o lado em px (28, 36, 44… apareceram na migração). Nesse caso
    * a caixa vai em `style`, não em classe: Tailwind não gera `h-[${n}px]` de
@@ -204,11 +241,16 @@ export interface BotaoDeIconeProps
   forma?: FormaDeBotaoDeIcone;
   /**
    * `nenhum` sem retângulo em estado algum (cabeçalho do canal). `hover` só
-   * pinta ao passar o ponteiro (barra da mensagem, painel de voz). `sempre`
-   * nasce pintado (botões sobre a faixa do perfil, "voltar ao presente" da
-   * lista, discos do painel de voz). `hover-critico` pinta um vermelho sólido
-   * só no hover, com o ícone claro por cima: o "fechar" da barra de título
-   * (item 10). Padrão: o que `comFundo` disser.
+   * pinta ao passar o ponteiro (barra da mensagem, painel de voz). `hover-
+   * selecionado` é o mesmo, um degrau mais forte — `--interactive-background-
+   * selected`/`--interactive-text-active` (item 13) — do composer
+   * (emoji/anexar). `sempre` nasce pintado (botões sobre a faixa do perfil,
+   * "voltar ao presente" da lista, discos do painel de voz). `hover-critico`
+   * pinta um vermelho sólido só no hover, com o ícone claro por cima: o
+   * "fechar" da barra de título (item 10). `nenhum-interativo` é como `nenhum`
+   * (sem retângulo em estado algum) mas com a tinta de `interactive-text-*`
+   * em vez de `icon-*` (item 14 — o botão de emoji do status personalizado).
+   * Padrão: o que `comFundo` disser.
    *
    * **Falta uma quarta família, de propósito:** botão sobre *imagem* (a faixa
    * do perfil, o palco de vídeo) não é `--background-base-lower`, que é opaco —
@@ -230,6 +272,14 @@ export interface BotaoDeIconeProps
    * retângulo pintado do ligado usa `tom="ativo"` junto.
    */
   ativo?: boolean;
+  /**
+   * Preenchimento fixo e mais fraco que `tom="ativo"` (`bg-background-base-
+   * low`), sem hover por cima — o trilho do `SeletorDeComandos` (item 15 do
+   * cabeçalho). Diferente de `ativo` (que só sobe a tinta) e de `tom="ativo"`
+   * (que é sobre feedback, com a tinta de `interactive-text-active` junto):
+   * aqui é só o fundo.
+   */
+  selecionado?: boolean;
   /** Atalho de `tom="perigo"`. Mantido para não quebrar os consumidores. */
   perigo?: boolean;
   /** Atalho de `fundo="hover"`. Mantido para não quebrar os consumidores. */
@@ -311,14 +361,17 @@ const CAIXA: Record<TamanhoDeBotaoDeIcone, string> = {
   sm: "h-[24px] w-[24px]",
   md: "h-[32px] w-[32px]",
   lg: "h-[40px] w-[40px]",
+  acao: "h-[36px] w-[36px]",
 };
 
 // 6px literal no `sm` (`.hoverBarButton_f84418`), 8px = --radius-sm no resto
 // (`.button_e131a9`, `.button_f563df`). O `lg` herda o do `md` por extensão.
+// `acao` (36) é o mesmo --radius-sm de `.actionButton_f8fa06` (item 16).
 const RAIO: Record<TamanhoDeBotaoDeIcone, string> = {
   sm: "rounded-md",
   md: "rounded-lg",
   lg: "rounded-lg",
+  acao: "rounded-lg",
 };
 
 /** Raio do lado numérico: 8px é o medido em 32 e em 44, os dois extremos. */
@@ -348,6 +401,17 @@ const PALETA: Record<FundoDeBotaoDeIcone, { repouso: string; hover: string; ativ
     caixa: "",
     caixaHover: "hover:bg-interactive-background-hover active:bg-interactive-background-active",
   },
+  // `.emojiButton__74017`/`.attachButton__36c1b` (item 13): um degrau mais
+  // forte que `hover` — o hover pinta `interactive-background-selected` e a
+  // tinta já sobe direto a `interactive-text-active`, sem o degrau
+  // intermediário de `interactive-text-hover`.
+  "hover-selecionado": {
+    repouso: "text-interactive-text-default",
+    hover: "hover:text-interactive-text-active",
+    ativo: "text-interactive-text-active",
+    caixa: "",
+    caixaHover: "hover:bg-interactive-background-selected",
+  },
   sempre: {
     repouso: "text-interactive-text-default",
     hover: "hover:text-interactive-text-hover",
@@ -363,6 +427,15 @@ const PALETA: Record<FundoDeBotaoDeIcone, { repouso: string; hover: string; ativ
     ativo: "text-interactive-text-active",
     caixa: "",
     caixaHover: "hover:bg-control-critical-primary-background-default",
+  },
+  // Item 14: o par de `nenhum` (sem retângulo em estado algum) que faltava
+  // com a tinta de `interactive-text-*` em vez de `icon-*`.
+  "nenhum-interativo": {
+    repouso: "text-interactive-text-default",
+    hover: "hover:text-interactive-text-hover",
+    ativo: "text-interactive-text-active",
+    caixa: "",
+    caixaHover: "",
   },
 };
 
@@ -388,6 +461,7 @@ export const BotaoDeIcone = forwardRef<HTMLButtonElement, BotaoDeIconeProps>(fun
     opacidadeDesabilitado,
     tom,
     ativo = false,
+    selecionado = false,
     perigo = false,
     comFundo = false,
     href,
@@ -448,7 +522,14 @@ export const BotaoDeIcone = forwardRef<HTMLButtonElement, BotaoDeIconeProps>(fun
   // parado de propósito, em vez de inventar um degrau.
   const ligado = tonalidade === "ativo";
   const tinta = ligado ? "text-interactive-text-active" : ativo ? paleta.ativo : paleta.repouso;
-  const preenchimento = ligado ? "bg-interactive-background-selected" : paleta.caixa;
+  // `selecionado` (item 15) é só o fundo — mais fraco que `ligado`, que também
+  // muda a tinta — e vence a família porque, como `ligado`, é um preenchimento
+  // persistente que o hover não deve riscar por cima.
+  const preenchimento = ligado
+    ? "bg-interactive-background-selected"
+    : selecionado
+      ? "bg-background-base-low"
+      : paleta.caixa;
 
   // O tom tingido **substitui** o hover neutro, não soma a ele: duas classes
   // `hover:text-*` no mesmo elemento deixariam a cor por conta da ordem do CSS
@@ -458,7 +539,11 @@ export const BotaoDeIcone = forwardRef<HTMLButtonElement, BotaoDeIconeProps>(fun
   // Desabilitado congela o hover (o ponteiro continua chegando, senão a dica
   // sumiria — ver item 8 do cabeçalho), e o `disabled` nativo, se alguém ainda
   // o passar por `...resto`, continua com o par `disabled:` de sempre.
-  const reativo = desabilitado ? `cursor-not-allowed ${opacidade}` : `${hoverDeTinta} ${paleta.caixaHover}`;
+  // `selecionado` anula o `caixaHover` da família (item 15): o preenchimento já
+  // está lá, e um hover por cima dele nunca foi medido.
+  const reativo = desabilitado
+    ? `cursor-not-allowed ${opacidade}`
+    : `${hoverDeTinta} ${selecionado ? "" : paleta.caixaHover}`;
 
   const classes = `grid shrink-0 place-items-center transition-colors disabled:pointer-events-none disabled:opacity-50 ${caixa} ${raio} ${classeDoGlifo} ${tinta} ${preenchimento} ${reativo} ${className}`;
   const estilo = medidas || glifo ? { ...medidas, ...glifo, ...style } : style;

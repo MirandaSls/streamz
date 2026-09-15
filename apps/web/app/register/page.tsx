@@ -116,10 +116,14 @@ function RegisterForm() {
            saíram. A regra de senha/usuário continua valendo — só não tem
            mais uma frase permanente embaixo do campo, igual ao Discord.
         3. `Campo` (não o `FieldLabel` velho da `AuthCard`) porque o erro dele
-           sai ABAIXO do controle, itálico, 12px, que é a
-           `.errorMessage_b717a1` medida no cabeçalho de
-           `primitivos/TextInput.tsx` — o `FieldLabel` põe o erro do lado do
-           rótulo, que é outro componente do Discord, não este.
+           sai ABAIXO do controle — o `FieldLabel` põe o erro do lado do
+           rótulo, que é outro componente do Discord, não este. Com
+           `estiloDoErro="ajuda"` (cartão textinput-e-telas-de-auth): ícone de
+           alerta de 16 + 12px peso normal, o `.helperTextContainer__5a838` das
+           telas de conta do Discord (mesmo módulo `container__5a838` dos
+           campos deste print), não o `.errorMessage_b717a1` itálico dos
+           formulários do app — medidas no cabeçalho de
+           `primitivos/TextInput.tsx`.
         4. "Data de nascimento" do print **não** entra: saiu de propósito em
            2026-08-26 (commit `561458a0`, migration
            `20260826120000_remover_data_de_nascimento`), decisão de produto
@@ -145,6 +149,7 @@ function RegisterForm() {
           htmlFor="email"
           obrigatorio
           erro={campo === "email" ? error : undefined}
+          estiloDoErro="ajuda"
           className="mb-5"
         >
           <TextInput
@@ -177,6 +182,7 @@ function RegisterForm() {
           htmlFor="username"
           obrigatorio
           erro={campo === "username" ? error : undefined}
+          estiloDoErro="ajuda"
           className="mb-5"
         >
           <TextInput
@@ -195,6 +201,7 @@ function RegisterForm() {
           htmlFor="password"
           obrigatorio
           erro={campo === "password" ? error : undefined}
+          estiloDoErro="ajuda"
           className="mb-5"
         >
           <TextInput
@@ -243,7 +250,7 @@ function RegisterForm() {
             "Entre aqui" com outra tinta. Alinhado à esquerda: o print mostra
             o link rente à mesma margem dos rótulos, não centralizado (o botão
             é que ocupa a largura toda). */}
-        <p className="text-sm">
+        <p className="text-text-sm">
           <Link
             href={destino === "/app" ? "/login" : `/login?next=${encodeURIComponent(destino)}`}
             className={linkClass}

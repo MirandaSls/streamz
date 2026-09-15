@@ -11,9 +11,11 @@ import {
   Settings,
   UserPlus,
   Volume2,
+  VozTrancada,
 } from "@/components/ui/icones";
-import type { Channel } from "@streamz/shared";
+import { Permission, type Channel } from "@streamz/shared";
 import { BotaoDeIcone } from "@/components/ui/primitivos";
+import { useCan } from "@/stores/permissions";
 
 /**
  * Os handlers de arrasto que o pai pendura na linha (canal ou cabeçalho).
@@ -42,10 +44,26 @@ export interface PropsDeArrasto {
  * repouso usa `channels-default`, não `icon-muted` — é a cor **medida** do
  * nome de canal (ver `CabecalhoDeCategoria`), e ícone e texto do mesmo item
  * picam a mesma cor na captura.
+ *
+ * **Voz sem `CONNECT` mostra o cadeado** (`VozTrancada`,
+ * `canais/voice-lock.svg`), igual ao canal de texto privado (`Lock`, pelo
+ * campo `channel.private` — não há hoje uma segunda checagem de permissão
+ * para texto, só o booleano do canal; voz não tem esse booleano, então é
+ * `useCan` quem decide). O hook é chamado **antes** de qualquer retorno —
+ * regra dos hooks — mesmo para canal de texto, onde o resultado não é usado;
+ * o cálculo é o mesmo `useCan` barato que `podeGerenciarCanais` já paga por
+ * linha em outros lugares da barra.
  */
 export function ChannelIcon({ channel, ativo = false }: { channel: Channel; ativo?: boolean }) {
   const cls = `shrink-0 ${ativo ? "text-icon-strong" : "text-channels-default"}`;
-  if (channel.type === "VOICE") return <Volume2 size={20} className={cls} aria-hidden="true" />;
+  const podeConectar = useCan(Permission.CONNECT, channel.id);
+  if (channel.type === "VOICE") {
+    return podeConectar ? (
+      <Volume2 size={20} className={cls} aria-hidden="true" />
+    ) : (
+      <VozTrancada size={20} className={cls} aria-hidden="true" />
+    );
+  }
   if (channel.type === "ANNOUNCEMENT" || channel.readOnly) {
     return <Megaphone size={20} className={cls} aria-hidden="true" />;
   }

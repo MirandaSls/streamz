@@ -106,22 +106,20 @@ export default function IncomingCallModal() {
         {/* O avatar pulsa enquanto toca — é o que faz o cartão ler como "chamada
             AO VIVO" e não como um aviso parado. Medido em
             `ringingIncoming_f910d0` (`css-bruto/401425.298f1ba0a6e8b19c.css`):
-            anel de 1px em `--interactive-text-active` (branco — não é marca,
-            é o mesmo token do item selecionado; o Discord usa isso, não o
-            blurple, então some do escopo da ADR-0009), crescendo e sumindo em
-            `--custom-call-avatar-incoming-duration` = 5,407s
-            (`variaveis-resolvidas.json`). O `@keyframes` de origem
-            (`incoming-call-pulse_f910d0`) não pode entrar em `globals.css`
-            neste cartão (fica de outra lista); o `ping` que o Tailwind já
-            embute faz o mesmo gesto — opacidade caindo enquanto a escala
-            cresce —, só que numa curva `ease-out` genérica, não a do Discord
-            (ver "faltando"). `prefers-reduced-motion`/`reduzir-movimento` já
-            zeram qualquer `animation`, este incluso — nada extra a fazer aqui. */}
+            anel de 1px (a variante `small` dele) em `--interactive-text-active`
+            (branco — não é marca, é o mesmo token do item selecionado; o
+            Discord usa isso, não o blurple, então some do escopo da ADR-0009),
+            com `incoming-call-pulse_f910d0` em
+            `--custom-call-avatar-incoming-duration` = 5,407s, `infinite
+            ease-out`. Os keyframes foram copiados para `app/globals.css` como
+            `toque-recebido` (classe `anim-toque-recebido`): três ondas por
+            ciclo, não o `ping` genérico do Tailwind que estava aqui.
+            `prefers-reduced-motion`/`reduzir-movimento` são tratados lá. */}
         <span className="relative inline-flex shrink-0 rounded-full">
           <Avatar user={call.from} size="lg" surface="border-background-surface-higher" />
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute -inset-px rounded-full border border-interactive-text-active animate-[ping_5.407s_ease-out_infinite]"
+            className="pointer-events-none absolute -inset-px rounded-full border border-interactive-text-active anim-toque-recebido"
           />
         </span>
         <span className="min-w-0">
@@ -144,6 +142,11 @@ export default function IncomingCallModal() {
           variante="positivo"
           tamanho="sm"
           larguraTotal
+          // `larguraTotal` é `w-full min-w-0` sem `flex-1` (cabeçalho do
+          // Button): o `flex-1` deixa explícito que o Atender fica com o que
+          // sobra da fileira depois dos quadrados de 36/44, em vez de depender
+          // da conta de encolhimento de uma base de 100%.
+          className="flex-1"
           icone={<Phone size={16} aria-hidden="true" />}
           onClick={() => void atender(false)}
           style={ehMobile ? { height: ALVO_MINIMO } : { height: 36 }}

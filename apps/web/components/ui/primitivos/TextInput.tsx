@@ -18,9 +18,10 @@ import { X } from "@/components/ui/icones";
  *   `--input-border-default` (hover igual — o Discord não muda a borda no
  *   hover), fundo `--input-background-default`, texto 16/20 (`text-text-md`)
  *   `--input-text-default`, placeholder `--input-placeholder-text-default`.
- *   O foco não é responsabilidade daqui: `globals.css` já poe outline de 1px
- *   colado (`--input-border-active`, limão) em todo `input`/`textarea` do
- *   app — este componente não repete a regra.
+ *   O foco é a borda da caixa em `--input-border-active` (limão), com o
+ *   `<input>` marcado `data-sem-anel` para o anel global do `globals.css` não
+ *   se sobrepor; a espessura de 2px está na rodada textinput-e-telas-de-auth,
+ *   abaixo.
  *   Padding lateral **sem** sufixo: 10px (`px-2.5`), não 12 — é o mesmo
  *   `padding-inline: 10px …` de `.input_fffc15` (`css-bruto/730931.*.css`) e
  *   `.base_f89b2c` (`sob-demanda/7a89de758a772c46.css`), que só zeram o lado
@@ -102,21 +103,80 @@ import { X } from "@/components/ui/icones";
  *   campo focado da mesma imagem mede 44 (y 534–665 = 132/3). E 48 é a regra
  *   de alvo de toque do app de celular (onda 8). Trocar aqui muda a altura de
  *   todo campo do celular; quem decide é o dono do celular.
+ *
+ * Rodada de correção (cartão textinput-e-telas-de-auth):
+ * - **Foco de 2px.** A borda de 1px só trocava de cor; o anel do Discord mede
+ *   2px por dentro da caixa (print `docs/Reference/Captura de tela
+ *   2026-08-31 120846.png`, e de novo em
+ *   `publico/desktop/04-esqueci-senha-erro-SIMULADO-viewport.png`, escala 2:
+ *   coluna x=734, borda focada em y 744–747 = 4/2 = 2px). O segundo pixel é
+ *   uma sombra `inset` de 1px na mesma cor, somada à borda: não mexe na
+ *   altura (a sombra não ocupa caixa) nem no padding. Só com caixa própria —
+ *   `semCaixa` não tem borda, e um anel ali seria desenho novo nas buscas de
+ *   `chat/HeaderBar.tsx` e `layout/DMList.tsx`.
+ * - **readOnly.** Com `readOnly` a borda vira `--input-border-readonly`, na
+ *   mesma ordem de `settings/campos.tsx` (erro > só leitura > padrão): só a
+ *   borda muda, sem esmaecer o texto (`[data-read-only=true]` do Discord).
+ * - **`lg`**: 44 (`h-11`) no desktop e 48 (`h-12`) no celular, para a tela que
+ *   precisa do campo grande (o `AplicativosTab`, em outro cartão). Texto 16px,
+ *   igual ao `md`.
+ * - **`Campo.estiloDoErro`**: o Discord tem dois desenhos de erro de campo.
+ *   `formulario` (padrão) é o `.errorMessage_b717a1` de sempre — 12px itálico
+ *   peso 500. `ajuda` é o `.helperTextContainer__5a838` das telas de conta
+ *   (`publico/desktop/04-esqueci-senha-erro-SIMULADO.html`): mora dentro de
+ *   `.control__5a838{display:flex;flex-direction:column;gap:var(--space-4)}`
+ *   (4 até o controle), e `.statusMessageContainer__5a838{display:grid;
+ *   gap:var(--space-4);grid-template-columns:auto 1fr;align-items:start}` põe
+ *   um ícone de alerta de 16 (`<svg width="16" … fill="var(--text-feedback-critical)">`)
+ *   antes do texto `text-xs/normal` (12px, peso 400, sem itálico) em
+ *   `--text-feedback-critical` (`.text-xs/normal_cf4812` no CSS bruto).
+ *   Conferido no print da mesma captura (escala 2): ícone em y 841–870
+ *   (≈16 CSS), a 8px de dispositivo (= 4 CSS) da borda de baixo do campo.
  */
-export type TamanhoDeCampo = "sm" | "md";
+export type TamanhoDeCampo = "sm" | "md" | "lg";
 
-/** Tamanho da fonte do campo: `md` 16px (padrão), `sm` 14px. */
+/** Tamanho da fonte do campo: `md` e `lg` 16px (padrão), `sm` 14px. */
 const TAMANHO_DO_TEXTO: Record<TamanhoDeCampo, string> = {
   sm: "text-text-sm",
   md: "text-text-md",
+  lg: "text-text-md",
 };
+
+/** Altura da caixa por tamanho nomeado — literais para o scanner do Tailwind. */
+const ALTURA_DA_CAIXA: Record<TamanhoDeCampo, string> = {
+  sm: "h-[32px]",
+  md: "h-[40px] celular:h-[48px]",
+  lg: "h-11 celular:h-12",
+};
+
+/**
+ * O "!" num círculo do Discord, copiado do `<path>` de
+ * `publico/desktop/04-esqueci-senha-erro-SIMULADO.html` (o erro de
+ * `.statusMessageContainer__5a838`). Local porque `components/ui/icones.tsx`
+ * não exporta um alerta circular (só `AlertTriangle`, outro desenho) e esse
+ * arquivo não é deste cartão — o mesmo precedente dos SVGs próprios de
+ * `Checkbox.tsx`/`Radio.tsx`. `currentColor` herda o
+ * `text-text-feedback-critical` do contêiner.
+ */
+function IconeDeAlerta() {
+  return (
+    <svg aria-hidden="true" width={16} height={16} viewBox="0 0 24 24" fill="none" className="shrink-0">
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M12 23a11 11 0 1 0 0-22 11 11 0 0 0 0 22Zm1.44-15.94L13.06 14a1.06 1.06 0 0 1-2.12 0l-.38-6.94a1 1 0 0 1 1-1.06h.88a1 1 0 0 1 1 1.06Zm-.19 10.69a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0Z"
+      />
+    </svg>
+  );
+}
 
 /** Tinta padrão do texto e do placeholder, trocada inteira por `classeDoTexto`. */
 const TINTA_DO_TEXTO = "text-input-text-default placeholder:text-input-placeholder-text-default";
 
 export interface TextInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "size" | "prefix"> {
   /**
-   * `md` 40 (padrão), `sm` 32, ou um número em px.
+   * `md` 40 (padrão), `sm` 32, `lg` 44 (48 no celular), ou um número em px.
    *
    * O número é para medida que não é `sm`/`md` e não tem classe Tailwind
    * pronta no projeto — a busca de 36 e a caixa composta de 58 que apareceram
@@ -194,6 +254,7 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function T
   ref,
 ) {
   const alturaEmPx = typeof tamanho === "number" ? tamanho : null;
+  const somenteLeitura = !!resto.readOnly;
   // Sem nenhuma das duas medidas em px o invólucro sai sem `style`, igual a
   // antes; com uma delas, só a propriedade pedida entra.
   const estiloDaCaixa =
@@ -210,15 +271,15 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function T
          anel nele aparecia flutuando por dentro — ver `data-sem-anel` no
          globals.css) */
       className={`flex items-center gap-2 rounded-lg ${paddingLateral == null ? "px-2.5" : ""} has-[:focus-visible]:border-input-border-active has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60 ${
-        semCaixa ? "" : "border"
-      } ${
-        typeof tamanho === "number" ? "" : tamanho === "sm" ? "h-[32px]" : "h-[40px] celular:h-[48px]"
-      } ${
+        semCaixa ? "" : "border has-[:focus-visible]:shadow-[inset_0_0_0_1px_rgb(var(--input-border-active-rgb))]"
+      } ${typeof tamanho === "number" ? "" : ALTURA_DA_CAIXA[tamanho]} ${
         semCaixa
           ? ""
           : erro
             ? "border-input-border-error-default bg-input-background-error-default"
-            : "border-input-border-default bg-input-background-default"
+            : somenteLeitura
+              ? "border-input-border-readonly bg-input-background-default"
+              : "border-input-border-default bg-input-background-default"
       } ${classeDaCaixa}`}
     >
       {prefixo}
@@ -331,6 +392,13 @@ export interface CampoProps {
    */
   rotuloDiscreto?: boolean;
   obrigatorio?: boolean;
+  /**
+   * Desenho do erro: `formulario` (padrão) é o `.errorMessage_b717a1` — 12px
+   * itálico peso 500, sem ícone; `ajuda` é o `.helperTextContainer__5a838`
+   * das telas de conta — ícone de alerta de 16 + 12px peso normal. Medidas no
+   * cabeçalho do arquivo.
+   */
+  estiloDoErro?: "formulario" | "ajuda";
   children: ReactNode;
   className?: string;
 }
@@ -343,6 +411,7 @@ export function Campo({
   erro,
   rotuloDiscreto = false,
   obrigatorio,
+  estiloDoErro = "formulario",
   children,
   className = "",
 }: CampoProps) {
@@ -359,7 +428,18 @@ export function Campo({
       {descricao ? <p className="mb-1 text-text-sm text-text-muted">{descricao}</p> : null}
       {children}
       {ajuda ? <p className="mt-1 text-text-xs text-text-muted">{ajuda}</p> : null}
-      {erro ? (
+      {erro && estiloDoErro === "ajuda" ? (
+        // `.statusMessageContainer__5a838`: grade `auto 1fr` com 4 de vão e
+        // itens no topo — o ícone fica na primeira linha quando o texto quebra.
+        <div
+          role="alert"
+          aria-live="polite"
+          className="mt-1 grid grid-cols-[auto_1fr] items-start gap-1 text-text-xs text-text-feedback-critical"
+        >
+          <IconeDeAlerta />
+          <p>{erro}</p>
+        </div>
+      ) : erro ? (
         // `role="alert"` + `aria-live="polite"` embutidos: antes cada tela
         // duplicava um `<p sr-only>` ao lado para o leitor de tela anunciar
         // o erro (ver `app/reset-password/page.tsx`) — agora é uma vez só,

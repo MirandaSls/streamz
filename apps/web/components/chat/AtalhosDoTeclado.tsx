@@ -1,6 +1,8 @@
 "use client";
 
 import { Modal } from "@/components/ui/primitivos";
+// o capuz de tecla medido (`.key__61c93`) mora em `ui/Tecla`, junto do da aba Teclado
+import { Combo } from "@/components/ui/Tecla";
 import {
   Keyboard,
   MessageSquare,
@@ -16,7 +18,7 @@ import {
 } from "@/components/ui/icones";
 import { atalhosEfetivos, useAtalhos } from "@/stores/atalhos";
 import { useT, type ChaveDeTexto } from "@/lib/i18n";
-import { formatShortcut, type ShortcutAction, type ShortcutSpec } from "@/lib/shortcuts";
+import { type ShortcutAction, type ShortcutSpec } from "@/lib/shortcuts";
 import { useUI } from "@/stores/ui";
 
 /**
@@ -69,34 +71,6 @@ import { useUI } from "@/stores/ui";
  * Configurações → Teclado). Ver "faltando" no retorno do cartão pelas linhas
  * exatas.
  */
-
-/**
- * Tecla ("Ctrl", "Shift", "M"…) no mesmo capuz medido de `TecladoTab.tsx`
- * (`.key__61c93`/`.key_db8087` do CSS bruto da página "Keybinds" — fundo
- * `--background-mod-muted`, borda `--border-subtle`, `radius:4px`, 23px de
- * altura, 12px semibold maiúsculo, relevo `shadow-[inset_0_-4px_0_…]`). É o
- * mesmo capuz de tecla do modal de atalhos do Discord (o CSS não separa os
- * dois), por isso repete aqui em vez de importar de `TecladoTab` — aquele
- * arquivo não exporta a peça, e não está na lista deste cartão. Repetição
- * pequena e com a mesma origem; ver "faltando" (extrair um componente
- * compartilhado).
- */
-const TECLA =
-  "flex h-[23px] min-w-[14px] items-center justify-center rounded border border-border-subtle bg-background-mod-muted px-[6px] pb-1 pt-[3px] text-text-xs font-semibold uppercase leading-none text-interactive-text-active shadow-[inset_0_-4px_0_var(--background-mod-muted)]";
-
-/** Uma combinação como fileira de capuzes de tecla, 3px entre si (mesma medida de `TecladoTab`). */
-function Combo({ texto }: { texto: string }) {
-  const teclas = formatShortcut(texto).split(" + ");
-  return (
-    <span className="flex items-center gap-[3px]">
-      {teclas.map((tecla, i) => (
-        <span key={i} className={TECLA}>
-          {tecla}
-        </span>
-      ))}
-    </span>
-  );
-}
 
 /** Categoria → ícone da grade (só decoração; o rótulo de cada cartão já diz a ação). */
 interface Categoria {

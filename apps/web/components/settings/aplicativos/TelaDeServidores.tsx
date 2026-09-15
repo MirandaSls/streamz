@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AppDetalhe, ServidorComOApp } from "@streamz/shared";
 import { Server } from "@/components/ui/icones";
+import { MensagemDeAjuda } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { isApiError } from "@/lib/api-error";
 import { errorMessage } from "@/stores/socket-adapter";
-import { ErroComNovaTentativa, MensagemDeAjuda, TituloDaTela, Voltar, dataCurta } from "./pecas";
+import { ErroComNovaTentativa, TituloDaTela, Voltar, dataCurta } from "./pecas";
 
 /**
  * Onde o aplicativo está instalado — o "Server Access" do cartão do Discord

@@ -2,7 +2,6 @@
 
 import {
   CheckCheck,
-  Compass,
   LogOut,
   Plus,
   MessageSquare,
@@ -22,7 +21,7 @@ import { corDoAvatar } from "@/components/ui/avatar-cores";
 import Marca from "@/components/ui/Marca";
 import Tooltip from "@/components/ui/Tooltip";
 import { Badge } from "@/components/ui/primitivos";
-import { MENU_WIDTH, MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
+import { MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
 import { useT } from "@/lib/i18n";
 import { submenuNotificacoes, submenuSilenciar } from "@/lib/notification-menu";
 import { useAplicativos } from "@/stores/aplicativos";
@@ -103,16 +102,23 @@ function SeloDeVoz() {
 }
 
 /**
- * Um item do rail: círculo em repouso que vira squircle (raio 16,
- * `--radius-lg`, `rounded-2xl`) no hover e quando ativo — o morfo do Discord
- * (cartão 1b-rail; o CSS bruto animava o blob por SVG, não achamos o par
- * exato de `border-radius`, então a aproximação é a troca de classe Tailwind
- * pedida pelo cartão, não um valor medido em `.css`). O que muda junto é a
- * cor e a "pílula" branca à esquerda (ponto se há não lido, curta no hover,
- * alta quando ativo). Mais o tooltip.
+ * Um item do rail: squircle fixo (raio 12, `--radius-md`, `rounded-xl`), em
+ * repouso, hover e ativo — não há morfo de círculo para squircle.
+ *
+ * A revisão visual mediu a forma em repouso nos prints 1:1 (`2026-09-02
+ * 152318.png`, servidor "H": 20px de largura em y=243, 34 em y=246, 38 em
+ * y=249, 40 em y=255 — raio ≈12; `2026-08-31 101638.png` confirma no mesmo
+ * ícone) e achou o **mesmo** raio no início ativo e no "+": o botão já nasce
+ * squircle, não círculo — o antigo `rounded-full` de repouso (cartão 1b-rail,
+ * que buscava o morfo por SVG do Discord sem achar o par exato de
+ * `border-radius`) desenhava um raio maior (≈20) do que o Discord usa. O raio
+ * do hover não foi medido à parte e fica igual ao do repouso. O que muda
+ * ainda é a cor e a "pílula" branca à esquerda (ponto se há não lido, curta
+ * no hover, alta quando ativo). Mais o tooltip.
  */
 function RailItem({
   label,
+  subtitulo,
   active = false,
   unread = false,
   mentions = 0,
@@ -126,6 +132,11 @@ function RailItem({
   children,
 }: {
   label: string;
+  /**
+   * Linha secundária da dica (ex.: "2 membros" num grupo de DM em destaque no
+   * rail). Ver `Tooltip.subtitle`.
+   */
+  subtitulo?: React.ReactNode;
   active?: boolean;
   unread?: boolean;
   mentions?: number;
@@ -135,10 +146,15 @@ function RailItem({
   /** lado do botão: 40 no desktop, 48 no celular (ver `GuildRail`). */
   lado?: 40 | 48;
   /**
-   * Círculo em vez de squircle. É a **bolha de conversas** no topo da rail do
-   * celular: na captura `discord-mobile-dms-2024.png` ela é redonda e os
-   * ícones de servidor abaixo dela não são — a forma é o que separa "minhas
-   * conversas" de "um servidor".
+   * Círculo, sempre — nunca o squircle fixo dos servidores/início/"+".
+   *
+   * É a forma das **conversas em destaque** do rail (`GuildRail.dmsEmDestaque`:
+   * a revisão mediu círculo no avatar de DM do print 1:1 `2026-09-01
+   * 130840.png`, 12px de largura em y=82 crescendo a 24 em y=86 — curva mais
+   * fechada que a de um squircle de raio 12) e da **bolha de conversas** no
+   * topo da rail do celular: na captura `discord-mobile-dms-2024.png` ela é
+   * redonda e os ícones de servidor abaixo dela não são — a forma é o que
+   * separa "minhas conversas" de "um servidor".
    */
   redondo?: boolean;
   /**
@@ -149,7 +165,6 @@ function RailItem({
    * dentro.
    */
   dados?: Record<string, string>;
-  /** recebe o evento porque o "+" ancora um menu no retângulo do botão. */
   onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
   children: React.ReactNode;
@@ -175,26 +190,21 @@ function RailItem({
           de cima e da direita e não pode ultrapassar a caixa (ver `SeloDeVoz`);
           o badge, sim, transborda o canto de baixo. */}
       <div className={`relative shrink-0 ${caixa}`}>
-        <Tooltip label={label} side="right">
+        <Tooltip label={label} subtitle={subtitulo} side="right" rail>
           <button
             type="button"
             onClick={onClick}
             {...dados}
             aria-label={unread && !active ? `${label} (não lido)` : label}
             aria-current={active ? "page" : undefined}
-            // `redondo` (a bolha de conversas do celular) é círculo sempre —
-            // é a forma que a separa de "servidor" (ver o comentário da prop).
-            // Todo o resto nasce círculo e vira squircle (`--radius-lg`,
-            // `rounded-2xl`) no hover e quando ativo, como no Discord: aqui o
-            // `rounded-xl` fixo (12px, `--radius-md`) desenhava sempre a forma
-            // do estado ativo, e o ícone de servidor em repouso nunca era
-            // círculo.
+            // `redondo` (DM em destaque e a bolha de conversas do celular) é
+            // círculo sempre — é a forma que a separa de "servidor" (ver o
+            // comentário da prop). Todo o resto (servidor, início, "+") nasce
+            // squircle de raio 12 (`rounded-xl`, `--radius-md`) e continua
+            // squircle em repouso, hover e ativo — sem morfo (ver o
+            // comentário do componente).
             className={`relative grid place-items-center overflow-hidden text-[15px] font-semibold transition-all duration-200 ${
-              redondo
-                ? "rounded-full"
-                : active
-                  ? "rounded-2xl"
-                  : "rounded-full group-hover:rounded-2xl focus-visible:rounded-2xl"
+              redondo ? "rounded-full" : "rounded-xl"
             } ${caixa} ${
               active
                 ? "bg-brand-500 text-control-primary-text-default"
@@ -210,20 +220,28 @@ function RailItem({
         {/*
           Badge de menção/não lidas — o primitivo `Badge` (`tipo="numero"`,
           `recorte`) é a mesma medida que este componente desenhava à mão
-          (miolo 16, anel de 3px na superfície de baixo), mas com o token
-          certo de texto (`--badge-text-default` #fbfbfb, não o branco puro
-          que estava aqui). O primitivo não tem `aria-label` nem posição — por
-          isso o wrapper, que mora **fora** do botão (ele tem
-          `overflow-hidden`, é o que faz a foto seguir o raio; o badge
-          transborda o canto) com `pointer-events-none`: o clique tem que
-          continuar caindo no servidor, não no número.
+          (miolo 16), mas com o token certo de texto (`--badge-text-default`
+          #fbfbfb, não o branco puro que estava aqui). O primitivo não tem
+          `aria-label` nem posição — por isso o wrapper, que mora **fora** do
+          botão (ele tem `overflow-hidden`, é o que faz a foto seguir o raio;
+          o badge transborda o canto) com `pointer-events-none`: o clique tem
+          que continuar caindo no servidor, não no número.
+
+          Posição e anel: revisão visual mediu o print 1:1 `2026-09-01
+          130840.png` (badge em x44-59/y106-121, rente às bordas do ícone em
+          x20-59/y82-121, anel de 2px) contra o que saía daqui (badge 2px além
+          da borda direita e 1px da inferior, anel de 3px do `recorte`
+          padrão do primitivo) — daí `bottom-0 right-0` (rente, não
+          transbordando) e `ring-2` (2px) por cima do `ring-[3px]` que
+          `recorte` aplica, sem mudar o padrão do primitivo (outros usos de
+          `recorte` continuam em 3px).
         */}
         {mentions > 0 && (
           <span
             aria-label={`${mentions} ${mentions === 1 ? "menção" : "menções"}`}
-            className="pointer-events-none absolute -bottom-0.5 -right-0.5"
+            className="pointer-events-none absolute bottom-0 right-0"
           >
-            <Badge tipo="numero" valor={mentions} recorte />
+            <Badge tipo="numero" valor={mentions} recorte className="ring-2" />
           </span>
         )}
       </div>
@@ -237,10 +255,10 @@ function RailItem({
  * `compacto` é o rail do celular. As medidas vêm da captura oficial
  * `docs/Reference/mobile/discord-mobile-servidor-2024.png` (1,9707 px/pt, ver
  * `MEDIDAS.md` §4): rail de **72pt**, ícone de **48pt**, folga vertical de
- * ~7–8pt — contra 72/40/10 **px** do desktop (`--custom-guild-list-width`,
- * unidade diferente, coincidência de valor). Não é enfeite: 40pt é um alvo de toque
- * abaixo do piso das duas plataformas, e o rail do telefone é a única
- * navegação entre servidores que existe ali.
+ * ~7–8pt — contra 80/40/20 **px** do desktop (ver o comentário da largura, no
+ * `<nav>` abaixo). Não é enfeite: 40pt é um alvo de toque abaixo do piso das
+ * duas plataformas, e o rail do telefone é a única navegação entre
+ * servidores que existe ali.
  */
 export default function GuildRail({ compacto = false }: { compacto?: boolean } = {}) {
   // de qual servidor é a call em curso, para o selo do ícone
@@ -319,35 +337,6 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
   }
 
   /**
-   * Menu do "+": criar um servidor ou entrar com um código de convite.
-   *
-   * As duas linhas abrem o mesmo `CriarServidorModal` (cartão
-   * 7a-criar-servidor) — a criação era um `prompt()` genérico e a entrada por
-   * convite, outro; agora as duas portas do modal do Discord, cada uma na
-   * tela certa (`tela: "entrar"` pula direto para o campo de código).
-   */
-  function abrirMenuDeServidor(e: React.MouseEvent<HTMLButtonElement>) {
-    const r = e.currentTarget.getBoundingClientRect();
-    ui.openContextMenu(
-      r.right + 12,
-      r.top,
-      [
-        {
-          label: "Criar um servidor",
-          icon: <Plus size={18} />,
-          onSelect: () => ui.openModal({ kind: "criarServidor" }),
-        },
-        {
-          label: "Entrar com um convite",
-          icon: <Compass size={18} />,
-          onSelect: () => ui.openModal({ kind: "criarServidor", tela: "entrar" }),
-        },
-      ],
-      MENU_WIDTH,
-    );
-  }
-
-  /**
    * Botão direito no ícone do servidor. Este menu simplesmente não existia — e
    * é onde o Discord põe "Marcar como lido", que antes estava no dropdown do
    * cabeçalho da barra de canais.
@@ -367,7 +356,6 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
       {
         label: "Convidar pessoas",
         icon: <UserPlus size={18} />,
-        highlight: true,
         onSelect: () => {
           select(guild);
           void createInvite();
@@ -408,20 +396,25 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
           título. Os nossos 12px de folga faziam a rail começar mais baixo que
           a coluna ao lado, e a diferença aparece na horizontal do topo.
 
-          Largura 72px = `--custom-guild-list-width` (avatar 40 + padding 16
-          dos dois lados, `.wrapper_ef3116`) — media 80px (`w-20`) sobrava
-          8px de padding. A borda de 1px entre a rail e a coluna de canais é
-          `var(--app-frame-border)` direto (não `theme(colors.app-frame-
-          border)`): a função de opacidade do token só resolve `<alpha-value>`
-          dentro do pipeline de cor do Tailwind, e o `theme(colors.rail-
-          divider)` antigo referenciava um nome que não existe mais em
-          `tokens.gerados.ts` desde a migração da ADR-0009 — a classe inteira
-          não compilava e a rail ficava sem nenhuma linha (cartão 1b-rail,
-          divergência "amigos-online"). */
+          Largura 80px no desktop: a revisão visual mediu o print 1:1
+          `2026-08-31 152318.png` (linha y=600 — rail em x0–79, borda em
+          x=80) contra o nosso (rail em x0–70, borda em x=71) — 72px
+          (`--custom-guild-list-width`) não batia com o Discord medido, que
+          recua 20px de cada lado do ícone de 40 (linha y=52, ícone em
+          x20–59), não 16. Os itens já centralizam com `justify-center`, então
+          o recuo vem sozinho da largura — não é padding extra. A borda de 1px
+          entre a rail e a coluna de canais é `var(--app-frame-border)` direto
+          (não `theme(colors.app-frame-border)`): a função de opacidade do
+          token só resolve `<alpha-value>` dentro do pipeline de cor do
+          Tailwind, e o `theme(colors.rail-divider)` antigo referenciava um
+          nome que não existe mais em `tokens.gerados.ts` desde a migração da
+          ADR-0009 — a classe inteira não compilava e a rail ficava sem
+          nenhuma linha (cartão 1b-rail, divergência "amigos-online"). */
       className={`flex shrink-0 flex-col items-center overflow-y-auto bg-background-base-lowest shadow-[inset_-1px_0_0_var(--app-frame-border)] ${
         // no celular não há card de usuário flutuando por cima da rail: o
-        // respiro de 78px existe só para ele, e ali sobraria um buraco no fim
-        compacto ? "w-[72px] gap-2 pb-3" : "w-[72px] gap-2.5 pb-[78px]"
+        // respiro de 78px existe só para ele, e ali sobraria um buraco no fim.
+        // O compacto continua 72 — só o desktop mudou para 80 (ver acima).
+        compacto ? "w-[72px] gap-2 pb-3" : "w-[80px] gap-2.5 pb-[78px]"
       }`}
     >
       {/*
@@ -464,11 +457,19 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
       */}
       {dmsEmDestaque.map((dm) => {
         const naoLida = !!dm.lastMessageAt && (!dm.lastReadAt || dm.lastMessageAt > dm.lastReadAt);
+        // contagem de membros na dica, só para grupo (DM 1-a-1 não tem
+        // subtítulo — o rótulo já é a pessoa). `others` exclui quem está
+        // olhando, daí o +1.
+        const membros = dm.others.length + 1;
         return (
           <RailItem
             key={dm.id}
             lado={compacto ? 48 : 40}
+            // DM em destaque é sempre círculo, nunca squircle — ver o
+            // comentário da prop em `RailItem`.
+            redondo
             label={dmTitle(dm)}
+            subtitulo={isGroupChannel(dm) ? `${membros} ${membros === 1 ? "membro" : "membros"}` : undefined}
             active={view === "dm" && activeDMId === dm.id}
             unread={naoLida}
             mentions={dm.unreadCount}
@@ -524,14 +525,17 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
         </RailItem>
       ))}
 
-      {/* O "+" do Discord pergunta antes: criar o meu, ou entrar num que já
-          existe. Aqui esse menu é o ÚNICO caminho para "entrar por convite" —
-          a descoberta pública de servidores não existe neste produto. */}
+      {/* O "+" do Discord abre "Crie seu servidor" direto — não um menu de
+          duas opções. "Já tem um convite?" mora dentro desse modal
+          (`CriarServidorModal.tsx`, tela "criar"), com o botão "Entrar em um
+          servidor" que leva à tela "entrar". Este continua sendo o ÚNICO
+          caminho para entrar por convite — a descoberta pública de
+          servidores não existe neste produto. */}
       <RailItem
         label="Adicionar um servidor"
         lado={compacto ? 48 : 40}
         green
-        onClick={abrirMenuDeServidor}
+        onClick={() => ui.openModal({ kind: "criarServidor" })}
       >
         <Plus size={compacto ? 24 : 20} />
       </RailItem>

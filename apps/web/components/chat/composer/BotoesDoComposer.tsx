@@ -23,7 +23,10 @@ export const ALVO_44 =
  * - caixa 32×32 — `.button__74017{min-height:var(--space-32);min-width:var(--space-32)}`
  *   (`css-bruto/962953.69892aacbc3b8e17.css`);
  * - raio 8 e hover pintado — `.emojiButton__74017{border-radius:8px}` /
- *   `:hover{background-color:var(--interactive-background-selected)}`;
+ *   `:hover{background-color:var(--interactive-background-selected)}` — a
+ *   família `fundo="hover-selecionado"` do primitivo (rodada de correção,
+ *   item 13 do cabeçalho de `BotaoDeIcone.tsx`), não `fundo="hover"` (um
+ *   degrau mais fraco, `--interactive-background-hover`);
  * - tinta `--interactive-text-default` (`#abacb2`) — print 1:1
  *   `Captura de tela 2026-09-02 180835.png`, linha y=992: o presente amostra
  *   `#abacb2` em x 1444–1459. O nosso amostrava `#96979e` (`icon-muted`, a
@@ -64,7 +67,7 @@ export function BotaoLateral({
       onClick={onClick}
       onMouseEnter={onMouseEnter}
       tamanho={baixo ? "lg" : "md"}
-      fundo={baixo ? "nenhum" : "hover"}
+      fundo={baixo ? "nenhum" : "hover-selecionado"}
       ativo={aberto}
       desabilitado={emBreve || desabilitado}
       motivoDesabilitado={emBreve ? `${rotulo} (em breve)` : undefined}
@@ -78,7 +81,8 @@ export function BotaoLateral({
  *
  * Desktop: caixa 32, raio 8, hover pintado — `.attachButton__36c1b{border-radius:8px;
  * padding:6px}` (6 + ícone 20 + 6) e `:hover{background-color:
- * var(--interactive-background-selected);color:var(--interactive-text-active)}`.
+ * var(--interactive-background-selected);color:var(--interactive-text-active)}`
+ * — `fundo="hover-selecionado"`, não `fundo="hover"`.
  * Posição pelo print 1:1 `180835.png`: glifo centrado em x=414,5 com a caixa
  * interna começando em x=386 (28,5 → caixa de 32 a 13px da borda interna) e o
  * texto em x=455 (69px da borda interna → 24 entre a caixa e o texto). Na
@@ -106,7 +110,7 @@ export function BotaoMais({
       desabilitado={desabilitado}
       tamanho={ehMobile ? "lg" : "md"}
       forma={ehMobile ? "disco" : "quadrado"}
-      fundo={ehMobile ? "nenhum" : "hover"}
+      fundo={ehMobile ? "nenhum" : "hover-selecionado"}
       className={
         ehMobile ? `bg-interactive-background-hover ${ALVO_44}` : "sticky top-0 ml-[13px] mr-6 mt-3"
       }

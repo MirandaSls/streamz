@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Keyboard, RotateCcw } from "@/components/ui/icones";
 import { BotaoDeIcone, Button } from "@/components/ui/primitivos";
+import { Combo } from "@/components/ui/Tecla";
 import { atalhosEfetivos, conflitoDe, useAtalhos } from "@/stores/atalhos";
 import { useT, type ChaveDeTexto } from "@/lib/i18n";
 import { formatShortcut, shortcutFromEvent, type ShortcutAction } from "@/lib/shortcuts";
@@ -54,9 +55,9 @@ import { ui } from "@/stores/ui";
  *   8%, sombra pulsando 6px→10px→6px em 1s). Portado com
  *   `border-feedback-critical`/`text-feedback-critical`/
  *   `background-feedback-critical` — os tokens do Discord para esse mesmo
- *   vermelho. A pulsação de sombra em si (`shadowPulse__2636e`) pediria uma
- *   `@keyframes` nova em `app/globals.css`, fora da lista deste cartão;
- *   aproximada com `animate-pulse` (opacidade) do Tailwind — ver "faltando".
+ *   vermelho. A pulsação de sombra é o `shadowPulse__2636e` portado como
+ *   `.anim-gravando-atalho` em `app/globals.css` (sombra, não opacidade: o
+ *   `animate-pulse` do Tailwind que estava aqui apagava o texto junto).
  *   Foco/hover fora da gravação, medidos: `border-color:var(--border-strong)`
  *   — o valor de *repouso* do `recorderContainer` não aparece neste arquivo
  *   (só hover/foco/gravando), então o repouso usa `border-border-subtle`, a
@@ -69,28 +70,6 @@ import { ui } from "@/stores/ui";
  *   "nao_verificado"). Evita regravar duas linhas ao mesmo tempo e criar dois
  *   `capturar` ouvindo o teclado juntos.
  */
-
-/**
- * Uma tecla ("Ctrl", "K", "Esc"…) no capuz medido (`.key__61c93`/`.key_db8087`
- * acima). `leading-none` porque a altura já é fixada em 23px pelo `h-[23px]`
- * — uma linha alta demais quebraria o relevo (`shadow-[inset…]`) da caixa.
- */
-const TECLA =
-  "flex h-[23px] min-w-[14px] items-center justify-center rounded border border-border-subtle bg-background-mod-muted px-[6px] pb-1 pt-[3px] text-text-xs font-semibold uppercase leading-none text-interactive-text-active shadow-[inset_0_-4px_0_var(--background-mod-muted)]";
-
-/** Uma combinação ("Ctrl + Shift + M") como uma fileira de capuzes de tecla, 3px entre si. */
-function Combo({ texto }: { texto: string }) {
-  const teclas = formatShortcut(texto).split(" + ");
-  return (
-    <span className="flex items-center gap-[3px]">
-      {teclas.map((tecla, i) => (
-        <span key={i} className={TECLA}>
-          {tecla}
-        </span>
-      ))}
-    </span>
-  );
-}
 
 export default function TecladoTab() {
   const t = useT();
@@ -151,7 +130,7 @@ export default function TecladoTab() {
                     onKeyDown={(e) => capturar(e, spec.action)}
                     onBlur={() => setGravando(null)}
                     aria-label={`Gravando atalho de ${rotulo}`}
-                    className="flex h-[23px] animate-pulse items-center gap-1.5 rounded border border-border-feedback-critical bg-background-feedback-critical px-2 text-text-xs font-semibold text-text-feedback-critical outline-none celular:h-[44px]"
+                    className="anim-gravando-atalho flex h-[23px] items-center gap-1.5 rounded border border-border-feedback-critical bg-background-feedback-critical px-2 text-text-xs font-semibold text-text-feedback-critical outline-none celular:h-[44px]"
                   >
                     <Keyboard size={14} aria-hidden="true" />
                     Aperte a combinação (Esc cancela)

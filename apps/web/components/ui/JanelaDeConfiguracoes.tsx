@@ -221,6 +221,38 @@ const PERIGO =
 
 const VarianteCtx = createContext<VarianteDaJanela>("janela");
 
+/** Duração do `settingNavAnchorFlash__75920` do Discord (ver `irParaSecao`). */
+const DURACAO_DO_FLASH_MS = 2250;
+const CLASSE_DO_FLASH = "anim-flash-da-secao";
+/** o temporizador de cada seção acesa, para um segundo clique não herdar o do primeiro */
+const temporizadoresDoFlash = new WeakMap<HTMLElement, number>();
+
+/** Aplica `.anim-flash-da-secao` ao alvo e tira no fim (ver `irParaSecao`). */
+function acenderSecao(alvo: HTMLElement) {
+  const anterior = temporizadoresDoFlash.get(alvo);
+  if (anterior !== undefined) window.clearTimeout(anterior);
+  alvo.classList.remove(CLASSE_DO_FLASH);
+  // ler o layout entre tirar e pôr é o que reinicia a animação no mesmo nó
+  void alvo.offsetWidth;
+  alvo.classList.add(CLASSE_DO_FLASH);
+
+  const apagar = () => {
+    alvo.classList.remove(CLASSE_DO_FLASH);
+    alvo.removeEventListener("animationend", aoTerminar);
+    const t = temporizadoresDoFlash.get(alvo);
+    if (t !== undefined) window.clearTimeout(t);
+    temporizadoresDoFlash.delete(alvo);
+  };
+  // só a animação do próprio flash: um filho animado também dispara
+  // `animationend` e borbulha até aqui
+  const aoTerminar = (e: AnimationEvent) => {
+    if (e.target === alvo && e.animationName === "flash-da-secao") apagar();
+  };
+  alvo.addEventListener("animationend", aoTerminar);
+  // folga de um quadro além dos 2,25s para o `animationend` chegar primeiro
+  temporizadoresDoFlash.set(alvo, window.setTimeout(apagar, DURACAO_DO_FLASH_MS + 50));
+}
+
 export default function JanelaDeConfiguracoes({
   titulo,
   cabecalho,
@@ -322,13 +354,25 @@ export default function JanelaDeConfiguracoes({
     // que ganha seções depois de carregar
   }, [abaId, secoes.length]);
 
-  /** Rola até a seção — sem animação para quem pediu menos movimento. */
+  /**
+   * Rola até a seção — sem animação para quem pediu menos movimento — e acende
+   * o fundo dela por um instante, como o Discord faz ao saltar pelo menu
+   * (`.flash__75920` + `settingNavAnchorFlash__75920`, 2,25s; keyframes e
+   * origem em `app/globals.css`, `.anim-flash-da-secao`).
+   *
+   * A classe sai no `animationend`. O temporizador de 2,25s é o fallback de
+   * quando não há animação (reduzir movimento: o fundo fica parado e nenhum
+   * `animationend` chega). Clicar de novo na mesma seção tira a classe e força
+   * um reflow antes de pô-la de volta, senão o navegador não reinicia a
+   * animação.
+   */
   function irParaSecao(id: string) {
     const alvo = rolagemRef.current?.querySelector<HTMLElement>(`[data-secao="${id}"]`);
     if (!alvo) return;
     const suave = !document.documentElement.classList.contains("reduzir-movimento");
     alvo.scrollIntoView({ behavior: suave ? "smooth" : "auto", block: "start" });
     setSecaoVisivel(id);
+    acenderSecao(alvo);
   }
 
   useEffect(() => {

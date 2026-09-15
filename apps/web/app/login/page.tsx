@@ -4,10 +4,10 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { exigeMfa } from "@streamz/shared";
-import AuthCard, { FieldLabel, linkClass } from "@/components/auth/AuthCard";
+import AuthCard, { linkClass } from "@/components/auth/AuthCard";
 import { api } from "@/lib/api";
 import { mensagemDeAuth, validarLogin } from "@/lib/auth-mensagens";
-import { Button, TextInput } from "@/components/ui/primitivos";
+import { Button, Campo, TextInput } from "@/components/ui/primitivos";
 import { useAuth } from "@/stores/auth";
 
 /**
@@ -15,6 +15,17 @@ import { useAuth } from "@/stores/auth";
  *
  * O `ticket` que sustenta o segundo passo mora só no estado desta tela — é de
  * curta duração e não autentica nada sozinho, então não vai para o storage.
+ *
+ * Rótulos e erro (cartão textinput-e-telas-de-auth): os três campos saíram do
+ * `FieldLabel` da `AuthCard` para `Campo`. O `FieldLabel` escrevia o erro
+ * *dentro* do rótulo (" - mensagem", no lugar do asterisco) e pintava o rótulo
+ * de vermelho. No Discord o rótulo continua `--text-strong` com o asterisco, e
+ * o erro fica abaixo do controle com ícone de alerta de 16 e 12px normal —
+ * é justamente esta tela no print `publico/desktop/04-esqueci-senha-erro-SIMULADO-viewport.png`
+ * ("Este campo é obrigatório" sob "E-mail ou número de telefone"), por isso
+ * `estiloDoErro="ajuda"`. A mensagem vai só sob o primeiro campo, como lá; a
+ * senha ganha só a borda de erro. O `<p sr-only role="alert">` que duplicava
+ * o anúncio saiu: o erro do `Campo` já tem `role="alert"` embutido.
  */
 export default function LoginPage() {
   // `useSearchParams` exige Suspense no App Router (a página é pré-renderizada)
@@ -90,31 +101,31 @@ function LoginForm() {
     return (
       <AuthCard title="Verificação em duas etapas" subtitle="Sua conta está protegida.">
         <form onSubmit={onSubmitCodigo} noValidate>
-          <FieldLabel htmlFor="code" invalid={!!error} hint={error ?? undefined}>
-            {backup ? "Código de recuperação" : "Digite o código de autenticação"}
-          </FieldLabel>
-          <TextInput
-            id="code"
-            name="code"
-            inputMode="text"
-            autoComplete="one-time-code"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            disabled={loading}
-            erro={!!error}
-            aria-describedby="apoio-2fa"
-            classeDaCaixa="mb-2"
-            className="tracking-[0.3em]"
-            autoFocus
-          />
-          <p id="apoio-2fa" className="mb-5 text-text-sm text-text-muted">
+          <Campo
+            rotulo={backup ? "Código de recuperação" : "Digite o código de autenticação"}
+            htmlFor="code"
+            obrigatorio
+            erro={error}
+            estiloDoErro="ajuda"
+          >
+            <TextInput
+              id="code"
+              name="code"
+              inputMode="text"
+              autoComplete="one-time-code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              disabled={loading}
+              erro={!!error}
+              aria-describedby="apoio-2fa"
+              className="tracking-[0.3em]"
+              autoFocus
+            />
+          </Campo>
+          <p id="apoio-2fa" className="mb-5 mt-2 text-text-sm text-text-muted">
             {backup
               ? "Use um dos códigos que você guardou ao ligar a verificação em duas etapas. Cada um vale uma vez só."
               : "Abra o seu app autenticador e informe o código de 6 dígitos da conta do Streamz."}
-          </p>
-
-          <p role="alert" aria-live="polite" className="sr-only">
-            {error}
           </p>
 
           <Button
@@ -183,45 +194,43 @@ function LoginForm() {
             e-mail OU usuário (`contaLoginSchema`, mensagem 401 "Usuário ou
             senha incorretos"). O rótulo segue trocando só a parte que não
             existe aqui, mantendo a medida do Discord (16px, peso 500,
-            asterisco vermelho depois — `AuthCard.tsx`/`FieldLabel`). */}
-        <FieldLabel htmlFor="identificador" invalid={!!error} hint={error ?? undefined}>
-          E-mail ou usuário
-        </FieldLabel>
-        <TextInput
-          id="identificador"
-          name="identificador"
-          autoComplete="username"
-          value={identificador}
-          onChange={(e) => setIdentificador(e.target.value)}
-          disabled={loading}
-          erro={!!error}
-          classeDaCaixa="mb-5"
-          autoFocus
-        />
+            asterisco vermelho depois — `Campo`, `primitivos/TextInput.tsx`). */}
+        <Campo
+          rotulo="E-mail ou usuário"
+          htmlFor="identificador"
+          obrigatorio
+          erro={error}
+          estiloDoErro="ajuda"
+          className="mb-5"
+        >
+          <TextInput
+            id="identificador"
+            name="identificador"
+            autoComplete="username"
+            value={identificador}
+            onChange={(e) => setIdentificador(e.target.value)}
+            disabled={loading}
+            erro={!!error}
+            autoFocus
+          />
+        </Campo>
 
-        <FieldLabel htmlFor="password" invalid={!!error}>
-          Senha
-        </FieldLabel>
-        <TextInput
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          disabled={loading}
-          erro={!!error}
-          classeDaCaixa="mb-2"
-        />
+        <Campo rotulo="Senha" htmlFor="password" obrigatorio className="mb-2">
+          <TextInput
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={loading}
+            erro={!!error}
+          />
+        </Campo>
         <p className="mb-5 text-text-sm">
           <Link href="/forgot-password" className={linkClass}>
             Esqueceu sua senha?
           </Link>
-        </p>
-
-        {/* aria-live: leitores de tela anunciam o erro sem mover o foco */}
-        <p role="alert" aria-live="polite" className="sr-only">
-          {error}
         </p>
 
         <Button

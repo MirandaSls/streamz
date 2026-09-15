@@ -96,22 +96,18 @@ export function TileDeConvite({ guildId }: { guildId: string }) {
         >
           Convidar para voz
         </Button>
-        {/* O `span` focável carrega a dica: botão `disabled` não recebe
-            ponteiro nem foco, e a dica "(em breve)" nunca abriria nele. */}
-        <Tooltip label="Escolher atividade (em breve)">
-          <span tabIndex={0} aria-label="Escolher atividade (em breve)" className="inline-flex rounded-lg">
-            <Button
-              variante="secundario"
-              tamanho="md"
-              icone={<Apps size={16} aria-hidden="true" />}
-              disabled
-              tabIndex={-1}
-              className="pointer-events-none"
-            >
-              Escolher atividade
-            </Button>
-          </span>
-        </Tooltip>
+        {/* `motivoDesabilitado` faz o que o `span` focável fazia à mão: o
+            botão continua no Tab (`aria-disabled`) e a dica "(em breve)" abre
+            no hover e no foco — ver o cabeçalho de `primitivos/Button.tsx`. */}
+        <Button
+          variante="secundario"
+          tamanho="md"
+          icone={<Apps size={16} aria-hidden="true" />}
+          disabled
+          motivoDesabilitado="Escolher atividade (em breve)"
+        >
+          Escolher atividade
+        </Button>
       </div>
     </div>
   );
@@ -165,9 +161,9 @@ export function AvatarDeChamada({
         <Avatar
           user={state.user}
           size="xl"
-          // o palco de avatares só existe no `CallStage`, que é `--black`; esta é
-          // a superfície mais escura que o `Avatar` sabe recortar (ver "faltando")
-          surface="border-background-base-lowest"
+          // o palco de avatares só existe no `CallStage`, que é `--black`: o
+          // recorte do selo de mudo/surdo tem de ser da mesma cor do palco
+          surface="border-black"
           voz={state.deafened ? "surdo" : state.muted ? "mudo" : null}
           className={`transition-transform ${ativo ? ENCOLHE_AO_FALAR : ""}`}
         />
@@ -324,9 +320,16 @@ export function VoiceTile({
               size="xl"
               surface="border-chat-background-default"
               className={`transition-transform ${ativo ? ENCOLHE_AO_FALAR : ""} ${
-                compacto
-                  ? "h-16 w-16 [&>img]:h-16 [&>img]:w-16 [&>span]:h-16 [&>span]:w-16 [&>span]:text-xl"
-                  : ""
+                compacto && rotuloPequeno
+                  ? // tira do celular (116×78, só ela passa `rotuloPequeno`): os
+                    // 64 da tira do desktop ocupavam 82% da altura e eram
+                    // cortados pela borda e pela pílula (passeio de 2026-09-15).
+                    // 40 cabe acima da pílula; não medido no Discord, que não
+                    // tem captura da tira de miniaturas no celular com escala
+                    "h-10 w-10 [&>img]:h-10 [&>img]:w-10 [&>span]:h-10 [&>span]:w-10 [&>span]:text-sm"
+                  : compacto
+                    ? "h-16 w-16 [&>img]:h-16 [&>img]:w-16 [&>span]:h-16 [&>span]:w-16 [&>span]:text-xl"
+                    : ""
               }`}
             />
             {ativo && <AnelDeFala />}

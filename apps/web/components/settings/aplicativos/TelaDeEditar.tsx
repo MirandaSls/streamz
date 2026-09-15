@@ -15,12 +15,20 @@ import {
 import { Image as ImagemIcone } from "@/components/ui/icones";
 import { Section } from "@/components/ui/controls";
 import { useAlteracoesNaoSalvas } from "@/components/ui/alteracoes";
-import { Button, Campo, LinhaDeControle, Switch, TextArea, TextInput } from "@/components/ui/primitivos";
+import {
+  Button,
+  Campo,
+  LinhaDeControle,
+  MensagemDeAjuda,
+  Switch,
+  TextArea,
+  TextInput,
+} from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { isApiError } from "@/lib/api-error";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
-import { IconeDoApp, MensagemDeAjuda, TituloDaTela, Voltar } from "./pecas";
+import { IconeDoApp, TituloDaTela, Voltar } from "./pecas";
 
 /**
  * Editar aplicativo: ícone, nome, descrição e permissões sugeridas.

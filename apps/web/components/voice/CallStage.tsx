@@ -262,9 +262,10 @@ function Chamando({
             className="absolute h-[132px] w-[132px] animate-ping rounded-full bg-status-positive/20"
           />
           {usuario ? (
-            // `border-background-base-lowest` (#121214) é a superfície mais
-            // escura que o `Avatar` sabe recortar; o palco é `--black` — ver "faltando"
-            <Avatar user={usuario} size="xxl" surface="border-background-base-lowest" />
+            // o palco é preto puro (`bg-black`, linha 111 desta função) — o
+            // `Avatar` já sabe recortar contra `--black` (`FUNDO_DO_SELO`), então
+            // a bolinha usa a cor real do fundo, não mais a aproximação `-lowest`
+            <Avatar user={usuario} size="xxl" surface="border-black" />
           ) : (
             <span className="grid h-[120px] w-[120px] place-items-center rounded-full bg-background-base-lowest">
               <Phone size={44} className="text-text-muted" aria-hidden="true" />
@@ -306,7 +307,7 @@ function ConviteParaEntrar({
         <div className="flex items-center justify-center -space-x-4">
           {estados.slice(0, 3).map((e) => (
             // o anel é a cor do palco (`--black`), que é o que "recorta" um avatar do outro
-            <Avatar key={e.user.id} user={e.user} size="xl" surface="border-background-base-lowest" className="rounded-full ring-4 ring-black" />
+            <Avatar key={e.user.id} user={e.user} size="xl" surface="border-black" className="rounded-full ring-4 ring-black" />
           ))}
         </div>
         <p className="text-lg font-bold text-text-strong">{texto}</p>

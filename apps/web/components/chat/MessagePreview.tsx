@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode, type RefObject } from "react";
-import { displayNameOf, extractFirstUrl, type Message } from "@streamz/shared";
+import { displayNameOf, extractFirstUrl, textoAchatadoDaMensagem, type Message } from "@streamz/shared";
+import { ehComponentsV2, embedsSuprimidos, embedsVisiveis, estaPensando } from "@/components/chat/bot/embed-layout";
 import LinkEmbedCard, { useLinkEmbed } from "@/components/chat/LinkEmbedCard";
+import PensandoDoBot from "@/components/chat/mensagem/PensandoDoBot";
 import { ReferenciaDeResposta } from "@/components/chat/mensagem/ReferenciaDaMensagem";
 import MediaGroup from "@/components/media/MediaGroup";
 import Avatar from "@/components/ui/Avatar";
@@ -58,20 +60,30 @@ export default function MessagePreview({
   aoAbrir?: () => void;
   className?: string;
 }) {
-  // mesma regra da timeline: uma prévia de link só, a da primeira URL
-  const url = message.suppressEmbeds ? null : extractFirstUrl(message.content);
+  const pensando = estaPensando(message);
+  const texto = textoDaPrevia(message);
+  // mesma regra da timeline (`MessageItem`): uma prévia de link só, a da
+  // primeira URL do `content` — e nenhuma em "pensando", em v2 ou com
+  // `SUPPRESS_EMBEDS`
+  const url = pensando || ehComponentsV2(message) || embedsSuprimidos(message) ? null : extractFirstUrl(message.content);
   const embed = useLinkEmbed(url);
-  const vazia = !message.content && message.attachments.length === 0;
+  const vazia = !pensando && !texto.trim() && message.attachments.length === 0;
   const corpoRef = useRef<HTMLDivElement>(null);
-  useRealceDaBusca(corpoRef, realce, message.content);
+  useRealceDaBusca(corpoRef, realce, texto);
+  const corpo = (
+    <>
+      {pensando && <PensandoDoBot nome={displayNameOf(message.author)} />}
+      {texto && <Markdown text={texto} />}
+      {message.attachments.length > 0 && <MediaGroup attachments={message.attachments} />}
+      {embed && <LinkEmbedCard embed={embed} />}
+      {vazia && <span className="italic text-text-muted">(mensagem vazia)</span>}
+    </>
+  );
 
   if (variante === "resultado") {
     return (
       <CartaoDeResultado message={message} aoAbrir={aoAbrir} className={className} corpoRef={corpoRef}>
-        {message.content && <Markdown text={message.content} />}
-        {message.attachments.length > 0 && <MediaGroup attachments={message.attachments} />}
-        {embed && <LinkEmbedCard embed={embed} />}
-        {vazia && <span className="italic text-text-muted">(mensagem vazia)</span>}
+        {corpo}
       </CartaoDeResultado>
     );
   }
@@ -95,10 +107,7 @@ export default function MessagePreview({
         ref={corpoRef}
         className="mt-1 break-words text-sm text-text-default [&_img]:max-w-full [&_video]:max-w-full [&_video]:h-auto"
       >
-        {message.content && <Markdown text={message.content} />}
-        {message.attachments.length > 0 && <MediaGroup attachments={message.attachments} />}
-        {embed && <LinkEmbedCard embed={embed} />}
-        {vazia && <span className="italic text-text-muted">(mensagem vazia)</span>}
+        {corpo}
       </div>
       {contexto?.depois && <Vizinha message={contexto.depois} />}
       {acoes && (
@@ -108,6 +117,33 @@ export default function MessagePreview({
       )}
     </article>
   );
+}
+
+/**
+ * O texto que a prévia mostra (e onde a busca realça).
+ *
+ * Ler só `message.content` deixava vazia, na busca, nas fixadas e na caixa de
+ * entrada, toda mensagem de bot feita só de embed ou de componentes v2 — a tela
+ * dizia "(mensagem vazia)" para uma mensagem que tem texto. O painel não tem os
+ * renderizadores de embed e de componente da timeline, então usa o mesmo texto
+ * achatado da notificação e da lista de conversas (`textoAchatadoDaMensagem`,
+ * `packages/shared/src/mensagens-de-bot.ts`), obedecendo às flags como a
+ * timeline obedece:
+ * - `LOADING`: o `content` é o provisório do servidor e não aparece (quem
+ *   desenha o estado é o `PensandoDoBot`);
+ * - `IS_COMPONENTS_V2`: sem `content` nem embeds, o texto é o dos text
+ *   displays;
+ * - `SUPPRESS_EMBEDS`: os embeds não são desenhados, então também não entram
+ *   no texto (o `embedsVisiveis` já corta os três casos).
+ * Mensagem de humano sai com o próprio `content`, intacto.
+ */
+function textoDaPrevia(message: Message): string {
+  if (estaPensando(message)) return "";
+  return textoAchatadoDaMensagem({
+    content: ehComponentsV2(message) ? "" : message.content,
+    embeds: embedsVisiveis(message),
+    components: message.components,
+  });
 }
 
 /** Botão de canto do cartão (saltar, desafixar, marcar como lida). */
@@ -134,7 +170,7 @@ function Vizinha({ message }: { message: Message }) {
       <Avatar user={message.author} size="xs" />
       <span className="shrink-0 font-medium">{displayNameOf(message.author)}</span>
       <span className="min-w-0 truncate">
-        {message.content || (message.attachments.length > 0 ? "anexo" : "")}
+        {textoDaPrevia(message) || (message.attachments.length > 0 ? "anexo" : "")}
       </span>
     </div>
   );
@@ -233,25 +269,12 @@ function CartaoDeResultado({
   );
 }
 
-/** Nome do realce no registro `CSS.highlights` — o `::highlight()` usa o mesmo. */
-export const NOME_DO_REALCE_DA_BUSCA = "streamz-busca";
-
 /**
- * A regra do realce. `.highlight{background:hsl(var(--yellow-300-hsl)/.3)}` é o
- * termo achado no resultado de busca do Discord (CSS bruto); `--yellow-300` é
- * #fdb833, o mesmo valor do `--status-warning` que já existe nos nossos tokens.
- * Não é a cor de marca: antes pintávamos com o limão a 30%, e o Discord não
- * pinta com o blurple aqui.
- *
- * Vai num `<style>` porque o Tailwind não gera `::highlight()`; o lugar certo é
- * o `globals.css`, que não é deste cartão (ver "faltando" do 2m-busca). Quem
- * mostra resultados renderiza isto uma vez.
+ * Nome do realce no registro `CSS.highlights`. A regra `::highlight(streamz-busca)`
+ * (cor e origem da medida) mora em `app/globals.css` — o Tailwind não gera
+ * `::highlight()` — e o nome dos dois lados precisa bater.
  */
-export function EstiloDoRealceDaBusca() {
-  return (
-    <style>{`::highlight(${NOME_DO_REALCE_DA_BUSCA}){background-color:rgb(var(--status-warning-rgb) / 0.3);color:inherit}`}</style>
-  );
-}
+export const NOME_DO_REALCE_DA_BUSCA = "streamz-busca";
 
 type RegistroDeRealce = { get(nome: string): Set<Range> | undefined; set(nome: string, h: Set<Range>): void };
 

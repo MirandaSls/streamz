@@ -216,7 +216,10 @@ function CartaoDeAnexo({
 /**
  * Botão da barrinha do cartão: 24×24 (`.miniPopover_aa605f` tem 24 de altura),
  * glifo de 20 como o resto das barras de ação medidas no primitivo. No celular
- * vira 32 — ali é o único jeito de agir.
+ * vira 32 — ali é o único jeito de agir. Fundo `hover-selecionado` no desktop
+ * (a mesma família do resto do composer, item 13 de `BotaoDeIcone.tsx`); no
+ * celular a barrinha já fica sempre visível (comentário acima, sem hover para
+ * medir), então fica em `hover` puro.
  */
 function AcaoDoCartao({
   rotulo,
@@ -239,7 +242,7 @@ function AcaoDoCartao({
       icone={icone}
       onClick={onClick}
       tamanho={compacto ? "md" : "sm"}
-      fundo="hover"
+      fundo={compacto ? "hover" : "hover-selecionado"}
       tom={perigo ? "perigo" : undefined}
       ativo={ativo}
     />

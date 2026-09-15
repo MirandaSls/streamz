@@ -1,8 +1,7 @@
 "use client";
 
 import type { UserStatus } from "@streamz/shared";
-import Avatar, { STATUS_LABEL } from "@/components/ui/Avatar";
-import IconeDeStatus from "@/components/ui/IconeDeStatus";
+import Avatar from "@/components/ui/Avatar";
 import { corDoAvatar } from "@/components/ui/avatar-cores";
 import { MoreVertical } from "@/components/ui/icones";
 import { BalaoDeStatus } from "./BalaoDeStatus";
@@ -31,9 +30,10 @@ import { BalaoDeStatus } from "./BalaoDeStatus";
  *   da caixa, por isso a caixa começa em 16 − 6 = 10 e 61 − 6 = 55.
  * - **Selo de status**: disco de 16 com anel de 6, a caixa de 28 passando 2px
  *   da borda da foto. No print, coluna x=1427: disco verde em y=252–267, quatro
- *   pixels acima da base da foto (271). É a geometria do `Avatar` `xl`, repetida
- *   aqui só porque o `Avatar` não tem o fundo de selo para
- *   `--background-surface-high` (ver a entrega do cartão).
+ *   pixels acima da base da foto (271). É a geometria do `Avatar` `xl` — desenhada
+ *   pelo próprio componente (`<Avatar status surface="border-background-surface-high">`),
+ *   que já sabe o fundo do selo para essa superfície (`FUNDO_DO_SELO`, em
+ *   `Avatar.tsx`).
  * - Avatar clicável com véu `--opacity-black-40` no hover, que entra em 150ms
  *   `ease-out` (`.clickable__75742:hover .overlay__75742:after`).
  * - **Botão do banner**: 32 × 32 (`--custom-button-button-sm-height: 32px`,
@@ -113,18 +113,16 @@ export function CabecalhoDoPerfil({
         aria-label={`Ver o perfil completo de ${nome}`}
         className="group absolute left-[10px] top-[55px] z-[1] flex rounded-full border-[6px] border-background-surface-high bg-background-surface-high"
       >
-        <Avatar user={user} size="xl" />
+        {/* selo pelo próprio `Avatar` (não mais desenhado à mão aqui): mesma
+            geometria de antes — `xl` já é disco de 28, anel de 6, deslocado
+            2px — e a mesma superfície `--background-surface-high`, conferida
+            contra o print `2026-08-31 101804` (coluna x=1427: verde em
+            y=252–267, 14px cheios entre os 6px de anel de cada lado). */}
+        <Avatar user={user} status={status} surface="border-background-surface-high" size="xl" />
         <span
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 rounded-full bg-opacity-black-40 opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100"
         />
-        <span
-          role="img"
-          aria-label={STATUS_LABEL[status]}
-          className="absolute -bottom-[2px] -right-[2px] h-7 w-7 rounded-full border-[6px] border-background-surface-high bg-background-surface-high"
-        >
-          <IconeDeStatus status={status} className="h-full w-full" />
-        </span>
       </button>
 
       {aoAbrirKebab && (

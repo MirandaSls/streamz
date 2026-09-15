@@ -31,12 +31,11 @@ import { mensagemDeAuth } from "@/lib/auth-mensagens";
  *   `.helperTextContainer__5a838`, irmão de `.control__5a838`, não filho do
  *   `<label>`; o asterisco de obrigatório (`.required__5a838`) continua
  *   visível ao lado do rótulo com o erro embaixo, o que `FieldLabel` não
- *   fazia. Falta ainda o ícone de "!" de 16px que o Discord põe antes do
- *   texto do erro (mesmo HTML, `<svg fill="var(--text-feedback-critical)">`)
- *   e o peso normal (`text-xs/normal`) em vez do itálico peso 500 que
- *   `Campo` usa — é medida de outro módulo do Discord
- *   (`.errorMessage_b717a1`, cabeçalho de `primitivos/TextInput.tsx`); só o
- *   dono de `primitivos` decide qual dos dois generalizar (ver "faltando").
+ *   fazia. O ícone de "!" de 16px antes do texto e o peso normal
+ *   (`text-xs/normal`, sem itálico) vêm de `estiloDoErro="ajuda"` (cartão
+ *   textinput-e-telas-de-auth; medidas no cabeçalho de
+ *   `primitivos/TextInput.tsx`), no lugar do `.errorMessage_b717a1` itálico
+ *   que o `Campo` usa por padrão nos formulários do app.
  * - Botão: texto fixo "Enviar link" com `carregando` (os três pontos que
  *   deslizam no lugar do texto, `.spinnerItem_a22cb0`, cabeçalho de
  *   `primitivos/Button.tsx`) no lugar de trocar o texto para "Enviando…" —
@@ -94,7 +93,7 @@ export default function ForgotPasswordPage() {
             margin-medium`, css-bruto/351200.*.css) que separa campo e botão
             no formulário de senha do Discord — confirma a medida que já
             tínhamos, não é valor novo. */}
-        <Campo rotulo="E-mail" htmlFor="email" obrigatorio erro={error} className="mb-5">
+        <Campo rotulo="E-mail" htmlFor="email" obrigatorio erro={error} estiloDoErro="ajuda" className="mb-5">
           <TextInput
             id="email"
             name="email"
@@ -120,7 +119,7 @@ export default function ForgotPasswordPage() {
           Enviar link
         </Button>
 
-        <p className="mt-2 text-sm">
+        <p className="mt-2 text-text-sm">
           <Link href="/login" className={linkClass}>
             Voltar ao login
           </Link>

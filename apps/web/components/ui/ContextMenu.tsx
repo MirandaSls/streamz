@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { ChevronRight } from "@/components/ui/icones";
+import { Divider } from "@/components/ui/primitivos";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
 import { isReacoes, isSlider, isSubmenu, useUI, type MenuItem } from "@/stores/ui";
@@ -411,7 +412,9 @@ function Painel({
             // `.separator_c1e9c4`: 1px `--border-subtle`, margem de 8 nos
             // quatro lados (`margin: var(--custom-menu-separator-margin, 8px)`,
             // não só vertical — o padding do rolador já dá o resto do respiro).
-            return <div key={i} role="separator" className="m-2 h-px bg-border-subtle" />;
+            // `Divider` sem `rotulo` é um `<hr>` puro — `role="separator"` é o
+            // papel ARIA implícito do elemento, sem precisar declará-lo.
+            return <Divider key={i} margem={8} />;
           }
           if (isSlider(item)) {
             return <ItemDeslizante key={i} item={item} />;
@@ -436,13 +439,12 @@ function Painel({
             critical` do hover/foco/pressionado — o token certo, não
             `--status-danger` (esse é a bolinha de status, outra coisa).
 
-            `highlight` (usado em "Convidar para o servidor") **não** vira cor
-            de marca: medido no print `124207` desse item, texto #f0f0f0 e
-            ícone #aaabb1 — a mesma cor de um item comum, sem destaque nenhum.
-            O Discord não pinta item de menu com o accent; o `text-brand-500`
-            que existia aqui foi tirado, e `highlight`/`forte` (status do
-            cartão de perfil) caem no mesmo texto e no mesmo hover do item
-            comum, que já eram idênticos entre si.
+            "Convidar para o servidor" **não** vira cor de marca: medido no
+            print `124207` desse item, texto #f0f0f0 e ícone #aaabb1 — a mesma
+            cor de um item comum, sem destaque nenhum. O Discord não pinta
+            item de menu com o accent; o `text-brand-500` que existia aqui foi
+            tirado, e `forte` (status do cartão de perfil) cai no mesmo texto
+            e no mesmo hover do item comum, que já eram idênticos entre si.
           */
           const cor = item.danger
             ? "text-text-feedback-critical hover:bg-background-feedback-critical focus:bg-background-feedback-critical active:bg-background-feedback-critical"
@@ -524,10 +526,12 @@ function Painel({
             >
               {item.icon ? (
                 // Quadro de 20px (`.iconContainer_c1e9c4{width:20px;height:20px}`,
-                // css-bruto/858942…) com o ícone desenhado em 16, não 20: medido
-                // no print `124207` ("Convidar para o servidor"), o traço do
-                // glifo cobre ~13px verticais dentro do quadro — consistente
-                // com 16, não com os 18/20 que saíam antes. Cor fixa
+                // css-bruto/858942…), e o ícone preenche o quadro inteiro
+                // (`.icon_c1e9c4{height:100%;width:100%}`, mesmo arquivo) — não
+                // 16 dentro de 20. Revisão visual mediu o glifo em 19-20px nos
+                // prints 1:1 (`124207`: user-plus em y158-176; `101733`:
+                // engrenagem em x133-152) contra os ~16px que saíam do svg em
+                // 4×4 dentro do quadro de 5×5 daqui. Cor fixa
                 // `--interactive-icon-default` (#abacb2 medido ali, contra
                 // #f0f0f0 do rótulo ao lado): o ícone comum **não** segue a cor
                 // do item, fica sempre nesse cinza — antes herdava o
@@ -542,7 +546,7 @@ function Painel({
                 // seletor de status, com cor própria.
                 <span
                   aria-hidden="true"
-                  className={`grid h-5 w-5 shrink-0 place-items-center [&>svg]:h-4 [&>svg]:w-4 ${
+                  className={`grid h-5 w-5 shrink-0 place-items-center [&>svg]:h-5 [&>svg]:w-5 ${
                     forte
                       ? ""
                       : item.danger

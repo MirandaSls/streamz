@@ -37,6 +37,7 @@ export default function Dialog({
   bodyClassName = "",
   semPadding = false,
   telaCheiaNoCelular = false,
+  centerHeader = false,
   className,
 }: {
   title: string;
@@ -57,6 +58,10 @@ export default function Dialog({
   /** No celular a caixa vira tela cheia, com barra de 56 e seta de voltar
    *  (ver `telaCheiaNoCelular` no `Modal`). */
   telaCheiaNoCelular?: boolean;
+  /** título e descrição centralizados (repassado como `cabecalhoCentralizado`
+   *  ao `Modal`) — as telas "criar"/"personalizar" do assistente de criar
+   *  servidor, que no Discord vêm com o cabeçalho no centro da caixa. */
+  centerHeader?: boolean;
   /** largura (e altura) própria da caixa; sem ela, 480 (`medio`). */
   className?: string;
 }) {
@@ -74,6 +79,7 @@ export default function Dialog({
       classeDoCorpo={bodyClassName}
       semPadding={semPadding}
       telaCheiaNoCelular={telaCheiaNoCelular}
+      cabecalhoCentralizado={centerHeader}
     >
       {children}
     </Modal>
@@ -106,6 +112,7 @@ export function PrimaryButton({
   type = "button",
   danger = false,
   autoFocus = false,
+  carregando = false,
 }: {
   children: ReactNode;
   disabled?: boolean;
@@ -114,6 +121,8 @@ export function PrimaryButton({
   danger?: boolean;
   /** marca este botão como o alvo do foco inicial do modal. */
   autoFocus?: boolean;
+  /** spinner do Discord no lugar do texto — repassado ao `Button`. */
+  carregando?: boolean;
 }) {
   const ehMobile = useEhMobile();
   return (
@@ -123,6 +132,7 @@ export function PrimaryButton({
       type={type}
       onClick={onClick}
       disabled={disabled}
+      carregando={carregando}
       data-autofocus={autoFocus ? "" : undefined}
       className={ehMobile ? ALTURA_DE_TOQUE : ""}
     >
@@ -137,12 +147,14 @@ export function SecondaryButton({
   onClick,
   full = false,
   autoFocus = false,
+  disabled = false,
 }: {
   children: ReactNode;
   onClick?: () => void;
   full?: boolean;
   /** marca este botão como o alvo do foco inicial do modal. */
   autoFocus?: boolean;
+  disabled?: boolean;
 }) {
   const ehMobile = useEhMobile();
   return (
@@ -151,6 +163,7 @@ export function SecondaryButton({
       tamanho="md"
       onClick={onClick}
       larguraTotal={full}
+      disabled={disabled}
       data-autofocus={autoFocus ? "" : undefined}
       className={ehMobile ? ALTURA_DE_TOQUE : ""}
     >

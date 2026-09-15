@@ -3,7 +3,6 @@
 import { displayNameOf, type VoiceStateEvent } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/primitivos";
-import Tooltip from "@/components/ui/Tooltip";
 import {
   LIMITE_DE_AVATARES,
   alemDosAvatares,
@@ -80,10 +79,10 @@ import {
  *   em nenhuma referência (nem catálogo, nem CSS bruto têm o Discord com um
  *   canal de voz visível-mas-sem-`Connect`) — em vez de inventar um texto de
  *   tela novo, o botão vira o mesmo botão **desabilitado** (o `Button` já
- *   cobre a forma: opacidade 50%, sem clique) com um `Tooltip` explicando o
- *   motivo, que é o padrão que o resto do app já usa para isso.
+ *   cobre a forma: opacidade 50%, sem clique) com a dica explicando o
+ *   motivo (`motivoDesabilitado`, que mantém o botão focável).
  * - **hover / foco / desabilitado** do botão: de graça pelo `Button`
- *   primitivo (`--control-secondary-*-hover`, `:focus-visible` global,
+ *   primitivo (`--control-overlay-primary-*-hover`, `:focus-visible` global,
  *   `opacity .5; pointer-events: none` — ver o cabeçalho de `Button.tsx`).
  *   Nada disso é reimplementado aqui.
  */
@@ -147,24 +146,21 @@ export default function VistaDoCanalDeVoz({
             {textoDePresenca(estados.length)}
           </p>
 
-          {/* Sem variante branca no primitivo: o botão do Discord aqui foge de
-              propósito da cor de marca (branco, não blurple/limão), mas o
-              conjunto de `Button` só tem primario/secundario/crítico/positivo/
-              link — `secundario` é o mais próximo (neutro, não citado como
-              marca). Ver "faltando" no cartão m57. */}
-          {podeConectar ? (
-            <Button variante="secundario" tamanho="md" onClick={onEntrar} className="mt-6">
-              Entrar na chamada de voz
-            </Button>
-          ) : (
-            // sem `Permission.CONNECT`: mesma forma, desabilitado, com o motivo
-            // no tooltip — ver "Estados" no cabeçalho do arquivo
-            <Tooltip label="Você não tem permissão para entrar neste canal de voz" side="top">
-              <Button variante="secundario" tamanho="md" disabled className="mt-6">
-                Entrar na chamada de voz
-              </Button>
-            </Tooltip>
-          )}
+          {/* Branco neutro, não a cor de marca: é o `.overlay-primary_a22cb0`
+              do Discord (fundo `--control-overlay-primary-background-*`, texto
+              preto), a variante `overlay-primario` do `Button`. Sem
+              `Permission.CONNECT` é o mesmo botão desabilitado, com o motivo na
+              dica — ver "Estados" no cabeçalho do arquivo. */}
+          <Button
+            variante="overlay-primario"
+            tamanho="md"
+            onClick={onEntrar}
+            disabled={!podeConectar}
+            motivoDesabilitado="Você não tem permissão para entrar neste canal de voz"
+            className="mt-6"
+          >
+            Entrar na chamada de voz
+          </Button>
         </div>
       </div>
     </div>

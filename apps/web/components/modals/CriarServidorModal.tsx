@@ -13,13 +13,9 @@ import { ui, useUI } from "@/stores/ui";
 /**
  * "Criar servidor" / "Entrar em um servidor" — cartão 7a-criar-servidor.
  *
- * Antes as duas ações eram um `PromptDialog` genérico (um campo, Cancelar/Criar
- * — `stores/guilds.ts` `create()`/`joinByCode()`, que continuam existindo mas
- * não são mais chamados daqui: este modal chama a API direto e escreve no
- * `useGuilds` do mesmo jeito que `KickModal`/`BanModal` já fazem
- * (`useGuilds.setState`), porque as duas funções antigas abrem o próprio
- * `ui.prompt()` por dentro — não dava para reusá-las sem reabrir a caixa
- * velha por cima desta).
+ * Antes as duas ações eram um `PromptDialog` genérico (um campo, Cancelar/
+ * Criar): este modal chama a API direto e escreve no `useGuilds` do mesmo
+ * jeito que `KickModal`/`BanModal` já fazem (`useGuilds.setState`).
  *
  * Três telas, na ordem do Discord (`modal-criar-servidor.webp`, referência
  * `desenvolvedores/imagens/servidor-e-comunidade/` — proporção e ordem, escala
@@ -191,6 +187,7 @@ export default function CriarServidorModal({ tela: telaInicial = "criar" }: { te
         title="Crie seu servidor"
         description="Seu servidor é onde você e seus amigos se encontram. Crie o seu e comece a conversar."
         onClose={closeModal}
+        centerHeader
       >
         <button
           type="button"
@@ -223,6 +220,7 @@ export default function CriarServidorModal({ tela: telaInicial = "criar" }: { te
         title="Personalize seu servidor"
         description="Dê ao seu novo servidor um nome e um ícone. Você pode mudar isso quando quiser."
         onClose={closeModal}
+        centerHeader
         footer={
           <div className="flex w-full items-center justify-between">
             <Button variante="neutro" disabled={carregando} onClick={() => setTela("criar")}>

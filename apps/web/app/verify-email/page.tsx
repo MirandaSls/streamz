@@ -126,7 +126,7 @@ export default function VerifyEmailPage() {
         reenviar={reenviar}
         aviso={aviso}
       />
-      <p className="mt-4 text-center text-sm">
+      <p className="mt-4 text-center text-text-sm">
         <Link href="/app" className={linkClass}>
           Continuar sem confirmar agora
         </Link>
@@ -159,7 +159,7 @@ function PedirNovoLink({
       noValidate
     >
       {!autenticado && (
-        <Campo rotulo="E-mail da conta" htmlFor="email" obrigatorio className="mb-5">
+        <Campo rotulo="E-mail da conta" htmlFor="email" obrigatorio estiloDoErro="ajuda" className="mb-5">
           <TextInput
             id="email"
             type="email"
@@ -172,7 +172,7 @@ function PedirNovoLink({
       )}
 
       {aviso && (
-        <p role="status" aria-live="polite" className="mb-3 text-sm text-text-muted">
+        <p role="status" aria-live="polite" className="mb-3 text-text-sm text-text-muted">
           {aviso}
         </p>
       )}

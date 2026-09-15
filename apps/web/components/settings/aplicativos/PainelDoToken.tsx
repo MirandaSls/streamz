@@ -3,9 +3,8 @@
 import { useState } from "react";
 import type { TokenCriado } from "@streamz/shared";
 import { Check, Copy } from "@/components/ui/icones";
-import { Button, TextInput } from "@/components/ui/primitivos";
+import { Button, MensagemDeAjuda, TextInput } from "@/components/ui/primitivos";
 import { dataCompleta } from "@/lib/format";
-import { MensagemDeAjuda } from "./pecas";
 
 /**
  * O painel que mostra o token em claro — **uma vez**.
