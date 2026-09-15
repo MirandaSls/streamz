@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Entitlements do `.app` de macOS, passados ao `codesign` pelo
+	  `bundle.macOS.entitlements` do `tauri.macos.conf.json`.
+
+	  Por que existem mesmo sem Developer ID: o `hardenedRuntime` está ligado
+	  (padrão do Tauri, e requisito da notarização quando houver conta), e com
+	  o runtime endurecido o acesso a microfone e câmera exige estes dois
+	  entitlements **além** dos textos do `Info.macos.plist`. Sem eles o
+	  sistema recusa a captura mesmo com a permissão concedida nos Ajustes.
+
+	  O que NÃO está aqui, de propósito:
+	  - `com.apple.security.cs.allow-jit`: o JavaScript roda no processo
+	    WebContent do WebKit, assinado pela Apple, não no nosso binário;
+	  - `com.apple.security.app-sandbox` e `network.client`: o app não é
+	    sandboxed (não vai para a Mac App Store), então rede não precisa de
+	    entitlement.
+	-->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+	<key>com.apple.security.device.camera</key>
+	<true/>
+</dict>
+</plist>

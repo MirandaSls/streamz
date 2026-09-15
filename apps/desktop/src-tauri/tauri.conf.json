@@ -87,7 +87,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://api.streamz.chat/api/updates/{{target}}/{{arch}}/{{current_version}}"
+        "https://api.streamz.chat/api/updates/{{target}}/{{arch}}/{{current_version}}?bundle_type={{bundle_type}}"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFFNjczOThFNERENUNCQUEKUldTcXk5Vk5qamxuSHBweUdZdVNwUzFpd1Bld3hwVklQNVVnVkdBZFZwN0QrYzBtWEJhYkNpaHYK",
       "windows": {
