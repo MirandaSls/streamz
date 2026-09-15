@@ -1,396 +1,372 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  DOWNLOAD_PLATAFORMAS,
-  rotuloPlataforma,
-  type DownloadCatalogo,
-  type DownloadPlataforma,
-} from "@streamz/shared";
-import AuthCard, {
-  FieldLabel,
-  inputClass,
-  linkClass,
-  submitClass,
-} from "@/components/auth/AuthCard";
-import { api, isApiError } from "@/lib/api";
-import { API_URL } from "@/lib/config";
+import { rotuloPlataforma, type DownloadCatalogo, type DownloadDisponivel } from "@streamz/shared";
+import MarcaLockup from "@/components/ui/MarcaLockup";
+import { Download, RefreshCw } from "@/components/ui/icones";
+import { api } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
+import { BotaoDaPagina, LinkDaPagina } from "@/components/download/BotaoDaPagina";
+import { ComposicaoDoApp } from "@/components/download/ComposicaoDoApp";
+import EtapaDaSenha from "@/components/download/EtapaDaSenha";
+import FundoDoTopo from "@/components/download/FundoDoTopo";
+import {
+  ID_DO_TERMINAL_MAC,
+  InstalarPeloTerminal,
+  notaDeInstalacao,
+} from "@/components/download/InstalacaoNoSistema";
+import { SecaoDePlataformas } from "@/components/download/SecaoDePlataformas";
+import {
+  dataDoInstalador,
+  detectarSistema,
+  disponivelPara,
+  ofertaDoTopo,
+  plataformaDaUrl,
+  plataformasPorExtenso,
+  type EstadoDoCatalogo,
+  type OfertaDoTopo,
+  type SistemaDetectado,
+} from "@/components/download/plataformas";
 
 /**
- * Download do app de desktop, protegido por senha única.
+ * Download dos apps, no molde da página de download do Discord
+ * (`referencias-discord/publico/<perfil>/15-download-inteira.png`): topo com
+ * título grande, subtítulo com as plataformas e o botão "Baixar para <sistema
+ * detectado>", a imagem do app, e uma seção por família de plataforma abaixo.
  *
- * É a **raiz do site** (`streamz.chat`), montada por `app/page.tsx` — quem
- * chega pelo endereço puro quer o app, e quem quer o chat no navegador tem o
- * atalho "Abrir no navegador" logo abaixo do formulário. `/download` só
- * redireciona para cá, para não quebrar o link gravado em versões antigas.
+ * **A proteção por senha é a mesma da página antiga.** Nenhum botão daqui
+ * baixa nada: todos abrem a etapa da senha (`EtapaDaSenha`), que manda a senha
+ * para `POST /api/downloads/token` e só então navega para o link que a API
+ * devolve. O catálogo (`GET /api/downloads`) diz só para quais sistemas existe
+ * instalador, com tamanho e data — sem nome de arquivo nem URL.
  *
- * A senha **não** é conferida aqui: esta tela só a envia. Quem decide é
- * `POST /api/downloads/token`, e o arquivo só sai por uma rota que exige o
- * token que essa checagem emite — abrir o DevTools e chamar a função de
- * sucesso na mão não produz nada, porque o link ainda não existe.
+ * **É a raiz do site no navegador** (`streamz.chat`), montada por
+ * `app/page.tsx` — quem chega pelo endereço puro quer o app. Por isso quem só
+ * quer o chat tem "Abrir no navegador" logo abaixo do botão principal (sem ele
+ * teria de saber `/app` de cor), e o "Entrar" do cabeçalho vai a `/login`, não
+ * a `/`, que é esta mesma página. `/download` só redireciona para cá.
  *
- * O seletor de sistema vem do catálogo (`GET /api/downloads`), que diz para
- * quais plataformas existe instalador. Sem isso a pessoa escolheria "macOS",
- * digitaria a senha certa e receberia um erro — culpa do formulário, não dela.
+ * Plataformas: as de `DOWNLOAD_PLATAFORMAS` (windows, macos, linux, android —
+ * o android é o `.apk` instalado à mão, não a Play). Sem instalador publicado,
+ * o botão fica "em breve". iOS não existe: nenhum botão de loja.
+ *
+ * Medidas do topo (capturas com escala conhecida em `publico/`: desktop 1440
+ * @2x, Pixel 7 412 @2,625):
+ * - **Título**: versal de 50 e passo de 65 no desktop (coluna x=1135: "B" em
+ *   y=367–467 @2x; o "D" da segunda linha começa em y=497) → 70px com a versal
+ *   de 0,714 da Noto Sans, `leading-[65px]`. Pixel 7: versal de 28 (74px
+ *   @2,625, x=310 y=309–382) e passo de 40 (segunda linha em y=414) → 40px/40.
+ *   Caixa alta em `font-headline font-extrabold` (Noto Sans 800 no lugar da ABC
+ *   Ginto Nord, design.md). Largura do bloco no desktop: x=655–2228 @2x → ~790.
+ * - **Subtítulo**: passo de 26 no desktop (linhas em y=945 e 997 @2x) e haste
+ *   mais alta de 29px @2x (ascendente, ~14,5) → 20px, `text-text-lg` com
+ *   `leading-[26px]`. Pixel 7: passo de 22 e haste de 30px @2,625 (11,4) →
+ *   16px, `leading-[22px]`. Cor: branco sobre o degradê → `text-text-default`.
+ * - **Ritmo**: título → subtítulo ≈24; subtítulo → botão ≈40 (base do
+ *   subtítulo em y≈1015 @2x, botão em 1106); botão → imagem 120 no desktop
+ *   (botão termina em y=601 CSS, imagem começa em ≈722) e ≈56 no Pixel 7.
+ * - **Cabeçalho**: logo a 41 da esquerda e "Entrar" a 40 da direita, centro da
+ *   linha em y≈60 (desktop); no Pixel 7 o centro fica em y≈31. Aqui 120 e 64
+ *   de altura. O menu de links do Discord (Nitro, Descobrir, Carreiras…) não
+ *   tem par no Streamz e não entra; no celular, sem menu, some o hambúrguer.
+ * - **Topo**: o título começa ≈56 abaixo do cabeçalho no desktop (versal em
+ *   y=183) e ≈48 no Pixel 7 (versal em y≈118).
  */
 export default function PaginaDeDownload() {
-  const [catalogo, setCatalogo] = useState<DownloadCatalogo | null>(null);
-  const [plataforma, setPlataforma] = useState<DownloadPlataforma | null>(null);
-  const [senha, setSenha] = useState("");
-  const [erro, setErro] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [baixando, setBaixando] = useState<string | null>(null);
+  const [estado, setEstado] = useState<EstadoDoCatalogo>({ tipo: "carregando" });
+  const [sistema, setSistema] = useState<SistemaDetectado>(null);
+  const [escolhido, setEscolhido] = useState<DownloadDisponivel | null>(null);
+  // a cada "tentar de novo" o efeito do catálogo roda outra vez
+  const [tentativa, setTentativa] = useState(0);
 
   useEffect(() => {
     let vivo = true;
+    setEstado({ tipo: "carregando" });
     api
       .downloadCatalogo()
-      .then((c) => {
-        if (!vivo) return;
-        setCatalogo(c);
-        // pré-seleciona o sistema de quem abriu, mas só se houver build para
-        // ele — caso contrário a primeira opção disponível
-        const detectada = detectarPlataforma();
-        const tem = (p: DownloadPlataforma) =>
-          c.disponiveis.some((d) => d.plataforma === p);
-        setPlataforma(
-          detectada && tem(detectada)
-            ? detectada
-            : (c.disponiveis[0]?.plataforma ?? detectada),
-        );
+      .then((catalogo) => {
+        if (vivo) setEstado({ tipo: "pronto", catalogo });
       })
       .catch(() => {
-        if (vivo) setCatalogo({ configurado: true, disponiveis: [] });
+        // a página antiga tratava a falha como "nenhum instalador" e deixava
+        // todos os botões apagados sem dizer por quê; agora é um estado próprio,
+        // com "tentar de novo"
+        if (vivo) setEstado({ tipo: "erro" });
       });
     return () => {
       vivo = false;
     };
+  }, [tentativa]);
+
+  // `navigator` e `location` só existem no cliente (a web é exportada estática)
+  useEffect(() => {
+    setSistema(
+      plataformaDaUrl(window.location.search) ??
+        detectarSistema(navigator.userAgent, navigator.maxTouchPoints),
+    );
   }, []);
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (loading || !plataforma) return;
-    setErro(null);
-    setLoading(true);
-    try {
-      const autorizado = await api.downloadAutorizar(senha, plataforma);
-      // navegação direta: o browser assume a transferência (barra de progresso,
-      // pausar, retomar). Um fetch+blob teria de segurar o instalador inteiro
-      // na memória da aba antes de salvar.
-      window.location.href = autorizado.url;
-      setBaixando(autorizado.filename);
-      setSenha("");
-    } catch (err) {
-      setErro(mensagemDeErro(err));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  if (catalogo?.configurado === false) {
-    return (
-      <AuthCard
-        title="Download indisponível"
-        subtitle="Este servidor ainda não publicou o app de desktop. Enquanto isso, dá para usar o Streamz no navegador."
-      >
-        <Link href="/app" className={`${submitClass} grid place-items-center`}>
-          Abrir no navegador
-        </Link>
-      </AuthCard>
-    );
-  }
-
-  if (baixando) {
-    return (
-      <AuthCard
-        title="O download começou"
-        subtitle={`Se nada aconteceu, o navegador pode ter bloqueado — informe a senha de novo para gerar um link novo (${baixando}).`}
-      >
-        <button
-          type="button"
-          onClick={() => setBaixando(null)}
-          className={submitClass}
-        >
-          Baixar de novo
-        </button>
-        <p className="mt-4 text-center text-sm">
-          <Link href="/app" className={linkClass}>
-            Abrir no navegador
-          </Link>
-        </p>
-      </AuthCard>
-    );
-  }
-
-  const disponivel = (p: DownloadPlataforma) =>
-    catalogo?.disponiveis.some((d) => d.plataforma === p) ?? false;
-  const escolhido = catalogo?.disponiveis.find((d) => d.plataforma === plataforma);
-  const nota = escolhido && notaDePlataforma(escolhido.plataforma);
+  const tentarDeNovo = useCallback(() => setTentativa((n) => n + 1), []);
+  const catalogo = estado.tipo === "pronto" ? estado.catalogo : null;
+  const oferta = ofertaDoTopo(estado, sistema);
+  const carregando = estado.tipo === "carregando";
 
   return (
-    <AuthCard
-      title="Baixar o Streamz"
-      subtitle="O app ainda é fechado. Informe a senha de acesso para baixar."
-    >
-      <form onSubmit={onSubmit} noValidate>
-        <FieldLabel htmlFor="plataforma-windows">Sistema</FieldLabel>
-        <div
-          role="radiogroup"
-          aria-label="Sistema operacional"
-          // duas colunas desde que o Android entrou: quatro botões numa grade
-          // de três deixavam um sozinho na segunda linha, com o dobro da
-          // largura dos outros
-          className="mb-5 grid grid-cols-2 gap-2"
+    <div className="min-h-[100dvh] bg-background-base-lowest text-text-default">
+      <div className="relative">
+        <FundoDoTopo />
+
+        {/* Celular: as áreas seguras entram no padding (o `viewportFit: "cover"`
+            do layout faz o `env()` responder), para a marca não cair atrás do
+            entalhe nem, deitado, atrás da câmera. */}
+        <header className="relative mx-auto flex h-[120px] max-w-[1920px] items-center justify-between px-10 celular:h-[calc(64px+env(safe-area-inset-top))] celular:pl-[max(1.5rem,env(safe-area-inset-left))] celular:pr-[max(1.5rem,env(safe-area-inset-right))] celular:pt-[env(safe-area-inset-top)]">
+          <Link href="/" aria-label="Streamz, início" className="flex min-h-[44px] items-center rounded-lg">
+            {/* logo do Discord: ~145×22 nas duas capturas; o símbolo de 22 dá a
+                mesma altura */}
+            <MarcaLockup size={22} className="text-text-strong" />
+          </Link>
+          <LinkDaPagina href="/login" medida="compacto">
+            Entrar
+          </LinkDaPagina>
+        </header>
+
+        <section
+          aria-labelledby="download-titulo"
+          className="relative flex flex-col items-center px-10 pt-[56px] text-center celular:pl-[max(1.5rem,env(safe-area-inset-left))] celular:pr-[max(1.5rem,env(safe-area-inset-right))] celular:pt-[48px]"
         >
-          {DOWNLOAD_PLATAFORMAS.map((p) => {
-            const ativo = p === plataforma;
-            const tem = disponivel(p);
-            return (
-              <button
-                key={p}
-                id={`plataforma-${p}`}
-                type="button"
-                role="radio"
-                aria-checked={ativo}
-                disabled={loading || (!!catalogo && !tem)}
-                onClick={() => setPlataforma(p)}
-                className={`h-10 rounded-[3px] border text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 celular:h-[48px] ${
-                  ativo
-                    ? "border-accent bg-accent text-accent-ink"
-                    : "border-border-strong bg-void text-txt-normal hover:border-border-strong-hover"
-                }`}
-              >
-                {rotuloPlataforma(p)}
-              </button>
-            );
-          })}
-        </div>
-
-        {escolhido?.plataforma === "macos" && <InstalarPeloTerminal />}
-
-        <FieldLabel htmlFor="senha" invalid={!!erro} hint={erro ?? undefined}>
-          Senha de acesso
-        </FieldLabel>
-        <input
-          id="senha"
-          name="senha"
-          type="password"
-          autoComplete="off"
-          value={senha}
-          onChange={(e) => setSenha(e.target.value)}
-          disabled={loading}
-          aria-invalid={erro ? true : undefined}
-          className={inputClass}
-          autoFocus
-        />
-
-        <p role="alert" aria-live="polite" className="sr-only">
-          {erro}
-        </p>
-
-        <button
-          type="submit"
-          disabled={loading || !senha.trim() || !plataforma}
-          className={submitClass}
-        >
-          {loading ? "Verificando…" : "Baixar"}
-        </button>
-
-        {escolhido && (
-          <p className="mt-3 text-center text-sm text-txt-muted">
-            {rotuloPlataforma(escolhido.plataforma)} · {formatBytes(escolhido.tamanho)}
+          <h1
+            id="download-titulo"
+            className="max-w-[790px] font-headline text-[70px] font-extrabold uppercase leading-[65px] text-text-strong celular:text-[40px] celular:leading-[40px]"
+          >
+            Baixe o app do Streamz
+          </h1>
+          <p className="mt-6 max-w-[800px] text-text-lg leading-[26px] text-text-default celular:text-text-md celular:leading-[22px]">
+            Chat de comunidade com voz, vídeo e compartilhamento de tela. Para {plataformasPorExtenso()}.
           </p>
-        )}
-        {nota && <p className="mt-2 text-center text-xs text-txt-muted">{nota}</p>}
 
-        {/* A raiz deixou de mandar direto para `/app`: sem este atalho, quem
-            só usa o chat no navegador teria de saber o endereço de cor. */}
-        <p className="mt-4 text-center text-sm text-txt-muted">
-          Prefere não instalar?{" "}
-          <Link href="/app" className={linkClass}>
-            Abrir no navegador
-          </Link>
-        </p>
-      </form>
-    </AuthCard>
-  );
-}
+          {/* `celular:w-full`: dá largura definida ao contêiner no celular, para
+              a coluna de botões do estado "lista" (abaixo) poder ser
+              `w-full` de verdade — porcentagem de largura só resolve contra um
+              pai com largura definida, e sem isto os três botões ficavam cada
+              um do tamanho do próprio texto. Não muda nada nos outros estados
+              (um botão só), que continuam centrados pelo `items-center`. */}
+          <div className="mt-10 flex min-h-[48px] flex-col items-center celular:w-full">
+            <AcaoDoTopo oferta={oferta} aoEscolher={setEscolhido} aoTentarDeNovo={tentarDeNovo} />
+          </div>
 
-/** Sistema provável de quem abriu a página, só para pré-selecionar o seletor. */
-function detectarPlataforma(): DownloadPlataforma | null {
-  if (typeof navigator === "undefined") return null;
-  const ua = navigator.userAgent;
-  if (/Windows/i.test(ua)) return "windows";
-  if (/Mac OS X|Macintosh/i.test(ua)) return "macos";
-  // Android **antes** de Linux: o UA de um Android também casa com "Linux", e
-  // trocar a ordem daria o instalador errado a todo telefone. O iPhone
-  // continua sem opção — não há `.ipa` para instalar à mão.
-  if (/Android/i.test(ua)) return "android";
-  if (/iPhone|iPad|iPod/i.test(ua)) return null;
-  if (/Linux|X11/i.test(ua)) return "linux";
-  return null;
-}
+          {/* Fora do `AcaoDoTopo` só nos estados em que ele não oferece o
+              navegador como ação principal (sem instalador, ele já oferece). */}
+          {oferta.tipo !== "nao-configurado" && oferta.tipo !== "vazio" ? (
+            <p className="mt-4 text-text-sm text-text-muted">
+              Prefere não instalar?{" "}
+              <Link href="/app" className="font-medium text-text-link hover:underline celular:inline-flex celular:min-h-[44px] celular:items-center">
+                Abrir no navegador
+              </Link>
+            </p>
+          ) : null}
 
-/** Base da API de produção — o padrão embutido no `public/instalar-mac.sh`. */
-const API_PADRAO_DO_INSTALADOR = "https://api.streamz.chat";
-
-/**
- * Aspeia um valor para entrar num comando de shell com segurança.
- *
- * `origem` e `API_URL` não são digitados por quem vê a tela — vêm de
- * `window.location.origin` e de configuração —, mas iam sem aspas para dentro
- * do `curl`/`STREAMZ_API=…`: um valor com espaço ou `&` quebraria o comando (e,
- * num ambiente que os controlasse, injetaria outro). Aspas simples, com o
- * único caractere que elas não escapam (`'`) fechado e reaberto por fora.
- */
-function aspas(valor: string): string {
-  return `'${valor.replaceAll("'", `'\\''`)}'`;
-}
-
-/**
- * Instalação do macOS pelo Terminal — a opção principal nessa plataforma.
- *
- * O app não é notarizado (não há conta Apple Developer). O `.dmg` baixado pelo
- * navegador ganha `com.apple.quarantine` e o Gatekeeper barra a primeira
- * abertura; o `curl` não põe quarentena, então pelo Terminal o app abre direto.
- * Não é um atalho que pula verificação: o `instalar-mac.sh` confere o selo da
- * assinatura e o identificador antes de copiar (e o certificado, com o pin).
- *
- * O endereço do script sai de `window.location.origin` para que homologação e
- * dev copiem o comando do próprio ambiente — o arquivo mora em `public/`, então
- * toda origem que serve esta página serve o script. A API só entra no comando
- * quando não é a de produção, e entra do lado do `bash`: um
- * `STREAMZ_API=… curl … | bash` definiria a variável para o `curl`, não para
- * quem a lê.
- */
-function InstalarPeloTerminal() {
-  const [origem, setOrigem] = useState("https://streamz.chat");
-  const [copiado, setCopiado] = useState<"sim" | "falhou" | null>(null);
-  const codigoRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    // no efeito, não no render: a página é pré-renderizada sem `window`, e ler
-    // a origem durante o render desencontraria a hidratação. Fora de http(s)
-    // (o `tauri://` do app de desktop) não há script servido — fica o padrão.
-    const { protocol, origin } = window.location;
-    if (protocol === "https:" || protocol === "http:") setOrigem(origin);
-  }, []);
-
-  useEffect(() => {
-    if (!copiado) return;
-    const t = setTimeout(() => setCopiado(null), 2500);
-    return () => clearTimeout(t);
-  }, [copiado]);
-
-  const variavelDaApi =
-    API_URL === API_PADRAO_DO_INSTALADOR ? "" : `STREAMZ_API=${aspas(API_URL)} `;
-  const comando = `curl -fsSL ${aspas(origem)}/instalar-mac.sh | ${variavelDaApi}bash`;
-
-  async function copiar() {
-    try {
-      await navigator.clipboard.writeText(comando);
-      setCopiado("sim");
-    } catch {
-      // `navigator.clipboard` só existe em contexto seguro (https/localhost) e
-      // pode ser negado; sem ele, deixa o texto selecionado para o Cmd+C
-      const el = codigoRef.current;
-      const selecao = window.getSelection();
-      if (el && selecao) {
-        const faixa = document.createRange();
-        faixa.selectNodeContents(el);
-        selecao.removeAllRanges();
-        selecao.addRange(faixa);
-      }
-      setCopiado("falhou");
-    }
-  }
-
-  return (
-    <div className="mb-5" role="group" aria-labelledby="terminal-mac-titulo">
-      <p
-        id="terminal-mac-titulo"
-        className="mb-2 font-display text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary"
-      >
-        Instalar pelo Terminal (recomendado)
-      </p>
-      <div className="flex gap-2">
-        <code
-          ref={codigoRef}
-          className="flex h-10 min-w-0 flex-1 select-all items-center overflow-x-auto whitespace-nowrap rounded-[3px] border border-black/30 bg-void px-2.5 font-mono text-xs text-txt-normal celular:h-[48px]"
-        >
-          {comando}
-        </code>
-        <button
-          type="button"
-          onClick={copiar}
-          className="h-10 shrink-0 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover celular:h-[48px]"
-        >
-          {copiado === "sim" ? "Copiado!" : "Copiar"}
-        </button>
+          <ComposicaoDoApp className="mt-[120px] max-w-[944px] celular:mt-[56px] celular:max-w-[560px]" />
+        </section>
       </div>
-      <p className="mt-2 text-xs text-txt-muted">
-        {copiado === "falhou"
-          ? "Não deu para copiar sozinho — o comando ficou selecionado, use Cmd+C."
-          : "Pelo Terminal o app abre direto, sem o aviso do macOS. Ele pede a mesma senha."}
-      </p>
-      <p role="status" aria-live="polite" className="sr-only">
-        {copiado === "sim" ? "Comando copiado" : ""}
-      </p>
-      <p className="mt-4 text-center text-xs uppercase tracking-[0.02em] text-txt-muted">
-        ou baixe o .dmg
-      </p>
+
+      {/* No celular a seção "celular" vem primeiro, como no Discord do iPhone
+          (`web-mobile-ios/15-download-inteira.png`: o cartão do telefone logo
+          depois da imagem do app, o de computador só abaixo). */}
+      <main
+        id="plataformas"
+        className="flex flex-col gap-[120px] px-10 pb-[120px] pt-[232px] celular:gap-[80px] celular:pb-[80px] celular:pl-[max(1.5rem,env(safe-area-inset-left))] celular:pr-[max(1.5rem,env(safe-area-inset-right))] celular:pt-[112px]"
+      >
+        <SecaoDePlataformas
+          id="computador"
+          titulo="Baixe para computador"
+          texto="O Streamz numa janela própria, com notificações do sistema e atualização automática."
+          imagem="computador"
+          carregando={carregando}
+          aoEscolher={setEscolhido}
+          plataformas={(["windows", "macos", "linux"] as const).map((p) => ({
+            plataforma: p,
+            disponivel: disponivelPara(catalogo, p),
+          }))}
+          extra={<InstrucoesDoComputador catalogo={catalogo} />}
+        />
+        <SecaoDePlataformas
+          id="celular"
+          titulo="Baixe para celular"
+          texto="O app de Android é um .apk instalado à mão, fora da Play: abra o arquivo baixado e permita a instalação quando o sistema pedir. Depois disso ele se atualiza sozinho."
+          imagem="celular"
+          imagemAntes
+          className="celular:order-first"
+          carregando={carregando}
+          aoEscolher={setEscolhido}
+          plataformas={[{ plataforma: "android", disponivel: disponivelPara(catalogo, "android") }]}
+          nota="Para iPhone e iPad ainda não há app."
+        />
+      </main>
+
+      <footer className="border-t border-border-subtle px-10 py-10 celular:pb-[max(2.5rem,env(safe-area-inset-bottom))] celular:pl-[max(1.5rem,env(safe-area-inset-left))] celular:pr-[max(1.5rem,env(safe-area-inset-right))]">
+        <div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-6">
+          <MarcaLockup size={22} className="text-text-strong" />
+          <nav aria-label="Conta" className="flex gap-2">
+            <Link
+              href="/login"
+              className="inline-flex h-[44px] items-center rounded-lg px-3 text-text-md font-medium text-text-link hover:underline"
+            >
+              Entrar
+            </Link>
+            <Link
+              href="/register"
+              className="inline-flex h-[44px] items-center rounded-lg px-3 text-text-md font-medium text-text-link hover:underline"
+            >
+              Criar conta
+            </Link>
+          </nav>
+        </div>
+      </footer>
+
+      {escolhido ? <EtapaDaSenha disponivel={escolhido} aoFechar={() => setEscolhido(null)} /> : null}
     </div>
   );
 }
 
-/**
- * Instrução curta de pós-download, só para as plataformas onde o sistema
- * atravessa no caminho — Windows e Android abrem o instalador de um duplo
- * clique/toque normal e não precisam de nada aqui.
- *
- * O `.dmg` do macOS é **universal** (Intel e Apple Silicon/M1–M4): o
- * `User-Agent` não diz o chip, então não haveria como escolher build por ele
- * mesmo se quiséssemos — `detectarPlataforma` não muda por causa disso.
- *
- * O desvio do Gatekeeper mudou no macOS 15 (Sequoia): o "botão direito →
- * Abrir" deixou de liberar app não notarizado, e o caminho passou a ser Ajustes
- * do Sistema → Privacidade e Segurança → "Abrir Mesmo Assim", que só aparece
- * depois de uma tentativa de abrir (e vale por cerca de uma hora). Fontes:
- * - https://developer.apple.com/news/?id=saqachfa ("Updates to runtime
- *   protection in macOS Sequoia": "users will no longer be able to
- *   Control-click to override Gatekeeper")
- * - https://support.apple.com/guide/mac-help/mh40616/15.0/mac/15.0 (15: só
- *   Privacidade e Segurança → Abrir Mesmo Assim)
- * - https://support.apple.com/guide/mac-help/mh40616/14.0/mac/14.0 (14 e
- *   anteriores: Control-clique no app → Abrir)
- */
-function notaDePlataforma(p: DownloadPlataforma): ReactNode | null {
-  if (p === "macos") {
-    return (
-      <>
-        Arraste para Aplicativos. Na primeira abertura o macOS bloqueia (o app
-        não é notarizado pela Apple): no macOS 15 ou mais novo, tente abrir e
-        vá em Ajustes do Sistema → Privacidade e Segurança → Abrir Mesmo Assim;
-        no 12 ao 14, clique com o botão direito no app → Abrir.
-      </>
-    );
+/** O que fica embaixo do subtítulo, para cada estado do catálogo. */
+function AcaoDoTopo({
+  oferta,
+  aoEscolher,
+  aoTentarDeNovo,
+}: {
+  oferta: OfertaDoTopo;
+  aoEscolher: (disponivel: DownloadDisponivel) => void;
+  aoTentarDeNovo: () => void;
+}) {
+  switch (oferta.tipo) {
+    case "carregando":
+      return (
+        <BotaoDaPagina disabled aria-busy icone={<Download size={24} />}>
+          Carregando…
+        </BotaoDaPagina>
+      );
+
+    case "erro":
+      return (
+        <>
+          <p role="alert" className="mb-4 max-w-[480px] text-text-md text-text-feedback-critical">
+            Não foi possível carregar a lista de instaladores. Confira a conexão e tente de novo.
+          </p>
+          <BotaoDaPagina onClick={aoTentarDeNovo} icone={<RefreshCw size={20} />}>
+            Tentar de novo
+          </BotaoDaPagina>
+        </>
+      );
+
+    case "nao-configurado":
+      return (
+        <>
+          <p className="mb-4 max-w-[480px] text-text-md text-text-default">
+            <strong className="font-semibold text-text-strong">Download indisponível.</strong> Este servidor
+            ainda não publicou o app de desktop. Enquanto isso, dá para usar o Streamz no navegador.
+          </p>
+          <LinkDaPagina href="/app">Abrir no navegador</LinkDaPagina>
+        </>
+      );
+
+    case "vazio":
+      return (
+        <>
+          <p className="mb-4 max-w-[480px] text-text-md text-text-default">
+            Nenhum instalador foi publicado ainda. Enquanto isso, dá para usar o Streamz no navegador.
+          </p>
+          <LinkDaPagina href="/app">Abrir no navegador</LinkDaPagina>
+        </>
+      );
+
+    case "principal": {
+      const { disponivel } = oferta;
+      const data = dataDoInstalador(disponivel.atualizadoEm);
+      return (
+        <>
+          <BotaoDaPagina icone={<Download size={24} />} onClick={() => aoEscolher(disponivel)}>
+            Baixar para {rotuloPlataforma(disponivel.plataforma)}
+          </BotaoDaPagina>
+          <p className="mt-3 text-text-sm text-text-muted">
+            {formatBytes(disponivel.tamanho)}
+            {data ? ` · atualizado em ${data}` : ""}
+          </p>
+          {/* No Mac o Terminal é o caminho recomendado (sem o bloqueio do
+              Gatekeeper), mas o bloco com o comando mora na seção "computador":
+              no topo ele quebraria o desenho do Discord, e duas cópias dariam
+              dois ids iguais. Daqui só a âncora. */}
+          {disponivel.plataforma === "macos" ? (
+            <a
+              href={`#${ID_DO_TERMINAL_MAC}`}
+              className="mt-2 text-text-sm font-medium text-text-link hover:underline celular:inline-flex celular:min-h-[44px] celular:items-center"
+            >
+              Recomendado no Mac: instalar pelo Terminal
+            </a>
+          ) : null}
+        </>
+      );
+    }
+
+    case "lista": {
+      const { sistema, disponiveis } = oferta;
+      const aviso =
+        sistema === "ios"
+          ? "Ainda não há app para iPhone e iPad. Escolha outra plataforma:"
+          : sistema
+            ? `Ainda não há instalador para ${rotuloPlataforma(sistema)}. Escolha outra plataforma:`
+            : "Escolha a plataforma:";
+      return (
+        <>
+          <p className="mb-4 max-w-[480px] text-text-md text-text-default">{aviso}</p>
+          {/* No desktop os botões ficam numa linha centralizada — cada um do
+              tamanho do próprio texto, como o resto da página. No celular isso
+              empilhava três larguras diferentes centralizadas uma sob a outra
+              (visto na captura `m-download.png`); a lista de plataformas do
+              Discord no celular (`publico/web-mobile-ios/15-download-*.png`)
+              é uma coluna de botões da largura da coluna, não do texto — por
+              isso `celular:w-full` em cada botão dentro de uma coluna
+              (`celular:flex-col celular:items-stretch`). */}
+          <div className="flex flex-wrap justify-center gap-4 celular:w-full celular:flex-col celular:items-stretch celular:gap-2">
+            {disponiveis.map((d) => (
+              <BotaoDaPagina
+                key={d.plataforma}
+                icone={<Download size={24} />}
+                onClick={() => aoEscolher(d)}
+                className="celular:w-full"
+              >
+                Baixar para {rotuloPlataforma(d.plataforma)}
+              </BotaoDaPagina>
+            ))}
+          </div>
+        </>
+      );
+    }
   }
-  if (p === "linux") {
-    return (
-      <>
-        É um AppImage (x86_64): dê permissão de execução com{" "}
-        <code className="font-mono">chmod +x Streamz_*.AppImage</code> e abra.
-      </>
-    );
-  }
-  return null;
 }
 
-function mensagemDeErro(erro: unknown): string {
-  if (isApiError(erro, 401)) return "Senha incorreta";
-  if (isApiError(erro, 429)) return "Muitas tentativas — espere um minuto";
-  if (isApiError(erro, 404) || isApiError(erro, 503)) return (erro as Error).message;
-  return "Não foi possível liberar o download. Tente de novo.";
+/**
+ * O que vem abaixo dos botões da seção "computador": o comando do Terminal
+ * (só com instalador de macOS publicado — o script baixa esse mesmo arquivo) e
+ * a instrução de pós-download de cada sistema que tem instalador. As mesmas
+ * instruções reaparecem no "O download começou" da `EtapaDaSenha`.
+ */
+function InstrucoesDoComputador({ catalogo }: { catalogo: DownloadCatalogo | null }) {
+  const temMac = disponivelPara(catalogo, "macos") !== null;
+  const notas = (["macos", "linux"] as const)
+    .filter((p) => disponivelPara(catalogo, p) !== null)
+    .map((p) => ({ plataforma: p, nota: notaDeInstalacao(p) }));
+  if (!temMac && notas.length === 0) return null;
+  return (
+    <div className="mt-8 flex w-full max-w-[560px] flex-col items-center gap-6 lg:items-start">
+      {temMac ? <InstalarPeloTerminal /> : null}
+      {notas.length > 0 ? (
+        <ul className="flex flex-col gap-2 text-text-sm text-text-muted">
+          {notas.map(({ plataforma, nota }) => (
+            <li key={plataforma}>{nota}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
 }

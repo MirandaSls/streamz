@@ -36,6 +36,10 @@ const LINHA: LinhaEfemera = {
   content: "Tocando **Never Gonna Give You Up**",
   createdAt: new Date("2026-09-09T12:00:00.000Z"),
   editedAt: null,
+  // ── onda 3 ── uma efêmera sem embed nem componente
+  embeds: [],
+  components: [],
+  flags: 0,
 };
 
 const CONTEXTO = {
@@ -108,5 +112,39 @@ describe("efemeraParaLinhaDeMensagem", () => {
     expect(linha.reactions).toEqual([]);
     expect(linha.respostaA).toBeNull();
     expect(linha.pinned).toBe(false);
+  });
+});
+
+// ── onda 3 ── embeds, componentes e flags ────────────────────
+
+describe("efêmera com embeds e componentes (onda 3)", () => {
+  const COM_EMBED: LinhaEfemera = {
+    ...LINHA,
+    embeds: [{ type: "rich", title: "Só para você" }],
+    components: [{ type: 1, id: 1, components: [{ type: 2, id: 2, style: 1, label: "Ok", custom_id: "ok" }] }],
+    // IS_COMPONENTS_V2 não, mas SUPPRESS_NOTIFICATIONS e SUPPRESS_EMBEDS sim
+    flags: (1 << 12) | (1 << 2),
+  };
+
+  it("o DTO traz embeds, componentes e as flags com EPHEMERAL ligado", () => {
+    const dto = efemeraParaDTO(COM_EMBED, CONTEXTO);
+    expect(dto.embeds).toEqual([{ type: "rich", title: "Só para você" }]);
+    expect(dto.components).toHaveLength(1);
+    expect(dto.flags).toBe((1 << 12) | (1 << 2) | (1 << 6));
+  });
+
+  it("a linha para o Discord leva o payload, sem EPHEMERAL (o controller o liga)", () => {
+    const linha = efemeraParaLinhaDeMensagem(COM_EMBED, {
+      autor: { id: "u_bot", snowflake: 222n, username: "musicbot", displayName: null, isBot: true },
+      channelSnowflake: 555n,
+      guildSnowflake: 333n,
+    });
+    expect(linha.payloadDeBot?.embeds).toEqual([{ type: "rich", title: "Só para você" }]);
+    expect(linha.payloadDeBot?.flags).toBe((1 << 12) | (1 << 2));
+  });
+
+  it("interação de componente (sem comando) não tem a faixa 'usou /…'", () => {
+    const dto = efemeraParaDTO(LINHA, { ...CONTEXTO, comando: null });
+    expect(dto.interacao).toBeNull();
   });
 });

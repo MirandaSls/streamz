@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { BotaoDeToque } from "@/components/mobile/pecas";
 import Marca from "@/components/ui/Marca";
 import { Upload, X } from "@/components/ui/icones";
+import { Button } from "@/components/ui/primitivos";
 import { isTauri } from "@/lib/desktop";
 import {
   avisoDeInstalacao,
@@ -161,14 +162,14 @@ export default function AvisoDeInstalacao() {
       role="region"
       aria-label="Instalar o Streamz"
     >
-      <div className="flex items-center gap-3 rounded-xl border border-border bg-panel px-3 py-2 shadow-lg">
-        <Marca size={26} className="shrink-0 text-accent" />
+      <div className="flex items-center gap-3 rounded-xl border border-border-subtle bg-background-base-lowest px-3 py-2 shadow-lg">
+        <Marca size={26} className="shrink-0 text-brand-500" />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold leading-tight text-txt-primary">
+          <p className="text-sm font-semibold leading-tight text-text-strong">
             Instalar o Streamz
           </p>
           {qual === "chrome" ? (
-            <p className="text-xs leading-tight text-txt-muted">
+            <p className="text-xs leading-tight text-text-muted">
               Fica na tela de início, sem barra de navegador.
             </p>
           ) : (
@@ -177,21 +178,17 @@ export default function AvisoDeInstalacao() {
                **não** é o quadrado-com-seta da Apple, que não existe no acervo
                de ícones do app; está relatado no PR. O ícone entra na frase
                para a pessoa reconhecer o botão sem ter de traduzir o nome. */
-            <p className="flex flex-wrap items-center gap-1 text-xs leading-tight text-txt-muted">
+            <p className="flex flex-wrap items-center gap-1 text-xs leading-tight text-text-muted">
               <span>Toque em</span>
-              <Upload size={14} aria-hidden="true" className="shrink-0 text-txt-secondary" />
+              <Upload size={14} aria-hidden="true" className="shrink-0 text-text-subtle" />
               <span>e em &ldquo;Adicionar à Tela de Início&rdquo;.</span>
             </p>
           )}
         </div>
         {qual === "chrome" && (
-          <button
-            type="button"
-            onClick={() => void instalar()}
-            className="h-[36px] shrink-0 rounded-lg bg-accent px-3 text-sm font-semibold text-accent-ink transition active:bg-accent-press"
-          >
+          <Button variante="primario" tamanho="sm" onClick={() => void instalar()} className="shrink-0">
             Instalar
-          </button>
+          </Button>
         )}
         <BotaoDeToque label="Dispensar" onClick={dispensar} className="-mr-1">
           <X size={18} />

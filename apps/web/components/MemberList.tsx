@@ -19,14 +19,15 @@ import {
   TIMEOUT_PRESETS,
   colorRoleOf,
   displayNameOf,
+  highestPosition,
   isTimedOut,
   type GuildMemberView,
   type Role,
 } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import TagDeBot from "@/components/ui/TagDeBot";
-import Tooltip from "@/components/ui/Tooltip";
 import { MENU_WIDTH } from "@/components/ui/ContextMenu";
+import { BotaoDeIcone, Tooltip } from "@/components/ui/primitivos";
 import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
 import { mencionar as inserirMencao } from "@/lib/mencoes";
 import { useAuth } from "@/stores/auth";
@@ -41,16 +42,20 @@ import { useVoice } from "@/stores/voice";
 /**
  * Título de seção da lista ("Disponível — 1").
  *
- * Medido no print do Discord: 14px, caixa mista, semibold, na cor muted, com o
- * texto a 20px da borda do painel (o avatar das linhas fica a 18). Era 12px em
- * caixa alta, o que dava um rótulo de categoria de canal, e não o do Discord.
+ * Medido no print 1:1 do Discord (180835, x1668–1790 y232–248 e x1668–1790
+ * y26–42 na captura canal-texto): 14px, caixa mista, semibold, SEMPRE
+ * `--channels-default` (#81828a) — inclusive na seção de um cargo hoisted
+ * ("Administrador — 1" no nosso app saía na cor do cargo, #e74c3c; no Discord
+ * o cabeçalho fica cinza igual ao de "Offline"; só o NOME do membro dentro da
+ * seção herda a cor do cargo). Por isso este componente não recebe mais cor:
+ * era `text-text-muted` (#96979e, tom errado) com a cor do cargo passada por
+ * fora — as duas coisas divergiam do print. Texto a 20px da borda do painel
+ * (o avatar das linhas fica a 18). Era 12px em caixa alta, o que dava um
+ * rótulo de categoria de canal, e não o do Discord.
  */
-function Section({ label, count, color }: { label: string; count: number; color?: string | null }) {
+function Section({ label, count }: { label: string; count: number }) {
   return (
-    <h3
-      style={color ? { color } : undefined}
-      className="mt-6 pb-1 pl-5 pr-2 text-sm font-semibold leading-5 text-txt-muted"
-    >
+    <h3 className="mt-6 pb-1 pl-5 pr-2 text-sm font-semibold leading-5 text-channels-default">
       {label} — {count}
     </h3>
   );
@@ -83,6 +88,13 @@ export default function MemberList() {
   const podeExpulsar = useCan(Permission.KICK_MEMBERS);
   const podeBanir = useCan(Permission.BAN_MEMBERS);
   const podeCargos = useCan(Permission.MANAGE_ROLES);
+  // Teto de quem olha — mesma conta de `assertPodeMexerNoCargo`: só cargo
+  // estritamente abaixo do meu mais alto entra no submenu (dono vê todos).
+  const meuMembro = members.find((m) => m.user.id === user?.id);
+  const meuTeto = highestPosition(
+    { isOwner: meuMembro?.role === "OWNER", roleIds: meuMembro?.roleIds ?? [] },
+    roles,
+  );
   // ── h-moderacao ── castigo é MODERATE_MEMBERS na permissão efetiva
   const podeCastigar = useCan(Permission.MODERATE_MEMBERS);
   const timeout = useGuilds((s) => s.timeout);
@@ -169,8 +181,12 @@ export default function MemberList() {
       });
     }
 
-    const atribuiveis = roles.filter((r) => !r.isDefault).sort((a, b) => b.position - a.position);
-    if (podeCargos && !isMe && atribuiveis.length > 0) {
+    const atribuiveis = roles
+      .filter((r) => !r.isDefault && r.position < meuTeto)
+      .sort((a, b) => b.position - a.position);
+    // Vestir cargo em mim mesmo é permitido (a API não bloqueia alvo == ator
+    // aqui — só em castigo/expulsão/banimento, que têm `assertCanActOn`).
+    if (podeCargos && atribuiveis.length > 0) {
       items.push({ separator: true });
       items.push({
         label: "Cargos",
@@ -244,7 +260,7 @@ export default function MemberList() {
            59,9pt de passo entre linhas de membro). Os 42 do desktop nascem de
            uma coluna que se navega com o mouse; no dedo ficam abaixo do piso
            de 44 e a lista vira uma faixa de alvos colados. */
-        className={`group mx-2.5 flex h-[42px] items-center gap-3 rounded-lg px-2 hover:bg-hov celular:h-[60px] ${
+        className={`group mx-2.5 flex h-[42px] items-center gap-3 rounded-lg px-2 hover:bg-interactive-background-hover celular:h-[60px] ${
           offline ? "opacity-30 hover:opacity-100" : ""
         }`}
       >
@@ -261,21 +277,22 @@ export default function MemberList() {
               user={m.user}
               size="md"
               status={status}
-              surface="border-panel"
+              surface="border-background-base-lowest"
               className={`transition-transform ${falando.has(m.user.id) ? ENCOLHE_AO_FALAR : ""}`}
             />
             {falando.has(m.user.id) && <AnelDeFala />}
           </span>
-          {/* nome em 16px na cor muted (medido: o mesmo cinza do título da
-              seção), e a sub-linha "Em voz" em 12px com o alto-falante verde.
-              Sem atividade/jogo: não existe aqui. */}
+          {/* nome em 16px: em repouso já é `text-default` (#efeff1), medido
+              pixel a pixel no print 1:1 ("Md", x1710 y172–178 do 180835) — não
+              é um cinza "muted" que clareia só no hover, como o item de canal.
+              O hover, então, não muda a cor do nome (só o fundo da linha). A
+              sub-linha "Em voz" em 12px com o alto-falante verde continua; sem
+              atividade/jogo, que não existe aqui (ADR-0009 §8). */}
           <span className="flex min-w-0 flex-col">
             <span className="flex min-w-0 items-center gap-1 text-base leading-5">
               <span
                 style={cor ? { color: cor } : undefined}
-                className={`truncate font-medium ${
-                  destaque ? "text-txt-primary" : "text-txt-muted group-hover:text-txt-normal"
-                }`}
+                className={`truncate font-medium ${destaque ? "text-text-strong" : "text-text-default"}`}
               >
                 {nome}
               </span>
@@ -283,25 +300,25 @@ export default function MemberList() {
                   encosta no nome, e os selos de cargo ficam depois dela. */}
               {m.user.bot && <TagDeBot />}
               {m.role === "OWNER" && (
-                <Tooltip label="Dono do servidor">
-                  <Crown size={14} className="shrink-0 text-yellow" aria-label="Dono do servidor" />
+                <Tooltip rotulo="Dono do servidor">
+                  <Crown size={14} className="shrink-0 text-status-warning" aria-label="Dono do servidor" />
                 </Tooltip>
               )}
               {m.role === "ADMIN" && (
-                <Tooltip label="Administrador">
-                  <ShieldCheck size={14} className="shrink-0 text-accent" aria-label="Administrador" />
+                <Tooltip rotulo="Administrador">
+                  <ShieldCheck size={14} className="shrink-0 text-brand-500" aria-label="Administrador" />
                 </Tooltip>
               )}
               {/* h-moderacao: relógio marca quem está de castigo agora */}
               {isTimedOut(m.timeoutUntil) && (
-                <Tooltip label="De castigo — não pode enviar mensagens">
-                  <Timer size={14} className="shrink-0 text-red" aria-label="De castigo" />
+                <Tooltip rotulo="De castigo — não pode enviar mensagens">
+                  <Timer size={14} className="shrink-0 text-status-danger" aria-label="De castigo" />
                 </Tooltip>
               )}
             </span>
             {emVoz.has(m.user.id) && (
-              <span className="flex items-center gap-1 text-xs leading-4 text-txt-muted">
-                <Volume2 size={12} className="shrink-0 text-green" aria-hidden="true" />
+              <span className="flex items-center gap-1 text-xs leading-4 text-text-muted">
+                <Volume2 size={12} className="shrink-0 text-status-positive" aria-hidden="true" />
                 Em voz
               </span>
             )}
@@ -309,63 +326,67 @@ export default function MemberList() {
         </button>
 
         {/*
-          No celular a fileira é **sempre visível** — o dedo não paira —, mas só
-          com "Mensagem": as três de moderação levariam 132px de uma linha de
-          335 e o nome truncava em "betoxip…" (medido em 390×844). Elas
-          continuam no menu de contexto, que no telefone abre pelo toque longo
+          Era "sempre visível" no celular (com só "Mensagem" — as três de
+          moderação levariam 132px de uma linha de 335 e o nome truncava em
+          "betoxip…", medido em 390×844): a revisão mediu o m-membros.png
+          contra a referência do Discord (blog "New Version" e ref desktop) e
+          achou o oposto — nenhum botão fica fixo na linha, nem "Mensagem".
+          Sem `celular:flex`, a fileira só aparece no hover/foco (mouse ou
+          teclado), que no toque não acontece: no celular a ação vira perfil
+          (toque no nome) ou o menu de contexto, que abre por toque longo
           (`AreaDeToqueLongo` envolve o shell inteiro). No desktop nada muda.
         */}
-        <div className="hidden shrink-0 gap-0.5 group-focus-within:flex group-hover:flex celular:flex">
+        <div className="hidden shrink-0 gap-0.5 group-focus-within:flex group-hover:flex">
           {!isMe && (
-            <Tooltip label="Mensagem">
-              <button
-                type="button"
-                onClick={() => void openWith(m.user.id)}
-                aria-label={`Abrir conversa com ${nome}`}
-                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-txt-primary celular:h-[44px] celular:w-[44px]"
-              >
-                <MessageSquare size={16} />
-              </button>
-            </Tooltip>
+            <BotaoDeIcone
+              rotulo="Mensagem"
+              icone={<MessageSquare size={16} />}
+              tamanho="sm"
+              aria-label={`Abrir conversa com ${nome}`}
+              onClick={() => void openWith(m.user.id)}
+              /* mesma trava das três de baixo: sem isto, um `:hover` que
+                 gruda depois do toque (nota do cartão — "o último item tocado
+                 fica aceso") deixava só ESTE botão de 32px flutuando sobre a
+                 linha, único dos quatro sem a trava. No celular a ação é o
+                 toque no nome (perfil) ou o menu de toque longo. */
+              className="celular:hidden"
+            />
           )}
           {podeAgirSobre(m) && podeCastigar && (
             /* h-moderacao: castigo é a ação de moderação mais usada — fica no hover */
-            <Tooltip label={isTimedOut(m.timeoutUntil) ? "Remover castigo" : "Colocar de castigo"}>
-              <button
-                type="button"
-                onClick={() =>
-                  isTimedOut(m.timeoutUntil) ? void removeTimeout(m.user.id) : timeout(m.user.id)
-                }
-                aria-label={`${isTimedOut(m.timeoutUntil) ? "Remover castigo de" : "Colocar de castigo"} ${nome}`}
-                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red celular:hidden"
-              >
-                {isTimedOut(m.timeoutUntil) ? <TimerOff size={16} /> : <Timer size={16} />}
-              </button>
-            </Tooltip>
+            <BotaoDeIcone
+              rotulo={isTimedOut(m.timeoutUntil) ? "Remover castigo" : "Colocar de castigo"}
+              icone={isTimedOut(m.timeoutUntil) ? <TimerOff size={16} /> : <Timer size={16} />}
+              tamanho="sm"
+              perigo
+              aria-label={`${isTimedOut(m.timeoutUntil) ? "Remover castigo de" : "Colocar de castigo"} ${nome}`}
+              onClick={() =>
+                isTimedOut(m.timeoutUntil) ? void removeTimeout(m.user.id) : timeout(m.user.id)
+              }
+              className="celular:hidden"
+            />
           )}
           {podeAgirSobre(m) && podeExpulsar && (
-            <Tooltip label="Expulsar">
-              <button
-                type="button"
-                onClick={() => kick(m.user.id)}
-                aria-label={`Expulsar ${nome}`}
-                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red celular:hidden"
-              >
-                <UserX size={16} />
-              </button>
-            </Tooltip>
+            <BotaoDeIcone
+              rotulo="Expulsar"
+              icone={<UserX size={16} />}
+              tamanho="sm"
+              perigo
+              aria-label={`Expulsar ${nome}`}
+              onClick={() => kick(m.user.id)}
+              className="celular:hidden"
+            />
           )}
           {podeAgirSobre(m) && podeBanir && (
-            <Tooltip label="Banir">
-              <button
-                type="button"
-                onClick={() => ban(m.user.id)}
-                aria-label={`Banir ${nome}`}
-                className="grid h-7 w-7 place-items-center rounded text-txt-muted hover:text-red celular:hidden"
-              >
-                <Gavel size={16} />
-              </button>
-            </Tooltip>
+            <BotaoDeIcone
+              rotulo="Banir"
+              icone={<Gavel size={16} />}
+              tamanho="sm"
+              perigo
+              aria-label={`Banir ${nome}`}
+              onClick={() => ban(m.user.id)}
+              className="celular:hidden"
+            />
           )}
         </div>
       </div>
@@ -375,17 +396,22 @@ export default function MemberList() {
   function renderSecao(role: Role, gente: Linha[]) {
     return (
       <div key={role.id}>
-        <Section label={role.name} count={gente.length} color={role.color} />
+        {/* sem `color`: o cabeçalho de grupo de cargo é cinza igual aos
+            demais — ver comentário de Section */}
+        <Section label={role.name} count={gente.length} />
         {gente.map(renderMember)}
       </div>
     );
   }
 
   return (
-    <aside aria-label="Membros" className="flex w-[267px] shrink-0 flex-col bg-panel">
+    // 264px = `--custom-member-list-width` (VARIAVEIS.md); era 267 (contagem
+    // solta de pixel no print, sem token — a régua de tudo que o Discord
+    // define é a variável, não o resultado de antisserrilhado na borda).
+    <aside aria-label="Membros" className="flex w-[264px] shrink-0 flex-col bg-background-base-lower">
       <div role="list" className="flex-1 overflow-y-auto pb-4">
         {members.length === 0 && (
-          <p className="px-4 py-3 text-sm text-txt-muted">Nenhum membro por aqui.</p>
+          <p className="px-4 py-3 text-sm text-text-muted">Nenhum membro por aqui.</p>
         )}
         {secoes.map((s) => renderSecao(s.role, s.gente))}
         {restoOnline.length > 0 && <Section label="Disponível" count={restoOnline.length} />}

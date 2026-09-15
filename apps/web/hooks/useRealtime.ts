@@ -4,7 +4,10 @@ import { useEffect } from "react";
 import {
   WS_EVENTS,
   displayNameOf,
+  FLAGS_DE_MENSAGEM,
   mentionsMe,
+  temFlag,
+  textoAchatadoDaMensagem,
   // ── f-voz ──,
   // ── d-social ──,
   // ── g-emojis-midia ──,
@@ -56,6 +59,13 @@ import type {
   ReportView,
 } from "@streamz/shared";
 import { shouldNotifyMessage } from "@streamz/shared";
+// ── onda 3 ── interações de componente, modal e autocomplete
+import type {
+  AutocompleteDeBotEvent,
+  InteracaoConcluidaEvent,
+  InteracaoFalhouEvent,
+  ModalDeBotAbertoEvent,
+} from "@streamz/shared";
 import { definirContadorNoIcone, janelaTemFoco, notify, observarFoco, prepararNotificacoes } from "@/lib/desktop";
 import {
   canalExibidoAgora,
@@ -74,6 +84,7 @@ import { on, onReconnect, rejoinChannel } from "@/stores/socket-adapter";
 import { useCategories } from "@/stores/categories";
 import { useChannels } from "@/stores/channels";
 import { useComandosDeApp } from "@/stores/comandos-de-app";
+import { useInteracoesDeBot } from "@/stores/interacoes-de-bot";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
 import { useEmojis } from "@/stores/emojis";
@@ -433,6 +444,25 @@ export function useRealtime(currentUserId?: string): void {
         useComandosDeApp.getState().aplicarAtualizacao(guildId);
       }),
 
+      /**
+       * ── onda 3 ── as respostas de um bot a um botão, select, modal ou
+       * autocomplete. Vêm pela sala do usuário e são casadas pelo `nonce` na
+       * store (só a sessão que disparou reage). A mensagem que o bot escreve ou
+       * edita **não** vem aqui: é `message.new`/`message.updated`, lá em cima.
+       */
+      on<InteracaoConcluidaEvent>(WS_EVENTS.INTERACTION_SUCCESS, (evento) => {
+        useInteracoesDeBot.getState().aoConcluir(evento);
+      }),
+      on<InteracaoFalhouEvent>(WS_EVENTS.INTERACTION_FAILED, (evento) => {
+        useInteracoesDeBot.getState().aoFalhar(evento);
+      }),
+      on<ModalDeBotAbertoEvent>(WS_EVENTS.INTERACTION_MODAL, (evento) => {
+        useInteracoesDeBot.getState().aoAbrirModal(evento);
+      }),
+      on<AutocompleteDeBotEvent>(WS_EVENTS.INTERACTION_AUTOCOMPLETE, (evento) => {
+        useInteracoesDeBot.getState().aoReceberAutocomplete(evento);
+      }),
+
       onReconnect(() => {
         rejoinChannel();
         void useMessages.getState().resyncActive();
@@ -624,9 +654,14 @@ function channelTitle(channelId: string): string {
  * desktop a janela aberta atrás de outro app continua `visible`, e com o gate
  * antigo mensagem de servidor nunca notificava. Com foco, só menção e DM
  * avisam; sem foco (outro app na frente, minimizada, bandeja), tudo avisa.
+ *
+ * `SUPPRESS_NOTIFICATIONS` e `LOADING` saem primeiro: são a vontade do bot
+ * (ou o "está pensando…" do callback 5, que ainda nem tem texto final), não
+ * uma preferência do usuário — nem som, nem notificação, para os dois.
  */
 function notifyIfAway(message: Message, mention: boolean) {
   if (typeof document === "undefined") return;
+  if (temFlag(message.flags, FLAGS_DE_MENSAGEM.SUPPRESS_NOTIFICATIONS | FLAGS_DE_MENSAGEM.LOADING)) return;
 
   const prefs = useSettings.getState();
   const me = useAuth.getState().user;
@@ -644,7 +679,10 @@ function notifyIfAway(message: Message, mention: boolean) {
   const { guildId, channelId } = message;
   void notify({
     title: channelTitle(channelId),
-    body: `${displayNameOf(message.author)}: ${message.content}`,
+    // `textoAchatadoDaMensagem`, não `message.content`: embed e mensagem
+    // "componentes v2" não têm `content` (ou vêm vazias) — o corpo da
+    // notificação saía em branco para as duas.
+    body: `${displayNameOf(message.author)}: ${textoAchatadoDaMensagem(message)}`,
     // o clique já focou a janela (`focarJanela`); falta abrir a conversa
     onClick: () => void goToChannel({ guildId, channelId }),
   });

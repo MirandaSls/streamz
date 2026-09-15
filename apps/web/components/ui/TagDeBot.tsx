@@ -14,43 +14,50 @@
  * e achar que isto é um erro de cópia: não é, é escolha; troque só com o
  * usuário na sala.
  *
- * **Medidas @1x** (`tag-bot-na-lista-de-membros.png`, lidas com `getpixel`; a
- * mesma pílula em `tag-bot-no-perfil-do-app.png`, que está a 2×, mede 30/2 = 15
- * — o Discord usa **um só tamanho**, mesmo ao lado do nome de 24px do perfil):
+ * **Medidas: o CSS do cliente atual** (`.botTag__82f07` na variante `rem`,
+ * `css-bruto/858942.086f3*.css`), que é a régua da ADR-0009 (cliente de
+ * 2026-09-11):
  *
- * | item | medido |
- * |---|---|
- * | altura da pílula | 15px |
- * | caixa-alta das letras | 7px → fonte de 10px em negrito |
- * | respiro horizontal | 3px à esquerda, 4px à direita → `px-[4px]` |
- * | raio | 3px (o topo recua 2px na primeira linha) |
- * | largura só com "BOT" | 25px |
+ * | item | CSS | aqui |
+ * |---|---|---|
+ * | altura | `.9375rem` = 15px | `h-[15px]` |
+ * | raio | `4px` | `rounded` |
+ * | respiro horizontal | `0 .275rem` = 4,4px | `px-[4.4px]` |
+ * | texto (`.botText__82f07`) | `.8rem` = 12,8px, `semibold`, linha `.9375rem` | `text-[12.8px] font-semibold leading-[15px]` |
+ * | fundo / texto (`.botTagRegular__82f07`) | `--background-brand` / `--white` | `bg-background-brand` / `text-control-primary-text-default` |
  *
- * Os 37px da captura incluem o `✓` de aplicativo **verificado**, que é outra
- * coisa: não temos verificação, e um selo que não significa nada seria pior que
- * a falta dele.
+ * Antes daqui a pílula seguia `tag-bot-na-lista-de-membros.png` (10px em
+ * negrito, raio 3). Aquele print é da era "BOT", **anterior** ao cliente que a
+ * ADR-0009 fixou como régua — por isso ele deixou de mandar. A proporção da era
+ * atual confere com o CSS em `tag-app-na-mensagem.png` (escala desconhecida,
+ * só proporção): a caixa-alta do "APP" tem ~0,55 da caixa-alta do nome de 16px
+ * ao lado, o que dá ~12–13px de fonte, e a pílula tem a altura da caixa-alta
+ * mais os ascendentes do nome.
  *
- * Tudo em px literal, e não na escala do Tailwind, porque **todo número aqui
- * significa alguma coisa**: a raiz do app é 15,5px e `h-4` entregaria 15,5 —
- * perto, mas por acidente, e `text-[10px]` viraria 10,3. Regra do §6.3 do
- * processo.
+ * O texto é **escuro** sobre o limão (`control-primary-text-default` =
+ * `accent-ink`), nunca o `--white` do Discord: branco sobre Volt Lime dá 1,57:1
+ * (ADR-0009, regra 2 do accent).
  *
- * A cor é a de destaque do produto (`accent` sobre `accent-ink`), que é o que o
- * blurple `#5865F2` é lá: a única mancha saturada de uma coluna cinza.
+ * Os 16px do `.px__82f07` (a variante em px) e o `✓` de aplicativo
+ * **verificado** ficam de fora: não temos verificação, e um selo que não
+ * significa nada seria pior que a falta dele.
+ *
+ * O espaço em volta (margem de 4px antes, `top:.1rem` no cabeçalho da mensagem)
+ * é de quem a usa — `.botTagCozy_c19a55`/`.botTagCompact_c19a55` são regras do
+ * módulo da mensagem, não da pílula.
  */
 
 /**
- * **Um tamanho só no desktop, de propósito.** A tentação era um tamanho por
- * superfície (o rótulo do tile de voz tem 20px de altura, o nome do popover de
- * perfil tem 24px de linha). A medição diz que não: a pílula mede 15px na lista
- * de membros, 15px no autor da mensagem e 15px ao lado do nome de 24px do
- * perfil — o Discord **não** a redimensiona por contexto.
+ * **Um tamanho só no desktop, de propósito.** O Discord **não** redimensiona a
+ * pílula por contexto: a mesma classe serve à lista de membros, ao autor da
+ * mensagem e ao nome de 24px do perfil.
  *
- * No celular ela cresce para 18px: 10px de texto é legível a 40cm com o mouse
- * na mão e não é a 30cm com o telefone na mão, e a linha de membro já cresceu
- * de 42 para 60 ao redor dela. É a única medida daqui **sem** captura do
- * Discord por trás — foi decidida no aparelho emulado, e está no PR como
- * escolha nossa.
+ * No celular ela cresce para 18px de altura: a linha de membro já cresceu de
+ * 42 para 60 ao redor dela, e uma pílula de 15 some a 30cm com o telefone na
+ * mão. É a única medida daqui **sem** captura do Discord por trás — foi
+ * decidida no aparelho emulado, e está no PR como escolha nossa. A fonte não
+ * cresce junto: os 12,8px já são legíveis, e crescer só a caixa preserva a
+ * largura que o nome ao lado tem para truncar.
  *
  * `caixaEstreita` desliga esse crescimento. A regra é uma só: **onde a caixa
  * em volta não cresce no celular, a pílula também não cresce.** Duas caixas se
@@ -59,7 +66,7 @@
  * | caixa | altura | pílula de 18 | pílula de 15 |
  * |---|---|---|---|
  * | rótulo comprimido do tile de voz (`h-[20px]`) | 20px | 1px de folga | 2,5px |
- * | barra de resposta do `MessageItem` (`leading-[18px]`) | 18px | 0 | 1,5px |
+ * | linha de resposta do `MessageItem` (`leading-[18px]`) | 18px | 0 | 1,5px |
  *
  * Nenhuma das duas *estoura* — o número diz que cabe. O que a captura mostra é
  * outra coisa: a pílula encosta nas bordas da caixa, os cantos arredondados dos
@@ -82,8 +89,8 @@ export default function TagDeBot({
       // vez de ser lido depois dele.
       role="img"
       aria-label="Conta de bot"
-      className={`inline-grid h-[15px] shrink-0 select-none place-items-center rounded-[3px] bg-accent px-[4px] text-[10px] font-bold uppercase leading-none tracking-[0.02em] text-accent-ink ${
-        caixaEstreita ? "" : "celular:h-[18px] celular:px-[5px] celular:text-[11px]"
+      className={`inline-grid h-[15px] shrink-0 select-none place-items-center rounded bg-background-brand px-[4.4px] text-[12.8px] font-semibold uppercase leading-[15px] text-control-primary-text-default ${
+        caixaEstreita ? "" : "celular:h-[18px] celular:px-[5px]"
       } ${className}`}
     >
       BOT

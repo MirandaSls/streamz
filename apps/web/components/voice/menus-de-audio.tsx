@@ -3,14 +3,15 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
+  type KeyboardEvent as KeyboardEventDoReact,
   type ReactNode,
+  type RefObject,
 } from "react";
-import { createPortal } from "react-dom";
 import { Check, ChevronRight, Settings } from "@/components/ui/icones";
-import { colocar, SUBMENU_DELAY } from "@/components/ui/ContextMenu";
+import { SUBMENU_DELAY } from "@/components/ui/ContextMenu";
+import { Popout } from "@/components/ui/primitivos/Popout";
 import { SliderDeVolume } from "@/components/voice/pecas-de-voz";
 import { ui } from "@/stores/ui";
 import { useVoice, type NivelDeRuido } from "@/stores/voice";
@@ -40,13 +41,26 @@ import { explicarMidia, nomeEscolhido, opcoesDe, useVoiceDevices } from "@/store
  * Sem cabeçalho no submenu: ele é uma lista de escolhas com a marca (✓) na que
  * vale, porque o título já está no item que ficou aceso ao lado.
  *
- * **Medidas.** Não há print do Discord com este menu aberto em
- * `docs/Reference` (procurados os de 2026-09-02 15:xx–18:xx e os de 09-03), e
- * por isso as medidas são as do próprio app: caixa de 288 (medida nos prints
- * `191405`, `191402`, `191339` e `191344`: x 206..493 e 261..548, 288 de
- * largura em todos), linha de 35px (bg do selecionado em `191339`, y 235..269),
- * respiro de 6 (`p-1.5`) — e do `ContextMenu`, os 4px de sobreposição do
- * submenu sobre o item e o espelhamento na borda da janela.
+ * **Medidas.** O submenu (a lista de aparelhos) não tem print 1:1 do Discord
+ * em `docs/Reference` — só do próprio app (`191405`, `191402`, `191339` e
+ * `191344`), e é de lá que vêm caixa de 288 (x 206..493 e 261..548, 288 de
+ * largura em todos), linha de 35px (bg do selecionado em `191339`, y
+ * 235..269) e respiro de 6 (`p-1.5`) — e do `ContextMenu`, os 4px de
+ * sobreposição do submenu sobre o item. O espelhamento na borda da janela
+ * agora é o do `Popout` (ver `Submenu`).
+ *
+ * **O menu-pai em si tem print real do Discord: `2026-09-03 201137`**
+ * (achado depois da primeira medida, resolução 3439×1360 — fora do padrão
+ * 1919×1079 do resto do acervo, então vale só para **ordem e presença**, não
+ * para px). Ele mostra "Dispositivo de entrada" e "Perfil de entrada" (o
+ * Krisp deles) seguidos de uma **divisória**, "Volume de entrada" com o
+ * slider, **outra divisória**, e só então "Configurações de voz" — três
+ * blocos, não dois. A divisória que faltava (entre o bloco dos dois itens com
+ * submenu e o slider) foi a correção que este print trouxe: antes só havia a
+ * de baixo (`AtalhoDeConfiguracoes`). "Perfil de entrada"/Isolamento de Voz é
+ * Krisp e não é portado (o cartão pede "Krisp não; o nosso supressor com o
+ * texto certo"): o lugar equivalente aqui é a "Redução de ruído" com os
+ * níveis que o supressor próprio (RNNoise, `PopoverDeRuido`) realmente tem.
  */
 
 /**
@@ -55,9 +69,17 @@ import { explicarMidia, nomeEscolhido, opcoesDe, useVoiceDevices } from "@/store
  */
 export const LARGURA_DO_MENU_DE_AUDIO = 288;
 
-/** `p-1.5` da caixa: o primeiro item do submenu alinha com o item do pai. */
+/**
+ * `p-1.5` da caixa: o submenu sobe esse tanto para o primeiro item dele ficar
+ * na linha do item que o abriu.
+ */
 const RESPIRO = 6;
-/** o submenu monta em cima da borda do item, como no `ContextMenu`. */
+/**
+ * O submenu monta 4px em cima da borda do item, como no `ContextMenu`. Não é
+ * medida do Discord: o CSS dele (`.submenuPaddingContainer_c1e9c4{padding:0
+ * 8px}`) sugere o contrário, uma folga, mas o menu com submenu aberto não tem
+ * print 1:1 e a troca de desenho fica para a onda que refizer este menu.
+ */
 const SOBREPOSICAO = 4;
 
 const RUIDO: Record<NivelDeRuido, string> = {
@@ -70,14 +92,16 @@ const RUIDO: Record<NivelDeRuido, string> = {
 /* Submenu                                                             */
 /* ------------------------------------------------------------------ */
 
-/** Qual submenu está aberto e em que item ele está pendurado. */
+/**
+ * Qual submenu está aberto. Em que item ele está pendurado não mora mais aqui:
+ * cada `LinhaComSubmenu` passa o próprio botão ao `Popout` como âncora.
+ */
 interface Submenus {
   aberto: string | null;
-  ancora: DOMRect | null;
   /** agenda abrir (chave) ou fechar (null) depois da pausa. */
-  agendar: (chave: string | null, el: HTMLElement | null) => void;
+  agendar: (chave: string | null) => void;
   /** abre na hora — clique e seta → não esperam pausa nenhuma. */
-  abrir: (chave: string, el: HTMLElement) => void;
+  abrir: (chave: string) => void;
   /** cancela o fechamento agendado (o ponteiro entrou no submenu). */
   segurar: () => void;
   fechar: () => void;
@@ -85,29 +109,17 @@ interface Submenus {
 
 function useSubmenus(): Submenus {
   const [aberto, setAberto] = useState<string | null>(null);
-  const [ancora, setAncora] = useState<DOMRect | null>(null);
   const timer = useRef<number | undefined>(undefined);
 
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
-  const agendar = useCallback((chave: string | null, el: HTMLElement | null) => {
+  const agendar = useCallback((chave: string | null) => {
     window.clearTimeout(timer.current);
-    // o retângulo é lido AGORA: dentro do timeout o React já pode ter trocado
-    // o elemento por outro, e a caixa nasceria no lugar errado
-    const r = el?.getBoundingClientRect() ?? null;
-    timer.current = window.setTimeout(() => {
-      if (chave === null || !r) {
-        setAberto(null);
-        return;
-      }
-      setAncora(r);
-      setAberto(chave);
-    }, SUBMENU_DELAY);
+    timer.current = window.setTimeout(() => setAberto(chave), SUBMENU_DELAY);
   }, []);
 
-  const abrir = useCallback((chave: string, el: HTMLElement) => {
+  const abrir = useCallback((chave: string) => {
     window.clearTimeout(timer.current);
-    setAncora(el.getBoundingClientRect());
     setAberto(chave);
   }, []);
 
@@ -118,94 +130,115 @@ function useSubmenus(): Submenus {
     setAberto(null);
   }, []);
 
-  return { aberto, ancora, agendar, abrir, segurar, fechar };
+  return { aberto, agendar, abrir, segurar, fechar };
 }
 
 /**
- * A caixa do submenu, em portal e presa à janela.
+ * Os itens do submenu que as setas percorrem. Por papel, e não `button`: é o
+ * que diz "item de menu", e a alça da folha do celular não é um.
+ */
+const ITEM_DO_SUBMENU = '[role^="menuitem"]';
+
+/**
+ * A caixa do submenu: o `Popout` único com `ehSubmenu`.
  *
- * Em portal pelo mesmo motivo do `PopoverFlutuante`: dentro da caixa-mãe ela
- * seria cortada pelo `overflow` e, durante os 0,12s do `anim-menu` (que anima
- * `transform`), um filho `fixed` ficaria preso ao pai transformado e apareceria
- * fora de lugar. O `data-submenu-de-popover` é o que impede o popover-mãe de
+ * O que vem do `Popout` e antes era feito à mão aqui: portal (dentro da
+ * caixa-mãe o submenu seria cortado pelo `overflow`), posição com a colisão
+ * contra a janela, entrada animada, pilha de camadas e o atributo
+ * `data-submenu-de-popout` — é ele, junto com a pilha, que impede o menu-pai de
  * ler um clique aqui dentro como "clique fora" e se fechar antes do clique
- * chegar ao item.
+ * chegar ao item. `ehSubmenu` também desliga o clique fora do próprio submenu:
+ * ele é desmontado junto com o pai, e passar para outro item já o troca.
+ *
+ * Mudanças de comportamento que vêm junto, todas do `Popout`:
+ * - **Esc** fecha só o submenu (é o topo da pilha). Antes o Esc da janela
+ *   chegava primeiro ao menu-pai, que fechava tudo.
+ * - **Colisão:** sem espaço à direita, espelha para a esquerda do item (a mesma
+ *   regra do `colocar` de antes); sem espaço embaixo, o alinhamento espelha e é
+ *   o **último** item do submenu que fica na linha do item, em vez de a caixa
+ *   inteira subir para cima dele.
+ * - **Foco:** Tab fica preso no submenu, e o foco volta a quem o tinha.
+ * - **Celular:** vira folha inferior por cima da folha do menu-pai, com véu,
+ *   alça e "voltar" do Android. Antes a caixa de 288 caía por cima do menu-pai,
+ *   espremida na lateral da tela.
+ * - **Superfície:** `--background-surface-high`, a do `Popout` (e a do
+ *   menu-pai, que também é um). Antes era `--background-surface-higher`.
+ *
+ * Posição: lado direito, `distancia` negativa para montar `SOBREPOSICAO` em cima
+ * do item, e `deslocamento` de `-RESPIRO` para o primeiro item alinhar com o
+ * item do pai — o mesmo ponto que o `colocar` calculava.
  */
 function Submenu({
+  aberto,
   ancora,
   rotulo,
   autoFoco,
+  pedidoDeFoco,
   onFechar,
   onSegurar,
   children,
 }: {
-  ancora: DOMRect;
+  aberto: boolean;
+  /** o item do menu-pai que abriu o submenu. */
+  ancora: RefObject<HTMLElement | null>;
   rotulo: string;
   /** aberto pelo teclado: o foco entra, senão a seta → não levaria a lugar nenhum. */
   autoFoco: boolean;
+  /**
+   * Muda a cada seta → num submenu que o hover já abriu. O `focarAoAbrir` do
+   * `Popout` só age na abertura; sem isto a seta não entraria na caixa.
+   */
+  pedidoDeFoco: number;
   onFechar: () => void;
   onSegurar: () => void;
   children: ReactNode;
 }) {
-  const caixa = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ x: number; y: number; origem: string } | null>(null);
-
+  // o `Popout` não expõe a caixa por ref: o miolo é o ponto de onde achar os itens
+  const miolo = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!autoFoco) return;
-    caixa.current?.querySelector<HTMLButtonElement>("button")?.focus();
-  }, [autoFoco]);
+    if (pedidoDeFoco === 0) return;
+    miolo.current?.querySelector<HTMLElement>(ITEM_DO_SUBMENU)?.focus();
+  }, [pedidoDeFoco]);
 
-  useLayoutEffect(() => {
-    const h = caixa.current?.offsetHeight ?? 0;
-    setPos(
-      colocar(
-        ancora.right - SOBREPOSICAO,
-        ancora.top - RESPIRO,
-        LARGURA_DO_MENU_DE_AUDIO,
-        h,
-        ancora.left + SOBREPOSICAO,
-      ),
-    );
-  }, [ancora]);
+  // Esc não passa por aqui: quem trata é o `Popout`, que chama `onFechar`
+  function aoTeclar(e: KeyboardEventDoReact<HTMLDivElement>) {
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      e.stopPropagation();
+      onFechar();
+      return;
+    }
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    const alvos = Array.from(miolo.current?.querySelectorAll<HTMLElement>(ITEM_DO_SUBMENU) ?? []);
+    if (alvos.length === 0) return;
+    const i = alvos.indexOf(document.activeElement as HTMLElement);
+    const passo = e.key === "ArrowDown" ? 1 : -1;
+    alvos[(i + passo + alvos.length) % alvos.length]?.focus();
+  }
 
-  if (typeof document === "undefined") return null;
-
-  return createPortal(
-    <div
-      ref={caixa}
-      data-submenu-de-popover=""
-      role="menu"
-      aria-label={rotulo}
-      onPointerEnter={onSegurar}
-      onKeyDown={(e) => {
-        if (e.key === "ArrowLeft" || e.key === "Escape") {
-          e.preventDefault();
-          e.stopPropagation();
-          onFechar();
-          return;
-        }
-        if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-        e.preventDefault();
-        const alvos = Array.from(
-          caixa.current?.querySelectorAll<HTMLButtonElement>("button") ?? [],
-        );
-        if (alvos.length === 0) return;
-        const i = alvos.indexOf(document.activeElement as HTMLButtonElement);
-        const passo = e.key === "ArrowDown" ? 1 : -1;
-        alvos[(i + passo + alvos.length) % alvos.length]?.focus();
-      }}
-      style={{
-        left: pos?.x ?? 0,
-        top: pos?.y ?? 0,
-        width: LARGURA_DO_MENU_DE_AUDIO,
-        transformOrigin: pos?.origem ?? "left top",
-        visibility: pos ? "visible" : "hidden",
-      }}
-      className="anim-menu fixed z-[95] rounded-lg bg-overlay p-1.5 shadow-high"
+  return (
+    <Popout
+      aberto={aberto}
+      aoFechar={onFechar}
+      ancora={ancora}
+      ehSubmenu
+      papel="menu"
+      rotulo={rotulo}
+      lado="right"
+      alinhamento="start"
+      distancia={-SOBREPOSICAO}
+      deslocamento={-RESPIRO}
+      largura={LARGURA_DO_MENU_DE_AUDIO}
+      // aberto pelo hover o foco fica no item do pai, como antes; o `Popout`
+      // leva o foco ao primeiro item só quando veio do teclado
+      focarAoAbrir={autoFoco}
+      aoTeclar={aoTeclar}
+      aoEntrarComPonteiro={onSegurar}
+      className="p-1.5"
     >
-      {children}
-    </div>,
-    document.body,
+      <div ref={miolo}>{children}</div>
+    </Popout>
   );
 }
 
@@ -229,6 +262,7 @@ function LinhaComSubmenu({
 }) {
   const botao = useRef<HTMLButtonElement>(null);
   const porTeclado = useRef(false);
+  const [pedidoDeFoco, setPedidoDeFoco] = useState(0);
   const aberto = ctrl.aberto === chave;
 
   return (
@@ -239,46 +273,54 @@ function LinhaComSubmenu({
         role="menuitem"
         aria-haspopup="menu"
         aria-expanded={aberto}
-        onPointerEnter={(e) => {
+        onPointerEnter={() => {
           porTeclado.current = false;
-          ctrl.agendar(chave, e.currentTarget);
+          ctrl.agendar(chave);
         }}
         // clique **abre**, nunca fecha: com o hover abrindo, um clique que
         // alternasse fecharia a caixa embaixo do ponteiro que a chamou
-        onClick={(e) => {
+        onClick={() => {
           porTeclado.current = false;
-          ctrl.abrir(chave, e.currentTarget);
+          ctrl.abrir(chave);
         }}
         onKeyDown={(e) => {
           if (e.key !== "ArrowRight") return;
           e.preventDefault();
           porTeclado.current = true;
-          ctrl.abrir(chave, e.currentTarget);
+          // já aberto pelo hover: o `Popout` só foca ao abrir, e a seta → aqui
+          // tem de levar o foco para dentro mesmo assim
+          if (aberto) setPedidoDeFoco((n) => n + 1);
+          else ctrl.abrir(chave);
         }}
         className={`flex w-full items-center gap-2 rounded-[3px] px-2 py-2 text-left transition ${
-          aberto ? "bg-hov" : "hover:bg-hov"
+          aberto ? "bg-interactive-background-hover" : "hover:bg-interactive-background-hover"
         }`}
       >
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold text-txt-primary">{titulo}</span>
-          <span className="block truncate text-xs text-txt-muted">{valor}</span>
+          <span className="block text-sm font-semibold text-text-strong">{titulo}</span>
+          <span className="block truncate text-xs text-text-muted">{valor}</span>
         </span>
-        <ChevronRight size={16} className="shrink-0 text-txt-muted" aria-hidden="true" />
+        <ChevronRight size={16} className="shrink-0 text-text-muted" aria-hidden="true" />
       </button>
-      {aberto && ctrl.ancora && (
-        <Submenu
-          ancora={ctrl.ancora}
-          rotulo={titulo}
-          autoFoco={porTeclado.current}
-          onSegurar={ctrl.segurar}
-          onFechar={() => {
-            ctrl.fechar();
-            botao.current?.focus();
-          }}
-        >
-          {children}
-        </Submenu>
-      )}
+      {/*
+        Âncora por ref, e não o retângulo lido no hover: o `Popout` relê a
+        posição do botão em scroll e resize, e o botão é sempre o desta linha —
+        o risco antigo de o React trocar o elemento durante a pausa sumiu.
+      */}
+      <Submenu
+        aberto={aberto}
+        ancora={botao}
+        rotulo={titulo}
+        autoFoco={porTeclado.current}
+        pedidoDeFoco={pedidoDeFoco}
+        onSegurar={ctrl.segurar}
+        onFechar={() => {
+          ctrl.fechar();
+          botao.current?.focus();
+        }}
+      >
+        {children}
+      </Submenu>
     </>
   );
 }
@@ -300,7 +342,7 @@ function Escolha({
       aria-checked={marcada}
       onClick={onSelect}
       className={`flex w-full items-center gap-2 rounded-[3px] px-2 py-2 text-left text-sm transition ${
-        marcada ? "bg-sel text-txt-primary" : "text-txt-normal hover:bg-hov"
+        marcada ? "bg-interactive-background-selected text-text-strong" : "text-text-default hover:bg-interactive-background-hover"
       }`}
     >
       <span aria-hidden="true" className="grid h-4 w-4 shrink-0 place-items-center">
@@ -314,21 +356,30 @@ function Escolha({
 /** Recado de rodapé do submenu (sem permissão, sem `setSinkId`…). */
 function Aviso({ texto }: { texto: string | null }) {
   if (!texto) return null;
-  return <p className="px-2 pb-1 pt-2 text-xs text-txt-muted">{texto}</p>;
+  return <p className="px-2 pb-1 pt-2 text-xs text-text-muted">{texto}</p>;
+}
+
+/**
+ * A divisória entre blocos do menu. No print real (`201137`) o menu tem três
+ * blocos — itens com submenu, volume, atalho de configurações —, cada um
+ * separado por uma dessas; antes só existia a de baixo.
+ */
+function Divisoria() {
+  return <div aria-hidden="true" className="my-1 h-px bg-border-subtle" />;
 }
 
 function AtalhoDeConfiguracoes({ ctrl }: { ctrl: Submenus }) {
   return (
     <>
-      <div aria-hidden="true" className="my-1 h-px bg-border" />
+      <Divisoria />
       <button
         type="button"
         role="menuitem"
         // passar por aqui fecha o submenu que estiver aberto: é o mesmo gesto
         // de "sair do item" que o `ContextMenu` já trata
-        onPointerEnter={() => ctrl.agendar(null, null)}
+        onPointerEnter={() => ctrl.agendar(null)}
         onClick={() => ui.openModal({ kind: "settings", tab: "voz" })}
-        className="flex w-full items-center gap-2 rounded-[3px] px-2 py-2 text-left text-sm text-txt-normal transition hover:bg-hov hover:text-txt-primary"
+        className="flex w-full items-center gap-2 rounded-[3px] px-2 py-2 text-left text-sm text-text-default transition hover:bg-interactive-background-hover hover:text-text-strong"
       >
         <Settings size={16} className="shrink-0" aria-hidden="true" />
         Configurações de voz
@@ -429,7 +480,8 @@ export function MenuDeEntrada() {
         ))}
       </LinhaComSubmenu>
 
-      <div className="px-2 py-2" onPointerEnter={() => ctrl.agendar(null, null)}>
+      <Divisoria />
+      <div className="px-2 py-2" onPointerEnter={() => ctrl.agendar(null)}>
         <SliderDeVolume
           label="Volume de entrada"
           valor={entrada}
@@ -470,7 +522,8 @@ export function MenuDeSaida() {
         />
       </LinhaComSubmenu>
 
-      <div className="px-2 py-2" onPointerEnter={() => ctrl.agendar(null, null)}>
+      <Divisoria />
+      <div className="px-2 py-2" onPointerEnter={() => ctrl.agendar(null)}>
         <SliderDeVolume
           label="Volume de saída"
           valor={saida}

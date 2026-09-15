@@ -35,7 +35,7 @@ export function AnelDeFala() {
   return (
     <span
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-inset ring-green"
+      className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-inset ring-status-positive"
     />
   );
 }
@@ -47,16 +47,16 @@ export const ENCOLHE_AO_FALAR = "scale-[0.925]";
 export function BarraDeNivel({ nivel, limiar }: { nivel: number; limiar?: number }) {
   const acima = limiar === undefined || nivel >= limiar;
   return (
-    <div className="relative h-2 w-full overflow-hidden rounded-full bg-void">
+    <div className="relative h-2 w-full overflow-hidden rounded-full bg-input-background-default">
       <div
-        className={`h-full rounded-full transition-[width] duration-75 ${acima ? "bg-accent" : "bg-txt-faint"}`}
+        className={`h-full rounded-full transition-[width] duration-75 ${acima ? "bg-brand-500" : "bg-channels-default"}`}
         style={{ width: `${Math.round(nivel * 100)}%` }}
       />
       {limiar !== undefined && (
         <span
           aria-hidden="true"
           style={{ left: `${Math.round(limiar * 100)}%` }}
-          className="absolute inset-y-0 w-0.5 bg-txt-primary"
+          className="absolute inset-y-0 w-0.5 bg-text-strong"
         />
       )}
     </div>
@@ -83,11 +83,11 @@ export function Chave({
         aria-label={rotulo}
         onClick={() => onChange(!ligado)}
         className={`relative h-6 w-10 shrink-0 rounded-full transition ${
-          ligado ? "bg-accent" : "bg-border-strong"
+          ligado ? "bg-brand-500" : "bg-border-normal"
         }`}
       >
         <span
-          className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-all ${
+          className={`absolute top-1 h-4 w-4 rounded-full bg-switch-thumb-background-default transition-all ${
             ligado ? "left-5" : "left-1"
           }`}
         />
@@ -96,7 +96,16 @@ export function Chave({
   );
 }
 
-/** Slider de volume 0–200% com o valor ao lado. */
+/** Slider de volume 0–200% com o valor ao lado.
+ *
+ * O rótulo era caixa alta pequena (`text-xs uppercase tracking-[0.02em]`,
+ * cor `text-text-muted`) — a print `2026-09-03 201137` mostra "Volume de
+ * entrada" no texto normal do menu, sem versalete nem tracking. Uso a mesma
+ * classe das outras linhas do menu de áudio (`titulo` em
+ * `menus-de-audio.tsx:300`, ex. "Dispositivo de entrada"): `text-sm
+ * font-semibold text-text-strong`. É usado nos dois menus que têm este
+ * slider — `MenuDeEntrada` e `MenuDeSaida` (`menus-de-audio.tsx:485` e
+ * `:527`) — então a mudança vale para os dois de uma vez. */
 export function SliderDeVolume({
   label,
   valor,
@@ -108,9 +117,9 @@ export function SliderDeVolume({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">
+      <span className="mb-1 flex items-center justify-between text-sm font-semibold text-text-strong">
         {label}
-        <span className="tabular-nums normal-case tracking-normal">{Math.round(valor * 100)}%</span>
+        <span className="tabular-nums">{Math.round(valor * 100)}%</span>
       </span>
       <input
         type="range"
@@ -119,7 +128,7 @@ export function SliderDeVolume({
         value={Math.round(valor * 100)}
         onChange={(e) => onChange(Number(e.target.value) / 100)}
         aria-label={label}
-        className="w-full accent-accent"
+        className="w-full accent-brand-500"
       />
     </label>
   );

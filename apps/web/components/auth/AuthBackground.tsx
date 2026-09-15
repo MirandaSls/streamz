@@ -37,19 +37,28 @@ export default function AuthBackground() {
             patternUnits="userSpaceOnUse"
             patternTransform="rotate(-12)"
           >
-            <path d={BALAO_TILE} fill="none" stroke="#9BE31F" strokeWidth="3" />
+            <path
+              d={BALAO_TILE}
+              fill="none"
+              style={{ stroke: "var(--brand-500)" }}
+              strokeWidth="3"
+            />
           </pattern>
           <radialGradient id={brilho}>
-            <stop offset="0%" stopColor="#9BE31F" stopOpacity="0.28" />
-            <stop offset="100%" stopColor="#9BE31F" stopOpacity="0" />
+            <stop offset="0%" style={{ stopColor: "var(--brand-500)" }} stopOpacity="0.28" />
+            <stop offset="100%" style={{ stopColor: "var(--brand-500)" }} stopOpacity="0" />
           </radialGradient>
           <radialGradient id={vinheta}>
-            <stop offset="55%" stopColor="#0B0B0F" stopOpacity="0" />
-            <stop offset="100%" stopColor="#0B0B0F" stopOpacity="0.92" />
+            {/* var(--background-base-lowest): mesmo fundo mais escuro do tema
+                ativo (Dark #121214, Ash #2c2d32, Onyx #000000) — antes era
+                "#0B0B0F" fixo, então as telas de conta ficavam quase pretas
+                mesmo no Ash e no Onyx. Em SVG a var só resolve via `style`. */}
+            <stop offset="55%" style={{ stopColor: "var(--background-base-lowest)" }} stopOpacity="0" />
+            <stop offset="100%" style={{ stopColor: "var(--background-base-lowest)" }} stopOpacity="0.92" />
           </radialGradient>
         </defs>
 
-        <rect width="1440" height="900" fill="#0B0B0F" />
+        <rect width="1440" height="900" style={{ fill: "var(--background-base-lowest)" }} />
         <ellipse cx="220" cy="120" rx="620" ry="440" fill={`url(#${brilho})`} />
         <ellipse cx="1320" cy="880" rx="560" ry="400" fill={`url(#${brilho})`} opacity="0.5" />
         {/* os balões ficam bem apagados: é textura, não ilustração em primeiro plano */}

@@ -39,7 +39,7 @@ import {
  * | símbolo | tinta de 82×82, centro a 155 do topo | idem | `IconeAnimado` de **96**, topo em 101 |
  * | frase | faixa de 35px (subida + descida), centro 528 | 15,6, centro 234 | **16px**, centro 235 |
  * | cor da frase | picos (252,255,255) | branco | `txt-primary` |
- * | fundo | (39,42,47) | — | `bg-chat` (token nosso; §6.6) |
+ * | fundo | (39,42,47) | — | `bg-background-base-lower` (token nosso; §6.6) |
  *
  * O símbolo de 96 é o que faz a **altura da tinta** bater com os 82px do
  * Discord (o `IconeAnimado` deixa margem dentro da caixa: 96 de caixa dão 74×82
@@ -77,9 +77,10 @@ import {
  * Tauri ignora o `transparent` e o WKWebView pinta o próprio fundo, branco:
  * com o `html` transparente e o `rounded-md`, cada canto mostraria uma lasca
  * branca de 6px. Por isso, no Mac, o cartão perde o raio e a página fica com
- * o fundo do `globals.css` (o mesmo `bg-chat`), cobrindo a janela inteira; o
- * `tauri.macos.conf.json` põe `transparent: false` e `backgroundColor` nessa
- * cor.
+ * o fundo do `globals.css` (o mesmo `--background-base-lower`, `#1a1a1e` no
+ * tema padrão), cobrindo a janela inteira; o `tauri.macos.conf.json` e o
+ * `JANELA_NO_MAC` do `useAtualizacao` põem `transparent: false` e
+ * `backgroundColor` nessa cor — mudou o token, mude os dois.
  *
  * O `backgroundColor` **não** escurece o WKWebView antes do primeiro quadro: o
  * que faria isso é o `drawsBackground = NO` do wry 0.55, que só compila com a
@@ -124,7 +125,7 @@ export default function JanelaSplash() {
       // sem moldura nativa, a janelinha só se move por aqui — e o Discord também
       // deixa arrastar a dele
       data-tauri-drag-region
-      className={`fixed inset-0 select-none overflow-hidden bg-chat ${mac ? "" : "rounded-md"}`}
+      className={`fixed inset-0 select-none overflow-hidden bg-background-base-lower ${mac ? "" : "rounded-md"}`}
     >
       {/*
         A janela é `transparent: true` para o canto arredondado deixar ver o que
@@ -143,7 +144,7 @@ export default function JanelaSplash() {
       <p
         role="status"
         aria-live="polite"
-        className="absolute inset-x-0 top-[224px] px-4 text-center text-base leading-[22px] text-txt-primary"
+        className="absolute inset-x-0 top-[224px] px-4 text-center text-base leading-[22px] text-text-strong"
       >
         {fraseDaSplash(estado, porcentagem)}
       </p>
@@ -157,12 +158,12 @@ export default function JanelaSplash() {
         aria-valuenow={porcentagem ?? 0}
         aria-label="Progresso da atualização"
         aria-hidden={!mostrarBarra}
-        className={`absolute left-1/2 top-[256px] h-1 w-[180px] -translate-x-1/2 overflow-hidden rounded-full bg-input transition-opacity ${
+        className={`absolute left-1/2 top-[256px] h-1 w-[180px] -translate-x-1/2 overflow-hidden rounded-full bg-chat-background-default transition-opacity ${
           mostrarBarra ? "opacity-100" : "opacity-0"
         }`}
       >
         <div
-          className="h-full rounded-full bg-accent transition-[width] duration-150 ease-linear"
+          className="h-full rounded-full bg-brand-500 transition-[width] duration-150 ease-linear"
           style={{ width: `${estado === "instalando" ? 100 : (porcentagem ?? 0)}%` }}
         />
       </div>

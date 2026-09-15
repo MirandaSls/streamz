@@ -77,12 +77,12 @@ export default function TelaDeAbertura() {
       // no desktop a barra de título é região de arrasto; aqui também, senão a
       // janela ficaria imóvel enquanto a tela está no ar
       data-tauri-drag-region
-      className={`fixed inset-0 z-30 flex select-none flex-col items-center justify-center gap-7 bg-chat transition-opacity duration-200 ${
+      className={`fixed inset-0 z-30 flex select-none flex-col items-center justify-center gap-7 bg-background-base-lower transition-opacity duration-200 ${
         fase === "saindo" ? "pointer-events-none opacity-0" : "anim-overlay opacity-100"
       }`}
     >
       <IconeAnimado size={92} />
-      <p className="text-sm text-txt-muted">Iniciando…</p>
+      <p className="text-sm text-text-muted">Iniciando…</p>
     </div>
   );
 }

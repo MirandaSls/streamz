@@ -34,7 +34,8 @@ export const INTERACAO_DA_MENSAGEM_INCLUDE = {
 /** A linha que o include acima devolve. */
 export interface LinhaDaFaixa {
   id: string;
-  commandName: string;
+  /** ── onda 3 ── null em interação de componente/modal (não há comando). */
+  commandName: string | null;
   user: PublicUserRow;
 }
 
@@ -42,6 +43,8 @@ export interface LinhaDaFaixa {
 export function toInteracaoDaMensagem(
   linha: LinhaDaFaixa | null | undefined,
 ): InteracaoDaMensagem | null {
-  if (!linha) return null;
+  // ── onda 3 ── a resposta a um **botão** não ganha a faixa "usou /…": não
+  // houve comando, e o Discord também não a desenha
+  if (!linha || linha.commandName === null) return null;
   return { id: linha.id, name: linha.commandName, user: toPublicUser(linha.user) };
 }

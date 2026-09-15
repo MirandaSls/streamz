@@ -1,7 +1,8 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { forwardRef, type ReactNode } from "react";
 import { ArrowLeft, ChevronRight } from "@/components/ui/icones";
+import { BotaoDeIcone } from "@/components/ui/primitivos";
 
 /**
  * As peças pequenas do leiaute de celular: alvo de toque, cabeçalho de tela e
@@ -14,10 +15,11 @@ import { ArrowLeft, ChevronRight } from "@/components/ui/icones";
  * sempre — o que cresce é a área clicável em volta dele.
  *
  * **Os tamanhos daqui são literais (`h-[44px]`, `h-[56px]`), não `h-11`/`h-14`.**
- * A raiz do app é 15,5px (ver `globals.css`), então todo `rem` do Tailwind sai
- * 3% menor que o nominal: `h-11` mede **42,6px** e `h-14`, 54,25. Onde o número
- * é um piso de segurança ou uma medida tirada da captura do Discord, ler a
- * classe e assumir o valor dá errado — e dava: os alvos "de 44" mediam 43.
+ * A raiz do app é 16px (ver `globals.css`, ADR-0009) — com ela `h-11` já mede
+ * 44px e `h-14`, 56 —, mas o literal fica: o número aqui não é um passo da
+ * escala do Tailwind, é o piso de toque (HIG/Material) ou uma medida tirada
+ * da captura do Discord, e ler a classe genérica e assumir o valor continua
+ * errado se a raiz mudar de novo.
  */
 
 /** Botão de ícone do cabeçalho/rodapé: 44×44 de alvo, glifo no meio. */
@@ -35,17 +37,16 @@ export function BotaoDeToque({
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
+    <BotaoDeIcone
+      rotulo={label}
+      icone={children}
+      tamanho="lg"
+      ativo={ativo}
+      comFundo
       onClick={onClick}
-      aria-label={label}
-      aria-pressed={ativo || undefined}
-      className={`grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg transition active:bg-hov ${
-        ativo ? "text-txt-primary" : "text-txt-secondary"
-      } ${className}`}
-    >
-      {children}
-    </button>
+      // 44 literal (ver comentário do arquivo) sobre a caixa de 40 do `lg`
+      className={`h-[44px] w-[44px] ${className}`}
+    />
   );
 }
 
@@ -84,21 +85,21 @@ export function CabecalhoMobile({
   const miolo = (
     <>
       {icone && (
-        <span className="shrink-0 text-txt-muted" aria-hidden="true">
+        <span className="shrink-0 text-text-muted" aria-hidden="true">
           {icone}
         </span>
       )}
       <span className="flex min-w-0 flex-col">
         <span className="flex min-w-0 items-center gap-1">
-          <span className="truncate text-base font-semibold leading-tight text-txt-primary">
+          <span className="truncate text-base font-semibold leading-tight text-text-strong">
             {titulo}
           </span>
           {chevron && (
-            <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-txt-secondary" />
+            <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-text-subtle" />
           )}
         </span>
         {subtitulo && (
-          <span className="truncate text-xs leading-tight text-txt-muted">{subtitulo}</span>
+          <span className="truncate text-xs leading-tight text-text-muted">{subtitulo}</span>
         )}
       </span>
     </>
@@ -107,7 +108,7 @@ export function CabecalhoMobile({
   return (
     /* 56pt de altura, medido em `discord-mobile-chat-canal-2024.png`
          (1px=1pt, MEDIDAS.md §6): a barra vai de y=44 a y=100. */
-    <header className="relative z-10 flex h-[56px] shrink-0 items-center gap-2 border-b border-border bg-panel pl-1 pr-1 shadow-header">
+    <header className="relative z-10 flex h-[56px] shrink-0 items-center gap-2 border-b border-border-subtle bg-background-base-lowest pl-1 pr-1 shadow-elevation-low">
       {aoVoltar && (
         <BotaoDeToque label="Voltar" onClick={aoVoltar}>
           <ArrowLeft size={24} />
@@ -140,14 +141,25 @@ export function CabecalhoMobile({
  * depois de a tela sair da pilha, e uma conversa desmontando com a lista de
  * mensagens dentro custa mais do que os 200ms de polimento valem. Está
  * registrado no PR.
+ *
+ * A `ref` é do arrasto (`ShellMobile`): quem acompanha o dedo escreve o
+ * `transform` direto no nó, sem passar por estado do React — um render por
+ * quadro de gesto faria a conversa inteira reconciliar sessenta vezes por
+ * segundo. `className` soma o que só vale com a gaveta aberta (o canto).
  */
-export function TelaEmpilhada({ children }: { children: ReactNode }) {
+export const TelaEmpilhada = forwardRef<
+  HTMLDivElement,
+  { className?: string; children: ReactNode }
+>(function TelaEmpilhada({ className = "", children }, ref) {
   return (
     /* a área segura de baixo vem para cá: com uma tela empilhada a barra de
        abas sai de cena (ver `ShellMobile`), e sem isto o composer encostaria na
        barra de gestos do aparelho */
-    <div className="anim-empilhar absolute inset-0 z-10 flex flex-col bg-chat pb-[env(safe-area-inset-bottom)]">
+    <div
+      ref={ref}
+      className={`anim-empilhar absolute inset-0 z-10 flex flex-col bg-background-base-lower pb-[env(safe-area-inset-bottom)] ${className}`}
+    >
       {children}
     </div>
   );
-}
+});

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { Search } from "@/components/ui/icones";
+import { TextInput, Tooltip } from "@/components/ui/primitivos";
 
 /**
  * Peças que os três seletores (emoji, GIF, figurinha) desenham igual: a caixa
@@ -16,10 +17,14 @@ import { Search } from "@/components/ui/icones";
  * listeners concorrendo é exatamente como o clique numa aba fecharia o painel.
  */
 
-/** Largura do painel, igual à do Discord. */
-export const LARGURA_PICKER = 424;
-/** Altura do painel inteiro (abas incluídas). */
-export const ALTURA_PICKER = 420;
+/**
+ * Largura e altura do painel, medidas no print 1:1 do seletor real
+ * (`docs/Reference/Captura de tela 2026-08-31 120846.png`, x952–1451 ×
+ * y388–897 = 499 × 509). Antes eram 424 × 420, um número que não batia com
+ * nenhuma das três fontes de medida (cartão 2j-seletor-gif-figurinha).
+ */
+export const LARGURA_PICKER = 500;
+export const ALTURA_PICKER = 510;
 
 /** Fecha ao apertar Escape ou clicar fora — só quando o seletor é o dono da caixa. */
 export function useFecharFora(
@@ -62,7 +67,13 @@ export function CaixaPicker({
       role="dialog"
       aria-label={rotulo}
       style={{ width: LARGURA_PICKER, height: ALTURA_PICKER }}
-      className={`anim-menu z-[70] flex flex-col overflow-hidden rounded-lg bg-panel shadow-high ${className}`}
+      // `--background-surface-high` (`#242429`, medido no mesmo print acima em
+      // y=650 x1001–1450 e y=430 x1342–1451) — era `background-base-lowest`
+      // (`#121214`), a superfície de baixo do app, não a do popout. Os
+      // cabeçalhos grudados de dentro de `GifPicker`/`StickerPicker` mudaram
+      // junto (ver o comentário deles): as duas pontas precisavam mudar
+      // juntas, como o `PickerPanel` já registrava.
+      className={`anim-menu z-[70] flex flex-col overflow-hidden rounded-lg bg-background-surface-high shadow-popout ${className}`}
     >
       {children}
     </div>
@@ -89,31 +100,37 @@ export function BuscaPicker({
   return (
     <div className="flex items-center gap-2 p-2">
       {children}
-      <div className="relative flex-1">
-        <Search
-          size={14}
-          aria-hidden="true"
-          className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-txt-muted"
-        />
-        <input
-          autoFocus={autoFocus}
-          value={valor}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          aria-label={rotulo}
-          className="h-8 w-full rounded bg-void pl-7 pr-2 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
-        />
-      </div>
+      <TextInput
+        // `md` = 40px, o que o print mede (borda 2px em y404–405/442–443,
+        // caixa 40 de altura). Era `sm` (32), que dava uma caixa de ~30px de
+        // fora — 10px mais baixa que a do Discord.
+        tamanho="md"
+        classeDaCaixa="flex-1"
+        autoFocus={autoFocus}
+        value={valor}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        aria-label={rotulo}
+        prefixo={<Search size={14} aria-hidden="true" className="text-text-muted" />}
+      />
     </div>
   );
 }
 
-/** Coluna vertical de atalhos à esquerda da grade. */
+/**
+ * Coluna vertical de atalhos à esquerda da grade — 48px
+ * (`docs/Reference/Captura de tela 2026-08-31 120846.png`, coluna em y=650:
+ * rail `#1a1a1e` de x953 a x1000 = 48). Era `w-11` (44).
+ */
 export function ColunaLateral({ children, rotulo }: { children: ReactNode; rotulo: string }) {
   return (
     <nav
       aria-label={rotulo}
-      className="flex w-11 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-black/30 py-2"
+      // `--background-base-lower` (`#1a1a1e`, mesma coluna acima): o rail é
+      // MAIS ESCURO que o conteúdo (`--background-surface-high`, `#242429`),
+      // não transparente sobre ele — sem fundo próprio herdava o da caixa e
+      // ficava claro demais.
+      className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-border-subtle bg-background-base-lower py-2"
     >
       {children}
     </nav>
@@ -132,18 +149,19 @@ export function BotaoLateral({
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      title={rotulo}
-      aria-label={rotulo}
-      aria-current={ativo || undefined}
-      onClick={onClick}
-      className={`grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded transition ${
-        ativo ? "bg-sel text-accent" : "text-txt-muted hover:bg-hov hover:text-txt-normal"
-      }`}
-    >
-      {children}
-    </button>
+    <Tooltip rotulo={rotulo} lado="right">
+      <button
+        type="button"
+        aria-label={rotulo}
+        aria-current={ativo || undefined}
+        onClick={onClick}
+        className={`grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded transition ${
+          ativo ? "bg-interactive-background-selected text-brand-500" : "text-text-muted hover:bg-interactive-background-hover hover:text-text-default"
+        }`}
+      >
+        {children}
+      </button>
+    </Tooltip>
   );
 }
 
@@ -156,7 +174,7 @@ export function IconeServidor({ nome, iconUrl }: { nome: string; iconUrl: string
     );
   }
   return (
-    <span className="grid h-6 w-6 place-items-center rounded-full bg-void text-[9px] font-semibold text-txt-normal">
+    <span className="grid h-6 w-6 place-items-center rounded-full bg-input-background-default text-[9px] font-semibold text-text-default">
       {sigla(nome)}
     </span>
   );
@@ -174,12 +192,16 @@ export function sigla(nome: string): string {
 
 /** Divisória fina entre os grupos da coluna lateral. */
 export function DivisoriaLateral() {
-  return <div aria-hidden="true" className="my-1 h-px w-6 shrink-0 rounded bg-border" />;
+  return <div aria-hidden="true" className="my-1 h-px w-6 shrink-0 rounded bg-border-subtle" />;
 }
 
 export function RodapePicker({ children }: { children: ReactNode }) {
   return (
-    <footer className="flex h-11 shrink-0 items-center gap-2 border-t border-black/30 bg-void/40 px-3">
+    // 47px e `--background-base-lower` sólido (`#1a1a1e`, medido no mesmo
+    // print: coluna x=1440, y850–896) — era `h-11` (44) com
+    // `bg-input-background-default/40`, uma cor translúcida que não existe
+    // no Discord (o rodapé é opaco, mais escuro que o corpo do painel).
+    <footer className="flex h-[47px] shrink-0 items-center gap-2 border-t border-border-subtle bg-background-base-lower px-3">
       {children}
     </footer>
   );

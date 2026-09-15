@@ -74,7 +74,7 @@ function Barra({ mac, zoom }: { mac: boolean; zoom: number }) {
       data-tauri-drag-region
       aria-label="Barra de título"
       style={{ height: ALTURA / zoom }}
-      className="fixed inset-x-0 top-0 z-40 flex select-none items-center bg-panel text-txt-secondary"
+      className="fixed inset-x-0 top-0 z-40 flex select-none items-center bg-background-base-lowest text-text-subtle"
     >
       <div
         data-tauri-drag-region

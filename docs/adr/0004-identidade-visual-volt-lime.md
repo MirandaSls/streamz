@@ -1,6 +1,6 @@
 # ADR-0004 — Identidade visual própria (Volt Lime sobre Void Ink)
 
-- **Status:** Aceita
+- **Status:** Substituída por [ADR-0009](0009-paridade-total-com-o-discord-exceto-a-marca.md) (2026-09-11), menos a marca e as regras do accent
 - **Data:** 2026-08-26
 - **Substitui:** a meta de paridade visual com o Discord fixada em `design.md`
 

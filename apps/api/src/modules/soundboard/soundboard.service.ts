@@ -33,7 +33,7 @@ import { redisClient } from "../realtime/redis";
 import { toPublicUser } from "../../common/dto";
 import { extensaoDeAudio, validarAudio } from "./audio";
 import { intervaloRespeitado } from "./intervalo";
-import { toSoundDTO } from "./dto";
+import { toSoundDTO, volumeDoEnvio } from "./dto";
 
 /** O que o multer entrega ao controller (o mesmo formato do envio de emoji). */
 export interface ArquivoDeSom {
@@ -111,10 +111,18 @@ export class SoundboardService {
     nome: string,
     emoji: string | undefined,
     file: ArquivoDeSom | undefined,
+    /** texto cru do multipart; ausente vale 1 (ver `volumeDoEnvio`). */
+    volumeBruto?: unknown,
   ): Promise<SoundboardSound> {
     await this.assertPodeGerenciar(userId, guildId);
     const name = this.validarNome(nome);
     const emojiLimpo = this.validarEmoji(emoji);
+    // antes do upload, como nome e emoji: um volume inválido não pode deixar
+    // um objeto subido no bucket só para ser apagado em seguida
+    const volume = volumeDoEnvio(volumeBruto);
+    if (volume === null) {
+      throw new BadRequestException("O volume do som vai de 0 a 1");
+    }
 
     if (!this.storage.isConfigured()) {
       throw new ServiceUnavailableException(
@@ -146,6 +154,7 @@ export class SoundboardService {
           guildId,
           name,
           emoji: emojiLimpo,
+          volume,
           key,
           contentType: audio.mime,
           size: file!.size,

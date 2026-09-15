@@ -23,8 +23,20 @@ interface EmojisState {
   guilds: GuildEmojis[];
   stickerGuilds: GuildStickers[];
   carregado: boolean;
+  /**
+   * true quando a última tentativa de carregar emojis OU figurinhas caiu em
+   * `.catch` — ver "falha aqui não pode derrubar a tela" em `load()`. Sem
+   * esta bandeira o seletor e as telas de gestão não tinham como diferenciar
+   * "usuário sem nenhum emoji" de "a rede falhou": as duas chegam com a
+   * mesma lista vazia. `false` de novo a cada chamada de `load()` — inclusive
+   * a primeira —, para uma tentativa que dá certo depois de uma que falhou
+   * apagar o aviso.
+   */
+  falhouCarregar: boolean;
 
   load: () => Promise<void>;
+  /** tenta de novo depois de uma falha — é o que o botão "Tentar de novo" chama. */
+  recarregar: () => Promise<void>;
   /** aplica o evento `emoji.updated` de um servidor. */
   applyEmojis: (guildId: string, emojis: CustomEmoji[]) => void;
   applyStickers: (guildId: string, stickers: Sticker[]) => void;
@@ -35,16 +47,28 @@ export const useEmojis = create<EmojisState>((set, get) => ({
   guilds: [],
   stickerGuilds: [],
   carregado: false,
+  falhouCarregar: false,
 
   load: async () => {
     // falha aqui não pode derrubar a tela: sem emoji personalizado o chat
-    // continua inteiro, então o erro só apaga a lista
+    // continua inteiro, então o erro só apaga a lista — mas fica registrado
+    // em `falhouCarregar`, para quem mostra a lista poder avisar em vez de
+    // fingir que está tudo vazio.
+    let falhou = false;
     const [guilds, stickerGuilds] = await Promise.all([
-      api.myEmojis().catch(() => [] as GuildEmojis[]),
-      api.myStickers().catch(() => [] as GuildStickers[]),
+      api.myEmojis().catch(() => {
+        falhou = true;
+        return [] as GuildEmojis[];
+      }),
+      api.myStickers().catch(() => {
+        falhou = true;
+        return [] as GuildStickers[];
+      }),
     ]);
-    set({ guilds, stickerGuilds, carregado: true });
+    set({ guilds, stickerGuilds, carregado: true, falhouCarregar: falhou });
   },
+
+  recarregar: () => get().load(),
 
   applyEmojis: (guildId, emojis) => {
     const atual = get().guilds;
@@ -71,7 +95,7 @@ export const useEmojis = create<EmojisState>((set, get) => ({
     set({ stickerGuilds });
   },
 
-  clear: () => set({ guilds: [], stickerGuilds: [], carregado: false }),
+  clear: () => set({ guilds: [], stickerGuilds: [], carregado: false, falhouCarregar: false }),
 }));
 
 /** Todos os emojis personalizados que eu posso usar, em lista plana. */

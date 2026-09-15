@@ -43,7 +43,7 @@ export default function Home() {
   if (ambiente === "web") return <PaginaDeDownload />;
 
   return (
-    <main className="flex h-screen items-center justify-center text-txt-muted">
+    <main className="flex h-screen items-center justify-center text-text-muted">
       Carregando…
     </main>
   );

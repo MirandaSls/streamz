@@ -32,6 +32,12 @@ export interface PollOption {
   votes: number;
   /** o espectador votou nesta opção. */
   me: boolean;
+  /**
+   * Emoji da resposta, desenhado antes do texto (o `.pollAnswerIcon` do
+   * Discord): o caractere unicode ou `<:nome:id>` de emoji personalizado.
+   * `null`/ausente = resposta sem emoji.
+   */
+  emoji?: string | null;
 }
 
 export interface Poll {
@@ -47,6 +53,55 @@ export interface Poll {
   /** votos somados (com `multi`, uma pessoa pode contar mais de uma vez). */
   totalVotes: number;
 }
+
+/** Teto de caracteres do emoji de uma resposta (sequência ZWJ ou `<:nome:id>`). */
+export const MAX_POLL_OPTION_EMOJI = 100;
+
+/**
+ * Emoji unicode "de verdade": só pictogramas, indicadores regionais (bandeiras),
+ * keycaps e os modificadores que costuram uma sequência (ZWJ, VS16, tom de pele,
+ * tags de subdivisão). Texto comum não passa — o campo é o ícone da resposta, e
+ * letra ali viraria um segundo rótulo.
+ */
+const EMOJI_UNICODE_RE =
+  /^(?:[\p{Extended_Pictographic}\p{Regional_Indicator}\p{Emoji_Modifier}\u200d\ufe0f\u20e3\u{E0020}-\u{E007F}]|[0-9#*](?=\ufe0f?\u20e3))+$/u;
+const EMOJI_PERSONALIZADO_RE = /^<:[a-z0-9_]{2,32}:[A-Za-z0-9_-]{1,64}>$/;
+
+/** true para um emoji unicode ou para a forma interna `<:nome:id>`. */
+export function ehEmojiDeResposta(valor: string): boolean {
+  if (!valor || valor.length > MAX_POLL_OPTION_EMOJI) return false;
+  if (EMOJI_PERSONALIZADO_RE.test(valor)) return true;
+  return EMOJI_UNICODE_RE.test(valor) && /[\p{Extended_Pictographic}\p{Regional_Indicator}\u20e3]/u.test(valor);
+}
+
+/**
+ * Emojis das respostas no `poll.create`, na mesma posição de `options`.
+ *
+ * Mora aqui, e não dentro do `pollCreateSchema` (em `eventos.ts`), porque o
+ * cartão das enquetes não pode mexer naquele arquivo: o gateway lê este campo
+ * do corpo cru, com este schema à parte. Quando `eventos.ts` puder ser tocado,
+ * o certo é juntar os dois (ver o relatório do cartão).
+ */
+export const pollOptionEmojisSchema = z.object({
+  optionEmojis: z
+    .array(
+      z
+        .string()
+        .trim()
+        .max(MAX_POLL_OPTION_EMOJI, "Emoji inválido")
+        .refine((v) => v === "" || ehEmojiDeResposta(v), "Emoji inválido")
+        .nullable(),
+    )
+    .max(MAX_POLL_OPTIONS, `Máximo de ${MAX_POLL_OPTIONS} opções`)
+    .optional(),
+});
+export type PollOptionEmojisPayload = z.infer<typeof pollOptionEmojisSchema>;
+
+/**
+ * Resposta (ack do Socket.IO) de `poll.create`, `poll.vote` e `poll.close`.
+ * Sem ela, uma falha no servidor deixava o voto otimista aceso na tela.
+ */
+export type PollAck = { ok: true } | { ok: false; error: string };
 
 /** Não aceita mais voto: encerrada à mão ou vencida. */
 export function isPollClosed(

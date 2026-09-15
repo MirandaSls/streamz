@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Download, X } from "@/components/ui/icones";
+import { BotaoDeIcone, Button } from "@/components/ui/primitivos";
 import {
   baixarAtualizacaoAndroid,
   ehAndroidNoTauri,
@@ -208,19 +209,19 @@ export default function AtualizadorDoAndroid() {
       // distância do rodapé na tela de login, que não tem barra —
       // `env(safe-area-inset-bottom)` não entra aqui porque quem reserva o
       // recorte inferior é a barra de abas; sem ela os 68px já sobram.
-      className="fixed inset-x-2 bottom-[68px] z-40 flex items-center gap-3 rounded-[8px] border border-border bg-chat px-3 py-3 shadow-lg"
+      className="fixed inset-x-2 bottom-[68px] z-40 flex items-center gap-3 rounded-[8px] border border-border-subtle bg-background-base-lower px-3 py-3 shadow-lg"
     >
       {fase === "falhou" ? (
-        <AlertTriangle size={20} className="shrink-0 text-red" />
+        <AlertTriangle size={20} className="shrink-0 text-status-danger" />
       ) : (
-        <Download size={20} className="shrink-0 text-accent" />
+        <Download size={20} className="shrink-0 text-brand-500" />
       )}
 
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-txt-primary">
+        <p className="text-sm font-semibold text-text-strong">
           {fase === "falhou" ? "Não deu para atualizar" : `Versão ${novidade.versao} disponível`}
         </p>
-        <p className="truncate text-xs text-txt-muted">{legenda(fase, porcentagem, novidade)}</p>
+        <p className="truncate text-xs text-text-muted">{legenda(fase, porcentagem, novidade)}</p>
 
         {fase === "baixando" && (
           // A barrinha discreta: mesma altura e mesmas cores da janelinha de
@@ -232,10 +233,10 @@ export default function AtualizadorDoAndroid() {
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={porcentagem ?? undefined}
-            className="mt-2 h-1 w-full overflow-hidden rounded-full bg-input"
+            className="mt-2 h-1 w-full overflow-hidden rounded-full bg-chat-background-default"
           >
             <div
-              className={`h-full rounded-full bg-accent ${
+              className={`h-full rounded-full bg-brand-500 ${
                 porcentagem === null
                   ? // sem `Content-Length` não há porcentagem honesta a mostrar:
                     // a barra fica cheia e pulsando em vez de mentir um número
@@ -256,26 +257,21 @@ export default function AtualizadorDoAndroid() {
           reabre o instalador — sem baixar de novo, porque o pacote está no
           disco. */}
       {fase !== "baixando" && (
-        <button
-          type="button"
-          onClick={() => void atualizar(novidade)}
-          className="shrink-0 rounded-[3px] bg-accent px-3 py-2 text-sm font-medium text-accent-ink"
-        >
+        <Button variante="primario" tamanho="sm" onClick={() => void atualizar(novidade)} className="shrink-0">
           {fase === "falhou" ? "Tentar de novo" : "Instalar"}
-        </button>
+        </Button>
       )}
 
       {/* "Baixando" não tem "x": o download já começou, some sozinho, e sumir
           com a barra deixaria o usuário sem saber por que a rede está ocupada. */}
       {fase !== "baixando" && (
-        <button
-          type="button"
-          aria-label="Dispensar aviso de atualização"
+        <BotaoDeIcone
+          rotulo="Dispensar aviso de atualização"
+          icone={<X size={16} />}
+          tamanho="sm"
+          className="shrink-0"
           onClick={dispensar}
-          className="shrink-0 p-1 text-txt-muted"
-        >
-          <X size={16} />
-        </button>
+        />
       )}
     </div>
   );

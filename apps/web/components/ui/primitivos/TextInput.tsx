@@ -1,0 +1,457 @@
+"use client";
+
+import {
+  forwardRef,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type TextareaHTMLAttributes,
+} from "react";
+
+import { X } from "@/components/ui/icones";
+
+/**
+ * Campos de formulário do Discord (refresh 2025).
+ *
+ * Medido (cartão 0.4-campos):
+ * - TextInput `md` 40 de altura (`sm` 32 — a busca da lista de membros,
+ *   `.searchBar_c322aa`), raio 8 (`--radius-sm`), borda 1px
+ *   `--input-border-default` (hover igual — o Discord não muda a borda no
+ *   hover), fundo `--input-background-default`, texto 16/20 (`text-text-md`)
+ *   `--input-text-default`, placeholder `--input-placeholder-text-default`.
+ *   O foco é a borda da caixa em `--input-border-active` (limão), com o
+ *   `<input>` marcado `data-sem-anel` para o anel global do `globals.css` não
+ *   se sobrepor; a espessura de 2px está na rodada textinput-e-telas-de-auth,
+ *   abaixo.
+ *   Padding lateral **sem** sufixo: 10px (`px-2.5`), não 12 — é o mesmo
+ *   `padding-inline: 10px …` de `.input_fffc15` (`css-bruto/730931.*.css`) e
+ *   `.base_f89b2c` (`sob-demanda/7a89de758a772c46.css`), que só zeram o lado
+ *   do botão quando há um; sem botão os dois lados ficam iguais. A caixa
+ *   (raio/altura/borda) é `.container_f89b2c` no mesmo arquivo sob-demanda.
+ *   Erro: borda `--input-border-error-default`, fundo
+ *   `--input-background-error-default`.
+ * - Prefixo (ícone à esquerda) e sufixo/limpar (à direita) aqui são irmãos
+ *   flexbox com `gap-2` (8, a escala de espaçamento do resto do app — **não**
+ *   é medida do Discord). O Discord absolutiza o ícone/botão por cima do
+ *   texto com `padding-inline: 48px 36px` (`sob-demanda/99d7da090ff5cf77.css`),
+ *   mas esse número é o tamanho exato do botão de emoji + "×" daquele campo
+ *   de status específico — não generaliza para um `prefixo`/`sufixo`
+ *   arbitrário deste primitivo, então não foi copiado.
+ * - TextArea: sem borda própria no `<textarea>` — a borda e o fundo ficam no
+ *   invólucro, como no Discord (`.textArea_fcde1f`, `css-bruto/142753.*.css`);
+ *   padding 12×10 (vertical×horizontal), `resize: none` por padrão; contador
+ *   em 12px `font-code` `--text-muted` no canto inferior direito (12 de
+ *   baixo, 14 da direita — `.maxLength_fcde1f`), que vira
+ *   `--text-feedback-critical` ao estourar (`.errorOverflow_fcde1f`).
+ * - Campo (rótulo + descrição + erro), `.legend_b717a1`
+ *   (`sob-demanda/355502.*.css`): rótulo 16px peso 500 `--text-strong`, **sem
+ *   caixa-alta** (a refresh aboliu), 8 até o controle; obrigatório = asterisco
+ *   DEPOIS do rótulo em `--text-feedback-critical` com 4 de recuo
+ *   (`.required_b717a1`); erro abaixo do controle em 12px itálico peso 500
+ *   `--text-feedback-critical` (`.errorMessage_b717a1`); descrição (hint)
+ *   14px `--text-muted`, 4 de distância até o controle — não achei a classe
+ *   da descrição no mesmo arquivo que `legend_b717a1` (só o módulo de
+ *   tipografia leva o hash `_b717a1`), mas 14px `--text-muted` é o padrão que
+ *   se repete no CSS bruto para texto secundário abaixo de um rótulo
+ *   (`.subText_f0c2ea`, `.discriminator__24091`, `.groupLabel_c1e9c4`).
+ * - Sem print 1:1 desta tela específica entre as capturas de
+ *   `docs/Reference/`: a única com campo de texto medível (Adicionar amigo,
+ *   `2026-08-31 124052.png`) é um componente à parte
+ *   (`.addFriendInputWrapper__72ba7`, raio **16**, caixa maior), não o
+ *   `TextInput` genérico — não serve de referência para as medidas acima.
+ * - Celular: `celular:h-[48px]` no `md` (alvo de toque), e 16px de fonte
+ *   mínima (evita o zoom do Safari — já é global).
+ *
+ * Rodada de correção (cartão c4-campos, sem medida nova — só o que a
+ * migração pediu):
+ * - `Campo.ajuda` é o texto muted DEPOIS do controle que BanModal, KickModal
+ *   e `settings/AplicativosTab.tsx` escreviam à mão ao lado do `TextInput`;
+ *   `Campo.descricao` continua sendo o que vem ANTES.
+ * - O erro de `Campo` ganhou `role="alert"`/`aria-live="polite"` embutidos —
+ *   `app/reset-password/page.tsx` duplicava um `<p sr-only>` só para isso.
+ * - `Campo.rotuloDiscreto` troca só o tamanho do rótulo (16px → 14px); peso e
+ *   caixa (nenhuma) continuam os mesmos dos dois tamanhos.
+ * - `semCaixa` (`TextInput`/`TextArea`) tira fundo e borda do invólucro para
+ *   a tela desenhar os dela em `classeDaCaixa` sem `!important` — o caso de
+ *   `chat/HeaderBar.tsx` e `layout/DMList.tsx`, que hoje usam `!bg-…`/`!border-…`
+ *   porque duas classes Tailwind de mesma especificidade (a daqui e a da
+ *   tela) empatam por ordem do stylesheet gerado, não pela ordem no
+ *   `className` — `classeDaCaixa` já ser o último no template não é garantia.
+ * - `tamanho` de `TextInput` aceita número (px) além de `sm`/`md` — a busca
+ *   de 36 e a caixa composta de 58 que apareceram na migração não tinham
+ *   classe Tailwind pronta; vira `style.height`, não `h-[Npx]` calculado em
+ *   runtime (o scanner do Tailwind só gera a utility que aparece literal no
+ *   código-fonte, não um valor que só existe depois de renderizado).
+ *
+ * Rodada 2p-primitivos (onda 2, só aditiva: nenhuma prop antiga mudou):
+ * - `classeDoTexto` e `tamanhoDoTexto` existem porque o `className` do
+ *   `<input>` **soma** às classes daqui. Uma `text-text-sm` ou uma
+ *   `placeholder:text-text-muted` vinda da tela empatava com a `text-text-md`
+ *   e a `placeholder:text-input-placeholder-text-default` do primitivo, e quem
+ *   vencia era a ordem do stylesheet gerado. Por isso `layout/DMList.tsx`
+ *   escrevia a cor e o tamanho sabendo que podiam perder, e o cabeçalho do
+ *   canal (`chat/HeaderBar.tsx`) nem usava o primitivo. As duas props
+ *   **trocam** a classe padrão em vez de empilhar outra. Medida do caso que as
+ *   motivou: `.searchBar_e6b769 .searchBarComponent_e6b769{color:var(--text-muted);
+ *   font-size:14px;font-weight:var(--font-weight-medium);padding:10px 12px}`
+ *   (`css-bruto/398929.40a41*.css`).
+ * - `paddingLateral` pelo mesmo motivo: `px-3` em `classeDaCaixa` contra o
+ *   `px-2.5` daqui é outro empate de ordem. Vai em `style`, e com ele o
+ *   `px-2.5` nem é emitido.
+ * - **Não mudou**: o `celular:h-[48px]` do `md`. A revisão mediu 40 no login
+ *   do Discord web no iOS (`publico/web-mobile-ios/01-login-viewport.png`,
+ *   escala 3, coluna x=590: campo de senha em y 810–929 = 120/3 = 40), mas o
+ *   campo focado da mesma imagem mede 44 (y 534–665 = 132/3). E 48 é a regra
+ *   de alvo de toque do app de celular (onda 8). Trocar aqui muda a altura de
+ *   todo campo do celular; quem decide é o dono do celular.
+ *
+ * Rodada de correção (cartão textinput-e-telas-de-auth):
+ * - **Foco de 2px.** A borda de 1px só trocava de cor; o anel do Discord mede
+ *   2px por dentro da caixa (print `docs/Reference/Captura de tela
+ *   2026-08-31 120846.png`, e de novo em
+ *   `publico/desktop/04-esqueci-senha-erro-SIMULADO-viewport.png`, escala 2:
+ *   coluna x=734, borda focada em y 744–747 = 4/2 = 2px). O segundo pixel é
+ *   uma sombra `inset` de 1px na mesma cor, somada à borda: não mexe na
+ *   altura (a sombra não ocupa caixa) nem no padding. Só com caixa própria —
+ *   `semCaixa` não tem borda, e um anel ali seria desenho novo nas buscas de
+ *   `chat/HeaderBar.tsx` e `layout/DMList.tsx`.
+ * - **readOnly.** Com `readOnly` a borda vira `--input-border-readonly`, na
+ *   mesma ordem de `settings/campos.tsx` (erro > só leitura > padrão): só a
+ *   borda muda, sem esmaecer o texto (`[data-read-only=true]` do Discord).
+ * - **`lg`**: 44 (`h-11`) no desktop e 48 (`h-12`) no celular, para a tela que
+ *   precisa do campo grande (o `AplicativosTab`, em outro cartão). Texto 16px,
+ *   igual ao `md`.
+ * - **`Campo.estiloDoErro`**: o Discord tem dois desenhos de erro de campo.
+ *   `formulario` (padrão) é o `.errorMessage_b717a1` de sempre — 12px itálico
+ *   peso 500. `ajuda` é o `.helperTextContainer__5a838` das telas de conta
+ *   (`publico/desktop/04-esqueci-senha-erro-SIMULADO.html`): mora dentro de
+ *   `.control__5a838{display:flex;flex-direction:column;gap:var(--space-4)}`
+ *   (4 até o controle), e `.statusMessageContainer__5a838{display:grid;
+ *   gap:var(--space-4);grid-template-columns:auto 1fr;align-items:start}` põe
+ *   um ícone de alerta de 16 (`<svg width="16" … fill="var(--text-feedback-critical)">`)
+ *   antes do texto `text-xs/normal` (12px, peso 400, sem itálico) em
+ *   `--text-feedback-critical` (`.text-xs/normal_cf4812` no CSS bruto).
+ *   Conferido no print da mesma captura (escala 2): ícone em y 841–870
+ *   (≈16 CSS), a 8px de dispositivo (= 4 CSS) da borda de baixo do campo.
+ */
+export type TamanhoDeCampo = "sm" | "md" | "lg";
+
+/** Tamanho da fonte do campo: `md` e `lg` 16px (padrão), `sm` 14px. */
+const TAMANHO_DO_TEXTO: Record<TamanhoDeCampo, string> = {
+  sm: "text-text-sm",
+  md: "text-text-md",
+  lg: "text-text-md",
+};
+
+/** Altura da caixa por tamanho nomeado — literais para o scanner do Tailwind. */
+const ALTURA_DA_CAIXA: Record<TamanhoDeCampo, string> = {
+  sm: "h-[32px]",
+  md: "h-[40px] celular:h-[48px]",
+  lg: "h-11 celular:h-12",
+};
+
+/**
+ * O "!" num círculo do Discord, copiado do `<path>` de
+ * `publico/desktop/04-esqueci-senha-erro-SIMULADO.html` (o erro de
+ * `.statusMessageContainer__5a838`). Local porque `components/ui/icones.tsx`
+ * não exporta um alerta circular (só `AlertTriangle`, outro desenho) e esse
+ * arquivo não é deste cartão — o mesmo precedente dos SVGs próprios de
+ * `Checkbox.tsx`/`Radio.tsx`. `currentColor` herda o
+ * `text-text-feedback-critical` do contêiner.
+ */
+function IconeDeAlerta() {
+  return (
+    <svg aria-hidden="true" width={16} height={16} viewBox="0 0 24 24" fill="none" className="shrink-0">
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M12 23a11 11 0 1 0 0-22 11 11 0 0 0 0 22Zm1.44-15.94L13.06 14a1.06 1.06 0 0 1-2.12 0l-.38-6.94a1 1 0 0 1 1-1.06h.88a1 1 0 0 1 1 1.06Zm-.19 10.69a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0Z"
+      />
+    </svg>
+  );
+}
+
+/** Tinta padrão do texto e do placeholder, trocada inteira por `classeDoTexto`. */
+const TINTA_DO_TEXTO = "text-input-text-default placeholder:text-input-placeholder-text-default";
+
+export interface TextInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "size" | "prefix"> {
+  /**
+   * `md` 40 (padrão), `sm` 32, `lg` 44 (48 no celular), ou um número em px.
+   *
+   * O número é para medida que não é `sm`/`md` e não tem classe Tailwind
+   * pronta no projeto — a busca de 36 e a caixa composta de 58 que apareceram
+   * na migração (cartão c4-campos). Vira `style.height` no invólucro, não
+   * classe: uma altura calculada em runtime (`h-[${tamanho}px]`) não é
+   * reconhecida pelo scanner do Tailwind, que só gera a utility que aparece
+   * literalmente no código-fonte.
+   */
+  tamanho?: TamanhoDeCampo | number;
+  erro?: boolean;
+  /** Ícone ou elemento à esquerda, dentro da caixa. */
+  prefixo?: ReactNode;
+  /** Ícone ou botão à direita, dentro da caixa. */
+  sufixo?: ReactNode;
+  /** Com valor não vazio, mostra o "×" à direita e chama isto ao clicar. */
+  aoLimpar?: () => void;
+  /** Classe da caixa externa (a do `<input>` é `className`); já vai por
+   *  último na `className` do invólucro, então uma classe daqui vence uma
+   *  classe interna de mesma especificidade sem precisar de `!important`. */
+  classeDaCaixa?: string;
+  /**
+   * Não desenha fundo nem borda própria — para a tela compor os dela
+   * (ex.: busca que precisa herdar um fundo diferente de `--input-*`) sem
+   * depender de `!important` em `classeDaCaixa` quando a ordem de classes
+   * não basta (mesma especificidade, ordem definida pelo Tailwind no
+   * stylesheet gerado, não pela ordem no atributo `className`).
+   */
+  semCaixa?: boolean;
+  /**
+   * Tamanho da fonte do `<input>`: `md` 16px (padrão, o de sempre) ou `sm`
+   * 14px, a busca da lista de conversas do Discord
+   * (`.searchBarComponent_e6b769{font-size:14px}`, `css-bruto/398929.*.css`).
+   * **Troca** a classe de tamanho do primitivo; um `text-text-sm` no
+   * `className` empataria com ela (ver cabeçalho). Independe de `tamanho`,
+   * que é a altura da caixa.
+   */
+  tamanhoDoTexto?: TamanhoDeCampo;
+  /**
+   * Cor (e, se a tela quiser, peso) do texto e do placeholder do `<input>`,
+   * **no lugar** do par padrão `text-input-text-default` +
+   * `placeholder:text-input-placeholder-text-default`, que deixa de ser
+   * emitido. É o jeito de trocar a tinta sem `!important`. O `className`
+   * continua indo para o `<input>` e continua **somando**: layout (alinhamento,
+   * largura) vai lá; cor e placeholder vêm aqui.
+   *
+   * Ex. da busca de DMs (`.searchBarComponent_e6b769`: `--text-muted`, peso
+   * 500): `classeDoTexto="font-medium text-text-default placeholder:text-text-muted"`.
+   * String vazia = nenhuma tinta, o `<input>` herda a cor do pai.
+   */
+  classeDoTexto?: string;
+  /**
+   * Padding lateral da caixa em px, no lugar dos 10 padrão (`px-2.5`, que
+   * deixa de ser emitido). Vai em `style` (`padding-inline`): um `px-3` em
+   * `classeDaCaixa` empatava com o `px-2.5` pela ordem do CSS gerado. Medida
+   * conhecida: 12 (`.searchBarComponent_e6b769{padding:10px 12px}`).
+   */
+  paddingLateral?: number;
+}
+
+export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function TextInput(
+  {
+    tamanho = "md",
+    erro = false,
+    prefixo,
+    sufixo,
+    aoLimpar,
+    classeDaCaixa = "",
+    semCaixa = false,
+    tamanhoDoTexto = "md",
+    classeDoTexto,
+    paddingLateral,
+    className = "",
+    ...resto
+  },
+  ref,
+) {
+  const alturaEmPx = typeof tamanho === "number" ? tamanho : null;
+  const somenteLeitura = !!resto.readOnly;
+  // Sem nenhuma das duas medidas em px o invólucro sai sem `style`, igual a
+  // antes; com uma delas, só a propriedade pedida entra.
+  const estiloDaCaixa =
+    alturaEmPx === null && paddingLateral == null
+      ? undefined
+      : {
+          ...(alturaEmPx === null ? {} : { height: alturaEmPx }),
+          ...(paddingLateral == null ? {} : { paddingInline: paddingLateral }),
+        };
+  return (
+    <div
+      style={estiloDaCaixa}
+      /* o foco é a borda DA CAIXA mudando de cor (o `<input>` é só o miolo, e o
+         anel nele aparecia flutuando por dentro — ver `data-sem-anel` no
+         globals.css) */
+      className={`flex items-center gap-2 rounded-lg ${paddingLateral == null ? "px-2.5" : ""} has-[:focus-visible]:border-input-border-active has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60 ${
+        semCaixa ? "" : "border has-[:focus-visible]:shadow-[inset_0_0_0_1px_rgb(var(--input-border-active-rgb))]"
+      } ${typeof tamanho === "number" ? "" : ALTURA_DA_CAIXA[tamanho]} ${
+        semCaixa
+          ? ""
+          : erro
+            ? "border-input-border-error-default bg-input-background-error-default"
+            : somenteLeitura
+              ? "border-input-border-readonly bg-input-background-default"
+              : "border-input-border-default bg-input-background-default"
+      } ${classeDaCaixa}`}
+    >
+      {prefixo}
+      <input
+        ref={ref}
+        data-sem-anel
+        aria-invalid={erro || undefined}
+        className={`min-w-0 flex-1 bg-transparent outline-none ${TAMANHO_DO_TEXTO[tamanhoDoTexto]} ${classeDoTexto ?? TINTA_DO_TEXTO} ${className}`}
+        {...resto}
+      />
+      {aoLimpar && resto.value ? (
+        <button
+          type="button"
+          onClick={aoLimpar}
+          aria-label="Limpar"
+          className="shrink-0 text-interactive-text-default transition-colors hover:text-interactive-text-hover"
+        >
+          <X size={16} aria-hidden="true" />
+        </button>
+      ) : null}
+      {sufixo}
+    </div>
+  );
+});
+
+export interface TextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+  erro?: boolean;
+  /** Mostra "n / máx" no canto (exige `maxLength`). */
+  contador?: boolean;
+  redimensionavel?: boolean;
+  /** Classe da caixa externa; já vai por último — ver `TextInputProps.classeDaCaixa`. */
+  classeDaCaixa?: string;
+  /** Não desenha fundo nem borda própria — ver `TextInputProps.semCaixa`. */
+  semCaixa?: boolean;
+  /** Tamanho da fonte do `<textarea>` (padrão `md`); ver `TextInputProps.tamanhoDoTexto`. */
+  tamanhoDoTexto?: TamanhoDeCampo;
+  /** Tinta do texto e do placeholder no lugar da padrão; ver `TextInputProps.classeDoTexto`. */
+  classeDoTexto?: string;
+}
+
+export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function TextArea(
+  {
+    erro = false,
+    contador = false,
+    redimensionavel = false,
+    classeDaCaixa = "",
+    semCaixa = false,
+    tamanhoDoTexto = "md",
+    classeDoTexto,
+    className = "",
+    ...resto
+  },
+  ref,
+) {
+  const n = typeof resto.value === "string" ? resto.value.length : 0;
+  const restante = typeof resto.maxLength === "number" ? resto.maxLength - n : null;
+  return (
+    <div
+      className={`relative rounded-lg has-[:focus-visible]:border-input-border-active has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60 ${
+        semCaixa ? "" : "border"
+      } ${
+        semCaixa
+          ? ""
+          : erro
+            ? "border-input-border-error-default bg-input-background-error-default"
+            : "border-input-border-default bg-input-background-default"
+      } ${classeDaCaixa}`}
+    >
+      <textarea
+        ref={ref}
+        data-sem-anel
+        aria-invalid={erro || undefined}
+        className={`block w-full bg-transparent px-2.5 py-3 outline-none ${TAMANHO_DO_TEXTO[tamanhoDoTexto]} ${classeDoTexto ?? TINTA_DO_TEXTO} ${
+          redimensionavel ? "resize-y" : "resize-none"
+        } ${className}`}
+        {...resto}
+      />
+      {contador && resto.maxLength ? (
+        <span
+          className={`pointer-events-none absolute bottom-3 right-3.5 font-mono text-text-xs ${
+            restante !== null && restante < 0 ? "text-text-feedback-critical" : "text-text-muted"
+          }`}
+        >
+          {restante}
+        </span>
+      ) : null}
+    </div>
+  );
+});
+
+export interface CampoProps {
+  rotulo: ReactNode;
+  /** `id` do controle, para o `<label htmlFor>`. */
+  htmlFor?: string;
+  /** Descrição ACIMA do controle (o hint do Discord, 14px). */
+  descricao?: ReactNode;
+  /**
+   * Ajuda DEPOIS do controle — o texto muted que BanModal, KickModal e
+   * AplicativosTab escreviam à mão como `<p className="mt-1 text-xs
+   * text-text-muted">` ao lado do `TextInput`/`TextArea`; migrar para cá
+   * evita reimplementar o espaçamento em cada tela.
+   */
+  ajuda?: ReactNode;
+  /** Mensagem de erro abaixo do controle; `null`/vazio esconde. */
+  erro?: string | null;
+  /**
+   * Rótulo pequeno (14px, `text-text-sm`) em vez do padrão do Discord (16px,
+   * `text-text-md`) — o peso (500) e a ausência de caixa-alta são os mesmos
+   * nos dois tamanhos; a refresh do Discord aboliu a caixa-alta.
+   */
+  rotuloDiscreto?: boolean;
+  obrigatorio?: boolean;
+  /**
+   * Desenho do erro: `formulario` (padrão) é o `.errorMessage_b717a1` — 12px
+   * itálico peso 500, sem ícone; `ajuda` é o `.helperTextContainer__5a838`
+   * das telas de conta — ícone de alerta de 16 + 12px peso normal. Medidas no
+   * cabeçalho do arquivo.
+   */
+  estiloDoErro?: "formulario" | "ajuda";
+  children: ReactNode;
+  className?: string;
+}
+
+export function Campo({
+  rotulo,
+  htmlFor,
+  descricao,
+  ajuda,
+  erro,
+  rotuloDiscreto = false,
+  obrigatorio,
+  estiloDoErro = "formulario",
+  children,
+  className = "",
+}: CampoProps) {
+  return (
+    <div className={className}>
+      <label
+        htmlFor={htmlFor}
+        className={`mb-2 block font-medium text-text-strong ${rotuloDiscreto ? "text-text-sm" : "text-text-md"}`}
+      >
+        {rotulo}
+        {obrigatorio ? <span className="pl-1 text-text-feedback-critical">*</span> : null}
+      </label>
+      {/* 4 até o controle (não os 8 do rótulo) — ver cabeçalho do arquivo */}
+      {descricao ? <p className="mb-1 text-text-sm text-text-muted">{descricao}</p> : null}
+      {children}
+      {ajuda ? <p className="mt-1 text-text-xs text-text-muted">{ajuda}</p> : null}
+      {erro && estiloDoErro === "ajuda" ? (
+        // `.statusMessageContainer__5a838`: grade `auto 1fr` com 4 de vão e
+        // itens no topo — o ícone fica na primeira linha quando o texto quebra.
+        <div
+          role="alert"
+          aria-live="polite"
+          className="mt-1 grid grid-cols-[auto_1fr] items-start gap-1 text-text-xs text-text-feedback-critical"
+        >
+          <IconeDeAlerta />
+          <p>{erro}</p>
+        </div>
+      ) : erro ? (
+        // `role="alert"` + `aria-live="polite"` embutidos: antes cada tela
+        // duplicava um `<p sr-only>` ao lado para o leitor de tela anunciar
+        // o erro (ver `app/reset-password/page.tsx`) — agora é uma vez só,
+        // aqui, e essa duplicata pode sair de lá.
+        <p
+          role="alert"
+          aria-live="polite"
+          className="mt-1 text-text-xs font-medium italic text-text-feedback-critical"
+        >
+          {erro}
+        </p>
+      ) : null}
+    </div>
+  );
+}

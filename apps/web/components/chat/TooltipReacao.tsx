@@ -2,23 +2,34 @@
 
 import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { displayNameOf, parseCustomEmoji, type PublicUser } from "@streamz/shared";
-import Avatar from "@/components/ui/Avatar";
-import { API_URL } from "@/lib/config";
+import { displayNameOf, type PublicUser } from "@streamz/shared";
+import { EmojiDaReacao, rotuloDaReacao } from "@/components/chat/EmojiDeReacao";
 
-/** Folga entre a pílula e a caixa. */
+/** Folga entre a pílula e a caixa — sem número medido para este tooltip (o
+ *  CSS do Discord não declara offset de posicionamento, isso é floating-ui
+ *  em runtime); mantém o valor já usado nos outros popouts flutuantes. */
 const GAP = 8;
 const EDGE = 8;
-/** Quantos avatares cabem antes do "+N". */
-const MAX_AVATARES = 6;
 
 /**
- * Tooltip da pílula de reação: o emoji grande, os avatares de quem reagiu e a
- * frase por extenso — como no Discord.
+ * Tooltip da pílula de reação: "Fulano, Beltrano e mais N reagiram com :x:",
+ * com o emoji grande à esquerda — a dica que aparece ao passar o mouse sobre
+ * a pílula, antes de abrir a lista completa de quem reagiu (essa é outra
+ * superfície do Discord, fora do escopo deste cartão).
  *
- * Não usa o `Tooltip` comum porque aquele só aceita texto, e o que informa aqui
- * é justamente **quem** reagiu: uma fileira de rostos é reconhecível de relance,
- * uma lista de nomes não.
+ * Medido de `.reactionTooltip_bbcccb` / `.reactionTooltipEmoji_bbcccb` /
+ * `.reactionTooltipText_bbcccb` / `.reactionTooltipInner_bbcccb`
+ * (docs/referencias-discord/tokens/css-bruto/sob-demanda/377016.ee694f35e21f879f.css):
+ * fundo `--background-surface-high`, raio `--radius-xs` (4px, `rounded`),
+ * sombra `var(--shadow-border), var(--shadow-high)` (`shadow-popout` — é a
+ * sombra que desenha o contorno de 1px, não existe `border` à parte), texto
+ * `--text-default` peso `--font-weight-medium` (500), `max-width: 288px`,
+ * `padding: 16px`, hyphens automático + quebra de palavra. Por dentro,
+ * `reactionTooltipInner` é uma **linha** (`display: flex`): emoji
+ * `reactionTooltipEmoji` de **32×32** e o texto com `margin-inline-start:
+ * 12px`. Não existe classe de avatar/rosto perto de `reactionTooltip_bbcccb`
+ * no CSS — essa superfície é só emoji grande + frase, sem fileira de rostos
+ * (os rostos ficam na lista completa, que se abre num clique separado).
  */
 export default function TooltipReacao({
   emoji,
@@ -59,16 +70,25 @@ export default function TooltipReacao({
     if (!aberto) return;
     window.addEventListener("scroll", fechar, true);
     window.addEventListener("resize", fechar);
+    // A dica ficava presa quando um véu (menu, modal, o próprio clique na
+    // pílula) cobria o alvo sem passar por `pointerleave`/`blur`: um
+    // `pointerdown` em qualquer lugar (capture, antes que alguém pare a
+    // propagação) e uma troca de aba (`visibilitychange`) também fecham.
+    document.addEventListener("pointerdown", fechar, true);
+    document.addEventListener("visibilitychange", fechar);
     return () => {
       window.removeEventListener("scroll", fechar, true);
       window.removeEventListener("resize", fechar);
+      document.removeEventListener("pointerdown", fechar, true);
+      document.removeEventListener("visibilitychange", fechar);
     };
   }, [aberto, fechar]);
 
-  const pessoas = userIds.map((id) => conhecidos.get(id));
-  const visiveis = pessoas.slice(0, MAX_AVATARES);
-  const sobra = pessoas.length - visiveis.length;
-  const custom = parseCustomEmoji(emoji);
+  // "carregando": quem ainda não chegou em `conhecidos` (membro fora da
+  // página carregada) vira "alguém" — não trava a frase esperando o resto do
+  // servidor. `userIds` vazio (não deveria existir — a pílula some com a
+  // última reação) cai no mesmo caminho, em vez de virar frase quebrada.
+  const pessoas = userIds.length > 0 ? userIds.map((id) => conhecidos.get(id)) : [undefined];
 
   return (
     <>
@@ -77,6 +97,8 @@ export default function TooltipReacao({
         className="inline-flex"
         onPointerEnter={() => setAberto(true)}
         onPointerLeave={fechar}
+        onPointerDown={fechar}
+        onClick={fechar}
         onFocusCapture={() => setAberto(true)}
         onBlurCapture={fechar}
       >
@@ -93,42 +115,12 @@ export default function TooltipReacao({
               left: pos?.left ?? 0,
               visibility: pos ? "visible" : "hidden",
             }}
-            className="pointer-events-none fixed z-[100] w-[220px] rounded-lg bg-void p-3 text-center shadow-high anim-menu"
+            className="pointer-events-none fixed z-[100] max-w-[288px] overflow-hidden rounded bg-background-surface-high p-4 font-medium text-text-default shadow-popout anim-menu"
           >
-            <span className="mx-auto block h-12 w-12">
-              {custom ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={`${API_URL}/api/emojis/${custom.id}/image`}
-                  alt={`:${custom.name}:`}
-                  className="h-12 w-12 object-contain"
-                />
-              ) : (
-                <span className="text-[44px] leading-[48px]">{emoji}</span>
-              )}
-            </span>
-            <span className="mt-2 flex items-center justify-center -space-x-1.5">
-              {visiveis.map((u, i) =>
-                u ? (
-                  <Avatar key={u.id} user={u} size="sm" className="ring-2 ring-void" />
-                ) : (
-                  <span
-                    key={`x${i}`}
-                    className="grid h-6 w-6 place-items-center rounded-full bg-panel text-[10px] text-txt-muted ring-2 ring-void"
-                  >
-                    ?
-                  </span>
-                ),
-              )}
-              {sobra > 0 && (
-                <span className="grid h-6 w-6 place-items-center rounded-full bg-panel text-[10px] font-semibold text-txt-muted ring-2 ring-void">
-                  +{sobra}
-                </span>
-              )}
-            </span>
-            <span className="mt-2 block text-sm font-semibold text-txt-primary">
-              {frase(pessoas)}
-            </span>
+            <div className="flex items-center [hyphens:auto] break-words">
+              <EmojiDaReacao emoji={emoji} tamanho={32} />
+              <span className="ml-3 text-text-sm">{frase(pessoas, emoji)}</span>
+            </div>
           </div>,
           document.body,
         )}
@@ -136,14 +128,16 @@ export default function TooltipReacao({
   );
 }
 
-/** "Ana, Bia e mais 3 reagiram" — o nome de quem não conhecemos vira "alguém". */
-function frase(pessoas: (PublicUser | undefined)[]): string {
+/** "Ana, Bia e mais 3 reagiram com :festa:" — o nome de quem não conhecemos
+ *  vira "alguém", e a frase sempre termina no emoji, como no Discord. */
+function frase(pessoas: (PublicUser | undefined)[], emoji: string): string {
   const nomes = pessoas.map((u) => (u ? displayNameOf(u) : "alguém"));
   const verbo = nomes.length === 1 ? "reagiu" : "reagiram";
-  if (nomes.length <= 3) {
-    const lista =
-      nomes.length <= 1 ? nomes.join("") : `${nomes.slice(0, -1).join(", ")} e ${nomes[nomes.length - 1]}`;
-    return `${lista} ${verbo}`;
-  }
-  return `${nomes.slice(0, 3).join(", ")} e mais ${nomes.length - 3} ${verbo}`;
+  const lista =
+    nomes.length <= 3
+      ? nomes.length <= 1
+        ? nomes.join("")
+        : `${nomes.slice(0, -1).join(", ")} e ${nomes[nomes.length - 1]}`
+      : `${nomes.slice(0, 3).join(", ")} e mais ${nomes.length - 3}`;
+  return `${lista} ${verbo} com ${rotuloDaReacao(emoji)}`;
 }

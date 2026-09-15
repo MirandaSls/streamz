@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { isTauri } from "@/lib/desktop";
 import {
   Amigos,
   Check,
   HelpCircle,
   MessageSquare,
+  MessageSquarePlus,
   Search,
   UserMinus,
-  UserPlus,
   UserX,
   X,
 } from "@/components/ui/icones";
@@ -18,7 +18,8 @@ import HeaderIcon from "@/components/chat/HeaderIcon";
 import InboxPopover from "@/components/chat/InboxPopover";
 import AddFriend from "@/components/friends/AddFriend";
 import EstadoVazio from "@/components/friends/EstadoVazio";
-import FriendRow, { RowAction } from "@/components/friends/FriendRow";
+import FriendRow, { FriendRowEsqueleto, RowAction } from "@/components/friends/FriendRow";
+import { Button, TextInput } from "@/components/ui/primitivos";
 import { useDMs } from "@/stores/dms";
 import { useFriends, type FriendsTab } from "@/stores/friends";
 import { resolveStatus, usePresence } from "@/stores/presence";
@@ -56,16 +57,38 @@ function abasVisiveis(pendentes: number, bloqueados: number) {
  * títulos, a 24px da borda (onde a busca começa); a linha de 1px fica 14px
  * abaixo da caixa do texto, começa 6px mais para dentro que o texto, e a
  * primeira linha de amigo vem colada nela. Era 12px em caixa alta e muted.
+ *
+ * A margem da linha é **assimétrica**, não `mx-[30px]`: `.divider_cc6179`
+ * (`docs/referencias-discord/tokens/css-bruto/979862.64f198e8e991d925.css`)
+ * é `margin-inline:30px 20px` — 30 à esquerda (os "6px mais para dentro" do
+ * texto acima, que já estavam certos), **20** à direita, não 30. O nosso
+ * `mx-[30px]` empurrava a ponta direita 10px além da borda da linha de amigo
+ * (que termina 20px do próprio limite, `.peopleListItem_cc6179`, ver
+ * `FriendRow.tsx`).
  */
 function Secao({ label, count }: { label: string; count: number }) {
   return (
     <>
-      <h3 className="mx-6 mt-6 text-sm font-semibold leading-5 text-txt-primary">
+      <h3 className="mx-6 mt-6 text-sm font-semibold leading-5 text-text-strong">
         {label} — {count}
       </h3>
-      <div aria-hidden="true" className="mx-[30px] mt-3.5 h-px bg-border" />
+      <div aria-hidden="true" className="ml-[30px] mr-5 mt-3.5 h-px bg-border-subtle" />
     </>
   );
+}
+
+/**
+ * Divisor entre duas linhas de amigo — `.divider_cc6179`
+ * (`docs/referencias-discord/tokens/css-bruto/979862.64f198e8e991d925.css`):
+ * elemento à parte do item, não a borda dele (`.peopleListItem_cc6179` tem
+ * `border-width:0`). Fica de fora do `FriendRow` porque não é toda linha que
+ * tem um depois (a última da lista, não). Some no hover da linha anterior
+ * por `[&:hover+div]:bg-transparent` no próprio `FriendRow`, que exige o
+ * divisor como irmão de DOM imediato — por isso cada lista usa `Fragment`
+ * em vez de deixar o `FriendRow` desenhá-lo dentro de si.
+ */
+function Divisor() {
+  return <div aria-hidden className="ml-[30px] mr-5 h-px bg-border-subtle" />;
 }
 
 /**
@@ -206,18 +229,20 @@ export default function FriendsPage() {
       <>
         <Secao label={rotulo} count={itens.length} />
         <div role="list">
-          {itens.map((u) => (
-            <FriendRow
-              key={u.id}
-              user={u}
-              menu={menuDeAmigo(u)}
-              onOpen={() => void openWith(u.id)}
-              actions={
-                <RowAction label={`Conversar com ${displayNameOf(u)}`} onClick={() => void openWith(u.id)}>
-                  <MessageSquare size={20} />
-                </RowAction>
-              }
-            />
+          {itens.map((u, i) => (
+            <Fragment key={u.id}>
+              <FriendRow
+                user={u}
+                menu={menuDeAmigo(u)}
+                onOpen={() => void openWith(u.id)}
+                actions={
+                  <RowAction label={`Conversar com ${displayNameOf(u)}`} onClick={() => void openWith(u.id)}>
+                    <MessageSquare size={20} />
+                  </RowAction>
+                }
+              />
+              {i < itens.length - 1 && <Divisor />}
+            </Fragment>
           ))}
         </div>
       </>
@@ -225,8 +250,8 @@ export default function FriendsPage() {
   }
 
   return (
-    <main className="flex min-w-0 flex-1 flex-col bg-chat">
-      {/* sem `shadow-header`: o cabeçalho do Discord tem borda e mais nada. Nós
+    <main className="flex min-w-0 flex-1 flex-col bg-background-base-lower">
+      {/* sem `shadow-elevation-low`: o cabeçalho do Discord tem borda e mais nada. Nós
           tínhamos a borda **e** 2px de sombra por baixo, o que engrossa a linha
           e faz a faixa parecer flutuar sobre o conteúdo. */}
       {/*
@@ -250,17 +275,23 @@ export default function FriendsPage() {
         No desktop nada disto se aplica: a faixa continua sendo a linha única
         de 48px com identidade, abas e o grupo da direita.
       */}
-      <header className="relative z-10 flex h-12 shrink-0 items-center gap-[7px] border-b border-border pl-7 pr-5 celular:h-[56px] celular:gap-0 celular:px-0">
-        <span className="text-txt-muted celular:hidden" aria-hidden="true">
+      {/* h-[49px], não h-12 (48): é a mesma altura do cabeçalho da DMList
+          (--custom-channel-header-height, com a borda incluída) — medida no
+          print 1:1 (152318.png), onde a borda da coluna de DMs (x=100) e a
+          do cabeçalho de Amigos (x=600) caem ambas em y=81 (faixa 33–80 + 1px
+          de borda). Com h-12 a borda ficava em y=47, 1px acima da da DMList,
+          e a emenda em x=366 tinha degrau. */}
+      <header className="relative z-10 flex h-[49px] shrink-0 items-center gap-[7px] border-b border-border-subtle pl-7 pr-5 celular:h-[56px] celular:gap-0 celular:px-0">
+        <span className="text-text-muted celular:hidden" aria-hidden="true">
           <Amigos size={21} />
         </span>
         {/* mesmo tamanho das abas e do botão: no Discord todo texto desta faixa
             mede o mesmo, e só a cor os separa. O nosso título era maior. */}
-        <h1 className="shrink-0 text-base font-semibold text-txt-primary celular:hidden">Amigos</h1>
+        <h1 className="shrink-0 text-base font-semibold text-text-strong celular:hidden">Amigos</h1>
         {/* ponto, não traço: no Discord o separador do cabeçalho de Amigos é uma
             bolinha de 4px centrada na faixa. O traço vertical lia como divisória
             de seção, que é outra coisa. */}
-        <span aria-hidden="true" className="mx-3 h-1 w-1 shrink-0 rounded-full bg-sel celular:hidden" />
+        <span aria-hidden="true" className="mx-3 h-1 w-1 shrink-0 rounded-full bg-interactive-background-selected celular:hidden" />
 
         <nav
           aria-label="Filtrar amigos"
@@ -273,30 +304,45 @@ export default function FriendsPage() {
               aria-pressed={tab === a.id}
               onClick={() => setTab(a.id)}
               className={`flex h-8 items-center gap-1.5 rounded-lg px-3 text-base font-medium transition celular:h-[44px] celular:shrink-0 celular:snap-start ${
-                tab === a.id ? "bg-sel text-txt-primary" : "text-txt-secondary hover:bg-hov hover:text-txt-primary"
+                tab === a.id ? "bg-interactive-background-selected text-text-strong" : "text-text-subtle hover:bg-interactive-background-hover hover:text-text-strong"
               }`}
             >
               {a.label}
               {a.id === "pendentes" && pendentes > 0 && (
-                <span className="grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[11px] font-bold leading-none text-white">
+                // texto claro sobre o vermelho de aviso: mesmo token que o botão
+                // "crítico" usa para o par fundo/texto (rule 6 — nada de branco cru)
+                <span className="grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[11px] font-bold leading-none text-control-critical-primary-text-default">
                   {pendentes}
                 </span>
               )}
             </button>
           ))}
-          {/* ação primária: 32px de altura e largura mínima, não um chip de aba */}
-          <button
-            type="button"
+          {/*
+            Botão primário do primitivo (limão, texto escuro), não um chip de
+            aba — o print real (`docs/Reference/Captura de tela 2026-08-31
+            101638.png`, aba Amigos) não muda a cor deste botão quando ele está
+            selecionado: em `…124052.png` (aba "Adicionar amigo" já ativa) ele
+            continua com o mesmo preenchimento sólido. Por isso não há mais
+            estado "ativo" em verde-de-status aqui — só o `Button` primário.
+
+            Altura: medida agora em `…101638.png`, coluna x=780 (miolo do
+            botão, longe de letra e canto) — sólido de y=47 a y=78 (32px, com
+            a borda de 1px de cada lado incluída); a mesma medida sai da pílula
+            selecionada "Disponível" ao lado (coluna x=520, mesmíssimo
+            y=47–78). 32px bate exato com o degrau `sm` do `Button` (já medido
+            e documentado no cabeçalho de `primitivos/Button.tsx` a partir de
+            outro print), não com os 28px que a revisão apontou — por isso
+            uso `sm`, não um número novo.
+          */}
+          <Button
+            variante="primario"
+            tamanho="sm"
             aria-pressed={tab === "adicionar"}
             onClick={() => setTab("adicionar")}
-            className={`h-8 rounded-lg px-3 text-base font-medium transition celular:h-[44px] celular:shrink-0 celular:snap-start ${
-              tab === "adicionar"
-                ? "bg-green/20 text-green"
-                : "bg-green text-accent-ink hover:bg-green/80"
-            }`}
+            className="celular:h-[44px] celular:shrink-0 celular:snap-start"
           >
             Adicionar amigo
-          </button>
+          </Button>
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center gap-4 celular:hidden">
@@ -304,7 +350,7 @@ export default function FriendsPage() {
             label="Nova mensagem de grupo"
             onClick={() => ui.openModal({ kind: "createGroupDM" })}
           >
-            <UserPlus size={24} />
+            <MessageSquarePlus size={24} />
           </HeaderIcon>
           {/*
             No desktop a caixa de entrada e a ajuda vivem na barra de título
@@ -328,25 +374,27 @@ export default function FriendsPage() {
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto pb-6">
-        {loading && !loaded && <p className="px-6 py-6 text-sm text-txt-muted">Carregando…</p>}
+        {loading && !loaded && (
+          <div role="list" aria-label="Carregando amigos">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <FriendRowEsqueleto key={i} />
+            ))}
+          </div>
+        )}
 
         {tab !== "adicionar" && (
           /* 12px entre a borda do cabeçalho e a busca (medido); era 16 */
-          <div className="relative px-6 pt-3">
-            {/* lupa à esquerda: é onde o print põe, e é onde o olho procura o
-                que a caixa faz antes de começar a digitar */}
-            <Search
-              size={18}
-              aria-hidden="true"
-              className="pointer-events-none absolute left-[42px] top-[22px] text-txt-muted celular:top-[26px]"
-            />
-            <input
+          <div className="px-6 pt-3">
+            <TextInput
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               type="search"
               aria-label="Buscar amigos"
               placeholder="Buscar"
-              className="h-10 w-full rounded-lg bg-void pl-10 pr-3 text-base text-txt-normal outline-none placeholder:text-txt-muted celular:h-[48px]"
+              classeDaCaixa="w-full"
+              // lupa à esquerda: é onde o print põe, e é onde o olho procura o
+              // que a caixa faz antes de começar a digitar
+              prefixo={<Search size={18} aria-hidden="true" className="shrink-0 text-text-muted" />}
             />
           </div>
         )}
@@ -370,39 +418,43 @@ export default function FriendsPage() {
             <>
               {recebidos.length > 0 && <Secao label="Recebidos" count={recebidos.length} />}
               <div role="list">
-                {recebidos.map((r) => (
-                  <FriendRow
-                    key={r.id}
-                    user={r.user}
-                    subtitle="Pedido de amizade recebido"
-                    menu={menuDeRecebido(r.id, r.user)}
-                    actions={
-                      <>
-                        <RowAction label="Aceitar" positive onClick={() => void accept(r.id)}>
-                          <Check size={20} />
-                        </RowAction>
-                        <RowAction label="Recusar" danger onClick={() => void dismiss(r.id)}>
-                          <X size={20} />
-                        </RowAction>
-                      </>
-                    }
-                  />
+                {recebidos.map((r, i) => (
+                  <Fragment key={r.id}>
+                    <FriendRow
+                      user={r.user}
+                      subtitle="Pedido de amizade recebido"
+                      menu={menuDeRecebido(r.id, r.user)}
+                      actions={
+                        <>
+                          <RowAction label="Aceitar" positive onClick={() => void accept(r.id)}>
+                            <Check size={20} />
+                          </RowAction>
+                          <RowAction label="Recusar" danger onClick={() => void dismiss(r.id)}>
+                            <X size={20} />
+                          </RowAction>
+                        </>
+                      }
+                    />
+                    {i < recebidos.length - 1 && <Divisor />}
+                  </Fragment>
                 ))}
               </div>
               {enviados.length > 0 && <Secao label="Enviados" count={enviados.length} />}
               <div role="list">
-                {enviados.map((r) => (
-                  <FriendRow
-                    key={r.id}
-                    user={r.user}
-                    subtitle="Pedido de amizade enviado"
-                    menu={menuDeEnviado(r.id, r.user)}
-                    actions={
-                      <RowAction label="Cancelar pedido" danger onClick={() => void dismiss(r.id)}>
-                        <X size={20} />
-                      </RowAction>
-                    }
-                  />
+                {enviados.map((r, i) => (
+                  <Fragment key={r.id}>
+                    <FriendRow
+                      user={r.user}
+                      subtitle="Pedido de amizade enviado"
+                      menu={menuDeEnviado(r.id, r.user)}
+                      actions={
+                        <RowAction label="Cancelar pedido" danger onClick={() => void dismiss(r.id)}>
+                          <X size={20} />
+                        </RowAction>
+                      }
+                    />
+                    {i < enviados.length - 1 && <Divisor />}
+                  </Fragment>
                 ))}
               </div>
             </>
@@ -423,18 +475,20 @@ export default function FriendsPage() {
             <>
               <Secao label="Bloqueado" count={bloqueados.length} />
               <div role="list">
-                {bloqueados.map((u) => (
-                  <FriendRow
-                    key={u.id}
-                    user={u}
-                    subtitle="Bloqueado"
-                    menu={menuDeBloqueado(u)}
-                    actions={
-                      <RowAction label="Desbloquear" onClick={() => void unblock(u.id)}>
-                        <UserMinus size={20} />
-                      </RowAction>
-                    }
-                  />
+                {bloqueados.map((u, i) => (
+                  <Fragment key={u.id}>
+                    <FriendRow
+                      user={u}
+                      subtitle="Bloqueado"
+                      menu={menuDeBloqueado(u)}
+                      actions={
+                        <RowAction label="Desbloquear" onClick={() => void unblock(u.id)}>
+                          <UserMinus size={20} />
+                        </RowAction>
+                      }
+                    />
+                    {i < bloqueados.length - 1 && <Divisor />}
+                  </Fragment>
                 ))}
               </div>
             </>

@@ -66,6 +66,15 @@ export default function manifest(): MetadataRoute.Manifest {
      * preto (`docs/branding/marca/LEIA-ME.txt`) — que é também o que o
      * `viewport.themeColor` do `app/layout.tsx` declara. Os dois valores têm
      * de continuar iguais.
+     *
+     * Fixo em hex de propósito, e não var(--background-base-lowest): este
+     * arquivo é uma rota de metadata que o Next serializa em build time para
+     * `/manifest.webmanifest`, um JSON estático servido antes de qualquer CSS
+     * carregar — não há cascata de tokens nem tema ativo para ler aqui (o
+     * tema mora em `data-tema` no `<html>`, decidido em runtime). Por isso
+     * ele fica preso ao Dark (Void Ink) mesmo que o usuário tenha escolhido
+     * Ash ou Onyx: é só a moldura da tela de abertura e da barra de status,
+     * substituída em milissegundos pelo `layout.tsx` real já no tema certo.
      */
     icons: [
       /*

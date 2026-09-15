@@ -50,12 +50,19 @@ export default function BlockedMessages({
   return (
     <div style={{ marginTop: "var(--espaco-entre-grupos, 17px)" }}>
       {/* o próprio rótulo é o botão, e o chevron gira ao abrir — o par
-          "ícone de escudo + link mostrar/esconder" não existe no Discord */}
+          "ícone de escudo + link mostrar/esconder" não existe no Discord.
+          Calha: `pl-[80px]` é a mesma de `MessageItem.tsx:571` (print 111402,
+          conteúdo em x=80 dentro do painel) — a linha lê como parte da mesma
+          lista, não um bloco à parte. `pr-6` (24px), também de lá: o `pr-12`
+          de antes não tinha origem, e esta linha não tem barra de ações no
+          hover que precise da folga extra. Texto: `text-text-sm`, a nossa
+          escala nomeada — não o `text-sm` cru do Tailwind (entrelinha
+          diferente). */}
       <button
         type="button"
         onClick={() => setAberto((v) => !v)}
         aria-expanded={aberto}
-        className="flex w-full items-center gap-2 py-0.5 pl-[80px] pr-12 text-sm text-txt-muted hover:bg-msghov hover:text-txt-normal"
+        className="flex w-full items-center gap-2 py-0.5 pl-[80px] pr-6 text-text-sm text-text-muted hover:bg-message-background-hover hover:text-text-default"
       >
         <ChevronRight
           size={16}

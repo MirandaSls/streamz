@@ -88,8 +88,70 @@ export function aplicarEscolha(
   return { texto: novo, caret: gatilho.inicio + valor.length + sufixo.length };
 }
 
-/** Move a seleção circularmente dentro da lista (setas ↑ ↓). */
-export function mover(indice: number, delta: number, total: number): number {
+/**
+ * Move a seleção circularmente dentro da lista (setas ↑ ↓).
+ *
+ * `podeSelecionar` é opcional e pula linhas desabilitadas (`ItemAutocomplete.
+ * desabilitado`, ver `components/chat/Autocomplete.tsx`) — sem ele o
+ * comportamento é o de sempre (qualquer índice serve), então nenhuma chamada
+ * existente quebra. O `Composer.tsx` passa o predicado nas listas de `:` `@`
+ * `#` e de valor de opção (cartão 3g).
+ */
+export function mover(
+  indice: number,
+  delta: number,
+  total: number,
+  podeSelecionar?: (indice: number) => boolean,
+): number {
   if (total === 0) return 0;
-  return (indice + delta + total) % total;
+  let proximo = (indice + delta + total) % total;
+  if (!podeSelecionar) return proximo;
+  // no pior caso (todo mundo desabilitado) dá uma volta inteira e desiste,
+  // devolvendo o índice de onde começou em vez de girar para sempre
+  for (let tentativas = 0; tentativas < total; tentativas++) {
+    if (podeSelecionar(proximo)) return proximo;
+    proximo = (proximo + delta + total) % total;
+  }
+  return indice;
+}
+
+// ── onda 3 · autocomplete de opção pedido ao bot (callback 8) ──────────────
+
+/**
+ * Espera entre a última tecla e o pedido ao bot. **Não medido**: o valor que o
+ * cliente do Discord usa não está em nenhuma das referências (o CSS não diz, e
+ * não há print do autocomplete de opção). É uma escolha — curta o bastante para
+ * a lista acompanhar a digitação, longa o bastante para uma palavra digitada de
+ * uma vez virar um pedido só, e não um por letra (cada pedido é uma interação
+ * nova no servidor e um `INTERACTION_CREATE` para o bot).
+ */
+export const ESPERA_DO_AUTOCOMPLETE_MS = 250;
+
+/** Em que pé está a lista de sugestões que o bot devolve. */
+export type EstadoDaListaDoBot = "carregando" | "falhou" | "vazio" | "pronto";
+
+/**
+ * Decide o que o popout mostra, a partir do pedido que o campo quer
+ * (`chaveEsperada`) e do que a store tem (`useInteracoesDeBot().autocomplete`).
+ *
+ * - **carregando** enquanto a store ainda não tem a opção certa (o *debounce*
+ *   não disparou, ou a lista é de outra opção) ou está esperando o bot **sem**
+ *   nada para mostrar. Com a lista anterior da mesma opção na mão, ela continua
+ *   na tela durante o pedido novo em vez de piscar "Carregando…" a cada letra
+ *   (a store guarda as escolhas de propósito, ver `pedirAutocomplete`).
+ * - **falhou** quando o pedido terminou sem que o bot tenha respondido: a rota
+ *   recusou, o servidor mandou `interaction.failed`, ou o relógio de segurança
+ *   da store venceu. Quem marca é a store (`autocomplete.falhou`); antes o
+ *   composer deduzia isso de um listener paralelo do socket, que disputava a
+ *   ordem com a própria store.
+ * - **vazio** quando o bot respondeu com `choices: []`.
+ */
+export function estadoDaListaDoBot(
+  chaveEsperada: string,
+  atual: { chave: string; carregando: boolean; falhou: boolean; escolhas: readonly unknown[] } | null,
+): EstadoDaListaDoBot {
+  if (!atual || atual.chave !== chaveEsperada) return "carregando";
+  if (atual.escolhas.length > 0) return "pronto";
+  if (atual.carregando) return "carregando";
+  return atual.falhou ? "falhou" : "vazio";
 }

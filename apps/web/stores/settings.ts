@@ -20,16 +20,33 @@ export type Locale = "pt-BR" | "en-US";
 export type SendMode = "enter" | "ctrl-enter";
 
 /**
- * Escala da fonte: px escritos em `html { font-size }`, de onde sai todo `rem`
- * do Tailwind (texto e espaçamento). O padrão é **15,5px**, 3,1% abaixo dos 16
- * do Discord — o pedido foi "um pouco menor", e é o único ponto do app que
- * encolhe o texto inteiro de uma vez. Superfície medida em px (cabeçalho de 49,
- * linha de conversa, ícone) não muda: por isso a redução é pequena.
+ * Os temas do Discord que o Streamz tem (onda 9): Dark (`theme-dark
+ * theme-darker`, o padrão), Ash (`theme-dark`) e Onyx (`theme-dark
+ * theme-midnight`). Cada um é um bloco de `app/tokens.css`, gerado por
+ * `scripts/paridade/gerar-tokens.mjs`; o Dark é o `:root` e os outros entram
+ * pelo `data-tema` do `<html>`.
  *
- * O passo é de meio pixel porque 15,5 precisa estar na grade do deslizador —
- * um padrão que o próprio controle não alcança não volta depois de arrastado.
+ * O Light não existe: o limão só vai sobre escuro, e um accent para fundo claro
+ * é outra ADR (ADR-0009, "Fora desta decisão").
  */
-export const FONT_SCALE = { min: 12, max: 24, step: 0.5, default: 15.5 };
+export type Tema = "dark" | "ash" | "onyx";
+export const TEMAS: readonly Tema[] = ["dark", "ash", "onyx"];
+
+/** Valor salvo que não é um tema conhecido (versão antiga, lixo) vira Dark. */
+export function temaValido(valor: unknown): Tema {
+  return TEMAS.includes(valor as Tema) ? (valor as Tema) : "dark";
+}
+
+/**
+ * Escala da fonte: px escritos em `html { font-size }`, de onde sai todo `rem`
+ * do Tailwind (texto e espaçamento). O padrão é **16px**, o do Discord
+ * (`font-size-16` no `<html>` dele), desde a ADR-0009: com 16 a escala do
+ * Tailwind cai exatamente na grade de 4px e nos raios do Discord (`rounded-lg`
+ * = 8 = `--radius-sm`), e medida de print volta a ser medida de classe.
+ *
+ * O passo continua de meio pixel: quem escolheu 15,5 antes não perde a escolha.
+ */
+export const FONT_SCALE = { min: 12, max: 24, step: 0.5, default: 16 };
 // 17px é o respiro que o Discord usa entre grupos de mensagens
 export const GROUP_SPACING = { min: 0, max: 24, step: 1, default: 17 };
 // 20px é o emoji do chip de reação do Discord, medido no print
@@ -57,8 +74,8 @@ export const ZOOM = { min: 0.8, max: 2, step: 0.1, default: 1 };
 
 export interface SettingsValues {
   // ── aparência ──
-  /** só escuro no MVP; o campo existe para o dia em que houver claro. */
-  theme: "dark";
+  /** Dark, Ash ou Onyx — ver `Tema`. */
+  theme: Tema;
   /** px aplicados em `html { font-size }` (12–24). */
   fontScale: number;
   /** px de respiro entre grupos de mensagens (0–24). */
@@ -151,24 +168,27 @@ export const useSettings = create<SettingsState>()(
     }),
     {
       name: "settings",
-      version: 2,
+      version: 4,
       /**
-       * v1 → v2: o padrão da escala da fonte caiu de 16px para 15,5px.
+       * v1 → v2 baixou o padrão da escala da fonte de 16px para 15,5px; v2 → v3
+       * (ADR-0009) devolve os 16 do Discord. v3 → v4 (onda 9) abre o `theme`
+       * de `"dark"` para `Tema`: o que estava salvo é sempre `"dark"`, que
+       * continua valendo; qualquer outro valor (não havia como gravar um, mas o
+       * `localStorage` é editável) volta ao Dark.
        *
        * `partialize` grava todos os valores no primeiro uso, então quem nunca
-       * tocou no controle tem `fontScale: 16` guardado e ficaria no tamanho
-       * antigo para sempre. Quem está **exatamente** no padrão antigo vai para o
-       * novo; quem escolheu outro número mantém a escolha (16 escolhido de
-       * propósito é indistinguível de 16 nunca tocado, e o preço de errar é um
-       * meio pixel).
+       * tocou no controle tem o padrão da época guardado e ficaria nele para
+       * sempre. Quem está **exatamente** no padrão antigo vai para o novo; quem
+       * escolheu outro número mantém a escolha (o padrão escolhido de propósito
+       * é indistinguível do nunca tocado, e o preço de errar é meio pixel).
+       * Quem vem da v1 com 16 já está no padrão de hoje.
        */
       migrate: (persistido, versao) => {
         const valores = persistido as Partial<SettingsValues> | undefined;
         if (!valores) return valores;
-        if (versao < 2 && valores.fontScale === 16) {
-          return { ...valores, fontScale: FONT_SCALE.default };
-        }
-        return valores;
+        const migrado =
+          versao === 2 && valores.fontScale === 15.5 ? { ...valores, fontScale: FONT_SCALE.default } : valores;
+        return { ...migrado, theme: temaValido(migrado.theme) };
       },
       // guarda só os valores: as ações são recriadas a cada carga, e serializar
       // função no localStorage deixaria lixo que nunca mais volta a ser função
@@ -208,6 +228,39 @@ export function applySettingsToDocument(s: SettingsValues): void {
   root.classList.toggle("cores-ajustadas", s.saturation !== 100);
   root.classList.toggle("modo-compacto", s.compactMode);
   root.lang = s.locale;
+  aplicarTema(temaValido(s.theme));
+}
+
+/** O último tema escrito por inteiro (atributo e barra do sistema). */
+let temaAplicado: Tema | null = null;
+
+/**
+ * Escreve o tema no `<html>`: `data-tema` para Ash/Onyx, nada para o Dark (é o
+ * `:root` de `tokens.css`, e assim o DOM do Dark continua o de antes da onda 9).
+ *
+ * O primeiro quadro não depende disto: o script de `app/layout.tsx` já leu o
+ * `localStorage` e escreveu o atributo antes de pintar. Aqui é a troca ao vivo
+ * (Aparência) e a fonte de verdade depois da reidratação.
+ *
+ * O `<meta name="theme-color">` (barra do navegador e do sistema no celular)
+ * acompanha o `--background-base-lowest` do tema — lido do CSS já aplicado, e
+ * não de uma tabela de hex daqui, para não haver segunda origem de cor. A troca
+ * de atributo acima invalida o estilo e o `getComputedStyle` recalcula na hora.
+ */
+function aplicarTema(tema: Tema): void {
+  // a store chama isto a cada mudança de qualquer preferência (arrastar o
+  // slider da fonte, por exemplo): sem troca de tema não há o que recalcular
+  if (tema === temaAplicado) return;
+  const root = document.documentElement;
+  if (tema === "dark") root.removeAttribute("data-tema");
+  else root.setAttribute("data-tema", tema);
+  const cor = getComputedStyle(root).getPropertyValue("--background-base-lowest").trim();
+  // vazio = o CSS ainda não carregou: não marca, e a próxima chamada tenta de novo
+  if (!cor) return;
+  document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((meta) => {
+    meta.content = cor;
+  });
+  temaAplicado = tema;
 }
 
 if (typeof window !== "undefined") {

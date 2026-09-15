@@ -33,15 +33,31 @@ const hashColor = corDoAvatar;
  * essa mesma cor — não é branco nem uma versão escura do vermelho.
  */
 const FUNDO_DO_SELO: Record<string, string> = {
-  "border-panel": "bg-panel",
-  "border-chat": "bg-chat",
-  "border-footer": "bg-footer",
-  "border-overlay": "bg-overlay",
-  "border-void": "bg-void",
-  "border-input": "bg-input",
-  "border-sel": "bg-sel",
-  "border-hov": "bg-hov",
-  "border-msghov": "bg-msghov",
+  "border-background-base-lowest": "bg-background-base-lowest",
+  "border-background-base-lower": "bg-background-base-lower",
+  "border-background-base-low": "bg-background-base-low",
+  "border-background-surface-higher": "bg-background-surface-higher",
+  "border-input-background-default": "bg-input-background-default",
+  "border-chat-background-default": "bg-chat-background-default",
+  "border-interactive-background-selected": "bg-interactive-background-selected",
+  "border-interactive-background-hover": "bg-interactive-background-hover",
+  "border-message-background-hover": "bg-message-background-hover",
+  // `--black` (#000000): o palco de chamada é preto puro (`CallStage.tsx:111`)
+  // — opaco, recorta igual aos de cima.
+  "border-black": "bg-black",
+  // `--background-surface-high` (#242429): superfície do cartão de perfil
+  // (`CabecalhoDoPerfil.tsx`) — também opaco.
+  "border-background-surface-high": "bg-background-surface-high",
+  // `--background-mod-subtle` é TRANSLÚCIDO (`#94949c1f`, ~12%, ver
+  // `tokens.css`): pintar o disco com ele não dá um fundo opaco — os recortes
+  // do `IconeDeStatus` (a barriga da lua, o furo do anel, o traço do "não
+  // perturbe") deixariam a foto do avatar por baixo aparecer, não a
+  // superfície. Hoje ninguém combina `status`/`voz` com esta `surface`
+  // (`BanimentosTab.tsx:158` só usa a borda do anel do avatar, sem bolinha),
+  // então o defeito nunca chega a aparecer na tela — mas se algum chamador
+  // futuro precisar da bolinha aqui, falta um token opaco equivalente que a
+  // paleta ainda não tem (ver "faltando").
+  "border-background-mod-subtle": "bg-background-mod-subtle",
 };
 
 /**
@@ -62,6 +78,15 @@ const SIZE = {
   sm: { box: "h-6 w-6 text-[10px]", dot: "h-3 w-3 -bottom-[2px] -right-[2px] border-2", icone: 8 },
   md: { box: "h-8 w-8 text-xs", dot: "h-4 w-4 -bottom-[3px] -right-[3px] border-[3px]", icone: 9 },
   lg: { box: "h-10 w-10 text-sm", dot: "h-[18px] w-[18px] -bottom-[3px] -right-[3px] border-[3px]", icone: 10 },
+  /**
+   * 48px: degrau que faltava entre `lg` (40) e `xl` (80) — cartão de
+   * configurações (`SettingsModal`, outro cartão). **Não medido**: não há
+   * avatar de 48 com selo em nenhum print de referência; interpolado pela
+   * curva do comentário acima (centro em 0,84375 × 48 = 40,5 — com disco de
+   * 20 e anel de 3, o deslocamento que fecha essa conta é 10 − (48 − 40,5) =
+   * 2,5, arredondado para 3px).
+   */
+  lg48: { box: "h-12 w-12 text-base", dot: "h-[20px] w-[20px] -bottom-[3px] -right-[3px] border-[3px]", icone: 11 },
   xl: { box: "h-20 w-20 text-2xl", dot: "h-7 w-7 -bottom-[2px] -right-[2px] border-[6px]", icone: 14 },
   /** 120px: cartão de perfil completo e tela de chamada. */
   xxl: { box: "h-[120px] w-[120px] text-4xl", dot: "h-10 w-10 -bottom-px -right-px border-[8px]", icone: 20 },
@@ -92,7 +117,7 @@ export default function Avatar({
   size = "md",
   status,
   voz,
-  surface = "border-panel",
+  surface = "border-background-base-lowest",
   className = "",
 }: {
   user: { id: string; username: string; avatarUrl?: string | null };
@@ -137,7 +162,11 @@ export default function Avatar({
         <span
           aria-hidden="true"
           style={{ backgroundColor: hashColor(user.id) }}
-          className={`${s.box} grid place-items-center rounded-full font-semibold text-white`}
+          // fundo é uma cor arbitrária do hash (nunca sabemos se é clara ou
+          // escura) — mesmo caso do texto sobre imagem/vídeo, por isso o token
+          // de overlay (branco garantido), não `text-white` cru; ver
+          // `CardDeApp.tsx`, que já usa o mesmo padrão para as iniciais de app.
+          className={`${s.box} grid place-items-center rounded-full font-semibold text-text-overlay-light`}
         >
           {username.slice(0, 2).toUpperCase()}
         </span>
@@ -147,7 +176,9 @@ export default function Avatar({
         <span
           role="img"
           aria-label={voz === "surdo" ? "Sem áudio" : "Mudo"}
-          className={`absolute grid place-items-center rounded-full bg-red text-white ${surface} ${s.dot}`}
+          // ícone branco sobre o disco de perigo — mesmo raciocínio do papel
+          // "overlay": é ícone sobre mancha de cor saturada, não texto de botão
+          className={`absolute grid place-items-center rounded-full bg-status-danger text-icon-overlay-light ${surface} ${s.dot}`}
         >
           {voz === "surdo" ? <HeadphoneOff size={s.icone} /> : <MicOff size={s.icone} />}
         </span>
@@ -233,7 +264,7 @@ export function GroupAvatar({
   return (
     <span
       aria-hidden="true"
-      className={`${box} grid shrink-0 place-items-center rounded-full bg-accent text-accent-ink ${className}`}
+      className={`${box} grid shrink-0 place-items-center rounded-full bg-brand-500 text-control-primary-text-default ${className}`}
     >
       <Users size={GROUP_ICON[size]} />
     </span>

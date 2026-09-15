@@ -173,21 +173,30 @@ export interface InboxUnreadGroup {
 export const SEARCH_HAS_VALUES = ["link", "image", "file"] as const;
 export type SearchHas = (typeof SEARCH_HAS_VALUES)[number];
 
-/** Filtros de uma busca, já separados do texto livre. */
+/**
+ * Filtros de uma busca, já separados do texto livre.
+ *
+ * Cada campo aceita o prefixo do Discord em pt-BR (o que a interface mostra) e
+ * o em inglês (que continua valendo para quem já digita assim): ver
+ * `PREFIXOS_DE_BUSCA` abaixo.
+ */
 export interface SearchFilters {
   /** o que sobrou depois de tirar os filtros — busca por conteúdo. */
   text: string;
-  /** `from:@fulano` — autor. */
+  /** `de:@fulano` / `from:@fulano` — autor. */
   from: string | null;
-  /** `in:#canal` — canal (só na busca do servidor inteiro). */
+  /** `em:#canal` / `in:#canal` — canal (só na busca do servidor inteiro). */
   in: string | null;
-  /** `has:link|image|file` — pode repetir; todos precisam valer. */
+  /** `tem:link|imagem|arquivo` / `has:link|image|file` — pode repetir; todos precisam valer. */
   has: SearchHas[];
-  /** `before:AAAA-MM-DD` — mensagens antes deste dia (exclusivo). */
+  /**
+   * `antes:AAAA-MM-DD` / `before:` — mensagens antes deste dia (exclusivo).
+   * `durante:` também escreve aqui (ver `parseSearchQuery`).
+   */
   before: string | null;
-  /** `after:AAAA-MM-DD` — mensagens depois deste dia (exclusivo). */
+  /** `depois:AAAA-MM-DD` / `after:` — mensagens depois deste dia (exclusivo). */
   after: string | null;
-  /** `mentions:@fulano` — mensagens que mencionam alguém. */
+  /** `menciona:@fulano` / `mentions:@fulano` — mensagens que mencionam alguém. */
   mentions: string | null;
 }
 
@@ -211,11 +220,62 @@ function isCalendarDate(value: string): boolean {
   return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
 }
 
+/** `AAAA-MM-DD` deslocado de `dias` dias no calendário UTC. */
+function shiftCalendarDate(value: string, dias: number): string {
+  const [y, m, d] = value.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + dias)).toISOString().slice(0, 10);
+}
+
 /**
- * Separa `from:`, `in:`, `has:`, `before:`, `after:` e `mentions:` do texto
- * livre da busca. Token com valor inválido (data que não existe, `has:xpto`)
- * **volta a ser texto** em vez de virar filtro silencioso — assim a busca não
- * devolve "nada encontrado" por um erro de digitação invisível.
+ * Prefixo digitado → filtro. O Discord em pt-BR lista `de:`, `em:`, `tem:` e
+ * `menciona:` no popout "Filtros" (print 1:1 `docs/Reference/Captura de tela
+ * 2026-09-01 113513.png`) e aceita `antes:`, `depois:` e `durante:` para datas;
+ * o inglês fica como sinônimo, para a consulta antiga (e a colada de quem usa o
+ * cliente em inglês) não virar texto de repente.
+ */
+const PREFIXOS_DE_BUSCA: Record<string, "from" | "in" | "has" | "before" | "after" | "during" | "mentions"> = {
+  from: "from",
+  de: "from",
+  in: "in",
+  em: "in",
+  has: "has",
+  tem: "has",
+  before: "before",
+  antes: "before",
+  after: "after",
+  depois: "after",
+  during: "during",
+  durante: "during",
+  mentions: "mentions",
+  menciona: "mentions",
+};
+
+/**
+ * Valor de `tem:`/`has:` → o tipo que a API entende. A dica do Discord em pt-BR
+ * é "link, anexo ou arquivo"; aqui "anexo" e "arquivo" são os dois o `file`
+ * da API (mensagem com qualquer anexo), e "imagem" é o `image`.
+ */
+const VALORES_DE_TEM: Record<string, SearchHas> = {
+  link: "link",
+  image: "image",
+  imagem: "image",
+  file: "file",
+  arquivo: "file",
+  anexo: "file",
+};
+
+const PREFIXO_RE = new RegExp(`^(${Object.keys(PREFIXOS_DE_BUSCA).join("|")}):(.*)$`, "i");
+
+/**
+ * Separa os filtros (`de:`, `em:`, `tem:`, `antes:`, `depois:`, `durante:`,
+ * `menciona:` e os equivalentes em inglês) do texto livre da busca. Token com
+ * valor inválido (data que não existe, `tem:xpto`) **volta a ser texto** em vez
+ * de virar filtro silencioso — assim a busca não devolve "nada encontrado" por
+ * um erro de digitação invisível.
+ *
+ * `durante:AAAA-MM-DD` não tem campo próprio no contrato: vira o par
+ * `depois:` (dia anterior) + `antes:` (dia seguinte), que, com os dois limites
+ * exclusivos da API, é exatamente aquele dia.
  */
 export function parseSearchQuery(raw: string): SearchFilters {
   const out: SearchFilters = { ...EMPTY_SEARCH_FILTERS, has: [] };
@@ -223,12 +283,12 @@ export function parseSearchQuery(raw: string): SearchFilters {
 
   for (const token of raw.trim().split(/\s+/)) {
     if (!token) continue;
-    const m = /^(from|in|has|before|after|mentions):(.*)$/i.exec(token);
+    const m = PREFIXO_RE.exec(token);
     if (!m) {
       livre.push(token);
       continue;
     }
-    const chave = m[1].toLowerCase();
+    const chave = PREFIXOS_DE_BUSCA[m[1].toLowerCase()];
     const valor = m[2].trim();
     if (!valor) {
       livre.push(token);
@@ -245,8 +305,10 @@ export function parseSearchQuery(raw: string): SearchFilters {
         out.in = valor.replace(/^#/, "");
         break;
       case "has": {
-        const v = valor.toLowerCase() as SearchHas;
-        if (SEARCH_HAS_VALUES.includes(v)) {
+        // `hasOwn`: sem ele `tem:constructor` acharia o do `Object.prototype`
+        const tipo = valor.toLowerCase();
+        const v = Object.hasOwn(VALORES_DE_TEM, tipo) ? VALORES_DE_TEM[tipo] : undefined;
+        if (v) {
           if (!out.has.includes(v)) out.has.push(v);
         } else {
           livre.push(token);
@@ -257,6 +319,14 @@ export function parseSearchQuery(raw: string): SearchFilters {
       case "after":
         if (isCalendarDate(valor)) out[chave] = valor;
         else livre.push(token);
+        break;
+      case "during":
+        if (isCalendarDate(valor)) {
+          out.after = shiftCalendarDate(valor, -1);
+          out.before = shiftCalendarDate(valor, 1);
+        } else {
+          livre.push(token);
+        }
         break;
     }
   }

@@ -51,9 +51,12 @@ export const FORMATOS: Record<
     titulo: string;
   }
 > = {
-  avatar: { proporcao: 1, larguraDeSaida: 512, redondo: true, titulo: "Ajustar foto de perfil" },
+  // título "Edit Image" confirmado no print do catálogo (account-settings/
+  // 4403147417623-custom-profiles/16.png: modal de recorte de avatar,
+  // cabeçalho "Edit Image") — mesmo modal serve para avatar e banner.
+  avatar: { proporcao: 1, larguraDeSaida: 512, redondo: true, titulo: "Editar imagem" },
   // 5:2 é a faixa do cartão de perfil (600×240 no Discord)
-  banner: { proporcao: 5 / 2, larguraDeSaida: 960, redondo: false, titulo: "Ajustar banner" },
+  banner: { proporcao: 5 / 2, larguraDeSaida: 960, redondo: false, titulo: "Editar imagem" },
 };
 
 export function limitar(valor: number, minimo: number, maximo: number): number {

@@ -7,6 +7,7 @@ import {
   Flag,
   Gamepad2,
   Hash,
+  Image as IconeDeImagem,
   Leaf,
   Lightbulb,
   Plane,
@@ -14,7 +15,8 @@ import {
   Smile,
   type Icone,
 } from "@/components/ui/icones";
-import { formatCustomEmoji, parseCustomEmoji, type CustomEmoji } from "@streamz/shared";
+import { BotaoDeIcone } from "@/components/ui/primitivos";
+import { formatCustomEmoji, hasPermission, parseCustomEmoji, Permission, type CustomEmoji } from "@streamz/shared";
 import {
   buscarUnicode,
   categoriasUnicode,
@@ -40,10 +42,11 @@ import {
   registrarUsoEmoji,
   usePrefsPicker,
 } from "@/components/media/preferencias-picker";
+import Emoji from "@/components/ui/Emoji";
 import { useEhMobile } from "@/hooks/useEhMobile";
-import { useAuth } from "@/stores/auth";
-import { useEmojisOrdenados } from "@/stores/emojis";
-import { useCanModerate, useGuilds } from "@/stores/guilds";
+import { useEmojis, useEmojisOrdenados } from "@/stores/emojis";
+import { useGuilds } from "@/stores/guilds";
+import { useMyPermissions, usePermissions } from "@/stores/permissions";
 import { ui } from "@/stores/ui";
 
 /** Ícone de cada categoria unicode na coluna da esquerda. */
@@ -58,9 +61,17 @@ const ICONE_CATEGORIA: Record<string, Icone> = {
   flags: Flag,
 };
 
-/** 9 por linha em 424px de painel; célula de 40px, emoji de 32px. */
+/**
+ * 9 por linha, célula de 48px, emoji (unicode e personalizado) de 40px —
+ * medido no print 2026-08-31 120846: fundo do hover em x 1009–1056 × y
+ * 489–536 (48px), 😍 em x 1061–1100 × y 493–532 (40px). A caixa do
+ * `PickerChrome` mede 500 (`LARGURA_PICKER`); descontados os 48 do rail de
+ * categorias (`ColunaLateral`, `w-12`) sobram ~452, e 9 × 48 = 432 cabe. O
+ * emoji Unicode fica com os mesmos 40px do personalizado, para os dois
+ * dividirem a grade.
+ */
 const COLUNAS = 9;
-const CELULA = 40;
+const CELULA = 48;
 
 type ItemGrade =
   | { tipo: "unicode"; chave: string; item: EmojiItem }
@@ -115,9 +126,31 @@ export default function EmojiPicker({
   const guildIdAtivoStore = useGuilds((s) => s.activeGuildId);
   const guildIdAtivo = guildId !== undefined ? guildId : guildIdAtivoStore;
   const secoesServidor = useEmojisOrdenados(guildIdAtivo);
-  const me = useAuth((s) => s.user);
-  const podeGerenciar = useCanModerate(me?.id);
+  // carregado: false só até o primeiro `load()` da store responder (login ou
+  // troca de conta) — dali em diante fica true para sempre, mesmo que a busca
+  // tenha vindo vazia (`.catch(() => [])`, ver stores/emojis.ts). É o sinal de
+  // "carregando" real: sem ele, "nenhum emoji ainda" e "ainda buscando" ficam
+  // visualmente idênticos.
+  const carregado = useEmojis((s) => s.carregado);
+  // Gestão de emoji é MANAGE_EMOJIS (o mesmo bit que ServerSettingsModal.tsx:95
+  // usa), não "qualquer permissão de moderação" — a engrenagem do rodapé usava
+  // `useCanModerate`, que também acende para quem só tem KICK_MEMBERS/
+  // BAN_MEMBERS (sem MANAGE_EMOJIS) e apaga para um cargo "comunidade" com só
+  // MANAGE_EMOJIS. `useCanModerate` documenta a si mesmo (stores/guilds.ts)
+  // dizendo para preferir `useCan`/`useMyPermissions` ao esconder uma ação só.
+  const permissoesDoServidor = useMyPermissions(guildIdAtivo);
+  const podeGerenciarEmojis = hasPermission(permissoesDoServidor, Permission.MANAGE_EMOJIS);
+  // `usePermissions.guildId` é o servidor cujas permissões já chegaram
+  // (stores/permissions.ts:176, a mesma conta que `useMyPermissions` faz por
+  // dentro). Enquanto ele ainda não é `guildIdAtivo`, a engrenagem fica
+  // desabilitada em vez de sumir: sem isto ela pisca (escondida → aparece) toda
+  // vez que o seletor abre antes da store responder.
+  const guildComPermissoesCarregadas = usePermissions((s) => s.guildId);
+  const carregandoPermissoes = !!guildIdAtivo && guildComPermissoesCarregadas !== guildIdAtivo;
   const prefs = usePrefsPicker();
+  // mesma regra fluida de `SecaoEmoji` (linha ~490): 9 × 40 estoura os 390px de
+  // um telefone somados aos 44 da coluna lateral.
+  const ehMobile = useEhMobile();
 
   const [busca, setBusca] = useState("");
   const [foco, setFoco] = useState<ItemGrade | null>(null);
@@ -304,10 +337,41 @@ export default function EmojiPicker({
           // sem isso o "pular para a categoria" erra o alvo
           className="relative min-h-0 flex-1 overflow-y-auto px-2 pb-2"
         >
+          {/*
+            Carregando: só os emojis PERSONALIZADOS dependem de rede
+            (stores/emojis.ts, `load()`); o unicode é dado local e já está na
+            tela. Sem este aviso, "ainda não chegou" e "este usuário não tem
+            emoji personalizado nenhum" ficam visualmente idênticos — as
+            categorias unicode aparecem cheias dos dois jeitos.
+          */}
+          {!carregado && !buscando && (
+            <div
+              role="status"
+              aria-label="Carregando emojis personalizados"
+              className="grid"
+              style={{
+                gridTemplateColumns: ehMobile
+                  ? `repeat(auto-fill, minmax(${CELULA}px, 1fr))`
+                  : `repeat(${COLUNAS}, ${CELULA}px)`,
+              }}
+            >
+              {Array.from({ length: COLUNAS * 2 }, (_, i) => (
+                <span key={i} aria-hidden="true" className="grid h-12 w-12 place-items-center">
+                  <span className="h-10 w-10 animate-pulse rounded-full bg-background-base-lowest" />
+                </span>
+              ))}
+            </div>
+          )}
+
           {secoes.every((s) => s.itens.length === 0) ? (
-            <p className="px-2 py-10 text-center text-sm text-txt-muted">
-              {buscando ? "Nenhum emoji com esse nome." : "Nenhum emoji por aqui."}
-            </p>
+            carregado || buscando ? (
+              <div className="flex flex-col items-center gap-2 px-2 py-10 text-center">
+                <Smile size={32} aria-hidden="true" className="text-text-muted" />
+                <p className="text-sm text-text-muted">
+                  {buscando ? "Nenhum emoji com esse nome." : "Nenhum emoji por aqui."}
+                </p>
+              </div>
+            ) : null
           ) : (
             secoes.map((secao) => (
               <SecaoEmoji
@@ -335,19 +399,25 @@ export default function EmojiPicker({
             setTomAberto(false);
           }}
         />
-        {podeGerenciar && guildIdAtivo && (
-          <button
-            type="button"
-            title="Gerenciar emojis do servidor"
-            aria-label="Gerenciar emojis do servidor"
+        {/*
+          Enquanto `carregandoPermissoes`, a engrenagem fica desabilitada em vez
+          de escondida — some/aparece a cada abertura seria pior que um clique
+          sem efeito por um instante. `BotaoDeIcone` põe a dica mesmo
+          desabilitado (é `aria-disabled`, não `disabled`; ver o cabeçalho do
+          primitivo, item 8), então `motivoDesabilitado` continua visível.
+        */}
+        {guildIdAtivo && (podeGerenciarEmojis || carregandoPermissoes) && (
+          <BotaoDeIcone
+            rotulo="Gerenciar emojis do servidor"
+            icone={<Settings2 size={16} aria-hidden="true" />}
+            tamanho="sm"
+            desabilitado={carregandoPermissoes}
+            motivoDesabilitado="Carregando permissões…"
             onClick={() => {
               onClose();
               ui.openModal({ kind: "guildEmojis", guildId: guildIdAtivo });
             }}
-            className="grid h-7 w-7 shrink-0 place-items-center rounded text-txt-muted transition hover:bg-hov hover:text-txt-normal"
-          >
-            <Settings2 size={16} aria-hidden="true" />
-          </button>
+          />
         )}
       </RodapePicker>
     </div>
@@ -408,7 +478,7 @@ function SecaoEmoji({
 
   return (
     <section ref={ref} className="mb-1">
-      <h3 className="sticky top-0 z-10 flex items-center gap-1.5 bg-panel px-1 py-1.5 text-xs font-semibold uppercase tracking-wide text-txt-muted">
+      <h3 className="sticky top-0 z-10 flex items-center gap-1.5 bg-background-surface-high px-1 py-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
         {secao.icone.tipo === "servidor" ? (
           <IconeServidor nome={secao.icone.nome} iconUrl={secao.icone.url} />
         ) : (
@@ -459,6 +529,12 @@ function BotaoEmoji({
   onFocar: (item: ItemGrade | null) => void;
 }) {
   const rotulo = alvo.tipo === "custom" ? `:${alvo.emoji.name}:` : `:${alvo.item.nome}:`;
+  // Erro: o emoji personalizado sumiu do CDN (servidor/emoji apagado depois de
+  // a lista carregar) — mesmo tratamento de `EmojiDaReacao.tsx`, que já resolve
+  // exatamente este caso para a reação: o `<img>` quebrado do navegador vira o
+  // ícone de imagem do próprio acervo, do tamanho da caixa. O botão continua
+  // clicável: `:nome:` ainda é texto válido para o composer mesmo sem o ícone.
+  const [falhou, setFalhou] = useState(false);
   return (
     <button
       type="button"
@@ -466,18 +542,27 @@ function BotaoEmoji({
       onClick={() => onEscolher(alvo)}
       onPointerEnter={() => onFocar(alvo)}
       onFocus={() => onFocar(alvo)}
-      className="grid h-10 w-10 place-items-center rounded transition hover:bg-hov"
+      className="grid h-12 w-12 place-items-center rounded transition hover:bg-interactive-background-hover"
     >
       {alvo.tipo === "custom" ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={alvo.emoji.url}
-          alt={rotulo}
-          loading="lazy"
-          className="h-8 w-8 object-contain"
-        />
+        falhou ? (
+          <IconeDeImagem size={22} aria-hidden="true" className="text-text-muted" />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={alvo.emoji.url}
+            alt={rotulo}
+            loading="lazy"
+            className="h-10 w-10 object-contain"
+            onError={() => setFalhou(true)}
+          />
+        )
       ) : (
-        <span className="text-[28px] leading-none">{comTomDePele(alvo.item, tom)}</span>
+        // Twemoji dos arquivos locais, como a mensagem: o que se escolhe aqui
+        // tem de ter a cara do que vai aparecer no chat. O `emoji-picker-react`
+        // tem `emojiStyle`/`getEmojiUrl`, mas só no componente pronto dele, que
+        // este seletor não usa (daquele pacote só vem o catálogo em JSON)
+        <Emoji emoji={comTomDePele(alvo.item, tom)} tamanho={40} />
       )}
     </button>
   );
@@ -492,8 +577,14 @@ function BotaoEmoji({
  * serve para dizer: qualquer um daqueles funciona no composer.
  */
 function Previa({ item, tom }: { item: ItemGrade | null; tom: TomDePele }) {
+  // O hook precisa correr sempre na mesma ordem — não pode ficar depois do
+  // `if (!item)`. Trocar de emoji focado reseta `falhou`: um erro do emoji
+  // anterior não pode grudar no próximo.
+  const chaveDoItem = item ? item.chave : null;
+  const [falhouChave, setFalhouChave] = useState<string | null>(null);
+  useEffect(() => setFalhouChave(null), [chaveDoItem]);
   if (!item) {
-    return <span className="flex-1 text-sm text-txt-muted">Escolha um emoji</span>;
+    return <span className="flex-1 text-sm text-text-muted">Escolha um emoji</span>;
   }
   const nome = item.tipo === "custom" ? item.emoji.name : item.item.nome;
   // emoji de servidor não tem apelido: ali o que informa é de qual servidor ele é
@@ -505,19 +596,37 @@ function Previa({ item, tom }: { item: ItemGrade | null; tom: TomDePele }) {
           .slice(0, 3)
           .map((a) => `:${a}:`)
           .join(" ");
+  const falhou = falhouChave === item.chave;
   return (
     <span className="flex min-w-0 flex-1 items-center gap-2">
       {item.tipo === "custom" ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={item.emoji.url} alt="" className="h-7 w-7 shrink-0 object-contain" />
+        falhou ? (
+          // mesma caixa 28px, o mesmo tratamento de erro do BotaoEmoji e de
+          // `EmojiDaReacao.tsx` — o emoji sumiu do CDN, o nome continua útil
+          <span className="grid h-7 w-7 shrink-0 place-items-center text-text-muted">
+            {/* 70% da caixa, a mesma proporção de `EmojiDaReacao.tsx` (Math.round(tamanho * 0.7)) */}
+            <IconeDeImagem size={20} aria-hidden="true" />
+          </span>
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={item.emoji.url}
+            alt=""
+            className="h-7 w-7 shrink-0 object-contain"
+            onError={() => setFalhouChave(item.chave)}
+          />
+        )
       ) : (
-        <span aria-hidden="true" className="shrink-0 text-2xl leading-none">
-          {comTomDePele(item.item, tom)}
+        // 28px, o mesmo do personalizado ao lado: no print 2026-08-31 120846 o
+        // 👍 do rodapé tem 28px de altura (y 860–887), contra 40 na grade (y
+        // 493–532), onde ele ocupa a altura inteira da caixa
+        <span aria-hidden="true" className="flex shrink-0">
+          <Emoji emoji={comTomDePele(item.item, tom)} tamanho={28} />
         </span>
       )}
       <span className="flex min-w-0 items-baseline gap-1.5 truncate">
-        <span className="shrink-0 text-sm font-semibold text-txt-primary">{`:${nome}:`}</span>
-        {detalhe && <span className="truncate text-sm text-txt-muted">{detalhe}</span>}
+        <span className="shrink-0 text-sm font-semibold text-text-strong">{`:${nome}:`}</span>
+        {detalhe && <span className="truncate text-sm text-text-muted">{detalhe}</span>}
       </span>
     </span>
   );
@@ -543,43 +652,51 @@ function SeletorDeTom({
         if (!e.currentTarget.contains(e.relatedTarget as Node)) onAbrir(false);
       }}
     >
-      <button
-        type="button"
-        aria-label={`Tom de pele: ${atual.rotulo}`}
+      {/*
+        `BotaoDeIcone tamanho="sm"` = 24px: a família medida (`.hoverBarButton_
+        f84418`, ver o cabeçalho do primitivo), no lugar do `h-7 w-7` (28px)
+        solto de antes, que não vinha de medida nenhuma. `semDica={false}`
+        (padrão) dá de graça a dica com o nome do tom — o Discord também mostra
+        o nome no hover das amostras.
+      */}
+      <BotaoDeIcone
+        rotulo={`Tom de pele: ${atual.rotulo}`}
+        icone={
+          <span aria-hidden="true" style={{ backgroundColor: atual.amostra }} className="h-4 w-4 rounded-full" />
+        }
+        tamanho="sm"
+        fundo="hover"
         aria-expanded={aberto}
         onClick={() => onAbrir(!aberto)}
-        className="grid h-7 w-7 place-items-center rounded transition hover:bg-hov"
-      >
-        <span
-          aria-hidden="true"
-          style={{ backgroundColor: atual.amostra }}
-          className="h-4 w-4 rounded-full"
-        />
-      </button>
+      />
       {aberto && (
         <div
           role="listbox"
           aria-label="Tom de pele"
-          className="anim-menu absolute bottom-full right-0 mb-1 flex gap-1 rounded bg-void p-1 shadow-high"
+          // Superfície do popout medida (`components/ui/primitivos/Popout.tsx`,
+          // cabeçalho "Superfície"): `--background-surface-high`, raio 8,
+          // `shadow-popout`. A caixa anterior (`bg-input-background-default`,
+          // `rounded` = 4) não vinha de medida nenhuma; esta é a mesma que
+          // qualquer outro popout do app já usa.
+          className="anim-menu absolute bottom-full right-0 mb-1 flex gap-1 rounded-lg bg-background-surface-high p-1 shadow-popout"
         >
           {TONS_DE_PELE.map((t) => (
-            <button
+            <BotaoDeIcone
               key={t.id}
-              type="button"
+              rotulo={t.rotulo}
               role="option"
               aria-selected={t.id === tom}
-              aria-label={t.rotulo}
+              icone={<span aria-hidden="true" style={{ backgroundColor: t.amostra }} className="h-4 w-4 rounded-full" />}
+              tamanho="sm"
+              fundo="hover"
+              // `tom="ativo"` pinta o fundo persistente
+              // (`--interactive-background-selected`) do escolhido — a versão
+              // antiga tingia com o token de HOVER (`bg-interactive-background-
+              // hover`), que é passageiro por definição; o tom escolhido tinha
+              // que ficar destacado o tempo todo, não só sob o ponteiro.
+              tom={t.id === tom ? "ativo" : "neutro"}
               onClick={() => onEscolher(t.id)}
-              className={`grid h-7 w-7 place-items-center rounded transition hover:bg-hov ${
-                t.id === tom ? "bg-hov" : ""
-              }`}
-            >
-              <span
-                aria-hidden="true"
-                style={{ backgroundColor: t.amostra }}
-                className="h-4 w-4 rounded-full"
-              />
-            </button>
+            />
           ))}
         </div>
       )}

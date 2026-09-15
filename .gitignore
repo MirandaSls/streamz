@@ -57,6 +57,8 @@ apps/web/next-env.d.ts
 
 # supressor de ruído copiado do node_modules pelo predev/prebuild
 apps/web/public/supressor/
+# SVG do Twemoji copiados do node_modules pelo predev/prebuild (ADR-0009, onda 0.6)
+apps/web/public/twemoji/
 
 # Postgres embutido (pnpm db:embedded)
 .pgdata/

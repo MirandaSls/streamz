@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Clock, Settings2, Star } from "@/components/ui/icones";
+import { AlertTriangle, Clock, RefreshCw, Settings2, Star } from "@/components/ui/icones";
 import type { Sticker } from "@streamz/shared";
 import { useAuth } from "@/stores/auth";
 import { useEmojis } from "@/stores/emojis";
 import { useCanModerate, useGuilds } from "@/stores/guilds";
 import { ui } from "@/stores/ui";
 import { ehMobileAgora } from "@/hooks/useEhMobile";
+import { BotaoDeIcone, Button } from "@/components/ui/primitivos";
 import {
   BotaoLateral,
   BuscaPicker,
@@ -23,7 +24,12 @@ import {
   usePrefsPicker,
 } from "@/components/media/preferencias-picker";
 
-/** 4 por linha no painel de 424px, com a coluna de packs à esquerda. */
+/**
+ * 4 por linha no painel (500px de largura, `LARGURA_PICKER`, menos os 48 da
+ * `ColunaLateral` de packs) — a contagem de colunas em si não está medida em
+ * nenhum print 1:1 do seletor de figurinha aberto; o grid é fluido
+ * (`minmax(0, 1fr)`), então continua correto se a medida mudar de novo.
+ */
 const COLUNAS = 4;
 const CELULA = 88;
 
@@ -44,6 +50,21 @@ interface SecaoFigurinha {
  *
  * A busca olha nome **e** palavras-chave — é para isso que a figurinha guarda
  * `tags`; procurar só pelo nome obrigaria a lembrar como quem subiu a batizou.
+ *
+ * ## Estados (cartão 2j-seletor-gif-figurinha)
+ *
+ * Vazio (sem figurinha, com ou sem busca), carregando (a resposta de
+ * `useEmojis().load()` ainda não chegou — `carregado`), erro (a resposta
+ * chegou mas `falhouCarregar` está true — `stores/emojis.ts`, `load()` engole
+ * a falha de rede e devolve lista vazia; sem esta bandeira "zero figurinhas"
+ * e "a rede caiu" eram visualmente idênticos), hover (fundo da célula e do
+ * item da coluna lateral), foco (o anel azul global de `globals.css`,
+ * `:focus-visible`, alcança os botões daqui sem nada extra neste arquivo) e
+ * desabilitado não se aplicam ao botão de escolher (nunca fica desabilitado).
+ * **Sem permissão**: o botão de gerenciar figurinhas do servidor só aparece
+ * com `podeGerenciar` — sem a permissão ele **some**, não fica desabilitado,
+ * porque é assim que o Discord trata (e o rodapé não tem onde pôr uma dica
+ * "(em breve)" para um botão que nem é dele).
  */
 export default function StickerPicker({
   onEscolher,
@@ -66,6 +87,13 @@ export default function StickerPicker({
   const guildIdAtivoStore = useGuilds((s) => s.activeGuildId);
   const guildIdAtivo = guildId !== undefined ? guildId : guildIdAtivoStore;
   const packs = useEmojis((s) => s.stickerGuilds);
+  // `carregado` distingue "ainda buscando" de "não tem nenhuma": os dois
+  // dão `packs = []`, e sem essa bandeira o painel mostraria "Seus servidores
+  // ainda não têm figurinhas" no primeiro instante depois do login, antes da
+  // resposta chegar.
+  const carregado = useEmojis((s) => s.carregado);
+  const falhouCarregar = useEmojis((s) => s.falhouCarregar);
+  const recarregar = useEmojis((s) => s.recarregar);
   const me = useAuth((s) => s.user);
   const podeGerenciar = useCanModerate(me?.id);
   const prefs = usePrefsPicker();
@@ -229,8 +257,14 @@ export default function StickerPicker({
           // da coluna lateral usa para rolar até o pack certo
           className="relative min-h-0 flex-1 overflow-y-auto px-2 pb-2"
         >
-          {vazio ? (
-            <p className="px-2 py-10 text-center text-sm text-txt-muted">
+          {!carregado ? (
+            <p className="px-2 py-10 text-center text-sm text-text-muted">Carregando…</p>
+          ) : falhouCarregar ? (
+            <div className="px-2 py-10">
+              <BlocoDeErro tentar={() => void recarregar()} />
+            </div>
+          ) : vazio ? (
+            <p className="px-2 py-10 text-center text-sm text-text-muted">
               {buscando
                 ? "Nenhuma figurinha com esse nome."
                 : "Seus servidores ainda não têm figurinhas."}
@@ -255,27 +289,25 @@ export default function StickerPicker({
       <RodapePicker>
         {foco ? (
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-semibold text-txt-primary">
+            <span className="block truncate text-sm font-semibold text-text-strong">
               {foco.sticker.name}
             </span>
-            <span className="block truncate text-[11px] text-txt-muted">{foco.pack}</span>
+            <span className="block truncate text-[11px] text-text-muted">{foco.pack}</span>
           </span>
         ) : (
-          <span className="flex-1 text-sm text-txt-muted">Escolha uma figurinha</span>
+          <span className="flex-1 text-sm text-text-muted">Escolha uma figurinha</span>
         )}
         {podeGerenciar && guildIdAtivo && (
-          <button
-            type="button"
-            title="Gerenciar figurinhas do servidor"
-            aria-label="Gerenciar figurinhas do servidor"
+          <BotaoDeIcone
+            rotulo="Gerenciar figurinhas do servidor"
+            icone={<Settings2 size={16} aria-hidden="true" />}
+            tamanho="sm"
+            comFundo
             onClick={() => {
               onClose();
               ui.openModal({ kind: "guildEmojis", guildId: guildIdAtivo });
             }}
-            className="grid h-7 w-7 shrink-0 place-items-center rounded text-txt-muted transition hover:bg-hov hover:text-txt-normal"
-          >
-            <Settings2 size={16} aria-hidden="true" />
-          </button>
+          />
         )}
       </RodapePicker>
     </div>
@@ -309,7 +341,10 @@ function SecaoGrade({
 
   return (
     <section ref={ref} className="mb-1">
-      <h3 className="sticky top-0 z-10 flex items-center gap-1.5 bg-panel px-1 py-1.5 text-xs font-semibold uppercase tracking-wide text-txt-muted">
+      {/* `--background-surface-high`: a mesma superfície da caixa (`CaixaPicker`),
+          para o cabeçalho grudado não virar uma faixa escura por cima do
+          painel — ver "A superfície agora é a do Discord" em PickerPanel.tsx. */}
+      <h3 className="sticky top-0 z-10 flex items-center gap-1.5 bg-background-surface-high px-1 py-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
         {secao.icone.tipo === "servidor" && (
           <IconeServidor nome={secao.icone.nome} iconUrl={secao.icone.url} />
         )}
@@ -328,7 +363,7 @@ function SecaoGrade({
             onPointerEnter={() => onFocar({ sticker, pack })}
             onFocus={() => onFocar({ sticker, pack })}
             style={{ height: CELULA }}
-            className="grid place-items-center rounded transition hover:bg-hov"
+            className="grid place-items-center rounded transition hover:bg-interactive-background-hover"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -341,5 +376,35 @@ function SecaoGrade({
         ))}
       </div>
     </section>
+  );
+}
+
+/**
+ * Erro persistente de carregamento: o mesmo par ícone+mensagem+"Tentar de
+ * novo" que `EngajamentoTab.tsx`/`SegurancaTab.tsx`/`SessoesTab.tsx` já usam
+ * para a mesma falha (caixa `rounded-[4px] border border-border-subtle
+ * bg-background-base-lowest`, `AlertTriangle` em `--status-warning`, botão
+ * secundário com `RefreshCw`). Repetido aqui em vez de extraído porque as
+ * outras fontes vivem em `components/settings/*.tsx`, fora da lista de
+ * arquivos deste cartão — mover para um lugar comum é trabalho de outro
+ * cartão, não deste.
+ */
+function BlocoDeErro({ tentar }: { tentar: () => void }) {
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-[4px] border border-border-subtle bg-background-base-lowest px-3 py-4 text-center">
+      <div className="flex min-w-0 items-center gap-2">
+        <AlertTriangle size={16} className="shrink-0 text-status-warning" aria-hidden="true" />
+        <p className="min-w-0 text-sm text-text-muted">Não foi possível carregar as figurinhas.</p>
+      </div>
+      <Button
+        variante="secundario"
+        tamanho="sm"
+        icone={<RefreshCw size={14} aria-hidden="true" />}
+        onClick={tentar}
+        className="shrink-0 celular:h-[44px]"
+      >
+        Tentar de novo
+      </Button>
+    </div>
   );
 }

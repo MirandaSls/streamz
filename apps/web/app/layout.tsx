@@ -3,36 +3,41 @@ import BarraDeTituloMinima from "@/components/desktop/BarraDeTituloMinima";
 import AvisoDeInstalacao from "@/components/pwa/AvisoDeInstalacao";
 import RegistroDoServiceWorker from "@/components/pwa/RegistroDoServiceWorker";
 import PesoDosIcones from "@/components/ui/PesoDosIcones";
+import "./tokens.css";
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
-import { Archivo, JetBrains_Mono, Noto_Sans } from "next/font/google";
+import { Archivo, Noto_Sans, Source_Code_Pro } from "next/font/google";
 
 /**
- * Corpo e densidade da interface. Ficou a Noto Sans do MVP: trocar a fonte do
- * chat mexeria em métrica, altura de linha e leiaute de milhares de linhas, e
- * o rebranding (ADR-0004) não é redesign.
+ * As fontes do Discord (gg sans, ABC Ginto, gg mono) são proprietárias. Usamos a
+ * pilha de fallback que o próprio CSS dele declara (ADR-0009, item 4):
+ *
+ * - `--font-primary` gg sans → **Noto Sans**: corpo e interface.
+ * - `--font-headline` ABC Ginto Nord → **Noto Sans 800**: títulos grandes.
+ * - `--font-code` gg mono → **Source Code Pro**: código.
+ *
+ * Os pesos e o itálico são os que o Discord registra em `@font-face` para a
+ * Noto Sans (400–800, com itálico) e para a Source Code Pro (400 e 700). Sem o
+ * itálico de verdade, o `*texto*` do markdown sai com itálico sintético.
  */
 const fonteSans = Noto_Sans({
   subsets: ["latin", "latin-ext"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "500", "600", "700", "800"],
+  style: ["normal", "italic"],
   variable: "--font-sans",
   display: "swap",
 });
 
-/**
- * Archivo: a fonte de título do pacote de marca — wordmark, telas de auth,
- * títulos de modal e categorias. Ver design.md para quando usar cada peso.
- */
+/** Archivo: **só o wordmark** (`MarcaLockup`). É marca, não interface. */
 const fonteDisplay = Archivo({
   subsets: ["latin", "latin-ext"],
-  weight: ["700", "800"],
+  weight: ["800"],
   variable: "--font-display",
   display: "swap",
 });
 
-/** JetBrains Mono: rótulos técnicos — código, código de convite, IDs, atalhos. */
-const fonteMono = JetBrains_Mono({
-  subsets: ["latin"],
+const fonteMono = Source_Code_Pro({
+  subsets: ["latin", "latin-ext"],
   weight: ["400", "700"],
   variable: "--font-mono",
   display: "swap",
@@ -90,7 +95,12 @@ export const metadata: Metadata = {
 };
 
 /**
- * Void Ink: a cor que o navegador pinta na barra antes da página carregar.
+ * A cor que o navegador pinta na barra antes da página carregar: a
+ * `--background-base-lowest` do Discord (rail, coluna e barra de título).
+ * Literal porque o metadado vira `<meta>` e não enxerga variável CSS. É a do
+ * Dark; em Ash e Onyx o script `TEMA_ANTES_DA_PINTURA` e depois
+ * `stores/settings.ts#aplicarTema` reescrevem o `content` com a do tema, lida
+ * do CSS aplicado.
  *
  * As três linhas de baixo são do leiaute de celular, e cada uma resolve um
  * defeito concreto:
@@ -110,13 +120,36 @@ export const metadata: Metadata = {
  *   `globals.css`), que é a causa, e não pela proibição de ampliar.
  */
 export const viewport: Viewport = {
-  themeColor: "#0b0b0f",
+  themeColor: "#121214",
   colorScheme: "dark",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
   interactiveWidget: "resizes-content",
 };
+
+/**
+ * Aplica o tema salvo **antes da primeira pintura**: sem isto, quem usa Ash ou
+ * Onyx veria o Dark (o `:root` de `tokens.css`) até o bundle carregar e a
+ * store escrever o atributo — um piscar a cada abertura, pior no app de
+ * celular, que carrega mais devagar.
+ *
+ * Roda síncrono no `<head>`, antes do `<body>` existir. Lê direto o que o
+ * `persist` do zustand grava em `localStorage["settings"]`
+ * (`{"state": {...}, "version": n}`) e só aceita `ash`/`onyx`: qualquer outra
+ * coisa (Dark, versão antiga, JSON quebrado, `localStorage` bloqueado) deixa o
+ * `<html>` sem atributo, que é o Dark. A normalização de verdade continua na
+ * store (`temaValido`); isto só antecipa o que ela vai escrever.
+ *
+ * A barra do sistema (`<meta name="theme-color">`) é trocada quando o documento
+ * termina de ser lido — antes disso o `<meta>` pode ainda não existir no DOM e
+ * o CSS pode não ter carregado; valor vazio não escreve nada.
+ *
+ * Inline de propósito, e por isso vale igual no site, no export do Tauri (a CSP
+ * de lá aceita script inline) e no app de celular. Qualquer mudança no formato
+ * salvo da store tem de passar por aqui.
+ */
+const TEMA_ANTES_DA_PINTURA = `(function(){try{var d=document.documentElement;var s=JSON.parse(localStorage.getItem("settings")||"null");var t=s&&s.state&&s.state.theme;if(t!=="ash"&&t!=="onyx")return;d.setAttribute("data-tema",t);document.addEventListener("DOMContentLoaded",function(){var c=getComputedStyle(d).getPropertyValue("--background-base-lowest").trim();if(!c)return;var m=document.querySelectorAll('meta[name="theme-color"]');for(var i=0;i<m.length;i++)m[i].setAttribute("content",c)})}catch(e){}})();`;
 
 export default function RootLayout({
   children,
@@ -125,13 +158,17 @@ export default function RootLayout({
 }) {
   return (
     // ── e-configuracoes ── `stores/settings` escreve style/class/lang no <html>
-    // antes da hidratação (a preferência tem de valer no primeiro quadro), e é
-    // exatamente a divergência que o React reclamaria aqui.
+    // antes da hidratação (a preferência tem de valer no primeiro quadro), e o
+    // script do tema escreve `data-tema` antes até disso: é exatamente a
+    // divergência que o React reclamaria aqui.
     <html
       lang="pt-BR"
       className={`${fonteSans.variable} ${fonteDisplay.variable} ${fonteMono.variable}`}
       suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: TEMA_ANTES_DA_PINTURA }} />
+      </head>
       <body className="font-sans">
         <BarraDeTituloMinima />
         <PesoDosIcones>{children}</PesoDosIcones>

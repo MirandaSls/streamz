@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Hash, Lock, Megaphone, Shield, Trash2, Volume2 } from "@/components/ui/icones";
 import {
   MAX_CHANNEL_TOPIC,
+  Permission,
   SLOWMODE_PRESETS,
   overridesEfetivos,
   slowmodeLabel,
@@ -14,11 +15,14 @@ import {
 import EditorDePermissoes from "@/components/permissoes/EditorDePermissoes";
 import JanelaDeConfiguracoes, { ItemPerigo, type ItemDeMenu } from "@/components/ui/JanelaDeConfiguracoes";
 import { Rotulo, SliderMarcas, ToggleLinha } from "@/components/ui/controls";
+import { Button, TextArea, TextInput } from "@/components/ui/primitivos";
+import { TituloDaPagina } from "@/components/settings/server/pagina";
 import { RegistrarAlteracoes, useControleDeAlteracoes } from "@/components/ui/alteracoes";
 import { api } from "@/lib/api";
+import { normalizarNomeDeCanal } from "@/lib/nome-de-canal";
 import { useChannels, type UpdateChannelInput } from "@/stores/channels";
 import { useGuilds } from "@/stores/guilds";
-import { useCategoryOverrides, useChannelOverrides, usePermissions } from "@/stores/permissions";
+import { useCan, useCategoryOverrides, useChannelOverrides, usePermissions } from "@/stores/permissions";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui, useUI } from "@/stores/ui";
 
@@ -55,8 +59,8 @@ const PARADAS = SLOWMODE_PRESETS.map((s) => ({ valor: s, label: slowmodeLabel(s)
  *
  * Não é um `Dialog`: as configurações de canal usam a mesma moldura das de
  * servidor e de usuário (barra lateral com o nome do canal, conteúdo centrado,
- * botão ESC redondo). O nome do canal é o cabeçalho da barra; o `<h1>` é o nome
- * da aba.
+ * botão ESC redondo). O nome do canal é o cabeçalho da barra; o `<h1>` é da
+ * página (`TituloDaPagina`), porque na `tela-cheia` o shell não o escreve.
  *
  * O formulário é local até salvar, e é a barra de "alterações não salvas" que
  * aparece quando há o que gravar — trocar de aba não perde o que foi digitado.
@@ -81,6 +85,13 @@ export default function ChannelSettingsModal({
   const handleOverrides = usePermissions((s) => s.handleOverrides);
   const overrides = useChannelOverrides(channelId);
   const daCategoria = useCategoryOverrides(channel?.categoryId ?? null);
+  /**
+   * A engrenagem que abre esta tela já exige isto (`ChannelSidebar.tsx`); o
+   * hook de novo aqui é para a permissão que muda **depois** de aberta — outro
+   * moderador tira o cargo enquanto esta janela está na tela. Sem isto, o
+   * `salvar()` só falharia no clique, calado até o toast de erro do `update`.
+   */
+  const podeGerenciar = useCan(Permission.MANAGE_CHANNELS, channelId);
 
   const [aba, setAba] = useState<Aba>(tab);
   const [name, setName] = useState(channel?.name ?? "");
@@ -116,6 +127,27 @@ export default function ChannelSettingsModal({
     };
   }, [guildId, channelId, handleOverrides]);
 
+  const existiuRef = useRef(false);
+  useEffect(() => {
+    if (channel) existiuRef.current = true;
+  }, [channel]);
+
+  /**
+   * Canal apagado por outro moderador com esta tela ainda aberta: a store
+   * perde a linha (evento `channel.deleted` do gateway) e `channel` vira
+   * `undefined` no meio da edição. Sem isto a tela some em silêncio — sem
+   * `channel` não há nome para o cabeçalho nem `<JanelaDeConfiguracoes>` para
+   * mostrar, então o retorno abaixo já teria de ser `null` mesmo; o toast é o
+   * que impede o desaparecimento de parecer um bug.
+   */
+  useEffect(() => {
+    if (existiuRef.current && !channel) {
+      existiuRef.current = false;
+      ui.toast("Este canal não existe mais.", "error");
+      closeModal();
+    }
+  }, [channel, closeModal]);
+
   if (!channel) return null;
   const voz = channel.type === "VOICE";
   const anuncio = channel.type === "ANNOUNCEMENT";
@@ -141,6 +173,12 @@ export default function ChannelSettingsModal({
 
   async function salvar() {
     if (!dirty || saving) return;
+    // clique preso na barra de "alterações não salvas": sem o toast, a barra
+    // continua ali e parece que o clique não fez nada
+    if (!podeGerenciar) {
+      ui.toast("Você não tem mais permissão para salvar este canal.", "error");
+      return;
+    }
     setSaving(true);
     await update(channelId, patch);
     setSaving(false);
@@ -224,6 +262,13 @@ export default function ChannelSettingsModal({
 
   return (
     <JanelaDeConfiguracoes
+      // Tela cheia, como as do servidor: o print da irmã (categoria,
+      // `Captura de tela 2026-09-04 102238.png`) é a moldura
+      // `standardSidebarView` — menu `#121214` até x=691, círculo "ESC" em
+      // x 1432–1467, título da aba escrito pela página (glifo em x≈733).
+      // Sem a prop caía no padrão `janela` (o modal das configurações do
+      // usuário), que não é o desenho do Discord para canal.
+      variante="tela-cheia"
       titulo={nomeExibido}
       cabecalho={nomeExibido}
       grupos={[{ id: "canal", itens }]}
@@ -233,85 +278,116 @@ export default function ChannelSettingsModal({
       controle={alteracoes}
       onClose={closeModal}
       rodapeMenu={
-        <ItemPerigo
-          icon={<Trash2 size={18} />}
-          onClick={async () => {
-            // o `remove` da store já pergunta antes; a tela só fecha se apagou
-            await remove(channel);
-            if (!useChannels.getState().channels.some((c) => c.id === channelId)) closeModal();
-          }}
-        >
-          Apagar canal
-        </ItemPerigo>
+        // some com a permissão junto: sem `MANAGE_CHANNELS` não dá para apagar
+        // canal no Discord, e um botão vermelho que abre confirmação para
+        // devolver um 403 no fim é peor do que não mostrá-lo
+        podeGerenciar ? (
+          <ItemPerigo
+            icon={<Trash2 size={18} />}
+            onClick={async () => {
+              // o `remove` da store já pergunta antes; a tela só fecha se apagou
+              await remove(channel);
+              if (!useChannels.getState().channels.some((c) => c.id === channelId)) closeModal();
+            }}
+          >
+            Apagar canal
+          </ItemPerigo>
+        ) : undefined
       }
     >
       <RegistrarAlteracoes dirty={dirty} salvar={salvar} redefinir={redefinir} />
 
       {aba === "geral" && (
-        <div className="space-y-6">
-          <div>
-            <Rotulo htmlFor="canal-nome">Nome do canal</Rotulo>
-            <input
-              id="canal-nome"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={64}
-              className="h-10 w-full rounded-[3px] bg-void px-2.5 text-txt-normal outline-none"
-            />
-          </div>
+        <>
+          {/* Na `tela-cheia` o shell não escreve o nome da aba: quem escreve é
+              a página (ver `pagina.tsx`). Sem isto "Visão geral" sumia. */}
+          <TituloDaPagina titulo={ROTULO.geral} />
+          <div className="space-y-6">
+            {!podeGerenciar && (
+              <p className="rounded-[4px] bg-background-base-lowest px-3 py-2 text-xs text-text-muted">
+                Você perdeu a permissão de gerenciar este canal enquanto esta tela estava aberta. Os
+                campos abaixo ficam só para consulta.
+              </p>
+            )}
 
-          {!voz && (
+            {/*
+              Sem permissão cada campo recebe o próprio `disabled` — nome,
+              tópico, modo lento e os dois interruptores. Antes era um
+              `pointer-events-none` no bloco, que barrava só o mouse: com Tab
+              até o deslizador, as setas ainda mudavam o valor local. O
+              esmaecido também é de cada controle (o `has-[:disabled]:opacity-60`
+              do `TextInput`, o do `Switch`), então o bloco não pinta o seu por
+              cima — seriam duas opacidades multiplicadas.
+            */}
             <div>
-              <Rotulo htmlFor="canal-topico" contador={`${topic.length}/${MAX_CHANNEL_TOPIC}`}>
-                Tópico do canal
-              </Rotulo>
-              <textarea
-                id="canal-topico"
-                value={topic}
-                onChange={(e) => setTopic(e.target.value.slice(0, MAX_CHANNEL_TOPIC))}
-                rows={3}
-                placeholder="Sobre o que é este canal?"
-                className="w-full resize-none rounded-[3px] bg-void px-2.5 py-2 text-txt-normal outline-none placeholder:text-txt-muted"
+              <Rotulo htmlFor="canal-nome">Nome do canal</Rotulo>
+              <TextInput
+                id="canal-nome"
+                value={name}
+                // texto e anúncios se escrevem "bate-papo" já ao digitar, como no
+                // Discord; canal de voz aceita "Sala de Música" como veio
+                onChange={(e) => setName(voz ? e.target.value : normalizarNomeDeCanal(e.target.value))}
+                maxLength={64}
+                disabled={!podeGerenciar}
               />
             </div>
-          )}
 
-          {!voz && (
-            <SliderMarcas
-              legenda="Modo lento"
-              opcoes={PARADAS}
-              indice={paradaAtual}
-              onChange={(i) => setSlowmode(PARADAS[i].valor)}
-              hint="Membros só podem enviar uma mensagem a cada intervalo. Moderadores não são afetados."
-            />
-          )}
-
-          {!voz && (
-            <div className="border-t border-border pt-1">
-              <ToggleLinha
-                checked={nsfw}
-                onChange={setNsfw}
-                titulo="Canal com conteúdo sensível"
-                hint="Quem abrir o canal vê um aviso e precisa confirmar a entrada."
-              />
-              {!anuncio && (
-                <ToggleLinha
-                  checked={readOnly}
-                  onChange={setReadOnly}
-                  titulo="Somente leitura"
-                  hint="Só moderadores enviam mensagens."
+            {!voz && (
+              <div>
+                <Rotulo htmlFor="canal-topico" contador={`${topic.length}/${MAX_CHANNEL_TOPIC}`}>
+                  Tópico do canal
+                </Rotulo>
+                <TextArea
+                  id="canal-topico"
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value.slice(0, MAX_CHANNEL_TOPIC))}
+                  rows={3}
+                  placeholder="Sobre o que é este canal?"
+                  disabled={!podeGerenciar}
                 />
-              )}
-            </div>
-          )}
+              </div>
+            )}
 
-          {anuncio && (
-            <p className="rounded-[4px] bg-panel px-3 py-2 text-xs text-txt-muted">
-              Canal de anúncios: só a moderação publica. Seguir o canal em outro servidor ainda não
-              está disponível.
-            </p>
-          )}
-        </div>
+            {!voz && (
+              <SliderMarcas
+                legenda="Modo lento"
+                opcoes={PARADAS}
+                indice={paradaAtual}
+                onChange={(i) => setSlowmode(PARADAS[i].valor)}
+                disabled={!podeGerenciar}
+                hint="Membros só podem enviar uma mensagem a cada intervalo. Moderadores não são afetados."
+              />
+            )}
+
+            {!voz && (
+              <div className="border-t border-border-subtle pt-1">
+                <ToggleLinha
+                  checked={nsfw}
+                  onChange={setNsfw}
+                  disabled={!podeGerenciar}
+                  titulo="Canal com conteúdo sensível"
+                  hint="Quem abrir o canal vê um aviso e precisa confirmar a entrada."
+                />
+                {!anuncio && (
+                  <ToggleLinha
+                    checked={readOnly}
+                    onChange={setReadOnly}
+                    disabled={!podeGerenciar}
+                    titulo="Somente leitura"
+                    hint="Só moderadores enviam mensagens."
+                  />
+                )}
+              </div>
+            )}
+
+            {anuncio && (
+              <p className="rounded-[4px] bg-background-base-lowest px-3 py-2 text-xs text-text-muted">
+                Canal de anúncios: só a moderação publica. Seguir o canal em outro servidor ainda não
+                está disponível.
+              </p>
+            )}
+          </div>
+        </>
       )}
 
       {/*
@@ -325,40 +401,55 @@ export default function ChannelSettingsModal({
         menu de contexto; quem quiser o quadro inteiro vem para cá.
       */}
       {aba === "permissoes" && guildId && (
-        <EditorDePermissoes
-          guildId={guildId}
-          escopo={escopoDoCanal(channel)}
-          privadoLabel="Canal privado"
-          privadoDescricao="Ao tornar o canal privado, só os cargos e membros marcados aqui embaixo o enxergam. Moderadores continuam entrando."
-          privado={isPrivate}
-          onPrivado={setPrivate}
-          overrides={regrasVisiveis}
-          onSalvarRegra={gravarRegra}
-          onRemoverRegra={apagarRegra}
-          aviso={
-            channel.categoryId ? (
-              // no celular o aviso e o botão empilham: lado a lado, o texto
-              // ficava em quatro linhas de ~250px ao lado de um botão largo
-              <div className="flex items-center justify-between gap-4 rounded-[4px] border border-border bg-panel px-3 py-2 celular:flex-col celular:items-stretch celular:gap-2">
-                <p className="min-w-0 text-xs text-txt-muted">
-                  {channel.syncedWithCategory
-                    ? "Sincronizado com a categoria: as regras abaixo são as dela, e a primeira edição feita aqui desgruda o canal."
-                    : "Este canal tem regras próprias — elas não seguem mais a categoria."}
-                </p>
-                {!channel.syncedWithCategory && (
-                  <button
-                    type="button"
-                    disabled={sincronizando}
-                    onClick={() => void sincronizar()}
-                    className="h-8 celular:h-[44px] shrink-0 rounded-[3px] border border-border-strong px-3 text-sm text-txt-normal transition hover:border-border-strong-hover disabled:opacity-50"
-                  >
-                    {sincronizando ? "Sincronizando…" : "Sincronizar com a categoria"}
-                  </button>
-                )}
-              </div>
-            ) : null
-          }
-        />
+        <>
+          {/*
+            Título e subtítulo do print da aba de permissões da categoria
+            (`Captura de tela 2026-09-04 102249.png`: "Configurações da
+            categoria" com glifo em y 97–110, e "Use permissões para personalizar quem
+            pode fazer o que nesta categoria." embaixo). Não há print da aba
+            do canal; a frase é a mesma trocando o objeto, e o nome da aba
+            ("Permissões") continua no menu e na barra do celular.
+          */}
+          <TituloDaPagina
+            titulo="Configurações do canal"
+            subtitulo="Use permissões para personalizar quem pode fazer o que neste canal."
+          />
+          <EditorDePermissoes
+            guildId={guildId}
+            escopo={escopoDoCanal(channel)}
+            privadoLabel="Canal privado"
+            privadoDescricao="Ao tornar o canal privado, só os cargos e membros marcados aqui embaixo o enxergam. Moderadores continuam entrando."
+            privado={isPrivate}
+            onPrivado={setPrivate}
+            overrides={regrasVisiveis}
+            onSalvarRegra={gravarRegra}
+            onRemoverRegra={apagarRegra}
+            aviso={
+              channel.categoryId ? (
+                // no celular o aviso e o botão empilham: lado a lado, o texto
+                // ficava em quatro linhas de ~250px ao lado de um botão largo
+                <div className="flex items-center justify-between gap-4 rounded-[4px] border border-border-subtle bg-background-base-lowest px-3 py-2 celular:flex-col celular:items-stretch celular:gap-2">
+                  <p className="min-w-0 text-xs text-text-muted">
+                    {channel.syncedWithCategory
+                      ? "Sincronizado com a categoria: as regras abaixo são as dela, e a primeira edição feita aqui desgruda o canal."
+                      : "Este canal tem regras próprias — elas não seguem mais a categoria."}
+                  </p>
+                  {!channel.syncedWithCategory && (
+                    <Button
+                      variante="secundario"
+                      tamanho="sm"
+                      disabled={sincronizando}
+                      onClick={() => void sincronizar()}
+                      className="shrink-0 celular:h-[44px]"
+                    >
+                      {sincronizando ? "Sincronizando…" : "Sincronizar com a categoria"}
+                    </Button>
+                  )}
+                </div>
+              ) : null
+            }
+          />
+        </>
       )}
     </JanelaDeConfiguracoes>
   );

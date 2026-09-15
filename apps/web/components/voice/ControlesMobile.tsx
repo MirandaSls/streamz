@@ -51,8 +51,9 @@ const useEfeitoDeLeiaute = typeof window === "undefined" ? useEffect : useLayout
  * - **44pt de alvo**, e não 42. É o piso do HIG e do Material e o mesmo número
  *   do resto do leiaute (`BotaoDeToque`); dois pontos não mudam o desenho e
  *   mudam o acerto do polegar. O círculo desenhado tem 48, dentro dos 68 da
- *   barra. Os dois saem de `palco-mobile.ts` em px, e não de `h-11`/`h-12`:
- *   com a raiz de 15,5px a escala `rem` do Tailwind entrega 42,6 e 46,5.
+ *   barra. Os dois saem de `palco-mobile.ts` em px — fonte única com o resto
+ *   do leiaute do celular —, e não de `h-11`/`h-12` (a raiz do app é 16px,
+ *   ADR-0009).
  *
  * A barra fica **acima da área segura**: o print mede 34pt entre a base dela e
  * a base da tela, que é exatamente o indicador de home do iPhone. Quem paga
@@ -127,7 +128,7 @@ export default function ControlesMobile({
           // home num iPhone — o dobro da folga que o print mostra.
           bottom: 8,
         }}
-        className={`absolute z-20 flex items-center justify-between rounded-full bg-overlay/95 px-2.5 shadow-high backdrop-blur transition-opacity duration-200 ${
+        className={`absolute z-20 flex items-center justify-between rounded-full bg-background-surface-higher/95 px-2.5 shadow-popout backdrop-blur transition-opacity duration-200 ${
           escondida ? "pointer-events-none opacity-0" : "opacity-100"
         }`}
       >
@@ -263,11 +264,11 @@ type Tom = "neutro" | "ativo" | "aoVivo" | "mudo" | "desligar";
  * sobre um véu do mesmo vermelho.
  */
 const TOM: Record<Tom, string> = {
-  neutro: "bg-white/10 text-white active:bg-white/20",
-  ativo: "bg-white text-void",
-  aoVivo: "bg-green text-accent-ink",
-  mudo: "bg-red/15 text-red",
-  desligar: "bg-red text-white",
+  neutro: "bg-control-secondary-background-default text-control-secondary-text-default active:bg-control-secondary-background-active",
+  ativo: "bg-control-overlay-primary-background-default text-control-overlay-primary-text-default active:bg-control-overlay-primary-background-active",
+  aoVivo: "bg-status-positive text-control-primary-text-default",
+  mudo: "bg-status-danger/15 text-status-danger",
+  desligar: "bg-status-danger text-control-critical-primary-text-default",
 };
 
 /** Círculo de 48 com alvo de 44 garantido; ver o cabeçalho do arquivo. */
@@ -298,9 +299,8 @@ function BotaoDaBarra({
       aria-label={label}
       aria-pressed={pressionado}
       aria-disabled={apagado || undefined}
-      // `style`, e não `h-12`: a raiz do app é 15,5px e a escala do Tailwind é
-      // `rem`, então `h-12` desenha 46,5 e não 48 — 3% a menos que o número
-      // deste arquivo. Medida em px é px (ver `palco-mobile.ts`).
+      // `style`, e não `h-12`: o valor vem de `palco-mobile.ts`, fonte única em
+      // px para esta barra (a raiz do app é 16px, ADR-0009). Medida em px é px.
       style={{ height: BOTAO, width: BOTAO }}
       className={`grid shrink-0 place-items-center rounded-full transition ${TOM[tom]} ${
         apagado ? "opacity-40" : ""

@@ -63,8 +63,9 @@ function rotuloDoCanal(c: Pick<InboxUnreadChannel, "channelName" | "channelType"
 
 export default function InboxPopover({
   tamanhoDoIcone = 20,
-  anelDaSuperficie = "ring-chat",
+  anelDaSuperficie = "ring-background-base-lower",
   modoTela = false,
+  distancia,
 }: {
   /** o ícone é de 20px no cabeçalho e de 19px na barra de título do desktop. */
   tamanhoDoIcone?: number;
@@ -72,18 +73,28 @@ export default function InboxPopover({
   modoTela?: boolean;
   /**
    * Cor do anel do badge: é a **superfície atrás do ícone**, não uma cor nova
-   * (`ring-chat` no cabeçalho de Amigos, `ring-void` na barra de título). O
+   * (`ring-background-base-lower` no cabeçalho de Amigos, `ring-input-background-default` na barra de título). O
    * anel existe para descolar o vermelho do ícone, e só funciona se for
    * exatamente o fundo — ver o badge do rail em `GuildRail`.
    */
   anelDaSuperficie?: string;
+  /**
+   * Vão até o painel, repassado direto ao `HeaderPopover` (que tem o próprio
+   * padrão de 8, não medido, e serve o cabeçalho de Amigos no navegador — sem
+   * barra de título, sem print de referência). Na barra de título do desktop
+   * (`BarraDeTitulo`, que passa `distancia={0}`) o print 1:1 mede painel a 0
+   * do ícone (`Captura de tela 2026-09-02 152351.png`: painel começa em y=36
+   * com o ícone saindo em y≈31 da barra, sem folga) — com o 8 padrão o nosso
+   * nascia em y=44, 8px mais baixo, enquanto largura, altura, abas e
+   * sublinhado já batiam pixel a pixel com o mesmo print. Prop explícita, e
+   * não mais inferida de `tamanhoDoIcone === 19`: o tamanho do ícone é um
+   * detalhe visual, não um sinal de qual barra está por cima.
+   */
+  distancia?: number;
 } = {}) {
   const [aba, setAba] = useState<Aba>("naoLidas");
-  /** "este servidor" filtra os não-lidos pelo servidor aberto. */
-  const [soEsteServidor, setSoEsteServidor] = useState(false);
   /** menções já resolvidas nesta sessão do painel (o contrato não tem "ler uma"). */
   const [lidas, setLidas] = useState<Set<string>>(new Set());
-  const guildAtiva = useGuilds((s) => s.activeGuildId);
   const mentions = useInbox((s) => s.mentions);
   const unread = useInbox((s) => s.unread);
   const loading = useInbox((s) => s.loading);
@@ -106,10 +117,7 @@ export default function InboxPopover({
     () => mentions.filter((m) => !lidas.has(m.message.id)),
     [mentions, lidas],
   );
-  const naoLidas = useMemo(
-    () => (soEsteServidor ? unread.filter((g) => g.guildId === guildAtiva) : unread),
-    [unread, soEsteServidor, guildAtiva],
-  );
+  const naoLidas = unread;
 
   /** Marca o canal da menção como lido e tira o cartão da lista. */
   function marcarComoLida(m: InboxMention) {
@@ -140,16 +148,24 @@ export default function InboxPopover({
       badge={<BadgeDaCaixa estado={badge} anel={anelDaSuperficie} />}
       largura={LARGURA}
       altura={ALTURA}
+      distancia={distancia}
       modoTela={modoTela}
       evento={modoTela ? undefined : EVENTO_CAIXA_DE_ENTRADA}
       corpoClassName="flex flex-col"
       onOpen={() => void load()}
       cabecalho={(fechar) => (
         <header className="shrink-0">
-          {/* título a 19px do topo, 36px de linha, 21px das bordas */}
-          <div className="flex h-9 items-center gap-2 px-[21px] pt-[19px] celular:h-[44px] celular:px-4">
-            <Inbox size={20} aria-hidden="true" className="shrink-0 text-txt-secondary" />
-            <h2 className="min-w-0 truncate font-display text-xl font-bold tracking-title text-txt-primary">
+          {/* título a 19px do topo, 36px de linha, 21px das bordas.
+              Rodada de correção (Captura de tela `152351.png`): `h-9`
+              `pt-[19px]` em border-box sobrava só 17px de conteúdo (36-19)
+              para uma linha de botões de 32 — a linha de título nascia 9px
+              mais alta e os botões 13px mais baixos do que o print mede.
+              `h-[55px]` (19 do padding + 36 da linha) resolve as duas
+              contas: o padding continua os mesmos 19px do topo, e agora
+              sobra a linha inteira de 36 abaixo dele. */}
+          <div className="flex h-[55px] items-center gap-2 px-[21px] pt-[19px] celular:h-[44px] celular:px-4">
+            <Inbox size={20} aria-hidden="true" className="shrink-0 text-text-strong" />
+            <h2 className="min-w-0 truncate text-xl font-bold text-text-strong">
               Caixa de Entrada
             </h2>
             <div className="ml-auto flex shrink-0 items-center gap-2">
@@ -169,10 +185,20 @@ export default function InboxPopover({
                   type="button"
                   onClick={() => verPedidos(fechar)}
                   aria-label={`Ver pedidos de amizade (${pedidos})`}
-                  className="flex h-8 w-[58px] items-center justify-center gap-1 rounded-lg bg-hov text-txt-secondary transition hover:bg-sel hover:text-txt-primary celular:h-[44px] celular:w-[66px]"
+                  /* Rodada de correção (mesma leitura do `BotaoDoCabecalho`
+                     acima, print `152351.png`): borda de 1px e glifo claro
+                     em repouso — `border-border-subtle` e
+                     `text-interactive-text-active`, no lugar de sem borda e
+                     `text-text-subtle`. */
+                  className="flex h-8 w-[58px] items-center justify-center gap-1 rounded-lg border border-border-subtle bg-interactive-background-hover text-interactive-text-active transition hover:bg-interactive-background-selected hover:text-text-strong celular:h-[44px] celular:w-[66px]"
                 >
                   <PedidoDeAmizade size={20} aria-hidden="true" />
-                  <span className="grid h-5 min-w-5 place-items-center rounded-full bg-overlay px-1 text-xs font-bold leading-none text-txt-normal">
+                  {/* chip do contador: no print (x 1710–1725) ele é MAIS
+                      claro que o botão, `--background-mod-strong`
+                      (`#9696a033` sobre o fundo do botão), e não
+                      `bg-background-surface-higher`, que aqui saía mais
+                      escuro — o inverso do medido. */}
+                  <span className="grid h-5 min-w-5 place-items-center rounded-full bg-background-mod-strong px-1 text-xs font-bold leading-none text-text-default">
                     {pedidos}
                   </span>
                 </button>
@@ -180,11 +206,15 @@ export default function InboxPopover({
             </div>
           </div>
 
-          {/* duas abas de meia largura; o indicador cobre a linha de baixo */}
+          {/* duas abas de meia largura; o indicador cobre a linha de baixo.
+              Rodada de correção: com a linha do título agora em `h-[55px]`,
+              `mt-[22px]` poria o divisor 22px além dela — 9px a mais do que
+              o print (`152351.png`: divisor em y=140/141, +105/+106 da borda
+              do popout). `mt-0.5` fecha a conta certa: 55+2+49=106. */}
           <div
             role="tablist"
             aria-label="Caixa de entrada"
-            className="mx-1 mt-[22px] flex h-[50px] gap-2.5 border-b border-border"
+            className="mx-1 mt-0.5 flex h-[50px] gap-2.5 border-b border-border-subtle"
           >
             {ABAS.map((a) => (
               <button
@@ -195,8 +225,8 @@ export default function InboxPopover({
                 onClick={() => setAba(a.id)}
                 className={`relative h-full flex-1 text-sm font-medium transition celular:text-base ${
                   aba === a.id
-                    ? "text-accent after:absolute after:inset-x-0 after:-bottom-px after:h-[2px] after:bg-accent"
-                    : "text-txt-secondary hover:text-txt-normal"
+                    ? "text-brand-500 after:absolute after:inset-x-0 after:-bottom-px after:h-[2px] after:bg-brand-500"
+                    : "text-text-subtle hover:text-text-default"
                 }`}
               >
                 {a.rotulo}
@@ -208,7 +238,7 @@ export default function InboxPopover({
     >
       {(fechar) => (
         <div role="tabpanel" className="flex min-h-0 flex-1 flex-col">
-          {loading && <p className="p-4 text-center text-sm text-txt-muted">Carregando…</p>}
+          {loading && <p className="p-4 text-center text-sm text-text-muted">Carregando…</p>}
 
           {!loading && aba === "mencoes" && (
             <>
@@ -225,8 +255,8 @@ export default function InboxPopover({
                       message={m.message}
                       className="mb-1 last:mb-0"
                       acima={
-                        <div className="mb-1 flex items-center gap-1.5 pr-16 text-xs text-txt-muted">
-                          <span className="truncate font-medium text-txt-secondary">
+                        <div className="mb-1 flex items-center gap-1.5 pr-16 text-xs text-text-muted">
+                          <span className="truncate font-medium text-text-subtle">
                             {m.guildName ?? "Mensagens diretas"}
                           </span>
                           <span aria-hidden="true">›</span>
@@ -267,7 +297,7 @@ export default function InboxPopover({
 
           {!loading && aba === "naoLidas" && (
             <>
-              {naoLidas.length === 0 && !soEsteServidor && (
+              {naoLidas.length === 0 && (
                 <Vazio icone={<Inbox size={40} />} titulo="Você está por dentro!">
                   {/* no celular a dica não pode ser um atalho de teclado: a aba
                       é a própria caixa de entrada, e não há Ctrl nem Esc */}
@@ -276,39 +306,11 @@ export default function InboxPopover({
                     : "Pressione Ctrl+I para abrir a caixa de entrada e Esc para marcar o canal aberto como lido."}
                 </Vazio>
               )}
-              {(naoLidas.length > 0 || soEsteServidor) && (
+              {naoLidas.length > 0 && (
                 <div className="px-[21px] py-3">
-                  <div className="mb-2 flex items-center gap-1">
-                    {(
-                      [
-                        [true, "Este servidor"],
-                        [false, "Todos os servidores"],
-                      ] as const
-                    ).map(([valor, rotulo]) => (
-                      <button
-                        key={rotulo}
-                        type="button"
-                        onClick={() => setSoEsteServidor(valor)}
-                        aria-pressed={soEsteServidor === valor}
-                        className={`rounded-[3px] px-2 py-1 text-xs font-medium transition celular:min-h-[44px] celular:px-3 ${
-                          soEsteServidor === valor
-                            ? "bg-sel text-txt-primary"
-                            : "text-txt-muted hover:text-txt-normal"
-                        }`}
-                      >
-                        {rotulo}
-                      </button>
-                    ))}
-                  </div>
-
-                  {naoLidas.length === 0 && (
-                    <p className="p-4 text-center text-sm text-txt-muted">
-                      Nada por ler neste servidor.
-                    </p>
-                  )}
                   {naoLidas.map((g) => (
                     <section key={g.guildId ?? "@me"} className="mb-2 last:mb-0">
-                      <h3 className="px-2 py-1 text-xs font-semibold uppercase text-txt-muted">
+                      <h3 className="px-2 py-1 text-xs font-semibold uppercase text-text-muted">
                         {g.guildName}
                       </h3>
                       {g.channels.map((c) => (
@@ -321,18 +323,18 @@ export default function InboxPopover({
                           }}
                           // 44 no celular: na aba Notificações esta linha é o
                           // caminho para o canal, e 35px é alvo de mouse
-                          className="flex w-full items-center gap-2 rounded-[3px] px-2 py-1.5 text-left hover:bg-hov celular:min-h-[44px]"
+                          className="flex w-full items-center gap-2 rounded-[3px] px-2 py-1.5 text-left hover:bg-interactive-background-hover celular:min-h-[44px]"
                         >
                           {c.channelType === "DM" || c.channelType === "GROUP" ? (
-                            <MessageCircle size={20} aria-hidden="true" className="text-txt-faint" />
+                            <MessageCircle size={20} aria-hidden="true" className="text-channels-default" />
                           ) : (
-                            <Hash size={20} aria-hidden="true" className="text-txt-faint" />
+                            <Hash size={20} aria-hidden="true" className="text-channels-default" />
                           )}
-                          <span className="min-w-0 flex-1 truncate text-txt-normal">
+                          <span className="min-w-0 flex-1 truncate text-text-default">
                             {c.channelName ?? "Conversa"}
                           </span>
                           {c.mentionCount > 0 && (
-                            <span className="grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[11px] font-bold text-white">
+                            <span className="grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[11px] font-bold text-control-critical-primary-text-default">
                               {c.mentionCount}
                             </span>
                           )}
@@ -398,14 +400,14 @@ function BadgeDaCaixa({
     return (
       <span
         aria-hidden="true"
-        className={`pointer-events-none absolute -right-1 top-0.5 h-2 w-2 rounded-full bg-red ring-[3px] ${anel}`}
+        className={`pointer-events-none absolute -right-1 top-0.5 h-2 w-2 rounded-full bg-status-danger ring-[3px] ${anel}`}
       />
     );
   }
   return (
     <span
       aria-hidden="true"
-      className={`pointer-events-none absolute -right-2 top-0 grid h-4 min-w-4 place-items-center rounded-full bg-red px-1 text-[12px] font-bold leading-none text-white ring-[3px] ${anel}`}
+      className={`pointer-events-none absolute -right-2 top-0 grid h-4 min-w-4 place-items-center rounded-full bg-status-danger px-1 text-[12px] font-bold leading-none text-control-critical-primary-text-default ring-[3px] ${anel}`}
     >
       {rotuloDoContador(estado.total)}
     </span>
@@ -433,11 +435,17 @@ function BotaoDoCabecalho({
         aria-label={label}
         aria-disabled={inerte || undefined}
         /* 44px no celular: na aba Notificações (`modoTela`) estes são os únicos
-           botões do topo da tela, e 31px não são alvo de dedo */
-        className={`grid h-8 w-8 place-items-center rounded-lg bg-hov transition celular:h-[44px] celular:w-[44px] ${
+           botões do topo da tela, e 31px não são alvo de dedo.
+           Rodada de correção (Captura de tela `152351.png`, linha y=72): o
+           botão tem borda de 1px #35353b (o token exato não foi medido —
+           ver "faltando" — `border-border-subtle` é o mais próximo já
+           usado no arquivo) e o glifo em repouso é claro (#fafafa/#c9c9cb),
+           não `--icon-muted`: por isso `text-interactive-text-active` no
+           lugar de `text-text-subtle`. */
+        className={`grid h-8 w-8 place-items-center rounded-lg border border-border-subtle bg-interactive-background-hover transition celular:h-[44px] celular:w-[44px] ${
           inerte
-            ? "cursor-default text-txt-secondary opacity-50"
-            : "text-txt-secondary hover:bg-sel hover:text-txt-primary"
+            ? "cursor-default text-text-subtle opacity-50"
+            : "text-interactive-text-active hover:bg-interactive-background-selected hover:text-text-strong"
         }`}
       >
         {children}
@@ -464,13 +472,13 @@ function Vazio({
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-10 text-center">
       <div className="relative h-20 w-20">
-        <div className="grid h-20 w-20 place-items-center rounded-full bg-void text-txt-secondary">
+        <div className="grid h-20 w-20 place-items-center rounded-full bg-input-background-default text-text-subtle">
           {icone}
         </div>
         <svg
           aria-hidden="true"
           viewBox="0 0 12 12"
-          className="absolute left-[75px] top-0.5 h-3 w-3 text-txt-link"
+          className="absolute left-[75px] top-0.5 h-3 w-3 text-text-link"
           fill="currentColor"
         >
           <circle cx="6" cy="1.5" r="1.5" />
@@ -481,17 +489,17 @@ function Vazio({
         <svg
           aria-hidden="true"
           viewBox="0 0 14 14"
-          className="absolute left-[-10px] top-16 h-3.5 w-3.5 text-yellow"
+          className="absolute left-[-10px] top-16 h-3.5 w-3.5 text-status-warning"
           fill="currentColor"
         >
           <path d="M7 0L8.6 5.4L14 7L8.6 8.6L7 14L5.4 8.6L0 7L5.4 5.4Z" />
         </svg>
       </div>
-      <h3 className="mt-8 font-display text-2xl font-bold tracking-title text-txt-primary">
+      <h3 className="mt-8 text-2xl font-bold text-text-strong">
         {titulo}
       </h3>
-      <p className="mt-2 text-xs text-txt-muted">
-        <span className="font-bold text-green">FICA A DICA: </span>
+      <p className="mt-2 text-xs text-text-muted">
+        <span className="font-bold text-status-positive">FICA A DICA: </span>
         {children}
       </p>
     </div>

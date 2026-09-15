@@ -31,7 +31,7 @@ import { useVoiceDevices } from "@/stores/voiceDevices";
  *
  Medidas (`docs/Reference/mobile/MEDIDAS.md` §12, `discord-mobile-call.png` a
  * 1,8779 px/pt): **raio do tile ≈16** e fundo do palco **preto** (`#000000` —
- * aqui `bg-void`, o preto que o projeto já tem: §6.6, a paleta não muda). A
+ * aqui `bg-input-background-default`, o preto que o projeto já tem: §6.6, a paleta não muda). A
  * margem lateral de ~31pt do print **não** vale aqui: ela é do leiaute de dois
  * tiles empilhados, onde sobra largura; num destaque que já é o maior quadro
  * possível ela custaria 62 dos 390. A nossa é 12 (`PALCO_MARGEM`), e o tamanho
@@ -59,6 +59,30 @@ import { useVoiceDevices } from "@/stores/voiceDevices";
  * ocupar a tela inteira e a faixa **flutua por cima**, encolhida, em vez de
  * roubar altura de uma tela que já só tem 390pt dela. Os controles seguem a
  * mesma regra e se escondem sozinhos (ver `ControlesMobile`).
+ *
+ * ## Dois participantes: tiles iguais, não destaque + faixa
+ *
+ * **Com exatamente duas vagas e a tela em pé, o Discord não escolhe destaque:
+ * as duas ficam do mesmo tamanho.** É o que as três referências que têm gente
+ * de verdade mostram, sem exceção: `discord-mobile-call.png` (2026,
+ * 1,8779 px/pt — a única com escala conhecida) tem dois tiles **empilhados**
+ * de 617×527px = 328,5×280,6pt, com ~60px (32pt) de margem lateral e 18px
+ * (9,6pt) de vão entre eles (`MEDIDAS.md` §12); `discord-mobile-call-2024.png`
+ * (375×812, 1:1, UI antiga) e `discord-mobile-tela-compartilhada.png` (idem,
+ * até com uma das duas vagas sendo tela compartilhada) mostram o mesmo par
+ * igual, só que lado a lado em vez de empilhado. Nenhuma delas tem uma vaga
+ * grande e outra miniatura — essa forma (`destaque` + `tira`) só nasce a
+ * partir de três pessoas, que é o caso que o resto deste arquivo resolve.
+ *
+ * A proporção do tile (328,5×280,6pt ≈ 1,17:1) vem por `aspectRatio` a partir
+ * da largura disponível, e não por altura fixa: numa tela de 390 menos os
+ * 2×32 de margem, 326×0,853 ≈ 278pt de altura por tile — dentro do erro de
+ * antialias dos 280,6 medidos. É assim que o par continua correto em qualquer
+ * altura de aparelho sem duplicar a conta.
+ *
+ * **Deitado não está medido** — o acervo não tem uma captura de dois
+ * participantes em paisagem — então esta forma só vale em pé; deitado os dois
+ * caem no destaque + tira de sempre (ver `docs/APPS-MOBILE.md`/cartão 8f).
  */
 export default function PalcoMobile({
   tiles,
@@ -84,6 +108,84 @@ export default function PalcoMobile({
   }, [emTelaCheia, aberto]);
 
   if (!principal) return null;
+
+  // Duas vagas, em pé: tiles iguais — ver o comentário do componente. Feito
+  // ANTES do destaque/tira de baixo, que é a forma de três ou mais.
+  if (!paisagem && tiles.length === 2) {
+    return (
+      <>
+        <div
+          data-palco-mobile
+          // 32 de margem lateral e 10 de vão — `MEDIDAS.md` §12, ver o
+          // comentário do componente. `justify-center` não empurra nada (os
+          // tiles têm altura própria pelo `aspectRatio`, não `flex-1`): é o
+          // que centraliza o par na folga vertical que sobra do cabeçalho e
+          // da cápsula de controles.
+          style={{ paddingLeft: 32, paddingRight: 32 }}
+          className="flex h-full min-h-0 w-full flex-col justify-center gap-[10px] bg-input-background-default pb-[88px]"
+        >
+          {tiles.map((t) => {
+            const podeExpandirEsse = podeAbrirEmTelaCheia(t);
+            return (
+              <div
+                key={t.key}
+                className="relative w-full shrink-0"
+                style={{ aspectRatio: "328.5 / 280.6" }}
+              >
+                <div
+                  className="h-full w-full"
+                  // mesmo gesto do destaque de baixo: um toque no quadro abre a
+                  // tela cheia quando há imagem; no botão de dentro (assistir),
+                  // não
+                  onClickCapture={(e) => {
+                    if (!podeExpandirEsse) return;
+                    const alvo = e.target as HTMLElement | null;
+                    if (alvo?.closest("button")) return;
+                    e.stopPropagation();
+                    setEmTelaCheia(t.key);
+                  }}
+                >
+                  <VoiceTile
+                    tile={t}
+                    {...acoes}
+                    grande
+                    semAcoes
+                    raio={16}
+                    ajusteDoVideo={ajusteDe(t)}
+                  />
+                </div>
+
+                {podeExpandirEsse && (
+                  <button
+                    type="button"
+                    onClick={() => setEmTelaCheia(t.key)}
+                    aria-label={`Ver ${displayNameOf(t.state.user)} em tela cheia`}
+                    style={{ height: ALVO_MINIMO, width: ALVO_MINIMO }}
+                    className="absolute left-2 top-2 grid place-items-center rounded-full bg-control-overlay-secondary-background-default text-control-overlay-secondary-icon-default backdrop-blur transition hover:bg-control-overlay-secondary-background-hover active:bg-control-overlay-secondary-background-active"
+                  >
+                    <Maximize size={20} />
+                  </button>
+                )}
+
+                {/* o botão de virar câmera é meu, não do tile: mora na MINHA
+                    vaga das duas, nunca na do outro participante */}
+                {t.userId === meId && <BotaoDeVirarCamera deslocado={podeExpandirEsse} />}
+              </div>
+            );
+          })}
+        </div>
+
+        {aberto?.publication && (
+          <TelaCheiaDeVideo
+            publication={aberto.publication}
+            titulo={`${displayNameOf(aberto.state.user)}${aberto.tela ? " — tela compartilhada" : ""}`}
+            espelhar={aberto.userId === meId && !aberto.tela}
+            onFechar={() => setEmTelaCheia(null)}
+          />
+        )}
+      </>
+    );
+  }
 
   const podeExpandir = podeAbrirEmTelaCheia(principal);
 
@@ -129,10 +231,10 @@ export default function PalcoMobile({
           type="button"
           onClick={() => setEmTelaCheia(principal.key)}
           aria-label={`Ver ${displayNameOf(principal.state.user)} em tela cheia`}
-          // 44 em px: `h-11` desenharia 42,6 com a raiz de 15,5 (ver
-          // `palco-mobile.ts`), e 42,6 fica **abaixo** do piso de toque
+          // 44 em px literal, e não `h-11`, para bater com a constante
+          // `ALVO_MINIMO` que o botão de virar câmera também usa
           style={{ height: ALVO_MINIMO, width: ALVO_MINIMO }}
-          className="absolute left-2 top-2 grid place-items-center rounded-full bg-black/50 text-white backdrop-blur transition active:bg-black/70"
+          className="absolute left-2 top-2 grid place-items-center rounded-full bg-control-overlay-secondary-background-default text-control-overlay-secondary-icon-default backdrop-blur transition hover:bg-control-overlay-secondary-background-hover active:bg-control-overlay-secondary-background-active"
         >
           <Maximize size={20} />
         </button>
@@ -206,21 +308,22 @@ export default function PalcoMobile({
     <>
       <div
         data-palco-mobile
-        // a folga lateral em px (`px-3` daria 11,6 com a raiz de 15,5)
+        // a folga lateral em px literal para bater com `PALCO_MARGEM`, a
+        // mesma constante usada nas margens negativas da tira abaixo
         style={paisagem ? undefined : { paddingLeft: PALCO_MARGEM, paddingRight: PALCO_MARGEM }}
         className={
           paisagem
             ? // Deitado a cápsula de controles **flutua sobre o vídeo** e se
               // esconde sozinha: reservar 88pt embaixo numa tela de 390 de
               // altura deixava uma faixa morta de um quarto do aparelho.
-              "relative h-full min-h-0 w-full bg-void"
+              "relative h-full min-h-0 w-full bg-input-background-default"
             : // Em pé a cápsula é fixa, então o palco lhe reserva a altura:
               // 68 da barra + 8 do rodapé dela + 12 de respiro = 88, em px
               // literais. A reserva mora aqui, e não no `VoicePanel`, porque
               // depende da orientação — e **sem** `env(safe-area-inset-bottom)`,
               // que a `TelaEmpilhada` já paga uma vez por toda tela do celular
               // (somá-la de novo roubaria 34pt de vídeo num iPhone).
-              "flex h-full min-h-0 w-full flex-col bg-void pb-[88px]"
+              "flex h-full min-h-0 w-full flex-col bg-input-background-default pb-[88px]"
         }
       >
         {destaque}
@@ -286,7 +389,7 @@ function BotaoDeVirarCamera({ deslocado = false }: { deslocado?: boolean }) {
       onClick={() => void virarCamera()}
       aria-label={label}
       style={{ height: ALVO_MINIMO, width: ALVO_MINIMO }}
-      className={`absolute top-2 grid place-items-center rounded-full bg-black/50 text-white backdrop-blur transition active:bg-black/70 ${
+      className={`absolute top-2 grid place-items-center rounded-full bg-control-overlay-secondary-background-default text-control-overlay-secondary-icon-default backdrop-blur transition hover:bg-control-overlay-secondary-background-hover active:bg-control-overlay-secondary-background-active ${
         deslocado ? "left-[60px]" : "left-2"
       }`}
     >

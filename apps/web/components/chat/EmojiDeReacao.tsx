@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { parseCustomEmoji } from "@streamz/shared";
+import { Image as IconeDeImagem } from "@/components/ui/icones";
 import { API_URL } from "@/lib/config";
 
 /**
@@ -18,13 +20,17 @@ import { API_URL } from "@/lib/config";
  * Nada de Twemoji: a CSP não deixa buscar de CDN e o desktop roda offline. A
  * fonte é a do sistema; o que se acerta aqui é a caixa.
  *
- * Mora num arquivo próprio porque agora tem dois donos: a mensagem
- * (`components/MessageItem.tsx`) e o visualizador de imagem em tela cheia
- * (`components/modals/ImageModal.tsx`), que mostra as reações da mensagem da
- * imagem embaixo dela.
+ * Mora num arquivo próprio porque agora tem três donos: a mensagem
+ * (`components/MessageItem.tsx`), o visualizador de imagem em tela cheia
+ * (`components/modals/ImageModal.tsx`) — que mostra as reações da mensagem da
+ * imagem embaixo dela — e o tooltip da pílula (`components/chat/TooltipReacao.tsx`),
+ * que reusa esta mesma caixa no tamanho grande (32) em vez de duplicar a lógica
+ * de imagem/estado de erro.
  */
 export function EmojiDaReacao({ emoji, tamanho }: { emoji: string; tamanho: number }) {
   const custom = parseCustomEmoji(emoji);
+  const [carregada, setCarregada] = useState(false);
+  const [falhou, setFalhou] = useState(false);
   // o tamanho é preferência do usuário (aba Acessibilidade de e-configuracoes)
   if (!custom)
     return (
@@ -35,6 +41,23 @@ export function EmojiDaReacao({ emoji, tamanho }: { emoji: string; tamanho: numb
         {emoji}
       </span>
     );
+
+  // erro: o emoji personalizado sumiu (canal/servidor apagado, emoji removido
+  // — a reação em si sobrevive no registro da mensagem). Sem isso o <img>
+  // quebrado vira o ícone padrão do navegador, fora de escala e mudo; o
+  // ícone de imagem do próprio acervo, do tamanho da caixa, mantém a pílula
+  // com a mesma largura e ainda dá pra apontar o nome pelo `title`.
+  if (falhou)
+    return (
+      <span
+        className="inline-flex shrink-0 items-center justify-center text-text-muted"
+        style={{ height: tamanho, width: tamanho }}
+        title={`:${custom.name}:`}
+      >
+        <IconeDeImagem size={Math.round(tamanho * 0.7)} />
+      </span>
+    );
+
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
@@ -42,7 +65,12 @@ export function EmojiDaReacao({ emoji, tamanho }: { emoji: string; tamanho: numb
       alt={`:${custom.name}:`}
       loading="lazy"
       style={{ height: tamanho, width: tamanho }}
-      className="shrink-0 object-contain"
+      // carregando: entra com fade — sem isso a imagem pipoca assim que a
+      // rede responde, e numa fileira de várias reações elas pipocam em
+      // instantes diferentes. 150ms é suave sem atrasar a leitura.
+      className={`shrink-0 object-contain transition-opacity duration-150 ${carregada ? "opacity-100" : "opacity-0"}`}
+      onLoad={() => setCarregada(true)}
+      onError={() => setFalhou(true)}
     />
   );
 }

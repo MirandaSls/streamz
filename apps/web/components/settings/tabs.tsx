@@ -4,6 +4,7 @@ import {
   Accessibility,
   Bell,
   Bot,
+  Code,
   Gauge,
   Keyboard,
   Languages,
@@ -26,6 +27,7 @@ import AdminServidoresTab from "@/components/settings/admin/AdminServidoresTab";
 import AdminUsuariosTab from "@/components/settings/admin/AdminUsuariosTab";
 import AdminVisaoGeralTab from "@/components/settings/admin/AdminVisaoGeralTab";
 import AparenciaTab from "@/components/settings/AparenciaTab";
+import AvancadoTab from "@/components/settings/AvancadoTab";
 import AplicativosTab from "@/components/settings/AplicativosTab";
 import ContaTab from "@/components/settings/ContaTab";
 import IdiomaTab from "@/components/settings/IdiomaTab";
@@ -91,10 +93,29 @@ export const SETTINGS_TABS: readonly SettingsTab[] = [
     label: "aba.privacidade",
     icon: <ShieldCheck size={20} />,
     Component: SegurancaTab,
+    // na ordem em que `SegurancaTab` monta os blocos: MFA, filtro, mensagens, dados
+    secoes: [
+      { id: "seguranca", label: "priv.secSeguranca" },
+      { id: "filtro", label: "priv.secFiltro" },
+      { id: "mensagens", label: "priv.secMensagens" },
+      { id: "dados", label: "priv.secDados" },
+    ],
   },
   { id: "dispositivos", group: "usuario", label: "aba.sessoes", icon: <Laptop size={20} />, Component: SessoesTab },
   // ── j-bots · F4 ── o portal do desenvolvedor
-  { id: "aplicativos", group: "usuario", label: "aba.aplicativos", icon: <Bot size={20} />, Component: AplicativosTab },
+  {
+    id: "aplicativos",
+    group: "usuario",
+    label: "aba.aplicativos",
+    icon: <Bot size={20} />,
+    Component: AplicativosTab,
+    // "meus" é o `data-secao` da lista em `AplicativosTab`; "apontar" é o
+    // `<Section>` de `aplicativos/ComoApontarSeuBot.tsx`
+    secoes: [
+      { id: "meus", label: "apps.secMeus" },
+      { id: "apontar", label: "apps.secApontar" },
+    ],
+  },
 
   {
     id: "aparencia",
@@ -118,6 +139,8 @@ export const SETTINGS_TABS: readonly SettingsTab[] = [
       { id: "legibilidade", label: "acess.secLegibilidade" },
       { id: "cor", label: "acess.secCor" },
       { id: "movimento", label: "acess.secMovimento" },
+      { id: "figurinhas", label: "acess.secFigurinhas" },
+      { id: "texto-para-fala", label: "acess.secTts" },
       { id: "chat", label: "acess.secChat" },
     ],
   },
@@ -149,6 +172,19 @@ export const SETTINGS_TABS: readonly SettingsTab[] = [
   },
   { id: "teclado", group: "app", label: "aba.teclado", icon: <Keyboard size={20} />, Component: TecladoTab },
   { id: "idioma", group: "app", label: "aba.idioma", icon: <Languages size={20} />, Component: IdiomaTab },
+  // O `developerMode` existia sem interruptor (só dava para ligar editando o
+  // localStorage). No Discord ele mora em "Avançado", depois de Idioma, no
+  // grupo do app (imagem de catálogo `suporte/imagens/safety-privacy-and-policy/
+  // 4407571667351-how-to-find-user-ids-for-law-enforcement/01.png`). O ícone é
+  // o `<>` do item "Desenvolvedor" do print 1:1
+  // `docs/Reference/Captura de tela 2026-09-01 114404.png` (y≈842).
+  {
+    id: "avancado",
+    group: "app",
+    label: "aba.avancado",
+    icon: <Code size={20} />,
+    Component: AvancadoTab,
+  },
 
   // ── j-painel-admin ── só aparecem para o administrador da instância
   {

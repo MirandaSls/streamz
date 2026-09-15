@@ -1,5 +1,13 @@
 import { MAX_MESSAGE_LENGTH, TIPOS_DE_OPCAO_ACEITOS, type OpcaoDeComando } from "@streamz/shared";
 import { z } from "zod";
+import { naoImplementado } from "../erros";
+import {
+  arquivosDoMultipart,
+  gravarArquivosDoMultipart,
+  renomearReferenciasDeAnexo,
+  type ArquivoDoMultipart,
+  type EnviadorDeArquivos,
+} from "./corpos";
 
 /**
  * Os corpos das rotas da F3 — registro de comandos, callback e followups.
@@ -98,6 +106,8 @@ const opcaoSchema = z
     type: z.number().int(),
     required: z.boolean().optional(),
     choices: z.array(escolhaSchema).max(MAX_ESCOLHAS).optional(),
+    // ── onda 3 ── a opção pede sugestões ao bot (interação 4, callback 8)
+    autocomplete: z.boolean().optional(),
   })
   .passthrough()
   .superRefine((opcao, ctx) => {
@@ -187,6 +197,10 @@ export function normalizarComando(comando: ComandoParaRegistrar): ComandoNormali
       type: opcao.type as OpcaoDeComando["type"],
       required: opcao.required ?? false,
       ...(opcao.choices ? { choices: opcao.choices } : {}),
+      // ── onda 3 ── guardado para o composer saber que deve pedir sugestões
+      // (`POST /api/channels/:id/interactions/autocomplete`); só quando `true`,
+      // para o JSON das opções antigas não mudar
+      ...(opcao.autocomplete === true ? { autocomplete: true } : {}),
     })),
     defaultMemberPermissions: comando.default_member_permissions ?? null,
   };
@@ -221,9 +235,12 @@ export const comandosParaRegistrarSchema = z
 /**
  * O `data` de uma resposta de interação, e o corpo inteiro de um followup.
  *
- * `content` é o único campo que a F3 materializa; `embeds`, `components` e
- * `attachments` chegam inteiros (é para isso que o `@Body()` é cru) e o lote A
- * os descarta com aviso no log. `flags: 64` é a **mensagem efêmera**, e desde
+ * `embeds`, `components` e `flags` chegam inteiros (é para isso que o `@Body()`
+ * é cru) e, desde a onda 3, são **guardados**: o domínio das interações os valida
+ * com `validarPayloadDeBot` (`@streamz/shared`) e responde `50035` com o
+ * detalhe por campo quando não passam. `attachments` é o pareamento com os
+ * `files[n]` do multipart (rodada de correção, `anexarArquivosAoCorpo`), e os
+ * arquivos gravados seguem em `attachment_ids`. `flags: 64` é a **mensagem efêmera**, e desde
  * o PR das efêmeras é entregue de verdade: só o invocador a recebe, pelo
  * socket, e ela não entra no histórico do canal — §9 do documento.
  *
@@ -238,11 +255,51 @@ export const dadosDeRespostaSchema = z
     embeds: z.array(z.record(z.unknown())).optional(),
     components: z.array(z.record(z.unknown())).optional(),
     attachments: z.array(z.record(z.unknown())).optional(),
+    // ── rodada de correção ── cuids de `Attachment` do usuário-bot, soltos. Quem
+    // preenche é `anexarArquivosAoCorpo` depois do upload multipart; o mesmo
+    // campo que o `POST /channels/:id/messages` já aceitava.
+    attachment_ids: z.array(z.string()).optional(),
     allowed_mentions: z.record(z.unknown()).optional(),
   })
   .passthrough();
 
 export type DadosDeResposta = z.infer<typeof dadosDeRespostaSchema>;
+
+/**
+ * ── rodada de correção ── Os `files[n]` de um multipart → gravados pelo
+ * `UploadsService` e acrescentados ao corpo como `attachment_ids`.
+ *
+ * É o `reply({ files })`/`followUp({ files })` do discord.js. Os
+ * `attachment://<nome>` de `embeds`/`components` são trocados pelo nome
+ * **gravado** (o upload sanitiza o nome, e a resolução casa por ele — ver
+ * `renomearReferenciasDeAnexo`).
+ *
+ * Sem arquivo devolve o **mesmo** objeto: o corpo JSON de sempre não muda em
+ * nada. Com arquivo e sem `UploadsService` injetado, 501 dizendo o que falta.
+ *
+ * Quem vincula os `attachment_ids` à mensagem é o `InteractionsService` (ele
+ * chama `MessagesService.criarComoBot`, que só aceita anexo solto do próprio
+ * autor — o usuário-bot, que é quem grava aqui).
+ */
+export async function anexarArquivosAoCorpo(
+  corpo: DadosDeResposta,
+  arquivos: readonly ArquivoDoMultipart[] | undefined,
+  enviador: EnviadorDeArquivos | undefined,
+  botUserId: string,
+): Promise<DadosDeResposta> {
+  const pareados = arquivosDoMultipart(arquivos, corpo.attachments);
+  if (pareados.length === 0) return corpo;
+  if (!enviador) throw naoImplementado("multipart file upload");
+  const ids = await gravarArquivosDoMultipart(enviador, botUserId, pareados);
+  return {
+    ...corpo,
+    ...(corpo.embeds ? { embeds: renomearReferenciasDeAnexo(corpo.embeds, pareados) } : {}),
+    ...(corpo.components
+      ? { components: renomearReferenciasDeAnexo(corpo.components, pareados) }
+      : {}),
+    attachment_ids: [...(corpo.attachment_ids ?? []), ...ids],
+  };
+}
 
 /**
  * `POST /interactions/:id/:token/callback`.

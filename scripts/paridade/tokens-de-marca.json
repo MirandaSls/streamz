@@ -1,0 +1,503 @@
+{
+  "aviso": "Gerado por gerar-tokens.mjs. O que a regra da ADR-0009 (item 3) trocou: `trocas` no tema Dark; `trocasPorTema`, só as trocas de Ash e Onyx que diferem das do Dark.",
+  "limao": "#9be31f",
+  "accentInk": "#0b0b0f",
+  "escala": {
+    "--brand-100": "#e5f0db",
+    "--brand-130": "#e5f0db",
+    "--brand-160": "#e5f0db",
+    "--brand-200": "#e0efd2",
+    "--brand-230": "#dbefc9",
+    "--brand-260": "#d7eec0",
+    "--brand-300": "#cfedb0",
+    "--brand-330": "#c5ec9d",
+    "--brand-345": "#beeb8b",
+    "--brand-360": "#b9ea83",
+    "--brand-400": "#ace763",
+    "--brand-430": "#a8e657",
+    "--brand-460": "#a3e545",
+    "--brand-500": "#9be31f",
+    "--brand-530": "#8ece25",
+    "--brand-560": "#7eb62a",
+    "--brand-600": "#6b9a25",
+    "--brand-630": "#5b841d",
+    "--brand-660": "#4e7318",
+    "--brand-700": "#39560f",
+    "--brand-730": "#36510d",
+    "--brand-760": "#304a08",
+    "--brand-800": "#2c4308",
+    "--brand-830": "#1e3003",
+    "--brand-860": "#0f1b01",
+    "--brand-900": "#020400"
+  },
+  "trocas": [
+    {
+      "nome": "--background-brand",
+      "regra": "família blurple",
+      "discord": "#5865f2",
+      "streamz": "#9be31f"
+    },
+    {
+      "nome": "--background-code",
+      "regra": "família blurple",
+      "discord": "#5966f214",
+      "streamz": "#9ce32314"
+    },
+    {
+      "nome": "--badge-background-brand",
+      "regra": "família blurple",
+      "discord": "#5865f2",
+      "streamz": "#9be31f"
+    },
+    {
+      "nome": "--badge-rare-background",
+      "regra": "família blurple",
+      "discord": "#5864f23d",
+      "streamz": "#9ae2193d"
+    },
+    {
+      "nome": "--badge-rare-border-gradient-end",
+      "regra": "família blurple",
+      "discord": "#2d35ad",
+      "streamz": "#5b8a00"
+    },
+    {
+      "nome": "--badge-rare-border-gradient-start",
+      "regra": "família blurple",
+      "discord": "#5865f2",
+      "streamz": "#9be31f"
+    },
+    {
+      "nome": "--badge-rare-text",
+      "regra": "família blurple",
+      "discord": "#a0a9fa",
+      "streamz": "#c1ea94"
+    },
+    {
+      "nome": "--badge-text-brand",
+      "regra": "sobre a marca",
+      "discord": "#ffffff",
+      "streamz": "#0b0b0f"
+    },
+    {
+      "nome": "--button-outline-brand-background-hover",
+      "regra": "família blurple",
+      "discord": "#5865f2",
+      "streamz": "#9be31f"
+    },
+    {
+      "nome": "--button-outline-brand-border-active",
+      "regra": "família blurple",
+      "discord": "#4654c0",
+      "streamz": "#7eb62a"
+    },
+    {
+      "nome": "--checkbox-background-active",
+      "regra": "família blurple",
+      "discord": "#3a48a3",
+      "streamz": "#6b9a25"
+    },
+    {
+      "nome": "--checkbox-background-selected-default",
+      "regra": "família blurple",
+      "discord": "#5865f2",
+      "streamz": "#9be31f"
+    },
+    {
+      "nome": "--checkbox-background-selected-hover",
+      "regra": "família blurple",
+      "discord": "#4452bb",
+      "streamz": "#7bb129"
+    },
+    {
+      "nome": "--checkbox-icon-active",
+      "regra": "sobre a marca",
+      "discord": "#ffffff",
+      "streamz": "#0b0b0f"
+    },
+    {
+      "nome": "--chip-blurple-dark-background",
+      "regra": "família blurple",
+      "discord": "#303e8d",
+      "streamz": "#5b841d"
+    },
+    {
+      "nome": "--chip-blurple-dark-text",
+      "regra": "família blurple",
+      "discord": "#e6eaff",
+      "streamz": "#e5f0db"
+    },
+    {
+      "nome": "--chip-blurple-light-background",
+      "regra": "família blurple",
+      "discord": "#a6b8ff",
+      "streamz": "#c7eca0"
+    },
+    {
+      "nome": "--chip-blurple-light-text",
+      "regra": "família blurple",
+      "discord": "#0c173a",
+      "streamz": "#1e3003"
+    },
+    {
+      "nome": "--chip-blurple-medium-background",
+      "regra": "família blurple",
+      "discord": "#6f82f7",
+      "streamz": "#aae65b"
+    },
+    {
+      "nome": "--control-brand-foreground",
+      "regra": "família blurple",
+      "discord": "#8ca0fd",
+      "streamz": "#b9ea83"
+    },
+    {
+      "nome": "--control-brand-foreground-new",
+      "regra": "família blurple",
+      "discord": "#8ca0fd",
+      "streamz": "#b9ea83"
+    },
+    {
+      "nome": "--control-primary-background-active",
+      "regra": "família blurple",
+      "discord": "#3a48a3",
+      "streamz": "#6b9a25"
+    },
+    {
+      "nome": "--control-primary-background-default",
+      "regra": "família blurple",
+      "discord": "#5865f2",
+      "streamz": "#9be31f"
+    },
+    {
+      "nome": "--control-primary-background-hover",
+      "regra": "família blurple",
+      "discord": "#4452bb",
+      "streamz": "#7bb129"
+    },
+    {
+      "nome": "--control-primary-icon-active",
+      "regra": "sobre a marca",
+      "discord": "#ffffff",
+      "streamz": "#0b0b0f"
+    },
+    {
+      "nome": "--control-primary-icon-default",
+      "regra": "sobre a marca",
+      "discord": "#ffffff",
+      "streamz": "#0b0b0f"
+    },
+    {
+      "nome": "--control-primary-icon-hover",
+      "regra": "sobre a marca",
+      "discord": "#ffffff",
+      "streamz": "#0b0b0f"
+    },
+    {
+      "nome": "--control-primary-text-active",
+      "regra": "sobre a marca",
+      "discord": "#ffffff",
+      "streamz": "#0b0b0f"
+    },
+    {
+      "nome": "--control-primary-text-default",
+      "regra": "sobre a marca",
+      "discord": "#ffffff",
+      "streamz": "#0b0b0f"
+    },
+    {
+      "nome": "--control-primary-text-hover",
+      "regra": "sobre a marca",
+      "discord": "#ffffff",
+      "streamz": "#0b0b0f"
+    },
+    {
+      "nome": "--datepicker-range-background-default",
+      "regra": "família blurple",
+      "discord": "#5764f266",
+      "streamz": "#9ae21766"
+    },
+    {
+      "nome": "--datepicker-range-background-hover",
+      "regra": "família blurple",
+      "discord": "#5866f299",
+      "streamz": "#9be32399"
+    },
+    {
+      "nome": "--icon-brand",
+      "regra": "família blurple",
+      "discord": "#798df9",
+      "streamz": "#afe86b"
+    },
+    {
+      "nome": "--input-border-active",
+      "regra": "família blurple",
+      "discord": "#5865f2",
+      "streamz": "#9be31f"
+    },
+    {
+      "nome": "--interactive-accent-background-active",
+      "regra": "família blurple",
+      "discord": "#3a48a3",
+      "streamz": "#6b9a25"
+    },
+    {
+      "nome": "--interactive-accent-background-hover",
+      "regra": "família blurple",
+      "discord": "#5865f2",
+      "streamz": "#9be31f"
+    },
+    {
+      "nome": "--interactive-accent-background-selected",
+      "regra": "família blurple",
+      "discord": "#5865f2",
+      "streamz": "#9be31f"
+    },
+    {
+      "nome": "--mention-background",
+      "regra": "família blurple",
+      "discord": "#5864f23d",
+      "streamz": "#9ae2193d"
+    },
+    {
+      "nome": "--mention-foreground",
+      "regra": "família blurple",
+      "discord": "#a9bbff",
+      "streamz": "#c9eca4"
+    },
+    {
+      "nome": "--message-highlight-background-default",
+      "regra": "família blurple",
+      "discord": "#5764f329",
+      "streamz": "#9ae21429"
+    },
+    {
+      "nome": "--message-highlight-background-hover",
+      "regra": "família blurple",
+      "discord": "#5a63ef1f",
+      "streamz": "#99e01f1f"
+    },
+    {
+      "nome": "--polls-voted-fill",
+      "regra": "família blurple",
+      "discord": "#5a64f033",
+      "streamz": "#9ae22233"
+    },
+    {
+      "nome": "--progressbar-indicator-background",
+      "regra": "família blurple",
+      "discord": "#5865f2",
+      "streamz": "#9be31f"
+    },
+    {
+      "nome": "--radio-background-active",
+      "regra": "família blurple",
+      "discord": "#3a48a3",
+      "streamz": "#6b9a25"
+    },
+    {
+      "nome": "--radio-background-selected-default",
+      "regra": "família blurple",
+      "discord": "#5865f2",
+      "streamz": "#9be31f"
+    },
+    {
+      "nome": "--radio-background-selected-hover",
+      "regra": "família blurple",
+      "discord": "#4452bb",
+      "streamz": "#7bb129"
+    },
+    {
+      "nome": "--radio-foreground-active",
+      "regra": "família blurple",
+      "discord": "#5865f2",
+      "streamz": "#9be31f"
+    },
+    {
+      "nome": "--radio-thumb-background-active",
+      "regra": "sobre a marca",
+      "discord": "#ffffff",
+      "streamz": "#0b0b0f"
+    },
+    {
+      "nome": "--reaction-background-reacted-default",
+      "regra": "família blurple",
+      "discord": "#5864f23d",
+      "streamz": "#9ae2193d"
+    },
+    {
+      "nome": "--reaction-background-reacted-hover",
+      "regra": "família blurple",
+      "discord": "#5864f23d",
+      "streamz": "#9ae2193d"
+    },
+    {
+      "nome": "--reaction-border-reacted-default",
+      "regra": "família blurple",
+      "discord": "#5865f2",
+      "streamz": "#9be31f"
+    },
+    {
+      "nome": "--reaction-text-reacted-default",
+      "regra": "família blurple",
+      "discord": "#b9c8ff",
+      "streamz": "#d1edb4"
+    },
+    {
+      "nome": "--standard-tab-gradient-center",
+      "regra": "família blurple",
+      "discord": "#5865f2",
+      "streamz": "#9be31f"
+    },
+    {
+      "nome": "--standard-tab-gradient-inner-ring",
+      "regra": "família blurple",
+      "discord": "#5866f180",
+      "streamz": "#9ce32580"
+    },
+    {
+      "nome": "--switch-background-active",
+      "regra": "família blurple",
+      "discord": "#3a48a3",
+      "streamz": "#6b9a25"
+    },
+    {
+      "nome": "--switch-background-selected-default",
+      "regra": "família blurple",
+      "discord": "#5865f2",
+      "streamz": "#9be31f"
+    },
+    {
+      "nome": "--switch-background-selected-hover",
+      "regra": "família blurple",
+      "discord": "#4452bb",
+      "streamz": "#7bb129"
+    },
+    {
+      "nome": "--switch-thumb-icon-active",
+      "regra": "sobre a marca",
+      "discord": "#5865f2",
+      "streamz": "#0b0b0f"
+    },
+    {
+      "nome": "--tabs-indicator-default",
+      "regra": "família blurple",
+      "discord": "#798df9",
+      "streamz": "#afe86b"
+    },
+    {
+      "nome": "--text-brand",
+      "regra": "família blurple",
+      "discord": "#798df9",
+      "streamz": "#afe86b"
+    },
+    {
+      "nome": "--text-code-title",
+      "regra": "família blurple",
+      "discord": "#9db0ff",
+      "streamz": "#c2ec96"
+    },
+    {
+      "nome": "--togglebutton-background-selected",
+      "regra": "família blurple",
+      "discord": "#5764f329",
+      "streamz": "#9ae21429"
+    },
+    {
+      "nome": "--togglebutton-background-selected-hover",
+      "regra": "família blurple",
+      "discord": "#5864f23d",
+      "streamz": "#9ae2193d"
+    },
+    {
+      "nome": "--togglebutton-border-active",
+      "regra": "família blurple",
+      "discord": "#5865f2d6",
+      "streamz": "#9be31fd6"
+    },
+    {
+      "nome": "--togglebutton-border-selected",
+      "regra": "família blurple",
+      "discord": "#5865f2",
+      "streamz": "#9be31f"
+    }
+  ],
+  "trocasPorTema": {
+    "ash": [
+      {
+        "nome": "--icon-brand",
+        "regra": "família blurple",
+        "discord": "#94a8ff",
+        "streamz": "#beeb8b"
+      },
+      {
+        "nome": "--mention-foreground",
+        "regra": "família blurple",
+        "discord": "#cdd7ff",
+        "streamz": "#daeec6"
+      },
+      {
+        "nome": "--reaction-text-reacted-default",
+        "regra": "família blurple",
+        "discord": "#dfe4ff",
+        "streamz": "#e2efd4"
+      },
+      {
+        "nome": "--tabs-indicator-default",
+        "regra": "família blurple",
+        "discord": "#94a8ff",
+        "streamz": "#beeb8b"
+      },
+      {
+        "nome": "--text-brand",
+        "regra": "família blurple",
+        "discord": "#94a8ff",
+        "streamz": "#beeb8b"
+      },
+      {
+        "nome": "--text-code-title",
+        "regra": "família blurple",
+        "discord": "#bccaff",
+        "streamz": "#d2edb6"
+      }
+    ],
+    "onyx": [
+      {
+        "nome": "--icon-brand",
+        "regra": "família blurple",
+        "discord": "#6374f4",
+        "streamz": "#a3e545"
+      },
+      {
+        "nome": "--mention-foreground",
+        "regra": "família blurple",
+        "discord": "#8ca0fd",
+        "streamz": "#b9ea83"
+      },
+      {
+        "nome": "--reaction-text-reacted-default",
+        "regra": "família blurple",
+        "discord": "#9aadff",
+        "streamz": "#c1eb92"
+      },
+      {
+        "nome": "--tabs-indicator-default",
+        "regra": "família blurple",
+        "discord": "#6374f4",
+        "streamz": "#a3e545"
+      },
+      {
+        "nome": "--text-brand",
+        "regra": "família blurple",
+        "discord": "#6374f4",
+        "streamz": "#a3e545"
+      },
+      {
+        "nome": "--text-code-title",
+        "regra": "família blurple",
+        "discord": "#8195fb",
+        "streamz": "#b4e975"
+      }
+    ]
+  }
+}

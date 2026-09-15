@@ -9,6 +9,7 @@ import {
 } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { Rotulo, SliderMarcas } from "@/components/ui/controls";
+import { TextInput } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { useGuilds } from "@/stores/guilds";
 import { errorMessage } from "@/stores/socket-adapter";
@@ -64,7 +65,6 @@ export default function BanModal({ guildId, user }: { guildId: string; user: Pub
       title={`Banir '${nome}' de ${guild?.name ?? "este servidor"}`}
       description="Essa pessoa sai do servidor e não consegue voltar, nem com um novo convite."
       onClose={closeModal}
-      className="w-[440px]"
       footer={
         <>
           <PrimaryButton danger disabled={saving} onClick={() => void submit()}>
@@ -77,16 +77,15 @@ export default function BanModal({ guildId, user }: { guildId: string; user: Pub
       }
     >
       <Rotulo htmlFor="ban-reason">Motivo do banimento</Rotulo>
-      <input
+      <TextInput
         id="ban-reason"
         value={reason}
         maxLength={MAX_MODERATION_REASON}
         onChange={(e) => setReason(e.target.value)}
         placeholder="Ex.: divulgação em massa"
-        className="h-10 w-full rounded-[3px] bg-void px-2.5 text-txt-normal outline-none placeholder:text-txt-muted"
         autoFocus
       />
-      <p className="mt-1 text-xs text-txt-muted">
+      <p className="mt-1 text-xs text-text-muted">
         O motivo vai para o registro de auditoria, para a lista de banimentos e para o aviso que
         essa pessoa recebe na conversa direta.
       </p>

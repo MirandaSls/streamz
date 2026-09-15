@@ -460,11 +460,21 @@ o que o ADR-0002 proíbe):
 **Embed sozinho é mensagem válida.** O `POST /channels/:id/messages` exigia
 `content` e devolvia `50035 content[BASE_TYPE_REQUIRED]` a um corpo que só
 trazia `embeds` — o jeito como quase todo bot responde. Agora `embeds` (ou
-`components`) sozinhos bastam, e o embed é **achatado em texto**
-(`traducao/embed.ts`: título, descrição, campos, rodapé, imagem) porque o
-Streamz não tem embed rico e uma mensagem de conteúdo vazio chega ao navegador
-como uma linha em branco. No dia em que houver embed de verdade, o achatamento
-sai e o objeto é guardado.
+`components`) sozinhos bastam.
+
+> **Onda 3 (paridade, 2026-09-14): o embed deixou de ser achatado.** Até aqui
+> ele virava texto (`traducao/embed.ts`: título, descrição, campos, rodapé,
+> imagem) porque o Streamz não tinha embed rico, e os `components` eram
+> descartados. Agora `embeds`, `components` e `flags` são **validados com as
+> regras e os limites do Discord** (`validarPayloadDeBot`/`conferirMensagemDeBot`
+> de `@streamz/shared`; corpo inválido leva `50035` com o detalhe por campo) e
+> **guardados** numa tabela 1:1 à parte, `MessageBotPayload` — a `Message`
+> continua sem coluna nova. O `PATCH` edita os quatro com a semântica do
+> Discord (ausente não mexe) e `IS_COMPONENTS_V2` (sem `content` nem `embeds`)
+> é aceita. O texto achatado sobrevive só onde não há renderizador (busca,
+> trecho de resposta, prévia da lista de conversas, notificação). O contrato
+> inteiro — tipos, tabelas, rotas e eventos — está em
+> [`docs/CONTRATO-ONDA-3.md`](CONTRATO-ONDA-3.md).
 
 ### Rate limit — o que as libs exigem
 
@@ -1345,7 +1355,9 @@ Sobrescrita em bloco (é o que o `deploy-commands.js` de todo tutorial faz).
 Guardamos em `ApplicationCommand`. Suportamos `type: 1` (CHAT_INPUT) e as
 opções de tipo 3 (string), 4 (integer), 5 (boolean), 6 (user), 7 (channel),
 8 (role), 10 (number). Subcomandos (1 e 2): F5. Autocomplete de opção
-(`type: 8` de callback): F5.
+(`type: 8` de callback): **onda 3** — a opção guarda `autocomplete: true` e o
+composer pede sugestões por `POST /api/channels/:id/interactions/autocomplete`
+(ver [`CONTRATO-ONDA-3.md`](CONTRATO-ONDA-3.md)).
 
 ### Execução
 
@@ -1369,8 +1381,16 @@ usuário digita "/play never gonna give you up" no composer
 
 Tipos de callback que implementamos na F3: **4** `CHANNEL_MESSAGE_WITH_SOURCE`
 e **5** `DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE` (o "pensando…", indispensável
-para bot de música, que leva mais de 3 s para resolver um link). Tipos 6/7
-(update de componente), 8 (autocomplete) e 9 (modal): F5.
+para bot de música, que leva mais de 3 s para resolver um link). Tipos **6/7**
+(update de componente), **8** (autocomplete) e **9** (modal) saíram da fila da
+F5 e ficaram para a **onda 3** da paridade — e **estão implementados**
+(cartão 3a, `InteractionsService.responder`): o contrato (as interações de
+componente tipo 3, de autocomplete tipo 4 e de envio de modal tipo 5, as rotas
+do navegador, a tabela de qual callback vale para qual tipo de interação e os
+eventos `interaction.*`) está em [`CONTRATO-ONDA-3.md`](CONTRATO-ONDA-3.md)
+§4, §5 e §9.1. Desde a onda 3 os callbacks 4 e 5 e os followups também
+guardam `embeds`, `components` e `flags`, e o 5 grava a mensagem com
+`LOADING` (1 << 7) ligado, que é o que a web lê para desenhar "está pensando…".
 
 Followups, na mesma fase:
 
@@ -1472,6 +1492,11 @@ na mesma proporção medida na captura de referência do Discord; **não** conta
 não lida, não notifica e não toca som; e sem menu de contexto nem mini-barra,
 porque responder, reagir, fixar ou copiar link apontariam para uma mensagem que
 o canal não tem.
+
+**Onda 3:** a efêmera também carrega `embeds`, `components` e `flags` (colunas
+direto na `EphemeralMessage` — a tabela é pequena e expira), e os componentes
+dela são clicáveis: a interação de componente aponta para a efêmera por
+`Interaction.ephemeralMessageId`. Ver [`CONTRATO-ONDA-3.md`](CONTRATO-ONDA-3.md).
 
 O que ela **não** tem: reação, anexo, figurinha, enquete, thread e fixação. Nada
 disso teria onde ser gravado, e mostrar o botão seria mentir.
@@ -2162,9 +2187,13 @@ há `MANAGE_MESSAGES` em DM, então lá cada um só tira a própria), e o
 
 #### Ainda na fila
 Membros/cargos/bans/permissões de canal no REST, `PRESENCE_UPDATE`,
-`GUILD_BAN_*`, `MESSAGE_DELETE_BULK`, `GUILD_EMOJIS_UPDATE`, componentes
-(botões e selects), modais, webhooks de entrada, embeds ricos, CDN de avatar no
-formato do Discord, DM com bot, `Request Guild Members`. Sem estimativa.
+`GUILD_BAN_*`, `MESSAGE_DELETE_BULK`, `GUILD_EMOJIS_UPDATE`, webhooks de
+entrada, CDN de avatar no formato do Discord, DM com bot, `Request Guild
+Members`. Sem estimativa.
+
+Componentes (botões e selects), modais, autocomplete e embeds ricos **saíram
+desta fila**: são a onda 3 do plano de paridade
+([`CONTRATO-ONDA-3.md`](CONTRATO-ONDA-3.md)).
 
 #### Mensagem efêmera — **feito**
 

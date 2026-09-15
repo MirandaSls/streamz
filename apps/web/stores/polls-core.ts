@@ -42,3 +42,31 @@ export function mesclarContagem(anterior: Poll | undefined, doServidor: Poll): P
   }));
   return { ...doServidor, options };
 }
+
+/** Um voto mandado ao servidor e o que o ack disse dele (`undefined` = em voo). */
+export interface VotoEmVoo {
+  indice: number;
+  ok?: boolean;
+}
+
+/**
+ * Estado final de um lote de votos em que algum falhou (ack `ok: false` ou
+ * servidor mudo até o timeout).
+ *
+ * "Lote" são os votos disparados enquanto havia outro em voo na mesma enquete
+ * — o botão "Votar" de uma enquete múltipla manda um por opção, de uma vez.
+ * Desfazer voto a voto não funciona: sem `multi`, cada voto mexe na marca das
+ * outras opções, e desfazer um no meio da fila deixa a marca errada. Então o
+ * lote guarda a enquete de antes do primeiro voto (`base`) e, quando todos
+ * respondem, refaz sobre ela **só os que o servidor aceitou**:
+ *
+ * - a marca (`me`) sai dessa repetição — é a única fonte que o cliente tem;
+ * - a contagem sai do último `poll.updated` do lote, se chegou algum (é a
+ *   verdade do servidor, e já inclui os votos aceitos: o gateway faz o
+ *   broadcast antes de devolver o ack); sem nenhum, sai da repetição.
+ */
+export function reconciliarLote(base: Poll, votos: readonly VotoEmVoo[], servidor?: Poll): Poll {
+  const refeita = votos.reduce((p, v) => (v.ok ? aplicarVoto(p, v.indice) : p), base);
+  if (!servidor) return refeita;
+  return mesclarContagem(refeita, servidor);
+}

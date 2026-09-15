@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { MessageSquarePlus, Search, ShieldCheck } from "@/components/ui/icones";
 import { MAX_MESSAGE_LENGTH, type AdminUserView, type AdminUsersPage } from "@streamz/shared";
 import Avatar, { STATUS_LABEL } from "@/components/ui/Avatar";
-import { ESTILO_AREA, ESTILO_CAMPO } from "@/components/settings/campos";
+import { Button, TextArea, TextInput, Tooltip } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { dataCompleta } from "@/lib/format";
 import { useAuth } from "@/stores/auth";
@@ -77,23 +77,18 @@ export default function AdminUsuariosTab() {
 
   return (
     <>
-      <div className="relative mb-4">
-        <Search
-          size={16}
-          aria-hidden="true"
-          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-txt-muted"
-        />
-        <input
+      <div className="mb-4">
+        <TextInput
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           placeholder="Buscar por nome, usuário ou e-mail"
           aria-label="Buscar contas"
-          className={`${ESTILO_CAMPO} pl-8`}
+          prefixo={<Search size={16} aria-hidden="true" className="text-text-muted" />}
         />
       </div>
 
       {pagina && !carregando && (
-        <p className="mb-2 text-xs text-txt-muted">
+        <p className="mb-2 text-xs text-text-muted">
           {itens.length} de {pagina.total.toLocaleString("pt-BR")} conta(s)
         </p>
       )}
@@ -110,14 +105,16 @@ export default function AdminUsuariosTab() {
         </ul>
 
         {pagina?.proximoCursor && (
-          <button
-            type="button"
+          <Button
+            variante="secundario"
+            tamanho="sm"
+            larguraTotal
             onClick={() => void carregarMais()}
-            disabled={carregandoMais}
-            className="mt-3 h-9 celular:h-[44px] w-full rounded-[3px] border border-border-strong text-sm font-medium text-txt-normal transition hover:border-border-strong-hover disabled:opacity-60"
+            carregando={carregandoMais}
+            className="mt-3 celular:h-[44px]"
           >
-            {carregandoMais ? "Carregando…" : "Carregar mais"}
-          </button>
+            Carregar mais
+          </Button>
         )}
       </Estado>
     </>
@@ -133,9 +130,9 @@ function Linha({ item }: { item: AdminUserView }) {
   const podeEscrever = !item.deletedAt && user.id !== meuId;
 
   return (
-    <li className="border-b border-border py-2.5 last:border-b-0">
+    <li className="border-b border-border-subtle py-2.5 last:border-b-0">
       <div className="flex items-center gap-3">
-        <Avatar user={user} size="md" status={user.status} surface="border-chat" />
+        <Avatar user={user} size="md" status={user.status} surface="border-background-base-lower" />
 
         <div className="min-w-0 flex-1">
           <span className="flex min-w-0 items-center gap-1.5">
@@ -150,7 +147,7 @@ function Linha({ item }: { item: AdminUserView }) {
             {!item.deletedAt && item.disabledAt && <Etiqueta tom="alerta">desativada</Etiqueta>}
           </span>
 
-          <p className="mt-0.5 truncate text-xs text-txt-muted">
+          <p className="mt-0.5 truncate text-xs text-text-muted">
             {item.email ?? "sem e-mail"}
             {item.email && !item.emailVerified && " (não verificado)"}
             {" · "}
@@ -162,29 +159,31 @@ function Linha({ item }: { item: AdminUserView }) {
           {/* a linha que o painel existe para mostrar */}
           {item.chamada ? (
             <span className="mt-1 flex min-w-0 items-center gap-1.5">
-              <span className="shrink-0 text-xs font-semibold uppercase tracking-[0.02em] text-accent">
+              <span className="shrink-0 text-xs font-semibold uppercase tracking-[0.02em] text-brand-500">
                 em chamada
               </span>
               <LocalDaChamada local={item.chamada} />
             </span>
           ) : (
-            <p className="mt-1 text-xs text-txt-faint">
+            <p className="mt-1 text-xs text-channels-default">
               {item.lastSeenAt ? `Visto por último em ${dataCompleta(item.lastSeenAt)}` : "Nunca se conectou"}
             </p>
           )}
         </div>
 
         {podeEscrever && (
-          <button
-            type="button"
-            onClick={() => setCompondo((aberto) => !aberto)}
-            aria-expanded={compondo}
-            title={`Mandar mensagem para @${user.username}`}
-            className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded-[3px] border border-border-strong px-2.5 text-xs font-medium text-txt-normal transition hover:border-border-strong-hover"
-          >
-            <MessageSquarePlus size={14} aria-hidden="true" />
-            Mensagem
-          </button>
+          <Tooltip rotulo={`Mandar mensagem para @${user.username}`}>
+            <Button
+              variante="secundario"
+              tamanho="sm"
+              icone={<MessageSquarePlus size={14} aria-hidden="true" />}
+              onClick={() => setCompondo((aberto) => !aberto)}
+              aria-expanded={compondo}
+              className="shrink-0 celular:h-[44px]"
+            >
+              Mensagem
+            </Button>
+          </Tooltip>
         )}
       </div>
 
@@ -226,7 +225,7 @@ function Compositor({ user, onFim }: { user: AdminUserView["user"]; onFim: () =>
 
   return (
     <div className="mt-2 pl-[52px]">
-      <textarea
+      <TextArea
         ref={campo}
         value={texto}
         onChange={(e) => setTexto(e.target.value)}
@@ -242,25 +241,21 @@ function Compositor({ user, onFim }: { user: AdminUserView["user"]; onFim: () =>
         disabled={enviando}
         placeholder={`Mensagem para @${user.username}`}
         aria-label={`Mensagem para @${user.username}`}
-        className={ESTILO_AREA}
       />
       <div className="mt-1.5 flex items-center gap-2">
-        <button
-          type="button"
+        <Button
+          variante="primario"
+          tamanho="sm"
           onClick={() => void enviar()}
           disabled={enviando || texto.trim().length === 0}
-          className="h-8 celular:h-[44px] rounded-[3px] bg-accent px-3 text-xs font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
+          className="celular:h-[44px]"
         >
           {enviando ? "Enviando…" : "Enviar"}
-        </button>
-        <button
-          type="button"
-          onClick={onFim}
-          className="h-8 celular:h-[44px] rounded-[3px] px-2 text-xs text-txt-muted transition hover:text-txt-normal"
-        >
+        </Button>
+        <Button variante="link" tamanho="sm" onClick={onFim} className="celular:h-[44px]">
           Cancelar
-        </button>
-        <span className="ml-auto text-[11px] text-txt-faint">
+        </Button>
+        <span className="ml-auto text-[11px] text-channels-default">
           {texto.length}/{MAX_MESSAGE_LENGTH}
         </span>
       </div>

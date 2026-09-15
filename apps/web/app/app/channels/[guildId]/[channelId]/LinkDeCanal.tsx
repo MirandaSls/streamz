@@ -45,7 +45,7 @@ export default function LinkDeCanal() {
   }, [params, pathname, router]);
 
   return (
-    <main className="grid h-screen place-items-center bg-chat text-txt-muted">
+    <main className="grid h-screen place-items-center bg-background-base-lower text-text-muted">
       Abrindo o canal…
     </main>
   );

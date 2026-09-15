@@ -10,11 +10,12 @@ import {
   POLL_DURATIONS,
 } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
-import { Rotulo, Select, ToggleLinha } from "@/components/ui/controls";
+import { Select, ToggleLinha } from "@/components/ui/controls";
+import { BotaoDeIcone, Button, Campo, TextInput } from "@/components/ui/primitivos";
 import EmojiPicker from "@/components/ui/EmojiPicker";
-import Tooltip from "@/components/ui/Tooltip";
+import { EmojiDaReacao } from "@/components/chat/EmojiDeReacao";
 import { criarEnquete } from "@/stores/polls";
-import { useUI } from "@/stores/ui";
+import { ui, useUI } from "@/stores/ui";
 
 /** "Sem prazo" é o valor 0; o contrato só lista as durações com prazo. */
 const SEM_PRAZO = 0;
@@ -30,6 +31,8 @@ export default function CreatePollModal({ channelId }: { channelId: string }) {
   const [hours, setHours] = useState<number>(POLL_DURATIONS[3].hours);
   /** qual seletor de emoji está aberto: -1 é o da pergunta, null é nenhum. */
   const [escolhendo, setEscolhendo] = useState<number | null>(null);
+  /** esperando o ack do `poll.create`: o botão fica em "carregando" e o modal aberto. */
+  const [enviando, setEnviando] = useState(false);
 
   const preenchidas = options.map((o) => o.trim()).filter(Boolean);
   const podeCriar = question.trim().length > 0 && preenchidas.length >= MIN_POLL_OPTIONS;
@@ -38,26 +41,33 @@ export default function CreatePollModal({ channelId }: { channelId: string }) {
     setOptions((prev) => prev.map((o, i) => (i === index ? value : o)));
   }
 
-  function submit() {
-    if (!podeCriar) return;
-    // o emoji entra colado no texto da resposta: o contrato da enquete guarda só
-    // a string da opção (ver relatório — falta um campo `emoji` em `PollOption`)
-    const finais = options
-      .map((o, i) => {
-        const texto = o.trim();
-        if (!texto) return "";
-        const emoji = emojis[i];
-        return emoji ? `${emoji} ${texto}`.slice(0, MAX_POLL_OPTION) : texto;
-      })
-      .filter(Boolean);
-    criarEnquete({
+  async function submit() {
+    if (!podeCriar || enviando) return;
+    // o emoji vai num campo próprio (`optionEmojis`, paralelo às opções) e não
+    // mais colado no texto: as respostas vazias saem da lista, e o emoji delas
+    // sai junto, para as posições continuarem batendo
+    const finais: string[] = [];
+    const emojisFinais: (string | null)[] = [];
+    options.forEach((o, i) => {
+      const texto = o.trim();
+      if (!texto) return;
+      finais.push(texto);
+      emojisFinais.push(emojis[i] ?? null);
+    });
+    setEnviando(true);
+    const erro = await criarEnquete({
       channelId,
       question: question.trim(),
       options: finais,
+      optionEmojis: emojisFinais.some(Boolean) ? emojisFinais : undefined,
       multi,
       durationHours: hours > 0 ? hours : undefined,
     });
-    closeModal();
+    setEnviando(false);
+    // na falha o modal fica aberto com o que foi digitado: fechar e avisar
+    // perderia a enquete inteira
+    if (erro) ui.toast(erro, "error");
+    else closeModal();
   }
 
   function escolherEmoji(indice: number, emoji: string) {
@@ -78,73 +88,74 @@ export default function CreatePollModal({ channelId }: { channelId: string }) {
       className="w-[460px]"
       footer={
         <>
-          <PrimaryButton disabled={!podeCriar} onClick={submit}>
+          <PrimaryButton disabled={!podeCriar} carregando={enviando} onClick={() => void submit()}>
             Criar
           </PrimaryButton>
           <SecondaryButton onClick={closeModal}>Cancelar</SecondaryButton>
         </>
       }
     >
-      <Rotulo htmlFor="poll-question">Pergunta</Rotulo>
-      <div className="relative flex h-10 items-center gap-1 rounded-[3px] bg-void px-1.5">
-        <input
-          id="poll-question"
-          value={question}
-          maxLength={MAX_POLL_QUESTION}
-          onChange={(e) => setQuestion(e.target.value)}
-          placeholder="Ex.: Qual dia fica melhor?"
-          className="min-w-0 flex-1 bg-transparent px-1 text-txt-normal outline-none placeholder:text-txt-muted"
-          autoFocus
-        />
-        <BotaoEmoji
-          aberto={escolhendo === -1}
-          onToggle={() => setEscolhendo((v) => (v === -1 ? null : -1))}
-          label="Adicionar emoji à pergunta"
-        />
-        {escolhendo === -1 && (
-          <EmojiPicker
-            className="absolute right-0 top-11 z-10"
-            onClose={() => setEscolhendo(null)}
-            onPick={(e) => escolherEmoji(-1, e)}
+      <Campo rotulo="Pergunta" htmlFor="poll-question">
+        <div className="relative">
+          <TextInput
+            id="poll-question"
+            value={question}
+            maxLength={MAX_POLL_QUESTION}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder="Ex.: Qual dia fica melhor?"
+            autoFocus
+            sufixo={
+              <BotaoEmoji
+                aberto={escolhendo === -1}
+                onToggle={() => setEscolhendo((v) => (v === -1 ? null : -1))}
+                label="Adicionar emoji à pergunta"
+              />
+            }
           />
-        )}
-      </div>
+          {escolhendo === -1 && (
+            <EmojiPicker
+              className="absolute right-0 top-11 z-10"
+              onClose={() => setEscolhendo(null)}
+              onPick={(e) => escolherEmoji(-1, e)}
+            />
+          )}
+        </div>
+      </Campo>
 
-      <p className="mb-2 mt-5 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+      <p className="mb-2 mt-5 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
         Respostas
       </p>
       <div className="flex flex-col gap-2">
         {options.map((o, i) => (
-          <div key={i} className="relative flex h-10 items-center gap-1 rounded-[3px] bg-void px-1.5">
-            <BotaoEmoji
-              aberto={escolhendo === i}
-              emoji={emojis[i]}
-              onToggle={() => setEscolhendo((v) => (v === i ? null : i))}
-              label={`Emoji da resposta ${i + 1}`}
-            />
-            <input
+          <div key={i} className="relative">
+            <TextInput
               value={o}
               maxLength={MAX_POLL_OPTION}
               onChange={(e) => setOption(i, e.target.value)}
               aria-label={`Resposta ${i + 1}`}
               placeholder={`Resposta ${i + 1}`}
-              className="min-w-0 flex-1 bg-transparent text-txt-normal outline-none placeholder:text-txt-muted"
+              prefixo={
+                <BotaoEmoji
+                  aberto={escolhendo === i}
+                  emoji={emojis[i]}
+                  onToggle={() => setEscolhendo((v) => (v === i ? null : i))}
+                  label={`Emoji da resposta ${i + 1}`}
+                />
+              }
+              sufixo={
+                options.length > MIN_POLL_OPTIONS ? (
+                  <BotaoDeIcone
+                    rotulo={`Remover resposta ${i + 1}`}
+                    icone={<X size={18} />}
+                    perigo
+                    onClick={() => {
+                      setOptions((prev) => prev.filter((_, j) => j !== i));
+                      setEmojis((prev) => prev.filter((_, j) => j !== i));
+                    }}
+                  />
+                ) : undefined
+              }
             />
-            {options.length > MIN_POLL_OPTIONS && (
-              <Tooltip label="Remover resposta">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOptions((prev) => prev.filter((_, j) => j !== i));
-                    setEmojis((prev) => prev.filter((_, j) => j !== i));
-                  }}
-                  aria-label={`Remover resposta ${i + 1}`}
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded text-txt-muted hover:text-red"
-                >
-                  <X size={18} />
-                </button>
-              </Tooltip>
-            )}
             {escolhendo === i && (
               <EmojiPicker
                 className="absolute left-0 top-11 z-10"
@@ -156,17 +167,18 @@ export default function CreatePollModal({ channelId }: { channelId: string }) {
         ))}
       </div>
       {options.length < MAX_POLL_OPTIONS && (
-        <button
-          type="button"
+        <Button
+          variante="link"
+          tamanho="sm"
+          icone={<Plus size={16} aria-hidden="true" />}
+          className="mt-2"
           onClick={() => {
             setOptions((prev) => [...prev, ""]);
             setEmojis((prev) => [...prev, null]);
           }}
-          className="mt-2 flex items-center gap-1.5 text-sm font-medium text-txt-link hover:underline"
         >
-          <Plus size={16} aria-hidden="true" />
           Adicionar resposta
-        </button>
+        </Button>
       )}
 
       <div className="mt-5">
@@ -182,7 +194,7 @@ export default function CreatePollModal({ channelId }: { channelId: string }) {
         />
       </div>
 
-      <div className="mt-2 border-t border-border pt-1">
+      <div className="mt-2 border-t border-border-subtle pt-1">
         <ToggleLinha
           checked={multi}
           onChange={setMulti}
@@ -205,16 +217,11 @@ function BotaoEmoji({
   label: string;
 }) {
   return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-label={label}
-        aria-expanded={aberto}
-        className="grid h-8 w-8 shrink-0 place-items-center rounded text-txt-secondary transition hover:text-txt-primary"
-      >
-        {emoji ? <span className="text-lg leading-none">{emoji}</span> : <SmilePlus size={18} />}
-      </button>
-    </Tooltip>
+    <BotaoDeIcone
+      rotulo={label}
+      icone={emoji ? <EmojiDaReacao emoji={emoji} tamanho={20} /> : <SmilePlus size={18} />}
+      aria-expanded={aberto}
+      onClick={onToggle}
+    />
   );
 }

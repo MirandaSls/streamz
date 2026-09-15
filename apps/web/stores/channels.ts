@@ -55,7 +55,7 @@ interface ChannelsState {
   loading: boolean;
 
   /** allowlist do canal privado aberto no modal de acesso. */
-  access: { channelId: string | null; allowed: string[]; loading: boolean };
+  access: { channelId: string | null; allowed: string[]; loading: boolean; erro: boolean };
 
   loadForGuild: (guildId: string) => Promise<void>;
   clear: () => void;
@@ -113,7 +113,7 @@ export const useChannels = create<ChannelsState>((set, get) => {
     activeChannelId: null,
     voiceChannelId: null,
     loading: false,
-    access: { channelId: null, allowed: [], loading: false },
+    access: { channelId: null, allowed: [], loading: false, erro: false },
 
     loadForGuild: async (guildId) => {
       const seq = ++loadSeq;
@@ -145,7 +145,7 @@ export const useChannels = create<ChannelsState>((set, get) => {
         activeChannelId: null,
         voiceChannelId: null,
         loading: false,
-        access: { channelId: null, allowed: [], loading: false },
+        access: { channelId: null, allowed: [], loading: false, erro: false },
       });
       useCategories.getState().clear();
       useMessages.getState().closeChannel();
@@ -372,14 +372,17 @@ export const useChannels = create<ChannelsState>((set, get) => {
 
     loadAccess: async (guildId, channelId) => {
       const seq = ++accessSeq;
-      set({ access: { channelId, allowed: [], loading: true } });
+      set({ access: { channelId, allowed: [], loading: true, erro: false } });
       try {
         const rows = (await api.channelMembers(guildId, channelId)) as Pick<GuildMemberView, "user">[];
         if (seq !== accessSeq) return;
-        set({ access: { channelId, allowed: rows.map((r) => r.user.id), loading: false } });
+        set({ access: { channelId, allowed: rows.map((r) => r.user.id), loading: false, erro: false } });
       } catch (e) {
         if (seq !== accessSeq) return;
-        set({ access: { channelId, allowed: [], loading: false } });
+        // fica marcado como erro (em vez de lista vazia) para o modal mostrar
+        // "Tentar de novo" — lista vazia de verdade e falha de rede eram
+        // indistinguíveis antes desta store guardar o `erro`
+        set({ access: { channelId, allowed: [], loading: false, erro: true } });
         ui.toast(errorMessage(e, "Não foi possível ler o acesso do canal"), "error");
       }
     },
@@ -403,7 +406,7 @@ export const useChannels = create<ChannelsState>((set, get) => {
       }
     },
 
-    clearAccess: () => set({ access: { channelId: null, allowed: [], loading: false } }),
+    clearAccess: () => set({ access: { channelId: null, allowed: [], loading: false, erro: false } }),
   };
 });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { GuildOnboarding } from "@streamz/shared";
 import { useAlteracoesNaoSalvas } from "@/components/ui/alteracoes";
 import { api } from "@/lib/api";
@@ -17,26 +17,49 @@ import { ui } from "@/stores/ui";
  * numa delas apagaria o que a outra tivesse acabado de mudar — o `PATCH` manda
  * o objeto inteiro. Aqui cada página altera os campos que mostra e envia o
  * objeto completo que acabou de ler.
+ *
+ * **Estados de carga (cartão 6n-engajamento).** Antes, uma falha na busca
+ * inicial só disparava um toast e deixava `form` em `null` para sempre — a
+ * página ficava presa em "Carregando…" sem forma de sair, o mesmo defeito que
+ * o cartão de `SessoesTab.tsx` já fechou lá. Agora `carregando`/
+ * `falhouCarregar` distinguem os dois estados e `recarregar` é o mesmo
+ * "Tentar de novo" do padrão do repositório (`SegurancaTab.tsx`,
+ * `SessoesTab.tsx`): quem chama decide o desenho, o hook só garante que dá
+ * para tentar de novo sem duplicar a lógica de busca.
  */
 export function useOnboarding(guildId: string) {
   const loadMembership = useModeration((s) => s.loadMembership);
   const [form, setForm] = useState<GuildOnboarding | null>(null);
   const [salvo, setSalvo] = useState<GuildOnboarding | null>(null);
+  const [carregando, setCarregando] = useState(true);
+  const [falhouCarregar, setFalhouCarregar] = useState(false);
+  /** evita `setState` depois que a página trocou de servidor ou desmontou. */
+  const vivo = useRef(true);
+
+  const carregar = useCallback(async () => {
+    setCarregando(true);
+    setFalhouCarregar(false);
+    try {
+      const o = await api.onboarding(guildId);
+      if (!vivo.current) return;
+      setForm(o);
+      setSalvo(o);
+    } catch (e) {
+      if (!vivo.current) return;
+      setFalhouCarregar(true);
+      ui.toast(errorMessage(e, "Não foi possível carregar"), "error");
+    } finally {
+      if (vivo.current) setCarregando(false);
+    }
+  }, [guildId]);
 
   useEffect(() => {
-    let ativo = true;
-    void api
-      .onboarding(guildId)
-      .then((o) => {
-        if (!ativo) return;
-        setForm(o);
-        setSalvo(o);
-      })
-      .catch((e) => ativo && ui.toast(errorMessage(e, "Não foi possível carregar"), "error"));
+    vivo.current = true;
+    void carregar();
     return () => {
-      ativo = false;
+      vivo.current = false;
     };
-  }, [guildId]);
+  }, [carregar]);
 
   const dirty = !!form && !!salvo && JSON.stringify(form) !== JSON.stringify(salvo);
 
@@ -61,5 +84,5 @@ export function useOnboarding(guildId: string) {
     setForm((f) => (f ? { ...f, ...p } : f));
   }
 
-  return { form, patch };
+  return { form, patch, carregando, falhouCarregar, recarregar: carregar };
 }

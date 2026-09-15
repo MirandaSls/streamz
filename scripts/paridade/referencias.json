@@ -1,0 +1,532 @@
+{
+  "aviso": "Gerado pelo cartão 0.7c. Caminhos relativos a docs/referencias-discord/ (ou absolutos para /opt/stack/streamz/docs/Reference). Escolhidos olhando a imagem.",
+  "desktop": {
+    "login": [
+      {
+        "arquivo": "publico/desktop/01-login-viewport.png",
+        "nota": "captura própria da tela de login real do Discord (discord.com), pt-BR, QR code lateral, tema escuro",
+        "data": null,
+        "escala": "desconhecida"
+      }
+    ],
+    "registro": [
+      {
+        "arquivo": "publico/desktop/05-registro-viewport.png",
+        "nota": "captura própria do formulário 'Criar uma conta' real, pt-BR, todos os campos (e-mail, nome exibido, usuário, senha, data de nascimento)",
+        "data": null,
+        "escala": "desconhecida"
+      },
+      {
+        "arquivo": "publico/desktop/06-registro-seletor-de-data-inteira.png",
+        "nota": "mesma tela com o seletor de data de nascimento aberto",
+        "data": null,
+        "escala": "desconhecida"
+      }
+    ],
+    "convite-pagina": [
+      {
+        "arquivo": "publico/desktop/09-convite-minecraft-viewport.png",
+        "nota": "página pública /invite real (servidor Minecraft), fundo de arte do servidor, card com online/membros, nome exibido + data de nascimento",
+        "data": null,
+        "escala": "desconhecida"
+      },
+      {
+        "arquivo": "publico/desktop/08-convite-discord-developers-viewport.png",
+        "nota": "segunda variação de página de convite pública, servidor Discord Developers",
+        "data": null,
+        "escala": "desconhecida"
+      }
+    ],
+    "amigos-online": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-08-31 101638.png",
+        "nota": "Discord real, aba Amigos > Disponível, 'Online — 6', linhas com status 'Não perturbar' e presença rica, coluna Ativo agora",
+        "data": "2026-08",
+        "escala": "1:1"
+      },
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-09-02 152318.png",
+        "nota": "Discord real com barra de janela visível, mesma tela, 'Online — 5', ótimo para o chrome da janela",
+        "data": "2026-09",
+        "escala": "1:1"
+      }
+    ],
+    "amigos-adicionar": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-08-31 124052.png",
+        "nota": "Discord real, aba 'Adicionar amigo': campo + botão desabilitado, 'Outros lugares para fazer amigos', cartão de presença rica em Ativo agora",
+        "data": "2026-08",
+        "escala": "1:1"
+      }
+    ],
+    "dm-conversa": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-08-31 111402.png",
+        "nota": "Discord real, DM 1:1 com histórico de mensagens, cabeçalho com chamada/vídeo, painel de perfil à direita",
+        "data": "2026-08",
+        "escala": "1:1"
+      }
+    ],
+    "dm-grupo": [
+      {
+        "arquivo": "blog/imagens/2025-11-a-cornucopia-of-updates-make-discord-on-desktop/03-criar-dm-em-grupo-com-nome-e-icone.png",
+        "nota": "post oficial do blog (refresh 2025-11): modal de criar DM em grupo com nome e ícone — mostra o fluxo de criação, não a conversa em si",
+        "data": "2025-11",
+        "escala": "desconhecida"
+      }
+    ],
+    "canal-texto": [
+      {
+        "arquivo": "blog/imagens/2025-08-starting-your-first-discord-server/03-canal-de-texto-completo.png",
+        "nota": "post oficial 2025-08, tema escuro, canal de texto completo com lista de membros aberta à direita, categorias e canais na esquerda",
+        "data": "2025-08",
+        "escala": "desconhecida"
+      },
+      {
+        "arquivo": "blog/imagens/2025-08-starting-your-first-discord-server/08-conversa-no-canal.png",
+        "nota": "mesmo post, conversa em andamento com várias mensagens seguidas (bom para densidade de texto)",
+        "data": "2025-08",
+        "escala": "desconhecida"
+      }
+    ],
+    "mensagem-hover": {
+      "lacuna": "nenhum print (nem os 181 do usuário em docs/Reference, nem o catálogo) mostra claramente a barra de ações flutuante ao passar o mouse sobre uma mensagem, distinta do menu de contexto. O mais próximo achado é a fileira de reações no topo do menu de contexto (124022/124036), que não é a mesma peça. Recomendo um print 1:1 novo do usuário com o mouse parado sobre uma mensagem."
+    },
+    "mensagem-menu": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-08-31 124022.png",
+        "nota": "Discord real, menu de contexto da mensagem (botão direito) com fileira de reações rápidas, Adicionar reação, Apps, Marcar como não lido, Copiar link",
+        "data": "2026-08",
+        "escala": "1:1"
+      },
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-08-31 124036.png",
+        "nota": "mesmo menu com o submenu 'Adicionar reação' expandido (emojis com nome)",
+        "data": "2026-08",
+        "escala": "1:1"
+      }
+    ],
+    "composer-autocomplete": [
+      {
+        "arquivo": "suporte/imagens/discord-basics/35692242798743-mention-suggestions-faq/01.png",
+        "nota": "popup de sugestão de menção com TAB, sobre o composer, tema escuro — mostra o card flutuante",
+        "data": null,
+        "escala": "desconhecida"
+      }
+    ],
+    "composer-comandos": [
+      {
+        "arquivo": "desenvolvedores/imagens/comandos/autocomplete-comando-simples.png",
+        "nota": "lista 'COMMANDS MATCHING /per' com ícone do app e descrição, tema escuro",
+        "data": null,
+        "escala": "desconhecida"
+      }
+    ],
+    "seletor-emoji": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-08-31 120846.png",
+        "nota": "Discord real: busca, rail de categorias, 'Utilizados com frequência', seções por servidor, rodapé com aliases",
+        "data": "2026-08",
+        "escala": "1:1"
+      }
+    ],
+    "seletor-gif": [
+      {
+        "arquivo": "suporte/imagens/discord-basics/360021235192-sending-gifs-on-discord/02.png",
+        "nota": "só a barra do composer com o botão GIF em destaque — não foi encontrado no acervo o grid do seletor de GIF já aberto em desktop",
+        "data": null,
+        "escala": "desconhecida"
+      }
+    ],
+    "mensagem-bot": [
+      {
+        "arquivo": "desenvolvedores/imagens/mensagens-de-bot/anuncio-com-embeds.png",
+        "nota": "mensagem de bot com embed rico (borda colorida, título, código) e exemplo de comando de barra no rodapé",
+        "data": null,
+        "escala": "desconhecida"
+      },
+      {
+        "arquivo": "desenvolvedores/imagens/mensagens-de-bot/sorteio-efemero-com-botao.webp",
+        "nota": "mensagem de bot efêmera com dois embeds e botão 'Claim!' — cobre o caso com botões",
+        "data": null,
+        "escala": "desconhecida"
+      }
+    ],
+    "enquete": [
+      {
+        "arquivo": "suporte/imagens/server-settings/22163184112407-polls-faq/07.gif",
+        "nota": "enquete real 'Which coffee is better?' com opções, contagem de votos e botão Vote, tema escuro",
+        "data": "2026-09",
+        "escala": "desconhecida"
+      }
+    ],
+    "thread-painel": [
+      {
+        "arquivo": "blog/imagens/2026-04-making-discord-on-desktop-look-just-right/12-visao-dividida-de-threads.gif",
+        "nota": "visão dividida real do Discord com o painel de thread aberto ao lado do canal principal, refresh 2026",
+        "data": "2026-04",
+        "escala": "desconhecida"
+      }
+    ],
+    "fixadas": [
+      {
+        "arquivo": "suporte/imagens/discord-basics/221421867-pin-messages-faq/10.png",
+        "nota": "aviso de sistema 'pinned a message... See all pinned messages' com o ícone de fixadas no cabeçalho em destaque — não foi encontrado no acervo o popout da lista de fixadas já aberto",
+        "data": null,
+        "escala": "desconhecida"
+      }
+    ],
+    "busca": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-09-01 113513.png",
+        "nota": "Discord real: painel de busca aberto à direita com os filtros de:/em:/tem:/menciona: e exemplos — mostra a peça, não uma lista de resultados",
+        "data": "2026-09",
+        "escala": "1:1"
+      }
+    ],
+    "caixa-de-entrada": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-09-01 113500.png",
+        "nota": "Discord real: popout 'Caixa de Entrada' com abas Não lidas/Menções e estado vazio ilustrado",
+        "data": "2026-09",
+        "escala": "1:1"
+      },
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-09-02 152351.png",
+        "nota": "Discord real: mesma caixa de entrada na aba Menções, com o ícone de filtro no canto visível",
+        "data": "2026-09",
+        "escala": "1:1"
+      }
+    ],
+    "perfil-popout": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-08-31 101804.png",
+        "nota": "Discord real: popover de perfil, banner, avatar com anel de status, badges, balão de status personalizado, coleção de jogos, Adicionar cargo, Editar perfil",
+        "data": "2026-08",
+        "escala": "1:1"
+      },
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-09-01 113603.png",
+        "nota": "mesmo popover com cargos como chips editáveis (× e +) junto do nome",
+        "data": "2026-09",
+        "escala": "1:1"
+      },
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-09-01 113533.png",
+        "nota": "popover com o cartão 'Em voz' (canal, servidor, botão Abrir chamada de voz)",
+        "data": "2026-09",
+        "escala": "1:1"
+      }
+    ],
+    "perfil-modal": [
+      {
+        "arquivo": "blog/imagens/2026-02-how-to-customize-your-discord-profile/05-widgets-de-perfil.png",
+        "nota": "modal de perfil completo sobre fundo escurecido: banner, avatar, bio, Membro desde, Editar perfil à esquerda, painel de widgets à direita — os widgets são feature que não temos, mas a composição do cartão é a referência certa",
+        "data": "2026-02",
+        "escala": "desconhecida"
+      }
+    ],
+    "menu-servidor": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-08-31 101733.png",
+        "nota": "Discord real: menu do servidor aberto pelo cabeçalho, 11 itens em 4 grupos, toggle Ocultar canais silenciados",
+        "data": "2026-08",
+        "escala": "1:1"
+      },
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-09-04 100527.png",
+        "nota": "mesmo menu em outro servidor ('Boteco da Esquina'), confirma o mesmo agrupamento com Denunciar invasão/Sair do servidor em vermelho no fim",
+        "data": "2026-09",
+        "escala": "1:1"
+      }
+    ],
+    "rail-tooltip": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-09-01 154426.png",
+        "nota": "Discord real: tooltip ao passar o mouse num servidor da rail, nome e '2 membros' — não pega um badge numérico de menção no mesmo frame",
+        "data": "2026-09",
+        "escala": "1:1"
+      }
+    ],
+    "voz-canal": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-08-31 101842.png",
+        "nota": "Discord real: canal de voz expandido na lista lateral com participante abaixo, 'Definir um status do canal', 'Convidar para voz' e cronômetro",
+        "data": "2026-08",
+        "escala": "1:1"
+      }
+    ],
+    "voz-chamada": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-08-31 101857.png",
+        "nota": "Discord real: palco de voz de servidor, tile com moldura, pill de nome, tile vazio com arte de convite, barra em cápsulas, pop-out e tela cheia soltos no canto",
+        "data": "2026-08",
+        "escala": "1:1"
+      },
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-08-31 160106.png",
+        "nota": "Discord real: chamada de DM sem vídeo, avatares soltos sem moldura, badge de mudo vermelho sobre o avatar, botão + para chamar mais gente",
+        "data": "2026-08",
+        "escala": "1:1"
+      }
+    ],
+    "painel-usuario-voz": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-08-31 101842.png",
+        "nota": "Discord real: painel 'Voz conectada' em cápsulas separadas (mic/câmera | atividade/soundboard | desligar)",
+        "data": "2026-08",
+        "escala": "1:1"
+      },
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-08-31 160106.png",
+        "nota": "painel do usuário durante a chamada com mic vermelho + chevron de trocar dispositivo (estado mudo)",
+        "data": "2026-08",
+        "escala": "1:1"
+      }
+    ],
+    "config-minha-conta": [
+      {
+        "arquivo": "blog/imagens/2025-11-a-cornucopia-of-updates-make-discord-on-desktop/04-configuracoes-redesenhadas.png",
+        "nota": "página Minha Conta completa: banner+avatar, Nome de exibição/Usuário/E-mail/Telefone editáveis, cartão de segurança com MFA — redesign 2025",
+        "data": "2025-11",
+        "escala": "desconhecida"
+      }
+    ],
+    "config-aparencia": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-09-01 114135.png",
+        "nota": "Discord real: página Tema, 'Mesmo tema do dispositivo', 4 swatches padrão, grade de temas coloridos com upsell Nitro",
+        "data": "2026-09",
+        "escala": "1:1"
+      },
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-09-01 114157.png",
+        "nota": "mesma seção Aparência, sub-página Ícone do aplicativo, grade de ícones",
+        "data": "2026-09",
+        "escala": "1:1"
+      }
+    ],
+    "config-servidor-perfil": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-09-01 113634.png",
+        "nota": "Discord real: Perfil do servidor, nome, ícone, faixa, características, cartão de prévia à direita",
+        "data": "2026-09",
+        "escala": "1:1"
+      },
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-09-01 113649.png",
+        "nota": "mesma página, rolada (descrição, jogos)",
+        "data": "2026-09",
+        "escala": "1:1"
+      }
+    ],
+    "config-servidor-cargos": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-09-01 113739.png",
+        "nota": "Discord real: lista de Cargos, cartão @everyone, busca, botão Criar cargo, contagem de membros por cargo",
+        "data": "2026-09",
+        "escala": "1:1"
+      },
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-09-01 113750.png",
+        "nota": "Editar cargo: coluna de cargos + abas Exibição/Permissões/Links/Gerenciar membros, grade de cores",
+        "data": "2026-09",
+        "escala": "1:1"
+      }
+    ],
+    "modal-criar-servidor": [
+      {
+        "arquivo": "desenvolvedores/imagens/servidor-e-comunidade/modal-criar-servidor.webp",
+        "nota": "'Crie seu servidor': Criar meu próprio + templates (Jogos/Amigos/Estudos/Escola) + Entrar em um servidor, tema escuro, recorte completo",
+        "data": null,
+        "escala": "desconhecida"
+      }
+    ],
+    "modal-criar-canal": {
+      "lacuna": "não há no material nenhuma captura do diálogo real de criação de canal (nome, tipo texto/voz, privado); os únicos achados (posts de blog, GIFs) mostram só o resultado pós-criação, não o formulário. Recomendo um print 1:1 do usuário."
+    },
+    "modal-convite": [
+      {
+        "arquivo": "suporte/imagens/discord-basics/360004851252-instant-invite-102-group-invites/01.png",
+        "nota": "modal de convite atual: link discord.gg, botão Copiar, validade do link — desenho recente",
+        "data": "2026-09",
+        "escala": "desconhecida"
+      },
+      {
+        "arquivo": "desenvolvedores/imagens/atividades/dialogo-de-convite.png",
+        "nota": "variante mais antiga com lista de amigos + campo de link — layout desatualizado, usar só como referência secundária",
+        "data": null,
+        "escala": "desconhecida"
+      }
+    ],
+    "modal-confirmacao": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-08-31 124114.png",
+        "nota": "Discord real: 'Você tem certeza?' com 'Não perguntar de novo' — é de troca de canal de voz, não de apagar mensagem, mas é o padrão real de confirmação do Discord",
+        "data": "2026-08",
+        "escala": "1:1"
+      },
+      {
+        "arquivo": "blog/imagens/2024-09-make-your-discord-messages-bold-italic/06-modal-saindo-do-discord.png",
+        "nota": "padrão genérico de modal de confirmação (título, corpo, botão secundário + primário azul)",
+        "data": "2024-09",
+        "escala": "desconhecida"
+      }
+    ],
+    "troca-rapida": [
+      {
+        "arquivo": "blog/imagens/2024-11-how-to-use-keyboard-shortcuts-on-discord-create/03-troca-rapida.png",
+        "nota": "Ctrl+K 'Para onde você gostaria de ir?' com canais recentes e resultado de usuário",
+        "data": "2024-11",
+        "escala": "desconhecida"
+      }
+    ],
+    "visualizador-imagem": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/Captura de tela 2026-08-31 120919.png",
+        "nota": "Discord real: lightbox de imagem, zoom, abrir externo, '...', fechar",
+        "data": "2026-08",
+        "escala": "1:1"
+      }
+    ],
+    "download": [
+      {
+        "arquivo": "publico/desktop/15-download-viewport.png",
+        "nota": "página de download real do Discord, pt-BR, topo",
+        "data": null,
+        "escala": "desconhecida"
+      }
+    ],
+    "download-senha": [
+      {
+        "arquivo": "publico/desktop/15-download-viewport.png",
+        "nota": "o Discord não tem etapa de senha; comparar só a linguagem visual do topo",
+        "data": null,
+        "escala": "desconhecida"
+      }
+    ]
+  },
+  "celular": {
+    "m-inicio": [
+      {
+        "arquivo": "lojas/imagens/appstore-iphone-pt-br/05.png",
+        "nota": "captura de loja PT-BR atual: rail de servidores + lista de canais de texto/voz do servidor, com popup de canal de voz mostrando participantes e badge AO VIVO",
+        "data": "2026-09",
+        "escala": "desconhecida"
+      }
+    ],
+    "m-mensagens": [
+      {
+        "arquivo": "lojas/imagens/appstore-iphone-en-us/04.png",
+        "nota": "screenshot oficial da App Store (app atual), aba de mensagens/inbox com lista de DMs e grupo, tema escuro — em inglês, mas layout atual",
+        "data": "2026-09",
+        "escala": "desconhecida"
+      }
+    ],
+    "m-chat": [
+      {
+        "arquivo": "suporte/imagens/announcements/42383370736023-mobile-visual-refresh-what-s-changing/07.gif",
+        "nota": "canal de texto no celular com o refresh visual de 2026 (cabeçalho, mensagens, composer com emoji/GIF/figurinhas)",
+        "data": "2026",
+        "escala": "desconhecida"
+      }
+    ],
+    "m-toque-longo": [
+      {
+        "arquivo": "suporte/imagens/discord-basics/24640649961367-message-forwarding/07.jpg",
+        "nota": "folha de ações do toque longo completa: reações rápidas, Responder/Encaminhar/Criar thread, Marcar como não lida, Reações, Fixar, Apps",
+        "data": null,
+        "escala": "desconhecida"
+      }
+    ],
+    "m-voce": [
+      {
+        "arquivo": "blog/imagens/2023-12-improving-our-mobile-experience/08-aba-voce-2023.png",
+        "nota": "aba 'Você': status, Editar Status/Editar Perfil, Sobre mim, Seus Amigos, barra inferior Servidores/Mensagens/Notificações/Você — é UI de 2023, pré-refresh 2025, só a estrutura das seções vale hoje",
+        "data": "2023-12",
+        "escala": "desconhecida"
+      }
+    ],
+    "m-perfil-folha": {
+      "lacuna": "não há no material nenhuma captura genuína da folha inferior de perfil de outra pessoa no mobile. Candidatas descartadas: aba 'Você' (perfil próprio, tela cheia, não é folha), cabeçalho de DM (tela cheia, não folha), cartão de perfil ilustrado de artigo de ajuda (mockup, não UI real), páginas 'Profiles' mal-rotuladas como mobile no catálogo. Recomendo um print 1:1 do usuário no celular."
+    },
+    "m-membros": [
+      {
+        "arquivo": "blog/imagens/2025-03-supercharging-discord-mobile-our-journey-to-a/06-lista-de-membros-antes-e-depois.webp",
+        "nota": "lado 'New Version' é a lista de membros mobile atual: abas Members/Media/Pins/Links/Files, avatares com status e mensagem de atividade; texto em inglês mas estrutura é a que vale",
+        "data": "2025-03",
+        "escala": "desconhecida"
+      }
+    ],
+    "m-voz": [
+      {
+        "arquivo": "lojas/imagens/appstore-iphone-pt-br/03.png",
+        "nota": "grade de chamada de voz no celular: tiles com moldura, badge AO VIVO, barra de controles inferior com mic/câmera/chat/atividade/desligar",
+        "data": "2026-09",
+        "escala": "desconhecida"
+      },
+      {
+        "arquivo": "lojas/imagens/appstore-iphone-pt-br/06.png",
+        "nota": "chamada com atividade em andamento sobre os tiles de câmera",
+        "data": "2026-09",
+        "escala": "desconhecida"
+      }
+    ],
+    "m-login": [
+      {
+        "arquivo": "publico/web-mobile-ios/01-login-viewport.png",
+        "nota": "captura própria do login real em viewport de iPhone, pt-BR, tema escuro",
+        "data": null,
+        "escala": "desconhecida"
+      }
+    ],
+    "m-download": [
+      {
+        "arquivo": "publico/web-mobile-ios/15-download-viewport.png",
+        "nota": "página de download do Discord no navegador do iPhone",
+        "data": null,
+        "escala": "desconhecida"
+      }
+    ],
+    "m-gaveta": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/mobile/discord-mobile-servidor-2024.png",
+        "nota": "lista de canais com a conversa estacionada à direita",
+        "data": null,
+        "escala": "1,9707 px/pt"
+      }
+    ],
+    "m-detalhes-canal": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/mobile/discord-mobile-membros.png",
+        "nota": "membros do canal no celular",
+        "data": null,
+        "escala": "ver MEDIDAS.md"
+      }
+    ],
+    "m-detalhes-fixadas": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/mobile/discord-mobile-membros.png",
+        "nota": "sem captura das fixadas no celular; mesma moldura dos detalhes do canal",
+        "data": null,
+        "escala": "desconhecida"
+      }
+    ],
+    "m-busca": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/mobile/discord-mobile-chat-canal-2024.png",
+        "nota": "sem captura da busca no celular; cabeçalho do canal para a entrada",
+        "data": null,
+        "escala": "1,9707 px/pt"
+      }
+    ],
+    "m-config": [
+      {
+        "arquivo": "/opt/stack/streamz/docs/Reference/mobile/discord-mobile-config-usuario.png",
+        "nota": "configurações do usuário no celular",
+        "data": null,
+        "escala": "desconhecida"
+      }
+    ]
+  }
+}

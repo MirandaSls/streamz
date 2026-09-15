@@ -33,7 +33,7 @@ export default function IconeAnimado({
   return (
     <div
       aria-hidden="true"
-      className={`flex flex-col items-center text-accent ${className ?? ""}`}
+      className={`flex flex-col items-center text-brand-500 ${className ?? ""}`}
       style={{ width: size, "--icone-tam": `${size}px` } as CSSProperties}
     >
       <Marca size={size} className="icone-animado-marca" />

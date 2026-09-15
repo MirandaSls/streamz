@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { Search } from "@/components/ui/icones";
 import Avatar from "@/components/ui/Avatar";
 import PopoverFlutuante from "@/components/ui/PopoverFlutuante";
+import { TextInput } from "@/components/ui/primitivos";
 import type { PublicUser } from "@streamz/shared";
 import type { Alvo } from "@/components/permissoes/alvos";
 
@@ -56,25 +57,21 @@ export default function AdicionarAlvoPopover({
       largura={260}
       denso
     >
-      <div className="relative mb-1">
-        <Search
-          size={14}
-          aria-hidden="true"
-          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-txt-muted"
-        />
-        <input
-          ref={campoRef}
-          value={filtro}
-          onChange={(e) => onFiltro(e.target.value)}
-          placeholder="Cargo ou membro"
-          aria-label="Buscar cargo ou membro"
-          className="h-8 w-full rounded-[4px] border border-border-strong bg-transparent pl-8 pr-2 text-sm text-txt-normal outline-none transition-colors placeholder:text-txt-muted focus:border-accent celular:h-[44px] celular:text-[max(16px,1em)]"
-        />
-      </div>
+      <TextInput
+        ref={campoRef}
+        value={filtro}
+        onChange={(e) => onFiltro(e.target.value)}
+        placeholder="Cargo ou membro"
+        aria-label="Buscar cargo ou membro"
+        tamanho="sm"
+        prefixo={<Search size={14} aria-hidden="true" className="text-text-muted" />}
+        classeDaCaixa="mb-1 celular:h-[44px]"
+        className="celular:text-[max(16px,1em)]"
+      />
 
       <div className="max-h-[220px] overflow-y-auto">
         {alvos.length === 0 ? (
-          <p className="px-2 py-2 text-sm text-txt-muted">Ninguém mais para adicionar.</p>
+          <p className="px-2 py-2 text-sm text-text-muted">Ninguém mais para adicionar.</p>
         ) : (
           alvos.map((alvo) => {
             const user = alvo.tipo === "membro" ? usuario(alvo.id) : null;
@@ -83,14 +80,14 @@ export default function AdicionarAlvoPopover({
                 key={alvo.chave}
                 type="button"
                 onClick={() => onEscolher(alvo)}
-                className="flex h-8 celular:h-[44px] w-full items-center gap-2 rounded-[3px] px-2 text-left text-sm text-txt-normal transition hover:bg-hov"
+                className="flex h-8 celular:h-[44px] w-full items-center gap-2 rounded-[3px] px-2 text-left text-sm text-text-default transition hover:bg-interactive-background-hover"
               >
                 {user ? (
-                  <Avatar user={user} size="sm" surface="border-overlay" />
+                  <Avatar user={user} size="sm" surface="border-background-surface-higher" />
                 ) : (
                   <span
                     aria-hidden="true"
-                    className="h-2.5 w-2.5 shrink-0 rounded-full bg-txt-muted"
+                    className="h-2.5 w-2.5 shrink-0 rounded-full bg-text-muted"
                     // a cor do cargo é dado do servidor, não token de tema:
                     // vem por `style`, como no resto do app
                     style={alvo.cor ? { backgroundColor: alvo.cor } : undefined}

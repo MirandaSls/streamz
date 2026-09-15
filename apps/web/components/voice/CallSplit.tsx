@@ -254,7 +254,7 @@ function DivisaoVertical({ chamada, chat }: { chamada: ReactNode; chat: ReactNod
   );
 
   return (
-    <div ref={raiz} className="flex min-h-0 min-w-0 flex-1 flex-col bg-chat">
+    <div ref={raiz} className="flex min-h-0 min-w-0 flex-1 flex-col bg-background-base-lower">
       <div
         // o `maxHeight` em CSS cobre o quadro entre a coluna encolher e o
         // observador reagir: sem ele a altura de uma tela grande engoliria o
@@ -282,7 +282,7 @@ function DivisaoVertical({ chamada, chat }: { chamada: ReactNode; chat: ReactNod
         // de pega**: `border-y-2` dá 5px de alvo, e 5px não se acerta com o
         // dedo — o divisor existia e não era arrastável. O `bg-clip-content`
         // mantém a borda transparente, então nada disso aparece na tela.
-        className={`h-px shrink-0 cursor-row-resize border-transparent bg-border bg-clip-content transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none ${
+        className={`h-px shrink-0 cursor-row-resize border-transparent bg-border-subtle bg-clip-content transition-colors hover:bg-brand-500 focus-visible:bg-brand-500 focus-visible:outline-none ${
           ehMobile ? PEGA_TOQUE : "border-y-2"
         }`}
       />
@@ -364,7 +364,7 @@ function DivisaoHorizontal({
   );
 
   return (
-    <div ref={raiz} className="flex min-h-0 min-w-0 flex-1 bg-chat">
+    <div ref={raiz} className="flex min-h-0 min-w-0 flex-1 bg-background-base-lower">
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">{chamada}</div>
 
       <div
@@ -377,7 +377,7 @@ function DivisaoHorizontal({
         tabIndex={0}
         onPointerDown={comecarArraste}
         onKeyDown={pelasTeclas}
-        className="w-px shrink-0 cursor-col-resize border-x-2 border-transparent bg-border bg-clip-content transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+        className="w-px shrink-0 cursor-col-resize border-x-2 border-transparent bg-border-subtle bg-clip-content transition-colors hover:bg-brand-500 focus-visible:bg-brand-500 focus-visible:outline-none"
       />
 
       <PainelDeChatDaCall titulo={titulo} largura={largura} onFechar={onFecharChat}>

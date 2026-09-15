@@ -14,11 +14,15 @@ export default function DownloadRedirecionamento() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/");
+    // leva junto a query e a âncora: `/download?plataforma=android` escolhe o
+    // botão principal da página (`plataformaDaUrl`), e perder isso no caminho
+    // mandaria o link de volta ao palpite pelo user agent
+    const { search, hash } = window.location;
+    router.replace(`/${search}${hash}`);
   }, [router]);
 
   return (
-    <main className="flex h-screen items-center justify-center text-txt-muted">
+    <main className="flex h-screen items-center justify-center text-text-muted">
       Carregando…
     </main>
   );

@@ -272,6 +272,13 @@ export interface OpcaoDeComando {
   required: boolean;
   /** escolhas fixas, quando o comando as declara. */
   choices?: { name: string; value: string | number }[];
+  /**
+   * ── onda 3 ── a opção pede sugestões ao bot enquanto a pessoa digita
+   * (interação tipo 4, resposta pelo callback 8). Só vale para 3, 4 e 10, e
+   * nunca junto de `choices` — é a regra do Discord. Ver
+   * `pedidoDeAutocompleteSchema` em `mensagens-de-bot.ts`.
+   */
+  autocomplete?: boolean;
 }
 
 /**
@@ -328,6 +335,15 @@ export const interacaoCriarSchema = z.object({
   /** cuid do `ApplicationCommand` escolhido no autocomplete. */
   commandId: idSchema,
   options: z.array(opcaoDeInteracaoSchema).max(25).default([]),
+  /**
+   * Gerado pelo navegador, como nas rotas de componente/modal/autocomplete
+   * (`mensagens-de-bot.ts`). Volta em todo `interaction.*` desta interação —
+   * sem ele a web não tem com que casar o `interaction.modal` de um
+   * `showModal()` respondido a um comando de barra, e o modal não abre.
+   * Opcional para não quebrar cliente antigo: sem `nonce`, o comando segue sem
+   * eventos por socket e sem o relógio dos 3 s (ver `criarInteracao`).
+   */
+  nonce: z.string().min(1).max(64).optional(),
 });
 
 export type InteracaoCriarInput = z.infer<typeof interacaoCriarSchema>;
