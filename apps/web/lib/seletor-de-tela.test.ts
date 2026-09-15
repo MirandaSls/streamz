@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SCREEN_QUALITY } from "@streamz/shared";
+import { SCREEN_QUALITY, SCREEN_QUALITY_PADRAO } from "@streamz/shared";
 import {
   RESOLUCOES,
   TAXAS,
@@ -21,7 +21,7 @@ describe("seletores de qualidade", () => {
     expect(separarPreset("720p60")).toEqual({ resolucao: "720p", fps: "60" });
     expect(juntarPreset("1080p", "60")).toBe("1080p60");
     // combinação que o contrato não tem: cai no padrão em vez de virar chave inválida
-    expect(juntarPreset("4k", "60")).toBe("1440p30");
+    expect(juntarPreset("4k", "60")).toBe(SCREEN_QUALITY_PADRAO);
   });
 
   it("oferece o que os presets permitem, em ordem crescente", () => {

@@ -33,6 +33,9 @@ const { SalaFalsa } = vi.hoisted(() => {
       publishTrack: vi.fn(async () => {}),
       unpublishTrack: vi.fn(async () => {}),
       setCameraEnabled: vi.fn(async () => {}),
+      getTrackPublication: vi.fn(() => undefined),
+      // o aviso de CPU da câmera (`LocalTrackCpuConstrained`)
+      on: vi.fn(),
     };
     activeSpeakers: unknown[] = [];
     remoteParticipants = new Map();
