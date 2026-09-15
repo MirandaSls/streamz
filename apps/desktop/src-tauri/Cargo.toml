@@ -77,6 +77,10 @@ webview2-com = "0.38"
 # nossa em 0.62 mantém pelo menos o nosso código e a captura na mesma.
 windows = { version = "0.62", features = [
     "Win32_Foundation",
+    # `CopyResource` na textura de staging reaproveitada do WGC (ver
+    # `src/tela/captura/wgc.rs`). O `windows-capture` já liga esta feature
+    # para si; declarar aqui é não depender dessa coincidência.
+    "Win32_Graphics_Direct3D11",
     "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
     # WASAPI loopback (áudio do sistema): `Media_Audio` é a API, `System_Com`

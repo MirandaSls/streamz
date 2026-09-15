@@ -10,10 +10,17 @@
 //! o do `GetWindowRect`: desde o Windows 10 as janelas têm uma borda invisível
 //! de vários pixels para o redimensionamento, e recortar por ela levaria uma
 //! tira do que está atrás em cada lado.
+//!
+//! **O limite de fps é um sono antes de pedir o quadro**, não um descarte
+//! depois de lê-lo. A duplicação é puxada: enquanto ninguém chama
+//! `AcquireNextFrame`, o Windows acumula as mudanças, e a chamada seguinte
+//! devolve a tela como está agora. Dormir até o intervalo do preset custa
+//! nada e não perde o último estado de uma rajada (fim de uma rolagem). A
+//! textura de staging e o `Vec` do quadro são reaproveitados.
 
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
@@ -21,12 +28,13 @@ use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromWindow, HMONITOR, MONITORINFO, MONITOR_DEFAULTTONEAREST,
 };
 use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, IsIconic, IsWindow};
+use windows_capture::d3d11::StagingTexture;
 use windows_capture::dxgi_duplication_api::{
     DxgiDuplicationApi, DxgiDuplicationFormat, Error as ErroDxgi,
 };
 use windows_capture::monitor::Monitor;
 
-use super::{escala, Alvo, Capturador, Erro, Quadro};
+use super::{copiar_sem_padding, escala, Alvo, Capturador, Erro, Quadro, Ritmo};
 
 /// Quanto uma miniatura espera por um quadro. A primeira chamada depois de
 /// criar a duplicação devolve a tela inteira quase na hora; a folga é para
@@ -43,7 +51,23 @@ pub struct Duplicacao {
     /// `None` entre um `AccessLost` e a recriação: o DXGI derruba a
     /// duplicação quando o desktop muda de modo (tela cheia exclusiva, troca
     /// de resolução, tela de bloqueio), e a resposta é abrir outra.
-    dup: Option<DxgiDuplicationApi>,
+    dup: Option<Leitor>,
+    ritmo: Ritmo,
+    /// Origem dos instantes passados ao `ritmo`.
+    origem: Instant,
+    /// Buffer devolvido pelo encoder (`reciclar`), para o próximo quadro.
+    livre: Vec<u8>,
+}
+
+/// A duplicação e o que vive no dispositivo D3D dela: a textura de staging
+/// só serve ao dispositivo em que foi criada, então as duas nascem e morrem
+/// juntas (ver `AcessoPerdido`).
+struct Leitor {
+    api: DxgiDuplicationApi,
+    staging: Option<StagingTexture>,
+    /// Esta duplicação já entregou um quadro. Até lá, todo quadro vale — o
+    /// primeiro é a tela inteira, e é dele que as miniaturas vivem.
+    entregou: bool,
 }
 
 // SAFETY: `HMONITOR` é um identificador opaco do sistema (ver `Alvo`), e a
@@ -52,7 +76,7 @@ pub struct Duplicacao {
 unsafe impl Send for Duplicacao {}
 
 impl Duplicacao {
-    pub fn abrir(alvo: Alvo) -> Result<Self, Erro> {
+    pub fn abrir(alvo: Alvo, ritmo: Ritmo) -> Result<Self, Erro> {
         let monitor = match alvo {
             Alvo::Monitor(hmonitor) => hmonitor,
             Alvo::Janela(hwnd) => {
@@ -65,16 +89,24 @@ impl Duplicacao {
             alvo,
             monitor,
             dup: Some(dup),
+            ritmo,
+            origem: Instant::now(),
+            livre: Vec::new(),
         })
     }
 }
 
-fn criar(monitor: HMONITOR) -> Result<DxgiDuplicationApi, Erro> {
-    DxgiDuplicationApi::new_options(
+fn criar(monitor: HMONITOR) -> Result<Leitor, Erro> {
+    let api = DxgiDuplicationApi::new_options(
         Monitor::from_raw_hmonitor(monitor.0),
         &[DxgiDuplicationFormat::Bgra8],
     )
-    .map_err(|e| Erro::Falha(e.to_string()))
+    .map_err(|e| Erro::Falha(e.to_string()))?;
+    Ok(Leitor {
+        api,
+        staging: None,
+        entregou: false,
+    })
 }
 
 fn validar(hwnd: HWND) -> Result<(), Erro> {
@@ -93,34 +125,74 @@ enum Leitura {
     Falha(String),
 }
 
+/// Lê um quadro da duplicação para dentro de `bgra`, devolvendo as
+/// dimensões dele e o instante em que o `AcquireNextFrame` o entregou (é
+/// dali, e não do fim da cópia, que o `Ritmo` conta o intervalo).
 fn ler(
-    dup: &mut DxgiDuplicationApi,
+    leitor: &mut Leitor,
     recorte: Option<Recorte>,
     limite: Duration,
-) -> Result<Quadro, Leitura> {
+    bgra: &mut Vec<u8>,
+) -> Result<(u32, u32, Instant), Leitura> {
     let limite_ms = u32::try_from(limite.as_millis()).unwrap_or(u32::MAX);
-    let mut quadro = match dup.acquire_next_frame(limite_ms) {
+    let mut quadro = match leitor.api.acquire_next_frame(limite_ms) {
         Ok(quadro) => quadro,
         Err(ErroDxgi::Timeout) => return Err(Leitura::NadaNovo),
         Err(ErroDxgi::AccessLost) => return Err(Leitura::AcessoPerdido),
         Err(e) => return Err(Leitura::Falha(e.to_string())),
     };
-    let buffer = match recorte {
-        None => quadro.buffer(),
-        Some((x0, y0, x1, y1)) => quadro.buffer_crop(x0, y0, x1, y1),
+    let chegou = Instant::now();
+    // `LastPresentTime` zero é "só o ponteiro mexeu": a imagem da tela é a
+    // mesma do quadro anterior (o DXGI não desenha o cursor nela). Mexer o
+    // mouse gera um desses por vsync, e cada um custava a leitura inteira.
+    if leitor.entregou && quadro.frame_info().LastPresentTime == 0 {
+        return Err(Leitura::NadaNovo);
+    }
+
+    // Uma staging do tamanho do monitor serve à tela inteira e a qualquer
+    // recorte dela; só muda quando o modo do monitor muda.
+    let desc = *quadro.texture_desc();
+    let serve = leitor.staging.as_ref().is_some_and(|s| {
+        let d = s.desc();
+        d.Width == desc.Width && d.Height == desc.Height && d.Format == desc.Format
+    });
+    if !serve {
+        leitor.staging = None;
+        let nova = StagingTexture::new(quadro.device(), desc.Width, desc.Height, desc.Format)
+            .map_err(|e| Leitura::Falha(e.to_string()))?;
+        leitor.staging = Some(nova);
+    }
+    let Some(staging) = leitor.staging.as_mut() else {
+        return Err(Leitura::NadaNovo);
+    };
+    let mut buffer = match recorte {
+        None => quadro.buffer_with(staging),
+        Some((x0, y0, x1, y1)) => quadro.buffer_crop_with(staging, x0, y0, x1, y1),
     }
     .map_err(|e| Leitura::Falha(e.to_string()))?;
-    let mut sobra = Vec::new();
-    let bgra = buffer.as_nopadding_buffer(&mut sobra).to_vec();
-    Ok(Quadro {
-        largura: buffer.width(),
-        altura: buffer.height(),
-        bgra,
-    })
+    let (largura, altura, passo) = (buffer.width(), buffer.height(), buffer.row_pitch());
+    if !copiar_sem_padding(buffer.as_raw_buffer(), largura, altura, passo, bgra) {
+        return Err(Leitura::NadaNovo);
+    }
+    leitor.entregou = true;
+    Ok((largura, altura, chegou))
 }
 
 impl Capturador for Duplicacao {
     fn proximo_quadro(&mut self, limite: Duration) -> Result<Option<Quadro>, Erro> {
+        // O marcapasso primeiro, e antes do recorte: a janela pode andar
+        // durante o sono, e o retângulo tem de ser o da hora da leitura.
+        let comeco = Instant::now();
+        let falta = self.ritmo.falta(comeco - self.origem);
+        if falta >= limite {
+            std::thread::sleep(limite);
+            return Ok(None);
+        }
+        if !falta.is_zero() {
+            std::thread::sleep(falta);
+        }
+        let limite = limite.saturating_sub(comeco.elapsed());
+
         let recorte = match self.alvo {
             Alvo::Monitor(_) => None,
             Alvo::Janela(hwnd) => {
@@ -152,18 +224,34 @@ impl Capturador for Duplicacao {
         if self.dup.is_none() {
             self.dup = Some(criar(self.monitor)?);
         }
-        let Some(dup) = self.dup.as_mut() else {
+        let Some(leitor) = self.dup.as_mut() else {
             return Ok(None);
         };
-        match ler(dup, recorte, limite) {
-            Ok(quadro) => Ok(Some(quadro)),
-            Err(Leitura::NadaNovo) => Ok(None),
+        let mut bgra = std::mem::take(&mut self.livre);
+        match ler(leitor, recorte, limite, &mut bgra) {
+            Ok((largura, altura, chegou)) => {
+                self.ritmo.marcar(chegou - self.origem);
+                Ok(Some(Quadro {
+                    largura,
+                    altura,
+                    bgra,
+                }))
+            }
+            Err(Leitura::NadaNovo) => {
+                self.livre = bgra;
+                Ok(None)
+            }
             Err(Leitura::AcessoPerdido) => {
+                self.livre = bgra;
                 self.dup = None;
                 Ok(None)
             }
             Err(Leitura::Falha(m)) => Err(Erro::Falha(m)),
         }
+    }
+
+    fn reciclar(&mut self, quadro: Quadro) {
+        self.livre = quadro.bgra;
     }
 }
 
@@ -263,7 +351,7 @@ pub fn miniaturas(alvos: &[Alvo], cancelar: &AtomicBool) -> Vec<Option<Vec<u8>>>
 }
 
 fn um_quadro_do_monitor(monitor: HMONITOR) -> Option<Quadro> {
-    let mut dup = Duplicacao::abrir(Alvo::Monitor(monitor)).ok()?;
+    let mut dup = Duplicacao::abrir(Alvo::Monitor(monitor), Ritmo::livre()).ok()?;
     // A primeira leitura pode voltar vazia enquanto a duplicação assenta; a
     // segunda é a que traz a tela.
     for _ in 0..2 {

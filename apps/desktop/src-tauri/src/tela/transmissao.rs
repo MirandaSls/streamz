@@ -268,10 +268,13 @@ pub async fn iniciar(
     // ele na mão o encoder nasce no tamanho certo e a faixa sobe já com
     // imagem. Ver `ESPERA_DO_PRIMEIRO_QUADRO`.
     let marca = Instant::now();
+    // O fps do preset desce até a captura: é lá, antes da cópia da GPU, que
+    // quadro a mais custa caro (ver `captura::abrir`).
+    let fps = pedido.fps.max(1);
     let (capturador, primeiro, captura_ms) =
         tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
             let aberta = Instant::now();
-            let mut capturador = captura::abrir(alvo).map_err(|e| e.to_string())?;
+            let mut capturador = captura::abrir(alvo, fps).map_err(|e| e.to_string())?;
             let captura_ms = aberta.elapsed().as_millis() as u64;
             let primeiro = match capturador.proximo_quadro(ESPERA_DO_PRIMEIRO_QUADRO) {
                 Ok(quadro) => quadro,
@@ -341,7 +344,7 @@ pub async fn iniciar(
     // faixa, o encoder já terá conteúdo, e o outro lado vê imagem em vez do
     // "Carregando a transmissão…" até a fonte repintar.
     if let Some(quadro) = &primeiro {
-        empurrar(&fonte, quadro, largura_max, altura_max);
+        Conversor::default().empurrar(&fonte, quadro, largura_max, altura_max);
     }
 
     // Espelha o `publicarTela` da web: teto de bitrate do preset, sem
@@ -405,7 +408,6 @@ pub async fn iniciar(
 
     let parar_bandeira = Arc::new(AtomicBool::new(false));
     let bandeira = parar_bandeira.clone();
-    let fps = pedido.fps.max(1);
     let thread = std::thread::Builder::new()
         .name("streamz-tela".into())
         .spawn(move || {
@@ -520,7 +522,7 @@ fn transmitir(
     mut eventos: UnboundedReceiver<RoomEvent>,
 ) -> Option<Motivo> {
     let intervalo = Duration::from_micros(1_000_000 / u64::from(fps));
-    let mut ultimo = Instant::now() - intervalo;
+    let mut conversor = Conversor::default();
     loop {
         if parar.load(Ordering::Acquire) {
             return None;
@@ -530,14 +532,13 @@ fn transmitir(
         }
         match capturador.proximo_quadro(intervalo) {
             Ok(Some(quadro)) => {
-                // A fonte pode repintar mais rápido que o preset (60 Hz de
-                // tela para 30 fps): quadro adiantado é descartado antes de
-                // custar a conversão.
-                if ultimo.elapsed() < intervalo {
-                    continue;
-                }
-                empurrar(fonte, &quadro, largura_max, altura_max);
-                ultimo = Instant::now();
+                // O quadro já chega no ritmo do preset: a captura descarta o
+                // adiantado antes de lê-lo da GPU (WGC) ou dorme até a hora
+                // de pedir o próximo (DXGI). Um segundo filtro aqui, medido
+                // depois da conversão, derrubava quadros bons por tremida de
+                // milissegundos e fazia 30 fps virarem 20.
+                conversor.empurrar(fonte, &quadro, largura_max, altura_max);
+                capturador.reciclar(quadro);
             }
             // Nada repintou: o encoder segue com o último quadro que recebeu.
             Ok(None) => {}
@@ -559,46 +560,76 @@ fn sala_caiu(eventos: &mut UnboundedReceiver<RoomEvent>) -> bool {
     }
 }
 
-/// Converte e entrega um quadro à fonte de vídeo do SDK.
+/// Converte quadros BGRA para o I420 do encoder e os entrega à fonte de vídeo.
 ///
 /// Está separado do laço porque o **primeiro** quadro é empurrado em
 /// `iniciar`, antes de publicar a faixa: assim a publicação já sobe com
 /// imagem.
-fn empurrar(fonte: &NativeVideoSource, quadro: &Quadro, largura_max: u32, altura_max: u32) {
-    let buffer = para_i420(quadro, largura_max, altura_max);
-    fonte.capture_frame(&VideoFrame {
-        rotation: VideoRotation::VideoRotation0,
-        // zero = "agora", pelo relógio do SDK
-        timestamp_us: 0,
-        frame_metadata: None,
-        buffer,
-    });
+#[derive(Default)]
+struct Conversor {
+    /// O I420 na resolução da fonte, quando ela é maior que o preset e o
+    /// quadro ainda vai ser reduzido. É só um passo intermediário (o
+    /// `scale` devolve um buffer novo, e é esse que o encoder guarda), então
+    /// dá para reaproveitá-lo: um monitor 4K são 12 MB a menos alocados por
+    /// quadro. O buffer que vai para o encoder **não** pode ser reaproveitado
+    /// — o libwebrtc segura uma referência a ele até codificar.
+    intermediario: Option<I420Buffer>,
 }
 
-/// BGRA → I420 na resolução da fonte e, se ela for maior que o preset,
-/// redução mantendo a proporção. A libyuv chama de "ARGB" a ordem de bytes
-/// B, G, R, A em memória — exatamente o que o Windows entrega.
-fn para_i420(quadro: &Quadro, largura_max: u32, altura_max: u32) -> I420Buffer {
-    let mut cheio = I420Buffer::new(quadro.largura, quadro.altura);
-    let (passo_y, passo_u, passo_v) = cheio.strides();
-    let (y, u, v) = cheio.data_mut();
-    yuv_helper::argb_to_i420(
-        &quadro.bgra,
-        quadro.largura * 4,
-        y,
-        passo_y,
-        u,
-        passo_u,
-        v,
-        passo_v,
-        quadro.largura as i32,
-        quadro.altura as i32,
-    );
-    let (largura, altura) = encaixar(quadro.largura, quadro.altura, largura_max, altura_max);
-    if (largura, altura) == (quadro.largura, quadro.altura) {
-        cheio
-    } else {
-        cheio.scale(largura as i32, altura as i32)
+impl Conversor {
+    fn empurrar(
+        &mut self,
+        fonte: &NativeVideoSource,
+        quadro: &Quadro,
+        largura_max: u32,
+        altura_max: u32,
+    ) {
+        let buffer = self.para_i420(quadro, largura_max, altura_max);
+        fonte.capture_frame(&VideoFrame {
+            rotation: VideoRotation::VideoRotation0,
+            // zero = "agora", pelo relógio do SDK
+            timestamp_us: 0,
+            frame_metadata: None,
+            buffer,
+        });
+    }
+
+    /// BGRA → I420 na resolução da fonte e, se ela for maior que o preset,
+    /// redução mantendo a proporção. A libyuv chama de "ARGB" a ordem de
+    /// bytes B, G, R, A em memória — exatamente o que o Windows entrega.
+    ///
+    /// Reduzir **antes** de converter (`ARGBScale` e depois `ARGBToI420` no
+    /// tamanho final) economizaria a conversão dos pixels que a redução joga
+    /// fora, mas o `yuv_helper` do `libwebrtc` 0.3 não expõe escala de ARGB —
+    /// só `I420Buffer::scale`. Fica a ordem converter → reduzir.
+    fn para_i420(&mut self, quadro: &Quadro, largura_max: u32, altura_max: u32) -> I420Buffer {
+        let (largura, altura) = encaixar(quadro.largura, quadro.altura, largura_max, altura_max);
+        let reduz = (largura, altura) != (quadro.largura, quadro.altura);
+        let mut cheio = match self.intermediario.take() {
+            Some(b) if reduz && b.width() == quadro.largura && b.height() == quadro.altura => b,
+            _ => I420Buffer::new(quadro.largura, quadro.altura),
+        };
+        let (passo_y, passo_u, passo_v) = cheio.strides();
+        let (y, u, v) = cheio.data_mut();
+        yuv_helper::argb_to_i420(
+            &quadro.bgra,
+            quadro.largura * 4,
+            y,
+            passo_y,
+            u,
+            passo_u,
+            v,
+            passo_v,
+            quadro.largura as i32,
+            quadro.altura as i32,
+        );
+        if reduz {
+            let reduzido = cheio.scale(largura as i32, altura as i32);
+            self.intermediario = Some(cheio);
+            reduzido
+        } else {
+            cheio
+        }
     }
 }
 
