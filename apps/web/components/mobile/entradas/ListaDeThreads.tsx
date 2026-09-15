@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
-import { Archive, ArchiveRestore, MessagesSquare, Pencil, Plus, Search } from "@/components/ui/icones";
+import { Archive, ArchiveRestore, Pencil, Plus, Search, Threads } from "@/components/ui/icones";
 import { displayNameOf, type ThreadView } from "@streamz/shared";
 import { EstadoCarregando, EstadoVazio } from "@/components/mobile/entradas/pecas";
 import Avatar from "@/components/ui/Avatar";
@@ -25,9 +25,10 @@ type Filtro = "ativas" | "arquivadas";
  *
  * O que muda para o dedo:
  *
- * - o seletor "Threads Ativas ▾" do título vira as **duas pílulas** do primitivo
- *   `Tabs` (a variante de Amigos): um menu para escolher entre duas opções custa
- *   dois toques onde um basta;
+ * - as abas "Ativas"/"Arquivadas" são as mesmas duas do cabeçalho do painel
+ *   do desktop (`.tabBar_d9c882`, ver `ThreadsPopover`), com os mesmos rótulos,
+ *   desenhadas com as **pílulas** do primitivo `Tabs` (a variante de Amigos)
+ *   porque aqui elas ficam no corpo, abaixo da busca, e não numa barra de 48;
  * - renomear e arquivar continuam **no toque longo** da linha, como o menu de
  *   contexto do desktop — o `AreaDeToqueLongo` do shell dispara o mesmo
  *   `contextmenu`;
@@ -141,7 +142,7 @@ export default function ListaDeThreads({
         <EstadoCarregando texto="Carregando threads…" />
       ) : lista.length === 0 ? (
         <EstadoVazio
-          icone={<MessagesSquare size={40} />}
+          icone={<Threads size={40} />}
           titulo={
             busca
               ? "Nenhuma thread com esse nome."

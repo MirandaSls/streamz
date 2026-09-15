@@ -1,12 +1,6 @@
 "use client";
 
 import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import {
-  Image as ImageIcon,
-  Smile,
-  Sticker as StickerIcon,
-  type Icone,
-} from "@/components/ui/icones";
 import { Popout } from "@/components/ui/primitivos";
 import type { Attachment, Sticker } from "@streamz/shared";
 import EmojiPicker from "@/components/ui/EmojiPicker";
@@ -20,10 +14,13 @@ export type PickerTab = "emoji" | "gif" | "figurinha";
 // ordem GIF · Figurinha · Emoji: a mesma ordem, da esquerda para a direita, dos
 // três botões que abrem cada seletor na barra do composer (GIF, figurinha,
 // emoji — o de emoji é o mais próximo do texto, o último antes de enviar).
-const ABAS: { id: PickerTab; rotulo: string; Icone: Icone }[] = [
-  { id: "gif", rotulo: "GIF", Icone: ImageIcon },
-  { id: "figurinha", rotulo: "Figurinha", Icone: StickerIcon },
-  { id: "emoji", rotulo: "Emoji", Icone: Smile },
+// Sem ícone na aba: o `.navButton__08434` do Discord (`css-bruto/
+// 678906.8d928f079d6635f0.css`) é só texto — sem regra de ícone nenhuma. Os
+// rótulos pt-BR do Discord não foram medidos, ficam os nomes óbvios.
+const ABAS: { id: PickerTab; rotulo: string }[] = [
+  { id: "gif", rotulo: "GIF" },
+  { id: "figurinha", rotulo: "Figurinha" },
+  { id: "emoji", rotulo: "Emoji" },
 ];
 
 /**
@@ -92,12 +89,11 @@ const ALCA_DA_FOLHA = 28;
  * (`#121214`, a superfície de baixo do app, não a do popout), e os cabeçalhos
  * fixos das seções (`h3.sticky`) tinham que trocar **junto**, senão cada um
  * viraria uma faixa escura sobre o painel novo — é por isso que a troca
- * esperou o cartão que redesenha os seletores (2j-seletor-gif-figurinha).
- * `GifPicker` e `StickerPicker` já mudaram; o `EmojiPicker`
- * (`components/ui/EmojiPicker.tsx:420`, fora da lista deste cartão) continua
- * com `--background-base-lowest` no cabeçalho — ver "faltando" no relatório
- * do cartão. Raio 8 e `shadow-popout` são os do `Popout`, que já eram os
- * daqui.
+ * esperou o cartão que redesenha os seletores (2j-seletor-gif-figurinha,
+ * fechado pelo cartão seletores-emoji-e-figurinha). `GifPicker`,
+ * `StickerPicker` e `EmojiPicker` (`components/ui/EmojiPicker.tsx`) já usam
+ * `--background-surface-high` no cabeçalho grudado. Raio 8 e `shadow-popout`
+ * são os do `Popout`, que já eram os daqui.
  *
  * ### 3. O foco vai para a busca da aba aberta
  *
@@ -210,39 +206,60 @@ export default function PickerPanel({
       >
         <div
           ref={miolo}
-          className="flex flex-col overflow-hidden"
+          // `.contentWrapper__08434`: grid de duas linhas (30px as abas, o
+          // resto o conteúdo), `grid-row-gap:12px`, `padding-top:16px` — a
+          // linha de 30 é exatamente a altura do `.navButton__08434`
+          // (padding 8×12 + entrelinha 14). Sem `fr` na segunda linha: uma
+          // única linha `auto` num grid de altura definida recebe o espaço
+          // que sobra (passo "Maximize Tracks" do algoritmo de grid), o que
+          // aqui faz o mesmo papel do `flex-1` de antes.
+          className="grid overflow-hidden"
           style={{
             height: ehMobile
               ? `calc(60dvh - ${ALCA_DA_FOLHA}px - env(safe-area-inset-bottom))`
               : ALTURA_PICKER,
+            gridTemplateRows: "30px auto",
+            rowGap: 12,
+            paddingTop: 16,
           }}
         >
-          <div role="tablist" aria-label="Tipo de mídia" className="flex shrink-0 border-b border-border-subtle">
-            {ABAS.map(({ id, rotulo, Icone }) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                id={`${baseId}-${id}`}
-                aria-selected={tab === id}
-                aria-controls={`${baseId}-${id}-painel`}
-                tabIndex={tab === id ? 0 : -1}
-                onClick={() => trocar(id)}
-                // `px-3 py-2` com o `text-text-sm` (14px, entrelinha 18) e o
-                // traço de 2 dá 36 de altura; no dedo a aba é alvo como
-                // qualquer outro botão
-                className={`flex flex-1 items-center justify-center gap-1.5 border-b-2 px-3 py-2 text-text-sm font-medium transition ${
-                  ehMobile ? "min-h-[44px]" : ""
-                } ${
-                  tab === id
-                    ? "border-brand-500 text-text-strong"
-                    : "border-transparent text-text-muted hover:text-text-default"
-                }`}
-              >
-                <Icone size={16} aria-hidden="true" />
-                {rotulo}
-              </button>
-            ))}
+          {/* `.nav__08434` (padding 0 16) > `.navList__08434` (flex, 8px entre itens) */}
+          <div className="px-4">
+            <div role="tablist" aria-label="Tipo de mídia" className="flex items-center gap-2">
+              {ABAS.map(({ id, rotulo }) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  id={`${baseId}-${id}`}
+                  aria-selected={tab === id}
+                  aria-controls={`${baseId}-${id}-painel`}
+                  tabIndex={tab === id ? 0 : -1}
+                  onClick={() => trocar(id)}
+                  // `.navButton__08434`: sem ícone, 14px peso 600 entrelinha
+                  // 14 (por isso o tamanho é literal — o par mais próximo do
+                  // sistema, `text-text-sm`, vem com entrelinha 18), padding
+                  // 8×12, raio 8 (`rounded-lg` = `--radius-sm`, ver
+                  // `Popout.tsx:32`). Repouso `--text-default`; hover
+                  // `--control-secondary-background-hover` +
+                  // `--interactive-text-hover`; `:active` (mouse apertado)
+                  // `--control-secondary-background-active` +
+                  // `--interactive-text-active`. Ativa (`.navButtonActive__08434`)
+                  // `--background-mod-normal` + `--text-strong`; hover/active
+                  // dela escurece para `--background-mod-strong` +
+                  // `--interactive-text-active`.
+                  className={`rounded-lg px-3 py-2 text-[14px] font-semibold leading-[14px] transition-colors ${
+                    ehMobile ? "min-h-[44px]" : ""
+                  } ${
+                    tab === id
+                      ? "bg-background-mod-normal text-text-strong hover:bg-background-mod-strong hover:text-interactive-text-active active:bg-background-mod-strong active:text-interactive-text-active"
+                      : "text-text-default hover:bg-control-secondary-background-hover hover:text-interactive-text-hover active:bg-control-secondary-background-active active:text-interactive-text-active"
+                  }`}
+                >
+                  {rotulo}
+                </button>
+              ))}
+            </div>
           </div>
 
           {ABAS.map(({ id }) => (

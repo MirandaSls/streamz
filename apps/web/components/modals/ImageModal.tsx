@@ -26,7 +26,7 @@ import { BotaoDeIcone, Tooltip } from "@/components/ui/primitivos";
 import Avatar from "@/components/ui/Avatar";
 import EmojiPicker from "@/components/ui/EmojiPicker";
 import PainelFlutuante from "@/components/chat/PainelFlutuante";
-import TooltipReacao from "@/components/chat/TooltipReacao";
+import PilulaDeReacao from "@/components/chat/mensagem/PilulaDeReacao";
 import { EmojiDaReacao, rotuloDaReacao } from "@/components/chat/EmojiDeReacao";
 import { registrarUsoDeReacao } from "@/components/chat/reacoes-rapidas";
 import { itensDaImagem } from "@/components/media/menu-da-imagem";
@@ -430,12 +430,21 @@ export default function ImageModal({
                     style={{ height: alturaDoChipDeReacao(tamanhoEmoji) }}
                     className={`flex items-center gap-1.5 rounded-lg border px-1.5 ${
                       minha
-                        ? "border-brand-500 bg-brand-500/20 text-text-strong"
-                        : "border-transparent bg-background-base-lowest text-text-default"
+                        ? "border-brand-500 bg-brand-500/20"
+                        : "border-transparent bg-background-base-lowest"
                     }`}
                   >
                     <EmojiDaReacao emoji={r.emoji} tamanho={tamanhoEmoji} />
-                    <span className="text-sm font-semibold leading-none">{r.count}</span>
+                    {/* número como o da `PilulaDeReacao` (cor do
+                        `.reactionCount_f8896c` e largura mínima do print
+                        124022); sem hover, que o dedo não tem */}
+                    <span
+                      className={`min-w-3 text-center text-sm font-semibold leading-none ${
+                        minha ? "text-reaction-text-reacted-default" : "text-text-subtle"
+                      }`}
+                    >
+                      {r.count}
+                    </span>
                   </button>
                 );
               })}
@@ -545,35 +554,18 @@ export default function ImageModal({
           */}
           {messageId && reacoes.length > 0 && (
             <div className="flex max-w-[85vw] flex-wrap gap-1">
-              {reacoes.map((r) => {
-              const minha = meuId ? r.userIds.includes(meuId) : false;
-              return (
-                <TooltipReacao
+              {/* a mesma pílula da mensagem (`chat/mensagem/PilulaDeReacao`) */}
+              {reacoes.map((r) => (
+                <PilulaDeReacao
                   key={r.emoji}
                   emoji={r.emoji}
+                  count={r.count}
                   userIds={r.userIds}
+                  minha={meuId ? r.userIds.includes(meuId) : false}
                   conhecidos={conhecidos}
-                >
-                  <button
-                    type="button"
-                    aria-pressed={minha}
-                    aria-label={`${rotuloDaReacao(r.emoji)}, ${r.count} ${
-                      r.count === 1 ? "reação" : "reações"
-                    }`}
-                    onClick={() => reagir(r.emoji)}
-                    style={{ height: alturaDoChipDeReacao(tamanhoEmoji) }}
-                    className={`flex items-center gap-1.5 rounded-lg border px-1.5 transition ${
-                      minha
-                        ? "border-brand-500 bg-brand-500/20 text-text-strong"
-                        : "border-transparent bg-background-base-lowest text-text-default hover:border-border-normal"
-                    }`}
-                  >
-                    <EmojiDaReacao emoji={r.emoji} tamanho={tamanhoEmoji} />
-                    <span className="text-sm font-semibold leading-none">{r.count}</span>
-                  </button>
-                </TooltipReacao>
-              );
-            })}
+                  onClick={() => reagir(r.emoji)}
+                />
+              ))}
             </div>
           )}
         </div>

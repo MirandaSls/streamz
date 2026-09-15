@@ -1,6 +1,6 @@
 "use client";
 
-import { Link2, MessagesSquare, MoreHorizontal, X } from "@/components/ui/icones";
+import { Link2, MoreHorizontal, Threads, X } from "@/components/ui/icones";
 import { channelNotificationScope, messageLinkPath } from "@streamz/shared";
 import ThreadPanel from "@/components/chat/ThreadPanel";
 import { CamadaDeEntrada } from "@/components/mobile/entradas/pecas";
@@ -91,7 +91,7 @@ export default function TelaDeThread({
     <CamadaDeEntrada rotulo="Tópico" acima>
       <CabecalhoMobile
         aoVoltar={closeThread}
-        icone={<MessagesSquare size={20} />}
+        icone={<Threads size={20} />}
         titulo={nome ?? "Tópico"}
         acoes={
           <BotaoDeToque

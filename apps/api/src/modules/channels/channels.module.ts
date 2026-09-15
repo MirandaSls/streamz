@@ -4,6 +4,7 @@ import { CategoriesService } from "./categories.service";
 import { ChannelsController } from "./channels.controller";
 import { ChannelsService } from "./channels.service";
 import { GuildReadController } from "./guild-read.controller";
+import { ResumoDeCanalController } from "./resumo-de-canal.controller";
 import { GuildsModule } from "../guilds/guilds.module";
 import { AuthModule } from "../auth/auth.module";
 import { RealtimeModule } from "../realtime/realtime.module";
@@ -11,7 +12,7 @@ import { AuditModule } from "../audit/audit.module";
 
 @Module({
   imports: [GuildsModule, AuthModule, RealtimeModule, AuditModule],
-  controllers: [ChannelsController, CategoriesController, GuildReadController],
+  controllers: [ChannelsController, CategoriesController, GuildReadController, ResumoDeCanalController],
   providers: [ChannelsService, CategoriesService],
   exports: [ChannelsService, CategoriesService],
 })

@@ -1,8 +1,29 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { AtSign, Hash, Paperclip, Search, SlidersHorizontal, User, X } from "@/components/ui/icones";
-import { Popout, Tooltip } from "@/components/ui/primitivos";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { displayNameOf, type PublicUser } from "@streamz/shared";
+import Avatar from "@/components/ui/Avatar";
+import MaisFiltrosDaBusca, { type CanalSugerivel } from "@/components/chat/MaisFiltrosDaBusca";
+import {
+  AtSign,
+  FileText,
+  Hash,
+  Image as IconeDeImagem,
+  Link2,
+  Megaphone,
+  Paperclip,
+  Search,
+  SlidersHorizontal,
+  User,
+  Volume2,
+  X,
+} from "@/components/ui/icones";
+import { Popout, TextInput } from "@/components/ui/primitivos";
+import { useAuth } from "@/stores/auth";
+import { useChannels } from "@/stores/channels";
+import { useDMs } from "@/stores/dms";
+import { useGuilds } from "@/stores/guilds";
+import { useUI } from "@/stores/ui";
 
 export { default as HeaderIcon } from "@/components/chat/HeaderIcon";
 
@@ -45,13 +66,32 @@ export { default as HeaderIcon } from "@/components/chat/HeaderIcon";
  * telefone → vídeo → alfinete → adicionar → perfil na conversa), então não há
  * um lugar fixo "das fixadas" aqui.
  *
- * Medido no print do Discord (1919px): caixas de ícone com passo de 42px
- * (centros da tinta em 1507,5 / 1547,5 / 1590 / 1629 no `180835`) e a busca de
- * 244×32, raio 8 (`--radius-sm`), texto a 8px da borda.
+ * Medido no print do Discord (1919px): caixas de ícone com passo de 42px e a
+ * busca de 244×32, raio 8 (`--radius-sm`), texto a 8px da borda. Remedido no
+ * cartão cabecalho-do-canal, pela caixa da tinta de cada glifo no `180835`
+ * (y 36–78, fundo #1a1a1e): x1496–1515, 1540–1555, 1582–1599 e 1623–1640,
+ * centros 1505,5 / 1547,5 / 1590,5 / 1631,5 — passos de 42, 43 e 41 (126/3 =
+ * 42). O `HeaderIcon` agora tem a caixa de 32 do `.iconWrapper__9293f`, então o
+ * vão entre ícones é **10** (32 + 10 = 42; antes 24 + 18). O CSS diz
+ * `.toolbar__9293f{gap:var(--space-xs)}` = 8, que daria 40: o print manda. Da
+ * caixa do último ícone (centro 1631,5 → borda em 1647,5) até a borda da busca
+ * (x=1662) são **14**, daí o `ml-1` da busca somado aos 10.
  *
  * **A busca abre o popout "Filtros" ao ganhar foco** (cartão 2m-busca), no lugar
  * da lista de prefixos em inglês que morava num tooltip. Ver `FiltrosDaBusca`
  * logo abaixo para as medidas.
+ *
+ * Cartão cabecalho-do-canal:
+ * - **Ctrl+F** foca o campo e abre o popout: o atalho (`useKeyboardShortcuts`)
+ *   só incrementa `focoNaBusca` em `stores/ui.ts`, e o efeito daqui observa a
+ *   troca do número.
+ * - **Sugestões enquanto se digita um valor**: com o cursor num token `de:`,
+ *   `menciona:`, `em:` ou `tem:` (ou os sinônimos em inglês), o popout troca
+ *   as linhas de filtro pela lista de valores — membros do servidor (ou os
+ *   participantes da conversa), canais, tipos de anexo — e escolher uma completa
+ *   o token. Ver `SugestoesDaBusca`.
+ * - **"Mais filtros"** deixou de ser "(em breve)": abre `MaisFiltrosDaBusca`,
+ *   um modal local que monta a consulta com os mesmos prefixos.
  */
 export default function HeaderBar({
   icon,
@@ -86,9 +126,73 @@ export default function HeaderBar({
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
   /** linha realçada pelas setas (−1 = nenhuma; Enter então busca). */
   const [ativo, setAtivo] = useState(-1);
+  const [maisFiltrosAberto, setMaisFiltrosAberto] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  /**
+   * O `Modal` devolve o foco para o campo ao fechar, e o `onFocus` do campo
+   * abriria o popout por cima dos resultados que o próprio modal acabou de
+   * pedir. Este sinal engole esse único foco de volta.
+   */
+  const ignorarProximoFocoRef = useRef(false);
   const idDaLista = useId();
+
+  // Fontes das sugestões. Selecionam o estado cru e derivam em `useMemo`: um
+  // seletor do zustand que devolve array novo a cada leitura re-renderiza sem
+  // parar.
+  const membrosDoServidor = useGuilds((s) => s.members);
+  const canaisDoServidor = useChannels((s) => s.channels);
+  const conversa = useDMs((s) => (s.activeId ? s.channels.find((c) => c.id === s.activeId) : undefined));
+  const eu = useAuth((s) => s.user);
+
+  /**
+   * Quem pode ser `de:`/`menciona:`. Numa conversa direta (`semFiltroDeCanal`,
+   * a busca corre só nela) são os participantes e eu; no servidor, a lista de
+   * membros que a coluna de membros já carregou.
+   */
+  const pessoas = useMemo<PublicUser[]>(() => {
+    if (!semFiltroDeCanal) return membrosDoServidor.map((m) => m.user);
+    const lista = [...(conversa?.others ?? [])];
+    if (eu && !lista.some((u) => u.id === eu.id)) lista.push(eu);
+    return lista;
+  }, [semFiltroDeCanal, membrosDoServidor, conversa, eu]);
+
+  /**
+   * Canais para `em:`. Só os que têm nome sem espaço: a consulta é quebrada em
+   * tokens por espaço (`parseSearchQuery`), e `em:nome com espaço` viraria
+   * `em:nome` mais texto solto. Categoria não está nesta store.
+   */
+  const canais = useMemo<(CanalSugerivel & { type: string })[]>(
+    () =>
+      semFiltroDeCanal
+        ? []
+        : canaisDoServidor
+            .filter((c) => c.guildId && c.name && !/\s/.test(c.name))
+            .map((c) => ({ id: c.id, name: c.name as string, type: c.type })),
+    [semFiltroDeCanal, canaisDoServidor],
+  );
+
+  // Ctrl+F. O valor com que o cabeçalho monta não é pedido nenhum (é o
+  // contador de pedidos antigos, ou o 0 de quando a store nasce): só a troca
+  // depois da montagem conta.
+  const focoNaBusca = useUI((s) => s.focoNaBusca);
+  const focoVistoRef = useRef(focoNaBusca);
+  useEffect(() => {
+    if (focoNaBusca === focoVistoRef.current) return;
+    focoVistoRef.current = focoNaBusca;
+    const el = inputRef.current;
+    if (!el) return;
+    el.focus();
+    // com o campo já focado o `onFocus` não dispara de novo, então abre aqui
+    // (o mesmo que `abrirFiltros`, escrito com os setters para o efeito não
+    // depender de uma função recriada a cada render)
+    setAtivo(-1);
+    setFiltrosAbertos(true);
+    // Com uma busca em vigor o texto fica selecionado: digitar começa uma
+    // consulta nova (o campo fica vazio na primeira tecla), como o Ctrl+F do
+    // navegador, sem apagar a busca cujos resultados estão abertos.
+    el.select();
+  }, [focoNaBusca]);
 
   // A consulta muda por fora — o "limpar" do painel, a troca de canal que zera
   // a busca no store — e o campo precisa acompanhar, senão fica mostrando uma
@@ -99,7 +203,15 @@ export default function HeaderBar({
   }, [searchValue]);
 
   const linhas = semFiltroDeCanal ? LINHAS_DE_FILTRO.filter((l) => l.prefixo !== "em:") : LINHAS_DE_FILTRO;
-  const habilitadas = linhas.filter((l) => l.prefixo);
+
+  /** O token sob o cursor (o último da consulta) e, se for um prefixo, qual. */
+  const token = /(?:^|\s)(\S*)$/.exec(query)?.[1] ?? "";
+  const pedido = pedidoDeSugestao(token, semFiltroDeCanal);
+  // sem `useMemo`: filtrar a lista de membros a cada tecla é barato, e o
+  // `pedido` é um objeto novo por render de qualquer jeito
+  const sugestoes = pedido ? sugerir(pedido, pessoas, canais) : [];
+  /** Quantas opções as setas percorrem: as sugestões, ou as linhas de filtro. */
+  const totalDeOpcoes = pedido ? sugestoes.length : linhas.length;
 
   function abrirFiltros() {
     setAtivo(-1);
@@ -123,6 +235,48 @@ export default function HeaderBar({
       el.focus();
       el.setSelectionRange(nova.length, nova.length);
     });
+  }
+
+  /** Troca o token sob o cursor pelo prefixo digitado + o valor escolhido. */
+  function completarToken(valor: string) {
+    if (!pedido) return;
+    const nova = `${query.slice(0, query.length - token.length)}${pedido.prefixo}${valor} `;
+    setQuery(nova);
+    setAtivo(-1);
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(nova.length, nova.length);
+    });
+  }
+
+  function abrirMaisFiltros() {
+    fecharFiltros();
+    setMaisFiltrosAberto(true);
+  }
+
+  function fecharMaisFiltros() {
+    ignorarProximoFocoRef.current = true;
+    setMaisFiltrosAberto(false);
+    // se o foco não voltar para o campo (ele saiu da tela), o sinal não pode
+    // ficar armado e engolir o próximo clique de verdade
+    requestAnimationFrame(() => {
+      ignorarProximoFocoRef.current = false;
+    });
+  }
+
+  /** Enter ou clique na linha `i` do popout, nos dois modos. */
+  function escolher(i: number) {
+    if (pedido) {
+      const s = sugestoes[i];
+      if (s) completarToken(s.valor);
+      return;
+    }
+    const linha = linhas[i];
+    if (!linha) return;
+    if (linha.prefixo) inserirPrefixo(linha.prefixo);
+    else abrirMaisFiltros();
   }
 
   function limpar() {
@@ -166,7 +320,9 @@ export default function HeaderBar({
           </>
         )}
 
-        <div className="ml-auto flex shrink-0 items-center gap-[18px]">
+        {/* vão de 10 entre caixas de 32 = passo de 42; a busca leva mais 4
+            (`ml-1`), os 14 do print — ver o cabeçalho do arquivo */}
+        <div className="ml-auto flex shrink-0 items-center gap-[10px]">
           {tools}
           <form
             ref={formRef}
@@ -176,13 +332,45 @@ export default function HeaderBar({
               fecharFiltros();
               onSearch(query);
             }}
-            className="relative"
+            className="relative ml-1"
           >
-            {/* continua <input> nativo, não `TextInput`: o primitivo não expõe
-                tamanho nem o par de tokens de campo desta caixa — ver cartão m14
-                em "faltando". */}
-            <input
+            {/* `TextInput` (cartão cabecalho-do-canal), não mais `<input>` nativo.
+                O `ref` chega ao `<input>` (o primitivo é `forwardRef`), e role,
+                aria-* e os handlers passam pelo `...resto` dele.
+
+                Medidas que continuam valendo:
+                - 244×32 e raio 8: print `180835`, linha y=57 (bordas em x=1662 e
+                  x=1905) e coluna x=1750 (bordas em y=41 e y=72). Fixa, não
+                  expansível: a busca que crescia ao focar empurrava os ícones.
+                - Fundo e borda do campo do Discord: `.searchBar_c322aa`
+                  (`398929…css`) é `background:var(--input-background-default)`
+                  com `border:1px solid var(--input-border-default)`.
+                  `--input-background-default` sobre `--background-base-lower` dá
+                  o #17171a do print; a borda mede #303035.
+                - **Sem a borda limão do foco.** No print `113513`, com o popout
+                  aberto (campo em foco), as bordas de cima e de baixo (coluna
+                  x=1250, y=41 e y=72) continuam #303035. O `TextInput` pinta
+                  `has-[:focus-visible]:border-input-border-active` na caixa, e
+                  uma classe de borda nossa empataria com ela pela ordem do CSS
+                  gerado. Por isso `semCaixa` (sem `border`, a largura da borda é
+                  0 e a cor do foco não aparece) e a linha de 1px vem de um
+                  `ring-1 ring-inset`, que não compete com propriedade nenhuma.
+                  Sem a borda de verdade o conteúdo começaria 1px antes: o
+                  `paddingLateral` de 9 mantém o texto onde o `border` + `pl-2`
+                  antigo punha (1 + 8 da borda de fora).
+                - Texto 14px (`tamanhoDoTexto="sm"`) em `--text-default`.
+                  Placeholder `--input-placeholder-text-default`, e não o
+                  `text-muted` que o cartão sugeria: a tinta de "Buscar Notas" no
+                  `113513` (x1034–1113, y52–61) chega a #8f9097, que é esse token
+                  (o `text-muted` é #96979e). Print > cartão. */}
+            <TextInput
               ref={inputRef}
+              tamanho="sm"
+              semCaixa
+              paddingLateral={9}
+              classeDaCaixa="w-[244px] bg-input-background-default ring-1 ring-inset ring-input-border-default"
+              tamanhoDoTexto="sm"
+              classeDoTexto="text-text-default placeholder:text-input-placeholder-text-default"
               value={query}
               onChange={(e) => {
                 setQuery(e.target.value);
@@ -190,7 +378,13 @@ export default function HeaderBar({
                 if (!filtrosAbertos) setFiltrosAbertos(true);
                 setAtivo(-1);
               }}
-              onFocus={abrirFiltros}
+              onFocus={() => {
+                if (ignorarProximoFocoRef.current) {
+                  ignorarProximoFocoRef.current = false;
+                  return;
+                }
+                abrirFiltros();
+              }}
               // clicar numa linha não tira o foco daqui (`onMouseDown` com
               // `preventDefault` nela), então perder o foco é sair da busca
               onBlur={fecharFiltros}
@@ -198,11 +392,14 @@ export default function HeaderBar({
                 if (!filtrosAbertos) return;
                 if (e.key === "ArrowDown" || e.key === "ArrowUp") {
                   e.preventDefault();
-                  const n = habilitadas.length;
+                  const n = totalDeOpcoes;
+                  if (n === 0) return;
                   setAtivo((i) => (e.key === "ArrowDown" ? (i + 1) % n : i <= 0 ? n - 1 : i - 1));
-                } else if (e.key === "Enter" && ativo >= 0) {
+                } else if ((e.key === "Enter" || e.key === "Tab") && ativo >= 0 && ativo < totalDeOpcoes) {
+                  // Tab também completa, mas só com uma linha realçada: sem
+                  // realce ele segue o caminho normal do foco
                   e.preventDefault();
-                  inserirPrefixo(habilitadas[ativo].prefixo as string);
+                  escolher(ativo);
                 }
               }}
               type="text"
@@ -213,57 +410,36 @@ export default function HeaderBar({
               aria-expanded={filtrosAbertos}
               aria-controls={idDaLista}
               aria-autocomplete="list"
-              aria-activedescendant={ativo >= 0 ? `${idDaLista}-${ativo}` : undefined}
+              aria-activedescendant={ativo >= 0 && ativo < totalDeOpcoes ? `${idDaLista}-${ativo}` : undefined}
               aria-label={searchLabel}
               placeholder={searchPlaceholder ?? "Buscar"}
-              /* Sem o anel de foco global (`data-sem-anel`): no print
-                 `113513`, com o popout "Filtros" aberto — ou seja, com o campo
-                 em foco —, as bordas de cima e de baixo (coluna x=1250, y=41 e
-                 y=72) continuam #303035 = `--input-border-default`. A borda
-                 limão do `input:focus-visible` do globals.css não existe nesta
-                 caixa; o popout é o indicador.
-                 fixa, não mais expansível: no Discord a caixa já nasce do
-                 tamanho final. A busca que cresce ao focar empurrava os ícones
-                 vizinhos e fazia a barra inteira dançar a cada clique.
-                 244×32 e raio 8: print `180835`, linha y=57 (bordas em x=1662
-                 e x=1905) e coluna x=1750 (bordas em y=41 e y=72).
-                 Os tokens são os do campo do Discord — `.searchBar_c322aa` do
-                 CSS bruto (`398929…css`) é `background:var(--input-background-default)`
-                 com `border:1px solid var(--input-border-default)` e
-                 `border-radius:var(--radius-sm)`. `--input-background-default`
-                 (preto a 12%) sobre `--background-base-lower` dá exatamente o
-                 #17171a do print; a borda mede #303035.
-                 Placeholder `--input-placeholder-text-default`: a tinta de
-                 "Buscar Notas" no `113513` (x1034–1113, y52–61) chega a #8f9097,
-                 que é esse token, e não o #96979e do `text-muted` de antes. */
-              data-sem-anel=""
-              className="h-[32px] w-[244px] rounded-lg border border-input-border-default bg-input-background-default pl-2 pr-[30px] text-sm text-text-default outline-none placeholder:text-input-placeholder-text-default"
+              /* Lupa com o campo vazio, X com texto — a troca do Discord
+                 (a lupa no `113513` com o campo vazio; o X no GIF de suporte
+                 `how-to-use-search-on-discord/05.gif`, com `from: the_real_phibi`).
+                 Tinta da lupa: 15×15 em #abacb2 = `--input-icon-default`
+                 (`113513`, x1247–1261, y49–63), a 5px da borda direita. No
+                 `sufixo` a caixa do ícone termina no padding de 9; o `-mr-1`
+                 devolve os 4 e ela volta a 5 da borda, onde o `right-[5px]`
+                 absoluto antigo a punha. */
+              sufixo={
+                <span className="-mr-1 flex shrink-0 items-center">
+                  {comTexto ? (
+                    <button
+                      type="button"
+                      aria-label="Limpar a busca"
+                      // o clique não pode tirar o foco do campo antes de limpar
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={limpar}
+                      className="flex h-[20px] w-[20px] items-center justify-center rounded text-input-icon-default hover:text-interactive-text-hover"
+                    >
+                      <X size={16} aria-hidden="true" />
+                    </button>
+                  ) : (
+                    <Search size={17} aria-hidden="true" className="pointer-events-none text-input-icon-default" />
+                  )}
+                </span>
+              }
             />
-            {/* Lupa com o campo vazio, X com texto — a troca do Discord
-                (a lupa no `113513` com o campo vazio; o X no GIF de suporte
-                `how-to-use-search-on-discord/05.gif`, com `from: the_real_phibi`).
-                Tinta da lupa: 15×15 em #abacb2 = `--input-icon-default`
-                (`113513`, x1247–1261, y49–63), a 5px da borda direita — o
-                `size={17}` com `right-[5px]` já dava 15px de tinta e os mesmos 5
-                na nossa `busca.png` (x1466–1481 contra a borda em 1487). */}
-            {comTexto ? (
-              <button
-                type="button"
-                aria-label="Limpar a busca"
-                // o clique não pode tirar o foco do campo antes de limpar
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={limpar}
-                className="absolute right-[5px] top-1/2 flex h-[20px] w-[20px] -translate-y-1/2 items-center justify-center rounded text-input-icon-default hover:text-interactive-text-hover"
-              >
-                <X size={16} aria-hidden="true" />
-              </button>
-            ) : (
-              <Search
-                size={17}
-                aria-hidden="true"
-                className="pointer-events-none absolute right-[5px] top-1/2 -translate-y-1/2 text-input-icon-default"
-              />
-            )}
           </form>
           <Popout
             aberto={filtrosAbertos}
@@ -295,14 +471,42 @@ export default function HeaderBar({
             superficie="nenhuma"
             className="w-[356px] rounded-lg border border-border-subtle bg-background-surface-high px-2 py-3 shadow-shadow-high anim-menu"
           >
-            <FiltrosDaBusca
-              idDaLista={idDaLista}
-              linhas={linhas}
-              ativo={ativo}
-              aoEscolher={inserirPrefixo}
-              aoApontar={(i) => setAtivo(i)}
-            />
+            {pedido ? (
+              <SugestoesDaBusca
+                idDaLista={idDaLista}
+                titulo={TITULO_DA_SUGESTAO[pedido.tipo]}
+                sugestoes={sugestoes}
+                ativo={ativo}
+                aoEscolher={escolher}
+                aoApontar={(i) => setAtivo(i)}
+              />
+            ) : (
+              <FiltrosDaBusca
+                idDaLista={idDaLista}
+                linhas={linhas}
+                ativo={ativo}
+                aoEscolher={escolher}
+                aoApontar={(i) => setAtivo(i)}
+              />
+            )}
           </Popout>
+          {/* Fora do `<form>` de busca: o modal é portal, mas os eventos
+              sintéticos sobem pela árvore do React, e o envio do formulário
+              dele chegaria ao `onSubmit` daqui. */}
+          {maisFiltrosAberto && (
+            <MaisFiltrosDaBusca
+              consulta={query}
+              membros={pessoas}
+              canais={canais}
+              semFiltroDeCanal={semFiltroDeCanal}
+              aoFechar={fecharMaisFiltros}
+              aoBuscar={(nova) => {
+                setQuery(nova);
+                fecharMaisFiltros();
+                onSearch(nova);
+              }}
+            />
+          )}
         </div>
       </header>
     </>
@@ -312,7 +516,7 @@ export default function HeaderBar({
 interface LinhaDeFiltro {
   icone: ReactNode;
   titulo: string;
-  /** o que se digita; `null` = linha sem filtro por trás (fica "em breve"). */
+  /** o que se digita; `null` = a linha "Mais filtros", que abre o modal. */
   prefixo: string | null;
   dica: string;
 }
@@ -320,10 +524,9 @@ interface LinhaDeFiltro {
 /**
  * As cinco linhas do popout, na ordem e com o texto do Discord em pt-BR (print
  * 1:1 `docs/Reference/Captura de tela 2026-09-01 113513.png`). A última abre o
- * modal "Filtros" do Discord (datas, tipo de autor…), que o Streamz não tem:
- * fica visível e desabilitada com "(em breve)" (§6.6 do PROCESSO). As datas já
- * funcionam digitadas (`antes:`, `depois:`, `durante:`) — o painel de
- * resultados ensina isso quando não acha nada.
+ * modal de filtros: no Streamz, `MaisFiltrosDaBusca`, que monta a consulta com
+ * os prefixos que a API já entende (datas incluídas). "Tipo de autor" da dica
+ * do Discord não existe na API e não entrou no modal.
  */
 const LINHAS_DE_FILTRO: LinhaDeFiltro[] = [
   { icone: <User size={20} />, titulo: "De um usuário específico", prefixo: "de:", dica: "usuário" },
@@ -368,7 +571,8 @@ function FiltrosDaBusca({
   idDaLista: string;
   linhas: LinhaDeFiltro[];
   ativo: number;
-  aoEscolher: (prefixo: string) => void;
+  /** índice da linha; quem chama decide se insere o prefixo ou abre o modal. */
+  aoEscolher: (indice: number) => void;
   aoApontar: (indice: number) => void;
 }) {
   return (
@@ -396,38 +600,19 @@ function FiltrosDaBusca({
             </>
           );
 
-          if (!linha.prefixo) {
-            return (
-              <Tooltip key={linha.titulo} rotulo="Mais filtros (em breve)" lado="left" className="w-full">
-                <div
-                  role="option"
-                  aria-disabled="true"
-                  aria-selected={false}
-                  onMouseDown={(e) => e.preventDefault()}
-                  className="flex h-[48px] w-full cursor-not-allowed items-center gap-2 rounded-lg px-2 opacity-50"
-                >
-                  {conteudo}
-                </div>
-              </Tooltip>
-            );
-          }
-
-          // o índice das setas conta só as linhas que filtram (a desabilitada
-          // não recebe realce), na mesma ordem de `habilitadas` no HeaderBar
-          const meu = linhas.slice(0, i).filter((l) => l.prefixo).length;
-          const realcada = ativo === meu;
+          const realcada = ativo === i;
           return (
             <div
               key={linha.titulo}
-              id={`${idDaLista}-${meu}`}
+              id={`${idDaLista}-${i}`}
               role="option"
               aria-selected={realcada}
               // `preventDefault` no mousedown: o foco fica no campo e o `onBlur`
               // dele não fecha o popout antes do clique chegar
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => aoEscolher(linha.prefixo as string)}
+              onClick={() => aoEscolher(i)}
               onPointerMove={() => {
-                if (!realcada) aoApontar(meu);
+                if (!realcada) aoApontar(i);
               }}
               className={`flex h-[48px] cursor-pointer items-center gap-2 rounded-lg px-2 ${
                 realcada ? "bg-interactive-background-hover" : ""
@@ -437,6 +622,196 @@ function FiltrosDaBusca({
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+type TipoDeSugestao = "de" | "menciona" | "em" | "tem";
+
+interface PedidoDeSugestao {
+  tipo: TipoDeSugestao;
+  /** o prefixo como foi digitado (`de:`, `from:`…), mantido ao completar. */
+  prefixo: string;
+  /** o que já foi digitado depois dele. */
+  valor: string;
+}
+
+/**
+ * Prefixo → tipo de sugestão. Os mesmos nomes e sinônimos em inglês que
+ * `PREFIXOS_DE_BUSCA` (`packages/shared/src/mensagens.ts`) aceita; as datas
+ * (`antes:`, `depois:`, `durante:`) não têm lista a sugerir.
+ */
+const TIPO_DO_PREFIXO: Record<string, TipoDeSugestao> = {
+  de: "de",
+  from: "de",
+  menciona: "menciona",
+  mentions: "menciona",
+  em: "em",
+  in: "em",
+  tem: "tem",
+  has: "tem",
+};
+
+const PREFIXO_SUGERIVEL_RE = /^(de|from|menciona|mentions|em|in|tem|has):(.*)$/i;
+
+/** O token digitado pede sugestões? `em:` numa conversa direta não pede: a API o ignora. */
+function pedidoDeSugestao(token: string, semFiltroDeCanal: boolean): PedidoDeSugestao | null {
+  const m = PREFIXO_SUGERIVEL_RE.exec(token);
+  if (!m) return null;
+  const tipo = TIPO_DO_PREFIXO[m[1].toLowerCase()];
+  if (tipo === "em" && semFiltroDeCanal) return null;
+  return { tipo, prefixo: `${m[1]}:`, valor: m[2] };
+}
+
+interface Sugestao {
+  chave: string;
+  /** o que entra na consulta depois do prefixo. */
+  valor: string;
+  titulo: string;
+  detalhe?: string;
+  icone: ReactNode;
+}
+
+/**
+ * Valores de `tem:` que o `parseSearchQuery` aceita, em pt-BR (os sinônimos em
+ * inglês — `image`, `file` — também funcionam digitados, mas a lista fica na
+ * língua do app). "anexo" e "arquivo" são o mesmo `file` na API; os dois
+ * aparecem porque a dica do Discord em pt-BR escreve os dois.
+ */
+const OPCOES_DE_TEM: { valor: string; detalhe: string; icone: ReactNode }[] = [
+  { valor: "link", detalhe: "mensagens com link", icone: <Link2 size={16} /> },
+  { valor: "imagem", detalhe: "mensagens com imagem", icone: <IconeDeImagem size={16} /> },
+  { valor: "arquivo", detalhe: "mensagens com qualquer anexo", icone: <FileText size={16} /> },
+  { valor: "anexo", detalhe: "mensagens com qualquer anexo", icone: <Paperclip size={16} /> },
+];
+
+/** Teto da lista: "não medido" — cabe no popout sem rolar (24 + 10 × 36 + 24). */
+const MAXIMO_DE_SUGESTOES = 10;
+
+const TITULO_DA_SUGESTAO: Record<TipoDeSugestao, string> = {
+  de: "De um usuário",
+  menciona: "Menciona um usuário",
+  em: "Em um canal",
+  tem: "Inclui",
+};
+
+function normalizar(texto: string): string {
+  return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+}
+
+/**
+ * Filtra por "contém", com quem **começa** pelo digitado primeiro — digitar
+ * `de:an` põe "ana" antes de "juliana". O valor que entra na consulta é o que a
+ * API compara: `username` exato para pessoas (`messages.service.ts`,
+ * `searchWhere`) e o nome do canal para `em:`.
+ */
+function sugerir(pedido: PedidoDeSugestao, pessoas: PublicUser[], canais: (CanalSugerivel & { type: string })[]): Sugestao[] {
+  const alvo = normalizar(pedido.valor.replace(/^[@#]/, ""));
+  const ordenar = <T,>(itens: T[], textos: (item: T) => string[]): T[] => {
+    const comPeso = itens
+      .map((item) => {
+        const t = textos(item).map(normalizar);
+        const peso = !alvo || t.some((x) => x.startsWith(alvo)) ? 0 : t.some((x) => x.includes(alvo)) ? 1 : -1;
+        return { item, peso };
+      })
+      .filter((x) => x.peso >= 0);
+    comPeso.sort((a, b) => a.peso - b.peso);
+    return comPeso.slice(0, MAXIMO_DE_SUGESTOES).map((x) => x.item);
+  };
+
+  if (pedido.tipo === "de" || pedido.tipo === "menciona") {
+    return ordenar(pessoas, (u) => [u.username, displayNameOf(u)]).map((u) => {
+      const nome = displayNameOf(u);
+      return {
+        chave: u.id,
+        valor: u.username,
+        titulo: nome,
+        detalhe: nome === u.username ? undefined : u.username,
+        icone: <Avatar user={u} size="sm" />,
+      };
+    });
+  }
+  if (pedido.tipo === "em") {
+    return ordenar(canais, (c) => [c.name]).map((c) => {
+      const Icone = c.type === "VOICE" ? Volume2 : c.type === "ANNOUNCEMENT" ? Megaphone : Hash;
+      return { chave: c.id, valor: c.name, titulo: c.name, icone: <Icone size={20} /> };
+    });
+  }
+  return ordenar(OPCOES_DE_TEM, (o) => [o.valor]).map((o) => ({
+    chave: o.valor,
+    valor: o.valor,
+    titulo: o.valor,
+    detalhe: o.detalhe,
+    icone: o.icone,
+  }));
+}
+
+/**
+ * O popout no modo sugestão: mesma caixa, mesmo título em caixa-alta e o mesmo
+ * realce do `FiltrosDaBusca`, com linhas de uma linha só.
+ *
+ * **Não medido**: não há print das sugestões do Discord nesta leva. A linha de
+ * 36 com avatar de 24 (`Avatar size="sm"`) e ícone de 20 é a escala das listas
+ * do app, e o título/detalhe em 14px usam os tokens das linhas de filtro
+ * (`--text-strong` e `--text-muted`).
+ */
+function SugestoesDaBusca({
+  idDaLista,
+  titulo,
+  sugestoes,
+  ativo,
+  aoEscolher,
+  aoApontar,
+}: {
+  idDaLista: string;
+  titulo: string;
+  sugestoes: Sugestao[];
+  ativo: number;
+  aoEscolher: (indice: number) => void;
+  aoApontar: (indice: number) => void;
+}) {
+  return (
+    <div>
+      <div
+        id={`${idDaLista}-titulo`}
+        className="h-[24px] px-2 pb-[6px] pt-[2px] text-text-xs font-semibold leading-4 text-text-subtle"
+      >
+        {titulo}
+      </div>
+      <div role="listbox" id={idDaLista} aria-labelledby={`${idDaLista}-titulo`}>
+        {sugestoes.length === 0 ? (
+          <div className="flex h-[36px] items-center px-2 text-text-sm text-text-muted">Nenhum resultado</div>
+        ) : (
+          sugestoes.map((s, i) => {
+            const realcada = ativo === i;
+            return (
+              <div
+                key={s.chave}
+                id={`${idDaLista}-${i}`}
+                role="option"
+                aria-selected={realcada}
+                // o foco fica no campo, como nas linhas de filtro
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => aoEscolher(i)}
+                onPointerMove={() => {
+                  if (!realcada) aoApontar(i);
+                }}
+                className={`flex h-[36px] cursor-pointer items-center gap-2 rounded-lg px-2 ${
+                  realcada ? "bg-interactive-background-hover" : ""
+                }`}
+              >
+                <span className="flex h-[24px] w-[24px] shrink-0 items-center justify-center text-icon-muted" aria-hidden="true">
+                  {s.icone}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-text-sm">
+                  <span className="font-semibold text-text-strong">{s.titulo}</span>
+                  {s.detalhe && <span className="ml-2 text-text-muted">{s.detalhe}</span>}
+                </span>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );

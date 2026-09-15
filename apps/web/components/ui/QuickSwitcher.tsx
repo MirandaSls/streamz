@@ -1,14 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Hash, Lock, Megaphone, Server, Users, Volume2 } from "@/components/ui/icones";
-import { isGroupChannel, type Channel, type PublicUser, type UserStatus } from "@streamz/shared";
+import {
+  isGroupChannel,
+  isUnread,
+  type Category,
+  type Channel,
+  type PublicUser,
+  type UserStatus,
+} from "@streamz/shared";
 import Dialog from "@/components/modals/Dialog";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import Avatar, { GroupAvatar } from "@/components/ui/Avatar";
 import { api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { rank, type QuickItem, type QuickKind } from "@/lib/quick-switcher";
+import { useCategories } from "@/stores/categories";
 import { useChannels } from "@/stores/channels";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
@@ -39,6 +47,18 @@ const PREFIXO_USUARIO = "user:";
  * problema que isso resolve.
  */
 const cacheDeCanais = new Map<string, Channel[]>();
+/**
+ * Categorias dos outros servidores, na mesma busca dos canais: o nome da
+ * categoria vai colado ao nome do canal (`.note__71961`), e a rota de servidor
+ * não traz categoria. Falhar aqui só apaga a nota, não vira aviso de erro.
+ */
+const cacheDeCategorias = new Map<string, Category[]>();
+
+/**
+ * Caracteres que, no começo da busca, filtram por tipo: `#` `@` `*` são do
+ * matcher (`lib/quick-switcher.ts`), `!` é o filtro de voz deste modal.
+ */
+const PREFIXOS_DE_BUSCA = "#@*!";
 
 function lerRecentes(): string[] {
   try {
@@ -84,14 +104,22 @@ interface Detalhe {
   grupo?: { iconUrl: string | null; members: PublicUser[] };
   /** servidor: ícone próprio. */
   guild?: { name: string; iconUrl: string | null };
-  /** servidor a que o canal pertence (para o "Servidor › #canal"). */
+  /** servidor a que o canal pertence (a navegação troca de servidor por ele). */
   guildId?: string | null;
+  /** canal: nome da categoria, em versalete colado ao nome (`.note__71961`). */
+  nota?: string;
+  /** conversa 1-a-1 ou amigo: o nome de usuário depois do nome (`.username__71961`). */
+  usuario?: string;
+  /** há mensagem depois do que eu li: o nome vai em `text-strong` (`.contentUnread__71961`). */
+  naoLido?: boolean;
 }
 
 export default function QuickSwitcher() {
   const t = useT();
   const closeModal = useUI((s) => s.closeModal);
   const canaisDoAtivo = useChannels((s) => s.channels);
+  const categoriasCarregadas = useCategories((s) => s.categories);
+  const guildDasCategorias = useCategories((s) => s.guildId);
   const dms = useDMs((s) => s.channels);
   const guilds = useGuilds((s) => s.guilds);
   const amigos = useFriends((s) => s.friends);
@@ -105,6 +133,9 @@ export default function QuickSwitcher() {
   const [tecladoNoComando, setTecladoNoComando] = useState(false);
   const [canaisPorServidor, setCanaisPorServidor] = useState<Map<string, Channel[]>>(
     () => new Map(cacheDeCanais),
+  );
+  const [categoriasPorServidor, setCategoriasPorServidor] = useState<Map<string, Category[]>>(
+    () => new Map(cacheDeCategorias),
   );
   /** estado "carregando": a busca dos canais dos outros servidores está em voo. */
   const [carregando, setCarregando] = useState(false);
@@ -123,17 +154,23 @@ export default function QuickSwitcher() {
     setErroAoCarregar(false);
     void Promise.all(
       faltando.map((g) =>
-        api
-          .getGuild(g.id)
-          .then((cheio) => {
+        Promise.all([
+          api.getGuild(g.id).then((cheio) => {
             cacheDeCanais.set(g.id, cheio.channels ?? []);
             return true;
-          })
+          }),
+          api
+            .listCategories(g.id)
+            .then((lista) => cacheDeCategorias.set(g.id, lista))
+            .catch(() => undefined),
+        ])
+          .then(() => true)
           .catch(() => false),
       ),
     ).then((sucessos) => {
       if (!vivo) return;
       setCanaisPorServidor(new Map(cacheDeCanais));
+      setCategoriasPorServidor(new Map(cacheDeCategorias));
       setCarregando(false);
       setErroAoCarregar(sucessos.some((ok) => !ok));
     });
@@ -146,6 +183,14 @@ export default function QuickSwitcher() {
     const detalhes = new Map<string, Detalhe>();
     const itens: QuickItem[] = [];
     const nomeDoServidor = new Map(guilds.map((g) => [g.id, g.name]));
+    const nomeDaCategoria = new Map<string, string>();
+    for (const lista of categoriasPorServidor.values()) {
+      for (const c of lista) nomeDaCategoria.set(c.id, c.name);
+    }
+    // as do servidor ativo vêm do store (ficam em dia com renomear/criar)
+    if (activeGuildId && guildDasCategorias === activeGuildId) {
+      for (const c of categoriasCarregadas) nomeDaCategoria.set(c.id, c.name);
+    }
 
     const todosOsCanais: { canal: Channel; guildId: string }[] = [];
     for (const c of canaisDoAtivo) {
@@ -168,12 +213,17 @@ export default function QuickSwitcher() {
                 ? "private"
                 : "",
         guildId,
+        nota: canal.categoryId ? nomeDaCategoria.get(canal.categoryId) : undefined,
+        naoLido: isUnread(canal),
       });
+      // à direita só o servidor, como no print (`03-troca-rapida.png`: "Plant
+      // Pals"); o antigo "Servidor › #canal" repetia o nome e punha `#` até
+      // em canal de voz
       itens.push({
         id: canal.id,
         kind: "channel",
         label: canal.name ?? "canal",
-        hint: `${nomeDoServidor.get(guildId) ?? ""} › #${canal.name ?? "canal"}`,
+        hint: nomeDoServidor.get(guildId),
       });
     }
 
@@ -187,26 +237,23 @@ export default function QuickSwitcher() {
         variante: grupo ? "GROUP" : "",
         user: outro,
         grupo: grupo ? { iconUrl: d.iconUrl, members: d.others } : undefined,
+        // sem apelido o título já é o usuário: não repete o mesmo nome
+        usuario: outro && dmTitle(d) !== outro.username ? outro.username : undefined,
+        naoLido: isUnread(d),
       });
-      itens.push({
-        id: d.id,
-        kind: "dm",
-        label: dmTitle(d),
-        hint: outro ? `@${outro.username}` : undefined,
-      });
+      itens.push({ id: d.id, kind: "dm", label: dmTitle(d) });
     }
 
     // amigos que ainda não têm conversa: escolher um deles abre a conversa
     for (const a of amigos) {
       if (comConversa.has(a.id)) continue;
       const id = `${PREFIXO_USUARIO}${a.id}`;
-      detalhes.set(id, { kind: "dm", user: a });
-      itens.push({
-        id,
+      detalhes.set(id, {
         kind: "dm",
-        label: a.displayName?.trim() || a.username,
-        hint: `@${a.username}`,
+        user: a,
+        usuario: a.displayName?.trim() ? a.username : undefined,
       });
+      itens.push({ id, kind: "dm", label: a.displayName?.trim() || a.username });
     }
 
     for (const g of guilds) {
@@ -215,7 +262,17 @@ export default function QuickSwitcher() {
     }
 
     return { itens, detalhes };
-  }, [canaisDoAtivo, canaisPorServidor, dms, amigos, guilds, activeGuildId]);
+  }, [
+    canaisDoAtivo,
+    canaisPorServidor,
+    categoriasPorServidor,
+    categoriasCarregadas,
+    guildDasCategorias,
+    dms,
+    amigos,
+    guilds,
+    activeGuildId,
+  ]);
 
   /** `!` filtra canais de voz; os outros prefixos são do próprio matcher. */
   const soVoz = query.trimStart().startsWith("!");
@@ -275,6 +332,49 @@ export default function QuickSwitcher() {
 
   const vazia = !query.trim();
 
+  /*
+   * Pílula no caractere de prefixo (`.autocompleteQuerySymbol_ac6cb0` em
+   * `css-bruto/599266.ab3918065004d411.css`: `background-color:var(--background-
+   * base-lowest);border-radius:4px;font-family:var(--font-code);padding:2px`).
+   * Um `<input>` não pinta um caractere só, então o campo vira três camadas
+   * alinhadas pixel a pixel (mesma fonte, tamanho, borda e recuo):
+   *   1. embaixo, o fundo do campo e a pílula (`EspelhoDoCampo camada="pilula"`);
+   *   2. no meio, o próprio `<input>`, com fundo e texto transparentes: cursor,
+   *      seleção e rolagem continuam sendo do navegador;
+   *   3. em cima, o texto visível (`camada="texto"`), sem fundo nenhum.
+   * A pílula fica ATRÁS do input para não cobrir o cursor, que na hora de
+   * digitar mora exatamente colado ao prefixo. O caractere ocupa a largura dele
+   * na fonte do campo (é por ela que o navegador põe o cursor) e o glifo mono é
+   * centrado por cima; os 2px de padding saem para fora dessa largura em vez de
+   * empurrar o texto (no Discord empurram, mas lá o texto não divide espaço com
+   * um input). A rolagem horizontal do input é copiada para as duas camadas.
+   * Sem print 1:1 do campo com prefixo digitado para conferir: a pílula segue só
+   * o CSS; o print do blog mostra a mesma classe no PROTIP, não no campo.
+   */
+  const inicioDaBusca = query.length - query.trimStart().length;
+  const caractereInicial = query.charAt(inicioDaBusca);
+  const prefixo =
+    caractereInicial && PREFIXOS_DE_BUSCA.includes(caractereInicial) ? caractereInicial : null;
+  const campoRef = useRef<HTMLInputElement>(null);
+  const [rolagem, setRolagem] = useState(0);
+  function copiarRolagem() {
+    const campo = campoRef.current;
+    if (!campo) return;
+    setRolagem(campo.scrollLeft);
+    // o navegador rola até o cursor depois de desenhar o caractere novo
+    requestAnimationFrame(() => {
+      if (campoRef.current) setRolagem(campoRef.current.scrollLeft);
+    });
+  }
+  // texto novo pode rolar o campo sem evento de rolagem (colar, apagar tudo)
+  useLayoutEffect(() => {
+    const campo = campoRef.current;
+    if (!campo) return;
+    setRolagem(campo.scrollLeft);
+    const quadro = requestAnimationFrame(() => setRolagem(campo.scrollLeft));
+    return () => cancelAnimationFrame(quadro);
+  }, [query]);
+
   return (
     <Dialog
       title={t("quick.titulo")}
@@ -314,50 +414,84 @@ export default function QuickSwitcher() {
       {/* No celular o campo fica **preso no topo** da área que rola: a lista
           passa por baixo dele, e o que se digita continua à vista. */}
       <div className={ehMobile ? "sticky top-0 z-10 bg-background-surface-high px-4 pb-2 pt-4" : "px-5 pt-3"}>
-        <input
-          autoFocus
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowDown") {
-              e.preventDefault();
-              navegar(1);
-            } else if (e.key === "ArrowUp") {
-              e.preventDefault();
-              navegar(-1);
-            } else if (e.key === "Enter") {
-              e.preventDefault();
-              escolher(resultados[cursor]);
-            }
-          }}
-          aria-label={t("quick.placeholder")}
-          aria-controls="quick-switcher-resultados"
-          placeholder={t("quick.placeholder")}
-          // só no celular: o teclado virtual corrigiria e capitalizaria nomes de
-          // canal; no desktop o campo continua exatamente como era
-          enterKeyHint={ehMobile ? "go" : undefined}
-          autoComplete={ehMobile ? "off" : undefined}
-          autoCapitalize={ehMobile ? "none" : undefined}
-          spellCheck={ehMobile ? false : undefined}
-          /* No celular, 48 de altura e 16px: os 70/22 do `.input_ac6cb0` são a
-             caixa do desktop. 48 é a altura dos campos do app de celular
-             (`TextInput` `md` com `celular:h-[48px]`, o campo do login), e 16 é
-             o mínimo que impede o zoom automático do iOS ao focar. A caixa do
-             Discord no celular não está medida no acervo. Tokens iguais. */
-          className={`w-full rounded-lg border border-input-border-default bg-input-background-default px-3 text-text-default outline-none placeholder:text-input-placeholder-text-default focus:border-input-border-active ${
-            ehMobile ? "h-[48px] text-text-md" : "h-[70px] text-[22px] leading-[70px]"
-          }`}
-        />
+        {/* o fundo do campo mora aqui (camada 1), porque o input é transparente */}
+        <div className="relative rounded-lg bg-input-background-default">
+          {prefixo && (
+            <EspelhoDoCampo
+              camada="pilula"
+              antes={query.slice(0, inicioDaBusca)}
+              prefixo={prefixo}
+              depois=""
+              rolagem={rolagem}
+              ehMobile={ehMobile}
+            />
+          )}
+          <input
+            ref={campoRef}
+            autoFocus
+            onScroll={copiarRolagem}
+            onSelect={copiarRolagem}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                navegar(1);
+              } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                navegar(-1);
+              } else if (e.key === "Enter") {
+                e.preventDefault();
+                escolher(resultados[cursor]);
+              }
+            }}
+            aria-label={t("quick.placeholder")}
+            aria-controls="quick-switcher-resultados"
+            placeholder={t("quick.placeholder")}
+            // só no celular: o teclado virtual corrigiria e capitalizaria nomes de
+            // canal; no desktop o campo continua exatamente como era
+            enterKeyHint={ehMobile ? "go" : undefined}
+            autoComplete={ehMobile ? "off" : undefined}
+            autoCapitalize={ehMobile ? "none" : undefined}
+            spellCheck={ehMobile ? false : undefined}
+            /* No celular, 48 de altura e 16px: os 70/22 do `.input_ac6cb0` são a
+               caixa do desktop. 48 é a altura dos campos do app de celular
+               (`TextInput` `md` com `celular:h-[48px]`, o campo do login), e 16 é
+               o mínimo que impede o zoom automático do iOS ao focar. A caixa do
+               Discord no celular não está medida no acervo. Tokens iguais. */
+            className={`relative z-[1] block w-full rounded-lg border border-input-border-default bg-transparent px-3 outline-none placeholder:text-input-placeholder-text-default focus:border-input-border-active ${
+              ehMobile ? "h-[48px] text-text-md" : "h-[70px] text-[22px] leading-[70px]"
+            } ${
+              // com prefixo o texto visível é o da camada de cima; o cursor
+              // precisa de cor própria, senão herdaria o transparente
+              prefixo
+                ? "text-transparent caret-text-default selection:text-transparent"
+                : "text-text-default"
+            }`}
+          />
+          {prefixo && (
+            <EspelhoDoCampo
+              camada="texto"
+              antes={query.slice(0, inicioDaBusca)}
+              prefixo={prefixo}
+              depois={query.slice(inicioDaBusca + 1)}
+              rolagem={rolagem}
+              ehMobile={ehMobile}
+            />
+          )}
+        </div>
       </div>
 
       {/* `margin-top:16px` do `.scroller_ac6cb0` antes da lista de resultados. */}
       <div className={ehMobile ? "mt-2" : "mt-4"}>
-        {/* cor do rótulo: não achamos CSS específico do quick switcher para
-         *  este cabeçalho, então reaproveitamos o mesmo token da lista irmã
-         *  (`.contentTitle__13533{color:var(--interactive-text-default)}` em
-         *  `Autocomplete.tsx`) — mesma família de lista, mesmo papel visual. */}
+        {/* `.header__71961` (`css-bruto/343264.b7207c1102406500.css`):
+         *  `color:var(--interactive-text-default);font-size:12px;font-weight:
+         *  semibold;letter-spacing:.025em;line-height:30px;margin-top:4px;
+         *  text-transform:uppercase`. Com os 16px do scroller, a 1ª linha começa
+         *  16+4+30 = 50px abaixo do campo. O texto en do print é "PREVIOUS
+         *  CHANNELS"; a chave `quick.recentes` mora em `lib/i18n.ts`. */}
         {vazia && resultados.length > 0 && (
-          <p className="px-5 pb-1 text-text-xs font-semibold uppercase text-interactive-text-default">
+          <p className="mt-1 px-5 text-text-xs font-semibold uppercase leading-[30px] tracking-[.025em] text-interactive-text-default">
             {t("quick.recentes")}
           </p>
         )}
@@ -391,7 +525,16 @@ export default function QuickSwitcher() {
         {/* `.resultsArea_ac6cb0{height:262px}` mede a caixa cheia (com a
          *  ilustração do estado vazio, que não temos — ver "faltando"); aqui
          *  vira teto (`max-h`), não altura fixa, para não sobrar caixa cinza
-         *  vazia atrás de uma linha de texto só. */}
+         *  vazia atrás de uma linha de texto só.
+         *
+         *  Alinhamento lateral: no print (`03-troca-rapida.png`) a linha
+         *  selecionada tem as mesmas bordas do campo (x371–1230). O Discord
+         *  consegue isso com `.scroller_ac6cb0{margin-inline-end:-17px}`, que
+         *  conta com uma barra de 17px. A nossa barra fina tem outra largura
+         *  (≈10px na captura, 0 onde a barra flutua), então a lista começa no
+         *  recuo do campo (`pl-5`), sem recuo à direita, e a linha tem no máximo
+         *  a largura do campo: 570 − 2 de borda − 2×20 de recuo = 528. Sobra à
+         *  direita espaço para a barra, qualquer que seja a largura dela. */}
         <ul
           id="quick-switcher-resultados"
           ref={listaRef}
@@ -399,7 +542,7 @@ export default function QuickSwitcher() {
           aria-label={t("quick.titulo")}
           onMouseMove={() => setTecladoNoComando(false)}
           /* no celular sem teto: a lista rola com a tela cheia inteira */
-          className={ehMobile ? "px-2 pb-3" : "max-h-[262px] overflow-y-auto px-2 pb-3"}
+          className={ehMobile ? "px-2 pb-3" : "max-h-[262px] overflow-y-auto pb-3 pl-5"}
         >
           {resultados.length === 0 && (
             <li className="px-3 py-10 text-center">
@@ -422,22 +565,64 @@ export default function QuickSwitcher() {
                   // o `mouseenter` sintético do toque moveria o cursor à toa
                   onMouseEnter={() => !ehMobile && !tecladoNoComando && setCursor(indice)}
                   onClick={() => escolher(item)}
-                  // linha selecionada: cinza neutro (`interactive-background-hover`),
-                  // nunca o limão — é a mesma correção que `Autocomplete.tsx` já fez
-                  // (comentário lá: "era bg-interactive-background-selected, a cor
-                  // errada"); aqui o erro era pior (brand-500 sólido).
-                  /* No celular, 48: o passo da lista de conversas do Discord no
+                  /* Desktop: `.result__71961{height:34px;border-radius:3px;
+                     font-size:16px;font-weight:medium}` e `.content__71961{
+                     line-height:34px;padding:0 10px}` (`css-bruto/343264`); no
+                     print a linha selecionada tem ≈34px (55px de imagem a 1,627).
+                     Selecionada: `.result__71961[aria-selected=true]{background:
+                     var(--interactive-background-selected)}`, o cinza neutro da
+                     própria peça, nunca o limão. Nome: `.contentDefault__71961`
+                     = `interactive-text-default`, e `text-strong` só com não
+                     lidas (`.contentUnread__71961`); a seleção não clareia o
+                     texto (no print "Big Wumpus" selecionado tem a mesma cor de
+                     "general"). O corpo já é 16px, então não há classe de tamanho.
+                     No celular, 48: o passo da lista de conversas do Discord no
                      celular (`MEDIDAS.md` §9, 47,7pt), a lista de nomes com
                      avatar mais parecida que o acervo mede — acima do piso de
                      44. O toque acende com `active:`, não com o cursor. */
-                  className={`flex w-full items-center gap-2 rounded px-2 text-left text-text-default ${
-                    ehMobile ? "h-[48px] active:bg-interactive-background-hover" : "h-10"
-                  } ${selecionado ? "bg-interactive-background-hover" : ""}`}
+                  className={`flex w-full items-center text-left font-medium ${
+                    detalhe?.naoLido ? "text-text-strong" : "text-interactive-text-default"
+                  } ${
+                    ehMobile
+                      ? "h-[48px] gap-2 rounded px-2 active:bg-interactive-background-hover"
+                      : "h-[34px] max-w-[528px] rounded-[3px] px-[10px] leading-[34px]"
+                  } ${selecionado ? "bg-interactive-background-selected" : ""}`}
                 >
-                  <ItemIcon detalhe={detalhe} statuses={statuses} selecionado={selecionado} />
-                  <span className="min-w-0 flex-1 truncate font-medium">{item.label}</span>
+                  {/* `.iconContainer__71961{width:20px;margin-inline-end:5px}`;
+                   *  no celular o ícone segue no `gap-2` de antes */}
+                  <span
+                    className={
+                      ehMobile ? "contents" : "mr-[5px] flex w-5 shrink-0 items-center justify-center"
+                    }
+                  >
+                    <ItemIcon detalhe={detalhe} statuses={statuses} selecionado={selecionado} />
+                  </span>
+                  {/* `.name__71961{display:flex;align-items:baseline}`: o nome, e
+                   *  colado a ele a categoria (`.note__71961{font-size:10px;
+                   *  font-weight:semibold;line-height:14px;text-transform:
+                   *  uppercase;color:var(--text-muted)}`, "PLANT HALL" no print)
+                   *  ou o nome de usuário (`.username__71961{font-weight:normal;
+                   *  opacity:.6}`). O print escreve o usuário sem "@"
+                   *  ("adorable_kiwi_05818"), e o print manda mais que o texto
+                   *  antigo. */}
+                  <span className="flex min-w-0 flex-1 items-baseline overflow-hidden">
+                    <span className="min-w-0 truncate">{item.label}</span>
+                    {detalhe?.nota && (
+                      <span className="ml-1 min-w-0 truncate text-[10px] font-semibold uppercase leading-[14px] text-text-muted">
+                        {detalhe.nota}
+                      </span>
+                    )}
+                    {detalhe?.usuario && (
+                      <span className="ml-1 min-w-0 truncate font-normal opacity-60">
+                        {detalhe.usuario}
+                      </span>
+                    )}
+                  </span>
+                  {/* `.misc__71961{color:var(--interactive-text-default);
+                   *  margin-inline-start:4px;max-width:140px}` dentro de
+                   *  `.miscContainer_ac6cb0{opacity:.6}`: o servidor do canal */}
                   {item.hint && (
-                    <span className="shrink-0 truncate text-text-xs text-text-muted">
+                    <span className="ml-1 max-w-[140px] shrink-0 truncate text-text-md text-interactive-text-default opacity-60">
                       {item.hint}
                     </span>
                   )}
@@ -451,14 +636,78 @@ export default function QuickSwitcher() {
       {/* Rodapé: uma linha só, como `.protip_ac6cb0` mede — as dicas de
        *  prefixo (`@ # ! *`) moram aqui, não numa faixa própria (ver
        *  divergência "faixa de dicas de prefixo"). "PROTIP" é verde
-       *  (`--text-feedback-positive`, medido no catálogo — ver "medidas"). */}
+       *  (`--text-feedback-positive`, medido no catálogo — ver "medidas").
+       *  Cada símbolo numa caixinha, a mesma `.autocompleteQuerySymbol_ac6cb0`
+       *  do campo (no print, "@" em fundo mais escuro que a caixa). O "Learn
+       *  more" do print não entra: não temos página de ajuda para onde levar. */}
       <p className="border-t border-border-subtle px-5 py-2.5 text-text-xs text-text-muted">
         <span className="font-semibold uppercase text-text-feedback-positive">Protip:</span>{" "}
-        comece a busca com <kbd className="font-mono">@</kbd> <kbd className="font-mono">#</kbd>{" "}
-        <kbd className="font-mono">!</kbd> <kbd className="font-mono">*</kbd> para restringir os
-        resultados.
+        comece a busca com <kbd className={CLASSE_DO_SIMBOLO}>@</kbd>{" "}
+        <kbd className={CLASSE_DO_SIMBOLO}>#</kbd> <kbd className={CLASSE_DO_SIMBOLO}>!</kbd>{" "}
+        <kbd className={CLASSE_DO_SIMBOLO}>*</kbd> para restringir os resultados.
       </p>
     </Dialog>
+  );
+}
+
+/** `.autocompleteQuerySymbol_ac6cb0`: fundo `background-base-lowest`, raio 4, mono, padding 2. */
+const CLASSE_DO_SIMBOLO = "rounded bg-background-base-lowest p-0.5 font-mono";
+
+/**
+ * Uma camada do campo com prefixo (ver o comentário de `prefixo` no modal).
+ * Repete a caixa do `<input>` — borda de 1px transparente, `px-3`, mesma fonte
+ * e altura — e corta o texto na caixa de conteúdo, onde o input corta o dele.
+ */
+function EspelhoDoCampo({
+  camada,
+  antes,
+  prefixo,
+  depois,
+  rolagem,
+  ehMobile,
+}: {
+  camada: "pilula" | "texto";
+  antes: string;
+  prefixo: string;
+  depois: string;
+  rolagem: number;
+  ehMobile: boolean;
+}) {
+  const pilula = camada === "pilula";
+  return (
+    <div
+      aria-hidden="true"
+      className={`pointer-events-none absolute inset-0 flex items-center border border-transparent px-3 ${
+        ehMobile ? "text-text-md" : "text-[22px] leading-[70px]"
+      } ${pilula ? "" : "z-[2] text-text-default"}`}
+    >
+      {/* o corte da camada da pílula abre 2px para cada lado, para o padding da
+       *  pílula não sumir quando o prefixo é o primeiro caractere */}
+      <div
+        className={`flex min-w-0 flex-1 items-center self-stretch overflow-hidden ${
+          pilula ? "-mx-[2px] px-[2px]" : ""
+        }`}
+      >
+        <span
+          className="shrink-0 whitespace-pre"
+          style={{ transform: `translateX(${-rolagem}px)` }}
+        >
+          <span className={pilula ? "text-transparent" : ""}>{antes}</span>
+          <span className="relative">
+            {/* a largura é a do caractere na fonte do campo, a do cursor */}
+            <span className="text-transparent">{prefixo}</span>
+            {pilula ? (
+              <span className="absolute -inset-[2px] rounded bg-background-base-lowest" />
+            ) : (
+              <span className="absolute inset-0 flex items-center justify-center font-mono">
+                {prefixo}
+              </span>
+            )}
+          </span>
+          {depois}
+        </span>
+      </div>
+    </div>
   );
 }
 

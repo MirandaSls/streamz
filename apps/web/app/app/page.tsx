@@ -84,8 +84,9 @@ export default function AppPage() {
   // é como o Discord abre o App Directory. Ver `stores/aplicativos.ts`.
   const appsAbertos = useAplicativos((s) => s.aberto);
   const threadParentId = useMessages((s) => s.threadParentId);
-  // a busca ocupa a coluna 4 (como no Discord) e tem prioridade sobre thread e membros
-  const buscaAberta = useMessages((s) => s.searchResults !== null || s.searching);
+  // a busca ocupa a coluna 4 (como no Discord) e tem prioridade sobre thread e
+  // membros. O erro também a mantém aberta: é dentro dela que ele aparece.
+  const buscaAberta = useMessages((s) => s.searchResults !== null || s.searching || s.searchError !== null);
 
   useRealtime(user?.id);
   // ── e-configuracoes ──
@@ -135,7 +136,6 @@ export default function AppPage() {
 
   // ── Coluna 4 do modo servidor: busca, thread OU lista de membros, uma por vez.
   //
-  // As três não moram no mesmo lugar do leiaute, e é isto que a onda 1 mudou.
   // No Discord o cabeçalho do canal **atravessa a área de conteúdo inteira** e a
   // lista de membros começa embaixo dele (print 1:1 `2026-09-02 180835`: em
   // y=57 a barra é #1a1a1e contínuo até a borda da janela, com a busca em
@@ -143,14 +143,17 @@ export default function AppPage() {
   // x=1651, só aparece a partir de y=82). Então a lista de membros entra
   // **dentro** da região do cabeçalho, com 49px de recuo no topo.
   //
-  // Busca e thread continuam irmãs: elas têm cabeçalho próprio de 49px que
-  // encosta no da conversa e continua a linha — é a mesma regra já escrita para
-  // o modo DM no §6.6 do PROCESSO, e por isso o cabeçalho para na borda delas.
-  const buscaOuThread = !activeChannel ? null : buscaAberta ? (
-    <SearchPanel guildId={activeChannel.guildId} />
-  ) : threadParentId ? (
-    <ThreadPanel channelId={activeChannel.id} />
-  ) : null;
+  // A busca foi para o mesmo lugar (rodada de correção, cartão
+  // busca-painel-e-store): no Discord o painel de resultados também começa
+  // embaixo do cabeçalho, que continua por cima dele até a borda da janela. Ela
+  // morava ao lado da região, com um cabeçalho próprio de 49px só para emendar
+  // a linha, e subia até o topo da janela.
+  //
+  // A thread continua irmã da região: ela tem cabeçalho próprio, e é nele que o
+  // cabeçalho do canal para.
+  const busca = activeChannel && buscaAberta ? <SearchPanel guildId={activeChannel.guildId} /> : null;
+  const thread =
+    activeChannel && !buscaAberta && threadParentId ? <ThreadPanel channelId={activeChannel.id} /> : null;
   // O canal de voz é um canal aberto como outro qualquer: busca e thread da
   // conversa dele e a mesma lista de membros do servidor — que ali cede a vez à
   // conversa da call quando as duas estão ligadas (`paineis-da-call.ts`).
@@ -214,17 +217,24 @@ export default function AppPage() {
           */}
           <div className="relative flex min-w-0 flex-1">
             <DMView />
+            {/* A busca da conversa entra na região, embaixo do cabeçalho, pelo
+                mesmo motivo do modo servidor (ver `busca`, acima). O recuo é
+                sempre de 49: o `DMView` do desktop sempre tem cabeçalho. */}
+            {activeDM && buscaAberta && (
+              <div className="flex shrink-0 pt-[49px]">
+                <SearchPanel guildId={null} />
+              </div>
+            )}
           </div>
-          {activeDM && buscaAberta && <SearchPanel guildId={null} />}
           {/* thread funciona em DM como em qualquer canal (ADR-0001) */}
           {activeDM && !buscaAberta && threadParentId && <ThreadPanel channelId={activeDM.id} />}
         </>
       ) : (
         <>
           {/*
-            Região de conteúdo do modo servidor: a conversa e a lista de
-            membros, com o `relative` que ancora o `HeaderBar` por cima das
-            duas. Busca e thread ficam fora dela (ver `buscaOuThread`).
+            Região de conteúdo do modo servidor: a conversa e a coluna 4 (lista
+            de membros ou busca), com o `relative` que ancora o `HeaderBar` por
+            cima delas. A thread fica fora (ver `busca` e `thread`).
           */}
           <div className="relative flex min-w-0 flex-1">
           {voiceChannel ? (
@@ -271,8 +281,17 @@ export default function AppPage() {
               <div className="flex border-l border-border-subtle">{membros}</div>
             </div>
           )}
+          {busca && (
+            /*
+              Mesmo recuo da lista de membros, pelo mesmo motivo. A borda aqui
+              é a do próprio painel (`.searchResultsWrap_a98f3b`,
+              `border-inline-start` em `--app-frame-border`), então o invólucro
+              não desenha nenhuma.
+            */
+            <div className={`flex shrink-0 ${voiceChannel ? "" : "pt-[49px]"}`}>{busca}</div>
+          )}
           </div>
-          {buscaOuThread}
+          {thread}
         </>
       )}
 

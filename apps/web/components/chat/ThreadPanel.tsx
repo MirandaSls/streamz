@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Bell, Lock, MessageSquare, MoreHorizontal, Users, X } from "@/components/ui/icones";
+import { Bell, MessageSquare, MoreHorizontal, Users, X } from "@/components/ui/icones";
 import { displayNameOf, messageLinkPath, Permission, type NotificationLevel } from "@streamz/shared";
 import { urlPublica } from "@/lib/links-do-app";
 import Composer from "@/components/chat/Composer";
 import MessageList from "@/components/chat/MessageList";
 import ReplyBar from "@/components/chat/ReplyBar";
+// h-moderacao: mesmo aviso "somente-leitura" do canal principal (ChatView)
+import { SemPermissaoNotice } from "@/components/moderation/ComposerNotice";
 import TypingIndicator from "@/components/chat/TypingIndicator";
 import { ultimaMinhaMensagem } from "@/components/chat/ultima-minha";
 import Avatar from "@/components/ui/Avatar";
@@ -138,7 +140,11 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
     <aside
       aria-label="Thread"
       style={{ width: largura }}
-      className="relative flex shrink-0 flex-col border-l border-black/20 bg-background-base-lower"
+      // separador com o chat: `border-border-subtle`, não `border-black/20`
+      // (css-bruto/264141…: `.chat_f75fb0.hasSidebar_f75fb0{border-inline-end:
+      // 1px solid var(--border-subtle)}` — mais clara que o fundo, e não mais
+      // escura como o preto a 20% dava) — acompanha Ash e Onyx também
+      className="relative flex shrink-0 flex-col border-l border-border-subtle bg-background-base-lower"
     >
       <div
         role="separator"
@@ -226,12 +232,8 @@ export default function ThreadPanel({ channelId }: { channelId: string }) {
             <TypingIndicator channelId={channelId} />
           </>
         ) : (
-          // mesmo aviso, mesma forma (altura e raio do composer) do canal
-          // principal sem permissão — ver `ChatView.tsx`
-          <div className="mx-2.5 mb-6 flex min-h-[58px] items-center gap-2 rounded-lg bg-chat-background-default px-4 text-sm text-text-muted">
-            <Lock size={18} aria-hidden="true" className="shrink-0" />
-            <span>Você não tem permissão para enviar mensagens neste canal.</span>
-          </div>
+          // mesmo aviso do canal principal sem permissão — ver `ChatView.tsx`
+          <SemPermissaoNotice />
         ))}
     </aside>
   );

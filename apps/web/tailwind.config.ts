@@ -20,11 +20,12 @@ const cor = (n: string) => `rgb(var(--${n}-rgb) / calc(var(--${n}-a) * <alpha-va
 /**
  * Mensagem efêmera: o Discord não tem token próprio. No print de referência
  * (`docs/Reference/efemeras/`) o bloco é a mensagem comum + (2, 2, 9) em RGB,
- * que é o blurple a 4% por cima; aqui, o limão a 4%. O hover não foi medido.
+ * que é o blurple a 4% por cima; aqui, o limão a 4%. O hover não tem print: vale
+ * o CSS, `.ephemeral__5126c:hover` com `--brand-10a` (a marca a 10%).
  */
 const mensagemEfemera = {
   efem: "rgb(var(--brand-500-rgb) / 0.04)",
-  efemhov: "rgb(var(--brand-500-rgb) / 0.08)",
+  efemhov: "rgb(var(--brand-500-rgb) / 0.10)",
 };
 
 export default {

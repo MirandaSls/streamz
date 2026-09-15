@@ -18,6 +18,7 @@ import {
   Smile,
   SmilePlus,
   Trash2,
+  Vote,
 } from "@/components/ui/icones";
 import type { Message, PublicUser } from "@streamz/shared";
 import {
@@ -37,13 +38,13 @@ import { codigoDeConviteDaUrl } from "@/lib/links-de-convite";
 import { urlPublica } from "@/lib/links-do-app";
 import PainelFlutuante from "@/components/chat/PainelFlutuante";
 import { ehMobileAgora, useEhMobile } from "@/hooks/useEhMobile";
-import TooltipReacao from "@/components/chat/TooltipReacao";
 import { useMarcadorNaoLido } from "@/components/chat/marcador-nao-lido";
 import { EmojiDaReacao, rotuloDaReacao } from "@/components/chat/EmojiDeReacao";
 import { registrarUsoDeReacao, useFrequentes } from "@/components/chat/reacoes-rapidas";
 import { shiftPressionado } from "@/components/chat/tecla-shift";
 import BarraDeAcoes from "@/components/chat/mensagem/BarraDeAcoes";
 import { fundoDaLinha } from "@/components/chat/mensagem/fundo";
+import PilulaDeReacao from "@/components/chat/mensagem/PilulaDeReacao";
 import { ReferenciaDeInteracao, ReferenciaDeResposta } from "@/components/chat/mensagem/ReferenciaDaMensagem";
 import RodapeEfemero from "@/components/chat/mensagem/RodapeEfemero";
 // ── onda 3 ── mensagens de bot
@@ -68,13 +69,14 @@ import Avatar from "@/components/ui/Avatar";
 import EmojiPicker from "@/components/ui/EmojiPicker";
 import TagDeBot from "@/components/ui/TagDeBot";
 import { BotaoDeIcone, Button, TextArea, Tooltip } from "@/components/ui/primitivos";
+import { confirmacaoLembrada } from "@/lib/confirmacao-lembrada";
 import { dataCompleta, hora, horaCompleta } from "@/lib/format";
 import { Markdown } from "@/lib/markdown";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useGuilds } from "@/stores/guilds";
-import { useAuthorColor, useCan, usePermissions } from "@/stores/permissions";
+import { useAuthorColor, usePermissions, usePodeTalvez } from "@/stores/permissions";
 import { useMessages } from "@/stores/messages";
 import SystemMessageItem from "@/components/chat/SystemMessageItem";
 import { usePins } from "@/stores/messages-pins";
@@ -82,7 +84,7 @@ import { useThreads } from "@/stores/messages-threads";
 import { alturaDoChipDeReacao, useSettings } from "@/stores/settings";
 import type { ChatMessage } from "@/stores/messages-core";
 import { useLiveUser } from "@/stores/presence";
-import { anchorOf, ui, type Anchor, type MenuItem } from "@/stores/ui";
+import { anchorOf, ui, useUI, type Anchor, type MenuItem } from "@/stores/ui";
 
 /** Sem cargos: referência estável, para o seletor do zustand não oscilar. */
 const SEM_CARGOS: string[] = [];
@@ -94,22 +96,8 @@ const RAPIDAS_NO_MENU = 6;
 /** Quantas cabem na fileira horizontal do topo do menu (é o número do print). */
 const RAPIDAS_NA_FILEIRA = 4;
 
-/**
- * "(editado)" e o primeiro parágrafo em linha.
- *
- * O `Markdown` desenha cada parágrafo num `<div>` sem classe, dentro de um
- * `<span class="contents">`. No Discord o "(editado)" fica **na mesma linha**
- * do fim do texto (print 111402: "…é individual (editado)", y=645) e, no modo
- * compacto, o texto começa na linha do nome. Com o `<div>` em bloco os dois
- * caíam na linha de baixo — a captura `mensagem-hover.png` mostrava o
- * "(editado)" sozinho numa linha.
- *
- * O seletor pega só o `<div>` **sem classe** (parágrafo): citação, título e
- * bloco de código têm classe e continuam em bloco, como no Discord. Depende do
- * desenho interno do `Markdown` — ver "faltando" do cartão 2a-mensagem.
- */
-const ULTIMO_PARAGRAFO_EM_LINHA = "[&>span>div:last-child:not([class])]:inline";
-const PRIMEIRO_PARAGRAFO_EM_LINHA = "[&>span>div:first-child:not([class])]:inline";
+/** Dono do menu de contexto aberto sobre esta mensagem (ver `selecionada`). */
+const donoDoMenu = (id: string) => `mensagem:${id}`;
 
 /**
  * Uma mensagem, no leiaute do Discord (módulos `.message__5126c` e
@@ -196,6 +184,9 @@ export default function MessageItem({
   // "Copiar ID" só existe com o Modo Desenvolvedor ligado, como no Discord
   const modoDesenvolvedor = useSettings((s) => s.developerMode);
   const members = useGuilds((s) => s.members);
+  // o menu de contexto desta mensagem está aberto: a linha fica "selecionada"
+  // (fundo de hover e barra à vista), como o `.selected__5126c` do Discord
+  const selecionada = useUI((s) => s.contextMenu?.dono === donoDoMenu(message.id));
   const highlighted = useMessages((s) => s.highlightId === message.id);
   // é a mensagem que o composer está respondendo agora (`.replying__5126c`)
   const respondendo = useMessages((s) => s.replyTarget?.message.id === message.id);
@@ -207,11 +198,15 @@ export default function MessageItem({
   // Sem permissão, a UI esconde o que a API recusaria. Em conversa direta não
   // há cargo nem bit: `useMyPermissions` responde 0 fora de servidor, e quem
   // participa da conversa pode reagir e escrever — daí o `guildId === null`.
+  // `usePodeTalvez` devolve `null` enquanto as permissões do servidor carregam
+  // (logo depois de trocar de servidor): só `false` esconde, senão reações e
+  // "Responder" sumiam e voltavam a cada troca.
   const emServidor = message.guildId !== null;
-  const podeReagirNoCanal = useCan(Permission.ADD_REACTIONS, message.channelId);
-  const podeEscreverNoCanal = useCan(Permission.SEND_MESSAGES, message.channelId);
-  const podeReagir = !emServidor || podeReagirNoCanal;
-  const podeResponder = !emServidor || podeEscreverNoCanal;
+  const escopo = { guildId: message.guildId, channelId: message.channelId };
+  const podeReagirNoCanal = usePodeTalvez(Permission.ADD_REACTIONS, escopo);
+  const podeEscreverNoCanal = usePodeTalvez(Permission.SEND_MESSAGES, escopo);
+  const podeReagir = !emServidor || podeReagirNoCanal !== false;
+  const podeResponder = !emServidor || podeEscreverNoCanal !== false;
 
   // @usuario → nome de exibição, para as menções mostrarem o nome como o Discord
   const displayNames = useMemo(() => {
@@ -363,7 +358,8 @@ export default function MessageItem({
       return;
     }
     const r = e.currentTarget.getBoundingClientRect();
-    ui.openContextMenu(r.left, r.bottom, destinos);
+    // o menu pertence à mensagem: ela fica selecionada enquanto ele está aberto
+    ui.openContextMenu(r.left, r.bottom, destinos, undefined, undefined, donoDoMenu(message.id));
   }
 
   /** Submenu de reação: os emojis frequentes e a porta para o seletor completo. */
@@ -493,8 +489,10 @@ export default function MessageItem({
         label: "Apagar mensagem",
         icon: <Trash2 size={18} />,
         danger: true,
-        // Shift pula a confirmação, como no Discord
-        onSelect: () => onDelete(message.id, shiftPressionado()),
+        // Shift pula a confirmação, como no Discord; e também quem marcou "não
+        // perguntar de novo" na caixa (`lib/confirmacao-lembrada`)
+        onSelect: () =>
+          onDelete(message.id, shiftPressionado() || confirmacaoLembrada("apagar-mensagem")),
       });
     }
     // ── h-moderacao ──
@@ -514,7 +512,7 @@ export default function MessageItem({
         onSelect: () => void navigator.clipboard?.writeText(message.id),
       });
     }
-    ui.openContextMenu(e.clientX, e.clientY, items);
+    ui.openContextMenu(e.clientX, e.clientY, items, undefined, undefined, donoDoMenu(message.id));
   }
 
   // menção a mim: `@usuario`, um cargo meu (`<@&id>`) ou resposta minha com o
@@ -533,6 +531,7 @@ export default function MessageItem({
     destacada: highlighted,
     respondendo,
     mencionada: mentionsMe,
+    selecionada,
     efemera,
   });
 
@@ -543,7 +542,13 @@ export default function MessageItem({
       <SystemMessageItem
         message={message}
         grouped={grouped}
+        primeiro={primeiro}
         currentUserId={currentUserId}
+        destacada={highlighted}
+        mencionada={mentionsMe}
+        selecionada={selecionada}
+        podeReagir={unconfirmed ? false : podeReagir}
+        conhecidos={conhecidos}
         onToggleReaction={onToggleReaction}
         onMenu={openMenu}
       />
@@ -553,7 +558,7 @@ export default function MessageItem({
   const corDoTexto = message.failed ? "text-text-feedback-critical" : "text-text-default";
 
   const editado = message.editedAt && (
-    <Tooltip rotulo={horaCompleta(message.editedAt)}>
+    <Tooltip rotulo={horaCompleta(message.editedAt)} larguraLivre>
       {/* `.edited_c19a55`: 10px (`.625rem`), peso normal, linha 1. No print
           111402 o "(editado)" começa 6px depois do fim do texto (x 955 → 961),
           o espaço de 4px mais o recuo dos glifos. */}
@@ -563,6 +568,18 @@ export default function MessageItem({
 
   // ── onda 3 ── "pensando" ignora o `content` (é o `TEXTO_PENSANDO` do
   // servidor); v2 não tem texto nenhum, mesmo que um payload velho traga
+  /*
+    "(editado)" e parágrafos em linha. No Discord o "(editado)" fica **na mesma
+    linha** do fim do texto (print 111402: "…é individual (editado)", y=645) e,
+    no compacto, o texto começa na linha do nome. Quem sabe desenhar isso é o
+    próprio `Markdown`: `sufixo` entra dentro do último parágrafo e `emLinha`
+    diz quais parágrafos ficam em linha — os dois no compacto (o primeiro
+    continua a linha do nome), só o último no cozy.
+
+    Sem jumbo no compacto: lá a mensagem só de emoji continua na linha do nome,
+    do tamanho do emoji em linha — `.compact_c19a55 .messageContent_c19a55
+    .jumboable` põe o emoji "jumbo" em `--custom-emoji-size-emoji` (1.375em).
+  */
   const corpo = pensando ? (
     <PensandoDoBot nome={displayNameOf(author)} />
   ) : message.content && !componentsV2 ? (
@@ -572,8 +589,37 @@ export default function MessageItem({
       displayNames={displayNames}
       roles={roles}
       myRoleIds={meusCargos}
+      jumbo={compacto ? false : undefined}
+      emLinha={compacto ? "ambos" : "ultimo"}
+      sufixo={editado}
     />
   ) : null;
+
+  /*
+    Selo de enquete, depois da hora (cozy). Print
+    `desenvolvedores/imagens/mensagens-de-bot/enquete.png` (1:1, tema antigo):
+    pílula em x=205–266 e y=14–29 — 62×16 com o antisserrilhado —, o glifo de
+    lista em x=214–223 e "POLL" em x=229–258, em caixa-alta e negrito, com a
+    versal de 8px (y=18–25), a mesma altura da versal da hora ao lado ("T" em
+    y=19–27), que é de 12px: daí `text-text-xs`. 6px de respiro de cada lado
+    (o glifo de 12 tem 1px de folga dentro da caixa) e 4px entre glifo e texto.
+    Do fim da hora (x=195) ao começo da pílula são 9–10px: o `gap-1.5` da linha
+    mais o `margin-inline-start: .25rem` do
+    `.cozy_c19a55 .pollBadgeDefault_c19a55`. A mesma animação `07.gif` do
+    `polls-faq` mostra "≡ POLL" ao lado de "Today at 4:12 PM".
+    Cor do fundo: **não medida** no tema atual (o `#393b41` do print é do tema
+    antigo) — `background-mod-strong`, o chip neutro do CSS atual
+    (`.clanTagChiplet_c19a55` compacto). Texto branco → `text-strong`.
+  */
+  const seloDeEnquete = (posicao: string) =>
+    message.poll ? (
+      <span
+        className={`inline-flex h-4 shrink-0 items-center gap-1 rounded-full bg-background-mod-strong px-1.5 indent-0 text-text-xs font-bold uppercase leading-none text-text-strong ${posicao}`}
+      >
+        <Vote size={12} aria-hidden="true" />
+        Enquete
+      </span>
+    ) : null;
 
   return (
     <div
@@ -613,6 +659,7 @@ export default function MessageItem({
            respiro de 2px da linha), por isso `top-0.5`. */
         <Tooltip
           rotulo={dataCompleta(message.createdAt)}
+          larguraLivre
           className={`absolute left-0 top-0.5 h-[22px] w-14 select-none justify-end text-[11px] font-medium leading-[22px] text-text-muted ${
             sempreHora ? "" : "opacity-0"
           } group-hover:opacity-100`}
@@ -655,6 +702,7 @@ export default function MessageItem({
           <div className={`leading-[22px] -indent-[64px] ${corDoTexto}`}>
             <Tooltip
               rotulo={dataCompleta(message.createdAt)}
+              larguraLivre
               className="mr-1 w-[3.1rem] select-none justify-end indent-0 align-baseline text-[11px] font-medium leading-[22px] text-text-muted"
             >
               <span>{hora(message.createdAt)}</span>
@@ -672,12 +720,12 @@ export default function MessageItem({
             >
               {displayNameOf(author)}
             </button>
-            {!editing && corpo && (
-              <span className={`break-words indent-0 ${PRIMEIRO_PARAGRAFO_EM_LINHA} ${ULTIMO_PARAGRAFO_EM_LINHA}`}>
-                {corpo}
-                {editado}
-              </span>
-            )}
+            {/* Selo de enquete no compacto: depois do nome, antes do texto.
+                Posição e margem **não medidas** (sem print do compacto com
+                enquete); `mr-1` repete a margem do nome, e `align-top` +
+                `mt-[3px]` centram os 16px na linha de 22, como a pílula BOT. */}
+            {seloDeEnquete("mr-1 mt-[3px] align-top")}
+            {!editing && corpo && <span className="break-words indent-0">{corpo}</span>}
           </div>
         ) : (
           inicioDeGrupo && (
@@ -705,11 +753,14 @@ export default function MessageItem({
                   "elle" e o começo de "21/05/2022" ficam 12px de glifo a glifo
                   (x 479 → 492), que é o `gap` de 6 + os 4 da margem mais o
                   recuo dos glifos. */}
-              <Tooltip rotulo={dataCompleta(message.createdAt)}>
+              <Tooltip rotulo={dataCompleta(message.createdAt)} larguraLivre>
                 <span className="ml-1 text-xs font-medium text-chat-text-muted">
                   {horaCompleta(message.createdAt)}
                 </span>
               </Tooltip>
+              {/* `self-center`, o mesmo do TagDeBot: na caixa `items-baseline`
+                  a pílula desceria abaixo da linha */}
+              {seloDeEnquete("ml-1 self-center")}
             </div>
           )
         )}
@@ -765,10 +816,7 @@ export default function MessageItem({
         ) : (
           !compacto &&
           corpo && (
-            <div className={`break-words ${corDoTexto} ${ULTIMO_PARAGRAFO_EM_LINHA}`}>
-              {corpo}
-              {editado}
-            </div>
+            <div className={`break-words ${corDoTexto}`}>{corpo}</div>
           )
         )}
 
@@ -857,38 +905,17 @@ export default function MessageItem({
 
         {message.reactions.length > 0 && (
           <div className="mt-1 flex flex-wrap gap-1">
-            {message.reactions.map((r) => {
-              const mine = currentUserId ? r.userIds.includes(currentUserId) : false;
-              return (
-                <TooltipReacao
-                  key={r.emoji}
-                  emoji={r.emoji}
-                  userIds={r.userIds}
-                  conhecidos={conhecidos}
-                >
-                  <button
-                    type="button"
-                    aria-pressed={mine}
-                    aria-label={`${rotuloDaReacao(r.emoji)}, ${r.count} ${r.count === 1 ? "reação" : "reações"}`}
-                    onClick={() => reagir(r.emoji)}
-                    style={{ height: alturaDoChipDeReacao(tamanhoEmoji) }}
-                    /* `min-h` (e não uma altura fixa) no celular: ele vence a
-                       altura em linha sem apagá-la, então quem aumentou o
-                       tamanho do emoji nas configurações continua com o chip
-                       maior — e quem está no padrão ganha os 44px de alvo que
-                       o dedo pede. */
-                    className={`flex items-center gap-1.5 rounded-lg border px-1.5 transition celular:min-h-[44px] celular:px-3 ${
-                      mine
-                        ? "border-brand-500 bg-brand-500/20 text-text-strong"
-                        : "border-transparent bg-background-base-lowest text-text-default hover:border-border-normal"
-                    }`}
-                  >
-                    <EmojiDaReacao emoji={r.emoji} tamanho={tamanhoEmoji} />
-                    <span className="text-sm font-semibold leading-none">{r.count}</span>
-                  </button>
-                </TooltipReacao>
-              );
-            })}
+            {message.reactions.map((r) => (
+              <PilulaDeReacao
+                key={r.emoji}
+                emoji={r.emoji}
+                count={r.count}
+                userIds={r.userIds}
+                minha={currentUserId ? r.userIds.includes(currentUserId) : false}
+                conhecidos={conhecidos}
+                onClick={() => reagir(r.emoji)}
+              />
+            ))}
             {podeReagir && (
               <Tooltip rotulo="Adicionar reação">
                 <button
@@ -968,6 +995,8 @@ export default function MessageItem({
       {!ehMobile && !unconfirmed && !editing && !efemera && (
         <BarraDeAcoes
           primeiro={primeiro}
+          cabecalho={!compacto && inicioDeGrupo}
+          selecionada={selecionada}
           rapidas={frequentes.slice(0, RAPIDAS_NA_BARRA)}
           propria={isOwn}
           podeReagir={podeReagir}

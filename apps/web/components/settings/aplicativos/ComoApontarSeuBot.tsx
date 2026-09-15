@@ -5,6 +5,7 @@ import { Check, Copy } from "@/components/ui/icones";
 import { Section } from "@/components/ui/controls";
 import { Button } from "@/components/ui/primitivos";
 import { API_URL } from "@/lib/config";
+import { BlocoDeCodigo } from "@/lib/markdown";
 import { ui } from "@/stores/ui";
 
 /**
@@ -26,13 +27,16 @@ import { ui } from "@/stores/ui";
  * - **Lavalink**: nada muda. Ele nem sabe que existe Discord.
  *
  * Não tem par no Discord (a documentação dele mora fora do cliente). O bloco
- * de código repete o do chat (`BlocoDeCodigo` em `lib/markdown.tsx`, que é o
+ * de código **é** o do chat (`BlocoDeCodigo` de `lib/markdown.tsx`, o
  * `.markup code` medido: raio 4, borda 1px `--border-normal`, fundo
- * `--background-code`, 14/18, `padding:.5em`, tinta `--text-code`), para o
- * trecho ler como código em qualquer lugar do app. Duas diferenças de
- * propósito: **sem quebra de linha** (`pre`, rolando dentro de si) porque o
- * trecho é para copiar e comparar linha a linha, e **sem destaque de
- * sintaxe**, que depende de `CLASSE_DO_TRECHO`, privado de `lib/markdown.tsx`.
+ * `--background-code`, 14/18, `padding:.5em`, tinta `--text-code`), com o
+ * mesmo destaque de sintaxe e o mesmo botão de copiar no hover, para o trecho
+ * ler como código em qualquer lugar do app. Vai com `documento`: sem quebra de
+ * linha (rola dentro de si, porque o trecho é para copiar e comparar linha a
+ * linha), sem os tetos de largura da linha de mensagem e sem ligaduras.
+ *
+ * O botão "Copiar" do título continua: o do bloco só aparece no hover, e no
+ * celular não há hover — ali o do título é o único alvo de 44px.
  */
 export function ComoApontarSeuBot() {
   const enderecos = useMemo(() => {
@@ -159,12 +163,12 @@ function Trecho({
         </Button>
       </div>
       <p className="mb-2 text-text-sm text-text-muted">{nota}</p>
-      {/* Ligadura desligada de propósito: com ela `===` vira `≡` e `=>` vira
-          `⇒` na tela, e quem lê o trecho para digitar à mão copia o glifo
-          errado — o botão manda o texto certo, mas os olhos vão no que veem. */}
-      <pre className="overflow-x-auto rounded border border-border-normal bg-background-code p-[0.5em] font-mono text-[0.875rem] leading-[1.125rem] text-text-code [font-variant-ligatures:none]">
-        <code data-linguagem={linguagem}>{codigo}</code>
-      </pre>
+      {/* `documento` desliga a ligadura de propósito: com ela `===` vira `≡` e
+          `=>` vira `⇒` na tela, e quem lê o trecho para digitar à mão copia o
+          glifo errado — o botão manda o texto certo, mas os olhos vão no que
+          veem. `linguagem` é a do cercado: js e python têm destaque; http não
+          tem gramática e sai sem cor, como no chat. */}
+      <BlocoDeCodigo lang={linguagem} v={codigo} documento />
     </div>
   );
 }

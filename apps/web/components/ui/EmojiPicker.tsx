@@ -62,16 +62,16 @@ const ICONE_CATEGORIA: Record<string, Icone> = {
 };
 
 /**
- * 9 por linha em 424px de painel; célula de 40px, emoji de 32px.
- *
- * O Discord usa célula de 48 e emoji de 40 (print 2026-08-31 120846: fundo do
- * hover em x 1009–1056 × y 489–536, 😍 em x 1061–1100 × y 493–532). A grade não
- * muda aqui porque 9 × 48 não cabe nos 424px da caixa do `PickerChrome` — é a
- * onda 2 (tela `seletor-emoji`) que redesenha a caixa e a grade juntas. O emoji
- * Unicode fica com os 32px do personalizado, para os dois dividirem a grade.
+ * 9 por linha, célula de 48px, emoji (unicode e personalizado) de 40px —
+ * medido no print 2026-08-31 120846: fundo do hover em x 1009–1056 × y
+ * 489–536 (48px), 😍 em x 1061–1100 × y 493–532 (40px). A caixa do
+ * `PickerChrome` mede 500 (`LARGURA_PICKER`); descontados os 48 do rail de
+ * categorias (`ColunaLateral`, `w-12`) sobram ~452, e 9 × 48 = 432 cabe. O
+ * emoji Unicode fica com os mesmos 40px do personalizado, para os dois
+ * dividirem a grade.
  */
 const COLUNAS = 9;
-const CELULA = 40;
+const CELULA = 48;
 
 type ItemGrade =
   | { tipo: "unicode"; chave: string; item: EmojiItem }
@@ -356,8 +356,8 @@ export default function EmojiPicker({
               }}
             >
               {Array.from({ length: COLUNAS * 2 }, (_, i) => (
-                <span key={i} aria-hidden="true" className="grid h-10 w-10 place-items-center">
-                  <span className="h-8 w-8 animate-pulse rounded-full bg-background-base-lowest" />
+                <span key={i} aria-hidden="true" className="grid h-12 w-12 place-items-center">
+                  <span className="h-10 w-10 animate-pulse rounded-full bg-background-base-lowest" />
                 </span>
               ))}
             </div>
@@ -478,7 +478,7 @@ function SecaoEmoji({
 
   return (
     <section ref={ref} className="mb-1">
-      <h3 className="sticky top-0 z-10 flex items-center gap-1.5 bg-background-base-lowest px-1 py-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
+      <h3 className="sticky top-0 z-10 flex items-center gap-1.5 bg-background-surface-high px-1 py-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
         {secao.icone.tipo === "servidor" ? (
           <IconeServidor nome={secao.icone.nome} iconUrl={secao.icone.url} />
         ) : (
@@ -542,7 +542,7 @@ function BotaoEmoji({
       onClick={() => onEscolher(alvo)}
       onPointerEnter={() => onFocar(alvo)}
       onFocus={() => onFocar(alvo)}
-      className="grid h-10 w-10 place-items-center rounded transition hover:bg-interactive-background-hover"
+      className="grid h-12 w-12 place-items-center rounded transition hover:bg-interactive-background-hover"
     >
       {alvo.tipo === "custom" ? (
         falhou ? (
@@ -553,7 +553,7 @@ function BotaoEmoji({
             src={alvo.emoji.url}
             alt={rotulo}
             loading="lazy"
-            className="h-8 w-8 object-contain"
+            className="h-10 w-10 object-contain"
             onError={() => setFalhou(true)}
           />
         )
@@ -562,7 +562,7 @@ function BotaoEmoji({
         // tem de ter a cara do que vai aparecer no chat. O `emoji-picker-react`
         // tem `emojiStyle`/`getEmojiUrl`, mas só no componente pronto dele, que
         // este seletor não usa (daquele pacote só vem o catálogo em JSON)
-        <Emoji emoji={comTomDePele(alvo.item, tom)} tamanho={32} />
+        <Emoji emoji={comTomDePele(alvo.item, tom)} tamanho={40} />
       )}
     </button>
   );

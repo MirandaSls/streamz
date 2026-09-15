@@ -20,9 +20,15 @@
  *
  * `--brand-10a` não existe no `tokens.css` gerado; é o `--brand-500` a 10%
  * (blurple → limão pela regra mecânica da ADR-0009 §3.1), daí `bg-brand-500/10`.
- * A efêmera continua em `efem`/`efemhov` (4% e 8% do limão), que vieram do print
- * de `docs/Reference/efemeras/` — print vence CSS (ADR-0009 §7) e o `--brand-05a`
- * do CSS daria 5%.
+ * A efêmera usa `efem`/`efemhov` (`tailwind.config.ts`). O repouso, 4% do limão,
+ * saiu do print de `docs/Reference/efemeras/` — print vence CSS (ADR-0009 §7) e
+ * o `--brand-05a` do CSS daria 5%. O hover não tem print: fica nos 10% do
+ * `--brand-10a` que o `.ephemeral__5126c:hover` declara.
+ *
+ * **Selecionada** (menu de contexto aberto sobre a mensagem): o Discord mantém
+ * a linha com o fundo de hover enquanto o menu dela está aberto, mesmo com o
+ * ponteiro fora — sem faixa. Vem depois de destaque, resposta e menção (esses
+ * já pintam um fundo próprio que diz mais) e antes da efêmera, que não tem menu.
  *
  * A ordem das perguntas repete a cascata do CSS: `.highlighted,.replying` são
  * declarados depois de `.mentioned`, então ganham quando os dois valem.
@@ -31,6 +37,8 @@ export interface EstadoDaLinha {
   destacada: boolean;
   respondendo: boolean;
   mencionada: boolean;
+  /** o menu de contexto desta mensagem está aberto. */
+  selecionada: boolean;
   efemera: boolean;
 }
 
@@ -59,6 +67,9 @@ export function fundoDaLinha(e: EstadoDaLinha): FundoDaLinha {
       fundo: "bg-message-mentioned-background-default hover:bg-message-mentioned-background-hover",
       faixa: "bg-icon-feedback-warning",
     };
+  }
+  if (e.selecionada) {
+    return { fundo: "bg-message-background-hover", faixa: null };
   }
   if (e.efemera) {
     return { fundo: "bg-efem hover:bg-efemhov", faixa: "bg-brand-500" };

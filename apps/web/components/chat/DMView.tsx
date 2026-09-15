@@ -175,6 +175,7 @@ export default function DMView({
         hasMore={slice.hasMore}
         loading={slice.loading}
         loadingOlder={slice.loadingOlder}
+        loadingOlderError={slice.loadingOlderError}
         onLoadOlder={() => void loadOlder(active.id)}
         currentUserId={user?.id}
         canModerate={false}
@@ -338,6 +339,10 @@ export default function DMView({
           // conversa não tem servidor: a busca corre só neste canal
           void runSearch({ channelId: active.id, guildId: null });
         }}
+        // a API ignora `em:` numa DM (`messages.service.ts`, `search` só filtra
+        // canal quando há `guildId`): sem isto o popout de filtros ofereceria
+        // uma linha que não filtra nada aqui
+        semFiltroDeCanal
         tools={
           // a ordem do Discord: telefone → vídeo → alfinete → adicionar → perfil → busca
           <>

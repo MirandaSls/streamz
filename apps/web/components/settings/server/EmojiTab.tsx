@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Pencil, Trash2 } from "@/components/ui/icones";
+import { AlertTriangle, Pencil, RefreshCw, Trash2 } from "@/components/ui/icones";
 import {
   MAX_CUSTOM_EMOJI_DIMENSION,
   MAX_CUSTOM_EMOJI_SIZE,
@@ -56,6 +56,8 @@ import { ui } from "@/stores/ui";
  */
 export default function EmojiTab({ guildId }: { guildId: string }) {
   const carregado = useEmojis((s) => s.carregado);
+  const falhouCarregar = useEmojis((s) => s.falhouCarregar);
+  const recarregar = useEmojis((s) => s.recarregar);
   const emojis = useEmojis((s) => s.guilds.find((g) => g.guildId === guildId)?.emojis ?? []);
   const members = useGuilds((s) => s.members);
   const podeGerenciar = useCan(Permission.MANAGE_EMOJIS);
@@ -188,7 +190,19 @@ export default function EmojiTab({ guildId }: { guildId: string }) {
                 </td>
               </tr>
             )}
-            {carregado && emojis.length === 0 && (
+            {/* Erro: `carregado` já é true (a chamada terminou), mas
+                `falhouCarregar` diz que foi com `.catch` — sem isto "zero
+                emojis" e "a rede caiu" ficavam idênticos (`stores/emojis.ts`).
+                Checa antes do vazio: quando falha, `emojis` também está
+                vazio, e o aviso de erro é o que importa mostrar. */}
+            {carregado && falhouCarregar && (
+              <tr>
+                <td colSpan={4} className="py-2">
+                  <BlocoDeErro tentar={() => void recarregar()} />
+                </td>
+              </tr>
+            )}
+            {carregado && !falhouCarregar && emojis.length === 0 && (
               <tr className="h-[64px]">
                 <td colSpan={4} className="text-sm text-text-muted">
                   Nenhum emoji ainda.
@@ -196,6 +210,7 @@ export default function EmojiTab({ guildId }: { guildId: string }) {
               </tr>
             )}
             {carregado &&
+              !falhouCarregar &&
               emojis.map((emoji) => {
                 const autor = members.find((m) => m.user.id === emoji.createdById)?.user ?? null;
                 return (
@@ -287,11 +302,31 @@ export default function EmojiTab({ guildId }: { guildId: string }) {
 }
 
 /**
- * Não existe um `BlocoDeErro` aqui — de propósito, não por esquecimento.
- * `stores/emojis.ts` (`load()`, fora da lista deste cartão) engole o erro de
- * rede e grava lista vazia com `carregado: true`: "falha aqui não pode
- * derrubar a tela". Sem um sinal de falha exposto pela store, esta aba não
- * tem como diferenciar "zero emojis" de "falhou ao buscar" — o estado "erro"
- * pedido pelo cartão fica descrito em "faltando" (`stores/emojis.ts`) em vez
- * de um componente que nada nesta aba chamaria.
+ * Erro persistente de carregamento: o mesmo par ícone+mensagem+"Tentar de
+ * novo" que `EngajamentoTab.tsx`/`SegurancaTab.tsx`/`SessoesTab.tsx` já usam
+ * para a mesma falha (caixa `rounded-[4px] border border-border-subtle
+ * bg-background-base-lowest`, `AlertTriangle` em `--status-warning`, botão
+ * secundário com `RefreshCw`). Repetido aqui em vez de extraído porque as
+ * outras fontes vivem em `components/settings/*.tsx` — fora da lista deste
+ * cartão as duas, mas pertencendo à mesma família — e mover para um lugar
+ * comum é trabalho de outro cartão, não deste.
  */
+function BlocoDeErro({ tentar }: { tentar: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-[4px] border border-border-subtle bg-background-base-lowest px-3 py-3">
+      <div className="flex min-w-0 items-center gap-2">
+        <AlertTriangle size={16} className="shrink-0 text-status-warning" aria-hidden="true" />
+        <p className="min-w-0 text-sm text-text-muted">Não foi possível carregar os emojis.</p>
+      </div>
+      <Button
+        variante="secundario"
+        tamanho="sm"
+        icone={<RefreshCw size={14} aria-hidden="true" />}
+        onClick={tentar}
+        className="shrink-0 celular:h-[44px]"
+      >
+        Tentar de novo
+      </Button>
+    </div>
+  );
+}

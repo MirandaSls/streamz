@@ -1,14 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Clock, Settings2, Star } from "@/components/ui/icones";
+import { AlertTriangle, Clock, RefreshCw, Settings2, Star } from "@/components/ui/icones";
 import type { Sticker } from "@streamz/shared";
 import { useAuth } from "@/stores/auth";
 import { useEmojis } from "@/stores/emojis";
 import { useCanModerate, useGuilds } from "@/stores/guilds";
 import { ui } from "@/stores/ui";
 import { ehMobileAgora } from "@/hooks/useEhMobile";
-import { BotaoDeIcone } from "@/components/ui/primitivos";
+import { BotaoDeIcone, Button } from "@/components/ui/primitivos";
 import {
   BotaoLateral,
   BuscaPicker,
@@ -54,17 +54,17 @@ interface SecaoFigurinha {
  * ## Estados (cartão 2j-seletor-gif-figurinha)
  *
  * Vazio (sem figurinha, com ou sem busca), carregando (a resposta de
- * `useEmojis().load()` ainda não chegou — `carregado`), hover (fundo da
- * célula e do item da coluna lateral), foco (o anel azul global de
- * `globals.css`, `:focus-visible`, alcança os botões daqui sem nada extra
- * neste arquivo) e desabilitado não se aplicam ao botão de escolher (nunca
- * fica desabilitado). **Sem permissão**: o botão de gerenciar figurinhas do
- * servidor só aparece com `podeGerenciar` — sem a permissão ele **some**, não
- * fica desabilitado, porque é assim que o Discord trata (e o rodapé não tem
- * onde pôr uma dica "(em breve)" para um botão que nem é dele). Não há erro
- * distinto de "vazio" porque `useEmojis().load()` engole a falha de rede e
- * devolve lista vazia (`stores/emojis.ts`, fora da lista deste cartão) — ver
- * "faltando" no relatório do cartão.
+ * `useEmojis().load()` ainda não chegou — `carregado`), erro (a resposta
+ * chegou mas `falhouCarregar` está true — `stores/emojis.ts`, `load()` engole
+ * a falha de rede e devolve lista vazia; sem esta bandeira "zero figurinhas"
+ * e "a rede caiu" eram visualmente idênticos), hover (fundo da célula e do
+ * item da coluna lateral), foco (o anel azul global de `globals.css`,
+ * `:focus-visible`, alcança os botões daqui sem nada extra neste arquivo) e
+ * desabilitado não se aplicam ao botão de escolher (nunca fica desabilitado).
+ * **Sem permissão**: o botão de gerenciar figurinhas do servidor só aparece
+ * com `podeGerenciar` — sem a permissão ele **some**, não fica desabilitado,
+ * porque é assim que o Discord trata (e o rodapé não tem onde pôr uma dica
+ * "(em breve)" para um botão que nem é dele).
  */
 export default function StickerPicker({
   onEscolher,
@@ -92,6 +92,8 @@ export default function StickerPicker({
   // ainda não têm figurinhas" no primeiro instante depois do login, antes da
   // resposta chegar.
   const carregado = useEmojis((s) => s.carregado);
+  const falhouCarregar = useEmojis((s) => s.falhouCarregar);
+  const recarregar = useEmojis((s) => s.recarregar);
   const me = useAuth((s) => s.user);
   const podeGerenciar = useCanModerate(me?.id);
   const prefs = usePrefsPicker();
@@ -257,6 +259,10 @@ export default function StickerPicker({
         >
           {!carregado ? (
             <p className="px-2 py-10 text-center text-sm text-text-muted">Carregando…</p>
+          ) : falhouCarregar ? (
+            <div className="px-2 py-10">
+              <BlocoDeErro tentar={() => void recarregar()} />
+            </div>
           ) : vazio ? (
             <p className="px-2 py-10 text-center text-sm text-text-muted">
               {buscando
@@ -370,5 +376,35 @@ function SecaoGrade({
         ))}
       </div>
     </section>
+  );
+}
+
+/**
+ * Erro persistente de carregamento: o mesmo par ícone+mensagem+"Tentar de
+ * novo" que `EngajamentoTab.tsx`/`SegurancaTab.tsx`/`SessoesTab.tsx` já usam
+ * para a mesma falha (caixa `rounded-[4px] border border-border-subtle
+ * bg-background-base-lowest`, `AlertTriangle` em `--status-warning`, botão
+ * secundário com `RefreshCw`). Repetido aqui em vez de extraído porque as
+ * outras fontes vivem em `components/settings/*.tsx`, fora da lista de
+ * arquivos deste cartão — mover para um lugar comum é trabalho de outro
+ * cartão, não deste.
+ */
+function BlocoDeErro({ tentar }: { tentar: () => void }) {
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-[4px] border border-border-subtle bg-background-base-lowest px-3 py-4 text-center">
+      <div className="flex min-w-0 items-center gap-2">
+        <AlertTriangle size={16} className="shrink-0 text-status-warning" aria-hidden="true" />
+        <p className="min-w-0 text-sm text-text-muted">Não foi possível carregar as figurinhas.</p>
+      </div>
+      <Button
+        variante="secundario"
+        tamanho="sm"
+        icone={<RefreshCw size={14} aria-hidden="true" />}
+        onClick={tentar}
+        className="shrink-0 celular:h-[44px]"
+      >
+        Tentar de novo
+      </Button>
+    </div>
   );
 }

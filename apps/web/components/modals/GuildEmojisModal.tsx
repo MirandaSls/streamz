@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Pencil, Trash2, Upload } from "@/components/ui/icones";
+import { AlertTriangle, Pencil, RefreshCw, Trash2, Upload } from "@/components/ui/icones";
 import {
   MAX_CUSTOM_EMOJI_DIMENSION,
   MAX_CUSTOM_EMOJI_SIZE,
@@ -39,17 +39,19 @@ type Aba = "emojis" | "figurinhas";
  * já existente segue como está — mudar largura, altura de linha ou espaçamento
  * aqui sem uma medida seria chute (§6.3 do PROCESSO). O que mudou é a
  * cobertura de estado: "carregando" (reaproveita `carregado` da store, o mesmo
- * sinal de `EmojiTab.tsx`) e "sem permissão" (`Permission.MANAGE_EMOJIS`
- * esconde os dois botões "Enviar" e as ações por item — mesmo padrão de
- * `MembrosTab.tsx`/`CargosTab.tsx`, sem aviso extra na tela). "Erro" continua
- * sem sinal para mostrar: ver o comentário em `EmojiTab.tsx` sobre
- * `stores/emojis.ts`.
+ * sinal de `EmojiTab.tsx`), "erro" (`falhouCarregar` da mesma store — troca as
+ * duas abas por um `BlocoDeErro` só, porque emoji e figurinha carregam juntos
+ * e falham juntos) e "sem permissão" (`Permission.MANAGE_EMOJIS` esconde os
+ * dois botões "Enviar" e as ações por item — mesmo padrão de
+ * `MembrosTab.tsx`/`CargosTab.tsx`, sem aviso extra na tela).
  */
 export default function GuildEmojisModal({ guildId }: { guildId: string }) {
   const closeModal = useUI((s) => s.closeModal);
   const [aba, setAba] = useState<Aba>("emojis");
   const guild = useGuilds((s) => s.guilds.find((g) => g.id === guildId));
   const carregado = useEmojis((s) => s.carregado);
+  const falhouCarregar = useEmojis((s) => s.falhouCarregar);
+  const recarregar = useEmojis((s) => s.recarregar);
   const emojis = useEmojis((s) => s.guilds.find((g) => g.guildId === guildId)?.emojis ?? []);
   const figurinhas = useEmojis(
     (s) => s.stickerGuilds.find((g) => g.guildId === guildId)?.stickers ?? [],
@@ -79,6 +81,8 @@ export default function GuildEmojisModal({ guildId }: { guildId: string }) {
 
       {!carregado ? (
         <p className="py-6 text-center text-sm text-text-muted">Carregando…</p>
+      ) : falhouCarregar ? (
+        <BlocoDeErro tentar={() => void recarregar()} />
       ) : aba === "emojis" ? (
         <ListaEmojis guildId={guildId} emojis={emojis} podeGerenciar={podeGerenciar} />
       ) : (
@@ -370,6 +374,38 @@ function BotaoEnviar({
         </span>
       </Tooltip>
       <span className="text-xs text-text-muted">{dica}</span>
+    </div>
+  );
+}
+
+/**
+ * Erro persistente de carregamento: o mesmo par ícone+mensagem+"Tentar de
+ * novo" que `EngajamentoTab.tsx`/`EmojiTab.tsx`/`SegurancaTab.tsx`/
+ * `SessoesTab.tsx` já usam para a mesma falha (caixa `rounded-[4px] border
+ * border-border-subtle bg-background-base-lowest`, `AlertTriangle` em
+ * `--status-warning`, botão secundário com `RefreshCw`). Repetido aqui em vez
+ * de extraído porque as outras fontes vivem em `components/settings/*.tsx`,
+ * fora da lista de arquivos deste cartão — mover para um lugar comum é
+ * trabalho de outro cartão, não deste.
+ */
+function BlocoDeErro({ tentar }: { tentar: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-[4px] border border-border-subtle bg-background-base-lowest px-3 py-3">
+      <div className="flex min-w-0 items-center gap-2">
+        <AlertTriangle size={16} className="shrink-0 text-status-warning" aria-hidden="true" />
+        <p className="min-w-0 text-sm text-text-muted">
+          Não foi possível carregar os emojis e figurinhas.
+        </p>
+      </div>
+      <Button
+        variante="secundario"
+        tamanho="sm"
+        icone={<RefreshCw size={14} aria-hidden="true" />}
+        onClick={tentar}
+        className="shrink-0 celular:h-[44px]"
+      >
+        Tentar de novo
+      </Button>
     </div>
   );
 }

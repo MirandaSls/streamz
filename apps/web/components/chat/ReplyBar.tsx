@@ -46,8 +46,11 @@ export default function ReplyBar({
   const mention = useMessages((s) => s.replyMention);
   const cancelReply = useMessages((s) => s.cancelReply);
   const toggleReplyMention = useMessages((s) => s.toggleReplyMention);
-  // o nome do citado sai na cor do cargo dele, como na timeline
-  const cor = useAuthorColor(alvo?.message.author.id ?? "");
+  // o nome do citado sai na cor do cargo dele, como na timeline — o `guildId`
+  // explícito da própria mensagem citada, e não o `useUI().view` implícito:
+  // a barra existe tanto no canal quanto na thread, sem depender de qual
+  // coluna (servidor/DM) está em foco agora
+  const cor = useAuthorColor(alvo?.message.author.id ?? "", alvo?.message.guildId);
 
   // Esc cancela a resposta mesmo com o foco fora do composer
   useEffect(() => {

@@ -8,14 +8,28 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { displayNameOf, type PublicUser } from "@streamz/shared";
+import { displayNameOf, type ChannelType, type PublicUser } from "@streamz/shared";
 import Emoji, { CLASSE_EMOJI_INLINE, CLASSE_EMOJI_JUMBO } from "@/components/ui/Emoji";
-import { Check, Copy, Hash, Megaphone, Volume2 } from "@/components/ui/icones";
+import {
+  AtSign,
+  Check,
+  Copy,
+  Hash,
+  Lock,
+  Megaphone,
+  MessagesSquare,
+  Users,
+  Volume2,
+} from "@/components/ui/icones";
 import { BotaoDeIcone, Tooltip } from "@/components/ui/primitivos";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
-import { useDMs } from "@/stores/dms";
+import { dmTitle, useDMs } from "@/stores/dms";
 import { useGuilds } from "@/stores/guilds";
+import { useMessages } from "@/stores/messages";
+import { goToChannel } from "@/stores/messages-navigate";
+import { useThreads } from "@/stores/messages-threads";
+import { useResumosDeCanal } from "@/stores/resumos-de-canal";
 import { anchorOf, useUI } from "@/stores/ui";
 import {
   destacarCodigo,
@@ -246,50 +260,129 @@ function MencaoDeUsuario({
   );
 }
 
-/**
- * `<#id>`: a mesma pílula, com o ícone do tipo do canal na frente
- * (`.icon_b75563`: 1em, `margin-bottom:.2rem`, `margin-inline-end:4px`,
- * `vertical-align:middle`). Clicar abre o canal. Só resolve canal do servidor
- * aberto — é a lista que `useChannels` tem; o resto sai "canal-desconhecido".
- */
-function MencaoDeCanal({ channelId }: { channelId: string }) {
-  const canal = useChannels((s) => s.channels.find((c) => c.id === channelId));
-  const classeDoIcone = "mb-[0.2rem] mr-1 inline-block h-[1em] w-[1em] align-middle";
-
-  if (!canal) {
-    return (
-      <span className={PILULA}>
-        <Hash aria-hidden size="1em" className={classeDoIcone} />
-        canal-desconhecido
-      </span>
-    );
+/** Ícone da pílula de canal pelo tipo. */
+function iconeDoTipo(tipo: ChannelType) {
+  switch (tipo) {
+    case "ANNOUNCEMENT":
+      return Megaphone;
+    case "VOICE":
+      return Volume2;
+    // conversa não tem ícone de menção no CSS do Discord (não medido): o `@`
+    // da conversa direta e o de pessoas do grupo são os da lista de conversas
+    case "DM":
+      return AtSign;
+    case "GROUP":
+      return Users;
+    default:
+      return Hash;
   }
+}
 
-  const Icone = canal.type === "ANNOUNCEMENT" ? Megaphone : canal.type === "VOICE" ? Volume2 : Hash;
-  // canal de voz: `select` entraria na chamada, e um clique numa menção não
-  // pode conectar o microfone de ninguém — a pílula fica só informativa
-  const clicavel = canal.type !== "VOICE";
-  const abrir = () => useChannels.getState().select(canal);
+/** `.icon_b75563`: 1em, `margin-bottom:.2rem`, `margin-inline-end:4px`, `vertical-align:middle`. */
+const CLASSE_DO_ICONE_DE_CANAL = "mb-[0.2rem] mr-1 inline-block h-[1em] w-[1em] align-middle";
 
+/**
+ * A pílula de canal em si. `aoAbrir` ausente = só informativa (sem hover, sem
+ * foco): canal de voz, "sem acesso" e o instante em que o nome ainda não chegou.
+ */
+function PilulaDeCanal({
+  Icone,
+  nome,
+  aoAbrir,
+  carregando,
+}: {
+  Icone: typeof Hash;
+  nome: string;
+  aoAbrir?: () => void;
+  carregando?: boolean;
+}) {
+  const clicavel = aoAbrir !== undefined;
   return (
     <span
       role={clicavel ? "button" : undefined}
       tabIndex={clicavel ? 0 : undefined}
+      aria-busy={carregando || undefined}
       className={`${PILULA} ${clicavel ? PILULA_INTERATIVA : ""}`}
       onClick={
-        clicavel
+        aoAbrir
           ? (e) => {
               e.stopPropagation();
-              abrir();
+              aoAbrir();
             }
           : undefined
       }
-      onKeyDown={clicavel ? porTeclado(abrir) : undefined}
+      onKeyDown={aoAbrir ? porTeclado(aoAbrir) : undefined}
     >
-      <Icone aria-hidden size="1em" className={classeDoIcone} />
-      {canal.name}
+      <Icone aria-hidden size="1em" className={CLASSE_DO_ICONE_DE_CANAL} />
+      {nome}
     </span>
   );
+}
+
+/**
+ * `<#id>`: a mesma pílula, com o ícone do tipo do canal na frente. Clicar abre
+ * o canal — menos o de voz: `select` entraria na chamada, e um clique numa
+ * menção não pode conectar o microfone de ninguém.
+ *
+ * Onde o canal é procurado, nesta ordem (o que já está na memória primeiro;
+ * a API só para o que não está em lugar nenhum):
+ *
+ * 1. `useChannels` — canais do servidor aberto;
+ * 2. `useThreads` — threads carregadas do canal aberto (o id da thread é o da
+ *    mensagem raiz; clicar abre a thread no painel lateral);
+ * 3. `useDMs` — conversas da lista;
+ * 4. `useResumosDeCanal` — `GET /channels/:id/resumo`, com cache por id. É o
+ *    caso do canal de outro servidor. 403/404 viram a pílula "Sem acesso", com
+ *    cadeado, como o "No Access" do Discord (texto e ícone não estão no CSS
+ *    medido: não medido, só o comportamento).
+ */
+function MencaoDeCanal({ channelId }: { channelId: string }) {
+  const canal = useChannels((s) => s.channels.find((c) => c.id === channelId));
+  const thread = useThreads((s) => (canal ? undefined : s.items.find((t) => t.id === channelId)));
+  const conversa = useDMs((s) =>
+    canal || thread ? undefined : s.channels.find((d) => d.id === channelId),
+  );
+  const conhecido = canal !== undefined || thread !== undefined || conversa !== undefined;
+  const remoto = useResumosDeCanal((s) => (conhecido ? undefined : s.porId[channelId]));
+
+  useEffect(() => {
+    if (!conhecido) useResumosDeCanal.getState().garantir(channelId);
+  }, [conhecido, channelId]);
+
+  if (canal) {
+    const aoAbrir = canal.type === "VOICE" ? undefined : () => useChannels.getState().select(canal);
+    return <PilulaDeCanal Icone={iconeDoTipo(canal.type)} nome={canal.name ?? ""} aoAbrir={aoAbrir} />;
+  }
+
+  if (thread) {
+    const abrirThread = () =>
+      void useMessages.getState().openThread(thread.channelId, { id: thread.id });
+    return <PilulaDeCanal Icone={MessagesSquare} nome={thread.name} aoAbrir={abrirThread} />;
+  }
+
+  if (conversa) {
+    const abrirConversa = () => void goToChannel({ guildId: null, channelId: conversa.id });
+    return (
+      <PilulaDeCanal Icone={iconeDoTipo(conversa.type)} nome={dmTitle(conversa)} aoAbrir={abrirConversa} />
+    );
+  }
+
+  if (remoto?.estado === "ok") {
+    const { resumo } = remoto;
+    const aoAbrir =
+      resumo.type === "VOICE"
+        ? undefined
+        : () => void goToChannel({ guildId: resumo.guildId, channelId: resumo.id });
+    return <PilulaDeCanal Icone={iconeDoTipo(resumo.type)} nome={resumo.name} aoAbrir={aoAbrir} />;
+  }
+
+  if (remoto?.estado === "sem-acesso") {
+    return <PilulaDeCanal Icone={Lock} nome="Sem acesso" />;
+  }
+
+  // pedido em curso (ou ainda por disparar, no primeiro render): o `#` sem
+  // nome ocupa o lugar e não pisca "desconhecido" antes da resposta
+  return <PilulaDeCanal Icone={Hash} nome="…" carregando />;
 }
 
 /**
@@ -319,7 +412,7 @@ function Carimbo({ unix, estilo }: { unix: number; estilo: EstiloDeCarimbo }) {
 }
 
 /** Classe de cada trecho destacado — o `.hljs-<tipo>` do Discord, token a token. */
-const CLASSE_DO_TRECHO: Record<TipoDeTrecho, string> = {
+export const CLASSE_DO_TRECHO: Record<TipoDeTrecho, string> = {
   keyword: "text-text-code-keyword",
   // `.hljs-built_in{color:var(--text-code-type)}` — o Discord não usa
   // `--text-code-builtin` aqui (esse é o `.hljs-symbol`)
@@ -353,8 +446,26 @@ const CLASSE_DO_TRECHO: Record<TipoDeTrecho, string> = {
  * - `.codeActions`: `top:8px`, `inset-inline-end:4px`, `display:none` fora do
  *   hover. O botão em si não está nesse CSS: caixa e fundo "não medido" — usa
  *   o `BotaoDeIcone` de 24px com fundo.
+ *
+ * Exportado para o código fora do chat ler igual ao do chat (a documentação
+ * de `settings/aplicativos/ComoApontarSeuBot`). Ali entra `documento`, que tira
+ * o que só faz sentido na linha de mensagem: os tetos de 90% e 50vw (a coluna
+ * de configurações já limita a largura) e a quebra de linha — trecho para
+ * copiar e comparar linha a linha rola dentro de si —, e desliga as ligaduras,
+ * senão `===` vira `≡` na tela e quem digita à mão copia o glifo errado.
  */
-function BlocoDeCodigo({ lang, v, naCitacao }: { lang: string | null; v: string; naCitacao: boolean }) {
+export interface BlocoDeCodigoProps {
+  /** linguagem do cercado (```ts); sem gramática conhecida, sai sem destaque. */
+  lang: string | null;
+  /** o código, sem as cercas. É também o que o botão copia. */
+  v: string;
+  /** dentro de citação o `pre` vai a 100% (`.markup blockquote pre`). */
+  naCitacao?: boolean;
+  /** fora do chat: sem teto de largura, sem quebra de linha, sem ligaduras. */
+  documento?: boolean;
+}
+
+export function BlocoDeCodigo({ lang, v, naCitacao = false, documento = false }: BlocoDeCodigoProps) {
   const trechos = useMemo(() => destacarCodigo(v, lang), [v, lang]);
   const [copiado, setCopiado] = useState(false);
 
@@ -373,12 +484,20 @@ function BlocoDeCodigo({ lang, v, naCitacao }: { lang: string | null; v: string;
 
   return (
     <pre
-      className={`mt-1.5 rounded font-mono text-[0.75rem] leading-4 [white-space:pre-wrap] ${
-        naCitacao ? "max-w-full" : "max-w-[90%]"
+      className={`rounded font-mono text-[0.75rem] leading-4 ${
+        documento
+          ? "max-w-full [font-variant-ligatures:none] [white-space:pre]"
+          : `mt-1.5 [white-space:pre-wrap] ${naCitacao ? "max-w-full" : "max-w-[90%]"}`
       }`}
     >
-      <span className="group/codigo relative block max-w-[50vw] celular:max-w-full">
-        <code className="block overflow-x-auto rounded border border-border-normal bg-background-code p-[0.5em] text-[0.875rem] leading-[1.125rem] text-text-code [text-size-adjust:none] [white-space:pre-wrap]">
+      <span
+        className={`group/codigo relative block ${documento ? "max-w-full" : "max-w-[50vw] celular:max-w-full"}`}
+      >
+        <code
+          className={`block overflow-x-auto rounded border border-border-normal bg-background-code p-[0.5em] text-[0.875rem] leading-[1.125rem] text-text-code [text-size-adjust:none] ${
+            documento ? "[white-space:pre]" : "[white-space:pre-wrap]"
+          }`}
+        >
           {trechos
             ? trechos.map((t, k) =>
                 t.tipo ? (
@@ -507,13 +626,39 @@ interface Contexto {
   lista: number;
 }
 
-function renderBlocos(blocks: Block[], ctx: Contexto): ReactNode[] {
+/** Quais parágrafos das pontas do texto ficam em linha (ver `MarkdownProps.emLinha`). */
+export type EmLinha = "primeiro" | "ultimo" | "ambos";
+
+/** Só o nível de cima do texto: citação e lista não herdam as pontas. */
+interface Pontas {
+  emLinha?: EmLinha;
+  sufixo?: ReactNode;
+}
+
+function renderBlocos(blocks: Block[], ctx: Contexto, pontas?: Pontas): ReactNode[] {
   const { opts } = ctx;
-  return blocks.map((b, i) => {
+  const ultimoIndice = blocks.length - 1;
+  const ultimo = blocks[ultimoIndice];
+  const temSufixo = pontas?.sufixo !== undefined && pontas.sufixo !== null && pontas.sufixo !== false;
+  // o sufixo entra dentro do último parágrafo; se o último bloco é outra coisa
+  // (código, lista, citação, linha vazia), vai logo depois dele
+  const sufixoDentro = temSufixo && ultimo?.t === "p" && ultimo.c.length > 0;
+
+  const nos: ReactNode[] = blocks.map((b, i) => {
     switch (b.t) {
-      case "p":
+      case "p": {
         // linha vazia vira só a quebra
-        return b.c.length === 0 ? <br key={i} /> : <div key={i}>{renderInline(b.c, opts)}</div>;
+        if (b.c.length === 0) return <br key={i} />;
+        const emLinha =
+          (i === 0 && (pontas?.emLinha === "primeiro" || pontas?.emLinha === "ambos")) ||
+          (i === ultimoIndice && (pontas?.emLinha === "ultimo" || pontas?.emLinha === "ambos"));
+        return (
+          <div key={i} className={emLinha ? "inline" : undefined}>
+            {renderInline(b.c, opts)}
+            {sufixoDentro && i === ultimoIndice ? pontas?.sufixo : null}
+          </div>
+        );
+      }
       case "h": {
         const Tag = `h${b.level}` as const;
         return (
@@ -577,10 +722,35 @@ function renderBlocos(blocks: Block[], ctx: Contexto): ReactNode[] {
         return <BlocoDeCodigo key={i} lang={b.lang} v={b.v} naCitacao={ctx.naCitacao} />;
     }
   });
+
+  if (temSufixo && !sufixoDentro) nos.push(<Fragment key="sufixo">{pontas?.sufixo}</Fragment>);
+  return nos;
+}
+
+export interface MarkdownProps extends RenderOptions {
+  text: string;
+  /**
+   * Parágrafo das pontas em linha (`display:inline` no `<div>` do parágrafo,
+   * que não tem classe nenhuma): `"primeiro"`, `"ultimo"` ou `"ambos"`. Só vale
+   * para parágrafo com texto, no nível de cima — título, lista, citação e
+   * código continuam blocos.
+   *
+   * Para o MessageItem: no modo compacto o horário e o nome vêm antes do texto
+   * na mesma linha (`"primeiro"`), e o "(editado)" fica colado ao fim da última
+   * linha em vez de cair numa linha só dele (`"ultimo"`).
+   */
+  emLinha?: EmLinha;
+  /**
+   * Nó anexado ao fim do texto — o "(editado)" do MessageItem. Entra **dentro**
+   * do último parágrafo, então segue a última palavra e quebra com ela; se o
+   * último bloco não é parágrafo (código, lista, citação), entra logo depois
+   * dele. `null`/`undefined`/`false` = nada.
+   */
+  sufixo?: ReactNode;
 }
 
 /** Mensagem inteira renderizada. */
-export function Markdown({ text, ...opts }: { text: string } & RenderOptions) {
+export function Markdown({ text, emLinha, sufixo, ...opts }: MarkdownProps) {
   const blocks = useMemo(() => parseBlocks(text), [text]);
   // "jumbo" é decidido aqui, sobre a mensagem inteira: um emoji sozinho numa
   // frase continua do tamanho da linha (ver soEmojis)
@@ -590,13 +760,13 @@ export function Markdown({ text, ...opts }: { text: string } & RenderOptions) {
   // `.markup__75297` (606633.*.css): 1rem, linha `--chat-markup-line-height`
   // (1.375rem, VARIAVEIS.md), `white-space:break-spaces` — espaços repetidos
   // aparecem, como no Discord — e `word-wrap:break-word`. Em `contents` as
-  // propriedades herdáveis descem para os blocos sem criar caixa, e o
-  // "(editado)" do MessageItem continua irmão do texto.
+  // propriedades herdáveis descem para os blocos sem criar caixa, e o que vem
+  // antes (compacto) ou depois (o `sufixo`) do texto divide a linha com ele.
   return (
     <span
       className={`${render.jumbo ? "block" : "contents"} text-[1rem] leading-[1.375rem] [white-space:break-spaces] [word-wrap:break-word]`}
     >
-      {renderBlocos(blocks, { opts: render, naCitacao: false, lista: 0 })}
+      {renderBlocos(blocks, { opts: render, naCitacao: false, lista: 0 }, { emLinha, sufixo })}
     </span>
   );
 }

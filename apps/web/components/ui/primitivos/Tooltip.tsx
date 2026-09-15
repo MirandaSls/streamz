@@ -45,6 +45,27 @@ export interface TooltipProps {
    * ilegível.
    */
   subtitulo?: ReactNode;
+  /**
+   * Tira o `max-width` de 190 e não deixa o texto quebrar. É a dica da hora
+   * da mensagem: `.timestampTooltip_c19a55{max-width:unset}` no CSS do
+   * Discord, e "terça-feira, 8 de setembro de 2026 às 17:14" não cabe em 190 —
+   * quebrava em duas linhas, que o Discord não mostra.
+   */
+  larguraLivre?: boolean;
+  /**
+   * `servidor`: a dica do rail (`.guildTooltipWrapper_b1f768{max-width:196px}`),
+   * com corpo de 16px e linha de 20. No print 1:1 `2026-09-01 113513.png` a
+   * dica "Mensagens diretas" mede 36px de altura com a borda (y 33–68) e a
+   * versal "M" tem 11px (y 45–55), o corpo de 16 — contra os 14px/16 das
+   * outras dicas: 1 + 8 + 20 + 8 + 1 = 36. Padrão: `padrao`.
+   */
+  tamanho?: "padrao" | "servidor";
+  /**
+   * Folga em px entre o alvo e a caixa. Padrão 8. O rail usa 12: no print
+   * `2026-09-01 113513.png` (linha y=40) o ícone termina em x=61 e a caixa da
+   * dica começa em x=74.
+   */
+  distancia?: number;
   /** Um elemento só, que recebe os eventos de hover e foco. */
   children: ReactElement;
   className?: string;
@@ -73,6 +94,9 @@ export function Tooltip({
   cor = "primaria",
   atalho,
   subtitulo,
+  larguraLivre = false,
+  tamanho = "padrao",
+  distancia = GAP,
   children,
   className = "",
 }: TooltipProps) {
@@ -123,9 +147,9 @@ export function Tooltip({
     const alvo = alvoRef.current?.getBoundingClientRect();
     const caixa = caixaRef.current?.getBoundingClientRect();
     if (!alvo || !caixa) return;
-    setPos(posicionar(alvo, caixa, lado));
+    setPos(posicionar(alvo, caixa, lado, distancia));
     // a segunda linha muda a altura da caixa, então também reposiciona
-  }, [aberto, lado, rotulo, subtitulo]);
+  }, [aberto, lado, rotulo, subtitulo, distancia]);
 
   // rolar ou redimensionar deixaria a caixa parada longe do alvo
   useEffect(() => {
@@ -148,6 +172,14 @@ export function Tooltip({
   if (desabilitado) return children;
 
   const variante = VARIANTES[cor];
+  // largura e corpo numa classe só por caso: duas classes de `max-width` (ou
+  // de `font-size`) competindo dependeriam da ordem do CSS gerado
+  const largura = larguraLivre
+    ? "max-w-none whitespace-nowrap"
+    : tamanho === "servidor"
+      ? "max-w-[196px]"
+      : "max-w-[190px]";
+  const corpo = tamanho === "servidor" ? "text-text-md leading-5" : "text-text-sm leading-4";
 
   return (
     <>
@@ -182,7 +214,7 @@ export function Tooltip({
               left: pos?.left ?? 0,
               visibility: pos ? "visible" : "hidden",
             }}
-            className={`pointer-events-none fixed z-[100] max-w-[190px] rounded-lg border border-border-subtle px-3 py-2 text-text-sm font-medium leading-4 shadow-shadow-high anim-menu ${variante.caixa} ${variante.texto}`}
+            className={`pointer-events-none fixed z-[100] rounded-lg border border-border-subtle px-3 py-2 font-medium shadow-shadow-high anim-menu ${largura} ${corpo} ${variante.caixa} ${variante.texto}`}
           >
             <span className="flex items-center gap-2">
               <span>{rotulo}</span>
@@ -207,7 +239,7 @@ export function Tooltip({
   );
 }
 
-/** folga entre o alvo e a caixa, igual nos quatro lados (como no Discord). */
+/** folga padrão entre o alvo e a caixa, igual nos quatro lados (prop `distancia`). */
 const GAP = 8;
 /** margem mínima até a borda da janela antes de inverter o lado. */
 const EDGE = 8;
@@ -233,12 +265,12 @@ interface Posicao {
  * quando não couber. Sem isso o tooltip vaza pela borda da janela — o `top` dos
  * ícones da primeira linha e o `right` dos ícones do rail são os casos reais.
  */
-function posicionar(alvo: DOMRect, caixa: DOMRect, preferido: LadoDaDica): Posicao {
+function posicionar(alvo: DOMRect, caixa: DOMRect, preferido: LadoDaDica, gap: number): Posicao {
   const cabe = (s: LadoDaDica) => {
-    if (s === "top") return alvo.top - caixa.height - GAP >= EDGE;
-    if (s === "bottom") return alvo.bottom + caixa.height + GAP <= window.innerHeight - EDGE;
-    if (s === "left") return alvo.left - caixa.width - GAP >= EDGE;
-    return alvo.right + caixa.width + GAP <= window.innerWidth - EDGE;
+    if (s === "top") return alvo.top - caixa.height - gap >= EDGE;
+    if (s === "bottom") return alvo.bottom + caixa.height + gap <= window.innerHeight - EDGE;
+    if (s === "left") return alvo.left - caixa.width - gap >= EDGE;
+    return alvo.right + caixa.width + gap <= window.innerWidth - EDGE;
   };
   const lado = cabe(preferido) ? preferido : cabe(OPOSTO[preferido]) ? OPOSTO[preferido] : preferido;
 
@@ -254,7 +286,7 @@ function posicionar(alvo: DOMRect, caixa: DOMRect, preferido: LadoDaDica): Posic
     return {
       lado,
       left,
-      top: lado === "top" ? alvo.top - caixa.height - GAP : alvo.bottom + GAP,
+      top: lado === "top" ? alvo.top - caixa.height - gap : alvo.bottom + gap,
       arrow: fixar(centro - left, ARROW + 2, caixa.width - ARROW - 2),
     };
   }
@@ -267,7 +299,7 @@ function posicionar(alvo: DOMRect, caixa: DOMRect, preferido: LadoDaDica): Posic
   return {
     lado,
     top,
-    left: lado === "left" ? alvo.left - caixa.width - GAP : alvo.right + GAP,
+    left: lado === "left" ? alvo.left - caixa.width - gap : alvo.right + gap,
     arrow: fixar(centro - top, ARROW + 2, caixa.height - ARROW - 2),
   };
 }

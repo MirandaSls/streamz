@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftRight, ChevronLeft, ChevronRight, Hash, SlidersHorizontal } from "@/components/ui/icones";
+import { ChevronLeft, ChevronRight, Hash, Ordenar, SlidersHorizontal } from "@/components/ui/icones";
 import { parseSearchQuery, type Message, type SearchFilters } from "@streamz/shared";
-import MessagePreview, { EstiloDoRealceDaBusca } from "@/components/chat/MessagePreview";
+import MessagePreview from "@/components/chat/MessagePreview";
 import { Button, Tooltip } from "@/components/ui/primitivos";
 import { useCategories } from "@/stores/categories";
 import { useChannels } from "@/stores/channels";
 import { dmTitle, useDMs } from "@/stores/dms";
+import { useFriends } from "@/stores/friends";
 import { useMessages } from "@/stores/messages";
 import { goToChannel, goToMessage } from "@/stores/messages-navigate";
 import { ui } from "@/stores/ui";
@@ -33,11 +34,15 @@ const ROTULO_DA_ORDEM: Record<Ordem, string> = {
  * - **Caixa** — `.searchResultsWrap_a98f3b`: `width: 418px`, fundo
  *   `--background-base-lowest`, `border-inline-start: 1px solid
  *   var(--app-frame-border)`. Antes: 416 (`w-[26rem]`) com `border-black/20`.
+ *   **Começa embaixo do cabeçalho do canal**, que atravessa a área inteira: a
+ *   página monta o painel dentro da região de conteúdo, como a lista de
+ *   membros, com o recuo de 49 (`app/app/page.tsx`).
  * - **Cabeçalho** — `.searchHeader_ae7890`: `padding: 8px 16px`, borda de baixo
  *   `--border-subtle`; `.totalResults_ae7890` semibold ocupando o resto, e à
  *   direita (GIF 05) o botão "Filtros (n)" e o de ordenar, os dois na caixa de
- *   32 do botão secundário pequeno — 8 + 32 + 8 + 1 = os 49 do cabeçalho do
- *   canal, então as duas linhas continuam emendadas. Carregando:
+ *   32 do botão secundário pequeno. A altura sai do conteúdo (8 + 32 + 8 + 1):
+ *   o `h-[49px]` fixo existia só para emendar com o cabeçalho do canal quando o
+ *   painel subia até o topo, e saiu junto com isso. Carregando:
  *   `.spinnerWrapper_ae7890` 16×16 a 8 do texto, traço `--text-default`.
  *   O X de fechar saiu: no Discord quem fecha a busca é o X do próprio campo
  *   (que o `HeaderBar` agora desenha).
@@ -61,16 +66,31 @@ const ROTULO_DA_ORDEM: Record<Ordem, string> = {
  * - **Vazio** — `.emptyResultsWrap_a98f3b`: centralizado, `padding: 20px`, 16px
  *   medium `--text-default`, linha 24, texto em 280 (`.noResults_a98f3b`). A
  *   ilustração de 160×160 (`.noResultsImage_a98f3b`) não existe no acervo.
+ * - **Erro** — a mesma caixa do vazio, com o texto em 300
+ *   (`.errorMessage_a98f3b{width:300px}`) e "Tentar de novo", que refaz a última
+ *   busca (`retrySearch`). A ilustração `.errorImage_a98f3b` (160×160) também
+ *   não existe no acervo; a distância do botão ao texto não foi medida.
+ * - **Bloqueados** — resultados de quem eu bloqueei saem da lista, e cada
+ *   sequência deles vira uma linha `.resultsBlocked_a7e67f` ("N resultados de
+ *   usuários bloqueados"): `padding: 6px 18px`, fundo `--background-mod-normal`,
+ *   borda 1px `--background-base-lowest`, raio 3, 14px `--text-muted` (hover
+ *   `--text-default`). Clicar mostra aquela sequência. O ícone de 32×32 a 20 do
+ *   texto (`.resultsBlockedImage_a7e67f`) não existe no acervo; o texto pt-BR e
+ *   o "Mostrar" não estão no acervo (não verificados).
  */
 export default function SearchPanel({ guildId }: { guildId: string | null }) {
   const query = useMessages((s) => s.searchQuery);
   const results = useMessages((s) => s.searchResults);
   const searching = useMessages((s) => s.searching);
+  const erro = useMessages((s) => s.searchError);
+  const bloqueados = useFriends((s) => s.blocked);
   const canais = useChannels((s) => s.channels);
   const categorias = useCategories((s) => s.categories);
   const conversas = useDMs((s) => s.channels);
   const [ordem, setOrdem] = useState<Ordem>("recentes");
   const [pagina, setPagina] = useState(0);
+  /** Sequências de bloqueados já reveladas, pelo id da primeira mensagem delas. */
+  const [revelados, setRevelados] = useState<ReadonlySet<string>>(() => new Set());
   const listaRef = useRef<HTMLDivElement>(null);
   const ordenarRef = useRef<HTMLButtonElement>(null);
 
@@ -78,7 +98,8 @@ export default function SearchPanel({ guildId }: { guildId: string | null }) {
   const termo = filtros.text.trim();
 
   const ordenados = useMemo(() => {
-    const lista = [...(results ?? [])];
+    // com erro não há lista: os resultados de antes não são a resposta desta busca
+    const lista = erro ? [] : [...(results ?? [])];
     if (ordem === "recentes") return lista.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     if (ordem === "antigas") return lista.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     // "Relevantes" sem apoio do servidor: quantas vezes as palavras do termo
@@ -89,7 +110,7 @@ export default function SearchPanel({ guildId }: { guildId: string | null }) {
       return palavras.reduce((soma, p) => soma + texto.split(p).length - 1, 0);
     };
     return lista.sort((a, b) => peso(b) - peso(a) || b.createdAt.localeCompare(a.createdAt));
-  }, [results, ordem, termo]);
+  }, [results, erro, ordem, termo]);
 
   const total = ordenados.length;
   const paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
@@ -97,12 +118,14 @@ export default function SearchPanel({ guildId }: { guildId: string | null }) {
 
   // busca nova (ou outra ordem) recomeça da primeira página
   useEffect(() => setPagina(0), [results, ordem]);
+  // e esconde de novo os bloqueados que tinham sido revelados na anterior
+  useEffect(() => setRevelados(new Set()), [results]);
   // trocar de página volta ao topo da lista, senão a página nova abre no fim
   useEffect(() => {
     listaRef.current?.scrollTo({ top: 0 });
   }, [pagina]);
 
-  if (results === null && !searching) return null;
+  if (results === null && !searching && erro === null) return null;
 
   /** Nome, categoria e tipo do cabeçalho de um grupo. */
   function contextoDoCanal(channelId: string): { nome: string; categoria: string | null; ehServidor: boolean } {
@@ -122,6 +145,7 @@ export default function SearchPanel({ guildId }: { guildId: string | null }) {
     if (ultimo && ultimo.channelId === m.channelId) ultimo.mensagens.push(m);
     else grupos.push({ channelId: m.channelId, mensagens: [m] });
   }
+  const idsBloqueados = new Set(bloqueados.map((u) => u.id));
 
   const resumo = resumoDosFiltros(filtros);
 
@@ -148,9 +172,7 @@ export default function SearchPanel({ guildId }: { guildId: string | null }) {
       aria-busy={searching}
       className="flex w-[418px] shrink-0 flex-col border-l border-app-frame-border bg-background-base-lowest celular:w-full"
     >
-      <EstiloDoRealceDaBusca />
-
-      <div className="flex h-[49px] shrink-0 items-center gap-2 border-b border-border-subtle px-4 py-2">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-4 py-2">
         <div className="flex min-w-0 flex-1 items-center font-semibold text-text-strong" aria-live="polite">
           <span className="truncate">
             {searching ? "Buscando…" : `${total} ${total === 1 ? "resultado" : "resultados"}`}
@@ -176,16 +198,18 @@ export default function SearchPanel({ guildId }: { guildId: string | null }) {
             tamanho="sm"
             aria-label={`Ordenar: ${ROTULO_DA_ORDEM[ordem]}`}
             aria-haspopup="menu"
-            // o acervo não tem as duas setas verticais do Discord: é o par
-            // horizontal girado (ver "faltando" do cartão 2m-busca)
-            icone={<ArrowLeftRight size={16} className="rotate-90" />}
+            // as duas setas verticais do Discord (`sort.svg` do acervo)
+            icone={<Ordenar size={16} />}
             onClick={abrirOrdenacao}
           />
         </Tooltip>
       </div>
 
       <div ref={listaRef} className="min-h-0 flex-1 overflow-y-auto px-4 pt-4">
-        {!searching && total === 0 && <SemResultados />}
+        {!searching && erro !== null && (
+          <ErroDaBusca mensagem={erro} aoTentarDeNovo={() => void useMessages.getState().retrySearch()} />
+        )}
+        {!searching && erro === null && total === 0 && <SemResultados />}
 
         {grupos.map((grupo, i) => {
           const ctx = contextoDoCanal(grupo.channelId);
@@ -213,16 +237,26 @@ export default function SearchPanel({ guildId }: { guildId: string | null }) {
                   </span>
                 )}
               </button>
-              {grupo.mensagens.map((m) => (
-                <MessagePreview
-                  key={m.id}
-                  message={m}
-                  variante="resultado"
-                  realce={termo || undefined}
-                  className="mb-2 last:mb-0"
-                  aoAbrir={() => void goToMessage({ guildId, channelId: m.channelId, messageId: m.id })}
-                />
-              ))}
+              {itensDoGrupo(grupo.mensagens, idsBloqueados, revelados).map((item) =>
+                item.tipo === "bloqueados" ? (
+                  <LinhaDeBloqueados
+                    key={`bloqueados-${item.chave}`}
+                    quantidade={item.quantidade}
+                    aoMostrar={() => setRevelados((atual) => new Set(atual).add(item.chave))}
+                  />
+                ) : (
+                  <MessagePreview
+                    key={item.mensagem.id}
+                    message={item.mensagem}
+                    variante="resultado"
+                    realce={termo || undefined}
+                    className="mb-2 last:mb-0"
+                    aoAbrir={() =>
+                      void goToMessage({ guildId, channelId: item.mensagem.channelId, messageId: item.mensagem.id })
+                    }
+                  />
+                ),
+              )}
             </section>
           );
         })}
@@ -237,6 +271,65 @@ export default function SearchPanel({ guildId }: { guildId: string | null }) {
         </nav>
       )}
     </aside>
+  );
+}
+
+type ItemDoGrupo =
+  | { tipo: "mensagem"; mensagem: Message }
+  | { tipo: "bloqueados"; chave: string; quantidade: number };
+
+/**
+ * As mensagens de um grupo com cada sequência de autores bloqueados trocada
+ * por uma linha só. A chave da sequência é o id da primeira mensagem dela, que
+ * é o que `revelados` guarda: revelar uma sequência não revela as outras.
+ */
+function itensDoGrupo(
+  mensagens: Message[],
+  bloqueados: ReadonlySet<string>,
+  revelados: ReadonlySet<string>,
+): ItemDoGrupo[] {
+  const itens: ItemDoGrupo[] = [];
+  let sequencia: Message[] = [];
+  const fechar = () => {
+    if (sequencia.length === 0) return;
+    const chave = sequencia[0].id;
+    if (revelados.has(chave)) {
+      for (const m of sequencia) itens.push({ tipo: "mensagem", mensagem: m });
+    } else {
+      itens.push({ tipo: "bloqueados", chave, quantidade: sequencia.length });
+    }
+    sequencia = [];
+  };
+  for (const m of mensagens) {
+    if (bloqueados.has(m.author.id)) {
+      sequencia.push(m);
+    } else {
+      fechar();
+      itens.push({ tipo: "mensagem", mensagem: m });
+    }
+  }
+  fechar();
+  return itens;
+}
+
+/**
+ * `.resultsBlocked_a7e67f` (medidas no cabeçalho do arquivo). É um botão
+ * inteiro, como no Discord (`cursor: pointer` na linha toda). O hover acende o
+ * texto onde há ponteiro fino (`hoverOnlyWhenSupported`); no toque quem acende
+ * é o `active:`.
+ */
+function LinhaDeBloqueados({ quantidade, aoMostrar }: { quantidade: number; aoMostrar: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={aoMostrar}
+      className="mb-2 flex w-full items-center rounded-[3px] border border-background-base-lowest bg-background-mod-normal px-[18px] py-[6px] text-left text-text-sm text-text-muted last:mb-0 hover:text-text-default active:text-text-default"
+    >
+      <span className="min-w-0 flex-1">
+        {quantidade} {quantidade === 1 ? "resultado de usuário bloqueado" : "resultados de usuários bloqueados"}
+      </span>
+      <span className="ml-2 shrink-0 font-semibold">Mostrar</span>
+    </button>
   );
 }
 
@@ -319,6 +412,23 @@ function SemResultados() {
         <strong className="font-semibold text-text-subtle">depois:</strong> ou{" "}
         <strong className="font-semibold text-text-subtle">durante:</strong> seguido de AAAA-MM-DD.
       </p>
+    </div>
+  );
+}
+
+/**
+ * A busca falhou: a caixa do `.emptyResultsWrap_a98f3b` com o texto em 300
+ * (`.errorMessage_a98f3b`). O texto é o que a API devolveu, com "A busca
+ * falhou." quando ela não diz nada (`errorMessage`). O botão é o secundário
+ * pequeno; a distância de 16 até o texto não foi medida.
+ */
+function ErroDaBusca({ mensagem, aoTentarDeNovo }: { mensagem: string; aoTentarDeNovo: () => void }) {
+  return (
+    <div role="alert" className="flex min-h-full flex-col items-center justify-center p-5 text-center">
+      <p className="w-[300px] max-w-full text-text-md font-medium leading-6 text-text-default">{mensagem}</p>
+      <Button variante="secundario" tamanho="sm" className="mt-4" onClick={aoTentarDeNovo}>
+        Tentar de novo
+      </Button>
     </div>
   );
 }

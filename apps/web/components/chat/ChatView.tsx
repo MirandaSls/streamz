@@ -5,7 +5,7 @@ import { Bell, EyeOff, Hash, Lock, Megaphone, Pencil, Users, Volume2 } from "@/c
 import { channelNotificationScope, isMuted } from "@streamz/shared";
 import Composer from "@/components/chat/Composer";
 // ── h-moderacao ──
-import { RulesNotice, TimeoutNotice } from "@/components/moderation/ComposerNotice";
+import { RulesNotice, SemPermissaoNotice, TimeoutNotice } from "@/components/moderation/ComposerNotice";
 
 import { useModeration, useMustAcceptRules, useMyTimeout } from "@/stores/moderation";
 import { usePolls } from "@/stores/polls";
@@ -201,7 +201,7 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
         searchValue={searchQuery}
         onSearch={(q) => {
           setSearchQuery(q);
-          // no servidor a busca é do servidor inteiro, com `in:#canal` filtrando
+          // no servidor a busca é do servidor inteiro, com `em:#canal` filtrando
           void runSearch({ channelId: channel.id, guildId: channel.guildId });
         }}
         tools={
@@ -262,6 +262,7 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
         hasMore={slice.hasMore}
         loading={slice.loading}
         loadingOlder={slice.loadingOlder}
+        loadingOlderError={slice.loadingOlderError}
         onLoadOlder={() => void loadOlder(channel.id)}
         currentUserId={user?.id}
         canModerate={canModerate}
@@ -298,12 +299,8 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
       />
 
       {readOnly ? (
-        // mantém a forma do composer (mesma altura e raio): o parágrafo cinza
-        // centralizado que ficava aqui tirava o chão da coluna
-        <div className="mx-2.5 mb-6 flex min-h-[58px] items-center gap-2 rounded-lg bg-chat-background-default px-4 text-sm text-text-muted">
-          <Lock size={18} aria-hidden="true" className="shrink-0" />
-          <span>Você não tem permissão para enviar mensagens neste canal.</span>
-        </div>
+        // mesmo aviso "somente-leitura" do composer em todo o app (h-moderacao)
+        <SemPermissaoNotice />
       ) : timeoutUntil ? (
         // h-moderacao: o castigo troca o composer pelo aviso de até quando
         <TimeoutNotice until={timeoutUntil} />
