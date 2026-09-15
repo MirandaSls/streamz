@@ -29,6 +29,9 @@ set -euo pipefail
 
 NOME="streamz-lavalink-token-$$"
 PASTA="$(mktemp -d)"
+# `mktemp -d` nasce 700 e o Lavalink roda como usuário não-root no container:
+# sem isto ele não lê o application.yml nem a pasta de plugins.
+chmod 755 "$PASTA"
 trap 'docker rm -f "$NOME" >/dev/null 2>&1 || true; rm -rf "$PASTA"' EXIT
 
 # O plugin já baixado pelo Lavalink de produção, se houver; senão baixa.
@@ -55,6 +58,7 @@ logging:
     root: WARN
     dev.lavalink.youtube.http.YoutubeOauth2Handler: INFO
 YML
+chmod 644 "$PASTA/application.yml"
 
 if docker volume inspect "$PLUGINS_VOLUME" >/dev/null 2>&1; then
   docker run --rm -v "$PLUGINS_VOLUME":/de:ro -v "$PASTA/plugins":/para alpine \
@@ -72,7 +76,8 @@ codigo_mostrado=""
 for _ in $(seq 1 300); do
   logs="$(docker logs "$NOME" 2>&1 || true)"
   if [ -z "$codigo_mostrado" ]; then
-    codigo="$(grep -oE 'enter code [A-Z0-9-]+' <<<"$logs" | tail -1 | awk '{print $3}')"
+    # `|| true`: com pipefail, o grep sem achar nada mataria o script (set -e).
+    codigo="$({ grep -oE 'enter code [A-Z0-9-]+' <<<"$logs" || true; } | tail -1 | awk '{print $3}')"
     if [ -n "$codigo" ]; then
       codigo_mostrado=1
       echo
@@ -82,7 +87,7 @@ for _ in $(seq 1 300); do
       echo "Esperando a autorização..."
     fi
   fi
-  token="$(grep -oE 'Store your refresh token as this can be reused\. \(([^)]+)\)' <<<"$logs" \
+  token="$({ grep -oE 'Store your refresh token as this can be reused\. \(([^)]+)\)' <<<"$logs" || true; } \
     | tail -1 | sed -E 's/.*\(([^)]+)\)/\1/')"
   if [ -n "$token" ]; then
     echo
@@ -91,7 +96,8 @@ for _ in $(seq 1 300); do
     echo "$token"
     exit 0
   fi
-  if grep -qE 'denied|has expired\. OAuth integration has been canceled' <<<"$logs"; then
+  # Frases exatas do plugin: um "Permission denied" qualquer não é login negado.
+  if grep -qE 'Account linking was denied|The device token has expired' <<<"$logs"; then
     echo "O login foi negado ou o código expirou. Rode de novo." >&2
     exit 1
   fi
