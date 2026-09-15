@@ -2,9 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Keyboard, Mic, RefreshCw, Video } from "@/components/ui/icones";
-import { PTT_RELEASE_MS } from "@streamz/shared";
+import { PTT_RELEASE_MS, type CameraFps } from "@streamz/shared";
 import { RadioCards, Section, Select, Slider, ToggleLinha } from "@/components/ui/controls";
 import { Button } from "@/components/ui/primitivos";
+import {
+  AJUDA_FPS_DA_CAMERA,
+  SeletorDeFpsDaCamera,
+  restricoesDaPrevia,
+} from "@/components/voice/fps-da-camera";
 import { SegmentosDeQualidade } from "@/components/voice/qualidade-de-tela";
 import { useTesteDeMicrofone } from "@/components/voice/useTesteDeMicrofone";
 import { useT } from "@/lib/i18n";
@@ -61,6 +66,9 @@ export default function VozTab() {
   const screenAudio = useVoice((v) => v.screenAudio);
   const setScreenQuality = useVoice((v) => v.setScreenQuality);
   const setScreenAudio = useVoice((v) => v.setScreenAudio);
+  // taxa de quadros da câmera — a mesma que a setinha do botão e o painel da
+  // chamada escrevem; a prévia daqui pede essa taxa para mostrar o que sai
+  const cameraFps = useVoice((v) => v.cameraFps);
 
   const [erro, setErro] = useState<string | null>(null);
   const [camera, setCamera] = useState(false);
@@ -71,12 +79,21 @@ export default function VozTab() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const camStream = useRef<MediaStream | null>(null);
+  // cada abertura da prévia ganha um número; a resposta de um `getUserMedia`
+  // que já foi superado (desligar, trocar o fps, sair da aba) é jogada fora e
+  // a trilha dela é parada, em vez de ficar com a luz da câmera acesa
+  const pedido = useRef(0);
+  // a pessoa quer a prévia ligada? (inclui o vão em que ela ainda está abrindo)
+  const previaPedida = useRef(false);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   const pararCamera = useCallback(() => {
+    pedido.current += 1;
+    previaPedida.current = false;
+    setAbrindoCamera(false);
     camStream.current?.getTracks().forEach((track) => track.stop());
     camStream.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
@@ -106,28 +123,58 @@ export default function VozTab() {
     }
   }
 
-  async function alternarCamera() {
-    if (camera) {
+  const abrirPrevia = useCallback(
+    async (cameraId: string | null, fps: CameraFps) => {
+      const meu = ++pedido.current;
+      previaPedida.current = true;
+      setAbrindoCamera(true);
+      // a trilha anterior sai **antes** de pedir a nova: há câmera (e driver
+      // no Windows) que não abre o mesmo aparelho duas vezes, e a troca de fps
+      // falharia com "aparelho ocupado" por causa da nossa própria prévia
+      camStream.current?.getTracks().forEach((track) => track.stop());
+      camStream.current = null;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: restricoesDaPrevia(cameraId, fps),
+        });
+        if (meu !== pedido.current) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        camStream.current = stream;
+        if (videoRef.current) videoRef.current.srcObject = stream;
+        setErro(null);
+        setCamera(true);
+        setAbrindoCamera(false);
+        void refresh();
+      } catch {
+        if (meu !== pedido.current) return;
+        setErro(explicarMidia(motivoDaFalha()) ?? t("voz.semPermissao"));
+        pararCamera();
+      }
+    },
+    [pararCamera, refresh, t],
+  );
+
+  function alternarCamera() {
+    if (camera || previaPedida.current) {
       pararCamera();
       return;
     }
-    setAbrindoCamera(true);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: devices.cameraId ? { deviceId: { exact: devices.cameraId } } : true,
-      });
-      camStream.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
-      setErro(null);
-      setCamera(true);
-      void refresh();
-    } catch {
-      setErro(explicarMidia(motivoDaFalha()) ?? t("voz.semPermissao"));
-      pararCamera();
-    } finally {
-      setAbrindoCamera(false);
-    }
+    void abrirPrevia(devices.cameraId, cameraFps);
   }
+
+  // trocar a taxa com a prévia ligada reabre a câmera na taxa nova — senão a
+  // prévia continuaria mostrando a taxa antiga e o seletor pareceria morto
+  // (o aparelho entra nas dependências só por ser lido; quem decide reabrir é
+  // a comparação com o fps da última abertura)
+  const fpsDaPrevia = useRef(cameraFps);
+  const cameraId = devices.cameraId;
+  useEffect(() => {
+    if (fpsDaPrevia.current === cameraFps) return;
+    fpsDaPrevia.current = cameraFps;
+    if (previaPedida.current) void abrirPrevia(cameraId, cameraFps);
+  }, [cameraFps, cameraId, abrirPrevia]);
 
   // mesma lista e mesmos nomes dos menus da setinha (`opcoesDe`), só no
   // formato que o `Select` pede
@@ -342,6 +389,14 @@ export default function VozTab() {
             emptyLabel={t("voz.padraoSistema")}
             disabled={devices.cameras.length === 0}
           />
+          {/* `flex-wrap`: no celular (segmentos de 44) rótulo e sulco não cabem
+              numa linha de 358px, e sem quebra o sulco espremia cada "15 fps"
+              em duas linhas. `mt-2`: os mesmos 8px entre sulco e legenda da
+              seção da tela, logo acima. */}
+          <div className="mt-3">
+            <SeletorDeFpsDaCamera className="flex flex-wrap items-center gap-2" />
+          </div>
+          <p className="mt-2 text-xs text-text-muted">{AJUDA_FPS_DA_CAMERA}</p>
           <div className="my-3 grid aspect-video w-full max-w-[420px] place-items-center overflow-hidden rounded-lg bg-input-background-default">
             {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
             <video
@@ -357,7 +412,7 @@ export default function VozTab() {
           <Button
             variante="secundario"
             tamanho="md"
-            onClick={() => void alternarCamera()}
+            onClick={alternarCamera}
             carregando={abrindoCamera}
             className="celular:h-[44px]"
           >

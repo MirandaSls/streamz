@@ -64,6 +64,118 @@ pub struct Quadro {
     pub bgra: Vec<u8>,
 }
 
+/// Copia um buffer mapeado da GPU (linhas de `passo` bytes, com o padding
+/// que o driver quiser) para `destino`, sem o padding, reaproveitando a
+/// alocação que `destino` já tem.
+///
+/// Substitui o `as_nopadding_buffer(..).to_vec()` do `windows-capture`, que
+/// eram **duas** cópias do quadro inteiro quando havia padding (a do crate e
+/// o `to_vec`) e um `Vec` novo de ~15 MB por quadro em 1440p: alocação
+/// grande no Windows é página zerada sob demanda, e isso a 60 quadros por
+/// segundo aparece no perfil. `false` se o mapeamento for menor que o quadro
+/// (não deveria acontecer; quem chama descarta o quadro em vez de entrar em
+/// pânico dentro da thread de captura).
+fn copiar_sem_padding(
+    origem: &[u8],
+    largura: u32,
+    altura: u32,
+    passo: u32,
+    destino: &mut Vec<u8>,
+) -> bool {
+    let linha = largura as usize * 4;
+    let passo = passo as usize;
+    let altura = altura as usize;
+    if passo < linha || altura == 0 {
+        return false;
+    }
+    // A última linha não precisa do padding dela.
+    let necessario = (altura - 1) * passo + linha;
+    if origem.len() < necessario {
+        return false;
+    }
+    destino.clear();
+    if passo == linha {
+        destino.extend_from_slice(&origem[..linha * altura]);
+    } else {
+        destino.reserve(linha * altura);
+        for y in 0..altura {
+            let inicio = y * passo;
+            destino.extend_from_slice(&origem[inicio..inicio + linha]);
+        }
+    }
+    true
+}
+
+/// Marcapasso da captura: deixa passar no máximo um quadro por intervalo do
+/// preset, **antes** de o quadro ser lido da GPU.
+///
+/// Sem ele a leitura acompanha o compositor, não o preset: um monitor de
+/// 144 Hz fazia 144 cópias GPU→CPU por segundo (textura de staging, `Map`,
+/// cópia de ~15 MB) para a transmissão aproveitar 30 e jogar o resto fora
+/// depois de pago.
+///
+/// Dois limiares, conforme o backend:
+///
+/// - **`descartando`** (WGC, que empurra quadros e o que passa do limite é
+///   perdido): **7/8 do intervalo**. Com o limiar exato, a tremida natural
+///   dos vsyncs faz um monitor de 60 Hz num preset de 30 fps perder o quadro
+///   de 33,3 ms quando ele chega em 33,1 e só aceitar o de 50 ms — 20 fps em
+///   vez de 30. Com 7/8 a tolerância é de ~4 ms em 30 fps, e em 144 Hz o
+///   quadro aceito é o de 34,7 ms (28,8 fps).
+/// - **`puxando`** (DXGI, em que quem chama decide quando pedir): o intervalo
+///   exato. Esperar demais um milissegundo não perde nada — o quadro
+///   acumulado continua lá —, e a folga só faria ler mais que o preset.
+///
+/// Os instantes são `Duration` desde uma origem qualquer, fixa por sessão: o
+/// WGC passa o carimbo do próprio quadro (o mesmo relógio que o sistema usa
+/// para o `MinUpdateInterval`) e o DXGI passa um `Instant` local.
+#[derive(Debug, Clone, Copy)]
+struct Ritmo {
+    /// `None` é sem limite (miniaturas: um quadro só, o primeiro que vier).
+    minimo: Option<Duration>,
+    ultimo: Option<Duration>,
+}
+
+impl Ritmo {
+    fn livre() -> Self {
+        Self {
+            minimo: None,
+            ultimo: None,
+        }
+    }
+
+    fn descartando(fps: u32) -> Self {
+        Self {
+            minimo: Some(intervalo_do_fps(fps).mul_f64(7.0 / 8.0)),
+            ultimo: None,
+        }
+    }
+
+    fn puxando(fps: u32) -> Self {
+        Self {
+            minimo: Some(intervalo_do_fps(fps)),
+            ultimo: None,
+        }
+    }
+
+    /// Quanto falta para o próximo quadro poder passar; zero se já pode.
+    fn falta(&self, agora: Duration) -> Duration {
+        match (self.minimo, self.ultimo) {
+            (Some(minimo), Some(ultimo)) => (ultimo + minimo).saturating_sub(agora),
+            _ => Duration::ZERO,
+        }
+    }
+
+    /// Registra que um quadro passou em `agora`.
+    fn marcar(&mut self, agora: Duration) {
+        self.ultimo = Some(agora);
+    }
+}
+
+fn intervalo_do_fps(fps: u32) -> Duration {
+    Duration::from_secs_f64(1.0 / f64::from(fps.max(1)))
+}
+
 /// Qual API está fazendo a captura nesta máquina.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Backend {
@@ -125,13 +237,22 @@ pub trait Capturador: Send {
     /// transmite repete o quadro anterior. `Err` é definitivo — a janela
     /// fechou ou a API caiu — e a transmissão encerra.
     fn proximo_quadro(&mut self, limite: Duration) -> Result<Option<Quadro>, Erro>;
+
+    /// Devolve um quadro já entregue ao encoder, para a captura reaproveitar
+    /// o buffer dele no próximo em vez de alocar outro do tamanho da tela.
+    fn reciclar(&mut self, quadro: Quadro);
 }
 
-/// Abre uma sessão de captura no backend desta máquina.
-pub fn abrir(alvo: Alvo) -> Result<Box<dyn Capturador>, Erro> {
+/// Abre uma sessão de captura no backend desta máquina, entregando no máximo
+/// `fps` quadros por segundo (o do preset). O limite vale **antes** da leitura
+/// da GPU: quadro que a transmissão jogaria fora não chega a ser copiado.
+pub fn abrir(alvo: Alvo, fps: u32) -> Result<Box<dyn Capturador>, Erro> {
     match backend() {
-        Backend::Wgc => Ok(Box::new(wgc::Sessao::abrir(alvo)?)),
-        Backend::Dxgi => Ok(Box::new(dxgi::Duplicacao::abrir(alvo)?)),
+        Backend::Wgc => Ok(Box::new(wgc::Sessao::abrir(alvo, Some(fps))?)),
+        Backend::Dxgi => Ok(Box::new(dxgi::Duplicacao::abrir(
+            alvo,
+            Ritmo::puxando(fps),
+        )?)),
     }
 }
 

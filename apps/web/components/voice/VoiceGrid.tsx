@@ -23,10 +23,16 @@ import {
 } from "@/components/voice/grid-layout";
 import { registrarVolumePopover } from "@/components/voice/participant-menu";
 import { useEhMobile } from "@/hooks/useEhMobile";
-import { chaveDoTileDeTela } from "@/stores/assinaturas-de-tela";
+import { chaveDoTileDeTela, usePreviaDaMinhaTela } from "@/stores/assinaturas-de-tela";
 import { useAuth } from "@/stores/auth";
 import { ui } from "@/stores/ui";
-import { camerasDe, participantesDe, telasDe, useVoice } from "@/stores/voice";
+import {
+  aplicarAssinaturasDeTela,
+  camerasDe,
+  participantesDe,
+  telasDe,
+  useVoice,
+} from "@/stores/voice";
 
 /**
  * A grade de participantes de uma sala de voz.
@@ -104,6 +110,7 @@ export default function VoiceGrid({
   const focarAutomaticamente = useVoice((s) => s.focarAutomaticamente);
   const assistir = useVoice((s) => s.assistir);
   const pararDeAssistir = useVoice((s) => s.pararDeAssistir);
+  const previaDaMinhaTela = usePreviaDaMinhaTela((s) => s.chave);
   const ehMobile = useEhMobile();
   // elemento em estado (e não em ref): o palco é desmontado quando alguém sobe
   // ao destaque, e um `ref` não avisaria o observador de que voltou
@@ -127,20 +134,27 @@ export default function VoiceGrid({
       userId: state.user.id,
       comVideo: !!camera?.track,
     };
-    const telas = meus.flatMap(telasDe).map(
-      (pub): Tile => ({
-        key: chaveDoTileDeTela(state.user.id, pub.trackSid),
-        state,
-        publication: pub,
-        tela: true,
-        // A minha transmissão é sempre exibida, como no Discord: no navegador
-        // porque a faixa é local, e no desktop porque a store assina de volta o
-        // `<userId>#tela` da captura nativa (ver `assinaturas-de-tela.ts`).
-        // Esconder a própria tela atrás de "Assistir" seria pedir permissão a
-        // si mesmo — e foi por não haver esse pedido que ela ficou preta.
-        assistindo: sou || assistindo.has(state.user.id),
-        userId: state.user.id,
-        comVideo: !!pub.track,
+    const telas = meus.flatMap((p) =>
+      telasDe(p).map((pub): Tile => {
+        const key = chaveDoTileDeTela(state.user.id, pub.trackSid);
+        // A minha tela pela captura nativa do desktop: vem do `<userId>#tela`,
+        // um participante que não é a pessoa. Ela **não** se assina sozinha
+        // (ver `assinaturas-de-tela.ts`): o tile mostra o aviso "Você está
+        // compartilhando sua tela" até eu pedir a prévia ou pô-la no palco.
+        const minhaTelaNativa = sou && p.identity !== state.user.id;
+        const mostrando = minhaTelaNativa && (previaDaMinhaTela === key || focado === key);
+        return {
+          key,
+          state,
+          publication: pub,
+          tela: true,
+          // No navegador a minha tela é faixa local e aparece sempre; a dos
+          // outros, só quando escolho assistir.
+          assistindo: minhaTelaNativa ? mostrando : sou || assistindo.has(state.user.id),
+          userId: state.user.id,
+          comVideo: !!pub.track && (!minhaTelaNativa || mostrando),
+          minhaTelaNativa,
+        };
       }),
     );
     return [pessoa, ...telas];
@@ -149,8 +163,10 @@ export default function VoiceGrid({
   // transmissão que eu **estou assistindo** assume o palco sozinha (Discord).
   // Só quando ninguém escolheu nada à mão — ver `focoAutomatico` na store —, e
   // só depois de assistida: subir ao palco uma tela fechada daria o convite
-  // "Assistir transmissão" em tamanho de cinema.
-  const telaAssistida = tiles.find((t) => t.tela && t.assistindo) ?? null;
+  // "Assistir transmissão" em tamanho de cinema. A **minha** tela nunca sobe
+  // sozinha: no palco ela seria assinada, e é justamente a volta da própria
+  // transmissão que deixava o PC lento.
+  const telaAssistida = tiles.find((t) => t.tela && t.assistindo && !t.minhaTelaNativa) ?? null;
   const chaveDaTela = telaAssistida?.key ?? null;
   useEffect(() => {
     if (focoAutomatico && chaveDaTela && focado !== chaveDaTela) {
@@ -174,6 +190,15 @@ export default function VoiceGrid({
       if (focado !== chave) setFocado(chave);
     },
     onPararDeAssistir: pararDeAssistir,
+    // a escolha fica fora da store de voz (ver `usePreviaDaMinhaTela`), então
+    // quem a muda reaplica as assinaturas na mão
+    onPreviaDaMinhaTela: (chave: string, ver: boolean) => {
+      usePreviaDaMinhaTela.setState({ chave: ver ? chave : null });
+      // ocultar com a tela no palco tira ela de lá: no destaque ela seguiria
+      // assinada, e o aviso em tamanho de cinema não serve para nada
+      if (!ver && focado === chave) setFocado(null);
+      aplicarAssinaturasDeTela();
+    },
   };
 
   if (tiles.length === 0) {

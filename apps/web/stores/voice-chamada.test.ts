@@ -46,6 +46,9 @@ const { SalaFalsa } = vi.hoisted(() => {
       }),
       unpublishTrack: vi.fn(async () => {}),
       setCameraEnabled: vi.fn(async () => {}),
+      getTrackPublication: vi.fn((_fonte: string): unknown => undefined),
+      // o aviso de CPU da câmera (`LocalTrackCpuConstrained`)
+      on: vi.fn(),
     };
 
     constructor() {
@@ -396,6 +399,121 @@ describe("tela compartilhada", () => {
     expect(SalaFalsa.criadas).toHaveLength(1);
     expect(sala.desconectada).toBe(false);
     expect(useVoice.getState().screenOn).toBe(true);
+  });
+
+  it("publica com o teto do preset escolhido em `screenShareEncoding`", async () => {
+    // com `videoEncoding` o SDK ignorava o preset para a fonte ScreenShare e a
+    // tela saía no padrão dele (1080p15, 2,5 Mbps)
+    useVoice.getState().setScreenQuality("1440p60");
+    await useVoice.getState().startCall("dm1", false);
+    await useVoice.getState().publicarTela(capturaFalsa());
+    const [, opcoes] = SalaFalsa.criadas[0].localParticipant.publishTrack.mock.calls[0] as unknown as [
+      unknown,
+      Record<string, unknown>,
+    ];
+    expect(opcoes.screenShareEncoding).toEqual({ maxBitrate: 9_000_000, maxFramerate: 60 });
+    expect(opcoes.videoEncoding).toBeUndefined();
+  });
+});
+
+describe("câmera: fps e alívio com a tela no ar", () => {
+  /** Uma câmera publicada e ligada, com um sender de duas camadas. */
+  function cameraNoAr() {
+    let encodings: RTCRtpEncodingParameters[] = [
+      { rid: "q", active: true, maxBitrate: 450_000, maxFramerate: 20, scaleResolutionDownBy: 3 },
+      { rid: "h", active: true, maxBitrate: 3_000_000, maxFramerate: 30, scaleResolutionDownBy: 1 },
+    ];
+    const sender = {
+      getParameters: () => ({ encodings: encodings.map((e) => ({ ...e })) }),
+      setParameters: vi.fn(async (p: { encodings: RTCRtpEncodingParameters[] }) => {
+        encodings = p.encodings;
+      }),
+    };
+    const faixa = {
+      isMuted: false,
+      sender,
+      publishOptions: {} as Record<string, unknown>,
+      mediaStreamTrack: { getSettings: () => ({ width: 1920, height: 1080, deviceId: "cam1" }) },
+      restartTrack: vi.fn(async (_o: unknown) => {}),
+    };
+    const lp = SalaFalsa.criadas[0].localParticipant;
+    lp.getTrackPublication.mockImplementation(() => ({ videoTrack: faixa }));
+    return { faixa, sender, encodings: () => encodings };
+  }
+
+  beforeEach(() => {
+    useVoice.setState({ cameraFps: 30 });
+  });
+
+  it("guarda o fps e o preset de tela, e recusa fps fora das opções", () => {
+    useVoice.getState().setCameraFps(60);
+    expect(useVoice.getState().cameraFps).toBe(60);
+    expect(localStorage.getItem("voiceCameraFps")).toBe("60");
+    useVoice.getState().setCameraFps(25 as never);
+    expect(useVoice.getState().cameraFps).toBe(60);
+    useVoice.getState().setScreenQuality("720p60");
+    expect(localStorage.getItem("voiceScreenQuality")).toBe("720p60");
+  });
+
+  it("liga a câmera no fps escolhido, com duas camadas", async () => {
+    await useVoice.getState().startCall("dm1", false);
+    useVoice.getState().setCameraFps(60);
+    await useVoice.getState().toggleCam();
+    const lp = SalaFalsa.criadas[0].localParticipant;
+    const [ligar, captura, publicacao] = lp.setCameraEnabled.mock.calls[0] as unknown as [
+      boolean,
+      { resolution: unknown },
+      { videoEncoding: unknown; videoSimulcastLayers: { width: number; height: number }[] },
+    ];
+    expect(ligar).toBe(true);
+    expect(captura.resolution).toEqual({ width: 1280, height: 720, frameRate: 60 });
+    expect(publicacao.videoEncoding).toEqual({ maxBitrate: 2_500_000, maxFramerate: 60 });
+    expect(publicacao.videoSimulcastLayers).toHaveLength(1);
+    expect(publicacao.videoSimulcastLayers[0]).toMatchObject({ width: 640, height: 360 });
+  });
+
+  it("trocar o fps com a câmera no ar reinicia a captura e reescreve o sender", async () => {
+    await useVoice.getState().startCall("dm1", false);
+    const { faixa, encodings } = cameraNoAr();
+    useVoice.getState().setCameraFps(24);
+    await vi.waitFor(() => expect(faixa.restartTrack).toHaveBeenCalledTimes(1));
+    expect(faixa.restartTrack.mock.calls[0]?.[0]).toEqual({
+      deviceId: "cam1",
+      resolution: { width: 1920, height: 1080, frameRate: 24 },
+    });
+    await vi.waitFor(() => expect(encodings()[1]?.maxFramerate).toBe(24));
+    expect(encodings()[1]).toMatchObject({ rid: "h", maxBitrate: 2_500_000, scaleResolutionDownBy: 1 });
+    expect(encodings()[0]?.maxFramerate).toBe(20);
+  });
+
+  it("a tela no ar alivia a câmera no sender, e parar a tela devolve", async () => {
+    await useVoice.getState().startCall("dm1", false);
+    const { faixa, encodings } = cameraNoAr();
+    useVoice.setState({ screenOn: true });
+    await vi.waitFor(() => expect(encodings()[1]?.maxFramerate).toBe(15));
+    expect(encodings()[1]?.scaleResolutionDownBy).toBe(1.5);
+    expect(encodings()[0]?.maxFramerate).toBe(15);
+    useVoice.setState({ screenOn: false });
+    await vi.waitFor(() => expect(encodings()[1]?.maxFramerate).toBe(30));
+    expect(encodings()[1]?.scaleResolutionDownBy).toBe(1);
+    // sem republicar e sem reabrir a captura: não pisca
+    expect(faixa.restartTrack).not.toHaveBeenCalled();
+  });
+
+  it("o aviso de CPU do navegador aplica o mesmo alívio", async () => {
+    await useVoice.getState().startCall("dm1", false);
+    const { encodings } = cameraNoAr();
+    const lp = SalaFalsa.criadas[0].localParticipant;
+    const [evento, ouvinte] = lp.on.mock.calls[0] as unknown as [
+      string,
+      (faixa: unknown, pub: { source: string }) => void,
+    ];
+    expect(evento).toBe("localTrackCpuConstrained");
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    ouvinte({}, { source: "camera" });
+    await vi.waitFor(() => expect(encodings()[1]?.maxFramerate).toBe(15));
+    expect(aviso).toHaveBeenCalled();
+    aviso.mockRestore();
   });
 });
 

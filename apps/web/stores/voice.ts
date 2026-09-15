@@ -2,12 +2,12 @@ import { create } from "zustand";
 import {
   type CallEndedEvent,
   type CallRingEvent,
+  type CameraFps,
   type Channel,
   MEDIA_QUALITY,
   PTT_RELEASE_MS,
   type PublicUser,
   SCREEN_QUALITY,
-  SCREEN_QUALITY_PADRAO,
   type ScreenQuality,
   type VoiceEvictedEvent,
   type VoiceFlags,
@@ -21,11 +21,14 @@ import {
   ConnectionState,
   LocalAudioTrack,
   LocalVideoTrack,
+  ParticipantEvent,
   RemoteTrackPublication,
   Room,
   RoomEvent,
   Track,
+  VideoPreset,
   createLocalTracks,
+  type LocalParticipant,
   type Participant,
   type TrackPublication,
 } from "livekit-client";
@@ -46,6 +49,17 @@ import {
 import { tocarSom, tocarSomDeMovido } from "@/lib/ringtone";
 import { cronometroDeVoz, type CronometroDeVoz } from "@/lib/tempos-de-voz";
 import { montarPedido } from "@/lib/seletor-de-tela";
+import {
+  CAMERA_FPS_KEY,
+  SCREEN_QUALITY_KEY,
+  capturaDaCamera,
+  ehCameraFps,
+  encodingsDaCamera,
+  lerCameraFps,
+  lerScreenQuality,
+  mesclarEncodings,
+  publicacaoDaCamera,
+} from "@/lib/qualidade-de-camera";
 import {
   avisoSemChamadas,
   destinoNoNavegador,
@@ -145,6 +159,12 @@ let telaPreparada: { url: string; token: string; channelId: string } | null = nu
  * número mudado desfaz o que acabou de abrir.
  */
 let geracaoDeTela = 0;
+/**
+ * O navegador avisou (`LocalTrackCpuConstrained`) que a CPU não está dando
+ * conta de codificar a câmera. Vale o mesmo alívio da tela compartilhada até a
+ * pessoa desligar a câmera, escolher outro fps ou sair da sala.
+ */
+let cameraSobCpu = false;
 
 interface VoiceStoreState {
   /** estados de voz por canal (só quem está conectado). */
@@ -207,6 +227,12 @@ interface VoiceStoreState {
   screenOn: boolean;
   screenQuality: ScreenQuality;
   screenAudio: boolean;
+  /**
+   * Taxa de quadros da câmera (persistida no browser). Vale na captura, no
+   * teto do encoder e nas camadas do simulcast; mudar com a câmera ligada
+   * reinicia a captura dentro da mesma faixa, sem republicar.
+   */
+  cameraFps: CameraFps;
   /** ajustes de áudio da aba "Voz e vídeo" (persistidos no browser). */
   audio: AudioPrefs;
   /**
@@ -314,6 +340,7 @@ interface VoiceStoreState {
   pararTela: () => Promise<void>;
   setScreenQuality: (q: ScreenQuality) => void;
   setScreenAudio: (on: boolean) => void;
+  setCameraFps: (fps: CameraFps) => void;
   setAudioPref: (patch: Partial<AudioPrefs>) => void;
 
   setVolume: (userId: string, volume: number) => void;
@@ -415,6 +442,23 @@ const AUDIO_PADRAO: AudioPrefs = {
 
 const AUDIO_KEY = "voiceAudioPrefs";
 
+/** Lê uma preferência crua do storage; sem storage (ou bloqueado), `null`. */
+function lerDoStorage(chave: string): string | null {
+  try {
+    return typeof window !== "undefined" ? localStorage.getItem(chave) : null;
+  } catch {
+    return null;
+  }
+}
+
+function gravarNoStorage(chave: string, valor: string) {
+  try {
+    localStorage.setItem(chave, valor);
+  } catch {
+    // sem storage a preferência vale só nesta sessão
+  }
+}
+
 function carregarAudio(): AudioPrefs {
   try {
     const raw = typeof window !== "undefined" ? localStorage.getItem(AUDIO_KEY) : null;
@@ -493,6 +537,7 @@ function desmontarSala() {
     telaPreparada = null;
     void ponteDescartarTela();
   }
+  cameraSobCpu = false;
   if (!sala) return;
   pararMedicaoDePing();
   // o microfone tem dono e é ele quem desmonta a cadeia: a `Room` fecha a
@@ -627,8 +672,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     camOn: false,
     facingMode: "user",
     screenOn: false,
-    screenQuality: SCREEN_QUALITY_PADRAO,
+    screenQuality: lerScreenQuality(lerDoStorage(SCREEN_QUALITY_KEY)),
     screenAudio: true,
+    cameraFps: lerCameraFps(lerDoStorage(CAMERA_FPS_KEY)),
     audio: carregarAudio(),
     erroDeSupressao: null,
     volumes: {},
@@ -955,24 +1001,37 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         return;
       }
       const proximo = !lp.isCameraEnabled;
+      const fps = get().cameraFps;
       try {
         const cameraId = useVoiceDevicesStore.getState().cameraId;
+        if (proximo) await descartarCameraDesatualizada(lp, fps);
         // A resolução vai explícita porque passar `captureOptions` substitui o
         // `videoCaptureDefaults` da sala em vez de completá-lo: sem isto, ligar
         // a câmera com um dispositivo escolhido cairia no padrão do navegador.
-        await lp.setCameraEnabled(proximo, {
-          // O lado escolhido no celular vale também ao **religar** a câmera:
-          // quem virou para a traseira e desligou não espera a frontal de volta.
-          // `deviceId` tem precedência quando existe (é escolha explícita das
-          // configurações, feita num computador); sem ele, manda o lado.
-          ...(cameraId ? { deviceId: cameraId } : { facingMode: get().facingMode }),
-          resolution: {
-            width: MEDIA_QUALITY.camera.width,
-            height: MEDIA_QUALITY.camera.height,
-            frameRate: MEDIA_QUALITY.camera.frameRate,
+        await lp.setCameraEnabled(
+          proximo,
+          {
+            // O lado escolhido no celular vale também ao **religar** a câmera:
+            // quem virou para a traseira e desligou não espera a frontal de volta.
+            // `deviceId` tem precedência quando existe (é escolha explícita das
+            // configurações, feita num computador); sem ele, manda o lado.
+            ...(cameraId ? { deviceId: cameraId } : { facingMode: get().facingMode }),
+            resolution: capturaDaCamera(fps),
           },
-        });
+          // teto do encoder e as duas camadas do simulcast para este fps (o
+          // `publishDefaults` da sala foi fixado quando ela nasceu)
+          proximo ? opcoesDePublicacaoDaCamera(fps) : undefined,
+        );
+        if (proximo) {
+          const faixa = cameraDe(lp);
+          if (faixa) fpsDaFaixa.set(faixa, fps);
+        } else {
+          // desligar zera o aviso de CPU: a próxima câmera começa sem alívio
+          cameraSobCpu = false;
+        }
         set({ camOn: proximo });
+        // a tela pode já estar no ar: a câmera que acabou de subir entra aliviada
+        if (proximo) await ajustarCameraNoSender();
       } catch (e) {
         set({ camOn: false });
         ui.toast(errorMessage(e, "Não foi possível ligar a câmera"), "error");
@@ -991,14 +1050,11 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       const faixa = lp.getTrackPublication(Track.Source.Camera)?.videoTrack;
       try {
         if (faixa) {
-          await faixa.restartTrack({
-            facingMode: alvo,
-            resolution: {
-              width: MEDIA_QUALITY.camera.width,
-              height: MEDIA_QUALITY.camera.height,
-              frameRate: MEDIA_QUALITY.camera.frameRate,
-            },
-          });
+          await faixa.restartTrack({ facingMode: alvo, resolution: capturaDaCamera(get().cameraFps) });
+          fpsDaFaixa.set(faixa, get().cameraFps);
+          // a outra câmera pode ter outras dimensões, e aí o SDK recalcula as
+          // codificações a partir das opções de publicação — sem o alívio
+          await ajustarCameraNoSender();
         }
         // Escolher um lado desfaz a escolha por dispositivo: as duas mandam na
         // mesma captura, e manter o `deviceId` faria o próximo `toggleCam`
@@ -1038,8 +1094,11 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         await lp.publishTrack(new LocalVideoTrack(video), {
           source: Track.Source.ScreenShare,
           // sem isto a faixa sobe com o bitrate padrão do SDK, calibrado para
-          // 1080p — em 1440p o resultado seria mais pixels, todos borrados
-          videoEncoding: { maxBitrate: preset.maxBitrate, maxFramerate: preset.frameRate },
+          // 1080p — em 1440p o resultado seria mais pixels, todos borrados.
+          // É `screenShareEncoding`, e não `videoEncoding`: para a fonte
+          // ScreenShare o SDK só lê este (`computeVideoEncodings`), e com o
+          // outro o preset escolhido era ignorado em silêncio
+          screenShareEncoding: { maxBitrate: preset.maxBitrate, maxFramerate: preset.frameRate },
           // simulcast de tela em alta gasta CPU de quem transmite para produzir
           // camadas reduzidas que ninguém quer: quem abre uma tela quer lê-la
           simulcast: false,
@@ -1181,8 +1240,23 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       rerender();
     },
 
-    setScreenQuality: (screenQuality) => set({ screenQuality }),
+    setScreenQuality: (screenQuality) => {
+      set({ screenQuality });
+      gravarNoStorage(SCREEN_QUALITY_KEY, screenQuality);
+    },
     setScreenAudio: (screenAudio) => set({ screenAudio }),
+
+    setCameraFps: (cameraFps) => {
+      if (!ehCameraFps(cameraFps)) return;
+      const mudou = cameraFps !== get().cameraFps;
+      set({ cameraFps });
+      gravarNoStorage(CAMERA_FPS_KEY, String(cameraFps));
+      if (!mudou) return;
+      // escolher o fps à mão é a pessoa dizendo o que quer: o alívio por CPU
+      // sai (o da tela continua, porque depende de a tela estar no ar)
+      cameraSobCpu = false;
+      void aplicarFpsNaCamera(cameraFps);
+    },
 
     setAudioPref: (patch) => {
       const anterior = get().audio;
@@ -1638,11 +1712,7 @@ async function entrarNaSala(
     adaptiveStream: true,
     dynacast: true,
     videoCaptureDefaults: {
-      resolution: {
-        width: MEDIA_QUALITY.camera.width,
-        height: MEDIA_QUALITY.camera.height,
-        frameRate: MEDIA_QUALITY.camera.frameRate,
-      },
+      resolution: capturaDaCamera(get().cameraFps),
     },
     // Câmera e microfone publicam com os tetos do contrato, não com o padrão do
     // SDK (calibrado para sala grande em rede ruim). `dtx: false` mantém o
@@ -1651,16 +1721,29 @@ async function entrarNaSala(
     // em inteligibilidade. `red` duplica os pacotes de voz e é o que segura a
     // qualidade quando a rede perde pacote, que é a falha comum de verdade.
     publishDefaults: {
-      videoEncoding: {
-        maxBitrate: MEDIA_QUALITY.camera.maxBitrate,
-        maxFramerate: MEDIA_QUALITY.camera.frameRate,
-      },
+      // `toggleCam` passa as opções do fps de agora; estas são o piso para
+      // qualquer outro caminho que publique câmera
+      ...opcoesDePublicacaoDaCamera(get().cameraFps),
       audioPreset: { maxBitrate: MEDIA_QUALITY.micBitrate },
       dtx: false,
       red: true,
     },
   });
   sala = room;
+  cameraSobCpu = false;
+
+  // O navegador mede a própria codificação (`qualityLimitationReason`) e o SDK
+  // avisa quando a CPU virou o gargalo. A câmera recebe o mesmo alívio da tela
+  // compartilhada; o SDK em si não faz nada com o aviso além de emiti-lo.
+  room.localParticipant.on(ParticipantEvent.LocalTrackCpuConstrained, (_faixa, publicacao) => {
+    if (sala !== room || publicacao.source !== Track.Source.Camera || cameraSobCpu) return;
+    cameraSobCpu = true;
+    console.warn("[camera] CPU no limite: câmera limitada a 15 fps e 720p", {
+      fps: useVoice.getState().cameraFps,
+      tela: useVoice.getState().screenOn,
+    });
+    void ajustarCameraNoSender();
+  });
 
   /**
    * Recalcula o conjunto de falantes a partir do que a sala diz **agora**.
@@ -1753,7 +1836,6 @@ async function entrarNaSala(
   // Agora é como no Discord: entra e ouve primeiro, o microfone vem em seguida.
   void aplicarSaidaEscolhida(room);
   void publicarMicrofone(room, set, crono);
-  void get; // o `get` fica na assinatura para futuras leituras de estado
   rerender();
 }
 
@@ -1906,6 +1988,133 @@ async function republicarMicrofone(audio: AudioPrefs) {
     .catch(() => {
       // o microfone pode ter sumido no meio da troca; o próximo toggle resolve
     });
+}
+
+// ── câmera: fps escolhido e alívio de CPU ─────────────────────────────────
+//
+// Três coisas decidem como a câmera sai: o fps escolhido (`cameraFps`), a tela
+// compartilhada no ar (`screenOn`) e o aviso de CPU do navegador. O fps muda a
+// **captura** (`restartTrack`, dentro da mesma faixa); o alívio muda só as
+// **codificações do sender** (`setParameters`) — nada é republicado, então a
+// imagem não pisca para ninguém. As contas moram em `lib/qualidade-de-camera.ts`.
+
+/**
+ * Com que fps cada faixa de câmera foi capturada. É o que diz se uma câmera
+ * desligada (o SDK só a muta: a publicação continua) pode ser religada como
+ * está ou precisa nascer de novo — religar reusa a captura e as opções de
+ * publicação antigas, e o fps escolhido no meio seria ignorado.
+ */
+const fpsDaFaixa = new WeakMap<LocalVideoTrack, CameraFps>();
+
+/**
+ * Uma fila só para mexer na câmera: `getParameters`/`setParameters` precisam
+ * andar em par, e dois cliques seguidos no fps não podem reiniciar a captura
+ * em paralelo.
+ */
+let filaDaCamera: Promise<void> = Promise.resolve();
+
+function naFilaDaCamera(tarefa: () => Promise<void>): Promise<void> {
+  const proxima = filaDaCamera.then(tarefa).catch((e: unknown) => {
+    console.warn("[camera] não foi possível ajustar a câmera", e);
+  });
+  filaDaCamera = proxima;
+  return proxima;
+}
+
+/** A faixa de câmera publicada (ligada ou mutada), se houver. */
+function cameraDe(lp: LocalParticipant): LocalVideoTrack | undefined {
+  return lp.getTrackPublication(Track.Source.Camera)?.videoTrack;
+}
+
+/** Opções de publicação da câmera no formato do SDK. */
+function opcoesDePublicacaoDaCamera(fps: CameraFps) {
+  const { videoEncoding, camadas } = publicacaoDaCamera(fps);
+  return {
+    videoEncoding,
+    videoSimulcastLayers: camadas.map(
+      (c) => new VideoPreset(c.width, c.height, c.maxBitrate, c.frameRate),
+    ),
+  };
+}
+
+/**
+ * Religar uma câmera mutada que foi capturada em outro fps não serve: o SDK
+ * reabriria a captura com as restrições antigas. Ela sai da sala antes (estava
+ * desligada, então ninguém vê nada sumir) e `setCameraEnabled` publica outra.
+ */
+async function descartarCameraDesatualizada(lp: LocalParticipant, fps: CameraFps) {
+  const faixa = cameraDe(lp);
+  if (!faixa || !faixa.isMuted || fpsDaFaixa.get(faixa) === fps) return;
+  await lp.unpublishTrack(faixa, true);
+}
+
+/**
+ * Reaplica as codificações da câmera no sender: o teto do fps da faixa, com o
+ * alívio quando a tela está no ar ou a CPU no limite. Sem câmera ligada, nada.
+ */
+function ajustarCameraNoSender(): Promise<void> {
+  return naFilaDaCamera(ajustarCameraAgora);
+}
+
+async function ajustarCameraAgora() {
+  const room = sala;
+  const faixa = room ? cameraDe(room.localParticipant) : undefined;
+  const sender = faixa?.sender;
+  if (!faixa || !sender || faixa.isMuted) return;
+  const { cameraFps, screenOn } = useVoice.getState();
+  const fps = fpsDaFaixa.get(faixa) ?? cameraFps;
+  const aliviar = screenOn || cameraSobCpu;
+  const { width, height } = faixa.mediaStreamTrack.getSettings();
+  const ladoMenor = width && height ? Math.min(width, height) : 0;
+  // duas tentativas: o dynacast do SDK também chama `setParameters` (liga e
+  // desliga camadas) e, se ele passar entre o nosso get e o nosso set, o
+  // navegador recusa a transação — basta ler de novo
+  for (let tentativa = 0; ; tentativa += 1) {
+    const params = sender.getParameters();
+    const encodings = mesclarEncodings(
+      params.encodings,
+      encodingsDaCamera({ fps, ladoMenor, quantidade: params.encodings.length, aliviar }),
+    );
+    if (!encodings) return;
+    params.encodings = encodings;
+    try {
+      await sender.setParameters(params);
+      return;
+    } catch (e) {
+      if (tentativa >= 1) throw e;
+    }
+  }
+}
+
+/**
+ * Leva o fps escolhido para a câmera que está no ar: reinicia a captura com a
+ * resolução e o `frameRate` novos dentro da mesma faixa (o `trackSid` não
+ * muda) e reescreve as codificações. As opções de publicação da faixa são
+ * atualizadas antes, porque é delas que o SDK recalcula as codificações quando
+ * as dimensões mudam (60 fps é 720p; o resto, 1080p).
+ */
+function aplicarFpsNaCamera(fps: CameraFps): Promise<void> {
+  return naFilaDaCamera(async () => {
+    // um clique mais novo já está na fila: só ele reinicia a captura
+    if (useVoice.getState().cameraFps !== fps) return;
+    const room = sala;
+    const faixa = room ? cameraDe(room.localParticipant) : undefined;
+    // câmera desligada: o próximo `toggleCam` já sobe no fps novo
+    if (!room || !faixa || faixa.isMuted) return;
+    if (fpsDaFaixa.get(faixa) !== fps) {
+      faixa.publishOptions = { ...faixa.publishOptions, ...opcoesDePublicacaoDaCamera(fps) };
+      // a mesma câmera que está no ar, e não a das configurações: trocar de
+      // câmera continua sendo coisa do próximo `setCameraEnabled`
+      const deviceId = faixa.mediaStreamTrack.getSettings().deviceId;
+      await faixa.restartTrack({
+        ...(deviceId ? { deviceId } : { facingMode: useVoice.getState().facingMode }),
+        resolution: capturaDaCamera(fps),
+      });
+      if (sala !== room) return;
+      fpsDaFaixa.set(faixa, fps);
+    }
+    await ajustarCameraAgora();
+  });
 }
 
 /**
@@ -2116,6 +2325,21 @@ if (typeof window !== "undefined") {
     // de microfone.
     void republicarMicrofone(useVoice.getState().audio);
     if (devices.outputId) void room.switchActiveDevice("audiooutput", devices.outputId).catch(() => {});
+  });
+}
+
+// Tela e câmera ao mesmo tempo eram o que deixava o PC lento: são duas
+// codificações de vídeo em software na mesma CPU. Enquanto a tela está no ar
+// (pelo navegador ou pela captura nativa, que roda na mesma máquina), a câmera
+// desce a ≤720p e ≤15 fps no sender; parar a tela devolve o fps escolhido.
+// Sem a guarda de `window` das outras assinaturas: fora do navegador `sala` é
+// sempre nula e o ouvinte não faz nada — e assim ele vale também nos testes.
+{
+  let telaNoAr = useVoice.getState().screenOn;
+  useVoice.subscribe((s) => {
+    if (s.screenOn === telaNoAr) return;
+    telaNoAr = s.screenOn;
+    if (sala) void ajustarCameraNoSender();
   });
 }
 

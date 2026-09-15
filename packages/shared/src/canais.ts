@@ -270,9 +270,8 @@ export interface ScreenQualityPreset {
  * Resolução × taxa de quadros, todas as combinações que a UI oferece.
  *
  * Os valores de bitrate são para **tela** (conteúdo estático com texto fino),
- * não para câmera: privilegiam nitidez por quadro. 1440p30 é o padrão porque
- * ler código na tela de alguém depende de resolução, não de fluidez — quem
- * compartilha jogo ou vídeo troca para 1080p60 no seletor.
+ * não para câmera: privilegiam nitidez por quadro. Quem compartilha jogo ou
+ * vídeo troca para 60 fps no seletor.
  */
 export const SCREEN_QUALITY: Record<ScreenQuality, ScreenQualityPreset> = {
   "720p30": { label: "720p · 30 fps", width: 1280, height: 720, frameRate: 30, maxBitrate: 1_500_000 },
@@ -283,8 +282,63 @@ export const SCREEN_QUALITY: Record<ScreenQuality, ScreenQualityPreset> = {
   "1440p60": { label: "1440p · 60 fps", width: 2560, height: 1440, frameRate: 60, maxBitrate: 9_000_000 },
 };
 
-/** Resolução padrão do seletor de tela. */
-export const SCREEN_QUALITY_PADRAO: ScreenQuality = "1440p30";
+/**
+ * Resolução padrão do seletor de tela.
+ *
+ * 1080p30, e não 1440p30: o VP8 é codificado em software, e 1440p são 1,78× os
+ * pixels de 1080p por quadro — com a câmera ligada junto, era o que deixava o
+ * PC lento. Quem precisa ler texto miúdo sobe para 1440p no seletor (a escolha
+ * fica guardada).
+ */
+export const SCREEN_QUALITY_PADRAO: ScreenQuality = "1080p30";
+
+/** Taxas de quadros que a câmera oferece (o seletor de fps). */
+export const CAMERA_FPS_OPCOES = [15, 24, 30, 60] as const;
+export type CameraFps = (typeof CAMERA_FPS_OPCOES)[number];
+export const CAMERA_FPS_PADRAO: CameraFps = 30;
+
+/** Captura e teto de encoding de uma camada de vídeo da câmera. */
+export interface CameraQualityPreset {
+  width: number;
+  height: number;
+  frameRate: number;
+  /** teto de bitrate (bits/s) da camada. */
+  maxBitrate: number;
+}
+
+/**
+ * Captura e encoding da câmera por taxa de quadros escolhida.
+ *
+ * O bitrate acompanha o fps (menos quadros, menos bits pela mesma nitidez).
+ * 60 fps pede **720p**: é o que webcam comum entrega a 60 — pedir 1080p60 cai
+ * em 1080p30 na maioria delas, ou em MJPEG que o navegador decodifica na CPU.
+ */
+export const CAMERA_QUALITY: Record<CameraFps, CameraQualityPreset> = {
+  15: { width: 1920, height: 1080, frameRate: 15, maxBitrate: 1_700_000 },
+  24: { width: 1920, height: 1080, frameRate: 24, maxBitrate: 2_500_000 },
+  30: { width: 1920, height: 1080, frameRate: 30, maxBitrate: 3_000_000 },
+  60: { width: 1280, height: 720, frameRate: 60, maxBitrate: 2_500_000 },
+};
+
+/**
+ * A segunda camada do simulcast da câmera (a de miniatura da grade). Só duas
+ * camadas — a cheia e esta —, e não as três do SDK: cada camada é mais uma
+ * codificação do mesmo quadro na CPU de quem transmite. O fps desta camada
+ * nunca passa do escolhido (ver `lib/qualidade-de-camera.ts`).
+ */
+export const CAMERA_CAMADA_BAIXA: CameraQualityPreset = {
+  width: 640,
+  height: 360,
+  frameRate: 20,
+  maxBitrate: 450_000,
+};
+
+/**
+ * Teto da câmera enquanto a tela está sendo compartilhada (ou o navegador
+ * avisa que a CPU não dá conta): as duas codificações ao mesmo tempo eram o
+ * que deixava o PC lento. Aplicado só no sender, sem republicar a faixa.
+ */
+export const CAMERA_ALIVIO = { alturaMaxima: 720, frameRate: 15, maxBitrate: 1_000_000 } as const;
 
 /**
  * Tetos de qualidade de microfone, áudio de tela e câmera.
@@ -305,8 +359,11 @@ export const MEDIA_QUALITY = {
    * compartilhando. Exige captura sem os processadores de voz (ver o seletor).
    */
   screenAudioBitrate: 160_000,
-  /** Câmera: 1080p30. Acima disso o encoder do navegador vira o gargalo. */
-  camera: { width: 1920, height: 1080, frameRate: 30, maxBitrate: 3_000_000 },
+  /**
+   * Câmera no fps padrão (1080p30). Acima disso o encoder do navegador vira o
+   * gargalo; a escolha de fps de cada um mora em `CAMERA_QUALITY`.
+   */
+  camera: CAMERA_QUALITY[CAMERA_FPS_PADRAO],
 } as const;
 
 /** Quem está numa chamada e o token de mídia, quando o LiveKit está configurado. */
