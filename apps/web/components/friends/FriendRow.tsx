@@ -69,7 +69,7 @@ export default function FriendRow({
     <div
       role="listitem"
       onContextMenu={abrirMenu}
-      className="group relative ml-[14px] mr-[10px] flex h-[61px] items-center gap-3 rounded-lg border-t border-border-subtle px-[10px] first:border-t-0 hover:border-transparent hover:bg-interactive-background-hover celular:mx-2 celular:gap-2.5"
+      className="group relative ml-[14px] mr-[10px] flex h-[61px] items-center gap-3 rounded-lg px-[10px] hover:bg-interactive-background-hover celular:mx-2 celular:gap-2.5 [&:hover+div]:bg-transparent"
     >
       <button
         type="button"
@@ -93,7 +93,11 @@ export default function FriendRow({
       <span className="pointer-events-none relative min-w-0 flex-1">
         <span className="flex items-baseline gap-1.5">
           <span className="truncate text-base font-semibold text-text-strong">{nome}</span>
-          <span className="truncate text-base text-text-muted">@{live.username}</span>
+          {/* `.discriminator__0a06e{visibility:hidden}` + `.hovered__0a06e .discriminator__0a06e{visibility:visible}`:
+              o usuário só aparece no hover da linha, sem '@' — não é um rótulo permanente. */}
+          <span className="invisible truncate text-sm leading-4 text-text-default group-hover:visible">
+            {live.username}
+          </span>
         </span>
         <span className="block truncate text-sm text-text-muted">{rodape}</span>
       </span>

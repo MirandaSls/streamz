@@ -153,15 +153,18 @@ export default function UserFooter() {
      * `border-radius: var(--radius-sm)` (8px), posição absoluta com
      * `--custom-panels-spacing` (= `min(var(--space-xs), var(--space-8))` =
      * 8px, os dois iguais) como `bottom`/`inset-inline-start`, e a largura
-     * `calc(100% - var(--custom-panels-spacing)*2)` — 8px de recuo dos três
-     * lados, não 10 (era `border-subtle` e `2.5` = 10px antes; a régua desta
-     * onda é o CSS, e VARIAVEIS.md:153 documenta a mesma dupla borda/recuo). A
-     * lista continua atrás: dá para ver um avatar cortado pela borda de cima do
-     * card, e o divisor da coluna reaparece embaixo dele.
+     * `calc(100% - var(--custom-panels-spacing)*2)`. O CSS resolve 8px, mas o
+     * print 1:1 manda: em `2026-09-02 152318.png` o painel tem 10px livres dos
+     * dois lados (linha y=1015, x 10–364 numa coluna de 375) e 10px até a base
+     * (coluna x=150, y 1022–1031) — daí `2.5`, não `2`. A lista continua atrás:
+     * dá para ver um avatar cortado pela borda de cima do card, e o divisor da
+     * coluna reaparece embaixo dele.
      *
-     * A altura de 58px da linha principal (abaixo) é medida em print (ver
-     * `medidas` da entrega): o CSS não fixa altura, o cartão cresce com o
-     * conteúdo.
+     * A linha principal (abaixo) tem 56px (`h-14`): medida entre a divisória e a
+     * borda de baixo em `2026-08-31 101842.png` (y 850–905) e
+     * `2026-08-31 160106.png` (y 680–735), avatar de 32 com 12 acima e abaixo;
+     * com a borda de 1px em cima e embaixo o cartão dá os 58 de `152318`
+     * (y 964–1021). O CSS não fixa altura, o cartão cresce com o conteúdo.
      *
      * A diferença não é enfeite. Encostado nas bordas, o painel lê como o fim da
      * coluna; recuado, lê como uma peça por cima dela — que é o que ele é, já
@@ -172,11 +175,11 @@ export default function UserFooter() {
      */
     <div
       ref={painel}
-      className="pointer-events-auto absolute inset-x-2 bottom-2 z-20 flex flex-col overflow-hidden rounded-lg border border-border-muted bg-background-base-low"
+      className="pointer-events-auto absolute inset-x-2.5 bottom-2.5 z-20 flex flex-col overflow-hidden rounded-lg border border-border-muted bg-background-base-low"
     >
       {/* f-voz: a barra da call sobe junto, como parte da mesma pilha flutuante */}
       <VoiceConnectedBar />
-      <div className="flex h-[58px] shrink-0 items-center gap-2 px-3.5">
+      <div className="flex h-14 shrink-0 items-center gap-2 px-3.5">
         <button
           type="button"
           /*
@@ -198,21 +201,24 @@ export default function UserFooter() {
             {/*
               Conectado à voz **substitui** o status (custom incluso): medido
               em `2026-08-31 101842.png` ("🔊 Em voz", canal de servidor) e
-              `2026-08-31 160106.png` ("📞 Em uma chamada", call de DM) — as
-              duas em verde, no lugar da linha de status de sempre. O ícone
-              muda com `guildId` (canal de voz vs. chamada de DM), como
-              `VoiceConnectedBar` já distingue os dois pelo mesmo campo.
+              `2026-08-31 160106.png` ("📞 Em uma chamada", call de DM), no
+              lugar da linha de status de sempre. O ícone muda com `guildId`
+              (canal de voz vs. chamada de DM), como `VoiceConnectedBar` já
+              distingue os dois pelo mesmo campo.
 
-              Cor `text-feedback-positive` (`#5eb479`), não `status-positive`
-              (`#3d9e60`, a bolinha "Disponível") — são tokens vizinhos, mas
-              não o mesmo; herdado do cartão 1i, que já tinha isolado os dois.
+              Só o **ícone** é verde; o texto é cinza. Em 101842 o texto tem
+              picos #a1a2a8/#abacb2 (x 80–120, y 886–890) = `text-subtle`, e o
+              alto-falante é #45a366 sólido (x 65–69) — a mesma cor que a
+              bolinha de presença tem nesse print (x 47–54, y 890). A nossa
+              bolinha é `icon-status-online` (#3d9e60) e sai com esse mesmo
+              desvio de captura, então o ícone usa o token dela, não um hex.
             */}
             {emVoz ? (
-              <span className="flex items-center gap-1 truncate text-xs leading-[13px] text-text-feedback-positive">
+              <span className="flex items-center gap-1 truncate text-xs leading-[13px] text-text-subtle">
                 {vozGuildId ? (
-                  <Volume2 size={12} className="shrink-0" aria-hidden="true" />
+                  <Volume2 size={12} className="shrink-0 text-icon-status-online" aria-hidden="true" />
                 ) : (
-                  <Phone size={12} className="shrink-0" aria-hidden="true" />
+                  <Phone size={12} className="shrink-0 text-icon-status-online" aria-hidden="true" />
                 )}
                 <span className="truncate">{vozGuildId ? "Em voz" : "Em uma chamada"}</span>
               </span>

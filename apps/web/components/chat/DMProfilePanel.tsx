@@ -64,17 +64,21 @@ import { anchorOf, ui, type MenuItem } from "@/stores/ui";
 const DATA = new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "short", year: "numeric" });
 
 /**
- * Os discos do canto do cartão: 30px, medidos no print. O véu é preto a 52%
- * sobre o cartão — o mesmo (17,17,19) sobre (34,35,39) que o print tem. Não há
- * token que bata com essa opacidade (`--background-scrim` é 72%, fixo), então
- * o preto cru fica — ver "faltando". O ícone por cima é branco puro sobre
- * imagem, por isso `text-icon-overlay-light`.
+ * Os discos do canto do cartão: 30px, medidos no print. É a mesma família
+ * `.bannerButton_fb7f94` (`css-bruto/865647…css`) que o kebab do cabeçalho de
+ * `CabecalhoDoPerfil.tsx` já usa: fundo
+ * `--control-overlay-secondary-background-default`, borda 1px
+ * `--opacity-white-8`, e hover/active em `-active` — o CSS deles usa a MESMA
+ * variável nos dois estados (`.bannerButton_fb7f94:active,
+ * .bannerButton_fb7f94:hover{background:var(--control-overlay-secondary-
+ * background-active)}`), não uma `-hover` separada. O ícone por cima é branco
+ * puro sobre imagem, por isso `text-icon-overlay-light`.
  */
 // 44px no celular: com 30 os dois discos ficavam abaixo do piso de toque, e
 // eles são o único caminho para "adicionar amigo" e para o menu de bloquear
 // dentro do painel deslizante do telefone.
 const CANTO =
-  "grid h-[30px] w-[30px] place-items-center rounded-full bg-black/[0.52] text-icon-overlay-light transition hover:bg-black/70 celular:h-[44px] celular:w-[44px]";
+  "grid h-[30px] w-[30px] place-items-center rounded-full border border-opacity-white-8 bg-control-overlay-secondary-background-default text-icon-overlay-light transition-colors duration-[50ms] ease-in hover:bg-control-overlay-secondary-background-active hover:duration-150 hover:ease-out active:bg-control-overlay-secondary-background-active celular:h-[44px] celular:w-[44px]";
 
 /** Três fases da busca do perfil rico — só o banner reage a isso (ver o comentário do topo do arquivo). */
 type EstadoDoPerfil = "carregando" | "pronto" | "erro";

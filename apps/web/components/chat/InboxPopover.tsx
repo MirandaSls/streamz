@@ -65,6 +65,7 @@ export default function InboxPopover({
   tamanhoDoIcone = 20,
   anelDaSuperficie = "ring-background-base-lower",
   modoTela = false,
+  distancia,
 }: {
   /** o ícone é de 20px no cabeçalho e de 19px na barra de título do desktop. */
   tamanhoDoIcone?: number;
@@ -77,6 +78,19 @@ export default function InboxPopover({
    * exatamente o fundo — ver o badge do rail em `GuildRail`.
    */
   anelDaSuperficie?: string;
+  /**
+   * Vão até o painel, repassado direto ao `HeaderPopover` (que tem o próprio
+   * padrão de 8, não medido, e serve o cabeçalho de Amigos no navegador — sem
+   * barra de título, sem print de referência). Na barra de título do desktop
+   * (`BarraDeTitulo`, que passa `distancia={0}`) o print 1:1 mede painel a 0
+   * do ícone (`Captura de tela 2026-09-02 152351.png`: painel começa em y=36
+   * com o ícone saindo em y≈31 da barra, sem folga) — com o 8 padrão o nosso
+   * nascia em y=44, 8px mais baixo, enquanto largura, altura, abas e
+   * sublinhado já batiam pixel a pixel com o mesmo print. Prop explícita, e
+   * não mais inferida de `tamanhoDoIcone === 19`: o tamanho do ícone é um
+   * detalhe visual, não um sinal de qual barra está por cima.
+   */
+  distancia?: number;
 } = {}) {
   const [aba, setAba] = useState<Aba>("naoLidas");
   /** menções já resolvidas nesta sessão do painel (o contrato não tem "ler uma"). */
@@ -104,19 +118,6 @@ export default function InboxPopover({
     [mentions, lidas],
   );
   const naoLidas = unread;
-  /**
-   * Vão até o painel: o padrão do `HeaderPopover` (8, não medido) serve o
-   * cabeçalho de Amigos no navegador (sem barra de título, sem print de
-   * referência). Na barra de título do desktop (`tamanhoDoIcone={19}`, ver
-   * `BarraDeTitulo`) o print 1:1 mede painel a 0 do ícone (`Captura de tela
-   * 2026-09-02 152351.png`: painel começa em y=36 com o ícone saindo em
-   * y≈31 da barra, sem folga) — com o 8 padrão o nosso nascia em y=44, 8px
-   * mais baixo, enquanto largura, altura, abas e sublinhado já batiam pixel a
-   * pixel com o mesmo print. `tamanhoDoIcone` já é o sinal que distingue os
-   * dois consumidores (ver o comentário do parâmetro), então não precisa de
-   * uma prop nova só para isto.
-   */
-  const distancia = tamanhoDoIcone === 19 ? 0 : undefined;
 
   /** Marca o canal da menção como lido e tira o cartão da lista. */
   function marcarComoLida(m: InboxMention) {
@@ -154,9 +155,16 @@ export default function InboxPopover({
       onOpen={() => void load()}
       cabecalho={(fechar) => (
         <header className="shrink-0">
-          {/* título a 19px do topo, 36px de linha, 21px das bordas */}
-          <div className="flex h-9 items-center gap-2 px-[21px] pt-[19px] celular:h-[44px] celular:px-4">
-            <Inbox size={20} aria-hidden="true" className="shrink-0 text-text-subtle" />
+          {/* título a 19px do topo, 36px de linha, 21px das bordas.
+              Rodada de correção (Captura de tela `152351.png`): `h-9`
+              `pt-[19px]` em border-box sobrava só 17px de conteúdo (36-19)
+              para uma linha de botões de 32 — a linha de título nascia 9px
+              mais alta e os botões 13px mais baixos do que o print mede.
+              `h-[55px]` (19 do padding + 36 da linha) resolve as duas
+              contas: o padding continua os mesmos 19px do topo, e agora
+              sobra a linha inteira de 36 abaixo dele. */}
+          <div className="flex h-[55px] items-center gap-2 px-[21px] pt-[19px] celular:h-[44px] celular:px-4">
+            <Inbox size={20} aria-hidden="true" className="shrink-0 text-text-strong" />
             <h2 className="min-w-0 truncate text-xl font-bold text-text-strong">
               Caixa de Entrada
             </h2>
@@ -177,10 +185,20 @@ export default function InboxPopover({
                   type="button"
                   onClick={() => verPedidos(fechar)}
                   aria-label={`Ver pedidos de amizade (${pedidos})`}
-                  className="flex h-8 w-[58px] items-center justify-center gap-1 rounded-lg bg-interactive-background-hover text-text-subtle transition hover:bg-interactive-background-selected hover:text-text-strong celular:h-[44px] celular:w-[66px]"
+                  /* Rodada de correção (mesma leitura do `BotaoDoCabecalho`
+                     acima, print `152351.png`): borda de 1px e glifo claro
+                     em repouso — `border-border-subtle` e
+                     `text-interactive-text-active`, no lugar de sem borda e
+                     `text-text-subtle`. */
+                  className="flex h-8 w-[58px] items-center justify-center gap-1 rounded-lg border border-border-subtle bg-interactive-background-hover text-interactive-text-active transition hover:bg-interactive-background-selected hover:text-text-strong celular:h-[44px] celular:w-[66px]"
                 >
                   <PedidoDeAmizade size={20} aria-hidden="true" />
-                  <span className="grid h-5 min-w-5 place-items-center rounded-full bg-background-surface-higher px-1 text-xs font-bold leading-none text-text-default">
+                  {/* chip do contador: no print (x 1710–1725) ele é MAIS
+                      claro que o botão, `--background-mod-strong`
+                      (`#9696a033` sobre o fundo do botão), e não
+                      `bg-background-surface-higher`, que aqui saía mais
+                      escuro — o inverso do medido. */}
+                  <span className="grid h-5 min-w-5 place-items-center rounded-full bg-background-mod-strong px-1 text-xs font-bold leading-none text-text-default">
                     {pedidos}
                   </span>
                 </button>
@@ -188,11 +206,15 @@ export default function InboxPopover({
             </div>
           </div>
 
-          {/* duas abas de meia largura; o indicador cobre a linha de baixo */}
+          {/* duas abas de meia largura; o indicador cobre a linha de baixo.
+              Rodada de correção: com a linha do título agora em `h-[55px]`,
+              `mt-[22px]` poria o divisor 22px além dela — 9px a mais do que
+              o print (`152351.png`: divisor em y=140/141, +105/+106 da borda
+              do popout). `mt-0.5` fecha a conta certa: 55+2+49=106. */}
           <div
             role="tablist"
             aria-label="Caixa de entrada"
-            className="mx-1 mt-[22px] flex h-[50px] gap-2.5 border-b border-border-subtle"
+            className="mx-1 mt-0.5 flex h-[50px] gap-2.5 border-b border-border-subtle"
           >
             {ABAS.map((a) => (
               <button
@@ -413,11 +435,17 @@ function BotaoDoCabecalho({
         aria-label={label}
         aria-disabled={inerte || undefined}
         /* 44px no celular: na aba Notificações (`modoTela`) estes são os únicos
-           botões do topo da tela, e 31px não são alvo de dedo */
-        className={`grid h-8 w-8 place-items-center rounded-lg bg-interactive-background-hover transition celular:h-[44px] celular:w-[44px] ${
+           botões do topo da tela, e 31px não são alvo de dedo.
+           Rodada de correção (Captura de tela `152351.png`, linha y=72): o
+           botão tem borda de 1px #35353b (o token exato não foi medido —
+           ver "faltando" — `border-border-subtle` é o mais próximo já
+           usado no arquivo) e o glifo em repouso é claro (#fafafa/#c9c9cb),
+           não `--icon-muted`: por isso `text-interactive-text-active` no
+           lugar de `text-text-subtle`. */
+        className={`grid h-8 w-8 place-items-center rounded-lg border border-border-subtle bg-interactive-background-hover transition celular:h-[44px] celular:w-[44px] ${
           inerte
             ? "cursor-default text-text-subtle opacity-50"
-            : "text-text-subtle hover:bg-interactive-background-selected hover:text-text-strong"
+            : "text-interactive-text-active hover:bg-interactive-background-selected hover:text-text-strong"
         }`}
       >
         {children}

@@ -87,16 +87,23 @@ export function submenuSilenciar(
   return { label: rotulo, icon: <BellOff size={18} />, submenu: itens };
 }
 
-/** "Configurações de Notificação ›": os três níveis como rádio. */
+/**
+ * "Configurações de Notificação ›": os três níveis como rádio.
+ *
+ * `rotulo` é opcional como o de `submenuSilenciar`: o cabeçalho do servidor
+ * usa "Config. de notificação" (print `2026-08-31 101733`), os outros menus
+ * continuam com `aba.notificacoes`.
+ */
 export function submenuNotificacoes(
   escopo: EscopoDeNotificacao,
   setting: NotificationSetting | undefined,
   t: (chave: ChaveDeTexto) => string,
+  rotulo?: string,
 ): MenuItem {
   const { definirNivel } = acoes(escopo);
   const nivelAtual = setting?.level ?? "ALL";
   return {
-    label: t("aba.notificacoes"),
+    label: rotulo ?? t("aba.notificacoes"),
     icon: <Bell size={18} />,
     // rádio de verdade: o estado é do item, não um ✓ ocupando o lugar do ícone
     submenu: NIVEIS.map(({ level, chave, icone }) => ({

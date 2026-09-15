@@ -77,7 +77,7 @@ export function CanalDeVoz({
         } ${alvoDeMembro ? "bg-interactive-background-hover ring-2 ring-inset ring-brand-500" : ""} ${
           ativo
             ? "bg-interactive-background-selected text-text-strong"
-            : naoLido
+            : naoLido || conectado
               ? "text-text-strong hover:bg-interactive-background-hover"
               : "text-channels-default hover:bg-interactive-background-hover hover:text-text-default"
         } ${silenciado && !ativo ? "opacity-50" : ""}`}
@@ -101,10 +101,12 @@ export function CanalDeVoz({
           className={`flex h-full min-w-0 flex-1 items-center gap-2.5 text-left ${naoLido ? "font-semibold" : "font-medium"}`}
         >
           {/* Conectado = ícone verde (`--icon-feedback-positive` #5eb479, medido
-              em 101842.png linha y=368 x=102–109): é o único sinal de "você está
-              aqui" no ícone — o Discord não pinta o nome do canal (medido na
-              mesma linha, x=161 y=368–372: #fbfbed, branco, igual a qualquer
-              canal ativo). Fora da chamada o ícone continua neutro. */}
+              em 101842.png linha y=368 x=102–109) e nome **branco**, mesmo sem
+              ser o canal aberto: na mesma linha o "Geral" tem picos
+              #fbfbfb/#f4fbfb (x=142–147) e #fbfbed (x=161 y=368–372), a cor de
+              canal ativo — por isso `text-strong` na linha, não o cinza de
+              `channels-default`. O nome não fica verde; só o ícone. Peso da
+              fonte: não medido. Fora da chamada o ícone continua neutro. */}
           <Volume2
             size={20}
             className={`shrink-0 ${conectado ? "text-icon-feedback-positive" : "text-channels-default"}`}
@@ -132,7 +134,11 @@ export function CanalDeVoz({
             // #3eaf5c/#43b45c, a mesma tinta sobre o fundo #121214.
             // `text-status-positive` (#3d9e60) é outro token, de outro
             // contexto (bolinha "Disponível"): próximo, mas não é este.
-            className="ml-auto mr-1.5 shrink-0 text-xs text-text-feedback-positive group-hover:hidden"
+            // `font-mono`: no print o "0:00" tem 28px (x 328–355) com passo
+            // de 8px por caractere e o ":" ocupando uma célula inteira — fonte
+            // de largura fixa. A família não foi medida; a pilha é a
+            // `--font-code` do Discord (tailwind.config.ts).
+            className="ml-auto mr-1.5 shrink-0 font-mono text-xs text-text-feedback-positive group-hover:hidden"
           />
         )}
 

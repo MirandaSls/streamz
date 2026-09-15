@@ -72,18 +72,21 @@ import { useAtualizacao, type Atualizacao } from "./useAtualizacao";
  * - **Controles**: 32px de largura, 4px entre eles, o último encostado na
  *   borda da janela — `separador (x=1808) + 7 = 1815` de início do primeiro;
  *   `1815+32+4+32+4=1887` de início do terceiro, centro em `1887+16=1903`,
- *   e o glifo do "fechar" mede exatamente aí no print. Continuam **fora**
- *   do `BotaoDeIcone` de propósito: o primitivo sempre
- *   aplica um raio (não existe "sem raio", e o de Windows é quadrado) e não
- *   tem uma família de "fundo sólido só no hover" (o fechar precisa de
- *   `bg-status-danger` cheio, não do cinza translúcido de
- *   `--interactive-background-hover`) — ver `faltando`.
+ *   e o glifo do "fechar" mede exatamente aí no print. Viraram
+ *   `BotaoDeIcone variante="janela"` (minimizar/maximizar) e
+ *   `variante="janela-fechar"` (fechar): a rodada de correção do primitivo
+ *   acrescentou `forma="reto"` (sem raio) e `fundo="hover-critico"`
+ *   (`--control-critical-primary-background-default` cheio no hover, e não o
+ *   cinza translúcido de `--interactive-background-hover`) — as duas famílias
+ *   que faltavam para os controles não precisarem mais do botão desenhado à
+ *   mão (ver `BotaoDeIcone.tsx`, itens 9–12 do cabeçalho).
  *
  * Os controles e as setas **não recebem foco pelo mouse** (`tabIndex={-1}` e
  * `preventDefault` no mousedown): clicar em "maximizar" deixava o anel verde
  * de foco aceso no botão, e o Discord não mostra nada — nem tooltip — nesses
- * botões (por isso as setas usam `semDica` no `BotaoDeIcone`, e o próprio
- * `aria-disabled`/`onMouseDown` continuam passando pelas props que sobram do
+ * botões (por isso as setas usam `semDica` no `BotaoDeIcone`, e os controles
+ * herdam o mesmo `semDica` da receita `janela`/`janela-fechar`; os dois
+ * `tabIndex`/`onMouseDown` continuam passando pelas props que sobram do
  * primitivo). Caixa de entrada e ajuda continuam focáveis pelo teclado.
  */
 export const ALTURA = 32;
@@ -155,7 +158,11 @@ function Barra() {
         <div data-tauri-drag-region className="ml-auto flex h-full items-center">
           <div data-tauri-drag-region className="flex items-center gap-3 pr-4">
             {/* o anel do badge é o fundo da barra (`bg-background-base-lowest`), não uma cor nova */}
-            <InboxPopover tamanhoDoIcone={19} anelDaSuperficie="ring-background-base-lowest" />
+            <InboxPopover
+              tamanhoDoIcone={19}
+              anelDaSuperficie="ring-background-base-lowest"
+              distancia={0}
+            />
             {/* sem central de ajuda no MVP: `fundo="nenhum"` porque o "?" do
                 print amostra `--icon-muted`, sem caixa em nenhum estado */}
             <BotaoDeIcone
@@ -238,11 +245,12 @@ function Seta({
   // `fundo="hover"` resolve `--interactive-text-default` (= `--icon-subtle`,
   // a cor medida da seta acesa) e `--interactive-text-hover` (= `--text-strong`,
   // a cor medida no hover); "sm" dá a caixa de 24px e o raio de 6px do
-  // `--custom-app-top-bar-item-radius`. `pointer-events-none` some com o
-  // hover inteiro no estado apagado — sem isso a classe `opacity-30` sozinha
-  // deixaria o botão claro de novo ao passar o mouse (ver cabeçalho do
-  // arquivo: no print a seta apagada é a acesa a ~30% sobre o fundo da barra,
-  // e não os 50% do `desabilitado` do primitivo).
+  // `--custom-app-top-bar-item-radius`. `desabilitado` com
+  // `opacidadeDesabilitado={30}` é a família medida no cabeçalho do arquivo
+  // (a seta apagada é a acesa a ~30% sobre o fundo da barra, não os 50% que o
+  // `desabilitado` do primitivo aplica por padrão) — o próprio `desabilitado`
+  // já congela o hover e o clique, sem precisar de `pointer-events-none`
+  // escrito à mão.
   return (
     <BotaoDeIcone
       rotulo={label}
@@ -250,11 +258,11 @@ function Seta({
       tamanho="sm"
       fundo="hover"
       semDica
-      aria-disabled={!ativa}
-      onClick={ativa ? onClick : undefined}
+      desabilitado={!ativa}
+      opacidadeDesabilitado={30}
+      onClick={onClick}
       onMouseDown={(e) => e.preventDefault()}
       tabIndex={-1}
-      className={ativa ? undefined : "pointer-events-none opacity-30"}
     />
   );
 }
@@ -273,30 +281,26 @@ export function Controle({
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      aria-label={label}
+    <BotaoDeIcone
+      rotulo={label}
+      icone={
+        <svg
+          width={10}
+          height={10}
+          viewBox="0 0 10 10"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1}
+          aria-hidden="true"
+        >
+          {children}
+        </svg>
+      }
+      variante={fechar ? "janela-fechar" : "janela"}
       onClick={onClick}
       onMouseDown={(e) => e.preventDefault()}
       tabIndex={-1}
-      className={`grid h-full w-8 place-items-center outline-none transition ${
-        fechar
-          ? "hover:bg-status-danger hover:text-control-critical-primary-text-default"
-          : "hover:bg-interactive-background-hover hover:text-text-strong"
-      }`}
-    >
-      <svg
-        width={10}
-        height={10}
-        viewBox="0 0 10 10"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1}
-        aria-hidden="true"
-      >
-        {children}
-      </svg>
-    </button>
+    />
   );
 }
 

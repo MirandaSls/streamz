@@ -3,14 +3,13 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import {
   ChevronDown,
+  CirclePlus,
   FolderPlus,
   LogOut,
   MoreHorizontal,
-  Plus,
   Search,
   Settings,
   UserPlus,
-  X,
 } from "@/components/ui/icones";
 import { Permission, guildNotificationScope, type Guild } from "@streamz/shared";
 import { BotaoDeIcone } from "@/components/ui/primitivos";
@@ -23,7 +22,7 @@ import { useCan } from "@/stores/permissions";
 import { useSettings } from "@/stores/settings";
 import { ui, useUI, type MenuItem } from "@/stores/ui";
 import { useT } from "@/lib/i18n";
-import { submenuNotificacoes, submenuSilenciar } from "@/lib/notification-menu";
+import { submenuNotificacoes } from "@/lib/notification-menu";
 
 /**
  * Topo da coluna de canais: o nome do servidor, o chevron e o menu que ele abre.
@@ -62,8 +61,8 @@ export function CabecalhoDoServidor({ celular }: { celular: boolean }) {
   const podeGerenciarCanais = useCan(Permission.MANAGE_CHANNELS);
   const criarCategoria = useCategories((s) => s.create);
   const openModal = useUI((s) => s.openModal);
-  // o chevron do cabeçalho vira X enquanto o dropdown está aberto, como no
-  // Discord; quem fecha o menu é o host, então o estado espelha a store
+  // o chevron do cabeçalho gira para cima enquanto o dropdown está aberto,
+  // como no Discord; quem fecha o menu é o host, então o estado espelha a store
   const contextMenu = useUI((s) => s.contextMenu);
   const [menuAberto, setMenuAberto] = useState(false);
   useEffect(() => {
@@ -91,7 +90,18 @@ export function CabecalhoDoServidor({ celular }: { celular: boolean }) {
    */
   function openGuildMenu(e: MouseEvent<HTMLButtonElement>) {
     if (!guild) return;
-    const r = e.currentTarget.getBoundingClientRect();
+    /*
+      Âncora no desktop é a **barra** (o pai do botão), não o botão: o menu fica
+      centrado na coluna e nasce 4px abaixo da borda do cabeçalho. Medido em
+      `2026-08-31 101733.png` (borda do cabeçalho em y=83, menu em y=88; coluna
+      x 81–374 e menu x 118–337, centro 228 nos dois) e em
+      `2026-09-04 100527.png` (81→86, mesmo centro). Ancorado no botão, subia
+      7px por cima do cabeçalho e saía 11px à esquerda. No celular o menu é
+      folha e a âncora do botão fica como estava.
+    */
+    const r = celular
+      ? e.currentTarget.getBoundingClientRect()
+      : e.currentTarget.parentElement!.getBoundingClientRect();
     const escopo = porEscopo[guildNotificationScope(guild.id)];
     const items: MenuItem[] = [
       /*
@@ -128,7 +138,8 @@ export function CabecalhoDoServidor({ celular }: { celular: boolean }) {
     if (podeGerenciarCanais) {
       items.push({
         label: "Criar canal",
-        icon: <Plus size={18} />,
+        // círculo cheio com o + vazado, 20px de tinta em `101733` (x 135–154)
+        icon: <CirclePlus size={18} />,
         onSelect: () => openModal({ kind: "createChannel" }),
       });
       items.push({
@@ -138,8 +149,14 @@ export function CabecalhoDoServidor({ celular }: { celular: boolean }) {
       });
     }
     items.push({ separator: true });
-    items.push(submenuSilenciar("Silenciar servidor", { tipo: "servidor", guildId: guild.id }, escopo, t));
-    items.push(submenuNotificacoes({ tipo: "servidor", guildId: guild.id }, escopo, t));
+    // sem "Silenciar servidor" aqui: no menu do cabeçalho do Discord o grupo de
+    // notificação só tem a configuração (revisão visual, `menu-servidor`); o
+    // silenciar mora no menu do ícone do servidor na rail (`GuildRail.tsx`)
+    // rótulo do print (`101733` y=401, `124207` y=400, `100527` y=471): o
+    // Discord abre um modal; aqui fica o submenu de rádio, que é o que existe
+    items.push(
+      submenuNotificacoes({ tipo: "servidor", guildId: guild.id }, escopo, t, "Config. de notificação"),
+    );
     // o dono não vê "sair" nem "apagar" aqui: apagar mora em Configurações
     if (!isOwner) {
       items.push({ separator: true });
@@ -158,7 +175,8 @@ export function CabecalhoDoServidor({ celular }: { celular: boolean }) {
       });
     }
     setMenuAberto(true);
-    ui.openContextMenu(r.left + 10, r.bottom + 4, items, MENU_WIDTH_WIDE);
+    if (celular) ui.openContextMenu(r.left + 10, r.bottom + 4, items, MENU_WIDTH_WIDE);
+    else ui.openContextMenu(r.left + (r.width - MENU_WIDTH_WIDE) / 2, r.bottom + 4, items, MENU_WIDTH_WIDE);
   }
 
   if (celular) {
@@ -209,15 +227,22 @@ function BarraDoDesktop({
         disabled={!guild}
         aria-haspopup="menu"
         aria-expanded={menuAberto}
-        className="-ml-1 flex min-w-0 flex-1 items-center gap-1.5 rounded-[4px] py-1 pl-1 pr-2 text-left text-heading-md font-semibold text-text-strong transition hover:bg-interactive-background-hover disabled:cursor-default disabled:hover:bg-transparent"
+        className="-ml-1 flex min-w-0 flex-1 items-center gap-1 rounded-[4px] py-1 pl-1 pr-2 text-left text-heading-md font-semibold text-text-strong transition hover:bg-interactive-background-hover disabled:cursor-default disabled:hover:bg-transparent"
       >
         <span className="truncate">{guild?.name ?? "Selecione um servidor"}</span>
-        {guild &&
-          (menuAberto ? (
-            <X size={14} aria-hidden="true" className="shrink-0 text-text-subtle" />
-          ) : (
-            <ChevronDown size={14} aria-hidden="true" className="shrink-0 text-text-subtle" />
-          ))}
+        {/*
+          Um chevron só, que gira: para baixo fechado (`2026-09-03 201805.png`,
+          10×6 de tinta em x 115–124, 5px depois do nome) e para cima aberto
+          (`101733`, 10×6 em x 147–156). Nenhum print mostra X. Cor #f2f2f3, a
+          do nome: `text-strong`. Tamanho 18 porque o 14 dava 8px de tinta.
+        */}
+        {guild && (
+          <ChevronDown
+            size={18}
+            aria-hidden="true"
+            className={`shrink-0 text-text-strong transition-transform ${menuAberto ? "rotate-180" : ""}`}
+          />
+        )}
       </button>
       {guild && (
         <BotaoDeIcone

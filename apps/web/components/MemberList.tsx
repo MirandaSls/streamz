@@ -19,6 +19,7 @@ import {
   TIMEOUT_PRESETS,
   colorRoleOf,
   displayNameOf,
+  highestPosition,
   isTimedOut,
   type GuildMemberView,
   type Role,
@@ -87,6 +88,13 @@ export default function MemberList() {
   const podeExpulsar = useCan(Permission.KICK_MEMBERS);
   const podeBanir = useCan(Permission.BAN_MEMBERS);
   const podeCargos = useCan(Permission.MANAGE_ROLES);
+  // Teto de quem olha — mesma conta de `assertPodeMexerNoCargo`: só cargo
+  // estritamente abaixo do meu mais alto entra no submenu (dono vê todos).
+  const meuMembro = members.find((m) => m.user.id === user?.id);
+  const meuTeto = highestPosition(
+    { isOwner: meuMembro?.role === "OWNER", roleIds: meuMembro?.roleIds ?? [] },
+    roles,
+  );
   // ── h-moderacao ── castigo é MODERATE_MEMBERS na permissão efetiva
   const podeCastigar = useCan(Permission.MODERATE_MEMBERS);
   const timeout = useGuilds((s) => s.timeout);
@@ -173,8 +181,12 @@ export default function MemberList() {
       });
     }
 
-    const atribuiveis = roles.filter((r) => !r.isDefault).sort((a, b) => b.position - a.position);
-    if (podeCargos && !isMe && atribuiveis.length > 0) {
+    const atribuiveis = roles
+      .filter((r) => !r.isDefault && r.position < meuTeto)
+      .sort((a, b) => b.position - a.position);
+    // Vestir cargo em mim mesmo é permitido (a API não bloqueia alvo == ator
+    // aqui — só em castigo/expulsão/banimento, que têm `assertCanActOn`).
+    if (podeCargos && atribuiveis.length > 0) {
       items.push({ separator: true });
       items.push({
         label: "Cargos",

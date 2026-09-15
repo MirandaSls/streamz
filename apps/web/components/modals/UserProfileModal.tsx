@@ -1,15 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Clock, MessageSquare, MoreHorizontal, UserCheck, UserPlus } from "@/components/ui/icones";
+import {
+  Clock,
+  MessageSquare,
+  MoreHorizontal,
+  Pencil,
+  UserCheck,
+  UserPlus,
+} from "@/components/ui/icones";
 import {
   customStatusOf,
   displayNameOf,
+  rolesOf,
   type MemberRole,
   type UserProfile,
 } from "@streamz/shared";
 import Dialog from "@/components/modals/Dialog";
 import Avatar from "@/components/ui/Avatar";
+import { PilulasDeCargo } from "@/components/ui/perfil/PilulasDeCargo";
 import { BotaoDeIcone, Button, Tabs, type AbaDeTabs } from "@/components/ui/primitivos";
 import TagDeBot from "@/components/ui/TagDeBot";
 import { api } from "@/lib/api";
@@ -17,6 +26,7 @@ import { useAuth } from "@/stores/auth";
 import { useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
+import { usePermissions } from "@/stores/permissions";
 import { resolveStatus, usePresence } from "@/stores/presence";
 import { errorMessage } from "@/stores/socket-adapter";
 import { anchorOf, ui, useUI, type MenuItem } from "@/stores/ui";
@@ -55,10 +65,18 @@ export default function UserProfileModal({
   guildId?: string;
 }) {
   const closeModal = useUI((s) => s.closeModal);
+  const openModal = useUI((s) => s.openModal);
   const me = useAuth((s) => s.user);
   const statuses = usePresence((s) => s.statuses);
   const openWith = useDMs((s) => s.openWith);
   const guild = useGuilds((s) => s.guilds.find((g) => g.id === guildId) ?? null);
+  // Cargos deste membro NO servidor do cartão — só existem para consulta
+  // quando `guildId` é o servidor CARREGADO: `members`/`roles` da store são
+  // sempre do `activeGuildId`, nunca de um servidor arbitrário (não há um
+  // "buscar membros deste outro servidor" para o modal chamar).
+  const activeGuildId = useGuilds((s) => s.activeGuildId);
+  const membrosDoServidor = useGuilds((s) => s.members);
+  const roles = usePermissions((s) => s.roles);
   const send = useFriends((s) => s.send);
   const remove = useFriends((s) => s.remove);
   const block = useFriends((s) => s.block);
@@ -100,6 +118,16 @@ export default function UserProfileModal({
   const personalizado = customStatusOf(user);
   const euMesmo = profile.relationship === "self" || user.id === me?.id;
   const bloqueado = profile.relationship === "blocked";
+  // Cargos como o popout monta (`ProfilePopover.tsx`, `meusCargos`/`chips`):
+  // só quando este é o servidor cujos membros a store tem (ver o comentário
+  // acima de `activeGuildId`). Fora disso (outro servidor, ou os membros ainda
+  // carregando) fica `null` e o rótulo de hierarquia ("Em X: Dono/Admin/
+  // Membro") continua sendo o que aparece.
+  const membroAqui =
+    guildId && guildId === activeGuildId
+      ? membrosDoServidor.find((m) => m.user.id === user.id)
+      : undefined;
+  const cargosAqui = membroAqui ? rolesOf(membroAqui.roleIds, roles) : null;
   // o pedido pendente, achado pelo id do outro lado — `undefined` enquanto as
   // listas de amigos ainda não chegaram (a store carrega em paralelo).
   const meuPedido =
@@ -247,6 +275,21 @@ export default function UserProfileModal({
                 />
               </>
             )}
+            {/* Meu próprio cartão completo: mesmo destino do "Editar perfil"
+                do popout (`ProfilePopover.tsx`, `editarPerfil`) — sem esse
+                botão, abrir o MEU perfil completo (em vez do cartão pequeno)
+                não tinha nenhum jeito de chegar às Configurações daqui. */}
+            {euMesmo && (
+              <Button
+                variante="secundario"
+                tamanho="sm"
+                icone={<Pencil size={16} aria-hidden="true" />}
+                onClick={() => openModal({ kind: "settings", tab: "perfil" })}
+                className="celular:h-[44px]"
+              >
+                Editar perfil
+              </Button>
+            )}
           </div>
         </div>
 
@@ -301,9 +344,30 @@ export default function UserProfileModal({
                       titulo="Membro do Streamz desde"
                       valor={DATA_SELO.format(new Date(profile.createdAt))}
                     />
-                    {guild && profile.guildRole && (
-                      <InfoDoPerfil titulo={`Em ${guild.name}`} valor={PAPEL[profile.guildRole]} />
-                    )}
+                    {/* Cargos de verdade (pílulas do popout) quando dá para
+                        montá-los; sem cargo próprio (só o @everyone) a lista
+                        fica vazia e o rótulo de hierarquia de baixo é o que
+                        sobra de informação — não uma pílula solta sem nada. */}
+                    {guild &&
+                      profile.guildRole &&
+                      (cargosAqui && cargosAqui.length > 0 ? (
+                        <div className="min-w-0">
+                          <div className="truncate text-text-sm font-semibold text-text-default">
+                            {`Cargos em ${guild.name}`}
+                          </div>
+                          <div className="mt-1">
+                            <PilulasDeCargo
+                              cargos={cargosAqui}
+                              podeRemover={false}
+                              podeAdicionar={false}
+                              aoRemover={() => {}}
+                              aoAdicionar={() => {}}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <InfoDoPerfil titulo={`Em ${guild.name}`} valor={PAPEL[profile.guildRole]} />
+                      ))}
                   </div>
                 </>
               )}

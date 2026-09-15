@@ -15,6 +15,7 @@ import {
   Permission,
   customStatusOf,
   displayNameOf,
+  highestPosition,
   rolesOf,
   type UserProfile,
   type UserStatus,
@@ -299,7 +300,17 @@ export default function ProfilePopoverHost() {
   const nome = displayNameOf(user);
   const meusCargos = membros.find((m) => m.user.id === user.id)?.roleIds ?? [];
   const chips = rolesOf(meusCargos, roles);
-  const atribuiveis = roles.filter((r) => !r.isDefault && !meusCargos.includes(r.id));
+  // Teto de quem olha: só oferece cargo estritamente abaixo do meu mais alto —
+  // é a mesma conta de `assertPodeMexerNoCargo` (dono = MAX_SAFE_INTEGER, vê
+  // todos). Sem isso o "+" listaria cargo que a API recusaria ao confirmar.
+  const meuMembro = membros.find((m) => m.user.id === me?.id);
+  const meuTeto = highestPosition(
+    { isOwner: meuMembro?.role === "OWNER", roleIds: meuMembro?.roleIds ?? [] },
+    roles,
+  );
+  const atribuiveis = roles.filter(
+    (r) => !r.isDefault && !meusCargos.includes(r.id) && r.position < meuTeto,
+  );
   const statusPersonalizado = customStatusOf(user) || null;
   /** Aberto pelo painel do usuário: o meu cartão ganha os painéis do print `180020`. */
   const peloRodape = Boolean(popover.acima);
@@ -498,7 +509,11 @@ export default function ProfilePopoverHost() {
     );
   }
 
-  const podeMexerNosCargos = podeCargos && !isMe;
+  // O próprio dono também "veste" cargo em si mesmo (print `101804`); a API
+  // aceita alvo igual ao ator aqui (`assign`/`unassign` usam `assertCanModerate`
+  // + `assertPodeMexerNoCargo`, sem o `assertCanActOn` que bloqueia castigo/
+  // expulsão/banimento contra si mesmo) — por isso sem `&& !isMe`.
+  const podeMexerNosCargos = podeCargos;
 
   return (
     <Popout

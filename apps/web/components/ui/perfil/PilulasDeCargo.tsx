@@ -74,8 +74,9 @@ export function PilulasDeCargo({ cargos, podeRemover, podeAdicionar, aoRemover, 
           key={c.id}
           className="flex min-h-6 min-w-0 max-w-full items-center rounded-lg border border-border-subtle pl-0.5 pr-2 text-text-xs font-medium text-text-default"
         >
-          {/* cargo sem cor: o Discord pinta com `--role-default`, que não foi
-              gerado em `tokens.css`; o cinza cru fica até ele existir */}
+          {/* cargo sem cor: o Discord pinta com `--role-default` (gerado em
+              `tokens.css` e em `tokens.gerados.ts`) — muda com o tema
+              (ADR-0009), ver `lib/cor-de-cargo.ts` */}
           <span
             aria-hidden="true"
             style={{ backgroundColor: c.color ?? COR_DE_CARGO_SEM_COR }}

@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { isTauri } from "@/lib/desktop";
 import {
   Amigos,
   Check,
   HelpCircle,
   MessageSquare,
+  MessageSquarePlus,
   Search,
   UserMinus,
-  UserPlus,
   UserX,
   X,
 } from "@/components/ui/icones";
@@ -75,6 +75,20 @@ function Secao({ label, count }: { label: string; count: number }) {
       <div aria-hidden="true" className="ml-[30px] mr-5 mt-3.5 h-px bg-border-subtle" />
     </>
   );
+}
+
+/**
+ * Divisor entre duas linhas de amigo — `.divider_cc6179`
+ * (`docs/referencias-discord/tokens/css-bruto/979862.64f198e8e991d925.css`):
+ * elemento à parte do item, não a borda dele (`.peopleListItem_cc6179` tem
+ * `border-width:0`). Fica de fora do `FriendRow` porque não é toda linha que
+ * tem um depois (a última da lista, não). Some no hover da linha anterior
+ * por `[&:hover+div]:bg-transparent` no próprio `FriendRow`, que exige o
+ * divisor como irmão de DOM imediato — por isso cada lista usa `Fragment`
+ * em vez de deixar o `FriendRow` desenhá-lo dentro de si.
+ */
+function Divisor() {
+  return <div aria-hidden className="ml-[30px] mr-5 h-px bg-border-subtle" />;
 }
 
 /**
@@ -215,18 +229,20 @@ export default function FriendsPage() {
       <>
         <Secao label={rotulo} count={itens.length} />
         <div role="list">
-          {itens.map((u) => (
-            <FriendRow
-              key={u.id}
-              user={u}
-              menu={menuDeAmigo(u)}
-              onOpen={() => void openWith(u.id)}
-              actions={
-                <RowAction label={`Conversar com ${displayNameOf(u)}`} onClick={() => void openWith(u.id)}>
-                  <MessageSquare size={20} />
-                </RowAction>
-              }
-            />
+          {itens.map((u, i) => (
+            <Fragment key={u.id}>
+              <FriendRow
+                user={u}
+                menu={menuDeAmigo(u)}
+                onOpen={() => void openWith(u.id)}
+                actions={
+                  <RowAction label={`Conversar com ${displayNameOf(u)}`} onClick={() => void openWith(u.id)}>
+                    <MessageSquare size={20} />
+                  </RowAction>
+                }
+              />
+              {i < itens.length - 1 && <Divisor />}
+            </Fragment>
           ))}
         </div>
       </>
@@ -259,7 +275,13 @@ export default function FriendsPage() {
         No desktop nada disto se aplica: a faixa continua sendo a linha única
         de 48px com identidade, abas e o grupo da direita.
       */}
-      <header className="relative z-10 flex h-12 shrink-0 items-center gap-[7px] border-b border-border-subtle pl-7 pr-5 celular:h-[56px] celular:gap-0 celular:px-0">
+      {/* h-[49px], não h-12 (48): é a mesma altura do cabeçalho da DMList
+          (--custom-channel-header-height, com a borda incluída) — medida no
+          print 1:1 (152318.png), onde a borda da coluna de DMs (x=100) e a
+          do cabeçalho de Amigos (x=600) caem ambas em y=81 (faixa 33–80 + 1px
+          de borda). Com h-12 a borda ficava em y=47, 1px acima da da DMList,
+          e a emenda em x=366 tinha degrau. */}
+      <header className="relative z-10 flex h-[49px] shrink-0 items-center gap-[7px] border-b border-border-subtle pl-7 pr-5 celular:h-[56px] celular:gap-0 celular:px-0">
         <span className="text-text-muted celular:hidden" aria-hidden="true">
           <Amigos size={21} />
         </span>
@@ -328,7 +350,7 @@ export default function FriendsPage() {
             label="Nova mensagem de grupo"
             onClick={() => ui.openModal({ kind: "createGroupDM" })}
           >
-            <UserPlus size={24} />
+            <MessageSquarePlus size={24} />
           </HeaderIcon>
           {/*
             No desktop a caixa de entrada e a ajuda vivem na barra de título
@@ -396,39 +418,43 @@ export default function FriendsPage() {
             <>
               {recebidos.length > 0 && <Secao label="Recebidos" count={recebidos.length} />}
               <div role="list">
-                {recebidos.map((r) => (
-                  <FriendRow
-                    key={r.id}
-                    user={r.user}
-                    subtitle="Pedido de amizade recebido"
-                    menu={menuDeRecebido(r.id, r.user)}
-                    actions={
-                      <>
-                        <RowAction label="Aceitar" positive onClick={() => void accept(r.id)}>
-                          <Check size={20} />
-                        </RowAction>
-                        <RowAction label="Recusar" danger onClick={() => void dismiss(r.id)}>
-                          <X size={20} />
-                        </RowAction>
-                      </>
-                    }
-                  />
+                {recebidos.map((r, i) => (
+                  <Fragment key={r.id}>
+                    <FriendRow
+                      user={r.user}
+                      subtitle="Pedido de amizade recebido"
+                      menu={menuDeRecebido(r.id, r.user)}
+                      actions={
+                        <>
+                          <RowAction label="Aceitar" positive onClick={() => void accept(r.id)}>
+                            <Check size={20} />
+                          </RowAction>
+                          <RowAction label="Recusar" danger onClick={() => void dismiss(r.id)}>
+                            <X size={20} />
+                          </RowAction>
+                        </>
+                      }
+                    />
+                    {i < recebidos.length - 1 && <Divisor />}
+                  </Fragment>
                 ))}
               </div>
               {enviados.length > 0 && <Secao label="Enviados" count={enviados.length} />}
               <div role="list">
-                {enviados.map((r) => (
-                  <FriendRow
-                    key={r.id}
-                    user={r.user}
-                    subtitle="Pedido de amizade enviado"
-                    menu={menuDeEnviado(r.id, r.user)}
-                    actions={
-                      <RowAction label="Cancelar pedido" danger onClick={() => void dismiss(r.id)}>
-                        <X size={20} />
-                      </RowAction>
-                    }
-                  />
+                {enviados.map((r, i) => (
+                  <Fragment key={r.id}>
+                    <FriendRow
+                      user={r.user}
+                      subtitle="Pedido de amizade enviado"
+                      menu={menuDeEnviado(r.id, r.user)}
+                      actions={
+                        <RowAction label="Cancelar pedido" danger onClick={() => void dismiss(r.id)}>
+                          <X size={20} />
+                        </RowAction>
+                      }
+                    />
+                    {i < enviados.length - 1 && <Divisor />}
+                  </Fragment>
                 ))}
               </div>
             </>
@@ -449,18 +475,20 @@ export default function FriendsPage() {
             <>
               <Secao label="Bloqueado" count={bloqueados.length} />
               <div role="list">
-                {bloqueados.map((u) => (
-                  <FriendRow
-                    key={u.id}
-                    user={u}
-                    subtitle="Bloqueado"
-                    menu={menuDeBloqueado(u)}
-                    actions={
-                      <RowAction label="Desbloquear" onClick={() => void unblock(u.id)}>
-                        <UserMinus size={20} />
-                      </RowAction>
-                    }
-                  />
+                {bloqueados.map((u, i) => (
+                  <Fragment key={u.id}>
+                    <FriendRow
+                      user={u}
+                      subtitle="Bloqueado"
+                      menu={menuDeBloqueado(u)}
+                      actions={
+                        <RowAction label="Desbloquear" onClick={() => void unblock(u.id)}>
+                          <UserMinus size={20} />
+                        </RowAction>
+                      }
+                    />
+                    {i < bloqueados.length - 1 && <Divisor />}
+                  </Fragment>
                 ))}
               </div>
             </>

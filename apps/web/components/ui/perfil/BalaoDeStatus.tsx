@@ -34,9 +34,14 @@ import { CirclePlus } from "@/components/ui/icones";
  * de 14 — o tamanho da caixa não foi medido.
  *
  * O hover do balão editável do Discord soma 4% de branco ao fundo
- * (`.container_ab8609.editable_ab8609:hover`); não há token para essa mistura,
- * então aqui só o convite muda de cor no hover, como o `.outer:hover
- * .addStatusPrompt` pede.
+ * (`.container_ab8609.editable_ab8609:hover`, `css-bruto/853855…css`) — o
+ * `0.04` é literal no CSS deles, sem token; aqui entra como uma segunda
+ * camada (`background-image`) por cima da cor sólida (`background-color`),
+ * em `group-hover` e não em `hover`: só o balão CLICÁVEL — o meu — tem o
+ * `.group` (no `<button>` do ramo `aoClicar`), então no balão de outra
+ * pessoa (a `<div>` sem essa classe) o seletor nunca casa. Vale para a caixa
+ * e para as duas bolinhas da cauda, que usam o mesmo fundo (`CONTORNO`); o
+ * convite também muda de cor, como o `.outer:hover .addStatusPrompt` pede.
  */
 
 /**
@@ -57,8 +62,14 @@ function conviteDe(chave: string): string {
   return CONVITES[h % CONVITES.length];
 }
 
+/**
+ * Os 4% de branco do hover editável (ver o comentário do topo do arquivo) —
+ * uma segunda camada de fundo, então soma à cor sólida em vez de substituí-la.
+ */
+const HOVER_EDITAVEL = "group-hover:bg-[linear-gradient(rgb(255_255_255/0.04),rgb(255_255_255/0.04))]";
+
 /** Fundo, borda e sombra são os mesmos na caixa e nas duas bolinhas. */
-const CONTORNO = "border border-border-muted bg-background-surface-highest shadow-shadow-low";
+const CONTORNO = `border border-border-muted bg-background-surface-highest shadow-shadow-low ${HOVER_EDITAVEL}`;
 
 export interface BalaoDeStatusProps {
   /** Texto do status. `null` com `aoClicar` desenha o convite; sem os dois, nada. */
@@ -106,8 +117,10 @@ export function BalaoDeStatus({ texto, chave, aoClicar, reserva = false }: Balao
 
   const caixa = (
     <>
-      <span className="block min-w-[42px] max-w-[181px] overflow-hidden rounded-2xl border border-border-muted bg-background-surface-highest shadow-shadow-low">
-        <span className="relative z-[1] mx-auto block w-fit bg-background-surface-highest px-3 py-2">
+      <span
+        className={`block min-w-[42px] max-w-[181px] overflow-hidden rounded-2xl border border-border-muted bg-background-surface-highest shadow-shadow-low ${HOVER_EDITAVEL}`}
+      >
+        <span className={`relative z-[1] mx-auto block w-fit bg-background-surface-highest px-3 py-2 ${HOVER_EDITAVEL}`}>
           {conteudo}
         </span>
       </span>

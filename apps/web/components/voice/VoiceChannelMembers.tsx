@@ -81,7 +81,11 @@ export default function VoiceChannelMembers({
 
   return (
     <>
-      <ul aria-label="Na sala de voz" className="mb-1 ml-3 mr-2 mt-0.5 space-y-0.5">
+      {/* Linhas de 32 coladas, sem `space-y`: em 101842.png o centro do avatar
+          de "Md" (y 409–430) fica a ~31px do centro do ícone de convite
+          (y 445–455); com `space-y-0.5` o passo era 34. O print só tem um
+          participante: o passo entre dois participantes não foi medido. */}
+      <ul aria-label="Na sala de voz" className="mb-1 ml-3 mr-2 mt-0.5">
         {estados.map((e) => {
           const nome = displayNameOf(e.user);
           // quem está mudo nunca "fala": o anel tem de contar a mesma história
@@ -166,10 +170,15 @@ export default function VoiceChannelMembers({
                 ) : (
                   e.video && <Video size={14} className="shrink-0 text-text-muted" aria-label="Com câmera" />
                 )}
+                {/* Cinza, não vermelho: em 101842.png o microfone cortado de "Md"
+                    (mudo por conta própria) sai #81828a = `channels-default`
+                    (coluna x=348, y 412–425). O Discord só pinta de vermelho o
+                    mudo/ensurdecido **pelo servidor**, estado que o Streamz não
+                    tem (`VoiceStateEvent` só traz muted/deafened). */}
                 {e.deafened ? (
-                  <HeadphoneOff size={14} className="shrink-0 text-status-danger" aria-label="Sem áudio" />
+                  <HeadphoneOff size={14} className="shrink-0 text-channels-default" aria-label="Sem áudio" />
                 ) : (
-                  e.muted && <MicOff size={14} className="shrink-0 text-status-danger" aria-label="Mudo" />
+                  e.muted && <MicOff size={14} className="shrink-0 text-channels-default" aria-label="Mudo" />
                 )}
               </button>
             </li>
