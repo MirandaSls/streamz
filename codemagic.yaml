@@ -490,7 +490,10 @@ workflows:
           # `CARGO_CFG_TARGET_ARCH` da primeira perna), é melhor o build
           # parar aqui do que entregar um .dmg que só roda numa das duas
           # arquiteturas.
-          APP="apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/Streamz.app"
+          # Absoluto: mais abaixo o certificado é extraído de dentro de uma
+          # pasta temporária (`cd`), e com caminho relativo o `codesign` não
+          # achava o app e o passo morria calado — foi o que derrubou o build #2.
+          APP="$PWD/apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/Streamz.app"
           # o nome do executável sai do Info.plist, como no
           # `scripts/build-desktop-macos.sh`: com o nome fixo, trocar o
           # `mainBinaryName` ou o nome do crate derrubaria este passo com um
@@ -526,7 +529,8 @@ workflows:
             codesign --verify --strict -R="identifier \"$IDENTIFICADOR\" and certificate leaf = H\"$CERT_SHA1_MIN\"" "$APP" \
               || { echo "ERRO: o .app não foi assinado pelo certificado $CERT_SHA1_MIN." >&2; exit 1; }
             EXTRAIDOS=$(mktemp -d)
-            (cd "$EXTRAIDOS" && codesign -d --extract-certificates "$APP" >/dev/null 2>&1)
+            (cd "$EXTRAIDOS" && codesign -d --extract-certificates "$APP" >/dev/null 2>&1) && [ -f "$EXTRAIDOS/codesign0" ] \
+              || { echo "ERRO: não deu para extrair o certificado de dentro do .app ($APP)." >&2; exit 1; }
             SHA256_APP=$(shasum -a 256 "$EXTRAIDOS/codesign0" | awk '{print $1}')
             echo "certificado do .app (SHA-256 do DER, o pin do instalador): $SHA256_APP"
             [ "$SHA256_APP" = "$CERT_SHA256" ] \
