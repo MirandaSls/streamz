@@ -42,23 +42,23 @@ beforeEach(() => {
 describe("SeletorDeFpsDaCamera", () => {
   it("mostra as quatro taxas e marca a atual", () => {
     const html = renderToStaticMarkup(<SeletorDeFpsDaCamera />);
-    for (const fps of [15, 24, 30, 60]) expect(html).toContain(`>${fps} FPS</button>`);
+    for (const fps of [15, 24, 30, 60]) expect(html).toContain(`>${fps} fps</button>`);
     expect(html).toContain('aria-label="Taxa de quadros da câmera"');
     expect(html.match(/aria-pressed="true"/g)).toHaveLength(1);
-    expect(html).toMatch(/aria-pressed="true"[^>]*>30 FPS</);
+    expect(html).toMatch(/aria-pressed="true"[^>]*>30 fps</);
   });
 
   it("acompanha a store quando a taxa muda", () => {
     falsas.voz.cameraFps = 60;
     expect(renderToStaticMarkup(<SeletorDeFpsDaCamera />)).toMatch(
-      /aria-pressed="true"[^>]*>60 FPS</,
+      /aria-pressed="true"[^>]*>60 fps</,
     );
   });
 
   it("clicar num segmento chama setCameraFps com o número", () => {
     const lista = botoes(<SeletorDeFpsDaCamera />);
     expect(lista).toHaveLength(4);
-    lista.find((b) => b.props.children === "24 FPS")!.props.onClick();
+    lista.find((b) => b.props.children === "24 fps")!.props.onClick();
     expect(falsas.voz.setCameraFps).toHaveBeenCalledWith(24);
   });
 });

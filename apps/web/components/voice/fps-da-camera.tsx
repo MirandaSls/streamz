@@ -20,12 +20,12 @@ import { useVoice } from "@/stores/voice";
  * vez", ao contrário da troca de aparelho.
  */
 
-/** "30 FPS" — o texto de cada opção, igual nos segmentos e no menu. */
-export const rotuloFps = (fps: CameraFps) => `${fps} FPS`;
+/** "30 fps" — o texto de cada opção, igual nos segmentos, no menu e no seletor da tela. */
+export const rotuloFps = (fps: CameraFps) => `${fps} fps`;
 
 /** Frase de ajuda que acompanha o seletor onde há espaço para ela. */
 export const AJUDA_FPS_DA_CAMERA =
-  "Menos FPS alivia o computador, sobretudo se você compartilha a tela ao mesmo tempo. Com 60 FPS a câmera sai em 720p.";
+  "Menos fps alivia o computador, sobretudo se você compartilha a tela ao mesmo tempo. Com 60 fps a câmera sai em 720p.";
 
 /** O valor do segmento (string) de volta para uma taxa válida, ou `null`. */
 export function fpsDoValor(valor: string): CameraFps | null {

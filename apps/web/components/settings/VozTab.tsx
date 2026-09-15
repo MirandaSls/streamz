@@ -389,10 +389,14 @@ export default function VozTab() {
             emptyLabel={t("voz.padraoSistema")}
             disabled={devices.cameras.length === 0}
           />
+          {/* `flex-wrap`: no celular (segmentos de 44) rótulo e sulco não cabem
+              numa linha de 358px, e sem quebra o sulco espremia cada "15 fps"
+              em duas linhas. `mt-2`: os mesmos 8px entre sulco e legenda da
+              seção da tela, logo acima. */}
           <div className="mt-3">
-            <SeletorDeFpsDaCamera />
+            <SeletorDeFpsDaCamera className="flex flex-wrap items-center gap-2" />
           </div>
-          <p className="mt-1.5 text-xs text-text-muted">{AJUDA_FPS_DA_CAMERA}</p>
+          <p className="mt-2 text-xs text-text-muted">{AJUDA_FPS_DA_CAMERA}</p>
           <div className="my-3 grid aspect-video w-full max-w-[420px] place-items-center overflow-hidden rounded-lg bg-input-background-default">
             {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
             <video
