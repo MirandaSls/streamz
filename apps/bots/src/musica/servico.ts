@@ -1,6 +1,8 @@
 import { Events, type Client } from "discord.js";
 import { LavalinkManager, type Player, type SearchResult, type Track } from "lavalink-client";
 import type { ContextoDoBot } from "../runtime/tipos";
+import { escaparMarkdown, truncar } from "./formatar";
+import { RodizioDeTokens, ehBloqueioDoYoutube, tokensDoAmbiente } from "./tokens-do-youtube";
 
 /**
  * O serviço de áudio do bot de música: o cliente do Lavalink e a ligação dele
@@ -83,6 +85,10 @@ export class ServicoDeMusica {
   /** Servidores para os quais um `VOICE_SERVER_UPDATE` já chegou nesta sessão. */
   private readonly pontesVistas = new Set<string>();
   private readonly aguardando = new Map<string, (() => void)[]>();
+  /** Contas do YouTube (ver `tokens-do-youtube.ts`). */
+  readonly contasDoYoutube = new RodizioDeTokens(tokensDoAmbiente());
+  /** Por servidor, a última faixa que já ganhou uma segunda tentativa. */
+  private readonly jaTentouDeNovo = new Map<string, string>();
 
   constructor(private readonly ctx: ContextoDoBot) {
     const cliente = ctx.cliente as Client<true>;
@@ -125,15 +131,40 @@ export class ServicoDeMusica {
       void this.manager.sendRawData(dado as never);
     });
 
-    this.manager.nodeManager.on("connect", (no) =>
-      this.ctx.log.info("lavalink conectado", { no: no.id }),
-    );
+    this.manager.nodeManager.on("connect", (no) => {
+      this.ctx.log.info("lavalink conectado", {
+        no: no.id,
+        contasDoYoutube: this.contasDoYoutube.quantidade,
+      });
+      // O Lavalink não guarda o token entre reinícios: toda (re)conexão reenvia.
+      const token = this.contasDoYoutube.ativo;
+      if (token) void this.enviarTokenDoYoutube(token, "conexão com o lavalink");
+    });
     this.manager.nodeManager.on("disconnect", (no, razao) =>
       this.ctx.log.aviso("lavalink caiu", { no: no.id, razao: JSON.stringify(razao ?? null) }),
     );
     this.manager.nodeManager.on("error", (no, erro) =>
       this.ctx.log.erro("lavalink com erro", { no: no.id, erro }),
     );
+
+    this.manager.on("trackStart", () => {
+      const novo = this.contasDoYoutube.registrarFaixa();
+      if (novo) void this.enviarTokenDoYoutube(novo, "rodízio");
+    });
+    this.manager.on("trackError", (jogador, faixa, evento) => {
+      void this.aoFalharFaixa(jogador, faixa as Track | null, evento.exception);
+    });
+    this.manager.on("trackStuck", (jogador, faixa, evento) => {
+      this.ctx.log.aviso("faixa travada", {
+        servidor: jogador.guildId,
+        faixa: faixa?.info.title,
+        limiteMs: evento.thresholdMs,
+      });
+      void this.avisarNoCanal(
+        jogador,
+        `**${nomeDaFaixa(faixa)}** travou sem mandar áudio; fui para a próxima.`,
+      );
+    });
 
     // `init` só **começa** a conexão com o nó. Não esperamos por ela: o bot tem
     // de subir, registrar comandos e responder mesmo com o Lavalink fora — é o
@@ -143,6 +174,109 @@ export class ServicoDeMusica {
       no: configuracaoDoAmbiente().host,
       busca: plataformaDeBusca(),
     });
+  }
+
+  /**
+   * Uma faixa não tocou. Sem isto a falha era muda: o bot dizia "tocando
+   * agora", o `autoSkip` esvaziava a fila e o player sumia 30 s depois.
+   *
+   * Se foi o YouTube barrando a conta, a conta ativa fica de molho, a próxima
+   * assume e a mesma faixa ganha **uma** segunda tentativa.
+   */
+  private async aoFalharFaixa(
+    jogador: Player,
+    faixa: Track | null,
+    excecao: { message?: string | null; cause?: string; severity?: string } | undefined,
+  ) {
+    const mensagem = [excecao?.message, excecao?.cause].filter(Boolean).join(" | ");
+    const bloqueio = ehBloqueioDoYoutube(mensagem);
+    this.ctx.log.aviso("faixa não tocou", {
+      servidor: jogador.guildId,
+      faixa: faixa?.info.title,
+      fonte: faixa?.info.sourceName,
+      bloqueioDoYoutube: bloqueio,
+      erro: truncar(mensagem, 500),
+    });
+
+    if (bloqueio && faixa?.encoded) {
+      const novo = this.contasDoYoutube.barrarAtiva();
+      const chave = faixa.encoded;
+      if (novo && this.jaTentouDeNovo.get(jogador.guildId) !== chave) {
+        this.jaTentouDeNovo.set(jogador.guildId, chave);
+        const enviado = await this.enviarTokenDoYoutube(novo, "conta barrada pelo YouTube");
+        if (enviado) {
+          await this.tentarDeNovo(jogador, faixa);
+          return;
+        }
+      }
+      await this.avisarNoCanal(
+        jogador,
+        this.contasDoYoutube.quantidade
+          ? `O YouTube recusou tocar **${nomeDaFaixa(faixa)}** e todas as contas do bot estão barradas agora. Tente de novo mais tarde.`
+          : `O YouTube recusou tocar **${nomeDaFaixa(faixa)}** a partir deste servidor. ` +
+              "Quem administra o Streamz precisa cadastrar uma conta do YouTube para o bot.",
+      );
+      return;
+    }
+
+    await this.avisarNoCanal(
+      jogador,
+      `Não consegui tocar **${nomeDaFaixa(faixa)}**${
+        excecao?.message ? `: ${escaparMarkdown(truncar(excecao.message, 150))}` : "."
+      }`,
+    );
+  }
+
+  /**
+   * Toca de novo a faixa que falhou, sem perder a fila.
+   *
+   * Quando isto roda o `trackEnd` (`loadFailed`) já pode ter andado a fila: se
+   * outra faixa virou a atual, ela volta para a frente antes de ser trocada.
+   */
+  private async tentarDeNovo(jogador: Player, faixa: Track) {
+    try {
+      const atual = jogador.queue.current;
+      if (atual && atual.encoded !== faixa.encoded) await jogador.queue.add(atual, 0);
+      await jogador.play({ clientTrack: faixa, noReplace: false });
+      this.ctx.log.info("tentando a faixa de novo com outra conta", {
+        servidor: jogador.guildId,
+        faixa: faixa.info.title,
+      });
+    } catch (erro) {
+      this.ctx.log.erro("a segunda tentativa falhou", { servidor: jogador.guildId, erro });
+    }
+  }
+
+  /** `POST /youtube` do youtube-plugin: troca a conta que o Lavalink usa. */
+  private async enviarTokenDoYoutube(token: string, motivo: string): Promise<boolean> {
+    const cfg = configuracaoDoAmbiente();
+    const url = `${cfg.secure ? "https" : "http"}://${cfg.host}:${cfg.port}/youtube`;
+    try {
+      const resposta = await fetch(url, {
+        method: "POST",
+        headers: { Authorization: cfg.authorization, "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken: token, skipInitialization: true }),
+      });
+      if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+      // Nunca o token no log: é uma credencial de conta Google.
+      this.ctx.log.info("conta do youtube enviada ao lavalink", { motivo });
+      return true;
+    } catch (erro) {
+      this.ctx.log.erro("não consegui enviar a conta do youtube ao lavalink", { motivo, erro });
+      return false;
+    }
+  }
+
+  /** Escreve no canal de texto onde a música foi pedida. Falha em silêncio. */
+  private async avisarNoCanal(jogador: Player, texto: string) {
+    if (!jogador.textChannelId) return;
+    try {
+      const cliente = this.ctx.cliente as Client<true>;
+      const canal = await cliente.channels.fetch(jogador.textChannelId);
+      if (canal?.isTextBased() && canal.isSendable()) await canal.send({ content: texto });
+    } catch (erro) {
+      this.ctx.log.aviso("não consegui avisar no canal", { canal: jogador.textChannelId, erro });
+    }
   }
 
   /** Algum nó do Lavalink respondendo? */
@@ -212,6 +346,10 @@ export class ServicoDeMusica {
       await jogador.destroy("o bot está desligando").catch(() => undefined);
     }
   }
+}
+
+function nomeDaFaixa(faixa: Track | null | undefined): string {
+  return escaparMarkdown(truncar(faixa?.info.title ?? "a faixa", 80));
 }
 
 /** A faixa, no formato que `formatar.ts` entende. */
