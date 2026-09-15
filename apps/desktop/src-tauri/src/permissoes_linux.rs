@@ -150,8 +150,12 @@ pub fn liberar_camera_e_microfone(webview: &WebView, dev_url: Option<&Url>) {
     // O `SignalHandlerId` não é guardado: a assinatura vale enquanto a janela
     // existir, e a janela principal só morre com o processo.
     webview.connect_permission_request(move |webview, pedido| {
-        let e_de_midia = pedido.downcast_ref::<UserMediaPermissionRequest>().is_some()
-            || pedido.downcast_ref::<DeviceInfoPermissionRequest>().is_some();
+        let e_de_midia = pedido
+            .downcast_ref::<UserMediaPermissionRequest>()
+            .is_some()
+            || pedido
+                .downcast_ref::<DeviceInfoPermissionRequest>()
+                .is_some();
         // A URI é lida a cada pedido, e não guardada na assinatura: o que
         // importa é a página que pede, e a janela pode ter navegado desde o
         // `setup`.
