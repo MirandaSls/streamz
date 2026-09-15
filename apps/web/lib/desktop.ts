@@ -90,6 +90,31 @@ export function isTauri(): boolean {
 }
 
 /**
+ * `true` só dentro do app de **macOS** — onde a janela tem os semáforos nativos
+ * (`titleBarStyle: "Overlay"` no `tauri.macos.conf.json`) em vez dos três
+ * controles desenhados pela barra de título.
+ *
+ * Síncrono de propósito, pelo `navigator.userAgent` e não pelo `plugin-os`
+ * (motivo em `hooks/useEhMobile.ts`): o WKWebView do Mac diz `Macintosh; Intel
+ * Mac OS X` — inclusive em Apple Silicon —, o WebView2 diz `Windows NT` e o
+ * WebKitGTK diz `X11; Linux`. A exceção é o iPad, que também se diz
+ * `Macintosh`. O desempate tem dois sinais, e basta um: o ponteiro grosso (o
+ * mesmo do `useEhMobile`) e `navigator.maxTouchPoints > 0`. O ponteiro sozinho
+ * não bastava — iPad com trackpad ou Magic Keyboard pode responder
+ * `(pointer: fine)` —, mas a tela continua sendo de toque, e o WebKit do Mac
+ * responde `maxTouchPoints = 0` (nenhum Mac tem tela de toque). Não importa o
+ * `useEhMobile` porque ele importa este arquivo.
+ */
+export function ehMacNoTauri(): boolean {
+  if (!isTauri() || typeof navigator === "undefined") return false;
+  if (!/Macintosh|Mac OS X/i.test(navigator.userAgent)) return false;
+  const ponteiroGrosso =
+    typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
+  const telaDeToque = navigator.maxTouchPoints > 0;
+  return !ponteiroGrosso && !telaDeToque;
+}
+
+/**
  * Dispara uma notificação nativa.
  * Aceita `notify({ title, body, onClick })` ou a forma curta `notify(title, body)`.
  */

@@ -1,4 +1,4 @@
-import { Controller, Get, NotFoundException, Param, Res } from "@nestjs/common";
+import { Controller, Get, NotFoundException, Param, Query, Res } from "@nestjs/common";
 import { SkipThrottle } from "@nestjs/throttler";
 import { UpdatesService, type ManifestoDeAtualizacao } from "./updates.service";
 
@@ -48,10 +48,14 @@ export class UpdatesController {
     @Param("target") target: string,
     @Param("arch") arch: string,
     @Param("version") version: string,
+    // desde o plugin 2.10 o atualizador manda o formato do instalador nesta
+    // query; opcional porque app já instalado chama sem ela (ver
+    // UpdatesService.manifesto)
+    @Query("bundle_type") tipoDePacote: string | undefined,
     // tipagem estrutural em vez de `Response` do express, como no health
     @Res({ passthrough: true }) res: { status(codigo: number): unknown },
   ): ManifestoDeAtualizacao | undefined {
-    const manifesto = this.updates.manifesto(`${target}-${arch}`, version);
+    const manifesto = this.updates.manifesto(`${target}-${arch}`, version, tipoDePacote);
     if (!manifesto) {
       // sem isto o Nest responde 200 com corpo vazio, e o atualizador do Tauri
       // trata isso como resposta inválida em vez de "não há nada"

@@ -15,7 +15,7 @@ function controller(manifesto: ReturnType<UpdatesService["manifesto"]>) {
 describe("UpdatesController", () => {
   it("responde 204 quando não há atualização", () => {
     const res = resposta();
-    const corpo = controller(null).buscar("windows", "x86_64", "0.1.0", res);
+    const corpo = controller(null).buscar("windows", "x86_64", "0.1.0", undefined, res);
 
     // o 204 é do protocolo do Tauri: 200 de corpo vazio faz o cliente tratar a
     // checagem como erro
@@ -31,9 +31,21 @@ describe("UpdatesController", () => {
       platforms: { "windows-x86_64": { signature: "sig", url: "https://exemplo/app.exe" } },
     };
     const res = resposta();
-    const corpo = controller(manifesto).buscar("windows", "x86_64", "0.1.0", res);
+    const corpo = controller(manifesto).buscar("windows", "x86_64", "0.1.0", undefined, res);
 
     expect(res.status).not.toHaveBeenCalled();
     expect(corpo).toEqual(manifesto);
+  });
+
+  it("repassa o bundle_type da query para o service, sem inventar nada quando ausente", () => {
+    const manifestoFn = vi.fn().mockReturnValue(null);
+    const service = { manifesto: manifestoFn } as unknown as UpdatesService;
+    const nova = new UpdatesController(service);
+
+    nova.buscar("linux", "x86_64", "0.1.0", "deb", resposta());
+    expect(manifestoFn).toHaveBeenCalledWith("linux-x86_64", "0.1.0", "deb");
+
+    nova.buscar("linux", "x86_64", "0.1.0", undefined, resposta());
+    expect(manifestoFn).toHaveBeenCalledWith("linux-x86_64", "0.1.0", undefined);
   });
 });

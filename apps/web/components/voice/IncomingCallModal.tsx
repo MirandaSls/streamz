@@ -73,8 +73,10 @@ export default function IncomingCallModal() {
   const comVideo = estados.some((e) => e.video);
 
   async function atender(video: boolean) {
-    await accept();
-    if (video) await toggleCam();
+    // não atendeu (o ambiente não faz chamada e o aviso está na tela): ligar a
+    // câmera daria "você não está conectado" por cima do aviso certo
+    const atendeu = await accept();
+    if (atendeu && video) await toggleCam();
   }
 
   return (

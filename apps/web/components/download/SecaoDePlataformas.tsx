@@ -61,6 +61,7 @@ export function SecaoDePlataformas({
   carregando,
   aoEscolher,
   nota,
+  extra,
   className = "",
 }: {
   id: string;
@@ -73,6 +74,12 @@ export function SecaoDePlataformas({
   carregando: boolean;
   aoEscolher: (disponivel: DownloadDisponivel) => void;
   nota?: ReactNode;
+  /**
+   * Bloco livre abaixo da nota (o Terminal do Mac, as instruções por sistema).
+   * Separado de `nota` porque ela é um `<p>`, e um bloco com título e botão
+   * dentro de parágrafo é HTML inválido.
+   */
+  extra?: ReactNode;
   className?: string;
 }) {
   const idDoTitulo = `${id}-titulo`;
@@ -127,6 +134,8 @@ export function SecaoDePlataformas({
         ) : null}
 
         {nota ? <p className="mt-4 max-w-[560px] text-text-sm text-text-muted">{nota}</p> : null}
+
+        {extra}
       </div>
     </section>
   );

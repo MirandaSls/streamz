@@ -6,6 +6,7 @@ import { FieldLabel } from "@/components/auth/AuthCard";
 import { Button, Modal, TextInput } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
+import { notaDeInstalacao } from "./InstalacaoNoSistema";
 import { dataDoInstalador, mensagemDeErroDoDownload } from "./plataformas";
 
 /**
@@ -66,6 +67,9 @@ export default function EtapaDaSenha({
   }
 
   if (baixando) {
+    // a instrução do sistema (Gatekeeper, `chmod +x`) aparece aqui, no momento
+    // em que o arquivo chega — é quando a pessoa vai tropeçar nela
+    const nota = notaDeInstalacao(disponivel.plataforma);
     return (
       <Modal
         aoFechar={aoFechar}
@@ -86,7 +90,9 @@ export default function EtapaDaSenha({
             </Button>
           </>
         }
-      />
+      >
+        {nota ? <p className="text-text-sm text-text-muted">{nota}</p> : null}
+      </Modal>
     );
   }
 

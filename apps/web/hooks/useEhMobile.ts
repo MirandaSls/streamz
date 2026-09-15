@@ -81,6 +81,12 @@ export interface AmbienteDeLeiaute {
   userAgent: string;
   /** `(pointer: coarse)` bate? Desempata o iPad, que se diz um Mac. */
   ponteiroGrosso: boolean;
+  /**
+   * `navigator.maxTouchPoints`. Segundo critério para desempatar o iPad: com
+   * trackpad/Magic Keyboard o ponteiro primário pode se reportar fino, mas um
+   * Mac de verdade nunca tem pontos de toque — um iPad sempre tem.
+   */
+  maxTouchPoints: number;
   /** `CONSULTA_MOBILE` bate? É a resposta do navegador. */
   consultaMobile: boolean;
 }
@@ -92,12 +98,18 @@ export interface AmbienteDeLeiaute {
  * navegador o UA de um celular é informação sobre o aparelho, não sobre o
  * leiaute, e lá quem manda é a largura da janela.
  */
-export function ehTauriDeCelular(userAgent: string, ponteiroGrosso: boolean): boolean {
+export function ehTauriDeCelular(
+  userAgent: string,
+  ponteiroGrosso: boolean,
+  maxTouchPoints: number,
+): boolean {
   if (/Android/i.test(userAgent)) return true;
   if (/iPhone|iPod|iPad/i.test(userAgent)) return true;
   // iPadOS 13+ se apresenta como `Macintosh; Intel Mac OS X` no WKWebView.
-  // Nenhum Mac de verdade responde `(pointer: coarse)`, então o par desempata.
-  if (/Macintosh|Mac OS X/i.test(userAgent) && ponteiroGrosso) return true;
+  // Nenhum Mac de verdade responde `(pointer: coarse)` OU reporta pontos de
+  // toque; com trackpad/Magic Keyboard o iPad pode ter ponteiro fino, mas
+  // `maxTouchPoints` continua denunciando a tela sensível ao toque.
+  if (/Macintosh|Mac OS X/i.test(userAgent) && (ponteiroGrosso || maxTouchPoints > 0)) return true;
   return false;
 }
 
@@ -110,7 +122,9 @@ export function ehTauriDeCelular(userAgent: string, ponteiroGrosso: boolean): bo
  * fora dele decide a consulta de mídia.
  */
 export function decidirMobile(ambiente: AmbienteDeLeiaute): boolean {
-  if (ambiente.tauri) return ehTauriDeCelular(ambiente.userAgent, ambiente.ponteiroGrosso);
+  if (ambiente.tauri) {
+    return ehTauriDeCelular(ambiente.userAgent, ambiente.ponteiroGrosso, ambiente.maxTouchPoints);
+  }
   return ambiente.consultaMobile;
 }
 
@@ -124,6 +138,7 @@ function lerAmbiente(): AmbienteDeLeiaute | null {
     tauri: isTauri(),
     userAgent: typeof navigator === "undefined" ? "" : navigator.userAgent,
     ponteiroGrosso: window.matchMedia(CONSULTA_PONTEIRO_GROSSO).matches,
+    maxTouchPoints: typeof navigator === "undefined" ? 0 : (navigator.maxTouchPoints ?? 0),
     consultaMobile: window.matchMedia(CONSULTA_MOBILE).matches,
   };
 }

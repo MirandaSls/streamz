@@ -31,6 +31,7 @@ function ambiente(parcial: Partial<AmbienteDeLeiaute>): AmbienteDeLeiaute {
     tauri: false,
     userAgent: UA_WINDOWS,
     ponteiroGrosso: false,
+    maxTouchPoints: 0,
     consultaMobile: false,
     ...parcial,
   };
@@ -70,9 +71,39 @@ describe("decidirMobile — dentro do app Tauri", () => {
   });
 
   it("iPad, que se diz um Mac, é desempatado pelo ponteiro grosso", () => {
-    expect(ehTauriDeCelular(UA_IPAD_DISFARCADO, true)).toBe(true);
+    expect(ehTauriDeCelular(UA_IPAD_DISFARCADO, true, 0)).toBe(true);
     // e o Mac de verdade, com o mesmo UA, continua sendo desktop
-    expect(ehTauriDeCelular(UA_MAC, false)).toBe(false);
+    expect(ehTauriDeCelular(UA_MAC, false, 0)).toBe(false);
+  });
+
+  it("iPad com trackpad/Magic Keyboard (ponteiro fino) é desempatado por maxTouchPoints", () => {
+    // iPadOS com trackpad reporta ponteiro primário fino, mas a tela continua
+    // sensível ao toque — é isso que `maxTouchPoints > 0` denuncia aqui.
+    expect(
+      decidirMobile(
+        ambiente({
+          tauri: true,
+          userAgent: UA_IPAD_DISFARCADO,
+          ponteiroGrosso: false,
+          maxTouchPoints: 5,
+          consultaMobile: false,
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("Mac de verdade com ponteiro fino e sem pontos de toque continua desktop", () => {
+    expect(
+      decidirMobile(
+        ambiente({
+          tauri: true,
+          userAgent: UA_MAC,
+          ponteiroGrosso: false,
+          maxTouchPoints: 0,
+          consultaMobile: true,
+        }),
+      ),
+    ).toBe(false);
   });
 });
 

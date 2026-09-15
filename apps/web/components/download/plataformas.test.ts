@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest";
 import type { DownloadCatalogo, DownloadDisponivel } from "@streamz/shared";
 import { ApiError } from "@/lib/api-error";
 import {
+  API_PADRAO_DO_INSTALADOR,
+  aspasDeShell,
+  comandoDoTerminalMac,
   dataDoInstalador,
   detectarSistema,
   disponivelPara,
   juntarComE,
   mensagemDeErroDoDownload,
   ofertaDoTopo,
+  origemDoInstalador,
   plataformaDaUrl,
   plataformasPorExtenso,
 } from "./plataformas";
@@ -148,5 +152,38 @@ describe("mensagemDeErroDoDownload", () => {
     expect(mensagemDeErroDoDownload(new Error("rede"))).toBe(
       "Não foi possível liberar o download. Tente de novo.",
     );
+  });
+});
+
+describe("comando do Terminal do macOS", () => {
+  it("aspeia valores comuns e fecha/reabre a aspa simples", () => {
+    expect(aspasDeShell("https://streamz.chat")).toBe("'https://streamz.chat'");
+    expect(aspasDeShell("a b&c")).toBe("'a b&c'");
+    // o shell lê 'it'\''s' como it's
+    expect(aspasDeShell("it's")).toBe(String.raw`'it'\''s'`);
+  });
+
+  it("não põe STREAMZ_API quando a API é a de produção", () => {
+    expect(comandoDoTerminalMac("https://streamz.chat", API_PADRAO_DO_INSTALADOR)).toBe(
+      "curl -fsSL 'https://streamz.chat/instalar-mac.sh' | bash",
+    );
+  });
+
+  it("põe STREAMZ_API do lado do bash, e não do curl, fora da produção", () => {
+    expect(comandoDoTerminalMac("http://localhost:3000", "http://localhost:3333")).toBe(
+      "curl -fsSL 'http://localhost:3000/instalar-mac.sh' | STREAMZ_API='http://localhost:3333' bash",
+    );
+  });
+
+  it("não deixa aspa simples nem $(…) escaparem das aspas", () => {
+    expect(comandoDoTerminalMac("https://x'$(id)", "https://api';id;'")).toBe(
+      String.raw`curl -fsSL 'https://x'\''$(id)/instalar-mac.sh' | STREAMZ_API='https://api'\'';id;'\''' bash`,
+    );
+  });
+
+  it("usa a própria origem em http(s) e a de produção fora disso", () => {
+    expect(origemDoInstalador("https:", "https://homolog.streamz.chat")).toBe("https://homolog.streamz.chat");
+    expect(origemDoInstalador("http:", "http://localhost:3000")).toBe("http://localhost:3000");
+    expect(origemDoInstalador("tauri:", "tauri://localhost")).toBe("https://streamz.chat");
   });
 });

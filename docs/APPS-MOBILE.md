@@ -38,7 +38,7 @@ O app é um só: `apps/web` (Next.js). O que muda é a casca.
 | | PWA | Android | iOS |
 |---|---|---|---|
 | Casca | nenhuma — é o site | Tauri 2 (`apps/desktop/src-tauri`) | Tauri 2 (o mesmo crate) |
-| Como chega no aparelho | "Adicionar à tela de início" em `streamz.chat` | `.apk` baixado de `streamz.chat/download`, ou Play Store | TestFlight, depois App Store |
+| Como chega no aparelho | "Adicionar à tela de início" em `streamz.chat` | `.apk` baixado de `streamz.chat` (a raiz virou a página de download; `/download` é só o link antigo redirecionando), ou Play Store | TestFlight, depois App Store |
 | Custo | zero | zero fora da loja; US$ 25 uma vez na Play | US$ 99/ano, obrigatório |
 | Onde compila | já está no ar | neste servidor, em Docker | **só em macOS** — Codemagic |
 | Precisa de Mac | não | não | sim (alugado por minuto) |

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { isTauri } from "@/lib/desktop";
+import { ehMacNoTauri, isTauri } from "@/lib/desktop";
 import { ui } from "@/stores/ui";
 import {
   EVENTO_DE_ERRO_DA_SPLASH,
@@ -68,6 +68,15 @@ const JANELA = {
   visible: false,
   focus: true,
 } as const;
+
+/**
+ * A mesma janela como o `tauri.macos.conf.json` a descreve: sem
+ * `macOSPrivateApi` o Mac não faz janela transparente, e o fundo passa a ser o
+ * `bg-chat` do cartão (motivo no topo do `JanelaSplash.tsx`). O
+ * `backgroundColor` pinta a `NSWindow` e a sobrerrolagem, não o primeiro quadro
+ * do webview — esse fica escondido porque a janela nasce `visible: false`.
+ */
+const JANELA_NO_MAC = { ...JANELA, transparent: false, backgroundColor: "#1a1a1e" } as const;
 
 /** Quanto esperar pela criação da janela antes de desistir (ms). */
 const LIMITE_DA_CRIACAO = 5000;
@@ -165,7 +174,7 @@ export function useAtualizacao(): Atualizacao {
         await existente.show();
         await existente.setFocus();
       } else {
-        const janela = new WebviewWindow(JANELA_SPLASH, JANELA);
+        const janela = new WebviewWindow(JANELA_SPLASH, ehMacNoTauri() ? JANELA_NO_MAC : JANELA);
         await esperarACriacao(janela);
       }
       await getCurrentWindow().hide();

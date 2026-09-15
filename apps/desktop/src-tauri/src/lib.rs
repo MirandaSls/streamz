@@ -37,6 +37,12 @@ mod atualizador;
 #[cfg(windows)]
 mod permissoes;
 
+// O par Linux: o WebKitGTK não pergunta, **nega** microfone e câmera quando
+// ninguém responde ao `permission-request`, e o wry não responde. Ver
+// `src/permissoes_linux.rs`.
+#[cfg(target_os = "linux")]
+mod permissoes_linux;
+
 use tauri::{Manager, RunEvent};
 
 // Bandeja e "fechar minimiza": desktop apenas. No celular o sistema é quem
@@ -45,8 +51,12 @@ use tauri::{Manager, RunEvent};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    WindowEvent,
 };
+
+// Só quem esconde ao fechar precisa do evento de janela; no Linux fechar
+// encerra (ver `on_window_event` em `run`).
+#[cfg(all(desktop, not(target_os = "linux")))]
+use tauri::WindowEvent;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -56,10 +66,20 @@ pub fn run() {
     // bandeja promete não fazer. Estes três argumentos desligam esse
     // comportamento e precisam estar no ambiente ANTES de o webview subir.
     //
-    // Só o WebView2 (Windows) lê esta variável. No WebKit (macOS/Linux) não há
-    // equivalente, e a rede de segurança é a do servidor: a carência de voz
-    // segura o usuário na sala e o cliente reentra ao voltar
-    // (VOICE_RECONNECT_GRACE_MS + `rejoinAposReconexao`).
+    // Só o WebView2 (Windows) lê esta variável, e **não há equivalente** nos
+    // outros alvos. O `backgroundThrottling: "disabled"` da janela `main` no
+    // `tauri.macos.conf.json` parece ser e não é: o wry 0.55 o traduz em
+    // `WKPreferences.inactiveSchedulingPolicy = none` (só macOS 14+), que diz
+    // ao RunningBoard para não suspender nem estrangular o *processo* do
+    // WebContent quando a view fica inativa — sem ele a página escondida é
+    // suspensa depois de alguns minutos. A página continua sendo uma página
+    // oculta para o WebKit: `visibilitychange`, `requestAnimationFrame` parado
+    // e o espaçamento dos timers DOM de página oculta são preferências internas,
+    // sem chave pública. No macOS 12–13 nem a política existe; no Linux fechar
+    // encerra o app (ver `on_window_event`), e a janela só fica escondida
+    // durante uma atualização. Por isso a rede de segurança continua sendo a
+    // do servidor: a carência de voz segura o usuário na sala e o cliente
+    // reentra ao voltar (VOICE_RECONNECT_GRACE_MS + `rejoinAposReconexao`).
     //
     // **Não** volte a pôr `--auto-accept-camera-and-microphone-capture` aqui.
     // Ele estava neste bloco para tirar o "permitir microfone e câmera?" do
@@ -133,6 +153,28 @@ pub fn run() {
                     });
                 }
             }
+            // No Linux o `inner()` é o `webkit2gtk::WebView` do wry, e o
+            // closure roda no laço de eventos (a thread da GTK), que é onde
+            // objetos GObject podem ser tocados. Aqui a falha é pior que um
+            // pop-up: sem o ouvinte o `getUserMedia` é negado em silêncio.
+            //
+            // O `devUrl` vai junto porque no `tauri dev` a página não vem do
+            // protocolo do Tauri, e sim do servidor do Next — e o módulo só
+            // concede mídia à origem de onde o app é servido. Ele é lido da
+            // configuração (e não escrito à mão) porque é o mesmo valor que o
+            // Tauri usa para carregar a janela.
+            #[cfg(target_os = "linux")]
+            {
+                let dev_url = app.config().build.dev_url.clone();
+                if let Some(janela) = app.get_webview_window("main") {
+                    let _ = janela.with_webview(move |webview| {
+                        permissoes_linux::liberar_camera_e_microfone(
+                            &webview.inner(),
+                            dev_url.as_ref(),
+                        );
+                    });
+                }
+            }
 
             // --- System tray (bandeja) ---------------------------------------
             // Só no desktop: o Android não tem bandeja, e `tauri::tray` sequer
@@ -180,21 +222,6 @@ pub fn run() {
             Ok(())
         });
 
-    // Fechar a janela principal minimiza para a bandeja em vez de encerrar o
-    // app — e a chamada em curso continua, que é a promessa da bandeja. Ver os
-    // argumentos do WebView2 acima: sem eles a janela escondida seria congelada
-    // e a call cairia assim mesmo.
-    //
-    // Só a principal. A janelinha de abertura/atualização (`splash`) fecha de
-    // verdade quando pede: se ela também fosse escondida, continuaria existindo
-    // com o rótulo ocupado, e a próxima atualização não conseguiria criar a
-    // janela ("window label already exists").
-    //
-    // **Desktop apenas.** No celular não há bandeja para onde esconder e quem
-    // tira o app da frente é o sistema; prevenir o fechamento ali seria prender
-    // o usuário. Este é o único ponto em que a cadeia do `Builder` precisou sair
-    // do encadeamento — um `#[cfg]` não se aplica a um `.metodo()` no meio de
-    // uma expressão, então o valor passa por uma variável.
     // Auto-update. Quem pede é a janelinha `splash` (ver
     // `components/desktop/JanelaSplash.tsx`): na abertura, antes de a janela
     // principal aparecer, e de novo quando a setinha verde da barra de título é
@@ -207,8 +234,8 @@ pub fn run() {
     // `.apk` baixado à mão é o usuário. O caminho equivalente no celular é o
     // card "Baixar atualização" da web (`lib/atualizacao-mobile.ts`), que só
     // consulta a mesma rota `/api/updates` e manda o usuário para
-    // `streamz.chat/download`. Registrar o plugin aqui no Android não daria
-    // erro visível, daria uma promessa falsa.
+    // `streamz.chat` (a raiz virou a página de download). Registrar o plugin
+    // aqui no Android não daria erro visível, daria uma promessa falsa.
     #[cfg(desktop)]
     let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -236,7 +263,40 @@ pub fn run() {
     #[cfg(target_os = "android")]
     let builder = builder.plugin(atualizador::init());
 
-    #[cfg(desktop)]
+    // Fechar a janela principal esconde em vez de encerrar o app — e a chamada
+    // em curso continua, que é a promessa da bandeja (Windows) e do Dock
+    // (macOS, ver o `RunEvent::Reopen` abaixo). Ver os argumentos do WebView2
+    // acima: sem eles a janela escondida seria congelada e a call cairia assim
+    // mesmo.
+    //
+    // Só a principal. A janelinha de abertura/atualização (`splash`) fecha de
+    // verdade quando pede: se ela também fosse escondida, continuaria existindo
+    // com o rótulo ocupado, e a próxima atualização não conseguiria criar a
+    // janela ("window label already exists").
+    //
+    // **Linux fica de fora, e fechar encerra o app de verdade.** Esconder só
+    // presta se houver por onde voltar, e no Linux a volta é o ícone da
+    // bandeja — que o GNOME puro (Fedora, Debian, Arch) não mostra sem a
+    // extensão AppIndicator. Lá a janela sumiria para sempre com o processo
+    // vivo, e abrir o AppImage de novo subiria uma segunda instância (não há
+    // single-instance): duas sessões no gateway e a voz duplicada. O Tauri não
+    // diz se o ícone ficou visível, e descobrir pelo D-Bus
+    // (`StatusNotifierWatcher`) pediria dependência nova. A troca: no Linux a
+    // call não sobrevive a fechar a janela. Sem prevenir o fechamento, a
+    // última janela destruída leva ao `ExitRequested` e ao `RunEvent::Exit`,
+    // que tira a transmissão de tela da sala como na saída pela bandeja.
+    //
+    // macOS em tela cheia: esconder deixa o Space da tela cheia vazio (preto).
+    // Não há saída simples — o `set_fullscreen(false)` é uma animação
+    // assíncrona, o `hide()` no meio dela não é confiável, e o Tauri não emite
+    // evento de "saiu da tela cheia" (o tao só manda `Resized`/`Moved` no
+    // `windowDidExitFullScreen`). Fica como limitação conhecida.
+    //
+    // **Desktop apenas.** No celular não há bandeja para onde esconder e quem
+    // tira o app da frente é o sistema; prevenir o fechamento ali seria prender
+    // o usuário. Como no updater, o `#[cfg]` não se aplica a um `.metodo()` no
+    // meio de uma expressão, então o valor passa por uma variável.
+    #[cfg(all(desktop, not(target_os = "linux")))]
     let builder = builder.on_window_event(|window, event| {
         if let WindowEvent::CloseRequested { api, .. } = event {
             if window.label() == "main" {
@@ -252,10 +312,41 @@ pub fn run() {
         // Sair pela bandeja no meio de uma transmissão: tirar o `#tela` da
         // sala antes de o processo morrer, em vez de deixar o LiveKit
         // descobrir pelo timeout e a tela "congelar" para os outros.
-        .run(|app, event| {
-            if let RunEvent::Exit = event {
-                app.state::<tela::Transmissao>().encerrar();
+        .run(|app, event| match event {
+            RunEvent::Exit => app.state::<tela::Transmissao>().encerrar(),
+            // **macOS: clicar no ícone do Dock traz a janela de volta.** O
+            // "fechar esconde" lá em cima é a promessa da bandeja no Windows,
+            // mas no Mac o gesto de reabrir um app que continua rodando é o
+            // Dock, não o ícone da barra de menus. Sem isto o `.app` ficava
+            // vivo, com a bolinha acesa no Dock, e o clique não fazia nada —
+            // a única saída era achar o ícone lá em cima ou forçar o encerramento.
+            //
+            // Só quando não há janela visível: com a `splash` na frente
+            // (checagem ou instalação de atualização) quem decide mostrar a
+            // principal continua sendo ela. `..` porque a variante é
+            // `#[non_exhaustive]`.
+            //
+            // "Nenhuma visível" não quer dizer "só a principal escondida": a
+            // `splash` existe sem aparecer antes do primeiro quadro dela (na
+            // abertura) e entre o `hide()` da principal e o `show()` dela (ao
+            // atualizar). Um clique no Dock nesse intervalo mostraria o app por
+            // cima da checagem ou da instalação — por isso, se ela existe, é
+            // ela que vem para a frente.
+            #[cfg(target_os = "macos")]
+            RunEvent::Reopen {
+                has_visible_windows,
+                ..
+            } => {
+                if !has_visible_windows {
+                    if let Some(splash) = app.get_webview_window("splash") {
+                        let _ = splash.show();
+                        let _ = splash.set_focus();
+                    } else {
+                        mostrar_janela(app);
+                    }
+                }
             }
+            _ => {}
         });
 }
 

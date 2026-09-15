@@ -108,3 +108,14 @@ tokio = { version = "1", features = ["sync"] }
 # e JPEG de 480 px (miniatura da grade).
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 base64 = "0.22"
+
+# Só no Linux: o `permission-request` e os ajustes de mídia do WebKitGTK (ver
+# `src/permissoes_linux.rs`). Pelo mesmo motivo do `webview2-com` acima, a
+# versão é a que o wry e o `tauri-runtime-wry` já puxam (2.0.2 no `Cargo.lock`):
+# o `webkit2gtk::WebView` que o `with_webview` entrega vem deste crate, e duas
+# cópias seriam dois tipos com o mesmo nome. `v2_38` é o que expõe o
+# `set_enable_webrtc` (e, por arrasto, o `DeviceInfoPermissionRequest` de
+# `v2_24`); não pede WebKitGTK mais novo do que já se exige, porque o
+# `tauri-runtime-wry` liga `v2_40` nesta mesma crate.
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = { version = "2.0.2", features = ["v2_38"] }

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Mesclado por cima do Info.plist que o Tauri gera para o `.app` de macOS
+	  (chave a chave: o que está aqui vence o padrão do bundler).
+
+	  O nome NÃO é `Info.plist` de propósito. O tauri-cli procura um
+	  `Info.plist` solto nesta pasta e o aplica ao macOS, mas o build de iOS
+	  procura `Info.plist` **e** `Info.ios.plist` — um `Info.plist` aqui
+	  vazaria para o app de iPhone. Por isso o arquivo tem nome próprio e só
+	  entra pelo `bundle.macOS.infoPlist` do `tauri.macos.conf.json`, que o
+	  iOS nunca lê. É o espelho do que o `Info.ios.plist` fez do lado de lá.
+	-->
+
+	<!-- Idioma de origem do app: os textos de permissão abaixo são pt-BR. O
+	     padrão do bundler é "English", o que faria o sistema tratar o pt-BR
+	     como tradução ausente. -->
+	<key>CFBundleDevelopmentRegion</key>
+	<string>pt-BR</string>
+
+	<!--
+	  Permissões de mídia. No macOS a falta destes textos não é um "negado":
+	  o TCC **mata o processo** no primeiro `getUserMedia` (o app some sem
+	  diálogo nem log visível ao usuário). Com eles, o sistema pergunta uma vez
+	  e lembra — e o WKWebView não pergunta de novo, porque o wry já responde
+	  `Grant` ao `requestMediaCapturePermissionForOrigin` da página.
+	-->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>O Streamz usa o microfone para você falar nos canais de voz e nas chamadas.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>O Streamz usa a câmera para mostrar seu vídeo nas chamadas.</string>
+</dict>
+</plist>

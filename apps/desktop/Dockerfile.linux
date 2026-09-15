@@ -1,0 +1,201 @@
+# Imagem que gera o app de desktop do Streamz para **Linux x86_64**: o
+# `.AppImage` (o que vai para a página de download, roda em qualquer distro) e
+# o `.deb` (bônus para Debian/Ubuntu).
+#
+# Por que ela existe: o mesmo motivo da `Dockerfile.xwin` e da
+# `Dockerfile.android` — não há Actions (§3.5 do processo) e o host não tem
+# rust nem node (memória `streamz-sem-node-no-host`). Diferente do Windows,
+# aqui **não há cross-compile**: o alvo é o próprio hospedeiro
+# (`x86_64-unknown-linux-gnu`), e o trabalho todo é ter as bibliotecas de GTK/
+# WebKitGTK que o Tauri linka e as ferramentas que o empacotador chama.
+#
+# **O que esta imagem NÃO prova**: que o app abre, que a bandeja aparece e que
+# a mídia toca numa distro de verdade. Ela prova que o pacote existe, está
+# assinado e declara o que dissemos. Ver `scripts/build-desktop-linux-no-servidor.sh`.
+#
+# Uso: `scripts/build-desktop-linux-no-servidor.sh` (constrói a imagem e roda tudo).
+
+# Ubuntu 22.04, e não o `rust:1-bookworm` das outras imagens, por causa da
+# **glibc**. Um binário Linux roda em qualquer glibc igual ou mais nova que a
+# da máquina onde foi linkado, nunca numa mais velha — e o AppImage não
+# embute a glibc (ela está na excludelist do linuxdeploy de propósito: glibc
+# embutida quebra no primeiro `dlopen` do sistema). Então a glibc do build é o
+# piso de quem consegue abrir o app:
+#
+#   - bookworm → glibc 2.36: Ubuntu 22.04, Mint 21 e RHEL/Rocky 9 (2.34) ficam de fora;
+#   - jammy    → glibc 2.35: roda do Ubuntu 22.04/Debian 12/Fedora 36 para cima.
+#
+# E não dá para descer mais: o Tauri 2 exige `webkit2gtk-4.1` (a ABI com
+# libsoup 3), que o Ubuntu 20.04 não tem. 22.04 é a distro mais velha que
+# consegue compilar o app — que é exatamente a regra da doc do Tauri para
+# AppImage ("build on the oldest base system you want to support").
+FROM ubuntu:22.04
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# O `libwebkit2gtk-4.1-dev` arrasta o `tzdata`, que para e pergunta o fuso
+# horário sem isto — e o `docker build` fica pendurado sem dizer por quê.
+ENV DEBIAN_FRONTEND=noninteractive
+
+# --- Pré-requisitos do Tauri 2 no Linux --------------------------------------
+# A lista de <https://v2.tauri.app/start/prerequisites/#linux> (Debian/Ubuntu):
+#   libwebkit2gtk-4.1-dev   → o webview (WebKitGTK) e o GTK 3 de desenvolvimento
+#   build-essential         → cc/ld para o link do binário e dos `build.rs`
+#   curl wget file          → downloads do bundler e o `file` que o plugin
+#                             GStreamer do linuxdeploy usa para achar ELF
+#   libxdo-dev              → o `muda` (menus nativos) linka a libxdo
+#   libssl-dev              → openssl-sys (reqwest do updater)
+#   libayatana-appindicator3-dev → a **bandeja**: a feature `tray-icon` está
+#                             ligada, e o tauri-cli consulta o `.pc` dela para
+#                             pôr a `.so` dentro do AppImage e a dependência no
+#                             `.deb`. Aqui é a de verdade, não o `.pc` de
+#                             fachada da imagem do Windows — este build usa o
+#                             resultado.
+#   librsvg2-dev            → o `linuxdeploy-plugin-gtk` copia o loader de SVG
+#                             do gdk-pixbuf (ícones do tema GTK)
+#
+# O que entra além da doc, e por quê:
+#   patchelf                → o `linuxdeploy-plugin-gstreamer.sh` recusa rodar
+#                             sem ele (reescreve o rpath de cada plugin)
+#   xdg-utils               → **obrigatório, não enfeite**: o tauri-cli liga
+#                             `bundle_xdg_open` sozinho quando o `Cargo.toml` tem
+#                             `tauri-plugin-opener` (o nosso tem) e o bundler dá
+#                             `fs::copy("/usr/bin/xdg-open")` para dentro do
+#                             AppImage. Sem o pacote o build morre no fim com
+#                             "xdg-open binary not found".
+#   libglib2.0-bin, libgdk-pixbuf2.0-bin → `glib-compile-schemas` e
+#                             `gdk-pixbuf-query-loaders`, que o plugin GTK chama
+#   pkg-config              → o tauri-cli e os `-sys` crates procuram as libs por ele
+#   git python3 xz-utils ca-certificates → pnpm (dependência git, node-gyp) e
+#                             o tarball do node
+#
+# GStreamer (runtime, **não** `-dev`): o `bundleMediaFramework: true` do
+# `tauri.linux.conf.json` faz o plugin copiar **todo** arquivo de
+# `/usr/lib/x86_64-linux-gnu/gstreamer-1.0` para dentro do AppImage, e o
+# AppRun aponta `GST_PLUGIN_SYSTEM_PATH_1_0` só para essa cópia. Ou seja: o que
+# está instalado AQUI é exatamente o que o app consegue tocar em qualquer
+# distro — os plugins do usuário deixam de valer, e o que NÃO está instalado
+# aqui não entra no pacote. Por isso a lista é pensada:
+#   plugins-base/good       → o mínimo que o próprio WebKitGTK declara em Depends
+#                             (ogg/opus/vorbis, webm/vp8/vp9, autoaudiosink, v4l2)
+#   pulseaudio              → saída de som; no PipeWire vale pelo pipewire-pulse.
+#                             O plugin `pipewire` fica de fora de propósito: a
+#                             libpipewire 0.3.48 do jammy embutida conversando
+#                             com um daemon novo é um risco que o pulse não tem
+#   alsa                    → saída de som onde não há servidor de som
+#   gl                      → o WebKitGTK renderiza vídeo pelo sink GL
+#
+# `gstreamer1.0-libav` (e portanto o FFmpeg da distro, `libavcodec`/
+# `libavformat`/`libavutil`/`libswresample`) **NÃO entra** — decisão revertida
+# depois de confirmar, no próprio `debian/copyright` do pacote-fonte `ffmpeg`
+# 4.4.2-0ubuntu0.22.04.1 (jammy), que o build padrão do Ubuntu usa arquivos
+# GPL (ex. `libavcodec/x86/flac_dsp_gpl.asm`), então os binários resultantes
+# são **GPL v2+**, não LGPL. O Streamz Desktop é código fechado: redistribuir
+# essas bibliotecas dentro do instalador puxaria a obrigação de GPL para um
+# app que não é GPL. Consequência: o AppImage não decodifica H.264/AAC — um
+# `.mp4` anexado ao chat pode não tocar dentro do app embutido. Áudio Opus/
+# Vorbis e vídeo WebM VP8/VP9 continuam, via `plugins-good`/`plugins-base`
+# acima. O `.deb` compensa isso *recomendando* (não instalando, não
+# redistribuindo) o `gstreamer1.0-libav` do repositório da própria distro —
+# ver `tauri.linux.conf.json` (`deb.recommends`) e
+# `apps/desktop/LICENCAS-DE-TERCEIROS.md`: quem instala pelo `.deb` e aceita a
+# recomendação baixa o pacote do Ubuntu/Debian, com a licença dele, pelo `apt`
+# — nós nunca copiamos esse `.so` para dentro de nada.
+#
+# Nenhum outro pacote desta lista traz `gstreamer1.0-libav` por `Depends`
+# (checado nos metadados do jammy: `plugins-base`/`plugins-good` não têm
+# relação de dependência com `libav`, e `libwebkit2gtk-4.1-dev` depende dos
+# `plugins-base`, não do `libav`) — só apareceria via `Recommends`, e o
+# `apt-get install` abaixo já roda com `--no-install-recommends`, então mesmo
+# que algum pacote passasse a recomendá-lo no futuro, não seria instalado
+# sozinho.
+#
+# `plugins-bad` (webrtcbin) também NÃO entra: a permissão de mídia já é
+# resolvida no app (`apps/desktop/src-tauri/src/permissoes_linux.rs` liga
+# `enable-media-stream`/`enable-webrtc` e concede o pedido), mas o WebKitGTK
+# do Ubuntu/Debian é compilado sem `ENABLE_WEB_RTC` — sem `RTCPeerConnection`
+# na biblioteca do sistema, embutir o webrtcbin seria peso morto (ver a seção
+# Linux do README do desktop).
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        ca-certificates curl wget file git xz-utils python3 pkg-config \
+        build-essential \
+        libwebkit2gtk-4.1-dev \
+        libxdo-dev \
+        libssl-dev \
+        libayatana-appindicator3-dev \
+        librsvg2-dev \
+        patchelf \
+        xdg-utils \
+        libglib2.0-bin libgdk-pixbuf2.0-bin \
+        gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+        gstreamer1.0-pulseaudio gstreamer1.0-alsa gstreamer1.0-gl; \
+    rm -rf /var/lib/apt/lists/*; \
+    pkg-config --modversion webkit2gtk-4.1 ayatana-appindicator3-0.1; \
+    test -x /usr/bin/xdg-open
+
+# --- Rust ----------------------------------------------------------------------
+# Pelo rustup, e não pelo `rustc` do apt: o jammy traz o 1.7x, e o piso aqui é
+# **1.85**. Não é firula — o Cargo.lock tem o `getrandom 0.4`, que é
+# `edition2024`, e a edição 2024 só existe a partir do 1.85: com toolchain mais
+# velho o build morre no meio com "feature `edition2024` is required" (foi o
+# que derrubou o Android com o 1.83; ver o comentário no `codemagic.yaml`). É o
+# mesmo lockfile para todos os alvos, então o piso também. A checagem abaixo
+# falha a imagem, e não o build de 20 minutos depois.
+#
+# Os caminhos imitam a imagem oficial `rust:*` (a base do Windows): toolchain em
+# /usr/local/rustup, proxies em /usr/local/cargo/bin. Mais abaixo o
+# `CARGO_HOME` passa para /cache/cargo, e só o registry/git vão para o volume.
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+RUN set -eux; \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+        | sh -s -- -y --no-modify-path --profile minimal --default-toolchain stable; \
+    rustc --version; cargo --version; \
+    MINIMO=1.85.0; \
+    VERSAO=$(rustc --version | awk '{print $2}' | cut -d- -f1); \
+    if [ "$(printf '%s\n%s\n' "$MINIMO" "$VERSAO" | sort -V | head -1)" != "$MINIMO" ]; then \
+        echo "ERRO: rustc $VERSAO é anterior ao mínimo $MINIMO (edition2024)" >&2; \
+        exit 1; \
+    fi
+
+# --- Node ----------------------------------------------------------------------
+# Tarball oficial, a mesma versão da imagem do Windows: o jammy traz o node 12,
+# e o NodeSource seria mais um repositório apt para confiar. O `corepack` lê o
+# `packageManager` da raiz e baixa o pnpm certo (9.x) na primeira chamada.
+ARG NODE_VERSION=22.23.2
+RUN set -eux; \
+    curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
+        | tar -xJ -C /usr/local --strip-components=1; \
+    corepack enable; \
+    node -v
+
+# Caches que valem entre rodadas (montados como volumes pelo script):
+#   /cache/cargo  — registry + git do cargo
+#   /cache/pnpm   — store do pnpm
+#   /cache/xdg    — ~/.cache: é onde o bundler guarda o linuxdeploy, o AppRun e
+#                   os plugins gtk/gstreamer/appimage (`dirs::cache_dir()/tauri`),
+#                   além do pnpm que o corepack baixa
+#
+# `APPIMAGE_EXTRACT_AND_RUN=1`: o linuxdeploy e o
+# `linuxdeploy-plugin-appimage` são, eles mesmos, AppImages, e AppImage monta a
+# si próprio por **FUSE** — que um container sem `--privileged` não tem. Com a
+# variável o runtime se extrai para /tmp e roda de lá. O bundler do Tauri já a
+# exporta para o linuxdeploy (`bundle/linux/appimage/linuxdeploy.rs`, "Looks
+# like the cli arg isn't enough"), mas deixá-la no ambiente cobre também o
+# plugin que o linuxdeploy chama e quem for rodar o AppImage gerado aqui dentro
+# para conferir.
+#
+# `NO_STRIP` fica **desligado**: o `strip` antigo embutido no linuxdeploy só
+# quebra com bibliotecas que têm seção `.relr.dyn` (toolchains recentes, Arch),
+# e as do jammy não têm. Se um dia aparecer "unknown type [0x13] section
+# `.relr.dyn'", o script repassa `NO_STRIP=true` do ambiente do host.
+ENV CARGO_HOME=/cache/cargo \
+    PNPM_STORE_PATH=/cache/pnpm \
+    XDG_CACHE_HOME=/cache/xdg \
+    APPIMAGE_EXTRACT_AND_RUN=1 \
+    PATH=/cache/cargo/bin:/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+WORKDIR /repo

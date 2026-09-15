@@ -17,6 +17,11 @@
 # O que este arquivo NÃO prova: que compila. Ele nunca rodou — não há Mac nem
 # conta Apple. É YAML validado por parser e escrito contra a doc; o primeiro
 # build de verdade é que vai dizer.
+#
+# Segundo workflow, `desktop-macos`: gera o `.dmg` universal (Intel + Apple
+# Silicon) do app desktop, sem conta Apple — assinatura ad-hoc ou certificado
+# autoassinado. Mesma cota de Mac mini M2, mesmo motivo de existir (o servidor
+# é Linux e não empacota Mac).
 
 workflows:
   ios-app-store:
@@ -189,3 +194,375 @@ workflows:
         # Revisão da App Store é passo manual, feito pelo painel: um envio
         # errado custa dias de espera.
         submit_to_app_store: false
+
+  desktop-macos:
+    name: Streamz desktop (macOS universal)
+    # Mesma máquina do workflow de iOS: é a única com cota gratuita.
+    instance_type: mac_mini_m2
+    # Universal = compila a árvore duas vezes (aarch64 e x86_64) e só depois
+    # funde os binários com `lipo` — ao contrário do iOS, que compila um alvo
+    # só. Mesmo assim o `livekit` (a dependência que demora, por trazer
+    # `webrtc-sys`) é `[target.'cfg(windows)'.dependencies]` em
+    # `apps/desktop/src-tauri/Cargo.toml`: não entra nem aqui nem no iOS. Com
+    # isso, 90 min é teto folgado (2× a estimativa do iOS de ~25 min, mais a
+    # geração do .dmg) e ainda garante pelo menos 5 builds/mês na cota de 500.
+    max_build_duration: 90
+
+    environment:
+      xcode: latest
+      node: 22
+      # Grupo OPCIONAL, para assinar os artefatos do atualizador (minisign,
+      # não é assinatura de código da Apple): TAURI_SIGNING_PRIVATE_KEY (o
+      # conteúdo da chave privada gerada com `tauri signer generate`, a mesma
+      # família da que já assina o instalador Windows — ver
+      # `docs/PROCESSO-DE-DESENVOLVIMENTO.md` §5) e, se houver senha,
+      # TAURI_SIGNING_PRIVATE_KEY_PASSWORD. Nenhum valor mora aqui — só o nome
+      # do grupo, criado e populado no painel (Environment variables). Ver
+      # `scripts/build-desktop-macos.sh` para o mesmo padrão usado localmente.
+      #
+      # A linha abaixo fica COMENTADA de propósito: a doc do Codemagic
+      # (https://docs.codemagic.io/yaml-basic-configuration/environment-variables/
+      # e https://docs.codemagic.io/yaml-basic-configuration/yaml-getting-started/)
+      # mostra a sintaxe de `groups:` mas não diz o que acontece se o grupo
+      # ainda não existir no painel — não achamos confirmação de que é
+      # inofensivo. Como o grupo é opcional (o script abaixo já degrada sozinho
+      # para "gera só o .dmg" sem a variável), o risco de travar TODO build por
+      # causa de um grupo que ninguém criou ainda não vale a pena. Depois de
+      # criar `streamz-updater` no painel do Codemagic, descomente as duas
+      # linhas seguintes.
+      #
+      # Segundo grupo OPCIONAL, `streamz-certificado-mac`: o certificado
+      # AUTOASSINADO de assinatura de código (não é Developer ID, não passa no
+      # Gatekeeper). Serve para o "designated requirement" do app ser o mesmo
+      # em todo build — sem ele (ad-hoc) o requirement é o cdhash, e o macOS
+      # pede de novo microfone/câmera/tela depois de cada atualização. Variáveis
+      # (todas "Secure"), impressas prontas por `scripts/gerar-certificado-mac.sh`,
+      # que roda UMA vez fora do CI:
+      #   APPLE_CERTIFICATE           o .p12 em base64
+      #   APPLE_CERTIFICATE_PASSWORD  a senha do .p12
+      #   APPLE_SIGNING_IDENTITY      SHA-1 do certificado (conferido contra o .p12)
+      # Mesmo cuidado do grupo acima: comentado até existir no painel. Sem ele
+      # o build assina ad-hoc e segue.
+      # Grupos criados no painel do Codemagic em 2026-09-15.
+      groups:
+        - streamz-updater
+        - streamz-certificado-mac
+      vars:
+        # As mesmas do workflow de iOS (§`beforeBuildCommand` builda a web) —
+        # é o que o `next build` embute no bundle estático que o app carrega.
+        NEXT_PUBLIC_API_URL: "https://api.streamz.chat"
+        NEXT_PUBLIC_WS_URL: "https://api.streamz.chat"
+        NEXT_PUBLIC_LIVEKIT_URL: "wss://livekit.streamz.chat"
+        NEXT_TELEMETRY_DISABLED: "1"
+
+    triggering:
+      # Igual ao iOS: sem gatilho automático, para não gastar minuto de cota
+      # sozinho. Dispare pelo painel ou pela API do Codemagic.
+      events: []
+
+    scripts:
+      - name: Rust com os dois alvos do macOS
+        script: |
+          set -euo pipefail
+          if ! command -v rustup >/dev/null; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
+          fi
+          source "$HOME/.cargo/env"
+          # Mesmo piso e mesmo motivo do workflow de iOS: o `Cargo.lock` deste
+          # crate único (compartilhado entre desktop/Android/iOS) resolve
+          # `getrandom 0.4` (via `rand`/`uuid`/`tempfile`, não só das
+          # dependências móveis) e `getrandom 0.4` é `edition2024`, que só
+          # existe a partir do Rust 1.85. A imagem do Codemagic traz um
+          # `rustup` cuja versão não é escolha nossa; por isso instalar e fixar
+          # o `stable` aqui, igual ao iOS.
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          # `universal-apple-darwin` não é um alvo real do `rustc`: é o CLI do
+          # Tauri que compila os dois abaixo e funde com `lipo` (doc do `tauri
+          # build --target`, v2.tauri.app/reference/cli/). aarch64 é Apple
+          # Silicon, x86_64 é Intel — esta máquina alugada é Apple Silicon, mas
+          # o binário final tem que rodar nas duas, incluindo o Mac Intel local
+          # que nem sempre está por perto.
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          rustc --version && cargo --version
+          # Mesma trava explícita do iOS: sem ela o erro só aparece minutos
+          # depois, no meio do cargo, sem falar em versão de toolchain.
+          MINIMO=1.85.0
+          VERSAO=$(rustc --version | awk '{print $2}' | cut -d- -f1)
+          printf '%s %s\n' "$MINIMO" "$VERSAO" | awk '{
+            split($1, m, "."); split($2, v, ".");
+            for (i = 1; i <= 3; i++) {
+              if (v[i] + 0 > m[i] + 0) exit 0;
+              if (v[i] + 0 < m[i] + 0) exit 1;
+            }
+            exit 0 }' || {
+              echo "ERRO: rustc $VERSAO é anterior ao mínimo $MINIMO." >&2
+              echo "A edição 2024 (getrandom 0.4) exige Rust >= 1.85." >&2
+              exit 1
+            }
+          echo "ok: rustc $VERSAO >= $MINIMO"
+
+      - name: Dependências do monorepo (pnpm)
+        script: |
+          set -euo pipefail
+          # O repo fixa o pnpm em `packageManager` do package.json da raiz.
+          corepack enable
+          corepack prepare --activate
+          pnpm install --frozen-lockfile
+
+      - name: Build do @streamz/shared
+        script: |
+          set -euo pipefail
+          # Mesmo motivo do iOS: o `next build` da web (disparado pelo
+          # `beforeBuildCommand` do tauri.conf.json) resolve `@streamz/shared`
+          # pelo `dist`, não pelo `src`.
+          pnpm --filter @streamz/shared build
+
+      - name: Build do .app + .dmg universal
+        script: |
+          set -euo pipefail
+          source "$HOME/.cargo/env"
+          # `tauri.macos.conf.json` entra sozinho — é o nome de arquivo que o
+          # Tauri 2 já reconhece como override automático da plataforma atual
+          # (mesmo mecanismo do `tauri.ios.conf.json` do outro workflow, que
+          # também nunca é citado num `--config`). É lá que mora o
+          # `signingIdentity: "-"` (ad-hoc — sem conta Apple, o
+          # v2.tauri.app/distribute/sign/macos/ documenta como o jeito de
+          # assinar app Apple Silicon sem certificado pago) e os entitlements
+          # de microfone/câmera para a chamada de voz/vídeo.
+          #
+          # `tauri.release.conf.json` é diferente: NÃO é nome de plataforma,
+          # então só entra se pedido via `--config`. Ele liga
+          # `createUpdaterArtifacts`, que é o que faz sair o `.app.tar.gz` e o
+          # `.sig` ao lado do `.app` — mesmo arquivo que
+          # `scripts/build-desktop-no-servidor.sh` usa para o instalador
+          # Windows. Sem a variável de assinatura (grupo `streamz-updater` não
+          # criado, ou vazio), pular esse `--config` é o que faz o build
+          # continuar gerando o `.dmg` mesmo sem a chave — a alternativa seria
+          # `tauri build` falhar tentando assinar um artefato que não foi
+          # pedido, com uma chave que não existe.
+          # `${arr[@]+...}` e não `"${arr[@]}"`: o bash 3.2 do macOS trata array
+          # vazio como variável não definida, e com `set -u` o build sem a chave
+          # do atualizador (o caso padrão) morreria aqui.
+          #
+          # Assinatura de código. Mesmo desenho do `scripts/build-desktop-macos.sh`
+          # (os porquês estão lá, conferidos no código do tauri-cli 2.11.4):
+          # APPLE_CERTIFICATE NÃO pode chegar ao bundler — o import dele só
+          # aceita certificado da Apple ("Developer ID Application:" + Team ID)
+          # e derrubaria o build com "failed to resolve signing identity". Por
+          # isso o .p12 é importado aqui num keychain próprio na lista de busca,
+          # e o bundler recebe só APPLE_SIGNING_IDENTITY = SHA-1 do certificado,
+          # que ele passa ao `codesign -s` e que sobrescreve o "-" do
+          # tauri.macos.conf.json. O `security find-identity -v` não lista o
+          # autoassinado (não confiável); o `codesign` assina com ele mesmo assim.
+          if [ -n "${APPLE_CERTIFICATE:-}" ]; then
+            [ -n "${APPLE_CERTIFICATE_PASSWORD+x}" ] || { echo "ERRO: APPLE_CERTIFICATE sem APPLE_CERTIFICATE_PASSWORD." >&2; exit 1; }
+            TMP_ASSINATURA=$(mktemp -d)
+            # Colar no painel costuma trazer espaço, quebra de linha ou aspas
+            # junto — e o `base64 --decode` do macOS recusa tudo isso com uma
+            # mensagem que não diz qual variável estava errada. Limpa o que é
+            # inofensivo e, se sobrar caractere fora do alfabeto do base64
+            # (ex.: o COMANDO `base64 -i … | pbcopy` colado no lugar do
+            # resultado), para dizendo o que colar.
+            CERT_B64=$(printf '%s' "$APPLE_CERTIFICATE" | tr -d ' \t\r\n"')
+            case "$CERT_B64" in
+              ''|*[!A-Za-z0-9+/=]*)
+                echo "ERRO: APPLE_CERTIFICATE não é base64 válido (${#CERT_B64} caracteres depois de limpar espaços)." >&2
+                echo "      O valor certo tem ~3400 caracteres, uma linha só, e começa com MII. No Mac, rode:" >&2
+                echo "        base64 -i ~/.streamz/certificado-mac/streamz-mac.p12 | pbcopy" >&2
+                echo "      e cole (Cmd+V) o RESULTADO no campo — não o comando." >&2
+                exit 1 ;;
+            esac
+            printf '%s' "$CERT_B64" | base64 --decode > "$TMP_ASSINATURA/cert.p12" \
+              || { echo "ERRO: APPLE_CERTIFICATE tem só caracteres de base64 mas não decodifica (cortado no meio da cópia?)." >&2; exit 1; }
+            # `-legacy` como segunda tentativa: OpenSSL 3 (se for o do PATH)
+            # recusa .p12 com RC2-40 sem o provider legado; o LibreSSL do
+            # macOS nem conhece a opção.
+            P12_LEGACY=""
+            if openssl pkcs12 -in "$TMP_ASSINATURA/cert.p12" -nokeys -clcerts -passin env:APPLE_CERTIFICATE_PASSWORD -out "$TMP_ASSINATURA/cert.pem" 2>/dev/null; then
+              :
+            elif openssl pkcs12 -legacy -in "$TMP_ASSINATURA/cert.p12" -nokeys -clcerts -passin env:APPLE_CERTIFICATE_PASSWORD -out "$TMP_ASSINATURA/cert.pem" 2>/dev/null; then
+              P12_LEGACY=-legacy
+            else
+              echo "ERRO: não deu para abrir o APPLE_CERTIFICATE (senha errada ou não é .p12)." >&2; exit 1
+            fi
+            # `.p12` sem a chave privada passa pelo `security import` e só
+            # quebraria no `set-key-partition-list`, com um erro que não diz o
+            # que falta. A chave passa só pelo pipe; `grep -c` lê tudo (sem
+            # SIGPIPE no openssl com pipefail).
+            # shellcheck disable=SC2086
+            CHAVES_NO_P12=$(openssl pkcs12 $P12_LEGACY -in "$TMP_ASSINATURA/cert.p12" -nocerts -nodes -passin env:APPLE_CERTIFICATE_PASSWORD 2>/dev/null \
+              | grep -c '^-----BEGIN .*PRIVATE KEY-----' || true)
+            [ "${CHAVES_NO_P12:-0}" -ge 1 ] \
+              || { echo "ERRO: o APPLE_CERTIFICATE não tem chave privada (só o certificado). Gere o segredo de novo com scripts/gerar-certificado-mac.sh." >&2; exit 1; }
+            CERT_SHA1=$(openssl x509 -in "$TMP_ASSINATURA/cert.pem" -outform DER | openssl dgst -sha1 | awk '{print $NF}' | tr 'a-f' 'A-F')
+            CERT_SHA256=$(openssl x509 -in "$TMP_ASSINATURA/cert.pem" -outform DER | openssl dgst -sha256 | awk '{print $NF}' | tr 'A-F' 'a-f')
+            if [ -n "${APPLE_SIGNING_IDENTITY:-}" ] && [ "$(printf '%s' "$APPLE_SIGNING_IDENTITY" | tr 'a-f' 'A-F')" != "$CERT_SHA1" ]; then
+              echo "ERRO: APPLE_SIGNING_IDENTITY ($APPLE_SIGNING_IDENTITY) não é o SHA-1 do APPLE_CERTIFICATE ($CERT_SHA1)." >&2
+              exit 1
+            fi
+            # A lista de busca é lida ANTES de criar o keychain, linha a linha
+            # num array (caminho com espaço sobrevive) e recusada se vier vazia:
+            # `list-keychains -s` só com o keychain novo tiraria o login.keychain
+            # da busca. A VM é descartada no fim, então aqui não há restauração;
+            # o cuidado é não montar uma lista errada.
+            SAIDA_LISTA=$(security list-keychains -d user) \
+              || { echo "ERRO: não deu para ler a lista de keychains (security list-keychains -d user)." >&2; exit 1; }
+            LISTA=()
+            while IFS= read -r LINHA; do
+              LINHA=$(printf '%s' "$LINHA" | sed -e 's/^[[:space:]]*"//' -e 's/"[[:space:]]*$//')
+              if [ -n "$LINHA" ]; then LISTA+=("$LINHA"); fi
+            done <<<"$SAIDA_LISTA"
+            [ ${#LISTA[@]} -gt 0 ] \
+              || { echo "ERRO: a lista de keychains do usuário veio vazia; não dá para somar o keychain temporário a ela." >&2; exit 1; }
+            KEYCHAIN="$TMP_ASSINATURA/assinatura.keychain-db"
+            KEYCHAIN_SENHA=$(openssl rand -hex 16)
+            security create-keychain -p "$KEYCHAIN_SENHA" "$KEYCHAIN"
+            security unlock-keychain -p "$KEYCHAIN_SENHA" "$KEYCHAIN"
+            # Sem `-t`: não travar sozinho no meio de uma compilação longa.
+            security set-keychain-settings "$KEYCHAIN"
+            # `-P` põe a senha do .p12 na linha de comando: fica visível no `ps`
+            # da VM enquanto o import roda (menos de um segundo). O `security
+            # import` não lê a senha do ambiente, de arquivo nem da entrada
+            # padrão — sem `-P` ele abre diálogo gráfico, que no CI não existe.
+            # A VM é descartável e só roda este build, então o risco é pequeno;
+            # o `>/dev/null` e a ausência de `set -x` mantêm a senha fora do log.
+            security import "$TMP_ASSINATURA/cert.p12" -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign >/dev/null \
+              || { echo "ERRO: o security import recusou o APPLE_CERTIFICATE." >&2; exit 1; }
+            # Identidade conferida ANTES do partition list (que, sem chave,
+            # falharia com "item could not be found"). Here-string e não
+            # `| grep -q`: com pipefail, o SIGPIPE do `security` faria o
+            # pipeline "falhar" justo quando achou. Sem `-v`: o autoassinado
+            # não é confiável e o `-v` o esconderia.
+            grep -q "$CERT_SHA1" <<<"$(security find-identity -p codesigning "$KEYCHAIN" 2>&1)" \
+              || { echo "ERRO: o .p12 não virou identidade de assinatura (sem chave privada?)." >&2; exit 1; }
+            # Sem isto o `codesign` esperaria um diálogo "permitir acesso" que
+            # numa máquina de CI não aparece.
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_SENHA" "$KEYCHAIN" >/dev/null
+            # Soma à lista existente (não substitui): o `codesign` que o bundler
+            # chama não recebe `--keychain`, só procura na lista de busca.
+            security list-keychains -d user -s "${LISTA[@]}" "$KEYCHAIN"
+            rm -f "$TMP_ASSINATURA/cert.p12"
+            # O próximo passo (conferência) compara com isto; são dados
+            # públicos do certificado, não segredo.
+            printf 'CERT_SHA1=%s\nCERT_SHA256=%s\n' "$CERT_SHA1" "$CERT_SHA256" > "$HOME/streamz-assinatura-mac.env"
+            export APPLE_SIGNING_IDENTITY="$CERT_SHA1"
+            unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD
+            echo "assinando com o certificado autoassinado SHA-1 $CERT_SHA1 (pin SHA-256 $CERT_SHA256)"
+          else
+            unset APPLE_SIGNING_IDENTITY || true
+            echo "AVISO: sem APPLE_CERTIFICATE (grupo streamz-certificado-mac ausente/vazio): assinatura AD-HOC."
+            echo "       O macOS vai pedir de novo microfone/câmera/tela depois de cada atualização."
+          fi
+          CONFIG_RELEASE=()
+          if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            # Mesmo tropeço do certificado: o valor é o CONTEÚDO de
+            # /root/.tauri/streamz.key (uma linha de base64), não o comando
+            # que o mostra. Espaço/quebra de linha nas pontas não atrapalha.
+            case "$(printf '%s' "$TAURI_SIGNING_PRIVATE_KEY" | tr -d ' \t\r\n')" in
+              *[!A-Za-z0-9+/=]*)
+                echo "ERRO: TAURI_SIGNING_PRIVATE_KEY não é o conteúdo da chave (tem caractere fora do base64)." >&2
+                echo "      No servidor rode 'cat /root/.tauri/streamz.key' e cole só a linha que ele imprime." >&2
+                exit 1 ;;
+            esac
+            echo "TAURI_SIGNING_PRIVATE_KEY presente: gerando também os artefatos do atualizador (.app.tar.gz + .sig)"
+            # A chave do servidor (/root/.tauri/streamz.key) não tem senha, e o
+            # build do Windows passa a senha vazia explícita pelo mesmo motivo:
+            # sem a variável o tauri-cli pode tentar perguntar a senha, e no CI
+            # não há terminal para responder. Quem cadastrar uma senha no grupo
+            # continua valendo.
+            export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
+            CONFIG_RELEASE=(--config src-tauri/tauri.release.conf.json)
+          else
+            echo "sem TAURI_SIGNING_PRIVATE_KEY (grupo streamz-updater ausente/vazio): gerando só o .dmg"
+          fi
+          pnpm --filter @streamz/desktop exec tauri build \
+            --target universal-apple-darwin \
+            --bundles app,dmg \
+            ${CONFIG_RELEASE[@]+"${CONFIG_RELEASE[@]}"}
+
+      - name: Conferir que o binário é mesmo universal
+        script: |
+          set -euo pipefail
+          # Trava equivalente à do bundle id no iOS: se por algum motivo o
+          # `--target universal-apple-darwin` não fundir os dois alvos (por
+          # exemplo, algum crate com `build.rs` que só olha
+          # `CARGO_CFG_TARGET_ARCH` da primeira perna), é melhor o build
+          # parar aqui do que entregar um .dmg que só roda numa das duas
+          # arquiteturas.
+          # Absoluto: mais abaixo o certificado é extraído de dentro de uma
+          # pasta temporária (`cd`), e com caminho relativo o `codesign` não
+          # achava o app e o passo morria calado — foi o que derrubou o build #2.
+          APP="$PWD/apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/Streamz.app"
+          # o nome do executável sai do Info.plist, como no
+          # `scripts/build-desktop-macos.sh`: com o nome fixo, trocar o
+          # `mainBinaryName` ou o nome do crate derrubaria este passo com um
+          # "arquivo não existe" que não diz nada sobre arquitetura
+          EXECUTAVEL=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")
+          BIN="$APP/Contents/MacOS/$EXECUTAVEL"
+          echo "executável: $EXECUTAVEL"
+          echo "arquiteturas no binário:"
+          # Here-string (`<<<`), não `lipo ... | grep -q`: com `set -o
+          # pipefail`, o `grep -q` sai no primeiro acerto, o `lipo` leva
+          # SIGPIPE e o pipeline "falha" justo quando encontrou (mesmo
+          # cuidado do `conferir_app` em scripts/build-desktop-macos.sh).
+          ARCHS=$(lipo -archs "$BIN")
+          echo "$ARCHS"
+          grep -q x86_64 <<<"$ARCHS" || { echo "ERRO: falta x86_64 (Intel) no binário universal." >&2; exit 1; }
+          grep -q arm64 <<<"$ARCHS" || { echo "ERRO: falta arm64 (Apple Silicon) no binário universal." >&2; exit 1; }
+          echo "ok: binário contém x86_64 e arm64"
+          echo
+          codesign --verify --strict --verbose=2 "$APP"
+          # `-dvv`: só com o segundo `v` saem as linhas Authority.
+          codesign -dvv "$APP" 2>&1
+          # O designated requirement é o que o TCC grava junto da permissão.
+          codesign -d -r- "$APP" 2>&1 | grep '^designated' || true
+          if [ -n "${APPLE_CERTIFICATE:-}" ]; then
+            [ -f "$HOME/streamz-assinatura-mac.env" ] \
+              || { echo "ERRO: APPLE_CERTIFICATE presente mas o passo de build não registrou o certificado." >&2; exit 1; }
+            # shellcheck disable=SC1091
+            . "$HOME/streamz-assinatura-mac.env"
+            CERT_SHA1_MIN=$(printf '%s' "$CERT_SHA1" | tr 'A-F' 'a-f')
+            IDENTIFICADOR=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")
+            # Assinatura íntegra E feita pelo nosso certificado — a mesma
+            # checagem que um instalador pode fazer (H"..." é SHA-1).
+            codesign --verify --strict -R="identifier \"$IDENTIFICADOR\" and certificate leaf = H\"$CERT_SHA1_MIN\"" "$APP" \
+              || { echo "ERRO: o .app não foi assinado pelo certificado $CERT_SHA1_MIN." >&2; exit 1; }
+            EXTRAIDOS=$(mktemp -d)
+            (cd "$EXTRAIDOS" && codesign -d --extract-certificates "$APP" >/dev/null 2>&1) && [ -f "$EXTRAIDOS/codesign0" ] \
+              || { echo "ERRO: não deu para extrair o certificado de dentro do .app ($APP)." >&2; exit 1; }
+            SHA256_APP=$(shasum -a 256 "$EXTRAIDOS/codesign0" | awk '{print $1}')
+            echo "certificado do .app (SHA-256 do DER, o pin do instalador): $SHA256_APP"
+            [ "$SHA256_APP" = "$CERT_SHA256" ] \
+              || { echo "ERRO: certificado do .app ($SHA256_APP) difere do APPLE_CERTIFICATE ($CERT_SHA256)." >&2; exit 1; }
+            for DMG in apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg; do
+              codesign --verify --strict "$DMG"
+            done
+            echo "ok: assinado com o certificado autoassinado (permissões do macOS se mantêm entre versões)"
+          else
+            grep -q 'Signature=adhoc' <<<"$(codesign -dv "$APP" 2>&1)" \
+              || { echo "ERRO: sem certificado a assinatura deveria ser ad-hoc." >&2; exit 1; }
+            echo "assinatura ad-hoc (sem pin: não há certificado)"
+          fi
+          echo
+          echo "sha256 do(s) .dmg gerado(s), para conferência de quem for publicar:"
+          shasum -a 256 apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+
+    artifacts:
+      # Caminhos documentados pelo Tauri para um build `--target
+      # universal-apple-darwin`: o triplo "universal-apple-darwin" substitui o
+      # nome do alvo de sempre no caminho de `target/`, e dentro do bundle os
+      # arquivos continuam nos mesmos subdiretórios de sempre (dmg/, macos/).
+      # https://v2.tauri.app/plugin/updater/ (artefatos .app.tar.gz/.sig) e
+      # https://v2.tauri.app/distribute/dmg/.
+      - apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+      # Os dois abaixo só existem quando o `--config tauri.release.conf.json`
+      # rodou (chave de assinatura presente); sem isso o padrão não casa com
+      # nenhum arquivo e o Codemagic segue em frente sem eles.
+      - apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz
+      - apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig
+
+    # Sem `publishing`: de propósito. Quem publica é
+    # `scripts/publicar-desktop.sh`, rodando no servidor — ele é quem sabe
+    # onde o site oferece o download e como avisar o atualizador da versão
+    # nova. Este workflow só entrega os artefatos prontos.

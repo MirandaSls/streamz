@@ -135,3 +135,44 @@ export function mensagemDeErroDoDownload(erro: unknown): string {
   if (isApiError(erro, 404) || isApiError(erro, 503)) return (erro as Error).message;
   return "Não foi possível liberar o download. Tente de novo.";
 }
+
+/** Base da API de produção — o padrão embutido no `public/instalar-mac.sh`. */
+export const API_PADRAO_DO_INSTALADOR = "https://api.streamz.chat";
+
+/** Origem usada quando a página não roda em http(s) (e no pré-render). */
+export const ORIGEM_PADRAO_DO_INSTALADOR = "https://streamz.chat";
+
+/**
+ * Aspeia um valor para entrar num comando de shell com segurança.
+ *
+ * `origem` e a URL da API não são digitadas por quem vê a tela — vêm de
+ * `window.location.origin` e de configuração —, mas iriam sem aspas para dentro
+ * do `curl`/`STREAMZ_API=…`: um valor com espaço ou `&` quebraria o comando (e,
+ * num ambiente que os controlasse, injetaria outro). Aspas simples, com o único
+ * caractere que elas não escapam (`'`) fechado e reaberto por fora.
+ */
+export function aspasDeShell(valor: string): string {
+  return `'${valor.replaceAll("'", `'\\''`)}'`;
+}
+
+/**
+ * De onde o comando baixa o `instalar-mac.sh`. O arquivo mora em `public/`, então
+ * toda origem que serve esta página serve o script — homologação e dev copiam o
+ * comando do próprio ambiente. Fora de http(s) (o `tauri://` do app de desktop)
+ * não há script servido, e fica a origem de produção.
+ */
+export function origemDoInstalador(protocolo: string, origem: string): string {
+  return protocolo === "https:" || protocolo === "http:" ? origem : ORIGEM_PADRAO_DO_INSTALADOR;
+}
+
+/**
+ * O comando de instalação do macOS pelo Terminal.
+ *
+ * A API só entra quando não é a de produção, e entra **do lado do `bash`**: um
+ * `STREAMZ_API=… curl … | bash` definiria a variável para o `curl`, não para o
+ * script que a lê.
+ */
+export function comandoDoTerminalMac(origem: string, apiUrl: string): string {
+  const variavelDaApi = apiUrl === API_PADRAO_DO_INSTALADOR ? "" : `STREAMZ_API=${aspasDeShell(apiUrl)} `;
+  return `curl -fsSL ${aspasDeShell(`${origem}/instalar-mac.sh`)} | ${variavelDaApi}bash`;
+}
