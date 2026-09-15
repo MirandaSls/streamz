@@ -3,6 +3,8 @@
 import { useEffect, useRef } from "react";
 import {
   Apps,
+  Eye,
+  EyeOff,
   HeadphoneOff,
   Maximize,
   Maximize2,
@@ -48,12 +50,18 @@ export interface Tile {
   state: VoiceStateEvent;
   publication: TrackPublication | null;
   tela: boolean;
-  /** só para tela: a faixa está assinada porque eu escolhi assistir (ou é minha). */
+  /** só para tela: o vídeo aparece — escolhi assistir, é a minha no navegador ou pedi a prévia da minha nativa. */
   assistindo: boolean;
   /** id do dono — o que casa um `focado` guardado como pessoa. */
   userId: string;
   /** há faixa **viva** para desenhar (é o que decide a tela cheia no celular). */
   comVideo: boolean;
+  /**
+   * A minha tela pela captura nativa do desktop (`<userId>#tela`). Ela não se
+   * assina por padrão: sem prévia (`assistindo` falso) o tile mostra o aviso
+   * "Você está compartilhando sua tela" em vez do vídeo.
+   */
+  minhaTelaNativa?: boolean;
 }
 
 /** As ações que todo tile precisa, iguais nos dois palcos. */
@@ -64,6 +72,8 @@ export interface AcoesDoTile {
   onFocar: (chave: string | null) => void;
   onAssistir: (userId: string, chave: string) => void;
   onPararDeAssistir: (userId: string) => void;
+  /** "Ver prévia"/"Ocultar prévia" no tile da minha tela nativa. */
+  onPreviaDaMinhaTela?: (chave: string, ver: boolean) => void;
 }
 
 /**
@@ -203,6 +213,7 @@ export function VoiceTile({
   onFocar,
   onAssistir,
   onPararDeAssistir,
+  onPreviaDaMinhaTela,
   grande = false,
   compacto = false,
   semAcoes = false,
@@ -253,8 +264,14 @@ export function VoiceTile({
   // também a cor do tile, sem F5
   const perfil = usePresence((e) => e.profiles[state.user.id]);
   const fundo = useCorDominante((perfil ?? state.user).avatarUrl, corDoAvatar(state.user.id));
+  /**
+   * A minha tela nativa sem prévia pedida. A faixa pode até estar chegando (a
+   * miniatura do hover a assina em baixa), mas o tile continua no aviso: quem
+   * decide se ela aparece aqui é o "Ver prévia".
+   */
+  const minhaTelaOculta = !!tile.minhaTelaNativa && !assistindo;
   /** só mostra vídeo quando há faixa: tela fechada não tem o que desenhar. */
-  const video = publication?.track ? publication : null;
+  const video = publication?.track && !minhaTelaOculta ? publication : null;
   /** ver o comentário do componente: a cor dominante só pinta o tile quando
    *  há vídeo de verdade atrás dela; sem vídeo o tile fica no neutro do
    *  palco, senão ele se camufla com a cor da `Avatar` sem foto. */
@@ -366,7 +383,36 @@ export function VoiceTile({
           botão gigante escondia justamente o tile que ele anuncia (print nosso
           `2026-09-03 203457`). Não há print do Discord com este botão — os 32
           são a medida do resto da interface, não medição. */}
-      {tela && !assistindo && (
+      {/* A minha própria transmissão, no desktop: aviso em vez de vídeo, como
+          no Discord. Baixar de volta a tela que esta máquina acabou de
+          codificar é decodificar 1440p só para se ver — ver
+          `assinaturas-de-tela.ts`. O botão reaproveita a pílula de 32px do
+          convite ao lado, no cinza secundário: não é um chamado para agir. */}
+      {minhaTelaOculta && (
+        <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-3 text-center">
+          {!compacto && (
+            <span className="text-sm font-semibold text-text-strong">
+              Você está compartilhando sua tela
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onPreviaDaMinhaTela?.(tile.key, true);
+            }}
+            aria-label="Ver prévia da sua transmissão"
+            className={`flex h-8 items-center rounded-full bg-control-secondary-background-default font-semibold text-control-secondary-text-default shadow-popout transition hover:bg-control-secondary-background-hover hover:text-control-secondary-text-hover ${
+              compacto ? "w-8 justify-center" : "gap-2 px-3 text-[13px]"
+            }`}
+          >
+            <Eye size={14} aria-hidden="true" />
+            {!compacto && "Ver prévia"}
+          </button>
+        </span>
+      )}
+
+      {tela && !assistindo && !tile.minhaTelaNativa && (
         <button
           type="button"
           onClick={(e) => {
@@ -500,15 +546,24 @@ export function VoiceTile({
       {!semAcoes && (
         <div className="absolute right-1 top-1 flex items-center gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
           {tela
-            ? assistindo &&
-              !sou && (
-                <AcaoDoTile
-                  label={`Parar de assistir a ${nome}`}
-                  onClick={() => onPararDeAssistir(state.user.id)}
-                >
-                  <MonitorX size={14} />
-                </AcaoDoTile>
-              )
+            ? tile.minhaTelaNativa
+              ? assistindo && (
+                  <AcaoDoTile
+                    label="Ocultar prévia"
+                    onClick={() => onPreviaDaMinhaTela?.(tile.key, false)}
+                  >
+                    <EyeOff size={14} />
+                  </AcaoDoTile>
+                )
+              : assistindo &&
+                !sou && (
+                  <AcaoDoTile
+                    label={`Parar de assistir a ${nome}`}
+                    onClick={() => onPararDeAssistir(state.user.id)}
+                  >
+                    <MonitorX size={14} />
+                  </AcaoDoTile>
+                )
             : !sou && (
                 <>
                   <AcaoDoTile

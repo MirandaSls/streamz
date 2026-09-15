@@ -1,4 +1,5 @@
 import { VideoQuality } from "livekit-client";
+import { create } from "zustand";
 
 /**
  * Quais transmissões de tela o meu cliente baixa, e em que qualidade.
@@ -18,12 +19,24 @@ import { VideoQuality } from "livekit-client";
  * **preto**, com o nome e o selo "Ao vivo" por cima. O Rust seguia publicando o
  * tempo todo: o quadro morria no cliente, não na captura.
  *
- * As três regras, então:
+ * **Mas assinar a própria tela de volta custa caro.** Em HIGH ela é a camada
+ * de 1440p30 (até 9 Mbps) que o SFU devolve para a mesma máquina que acabou
+ * de codificá-la — e o webview decodifica isso o tempo todo, junto com a
+ * câmera e a captura. Era uma das causas do "compartilhar tela + câmera deixa
+ * o PC lento". O Discord não faz isso: a sua transmissão aparece como um aviso
+ * "Você está compartilhando sua tela", e o vídeo só vem quando você pede.
  *
- * 1. **A minha tela é sempre assinada.** No Discord você vê a sua própria
- *    transmissão no palco, e é a única forma de conferir o que está no ar.
- *    (No navegador a faixa é local e nem passa por aqui — faixa local não se
- *    assina; ver `aplicarAssinaturasDeTela`.)
+ * As regras, então:
+ *
+ * 1. **A minha tela não se assina por padrão.** O tile dela mostra o aviso e o
+ *    botão "Ver prévia" (a tela não fica preta: ela não finge ter vídeo). Ela
+ *    se assina, **sempre em LOW**, só quando eu peço: a prévia do tile
+ *    (`previaDaMinhaTela`, a chave do tile), o palco focado nela por clique
+ *    (`focado === chave`) ou a miniatura do hover (`previa`). `assistindo` não
+ *    conta para a minha tela: é um conjunto que sobrevive ao fim da
+ *    transmissão, e a próxima nasceria assinada. (No navegador a faixa é
+ *    local e nem passa por aqui — faixa local não se assina; ver
+ *    `aplicarAssinaturasDeTela`.)
  * 2. **Tela escolhida** (`assistindo`) e **miniatura aberta** (`previa`) são
  *    assinadas. O resto — tela que tem tile mas mostra só o convite "Assistir
  *    transmissão" — fica desassinado, que é o ganho do #108.
@@ -70,6 +83,12 @@ export interface EstadoDeAssistir {
   previa: string | null;
   /** chave do tile no destaque do palco (null = grade). */
   focado: string | null;
+  /**
+   * Chave do tile da **minha** tela cuja prévia pedi ("Ver prévia"). Omitido,
+   * vale o que está em `usePreviaDaMinhaTela` — é assim que a store de voz,
+   * que não sabe desta escolha, a enxerga.
+   */
+  previaDaMinhaTela?: string | null;
 }
 
 export interface Assinatura {
@@ -89,14 +108,29 @@ export function chaveDoTileDeTela(dono: string, trackSid: string): string {
   return `${dono}:${trackSid}`;
 }
 
+/**
+ * A escolha "Ver prévia" no tile da minha própria tela, só em memória.
+ *
+ * Guarda a **chave do tile** (`dono:trackSid`), e não um booleano: uma nova
+ * transmissão tem outro `trackSid`, então uma prévia esquecida ligada nunca
+ * faz a próxima nascer assinada. E `aplicarAssinaturas` a apaga assim que a
+ * tela some da sala.
+ */
+export const usePreviaDaMinhaTela = create<{ chave: string | null }>(() => ({ chave: null }));
+
 /** A decisão para uma publicação de tela. Ver o cabeçalho do módulo. */
 export function assinaturaDaTela(
   dono: string,
   chave: string,
-  { meuId, assistindo, previa, focado }: EstadoDeAssistir,
+  { meuId, assistindo, previa, focado, previaDaMinhaTela = null }: EstadoDeAssistir,
 ): Assinatura {
-  const minha = !!meuId && dono === meuId;
-  const assistida = minha || assistindo.has(dono);
+  if (meuId && dono === meuId) {
+    // a minha: só quando eu pedi, e nunca além da camada baixa — conferir o
+    // que está no ar não pede 1440p decodificados na mesma máquina que captura
+    const pedi = previaDaMinhaTela === chave || focado === chave || previa === dono;
+    return pedi ? { assinar: true, qualidade: VideoQuality.LOW } : { assinar: false, qualidade: null };
+  }
+  const assistida = assistindo.has(dono);
   const assinar = assistida || previa === dono;
   if (!assinar) return { assinar: false, qualidade: null };
   // só a miniatura do hover: 240×135 não pede mais que a camada baixa
@@ -117,8 +151,26 @@ export function assinaturaDaTela(
  */
 export function aplicarAssinaturas(
   participantes: readonly ParticipanteDeTela[],
-  estado: EstadoDeAssistir,
+  estadoDaStore: EstadoDeAssistir,
 ): void {
+  const guardada = usePreviaDaMinhaTela.getState().chave;
+  const estado: EstadoDeAssistir = {
+    ...estadoDaStore,
+    previaDaMinhaTela:
+      estadoDaStore.previaDaMinhaTela === undefined ? guardada : estadoDaStore.previaDaMinhaTela,
+  };
+  // A transmissão acabou (ou saí da sala): a prévia vai junto. A faixa em si
+  // já some com a publicação — o que sobraria é só esta escolha.
+  if (guardada !== null) {
+    const aindaNoAr =
+      !!estado.meuId &&
+      participantes.some(
+        (p) =>
+          p.dono === estado.meuId &&
+          p.telas.some((pub) => chaveDoTileDeTela(p.dono, pub.trackSid) === guardada),
+      );
+    if (!aindaNoAr) usePreviaDaMinhaTela.setState({ chave: null });
+  }
   for (const p of participantes) {
     for (const pub of p.telas) {
       const { assinar, qualidade } = assinaturaDaTela(

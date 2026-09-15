@@ -1,5 +1,5 @@
 import { VideoQuality } from "livekit-client";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { donoDaIdentidade, identidadeDeTela } from "@streamz/shared";
 import {
   aplicarAssinaturas,
@@ -7,18 +7,20 @@ import {
   chaveDoTileDeTela,
   type EstadoDeAssistir,
   type ParticipanteDeTela,
+  usePreviaDaMinhaTela,
 } from "./assinaturas-de-tela";
 
 /**
- * A regressão que este arquivo prende: **a tela do próprio usuário ficava
- * preta no desktop**.
+ * As duas histórias que este arquivo prende sobre **a minha própria tela no
+ * desktop**, que entra na sala como um participante separado
+ * (`<userId>#tela`) e por isso é *remota* para o meu cliente:
  *
- * A captura nativa entra na sala como um participante separado
- * (`<userId>#tela`), então do ponto de vista do meu cliente a minha
- * transmissão é *remota*. A regra do PR #108 desassinava toda tela cujo dono
- * não estivesse em `assistindo` — e ninguém entra em `assistindo` pela própria
- * tela. Resultado: `setSubscribed(false)` na própria transmissão, SFU parando
- * de encaminhar, `<video>` sem quadros.
+ * - **0.0.18:** a regra desassinava a minha tela e o tile ficava **preto**,
+ *   fingindo ter vídeo. O tile agora mostra o aviso "Você está compartilhando
+ *   sua tela" e não depende da faixa.
+ * - **1.2.1:** a correção daquela regressão assinava a minha tela sempre, em
+ *   HIGH — 1440p30 devolvidos pelo SFU e decodificados na mesma máquina que
+ *   captura e codifica. Agora ela só se assina quando eu peço, e em LOW.
  */
 
 /** Uma publicação de tela de mentira, que anota o que pediram a ela. */
@@ -56,13 +58,53 @@ function estado(patch: Partial<EstadoDeAssistir> = {}): EstadoDeAssistir {
   return { meuId: EU, assistindo: new Set(), previa: null, focado: null, ...patch };
 }
 
+beforeEach(() => usePreviaDaMinhaTela.setState({ chave: null }));
+
 describe("assinaturaDaTela", () => {
-  it("assina a minha própria tela mesmo sem ninguém 'assistindo' (a regressão da 0.0.18)", () => {
+  it("não assina a minha própria tela por padrão", () => {
     const chave = chaveDoTileDeTela(EU, "TR_1");
-    expect(assinaturaDaTela(EU, chave, estado())).toEqual({
+    expect(assinaturaDaTela(EU, chave, estado())).toEqual({ assinar: false, qualidade: null });
+  });
+
+  it("com a prévia pedida no tile, assina a minha tela em LOW", () => {
+    const chave = chaveDoTileDeTela(EU, "TR_1");
+    expect(assinaturaDaTela(EU, chave, estado({ previaDaMinhaTela: chave }))).toEqual({
       assinar: true,
-      qualidade: VideoQuality.HIGH,
+      qualidade: VideoQuality.LOW,
     });
+  });
+
+  it("a prévia de uma transmissão anterior (outro trackSid) não assina a nova", () => {
+    const antiga = chaveDoTileDeTela(EU, "TR_VELHA");
+    const nova = chaveDoTileDeTela(EU, "TR_NOVA");
+    expect(assinaturaDaTela(EU, nova, estado({ previaDaMinhaTela: antiga })).assinar).toBe(false);
+  });
+
+  it("a minha tela no destaque (clique) assina, mas continua em LOW", () => {
+    const chave = chaveDoTileDeTela(EU, "TR_1");
+    expect(assinaturaDaTela(EU, chave, estado({ focado: chave }))).toEqual({
+      assinar: true,
+      qualidade: VideoQuality.LOW,
+    });
+  });
+
+  it("a miniatura do hover da minha tela assina em LOW", () => {
+    const chave = chaveDoTileDeTela(EU, "TR_1");
+    expect(assinaturaDaTela(EU, chave, estado({ previa: EU }))).toEqual({
+      assinar: true,
+      qualidade: VideoQuality.LOW,
+    });
+  });
+
+  it("'assistindo' não liga a minha tela (o conjunto sobrevive ao fim da transmissão)", () => {
+    const chave = chaveDoTileDeTela(EU, "TR_1");
+    expect(assinaturaDaTela(EU, chave, estado({ assistindo: new Set([EU]) })).assinar).toBe(false);
+  });
+
+  it("focar outro tile não assina a minha tela", () => {
+    const minha = chaveDoTileDeTela(EU, "TR_1");
+    const dela = chaveDoTileDeTela(OUTRA, "TR_2");
+    expect(assinaturaDaTela(EU, minha, estado({ focado: dela })).assinar).toBe(false);
   });
 
   it("não assina a tela de outra pessoa enquanto ninguém a abriu", () => {
@@ -87,22 +129,25 @@ describe("assinaturaDaTela", () => {
   });
 
   it("no destaque do palco é alta; na faixa embaixo dele, baixa", () => {
-    const minha = chaveDoTileDeTela(EU, "TR_1");
     const dela = chaveDoTileDeTela(OUTRA, "TR_2");
-    const assistindo = new Set([OUTRA]);
-    // a dela está no destaque, a minha desceu para a faixa de 188×106
+    const doBia = chaveDoTileDeTela("bia", "TR_3");
+    const assistindo = new Set([OUTRA, "bia"]);
+    // a dela está no destaque, a da Bia desceu para a faixa de 188×106
     expect(assinaturaDaTela(OUTRA, dela, estado({ assistindo, focado: dela })).qualidade).toBe(
       VideoQuality.HIGH,
     );
-    expect(assinaturaDaTela(EU, minha, estado({ assistindo, focado: dela })).qualidade).toBe(
+    expect(assinaturaDaTela("bia", doBia, estado({ assistindo, focado: dela })).qualidade).toBe(
       VideoQuality.LOW,
     );
   });
 
   it("focar o tile da pessoa (a câmera) deixa as telas na faixa, em baixa", () => {
-    const minha = chaveDoTileDeTela(EU, "TR_1");
+    const dela = chaveDoTileDeTela(OUTRA, "TR_2");
     // a chave do tile de pessoa é o `userId` cru, sem o `:sid`
-    expect(assinaturaDaTela(EU, minha, estado({ focado: OUTRA })).qualidade).toBe(VideoQuality.LOW);
+    const assistindo = new Set([OUTRA]);
+    expect(assinaturaDaTela(OUTRA, dela, estado({ assistindo, focado: OUTRA })).qualidade).toBe(
+      VideoQuality.LOW,
+    );
   });
 
   it("sem sala (meuId nulo) ninguém vira 'minha tela'", () => {
@@ -112,7 +157,7 @@ describe("assinaturaDaTela", () => {
 });
 
 describe("aplicarAssinaturas", () => {
-  it("a minha tela nativa (`md#tela`) continua assinada; a de outra pessoa é desassinada", () => {
+  it("desassina a minha tela nativa (`md#tela`) e a de outra pessoa que ninguém abriu", () => {
     const minha = faixa("TR_1");
     const dela = faixa("TR_2");
     aplicarAssinaturas(
@@ -124,11 +169,53 @@ describe("aplicarAssinaturas", () => {
       ],
       estado(),
     );
-    // era aqui que a tela ficava preta: um `setSubscribed(false)` na minha
-    expect(minha.chamadas.assinaturas).toEqual([]);
-    expect(minha.isSubscribed).toBe(true);
-    expect(minha.chamadas.qualidades).toEqual([VideoQuality.HIGH]);
+    // o `autoSubscribe` a trouxe assinada: é a volta de 1440p que se corta
+    expect(minha.chamadas.assinaturas).toEqual([false]);
+    expect(minha.chamadas.qualidades).toEqual([]);
     expect(dela.chamadas.assinaturas).toEqual([false]);
+  });
+
+  it("'Ver prévia' (guardada na store) assina a minha tela em LOW; ocultar desassina", () => {
+    const minha = faixa("TR_1", false);
+    const sala = [participante(identidadeDeTela(EU), [minha])];
+    usePreviaDaMinhaTela.setState({ chave: chaveDoTileDeTela(EU, "TR_1") });
+    aplicarAssinaturas(sala, estado());
+    expect(minha.chamadas.assinaturas).toEqual([true]);
+    expect(minha.chamadas.qualidades).toEqual([VideoQuality.LOW]);
+
+    usePreviaDaMinhaTela.setState({ chave: null });
+    aplicarAssinaturas(sala, estado());
+    expect(minha.chamadas.assinaturas).toEqual([true, false]);
+    expect(minha.chamadas.qualidades).toEqual([VideoQuality.LOW]);
+  });
+
+  it("a tela de outra pessoa assistida continua em HIGH mesmo com a minha prévia ligada", () => {
+    const minha = faixa("TR_1", false);
+    const dela = faixa("TR_2", false);
+    usePreviaDaMinhaTela.setState({ chave: chaveDoTileDeTela(EU, "TR_1") });
+    aplicarAssinaturas(
+      [participante(identidadeDeTela(EU), [minha]), participante(identidadeDeTela(OUTRA), [dela])],
+      estado({ assistindo: new Set([OUTRA]) }),
+    );
+    expect(minha.chamadas.qualidades).toEqual([VideoQuality.LOW]);
+    expect(dela.chamadas.qualidades).toEqual([VideoQuality.HIGH]);
+  });
+
+  it("encerrar a transmissão apaga a prévia guardada", () => {
+    const minha = faixa("TR_1", false);
+    usePreviaDaMinhaTela.setState({ chave: chaveDoTileDeTela(EU, "TR_1") });
+    aplicarAssinaturas([participante(identidadeDeTela(EU), [minha])], estado());
+    expect(usePreviaDaMinhaTela.getState().chave).toBe(chaveDoTileDeTela(EU, "TR_1"));
+
+    // o `#tela` saiu da sala: não há mais publicação com aquela chave
+    aplicarAssinaturas([participante(EU, [])], estado());
+    expect(usePreviaDaMinhaTela.getState().chave).toBeNull();
+  });
+
+  it("sair da sala (meuId nulo) também apaga a prévia", () => {
+    usePreviaDaMinhaTela.setState({ chave: chaveDoTileDeTela(EU, "TR_1") });
+    aplicarAssinaturas([], estado({ meuId: null }));
+    expect(usePreviaDaMinhaTela.getState().chave).toBeNull();
   });
 
   it("assinar de volta quando a pessoa escolhe assistir, sem mexer no que já está certo", () => {
