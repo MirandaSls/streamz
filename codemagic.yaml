@@ -440,6 +440,12 @@ workflows:
           CONFIG_RELEASE=()
           if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
             echo "TAURI_SIGNING_PRIVATE_KEY presente: gerando também os artefatos do atualizador (.app.tar.gz + .sig)"
+            # A chave do servidor (/root/.tauri/streamz.key) não tem senha, e o
+            # build do Windows passa a senha vazia explícita pelo mesmo motivo:
+            # sem a variável o tauri-cli pode tentar perguntar a senha, e no CI
+            # não há terminal para responder. Quem cadastrar uma senha no grupo
+            # continua valendo.
+            export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
             CONFIG_RELEASE=(--config src-tauri/tauri.release.conf.json)
           else
             echo "sem TAURI_SIGNING_PRIVATE_KEY (grupo streamz-updater ausente/vazio): gerando só o .dmg"
