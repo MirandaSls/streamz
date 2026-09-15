@@ -80,11 +80,10 @@ export function nomeDoModoDeRepeticao(modo: string): string {
 }
 
 /**
- * Link do Spotify vira **busca**, e o usuário precisa saber disso.
+ * Link do Spotify: o LavaSrc resolve a faixa, mas o áudio vem de outro lugar.
  *
  * O Spotify não entrega áudio a terceiros: todo bot de música lê os metadados
- * e procura o equivalente no YouTube. Prometer "toca Spotify" e entregar outra
- * gravação é o tipo de mentira pequena que gera "esse bot é ruim".
+ * (ISRC, título) e toca a mesma gravação do YouTube — e o usuário precisa saber.
  */
 export function ehLinkDoSpotify(consulta: string): boolean {
   return /(^|\/\/)(open\.)?spotify\.com\//i.test(consulta) || consulta.startsWith("spotify:");

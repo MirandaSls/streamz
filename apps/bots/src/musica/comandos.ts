@@ -180,8 +180,8 @@ const tocar: Comando = {
     }
 
     const avisoDoSpotify = ehLinkDoSpotify(consulta)
-      ? "Link do Spotify vira **busca**: o Spotify não entrega áudio a terceiros, " +
-        "então eu toco a gravação equivalente que eu achar."
+      ? "Do Spotify vem a faixa; o áudio vem da mesma gravação no YouTube " +
+        "(o Spotify não entrega áudio a terceiros)."
       : undefined;
 
     // Playlist inteira ou uma faixa só.

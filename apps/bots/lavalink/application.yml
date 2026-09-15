@@ -18,6 +18,11 @@ lavalink:
   plugins:
     - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.2"
       repository: "https://maven.lavalink.dev/releases"
+    # Spotify, Apple Music e companhia como **catálogo** (links, playlists,
+    # busca). Nenhum deles entrega áudio: o LavaSrc acha a faixa pelo ISRC nos
+    # `providers` abaixo e quem toca é o YouTube. Mesma versão do Vocard.
+    - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.8.3"
+      repository: "https://maven.lavalink.dev/releases"
   server:
     # A senha vem do ambiente para não ficar em texto no repositório. O mesmo
     # valor tem de chegar ao bot em `LAVALINK_SENHA`.
@@ -50,12 +55,57 @@ lavalink:
 plugins:
   youtube:
     enabled: true
-    # `MUSIC` e `WEB` são os clientes que ainda funcionam sem login; a ordem é
-    # a de tentativa. Sem nenhum deles, toda busca volta vazia — e é o erro
-    # nº 1 de quem sobe Lavalink v4 pela primeira vez.
-    clients: ["MUSIC", "ANDROID_VR", "WEB", "WEBEMBEDDED"]
+    allowSearch: true
+    # A lista e as opções são as do Vocard (Vocard-Installer, 2026-08). O `TV`
+    # na frente é o único cliente que usa a conta OAuth — e, com o IP deste
+    # servidor, **sem conta nenhum cliente toca**: todos respondem "This video
+    # requires login" ou "Sign in to confirm you're not a bot" (medido em
+    # 2026-09-15). A busca continua pelo `MUSIC`, que não precisa de login.
+    clients: ["TV", "MUSIC", "ANDROID_VR", "ANDROID_MUSIC", "WEB", "WEBEMBEDDED", "TVHTML5_SIMPLY"]
+    clientOptions:
+      WEB:
+        playback: false
+        videoLoading: false
+      WEBEMBEDDED:
+        playlistLoading: false
+        searching: false
+    # A conta **não** mora aqui: o bot manda o refresh token por `POST /youtube`
+    # a cada conexão e faz o rodízio entre várias (`YOUTUBE_REFRESH_TOKENS`, ver
+    # `src/musica/tokens-do-youtube.ts`). `skipInitialization` impede o plugin
+    # de abrir, sozinho, o fluxo de login do Google a cada subida.
+    oauth:
+      enabled: true
+      skipInitialization: true
+
+  lavasrc:
+    providers:
+      - 'ytsearch:"%ISRC%"'
+      - "ytsearch:%QUERY%"
+    sources:
+      spotify: true
+      applemusic: false
+      deezer: false
+      yandexmusic: false
+      flowerytts: false
+      youtube: false
+      vkmusic: false
+    spotify:
+      # App gratuito em developer.spotify.com. Sem ele o LavaSrc tenta o token
+      # anônimo, que o Spotify responde com 429 para o IP deste servidor.
+      clientId: "${SPOTIFY_CLIENT_ID:}"
+      clientSecret: "${SPOTIFY_CLIENT_SECRET:}"
+      countryCode: "BR"
+      playlistLoadLimit: 6
+      albumLoadLimit: 6
+      resolveArtistsInSearch: false
 
 logging:
   level:
     root: INFO
     lavalink: INFO
+    # O `POST /youtube` loga o refresh token em texto puro no nível INFO.
+    dev.lavalink.youtube.plugin.YoutubeRestHandler: WARN
+  request:
+    # O corpo das requisições leva credencial: o refresh token do YouTube
+    # (`POST /youtube`) e o JWT de voz da ponte (`PATCH .../players`).
+    includePayload: false

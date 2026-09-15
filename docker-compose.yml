@@ -85,6 +85,9 @@ services:
     restart: unless-stopped
     environment:
       LAVALINK_SERVER_PASSWORD: ${LAVALINK_SENHA:-streamz}
+      # Catálogo do Spotify (LavaSrc). Vazios = links do Spotify não resolvem.
+      SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}
+      SPOTIFY_CLIENT_SECRET: ${SPOTIFY_CLIENT_SECRET:-}
       # A JVM, sem teto, reserva um quarto da RAM da máquina só para o heap.
       # Este servidor tem 6 núcleos e já caiu por OOM: o teto não é enfeite.
       _JAVA_OPTIONS: -Xmx512m -XX:+UseSerialGC
@@ -129,6 +132,10 @@ services:
       LAVALINK_HOST: lavalink
       LAVALINK_PORT: "2333"
       LAVALINK_SENHA: ${LAVALINK_SENHA:-streamz}
+      # Refresh tokens OAuth de contas Google **descartáveis**, separados por
+      # vírgula. Sem nenhum, o YouTube não toca a partir deste servidor.
+      # Gerar com `scripts/gerar-token-do-youtube.sh`.
+      YOUTUBE_REFRESH_TOKENS: ${YOUTUBE_REFRESH_TOKENS:-}
       LOG_FORMATO: json
       BOTS_DIR: /app/.bots
     volumes:
