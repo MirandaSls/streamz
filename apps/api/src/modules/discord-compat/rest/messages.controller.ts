@@ -4,22 +4,25 @@ import {
   Delete,
   Get,
   HttpCode,
+  Inject,
+  Optional,
   Param,
   Patch,
   Post,
   Put,
   Query,
+  UploadedFiles,
   UseFilters,
   UseGuards,
   UseInterceptors,
 } from "@nestjs/common";
+import { AnyFilesInterceptor } from "@nestjs/platform-express";
 import { SkipThrottle } from "@nestjs/throttler";
 import {
   ehSnowflake,
   FLAGS_DE_MENSAGEM,
   snowflakeParaData,
   WS_EVENTS,
-  type Message as MessageDTO,
 } from "@streamz/shared";
 import { zodBody } from "../../../common/zod.pipe";
 import { GuildsService } from "../../guilds/guilds.service";
@@ -27,6 +30,7 @@ import { anunciarReacao, anunciarReacoesLimpas } from "../../messages/eventos-de
 import { MessagesService } from "../../messages/messages.service";
 import { ModerationService } from "../../moderation/moderation.service";
 import { RealtimeService } from "../../realtime/realtime.service";
+import { UploadsService } from "../../uploads/uploads.service";
 import { BotTokenGuard } from "../bot-token.guard";
 import { DadosDeCompatService } from "../dados.service";
 import {
@@ -36,6 +40,7 @@ import {
   FiltroDeErrosDoDiscord,
   mensagemAntigaDemais,
   mensagemDesconhecida,
+  naoImplementado,
 } from "../erros";
 import { IdsService } from "../ids.service";
 import { RateLimitDoDiscordInterceptor } from "../rate-limit.interceptor";
@@ -47,9 +52,15 @@ import { mensagemParaDiscord } from "../traducao/mensagem";
 import { usuarioParaDiscord } from "../traducao/usuario";
 import { BotAtual } from "./bot-atual";
 import {
+  arquivosDoMultipart,
   corpoDeMensagemSchema,
   edicaoDeMensagemSchema,
+  gravarArquivosDoMultipart,
   lerQueryDoHistorico,
+  LIMITES_DO_MULTIPART,
+  PayloadJsonPipe,
+  renomearReferenciasDeAnexo,
+  type ArquivoDoMultipart,
   type CorpoDeMensagem,
   type EdicaoDeMensagem,
 } from "./corpos";
@@ -129,6 +140,12 @@ export class MessagesCompatController {
     private readonly realtime: RealtimeService,
     private readonly reacoes: ReacoesDeCompatService,
     private readonly moderacao: ModerationService,
+    // ── rodada de correção ── o upload multipart (`files[n]`). `@Optional`
+    // porque o `UploadsModule` não exporta o service e o `DiscordCompatModule`
+    // (do coordenador) ainda não importa o módulo: sem isto a API não subiria.
+    // Enquanto não estiver ligado, um POST com arquivo leva 501 dizendo o que
+    // falta — e o POST sem arquivo segue igual.
+    @Optional() @Inject(UploadsService) private readonly uploads?: UploadsService,
   ) {}
 
   @Get()
@@ -142,34 +159,62 @@ export class MessagesCompatController {
       ...lerQueryDoHistorico(query),
       paraBotUserId: bot.botUserId,
     });
-    // ── onda 3 ── embeds/componentes/flags numa consulta só para a página: a
-    // linha do `DadosDeCompatService` ainda não os traz
-    const payloads = await this.mensagens.payloadsDeBot(linhas.map((l) => l.id));
-    return linhas.map((l) => mensagemParaDiscord({ ...l, payloadDeBot: payloads.get(l.id) ?? null }));
+    // ── rodada de correção ── embeds/componentes/flags já vêm na linha (o
+    // `select` do `DadosDeCompatService` os traz): a consulta extra de
+    // `payloadsDeBot` saiu
+    return linhas.map((l) => mensagemParaDiscord(l));
   }
 
   @Post()
+  // ── rodada de correção ── `multipart/form-data` (`payload_json` + `files[n]`),
+  // o formato de todo `channel.send({ files })`. O multer só age em multipart;
+  // num corpo JSON ele passa direto e `arquivos` chega vazio.
+  @UseInterceptors(AnyFilesInterceptor({ limits: LIMITES_DO_MULTIPART }))
   async criar(
     @BotAtual() bot: BotAutenticado,
     @Param("id") id: string,
-    // `@Body()` com um pipe local e um tipo que **não** é classe: o metatype que
+    // `@Body()` com pipes locais e um tipo que **não** é classe: o metatype que
     // o `ValidationPipe` global recebe é `Object`, e ele não valida (nem faz
     // whitelist de) `Object`. É o que salva `embeds`, `components`, `flags`,
-    // `allowed_mentions`, `message_reference`, `tts` e `nonce`.
-    @Body(zodBody(corpoDeMensagemSchema)) dados: CorpoDeMensagem,
+    // `allowed_mentions`, `message_reference`, `tts` e `nonce`. O
+    // `PayloadJsonPipe` vem antes do zod: no multipart o corpo mora em
+    // `payload_json`.
+    @Body(new PayloadJsonPipe(), zodBody(corpoDeMensagemSchema)) corpo: CorpoDeMensagem,
+    @UploadedFiles() arquivos: ArquivoDoMultipart[] | undefined,
   ): Promise<MensagemDoDiscord> {
     const canalId = await this.cuidDoCanal(id);
 
-    const anexos = dados.attachment_ids ?? [];
+    // os `attachment://` do bot passam a apontar para o nome **gravado** do
+    // arquivo (o upload o sanitiza) antes de validar e guardar
+    const pareados = arquivosDoMultipart(arquivos, corpo.attachments);
+    const dados: CorpoDeMensagem = pareados.length
+      ? {
+          ...corpo,
+          embeds: renomearReferenciasDeAnexo(corpo.embeds, pareados),
+          components: renomearReferenciasDeAnexo(corpo.components, pareados),
+        }
+      : corpo;
+    if (pareados.length > 0 && !this.uploads) throw naoImplementado("multipart file upload");
+
+    const idsJaEnviados = dados.attachment_ids ?? [];
     // ── onda 3 ── embeds e componentes são **guardados** no formato do Discord
     // (até aqui o embed era achatado em texto e o componente, descartado). A
     // validação é a do Discord, com os limites dele: corpo inválido leva
     // `50035` com o detalhe por campo, e mensagem sem texto, embed, componente
     // nem anexo continua levando `content[BASE_TYPE_REQUIRED]`.
-    const lido = lerPayloadDeBot(dados, { temAnexos: anexos.length > 0 });
+    //
+    // A validação vem **antes** do upload: um corpo recusado não deixa arquivo
+    // órfão no bucket.
+    const lido = lerPayloadDeBot(dados, {
+      temAnexos: idsJaEnviados.length + pareados.length > 0,
+    });
     if (!lido.ok) throw corpoInvalido(lido.erros);
 
     const resposta = await this.resposta(dados);
+    const anexos = [
+      ...idsJaEnviados,
+      ...(this.uploads ? await gravarArquivosDoMultipart(this.uploads, bot.botUserId, pareados) : []),
+    ];
     const mensagem = await this.mensagens.criarComoBot(canalId, bot.botUserId, {
       content: lido.payload.content ?? "",
       embeds: lido.payload.embeds ?? [],
@@ -190,7 +235,7 @@ export class MessagesCompatController {
       nonce ? { ...mensagem, nonce } : mensagem,
     );
 
-    return this.reler(mensagem.id, bot.botUserId, mensagem);
+    return this.reler(mensagem.id, bot.botUserId);
   }
 
   /**
@@ -256,8 +301,7 @@ export class MessagesCompatController {
     // mensagem que existe mas é de outro canal: para o bot é o mesmo que não
     // existir — o `:id` da rota é que diz o que ele tem autorização de ler
     if (!linha || linha.channelSnowflake !== BigInt(id)) throw mensagemDesconhecida();
-    const payloads = await this.mensagens.payloadsDeBot([linha.id]);
-    return mensagemParaDiscord({ ...linha, payloadDeBot: payloads.get(linha.id) ?? null });
+    return mensagemParaDiscord(linha);
   }
 
   @Patch(":mid")
@@ -282,7 +326,7 @@ export class MessagesCompatController {
 
     const mensagem = await this.mensagens.editarComoBot(mensagemId, bot.botUserId, p);
     this.realtime.emitToChannel(mensagem.channelId, WS_EVENTS.MESSAGE_UPDATED, mensagem);
-    return this.reler(mensagemId, bot.botUserId, mensagem);
+    return this.reler(mensagemId, bot.botUserId);
   }
 
   @Delete(":mid")
@@ -476,20 +520,15 @@ export class MessagesCompatController {
    * `MessagesService` devolve o DTO de `@streamz/shared` (cuid, sem snowflake) —
    * a resposta do Discord precisa do número, e ele está na linha.
    *
-   * ── onda 3 ── embeds/componentes/flags saem do DTO quando quem chama já o
-   * tem (acabou de criar ou editar), e de `payloadsDeBot` quando não.
+   * ── rodada de correção ── embeds/componentes/flags saem da própria linha.
+   * Antes vinham do DTO, e o DTO é o **da web**: o `emoji.id` e os
+   * `default_values` dos componentes já trocados de snowflake para cuid — o
+   * bot recebia de volta um id que ele nunca mandou.
    */
-  private async reler(
-    mensagemId: string,
-    botUserId: string,
-    dto?: MessageDTO,
-  ): Promise<MensagemDoDiscord> {
+  private async reler(mensagemId: string, botUserId: string): Promise<MensagemDoDiscord> {
     const linha = await this.dados.mensagemPorCuid(mensagemId, botUserId);
     if (!linha) throw mensagemDesconhecida();
-    const payloadDeBot = dto
-      ? { embeds: dto.embeds ?? [], components: dto.components ?? [], flags: dto.flags ?? 0 }
-      : ((await this.mensagens.payloadsDeBot([mensagemId])).get(mensagemId) ?? null);
-    return mensagemParaDiscord({ ...linha, payloadDeBot });
+    return mensagemParaDiscord(linha);
   }
 
   /**

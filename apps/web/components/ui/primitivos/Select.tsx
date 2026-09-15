@@ -81,6 +81,18 @@ import { Popout } from "./Popout";
  *   `className` do Popout não teria como vencer a dele de forma confiável.
  *   Melhor um só popout com um visual, do que dois concorrendo pela mesma
  *   propriedade.
+ * - **`aoFechar`** (rodada de correção): avisa **toda** vez que a lista aberta
+ *   fecha — Esc, clique fora, Tab, clique na caixa, escolha no único. É o gancho
+ *   do "mandar ao fechar" do select de componente de bot (o Discord só dispara
+ *   a interação do múltiplo quando a lista fecha, nunca a cada marcação). No
+ *   único ele roda **depois** do `aoMudar` da escolha, na mesma leva.
+ * - **`carregando`** (rodada de correção): o spinner no lugar do chevron e a
+ *   caixa travada (não abre, não remove pílula, teclado ignorado), sem a
+ *   opacidade .5 do desabilitado — é o estado do select de bot enquanto a
+ *   interação anterior não voltou. O spinner (16, borda 2, `--border-normal`
+ *   com o topo `--text-muted`) é o mesmo anel do app (`MessageList`,
+ *   `QuickSwitcher`) no tamanho do chevron; **não medido** no Discord. O
+ *   cursor `wait` também é decisão, não medida.
  */
 export interface OpcaoDeSelect<T extends string = string> {
   valor: T;
@@ -90,6 +102,12 @@ export interface OpcaoDeSelect<T extends string = string> {
   prefixo?: ReactNode;
   /** Linha secundária sob o rótulo. */
   descricao?: string;
+  /**
+   * Selo à direita do rótulo, antes do check — a pílula de bot do
+   * `select-de-usuario.webp` (doc oficial do Discord: o "APP" de Helper fica
+   * encostado na borda direita da linha, não junto do avatar).
+   */
+  sufixo?: ReactNode;
 }
 
 interface SelectBaseProps<T extends string> {
@@ -104,6 +122,10 @@ interface SelectBaseProps<T extends string> {
   /** Nome acessível quando não há `<label htmlFor>`. */
   rotulo?: string;
   className?: string;
+  /** A lista aberta fechou, por qualquer caminho (ver "`aoFechar`" no cabeçalho). */
+  aoFechar?: () => void;
+  /** Spinner no lugar do chevron e caixa travada, sem esmaecer (ver "`carregando`" no cabeçalho). */
+  carregando?: boolean;
 }
 
 export interface SelectProps<T extends string = string> extends SelectBaseProps<T> {
@@ -161,8 +183,10 @@ function idDaOpcao<T extends string>(idBase: string, valor: T): string {
 
 function useComboBox<T extends string>(
   opcoes: OpcaoDeSelect<T>[],
-  desabilitado: boolean | undefined,
+  /** `desabilitado || carregando`: nenhum dos dois abre a lista. */
+  bloqueado: boolean,
   ehSelecionado: (valor: T) => boolean,
+  aoFechar: (() => void) | undefined,
 ) {
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState("");
@@ -182,7 +206,7 @@ function useComboBox<T extends string>(
   }, [opcoesFiltro, aberto]);
 
   function abrirCom(valor: T | null) {
-    if (desabilitado || opcoes.length === 0) return;
+    if (bloqueado || opcoes.length === 0) return;
     setBusca("");
     setAtivoValor(valor);
     setAberto(true);
@@ -196,7 +220,10 @@ function useComboBox<T extends string>(
   }
 
   function fechar() {
+    // só avisa quem abriu: fechar o que já está fechado não é um "fechou"
+    if (!aberto) return;
     setAberto(false);
+    aoFechar?.();
   }
 
   function mover(direcao: 1 | -1) {
@@ -256,6 +283,8 @@ interface CorpoDoSelectProps<T extends string> {
   aoEscolher: (opcao: OpcaoDeSelect<T>) => void;
   /** Só no múltiplo: remover pela pílula. */
   aoRemover?: (valor: T) => void;
+  aoFechar?: () => void;
+  carregando: boolean;
 }
 
 function CorpoDoSelect<T extends string>({
@@ -272,12 +301,15 @@ function CorpoDoSelect<T extends string>({
   ehSelecionado,
   aoEscolher,
   aoRemover,
+  aoFechar,
+  carregando,
 }: CorpoDoSelectProps<T>) {
   const idGerado = useId();
   const idBase = id ?? idGerado;
   const idLista = `${idBase}-lista`;
 
-  const combo = useComboBox(opcoes, desabilitado, ehSelecionado);
+  const bloqueado = !!desabilitado || carregando;
+  const combo = useComboBox(opcoes, bloqueado, ehSelecionado, aoFechar);
   const { aberto, busca, setBusca, opcoesFiltro, indiceAtivo, definirAtivo, abrir, abrirCom, fechar, mover, irPara } =
     combo;
 
@@ -336,7 +368,7 @@ function CorpoDoSelect<T extends string>({
   }
 
   function aoTeclarNoGatilho(e: KeyboardEventDoReact<HTMLDivElement>) {
-    if (desabilitado) return;
+    if (bloqueado) return;
     switch (e.key) {
       case "ArrowDown":
         e.preventDefault();
@@ -410,9 +442,10 @@ function CorpoDoSelect<T extends string>({
         aria-activedescendant={aberto ? idAtivo : undefined}
         aria-label={rotulo}
         aria-disabled={desabilitado || undefined}
+        aria-busy={carregando || undefined}
         tabIndex={desabilitado ? -1 : 0}
         onClick={() => {
-          if (desabilitado) return;
+          if (bloqueado) return;
           if (aberto) fechar();
           else abrir();
         }}
@@ -422,7 +455,7 @@ function CorpoDoSelect<T extends string>({
           // input), então o clique/tecla é barrado pelos handlers (`if
           // (desabilitado) return`) — `pointer-events-none` tiraria o
           // elemento do hit-test e o `cursor-not-allowed` deixaria de aparecer
-          desabilitado ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+          desabilitado ? "cursor-not-allowed opacity-50" : carregando ? "cursor-wait" : "cursor-pointer"
         } ${className}`}
       >
         {multiplo ? (
@@ -442,6 +475,7 @@ function CorpoDoSelect<T extends string>({
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation();
+                      if (bloqueado) return;
                       aoRemover?.(o.valor);
                     }}
                     className="text-interactive-text-default transition-colors hover:text-interactive-text-hover"
@@ -457,11 +491,18 @@ function CorpoDoSelect<T extends string>({
         ) : (
           <span className="truncate text-text-md text-text-subtle">{placeholder}</span>
         )}
-        <ChevronDown
-          size={16}
-          aria-hidden="true"
-          className={`shrink-0 text-icon-muted transition-transform duration-150 ${aberto ? "rotate-180" : ""}`}
-        />
+        {carregando ? (
+          <span
+            aria-hidden="true"
+            className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-border-normal border-t-text-muted motion-reduce:animate-none"
+          />
+        ) : (
+          <ChevronDown
+            size={16}
+            aria-hidden="true"
+            className={`shrink-0 text-icon-muted transition-transform duration-150 ${aberto ? "rotate-180" : ""}`}
+          />
+        )}
       </div>
 
       <Popout
@@ -550,6 +591,7 @@ function CorpoDoSelect<T extends string>({
                       <span className="block truncate text-text-sm text-text-muted">{o.descricao}</span>
                     ) : null}
                   </span>
+                  {o.sufixo}
                   {!multiplo && selecionada ? (
                     <Check size={16} aria-hidden="true" className="shrink-0 text-brand-500" />
                   ) : null}
@@ -578,6 +620,8 @@ export function Select<T extends string = string>({
   id,
   rotulo,
   className = "",
+  aoFechar,
+  carregando = false,
 }: SelectProps<T>) {
   const opcoesEscolhidas = useMemo(() => opcoes.filter((o) => o.valor === valor), [opcoes, valor]);
 
@@ -595,6 +639,8 @@ export function Select<T extends string = string>({
       multiplo={false}
       ehSelecionado={(v) => v === valor}
       aoEscolher={(o) => aoMudar(o.valor)}
+      aoFechar={aoFechar}
+      carregando={carregando}
     />
   );
 }
@@ -611,6 +657,8 @@ export function MultiSelect<T extends string = string>({
   rotulo,
   className = "",
   maximo,
+  aoFechar,
+  carregando = false,
 }: MultiSelectProps<T>) {
   const opcoesEscolhidas = useMemo(() => opcoes.filter((o) => valor.includes(o.valor)), [opcoes, valor]);
   const cheio = maximo !== undefined && valor.length >= maximo;
@@ -634,6 +682,8 @@ export function MultiSelect<T extends string = string>({
         aoMudar(marcado ? valor.filter((v) => v !== o.valor) : [...valor, o.valor]);
       }}
       aoRemover={(v) => aoMudar(valor.filter((x) => x !== v))}
+      aoFechar={aoFechar}
+      carregando={carregando}
     />
   );
 }

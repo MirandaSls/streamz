@@ -3,11 +3,13 @@ import {
   PRAZO_DA_RESPOSTA_DO_BOT_MS,
   type AutocompleteDeBotEvent,
   type EscolhaDeAutocomplete,
+  type InteracaoCriada,
   type InteracaoConcluidaEvent,
   type InteracaoFalhouEvent,
   type ModalDeBot,
   type ModalDeBotAbertoEvent,
   type MotivoDaFalhaDeInteracao,
+  type OpcaoDeInteracao,
   type PedidoDeAutocompleteInput,
   type PublicUser,
   type RespostaDeComponenteDeModal,
@@ -43,13 +45,20 @@ import { api } from "@/lib/api";
  * (`pendentes`); o modal, por exemplo, abre só onde o clique aconteceu.
  */
 
-export type TipoDeInteracaoPendente = "componente" | "modal" | "autocomplete";
+/**
+ * `comando` é o comando de barra (interação tipo 2). A API não emite
+ * `interaction.success`/`failed` para ele (`ehInteracaoDeComponente` só aceita
+ * 3 e 5): o pendente existe para o `interaction.modal` do callback 9 casar com
+ * a sessão que digitou, e sai pelo relógio de segurança quando o bot responde
+ * de outro jeito (a mensagem chega pelo `message.new` de sempre).
+ */
+export type TipoDeInteracaoPendente = "componente" | "modal" | "autocomplete" | "comando";
 
 export interface InteracaoPendente {
   nonce: string;
   tipo: TipoDeInteracaoPendente;
   channelId: string;
-  /** mensagem de origem (componente); null em autocomplete e envio de modal. */
+  /** mensagem de origem (componente); null em comando, autocomplete e envio de modal. */
   messageId: string | null;
   customId: string | null;
   /** `Date.now()` do disparo. */
@@ -87,6 +96,15 @@ export interface AutocompleteEmCurso {
   /** o nonce do **último** pedido; resposta de pedido anterior é descartada. */
   nonce: string;
   carregando: boolean;
+  /**
+   * O pedido terminou **sem** resposta do bot: a rota recusou, o servidor mandou
+   * `interaction.failed`, ou o relógio de segurança venceu. Separa "o bot não
+   * achou nada" (`escolhas: []` com `falhou: false`) de "falhou" — antes o
+   * composer mantinha um listener paralelo só para saber isso, e a corrida entre
+   * o `setState` dele e esta store podia mostrar "falhou" numa resposta vazia.
+   * Volta a `false` a cada pedido novo e quando a resposta chega.
+   */
+  falhou: boolean;
   escolhas: EscolhaDeAutocomplete[];
 }
 
@@ -122,6 +140,15 @@ export interface InteracoesDeBotState {
    */
   pedirAutocomplete: (channelId: string, commandId: string, options: OpcaoDoAutocomplete[]) => Promise<void>;
   limparAutocomplete: () => void;
+  /**
+   * Comando de barra de bot (`POST /channels/:id/interactions`). O `nonce` nasce
+   * aqui e vai no corpo, como no clique em componente: é com ele que o
+   * `interaction.modal` de um comando que responde com modal (callback 9) casa
+   * com esta sessão. Ao contrário das outras ações, **rejeita** quando a rota
+   * recusa — quem digitou o comando precisa do toast, e não há mensagem onde
+   * pendurar um "Esta interação falhou".
+   */
+  usarComando: (channelId: string, commandId: string, options: OpcaoDeInteracao[]) => Promise<InteracaoCriada>;
   /** Tira o "Esta interação falhou" de uma mensagem. */
   dispensarFalha: (messageId: string) => void;
 
@@ -156,6 +183,24 @@ export function novoNonce(): string {
 const REDE_DE_SEGURANCA_MS = PRAZO_DA_RESPOSTA_DO_BOT_MS * 2;
 
 const relogios = new Map<string, ReturnType<typeof setTimeout>>();
+
+/**
+ * O HTTP do pedido de autocomplete em voo (há no máximo um: a store só guarda o
+ * último). Trocar de `nonce` aborta o anterior — com uma palavra digitada letra
+ * a letra, cada `fetch` velho ainda em curso é banda e uma interação a menos no
+ * servidor, se ainda não tiver chegado lá.
+ */
+let autocompleteEmVoo: { nonce: string; controlador: AbortController } | null = null;
+
+function abortarAutocompleteEmVoo(): void {
+  autocompleteEmVoo?.controlador.abort();
+  autocompleteEmVoo = null;
+}
+
+/** `fetch` abortado rejeita com `DOMException` de nome `AbortError`. */
+function ehAborto(e: unknown): boolean {
+  return typeof e === "object" && e !== null && (e as { name?: unknown }).name === "AbortError";
+}
 
 function pararRelogio(nonce: string): void {
   const r = relogios.get(nonce);
@@ -199,7 +244,7 @@ export const useInteracoesDeBot = create<InteracoesDeBotState>((set, get) => {
     if (p.tipo === "autocomplete") {
       set((s) =>
         s.autocomplete && s.autocomplete.nonce === p.nonce
-          ? { autocomplete: { ...s.autocomplete, carregando: false, escolhas: [] } }
+          ? { autocomplete: { ...s.autocomplete, carregando: false, falhou: true, escolhas: [] } }
           : s,
       );
     }
@@ -227,6 +272,9 @@ export const useInteracoesDeBot = create<InteracoesDeBotState>((set, get) => {
       await chamada();
     } catch (e) {
       const pendente = resolver(p.nonce);
+      // pedido abortado foi trocado por um mais novo (ou a store foi limpa):
+      // não é falha, e marcar "falhou" apagaria a lista do pedido que vale
+      if (ehAborto(e)) return;
       if (pendente) registrarFalha(pendente, "erro", textoDoErro(e));
     }
   }
@@ -301,27 +349,51 @@ export const useInteracoesDeBot = create<InteracoesDeBotState>((set, get) => {
       const nonce = novoNonce();
       const chave = `${commandId}:${emFoco?.name ?? ""}`;
       const anterior = get().autocomplete;
-      // o pedido anterior deixa de importar: a resposta dele é descartada
+      // o pedido anterior deixa de importar: a resposta dele é descartada, e o
+      // HTTP dele (se ainda estiver em voo) é abortado
       if (anterior) resolver(anterior.nonce);
+      abortarAutocompleteEmVoo();
+      const controlador = typeof AbortController === "undefined" ? null : new AbortController();
+      if (controlador) autocompleteEmVoo = { nonce, controlador };
       set({
         autocomplete: {
           chave,
           nonce,
           carregando: true,
+          falhou: false,
           // enquanto chega a resposta nova, a lista da mesma opção continua na tela
           escolhas: anterior && anterior.chave === chave ? anterior.escolhas : [],
         },
       });
       return disparar(
         { nonce, tipo: "autocomplete", channelId, messageId: null, customId: null, desde: Date.now() },
-        () => api.pedirAutocompleteDeComando(channelId, { commandId, options, nonce }),
+        async () => {
+          try {
+            await api.pedirAutocompleteDeComando(channelId, { commandId, options, nonce }, controlador?.signal);
+          } finally {
+            // a rota já respondeu: daqui em diante abortar não desfaz nada
+            if (autocompleteEmVoo?.nonce === nonce) autocompleteEmVoo = null;
+          }
+        },
       );
     },
 
     limparAutocomplete: () => {
       const atual = get().autocomplete;
       if (atual) resolver(atual.nonce);
+      abortarAutocompleteEmVoo();
       set({ autocomplete: null });
+    },
+
+    usarComando: async (channelId, commandId, options) => {
+      const nonce = novoNonce();
+      comecar({ nonce, tipo: "comando", channelId, messageId: null, customId: null, desde: Date.now() });
+      try {
+        return await api.criarInteracao(channelId, { commandId, options, nonce });
+      } catch (e) {
+        resolver(nonce);
+        throw e;
+      }
     },
 
     dispensarFalha: (messageId) =>
@@ -369,11 +441,12 @@ export const useInteracoesDeBot = create<InteracoesDeBotState>((set, get) => {
       const atual = get().autocomplete;
       resolver(evento.nonce);
       if (!atual || atual.nonce !== evento.nonce) return; // resposta de um pedido velho
-      set({ autocomplete: { ...atual, carregando: false, escolhas: evento.choices } });
+      set({ autocomplete: { ...atual, carregando: false, falhou: false, escolhas: evento.choices } });
     },
 
     limparTudo: () => {
       for (const nonce of [...relogios.keys()]) pararRelogio(nonce);
+      abortarAutocompleteEmVoo();
       set({ pendentes: {}, falhas: {}, modal: null, autocomplete: null });
     },
   };

@@ -13,6 +13,7 @@ import {
   type PedidoDeAutocompleteInput,
 } from "@streamz/shared";
 import { CurrentUser } from "../../common/current-user.decorator";
+import { AUTOCOMPLETE_THROTTLE } from "../../common/throttle";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { zodBody } from "../../common/zod.pipe";
 import { InteractionsService } from "./interactions.service";
@@ -64,6 +65,8 @@ export class InteractionsController {
       usuarioId: usuario.sub,
       commandId: corpo.commandId,
       opcoes: corpo.options.map((o) => ({ nome: o.name, tipo: o.type, valor: o.value })),
+      // o `showModal()` respondido ao comando volta casado por ele
+      nonce: corpo.nonce,
     });
 
     return {
@@ -118,6 +121,9 @@ export class InteractionsController {
 
   @Post("channels/:id/interactions/autocomplete")
   @HttpCode(200)
+  // o composer chama esta rota a cada pausa da digitação: o teto global por IP
+  // (300/min) derrubava quem digita rápido, ou uma sala inteira atrás de um NAT
+  @AUTOCOMPLETE_THROTTLE
   pedirAutocomplete(
     @CurrentUser() usuario: JwtPayload,
     @Param("id") canalId: string,

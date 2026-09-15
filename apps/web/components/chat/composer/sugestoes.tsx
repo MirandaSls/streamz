@@ -13,6 +13,7 @@ import { Hash, Volume2 } from "@/components/ui/icones";
 import { COR_DE_CARGO_SEM_COR } from "@/lib/cor-de-cargo";
 import { buscarEmojisUnicode } from "@/lib/emojis-unicode";
 import type { Gatilho } from "@/lib/composer-autocomplete";
+import { useSettings } from "@/stores/settings";
 
 /** Sugestões mostradas de uma vez em cada gatilho. */
 const MAX_SUGESTOES = 10;
@@ -182,9 +183,17 @@ export function sugestoesDoBot(escolhas: readonly EscolhaDeAutocomplete[]): Item
   });
 }
 
-/** O nome que a pessoa vê — e que entra no campo — de uma escolha do bot. */
+/**
+ * O nome que a pessoa vê — e que entra no campo — de uma escolha do bot, no
+ * idioma do app (`stores/settings`, não fixo em `pt-BR`): o app já roda em
+ * en-US com o mesmo mecanismo (`root.lang = s.locale`), e o bot pode não ter
+ * mandado `name_localizations` para o idioma da vez — cai no `name` puro.
+ * Função solta (não é componente nem hook), por isso `getState()` em vez de
+ * `useSettings(s => s.locale)`.
+ */
 export function nomeDaEscolha(c: EscolhaDeAutocomplete): string {
-  return c.name_localizations?.["pt-BR"] ?? c.name;
+  const locale = useSettings.getState().locale;
+  return c.name_localizations?.[locale] ?? c.name;
 }
 
 function itemDeMembro(

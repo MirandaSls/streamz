@@ -4,7 +4,10 @@ import { useEffect } from "react";
 import {
   WS_EVENTS,
   displayNameOf,
+  FLAGS_DE_MENSAGEM,
   mentionsMe,
+  temFlag,
+  textoAchatadoDaMensagem,
   // ── f-voz ──,
   // ── d-social ──,
   // ── g-emojis-midia ──,
@@ -651,9 +654,14 @@ function channelTitle(channelId: string): string {
  * desktop a janela aberta atrás de outro app continua `visible`, e com o gate
  * antigo mensagem de servidor nunca notificava. Com foco, só menção e DM
  * avisam; sem foco (outro app na frente, minimizada, bandeja), tudo avisa.
+ *
+ * `SUPPRESS_NOTIFICATIONS` e `LOADING` saem primeiro: são a vontade do bot
+ * (ou o "está pensando…" do callback 5, que ainda nem tem texto final), não
+ * uma preferência do usuário — nem som, nem notificação, para os dois.
  */
 function notifyIfAway(message: Message, mention: boolean) {
   if (typeof document === "undefined") return;
+  if (temFlag(message.flags, FLAGS_DE_MENSAGEM.SUPPRESS_NOTIFICATIONS | FLAGS_DE_MENSAGEM.LOADING)) return;
 
   const prefs = useSettings.getState();
   const me = useAuth.getState().user;
@@ -671,7 +679,10 @@ function notifyIfAway(message: Message, mention: boolean) {
   const { guildId, channelId } = message;
   void notify({
     title: channelTitle(channelId),
-    body: `${displayNameOf(message.author)}: ${message.content}`,
+    // `textoAchatadoDaMensagem`, não `message.content`: embed e mensagem
+    // "componentes v2" não têm `content` (ou vêm vazias) — o corpo da
+    // notificação saía em branco para as duas.
+    body: `${displayNameOf(message.author)}: ${textoAchatadoDaMensagem(message)}`,
     // o clique já focou a janela (`focarJanela`); falta abrir a conversa
     onClick: () => void goToChannel({ guildId, channelId }),
   });

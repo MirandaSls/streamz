@@ -121,8 +121,18 @@ export default function EmbedDeBot({ embed, message }: { embed: Embed; message: 
     <article
       /* `border-l-border-normal` depois de `border-border-subtle`: no Tailwind 3
          a cor de um lado sai depois da cor das quatro bordas, então vence sem
-         `!`. A cor do bot, quando existe, entra por cima em `style`. */
-      className="relative box-border grid w-fit max-w-full rounded border border-l-4 border-border-subtle border-l-border-normal bg-background-surface-high"
+         `!`. A cor do bot, quando existe, entra por cima em `style`.
+         `[&_.align-bottom]:h-/w-[18px]`: `.embed__623de .emoji{height:18px;
+         width:18px}`, mas `useOpcoesDoMarkdown` só manda `jumbo:false` — isso
+         escolhe `CLASSE_EMOJI_INLINE` (1.375em, ~19px aqui) em vez do jumbo,
+         não os 18px fixos do embed. `align-bottom` é a classe real de
+         `CLASSE_EMOJI_INLINE`/`CLASSE_EMOJI_JUMBO` (`components/ui/Emoji.tsx`)
+         que nenhuma outra imagem do embed usa (avatar de autor/rodapé e mídia
+         usam `object-contain` sozinho) — sem precisar de `!`: duas classes no
+         seletor (`.embed .align-bottom`) já têm mais especificidade que a
+         classe única `w-[1.375em]`/`h-[1.375em]` do emoji, então ganha
+         independente da ordem no CSS gerado. */
+      className="relative box-border grid w-fit max-w-full rounded border border-l-4 border-border-subtle border-l-border-normal bg-background-surface-high [&_.align-bottom]:h-[18px] [&_.align-bottom]:w-[18px]"
       style={cor ? { borderLeftColor: cor } : undefined}
     >
       <div className="min-w-0" style={{ maxWidth: LARGURA_MAXIMA_DO_EMBED }}>

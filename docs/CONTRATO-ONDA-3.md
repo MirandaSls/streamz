@@ -6,7 +6,8 @@ diff do 3.0 encontra aqui os tipos, as tabelas, as rotas, os eventos e a store.
 
 Meta da onda (ADR-0009): `Message` ganha **embeds e componentes de verdade**, a
 web desenha embed rico, botões, selects, modais e Components v2 **como o
-Discord**, e os callbacks de interação 6/7/8/9 (hoje 501) passam a existir.
+Discord**, e os callbacks de interação 6/7/8/9 (antes 501) passam a existir —
+implementados pelo cartão 3a; ver §9.
 
 Fontes da forma dos objetos (a API do Discord é a especificação do contrato),
 conferidas no repositório `discord/discord-api-docs` em 2026-09-10:
@@ -473,26 +474,43 @@ A mensagem `bot` **não** é mais "remover prévia" (isso ligaria
 
 ## 9. O que ficou para o 3a (e o que nenhum cartão tem ainda)
 
+> **Feito.** Os seis itens abaixo — o que este documento pediu ao cartão 3a —
+> estão implementados; ver a §9.1 pelas regras finas que o código acabou
+> fixando (algumas mais estreitas do que o texto original previa). A lista
+> continua aqui como registro do pedido, não como pendência.
+
 **3a — interações de componente (API):**
 
 1. As três rotas da seção 4 (controller interno em `modules/interactions/`,
    `zodBody` com os schemas do shared).
 2. `INTERACTION_CREATE` para os tipos 3, 4 e 5 (com `message` e `resolved`).
-3. Callbacks em `InteractionsService.responder` (hoje 501):
+3. Callbacks em `InteractionsService.responder` — **implementados** (antes
+   501):
    - **6** `DEFERRED_UPDATE_MESSAGE` — só em interação 3/5; toma a resposta e emite `interaction.success`.
    - **7** `UPDATE_MESSAGE` — só em 3/5; valida com `lerPayloadDeBot` (sem estado) e edita a **mensagem de origem**: `MessagesService.editarComoBot(messageId, botUserId, payload)` + `emitToChannel(message.updated)`, ou, na efêmera, `gravacaoDaEdicao` nas colunas + `emitToUser(message.updated)`. Emite `interaction.success`.
    - **8** `APPLICATION_COMMAND_AUTOCOMPLETE_RESULT` — só em 4; `respostaDeAutocompleteSchema`; `interaction.autocomplete`.
    - **9** `MODAL` — só em 2/3 (nunca em 5); `validarModalDeBot`; grava `Interaction.modal`; `interaction.modal`.
-   - 4/5 numa interação 3/5 também emitem `interaction.success`.
+   - 4/5 numa interação 3/5 também emitem `interaction.success` — e o
+     **followup** que vira a original também (ver §9.1): é o mesmo
+     `concluir()` que os callbacks usam.
 4. `@original` de interação 3/5 é a **mensagem de origem** (é o que o Discord
-   faz para o `editReply`/`update` de componente): `webhooks.controller.ts` e
-   `editarOriginal` passam a olhar `Interaction.messageId`/`ephemeralMessageId`
-   quando `responseMessageId` é null.
-5. Relógio dos 3 s e `bot_offline` (seção 5).
-6. `rest/interactions.controller.ts` (fora da lista do 3.0): o `with_response`
-   ainda sobrescreve `flags: FLAG_EFEMERA` na efêmera (linha 143) — trocar por
-   `flags | FLAG_EFEMERA`; e o `type` da interação no `InteractionCallbackResponse`
-   está fixo em 2.
+   faz para o `editReply`/`update` de componente) — mas **só depois de a
+   interação ter sido respondida** (`respondedAt` não nulo: veio de 6, 7, 9 ou
+   de um followup efêmero). Antes disso o alvo continua sendo a resposta
+   normal (4/5) ou a inexistência (10062) — nunca a mensagem de origem, que
+   pertence a quem clicou, não a quem respondeu. `webhooks.controller.ts` e
+   `InteractionsService.alvoDoOriginal` fazem essa checagem, nesta ordem:
+   efêmera original → `responseMessageId` → mensagem/efêmera de origem (só
+   respondida). Ver §9.1.
+5. Relógio dos 3 s e `bot_offline` (seção 5) — inclusive para o comando (tipo
+   2): ver §9.1 a condição (`nonce`).
+6. `rest/interactions.controller.ts` (fora da lista do 3.0): **corrigido** — o
+   `with_response` usa `flags | FLAG_EFEMERA` (não mais `=`, que apagaria
+   `IS_COMPONENTS_V2` de uma efêmera v2) e o `type` do
+   `InteractionCallbackResponse` é `atual.tipo ?? 2` (o tipo de verdade da
+   interação — 3 componente, 4 autocomplete, 5 envio de modal —, e não mais
+   fixo em 2). `with_response` agora monta o `resource` certo para os seis
+   tipos de callback (4/5/6/7/8/9); ver §9.1.
 
 **Desenho (cartões 3b–3g), só leitura do contrato:** embed rico; action row e
 botões (estilos, desabilitado, emoji, carregando via `componenteEstaPendente`,
@@ -509,3 +527,60 @@ porque `DadosDeCompatService.SELECAO_DE_MENSAGEM` não seleciona `botPayload`;
 a prévia de DM da API e a notificação de desktop (seção 7); upload multipart na
 casca (sem ele, `attachment://` só resolve anexo mandado por `attachment_ids`,
 a extensão do Streamz).
+
+### 9.1 O que o código do 3a fixou (registro da rodada de correção)
+
+Cinco regras que este documento não tinha, ou tinha em versão mais grosseira
+que a implementação — conferidas em `interactions/componentes.ts`,
+`interactions/interactions.service.ts` e
+`discord-compat/rest/interactions.controller.ts`.
+
+**Qual callback vale para qual tipo de interação** — fora da tabela, `50035`
+(`INTERACTION_CALLBACK_TYPE_INVALID`), **antes de tomar a resposta** (a
+interação continua disponível para um callback válido). Tabela de
+`callbackPermitido` (`componentes.ts`), igual à do Discord
+(`receiving-and-responding.mdx`, "Interaction Callback Type"):
+
+| Interação | 4 `CHANNEL_MESSAGE_WITH_SOURCE` / 5 `DEFERRED_…WITH_SOURCE` | 6 `DEFERRED_UPDATE_MESSAGE` / 7 `UPDATE_MESSAGE` | 8 `AUTOCOMPLETE_RESULT` | 9 `MODAL` |
+|---|---|---|---|---|
+| 2 comando | sim | — | — | sim |
+| 3 componente | sim | sim | — | sim |
+| 4 autocomplete | — | — | sim | — |
+| 5 envio de modal | sim | só se o modal veio de um componente | — | — |
+
+6/7 exigem mensagem de origem (`temOrigem`); um modal aberto por um comando de
+barra (interação 5 sem `messageId`/`ephemeralMessageId`) não tem, e o Discord
+recusa o `update()`/`deferUpdate()` ali — mesmo 50035, não 404.
+
+**A tomada da resposta exige `expiresAt > agora`.** `tomarResposta`
+(`interactions.service.ts`) escreve `respondedAt` com um `updateMany({ where:
+{ id, respondedAt: null, expiresAt: { gt: agora } } })`. Zero linhas afetadas
+e a releitura decide o erro: `respondedAt` ainda nulo (a interação venceu
+entre o `porToken` e a escrita, ou o relógio dos 3 s já a invalidou) → 404
+`10062 Unknown interaction`; `respondedAt` preenchido (segundo callback) →
+400 `40060 Interaction has already been acknowledged`.
+
+**O followup que vira a original emite `interaction.success`.**
+`InteractionsService.followup`: quando não havia resposta ainda
+(`respondedAt === null`), o followup grava `respondedAt`, cancela o relógio
+dos 3 s e passa por `concluir()` — o mesmo caminho dos callbacks 4–7 — então a
+web sai do "carregando" mesmo quando a resposta chegou por
+`POST /webhooks/{app}/{token}` e não por `/callback`.
+
+**O comando (tipo 2) só tem o relógio dos 3 s quando o `POST
+/api/channels/:id/interactions` leva `nonce`.** `nonce` é opcional em
+`interacaoCriarSchema` só para não quebrar cliente antigo; o cliente atual
+sempre manda. Sem `nonce` não há sessão do navegador para casar o evento, e
+`criarInteracao` não agenda `agendarPrazo` nem emite `interaction.*` — seguindo
+como na F3. Com `nonce` (o caso de hoje), o comando ganha exatamente o que o
+componente/modal/autocomplete já tinham: o relógio, o `bot_offline` na
+criação sem sessão de gateway, e o `interaction.success`/`failed`.
+
+**`with_response` (`?with_response=1`) monta o `InteractionCallbackResponse`
+certo para 6/7/8/9, não só para 4/5.** `InteractionCallbackCompatController
+.callbackResponse`: `interaction.type` é o tipo de verdade da interação
+(`atual.tipo ?? 2`, nunca fixo em 2); em 6/7 `response_message_id` é a
+mensagem de origem e `resource.message` só existe no 7 (6 não devolve
+mensagem, como o Discord); em 8/9 só `interaction` e `resource.type` — sem
+mensagem; e toda flag de efêmera usa `flags | FLAG_EFEMERA` (nunca `=`), para
+não apagar `IS_COMPONENTS_V2` de uma efêmera v2.

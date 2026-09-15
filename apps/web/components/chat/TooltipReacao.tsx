@@ -70,9 +70,17 @@ export default function TooltipReacao({
     if (!aberto) return;
     window.addEventListener("scroll", fechar, true);
     window.addEventListener("resize", fechar);
+    // A dica ficava presa quando um véu (menu, modal, o próprio clique na
+    // pílula) cobria o alvo sem passar por `pointerleave`/`blur`: um
+    // `pointerdown` em qualquer lugar (capture, antes que alguém pare a
+    // propagação) e uma troca de aba (`visibilitychange`) também fecham.
+    document.addEventListener("pointerdown", fechar, true);
+    document.addEventListener("visibilitychange", fechar);
     return () => {
       window.removeEventListener("scroll", fechar, true);
       window.removeEventListener("resize", fechar);
+      document.removeEventListener("pointerdown", fechar, true);
+      document.removeEventListener("visibilitychange", fechar);
     };
   }, [aberto, fechar]);
 
@@ -89,6 +97,8 @@ export default function TooltipReacao({
         className="inline-flex"
         onPointerEnter={() => setAberto(true)}
         onPointerLeave={fechar}
+        onPointerDown={fechar}
+        onClick={fechar}
         onFocusCapture={() => setAberto(true)}
         onBlurCapture={fechar}
       >

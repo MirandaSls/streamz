@@ -141,18 +141,17 @@ export type EstadoDaListaDoBot = "carregando" | "falhou" | "vazio" | "pronto";
  *   (a store guarda as escolhas de propósito, ver `pedirAutocomplete`).
  * - **falhou** quando o pedido terminou sem que o bot tenha respondido: a rota
  *   recusou, o servidor mandou `interaction.failed`, ou o relógio de segurança
- *   da store venceu. A store zera as escolhas nos três casos **sem** marcar
- *   falha — por isso quem chama diz se o `interaction.autocomplete` daquele
- *   `nonce` chegou (`respondeu`).
+ *   da store venceu. Quem marca é a store (`autocomplete.falhou`); antes o
+ *   composer deduzia isso de um listener paralelo do socket, que disputava a
+ *   ordem com a própria store.
  * - **vazio** quando o bot respondeu com `choices: []`.
  */
 export function estadoDaListaDoBot(
   chaveEsperada: string,
-  atual: { chave: string; nonce: string; carregando: boolean; escolhas: readonly unknown[] } | null,
-  respondeu: (nonce: string) => boolean,
+  atual: { chave: string; carregando: boolean; falhou: boolean; escolhas: readonly unknown[] } | null,
 ): EstadoDaListaDoBot {
   if (!atual || atual.chave !== chaveEsperada) return "carregando";
   if (atual.escolhas.length > 0) return "pronto";
   if (atual.carregando) return "carregando";
-  return respondeu(atual.nonce) ? "vazio" : "falhou";
+  return atual.falhou ? "falhou" : "vazio";
 }

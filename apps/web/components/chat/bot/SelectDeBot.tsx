@@ -2,23 +2,31 @@
 
 import {
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type KeyboardEvent as KeyboardEventDoReact,
 } from "react";
-import type { Channel, EmojiParcial, Message, PublicUser, Role, SelectDeBot as ComponenteDeSelect } from "@streamz/shared";
+import type {
+  Category,
+  Channel,
+  EmojiParcial,
+  GuildMemberView,
+  Message,
+  Role,
+  SelectDeBot as ComponenteDeSelect,
+} from "@streamz/shared";
 import { Button, Popout, type OpcaoDeSelect } from "@/components/ui/primitivos";
-import { Check, ChevronDown, Hash, Lock, Megaphone, Search, Shield, Volume2, X } from "@/components/ui/icones";
+import { Check, ChevronDown, Search, X } from "@/components/ui/icones";
 import Emoji from "@/components/ui/Emoji";
-import Avatar from "@/components/ui/Avatar";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { useGuilds } from "@/stores/guilds";
 import { useChannels } from "@/stores/channels";
+import { useCategories } from "@/stores/categories";
 import { usePermissions } from "@/stores/permissions";
 import { useEmojis, todosOsEmojis } from "@/stores/emojis";
-import { useLiveUser } from "@/stores/presence";
 import { componenteEstaPendente, useInteracoesDeBot } from "@/stores/interacoes-de-bot";
 import { canaisFiltrados } from "./select-canais";
 import {
@@ -26,6 +34,10 @@ import {
   filtrarPorTexto,
   limitesDoComponente,
   multiploDoComponente,
+  normalizarBusca,
+  opcaoDeItemDeCanal,
+  opcaoDeUsuario,
+  opcoesDeCargo,
   placeholderPadrao,
   resolverEmojiDeOpcao,
   valoresIniciais,
@@ -46,27 +58,31 @@ import { LARGURA_MAXIMA_DO_EMBED } from "@/components/chat/bot/embed-layout";
  * Discord, contrato da onda 3): quem preenche a lista é o **servidor**, das
  * mesmas stores que a lista de membros, o painel de cargos e a lista de
  * canais já usam (`stores/guilds.ts`, `stores/permissions.ts`,
- * `stores/channels.ts`) — nenhuma rota nova, nenhum dado novo.
+ * `stores/channels.ts`, `stores/categories.ts`) — nenhuma rota nova, nenhum
+ * dado novo. A montagem de cada linha (avatar, escudo do cargo, ícone do
+ * canal) mora em `select-opcoes.ts`, compartilhada com o `ModalDeBot`.
  *
- * ## Por que não uso o `Select`/`MultiSelect` primitivo
+ * ## Por que ainda não uso o `Select`/`MultiSelect` primitivo
  *
- * Tentei; faltam duas coisas que este componente precisa e a API deles não
- * tem (ver "faltando" na entrega do cartão):
+ * A rodada de correção deu ao primitivo o `aoFechar` e o `carregando` que
+ * faltavam (o "mandar ao fechar" e o spinner da interação pendente). Ele cobre
+ * múltipla escolha e opções ricas (`prefixo`, `descricao`), mas três coisas
+ * deste componente não cabem nele sem mudar o visual de todo `Select` do app:
  *
- * 1. **"Mandar ao fechar"**: o Discord só dispara a interação quando a lista
- *    **fecha** (Esc, clique fora, ou o "Concluir" da folha do celular), nunca
- *    a cada marcação — mas nem `Select` nem `MultiSelect` avisam de
- *    fechamento (não têm `aoFechar`; o próprio cabeçalho de
- *    `primitivos/Select.tsx` já documenta a lacuna). No não-múltiplo escolher
- *    fecha e manda ao mesmo tempo, mas ainda seria a `Select`; o múltiplo não
- *    tem contorno.
- * 2. **"Carregando" com spinner**: enquanto a interação está pendente, o
- *    Discord troca o chevron por um spinner e trava o clique — mas o
- *    primitivo só desenha chevron, sem esse terceiro estado.
+ * 1. a **folha do celular com título e "Concluir"** fixos junto da busca
+ *    (o primitivo não tem cabeçalho na lista);
+ * 2. o **checkbox à direita** do rótulo no múltiplo (o primitivo o põe à
+ *    esquerda — ver abaixo);
+ * 3. a **pílula com o prefixo** (avatar/ícone) na caixa fechada e a opção
+ *    **esmaecida quando o máximo foi atingido**.
  *
- * Por isso este arquivo compõe `Popout` direto para os dois modos — a saída
- * que o próprio cartão previa ("se não comportar multi-seleção, componha com
- * Popout").
+ * Por isso o corpo continua compondo o `Popout` direto, mas com o **mesmo
+ * padrão de teclado do primitivo**: foco sempre na caixa (ou no campo de
+ * busca), opções `role=option` com `tabIndex=-1` e a opção "ativa" só por
+ * `aria-activedescendant`; ↑/↓ movem, Home/End vão às pontas (fora do campo
+ * de busca), Enter/Espaço escolhem (no múltiplo, marcam/desmarcam), Tab sai
+ * fechando, Esc fecha (quem ouve é o `Popout`); digitar abre a busca (5/6/7/8)
+ * ou pula para a opção pelo começo do rótulo (3).
  *
  * ## Checkbox à direita, só no múltiplo (e não à esquerda, como o `Select`)
  *
@@ -102,7 +118,7 @@ export default function SelectDeBot({ componente, message }: { componente: Compo
         placeholder={placeholder}
         buscavel={buscavel}
         multiplo={multiplo}
-        desabilitado={!!componente.disabled || pendente}
+        desabilitado={!!componente.disabled}
         pendente={pendente}
         min={min}
         max={max}
@@ -144,12 +160,6 @@ function FalhaDoComponente({
 
 // ── dados: options do bot (type 3) ou lista viva do servidor (5/6/7/8) ────
 
-function iconeDeCanal(type: Channel["type"], className: string) {
-  if (type === "VOICE") return <Volume2 size={16} aria-hidden="true" className={className} />;
-  if (type === "ANNOUNCEMENT") return <Megaphone size={16} aria-hidden="true" className={className} />;
-  return <Hash size={16} aria-hidden="true" className={className} />;
-}
-
 /** Emoji de uma opção do select de texto, já resolvido, como `prefixo` de 16px. */
 function PrefixoDeEmoji({ emoji }: { emoji: EmojiParcial | undefined }) {
   const guilds = useEmojis((s) => s.guilds);
@@ -164,11 +174,24 @@ function PrefixoDeEmoji({ emoji }: { emoji: EmojiParcial | undefined }) {
   return <span className="text-text-sm text-text-muted">:{resolvido.texto}:</span>;
 }
 
-/** Monta a lista de opções no formato comum ao corpo do select (o `Select` primitivo usa a mesma forma). */
+// referências estáveis para "outro servidor": o seletor não devolve um `[]`
+// novo a cada leitura da store
+const SEM_MEMBROS: GuildMemberView[] = [];
+const SEM_CARGOS: Role[] = [];
+const SEM_CANAIS: Channel[] = [];
+const SEM_CATEGORIAS: Category[] = [];
+
+/**
+ * Monta a lista de opções no formato comum ao corpo do select (o `Select`
+ * primitivo usa a mesma forma). Usuário, cargo e canal vêm de
+ * `select-opcoes.ts`, os mesmos do campo de select do `ModalDeBot`.
+ */
 function useOpcoesDoSelect(componente: ComponenteDeSelect, guildId: string | null): OpcaoDeSelect<string>[] {
-  const membros = useGuilds((s) => (s.activeGuildId === guildId ? s.members : []));
-  const roles = usePermissions((s) => (s.guildId === guildId ? s.roles : []));
-  const canais = useChannels((s) => (s.guildId === guildId ? s.channels : []));
+  const membros = useGuilds((s) => (s.activeGuildId === guildId ? s.members : SEM_MEMBROS));
+  const roles = usePermissions((s) => (s.guildId === guildId ? s.roles : SEM_CARGOS));
+  const canais = useChannels((s) => (s.guildId === guildId ? s.channels : SEM_CANAIS));
+  // categoria entra como "canal 4" só quando o bot pede — ver `select-canais.ts`
+  const categorias = useCategories((s) => (s.guildId === guildId ? s.categories : SEM_CATEGORIAS));
 
   return useMemo(() => {
     if (componente.type === 3) {
@@ -186,78 +209,40 @@ function useOpcoesDoSelect(componente: ComponenteDeSelect, guildId: string | nul
       return opcoesDeCargo(roles);
     }
     if (componente.type === 8) {
-      const canaisDoTipo = canaisFiltrados(canais, componente.channel_types, "");
-      return canaisDoTipo.map((c) => ({
-        valor: c.id,
-        rotulo: c.name ?? "",
-        prefixo: (
-          <span className="flex shrink-0 items-center gap-0.5">
-            {iconeDeCanal(c.type, "text-icon-muted")}
-            {c.private ? <Lock size={12} aria-hidden="true" className="text-icon-muted" /> : null}
-          </span>
-        ),
-      }));
+      return canaisFiltrados(canais, componente.channel_types, "", categorias).map(opcaoDeItemDeCanal);
     }
     // type 7 · mencionável: usuários primeiro, depois cargos — a ordem do
     // `select-mencionavel.webp` da doc oficial (Ant/Helper/Colin de usuário,
     // Bot/Developer de cargo, nessa ordem).
     return [...membros.map((m) => opcaoDeUsuario(m.user)), ...opcoesDeCargo(roles)];
-  }, [componente, membros, roles, canais]);
+  }, [componente, membros, roles, canais, categorias]);
 }
 
-function opcaoDeUsuario(user: PublicUser): OpcaoDeSelect<string> {
-  return {
-    valor: user.id,
-    rotulo: user.displayName ?? user.username,
-    prefixo: <PrefixoDeUsuario user={user} />,
-  };
+// ── corpo do select (compõe Popout: ver "Por que ainda não uso..." no cabeçalho) ─
+
+function idDaOpcao(idBase: string, valor: string): string {
+  return `${idBase}-opcao-${encodeURIComponent(valor)}`;
 }
 
-/**
- * Avatar + bolinha de presença + pílula "BOT" de uma linha de usuário/
- * mencionável. Medido em `select-de-usuario.webp` (doc oficial): a bolinha de
- * status aparece mesmo dentro do select, junto do avatar — não é exclusiva da
- * lista de membros.
- */
-function PrefixoDeUsuario({ user }: { user: PublicUser }) {
-  const vivo = useLiveUser(user);
-  return (
-    <span className="flex shrink-0 items-center gap-1.5">
-      {/* `border-background-surface-higher`: o mais próximo que `Avatar.tsx`
-          tem em `FUNDO_DO_SELO` (proibido editar nesta onda) — a lista deste
-          select vive sobre `--background-surface-high` (a do `Popout`
-          `superficie="alta"`), sem entrada própria; ver "faltando". */}
-      <Avatar user={vivo} size="xs" status={vivo.status} surface="border-background-surface-higher" />
-      {vivo.bot ? (
-        <span className="rounded bg-brand-500 px-1 text-[10px] font-bold uppercase leading-4 text-accent-ink">
-          BOT
-        </span>
-      ) : null}
-    </span>
-  );
+/** Primeira (direcao 1) ou última (-1) opção que aceita ser ativada. */
+function extremoAtivavel(lista: OpcaoDeSelect<string>[], inativa: (o: OpcaoDeSelect<string>) => boolean, direcao: 1 | -1) {
+  if (direcao === 1) return lista.findIndex((o) => !inativa(o));
+  for (let i = lista.length - 1; i >= 0; i--) if (!inativa(lista[i])) return i;
+  return -1;
 }
 
-function opcoesDeCargo(roles: readonly Role[]): OpcaoDeSelect<string>[] {
-  return roles
-    .filter((r) => !r.isDefault) // @everyone não é atribuível — mesma regra de c-cargos
-    .sort((a, b) => b.position - a.position)
-    .map((r) => ({
-      valor: r.id,
-      rotulo: r.name,
-      prefixo: (
-        <Shield
-          size={16}
-          aria-hidden="true"
-          className={r.color ? "" : "text-icon-muted"}
-          // cor arbitrária do servidor (cargo), não token — mesma regra do
-          // `color` do embed: dado, não estilo de classe
-          style={r.color ? { color: r.color } : undefined}
-        />
-      ),
-    }));
+/** Próxima opção ativável na `direcao`, sem dar a volta (para no limite) — o mesmo do primitivo. */
+function proximaAtivavel(
+  lista: OpcaoDeSelect<string>[],
+  inativa: (o: OpcaoDeSelect<string>) => boolean,
+  de: number,
+  direcao: 1 | -1,
+) {
+  for (let i = de + direcao; i >= 0 && i < lista.length; i += direcao) {
+    if (!inativa(lista[i])) return i;
+  }
+  return de;
 }
-
-// ── corpo do select (compõe Popout: ver "Por que não uso..." no cabeçalho) ─
 
 function CorpoDoSelectDeBot({
   opcoes,
@@ -275,8 +260,13 @@ function CorpoDoSelectDeBot({
   placeholder: string;
   buscavel: boolean;
   multiplo: boolean;
-  /** já inclui `pendente`: enquanto a interação anterior não voltou, ninguém abre outra. */
+  /** `disabled` do bot: esmaece (opacidade .5) e trava. */
   desabilitado: boolean;
+  /**
+   * A interação anterior ainda não voltou: trava igual, mas **sem esmaecer**,
+   * com o spinner no lugar do chevron — o mesmo contrato do `carregando` do
+   * `Select` primitivo (ver o cabeçalho dele).
+   */
   pendente: boolean;
   min: number;
   max: number;
@@ -284,11 +274,16 @@ function CorpoDoSelectDeBot({
   onEscolher: (valores: string[]) => void;
 }) {
   const ehMobile = useEhMobile();
+  const idBase = useId();
+  const idLista = `${idBase}-lista`;
   const gatilhoRef = useRef<HTMLDivElement>(null);
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState("");
   const [valor, setValor] = useState<string[]>(() => JSON.parse(assinaturaInicial) as string[]);
+  const [ativoValor, setAtivoValor] = useState<string | null>(null);
   const [larguraDaLista, setLarguraDaLista] = useState<number>();
+  // nem o `disabled` do bot nem a interação pendente deixam abrir/marcar
+  const bloqueado = desabilitado || pendente;
 
   // a lista fica com a largura do gatilho — mesma conta do `Select` primitivo
   // (`CorpoDoSelect`), refeita se ele mudar de tamanho enquanto está aberta
@@ -317,6 +312,38 @@ function CorpoDoSelectDeBot({
   );
   const cheio = multiplo && valor.length >= max;
 
+  /** Opção que o teclado pula: desabilitada pelo bot, ou nova com o máximo já atingido. */
+  const inativa = (o: OpcaoDeSelect<string>) => !!o.desabilitada || (cheio && !valor.includes(o.valor));
+  const indiceAtivo = ativoValor === null ? -1 : opcoesFiltradas.findIndex((o) => o.valor === ativoValor);
+  const idAtivo = indiceAtivo !== -1 ? idDaOpcao(idBase, opcoesFiltradas[indiceAtivo].valor) : undefined;
+
+  // a busca (ou a lista) mudou e a opção ativa saiu do resultado: pousa na
+  // primeira ativável em vez de deixar `aria-activedescendant` apontando para
+  // nada — o mesmo efeito do `useComboBox` do primitivo
+  useEffect(() => {
+    if (!aberto || indiceAtivo !== -1) return;
+    const i = extremoAtivavel(opcoesFiltradas, inativa, 1);
+    setAtivoValor(i === -1 ? null : opcoesFiltradas[i].valor);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- indiceAtivo/inativa derivam de opcoesFiltradas/valor
+  }, [opcoesFiltradas, aberto]);
+
+  function abrirCom(ativo: string | null) {
+    // sem `opcoes.length === 0` (o primitivo tem): a lista de membros/canais
+    // pode não ter carregado, e abrir no "Sem resultados" diz isso melhor que
+    // uma caixa que não responde
+    if (bloqueado) return;
+    setBusca("");
+    setAtivoValor(ativo);
+    setAberto(true);
+  }
+
+  /** Abre pousando na opção já escolhida (ou na primeira ativável). */
+  function abrir() {
+    const iSel = opcoes.findIndex((o) => valor.includes(o.valor) && !o.desabilitada);
+    const i = iSel !== -1 ? iSel : extremoAtivavel(opcoes, inativa, 1);
+    abrirCom(i === -1 ? null : opcoes[i].valor);
+  }
+
   function fechar() {
     setAberto(false);
     setBusca("");
@@ -342,8 +369,8 @@ function CorpoDoSelectDeBot({
   }
 
   /**
-   * Fechar por Esc, clique fora ou o "Concluir" da folha — o "ao fechar" do
-   * Discord. Só manda se a seleção final for diferente da que estava quando
+   * Fechar por Esc, clique fora, Tab ou o "Concluir" da folha — o "ao fechar"
+   * do Discord. Só manda se a seleção final for diferente da que estava quando
    * a lista abriu: abrir e fechar sem tocar em nada (ou marcar e desmarcar de
    * volta) não gasta a interação do bot por nada.
    */
@@ -352,24 +379,127 @@ function CorpoDoSelectDeBot({
     if (JSON.stringify(valor) !== assinaturaInicial) onEscolher(valor);
   }
 
+  /** O fechar certo para o modo: o múltiplo confirma, o único só fecha. */
+  function fecharDoModo() {
+    if (multiplo) fecharEConfirmar();
+    else fechar();
+  }
+
+  function escolher(o: OpcaoDeSelect<string>) {
+    if (inativa(o)) return;
+    if (multiplo) alternar(o.valor);
+    else escolherUnico(o.valor);
+  }
+
   function alternarAbertura() {
-    if (desabilitado) return;
+    if (bloqueado) return;
+    if (!aberto) abrir();
+    else fecharDoModo();
+  }
+
+  function mover(direcao: 1 | -1) {
     if (!aberto) {
-      setAberto(true);
-    } else if (multiplo) {
-      fecharEConfirmar();
-    } else {
-      fechar();
+      abrir();
+      return;
     }
+    const i =
+      indiceAtivo === -1
+        ? extremoAtivavel(opcoesFiltradas, inativa, 1)
+        : proximaAtivavel(opcoesFiltradas, inativa, indiceAtivo, direcao);
+    if (i !== -1) setAtivoValor(opcoesFiltradas[i].valor);
+  }
+
+  function irPara(direcao: 1 | -1) {
+    if (!aberto) {
+      abrir();
+      return;
+    }
+    const i = extremoAtivavel(opcoesFiltradas, inativa, direcao);
+    if (i !== -1) setAtivoValor(opcoesFiltradas[i].valor);
+  }
+
+  function confirmarAtivo() {
+    if (indiceAtivo === -1) return;
+    escolher(opcoesFiltradas[indiceAtivo]);
+  }
+
+  // digitar-para-pular — copiado do primitivo: com busca, abre e começa o
+  // filtro; sem busca (type 3), acumula 700ms (não medido) e ativa a primeira
+  // opção cujo rótulo começa com o que foi digitado
+  const bufferRef = useRef("");
+  const timeoutRef = useRef<number>();
+  function digitarParaPular(e: KeyboardEventDoReact<HTMLDivElement>) {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) return;
+    e.preventDefault();
+    if (buscavel) {
+      if (!aberto) abrir();
+      setBusca((atual) => atual + e.key);
+      return;
+    }
+    window.clearTimeout(timeoutRef.current);
+    bufferRef.current += e.key.toLocaleLowerCase("pt-BR");
+    const alvo = bufferRef.current;
+    const i = opcoes.findIndex((o) => !inativa(o) && normalizarBusca(o.rotulo).startsWith(alvo));
+    if (i !== -1) {
+      if (aberto) setAtivoValor(opcoes[i].valor);
+      else abrirCom(opcoes[i].valor);
+    }
+    timeoutRef.current = window.setTimeout(() => {
+      bufferRef.current = "";
+    }, 700);
   }
 
   // Esc não precisa de handler aqui: o próprio `Popout` já ouve a tecla no
   // `window` (em captura) e chama `aoFechar`.
   function aoTeclarNoGatilho(e: KeyboardEventDoReact<HTMLDivElement>) {
-    if (desabilitado) return;
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      alternarAbertura();
+    if (bloqueado) return;
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        mover(1);
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        mover(-1);
+        break;
+      case "Home":
+        e.preventDefault();
+        irPara(1);
+        break;
+      case "End":
+        e.preventDefault();
+        irPara(-1);
+        break;
+      case "Enter":
+      case " ":
+        e.preventDefault();
+        if (!aberto) abrir();
+        else confirmarAtivo();
+        break;
+      case "Tab":
+        // sem `preventDefault`: o foco segue, a lista fecha atrás dele
+        if (aberto) fecharDoModo();
+        break;
+      default:
+        digitarParaPular(e);
+    }
+  }
+
+  function aoTeclarNaBusca(e: KeyboardEventDoReact<HTMLInputElement>) {
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        mover(1);
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        mover(-1);
+        break;
+      case "Enter":
+        e.preventDefault();
+        confirmarAtivo();
+        break;
+      // Home/End ficam para o cursor do texto — não roubar a edição do termo
     }
   }
 
@@ -389,13 +519,16 @@ function CorpoDoSelectDeBot({
         role="combobox"
         aria-haspopup="listbox"
         aria-expanded={aberto}
+        aria-controls={idLista}
+        aria-activedescendant={aberto ? idAtivo : undefined}
         aria-label={placeholder}
         aria-disabled={desabilitado || undefined}
+        aria-busy={pendente || undefined}
         tabIndex={desabilitado ? -1 : 0}
         onKeyDown={aoTeclarNoGatilho}
         onClick={alternarAbertura}
         className={`grid min-h-[40px] w-full grid-cols-[1fr_auto] items-center gap-2 rounded-lg border border-input-border-default bg-input-background-default py-2 pl-3 pr-2 outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-border-focus focus-visible:outline-offset-2 ${
-          desabilitado ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+          desabilitado ? "cursor-not-allowed opacity-50" : pendente ? "cursor-wait" : "cursor-pointer"
         }`}
       >
         {multiplo ? (
@@ -416,6 +549,7 @@ function CorpoDoSelectDeBot({
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation();
+                      if (bloqueado) return;
                       alternar(o.valor);
                     }}
                     className="text-interactive-text-default transition-colors hover:text-interactive-text-hover"
@@ -437,7 +571,7 @@ function CorpoDoSelectDeBot({
         {pendente ? (
           <span
             aria-hidden="true"
-            className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-border-normal border-t-text-muted"
+            className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-border-normal border-t-text-muted motion-reduce:animate-none"
           />
         ) : (
           <ChevronDown
@@ -450,7 +584,7 @@ function CorpoDoSelectDeBot({
 
       <Popout
         aberto={aberto}
-        aoFechar={multiplo ? fecharEConfirmar : fechar}
+        aoFechar={fecharDoModo}
         ancora={gatilhoRef}
         largura={larguraDaLista}
         rotulo={placeholder}
@@ -490,61 +624,80 @@ function CorpoDoSelectDeBot({
                   inputMode="search"
                   value={busca}
                   onChange={(e) => setBusca(e.target.value)}
+                  onKeyDown={aoTeclarNaBusca}
                   placeholder="Buscar…"
                   aria-label="Buscar"
+                  aria-controls={idLista}
+                  aria-activedescendant={idAtivo}
                   className="w-full bg-transparent text-text-md text-text-default outline-none placeholder:text-input-placeholder-text-default"
                 />
               </div>
             ) : null}
           </div>
         ) : null}
-        <ul role="listbox" aria-label={placeholder} aria-multiselectable={multiplo || undefined}>
+        <ul id={idLista} role="listbox" aria-label={placeholder} aria-multiselectable={multiplo || undefined}>
           {opcoesFiltradas.length === 0 ? (
             <li className="bg-background-base-lower p-3 text-center text-text-sm text-text-muted">Sem resultados</li>
           ) : (
             opcoesFiltradas.map((o) => {
               const selecionada = valor.includes(o.valor);
-              const bloqueada = multiplo && !selecionada && cheio;
+              const bloqueada = inativa(o);
+              // no celular não há ponteiro "passando por cima": o `mouseenter`
+              // sintético do toque deixaria a última linha tocada acesa como
+              // ativa — lá o retorno do toque é o `active:`
+              const ativa = !ehMobile && indiceAtivo !== -1 && opcoesFiltradas[indiceAtivo].valor === o.valor;
               return (
-                <li key={o.valor} role="presentation">
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={selecionada}
-                    aria-disabled={bloqueada || undefined}
-                    disabled={bloqueada}
-                    onClick={() => (multiplo ? alternar(o.valor) : escolherUnico(o.valor))}
-                    className={`flex w-full items-center gap-3 p-3 text-left outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-border-focus focus-visible:outline-offset-2 ${
-                      bloqueada
-                        ? "cursor-not-allowed opacity-50"
-                        : `cursor-pointer hover:bg-interactive-background-hover ${
-                            selecionada ? "bg-interactive-background-selected" : ""
-                          }`
-                    }`}
-                  >
-                    {o.prefixo}
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-text-md text-text-default">{o.rotulo}</span>
-                      {o.descricao ? (
-                        <span className="block truncate text-text-sm text-text-muted">{o.descricao}</span>
-                      ) : null}
-                    </span>
-                    {multiplo ? (
-                      // checkbox à direita: ver "Checkbox à direita" no cabeçalho do arquivo
-                      <span
-                        aria-hidden="true"
-                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] border transition-colors ${
+                <li
+                  key={o.valor}
+                  id={idDaOpcao(idBase, o.valor)}
+                  role="option"
+                  aria-selected={selecionada}
+                  aria-disabled={bloqueada || undefined}
+                  tabIndex={-1}
+                  onMouseEnter={() => {
+                    if (!ehMobile && !bloqueada) setAtivoValor(o.valor);
+                  }}
+                  // `mousedown` só segura o foco na caixa/busca; quem escolhe é
+                  // o `click` — escolher no `mousedown` (como o primitivo) fecha
+                  // a folha do celular antes do `click` sintético do toque, que
+                  // cairia no que estiver atrás dela
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => escolher(o)}
+                  className={`flex items-center gap-3 p-3 ${
+                    bloqueada
+                      ? "cursor-not-allowed opacity-50"
+                      : `cursor-pointer ${
                           selecionada
-                            ? "border-checkbox-border-selected-default bg-checkbox-background-selected-default"
-                            : "border-checkbox-border-default bg-checkbox-background-default"
-                        }`}
-                      >
-                        {selecionada ? <Check size={14} className="text-checkbox-icon-active" /> : null}
-                      </span>
-                    ) : selecionada ? (
-                      <Check size={16} aria-hidden="true" className="shrink-0 text-brand-500" />
+                            ? "bg-interactive-background-selected"
+                            : ativa
+                              ? "bg-interactive-background-hover"
+                              : "active:bg-interactive-background-hover"
+                        }`
+                  }`}
+                >
+                  {o.prefixo}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-text-md text-text-default">{o.rotulo}</span>
+                    {o.descricao ? (
+                      <span className="block truncate text-text-sm text-text-muted">{o.descricao}</span>
                     ) : null}
-                  </button>
+                  </span>
+                  {o.sufixo}
+                  {multiplo ? (
+                    // checkbox à direita: ver "Checkbox à direita" no cabeçalho do arquivo
+                    <span
+                      aria-hidden="true"
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] border transition-colors ${
+                        selecionada
+                          ? "border-checkbox-border-selected-default bg-checkbox-background-selected-default"
+                          : "border-checkbox-border-default bg-checkbox-background-default"
+                      }`}
+                    >
+                      {selecionada ? <Check size={14} className="text-checkbox-icon-active" /> : null}
+                    </span>
+                  ) : selecionada ? (
+                    <Check size={16} aria-hidden="true" className="shrink-0 text-brand-500" />
+                  ) : null}
                 </li>
               );
             })

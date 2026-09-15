@@ -1,5 +1,13 @@
-import { MAX_MESSAGE_LENGTH, ehSnowflake } from "@streamz/shared";
+import type { PipeTransform } from "@nestjs/common";
+import {
+  MAX_ATTACHMENTS_PER_MESSAGE,
+  MAX_ATTACHMENT_SIZE,
+  MAX_MESSAGE_LENGTH,
+  ehSnowflake,
+} from "@streamz/shared";
 import { z } from "zod";
+import { sanitizeFilename } from "../../uploads/media";
+import { jsonInvalido } from "../erros";
 
 /**
  * Os corpos e as queries que as rotas de compat aceitam, em zod.
@@ -56,9 +64,11 @@ export const corpoDeMensagemSchema = z
     flags: z.number().optional(),
     allowed_mentions: mencoesPermitidasSchema.optional(),
     message_reference: referenciaSchema.optional(),
-    // ids de anexo **nossos** (cuid): o `attachments` do Discord é outra coisa
-    // (o pareamento com o multipart), e a F1 não faz upload por esta rota
+    // ids de anexo **nossos** (cuid), já enviados por `POST /uploads`. O
+    // `attachments` do Discord é outra coisa — o pareamento `id` ↔ `files[n]`
+    // do multipart — e é lido por `arquivosDoMultipart`, logo abaixo
     attachment_ids: z.array(z.string()).optional(),
+    attachments: z.array(z.unknown()).optional(),
   })
   .passthrough();
 
@@ -113,4 +123,174 @@ function primeiro(valor: unknown): string | undefined {
   if (typeof valor === "string") return valor;
   if (Array.isArray(valor) && typeof valor[0] === "string") return valor[0];
   return undefined;
+}
+
+// ── multipart/form-data (rodada de correção) ─────────────────
+
+/**
+ * O upload do Discord: `payload_json` + `files[n]`.
+ *
+ * Todo `channel.send({ files })` do discord.js, `reply({ files })` e
+ * `webhook.send({ files })` sai assim — e o discord.py igual. O corpo JSON de
+ * sempre vai **dentro** do campo de texto `payload_json`, os arquivos em
+ * `files[0]`, `files[1]`…, e o `attachments` do payload pareia cada um pelo
+ * `id` (o `n` do campo), com o `filename` que vale e a `description`:
+ *
+ * ```
+ * payload_json = {"content":"placar","embeds":[{"image":{"url":"attachment://placar.png"}}],
+ *                 "attachments":[{"id":0,"filename":"placar.png"}]}
+ * files[0]     = <bytes>
+ * ```
+ *
+ * Sem isto a única forma de um embed apontar para um arquivo era subir antes
+ * por `POST /uploads` e mandar `attachment_ids` — que nenhuma lib conhece.
+ *
+ * Quem lê os arquivos é o `AnyFilesInterceptor` do `@nestjs/platform-express`
+ * (o multer, como nas rotas de upload da API); o que chega ao controller mora
+ * aqui, puro e testável.
+ */
+
+/** Os limites do multer nas rotas de compat: os do anexo comum do Streamz. */
+export const LIMITES_DO_MULTIPART = {
+  fileSize: MAX_ATTACHMENT_SIZE,
+  files: MAX_ATTACHMENTS_PER_MESSAGE,
+} as const;
+
+/** O que o multer entrega por arquivo. */
+export interface ArquivoDoMultipart {
+  fieldname: string;
+  originalname: string;
+  buffer: Buffer;
+  size: number;
+}
+
+/**
+ * `@Body(new PayloadJsonPipe(), zodBody(schema))`: desembrulha o `payload_json`.
+ *
+ * Roda **antes** do zod. Num corpo JSON comum não há `payload_json` e o valor
+ * passa intacto. Num multipart, o multer põe os campos de texto em `req.body`
+ * (um objeto sem protótipo) e o JSON de verdade está em `payload_json`; ele vira
+ * o corpo, e o resto do handler não percebe a diferença.
+ *
+ * JSON quebrado leva o `50109` do Discord em vez de um 500 do `JSON.parse`.
+ */
+export class PayloadJsonPipe implements PipeTransform<unknown, unknown> {
+  transform(valor: unknown): unknown {
+    if (typeof valor !== "object" || valor === null) return valor;
+    const bruto = (valor as Record<string, unknown>).payload_json;
+    if (typeof bruto !== "string") return valor;
+    let lido: unknown;
+    try {
+      lido = JSON.parse(bruto);
+    } catch {
+      throw jsonInvalido();
+    }
+    if (typeof lido !== "object" || lido === null || Array.isArray(lido)) throw jsonInvalido();
+    return lido;
+  }
+}
+
+/** Um arquivo do multipart, com o nome com que ele fica gravado. */
+export interface ArquivoPareado {
+  arquivo: ArquivoDoMultipart;
+  /** o nome que o bot usou (`attachments[].filename` ou o do próprio arquivo). */
+  nomeDoBot: string;
+  /** o nome depois do `sanitizeFilename` — é este que `attachment://` resolve. */
+  nomeGravado: string;
+}
+
+/**
+ * Os arquivos do multer, pareados com o `attachments` do payload.
+ *
+ * O `n` de `files[n]` casa com o `id` de `attachments` (número ou texto, as
+ * libs mandam os dois); achando, o `filename` de lá vale — é como o Discord
+ * renomeia um arquivo sem reenviar os bytes. Campo com outro nome (`file`,
+ * versões antigas) usa a posição.
+ */
+export function arquivosDoMultipart(
+  arquivos: readonly ArquivoDoMultipart[] | undefined,
+  attachments: unknown,
+): ArquivoPareado[] {
+  if (!arquivos?.length) return [];
+  const nomes = new Map<string, string>();
+  if (Array.isArray(attachments)) {
+    for (const item of attachments) {
+      if (typeof item !== "object" || item === null) continue;
+      const { id, filename } = item as { id?: unknown; filename?: unknown };
+      if ((typeof id === "number" || typeof id === "string") && typeof filename === "string" && filename) {
+        nomes.set(String(id), filename);
+      }
+    }
+  }
+  return arquivos.map((arquivo, posicao) => {
+    const indice = /^files\[(\d+)\]$/.exec(arquivo.fieldname)?.[1] ?? String(posicao);
+    const nomeDoBot = nomes.get(indice) ?? arquivo.originalname;
+    return { arquivo, nomeDoBot, nomeGravado: sanitizeFilename(nomeDoBot) };
+  });
+}
+
+/**
+ * `attachment://<nome do bot>` → `attachment://<nome gravado>`, em qualquer
+ * profundidade de `embeds`/`components`.
+ *
+ * Necessário porque o upload passa o nome por `sanitizeFilename` (espaço e
+ * acento viram `_`), e a resolução (`resolverAnexosDoPayload`) casa pelo nome
+ * **gravado**. Sem a troca, `attachment://meu placar.png` nunca acharia o
+ * `meu_placar.png`. Só o texto exato `attachment://<nome>` muda; o resto do
+ * payload volta idêntico (cópia, sem mutar o corpo).
+ */
+export function renomearReferenciasDeAnexo<T>(valor: T, pareados: readonly ArquivoPareado[]): T {
+  const trocas = new Map<string, string>();
+  for (const p of pareados) {
+    if (p.nomeDoBot !== p.nomeGravado) {
+      trocas.set(`attachment://${p.nomeDoBot}`, `attachment://${p.nomeGravado}`);
+    }
+  }
+  if (trocas.size === 0) return valor;
+  const trocar = (v: unknown): unknown => {
+    if (typeof v === "string") return trocas.get(v) ?? v;
+    if (Array.isArray(v)) return v.map(trocar);
+    if (typeof v === "object" && v !== null) {
+      return Object.fromEntries(Object.entries(v).map(([k, filho]) => [k, trocar(filho)]));
+    }
+    return v;
+  };
+  return trocar(valor) as T;
+}
+
+/** O pedaço do `UploadsService` que a casca usa (estrutural, para testar sem Nest). */
+export interface EnviadorDeArquivos {
+  upload(
+    uploaderId: string,
+    file: { originalname: string; buffer: Buffer; size: number },
+  ): Promise<{ id: string }>;
+}
+
+/**
+ * Grava cada arquivo pelo `UploadsService` — a mesma validação, o mesmo bucket
+ * e a mesma linha de `Attachment` solta do `POST /uploads` — e devolve os cuids
+ * na ordem dos `files[n]`.
+ *
+ * Em série e não em paralelo: a ordem dos anexos é a ordem em que o bot os
+ * mandou, e dez uploads simultâneos do mesmo bot não ganham nada.
+ *
+ * `uploaderId` é o **usuário-bot**: o `MessagesService.create` só vincula anexo
+ * solto do próprio autor, e é isso que impede o bot de pegar o arquivo de
+ * outra pessoa.
+ */
+export async function gravarArquivosDoMultipart(
+  enviador: EnviadorDeArquivos,
+  uploaderId: string,
+  pareados: readonly ArquivoPareado[],
+): Promise<string[]> {
+  const ids: string[] = [];
+  for (const { arquivo, nomeDoBot } of pareados) {
+    const anexo = await enviador.upload(uploaderId, {
+      originalname: nomeDoBot,
+      buffer: arquivo.buffer,
+      size: arquivo.size,
+    });
+    ids.push(anexo.id);
+  }
+  return ids;
 }

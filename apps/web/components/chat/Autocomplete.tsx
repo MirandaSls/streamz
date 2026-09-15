@@ -19,21 +19,25 @@ export interface ItemAutocomplete {
    * todos"`) ou indisponível por outro motivo. `true` sem texto usa "(em
    * breve)", como o resto do app trata funcionalidade que ainda não existe.
    *
-   * Nenhum produtor de `ItemAutocomplete` hoje usa este campo — nem
-   * `montarSugestoes` marca `@everyone`/`@here` quando falta
-   * `MENTION_EVERYONE`, nem `sugestoesDeOpcao` marca nada — porque os dois
-   * vivem em `components/chat/composer/sugestoes.tsx`, fora da lista de
-   * arquivos deste cartão. Ver "faltando" no cartão 2d-autocomplete.
+   * Já tem produtor: `montarSugestoes` (`components/chat/composer/
+   * sugestoes.tsx`) filtra `@everyone`/`@here` da lista quando falta
+   * `MENTION_EVERYONE` — não marca a linha como desabilitada, simplesmente não
+   * a inclui. O campo fica pronto para quando `sugestoesDeOpcao` ou outra
+   * fonte precisar mostrar (e não só esconder) um item sem permissão.
    */
   desabilitado?: string | true;
 }
 
-/** Como cada gatilho nomeia a seção, já preparado para receber o termo. */
+/**
+ * Como cada gatilho nomeia a seção, já preparado para receber o termo. Caixa
+ * normal — o cabeçalho não é mais `uppercase` (ver o bloco de medidas abaixo),
+ * mesma caixa que `TITULO_GATILHO` (`composer/sugestoes.tsx`) já usa.
+ */
 const TITULO: Record<string, string> = {
-  ":": "EMOJIS CORRESPONDENDO A",
-  "@": "MEMBROS CORRESPONDENDO A",
-  "#": "CANAIS DE TEXTO CORRESPONDENDO A",
-  "/": "COMANDOS CORRESPONDENDO A",
+  ":": "Emojis correspondendo a",
+  "@": "Membros correspondendo a",
+  "#": "Canais de texto correspondendo a",
+  "/": "Comandos correspondendo a",
 };
 
 /**
@@ -79,29 +83,33 @@ const TITULO: Record<string, string> = {
  *   app de referência a 64px ÷ escala 2,0 aferida — `desenvolvedores/imagens/
  *   comandos/autocomplete-comando-simples.png`); o slot deste componente virou
  *   `h-8 w-8` (32) para bater, igual ao que `SeletorDeComandos.tsx` já usa
- *   (`Avatar size="md"`). **O avatar em si continua 24** (`size="sm"`, fixado
- *   em `components/chat/composer/sugestoes.tsx:163`, fora da lista deste
- *   cartão) — ver "faltando";
- * - cabeçalho: `.contentTitle__13533{color:var(--interactive-text-default);
- *   padding:4px 0;text-transform:uppercase}` e `.contentTitle__13533
- *   strong{color:var(--text-subtle);text-transform:none}` — no tema Dark os
- *   dois tokens resolvem a cor **igual** (`#abacb2`, ver `tokens/VARIAVEIS.md`
- *   linhas 53 e 68: mesma coluna); a diferença real é só o `<strong>` (negrito
- *   do navegador) e o `text-transform:none`, que tira da caixa alta o que a
- *   pessoa digitou — por isso o termo vai num `<strong>` à parte, sem
- *   `uppercase`, em vez de a frase inteira ganhar `uppercase` (que também
- *   deixava MAIÚSCULO o texto digitado, e o Discord preserva o que foi
- *   escrito). A leitura de pixel da revisão (rótulo cinza, termo branco) não
- *   bate com os tokens iguais — ver "nao_verificado";
+ *   (`Avatar size="md"`). O avatar em si também já é `md` (32) —
+ *   `components/chat/composer/sugestoes.tsx:204` — não há mais o descompasso
+ *   com o slot de 24 que uma versão anterior deste comentário apontava;
+ * - cabeçalho: a variante `mana-type-consolidation` do CSS bruto (`862735.
+ *   30278509527ce174.css`) troca `.contentTitle__13533` de `text-transform:
+ *   uppercase` para `{font-size:14px;font-weight:var(--font-weight-medium);
+ *   text-transform:none}` — a mesma que `SearchPanel.tsx` já usa nos títulos
+ *   de seção dele. Por isso o `<p>` daqui é `text-text-sm font-medium
+ *   normal-case`, sem `.toUpperCase()` em cima do rótulo nem do termo
+ *   digitado (o Discord preserva o que a pessoa escreveu). O `<strong>` com o
+ *   termo fica `text-text-subtle` — no tema Dark resolve para a mesma cor que
+ *   `--interactive-text-default` (`tokens/VARIAVEIS.md` linhas 53 e 68: mesma
+ *   coluna), então a diferença visível entre rótulo e termo é só o peso
+ *   (negrito do próprio `<strong>` contra o `font-medium` do resto da linha),
+ *   não a cor — a leitura de pixel da revisão (rótulo cinza, termo branco) não
+ *   bate com os tokens iguais, ver "nao_verificado";
  * - vazio: `.noAutocompleteResults__3b122{height:200px}` (`css-bruto/
  *   sob-demanda/0d62866b693a2d53.css`) prova que o Discord **não** fecha o
  *   popup com zero resultado — mostra algo. Sem a ilustração dele (não há
  *   referência do desenho), a linha vazia daqui é só texto, numa caixa do
  *   tamanho de uma linha normal, não os 200px medidos (não localizados: ver
- *   "nao_verificado"). Hoje esse caminho é **inatingível pelo Composer**: ele
- *   só monta este componente quando `sugestoes.length > 0`
- *   (`components/chat/Composer.tsx:338`, fora da lista) — o suporte aqui é
- *   para quando essa checagem for solta lá.
+ *   "nao_verificado"). Vazio e carregando **são** estados atingíveis: quem usa
+ *   este componente decide se chama com `itens` vazio ou com `carregando`,
+ *   sem checagem aqui que os torne inertes (uma versão anterior deste
+ *   comentário dizia o contrário para o vazio). O spinner do "Carregando…"
+ *   segue como texto simples — nenhuma referência de desenho do Discord para
+ *   ele foi localizada, então nada foi desenhado além do texto.
  *
  * A faixa de dicas de teclado ("↑↓ navegar · enter escolher · esc sair") saiu:
  * o Discord não tem — a única referência de tecla que ele mostra é o chip
@@ -151,25 +159,31 @@ export default function Autocomplete({
     el?.scrollIntoView({ block: "nearest" });
   }, [selecionado]);
 
-  const base = (gatilho && TITULO[gatilho]) ?? titulo.toUpperCase();
+  const base = (gatilho && TITULO[gatilho]) ?? titulo;
 
   return (
     <div className="absolute bottom-[calc(100%+8px)] left-2.5 right-[18px] z-[60] overflow-hidden rounded-[5px] bg-background-surface-high shadow-popout celular:left-3 celular:right-3">
-      <p className="flex items-baseline gap-1 px-4 py-1 text-text-xs font-semibold uppercase text-interactive-text-default">
+      <p className="flex items-baseline gap-1 px-4 py-1 text-text-sm font-medium normal-case text-interactive-text-default">
         <span className="truncate">{base}</span>
-        {/* preserva o que foi digitado como foi digitado — negrito do <strong>,
-            sem `uppercase` (ver cabeçalho do componente) */}
-        {gatilho && <strong className="min-w-0 truncate normal-case">{gatilho}{termo ?? ""}</strong>}
+        {/* preserva o que foi digitado como foi digitado — a cor muda
+            (text-subtle), o peso vem de graça do <strong> (ver cabeçalho) */}
+        {gatilho && <strong className="min-w-0 truncate text-text-subtle">{gatilho}{termo ?? ""}</strong>}
       </p>
 
+      {/* carregando/vazio/falhou são estados de status, não conteúdo — o
+          leitor de tela precisa anunciá-los mesmo sem o foco estar aqui */}
       {erro ? (
-        <p className="px-4 py-3 text-text-sm text-text-feedback-critical">{erro}</p>
+        <p role="status" aria-live="polite" className="px-4 py-3 text-text-sm text-text-feedback-critical">
+          {erro}
+        </p>
       ) : carregando ? (
-        <p className="px-4 py-3 text-text-sm text-text-muted" aria-busy="true">
+        <p role="status" aria-live="polite" aria-busy="true" className="px-4 py-3 text-text-sm text-text-muted">
           Carregando…
         </p>
       ) : itens.length === 0 ? (
-        <p className="px-4 py-3 text-text-sm text-text-muted">{mensagemVazia ?? "Nenhum resultado encontrado."}</p>
+        <p role="status" aria-live="polite" className="px-4 py-3 text-text-sm text-text-muted">
+          {mensagemVazia ?? "Nenhum resultado encontrado."}
+        </p>
       ) : (
         <ul ref={listaRef} role="listbox" aria-label={gatilho ? `${base} ${gatilho}${termo ?? ""}` : base} className="max-h-[360px] overflow-y-auto pb-2">
           {itens.map((item, i) => {

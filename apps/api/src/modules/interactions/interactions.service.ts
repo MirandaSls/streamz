@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
   type OnModuleDestroy,
+  type OnModuleInit,
 } from "@nestjs/common";
 import { randomBytes } from "node:crypto";
 import { Prisma } from "@prisma/client";
@@ -39,7 +40,7 @@ import {
 import { toPublicUser } from "../../common/dto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { CODIGO, ErroDoDiscord, corpoInvalido, mensagemDesconhecida } from "../discord-compat/erros";
-import { DadosDeCompatService } from "../discord-compat/dados.service";
+import { DadosDeCompatService, urlDoAnexoParaBot } from "../discord-compat/dados.service";
 import { RegistroDeSessoes } from "../discord-compat/gateway/sessao";
 import { IdsService } from "../discord-compat/ids.service";
 import type { JsonDoDiscord, MensagemDoDiscord } from "../discord-compat/tipos";
@@ -206,7 +207,7 @@ function paraHttp(recusa: Recusa): BadRequestException | NotFoundException {
  * Ver `docs/BOTS-COMPATIVEIS-COM-O-DISCORD.md` §9 e o `CONTRATO-F3.md`.
  */
 @Injectable()
-export class InteractionsService implements OnModuleDestroy {
+export class InteractionsService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger(InteractionsService.name);
 
   /**
@@ -243,7 +244,11 @@ export class InteractionsService implements OnModuleDestroy {
    * a interação existe, expira em 15 min e ninguém responde. É o que o Discord
    * faz, e é o que deixa o composer devolver na hora.
    */
-  async criarInteracao(entrada: EntradaDeInteracao): Promise<InteracaoEmVoo> {
+  async criarInteracao(
+    // `nonce` aqui e não em `EntradaDeInteracao` (`tipos.ts`) só porque aquele
+    // arquivo não é deste cartão; o controller o repassa de `interacaoCriarSchema`
+    entrada: EntradaDeInteracao & { nonce?: string },
+  ): Promise<InteracaoEmVoo> {
     const { comando, guildId, botUserId } = await this.acharComandoNoCanal(
       entrada.commandId,
       entrada.canalId,
@@ -272,17 +277,21 @@ export class InteractionsService implements OnModuleDestroy {
         guildId,
         commandId: comando.id,
         commandName: comando.name,
+        // gravado para o callback 9 (`abrirModal`) e o `success`/`failed`
+        // (`eventoDe`) voltarem casados na sessão do navegador que digitou
+        nonce: entrada.nonce ?? null,
         data: dadosDoComando as Prisma.InputJsonValue,
         expiresAt,
       },
       select: { id: true, snowflake: true },
     });
 
-    // Comando de barra continua sem o relógio dos 3 s e sem `interaction.*`: o
-    // `POST` dele não manda `nonce` (`interacaoCriarSchema`), então não há
-    // sessão do navegador para avisar, e vencer o token aos 3 s mudaria o
-    // comportamento de todo bot da F3 sem ninguém do outro lado para ver a falha.
-    await this.despachar({
+    // Com `nonce`, o comando de barra ganha o que o componente já tinha: o
+    // relógio dos 3 s ("O aplicativo não respondeu" do Discord) e o
+    // `bot_offline` na hora. Sem `nonce` (cliente antigo) segue como na F3, sem
+    // relógio e sem `interaction.*`: não há sessão do navegador para avisar, e
+    // vencer o token aos 3 s mudaria o bot sem ninguém do outro lado ver a falha.
+    const temSessao = await this.despachar({
       tipo: TIPO_DE_INTERACAO.APPLICATION_COMMAND,
       snowflake: linha.snowflake,
       applicationSnowflake: comando.application.snowflake,
@@ -293,6 +302,18 @@ export class InteractionsService implements OnModuleDestroy {
       usuarioId: entrada.usuarioId,
       data: dadosDoComando,
     });
+
+    if (entrada.nonce) {
+      const evento: EventoDaInteracao = {
+        interactionId: linha.id,
+        nonce: entrada.nonce,
+        channelId: entrada.canalId,
+        messageId: null,
+        customId: null,
+      };
+      if (temSessao) this.agendarPrazo(evento, entrada.usuarioId);
+      else this.emitirFalha(entrada.usuarioId, evento, "bot_offline");
+    }
 
     return {
       id: linha.id,
@@ -1022,11 +1043,16 @@ export class InteractionsService implements OnModuleDestroy {
    * chegou a tempo noutra instância já gravou `respondedAt`, e aqui o `count`
    * sai 0 e nada é emitido.
    */
-  private agendarPrazo(evento: EventoDaInteracao, usuarioId: string): void {
+  private agendarPrazo(
+    evento: EventoDaInteracao,
+    usuarioId: string,
+    // o que falta do prazo; menor que os 3 s só na retomada (`retomarPrazos`)
+    ms: number = PRAZO_DA_RESPOSTA_DO_BOT_MS,
+  ): void {
     const relogio = setTimeout(() => {
       this.prazos.delete(evento.interactionId);
       void this.vencerSemResposta(evento, usuarioId);
-    }, PRAZO_DA_RESPOSTA_DO_BOT_MS);
+    }, ms);
     // o relógio não pode segurar o processo vivo num desligamento
     (relogio as { unref?: () => void }).unref?.();
     this.prazos.set(evento.interactionId, relogio);
@@ -1051,6 +1077,68 @@ export class InteractionsService implements OnModuleDestroy {
     this.prazos.delete(interactionId);
   }
 
+  /**
+   * ── api-interacoes ── A retomada dos relógios na subida.
+   *
+   * O relógio dos 3 s é um `setTimeout` em memória: se a instância cai entre o
+   * despacho e o prazo, ninguém invalida o token nem emite o `failed`, e um
+   * callback atrasado ainda escreveria depois de a web já ter desistido (a rede
+   * de segurança dela é de 6 s). Não bloqueia a subida: roda solta, e erro só
+   * vai para o log.
+   */
+  onModuleInit(): void {
+    void this.retomarPrazos();
+  }
+
+  /**
+   * As interações com `nonce` (as que a web acompanha) ainda sem resposta e
+   * sem invalidação (`expiresAt` no futuro): prazo vencido → a mesma escrita
+   * condicional de `vencerSemResposta` e o `failed`; prazo ainda correndo (a
+   * instância caiu há menos de 3 s) → o relógio volta com o que falta.
+   *
+   * Com várias instâncias, uma que sobe pode pegar interação cujo relógio vive
+   * noutra: quem decide continua sendo a escrita condicional, então sai um
+   * `failed` só. Interação que já levou `bot_offline` na hora também não tem
+   * `respondedAt` e pode receber um segundo `failed`; a web o ignora, porque
+   * aquele `nonce` já não está pendente.
+   */
+  async retomarPrazos(agora: Date = new Date()): Promise<void> {
+    try {
+      const pendentes = await this.prisma.interaction.findMany({
+        where: { respondedAt: null, nonce: { not: null }, expiresAt: { gt: agora } },
+        select: {
+          id: true,
+          userId: true,
+          channelId: true,
+          messageId: true,
+          ephemeralMessageId: true,
+          customId: true,
+          nonce: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: "asc" },
+        // teto de segurança: a janela é de 15 min, e numa queda normal cabem
+        // poucas interações em voo
+        take: 500,
+      });
+      for (const p of pendentes) {
+        if (!p.nonce) continue;
+        const evento: EventoDaInteracao = {
+          interactionId: p.id,
+          nonce: p.nonce,
+          channelId: p.channelId,
+          messageId: p.messageId ?? p.ephemeralMessageId ?? null,
+          customId: p.customId ?? null,
+        };
+        const falta = p.createdAt.getTime() + PRAZO_DA_RESPOSTA_DO_BOT_MS - agora.getTime();
+        if (falta > 0) this.agendarPrazo(evento, p.userId, falta);
+        else await this.vencerSemResposta(evento, p.userId);
+      }
+    } catch (erro) {
+      this.log.error(`falha ao retomar os prazos das interações: ${String(erro)}`);
+    }
+  }
+
   onModuleDestroy(): void {
     for (const relogio of this.prazos.values()) clearTimeout(relogio);
     this.prazos.clear();
@@ -1065,9 +1153,17 @@ export class InteractionsService implements OnModuleDestroy {
     this.realtime.emitToUser(usuarioId, WS_EVENTS.INTERACTION_FAILED, falha);
   }
 
-  /** O `EventoDaInteracao` de uma interação já autenticada pelo token. */
+  /**
+   * O `EventoDaInteracao` de uma interação já autenticada pelo token.
+   *
+   * Vale para toda interação com `nonce` menos o autocomplete, que tem evento
+   * próprio (`interaction.autocomplete`). O comando de barra entra desde que o
+   * `POST` dele passou a mandar `nonce` (`interacaoCriarSchema`); o de cliente
+   * antigo, sem `nonce`, continua sem evento.
+   */
   private eventoDe(interacao: InteracaoAutenticada): EventoDaInteracao | null {
-    if (!ehInteracaoDeComponente(interacao.tipo ?? TIPO_DE_INTERACAO.APPLICATION_COMMAND)) return null;
+    const tipo = interacao.tipo ?? TIPO_DE_INTERACAO.APPLICATION_COMMAND;
+    if (tipo === TIPO_DE_INTERACAO.APPLICATION_COMMAND_AUTOCOMPLETE) return null;
     if (!interacao.nonce) return null;
     return {
       interactionId: interacao.id,
@@ -1079,8 +1175,8 @@ export class InteractionsService implements OnModuleDestroy {
   }
 
   /**
-   * `interaction.success` para quem clicou — só em interação 3 e 5 (as que a
-   * web acompanha pelo `nonce`). A mensagem em si chega pelo `message.*` de
+   * `interaction.success` para quem clicou — em interação 2, 3 e 5 que tenham
+   * `nonce` (as que a web acompanha). A mensagem em si chega pelo `message.*` de
    * sempre; isto só tira o "carregando" do componente.
    */
   private emitirSucesso(interacao: InteracaoAutenticada): void {
@@ -1217,7 +1313,15 @@ export class InteractionsService implements OnModuleDestroy {
     // um `update()` num comando de barra é defeito do bot, e ele ainda pode
     // responder direito depois. O código é o do corpo inválido porque o Discord
     // responde com 400 (o `code` exato dele não foi conferido — ver a entrega).
-    const temOrigem = Boolean(interacao.messageId || interacao.ephemeralMessageId);
+    // A interação 3 **nasce** com mensagem de origem (`clicarComponente` não grava
+    // sem ela); os dois ids nulos aqui querem dizer que ela foi apagada depois
+    // (`onDelete: SetNull`). Conta como "tem origem" para o 7 chegar ao
+    // `atualizarOrigem` e levar o 10008 Unknown Message do Discord, e não o
+    // 50035 de callback que não vale para o tipo. No 5 (envio de modal) os ids
+    // nulos são também o modal de comando, que de fato não tem origem.
+    const temOrigem =
+      Boolean(interacao.messageId || interacao.ephemeralMessageId) ||
+      tipoDaInteracao === TIPO_DE_INTERACAO.MESSAGE_COMPONENT;
     if (!callbackPermitido(tipoDaInteracao, tipo, temOrigem)) {
       throw corpoInvalido({
         type: {
@@ -1360,8 +1464,8 @@ export class InteractionsService implements OnModuleDestroy {
    * **só** para a sala de quem interagiu; as outras sessões dessa pessoa o
    * ignoram porque não têm o `nonce`.
    *
-   * Num comando de barra o `nonce` é vazio: a rota do comando ainda não manda
-   * um (ver a entrega do cartão 3a), então a web não tem com que casar.
+   * Num comando de barra o `nonce` é o do `POST /channels/:id/interactions`
+   * (`interacaoCriarSchema`); vazio só quando o cliente é antigo e não o mandou.
    */
   private async abrirModal(
     interacao: InteracaoAutenticada,
@@ -1533,6 +1637,9 @@ export class InteractionsService implements OnModuleDestroy {
     ) {
       const origem = await this.origemDaInteracao(interacao);
       if (origem) return origem;
+      // a interação 3 nasceu com origem: sem ela, a mensagem foi apagada, e o
+      // Discord responde 10008 (o 5 sem origem é o modal de comando: 10062)
+      if (interacao.tipo === TIPO_DE_INTERACAO.MESSAGE_COMPONENT) throw mensagemDesconhecida();
     }
     throw interacaoDesconhecida();
   }
@@ -1985,12 +2092,24 @@ export class InteractionsService implements OnModuleDestroy {
       }
 
       const alvo = String(opcao.valor);
-      const snowflake = await this.resolver(opcao.tipo, alvo, guildId, {
-        usuarios,
-        membros,
-        canais,
-        cargos,
-      });
+      const resolvido = { usuarios, membros, canais, cargos };
+      if (emFoco !== undefined) {
+        // ── api-interacoes ── No autocomplete a opção 6/7/8 **não focada** pode
+        // estar pela metade (o composer ainda não escolheu o alvo) ou apontar
+        // para quem saiu: recusar com 400 tirava as sugestões da opção em foco
+        // por causa de outra. Ela é **omitida**, e não mandada com o cuid bruto:
+        // sem a entrada no `resolved`, o `_get_namespace` do discord.py levanta
+        // dentro da lib; ausente, a lib a lê como "não preenchida".
+        const snowflake = await this.resolver(opcao.tipo, alvo, guildId, resolvido).catch(
+          (erro: unknown) => {
+            if (erro instanceof BadRequestException) return null;
+            throw erro;
+          },
+        );
+        if (snowflake !== null) saida.push({ name: opcao.nome, type: opcao.tipo, value: snowflake });
+        continue;
+      }
+      const snowflake = await this.resolver(opcao.tipo, alvo, guildId, resolvido);
       saida.push({ name: opcao.nome, type: opcao.tipo, value: snowflake });
     }
 
@@ -2204,21 +2323,6 @@ function campoDoLabel(c: ModalDeBot["components"][number]) {
     return input && input.type === TIPO_DE_COMPONENTE.TEXT_INPUT ? input : null;
   }
   return null;
-}
-
-/**
- * A URL de um anexo enviado num modal, como o bot a recebe no `resolved`.
- *
- * É a mesma regra de `paraLinhaDeAnexo` (`discord-compat/dados.service.ts`),
- * com a mesma limitação declarada lá: sem o `StorageService` na casca, anexo do
- * bucket sai pela URL pública do R2 quando existe e, senão, pelo proxy da API
- * sem o token curto. Copiada e não importada porque a função de lá não é
- * exportada e o arquivo não é deste cartão (ver a entrega).
- */
-function urlDoAnexoParaBot(a: { id: string; key: string; externalUrl: string | null }): string {
-  const base = process.env.R2_PUBLIC_BASE_URL?.replace(/\/+$/, "");
-  const api = (process.env.API_PUBLIC_URL ?? "http://localhost:3333").replace(/\/+$/, "");
-  return a.externalUrl ?? (base ? `${base}/${a.key}` : `${api}/api/uploads/file/${a.id}`);
 }
 
 /**

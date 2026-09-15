@@ -274,6 +274,74 @@ describe("conferirEnvioDoModal", () => {
   });
 });
 
+// ── api-interacoes ── o `required` padrão, tipo a tipo ──────────
+//
+// `developers/components/reference.mdx` (discord-api-docs, conferido em
+// 2026-09-14): "defaults to `true`" no text input (4), nos selects (3, 5–8), no
+// file upload (19), no radio group (21) e no checkbox group (22). O checkbox
+// avulso (23) não tem `required`.
+
+/** Um modal com um campo só, dentro de um `Label`. */
+function modalCom(campo: Record<string, unknown>): ModalDeBot {
+  return {
+    custom_id: "m",
+    title: "M",
+    components: [{ type: 18, id: 1, label: "Campo", component: { id: 2, custom_id: "c", ...campo } }],
+  } as unknown as ModalDeBot;
+}
+
+const OPCOES = [
+  { value: "a", label: "A" },
+  { value: "b", label: "B" },
+];
+
+const CAMPOS_COM_REQUIRED: Array<[string, Record<string, unknown>]> = [
+  ["4 text input", { type: 4, style: 1 }],
+  ["3 select de texto", { type: 3, options: OPCOES }],
+  ["5 select de usuário", { type: 5 }],
+  ["6 select de cargo", { type: 6 }],
+  ["7 select mencionável", { type: 7 }],
+  ["8 select de canal", { type: 8 }],
+  ["19 file upload", { type: 19 }],
+  ["21 radio group", { type: 21, options: OPCOES }],
+  ["22 checkbox group", { type: 22, options: OPCOES }],
+];
+
+describe("conferirEnvioDoModal — `required` padrão por tipo", () => {
+  it.each(CAMPOS_COM_REQUIRED)("%s: sem a chave `required`, vazio é 400", (_nome, campo) => {
+    expect(conferirEnvioDoModal(modalCom(campo), [])).toMatchObject({
+      ok: false,
+      recusa: { status: 400, mensagem: expect.stringContaining("obrigatório") },
+    });
+  });
+
+  it.each(CAMPOS_COM_REQUIRED)("%s: com `required: false`, vazio passa", (_nome, campo) => {
+    expect(conferirEnvioDoModal(modalCom({ ...campo, required: false }), [])).toMatchObject({ ok: true });
+  });
+
+  it("23 checkbox não tem `required`: não enviado chega `false`, nunca é recusa", () => {
+    expect(conferirEnvioDoModal(modalCom({ type: 23 }), [])).toEqual({
+      ok: true,
+      components: [{ type: 18, id: 1, component: { type: 23, id: 2, custom_id: "c", value: false } }],
+    });
+  });
+
+  it("22 checkbox group: `required` manda mesmo com `min_values: 0`", () => {
+    expect(conferirEnvioDoModal(modalCom({ type: 22, options: OPCOES, min_values: 0 }), [])).toMatchObject({
+      ok: false,
+    });
+  });
+
+  it("22 checkbox group: `min_values` padrão 1 e `max_values` padrão = número de opções", () => {
+    const modal = modalCom({ type: 22, options: OPCOES, required: false });
+    const envio = (values: string[]) => [
+      { type: 18 as const, id: 1, component: { type: 22 as const, id: 2, custom_id: "c", values } },
+    ];
+    expect(conferirEnvioDoModal(modal, envio(["a", "b"]))).toMatchObject({ ok: true });
+    expect(conferirEnvioDoModal(modal, envio(["a"]))).toMatchObject({ ok: true });
+  });
+});
+
 describe("arquivoAceito", () => {
   it("`image` casa pelo content-type; `.pdf` pela extensão; sem lista, tudo vale", () => {
     expect(arquivoAceito(["image"], { filename: "a.png", contentType: "image/png" })).toBe(true);

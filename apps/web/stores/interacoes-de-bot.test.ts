@@ -9,7 +9,10 @@ import type { ModalDeBotAbertoEvent, PublicUser } from "@streamz/shared";
  * 1. **O nonce é a chave**, não o id da interação: o evento do bot pode chegar
  *    antes da resposta HTTP, e só a sessão que disparou reage.
  * 2. **"Esta interação falhou" é por mensagem**, e some ao clicar de novo.
- * 3. **Resposta velha de autocomplete não sobrescreve a nova.**
+ * 3. **Resposta velha de autocomplete não sobrescreve a nova**, e o HTTP do
+ *    pedido velho é abortado sem virar "falhou".
+ * 4. **Falha e lista vazia são estados diferentes** (`autocomplete.falhou`).
+ * 5. **O comando de barra leva nonce**, e o modal que ele abre casa com a sessão.
  */
 
 const api = vi.hoisted(() => ({
@@ -23,9 +26,15 @@ const api = vi.hoisted(() => ({
     nonce: corpo.nonce,
     expiresAt: "2026-09-14T12:15:00.000Z",
   })),
-  pedirAutocompleteDeComando: vi.fn(async (_c: string, corpo: { nonce: string }) => ({
+  pedirAutocompleteDeComando: vi.fn(async (_c: string, corpo: { nonce: string }, _signal?: AbortSignal) => ({
     id: "i_3",
     nonce: corpo.nonce,
+    expiresAt: "2026-09-14T12:15:00.000Z",
+  })),
+  criarInteracao: vi.fn(async (_c: string, _corpo: { nonce?: string }) => ({
+    id: "i_4",
+    snowflake: "4000",
+    name: "relatar",
     expiresAt: "2026-09-14T12:15:00.000Z",
   })),
 }));
@@ -56,6 +65,7 @@ beforeEach(() => {
   api.clicarComponente.mockClear();
   api.enviarModalDeBot.mockClear();
   api.pedirAutocompleteDeComando.mockClear();
+  api.criarInteracao.mockClear();
 });
 
 afterEach(() => {
@@ -217,5 +227,112 @@ describe("autocomplete", () => {
       carregando: false,
       escolhas: [{ name: "Never Gonna Give You Up", value: "ngg" }],
     });
+  });
+
+  const opcoes = (valor: string) => [{ name: "musica", type: 3, value: valor, focused: true }];
+
+  it("resposta vazia não é falha; interaction.failed é", async () => {
+    await useInteracoesDeBot.getState().pedirAutocomplete("c_1", "cmd_1", opcoes("zzz"));
+    expect(useInteracoesDeBot.getState().autocomplete).toMatchObject({ carregando: true, falhou: false });
+    useInteracoesDeBot.getState().aoReceberAutocomplete({
+      interactionId: "i_a",
+      nonce: ultimoNonce(api.pedirAutocompleteDeComando),
+      choices: [],
+    });
+    expect(useInteracoesDeBot.getState().autocomplete).toMatchObject({ carregando: false, falhou: false, escolhas: [] });
+
+    await useInteracoesDeBot.getState().pedirAutocomplete("c_1", "cmd_1", opcoes("zzzz"));
+    useInteracoesDeBot.getState().aoFalhar({
+      interactionId: "i_b",
+      nonce: ultimoNonce(api.pedirAutocompleteDeComando),
+      channelId: "c_1",
+      messageId: null,
+      customId: null,
+      motivo: "sem_resposta",
+    });
+    expect(useInteracoesDeBot.getState().autocomplete).toMatchObject({ carregando: false, falhou: true, escolhas: [] });
+
+    // pedido novo limpa a marca
+    await useInteracoesDeBot.getState().pedirAutocomplete("c_1", "cmd_1", opcoes("zz"));
+    expect(useInteracoesDeBot.getState().autocomplete?.falhou).toBe(false);
+  });
+
+  it("a rota recusou e o relógio de segurança venceu: falhou", async () => {
+    api.pedirAutocompleteDeComando.mockRejectedValueOnce(new Error("Comando sem autocomplete"));
+    await useInteracoesDeBot.getState().pedirAutocomplete("c_1", "cmd_1", opcoes("a"));
+    expect(useInteracoesDeBot.getState().autocomplete).toMatchObject({ carregando: false, falhou: true });
+
+    await useInteracoesDeBot.getState().pedirAutocomplete("c_1", "cmd_1", opcoes("ab"));
+    vi.advanceTimersByTime(6_001);
+    expect(useInteracoesDeBot.getState().autocomplete).toMatchObject({ carregando: false, falhou: true });
+  });
+
+  it("pedido novo aborta o HTTP do anterior, e o aborto não conta como falha", async () => {
+    let sinalDoPrimeiro: AbortSignal | undefined;
+    api.pedirAutocompleteDeComando.mockImplementationOnce(
+      (_c: string, _corpo: { nonce: string }, signal?: AbortSignal) =>
+        new Promise<never>((_resolve, reject) => {
+          sinalDoPrimeiro = signal;
+          signal?.addEventListener("abort", () => {
+            const erro = new Error("The operation was aborted.");
+            erro.name = "AbortError";
+            reject(erro);
+          });
+        }),
+    );
+    const primeiro = useInteracoesDeBot.getState().pedirAutocomplete("c_1", "cmd_1", opcoes("nev"));
+    expect(sinalDoPrimeiro?.aborted).toBe(false);
+
+    await useInteracoesDeBot.getState().pedirAutocomplete("c_1", "cmd_1", opcoes("never"));
+    await primeiro;
+
+    expect(sinalDoPrimeiro?.aborted).toBe(true);
+    expect(useInteracoesDeBot.getState().autocomplete).toMatchObject({ carregando: true, falhou: false });
+    // o segundo pedido recebeu um sinal próprio, ainda de pé
+    const sinalDoSegundo = api.pedirAutocompleteDeComando.mock.calls.at(-1)?.[2] as AbortSignal | undefined;
+    expect(sinalDoSegundo?.aborted).toBe(false);
+  });
+});
+
+describe("comando de barra", () => {
+  const modalDe = (nonce: string): ModalDeBotAbertoEvent => ({
+    interactionId: "i_4",
+    nonce,
+    channelId: "c_1",
+    applicationId: "app_1",
+    bot: BOT,
+    modal: {
+      custom_id: "relato",
+      title: "Relatar",
+      components: [{ type: 18, id: 1, label: "O quê?", component: { type: 4, id: 2, custom_id: "t", style: 2 } }],
+    },
+  });
+
+  it("manda o nonce no corpo e o modal do callback 9 abre nesta sessão", async () => {
+    await useInteracoesDeBot.getState().usarComando("c_1", "cmd_relatar", []);
+    expect(api.criarInteracao).toHaveBeenCalledWith("c_1", {
+      commandId: "cmd_relatar",
+      options: [],
+      nonce: expect.any(String),
+    });
+    const nonce = (api.criarInteracao.mock.calls.at(-1)?.[1] as { nonce: string }).nonce;
+    expect(useInteracoesDeBot.getState().pendentes[nonce]).toMatchObject({ tipo: "comando", channelId: "c_1" });
+
+    useInteracoesDeBot.getState().aoAbrirModal(modalDe(nonce));
+    expect(useInteracoesDeBot.getState().modal).toMatchObject({ interactionId: "i_4", channelId: "c_1" });
+    expect(useInteracoesDeBot.getState().pendentes[nonce]).toBeUndefined();
+  });
+
+  it("a rota recusou: rejeita para o composer avisar e não deixa pendente", async () => {
+    api.criarInteracao.mockRejectedValueOnce(new Error("Sem permissão"));
+    await expect(useInteracoesDeBot.getState().usarComando("c_1", "cmd_relatar", [])).rejects.toThrow("Sem permissão");
+    expect(useInteracoesDeBot.getState().pendentes).toEqual({});
+  });
+
+  it("sem modal, o pendente sai pelo relógio de segurança sem marcar falha", async () => {
+    await useInteracoesDeBot.getState().usarComando("c_1", "cmd_relatar", []);
+    vi.advanceTimersByTime(6_001);
+    expect(useInteracoesDeBot.getState().pendentes).toEqual({});
+    expect(useInteracoesDeBot.getState().falhas).toEqual({});
   });
 });

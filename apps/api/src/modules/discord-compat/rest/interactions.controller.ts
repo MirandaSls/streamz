@@ -1,24 +1,30 @@
 import {
   Body,
   Controller,
+  Inject,
+  Optional,
   Param,
   Post,
   Query,
   Res,
+  UploadedFiles,
   UseFilters,
   UseInterceptors,
 } from "@nestjs/common";
+import { AnyFilesInterceptor } from "@nestjs/platform-express";
 import { SkipThrottle } from "@nestjs/throttler";
 import { zodBody } from "../../../common/zod.pipe";
 import { InteractionsService } from "../../interactions/interactions.service";
 import type { InteracaoAutenticada } from "../../interactions/tipos";
 import { FLAG_EFEMERA, TIPO_DE_CALLBACK } from "../../interactions/tipos";
+import { UploadsService } from "../../uploads/uploads.service";
 import { aplicarContentTypeDoDiscord } from "../content-type";
 import { FiltroDeErrosDoDiscord, interacaoDesconhecida } from "../erros";
 import { RateLimitDoDiscordInterceptor } from "../rate-limit.interceptor";
 import type { JsonDoDiscord } from "../tipos";
 import { mensagemParaDiscord } from "../traducao/mensagem";
-import { corpoDeCallbackSchema, type CorpoDeCallback } from "./corpos-f3";
+import { LIMITES_DO_MULTIPART, PayloadJsonPipe, type ArquivoDoMultipart } from "./corpos";
+import { anexarArquivosAoCorpo, corpoDeCallbackSchema, type CorpoDeCallback } from "./corpos-f3";
 
 /**
  * O mínimo do `Response` do Express que este controller usa — mesmo motivo do
@@ -76,24 +82,42 @@ interface RespostaHttp {
 @Controller("v10/interactions")
 export class InteractionCallbackCompatController {
   // ── onda 3 ── sem o `DadosDeCompatService`: a mensagem da resposta sai por
-  // `InteractionsService.origemParaCompat`, que junta embeds e componentes à
-  // linha da compat (a `mensagemPorCuid` sozinha ainda os devolve vazios)
-  constructor(protected readonly interacoes: InteractionsService) {}
+  // `InteractionsService.origemParaCompat`. (Desde a rodada de correção a
+  // `mensagemPorCuid` já traz embeds e componentes na própria linha.)
+  constructor(
+    protected readonly interacoes: InteractionsService,
+    // ── rodada de correção ── o upload multipart do `reply({ files })`.
+    // `@Optional` porque o `UploadsModule` não exporta o service e o
+    // `InteractionsModule` (do coordenador) não o importa; desligado, arquivo
+    // leva 501 e o callback sem arquivo segue igual.
+    @Optional() @Inject(UploadsService) protected readonly uploads?: UploadsService,
+  ) {}
 
   @Post(":id/:token/callback")
+  // ── rodada de correção ── `multipart/form-data` (`payload_json` + `files[n]`).
+  // O multer só age em multipart; o `{ "type": 5 }` do `deferReply()` passa direto.
+  @UseInterceptors(AnyFilesInterceptor({ limits: LIMITES_DO_MULTIPART }))
   async callback(
     @Param("id") id: string,
     @Param("token") token: string,
     @Query("with_response") comResposta: string | undefined,
     // `data` fica intacto até o `responder`: é o único lugar onde `embeds`,
-    // `components` e `flags` existem, e o pipe global os comeria num DTO
-    @Body(zodBody(corpoDeCallbackSchema)) corpo: CorpoDeCallback,
+    // `components` e `flags` existem, e o pipe global os comeria num DTO. O
+    // `PayloadJsonPipe` desembrulha o corpo do multipart antes do zod.
+    @Body(new PayloadJsonPipe(), zodBody(corpoDeCallbackSchema)) corpo: CorpoDeCallback,
+    @UploadedFiles() arquivos: ArquivoDoMultipart[] | undefined,
     // `@Res()` cru porque as duas saídas têm forma diferente (204 sem corpo e
     // 200 com JSON) e o Nest não deixa variar o status sem ele
     @Res() resposta: RespostaHttp,
   ): Promise<void> {
     const interacao = await this.resolver(id, token);
-    await this.interacoes.responder(interacao, corpo.type, corpo.data);
+    // os arquivos vão para `data.attachment_ids`, e só depois de o token
+    // passar: interação inválida não grava nada no bucket
+    const data =
+      arquivos?.length && corpo.data
+        ? await anexarArquivosAoCorpo(corpo.data, arquivos, this.uploads, interacao.botUserId)
+        : corpo.data;
+    await this.interacoes.responder(interacao, corpo.type, data);
 
     // o `Content-Type` sem charset também aqui: é o §5, e o `json_or_text` do
     // discord.py compara o cabeçalho por igualdade exata

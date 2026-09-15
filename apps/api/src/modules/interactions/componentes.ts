@@ -282,9 +282,12 @@ function campoDoEnvio(
   }
   const id = definido.id ?? 0;
   const custom_id = definido.custom_id;
-  // "defaults to true" em todos os campos que têm `required` (`components/reference.mdx`).
-  // Não é `"required" in definido`: o bot quase nunca manda a chave, e ausente
-  // quer dizer obrigatório. O checkbox avulso (23) não tem `required`.
+  // "defaults to `true`" em **todos** os campos que têm `required`, conferido
+  // tipo a tipo em `developers/components/reference.mdx` (discord-api-docs,
+  // 2026-09-14): text input 4, selects 3 e 5–8, file upload 19, radio group 21
+  // e checkbox group 22. O checkbox avulso (23) não tem `required` ("you can't
+  // set a checkbox as required"). Não é `"required" in definido`: o bot quase
+  // nunca manda a chave, e ausente quer dizer obrigatório.
   const obrigatorio =
     definido.type !== 23 && (definido as { required?: boolean }).required !== false;
 
@@ -343,12 +346,15 @@ function campoDoEnvio(
       if (new Set(values).size !== values.length) return recusa(`Campo ${custom_id}: valor repetido`);
       const validos = new Set(definido.options.map((o) => o.value));
       if (values.some((v) => !validos.has(v))) return recusa(`Campo ${custom_id}: valor fora das opções`);
-      if (values.length === 0 && !obrigatorio) {
+      if (values.length === 0) {
+        // `required` manda mesmo com `min_values: 0` (combinação que o Discord
+        // recusa na criação do modal), como nos selects e no upload
+        if (obrigatorio) return recusa(`Campo ${custom_id}: obrigatório`);
         return { ok: true, campo: { type: 22, id, custom_id, values: [] } };
       }
-      // "não medido": o padrão de `min_values` do checkbox group não foi
-      // conferido na documentação; vale 1 quando obrigatório, como no select
-      const min = definido.min_values ?? (obrigatorio ? 1 : 0);
+      // reference.mdx, Checkbox Group Structure: `min_values` "defaults to 1",
+      // `max_values` "defaults to the number of options"
+      const min = definido.min_values ?? 1;
       const max = definido.max_values ?? definido.options.length;
       if (values.length < min || values.length > max) {
         return recusa(`Campo ${custom_id}: marque entre ${min} e ${max}`);

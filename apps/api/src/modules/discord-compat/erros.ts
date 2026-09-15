@@ -85,10 +85,46 @@ export const CODIGO = {
    */
   MENSAGEM_ANTIGA_DEMAIS: 50034,
   NAO_IMPLEMENTADO: 20012,
+  /**
+   * ── rodada de correção ── `The request body contains invalid JSON.` O
+   * `payload_json` de um multipart que não é um objeto JSON (ver
+   * `PayloadJsonPipe`, `rest/corpos.ts`).
+   */
+  JSON_INVALIDO: 50109,
 } as const;
 
-/** Detalhe por campo do 50035, no formato do Discord. */
-export type ErrosPorCampo = Record<string, { _errors: { code: string; message: string }[] }>;
+/** Um erro de um campo: `{ "code": "BASE_TYPE_MAX_LENGTH", "message": "…" }`. */
+export interface ErroDeCampo {
+  code: string;
+  message: string;
+}
+
+/**
+ * Detalhe por campo do 50035, no formato do Discord — **recursivo**.
+ *
+ * O `errors` real acompanha o caminho do campo, um nível por segmento, e os
+ * índices de lista viram chave de texto:
+ *
+ * ```json
+ * { "embeds": { "0": { "title": { "_errors": [{ "code": "BASE_TYPE_MAX_LENGTH", "message": "…" }] } } } }
+ * ```
+ *
+ * O `DiscordAPIError` do `@discordjs/rest` percorre esse objeto até achar os
+ * `_errors` para montar "embeds[0].title: …". A forma antiga (`Record` de um
+ * nível só) mentia para o compilador e obrigava um `as unknown as` em quem
+ * montava o aninhamento.
+ *
+ * Por que interface com o índice largo, e não o
+ * `{ _errors?: ErroDeCampo[] } & { [campo: string]: ErrosPorCampo }` óbvio: na
+ * interseção, o próprio `_errors` também precisa caber no índice (`ErrosPorCampo`),
+ * e uma lista não cabe — nenhum literal com `_errors` compilaria. O índice
+ * aceitando `ErroDeCampo[]` é o que deixa a chave especial conviver com as
+ * chaves de campo.
+ */
+export interface ErrosPorCampo {
+  _errors?: ErroDeCampo[];
+  [campo: string]: ErrosPorCampo | ErroDeCampo[] | undefined;
+}
 
 /**
  * Exceção que o Nest serializa exatamente como o Discord serializa.
@@ -162,6 +198,14 @@ export const semPermissao = () =>
 
 export const corpoInvalido = (errors?: ErrosPorCampo) =>
   new ErroDoDiscord(HttpStatus.BAD_REQUEST, CODIGO.CORPO_INVALIDO, "Invalid Form Body", errors);
+
+/** ── rodada de correção ── 400 `50109`: `payload_json` que não é JSON de objeto. */
+export const jsonInvalido = () =>
+  new ErroDoDiscord(
+    HttpStatus.BAD_REQUEST,
+    CODIGO.JSON_INVALIDO,
+    "The request body contains invalid JSON.",
+  );
 
 /**
  * ── F3 ── 404 `10062`: o token do caminho não achou interação nenhuma.

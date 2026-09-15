@@ -174,10 +174,54 @@ function converterOpcao(opcao: OpcaoDeComando, bruto: string): OpcaoDeInteracao 
   return { name: opcao.name, type: opcao.type, value: texto };
 }
 
-/** Tira as aspas de `"valor com espaço"`, quando elas embrulham o valor inteiro. */
+/**
+ * ── aspas ──
+ *
+ * O campo é texto, então um valor com espaço vai entre aspas
+ * (`musica:"never gonna"`). Até a rodada de correção nada era escapado, e o
+ * `name` de uma escolha do bot é livre: `Diga "oi"` ou `Remix volume:11` no
+ * campo confundiam o parser — o `volume:` de dentro virava marca de opção e o
+ * valor era cortado ao meio. A regra agora:
+ *
+ * - `aplicarValorDeOpcao` põe aspas quando o valor tem espaço **ou** começa com
+ *   aspas, e dentro delas escapa `\` e `"` com barra invertida;
+ * - um valor entre aspas termina na primeira `"` **não escapada seguida de
+ *   espaço ou do fim** — o que também tolera aspas digitadas à mão no meio;
+ * - `marcasDeOpcoes` não procura `nome:` dentro de um valor entre aspas
+ *   fechado. Aspas abertas e ainda não fechadas (no meio da digitação) não
+ *   protegem nada: a marca seguinte continua valendo, como antes.
+ */
+
+/** A `"` em `i` está escapada (número ímpar de `\` logo antes)? */
+function escapada(texto: string, i: number): boolean {
+  let barras = 0;
+  for (let j = i - 1; j >= 0 && texto[j] === "\\"; j--) barras++;
+  return barras % 2 === 1;
+}
+
+/**
+ * Onde fecha o valor entre aspas que abre em `abre`, ou -1 se não fecha: a
+ * primeira `"` não escapada seguida de espaço ou do fim do texto.
+ */
+function fechamentoDasAspas(texto: string, abre: number): number {
+  for (let i = abre + 1; i < texto.length; i++) {
+    if (texto[i] !== '"' || escapada(texto, i)) continue;
+    if (i + 1 === texto.length || /\s/.test(texto[i + 1])) return i;
+  }
+  return -1;
+}
+
+/** Tira as aspas de `"valor com espaço"`, quando elas embrulham o valor inteiro, e desfaz o escape. */
 function semAspas(valor: string): string {
   const v = valor.trim();
-  return v.length >= 2 && v.startsWith('"') && v.endsWith('"') ? v.slice(1, -1) : v;
+  if (v.length < 2 || !v.startsWith('"') || fechamentoDasAspas(v, 0) !== v.length - 1) return v;
+  return v.slice(1, -1).replace(/\\(["\\])/g, "$1");
+}
+
+/** O valor como ele entra no campo: entre aspas (e escapado) quando precisa. */
+function comAspas(valor: string): string {
+  if (!/\s/.test(valor) && !valor.startsWith('"')) return valor;
+  return `"${valor.replace(/["\\]/g, "\\$&")}"`;
 }
 
 /**
@@ -200,11 +244,19 @@ interface MarcaDeOpcao {
 function marcasDeOpcoes(argumento: string, opcoes: readonly OpcaoDeComando[]): MarcaDeOpcao[] {
   const declaradas = new Set(opcoes.map((o) => o.name.toLowerCase()));
   const marcas: MarcaDeOpcao[] = [];
+  /** fim do último valor entre aspas fechado: `nome:` antes disso é texto do valor. */
+  let protegidoAte = 0;
   const re = /(^|\s)([a-z0-9_-]{1,32}):/g;
   for (let m = re.exec(argumento); m; m = re.exec(argumento)) {
     const nome = m[2].toLowerCase();
-    if (!declaradas.has(nome)) continue;
-    marcas.push({ nome, inicio: m.index + m[1].length, fim: m.index + m[0].length });
+    const inicio = m.index + m[1].length;
+    if (!declaradas.has(nome) || inicio < protegidoAte) continue;
+    const fim = m.index + m[0].length;
+    marcas.push({ nome, inicio, fim });
+    if (argumento[fim] === '"') {
+      const fecha = fechamentoDasAspas(argumento, fim);
+      if (fecha >= 0) protegidoAte = fecha + 1;
+    }
   }
   return marcas;
 }
@@ -477,20 +529,22 @@ function deAppListavel(c: ComandoDeApp): ComandoListavel {
 /**
  * As seções do seletor para o termo digitado depois do `/`.
  *
- * Nativos primeiro (é a mesma precedência do `interpretarComando`), depois um
- * grupo por app, na ordem em que o servidor os devolveu. O comando de bot que
- * colide com um nativo some pelo mesmo motivo de `sugestoesDeComandosDeApp`.
- * Seção vazia não entra — o trilho não pode ter ícone que leva a nada.
+ * Um grupo por app, na ordem em que o servidor os devolveu, e os integrados
+ * **por último**: no Discord (`desenvolvedores/imagens/comandos/
+ * lancador-de-comandos-desktop.png`) o trilho tem os apps em cima (y≈145–330),
+ * o separador (y≈372) e só então o ícone dos integrados (y 397–423); o CSS
+ * (`css-bruto/116815…css`) só tem `.builtInSeparator_b1e4f3{border-bottom:1px
+ * solid var(--border-subtle);margin:8px 0}`, o separador **antes** deles. É só
+ * ordem de exibição: a precedência de nome do `interpretarComando` (o nativo
+ * ganha) não muda, e o comando de bot que colide com um nativo continua sumindo
+ * pelo mesmo motivo de `sugestoesDeComandosDeApp`. Seção vazia não entra — o
+ * trilho não pode ter ícone que leva a nada.
  *
  * Não existe "Usados com frequência": o Discord abre com ela, mas o Streamz não
  * guarda uso de comando, e uma seção inventada a partir de nada seria mentira.
  */
 export function agruparComandos(termo: string, comandosDeApp: readonly ComandoDeApp[]): GrupoDeComandos[] {
   const grupos: GrupoDeComandos[] = [];
-  const nativos = buscarComandos(termo).map(nativoListavel);
-  if (nativos.length > 0) {
-    grupos.push({ id: GRUPO_NATIVOS, nome: "Integrados", botUser: null, comandos: nativos });
-  }
   const q = termo.trim().toLowerCase();
   const nomesNativos = new Set(COMANDOS_BARRA.map((c) => c.nome));
   const porApp = new Map<string, GrupoDeComandos>();
@@ -503,6 +557,10 @@ export function agruparComandos(termo: string, comandosDeApp: readonly ComandoDe
       grupos.push(grupo);
     }
     grupo.comandos.push(deAppListavel(c));
+  }
+  const nativos = buscarComandos(termo).map(nativoListavel);
+  if (nativos.length > 0) {
+    grupos.push({ id: GRUPO_NATIVOS, nome: "Integrados", botUser: null, comandos: nativos });
   }
   return grupos;
 }
@@ -638,8 +696,8 @@ export function estadoDoComando(
 /**
  * Troca o valor da opção ativa pelo escolhido na lista e, se ainda faltar uma
  * obrigatória, já escreve o `nome:` dela — o Tab do Discord, que pula para a
- * próxima opção. Valor com espaço vai entre aspas, que `semAspas` tira na hora
- * de interpretar.
+ * próxima opção. Valor com espaço (ou que começa com aspas) vai entre aspas e
+ * escapado (`comAspas`), que `semAspas` desfaz na hora de interpretar.
  */
 export function aplicarValorDeOpcao(
   texto: string,
@@ -648,7 +706,7 @@ export function aplicarValorDeOpcao(
   valor: string,
 ): { texto: string; caret: number } {
   const cursor = caret < 0 ? texto.length : caret;
-  const escrito = /\s/.test(valor) && !valor.startsWith('"') ? `"${valor}"` : valor;
+  const escrito = comAspas(valor);
   const preenchidas = new Set(estado.preenchidas);
   if (estado.ativa) preenchidas.add(estado.ativa.name.toLowerCase());
   const proxima = estado.comando.nativo

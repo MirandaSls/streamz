@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { ComandoDeApp, PublicUser } from "@streamz/shared";
 import { aplicarEscolha, detectarGatilho, estadoDaListaDoBot, mover } from "../composer-autocomplete";
 import {
+  GRUPO_NATIVOS,
+  agruparComandos,
+  aplicarValorDeOpcao,
   buscarComandos,
   chaveDeEscolha,
   estadoDoComando,
@@ -295,22 +298,112 @@ describe("interpretarComando com escolhas do autocomplete", () => {
 });
 
 describe("estadoDaListaDoBot", () => {
-  const nunca = () => false;
-  const sempre = () => true;
-  const base = { chave: "c:musica", nonce: "n1", carregando: false, escolhas: [] as unknown[] };
+  const base = { chave: "c:musica", carregando: false, falhou: false, escolhas: [] as unknown[] };
 
   it("carregando enquanto a store não tem a opção pedida", () => {
-    expect(estadoDaListaDoBot("c:musica", null, nunca)).toBe("carregando");
-    expect(estadoDaListaDoBot("c:musica", { ...base, chave: "c:volume" }, sempre)).toBe("carregando");
-    expect(estadoDaListaDoBot("c:musica", { ...base, carregando: true }, nunca)).toBe("carregando");
+    expect(estadoDaListaDoBot("c:musica", null)).toBe("carregando");
+    expect(estadoDaListaDoBot("c:musica", { ...base, chave: "c:volume", falhou: true })).toBe("carregando");
+    expect(estadoDaListaDoBot("c:musica", { ...base, carregando: true })).toBe("carregando");
   });
 
   it("com escolhas na mão mostra a lista, mesmo esperando o pedido novo", () => {
-    expect(estadoDaListaDoBot("c:musica", { ...base, carregando: true, escolhas: [{}] }, nunca)).toBe("pronto");
+    expect(estadoDaListaDoBot("c:musica", { ...base, carregando: true, escolhas: [{}] })).toBe("pronto");
   });
 
-  it("vazio quando o bot respondeu sem nada; falhou quando não respondeu", () => {
-    expect(estadoDaListaDoBot("c:musica", base, (n) => n === "n1")).toBe("vazio");
-    expect(estadoDaListaDoBot("c:musica", base, nunca)).toBe("falhou");
+  it("vazio quando o bot respondeu sem nada; falhou quando a store marcou falha", () => {
+    expect(estadoDaListaDoBot("c:musica", base)).toBe("vazio");
+    expect(estadoDaListaDoBot("c:musica", { ...base, falhou: true })).toBe("falhou");
+  });
+});
+
+// ── rodada de correção · aspas no name de escolha do bot ────────────────────
+//
+// O `name` que o bot devolve é livre. Antes nada era escapado: um `volume:`
+// dentro do nome virava marca de opção e cortava o valor, e aspas no nome não
+// voltavam iguais — a escolha feita deixava de casar e o bot recebia o texto em
+// vez do `value`.
+
+/** Escolhe `nome` na opção `musica` a partir de `/tocar musica:`. */
+function escolherMusica(nome: string) {
+  const texto = "/tocar musica:";
+  const estado = estadoDoComando(texto, texto.length, [TOCAR]);
+  if (!estado) throw new Error("sem estado");
+  return aplicarValorDeOpcao(texto, texto.length, estado, nome);
+}
+
+describe("aspas e nome:valor dentro do name da escolha", () => {
+  it("aspas no nome são escapadas e voltam iguais", () => {
+    const r = escolherMusica('Diga "oi" agora');
+    expect(r.texto).toBe('/tocar musica:"Diga \\"oi\\" agora" ');
+    expect(interpretarComando(r.texto, [TOCAR])).toEqual({
+      tipo: "interacao",
+      commandId: "cmd-tocar",
+      opcoes: [{ name: "musica", type: 3, value: 'Diga "oi" agora' }],
+    });
+    const escolhas = new Map([[chaveDeEscolha("cmd-tocar", "musica"), { name: 'Diga "oi" agora', value: "id-oi" }]]);
+    expect(interpretarComando(r.texto, [TOCAR], escolhas)).toEqual({
+      tipo: "interacao",
+      commandId: "cmd-tocar",
+      opcoes: [{ name: "musica", type: 3, value: "id-oi" }],
+    });
+  });
+
+  it("nome que começa e termina com aspas, sem espaço, também vai embrulhado", () => {
+    const r = escolherMusica('"Hino"');
+    expect(r.texto).toBe('/tocar musica:"\\"Hino\\"" ');
+    const escolhas = new Map([[chaveDeEscolha("cmd-tocar", "musica"), { name: '"Hino"', value: "id-hino" }]]);
+    expect(interpretarComando(r.texto, [TOCAR], escolhas)).toMatchObject({
+      opcoes: [{ name: "musica", type: 3, value: "id-hino" }],
+    });
+  });
+
+  it("`outra:` dentro do nome não vira marca de opção", () => {
+    const nome = "Remix volume:11 edição";
+    const r = escolherMusica(nome);
+    expect(r.texto).toBe('/tocar musica:"Remix volume:11 edição" ');
+    expect(estadoDoComando(r.texto, r.caret, [TOCAR])?.marcadas).toEqual(new Set(["musica"]));
+    expect(interpretarComando(r.texto, [TOCAR])).toEqual({
+      tipo: "interacao",
+      commandId: "cmd-tocar",
+      opcoes: [{ name: "musica", type: 3, value: nome }],
+    });
+    const escolhas = new Map([[chaveDeEscolha("cmd-tocar", "musica"), { name: nome, value: "id-remix" }]]);
+    expect(interpretarComando(`${r.texto}volume:30`, [TOCAR], escolhas)).toEqual({
+      tipo: "interacao",
+      commandId: "cmd-tocar",
+      opcoes: [
+        { name: "musica", type: 3, value: "id-remix" },
+        { name: "volume", type: 4, value: 30 },
+      ],
+    });
+  });
+
+  it("o pedido ao bot da opção seguinte leva o value da escolha com `outra:` no nome", () => {
+    const nome = "Remix volume:11 edição";
+    const escolhas = new Map([[chaveDeEscolha("cmd-tocar", "musica"), { name: nome, value: "id-remix" }]]);
+    expect(pedidoNoFim(`${escolherMusica(nome).texto}volume:`, escolhas)?.options).toEqual([
+      { name: "musica", type: 3, value: "id-remix" },
+      { name: "volume", type: 4, value: "", focused: true },
+    ]);
+  });
+
+  it("aspas abertas no meio da digitação não escondem a marca seguinte", () => {
+    expect(estadoDoComando('/tocar musica:"abc volume:3', 27, [TOCAR])?.marcadas).toEqual(
+      new Set(["musica", "volume"]),
+    );
+  });
+});
+
+describe("agruparComandos", () => {
+  it("apps primeiro e os integrados por último, como no lançador do Discord", () => {
+    const grupos = agruparComandos("", [TOCAR]);
+    expect(grupos.map((g) => g.id)).toEqual(["app:app1", GRUPO_NATIVOS]);
+  });
+
+  it("a precedência de nome não muda: bot com nome de nativo continua fora", () => {
+    const me: ComandoDeApp = { ...TOCAR, id: "cmd-me", name: "me" };
+    const grupos = agruparComandos("me", [me]);
+    expect(grupos.map((g) => g.id)).toEqual([GRUPO_NATIVOS]);
+    expect(interpretarComando("/me dança", [me])).toEqual({ tipo: "enviar", content: "*dança*" });
   });
 });

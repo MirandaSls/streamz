@@ -81,8 +81,10 @@ const LARGURA = 432;
  *   então herda do texto do embed; o pico de tinta no print (`#dedee1`,
  *   linha y=109) fica muito acima de `text-muted` (`#96979e`) e perto de
  *   `text-default` (`#efeff1`, o mesmo pico que a descrição bate exatamente
- *   em y=165) — por isso `text-default`, não `text-muted`. Tamanho 14
- *   (`embedAuthorName` — mesma família de texto do embed — é `.875rem`).
+ *   em y=165) — por isso `text-default`, não `text-muted`. Tamanho 12
+ *   (`text-xs`), não 14: a caixa alta da linha do site no print mede 8px de
+ *   altura (`medir.py caixa 471 106` em `173327.png`, y 106–113) — cap
+ *   height de fonte 12, não de 14 (que subiria a ~10px).
  * - Título: `font-size:1rem` (16), `font-weight:var(--font-weight-semibold)`,
  *   cor `text-strong` quando não é link e `text-link` quando é (sempre é,
  *   aqui) — `#4d96ee` bate pixel a pixel no print (y=136).
@@ -108,7 +110,7 @@ export default function LinkEmbedCard({ embed }: { embed: LinkEmbed }) {
     >
       <div className="w-1 bg-background-surface-high" style={{ backgroundColor: corDoDominio(embed.url) }} aria-hidden="true" />
       <div className="min-w-0 bg-background-surface-high" style={{ padding: "2px 16px 16px 12px" }}>
-        {embed.siteName && <div className="text-sm font-medium text-text-default">{embed.siteName}</div>}
+        {embed.siteName && <div className="text-xs font-medium text-text-default">{embed.siteName}</div>}
         {embed.title && (
           <a
             href={embed.url}

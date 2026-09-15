@@ -31,10 +31,8 @@ import {
   MAX_ATTACHMENT_SIZE,
   MAX_MESSAGE_LENGTH,
   Permission,
-  WS_EVENTS,
   mentionsEveryone,
   type Attachment,
-  type AutocompleteDeBotEvent,
   type EscolhaDeAutocomplete,
   type OpcaoDeComando,
   type Sticker,
@@ -75,6 +73,7 @@ import {
   type ComandoListavel,
   type EscolhaFeita,
 } from "@/lib/comandos-barra";
+import { EVENTO_PAINEL_DO_COMPOSER, type DetalhePainelDoComposer } from "@/lib/eventos-do-composer";
 import { EVENTO_MENCAO, type DetalheMencao } from "@/lib/mencoes";
 import { lerRascunho, limparRascunho, salvarRascunho } from "@/lib/rascunhos";
 import { useEhMobile } from "@/hooks/useEhMobile";
@@ -86,7 +85,7 @@ import { useInteracoesDeBot } from "@/stores/interacoes-de-bot";
 import { useMessages } from "@/stores/messages";
 import { useCan, usePermissions } from "@/stores/permissions";
 import { useSettings } from "@/stores/settings";
-import { errorMessage, on } from "@/stores/socket-adapter";
+import { errorMessage } from "@/stores/socket-adapter";
 import { emitTyping } from "@/stores/typing";
 import { ui, type MenuItem } from "@/stores/ui";
 
@@ -136,12 +135,6 @@ let seqAnexo = 0;
 
 /** Lista vazia estável, para o `useMemo` das sugestões do bot não recalcular à toa. */
 const NENHUMA_ESCOLHA: readonly EscolhaDeAutocomplete[] = [];
-/**
- * Quantos `nonce` de `interaction.autocomplete` recebidos o composer lembra. Só
- * o do pedido em curso importa; os anteriores ficam para o caso de a resposta
- * do pedido velho chegar depois da do novo.
- */
-const RESPOSTAS_LEMBRADAS = 16;
 /**
  * Textos do popout de valores quando quem sugere é o bot. **Não medidos**: não
  * há print nem imagem do autocomplete de opção do Discord nas referências
@@ -199,7 +192,6 @@ export default function Composer({
   onCreateThread,
   onCreatePoll,
   modoLento,
-  desabilitado,
 }: {
   /** canal em que se está digitando — para o aviso de "digitando…". */
   channelId?: string;
@@ -219,14 +211,14 @@ export default function Composer({
   onCreateThread?: () => void;
   /** menu do "+": criar enquete (h-moderacao). */
   onCreatePoll?: () => void;
-  /** modo lento do canal: o aviso e a contagem vivem colados na caixa. */
-  modoLento?: { segundos: number; restante: number; bloqueado: boolean };
   /**
-   * Motivo para o campo estar desabilitado. A caixa continua na tela, como a
-   * `.channelTextAreaDisabled__74017` do Discord, com o motivo no lugar do
-   * placeholder e o cursor de proibido (`.innerDisabled__74017`).
+   * Modo lento do canal: o aviso e a contagem vivem colados na caixa. O campo
+   * **continua digitável** durante a espera, como no Discord; quem barra o
+   * envio é o `onSend` do `ChatView`. Não existe mais a prop `desabilitado`:
+   * nenhuma tela a passava, e sem permissão de enviar as telas trocam o
+   * composer inteiro pelo aviso.
    */
-  desabilitado?: string;
+  modoLento?: { segundos: number; restante: number; bloqueado: boolean };
 }) {
   const [draft, setDraft] = useState("");
   const [pendentes, setPendentes] = useState<AnexoLocal[]>([]);
@@ -263,7 +255,6 @@ export default function Composer({
   const comandosDeApp = useComandosDeApp((s) => s.comandos);
   // @everyone/@here é MENTION_EVERYONE na permissão efetiva do canal (ADR-0002)
   const podeMencionarTodos = useCan(Permission.MENTION_EVERYONE, channelId);
-  const bloqueado = Boolean(desabilitado);
 
   // ── rascunho por canal ──
   const chaveRascunho = draftKey ?? channelId;
@@ -366,7 +357,7 @@ export default function Composer({
   );
 
   const chaveDaLista = `${draft} ${caret}`;
-  const listaFechada = fechadaEm === chaveDaLista || bloqueado;
+  const listaFechada = fechadaEm === chaveDaLista;
 
   // ── onda 3 · opção com `autocomplete: true` (callback 8) ──
   //
@@ -384,23 +375,9 @@ export default function Composer({
       !gatilho && estado && channelId && !listaFechada ? pedidoDeAutocomplete(draft, estado, escolhasFeitas) : null,
     [gatilho, estado, channelId, listaFechada, draft, escolhasFeitas],
   );
-  /**
-   * Os `nonce` cujo `interaction.autocomplete` chegou. A store zera as escolhas
-   * tanto na resposta vazia quanto na falha, sem distinguir as duas; é isto que
-   * separa "o bot não achou nada" de "falhou" (ver `estadoDaListaDoBot`). O
-   * listener só lê: quem aplica o evento continua sendo o `useRealtime`.
-   */
-  const [respondidos, setRespondidos] = useState<readonly string[]>([]);
-  useEffect(
-    () =>
-      on<AutocompleteDeBotEvent>(WS_EVENTS.INTERACTION_AUTOCOMPLETE, (evento) =>
-        setRespondidos((prev) => [evento.nonce, ...prev].slice(0, RESPOSTAS_LEMBRADAS)),
-      ),
-    [],
-  );
-  const listaDoBot = pedido
-    ? estadoDaListaDoBot(pedido.chave, autocompleteDoBot, (nonce) => respondidos.includes(nonce))
-    : null;
+  // "o bot não achou nada" contra "falhou" é a store quem sabe
+  // (`autocomplete.falhou`, ver `estadoDaListaDoBot`)
+  const listaDoBot = pedido ? estadoDaListaDoBot(pedido.chave, autocompleteDoBot) : null;
   const escolhasDoBot =
     listaDoBot === "pronto" && autocompleteDoBot ? autocompleteDoBot.escolhas : NENHUMA_ESCOLHA;
   const opcaoDoBot = pedido !== null;
@@ -412,10 +389,9 @@ export default function Composer({
   // O pedido em si, com *debounce*. A assinatura é o corpo inteiro: mover o
   // cursor dentro do mesmo valor não pede de novo, e mudar outra opção já
   // preenchida pede (o bot recebe as duas). Trocar de opção pede **na hora** —
-  // a lista abre em "Carregando…" e não há digitação para esperar. Pedido
-  // anterior em voo não é abortado (o `api.pedirAutocompleteDeComando` não
-  // aceita `AbortSignal`, e o servidor já criou a interação): a store troca o
-  // `nonce` e a resposta velha é descartada ao chegar.
+  // a lista abre em "Carregando…" e não há digitação para esperar. O HTTP do
+  // pedido anterior ainda em voo é abortado pela store ao trocar o `nonce`, e
+  // a resposta de um pedido que já chegou ao servidor é descartada ao chegar.
   const assinaturaDoPedido = pedido ? JSON.stringify(pedido) : null;
   const pedidoRef = useRef(pedido);
   pedidoRef.current = pedido;
@@ -487,7 +463,7 @@ export default function Composer({
   const restante = MAX_MESSAGE_LENGTH - draft.length;
   const mostrarContador = draft.length >= MAX_MESSAGE_LENGTH * COUNTER_THRESHOLD;
   const totalAnexos = pendentes.length + prontos.length;
-  const podeEnviar = (draft.trim().length > 0 || totalAnexos > 0) && !enviando && !bloqueado;
+  const podeEnviar = (draft.trim().length > 0 || totalAnexos > 0) && !enviando;
 
   function atualizarTexto(valor: string, novoCaret?: number) {
     setDraft(valor);
@@ -561,10 +537,10 @@ export default function Composer({
       if (!channelId) return;
       setEnviando(true);
       try {
-        await api.criarInteracao(channelId, {
-          commandId: comando.commandId,
-          options: comando.opcoes,
-        });
+        // pela store, e não direto pela `api`: é ela que gera o `nonce` e guarda
+        // a interação pendente, para o modal de um comando que responde com
+        // callback 9 (`interaction.modal`) abrir nesta sessão
+        await useInteracoesDeBot.getState().usarComando(channelId, comando.commandId, comando.opcoes);
         setDraft("");
         if (chaveRascunho) limparRascunho(chaveRascunho);
       } catch (e) {
@@ -724,6 +700,31 @@ export default function Composer({
     return () => window.removeEventListener(EVENTO_MENCAO, aoMencionar);
   });
 
+  // Emoji, GIF, figurinha e anexar pedidos de fora (os atalhos de teclado, ver
+  // `lib/eventos-do-composer`). Só o composer principal da conversa atende:
+  // - o da thread fica de fora — ele é o único que recebe `draftKey`
+  //   (`ThreadPanel.tsx`), e com a thread aberta os dois abririam juntos;
+  // - sem permissão de enviar (somente leitura, castigo, regras a aceitar) o
+  //   `ChatView` e o `ThreadPanel` montam o aviso no lugar do composer, então
+  //   não há quem ouça;
+  // - composer montado mas fora da tela (`display:none`) também não atende.
+  const atendePainel = !draftKey;
+  useEffect(() => {
+    if (!atendePainel) return;
+    function aoPedirPainel(e: Event) {
+      const acao = (e as CustomEvent<DetalhePainelDoComposer>).detail?.acao;
+      const campo = textareaRef.current;
+      if (!acao || !campo || campo.getClientRects().length === 0) return;
+      if (acao === "anexar") {
+        if (allowAttachments) fileInputRef.current?.click();
+        return;
+      }
+      alternarPainel(acao);
+    }
+    window.addEventListener(EVENTO_PAINEL_DO_COMPOSER, aoPedirPainel);
+    return () => window.removeEventListener(EVENTO_PAINEL_DO_COMPOSER, aoPedirPainel);
+  });
+
   function adicionarArquivos(files: FileList | File[]) {
     const arquivos = Array.from(files);
     if (arquivos.length === 0) return;
@@ -765,7 +766,7 @@ export default function Composer({
   }
 
   function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
-    if (!allowAttachments || bloqueado) return;
+    if (!allowAttachments) return;
     const files = Array.from(event.clipboardData.files);
     if (files.length === 0) return;
     event.preventDefault();
@@ -807,11 +808,11 @@ export default function Composer({
    * WebView que emitisse `dragover` num gesto de rolagem cobria a conversa com o
    * overlay sem ninguém ter arrastado nada.
    */
-  const podeArrastar = allowAttachments && !ehMobile && !bloqueado;
+  const podeArrastar = allowAttachments && !ehMobile;
   const temAnexos = pendentes.length > 0 || prontos.length > 0;
   const temTexto = draft.trim().length > 0 || temAnexos;
 
-  const botaoMais = <BotaoMais ehMobile={ehMobile} onClick={abrirMenuMais} desabilitado={bloqueado} />;
+  const botaoMais = <BotaoMais ehMobile={ehMobile} onClick={abrirMenuMais} />;
 
   function aoEscolherArquivos(e: ChangeEvent<HTMLInputElement>) {
     if (e.target.files?.length) adicionarArquivos(e.target.files);
@@ -864,9 +865,7 @@ export default function Composer({
           className={
             ehMobile
               ? "min-w-0 flex-1 rounded-[20px] bg-chat-background-default"
-              : `rounded-lg border border-border-subtle bg-chat-background-default [.barra-empilhada~*_&]:rounded-t-none ${
-                  bloqueado ? "cursor-not-allowed" : ""
-                }`
+              : "rounded-lg border border-border-subtle bg-chat-background-default [.barra-empilhada~*_&]:rounded-t-none"
           }
         >
           {temAnexos && (
@@ -925,7 +924,6 @@ export default function Composer({
               data-sem-anel
               rows={1}
               value={draft}
-              disabled={bloqueado}
               maxLength={MAX_MESSAGE_LENGTH}
               onChange={(e) => atualizarTexto(e.target.value, e.target.selectionStart)}
               onKeyUp={(e) => setCaret(e.currentTarget.selectionStart)}
@@ -938,10 +936,10 @@ export default function Composer({
               // próprio popup, que é um `listbox` rotulado
               aria-autocomplete="list"
               aria-busy={enviando || undefined}
-              placeholder={desabilitado ?? placeholder}
+              placeholder={placeholder}
               // `.textArea__74017`: 16px, entrelinha 22, `--text-default`,
               // placeholder `--text-muted`, `padding-inline: 0 10px`
-              className={`min-w-0 flex-1 resize-none bg-transparent text-[1rem] leading-[1.375rem] text-text-default outline-none placeholder:text-text-muted disabled:cursor-not-allowed ${
+              className={`min-w-0 flex-1 resize-none bg-transparent text-[1rem] leading-[1.375rem] text-text-default outline-none placeholder:text-text-muted ${
                 ehMobile ? "min-h-[40px] py-[9px] pl-4" : "min-h-[56px] py-[17px] pr-2.5"
               }`}
             />
@@ -962,7 +960,6 @@ export default function Composer({
               <BotaoLateral
                 rotulo="GIF"
                 baixo={ehMobile}
-                desabilitado={bloqueado}
                 aberto={aberto === "gif"}
                 onClick={() => alternarPainel("gif")}
                 // o ativo do Discord, não `<span>GIF</span>` com borda: texto
@@ -972,7 +969,6 @@ export default function Composer({
               {!ehMobile && (
                 <BotaoLateral
                   rotulo="Figurinha"
-                  desabilitado={bloqueado}
                   aberto={aberto === "figurinha"}
                   onClick={() => alternarPainel("figurinha")}
                   icone={<StickerIcon size={20} />}
@@ -981,7 +977,6 @@ export default function Composer({
               <BotaoLateral
                 rotulo="Emoji"
                 baixo={ehMobile}
-                desabilitado={bloqueado}
                 aberto={aberto === "emoji"}
                 onClick={() => alternarPainel("emoji")}
                 // o ícone troca de carinha a cada passada do mouse, como no Discord
@@ -1002,7 +997,7 @@ export default function Composer({
                 }
               />
               {!ehMobile && <BotaoLateral rotulo="Apps" icone={<Apps size={20} />} emBreve />}
-              {ehMobile && temTexto && !bloqueado && <BotaoEnviar ocupado={enviando} />}
+              {ehMobile && temTexto && <BotaoEnviar ocupado={enviando} />}
             </div>
 
             {mostrarContador && (

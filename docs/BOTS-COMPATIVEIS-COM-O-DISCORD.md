@@ -1383,11 +1383,13 @@ Tipos de callback que implementamos na F3: **4** `CHANNEL_MESSAGE_WITH_SOURCE`
 e **5** `DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE` (o "pensando…", indispensável
 para bot de música, que leva mais de 3 s para resolver um link). Tipos **6/7**
 (update de componente), **8** (autocomplete) e **9** (modal) saíram da fila da
-F5 e são a **onda 3** da paridade: o contrato (as interações de componente tipo
-3, de autocomplete tipo 4 e de envio de modal tipo 5, as rotas do navegador e os
-eventos `interaction.*`) está em [`CONTRATO-ONDA-3.md`](CONTRATO-ONDA-3.md), e a
-implementação é do cartão 3a. Desde a onda 3 os callbacks 4 e 5 e os followups
-também guardam `embeds`, `components` e `flags`, e o 5 grava a mensagem com
+F5 e ficaram para a **onda 3** da paridade — e **estão implementados**
+(cartão 3a, `InteractionsService.responder`): o contrato (as interações de
+componente tipo 3, de autocomplete tipo 4 e de envio de modal tipo 5, as rotas
+do navegador, a tabela de qual callback vale para qual tipo de interação e os
+eventos `interaction.*`) está em [`CONTRATO-ONDA-3.md`](CONTRATO-ONDA-3.md)
+§4, §5 e §9.1. Desde a onda 3 os callbacks 4 e 5 e os followups também
+guardam `embeds`, `components` e `flags`, e o 5 grava a mensagem com
 `LOADING` (1 << 7) ligado, que é o que a web lê para desenhar "está pensando…".
 
 Followups, na mesma fase:

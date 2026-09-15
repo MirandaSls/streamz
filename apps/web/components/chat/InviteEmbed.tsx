@@ -129,11 +129,14 @@ export default function InviteEmbed({ code }: { code: string }) {
         <div className="min-w-0 flex-1">
           <div className="truncate font-semibold text-text-strong">{previa.guild.name}</div>
           <div className="mt-0.5 flex items-center gap-2 text-xs text-text-muted">
-            <span className="flex items-center gap-1.5">
+            {/* `.status_d5f3cd{height:8px;width:8px;margin-inline-end:4px}`
+                (css-bruto/931937): bolinha de 8×8 (`h-2 w-2`, já batia) com
+                4px até o texto — `gap-1`, não `gap-1.5` (6px). */}
+            <span className="flex items-center gap-1">
               <span aria-hidden="true" className="h-2 w-2 rounded-full bg-status-positive" />
               {previa.onlineCount} online
             </span>
-            <span className="flex items-center gap-1.5">
+            <span className="flex items-center gap-1">
               <span aria-hidden="true" className="h-2 w-2 rounded-full bg-channels-default" />
               {previa.memberCount} membros
             </span>

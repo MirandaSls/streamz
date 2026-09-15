@@ -193,6 +193,8 @@ function montar(
       ),
       update: vi.fn(async () => ({})),
       updateMany: vi.fn(async () => ({ count: 1 })),
+      // ── api-interacoes ── a varredura dos prazos na subida (`retomarPrazos`)
+      findMany: vi.fn(async (_argumentos: unknown): Promise<unknown[]> => []),
     },
     // ── j-bots ── a tabela da mensagem efêmera
     ephemeralMessage: {
@@ -1629,5 +1631,269 @@ describe("onda 3 — pedirAutocomplete (interação 4)", () => {
       }),
     ).rejects.toThrow("403");
     expect(prisma.interaction.create).not.toHaveBeenCalled();
+  });
+});
+
+// ── api-interacoes: a rodada de correção ─────────────────────
+
+describe("api-interacoes — comando de barra com `nonce`", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const esvaziar = async () => {
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+  };
+
+  it("grava o `nonce` e, sem callback em 3 s, vence o token e avisa `sem_resposta` casado por ele", async () => {
+    const { service, prisma, realtime } = montar();
+
+    await service.criarInteracao({ ...ENTRADA, nonce: "n_cmd" });
+    const gravado = (prisma.interaction.create.mock.calls[0]?.[0] as { data: Record<string, unknown> }).data;
+    expect(gravado.nonce).toBe("n_cmd");
+    expect(realtime.emitToUser).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(3_000);
+    await esvaziar();
+
+    expect(realtime.emitToUser).toHaveBeenCalledWith(USUARIO.id, WS_EVENTS.INTERACTION_FAILED, {
+      interactionId: "i_1",
+      nonce: "n_cmd",
+      channelId: CANAL.id,
+      messageId: null,
+      customId: null,
+      motivo: "sem_resposta",
+    });
+  });
+
+  it("sem `nonce` (cliente antigo) continua sem relógio e sem evento, e grava `nonce` nulo", async () => {
+    const { service, prisma, realtime } = montar();
+
+    await service.criarInteracao(ENTRADA);
+    await vi.advanceTimersByTimeAsync(5_000);
+    await esvaziar();
+
+    const gravado = (prisma.interaction.create.mock.calls[0]?.[0] as { data: Record<string, unknown> }).data;
+    expect(gravado.nonce).toBeNull();
+    expect(prisma.interaction.updateMany).not.toHaveBeenCalled();
+    expect(realtime.emitToUser).not.toHaveBeenCalled();
+  });
+
+  it("bot sem sessão: `bot_offline` na hora, com o `nonce` do comando", async () => {
+    const { service, sessoes, realtime } = montar();
+    sessoes.porBot.mockReturnValue([]);
+
+    await service.criarInteracao({ ...ENTRADA, nonce: "n_cmd" });
+
+    expect(realtime.emitToUser).toHaveBeenCalledWith(
+      USUARIO.id,
+      WS_EVENTS.INTERACTION_FAILED,
+      expect.objectContaining({ nonce: "n_cmd", motivo: "bot_offline" }),
+    );
+  });
+
+  it("callback 9 num comando: o `interaction.modal` sai com o `nonce` do comando (o modal abre na web)", async () => {
+    const { service, realtime } = montar();
+
+    await service.responder(
+      autenticada({ tipo: 2, nonce: "n_cmd" }),
+      TIPO_DE_CALLBACK.MODAL,
+      {
+        custom_id: "cadastro",
+        title: "Cadastro",
+        components: [{ type: 18, label: "Nome", component: { type: 4, custom_id: "nome", style: 1 } }],
+      } as never,
+    );
+
+    expect(realtime.emitToUser).toHaveBeenCalledWith(
+      USUARIO.id,
+      WS_EVENTS.INTERACTION_MODAL,
+      expect.objectContaining({ interactionId: "i_1", nonce: "n_cmd" }),
+    );
+  });
+
+  it("callback 4 num comando com `nonce` emite `success`", async () => {
+    const { service, realtime } = montar();
+
+    await service.responder(autenticada({ tipo: 2, nonce: "n_cmd" }), TIPO_DE_CALLBACK.CHANNEL_MESSAGE_WITH_SOURCE, {
+      content: "pong",
+    });
+
+    expect(realtime.emitToUser).toHaveBeenCalledWith(
+      USUARIO.id,
+      WS_EVENTS.INTERACTION_SUCCESS,
+      expect.objectContaining({ nonce: "n_cmd", messageId: null, customId: null }),
+    );
+  });
+});
+
+describe("api-interacoes — autocomplete com opção de alvo não focada", () => {
+  const COMANDO_COM_ALVO = {
+    ...COMANDO,
+    options: [
+      { name: "url", description: "o link", type: 3, required: true, autocomplete: true },
+      { name: "alvo", description: "quem", type: 6, required: false },
+      { name: "sala", description: "onde", type: 7, required: false },
+    ],
+  };
+
+  it("alvo inexistente não é 400: a opção é omitida e a em foco segue para o bot", async () => {
+    const { service, dados, prisma, sessao } = montar({ comando: COMANDO_COM_ALVO });
+    // só o alvo some: quem digitou (lido na montagem do payload) continua existindo
+    dados.usuarioPorCuid.mockImplementation(async (...a: unknown[]) =>
+      a[0] === "cuid_que_nao_existe" ? (null as never) : USUARIO,
+    );
+    dados.canalPorCuid.mockImplementation(async (...a: unknown[]) => (a[0] === CANAL.id ? CANAL : null));
+
+    await service.pedirAutocomplete({
+      canalId: CANAL.id,
+      usuarioId: USUARIO.id,
+      commandId: COMANDO.id,
+      nonce: "n_ac",
+      options: [
+        { name: "url", type: 3, value: "nev", focused: true },
+        { name: "alvo", type: 6, value: "cuid_que_nao_existe" },
+        { name: "sala", type: 7, value: CANAL.id },
+      ],
+    });
+
+    expect(prisma.interaction.create).toHaveBeenCalledTimes(1);
+    const payload = sessao.despachar.mock.calls[0]?.[1] as { data: Record<string, unknown> };
+    // a resolvível vai em snowflake; a que não resolve some, e nunca vai o cuid bruto
+    expect(payload.data.options).toEqual([
+      { name: "url", type: 3, value: "nev", focused: true },
+      { name: "sala", type: 7, value: "555" },
+    ]);
+  });
+
+  it("no comando de barra (sem foco) o alvo inexistente continua 400", async () => {
+    const { service, dados, prisma } = montar({ comando: COMANDO_COM_ALVO });
+    dados.usuarioPorCuid.mockImplementation(async () => null as never);
+
+    await expect(
+      service.criarInteracao({
+        ...ENTRADA,
+        opcoes: [
+          { nome: "url", tipo: 3, valor: "x" },
+          { nome: "alvo", tipo: 6, valor: "cuid_que_nao_existe" },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.interaction.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("api-interacoes — componente cuja mensagem de origem foi apagada", () => {
+  // `Interaction.messageId` é `onDelete: SetNull`: apagada a mensagem, a
+  // interação 3 fica com os dois ids nulos
+  const semOrigem = (ajustes: Partial<InteracaoAutenticada> = {}) =>
+    deComponente({ messageId: null, ephemeralMessageId: null, ...ajustes });
+
+  it("callback 7 é 404 10008 Unknown Message, e não 50035 — sem gastar a resposta", async () => {
+    const { service, prisma, mensagens } = montar();
+
+    await expect(
+      service.responder(semOrigem(), TIPO_DE_CALLBACK.UPDATE_MESSAGE, { content: "x" }),
+    ).rejects.toMatchObject({ response: { code: 10008 } });
+    expect(prisma.interaction.updateMany).not.toHaveBeenCalled();
+    expect(mensagens.editarComoBot).not.toHaveBeenCalled();
+  });
+
+  it("`editReply()` depois do 6 também é 10008", async () => {
+    const { service } = montar();
+    await expect(
+      service.editarOriginal(semOrigem({ respondedAt: new Date() }), { content: "x" }),
+    ).rejects.toMatchObject({ response: { code: 10008 } });
+  });
+
+  it("envio de modal de comando (5, sem origem de nascença) continua 50035 no 7", async () => {
+    const { service } = montar();
+    await expect(
+      service.responder(semOrigem({ tipo: 5 }), TIPO_DE_CALLBACK.UPDATE_MESSAGE, { content: "x" }),
+    ).rejects.toMatchObject({ response: { code: 50035 } });
+  });
+});
+
+describe("api-interacoes — retomada dos prazos na subida", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const agora = new Date("2026-09-14T12:00:00.000Z");
+
+  const pendente = (ajustes: Record<string, unknown> = {}) => ({
+    id: "i_vencida",
+    userId: USUARIO.id,
+    channelId: CANAL.id,
+    messageId: "m_bot",
+    ephemeralMessageId: null,
+    customId: "tocar",
+    nonce: "n_1",
+    createdAt: new Date(agora.getTime() - 10_000),
+    ...ajustes,
+  });
+
+  it("procura só as pendentes com `nonce` e ainda não invalidadas", async () => {
+    const { service, prisma } = montar();
+
+    await service.retomarPrazos(agora);
+
+    expect(prisma.interaction.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { respondedAt: null, nonce: { not: null }, expiresAt: { gt: agora } },
+      }),
+    );
+  });
+
+  it("prazo vencido durante a queda: invalida (escrita condicional) e emite `failed`", async () => {
+    const { service, prisma, realtime } = montar();
+    prisma.interaction.findMany.mockResolvedValue([pendente()]);
+
+    await service.retomarPrazos(agora);
+
+    expect(prisma.interaction.updateMany).toHaveBeenCalledWith({
+      where: { id: "i_vencida", respondedAt: null },
+      data: { expiresAt: expect.any(Date) },
+    });
+    expect(realtime.emitToUser).toHaveBeenCalledWith(USUARIO.id, WS_EVENTS.INTERACTION_FAILED, {
+      interactionId: "i_vencida",
+      nonce: "n_1",
+      channelId: CANAL.id,
+      messageId: "m_bot",
+      customId: "tocar",
+      motivo: "sem_resposta",
+    });
+  });
+
+  it("o banco decide: já respondida noutra instância (`count` 0) não vira `failed`", async () => {
+    const { service, prisma, realtime } = montar();
+    prisma.interaction.findMany.mockResolvedValue([pendente()]);
+    prisma.interaction.updateMany.mockResolvedValue({ count: 0 });
+
+    await service.retomarPrazos(agora);
+
+    expect(realtime.emitToUser).not.toHaveBeenCalled();
+  });
+
+  it("prazo ainda correndo: o relógio volta com o que falta", async () => {
+    const { service, prisma, realtime } = montar();
+    prisma.interaction.findMany.mockResolvedValue([pendente({ createdAt: new Date(agora.getTime() - 1_000) })]);
+
+    await service.retomarPrazos(agora);
+    expect(prisma.interaction.updateMany).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+
+    expect(realtime.emitToUser).toHaveBeenCalledWith(
+      USUARIO.id,
+      WS_EVENTS.INTERACTION_FAILED,
+      expect.objectContaining({ interactionId: "i_vencida", motivo: "sem_resposta" }),
+    );
+  });
+
+  it("erro do banco na subida só vai para o log", async () => {
+    const { service, prisma } = montar();
+    prisma.interaction.findMany.mockRejectedValue(new Error("banco fora"));
+
+    await expect(service.retomarPrazos(agora)).resolves.toBeUndefined();
   });
 });
