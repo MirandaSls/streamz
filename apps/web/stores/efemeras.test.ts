@@ -55,7 +55,7 @@ function efemera(extra: Partial<Message> = {}): Message {
 /** Um canal já aberto: é o que `fetchHistory` deixa na store. */
 function abrirCanal() {
   useMessages.setState({
-    byChannel: { c1: { items: [], hasMore: false, loading: false, loadingOlder: false } },
+    byChannel: { c1: { items: [], hasMore: false, loading: false, loadingOlder: false, loadingOlderError: false } },
   });
 }
 

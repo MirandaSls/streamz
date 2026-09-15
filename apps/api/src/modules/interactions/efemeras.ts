@@ -7,8 +7,10 @@
 //
 // Ver `docs/BOTS-COMPATIVEIS-COM-O-DISCORD.md` §9 e o `CONTRATO-F3.md`.
 
-import type { Message as MessageDTO, PublicUser } from "@streamz/shared";
+import { FLAGS_DE_MENSAGEM, temFlag, type Message as MessageDTO, type PublicUser } from "@streamz/shared";
 import type { LinhaDeMensagem } from "../discord-compat/tipos";
+import type { LinhaDeMensagemDeBot } from "../discord-compat/traducao/mensagem";
+import { camposDeBotDoDTO } from "../messages/payload-de-bot";
 
 /**
  * Uma linha de `EphemeralMessage` com o que as duas conversões precisam.
@@ -26,6 +28,16 @@ export interface LinhaEfemera {
   content: string;
   createdAt: Date;
   editedAt: Date | null;
+  // ── onda 3 ── embeds, componentes e flags (colunas da própria efêmera). `Json`
+  // cru do Prisma: quem lê passa por `lerEmbedsGuardados`/`lerComponentesGuardados`.
+  embeds: unknown;
+  components: unknown;
+  /**
+   * `FLAGS_GUARDADAS` **mais** `SUPPRESS_EMBEDS`: a efêmera não tem a coluna
+   * `suppressEmbeds` da `Message`, então o bit mora aqui. `EPHEMERAL` nunca —
+   * é implícito na tabela.
+   */
+  flags: number;
 }
 
 /** O contexto que a efêmera não guarda (porque a interação já guarda). */
@@ -36,7 +48,8 @@ export interface ContextoDaEfemera {
   invocador: PublicUser;
   /** cuid da interação e o nome do comando: a faixa. */
   interacaoId: string;
-  comando: string;
+  /** ── onda 3 ── null quando a interação é de componente/modal: sem faixa. */
+  comando: string | null;
   /** cuid do servidor, ou null em conversa direta. */
   guildId: string | null;
 }
@@ -78,8 +91,19 @@ export function efemeraParaDTO(linha: LinhaEfemera, ctx: ContextoDaEfemera): Mes
     poll: null,
     // a faixa "@fulano usou /play": uma efêmera chega ao chat sozinha, como
     // qualquer resposta de comando, e sem ela o bot pareceria falar sozinho
-    interacao: { id: ctx.interacaoId, name: ctx.comando, user: ctx.invocador },
+    interacao:
+      ctx.comando === null ? null : { id: ctx.interacaoId, name: ctx.comando, user: ctx.invocador },
     efemera: true,
+    // ── onda 3 ── embeds/componentes/flags, com `EPHEMERAL` ligado. Sem anexos
+    // para resolver: a efêmera não tem anexo.
+    ...camposDeBotDoDTO(
+      {
+        suppressEmbeds: temFlag(linha.flags, FLAGS_DE_MENSAGEM.SUPPRESS_EMBEDS),
+        payload: { embeds: linha.embeds, components: linha.components, flags: linha.flags & ~FLAGS_DE_MENSAGEM.SUPPRESS_EMBEDS },
+        efemera: true,
+      },
+      [],
+    ),
   };
 }
 
@@ -98,8 +122,17 @@ export function efemeraParaLinhaDeMensagem(
     channelSnowflake: bigint;
     guildSnowflake: bigint | null;
   },
-): LinhaDeMensagem {
-  return {
+): LinhaDeMensagemDeBot {
+  // os campos de bot saem pelo mesmo conversor do DTO, sem o `EPHEMERAL`: quem
+  // devolve ao bot (`webhooks.controller.ts`) liga a flag por cima
+  const deBot = camposDeBotDoDTO(
+    {
+      suppressEmbeds: temFlag(linha.flags, FLAGS_DE_MENSAGEM.SUPPRESS_EMBEDS),
+      payload: { embeds: linha.embeds, components: linha.components, flags: linha.flags & ~FLAGS_DE_MENSAGEM.SUPPRESS_EMBEDS },
+    },
+    [],
+  );
+  const base: LinhaDeMensagem = {
     id: linha.id,
     snowflake: linha.snowflake,
     channelSnowflake: ctx.channelSnowflake,
@@ -114,4 +147,5 @@ export function efemeraParaLinhaDeMensagem(
     respostaA: null,
     pinned: false,
   };
+  return { ...base, payloadDeBot: deBot };
 }

@@ -64,6 +64,127 @@ describe("parseSearchQuery", () => {
     expect(isEmptySearch(parseSearchQuery("   "))).toBe(true);
     expect(isEmptySearch(parseSearchQuery("has:link"))).toBe(false);
   });
+
+  // ── prefixos em português ──
+  // O Discord em pt-BR mostra `de:`, `em:`, `tem:` e `menciona:` no popout
+  // "Filtros" e aceita `antes:`, `depois:` e `durante:` (PREFIXOS_DE_BUSCA em
+  // packages/shared/src/mensagens.ts). Os casos abaixo prendem os sinônimos e
+  // as bordas em que um filtro viraria texto — ou texto viraria filtro — calado.
+
+  it("de:, em: e tem: em português, juntos com o texto livre", () => {
+    const f = parseSearchQuery("de:@ana em:#geral tem:imagem bug no login");
+    expect(f.from).toBe("ana");
+    expect(f.in).toBe("geral");
+    expect(f.has).toEqual(["image"]);
+    expect(f.text).toBe("bug no login");
+  });
+
+  it("texto livre entre filtros em português fica na ordem digitada", () => {
+    const f = parseSearchQuery("bug de:ana no em:geral login");
+    expect(f.from).toBe("ana");
+    expect(f.in).toBe("geral");
+    expect(f.text).toBe("bug no login");
+  });
+
+  it("reconhece menciona:, com e sem @", () => {
+    expect(parseSearchQuery("menciona:@bia").mentions).toBe("bia");
+    const f = parseSearchQuery("menciona:bia prazo");
+    expect(f.mentions).toBe("bia");
+    expect(f.text).toBe("prazo");
+  });
+
+  it("tem:arquivo e tem:anexo são o mesmo `file`; tem:link é `link`", () => {
+    expect(parseSearchQuery("tem:arquivo").has).toEqual(["file"]);
+    expect(parseSearchQuery("tem:anexo").has).toEqual(["file"]);
+    expect(parseSearchQuery("tem:link").has).toEqual(["link"]);
+    // arquivo e anexo juntos não repetem o `file`
+    const f = parseSearchQuery("tem:arquivo tem:link tem:anexo");
+    expect(f.has).toEqual(["file", "link"]);
+    expect(f.text).toBe("");
+  });
+
+  it("antes: e depois: com datas válidas", () => {
+    const f = parseSearchQuery("antes:2026-08-25 depois:2026-08-01 reunião");
+    expect(f.before).toBe("2026-08-25");
+    expect(f.after).toBe("2026-08-01");
+    expect(f.text).toBe("reunião");
+  });
+
+  it("depois: com data que não existe volta ao texto", () => {
+    const f = parseSearchQuery("depois:2026-02-30");
+    expect(f.after).toBeNull();
+    expect(f.text).toBe("depois:2026-02-30");
+  });
+
+  it("durante: vira o par depois: (dia anterior) + antes: (dia seguinte)", () => {
+    const f = parseSearchQuery("durante:2026-08-15");
+    expect(f.after).toBe("2026-08-14");
+    expect(f.before).toBe("2026-08-16");
+    expect(f.text).toBe("");
+    expect(isEmptySearch(f)).toBe(false);
+  });
+
+  it("durante: atravessa a virada de mês e de ano no calendário", () => {
+    const marco = parseSearchQuery("durante:2026-03-01");
+    expect(marco.after).toBe("2026-02-28");
+    expect(marco.before).toBe("2026-03-02");
+    const reveillon = parseSearchQuery("durante:2026-12-31");
+    expect(reveillon.after).toBe("2026-12-30");
+    expect(reveillon.before).toBe("2027-01-01");
+  });
+
+  it("durante:2026-02-31 não existe: é texto, e não mexe em antes/depois", () => {
+    const f = parseSearchQuery("durante:2026-02-31");
+    expect(f.before).toBeNull();
+    expect(f.after).toBeNull();
+    expect(f.text).toBe("durante:2026-02-31");
+  });
+
+  it("durante: fora do formato AAAA-MM-DD também é texto", () => {
+    const f = parseSearchQuery("durante:ontem");
+    expect(f.before).toBeNull();
+    expect(f.after).toBeNull();
+    expect(f.text).toBe("durante:ontem");
+  });
+
+  it("tem:constructor é texto (não acha o do Object.prototype)", () => {
+    const f = parseSearchQuery("tem:constructor");
+    expect(f.has).toEqual([]);
+    expect(f.text).toBe("tem:constructor");
+    // e o mesmo para outras chaves herdadas
+    expect(parseSearchQuery("tem:toString").text).toBe("tem:toString");
+    expect(parseSearchQuery("has:__proto__").has).toEqual([]);
+  });
+
+  it("prefixo e valor de tem: sem diferença de caixa; o valor de De: fica como veio", () => {
+    const f = parseSearchQuery("De:@Ana EM:#Geral TEM:Link");
+    expect(f.from).toBe("Ana");
+    expect(f.in).toBe("Geral");
+    expect(f.has).toEqual(["link"]);
+    expect(f.text).toBe("");
+  });
+
+  it("during: em inglês continua valendo, igual ao durante:", () => {
+    const f = parseSearchQuery("during:2026-08-15");
+    expect(f.after).toBe("2026-08-14");
+    expect(f.before).toBe("2026-08-16");
+    expect(f.text).toBe("");
+    expect(parseSearchQuery("during:2026-02-31").text).toBe("during:2026-02-31");
+  });
+
+  it("português e inglês misturados na mesma consulta", () => {
+    const f = parseSearchQuery("from:ana tem:arquivo has:link em:geral");
+    expect(f.from).toBe("ana");
+    expect(f.in).toBe("geral");
+    expect(f.has).toEqual(["file", "link"]);
+    expect(f.text).toBe("");
+  });
+
+  it("prefixo em português sem valor continua sendo texto", () => {
+    const f = parseSearchQuery("de: alguém");
+    expect(f.from).toBeNull();
+    expect(f.text).toBe("de: alguém");
+  });
 });
 
 describe("replySnippet", () => {

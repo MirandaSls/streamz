@@ -27,6 +27,7 @@ import DMList from "@/components/layout/DMList";
 import GuildRail from "@/components/layout/GuildRail";
 import Avatar from "@/components/ui/Avatar";
 import IconeDeStatus from "@/components/ui/IconeDeStatus";
+import { Button } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { useAuth } from "@/stores/auth";
@@ -112,18 +113,18 @@ function Linha({
     <button
       type="button"
       onClick={onClick}
-      className={`flex min-h-[52px] w-full items-center gap-3 rounded-lg px-3 text-left transition active:bg-hov ${
-        perigo ? "text-red" : "text-txt-normal"
+      className={`flex min-h-[52px] w-full items-center gap-3 rounded-lg px-3 text-left transition active:bg-interactive-background-hover ${
+        perigo ? "text-status-danger" : "text-text-default"
       }`}
     >
-      <span className="shrink-0 text-txt-secondary" aria-hidden="true">
+      <span className="shrink-0 text-text-subtle" aria-hidden="true">
         {icone}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate font-medium">{rotulo}</span>
-        {detalhe && <span className="block truncate text-xs text-txt-muted">{detalhe}</span>}
+        {detalhe && <span className="block truncate text-xs text-text-muted">{detalhe}</span>}
       </span>
-      {!perigo && <ChevronRight size={18} aria-hidden="true" className="shrink-0 text-txt-faint" />}
+      {!perigo && <ChevronRight size={18} aria-hidden="true" className="shrink-0 text-channels-default" />}
     </button>
   );
 }
@@ -197,13 +198,13 @@ export function TelaVoce() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-panel">
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-background-base-lowest">
       {/* Banner de 106pt com a engrenagem por cima, como na captura. Sem imagem,
           a cor de destaque do perfil; sem ela, a superfície do app. */}
       <div className="relative shrink-0">
         <div
           style={perfil?.bannerColor ? { backgroundColor: perfil.bannerColor } : undefined}
-          className="h-[106px] w-full overflow-hidden bg-hov"
+          className="h-[106px] w-full overflow-hidden bg-interactive-background-hover"
         >
           {perfil?.bannerUrl && (
             // eslint-disable-next-line @next/next/no-img-element
@@ -214,28 +215,60 @@ export function TelaVoce() {
           type="button"
           onClick={() => ui.openModal({ kind: "settings" })}
           aria-label="Configurações do usuário"
-          className="absolute right-3 top-3 grid h-[44px] w-[44px] place-items-center rounded-full bg-black/45 text-white"
+          // fica sobre o banner/imagem: o par bg/texto de "overlay secundário"
+          // (fundo escuro translúcido + ícone claro) é o token pensado para
+          // isso — diferente do `BotaoDeIcone`, aqui o fundo é permanente, não
+          // só no hover, e o primitivo não cobre esse caso
+          className="absolute right-3 top-3 grid h-[44px] w-[44px] place-items-center rounded-full bg-control-overlay-secondary-background-default text-control-overlay-secondary-icon-default"
         >
           <Settings size={22} />
         </button>
         {/* o avatar transborda a borda de baixo do banner, com o anel da
-            superfície de trás — é assim na captura */}
-        <div className="absolute -bottom-8 left-4">
-          <span className="block rounded-full ring-[6px] ring-panel">
-            <Avatar user={vivo} size="xl" status={status} surface="ring-panel" />
+            superfície de trás — é assim na captura.
+
+            Medido em `discord-mobile-voce.png` (375×812, 1px=1pt — escala
+            §1 do MEDIDAS.md): o topo do anel (onde o verde do banner é
+            interrompido) fica em `y=110` nas colunas `x=60..63`, que é onde
+            o círculo é mais largo (centro horizontal ≈61,5, condizente com
+            a borda esquerda/direita do avatar em `x=22..101`, 80px = a
+            mesma medida do nosso `size="xl"`). O avatar (sem o anel, que é
+            `box-shadow` e não desloca a caixa) some do verde em `y=116`
+            (110+6 do anel) e volta ao fundo da página em `y=196`
+            (116+80) — avatar-caixa 80px alto, e o fundo do banner some em
+            `y=149` (medido limpo em `x=10`, longe do avatar).
+            `-bottom` é a distância da base da CAIXA do avatar (sem anel) até
+            a base do banner: 196 (base da caixa) − 149 (base do banner) =
+            **47px**, não os 32 (`-bottom-8`) de antes — o avatar ficava alto
+            demais, mordendo o banner em vez de pender sobre o conteúdo.
+            `left`: a caixa (sem anel) começa em `x=22`, não em `x=16`
+            (`left-4`). */}
+        <div className="absolute -bottom-[47px] left-[22px]">
+          <span className="block rounded-full ring-[6px] ring-background-base-lowest">
+            <Avatar user={vivo} size="xl" status={status} surface="ring-background-base-lowest" />
           </span>
         </div>
       </div>
 
-      <div className="mt-11 px-3 pb-6">
+      {/* Distância medida direto na captura, longe do avatar (`x=150..345`,
+          fora da sombra dele): o fundo da página (`#f2f3f5`) some e o
+          cartão branco (`#ffffff`) começa em `y=212`, sempre — contra o fim
+          do banner em `y=149` (medido limpo em `x=10`). 212−149 = **63px**,
+          não os 44 (`mt-11`) de antes, que datavam de quando o avatar
+          transbordava menos. */}
+      {/* `px-4` (16px), não `px-3` (12px): na captura a margem lateral do
+          cartão branco é 16px dos dois lados (`x=16..358` numa tela de
+          375, longe do avatar) — e 16 é também a borda de fora do anel do
+          avatar (22 do box − 6 do anel), ou seja o cartão se alinha com a
+          borda externa do anel, não com a caixa do avatar. */}
+      <div className="mt-[63px] px-4 pb-6">
         {/* cartão de identidade */}
-        <div className="rounded-2xl bg-chat p-4">
-          <h1 className="truncate font-display text-xl font-bold tracking-title text-txt-primary">
+        <div className="rounded-2xl bg-background-base-lower p-4">
+          <h1 className="truncate text-xl font-bold text-text-strong">
             {displayNameOf(vivo)}
           </h1>
-          <p className="truncate text-sm text-txt-muted">@{vivo.username}</p>
+          <p className="truncate text-sm text-text-muted">@{vivo.username}</p>
           {personalizado && (
-            <p className="mt-2 break-words text-sm text-txt-normal">{personalizado}</p>
+            <p className="mt-2 break-words text-sm text-text-default">{personalizado}</p>
           )}
           <div className="mt-3 flex gap-2">
             <BotaoDeCartao
@@ -254,34 +287,32 @@ export function TelaVoce() {
         {/* microfone e áudio: os mesmos interruptores do card do desktop, aqui
             em botões largos porque não há hover que explique um ícone de 32px */}
         <div className="mt-3 flex gap-2">
-          <button
-            type="button"
+          <Button
+            variante={muted ? "critico-secundario" : "secundario"}
+            tamanho="md"
+            icone={muted ? <MicOff size={20} /> : <Mic size={20} />}
             onClick={toggleMute}
             aria-pressed={muted}
-            className={`flex h-[44px] flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-medium transition ${
-              muted ? "bg-red/15 text-red" : "bg-chat text-txt-normal"
-            }`}
+            className="h-[44px] flex-1 rounded-2xl"
           >
-            {muted ? <MicOff size={20} /> : <Mic size={20} />}
             {muted ? "Mudo" : "Microfone"}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variante={deafened ? "critico-secundario" : "secundario"}
+            tamanho="md"
+            icone={deafened ? <HeadphoneOff size={20} /> : <Headphones size={20} />}
             onClick={toggleDeafen}
             aria-pressed={deafened}
-            className={`flex h-[44px] flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-medium transition ${
-              deafened ? "bg-red/15 text-red" : "bg-chat text-txt-normal"
-            }`}
+            className="h-[44px] flex-1 rounded-2xl"
           >
-            {deafened ? <HeadphoneOff size={20} /> : <Headphones size={20} />}
             {deafened ? "Sem áudio" : "Áudio"}
-          </button>
+          </Button>
         </div>
 
-        <h2 className="px-2 pb-1 pt-5 text-xs font-semibold uppercase tracking-wide text-txt-muted">
+        <h2 className="px-2 pb-1 pt-5 text-xs font-semibold uppercase tracking-wide text-text-muted">
           Status
         </h2>
-        <div className="overflow-hidden rounded-2xl bg-chat">
+        <div className="overflow-hidden rounded-2xl bg-background-base-lower">
           {STATUS.map((o) => {
             const escolhido = o.valor === null ? status === "ONLINE" : status === o.valor;
             return (
@@ -290,15 +321,15 @@ export function TelaVoce() {
                 type="button"
                 onClick={() => void aplicarStatus(o.valor)}
                 aria-pressed={escolhido}
-                className={`flex min-h-[48px] w-full items-center gap-3 px-4 text-left transition active:bg-hov ${
-                  escolhido ? "bg-sel text-txt-primary" : "text-txt-normal"
+                className={`flex min-h-[48px] w-full items-center gap-3 px-4 text-left transition active:bg-interactive-background-hover ${
+                  escolhido ? "bg-interactive-background-selected text-text-strong" : "text-text-default"
                 }`}
               >
                 <span className="block h-2.5 w-2.5 shrink-0">
                   <IconeDeStatus status={o.ponto} className="h-full w-full" />
                 </span>
                 <span className="flex-1 font-medium">{o.rotulo}</span>
-                {escolhido && <Check size={18} className="shrink-0 text-accent" />}
+                {escolhido && <Check size={18} className="shrink-0 text-brand-500" />}
               </button>
             );
           })}
@@ -306,19 +337,19 @@ export function TelaVoce() {
 
         {perfil?.aboutMe && (
           <>
-            <h2 className="px-2 pb-1 pt-5 text-xs font-semibold uppercase tracking-wide text-txt-muted">
+            <h2 className="px-2 pb-1 pt-5 text-xs font-semibold uppercase tracking-wide text-text-muted">
               Sobre mim
             </h2>
-            <p className="whitespace-pre-wrap break-words rounded-2xl bg-chat p-4 text-sm text-txt-normal">
+            <p className="whitespace-pre-wrap break-words rounded-2xl bg-background-base-lower p-4 text-sm text-text-default">
               {perfil.aboutMe}
             </p>
           </>
         )}
 
-        <h2 className="px-2 pb-1 pt-5 text-xs font-semibold uppercase tracking-wide text-txt-muted">
+        <h2 className="px-2 pb-1 pt-5 text-xs font-semibold uppercase tracking-wide text-text-muted">
           Conta
         </h2>
-        <div className="overflow-hidden rounded-2xl bg-chat">
+        <div className="overflow-hidden rounded-2xl bg-background-base-lower">
           <Linha
             icone={<User size={20} />}
             rotulo="Meu perfil"
@@ -366,17 +397,17 @@ function BotaoDeCartao({
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
+    <Button
+      variante="secundario"
+      tamanho="md"
+      icone={icone}
       onClick={onClick}
-      // 44 literal, não `h-10`: sobre a raiz de 15,5px `h-10` mede 38,75, e
-      // estes são os dois primeiros botões da aba "Você"
-      className="flex h-[44px] min-w-0 flex-1 items-center justify-center gap-2 rounded-lg bg-border-strong/60 px-3 text-sm font-medium text-txt-normal transition active:bg-border-strong"
+      // 44 literal, não `md` puro (40px): a raiz do app é 16px agora, então
+      // `md` já bate com o nominal, mas estes são os dois primeiros botões da
+      // aba "Você" e o alvo de toque pedido é 44
+      className="h-[44px] min-w-0 flex-1"
     >
-      <span className="shrink-0 text-txt-secondary" aria-hidden="true">
-        {icone}
-      </span>
       <span className="truncate">{rotulo}</span>
-    </button>
+    </Button>
   );
 }

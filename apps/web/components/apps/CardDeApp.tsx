@@ -64,42 +64,55 @@ export default function CardDeApp({
 }) {
   return (
     <article
-      /* px literais, e não a escala do Tailwind: a raiz do app é 15,5px e todo
-         número nominal em `rem` sai 3% menor — 244 e 16 são medidas da captura,
-         não escolhas de escala (a regra do §6.3 do processo). */
-      className="relative flex h-[204px] w-[244px] flex-col rounded-[8px] bg-panel p-[16px] transition-colors hover:bg-hov celular:w-full"
+      /* px literais, e não a escala do Tailwind: 244 e 16 são medidas da
+         captura (a raiz do app é 16px, ADR-0009), não escolhas de escala —
+         o literal fixa o valor medido independente da raiz (a regra do §6.3
+         do processo). */
+      className="relative flex h-[204px] w-[244px] flex-col rounded-[8px] bg-background-base-lowest p-[16px] transition-colors hover:bg-interactive-background-hover celular:w-full"
     >
+      {/*
+        Cobre o card inteiro e abre a página do app — não é `<Button>`/
+        `<BotaoDeIcone>`: é a peça "cartão clicável" (regra 3 da migração),
+        irmã do botão "Adicionar" abaixo, não um botão de ação com texto.
+      */}
       <button
         type="button"
         onClick={aoAbrir}
         aria-label={`Ver ${app.name}`}
-        className="absolute inset-0 rounded-[8px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+        className="absolute inset-0 rounded-[8px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500"
       />
 
       {/* o cabeçalho do card: ícone à esquerda, nome ao lado — é o leiaute da
           captura, e é o que faz 48 de ícone caberem sem comer a descrição */}
       <div className="pointer-events-none flex shrink-0 items-center gap-3">
         <IconeDoApp app={app} lado={48} />
-        <h3 className="min-w-0 flex-1 truncate text-base font-semibold leading-tight text-txt-primary">
+        <h3 className="min-w-0 flex-1 truncate text-base font-semibold leading-tight text-text-strong">
           {app.name}
         </h3>
       </div>
 
       {/* duas linhas, como na captura. `line-clamp-2` e não `truncate`: uma
           descrição sem espaço nenhum também tem de cortar */}
-      <p className="pointer-events-none mt-3 line-clamp-2 shrink-0 text-sm leading-[18px] text-txt-muted">
+      <p className="pointer-events-none mt-3 line-clamp-2 shrink-0 text-sm leading-[18px] text-text-muted">
         {app.description ?? "Sem descrição."}
       </p>
 
-      <p className="pointer-events-none mt-auto shrink-0 pt-2 text-xs leading-tight text-txt-muted">
+      <p className="pointer-events-none mt-auto shrink-0 pt-2 text-xs leading-tight text-text-muted">
         {textoDeServidores(app.servidores)}
       </p>
 
+      {/*
+        Continua `<button>`, não `<Button>`: `data-adicionar-app` é seletor do
+        e2e (`scripts/e2e-f4-integracao.mjs`) e `ButtonProps` (que estende
+        `ButtonHTMLAttributes`, sem índice `data-*` nesta versão de
+        `@types/react`) não aceita a prop — passar quebraria o typecheck.
+        Cor já é token (`bg-brand-500` / `control-primary-text-default`).
+      */}
       <button
         type="button"
         onClick={aoAdicionar}
         data-adicionar-app={app.id}
-        className="relative mt-2 h-[32px] shrink-0 self-start rounded-[8px] bg-accent px-3 text-sm font-medium text-accent-ink transition-colors hover:brightness-110"
+        className="relative mt-2 h-[32px] shrink-0 self-start rounded-[8px] bg-brand-500 px-3 text-sm font-medium text-control-primary-text-default transition-colors hover:brightness-110"
       >
         Adicionar ao servidor
       </button>
@@ -136,7 +149,7 @@ export function IconeDoApp({ app, lado }: { app: AppDoDiretorio; lado: number })
     <span
       aria-hidden="true"
       style={{ ...estilo, backgroundColor: corDoAvatar(app.id), fontSize: Math.round(lado / 2.5) }}
-      className="grid shrink-0 place-items-center rounded-full font-semibold text-white"
+      className="grid shrink-0 place-items-center rounded-full font-semibold text-text-overlay-light"
     >
       {app.name.slice(0, 2).toUpperCase()}
     </span>

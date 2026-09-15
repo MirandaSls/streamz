@@ -1,42 +1,72 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { HeaderIcon } from "@/components/chat/HeaderBar";
+import { Popout, TextInput } from "@/components/ui/primitivos";
+import { useEhMobile } from "@/hooks/useEhMobile";
 
 /**
  * Botão da toolbar do cabeçalho que abre um painel ancorado abaixo dele —
  * o padrão das fixadas, das threads e da caixa de entrada no Discord.
  *
- * Três decisões que vieram da comparação com o original:
+ * A mecânica é do `Popout` (`components/ui/primitivos/Popout.tsx`): portal
+ * preso à janela, colisão com a borda, Esc, clique fora, foco preso e
+ * devolvido, folha inferior no celular e a entrada animada. O que fica aqui é
+ * o que é só deste painel:
  *
- * - **Altura fixa** (600px, limitada pela janela). Com `max-h` o painel mudava
- *   de tamanho a cada item que chegava; no Discord ele tem sempre a mesma
- *   caixa e é o conteúdo que rola dentro.
- * - **Caret**: a setinha que liga o painel ao ícone que o abriu. Sem ela o
- *   painel parece solto no cabeçalho.
- * - **Espelho horizontal**: um painel de 420–440px alinhado à direita vaza pela
- *   esquerda em janela estreita; quando não cabe, ele alinha pela esquerda do
- *   botão.
+ * - **Alinhado pela direita do botão** (`alinhamento="end"`), espelhando para
+ *   a esquerda quando não cabe — a conta de espelho agora é a do `Popout`. No
+ *   print 1:1 da caixa de entrada (`Captura de tela 2026-09-01 113500.png`) o
+ *   glifo do ícone ocupa x 1098–1113 (centro 1105,5) e a caixa termina em
+ *   x=1117: a borda direita da caixa é a de um botão de 24 centrado no glifo.
+ *   O `HeaderIcon` passou a ter a caixa de 32 do `.iconWrapper__9293f` (cartão
+ *   cabecalho-do-canal), então **no cabeçalho do canal** o painel termina 4px
+ *   mais à direita do que antes — é a borda do botão de verdade do Discord
+ *   (nenhum print mede painel de fixadas/threads, fica "não medido"). Na barra
+ *   de título, onde o print acima vale, a caixa de 24 volta com `botaoCompacto`.
+ * - **Altura fixa** (600, ou 466 na caixa de entrada — a do mesmo print, caixa
+ *   de y=37 a y=502), limitada pelo espaço abaixo do botão. Com `max-h` o
+ *   painel mudava de tamanho a cada item que chegava; no Discord ele tem
+ *   sempre a mesma caixa e é o conteúdo que rola dentro. O teto é calculado
+ *   do botão, e não mais um `100vh - 80px` fixo: o `Popout` troca de lado
+ *   quando a caixa não cabe embaixo, e numa janela baixa um painel de 600
+ *   iria parar ao lado do ícone.
+ * - **Sem caret.** A setinha que ligava o painel ao ícone saiu: no mesmo
+ *   print a coluna x=1105 vai da barra de título (#121214, y 25–32) direto
+ *   para a sombra e a borda da caixa (y 33–36), sem triângulo.
+ * - **Fundo** é o do `Popout`, `--background-surface-high`: o print mede
+ *   #242429 no miolo da caixa (x=900 y=200 e x=700 y=450), que é esse token, e
+ *   não o `--background-surface-higher` (#28282d) que este arquivo usava.
  *
- * Fecha no Esc e no clique fora; `onOpen` é onde o conteúdo carrega, para a
- * lista só ir ao servidor quando alguém realmente abre o painel.
+ * `onOpen` é onde o conteúdo carrega, para a lista só ir ao servidor quando
+ * alguém realmente abre o painel.
  */
 
-const FOCALIZAVEL =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-/** folga entre o ícone e o painel (a do Discord). */
+/**
+ * Distância entre o botão e o painel. Coerente com o print (glifo termina em
+ * y=24, a borda da caixa está em y=36), mas o tamanho do botão âncora do
+ * Discord não foi medido, então o 8 é "não medido" — é o mesmo padrão do
+ * `Popout`.
+ */
 const FOLGA = 8;
-/** margem mínima até a borda da janela. */
+/** Margem até a borda da janela: a mesma do `Popout` (8, não medida). */
 const BORDA = 8;
+/**
+ * A folha do celular do `Popout` tem teto de 85dvh e uma alça de 28px por
+ * cima do conteúdo; o painel desconta os dois para só o corpo rolar, e não a
+ * folha inteira (o cabeçalho com a busca subiria junto).
+ */
+const TETO_NA_FOLHA = "calc(85dvh - 28px)";
+
+/**
+ * Um clique no menu de contexto aberto de dentro do painel (o seletor
+ * "Threads Ativas ▾", o menu de um item) não é clique fora. O `ContextMenu`
+ * ainda não entra na pilha de camadas do `Popout`, então sem isto escolher
+ * "Threads Arquivadas" fechava o painel que devia mostrar a lista trocada.
+ */
+function ehMenuDeContexto(alvo: Element): boolean {
+  return alvo.closest('[role="menu"]') !== null;
+}
 
 export default function HeaderPopover({
   label,
@@ -49,7 +79,9 @@ export default function HeaderPopover({
   busca,
   largura = 420,
   altura = 600,
+  distancia = FOLGA,
   cabecalho,
+  botaoCompacto = false,
   corpoClassName = "p-2",
   evento,
   modoTela = false,
@@ -79,10 +111,38 @@ export default function HeaderPopover({
   /** altura fixa do painel (600 nas fixadas e threads; 466 na caixa de entrada). */
   altura?: number;
   /**
-   * Substitui o cabeçalho padrão (ícone + título) pelo que o chamador
-   * desenhar — a caixa de entrada tem controles e abas próprios.
+   * Distância entre o botão e o painel — o padrão é o `FOLGA` de sempre (8,
+   * não medido). A caixa de entrada da barra de título passa 0: no print 1:1
+   * (`Captura de tela 2026-09-02 152351.png`) o painel começa em y=36 com o
+   * ícone saindo em y≈31 da barra de título, sem folga nenhuma; com o FOLGA
+   * padrão o nosso painel nascia 8px mais baixo que o Discord (y=44), embora
+   * largura, altura, abas e sublinhado batessem pixel a pixel com o resto do
+   * mesmo print.
    */
-  cabecalho?: (fechar: () => void) => ReactNode;
+  distancia?: number;
+  /**
+   * **Slot do cabeçalho.** Substitui o cabeçalho padrão inteiro — a linha de
+   * título (ícone + título + contagem + `action`) **e** o campo de `busca`, que
+   * mora dentro dele — pelo que o chamador desenhar: a caixa de entrada tem
+   * controles e abas próprios, e o painel de Threads monta o dele.
+   *
+   * Aceita um nó pronto ou uma função que recebe o `fechar` (para um × ou um
+   * item que fecha o painel). O resto do painel não muda com o slot:
+   * - **foco ao abrir** (desktop): o efeito abaixo procura `[data-autofocus]`
+   *   em toda a moldura, slot incluído — um cabeçalho próprio com busca põe o
+   *   atributo no campo dele e o foco cai lá; sem nenhum, o foco vai para a
+   *   caixa do `Popout`, como no padrão;
+   * - **fechar**: Esc, clique fora e o clique no botão continuam do `Popout`
+   *   e deste componente; a função recebe o mesmo `fechar` do corpo;
+   * - **altura e rolagem**: o slot é `shrink-0` por conta de quem desenha (o
+   *   corpo é que rola); a borda de baixo do padrão não vem junto.
+   */
+  cabecalho?: ReactNode | ((fechar: () => void) => ReactNode);
+  /**
+   * Botão na caixa de 24 (`HeaderIcon compacto`) em vez da de 32 — a barra de
+   * título do desktop, onde o print `113500` mede o painel pela caixa de 24.
+   */
+  botaoCompacto?: boolean;
   /** classes do corpo rolável; o padrão é o `p-2` das listas de cartões. */
   corpoClassName?: string;
   /** nome de um evento no `window` que abre o painel (o atalho Ctrl+I). */
@@ -105,126 +165,121 @@ export default function HeaderPopover({
   children: (fechar: () => void) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  /** null enquanto não medimos: o painel nasce alinhado à direita do botão. */
-  const [alinharEsquerda, setAlinharEsquerda] = useState(false);
-  const boxRef = useRef<HTMLDivElement>(null);
-  const painelRef = useRef<HTMLDivElement>(null);
-  const botaoRef = useRef<HTMLElement | null>(null);
+  /** espaço abaixo do botão, medido ao abrir e a cada resize. */
+  const [alturaMaxima, setAlturaMaxima] = useState<number | undefined>(undefined);
+  const ancoraRef = useRef<HTMLDivElement>(null);
+  const molduraRef = useRef<HTMLDivElement>(null);
+  const ehMobile = useEhMobile();
 
   const fechar = useCallback(() => setOpen(false), []);
 
-  // o atalho abre este painel; o primeiro montado a ouvir fica com o evento
+  const medirAlturaMaxima = useCallback(() => {
+    const r = ancoraRef.current?.getBoundingClientRect();
+    // `floor`: o `Popout` compara com a altura em px inteiros (`offsetHeight`),
+    // e meio pixel arredondado para cima já contaria como "não cabe embaixo".
+    // `distancia`, não o `FOLGA` fixo: o teto tem que descontar o mesmo vão
+    // que o `Popout` vai usar de verdade (a caixa de entrada passa 0).
+    setAlturaMaxima(r ? Math.max(0, Math.floor(window.innerHeight - r.bottom - distancia - BORDA)) : undefined);
+  }, [distancia]);
+
+  // o teto é medido no mesmo evento que abre, e não num efeito depois: o
+  // `Popout` escolhe o lado pela altura do primeiro quadro, e um painel que
+  // nascesse com 600 numa janela baixa iria para o lado antes de encolher
   const onOpenRef = useRef(onOpen);
   onOpenRef.current = onOpen;
+  const abrir = useCallback(() => {
+    medirAlturaMaxima();
+    setOpen(true);
+    onOpenRef.current?.();
+  }, [medirAlturaMaxima]);
+
+  // o atalho abre este painel; o primeiro montado a ouvir fica com o evento
   useEffect(() => {
     if (!evento) return;
-    function abrir(e: Event) {
+    function aoEvento(e: Event) {
       e.stopImmediatePropagation();
-      setOpen(true);
-      onOpenRef.current?.();
+      abrir();
     }
-    window.addEventListener(evento, abrir);
-    return () => window.removeEventListener(evento, abrir);
-  }, [evento]);
-
-  // alinhado à direita do botão; se o painel vazasse pela esquerda, à esquerda
-  useLayoutEffect(() => {
-    if (!open) return;
-    const r = boxRef.current?.getBoundingClientRect();
-    if (!r) return;
-    setAlinharEsquerda(r.right - largura < BORDA);
-  }, [open, largura]);
+    window.addEventListener(evento, aoEvento);
+    return () => window.removeEventListener(evento, aoEvento);
+  }, [evento, abrir]);
 
   useEffect(() => {
-    if (!open) return;
-    // quem tinha o foco volta a tê-lo quando o painel fecha
-    botaoRef.current = document.activeElement as HTMLElement | null;
-    // o campo de busca, quando existe; senão o próprio painel — cair no
-    // primeiro focável levaria o foco para um botão que só existe no hover
-    const alvo = painelRef.current?.querySelector<HTMLElement>("[data-autofocus]");
-    (alvo ?? painelRef.current)?.focus();
-    return () => botaoRef.current?.focus?.();
-  }, [open]);
+    if (!open || ehMobile) return;
+    window.addEventListener("resize", medirAlturaMaxima);
+    return () => window.removeEventListener("resize", medirAlturaMaxima);
+  }, [open, ehMobile, medirAlturaMaxima]);
 
+  /*
+    Foco ao abrir, no desktop: o campo de busca quando existe; senão a própria
+    caixa. O `Popout` cairia no primeiro focável, e nas fixadas esse é o
+    "Saltar" de um cartão — um botão que só existe no hover, e que o foco
+    faria aparecer. Um quadro depois porque o `Popout` nasce invisível até
+    medir a posição, e `focus()` não pega em `visibility: hidden`. Na folha do
+    celular fica a regra do `Popout` (foco na alça, sem levantar o teclado).
+  */
   useEffect(() => {
-    if (!open) return;
-    function aoTeclar(e: globalThis.KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    function aoClicar(e: MouseEvent) {
-      if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
-    }
-    window.addEventListener("keydown", aoTeclar);
-    // captura: um clique em algo que remonta a árvore ainda fecha o painel
-    window.addEventListener("mousedown", aoClicar, true);
-    return () => {
-      window.removeEventListener("keydown", aoTeclar);
-      window.removeEventListener("mousedown", aoClicar, true);
-    };
-  }, [open]);
-
-  /** Tab preso dentro do painel, como num diálogo. */
-  function prenderFoco(e: KeyboardEvent<HTMLDivElement>) {
-    if (e.key !== "Tab") return;
-    const nos = Array.from(
-      painelRef.current?.querySelectorAll<HTMLElement>(FOCALIZAVEL) ?? [],
-    ).filter((no) => no.offsetParent !== null);
-    if (nos.length === 0) return;
-    const primeiro = nos[0];
-    const ultimo = nos[nos.length - 1];
-    if (e.shiftKey && document.activeElement === primeiro) {
-      e.preventDefault();
-      ultimo.focus();
-    } else if (!e.shiftKey && document.activeElement === ultimo) {
-      e.preventDefault();
-      primeiro.focus();
-    }
-  }
+    if (!open || ehMobile) return;
+    const quadro = requestAnimationFrame(() => {
+      const moldura = molduraRef.current;
+      if (!moldura) return;
+      const alvo =
+        moldura.querySelector<HTMLElement>("[data-autofocus]") ??
+        moldura.closest<HTMLElement>("[data-popout]");
+      alvo?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(quadro);
+  }, [open, ehMobile]);
 
   if (modoTela) return <ComoTela {...{ icon, title, tituloControle, contagem, action, busca, cabecalho, corpoClassName, onOpen, children }} />;
 
   return (
-    <div ref={boxRef} className="relative">
+    <div ref={ancoraRef} className="relative">
       <HeaderIcon
         label={label}
         active={open}
         semTooltip={open}
-        onClick={() => {
-          const proximo = !open;
-          setOpen(proximo);
-          if (proximo) onOpen?.();
-        }}
+        compacto={botaoCompacto}
+        onClick={() => (open ? fechar() : abrir())}
       >
         {icon}
       </HeaderIcon>
       {badge}
 
-      {open && (
-        <>
-          {/* caret: liga o painel ao ícone que o abriu */}
-          <span
-            aria-hidden="true"
-            style={{
-              borderLeft: "6px solid transparent",
-              borderRight: "6px solid transparent",
-              borderBottom: "6px solid #050507",
-            }}
-            className="absolute left-1/2 top-full z-40 -ml-1.5 mt-0.5 h-0 w-0"
-          />
+      <Popout
+        aberto={open}
+        aoFechar={fechar}
+        ancora={ancoraRef}
+        lado="bottom"
+        alinhamento="end"
+        distancia={distancia}
+        largura={largura}
+        rotulo={title}
+        focarAoAbrir={ehMobile}
+        ehDeDentro={ehMenuDeContexto}
+        /*
+          `!z-[39]` passa por cima do `zIndex` 90 que o `Popout` põe inline. Com
+          90 o painel cobriria as camadas que ele mesmo abre e que ainda não
+          entraram na pilha do `Popout`: o `ContextMenu` (z-80) do seletor de
+          threads nasceria **atrás** do painel, e o confirm de "Desafixar"
+          (`Dialog`, z-50) ficaria por baixo dele. 39 é logo abaixo da camada 40
+          (barra de título, chamada recebida, avisos do PWA), que ficava por
+          cima do painel antigo, e acima de todo o resto do app (≤ z-30).
+        */
+        className="!z-[39] overflow-hidden"
+        classeNaFolha=""
+      >
+        {open ? (
           <div
-            ref={painelRef}
-            role="dialog"
-            aria-modal="true"
-            aria-label={title}
-            tabIndex={-1}
-            onKeyDown={prenderFoco}
-            style={{ width: largura, height: altura, top: `calc(100% + ${FOLGA}px)` }}
-            className={`absolute z-30 flex max-h-[calc(100vh-80px)] flex-col overflow-hidden rounded-lg bg-overlay shadow-high outline-none anim-menu ${
-              alinharEsquerda ? "left-0" : "right-0"
-            }`}
+            ref={molduraRef}
+            style={{
+              height: altura,
+              maxHeight: ehMobile ? TETO_NA_FOLHA : alturaMaxima,
+            }}
+            className="flex flex-col"
           >
-            {cabecalho ? (
-              cabecalho(fechar)
+            {cabecalho != null && cabecalho !== false ? (
+              desenharSlot(cabecalho, fechar)
             ) : (
               <CabecalhoPadrao
                 icon={icon}
@@ -240,13 +295,33 @@ export default function HeaderPopover({
               {children(fechar)}
             </div>
           </div>
-        </>
-      )}
+        ) : null}
+      </Popout>
     </div>
   );
 }
 
-/** O cabeçalho de fábrica do painel — o mesmo no popover e no `modoTela`. */
+/** O slot `cabecalho` nas duas formas: nó pronto ou função do `fechar`. */
+function desenharSlot(cabecalho: ReactNode | ((fechar: () => void) => ReactNode), fechar: () => void): ReactNode {
+  return typeof cabecalho === "function" ? cabecalho(fechar) : cabecalho;
+}
+
+/**
+ * O cabeçalho de fábrica do painel — o mesmo no popover e no `modoTela`.
+ *
+ * Caixa do `.header__0aee3` (o cabeçalho do popout de fixadas,
+ * `css-bruto/sob-demanda/f7dc7e191961bace.css`):
+ * `border-bottom:1px solid var(--border-subtle);padding:16px`. Antes era uma
+ * linha de 48 (`h-12 px-4`) fechada por `shadow-elevation-low`, que na nossa
+ * `fixadas.png` desenhava uma linha **escura** (#19191d em y=92, x=1300) onde o
+ * Discord tem uma linha **mais clara** que o fundo (`--border-subtle` #94949c1f
+ * sobre #242429 ≈ #313136).
+ *
+ * Com `busca` (o painel de Threads de fábrica) a linha de título perde os 16 de
+ * baixo e o campo leva 16 embaixo, para a borda não colar no campo: "não
+ * medido" — nenhum print mostra o painel de threads, e o cartão de Threads deve
+ * trocar este cabeçalho pelo slot `cabecalho`.
+ */
 function CabecalhoPadrao({
   icon,
   title,
@@ -265,33 +340,36 @@ function CabecalhoPadrao({
   fechar: () => void;
 }) {
   return (
-    <header className="shrink-0 shadow-header">
-      <div className="flex h-12 items-center gap-2 px-4">
-        <span aria-hidden="true" className="shrink-0 text-txt-secondary">
+    <header className="shrink-0 border-b border-border-subtle">
+      <div className={`flex items-center gap-2 ${busca ? "px-4 pt-4" : "p-4"}`}>
+        <span aria-hidden="true" className="shrink-0 text-text-subtle">
           {icon}
         </span>
         {tituloControle ? (
           tituloControle(fechar)
         ) : (
-          <h2 className="min-w-0 truncate font-semibold text-txt-primary">{title}</h2>
+          <h2 className="min-w-0 truncate font-semibold text-text-strong">{title}</h2>
         )}
         {contagem !== undefined && contagem > 0 && (
-          <span className="shrink-0 rounded-full bg-void px-1.5 text-xs font-semibold text-txt-muted">
+          <span className="shrink-0 rounded-full bg-input-background-default px-1.5 text-xs font-semibold text-text-muted">
             {contagem}
           </span>
         )}
         {action && <span className="ml-auto shrink-0">{action}</span>}
       </div>
       {busca && (
-        <div className="px-4 pb-2">
-          <input
+        <div className="px-4 pb-4 pt-2">
+          {/* `sm` (32) é o tamanho do campo de busca de lista do Discord
+              (`.searchBar_c322aa`, ver o cabeçalho do `TextInput`); o campo
+              antigo tinha 28, que não saiu de medida nenhuma */}
+          <TextInput
+            tamanho="sm"
             data-autofocus
             value={busca.valor}
             onChange={(e) => busca.aoMudar(e.target.value)}
             type="search"
             aria-label={busca.placeholder}
             placeholder={busca.placeholder}
-            className="h-7 w-full rounded-[4px] bg-void px-2 text-sm text-txt-normal outline-none placeholder:text-txt-muted"
           />
         </div>
       )}
@@ -321,7 +399,7 @@ function ComoTela({
   contagem?: number;
   action?: ReactNode;
   busca?: { valor: string; aoMudar: (valor: string) => void; placeholder: string };
-  cabecalho?: (fechar: () => void) => ReactNode;
+  cabecalho?: ReactNode | ((fechar: () => void) => ReactNode);
   corpoClassName: string;
   onOpen?: () => void;
   children: (fechar: () => void) => ReactNode;
@@ -338,9 +416,9 @@ function ComoTela({
   const fechar = useCallback(() => {}, []);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-panel" role="region" aria-label={title}>
-      {cabecalho ? (
-        cabecalho(fechar)
+    <div className="flex h-full min-h-0 flex-col bg-background-base-lowest" role="region" aria-label={title}>
+      {cabecalho != null && cabecalho !== false ? (
+        desenharSlot(cabecalho, fechar)
       ) : (
         <CabecalhoPadrao
           icon={icon}

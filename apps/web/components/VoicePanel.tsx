@@ -2,8 +2,8 @@
 
 import { useRef } from "react";
 import { AlertTriangle, MessageSquare, RotateCw, UserPlus, Users, Volume2 } from "@/components/ui/icones";
-import type { Channel, NotificationLevel } from "@streamz/shared";
-import Tooltip from "@/components/ui/Tooltip";
+import { Permission, type Channel, type NotificationLevel } from "@streamz/shared";
+import { BotaoDeIcone } from "@/components/ui/primitivos";
 import IconesDoCanto from "@/components/voice/IconesDoCanto";
 import { membrosVisiveis } from "@/components/voice/paineis-da-call";
 import VistaDoCanalDeVoz from "@/components/voice/VistaDoCanalDeVoz";
@@ -19,6 +19,7 @@ import {
   levelForChannel,
   useNotifications,
 } from "@/stores/notifications";
+import { useCan } from "@/stores/permissions";
 import { ui, useUI, type MenuItem } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
 
@@ -75,6 +76,16 @@ export default function VoicePanel({
   );
   const alternarMembros = useUI((s) => s.alternarMembrosNaCall);
 
+  // `CONNECT` — ver o canal na coluna não é poder entrar nele (mesmo bit que a
+  // API confere em `voice.service.ts:assertPodeConectar`; a UI só esconde o
+  // que ela recusaria, como em qualquer outro `useCan` do projeto). DM/grupo
+  // (`guildId` nulo) não tem cargo nem bitfield — lá quem decide é já ser
+  // participante da conversa, e `useCan` sempre devolveria `false` sem
+  // servidor, então o hook roda (regra dos hooks) mas o resultado só conta
+  // para canal de servidor.
+  const podeConectarNoServidor = useCan(Permission.CONNECT, channel.id);
+  const podeConectar = channel.guildId ? podeConectarNoServidor : true;
+
   const palco = useRef<HTMLDivElement>(null);
   const { telaCheia, alternar } = useTelaCheia(palco);
   const { visivel, doPalco, daMoldura } = useOcultarInativo();
@@ -92,8 +103,12 @@ export default function VoicePanel({
     <div
       ref={palco}
       {...doPalco}
-      // a tela cheia é a do navegador (ver `fullscreen.ts`), não um `fixed inset-0`
-      className="flex h-full flex-col bg-chat"
+      // a tela cheia é a do navegador (ver `fullscreen.ts`), não um `fixed inset-0`.
+      // Preto puro (`bg-black`, o `--black` do Discord, não o preto do
+      // Tailwind) só enquanto `aqui`: print `2026-08-31 101857`, pixel 1000,100
+      // = `#000000` (`CallStage.tsx` já usa o mesmo tom). A `VistaDoCanalDeVoz`
+      // — sem conexão — continua com o degradê sobre `background-base-lower`.
+      className={`flex h-full flex-col ${aqui ? "bg-black" : "bg-background-base-lower"}`}
       data-voice-panel={channel.id}
     >
       {/* **No celular este cabeçalho não existe.** A tela empilhada já tem o
@@ -108,24 +123,24 @@ export default function VoicePanel({
         // Na vista do canal o cabeçalho flutua sobre o degradê: na print não há
         // filete nenhum cruzando o palco, e o brilho sobe por trás do nome.
         className={`flex h-[49px] shrink-0 items-center justify-between gap-2 px-4 transition-opacity duration-200 ${
-          aqui ? "border-b border-border shadow-header" : ""
+          aqui ? "border-b border-border-subtle shadow-elevation-low" : ""
         } ${molduraVisivel ? "opacity-100" : "pointer-events-none opacity-0"}`}
       >
-        <span className="flex min-w-0 items-center gap-2 font-semibold text-txt-primary">
-          <Volume2 size={24} className="shrink-0 text-txt-muted" aria-hidden="true" />
+        <span className="flex min-w-0 items-center gap-2 font-semibold text-text-strong">
+          <Volume2 size={24} className="shrink-0 text-text-muted" aria-hidden="true" />
           <span className="truncate">{nome}</span>
         </span>
         <span className="flex shrink-0 items-center gap-1">
           <AoVivoIndicador />
           {/* no canal de voz o palco ocupa tudo: este botão é o ÚNICO caminho
               para o chat de texto do canal */}
-          <IconeDeCabecalho
-            label={chatAberto ? "Ocultar chat" : "Abrir chat"}
-            active={chatAberto}
+          <BotaoDeIcone
+            rotulo={chatAberto ? "Ocultar chat" : "Abrir chat"}
+            icone={<MessageSquare size={20} />}
+            ativo={chatAberto}
+            comFundo
             onClick={() => toggleVoiceChat(channel.id)}
-          >
-            <MessageSquare size={20} />
-          </IconeDeCabecalho>
+          />
           {/* **Membros também aqui.** O canal de voz é um canal do servidor
               como outro qualquer, e a lista da coluna da direita é a mesma do
               canal de texto (`MemberList`: cargos, Disponível, Offline e a
@@ -143,13 +158,13 @@ export default function VoicePanel({
               (`paineis-da-call.ts`) — os dois têm de sumir no mesmo instante,
               senão sobra um botão que não muda nada na tela. */}
           {!aqui && (
-            <IconeDeCabecalho
-              label={listaVisivel ? "Ocultar lista de membros" : "Mostrar lista de membros"}
-              active={listaVisivel}
+            <BotaoDeIcone
+              rotulo={listaVisivel ? "Ocultar lista de membros" : "Mostrar lista de membros"}
+              icone={<Users size={20} />}
+              ativo={listaVisivel}
+              comFundo
               onClick={() => alternarMembros(channel.id)}
-            >
-              <Users size={20} />
-            </IconeDeCabecalho>
+            />
           )}
           {/* sem sino aqui: no print o cabeçalho do canal de voz tem só o
               balão do chat. Notificação e silêncio continuam no menu de
@@ -163,10 +178,13 @@ export default function VoicePanel({
         // banner de largura total: uma falha de conexão não é nota de rodapé
         <div
           role="alert"
-          className="flex shrink-0 items-center gap-2 bg-red px-4 py-2 text-sm font-medium text-white"
+          className="flex shrink-0 items-center gap-2 bg-status-danger px-4 py-2 text-sm font-medium text-control-critical-primary-text-default"
         >
           <AlertTriangle size={16} className="shrink-0" aria-hidden="true" />
           <span className="min-w-0 flex-1">{erro}</span>
+          {/* sem primitivo/token para "capa translúcida branca sobre banner de
+              perigo" (nem `Button` nem `bg-white/NN` têm par no contrato) — mesmo
+              padrão intocado em `CallStage.tsx`; ver "faltando" no cartão m25 */}
           <button
             type="button"
             onClick={() => void reconnect()}
@@ -194,7 +212,11 @@ export default function VoicePanel({
                   // orientação — deitado a cápsula de controles flutua sobre o
                   // vídeo em vez de ocupar altura.
                   "h-full"
-                : "h-full p-4 pb-24"
+                : // `px-2 pt-2` = `FOLGA_DO_PALCO` (8px, `grid-layout.ts:38`,
+                  // medido print `101857` x=1911–1918): tínhamos `p-4` (16),
+                  // o dobro. `pb-24` continua à parte — reserva espaço para a
+                  // barra de controles flutuante, não é folga do palco.
+                  "h-full px-2 pt-2 pb-24"
             }
           >
             {/* **A grade aparece no clique, não no `connected`.** Quem manda
@@ -213,6 +235,7 @@ export default function VoicePanel({
           <VistaDoCanalDeVoz
             nome={nome}
             estados={estados}
+            podeConectar={podeConectar}
             onEntrar={() => void connect(channel)}
           />
         )}
@@ -240,14 +263,14 @@ export default function VoicePanel({
                 visivel ? "opacity-100" : "pointer-events-none opacity-0"
               }`}
             >
-              <IconeDeCabecalho
-                label="Convidar para voz"
+              <BotaoDeIcone
+                rotulo="Convidar para voz"
+                icone={<UserPlus size={22} />}
+                comFundo
                 onClick={() =>
                   channel.guildId && ui.openModal({ kind: "invite", guildId: channel.guildId })
                 }
-              >
-                <UserPlus size={22} />
-              </IconeDeCabecalho>
+              />
             </div>
 
             <IconesDoCanto
@@ -301,33 +324,4 @@ function abrirMenuDeNotificacoes(
     })),
   ];
   ui.openContextMenu(r.left, r.bottom + 4, itens);
-}
-
-function IconeDeCabecalho({
-  label,
-  onClick,
-  active = false,
-  children,
-}: {
-  label: string;
-  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
-  /** ligado (o chat aberto, por exemplo) fica branco, como na toolbar do canal. */
-  active?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        onClick={onClick}
-        aria-label={label}
-        aria-pressed={active || undefined}
-        className={`grid h-8 w-8 place-items-center rounded-[4px] transition hover:bg-hov hover:text-txt-primary ${
-          active ? "text-txt-primary" : "text-txt-secondary"
-        }`}
-      >
-        {children}
-      </button>
-    </Tooltip>
-  );
 }

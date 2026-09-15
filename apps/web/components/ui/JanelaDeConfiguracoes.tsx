@@ -1,92 +1,147 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { ArrowLeft, ChevronDown, ChevronRight, Search, X } from "@/components/ui/icones";
 import {
   BarraDeAlteracoes,
   ProvedorDeAlteracoes,
   type ControleDeAlteracoes,
 } from "@/components/ui/alteracoes";
+import { BotaoDeIcone, TextInput, Tooltip } from "@/components/ui/primitivos";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { useVoltarNoCelular } from "@/hooks/useVoltarNoCelular";
 
 /**
- * A moldura das configurações — a única do app. Servem-se dela as quatro telas:
- * usuário, servidor, canal e grupo. O leiaute mora aqui e a navegação entra
- * como **dado**.
+ * A moldura das configurações — a única do app. Servem-se dela as telas de
+ * usuário, servidor, canal, categoria e grupo. O leiaute mora aqui e a
+ * navegação entra como **dado**.
  *
- * **É uma janela flutuante, não uma página.** Era `fixed inset-0` (a tela
- * inteira, com o ESC redondo numa coluna de 60px à direita); o Discord de hoje
- * abre as configurações como um modal centrado, com o app escurecido em volta.
- * As medidas vieram do print `docs/Reference/Captura de tela 2026-09-01
- * 114404.png` (janela de 1920×1032, medido por `getpixel`) e se repetem em
- * 114348/114644:
+ * O Discord de 2026-09 tem **dois desenhos** para isso, e os dois vivem aqui
+ * (`variante`):
  *
- * | item | medida no print |
- * |---|---|
- * | véu | preto a ~80% (painel `#1A1A1E` → `(5,5,6)`) |
- * | modal | 1400×888 centrado; sobra 260 de cada lado e 72 em cima/embaixo |
- * | moldura | borda de 1px `(41,41,45)`, cantos de ~8px |
- * | coluna do menu | 252px, itens de 220×40 com 16 de recuo |
- * | busca | 220×40, borda de 1px, fundo transparente |
- * | cabeçalho | 48px + divisória de 1px, **só sobre o conteúdo** |
- * | fechar | X simples de 12px, centro a 24px da borda direita |
- * | conteúdo | coluna útil de 700px centrada, 40px de recuo lateral |
+ * ## `janela` — as configurações do usuário (o refresh de 2025)
  *
- * O 1400×888 é teto, não tamanho fixo: `max-w/max-h` deixam o modal encolher
- * até 16px de margem, e as duas colunas rolam por dentro. Só existe print de
- * uma largura de janela, então não dá para saber se o Discord usa porcentagem;
- * o teto é o que reproduz o print e sobrevive à janela pequena.
+ * Modal centrado com o app escurecido em volta. Casca medida no CSS
+ * (`css-bruto/sob-demanda/48832ff684019b72.css`, `.modal_e44912`) e o miolo
+ * nos prints 1:1 `docs/Reference/Captura de tela 2026-09-01 114404.png`
+ * (menu rolado até o fim), `114644` (menu no topo) e `114508`:
  *
- * O cartão de perfil e a busca ficam **fixos** no topo do menu e só a lista
- * rola — é o que os prints mostram (a mesma altura do cartão com a lista em
- * posições diferentes).
+ * | item | medida | origem |
+ * |---|---|---|
+ * | tamanho | `100% − 2×(40 + 32)` com teto de 1400; até 1600px de janela, `100% − 2×40`; até 1080px, tela cheia sem borda nem raio | `.modal_e44912` e as duas `@container` |
+ * | moldura | borda 1px `--border-subtle`, raio 12 | 114404: borda `#29292d` em x=260/y=72; a curva chega à coluna x=260 em y≈82 |
+ * | coluna do menu | 252, fundo `--background-base-lower` | 114404 linha y=600: x 261–512 `#1a1a1e` |
+ * | conteúdo | `--background-base-low` | 114404 pixel (1000,200) `#202024` |
+ * | cartão de perfil | avatar 48 a 11 da borda do item, nome a 12 do avatar | 114404: avatar x 288–335/y 104–151, nome x=347 |
+ * | busca | 220×40 | 114404: x 277–496, y 167–206 |
+ * | item | 220 × mín. 40, recuo 10, ícone 20, texto a 10 do ícone, 16px/20, 4 entre itens; **quebra linha** (60 com duas) | 114404: selecionado x 277–496/y 291–330; ícones x 287–306; texto x=317; "Privacidade nas atividades" em duas linhas de 20 |
+ * | item selecionado | `--background-mod-normal` (`#2e2e33` sobre `#1a1a1e`), raio 8, texto `--text-strong` | 114404 caixa (480,300) |
+ * | item em repouso | texto e ícone `--text-muted` (`#96979e`) | 114404, tinta dos itens |
+ * | cabeçalho de grupo | 14px/18, `--text-muted`, sem caixa-alta, recuo 8, 8 de respiro em cima e embaixo | 114404: "Jogos e apps" glifo y 588–600, x=285 |
+ * | divisória entre grupos | 1px `--border-subtle` na largura do item, 10 acima e 10 abaixo | 114404: y=565 e y=812, x 277–496 |
+ * | subitens | trilho 2px `--border-subtle` alinhado ao centro do ícone, marca 2×20 `--text-strong` no subitem visível, 40 por linha, texto na coluna do rótulo | 114404: trilho x 296–297/y 361–500, marca y 341–360, "Geral" x=317 |
+ * | esmaecido da lista rolada | 40px de gradiente sob a busca, só com a lista fora do topo | 114404 y 207→246 (alfa 0→1); 114644 sem esmaecido no topo |
+ * | cabeçalho do conteúdo | 48 + divisória 1px `--border-muted`, título 16px semibold `--text-default` a 16 da borda | 114404: y 73–120, divisória `#252529` em y=121; título x=530 `#efeff1` |
+ * | fechar | X de 12px `--icon-subtle` com centro a 24 da borda direita | 114404: glifo x 1629–1640/y 91–102 `#abacb2` |
+ * | coluna do conteúdo | 700 úteis, centrada | 114404: divisória x 739–1434, centro = centro da área |
+ * | versão | 12px `--text-muted`, 36 abaixo do último item | 114404: glifo y 947–954, "Sair" termina em y=907 |
  *
- * Não usa `Dialog` de propósito: `Dialog` é a caixa de 380–480px com rodapé de
- * botões. O que se repete de lá é a casca (véu `bg-black`, `rounded-lg border
- * border-border bg-chat`) e o contrato de acessibilidade — `role="dialog"`,
+ * ## `tela-cheia` — configurações do servidor (o `standardSidebarView`)
+ *
+ * Tela cheia, sem véu. Módulo `.standardSidebarView__23e6b`
+ * (`css-bruto/sob-demanda/98259d2dbb54535f.css`) + a barra de abas lateral
+ * `.side_aa8da2` (`css-bruto/773326.616f0e0d19c4d900.css`), conferidos no
+ * print `2026-09-04 100541.png` (e `100700`), janela 1919×1079:
+ *
+ * | item | medida | origem |
+ * |---|---|---|
+ * | região do menu | `flex: 1 0 272`, fundo `--background-base-lowest`, menu encostado à direita | `.sidebarRegion__23e6b`; print: `#121214` até x=691 |
+ * | menu | 272 = 20 + 238 + 14 (6 de recuo + 8 de barra de rolagem), 60 em cima | print: itens x 440–677; `.sidebar__23e6b{padding-block:60px}` |
+ * | item | 36 (6 + 24 + 6), recuo 10, raio 4, 2 entre itens, 16px medium, reticências | `.side_aa8da2 .item_aa8da2`; print: "Perfil do servidor" y 82–117, passo 38 |
+ * | item: cores | repouso `--text-subtle`; hover `--background-mod-subtle` + `--text-strong`; ativo e selecionado `--background-mod-strong` + `--text-strong` | `.themed_aa8da2`; print: `#2c2c30` sobre `#121214` |
+ * | cabeçalho | 12px bold caixa-alta `--channels-default`, 6×10 (0 em cima no primeiro) | `.header_aa8da2`; print: "EXPRESSÕES" `#81828a` |
+ * | separador | 1px `--border-subtle`, margem 8×10 | `.separator_aa8da2`; print: y=242, x 450–667 |
+ * | conteúdo | `flex: 1 1 800`, `--background-base-low`, coluna de até 740 com 60/40/80 | `.contentRegion__23e6b`, `.contentColumnDefault__23e6b`; print: título em x=732 |
+ * | fechar "ESC" | coluna de 36 logo depois da coluna de conteúdo, 21 da borda, 60 do topo, fixa na rolagem; círculo 36 com anel 2px, X de 10, "ESC" embaixo, tudo `--icon-subtle` | `.toolsContainer__23e6b` (+ `.tools{position:fixed}`); print: círculo x 1432–1467 (100700), X y 105–114 (100541) |
+ * | aviso de alterações | largura da coluna + 20 de cada lado, 20 da borda de baixo | `.noticeRegion__23e6b{max-width:740px;padding:0 20px 20px}` |
+ *
+ * No Windows o Discord ainda desce o conteúdo 32px pela barra de título
+ * (`.platform-win .contentRegionScroller`); aqui a tela começa **abaixo** da
+ * nossa barra (`--barra-de-titulo`), que é a mesma coisa sem esconder os
+ * botões da janela.
+ *
+ * **Os dois fechamentos** são essa diferença: X simples no cabeçalho de 48 na
+ * `janela`, círculo com "ESC" na `tela-cheia`. `fecharComoEsc` continua
+ * aceito e quer dizer `variante="tela-cheia"`.
+ *
+ * Não usa `Modal` de propósito: `Modal` é a caixa de 380–480px com rodapé de
+ * botões. O que se repete de lá é o contrato de acessibilidade — `role="dialog"`,
  * `aria-modal`, Esc fecha, o foco começa dentro e **volta para quem abriu**.
  *
  * ## No celular: mestre-detalhe em tela cheia
  *
- * A janela de 1400×888 com menu fixo de 252 não cabe num telefone: em 390px de
- * largura sobravam ~100 para o conteúdo. No celular a mesma moldura vira o que
- * o Discord faz — **duas telas**, não duas colunas:
+ * A janela com menu fixo não cabe num telefone. No celular a mesma moldura vira
+ * o que o Discord faz — **duas telas**, não duas colunas:
  *
  * 1. a lista de seções, agrupada em cartões de cantos arredondados, com um
- *    cabeçalho ("Configurações") e um X;
- * 2. tocar num item **empurra a seção em tela cheia**, com seta de voltar e o
- *    nome da seção no cabeçalho próprio.
+ *    cabeçalho **centralizado** e o fechar sempre à **esquerda** (nunca à
+ *    direita: as duas capturas trazem o glifo colado na borda esquerda e o
+ *    título no centro da tela — `discord-mobile-config-usuario.png` e
+ *    `-config-servidor.png`, MEDIDAS.md §11);
+ * 2. tocar num item **empurra a seção em tela cheia**, com seta de voltar
+ *    **e o título ao lado dela, à esquerda** (não centralizado — diferente da
+ *    lista: `medir.py linha config-usuario-aparencia.png 92 0 719` acha a
+ *    seta em x 40–68 e "Appearance" logo depois, em x 101–257 — centro 179
+ *    contra o centro real 360 da tela de 720, ou seja **colado à seta**, não
+ *    no meio).
+ *
+ * O glifo do fechar da lista muda com a `variante`: as configurações do
+ * **usuário** (`janela`) abrem com **seta** (`config-usuario.png`: "←
+ * Settings" — é a mesma pilha da aba Você, "voltar" faz sentido); as do
+ * **servidor** (`tela-cheia`) abrem com **X** (`config-servidor.png`: "✕
+ * Server Settings" — vem de um menu, não tem para onde "voltar"). O detalhe
+ * empurrado é sempre seta, nas duas variantes: dentro da seção sempre existe
+ * uma lista para onde voltar.
  *
  * O Esc e o "voltar" do Android desfazem **uma camada por vez**: detalhe →
- * lista → fechado (`useVoltarNoCelular`).
+ * lista → fechado (`useVoltarNoCelular`). O ramo do celular é da onda 8; este
+ * cartão (6a) não o redesenhou.
  *
  * Medidas das referências (`docs/Reference/mobile/`,
  * `discord-mobile-config-usuario.png` e `config-servidor.png`, `MEDIDAS.md`
- * §11): passo de linha de **37 pt** e fundo `#26272F`. Duas diferenças
- * registradas de propósito:
+ * §11):
  *
- * - a linha aqui tem **48px**, não 37: 37 fica abaixo do alvo de toque de 44px
- *   que vale para todo o leiaute mobile (`components/mobile/pecas.tsx`). O
- *   Discord chega perto porque a linha inteira é alvo e ele aceita 37; nós
- *   preferimos o piso das duas plataformas;
- * - as cores não mudam (§6.6): o fundo da página é o `chat` e o cartão é o
- *   `panel`, que é o par de superfícies mais próximo do `#26272F` sobre o preto
- *   da referência.
+ * | item | medida | origem |
+ * |---|---|---|
+ * | passo de linha (divisória a divisória) | **55pt** | §11 tinha "37pt" até a correção de 2026-09-09 (o número velho media a altura do *conteúdo* da linha, não o passo — a `panel` errava a linha em quase metade). Confirmado em duas capturas de escala diferente: `config-servidor.png` (738×1600, y=212/315/418/521 → 103px) e `config-usuario.png` (769×1600, y=296/403/511/620 → 108px); as duas batem em 55pt. **55 já passa do piso de 44** — a linha usa a medida, não o piso |
+ * | folga entre cartões de grupo | 34pt | §11, "Folga entre seções": 63–64px em `config-servidor.png` |
+ * | fundo do cartão | mais **claro** que a página atrás | §11: cartão `#26272F` sobre página `#1B1C22` — por isso o cartão usa `background-base-lower` (mais claro) e a tela `background-base-lowest` (mais escura), a ordem oposta da versão anterior deste arquivo, que pintava o cartão mais escuro que a página |
+ * | cabeçalho de grupo ("Account Settings", "Community"…) | **caixa mista**, não caixa-alta | as duas capturas: nenhum cabeçalho de grupo está em maiúsculas, diferente do `EXPRESSÕES` em caixa-alta da barra lateral `tela-cheia` do desktop |
+ * | título do cabeçalho da lista | **centralizado na tela cheia**, não na área livre depois do ícone | `medir.py linha config-servidor.png 138 0 737`: X em x 43–51, texto "Server Settings" em x 268–468 → centro 368 (tela 738, centro real 369); `medir.py linha config-usuario.png 59 0 768`: seta em x 43–72, "Settings" em x 334–440 → centro 387 (tela 769, centro real 384). As duas fecham a ±1–3px — daí o espaçador de 44px do lado direito, do mesmo tamanho do ícone da esquerda |
  *
- * **Os tamanhos do ramo de celular são literais** — `h-[56px]` no cabeçalho,
- * `h-[44px]` nos alvos, `min-h-[48px]` na linha —, e não `h-14`/`h-11`/`h-12`:
- * a raiz do app é 15,5px e todo `rem` do Tailwind sai 3% menor que o nominal
- * (`h-14` mede 54,25; `h-11`, 42,6). Onde o número é medida da captura ou piso
- * de toque, ler a classe e assumir o valor dá errado — é a mesma regra do
- * `components/mobile/pecas.tsx`. O que não é medida nem alvo (a caixa de 24 do
- * ícone da linha, os respiros) fica na escala de propósito.
+ * Os tamanhos do ramo de celular são literais (`h-[56px]`, `h-[44px]`,
+ * `min-h-[55px]`) porque são medida de captura ou piso de toque, não escala do
+ * tema.
  */
 
 export interface ItemDeMenu {
   id: string;
   label: string;
   icon?: ReactNode;
+  /**
+   * Item que existe no Discord e ainda não no Streamz: aparece, não navega
+   * (§6.6 do PROCESSO — o rótulo leva o "(em breve)").
+   */
+  desabilitado?: boolean;
   /**
    * As seções da aba, para o menu de segundo nível.
    *
@@ -102,7 +157,7 @@ export interface ItemDeMenu {
 
 export interface GrupoDeMenu {
   id: string;
-  /** cabeçalho da seção em caixa-alta; sem ele os itens ficam soltos. */
+  /** cabeçalho do grupo; sem ele os itens ficam soltos (o primeiro grupo do Discord). */
   label?: string;
   itens: ItemDeMenu[];
 }
@@ -115,10 +170,88 @@ export interface BuscaDoMenu {
   rotulo: string;
 }
 
-/** Classes de um item do menu lateral, compartilhadas com o rodapé ("Sair", "Apagar…"). */
-const ITEM_BASE =
-  "mb-1 flex h-10 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-base transition";
-const ITEM_REPOUSO = "text-txt-faint hover:bg-hov hover:text-txt-normal";
+export type VarianteDaJanela = "janela" | "tela-cheia";
+
+/**
+ * As classes do menu lateral de cada variante (a origem de cada número está na
+ * tabela do cabeçalho). Num lugar só porque o item comum e o item de perigo do
+ * rodapé ("Sair", "Apagar servidor") precisam da mesma caixa.
+ */
+const ESTILO = {
+  janela: {
+    // `font-medium`: o peso não sai de pixel; é o `/medium` que o Discord usa
+    // em item de navegação (ver "nao_verificado" do cartão 6a)
+    item: "flex min-h-[40px] w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left text-text-md font-medium transition-colors",
+    // o hover não aparece em print nenhum: é o da barra de abas lateral do
+    // Discord (`.side_aa8da2 .themed_aa8da2.item_aa8da2:hover`)
+    repouso:
+      "text-text-muted hover:bg-background-mod-subtle hover:text-text-strong active:bg-background-mod-strong active:text-text-strong",
+    selecionado: "bg-background-mod-normal text-text-strong",
+    desabilitado: "cursor-not-allowed text-text-muted opacity-50",
+    espaco: "mb-1",
+    // o rótulo quebra linha, como "Privacidade nas atividades" no print —
+    // cortar em "Privacidade e segura…" era a divergência
+    rotulo: "min-w-0 break-words",
+    cabecalho: "px-2 py-2 text-text-sm text-text-muted",
+    divisoria: "my-[10px] h-px bg-border-subtle",
+  },
+  "tela-cheia": {
+    item: "flex w-full items-center gap-2.5 rounded px-2.5 py-1.5 text-left text-text-md font-medium leading-6 transition-colors",
+    repouso:
+      "text-text-subtle hover:bg-background-mod-subtle hover:text-text-strong active:bg-background-mod-strong active:text-text-strong",
+    selecionado: "bg-background-mod-strong text-text-strong",
+    // `.disabled_aa8da2.item_aa8da2{color:var(--text-muted);cursor:default}`
+    desabilitado: "cursor-default text-text-muted",
+    espaco: "mb-0.5",
+    // `.item_aa8da2{white-space:nowrap;text-overflow:ellipsis}`
+    rotulo: "min-w-0 truncate",
+    cabecalho: "px-2.5 py-1.5 text-text-xs font-bold uppercase tracking-[0.02em] text-channels-default",
+    divisoria: "mx-2.5 my-2 h-px bg-border-subtle",
+  },
+} as const;
+
+/**
+ * Perigo: `.destructive_aa8da2` — texto `--text-feedback-critical` (não o
+ * `--status-danger`, que a revisão mediu no nosso "Sair": `#da3e44` contra o
+ * `#f87e7a` do print 114404), fundo `--background-feedback-critical` no
+ * hover, e texto claro só no clique.
+ */
+const PERIGO =
+  "text-text-feedback-critical hover:bg-background-feedback-critical active:bg-background-feedback-critical active:text-control-critical-primary-text-default";
+
+const VarianteCtx = createContext<VarianteDaJanela>("janela");
+
+/** Duração do `settingNavAnchorFlash__75920` do Discord (ver `irParaSecao`). */
+const DURACAO_DO_FLASH_MS = 2250;
+const CLASSE_DO_FLASH = "anim-flash-da-secao";
+/** o temporizador de cada seção acesa, para um segundo clique não herdar o do primeiro */
+const temporizadoresDoFlash = new WeakMap<HTMLElement, number>();
+
+/** Aplica `.anim-flash-da-secao` ao alvo e tira no fim (ver `irParaSecao`). */
+function acenderSecao(alvo: HTMLElement) {
+  const anterior = temporizadoresDoFlash.get(alvo);
+  if (anterior !== undefined) window.clearTimeout(anterior);
+  alvo.classList.remove(CLASSE_DO_FLASH);
+  // ler o layout entre tirar e pôr é o que reinicia a animação no mesmo nó
+  void alvo.offsetWidth;
+  alvo.classList.add(CLASSE_DO_FLASH);
+
+  const apagar = () => {
+    alvo.classList.remove(CLASSE_DO_FLASH);
+    alvo.removeEventListener("animationend", aoTerminar);
+    const t = temporizadoresDoFlash.get(alvo);
+    if (t !== undefined) window.clearTimeout(t);
+    temporizadoresDoFlash.delete(alvo);
+  };
+  // só a animação do próprio flash: um filho animado também dispara
+  // `animationend` e borbulha até aqui
+  const aoTerminar = (e: AnimationEvent) => {
+    if (e.target === alvo && e.animationName === "flash-da-secao") apagar();
+  };
+  alvo.addEventListener("animationend", aoTerminar);
+  // folga de um quadro além dos 2,25s para o `animationend` chegar primeiro
+  temporizadoresDoFlash.set(alvo, window.setTimeout(apagar, DURACAO_DO_FLASH_MS + 50));
+}
 
 export default function JanelaDeConfiguracoes({
   titulo,
@@ -132,6 +265,7 @@ export default function JanelaDeConfiguracoes({
   menuVazio,
   rodapeMenu,
   tituloAba,
+  variante: varianteProp,
   fecharComoEsc = false,
   rotuloFechar = "Fechar",
   controle,
@@ -144,8 +278,8 @@ export default function JanelaDeConfiguracoes({
   cabecalho?: string;
   /**
    * Bloco livre acima da busca — o cartão de perfil das configurações do
-   * usuário. Não é `cabecalho` com outro nome: aquele é uma linha de texto em
-   * caixa-alta, este é avatar, nome e um atalho.
+   * usuário. Não é `cabecalho` com outro nome: aquele é uma linha de texto,
+   * este é avatar, nome e um atalho.
    */
   cabecalhoRico?: ReactNode;
   /** quando presente, o cabeçalho vira botão com chevron (menu do servidor). */
@@ -158,24 +292,14 @@ export default function JanelaDeConfiguracoes({
   menuVazio?: ReactNode;
   /** ações no fim da barra lateral, depois de uma divisória. */
   rodapeMenu?: ReactNode;
-  /** vira o `<h1>` do cabeçalho: o nome da aba, não o do objeto. */
+  /** vira o `<h1>` do cabeçalho da `janela`: o nome da aba, não o do objeto. */
   tituloAba?: string;
+  /** ver o cabeçalho do arquivo. Padrão `janela`. */
+  variante?: VarianteDaJanela;
   /**
-   * Desenha o fechar como o **X redondo com "ESC"** ao lado da coluna de
-   * conteúdo, sem a barra de 48px — e aí quem escreve o título é a página.
-   *
-   * As configurações do **servidor** do Discord são assim (prints
-   * `2026-09-04 100541`–`100821`); as do usuário, que foram medidas em
-   * `2026-09-01 1143–1146`, têm a barra com o X simples. São dois desenhos
-   * diferentes no mesmo produto, então isto é uma opção e não uma troca: quem
-   * não pedir continua com a barra.
-   *
-   * Medidas (print `2026-09-04 100700`, janela 1919×1079, `getpixel`):
-   * círculo de 36 com anel de 2px, centro a 58 da borda direita da coluna de
-   * conteúdo; "ESC" em caixa-alta 9px abaixo do círculo. A altura do print
-   * (centro a 110 do topo da janela) **não** transfere — lá a tela ocupa a
-   * janela inteira e aqui é um modal de 888 —, então o círculo alinha o centro
-   * com a primeira linha do título da página.
+   * Nome antigo de `variante="tela-cheia"`, mantido para quem ainda chama
+   * assim: nas duas o fechar é o círculo com "ESC" e quem escreve o título é
+   * a página.
    */
   fecharComoEsc?: boolean;
   rotuloFechar?: string;
@@ -184,9 +308,12 @@ export default function JanelaDeConfiguracoes({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const variante: VarianteDaJanela = varianteProp ?? (fecharComoEsc ? "tela-cheia" : "janela");
   const painelRef = useRef<HTMLDivElement>(null);
   const rolagemRef = useRef<HTMLDivElement>(null);
   const [secaoVisivel, setSecaoVisivel] = useState<string | null>(null);
+  /** a lista do menu saiu do topo: liga o esmaecido sob a busca. */
+  const [listaRolada, setListaRolada] = useState(false);
   const ehMobile = useEhMobile();
   /** No celular: `false` = lista de seções, `true` = a seção em tela cheia. */
   const [emDetalhe, setEmDetalhe] = useState(false);
@@ -227,13 +354,25 @@ export default function JanelaDeConfiguracoes({
     // que ganha seções depois de carregar
   }, [abaId, secoes.length]);
 
-  /** Rola até a seção — sem animação para quem pediu menos movimento. */
+  /**
+   * Rola até a seção — sem animação para quem pediu menos movimento — e acende
+   * o fundo dela por um instante, como o Discord faz ao saltar pelo menu
+   * (`.flash__75920` + `settingNavAnchorFlash__75920`, 2,25s; keyframes e
+   * origem em `app/globals.css`, `.anim-flash-da-secao`).
+   *
+   * A classe sai no `animationend`. O temporizador de 2,25s é o fallback de
+   * quando não há animação (reduzir movimento: o fundo fica parado e nenhum
+   * `animationend` chega). Clicar de novo na mesma seção tira a classe e força
+   * um reflow antes de pô-la de volta, senão o navegador não reinicia a
+   * animação.
+   */
   function irParaSecao(id: string) {
     const alvo = rolagemRef.current?.querySelector<HTMLElement>(`[data-secao="${id}"]`);
     if (!alvo) return;
     const suave = !document.documentElement.classList.contains("reduzir-movimento");
     alvo.scrollIntoView({ behavior: suave ? "smooth" : "auto", block: "start" });
     setSecaoVisivel(id);
+    acenderSecao(alvo);
   }
 
   useEffect(() => {
@@ -242,6 +381,12 @@ export default function JanelaDeConfiguracoes({
     painelRef.current?.focus();
     return () => anterior?.focus?.();
   }, []);
+
+  // trocar de aba volta o conteúdo ao topo, como no Discord: a página nova não
+  // herda a rolagem da anterior
+  useEffect(() => {
+    rolagemRef.current?.scrollTo?.({ top: 0 });
+  }, [abaId]);
 
   const podeSair = () => !controle || controle.pedirParaSair();
 
@@ -286,7 +431,12 @@ export default function JanelaDeConfiguracoes({
   const miolo = controle ? (
     <ProvedorDeAlteracoes controle={controle}>
       {children}
-      <BarraDeAlteracoes controle={controle} />
+      <BarraDeAlteracoes
+        controle={controle}
+        // `.noticeRegion__23e6b`: a barra mede a coluna de 740 menos 20 de
+        // cada lado — 20 a mais que a coluna útil, que tem 40 de recuo
+        className={variante === "tela-cheia" && !ehMobile ? "-mx-5" : ""}
+      />
     </ProvedorDeAlteracoes>
   ) : (
     children
@@ -300,21 +450,30 @@ export default function JanelaDeConfiguracoes({
         aria-modal="true"
         aria-label={titulo}
         tabIndex={-1}
+        // o foco programático da abertura não é foco de teclado: sem isto o
+        // `:focus-visible` global desenhava o anel azul em volta da tela toda
+        data-sem-anel
         onKeyDown={onKeyDown}
-        className="anim-overlay fixed inset-0 z-50 flex h-[100dvh] flex-col overflow-hidden bg-chat pt-[env(safe-area-inset-top)] outline-none"
+        // a página é mais escura que os cartões de dentro (MEDIDAS.md §11:
+        // #1B1C22 atrás de #26272F) — `lowest`, não `lower`
+        className="anim-overlay fixed inset-0 z-50 flex h-[100dvh] flex-col overflow-hidden bg-background-base-lowest pt-[env(safe-area-inset-top)] outline-none"
       >
         {emDetalhe ? (
           <>
-            <header className="flex h-[56px] shrink-0 items-center gap-1 border-b border-border bg-panel pl-1 pr-2">
-              <button
-                type="button"
+            <header className="flex h-[56px] shrink-0 items-center gap-1 border-b border-border-subtle bg-background-base-lowest pl-1 pr-2">
+              {/* 44px de alvo é medida do celular, não um tamanho do primitivo
+                  (24/32/40) — mesma razão do `style` em vez de className, ver
+                  `BotaoDeIcone`. */}
+              <BotaoDeIcone
+                rotulo="Voltar"
+                icone={<ArrowLeft size={24} />}
+                tamanho="lg"
+                comFundo
                 onClick={voltarParaALista}
-                aria-label="Voltar"
-                className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg text-txt-secondary transition active:bg-hov"
-              >
-                <ArrowLeft size={24} />
-              </button>
-              <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-txt-primary">
+                className="shrink-0"
+                style={{ height: 44, width: 44 }}
+              />
+              <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-text-strong">
                 {tituloAba ?? itemAtivo?.label ?? titulo}
               </h1>
             </header>
@@ -331,18 +490,28 @@ export default function JanelaDeConfiguracoes({
           </>
         ) : (
           <>
-            <header className="flex h-[56px] shrink-0 items-center gap-1 border-b border-border bg-panel pl-4 pr-1">
-              <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-txt-primary">
+            <header className="flex h-[56px] shrink-0 items-center gap-1 border-b border-border-subtle bg-background-base-lowest pl-1 pr-1">
+              {/* Nas duas capturas o glifo mora à ESQUERDA e o título fica no
+                  centro da tela — nunca título à esquerda com o X à direita,
+                  que era o que este cabeçalho fazia antes. Seta na `janela`
+                  (config-usuario.png: "← Settings"), X na `tela-cheia`
+                  (config-servidor.png: "✕ Server Settings"). */}
+              <BotaoDeIcone
+                rotulo={rotuloFechar}
+                icone={variante === "tela-cheia" ? <X size={22} /> : <ArrowLeft size={24} />}
+                tamanho="lg"
+                comFundo
+                onClick={fechar}
+                className="shrink-0"
+                style={{ height: 44, width: 44 }}
+              />
+              <h1 className="min-w-0 flex-1 truncate text-center text-base font-semibold text-text-strong">
                 {titulo}
               </h1>
-              <button
-                type="button"
-                onClick={fechar}
-                aria-label={rotuloFechar}
-                className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-lg text-txt-secondary transition active:bg-hov"
-              >
-                <X size={22} />
-              </button>
+              {/* espaçador do mesmo tamanho do botão: sem ele o título centra
+                  na largura toda e não na área livre, e fica puxado para a
+                  direita do centro real da tela */}
+              <span aria-hidden="true" className="w-[44px] shrink-0" />
             </header>
 
             <nav
@@ -355,15 +524,15 @@ export default function JanelaDeConfiguracoes({
                     type="button"
                     onClick={onCabecalho}
                     aria-haspopup="menu"
-                    className="mb-2 flex h-[44px] w-full items-center gap-1 rounded-lg px-1 text-left transition active:bg-hov"
+                    className="mb-2 flex h-[44px] w-full items-center gap-1 rounded-lg px-1 text-left transition active:bg-interactive-background-hover"
                   >
-                    <span className="min-w-0 flex-1 truncate text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
+                    <span className="min-w-0 flex-1 truncate text-xs font-bold uppercase tracking-[0.02em] text-text-muted">
                       {cabecalho}
                     </span>
-                    <ChevronDown size={16} aria-hidden="true" className="shrink-0 text-txt-muted" />
+                    <ChevronDown size={16} aria-hidden="true" className="shrink-0 text-text-muted" />
                   </button>
                 ) : (
-                  <h2 className="mb-2 truncate px-1 text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
+                  <h2 className="mb-2 truncate px-1 text-xs font-bold uppercase tracking-[0.02em] text-text-muted">
                     {cabecalho}
                   </h2>
                 ))}
@@ -371,20 +540,19 @@ export default function JanelaDeConfiguracoes({
               {cabecalhoRico && <div className="mb-3">{cabecalhoRico}</div>}
 
               {busca && (
-                <div className="relative mb-4">
-                  <Search
-                    size={16}
-                    aria-hidden="true"
-                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-txt-muted"
-                  />
-                  <input
-                    value={busca.valor}
-                    onChange={(e) => busca.onChange(e.target.value)}
-                    placeholder={busca.placeholder ?? "Buscar"}
-                    aria-label={busca.rotulo}
-                    className="h-[44px] w-full rounded-lg bg-input pl-10 pr-3 text-base text-txt-normal outline-none transition-colors placeholder:text-txt-muted focus:ring-1 focus:ring-accent"
-                  />
-                </div>
+                // Caixa própria (sem borda, fundo `chat`) em vez do
+                // `input-background-default` padrão do `TextInput`: é o
+                // campo de busca "dentro do menu", não um formulário — o
+                // `border-none` apaga a borda que o primitivo sempre inclui
+                // no wrapper (o foco em si é global, ver `TextInput`).
+                <TextInput
+                  value={busca.valor}
+                  onChange={(e) => busca.onChange(e.target.value)}
+                  placeholder={busca.placeholder ?? "Buscar"}
+                  aria-label={busca.rotulo}
+                  prefixo={<Search size={16} aria-hidden="true" className="text-text-muted" />}
+                  classeDaCaixa="mb-4 border-none bg-chat-background-default"
+                />
               )}
 
               {grupos.map((grupo) => {
@@ -393,33 +561,46 @@ export default function JanelaDeConfiguracoes({
                 // ficava com 36px de coluna vazia antes de cada rótulo
                 const comIcone = grupo.itens.some((i) => i.icon);
                 return (
-                  <div key={grupo.id} className="mb-5 last:mb-0">
+                  // 34pt de folga entre cartões — MEDIDAS.md §11 "Folga entre
+                  // seções" (63–64px em config-servidor.png)
+                  <div key={grupo.id} className="mb-[34px] last:mb-0">
                     {grupo.label && (
-                      <h2 className="mb-1.5 px-1 text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
+                      // sem `uppercase`: as duas capturas mostram "Account
+                      // Settings", "Community" em caixa mista, não em
+                      // maiúsculas — diferente do cabeçalho de grupo da barra
+                      // lateral `tela-cheia` do desktop, que é caixa-alta
+                      <h2 className="mb-1.5 px-1 text-xs font-bold text-text-muted">
                         {grupo.label}
                       </h2>
                     )}
                     {/* cartão de cantos arredondados com as linhas dentro, e a
                         divisória recuada até a coluna do rótulo — é o desenho
-                        das duas referências */}
-                    <div className="overflow-hidden rounded-xl bg-panel">
+                        das duas referências. `background-base-lower`: o
+                        cartão é mais CLARO que a página atrás dele
+                        (`#26272F` sobre `#1B1C22`, MEDIDAS.md §11) */}
+                    <div className="overflow-hidden rounded-xl bg-background-base-lower">
                       {grupo.itens.map((item, i) => (
                         <div key={item.id}>
                           {i > 0 && (
                             <div
                               aria-hidden="true"
-                              className={`h-px bg-border ${comIcone ? "ml-[52px]" : "ml-4"}`}
+                              className={`h-px bg-border-subtle ${comIcone ? "ml-[52px]" : "ml-4"}`}
                             />
                           )}
                           <button
                             type="button"
-                            onClick={() => irPara(item.id)}
-                            className="flex min-h-[48px] w-full items-center gap-3 px-4 py-2 text-left text-base text-txt-normal transition active:bg-hov"
+                            aria-disabled={item.desabilitado || undefined}
+                            onClick={() => !item.desabilitado && irPara(item.id)}
+                            // 55px: passo de linha medido (ver cabeçalho do
+                            // arquivo) — não é o piso de 44, é a medida
+                            className={`flex min-h-[55px] w-full items-center gap-3 px-4 py-2 text-left text-base transition active:bg-interactive-background-hover ${
+                              item.desabilitado ? "text-text-muted opacity-50" : "text-text-default"
+                            }`}
                           >
                             {comIcone && (
                               <span
                                 aria-hidden="true"
-                                className="grid h-6 w-6 shrink-0 place-items-center text-txt-secondary"
+                                className="grid h-6 w-6 shrink-0 place-items-center text-text-subtle"
                               >
                                 {item.icon}
                               </span>
@@ -428,7 +609,7 @@ export default function JanelaDeConfiguracoes({
                             <ChevronRight
                               size={20}
                               aria-hidden="true"
-                              className="shrink-0 text-txt-muted"
+                              className="shrink-0 text-text-muted"
                             />
                           </button>
                         </div>
@@ -441,9 +622,11 @@ export default function JanelaDeConfiguracoes({
               {vazio && menuVazio}
 
               {rodapeMenu && (
-                // os itens do rodapé vêm com os 40px do desktop (`ITEM_BASE`);
-                // aqui sobem para o alvo de toque de 44
-                <div className="mt-5 overflow-hidden rounded-xl bg-panel p-1 [&_button]:h-[44px] [&_button]:mb-0">
+                // os itens do rodapé vêm com os 40px do desktop; aqui sobem
+                // para o mesmo passo de linha do resto da lista (55px, não o
+                // piso de 44 — ver a tabela do cabeçalho). Mesmo cartão claro
+                // sobre página escura que os grupos acima.
+                <div className="mt-5 overflow-hidden rounded-xl bg-background-base-lower p-1 [&>div]:mb-0 [&_button]:min-h-[55px]">
                   {rodapeMenu}
                 </div>
               )}
@@ -454,233 +637,286 @@ export default function JanelaDeConfiguracoes({
     );
   }
 
-  return (
-    <div
-      // `flex` e não `grid`: numa grade o trilho automático cresce até o
-      // max-content do modal (1400px), e aí `max-w-full` mede 100% de 1400 em
-      // vez da janela — numa janela de 1100px o conteúdo saía pela direita
-      className="anim-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-      onMouseDown={(e) => {
-        // só o clique que **começa** no véu fecha: arrastar um controle de
-        // dentro e soltar aqui fora não pode derrubar a tela
-        if (e.target === e.currentTarget) fechar();
-      }}
-    >
-      <div
-        ref={painelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={titulo}
-        tabIndex={-1}
-        onKeyDown={onKeyDown}
-        className="anim-settings flex h-[888px] max-h-full w-[1400px] max-w-full overflow-hidden rounded-lg border border-border bg-chat shadow-high outline-none"
-      >
-        <nav
-          aria-label="Seções das configurações"
-          className="flex w-[252px] shrink-0 flex-col overflow-hidden bg-panel"
-        >
-          {/* Cartão de perfil e busca ficam parados; só a lista rola. 252 de
-              coluna com 16 de cada lado: o item do Discord mede 220×40 (print
-              das configurações do usuário, medido por pixel), e a busca e os
-              cabeçalhos acompanham a mesma largura. */}
-          <div className="shrink-0 px-4 pt-4">
-            {cabecalho !== undefined &&
-              (onCabecalho ? (
-                <button
-                  type="button"
-                  onClick={onCabecalho}
-                  aria-haspopup="menu"
-                  className="mb-2 flex h-8 w-full items-center gap-1 rounded-[4px] px-2.5 text-left transition hover:bg-hov"
-                >
-                  <span className="min-w-0 flex-1 truncate text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
-                    {cabecalho}
-                  </span>
-                  <ChevronDown size={14} aria-hidden="true" className="shrink-0 text-txt-muted" />
-                </button>
-              ) : (
-                <h2 className="mb-1 truncate px-2.5 text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
-                  {cabecalho}
-                </h2>
-              ))}
+  const e = ESTILO[variante];
 
-            {cabecalhoRico}
-
-            {busca && (
-              <div className="relative mb-3">
-                <Search
-                  size={16}
-                  aria-hidden="true"
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-txt-muted"
-                />
-                {/* 40 de altura e borda no lugar de fundo: é o campo do print,
-                    que tem a mesma altura dos itens do menu logo abaixo. */}
-                <input
-                  value={busca.valor}
-                  onChange={(e) => busca.onChange(e.target.value)}
-                  placeholder={busca.placeholder ?? "Buscar"}
-                  aria-label={busca.rotulo}
-                  className="h-10 w-full rounded-[4px] border border-border-strong bg-transparent pl-10 pr-3 text-base text-txt-normal outline-none transition-colors placeholder:text-txt-muted focus:border-accent"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* A lista é a única parte que rola: numa janela baixa o cartão e a
-              busca continuam à vista, como no Discord. */}
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-            {grupos.map((grupo, i) => {
-              if (grupo.itens.length === 0) return null;
+  /** A lista de grupos do menu — igual nas duas variantes, muda só a classe. */
+  const listaDoMenu = (
+    <>
+      {grupos
+        .filter((g) => g.itens.length > 0)
+        .map((grupo, i) => (
+          <div key={grupo.id} role="group" aria-label={grupo.label}>
+            {/* Divisória entre grupos, nos dois desenhos (114404 acima de
+                "Jogos e apps"; 100541 acima de EXPRESSÕES). O primeiro grupo
+                não tem — nem cabeçalho, no refresh. */}
+            {i > 0 && <div aria-hidden="true" className={e.divisoria} />}
+            {grupo.label && <h2 className={e.cabecalho}>{grupo.label}</h2>}
+            {grupo.itens.map((item) => {
+              const ativo = item.id === abaId;
+              const estado = item.desabilitado ? e.desabilitado : ativo ? e.selecionado : e.repouso;
               return (
-                <div key={grupo.id} className={grupo.label ? "mb-4" : undefined}>
-                  {/* Divisória entre grupos: está nos dois prints do menu (o do
-                      servidor, `2026-09-04 100541`, com a linha entre "Vantagens
-                      de Impulso" e EXPRESSÕES; e o do usuário, `2026-09-01
-                      114404`, acima de "Jogos e apps"). Sem ela os cabeçalhos em
-                      caixa-alta eram a única separação, e grupo de um item só
-                      encostava no anterior. */}
-                  {i > 0 && <div aria-hidden="true" className="mb-2 mt-1 h-px bg-border" />}
-                  {grupo.label && (
-                    <h2 className="mb-1 px-2.5 text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
-                      {grupo.label}
-                    </h2>
-                  )}
-                  {grupo.itens.map((item) => {
-                    const ativo = item.id === abaId;
-                    return (
-                      <div key={item.id}>
-                        <button
-                          type="button"
-                          aria-current={ativo ? "page" : undefined}
-                          onClick={() => irPara(item.id)}
-                          className={`${ITEM_BASE} ${
-                            ativo ? "bg-sel text-txt-primary" : ITEM_REPOUSO
-                          }`}
-                        >
-                          {item.icon && (
-                            <span aria-hidden="true" className="shrink-0">
-                              {item.icon}
-                            </span>
-                          )}
-                          <span className="truncate">{item.label}</span>
-                        </button>
+                <div key={item.id} className={e.espaco}>
+                  <button
+                    type="button"
+                    aria-current={ativo ? "page" : undefined}
+                    aria-disabled={item.desabilitado || undefined}
+                    onClick={() => !item.desabilitado && irPara(item.id)}
+                    className={`${e.item} ${estado}`}
+                  >
+                    {item.icon && (
+                      // caixa de 20: é a medida do ícone no print (x 287–306)
+                      <span aria-hidden="true" className="grid h-5 w-5 shrink-0 place-items-center">
+                        {item.icon}
+                      </span>
+                    )}
+                    <span className={e.rotulo}>{item.label}</span>
+                  </button>
 
-                        {/* Só da aba aberta: as seções das outras não são
-                            navegáveis daqui, e listá-las faria um menu de
-                            cinquenta linhas. */}
-                        {ativo && item.secoes && item.secoes.length > 0 && (
-                          <div className="mb-1 ml-3 border-l border-border pl-2">
-                            {item.secoes.map((secao) => {
-                              const aqui = secao.id === secaoVisivel;
-                              return (
-                                <button
-                                  key={secao.id}
-                                  type="button"
-                                  aria-current={aqui ? "true" : undefined}
-                                  onClick={() => irParaSecao(secao.id)}
-                                  className={`relative mb-0.5 flex h-7 w-full items-center rounded-[4px] px-2.5 text-left text-sm transition ${
-                                    aqui
-                                      ? "text-txt-primary"
-                                      : "text-txt-faint hover:bg-hov hover:text-txt-normal"
-                                  }`}
-                                >
-                                  {aqui && (
-                                    <span
-                                      aria-hidden="true"
-                                      className="absolute -left-[9px] top-1 h-5 w-0.5 rounded-full bg-txt-primary"
-                                    />
-                                  )}
-                                  <span className="truncate">{secao.label}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {/* Só da aba aberta: as seções das outras não são navegáveis
+                      daqui, e listá-las faria um menu de cinquenta linhas. O
+                      trilho corre do centro do ícone (x=296 no print, 19 da
+                      borda do item), de 10 abaixo do topo do primeiro subitem
+                      a 10 acima do fim do último. */}
+                  {ativo && item.secoes && item.secoes.length > 0 && (
+                    <div className="relative">
+                      <span
+                        aria-hidden="true"
+                        className="absolute bottom-[10px] left-[19px] top-[10px] w-[2px] bg-border-subtle"
+                      />
+                      {item.secoes.map((secao) => {
+                        const aqui = secao.id === secaoVisivel;
+                        return (
+                          <button
+                            key={secao.id}
+                            type="button"
+                            aria-current={aqui ? "true" : undefined}
+                            onClick={() => irParaSecao(secao.id)}
+                            // hover sem fundo: no print o subitem não tem caixa
+                            // em estado nenhum; a cor do hover não foi medida
+                            className={`relative flex min-h-[40px] w-full items-center rounded-lg py-2.5 pl-10 pr-2.5 text-left text-text-md transition-colors ${
+                              aqui ? "text-text-strong" : "text-text-muted hover:text-text-strong"
+                            }`}
+                          >
+                            {aqui && (
+                              <span
+                                aria-hidden="true"
+                                className="absolute bottom-[10px] left-[19px] top-[10px] w-[2px] bg-text-strong"
+                              />
+                            )}
+                            <span className="min-w-0 break-words">{secao.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}
-
-            {vazio && menuVazio}
-
-            {rodapeMenu && (
-              <>
-                <div aria-hidden="true" className="my-2 h-px bg-border" />
-                {rodapeMenu}
-              </>
-            )}
           </div>
-        </nav>
+        ))}
 
-        <div className="relative flex min-w-0 flex-1 flex-col">
-          {/* Cabeçalho de 48px com divisória, só sobre o conteúdo: o título da
-              aba fica aqui (era um `<h1>` dentro do miolo) e o fechar é um X
-              simples com o centro a 24px da borda — sem o círculo com "ESC",
-              que no Discord de hoje só aparece nas telas do **servidor**
-              (`fecharComoEsc`). */}
-          {!fecharComoEsc && (
-            <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border pl-4 pr-2">
-              <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-txt-primary">
-                {tituloAba}
-              </h1>
-              <button
-                type="button"
-                onClick={fechar}
-                aria-label={rotuloFechar}
-                title={`${rotuloFechar} (Esc)`}
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-txt-muted transition hover:bg-hov hover:text-txt-primary"
-              >
-                <X size={16} />
-              </button>
-            </header>
-          )}
+      {vazio && menuVazio}
 
-          {/* Coluna útil de 700px com 40 de recuo. Centrada na variante com
-              barra; encostada à esquerda na variante "ESC", porque lá o círculo
-              de fechar mora à direita dela e o conjunto é que fica alinhado ao
-              começo do conteúdo, como no print do servidor. */}
-          <div ref={rolagemRef} className="min-h-0 flex-1 overflow-y-auto">
-            <div
-              className={`w-full max-w-[780px] px-10 pb-10 pt-10 ${
-                fecharComoEsc ? "" : "mx-auto"
-              }`}
+      {rodapeMenu && (
+        <>
+          <div aria-hidden="true" className={e.divisoria} />
+          {rodapeMenu}
+        </>
+      )}
+    </>
+  );
+
+  const cabecalhoDoMenu =
+    cabecalho !== undefined &&
+    (onCabecalho ? (
+      <button
+        type="button"
+        onClick={onCabecalho}
+        aria-haspopup="menu"
+        // o chevron é nosso (o cabeçalho do Discord não abre menu): é por aqui
+        // que "Convidar", "Criar canal" e "Apagar/Sair" continuam a um clique
+        className={`${e.cabecalho} flex w-full items-center gap-1 rounded text-left transition-colors hover:text-text-strong ${
+          variante === "tela-cheia" ? "pt-0" : ""
+        }`}
+      >
+        <span className="min-w-0 flex-1 truncate">{cabecalho}</span>
+        <ChevronDown size={14} aria-hidden="true" className="shrink-0" />
+      </button>
+    ) : (
+      <h2 className={`${e.cabecalho} truncate ${variante === "tela-cheia" ? "pt-0" : ""}`}>{cabecalho}</h2>
+    ));
+
+  const campoDeBusca = busca && (
+    // 40 de altura é o próprio `md` do `TextInput` — os 220×40 do print
+    <TextInput
+      value={busca.valor}
+      onChange={(ev) => busca.onChange(ev.target.value)}
+      placeholder={busca.placeholder ?? "Buscar"}
+      aria-label={busca.rotulo}
+      prefixo={<Search size={16} aria-hidden="true" className="text-text-muted" />}
+    />
+  );
+
+  if (variante === "tela-cheia") {
+    return (
+      <VarianteCtx.Provider value={variante}>
+        <div
+          ref={painelRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label={titulo}
+          tabIndex={-1}
+          data-sem-anel
+          onKeyDown={onKeyDown}
+          // abaixo da barra de título (ver o cabeçalho): cobri-la esconderia
+          // minimizar/fechar a janela enquanto as configurações estão abertas
+          style={{ top: "var(--barra-de-titulo, 0px)" }}
+          className="anim-settings fixed inset-x-0 bottom-0 z-50 flex bg-background-base-lowest outline-none"
+        >
+          <div className="flex min-w-0 flex-[1_0_272px] justify-end bg-background-base-lowest">
+            <nav
+              aria-label="Seções das configurações"
+              // 6 de recuo + 8 da barra de rolagem reservada = os 14 do print;
+              // `scrollbar-gutter` segura os 8 mesmo sem rolagem, e o item não
+              // muda de largura quando a lista passa a rolar
+              className="w-[272px] shrink-0 overflow-y-auto pb-[60px] pl-5 pr-[6px] pt-[60px] [scrollbar-gutter:stable]"
             >
-              {miolo}
+              {cabecalhoDoMenu}
+              {cabecalhoRico}
+              {campoDeBusca && <div className="mb-2">{campoDeBusca}</div>}
+              {listaDoMenu}
+            </nav>
+          </div>
+
+          <div className="relative flex min-w-0 flex-[1_1_800px] bg-background-base-low">
+            <div
+              ref={rolagemRef}
+              className="flex h-full w-full items-start overflow-y-auto overflow-x-hidden"
+            >
+              <div className="min-w-0 max-w-[740px] flex-[1_1_auto] px-10 pb-20 pt-[60px]">{miolo}</div>
+
+              {/* A coluna de ferramentas não rola com a página
+                  (`.contentRegionScroller__23e6b .tools__23e6b{position:
+                  fixed}`): `sticky` no topo do scroller faz o mesmo sem tirar
+                  o botão do fluxo, que é o que o mantém colado à coluna. */}
+              <div className="sticky top-0 mr-[21px] flex-[0_0_36px] pt-[60px]">
+                {/* `<button>` e não `BotaoDeIcone`: é círculo + rótulo "ESC" em
+                    duas linhas, composição que o primitivo não cobre. */}
+                <Tooltip rotulo={rotuloFechar} atalho="Esc">
+                  <button
+                    type="button"
+                    onClick={fechar}
+                    aria-label={rotuloFechar}
+                    // a cor do hover não foi medida: é o par default→hover do
+                    // mesmo token do ícone (`--interactive-icon-*`)
+                    className="flex w-9 flex-col items-center gap-2 text-interactive-icon-default transition-colors hover:text-interactive-icon-hover"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="grid h-9 w-9 place-items-center rounded-full border-2 border-current"
+                    >
+                      {/* 13px desenha o X de 10 do print (o glifo ocupa 3/4 do quadro) */}
+                      <X size={13} />
+                    </span>
+                    {/* glifo de 8px de altura no print → 11px de corpo */}
+                    <span aria-hidden="true" className="text-[11px] font-bold leading-none tracking-[0.02em]">
+                      ESC
+                    </span>
+                  </button>
+                </Tooltip>
+              </div>
             </div>
           </div>
+        </div>
+      </VarianteCtx.Provider>
+    );
+  }
 
-          {/* Fora do scroller de propósito: no Discord o botão não sobe com a
-              página. `min(...)` prende ao fim da coluna de 700 (740 + 58 - 18)
-              e recua para a borda do painel quando a janela é estreita demais
-              para os dois caberem lado a lado. */}
-          {fecharComoEsc && (
-            <button
-              type="button"
-              onClick={fechar}
-              aria-label={rotuloFechar}
-              title={`${rotuloFechar} (Esc)`}
-              style={{ left: "min(780px, calc(100% - 52px))" }}
-              className="absolute top-9 flex w-9 flex-col items-center gap-[9px] text-txt-secondary transition hover:text-txt-primary"
+  return (
+    <VarianteCtx.Provider value={variante}>
+      <div
+        // `flex` e não `grid`: numa grade o trilho automático cresce até o
+        // max-content do modal (1400px), e aí `max-w-full` mede 100% de 1400 em
+        // vez da janela. Até 1080px o modal vira tela cheia e desce para baixo
+        // da barra de título, como o `padding-top` do `.modal_e44912`.
+        className="anim-overlay fixed inset-0 z-50 flex items-center justify-center bg-background-scrim max-[1080px]:top-[var(--barra-de-titulo,0px)]"
+        onMouseDown={(ev) => {
+          // só o clique que **começa** no véu fecha: arrastar um controle de
+          // dentro e soltar aqui fora não pode derrubar a tela
+          if (ev.target === ev.currentTarget) fechar();
+        }}
+      >
+        <div
+          ref={painelRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label={titulo}
+          tabIndex={-1}
+          // O painel recebe `focus()` ao abrir (para o Esc funcionar e o foco
+          // voltar depois). Isso não é foco de teclado, e a revisão mediu o
+          // anel azul de 2px do `:focus-visible` global em volta da janela
+          // inteira (x=256–257/1662–1663) — o Discord não tem anel nenhum ali.
+          data-sem-anel
+          onKeyDown={onKeyDown}
+          className="anim-settings flex h-[calc(100%-144px)] w-[calc(100%-144px)] max-w-[1400px] overflow-hidden rounded-xl border border-border-subtle bg-background-base-lower shadow-popout outline-none max-[1600px]:h-[calc(100%-80px)] max-[1600px]:w-[calc(100%-80px)] max-[1080px]:h-full max-[1080px]:w-full max-[1080px]:max-w-none max-[1080px]:rounded-none max-[1080px]:border-0 max-[1080px]:border-t max-[1080px]:border-border-muted"
+        >
+          <nav aria-label="Seções das configurações" className="flex w-[252px] shrink-0 flex-col overflow-hidden">
+            {/* Cartão de perfil e busca ficam parados; só a lista rola (a mesma
+                altura do cartão em 114404 e 114644, com a lista em posições
+                diferentes). 16 de cada lado: itens de 220 em 252. */}
+            <div className="shrink-0 px-4 pt-4">
+              {cabecalhoDoMenu}
+              {cabecalhoRico}
+              {campoDeBusca}
+            </div>
+
+            {/* 12 entre a busca e o primeiro item (114644: busca termina em
+                y=206, "Conta" começa em y=219). Rolada, a lista some num
+                gradiente de 40px sob a busca, em vez de cortar seco. */}
+            <div
+              onScroll={(ev) => setListaRolada(ev.currentTarget.scrollTop > 0)}
+              className={`min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-3 ${
+                listaRolada ? "[mask-image:linear-gradient(to_bottom,transparent,black_40px)]" : ""
+              }`}
             >
-              <span
-                aria-hidden="true"
-                className="grid h-9 w-9 place-items-center rounded-full border-2 border-current"
-              >
-                <X size={16} />
-              </span>
-              <span aria-hidden="true" className="text-[11px] font-bold tracking-[0.02em]">
-                ESC
-              </span>
-            </button>
-          )}
+              {listaDoMenu}
+            </div>
+          </nav>
+
+          <div className="relative flex min-w-0 flex-1 flex-col bg-background-base-low">
+            <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border-muted pl-4 pr-2">
+              <h1 className="min-w-0 flex-1 truncate text-text-md font-semibold text-text-default">{tituloAba}</h1>
+              {/* `md` (32) com X de 16 põe o glifo de 12 com o centro a 24 da
+                  borda, como no print. Pílula no hover: não medido. */}
+              <BotaoDeIcone
+                rotulo={rotuloFechar}
+                icone={<X size={16} />}
+                tamanho="md"
+                comFundo
+                atalho="Esc"
+                onClick={fechar}
+                className="shrink-0 rounded-full"
+              />
+            </header>
+
+            {/* Coluna útil de 700 (780 − 2×40), centrada. O respiro de cima
+                muda de página para página nos prints (28 em Aparência, 76 em
+                Sobreposição de jogo) — os 40 são os de antes, "não medido". */}
+            <div ref={rolagemRef} className="min-h-0 flex-1 overflow-y-auto">
+              <div className="mx-auto w-full max-w-[780px] px-10 pb-10 pt-10">{miolo}</div>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </VarianteCtx.Provider>
   );
 }
 
-/** Item vermelho do fim da barra lateral ("Apagar canal", "Apagar servidor"). */
+/**
+ * Item vermelho do fim da barra lateral ("Sair", "Apagar canal", "Apagar
+ * servidor"): a mesma caixa dos itens da variante em uso, com as cores de
+ * perigo.
+ */
 export function ItemPerigo({
   onClick,
   icon,
@@ -690,18 +926,17 @@ export function ItemPerigo({
   icon?: ReactNode;
   children: ReactNode;
 }) {
+  const e = ESTILO[useContext(VarianteCtx)];
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`${ITEM_BASE} text-red hover:bg-red hover:text-white`}
-    >
-      {icon && (
-        <span aria-hidden="true" className="shrink-0">
-          {icon}
-        </span>
-      )}
-      <span className="truncate">{children}</span>
-    </button>
+    <div className={e.espaco}>
+      <button type="button" onClick={onClick} className={`${e.item} ${PERIGO}`}>
+        {icon && (
+          <span aria-hidden="true" className="grid h-5 w-5 shrink-0 place-items-center">
+            {icon}
+          </span>
+        )}
+        <span className={e.rotulo}>{children}</span>
+      </button>
+    </div>
   );
 }

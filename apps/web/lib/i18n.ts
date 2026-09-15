@@ -38,6 +38,7 @@ const PT_BR = {
   "aba.notificacoes": "Notificações",
   "aba.teclado": "Teclado",
   "aba.idioma": "Idioma",
+  "aba.avancado": "Avançado",
 
   // ── abas do painel do administrador da instância ──
   "aba.adminVisao": "Visão geral",
@@ -71,6 +72,30 @@ const PT_BR = {
   "acess.secCor": "Cor e contraste",
   "acess.secMovimento": "Movimento reduzido",
   "acess.secChat": "Caixa de chat",
+  // textos copiados de `AcessibilidadeTab.tsx` (Contraste alto, Figurinhas,
+  // Texto para fala); o "(em breve)" fica fora da ajuda — a aba acrescenta
+  // o sufixo de `aparencia.emBreve` enquanto o controle estiver desabilitado
+  "acess.contrasteAlto": "Contraste alto",
+  "acess.contrasteAltoAjuda": "Aumenta o contraste dos elementos de interface, em qualquer tema.",
+  "acess.secFigurinhas": "Figurinhas",
+  "acess.animacaoFigurinha": "Animação de figurinha",
+  "acess.figurinhaSempre": "Sempre animar",
+  "acess.figurinhaInteracao": "Ao interagir",
+  "acess.figurinhaNunca": "Nunca animar",
+  "acess.secTts": "Texto para fala",
+  "acess.ttsPermitir": "Permitir o uso do comando /tts",
+  "acess.ttsAjuda": "Mensagens enviadas com /tts são lidas em voz alta para quem está no canal.",
+  "acess.ttsVelocidade": "Velocidade do texto para fala",
+
+  // ── seções de privacidade (ids dos `<Section>` de `SegurancaTab.tsx`) ──
+  "priv.secSeguranca": "Segurança da conta",
+  "priv.secFiltro": "Filtro de conteúdo explícito",
+  "priv.secMensagens": "Quem pode te mandar mensagem",
+  "priv.secDados": "Dados e privacidade",
+
+  // ── seções de aplicativos (títulos de `AplicativosTab` e `ComoApontarSeuBot`) ──
+  "apps.secMeus": "Meus aplicativos",
+  "apps.secApontar": "Como apontar seu bot",
   "acess.reduzirMovimento": "Reduzir movimento",
   "acess.reduzirMovimentoAjuda": "Desliga transições e animações da interface.",
   "acess.saturacao": "Saturação das cores",
@@ -134,11 +159,20 @@ const PT_BR = {
   "notif.silenciadoAte": "Silenciado até",
   "notif.tocarSom": "Tocar som",
   "notif.esteDispositivo": "Neste dispositivo",
+  "notif.desativarSons": "Desativar todos os sons de notificação",
 
   // ── teclado ──
   "teclado.intro": "Os atalhos abaixo valem em qualquer tela do app.",
   "atalho.quickSwitcher": "Abrir a busca rápida",
   "atalho.caixaDeEntrada": "Abrir a caixa de entrada",
+  // os da seção "Chat" da grade do Discord (ver `lib/shortcuts.ts`)
+  "atalho.busca": "Abrir a busca",
+  "atalho.fixadas": "Abrir as mensagens fixadas",
+  "atalho.alternarMembros": "Mostrar/ocultar a lista de membros",
+  "atalho.anexar": "Anexar um arquivo",
+  "atalho.emoji": "Abrir o seletor de emoji",
+  "atalho.gif": "Abrir o seletor de GIF",
+  "atalho.figurinha": "Abrir o seletor de figurinha",
   "atalho.canalAnterior": "Canal anterior",
   "atalho.canalProximo": "Próximo canal",
   "atalho.naoLidoAnterior": "Canal não lido anterior",
@@ -157,13 +191,14 @@ const PT_BR = {
 
   // ── idioma ──
   "idioma.escolha": "Idioma do app",
+  "idioma.selecione": "Selecione um idioma",
   "idioma.ajuda": "Vale para as telas de configuração; o resto do app segue em português.",
 
   // ── sessões ──
   "sessoes.intro": "Aqui estão todos os dispositivos com a sua sessão aberta.",
   "sessoes.atual": "Este dispositivo",
   "sessoes.encerrar": "Encerrar",
-  "sessoes.encerrarTudo": "Encerrar todas as outras",
+  "sessoes.encerrarTudo": "Sair de todos os dispositivos conhecidos",
   "sessoes.vazio": "Nenhuma outra sessão ativa.",
   "sessoes.indisponivel": "A lista de sessões ainda não está disponível nesta API.",
   "sessoes.desde": "Iniciada em",
@@ -200,6 +235,7 @@ const EN_US: Dicionario = {
   "aba.notificacoes": "Notifications",
   "aba.teclado": "Keybinds",
   "aba.idioma": "Language",
+  "aba.avancado": "Advanced",
 
   "aba.adminVisao": "Overview",
   "aba.adminUsuarios": "Users",
@@ -230,6 +266,25 @@ const EN_US: Dicionario = {
   "acess.secCor": "Color and contrast",
   "acess.secMovimento": "Reduced motion",
   "acess.secChat": "Chat box",
+  "acess.contrasteAlto": "High contrast mode",
+  "acess.contrasteAltoAjuda": "Increases the contrast of interface elements, in any theme.",
+  "acess.secFigurinhas": "Stickers",
+  "acess.animacaoFigurinha": "Sticker animation",
+  "acess.figurinhaSempre": "Always animate",
+  "acess.figurinhaInteracao": "Animate on interaction",
+  "acess.figurinhaNunca": "Never animate",
+  "acess.secTts": "Text-to-speech",
+  "acess.ttsPermitir": "Allow playback and usage of the /tts command",
+  "acess.ttsAjuda": "Messages sent with /tts are read aloud to everyone in the channel.",
+  "acess.ttsVelocidade": "Text-to-speech rate",
+
+  "priv.secSeguranca": "Account security",
+  "priv.secFiltro": "Explicit content filter",
+  "priv.secMensagens": "Who can message you",
+  "priv.secDados": "Data and privacy",
+
+  "apps.secMeus": "My applications",
+  "apps.secApontar": "How to point your bot",
   "acess.reduzirMovimento": "Reduce motion",
   "acess.reduzirMovimentoAjuda": "Turns off interface transitions and animations.",
   "acess.saturacao": "Color saturation",
@@ -291,10 +346,18 @@ const EN_US: Dicionario = {
   "notif.silenciadoAte": "Muted until",
   "notif.tocarSom": "Play sound",
   "notif.esteDispositivo": "On this device",
+  "notif.desativarSons": "Disable all notification sounds",
 
   "teclado.intro": "These shortcuts work anywhere in the app.",
   "atalho.quickSwitcher": "Open quick switcher",
   "atalho.caixaDeEntrada": "Open the inbox",
+  "atalho.busca": "Open search",
+  "atalho.fixadas": "Open pinned messages",
+  "atalho.alternarMembros": "Show/hide the member list",
+  "atalho.anexar": "Upload a file",
+  "atalho.emoji": "Open the emoji picker",
+  "atalho.gif": "Open the GIF picker",
+  "atalho.figurinha": "Open the sticker picker",
   "atalho.canalAnterior": "Previous channel",
   "atalho.canalProximo": "Next channel",
   "atalho.naoLidoAnterior": "Previous unread channel",
@@ -312,12 +375,13 @@ const EN_US: Dicionario = {
   "atalho.zoomPadrao": "Reset zoom",
 
   "idioma.escolha": "App language",
+  "idioma.selecione": "Select a language",
   "idioma.ajuda": "Applies to the settings screens; the rest of the app stays in Portuguese.",
 
   "sessoes.intro": "Here is every device with an open session of yours.",
   "sessoes.atual": "This device",
   "sessoes.encerrar": "End session",
-  "sessoes.encerrarTudo": "End all other sessions",
+  "sessoes.encerrarTudo": "Log out of all known devices",
   "sessoes.vazio": "No other active sessions.",
   "sessoes.indisponivel": "This API does not expose the session list yet.",
   "sessoes.desde": "Started on",

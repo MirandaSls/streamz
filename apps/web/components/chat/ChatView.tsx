@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { EyeOff, Hash, Lock, Megaphone, Pencil, Users, Volume2 } from "@/components/ui/icones";
+import { Bell, EyeOff, Hash, Lock, Megaphone, Pencil, Users, Volume2 } from "@/components/ui/icones";
+import { channelNotificationScope, isMuted } from "@streamz/shared";
 import Composer from "@/components/chat/Composer";
 // ── h-moderacao ──
-import { RulesNotice, TimeoutNotice } from "@/components/moderation/ComposerNotice";
+import { RulesNotice, SemPermissaoNotice, TimeoutNotice } from "@/components/moderation/ComposerNotice";
 
 import { useModeration, useMustAcceptRules, useMyTimeout } from "@/stores/moderation";
 import { usePolls } from "@/stores/polls";
@@ -15,10 +16,15 @@ import ReplyBar from "@/components/chat/ReplyBar";
 import ThreadsPopover from "@/components/chat/ThreadsPopover";
 import TypingIndicator from "@/components/chat/TypingIndicator";
 import { ultimaMinhaMensagem } from "@/components/chat/ultima-minha";
+import { MENU_WIDTH } from "@/components/ui/ContextMenu";
+import { Button, Tooltip } from "@/components/ui/primitivos";
 import { useSlowmode } from "@/hooks/useSlowmode";
+import { useT } from "@/lib/i18n";
+import { submenuNotificacoes, submenuSilenciar } from "@/lib/notification-menu";
 import { useAuth } from "@/stores/auth";
 import { useActiveChannel } from "@/stores/channels";
 import { useGuilds } from "@/stores/guilds";
+import { useNotifications } from "@/stores/notifications";
 import {
   useCanManageActiveChannel,
   useCanModerateActiveChannel,
@@ -83,6 +89,10 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
   const slice = useActiveSlice();
   const membersOpen = useUI((s) => s.membersOpen);
   const toggleMembers = useUI((s) => s.toggleMembers);
+  // o sino do cabeçalho: mesmo par (config. de silêncio + nível) do menu de
+  // contexto do canal na barra lateral (`ChannelSidebar.openChannelMenu`)
+  const t = useT();
+  const porEscopo = useNotifications((s) => s.porEscopo);
   // ── h-moderacao ──
   const timeoutUntil = useMyTimeout();
   const mustAcceptRules = useMustAcceptRules();
@@ -112,7 +122,7 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
 
   if (!channel) {
     return (
-      <Raiz className="grid min-w-0 flex-1 place-items-center bg-chat text-txt-muted">
+      <Raiz className="grid min-w-0 flex-1 place-items-center bg-background-base-lower text-text-muted">
         Escolha um canal
       </Raiz>
     );
@@ -136,34 +146,34 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
   // conteúdo sensível: o canal só abre depois do aviso
   if (channel.nsfw && !liberado.includes(channel.id) && !jaConfirmou(channel.id)) {
     return (
-      <Raiz className="grid min-w-0 flex-1 place-items-center bg-chat px-8 text-center">
+      <Raiz className="grid min-w-0 flex-1 place-items-center bg-background-base-lower px-8 text-center">
         <div className="max-w-md">
-          <EyeOff size={64} strokeWidth={1} className="mx-auto text-txt-muted" aria-hidden="true" />
-          <h2 className="mt-4 font-display text-2xl font-extrabold tracking-wordmark text-txt-primary">
+          <EyeOff size={64} strokeWidth={1} className="mx-auto text-text-muted" aria-hidden="true" />
+          <h2 className="mt-4 font-headline text-2xl font-extrabold text-text-strong">
             {prefixo}
             {name}
           </h2>
-          <p className="mt-2 text-txt-muted">
+          <p className="mt-2 text-text-muted">
             Este canal foi marcado como sensível. O conteúdo pode não ser apropriado
             para todo mundo.
           </p>
-          <button
-            type="button"
+          <Button
+            variante="primario"
             onClick={() => {
               confirmar(channel.id);
               setLiberado((ids) => [...ids, channel.id]);
             }}
-            className="mt-6 h-[38px] rounded-[3px] bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover"
+            className="mt-6"
           >
             Continuar mesmo assim
-          </button>
+          </Button>
         </div>
       </Raiz>
     );
   }
 
   return (
-    <Raiz className="flex min-h-0 min-w-0 flex-1 flex-col bg-chat">
+    <Raiz className="flex min-h-0 min-w-0 flex-1 flex-col bg-background-base-lower">
       {/* Incorporado ao palco de uma chamada, o cabeçalho é o do
           `PainelDeChatDaCall` (balão + nome + X, 49px): na print do Discord a
           coluna da conversa da call **não** tem busca, alfinete nem lista de
@@ -175,14 +185,15 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
         title={name}
         subtitle={
           channel.topic ? (
-            <button
-              type="button"
-              onClick={() => ui.openModal({ kind: "channelTopic", channelId: channel.id })}
-              title="Ver o tópico completo"
-              className="max-w-[40vw] truncate text-left hover:text-txt-normal"
-            >
-              {channel.topic}
-            </button>
+            <Tooltip rotulo="Ver o tópico completo">
+              <button
+                type="button"
+                onClick={() => ui.openModal({ kind: "channelTopic", channelId: channel.id })}
+                className="max-w-[40vw] truncate text-left hover:text-text-default"
+              >
+                {channel.topic}
+              </button>
+            </Tooltip>
           ) : undefined
         }
         searchLabel={`Buscar mensagens em ${name}`}
@@ -190,16 +201,46 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
         searchValue={searchQuery}
         onSearch={(q) => {
           setSearchQuery(q);
-          // no servidor a busca é do servidor inteiro, com `in:#canal` filtrando
+          // no servidor a busca é do servidor inteiro, com `em:#canal` filtrando
           void runSearch({ channelId: channel.id, guildId: channel.guildId });
         }}
         tools={
-          // a ordem do Discord: threads → (sino) → alfinete → membros → busca.
-          // O sino (notificações do canal) não existe aqui e não foi criado.
-          // Tinta medida no print: 18×18 em cada glifo; `size` por ícone
-          // porque cada desenho ocupa uma fração diferente do quadro.
+          // a ordem do Discord, medida no `HeaderBar` (passo de 42px, print
+          // `180835`): threads → sino → alfinete → membros → busca. Tinta
+          // medida no print: 18×18 em cada glifo; `size` por ícone porque cada
+          // desenho ocupa uma fração diferente do quadro (Threads e Pin a 21
+          // já dão os 18px; o sino usa o mesmo 21 pelo mesmo motivo).
           <>
             <ThreadsPopover channelId={channel.id} canManage={canModerate} />
+            <HeaderIcon
+              // rótulo muda com o estado, como o de membros logo abaixo — o
+              // Discord não escreve "(silenciado)" no tooltip do sino, mas sem
+              // pista nenhuma o botão que abre "Silenciar canal" e já mudo
+              // pareceria quebrado
+              label={
+                isMuted(porEscopo[channelNotificationScope(channel.id)])
+                  ? "Notificações do canal (silenciado)"
+                  : "Notificações do canal"
+              }
+              onClick={(e) => {
+                const r = e.currentTarget.getBoundingClientRect();
+                const escopo = { tipo: "canal" as const, channelId: channel.id };
+                const setting = porEscopo[channelNotificationScope(channel.id)];
+                // alinhado pela borda direita do botão, 4px abaixo — o mesmo
+                // cálculo do menu do cabeçalho do servidor
+                // (`CabecalhoDoServidor`, linha 161) e do canal
+                // (`ChannelSidebar.openChannelMenu`), cujos dois primeiros
+                // itens são estes dois submenus
+                ui.openContextMenu(
+                  r.right - MENU_WIDTH,
+                  r.bottom + 4,
+                  [submenuSilenciar("Silenciar canal", escopo, setting, t), submenuNotificacoes(escopo, setting, t)],
+                  MENU_WIDTH,
+                );
+              }}
+            >
+              <Bell size={21} />
+            </HeaderIcon>
             <PinsPopover channelId={channel.id} guildId={channel.guildId} canPin={canModerate} />
             <HeaderIcon
               label={membersOpen ? "Ocultar lista de membros" : "Mostrar lista de membros"}
@@ -221,6 +262,7 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
         hasMore={slice.hasMore}
         loading={slice.loading}
         loadingOlder={slice.loadingOlder}
+        loadingOlderError={slice.loadingOlderError}
         onLoadOlder={() => void loadOlder(channel.id)}
         currentUserId={user?.id}
         canModerate={canModerate}
@@ -257,12 +299,8 @@ export default function ChatView({ incorporado = false }: { incorporado?: boolea
       />
 
       {readOnly ? (
-        // mantém a forma do composer (mesma altura e raio): o parágrafo cinza
-        // centralizado que ficava aqui tirava o chão da coluna
-        <div className="mx-2.5 mb-6 flex min-h-[58px] items-center gap-2 rounded-lg bg-input px-4 text-sm text-txt-muted">
-          <Lock size={18} aria-hidden="true" className="shrink-0" />
-          <span>Você não tem permissão para enviar mensagens neste canal.</span>
-        </div>
+        // mesmo aviso "somente-leitura" do composer em todo o app (h-moderacao)
+        <SemPermissaoNotice />
       ) : timeoutUntil ? (
         // h-moderacao: o castigo troca o composer pelo aviso de até quando
         <TimeoutNotice until={timeoutUntil} />

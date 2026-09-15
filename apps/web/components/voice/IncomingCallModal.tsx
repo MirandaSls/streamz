@@ -5,6 +5,7 @@ import { Phone, PhoneOff, Video } from "@/components/ui/icones";
 import { CALL_RING_TIMEOUT_MS, displayNameOf, isGroupChannel } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import Tooltip from "@/components/ui/Tooltip";
+import { Button } from "@/components/ui/primitivos";
 import { ALVO_MINIMO } from "@/components/voice/palco-mobile";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { pararToque, prepararToque, tocarToque, toqueDeChamadaUrl } from "@/lib/ringtone";
@@ -96,38 +97,62 @@ export default function IncomingCallModal() {
             }
           : undefined
       }
-      className={`fixed z-40 rounded-lg bg-overlay p-3 shadow-high anim-modal ${
+      className={`fixed z-40 rounded-lg bg-background-surface-higher p-3 shadow-popout anim-modal ${
         ehMobile ? "inset-x-3" : "bottom-[76px] left-[84px] w-[248px]"
       }`}
     >
       <audio ref={audio} src={toqueDeChamadaUrl()} preload="auto" loop />
       <div className="flex items-center gap-3">
-        <Avatar user={call.from} size="lg" surface="border-overlay" />
+        {/* O avatar pulsa enquanto toca — é o que faz o cartão ler como "chamada
+            AO VIVO" e não como um aviso parado. Medido em
+            `ringingIncoming_f910d0` (`css-bruto/401425.298f1ba0a6e8b19c.css`):
+            anel de 1px (a variante `small` dele) em `--interactive-text-active`
+            (branco — não é marca, é o mesmo token do item selecionado; o
+            Discord usa isso, não o blurple, então some do escopo da ADR-0009),
+            com `incoming-call-pulse_f910d0` em
+            `--custom-call-avatar-incoming-duration` = 5,407s, `infinite
+            ease-out`. Os keyframes foram copiados para `app/globals.css` como
+            `toque-recebido` (classe `anim-toque-recebido`): três ondas por
+            ciclo, não o `ping` genérico do Tailwind que estava aqui.
+            `prefers-reduced-motion`/`reduzir-movimento` são tratados lá. */}
+        <span className="relative inline-flex shrink-0 rounded-full">
+          <Avatar user={call.from} size="lg" surface="border-background-surface-higher" />
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute -inset-px rounded-full border border-interactive-text-active anim-toque-recebido"
+          />
+        </span>
         <span className="min-w-0">
-          <span className="block truncate font-semibold text-txt-primary">{nome}</span>
-          <span className="block truncate text-xs text-txt-muted">
-            {onde ? `Chamada recebida em ${onde}` : "Chamada recebida"}
+          <span className="block truncate font-semibold text-text-strong">{nome}</span>
+          <span className="block truncate text-xs text-text-muted">
+            {onde ? `Chamada recebida em ${onde}…` : "Chamada recebida…"}
           </span>
         </span>
       </div>
 
       {/* o verde vem primeiro: no cartão pequeno a ordem é a hierarquia.
-          Os 36px de `h-9` são de mouse; no telefone atender e recusar são os
+          Os 36px de altura são de mouse; no telefone atender e recusar são os
           dois botões mais caros de errar do app inteiro, e vão para os 44 de
-          `ALVO_MINIMO` — em px, porque `h-11` desenharia 42,6 com a raiz de
-          15,5 (ver `palco-mobile.ts`). */}
+          `ALVO_MINIMO` — em px, direto (a raiz do app é 16px desde a
+          ADR-0009, então um `h-11` já bateria exato em 44; o número fica em
+          `ALVO_MINIMO` para não duplicar entre arquivos — ver
+          `palco-mobile.ts`). */}
       <div className="mt-3 flex items-center gap-2">
-        <button
-          type="button"
+        <Button
+          variante="positivo"
+          tamanho="sm"
+          larguraTotal
+          // `larguraTotal` é `w-full min-w-0` sem `flex-1` (cabeçalho do
+          // Button): o `flex-1` deixa explícito que o Atender fica com o que
+          // sobra da fileira depois dos quadrados de 36/44, em vez de depender
+          // da conta de encolhimento de uma base de 100%.
+          className="flex-1"
+          icone={<Phone size={16} aria-hidden="true" />}
           onClick={() => void atender(false)}
-          style={ehMobile ? { height: ALVO_MINIMO } : undefined}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-[3px] bg-green text-sm font-semibold text-accent-ink transition hover:brightness-110 ${
-            ehMobile ? "" : "h-9"
-          }`}
+          style={ehMobile ? { height: ALVO_MINIMO } : { height: 36 }}
         >
-          <Phone size={16} aria-hidden="true" />
           Atender
-        </button>
+        </Button>
         {comVideo && (
           <Tooltip label="Atender com vídeo">
             <button
@@ -135,7 +160,11 @@ export default function IncomingCallModal() {
               onClick={() => void atender(true)}
               aria-label="Atender com vídeo"
               style={ehMobile ? { height: ALVO_MINIMO, width: ALVO_MINIMO } : undefined}
-              className={`grid place-items-center rounded-[3px] bg-green/20 text-green transition hover:bg-green/30 ${
+              // `rounded-[3px]` não é um dos quatro raios do design.md (a peça
+              // mais próxima em medida é o botão de ícone quadrado de 36px do
+              // rodapé de voz — `--radius-sm`/`rounded-lg`, ver o cabeçalho de
+              // `BotaoDeIcone.tsx`, família 3): trocado por `rounded-lg`.
+              className={`grid place-items-center rounded-lg bg-status-positive/20 text-status-positive transition hover:bg-status-positive/30 ${
                 ehMobile ? "" : "h-9 w-9"
               }`}
             >
@@ -144,17 +173,14 @@ export default function IncomingCallModal() {
           </Tooltip>
         )}
         <Tooltip label="Recusar">
-          <button
-            type="button"
+          <Button
+            variante="critico"
+            tamanho="sm"
+            icone={<PhoneOff size={16} />}
             onClick={decline}
             aria-label="Recusar chamada"
-            style={ehMobile ? { height: ALVO_MINIMO, width: ALVO_MINIMO } : undefined}
-            className={`grid place-items-center rounded-[3px] bg-red text-white transition hover:bg-red-hover ${
-              ehMobile ? "" : "h-9 w-9"
-            }`}
-          >
-            <PhoneOff size={16} />
-          </button>
+            style={ehMobile ? { height: ALVO_MINIMO, width: ALVO_MINIMO } : { height: 36, width: 36 }}
+          />
         </Tooltip>
       </div>
     </div>

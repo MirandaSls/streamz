@@ -17,9 +17,9 @@ import { useVoice } from "@/stores/voice";
  * Quem está num canal de voz, listado sob ele na barra lateral.
  *
  * É a leitura do `voice.state` do gateway — o mesmo evento que a barra lateral
- * consome. Fica num componente próprio para que a `ChannelSidebar` precise
- * apenas montá-lo: a regra de quem aparece (e com quais ícones) mora aqui,
- * junto do resto da voz.
+ * consome. Fica num componente próprio para que a `CanalDeVoz` precise apenas
+ * montá-lo: a regra de quem aparece (e com quais ícones) mora aqui, junto do
+ * resto da voz.
  *
  * Três detalhes que parecem cosméticos e não são:
  *
@@ -39,9 +39,9 @@ import { useVoice } from "@/stores/voice";
  *
  * Arrastar um participante daqui para outro canal de voz é de quem tem
  * `MOVE_MEMBERS`; quem guarda o estado do arrasto e desenha o realce no canal
- * alvo é a `ChannelSidebar`, que já faz isso para canais e categorias. Este
- * componente só marca o `li` como arrastável e avisa quem começou e quando
- * acabou — não decide nada.
+ * alvo é a `CanalDeVoz` (por cima, a coluna que a monta), que já faz isso para
+ * canais e categorias. Este componente só marca o `li` como arrastável e avisa
+ * quem começou e quando acabou — não decide nada.
  */
 export default function VoiceChannelMembers({
   channelId,
@@ -81,7 +81,11 @@ export default function VoiceChannelMembers({
 
   return (
     <>
-      <ul aria-label="Na sala de voz" className="mb-1 ml-3 mr-2 mt-0.5 space-y-0.5">
+      {/* Linhas de 32 coladas, sem `space-y`: em 101842.png o centro do avatar
+          de "Md" (y 409–430) fica a ~31px do centro do ícone de convite
+          (y 445–455); com `space-y-0.5` o passo era 34. O print só tem um
+          participante: o passo entre dois participantes não foi medido. */}
+      <ul aria-label="Na sala de voz" className="mb-1 ml-3 mr-2 mt-0.5">
         {estados.map((e) => {
           const nome = displayNameOf(e.user);
           // quem está mudo nunca "fala": o anel tem de contar a mesma história
@@ -127,8 +131,8 @@ export default function VoiceChannelMembers({
                   **à esquerda** do ícone do próprio canal — colado na borda da
                   coluna, que foi a queixa.
                 */
-                className={`flex h-8 w-full items-center gap-1.5 rounded-[4px] pl-[38px] pr-1 text-left text-sm hover:bg-hov hover:text-txt-normal ${
-                  e.deafened ? "text-txt-faint opacity-30" : "text-txt-faint"
+                className={`flex h-8 w-full items-center gap-1.5 rounded-[4px] pl-[38px] pr-1 text-left text-sm hover:bg-interactive-background-hover hover:text-text-default ${
+                  e.deafened ? "text-channels-default opacity-30" : "text-channels-default"
                 }`}
               >
                 {/* 24px (`sm`), medido no print. O anel de "está falando" é o
@@ -140,7 +144,7 @@ export default function VoiceChannelMembers({
                   <Avatar
                     user={e.user}
                     size="sm"
-                    surface="border-panel"
+                    surface="border-background-base-lowest"
                     className={`transition-transform ${ativo ? ENCOLHE_AO_FALAR : ""}`}
                   />
                   {ativo && <AnelDeFala />}
@@ -160,16 +164,21 @@ export default function VoiceChannelMembers({
                     a pílula é do nome, o selo é do que a pessoa está fazendo. */}
                 {e.user.bot && <TagDeBot />}
                 {e.screen ? (
-                  <span className="shrink-0 rounded-[3px] bg-red px-1 text-[10px] font-bold uppercase leading-4 tracking-[0.02em] text-white">
+                  <span className="shrink-0 rounded-[3px] bg-status-danger px-1 text-[10px] font-bold uppercase leading-4 tracking-[0.02em] text-control-critical-primary-text-default">
                     Ao vivo
                   </span>
                 ) : (
-                  e.video && <Video size={14} className="shrink-0 text-txt-muted" aria-label="Com câmera" />
+                  e.video && <Video size={14} className="shrink-0 text-text-muted" aria-label="Com câmera" />
                 )}
+                {/* Cinza, não vermelho: em 101842.png o microfone cortado de "Md"
+                    (mudo por conta própria) sai #81828a = `channels-default`
+                    (coluna x=348, y 412–425). O Discord só pinta de vermelho o
+                    mudo/ensurdecido **pelo servidor**, estado que o Streamz não
+                    tem (`VoiceStateEvent` só traz muted/deafened). */}
                 {e.deafened ? (
-                  <HeadphoneOff size={14} className="shrink-0 text-red" aria-label="Sem áudio" />
+                  <HeadphoneOff size={14} className="shrink-0 text-channels-default" aria-label="Sem áudio" />
                 ) : (
-                  e.muted && <MicOff size={14} className="shrink-0 text-red" aria-label="Mudo" />
+                  e.muted && <MicOff size={14} className="shrink-0 text-channels-default" aria-label="Mudo" />
                 )}
               </button>
             </li>
@@ -184,7 +193,7 @@ export default function VoiceChannelMembers({
             <button
               type="button"
               onClick={() => ui.openModal({ kind: "invite", guildId })}
-              className="flex h-8 w-full items-center gap-1.5 rounded-[4px] pl-[38px] pr-1 text-left text-sm text-txt-faint transition hover:bg-hov hover:text-txt-normal"
+              className="flex h-8 w-full items-center gap-1.5 rounded-[4px] pl-[38px] pr-1 text-left text-sm text-channels-default transition hover:bg-interactive-background-hover hover:text-text-default"
             >
               <span className="grid h-5 w-5 shrink-0 place-items-center">
                 <UserPlus size={14} aria-hidden="true" />

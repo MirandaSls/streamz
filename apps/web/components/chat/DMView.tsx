@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PhoneCall, Settings, UserPlus, UserProfile, Users, Video } from "@/components/ui/icones";
+import { Clock, PhoneCall, Settings, UserCheck, UserPlus, UserProfile, Users, Video } from "@/components/ui/icones";
 import { isGroupChannel } from "@streamz/shared";
 import Composer from "@/components/chat/Composer";
 import DMMemberList from "@/components/chat/DMMemberList";
@@ -14,6 +14,7 @@ import TypingIndicator from "@/components/chat/TypingIndicator";
 import { ultimaMinhaMensagem } from "@/components/chat/ultima-minha";
 import FriendsPage from "@/components/friends/FriendsPage";
 import Avatar, { GroupAvatar } from "@/components/ui/Avatar";
+import { Button } from "@/components/ui/primitivos";
 import CallBanner from "@/components/voice/CallBanner";
 import CallSplit from "@/components/voice/CallSplit";
 import CallStage from "@/components/voice/CallStage";
@@ -80,6 +81,14 @@ export default function DMView({
   const removerAmigo = useFriends((s) => s.remove);
   const bloquear = useFriends((s) => s.block);
   const desbloquear = useFriends((s) => s.unblock);
+  // "outgoing"/"incoming" (pedido de amizade sem resposta) também abrem DM —
+  // basta ter servidor em comum. Mesmas ações e palavras do popover de perfil
+  // e do modal de perfil completo (`ProfilePopover`, `UserProfileModal`):
+  // recusar/cancelar são destrutivos e por isso não têm botão aqui, só existem
+  // no "…" das outras telas — esta fileira, como no Discord, é só a neutra.
+  const enviarPedido = useFriends((s) => s.send);
+  const aceitarPedido = useFriends((s) => s.accept);
+  const pedidosRecebidos = useFriends((s) => s.incoming);
   const [servidoresEmComum, setServidoresEmComum] = useState<number | null>(null);
   useEffect(() => {
     setServidoresEmComum(null);
@@ -130,7 +139,7 @@ export default function DMView({
 
   if (!active) {
     return (
-      <main className="grid min-w-0 flex-1 place-items-center bg-chat text-txt-muted">
+      <main className="grid min-w-0 flex-1 place-items-center bg-background-base-lower text-text-muted">
         Selecione uma conversa
       </main>
     );
@@ -166,6 +175,7 @@ export default function DMView({
         hasMore={slice.hasMore}
         loading={slice.loading}
         loadingOlder={slice.loadingOlder}
+        loadingOlderError={slice.loadingOlderError}
         onLoadOlder={() => void loadOlder(active.id)}
         currentUserId={user?.id}
         canModerate={false}
@@ -190,7 +200,7 @@ export default function DMView({
                 description: (
                   <>
                     Este é o começo do seu histórico de mensagens diretas com{" "}
-                    <strong className="font-semibold text-txt-primary">{title}</strong>.
+                    <strong className="font-semibold text-text-strong">{title}</strong>.
                   </>
                 ),
                 // descrição → topo dos botões: 25px medidos (8 de margem + a folga
@@ -200,18 +210,57 @@ export default function DMView({
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     {servidoresEmComum !== null && (
                       <>
-                        <span className="text-sm text-txt-muted">
+                        <span className="text-sm text-text-muted">
                           {servidoresEmComum === 0
                             ? "Nenhum servidor em comum"
                             : servidoresEmComum === 1
                               ? "1 servidor em comum"
                               : `${servidoresEmComum} servidores em comum`}
                         </span>
-                        <span aria-hidden="true" className="mx-1 h-1 w-1 rounded-full bg-txt-muted" />
+                        <span aria-hidden="true" className="mx-1 h-1 w-1 rounded-full bg-text-muted" />
                       </>
                     )}
                     {relacao === "friend" && (
                       <BotaoBoasVindas label="Desfazer amizade" onClick={() => void removerAmigo(other)} />
+                    )}
+                    {/* sem relação nenhuma: ainda dá para pedir amizade daqui,
+                        sem abrir o perfil — mesma ação do popover */}
+                    {relacao === "none" && (
+                      <BotaoBoasVindas
+                        icon={<UserPlus size={16} />}
+                        label="Adicionar amigo"
+                        onClick={() => void enviarPedido(other.username)}
+                      />
+                    )}
+                    {/* pedido meu, ainda sem resposta: mostra o estado, não
+                        some — cancelar é destrutivo, então mora no "…" do
+                        perfil, não nesta fileira neutra */}
+                    {relacao === "outgoing" && (
+                      <Button
+                        variante="secundario"
+                        tamanho="sm"
+                        disabled
+                        icone={<Clock size={16} aria-hidden="true" />}
+                        className="celular:h-[44px] celular:px-4"
+                      >
+                        Pedido enviado
+                      </Button>
+                    )}
+                    {/* pedido da outra pessoa: aceitar fica à mão aqui;
+                        recusar é destrutivo e mora no "…" do perfil */}
+                    {relacao === "incoming" && (
+                      <Button
+                        variante="positivo"
+                        tamanho="sm"
+                        icone={<UserCheck size={16} aria-hidden="true" />}
+                        onClick={() => {
+                          const pedido = pedidosRecebidos.find((r) => r.user.id === other.id);
+                          if (pedido) void aceitarPedido(pedido.id);
+                        }}
+                        className="celular:h-[44px] celular:px-4"
+                      >
+                        Aceitar pedido
+                      </Button>
                     )}
                     {relacao === "blocked" ? (
                       <BotaoBoasVindas label="Desbloquear" onClick={() => void desbloquear(other.id)} />
@@ -269,12 +318,12 @@ export default function DMView({
     // `min-h-0` só sem cabeçalho (celular): ali este `main` é filho de uma
     // coluna que já mede a tela, e sem ele a timeline empurraria o composer
     // para fora. No desktop a classe fica exatamente como era.
-    <main className={`flex min-w-0 flex-1 flex-col bg-chat ${semCabecalho ? "min-h-0" : ""}`}>
+    <main className={`flex min-w-0 flex-1 flex-col bg-background-base-lower ${semCabecalho ? "min-h-0" : ""}`}>
       {!semCabecalho && (
       <HeaderBar
         icon={
           other ? (
-            <Avatar user={other} size="sm" status={resolveStatus(statuses, other)} surface="border-chat" />
+            <Avatar user={other} size="sm" status={resolveStatus(statuses, other)} surface="border-background-base-lower" />
           ) : (
             <GroupAvatar iconUrl={active.iconUrl} size="sm" />
           )
@@ -290,6 +339,10 @@ export default function DMView({
           // conversa não tem servidor: a busca corre só neste canal
           void runSearch({ channelId: active.id, guildId: null });
         }}
+        // a API ignora `em:` numa DM (`messages.service.ts`, `search` só filtra
+        // canal quando há `guildId`): sem isto o popout de filtros ofereceria
+        // uma linha que não filtra nada aqui
+        semFiltroDeCanal
         tools={
           // a ordem do Discord: telefone → vídeo → alfinete → adicionar → perfil → busca
           <>

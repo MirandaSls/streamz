@@ -11,6 +11,8 @@ export interface PollRow {
   messageId: string;
   question: string;
   options: string[];
+  /** emoji de cada opção, paralelo a `options`; "" (ou ausente) = sem emoji. */
+  optionEmojis?: string[];
   multi: boolean;
   expiresAt: Date | null;
   closedAt: Date | null;
@@ -47,10 +49,30 @@ export function tallyPoll(poll: PollRow, votes: VotoRow[], viewerId?: string): P
       text,
       votes: contagem[index],
       me: meus[index],
+      emoji: poll.optionEmojis?.[index] || null,
     })),
     multi: poll.multi,
     expiresAt: poll.expiresAt ? poll.expiresAt.toISOString() : null,
     closedAt: poll.closedAt ? poll.closedAt.toISOString() : null,
     totalVotes: total,
   };
+}
+
+/**
+ * Array de emojis que vai para a coluna `optionEmojis`: um por opção, na mesma
+ * posição, com "" onde a resposta não tem emoji.
+ *
+ * Função pura porque as duas pontas soltas quebram em silêncio: o cliente pode
+ * mandar menos (ou mais) emojis que opções, e `null`/espaços não podem virar um
+ * emoji "vazio" desenhado. Devolve `[]` quando nenhuma opção tem emoji — é o
+ * mesmo valor das enquetes antigas, e poupa a linha de um array de strings
+ * vazias.
+ */
+export function normalizarEmojisDasOpcoes(
+  quantasOpcoes: number,
+  emojis: readonly (string | null | undefined)[] | undefined,
+): string[] {
+  if (!emojis) return [];
+  const saida = Array.from({ length: quantasOpcoes }, (_, i) => (emojis[i] ?? "").trim());
+  return saida.some(Boolean) ? saida : [];
 }

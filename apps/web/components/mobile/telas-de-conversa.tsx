@@ -8,6 +8,7 @@ import {
   Megaphone,
   MessageSquare,
   PhoneCall,
+  Search,
   Users,
   UserProfile,
   Video,
@@ -20,12 +21,15 @@ import DMMemberList from "@/components/chat/DMMemberList";
 import DMProfilePanel from "@/components/chat/DMProfilePanel";
 import DMView from "@/components/chat/DMView";
 import FriendsPage from "@/components/friends/FriendsPage";
-import MemberList from "@/components/MemberList";
 import VoicePanel from "@/components/VoicePanel";
+import CamadasDoCanal, { useEntradasDoCanal } from "@/components/mobile/entradas/EntradasDoCanal";
+import { BotaoRedondo } from "@/components/mobile/entradas/pecas";
+import TelaDeThread from "@/components/mobile/entradas/TelaDeThread";
 import { BotaoDeToque, CabecalhoMobile } from "@/components/mobile/pecas";
 import Avatar, { GroupAvatar } from "@/components/ui/Avatar";
 import { useActiveChannel, useVoiceChannel } from "@/stores/channels";
 import { useActiveDM } from "@/stores/dms";
+import { useMessages } from "@/stores/messages";
 import { dmTitle } from "@/stores/dms";
 import { useMobile } from "@/stores/mobile";
 import { resolveStatus, usePresence } from "@/stores/presence";
@@ -74,7 +78,7 @@ export function PainelDeslizante({
 
   return createPortal(
     <div
-      className="anim-overlay fixed inset-0 z-[85] flex justify-end bg-black/60"
+      className="anim-overlay fixed inset-0 z-[85] flex justify-end bg-background-scrim"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onFechar();
       }}
@@ -83,10 +87,10 @@ export function PainelDeslizante({
         role="dialog"
         aria-modal="true"
         aria-label={rotulo}
-        className="anim-deslizar-direita flex h-full w-[86%] max-w-sm flex-col bg-panel pt-[env(safe-area-inset-top)] shadow-high"
+        className="anim-deslizar-direita flex h-full w-[86%] max-w-sm flex-col bg-background-base-lowest pt-[env(safe-area-inset-top)] shadow-popout"
       >
-        <div className="flex h-[56px] shrink-0 items-center gap-2 border-b border-border pl-4 pr-1">
-          <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-txt-primary">
+        <div className="flex h-[56px] shrink-0 items-center gap-2 border-b border-border-subtle pl-4 pr-1">
+          <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-text-strong">
             {titulo}
           </h2>
           <BotaoDeToque label="Fechar" onClick={onFechar}>
@@ -164,8 +168,12 @@ export function AreaDeToqueLongo({ children }: { children: ReactNode }) {
       const selecao = window.getSelection?.();
       if (selecao && !selecao.isCollapsed) return;
       const { clientX: x, clientY: y } = e;
-      origem.current = { x, y };
+      // `cancelar()` ANTES de gravar a origem: ele a zera, e na ordem inversa o
+      // `aoMover` achava a origem nula e nunca desistia pelos 10px — o menu
+      // abria no meio de um arrasto de lado (bancada, 2026-09-14). Enquanto só
+      // existia rolagem vertical ninguém via, porque ela manda `pointercancel`.
       cancelar();
+      origem.current = { x, y };
       timer.current = window.setTimeout(() => {
         timer.current = null;
         /*
@@ -231,8 +239,8 @@ export function AreaDeToqueLongo({ children }: { children: ReactNode }) {
 export function TelaDeCanal() {
   const canal = useActiveChannel();
   const voltar = useMobile((s) => s.voltar);
-  const abrirMembros = useMobile((s) => s.abrirMembros);
-  const membrosAbertos = useMobile((s) => s.membrosAbertos);
+  // antes do `return` condicional: a pilha de entradas é um hook
+  const entradas = useEntradasDoCanal(canal?.id ?? null);
 
   if (!canal) return null;
   const nome = canal.name ?? "canal";
@@ -248,28 +256,39 @@ export function TelaDeCanal() {
   return (
     <>
       {/*
-        `# nome ›`, e é **o título** que abre a lista de membros — é o que a
-        captura `discord-mobile-chat-canal-2024.png` mostra: seta de voltar,
-        `# general ›` e a lupa à direita. Não há ícone de membros ali.
+        `# nome ›` e a lupa à direita — é o que a captura
+        `discord-mobile-chat-canal-2024.png` mostra: seta de voltar,
+        `# general ›` e um círculo de busca. Não há ícone de membros ali.
 
-        A lupa fica de fora: a busca de mensagens não tem tela no celular, e
-        §6.6 é clara — botão inerte só existe quando o Discord o tem e nós
-        temos o que ele faz. Uma lupa que não busca seria pior que nenhuma.
+        **O título abre os detalhes do canal**, e não mais só a lista de
+        membros: no Discord do celular é esse toque que leva à tela com Membros,
+        Fixadas e Threads (`suporte/.../pin-messages-faq/14.gif`, "Pins option
+        in channel details"). Os membros continuam a um toque, como a primeira
+        aba. Era a pendência de §6.2 do `LEIAUTE-MOBILE-COBERTURA.md`: busca,
+        fixadas e threads não tinham entrada nenhuma no celular.
+
+        **A lupa voltou** porque agora a busca tem tela (`TelaDeBusca`). Ela
+        ficava de fora pela regra de §6.6 — botão só quando o Discord o tem e
+        nós temos o que ele faz —, e as duas metades passaram a valer. Círculo
+        de 32 a 16 da borda, medido (ver `BotaoRedondo`): o `CabecalhoMobile`
+        tem 4 de recuo à direita, o alvo de 44 põe 6 de folga em volta do
+        círculo, e os 6 de margem fecham os 16.
       */}
       <CabecalhoMobile
         aoVoltar={() => voltar()}
         icone={<Icone size={20} />}
         titulo={nome}
         subtitulo={canal.topic ?? undefined}
-        aoTocarNoTitulo={abrirMembros}
+        aoTocarNoTitulo={() => entradas.abrir("detalhes")}
         chevron
+        acoes={
+          <BotaoRedondo rotulo={`Buscar em ${nome}`} onClick={() => entradas.abrir("busca")} className="mr-[6px]">
+            <Search size={18} />
+          </BotaoRedondo>
+        }
       />
       <ChatView incorporado />
-      {membrosAbertos && (
-        <PainelDeslizante rotulo="Membros" titulo="Membros" onFechar={() => voltar()}>
-          <MemberList />
-        </PainelDeslizante>
-      )}
+      <CamadasDoCanal canal={canal} entradas={entradas} />
     </>
   );
 }
@@ -281,6 +300,9 @@ export function TelaDeDM() {
   const voltar = useMobile((s) => s.voltar);
   const abrirMembros = useMobile((s) => s.abrirMembros);
   const membrosAbertos = useMobile((s) => s.membrosAbertos);
+  // thread também existe em conversa direta (ADR-0001); sem esta camada o
+  // "Criar Tópico" da mensagem não mostrava nada no celular
+  const threadAberta = useMessages((s) => s.threadParentId !== null);
 
   if (!dm) return null;
   const titulo = dmTitle(dm);
@@ -294,7 +316,7 @@ export function TelaDeDM() {
         aoVoltar={() => voltar()}
         icone={
           outro ? (
-            <Avatar user={outro} size="sm" status={resolveStatus(statuses, outro)} surface="border-panel" />
+            <Avatar user={outro} size="sm" status={resolveStatus(statuses, outro)} surface="border-background-base-lowest" />
           ) : (
             <GroupAvatar iconUrl={dm.iconUrl} size="sm" />
           )
@@ -337,6 +359,7 @@ export function TelaDeDM() {
           {grupo || !outro ? <DMMemberList dm={dm} /> : <DMProfilePanel user={outro} />}
         </PainelDeslizante>
       )}
+      {threadAberta && <TelaDeThread channelId={dm.id} guildId={null} />}
     </>
   );
 }

@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { parseCustomEmoji } from "@streamz/shared";
+import { camposDeBotDoDTO } from "../messages/payload-de-bot";
+import type { LinhaDeMensagemDeBot } from "./traducao/mensagem";
 import type {
   LinhaDeAnexo,
   LinhaDeCanal,
@@ -109,6 +111,13 @@ const SELECAO_DE_MENSAGEM = {
   reactions: { select: { emoji: true, userId: true } },
   replyTo: { select: { snowflake: true, channel: { select: { snowflake: true } } } },
   pin: { select: { messageId: true } },
+  // ── rodada de correção ── embeds, componentes e flags do bot. Sem estes dois
+  // campos a linha saía sem `payloadDeBot`, e o `MESSAGE_CREATE`/`MESSAGE_UPDATE`
+  // do gateway (`gateway/dispatch.ts`, que só tem esta linha) chegava ao bot com
+  // `embeds: []` e `flags: 0` — o REST remendava com `payloadsDeBot`, o
+  // gateway não tinha de onde.
+  suppressEmbeds: true,
+  botPayload: { select: { embeds: true, components: true, flags: true } },
 } as const;
 
 /** `limit` do histórico: o mesmo intervalo do Discord. */
@@ -349,7 +358,10 @@ export class DadosDeCompatService {
   }
 
   /** `paraBot` decide o `me` das reações; `null` = ninguém. */
-  async mensagemPorCuid(id: string, paraBotUserId: string | null): Promise<LinhaDeMensagem | null> {
+  async mensagemPorCuid(
+    id: string,
+    paraBotUserId: string | null,
+  ): Promise<LinhaDeMensagemDeBot | null> {
     const mensagem = await this.prisma.message.findUnique({
       where: { id },
       select: SELECAO_DE_MENSAGEM,
@@ -378,7 +390,7 @@ export class DadosDeCompatService {
       around?: bigint;
       paraBotUserId: string | null;
     },
-  ): Promise<LinhaDeMensagem[]> {
+  ): Promise<LinhaDeMensagemDeBot[]> {
     const limite = Math.min(LIMITE_MAXIMO, Math.max(LIMITE_MINIMO, Math.trunc(opcoes.limit)));
     // resposta de thread não vive na timeline do canal — é o mesmo filtro do
     // `MessagesService.history`, e sem ele o bot veria mensagens que o navegador
@@ -495,7 +507,8 @@ export class DadosDeCompatService {
     m: LinhaCrua,
     paraBotUserId: string | null,
     personalizados: Map<string, LinhaDeEmojiPersonalizado>,
-  ): LinhaDeMensagem {
+  ): LinhaDeMensagemDeBot {
+    const attachments = m.attachments.map(paraLinhaDeAnexo);
     return {
       id: m.id,
       snowflake: m.snowflake,
@@ -506,12 +519,13 @@ export class DadosDeCompatService {
       createdAt: m.createdAt,
       editedAt: m.editedAt,
       type: m.type,
-      attachments: m.attachments.map(paraLinhaDeAnexo),
+      attachments,
       reactions: agruparReacoes(m.reactions, paraBotUserId, personalizados),
       respostaA: m.replyTo
         ? { snowflake: m.replyTo.snowflake, channelSnowflake: m.replyTo.channel.snowflake }
         : null,
       pinned: m.pin !== null,
+      payloadDeBot: payloadDeBotDaLinha(m, attachments),
     };
   }
 }
@@ -540,6 +554,9 @@ interface LinhaCrua {
   reactions: { emoji: string; userId: string }[];
   replyTo: { snowflake: bigint; channel: { snowflake: bigint } } | null;
   pin: { messageId: string } | null;
+  /** `?`: linha montada à mão nos testes antigos não traz as colunas de bot. */
+  suppressEmbeds?: boolean;
+  botPayload?: { embeds: unknown; components: unknown; flags: number } | null;
 }
 
 /**
@@ -580,7 +597,43 @@ function agruparReacoes(
 }
 
 /**
- * Linha de `Attachment` → `LinhaDeAnexo`.
+ * Embeds, componentes e flags de uma mensagem, do jeito que o bot os recebe.
+ *
+ * É a mesma montagem do DTO (`camposDeBotDoDTO`, `messages/payload-de-bot.ts`):
+ * `flags` junta as guardadas com a coluna `suppressEmbeds`. Duas diferenças, e
+ * as duas são a identidade que a casca expõe ao bot:
+ *
+ * - **sem** trocar snowflake por cuid nos componentes (os `MapasDeIds` vazios):
+ *   o bot mandou snowflake e recebe snowflake de volta — a troca é da web;
+ * - `attachment://<nome>` é resolvido com a URL de `urlDoAnexoParaBot` e o
+ *   `attachment_id` sai com o **snowflake** do anexo, nunca com o cuid. É o que
+ *   o Discord devolve: a mídia do embed já aponta para o arquivo enviado.
+ *
+ * Mensagem sem linha de `MessageBotPayload` e sem `suppressEmbeds` (quase
+ * todas) devolve `null` — a tradução cai no `embeds: []`, `flags: 0` de sempre.
+ */
+function payloadDeBotDaLinha(
+  m: Pick<LinhaCrua, "suppressEmbeds" | "botPayload">,
+  anexos: readonly LinhaDeAnexo[],
+): LinhaDeMensagemDeBot["payloadDeBot"] {
+  const suppressEmbeds = m.suppressEmbeds ?? false;
+  if (!m.botPayload && !suppressEmbeds) return null;
+  return camposDeBotDoDTO(
+    { suppressEmbeds, payload: m.botPayload ?? null },
+    anexos.map((a) => ({
+      id: String(a.snowflake),
+      filename: a.filename,
+      url: a.url,
+      contentType: a.contentType,
+      size: a.size,
+      width: a.width,
+      height: a.height,
+    })),
+  );
+}
+
+/**
+ * A URL de um anexo, do jeito que o bot a recebe.
  *
  * **Limitação declarada da F1:** a URL de um anexo guardado no nosso bucket é
  * assinada na hora pelo `StorageService` (`attachmentUrl`), e ele não está
@@ -589,10 +642,19 @@ function agruparReacoes(
  * externo (GIF), o caminho público do R2 quando `R2_PUBLIC_BASE_URL` existe, e o
  * proxy da API sem o `?t=` no resto — que o bot não consegue baixar. Relatado no
  * PR: resolve-se injetando `StorageService` neste service.
+ *
+ * Exportada porque o `resolved.attachments` do modal
+ * (`interactions/interactions.service.ts`) precisa da mesma regra — uma cópia
+ * lá divergiria no primeiro ajuste. Nome e assinatura são contrato.
  */
-function paraLinhaDeAnexo(a: LinhaCrua["attachments"][number]): LinhaDeAnexo {
+export function urlDoAnexoParaBot(a: { id: string; key: string; externalUrl: string | null }): string {
   const base = process.env.R2_PUBLIC_BASE_URL?.replace(/\/+$/, "");
   const api = (process.env.API_PUBLIC_URL ?? "http://localhost:3333").replace(/\/+$/, "");
+  return a.externalUrl ?? (base ? `${base}/${a.key}` : `${api}/api/uploads/file/${a.id}`);
+}
+
+/** Linha de `Attachment` → `LinhaDeAnexo`. A URL sai de `urlDoAnexoParaBot`. */
+function paraLinhaDeAnexo(a: LinhaCrua["attachments"][number]): LinhaDeAnexo {
   return {
     id: a.id,
     snowflake: a.snowflake,
@@ -601,6 +663,6 @@ function paraLinhaDeAnexo(a: LinhaCrua["attachments"][number]): LinhaDeAnexo {
     size: a.size,
     width: a.width,
     height: a.height,
-    url: a.externalUrl ?? (base ? `${base}/${a.key}` : `${api}/api/uploads/file/${a.id}`),
+    url: urlDoAnexoParaBot(a),
   };
 }

@@ -4,9 +4,8 @@ import { useState } from "react";
 import {
   ArrowLeft,
   ChevronRight,
-  GripVertical,
+  Eye,
   MoreHorizontal,
-  Pencil,
   Search,
   Trash2,
   User,
@@ -26,16 +25,18 @@ import {
 } from "@streamz/shared";
 import { useAlteracoesNaoSalvas } from "@/components/ui/alteracoes";
 import { Section, Toggle } from "@/components/ui/controls";
-import { ESTILO_CAMPO, ESTILO_ROTULO } from "@/components/settings/campos";
+import { ESTILO_ROTULO } from "@/components/settings/campos";
 import { TituloDaPagina } from "@/components/settings/server/pagina";
 import SeletorDeCor from "@/components/settings/SeletorDeCor";
 import { MENU_WIDTH } from "@/components/ui/ContextMenu";
 import Tooltip from "@/components/ui/Tooltip";
+import { BotaoDeIcone, Button, Campo, TextInput } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { useGuilds } from "@/stores/guilds";
 import { usePermissions } from "@/stores/permissions";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui, type MenuItem } from "@/stores/ui";
+import { COR_DE_CARGO_SEM_COR } from "@/lib/cor-de-cargo";
 
 const GRUPOS: { id: "geral" | "membros" | "mensagens" | "voz"; label: string }[] = [
   { id: "geral", label: "Permissões gerais do servidor" },
@@ -56,12 +57,93 @@ const GRUPOS: { id: "geral" | "membros" | "mensagens" | "voz"; label: string }[]
  * ficavam com uma coluna de texto ilegível — que é exatamente o motivo de o
  * Discord ter separado as duas telas.
  *
- * A ordem da lista é a hierarquia, e ela é reordenada arrastando pela alça: os
- * chevrons antigos só apareciam no hover, então a única affordance de "isto se
- * reordena" era invisível até o mouse passar por cima.
+ * A ordem da lista é a hierarquia, e ela é reordenada arrastando a linha
+ * inteira (ver "sem alça" abaixo).
+ *
+ * ── Rodada de correção (cartão 6r-cargos) ──────────────────────────────────
+ * Medido no print 1:1 `docs/Reference/Captura de tela 2026-09-01 113739.png`
+ * (Discord real, janela 1919×1079, zoom 100% — a única referência desta
+ * rodada) contra o mesmo passo do nosso app:
+ *
+ * - **Busca "Buscar cargos" a 40, não 32.** Coluna x=700: borda em y=284/323
+ *   → miolo 285–322 = 38 + as duas bordas = **40px**. O "Criar cargo" ao lado
+ *   mede 32 nos dois apps (y=288–319 lá, y=315–346 aqui) — ele não muda; só o
+ *   campo de busca estava com `tamanho="sm"` (32) em vez do padrão `md` (40)
+ *   do `TextInput`.
+ * - **Marcador do cargo: ícone redondo de 24, não ponto de 12.** Linha y=697:
+ *   glifo na cor do cargo de x=417 a 436 (coluna x=427: y=688–710 = 22–24 de
+ *   alto, a franja é antisserrilhado) — bate com os outros redondos de 24 do
+ *   Discord (ver `BotaoDeIcone`, item 6 do cabeçalho: 24 é o degrau `sm` dele).
+ *   O ponto de 12 (`h-3 w-3`) era o valor antigo da ADR-0004; sem CSS bruto
+ *   isolando este marcador específico, o glifo interno (se há desenho dentro
+ *   do círculo além da cor sólida) não foi possível confirmar por um leitor de
+ *   PNG puro (sem Pillow) — fica **não verificado**; o que subiu é o círculo
+ *   sólido de 24 na cor do cargo, que é o que a régua confirma sem margem de
+ *   dúvida.
+ * - **Botões de ação da linha: fundo permanente, não só no hover — e o
+ *   primeiro é "olho", não lápis.** Linha y=697, colunas 987–1026 e 1035–1074:
+ *   caixa 40×40 (`tamanho="lg"` do `BotaoDeIcone`, que já era o usado) com
+ *   fundo sólido `#323236` em repouso e `#2e2e33` sob o glifo — o par exato de
+ *   `--background-base-lower`/`--interactive-background-hover` que
+ *   `CartaoDoAplicativo.tsx` já documentou para o mesmo `fundo="sempre"` do
+ *   primitivo (ali sobre `.actionMenuButton__8dc78`). O código usava
+ *   `comFundo`, que resolve para `fundo="hover"` (sem caixa em repouso) — por
+ *   isso os dois ícones apareciam soltos, sem fundo nenhum, no nosso print.
+ *   Trocado por `fundo="sempre"`. O glifo do primeiro botão: nas linhas
+ *   y=690–692 e y=703–706 (o par simétrico topo/base de uma lente) e o miolo
+ *   em y=697 é o formato de um "olho", não de um lápis — trocado `Pencil` por
+ *   `Eye`. O clique continua abrindo o mesmo editor de sempre (o Streamz não
+ *   tem uma tela de "ver cargo" somente leitura separada da de editar — não é
+ *   inventada); só o desenho do ícone mudou para bater com o print. O rótulo
+ *   (`aria-label`/dica) continua "Editar o cargo…", que é o que o clique
+ *   realmente faz.
+ * - **Sem alça de arraste.** O Discord não desenha nenhum ícone de arrastar
+ *   nesta lista (comparação visual dos dois prints 1:1; a linha inteira é o
+ *   alvo, sem afordance visível) — o `GripVertical` de 16px que a ADR-0004
+ *   deixou na frente do marcador saiu. `draggable`/`onDragStart`/`onDrop`
+ *   continuam no `<div role="listitem">` da linha, que já era o alvo real do
+ *   arraste (o ícone era só decoração redundante).
+ * - **Link de ajuda abaixo do texto explicativo.** O Discord tem "Precisando
+ *   de ajuda com as permissões?" como uma segunda linha em azul de link
+ *   (mesmo print, y=359) — o Streamz não tem central de ajuda/artigos por
+ *   permissão (§6.6 do PROCESSO: não inventar), então o texto fica visível,
+ *   como o Discord, mas **desabilitado com a dica "(em breve)"** (o padrão de
+ *   `chat/SearchPanel.tsx`: o `<span>` recebe o ponteiro porque um `<button
+ *   disabled>` não dispara hover, e a dica nunca abriria). Cor exata do link
+ *   do Discord não medida (texto pequeno, muito antisserrilhado) — usa
+ *   `variante="link"` do `Button`, que já é `--text-link`.
+ * - **Cartão "Permissões padrão": `bg-background-surface-high`, não
+ *   `bg-chat-background-default`.** Os dois medem os mesmos 74px de altura; a
+ *   cor do Discord é exatamente `#242429` (coluna x=700: y=178–251) =
+ *   `--background-surface-high`, e a borda `--border-subtle` (alfa 12% branco)
+ *   sobre ela resolve para `#323237`, que também bate com o print. O token
+ *   antigo (`chat-background-default`, `#222327`) tinha sido escolhido em
+ *   relação ao fundo de página então usado (`--background-base-lower`,
+ *   `#1a1a1e`); a página de configurações do servidor **é**
+ *   `--background-base-lower` hoje (ver `AdminMensagensTab.tsx`), mas o
+ *   Discord usa `--background-base-low` (`#202024`, "conteúdo das
+ *   configurações" em `tokens/VARIAVEIS.md`) para o corpo das configurações —
+ *   essa troca de fundo de página é da moldura (`JanelaDeConfiguracoes`, fora
+ *   desta lista de arquivos); aqui só o token do cartão foi corrigido para o
+ *   valor medido direto do Discord, que já é certo mesmo com a página errada
+ *   por baixo (é opaco, não depende do que está atrás).
+ *
+ * Estados: **vazio** (nenhum cargo/nenhum resultado da busca — texto já
+ * existia); **carregando** (`usePermissions.loading`, o `load()` da store ao
+ * trocar de servidor pode ainda não ter resolvido quando a aba abre —
+ * mensagem "Carregando cargos…" no lugar do vazio, como
+ * `BanimentosTab.tsx`); **erro** (toda falha de API já usa `ui.toast` +
+ * `errorMessage`, o padrão do resto do app — nenhuma tela de erro própria foi
+ * inventada); **sem permissão** (não existe *dentro* desta peça: quem abre
+ * `ServerSettingsModal` sem `MANAGE_ROLES` nem vê a aba "Cargos" no menu —
+ * `podeCargos` em `ServerSettingsModal.tsx`, fora desta lista — exatamente
+ * como o Discord, que também não mostra a aba); **hover/foco/desabilitado**
+ * herdados dos primitivos (`TextInput`, `Button`, `BotaoDeIcone`, `Toggle`),
+ * sem `!important` em lugar nenhum.
  */
 export default function CargosTab({ guildId }: { guildId: string }) {
   const roles = usePermissions((s) => s.roles);
+  const loading = usePermissions((s) => s.loading);
   const members = useGuilds((s) => s.members);
   const [selecionado, setSelecionado] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
@@ -186,66 +268,84 @@ export default function CargosTab({ guildId }: { guildId: string }) {
         <button
           type="button"
           onClick={() => setSelecionado(padrao.id)}
-          className="mb-8 flex h-[74px] w-full items-center gap-4 rounded border border-border bg-input pl-4 pr-6 text-left transition hover:bg-hov"
+          className="mb-8 flex h-[74px] w-full items-center gap-4 rounded border border-border-subtle bg-background-surface-high pl-4 pr-6 text-left transition hover:bg-interactive-background-hover"
         >
           <span
             aria-hidden="true"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-chat text-txt-normal"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-background-base-lower text-text-default"
           >
             <Users size={20} />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-base font-semibold text-txt-primary">
+            <span className="block truncate text-base font-semibold text-text-strong">
               Permissões padrão
             </span>
-            <span className="mt-1 block truncate text-xs text-txt-muted">
+            <span className="mt-1 block truncate text-xs text-text-muted">
               @everyone • vale para todos os membros do servidor
             </span>
           </span>
-          <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-txt-muted" />
+          <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-text-muted" />
         </button>
       )}
 
       <div className="flex items-center gap-4">
-        <div className="relative min-w-0 flex-1">
-          <Search
-            size={14}
-            aria-hidden="true"
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-txt-muted"
-          />
-          <input
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar cargos"
-            aria-label="Buscar cargos"
-            className={`${ESTILO_CAMPO} pl-8`}
-          />
-        </div>
+        <TextInput
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Buscar cargos"
+          aria-label="Buscar cargos"
+          // 40 (o padrão `md`), medido no print: coluna x=700 dá borda em
+          // y=284/323 → 40. Era `sm` (32) — o "Criar cargo" ao lado é que é
+          // 32 nos dois apps, não o campo.
+          prefixo={<Search size={14} aria-hidden="true" className="text-text-muted" />}
+          classeDaCaixa="min-w-0 flex-1"
+        />
         {/* 32 de altura, raio 8, sem ícone: o "Criar cargo" do print. */}
-        <button
-          type="button"
+        <Button
+          variante="primario"
+          tamanho="sm"
           disabled={busy}
           onClick={() => void criar()}
-          className="h-8 celular:h-[44px] shrink-0 rounded-lg bg-accent px-4 text-sm font-medium text-accent-ink transition hover:bg-accent-hover disabled:opacity-50"
+          className="shrink-0 celular:h-[44px]"
         >
           Criar cargo
-        </button>
+        </Button>
       </div>
-      <p className="mt-2 text-sm text-txt-normal">
+      <p className="mt-2 text-sm text-text-default">
         Os membros usam a cor do cargo mais alto que eles possuem nesta lista. Arraste os
         cargos para reordenar.
+        <br />
+        {/* O Discord tem esta segunda linha como link para a central de ajuda
+            (print 1:1, y=359). O Streamz não tem artigo de ajuda sobre
+            permissões — fica visível, como lá, mas desabilitado com a dica
+            "(em breve)" (§6.6 do PROCESSO). O `span` recebe o ponteiro: um
+            `<button disabled>` não dispara hover, e a dica nunca abriria
+            (mesmo padrão de `chat/SearchPanel.tsx`). */}
+        <Tooltip label="Precisando de ajuda com as permissões? (em breve)">
+          <span className="inline-flex">
+            {/* `tamanho` não se aplica ao inline (herda o `text-sm` do
+                parágrafo) — omitido de propósito. */}
+            <Button variante="link" disabled>
+              Precisando de ajuda com as permissões?
+            </Button>
+          </span>
+        </Tooltip>
       </p>
 
-      <div className="mt-8 flex items-center gap-2 border-b border-border pb-2 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
-        <span className="w-6 shrink-0" aria-hidden="true" />
+      <div className="mt-8 flex items-center gap-2 border-b border-border-subtle pb-2 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
         <span className="min-w-0 flex-1">Cargos — {editaveis.length}</span>
         <span className="w-[92px] shrink-0 text-right">Membros</span>
-        <span className="w-20 shrink-0" aria-hidden="true" />
+        {/* alinha com os dois botões de ação de 40 + 8 de vão da linha (item
+            "botões de ação" do cabeçalho) */}
+        <span className="w-[88px] shrink-0" aria-hidden="true" />
       </div>
 
       <div role="list">
-        {lista.length === 0 && (
-          <p className="py-3 text-sm text-txt-muted">
+        {loading && (
+          <p className="py-3 text-sm text-text-muted">Carregando cargos…</p>
+        )}
+        {!loading && lista.length === 0 && (
+          <p className="py-3 text-sm text-text-muted">
             {editaveis.length === 0 ? "Ainda não há cargos além do @everyone." : "Nenhum cargo com esse nome."}
           </p>
         )}
@@ -260,19 +360,10 @@ export default function CargosTab({ guildId }: { guildId: string }) {
             }}
             onDrop={() => void soltarEm(r)}
             onDragEnd={() => setArrastando(null)}
-            className={`group flex h-[61px] items-center gap-2 border-b border-border transition ${
-              arrastando === r.id ? "opacity-40" : "hover:bg-hov"
+            className={`group flex h-[61px] items-center gap-2 border-b border-border-subtle transition ${
+              arrastando === r.id ? "opacity-40" : "hover:bg-interactive-background-hover"
             }`}
           >
-            <span className="w-6 shrink-0 text-txt-faint">
-              <Tooltip label="Arraste para reordenar">
-                <GripVertical
-                  size={16}
-                  aria-hidden="true"
-                  className="cursor-grab active:cursor-grabbing"
-                />
-              </Tooltip>
-            </span>
             <button
               type="button"
               onClick={() => setSelecionado(r.id)}
@@ -280,39 +371,44 @@ export default function CargosTab({ guildId }: { guildId: string }) {
               // altura toda dela em vez dos 19 do texto
               className="flex min-w-0 flex-1 items-center gap-2 text-left celular:h-full"
             >
+              {/* 24, não 12: o marcador do Discord é um ícone redondo (medido
+                  no print, coluna x=427: 22–24 de alto), não um pontinho —
+                  ver cabeçalho do arquivo */}
               <span
                 aria-hidden="true"
-                style={{ backgroundColor: r.color ?? "#8a8a8e" }}
-                className="h-3 w-3 shrink-0 rounded-full"
+                style={{ backgroundColor: r.color ?? COR_DE_CARGO_SEM_COR }}
+                className="h-6 w-6 shrink-0 rounded-full"
               />
-              <span className="min-w-0 flex-1 truncate text-sm text-txt-primary">{r.name}</span>
+              <span className="min-w-0 flex-1 truncate text-sm text-text-strong">{r.name}</span>
             </button>
-            <span className="flex w-[92px] shrink-0 items-center justify-end gap-1.5 text-sm text-txt-normal">
+            <span className="flex w-[92px] shrink-0 items-center justify-end gap-1.5 text-sm text-text-default">
               {quantosTem(r)}
-              <User size={16} aria-hidden="true" className="text-txt-muted" />
+              <User size={16} aria-hidden="true" className="text-text-muted" />
             </span>
-            {/* O lápis do print, sempre visível: no Discord ele é a ação
-                principal da linha e não espera o hover — o "…" ao lado é que
-                guarda o resto. */}
-            <button
-              type="button"
+            {/* O olho do print, sempre visível (não espera o hover) — o "…"
+                ao lado guarda o resto. Fundo permanente (`fundo="sempre"`),
+                não só no hover: ver cabeçalho do arquivo. O clique abre o
+                mesmo editor de sempre; o Streamz não tem uma tela de "ver"
+                somente leitura separada de "editar". */}
+            <BotaoDeIcone
+              rotulo={`Editar o cargo ${r.name}`}
+              icone={<Eye size={16} />}
+              tamanho="lg"
+              fundo="sempre"
               onClick={() => setSelecionado(r.id)}
-              aria-label={`Editar o cargo ${r.name}`}
-              className="grid h-10 celular:h-[44px] w-10 celular:w-[44px] shrink-0 place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong hover:text-txt-primary"
-            >
-              <Pencil size={16} />
-            </button>
-            <button
-              type="button"
+              className="shrink-0 celular:h-[44px] celular:w-[44px]"
+            />
+            {/* sempre visível, como no print: olho e "…" são o par de ações
+                da linha, e um que some no hover parecia bug ao lado do outro
+                que não some */}
+            <BotaoDeIcone
+              rotulo={`Ações do cargo ${r.name}`}
+              icone={<MoreHorizontal size={16} />}
+              tamanho="lg"
+              fundo="sempre"
               onClick={(e) => abrirMenu(e, r)}
-              aria-label={`Ações do cargo ${r.name}`}
-              // sempre visível, como no print: o lápis e o "…" são o par de
-              // ações da linha, e um que some no hover parecia bug ao lado do
-              // outro que não some
-              className="grid h-10 celular:h-[44px] w-10 celular:w-[44px] shrink-0 place-items-center rounded-lg text-txt-muted transition hover:bg-border-strong hover:text-txt-primary"
-            >
-              <MoreHorizontal size={16} />
-            </button>
+              className="shrink-0 celular:h-[44px] celular:w-[44px]"
+            />
           </div>
         ))}
       </div>
@@ -395,22 +491,22 @@ function RoleEditor({
       <button
         type="button"
         onClick={aoVoltar}
-        className="mb-3 flex items-center gap-1.5 text-sm text-txt-muted transition hover:text-txt-primary celular:min-h-[44px]"
+        className="mb-3 flex items-center gap-1.5 text-sm text-text-muted transition hover:text-text-strong celular:min-h-[44px]"
       >
         <ArrowLeft size={16} aria-hidden="true" />
         Voltar aos cargos
       </button>
 
-      <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-txt-primary">
+      <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-text-strong">
         <span
           aria-hidden="true"
-          style={{ backgroundColor: color || "#8a8a8e" }}
+          style={{ backgroundColor: color || COR_DE_CARGO_SEM_COR }}
           className="h-3 w-3 shrink-0 rounded-full"
         />
         <span className="min-w-0 truncate">{name}</span>
       </h2>
 
-      <div role="tablist" aria-label="Seções do cargo" className="mb-5 flex gap-1 border-b border-border">
+      <div role="tablist" aria-label="Seções do cargo" className="mb-5 flex gap-1 border-b border-border-subtle">
         {abas.map((a) => (
           <button
             key={a.id}
@@ -420,8 +516,8 @@ function RoleEditor({
             onClick={() => setAba(a.id)}
             className={`-mb-px border-b-2 px-3 pb-2 text-sm font-medium transition celular:min-h-[44px] ${
               aba === a.id
-                ? "border-accent text-txt-primary"
-                : "border-transparent text-txt-muted hover:text-txt-normal"
+                ? "border-brand-500 text-text-strong"
+                : "border-transparent text-text-muted hover:text-text-default"
             }`}
           >
             {a.label}
@@ -430,7 +526,7 @@ function RoleEditor({
       </div>
 
       {role.isDefault && (
-        <p className="mb-4 rounded bg-void/50 px-3 py-2 text-sm text-txt-muted">
+        <p className="mb-4 rounded bg-input-background-default/50 px-3 py-2 text-sm text-text-muted">
           O @everyone vale para todo membro do servidor. Ele não tem nome, cor nem posição —
           só o conjunto de permissões que todo mundo recebe por padrão.
         </p>
@@ -438,16 +534,14 @@ function RoleEditor({
 
       {aba === "exibir" && (
         <>
-          <label htmlFor="roleName" className={ESTILO_ROTULO}>
-            Nome do cargo
-          </label>
-          <input
-            id="roleName"
-            value={name}
-            maxLength={MAX_ROLE_NAME}
-            onChange={(e) => setName(e.target.value)}
-            className={ESTILO_CAMPO}
-          />
+          <Campo rotulo="Nome do cargo" htmlFor="roleName">
+            <TextInput
+              id="roleName"
+              value={name}
+              maxLength={MAX_ROLE_NAME}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </Campo>
 
           <div className={`${ESTILO_ROTULO} mt-5`}>Cor do cargo</div>
           <SeletorDeCor
@@ -498,28 +592,26 @@ function RoleEditor({
       {aba === "membros" && (
         <>
           <h3 className={ESTILO_ROTULO}>Membros com este cargo — {doCargo.length}</h3>
-          <div className="rounded bg-void/50">
+          <div className="rounded bg-input-background-default/50">
             {doCargo.length === 0 ? (
-              <p className="px-3 py-2 text-sm text-txt-muted">Ninguém tem este cargo ainda.</p>
+              <p className="px-3 py-2 text-sm text-text-muted">Ninguém tem este cargo ainda.</p>
             ) : (
               doCargo.map((m) => (
                 <div
                   key={m.user.id}
-                  className="flex items-center gap-3 px-3 py-2 text-sm hover:bg-hov"
+                  className="flex items-center gap-3 px-3 py-2 text-sm hover:bg-interactive-background-hover"
                 >
-                  <span className="min-w-0 flex-1 truncate text-txt-normal">
+                  <span className="min-w-0 flex-1 truncate text-text-default">
                     {displayNameOf(m.user)}
                   </span>
-                  <Tooltip label="Remover cargo">
-                    <button
-                      type="button"
-                      onClick={() => void toggleRole(m.user.id, role.id, false)}
-                      aria-label={`Remover ${role.name} de ${displayNameOf(m.user)}`}
-                      className="grid h-7 celular:h-[44px] w-7 celular:w-[44px] place-items-center rounded text-txt-muted hover:text-red"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </Tooltip>
+                  <BotaoDeIcone
+                    rotulo={`Remover ${role.name} de ${displayNameOf(m.user)}`}
+                    icone={<Trash2 size={16} />}
+                    tamanho="sm"
+                    perigo
+                    onClick={() => void toggleRole(m.user.id, role.id, false)}
+                    className="celular:h-[44px] celular:w-[44px]"
+                  />
                 </div>
               ))
             )}

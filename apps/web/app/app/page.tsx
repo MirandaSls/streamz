@@ -6,6 +6,7 @@ import MemberList from "@/components/MemberList";
 import VoicePanel from "@/components/VoicePanel";
 import DiretorioDeApps from "@/components/apps/DiretorioDeApps";
 import ChatView from "@/components/chat/ChatView";
+import HostDeModalDeBot from "@/components/chat/bot/HostDeModalDeBot";
 import DMView from "@/components/chat/DMView";
 import SearchPanel from "@/components/chat/SearchPanel";
 import ThreadPanel from "@/components/chat/ThreadPanel";
@@ -83,8 +84,9 @@ export default function AppPage() {
   // é como o Discord abre o App Directory. Ver `stores/aplicativos.ts`.
   const appsAbertos = useAplicativos((s) => s.aberto);
   const threadParentId = useMessages((s) => s.threadParentId);
-  // a busca ocupa a coluna 4 (como no Discord) e tem prioridade sobre thread e membros
-  const buscaAberta = useMessages((s) => s.searchResults !== null || s.searching);
+  // a busca ocupa a coluna 4 (como no Discord) e tem prioridade sobre thread e
+  // membros. O erro também a mantém aberta: é dentro dela que ele aparece.
+  const buscaAberta = useMessages((s) => s.searchResults !== null || s.searching || s.searchError !== null);
 
   useRealtime(user?.id);
   // ── e-configuracoes ──
@@ -123,8 +125,40 @@ export default function AppPage() {
   // entrou na conta também tem de poder atualizar, e a tela de login não passa
   // por esta rota.
   if (ehMobile) {
-    return <ShellMobile />;
+    // ── onda 3 ── o modal de bot também existe no celular; o host é o mesmo
+    return (
+      <>
+        <ShellMobile />
+        <HostDeModalDeBot />
+      </>
+    );
   }
+
+  // ── Coluna 4 do modo servidor: busca, thread OU lista de membros, uma por vez.
+  //
+  // No Discord o cabeçalho do canal **atravessa a área de conteúdo inteira** e a
+  // lista de membros começa embaixo dele (print 1:1 `2026-09-02 180835`: em
+  // y=57 a barra é #1a1a1e contínuo até a borda da janela, com a busca em
+  // x1662–1905 sobre a coluna de membros, e a divisória da coluna, #29292d em
+  // x=1651, só aparece a partir de y=82). Então a lista de membros entra
+  // **dentro** da região do cabeçalho, com 49px de recuo no topo.
+  //
+  // A busca foi para o mesmo lugar (rodada de correção, cartão
+  // busca-painel-e-store): no Discord o painel de resultados também começa
+  // embaixo do cabeçalho, que continua por cima dele até a borda da janela. Ela
+  // morava ao lado da região, com um cabeçalho próprio de 49px só para emendar
+  // a linha, e subia até o topo da janela.
+  //
+  // A thread continua irmã da região: ela tem cabeçalho próprio, e é nele que o
+  // cabeçalho do canal para.
+  const busca = activeChannel && buscaAberta ? <SearchPanel guildId={activeChannel.guildId} /> : null;
+  const thread =
+    activeChannel && !buscaAberta && threadParentId ? <ThreadPanel channelId={activeChannel.id} /> : null;
+  // O canal de voz é um canal aberto como outro qualquer: busca e thread da
+  // conversa dele e a mesma lista de membros do servidor — que ali cede a vez à
+  // conversa da call quando as duas estão ligadas (`paineis-da-call.ts`).
+  const membros =
+    activeChannel && !buscaAberta && !threadParentId && listaDeMembros ? <MemberList /> : null;
 
   // `min-w` no shell: abaixo de ~940px o cabeçalho da conversa quebrava — o
   // título espremia os ícones, sobrava um caractere solto à esquerda e o
@@ -174,20 +208,42 @@ export default function AppPage() {
         </>
       ) : view === "dm" ? (
         <>
-          <DMView />
-          {activeDM && buscaAberta && <SearchPanel guildId={null} />}
+          {/*
+            Região de conteúdo do modo DM. O `relative` é a âncora do cabeçalho
+            do `HeaderBar`, que atravessa a área inteira; a coluna 4 da conversa
+            (perfil em 1:1, participantes em grupo) é montada dentro do `DMView`,
+            embaixo dele, como o §6.6 do PROCESSO descreve. A geometria não muda:
+            o `<main>` do `DMView` continua sendo o único filho que cresce.
+          */}
+          <div className="relative flex min-w-0 flex-1">
+            <DMView />
+            {/* A busca da conversa entra na região, embaixo do cabeçalho, pelo
+                mesmo motivo do modo servidor (ver `busca`, acima). O recuo é
+                sempre de 49: o `DMView` do desktop sempre tem cabeçalho. */}
+            {activeDM && buscaAberta && (
+              <div className="flex shrink-0 pt-[49px]">
+                <SearchPanel guildId={null} />
+              </div>
+            )}
+          </div>
           {/* thread funciona em DM como em qualquer canal (ADR-0001) */}
           {activeDM && !buscaAberta && threadParentId && <ThreadPanel channelId={activeDM.id} />}
         </>
       ) : (
         <>
+          {/*
+            Região de conteúdo do modo servidor: a conversa e a coluna 4 (lista
+            de membros ou busca), com o `relative` que ancora o `HeaderBar` por
+            cima delas. A thread fica fora (ver `busca` e `thread`).
+          */}
+          <div className="relative flex min-w-0 flex-1">
           {voiceChannel ? (
             // No canal de voz o palco ocupa a área e a conversa do canal abre
             // numa **coluna à direita** — o oposto do que o Discord faz em
             // conversa direta, e quem decide é o `orientacaoDaChamada`, dentro
             // do `CallSplit`, pelo `guildId`. A coluna nasce ABERTA (é assim na
             // print `2026-09-04 102429`) e o balão é lembrado canal a canal.
-            <main className="flex min-w-0 flex-1 bg-chat">
+            <main className="flex min-w-0 flex-1 bg-background-base-lower">
               {voiceChatOpen ? (
                 <CallSplit
                   guildId={voiceChannel.guildId}
@@ -211,25 +267,38 @@ export default function AppPage() {
           ) : (
             <ChatView />
           )}
-
-          {/* Coluna 4: busca, thread OU lista de membros — uma por vez. Não há
-              caso especial de voz: o canal de voz é um canal aberto como outro
-              qualquer, com busca e thread na conversa dele, e a mesma lista de
-              membros do servidor — que ali cede a vez à conversa da call quando
-              as duas estão ligadas (`paineis-da-call.ts`). */}
-          {activeChannel &&
-            (buscaAberta ? (
-              <SearchPanel guildId={activeChannel.guildId} />
-            ) : threadParentId ? (
-              <ThreadPanel channelId={activeChannel.id} />
-            ) : (
-              listaDeMembros && <MemberList />
-            ))}
+          {membros && (
+            /*
+              O recuo de 49px é o lugar do cabeçalho, e só existe quando há
+              cabeçalho: o palco do canal de voz não tem `HeaderBar`, e ali a
+              lista continua começando no topo, como antes.
+              A borda é a divisória do print `180835` (#29292d em x=1651, de
+              y=82 para baixo): `--border-subtle` (#94949c a 12%) sobre o
+              `#1a1a1e` da coluna dá #29292a. Ela fica no invólucro, e não na
+              `MemberList`, para começar embaixo do cabeçalho junto com a lista.
+            */
+            <div className={`flex shrink-0 ${voiceChannel ? "" : "pt-[49px]"}`}>
+              <div className="flex border-l border-border-subtle">{membros}</div>
+            </div>
+          )}
+          {busca && (
+            /*
+              Mesmo recuo da lista de membros, pelo mesmo motivo. A borda aqui
+              é a do próprio painel (`.searchResultsWrap_a98f3b`,
+              `border-inline-start` em `--app-frame-border`), então o invólucro
+              não desenha nenhuma.
+            */
+            <div className={`flex shrink-0 ${voiceChannel ? "" : "pt-[49px]"}`}>{busca}</div>
+          )}
+          </div>
+          {thread}
         </>
       )}
 
       <VoiceLayer />
       <ModalHost />
+      {/* onda 3: o modal que um bot abre (callback 9) — ver HostDeModalDeBot */}
+      <HostDeModalDeBot />
       <ContextMenuHost />
       <ProfilePopoverHost />
       <Toasts />

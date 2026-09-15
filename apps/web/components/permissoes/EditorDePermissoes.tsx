@@ -16,7 +16,7 @@ import {
 } from "@streamz/shared";
 import { ChevronDown, Lock, Plus, X } from "@/components/ui/icones";
 import Avatar from "@/components/ui/Avatar";
-import Tooltip from "@/components/ui/Tooltip";
+import { BotaoDeIcone } from "@/components/ui/primitivos";
 import { Switch } from "@/components/ui/controls";
 import AdicionarAlvoPopover, {
   useFiltroDeAlvo,
@@ -136,8 +136,11 @@ export default function EditorDePermissoes({
   const usuarioDe = (id: string) => membros.find((m) => m.user.id === id)?.user ?? null;
 
   if (!podeGerenciar) {
+    // mesma superfície do cartão "privado" abaixo (bg-background-surface-higher,
+    // ver comentário na linha do cartão): não há print do Discord para este
+    // aviso específico, mas os dois são o mesmo "cartão de explicação" da tela
     return (
-      <p className="rounded-[4px] border border-border bg-panel px-3 py-2 text-sm text-txt-muted">
+      <p className="rounded-[4px] border border-border-subtle bg-background-surface-higher px-3 py-2 text-sm text-text-muted">
         Só quem tem “Gerenciar cargos” pode mudar as permissões{" "}
         {escopo === "categoria" ? "desta categoria" : "deste canal"}.
       </p>
@@ -151,61 +154,72 @@ export default function EditorDePermissoes({
       {/* O cartão do topo. A linha é a `ToggleLinha` do app em espírito (ícone,
           título, interruptor), mas montada aqui porque no print a explicação
           ocupa a largura inteira do cartão, embaixo dos dois — e não a coluna
-          da esquerda, que é onde a `ToggleLinha` a coloca. */}
-      <div className="rounded-[4px] bg-panel p-4">
+          da esquerda, que é onde a `ToggleLinha` a coloca.
+
+          Fundo medido no print `docs/Reference/Captura de tela 2026-09-04
+          102249.png`: o cartão é `#29292d` (x 732–1389, y ~151–247) sobre a
+          página `#202024` — mais CLARO que a página, não mais escuro. É
+          `--background-surface-higher` (`#28282d`, diferença de 1 por
+          antialiasing/compressão), não `--background-base-lowest` (`#121214`,
+          que ficaria quase preto e é o oposto do que o print mostra). */}
+      <div className="rounded-[4px] bg-background-surface-higher p-4">
         <div className="flex items-center justify-between gap-4">
           <span className="flex min-w-0 items-center gap-2">
-            <Lock size={18} aria-hidden="true" className="shrink-0 text-txt-secondary" />
+            <Lock size={18} aria-hidden="true" className="shrink-0 text-text-subtle" />
             <label
               htmlFor={idPrivado}
-              className="cursor-pointer truncate text-sm font-bold text-txt-primary"
+              className="cursor-pointer truncate text-sm font-bold text-text-strong"
             >
               {privadoLabel}
             </label>
           </span>
           <Switch id={idPrivado} checked={privado} onChange={onPrivado} />
         </div>
-        <p className="mt-2 text-xs leading-4 text-txt-muted">{privadoDescricao}</p>
+        <p className="mt-2 text-xs leading-4 text-text-muted">{privadoDescricao}</p>
       </div>
 
-      <div className="border-t border-border pt-4">
+      <div className="border-t border-border-subtle pt-4">
         <button
           type="button"
           aria-expanded={avancadas}
           onClick={() => setAvancadas((v) => !v)}
-          className="flex items-center gap-2 text-base font-semibold text-txt-primary transition hover:text-txt-normal celular:min-h-[44px]"
+          className="flex items-center gap-2 text-base font-semibold text-text-strong transition hover:text-text-default celular:min-h-[44px]"
         >
           <span>Permissões avançadas</span>
           <ChevronDown
             size={18}
             aria-hidden="true"
-            className={`text-txt-muted transition-transform ${avancadas ? "" : "-rotate-90"}`}
+            className={`text-text-muted transition-transform ${avancadas ? "" : "-rotate-90"}`}
           />
         </button>
 
         {avancadas && (
           /* No celular as duas colunas viram duas faixas empilhadas: a de
-             cargos tem 180px fixos e a de permissões precisa de bem mais que os
-             ~190 que sobrariam numa tela de 390. */
+             cargos tem 208px fixos e a de permissões precisa de bem mais que os
+             ~182 que sobrariam numa tela de 390. */
           <div className="mt-4 flex gap-6 celular:flex-col celular:gap-4">
-            <div className="w-[180px] shrink-0 celular:w-full">
+            {/* 208px medido no mesmo print (linha da pílula "@everyone",
+                `#38383d` de ponta a ponta da coluna: x 731–939, 209px — a linha
+                da pílula ativa é a coluna inteira, sem sobra à direita para o
+                "+"). O `gap-6` (24px) bate com a distância até o texto da
+                coluna de permissões, que começa em x=964 (939+25). Era 180px
+                sem medida — chute que sobrava ~29px da coluna real. */}
+            <div className="w-[208px] shrink-0 celular:w-full">
               <div className="mb-1 flex items-center justify-between gap-2 px-2">
-                <h3 className="text-xs font-bold uppercase tracking-[0.02em] text-txt-muted">
+                <h3 className="text-xs font-bold uppercase tracking-[0.02em] text-text-muted">
                   Cargos/membros
                 </h3>
-                <Tooltip label="Adicionar cargo ou membro">
-                  <button
-                    ref={botaoMais}
-                    type="button"
-                    aria-label="Adicionar cargo ou membro"
-                    aria-haspopup="dialog"
-                    aria-expanded={popover}
-                    onClick={() => setPopover((v) => !v)}
-                    className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-txt-muted transition hover:bg-hov hover:text-txt-primary celular:-my-2 celular:h-[44px] celular:w-[44px]"
-                  >
-                    <Plus size={14} />
-                  </button>
-                </Tooltip>
+                <BotaoDeIcone
+                  ref={botaoMais}
+                  rotulo="Adicionar cargo ou membro"
+                  icone={<Plus size={14} />}
+                  tamanho="sm"
+                  comFundo
+                  aria-haspopup="dialog"
+                  aria-expanded={popover}
+                  onClick={() => setPopover((v) => !v)}
+                  className="h-5 w-5 shrink-0 rounded-full celular:-my-2 celular:h-[44px] celular:w-[44px]"
+                />
               </div>
 
               <ul>
@@ -216,7 +230,7 @@ export default function EditorDePermissoes({
                     <li
                       key={alvo.chave}
                       className={`group mb-0.5 flex h-8 items-center rounded-[4px] pr-1 transition celular:h-[44px] ${
-                        ativo ? "bg-sel" : "hover:bg-hov"
+                        ativo ? "bg-interactive-background-selected" : "hover:bg-interactive-background-hover"
                       }`}
                     >
                       {/* linha e "remover" são irmãos, não aninhados: botão
@@ -227,15 +241,15 @@ export default function EditorDePermissoes({
                         aria-current={ativo ? "true" : undefined}
                         onClick={() => setSelecionado(alvo.chave)}
                         className={`flex h-8 min-w-0 flex-1 items-center gap-2 rounded-[4px] px-2 text-left text-sm celular:h-[44px] ${
-                          ativo ? "text-txt-primary" : "text-txt-normal"
+                          ativo ? "text-text-strong" : "text-text-default"
                         }`}
                       >
                         {user ? (
-                          <Avatar user={user} size="sm" surface="border-chat" />
+                          <Avatar user={user} size="sm" surface="border-background-base-lower" />
                         ) : (
                           <span
                             aria-hidden="true"
-                            className="h-2.5 w-2.5 shrink-0 rounded-full bg-txt-muted"
+                            className="h-2.5 w-2.5 shrink-0 rounded-full bg-text-muted"
                             // cor de cargo é dado do servidor, não token de tema
                             style={alvo.cor ? { backgroundColor: alvo.cor } : undefined}
                           />
@@ -246,22 +260,22 @@ export default function EditorDePermissoes({
                       {/* o @everyone não sai: é o padrão do canal, e sem ele não
                           haveria onde dizer o que vale para todo mundo */}
                       {!alvo.padrao && (
-                        <button
-                          type="button"
-                          aria-label={`Remover regra de ${alvo.nome}`}
+                        <BotaoDeIcone
+                          rotulo={`Remover regra de ${alvo.nome}`}
+                          icone={<X size={12} />}
                           onClick={() => void onRemoverRegra(alvo.id)}
+                          perigo
+                          tamanho="sm"
                           /* no dedo não há hover: sem isto "remover regra" não tinha caminho */
-                          className="grid h-5 w-5 shrink-0 place-items-center rounded text-txt-muted opacity-0 transition hover:text-red focus-visible:opacity-100 group-hover:opacity-100 celular:h-[44px] celular:w-[44px] celular:opacity-100"
-                        >
-                          <X size={12} />
-                        </button>
+                          className="h-5 w-5 shrink-0 rounded opacity-0 transition focus-visible:opacity-100 group-hover:opacity-100 celular:h-[44px] celular:w-[44px] celular:opacity-100"
+                        />
                       )}
                     </li>
                   );
                 })}
               </ul>
 
-              <p className="mt-3 px-2 text-xs leading-4 text-txt-muted">
+              <p className="mt-3 px-2 text-xs leading-4 text-text-muted">
                 As regras valem na hora — não dependem do botão salvar.
               </p>
 
@@ -280,7 +294,7 @@ export default function EditorDePermissoes({
             <div className="min-w-0 flex-1">
               {secoesDePermissoes(escopo).map((secao) => (
                 <section key={secao.id} className="mb-6 last:mb-0">
-                  <h3 className="mb-2 text-base font-semibold text-txt-primary">{secao.label}</h3>
+                  <h3 className="mb-2 text-base font-semibold text-text-strong">{secao.label}</h3>
                   {secao.permissions.map((nome) => {
                     const bit = Permission[nome];
                     // a API recusa conceder um bit que quem edita não tem; a
@@ -289,13 +303,13 @@ export default function EditorDePermissoes({
                     return (
                       <div
                         key={nome}
-                        className="flex items-start justify-between gap-4 border-b border-border py-3 last:border-b-0"
+                        className="flex items-start justify-between gap-4 border-b border-border-subtle py-3 last:border-b-0"
                       >
                         <div className="min-w-0">
-                          <p className="text-sm font-bold text-txt-primary">
+                          <p className="text-sm font-bold text-text-strong">
                             {PERMISSION_INFO[nome].label}
                           </p>
-                          <p className="mt-0.5 text-xs leading-4 text-txt-muted">
+                          <p className="mt-0.5 text-xs leading-4 text-text-muted">
                             {PERMISSION_INFO[nome].description}
                           </p>
                         </div>

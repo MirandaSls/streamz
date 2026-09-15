@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { RefreshCw } from "@/components/ui/icones";
 import { Section } from "@/components/ui/controls";
+import { Button } from "@/components/ui/primitivos";
 import { api } from "@/lib/api";
 import { Estado, LocalDaChamada, Numero, duracao, usePainel } from "./comuns";
 
@@ -27,18 +28,19 @@ export default function AdminVisaoGeralTab() {
   return (
     <>
       <div className="mb-4 flex items-start justify-between gap-3">
-        <p className="text-sm text-txt-muted">
+        <p className="text-sm text-text-muted">
           Tudo o que acontece nesta instância, sem entrar em servidor nenhum. O painel é só
           leitura.
         </p>
-        <button
-          type="button"
+        <Button
+          variante="secundario"
+          tamanho="sm"
           onClick={recarregar}
-          className="flex h-8 celular:h-[44px] shrink-0 items-center gap-1.5 rounded-[3px] px-2 text-sm font-medium text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
+          icone={<RefreshCw size={14} aria-hidden="true" />}
+          className="shrink-0 celular:h-[44px]"
         >
-          <RefreshCw size={14} aria-hidden="true" />
           Atualizar
-        </button>
+        </Button>
       </div>
 
       <Estado erro={erro} carregando={carregando && !dados}>
@@ -62,15 +64,15 @@ export default function AdminVisaoGeralTab() {
 
             <Section title="Chamadas em curso">
               {dados.chamadas.length === 0 ? (
-                <p className="py-1 text-sm text-txt-muted">Ninguém está em chamada agora.</p>
+                <p className="py-1 text-sm text-text-muted">Ninguém está em chamada agora.</p>
               ) : (
                 dados.chamadas.map((c) => (
                   <div
                     key={c.local.channelId}
-                    className="flex items-center justify-between gap-3 border-b border-border py-2.5 last:border-b-0"
+                    className="flex items-center justify-between gap-3 border-b border-border-subtle py-2.5 last:border-b-0"
                   >
                     <LocalDaChamada local={c.local} comAvatares />
-                    <span className="shrink-0 text-xs text-txt-muted">
+                    <span className="shrink-0 text-xs text-text-muted">
                       {c.participantes.length} · {duracao(c.desde)}
                     </span>
                   </div>

@@ -7,15 +7,16 @@ import ConfirmDialog from "@/components/modals/ConfirmDialog";
 import CategorySettingsModal from "@/components/modals/CategorySettingsModal";
 import CreateChannelModal from "@/components/modals/CreateChannelModal";
 import CreateGroupDMModal from "@/components/modals/CreateGroupDMModal";
+import CriarServidorModal from "@/components/modals/CriarServidorModal";
 import AdicionarSomModal from "@/components/modals/AdicionarSomModal";
 import GuildEmojisModal from "@/components/modals/GuildEmojisModal";
 import ImageModal from "@/components/modals/ImageModal";
 import InviteModal from "@/components/modals/InviteModal";
-import InvitesModal from "@/components/modals/InvitesModal";
 import PromptDialog from "@/components/modals/PromptDialog";
 import ServerSettingsModal from "@/components/modals/ServerSettingsModal";
 import RecortarImagemModal from "@/components/modals/RecortarImagemModal";
 import QuickSwitcher from "@/components/ui/QuickSwitcher";
+import AtalhosDoTeclado from "@/components/chat/AtalhosDoTeclado";
 import SettingsModal from "@/components/modals/SettingsModal";
 // ── d-social ──
 import AddGroupMembersModal from "@/components/modals/AddGroupMembersModal";
@@ -72,6 +73,8 @@ function renderModal(modal: Modal) {
       return <InviteModal guildId={modal.guildId} code={modal.code} />;
     case "createGroupDM":
       return <CreateGroupDMModal />;
+    case "criarServidor":
+      return <CriarServidorModal tela={modal.tela} />;
     // ── multiconta ──
     case "gerenciarContas":
       return <GerenciarContasModal />;
@@ -79,8 +82,6 @@ function renderModal(modal: Modal) {
       return <AdicionarContaModal voltar={modal.voltar ?? false} />;
     case "settings":
       return <SettingsModal tab={modal.tab} />;
-    case "invites":
-      return <InvitesModal guildId={modal.guildId} />;
     case "image":
       return <ImageModal urls={[modal.url]} alts={[modal.alt]} indice={0} />;
     // ── f-voz ──
@@ -94,6 +95,8 @@ function renderModal(modal: Modal) {
     // ── e-configuracoes ──
     case "quickSwitcher":
       return <QuickSwitcher />;
+    case "atalhosDoTeclado":
+      return <AtalhosDoTeclado />;
     // ── d-social ──
     case "customStatus":
       return <CustomStatusModal />;

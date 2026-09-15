@@ -87,16 +87,20 @@ export default function ScreenShareButton({
         // Só ícone, como no painel do Discord: o rótulo comia mais da metade da
         // largura do botão e ainda precisava ser abreviado ("Tela") para caber
         // na largura de meio cartão. O nome inteiro vive no tooltip.
+        //
+        // `h-[30px]`, não `h-8` (32): o invólucro de `VoiceConnectedBar` já é
+        // 74×30 (medido nos prints 101842/160106), e os 32 daqui vazavam 2px
+        // por baixo dele — ver o comentário lá ("faltando" do cartão anterior).
         <Tooltip label={label} className="min-w-0 flex-1">
           <button
             type="button"
             onClick={acionar}
             aria-label={label}
             aria-pressed={screenOn}
-            className={`grid h-8 w-full place-items-center rounded-lg transition ${
+            className={`grid h-[30px] w-full place-items-center rounded-lg transition ${
               screenOn
-                ? "bg-green/20 text-green hover:bg-green/30"
-                : "bg-border-strong/60 text-txt-secondary hover:bg-border-strong hover:text-txt-primary"
+                ? "bg-status-positive/20 text-status-positive hover:bg-status-positive/30"
+                : "bg-border-normal/60 text-text-subtle hover:bg-border-normal hover:text-text-strong"
             }`}
           >
             {screenOn ? <MonitorX size={24} /> : <MonitorUp size={20} />}
@@ -134,13 +138,13 @@ export function AoVivoIndicador() {
   // deixava espremer, quebrava "Você está ao vivo" uma palavra por linha e o
   // botão subia por cima do texto.
   return (
-    <div className="flex w-max items-center gap-2 rounded-full bg-red/15 py-1 pl-3 pr-1 text-xs font-semibold text-red">
+    <div className="flex w-max items-center gap-2 rounded-full bg-status-danger/15 py-1 pl-3 pr-1 text-xs font-semibold text-status-danger">
       <Radio size={14} className="shrink-0" aria-hidden="true" />
       <span className="whitespace-nowrap">Você está ao vivo</span>
       {/* No telefone este é o botão que tira a sua tela do ar, e ele media 21px
           de altura (`py-1` sobre 11px de texto): metade do piso de toque, em
           cima de um palco onde tudo o mais tem 44 ou 48. Cresce para
-          `ALVO_MINIMO`, em px pelo motivo de sempre (a raiz é 15,5). O selo é a
+          `ALVO_MINIMO`, em px pelo motivo de sempre (a raiz é 16). O selo é a
           única coisa que a barra de controles do celular não repete com folga —
           o botão de tela dela também para a transmissão, mas quem lê "Você está
           ao vivo" está olhando para cá. */}
@@ -148,7 +152,7 @@ export function AoVivoIndicador() {
         type="button"
         onClick={() => void pararTela()}
         style={ehMobile ? { height: ALVO_MINIMO } : undefined}
-        className={`shrink-0 whitespace-nowrap rounded-full bg-red px-2 text-[11px] font-bold text-white transition hover:bg-red-hover ${
+        className={`shrink-0 whitespace-nowrap rounded-full bg-status-danger px-2 text-[11px] font-bold text-control-critical-primary-text-default transition hover:bg-control-critical-primary-background-hover ${
           ehMobile ? "" : "py-1"
         }`}
       >

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Plus, UserPlus, Volume2 } from "@/components/ui/icones";
 import Tooltip from "@/components/ui/Tooltip";
+import { Button } from "@/components/ui/primitivos";
 import PalcoMobile from "@/components/voice/PalcoMobile";
 import {
   AvatarDeChamada,
@@ -179,21 +180,22 @@ export default function VoiceGrid({
     return (
       <div className="grid h-full place-items-center px-6 text-center">
         <div className="flex flex-col items-center gap-3">
-          <p className="font-display text-lg font-bold text-txt-primary">
+          <p className="text-lg font-bold text-text-strong">
             {nomeDoCanal ? `Ninguém em ${nomeDoCanal}` : "Ninguém na sala"}
           </p>
-          <p className="max-w-sm text-sm text-txt-muted">
+          <p className="max-w-sm text-sm text-text-muted">
             Chame alguém e a conversa começa aqui — quem entrar aparece nesta tela.
           </p>
           {guildId && (
-            <button
-              type="button"
+            <Button
+              variante="primario"
+              tamanho="sm"
+              icone={<UserPlus size={16} aria-hidden="true" />}
               onClick={() => ui.openModal({ kind: "invite", guildId })}
-              className="mt-1 flex h-9 items-center gap-2 rounded-[3px] bg-accent px-4 text-sm font-semibold text-accent-ink transition hover:bg-accent-hover"
+              className="mt-1"
             >
-              <UserPlus size={16} aria-hidden="true" />
               Convidar pessoas
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -218,7 +220,7 @@ export default function VoiceGrid({
                 type="button"
                 onClick={onAdicionar}
                 aria-label="Adicionar pessoas"
-                className="grid h-20 w-20 place-items-center rounded-full text-txt-secondary transition hover:bg-panel hover:text-txt-primary"
+                className="grid h-20 w-20 place-items-center rounded-full text-text-subtle transition hover:bg-background-base-lowest hover:text-text-strong"
               >
                 <Plus size={32} />
               </button>
@@ -386,12 +388,12 @@ export function VoiceVolumePopoverHost() {
         left: Math.min(popover.x, window.innerWidth - 240),
         top: Math.min(popover.y, window.innerHeight - 90),
       }}
-      className="fixed z-50 w-56 rounded-lg bg-overlay p-3 shadow-high anim-menu"
+      className="fixed z-50 w-56 rounded-lg bg-background-surface-higher p-3 shadow-popout anim-menu"
     >
-      <p className="truncate pb-2 text-xs font-semibold uppercase tracking-[0.02em] text-txt-muted">
+      <p className="truncate pb-2 text-xs font-semibold uppercase tracking-[0.02em] text-text-muted">
         {popover.nome}
       </p>
-      <label className="flex items-center gap-2 text-sm text-txt-normal">
+      <label className="flex items-center gap-2 text-sm text-text-default">
         <Volume2 size={16} aria-hidden="true" />
         <input
           type="range"
@@ -400,9 +402,9 @@ export function VoiceVolumePopoverHost() {
           value={Math.round(volume * 100)}
           onChange={(e) => setVolume(popover.userId, Number(e.target.value) / 100)}
           aria-label={`Volume de ${popover.nome}`}
-          className="flex-1 accent-accent"
+          className="flex-1 accent-brand-500"
         />
-        <span className="w-9 text-right text-xs text-txt-muted">{Math.round(volume * 100)}%</span>
+        <span className="w-9 text-right text-xs text-text-muted">{Math.round(volume * 100)}%</span>
       </label>
     </div>
   );

@@ -453,7 +453,42 @@ model Message {
   // ligação mora do lado da `Interaction` (`responseMessageId @unique`), e é o
   // `@unique` de lá que faz isto ser `Interaction?` e não `Interaction[]`.
   // Foi de propósito: a `Message` é a maior tabela do banco.
-  interacao      Interaction?
+  interacao      Interaction? @relation("RespostaDaInteracao")
+
+  // ── onda 3 ── mensagens de bot. As duas são back-relations, e a regra acima
+  // continua valendo: a `Message` não ganhou coluna nenhuma.
+  //
+  // Embeds, componentes e flags moram numa tabela 1:1 à parte, criada **só**
+  // quando a mensagem tem algum deles — quase nenhuma tem, e uma coluna `Json`
+  // aqui pesaria em toda linha do chat.
+  botPayload             MessageBotPayload?
+  // as interações disparadas por um componente (botão, select) desta mensagem
+  interacoesDeComponente Interaction[]      @relation("OrigemDaInteracao")
+}
+
+/// ── onda 3 ── Embeds, componentes e flags de uma mensagem de **bot**.
+///
+/// 1:1 com `Message`, e só existe quando há algo aqui (a regra "j-bots": a
+/// `Message` é a maior tabela e não ganha colunas). O formato de `embeds` e
+/// `components` é o da API do Discord, já validado e normalizado por
+/// `validarPayloadDeBot`/`normalizarPayloadDeBot` de `@streamz/shared`.
+///
+/// `flags` guarda só `FLAGS_GUARDADAS` (IS_COMPONENTS_V2, LOADING,
+/// SUPPRESS_NOTIFICATIONS): `SUPPRESS_EMBEDS` é a coluna
+/// `Message.suppressEmbeds`, que já existia.
+///
+/// `flatText` é o texto achatado de `content` + embeds + text displays
+/// (`achatarPayloadDeBot`). Não é redundância: é o que a **busca** procura e o
+/// que o trecho da resposta citada mostra, porque uma mensagem só de embed tem
+/// `content` vazio. Ver `docs/CONTRATO-ONDA-3.md`.
+model MessageBotPayload {
+  messageId  String @id
+  embeds     Json   @default("[]")
+  components Json   @default("[]")
+  flags      Int    @default(0)
+  flatText   String @default("")
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 }
 
 // Arquivo enviado ao storage (R2). Criado no upload (messageId null) e
@@ -922,6 +957,10 @@ model Poll {
   question  String
   // texto das opções, na ordem; o voto referencia o índice.
   options   String[]
+  // emoji de cada opção, na mesma posição de `options`; "" = opção sem emoji.
+  // Array paralelo e não tabela de opções: as opções são `String[]` desde a
+  // origem e ficam imutáveis depois de criadas. Vazio nas enquetes antigas.
+  optionEmojis String[] @default([])
   multi     Boolean   @default(false)
   expiresAt DateTime?
   closedAt  DateTime?
@@ -1182,7 +1221,29 @@ model Interaction {
   commandId     String?
   /// O nome do comando, copiado na hora. **Não é redundância**: sem ele a faixa
   /// "usou /play" some quando o dono do bot re-registra os comandos.
-  commandName   String
+  /// ── onda 3 ── null em interação de componente e de modal (não há comando).
+  commandName   String?
+  /// ── onda 3 ── o `type` da interação do Discord: 2 comando, 3 componente,
+  /// 4 autocomplete, 5 envio de modal. As linhas da F3 são todas 2.
+  type          Int      @default(2)
+  /// ── onda 3 ── o `custom_id` do componente (3) ou do modal (5).
+  customId      String?
+  /// ── onda 3 ── o `type` do componente clicado (2 botão, 3/5/6/7/8 select).
+  componentType Int?
+  /// ── onda 3 ── a mensagem de onde o componente foi clicado — é o alvo do
+  /// callback 7 e do `@original` de uma interação de componente. Exatamente um
+  /// dos dois abaixo é preenchido numa interação de componente: a mensagem
+  /// normal ou a efêmera. SetNull: apagar a mensagem não apaga o registro.
+  messageId          String?
+  ephemeralMessageId String?
+  /// ── onda 3 ── o `nonce` que o navegador mandou; volta em todo evento
+  /// `interaction.*`. Mora no banco porque o callback pode cair em outra
+  /// instância da API que não a que recebeu o clique.
+  nonce         String?
+  /// ── onda 3 ── o modal que o bot abriu com o callback 9 (`ModalDeBot`), para
+  /// o envio conferir que o modal existiu, é desta pessoa e tem este
+  /// `custom_id`. Null enquanto não houve callback 9.
+  modal         Json?
   /// o `data` do INTERACTION_CREATE, como foi enviado
   data          Json
   /// mensagem criada pelo callback tipo 4/5 — alvo do `@original`.
@@ -1199,13 +1260,18 @@ model Interaction {
   channel         Channel             @relation(fields: [channelId], references: [id], onDelete: Cascade)
   guild           Guild?              @relation(fields: [guildId], references: [id], onDelete: Cascade)
   command         ApplicationCommand? @relation(fields: [commandId], references: [id], onDelete: SetNull)
-  responseMessage Message?            @relation(fields: [responseMessageId], references: [id], onDelete: SetNull)
+  responseMessage Message?            @relation("RespostaDaInteracao", fields: [responseMessageId], references: [id], onDelete: SetNull)
+  // ── onda 3 ── a origem de uma interação de componente
+  message          Message?          @relation("OrigemDaInteracao", fields: [messageId], references: [id], onDelete: SetNull)
+  ephemeralMessage EphemeralMessage? @relation("OrigemEfemeraDaInteracao", fields: [ephemeralMessageId], references: [id], onDelete: SetNull)
 
   /// as respostas efêmeras desta interação (a original e os followups)
-  efemeras        EphemeralMessage[]
+  efemeras        EphemeralMessage[] @relation("EfemerasDaInteracao")
 
   @@index([expiresAt])
   @@index([applicationId, createdAt])
+  @@index([messageId])
+  @@index([ephemeralMessageId])
 }
 
 /// A resposta **efêmera** de um bot: `flags: 64`, a mensagem que só quem
@@ -1238,6 +1304,13 @@ model EphemeralMessage {
   /// o usuário-bot que respondeu
   authorId      String
   content       String
+  /// ── onda 3 ── embeds, componentes e flags, no formato do Discord (as mesmas
+  /// regras de `MessageBotPayload`). Colunas direto aqui, e não uma tabela à
+  /// parte: a efêmera é pequena e some em 15 minutos.
+  embeds        Json      @default("[]")
+  components    Json      @default("[]")
+  /// `FLAGS_GUARDADAS`. O `EPHEMERAL` é implícito (é a tabela).
+  flags         Int       @default(0)
   /// `true` na resposta do callback 4/5 — é o alvo do `@original`. Os followups
   /// efêmeros são `false`, e nunca são editados por `@original`.
   original      Boolean   @default(false)
@@ -1246,10 +1319,12 @@ model EphemeralMessage {
   /// createdAt + 15 min: a mesma janela do token da interação
   expiresAt     DateTime
 
-  interaction Interaction @relation(fields: [interactionId], references: [id], onDelete: Cascade)
+  interaction Interaction @relation("EfemerasDaInteracao", fields: [interactionId], references: [id], onDelete: Cascade)
   channel     Channel     @relation(fields: [channelId], references: [id], onDelete: Cascade)
   author      User        @relation("EfemeraAutor", fields: [authorId], references: [id], onDelete: Cascade)
   paraUsuario User        @relation("EfemeraPara", fields: [ephemeralFor], references: [id], onDelete: Cascade)
+  /// ── onda 3 ── as interações disparadas por um componente desta efêmera
+  interacoesDeComponente Interaction[] @relation("OrigemEfemeraDaInteracao")
 
   @@index([expiresAt])
   @@index([interactionId, original])

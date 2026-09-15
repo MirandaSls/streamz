@@ -33,6 +33,38 @@ import { ui, type Anchor } from "@/stores/ui";
  * pertence a uma mensagem confirmada (`mensagemId`), também "Adicionar
  * Reação" — no desktop o menu nativo do WebView2 está bloqueado (#138), então
  * sem este menu o clique direito sobre uma foto não fazia nada lá.
+ *
+ * Medidas (CSS bruto, não há print 1:1 de mosaico de anexos em
+ * `docs/Reference/`):
+ * - Raio **4** (`rounded`, não `rounded-lg`) nas imagens/vídeo/spoiler —
+ *   `.embedMedia__623de{border-radius:4px}` e
+ *   `.embedImage__623de,.embedThumbnail__623de,.embedVideo__623de … img,
+ *   video{border-radius:4px}`, mesma família de mídia do `LinkEmbedCard`
+ *   (`docs/referencias-discord/tokens/css-bruto/198496.7ea2af35bfe94977.css`).
+ * - Vão de **4px** (`gap-1`) e largura máxima **550** entre as fotos da
+ *   grade: `.embedGalleryImagesWrapper__623de{column-gap:4px}` (mesmo
+ *   arquivo) — a grade de galeria do Discord é a referência mais próxima que
+ *   o CSS bruto tem para o mosaico de anexos (o algoritmo real de
+ *   empacotamento por proporção do Discord é calculado em JS, fora do CSS).
+ * - Áudio: fundo **`background-base-lower`** (o mesmo do chat — o cartão se
+ *   distingue só pela borda `border-subtle`, não por um fundo mais claro
+ *   como os embeds), raio 8 (`rounded-lg`) e **padding 16** (`p-4`, não 12):
+ *   `.wrapperAudio_cf09d8{background-color:var(--background-base-lower);
+ *   border-color:var(--border-subtle)…}` e
+ *   `.wrapperAudio_cf09d8.newMosaicStyle_cf09d8{border-radius:8px;
+ *   padding:16px;width:432px}`
+ *   (`docs/referencias-discord/tokens/css-bruto/397244.32e009fed9e0af56.css`).
+ *   O cartão de arquivo (`Arquivo`) segue o mesmo fundo por estar na mesma
+ *   família de cartão do CSS (`newMosaicStyle`) — não há classe própria
+ *   medida para PDF/arquivo genérico, então o fundo é inferido do vizinho.
+ *
+ * Estados: imagem/vídeo com origem quebrada não têm tratamento de erro aqui
+ * — decisão deliberada, porque o navegador já mostra `alt`/um quadro vazio
+ * discreto, e o Discord também não troca o mosaico inteiro por um aviso
+ * quando uma miniatura falha. O que existe: spoiler (revelado/oculto),
+ * hover/`group-hover` nos botões de ação que `MessageItem` desenha por cima,
+ * e foco de teclado pelo anel global (`globals.css`) nos `<button>`/`<a>`
+ * daqui.
  */
 export default function MediaGroup({
   attachments,
@@ -151,7 +183,7 @@ function Imagem({
         type="button"
         onClick={() => setRevelado(true)}
         aria-label={`Spoiler: mostrar ${nome}`}
-        className="relative block w-fit overflow-hidden rounded-lg"
+        className="relative block w-fit overflow-hidden rounded"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -161,7 +193,7 @@ function Imagem({
           className={`blur-2xl ${sozinha ? "max-h-[350px] max-w-[min(550px,100%)]" : "h-full w-full"} object-cover`}
         />
         <span className="absolute inset-0 grid place-items-center">
-          <span className="flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1 text-sm font-bold uppercase text-white">
+          <span className="flex items-center gap-1.5 rounded-full bg-background-scrim px-3 py-1 text-sm font-bold uppercase text-text-overlay-light">
             <EyeOff size={16} aria-hidden="true" />
             Spoiler
           </span>
@@ -176,7 +208,7 @@ function Imagem({
       onClick={onAbrir}
       onContextMenu={onMenu}
       aria-label={`Abrir imagem ${nome}`}
-      className={`block cursor-zoom-in overflow-hidden rounded-lg ${sozinha ? "w-fit" : "h-full w-full"}`}
+      className={`block cursor-zoom-in overflow-hidden rounded ${sozinha ? "w-fit" : "h-full w-full"}`}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -212,15 +244,15 @@ function Video({ anexo }: { anexo: Attachment }) {
         e.currentTarget.currentTime = 0;
       }}
       aria-label={attachmentDisplayName(anexo)}
-      className="max-h-[350px] max-w-[min(550px,100%)] rounded-lg bg-black"
+      className="max-h-[350px] max-w-[min(550px,100%)] rounded bg-black"
     />
   );
 }
 
 function Audio({ anexo }: { anexo: Attachment }) {
   return (
-    <div className="w-[432px] max-w-full rounded-lg border border-black/30 bg-panel p-3">
-      <span className="mb-2 block truncate text-sm font-medium text-txt-normal">
+    <div className="w-[432px] max-w-full rounded-lg border border-border-subtle bg-background-base-lower p-4">
+      <span className="mb-2 block truncate text-sm font-medium text-text-default">
         {attachmentDisplayName(anexo)}
       </span>
       <audio src={anexo.url} controls preload="metadata" className="w-full" />
@@ -232,11 +264,11 @@ function Audio({ anexo }: { anexo: Attachment }) {
 function Arquivo({ anexo }: { anexo: Attachment }) {
   const nome = attachmentDisplayName(anexo);
   return (
-    <div className="flex w-[432px] max-w-full items-center gap-3 rounded-lg border border-black/30 bg-panel p-4">
+    <div className="flex w-[432px] max-w-full items-center gap-3 rounded-lg border border-border-subtle bg-background-base-lower p-4">
       <FileText
         size={40}
         strokeWidth={1.25}
-        className={`shrink-0 ${isPdfAttachment(anexo) ? "text-red" : "text-txt-muted"}`}
+        className={`shrink-0 ${isPdfAttachment(anexo) ? "text-status-danger" : "text-text-muted"}`}
         aria-hidden="true"
       />
       <span className="min-w-0 flex-1">
@@ -244,11 +276,11 @@ function Arquivo({ anexo }: { anexo: Attachment }) {
           href={anexo.url}
           target="_blank"
           rel="noreferrer"
-          className="block truncate font-medium text-txt-link hover:underline"
+          className="block truncate font-medium text-text-link hover:underline"
         >
           {nome}
         </a>
-        <span className="text-xs text-txt-muted">
+        <span className="text-xs text-text-muted">
           {isPdfAttachment(anexo) ? "PDF · " : ""}
           {formatBytes(anexo.size)}
         </span>
@@ -257,11 +289,13 @@ function Arquivo({ anexo }: { anexo: Attachment }) {
         href={anexo.url}
         download={nome}
         aria-label={`Baixar ${nome}`}
-        /* `h-8 w-8` mede 31 (a raiz do app é 15,5px), e no telefone este é o
-           único jeito de guardar o arquivo: o menu de toque longo da mensagem
-           não tem "baixar anexo". 44 literais no celular, como o resto dos
-           alvos de dedo do app. */
-        className="grid h-8 w-8 shrink-0 place-items-center rounded text-txt-secondary hover:bg-hov hover:text-txt-primary celular:h-[44px] celular:w-[44px]"
+        /* `h-8 w-8` mede 32 (a raiz do app é 16px, ADR-0009), e no telefone
+           este é o único jeito de guardar o arquivo: o menu de toque longo da
+           mensagem não tem "baixar anexo". 44 literais no celular, como o
+           resto dos alvos de dedo do app.
+           Fica `<a download>`, não `BotaoDeIcone`: o download nativo do
+           navegador exige uma âncora, e o primitivo só renderiza `<button>`. */
+        className="grid h-8 w-8 shrink-0 place-items-center rounded text-text-subtle hover:bg-interactive-background-hover hover:text-text-strong celular:h-[44px] celular:w-[44px]"
       >
         <Download size={20} />
       </a>

@@ -5,15 +5,12 @@ import {
   Copy,
   CornerUpLeft,
   CornerUpRight,
-  Eye,
   EyeOff,
   Flag,
   Hash,
-  Image as ImageIcon,
   Link2,
   MailOpen,
   MessageSquare,
-  MoreHorizontal,
   Pencil,
   Pin,
   PinOff,
@@ -21,9 +18,11 @@ import {
   Smile,
   SmilePlus,
   Trash2,
+  Vote,
 } from "@/components/ui/icones";
 import type { Message, PublicUser } from "@streamz/shared";
 import {
+  Permission,
   WS_EVENTS,
   displayNameOf,
   extractFirstUrl,
@@ -38,12 +37,27 @@ import InviteEmbed from "@/components/chat/InviteEmbed";
 import { codigoDeConviteDaUrl } from "@/lib/links-de-convite";
 import { urlPublica } from "@/lib/links-do-app";
 import PainelFlutuante from "@/components/chat/PainelFlutuante";
-import { ehMobileAgora } from "@/hooks/useEhMobile";
-import TooltipReacao from "@/components/chat/TooltipReacao";
+import { ehMobileAgora, useEhMobile } from "@/hooks/useEhMobile";
 import { useMarcadorNaoLido } from "@/components/chat/marcador-nao-lido";
 import { EmojiDaReacao, rotuloDaReacao } from "@/components/chat/EmojiDeReacao";
 import { registrarUsoDeReacao, useFrequentes } from "@/components/chat/reacoes-rapidas";
 import { shiftPressionado } from "@/components/chat/tecla-shift";
+import BarraDeAcoes from "@/components/chat/mensagem/BarraDeAcoes";
+import { fundoDaLinha } from "@/components/chat/mensagem/fundo";
+import PilulaDeReacao from "@/components/chat/mensagem/PilulaDeReacao";
+import { ReferenciaDeInteracao, ReferenciaDeResposta } from "@/components/chat/mensagem/ReferenciaDaMensagem";
+import RodapeEfemero from "@/components/chat/mensagem/RodapeEfemero";
+// ── onda 3 ── mensagens de bot
+import PensandoDoBot from "@/components/chat/mensagem/PensandoDoBot";
+import EmbedDeBot from "@/components/chat/bot/EmbedDeBot";
+import ComponentesDaMensagem from "@/components/chat/bot/ComponentesDaMensagem";
+import {
+  anexosVisiveis,
+  ehComponentsV2,
+  embedsSuprimidos,
+  embedsVisiveis,
+  estaPensando,
+} from "@/components/chat/bot/embed-layout";
 import MediaGroup from "@/components/media/MediaGroup";
 import { itensDaImagem } from "@/components/media/menu-da-imagem";
 import StickerView from "@/components/media/StickerView";
@@ -54,253 +68,67 @@ import { emit } from "@/stores/socket-adapter";
 import Avatar from "@/components/ui/Avatar";
 import EmojiPicker from "@/components/ui/EmojiPicker";
 import TagDeBot from "@/components/ui/TagDeBot";
-import Tooltip from "@/components/ui/Tooltip";
+import { BotaoDeIcone, Button, TextArea, Tooltip } from "@/components/ui/primitivos";
+import { confirmacaoLembrada } from "@/lib/confirmacao-lembrada";
 import { dataCompleta, hora, horaCompleta } from "@/lib/format";
 import { Markdown } from "@/lib/markdown";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useGuilds } from "@/stores/guilds";
-import { useAuthorColor, usePermissions } from "@/stores/permissions";
+import { useAuthorColor, usePermissions, usePodeTalvez } from "@/stores/permissions";
 import { useMessages } from "@/stores/messages";
 import SystemMessageItem from "@/components/chat/SystemMessageItem";
-import { goToMessage } from "@/stores/messages-navigate";
 import { usePins } from "@/stores/messages-pins";
 import { useThreads } from "@/stores/messages-threads";
 import { alturaDoChipDeReacao, useSettings } from "@/stores/settings";
 import type { ChatMessage } from "@/stores/messages-core";
 import { useLiveUser } from "@/stores/presence";
-import { anchorOf, ui, type Anchor, type MenuItem } from "@/stores/ui";
+import { anchorOf, ui, useUI, type Anchor, type MenuItem } from "@/stores/ui";
 
-/** Ícone-botão da barra de ações que aparece no hover da mensagem. */
-function ActionButton({
-  label,
-  onClick,
-  danger = false,
-  children,
-}: {
-  label: string;
-  onClick: (e: MouseEvent<HTMLButtonElement>) => void;
-  danger?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        onClick={onClick}
-        aria-label={label}
-        // 28px com raio 6, medido no botão "…" da barra do Discord
-        // (`2026-08-31 124022.png`, x 1222..1249, y 394..421; canto sobe
-        // 4, 2, 1, 1, 0 px). Era 32 com raio 3.
-        className={`grid h-7 w-7 place-items-center rounded-md text-txt-secondary transition hover:bg-hov ${
-          danger ? "hover:text-red" : "hover:text-txt-primary"
-        }`}
-      >
-        {children}
-      </button>
-    </Tooltip>
-  );
-}
-
-/**
- * Linha de referência da resposta, acima da mensagem: avatar miúdo, nome e o
- * começo da original. O traço em "L" à esquerda é o mesmo do Discord — é ele
- * que amarra visualmente a resposta à mensagem citada, e por isso ele sobe do
- * topo do avatar de 40px (x≈40) até encostar na calha do conteúdo (x=80).
- *
- * Passar o mouse na linha inteira **destaca a original** na timeline: é o que
- * responde "a qual mensagem isso responde?" sem tirar ninguém do lugar.
- */
-function ReplyReference({ message }: { message: Message }) {
-  const ref = message.replyTo;
-  const cor = useAuthorColor(ref?.author.id ?? "");
-  if (!ref) return null;
-
-  function realcar(ligado: boolean) {
-    const el = document.getElementById(`mensagem-${ref!.id}`);
-    // classe do Tailwind não serve: a original pode já ter fundo próprio
-    // (menção, destaque do "ir para") e a cor precisa somar, não brigar
-    if (el) el.style.backgroundColor = ligado ? "rgba(255,255,255,0.06)" : "";
-  }
-
-  function abrirPerfil(e: MouseEvent<HTMLElement>) {
-    ui.openProfile(ref!.author, anchorOf(e.currentTarget));
-  }
-
-  return (
-    <div
-      onMouseEnter={() => realcar(true)}
-      onMouseLeave={() => realcar(false)}
-      className="relative flex items-center gap-1.5 pb-0.5 text-[13px] leading-[18px] text-txt-muted"
-    >
-      <span
-        aria-hidden="true"
-        className="absolute -left-10 bottom-[8px] h-3 w-10 rounded-tl-[6px] border-l-2 border-t-2 border-border-strong"
-      />
-      <button
-        type="button"
-        onClick={abrirPerfil}
-        aria-label={`Perfil de ${displayNameOf(ref.author)}`}
-        className="shrink-0 rounded-full transition hover:brightness-110"
-      >
-        <Avatar user={ref.author} size="xs" />
-      </button>
-      <button
-        type="button"
-        onClick={abrirPerfil}
-        style={cor ? { color: cor } : undefined}
-        className="shrink-0 font-medium text-txt-secondary hover:underline"
-      >
-        @{displayNameOf(ref.author)}
-      </button>
-      {/* ── j-bots ── responder a um bot também tem que dizer que é um bot: sem
-          isto a barra de resposta seria a única superfície com nome de autor
-          sem a pílula, e é justamente ela que aparece quando alguém responde a
-          uma resposta de comando de barra.
-          `caixaEstreita` pela mesma regra do rótulo do tile de voz: esta linha
-          é `leading-[18px]` **fixo nos dois leiautes** (não há `celular:` aqui),
-          e a pílula de 18 do celular a preenchia de ponta a ponta — medido: pai
-          de 18px de conteúdo, pílula de 18, folga zero. Nos 15 do desktop sobra
-          1,5px de cada lado, a pílula volta a ter o porte do texto de 13px que
-          a cerca, e o trecho citado ganha 4px de volta antes de truncar.
-          Centrada sem margem: o pai é `items-center`, e a folga de 0,97px que
-          uma medida ingênua acusa é a metade do `pb-0.5` da linha — sobre a
-          caixa de conteúdo o desalinho é 0. */}
-      {ref.author.bot && <TagDeBot caixaEstreita />}
-      <button
-        type="button"
-        onClick={() =>
-          void goToMessage({
-            guildId: message.guildId,
-            channelId: message.channelId,
-            messageId: ref.id,
-          })
-        }
-        className="flex min-w-0 items-center gap-1 truncate text-left hover:text-txt-normal"
-      >
-        {ref.content ? (
-          ref.content
-        ) : ref.hasAttachments ? (
-          <>
-            <ImageIcon size={14} aria-hidden="true" className="shrink-0" />
-            <span className="italic">Clique para ver o anexo</span>
-          </>
-        ) : (
-          <span className="italic text-txt-faint">Mensagem apagada</span>
-        )}
-      </button>
-    </div>
-  );
-}
-
-/**
- * ── j-bots ── "fulano usou /play", acima da resposta do bot.
- *
- * A resposta de um bot a um comando de barra chega ao canal **sem** nenhuma
- * mensagem de quem pediu antes dela — uma interação não é mensagem. Sem esta
- * faixa o chat mostraria o bot falando sozinho, e ninguém saberia quem mandou.
- *
- * Ela sobrevive ao F5 porque o `interacao` vem do `include` da mensagem, e não
- * do payload do socket. O traço em "L" é o mesmo da resposta: as duas faixas
- * ocupam o mesmo lugar e amarram a mensagem ao que veio antes dela.
- */
-function InteractionReference({ message }: { message: Message }) {
-  const interacao = message.interacao;
-  const cor = useAuthorColor(interacao?.user.id ?? "");
-  if (!interacao) return null;
-
-  return (
-    <div className="relative flex items-center gap-1.5 pb-0.5 text-[13px] leading-[18px] text-txt-muted">
-      <span
-        aria-hidden="true"
-        className="absolute -left-10 bottom-[8px] h-3 w-10 rounded-tl-[6px] border-l-2 border-t-2 border-border-strong"
-      />
-      <button
-        type="button"
-        onClick={(e) => ui.openProfile(interacao.user, anchorOf(e.currentTarget))}
-        aria-label={`Perfil de ${displayNameOf(interacao.user)}`}
-        className="shrink-0 rounded-full transition hover:brightness-110"
-      >
-        <Avatar user={interacao.user} size="xs" />
-      </button>
-      <button
-        type="button"
-        onClick={(e) => ui.openProfile(interacao.user, anchorOf(e.currentTarget))}
-        style={cor ? { color: cor } : undefined}
-        className="shrink-0 font-medium text-txt-secondary hover:underline"
-      >
-        @{displayNameOf(interacao.user)}
-      </button>
-      <span className="truncate">
-        usou <span className="font-medium text-txt-secondary">/{interacao.name}</span>
-      </span>
-    </div>
-  );
-}
-
-/**
- * ── j-bots ── O rodapé da mensagem efêmera: "Somente você pode ver isso ·
- * Dispensar mensagem".
- *
- * É a única coisa que distingue uma efêmera de uma resposta comum de bot na
- * tela, e por isso ela tem de estar sempre visível — não no hover, não dentro
- * de um menu. Sem ela a pessoa não tem como saber que o canal não viu aquilo, e
- * responderia a uma conversa que ninguém está tendo.
- *
- * **Medidas da captura de referência** (`docs/Reference/efemeras/`, com fonte em
- * `FONTES.md`; Discord em 1×, medido com Pillow): a linha fica **abaixo** do
- * conteúdo, com o texto em `#949BA4` — o `txt-muted` daqui — e o "Dismiss
- * message" em `#00A8FC`, que é exatamente o nosso `txt-link`. O tipo é ~12px
- * contra os 16px do corpo, com um ícone de olho antes.
- *
- * "Dispensar" é local (ver `useMessages.dispensarEfemera`): a efêmera não está
- * no canal, então tirá-la da lista é tirá-la de onde ela existe.
- */
-function EphemeralFooter({ message }: { message: Message }) {
-  const dispensar = useMessages((s) => s.dispensarEfemera);
-
-  return (
-    /* `flex-wrap` + `whitespace-nowrap` nas duas partes: na coluna estreita do
-       celular a linha não cabe (262px úteis contra ~280px de texto), e sem isto
-       ela quebrava **no meio das frases** — "Somente você pode / ver isso". Com
-       as partes indivisíveis, a quebra cai entre elas, e o `·` some quando
-       deixa de separar coisa nenhuma. */
-    <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs leading-4 text-txt-muted">
-      <Eye size={16} aria-hidden="true" className="shrink-0" />
-      <span className="whitespace-nowrap">Somente você pode ver isso</span>
-      <span aria-hidden="true" className="celular:hidden">
-        ·
-      </span>
-      <button
-        type="button"
-        onClick={() => dispensar(message.channelId, message.id)}
-        /* `celular:min-h-[44px]`: no telefone este é o único gesto que a
-           efêmera tem, e um alvo de 16px de altura não é alvo. */
-        className="whitespace-nowrap font-medium text-txt-link hover:underline celular:min-h-[44px]"
-      >
-        Dispensar mensagem
-      </button>
-    </div>
-  );
-}
-
-/**
- * Uma mensagem, no leiaute do Discord: avatar de 40px à esquerda, nome e hora na
- * primeira linha, corpo (markdown, menções, prévia de link) abaixo. Quando
- * `grouped`, é a continuação da anterior (mesmo autor, poucos minutos) e só
- * mostra o corpo, com a hora na margem ao passar o mouse.
- */
 /** Sem cargos: referência estável, para o seletor do zustand não oscilar. */
 const SEM_CARGOS: string[] = [];
 
-/** Reações rápidas da mini-barra (o Discord mostra três). */
+/** Reações rápidas da barra de hover (três no print `2026-08-31 111402.png`). */
 const RAPIDAS_NA_BARRA = 3;
-/** Reações rápidas dentro do submenu "Adicionar Reação". */
+/** Reações rápidas dentro do submenu "Adicionar reação". */
 const RAPIDAS_NO_MENU = 6;
 /** Quantas cabem na fileira horizontal do topo do menu (é o número do print). */
 const RAPIDAS_NA_FILEIRA = 4;
 
+/** Dono do menu de contexto aberto sobre esta mensagem (ver `selecionada`). */
+const donoDoMenu = (id: string) => `mensagem:${id}`;
+
+/**
+ * Uma mensagem, no leiaute do Discord (módulos `.message__5126c` e
+ * `.cozy_/.compact_c19a55` do CSS bruto, prints 1:1 `2026-08-31 111402.png` e
+ * `124022.png`).
+ *
+ * **Cozy** (padrão): avatar de 40px à esquerda, nome e hora na primeira linha,
+ * corpo abaixo. Quando `grouped` (mesmo autor, poucos minutos), é continuação:
+ * só o corpo, com a hora curta na calha ao passar o mouse.
+ * **Compacto:** tudo numa linha — hora de largura fixa, nome, texto —, sem
+ * avatar, e o texto que quebra volta para a calha de 80px (recuo pendurado).
+ * No compacto toda mensagem mostra hora e nome; o agrupamento só decide o
+ * respiro entre grupos.
+ *
+ * Geometria da linha:
+ * - calha: avatar em x=20 e conteúdo em x=80 (print 111402: painel em 375,
+ *   avatar em 395, texto em 455; divisor de data em 391 = 375 + 16, que é a
+ *   margem do divisor, `.divider__5126c {margin-inline: 1rem .875rem}`). O CSS
+ *   dá 16/72 (`--space-md`), o print dá 20/80 — vale o print.
+ * - respiro vertical: `padding-block: .125rem` (2px) nos dois modos
+ *   (`--custom-message-spacing-vertical-container-cozy`,
+ *   `--custom-message-padding-vertical-container-compact`).
+ * - direita: `padding-inline-end: --space-xl` (24px) e raio `--radius-xs` (4px)
+ *   nos cantos da direita (`.message__5126c`).
+ * - início de grupo: `margin-top: --custom-group-spacing-start` (1.0625rem =
+ *   17px no `group-spacing-16` padrão, que aqui é a preferência
+ *   `--espaco-entre-grupos`) e, no cozy, `min-height: 2.75rem`
+ *   (`.cozyMessage__5126c.groupStart__5126c`).
+ * - enviando: `opacity: .5` (`.isSending_c19a55`); falhou: texto em
+ *   `--text-feedback-critical` (`.isFailed_c19a55`).
+ */
 export default function MessageItem({
   message,
   grouped = false,
@@ -317,7 +145,7 @@ export default function MessageItem({
 }: {
   message: ChatMessage;
   grouped?: boolean;
-  /** primeiro item desenhado na lista: a mini-barra não pode sair por cima. */
+  /** primeiro item desenhado na lista: a barra de ações não pode sair por cima. */
   primeiro?: boolean;
   /** id da thread quando a lista é o painel de thread — escopo do "Responder". */
   threadId?: string | null;
@@ -342,8 +170,9 @@ export default function MessageItem({
   const [picker, setPicker] = useState<{ alvo: "reacao" | "edicao"; ancora: Anchor } | null>(null);
 
   const author = useLiveUser(message.author);
-  // nome do autor na cor do seu cargo mais alto, como no Discord
-  const corDoAutor = useAuthorColor(message.author.id);
+  // nome do autor na cor do seu cargo mais alto, como no Discord — só em canal
+  // de servidor: conversa e grupo não têm cargo, e o nome fica na cor padrão
+  const corDoAutor = useAuthorColor(message.author.id, message.guildId);
   const me = useAuth((s) => s.user);
   // ── c-cargos ── cargos do servidor (para desenhar `<@&id>`) e os meus
   const roles = usePermissions((s) => s.roles);
@@ -355,9 +184,30 @@ export default function MessageItem({
   // "Copiar ID" só existe com o Modo Desenvolvedor ligado, como no Discord
   const modoDesenvolvedor = useSettings((s) => s.developerMode);
   const members = useGuilds((s) => s.members);
+  // o menu de contexto desta mensagem está aberto: a linha fica "selecionada"
+  // (fundo de hover e barra à vista), como o `.selected__5126c` do Discord
+  const selecionada = useUI((s) => s.contextMenu?.dono === donoDoMenu(message.id));
   const highlighted = useMessages((s) => s.highlightId === message.id);
+  // é a mensagem que o composer está respondendo agora (`.replying__5126c`)
+  const respondendo = useMessages((s) => s.replyTarget?.message.id === message.id);
   const startReply = useMessages((s) => s.startReply);
   const frequentes = useFrequentes(RAPIDAS_NO_MENU);
+  // a barra de hover não existe no celular (ver o comentário onde ela é montada)
+  const ehMobile = useEhMobile();
+
+  // Sem permissão, a UI esconde o que a API recusaria. Em conversa direta não
+  // há cargo nem bit: `useMyPermissions` responde 0 fora de servidor, e quem
+  // participa da conversa pode reagir e escrever — daí o `guildId === null`.
+  // `usePodeTalvez` devolve `null` enquanto as permissões do servidor carregam
+  // (logo depois de trocar de servidor): só `false` esconde, senão reações e
+  // "Responder" sumiam e voltavam a cada troca.
+  const emServidor = message.guildId !== null;
+  const escopo = { guildId: message.guildId, channelId: message.channelId };
+  const podeReagirNoCanal = usePodeTalvez(Permission.ADD_REACTIONS, escopo);
+  const podeEscreverNoCanal = usePodeTalvez(Permission.SEND_MESSAGES, escopo);
+  const podeReagir = !emServidor || podeReagirNoCanal !== false;
+  const podeResponder = !emServidor || podeEscreverNoCanal !== false;
+
   // @usuario → nome de exibição, para as menções mostrarem o nome como o Discord
   const displayNames = useMemo(() => {
     const map: Record<string, string> = {};
@@ -382,12 +232,23 @@ export default function MessageItem({
   // em conversa direta não há moderação: qualquer participante fixa (como no Discord)
   const canPin = message.guildId === null || Boolean(canModerate);
 
+  // ── onda 3 ── o que as flags do bot mudam na tela (contrato, §1.3):
+  // `LOADING` troca o texto provisório por "<bot> está pensando…"; v2 é só
+  // componentes (sem texto, embed, prévia nem anexo solto); `SUPPRESS_EMBEDS`
+  // (flag ou coluna) desliga o embed rico **e** a prévia de link.
+  const pensando = estaPensando(message);
+  const componentsV2 = ehComponentsV2(message);
+  const embedsDoBot = embedsVisiveis(message);
+  const temComponentes = !pensando && (message.components?.length ?? 0) > 0;
+
   // Prévia de link: uma URL só, a primeira. `suppressEmbeds` desliga a prévia
   // desta mensagem (item do menu, para o autor e a moderação); vídeo do YouTube
   // vira player e imagem direta vira a própria imagem — nos dois casos o card
   // de Open Graph não acrescentaria nada.
   const url =
-    unconfirmed || sistema || message.suppressEmbeds ? null : extractFirstUrl(message.content);
+    unconfirmed || sistema || pensando || componentsV2 || embedsSuprimidos(message)
+      ? null
+      : extractFirstUrl(message.content);
   const videoId = url ? youtubeVideoId(url) : null;
   const imagemDireta = url && !videoId && isDirectImageUrl(url) ? url : null;
   // convite do nosso servidor vira cartão com botão "Entrar", não prévia de
@@ -451,7 +312,7 @@ export default function MessageItem({
     if (thread) onOpenThread?.(message);
   }
 
-  /** "Marcar como não lida": o divisor vermelho volta para cima desta mensagem. */
+  /** "Marcar como não lido": o divisor vermelho volta para cima desta mensagem. */
   function marcarNaoLida() {
     useMarcadorNaoLido.getState().marcarNaoLidaAPartirDe(message.channelId, message.createdAt);
     ui.toast("Marcado como não lido a partir daqui");
@@ -489,6 +350,18 @@ export default function MessageItem({
     ];
   }
 
+  /** "Encaminhar" da barra: a mesma lista do menu, ancorada no botão. */
+  function encaminharPelaBarra(e: MouseEvent<HTMLButtonElement>) {
+    const destinos = destinosParaEncaminhar();
+    if (destinos.length === 0) {
+      ui.toast("Não há para onde encaminhar ainda");
+      return;
+    }
+    const r = e.currentTarget.getBoundingClientRect();
+    // o menu pertence à mensagem: ela fica selecionada enquanto ele está aberto
+    ui.openContextMenu(r.left, r.bottom, destinos, undefined, undefined, donoDoMenu(message.id));
+  }
+
   /** Submenu de reação: os emojis frequentes e a porta para o seletor completo. */
   function submenuDeReacao(ancora: Anchor): MenuItem[] {
     return [
@@ -513,45 +386,49 @@ export default function MessageItem({
     const items: MenuItem[] = [];
 
     if (!sistema) {
-      // A fileira horizontal é a primeira coisa do menu no Discord: quatro
-      // alvos do mesmo peso, escolhidos pela cara do emoji. Como itens comuns
-      // eles viravam quatro linhas de texto, onde o desenho é o que identifica.
-      items.push({
-        reacoes: frequentes.slice(0, RAPIDAS_NA_FILEIRA).map((emoji) => ({
-          chave: emoji,
-          rotulo: rotuloDaReacao(emoji),
-          nodo: <EmojiDaReacao emoji={emoji} tamanho={20} />,
-          onSelect: () => reagir(emoji),
-        })),
-      });
-      items.push({
-        label: "Adicionar Reação",
-        icon: <SmilePlus size={18} />,
-        submenu: submenuDeReacao(ancora),
-      });
-      if (isOwn) items.push({ label: "Editar Mensagem", icon: <Pencil size={18} />, onSelect: startEdit });
+      if (podeReagir) {
+        // A fileira horizontal é a primeira coisa do menu no Discord: quatro
+        // alvos do mesmo peso, escolhidos pela cara do emoji. Como itens comuns
+        // eles viravam quatro linhas de texto, onde o desenho é o que identifica.
+        items.push({
+          reacoes: frequentes.slice(0, RAPIDAS_NA_FILEIRA).map((emoji) => ({
+            chave: emoji,
+            rotulo: rotuloDaReacao(emoji),
+            nodo: <EmojiDaReacao emoji={emoji} tamanho={20} />,
+            onSelect: () => reagir(emoji),
+          })),
+        });
+        items.push({
+          label: "Adicionar reação",
+          icon: <SmilePlus size={18} />,
+          submenu: submenuDeReacao(ancora),
+        });
+      }
+      if (isOwn) items.push({ label: "Editar mensagem", icon: <Pencil size={18} />, onSelect: startEdit });
       if (canPin) {
         items.push({
-          label: message.pinned ? "Desafixar Mensagem" : "Fixar Mensagem",
+          label: message.pinned ? "Desafixar mensagem" : "Fixar mensagem",
           icon: message.pinned ? <PinOff size={18} /> : <Pin size={18} />,
           onSelect: alternarFixada,
         });
       }
-      items.push({ label: "Responder", icon: <CornerUpLeft size={18} />, onSelect: responder });
+      if (podeResponder) {
+        items.push({ label: "Responder", icon: <CornerUpLeft size={18} />, onSelect: responder });
+      }
       const destinos = destinosParaEncaminhar();
       if (destinos.length > 0) {
         items.push({ label: "Encaminhar", icon: <CornerUpRight size={18} />, submenu: destinos });
       }
       if (onOpenThread) {
         items.push({
-          label: message.thread ? "Ver Tópico" : "Criar Tópico",
+          label: message.thread ? "Ver tópico" : "Criar tópico",
           icon: <MessageSquare size={18} />,
           onSelect: () => (message.thread ? onOpenThread(message) : void criarThread()),
         });
       }
       items.push({ separator: true });
       items.push({
-        label: "Copiar Texto",
+        label: "Copiar texto",
         icon: <Copy size={18} />,
         disabled: !message.content,
         onSelect: () => void navigator.clipboard?.writeText(message.content),
@@ -572,7 +449,7 @@ export default function MessageItem({
       */
       if (ehMobileAgora()) {
         items.push({
-          label: "Selecionar Texto",
+          label: "Selecionar texto",
           icon: <ScrollText size={18} />,
           disabled: !message.content,
           onSelect: () =>
@@ -589,12 +466,14 @@ export default function MessageItem({
       }
     }
 
-    items.push({ label: "Marcar Não Lida", icon: <MailOpen size={18} />, onSelect: marcarNaoLida });
-    items.push({ label: "Copiar Link", icon: <Link2 size={18} />, onSelect: copiarLink });
+    // rótulos do print 1:1 124022: só a primeira palavra em maiúscula, e o
+    // texto inteiro do Discord ("Marcar como não lido", "Copiar link da mensagem")
+    items.push({ label: "Marcar como não lido", icon: <MailOpen size={18} />, onSelect: marcarNaoLida });
+    items.push({ label: "Copiar link da mensagem", icon: <Link2 size={18} />, onSelect: copiarLink });
     // só faz sentido quando há link, e só o autor/moderação pode mexer
     if (!sistema && (isOwn || canModerate) && extractFirstUrl(message.content)) {
       items.push({
-        label: message.suppressEmbeds ? "Mostrar Prévia do Link" : "Remover Prévia do Link",
+        label: message.suppressEmbeds ? "Mostrar prévia do link" : "Remover prévia do link",
         icon: <EyeOff size={18} />,
         onSelect: () =>
           emit(WS_EVENTS.MESSAGE_SUPPRESS_EMBEDS, {
@@ -607,17 +486,19 @@ export default function MessageItem({
     if (canDelete || !isOwn) items.push({ separator: true });
     if (canDelete) {
       items.push({
-        label: "Apagar Mensagem",
+        label: "Apagar mensagem",
         icon: <Trash2 size={18} />,
         danger: true,
-        // Shift pula a confirmação, como no Discord
-        onSelect: () => onDelete(message.id, shiftPressionado()),
+        // Shift pula a confirmação, como no Discord; e também quem marcou "não
+        // perguntar de novo" na caixa (`lib/confirmacao-lembrada`)
+        onSelect: () =>
+          onDelete(message.id, shiftPressionado() || confirmacaoLembrada("apagar-mensagem")),
       });
     }
     // ── h-moderacao ──
     if (!isOwn) {
       items.push({
-        label: "Denunciar Mensagem",
+        label: "Denunciar mensagem",
         icon: <Flag size={18} />,
         onSelect: () =>
           ui.openModal({ kind: "report", messageId: message.id, preview: message.content }),
@@ -627,11 +508,11 @@ export default function MessageItem({
     if (modoDesenvolvedor) {
       items.push({ separator: true });
       items.push({
-        label: "Copiar ID da Mensagem",
+        label: "Copiar ID da mensagem",
         onSelect: () => void navigator.clipboard?.writeText(message.id),
       });
     }
-    ui.openContextMenu(e.clientX, e.clientY, items);
+    ui.openContextMenu(e.clientX, e.clientY, items, undefined, undefined, donoDoMenu(message.id));
   }
 
   // menção a mim: `@usuario`, um cargo meu (`<@&id>`) ou resposta minha com o
@@ -641,19 +522,18 @@ export default function MessageItem({
   // ── j-bots ── a faixa de resposta ou de comando de barra ocupa a primeira
   // linha do bloco: com ela, a mensagem nunca é desenhada como continuação
   const temFaixa = !!message.replyTo || !!message.interacao;
+  const inicioDeGrupo = !grouped || temFaixa;
 
   // ── j-bots ── a mensagem efêmera: só eu a vejo, e a tela tem de dizer isso
   const efemera = !!message.efemera;
 
-  const fundo = highlighted
-    ? "bg-accent/20 hover:bg-accent/25"
-    : mentionsMe
-      ? "border-l-2 border-yellow bg-yellow/10 hover:bg-yellow/15"
-      : efemera
-        ? // fundo levemente diferente, como no Discord — ver os tokens `efem`/
-          // `efemhov` em `tailwind.config.ts`, medidos na captura de referência
-          "bg-efem hover:bg-efemhov"
-        : "hover:bg-msghov";
+  const { fundo, faixa } = fundoDaLinha({
+    destacada: highlighted,
+    respondendo,
+    mencionada: mentionsMe,
+    selecionada,
+    efemera,
+  });
 
   // narração do canal (fixar, entrada de membro, eventos de grupo): é o mesmo
   // componente que a timeline usa, para não haver duas versões do mesmo texto
@@ -662,12 +542,84 @@ export default function MessageItem({
       <SystemMessageItem
         message={message}
         grouped={grouped}
+        primeiro={primeiro}
         currentUserId={currentUserId}
+        destacada={highlighted}
+        mencionada={mentionsMe}
+        selecionada={selecionada}
+        podeReagir={unconfirmed ? false : podeReagir}
+        conhecidos={conhecidos}
         onToggleReaction={onToggleReaction}
         onMenu={openMenu}
       />
     );
   }
+
+  const corDoTexto = message.failed ? "text-text-feedback-critical" : "text-text-default";
+
+  const editado = message.editedAt && (
+    <Tooltip rotulo={horaCompleta(message.editedAt)} larguraLivre>
+      {/* `.edited_c19a55`: 10px (`.625rem`), peso normal, linha 1. No print
+          111402 o "(editado)" começa 6px depois do fim do texto (x 955 → 961),
+          o espaço de 4px mais o recuo dos glifos. */}
+      <span className="ml-1 select-none text-[10px] font-normal leading-none text-text-muted">(editado)</span>
+    </Tooltip>
+  );
+
+  // ── onda 3 ── "pensando" ignora o `content` (é o `TEXTO_PENSANDO` do
+  // servidor); v2 não tem texto nenhum, mesmo que um payload velho traga
+  /*
+    "(editado)" e parágrafos em linha. No Discord o "(editado)" fica **na mesma
+    linha** do fim do texto (print 111402: "…é individual (editado)", y=645) e,
+    no compacto, o texto começa na linha do nome. Quem sabe desenhar isso é o
+    próprio `Markdown`: `sufixo` entra dentro do último parágrafo e `emLinha`
+    diz quais parágrafos ficam em linha — os dois no compacto (o primeiro
+    continua a linha do nome), só o último no cozy.
+
+    Sem jumbo no compacto: lá a mensagem só de emoji continua na linha do nome,
+    do tamanho do emoji em linha — `.compact_c19a55 .messageContent_c19a55
+    .jumboable` põe o emoji "jumbo" em `--custom-emoji-size-emoji` (1.375em).
+  */
+  const corpo = pensando ? (
+    <PensandoDoBot nome={displayNameOf(author)} />
+  ) : message.content && !componentsV2 ? (
+    <Markdown
+      text={message.content}
+      meUsername={me?.username}
+      displayNames={displayNames}
+      roles={roles}
+      myRoleIds={meusCargos}
+      jumbo={compacto ? false : undefined}
+      emLinha={compacto ? "ambos" : "ultimo"}
+      sufixo={editado}
+    />
+  ) : null;
+
+  /*
+    Selo de enquete, depois da hora (cozy). Print
+    `desenvolvedores/imagens/mensagens-de-bot/enquete.png` (1:1, tema antigo):
+    pílula em x=205–266 e y=14–29 — 62×16 com o antisserrilhado —, o glifo de
+    lista em x=214–223 e "POLL" em x=229–258, em caixa-alta e negrito, com a
+    versal de 8px (y=18–25), a mesma altura da versal da hora ao lado ("T" em
+    y=19–27), que é de 12px: daí `text-text-xs`. 6px de respiro de cada lado
+    (o glifo de 12 tem 1px de folga dentro da caixa) e 4px entre glifo e texto.
+    Do fim da hora (x=195) ao começo da pílula são 9–10px: o `gap-1.5` da linha
+    mais o `margin-inline-start: .25rem` do
+    `.cozy_c19a55 .pollBadgeDefault_c19a55`. A mesma animação `07.gif` do
+    `polls-faq` mostra "≡ POLL" ao lado de "Today at 4:12 PM".
+    Cor do fundo: **não medida** no tema atual (o `#393b41` do print é do tema
+    antigo) — `background-mod-strong`, o chip neutro do CSS atual
+    (`.clanTagChiplet_c19a55` compacto). Texto branco → `text-strong`.
+  */
+  const seloDeEnquete = (posicao: string) =>
+    message.poll ? (
+      <span
+        className={`inline-flex h-4 shrink-0 items-center gap-1 rounded-full bg-background-mod-strong px-1.5 indent-0 text-text-xs font-bold uppercase leading-none text-text-strong ${posicao}`}
+      >
+        <Vote size={12} aria-hidden="true" />
+        Enquete
+      </span>
+    ) : null;
 
   return (
     <div
@@ -677,45 +629,56 @@ export default function MessageItem({
          existe no canal. O gesto que ela tem é o "Dispensar" do rodapé. */
       onContextMenu={efemera ? undefined : openMenu}
       // o respiro entre grupos é preferência do usuário (aba Aparência)
-      style={
-        grouped && !temFaixa
-          ? undefined
-          : { marginTop: "var(--espaco-entre-grupos, 17px)" }
-      }
+      style={inicioDeGrupo ? { marginTop: "var(--espaco-entre-grupos, 17px)" } : undefined}
       // sem `transition-colors`: o Discord troca o fundo no mesmo quadro, e a
       // transição fazia o realce "arrastar" atrás do cursor ao correr a lista
       /*
-        No celular a linha é mais estreita: `pl-[80px] pr-12` são medidas do
-        desktop, e o `pr-12` existe para reservar a faixa da barra de ações do
-        `hover` — que no telefone é `celular:!hidden`, ou seja, 46,5px de espaço
-        morto. Medido na captura `norm/discord-mobile-chat-canal.png` (390px): o
-        texto e a mídia vão de x=62 a x=376. Com `celular:pl-[64px]
-        celular:pr-3` a nossa coluna sai em 64 → 378, dentro de 2px da
-        referência — e é isso que dá ao GIF a mesma largura que ele tem lá.
-        Literal, não `rem`: a raiz do app é 15,5px.
+        No celular a linha é mais estreita. Medido na captura
+        `norm/discord-mobile-chat-canal.png` (390px): o texto e a mídia vão de
+        x=62 a x=376. Com `celular:pl-[64px] celular:pr-3` a nossa coluna sai
+        em 64 → 378, dentro de 2px da referência — e é isso que dá ao GIF a
+        mesma largura que ele tem lá. O compacto não muda no celular: o app do
+        Discord no telefone não tem modo compacto para medir.
       */
-      className={`group relative flex py-0.5 pr-12 celular:pr-3 ${
-        compacto ? "gap-1.5 pl-4" : "gap-4 pl-[80px] celular:pl-[64px]"
-      } ${fundo} ${message.pending ? "opacity-60" : ""}`}
+      className={`group relative rounded-r py-0.5 pl-[80px] pr-6 ${
+        compacto ? "" : "celular:pl-[64px] celular:pr-3"
+      } ${!compacto && inicioDeGrupo ? "min-h-[2.75rem]" : ""} ${fundo} ${
+        message.pending ? "opacity-50" : ""
+      }`}
     >
-      {compacto ? null : grouped && !temFaixa ? (
-        // hora na calha, alinhada à direita e só no hover — como o Discord faz
-        // com mensagens agrupadas
-        <span
-          className={`absolute left-0 top-1 w-14 select-none pr-0 text-right text-[11px] leading-[22px] text-txt-muted ${
+      {faixa && (
+        <span aria-hidden="true" className={`pointer-events-none absolute inset-y-0 left-0 w-[2px] ${faixa}`} />
+      )}
+
+      {compacto ? null : !inicioDeGrupo ? (
+        /* Hora curta na calha, só no hover (ou sempre, pela preferência).
+           `.cozy_c19a55 .timestamp_c19a55.alt_c19a55`: absoluta em
+           `inset-inline-start: 0`, largura 56px, alinhada à direita, 22px de
+           altura e de linha, 11px (`.6875rem`), `--text-muted`, peso `medium`
+           (`.timestamp_c19a55`). O topo é o da primeira linha do texto (o
+           respiro de 2px da linha), por isso `top-0.5`. */
+        <Tooltip
+          rotulo={dataCompleta(message.createdAt)}
+          larguraLivre
+          className={`absolute left-0 top-0.5 h-[22px] w-14 select-none justify-end text-[11px] font-medium leading-[22px] text-text-muted ${
             sempreHora ? "" : "opacity-0"
           } group-hover:opacity-100`}
         >
-          {hora(message.createdAt)}
-        </span>
+          <span>{hora(message.createdAt)}</span>
+        </Tooltip>
       ) : (
         <button
           type="button"
           onClick={openProfile}
           aria-label={`Perfil de ${displayNameOf(author)}`}
-          // o avatar acompanha a calha mais estreita do celular (x=12, contra
-          // os 12,4pt da captura)
-          className={`absolute left-5 celular:left-3 rounded-full transition hover:brightness-110 ${
+          /* 40px (`--custom-message-avatar-size`). Topo: no print 111402 a
+             caixa-alta do nome fica 3px abaixo do topo do avatar ("Md": avatar
+             em y=398, "M" em 401); na nossa captura, 2px — diferença dentro do
+             antisserrilhado da borda escura, então fica em 2px. Com faixa de
+             referência ele desce 18 + 4 da linha e mais os 2 do topo (26).
+             `:active` desce 1px (`.avatar_c19a55.clickable_c19a55:active`).
+             O avatar acompanha a calha mais estreita do celular (x=12). */
+          className={`absolute left-5 rounded-full active:translate-y-px celular:left-3 ${
             temFaixa ? "top-[26px]" : "top-0.5"
           }`}
         >
@@ -723,32 +686,83 @@ export default function MessageItem({
         </button>
       )}
 
-      <div className="min-w-0 flex-1">
-        <ReplyReference message={message} />
-        <InteractionReference message={message} />
+      <div className="min-w-0">
+        <ReferenciaDeResposta message={message} compacto={compacto} />
+        <ReferenciaDeInteracao message={message} compacto={compacto} />
 
-        {(!grouped || temFaixa) && !compacto && (
-          <div className="flex items-baseline gap-1.5 leading-[22px]">
+        {compacto ? (
+          /* Compacto (`.compact_c19a55`): a linha tem `padding-inline-start:
+             5rem` (80) e o bloco, `text-indent: -(5rem - 1rem)` = −64px — a
+             primeira linha começa em x=16 e as seguintes voltam para 80.
+             Hora com largura fixa de 3.1rem (`.latin24CompactTimeStamp_`,
+             relógio de 24h), 11px, `--text-muted`, peso `medium`, alinhada à
+             direita, `margin-inline-end: 4px`. Pílula BOT **antes** do nome
+             (`.botTagCompact_c19a55 {margin-inline-end: .25rem}`). Nome 16px,
+             peso `medium`, linha 22, `margin-inline-end: .25rem`. */
+          <div className={`leading-[22px] -indent-[64px] ${corDoTexto}`}>
+            <Tooltip
+              rotulo={dataCompleta(message.createdAt)}
+              larguraLivre
+              className="mr-1 w-[3.1rem] select-none justify-end indent-0 align-baseline text-[11px] font-medium leading-[22px] text-text-muted"
+            >
+              <span>{hora(message.createdAt)}</span>
+            </Tooltip>
+            {/* ── j-bots ── `vertical-align: top` + `margin-top: .2em` (2px na
+                fonte de 10px da pílula) + `top: .1rem` (`.botTag__82f07`,
+                `.botTag_c19a55`): o topo fica 3,6px abaixo da linha de 22,
+                centrando a pílula de 15 na primeira linha. */}
+            {author.bot && <TagDeBot className="relative top-[0.1rem] mr-1 mt-[2px] indent-0 align-top" />}
             <button
               type="button"
               onClick={openProfile}
               style={corDoAutor ? { color: corDoAutor } : undefined}
-              // 600, não 500: no print da DM (`142337.png`) a haste do "d"
-              // de "Md" tem 2,1px contra 1,45px do "l" do corpo — a razão do
-              // semibold (0,13em contra 0,09em em 16px); o medium daria ~1,75
-              className="font-semibold text-txt-primary hover:underline"
+              className="mr-1 indent-0 font-medium leading-[22px] text-text-strong hover:underline"
             >
               {displayNameOf(author)}
             </button>
-            {/* ── j-bots ── entre o nome e a hora, como no Discord. A caixa é
-                `items-baseline`, e uma pílula alinhada pela linha de base
-                desceria abaixo dela; `self-center` a recentra na linha de 22px
-                sem mexer no alinhamento do nome nem no da hora. */}
-            {author.bot && <TagDeBot className="self-center" />}
-            <Tooltip label={dataCompleta(message.createdAt)}>
-              <span className="ml-1 text-xs text-txt-muted">{horaCompleta(message.createdAt)}</span>
-            </Tooltip>
+            {/* Selo de enquete no compacto: depois do nome, antes do texto.
+                Posição e margem **não medidas** (sem print do compacto com
+                enquete); `mr-1` repete a margem do nome, e `align-top` +
+                `mt-[3px]` centram os 16px na linha de 22, como a pílula BOT. */}
+            {seloDeEnquete("mr-1 mt-[3px] align-top")}
+            {!editing && corpo && <span className="break-words indent-0">{corpo}</span>}
           </div>
+        ) : (
+          inicioDeGrupo && (
+            <div className="flex items-baseline gap-1.5 leading-[22px]">
+              <button
+                type="button"
+                onClick={openProfile}
+                style={corDoAutor ? { color: corDoAutor } : undefined}
+                // 600, não o `medium` do `.username_c19a55`: no print da DM
+                // (`142337.png`) a haste do "d" de "Md" tem 2,1px contra 1,45px
+                // do "l" do corpo — a razão do semibold (0,13em contra 0,09em em
+                // 16px); o medium daria ~1,75. Print vence CSS.
+                className="font-semibold text-text-strong hover:underline"
+              >
+                {displayNameOf(author)}
+              </button>
+              {/* ── j-bots ── entre o nome e a hora, como no Discord. A caixa é
+                  `items-baseline`, e uma pílula alinhada pela linha de base
+                  desceria abaixo dela; `self-center` a recentra na linha de 22px
+                  ((22 − 15)/2 = 3,5, o mesmo 3,6 do `margin-top .2em + top
+                  .1rem` do CSS) sem mexer no nome nem na hora. */}
+              {author.bot && <TagDeBot className="self-center" />}
+              {/* `.cozy_c19a55 .timestamp_c19a55`: 12px (`.75rem`), linha 22,
+                  `--chat-text-muted`, peso `medium`. No print 111402 o fim de
+                  "elle" e o começo de "21/05/2022" ficam 12px de glifo a glifo
+                  (x 479 → 492), que é o `gap` de 6 + os 4 da margem mais o
+                  recuo dos glifos. */}
+              <Tooltip rotulo={dataCompleta(message.createdAt)} larguraLivre>
+                <span className="ml-1 text-xs font-medium text-chat-text-muted">
+                  {horaCompleta(message.createdAt)}
+                </span>
+              </Tooltip>
+              {/* `self-center`, o mesmo do TagDeBot: na caixa `items-baseline`
+                  a pílula desceria abaixo da linha */}
+              {seloDeEnquete("ml-1 self-center")}
+            </div>
+          )
         )}
 
         {editing ? (
@@ -760,7 +774,7 @@ export default function MessageItem({
             className="mt-1"
           >
             <div className="relative">
-              <textarea
+              <TextArea
                 autoFocus
                 rows={Math.min(8, Math.max(1, draft.split("\n").length))}
                 value={draft}
@@ -773,74 +787,36 @@ export default function MessageItem({
                   }
                 }}
                 aria-label="Editar mensagem"
-                className="w-full resize-none rounded-lg bg-input py-[11px] pl-4 pr-12 text-txt-normal outline-none"
+                // a caixa de edição usa o fundo do composer, sem borda — a
+                // borda e o padding padrão do primitivo (pensado para
+                // formulário) não são o desenho daqui
+                classeDaCaixa="rounded-lg border-transparent bg-chat-background-default"
+                className="py-[11px] pl-4 pr-12 text-text-default"
               />
               {/* o Discord mantém o emoji também na caixa de edição */}
-              <button
-                type="button"
+              <BotaoDeIcone
+                rotulo="Emoji"
+                icone={<Smile size={22} />}
+                tamanho="md"
                 onClick={(e) => setPicker({ alvo: "edicao", ancora: anchorOf(e.currentTarget) })}
-                aria-label="Emoji"
-                className="absolute right-2 top-1.5 grid h-8 w-8 place-items-center text-txt-secondary transition hover:text-txt-primary"
-              >
-                <Smile size={22} />
-              </button>
+                className="absolute right-2 top-1.5"
+              />
             </div>
-            <div className="mt-1 text-xs text-txt-muted">
+            <div className="mt-1 text-xs text-text-muted">
               escape para{" "}
-              <button type="button" onClick={stopEditing} className="text-txt-link hover:underline">
+              <button type="button" onClick={stopEditing} className="text-text-link hover:underline">
                 cancelar
               </button>{" "}
               • enter para{" "}
-              <button type="submit" className="text-txt-link hover:underline">
+              <button type="submit" className="text-text-link hover:underline">
                 salvar
               </button>
             </div>
           </form>
         ) : (
-          message.content && (
-            <div className={`break-words text-txt-normal ${compacto ? "flex gap-1.5" : ""}`}>
-              {compacto && (
-                <>
-                  <span className="shrink-0 text-[11px] leading-[22px] text-txt-muted">
-                    {hora(message.createdAt)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={openProfile}
-                    className="shrink-0 font-medium text-txt-primary hover:underline"
-                  >
-                    {displayNameOf(author)}
-                  </button>
-                  {/* ── j-bots ── no modo compacto a hora, o nome e o texto
-                      dividem a **primeira** linha da mensagem — a hora é
-                      `leading-[22px]`, e é ela que fixa a linha em 22px nos dois
-                      leiautes. `self-start` (e não `self-center`) porque a caixa
-                      cresce com o texto: numa mensagem de três linhas ela mede
-                      64px, e centrar poria a pílula no meio do parágrafo, 20px
-                      abaixo do nome — medido.
-                      A margem é o que centra a pílula **naquela** primeira
-                      linha, e por isso muda com o tamanho dela:
-                      (22 − 15)/2 = 3,5 no desktop e (22 − 18)/2 = 2 no celular.
-                      Os 3px iguais para os dois que estavam aqui deixavam a
-                      pílula 0,5px alta no desktop e 1px baixa no celular. */}
-                  {author.bot && <TagDeBot className="mt-[3.5px] self-start celular:mt-[2px]" />}
-                </>
-              )}
-              <div className={compacto ? "min-w-0 flex-1" : undefined}>
-                <Markdown
-                  text={message.content}
-                  meUsername={me?.username}
-                  displayNames={displayNames}
-                  roles={roles}
-                  myRoleIds={meusCargos}
-                />
-                {message.editedAt && (
-                  <span className="ml-1 text-[10px] text-txt-muted" title={horaCompleta(message.editedAt)}>
-                    (editado)
-                  </span>
-                )}
-              </div>
-            </div>
+          !compacto &&
+          corpo && (
+            <div className={`break-words ${corDoTexto}`}>{corpo}</div>
           )
         )}
 
@@ -850,10 +826,27 @@ export default function MessageItem({
         {message.poll && (
           <PollCard poll={message.poll} canModerate={Boolean(canModerate)} isAuthor={isOwn} />
         )}
+        {/* ── onda 3 ── em v2 nenhum anexo solto (o componente que o cita é
+            quem desenha), e o anexo que um embed usa por `attachment://` não
+            aparece duas vezes — ver `anexosVisiveis` */}
         <MediaGroup
-          attachments={message.attachments}
+          attachments={anexosVisiveis(message)}
           mensagemId={unconfirmed ? undefined : message.id}
         />
+        {/* ── onda 3 ── Embeds ricos do bot, em sequência, antes da prévia de
+            link (no Discord os dois são `embeds` da mesma mensagem, e os do bot
+            vêm primeiro). A caixa é o `.container_b7e1cb` dos acessórios da
+            mensagem (`css-bruto/653383.9d407f1fef76e564.css`): grade de uma
+            coluna com `grid-row-gap:.25rem` (4px) e `padding-block:.125rem`
+            (2px). `minmax(0,1fr)` deixa o embed encolher no celular.
+            A efêmera passa por aqui também: é este mesmo componente. */}
+        {embedsDoBot.length > 0 && (
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-1 py-0.5">
+            {embedsDoBot.map((e, i) => (
+              <EmbedDeBot key={i} embed={e} message={message} />
+            ))}
+          </div>
+        )}
         {videoId && <YouTubeEmbed videoId={videoId} title={message.content} />}
         {imagemDireta && (
           <button
@@ -897,57 +890,51 @@ export default function MessageItem({
         {codigoDeConvite && <InviteEmbed code={codigoDeConvite} />}
         {embed && <LinkEmbedCard embed={embed} />}
 
+        {/* ── onda 3 ── Componentes do bot (action rows e, com
+            `IS_COMPONENTS_V2`, os de leiaute), abaixo dos embeds e antes das
+            reações, como no Discord. O despacho v1/v2, os estados de carregando
+            e o "Esta interação falhou" são do `ComponentesDaMensagem` (cartão
+            3c); aqui só a caixa dos acessórios, a mesma dos embeds.
+            `empty:hidden` (`.container_b7e1cb:empty{display:none}`): se o
+            componente não desenhar nada, a caixa não deixa os 4px de respiro. */}
+        {temComponentes && (
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-1 py-0.5 empty:hidden">
+            <ComponentesDaMensagem message={message} />
+          </div>
+        )}
+
         {message.reactions.length > 0 && (
           <div className="mt-1 flex flex-wrap gap-1">
-            {message.reactions.map((r) => {
-              const mine = currentUserId ? r.userIds.includes(currentUserId) : false;
-              return (
-                <TooltipReacao
-                  key={r.emoji}
-                  emoji={r.emoji}
-                  userIds={r.userIds}
-                  conhecidos={conhecidos}
+            {message.reactions.map((r) => (
+              <PilulaDeReacao
+                key={r.emoji}
+                emoji={r.emoji}
+                count={r.count}
+                userIds={r.userIds}
+                minha={currentUserId ? r.userIds.includes(currentUserId) : false}
+                conhecidos={conhecidos}
+                onClick={() => reagir(r.emoji)}
+              />
+            ))}
+            {podeReagir && (
+              <Tooltip rotulo="Adicionar reação">
+                <button
+                  type="button"
+                  onClick={abrirSeletorDeReacao}
+                  aria-label="Adicionar reação"
+                  // mesma altura dos chips ao lado, inclusive quando o emoji cresce
+                  style={{ height: alturaDoChipDeReacao(tamanhoEmoji) }}
+                  /* No celular ele é **opaco desde sempre**: era `opacity-0` até
+                     o hover, e no dedo isso quer dizer "não existe". O toque
+                     longo abre o menu com "Adicionar reação", mas o "+" ao lado
+                     das reações é o gesto direto, e some-se dele custava um menu
+                     inteiro por reação. */
+                  className="grid min-w-[2.375rem] place-items-center rounded-lg border border-transparent bg-background-base-lowest px-1.5 text-text-muted opacity-0 transition hover:border-border-normal hover:text-text-strong group-hover:opacity-100 celular:min-h-[44px] celular:min-w-[44px] celular:opacity-100"
                 >
-                  <button
-                    type="button"
-                    aria-pressed={mine}
-                    aria-label={`${rotuloDaReacao(r.emoji)}, ${r.count} ${r.count === 1 ? "reação" : "reações"}`}
-                    onClick={() => reagir(r.emoji)}
-                    style={{ height: alturaDoChipDeReacao(tamanhoEmoji) }}
-                    /* `min-h` (e não uma altura fixa) no celular: ele vence a
-                       altura em linha sem apagá-la, então quem aumentou o
-                       tamanho do emoji nas configurações continua com o chip
-                       maior — e quem está no padrão ganha os 44px de alvo que
-                       o dedo pede. */
-                    className={`flex items-center gap-1.5 rounded-lg border px-1.5 transition celular:min-h-[44px] celular:px-3 ${
-                      mine
-                        ? "border-accent bg-accent/20 text-txt-primary"
-                        : "border-transparent bg-panel text-txt-normal hover:border-border-strong"
-                    }`}
-                  >
-                    <EmojiDaReacao emoji={r.emoji} tamanho={tamanhoEmoji} />
-                    <span className="text-sm font-semibold leading-none">{r.count}</span>
-                  </button>
-                </TooltipReacao>
-              );
-            })}
-            <Tooltip label="Adicionar reação">
-              <button
-                type="button"
-                onClick={abrirSeletorDeReacao}
-                aria-label="Adicionar reação"
-                // mesma altura dos chips ao lado, inclusive quando o emoji cresce
-                style={{ height: alturaDoChipDeReacao(tamanhoEmoji) }}
-                /* No celular ele é **opaco desde sempre**: era `opacity-0` até
-                   o hover, e no dedo isso quer dizer "não existe". O toque
-                   longo abre o menu com "Adicionar Reação", mas o "+" ao lado
-                   das reações é o gesto direto, e some-se dele custava um menu
-                   inteiro por reação. */
-                className="grid min-w-[2.375rem] place-items-center rounded-lg border border-transparent bg-panel px-1.5 text-txt-muted opacity-0 transition hover:border-border-strong hover:text-txt-primary group-hover:opacity-100 celular:min-h-[44px] celular:min-w-[44px] celular:opacity-100"
-              >
-                <SmilePlus size={16} />
-              </button>
-            </Tooltip>
+                  <SmilePlus size={16} />
+                </button>
+              </Tooltip>
+            )}
           </div>
         )}
 
@@ -955,121 +942,72 @@ export default function MessageItem({
           <button
             type="button"
             onClick={() => onOpenThread(message)}
-            className="mt-1 flex w-fit items-center gap-1.5 rounded-[4px] py-0.5 text-sm font-medium text-txt-link hover:underline celular:min-h-[44px] celular:py-2"
+            className="mt-1 flex w-fit items-center gap-1.5 rounded-[4px] py-0.5 text-sm font-medium text-text-link hover:underline celular:min-h-[44px] celular:py-2"
           >
             {message.thread && message.thread.participants.length > 0 && (
               <span className="flex -space-x-1.5" aria-hidden="true">
                 {message.thread.participants.map((p) => (
-                  <Avatar key={p.id} user={p} size="xs" className="ring-2 ring-chat" />
+                  <Avatar key={p.id} user={p} size="xs" className="ring-2 ring-background-base-lower" />
                 ))}
               </span>
             )}
             <MessageSquare size={16} aria-hidden="true" />
             {message.thread ? (
               <>
-                <span className="text-txt-primary">{message.thread.name}</span>
+                <span className="text-text-strong">{message.thread.name}</span>
                 {message.thread.archived && (
-                  <span className="text-xs font-normal text-txt-muted">(arquivada)</span>
+                  <span className="text-xs font-normal text-text-muted">(arquivada)</span>
                 )}
               </>
             ) : (
               `${message.replyCount} ${message.replyCount === 1 ? "resposta" : "respostas"}`
             )}
-            <span className="font-normal text-txt-muted">›</span>
+            <span className="font-normal text-text-muted">›</span>
           </button>
         )}
 
-        {efemera && <EphemeralFooter message={message} />}
+        {efemera && <RodapeEfemero message={message} />}
 
         {message.failed && message.nonce && (
-          <div className="mt-1 flex items-center gap-2 text-xs text-red">
+          <div className="mt-1 flex items-center gap-2 text-xs text-text-feedback-critical">
             <span>Não foi possível enviar.</span>
-            <button
-              type="button"
-              onClick={() => onRetry?.(message.nonce as string)}
-              className="rounded-[3px] bg-panel px-2 py-0.5 font-medium text-txt-normal hover:text-txt-primary"
-            >
+            <Button variante="secundario" tamanho="xs" onClick={() => onRetry?.(message.nonce as string)}>
               Reenviar
-            </button>
-            <button
-              type="button"
-              onClick={() => onDiscard?.(message.nonce as string)}
-              className="rounded-[3px] px-1 py-0.5 text-txt-muted hover:text-txt-primary"
-            >
+            </Button>
+            <Button variante="link" tamanho="xs" onClick={() => onDiscard?.(message.nonce as string)}>
               Descartar
-            </button>
+            </Button>
           </div>
         )}
       </div>
 
       {/*
-        Mini-barra, como no print: as reações rápidas, "Adicionar reação",
-        responder/editar, encaminhar e o "…". Fixar, denunciar e apagar moram
-        dentro do "…" — nove ícones em fila viravam uma régua ilegível.
-        No primeiro item da lista ela desce para dentro da linha: subindo, seria
-        cortada pelo topo da área rolável.
-
-        Medidas do Discord (`2026-08-31 124022.png`, barra em x ..1252,
-        y 391..424): 34px de altura = borda 1 + 2 + botão 28 + 2 + borda 1;
-        raio 8 (canto sobe 4, 3, 2, 1, 0); borda de 1px **mais clara** que o
-        fundo da barra (50 contra 36), não a `black/20` escura de antes — daí o
-        token `border`, que já é a divisória do app; termina 14px antes da
-        borda da linha e começa 25px acima do topo dela (entra 9 na linha).
+        Barra de ações do hover — medidas em `mensagem/BarraDeAcoes.tsx`.
+        Não existe no celular, e por isso nem é montada lá: ela é de `hover`,
+        que o dedo não tem, e `group-focus-within` a fazia aparecer sozinha
+        depois de qualquer toque que desse foco dentro da mensagem, com os
+        botões empilhados sobre o texto (medido em 390×844). As mesmas ações
+        estão no menu de toque longo, que é onde elas pertencem no telefone.
+        Montar condicionalmente, e não `celular:hidden`, porque o
+        `group-hover:block` tem especificidade maior que a da variante de mídia
+        e só perderia com `!important`.
       */}
-      {!unconfirmed && !editing && !efemera && (
-        <div
-          /* `celular:!hidden`: no celular esta barra não existe. Ela é de
-             `hover`, que o dedo não tem — mas `group-focus-within` a fazia
-             aparecer sozinha depois de qualquer toque que desse foco dentro da
-             mensagem, com sete botões de 27px empilhados sobre o texto (medido
-             em 390×844). As mesmas ações estão no menu de toque longo, que é
-             onde elas pertencem no telefone. */
-          className={`absolute right-3.5 ${
-            primeiro ? "top-0.5" : "-top-[25px]"
-          } hidden rounded-lg border border-border bg-chat p-0.5 shadow-high group-focus-within:flex group-hover:flex celular:!hidden`}
-        >
-          {frequentes.slice(0, RAPIDAS_NA_BARRA).map((emoji) => (
-            <ActionButton
-              key={emoji}
-              label={`Reagir com ${rotuloDaReacao(emoji)}`}
-              onClick={() => reagir(emoji)}
-            >
-              <EmojiDaReacao emoji={emoji} tamanho={20} />
-            </ActionButton>
-          ))}
-          <ActionButton label="Adicionar reação" onClick={abrirSeletorDeReacao}>
-            <SmilePlus size={20} />
-          </ActionButton>
-          {isOwn ? (
-            <ActionButton label="Editar" onClick={startEdit}>
-              <Pencil size={20} />
-            </ActionButton>
-          ) : (
-            <ActionButton label="Responder" onClick={responder}>
-              <CornerUpLeft size={20} />
-            </ActionButton>
-          )}
-          {/* Encaminhar tem casa própria na barra do print, e não só dentro do
-              "…": é uma das quatro coisas que se faz com a mensagem do outro.
-              Abre a mesma lista de destinos do menu, ancorada no botão. */}
-          <ActionButton
-            label="Encaminhar"
-            onClick={(e) => {
-              const destinos = destinosParaEncaminhar();
-              if (destinos.length === 0) {
-                ui.toast("Não há para onde encaminhar ainda");
-                return;
-              }
-              const r = e.currentTarget.getBoundingClientRect();
-              ui.openContextMenu(r.left, r.bottom, destinos);
-            }}
-          >
-            <CornerUpRight size={20} />
-          </ActionButton>
-          <ActionButton label="Mais" onClick={openMenu}>
-            <MoreHorizontal size={20} />
-          </ActionButton>
-        </div>
+      {!ehMobile && !unconfirmed && !editing && !efemera && (
+        <BarraDeAcoes
+          primeiro={primeiro}
+          cabecalho={!compacto && inicioDeGrupo}
+          selecionada={selecionada}
+          rapidas={frequentes.slice(0, RAPIDAS_NA_BARRA)}
+          propria={isOwn}
+          podeReagir={podeReagir}
+          podeResponder={podeResponder}
+          onReagir={reagir}
+          onAbrirSeletor={abrirSeletorDeReacao}
+          onEditar={startEdit}
+          onResponder={responder}
+          onEncaminhar={encaminharPelaBarra}
+          onMais={openMenu}
+        />
       )}
 
       {picker && (

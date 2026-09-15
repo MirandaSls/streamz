@@ -186,3 +186,29 @@ describe("mensagemParaDiscord", () => {
     expect(typeof voltou.channel_id).toBe("string");
   });
 });
+
+// ── onda 3 ── embeds, componentes e flags ────────────────────
+
+describe("mensagemParaDiscord — payload de bot (onda 3)", () => {
+  it("sem `payloadDeBot`, a saída é a de sempre", () => {
+    const m = mensagemParaDiscord(mensagem());
+    expect(m.embeds).toEqual([]);
+    expect(m.components).toEqual([]);
+    expect(m.flags).toBe(0);
+  });
+
+  it("com `payloadDeBot`, embeds, componentes e flags saem como foram guardados", () => {
+    const m = mensagemParaDiscord({
+      ...mensagem(),
+      payloadDeBot: {
+        embeds: [{ type: "rich", title: "Status", color: 0x9be31f }],
+        components: [{ type: 10, id: 1, content: "oi" }],
+        flags: 1 << 15,
+      },
+    });
+    expect(m.embeds).toEqual([{ type: "rich", title: "Status", color: 0x9be31f }]);
+    expect(m.components).toEqual([{ type: 10, id: 1, content: "oi" }]);
+    expect(m.flags).toBe(1 << 15);
+  });
+});
+

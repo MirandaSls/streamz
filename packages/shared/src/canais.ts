@@ -8,7 +8,7 @@
 import { idSchema } from "./internos";
 
 import { z } from "zod";
-import type { Channel, PublicUser } from "./dominio";
+import type { Channel, ChannelType, PublicUser } from "./dominio";
 import { isDirectChannel } from "./midia";
 import type { VoiceTokenResponse } from "./voz";
 
@@ -61,6 +61,25 @@ export function slowmodeRemaining(
   if (!Number.isFinite(decorrido)) return 0;
   return Math.max(0, Math.ceil(slowmodeSeconds - decorrido));
 }
+
+/**
+ * Resposta de `GET /channels/:channelId/resumo`: o mínimo para desenhar a
+ * pílula de `<#id>` de um canal que o cliente não tem carregado — de outro
+ * servidor ou uma conversa. No Discord a menção a canal de fora sai com o nome
+ * quando você o enxerga e como "sem acesso" quando não.
+ *
+ * Só sai depois de `assertCanViewChannel` (a mesma porta de ler mensagens):
+ * quem não vê o canal recebe 403/404 e não descobre nem o nome. `name` já vem
+ * resolvido para conversa sem nome (os participantes, menos quem pede), então
+ * o cliente não precisa de outra consulta.
+ */
+export type ResumoDeCanal = {
+  id: string;
+  name: string;
+  type: ChannelType;
+  /** null em conversa direta ou grupo. */
+  guildId: string | null;
+};
 
 /** Canal onde se lê e escreve texto — inclui o canal de anúncios. */
 export function isTextChannel(c: Pick<Channel, "type">): boolean {

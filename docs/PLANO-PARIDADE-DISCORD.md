@@ -57,15 +57,22 @@ em "Sobre".
 2. **Temas: Dark agora; Ash e Onyx na onda 9.** O Light fica fora, porque a regra
    "limão só sobre escuro" exige um accent alternativo, e isso é outra ADR.
 3. **Onde: no servidor** (`/opt/stack/streamz`, worktrees, `docker run node:22`,
-   §2–§3). É onde estão o acervo de ícones (`docs/Reference/`) e o
-   `publicar-local.sh`. As referências coletadas estão **no próprio
-   repositório**, em `docs/referencias-discord/` (3 GB), por decisão do usuário:
-   todo agente as tem na worktree. Ficam fora do build das imagens pelo
-   `.dockerignore`.
-4. **Deploy: uma branch por onda.** As tarefas viram PR em
-   `feat/paridade-discord`, que entra na `main` ao fim de cada onda, com os prints
-   do usuário. Cada feature da trilha §4b tem PR próprio na `main`, porque é tela
-   nova e não deixa visual misto.
+   §2–§3). É onde estão o acervo de ícones e os prints 1:1
+   (`/opt/stack/streamz/docs/Reference/`, **fora do git**: só existe no clone
+   principal, sempre por caminho absoluto) e o `publicar-local.sh`. As referências
+   coletadas estão **no próprio repositório**, em `docs/referencias-discord/`
+   (3 GB), por decisão do usuário, e ficam fora do build das imagens pelo
+   `.dockerignore`. Para não copiar 3 GB por worktree:
+   - **uma** worktree só de leitura com tudo, `.claude/worktrees/referencias`
+     (destacada em `origin/main`), que todo subagente lê;
+   - as worktrees de trabalho usam sparse-checkout **sem**
+     `docs/referencias-discord/`, com a configuração em `config.worktree`
+     (`extensions.worktreeConfig`), para não vazar para o clone principal nem
+     para as worktrees das outras sessões.
+4. **Deploy: uma branch de integração.** O trabalho de cada onda vira commits do
+   coordenador em `feat/paridade-discord`, que entra na `main` por PR ao fim de
+   cada onda, com os prints do usuário. Cada feature da trilha §4b tem PR próprio
+   na `main`, porque é tela nova e não deixa visual misto.
 5. **Base de fonte 16px** (padrão do Discord) no lugar dos 15,5 atuais. Não foi
    perguntado; vale até o usuário dizer o contrário, e entra na onda 0.2.
 
@@ -83,9 +90,25 @@ em "Sobre".
 | **Revisor visual** | Opus (subagente) | Compara a nossa captura com a referência, por tela, e devolve divergências com medida (não opinião) |
 
 Cada onda roda como **workflow** (fase de implementação em paralelo, depois
-integração e revisão), com até ~15 agentes por execução. Agente **não** roda
-typecheck nem build na árvore parcial dos outros (§6.4.4: falso vermelho, e o
-servidor já caiu por falta de memória). Quem verifica é o coordenador, no fim.
+integração e revisão). **Não há teto de ~15 agentes**: o usuário autorizou 30, 40
+ou mais subagentes por onda (2026-09-11). O que manda é o menor escopo possível
+por agente:
+
+- **Um cartão = uma peça**: um componente, uma aba, um modal, ou um lote mecânico
+  de poucos arquivos.
+- **Arquivo grande** (`Composer`, `MessageItem`, `ChannelSidebar`,
+  `ProfilePopover`, `AplicativosTab`…) o Opus quebra em partes antes, separando o
+  visual da lógica, e **cada parte vira um cartão**.
+- **Opus** para o que toca arquivo compartilhado, contrato (`packages/shared`,
+  API, Prisma) ou lógica pesada; **Sonnet** para todo o resto, com o plano e a
+  lista fechada de arquivos.
+- Os subagentes de uma onda trabalham **na mesma worktree da onda**, em arquivos
+  disjuntos, **sem git**: quem commita é o coordenador. Nada de worktree por
+  agente.
+- Subagente **não** roda typecheck, build nem servidor (§6.4.4: falso vermelho na
+  árvore parcial dos outros, e o servidor, de 6 vCPU e 15 GB, já caiu por falta de
+  memória). A verificação completa (§3.2) é do coordenador, **uma vez por onda**, e
+  a rodada de correções que vem depois também corre em paralelo.
 
 ### Cartão de tarefa (modelo que todo subagente recebe)
 
@@ -109,15 +132,18 @@ Pronto quando:
   - [ ] tabela Discord / antes / depois com a origem de cada número
 Entrega: diff + tabela + lista do que NÃO foi verificado. Ícone ou token
          faltando → relata, não cria.
+Nunca: git (commit, stash, checkout), typecheck, build, servidor, docker.
+       Referências: só leitura, em .claude/worktrees/referencias/.
 ```
 
 ### O ciclo de uma onda
 
 1. O coordenador escreve os cartões e reserva os arquivos (`SendMessage` para as
    outras sessões vivas, §2.4).
-2. **Implementação em paralelo**: subagentes em worktrees próprias, lotes
-   disjuntos.
-3. **Integração** na branch da onda; `git merge origin/main`.
+2. **Implementação em paralelo**: subagentes na worktree da onda, lotes de
+   arquivos disjuntos, sem git.
+3. **Integração**: o coordenador commita por cartão (ou por lote coerente) em
+   `feat/paridade-discord` e faz `git merge origin/main`.
 4. **Verificação completa** (§3.2) + **passeio de paridade** (onda 0.7), que
    fotografa as telas da onda em desktop 1920×1080 e celular 390×844.
 5. **Revisão visual**: folha lado a lado (nosso × referência) por tela → lista de

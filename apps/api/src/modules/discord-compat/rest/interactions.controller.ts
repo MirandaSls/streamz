@@ -1,25 +1,30 @@
 import {
   Body,
   Controller,
+  Inject,
+  Optional,
   Param,
   Post,
   Query,
   Res,
+  UploadedFiles,
   UseFilters,
   UseInterceptors,
 } from "@nestjs/common";
+import { AnyFilesInterceptor } from "@nestjs/platform-express";
 import { SkipThrottle } from "@nestjs/throttler";
 import { zodBody } from "../../../common/zod.pipe";
-import { DadosDeCompatService } from "../dados.service";
 import { InteractionsService } from "../../interactions/interactions.service";
 import type { InteracaoAutenticada } from "../../interactions/tipos";
 import { FLAG_EFEMERA, TIPO_DE_CALLBACK } from "../../interactions/tipos";
+import { UploadsService } from "../../uploads/uploads.service";
 import { aplicarContentTypeDoDiscord } from "../content-type";
 import { FiltroDeErrosDoDiscord, interacaoDesconhecida } from "../erros";
 import { RateLimitDoDiscordInterceptor } from "../rate-limit.interceptor";
 import type { JsonDoDiscord } from "../tipos";
 import { mensagemParaDiscord } from "../traducao/mensagem";
-import { corpoDeCallbackSchema, type CorpoDeCallback } from "./corpos-f3";
+import { LIMITES_DO_MULTIPART, PayloadJsonPipe, type ArquivoDoMultipart } from "./corpos";
+import { anexarArquivosAoCorpo, corpoDeCallbackSchema, type CorpoDeCallback } from "./corpos-f3";
 
 /**
  * O mínimo do `Response` do Express que este controller usa — mesmo motivo do
@@ -45,7 +50,10 @@ interface RespostaHttp {
  * token inexistente ou vencido).
  *
  * Tipos implementados na F3: **4** `CHANNEL_MESSAGE_WITH_SOURCE` e **5**
- * `DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE`. 6, 7, 8 e 9 são F5 → 501.
+ * `DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE`. ── onda 3 (cartão 3a) ── **6**
+ * `DEFERRED_UPDATE_MESSAGE`, **7** `UPDATE_MESSAGE`, **8**
+ * `APPLICATION_COMMAND_AUTOCOMPLETE_RESULT` e **9** `MODAL` também; qual vale
+ * para qual tipo de interação é do `InteractionsService.responder`.
  *
  * ## A resposta: 204 **ou** um corpo, e quem decide é o `?with_response`
  *
@@ -73,25 +81,43 @@ interface RespostaHttp {
 @UseInterceptors(RateLimitDoDiscordInterceptor)
 @Controller("v10/interactions")
 export class InteractionCallbackCompatController {
+  // ── onda 3 ── sem o `DadosDeCompatService`: a mensagem da resposta sai por
+  // `InteractionsService.origemParaCompat`. (Desde a rodada de correção a
+  // `mensagemPorCuid` já traz embeds e componentes na própria linha.)
   constructor(
     protected readonly interacoes: InteractionsService,
-    protected readonly dados: DadosDeCompatService,
+    // ── rodada de correção ── o upload multipart do `reply({ files })`.
+    // `@Optional` porque o `UploadsModule` não exporta o service e o
+    // `InteractionsModule` (do coordenador) não o importa; desligado, arquivo
+    // leva 501 e o callback sem arquivo segue igual.
+    @Optional() @Inject(UploadsService) protected readonly uploads?: UploadsService,
   ) {}
 
   @Post(":id/:token/callback")
+  // ── rodada de correção ── `multipart/form-data` (`payload_json` + `files[n]`).
+  // O multer só age em multipart; o `{ "type": 5 }` do `deferReply()` passa direto.
+  @UseInterceptors(AnyFilesInterceptor({ limits: LIMITES_DO_MULTIPART }))
   async callback(
     @Param("id") id: string,
     @Param("token") token: string,
     @Query("with_response") comResposta: string | undefined,
     // `data` fica intacto até o `responder`: é o único lugar onde `embeds`,
-    // `components` e `flags` existem, e o pipe global os comeria num DTO
-    @Body(zodBody(corpoDeCallbackSchema)) corpo: CorpoDeCallback,
+    // `components` e `flags` existem, e o pipe global os comeria num DTO. O
+    // `PayloadJsonPipe` desembrulha o corpo do multipart antes do zod.
+    @Body(new PayloadJsonPipe(), zodBody(corpoDeCallbackSchema)) corpo: CorpoDeCallback,
+    @UploadedFiles() arquivos: ArquivoDoMultipart[] | undefined,
     // `@Res()` cru porque as duas saídas têm forma diferente (204 sem corpo e
     // 200 com JSON) e o Nest não deixa variar o status sem ele
     @Res() resposta: RespostaHttp,
   ): Promise<void> {
     const interacao = await this.resolver(id, token);
-    await this.interacoes.responder(interacao, corpo.type, corpo.data);
+    // os arquivos vão para `data.attachment_ids`, e só depois de o token
+    // passar: interação inválida não grava nada no bucket
+    const data =
+      arquivos?.length && corpo.data
+        ? await anexarArquivosAoCorpo(corpo.data, arquivos, this.uploads, interacao.botUserId)
+        : corpo.data;
+    await this.interacoes.responder(interacao, corpo.type, data);
 
     // o `Content-Type` sem charset também aqui: é o §5, e o `json_or_text` do
     // discord.py compara o cabeçalho por igualdade exata
@@ -110,6 +136,14 @@ export class InteractionCallbackCompatController {
    * Relê a interação pelo token porque o `responder` acabou de gravar o
    * `responseMessageId` — e é ele que o discord.py guarda para o
    * `edit_original_response()` seguinte.
+   *
+   * ── onda 3 ── por tipo de callback (`receiving-and-responding.mdx`,
+   * "Interaction Callback Response Object": `resource.message` só existe em
+   * 4 e 7):
+   * - 4/5: a mensagem criada (efêmera ou normal), como na F3;
+   * - 6/7: a **mensagem de origem** em `response_message_id`, e o objeto dela
+   *   em `resource.message` só no 7;
+   * - 8/9: só `interaction` e `resource.type` — não há mensagem.
    */
   protected async callbackResponse(
     token: string,
@@ -120,7 +154,9 @@ export class InteractionCallbackCompatController {
 
     const interacao: JsonDoDiscord = {
       id: String(atual.snowflake),
-      type: 2,
+      // ── onda 3 ── o tipo de verdade (3 componente, 4 autocomplete, 5 envio de
+      // modal); fixo em 2 o discord.py tomaria um clique por comando de barra
+      type: atual.tipo ?? 2,
       activity_instance_id: null,
       response_message_id: null,
       response_message_loading: carregando,
@@ -132,6 +168,30 @@ export class InteractionCallbackCompatController {
 
     const resource: JsonDoDiscord = { type: corpo.type, activity_instance: null };
 
+    if (
+      corpo.type === TIPO_DE_CALLBACK.DEFERRED_UPDATE_MESSAGE ||
+      corpo.type === TIPO_DE_CALLBACK.UPDATE_MESSAGE
+    ) {
+      const origem = await this.interacoes.origemParaCompat(atual);
+      if (origem) {
+        interacao.response_message_id = String(origem.linha.snowflake);
+        interacao.response_message_ephemeral = origem.efemera;
+        if (corpo.type === TIPO_DE_CALLBACK.UPDATE_MESSAGE) {
+          const traduzida = mensagemParaDiscord(origem.linha);
+          resource.message = origem.efemera
+            ? { ...traduzida, flags: traduzida.flags | FLAG_EFEMERA }
+            : traduzida;
+        }
+      }
+      return { interaction: interacao, resource };
+    }
+    if (
+      corpo.type === TIPO_DE_CALLBACK.APPLICATION_COMMAND_AUTOCOMPLETE_RESULT ||
+      corpo.type === TIPO_DE_CALLBACK.MODAL
+    ) {
+      return { interaction: interacao, resource };
+    }
+
     // ── j-bots ── a efêmera vem primeiro: quando a resposta foi efêmera o
     // `responseMessageId` é null (ela não é uma `Message`), e sem esta consulta
     // o `InteractionCallbackResponse` sairia sem `response_message_id` — que é
@@ -140,12 +200,18 @@ export class InteractionCallbackCompatController {
     if (efemera) {
       interacao.response_message_ephemeral = true;
       interacao.response_message_id = String(efemera.snowflake);
-      resource.message = { ...mensagemParaDiscord(efemera), flags: FLAG_EFEMERA };
+      // ── onda 3 ── `|` e não `=`: a efêmera pode ser v2 (`IS_COMPONENTS_V2`), e
+      // sobrescrever as flags a esconderia da lib do bot
+      const traduzida = mensagemParaDiscord(efemera);
+      resource.message = { ...traduzida, flags: traduzida.flags | FLAG_EFEMERA };
     } else if (atual.responseMessageId) {
-      const linha = await this.dados.mensagemPorCuid(atual.responseMessageId, atual.botUserId);
-      if (linha) {
-        interacao.response_message_id = String(linha.snowflake);
-        resource.message = mensagemParaDiscord(linha);
+      const resposta = await this.interacoes.origemParaCompat({
+        messageId: atual.responseMessageId,
+        botUserId: atual.botUserId,
+      });
+      if (resposta) {
+        interacao.response_message_id = String(resposta.linha.snowflake);
+        resource.message = mensagemParaDiscord(resposta.linha);
       }
     }
 

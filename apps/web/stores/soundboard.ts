@@ -32,6 +32,13 @@ interface SoundboardState {
   // ── do servidor ──
   guilds: GuildSoundboard[];
   carregado: boolean;
+  /**
+   * O último `GET /soundboard` falhou. Separado de `carregado` porque "não
+   * sei" e "não há nada" pedem telas diferentes: sem este campo a falha de
+   * rede virava lista vazia, e painel e aba diziam "Nenhum som ainda." para
+   * quem estava só sem internet — sem oferecer tentar de novo.
+   */
+  falhouCarregar: boolean;
   // ── deste navegador ──
   /** ids favoritados, do mais recente para o mais antigo. */
   favoritos: string[];
@@ -41,6 +48,8 @@ interface SoundboardState {
   volume: number;
 
   load: () => Promise<void>;
+  /** o "Tentar de novo" do estado de erro (painel e aba). */
+  recarregar: () => Promise<void>;
   aplicar: (guildId: string, sounds: SoundboardSound[]) => void;
   clear: () => void;
   alternarFavorito: (id: string) => void;
@@ -60,16 +69,28 @@ export const useSoundboard = create<SoundboardState>()(
     (set, get) => ({
       guilds: [],
       carregado: false,
+      falhouCarregar: false,
       favoritos: [],
       usos: {},
       volume: 1,
 
       load: async () => {
-        // falha aqui não pode derrubar nada: sem a lista o painel abre com as
-        // seções vazias, e o "+ Adicionar som" continua no lugar
-        const guilds = await api.mySoundboard().catch(() => [] as GuildSoundboard[]);
-        set({ guilds, carregado: true });
+        // falha aqui não derruba nada, mas também não finge lista vazia: marca
+        // `falhouCarregar` e deixa `guilds`/`carregado` como estavam. Na
+        // primeira carga isso é o estado de erro com "Tentar de novo"; numa
+        // recarga (reconexão do socket, `aplicar` de servidor novo) quem já
+        // tinha a lista continua vendo a lista, que é melhor que uma tela de
+        // erro por cima de sons que ainda tocam
+        set({ falhouCarregar: false });
+        try {
+          const guilds = await api.mySoundboard();
+          set({ guilds, carregado: true, falhouCarregar: false });
+        } catch {
+          set({ falhouCarregar: true });
+        }
       },
+
+      recarregar: () => get().load(),
 
       aplicar: (guildId, sounds) => {
         const atual = get().guilds;
@@ -84,7 +105,7 @@ export const useSoundboard = create<SoundboardState>()(
         set({ guilds });
       },
 
-      clear: () => set({ guilds: [], carregado: false }),
+      clear: () => set({ guilds: [], carregado: false, falhouCarregar: false }),
 
       alternarFavorito: (id) =>
         set((s) => ({

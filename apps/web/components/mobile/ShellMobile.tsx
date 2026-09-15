@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useRef, type MouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type RefObject,
+} from "react";
 import { TelaDeAplicativos } from "@/components/apps/DiretorioDeApps";
 import BarraDeAbas from "@/components/mobile/BarraDeAbas";
 import BarraDeVozMobile from "@/components/mobile/BarraDeVozMobile";
@@ -19,12 +27,30 @@ import ProfilePopoverHost from "@/components/ui/ProfilePopover";
 import TelaDeAbertura from "@/components/ui/TelaDeAbertura";
 import Toasts from "@/components/ui/Toasts";
 import VoiceLayer from "@/components/voice/VoiceLayer";
-import { haCamadaNoCelular } from "@/hooks/useVoltarNoCelular";
+import {
+  assentar,
+  decidirSoltura,
+  limitar,
+  movimentoReduzido,
+  pintarVeu,
+  useArrastoHorizontal,
+} from "@/hooks/useArrastoHorizontal";
+import {
+  camadasNoCelular,
+  haCamadaNoCelular,
+  useVoltarNoCelular,
+} from "@/hooks/useVoltarNoCelular";
 import { destravarSons } from "@/lib/ringtone";
 import { useChannels } from "@/stores/channels";
 import { useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
-import { mobile, profundidade, telaDoTopo, useMobile } from "@/stores/mobile";
+import {
+  mobile,
+  profundidade,
+  telaDoTopo,
+  useMobile,
+  type TelaMobile,
+} from "@/stores/mobile";
 import { ui, useUI } from "@/stores/ui";
 
 /**
@@ -52,6 +78,14 @@ import { ui, useUI } from "@/stores/ui";
  * última conversa no boot. Observando o `activeChannelId`, trocar de servidor
  * jogaria a pessoa dentro de uma conversa que ela não pediu — no Discord do
  * celular tocar num servidor mostra a **lista de canais**.
+ *
+ * ## E por arrasto
+ *
+ * O toque continua sendo o caminho de ida; o arrasto é o outro, e é o que o
+ * Discord do celular usa o tempo todo (ver `useGestosDoShell`, mais abaixo):
+ * na conversa, arrastar para a direita revela a coluna de canais por baixo e a
+ * conversa fica estacionada na borda; arrastar para a esquerda traz a lista de
+ * membros.
  */
 export default function ShellMobile() {
   const aba = useMobile((s) => s.aba);
@@ -78,6 +112,27 @@ export default function ShellMobile() {
 
   useVoltarDoAndroid(prof);
   useDestravarSons();
+
+  /** a área das telas (base + pilha), onde o arrasto é ouvido. */
+  const regiao = useRef<HTMLDivElement>(null);
+  /** a tela do topo da pilha, que é quem o dedo arrasta. */
+  const tela = useRef<HTMLDivElement>(null);
+  const gaveta = useGestosDoShell(regiao, tela);
+
+  /**
+   * Com a gaveta aberta a conversa ainda está na pilha, estacionada na borda.
+   * Tocar noutro item da lista **troca** a conversa estacionada em vez de
+   * empilhar outra por cima — senão cada canal visitado pela gaveta viraria um
+   * "voltar" a mais — e a traz de volta para a frente.
+   */
+  function abrirTela(destino: TelaMobile) {
+    if (gaveta.abertaAgora.current) {
+      mobile.trocarTopo(destino);
+      gaveta.fechar();
+      return;
+    }
+    mobile.empilhar(destino);
+  }
 
   /**
    * Não há ligação aba↔`view` para manter: a aba **Início** abriga os dois
@@ -115,16 +170,16 @@ export default function ShellMobile() {
       window.setTimeout(() => {
         const canal = useChannels.getState();
         const ativo = canal.channels.find((c) => c.id === canal.activeChannelId);
-        mobile.empilhar(ativo?.type === "VOICE" ? "voz" : "canal");
+        abrirTela(ativo?.type === "VOICE" ? "voz" : "canal");
       }, 0);
       return;
     }
     if (alvo.closest("[data-dm-button]")) {
-      mobile.empilhar("conversa");
+      abrirTela("conversa");
       return;
     }
     if (alvo.closest("[data-amigos-button]")) {
-      mobile.empilhar("amigos");
+      abrirTela("amigos");
       return;
     }
     /*
@@ -137,7 +192,7 @@ export default function ShellMobile() {
       perguntar nada à store depois do `onClick` — a tela é sempre a mesma.
     */
     if (alvo.closest("[data-apps-button]")) {
-      mobile.empilhar("aplicativos");
+      abrirTela("aplicativos");
     }
   }
 
@@ -183,6 +238,20 @@ export default function ShellMobile() {
       <TelaVoce />
     );
 
+  const conteudoDoTopo =
+    topo === "canal" ? (
+      <TelaDeCanal />
+    ) : topo === "conversa" ? (
+      <TelaDeDM />
+    ) : topo === "amigos" ? (
+      <TelaDeAmigos />
+    ) : topo === "voz" ? (
+      <TelaDeVoz />
+    ) : topo === "aplicativos" ? (
+      /* ── j-bots · F4 ── o diretório de aplicativos, empilhado pela rail */
+      <TelaDeAplicativos aoSair={() => voltar()} />
+    ) : null;
+
   return (
     <div
       /* `100dvh`, e não `h-full`: no celular a barra de endereço aparece e some
@@ -194,7 +263,7 @@ export default function ShellMobile() {
          `overflow-hidden` + `overscroll-none`: quem rola é a lista de dentro. Sem
          isto o "puxar para atualizar" do Chrome dispara ao rolar a conversa
          para cima. */
-      className="flex h-[100dvh] w-full flex-col overflow-hidden overscroll-none bg-chat pt-[env(safe-area-inset-top)]"
+      className="flex h-[100dvh] w-full flex-col overflow-hidden overscroll-none bg-background-base-lower pt-[env(safe-area-inset-top)]"
       data-shell-mobile
       onPointerDownCapture={() => {
         jaInteragiu.current = true;
@@ -204,34 +273,62 @@ export default function ShellMobile() {
           sem ele os menus de canal, servidor, conversa e membro não existiriam
           (ver `AreaDeToqueLongo`) */}
       <AreaDeToqueLongo>
-        <div className="relative min-h-0 flex-1" onClickCapture={aoTocarNaLista}>
-        {base}
-        {topo === "canal" && (
-          <TelaEmpilhada>
-            <TelaDeCanal />
-          </TelaEmpilhada>
-        )}
-        {topo === "conversa" && (
-          <TelaEmpilhada>
-            <TelaDeDM />
-          </TelaEmpilhada>
-        )}
-        {topo === "amigos" && (
-          <TelaEmpilhada>
-            <TelaDeAmigos />
-          </TelaEmpilhada>
-        )}
-        {topo === "voz" && (
-          <TelaEmpilhada>
-            <TelaDeVoz />
-          </TelaEmpilhada>
-        )}
-        {/* ── j-bots · F4 ── o diretório de aplicativos, empilhado pela rail */}
-        {topo === "aplicativos" && (
-          <TelaEmpilhada>
-            <TelaDeAplicativos aoSair={() => voltar()} />
-          </TelaEmpilhada>
-        )}
+        {/*
+          `touch-pan-y`: o navegador continua dono da rolagem vertical (as
+          listas rolam como sempre), e o eixo horizontal fica para o arrasto —
+          sem isto o primeiro movimento de lado vira um `pointercancel` e a
+          conversa nunca acompanha o dedo. Um rolador horizontal lá dentro (as
+          abas de Amigos, um bloco de código) continua rolando: o `touch-action`
+          só é somado até o rolador mais próximo.
+        */}
+        <div
+          ref={regiao}
+          className="relative min-h-0 flex-1 touch-pan-y"
+          onClickCapture={aoTocarNaLista}
+        >
+          {/*
+            Com a gaveta aberta a coluna de canais termina **antes** da borda da
+            conversa estacionada, e o vão tem a cor da rail. Medido em
+            `discord-mobile-servidor-2024.png` (1,9707 px/pt), na linha y=600:
+            a lista acaba em x=675, o vão escuro vai de 676 a 690 (15 px =
+            7,6 pt → 8) e a conversa começa em 691,5 — 47,5 px = 24 pt até a
+            borda. 24 + 8 = 32 de reserva. Sem ela a borda da conversa cobriria
+            o contador de não lidas no fim de cada linha de canal.
+
+            A reserva entra quando o eixo trava (uma vez por gesto, não por
+            quadro) e sai quando a conversa volta inteira: o que se move com o
+            dedo é só `transform`.
+          */}
+          <div
+            className={`h-full ${gaveta.bordaReservada ? "bg-background-base-lowest pr-[32px]" : ""}`}
+          >
+            {base}
+          </div>
+          {conteudoDoTopo && (
+            <TelaEmpilhada
+              key={topo ?? undefined}
+              ref={tela}
+              /* canto de cima da conversa estacionada: 8 pt, ajuste de arco
+                 em `discord-mobile-servidor-2024.png` — a borda de cima está
+                 em y=106 px no miolo reto, 108 em x=700 e 116 em x=692, o que
+                 fecha com um raio de 16 px = 8 pt. O canto de baixo não aparece
+                 na captura (a barra de abas passa por cima dele) e fica reto */
+              className={gaveta.bordaReservada ? "overflow-hidden rounded-tl-[8px]" : ""}
+            >
+              {conteudoDoTopo}
+              {gaveta.aberta && (
+                /* a conversa estacionada não é interativa: tocar na borda a
+                   traz de volta, como no Discord, e nada lá dentro (o composer,
+                   um link) recebe o toque por engano */
+                <button
+                  type="button"
+                  aria-label="Voltar para a conversa"
+                  className="absolute inset-0 z-50"
+                  onClick={() => gaveta.fechar()}
+                />
+              )}
+            </TelaEmpilhada>
+          )}
         </div>
       </AreaDeToqueLongo>
 
@@ -243,8 +340,15 @@ export default function ShellMobile() {
         Não é só fidelidade: são 48px de timeline de volta num aparelho que tem
         844 de altura, e trocar de seção com uma conversa aberta é justamente o
         que a seta de voltar já resolve.
+
+        Com a gaveta aberta ela volta: em `discord-mobile-servidor-2024.png` a
+        conversa estacionada aparece na borda e a barra de abas está lá. No
+        Discord a barra passa **por cima** da conversa; aqui ela entra no fluxo
+        e encurta a área das telas, porque sobrepor exigiria saber a altura da
+        barra (que é do `BarraDeAbas`) para reservar embaixo da coluna de
+        canais. Com 24 pt de conversa à vista, a diferença não aparece.
       */}
-      {topo === null && <BarraDeAbas />}
+      {(topo === null || gaveta.aberta) && <BarraDeAbas />}
 
       {/* os mesmos hospedeiros globais do shell de desktop */}
       <VoiceLayer />
@@ -350,4 +454,352 @@ function useDestravarSons() {
       window.removeEventListener("touchstart", destravar);
     };
   }, []);
+}
+
+/**
+ * Largura da conversa que fica à vista com a gaveta aberta: 47,5 px de
+ * `discord-mobile-servidor-2024.png` (x 691,5 → 739, linha y=600) ÷ 1,9707 =
+ * 24 pt. É também a medida da reserva da coluna de canais (mais o vão de 8).
+ */
+const BORDA_DA_CONVERSA = 24;
+
+const useEfeitoDeLeiaute = typeof window === "undefined" ? useEffect : useLayoutEffect;
+const TRANSFORM_DA_GAVETA_ABERTA = `translate3d(calc(100% - ${BORDA_DA_CONVERSA}px), 0, 0)`;
+
+type ModoDoArrasto = "abrir-gaveta" | "fechar-gaveta" | "voltar" | "membros";
+
+/** A pilha da aba atual, lida no momento do gesto (não no render). */
+function pilhaAgora() {
+  const s = useMobile.getState();
+  const pilha = s.pilhas[s.aba];
+  return { s, pilha, topo: pilha[pilha.length - 1] ?? null };
+}
+
+/**
+ * A conversa pode ser estacionada na borda? Só na aba Início, com **uma** tela
+ * na pilha e essa tela sendo uma conversa: é a única situação em que o que está
+ * por baixo dela (a base da aba, rail + canais) é mesmo a coluna que o Discord
+ * revela. Com duas telas na pilha a de baixo não está montada, e arrastar
+ * mostraria a base no lugar dela.
+ */
+function podeEstacionar(): boolean {
+  const { s, pilha, topo } = pilhaAgora();
+  return s.aba === "inicio" && pilha.length === 1 && (topo === "canal" || topo === "conversa");
+}
+
+/**
+ * O painel de membros/perfil que está na tela, se houver.
+ *
+ * **Isto é um acoplamento, e está aqui de propósito até ter dono.** O
+ * `PainelDeslizante` mora em `telas-de-conversa.tsx`, que não é deste arquivo, e
+ * não expõe `ref` nem deslocamento. Para ele acompanhar o dedo sem mexer lá, o
+ * shell o encontra pelo que ele já tem de único — o `aside` de diálogo com a
+ * `anim-deslizar-direita`, que nenhuma outra peça usa — e escreve o `transform`
+ * direto no nó, como faz com a tela empilhada. O jeito certo é o painel receber
+ * a `ref` (registrado no PR).
+ */
+function painelLateral(): HTMLElement | null {
+  if (typeof document === "undefined") return null;
+  return document.querySelector<HTMLElement>("aside.anim-deslizar-direita[role='dialog']");
+}
+
+/**
+ * Tira a animação de entrada do caminho: uma animação CSS vence o `transform`
+ * inline enquanto roda, e a camada ficaria surda ao dedo nos primeiros 220ms.
+ * Fica `none` até o nó sair do DOM — apagar o valor inline religaria a classe,
+ * e a entrada tocaria de novo.
+ */
+function tirarAnimacao(el: HTMLElement | null) {
+  if (!el) return;
+  el.style.animation = "none";
+  el.style.transition = "none";
+}
+
+function fecharMembros() {
+  if (useMobile.getState().membrosAbertos) useMobile.setState({ membrosAbertos: false });
+}
+
+/**
+ * Os arrastos do shell.
+ *
+ * **Na conversa** (canal ou DM empilhado):
+ *
+ * - **para a direita** revela a base da aba — a rail e a coluna de canais — por
+ *   baixo, com a conversa acompanhando o dedo. Soltado além da metade (ou num
+ *   arremesso), a conversa fica **estacionada** com 24 pt à vista na borda
+ *   direita e a barra de abas volta: é `discord-mobile-servidor-2024.png`. Um
+ *   toque na borda, um arrasto para a esquerda em qualquer lugar ou o "voltar"
+ *   do sistema a trazem de volta (a gaveta aberta é uma camada do
+ *   `useVoltarNoCelular`). A seta do cabeçalho continua desempilhando, como
+ *   antes;
+ * - **para a esquerda** abre a lista de membros (o mesmo `PainelDeslizante` do
+ *   título), que entra acompanhando o dedo. Com ela aberta, arrastá-la para a
+ *   direita a fecha.
+ *
+ * **Em Amigos e no diretório de aplicativos**, com uma tela só na pilha, o
+ * arrasto para a direita desempilha — é a volta por gesto de qualquer pilha do
+ * iOS, e a base que aparece por baixo é mesmo a tela de destino.
+ *
+ * O palco da chamada fica de fora: tem gestos próprios (a alça dos controles,
+ * a grade), e desempilhar a chamada por um arrasto de lado é o tipo de acidente
+ * que só se descobre no meio de uma call.
+ *
+ * Com movimento reduzido nada acompanha o dedo: soltar decide, e a camada troca
+ * de lugar sem animação.
+ */
+function useGestosDoShell(regiao: RefObject<HTMLDivElement>, tela: RefObject<HTMLDivElement>) {
+  const [aberta, setAberta] = useState(false);
+  /** a coluna de canais está encolhida para a borda da conversa (gaveta não fechada de todo). */
+  const [bordaReservada, setBordaReservada] = useState(false);
+  /** o valor de agora, para quem lê fora do render (toque na lista, gesto). */
+  const abertaAgora = useRef(false);
+  const modo = useRef<ModoDoArrasto | null>(null);
+  /** curso do arrasto em curso, em px, medido ao travar o eixo. */
+  const curso = useRef(0);
+  /** a lista de membros foi aberta por um arrasto que ainda não soltou. */
+  const membrosPeloDedo = useRef(false);
+  const membrosAbertos = useMobile((s) => s.membrosAbertos);
+  const aba = useMobile((s) => s.aba);
+  const pilhas = useMobile((s) => s.pilhas);
+
+  const abrir = useCallback(() => {
+    abertaAgora.current = true;
+    setAberta(true);
+    setBordaReservada(true);
+    const el = tela.current;
+    // o teclado não fica aberto atrás de uma conversa estacionada
+    const foco = document.activeElement;
+    if (el && foco instanceof HTMLElement && el.contains(foco)) foco.blur();
+    tirarAnimacao(el);
+    assentar(el, TRANSFORM_DA_GAVETA_ABERTA, true);
+  }, [tela]);
+
+  const fechar = useCallback(
+    (animar = true) => {
+      abertaAgora.current = false;
+      setAberta(false);
+      const el = tela.current;
+      assentar(el, "translate3d(0, 0, 0)", animar, () => {
+        // reaberta, ou já agarrada por outro arrasto de gaveta, no meio do
+        // caminho: quem soltar esse arrasto decide o resto
+        if (abertaAgora.current) return;
+        if (modo.current === "abrir-gaveta" || modo.current === "fechar-gaveta") return;
+        if (el) {
+          el.style.transform = "";
+          el.style.transition = "";
+        }
+        setBordaReservada(false);
+      });
+    },
+    [tela],
+  );
+
+  useVoltarNoCelular(aberta, fechar);
+
+  // trocou de aba, a pilha mudou por outro caminho (a caixa de entrada abriu
+  // uma DM, a barra de voz abriu o palco): a gaveta não tem mais o que guardar
+  useEffect(() => {
+    if (abertaAgora.current && !podeEstacionar()) fechar(false);
+  }, [aba, pilhas, fechar]);
+
+  useArrastoHorizontal(regiao, {
+    ligado: true,
+    podeComecar: (e) => {
+      if (useUI.getState().modals.length > 0) return false;
+      // a própria gaveta aberta é uma camada; qualquer outra por cima manda
+      if (camadasNoCelular() > (abertaAgora.current ? 1 : 0)) return false;
+      const s = useMobile.getState();
+      if (s.folha || s.membrosAbertos) return false;
+      if (abertaAgora.current) return true;
+      const el = tela.current;
+      return !!el && e.target instanceof Node && el.contains(e.target);
+    },
+    aoTravar: (sentido) => {
+      const el = tela.current;
+      if (!el) return null;
+      const largura = el.offsetWidth;
+      if (abertaAgora.current) {
+        if (sentido !== -1) return null;
+        modo.current = "fechar-gaveta";
+        curso.current = largura - BORDA_DA_CONVERSA;
+        tirarAnimacao(el);
+        return { min: -curso.current, max: 0 };
+      }
+      const { pilha, topo } = pilhaAgora();
+      if (sentido === 1) {
+        if (podeEstacionar()) {
+          modo.current = "abrir-gaveta";
+          curso.current = largura - BORDA_DA_CONVERSA;
+          setBordaReservada(true);
+          tirarAnimacao(el);
+          return { min: 0, max: curso.current };
+        }
+        if (pilha.length === 1 && (topo === "amigos" || topo === "aplicativos")) {
+          modo.current = "voltar";
+          curso.current = largura;
+          tirarAnimacao(el);
+          return { min: 0, max: largura };
+        }
+        return null;
+      }
+      if (topo === "canal" || topo === "conversa") {
+        modo.current = "membros";
+        curso.current = largura;
+        if (!movimentoReduzido()) {
+          membrosPeloDedo.current = true;
+          useMobile.getState().abrirMembros();
+        }
+        return { min: -largura, max: 0 };
+      }
+      return null;
+    },
+    aoMover: (dx) => {
+      if (movimentoReduzido()) return;
+      const el = tela.current;
+      switch (modo.current) {
+        case "abrir-gaveta":
+        case "voltar":
+          if (el) el.style.transform = `translate3d(${dx}px, 0, 0)`;
+          return;
+        case "fechar-gaveta":
+          if (el) el.style.transform = `translate3d(${curso.current + dx}px, 0, 0)`;
+          return;
+        case "membros": {
+          const painel = painelLateral();
+          if (!painel) return; // ainda montando: o próximo quadro alcança
+          tirarAnimacao(painel);
+          const w = painel.offsetWidth;
+          const x = limitar(w + dx, 0, w);
+          painel.style.transform = `translate3d(${x}px, 0, 0)`;
+          pintarVeu(painel.parentElement, w ? 1 - x / w : 1);
+          return;
+        }
+      }
+    },
+    aoSoltar: (dx, velocidade) => soltar(dx, velocidade),
+    // o sistema tomou o toque: tudo volta para onde estava antes do gesto
+    aoCancelar: () => soltar(0, 0),
+  });
+
+  function soltar(dx: number, velocidade: number) {
+    const m = modo.current;
+    modo.current = null;
+    const el = tela.current;
+    const c = curso.current;
+    switch (m) {
+      case "abrir-gaveta":
+        if (decidirSoltura({ progresso: c ? dx / c : 0, velocidade, sentido: 1 })) abrir();
+        else fechar();
+        return;
+      case "fechar-gaveta":
+        if (decidirSoltura({ progresso: c ? -dx / c : 0, velocidade, sentido: -1 })) fechar();
+        else abrir();
+        return;
+      case "voltar":
+        if (decidirSoltura({ progresso: c ? dx / c : 0, velocidade, sentido: 1 })) {
+          assentar(el, "translate3d(100%, 0, 0)", true, () => useMobile.getState().voltar());
+        } else {
+          assentar(el, "", true);
+        }
+        return;
+      case "membros": {
+        membrosPeloDedo.current = false;
+        const painel = painelLateral();
+        const w = painel?.offsetWidth ?? c;
+        const abrirPainel = decidirSoltura({ progresso: w ? -dx / w : 0, velocidade, sentido: -1 });
+        if (movimentoReduzido()) {
+          if (abrirPainel) useMobile.getState().abrirMembros();
+          return;
+        }
+        if (!painel) {
+          // soltou antes de o painel montar: se abre, a entrada dele resolve
+          if (!abrirPainel) fecharMembros();
+          return;
+        }
+        assentarPainel(painel, abrirPainel);
+        return;
+      }
+    }
+  }
+
+  /*
+    O painel acabou de montar por um arrasto: antes da primeira pintura ele sai
+    da posição de entrada da animação e vai para fora da tela, de onde o dedo o
+    puxa. E o `touch-action` do véu vai para `pan-y` — o painel é um portal, fora
+    da área do shell, e sem isto o arrasto de fechar nunca receberia um
+    `pointermove` de lado.
+  */
+  useEfeitoDeLeiaute(() => {
+    if (!membrosAbertos) return;
+    const painel = painelLateral();
+    if (!painel) return;
+    if (painel.parentElement) painel.parentElement.style.touchAction = "pan-y";
+    if (!membrosPeloDedo.current) return;
+    tirarAnimacao(painel);
+    painel.style.transform = "translate3d(100%, 0, 0)";
+    pintarVeu(painel.parentElement, 0);
+  }, [membrosAbertos]);
+
+  /** o painel de membros aberto: arrastá-lo para a direita o fecha. */
+  const painelArrastado = useRef<HTMLElement | null>(null);
+  useArrastoHorizontal(null, {
+    ligado: membrosAbertos,
+    podeComecar: (e) => {
+      if (useUI.getState().modals.length > 0 || camadasNoCelular() > 0) return false;
+      if (useMobile.getState().folha) return false;
+      const painel = painelLateral();
+      const veu = painel?.parentElement;
+      if (!painel || !veu || !(e.target instanceof Node) || !veu.contains(e.target)) return false;
+      painelArrastado.current = painel;
+      return true;
+    },
+    aoTravar: (sentido) => {
+      const painel = painelArrastado.current;
+      if (sentido !== 1 || !painel) return null;
+      tirarAnimacao(painel);
+      return { min: 0, max: painel.offsetWidth };
+    },
+    aoMover: (dx) => {
+      const painel = painelArrastado.current;
+      if (!painel || movimentoReduzido()) return;
+      const w = painel.offsetWidth;
+      painel.style.transform = `translate3d(${dx}px, 0, 0)`;
+      pintarVeu(painel.parentElement, w ? 1 - dx / w : 1);
+    },
+    aoSoltar: (dx, velocidade) => {
+      const painel = painelArrastado.current;
+      painelArrastado.current = null;
+      if (!painel) return;
+      const w = painel.offsetWidth;
+      const fecharPainel = decidirSoltura({ progresso: w ? dx / w : 0, velocidade, sentido: 1 });
+      if (movimentoReduzido()) {
+        if (fecharPainel) fecharMembros();
+        return;
+      }
+      assentarPainel(painel, !fecharPainel);
+    },
+    aoCancelar: () => {
+      const painel = painelArrastado.current;
+      painelArrastado.current = null;
+      if (painel) assentarPainel(painel, true);
+    },
+  });
+
+  return { aberta, bordaReservada, abertaAgora, fechar };
+}
+
+/** Leva o painel de membros até aberto (0) ou até fora da tela, e aí o fecha. */
+function assentarPainel(painel: HTMLElement, aberto: boolean) {
+  const veu = painel.parentElement;
+  if (aberto) {
+    pintarVeu(veu, 1, true);
+    assentar(painel, "translate3d(0, 0, 0)", true, () => {
+      painel.style.transform = "";
+      painel.style.transition = "";
+      pintarVeu(veu, null);
+    });
+    return;
+  }
+  pintarVeu(veu, 0, true);
+  assentar(painel, "translate3d(100%, 0, 0)", true, fecharMembros);
 }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Keyboard, Mic, RefreshCw, Video } from "@/components/ui/icones";
 import { PTT_RELEASE_MS } from "@streamz/shared";
 import { RadioCards, Section, Select, Slider, ToggleLinha } from "@/components/ui/controls";
+import { Button } from "@/components/ui/primitivos";
 import { SegmentosDeQualidade } from "@/components/voice/qualidade-de-tela";
 import { useTesteDeMicrofone } from "@/components/voice/useTesteDeMicrofone";
 import { useT } from "@/lib/i18n";
@@ -64,6 +65,8 @@ export default function VozTab() {
   const [erro, setErro] = useState<string | null>(null);
   const [camera, setCamera] = useState(false);
   const [capturando, setCapturando] = useState(false);
+  const [atualizandoLista, setAtualizandoLista] = useState(false);
+  const [abrindoCamera, setAbrindoCamera] = useState(false);
   const { testando, nivel, erro: erroDoTeste, alternar: alternarTeste } = useTesteDeMicrofone();
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -90,11 +93,25 @@ export default function VozTab() {
     void refresh();
   }
 
+  // "Atualizar lista" é o pedido explícito de tentar de novo a permissão
+  // (ver o comentário no botão); o estado `carregando` do `Button` é o único
+  // aviso de que o clique pegou — sem ele, uma permissão que demora parece um
+  // botão morto.
+  async function atualizarLista() {
+    setAtualizandoLista(true);
+    try {
+      await devices.refresh(true);
+    } finally {
+      setAtualizandoLista(false);
+    }
+  }
+
   async function alternarCamera() {
     if (camera) {
       pararCamera();
       return;
     }
+    setAbrindoCamera(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: devices.cameraId ? { deviceId: { exact: devices.cameraId } } : true,
@@ -107,6 +124,8 @@ export default function VozTab() {
     } catch {
       setErro(explicarMidia(motivoDaFalha()) ?? t("voz.semPermissao"));
       pararCamera();
+    } finally {
+      setAbrindoCamera(false);
     }
   }
 
@@ -159,21 +178,26 @@ export default function VozTab() {
           {!devices.autorizado && (
             // o motivo real, e não sempre "conceda a permissão": no desktop a
             // captura é aceita e mesmo assim os nomes não vêm
-            <p className="min-w-0 flex-1 text-xs text-yellow">
+            <p className="min-w-0 flex-1 text-xs text-status-warning">
               {explicarMidia(devices.motivo) ??
                 "Conceda acesso ao microfone para ver o nome dos dispositivos."}
             </p>
           )}
-          <button
-            type="button"
+          <Button
+            variante="link"
+            tamanho="xs"
+            icone={<RefreshCw size={14} aria-hidden="true" />}
             // `true`: este botão é o pedido explícito de tentar de novo, e tem
             // de furar a trava que impede um prompt por abertura de menu
-            onClick={() => void devices.refresh(true)}
-            className="ml-auto flex items-center gap-1.5 text-xs text-txt-muted transition hover:text-txt-primary celular:min-h-[44px]"
+            onClick={() => void atualizarLista()}
+            // estado "carregando": o próprio primitivo troca o rótulo pelos
+            // três pontos (`Button.tsx`) — sem isso, um pedido de permissão
+            // que demora parece um clique que não pegou
+            carregando={atualizandoLista}
+            className="ml-auto celular:min-h-[44px]"
           >
-            <RefreshCw size={14} aria-hidden="true" />
             Atualizar lista
-          </button>
+          </Button>
         </div>
       </Section>
 
@@ -190,11 +214,13 @@ export default function VozTab() {
         />
         {pushToTalk && (
           <div className="py-3">
-            <p className="mb-1.5 text-xs font-bold uppercase tracking-[0.02em] text-txt-secondary">
+            <p className="mb-1.5 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
               {t("voz.pttTecla")}
             </p>
-            <button
-              type="button"
+            <Button
+              variante={capturando ? "primario" : "secundario"}
+              tamanho="md"
+              icone={<Keyboard size={16} aria-hidden="true" />}
               onClick={() => setCapturando(true)}
               onKeyDown={(e) => {
                 if (!capturando) return;
@@ -205,14 +231,11 @@ export default function VozTab() {
               }}
               onBlur={() => setCapturando(false)}
               aria-label={t("voz.gravarTecla")}
-              className={`flex h-9 celular:h-[44px] items-center gap-1.5 rounded-[3px] px-3 text-sm transition ${
-                capturando ? "bg-accent text-accent-ink" : "bg-void text-txt-normal hover:bg-hov"
-              }`}
+              className="celular:h-[44px]"
             >
-              <Keyboard size={16} aria-hidden="true" />
               {capturando ? t("voz.apertePara") : pttRotulo(pttKey)}
-            </button>
-            <p className="mt-1.5 text-xs text-txt-muted">
+            </Button>
+            <p className="mt-1.5 text-xs text-text-muted">
               O microfone continua aberto por {PTT_RELEASE_MS} ms depois de soltar, para a última
               sílaba não sumir.
             </p>
@@ -234,7 +257,7 @@ export default function VozTab() {
             { value: "avancada", label: t("voz.ruidoAvancada") },
           ]}
         />
-        <p className="-mt-1 pb-3 text-xs text-txt-muted">{t("voz.ruidoAjuda")}</p>
+        <p className="-mt-1 pb-3 text-xs text-text-muted">{t("voz.ruidoAjuda")}</p>
         <ToggleLinha
           titulo={t("voz.eco")}
           checked={processamento.eco}
@@ -248,26 +271,47 @@ export default function VozTab() {
       </Section>
 
       <Section id="testar" title={t("voz.testarMic")}>
-        <div className="flex items-center gap-3 py-3">
-          <button
-            type="button"
+        {/*
+          Grade `auto 1fr`, não `flex`: é o leiaute medido do "Mic Test" do
+          Discord (`.micTest__011b7{display:grid;grid-template-columns:auto
+          1fr;column-gap:var(--space-16);align-items:center}`,
+          `docs/referencias-discord/tokens/css-bruto/333008.90c167df50b44f04.css`)
+          — o botão fica na primeira
+          coluna, o medidor ocupa o resto, e a legenda embaixo (`.micTestCaption
+          __011b7{grid-column:2;min-height:var(--space-32)}`) começa alinhada
+          com o medidor, não com o botão. `gap-4` = 16px (`--space-16`).
+        */}
+        <div className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-1 py-3">
+          <Button
+            variante="primario"
+            // 32px: medido no mesmo print (`Captura de tela 2026-09-01
+            // 113445.png`, botão "Testar" em x175–236/y448–479 = 61×32),
+            // igual ao botão do popover de supressão (`PopoverDeRuido.tsx`)
+            // — os dois testes são o mesmo hook, então o mesmo botão.
+            tamanho="sm"
+            icone={<Mic size={14} aria-hidden="true" />}
             onClick={testarMicrofone}
-            className="flex h-9 celular:h-[44px] shrink-0 items-center gap-2 rounded-[3px] bg-accent px-3 text-sm font-medium text-accent-ink hover:bg-accent-hover"
+            className="shrink-0 celular:h-[44px]"
           >
-            <Mic size={16} aria-hidden="true" />
             {testando ? t("voz.parar") : t("voz.testar")}
-          </button>
+          </Button>
           <MedidorDeMicrofone nivel={nivel} rotulo={t("voz.volumeEntrada")} />
+          {/* `min-h-8` (32px) reserva a altura da legenda antes de ela trocar
+              de texto — sem a reserva, o erro do teste empurra o resto da
+              seção para baixo quando aparece. `col-start-2`: por baixo do
+              medidor, como no `.micTestCaption__011b7` medido acima. */}
+          <p className="col-start-2 min-h-8 text-xs text-text-muted">
+            {/* O que o teste faz, dito antes de a pessoa estranhar o silêncio
+                (e os dois ícones acesos no rodapé): o Discord também
+                ensurdece, e sem o aviso parece que a call caiu. */}
+            {testando
+              ? "Você está se ouvindo. Enquanto o teste durar você fica mudo e surdo — a sala não te ouve e você não ouve ninguém."
+              : "Você vai se ouvir; enquanto o teste durar você fica mudo e surdo, e a chamada fica em silêncio dos dois lados."}
+          </p>
+          {erroDoTeste && (
+            <p className="col-start-2 text-xs text-status-danger">{erroDoTeste}</p>
+          )}
         </div>
-        {/* O que o teste faz, dito antes de a pessoa estranhar o silêncio (e
-            os dois ícones acesos no rodapé): o Discord também ensurdece, e sem
-            o aviso parece que a call caiu. */}
-        <p className="-mt-1 pb-3 text-xs text-txt-muted">
-          {testando
-            ? "Você está se ouvindo. Enquanto o teste durar você fica mudo e surdo — a sala não te ouve e você não ouve ninguém."
-            : "Você vai se ouvir; enquanto o teste durar você fica mudo e surdo, e a chamada fica em silêncio dos dois lados."}
-        </p>
-        {erroDoTeste && <p className="pb-3 text-xs text-red">{erroDoTeste}</p>}
       </Section>
 
       <Section id="tela" title={t("voz.tela")}>
@@ -276,7 +320,7 @@ export default function VozTab() {
         </div>
         {/* O custo de subida é a única coisa que o usuário não consegue deduzir
             sozinho, e é o que decide se 1440p vai funcionar na conexão dele. */}
-        <p className="-mt-1 pb-3 text-xs text-txt-muted">
+        <p className="-mt-1 pb-3 text-xs text-text-muted">
           Usa cerca de {estimativaDeBanda(screenQuality)} da sua internet de subida
         </p>
         <ToggleLinha
@@ -298,7 +342,7 @@ export default function VozTab() {
             emptyLabel={t("voz.padraoSistema")}
             disabled={devices.cameras.length === 0}
           />
-          <div className="my-3 grid aspect-video w-full max-w-[420px] place-items-center overflow-hidden rounded-lg bg-void">
+          <div className="my-3 grid aspect-video w-full max-w-[420px] place-items-center overflow-hidden rounded-lg bg-input-background-default">
             {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
             <video
               ref={videoRef}
@@ -308,19 +352,21 @@ export default function VozTab() {
               aria-label={t("voz.previaCamera")}
               className={`h-full w-full object-cover ${camera ? "" : "hidden"}`}
             />
-            {!camera && <Video size={40} className="text-txt-faint" aria-hidden="true" />}
+            {!camera && <Video size={40} className="text-channels-default" aria-hidden="true" />}
           </div>
-          <button
-            type="button"
+          <Button
+            variante="secundario"
+            tamanho="md"
             onClick={() => void alternarCamera()}
-            className="h-9 celular:h-[44px] rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-normal hover:bg-border-strong-hover"
+            carregando={abrindoCamera}
+            className="celular:h-[44px]"
           >
             {camera ? t("voz.desligarCamera") : t("voz.ligarCamera")}
-          </button>
+          </Button>
         </div>
       </Section>
 
-      {erro && <p className="text-sm text-red">{erro}</p>}
+      {erro && <p className="text-sm text-status-danger">{erro}</p>}
     </>
   );
 }
@@ -333,6 +379,17 @@ const BLOCOS = 20;
  * Não é decoração: com blocos discretos dá para ver *quantos* acendem e voltar
  * ao mesmo ponto depois de mexer no volume — uma barra contínua a 40% e a 45%
  * é a mesma imagem.
+ *
+ * As duas cores vêm do mesmo print, medidas em repouso (nenhum bloco aceso):
+ * `linha 463, x175–420` de `Captura de tela 2026-09-01 113445.png` dá o traço
+ * em `#46474f`, que bate exato com `--neutral-56` e quase exato (dist. 6, a
+ * antisserrilhado) com `--slider-track-background` (`#474851`) — o mesmo
+ * trilho que o `Slider`/`SliderMarcas` de `ui/controls.tsx` já usa para "sem
+ * valor". O aceso não aparece em nenhum print parado; fica `--brand-500`, o
+ * preenchido desses dois sliders (e do `accent-brand-500` do `<input
+ * type=range>` do modo PTT/sensibilidade) — não `--status-positive` (verde):
+ * essa é a cor do anel de quem fala (`AnelDeFala`) e da bolinha "on-line", não
+ * de medidor de volume, e o Discord não mistura as duas.
  */
 function MedidorDeMicrofone({ nivel, rotulo }: { nivel: number; rotulo: string }) {
   const acesos = Math.round(nivel * BLOCOS);
@@ -350,7 +407,7 @@ function MedidorDeMicrofone({ nivel, rotulo }: { nivel: number; rotulo: string }
           key={i}
           aria-hidden="true"
           className={`h-full flex-1 rounded-[1px] transition-colors duration-75 ${
-            i < acesos ? "bg-green" : "bg-void"
+            i < acesos ? "bg-brand-500" : "bg-slider-track-background"
           }`}
         />
       ))}

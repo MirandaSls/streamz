@@ -52,14 +52,14 @@ export default function Toasts() {
         return (
           <div
             key={toast.id}
-            className={`flex items-center gap-2 rounded-full bg-overlay px-3.5 py-2 text-sm text-txt-normal shadow-high transition duration-200 anim-menu ${
+            className={`flex items-center gap-2 rounded-full bg-background-surface-higher px-3.5 py-2 text-sm text-text-default shadow-popout transition duration-200 anim-menu ${
               foi ? "-translate-y-1 opacity-0" : "opacity-100"
             }`}
           >
             {toast.kind === "error" ? (
-              <AlertTriangle size={16} aria-hidden="true" className="shrink-0 text-red" />
+              <AlertTriangle size={16} aria-hidden="true" className="shrink-0 text-status-danger" />
             ) : (
-              <Check size={16} aria-hidden="true" className="shrink-0 text-accent" />
+              <Check size={16} aria-hidden="true" className="shrink-0 text-brand-500" />
             )}
             <span className="min-w-0">{toast.text}</span>
           </div>

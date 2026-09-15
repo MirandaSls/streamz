@@ -1,11 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ChevronDown, Headphones, HeadphoneOff, Mic, MicOff, Settings } from "@/components/ui/icones";
+import { ChevronDown, Headphones, HeadphoneOff, Mic, MicOff, Phone, Settings, Volume2 } from "@/components/ui/icones";
 import { customStatusOf, displayNameOf } from "@streamz/shared";
 import Avatar, { STATUS_LABEL } from "@/components/ui/Avatar";
 import PopoverFlutuante from "@/components/ui/PopoverFlutuante";
 import Tooltip from "@/components/ui/Tooltip";
+import { BotaoDeIcone } from "@/components/ui/primitivos";
 import VoiceConnectedBar from "@/components/voice/VoiceConnectedBar";
 import {
   LARGURA_DO_MENU_DE_AUDIO,
@@ -15,6 +16,7 @@ import {
 import { useAuth } from "@/stores/auth";
 import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
 import { anchorOf, useUI } from "@/stores/ui";
+import { useVoice } from "@/stores/voice";
 import { useVoicePrefs } from "@/stores/voicePrefs";
 
 /** Botão de ícone do rodapé (32px, hover claro). */
@@ -27,18 +29,7 @@ function FooterButton({
   onClick: () => void;
   children: React.ReactNode;
 }) {
-  return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        onClick={onClick}
-        aria-label={label}
-        className="grid h-8 w-8 place-items-center rounded-[4px] text-txt-secondary transition hover:bg-hov hover:text-txt-primary"
-      >
-        {children}
-      </button>
-    </Tooltip>
-  );
+  return <BotaoDeIcone rotulo={label} icone={children} tamanho="md" comFundo onClick={onClick} />;
 }
 
 /**
@@ -77,8 +68,8 @@ function FooterSplit({
   const par = useRef<HTMLDivElement>(null);
 
   const cor = off
-    ? "bg-red/15 text-red hover:bg-red/25"
-    : "text-txt-secondary hover:bg-hov hover:text-txt-primary";
+    ? "bg-status-danger/15 text-status-danger hover:bg-status-danger/25"
+    : "text-text-subtle hover:bg-interactive-background-hover hover:text-text-strong";
 
   return (
     <div ref={par} className="flex items-center gap-px">
@@ -139,6 +130,12 @@ export default function UserFooter() {
   const deafened = useVoicePrefs((s) => s.deafened);
   const toggleMute = useVoicePrefs((s) => s.toggleMute);
   const toggleDeafen = useVoicePrefs((s) => s.toggleDeafen);
+  // mesma leitura que `VoiceConnectedBar`: `channelId` é "estou numa chamada
+  // agora"; `guildId` distingue canal de voz de servidor (guildId) de call de
+  // DM (guildId nulo).
+  const vozChannelId = useVoice((s) => s.channelId);
+  const vozGuildId = useVoice((s) => s.guildId);
+  const emVoz = Boolean(vozChannelId);
 
   if (!user) return null;
   // o status personalizado chega por presença, não pelo `user` da sessão
@@ -150,10 +147,24 @@ export default function UserFooter() {
      * O card **flutua**: sai do fluxo da coluna e a lista rola por trás dele.
      *
      * Era um rodapé em fluxo, encostado nas três bordas e da largura inteira da
-     * coluna. Medido no print do Discord, o card de lá tem 58px de altura, raio
-     * de 8px, borda de 1px e 10px de recuo dos três lados — e a lista continua
-     * atrás: dá para ver um avatar cortado pela borda de cima do card, e o
-     * divisor da coluna reaparece embaixo dele.
+     * coluna. `.panels__5e434` (css-bruto/307314.9ca6eb41da8da923.css) é este
+     * mesmo cartão no Discord: `background: var(--background-gradient-highest,
+     * var(--background-base-low))`, `border: 1px solid var(--border-muted)`,
+     * `border-radius: var(--radius-sm)` (8px), posição absoluta com
+     * `--custom-panels-spacing` (= `min(var(--space-xs), var(--space-8))` =
+     * 8px, os dois iguais) como `bottom`/`inset-inline-start`, e a largura
+     * `calc(100% - var(--custom-panels-spacing)*2)`. O CSS resolve 8px, mas o
+     * print 1:1 manda: em `2026-09-02 152318.png` o painel tem 10px livres dos
+     * dois lados (linha y=1015, x 10–364 numa coluna de 375) e 10px até a base
+     * (coluna x=150, y 1022–1031) — daí `2.5`, não `2`. A lista continua atrás:
+     * dá para ver um avatar cortado pela borda de cima do card, e o divisor da
+     * coluna reaparece embaixo dele.
+     *
+     * A linha principal (abaixo) tem 56px (`h-14`): medida entre a divisória e a
+     * borda de baixo em `2026-08-31 101842.png` (y 850–905) e
+     * `2026-08-31 160106.png` (y 680–735), avatar de 32 com 12 acima e abaixo;
+     * com a borda de 1px em cima e embaixo o cartão dá os 58 de `152318`
+     * (y 964–1021). O CSS não fixa altura, o cartão cresce com o conteúdo.
      *
      * A diferença não é enfeite. Encostado nas bordas, o painel lê como o fim da
      * coluna; recuado, lê como uma peça por cima dela — que é o que ele é, já
@@ -164,11 +175,11 @@ export default function UserFooter() {
      */
     <div
       ref={painel}
-      className="pointer-events-auto absolute inset-x-2.5 bottom-2.5 z-20 flex flex-col overflow-hidden rounded-lg border border-border bg-footer"
+      className="pointer-events-auto absolute inset-x-2.5 bottom-2.5 z-20 flex flex-col overflow-hidden rounded-lg border border-border-muted bg-background-base-low"
     >
       {/* f-voz: a barra da call sobe junto, como parte da mesma pilha flutuante */}
       <VoiceConnectedBar />
-      <div className="flex h-[58px] shrink-0 items-center gap-2 px-3.5">
+      <div className="flex h-14 shrink-0 items-center gap-2 px-3.5">
         <button
           type="button"
           /*
@@ -180,18 +191,44 @@ export default function UserFooter() {
           */
           onClick={(e) => openProfile(user, anchorOf(painel.current ?? e.currentTarget), true)}
           aria-label="Meu perfil"
-          className="-ml-1 flex min-w-0 flex-1 items-center gap-2 rounded-[4px] py-1 pl-1 pr-2 text-left transition hover:bg-hov"
+          className="-ml-1 flex min-w-0 flex-1 items-center gap-2 rounded-[4px] py-1 pl-1 pr-2 text-left transition hover:bg-interactive-background-hover"
         >
-          <Avatar user={vivo} size="md" status={status} surface="border-footer" />
+          <Avatar user={vivo} size="md" status={status} surface="border-background-base-low" />
           <span className="min-w-0">
-            <span className="block truncate text-base font-semibold leading-[19px] text-txt-primary">
+            <span className="block truncate text-base font-semibold leading-[19px] text-text-strong">
               {displayNameOf(user)}
             </span>
-            {/* o status personalizado tem prioridade sobre o rótulo do estado:
-                é o que o Discord mostra quando a pessoa escreveu algo */}
-            <span className="block truncate text-xs leading-[13px] text-txt-muted">
-              {customStatusOf(vivo) ?? STATUS_LABEL[status]}
-            </span>
+            {/*
+              Conectado à voz **substitui** o status (custom incluso): medido
+              em `2026-08-31 101842.png` ("🔊 Em voz", canal de servidor) e
+              `2026-08-31 160106.png` ("📞 Em uma chamada", call de DM), no
+              lugar da linha de status de sempre. O ícone muda com `guildId`
+              (canal de voz vs. chamada de DM), como `VoiceConnectedBar` já
+              distingue os dois pelo mesmo campo.
+
+              Só o **ícone** é verde; o texto é cinza. Em 101842 o texto tem
+              picos #a1a2a8/#abacb2 (x 80–120, y 886–890) = `text-subtle`, e o
+              alto-falante é #45a366 sólido (x 65–69) — a mesma cor que a
+              bolinha de presença tem nesse print (x 47–54, y 890). A nossa
+              bolinha é `icon-status-online` (#3d9e60) e sai com esse mesmo
+              desvio de captura, então o ícone usa o token dela, não um hex.
+            */}
+            {emVoz ? (
+              <span className="flex items-center gap-1 truncate text-xs leading-[13px] text-text-subtle">
+                {vozGuildId ? (
+                  <Volume2 size={12} className="shrink-0 text-icon-status-online" aria-hidden="true" />
+                ) : (
+                  <Phone size={12} className="shrink-0 text-icon-status-online" aria-hidden="true" />
+                )}
+                <span className="truncate">{vozGuildId ? "Em voz" : "Em uma chamada"}</span>
+              </span>
+            ) : (
+              // o status personalizado tem prioridade sobre o rótulo do estado:
+              // é o que o Discord mostra quando a pessoa escreveu algo
+              <span className="block truncate text-xs leading-[13px] text-text-muted">
+                {customStatusOf(vivo) ?? STATUS_LABEL[status]}
+              </span>
+            )}
           </span>
         </button>
 

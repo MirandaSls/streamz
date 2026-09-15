@@ -67,10 +67,11 @@ const GRUPOS: { id: string; label?: string; abas: ServerSettingsTab[] }[] = [
  * "Configurações do servidor" — desenhada pela `JanelaDeConfiguracoes` de
  * `components/ui`, a mesma moldura das de usuário, canal e grupo.
  *
- * Entra nela em `fecharComoEsc`: nas configurações **do servidor** o Discord não
- * tem a barra de 48 com o X simples; o título é da página e o fechar é o X
- * redondo com "ESC" ao lado da coluna de conteúdo. As de usuário continuam com
- * a barra, que é como os prints de 2026-09-01 as mostram.
+ * Entra nela em `variante="tela-cheia"`: as configurações **do servidor** do
+ * Discord não são o modal de 1400 das de usuário, e sim a tela inteira do
+ * `standardSidebarView` (prints `2026-09-04 100541`–`100821`) — menu à
+ * esquerda sobre `--background-base-lowest`, sem véu, título escrito pela
+ * página e o fechar como círculo com "ESC" ao lado da coluna de conteúdo.
  *
  * Cada aba pede a permissão que a API exigiria, e a lista esconde as que o
  * usuário não tem: quem só pode banir vê "Banimentos" e nada mais.
@@ -234,7 +235,7 @@ export default function ServerSettingsModal({
       abaId={ativa}
       onAba={(id) => setAtiva(id as ServerSettingsTab)}
       tituloAba={aba?.label}
-      fecharComoEsc
+      variante="tela-cheia"
       rotuloFechar="Fechar configurações"
       controle={alteracoes}
       onClose={closeModal}
@@ -249,7 +250,11 @@ export default function ServerSettingsModal({
       {aba ? (
         aba.render()
       ) : (
-        <p className="text-sm text-txt-muted">
+        // estado "sem permissão": nenhuma aba passou pelo filtro. O Discord nem
+        // mostra a entrada "Configurações do servidor" nesse caso; aqui ela
+        // pode chegar por um link velho, então a tela explica em vez de abrir
+        // vazia
+        <p role="status" className="text-text-md text-text-muted">
           Você não tem permissão para gerenciar este servidor.
         </p>
       )}

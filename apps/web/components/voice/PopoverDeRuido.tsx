@@ -2,6 +2,7 @@
 
 import { BarraDeNivel, Chave } from "@/components/voice/pecas-de-voz";
 import { useTesteDeMicrofone } from "@/components/voice/useTesteDeMicrofone";
+import { Button } from "@/components/ui/primitivos";
 import { useVoice } from "@/stores/voice";
 
 /**
@@ -41,36 +42,32 @@ export default function PopoverDeRuido() {
         }
       />
 
-      <p className="text-xs leading-relaxed text-txt-muted">
+      <p className="text-xs leading-relaxed text-text-muted">
         Tira o barulho de fundo do seu microfone — ventilador, teclado, a rua —
         e deixa passar só a voz. Desligada, vale a redução comum do navegador.
       </p>
 
       <div className="space-y-2">
-        <p className="text-sm font-semibold text-txt-primary">Teste do microfone</p>
+        <p className="text-sm font-semibold text-text-strong">Teste do microfone</p>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={alternar}
-            className="h-8 shrink-0 rounded-[3px] bg-border-strong px-3 text-sm font-medium text-txt-primary transition hover:bg-border-strong-hover"
-          >
+          <Button variante="secundario" tamanho="sm" onClick={alternar} className="shrink-0">
             {testando ? "Parar" : "Testar"}
-          </button>
+          </Button>
           <span className="min-w-0 flex-1">
             <BarraDeNivel nivel={nivel} />
           </span>
         </div>
-        <p className="text-xs text-txt-muted">
+        <p className="text-xs text-text-muted">
           {testando
             ? "Fale: você está se ouvindo. Enquanto o teste durar você fica mudo e surdo — a sala não te ouve e você não ouve ninguém."
             : "Fale, ou bata palmas: com a supressão ligada, o outro lado ouve só você. Testar te deixa mudo e surdo até você parar."}
         </p>
-        {erro && <p className="text-xs text-red">{erro}</p>}
+        {erro && <p className="text-xs text-status-danger">{erro}</p>}
       </div>
 
       {/* Crédito honesto: o motor é o RNNoise, o mesmo que o Jitsi usa. Sem ele
           esta caixa insinuaria tecnologia própria que não é nossa. */}
-      <p className="border-t border-border pt-2 text-xs text-txt-faint">
+      <p className="border-t border-border-subtle pt-2 text-xs text-channels-default">
         Supressão avançada por RNNoise
       </p>
     </div>

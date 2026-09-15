@@ -21,9 +21,19 @@ import { InteractionsController } from "./interactions.controller";
 import { InteractionsService } from "./interactions.service";
 
 /**
- * ── j-bots · F3 ── comandos de barra e interações.
+ * ── j-bots ── comandos de barra e interações (F3), estendido pela **onda 3**
+ * com componente, modal e autocomplete (cartão 3a).
  *
  * **Este arquivo é do coordenador; os lotes não o editam.**
+ *
+ * `InteractionsController` (`interactions.controller.ts`) é o REST **interno**
+ * — `Authorization: Bearer` + `JwtGuard`, o que o navegador chama — e reúne
+ * hoje cinco rotas: `POST /api/channels/:id/interactions` (comando de barra, F3)
+ * e, da onda 3, `POST /api/channels/:id/interactions/componente` (clique em
+ * botão/select), `.../modal` (envio do modal aberto pelo bot) e
+ * `.../autocomplete` (sugestão da opção em foco), mais
+ * `GET /api/guilds/:id/comandos-de-app`. Contrato completo em
+ * `docs/CONTRATO-ONDA-3.md` §4.
  *
  * Por que os três controllers de `/api/v10/**` são registrados **aqui**, e não
  * no `DiscordCompatModule` onde os arquivos moram: eles precisam do
@@ -39,10 +49,12 @@ import { InteractionsService } from "./interactions.service";
  *
  * O caminho da rota não tem nada com o módulo que a registra: o Nest monta o
  * roteador uma vez, com todos os controllers. Os arquivos continuam em
- * `discord-compat/rest/`, como o §5 do documento desenhou.
+ * `discord-compat/rest/`, como o §5 do documento desenhou — e é lá, no
+ * `InteractionCallbackCompatController`, que moram os callbacks 4 a 9
+ * (`POST /api/v10/interactions/:id/:token/callback`) e os followups.
  *
- * Ver `docs/BOTS-COMPATIVEIS-COM-O-DISCORD.md` §9 e o `CONTRATO-F3.md` deste
- * diretório.
+ * Ver `docs/BOTS-COMPATIVEIS-COM-O-DISCORD.md` §9, `docs/CONTRATO-ONDA-3.md` e
+ * o `CONTRATO-F3.md` deste diretório (o que já valia antes da onda 3).
  */
 @Module({
   imports: [

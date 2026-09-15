@@ -47,6 +47,13 @@ export interface ChannelSlice {
   hasMore: boolean;
   loading: boolean;
   loadingOlder: boolean;
+  /**
+   * A última página mais antiga falhou. Fica no slice, e não num aviso solto,
+   * porque no Discord o erro de paginação é uma barra dentro da própria
+   * timeline (`.messagesErrorBar`), com "tentar de novo" — quem a desenha é o
+   * `MessageList`. Volta a `false` quando `loadOlder` recomeça.
+   */
+  loadingOlderError: boolean;
 }
 
 const EMPTY_SLICE: ChannelSlice = {
@@ -54,6 +61,7 @@ const EMPTY_SLICE: ChannelSlice = {
   hasMore: true,
   loading: false,
   loadingOlder: false,
+  loadingOlderError: false,
 };
 
 /**
@@ -84,6 +92,12 @@ interface OutboxEntry {
 }
 const outbox = new Map<string, OutboxEntry>();
 const ackTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/**
+ * Última busca pedida, para o "Tentar de novo" do painel: o painel só conhece
+ * o `guildId`, e a consulta no campo pode já ter mudado desde o pedido.
+ */
+let ultimaBusca: { channelId: string; guildId: string | null; query: string } | null = null;
 
 /** Timer do destaque do "ir para": um só, o último jump manda. */
 let highlightTimer: ReturnType<typeof setTimeout> | null = null;
@@ -130,6 +144,12 @@ interface MessagesState {
   searchQuery: string;
   searchResults: Message[] | null;
   searching: boolean;
+  /**
+   * Texto do erro da última busca, ou `null`. O Discord desenha a falha dentro
+   * do painel de resultados (`.errorMessage_a98f3b`), não num aviso flutuante;
+   * zera ao começar uma busca e em `clearSearch`.
+   */
+  searchError: string | null;
   /** onde a busca corre: só no canal aberto ou no servidor inteiro. */
   searchScope: "channel" | "guild";
 
@@ -174,6 +194,8 @@ interface MessagesState {
   setSearchQuery: (query: string) => void;
   /** busca no servidor quando há `guildId`; senão, só na conversa. */
   runSearch: (target: { channelId: string; guildId: string | null }) => Promise<void>;
+  /** Refaz a última busca pedida (consulta e alvo) — o "Tentar de novo" do erro. */
+  retrySearch: () => Promise<void>;
   clearSearch: () => void;
 
   startReply: (message: Message, threadId?: string | null) => void;
@@ -289,6 +311,7 @@ export const useMessages = create<MessagesState>((set, get) => {
         hasMore: history.length >= PAGE_SIZE,
         loading: false,
         loadingOlder: false,
+        loadingOlderError: false,
       });
     } catch (e) {
       if (!isCurrent(channelId, seq)) return;
@@ -307,6 +330,7 @@ export const useMessages = create<MessagesState>((set, get) => {
     searchQuery: "",
     searchResults: null,
     searching: false,
+    searchError: null,
     searchScope: "channel",
     replyTarget: null,
     replyMention: true,
@@ -326,6 +350,7 @@ export const useMessages = create<MessagesState>((set, get) => {
         searchQuery: "",
         searchResults: null,
         searching: false,
+        searchError: null,
         // responder é por canal: a barra não pode sobreviver à troca
         replyTarget: null,
         highlightId: null,
@@ -343,6 +368,7 @@ export const useMessages = create<MessagesState>((set, get) => {
         threadItems: [],
         searchQuery: "",
         searchResults: null,
+        searchError: null,
         replyTarget: null,
         highlightId: null,
         editingId: null,
@@ -364,7 +390,7 @@ export const useMessages = create<MessagesState>((set, get) => {
     loadOlder: async (channelId) => {
       const slice = get().byChannel[channelId];
       if (!slice || slice.loadingOlder || !slice.hasMore || slice.items.length === 0) return;
-      patchSlice(channelId, { loadingOlder: true });
+      patchSlice(channelId, { loadingOlder: true, loadingOlderError: false });
       const cursor = slice.items[0].id;
       try {
         const older = (await api.history(channelId, cursor)) as Message[];
@@ -373,9 +399,10 @@ export const useMessages = create<MessagesState>((set, get) => {
           loadingOlder: false,
           hasMore: older.length >= PAGE_SIZE,
         });
-      } catch (e) {
-        patchSlice(channelId, { loadingOlder: false });
-        ui.toast(errorMessage(e, "Não foi possível carregar mais mensagens"), "error");
+      } catch {
+        // sem aviso: a falha vira a barra de erro dentro da timeline
+        // (`loadingOlderError`, desenhada pelo `MessageList`)
+        patchSlice(channelId, { loadingOlder: false, loadingOlderError: true });
       }
     },
 
@@ -513,16 +540,21 @@ export const useMessages = create<MessagesState>((set, get) => {
 
     runSearch: async ({ channelId, guildId }) => {
       const query = get().searchQuery.trim();
+      const chave = `search:${guildId ?? channelId}`;
       if (!query) {
-        set({ searchResults: null });
+        // consulta vazia é o X do campo: além de fechar o painel, invalida a
+        // busca em curso — sem o `nextSeq`, a resposta atrasada passava no
+        // `isCurrent` e trazia os resultados de volta depois do X
+        nextSeq(chave);
+        set({ searchResults: null, searching: false, searchError: null });
         return;
       }
+      ultimaBusca = { channelId, guildId, query };
       // no servidor a busca corre no servidor inteiro (como no Discord); numa
       // conversa direta não há servidor, então ela corre só no canal
       const escopo = guildId ? "guild" : "channel";
-      const chave = `search:${guildId ?? channelId}`;
       const seq = nextSeq(chave);
-      set({ searching: true, searchScope: escopo });
+      set({ searching: true, searchScope: escopo, searchError: null });
       try {
         const results = (await (guildId
           ? api.searchGuild(guildId, query)
@@ -531,12 +563,25 @@ export const useMessages = create<MessagesState>((set, get) => {
         set({ searchResults: results, searching: false });
       } catch (e) {
         if (!isCurrent(chave, seq)) return;
-        set({ searching: false });
-        ui.toast(errorMessage(e, "A busca falhou"), "error");
+        // sem aviso: o erro aparece dentro do painel. `searchResults` fica como
+        // estava — a `TelaDeBusca` do celular deduz a falha comparando antes e
+        // depois (`desfechoDaBusca`), e zerar aqui esconderia essa falha lá
+        set({ searching: false, searchError: errorMessage(e, "A busca falhou.") });
       }
     },
 
-    clearSearch: () => set({ searchQuery: "", searchResults: null, searching: false }),
+    retrySearch: async () => {
+      const alvo = ultimaBusca;
+      if (!alvo) return;
+      set({ searchQuery: alvo.query });
+      await get().runSearch({ channelId: alvo.channelId, guildId: alvo.guildId });
+    },
+
+    clearSearch: () => {
+      // invalida a busca em curso pelo mesmo motivo do ramo vazio do `runSearch`
+      if (ultimaBusca) nextSeq(`search:${ultimaBusca.guildId ?? ultimaBusca.channelId}`);
+      set({ searchQuery: "", searchResults: null, searching: false, searchError: null });
+    },
 
     startReply: (message, threadId = null) =>
       set({
@@ -564,6 +609,7 @@ export const useMessages = create<MessagesState>((set, get) => {
             hasMore: true,
             loading: false,
             loadingOlder: false,
+            loadingOlderError: false,
           });
         } catch (e) {
           if (isCurrent(channelId, seq)) patchSlice(channelId, { loading: false });
@@ -622,6 +668,7 @@ export const useMessages = create<MessagesState>((set, get) => {
       ackTimers.clear();
       outbox.clear();
       seqByChannel.clear();
+      ultimaBusca = null;
       set({
         byChannel: {},
         recent: [],
@@ -632,6 +679,7 @@ export const useMessages = create<MessagesState>((set, get) => {
         searchQuery: "",
         searchResults: null,
         searching: false,
+        searchError: null,
         replyTarget: null,
         replyMention: true,
         highlightId: null,

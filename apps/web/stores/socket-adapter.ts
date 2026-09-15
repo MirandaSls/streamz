@@ -26,6 +26,26 @@ export function emit(event: string, payload?: unknown): void {
   clientSocket()?.emit(event, payload);
 }
 
+/**
+ * `emit` que espera a resposta do servidor (o ack do Socket.IO).
+ *
+ * Resolve com o que o handler do gateway devolveu; rejeita se o servidor não
+ * responder em `timeoutMs` (8s: folga para um comando que grava no banco sem
+ * deixar a tela pendurada) ou fora do browser. Com a conexão caída o
+ * `socket.timeout` também rejeita no prazo — o Socket.IO guarda o pacote no
+ * buffer, mas o ack não chega, e quem chamou precisa desfazer o otimista.
+ */
+export function emitComAck<T>(event: string, payload: unknown, timeoutMs = 8000): Promise<T> {
+  const socket = clientSocket();
+  if (!socket) return Promise.reject(new Error("Sem conexão com o servidor"));
+  return new Promise<T>((resolve, reject) => {
+    socket.timeout(timeoutMs).emit(event, payload, (err: Error | null, resposta: T) => {
+      if (err) reject(new Error("O servidor não respondeu a tempo"));
+      else resolve(resposta);
+    });
+  });
+}
+
 /** Registra um listener e devolve a função de remoção. */
 export function on<T>(event: string, handler: (payload: T) => void): () => void {
   const socket = clientSocket();

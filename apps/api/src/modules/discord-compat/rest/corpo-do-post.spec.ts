@@ -49,14 +49,16 @@ const CORPO_DO_DISCORD_JS = {
   content: "pong",
   tts: false,
   nonce: "1382915770057249472",
-  embeds: [{ title: "um embed", description: "que a F1 ainda não renderiza" }],
-  components: [{ type: 1, components: [] }],
+  embeds: [{ title: "um embed", description: "que a onda 3 guarda e a web desenha" }],
+  // uma action row **válida**: desde a onda 3 os componentes são validados com
+  // as regras do Discord, e uma row vazia leva 50035 lá também
+  components: [{ type: 1, components: [{ type: 2, style: 1, label: "Ok", custom_id: "ok" }] }],
   flags: 4,
   allowed_mentions: { parse: ["users"], replied_user: false },
   message_reference: { message_id: "1000000000000000000", fail_if_not_exists: false },
 };
 
-const criar = vi.fn(async () => ({ id: "msg_novo", channelId: "canal_1" }));
+const criar = vi.fn(async (..._a: unknown[]) => ({ id: "msg_novo", channelId: "canal_1" }));
 const emitToChannel = vi.fn();
 const apagarEmLote = vi.fn(async (..._a: unknown[]) => ({ deleted: [] as string[] }));
 
@@ -108,7 +110,8 @@ const ANTIGA = snowflakeDe(Date.now() - 20 * 24 * 60 * 60 * 1000);
       },
     },
     { provide: GuildsService, useValue: { assertCanViewChannel: async () => ({}) } },
-    { provide: MessagesService, useValue: { create: criar } },
+    // ── onda 3 ── mensagem de bot é `criarComoBot` (embeds e componentes guardados)
+    { provide: MessagesService, useValue: { criarComoBot: criar } },
     // F5 membros: quem apaga o lote do `bulk-delete`.
     { provide: ModerationService, useValue: { bulkDelete: apagarEmLote } },
     { provide: RealtimeService, useValue: { emitToChannel } },
@@ -186,11 +189,21 @@ describe("POST /api/v10/channels/:id/messages — o corpo sobrevive ao Validatio
       body: JSON.stringify(CORPO_DO_DISCORD_JS),
     });
 
-    expect(criar).toHaveBeenCalledWith("canal_1", "user_bot", "pong", undefined, [], {
-      replyToId: "msg_citada",
-      // `allowed_mentions.replied_user: false` desliga o "@ ligado"
-      replyMention: false,
-    });
+    expect(criar).toHaveBeenCalledWith(
+      "canal_1",
+      "user_bot",
+      expect.objectContaining({
+        content: "pong",
+        attachmentIds: [],
+        // `flags: 4` (SUPPRESS_EMBEDS) chega ao service, que a põe na coluna
+        flags: 4,
+        reply: {
+          replyToId: "msg_citada",
+          // `allowed_mentions.replied_user: false` desliga o "@ ligado"
+          replyMention: false,
+        },
+      }),
+    );
     // o mesmo evento e a mesma forma do chat.gateway, para o navegador ver a
     // resposta do bot sem F5
     expect(emitToChannel).toHaveBeenCalledWith("canal_1", "message.new", {
@@ -213,12 +226,13 @@ describe("POST /api/v10/channels/:id/messages — o corpo sobrevive ao Validatio
     expect(criar).not.toHaveBeenCalled();
   });
 
-  // ── F5 membros: embed sozinho é mensagem válida ─────────────
+  // ── F5 membros → onda 3: embed sozinho é mensagem válida, e é guardado ──
 
   // O defeito que quem tentou escrever um bot achou: o corpo `{ embeds: [...] }`
   // — o jeito como quase todo bot responde — levava
-  // `50035 content[BASE_TYPE_REQUIRED]`. No Discord ele é válido.
-  it("corpo só com `embeds` é aceito, e o embed vira texto (não linha em branco)", async () => {
+  // `50035 content[BASE_TYPE_REQUIRED]`. No Discord ele é válido. Na F5 o embed
+  // virava texto; na onda 3 ele é guardado como objeto e o texto fica vazio.
+  it("corpo só com `embeds` é aceito, e o embed é guardado (não achatado)", async () => {
     criar.mockClear();
     const resposta = await fetch(`${url}/api/v10/channels/999/messages`, {
       method: "POST",
@@ -229,20 +243,85 @@ describe("POST /api/v10/channels/:id/messages — o corpo sobrevive ao Validatio
     });
 
     expect(resposta.status).toBe(201);
-    const [, , conteudo] = criar.mock.calls.at(-1) as unknown as [string, string, string];
-    expect(conteudo).toBe("**Nível 5**\nParabéns!\n**XP**: 1200");
+    const [, , entrada] = criar.mock.calls.at(-1) as unknown as [
+      string,
+      string,
+      { content: string; embeds: unknown[] },
+    ];
+    expect(entrada.content).toBe("");
+    expect(entrada.embeds).toEqual([
+      {
+        type: "rich",
+        title: "Nível 5",
+        description: "Parabéns!",
+        fields: [{ name: "XP", value: "1200" }],
+      },
+    ]);
   });
 
-  it("corpo só com `components` também passa (a mensagem fica vazia, mas não é recusada)", async () => {
+  it("corpo só com `components` também passa, e os componentes ganham `id`", async () => {
     criar.mockClear();
     const resposta = await fetch(`${url}/api/v10/channels/999/messages`, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: "Bot a.b.c" },
-      body: JSON.stringify({ components: [{ type: 1, components: [] }] }),
+      body: JSON.stringify({
+        components: [{ type: 1, components: [{ type: 2, style: 2, label: "Oi", custom_id: "oi" }] }],
+      }),
     });
 
     expect(resposta.status).toBe(201);
-    expect(criar).toHaveBeenCalled();
+    const [, , entrada] = criar.mock.calls.at(-1) as unknown as [string, string, { components: unknown[] }];
+    expect(entrada.components).toEqual([
+      { type: 1, id: 1, components: [{ type: 2, id: 2, style: 2, label: "Oi", custom_id: "oi" }] },
+    ]);
+  });
+
+  it("embed fora do limite do Discord leva 50035 com o caminho do campo", async () => {
+    criar.mockClear();
+    const resposta = await fetch(`${url}/api/v10/channels/999/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bot a.b.c" },
+      body: JSON.stringify({ embeds: [{ title: "x".repeat(257) }] }),
+    });
+
+    expect(resposta.status).toBe(400);
+    const corpo = (await resposta.json()) as {
+      code: number;
+      errors: { embeds: { "0": { title: { _errors: { code: string }[] } } } };
+    };
+    expect(corpo.code).toBe(50035);
+    expect(corpo.errors.embeds["0"].title._errors[0]?.code).toBe("BASE_TYPE_MAX_LENGTH");
+    expect(criar).not.toHaveBeenCalled();
+  });
+
+  it("IS_COMPONENTS_V2 com `content` leva 50035 (regra do Discord)", async () => {
+    criar.mockClear();
+    const resposta = await fetch(`${url}/api/v10/channels/999/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bot a.b.c" },
+      body: JSON.stringify({
+        content: "não pode",
+        flags: 1 << 15,
+        components: [{ type: 10, content: "texto" }],
+      }),
+    });
+
+    expect(resposta.status).toBe(400);
+    expect(await resposta.json()).toMatchObject({ code: 50035, errors: { content: {} } });
+    expect(criar).not.toHaveBeenCalled();
+  });
+
+  it("botão sem `custom_id` leva 50035", async () => {
+    criar.mockClear();
+    const resposta = await fetch(`${url}/api/v10/channels/999/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bot a.b.c" },
+      body: JSON.stringify({ components: [{ type: 1, components: [{ type: 2, style: 1, label: "Sem id" }] }] }),
+    });
+
+    expect(resposta.status).toBe(400);
+    expect(await resposta.json()).toMatchObject({ code: 50035 });
+    expect(criar).not.toHaveBeenCalled();
   });
 
   // ── F5 membros: bulk-delete ─────────────────────────────────

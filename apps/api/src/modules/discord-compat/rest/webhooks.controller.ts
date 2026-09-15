@@ -4,18 +4,23 @@ import {
   Delete,
   Get,
   HttpCode,
+  Inject,
+  Optional,
   Param,
   Patch,
   Post,
+  UploadedFiles,
   UseFilters,
   UseInterceptors,
 } from "@nestjs/common";
+import { AnyFilesInterceptor } from "@nestjs/platform-express";
 import { SkipThrottle } from "@nestjs/throttler";
 import type { Message as MessageDTO } from "@streamz/shared";
 import { zodBody } from "../../../common/zod.pipe";
 import { InteractionsService } from "../../interactions/interactions.service";
 import type { InteracaoAutenticada } from "../../interactions/tipos";
 import { FLAG_EFEMERA } from "../../interactions/tipos";
+import { UploadsService } from "../../uploads/uploads.service";
 import { DadosDeCompatService } from "../dados.service";
 import {
   FiltroDeErrosDoDiscord,
@@ -26,7 +31,8 @@ import {
 import { RateLimitDoDiscordInterceptor } from "../rate-limit.interceptor";
 import type { MensagemDoDiscord } from "../tipos";
 import { mensagemParaDiscord } from "../traducao/mensagem";
-import { dadosDeRespostaSchema, type DadosDeResposta } from "./corpos-f3";
+import { PayloadJsonPipe, LIMITES_DO_MULTIPART, type ArquivoDoMultipart } from "./corpos";
+import { anexarArquivosAoCorpo, dadosDeRespostaSchema, type DadosDeResposta } from "./corpos-f3";
 
 /**
  * Os followups de uma interação — o `editReply()`, o `fetchReply()` e o
@@ -67,6 +73,11 @@ export class WebhooksCompatController {
   constructor(
     protected readonly interacoes: InteractionsService,
     protected readonly dados: DadosDeCompatService,
+    // ── rodada de correção ── o upload multipart do `followUp({ files })`.
+    // `@Optional` pelo mesmo motivo do `messages.controller.ts`: o
+    // `UploadsModule` não exporta o service e o `InteractionsModule` (do
+    // coordenador) não o importa. Desligado, arquivo leva 501.
+    @Optional() @Inject(UploadsService) protected readonly uploads?: UploadsService,
   ) {}
 
   /**
@@ -78,12 +89,20 @@ export class WebhooksCompatController {
    */
   @Post()
   @HttpCode(200)
+  // ── rodada de correção ── `multipart/form-data` (`payload_json` + `files[n]`):
+  // é assim que sai todo `followUp({ files })`. Num corpo JSON o multer passa
+  // direto.
+  @UseInterceptors(AnyFilesInterceptor({ limits: LIMITES_DO_MULTIPART }))
   async followup(
     @Param("app") app: string,
     @Param("token") token: string,
-    @Body(zodBody(dadosDeRespostaSchema)) dados: DadosDeResposta,
+    @Body(new PayloadJsonPipe(), zodBody(dadosDeRespostaSchema)) corpo: DadosDeResposta,
+    @UploadedFiles() arquivos: ArquivoDoMultipart[] | undefined,
   ): Promise<MensagemDoDiscord> {
+    // o token é conferido **antes** do upload: sem interação válida, nenhum
+    // byte vai para o bucket
     const interacao = await this.resolver(app, token);
+    const dados = await anexarArquivosAoCorpo(corpo, arquivos, this.uploads, interacao.botUserId);
     return this.reler(interacao, await this.interacoes.followup(interacao, dados));
   }
 
@@ -200,11 +219,17 @@ export class WebhooksCompatController {
     if (mensagem.efemera) {
       const efemera = await this.interacoes.linhaEfemeraParaCompat(mensagem.id);
       if (!efemera) throw mensagemDesconhecida();
-      return { ...mensagemParaDiscord(efemera), flags: FLAG_EFEMERA };
+      // ── onda 3 ── o `|` e não `=`: a efêmera também pode ter
+      // `IS_COMPONENTS_V2`, e a lib do bot precisa ver as duas
+      const traduzida = mensagemParaDiscord(efemera);
+      return { ...traduzida, flags: traduzida.flags | FLAG_EFEMERA };
     }
 
     const linha = await this.dados.mensagemPorCuid(mensagem.id, interacao.botUserId);
     if (!linha) throw mensagemDesconhecida();
+    // ── rodada de correção ── embeds, componentes e flags vêm da própria linha
+    // (o `select` da compat os traz). O DTO do service é o da web, com os
+    // snowflakes dos componentes já trocados por cuid — errado para o bot.
     return mensagemParaDiscord(linha);
   }
 }

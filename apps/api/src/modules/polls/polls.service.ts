@@ -4,20 +4,21 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { WS_EVENTS, isPollClosed } from "@streamz/shared";
+import { WS_EVENTS, ehEmojiDeResposta, isPollClosed, parseCustomEmoji } from "@streamz/shared";
 import type { Message as MessageDTO, Poll, PollVoters } from "@streamz/shared";
 import { toPublicUser } from "../../common/dto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { GuildsService } from "../guilds/guilds.service";
 import { MessagesService } from "../messages/messages.service";
 import { RealtimeService } from "../realtime/realtime.service";
-import { tallyPoll } from "./poll-core";
+import { normalizarEmojisDasOpcoes, tallyPoll } from "./poll-core";
 
 const POLL_SELECT = {
   id: true,
   messageId: true,
   question: true,
   options: true,
+  optionEmojis: true,
   multi: true,
   expiresAt: true,
   closedAt: true,
@@ -47,12 +48,23 @@ export class PollsService {
       channelId: string;
       question: string;
       options: string[];
+      /** emoji de cada opção, na mesma posição; null/"" = sem emoji. */
+      optionEmojis?: (string | null)[];
       multi?: boolean;
       durationHours?: number;
     },
   ): Promise<MessageDTO> {
-    // a mensagem carrega a autorização: castigo, regras, canal somente-leitura
-    const message = await this.messages.create(input.channelId, authorId, input.question);
+    // valida os emojis antes de criar a mensagem: um emoji recusado não pode
+    // deixar para trás uma mensagem órfã, sem a enquete pendurada
+    const optionEmojis = normalizarEmojisDasOpcoes(input.options.length, input.optionEmojis);
+    await this.assertEmojisUsaveis(authorId, optionEmojis);
+    // a mensagem carrega a autorização: castigo, regras, canal somente-leitura.
+    // Conteúdo vazio de propósito: no Discord a mensagem da enquete não tem
+    // texto — o card vem logo abaixo da linha do autor
+    // (`desenvolvedores/imagens/mensagens-de-bot/enquete.png`: autor em
+    // y14–29, topo do card em y41, nada no meio; idem `polls-faq/07.gif`). A
+    // pergunta já é o título do card; repeti-la como texto era a divergência.
+    const message = await this.messages.create(input.channelId, authorId, "");
     const expiresAt = input.durationHours
       ? new Date(Date.now() + input.durationHours * 3600 * 1000)
       : null;
@@ -61,6 +73,7 @@ export class PollsService {
         messageId: message.id,
         question: input.question,
         options: input.options,
+        optionEmojis,
         multi: !!input.multi,
         expiresAt,
       },
@@ -178,6 +191,31 @@ export class PollsService {
     const dto = tallyPoll(poll, votes);
     this.realtime.emitToChannel(channelId, WS_EVENTS.POLL_UPDATED, { channelId, poll: dto });
     return dto;
+  }
+
+  /**
+   * Emoji de resposta aceito: unicode, ou `<:nome:id>` de um emoji que existe e
+   * de um servidor de que o autor é membro — a mesma regra da reação
+   * (`MessagesService.addReaction` → `EmojisService.assertPodeUsar`). Sem ela
+   * um id vazado desenharia o emoji de um servidor fechado para todo o canal.
+   *
+   * A consulta é direta no Prisma, e não pelo `EmojisService`, porque o
+   * `PollsModule` não importa o `EmojisModule` (e o módulo fica fora deste
+   * cartão); a regra é a mesma linha por linha.
+   */
+  private async assertEmojisUsaveis(userId: string, emojis: string[]) {
+    for (const emoji of emojis) {
+      if (!emoji) continue;
+      if (!ehEmojiDeResposta(emoji)) throw new BadRequestException("Emoji inválido");
+      const custom = parseCustomEmoji(emoji);
+      if (!custom) continue;
+      const row = await this.prisma.customEmoji.findUnique({
+        where: { id: custom.id },
+        select: { guildId: true },
+      });
+      if (!row) throw new NotFoundException("Emoji não encontrado");
+      await this.guilds.assertMember(userId, row.guildId);
+    }
   }
 
   private async carregar(messageId: string) {

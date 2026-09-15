@@ -31,7 +31,7 @@ export default function LinkDeMensagem() {
   }, [params, router]);
 
   return (
-    <main className="grid h-screen place-items-center bg-chat text-txt-muted">
+    <main className="grid h-screen place-items-center bg-background-base-lower text-text-muted">
       Abrindo a mensagem…
     </main>
   );

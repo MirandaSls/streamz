@@ -4,15 +4,10 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { MAX_DISPLAY_NAME } from "@streamz/shared";
-import AuthCard, {
-  FieldLabel,
-  OptionalFieldLabel,
-  inputClass,
-  linkClass,
-  submitClass,
-} from "@/components/auth/AuthCard";
+import AuthCard, { linkClass } from "@/components/auth/AuthCard";
 import { api } from "@/lib/api";
 import { mensagemDeAuth, validarRegistro } from "@/lib/auth-mensagens";
+import { Button, Campo, Checkbox, TextInput } from "@/components/ui/primitivos";
 import { useAuth } from "@/stores/auth";
 import { ui } from "@/stores/ui";
 
@@ -25,7 +20,9 @@ export default function RegisterPage() {
   );
 }
 
-type Campo = "email" | "username" | "password";
+// Nome trocado de `Campo` para `NomeDoCampo`: o primitivo `Campo` (import
+// acima, `@/components/ui/primitivos`) já ocupa esse nome nesta tela.
+type NomeDoCampo = "email" | "username" | "password";
 
 /**
  * De qual campo a mensagem de recusa fala.
@@ -35,7 +32,7 @@ type Campo = "email" | "username" | "password";
  * mais barato ler a frase do que fazer o contrato devolver o campo. Sem
  * palavra-chave, o erro fica no primeiro campo, que é onde o olho já está.
  */
-function campoDoErro(mensagem: string): Campo {
+function campoDoErro(mensagem: string): NomeDoCampo {
   const texto = mensagem.toLowerCase();
   if (texto.includes("senha")) return "password";
   if (texto.includes("usuário") || texto.includes("usuario")) return "username";
@@ -101,114 +98,166 @@ function RegisterForm() {
 
   return (
     <AuthCard title="Criar uma conta">
+      {/*
+        Redesenho medido no print 1:1 `publico/desktop/05-registro-viewport.png`
+        (2880×1800 = 2×; a captura já é pt-BR) — autoridade mais alta que o
+        catálogo/CSS avulso (ADR-0009 item 7). Cinco divergências da revisão
+        de 2026-09-11 fecham aqui:
+
+        1. Ordem e rótulo batem com o print, de cima a baixo: "E-mail"*,
+           "Nome exibido" (sem "de" — o print mostra as duas palavras, não
+           "Nome de exibição" que tínhamos), "Nome de usuário"*, "Senha"*,
+           checkbox de e-mail, texto legal, botão
+           "Criar conta", link "Já tem uma conta? Entre aqui" — nessa ordem,
+           não com o link antes do botão como estava.
+        2. Sem texto de ajuda sob os campos: o print não tem nenhum (só
+           rótulo + caixa); por isso as três dicas fixas ("É como as
+           pessoas...", "3 a 32 caracteres...", "Ao menos 6 caracteres.")
+           saíram. A regra de senha/usuário continua valendo — só não tem
+           mais uma frase permanente embaixo do campo, igual ao Discord.
+        3. `Campo` (não o `FieldLabel` velho da `AuthCard`) porque o erro dele
+           sai ABAIXO do controle — o `FieldLabel` põe o erro do lado do
+           rótulo, que é outro componente do Discord, não este. Com
+           `estiloDoErro="ajuda"` (cartão textinput-e-telas-de-auth): ícone de
+           alerta de 16 + 12px peso normal, o `.helperTextContainer__5a838` das
+           telas de conta do Discord (mesmo módulo `container__5a838` dos
+           campos deste print), não o `.errorMessage_b717a1` itálico dos
+           formulários do app — medidas no cabeçalho de
+           `primitivos/TextInput.tsx`.
+        4. "Data de nascimento" do print **não** entra: saiu de propósito em
+           2026-08-26 (commit `561458a0`, migration
+           `20260826120000_remover_data_de_nascimento`), decisão de produto
+           anterior à ADR-0009. Não é "ainda não fizemos" — um "(em breve)"
+           aqui prometeria a volta de algo que foi descartado.
+        5. Checkbox de e-mail: o Discord vem marcado por padrão porque tem
+           campo de consentimento de marketing no banco dele. O Streamz não
+           tem nenhuma coluna equivalente (mesma busca que não achou
+           `birthDate`) — então, pela mesma regra do item 4, o controle
+           aparece **desmarcado e desabilitado**, com "(em breve)" no rótulo:
+           marcá-lo sem um lugar para guardar a escolha seria fingir que a
+           conta "concordou" com algo que a API nunca recebe.
+
+        O texto legal deste `<p>` já dizia "do Streamz" antes da ADR-0009 —
+        mantido, só a frase ficou mais perto do "Ao clicar em 'Criar conta'…"
+        do print (Termos de Serviço/Política de Privacidade continuam sem
+        link: não há rota `/terms` nem `/privacy` no app, e inventar uma fica
+        fora deste cartão — ver "faltando").
+      */}
       <form onSubmit={onSubmit} noValidate>
-        <FieldLabel
+        <Campo
+          rotulo="E-mail"
           htmlFor="email"
-          invalid={campo === "email"}
-          hint={campo === "email" ? error! : undefined}
+          obrigatorio
+          erro={campo === "email" ? error : undefined}
+          estiloDoErro="ajuda"
+          className="mb-5"
         >
-          E-mail
-        </FieldLabel>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          disabled={loading}
-          aria-invalid={campo === "email" ? true : undefined}
-          className={inputClass}
-          autoFocus
-        />
+          <TextInput
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={loading}
+            erro={campo === "email"}
+            autoFocus
+          />
+        </Campo>
 
-        <OptionalFieldLabel htmlFor="displayName">Nome de exibição</OptionalFieldLabel>
-        <input
-          id="displayName"
-          name="displayName"
-          autoComplete="nickname"
-          value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
-          disabled={loading}
-          maxLength={MAX_DISPLAY_NAME}
-          aria-describedby="dica-exibicao"
-          className={`${inputClass} mb-2`}
-        />
-        <p id="dica-exibicao" className="mb-5 text-xs text-txt-muted">
-          É como as pessoas vão te ver. Sem isso, mostramos o seu nome de usuário.
-        </p>
+        <Campo rotulo="Nome exibido" htmlFor="displayName" className="mb-5">
+          <TextInput
+            id="displayName"
+            name="displayName"
+            autoComplete="nickname"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            disabled={loading}
+            maxLength={MAX_DISPLAY_NAME}
+          />
+        </Campo>
 
-        <FieldLabel
+        <Campo
+          rotulo="Nome de usuário"
           htmlFor="username"
-          invalid={campo === "username"}
-          hint={campo === "username" ? error! : undefined}
+          obrigatorio
+          erro={campo === "username" ? error : undefined}
+          estiloDoErro="ajuda"
+          className="mb-5"
         >
-          Nome de usuário
-        </FieldLabel>
-        <input
-          id="username"
-          name="username"
-          autoComplete="username"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          disabled={loading}
-          aria-invalid={campo === "username" ? true : undefined}
-          aria-describedby="dica-usuario"
-          className={`${inputClass} mb-2`}
-        />
-        <p id="dica-usuario" className="mb-5 text-xs text-txt-muted">
-          3 a 32 caracteres — letras, números, _ . e -
-        </p>
+          <TextInput
+            id="username"
+            name="username"
+            autoComplete="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            disabled={loading}
+            erro={campo === "username"}
+          />
+        </Campo>
 
-        <FieldLabel
+        <Campo
+          rotulo="Senha"
           htmlFor="password"
-          invalid={campo === "password"}
-          hint={campo === "password" ? error! : undefined}
+          obrigatorio
+          erro={campo === "password" ? error : undefined}
+          estiloDoErro="ajuda"
+          className="mb-5"
         >
-          Senha
-        </FieldLabel>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="new-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          disabled={loading}
-          aria-invalid={campo === "password" ? true : undefined}
-          aria-describedby="dica-senha"
-          className={`${inputClass} mb-2`}
+          <TextInput
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={loading}
+            erro={campo === "password"}
+          />
+        </Campo>
+
+        {/* Checkbox de e-mail: visível, desmarcado e desabilitado, "(em
+            breve)" — item 5 da nota acima. Nunca entra em `dados`. */}
+        <Checkbox
+          id="registro-emails-opcionais"
+          marcado={false}
+          aoMudar={() => {}}
+          desabilitado
+          className="mb-5"
+          rotulo="(Opcional) Tudo bem me mandar e-mails do Streamz com novidades, dicas e ofertas especiais (em breve). Você poderá mudar isso quando quiser."
         />
-        <p id="dica-senha" className="mb-5 text-xs text-txt-muted">
-          Ao menos 6 caracteres.
+
+        <p className="mb-4 text-xs leading-4 text-text-muted">
+          Ao clicar em <span className="font-medium text-text-default">“Criar conta”</span>, você
+          concorda com os <span className="font-medium text-text-default">Termos de Serviço</span> e
+          confirma que leu a{" "}
+          <span className="font-medium text-text-default">Política de Privacidade</span> do Streamz.
         </p>
 
-        {/* aria-live: leitores de tela anunciam o erro sem mover o foco. O texto
-            visível já está no rótulo do campo que o erro cita. */}
-        <p role="alert" aria-live="polite" className="sr-only">
-          {error}
-        </p>
+        <Button
+          type="submit"
+          variante="primario"
+          tamanho="md"
+          larguraTotal
+          carregando={loading}
+          className="mb-5 celular:h-[48px]"
+        >
+          Criar conta
+        </Button>
 
-        {/* a saída para quem já tem conta vem antes do bloco legal: o botão de
-            criar a conta é o último elemento do formulário */}
-        <p className="mb-5 text-sm">
+        {/* Link único, do jeito que o print mostra a frase inteira como uma
+            só cor de link — não "Já tem uma conta?" simples seguido de
+            "Entre aqui" com outra tinta. Alinhado à esquerda: o print mostra
+            o link rente à mesma margem dos rótulos, não centralizado (o botão
+            é que ocupa a largura toda). */}
+        <p className="text-text-sm">
           <Link
             href={destino === "/app" ? "/login" : `/login?next=${encodeURIComponent(destino)}`}
             className={linkClass}
           >
-            Já tem uma conta?
+            Já tem uma conta? Entre aqui
           </Link>
         </p>
-
-        <p className="mb-4 text-xs leading-4 text-txt-muted">
-          Ao se registrar, você concorda com os{" "}
-          <span className="font-medium text-txt-normal">Termos de Serviço</span> e com a{" "}
-          <span className="font-medium text-txt-normal">Política de Privacidade</span> do Streamz.
-        </p>
-
-        <button type="submit" disabled={loading} className={submitClass}>
-          {loading ? "Criando…" : "Continuar"}
-        </button>
       </form>
     </AuthCard>
   );

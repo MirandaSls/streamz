@@ -59,18 +59,42 @@ export function volumeDoEfeito(sound: SoundboardSound, volume: number): number {
  * Não toca quando o volume de efeitos está em zero (é o que o botão de mudo do
  * painel significa) nem quando a pessoa está **surda**: quem desligou o áudio da
  * chamada não deve ouvir justamente o som que a chamada dispara.
+ *
+ * É a porta de quem **ouve o `soundboard.play`** (`hooks/useRealtime.ts`); o
+ * tocar em si é `tocarNaSaida`, que as prévias usam sem esta guarda.
  */
 export function tocarEfeitoSonoro(sound: SoundboardSound, volume: number): void {
-  if (typeof Audio === "undefined") return;
   if (useVoicePrefs.getState().deafened) return;
-  const nivel = volumeDoEfeito(sound, volume);
-  if (nivel <= 0) return;
+  tocarNaSaida(sound.url, volumeDoEfeito(sound, volume));
+}
+
+/**
+ * Toca um arquivo na saída de áudio escolhida em "Voz e vídeo", no volume dado
+ * (0 a 1) — **sem** olhar se a pessoa está surda.
+ *
+ * Separado de `tocarEfeitoSonoro` porque as duas perguntas são diferentes. Lá é
+ * "a chamada disparou um som, devo deixá-lo entrar?", e ensurdecido responde
+ * não. Aqui é o gesto deliberado de **ouvir uma prévia** — o botão de tocar da
+ * aba "Painel de efeitos sonoros" e o do modal "Adicionar som": não há chamada
+ * envolvida, e a prévia falhar em silêncio porque a pessoa está ensurdecida numa
+ * call é o tipo de defeito que ninguém entende. Antes desta função a aba
+ * contornava a guarda criando um `Audio` próprio, e com isso perdia o
+ * roteamento para o fone escolhido (`aplicarSaida`); agora as duas portas
+ * dividem o mesmo elemento, a mesma saída e o mesmo "falhar em silêncio".
+ *
+ * Devolve o elemento (ou `null` quando nada tocou) para quem precisa **parar**
+ * a prévia — trocar de som, sair da aba.
+ */
+export function tocarNaSaida(url: string, volume: number): HTMLAudioElement | null {
+  if (typeof Audio === "undefined") return null;
+  const nivel = Math.min(1, Math.max(0, volume));
+  if (nivel <= 0) return null;
   try {
-    let el = elementos.get(sound.url);
+    let el = elementos.get(url);
     if (!el) {
-      el = new Audio(sound.url);
+      el = new Audio(url);
       el.preload = "auto";
-      elementos.set(sound.url, el);
+      elementos.set(url, el);
     }
     const escolhida = useVoiceDevicesStore.getState().outputId;
     if (!saidaAplicada.has(el) || saidaAplicada.get(el) !== escolhida) {
@@ -82,9 +106,26 @@ export function tocarEfeitoSonoro(sound: SoundboardSound, volume: number): void 
     void el.play().catch(() => {
       // autoplay bloqueado ou arquivo indisponível: silêncio, não erro
     });
+    return el;
   } catch {
     // sem suporte a áudio
+    return null;
   }
+}
+
+/**
+ * Esquece o elemento de uma URL — para a URL que **morre**.
+ *
+ * O cache por URL é certo para os sons do servidor (o arquivo de um id nunca
+ * muda), mas a prévia do modal "Adicionar som" toca um `blob:` do arquivo local,
+ * e cada arquivo escolhido é uma URL nova que é revogada logo depois. Sem isto o
+ * mapa guardaria um `Audio` apontando para um blob morto a cada troca.
+ */
+export function soltarElemento(url: string): void {
+  const el = elementos.get(url);
+  if (!el) return;
+  el.pause();
+  elementos.delete(url);
 }
 
 /**

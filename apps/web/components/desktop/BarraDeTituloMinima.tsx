@@ -58,7 +58,7 @@ function Barra() {
       data-tauri-drag-region
       aria-label="Barra de título"
       style={{ height: ALTURA }}
-      className="fixed inset-x-0 top-0 z-40 flex select-none items-center bg-panel text-txt-secondary"
+      className="fixed inset-x-0 top-0 z-40 flex select-none items-center bg-background-base-lowest text-text-subtle"
     >
       <div data-tauri-drag-region className="flex items-center gap-2 pl-4 text-xs font-semibold">
         <Marca size={15} />

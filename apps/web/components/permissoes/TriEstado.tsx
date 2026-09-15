@@ -2,7 +2,7 @@
 
 import { useRef, type KeyboardEvent } from "react";
 import { Check, Slash, X } from "@/components/ui/icones";
-import Tooltip from "@/components/ui/Tooltip";
+import { Tooltip } from "@/components/ui/primitivos";
 import type { EstadoDaRegra } from "@streamz/shared";
 
 /**
@@ -19,12 +19,13 @@ import type { EstadoDaRegra } from "@streamz/shared";
  * Medidas do print `docs/Reference/Captura de tela 2026-09-04 102249.png`:
  * grupo de 96×28 com cantos externos de ~4px, três botões de 32×28 colados
  * (sem vão entre eles), glifo de 18. As medidas vão em **pixel** (`w-[96px]`,
- * não `w-24`): o `globals.css` põe a raiz em 15,5px, então toda escala em `rem`
- * do Tailwind sai a 96,9% — `w-24` renderizava 93, e o desenho aqui é medido,
- * não proporcional (conferido no Chromium com o CSS compilado). O botão ativo é uma superfície um passo
+ * não `w-24`): a raiz do app é 16px (ADR-0009), então a escala em `rem` do
+ * Tailwind já bate com o pixel, mas o desenho aqui é medido, não proporcional
+ * (conferido no Chromium com o CSS compilado), e por isso ficou em pixel
+ * literal mesmo assim. O botão ativo é uma superfície um passo
  * mais clara que o fundo, e o grupo em si **não tem fundo**: no print o vão dos
  * dois botões inativos é exatamente a cor da página (medido: `#202024` nos dois),
- * e só o ativo se destaca (`#38383D`). O ativo usa `bg-sel`, que é o token de
+ * e só o ativo se destaca (`#38383D`). O ativo usa `bg-interactive-background-selected`, que é o token de
  * "item ativo" do `tailwind.config.ts` — nenhuma cor nova entrou por esta tela.
  * (A borda de 1px que o print insinua no contorno do grupo é antialiasing de
  * +3 de luminância; qualquer token de borda nosso seria mais forte que ela, e
@@ -46,16 +47,16 @@ const ORDEM: { estado: EstadoDaRegra; rotulo: string }[] = [
 
 /** Cor do glifo quando o estado é o vigente. */
 const COR_ATIVA: Record<EstadoDaRegra, string> = {
-  negar: "text-red",
-  herdar: "text-txt-primary",
-  permitir: "text-green",
+  negar: "text-status-danger",
+  herdar: "text-text-strong",
+  permitir: "text-status-positive",
 };
 
 /** E a que o hover antecipa, para o botão dizer o que vai virar. */
 const COR_HOVER: Record<EstadoDaRegra, string> = {
-  negar: "text-txt-muted hover:text-red",
-  herdar: "text-txt-muted hover:text-txt-normal",
-  permitir: "text-txt-muted hover:text-green",
+  negar: "text-text-muted hover:text-status-danger",
+  herdar: "text-text-muted hover:text-text-default",
+  permitir: "text-text-muted hover:text-status-positive",
 };
 
 function Glifo({ estado }: { estado: EstadoDaRegra }) {
@@ -124,7 +125,7 @@ export default function TriEstado({
             tabIndex={ativo ? 0 : -1}
             onClick={() => onChange(estado)}
             className={`grid h-[28px] w-[32px] place-items-center transition disabled:cursor-not-allowed celular:h-[44px] celular:w-[44px] ${
-              ativo ? `bg-sel ${COR_ATIVA[estado]}` : COR_HOVER[estado]
+              ativo ? `bg-interactive-background-selected ${COR_ATIVA[estado]}` : COR_HOVER[estado]
             }`}
           >
             <Glifo estado={estado} />
@@ -137,7 +138,7 @@ export default function TriEstado({
   // o tooltip só entra quando há o que explicar: envolver sempre acrescentaria
   // um `<span>` e um listener de ponteiro em cada uma das ~20 linhas da lista
   return disabled && motivoDesabilitado ? (
-    <Tooltip label={motivoDesabilitado} side="left">
+    <Tooltip rotulo={motivoDesabilitado} lado="left">
       {grupo}
     </Tooltip>
   ) : (

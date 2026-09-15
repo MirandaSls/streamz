@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { aplicarEscolha, detectarGatilho, mover } from "../composer-autocomplete";
-import { buscarComandos, interpretarComando, separarComando } from "../comandos-barra";
+import type { ComandoDeApp, PublicUser } from "@streamz/shared";
+import { aplicarEscolha, detectarGatilho, estadoDaListaDoBot, mover } from "../composer-autocomplete";
+import {
+  GRUPO_NATIVOS,
+  agruparComandos,
+  aplicarValorDeOpcao,
+  buscarComandos,
+  chaveDeEscolha,
+  estadoDoComando,
+  interpretarComando,
+  pedidoDeAutocomplete,
+  separarComando,
+  type EscolhaFeita,
+} from "../comandos-barra";
 import { buscarEmojisUnicode } from "../emojis-unicode";
 
 /** Atalho: detecta com o cursor no fim do texto (o caso normal ao digitar). */
@@ -146,5 +158,252 @@ describe("buscarEmojisUnicode", () => {
 
   it("respeita o limite", () => {
     expect(buscarEmojisUnicode("", 3)).toHaveLength(3);
+  });
+});
+
+// ── onda 3 · autocomplete de opção pedido ao bot (cartão 3g) ────────────────
+
+const BOT_AC: PublicUser = {
+  id: "u-bot",
+  username: "musicabot",
+  displayName: "Música Bot",
+  avatarUrl: null,
+  status: "ONLINE",
+  customStatusText: null,
+  customStatusEmoji: null,
+  bot: true,
+};
+
+/** `/tocar musica:<autocomplete> volume:<4, autocomplete> fonte:<choices>` */
+const TOCAR: ComandoDeApp = {
+  id: "cmd-tocar",
+  snowflake: "2000",
+  name: "tocar",
+  description: "Toca uma música",
+  options: [
+    { name: "musica", description: "", type: 3, required: true, autocomplete: true },
+    { name: "volume", description: "", type: 4, required: false, autocomplete: true },
+    {
+      name: "fonte",
+      description: "",
+      type: 3,
+      required: false,
+      choices: [
+        { name: "YouTube", value: "yt" },
+        { name: "SoundCloud", value: "sc" },
+      ],
+    },
+  ],
+  applicationId: "app1",
+  applicationName: "Música",
+  botUser: BOT_AC,
+};
+
+/** Estado e pedido com o cursor no fim do texto. */
+function pedidoNoFim(texto: string, escolhas?: ReadonlyMap<string, EscolhaFeita>) {
+  const estado = estadoDoComando(texto, texto.length, [TOCAR]);
+  if (!estado) throw new Error("sem estado");
+  return pedidoDeAutocomplete(texto, estado, escolhas);
+}
+
+describe("pedidoDeAutocomplete", () => {
+  it("a opção em foco vai com focused e o texto digitado", () => {
+    expect(pedidoNoFim("/tocar musica:never gon")).toEqual({
+      commandId: "cmd-tocar",
+      chave: "cmd-tocar:musica",
+      options: [{ name: "musica", type: 3, value: "never gon", focused: true }],
+    });
+  });
+
+  it("abre já com o valor vazio, no instante em que a opção fica ativa", () => {
+    expect(pedidoNoFim("/tocar musica:")?.options).toEqual([
+      { name: "musica", type: 3, value: "", focused: true },
+    ]);
+  });
+
+  it("número em foco vai **em texto**, como no Discord", () => {
+    expect(pedidoNoFim("/tocar musica:abc volume:7")?.options).toEqual([
+      { name: "musica", type: 3, value: "abc" },
+      { name: "volume", type: 4, value: "7", focused: true },
+    ]);
+  });
+
+  it("as outras opções vão convertidas, e escolha fixa pelo value", () => {
+    expect(pedidoNoFim("/tocar fonte:YouTube volume:30 musica:ra")?.options).toEqual([
+      { name: "musica", type: 3, value: "ra", focused: true },
+      { name: "volume", type: 4, value: 30 },
+      { name: "fonte", type: 3, value: "yt" },
+    ]);
+  });
+
+  it("aspas abertas não entram no texto procurado", () => {
+    expect(pedidoNoFim('/tocar musica:"never gon')?.options[0]).toMatchObject({ value: "never gon" });
+  });
+
+  it("opção com choices continua local: não há pedido", () => {
+    expect(pedidoNoFim("/tocar musica:abc fonte:You")).toBeNull();
+  });
+
+  it("opção sem autocomplete, nativo e nenhuma opção ativa: não há pedido", () => {
+    const semAc: ComandoDeApp = { ...TOCAR, options: [{ name: "musica", description: "", type: 3, required: true }] };
+    const e1 = estadoDoComando("/tocar musica:a", 15, [semAc]);
+    expect(e1 && pedidoDeAutocomplete("/tocar musica:a", e1)).toBeNull();
+    const e2 = estadoDoComando("/me dança", 9, [TOCAR]);
+    expect(e2 && pedidoDeAutocomplete("/me dança", e2)).toBeNull();
+    const e3 = estadoDoComando("/tocar ", 7, [TOCAR]);
+    expect(e3 && pedidoDeAutocomplete("/tocar ", e3)).toBeNull();
+  });
+
+  it("a escolha feita numa opção já preenchida vai pelo value", () => {
+    const escolhas = new Map([[chaveDeEscolha("cmd-tocar", "musica"), { name: "Never Gonna Give You Up", value: "dQw4" }]]);
+    expect(pedidoNoFim('/tocar musica:"Never Gonna Give You Up" volume:', escolhas)?.options).toEqual([
+      { name: "musica", type: 3, value: "dQw4" },
+      { name: "volume", type: 4, value: "", focused: true },
+    ]);
+  });
+});
+
+describe("interpretarComando com escolhas do autocomplete", () => {
+  const escolhas = new Map<string, EscolhaFeita>([
+    [chaveDeEscolha("cmd-tocar", "musica"), { name: "Never Gonna Give You Up", value: "dQw4" }],
+    [chaveDeEscolha("cmd-tocar", "volume"), { name: "Alto (80)", value: 80 }],
+  ]);
+
+  it("o campo mostra o name e o bot recebe o value, no tipo da opção", () => {
+    expect(interpretarComando('/tocar musica:"Never Gonna Give You Up" volume:"Alto (80)"', [TOCAR], escolhas)).toEqual({
+      tipo: "interacao",
+      commandId: "cmd-tocar",
+      opcoes: [
+        { name: "musica", type: 3, value: "dQw4" },
+        { name: "volume", type: 4, value: 80 },
+      ],
+    });
+  });
+
+  it("texto editado depois da escolha vale como foi escrito", () => {
+    expect(interpretarComando("/tocar musica:outra coisa", [TOCAR], escolhas)).toEqual({
+      tipo: "interacao",
+      commandId: "cmd-tocar",
+      opcoes: [{ name: "musica", type: 3, value: "outra coisa" }],
+    });
+  });
+
+  it("sem escolhas, o comportamento de antes", () => {
+    expect(interpretarComando("/tocar musica:abc", [TOCAR])).toEqual({
+      tipo: "interacao",
+      commandId: "cmd-tocar",
+      opcoes: [{ name: "musica", type: 3, value: "abc" }],
+    });
+  });
+});
+
+describe("estadoDaListaDoBot", () => {
+  const base = { chave: "c:musica", carregando: false, falhou: false, escolhas: [] as unknown[] };
+
+  it("carregando enquanto a store não tem a opção pedida", () => {
+    expect(estadoDaListaDoBot("c:musica", null)).toBe("carregando");
+    expect(estadoDaListaDoBot("c:musica", { ...base, chave: "c:volume", falhou: true })).toBe("carregando");
+    expect(estadoDaListaDoBot("c:musica", { ...base, carregando: true })).toBe("carregando");
+  });
+
+  it("com escolhas na mão mostra a lista, mesmo esperando o pedido novo", () => {
+    expect(estadoDaListaDoBot("c:musica", { ...base, carregando: true, escolhas: [{}] })).toBe("pronto");
+  });
+
+  it("vazio quando o bot respondeu sem nada; falhou quando a store marcou falha", () => {
+    expect(estadoDaListaDoBot("c:musica", base)).toBe("vazio");
+    expect(estadoDaListaDoBot("c:musica", { ...base, falhou: true })).toBe("falhou");
+  });
+});
+
+// ── rodada de correção · aspas no name de escolha do bot ────────────────────
+//
+// O `name` que o bot devolve é livre. Antes nada era escapado: um `volume:`
+// dentro do nome virava marca de opção e cortava o valor, e aspas no nome não
+// voltavam iguais — a escolha feita deixava de casar e o bot recebia o texto em
+// vez do `value`.
+
+/** Escolhe `nome` na opção `musica` a partir de `/tocar musica:`. */
+function escolherMusica(nome: string) {
+  const texto = "/tocar musica:";
+  const estado = estadoDoComando(texto, texto.length, [TOCAR]);
+  if (!estado) throw new Error("sem estado");
+  return aplicarValorDeOpcao(texto, texto.length, estado, nome);
+}
+
+describe("aspas e nome:valor dentro do name da escolha", () => {
+  it("aspas no nome são escapadas e voltam iguais", () => {
+    const r = escolherMusica('Diga "oi" agora');
+    expect(r.texto).toBe('/tocar musica:"Diga \\"oi\\" agora" ');
+    expect(interpretarComando(r.texto, [TOCAR])).toEqual({
+      tipo: "interacao",
+      commandId: "cmd-tocar",
+      opcoes: [{ name: "musica", type: 3, value: 'Diga "oi" agora' }],
+    });
+    const escolhas = new Map([[chaveDeEscolha("cmd-tocar", "musica"), { name: 'Diga "oi" agora', value: "id-oi" }]]);
+    expect(interpretarComando(r.texto, [TOCAR], escolhas)).toEqual({
+      tipo: "interacao",
+      commandId: "cmd-tocar",
+      opcoes: [{ name: "musica", type: 3, value: "id-oi" }],
+    });
+  });
+
+  it("nome que começa e termina com aspas, sem espaço, também vai embrulhado", () => {
+    const r = escolherMusica('"Hino"');
+    expect(r.texto).toBe('/tocar musica:"\\"Hino\\"" ');
+    const escolhas = new Map([[chaveDeEscolha("cmd-tocar", "musica"), { name: '"Hino"', value: "id-hino" }]]);
+    expect(interpretarComando(r.texto, [TOCAR], escolhas)).toMatchObject({
+      opcoes: [{ name: "musica", type: 3, value: "id-hino" }],
+    });
+  });
+
+  it("`outra:` dentro do nome não vira marca de opção", () => {
+    const nome = "Remix volume:11 edição";
+    const r = escolherMusica(nome);
+    expect(r.texto).toBe('/tocar musica:"Remix volume:11 edição" ');
+    expect(estadoDoComando(r.texto, r.caret, [TOCAR])?.marcadas).toEqual(new Set(["musica"]));
+    expect(interpretarComando(r.texto, [TOCAR])).toEqual({
+      tipo: "interacao",
+      commandId: "cmd-tocar",
+      opcoes: [{ name: "musica", type: 3, value: nome }],
+    });
+    const escolhas = new Map([[chaveDeEscolha("cmd-tocar", "musica"), { name: nome, value: "id-remix" }]]);
+    expect(interpretarComando(`${r.texto}volume:30`, [TOCAR], escolhas)).toEqual({
+      tipo: "interacao",
+      commandId: "cmd-tocar",
+      opcoes: [
+        { name: "musica", type: 3, value: "id-remix" },
+        { name: "volume", type: 4, value: 30 },
+      ],
+    });
+  });
+
+  it("o pedido ao bot da opção seguinte leva o value da escolha com `outra:` no nome", () => {
+    const nome = "Remix volume:11 edição";
+    const escolhas = new Map([[chaveDeEscolha("cmd-tocar", "musica"), { name: nome, value: "id-remix" }]]);
+    expect(pedidoNoFim(`${escolherMusica(nome).texto}volume:`, escolhas)?.options).toEqual([
+      { name: "musica", type: 3, value: "id-remix" },
+      { name: "volume", type: 4, value: "", focused: true },
+    ]);
+  });
+
+  it("aspas abertas no meio da digitação não escondem a marca seguinte", () => {
+    expect(estadoDoComando('/tocar musica:"abc volume:3', 27, [TOCAR])?.marcadas).toEqual(
+      new Set(["musica", "volume"]),
+    );
+  });
+});
+
+describe("agruparComandos", () => {
+  it("apps primeiro e os integrados por último, como no lançador do Discord", () => {
+    const grupos = agruparComandos("", [TOCAR]);
+    expect(grupos.map((g) => g.id)).toEqual(["app:app1", GRUPO_NATIVOS]);
+  });
+
+  it("a precedência de nome não muda: bot com nome de nativo continua fora", () => {
+    const me: ComandoDeApp = { ...TOCAR, id: "cmd-me", name: "me" };
+    const grupos = agruparComandos("me", [me]);
+    expect(grupos.map((g) => g.id)).toEqual([GRUPO_NATIVOS]);
+    expect(interpretarComando("/me dança", [me])).toEqual({ tipo: "enviar", content: "*dança*" });
   });
 });

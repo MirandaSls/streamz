@@ -5,7 +5,6 @@ import type { NestExpressApplication } from "@nestjs/platform-express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { InteractionsService } from "../../interactions/interactions.service";
 import type { InteracaoAutenticada } from "../../interactions/tipos";
-import { DadosDeCompatService } from "../dados.service";
 import { interacaoDesconhecida, interacaoJaRespondida } from "../erros";
 import { InteractionCallbackCompatController } from "./interactions.controller";
 
@@ -60,7 +59,15 @@ const porTokenDepois = vi.fn(async (token: string) => {
   return { ...INTERACAO, responseMessageId: "msg_1", respondedAt: new Date() };
 });
 
-const mensagemPorCuid = vi.fn(async () => ({ snowflake: 555n }));
+/**
+ * ── onda 3 ── a mensagem da resposta (e a de origem, no 6/7) sai por
+ * `origemParaCompat`, que junta embeds e componentes à linha. Por padrão só a
+ * resposta `msg_1` existe; quem exercita o 7 sobrescreve.
+ */
+const RESPOSTA_PADRAO = async (o: unknown): Promise<unknown> =>
+  (o as { messageId?: string | null }).messageId === "msg_1"
+    ? { linha: { snowflake: 555n }, efemera: false }
+    : null;
 
 /**
  * ── j-bots ── a efêmera original da interação, quando a resposta foi efêmera.
@@ -70,8 +77,19 @@ const mensagemPorCuid = vi.fn(async () => ({ snowflake: 555n }));
  */
 const linhaEfemeraOriginalParaCompat = vi.fn(async (): Promise<unknown> => null);
 
+/**
+ * ── onda 3 ── a mensagem de origem de uma interação de componente (o alvo do
+ * callback 6/7). `null` por padrão; quem exercita o 7 sobrescreve.
+ */
+const origemParaCompat = vi.fn(RESPOSTA_PADRAO);
+
+// ── onda 3 ── as `flags` do payload de bot passam pela tradução de mentira: é o
+// que deixa cobrar o `|` (e não `=`) do `FLAG_EFEMERA` numa efêmera v2
 vi.mock("../traducao/mensagem", () => ({
-  mensagemParaDiscord: (m: { snowflake: bigint }) => ({ id: String(m.snowflake) }),
+  mensagemParaDiscord: (m: { snowflake: bigint; payloadDeBot?: { flags: number } | null }) => ({
+    id: String(m.snowflake),
+    flags: m.payloadDeBot?.flags ?? 0,
+  }),
 }));
 
 @Module({
@@ -79,9 +97,8 @@ vi.mock("../traducao/mensagem", () => ({
   providers: [
     {
       provide: InteractionsService,
-      useValue: { porToken, responder, linhaEfemeraOriginalParaCompat },
+      useValue: { porToken, responder, linhaEfemeraOriginalParaCompat, origemParaCompat },
     },
-    { provide: DadosDeCompatService, useValue: { mensagemPorCuid } },
   ],
 })
 class ModuloDeProva {}
@@ -116,9 +133,10 @@ describe("POST /api/v10/interactions/:id/:token/callback", () => {
   beforeEach(() => {
     porToken.mockClear();
     responder.mockClear();
-    mensagemPorCuid.mockClear();
     linhaEfemeraOriginalParaCompat.mockClear();
     linhaEfemeraOriginalParaCompat.mockResolvedValue(null);
+    origemParaCompat.mockReset();
+    origemParaCompat.mockImplementation(RESPOSTA_PADRAO);
   });
 
   // ── o `?with_response` (o que a prova 3b da fase pegou) ──────
@@ -145,7 +163,7 @@ describe("POST /api/v10/interactions/:id/:token/callback", () => {
     // compara o cabeçalho por igualdade exata
     expect(resposta.headers.get("content-type")).toBe("application/json");
 
-    const corpo = await resposta.json();
+    const corpo = (await resposta.json()) as { resource: Record<string, unknown> };
     // o `_update` do discord.py lê `data['interaction']` **sem `.get`**
     expect(corpo).toMatchObject({
       interaction: {
@@ -199,7 +217,127 @@ describe("POST /api/v10/interactions/:id/:token/callback", () => {
       // `flags: 64` de volta é como a lib reconhece a efemeridade
       resource: { type: 4, message: { id: "888", flags: 64 } },
     });
-    expect(mensagemPorCuid).not.toHaveBeenCalled();
+    expect(origemParaCompat).not.toHaveBeenCalled();
+  });
+
+  it("── onda 3 ── efêmera v2: as flags da efêmera ganham o 64, e não são trocadas por ele", async () => {
+    linhaEfemeraOriginalParaCompat.mockResolvedValue({ snowflake: 888n, payloadDeBot: { flags: 1 << 15 } });
+
+    const resposta = await callback(
+      `/${String(INTERACAO.snowflake)}/${TOKEN}/callback?with_response=1`,
+      { type: 4, data: { flags: 64 | (1 << 15), components: [] } },
+    );
+
+    expect(await resposta.json()).toMatchObject({
+      resource: { message: { id: "888", flags: 64 | (1 << 15) } },
+    });
+  });
+
+  // ── onda 3 · cartão 3a: callbacks 6, 7, 8 e 9 ──────────────
+
+  /** A interação de componente como `porToken` a devolve depois do callback. */
+  const DE_COMPONENTE: InteracaoAutenticada = {
+    ...INTERACAO,
+    tipo: 3,
+    customId: "tocar",
+    messageId: "msg_origem",
+    ephemeralMessageId: null,
+    nonce: "n_1",
+    respondedAt: new Date(),
+  };
+
+  it("7 com `with_response`: `type` é o da interação (3) e a mensagem é a de origem", async () => {
+    porToken.mockResolvedValueOnce(DE_COMPONENTE).mockResolvedValueOnce(DE_COMPONENTE);
+    origemParaCompat.mockResolvedValue({ linha: { snowflake: 777n }, efemera: false });
+
+    const resposta = await callback(
+      `/${String(INTERACAO.snowflake)}/${TOKEN}/callback?with_response=1`,
+      { type: 7, data: { content: "atualizada", components: [] } },
+    );
+
+    expect(resposta.status).toBe(200);
+    expect(await resposta.json()).toMatchObject({
+      interaction: {
+        type: 3,
+        response_message_id: "777",
+        response_message_loading: false,
+        response_message_ephemeral: false,
+      },
+      resource: { type: 7, message: { id: "777" } },
+    });
+    expect(responder).toHaveBeenCalledWith(DE_COMPONENTE, 7, { content: "atualizada", components: [] });
+    // a origem não é a resposta do callback: nem a efêmera original é procurada
+    expect(origemParaCompat).toHaveBeenCalledWith(DE_COMPONENTE);
+    expect(linhaEfemeraOriginalParaCompat).not.toHaveBeenCalled();
+  });
+
+  it("7 numa efêmera de origem: `response_message_ephemeral` e `flags` 64 no `message`", async () => {
+    porToken.mockResolvedValueOnce(DE_COMPONENTE).mockResolvedValueOnce(DE_COMPONENTE);
+    origemParaCompat.mockResolvedValue({ linha: { snowflake: 889n }, efemera: true });
+
+    const resposta = await callback(
+      `/${String(INTERACAO.snowflake)}/${TOKEN}/callback?with_response=1`,
+      { type: 7, data: { content: "só sua" } },
+    );
+
+    expect(await resposta.json()).toMatchObject({
+      interaction: { response_message_id: "889", response_message_ephemeral: true },
+      resource: { type: 7, message: { id: "889", flags: 64 } },
+    });
+  });
+
+  it("6 com `with_response`: aponta a origem, mas sem `resource.message` (só 4 e 7 o têm)", async () => {
+    porToken.mockResolvedValueOnce(DE_COMPONENTE).mockResolvedValueOnce(DE_COMPONENTE);
+    origemParaCompat.mockResolvedValue({ linha: { snowflake: 777n }, efemera: false });
+
+    const resposta = await callback(
+      `/${String(INTERACAO.snowflake)}/${TOKEN}/callback?with_response=1`,
+      { type: 6 },
+    );
+
+    const corpo = (await resposta.json()) as { resource: Record<string, unknown> };
+    expect(corpo).toMatchObject({ interaction: { type: 3, response_message_id: "777" }, resource: { type: 6 } });
+    expect(corpo.resource).not.toHaveProperty("message");
+  });
+
+  it("8 e 9 com `with_response`: só `interaction` e `resource.type`, sem procurar mensagem", async () => {
+    for (const [tipoDaInteracao, tipo, data] of [
+      [4, 8, { choices: [{ name: "a", value: "a" }] }],
+      [3, 9, { custom_id: "m", title: "Oi", components: [] }],
+    ] as const) {
+      const atual = { ...DE_COMPONENTE, tipo: tipoDaInteracao };
+      porToken.mockResolvedValueOnce(atual).mockResolvedValueOnce(atual);
+
+      const resposta = await callback(
+        `/${String(INTERACAO.snowflake)}/${TOKEN}/callback?with_response=1`,
+        { type: tipo, data },
+      );
+
+      const corpo = (await resposta.json()) as { resource: Record<string, unknown> };
+      expect(corpo).toMatchObject({
+        interaction: { type: tipoDaInteracao, response_message_id: null },
+        resource: { type: tipo },
+      });
+      expect(corpo.resource).not.toHaveProperty("message");
+    }
+    expect(origemParaCompat).not.toHaveBeenCalled();
+    expect(linhaEfemeraOriginalParaCompat).not.toHaveBeenCalled();
+  });
+
+  it("o `data` do 8 e do 9 chega inteiro ao `responder` (`choices`, `custom_id`, `title`)", async () => {
+    await callback(`/${INTERACAO.snowflake}/${TOKEN}/callback`, {
+      type: 9,
+      data: { custom_id: "cadastro", title: "Cadastro", components: [{ type: 18 }] },
+    });
+    const modal = responder.mock.calls.at(-1) as unknown as [unknown, number, Record<string, unknown>];
+    expect(modal[2]).toMatchObject({ custom_id: "cadastro", title: "Cadastro" });
+
+    await callback(`/${INTERACAO.snowflake}/${TOKEN}/callback`, {
+      type: 8,
+      data: { choices: [{ name: "a", value: "a" }] },
+    });
+    const autocomplete = responder.mock.calls.at(-1) as unknown as [unknown, number, Record<string, unknown>];
+    expect(autocomplete[2]).toMatchObject({ choices: [{ name: "a", value: "a" }] });
   });
 
   it("`with_response=0` e `false` valem como ausente (204)", async () => {

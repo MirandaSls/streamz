@@ -23,3 +23,5 @@ export * from "./eventos";
 export * from "./snowflake";
 export * from "./aplicativos";
 export * from "./permissoes-discord";
+// ── onda 3 ── embeds, componentes, modais e interações de componente
+export * from "./mensagens-de-bot";

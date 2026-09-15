@@ -5,6 +5,7 @@ import type { ScreenQuality } from "@streamz/shared";
 import Dialog from "@/components/modals/Dialog";
 import { ehMobileAgora } from "@/hooks/useEhMobile";
 import { AppWindow, Monitor } from "@/components/ui/icones";
+import { Checkbox } from "@/components/ui/primitivos";
 import { SegmentosDeQualidade } from "@/components/voice/qualidade-de-tela";
 import {
   capacidadesDeTela,
@@ -134,7 +135,7 @@ export default function ScreenSharePicker({ onClose }: { onClose: () => void }) 
 
       <div className="mt-6 min-h-0 flex-1 overflow-y-auto pr-4">
         {capacidades === null ? (
-          <p className="pt-10 text-center text-sm text-txt-muted">Procurando janelas…</p>
+          <p className="pt-10 text-center text-sm text-text-muted">Procurando janelas…</p>
         ) : capacidades.nativo ? (
           <GradeNativa
             aba={aba}
@@ -185,7 +186,7 @@ function BarraDeAbas({ aba, onAba }: { aba: Aba; onAba: (aba: Aba) => void }) {
     <div
       role="tablist"
       aria-label="Tipo de fonte"
-      className="flex h-10 shrink-0 gap-1 rounded-lg bg-void p-1"
+      className="flex h-10 shrink-0 gap-1 rounded-lg bg-input-background-default p-1"
     >
       {abas.map(([id, rotulo, icone]) => (
         <button
@@ -194,10 +195,14 @@ function BarraDeAbas({ aba, onAba }: { aba: Aba; onAba: (aba: Aba) => void }) {
           role="tab"
           aria-selected={aba === id}
           onClick={() => onAba(id)}
-          className={`flex h-8 flex-1 items-center justify-center gap-2 rounded-md text-sm font-semibold transition ${
+          // Anel de foco azul (`border-focus`), o mesmo token dos primitivos
+          // (`Tabs`, `Checkbox`, `Radio`) — estava faltando aqui: a barra era
+          // navegável por teclado sem nenhuma marca visível de onde o foco
+          // estava.
+          className={`flex h-8 flex-1 items-center justify-center gap-2 rounded-md text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus ${
             aba === id
-              ? "bg-chat text-txt-primary"
-              : "text-txt-secondary hover:bg-hov hover:text-txt-primary"
+              ? "bg-background-base-lower text-text-strong"
+              : "text-text-subtle hover:bg-interactive-background-hover hover:text-text-strong"
           }`}
         >
           {icone}
@@ -286,7 +291,7 @@ function GradeNativa({
   }, [ids, iniciando]);
 
   if (fontes === null) {
-    return <p className="pt-10 text-center text-sm text-txt-muted">Procurando janelas…</p>;
+    return <p className="pt-10 text-center text-sm text-text-muted">Procurando janelas…</p>;
   }
   if (visiveis.length === 0) {
     return (
@@ -301,7 +306,7 @@ function GradeNativa({
 
   return (
     <div>
-      {aviso && <p className="mb-3 text-xs text-txt-muted">{aviso}</p>}
+      {aviso && <p className="mb-3 text-xs text-text-muted">{aviso}</p>}
       <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-x-4 gap-y-4">
         {visiveis.map((f) => (
           <Miniatura
@@ -312,9 +317,9 @@ function GradeNativa({
                 // eslint-disable-next-line @next/next/no-img-element -- data URL vinda do Rust
                 <img src={f.icone} alt="" className="h-4 w-4 shrink-0 object-contain" />
               ) : f.tipo === "monitor" ? (
-                <Monitor size={16} className="shrink-0 text-txt-secondary" />
+                <Monitor size={16} className="shrink-0 text-text-subtle" />
               ) : (
-                <AppWindow size={16} className="shrink-0 text-txt-secondary" />
+                <AppWindow size={16} className="shrink-0 text-text-subtle" />
               )
             }
             onClick={() => onEscolher(f.id)}
@@ -329,9 +334,9 @@ function GradeNativa({
               // eslint-disable-next-line @next/next/no-img-element -- data URL vinda do Rust
               <img src={f.icone} alt="" className="h-12 w-12 object-contain" />
             ) : f.tipo === "monitor" ? (
-              <Monitor size={48} className="text-txt-muted" />
+              <Monitor size={48} className="text-text-muted" />
             ) : (
-              <AppWindow size={48} className="text-txt-muted" />
+              <AppWindow size={48} className="text-text-muted" />
             )}
           </Miniatura>
         ))}
@@ -365,12 +370,17 @@ function Miniatura({
       disabled={disabled}
       className="group flex w-full flex-col text-left outline-none disabled:cursor-wait"
     >
-      <div className="grid aspect-video w-full place-items-center overflow-hidden rounded-lg bg-black transition group-hover:ring-2 group-hover:ring-border-strong-hover group-focus-visible:ring-2 group-focus-visible:ring-accent">
+      {/* Anel de foco azul (`border-focus`), não limão: no Discord o anel de
+          foco de teclado não é marca (ADR-0009 §3.2, `design.md` "Link, anel
+          de foco de teclado e cores ANSI continuam azuis"). Só o hover do
+          mouse usa `border-strong`, a mesma vizinhança neutra do resto do
+          seletor. */}
+      <div className="grid aspect-video w-full place-items-center overflow-hidden rounded-lg bg-black transition group-hover:ring-2 group-hover:ring-border-strong group-focus-visible:ring-2 group-focus-visible:ring-border-focus">
         {children}
       </div>
       <div className="mt-2 flex h-6 w-full items-center gap-2">
         {icone}
-        <span className="truncate text-sm font-semibold text-txt-primary">{rotulo}</span>
+        <span className="truncate text-sm font-semibold text-text-strong">{rotulo}</span>
       </div>
     </button>
   );
@@ -378,7 +388,7 @@ function Miniatura({
 
 function EstadoVazio({ icone, texto }: { icone: ReactNode; texto: string }) {
   return (
-    <div className="flex h-full min-h-[248px] flex-col items-center justify-center gap-3 text-txt-muted">
+    <div className="flex h-full min-h-[248px] flex-col items-center justify-center gap-3 text-text-muted">
       {icone}
       <p className="text-sm">{texto}</p>
     </div>
@@ -409,18 +419,10 @@ function Rodape({
       <div className="min-w-0">
         {/* O som vem do loopback do Windows (tudo o que está tocando), pelo
             WASAPI do Rust — não da fonte escolhida. */}
-        <label className="flex w-max cursor-pointer items-center gap-2 text-sm leading-5 text-txt-normal">
-          <input
-            type="checkbox"
-            checked={audio}
-            onChange={(e) => onAudio(e.target.checked)}
-            className="accent-accent"
-          />
-          Compartilhar áudio do sistema
-        </label>
+        <Checkbox marcado={audio} aoMudar={onAudio} rotulo="Compartilhar áudio do sistema" />
         {/* O custo de subida é a única coisa que o usuário não consegue deduzir
             sozinho, e é o que decide se 1440p vai funcionar na conexão dele. */}
-        <p className="truncate text-xs leading-4 text-txt-muted">
+        <p className="truncate text-xs leading-4 text-text-muted">
           Usa cerca de {estimativaDeBanda(quality)} da sua internet de subida
         </p>
       </div>

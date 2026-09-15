@@ -11,11 +11,12 @@ registra **por que** e o que foi descartado no caminho.
 | [0001](0001-unificar-dm-em-channel-message.md) | Unificar DM e grupo em Channel/Message | Proposta | 2026-08-25 |
 | [0002](0002-cargos-e-permissoes.md)          | Cargos e permissões por bitfield       | Aceita   | 2026-08-25 |
 | [0003](0003-livekit-cloud-como-sfu.md)       | LiveKit Cloud como SFU de voz/vídeo    | Substituída por ADR-0005 | 2026-08-26 |
-| [0004](0004-identidade-visual-volt-lime.md)  | Identidade visual própria (Volt Lime)  | Aceita   | 2026-08-26 |
+| [0004](0004-identidade-visual-volt-lime.md)  | Identidade visual própria (Volt Lime)  | Substituída por ADR-0009 (menos a marca) | 2026-08-26 |
 | [0005](0005-self-host-do-livekit.md)         | Self-host do LiveKit (público brasileiro) | Aceita   | 2026-08-27 |
 | [0006](0006-giphy-como-provedor-de-gif.md)   | Giphy como provedor de busca de GIF   | Aceita   | 2026-08-28 |
 | [0007](0007-cd-por-ghcr-e-ssh-travado.md)   | CD por GHCR e SSH de comando forçado  | Aceita   | 2026-08-28 |
 | [0008](0008-painel-do-administrador-da-instancia.md) | Painel do administrador da instância | Aceita | 2026-08-28 |
+| [0009](0009-paridade-total-com-o-discord-exceto-a-marca.md) | Paridade total com o Discord, exceto a marca | Aceita | 2026-09-11 |
 
 ## Como escrever uma
 

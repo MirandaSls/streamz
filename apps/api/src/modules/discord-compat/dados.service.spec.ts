@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PrismaService } from "../../prisma/prisma.service";
-import { DadosDeCompatService } from "./dados.service";
+import { DadosDeCompatService, urlDoAnexoParaBot } from "./dados.service";
 import { lerQueryDoHistorico } from "./rest/corpos";
+import { mensagemParaDiscord } from "./traducao/mensagem";
 
 /**
  * O cursor do histórico.
@@ -148,5 +149,135 @@ describe("lerQueryDoHistorico", () => {
     // `BigInt("lixo")` lança `SyntaxError`; o Discord simplesmente ignora
     expect(lerQueryDoHistorico({ after: "lixo", limit: "abc" })).toEqual({ limit: 50 });
     expect(lerQueryDoHistorico({ limit: "999" })).toEqual({ limit: 100 });
+  });
+});
+
+/**
+ * ── rodada de correção ── o `payloadDeBot` sai da própria linha.
+ *
+ * O `MESSAGE_CREATE`/`MESSAGE_UPDATE` do gateway (`gateway/dispatch.ts`) faz
+ * exatamente `mensagemParaDiscord(await dados.mensagemPorCuid(id, bot))` — não
+ * tem `payloadsDeBot` para remendar. Antes desta rodada o `select` não trazia
+ * `botPayload` nem `suppressEmbeds`, e todo embed chegava ao bot como `[]`.
+ */
+describe("DadosDeCompatService.mensagemPorCuid — embeds no dispatch", () => {
+  const ANEXO = {
+    id: "att_1",
+    snowflake: 77n,
+    key: "attachments/uuid/placar.png",
+    filename: "placar.png",
+    contentType: "image/png",
+    size: 10,
+    width: 64,
+    height: 32,
+    externalUrl: null,
+  };
+
+  function serviceComUma(crua: Record<string, unknown>) {
+    const findUnique = vi.fn(async (_argumentos: unknown): Promise<unknown> => ({
+      ...linha(20n),
+      ...crua,
+    }));
+    const prisma = { message: { findUnique } } as unknown as PrismaService;
+    return { service: new DadosDeCompatService(prisma), findUnique };
+  }
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("o `select` pede `botPayload` e `suppressEmbeds`", async () => {
+    const { service, findUnique } = serviceComUma({});
+    await service.mensagemPorCuid("m_20", "bot_1");
+    const args = findUnique.mock.calls[0]?.[0] as { select: Record<string, unknown> };
+    expect(args.select.suppressEmbeds).toBe(true);
+    expect(args.select.botPayload).toEqual({
+      select: { embeds: true, components: true, flags: true },
+    });
+  });
+
+  it("o embed guardado chega à mensagem do dispatch, com `attachment://` resolvido", async () => {
+    vi.stubEnv("R2_PUBLIC_BASE_URL", "https://cdn.exemplo/");
+    const { service } = serviceComUma({
+      suppressEmbeds: false,
+      attachments: [ANEXO],
+      botPayload: {
+        embeds: [{ title: "Placar", image: { url: "attachment://placar.png" } }],
+        components: [{ type: 1, components: [{ type: 2, style: 1, label: "Ok", custom_id: "ok" }] }],
+        flags: 0,
+      },
+    });
+
+    const linhaDoBot = await service.mensagemPorCuid("m_20", "bot_1");
+    expect(linhaDoBot).not.toBeNull();
+    const traduzida = mensagemParaDiscord(linhaDoBot!);
+
+    expect(traduzida.embeds).toEqual([
+      { title: "Placar", image: { url: "https://cdn.exemplo/attachments/uuid/placar.png" } },
+    ]);
+    expect(traduzida.components).toEqual([
+      { type: 1, components: [{ type: 2, style: 1, label: "Ok", custom_id: "ok" }] },
+    ]);
+    expect(traduzida.flags).toBe(0);
+  });
+
+  it("`suppressEmbeds` vira a flag 4 mesmo sem linha de payload", async () => {
+    const { service } = serviceComUma({ suppressEmbeds: true, botPayload: null });
+    const linhaDoBot = await service.mensagemPorCuid("m_20", null);
+    expect(mensagemParaDiscord(linhaDoBot!).flags).toBe(1 << 2);
+  });
+
+  it("mensagem de gente (sem payload, sem supressão) segue com `embeds: []` e `flags: 0`", async () => {
+    const { service } = serviceComUma({ suppressEmbeds: false, botPayload: null });
+    const linhaDoBot = await service.mensagemPorCuid("m_20", null);
+    expect(linhaDoBot?.payloadDeBot).toBeNull();
+    const traduzida = mensagemParaDiscord(linhaDoBot!);
+    expect(traduzida.embeds).toEqual([]);
+    expect(traduzida.flags).toBe(0);
+  });
+
+  it("o `attachment_id` da mídia v2 é o snowflake do anexo, nunca o cuid", async () => {
+    const { service } = serviceComUma({
+      suppressEmbeds: false,
+      attachments: [ANEXO],
+      botPayload: {
+        embeds: [],
+        components: [{ type: 12, items: [{ media: { url: "attachment://placar.png" } }] }],
+        flags: 1 << 15,
+      },
+    });
+    const linhaDoBot = await service.mensagemPorCuid("m_20", null);
+    const galeria = mensagemParaDiscord(linhaDoBot!).components[0] as {
+      items: { media: { attachment_id?: string } }[];
+    };
+    expect(galeria.items[0]?.media.attachment_id).toBe("77");
+  });
+});
+
+describe("urlDoAnexoParaBot", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("externo (GIF) sai com a URL do provedor", () => {
+    vi.stubEnv("R2_PUBLIC_BASE_URL", "https://cdn.exemplo");
+    expect(
+      urlDoAnexoParaBot({ id: "a", key: "external/x", externalUrl: "https://media.giphy.com/x.gif" }),
+    ).toBe("https://media.giphy.com/x.gif");
+  });
+
+  it("com R2 público sai o caminho do bucket, sem barra dobrada", () => {
+    vi.stubEnv("R2_PUBLIC_BASE_URL", "https://cdn.exemplo//");
+    expect(urlDoAnexoParaBot({ id: "a", key: "attachments/u/f.png", externalUrl: null })).toBe(
+      "https://cdn.exemplo/attachments/u/f.png",
+    );
+  });
+
+  it("sem R2 público cai no proxy da API", () => {
+    vi.stubEnv("R2_PUBLIC_BASE_URL", "");
+    vi.stubEnv("API_PUBLIC_URL", "https://api.exemplo/");
+    expect(urlDoAnexoParaBot({ id: "att_9", key: "attachments/u/f.png", externalUrl: null })).toBe(
+      "https://api.exemplo/api/uploads/file/att_9",
+    );
   });
 });
