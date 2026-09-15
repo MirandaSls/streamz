@@ -32,7 +32,6 @@ export default function ChannelTopicModal({ channelId }: { channelId: string }) 
     <Dialog
       title={`#${channel?.name ?? "canal"}`}
       onClose={closeModal}
-      className="w-[440px]"
       footer={<SecondaryButton full onClick={closeModal}>Fechar</SecondaryButton>}
     >
       {!channel && carregando ? (

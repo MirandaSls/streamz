@@ -9,7 +9,6 @@ import {
   SETTINGS_TABS,
   abaOuPadrao,
   ehAbaDeAdmin,
-  rotuloDaAba,
   type SettingsGroup,
 } from "@/components/settings/tabs";
 import { ProvedorDeAbas } from "@/components/settings/navegacao";
@@ -92,11 +91,11 @@ export default function SettingsModal({ tab }: { tab?: string }) {
             // a busca acha a aba pelo nome dela **ou** de uma das seções:
             // quem digita "senha" quer "Minha conta", que não tem "senha" no nome
             (!q ||
-              rotuloDaAba(t, item.label).toLowerCase().includes(q) ||
+              t(item.label).toLowerCase().includes(q) ||
               (item.secoes ?? []).some((sec) => t(sec.label).toLowerCase().includes(q))),
         ).map((item) => ({
           id: item.id,
-          label: rotuloDaAba(t, item.label),
+          label: t(item.label),
           icon: item.icon,
           secoes: item.secoes?.map((sec) => ({ id: sec.id, label: t(sec.label) })),
         })),
@@ -136,14 +135,8 @@ export default function SettingsModal({ tab }: { tab?: string }) {
             onClick={() => setAbaId("perfil")}
             className="flex w-full items-center gap-3 rounded-lg px-[11px] py-[15px] text-left transition-colors hover:bg-background-mod-subtle"
           >
-            {/* O `Avatar` não tem o degrau de 48 (40 → 80); até ter, a caixa
-                de dentro cresce por aqui — ver "faltando" do cartão 6a. */}
-            <Avatar
-              user={user}
-              size="lg"
-              surface="border-background-base-lower"
-              className="[&>*]:h-12 [&>*]:w-12"
-            />
+            {/* degrau de 48 do `Avatar` (medida acima, print 114404) */}
+            <Avatar user={user} size="lg48" surface="border-background-base-lower" />
             <span className="min-w-0">
               <span className="block truncate text-text-md font-semibold text-text-strong">
                 {user.displayName || user.username}
@@ -166,7 +159,7 @@ export default function SettingsModal({ tab }: { tab?: string }) {
           Nenhuma configuração com esse nome.
         </p>
       }
-      tituloAba={rotuloDaAba(t, aba.label)}
+      tituloAba={t(aba.label)}
       rotuloFechar={t("config.fechar")}
       controle={alteracoes}
       onClose={closeModal}

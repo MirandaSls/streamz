@@ -28,10 +28,8 @@ import { useSettings, type Locale } from "@/stores/settings";
  * `components/ui/primitivos` — o círculo de 20px com ponto interno de 8px e
  * a animação de entrada/saída medidos no cartão 0.4-controles, em vez de
  * redesenhar um rádio próprio aqui (regra do cabeçalho deste tipo de
- * cartão). O cabeçalho "IDIOMA DO APP" reaproveita a chave `idioma.escolha`
- * que já existia (só como `aria-label`) em vez de criar uma chave nova: os
- * dois arquivos editáveis por este cartão não incluem `lib/i18n.ts` — ver
- * "faltando".
+ * cartão). O cabeçalho visível usa `idioma.selecione` ("Selecione um
+ * idioma"); `idioma.escolha` fica só na legenda acessível do grupo de rádios.
  *
  * A bandeira do Discord é um ícone PNG **16×12** (`.flagIcon__45b6e{height:
  * 12px;width:16px}`, `css-bruto/sob-demanda/926787.3ad3e66d17a49d3a.css`);
@@ -80,7 +78,7 @@ export default function IdiomaTab() {
           de Configurações (`VozTab`, `PerfilTab`, `SegurancaTab`): `text-xs
           font-bold uppercase tracking-[0.02em] text-text-subtle`. */}
       <h2 className="mb-2 text-text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
-        {t("idioma.escolha")}
+        {t("idioma.selecione")}
       </h2>
 
       <RadioGroup

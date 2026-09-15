@@ -2,11 +2,13 @@
 
 import { useMemo, useState } from "react";
 import {
+  AlertTriangle,
   ArrowLeftRight,
   ChevronLeft,
   ChevronRight,
   Crown,
   MoreHorizontal,
+  RefreshCw,
   Search,
   ShieldAlert,
   X,
@@ -75,11 +77,14 @@ import { COR_DE_CARGO_SEM_COR } from "@/lib/cor-de-cargo";
  *   pular para "Ninguém aqui ainda." enquanto o primeiro fetch não voltou.
  * - **vazio** — "Ninguém aqui ainda." (servidor sem gente) ou "Ninguém com
  *   esses filtros." (busca/cargo sem resultado).
- * - **erro** — **sem sinal para mostrar**: `stores/guilds.ts:96-104`
- *   (`loadMembers`) engole a falha num `catch` mudo e devolve `members: []`,
- *   indistinguível de "servidor sem gente" — o mesmo defeito que
- *   `GuildEmojisModal.tsx`/`EmojiTab.tsx` documentam para `stores/emojis.ts`.
- *   `stores/*` está fora da lista deste cartão; ver "faltando".
+ * - **erro** — `membersError` (`stores/guilds.ts`, `loadMembers`) marca a
+ *   falha em vez de devolver `members: []` indistinguível de "servidor sem
+ *   gente"; a linha de erro usa o mesmo par ícone+mensagem+"Tentar de novo"
+ *   do `BlocoDeErro` de `EngajamentoTab.tsx` (`AlertTriangle` em
+ *   `--status-warning`, botão secundário com `RefreshCw`), chamando
+ *   `recarregarMembros(guildId)`. `GuildEmojisModal.tsx`/`EmojiTab.tsx`
+ *   documentam o mesmo defeito para `stores/emojis.ts` — fora da lista
+ *   deste cartão.
  * - **sem permissão** — a aba some inteira do menu de configurações para quem
  *   não tem `MANAGE_ROLES` (`ServerSettingsModal.tsx`), então quem abre esta
  *   tela sempre pode ver a lista e atribuir cargo (`podeCargos` é sempre
@@ -104,10 +109,12 @@ import { COR_DE_CARGO_SEM_COR } from "@/lib/cor-de-cargo";
  * A ordenação, o filtro e a paginação são funções puras em `membros-tabela.ts`,
  * com teste — é a parte que erra em silêncio num servidor grande.
  */
-export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
+export default function MembrosTab({ guildId }: { guildId: string }) {
   const me = useAuth((s) => s.user);
   const members = useGuilds((s) => s.members);
   const membersLoading = useGuilds((s) => s.membersLoading);
+  const membersError = useGuilds((s) => s.membersError);
+  const recarregarMembros = useGuilds((s) => s.recarregarMembros);
   const kick = useGuilds((s) => s.kick);
   const ban = useGuilds((s) => s.ban);
   const toggleRole = useGuilds((s) => s.toggleRole);
@@ -355,7 +362,32 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
                 </td>
               </tr>
             )}
-            {!membersLoading && pag.itens.length === 0 && (
+            {/* "erro": `membersError` — sem isto, uma falha de rede caía direto
+                em "Ninguém aqui ainda.", indistinguível de servidor vazio de
+                verdade (par ícone+mensagem+"Tentar de novo" de
+                `BlocoDeErro`/`EngajamentoTab.tsx`). */}
+            {!membersLoading && membersError && (
+              <tr>
+                <td colSpan={6} className="px-4 py-3">
+                  <div className="flex items-center justify-between gap-4 rounded-[4px] border border-border-subtle bg-background-base-lowest px-3 py-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <AlertTriangle size={16} className="shrink-0 text-status-warning" aria-hidden="true" />
+                      <p className="min-w-0 text-sm text-text-muted">Não foi possível carregar os membros.</p>
+                    </div>
+                    <Button
+                      variante="secundario"
+                      tamanho="sm"
+                      icone={<RefreshCw size={14} aria-hidden="true" />}
+                      onClick={() => void recarregarMembros(guildId)}
+                      className="shrink-0 celular:h-[44px]"
+                    >
+                      Tentar de novo
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            )}
+            {!membersLoading && !membersError && pag.itens.length === 0 && (
               <tr className="h-[55px]">
                 <td colSpan={6} className="text-sm text-text-muted">
                   {members.length === 0 ? "Ninguém aqui ainda." : "Ninguém com esses filtros."}
@@ -363,6 +395,7 @@ export default function MembrosTab({ guildId: _guildId }: { guildId: string }) {
               </tr>
             )}
             {!membersLoading &&
+              !membersError &&
               pag.itens.map((m) => {
               const cor = colorRoleOf(m.roleIds, roles)?.color ?? null;
               const chips = rolesOf(m.roleIds, roles);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Hash, Lock, Megaphone, Volume2 } from "@/components/ui/icones";
+import { Forum, Hash, Lock, Megaphone, Volume2, type Icone as TipoDeIcone } from "@/components/ui/icones";
 import { Permission, type Channel, type GuildChannelType } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
 import { ChannelAccessList } from "@/components/modals/ChannelAccessModal";
@@ -9,6 +9,7 @@ import { RadioLinha, ToggleLinha } from "@/components/ui/controls";
 import { Button, Campo, TextInput } from "@/components/ui/primitivos";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { api } from "@/lib/api";
+import { normalizarNomeDeCanal } from "@/lib/nome-de-canal";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui, useUI } from "@/stores/ui";
 import { useGuilds } from "@/stores/guilds";
@@ -16,12 +17,19 @@ import { useCan } from "@/stores/permissions";
 import { useCategories } from "@/stores/categories";
 import { useChannels } from "@/stores/channels";
 
-/** Tipos criáveis dentro de um servidor, com a descrição que o Discord mostra. */
+/**
+ * Tipos da lista, com a descrição que o Discord mostra.
+ *
+ * `"FORUM"` não é um `GuildChannelType` — o contrato só tem TEXT/VOICE/
+ * ANNOUNCEMENT — e por isso vem marcado `emBreve`: a linha aparece, cinza e
+ * sem clique (§6.6 do PROCESSO), e nunca chega a `setType`.
+ */
 const TIPOS: {
-  valor: GuildChannelType;
+  valor: GuildChannelType | "FORUM";
   rotulo: string;
   descricao: string;
-  icone: typeof Hash;
+  icone: TipoDeIcone;
+  emBreve?: boolean;
 }[] = [
   {
     valor: "TEXT",
@@ -34,6 +42,18 @@ const TIPOS: {
     rotulo: "Voz",
     descricao: "Converse por voz, vídeo e compartilhamento de tela",
     icone: Volume2,
+  },
+  {
+    // Posição logo depois de Voz: não medida (não há print do diálogo, ver o
+    // cabeçalho do componente). A dica traduz o artigo de suporte "Forum
+    // Channels FAQ" (#6208479917079, `suporte/api/artigos.json`: "Forum
+    // Channels provide a space for organized discussions") — é a frase do
+    // suporte, não a da linha do diálogo, que não foi capturada.
+    valor: "FORUM",
+    rotulo: "Fórum (em breve)",
+    descricao: "Crie um espaço para discussões organizadas",
+    icone: Forum,
+    emBreve: true,
   },
   {
     valor: "ANNOUNCEMENT",
@@ -67,11 +87,14 @@ const ALTURA_DE_TOQUE = "!h-[44px]";
  * categoria de verdade (que aceita os dois) e do "Criar canal" do menu do
  * servidor — aí a pergunta continua de pé, começando em Texto.
  *
- * **Fórum não entra.** O Discord tem um quarto tipo aqui; o Streamz não tem
- * fórum (nem o contrato em `packages/shared` — `GUILD_CHANNEL_TYPES` só lista
- * TEXT/VOICE/ANNOUNCEMENT). A regra do §6.6 pede a opção visível e desabilitada
- * com "(em breve)" para o que falta, mas isso exige um ícone de fórum em
- * `icones.tsx`, fora da lista deste cartão — ver "faltando".
+ * **Fórum aparece inerte.** O Discord tem um quarto tipo aqui; o Streamz não
+ * tem fórum (nem o contrato em `packages/shared` — `GUILD_CHANNEL_TYPES` só
+ * lista TEXT/VOICE/ANNOUNCEMENT). Pela regra do §6.6 a opção fica visível e
+ * desabilitada, "Fórum (em breve)", com o ícone `Forum` do acervo. O fórum de
+ * verdade segue na trilha.
+ *
+ * **O nome se normaliza ao digitar** em texto e anúncios (`normalizarNomeDeCanal`:
+ * minúsculas, espaço vira hífen), como o Discord faz; voz fica livre.
  *
  * **Sem captura do diálogo real.** `referencias.json` marca
  * `modal-criar-canal` como lacuna (nenhum print 1:1 do formulário de criação,
@@ -210,26 +233,37 @@ export default function CreateChannelModal({
         </>
       }
     >
-      {/* `disabled` no fieldset cascateia para os `<input type="radio">` de
-          dentro (nativo do HTML, sem precisar de uma prop de `RadioLinha` que
-          não existe) — trava a escolha de tipo enquanto o POST está em voo,
-          como o resto do formulário. */}
-      <fieldset disabled={saving}>
-        <legend className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
+      {/* Grupo de rádio sem `<fieldset>`: o `disabled` agora é de cada
+          `RadioLinha` (a prop trava o `<input>` e esmaece a linha). O
+          fieldset nativo cascateava o `disabled`, mas não deixava uma linha
+          ficar cinza sozinha — que é o que o Fórum precisa. O rótulo do grupo
+          vira `aria-labelledby`, que é o que a `<legend>` dava ao leitor. */}
+      <div role="radiogroup" aria-labelledby="novo-canal-tipo">
+        <p id="novo-canal-tipo" className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
           Tipo de canal
-        </legend>
+        </p>
         {/* gap 8px: `--space-8` do `radioGroupContainer` medido no CSS bruto do
             Discord (ver o comentário do arquivo) — trocado do gap-1 (4px) que
             não tinha origem nenhuma. */}
         <div className="flex flex-col gap-2">
           {tipos.map((option) => {
             const Icone = option.icone;
+            const valor = option.valor;
             return (
               <RadioLinha
-                key={option.valor}
+                key={valor}
                 name="tipo-de-canal"
-                checked={type === option.valor}
-                onChange={() => setType(option.valor)}
+                checked={type === valor}
+                onChange={() => {
+                  if (valor === "FORUM") return;
+                  setType(valor);
+                  // quem digitou "Sala de Música" em Voz e trocou para Texto
+                  // não pode gravar o nome cru: normaliza na troca também
+                  if (valor !== "VOICE") setName((n) => normalizarNomeDeCanal(n));
+                }}
+                // travado enquanto o POST está em voo, como o resto do
+                // formulário; o Fórum fica travado sempre
+                disabled={saving || option.emBreve === true}
                 titulo={option.rotulo}
                 hint={option.descricao}
                 icon={<Icone size={20} />}
@@ -237,7 +271,7 @@ export default function CreateChannelModal({
             );
           })}
         </div>
-      </fieldset>
+      </div>
 
       <Campo rotulo="Nome do canal" htmlFor="novo-canal-nome" erro={erro} className="mt-5">
         <TextInput
@@ -247,7 +281,9 @@ export default function CreateChannelModal({
           disabled={saving}
           erro={!!erro}
           onChange={(e) => {
-            setName(e.target.value);
+            // texto e anúncios viram "bate-papo" já ao digitar, como no Discord;
+            // canal de voz aceita "Sala de Música" como veio
+            setName(type === "VOICE" ? e.target.value : normalizarNomeDeCanal(e.target.value));
             setErro(null);
           }}
           onKeyDown={(e) => {
@@ -268,25 +304,24 @@ export default function CreateChannelModal({
 
       {podeGerenciarCanais && !anuncio && (
         <div className="mt-4 border-t border-border-subtle pt-1">
-          {/* mesmo truque do fieldset acima: `contents` tira a caixa própria
-              (sem isto o border-0/padding-0 default do fieldset some com a
-              margem/borda deste bloco), só a cascata de `disabled` fica. */}
-          <fieldset disabled={saving} className="contents">
-            <ToggleLinha
-              checked={isPrivate}
-              onChange={setPrivate}
-              icon={<Lock size={18} />}
-              titulo="Canal privado"
-              hint="Só os membros e cargos escolhidos conseguem ver este canal."
-            />
-            <ToggleLinha
-              checked={readOnly}
-              onChange={setReadOnly}
-              icon={<Megaphone size={18} />}
-              titulo="Somente leitura"
-              hint="Todo mundo lê; só a moderação envia mensagens."
-            />
-          </fieldset>
+          {/* `disabled` direto no `ToggleLinha`, como no tipo acima: trava os
+              dois enquanto o POST está em voo, sem o fieldset `contents`. */}
+          <ToggleLinha
+            checked={isPrivate}
+            onChange={setPrivate}
+            disabled={saving}
+            icon={<Lock size={18} />}
+            titulo="Canal privado"
+            hint="Só os membros e cargos escolhidos conseguem ver este canal."
+          />
+          <ToggleLinha
+            checked={readOnly}
+            onChange={setReadOnly}
+            disabled={saving}
+            icon={<Megaphone size={18} />}
+            titulo="Somente leitura"
+            hint="Todo mundo lê; só a moderação envia mensagens."
+          />
         </div>
       )}
     </Dialog>

@@ -65,23 +65,29 @@ import { ui } from "@/stores/ui";
  *    (tamanho não medido com confiança — a única fonte é a imagem de escala
  *    deduzida — mantido um degrau abaixo do valor, como o rótulo de campo já
  *    faz em `ESTILO_ROTULO`).
- * 7. **Título de seção sem caixa-alta.** Pela mesma razão do item 6,
- *    "Senha e autenticação" e "Encerrar a conta" trocam a legenda pequena de
- *    `Section` (que eu não posso mudar — vive em `ui/controls.tsx`, fora da
- *    lista deste cartão) por um `<h2>` local, `text-heading-lg` (20px, a
- *    escala de `tailwind.config.ts`) `font-semibold`, igual ao "Password and
- *    Authentication" do print.
+ * 7. **Título de seção sem caixa-alta.** "Senha e autenticação" e "Encerrar a
+ *    conta" passam o texto pelo `title` de `Section` (`ui/controls.tsx`), que
+ *    outro cartão já deixou em `text-heading-lg font-semibold text-text-strong`
+ *    — igual ao "Password and Authentication" do print. Antes, enquanto o
+ *    `title` do `Section` ainda era a legenda pequena em caixa-alta, este
+ *    arquivo usava um `<h2>` local com a mesma classe só para não ficar preso
+ *    a um arquivo fora da lista de então; a rodada de correção
+ *    `conta-seguranca-perfil` tirou o `<h2>` duplicado agora que os dois
+ *    caminhos desenham igual.
  * 8. **Linha de telefone**, como no Discord ("Phone Number"/"Add"). O Streamz
  *    não tem telefone de conta: o botão fica visível e desabilitado com a
  *    dica "(em breve)" (padrão de `voice/TileDeVoz.tsx` — `span` focável por
  *    fora do botão `disabled`, porque um botão nativo desabilitado não recebe
  *    ponteiro nem foco e a dica nunca abriria nele).
- * 9. **Carregando/erro.** `stores/conta.ts` não expõe status (é `stores/*`,
- *    fora da lista deste cartão) e engole erro num toast. Este arquivo cobre
- *    os dois localmente: enquanto a primeira busca não termina, a caixa de
- *    campos mostra um esqueleto pulsante em vez de "Nenhum e-mail cadastrado"
- *    (que seria uma mentira); se termina e a conta continua `null`, vira um
- *    aviso com "Tentar de novo".
+ * 9. **Carregando/erro.** `stores/conta.ts` expõe `carregando`/`falhouCarregar`
+ *    (rodada de correção `conta-seguranca-perfil` — antes era só um toast no
+ *    catch, e este arquivo deduzia erro pela heurística "a busca terminou e a
+ *    conta continua `null`", que `SegurancaTab` reimplementava à parte, com o
+ *    seu próprio `useState`). Os dois vêm direto da store agora: enquanto
+ *    `carregandoConta` é `true`, a caixa de campos mostra um esqueleto
+ *    pulsante em vez de "Nenhum e-mail cadastrado" (que seria uma mentira);
+ *    se `erroConta` (== `falhouCarregar` da store) fica `true`, vira um aviso
+ *    com "Tentar de novo".
  * 10. **Sem permissão.** Esta tela é sempre a conta da própria pessoa — não
  *    existe um "ver a conta de outro sem poder editar". A única negação
  *    possível é a API recusar uma ação (ex.: apagar a conta quando é a única
@@ -114,6 +120,11 @@ export default function ContaTab() {
   // a conta é da pessoa, não da aba: mora numa store para o `account.updated`
   // do outro aparelho chegar aqui (ver `stores/conta`)
   const conta = useConta((s) => s.conta);
+  // carregando/falhouCarregar vêm da store (item 9 do cabeçalho, atualizado
+  // nesta rodada): antes eram um `useState` local que deduzia erro por
+  // heurística; agora é o mesmo estado que `SegurancaTab` lê, uma vez só.
+  const carregandoConta = useConta((s) => s.carregando);
+  const erroConta = useConta((s) => s.falhouCarregar);
   const carregar = useConta((s) => s.carregar);
   const aplicarConta = useConta((s) => s.aplicar);
   const [banner, setBanner] = useState<{ url: string | null; cor: string | null }>({
@@ -126,26 +137,13 @@ export default function ContaTab() {
   // sai de "seguranca" na prática, mas o primitivo `Tabs` é controlado e
   // exige os dois valores.
   const [aba, setAba] = useState<AbaDeMinhaConta>("seguranca");
-  // carregando = a primeira busca da conta ainda não terminou (item 9). Começa
-  // falso quando a store já tinha a conta em cache de uma visita anterior à
-  // aba nesta sessão — assim não pisca esqueleto por cima de um dado que já
-  // existe.
-  const [carregandoConta, setCarregandoConta] = useState(() => conta === null);
-  const erroConta = !carregandoConta && !conta;
 
   function buscarConta() {
-    setCarregandoConta(true);
-    void carregar().finally(() => setCarregandoConta(false));
+    void carregar();
   }
 
   useEffect(() => {
-    let vivo = true;
-    carregar().finally(() => {
-      if (vivo) setCarregandoConta(false);
-    });
-    return () => {
-      vivo = false;
-    };
+    void carregar();
   }, [carregar]);
 
   // só a aba visível fica montada, então voltar de "Perfil" já traz o banner
@@ -518,6 +516,7 @@ function LinhaDeEmail({
               value={email}
               onChange={setEmail}
               disabled={ocupado}
+              invalido={!!erro}
             />
             <CampoDeTexto
               id="senha-email"
@@ -527,6 +526,7 @@ function LinhaDeEmail({
               value={senha}
               onChange={setSenha}
               disabled={ocupado}
+              invalido={!!erro}
             />
             <Erro texto={erro} />
             <PrimaryButton type="submit" disabled={ocupado || !email.trim() || !senha}>
@@ -604,11 +604,13 @@ function BlocoDeSenha({ carregando }: { carregando: boolean }) {
   }
 
   return (
-    <Section id="senha">
-      {/* legenda própria em vez do `title` de `Section` (caixa-alta 12px, sem
-          par no print — item 7 do cabeçalho): `text-heading-lg` 20px, igual ao
-          "Password and Authentication" do Discord */}
-      <h2 className="mb-3 text-heading-lg font-semibold text-text-strong">{t("conta.secSenha")}</h2>
+    // título pelo `title` de `Section` (`ui/controls.tsx`), já em
+    // `text-heading-lg font-semibold text-text-strong` — o `<h2>` local que
+    // existia aqui (item 7 do cabeçalho, versão anterior deste arquivo) foi
+    // só porque o `title` do Section ainda era caixa-alta 12px; outro cartão
+    // já trocou isso (`controls.tsx:80`), então o `<h2>` duplicava o mesmo
+    // texto duas vezes.
+    <Section id="senha" title={t("conta.secSenha")}>
       <div className="flex items-center justify-between gap-4 py-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-text-strong">Senha da conta</p>
@@ -631,6 +633,7 @@ function BlocoDeSenha({ carregando }: { carregando: boolean }) {
             value={atual}
             onChange={setAtual}
             disabled={ocupado}
+            invalido={!!erro}
           />
           <CampoDeTexto
             id="senha-nova"
@@ -640,6 +643,7 @@ function BlocoDeSenha({ carregando }: { carregando: boolean }) {
             value={nova}
             onChange={setNova}
             disabled={ocupado}
+            invalido={!!erro}
           />
           <Erro texto={erro} />
           <PrimaryButton type="submit" disabled={ocupado || !atual || !nova}>
@@ -706,8 +710,9 @@ function BlocoDeEncerramento({
   }
 
   return (
-    <Section id="encerrar" semDivisoria>
-      <h2 className="mb-3 text-heading-lg font-semibold text-text-strong">{t("conta.secEncerrar")}</h2>
+    // mesma razão do `BlocoDeSenha` acima: título pelo `title` do `Section`,
+    // sem `<h2>` local duplicando o texto.
+    <Section id="encerrar" semDivisoria title={t("conta.secEncerrar")}>
       <p className="text-sm text-text-muted">
         Desativar é reversível: a conta volta quando você entra de novo. Excluir anonimiza o
         usuário para sempre.
@@ -743,6 +748,7 @@ function BlocoDeEncerramento({
             value={senha}
             onChange={setSenha}
             disabled={ocupado}
+            invalido={!!erro}
           />
           {excluindo && conta?.mfaEnabled && (
             <CampoDeTexto
@@ -752,6 +758,7 @@ function BlocoDeEncerramento({
               value={codigo}
               onChange={setCodigo}
               disabled={ocupado}
+              invalido={!!erro}
             />
           )}
           <Erro texto={erro} />

@@ -45,7 +45,6 @@ export type Modal =
   | { kind: "criarServidor"; tela?: "criar" | "entrar" }
   | { kind: "createGroupDM" }
   | { kind: "settings"; tab?: string }
-  | { kind: "invites"; guildId: string }
   | { kind: "image"; url: string; alt: string }
   // ── g-emojis-midia ──
   /**
@@ -69,6 +68,12 @@ export type Modal =
       preview?: string;
       confirmLabel: string;
       danger: boolean;
+      /**
+       * Com ela, o rodapé ganha o "Não perguntar de novo" do Discord (124114) e
+       * a escolha fica guardada sob esta chave (`lib/confirmacao-lembrada.ts`).
+       * Quem chama é quem consulta `confirmacaoLembrada(chave)` antes de abrir.
+       */
+      chaveDeLembrar?: string;
       resolve: (ok: boolean) => void;
     }
   | {
@@ -104,6 +109,8 @@ export type Modal =
   | { kind: "channelTopic"; channelId: string }
   // ── e-configuracoes ──
   | { kind: "quickSwitcher" }
+  /** a grade de atalhos do Ctrl+/ (`components/chat/AtalhosDoTeclado.tsx`). */
+  | { kind: "atalhosDoTeclado" }
   // ── d-social ──
   | { kind: "customStatus" }
   /** perfil completo de alguém; `guildId` é o servidor de onde o cartão abriu. */
@@ -160,8 +167,6 @@ export type MenuItem =
       onSelect: () => void;
       danger?: boolean;
       disabled?: boolean;
-      /** destaque de ação principal ("Convidar pessoas" no menu do servidor). */
-      highlight?: boolean;
       checked?: boolean;
       /** `radio` desenha bolinha; `checkbox`, quadrado. */
       control?: "radio" | "checkbox";
@@ -245,6 +250,12 @@ export interface ContextMenuState {
   items: MenuItem[];
   /** largura da caixa; o Discord varia entre ~188px e ~220px por tipo de menu. */
   width?: number;
+  /**
+   * Quem abriu o menu (`mensagem:<id>` no `MessageItem`). Serve para o dono
+   * saber que o menu aberto é o dele — a mensagem fica acesa enquanto o menu
+   * dela está na tela, como no Discord — sem comparar a lista de itens.
+   */
+  dono?: string;
 }
 
 /** Retângulo do elemento que abriu um popover (coordenadas da viewport). */
@@ -276,6 +287,8 @@ export interface ConfirmOptions {
   preview?: string;
   confirmLabel?: string;
   danger?: boolean;
+  /** ver `chaveDeLembrar` no modal `confirm`. */
+  chaveDeLembrar?: string;
 }
 
 export interface PromptOptions {
@@ -317,6 +330,19 @@ interface UIState {
   contextMenu: ContextMenuState | null;
   popover: Popover | null;
   toasts: Toast[];
+  /**
+   * Canal (de servidor ou DM) cujo painel de fixadas está aberto; `null` =
+   * fechado. Mora aqui, e não no estado local do `PinsPopover`, para o Ctrl+P
+   * (`hooks/useKeyboardShortcuts.ts`) conseguir abrir o mesmo painel que o
+   * alfinete do cabeçalho abre.
+   */
+  fixadasAbertasEm: string | null;
+  /**
+   * Contador de pedidos de foco na busca do cabeçalho (Ctrl+F). É número, não
+   * booleano: dois Ctrl+F seguidos têm de ser dois pedidos, e um booleano que
+   * já está `true` não muda — o `HeaderBar` observa a troca do valor.
+   */
+  focoNaBusca: number;
 
   setView: (view: "guild" | "dm") => void;
   toggleMembers: () => void;
@@ -356,8 +382,13 @@ interface UIState {
     items: MenuItem[],
     width?: number,
     manterPopover?: boolean,
+    /** quem abriu (ver `ContextMenuState.dono`). */
+    dono?: string,
   ) => void;
   closeContextMenu: () => void;
+  openPins: (channelId: string) => void;
+  closePins: () => void;
+  pedirFocoNaBusca: () => void;
   openProfile: (user: PublicUser, anchor: Anchor, acima?: boolean) => void;
   closePopover: () => void;
 
@@ -398,6 +429,8 @@ export const useUI = create<UIState>((set, get) => ({
   contextMenu: null,
   popover: null,
   toasts: [],
+  fixadasAbertasEm: null,
+  focoNaBusca: 0,
 
   setView: (view) => set({ view }),
   toggleMembers: () => set((s) => ({ membersOpen: !s.membersOpen })),
@@ -455,12 +488,15 @@ export const useUI = create<UIState>((set, get) => ({
     set({ modals: [] });
   },
 
-  openContextMenu: (x, y, items, width, manterPopover) =>
+  openContextMenu: (x, y, items, width, manterPopover, dono) =>
     set((s) => ({
-      contextMenu: { x, y, items, width },
+      contextMenu: { x, y, items, width, dono },
       popover: manterPopover ? s.popover : null,
     })),
   closeContextMenu: () => set({ contextMenu: null }),
+  openPins: (channelId) => set({ fixadasAbertasEm: channelId }),
+  closePins: () => set({ fixadasAbertasEm: null }),
+  pedirFocoNaBusca: () => set((s) => ({ focoNaBusca: s.focoNaBusca + 1 })),
   openProfile: (user, anchor, acima) =>
     set({ popover: { kind: "profile", user, anchor, acima }, contextMenu: null }),
   closePopover: () => set({ popover: null }),
@@ -475,6 +511,7 @@ export const useUI = create<UIState>((set, get) => ({
         preview: options.preview,
         confirmLabel: options.confirmLabel ?? "Confirmar",
         danger: options.danger ?? false,
+        chaveDeLembrar: options.chaveDeLembrar,
         resolve: (ok) => {
           set((s) => ({ modals: s.modals.filter((m) => m !== modal) }));
           resolve(ok);
@@ -557,7 +594,11 @@ export const ui = {
     items: MenuItem[],
     width?: number,
     manterPopover?: boolean,
-  ) => useUI.getState().openContextMenu(x, y, items, width, manterPopover),
+    dono?: string,
+  ) => useUI.getState().openContextMenu(x, y, items, width, manterPopover, dono),
+  openPins: (channelId: string) => useUI.getState().openPins(channelId),
+  closePins: () => useUI.getState().closePins(),
+  pedirFocoNaBusca: () => useUI.getState().pedirFocoNaBusca(),
   openProfile: (user: PublicUser, anchor: Anchor, acima?: boolean) =>
     useUI.getState().openProfile(user, anchor, acima),
   setView: (view: "guild" | "dm") => useUI.getState().setView(view),

@@ -47,33 +47,31 @@ import { ui } from "@/stores/ui";
  * dos primitivos (`Button`, `CampoDeTexto`). **Não existe estado "sem
  * permissão"**: as rotas de `/me/*` só respondem pelo dono do token — não há
  * papel nem ownership para negar aqui, diferente de uma aba de servidor.
+ *
+ * `carregando`/`falhouCarregar` vêm da store agora (rodada de correção
+ * `conta-seguranca-perfil`, `stores/conta.ts`): antes eram um `useState`
+ * local aqui — porque `useConta.carregar` só avisava erro por toast e nunca
+ * relançava — deduzindo `falhouCarregar` pela heurística "carregando acabou e
+ * a conta continua `null`", a mesma duplicada em `ContaTab.tsx`. A store
+ * exposta de vez resolve os dois lugares com o mesmo estado, sem cada aba
+ * reimplementar a própria janela de corrida.
  */
 export default function SegurancaTab() {
   // a conta vive numa store, e não aqui: `account.updated` chega a todas as
   // conexões da pessoa, e ligar o 2FA num aparelho tem de aparecer no outro
   const conta = useConta((s) => s.conta);
+  const carregando = useConta((s) => s.carregando);
+  const falhouCarregar = useConta((s) => s.falhouCarregar);
   const carregar = useConta((s) => s.carregar);
   const irParaAba = useIrParaAba();
 
-  // `carregando` é local porque `useConta.carregar` só avisa erro por toast
-  // (nunca relança) — sem um estado próprio aqui, a tela não distingue "ainda
-  // buscando" de "buscou e falhou", e o bloco de 2FA mostraria "Desativada"
-  // por engano enquanto a conta de verdade ainda não chegou.
-  const [carregando, setCarregando] = useState(true);
-
   const tentar = useCallback(() => {
-    setCarregando(true);
-    void carregar().finally(() => setCarregando(false));
+    void carregar();
   }, [carregar]);
 
   useEffect(() => {
     tentar();
   }, [tentar]);
-
-  // depois do primeiro carregamento, `conta` continua `null` só quando a
-  // busca falhou — em sucesso o servidor sempre devolve a conta de quem está
-  // autenticado.
-  const falhouCarregar = !carregando && !conta;
 
   return (
     <>
@@ -508,6 +506,7 @@ function BlocoDeMfa({
               value={codigo}
               onChange={setCodigo}
               disabled={ocupado}
+              invalido={!!erro}
             />
             <Erro texto={erro} />
             <PrimaryButton type="submit" disabled={ocupado || !codigo.trim()}>
@@ -529,6 +528,7 @@ function BlocoDeMfa({
               value={senha}
               onChange={setSenha}
               disabled={ocupado}
+              invalido={!!erro}
             />
             <Erro texto={erro} />
             <PrimaryButton type="submit" disabled={ocupado || !senha}>
@@ -547,6 +547,7 @@ function BlocoDeMfa({
               value={senha}
               onChange={setSenha}
               disabled={ocupado}
+              invalido={!!erro}
             />
             <CampoDeTexto
               id="mfa-codigo-off"
@@ -555,6 +556,7 @@ function BlocoDeMfa({
               value={codigo}
               onChange={setCodigo}
               disabled={ocupado}
+              invalido={!!erro}
             />
             <Erro texto={erro} />
             <PrimaryButton type="submit" danger disabled={ocupado || !senha || !codigo.trim()}>

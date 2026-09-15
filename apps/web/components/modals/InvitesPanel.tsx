@@ -19,9 +19,10 @@ import { ui } from "@/stores/ui";
  * — o único CSS bruto encontrado para esta tela; regra §7 da ADR-0009, o print
  * decide onde ele e o CSS discordam.
  *
- * Vive separado do modal porque é a mesma tela em dois lugares — o modal
- * `InvitesModal` (atalho do menu do servidor) e a aba "Convites" das
- * configurações. Duplicar seria manter duas listas que envelhecem diferente.
+ * Vive separado da aba "Convites" das configurações do servidor, que é quem o
+ * monta. Havia também um `InvitesModal` com a mesma lista, mas nenhum menu o
+ * abria mais e ele foi apagado; o painel continua componente próprio para a
+ * lista não depender do quadro das configurações.
  *
  * Estados cobertos:
  * - **carregando** — "Carregando…" na primeira linha da tabela.

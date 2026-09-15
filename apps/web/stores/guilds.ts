@@ -28,12 +28,14 @@ interface GuildsState {
   members: GuildMemberView[];
   loading: boolean;
   membersLoading: boolean;
+  /** `loadMembers` engoliu uma falha: a aba Membros mostra "Tentar de novo" em vez da lista. */
+  membersError: boolean;
 
   load: () => Promise<void>;
   /** `manterVisao` pré-carrega o servidor sem tirar o usuário da tela atual. */
   select: (guild: Pick<Guild, "id" | "name">, opcoes?: { manterVisao?: boolean }) => void;
-  create: () => Promise<void>;
-  joinByCode: () => Promise<void>;
+  /** Refaz a carga de membros do servidor ativo (botão "Tentar de novo"). */
+  recarregarMembros: (guildId: string) => Promise<void>;
   /** Resgata um convite pelo código e abre o servidor (cartão de convite e menu). */
   entrarPorConvite: (code: string) => Promise<void>;
   createInvite: () => Promise<void>;
@@ -93,15 +95,17 @@ let membersSeq = 0;
 export const useGuilds = create<GuildsState>((set, get) => {
   async function loadMembers(guildId: string) {
     const seq = ++membersSeq;
-    set({ members: [], membersLoading: true });
+    set({ members: [], membersLoading: true, membersError: false });
     try {
       const members = await api.members(guildId);
       if (seq !== membersSeq) return; // trocaram de servidor no meio do fetch
-      set({ members, membersLoading: false });
+      set({ members, membersLoading: false, membersError: false });
       usePresence.getState().seed(members.map((m) => m.user));
     } catch {
       if (seq !== membersSeq) return;
-      set({ members: [], membersLoading: false });
+      // marca o erro em vez de deixar `members: []` se passar por "sem gente"
+      // — é o que dá ao `MembrosTab` o que mostrar em vez do vazio
+      set({ members: [], membersLoading: false, membersError: true });
     }
   }
 
@@ -115,6 +119,7 @@ export const useGuilds = create<GuildsState>((set, get) => {
     members: [],
     loading: false,
     membersLoading: false,
+    membersError: false,
 
     load: async () => {
       set({ loading: true });
@@ -150,32 +155,8 @@ export const useGuilds = create<GuildsState>((set, get) => {
       void useComandosDeApp.getState().loadForGuild(guild.id);
     },
 
-    create: async () => {
-      const name = await ui.prompt({
-        title: "Criar um servidor",
-        message: "Dê um nome ao seu servidor. Você pode mudar depois.",
-        placeholder: "Ex.: Time de produto",
-        confirmLabel: "Criar",
-      });
-      if (!name?.trim()) return;
-      try {
-        const guild = await api.createGuild(name.trim());
-        set((s) => ({ guilds: [...s.guilds, guild] }));
-        get().select(guild);
-      } catch (e) {
-        ui.toast(errorMessage(e, "Não foi possível criar o servidor"), "error");
-      }
-    },
-
-    joinByCode: async () => {
-      const code = await ui.prompt({
-        title: "Entrar em um servidor",
-        message: "Cole o código do convite que você recebeu.",
-        placeholder: "Ex.: a1b2c3d4",
-        confirmLabel: "Entrar",
-      });
-      if (!code?.trim()) return;
-      await get().entrarPorConvite(code.trim());
+    recarregarMembros: async (guildId) => {
+      await loadMembers(guildId);
     },
 
     entrarPorConvite: async (code) => {
@@ -409,7 +390,7 @@ export const useGuilds = create<GuildsState>((set, get) => {
       set((s) => ({ guilds: s.guilds.filter((g) => g.id !== guildId) }));
       if (get().activeGuildId !== guildId) return;
       ++membersSeq;
-      set({ activeGuildId: null, members: [], membersLoading: false });
+      set({ activeGuildId: null, members: [], membersLoading: false, membersError: false });
       useChannels.getState().clear();
       usePermissions.getState().clear();
       const next = get().guilds[0];

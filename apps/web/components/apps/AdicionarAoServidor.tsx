@@ -132,7 +132,6 @@ export default function AdicionarAoServidor() {
       title="Adicionar ao servidor"
       description={`${app.name} vai entrar como membro, com um cargo próprio.`}
       onClose={fechar}
-      className="w-[440px]"
       footer={
         /*
           O primário vem **primeiro** no JSX: o rodapé do `Dialog` é

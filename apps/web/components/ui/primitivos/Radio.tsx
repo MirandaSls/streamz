@@ -74,7 +74,7 @@ export function RadioGroup<T extends string = string>({
         return (
           <label
             key={o.valor}
-            className={`group flex items-start gap-3 rounded-lg ${o.desabilitada ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+            className={`group flex items-start gap-3 rounded-lg celular:min-h-11 celular:items-center ${o.desabilitada ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
           >
             <span className="relative mt-0.5 h-[20px] w-[20px] shrink-0">
               <input

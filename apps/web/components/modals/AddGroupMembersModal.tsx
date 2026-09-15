@@ -75,7 +75,6 @@ export default function AddGroupMembersModal({ channelId }: { channelId: string 
       title="Adicionar pessoas"
       description="Só amigos aparecem aqui."
       onClose={closeModal}
-      className="w-[440px]"
       footer={<SecondaryButton onClick={closeModal}>Fechar</SecondaryButton>}
     >
       {!dm ? (

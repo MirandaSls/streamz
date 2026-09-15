@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, Image as ImageIcon, Trash2 } from "@/components/ui/icones";
+import { Camera, Image as ImageIcon, Smile, Trash2 } from "@/components/ui/icones";
 import {
   ACCEPT_IMAGEM_DE_PERFIL,
   MAX_ABOUT_ME,
@@ -13,6 +13,7 @@ import {
 import { useAlteracoesNaoSalvas } from "@/components/ui/alteracoes";
 import SeletorDeCor, { ehHex } from "@/components/settings/SeletorDeCor";
 import { ESTILO_ROTULO } from "@/components/settings/campos";
+import PickerPanel from "@/components/media/PickerPanel";
 import { BotaoDeIcone, Button, TextArea, TextInput } from "@/components/ui/primitivos";
 import Avatar from "@/components/ui/Avatar";
 import { api } from "@/lib/api";
@@ -59,6 +60,21 @@ const COR_PADRAO = "#9be31f";
  *    inválida, upload sem armazenamento configurado): já vira toast de erro
  *    pelos `catch` abaixo. Não há estado de tela novo para desenhar (mesma
  *    conclusão do cartão 6c, item 10 do cabeçalho de `ContaTab.tsx`).
+ * 6. **Emoji no "Sobre mim"** (rodada de correção `conta-seguranca-perfil`):
+ *    faltava o botão que o catálogo mostra no canto superior direito do
+ *    campo (`suporte/imagens/account-settings/4403147417623-custom-profiles/
+ *    11.png`). Abre o `PickerPanel` (`components/media/PickerPanel`) travado
+ *    na aba "emoji" — `guildId={null}`, porque aqui não há servidor: um
+ *    `guildId` implícito (o servidor aberto na barra lateral antes de entrar
+ *    nas configurações) faria a engrenagem de "gerenciar emoji" desse
+ *    servidor aparecer sem relação com o próprio perfil. `PickerPanel` está
+ *    fora da lista deste cartão e sempre desenha as 3 abas (GIF/Figurinha/
+ *    Emoji); `onTab` ignora a troca, então clicar em GIF ou Figurinha aqui
+ *    não faz nada — a aba visível nunca deixa de ser "Emoji". O emoji entra
+ *    no ponto do cursor do `<textarea>` (não sempre no fim), via
+ *    `selectionStart`/`selectionEnd` do `ref` — sem isso, editar o meio do
+ *    texto e abrir o seletor jogaria o emoji para o fim, fora do lugar onde
+ *    se estava digitando.
  *
  * A foto também é trocável pela aba "Minha conta", num botão de câmera sobre
  * o avatar. Ter os dois caminhos não é duplicação à toa: lá se edita a
@@ -93,6 +109,12 @@ export default function PerfilTab() {
   // input próprio: um só, compartilhado com o banner, mandaria a foto para a
   // rota errada dependendo de qual botão foi clicado por último
   const fotoRef = useRef<HTMLInputElement>(null);
+  // botão de emoji do "Sobre mim" (item 4 do catálogo suporte/imagens/
+  // account-settings/4403147417623-custom-profiles/11.png) — o `ref` do
+  // textarea é o que deixa inserir no ponto do cursor, em vez de sempre no
+  // fim do texto.
+  const [emojiAberto, setEmojiAberto] = useState(false);
+  const aboutMeRef = useRef<HTMLTextAreaElement>(null);
 
   // carregandoPerfil = a primeira busca do perfil rico ainda não terminou;
   // perfilCarregado = ela já terminou com sucesso ao menos uma vez. erro só é
@@ -247,6 +269,26 @@ export default function PerfilTab() {
     }
   }
 
+  /**
+   * Insere no ponto do cursor (não sempre no fim) e devolve o foco pro
+   * textarea depois — sem isto, o próximo caractere digitado iria para o
+   * fim do texto, não para onde o emoji entrou.
+   */
+  function inserirEmojiNoSobreMim(texto: string) {
+    const el = aboutMeRef.current;
+    const inicio = el?.selectionStart ?? aboutMe.length;
+    const fim = el?.selectionEnd ?? aboutMe.length;
+    const novo = aboutMe.slice(0, inicio) + texto + aboutMe.slice(fim);
+    setAboutMe(novo.slice(0, MAX_ABOUT_ME));
+    setEmojiAberto(false);
+    requestAnimationFrame(() => {
+      if (!el) return;
+      el.focus();
+      const posicao = inicio + texto.length;
+      el.setSelectionRange(posicao, posicao);
+    });
+  }
+
   return (
     // No celular as duas colunas **empilham**: os 280px da prévia sobre os
     // 358 de conteúdo deixavam 62 para o formulário — "Escolher foto"
@@ -399,16 +441,58 @@ export default function PerfilTab() {
             >
               Sobre mim
             </label>
-            <TextArea
-              id="aboutMe"
-              value={aboutMe}
-              maxLength={MAX_ABOUT_ME}
-              rows={4}
-              disabled={carregandoPerfil}
-              contador
-              onChange={(e) => setAboutMe(e.target.value)}
-              placeholder="Fale um pouco sobre você."
-            />
+            {/* `relative` é NOSSO, não do primitivo `TextArea` (que já tem
+                o dele por dentro, num `<div>` que não expõe `ref` para
+                pendurar irmão nenhum) — o botão de emoji é filho deste
+                wrapper, não do wrapper interno do primitivo. */}
+            <div className="relative">
+              <TextArea
+                id="aboutMe"
+                ref={aboutMeRef}
+                value={aboutMe}
+                maxLength={MAX_ABOUT_ME}
+                rows={4}
+                disabled={carregandoPerfil}
+                contador
+                onChange={(e) => setAboutMe(e.target.value)}
+                placeholder="Fale um pouco sobre você."
+                // espaço pro botão de emoji não ficar por cima do texto
+                // digitado na primeira linha
+                className="pr-9"
+              />
+              <BotaoDeIcone
+                rotulo="Inserir emoji"
+                icone={<Smile size={16} aria-hidden="true" />}
+                tamanho="sm"
+                disabled={carregandoPerfil}
+                onClick={() => setEmojiAberto((v) => !v)}
+                className="absolute right-1.5 top-1.5"
+              />
+              {emojiAberto && (
+                <PickerPanel
+                  // aba fixa em "emoji" — "Sobre mim" é texto puro, sem GIF
+                  // nem figurinha (o catálogo mostra só um emoji no canto,
+                  // suporte/imagens/account-settings/
+                  // 4403147417623-custom-profiles/11.png); `onTab` ignora a
+                  // troca porque `PickerPanel` (fora da lista deste cartão)
+                  // sempre desenha as 3 abas — clicar em GIF/Figurinha aqui
+                  // não faz nada, a de emoji nunca sai da tela.
+                  tab="emoji"
+                  onTab={() => {}}
+                  // `null`, não o servidor ativo da barra lateral: aqui é o
+                  // perfil da conta, sem vínculo com um servidor — "só
+                  // leitura" do item 4, sem o link de gerenciar emoji de um
+                  // servidor que por acaso estava aberto antes de entrar
+                  // nas configurações.
+                  guildId={null}
+                  onClose={() => setEmojiAberto(false)}
+                  onPickEmoji={inserirEmojiNoSobreMim}
+                  onGif={() => setEmojiAberto(false)}
+                  onSticker={() => setEmojiAberto(false)}
+                  className="absolute right-1.5 top-1.5"
+                />
+              )}
+            </div>
           </>
         )}
       </div>

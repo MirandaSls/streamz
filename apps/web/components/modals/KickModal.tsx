@@ -37,7 +37,6 @@ export default function KickModal({ guildId, user }: { guildId: string; user: Pu
       title={`Expulsar '${nome}' de ${guild?.name ?? "este servidor"}`}
       description="Essa pessoa sai do servidor, mas pode voltar com um novo convite."
       onClose={closeModal}
-      className="w-[440px]"
       footer={
         <>
           <PrimaryButton danger disabled={saving} onClick={() => void submit()}>

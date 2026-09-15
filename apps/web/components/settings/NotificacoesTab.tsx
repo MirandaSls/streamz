@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, ChevronRight, Mic } from "@/components/ui/icones";
+import { AlertTriangle, ChevronRight, Mic, RefreshCw } from "@/components/ui/icones";
 import { type NotificationLevel } from "@streamz/shared";
 import {
   ConfiguracoesRelacionadas,
@@ -56,6 +56,8 @@ export default function NotificacoesTab() {
   const global = useGlobalSetting();
   const loaded = useNotifications((st) => st.loaded);
   const load = useNotifications((st) => st.load);
+  const falhouCarregar = useNotifications((st) => st.falhouCarregar);
+  const recarregar = useNotifications((st) => st.recarregar);
   const setGlobalLevel = useNotifications((st) => st.setGlobalLevel);
   const permissaoBloqueada = usePermissaoDeNotificacaoBloqueada();
 
@@ -127,7 +129,14 @@ export default function NotificacoesTab() {
           agora precisa da mesma divisória que separa "Neste dispositivo" de
           "Padrão", ou as duas leriam como um bloco só. */}
       <Section id="padrao" title={t("notif.padrao")}>
-        {loaded ? (
+        {falhouCarregar ? (
+          // Mesmo bloco ícone+mensagem+"Tentar de novo" de `SegurancaTab.tsx`/
+          // `server/EngajamentoTab.tsx` (`BlocoDeErro`) para a mesma falha:
+          // sem ele, `global?.level` caindo no padrão "ALL" (ver comentário
+          // abaixo) fazia uma preferência real "Nada" parecer "Todas as
+          // mensagens" resolvida, quando na verdade a busca falhou.
+          <BlocoDeErroDeCarregamento tentar={() => void recarregar()} />
+        ) : loaded ? (
           <RadioCards<NotificationLevel>
             legend={t("notif.padrao")}
             legendaOculta
@@ -160,6 +169,38 @@ export default function NotificacoesTab() {
 
       <BlocoDeSons />
     </>
+  );
+}
+
+/**
+ * Erro persistente de carregamento do padrão global: o par
+ * ícone+mensagem+"Tentar de novo" que `SegurancaTab.tsx`/
+ * `server/EngajamentoTab.tsx` já usam para a mesma falha (caixa
+ * `rounded-[4px] border border-border-subtle bg-background-base-lowest`,
+ * `AlertTriangle` em `--status-warning`, botão secundário com `RefreshCw`).
+ * Repetido aqui em vez de extraído porque as três fontes vivem em
+ * `components/settings/*.tsx`, fora da lista de arquivos deste cartão — mover
+ * para um lugar comum é trabalho de outro cartão, não deste.
+ */
+function BlocoDeErroDeCarregamento({ tentar }: { tentar: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-[4px] border border-border-subtle bg-background-base-lowest px-3 py-3">
+      <div className="flex min-w-0 items-center gap-2">
+        <AlertTriangle size={16} className="shrink-0 text-status-warning" aria-hidden="true" />
+        <p className="min-w-0 text-sm text-text-muted">
+          Não foi possível carregar a preferência padrão.
+        </p>
+      </div>
+      <Button
+        variante="secundario"
+        tamanho="sm"
+        icone={<RefreshCw size={14} aria-hidden="true" />}
+        onClick={tentar}
+        className="shrink-0 celular:h-[44px]"
+      >
+        Tentar de novo
+      </Button>
+    </div>
   );
 }
 
@@ -259,14 +300,22 @@ function BlocoDeSons() {
 
   return (
     <Section id="sons" title={t("notif.sons")}>
+      {/* Discord mostra o interruptor mestre invertido: "Desativar todos os
+          sons de notificação" — ligado = silencia. `notificationSound`
+          continua gravado do jeito de sempre ("ligado" = toca); só a tela
+          inverte o que mostra e o que escreve de volta, com `!` dos dois
+          lados (`checked={!s.notificationSound}` e `set({notificationSound:
+          !v})`), para não arriscar um valor persistido ao contrário do resto
+          do produto (`stores/sons.ts`, `lib/ringtone.ts`, que leem
+          `notificationSound` como "ligado = toca"). */}
       <Row
-        label={t("notif.som")}
+        label={t("notif.desativarSons")}
         hint="Sem isto, notificação nenhuma faz barulho neste aparelho."
         control={
           <Switch
-            checked={s.notificationSound}
-            onChange={(notificationSound) => s.set({ notificationSound })}
-            label={t("notif.som")}
+            checked={!s.notificationSound}
+            onChange={(v) => s.set({ notificationSound: !v })}
+            label={t("notif.desativarSons")}
           />
         }
       />

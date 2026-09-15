@@ -41,15 +41,15 @@ import { EMOJI_SIZE, useSettings, type SendMode } from "@/stores/settings";
  * Pela §6.6 do PROCESSO, funcionalidade que o Streamz não tem não se inventa:
  * os três aparecem **visíveis e desabilitados**, com a dica "(em breve)" —
  * não somem da aba (o Discord os tem, e a régua é medida na peça, não editada
- * pela ausência de back-end), mas também não fingem funcionar.
+ * pela ausência de back-end), mas também não fingem funcionar. A velocidade
+ * do texto para fala entra do mesmo jeito, como `Slider` desabilitado — o
+ * Discord tem um controle contínuo ali, não mais uma alternância.
  *
- * Os rótulos e dicas de "(em breve)" usam string solta em vez de `t(...)`
- * porque `lib/i18n.ts` está fora da lista de arquivos deste cartão — só o
- * sufixo "(em breve)" vem de `t("aparencia.emBreve")`, chave que já existe
- * nos dois idiomas e ainda não tinha uso. Ver "faltando" no retrato do
- * cartão: as nove chaves novas (`acess.contrasteAlto`, `acess.figurinhas*`,
- * `acess.tts*`) precisam entrar em `lib/i18n.ts` para a aba ficar em inglês
- * também.
+ * Todos os rótulos e dicas passam por `t(...)` — as chaves `acess.contrasteAlto`,
+ * `acess.secFigurinhas`, `acess.figurinha*`, `acess.secTts`, `acess.tts*` já
+ * existem em `lib/i18n.ts` (pt-BR e en-US) desde o cartão que criou o
+ * dicionário; só o sufixo "(em breve)" continua vindo de
+ * `t("aparencia.emBreve")`, que já existia antes deste cartão.
  */
 export default function AcessibilidadeTab() {
   const t = useT();
@@ -95,8 +95,8 @@ export default function AcessibilidadeTab() {
             — abrir a seção "Cor e contraste" com um controle desabilitado
             venderia a peça errada como a principal. */}
         <Toggle
-          label="Contraste alto"
-          hint={`Aumenta o contraste dos elementos de interface, em qualquer tema. ${emBreve}`}
+          label={t("acess.contrasteAlto")}
+          hint={`${t("acess.contrasteAltoAjuda")} ${emBreve}`}
           checked={false}
           onChange={() => {}}
           disabled
@@ -112,7 +112,7 @@ export default function AcessibilidadeTab() {
         />
       </Section>
 
-      <Section id="figurinhas" title="Figurinhas">
+      <Section id="figurinhas" title={t("acess.secFigurinhas")}>
         <p className="mb-3 text-sm text-text-muted">
           Controla quando as figurinhas animadas tocam a animação. Hoje toda
           figurinha só tem o comportamento nativo da imagem
@@ -121,25 +121,42 @@ export default function AcessibilidadeTab() {
           três opções do Discord.
         </p>
         <RadioCards<"sempre" | "interacao" | "nunca">
-          legend="Animação de figurinha"
+          legend={t("acess.animacaoFigurinha")}
           legendaOculta
           value="sempre"
           onChange={() => {}}
           columns={3}
           options={[
-            { value: "sempre", label: "Sempre animar", disabled: true },
-            { value: "interacao", label: "Ao interagir", disabled: true },
-            { value: "nunca", label: "Nunca animar", disabled: true },
+            { value: "sempre", label: t("acess.figurinhaSempre"), disabled: true },
+            { value: "interacao", label: t("acess.figurinhaInteracao"), disabled: true },
+            { value: "nunca", label: t("acess.figurinhaNunca"), disabled: true },
           ]}
         />
         <p className="mt-2 text-xs text-text-muted">{emBreve}</p>
       </Section>
 
-      <Section id="texto-para-fala" title="Texto para fala">
+      <Section id="texto-para-fala" title={t("acess.secTts")}>
         <Toggle
-          label="Permitir o uso do comando /tts"
-          hint={`Mensagens enviadas com /tts são lidas em voz alta para quem está no canal. ${emBreve}`}
+          label={t("acess.ttsPermitir")}
+          hint={`${t("acess.ttsAjuda")} ${emBreve}`}
           checked={false}
+          onChange={() => {}}
+          disabled
+        />
+        {/* Discord tem um controle contínuo de velocidade de leitura junto do
+            "Permitir /tts" (mesmo artigo de suporte). Sem preferência real
+            para guardar (nenhuma implementação de texto para fala no
+            produto, ver cabeçalho), o `Slider` fica desabilitado num valor
+            neutro ("1x" = velocidade normal) só para a régua bater com a
+            peça do Discord. */}
+        <Slider
+          label={t("acess.ttsVelocidade")}
+          hint={emBreve}
+          value={1}
+          min={0.5}
+          max={2}
+          step={0.1}
+          format={(v) => `${v.toFixed(1)}x`}
           onChange={() => {}}
           disabled
         />

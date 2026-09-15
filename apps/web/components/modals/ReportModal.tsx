@@ -45,7 +45,6 @@ export default function ReportModal({
       title="Denunciar mensagem"
       description="Só a moderação deste servidor vê as denúncias."
       onClose={closeModal}
-      className="w-[440px]"
       footer={
         <>
           <PrimaryButton danger disabled={saving} onClick={() => void submit()}>

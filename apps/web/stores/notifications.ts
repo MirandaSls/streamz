@@ -26,6 +26,8 @@ interface NotificationsState {
   /** por escopo canônico ("global" | "guild:<id>" | "channel:<id>"). */
   porEscopo: Record<string, NotificationSetting>;
   loaded: boolean;
+  /** `true` quando o `load()` mais recente falhou (ver comentário em `load`). */
+  falhouCarregar: boolean;
 
   load: () => Promise<void>;
   /** Aplica uma preferência que chegou pelo gateway (outra aba/dispositivo). */
@@ -34,6 +36,8 @@ interface NotificationsState {
   setChannelLevel: (channelId: string, level: NotificationLevel) => Promise<void>;
   setGuildLevel: (guildId: string, level: NotificationLevel) => Promise<void>;
   setGlobalLevel: (level: NotificationLevel) => Promise<void>;
+  /** Repete o `load()` — mesmo método, nome que a tela chama após um erro. */
+  recarregar: () => Promise<void>;
   /** `minutos` null = silenciar até eu reativar; `false` em `muted` dessilencia. */
   muteChannel: (channelId: string, minutos: number | null) => Promise<void>;
   muteGuild: (guildId: string, minutos: number | null) => Promise<void>;
@@ -61,6 +65,7 @@ export const useNotifications = create<NotificationsState>((set, get) => {
   return {
     porEscopo: {},
     loaded: false,
+    falhouCarregar: false,
 
     load: async () => {
       try {
@@ -68,10 +73,17 @@ export const useNotifications = create<NotificationsState>((set, get) => {
         set({
           porEscopo: Object.fromEntries(lista.map((s) => [s.scope, s])),
           loaded: true,
+          falhouCarregar: false,
         });
       } catch {
-        // preferência é conveniência: sem ela o padrão (notificar tudo) vale
-        set({ loaded: true });
+        // Antes o padrão (notificar tudo) valia em silêncio — mas aqui é
+        // justamente a preferência que a aba de Notificações edita
+        // (`useGlobalSetting`), então um erro de rede não pode ficar
+        // indistinguível de "a pessoa nunca mudou o padrão": a tela mostra
+        // `falhouCarregar` com "Tentar de novo" em vez de deixar a seção
+        // "Padrão" parecer resolvida. `loaded: true` continua junto —
+        // `RadioCards` da seção só deixa de mostrar o esqueleto com ele.
+        set({ loaded: true, falhouCarregar: true });
       }
     },
 
@@ -81,6 +93,7 @@ export const useNotifications = create<NotificationsState>((set, get) => {
     setChannelLevel: (channelId, level) => salvar({ channelId, level }),
     setGuildLevel: (guildId, level) => salvar({ guildId, level }),
     setGlobalLevel: (level) => salvar({ level }),
+    recarregar: () => get().load(),
 
     muteChannel: (channelId, minutos) =>
       salvar({ channelId, muted: true, mutedUntil: ate(minutos) }),
@@ -88,7 +101,7 @@ export const useNotifications = create<NotificationsState>((set, get) => {
     unmuteChannel: (channelId) => salvar({ channelId, muted: false, mutedUntil: null }),
     unmuteGuild: (guildId) => salvar({ guildId, muted: false, mutedUntil: null }),
 
-    clear: () => set({ porEscopo: {}, loaded: false }),
+    clear: () => set({ porEscopo: {}, loaded: false, falhouCarregar: false }),
   };
 });
 

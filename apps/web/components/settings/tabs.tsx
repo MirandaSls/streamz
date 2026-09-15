@@ -4,6 +4,7 @@ import {
   Accessibility,
   Bell,
   Bot,
+  Code,
   Gauge,
   Keyboard,
   Languages,
@@ -12,7 +13,6 @@ import {
   Paintbrush,
   PhoneCall,
   Server,
-  Settings2,
   ShieldCheck,
   User,
   UserCircle,
@@ -40,18 +40,6 @@ import VozTab from "@/components/settings/VozTab";
 import type { ChaveDeTexto } from "@/lib/i18n";
 
 /**
- * O rótulo de uma aba: a chave do dicionário ou, enquanto a chave não existe
- * em `lib/i18n.ts`, o texto em pt-BR. Existe por causa do "Avançado" (cartão
- * 6a): a aba precisava entrar e o dicionário não é deste cartão — quando
- * `aba.avancado` chegar lá, a aba volta a usar a chave e isto pode sair.
- */
-export type RotuloDeAba = ChaveDeTexto | { texto: string };
-
-export function rotuloDaAba(t: (chave: ChaveDeTexto) => string, rotulo: RotuloDeAba): string {
-  return typeof rotulo === "string" ? t(rotulo) : rotulo.texto;
-}
-
-/**
  * O índice das configurações: id (que é o valor de `?settings=`), grupo, ícone
  * e componente.
  *
@@ -71,7 +59,7 @@ export type SettingsGroup = "usuario" | "app" | "admin";
 export interface SettingsTab {
   id: string;
   group: SettingsGroup;
-  label: RotuloDeAba;
+  label: ChaveDeTexto;
   icon: ReactNode;
   Component: ComponentType;
   /**
@@ -105,10 +93,29 @@ export const SETTINGS_TABS: readonly SettingsTab[] = [
     label: "aba.privacidade",
     icon: <ShieldCheck size={20} />,
     Component: SegurancaTab,
+    // na ordem em que `SegurancaTab` monta os blocos: MFA, filtro, mensagens, dados
+    secoes: [
+      { id: "seguranca", label: "priv.secSeguranca" },
+      { id: "filtro", label: "priv.secFiltro" },
+      { id: "mensagens", label: "priv.secMensagens" },
+      { id: "dados", label: "priv.secDados" },
+    ],
   },
   { id: "dispositivos", group: "usuario", label: "aba.sessoes", icon: <Laptop size={20} />, Component: SessoesTab },
   // ── j-bots · F4 ── o portal do desenvolvedor
-  { id: "aplicativos", group: "usuario", label: "aba.aplicativos", icon: <Bot size={20} />, Component: AplicativosTab },
+  {
+    id: "aplicativos",
+    group: "usuario",
+    label: "aba.aplicativos",
+    icon: <Bot size={20} />,
+    Component: AplicativosTab,
+    // "meus" é o `data-secao` da lista em `AplicativosTab`; "apontar" é o
+    // `<Section>` de `aplicativos/ComoApontarSeuBot.tsx`
+    secoes: [
+      { id: "meus", label: "apps.secMeus" },
+      { id: "apontar", label: "apps.secApontar" },
+    ],
+  },
 
   {
     id: "aparencia",
@@ -132,6 +139,8 @@ export const SETTINGS_TABS: readonly SettingsTab[] = [
       { id: "legibilidade", label: "acess.secLegibilidade" },
       { id: "cor", label: "acess.secCor" },
       { id: "movimento", label: "acess.secMovimento" },
+      { id: "figurinhas", label: "acess.secFigurinhas" },
+      { id: "texto-para-fala", label: "acess.secTts" },
       { id: "chat", label: "acess.secChat" },
     ],
   },
@@ -166,12 +175,14 @@ export const SETTINGS_TABS: readonly SettingsTab[] = [
   // O `developerMode` existia sem interruptor (só dava para ligar editando o
   // localStorage). No Discord ele mora em "Avançado", depois de Idioma, no
   // grupo do app (imagem de catálogo `suporte/imagens/safety-privacy-and-policy/
-  // 4407571667351-how-to-find-user-ids-for-law-enforcement/01.png`).
+  // 4407571667351-how-to-find-user-ids-for-law-enforcement/01.png`). O ícone é
+  // o `<>` do item "Desenvolvedor" do print 1:1
+  // `docs/Reference/Captura de tela 2026-09-01 114404.png` (y≈842).
   {
     id: "avancado",
     group: "app",
-    label: { texto: "Avançado" },
-    icon: <Settings2 size={20} />,
+    label: "aba.avancado",
+    icon: <Code size={20} />,
     Component: AvancadoTab,
   },
 

@@ -16,10 +16,16 @@ import JanelaDeConfiguracoes, {
 } from "@/components/ui/JanelaDeConfiguracoes";
 import { Rotulo } from "@/components/ui/controls";
 import { TextInput } from "@/components/ui/primitivos";
+import { TituloDaPagina } from "@/components/settings/server/pagina";
 import { RegistrarAlteracoes, useControleDeAlteracoes } from "@/components/ui/alteracoes";
 import { api } from "@/lib/api";
 import { useCategories } from "@/stores/categories";
-import { useEveryoneRole, useCategoryOverrides, usePermissions } from "@/stores/permissions";
+import {
+  useCanManageCategory,
+  useCategoryOverrides,
+  useEveryoneRole,
+  usePermissions,
+} from "@/stores/permissions";
 import { useGuilds } from "@/stores/guilds";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui, useUI } from "@/stores/ui";
@@ -57,6 +63,14 @@ export default function CategorySettingsModal({
   const handleCategoryOverrides = usePermissions((s) => s.handleCategoryOverrides);
   const overrides = useCategoryOverrides(categoryId);
   const everyone = useEveryoneRole();
+  /**
+   * O mesmo gate de `ChannelSettingsModal` (`podeGerenciar`), com a regra da
+   * categoria por cima dos cargos. A engrenagem que abre esta tela já pede
+   * isto; o hook aqui é para a permissão que muda com a tela aberta — e para
+   * quem chega por um caminho que não checou. Sem ele o campo aceitava a
+   * edição e o "Salvar" só respondia com o 403 da API.
+   */
+  const podeGerenciar = useCanManageCategory(categoryId);
 
   const [aba, setAba] = useState<Aba>(tab);
   const [name, setName] = useState(category?.name ?? "");
@@ -111,6 +125,12 @@ export default function CategorySettingsModal({
 
   async function salvar() {
     if (!patchNome || !guildId) return;
+    // clique preso na barra de "alterações não salvas" (mesma frase do canal):
+    // sem o toast a barra fica ali e parece que o clique não fez nada
+    if (!podeGerenciar) {
+      ui.toast("Você não tem mais permissão para salvar esta categoria.", "error");
+      return;
+    }
     try {
       /*
        * Chama a API direto em vez de `useCategories().rename`: aquele abre um
@@ -177,6 +197,11 @@ export default function CategorySettingsModal({
 
   return (
     <JanelaDeConfiguracoes
+      // Print 102238 (medir.py): é a moldura `tela-cheia` — menu `#121214`
+      // (`--background-base-lowest`) até x=691, conteúdo `#202024` a partir
+      // de x=692, círculo "ESC" em x 1432–1467, e "Visão geral" escrito na
+      // página (glifo em x≈733, y 99–109). Sem a prop caía na `janela`.
+      variante="tela-cheia"
       titulo={`Configurações de ${category.name}`}
       // o shell já põe o cabeçalho em caixa-alta e apagado, como o nome da
       // categoria aparece na barra lateral — não vale repetir a formatação aqui
@@ -188,19 +213,23 @@ export default function CategorySettingsModal({
       controle={alteracoes}
       onClose={closeModal}
       rodapeMenu={
-        <ItemPerigo
-          icon={<Trash2 size={18} />}
-          onClick={async () => {
-            // o `remove` da store já pergunta antes, como o de canal; a tela só
-            // fecha se a categoria de fato saiu
-            await removeCategory(guildId, category);
-            if (!useCategories.getState().categories.some((c) => c.id === categoryId)) {
-              closeModal();
-            }
-          }}
-        >
-          Excluir categoria
-        </ItemPerigo>
+        // some com a permissão, como o "Apagar canal": um botão vermelho que
+        // pergunta e devolve 403 no fim é pior do que não mostrá-lo
+        podeGerenciar ? (
+          <ItemPerigo
+            icon={<Trash2 size={18} />}
+            onClick={async () => {
+              // o `remove` da store já pergunta antes, como o de canal; a tela só
+              // fecha se a categoria de fato saiu
+              await removeCategory(guildId, category);
+              if (!useCategories.getState().categories.some((c) => c.id === categoryId)) {
+                closeModal();
+              }
+            }}
+          >
+            Excluir categoria
+          </ItemPerigo>
+        ) : undefined
       }
     >
       <RegistrarAlteracoes
@@ -210,42 +239,64 @@ export default function CategorySettingsModal({
       />
 
       {aba === "geral" && (
-        <div>
-          <Rotulo htmlFor="categoria-nome">Nome da categoria</Rotulo>
-          <TextInput
-            id="categoria-nome"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={MAX_CATEGORY_NAME}
-          />
-        </div>
+        <>
+          {/* Na `tela-cheia` quem escreve o nome da aba é a página
+              (print 102238: "Visão geral" em x≈733, acima do rótulo). */}
+          <TituloDaPagina titulo={ROTULO.geral} />
+          <div className="space-y-6">
+            {!podeGerenciar && (
+              <p className="rounded-[4px] bg-background-base-lowest px-3 py-2 text-xs text-text-muted">
+                Você não tem permissão para gerenciar esta categoria. O campo abaixo fica só para
+                consulta.
+              </p>
+            )}
+            <div>
+              <Rotulo htmlFor="categoria-nome">Nome da categoria</Rotulo>
+              <TextInput
+                id="categoria-nome"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={MAX_CATEGORY_NAME}
+                disabled={!podeGerenciar}
+              />
+            </div>
+          </div>
+        </>
       )}
 
       {aba === "permissoes" && (
-        <EditorDePermissoes
-          guildId={guildId}
-          escopo="categoria"
-          privadoLabel="Categoria privada"
-          privadoDescricao="Ao tornar a categoria privada, só os cargos e membros marcados aqui embaixo enxergam os canais dela. Os canais sincronizados com a categoria seguem esta configuração automaticamente."
-          privado={privado}
-          onPrivado={(v) =>
-            void gravarRegra(
-              comEstadoDaRegra(
-                regraDoEveryone ?? {
-                  roleId: everyone?.id ?? null,
-                  userId: null,
-                  allow: 0,
-                  deny: 0,
-                },
-                Permission.VIEW_CHANNEL,
-                v ? "negar" : "herdar",
-              ),
-            )
-          }
-          overrides={overrides}
-          onSalvarRegra={gravarRegra}
-          onRemoverRegra={apagarRegra}
-        />
+        <>
+          {/* título e subtítulo com o texto do print 102249 ("Configurações da
+              categoria" com glifo em y 97–110, a frase logo embaixo) */}
+          <TituloDaPagina
+            titulo="Configurações da categoria"
+            subtitulo="Use permissões para personalizar quem pode fazer o que nesta categoria."
+          />
+          <EditorDePermissoes
+            guildId={guildId}
+            escopo="categoria"
+            privadoLabel="Categoria privada"
+            privadoDescricao="Ao tornar a categoria privada, só os cargos e membros marcados aqui embaixo enxergam os canais dela. Os canais sincronizados com a categoria seguem esta configuração automaticamente."
+            privado={privado}
+            onPrivado={(v) =>
+              void gravarRegra(
+                comEstadoDaRegra(
+                  regraDoEveryone ?? {
+                    roleId: everyone?.id ?? null,
+                    userId: null,
+                    allow: 0,
+                    deny: 0,
+                  },
+                  Permission.VIEW_CHANNEL,
+                  v ? "negar" : "herdar",
+                ),
+              )
+            }
+            overrides={overrides}
+            onSalvarRegra={gravarRegra}
+            onRemoverRegra={apagarRegra}
+          />
+        </>
       )}
     </JanelaDeConfiguracoes>
   );

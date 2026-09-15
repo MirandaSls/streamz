@@ -1,7 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import MessagePreview from "@/components/chat/MessagePreview";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
+import { Checkbox } from "@/components/ui/primitivos/Checkbox";
+import { lembrarConfirmacao } from "@/lib/confirmacao-lembrada";
 import { useMessages } from "@/stores/messages";
 import type { Modal } from "@/stores/ui";
 
@@ -38,6 +41,23 @@ import type { Modal } from "@/stores/ui";
  *   tem — ver §6.6 do PROCESSO.
  * - **Hover / foco / desabilitado** dos botões: do `Button` (`primitivos/
  *   Button.tsx`), já medido lá — este arquivo só escolhe a variante.
+ *
+ * ## Rodapé (print 1:1 `docs/Reference/Captura de tela 2026-08-31 124114.png`)
+ *
+ * No Discord o rodapé é **uma linha só**: os dois botões de 40 à direita e,
+ * quando a confirmação pode ser lembrada, o checkbox 20×20 com "Não perguntar
+ * de novo" em 16px à esquerda, centrado na altura dos botões (caixa y 400–419,
+ * botões y 391–428), 12 entre o quadrado e o texto (x 425–444, texto em 457),
+ * e 24 do botão até a borda de baixo (y 430–453). A dica do shift morava
+ * aqui, em 12px com `max-w-[240px]`, e quebrava em 3 linhas — a linha do
+ * rodapé crescia para 48 e a folga de baixo para 28 (captura
+ * `saida/desktop/modal-confirmacao.png`, y 606–650). Agora ela vai para o
+ * corpo, embaixo da prévia, e o rodapé fica com a altura dos botões.
+ *
+ * O checkbox só aparece com `chaveDeLembrar`: marcar e **confirmar** grava a
+ * escolha (`lib/confirmacao-lembrada.ts`); marcar e cancelar não grava nada,
+ * porque "não perguntar de novo" sobre algo que se desistiu de fazer seria
+ * pular uma confirmação que a pessoa acabou de usar para desistir.
  */
 export default function ConfirmDialog({
   modal,
@@ -53,6 +73,12 @@ export default function ConfirmDialog({
     }
     return s.threadItems.find((m) => m.id === id) ?? null;
   });
+  const [naoPerguntar, setNaoPerguntar] = useState(false);
+
+  function confirmar() {
+    if (modal.chaveDeLembrar && naoPerguntar) lembrarConfirmacao(modal.chaveDeLembrar);
+    modal.resolve(true);
+  }
 
   return (
     <Dialog
@@ -64,28 +90,22 @@ export default function ConfirmDialog({
           <PrimaryButton
             danger={modal.danger}
             autoFocus={!modal.danger}
-            onClick={() => modal.resolve(true)}
+            onClick={confirmar}
           >
             {modal.confirmLabel}
           </PrimaryButton>
           <SecondaryButton autoFocus={modal.danger} onClick={() => modal.resolve(false)}>
             Cancelar
           </SecondaryButton>
-          {modal.preview && (
-            // Equivalente ao checkbox "Não perguntar de novo" do Discord
-            // (124114, alinhado com os botões) — mas essa caixa lembraria a
-            // escolha entre confirmações futuras, e isso pede estado
-            // persistido que `confirm()` (`stores/ui.ts`) não tem; fora da
-            // lista deste cartão (não é `components/modals/*`). O que já
-            // existe é o atalho por teclado (segurar shift ao clicar em
-            // apagar, `MessageItem.tsx`), então a dica descreve ele — não
-            // inventa o toggle. `text-text-xs` é o token de 12px/16 (a escala
-            // de `tailwind.config.ts`), não o `text-xs` solto do Tailwind
-            // (12px/16 também, mas por coincidência — não é o mesmo token).
-            <p className="mr-auto max-w-[240px] text-text-xs text-text-muted">
-              Dica: você pode segurar shift ao clicar em apagar mensagem para pular esta
-              confirmação.
-            </p>
+          {modal.chaveDeLembrar && (
+            // último filho num rodapé `flex-row-reverse`: fica na ponta
+            // esquerda, e o `mr-auto` o afasta dos botões, como no 124114
+            <Checkbox
+              className="mr-auto"
+              marcado={naoPerguntar}
+              aoMudar={setNaoPerguntar}
+              rotulo="Não perguntar de novo"
+            />
           )}
         </>
       }
@@ -103,6 +123,17 @@ export default function ConfirmDialog({
             Não foi possível carregar a prévia desta mensagem.
           </p>
         ))}
+      {modal.preview && (
+        // O atalho de teclado que já existe (segurar shift ao clicar em
+        // apagar, `MessageItem.tsx`). Fica no corpo, logo abaixo da prévia, e
+        // não no rodapé: lá ele quebrava em 3 linhas e empurrava os botões
+        // (ver "Rodapé" acima). Posição e espaçamento "não medido" — nenhum
+        // print nosso mostra a dica no Discord.
+        <p className="mt-2 text-text-xs text-text-muted">
+          Dica: você pode segurar shift ao clicar em apagar mensagem para pular esta
+          confirmação.
+        </p>
+      )}
     </Dialog>
   );
 }

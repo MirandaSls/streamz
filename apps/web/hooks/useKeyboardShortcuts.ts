@@ -10,6 +10,7 @@ import { useGuilds } from "@/stores/guilds";
 import { useSettings, ZOOM } from "@/stores/settings";
 import { useUI } from "@/stores/ui";
 import { abrirCaixaDeEntrada } from "@/lib/caixa-de-entrada";
+import { pedirPainelDoComposer } from "@/lib/eventos-do-composer";
 
 /**
  * Atalhos globais do app (a lista está em `lib/shortcuts`, e a aba "Teclado"
@@ -75,7 +76,31 @@ function executar(action: ShortcutAction): void {
       ui.openModal({ kind: "settings" });
       return;
     case "mostrarAtalhos":
-      ui.openModal({ kind: "settings", tab: "teclado" });
+      // Ctrl+/ no Discord abre a grade de atalhos por cima da conversa, não a
+      // aba "Teclado" das configurações (quadros do GIF oficial citado em
+      // `lib/shortcuts.ts`); a aba continua sendo onde se regrava
+      ui.openModal({ kind: "atalhosDoTeclado" });
+      return;
+
+    // O `preventDefault` dos atalhos abaixo é o de `onKeyDown`, antes de
+    // `executar`: Ctrl+F, Ctrl+P e Ctrl+S são do navegador (buscar, imprimir,
+    // salvar) e só chegam aqui já cancelados.
+    case "busca":
+      // o campo mora no `HeaderBar`, que observa o contador e se foca
+      ui.pedirFocoNaBusca();
+      return;
+    case "fixadas":
+      alternarFixadas();
+      return;
+    case "alternarMembros":
+      alternarMembros();
+      return;
+    case "emoji":
+    case "gif":
+    case "figurinha":
+    case "anexar":
+      // quem abre o painel é o composer montado; o atalho só avisa
+      pedirPainelDoComposer(action);
       return;
 
     case "zoomMais":
@@ -115,6 +140,49 @@ function executar(action: ShortcutAction): void {
       marcarServidorComoLido();
       return;
   }
+}
+
+/** A conversa aberta agora: canal do servidor ou DM, conforme a coluna 2. */
+function conversaAtiva(): string | null {
+  if (useUI.getState().view === "dm") return useDMs.getState().activeId;
+  return useChannels.getState().activeChannelId;
+}
+
+/**
+ * Ctrl+P: "Toggle pins popout" na grade do Discord — abre o painel de fixadas
+ * da conversa aberta, e fecha se ele já está aberto nela. Sem conversa (página
+ * Amigos, servidor sem canal) não há painel a abrir.
+ */
+function alternarFixadas(): void {
+  const id = conversaAtiva();
+  if (!id) return;
+  const ui = useUI.getState();
+  if (ui.fixadasAbertasEm === id) ui.closePins();
+  else ui.openPins(id);
+}
+
+/**
+ * Ctrl+U: "Toggle channel member list or voice text chat".
+ *
+ * No canal de texto do servidor é o mesmo `toggleMembers` do ícone do
+ * cabeçalho. No canal de voz a coluna da direita é disputada com a conversa da
+ * call, e o atalho usa a variante do ícone de lá (`alternarMembrosNaCall`,
+ * `stores/ui.ts`): um `toggleMembers` cru ligaria `membersOpen` por baixo da
+ * conversa aberta sem mudar nada na tela. Na DM vai pela mesma variante com o
+ * id da conversa — sem conversa de call guardada para a DM ela é exatamente o
+ * alternador do cabeçalho da `DMView`, e continua certa se um dia houver.
+ */
+function alternarMembros(): void {
+  const ui = useUI.getState();
+  if (ui.view === "dm") {
+    const dm = useDMs.getState().activeId;
+    // sem id a variante cairia no canal de voz do servidor, que nem está na tela
+    if (dm) ui.alternarMembrosNaCall(dm);
+    return;
+  }
+  const voz = useChannels.getState().voiceChannelId;
+  if (voz) ui.alternarMembrosNaCall(voz);
+  else ui.toggleMembers();
 }
 
 /**

@@ -65,7 +65,6 @@ export default function BanModal({ guildId, user }: { guildId: string; user: Pub
       title={`Banir '${nome}' de ${guild?.name ?? "este servidor"}`}
       description="Essa pessoa sai do servidor e não consegue voltar, nem com um novo convite."
       onClose={closeModal}
-      className="w-[440px]"
       footer={
         <>
           <PrimaryButton danger disabled={saving} onClick={() => void submit()}>

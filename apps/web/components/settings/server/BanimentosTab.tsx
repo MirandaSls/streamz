@@ -102,18 +102,25 @@ export default function BanimentosTab({ guildId }: { guildId: string }) {
 
   return (
     <div>
-      <TituloDaPagina titulo="Banimentos" />
-
-      <div className="mb-4">
-        <TextInput
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          placeholder="Buscar banidos"
-          aria-label="Buscar banidos"
-          tamanho="sm"
-          prefixo={<Search size={14} aria-hidden="true" className="text-text-muted" />}
-        />
-      </div>
+      {/* A busca mora **ao lado** do título, no slot `acao`:
+          `.settingsHeader__4b8d8{align-items:flex-start;display:flex;gap:40px;
+          justify-content:space-between}` (mesmo arquivo do cabeçalho). Antes
+          ficava numa linha própria abaixo do `<h1>`, com `mb-4`. A largura do
+          campo não está no CSS bruto (não medido): fica a natural do
+          `TextInput`; no celular o `TituloDaPagina` estica a ação. */}
+      <TituloDaPagina
+        titulo="Banimentos"
+        acao={
+          <TextInput
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar banidos"
+            aria-label="Buscar banidos"
+            tamanho="sm"
+            prefixo={<Search size={14} aria-hidden="true" className="text-text-muted" />}
+          />
+        }
+      />
 
       <p className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
         Banimentos — {(bans ?? []).length}
@@ -141,13 +148,14 @@ export default function BanimentosTab({ guildId }: { guildId: string }) {
             aria-label={`Revogar o banimento de ${displayNameOf(b.user)}${b.reason ? `. Motivo: ${b.reason}` : ""}`}
             className="mb-1 flex min-w-0 cursor-pointer items-center rounded-lg bg-background-mod-subtle p-2 outline-none transition-colors last:mb-0 hover:bg-interactive-background-hover focus-visible:bg-interactive-background-hover"
           >
-            {/* `surface` deveria ser `border-background-mod-subtle` (o fundo
-                real da pílula agora), mas esse valor não está no mapa
-                `FUNDO_DO_SELO` de `Avatar.tsx` (fora desta lista de
-                arquivos) — cairia em disco sem preenchimento. Fica
-                `border-background-base-lower`, o mais próximo já mapeado;
-                ver "faltando". */}
-            <Avatar user={b.user} size="sm" surface="border-background-base-lower" />
+            {/* `surface` é o fundo real da pílula (`--background-mod-subtle`,
+                `.bannedUser__4b8d8`). Esta linha não passa `status` nem `voz`,
+                então o `Avatar` não desenha selo e a borda/fundo do disco
+                nunca pinta — o valor só documenta a superfície. Se um dia a
+                lista ganhar status, atenção: o token é translúcido (`#94949c`
+                a 12%), então a borda e o `FUNDO_DO_SELO` deixariam a foto
+                aparecer por dentro do recorte em vez de "furar" o avatar. */}
+            <Avatar user={b.user} size="sm" surface="border-background-mod-subtle" />
             <div className="min-w-0 flex-1 pl-2">
               <div className="truncate text-sm font-medium text-text-strong">{displayNameOf(b.user)}</div>
               <div className="truncate text-xs text-text-muted">{horaCompleta(b.createdAt)}</div>

@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
-import { Check } from "@/components/ui/icones";
+import { AlertTriangle, Check, RefreshCw } from "@/components/ui/icones";
 import { displayNameOf } from "@streamz/shared";
 import Dialog, { SecondaryButton } from "@/components/modals/Dialog";
 import Avatar from "@/components/ui/Avatar";
+import { Button } from "@/components/ui/primitivos";
 import { useChannels } from "@/stores/channels";
 import { useGuilds } from "@/stores/guilds";
 import { useUI } from "@/stores/ui";
@@ -43,10 +44,26 @@ export function ChannelAccessList({ channelId }: { channelId: string }) {
 
   const plainMembers = members.filter((m) => m.role === "MEMBER");
   const ready = access.channelId === channelId && !access.loading;
+  // erro só conta quando é desta carga — trocar de canal com uma falha antiga
+  // pendurada não pode mostrar "não foi possível" antes do novo fetch decidir
+  const erro = access.channelId === channelId && !access.loading && access.erro;
 
   return (
     <div className="max-h-64 overflow-y-auto rounded-lg bg-background-base-lowest p-1">
-      {!ready ? (
+      {erro ? (
+        <div className="flex flex-col items-center gap-2 px-3 py-4 text-center">
+          <AlertTriangle size={20} className="text-status-warning" aria-hidden="true" />
+          <p className="text-sm text-text-muted">Não foi possível carregar o acesso do canal.</p>
+          <Button
+            variante="secundario"
+            tamanho="sm"
+            icone={<RefreshCw size={14} aria-hidden="true" />}
+            onClick={() => guildId && loadAccess(guildId, channelId)}
+          >
+            Tentar de novo
+          </Button>
+        </div>
+      ) : !ready ? (
         <p className="px-3 py-3 text-sm text-text-muted">Carregando…</p>
       ) : plainMembers.length === 0 ? (
         <p className="px-3 py-3 text-sm text-text-muted">
