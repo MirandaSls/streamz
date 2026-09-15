@@ -27,7 +27,8 @@ apps/
   api/       # NestJS — módulos por domínio (auth, users, guilds, channels,
              #   messages, read-state, embeds, gateway, dms, voice, storage,
              #   uploads, maintenance, admin)
-  web/       # Next.js — login/registro + app de chat de 3 colunas (app/app/page.tsx)
+  web/       # Next.js — raiz vitrine/download no navegador (app/page.tsx), login/registro
+             #   + app de chat de 3 colunas (app/app/page.tsx)
   desktop/   # Tauri 2 — embrulha a web num instalador
 packages/
   shared/    # @streamz/shared — tipos + schemas zod + WS_EVENTS, fonte única de

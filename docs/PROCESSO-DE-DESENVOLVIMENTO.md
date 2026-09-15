@@ -399,9 +399,22 @@ com a idempotência explícita).
 O app consulta `GET /api/updates/{target}/{arch}/{versão}` na abertura: 204
 quando não há nada, ou um manifesto assinado. A chave privada está em
 `/root/.tauri/streamz.key` (e no segredo `TAURI_SIGNING_PRIVATE_KEY` do repo);
-a pública em `tauri.conf.json`. Perder a privada = ninguém atualiza mais.
+a pública em `tauri.conf.json`. Perder a privada = ninguém atualiza mais. É a
+**mesma chave para as três plataformas** (Windows, macOS e Linux verificam a
+mesma pública embutida no app) — nenhuma tem par próprio.
 
-Passo a passo, como foi feito para 0.0.6, 0.0.7 e 0.0.8:
+O passo a passo abaixo é o histórico do Windows (0.0.6 a 0.0.8) e continua
+valendo tal como foi feito; a forma geral — bump de versão, build, publicar,
+conferir — é a mesma para as três plataformas, mas o build de cada uma é
+próprio (§5.3 Windows, §5.5 macOS, §5.6 Linux) e a publicação, desde que os
+três desktops existem, é uma chamada só: `scripts/publicar-desktop.sh
+<pasta-de-saída-1> [<pasta-de-saída-2> ...] --aplicar` substitui o script
+batizado por sessão (`scratchpad/publicar-0.0.8.sh`) do passo 3 — ele detecta a
+plataforma de cada pasta pelos arquivos que ela contém e nunca mistura as
+variáveis de `.env` de uma com as de outra. Ver `apps/desktop/README.md` §
+Auto-update para a tabela completa de variáveis por plataforma.
+
+Passo a passo, como foi feito para 0.0.6, 0.0.7 e 0.0.8 (Windows):
 
 1. **Bump** em quatro lugares, numa worktree própria: `apps/desktop/package.json`,
    `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` (linha 3) e
@@ -434,6 +447,10 @@ Passo a passo, como foi feito para 0.0.6, 0.0.7 e 0.0.8:
    continua valendo.
 5. O primeiro salto de quem está antes da 0.0.3 é manual (a chave pública mora
    no app instalado).
+6. **macOS e Linux seguem a mesma forma**, com o build de cada um (§5.5, §5.6)
+   no lugar do passo 2 e as variáveis `MACOS_UPDATE_*`/`LINUX_UPDATE_*` no
+   lugar de `DESKTOP_UPDATE_*` no passo 3 — nenhuma plataforma foi publicada
+   ainda (§10).
 
 **A atualização acontece numa janelinha própria** (§5.2), não dentro do app.
 `plugins.updater.windows.installMode` é `"quiet"` (o NSIS roda com `/S /R`, sem
@@ -472,9 +489,18 @@ da tela, como a do Discord — não uma tela dentro do app. O que existe:
 - `apps/web/app/splash/page.tsx` → `components/desktop/JanelaSplash.tsx`
   (leiaute medido nas referências, com a tabela no topo do arquivo) e
   `janela-splash.ts` (parte pura, testada).
-- **Na abertura**: a janelinha se mostra no primeiro quadro (nasce escondida
-  porque o WebView2 pinta um quadro branco antes do primeiro render), chama
-  `check()` com teto de 8s e: sem versão nova, erro de rede ou tempo esgotado →
+- **Na abertura**: a janelinha se mostra no primeiro `requestAnimationFrame`
+  **ou em 100ms, o que vier antes** (`primeiroQuadroOuTeto`, em
+  `JanelaSplash.tsx`) — nasce escondida porque o WebView2 pinta um quadro
+  branco antes do primeiro render, e o rAF sozinho basta lá (chega em ~16ms).
+  O teto é do WebKit: janela `visible: false` é página escondida para
+  WKWebView (Mac) e WebKitGTK (Linux), que suspendem o rAF até a janela
+  aparecer — e é o próprio rAF quem a mostraria. Sem o teto, splash e `main`
+  nunca apareciam nessas duas plataformas. O teto não muda o Windows (o rAF
+  sempre ganha a corrida lá) e, se falhar de chegar a tempo em algum caso raro,
+  o pior é o quadro branco que o rAF evitava — nunca um app que não abre.
+  Depois disso chama `check()` com teto de 8s e: sem versão nova, erro de rede
+  ou tempo esgotado →
   `show()` + foco na `main` e fecha; com versão nova → `downloadAndInstall`,
   com a porcentagem vinda dos eventos de download. Exibição mínima de 600ms
   para não piscar.
@@ -647,6 +673,195 @@ aparece o card "Versão X disponível — Instalar". **A tela de confirmação d
 Android é inescapável fora da loja**, e a interface diz isso. Publicar é
 `scripts/publicar-android.sh`. Detalhe e a prova de emulador em
 `docs/APPS-MOBILE.md` §13.
+
+### 5.5 macOS (`.dmg` universal)
+
+Como o §5.3 (Windows) e o §5.4 (Android), este é o mesmo formato: como
+funciona, o que o build prova e o que **não** prova. Diferença de fundo: aqui
+não há como fugir do macOS — o `.app` precisa de `codesign`, `lipo` e
+`hdiutil`, que só existem lá. Não existe caminho "sem o Actions" a partir
+deste servidor Linux, como há para Windows (cross-compile) e Linux (é o
+próprio hospedeiro); o build roda **num Mac**, seja uma máquina alugada por
+minuto (Codemagic) ou um Mac físico.
+
+```bash
+scripts/build-desktop-macos.sh                              # origin/main, sem assinar o atualizador
+scripts/build-desktop-macos.sh <ref> --assinar-atualizador <chave>
+scripts/build-desktop-macos.sh --sem-finder                 # ligado sozinho por SSH
+```
+
+Sai em `.claude/saida-desktop/<versão>-<commit>-macos/`: o `.dmg` sempre, e com
+`--assinar-atualizador` também `Streamz.app.tar.gz` + `.sig`.
+
+**Como funciona.** `--target universal-apple-darwin` não é um alvo real do
+`rustc`: é o tauri-cli que compila `aarch64-apple-darwin` e
+`x86_64-apple-darwin` **duas vezes** e funde os binários com `lipo` — daí o
+build demorar o dobro de um alvo só. É universal, e não um `.dmg` por chip,
+porque o `User-Agent` do navegador não revela o chip do Mac (o Safari de um M3
+ainda se diz "Intel Mac OS X"): a página de download não teria como escolher
+entre dois arquivos, e baixar o errado dá "o app não pode ser aberto" sem
+explicação. `tauri.macos.conf.json` entra sozinho (nome de plataforma que o
+tauri-cli já reconhece, sem precisar de `--config`): `signingIdentity: "-"`
+(ad-hoc — sem conta Apple Developer), `hardenedRuntime: true`,
+`Entitlements.macos.plist` (microfone e câmera) e `Info.macos.plist` (os
+textos de permissão e `CFBundleDevelopmentRegion: pt-BR`; nome próprio para não
+vazar para o build de iOS, que também procura um `Info.plist` solto na pasta).
+`--assinar-atualizador` liga por cima o `tauri.release.conf.json`
+(`createUpdaterArtifacts: true`), que é o mesmo arquivo do Windows e do Linux.
+
+**O que o build prova.** Que o `.app`/`.dmg` existem, que o binário é de fato
+universal (`lipo -archs` acusando `x86_64` **e** `arm64`), que a assinatura
+ad-hoc é válida com hardened runtime (`codesign --verify --strict`) e que os
+dois entitlements de mídia e os textos de permissão do Info.plist estão lá —
+tudo isso conferido duas vezes: no `.app` da pasta de build e no de dentro do
+`.dmg` montado (`hdiutil attach`), porque uma cópia poderia ter perdido a
+assinatura no caminho.
+
+**O que este build NÃO prova.** Que o `.app` abre num Mac de verdade, que o
+Gatekeeper mostra o aviso esperado (e não outro), que o microfone/câmera
+funcionam, que a chamada de voz/vídeo conecta. Nada disto foi compilado nem
+testado numa máquina real — é a mesma ressalva do §5.3 para o Windows, só que
+aqui ainda mais literal: nunca rodou.
+
+**Sem notarização** (exige Apple Developer Program, US$ 99/ano — pendência,
+§10): quem baixa pelo navegador vê o aviso do Gatekeeper na primeira abertura
+("botão direito → Abrir", ou `xattr -dr com.apple.quarantine
+/Applications/Streamz.app`). A assinatura ad-hoc também muda de cdhash a cada
+build, então uma atualização pode fazer o macOS pedir de novo a permissão de
+microfone/câmera.
+
+Também existe o workflow `desktop-macos` no `codemagic.yaml`
+(`mac_mini_m2`, disparo manual, mesma cota gratuita do workflow de iOS): mesma
+build universal, com a mesma checagem de arquiteturas ao final. O grupo
+`streamz-updater` (a chave de assinatura do atualizador) está **comentado** no
+arquivo até existir no painel do Codemagic (pendência, §10) — sem ele o
+workflow gera só o `.dmg`. Um segundo grupo, `streamz-certificado-mac` (as três
+variáveis do certificado abaixo), está comentado pelo mesmo motivo.
+
+**Assinatura ad-hoc ou certificado autoassinado.** O padrão
+(`signingIdentity: "-"`) é ad-hoc, e nele o requirement de código é o cdhash do
+binário — muda a cada build, então o TCC trata cada atualização como "outro
+app" e repede microfone/câmera/tela. `scripts/gerar-certificado-mac.sh` gera,
+uma vez, um certificado autoassinado (guardado fora do repo, em
+`~/.streamz/certificado-mac/`) cujo requirement
+(`identifier "dev.streamz.app" and certificate root = H"<sha1>"`) é o mesmo em
+todo build; `scripts/build-desktop-macos.sh --certificado <p12>` importa-o num
+keychain temporário só durante o build e passa ao bundler apenas
+`APPLE_SIGNING_IDENTITY` — passar `APPLE_CERTIFICATE` direto ao Tauri não
+funciona (o `identity::list` do `tauri-macos-sign` só reconhece certificado com
+Team ID). Isso não é notarização: o Gatekeeper (`spctl`) continua recusando;
+o ganho é só a permissão sobrevivendo a uma atualização. Detalhe completo —
+cuidados com a chave, limpeza de keychain depois de um `kill -9`, o pin que o
+instalador confere — em `apps/desktop/README.md` § Assinatura.
+
+**Instalar pelo Terminal.** `apps/web/public/instalar-mac.sh`
+(`curl -fsSL https://streamz.chat/instalar-mac.sh | bash`) é a forma
+recomendada na página de download: o `curl` não põe `com.apple.quarantine`, e
+sem esse atributo o Gatekeeper não intercepta a primeira abertura — sem
+precisar de notarização nem do certificado acima. Pede a mesma senha da
+página, confere assinatura/identificador/tamanho e, com os pins do certificado
+preenchidos no topo do script, o certificado folha também. Detalhe em
+`apps/desktop/README.md` § Instalar pelo Terminal.
+
+Barra de título e janela de splash no Mac (moldura nativa, semáforos, cartão
+sem cantos) estão no §8.1, não aqui — é UX da janela, não do build.
+
+### 5.6 Linux (`AppImage` e `.deb` no servidor)
+
+Mesmo formato do §5.3/§5.4/§5.5. Diferente do Windows (cross-compile) e do
+macOS (só roda num Mac), aqui **não há cross-compile**: o servidor já é Linux
+x86_64, então o alvo é o próprio hospedeiro e não precisa de máquina alugada
+nem de `cargo-xwin`.
+
+```bash
+scripts/build-desktop-linux-no-servidor.sh                  # origin/main, assinado
+scripts/build-desktop-linux-no-servidor.sh <ref>
+scripts/build-desktop-linux-no-servidor.sh --sem-assinar
+scripts/build-desktop-linux-no-servidor.sh --refazer-imagem
+```
+
+Sai em `.claude/saida-desktop/<versão>-<commit>-linux/`: `.AppImage`, `.deb` e,
+sem `--sem-assinar`, o `.AppImage.sig`.
+
+**Como funciona.** `apps/desktop/Dockerfile.linux` monta `ubuntu:22.04` (não o
+`rust:1-bookworm` das outras imagens) porque a **glibc do build é o piso de
+quem consegue abrir o app** — um binário Linux não roda numa glibc mais velha
+que a de quem o linkou, e o AppImage não embute a sua de propósito (está na
+excludelist do linuxdeploy: glibc embutida quebra no primeiro `dlopen` do
+sistema). jammy = glibc 2.35, cobrindo Ubuntu 22.04+, Debian 12+ e Fedora 36+;
+não dá para descer mais porque o Tauri 2 exige `webkit2gtk-4.1` (ABI com
+libsoup 3), que o Ubuntu 20.04 não tem. `tauri.linux.conf.json` entra sozinho
+como o das outras plataformas: `bundle.targets: ["appimage", "deb"]`,
+`bundleMediaFramework: true` (empacota o GStreamer do sistema de build dentro
+do AppImage — é exatamente o que o app consegue tocar em qualquer distro,
+plugins do usuário deixam de valer) e o ícone com o PNG de 256px primeiro (o
+codegen usa o primeiro da lista para janela e bandeja). `xdg-utils` na imagem
+é obrigatório, não enfeite: o tauri-cli liga `bundle_xdg_open` sozinho por
+causa do `tauri-plugin-opener`, e falha no fim sem o pacote.
+
+A permissão de mídia no WebKitGTK precisou de código próprio
+(`src/permissoes_linux.rs`, dependência `webkit2gtk` só em
+`cfg(target_os = "linux")`): o wry não responde ao `permission-request`, e sem
+resposta o manipulador padrão do próprio WebKit **nega** — o oposto do padrão
+do WebView2 no Windows, que pergunta. O módulo liga `enable-media-stream` +
+`enable-webrtc` e responde `allow` a pedido de mídia e de lista de
+dispositivos — só quando a página que pede é a nossa: a cada
+`permission-request` ele confere se a URI carregada na janela está em
+`tauri://localhost` (onde o bundle é servido) ou, só em `tauri dev`
+(`tauri::is_dev()`), no `devUrl` da configuração (`http://localhost:3000`);
+fora dessas origens o pedido cai no manipulador padrão do WebKit, que nega.
+
+**Voz e vídeo, decidido: degrada com aviso em vez de travar.** O WebKitGTK que
+Ubuntu/Debian/Fedora/Arch empacotam é compilado **sem** `ENABLE_WEB_RTC`
+(opção experimental, fora do padrão desses pacotes). Ligar `enable-webrtc` no
+wry não muda isso — é a biblioteca do sistema que não tem o código —, então
+`RTCPeerConnection` provavelmente **não existe** mesmo com o patch, e o
+LiveKit não teria como conectar. Como verificar num build específico:
+`--debug`, abrir o Web Inspector e rodar `typeof RTCPeerConnection` no console.
+
+A decisão (era pendência aberta, §10): detectar **por capacidade**, não por
+sistema (`apps/web/lib/suporte-a-chamadas.ts`, a mesma regra do
+`isBrowserSupported` do `livekit-client`), e recusar entrar na chamada **antes**
+de qualquer `emit`/API — `stores/voice.ts` passa `connect`, `startCall` e
+`acceptCall` por `recusadoSemWebRTC`, então ninguém aparece "na call" para o
+outro lado nem o toque é interrompido à toa. No app aparece um modal ("Chamadas
+de voz ainda não funcionam no app para Linux" + "Abrir no navegador", que leva
+ao mesmo canal/conversa pela rota nova `/app/channels/[guildId]/[channelId]` —
+antes o link de canal dava 404). Chamada recebida continua tocando; é
+"Atender" que leva ao aviso. Volta a funcionar sozinho se algum dia o
+WebKitGTK vier com WebRTC — é o que a checagem por capacidade compra. Regra
+para quem adicionar um novo ponto de entrada em chamada: passar por uma dessas
+três funções, nunca reimplementar o `if`. Continua pendente (§10): voz nativa
+no Linux (crate `livekit` do lado Rust, como a tela nativa no Windows).
+Detalhe completo em `apps/desktop/README.md` — seção "Chamada de voz/vídeo:
+decidido — degrada com aviso, não trava".
+
+**Fechar a janela principal encerra o app** — diferente de Windows e macOS,
+onde `CloseRequested` esconde a `main` para a bandeja/Dock continuarem a
+chamada. No Linux esse handler nem é registrado
+(`#[cfg(all(desktop, not(target_os = "linux")))]` em `lib.rs`), de propósito:
+esconder só presta se houver por onde voltar, e o GNOME "puro" (sem a extensão
+AppIndicator) não mostra a bandeja; sem single-instance, reabrir o AppImage
+com a janela escondida criaria uma segunda sessão no gateway, com voz
+duplicada. A troca é a call não sobreviver a fechar a janela no Linux.
+
+**O que este build NÃO prova.** Que o app abre, que a bandeja aparece (ela
+depende de AppIndicator — no GNOME "puro", sem a extensão, o ícone não
+aparece) e que o som toca numa distro de verdade. Prova que os pacotes
+existem, são ELF/AppImage/deb x86-64 corretos e estão assinados — o script
+confere com `dpkg-deb --field` e extraindo o squashfs do AppImage (plugins
+GStreamer, WebKit, appindicator lá dentro). Relatos de janela branca com
+NVIDIA + Wayland têm saída conhecida: `WEBKIT_DISABLE_DMABUF_RENDERER=1`.
+
+Não há workflow do Codemagic para Linux — o motivo de existir nas outras duas
+(cross-compile caro para Windows, impossível para macOS fora do Mac) não se
+aplica aqui: o servidor já é Linux x86_64.
+
+Publicar é o mesmo `scripts/publicar-desktop.sh` das outras plataformas; só o
+**AppImage** vai para `updates/` (quem instalou pelo `.deb` pediria a chave
+`linux-x86_64-deb`, que este contrato não publica — ver
+`UpdatesService.alvoDoTauri`), o `.deb` fica só em `downloads/` como
+alternativa manual.
 
 ## 6. Paridade visual com o Discord (o método)
 
@@ -1538,8 +1753,114 @@ virou ~500 ms e o espaço dela já fica reservado (senão a grade dava um pulo d
   Controles sem foco por mouse e sem tooltip. `body` desconta a altura por
   `--barra-de-titulo`.
 - Limitação conhecida: sem moldura nativa, o Windows 11 não mostra o menu de
-  "snap" ao pousar no maximizar (o Discord tem a mesma).
+  "snap" ao pousar no maximizar (o Discord tem a mesma). Não vale para o Mac
+  (§8.1) — lá a moldura é nativa.
 - Ctrl+I abre a caixa de entrada.
+
+### 8.1 macOS: moldura nativa por cima do conteúdo
+
+Windows e Linux têm `decorations: false` — a barra é toda nossa, do jeito
+descrito acima. O Mac é o oposto: `tauri.macos.conf.json` (janela `main`) pede
+`decorations: true` + `titleBarStyle: "Overlay"` + `hiddenTitle: true` +
+`trafficLightPosition: {x: 9, y: 14}`. O sistema desenha os três semáforos por
+cima do conteúdo, que vai até o topo da janela — a nossa barra continua
+existindo por baixo (arrasto, setas, título, caixa de entrada), só sem os três
+controles próprios.
+
+- `trafficLightPosition` foi medido no AppKit do **macOS 13**, aplicando o
+  algoritmo `inset_traffic_lights` do wry 0.55.1 a uma `NSWindow` com a mesma
+  máscara: o quadro do botão é 14×16, o círculo 12×12 fica centrado nele, e o
+  topo do quadro cai em `y − 6`. Com `y = 14` o círculo vai de 10 a 22 —
+  centrado nos 32px desta barra; `x = 9` repete a margem da barra padrão do
+  Mac. **Mudou no `tauri.macos.conf.json`, muda em `POSICAO_DOS_SEMAFOROS`**
+  (`BarraDeTitulo.tsx`) — são o mesmo número em dois arquivos, sem nada que os
+  trave juntos em tempo de compilação.
+- `apps/web/lib/desktop.ts` ganhou `ehMacNoTauri()`: só verdadeiro dentro do
+  Tauri de Mac. Síncrono de propósito, pelo `navigator.userAgent` — o WKWebView
+  se diz "Macintosh; Intel Mac OS X" mesmo em Apple Silicon, o WebView2 diz
+  "Windows NT" e o WebKitGTK diz "X11; Linux" — com o iPad descartado por dois
+  sinais (basta um): o ponteiro grosso (`pointer: coarse`) e
+  `navigator.maxTouchPoints > 0`. Um só não bastava — um iPad com
+  trackpad/Magic Keyboard pode responder `(pointer: fine)`, mas a tela
+  continua sendo de toque, e nenhum Mac de verdade reporta pontos de toque.
+  `useEhMobile` (`hooks/useEhMobile.ts`) usa o mesmo par de sinais para a
+  detecção equivalente do lado mobile.
+- A altura da barra e `ESPACO_DOS_SEMAFOROS` medem **pontos de tela**, mas o
+  zoom do app (`body { zoom: var(--zoom) }`) é aplicado em cima: sem
+  compensar, a barra escalaria junto e os semáforos (que são do AppKit e não
+  escalam) sairiam do lugar. `useZoomDoApp` lê `--zoom` do `<html>` (via
+  `MutationObserver`, só ativo no Mac) e `BarraDeTitulo`/`BarraDeTituloMinima`
+  dividem altura e reserva por ele, então os 32px/78px continuam sendo pontos
+  de verdade. O conteúdo da barra (setas, ícones, texto) não é compensado e
+  escala normalmente — perto do zoom máximo os ícones encostam nas bordas.
+- `BarraDeTitulo.tsx`/`BarraDeTituloMinima.tsx`: no Mac somem
+  minimizar/maximizar/fechar (e o separador que vinha antes deles, que não
+  separaria mais nada), e a área de arrasto reserva 78px à esquerda
+  (`ESPACO_DOS_SEMAFOROS`: onde o círculo verde termina, mais os mesmos 16px de
+  margem do `pl-4` que o Windows usa antes da primeira seta). Em tela cheia a
+  reserva cai para 0 — os semáforos somem junto com o conteúdo.
+  `useReservaDosSemaforos`/`useMaximizada` compartilham `useLeituraDaJanela`:
+  um contador de geração descarta resposta de IPC que chegue fora de ordem
+  (arrastar a borda ou a animação de tela cheia disparam uma rajada de
+  `onResized`, e nada garante a ordem de volta), mais uma releitura 300ms
+  depois do último `Resized` da rajada e outra a cada troca de foco — cobrindo
+  o `windowDidFailToEnterFullScreen`, que desfaz o estado de tela cheia sem
+  emitir `Resized`. Não é garantia: uma tela cheia que falhar **sem** troca de
+  foco e sem gerar `Resized` nenhum pode deixar o estado errado até o próximo
+  resize.
+- Arrasto e duplo clique continuam pelo mesmo `data-tauri-drag-region` de
+  sempre, tratado pelo `drag.js` do próprio Tauri 2.11 (que cancela no
+  mouseup se o ponteiro andou, como a barra nativa). **Limitação conhecida**:
+  o `drag.js` sempre chama `internal_toggle_maximize` (zoom da janela) no
+  duplo clique e **não lê** a preferência do sistema "Clique duplo na barra de
+  título" (`AppleActionOnDoubleClick`) — quem escolheu "minimizar" nas
+  Preferências do Sistema ganha zoom mesmo assim.
+- Splash (`JanelaSplash.tsx`, `useAtualizacao.ts`): sem `macOSPrivateApi`
+  ligado (a feature que ele exige no `Cargo.toml` do crate único brigaria com o
+  build de Windows), o Mac não faz janela transparente de verdade — o WKWebView
+  pinta um fundo branco atrás do `rounded-md`, que apareceria como uma lasca
+  branca em cada canto. No Mac o cartão perde o raio e ganha o próprio
+  `bg-chat` cobrindo a janela inteira; `tauri.macos.conf.json` e
+  `useAtualizacao.ts` trocam para `transparent: false` +
+  `backgroundColor: "#1A1A1E"`. Essa cor **não** escurece o WKWebView antes do
+  primeiro quadro — quem faria isso é `drawsBackground = NO` no wry 0.55, que
+  só compila com a feature `transparent`, a mesma que só entra com
+  `macOSPrivateApi` (desligado). Sem ela, a cor pinta a `NSWindow` (que o
+  webview cobre) e o `underPageBackgroundColor` (a sobrerrolagem); quem evita o
+  quadro branco é a janela nascer oculta e só ganhar `show()` depois do
+  primeiro quadro ou do teto de 100ms (§5.2) — no caso do teto, se o WebKit
+  ainda não tiver pintado nada, o branco pode aparecer por um instante.
+  Sombra não há: uma janela sem moldura nasce sem `hasShadow` no AppKit, e
+  ninguém liga de volta.
+- `backgroundThrottling: "disabled"` (janela `main`, só a partir do macOS 14)
+  evita só a suspensão do **processo** WebContent pelo RunningBoard
+  (`WKPreferences.inactiveSchedulingPolicy = none`) — a página escondida
+  continua sendo uma página oculta para o WebKit (rAF parado, timers de fundo
+  espaçados); não é equivalente às flags do WebView2 no Windows. A rede de
+  segurança de verdade continua sendo a carência de voz do servidor
+  (`VOICE_RECONNECT_GRACE_MS` + `rejoinAposReconexao`), como já era antes desta
+  chave existir.
+- Dock: `RunEvent::Reopen` traz a `main` de volta ao clicar no ícone com o app
+  rodando de janela escondida — sem isso o `.app` ficava vivo sem jeito de
+  voltar (o Mac não tem ícone de bandeja clicável como o Windows). Se a
+  `splash` estiver na frente (checagem ou instalação de atualização em
+  andamento), o clique no Dock traz **ela**, não a `main` — "nenhuma janela
+  visível" cobre também o intervalo entre a `main` escondida e a `splash`
+  ainda não mostrada.
+- Fechar a `main` **em tela cheia** deixa um Space preto vazio: não há saída
+  simples (`set_fullscreen(false)` é assíncrono, `hide()` no meio dele não é
+  confiável, e o Tauri não emite evento de "saiu da tela cheia") — fica como
+  limitação conhecida; sair da tela cheia antes de fechar evita.
+- Atalhos e menu: o Tauri 2.11 instala o **menu padrão do macOS** porque o app
+  nunca chama `.menu()` — copiar/colar/desfazer/selecionar tudo, Cmd+M
+  (minimizar) e zoom saem de graça. Cmd+W esconde a janela (o mesmo
+  `CloseRequested` → bandeja de sempre); **Cmd+Q encerra o processo de
+  verdade** — não há "continuar na bandeja" para esse atalho.
+- **Nada disto rodou num `.app` de verdade.** Em aberto: o comportamento em
+  macOS 12, 14/15 e 26 (o código só cita o algoritmo medido no 13); os
+  semáforos voltando ao normal depois de sair da tela cheia; arrastar uma
+  janela sem foco pede dois cliques (`acceptFirstMouse` não ligado, de
+  propósito — é o padrão do AppKit, tauri#4316).
 
 ## 9. Histórico de 2026-09-02
 
@@ -1727,6 +2048,11 @@ pelo `drop` da página.
 
 - **Nenhum PR de hoje foi visto em app rodando.** Validação pelos prints do
   usuário (§6.5). O que estiver torto vira PR pequeno.
+- **Verificação local (§3.2) do lote de macOS/Linux/voz rodou em 2026-09-15**:
+  `prisma generate`, build do `shared`, `tsc --noEmit` limpo em
+  `shared`/`api`/`web`, testes `api` (87 arquivos/971 testes) e `web`
+  (81 arquivos/841 testes) passando, `next build` e export estático
+  (`NEXT_OUTPUT=export`) ok.
 - Navegador do usuário que não carregava após F5 durante uma call (antes do
   #45): sem causa confirmada; pedia-se o erro do Console (F12) antes de limpar
   os dados do site.
@@ -1757,6 +2083,60 @@ pelo `drop` da página.
   nasce escondida e se mostra no primeiro quadro), mas **nunca vista num
   Windows** — nem ela, nem o canto arredondado por `transparent: true` no
   WebView2, nem o ciclo de atualização pela janelinha.
+- **Splash fechada pelo gerenciador de janelas (ex.: Alt+F4) com a `main`
+  ainda escondida deixa o processo vivo sem janela nenhuma.** Problema antigo,
+  presente nas três plataformas: fechar a `splash` "de verdade" (ela não
+  esconde, ver §5.2) não devolve a `main`, que só aparece quando a própria
+  `splash` decide mostrá-la. Sem outra janela e sem bandeja em foco, o usuário
+  fica sem jeito óbvio de voltar ao app a não ser matando o processo.
+- **Arrastar uma janela sem foco no Mac exige dois cliques**
+  (`acceptFirstMouse` não ligado; é o padrão do AppKit, tauri#4316) — o
+  primeiro clique só foca a janela, o segundo é que arrasta.
+- **Desktop macOS e Linux: nada foi publicado ainda, nem testado numa máquina
+  de verdade** (§5.5, §5.6). Falta:
+  - testar o `.dmg` universal **num Mac Intel e num Apple Silicon** — nada foi
+    compilado nem aberto num Mac até agora;
+  - **validar a geometria dos semáforos** (`trafficLightPosition`,
+    `POSICAO_DOS_SEMAFOROS`, `ESPACO_DOS_SEMAFOROS`) em **macOS 12, 14/15 e
+    26** — só foi medida no algoritmo do wry aplicado ao 13 (§8.1);
+  - testar o `.AppImage`/`.deb` **numa distro de verdade** (abrir, bandeja,
+    som) — o build no servidor só prova que o pacote existe e está assinado;
+  - **decidido: voz/vídeo no app Linux degrada com aviso** (não é mais
+    pendência de decisão) — `apps/web/lib/suporte-a-chamadas.ts` detecta a
+    falta de `RTCPeerConnection` por capacidade e `stores/voice.ts` recusa
+    entrar na chamada antes de qualquer `emit`/API, com um modal oferecendo
+    "Abrir no navegador". Detalhe em `apps/desktop/README.md` (§5.6 acima).
+    O que continua pendente é **voz nativa no Linux** (crate `livekit`, como a
+    tela nativa no Windows) — ninguém começou;
+  - **decidido: `libav`/FFmpeg NÃO vão embutidos no AppImage** (não é mais
+    pendência de decisão) — o `ffmpeg` do Ubuntu jammy é GPL v2+, incompatível
+    com redistribuir num app fechado; o `.deb` só recomenda o pacote da
+    distro. Detalhe e a lista de licenças em
+    `apps/desktop/LICENCAS-DE-TERCEIROS.md`;
+  - **gerar o certificado autoassinado do Mac e preencher os dois pins do
+    instalador por Terminal** — `scripts/gerar-certificado-mac.sh` ainda não
+    rodou de verdade; sem isso o build assina ad-hoc (permissões repetidas a
+    cada atualização) e `apps/web/public/instalar-mac.sh` roda com a
+    verificação de autoria desligada (`PIN_DO_CERTIFICADO_SHA256`/`_SHA1`
+    vazios). Ver `apps/desktop/README.md` § Assinatura;
+  - **preencher `<contato>` em `apps/desktop/LICENCAS-DE-TERCEIROS.md`** antes
+    da primeira publicação pública (a oferta de código-fonte da LGPL §6(c)
+    precisa de um canal de contato real);
+  - **testar `instalar-mac.sh` contra a API real e um `.dmg` real** — o script
+    nunca rodou de ponta a ponta (token, download, montagem, verificação de
+    assinatura, instalação atômica);
+  - **criar o grupo `streamz-updater` no painel do Codemagic** — está
+    comentado no `codemagic.yaml` até existir, e sem ele o workflow
+    `desktop-macos` gera só o `.dmg`, sem os artefatos do atualizador; o
+    segundo grupo, `streamz-certificado-mac`, está comentado pelo mesmo
+    motivo;
+  - **notarização Apple**: exige Apple Developer Program (US$ 99/ano); sem
+    ela, todo `.dmg` publicado carrega o aviso do Gatekeeper (o instalador por
+    Terminal contorna o aviso, mas não é notarização — `spctl` continua
+    recusando);
+  - **primeira publicação de macOS e Linux**: nenhuma versão chegou a
+    `downloads/`/`updates/` — os passos existem (`scripts/publicar-desktop.sh`,
+    §5) mas nunca rodaram de verdade para essas duas plataformas.
 
 ## 11. Checklist para uma sessão nova
 

@@ -102,10 +102,10 @@ que tem a sua.
 | Esqueci a senha | `app/forgot-password/page.tsx` | parcial | **ok** | idem |
 | Redefinir senha | `app/reset-password/page.tsx` | parcial | **ok** | idem |
 | Verificar e-mail | `app/verify-email/page.tsx` | parcial | **ok** | idem |
-| Download | `app/download/page.tsx` | parcial | **ok** | os três botões de sistema em 39px |
+| Download | `components/download/PaginaDeDownload.tsx` | parcial | **ok** | os três botões de sistema em 39px |
 | **Convite** | `app/invite/[code]/AceitarConvite.tsx` | **não** | **ok** | **a página rolava 436px numa tela de 390** e o botão "Entrar para aceitar o convite" saía pela direita: `w-[420px] max-w-full` dentro de um `grid place-items-center` não é limitado pela tela |
 | Convite inválido | idem | **não** | **ok** | mesmo estouro |
-| Raiz (`/`) | `app/page.tsx` | ok | ok | redireciona para o login |
+| Raiz (`/`) | `app/page.tsx` | ok | ok | no navegador mostra a página de download (`PaginaDeDownload`); dentro do Tauri (mobile incluído) continua redirecionando para `/app` ou `/login` |
 | Link de mensagem | `app/app/channels/.../[messageId]` | não avaliado | não avaliado | redireciona para `/app`; a tela final é a do canal |
 | Splash | `app/splash/page.tsx` | n/a | n/a | janela de 300×350 do Tauri |
 
@@ -242,7 +242,7 @@ de diferença no desktop em 1300×900.**
 | `tailwind.config.ts` | a variante `celular:` — uma tela `raw` com a mesma consulta do `hooks/useEhMobile`, para as classes perguntarem o mesmo que o JS (e não perderem o telefone deitado) |
 | `app/invite/[code]/AceitarConvite.tsx` | `w-full max-w-[420px]` no lugar de `w-[420px] max-w-full` (fim do estouro de 46px), `100dvh`, áreas seguras, botão de 48 |
 | `components/auth/AuthCard.tsx` | `100dvh`, áreas seguras no padding e na marca, cartão com 24px de respiro, campos e botão de envio em 48px — vale para login, registro, esqueci/redefinir senha, verificar e-mail e download |
-| `app/download/page.tsx` | os três botões de sistema em 48px |
+| `components/download/PaginaDeDownload.tsx` | os três botões de sistema em 48px |
 | `components/friends/FriendsPage.tsx` | cabeçalho que **rola na horizontal** no celular, sem a identidade (já está no cabeçalho da tela) e sem o grupo da direita (a caixa de entrada é uma aba; "nova conversa" é o "+" da lista); abas e "Adicionar amigo" em 44px; busca em 48 |
 | `components/friends/FriendRow.tsx` | ações da linha (mensagem, aceitar, recusar, "…") de 35 para 44px, com recuo menor para o nome caber |
 | `components/friends/AddFriend.tsx` | campo e botão empilhados em 44px cada (lado a lado sobrava menos de 100px para o campo) |

@@ -82,6 +82,67 @@ configurada neste servidor" — de propósito, e com prova na bancada
 Sem Azure Trusted Signing, o `.exe` dispara o alerta do SmartScreen em quem
 baixa. O instalador em si já é gerado pelo workflow `Desktop (Windows)`.
 
+### Splash fechada pelo gerenciador de janelas deixa o processo vivo sem janela
+Problema antigo, nas **três plataformas**: fechar a janelinha `splash` "de
+verdade" (ex.: Alt+F4) enquanto a `main` ainda está escondida não devolve a
+`main` — quem a mostra é a própria `splash`, ao terminar a checagem ou a
+instalação. Sem outra janela visível e sem clicar na bandeja/Dock, o processo
+fica rodando sem jeito óbvio de voltar ao app.
+
+### Desktop macOS e Linux: gerados, nunca publicados nem testados numa máquina de verdade
+O `.dmg` universal e o `.AppImage`/`.deb` saem dos scripts
+(`scripts/build-desktop-macos.sh`, `scripts/build-desktop-linux-no-servidor.sh`
+— ver `docs/PROCESSO-DE-DESENVOLVIMENTO.md` §5.5/§5.6), mas nada disso foi
+verificado fora do build:
+
+1. **Testar o `.dmg` num Mac Intel e num Apple Silicon** — abrir de verdade,
+   conferir o aviso do Gatekeeper, o microfone/câmera e a chamada de voz/vídeo.
+   Inclui **validar a geometria dos semáforos** (`trafficLightPosition`,
+   `POSICAO_DOS_SEMAFOROS`, `ESPACO_DOS_SEMAFOROS`) em **macOS 12, 14/15 e
+   26** — foi medida só no algoritmo do wry aplicado ao macOS 13 (ver
+   `docs/PROCESSO-DE-DESENVOLVIMENTO.md` §8.1) — e conferir que arrastar uma
+   janela sem foco realmente exige dois cliques (`acceptFirstMouse` não
+   ligado, de propósito; tauri#4316).
+2. **Testar o `.AppImage`/`.deb` numa distro de verdade** (Ubuntu, Debian, ou
+   Fedora) — abrir, bandeja, som.
+3. **Gerar o certificado autoassinado do Mac e preencher os dois pins do
+   instalador por Terminal** — `scripts/gerar-certificado-mac.sh` nunca rodou
+   de verdade. Sem ele o build de macOS assina ad-hoc (o macOS repede
+   microfone/câmera/tela a cada atualização) e `apps/web/public/instalar-mac.sh`
+   fica com `PIN_DO_CERTIFICADO_SHA256`/`PIN_DO_CERTIFICADO_SHA1` vazios, ou
+   seja, com a verificação de autoria do certificado desligada (o script ainda
+   confere selo e identificador). Ver `apps/desktop/README.md` § Assinatura.
+4. **Testar `apps/web/public/instalar-mac.sh` contra a API real e um `.dmg`
+   real** — token de download, checagem de tamanho, `codesign --verify`,
+   montagem do `.dmg` e troca atômica em `/Applications` nunca rodaram de
+   ponta a ponta.
+5. **Preencher `<contato>` em `apps/desktop/LICENCAS-DE-TERCEIROS.md`** antes
+   da primeira publicação pública — é o canal para a oferta de código-fonte
+   da LGPL (§6(c)) das bibliotecas embutidas no AppImage.
+6. **Criar o grupo `streamz-updater` no painel do Codemagic** — está comentado
+   no `codemagic.yaml` até existir; sem ele o workflow `desktop-macos` gera só
+   o `.dmg`, sem os artefatos do atualizador (`.app.tar.gz` + `.sig`). O
+   segundo grupo, `streamz-certificado-mac` (as três variáveis do certificado
+   do item 3), está comentado pelo mesmo motivo.
+7. **Notarização Apple** — exige Apple Developer Program (US$ 99/ano); sem
+   ela, todo `.dmg` carrega o aviso do Gatekeeper na primeira abertura (o
+   instalador por Terminal contorna o aviso sem resolver isto — `spctl`
+   continua recusando).
+8. **Primeira publicação de macOS e Linux** — nenhuma versão chegou a
+   `downloads/`/`updates/` para essas duas plataformas; o caminho existe
+   (`scripts/publicar-desktop.sh`) mas nunca rodou de verdade.
+9. **Voz nativa no Linux** — a chamada dentro do app já degrada com aviso em
+   vez de travar (decidido; ver `apps/desktop/README.md` § Chamada de
+   voz/vídeo). O que falta, e ninguém começou, é um caminho nativo (crate
+   `livekit` do lado Rust, como a tela nativa no Windows) para a chamada
+   funcionar de fato no app de Linux.
+
+A verificação local (§3.2) deste lote (voz/Linux/macOS, download) rodou em
+2026-09-15: `prisma generate`, build do `shared`, `tsc --noEmit` limpo em
+`shared`/`api`/`web`, testes `api` (87 arquivos/971 testes) e `web`
+(81 arquivos/841 testes) passando, `next build` e export estático
+(`NEXT_OUTPUT=export`) ok.
+
 ## 2. Backlog de features
 
 - **Login social (OAuth)** — o modelo `OAuthAccount` e o `linkedProviders` do
