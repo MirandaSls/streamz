@@ -243,9 +243,10 @@ workflows:
       #   APPLE_SIGNING_IDENTITY      SHA-1 do certificado (conferido contra o .p12)
       # Mesmo cuidado do grupo acima: comentado até existir no painel. Sem ele
       # o build assina ad-hoc e segue.
-      # groups:
-      #   - streamz-updater
-      #   - streamz-certificado-mac
+      # Grupos criados no painel do Codemagic em 2026-09-15.
+      groups:
+        - streamz-updater
+        - streamz-certificado-mac
       vars:
         # As mesmas do workflow de iOS (§`beforeBuildCommand` builda a web) —
         # é o que o `next build` embute no bundle estático que o app carrega.
