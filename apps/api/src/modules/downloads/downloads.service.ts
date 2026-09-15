@@ -18,6 +18,7 @@ import {
   type DownloadDisponivel,
   type DownloadPlataforma,
 } from "@streamz/shared";
+import { escolherInstalador, type EntradaInstalador } from "./instalador";
 
 /** Claims do token curto de download (`?t=` na rota do arquivo). */
 interface DownloadTokenClaims {
@@ -35,7 +36,19 @@ interface ArquivoDeDownload {
 }
 
 /**
- * Extensões que identificam o instalador de cada sistema.
+ * Extensões que identificam o instalador de cada sistema, em ORDEM DE
+ * PREFERÊNCIA — não é um conjunto. O build passou a gerar mais de um formato
+ * na mesma pasta (Linux: `.AppImage` e `.deb` juntos; Windows, às vezes `.exe`
+ * e `.msi`), e o mtime dos dois fica perto demais para decidir sozinho: bastaria
+ * publicar primeiro o pacote "errado" para a página passar a entregá-lo. A
+ * extensão mais preferida presente sempre vence; só entre arquivos da mesma
+ * extensão o mais recente decide (`escolherInstalador`, em `instalador.ts`).
+ *
+ * windows: `.exe` primeiro — é o NSIS, o formato que o autoupdater usa; `.msi`
+ *   fica de reserva.
+ * macos: `.dmg` primeiro — instalador padrão do sistema; `.pkg` de reserva.
+ * linux: `.appimage` primeiro — roda em qualquer distro sem instalar nada;
+ *   `.deb` só serve Debian/Ubuntu; `.rpm` por último.
  *
  * É por extensão, e não por nome fixo, porque o nome do instalador do Tauri
  * carrega a versão (`Streamz_1.0.0_x64-setup.exe`) e mudaria a cada release —
@@ -202,11 +215,15 @@ export class DownloadsService {
   }
 
   /**
-   * O arquivo mais recente da pasta que casa com a extensão da plataforma.
+   * O instalador que a extensão preferida da plataforma indica — e, entre
+   * arquivos da mesma extensão, o mais recente.
    *
-   * "Mais recente" e não "único" para que publicar uma versão nova seja copiar
-   * o novo instalador na pasta — a anterior pode ficar lá como histórico sem
-   * confundir a rota.
+   * "Mais recente" dentro da extensão, e não "único", para que publicar uma
+   * versão nova seja copiar o novo instalador na pasta — a anterior pode ficar
+   * lá como histórico sem confundir a rota. A escolha entre extensões (quando
+   * o build deixa mais de uma na pasta) é responsabilidade de
+   * `escolherInstalador`; aqui só se monta a lista de candidatos e se resolve
+   * o caminho final.
    */
   private async arquivoDe(
     plataforma: DownloadPlataforma,
@@ -222,7 +239,10 @@ export class DownloadsService {
     );
 
     const extensoes = EXTENSOES[plataforma];
-    let melhor: ArquivoDeDownload | null = null;
+    // caminho de cada candidato, indexado pelo nome — `escolherInstalador` só
+    // conhece nome/mtime/tamanho, não disco, então o caminho fica de fora dela
+    const caminhos = new Map<string, string>();
+    const candidatos: EntradaInstalador[] = [];
 
     for (const entrada of entradas) {
       if (!entrada.isFile()) continue;
@@ -236,15 +256,18 @@ export class DownloadsService {
       const info = await stat(caminho).catch(() => null);
       if (!info?.isFile()) continue;
 
-      if (!melhor || info.mtime > melhor.atualizadoEm) {
-        melhor = {
-          caminho,
-          filename: entrada.name,
-          tamanho: info.size,
-          atualizadoEm: info.mtime,
-        };
-      }
+      caminhos.set(entrada.name, caminho);
+      candidatos.push({ nome: entrada.name, mtime: info.mtime, tamanho: info.size });
     }
-    return melhor;
+
+    const escolhido = escolherInstalador(candidatos, extensoes);
+    if (!escolhido) return null;
+
+    return {
+      caminho: caminhos.get(escolhido.nome)!,
+      filename: escolhido.nome,
+      tamanho: escolhido.tamanho,
+      atualizadoEm: escolhido.mtime,
+    };
   }
 }
