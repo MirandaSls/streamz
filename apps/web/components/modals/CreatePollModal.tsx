@@ -13,8 +13,9 @@ import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dial
 import { Select, ToggleLinha } from "@/components/ui/controls";
 import { BotaoDeIcone, Button, Campo, TextInput } from "@/components/ui/primitivos";
 import EmojiPicker from "@/components/ui/EmojiPicker";
+import { EmojiDaReacao } from "@/components/chat/EmojiDeReacao";
 import { criarEnquete } from "@/stores/polls";
-import { useUI } from "@/stores/ui";
+import { ui, useUI } from "@/stores/ui";
 
 /** "Sem prazo" é o valor 0; o contrato só lista as durações com prazo. */
 const SEM_PRAZO = 0;
@@ -30,6 +31,8 @@ export default function CreatePollModal({ channelId }: { channelId: string }) {
   const [hours, setHours] = useState<number>(POLL_DURATIONS[3].hours);
   /** qual seletor de emoji está aberto: -1 é o da pergunta, null é nenhum. */
   const [escolhendo, setEscolhendo] = useState<number | null>(null);
+  /** esperando o ack do `poll.create`: o botão fica em "carregando" e o modal aberto. */
+  const [enviando, setEnviando] = useState(false);
 
   const preenchidas = options.map((o) => o.trim()).filter(Boolean);
   const podeCriar = question.trim().length > 0 && preenchidas.length >= MIN_POLL_OPTIONS;
@@ -38,26 +41,33 @@ export default function CreatePollModal({ channelId }: { channelId: string }) {
     setOptions((prev) => prev.map((o, i) => (i === index ? value : o)));
   }
 
-  function submit() {
-    if (!podeCriar) return;
-    // o emoji entra colado no texto da resposta: o contrato da enquete guarda só
-    // a string da opção (ver relatório — falta um campo `emoji` em `PollOption`)
-    const finais = options
-      .map((o, i) => {
-        const texto = o.trim();
-        if (!texto) return "";
-        const emoji = emojis[i];
-        return emoji ? `${emoji} ${texto}`.slice(0, MAX_POLL_OPTION) : texto;
-      })
-      .filter(Boolean);
-    criarEnquete({
+  async function submit() {
+    if (!podeCriar || enviando) return;
+    // o emoji vai num campo próprio (`optionEmojis`, paralelo às opções) e não
+    // mais colado no texto: as respostas vazias saem da lista, e o emoji delas
+    // sai junto, para as posições continuarem batendo
+    const finais: string[] = [];
+    const emojisFinais: (string | null)[] = [];
+    options.forEach((o, i) => {
+      const texto = o.trim();
+      if (!texto) return;
+      finais.push(texto);
+      emojisFinais.push(emojis[i] ?? null);
+    });
+    setEnviando(true);
+    const erro = await criarEnquete({
       channelId,
       question: question.trim(),
       options: finais,
+      optionEmojis: emojisFinais.some(Boolean) ? emojisFinais : undefined,
       multi,
       durationHours: hours > 0 ? hours : undefined,
     });
-    closeModal();
+    setEnviando(false);
+    // na falha o modal fica aberto com o que foi digitado: fechar e avisar
+    // perderia a enquete inteira
+    if (erro) ui.toast(erro, "error");
+    else closeModal();
   }
 
   function escolherEmoji(indice: number, emoji: string) {
@@ -78,7 +88,7 @@ export default function CreatePollModal({ channelId }: { channelId: string }) {
       className="w-[460px]"
       footer={
         <>
-          <PrimaryButton disabled={!podeCriar} onClick={submit}>
+          <PrimaryButton disabled={!podeCriar} carregando={enviando} onClick={() => void submit()}>
             Criar
           </PrimaryButton>
           <SecondaryButton onClick={closeModal}>Cancelar</SecondaryButton>
@@ -209,7 +219,7 @@ function BotaoEmoji({
   return (
     <BotaoDeIcone
       rotulo={label}
-      icone={emoji ? <span className="text-lg leading-none">{emoji}</span> : <SmilePlus size={18} />}
+      icone={emoji ? <EmojiDaReacao emoji={emoji} tamanho={20} /> : <SmilePlus size={18} />}
       aria-expanded={aberto}
       onClick={onToggle}
     />

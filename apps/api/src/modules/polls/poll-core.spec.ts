@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { isPollClosed, pollPercent } from "@streamz/shared";
-import { tallyPoll, type PollRow } from "./poll-core";
+import { ehEmojiDeResposta, isPollClosed, pollOptionEmojisSchema, pollPercent } from "@streamz/shared";
+import { normalizarEmojisDasOpcoes, tallyPoll, type PollRow } from "./poll-core";
 
 const AGORA = new Date("2026-08-25T12:00:00.000Z").getTime();
 
@@ -103,5 +103,48 @@ describe("enquete encerrada", () => {
     const futuro = new Date(AGORA + 60_000).toISOString();
     const fechada = new Date(AGORA - 60_000).toISOString();
     expect(isPollClosed({ expiresAt: futuro, closedAt: fechada }, AGORA)).toBe(true);
+  });
+});
+
+describe("emoji por resposta", () => {
+  it("sai no DTO na posição da opção, e null onde não há", () => {
+    const poll = tallyPoll({ ...enquete, optionEmojis: ["🍕", "", "<:festa:abc123>"] }, []);
+    expect(poll.options.map((o) => o.emoji)).toEqual(["🍕", null, "<:festa:abc123>"]);
+  });
+
+  it("enquete antiga, sem a coluna preenchida, sai sem emoji nenhum", () => {
+    expect(tallyPoll(enquete, []).options.every((o) => o.emoji === null)).toBe(true);
+    expect(tallyPoll({ ...enquete, optionEmojis: [] }, []).options.every((o) => o.emoji === null)).toBe(
+      true,
+    );
+  });
+
+  it("alinha o array com as opções: completa com vazio e corta o excesso", () => {
+    expect(normalizarEmojisDasOpcoes(3, ["🍕"])).toEqual(["🍕", "", ""]);
+    expect(normalizarEmojisDasOpcoes(2, ["🍕", "🎉", "🔥"])).toEqual(["🍕", "🎉"]);
+    expect(normalizarEmojisDasOpcoes(3, [null, " 🎉 ", undefined])).toEqual(["", "🎉", ""]);
+  });
+
+  it("sem nenhum emoji grava array vazio, igual às enquetes antigas", () => {
+    expect(normalizarEmojisDasOpcoes(3, undefined)).toEqual([]);
+    expect(normalizarEmojisDasOpcoes(3, [null, "", "  "])).toEqual([]);
+  });
+
+  it("aceita unicode (inclusive sequências) e a forma <:nome:id>", () => {
+    for (const e of ["🍕", "👍🏽", "👩‍💻", "🇧🇷", "1️⃣", "❤️", "🏴󠁧󠁢󠁳󠁣󠁴󠁿", "<:festa:abc123>"]) {
+      expect(ehEmojiDeResposta(e), e).toBe(true);
+    }
+  });
+
+  it("recusa texto comum no lugar do emoji", () => {
+    for (const e of ["", "a", "sim", "12", "🍕 pizza", ":festa:", "<:Festa:abc>", "<a:festa:abc>"]) {
+      expect(ehEmojiDeResposta(e), e).toBe(false);
+    }
+  });
+
+  it("o schema do poll.create aceita null e vazio, e recusa texto", () => {
+    expect(pollOptionEmojisSchema.safeParse({ optionEmojis: ["🍕", null, ""] }).success).toBe(true);
+    expect(pollOptionEmojisSchema.safeParse({}).success).toBe(true);
+    expect(pollOptionEmojisSchema.safeParse({ optionEmojis: ["pizza"] }).success).toBe(false);
   });
 });

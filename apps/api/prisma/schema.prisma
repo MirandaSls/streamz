@@ -957,6 +957,10 @@ model Poll {
   question  String
   // texto das opções, na ordem; o voto referencia o índice.
   options   String[]
+  // emoji de cada opção, na mesma posição de `options`; "" = opção sem emoji.
+  // Array paralelo e não tabela de opções: as opções são `String[]` desde a
+  // origem e ficam imutáveis depois de criadas. Vazio nas enquetes antigas.
+  optionEmojis String[] @default([])
   multi     Boolean   @default(false)
   expiresAt DateTime?
   closedAt  DateTime?

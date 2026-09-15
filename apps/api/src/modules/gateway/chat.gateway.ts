@@ -21,6 +21,7 @@ import {
   parseWsPayload,
   pollCloseSchema,
   pollCreateSchema,
+  pollOptionEmojisSchema,
   pollVoteSchema,
   reactionSchema,
   suppressEmbedsSchema,
@@ -31,7 +32,7 @@ import {
   voiceUpdateSchema,
   VOICE_RECONNECT_GRACE_MS,
 } from "@streamz/shared";
-import type { UserStatus, WsErrorEvent } from "@streamz/shared";
+import type { PollAck, UserStatus, WsErrorEvent } from "@streamz/shared";
 import {
   newBucket,
   takeToken,
@@ -73,6 +74,9 @@ const WS_LIMITS: Record<string, BucketLimit> = {
   [WS_EVENTS.POLL_CREATE]: { capacity: 5, refillPerSecond: 0.5 },
   [WS_EVENTS.POLL_VOTE]: { capacity: 10, refillPerSecond: 2 },
 };
+
+/** Resposta de ack quando o balde do comando esvaziou. */
+const AVISO_DE_RAJADA = { ok: false, error: "Devagar: muitos comandos seguidos" } as const;
 
 /**
  * Heartbeat folgado de propósito.
@@ -382,47 +386,77 @@ export class ChatGateway
 
   // ── h-moderacao: enquetes ──────────────────────────────────
 
+  // Os três comandos de enquete respondem com ack (`PollAck`): o valor devolvido
+  // por um `@SubscribeMessage` é o que o adaptador do Nest entrega ao callback
+  // do `emit` do cliente — e retorno `undefined` é filtrado, o callback nunca
+  // roda. Antes eles não devolviam nada, e a falha só chegava como `ws.error`
+  // solto: a tela não sabia QUAL voto desfazer e o otimista ficava aceso. Por
+  // isso as falhas daqui voltam no ack e **não** repetem o `ws.error` (o
+  // cliente mostraria dois toasts para o mesmo erro).
+
   @SubscribeMessage(WS_EVENTS.POLL_CREATE)
-  async onPollCreate(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
+  async onPollCreate(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<PollAck> {
     const user = this.userOf(client);
-    if (!this.allow(client, WS_EVENTS.POLL_CREATE)) return;
-    const payload = this.parse(client, pollCreateSchema, body);
-    if (!user || !payload) return;
+    if (!user) return { ok: false, error: "Sessão expirada" };
+    if (!this.allow(client, WS_EVENTS.POLL_CREATE, false)) return AVISO_DE_RAJADA;
+    const payload = parseWsPayload(pollCreateSchema, body);
+    if (!payload.ok) return { ok: false, error: payload.message };
+    // `optionEmojis` fica fora do `pollCreateSchema` (ver `pollOptionEmojisSchema`
+    // em `comunidade.ts`); o zod daquele descarta a chave, então lê-se do corpo cru
+    const emojis = parseWsPayload(pollOptionEmojisSchema, body);
+    if (!emojis.ok) return { ok: false, error: emojis.message };
     try {
-      const message = await this.polls.create(user.id, payload);
+      const message = await this.polls.create(user.id, {
+        ...payload.data,
+        optionEmojis: emojis.data.optionEmojis,
+      });
       this.realtime.emitToChannel(
-        payload.channelId,
+        payload.data.channelId,
         WS_EVENTS.MESSAGE_NEW,
-        payload.nonce ? { ...message, nonce: payload.nonce } : message,
+        payload.data.nonce ? { ...message, nonce: payload.data.nonce } : message,
       );
+      return { ok: true };
     } catch (e) {
-      this.emitError(client, e);
+      return { ok: false, error: this.mensagemDeErro(client, e) };
     }
   }
 
   @SubscribeMessage(WS_EVENTS.POLL_VOTE)
-  async onPollVote(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
+  async onPollVote(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<PollAck> {
     const user = this.userOf(client);
-    if (!this.allow(client, WS_EVENTS.POLL_VOTE)) return;
-    const payload = this.parse(client, pollVoteSchema, body);
-    if (!user || !payload) return;
+    if (!user) return { ok: false, error: "Sessão expirada" };
+    if (!this.allow(client, WS_EVENTS.POLL_VOTE, false)) return AVISO_DE_RAJADA;
+    const payload = parseWsPayload(pollVoteSchema, body);
+    if (!payload.ok) return { ok: false, error: payload.message };
     try {
       // o próprio serviço faz o broadcast do `poll.updated` para a sala
-      await this.polls.vote(user.id, payload.messageId, payload.optionIndex);
+      await this.polls.vote(user.id, payload.data.messageId, payload.data.optionIndex);
+      return { ok: true };
     } catch (e) {
-      this.emitError(client, e);
+      return { ok: false, error: this.mensagemDeErro(client, e) };
     }
   }
 
   @SubscribeMessage(WS_EVENTS.POLL_CLOSE)
-  async onPollClose(@ConnectedSocket() client: Socket, @MessageBody() body: unknown) {
+  async onPollClose(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<PollAck> {
     const user = this.userOf(client);
-    const payload = this.parse(client, pollCloseSchema, body);
-    if (!user || !payload) return;
+    if (!user) return { ok: false, error: "Sessão expirada" };
+    const payload = parseWsPayload(pollCloseSchema, body);
+    if (!payload.ok) return { ok: false, error: payload.message };
     try {
-      await this.polls.close(user.id, payload.messageId);
+      await this.polls.close(user.id, payload.data.messageId);
+      return { ok: true };
     } catch (e) {
-      this.emitError(client, e);
+      return { ok: false, error: this.mensagemDeErro(client, e) };
     }
   }
 
@@ -434,15 +468,16 @@ export class ChatGateway
    * Consome um token do balde daquele comando. Os baldes ficam no próprio
    * socket, então somem junto com a conexão — não há mapa global a limpar.
    */
-  private allow(client: Socket, event: keyof typeof WS_LIMITS): boolean {
+  private allow(client: Socket, event: keyof typeof WS_LIMITS, avisar = true): boolean {
     const limit = WS_LIMITS[event];
     const buckets = (client.data.buckets ??= {} as Record<string, BucketState>);
     const now = Date.now();
     const state = (buckets[event] ??= newBucket(limit, now));
     if (takeToken(state, limit, now)) return true;
-    client.emit(WS_EVENTS.ERROR, {
-      message: "Devagar: muitos comandos seguidos",
-    } satisfies WsErrorEvent);
+    // `avisar = false`: o comando responde por ack e o aviso vai nele
+    if (avisar) {
+      client.emit(WS_EVENTS.ERROR, { message: AVISO_DE_RAJADA.error } satisfies WsErrorEvent);
+    }
     return false;
   }
 
@@ -470,21 +505,27 @@ export class ChatGateway
    * interno" e o detalhe fica no log.
    */
   private emitError(client: Socket, e: unknown) {
+    client.emit(WS_EVENTS.ERROR, { message: this.mensagemDeErro(client, e) } satisfies WsErrorEvent);
+  }
+
+  /**
+   * Texto legível de uma falha de comando: a mensagem da `HttpException`, ou
+   * "Erro interno" (com log) para o resto. Serve ao `ws.error` e ao ack.
+   */
+  private mensagemDeErro(client: Socket, e: unknown): string {
     if (e instanceof HttpException) {
       const body = e.getResponse();
       const detail =
         typeof body === "string"
           ? body
           : ((body as { message?: string | string[] })?.message ?? e.message);
-      const message = Array.isArray(detail) ? detail.join("; ") : String(detail);
-      client.emit(WS_EVENTS.ERROR, { message } satisfies WsErrorEvent);
-      return;
+      return Array.isArray(detail) ? detail.join("; ") : String(detail);
     }
     this.logger.error(
       `Falha em comando WS (socket ${client.id})`,
       e instanceof Error ? e.stack : String(e),
     );
-    client.emit(WS_EVENTS.ERROR, { message: "Erro interno" } satisfies WsErrorEvent);
+    return "Erro interno";
   }
 
   @SubscribeMessage(WS_EVENTS.TYPING)

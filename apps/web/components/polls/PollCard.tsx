@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { Check } from "@/components/ui/icones";
 import { isPollClosed, pollPercent, type Poll } from "@streamz/shared";
 import { Button } from "@/components/ui/primitivos";
+import { EmojiDaReacao } from "@/components/chat/EmojiDeReacao";
 import { horaCompleta } from "@/lib/format";
 import { usePoll, usePolls } from "@/stores/polls";
-import { ui } from "@/stores/ui";
 
 /**
  * Enquete dentro da mensagem: pergunta, opções com rádio/caixa à direita,
@@ -75,19 +75,43 @@ import { ui } from "@/stores/ui";
  * é o que a store já fazia antes desta peça existir. "Ver resultados" espia
  * as porcentagens sem votar e só aparece antes do voto (depois disso o
  * resultado já está à mostra sozinho).
+ *
+ * Rodada de correção (cartão "enquetes", revisão visual de 2026-09-14, régua
+ * `scripts/paridade/medir.py` sobre a mesma `enquete.png` e sobre a nossa
+ * captura `.claude/paridade/saida/desktop/enquete.png`):
+ * 7. Rodapé sem "Quem votou"/"Encerrar": o do Discord tem só "0 votes" à
+ *    esquerda, "Show votes" e o botão Vote (idem `polls-faq/07.gif`). As duas
+ *    ações vão para o menu da mensagem (`MessageItem.tsx`, fora deste
+ *    arquivo); por isso `canModerate`/`isAuthor` continuam no tipo das props,
+ *    mas o card não os usa mais.
+ * 8. Anel do rádio com traço de 2px (`linha 151 480 510` → 484–485 e 502–503;
+ *    `coluna 493` → 141–142 e 159–160). O nosso media 1px (866 e 885). A cor
+ *    da imagem (#d6d9dd) é do tema antigo; o token mais próximo do atual é
+ *    `interactive-text-default`.
+ * 9. Rótulo da opção em semibold: haste do "E" de 2px nítidos em #d6d9dd na
+ *    imagem, contra 2px com franja no nosso (peso normal).
+ * 10. Subtítulo, meta e ações do rodapé em 14px: "S" de "Select one answer",
+ *    "0" de "0 votes" e "S" de "Show votes" com 10–11px de altura (14px); o
+ *    nosso media 9px (12px). "Show votes" é semibold.
+ * 11. Subtítulo → 1ª opção: pé do texto em y113 e topo da opção em y126 (13px,
+ *    ~8px de margem com a linha de 18px) — `mb-2`, não `mb-4`.
+ * 12. Emoji por resposta, antes do rótulo: `.emoji__4c520{height:24px;width:
+ *    24px;margin-inline-end:2px}` (`tokens/css-bruto/sob-demanda/519435.
+ *    209fb0d929c9c7bf.css`, enquete em lista). O `.pollAnswerIcon__10758`
+ *    citado no cartão é outra peça: o selo de 28px no canto da resposta com
+ *    imagem, que o Streamz não tem.
  */
 export default function PollCard({
   poll: fromMessage,
-  canModerate = false,
-  isAuthor = false,
 }: {
   poll: Poll;
+  /** sem uso no card desde que "Quem votou" foi para o menu da mensagem (item 7). */
   canModerate?: boolean;
+  /** sem uso no card desde que "Encerrar" foi para o menu da mensagem (item 7). */
   isAuthor?: boolean;
 }) {
   const seed = usePolls((s) => s.seed);
   const vote = usePolls((s) => s.vote);
-  const close = usePolls((s) => s.close);
   const poll = usePoll(fromMessage) ?? fromMessage;
 
   // a versão que veio na mensagem entra na store; as atualizações ao vivo
@@ -129,7 +153,7 @@ export default function PollCard({
   return (
     <div className="mt-1 w-[472px] max-w-full rounded-lg bg-background-surface-high p-4">
       <h3 className="min-w-0 break-words text-text-md font-semibold text-text-strong">{poll.question}</h3>
-      <p className="mb-4 mt-1 text-xs text-text-muted">
+      <p className="mb-2 mt-1 text-sm text-text-muted">
         {poll.multi ? "Escolha quantas quiser" : "Escolha uma opção"}
       </p>
 
@@ -163,7 +187,12 @@ export default function PollCard({
                   style={{ width: `${pct}%` }}
                 />
               )}
-              <span className="relative min-w-0 flex-1 truncate text-sm text-text-default">{o.text}</span>
+              {o.emoji && (
+                <span aria-hidden="true" className="relative mr-[2px] flex h-6 w-6 shrink-0 items-center justify-center">
+                  <EmojiDaReacao emoji={o.emoji} tamanho={24} />
+                </span>
+              )}
+              <span className="relative min-w-0 flex-1 truncate text-sm font-semibold text-text-default">{o.text}</span>
               {mostrarResultado && (
                 <span className="relative shrink-0 text-xs font-medium text-text-muted">{pct}%</span>
               )}
@@ -171,9 +200,13 @@ export default function PollCard({
                   Discord não marca à esquerda, como a peça antiga fazia */}
               <span
                 aria-hidden="true"
-                className={`relative grid h-5 w-5 shrink-0 place-items-center border ${
+                className={`relative grid h-5 w-5 shrink-0 place-items-center ${
                   poll.multi ? "rounded-[3px]" : "rounded-full"
-                } ${marcada ? "border-brand-500 bg-brand-500 text-control-primary-text-default" : "border-text-muted"}`}
+                } ${
+                  marcada
+                    ? "border border-brand-500 bg-brand-500 text-control-primary-text-default"
+                    : "border-2 border-interactive-text-default"
+                }`}
               >
                 {marcada && <Check size={13} strokeWidth={3} aria-hidden="true" />}
               </span>
@@ -183,7 +216,7 @@ export default function PollCard({
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 celular:[&_button]:min-h-[44px]">
-        <span className="flex flex-wrap items-center gap-x-1.5 text-xs text-text-muted">
+        <span className="flex flex-wrap items-center gap-x-1.5 text-sm text-text-muted">
           <span>
             {poll.totalVotes} {poll.totalVotes === 1 ? "voto" : "votos"}
           </span>
@@ -198,33 +231,13 @@ export default function PollCard({
         </span>
 
         <div className="flex items-center gap-4">
-          {/* "sem permissão": quem não modera nem é autor nunca vê estes dois
-              — a única moderação que este componente enxerga */}
-          {canModerate && (
-            <button
-              type="button"
-              onClick={() => ui.openModal({ kind: "pollVoters", messageId: poll.messageId })}
-              className="text-xs font-medium text-text-default hover:underline"
-            >
-              Quem votou
-            </button>
-          )}
-          {!encerrada && (isAuthor || canModerate) && (
-            <button
-              type="button"
-              onClick={() => void close(poll.messageId)}
-              className="text-xs font-medium text-text-default hover:underline"
-            >
-              Encerrar
-            </button>
-          )}
           {!encerrada && !votei && (
             <>
               <button
                 type="button"
                 onClick={() => setVerResultados((v) => !v)}
                 aria-pressed={verResultados}
-                className="text-xs font-medium text-text-default hover:underline"
+                className="text-sm font-semibold text-text-default hover:underline"
               >
                 {verResultados ? "Ocultar resultados" : "Ver resultados"}
               </button>
