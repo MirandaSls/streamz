@@ -324,9 +324,10 @@ passo "Licenças de terceiros (LGPL/GPL: pacotes e versões embutidos, para a of
 # aviso visível (sem falhar) se o `.md` ainda tiver o marcador
 # `[CONTATO A DEFINIR ANTES DA PUBLICAÇÃO]` — ele é intencional até alguém
 # preencher o contato oficial da oferta de código-fonte (LGPL §6(c)).
-LISTA_FIXA="libwebkit2gtk-4.1-0 libgtk-3-0 libglib2.0-0 libgdk-pixbuf2.0-0 libcairo2 libpango-1.0-0 libgstreamer1.0-0 libgstreamer-plugins-base1.0-0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-pulseaudio gstreamer1.0-alsa gstreamer1.0-gl libayatana-appindicator3-1"
+LISTA_FIXA="libwebkit2gtk-4.1-0 libgtk-3-0 libglib2.0-0 libgdk-pixbuf-2.0-0 libcairo2 libpango-1.0-0 libgstreamer1.0-0 libgstreamer-plugins-base1.0-0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-pulseaudio gstreamer1.0-alsa gstreamer1.0-gl libayatana-appindicator3-1"
 
-if ! docker run --rm \
+# `-i`: sem ele o heredoc não chega ao `bash -s` do container, nada roda e sai 0.
+if ! docker run --rm -i \
   -v "$SAIDA:/s" \
   -e NOME_APPIMAGE="$NOME_APPIMAGE" \
   -e LISTA_FIXA="$LISTA_FIXA" \
