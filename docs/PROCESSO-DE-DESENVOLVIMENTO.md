@@ -2113,15 +2113,11 @@ pelo `drop` da página.
     com redistribuir num app fechado; o `.deb` só recomenda o pacote da
     distro. Detalhe e a lista de licenças em
     `apps/desktop/LICENCAS-DE-TERCEIROS.md`;
-  - **gerar o certificado autoassinado do Mac e preencher os dois pins do
-    instalador por Terminal** — `scripts/gerar-certificado-mac.sh` ainda não
-    rodou de verdade; sem isso o build assina ad-hoc (permissões repetidas a
-    cada atualização) e `apps/web/public/instalar-mac.sh` roda com a
-    verificação de autoria desligada (`PIN_DO_CERTIFICADO_SHA256`/`_SHA1`
-    vazios). Ver `apps/desktop/README.md` § Assinatura;
-  - **preencher `<contato>` em `apps/desktop/LICENCAS-DE-TERCEIROS.md`** antes
-    da primeira publicação pública (a oferta de código-fonte da LGPL §6(c)
-    precisa de um canal de contato real);
+  - **certificado autoassinado do Mac gerado em 2026-09-15** (chave fora do
+    repo, em `~/.streamz/certificado-mac/` de quem gerou; pins já preenchidos
+    em `apps/web/public/instalar-mac.sh`). Falta usá-lo no primeiro build e
+    cadastrá-lo no Codemagic. O contato da oferta LGPL em
+    `LICENCAS-DE-TERCEIROS.md` é `contato@aipecorp.com`;
   - **testar `instalar-mac.sh` contra a API real e um `.dmg` real** — o script
     nunca rodou de ponta a ponta (token, download, montagem, verificação de
     assinatura, instalação atômica);

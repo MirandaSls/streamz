@@ -105,33 +105,30 @@ verificado fora do build:
    ligado, de propósito; tauri#4316).
 2. **Testar o `.AppImage`/`.deb` numa distro de verdade** (Ubuntu, Debian, ou
    Fedora) — abrir, bandeja, som.
-3. **Gerar o certificado autoassinado do Mac e preencher os dois pins do
-   instalador por Terminal** — `scripts/gerar-certificado-mac.sh` nunca rodou
-   de verdade. Sem ele o build de macOS assina ad-hoc (o macOS repede
-   microfone/câmera/tela a cada atualização) e `apps/web/public/instalar-mac.sh`
-   fica com `PIN_DO_CERTIFICADO_SHA256`/`PIN_DO_CERTIFICADO_SHA1` vazios, ou
-   seja, com a verificação de autoria do certificado desligada (o script ainda
-   confere selo e identificador). Ver `apps/desktop/README.md` § Assinatura.
+3. **Certificado autoassinado do Mac: gerado em 2026-09-15.** A chave mora
+   fora do repositório, em `~/.streamz/certificado-mac/` na máquina de quem
+   gerou (`streamz-mac.p12` + `senha-do-p12.txt`, chmod 600) — copie os dois
+   para um cofre de senhas. Os pins já estão em `apps/web/public/instalar-mac.sh`
+   (SHA-1 `F924CD73C756DD80573A5DB8D619B08C80E371FA`). Falta usá-lo no primeiro
+   build (`scripts/build-desktop-macos.sh --certificado … --senha-do-certificado-em …`)
+   e cadastrá-lo no Codemagic (item 6).
 4. **Testar `apps/web/public/instalar-mac.sh` contra a API real e um `.dmg`
    real** — token de download, checagem de tamanho, `codesign --verify`,
    montagem do `.dmg` e troca atômica em `/Applications` nunca rodaram de
    ponta a ponta.
-5. **Preencher `<contato>` em `apps/desktop/LICENCAS-DE-TERCEIROS.md`** antes
-   da primeira publicação pública — é o canal para a oferta de código-fonte
-   da LGPL (§6(c)) das bibliotecas embutidas no AppImage.
-6. **Criar o grupo `streamz-updater` no painel do Codemagic** — está comentado
+5. **Criar o grupo `streamz-updater` no painel do Codemagic** — está comentado
    no `codemagic.yaml` até existir; sem ele o workflow `desktop-macos` gera só
    o `.dmg`, sem os artefatos do atualizador (`.app.tar.gz` + `.sig`). O
    segundo grupo, `streamz-certificado-mac` (as três variáveis do certificado
    do item 3), está comentado pelo mesmo motivo.
-7. **Notarização Apple** — exige Apple Developer Program (US$ 99/ano); sem
+6. **Notarização Apple** — exige Apple Developer Program (US$ 99/ano); sem
    ela, todo `.dmg` carrega o aviso do Gatekeeper na primeira abertura (o
    instalador por Terminal contorna o aviso sem resolver isto — `spctl`
    continua recusando).
-8. **Primeira publicação de macOS e Linux** — nenhuma versão chegou a
+7. **Primeira publicação de macOS e Linux** — nenhuma versão chegou a
    `downloads/`/`updates/` para essas duas plataformas; o caminho existe
    (`scripts/publicar-desktop.sh`) mas nunca rodou de verdade.
-9. **Voz nativa no Linux** — a chamada dentro do app já degrada com aviso em
+8. **Voz nativa no Linux** — a chamada dentro do app já degrada com aviso em
    vez de travar (decidido; ver `apps/desktop/README.md` § Chamada de
    voz/vídeo). O que falta, e ninguém começou, é um caminho nativo (crate
    `livekit` do lado Rust, como a tela nativa no Windows) para a chamada

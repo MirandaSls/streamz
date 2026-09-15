@@ -31,7 +31,7 @@ set -euo pipefail
 # com ou sem ":"). Vazio = verificação de autoria DESLIGADA: o script ainda
 # confere o selo e o identificador, mas qualquer um que assine um app com o
 # identificador `dev.streamz.app` passaria.
-PIN_DO_CERTIFICADO_SHA256=""
+PIN_DO_CERTIFICADO_SHA256="4d0edd7a32e231c28ef3c1b73f3d3701ed6271e04bc584483f9df2a3e5c248bb"
 
 # Identidade SHA-1 do MESMO certificado, impressa por
 # `scripts/gerar-certificado-mac.sh` como `APPLE_SIGNING_IDENTITY` (hex, com ou
@@ -41,7 +41,7 @@ PIN_DO_CERTIFICADO_SHA256=""
 # grava para as permissões de microfone/câmera/tela sobreviverem a atualização.
 # Os dois pins nascem do mesmo certificado: preencha os dois juntos, ou nenhum
 # — um sem o outro é configuração inconsistente e o script aborta.
-PIN_DO_CERTIFICADO_SHA1=""
+PIN_DO_CERTIFICADO_SHA1="f924cd73c756dd80573a5db8d619b08c80e371fa"
 
 IDENTIFICADOR_DO_APP="dev.streamz.app"
 NOME_DO_APP="Streamz.app"

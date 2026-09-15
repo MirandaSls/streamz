@@ -100,11 +100,7 @@ repositórios do Ubuntu/Launchpad (endereços acima), a forma mais rápida de
 obtê-lo é diretamente por lá; para pedir por outro meio, ou para qualquer
 dúvida sobre esta oferta, o contato é:
 
-**[CONTATO A DEFINIR ANTES DA PUBLICAÇÃO]**
-
-Enquanto este marcador não for substituído pelo contato oficial do projeto,
-peça por uma issue em `https://github.com/MirandaSls/streamz`, que também
-serve como pedido.
+**contato@aipecorp.com**
 
 ## Patentes (H.264)
 
