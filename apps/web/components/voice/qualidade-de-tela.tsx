@@ -60,27 +60,40 @@ export function SegmentosDeQualidade({
  * navegador é aqui que se escolhe a qualidade da transmissão (o
  * seletor com rodapé só existe no app de desktop), então estes são os botões da
  * escolha, não uma preferência escondida. O sulco acompanha, 44 + os 8 do `p-1`.
+ *
+ * Exportado porque a taxa de quadros da câmera (`fps-da-camera.tsx`) é o mesmo
+ * controle: um segmento com cara própria seria a divergência que o componente
+ * único da tela veio evitar.
  */
-function Segmento({
+export function Segmento({
   rotulo,
   opcoes,
   atual,
   onEscolher,
+  rotuloAcessivel = rotulo,
+  className = "flex items-center gap-2",
 }: {
   rotulo: string;
   opcoes: { valor: string; texto: string }[];
   atual: string;
   onEscolher: (valor: string) => void;
+  /**
+   * Nome do grupo para leitor de tela, quando o rótulo visível só faz sentido
+   * pela seção em volta ("Taxa de quadros" dentro da seção da câmera).
+   */
+  rotuloAcessivel?: string;
+  /** Arrumação de rótulo + sulco; o padrão é a linha única da tela. */
+  className?: string;
 }) {
   const ehMobile = useEhMobile();
   return (
-    <div className="flex items-center gap-2">
+    <div className={className}>
       <span className="whitespace-nowrap text-xs font-semibold uppercase tracking-[0.02em] text-text-muted">
         {rotulo}
       </span>
       <div
         role="group"
-        aria-label={rotulo}
+        aria-label={rotuloAcessivel}
         style={ehMobile ? { height: ALVO_MINIMO + 8 } : undefined}
         className={`flex gap-1 rounded-lg bg-input-background-default p-1 ${ehMobile ? "" : "h-10"}`}
       >

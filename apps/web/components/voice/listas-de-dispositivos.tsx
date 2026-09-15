@@ -1,6 +1,9 @@
 "use client";
 
+import { CAMERA_FPS_OPCOES } from "@streamz/shared";
 import { Camera, Check } from "@/components/ui/icones";
+import { rotuloFps } from "@/components/voice/fps-da-camera";
+import { useVoice } from "@/stores/voice";
 import { explicarMidia, opcoesDe, useVoiceDevices } from "@/stores/voiceDevices";
 
 /**
@@ -14,25 +17,47 @@ import { explicarMidia, opcoesDe, useVoiceDevices } from "@/stores/voiceDevices"
  *
  * Microfone e saída saíram daqui: viraram os menus curtos de
  * `menus-de-audio.tsx`, que é o que os prints mostram. A câmera continua sendo
- * uma lista — ali não há nada além do aparelho para escolher.
+ * uma lista: o aparelho e, embaixo de uma divisória, a taxa de quadros — as
+ * duas coisas que se escolhem da câmera. A taxa vale na hora (a store republica
+ * a câmera ligada), então o aviso de "vale na próxima vez" fica só no bloco do
+ * aparelho, que é a quem ele se refere.
  */
 
 export function ListaDeCameras({ camLigada }: { camLigada: boolean }) {
   const devices = useVoiceDevices();
+  const cameraFps = useVoice((v) => v.cameraFps);
+  const setCameraFps = useVoice((v) => v.setCameraFps);
   return (
-    <ListaDeFontes
-      titulo="Câmera"
-      icone={<Camera size={16} />}
-      opcoes={devices.cameras}
-      atual={devices.cameraId}
-      onEscolher={devices.setCamera}
-      aviso={
-        explicarMidia(devices.motivo) ??
-        // republicar vídeo no meio de uma frase pisca a imagem para todo mundo,
-        // então a troca espera o próximo `setCameraEnabled` (ver `stores/voice`)
-        (camLigada ? "A troca vale na próxima vez que você ligar a câmera." : null)
-      }
-    />
+    <>
+      <ListaDeFontes
+        titulo="Câmera"
+        icone={<Camera size={16} />}
+        opcoes={devices.cameras}
+        atual={devices.cameraId}
+        onEscolher={devices.setCamera}
+        aviso={
+          explicarMidia(devices.motivo) ??
+          // republicar vídeo no meio de uma frase pisca a imagem para todo mundo,
+          // então a troca espera o próximo `setCameraEnabled` (ver `stores/voice`)
+          (camLigada ? "A troca vale na próxima vez que você ligar a câmera." : null)
+        }
+      />
+      {/* a mesma divisória de `menus-de-audio.tsx` entre blocos do menu */}
+      <div aria-hidden="true" className="my-1 h-px bg-border-subtle" />
+      <div role="group" aria-label="Taxa de quadros da câmera">
+        <p className="px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.02em] text-text-muted">
+          Taxa de quadros
+        </p>
+        {CAMERA_FPS_OPCOES.map((fps) => (
+          <Opcao
+            key={fps}
+            rotulo={rotuloFps(fps)}
+            escolhida={cameraFps === fps}
+            onSelect={() => setCameraFps(fps)}
+          />
+        ))}
+      </div>
+    </>
   );
 }
 

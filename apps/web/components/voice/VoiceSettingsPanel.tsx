@@ -5,6 +5,12 @@ import { Keyboard, Mic, Video } from "@/components/ui/icones";
 import { Button } from "@/components/ui/primitivos";
 import { RadioCards, Select, Slider, ToggleLinha } from "@/components/ui/controls";
 import { pttRotulo } from "@/stores/ptt-core";
+import type { CameraFps } from "@streamz/shared";
+import {
+  AJUDA_FPS_DA_CAMERA,
+  SeletorDeFpsDaCamera,
+  restricoesDaPrevia,
+} from "@/components/voice/fps-da-camera";
 import { BarraDeNivel } from "@/components/voice/pecas-de-voz";
 import { useTesteDeMicrofone } from "@/components/voice/useTesteDeMicrofone";
 import { useVoice, type NivelDeRuido } from "@/stores/voice";
@@ -48,6 +54,7 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
   const setPttKey = useVoicePrefs((s) => s.setPttKey);
   const audio = useVoice((s) => s.audio);
   const setAudioPref = useVoice((s) => s.setAudioPref);
+  const cameraFps = useVoice((s) => s.cameraFps);
 
   const [capturando, setCapturando] = useState(false);
   const [testandoCam, setTestandoCam] = useState(false);
@@ -277,6 +284,10 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
           emptyLabel="Nenhuma câmera encontrada"
           disabled={devices.cameras.length === 0}
         />
+        {/* rótulo e sulco quebram em duas linhas se a coluna de 380px não
+            couber os quatro segmentos ao lado do rótulo */}
+        <SeletorDeFpsDaCamera className="flex flex-wrap items-center gap-2" />
+        <p className="text-xs text-text-muted">{AJUDA_FPS_DA_CAMERA}</p>
         <Button
           variante="secundario"
           tamanho="sm"
@@ -285,13 +296,18 @@ export default function VoiceSettingsPanel({ compacto = false }: { compacto?: bo
         >
           {testandoCam ? "Parar vídeo" : "Testar vídeo"}
         </Button>
-        {testandoCam && <PreviaDaCamera deviceId={devices.cameraId} />}
+        {testandoCam && <PreviaDaCamera deviceId={devices.cameraId} fps={cameraFps} />}
       </section>
     </div>
   );
 }
 
-function PreviaDaCamera({ deviceId }: { deviceId: string | null }) {
+/**
+ * Pede a taxa escolhida (`restricoesDaPrevia`) para mostrar o que a chamada
+ * vai mandar; trocar o fps com a prévia aberta refaz o efeito, e a limpeza do
+ * efeito anterior para a trilha antiga antes da nova abrir.
+ */
+function PreviaDaCamera({ deviceId, fps }: { deviceId: string | null; fps: CameraFps }) {
   const video = useRef<HTMLVideoElement>(null);
   const [erro, setErro] = useState(false);
   const [abrindo, setAbrindo] = useState(true);
@@ -304,7 +320,7 @@ function PreviaDaCamera({ deviceId }: { deviceId: string | null }) {
     void (async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: deviceId ? { deviceId: { exact: deviceId } } : true,
+          video: restricoesDaPrevia(deviceId, fps),
         });
         if (parado) {
           stream.getTracks().forEach((t) => t.stop());
@@ -321,7 +337,7 @@ function PreviaDaCamera({ deviceId }: { deviceId: string | null }) {
       parado = true;
       stream?.getTracks().forEach((t) => t.stop());
     };
-  }, [deviceId]);
+  }, [deviceId, fps]);
 
   if (erro) return <p className="text-xs text-status-warning">Não foi possível abrir a câmera.</p>;
   return (
