@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { AudioLines, Gamepad2, PhoneOff, RotateCw, Signal, SignalZero, Video, VideoOff } from "@/components/ui/icones";
+import { AudioLines, Apps, PhoneOff, RotateCw, Signal, SignalZero, Video, VideoOff } from "@/components/ui/icones";
 import Tooltip from "@/components/ui/Tooltip";
 import PopoverFlutuante from "@/components/ui/PopoverFlutuante";
 import { BotaoDeIcone } from "@/components/ui/primitivos";
@@ -37,12 +37,15 @@ import { rotuloDoPing, useVoicePing, type QualidadeDeVoz } from "@/stores/voice-
  *
  * A fileira de baixo é **quatro cápsulas de tamanho fixo**, não mais
  * `flex-1` esticando para preencher a barra. Medido nas prints `2026-08-31
- * 101842` (linha y=819 e coluna x=200 y=804–833) e `160106` (repete as
- * mesmas quatro): câmera, tela, atividade, soundboard, 74×30 cada, 10px de
- * vão, ocupando x=24–349. Tínhamos 3 controles esticados (101 e 102px, e um
- * terceiro sem cápsula em x≈250–259, porque `flex-1` cresce até a barra
- * acabar). "Atividade" não existe no produto (§6.6): fica visível a 50%,
- * com a dica "(em breve)", em vez de sumir e a fileira virar 3 outra vez.
+ * 101842` (coluna x=200 e x=340, y=803–834, contando o 1px de borda
+ * antisserrilhada) e `160106` (repete as mesmas quatro): câmera, tela,
+ * atividade, soundboard, 74×32 cada, 10px de vão, ocupando x=24–349
+ * (24–97, 108–181, 192–265, 276–349). Uma rodada anterior tinha descontado
+ * essa borda e medido 30 de altura — os 2px que faltavam. Tínhamos 3
+ * controles esticados (101 e 102px, e um terceiro sem cápsula em x≈250–259,
+ * porque `flex-1` cresce até a barra acabar). "Atividade" não existe no
+ * produto (§6.6): fica visível a 50%, com a dica "(em breve)", em vez de
+ * sumir e a fileira virar 3 outra vez.
  *
  * Sem rótulo de texto: dois botões com texto ("Vídeo", "Tela") pareciam mais
  * claros e são menos: o rótulo empurra o alvo clicável para menos da metade
@@ -58,12 +61,15 @@ import { rotuloDoPing, useVoicePing, type QualidadeDeVoz } from "@/stores/voice-
 
 /** Cor do selo do sinal pela qualidade; "excelente" = verde de "conectado"
  *  medido (ver comentário do componente); boa/ruim sem medida nesta rodada.
- *  O fundo do selo também estava errado por tabela: `bg-status-positive/15`
- *  sobre `#202024` dava `#24332c`, e o medido é `#1d2726` (print `101842`,
- *  linha y=774 x=28–36) — a mesma opacidade sobre `icon-feedback-positive`
- *  chega mais perto (a opacidade exata de 15% não foi remedida, só o token). */
+ *  O fundo do selo é `#1d2726` (print `101842`, linha y=759–790 x=24–55, e a
+ *  mesma cor em `160106` x=24–30 y=610) — mais escuro que o próprio cartão
+ *  (`#202024`) no canal R, então não é opacidade de token sobre o fundo:
+ *  `bg-icon-feedback-positive/15` (ou `bg-status-positive/15`) sobre `#202024`
+ *  clareia para `#24332c`/verde translúcido, e o medido escurece. Fica o
+ *  valor cru até achar um token que bata (ver "faltando"); o ícone continua
+ *  `text-icon-feedback-positive`. */
 const COR_DO_SINAL: Record<QualidadeDeVoz, string> = {
-  excelente: "bg-icon-feedback-positive/15 text-icon-feedback-positive",
+  excelente: "bg-[#1d2726] text-icon-feedback-positive",
   boa: "bg-status-warning/15 text-status-warning",
   ruim: "bg-status-danger/15 text-status-danger",
 };
@@ -120,15 +126,21 @@ export default function VoiceConnectedBar() {
         chamada ou fora dela ela ocupa a mesma faixa, e é a seção de voz que
         cresce para cima. Por isso o respiro fixo das listas continua valendo.
 
-        Altura: Discord 163px (coluna x=200 do #202024, y=744–906 na print
-        `101842`); a fileira de ações caindo de 32 para os 30 medidos (ver
-        abaixo) tira 2px daqui, mas não fecha os 170 medidos antes (`coluna
-        x=200 y=900–1069` em `painel-usuario-voz.png`) até 163 — o resto do
-        respiro (`pt-[15px]`/`pb-[14px]`/`gap-3`) não tem número medido
-        próprio, só o total, então não mexi nele: ver "faltando".
+        Altura: Discord 104px só na seção de voz (y=745–848 na print `101842`;
+        104 também em `160106`, y=575–678): 14 até o selo, selo de 32, 12 até
+        as cápsulas, cápsula de 32, 14 embaixo. A nossa linha de cima tinha 36
+        (título de 20 + subtítulo de 16 empilhados, maior que o selo de 32) —
+        travada em `h-8` com `leading-[18px]`/`leading-[14px]` abaixo, o total
+        fecha 14+32+12+32+14 = 104, com as cápsulas também em 32 (ver a
+        fileira de baixo).
+
+        Divisória: `border-border-muted`, não `-subtle` — no Discord a linha
+        entre voz e usuário (y=849 em `101842`) é a mesma cor da borda do
+        cartão (y=744/906), e o token que bate com essa cor mais escura é
+        `-muted`.
       */
-      className="flex shrink-0 flex-col gap-3 border-b border-border-subtle px-3.5 pb-[14px] pt-[15px]" data-voice-bar>
-      <div className="flex items-center gap-1">
+      className="flex shrink-0 flex-col gap-3 border-b border-border-muted px-3.5 pb-[14px] pt-[14px]" data-voice-bar>
+      <div className="flex h-8 items-center gap-1">
         {/*
           O selo sai de dentro da linha do título e vira irmão dela: no Discord
           o ícone fica à esquerda e **título e subtítulo empilham ao lado dele**.
@@ -168,7 +180,12 @@ export default function VoiceConnectedBar() {
             {/* o texto precisa do próprio span: `truncate` num container flex
                 corta sem reticências */}
             <span
-              className={`truncate text-sm font-semibold ${
+              // `leading-[18px]`: com o subtítulo abaixo em `leading-[14px]`,
+              // 18+14=32 preenche exatamente o selo de 32 ao lado — sem travar
+              // a entrelinha, o `text-sm`/`text-xs` padrão empilhados somavam
+              // 36 e a linha de cima crescia mais que o selo (ver comentário
+              // do container).
+              className={`truncate text-sm font-semibold leading-[18px] ${
                 // verde medido `#5eb479` = `--text-feedback-positive` (mesmo
                 // par que `CanalDeVoz.tsx` já usa para "Em voz"); tínhamos
                 // `--status-positive` (`#3d9e60`, o mesmo do bolinha "online",
@@ -181,10 +198,15 @@ export default function VoiceConnectedBar() {
             <button
               type="button"
               onClick={irParaCall}
-              className="block max-w-full truncate text-left text-xs text-text-muted hover:underline"
+              // `text-text-subtle` (não `-muted`) nas duas partes, sem cor à
+              // parte no nome do servidor: no Discord "canal" e "/ servidor"
+              // são um pico de cor só (#a1a2a7/#a6a7ac, print `101842` y=782).
+              // Tínhamos `-muted` no canal e `text-channels-default` no
+              // servidor — duas cores, e a segunda mais escura que a medida.
+              className="block max-w-full truncate text-left text-xs leading-[14px] text-text-subtle hover:underline"
             >
               {titulo}
-              {servidor && <span className="text-channels-default"> / {servidor}</span>}
+              {servidor && <span> / {servidor}</span>}
             </button>
           </span>
         </span>
@@ -237,15 +259,15 @@ export default function VoiceConnectedBar() {
         </div>
       )}
 
-      {/* Quatro cápsulas de 74×30 com 10px de vão (`gap-2.5`), medidas nas
+      {/* Quatro cápsulas de 74×32 com 10px de vão (`gap-2.5`), medidas nas
           prints `101842`/`160106` — ver o comentário do componente. Nada mais
           cresce por `flex-1`: cada slot tem o tamanho medido, e o que sobra
           de largura na coluna fica vazio à direita, como no Discord (a
           fileira não "estica" para preencher o painel). */}
       <div className="flex items-center gap-2.5">
         {/* Câmera: única das quatro que é só deste arquivo, então o tamanho
-            vai direto na classe (74×30, sem wrapper). */}
-        <Tooltip label={camOn ? "Desligar câmera" : "Ligar câmera"} className="h-[30px] w-[74px] shrink-0">
+            vai direto na classe (74×32, sem wrapper). */}
+        <Tooltip label={camOn ? "Desligar câmera" : "Ligar câmera"} className="h-8 w-[74px] shrink-0">
           <button
             type="button"
             onClick={() => void toggleCam()}
@@ -254,7 +276,7 @@ export default function VoiceConnectedBar() {
             className={`grid h-full w-full place-items-center rounded-lg transition ${
               camOn
                 ? "bg-border-strong text-text-strong"
-                : "bg-border-normal/60 text-text-subtle hover:bg-border-normal hover:text-text-strong"
+                : "bg-border-normal/60 text-interactive-text-active hover:bg-border-normal hover:text-text-strong"
             }`}
           >
             {camOn ? <Video size={20} /> : <VideoOff size={18} />}
@@ -263,12 +285,16 @@ export default function VoiceConnectedBar() {
 
         {/* `ScreenShareButton`/`BotaoDeSons` não estão na lista deste cartão
             (§ escopo): a `variante="largo"` de cada um cresce por `flex-1`
-            **próprio**, hardcoded no arquivo deles. O invólucro `flex` de
-            74×30 abaixo dá a esse `flex-1` um pai de largura fixa para
-            preencher — 74 de largura sai certo — mas a **altura** dos dois é
-            `h-8` (32px) escrita lá dentro, 2px acima dos 30 medidos aqui:
-            não dá para consertar sem tocar nos dois arquivos. Ver "faltando". */}
-        <div className="flex h-[30px] w-[74px] shrink-0">
+            **próprio**, hardcoded no arquivo deles. O invólucro `flex` abaixo
+            dá a esse `flex-1` um pai de largura fixa para preencher — 74 de
+            largura sai certo —, e agora, com a correção de altura desta
+            rodada (30→32, ver o comentário do componente), o invólucro subiu
+            para `h-8`. O **botão** de dentro dos dois continua `h-[30px]`/
+            `height: 30` (ver `ScreenShareButton.tsx:100` e
+            `BotaoDeSons.tsx:68`, fora da lista deste cartão): sobra 2px de
+            fundo do invólucro embaixo do botão. Não dá para fechar sem tocar
+            nos dois arquivos — ver "faltando". */}
+        <div className="flex h-8 w-[74px] shrink-0">
           <ScreenShareButton variante="largo" />
         </div>
 
@@ -278,19 +304,26 @@ export default function VoiceConnectedBar() {
             simular uma função que não existe é pior que a ausência (§6.6,
             mesma regra do "presente"/"apps" do composer). Fica visível a 50%
             (via `desabilitado`), com a dica explicando o motivo, no lugar do
-            terceiro ícone solto que virava a vaga do soundboard. */}
+            terceiro ícone solto que virava a vaga do soundboard.
+            Glifo `Apps` (as quatro formas em 2×2), não `Gamepad2`: o Discord
+            mostra o mesmo losango/triângulo/flor/estrela do botão "Apps" do
+            composer nesta vaga (manchas em x=221–227/231–235 e y=814–817/
+            822–824, print `101842`) — controle de videogame não tem par lá. */}
         <BotaoDeIcone
           rotulo="Atividades"
           motivoDesabilitado="Atividades (em breve)"
           desabilitado
-          icone={<Gamepad2 size={20} aria-hidden="true" />}
+          icone={<Apps size={20} aria-hidden="true" />}
           // mesma cápsula de câmera e tela — ver o comentário em `BotaoDeSons`
           fundo="hover"
           className="bg-border-normal/60"
-          style={{ width: 74, height: 30 }}
+          style={{ width: 74, height: 32 }}
         />
 
-        <div className="flex h-[30px] w-[74px] shrink-0">
+        {/* Mesmo caso do invólucro da tela acima: `h-8` (32) aqui, mas o botão
+            de dentro continua `height: 30` (`BotaoDeSons.tsx:68`, fora da
+            lista deste cartão) — ver "faltando". */}
+        <div className="flex h-8 w-[74px] shrink-0">
           <BotaoDeSons variante="largo" />
         </div>
       </div>

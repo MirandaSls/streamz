@@ -46,8 +46,13 @@ export class SoundboardController {
 
   /**
    * Envio do som: `multipart/form-data` com o arquivo em `file`, o nome em
-   * `name` e o emoji (opcional) em `emoji`. O limite do multer é o mesmo do
-   * contrato — quem passa dele leva 413 antes de o arquivo terminar de subir.
+   * `name`, o emoji (opcional) em `emoji` e o volume de referência (opcional,
+   * texto de "0" a "1") em `volume` — o "Volume do som" do modal, que já existia
+   * no contrato (`SoundboardSound.volume`) e na coluna, mas não tinha por onde
+   * entrar. Chega como `unknown` porque multipart só carrega texto; quem
+   * converte e valida é `volumeDoEnvio` (`dto.ts`). O limite do multer é o
+   * mesmo do contrato — quem passa dele leva 413 antes de o arquivo terminar de
+   * subir.
    *
    * A **duração** não é conferida aqui (não há decodificador de áudio na API):
    * quem mede é o cliente, antes de enviar. Ver `soundboard/audio.ts`.
@@ -61,9 +66,10 @@ export class SoundboardController {
     @Param("guildId") guildId: string,
     @Body("name") name: string,
     @Body("emoji") emoji: string,
+    @Body("volume") volume: unknown,
     @UploadedFile() file: { buffer: Buffer; size: number },
   ) {
-    return this.soundboard.create(user.sub, guildId, name, emoji, file);
+    return this.soundboard.create(user.sub, guildId, name, emoji, file, volume);
   }
 
   @UseGuards(JwtGuard)

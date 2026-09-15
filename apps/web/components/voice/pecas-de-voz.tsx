@@ -96,7 +96,16 @@ export function Chave({
   );
 }
 
-/** Slider de volume 0–200% com o valor ao lado. */
+/** Slider de volume 0–200% com o valor ao lado.
+ *
+ * O rótulo era caixa alta pequena (`text-xs uppercase tracking-[0.02em]`,
+ * cor `text-text-muted`) — a print `2026-09-03 201137` mostra "Volume de
+ * entrada" no texto normal do menu, sem versalete nem tracking. Uso a mesma
+ * classe das outras linhas do menu de áudio (`titulo` em
+ * `menus-de-audio.tsx:300`, ex. "Dispositivo de entrada"): `text-sm
+ * font-semibold text-text-strong`. É usado nos dois menus que têm este
+ * slider — `MenuDeEntrada` e `MenuDeSaida` (`menus-de-audio.tsx:485` e
+ * `:527`) — então a mudança vale para os dois de uma vez. */
 export function SliderDeVolume({
   label,
   valor,
@@ -108,9 +117,9 @@ export function SliderDeVolume({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.02em] text-text-muted">
+      <span className="mb-1 flex items-center justify-between text-sm font-semibold text-text-strong">
         {label}
-        <span className="tabular-nums normal-case tracking-normal">{Math.round(valor * 100)}%</span>
+        <span className="tabular-nums">{Math.round(valor * 100)}%</span>
       </span>
       <input
         type="range"

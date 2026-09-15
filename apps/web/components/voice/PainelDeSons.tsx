@@ -8,17 +8,19 @@ import {
   type SoundboardSound,
 } from "@streamz/shared";
 import {
+  AlertTriangle,
   ChevronDown,
   ChevronRight,
   Clock,
   Plus,
+  RefreshCw,
   Search,
   Star,
   Volume2,
   VolumeX,
 } from "@/components/ui/icones";
 import PopoverFlutuante from "@/components/ui/PopoverFlutuante";
-import { TextInput, Tooltip } from "@/components/ui/primitivos";
+import { Button, TextInput, Tooltip } from "@/components/ui/primitivos";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
@@ -98,11 +100,13 @@ import { useVoice } from "@/stores/voice";
  *   busca e com `carregado`, as seções Favoritos/Frequentes aparecem mesmo
  *   vazias — é assim no Discord (ver `secoesDoPainel`), não uma lacuna.
  * - **erro**: tocar um som (`tocar`) e criar um som (`AdicionarSomModal`) já
- *   mostravam toast de erro. O que **não** dá para cobrir aqui: `load()` em
- *   `stores/soundboard.ts:69` despeja a falha num `.catch(() => [])` — quem
- *   abre o painel sem internet vê "vazio", não "erro ao carregar". Corrigir
- *   isso pede expor um campo de erro na store, fora da lista deste cartão
- *   (ver "faltando" no retorno do cartão).
+ *   mostravam toast de erro. A falha da **carga** agora também tem tela: a
+ *   store expõe `falhouCarregar` (antes o `load()` trocava a falha por lista
+ *   vazia e o painel sem internet parecia só "sem sons"), e o corpo mostra
+ *   `PainelComErro` — o mesmo bloco de `BlocoDeErro` de
+ *   `settings/server/EngajamentoTab.tsx`, com "Tentar de novo" chamando
+ *   `recarregar()`. Só na **primeira** carga: se a lista já veio e uma
+ *   recarga falha, os sons continuam na tela (ver `load` na store).
  * - **sem permissão**: quem não tem `MANAGE_EMOJIS` no servidor não vê o card
  *   "+ Adicionar som" (já existia). Quem tem, mas o servidor já está no teto
  *   de `MAX_SOUNDBOARD_POR_GUILD`, agora vê o card **desabilitado** com
@@ -135,6 +139,8 @@ export default function PainelDeSons({
 }) {
   const guilds = useSoundboard((s) => s.guilds);
   const carregado = useSoundboard((s) => s.carregado);
+  const falhouCarregar = useSoundboard((s) => s.falhouCarregar);
+  const recarregar = useSoundboard((s) => s.recarregar);
   const favoritos = useSoundboard((s) => s.favoritos);
   const usos = useSoundboard((s) => s.usos);
   const volume = useSoundboard((s) => s.volume);
@@ -385,7 +391,11 @@ export default function PainelDeSons({
             className="relative min-h-0 flex-1 overflow-y-auto pb-[8px] pl-[8px] pr-[14px]"
           >
             {!carregado ? (
-              <PainelCarregando />
+              falhouCarregar ? (
+                <PainelComErro tentar={() => void recarregar()} />
+              ) : (
+                <PainelCarregando />
+              )
             ) : buscando && secoes[0]?.sons.length === 0 ? (
               <p className="px-1 py-10 text-center text-sm text-text-muted">
                 Nenhum som com esse nome.
@@ -448,6 +458,40 @@ function PainelCarregando() {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Estado de erro — o primeiro `GET /soundboard` falhou.
+ *
+ * Desenho copiado de `BlocoDeErro` (`settings/server/EngajamentoTab.tsx`, que
+ * por sua vez repete o de `SegurancaTab`/`SessoesTab`): caixa com borda sutil
+ * sobre `base-lowest`, `AlertTriangle` de 16 em `--status-warning`, frase em
+ * `text-muted` e o botão secundário "Tentar de novo" com `RefreshCw`. Repetido
+ * e não importado porque aquele é função local do arquivo dele (sem `export`),
+ * fora da lista deste cartão. O respiro de cima (`pt-[8px]`) alinha a caixa
+ * com onde nasceria o primeiro cabeçalho de seção; não há print do Discord
+ * nesse estado (não medido).
+ */
+function PainelComErro({ tentar }: { tentar: () => void }) {
+  return (
+    <div role="alert" className="pt-[8px]">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[4px] border border-border-subtle bg-background-base-lowest px-3 py-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <AlertTriangle size={16} className="shrink-0 text-status-warning" aria-hidden="true" />
+          <p className="min-w-0 text-sm text-text-muted">Não foi possível carregar os sons.</p>
+        </div>
+        <Button
+          variante="secundario"
+          tamanho="sm"
+          icone={<RefreshCw size={14} aria-hidden="true" />}
+          onClick={tentar}
+          className="shrink-0 celular:h-[44px]"
+        >
+          Tentar de novo
+        </Button>
+      </div>
     </div>
   );
 }

@@ -134,7 +134,13 @@ export default function DownloadPage() {
             Chat de comunidade com voz, vídeo e compartilhamento de tela. Para {plataformasPorExtenso()}.
           </p>
 
-          <div className="mt-10 flex min-h-[48px] flex-col items-center">
+          {/* `celular:w-full`: dá largura definida ao contêiner no celular, para
+              a coluna de botões do estado "lista" (abaixo) poder ser
+              `w-full` de verdade — porcentagem de largura só resolve contra um
+              pai com largura definida, e sem isto os três botões ficavam cada
+              um do tamanho do próprio texto. Não muda nada nos outros estados
+              (um botão só), que continuam centrados pelo `items-center`. */}
+          <div className="mt-10 flex min-h-[48px] flex-col items-center celular:w-full">
             <AcaoDoTopo oferta={oferta} aoEscolher={setEscolhido} aoTentarDeNovo={tentarDeNovo} />
           </div>
 
@@ -278,9 +284,22 @@ function AcaoDoTopo({
       return (
         <>
           <p className="mb-4 max-w-[480px] text-text-md text-text-default">{aviso}</p>
-          <div className="flex flex-wrap justify-center gap-4 celular:gap-2">
+          {/* No desktop os botões ficam numa linha centralizada — cada um do
+              tamanho do próprio texto, como o resto da página. No celular isso
+              empilhava três larguras diferentes centralizadas uma sob a outra
+              (visto na captura `m-download.png`); a lista de plataformas do
+              Discord no celular (`publico/web-mobile-ios/15-download-*.png`)
+              é uma coluna de botões da largura da coluna, não do texto — por
+              isso `celular:w-full` em cada botão dentro de uma coluna
+              (`celular:flex-col celular:items-stretch`). */}
+          <div className="flex flex-wrap justify-center gap-4 celular:w-full celular:flex-col celular:items-stretch celular:gap-2">
             {disponiveis.map((d) => (
-              <BotaoDaPagina key={d.plataforma} icone={<Download size={24} />} onClick={() => aoEscolher(d)}>
+              <BotaoDaPagina
+                key={d.plataforma}
+                icone={<Download size={24} />}
+                onClick={() => aoEscolher(d)}
+                className="celular:w-full"
+              >
                 Baixar para {rotuloPlataforma(d.plataforma)}
               </BotaoDaPagina>
             ))}

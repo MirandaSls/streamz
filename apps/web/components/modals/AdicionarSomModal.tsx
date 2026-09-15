@@ -1,19 +1,20 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   MAX_SOUNDBOARD_DURACAO_MS,
   MAX_SOUNDBOARD_SIZE,
   MAX_SOUNDBOARD_POR_GUILD,
 } from "@streamz/shared";
 import Dialog, { PrimaryButton, SecondaryButton } from "@/components/modals/Dialog";
-import { Rotulo } from "@/components/ui/controls";
+import { Rotulo, Slider } from "@/components/ui/controls";
 import { BotaoDeIcone, Campo, TextInput } from "@/components/ui/primitivos";
-import { Upload } from "@/components/ui/icones";
+import { Play, Upload } from "@/components/ui/icones";
 import EmojiPicker from "@/components/ui/EmojiPicker";
 import PopoverFlutuante from "@/components/ui/PopoverFlutuante";
 import { api } from "@/lib/api";
-import { duracaoDoArquivo } from "@/lib/soundboard-audio";
+import { useEhMobile } from "@/hooks/useEhMobile";
+import { duracaoDoArquivo, soltarElemento, tocarNaSaida } from "@/lib/soundboard-audio";
 import { useSoundboard } from "@/stores/soundboard";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui, useUI } from "@/stores/ui";
@@ -46,14 +47,21 @@ const KILOBYTES = Math.round(MAX_SOUNDBOARD_SIZE / 1024);
  * de continuar", embora a permissão de **abrir** este modal (`MANAGE_EMOJIS`)
  * seja checada por quem chama (`PainelDeSons`/`SoundboardTab`), não aqui.
  *
- * **Fora desta peça**: o modal do Discord tem um controle "Sound Volume" (ver
- * `docs/referencias-discord/.../07.png`) — e `SoundboardSound.volume`
- * (`packages/shared/src/soundboard.ts:80`) já existe no contrato para isso.
- * Não dá para ligar aqui: `api.createSound` (`lib/api.ts:587`) só manda
- * `name`/`emoji`/`file`, e o controller (`POST /guilds/:guildId/soundboard`,
- * `apps/api/.../soundboard.controller.ts:57`) só lê esses dois campos do
- * corpo — o volume de todo som novo nasce no padrão do servidor. Os dois
- * arquivos estão fora da lista deste cartão; ver "faltando".
+ * **Volume do som**: o modal do Discord tem "Sound Volume" abaixo de nome e
+ * emoji, e um botão de tocar a prévia (catálogo,
+ * `blog/imagens/2023-04-ready-your-airhorns-discord-soundboard-is-coming/
+ * 02-editar-som.png` — imagem de catálogo, só ordem e presença, sem px). O
+ * contrato já tinha `SoundboardSound.volume` (0 a 1) e a coluna já existia; o
+ * que faltava era a API ler o campo do multipart (`volumeDoEnvio`, em
+ * `apps/api/src/modules/soundboard/dto.ts`). Aqui o deslizador guarda 0 a 1 e
+ * mostra 0 a 100%, e a prévia toca **nesse** volume, pela mesma saída de áudio
+ * dos efeitos (`tocarNaSaida`) — sem a guarda de surdo, porque ouvir o arquivo
+ * antes de enviar é gesto deliberado. O padrão é 100%, o mesmo `@default(1)` da
+ * coluna: quem não mexe no controle envia o som como ele veio.
+ *
+ * A prévia toca um `blob:` do arquivo escolhido. Cada arquivo é uma URL nova,
+ * então a troca (e o fechar do modal) solta o elemento em cache e revoga a URL
+ * — ver `soltarElemento`.
  */
 export default function AdicionarSomModal({ guildId }: { guildId: string }) {
   const closeModal = useUI((s) => s.closeModal);
@@ -66,11 +74,48 @@ export default function AdicionarSomModal({ guildId }: { guildId: string }) {
   const [emoji, setEmoji] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [emojiAberto, setEmojiAberto] = useState(false);
+  /** volume de referência do som, 0 a 1 — o que vai no envio. */
+  const [volume, setVolume] = useState(1);
+  const [urlDaPrevia, setUrlDaPrevia] = useState<string | null>(null);
+  const previaRef = useRef<HTMLAudioElement | null>(null);
+  const ehMobile = useEhMobile();
 
   const arquivoRef = useRef<HTMLInputElement>(null);
   const botaoDoEmoji = useRef<HTMLButtonElement>(null);
 
   const cheio = sonsDoServidor >= MAX_SOUNDBOARD_POR_GUILD;
+
+  // uma URL por arquivo escolhido; trocar de arquivo ou fechar o modal para a
+  // prévia, tira o elemento do cache e devolve a memória do blob
+  useEffect(() => {
+    if (!file || typeof URL === "undefined") {
+      setUrlDaPrevia(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setUrlDaPrevia(url);
+    return () => {
+      previaRef.current = null;
+      soltarElemento(url);
+      URL.revokeObjectURL(url);
+    };
+  }, [file]);
+
+  function tocarPrevia() {
+    if (!urlDaPrevia) return;
+    previaRef.current = tocarNaSaida(urlDaPrevia, volume);
+  }
+
+  function mudarVolume(v: number) {
+    setVolume(v);
+    // arrastar com a prévia tocando ajusta o que está saindo, para a pessoa
+    // ouvir o efeito do controle sem apertar tocar de novo
+    const el = previaRef.current;
+    if (el && !el.paused) {
+      if (v <= 0) el.pause();
+      else el.volume = v;
+    }
+  }
 
   async function escolher(escolhido: File) {
     if (escolhido.size > MAX_SOUNDBOARD_SIZE) {
@@ -92,7 +137,7 @@ export default function AdicionarSomModal({ guildId }: { guildId: string }) {
     if (!file || !nome.trim()) return;
     setEnviando(true);
     try {
-      await api.createSound(guildId, nome.trim(), emoji, file);
+      await api.createSound(guildId, nome.trim(), emoji, file, volume);
       ui.toast(`Som "${nome.trim()}" adicionado.`);
       closeModal();
     } catch (e) {
@@ -136,22 +181,39 @@ export default function AdicionarSomModal({ guildId }: { guildId: string }) {
       />
 
       <Rotulo>Arquivo</Rotulo>
-      <button
-        type="button"
-        disabled={enviando}
-        onClick={() => arquivoRef.current?.click()}
-        className="flex h-10 w-full items-center gap-2 rounded-[3px] bg-input-background-default px-2.5 text-left text-sm text-text-default transition hover:bg-interactive-background-hover disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-input-background-default"
-      >
-        <Upload size={18} className="shrink-0 text-text-muted" aria-hidden="true" />
-        <span className="min-w-0 flex-1 truncate">
-          {file ? file.name : "Escolher um arquivo de áudio"}
-        </span>
-        {file && (
-          <span className="shrink-0 text-xs text-text-muted">
-            {Math.round(file.size / 1024)} KB
+      {/* o botão de prévia fica ao lado, e não dentro, do seletor de arquivo:
+          botão dentro de botão não é HTML válido. Aparece só com arquivo — antes
+          disso não há o que ouvir. */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={enviando}
+          onClick={() => arquivoRef.current?.click()}
+          className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-[3px] bg-input-background-default px-2.5 text-left text-sm text-text-default transition hover:bg-interactive-background-hover disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-input-background-default"
+        >
+          <Upload size={18} className="shrink-0 text-text-muted" aria-hidden="true" />
+          <span className="min-w-0 flex-1 truncate">
+            {file ? file.name : "Escolher um arquivo de áudio"}
           </span>
+          {file && (
+            <span className="shrink-0 text-xs text-text-muted">
+              {Math.round(file.size / 1024)} KB
+            </span>
+          )}
+        </button>
+        {file && (
+          <BotaoDeIcone
+            rotulo="Ouvir prévia"
+            icone={<Play size={20} aria-hidden="true" />}
+            tamanho={ehMobile ? 44 : 40}
+            tamanhoDoIcone={20}
+            comFundo
+            desabilitado={!urlDaPrevia || volume <= 0}
+            motivoDesabilitado={volume <= 0 ? "O volume do som está em 0%" : undefined}
+            onClick={tocarPrevia}
+          />
         )}
-      </button>
+      </div>
 
       <div className="mt-5">
         <Campo rotulo="Nome" htmlFor="novo-som-nome">
@@ -184,6 +246,20 @@ export default function AdicionarSomModal({ guildId }: { guildId: string }) {
         <p className="mt-1 text-xs text-text-muted">
           O emoji é o que aparece no card, ao lado do nome.
         </p>
+      </div>
+
+      <div className="mt-2">
+        <Slider
+          label="Volume do som"
+          hint="Quão alto este som toca para todo mundo, antes do volume de efeitos de cada um."
+          value={Math.round(volume * 100)}
+          min={0}
+          max={100}
+          step={1}
+          format={(v) => `${v}%`}
+          onChange={(v) => mudarVolume(v / 100)}
+          disabled={enviando}
+        />
       </div>
 
       <PopoverFlutuante

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Pencil, Trash2, Volume2 } from "@/components/ui/icones";
+import { AlertTriangle, Pencil, RefreshCw, Trash2, Volume2 } from "@/components/ui/icones";
 import {
   MAX_SOUNDBOARD_DURACAO_MS,
   MAX_SOUNDBOARD_POR_GUILD,
@@ -17,7 +17,7 @@ import {
   TituloDaPagina,
 } from "@/components/settings/server/pagina";
 import { api } from "@/lib/api";
-import { volumeDoEfeito } from "@/lib/soundboard-audio";
+import { tocarNaSaida, volumeDoEfeito } from "@/lib/soundboard-audio";
 import { useGuilds } from "@/stores/guilds";
 import { useSoundboard } from "@/stores/soundboard";
 import { errorMessage } from "@/stores/socket-adapter";
@@ -63,13 +63,13 @@ const KILOBYTES = Math.round(MAX_SOUNDBOARD_SIZE / 1024);
  * (quem se ensurdeceu na call não deve ouvir o som que ela dispara), errado
  * aqui: apertar "tocar" nas configurações é um gesto deliberado, sem call
  * nenhuma envolvida, e não devia falhar em silêncio só porque a pessoa está
- * ensurdecida numa chamada de outra aba. Por isso esta prévia toca um
- * `Audio` próprio, só compartilhando o `volumeDoEfeito` (mistura o volume dos
- * efeitos com o volume de referência do arquivo — a mesma conta do painel da
- * chamada, sem reimplementá-la). O que ela **não** replica, de propósito
- * (duplicaria lógica de fora da lista deste cartão): o roteamento para o
- * dispositivo de saída escolhido em "Voz e vídeo" (`aplicarSaida`, em
- * `lib/soundboard-audio.ts`) — ver "faltando" na entrega do cartão.
+ * ensurdecida numa chamada de outra aba. Por isso esta prévia chama
+ * `tocarNaSaida` (`lib/soundboard-audio.ts`), a metade de `tocarEfeitoSonoro`
+ * sem a guarda de `deafened`, com o volume de `volumeDoEfeito` (volume dos
+ * efeitos vezes o de referência do arquivo — a mesma conta do painel da
+ * chamada). Antes a prévia criava um `Audio` próprio e por isso tocava no
+ * alto-falante do sistema mesmo com um fone escolhido em "Voz e vídeo"; agora
+ * sai no mesmo dispositivo dos efeitos da chamada.
  *
  * **Estados cobertos** (o pedido do cartão 6p-sons):
  * - **carregando** — `useSoundboard().carregado` começa `false`; enquanto isso
@@ -78,12 +78,12 @@ const KILOBYTES = Math.round(MAX_SOUNDBOARD_SIZE / 1024);
  *   não há nada.
  * - **vazio** — "Nenhum som ainda.", só depois de `carregado` (a frase da
  *   aba Emoji, mesmo padrão).
- * - **erro** — **não coberto de propósito, e é o mesmo buraco que
- *   `voice/PainelDeSons.tsx` já documenta**: `stores/soundboard.ts:67-71`
- *   despeja a falha do `GET /me/soundboard` num `.catch(() => [])`, então
- *   quem abre esta aba sem internet vê "vazio", não "erro ao carregar".
- *   Corrigir isso pede expor um campo de erro na store, fora da lista deste
- *   cartão (ver "faltando" na entrega).
+ * - **erro** — a store expõe `falhouCarregar` (antes a falha do
+ *   `GET /soundboard` virava lista vazia e esta aba dizia "Nenhum som ainda."
+ *   para quem estava sem internet). Na primeira carga que falha, a tabela e a
+ *   contagem "Sons — 0/N" (que afirmaria um zero que ninguém sabe) dão lugar a
+ *   `BlocoDeErro`, o mesmo desenho de `EngajamentoTab.tsx`, com "Tentar de
+ *   novo" chamando `recarregar()`.
  * - **sem permissão** — não existe dentro desta página: `ServerSettingsModal.tsx`
  *   só lista a entrada "Painel de efeitos sonoros" para quem tem
  *   `MANAGE_EMOJIS` (mesmo padrão de `AplicativosTab.tsx`/`EngajamentoTab.tsx`),
@@ -102,6 +102,8 @@ const KILOBYTES = Math.round(MAX_SOUNDBOARD_SIZE / 1024);
 export default function SoundboardTab({ guildId }: { guildId: string }) {
   const sons = useSoundboard((s) => s.guilds.find((g) => g.guildId === guildId)?.sounds ?? []);
   const carregado = useSoundboard((s) => s.carregado);
+  const falhouCarregar = useSoundboard((s) => s.falhouCarregar);
+  const recarregar = useSoundboard((s) => s.recarregar);
   const volume = useSoundboard((s) => s.volume);
   const members = useGuilds((s) => s.members);
   const [removendoId, setRemovendoId] = useState<string | null>(null);
@@ -113,13 +115,12 @@ export default function SoundboardTab({ guildId }: { guildId: string }) {
   function tocarPreview(som: SoundboardSound) {
     // um segundo clique rápido em outro som não deve somar às duas prévias
     previaRef.current?.pause();
-    const el = new Audio(som.url);
-    el.volume = volumeDoEfeito(som, volume);
-    previaRef.current = el;
-    void el.play().catch(() => {
-      // autoplay bloqueado ou arquivo fora do ar: é só uma prévia, sem toast
-    });
+    // autoplay bloqueado ou arquivo fora do ar: `tocarNaSaida` fica em
+    // silêncio — é só uma prévia, sem toast
+    previaRef.current = tocarNaSaida(som.url, volumeDoEfeito(som, volume));
   }
+
+  const erroNaCarga = !carregado && falhouCarregar;
 
   async function removerSom(som: SoundboardSound) {
     const ok = await ui.confirm({
@@ -157,122 +158,158 @@ export default function SoundboardTab({ guildId }: { guildId: string }) {
         }
       />
 
-      <p className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
-        Sons — {sons.length}/{MAX_SOUNDBOARD_POR_GUILD}
-      </p>
+      {erroNaCarga ? (
+        <BlocoDeErro tentar={() => void recarregar()} />
+      ) : (
+        <>
+          <p className="mb-2 text-xs font-bold uppercase tracking-[0.02em] text-text-subtle">
+            Sons — {sons.length}/{MAX_SOUNDBOARD_POR_GUILD}
+          </p>
 
-      {/* Fora da tabela de propósito: um `<span>` dentro de `<tbody>` não é
-          HTML válido (só `<tr>` pode filhar `tbody`), e o navegador reordena
-          conteúdo inválido — o que quebraria a hidratação do React. */}
-      <p aria-live="polite" className="sr-only">
-        {!carregado ? "Carregando sons…" : ""}
-      </p>
+          {/* Fora da tabela de propósito: um `<span>` dentro de `<tbody>` não é
+              HTML válido (só `<tr>` pode filhar `tbody`), e o navegador reordena
+              conteúdo inválido — o que quebraria a hidratação do React. */}
+          <p aria-live="polite" className="sr-only">
+            {!carregado ? "Carregando sons…" : ""}
+          </p>
 
-      {/* A tabela rola por dentro no celular: `table-fixed` sem piso de
-          largura espremeria quatro colunas em 358px e nenhuma ficaria legível.
-          Em 520 (a mesma soma da aba Emoji) o piso não tem efeito no desktop. */}
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[520px] table-fixed">
-          <colgroup>
-            <col className="w-[72px]" />
-            <col />
-            <col className="w-[40%]" />
-            <col className="w-[88px]" />
-          </colgroup>
-          <thead>
-            <tr className={`h-10 ${TABELA_CABECALHO}`}>
-              <th scope="col" className="font-bold">
-                Emoji
-              </th>
-              <th scope="col" className="font-bold">
-                Nome
-              </th>
-              <th scope="col" className="font-bold">
-                Enviado por
-              </th>
-              <th scope="col">
-                <span className="sr-only">Ações</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {!carregado ? (
-              [0, 1, 2].map((i) => <LinhaEsqueleto key={i} />)
-            ) : sons.length === 0 ? (
-              <tr className="h-[55px]">
-                <td colSpan={4} className="text-sm text-text-muted">
-                  Nenhum som ainda.
-                </td>
-              </tr>
-            ) : (
-              sons.map((som) => {
-                const autor = members.find((m) => m.user.id === som.createdById)?.user ?? null;
-                const removendo = removendoId === som.id;
-                return (
-                  <tr key={som.id} className="group h-[55px] border-b border-border-subtle align-middle">
-                    <td className="pr-2">
-                      <BotaoDeIcone
-                        rotulo={`Tocar "${som.name}"`}
-                        icone={
-                          som.emoji ? (
-                            <Emoji emoji={som.emoji} tamanho={16} />
-                          ) : (
-                            <Volume2 size={16} aria-hidden="true" />
-                          )
-                        }
-                        tamanho={28}
-                        tamanhoDoIcone={16}
-                        forma="disco"
-                        fundo="sempre"
-                        onClick={() => tocarPreview(som)}
-                      />
-                    </td>
-                    <td className="pr-2">
-                      <span className="truncate text-sm text-text-strong">{som.name}</span>
-                    </td>
-                    <td className="pr-2">
-                      {autor ? (
-                        <span className="flex min-w-0 items-center gap-2">
-                          <Avatar user={autor} size="sm" surface="border-background-base-lower" />
-                          <span className="truncate text-sm text-text-default">
-                            {displayNameOf(autor)}
-                          </span>
-                        </span>
-                      ) : (
-                        <span className="text-sm text-text-muted">—</span>
-                      )}
-                    </td>
-                    <td>
-                      <span className="flex items-center justify-end gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100 celular:opacity-100">
-                        <BotaoDeIcone
-                          rotulo="Editar"
-                          icone={<Pencil size={16} />}
-                          tamanho="md"
-                          comFundo
-                          desabilitado
-                          motivoDesabilitado="Editar som (em breve)"
-                          className="celular:h-[44px] celular:w-[44px]"
-                        />
-                        <BotaoDeIcone
-                          rotulo="Remover"
-                          icone={<Trash2 size={16} />}
-                          tamanho="md"
-                          comFundo
-                          perigo
-                          desabilitado={removendo}
-                          onClick={() => void removerSom(som)}
-                          className="celular:h-[44px] celular:w-[44px]"
-                        />
-                      </span>
+          {/* A tabela rola por dentro no celular: `table-fixed` sem piso de
+              largura espremeria quatro colunas em 358px e nenhuma ficaria legível.
+              Em 520 (a mesma soma da aba Emoji) o piso não tem efeito no desktop. */}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[520px] table-fixed">
+              <colgroup>
+                <col className="w-[72px]" />
+                <col />
+                <col className="w-[40%]" />
+                <col className="w-[88px]" />
+              </colgroup>
+              <thead>
+                <tr className={`h-10 ${TABELA_CABECALHO}`}>
+                  <th scope="col" className="font-bold">
+                    Emoji
+                  </th>
+                  <th scope="col" className="font-bold">
+                    Nome
+                  </th>
+                  <th scope="col" className="font-bold">
+                    Enviado por
+                  </th>
+                  <th scope="col">
+                    <span className="sr-only">Ações</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {!carregado ? (
+                  [0, 1, 2].map((i) => <LinhaEsqueleto key={i} />)
+                ) : sons.length === 0 ? (
+                  <tr className="h-[55px]">
+                    <td colSpan={4} className="text-sm text-text-muted">
+                      Nenhum som ainda.
                     </td>
                   </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                ) : (
+                  sons.map((som) => {
+                    const autor = members.find((m) => m.user.id === som.createdById)?.user ?? null;
+                    const removendo = removendoId === som.id;
+                    return (
+                      <tr key={som.id} className="group h-[55px] border-b border-border-subtle align-middle">
+                        <td className="pr-2">
+                          <BotaoDeIcone
+                            rotulo={`Tocar "${som.name}"`}
+                            icone={
+                              som.emoji ? (
+                                <Emoji emoji={som.emoji} tamanho={16} />
+                              ) : (
+                                <Volume2 size={16} aria-hidden="true" />
+                              )
+                            }
+                            tamanho={28}
+                            tamanhoDoIcone={16}
+                            forma="disco"
+                            fundo="sempre"
+                            onClick={() => tocarPreview(som)}
+                          />
+                        </td>
+                        <td className="pr-2">
+                          <span className="truncate text-sm text-text-strong">{som.name}</span>
+                        </td>
+                        <td className="pr-2">
+                          {autor ? (
+                            <span className="flex min-w-0 items-center gap-2">
+                              <Avatar user={autor} size="sm" surface="border-background-base-lower" />
+                              <span className="truncate text-sm text-text-default">
+                                {displayNameOf(autor)}
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="text-sm text-text-muted">—</span>
+                          )}
+                        </td>
+                        <td>
+                          <span className="flex items-center justify-end gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100 celular:opacity-100">
+                            <BotaoDeIcone
+                              rotulo="Editar"
+                              icone={<Pencil size={16} />}
+                              tamanho="md"
+                              comFundo
+                              desabilitado
+                              motivoDesabilitado="Editar som (em breve)"
+                              className="celular:h-[44px] celular:w-[44px]"
+                            />
+                            <BotaoDeIcone
+                              rotulo="Remover"
+                              icone={<Trash2 size={16} />}
+                              tamanho="md"
+                              comFundo
+                              perigo
+                              desabilitado={removendo}
+                              onClick={() => void removerSom(som)}
+                              className="celular:h-[44px] celular:w-[44px]"
+                            />
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </>
+  );
+}
+
+/**
+ * Falha da primeira carga dos sons. Desenho de `BlocoDeErro` em
+ * `EngajamentoTab.tsx` (caixa `rounded-[4px] border border-border-subtle
+ * bg-background-base-lowest`, `AlertTriangle` em `--status-warning`, botão
+ * secundário com `RefreshCw`) — repetido, e não importado, porque lá é função
+ * local sem `export`, num arquivo fora da lista deste cartão.
+ */
+function BlocoDeErro({ tentar }: { tentar: () => void }) {
+  return (
+    <div
+      role="alert"
+      className="flex items-center justify-between gap-4 rounded-[4px] border border-border-subtle bg-background-base-lowest px-3 py-3"
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <AlertTriangle size={16} className="shrink-0 text-status-warning" aria-hidden="true" />
+        <p className="min-w-0 text-sm text-text-muted">Não foi possível carregar os sons.</p>
+      </div>
+      <Button
+        variante="secundario"
+        tamanho="sm"
+        icone={<RefreshCw size={14} aria-hidden="true" />}
+        onClick={tentar}
+        className="shrink-0 celular:h-[44px]"
+      >
+        Tentar de novo
+      </Button>
+    </div>
   );
 }
 

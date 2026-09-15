@@ -103,8 +103,12 @@ export default function VoicePanel({
     <div
       ref={palco}
       {...doPalco}
-      // a tela cheia é a do navegador (ver `fullscreen.ts`), não um `fixed inset-0`
-      className="flex h-full flex-col bg-background-base-lower"
+      // a tela cheia é a do navegador (ver `fullscreen.ts`), não um `fixed inset-0`.
+      // Preto puro (`bg-black`, o `--black` do Discord, não o preto do
+      // Tailwind) só enquanto `aqui`: print `2026-08-31 101857`, pixel 1000,100
+      // = `#000000` (`CallStage.tsx` já usa o mesmo tom). A `VistaDoCanalDeVoz`
+      // — sem conexão — continua com o degradê sobre `background-base-lower`.
+      className={`flex h-full flex-col ${aqui ? "bg-black" : "bg-background-base-lower"}`}
       data-voice-panel={channel.id}
     >
       {/* **No celular este cabeçalho não existe.** A tela empilhada já tem o
@@ -208,7 +212,11 @@ export default function VoicePanel({
                   // orientação — deitado a cápsula de controles flutua sobre o
                   // vídeo em vez de ocupar altura.
                   "h-full"
-                : "h-full p-4 pb-24"
+                : // `px-2 pt-2` = `FOLGA_DO_PALCO` (8px, `grid-layout.ts:38`,
+                  // medido print `101857` x=1911–1918): tínhamos `p-4` (16),
+                  // o dobro. `pb-24` continua à parte — reserva espaço para a
+                  // barra de controles flutuante, não é folga do palco.
+                  "h-full px-2 pt-2 pb-24"
             }
           >
             {/* **A grade aparece no clique, não no `connected`.** Quem manda
