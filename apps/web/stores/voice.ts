@@ -31,6 +31,7 @@ import {
 } from "livekit-client";
 import { api } from "@/lib/api";
 import {
+  abrirNoSistema,
   descartarTelaNativa as ponteDescartarTela,
   ehAndroidNoTauri,
   iniciarServicoDeChamada,
@@ -45,6 +46,12 @@ import {
 import { tocarSom, tocarSomDeMovido } from "@/lib/ringtone";
 import { cronometroDeVoz, type CronometroDeVoz } from "@/lib/tempos-de-voz";
 import { montarPedido } from "@/lib/seletor-de-tela";
+import {
+  avisoSemChamadas,
+  destinoNoNavegador,
+  suportaChamadas,
+  type AlvoDaChamada,
+} from "@/lib/suporte-a-chamadas";
 import {
   aoFalharASupressao,
   esquecerSupressaoIndisponivel,
@@ -85,7 +92,7 @@ import {
   type EstadoDoTeste,
   type PrefsDeVoz,
 } from "@/stores/teste-de-microfone";
-import { ui } from "@/stores/ui";
+import { ui, useUI } from "@/stores/ui";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { useDMs } from "@/stores/dms";
@@ -328,7 +335,12 @@ interface VoiceStoreState {
   abrirPrevia: (userId: string | null) => void;
 
   startCall: (channelId: string, comVideo: boolean) => Promise<void>;
-  acceptCall: () => Promise<void>;
+  /**
+   * `true` quando entrou (ou tentou entrar) na chamada; `false` quando não havia
+   * o que atender ou o ambiente não faz chamada — quem atende "com vídeo" só
+   * liga a câmera no primeiro caso.
+   */
+  acceptCall: () => Promise<boolean>;
   declineCall: () => void;
   endCall: () => Promise<void>;
   handleRing: (evento: CallRingEvent) => void;
@@ -799,6 +811,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       // `Room` com a mesma identidade e o LiveKit derrubava a primeira — a
       // "queda de alguns segundos" que também levava a tela compartilhada
       if (!opcoes?.forcar && jaNaChamada(instantaneo(get()), channel.id)) return;
+      // sem WebRTC não há sala a abrir: nem `voice.join` (os outros me veriam
+      // numa chamada em que não estou), nem troca de sala
+      if (recusadoSemWebRTC({ guildId: channel.guildId, channelId: channel.id })) return;
       // trocar de sala não é sair: a coluna do canal de destino fica de pé
       if (anterior && anterior !== channel.id) sairDaSalaAtual("troca-de-sala", !!channel.guildId);
 
@@ -1258,6 +1273,9 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       // (`botaoDeChamadaBloqueado`), mas a guarda mora nos dois lugares: quem
       // clica não é só o botão — a faixa "entrar" e o teclado chegam aqui
       if (jaNaChamada(instantaneo(get()), channelId)) return;
+      // antes do `POST /dms/:id/call`: ele já faria o outro lado tocar por uma
+      // chamada que daqui nunca teria som
+      if (recusadoSemWebRTC({ guildId: null, channelId })) return;
       // uma conexão de voz por vez: o servidor já garante isso, o cliente
       // precisa fechar a sala antiga para não ficar com duas conexões de mídia.
       // A chamada mora na conversa, então a coluna do canal de voz fecha
@@ -1296,10 +1314,14 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
 
     acceptCall: async () => {
       const channelId = get().call.channelId;
-      if (!channelId) return;
+      if (!channelId) return false;
       // só se atende o que está tocando: um segundo clique em "Atender" (ou o
       // atalho junto com o clique) entrava na sala duas vezes
-      if (get().call.phase !== "incoming") return;
+      if (get().call.phase !== "incoming") return false;
+      // o toque continua: sem `call.accept` o outro lado segue chamando, e é
+      // atendendo no navegador que ele se cala aqui (o `voice.state` da minha
+      // conta entrando, em `applyState`). Cancelar o aviso deixa "Recusar" à mão
+      if (recusadoSemWebRTC({ guildId: null, channelId })) return false;
       if (get().channelId && get().channelId !== channelId) sairDaSalaAtual("troca-de-sala");
       get().dispatchCall({ type: "accept" });
       emit(WS_EVENTS.CALL_ACCEPT, { channelId });
@@ -1318,6 +1340,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         set({ status: "connected", midiaDisponivel: false, erro: null });
       }
       get().syncFlags();
+      return true;
     },
 
     declineCall: () => {
@@ -1447,6 +1470,106 @@ async function abrirConversa(channelId: string) {
   // primeiro) e a que estava fechada — esta o `GET /dms` não devolve, e a
   // chamada ficava sem tela nenhuma
   await useDMs.getState().abrirPorId(channelId);
+}
+
+/**
+ * O ambiente não faz chamada (WebKitGTK do Linux, ver `lib/suporte-a-chamadas.ts`):
+ * avisa e devolve `true` para quem chamou desistir **antes** de mexer em
+ * qualquer coisa — gateway, sala, toque.
+ *
+ * Mora aqui, e não nos botões, porque os caminhos de entrada são muitos
+ * (clique no canal, "Entrar na voz", telefone da conversa, faixa da chamada,
+ * menu do participante, cartão de toque, tela mobile) e todos passam por
+ * `connect`, `startCall` ou `acceptCall`. Um `if` por botão seria o que esquece
+ * o próximo botão.
+ */
+function recusadoSemWebRTC(alvo: AlvoDaChamada): boolean {
+  if (suportaChamadas()) return false;
+  void avisarSemChamadas(alvo);
+  return true;
+}
+
+/**
+ * Um aviso por vez: clicar de novo no canal (ou no navegador sem WebRTC) não
+ * empilha uma segunda caixa, nem um segundo toast, em cima do anterior.
+ */
+let avisoSemChamadasAberto = false;
+
+/**
+ * Só para teste: destrava "um aviso por vez" sem esperar os 5s do toast (ver
+ * `esquecerSuporteAChamadas`, o mesmo padrão em `lib/suporte-a-chamadas.ts`).
+ * Sem isto, um teste que dispara o toast prendia a trava por 5s de relógio de
+ * verdade — tempo real, porque o `setTimeout` já tinha sido agendado antes de
+ * qualquer `vi.useFakeTimers()` do teste seguinte — e contaminava os testes
+ * vizinhos.
+ */
+export function esquecerAvisoSemChamadas(): void {
+  avisoSemChamadasAberto = false;
+}
+
+/**
+ * Quanto tempo a trava acima segura o **toast** (o caminho fora do app, sem
+ * `ui.confirm`). O `confirm` se destrava sozinho quando resolve — o toast não
+ * tem esse sinal, então a trava dele expira por tempo; o valor só precisa
+ * cobrir o clique duplo/triplo que motivou o pedido, não bater com o TTL do
+ * toast em si.
+ */
+const TRAVA_DO_TOAST_MS = 5000;
+
+async function avisarSemChamadas(alvo: AlvoDaChamada) {
+  if (avisoSemChamadasAberto) return;
+  const aviso = avisoSemChamadas({
+    noApp: isTauri(),
+    userAgent: typeof navigator === "undefined" ? "" : navigator.userAgent,
+    alvo,
+  });
+  if (!aviso.abrirNoNavegador) {
+    avisoSemChamadasAberto = true;
+    ui.toast(`${aviso.titulo}. ${aviso.mensagem}`, "error");
+    // sem `window`: um timer de verdade, não `window.setTimeout` — este
+    // caminho não depende de nada do DOM, só de destravar sozinho mais tarde
+    setTimeout(() => {
+      avisoSemChamadasAberto = false;
+    }, TRAVA_DO_TOAST_MS);
+    return;
+  }
+  avisoSemChamadasAberto = true;
+  // só existe "toque acabando por baixo da caixa" para quem chegou aqui
+  // atendendo uma chamada recebida (`acceptCall`, com a fase ainda `incoming`
+  // porque o aceite real só roda depois deste aviso). Clicar num canal de voz
+  // ou ligar (`connect`/`startCall`) não tem toque nenhum correndo atrás para
+  // terminar sozinho, e por isso não entra nesta vigia.
+  const tocando = () => {
+    const { call } = useVoice.getState();
+    return call.phase === "incoming" && call.channelId === alvo.channelId;
+  };
+  // o toque pode acabar (os 30s, o outro lado desligou, chamada cancelada)
+  // com a caixa ainda na tela — sem isto ela ficava com "Abrir no navegador"
+  // para uma chamada que já não existe. `closeModal` resolve o `confirm` como
+  // cancelado, exatamente como Esc ou clique fora fariam; o `at(-1)` evita
+  // fechar por engano um modal diferente que tenha empilhado por cima
+  // enquanto o toque tocava.
+  const pararDeVigiarOToque = tocando()
+    ? useVoice.subscribe(() => {
+        if (tocando()) return;
+        if (useUI.getState().modals.at(-1)?.kind === "confirm") useUI.getState().closeModal();
+      })
+    : null;
+  try {
+    const abrir = await ui.confirm({
+      title: aviso.titulo,
+      message: aviso.mensagem,
+      confirmLabel: "Abrir no navegador",
+    });
+    if (!abrir) return;
+    // o WebKitGTK engole `window.open`: quem abre é o sistema, pelo `opener`
+    if (!(await abrirNoSistema(destinoNoNavegador(alvo)))) {
+      ui.toast("Não foi possível abrir o navegador", "error");
+    }
+  } finally {
+    pararDeVigiarOToque?.();
+    avisoSemChamadasAberto = false;
+  }
 }
 
 /**

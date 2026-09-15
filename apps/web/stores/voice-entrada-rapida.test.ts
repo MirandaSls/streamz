@@ -98,6 +98,12 @@ vi.mock("@/lib/desktop", () => ({
   pararTelaNativa: vi.fn(async () => {}),
   ouvirTelaEncerrada: () => () => {},
 }));
+// o Node não tem `RTCPeerConnection`: sem isto toda entrada pararia no aviso
+// de "este ambiente não faz chamada", que não é o que este arquivo testa
+vi.mock("@/lib/suporte-a-chamadas", async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  suportaChamadas: () => true,
+}));
 vi.mock("@/lib/microfone", () => ({
   abrirMicrofone: microfone.abrirMicrofone,
   atualizarMicrofone: vi.fn(async () => {}),

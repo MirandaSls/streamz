@@ -106,18 +106,45 @@ vi.mock("livekit-client", async (original) => ({
 
 // `vi.mock` é içado para o topo do arquivo: tudo o que a fábrica lê precisa
 // nascer em `vi.hoisted`, e não numa `const` do módulo
-const { api, emitidos, sons, abrirPorId } = vi.hoisted(() => ({
-  api: {
-    startCall: vi.fn(),
-    dmVoiceStates: vi.fn(async () => []),
-    guildVoiceStates: vi.fn(async () => []),
-    voiceToken: vi.fn(),
-    telaToken: vi.fn(async () => ({ token: "t", url: "wss://lk", room: "r" })),
-  },
-  emitidos: [] as { evento: string; dados: unknown }[],
-  sons: [] as string[],
-  abrirPorId: vi.fn(async () => {}),
-}));
+const { api, emitidos, sons, abrirPorId, ambiente, avisos } = vi.hoisted(() => {
+  const avisos = {
+    toast: vi.fn(),
+    confirm: vi.fn(async (_o: unknown) => false),
+    abrirNoSistema: vi.fn(async (_url: string) => true),
+    closeModal: vi.fn(),
+    /** topo da pilha de modais que `stores/ui` real teria — só o que a vigia
+     *  do toque em `avisarSemChamadas` olha antes de fechar. */
+    modais: [{ kind: "confirm" }] as { kind: string }[],
+    /** o `resolve` do `confirm` "pendurado" (ver `confirmPendurado` abaixo) —
+     *  é o que deixa `closeModal` fechar o aviso de verdade, como no app real
+     *  (lá `closeModal` resolve o `confirm` do topo da pilha como cancelado). */
+    resolvePendente: null as ((ok: boolean) => void) | null,
+  };
+  // desligado do `confirm` acima só por serem dois mocks independentes: sem
+  // isto, `closeModal()` fechava a caixa na pilha de mentira sem nunca
+  // destravar o `await ui.confirm(...)` que `avisarSemChamadas` ainda segura
+  // — e a trava de "um aviso por vez" ficava presa para o resto do arquivo
+  avisos.closeModal = vi.fn(() => {
+    const resolver = avisos.resolvePendente;
+    avisos.resolvePendente = null;
+    resolver?.(false);
+  });
+  return {
+    api: {
+      startCall: vi.fn(),
+      dmVoiceStates: vi.fn(async () => []),
+      guildVoiceStates: vi.fn(async () => []),
+      voiceToken: vi.fn(),
+      telaToken: vi.fn(async () => ({ token: "t", url: "wss://lk", room: "r" })),
+    },
+    emitidos: [] as { evento: string; dados: unknown }[],
+    sons: [] as string[],
+    abrirPorId: vi.fn(async () => {}),
+    /** O que o ambiente de mentira responde: WebRTC e "estou no app". */
+    ambiente: { webrtc: true, tauri: false },
+    avisos,
+  };
+});
 
 vi.mock("@/lib/api", () => ({ api }));
 
@@ -131,10 +158,16 @@ vi.mock("@/stores/socket-adapter", () => ({
 }));
 
 vi.mock("@/lib/desktop", () => ({
-  isTauri: () => false,
+  isTauri: () => ambiente.tauri,
+  abrirNoSistema: avisos.abrirNoSistema,
   iniciarTelaNativa: vi.fn(async () => {}),
   pararTelaNativa: vi.fn(async () => {}),
   ouvirTelaEncerrada: () => () => {},
+}));
+// o Node não tem `RTCPeerConnection`: quem decide aqui é o teste
+vi.mock("@/lib/suporte-a-chamadas", async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  suportaChamadas: () => ambiente.webrtc,
 }));
 vi.mock("@/lib/microfone", () => ({
   abrirMicrofone: vi.fn(async () => {}),
@@ -161,12 +194,13 @@ vi.mock("@/stores/dms", () => ({
 // os avisos usam `window.setTimeout`, que o ambiente de teste não stubba; aqui
 // só interessa **se** houve aviso
 vi.mock("@/stores/ui", () => ({
-  ui: { toast: vi.fn(), setView: vi.fn(), openModal: vi.fn() },
+  ui: { toast: avisos.toast, confirm: avisos.confirm, setView: vi.fn(), openModal: vi.fn() },
+  useUI: { getState: () => ({ modals: avisos.modais, closeModal: avisos.closeModal }) },
 }));
 
 import { CHAMADA_INICIAL } from "@/stores/call-machine";
 import { useAuth } from "@/stores/auth";
-import { useVoice } from "@/stores/voice";
+import { esquecerAvisoSemChamadas, useVoice } from "@/stores/voice";
 
 const EU = { id: "ana", username: "ana", displayName: null, avatarUrl: null } as never;
 const OUTRO = { id: "bia", username: "bia", displayName: null, avatarUrl: null } as never;
@@ -185,6 +219,17 @@ function estadoDeVoz(userId: string, channelId: string): VoiceStateEvent {
   } as VoiceStateEvent;
 }
 
+/**
+ * Um `ui.confirm` que só resolve quando algo chama `closeModal()` — é o que os
+ * testes do §(a) usam para segurar o aviso "aberto" enquanto o toque acaba por
+ * baixo dele.
+ */
+function confirmPendurado(): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    avisos.resolvePendente = resolve;
+  });
+}
+
 /** O que `POST /dms/:id/call` devolve quando a chamada nasce: só eu na sala. */
 function respostaDaChamada(channelId: string) {
   return {
@@ -197,6 +242,16 @@ function respostaDaChamada(channelId: string) {
 
 beforeEach(() => {
   abrirPorId.mockClear();
+  ambiente.webrtc = true;
+  ambiente.tauri = false;
+  avisos.toast.mockClear();
+  avisos.confirm.mockReset();
+  avisos.confirm.mockResolvedValue(false);
+  avisos.abrirNoSistema.mockClear();
+  avisos.closeModal.mockClear();
+  avisos.modais = [{ kind: "confirm" }];
+  avisos.resolvePendente = null;
+  esquecerAvisoSemChamadas();
   SalaFalsa.zerar();
   emitidos.length = 0;
   sons.length = 0;
@@ -360,5 +415,143 @@ describe("eventos da própria conta (todas as sessões, #117)", () => {
     useVoice.getState().applyState(estadoDeVoz("ana", "dm1"));
     expect(useVoice.getState().call.phase).toBe("outgoing");
     expect(useVoice.getState().channelId).toBe("dm1");
+  });
+});
+
+describe("ambiente sem WebRTC (app de Linux)", () => {
+  /** O que qualquer tentativa de entrar não pode ter feito. */
+  function nadaSaiu() {
+    expect(api.startCall).not.toHaveBeenCalled();
+    expect(api.voiceToken).not.toHaveBeenCalled();
+    expect(SalaFalsa.criadas).toHaveLength(0);
+    // nem `voice.join`: os outros me veriam numa chamada em que não estou
+    expect(emitidos).toHaveLength(0);
+    expect(useVoice.getState().channelId).toBeNull();
+    expect(useVoice.getState().status).toBe("idle");
+  }
+
+  beforeEach(() => {
+    ambiente.webrtc = false;
+    api.voiceToken.mockReset();
+  });
+
+  it("entrar num canal de voz não conecta e oferece o navegador no mesmo canal", async () => {
+    ambiente.tauri = true;
+    avisos.confirm.mockResolvedValueOnce(true);
+    const canal = { id: "v1", guildId: "g1", name: "Geral", type: "VOICE" } as never;
+    await useVoice.getState().connect(canal);
+    nadaSaiu();
+    expect(sons).toHaveLength(0);
+    await vi.waitFor(() => expect(avisos.abrirNoSistema).toHaveBeenCalledTimes(1));
+    expect(avisos.confirm.mock.calls[0]?.[0]).toMatchObject({ confirmLabel: "Abrir no navegador" });
+    expect(avisos.abrirNoSistema.mock.calls[0]?.[0]).toMatch(/\/app\/channels\/g1\/v1$/);
+  });
+
+  it("ligar numa conversa não faz o outro lado tocar", async () => {
+    ambiente.tauri = true;
+    await useVoice.getState().startCall("dm1", true);
+    nadaSaiu();
+    expect(useVoice.getState().call.phase).toBe("idle");
+    expect(avisos.confirm).toHaveBeenCalledTimes(1);
+    // cancelou: nada abre
+    expect(avisos.abrirNoSistema).not.toHaveBeenCalled();
+  });
+
+  it("o toque continua, e atender não atende", async () => {
+    ambiente.tauri = true;
+    useVoice.getState().handleRing({ channelId: "dm1", from: OUTRO });
+    const atendeu = await useVoice.getState().acceptCall();
+    expect(atendeu).toBe(false);
+    expect(useVoice.getState().call.phase).toBe("incoming");
+    nadaSaiu();
+    expect(avisos.confirm).toHaveBeenCalledTimes(1);
+  });
+
+  it("o toque acabando (30s) fecha sozinho o aviso ainda aberto", async () => {
+    ambiente.tauri = true;
+    useVoice.getState().handleRing({ channelId: "dm1", from: OUTRO });
+    // o aviso fica pendurado até algo chamar `closeModal` — é a janela em que
+    // o toque pode acabar por baixo dele, com "Abrir no navegador" ainda na tela
+    avisos.confirm.mockImplementationOnce(confirmPendurado);
+    const atendeu = await useVoice.getState().acceptCall();
+    expect(atendeu).toBe(false);
+    expect(avisos.closeModal).not.toHaveBeenCalled();
+    // ninguém atendeu nos 30s: o servidor derruba o toque
+    useVoice.getState().handleEnded({ channelId: "dm1", reason: "timeout", by: null });
+    expect(useVoice.getState().call.phase).toBe("idle");
+    expect(avisos.closeModal).toHaveBeenCalled();
+    // drena o `await ui.confirm(...)` que `closeModal` acabou de destravar,
+    // senão a trava de "um aviso por vez" fica presa para o próximo teste
+    await new Promise((r) => setTimeout(r, 0));
+  });
+
+  it("o chamador desistindo também fecha o aviso ainda aberto", async () => {
+    ambiente.tauri = true;
+    useVoice.getState().handleRing({ channelId: "dm1", from: OUTRO });
+    avisos.confirm.mockImplementationOnce(confirmPendurado);
+    await useVoice.getState().acceptCall();
+    useVoice.getState().handleEnded({ channelId: "dm1", reason: "ended", by: OUTRO });
+    expect(avisos.closeModal).toHaveBeenCalled();
+    await new Promise((r) => setTimeout(r, 0));
+  });
+
+  it("um estado de voz alheio não fecha o aviso: só o fim do toque fecha", async () => {
+    ambiente.tauri = true;
+    useVoice.getState().handleRing({ channelId: "dm1", from: OUTRO });
+    avisos.confirm.mockImplementationOnce(confirmPendurado);
+    await useVoice.getState().acceptCall();
+    useVoice.getState().applyState(estadoDeVoz("bia", "dm2"));
+    expect(avisos.closeModal).not.toHaveBeenCalled();
+    expect(useVoice.getState().call.phase).toBe("incoming");
+    // o aviso deste teste nunca fecha sozinho — fecha à mão, para não vazar a
+    // trava de "um aviso por vez" para o próximo teste
+    avisos.resolvePendente?.(false);
+    await new Promise((r) => setTimeout(r, 0));
+  });
+
+  it("dois cliques seguidos não empilham dois avisos", async () => {
+    ambiente.tauri = true;
+    // o primeiro aviso fica aberto até o teste fechá-lo
+    let fechar: (ok: boolean) => void = () => {};
+    avisos.confirm.mockImplementationOnce(
+      () => new Promise<boolean>((resolve) => (fechar = resolve)),
+    );
+    await useVoice.getState().startCall("dm1", false);
+    await useVoice.getState().startCall("dm1", false);
+    expect(avisos.confirm).toHaveBeenCalledTimes(1);
+    // fechado o primeiro, o próximo clique volta a avisar
+    fechar(false);
+    await new Promise((r) => setTimeout(r, 0));
+    await useVoice.getState().startCall("dm1", false);
+    expect(avisos.confirm).toHaveBeenCalledTimes(2);
+  });
+
+  it("num navegador sem WebRTC avisa sem oferecer abrir no navegador", async () => {
+    await useVoice.getState().startCall("dm2", false);
+    nadaSaiu();
+    expect(avisos.confirm).not.toHaveBeenCalled();
+    expect(avisos.toast).toHaveBeenCalledWith(expect.stringContaining("WebRTC"), "error");
+  });
+
+  it("clique repetido no navegador sem WebRTC não empilha um toast por clique", async () => {
+    // sem `confirm` (não é o app) não há como saber quando o aviso "fechou" —
+    // é a mesma trava do outro caminho, só que destravada por tempo
+    await useVoice.getState().startCall("dm2", false);
+    await useVoice.getState().startCall("dm2", false);
+    await useVoice.getState().startCall("dm2", false);
+    expect(avisos.toast).toHaveBeenCalledTimes(1);
+  });
+
+  it("depois da janela da trava, um novo clique volta a avisar", async () => {
+    vi.useFakeTimers();
+    try {
+      await useVoice.getState().startCall("dm2", false);
+      expect(avisos.toast).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(5000);
+      await useVoice.getState().startCall("dm2", false);
+      expect(avisos.toast).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
