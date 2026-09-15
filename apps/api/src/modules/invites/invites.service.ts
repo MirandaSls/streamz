@@ -11,7 +11,7 @@ import { GuildsService } from "../guilds/guilds.service";
 import { OnboardingService } from "../onboarding/onboarding.service";
 import { RealtimeService } from "../realtime/realtime.service";
 import { isUniqueViolation } from "../../common/prisma-errors";
-import { Permission, WS_EVENTS } from "@streamz/shared";
+import { hasPermission, Permission, WS_EVENTS } from "@streamz/shared";
 import type {
   Guild,
   InviteDetail,
@@ -39,20 +39,40 @@ export class InvitesService {
   ) {}
 
   /**
-   * Cria um convite. Só membros do servidor podem convidar.
+   * Cria um convite. Exige `CREATE_INVITE`, como no Discord.
+   *
+   * A permissão é a efetiva, calculada pela autorização central do
+   * `GuildsService` — nada de regra própria aqui. Com canal escolhido, vale a
+   * permissão **naquele canal** (cargos + overrides, e é preciso enxergá-lo):
+   * um deny de `CREATE_INVITE` no canal recusa o convite para ele, e um allow
+   * libera mesmo sem a permissão no servidor. Sem canal, vale a do servidor.
+   * Antes a API só conferia a associação, e o botão escondido no cliente era a
+   * única barreira — qualquer membro convidava com um `POST` à mão. Servidores
+   * no padrão não mudam: o `@everyone` nasce com `CREATE_INVITE`.
    *
    * Nas opções, `0` significa "sem limite"/"nunca" — é o que os seletores da UI
    * mandam para a última opção da lista; `undefined` cai no padrão (7 dias, sem
    * limite de usos), como no Discord.
    */
   async create(userId: string, guildId: string, opts?: InviteOptions): Promise<InviteInfo> {
-    await this.guilds.assertMember(userId, guildId);
+    let channelId: string | null = null;
+    if (opts?.channelId) {
+      // a associação vem antes da validação do canal: quem não é membro leva
+      // 403, e não um 400 que confirmaria se o canal existe neste servidor
+      await this.guilds.assertMember(userId, guildId);
+      channelId = await this.channelDoServidor(guildId, opts.channelId);
+      const acesso = await this.guilds.assertCanViewChannel(userId, channelId);
+      if (!hasPermission(acesso.permissions, Permission.CREATE_INVITE)) {
+        throw new ForbiddenException("Você não tem permissão para criar convites");
+      }
+    } else {
+      await this.guilds.assertCanModerate(userId, guildId, Permission.CREATE_INVITE);
+    }
 
     const minutos = opts?.expiresInMinutes ?? DEFAULT_EXPIRY_MINUTES;
     const expiresAt = minutos > 0 ? new Date(Date.now() + minutos * 60_000) : null;
     const maxUses = opts?.maxUses && opts.maxUses > 0 ? opts.maxUses : null;
     const temporary = !!opts?.temporary;
-    const channelId = opts?.channelId ? await this.channelDoServidor(guildId, opts.channelId) : null;
 
     // Tenta criar direto; em caso de colisão no code (@unique → P2002) gera
     // outro. Evita o findUnique-then-create, que tem corrida entre a checagem
@@ -295,7 +315,7 @@ export class InvitesService {
   }
 
   /** O canal precisa ser um canal de texto deste servidor. */
-  private async channelDoServidor(guildId: string, channelId: string): Promise<string | null> {
+  private async channelDoServidor(guildId: string, channelId: string): Promise<string> {
     const canal = await this.prisma.channel.findFirst({
       where: { id: channelId, guildId, type: "TEXT" },
       select: { id: true },

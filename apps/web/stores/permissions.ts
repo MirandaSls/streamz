@@ -32,7 +32,9 @@ import { useUI } from "@/stores/ui";
  * ao servidor por canal seria inviável.
  *
  * Para os outros agentes: `useMyPermissions(guildId, channelId?)` devolve o
- * bitfield, e `useCan(Permission.X, channelId?)` o booleano.
+ * bitfield, `useCan(Permission.X, channelId?)` o booleano, `usePodeTalvez`
+ * o booleano ou `null` enquanto não dá para saber, e `useCanManageCategory`
+ * a engrenagem da categoria.
  */
 
 interface PermissionsState {
@@ -212,6 +214,79 @@ export function useCan(permission: number, channelId?: string | null): boolean {
   return hasPermission(useMyPermissions(null, channelId), permission);
 }
 
+/**
+ * "Posso?" com três respostas: `true`, `false` e `null` = **ainda não sei**.
+ *
+ * `useMyPermissions` devolve 0 enquanto as permissões do servidor carregam (e
+ * quando o servidor pedido não é o carregado), e 0 é indistinguível de "não
+ * pode". Para esconder um controle isso é o conservador certo; para quem só
+ * deve esconder diante de um "não" confirmado (reação e Responder na mensagem,
+ * o aviso "sem permissão" do convite) o 0 provisório vira uma mentira: a
+ * pessoa via "você não tem permissão" num servidor em que tem. Por isso quem
+ * usa este hook esconde/bloqueia **só com `false`** e deixa a API responder no
+ * `null`.
+ *
+ * `null` enquanto: não há usuário; o servidor não está na lista; as regras
+ * estão carregando ou são de outro servidor; os membros (de onde vêm os meus
+ * cargos) ainda estão chegando — sem eles o cálculo cairia no @everyone. O dono
+ * é `true` sempre: `computePermissions` não depende de nada disso para ele.
+ *
+ * Sem `guildId`, o servidor ativo. Com `channelId`, aplica as regras do canal
+ * (ou da categoria, se sincronizado), exatamente como `useMyPermissions`.
+ */
+export function usePodeTalvez(
+  permission: number,
+  opcoes?: { guildId?: string | null; channelId?: string | null },
+): boolean | null {
+  const guildId = opcoes?.guildId ?? null;
+  const channelId = opcoes?.channelId ?? null;
+  const bits = useMyPermissions(guildId, channelId);
+  const meId = useAuth((s) => s.user?.id);
+  const loading = usePermissions((s) => s.loading);
+  const carregado = usePermissions((s) => s.guildId);
+  const membrosCarregando = useGuilds((s) => s.membersLoading);
+  const guild = useGuilds((s) =>
+    s.guilds.find((g) => g.id === (guildId ?? s.activeGuildId)) ?? null,
+  );
+
+  if (!meId || !guild) return null;
+  if (guild.ownerId === meId) return true;
+  if (loading || carregado !== guild.id || membrosCarregando) return null;
+  return hasPermission(bits, permission);
+}
+
+/**
+ * Posso editar esta categoria? (MANAGE_CHANNELS com as regras **da categoria**)
+ *
+ * `useCan` só conhece canal: sem `channelId` responde pelo servidor, e aí quem
+ * perdeu MANAGE_CHANNELS só nesta categoria (ou ganhou só nela) veria a
+ * engrenagem errada. Aqui as regras da categoria entram por cima dos cargos,
+ * a mesma `computePermissions` que a API usa ao gravar.
+ *
+ * Servidor ativo, como `useCan`: categoria só aparece na barra lateral dele.
+ * Enquanto as regras não são desse servidor, só o dono é certeza.
+ */
+export function useCanManageCategory(categoryId: string | null | undefined): boolean {
+  const meId = useAuth((s) => s.user?.id);
+  const roles = usePermissions((s) => s.roles);
+  const carregado = usePermissions((s) => s.guildId);
+  const regras = useCategoryOverrides(categoryId);
+  const guild = useGuilds((s) => s.guilds.find((g) => g.id === s.activeGuildId) ?? null);
+  const roleIds = useGuilds(
+    (s) => s.members.find((m) => m.user.id === meId)?.roleIds ?? EMPTY,
+  );
+
+  if (!meId || !guild || !categoryId) return false;
+  const isOwner = guild.ownerId === meId;
+  if (carregado !== guild.id) return isOwner;
+  // regra de outra pessoa não me diz respeito: só as de cargo e a minha
+  const minhas = regras.filter((o) => o.userId === null || o.userId === meId);
+  return hasPermission(
+    computePermissions({ isOwner, roleIds }, roles, minhas),
+    Permission.MANAGE_CHANNELS,
+  );
+}
+
 /** Posso escrever no canal aberto? É o que decide o composer bloqueado. */
 export function useCanPostActiveChannel(): boolean {
   const channelId = useChannels((s) => s.activeChannelId);
@@ -234,16 +309,6 @@ export function useCanModerateActiveChannel(): boolean {
 export function useCanManageActiveChannel(): boolean {
   const channelId = useChannels((s) => s.activeChannelId);
   return useCan(Permission.MANAGE_CHANNELS, channelId);
-}
-
-/**
- * Cor do nome de um membro: a do seu cargo mais alto que tenha cor. `null`
- * quando ele não tem cargo colorido — aí o nome fica na cor padrão do tema.
- */
-export function useRoleColor(roleIds: readonly string[] | undefined): string | null {
-  const roles = usePermissions((s) => s.roles);
-  if (!roleIds?.length) return null;
-  return colorRoleOf(roleIds, roles)?.color ?? null;
 }
 
 /**

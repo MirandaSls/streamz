@@ -58,6 +58,12 @@ type LinhaDaUltimaMensagem = {
   createdAt: Date;
   type: MessageType;
   stickerId: string | null;
+  /**
+   * `MessageBotPayload.flatText`: o texto achatado dos embeds/componentes de
+   * um bot. `null` quando a mensagem não tem payload (o `LEFT JOIN` não achou
+   * linha) — e ausente nos dublês de teste que não o declaram.
+   */
+  flatText?: string | null;
 };
 
 /** A linha de `Channel` (com participantes) que `toView` sabe traduzir. */
@@ -347,16 +353,27 @@ export class DMsService {
     const out = new Map<string, PreviaDeMensagem>();
     if (channelIds.length === 0) return out;
 
+    // O `LEFT JOIN` no payload de bot é pela chave primária (`messageId` é o
+    // `@id` de `MessageBotPayload`): no máximo uma linha por mensagem, então o
+    // `DISTINCT ON` continua escolhendo a mesma. Sem ele, DM de bot só com
+    // embed chegava à lista com a prévia vazia — o `content` é "" e o texto
+    // mora todo no `flatText`, o mesmo que o `message.new` usa no cliente.
     const ultimas = await this.prisma.$queryRaw<LinhaDaUltimaMensagem[]>`
       SELECT DISTINCT ON (m."channelId")
         m."channelId", m."id", m."authorId", m."content", m."createdAt",
-        m."type"::text AS "type", m."stickerId"
+        m."type"::text AS "type", m."stickerId", p."flatText"
       FROM "Message" m
+      LEFT JOIN "MessageBotPayload" p ON p."messageId" = m."id"
       WHERE m."channelId" IN (${Prisma.join(channelIds)})
       ORDER BY m."channelId", m."createdAt" DESC, m."id" DESC
     `;
 
-    const semTexto = ultimas.filter((m) => !m.content.trim()).map((m) => m.id);
+    // "sem texto" é sem conteúdo **e** sem texto de bot: um embed já dá prévia,
+    // e não há por que buscar anexos de uma mensagem que não vai virar
+    // "Enviou um anexo"
+    const semTexto = ultimas
+      .filter((m) => !m.content.trim() && !(m.flatText ?? "").trim())
+      .map((m) => m.id);
     const anexos = semTexto.length
       ? await this.prisma.attachment.findMany({
           where: { messageId: { in: semTexto } },
@@ -381,6 +398,7 @@ export class DMsService {
         // onde o "…" cai
         content: textoDaPrevia({
           content: m.content,
+          textoDeBot: m.flatText || undefined,
           type: m.type,
           attachments: porMensagem.get(m.id),
           temFigurinha: !!m.stickerId,

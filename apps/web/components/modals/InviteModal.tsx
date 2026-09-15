@@ -8,7 +8,6 @@ import {
   Permission,
   WS_EVENTS,
   displayNameOf,
-  hasPermission,
   type InviteInfo,
   type PublicUser,
 } from "@streamz/shared";
@@ -21,7 +20,7 @@ import { urlDeConvite } from "@/lib/links-de-convite";
 import { useChannels } from "@/stores/channels";
 import { useFriends } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
-import { useMyPermissions } from "@/stores/permissions";
+import { usePodeTalvez } from "@/stores/permissions";
 import { emit, errorMessage } from "@/stores/socket-adapter";
 import { ui, useUI } from "@/stores/ui";
 
@@ -123,15 +122,19 @@ export default function InviteModal({
   const destino = textos.find((c) => c.id === channelId) ?? textos[0] ?? null;
 
   // "Criar convite" (`permissoes.ts`) — concedida ao @everyone por padrão,
-  // revogável por cargo ou canal. `useMyPermissions(guildId, …)` explícito, e
-  // não `useCan` (que assume o servidor **ativo**): este modal também abre a
-  // partir do painel de voz de um canal, que pode não ser o servidor que a
-  // pessoa está olhando agora. Sem a permissão não criamos convite sozinhos;
-  // um link que já veio pronto (`code`) continua valendo, só não é recriável.
-  const podeConvidar = hasPermission(
-    useMyPermissions(guildId, destino?.id ?? null),
-    Permission.CREATE_INVITE,
-  );
+  // revogável por cargo ou canal. `guildId` explícito, e não `useCan` (que
+  // assume o servidor **ativo**): este modal também abre a partir do painel de
+  // voz de um canal, que pode não ser o servidor que a pessoa está olhando.
+  // Nesse caso as regras carregadas são de **outro** servidor e o bitfield
+  // vinha 0 — o modal dizia "sem permissão" a quem tem. `usePodeTalvez`
+  // separa o "não sei" (`null`) do "não pode" (`false`): só o `false`
+  // bloqueia; no `null` tentamos criar e quem decide é a API (que responde com
+  // o toast de erro se de fato não puder).
+  const podeConvidar = usePodeTalvez(Permission.CREATE_INVITE, {
+    guildId,
+    channelId: destino?.id ?? null,
+  });
+  const semPermissao = podeConvidar === false;
 
   useEffect(() => {
     void loadFriends();
@@ -139,7 +142,7 @@ export default function InviteModal({
 
   // cria um convite assim que o modal abre (sem código pronto), como o Discord
   useEffect(() => {
-    if (initialCode || !podeConvidar) return;
+    if (initialCode || semPermissao) return;
     let ativo = true;
     void api
       .createInvite(guildId, { expiresInMinutes: INVITE_EXPIRY_OPTIONS[5].minutes })
@@ -152,7 +155,10 @@ export default function InviteModal({
     return () => {
       ativo = false;
     };
-  }, [guildId, initialCode, podeConvidar]);
+    // depende de `semPermissao`, e não de `podeConvidar`: a passagem de `null`
+    // para `true` (as regras terminaram de carregar) não pode criar um segundo
+    // convite em cima do que já saiu
+  }, [guildId, initialCode, semPermissao]);
 
   // sempre o endereço público (`WEB_URL`), nunca o `tauri.localhost` do desktop
   const url = useMemo(() => (code ? urlDeConvite(code) : ""), [code]);
@@ -307,7 +313,7 @@ export default function InviteModal({
           <p className="text-base font-semibold leading-5 text-text-strong">
             Ou, envie um convite do servidor a um amigo
           </p>
-          {!url && !podeConvidar ? (
+          {!url && semPermissao ? (
             // sem `CREATE_INVITE` e sem link pronto (não veio por `code`): nada
             // para copiar nem para editar, só o aviso — como o resto do app
             // resolve "sem permissão" (`ServerSettingsModal`).
@@ -344,7 +350,7 @@ export default function InviteModal({
                 {/* editar recria o convite (mesma chamada da criação): sem
                     `CREATE_INVITE` o link que já existe continua visível, só
                     deixa de ser editável */}
-                {podeConvidar && (
+                {!semPermissao && (
                   <>
                     <button
                       type="button"

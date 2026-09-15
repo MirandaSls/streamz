@@ -224,7 +224,10 @@ try {
   registrar(
     "f. mensagem SÓ com embed é aceita (era 50035 content[BASE_TYPE_REQUIRED])",
     !!so?.id,
-    `conteúdo achatado: ${JSON.stringify(so?.content)}`,
+    // o que se loga é o `content` que a API devolveu (vazio num envio só com
+    // embed: o texto achatado mora em `MessageBotPayload.flatText`, que não
+    // sai no REST) e quantos embeds voltaram na mensagem
+    `content devolvido: ${JSON.stringify(so?.content)} | embeds: ${so?.embeds?.length ?? 0}`,
   );
 } catch (e) {
   registrar("f. mensagem só com embed é aceita", false, `code=${codigoDoErro(e)} ${e.message}`);

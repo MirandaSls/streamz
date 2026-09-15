@@ -211,14 +211,17 @@ async function respostaDoBot(nav, criterio, ms, oQue, canalId) {
 
   // A publicação no canal de registro — quem fez, em quem, por quê, quando.
   //
-  // A asserção é sobre o **texto**, e não sobre os campos do embed, porque a
-  // API descarta os embeds (`interactions.service.ts`: "embeds descartados
-  // (N): F5") e recusa um corpo só com eles. Um bot que pusesse a informação
-  // só no embed publicaria uma mensagem vazia — foi o que a primeira execução
-  // desta prova mostrou, e é o que este passo protege.
+  // A asserção olha o `content` **e** o texto do embed juntos. Desde a onda 3
+  // a API guarda embeds e componentes (`MessageBotPayload`) e aceita mensagem
+  // só com embed, então a informação pode estar em qualquer um dos dois: o bot
+  // de moderação hoje manda os campos no texto ("**Quem:** …") e repete no
+  // embed. Ler só o `content` reprovaria um bot que migrasse para embed puro,
+  // e ler só o embed reprovaria o texto — o passo protege a informação chegar,
+  // não o lugar onde ela mora. O `textoDoEmbed` usa o nome do campo sem os
+  // dois-pontos, por isso "Quem:" só casa no `content`; o "Aviso" casa nos dois.
   try {
     const m = await respostaDoBot(dono, /spam repetido na prova/i, 20_000, "o registro publicado", canalDeRegistro.id);
-    const texto = m.content ?? "";
+    const texto = `${m.content ?? ""}\n${textoDoEmbed(m)}`;
     const campos = ["Quem:", "Em quem:", "Quando:", "Motivo:"].filter((c) => texto.includes(c));
     registrar(
       "4b. a ação é publicada no canal de registro, com os quatro campos",
