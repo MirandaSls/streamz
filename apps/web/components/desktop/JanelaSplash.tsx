@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import IconeAnimado from "@/components/ui/IconeAnimado";
-import { isTauri } from "@/lib/desktop";
+import { ehMacNoTauri, isTauri } from "@/lib/desktop";
 import {
   EVENTO_DE_ERRO_DA_SPLASH,
   JANELA_PRINCIPAL,
@@ -55,9 +55,10 @@ import {
  *
  * ## Sequência
  *
- * 1. mostra a janelinha no primeiro quadro (ela nasce `visible: false`: o
- *    WebView2 pinta um quadro branco antes do primeiro render, e num cartão de
- *    300×350 isso é um flash branco no meio da tela);
+ * 1. mostra a janelinha no primeiro quadro, com teto de 100ms (ela nasce
+ *    `visible: false`: o WebView2 pinta um quadro branco antes do primeiro
+ *    render, e num cartão de 300×350 isso é um flash branco no meio da tela; o
+ *    teto é do WebKit, que não entrega quadro a janela escondida);
  * 2. `check()` do plugin updater, com teto de {@link LIMITE_DA_CHECAGEM};
  * 3. sem atualização, erro de rede ou checagem estourada → mostra a principal e
  *    fecha. **Nunca prende**: atualização é conveniência;
@@ -68,7 +69,33 @@ import {
  *
  * O erro vira toast na janela principal (evento {@link EVENTO_DE_ERRO_DA_SPLASH}),
  * porque aqui não cabe explicação nenhuma e a janelinha some logo depois.
+ *
+ * ## macOS: cartão de canto reto
+ *
+ * Janela transparente no Mac exige `macOSPrivateApi`, que não está ligado (a
+ * feature que ele pede no `Cargo.toml` briga com o build do Windows). Sem ele o
+ * Tauri ignora o `transparent` e o WKWebView pinta o próprio fundo, branco:
+ * com o `html` transparente e o `rounded-md`, cada canto mostraria uma lasca
+ * branca de 6px. Por isso, no Mac, o cartão perde o raio e a página fica com
+ * o fundo do `globals.css` (o mesmo `bg-chat`), cobrindo a janela inteira; o
+ * `tauri.macos.conf.json` põe `transparent: false` e `backgroundColor` nessa
+ * cor.
+ *
+ * O `backgroundColor` **não** escurece o WKWebView antes do primeiro quadro: o
+ * que faria isso é o `drawsBackground = NO` do wry 0.55, que só compila com a
+ * feature `transparent` — a mesma que só entra com `macos-private-api`. Sem
+ * ela, a cor pinta a `NSWindow` (que o webview cobre) e o
+ * `underPageBackgroundColor` (a área da sobrerrolagem). Quem impede o quadro
+ * branco de aparecer é a janela nascer oculta e só ganhar `show()` depois do
+ * primeiro quadro (ou do teto, ver `primeiroQuadroOuTeto`) — no caso do teto,
+ * se o WebKit ainda não tiver pintado, o branco pode aparecer por um instante.
+ *
+ * Sombra não há: janela sem moldura no AppKit nasce com `hasShadow = NO`, e o
+ * tao só mexe nisso para desligar.
  */
+
+/** `useLayoutEffect` no cliente; no servidor (export estático) o React avisa. */
+const useEfeitoDeLeiaute = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 export default function JanelaSplash() {
   const [estado, setEstado] = useState<EstadoDaSplash>("verificando");
@@ -76,6 +103,10 @@ export default function JanelaSplash() {
   // o efeito abaixo baixa e instala; o StrictMode do `next dev` roda efeito
   // duas vezes e dois downloads do mesmo instalador seriam um estrago real
   const jaComecou = useRef(false);
+  // antes da pintura: a janela só aparece depois do primeiro quadro (ver
+  // `mostrarEstaJanela`), e até lá o canto já tem de estar certo
+  const [mac, setMac] = useState(false);
+  useEfeitoDeLeiaute(() => setMac(ehMacNoTauri()), []);
 
   useEffect(() => {
     if (jaComecou.current) return;
@@ -93,7 +124,7 @@ export default function JanelaSplash() {
       // sem moldura nativa, a janelinha só se move por aqui — e o Discord também
       // deixa arrastar a dele
       data-tauri-drag-region
-      className="fixed inset-0 select-none overflow-hidden rounded-md bg-chat"
+      className={`fixed inset-0 select-none overflow-hidden bg-chat ${mac ? "" : "rounded-md"}`}
     >
       {/*
         A janela é `transparent: true` para o canto arredondado deixar ver o que
@@ -101,9 +132,9 @@ export default function JanelaSplash() {
         globals.css e cobriria os cantos com um quadrado — daí a regra aqui, que
         vale desde o primeiro quadro (nada de esperar o JS). Se o WebView2 do
         usuário não fizer janela transparente, o resultado é o mesmo cartão com
-        canto reto: nada quebra.
+        canto reto: nada quebra. No Mac a regra sai (ver o topo do arquivo).
       */}
-      <style>{"html,body{background:transparent}"}</style>
+      {!mac && <style>{"html,body{background:transparent}"}</style>}
 
       <div className="absolute left-1/2 top-[101px] -translate-x-1/2">
         <IconeAnimado size={96} />
@@ -205,7 +236,7 @@ async function percorrer(
  * apareceria por um instante é um retângulo branco de 300×350 no meio da tela.
  */
 async function mostrarEstaJanela(): Promise<void> {
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await primeiroQuadroOuTeto();
   try {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
     const janela = getCurrentWindow();
@@ -214,6 +245,41 @@ async function mostrarEstaJanela(): Promise<void> {
   } catch {
     // fora do Tauri (ou sem a permissão) não há janela para mostrar
   }
+}
+
+/**
+ * Quanto esperar pelo primeiro quadro antes de mostrar a janela assim mesmo
+ * (ms). Folgado para o WebView2, que entrega o `requestAnimationFrame` em ~16ms
+ * e por isso nunca chega aqui.
+ */
+const TETO_DO_PRIMEIRO_QUADRO = 100;
+
+/**
+ * Resolve no primeiro `requestAnimationFrame` **ou** no teto, o que vier antes.
+ *
+ * O rAF sozinho prendia o app no WebKit. A janela nasce `visible: false`, e
+ * para o WebKit página em janela invisível é página escondida: no WKWebView do
+ * Mac (`isViewVisible` falso → `Page::setIsVisibleInternal(false)` →
+ * `suspendScriptedAnimations`) e no WebKitGTK (widget não mapeado) o rAF fica
+ * suspenso até a janela aparecer — e quem a faria aparecer é justamente este
+ * rAF. Resultado: splash nunca visível, `main` nunca mostrada, e no modo
+ * `atualizar` a principal já escondida, ou seja, nada na tela.
+ *
+ * O teto não muda o Windows: lá o WebView2 entrega o rAF com a janela
+ * escondida (é o comportamento de hoje, que funciona), ele chega bem antes dos
+ * 100ms e ganha a corrida. Se um dia não chegar, o pior caso é o quadro branco
+ * que o rAF evitava — nunca um app que não abre. O teto é um `setTimeout`, e
+ * não outro evento de pintura, porque timer em página escondida atrasa
+ * (o WebKit alinha os timers de página oculta), mas não para.
+ */
+function primeiroQuadroOuTeto(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const relogio = window.setTimeout(resolve, TETO_DO_PRIMEIRO_QUADRO);
+    requestAnimationFrame(() => {
+      window.clearTimeout(relogio);
+      resolve();
+    });
+  });
 }
 
 /**
