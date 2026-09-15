@@ -31,6 +31,12 @@
  *   aberto, `chat.gateway.ts` `markOnline`), então este processo abre um
  *   socket por membro marcado `conectar` no manifesto e põe dois deles no canal
  *   de voz. O dono é o navegador.
+ * - **Bot figurante**: a semente não deixa bot rodando, e botão, modal e
+ *   autocomplete de bot só existem com alguém respondendo à interação. Nas
+ *   telas marcadas `bot`, este processo abre uma sessão no gateway compatível
+ *   (`/gateway`) com o token do Pixel e responde ao `INTERACTION_CREATE` com o
+ *   que a semente guardou em `aplicativo.respostas` (callback 9 e 8). Só
+ *   nessas telas: com a sessão aberta o Pixel fica online na lista de membros.
  * - **Uma tela que falha não derruba as outras**: o erro vai para o resumo e a
  *   tela como estava vira `<id>.falha.png`, para depurar olhando.
  *
@@ -86,6 +92,18 @@ const exigir = createRequire(import.meta.url);
 const pw = exigir(process.env.PW_CORE || "playwright-core");
 const { chromium, devices } = pw;
 const { io } = createRequire(join(RAIZ, "apps/web/package.json"))("socket.io-client");
+/**
+ * O cliente do gateway compatível do bot figurante: o `ws` que a API já tem
+ * instalado (é o mesmo pacote do lado do servidor, `gateway/servidor.ts`); o
+ * `WebSocket` global do Node fica de reserva.
+ */
+const ClienteWs = (() => {
+  try {
+    return createRequire(join(RAIZ, "apps/api/package.json"))("ws");
+  } catch {
+    return globalThis.WebSocket ?? null;
+  }
+})();
 
 function executavelDoChromium() {
   try {
@@ -209,13 +227,17 @@ async function abrirCanal(page, chave) {
   await rede(page);
 }
 
-/** Leva a mensagem ao meio da lista — o que está acima do fim não aparece sozinho. */
-async function centralizar(page, chaveDaMensagem) {
+/**
+ * Leva a mensagem ao meio da lista — o que está acima do fim não aparece
+ * sozinho. `bloco: "start"` a alinha no topo, para mensagem mais alta que meia
+ * tela (a v2 do Pixel) sair inteira com o que vem logo depois dela.
+ */
+async function centralizar(page, chaveDaMensagem, bloco = "center") {
   const id = s.mensagens[chaveDaMensagem];
-  if (!id) throw new Error(`mensagem "${chaveDaMensagem}" não está no manifesto`);
+  if (!id) throw new Error(`mensagem "${chaveDaMensagem}" não está no manifesto (semente antiga? rode \`bancada.sh semear\`)`);
   const alvo = page.locator(`#mensagem-${id}`);
   await alvo.waitFor({ timeout: 20_000 });
-  await alvo.evaluate((el) => el.scrollIntoView({ block: "center" }));
+  await alvo.evaluate((el, b) => el.scrollIntoView({ block: b }), bloco);
   await dormir(500);
   return alvo;
 }
@@ -249,27 +271,35 @@ async function abrirConfigDoServidor(page, aba) {
   await rede(page);
 }
 
-async function digitarNoComposer(page, texto) {
-  const campo = page.locator(`textarea[aria-label="Mensagem para #${s.canais.geral.nome}"]`);
-  await campo.click();
+const campoDoComposer = (page, canal = "geral") =>
+  page.locator(`textarea[aria-label="Mensagem para #${s.canais[canal].nome}"]`);
+
+async function digitarNoComposer(page, texto, canal = "geral") {
+  const campo = campoDoComposer(page, canal);
+  await acionar(page, campo);
   await campo.pressSequentially(texto);
   await page.locator('[role="listbox"]').first().waitFor();
 }
 
 /**
- * Troca o tema pelo mesmo lugar em que o app o guarda (o `persist` da store de
- * configurações) e recarrega: é o caminho de quem abre o app já em Ash/Onyx,
- * que é também o que o script do `<head>` precisa pintar sem piscar o Dark.
+ * Muda preferências pelo mesmo lugar em que o app as guarda (o `persist` da
+ * store de configurações, `stores/settings.ts`) e recarrega: é o caminho de
+ * quem abre o app já em Ash/Onyx ou no modo compacto, que é também o que o
+ * script do `<head>` precisa pintar sem piscar o padrão.
  */
-async function escolherTema(page, tema) {
-  await page.evaluate((t) => {
+async function mudarConfiguracoes(page, valores) {
+  await page.evaluate((v) => {
     const cru = localStorage.getItem("settings");
     const salvo = cru ? JSON.parse(cru) : { state: {}, version: 4 };
-    salvo.state = { ...(salvo.state ?? {}), theme: t };
+    salvo.state = { ...(salvo.state ?? {}), ...v };
     localStorage.setItem("settings", JSON.stringify(salvo));
-  }, tema);
+  }, valores);
   await page.reload();
   await esperarShell(page);
+}
+
+async function escolherTema(page, tema) {
+  await mudarConfiguracoes(page, { theme: tema });
 }
 
 async function perfilDe(page, chave) {
@@ -312,11 +342,137 @@ async function entrarNaVoz(page) {
   await rede(page);
 }
 
+// ── bot figurante ───────────────────────────────────────────────────────────
+
+/** As respostas que a semente guardou para o Pixel (`RESPOSTAS_DO_BOT` do `semente.mjs`). */
+function respostasDoBot() {
+  const r = s.aplicativo?.respostas;
+  if (!r) throw new Error("o manifesto não tem aplicativo.respostas (semente antiga? rode `bancada.sh semear`)");
+  return r;
+}
+
+/** As escolhas do autocomplete de `comando`, filtradas pelo que se digitou — o que um bot de verdade faria. */
+function escolhasDoAutocomplete(comando, termo) {
+  const todas = respostasDoBot().autocomplete?.[comando] ?? [];
+  const q = String(termo ?? "").trim().toLowerCase();
+  const filtradas = q ? todas.filter((c) => c.name.toLowerCase().includes(q)) : todas;
+  // até 25: o teto do Discord, que a API recusa acima disso
+  return filtradas.slice(0, 25);
+}
+
+/**
+ * O token do Pixel: o do manifesto; sem ele (manifesto de antes deste campo),
+ * um novo pela rota do dono (`POST /applications/:id/token`), que revoga o
+ * anterior — sem efeito fora da bancada, que restaura o banco a cada passeio.
+ */
+async function tokenDoBot() {
+  if (s.aplicativo?.token) return s.aplicativo.token;
+  const acesso = await loginRest(s.dono);
+  const r = await fetch(`${API}/api/applications/${s.aplicativo.id}/token`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${acesso}` },
+  });
+  if (!r.ok) throw new Error(`token do bot: HTTP ${r.status}`);
+  return (await r.json()).token;
+}
+
+/**
+ * Sessão de gateway do Pixel, do `HELLO` ao `READY`, respondendo às interações:
+ *
+ * - componente (3) cujo `custom_id` tem modal na semente → callback 9 (MODAL);
+ * - outro componente → callback 6 (DEFERRED_UPDATE_MESSAGE): sem resposta em 3 s
+ *   a web pintaria "a interação falhou" (`PRAZO_DA_RESPOSTA_DO_BOT_MS`);
+ * - autocomplete (4) → callback 8 com `escolhasDoAutocomplete`.
+ *
+ * `INTERACTION_CREATE` não depende de intent (`interactions.service.ts`,
+ * `despachar`), por isso o IDENTIFY vai com `intents: 0`.
+ */
+async function subirBotFigurante() {
+  respostasDoBot();
+  if (!ClienteWs) throw new Error("bot figurante: sem cliente WebSocket (nem o `ws` da API nem o global)");
+  const token = await tokenDoBot();
+  const sock = new ClienteWs(`${API.replace(/^http/, "ws")}/gateway?v=10&encoding=json`);
+  let seq = null;
+  let relogio = null;
+  const enviar = (quadro) => {
+    if (sock.readyState === 1) sock.send(JSON.stringify(quadro));
+  };
+
+  async function responder(i) {
+    const modal = i.type === 3 ? respostasDoBot().modais?.[i.data?.custom_id] : undefined;
+    let corpo = null;
+    if (modal) corpo = { type: 9, data: modal };
+    else if (i.type === 3) corpo = { type: 6 };
+    else if (i.type === 4) {
+      const foco = (i.data?.options ?? []).find((o) => o.focused);
+      corpo = { type: 8, data: { choices: escolhasDoAutocomplete(i.data?.name, foco?.value) } };
+    }
+    if (!corpo) return;
+    try {
+      const r = await fetch(`${API}/api/v10/interactions/${i.id}/${i.token}/callback`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(corpo),
+      });
+      if (!r.ok) console.warn(`! bot figurante: callback ${corpo.type} → HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
+    } catch (e) {
+      console.warn(`! bot figurante: callback ${corpo.type} falhou (${e.message})`);
+    }
+  }
+
+  const fechar = () => {
+    clearInterval(relogio);
+    try {
+      sock.close();
+    } catch {
+      // já fechado
+    }
+  };
+
+  const conectado = new Promise((ok, falha) => {
+    const limite = setTimeout(() => falha(new Error("bot figurante: sem READY em 15 s")), 15_000);
+    const desistir = (motivo) => {
+      clearTimeout(limite);
+      clearInterval(relogio);
+      falha(new Error(`bot figurante: ${motivo}`));
+    };
+    sock.addEventListener("error", (e) => desistir(e?.message ?? "erro no WebSocket"));
+    sock.addEventListener("close", (e) => desistir(`o gateway fechou (${e?.code ?? "?"} ${e?.reason ?? ""})`));
+    sock.addEventListener("message", (ev) => {
+      let quadro;
+      try {
+        quadro = JSON.parse(String(ev.data));
+      } catch {
+        return; // quadro binário: só com compress, que não pedimos
+      }
+      if (typeof quadro.s === "number") seq = quadro.s;
+      if (quadro.op === 10) {
+        relogio = setInterval(() => enviar({ op: 1, d: seq }), quadro.d?.heartbeat_interval ?? 41_250);
+        enviar({ op: 2, d: { token, intents: 0, properties: { os: "linux", browser: "paridade", device: "paridade" } } });
+      } else if (quadro.op === 0 && quadro.t === "READY") {
+        clearTimeout(limite);
+        ok();
+      } else if (quadro.op === 0 && quadro.t === "INTERACTION_CREATE") {
+        void responder(quadro.d ?? {});
+      }
+    });
+  });
+  try {
+    await conectado;
+  } catch (e) {
+    // sem READY a sessão não serve, e não pode ficar aberta até o fim do passeio
+    fechar();
+    throw e;
+  }
+  return { fechar };
+}
+
 // ── o mapa: tela → passos ───────────────────────────────────────────────────
 //
 // `logado: false` = contexto sem login. `mouse: true` = a foto quer o ponteiro
 // onde o passo o deixou (hover, tooltip). `voz: true` = o passo entrou em voz,
-// e a faxina tira o dono da sala antes da próxima tela.
+// e a faxina tira o dono da sala antes da próxima tela. `bot: true` = o bot
+// figurante fica conectado durante a tela (ver o cabeçalho).
 
 const PASSOS = {
   desktop: {
@@ -509,8 +665,14 @@ const PASSOS = {
       },
     },
     "voz-canal": {
+      // conectado, como a referência mapeada (`101842`): nome do canal claro,
+      // cronômetro e "Convidar para voz". Sem entrar, "Geral" saía cinza
+      // (#81828a em x=91–108, y=463 da captura de 2026-09-14) e a tela não
+      // era comparável.
+      voz: true,
       async fazer(page) {
         await abrirServidor(page);
+        await entrarNaVoz(page);
         await abrirCanal(page, "geral");
         // os figurantes em voz aparecem sob o canal de voz, na coluna de canais
         await page
@@ -564,8 +726,9 @@ const PASSOS = {
     },
     "modal-criar-servidor": {
       async fazer(page) {
+        // o "+" da rail abre o modal direto, como no Discord (rodada de
+        // correção); antes passava por um menu com "Criar um servidor"
         await page.locator('button[aria-label="Adicionar um servidor"]').click();
-        await page.getByRole("menuitem", { name: /Criar um servidor/ }).click();
         await page.locator('[role="dialog"]').first().waitFor();
       },
     },
@@ -649,6 +812,56 @@ const PASSOS = {
         await abrirCanal(page, "geral");
       },
     },
+    "config-acessibilidade": {
+      async fazer(page) {
+        await ir(page, "/app?settings=acessibilidade");
+        await esperarShell(page);
+        await page.locator('[role="dialog"]').first().waitFor();
+      },
+    },
+    "mensagem-bot-v2": {
+      async fazer(page) {
+        await abrirServidor(page);
+        await abrirCanal(page, "bots");
+        // no topo, e não no meio: a v2 passa de meia tela, e centralizada ela
+        // cortava em cima; abaixo dela vem o embed sem cor (`bot-sem-cor`)
+        await centralizar(page, "bot-v2", "start");
+      },
+    },
+    "mensagem-bot-compacta": {
+      async fazer(page) {
+        await mudarConfiguracoes(page, { compactMode: true });
+        await abrirServidor(page);
+        await abrirCanal(page, "bots");
+        // a mesma mensagem da `mensagem-bot`, para as duas fotos se compararem
+        await centralizar(page, "bot");
+      },
+    },
+    "select-de-bot-aberto": {
+      async fazer(page) {
+        await abrirServidor(page);
+        await abrirCanal(page, "bots");
+        const msg = await centralizar(page, "bot-componentes");
+        // o placeholder é o rótulo do gatilho e da lista (`SelectDeBot.tsx`);
+        // o texto vem da mensagem `bot-componentes` da semente
+        await msg.locator('[role="combobox"][aria-label="Escolha um serviço"]').first().click();
+        await page.locator('ul[role="listbox"][aria-label="Escolha um serviço"]').first().waitFor();
+        await dormir(300);
+      },
+    },
+    "modal-de-bot": {
+      bot: true,
+      async fazer(page) {
+        await abrirServidor(page);
+        await abrirCanal(page, "bots");
+        const msg = await centralizar(page, "bot-componentes");
+        await msg.getByRole("button", { name: "Detalhes", exact: true }).first().click();
+        const titulo = respostasDoBot().modais["status:detalhes"].title;
+        await page.locator('[role="dialog"]').filter({ hasText: titulo }).first().waitFor({ timeout: 15_000 });
+        await rede(page);
+        await dormir(400);
+      },
+    },
   },
 
   celular: {
@@ -682,6 +895,9 @@ const PASSOS = {
         await abrirServidor(page);
         await abrirCanal(page, "geral");
         const alvo = await centralizar(page, "contraste");
+        // a lista ainda assenta (imagens e prévias chegando) logo depois de
+        // centralizar; tocar antes disso acerta outra coisa ou nada
+        await dormir(1_000);
         await toqueLongo(page, alvo);
         await page.locator('[role="menu"]').first().waitFor();
       },
@@ -788,6 +1004,43 @@ const PASSOS = {
         await page.locator('nav[aria-label="Seções"] button').filter({ hasText: "Você" }).first().tap();
         await page.getByRole("button", { name: "Configurações do usuário" }).first().tap();
         await dormir(800);
+      },
+    },
+    "m-mensagem-bot": {
+      async fazer(page) {
+        await abrirServidor(page);
+        await abrirCanal(page, "bots");
+        await centralizar(page, "bot");
+      },
+    },
+    "m-select-de-bot": {
+      async fazer(page) {
+        await abrirServidor(page);
+        await abrirCanal(page, "bots");
+        // o select de usuário múltiplo da `bot-sem-cor`: é o que abre a folha
+        // com título, Concluir e busca juntos (ver a semente)
+        const msg = await centralizar(page, "bot-sem-cor");
+        await msg.locator('[role="combobox"][aria-label="Quem revisa?"]').first().tap();
+        await page.locator('ul[role="listbox"][aria-label="Quem revisa?"]').first().waitFor();
+        // a folha sobe animada
+        await dormir(600);
+      },
+    },
+    "m-autocomplete-de-bot": {
+      bot: true,
+      async fazer(page) {
+        await abrirServidor(page);
+        await abrirCanal(page, "bots");
+        const campo = campoDoComposer(page, "bots");
+        await acionar(page, campo);
+        // em duas partes: o espaço fecha o nome e já pede as sugestões da opção
+        // (sem espera); o termo pede de novo depois dos 250 ms do composer
+        await campo.pressSequentially("/buscar ");
+        await campo.pressSequentially("lo", { delay: 40 });
+        const primeira = escolhasDoAutocomplete("buscar", "lo")[0];
+        if (!primeira) throw new Error("a semente não tem escolhas de autocomplete para /buscar");
+        await page.locator('[role="option"]').filter({ hasText: primeira.name }).first().waitFor({ timeout: 15_000 });
+        await dormir(400);
       },
     },
   },
@@ -1076,6 +1329,7 @@ async function principal() {
         continue;
       }
 
+      let bot = null;
       const ctx = await browser.newContext(opcoesDoContexto(tela.plataforma));
       if (RELOGIO) await ctx.clock.setFixedTime(new Date(RELOGIO));
       await ctx.addInitScript(scriptInicial);
@@ -1086,6 +1340,7 @@ async function principal() {
 
       try {
         const execucao = (async () => {
+          if (passo.bot) bot = await subirBotFigurante();
           if (passo.logado !== false) await entrar(page);
           await passo.fazer(page);
           await foto(page, arquivo, { mouse: passo.mouse });
@@ -1106,6 +1361,7 @@ async function principal() {
         await page.screenshot({ path: falha, animations: "disabled" }).catch(() => {});
       } finally {
         await ctx.close().catch(() => {});
+        bot?.fechar();
         // a queda do socket do navegador só agenda a saída da voz (carência de
         // reconexão); o `voice.leave` pelo socket auxiliar a efetiva agora, e a
         // próxima tela não herda o dono dentro da sala

@@ -41,7 +41,12 @@
     { "id": "download", "onda": 8, "o_que": "página de download pública, sem login" },
     { "id": "download-senha", "onda": 8, "o_que": "página de download com a etapa da senha aberta" },
     { "id": "tema-ash", "onda": 9, "o_que": "canal de texto no tema Ash" },
-    { "id": "tema-onyx", "onda": 9, "o_que": "canal de texto no tema Onyx" }
+    { "id": "tema-onyx", "onda": 9, "o_que": "canal de texto no tema Onyx" },
+    { "id": "config-acessibilidade", "onda": 6, "o_que": "Configurações de usuário > Acessibilidade" },
+    { "id": "mensagem-bot-v2", "onda": 3, "o_que": "#bots alinhado na mensagem Components v2 do Pixel, com o embed sem cor e o select de usuário logo abaixo" },
+    { "id": "mensagem-bot-compacta", "onda": 3, "o_que": "a mesma mensagem de bot com embed rico e botões, no modo compacto" },
+    { "id": "select-de-bot-aberto", "onda": 3, "o_que": "select de texto da mensagem de bot aberto (a lista deve ter a largura do gatilho)" },
+    { "id": "modal-de-bot", "onda": 3, "o_que": "modal aberto pelo bot (callback 9) ao clicar em Detalhes: título com o avatar do bot e o aviso" }
   ]},
   "celular": { "largura": 390, "altura": 844, "telas": [
     { "id": "m-inicio", "onda": 8, "o_que": "aba Início: rail + canais do servidor" },
@@ -58,6 +63,9 @@
     { "id": "m-detalhes-canal", "onda": 8, "o_que": "detalhes do canal (título do cabeçalho), aba de membros" },
     { "id": "m-detalhes-fixadas", "onda": 8, "o_que": "detalhes do canal, aba Fixadas" },
     { "id": "m-busca", "onda": 8, "o_que": "busca no canal pelo celular" },
-    { "id": "m-config", "onda": 8, "o_que": "configurações do usuário no celular (lista de seções)" }
+    { "id": "m-config", "onda": 8, "o_que": "configurações do usuário no celular (lista de seções)" },
+    { "id": "m-mensagem-bot", "onda": 8, "o_que": "mensagem de bot com embed rico e botões no celular" },
+    { "id": "m-select-de-bot", "onda": 8, "o_que": "select de usuário (múltiplo) da mensagem de bot aberto em folha: título, Concluir e busca fixa" },
+    { "id": "m-autocomplete-de-bot", "onda": 8, "o_que": "composer com /buscar e a lista de sugestões que o bot devolveu (callback 8) aberta" }
   ]}
 }

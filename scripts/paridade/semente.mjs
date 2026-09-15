@@ -301,7 +301,67 @@ const COMANDOS_DO_BOT = [
       },
     ],
   },
+  // opção com `autocomplete: true`: quem sugere é o bot (interação tipo 4,
+  // callback 8). A tela `m-autocomplete-de-bot` digita `/buscar lo` e o bot
+  // figurante do `capturar.mjs` responde com `RESPOSTAS_DO_BOT.autocomplete`
+  {
+    name: "buscar",
+    description: "Procura uma música para tocar",
+    options: [{ type: 3, name: "musica", description: "Comece a digitar o nome", required: true, autocomplete: true }],
+  },
 ];
+
+/**
+ * O que o Pixel **responde** quando alguém interage — a semente não tem bot
+ * rodando, então quem responde durante o passeio é o bot figurante do
+ * `capturar.mjs` (uma sessão no gateway compatível com o token do manifesto).
+ * Os dados moram aqui, ao lado das mensagens e dos comandos a que respondem, e
+ * vão para o manifesto em `aplicativo.respostas`.
+ *
+ * - `modais`: `custom_id` do botão → `data` do callback 9 (MODAL). "Detalhes"
+ *   (`status:detalhes`, da mensagem `bot-componentes`) abre o modal da tela
+ *   `modal-de-bot`: `Label` com texto curto e com parágrafo, a forma nova do
+ *   Discord.
+ * - `autocomplete`: nome do comando → as escolhas do callback 8; o figurante
+ *   filtra pelo texto da opção em foco.
+ */
+const RESPOSTAS_DO_BOT = {
+  modais: {
+    "status:detalhes": {
+      custom_id: "status:detalhes:modal",
+      title: "Detalhes do serviço",
+      components: [
+        {
+          type: 18,
+          label: "Serviço",
+          description: "Qual serviço você quer acompanhar",
+          component: { type: 4, custom_id: "servico", style: 1, placeholder: "API, Web ou Voz", required: true, max_length: 20 },
+        },
+        {
+          type: 18,
+          label: "Observação",
+          component: {
+            type: 4,
+            custom_id: "observacao",
+            style: 2,
+            placeholder: "Conte o que você percebeu",
+            required: false,
+            max_length: 400,
+          },
+        },
+      ],
+    },
+  },
+  autocomplete: {
+    buscar: [
+      { name: "Lo-fi para estudar", value: "lofi-estudar" },
+      { name: "Lo-fi da madrugada", value: "lofi-madrugada" },
+      { name: "Lofi Girl — beats to relax", value: "lofi-girl" },
+      { name: "Balão (lo-fi remix)", value: "balao-lofi" },
+      { name: "Solo de guitarra", value: "solo-guitarra" },
+    ],
+  },
+};
 
 /**
  * Os anexos. A URL é um arquivo estático que a web da bancada já serve
@@ -479,7 +539,7 @@ const ROTEIROS_CANAIS = {
  * (embeds, componentes e flags) e a web as desenha como o Discord; antes o embed
  * era achatado em texto e os componentes, descartados.
  *
- * As três cobrem o que os cartões 3b–3g desenham (ver `docs/CONTRATO-ONDA-3.md`):
+ * As quatro cobrem o que os cartões 3b–3g desenham (ver `docs/CONTRATO-ONDA-3.md`):
  *
  * 1. `bot` — embed rico **completo**: autor com ícone, título com link,
  *    descrição com markdown, cor, 3 campos inline + 1 não inline, imagem,
@@ -492,6 +552,12 @@ const ROTEIROS_CANAIS = {
  *    thumbnail, text display, separator, media gallery e file. O file referencia
  *    um anexo da própria mensagem por `attachment://`, que é a única forma que o
  *    Discord aceita para ele.
+ * 4. `bot-sem-cor` — embed **sem `color`**, para medir a borda esquerda padrão
+ *    (`EmbedDeBot.tsx`: `border-l-border-normal` contra `border-border-subtle`)
+ *    logo abaixo do container v2, que tem cor; e um select de usuário múltiplo
+ *    (`type` 5), o único jeito de a folha do celular mostrar título, Concluir
+ *    e busca juntos (`SelectDeBot.tsx`: a busca é só dos tipos 5–8, o título e
+ *    o Concluir só do múltiplo).
  *
  * As imagens são arquivos que a web da bancada já serve (`apps/web/public/`):
  * nada sai da máquina e a foto é sempre a mesma.
@@ -604,6 +670,34 @@ const MENSAGENS_DO_BOT = [
           ],
         },
         { type: 10, content: "-# Gerado pelo Pixel" },
+      ],
+    },
+  },
+  {
+    h: "15:33",
+    k: "bot-sem-cor",
+    corpo: {
+      // sem `color` de propósito (ver o item 4 do cabeçalho)
+      embeds: [
+        {
+          title: "Fila de revisão",
+          description: "3 telas esperando revisão. Escolha até três pessoas para revisar.",
+          footer: { text: "Pixel • revisão" },
+        },
+      ],
+      components: [
+        {
+          type: 1,
+          components: [
+            {
+              type: 5,
+              custom_id: "revisao:pessoas",
+              placeholder: "Quem revisa?",
+              min_values: 1,
+              max_values: 3,
+            },
+          ],
+        },
       ],
     },
   },
@@ -1423,7 +1517,10 @@ function escreverManifesto() {
     canais: c.canais,
     cargos: c.cargos,
     conversas: c.conversas,
-    aplicativo: c.aplicativo,
+    // o token vai junto (a bancada é local, como as senhas acima): é com ele que
+    // o bot figurante do `capturar.mjs` abre a sessão no gateway e responde às
+    // interações com `respostas`
+    aplicativo: { ...c.aplicativo, token: tokenDoBot, respostas: RESPOSTAS_DO_BOT },
     mensagens: c.mensagens,
   };
   mkdirSync(dirname(MANIFESTO), { recursive: true });
