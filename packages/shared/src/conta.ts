@@ -48,7 +48,7 @@ export interface NotificationSetting {
 }
 
 /** Durações do "silenciar por…" (minutos). `null` = até eu reativar. */
-export const MUTE_PRESETS_MINUTES: readonly number[] = [15, 60, 8 * 60, 24 * 60];
+export const MUTE_PRESETS_MINUTES: readonly number[] = [15, 60, 3 * 60, 8 * 60, 24 * 60];
 
 /** true se o escopo está silenciado no instante `now`. */
 export function isMuted(

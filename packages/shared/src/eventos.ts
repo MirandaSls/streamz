@@ -197,6 +197,17 @@ export const WS_EVENTS = {
   INTERACTION_MODAL: "interaction.modal",
   /** Sugestões para a opção em foco (callback 8). Payload: `AutocompleteDeBotEvent`. */
   INTERACTION_AUTOCOMPLETE: "interaction.autocomplete",
+  // ── menus de contexto ── todos para a sala `user:<eu>` (outras abas e o
+  // desktop do mesmo usuário); nenhum sai para o outro lado. Ver
+  // `docs/CONTRATO-MENUS.md`. Payloads em `menus.ts`.
+  /** Fixei/desafixei uma conversa. Payload: `ConversaFixadaEvent`. */
+  DM_PIN_UPDATED: "dm.pinUpdated",
+  /** Minha nota sobre alguém mudou. Payload: `NotaDeUsuario`. */
+  USER_NOTE_UPDATED: "user.noteUpdated",
+  /** Meu apelido de amigo para alguém mudou. Payload: `ApelidoDeAmigoEvent`. */
+  FRIEND_NICKNAME_UPDATED: "friend.nicknameUpdated",
+  /** Ignorei/deixei de ignorar alguém. Payload: `UsuarioIgnoradoEvent`. */
+  USER_IGNORED: "user.ignored",
 } as const;
 
 
@@ -360,6 +371,12 @@ export interface MemberUpdatedEvent {
   roleIds?: string[];
   /** h-moderacao: fim do castigo (ISO) — null = castigo removido. */
   timeoutUntil?: string | null;
+  /**
+   * ── menus de contexto ── apelido no servidor depois da mudança. Ausente =
+   * o apelido não mudou; `null` = apelido removido. Quando só o apelido muda,
+   * `role` vem com o papel atual (o campo é obrigatório).
+   */
+  nickname?: string | null;
 }
 
 /** Alguém entrou no servidor (convite). */

@@ -42,6 +42,14 @@ export interface FriendLists {
   outgoing: FriendRequest[];
   /** quem eu bloqueei. */
   blocked: PublicUser[];
+  // ── menus de contexto ── (a API sempre preenche; opcionais por payload antigo)
+  /**
+   * Meus apelidos de amigo, por id do amigo. Só os que existem — amigo sem
+   * apelido não tem chave.
+   */
+  apelidos?: Record<string, string>;
+  /** quem eu ignorei (distinto de `blocked`; um usuário pode estar nos dois). */
+  ignored?: PublicUser[];
 }
 
 /**
@@ -201,6 +209,15 @@ export interface UserProfile {
    * cargos coloridos entram aqui quando o agente C entregar `Permission`.
    */
   guildRole: MemberRole | null;
+  // ── menus de contexto ── o que só o espectador vê (a API sempre preenche)
+  /** a minha nota sobre esta pessoa; null = sem nota (e sempre null em `self`). */
+  nota?: string | null;
+  /** o apelido de amigo que eu dei; null = sem apelido ou não é amigo. */
+  apelidoDeAmigo?: string | null;
+  /** eu ignoro esta pessoa. */
+  ignorado?: boolean;
+  /** apelido dela no servidor de `?guildId=` (null fora desse contexto). */
+  nicknameNoServidor?: string | null;
 }
 
 // ── Presença rica ────────────────────────────────────────────
