@@ -22,6 +22,7 @@ import {
   type ChannelDeletedEvent,
   type ChannelOverridesEvent,
   type ApelidoDeAmigoEvent,
+  type ConversaFixadaEvent,
   type EmojiUpdatedEvent,
   type FriendAcceptedEvent,
   type FriendRemovedEvent,
@@ -238,11 +239,18 @@ export function useRealtime(currentUserId?: string): void {
 
       on<MemberUpdatedEvent>(
         WS_EVENTS.MEMBER_UPDATED,
-        ({ guildId, userId, role, roleIds, timeoutUntil }) => {
-          useGuilds.getState().handleMemberUpdated(guildId, userId, role, roleIds, timeoutUntil);
+        ({ guildId, userId, role, roleIds, timeoutUntil, nickname }) => {
+          useGuilds
+            .getState()
+            .handleMemberUpdated(guildId, userId, role, roleIds, timeoutUntil, nickname);
           // h-moderacao: o castigo chega por aqui — é o que troca o composer pelo aviso
           if (userId === currentUserId && timeoutUntil !== undefined) {
             useModeration.getState().applyTimeout(guildId, userId, timeoutUntil);
+          }
+          // ── menus de contexto ── meu apelido neste servidor mudou por outra
+          // aba/dispositivo (ou é o eco da minha própria edição)
+          if (userId === currentUserId && nickname !== undefined) {
+            useModeration.getState().applyNickname(guildId, nickname);
           }
           // evento de castigo não fala de papel nem de cargo: nada a recarregar
           if (userId === currentUserId && timeoutUntil === undefined) {
@@ -384,6 +392,9 @@ export function useRealtime(currentUserId?: string): void {
       }),
       on<UsuarioIgnoradoEvent>(WS_EVENTS.USER_IGNORED, (evento) => {
         useFriends.getState().handleIgnored(evento);
+      }),
+      on<ConversaFixadaEvent>(WS_EVENTS.DM_PIN_UPDATED, (evento) => {
+        useDMs.getState().handleDmPinUpdated(evento);
       }),
 
       // ── g-emojis-midia ──
@@ -603,7 +614,11 @@ function onMessageArrived(message: Message, currentUserId?: string) {
   // "@ ligado" — a regra é a do contrato, a mesma que a API conta
   const meusCargos =
     useGuilds.getState().members.find((m) => m.user.id === me?.id)?.roleIds ?? [];
-  const mention = !mine && !!me && mentionsMe(message, { ...me, roleIds: meusCargos });
+  // usuário ignorado: a mensagem entra na conversa (recolhida), mas não conta
+  // como menção nem notifica — é o que "Ignorar" promete no Discord
+  const ignorado = !mine && useFriends.getState().estaIgnorado(message.author.id);
+  const mention =
+    !mine && !ignorado && !!me && mentionsMe(message, { ...me, roleIds: meusCargos });
   // "na tela" = a interface está **mostrando** este canal (modo de visão,
   // página Amigos, conversa/canal selecionado — ver `lib/na-tela.ts`) numa
   // janela visível **e com foco**: atrás de outro app, ou com a conversa
@@ -637,7 +652,7 @@ function onMessageArrived(message: Message, currentUserId?: string) {
     }
   }
 
-  if (!mine && !naTela) notifyIfAway(message, mention);
+  if (!mine && !ignorado && !naTela) notifyIfAway(message, mention);
   // ── e-configuracoes ── contador de menções no ícone do app
   atualizarContadorNoIcone();
 }

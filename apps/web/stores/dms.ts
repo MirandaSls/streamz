@@ -1,9 +1,11 @@
 import { create } from "zustand";
 import {
+  compararConversas,
   displayNameOf,
   isDirectChannel,
   isGroupChannel,
   previaDaMensagem,
+  type ConversaFixadaEvent,
   type DMChannelView,
   type Message,
   type PreviaDeMensagem,
@@ -66,6 +68,22 @@ interface DMsState {
   /** Aplica a conversa atualizada que chegou por `channel.updated`. */
   handleUpdated: (dm: DMChannelView) => void;
   markRead: (channelId: string) => Promise<void>;
+  // ── menus de contexto ── (docs/CONTRATO-MENUS.md §1)
+  /**
+   * Fixa a conversa no topo da lista de Mensagens diretas. Otimista: a linha
+   * sobe na hora, e desfaz (com toast) se a API recusar. Idempotente do lado
+   * do servidor — chamar já fixada não faz nada de mal.
+   */
+  fixar: (channelId: string) => Promise<void>;
+  /** Desafixa (mesmas garantias de `fixar`). */
+  desafixar: (channelId: string) => Promise<void>;
+  /**
+   * `dm.pinUpdated`: eu fixei/desafixei esta conversa em **outra** conexão da
+   * minha conta — ou é o eco da própria ação, que `fixar`/`desafixar` já
+   * aplicaram; reaplicar o mesmo valor aqui é idempotente. Conversa que já
+   * saiu da lista (ex.: fechada) ignora o evento.
+   */
+  handleDmPinUpdated: (evento: ConversaFixadaEvent) => void;
   /**
    * `channel.read`: li estas conversas em **outra** conexão da minha conta —
    * badge e contador zeram aqui sem ida à API. Idempotente (`stores/leitura`).
@@ -104,7 +122,9 @@ export const useDMs = create<DMsState>((set, get) => {
       if (seq !== listSeq) return null;
       // a conversa aberta nunca sai da coluna, mesmo que esta resposta tenha
       // sido montada antes de ela existir (ver `comAConversaAberta`)
-      const channels = comAConversaAberta(doServidor, get().activeId, get().channels);
+      const channels = ordenarPorFixacao(
+        comAConversaAberta(doServidor, get().activeId, get().channels),
+      );
       set({ channels, loadingList: false });
       return channels;
     } catch (e) {
@@ -117,6 +137,26 @@ export const useDMs = create<DMsState>((set, get) => {
 
   function patchDM(channelId: string, fn: (d: DMChannelView) => DMChannelView) {
     set((s) => ({ channels: s.channels.map((d) => (d.id === channelId ? fn(d) : d)) }));
+  }
+
+  /**
+   * A ordem da coluna, com fixadas no bloco de cima (`compararConversas`,
+   * shared — mesma regra dos dois lados, `docs/CONTRATO-MENUS.md` §1).
+   *
+   * O `GET /dms` já devolve nessa ordem; reordenamos aqui porque **este**
+   * cliente também move a conversa de lugar sem recarregar a lista inteira —
+   * `noTopo` (mensagem nova) e `fixar`/`desafixar` (otimista) — e os dois
+   * precisam continuar respeitando o bloco das fixadas.
+   */
+  function ordenarPorFixacao(channels: DMChannelView[]): DMChannelView[] {
+    return [...channels].sort(compararConversas);
+  }
+
+  /** `patchDM`, mas refazendo a ordem — para quando `fixadaEm` muda. */
+  function patchDMOrdenado(channelId: string, fn: (d: DMChannelView) => DMChannelView) {
+    set((s) => ({
+      channels: ordenarPorFixacao(s.channels.map((d) => (d.id === channelId ? fn(d) : d))),
+    }));
   }
 
   /**
@@ -137,7 +177,7 @@ export const useDMs = create<DMsState>((set, get) => {
     useChannels.getState().leaveVoice();
     const foraDaLista = !get().channels.some((d) => d.id === dm.id);
     set((s) => ({
-      channels: foraDaLista ? noTopo(s.channels, dm) : s.channels,
+      channels: foraDaLista ? ordenarPorFixacao(noTopo(s.channels, dm)) : s.channels,
       activeId: dm.id,
     }));
     if (foraDaLista && !opcoes.jaReaberta) {
@@ -206,7 +246,7 @@ export const useDMs = create<DMsState>((set, get) => {
       }
     },
 
-    registrar: (dm) => set((s) => ({ channels: noTopo(s.channels, dm) })),
+    registrar: (dm) => set((s) => ({ channels: ordenarPorFixacao(noTopo(s.channels, dm)) })),
 
     createGroup: async (userIds, name) => {
       if (userIds.length < 2) return false;
@@ -327,6 +367,50 @@ export const useDMs = create<DMsState>((set, get) => {
       }
     },
 
+    // ── menus de contexto ── (docs/CONTRATO-MENUS.md §1)
+
+    fixar: async (channelId) => {
+      const anterior = get().channels;
+      if (!anterior.some((d) => d.id === channelId)) return;
+      // otimista: a linha sobe para o bloco das fixadas na hora; o valor real
+      // de `pinnedAt` (a resposta) chega logo em seguida e substitui este —
+      // sem isso a linha "pulava" duas vezes numa rede lenta
+      patchDMOrdenado(channelId, (d) => ({ ...d, fixadaEm: new Date().toISOString() }));
+      try {
+        const evento = await api.fixarDM(channelId);
+        patchDMOrdenado(channelId, (d) => ({ ...d, fixadaEm: evento.fixadaEm }));
+      } catch (e) {
+        set({ channels: anterior });
+        ui.toast(errorMessage(e, "Não foi possível fixar a conversa"), "error");
+      }
+    },
+
+    desafixar: async (channelId) => {
+      const anterior = get().channels;
+      if (!anterior.some((d) => d.id === channelId)) return;
+      patchDMOrdenado(channelId, (d) => ({ ...d, fixadaEm: null }));
+      try {
+        await api.desafixarDM(channelId);
+      } catch (e) {
+        set({ channels: anterior });
+        ui.toast(errorMessage(e, "Não foi possível desafixar a conversa"), "error");
+      }
+    },
+
+    handleDmPinUpdated: (evento) =>
+      set((s) => {
+        // conversa fechada por outra via (ex.: `hide` já tirou da lista):
+        // o servidor apaga o pin e avisa, mas não há linha para atualizar
+        if (!s.channels.some((d) => d.id === evento.channelId)) return s;
+        return {
+          channels: ordenarPorFixacao(
+            s.channels.map((d) =>
+              d.id === evento.channelId ? { ...d, fixadaEm: evento.fixadaEm } : d,
+            ),
+          ),
+        };
+      }),
+
     aplicarLeitura: (channelIds, lastReadAt) =>
       set((s) => {
         const channels = listaLida(s.channels, channelIds, (d) => conversaLida(d, lastReadAt));
@@ -338,8 +422,9 @@ export const useDMs = create<DMsState>((set, get) => {
         const d = s.channels.find((x) => x.id === channelId);
         if (!d) return s;
         const next = aoChegarMensagem(d, at, { mention, propria });
-        // conversa com mensagem nova sobe para o topo, como no Discord
-        return { channels: noTopo(s.channels, next) };
+        // conversa com mensagem nova sobe para o topo do bloco dela — se
+        // estiver fixada, não passa à frente das outras fixadas
+        return { channels: ordenarPorFixacao(noTopo(s.channels, next)) };
       }),
 
     aplicarPrevia: (message) =>
@@ -352,7 +437,7 @@ export const useDMs = create<DMsState>((set, get) => {
         // editar a que já estava na linha não reordena nada; mensagem nova sobe
         return previa.id === d.ultimaMensagem?.id
           ? { channels: s.channels.map((x) => (x.id === d.id ? atualizada : x)) }
-          : { channels: noTopo(s.channels, atualizada) };
+          : { channels: ordenarPorFixacao(noTopo(s.channels, atualizada)) };
       }),
 
     removerPrevia: (channelId, messageId) =>
