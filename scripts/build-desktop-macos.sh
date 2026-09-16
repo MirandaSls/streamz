@@ -635,3 +635,12 @@ if [ -n "$CHAVE" ]; then
   echo "darwin-x86_64 num Intel, e as duas chaves do manifesto apontam para ele."
   echo "A assinatura não é impressa aqui de propósito; ela está no .sig acima."
 fi
+
+# Publicar direto daqui, sem SFTP nem .env (só admin da instância; ver
+# scripts/enviar-macos.sh e docs/PROCESSO-DE-DESENVOLVIMENTO.md §5.5):
+echo
+echo "Publicar pela API (pede login de admin da instância):"
+echo "  scripts/enviar-macos.sh \"$SAIDA\" --notas \"Correções e melhorias.\""
+if [ -z "$CHAVE" ]; then
+  echo "  (sem --assinar-atualizador só vai o .dmg; o auto-update do Mac não muda)"
+fi

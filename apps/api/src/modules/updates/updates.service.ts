@@ -1,6 +1,13 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { caminhoDoInstalador } from "./arquivo";
+import {
+  MANIFESTO_MACOS,
+  lerManifestoMacos,
+  type ManifestoMacosPublicado,
+} from "./publicacao";
 import { ehMaisNova } from "./versao";
 
 /**
@@ -50,6 +57,23 @@ interface AlvoDoTauri {
   chave: string;
 }
 
+/** De onde saiu a versão de um desktop: o que o manifesto precisa. */
+interface FonteDoDesktop {
+  versao: string;
+  url: string;
+  assinatura: string;
+  notas: string;
+  data: string;
+  origem: "manifesto" | "ambiente";
+}
+
+/** O que `estadoDoDesktop` conta para quem publicou. */
+export interface EstadoDoDesktop {
+  ativo: boolean;
+  versao: string | null;
+  origem: "manifesto" | "ambiente" | null;
+}
+
 /**
  * De onde o app de desktop descobre que existe versão nova.
  *
@@ -62,10 +86,19 @@ interface AlvoDoTauri {
  * pública embutida no app: sem assinatura válida o Tauri recusa o pacote, que é
  * exatamente o que impede alguém que assuma este endpoint de empurrar um
  * executável qualquer.
+ *
+ * **Exceção do macOS**: `POST /updates/macos` (ver `PublicacaoMacosService`)
+ * grava `<UPDATE_DIR>/macos.json`, e esse arquivo, quando existe e é válido,
+ * **tem precedência** sobre `MACOS_UPDATE_*` do ambiente — é o que deixa
+ * publicar o Mac sem editar o `.env` nem recriar a API. É relido quando muda
+ * (cache por mtime/tamanho). Para voltar ao ambiente, apague o arquivo.
  */
 @Injectable()
 export class UpdatesService {
   private readonly logger = new Logger(UpdatesService.name);
+
+  /** Último `macos.json` lido, pela assinatura (mtime + tamanho) do arquivo. */
+  private cacheMacos: { marca: string; manifesto: ManifestoMacosPublicado | null } | null = null;
 
   constructor(private readonly config: ConfigService) {}
 
@@ -94,7 +127,77 @@ export class UpdatesService {
    * já o chamava assim não muda de resposta.
    */
   isConfigured(prefixo: PrefixoDoDesktop = "DESKTOP"): boolean {
-    return Boolean(this.versao(prefixo) && this.url(prefixo) && this.assinatura(prefixo));
+    return this.fonteDoDesktop(prefixo) !== null;
+  }
+
+  /** Se o desktop tem atualização ativa, em qual versão e de onde ela vem. */
+  estadoDoDesktop(prefixo: PrefixoDoDesktop): EstadoDoDesktop {
+    const fonte = this.fonteDoDesktop(prefixo);
+    return { ativo: !!fonte, versao: fonte?.versao ?? null, origem: fonte?.origem ?? null };
+  }
+
+  /**
+   * O `macos.json` publicado pela rota, ou `null` (ausente ou inválido).
+   *
+   * Síncrono de propósito — o `manifesto` inteiro é síncrono — e barato: um
+   * `stat` por consulta, e a leitura só quando mtime ou tamanho mudam. O
+   * arquivo é gravado por `rename`, então nunca é lido pela metade.
+   */
+  manifestoMacosPublicado(): ManifestoMacosPublicado | null {
+    const caminho = join(this.diretorio(), MANIFESTO_MACOS);
+    let marca: string;
+    try {
+      const info = statSync(caminho);
+      marca = `${info.mtimeMs}:${info.size}`;
+    } catch {
+      this.cacheMacos = null;
+      return null;
+    }
+    if (this.cacheMacos?.marca === marca) return this.cacheMacos.manifesto;
+
+    let manifesto: ManifestoMacosPublicado | null = null;
+    try {
+      manifesto = lerManifestoMacos(JSON.parse(readFileSync(caminho, "utf8")));
+    } catch {
+      manifesto = null;
+    }
+    if (!manifesto) {
+      this.logger.warn(`${caminho} existe mas não é um manifesto válido; usando MACOS_UPDATE_* do ambiente`);
+    }
+    this.cacheMacos = { marca, manifesto };
+    return manifesto;
+  }
+
+  /**
+   * Versão, URL e assinatura de um desktop — do `macos.json` (só macOS) ou
+   * do ambiente —, ou `null` se falta alguma das três.
+   */
+  private fonteDoDesktop(prefixo: PrefixoDoDesktop): FonteDoDesktop | null {
+    if (prefixo === "MACOS") {
+      const publicado = this.manifestoMacosPublicado();
+      if (publicado) {
+        return {
+          versao: publicado.version,
+          url: publicado.url,
+          assinatura: publicado.signature,
+          notas: publicado.notes,
+          data: publicado.pubDate,
+          origem: "manifesto",
+        };
+      }
+    }
+    const versao = this.versao(prefixo);
+    const url = this.url(prefixo);
+    const assinatura = this.assinatura(prefixo);
+    if (!versao || !url || !assinatura) return null;
+    return {
+      versao,
+      url,
+      assinatura,
+      notas: this.variavel(prefixo, "NOTES"),
+      data: this.variavel(prefixo, "DATE"),
+      origem: "ambiente",
+    };
   }
 
   private variavel(prefixo: string, nome: string): string {
@@ -246,17 +349,15 @@ export class UpdatesService {
     { prefixo, chave }: AlvoDoTauri,
     atual: string,
   ): ManifestoDeAtualizacao | null {
-    if (!this.isConfigured(prefixo)) return null;
-
-    const versao = this.versao(prefixo);
-    if (!ehMaisNova(versao, atual)) return null;
+    const fonte = this.fonteDoDesktop(prefixo);
+    if (!fonte || !ehMaisNova(fonte.versao, atual)) return null;
 
     return {
-      version: versao,
-      notes: this.variavel(prefixo, "NOTES") || "Correções e melhorias.",
-      pub_date: this.variavel(prefixo, "DATE") || new Date().toISOString(),
+      version: fonte.versao,
+      notes: fonte.notas || "Correções e melhorias.",
+      pub_date: fonte.data || new Date().toISOString(),
       platforms: {
-        [chave]: { signature: this.assinatura(prefixo), url: this.url(prefixo) },
+        [chave]: { signature: fonte.assinatura, url: fonte.url },
       },
     };
   }
