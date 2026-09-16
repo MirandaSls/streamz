@@ -15,6 +15,7 @@ import { Permission, guildNotificationScope, type Guild } from "@streamz/shared"
 import { BotaoDeIcone } from "@/components/ui/primitivos";
 import { MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
 import { useAuth } from "@/stores/auth";
+import { useCanaisOcultos } from "@/stores/canais-ocultos";
 import { useCategories } from "@/stores/categories";
 import { useCanModerate, useGuilds, useIsOwner } from "@/stores/guilds";
 import { useNotifications } from "@/stores/notifications";
@@ -157,6 +158,17 @@ export function CabecalhoDoServidor({ celular }: { celular: boolean }) {
     items.push(
       submenuNotificacoes({ tipo: "servidor", guildId: guild.id }, escopo, t, "Config. de notificação"),
     );
+    // "Ocultar canais silenciados": o Discord tem este item também aqui, não
+    // só no menu do ícone do servidor na rail (`GuildRail.tsx`, que tem a
+    // mesma checagem) — os dois lêem e escrevem a mesma preferência por
+    // servidor (`stores/canais-ocultos.ts`), então ligar num lugar reflete no
+    // outro sem round-trip.
+    items.push({
+      label: "Ocultar canais silenciados",
+      control: "checkbox",
+      checked: useCanaisOcultos.getState().ocultarSilenciados(guild.id),
+      onSelect: () => useCanaisOcultos.getState().alternar(guild.id),
+    });
     // o dono não vê "sair" nem "apagar" aqui: apagar mora em Configurações
     if (!isOwner) {
       items.push({ separator: true });

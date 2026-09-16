@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type MouseEvent, type ReactNode } from "react";
-import { Permission } from "@streamz/shared";
+import { Permission, hasPermission } from "@streamz/shared";
 import { useControleDeAlteracoes } from "@/components/ui/alteracoes";
 import JanelaDeConfiguracoes, { ItemPerigo } from "@/components/ui/JanelaDeConfiguracoes";
 import PerfilDoServidorTab from "@/components/settings/server/PerfilDoServidorTab";
@@ -20,16 +20,78 @@ import type { ServerSettingsTab } from "@/components/settings/server/tabs";
 import { MENU_WIDTH } from "@/components/ui/ContextMenu";
 import { useGuilds, useIsOwner } from "@/stores/guilds";
 import { useAuth } from "@/stores/auth";
-import { useCan } from "@/stores/permissions";
+import { useMyPermissions } from "@/stores/permissions";
 import { ui, useUI, type MenuItem } from "@/stores/ui";
 
-/** Uma entrada do menu lateral. `owner` limita ao dono do servidor. */
-interface Aba {
+/**
+ * Metadados de uma aba — sem `render`, que arrasta componente React consigo.
+ *
+ * Exportado (junto com `ABAS_DO_SERVIDOR` e `abaDoServidorVisivel` abaixo)
+ * para o menu do ícone do servidor (`GuildRail.tsx`, "Config. do servidor >"
+ * do print p5) montar o mesmo submenu sem instanciar este modal — é o mínimo
+ * que ele precisa: id, rótulo e a permissão que decide se a aba aparece.
+ * `owner` limita ao dono do servidor.
+ */
+export interface AbaDoServidor {
   id: ServerSettingsTab;
   label: string;
   permission?: number;
   owner?: boolean;
+}
+
+/** Uma entrada do menu lateral, com o que ela desenha. */
+interface Aba extends AbaDoServidor {
   render: () => ReactNode;
+}
+
+/**
+ * A lista de abas do menu lateral, na ordem e com os rótulos do Discord —
+ * mesma origem do `GRUPOS` abaixo. Vive fora do componente (sem `render`)
+ * para poder ser reaproveitada por quem só precisa saber "quais abas existem
+ * e que permissão cada uma pede", sem montar a tela inteira.
+ */
+export const ABAS_DO_SERVIDOR: AbaDoServidor[] = [
+  { id: "overview", label: "Perfil do servidor", permission: Permission.MANAGE_GUILD },
+  { id: "engajamento", label: "Engajamento", permission: Permission.MANAGE_GUILD },
+  { id: "emoji", label: "Emoji", permission: Permission.MANAGE_EMOJIS },
+  { id: "soundboard", label: "Painel de efeitos sonoros", permission: Permission.MANAGE_EMOJIS },
+  { id: "members", label: "Membros" },
+  { id: "roles", label: "Cargos", permission: Permission.MANAGE_ROLES },
+  { id: "invites", label: "Convites", permission: Permission.MANAGE_GUILD },
+  { id: "acesso", label: "Acesso", permission: Permission.MANAGE_GUILD },
+  { id: "aplicativos", label: "Aplicativos", permission: Permission.MANAGE_GUILD },
+  { id: "audit", label: "Registro de auditoria", permission: Permission.MANAGE_GUILD },
+  { id: "bans", label: "Banimentos", permission: Permission.BAN_MEMBERS },
+  { id: "reports", label: "Denúncias", permission: Permission.MANAGE_MESSAGES },
+];
+
+/**
+ * `true` quando `bits` (o bitfield de `computePermissions`, já `ALL_PERMISSIONS`
+ * para o dono) permite ver esta aba — a mesma checagem que a API faria.
+ * Exportada para quem monta uma lista de abas fora deste modal.
+ */
+export function abaDoServidorVisivel(aba: AbaDoServidor, bits: number, isOwner: boolean): boolean {
+  if (aba.owner) return isOwner;
+  if (!aba.permission) return true;
+  return hasPermission(bits, aba.permission);
+}
+
+/** O que cada aba desenha, por id — a metade que `ABAS_DO_SERVIDOR` não leva. */
+function renderizadores(guildId: string): Record<ServerSettingsTab, () => ReactNode> {
+  return {
+    overview: () => <PerfilDoServidorTab guildId={guildId} />,
+    engajamento: () => <EngajamentoTab guildId={guildId} />,
+    emoji: () => <EmojiTab guildId={guildId} />,
+    soundboard: () => <SoundboardTab guildId={guildId} />,
+    members: () => <MembrosTab guildId={guildId} />,
+    roles: () => <CargosTab guildId={guildId} />,
+    invites: () => <ConvitesTab guildId={guildId} />,
+    acesso: () => <AcessoTab guildId={guildId} />,
+    aplicativos: () => <AplicativosTab guildId={guildId} />,
+    audit: () => <AuditLogTab guildId={guildId} />,
+    bans: () => <BanimentosTab guildId={guildId} />,
+    reports: () => <ReportsTab guildId={guildId} />,
+  };
 }
 
 /**
@@ -89,97 +151,13 @@ export default function ServerSettingsModal({
   const leaveGuild = useGuilds((s) => s.leave);
   const me = useAuth((s) => s.user);
   const isOwner = useIsOwner(me?.id);
-  const podeGerenciar = useCan(Permission.MANAGE_GUILD);
-  const podeCargos = useCan(Permission.MANAGE_ROLES);
-  const podeBanir = useCan(Permission.BAN_MEMBERS);
-  const podeModerarMensagens = useCan(Permission.MANAGE_MESSAGES);
-  const podeEmojis = useCan(Permission.MANAGE_EMOJIS);
+  const bits = useMyPermissions();
   const alteracoes = useControleDeAlteracoes();
 
-  const abas: Aba[] = [
-    {
-      id: "overview",
-      label: "Perfil do servidor",
-      permission: Permission.MANAGE_GUILD,
-      render: () => <PerfilDoServidorTab guildId={guildId} />,
-    },
-    {
-      id: "engajamento",
-      label: "Engajamento",
-      permission: Permission.MANAGE_GUILD,
-      render: () => <EngajamentoTab guildId={guildId} />,
-    },
-    {
-      id: "emoji",
-      label: "Emoji",
-      permission: Permission.MANAGE_EMOJIS,
-      render: () => <EmojiTab guildId={guildId} />,
-    },
-    {
-      id: "soundboard",
-      label: "Painel de efeitos sonoros",
-      permission: Permission.MANAGE_EMOJIS,
-      render: () => <SoundboardTab guildId={guildId} />,
-    },
-    {
-      id: "members",
-      label: "Membros",
-      render: () => <MembrosTab guildId={guildId} />,
-    },
-    {
-      id: "roles",
-      label: "Cargos",
-      permission: Permission.MANAGE_ROLES,
-      render: () => <CargosTab guildId={guildId} />,
-    },
-    {
-      id: "invites",
-      label: "Convites",
-      permission: Permission.MANAGE_GUILD,
-      render: () => <ConvitesTab guildId={guildId} />,
-    },
-    {
-      id: "acesso",
-      label: "Acesso",
-      permission: Permission.MANAGE_GUILD,
-      render: () => <AcessoTab guildId={guildId} />,
-    },
-    {
-      id: "aplicativos",
-      label: "Aplicativos",
-      permission: Permission.MANAGE_GUILD,
-      render: () => <AplicativosTab guildId={guildId} />,
-    },
-    {
-      id: "audit",
-      label: "Registro de auditoria",
-      permission: Permission.MANAGE_GUILD,
-      render: () => <AuditLogTab guildId={guildId} />,
-    },
-    {
-      id: "bans",
-      label: "Banimentos",
-      permission: Permission.BAN_MEMBERS,
-      render: () => <BanimentosTab guildId={guildId} />,
-    },
-    {
-      id: "reports",
-      label: "Denúncias",
-      permission: Permission.MANAGE_MESSAGES,
-      render: () => <ReportsTab guildId={guildId} />,
-    },
-  ];
+  const render = renderizadores(guildId);
+  const abas: Aba[] = ABAS_DO_SERVIDOR.map((a) => ({ ...a, render: render[a.id] }));
 
-  const permitida = (a: Aba) => {
-    if (a.owner) return isOwner;
-    if (!a.permission) return true;
-    if (a.permission === Permission.MANAGE_GUILD) return podeGerenciar;
-    if (a.permission === Permission.MANAGE_ROLES) return podeCargos;
-    if (a.permission === Permission.BAN_MEMBERS) return podeBanir;
-    if (a.permission === Permission.MANAGE_MESSAGES) return podeModerarMensagens;
-    if (a.permission === Permission.MANAGE_EMOJIS) return podeEmojis;
-    return false;
-  };
+  const permitida = (a: Aba) => abaDoServidorVisivel(a, bits, isOwner);
   const visiveis = abas.filter(permitida);
   // a aba pedida pelo call site só vale se o usuário puder abri-la
   const [ativa, setAtiva] = useState<ServerSettingsTab>(
