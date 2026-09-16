@@ -29,7 +29,9 @@ import { PainelDaMinhaConta } from "@/components/ui/perfil/PainelDaMinhaConta";
 import { PilulasDeCargo } from "@/components/ui/perfil/PilulasDeCargo";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { api } from "@/lib/api";
+import { contaDe, lerCofreDoDisco } from "@/lib/contas";
 import { lerRascunho, salvarRascunho } from "@/lib/rascunhos";
+import { trocarDeConta } from "@/lib/troca-de-contas";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { useDMs } from "@/stores/dms";
@@ -424,14 +426,109 @@ export default function ProfilePopoverHost() {
     );
   }
 
-  function passarNoStatus(linha: HTMLElement) {
+  /**
+   * Agenda a abertura de um submenu do cartão depois da pausa do hover —
+   * comum ao de status e ao de contas, os dois únicos que nascem do painel do
+   * rodapé (`PainelDaMinhaConta`).
+   */
+  function agendarSubmenuDoCartao(abrir: () => void) {
     window.clearTimeout(timerDoSubmenu.current);
     timerDoSubmenu.current = window.setTimeout(() => {
       // com um menu já aberto o hover não faz nada: reabrir o mesmo submenu
       // remontaria o painel e ele reapareceria piscando a cada ida e volta
       if (useUI.getState().contextMenu) return;
-      abrirSubmenuDeStatus(linha);
+      abrir();
     }, ATRASO_DO_SUBMENU);
+  }
+
+  function passarNoStatus(linha: HTMLElement) {
+    agendarSubmenuDoCartao(() => abrirSubmenuDeStatus(linha));
+  }
+
+  /**
+   * Submenu de "Mudar de conta", à direita da linha — mesmo mecanismo do
+   * submenu de status acima (posição pela borda direita do cartão, largura de
+   * 300, `manter` para não fechar o cartão): uma linha por conta salva neste
+   * aparelho (`lib/contas.ts`, a mesma lista do `GerenciarContasModal`), com o
+   * selo de conta ativa, e "Gerenciar contas" abrindo o modal que já existia.
+   */
+  function abrirSubmenuDeContas(linha: HTMLElement) {
+    const r = linha.getBoundingClientRect();
+    const direitaDoCartao = ref.current?.getBoundingClientRect().right ?? r.right;
+    const cofre = lerCofreDoDisco();
+    const itens: MenuItem[] = cofre.contas.map((conta): MenuItem => ({
+      label: conta.user.username,
+      icon: <Avatar user={conta.user} size="sm" />,
+      // o selo de conta ativa: o `control="checkbox"` do menu genérico
+      // desenha um quadrado azul-marca com ✓ (não o círculo do print `p7`,
+      // ver o comentário de `trocarParaConta` sobre por que fica assim)
+      checked: conta.user.id === cofre.ativa,
+      control: "checkbox",
+      onSelect: () => void trocarParaConta(conta.user.id),
+    }));
+    itens.push(
+      { separator: true },
+      {
+        label: "Gerenciar contas",
+        onSelect: () => {
+          close();
+          openModal({ kind: "gerenciarContas" });
+        },
+      },
+    );
+    abrirMenuDoCartao(
+      direitaDoCartao - SOBREPOSICAO_DO_SUBMENU,
+      r.top - TOPO_DO_SUBMENU,
+      itens,
+      LARGURA_DO_SUBMENU,
+      !ehMobile,
+    );
+  }
+
+  function passarNaConta(linha: HTMLElement) {
+    agendarSubmenuDoCartao(() => abrirSubmenuDeContas(linha));
+  }
+
+  /**
+   * Troca para a conta escolhida no submenu — a mesma `trocarDeConta` de
+   * `lib/troca-de-contas.ts` que o `GerenciarContasModal` chama em `escolher`.
+   * O aviso de "sair da chamada" também é copiado de lá (`pedirParaSairDaCall`
+   * não é exportado, e este cartão não pode tocar naquele arquivo — ver o
+   * relato final do cartão web-conta): sem ele, escolher outra conta no
+   * submenu derrubaria uma chamada em andamento sem avisar.
+   *
+   * Sem spinner/"aria-busy" por linha, ao contrário do modal: o submenu fecha
+   * no clique (como todo item de `ContextMenu`) antes de a troca terminar, e a
+   * própria `trocarDeConta`, quando dá certo, recarrega a página — não há
+   * lista para desenhar "entrando…" nela.
+   */
+  async function trocarParaConta(userId: string) {
+    const cofre = lerCofreDoDisco();
+    const conta = contaDe(cofre, userId);
+    if (!conta || cofre.ativa === userId) return;
+    if (!conta.refreshToken) {
+      openModal({ kind: "adicionarConta", voltar: true });
+      return;
+    }
+    const voz = useVoice.getState();
+    if (voz.channelId) {
+      const ok = await ui.confirm({
+        title: "Sair da chamada?",
+        message: "Trocar de conta encerra a chamada em que você está agora.",
+        confirmLabel: "Trocar mesmo assim",
+        danger: true,
+      });
+      if (!ok) return;
+      await voz.disconnect();
+    }
+    const r = await trocarDeConta(userId);
+    if (r.ok) return; // termina em `location.replace`; nada mais a fazer aqui
+    if (r.motivo === "pedir-senha") {
+      ui.toast("A sessão desta conta expirou. Entre com a senha de novo.", "error");
+      openModal({ kind: "adicionarConta", voltar: true });
+    } else if (r.motivo === "falhou") {
+      ui.toast("Não foi possível trocar de conta. Tente de novo.", "error");
+    }
   }
 
   /** O kebab só existe no cartão dos outros (ver `CabecalhoDoPerfil`). */
@@ -785,11 +882,9 @@ export default function ProfilePopoverHost() {
               aoEditarPerfil={editarPerfil}
               aoAbrirStatus={abrirSubmenuDeStatus}
               aoPassarNoStatus={passarNoStatus}
-              aoSairDoStatus={() => window.clearTimeout(timerDoSubmenu.current)}
-              aoMudarDeConta={() => {
-                close();
-                openModal({ kind: "gerenciarContas" });
-              }}
+              aoAbrirConta={abrirSubmenuDeContas}
+              aoPassarNaConta={passarNaConta}
+              aoSairDoSubmenu={() => window.clearTimeout(timerDoSubmenu.current)}
             />
           )}
         </div>
