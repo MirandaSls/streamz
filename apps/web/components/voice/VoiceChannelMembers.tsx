@@ -12,6 +12,7 @@ import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { anchorOf, ui } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
+import { useNomesOcultos } from "@/stores/nomes-ocultos";
 
 /**
  * Quem está num canal de voz, listado sob ele na barra lateral.
@@ -65,6 +66,7 @@ export default function VoiceChannelMembers({
   const assistir = useVoice((s) => s.assistir);
   const canal = useChannels((s) => s.channels.find((c) => c.id === channelId) ?? null);
   const select = useChannels((s) => s.select);
+  const nomesOcultos = useNomesOcultos((s) => s.ocultos(channelId));
   const [previa, setPrevia] = useState<AlvoDaPrevia | null>(null);
   // fechar com um respiro: entre a linha e o cartão há 8px de vão, e sem a
   // carência o pop-up piscaria toda vez que o cursor os atravessa
@@ -151,7 +153,13 @@ export default function VoiceChannelMembers({
                 </span>
                 {/* menor que o nome do canal, como no Discord: nosso texto era maior que o
                     do canal acima, o que invertia a hierarquia */}
-                <span className="min-w-0 flex-1 truncate text-[14px]">{nome}</span>
+                <span
+                  className="min-w-0 flex-1 truncate text-[14px]"
+                  title={nomesOcultos ? nome : undefined}
+                  aria-label={nomesOcultos ? nome : undefined}
+                >
+                  {!nomesOcultos && nome}
+                </span>
                 {/* ── j-bots ── a **sétima** superfície. O §11 do documento lista
                     seis, e o lote C achou esta ao fotografar o tile de voz: um
                     bot de música na sala aparece aqui, na coluna de canais, e
