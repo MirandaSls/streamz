@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import {
+  Apps,
   Copy,
   CornerUpLeft,
   CornerUpRight,
   EyeOff,
+  FalarMensagem,
   Flag,
-  Hash,
   Link2,
   MailOpen,
   MessageSquare,
@@ -20,7 +21,7 @@ import {
   Trash2,
   Vote,
 } from "@/components/ui/icones";
-import type { Message, PublicUser } from "@streamz/shared";
+import type { ComandoDeApp, Message, PublicUser } from "@streamz/shared";
 import {
   Permission,
   WS_EVENTS,
@@ -64,18 +65,21 @@ import StickerView from "@/components/media/StickerView";
 import YouTubeEmbed from "@/components/media/YouTubeEmbed";
 // ── h-moderacao ──
 import PollCard from "@/components/polls/PollCard";
-import { emit } from "@/stores/socket-adapter";
+import { emit, errorMessage } from "@/stores/socket-adapter";
 import Avatar from "@/components/ui/Avatar";
 import EmojiPicker from "@/components/ui/EmojiPicker";
 import TagDeBot from "@/components/ui/TagDeBot";
 import { BotaoDeIcone, Button, TextArea, Tooltip } from "@/components/ui/primitivos";
 import { confirmacaoLembrada } from "@/lib/confirmacao-lembrada";
+import { falarMensagem, podeFalarMensagem } from "@/lib/falar-mensagem";
 import { dataCompleta, hora, horaCompleta } from "@/lib/format";
 import { Markdown } from "@/lib/markdown";
+import { useNomeParaMim } from "@/lib/nome-para-mim";
+import { aplicativos } from "@/stores/aplicativos";
 import { useAuth } from "@/stores/auth";
-import { useChannels } from "@/stores/channels";
-import { dmTitle, useDMs } from "@/stores/dms";
+import { useComandosDeContexto, useComandosDeMensagem } from "@/stores/comandos-de-contexto";
 import { useGuilds } from "@/stores/guilds";
+import { useInteracoesDeBot } from "@/stores/interacoes-de-bot";
 import { useAuthorColor, usePermissions, usePodeTalvez } from "@/stores/permissions";
 import { useMessages } from "@/stores/messages";
 import SystemMessageItem from "@/components/chat/SystemMessageItem";
@@ -170,6 +174,9 @@ export default function MessageItem({
   const [picker, setPicker] = useState<{ alvo: "reacao" | "edicao"; ancora: Anchor } | null>(null);
 
   const author = useLiveUser(message.author);
+  // ── menus de contexto ── apelido de amigo > apelido no servidor > nome de
+  // exibição > usuário (`docs/CONTRATO-MENUS.md` §3) — o nome do cabeçalho.
+  const nomeDoAutor = useNomeParaMim(author, message.guildId ?? undefined);
   // nome do autor na cor do seu cargo mais alto, como no Discord — só em canal
   // de servidor: conversa e grupo não têm cargo, e o nome fica na cor padrão
   const corDoAutor = useAuthorColor(message.author.id, message.guildId);
@@ -207,6 +214,16 @@ export default function MessageItem({
   const podeEscreverNoCanal = usePodeTalvez(Permission.SEND_MESSAGES, escopo);
   const podeReagir = !emServidor || podeReagirNoCanal !== false;
   const podeResponder = !emServidor || podeEscreverNoCanal !== false;
+
+  // ── apps (leva 3) ── comandos de contexto tipo 3 (MESSAGE) do servidor, para
+  // o submenu "Apps >". O menu é síncrono: o clique nunca espera rede, então o
+  // submenu nasce com o que já estiver no cache (`useComandosDeMensagem`) e
+  // `garantir` dispara a carga por baixo — o próximo hover/clique já vê a
+  // lista pronta (`stores/comandos-de-contexto.ts`).
+  const comandosDeMensagem = useComandosDeMensagem(message.guildId);
+  function garantirComandosDeContexto() {
+    if (message.guildId) useComandosDeContexto.getState().garantir(message.guildId);
+  }
 
   // @usuario → nome de exibição, para as menções mostrarem o nome como o Discord
   const displayNames = useMemo(() => {
@@ -319,47 +336,16 @@ export default function MessageItem({
   }
 
   /**
-   * Destinos de "Encaminhar": as conversas diretas e os canais de texto do
-   * servidor aberto. Encaminhar reenvia o **texto** — os anexos ficam presos à
-   * mensagem original (ver relatório de pendências).
+   * "Encaminhar": sem submenu, abre o modal direto (ESPEC p1/p3, item 5) — o
+   * `EncaminharModal` é quem lista os destinos, monta a prévia e envia.
    */
-  function destinosParaEncaminhar(): MenuItem[] {
-    const eu = useAuth.getState().user;
-    if (!eu) return [];
-    const send = useMessages.getState().send;
-    const conversas = useDMs.getState().channels.slice(0, 8);
-    const canais = useChannels
-      .getState()
-      .channels.filter((c) => c.type === "TEXT" && c.id !== message.channelId)
-      .slice(0, 8);
-    const encaminhar = (channelId: string, guildId: string | null, nome: string) => () => {
-      send({ channelId, guildId, author: eu, content: message.content });
-      ui.toast(`Mensagem encaminhada para ${nome}`);
-    };
-    return [
-      ...conversas.map<MenuItem>((d) => ({
-        label: dmTitle(d),
-        onSelect: encaminhar(d.id, null, dmTitle(d)),
-      })),
-      ...(conversas.length && canais.length ? [{ separator: true } as MenuItem] : []),
-      ...canais.map<MenuItem>((c) => ({
-        label: `#${c.name ?? "canal"}`,
-        icon: <Hash size={18} />,
-        onSelect: encaminhar(c.id, c.guildId, `#${c.name ?? "canal"}`),
-      })),
-    ];
+  function abrirEncaminhar() {
+    ui.openModal({ kind: "encaminhar", messageId: message.id, channelId: message.channelId });
   }
 
-  /** "Encaminhar" da barra: a mesma lista do menu, ancorada no botão. */
-  function encaminharPelaBarra(e: MouseEvent<HTMLButtonElement>) {
-    const destinos = destinosParaEncaminhar();
-    if (destinos.length === 0) {
-      ui.toast("Não há para onde encaminhar ainda");
-      return;
-    }
-    const r = e.currentTarget.getBoundingClientRect();
-    // o menu pertence à mensagem: ela fica selecionada enquanto ele está aberto
-    ui.openContextMenu(r.left, r.bottom, destinos, undefined, undefined, donoDoMenu(message.id));
+  /** "Encaminhar" da barra: o mesmo modal, sem depender de onde o botão está. */
+  function encaminharPelaBarra() {
+    abrirEncaminhar();
   }
 
   /** Submenu de reação: os emojis frequentes e a porta para o seletor completo. */
@@ -379,13 +365,51 @@ export default function MessageItem({
     ];
   }
 
+  /** Dispara o comando de contexto tipo 3, com o alvo = esta mensagem. */
+  async function usarComandoDeContextoNoMenu(comando: ComandoDeApp) {
+    try {
+      await useInteracoesDeBot.getState().usarComandoDeContexto(message.channelId, comando.id, message.id);
+    } catch (e) {
+      ui.toast(errorMessage(e, "Não foi possível usar o comando"), "error");
+    }
+  }
+
+  /**
+   * Submenu "Apps >" (ESPEC item 8): os comandos tipo 3 (MESSAGE) do servidor.
+   * Em DM, ou sem nenhum, um único item desabilitado ("Nenhum app disponível",
+   * como no Discord). "Adicionar app" só existe em servidor — é lá que o
+   * diretório instala.
+   */
+  function submenuDeApps(): MenuItem[] {
+    const semNenhum: MenuItem = { label: "Nenhum app disponível", disabled: true, onSelect: () => {} };
+    if (!emServidor) return [semNenhum];
+    const itens: MenuItem[] =
+      comandosDeMensagem.length > 0
+        ? comandosDeMensagem.map((c) => ({
+            label: c.name,
+            icon: <Avatar user={c.botUser} size="xs" />,
+            onSelect: () => void usarComandoDeContextoNoMenu(c),
+          }))
+        : [semNenhum];
+    itens.push({ separator: true });
+    itens.push({ label: "Adicionar app", icon: <Apps size={18} />, onSelect: () => aplicativos.abrir() });
+    return itens;
+  }
+
   function openMenu(e: MouseEvent) {
     if (unconfirmed) return;
     e.preventDefault();
     const ancora: Anchor = { x: e.clientX, y: e.clientY, width: 0, height: 0 };
     const items: MenuItem[] = [];
 
+    // ordem exata do ESPEC (p1 mensagem própria / p3 mensagem alheia): reações,
+    // "Adicionar reação", editar (própria)/responder, encaminhar, [tópico só em
+    // servidor], copiar texto, fixar, [apps — leva 3], marcar não lido, copiar
+    // link, falar mensagem, e por fim o grupo vermelho (excluir/denunciar).
     if (!sistema) {
+      // dispara a carga do cache se o hover não tiver rodado antes (celular,
+      // que não tem hover) — o menu em si já monta com o que houver agora
+      garantirComandosDeContexto();
       if (podeReagir) {
         // A fileira horizontal é a primeira coisa do menu no Discord: quatro
         // alvos do mesmo peso, escolhidos pela cara do emoji. Como itens comuns
@@ -403,23 +427,18 @@ export default function MessageItem({
           icon: <SmilePlus size={18} />,
           submenu: submenuDeReacao(ancora),
         });
+        // o separador só existe para separar as reações do resto — sem elas
+        // (sem permissão para reagir) o menu começa direto em Editar/Responder
+        items.push({ separator: true });
       }
       if (isOwn) items.push({ label: "Editar mensagem", icon: <Pencil size={18} />, onSelect: startEdit });
-      if (canPin) {
-        items.push({
-          label: message.pinned ? "Desafixar mensagem" : "Fixar mensagem",
-          icon: message.pinned ? <PinOff size={18} /> : <Pin size={18} />,
-          onSelect: alternarFixada,
-        });
-      }
       if (podeResponder) {
         items.push({ label: "Responder", icon: <CornerUpLeft size={18} />, onSelect: responder });
       }
-      const destinos = destinosParaEncaminhar();
-      if (destinos.length > 0) {
-        items.push({ label: "Encaminhar", icon: <CornerUpRight size={18} />, submenu: destinos });
-      }
-      if (onOpenThread) {
+      // sem seta de submenu: abre o modal de encaminhar direto (ESPEC, item 5)
+      items.push({ label: "Encaminhar", icon: <CornerUpRight size={18} />, onSelect: abrirEncaminhar });
+      // "Criar/Ver tópico" só existe em canal de servidor — em DM não há tópico
+      if (emServidor && onOpenThread) {
         items.push({
           label: message.thread ? "Ver tópico" : "Criar tópico",
           icon: <MessageSquare size={18} />,
@@ -464,29 +483,44 @@ export default function MessageItem({
             }),
         });
       }
-    }
-
-    // rótulos do print 1:1 124022: só a primeira palavra em maiúscula, e o
-    // texto inteiro do Discord ("Marcar como não lido", "Copiar link da mensagem")
-    items.push({ label: "Marcar como não lido", icon: <MailOpen size={18} />, onSelect: marcarNaoLida });
-    items.push({ label: "Copiar link da mensagem", icon: <Link2 size={18} />, onSelect: copiarLink });
-    // só faz sentido quando há link, e só o autor/moderação pode mexer
-    if (!sistema && (isOwn || canModerate) && extractFirstUrl(message.content)) {
+      if (canPin) {
+        items.push({
+          label: message.pinned ? "Desafixar mensagem" : "Fixar mensagem",
+          icon: message.pinned ? <PinOff size={18} /> : <Pin size={18} />,
+          onSelect: alternarFixada,
+        });
+      }
+      items.push({ label: "Apps", icon: <Apps size={18} />, submenu: submenuDeApps() });
+      items.push({ label: "Marcar como não lido", icon: <MailOpen size={18} />, onSelect: marcarNaoLida });
+      items.push({ label: "Copiar link da mensagem", icon: <Link2 size={18} />, onSelect: copiarLink });
+      // só faz sentido quando há link, e só o autor/moderação pode mexer
+      if ((isOwn || canModerate) && extractFirstUrl(message.content)) {
+        items.push({
+          label: message.suppressEmbeds ? "Mostrar prévia do link" : "Remover prévia do link",
+          icon: <EyeOff size={18} />,
+          onSelect: () =>
+            emit(WS_EVENTS.MESSAGE_SUPPRESS_EMBEDS, {
+              messageId: message.id,
+              suppress: !message.suppressEmbeds,
+            }),
+        });
+      }
       items.push({
-        label: message.suppressEmbeds ? "Mostrar prévia do link" : "Remover prévia do link",
-        icon: <EyeOff size={18} />,
-        onSelect: () =>
-          emit(WS_EVENTS.MESSAGE_SUPPRESS_EMBEDS, {
-            messageId: message.id,
-            suppress: !message.suppressEmbeds,
-          }),
+        label: "Falar mensagem",
+        icon: <FalarMensagem size={18} />,
+        disabled: !podeFalarMensagem(message.content),
+        onSelect: () => falarMensagem(displayNameOf(author), message.content),
       });
+    } else {
+      // mensagens de sistema continuam só com o que já tinham: não lido e link
+      items.push({ label: "Marcar como não lido", icon: <MailOpen size={18} />, onSelect: marcarNaoLida });
+      items.push({ label: "Copiar link da mensagem", icon: <Link2 size={18} />, onSelect: copiarLink });
     }
 
     if (canDelete || !isOwn) items.push({ separator: true });
     if (canDelete) {
       items.push({
-        label: "Apagar mensagem",
+        label: "Excluir mensagem",
         icon: <Trash2 size={18} />,
         danger: true,
         // Shift pula a confirmação, como no Discord; e também quem marcou "não
@@ -500,6 +534,7 @@ export default function MessageItem({
       items.push({
         label: "Denunciar mensagem",
         icon: <Flag size={18} />,
+        danger: true,
         onSelect: () =>
           ui.openModal({ kind: "report", messageId: message.id, preview: message.content }),
       });
@@ -628,6 +663,9 @@ export default function MessageItem({
          link, encaminhar e apagar apontariam todos para uma mensagem que não
          existe no canal. O gesto que ela tem é o "Dispensar" do rodapé. */
       onContextMenu={efemera ? undefined : openMenu}
+      // pré-carrega os comandos de contexto no hover: no clique direito o menu
+      // já pode desenhar com o cache pronto (ESPEC item 8 / §7 do contrato)
+      onMouseEnter={efemera ? undefined : garantirComandosDeContexto}
       // o respiro entre grupos é preferência do usuário (aba Aparência)
       style={inicioDeGrupo ? { marginTop: "var(--espaco-entre-grupos, 17px)" } : undefined}
       // sem `transition-colors`: o Discord troca o fundo no mesmo quadro, e a
@@ -670,7 +708,7 @@ export default function MessageItem({
         <button
           type="button"
           onClick={openProfile}
-          aria-label={`Perfil de ${displayNameOf(author)}`}
+          aria-label={`Perfil de ${nomeDoAutor}`}
           /* 40px (`--custom-message-avatar-size`). Topo: no print 111402 a
              caixa-alta do nome fica 3px abaixo do topo do avatar ("Md": avatar
              em y=398, "M" em 401); na nossa captura, 2px — diferença dentro do
@@ -718,7 +756,7 @@ export default function MessageItem({
               style={corDoAutor ? { color: corDoAutor } : undefined}
               className="mr-1 indent-0 font-medium leading-[22px] text-text-strong hover:underline"
             >
-              {displayNameOf(author)}
+              {nomeDoAutor}
             </button>
             {/* Selo de enquete no compacto: depois do nome, antes do texto.
                 Posição e margem **não medidas** (sem print do compacto com
@@ -740,7 +778,7 @@ export default function MessageItem({
                 // 16px); o medium daria ~1,75. Print vence CSS.
                 className="font-semibold text-text-strong hover:underline"
               >
-                {displayNameOf(author)}
+                {nomeDoAutor}
               </button>
               {/* ── j-bots ── entre o nome e a hora, como no Discord. A caixa é
                   `items-baseline`, e uma pílula alinhada pela linha de base

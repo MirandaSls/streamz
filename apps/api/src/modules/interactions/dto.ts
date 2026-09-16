@@ -1,5 +1,6 @@
 import type { InteracaoDaMensagem } from "@streamz/shared";
 import { toPublicUser, type PublicUserRow } from "../../common/dto";
+import { tipoDoDataGuardado } from "./contexto";
 
 /**
  * A faixa "@fulano usou /play" acima da resposta de um bot.
@@ -28,6 +29,11 @@ export const INTERACAO_DA_MENSAGEM_INCLUDE = {
     id: true,
     commandName: true,
     user: true,
+    // ── menus de contexto ── o `tipo` da faixa sai de `data.type`, como foi
+    // enviado ao bot: a linha do comando pode ter sumido num re-registro, e o
+    // Prisma não seleciona um caminho dentro de um Json. O custo é o `data`
+    // inteiro só das mensagens que são resposta de interação.
+    data: true,
   },
 } as const;
 
@@ -37,6 +43,8 @@ export interface LinhaDaFaixa {
   /** ── onda 3 ── null em interação de componente/modal (não há comando). */
   commandName: string | null;
   user: PublicUserRow;
+  /** ── menus de contexto ── o `data` do `INTERACTION_CREATE`; só `type` é lido. */
+  data?: unknown;
 }
 
 /** `null` para toda mensagem que não veio de uma interação — quase todas. */
@@ -46,5 +54,11 @@ export function toInteracaoDaMensagem(
   // ── onda 3 ── a resposta a um **botão** não ganha a faixa "usou /…": não
   // houve comando, e o Discord também não a desenha
   if (!linha || linha.commandName === null) return null;
-  return { id: linha.id, name: linha.commandName, user: toPublicUser(linha.user) };
+  return {
+    id: linha.id,
+    name: linha.commandName,
+    user: toPublicUser(linha.user),
+    // ── menus de contexto ── 2/3 tiram a barra da faixa; ausente/antigo = 1
+    tipo: tipoDoDataGuardado(linha.data) ?? 1,
+  };
 }

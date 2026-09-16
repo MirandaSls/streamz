@@ -1,5 +1,10 @@
 import { create } from "zustand";
-import { isTimedOut, type GuildMembership, type ReportView } from "@streamz/shared";
+import {
+  isTimedOut,
+  type GuildMembership,
+  type MinhaAssociacaoEditarInput,
+  type ReportView,
+} from "@streamz/shared";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
 import { ui } from "@/stores/ui";
@@ -21,6 +26,26 @@ interface ModerationState {
   dismissWelcome: () => Promise<void>;
   /** `member.updated` mudou o meu castigo. */
   applyTimeout: (guildId: string, userId: string, timeoutUntil: string | null) => void;
+  /** `member.updated` mudou o meu apelido neste servidor (por outra aba/dispositivo). */
+  applyNickname: (guildId: string, nickname: string | null) => void;
+
+  /**
+   * ── menus de contexto ── associação de **qualquer** servidor, não só o
+   * aberto: os modais "Config. de privacidade" e "Editar perfil por
+   * servidor" abrem a partir do menu do ícone na barra, que existe para
+   * qualquer item dela — inclusive um servidor que não é o `membership`
+   * ativo. Não mexe no estado; quem chama guarda a resposta localmente.
+   */
+  membershipDe: (guildId: string) => Promise<GuildMembership>;
+  /**
+   * `PATCH /guilds/:guildId/membership`. Atualiza `membership` também quando
+   * `guildId` é o servidor aberto — é o mesmo objeto que a API devolve, então
+   * o composer e o resto da tela veem o apelido/privacidade novos sem F5.
+   * Não faz otimismo aqui (outros consumidores do `membership` ativo não
+   * podem ver um valor que a API ainda pode recusar); quem chama decide a UI
+   * otimista do próprio campo e reverte no catch.
+   */
+  editarAssociacao: (guildId: string, patch: MinhaAssociacaoEditarInput) => Promise<GuildMembership>;
 
   loadReports: (guildId: string, resolved?: boolean) => Promise<void>;
   resolveReport: (guildId: string, reportId: string, resolved: boolean) => Promise<void>;
@@ -71,6 +96,20 @@ export const useModeration = create<ModerationState>((set, get) => ({
     set({ membership: { ...membership, timeoutUntil } });
     if (isTimedOut(timeoutUntil)) ui.toast("Você foi colocado de castigo neste servidor.", "error");
     else if (membership.timeoutUntil) ui.toast("Seu castigo foi removido.");
+  },
+
+  applyNickname: (guildId, nickname) => {
+    const membership = get().membership;
+    if (!membership || membership.guildId !== guildId) return;
+    set({ membership: { ...membership, nickname } });
+  },
+
+  membershipDe: (guildId) => api.membership(guildId),
+
+  editarAssociacao: async (guildId, patch) => {
+    const atualizado = await api.editarMinhaAssociacao(guildId, patch);
+    set((s) => (s.membership?.guildId === guildId ? { membership: atualizado } : s));
+    return atualizado;
   },
 
   loadReports: async (guildId, resolved = false) => {

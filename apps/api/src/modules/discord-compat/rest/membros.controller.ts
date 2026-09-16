@@ -68,12 +68,15 @@ import { zodBody } from "../../../common/zod.pipe";
  *
  * **Duas divergências declaradas** (também no §5 do documento):
  *
- * 1. **`nick`** — o Streamz não tem apelido por servidor: não há coluna, e o
+ * 1. **`nick`** — o Streamz agora tem apelido por servidor (menus de
+ *    contexto, `GuildMember.nickname`, exposto na leitura por
+ *    `membroParaDiscord`), mas **editar** por aqui continua fora de escopo: o
  *    §6 já lista `MANAGE_NICKNAMES` entre as permissões **sempre apagadas** na
- *    tradução para o Discord. Um `nick` com texto leva **50013**, que é o que
- *    o bot lê no bitfield antes de tentar; ignorar em silêncio devolveria 200
- *    a uma mudança que nunca aconteceu. `nick: null` (limpar) é um no-op que
- *    passa, porque limpar o que não existe é verdade.
+ *    tradução para o Discord, e esta entrega não criou o bit
+ *    `CHANGE_NICKNAME`. Um `nick` com texto leva **50013**, que é o que o bot
+ *    lê no bitfield antes de tentar; ignorar em silêncio devolveria 200 a uma
+ *    mudança que nunca aconteceu. `nick: null` (limpar) é um no-op que passa
+ *    mesmo sem apelido — limpar o que já está limpo é verdade.
  * 2. **`mute`/`deaf`/`channel_id`** — silenciar e mover na voz. `mute`/`deaf`
  *    do Discord são estado do servidor sobre a call; o nosso vive no
  *    `VoiceStateStore` (F2) e não no membro. Ignorados em silêncio: são campos
@@ -162,7 +165,7 @@ export class MembrosCompatController {
     const { userId } = await membroAlvo(this.ids, this.dados, guildId, uid);
 
     // ── validação, antes de escrever qualquer coisa ──
-    // apelido por servidor não existe aqui (ver o cabeçalho da classe)
+    // editar apelido por esta casca não existe (ver o cabeçalho da classe)
     if (typeof corpo.nick === "string" && corpo.nick.trim().length > 0) throw semPermissao();
 
     const desejados = corpo.roles === undefined ? null : await this.cargosPedidos(guildId, corpo.roles);

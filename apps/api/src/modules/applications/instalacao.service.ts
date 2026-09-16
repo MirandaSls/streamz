@@ -384,6 +384,8 @@ export class InstalacaoService {
         // por convite, que só tem o @everyone
         roleIds: [roleId],
         joinedAt: membro.joinedAt.toISOString(),
+        // bot recém-instalado nunca tem apelido ainda
+        nickname: null,
       },
     });
   }

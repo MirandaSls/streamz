@@ -11,10 +11,13 @@ import {
   MAX_GUILD_DESCRIPTION,
   MAX_WELCOME_CHANNELS,
   MAX_WELCOME_DESCRIPTION,
+  minhaAssociacaoEditarSchema,
 } from "@streamz/shared";
+import type { MinhaAssociacaoEditarInput } from "@streamz/shared";
 import { OnboardingService } from "./onboarding.service";
 import { CurrentUser } from "../../common/current-user.decorator";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
+import { zodBody } from "../../common/zod.pipe";
 
 class OnboardingDto {
   @IsOptional()
@@ -55,6 +58,20 @@ export class OnboardingController {
   @Get("membership")
   membership(@CurrentUser() user: JwtPayload, @Param("guildId") guildId: string) {
     return this.onboarding.membership(user.sub, guildId);
+  }
+
+  /**
+   * Menus de contexto (§5/§6): meu apelido neste servidor e "Permitir
+   * mensagens diretas de membros do servidor". Só o próprio membro edita, e
+   * qualquer membro pode — o bitfield do Streamz não tem `CHANGE_NICKNAME`.
+   */
+  @Patch("membership")
+  editMembership(
+    @CurrentUser() user: JwtPayload,
+    @Param("guildId") guildId: string,
+    @Body(zodBody(minhaAssociacaoEditarSchema)) dto: MinhaAssociacaoEditarInput,
+  ) {
+    return this.onboarding.editMembership(user.sub, guildId, dto);
   }
 
   @Get("onboarding")

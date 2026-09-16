@@ -25,3 +25,5 @@ export * from "./aplicativos";
 export * from "./permissoes-discord";
 // ── onda 3 ── embeds, componentes, modais e interações de componente
 export * from "./mensagens-de-bot";
+// ── menus de contexto ── fixar DM, notas, apelidos, ignorar, comandos de contexto
+export * from "./menus";

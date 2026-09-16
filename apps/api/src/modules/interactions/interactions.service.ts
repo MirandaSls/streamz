@@ -22,6 +22,7 @@ import type {
   OpcaoDeComando,
   PayloadDeBot,
   RespostaDeComponenteDeModal,
+  TipoDeComandoDeApp,
 } from "@streamz/shared";
 import {
   FLAGS_DE_MENSAGEM,
@@ -33,6 +34,7 @@ import {
   respostaDeAutocompleteSchema,
   temFlag,
   TEXTO_PENSANDO,
+  TIPO_DE_COMANDO_DE_APP,
   TIPO_DE_COMPONENTE,
   validarModalDeBot,
   WS_EVENTS,
@@ -66,6 +68,7 @@ import {
   type OpcaoDoPedido,
   type Recusa,
 } from "./componentes";
+import { conferirAlvoDoComando, TIPOS_PADRAO, tipoDeContexto } from "./contexto";
 import {
   efemeraParaDTO,
   efemeraParaLinhaDeMensagem,
@@ -246,8 +249,10 @@ export class InteractionsService implements OnModuleInit, OnModuleDestroy {
    */
   async criarInteracao(
     // `nonce` aqui e não em `EntradaDeInteracao` (`tipos.ts`) só porque aquele
-    // arquivo não é deste cartão; o controller o repassa de `interacaoCriarSchema`
-    entrada: EntradaDeInteracao & { nonce?: string },
+    // arquivo não é deste cartão; o controller o repassa de `interacaoCriarSchema`.
+    // ── menus de contexto ── `targetId` pelo mesmo motivo: o cuid da mensagem
+    // (comando tipo 3) ou do usuário (tipo 2)
+    entrada: EntradaDeInteracao & { nonce?: string; targetId?: string },
   ): Promise<InteracaoEmVoo> {
     const { comando, guildId, botUserId } = await this.acharComandoNoCanal(
       entrada.commandId,
@@ -257,13 +262,24 @@ export class InteractionsService implements OnModuleInit, OnModuleDestroy {
     // quem digitou precisa poder escrever aqui: 403 vem daqui, e não do bot
     await this.guilds.assertCanPostChannel(entrada.usuarioId, entrada.canalId);
 
-    const opcoes = this.conferirOpcoes(this.opcoesDeclaradas(comando.options), entrada.opcoes);
+    // ── menus de contexto ── o alvo contra o tipo do comando, antes das opções
+    const recusaDoAlvo = conferirAlvoDoComando(comando.type, entrada.targetId, entrada.opcoes.length);
+    if (recusaDoAlvo) throw paraHttp(recusaDoAlvo);
 
-    const dadosDoComando = await this.montarData(
-      { snowflake: comando.snowflake, name: comando.name, guildId: comando.guildId },
-      guildId,
-      opcoes,
-    );
+    const dadosDoComando =
+      entrada.targetId !== undefined && tipoDeContexto(comando.type)
+        ? await this.montarDataDeContexto(
+            { snowflake: comando.snowflake, name: comando.name, guildId: comando.guildId, type: comando.type },
+            guildId,
+            entrada.canalId,
+            entrada.targetId,
+            botUserId,
+          )
+        : await this.montarData(
+            { snowflake: comando.snowflake, name: comando.name, guildId: comando.guildId },
+            guildId,
+            this.conferirOpcoes(this.opcoesDeclaradas(comando.options), entrada.opcoes),
+          );
 
     const token = randomBytes(BYTES_DO_TOKEN_DE_INTERACAO).toString("base64url");
     const expiresAt = new Date(Date.now() + VALIDADE_DA_INTERACAO_MS);
@@ -280,6 +296,10 @@ export class InteractionsService implements OnModuleInit, OnModuleDestroy {
         // gravado para o callback 9 (`abrirModal`) e o `success`/`failed`
         // (`eventoDe`) voltarem casados na sessão do navegador que digitou
         nonce: entrada.nonce ?? null,
+        // ── menus de contexto ── o cuid do alvo; null no comando de barra.
+        // `type` da linha continua 2 (APPLICATION_COMMAND): o tipo do comando
+        // mora em `data.type`
+        targetId: entrada.targetId ?? null,
         data: dadosDoComando as Prisma.InputJsonValue,
         expiresAt,
       },
@@ -337,6 +357,8 @@ export class InteractionsService implements OnModuleInit, OnModuleDestroy {
         id: true,
         snowflake: true,
         name: true,
+        // ── menus de contexto ── 1 barra, 2 usuário, 3 mensagem
+        type: true,
         options: true,
         guildId: true,
         applicationId: true,
@@ -376,8 +398,18 @@ export class InteractionsService implements OnModuleInit, OnModuleDestroy {
     return { comando, guildId, botUserId };
   }
 
-  /** Os comandos que valem naquele servidor — o `GET /api/guilds/:id/comandos-de-app`. */
-  async comandosDoServidor(guildId: string, usuarioId: string): Promise<ComandoDeApp[]> {
+  /**
+   * Os comandos que valem naquele servidor — o `GET /api/guilds/:id/comandos-de-app`.
+   *
+   * ── menus de contexto ── `tipos` filtra por `type` (padrão só o 1, para o
+   * composer antigo não sugerir comando de contexto); `?tipos=2,3` é o
+   * "Apps >" dos menus.
+   */
+  async comandosDoServidor(
+    guildId: string,
+    usuarioId: string,
+    tipos: readonly TipoDeComandoDeApp[] = TIPOS_PADRAO,
+  ): Promise<ComandoDeApp[]> {
     // ver o servidor é condição para ver os comandos dele
     await this.guilds.assertMember(usuarioId, guildId);
 
@@ -391,7 +423,7 @@ export class InteractionsService implements OnModuleInit, OnModuleDestroy {
 
     const linhas = await this.prisma.applicationCommand.findMany({
       where: {
-        type: TIPO_CHAT_INPUT,
+        type: { in: [...tipos] },
         // global (guildId null) ou registrado para este servidor
         OR: [{ guildId: null }, { guildId }],
         application: { botUserId: { in: botsPresentes.map((m) => m.userId) } },
@@ -401,22 +433,29 @@ export class InteractionsService implements OnModuleInit, OnModuleDestroy {
         snowflake: true,
         name: true,
         description: true,
+        type: true,
         options: true,
         application: { select: { id: true, name: true, botUser: true } },
       },
       orderBy: { name: "asc" },
     });
 
-    return linhas.map((c) => ({
-      id: c.id,
-      snowflake: String(c.snowflake),
-      name: c.name,
-      description: c.description,
-      options: this.opcoesDeclaradas(c.options),
+    return linhas.map((c) => {
+      const contexto = tipoDeContexto(c.type);
+      return {
+        id: c.id,
+        snowflake: String(c.snowflake),
+        name: c.name,
+        // o de contexto não tem descrição nem opções, mesmo que uma linha
+        // antiga as tenha guardado
+        description: contexto ? "" : c.description,
+        options: contexto ? [] : this.opcoesDeclaradas(c.options),
+        tipo: c.type as TipoDeComandoDeApp,
       applicationId: c.application.id,
-      applicationName: c.application.name,
-      botUser: toPublicUser(c.application.botUser),
-    }));
+        applicationName: c.application.name,
+        botUser: toPublicUser(c.application.botUser),
+      };
+    });
   }
 
   // ── onda 3 · cartão 3a: componente, modal e autocomplete ───
@@ -623,6 +662,8 @@ export class InteractionsService implements OnModuleInit, OnModuleDestroy {
       entrada.commandId,
       entrada.canalId,
     );
+    // ── menus de contexto ── comando de contexto não tem opção para sugerir
+    if (comando.type !== TIPO_CHAT_INPUT) throw new NotFoundException("Comando não encontrado");
     await this.guilds.assertCanPostChannel(entrada.usuarioId, entrada.canalId);
 
     const conferido = conferirPedidoDeAutocomplete(
@@ -2127,6 +2168,74 @@ export class InteractionsService implements OnModuleInit, OnModuleDestroy {
       const sf = await this.ids.snowflakeDeServidor(comando.guildId);
       if (sf !== null) data.guild_id = String(sf);
     }
+    return data;
+  }
+
+  /**
+   * ── menus de contexto ── O `data` de um comando de usuário (2) ou de
+   * mensagem (3), no formato do Discord: sem `options`, com `target_id` e o
+   * alvo em `resolved` (`docs/CONTRATO-MENUS.md` §7).
+   *
+   * - 3: a `Message` tem de ser **deste canal** (quem usa já passou pelo
+   *   `assertCanPostChannel`, então a vê). Efêmera não está na `Message` e cai
+   *   no mesmo 404. Vai em `resolved.messages`, pela mesma tradução do
+   *   `message` de componente.
+   * - 2: o `User` tem de ser membro do servidor do canal. Vai em
+   *   `resolved.users` e, sem o `user` dentro, em `resolved.members`.
+   *
+   * Os quatro mapas de sempre vão junto, vazios quando não usados (ver
+   * `resolvedDoDiscord`).
+   */
+  private async montarDataDeContexto(
+    comando: { snowflake: bigint; name: string; guildId: string | null; type: number },
+    guildId: string,
+    canalId: string,
+    targetId: string,
+    botUserId: string,
+  ): Promise<DadosDaInteracao> {
+    const resolvido = novoResolvido();
+    let alvo: string;
+    let mensagens: Record<string, MensagemDoDiscord> | undefined;
+
+    if (comando.type === TIPO_DE_COMANDO_DE_APP.MESSAGE) {
+      const naoAchou = () => new NotFoundException("Mensagem não encontrada");
+      const linha = await this.prisma.message.findUnique({
+        where: { id: targetId },
+        select: { id: true, channelId: true },
+      });
+      if (!linha || linha.channelId !== canalId) throw naoAchou();
+      const achada = await this.origemParaCompat({ messageId: linha.id, botUserId });
+      if (!achada) throw naoAchou();
+      const mensagem = mensagemParaDiscord(achada.linha);
+      alvo = mensagem.id;
+      mensagens = { [alvo]: mensagem };
+    } else {
+      const naoAchou = () => new NotFoundException("Usuário não encontrado");
+      const [usuario, membro] = await Promise.all([
+        this.dados.usuarioPorCuid(targetId),
+        this.dados.membroDoServidor(guildId, targetId),
+      ]);
+      if (!usuario || !membro) throw naoAchou();
+      alvo = String(usuario.snowflake);
+      resolvido.usuarios[alvo] = usuarioParaDiscord(usuario);
+      resolvido.membros[alvo] = membroParaDiscord(membro, false);
+    }
+
+    const data: DadosDaInteracao = {
+      id: String(comando.snowflake),
+      name: comando.name,
+      type: comando.type,
+    };
+    // `guild_id` só em comando registrado por servidor, como no de barra
+    if (comando.guildId !== null) {
+      const sf = await this.ids.snowflakeDeServidor(comando.guildId);
+      if (sf !== null) data.guild_id = String(sf);
+    }
+    data.target_id = alvo;
+    data.resolved = {
+      ...resolvedDoDiscord(resolvido),
+      ...(mensagens ? { messages: mensagens } : {}),
+    };
     return data;
   }
 

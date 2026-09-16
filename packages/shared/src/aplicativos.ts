@@ -12,6 +12,7 @@ import { z } from "zod";
 import type { PublicUser } from "./dominio";
 import { idSchema } from "./internos";
 import { ALL_PERMISSIONS } from "./permissoes";
+import type { TipoDeComandoDeApp } from "./menus";
 
 // ── limites ──────────────────────────────────────────────────
 
@@ -299,6 +300,13 @@ export interface ComandoDeApp {
   applicationName: string;
   /** o usuário-bot: nome, e o `avatarUrl` que o autocomplete desenha. */
   botUser: PublicUser;
+  /**
+   * ── menus de contexto ── 1 barra (composer), 2 usuário, 3 mensagem ("Apps >").
+   * Ausente = 1 (payload antigo). Comando 2/3 tem `options: []` e
+   * `description: ""`, como no Discord. `name` de 2/3 pode ter maiúsculas e
+   * espaço — é o rótulo do item do submenu.
+   */
+  tipo?: TipoDeComandoDeApp;
 }
 
 /**
@@ -344,6 +352,14 @@ export const interacaoCriarSchema = z.object({
    * eventos por socket e sem o relógio dos 3 s (ver `criarInteracao`).
    */
   nonce: z.string().min(1).max(64).optional(),
+  /**
+   * ── menus de contexto ── o alvo de um comando de contexto: cuid da
+   * mensagem (comando tipo 3) ou do usuário (tipo 2). **Obrigatório** para
+   * 2/3 e **proibido** para 1 — a API confere contra o tipo do comando e
+   * responde 400 ("Comando de contexto sem alvo" / "Comando de barra não tem
+   * alvo"). Com `targetId`, `options` tem de vir vazio.
+   */
+  targetId: idSchema.optional(),
 });
 
 export type InteracaoCriarInput = z.infer<typeof interacaoCriarSchema>;
@@ -374,6 +390,11 @@ export interface InteracaoDaMensagem {
   name: string;
   /** quem digitou. */
   user: PublicUser;
+  /**
+   * ── menus de contexto ── tipo do comando usado. Com 2/3 a faixa diz
+   * "@fulano usou **Nome**" (sem a barra). Ausente = 1.
+   */
+  tipo?: TipoDeComandoDeApp;
 }
 
 /**

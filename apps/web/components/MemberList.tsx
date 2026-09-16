@@ -18,9 +18,9 @@ import {
   Permission,
   TIMEOUT_PRESETS,
   colorRoleOf,
-  displayNameOf,
   highestPosition,
   isTimedOut,
+  nomeParaMim,
   type GuildMemberView,
   type Role,
 } from "@streamz/shared";
@@ -32,6 +32,7 @@ import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
 import { mencionar as inserirMencao } from "@/lib/mencoes";
 import { useAuth } from "@/stores/auth";
 import { useDMs } from "@/stores/dms";
+import { useFriends } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
 import { useCan, usePermissions } from "@/stores/permissions";
 import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
@@ -80,6 +81,12 @@ interface Linha {
  */
 export default function MemberList() {
   const user = useAuth((s) => s.user);
+  // ── menus de contexto ── apelido de amigo (qualquer contexto) tem
+  // precedência sobre o apelido no servidor, que já vem em `m.nickname` —
+  // ver `nomeParaMim` (`docs/CONTRATO-MENUS.md` §3/§5). Um hook só aqui em
+  // cima: `renderMember` é chamado num `.map`, e um hook por linha variaria
+  // de contagem a cada render (a lista de membros muda de tamanho).
+  const apelidosDeAmigo = useFriends((s) => s.apelidos);
   const members = useGuilds((s) => s.members);
   const kick = useGuilds((s) => s.kick);
   const ban = useGuilds((s) => s.ban);
@@ -247,7 +254,10 @@ export default function MemberList() {
   function renderMember({ m, status }: Linha) {
     const isMe = m.user.id === user?.id;
     const offline = status === "OFFLINE";
-    const nome = displayNameOf(m.user);
+    const nome = nomeParaMim(m.user, {
+      apelidoDeAmigo: apelidosDeAmigo?.[m.user.id],
+      apelidoNoServidor: m.nickname,
+    });
     const cor = colorRoleOf(m.roleIds, roles)?.color ?? null;
     const destaque = !!cor || m.role === "OWNER" || m.role === "ADMIN";
     return (

@@ -16,6 +16,7 @@ describe("membroParaDiscord", () => {
       cargoSnowflakes: [777888999000111222n, 123456789012345678n],
       joinedAt: new Date("2026-01-15T10:20:30.000Z"),
       timeoutUntil: null,
+      nickname: null,
       ...campos,
     };
   }
@@ -64,6 +65,14 @@ describe("membroParaDiscord", () => {
     expect(
       membroParaDiscord(membro({ timeoutUntil: passado })).communication_disabled_until,
     ).toBeNull();
+  });
+
+  it("nick vem do apelido por servidor (menus de contexto)", () => {
+    expect(membroParaDiscord(membro({ nickname: "Zezinho" })).nick).toBe("Zezinho");
+  });
+
+  it("sem apelido, nick é null", () => {
+    expect(membroParaDiscord(membro({ nickname: null })).nick).toBeNull();
   });
 
   it("roles não inclui o @everyone e é tudo string", () => {

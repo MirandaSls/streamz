@@ -10,12 +10,16 @@ import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import {
+  aceitaDmDeMembro,
+  compararConversas,
+  ERRO_DM_NAO_PERMITIDA,
   MAX_DM_GROUP_INVITEES,
   MAX_DM_GROUP_NAME,
   MAX_GROUP_ICON_SIZE,
   WS_EVENTS,
 } from "@streamz/shared";
 import type {
+  ConversaFixadaEvent,
   DMChannelView,
   DMLeaveResult,
   MessageType,
@@ -118,6 +122,18 @@ export class DMsService {
     // upsert por pairKey → idempotente e à prova de corrida (1 canal por dupla)
     const [a, b] = this.pair(meId, otherUserId);
     const pairKey = `${a}:${b}`;
+
+    // privacidade por servidor (item 6 do contrato de menus): só entra quando
+    // a conversa ainda não existe — uma DM já aberta continua acessível — e
+    // não vale para o painel do administrador (`ignorarBloqueio`)
+    if (!opcoes.ignorarBloqueio) {
+      const existente = await this.prisma.channel.findUnique({
+        where: { pairKey },
+        select: { id: true },
+      });
+      if (!existente) await this.assertAceitaDm(meId, otherUserId);
+    }
+
     const channel = await this.prisma.channel.upsert({
       where: { pairKey },
       create: {
@@ -158,6 +174,63 @@ export class DMsService {
     // a coluna das minhas outras sessões acompanha (ver `openWith`)
     this.realtime.emitToUser(meId, WS_EVENTS.CHANNEL_UPDATED, view);
     return view;
+  }
+
+  /**
+   * Regra "Permitir mensagens diretas de membros do servidor" (item 6 do
+   * contrato de menus): amigo sempre pode; sem servidor em comum, nada muda;
+   * com servidor em comum, precisa de ao menos um onde o **destinatário**
+   * deixou a opção ligada. `aceitaDmDeMembro` (shared) é quem decide — aqui só
+   * junta os dados (amizade + a preferência do outro em cada servidor comum).
+   */
+  private async assertAceitaDm(meId: string, otherUserId: string): Promise<void> {
+    const amigos = (await this.friends.relationship(meId, otherUserId)) === "friend";
+    let permissoesNosServidoresEmComum: boolean[] = [];
+    if (!amigos) {
+      const [meusServidores, servidoresDoOutro] = await Promise.all([
+        this.prisma.guildMember.findMany({ where: { userId: meId }, select: { guildId: true } }),
+        this.prisma.guildMember.findMany({
+          where: { userId: otherUserId },
+          select: { guildId: true, permitirDmsDoServidor: true },
+        }),
+      ]);
+      const meusIds = new Set(meusServidores.map((g) => g.guildId));
+      permissoesNosServidoresEmComum = servidoresDoOutro
+        .filter((g) => meusIds.has(g.guildId))
+        .map((g) => g.permitirDmsDoServidor);
+    }
+    if (!aceitaDmDeMembro({ amigos, permissoesNosServidoresEmComum })) {
+      throw new ForbiddenException(ERRO_DM_NAO_PERMITIDA);
+    }
+  }
+
+  /**
+   * ── menus de contexto ── Fixa a conversa no topo da minha lista.
+   * Upsert idempotente: fixar o que já está fixado devolve o `pinnedAt`
+   * gravado sem mudá-lo.
+   */
+  async pin(meId: string, channelId: string): Promise<ConversaFixadaEvent> {
+    await this.acharConversa(meId, channelId);
+    const fixado = await this.prisma.dMPin.upsert({
+      where: { userId_channelId: { userId: meId, channelId } },
+      create: { userId: meId, channelId },
+      update: {},
+    });
+    const evento: ConversaFixadaEvent = {
+      channelId,
+      fixadaEm: fixado.pinnedAt.toISOString(),
+    };
+    this.realtime.emitToUser(meId, WS_EVENTS.DM_PIN_UPDATED, evento);
+    return evento;
+  }
+
+  /** ── menus de contexto ── Desafixa. Idempotente: quem não estava fixado devolve `null`. */
+  async unpin(meId: string, channelId: string): Promise<ConversaFixadaEvent> {
+    await this.acharConversa(meId, channelId);
+    await this.prisma.dMPin.deleteMany({ where: { userId: meId, channelId } });
+    const evento: ConversaFixadaEvent = { channelId, fixadaEm: null };
+    this.realtime.emitToUser(meId, WS_EVENTS.DM_PIN_UPDATED, evento);
+    return evento;
   }
 
   /** Cria um grupo (3+ participantes, contando o criador). */
@@ -224,6 +297,9 @@ export class DMsService {
       this.prisma.channelMember.delete({
         where: { channelId_userId: { channelId, userId: meId } },
       }),
+      // o DMPin é FK com User/Channel, não com ChannelMember: sair do grupo
+      // não o apaga por cascade — precisa ser explícito, na mesma transação
+      this.prisma.dMPin.deleteMany({ where: { userId: meId, channelId } }),
       ...(channel.ownerId === meId
         ? [
             this.prisma.channel.update({
@@ -251,25 +327,32 @@ export class DMsService {
       orderBy: { createdAt: "desc" },
     });
     const ids = channels.map((c) => c.id);
-    const [summaries, escondidas, previas] = await Promise.all([
+    const [summaries, escondidas, previas, fixadas] = await Promise.all([
       this.readState.summaries(meId, username, ids),
       this.prisma.dMHidden.findMany({ where: { userId: meId }, select: { channelId: true, hiddenAt: true } }),
       this.previas(ids),
+      this.prisma.dMPin.findMany({
+        where: { userId: meId, channelId: { in: ids } },
+        select: { channelId: true, pinnedAt: true },
+      }),
     ]);
     const hiddenAt = new Map(escondidas.map((h) => [h.channelId, h.hiddenAt]));
+    const fixadaEmMap = new Map(fixadas.map((f) => [f.channelId, f.pinnedAt.toISOString()]));
     // conversa recém-criada (amizade nova) ainda sem mensagem fica no topo,
     // como no Discord: a chave de ordem é a última atividade, e criar conta
     const criadaEm = new Map(channels.map((c) => [c.id, c.createdAt.toISOString()]));
-    const atividade = (c: DMChannelView) => c.lastMessageAt ?? criadaEm.get(c.id) ?? "";
     return channels
-      .map((c) => this.toView(c, meId, summaries.get(c.id), previas.get(c.id)))
+      .map((c) =>
+        this.toView(c, meId, summaries.get(c.id), previas.get(c.id), fixadaEmMap.get(c.id) ?? null),
+      )
       // conversa fechada volta sozinha quando chega mensagem depois do fechamento
       .filter((c) => {
         const at = hiddenAt.get(c.id);
         if (!at) return true;
         return !!c.lastMessageAt && new Date(c.lastMessageAt).getTime() > at.getTime();
       })
-      .sort((a, b) => atividade(b).localeCompare(atividade(a)));
+      // fixadas primeiro (ordem de fixação), depois por atividade — ver menus.ts
+      .sort((a, b) => compararConversas(a, b, (id) => criadaEm.get(id)));
   }
 
   /**
@@ -298,12 +381,30 @@ export class DMsService {
     meId: string,
     username?: string,
   ): Promise<DMChannelView> {
-    if (!username) return this.toView(channel, meId);
-    const [summaries, previas] = await Promise.all([
+    if (!username) {
+      const fixadaEm = await this.fixadaEmDe(meId, channel.id);
+      return this.toView(channel, meId, undefined, undefined, fixadaEm);
+    }
+    const [summaries, previas, fixadaEm] = await Promise.all([
       this.readState.summaries(meId, username, [channel.id]),
       this.previas([channel.id]),
+      this.fixadaEmDe(meId, channel.id),
     ]);
-    return this.toView(channel, meId, summaries.get(channel.id), previas.get(channel.id));
+    return this.toView(
+      channel,
+      meId,
+      summaries.get(channel.id),
+      previas.get(channel.id),
+      fixadaEm,
+    );
+  }
+
+  /** `fixadaEm` de uma conversa para um usuário (`null` = não fixada). */
+  private async fixadaEmDe(meId: string, channelId: string): Promise<string | null> {
+    const pin = await this.prisma.dMPin.findUnique({
+      where: { userId_channelId: { userId: meId, channelId } },
+    });
+    return pin?.pinnedAt.toISOString() ?? null;
   }
 
   /** Canonicaliza o par (ordem estável) para garantir 1 canal por dupla. */
@@ -316,6 +417,7 @@ export class DMsService {
     meId: string,
     summary?: ChannelReadSummary,
     previa?: PreviaDeMensagem | null,
+    fixadaEm?: string | null,
   ): DMChannelView {
     const others = channel.members
       .filter((p) => p.userId !== meId)
@@ -327,6 +429,7 @@ export class DMsService {
       ownerId: channel.ownerId,
       unreadCount: summary?.unreadCount ?? 0,
       ultimaMensagem: previa ?? null,
+      fixadaEm: fixadaEm ?? null,
     };
   }
 
@@ -429,15 +532,25 @@ export class DMsService {
    * Guardamos o instante em vez de apagar a conversa porque o histórico é dos
    * dois lados — e é o instante que faz ela reaparecer sozinha quando o outro
    * escreve, sem ninguém precisar limpar a linha no envio.
+   *
+   * ── menus de contexto ── Fechar também desafixa: conversa fechada sai da
+   * lista, então não faz sentido continuar no bloco das fixadas.
    */
   async hide(meId: string, channelId: string): Promise<{ channelId: string }> {
     await this.acharConversa(meId, channelId);
-    await this.prisma.dMHidden.upsert({
-      where: { userId_channelId: { userId: meId, channelId } },
-      create: { userId: meId, channelId },
-      update: { hiddenAt: new Date() },
-    });
+    await this.prisma.$transaction([
+      this.prisma.dMHidden.upsert({
+        where: { userId_channelId: { userId: meId, channelId } },
+        create: { userId: meId, channelId },
+        update: { hiddenAt: new Date() },
+      }),
+      this.prisma.dMPin.deleteMany({ where: { userId: meId, channelId } }),
+    ]);
     this.saiuDaMinhaColuna(meId, channelId);
+    this.realtime.emitToUser(meId, WS_EVENTS.DM_PIN_UPDATED, {
+      channelId,
+      fixadaEm: null,
+    } satisfies ConversaFixadaEvent);
     return { channelId };
   }
 
@@ -486,9 +599,13 @@ export class DMsService {
     const alvo = channel.members.find((m) => m.userId === userId);
     if (!alvo) throw new NotFoundException("Esta pessoa não está no grupo");
 
-    await this.prisma.channelMember.delete({
-      where: { channelId_userId: { channelId, userId } },
-    });
+    await this.prisma.$transaction([
+      this.prisma.channelMember.delete({
+        where: { channelId_userId: { channelId, userId } },
+      }),
+      // DMPin não cai por cascade daqui (FK é com User/Channel) — apaga junto
+      this.prisma.dMPin.deleteMany({ where: { userId, channelId } }),
+    ]);
     // sem isto o removido seguiria recebendo as mensagens ao vivo até recarregar
     this.realtime.leaveChannelRooms(userId, [channelId]);
     this.realtime.emitToUser(userId, WS_EVENTS.CHANNEL_DELETED, { channelId, guildId: null });
@@ -571,10 +688,21 @@ export class DMsService {
       where: { id: channelId },
       include: WITH_MEMBERS,
     });
+    const userIds = channel.members.map((m) => m.userId);
+    // fixadaEm é por espectador — busca de uma vez os pins de todo mundo
+    const fixadas = await this.prisma.dMPin.findMany({
+      where: { channelId, userId: { in: userIds } },
+      select: { userId: true, pinnedAt: true },
+    });
+    const fixadaEmMap = new Map(fixadas.map((f) => [f.userId, f.pinnedAt.toISOString()]));
     for (const m of channel.members) {
-      this.realtime.emitToUser(m.userId, WS_EVENTS.CHANNEL_UPDATED, this.toView(channel, m.userId));
+      this.realtime.emitToUser(
+        m.userId,
+        WS_EVENTS.CHANNEL_UPDATED,
+        this.toView(channel, m.userId, undefined, undefined, fixadaEmMap.get(m.userId) ?? null),
+      );
     }
-    return this.toView(channel, meId);
+    return this.toView(channel, meId, undefined, undefined, fixadaEmMap.get(meId) ?? null);
   }
 
   /** Conversa (DM ou grupo) da qual eu participo — 404 caso contrário. */

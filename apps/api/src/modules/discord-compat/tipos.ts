@@ -110,6 +110,8 @@ export interface LinhaDeMembro {
   joinedAt: Date;
   /** fim do castigo; null/passado = sem castigo (vira `communication_disabled_until`). */
   timeoutUntil: Date | null;
+  /** apelido por servidor (menus de contexto); null = sem apelido. Vira `nick`. */
+  nickname: string | null;
 }
 
 export interface LinhaDeAnexo {

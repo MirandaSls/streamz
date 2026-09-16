@@ -148,11 +148,9 @@ A verificação local (§3.2) deste lote (voz/Linux/macOS, download) rodou em
   `OAUTH_<PROVIDER>_CLIENT_ID/SECRET` e **exigir e-mail verificado no provedor**
   antes de vincular — sem isso, quem controlasse um e-mail alheio entraria na
   conta de outra pessoa. Hoje `linkedProviders` responde sempre `[]`.
-- **Apelido por servidor (`/nick`)** — o comando já existe no composer (tratado
-  como `"apelido"`, por isso não se acha procurando por "nick") e responde com um
-  toast de "ainda não está disponível". Falta a coluna de apelido em
-  `GuildMember`, a rota que a edita e a leitura no `displayNameOf` da lista de
-  membros.
+- **Perfil por servidor além do apelido** — o apelido por servidor existe
+  (`/nick`, "Editar perfil por servidor"); avatar, faixa e bio por servidor não.
+  A casca de bots (`PATCH` de membro em `discord-compat`) ainda recusa `nick`.
 - **"Seguir" canal de anúncios** de outro servidor — o item do menu existe
   desabilitado; não há modelo de canal seguido.
 - **Menção a cargo não vira notificação dedicada** — ela conta no badge, na

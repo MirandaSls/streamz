@@ -70,6 +70,9 @@ function servico(ultimaMensagem: Record<string, Date | undefined> = {}) {
   const escondidas: { userId: string; channelId: string; hiddenAt: Date }[] = [];
 
   const prisma = {
+    // `hide` grava o fechamento e desafixa na mesma transação — aqui é só a
+    // lista de promises já disparadas (nenhum teste precisa de atomicidade real)
+    $transaction: async (acoes: Promise<unknown>[]) => Promise.all(acoes),
     channel: {
       findMany: async () => canais,
       findFirst: async ({
@@ -99,6 +102,13 @@ function servico(ultimaMensagem: Record<string, Date | undefined> = {}) {
         );
         if (i >= 0) escondidas.splice(i, 1);
       },
+    },
+    // nenhum teste deste arquivo fixa conversa — sempre "não fixada"
+    dMPin: {
+      findUnique: async () => null,
+      findMany: async () => [],
+      upsert: async () => ({ pinnedAt: new Date() }),
+      deleteMany: async () => ({ count: 0 }),
     },
   } as unknown as PrismaService;
 

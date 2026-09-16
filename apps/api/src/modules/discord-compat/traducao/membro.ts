@@ -8,7 +8,9 @@ import { usuarioParaDiscord } from "./usuario";
  *
  * - `roles` **não inclui o `@everyone`** (no Discord ele é implícito) — a
  *   `LinhaDeMembro` já chega sem ele.
- * - `nick` é sempre null: o Streamz não tem apelido por servidor.
+ * - `nick` vem do apelido por servidor (menus de contexto, `GuildMember.nickname`).
+ *   `null` = sem apelido. A escrita pela casca continua recusando texto (ver o
+ *   cabeçalho de `MembrosCompatController.editar`) — só a leitura muda aqui.
  * - `communication_disabled_until` é o nosso `timeoutUntil`; data no passado é
  *   o mesmo que ausente (o histórico não é apagado, mas o castigo acabou).
  * - `comUsuario: false` produz o membro **sem** o campo `user` — é a forma que
@@ -24,7 +26,7 @@ export function membroParaDiscord(m: LinhaDeMembro, comUsuario = true): MembroDo
       : null;
 
   const membro: MembroDoDiscord = {
-    nick: null,
+    nick: m.nickname,
     avatar: null,
     roles: m.cargoSnowflakes.map(String),
     joined_at: m.joinedAt.toISOString(),

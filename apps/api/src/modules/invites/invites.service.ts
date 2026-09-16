@@ -279,6 +279,8 @@ export class InvitesService {
           user: toPublicUser(user),
           roleIds: [],
           joinedAt: novoMembro.joinedAt.toISOString(),
+          // membro recém-chegado nunca tem apelido ainda
+          nickname: null,
         },
       });
     }

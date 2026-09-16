@@ -2,10 +2,10 @@
 
 import type { MouseEvent, ReactNode } from "react";
 import type { Message } from "@streamz/shared";
-import { displayNameOf } from "@streamz/shared";
 import { Image as ImageIcon } from "@/components/ui/icones";
 import Avatar from "@/components/ui/Avatar";
 import TagDeBot from "@/components/ui/TagDeBot";
+import { useNomeParaMim } from "@/lib/nome-para-mim";
 import { goToMessage } from "@/stores/messages-navigate";
 import { useAuthorColor } from "@/stores/permissions";
 import { anchorOf, ui } from "@/stores/ui";
@@ -91,7 +91,18 @@ function LinhaDeReferencia({
  * cor é a do cargo (quando há) ou `--text-strong`, e a opacidade vale para as
  * duas.
  */
-function QuemECitado({ user, cor }: { user: Message["author"]; cor: string | null }) {
+function QuemECitado({
+  user,
+  cor,
+  guildId,
+}: {
+  user: Message["author"];
+  cor: string | null;
+  /** ── menus de contexto ── para o apelido de servidor de `useNomeParaMim`. */
+  guildId?: string | null;
+}) {
+  // apelido de amigo > apelido no servidor > nome de exibição (§3 do contrato)
+  const nome = useNomeParaMim(user, guildId ?? undefined);
   function abrirPerfil(e: MouseEvent<HTMLElement>) {
     ui.openProfile(user, anchorOf(e.currentTarget));
   }
@@ -100,7 +111,7 @@ function QuemECitado({ user, cor }: { user: Message["author"]; cor: string | nul
       <button
         type="button"
         onClick={abrirPerfil}
-        aria-label={`Perfil de ${displayNameOf(user)}`}
+        aria-label={`Perfil de ${nome}`}
         className="mr-1 shrink-0 rounded-full"
       >
         <Avatar user={user} size="xs" />
@@ -111,7 +122,7 @@ function QuemECitado({ user, cor }: { user: Message["author"]; cor: string | nul
         style={cor ? { color: cor } : undefined}
         className="mr-1 shrink-0 font-medium text-text-strong opacity-[.64] hover:underline"
       >
-        @{displayNameOf(user)}
+        @{nome}
       </button>
       {/* ── j-bots ── responder a um bot também diz que é um bot.
           `.repliedMessage_c19a55 .botTag_c19a55 {top:0}`: aqui a pílula não
@@ -151,7 +162,7 @@ export function ReferenciaDeResposta({ message, compacto }: { message: Message; 
 
   return (
     <LinhaDeReferencia compacto={compacto} onMouseEnter={() => realcar(true)} onMouseLeave={() => realcar(false)}>
-      <QuemECitado user={ref.author} cor={cor} />
+      <QuemECitado user={ref.author} cor={cor} guildId={message.guildId} />
       <button
         type="button"
         onClick={() =>
@@ -197,7 +208,7 @@ export function ReferenciaDeInteracao({ message, compacto }: { message: Message;
 
   return (
     <LinhaDeReferencia compacto={compacto}>
-      <QuemECitado user={interacao.user} cor={cor} />
+      <QuemECitado user={interacao.user} cor={cor} guildId={message.guildId} />
       <span className="truncate">
         usou <span className="font-medium text-text-strong">/{interacao.name}</span>
       </span>

@@ -26,6 +26,7 @@ import { useAuth } from "@/stores/auth";
 import { useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
+import { useNotas } from "@/stores/notas";
 import { usePermissions } from "@/stores/permissions";
 import { resolveStatus, usePresence } from "@/stores/presence";
 import { errorMessage } from "@/stores/socket-adapter";
@@ -90,6 +91,7 @@ export default function UserProfileModal({
   const outgoing = useFriends((s) => s.outgoing);
   const accept = useFriends((s) => s.accept);
   const dismiss = useFriends((s) => s.dismiss);
+  const nota = useNotas((s) => s.nota(userId));
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -157,6 +159,12 @@ export default function UserProfileModal({
         onSelect: () => void dismiss(meuPedido.id),
       });
     }
+    // nota privada (`docs/CONTRATO-MENUS.md` §2) — não depende da relação
+    itens.push({
+      label: nota ? "Editar nota" : "Adicionar nota",
+      description: "Visível apenas para você",
+      onSelect: () => ui.openModal({ kind: "notaDeUsuario", userId: user.id }),
+    });
     itens.push(
       bloqueado
         ? { label: "Desbloquear", onSelect: () => void unblock(user.id) }

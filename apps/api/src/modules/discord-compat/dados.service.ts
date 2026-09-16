@@ -308,6 +308,7 @@ export class DadosDeCompatService {
       select: {
         joinedAt: true,
         timeoutUntil: true,
+        nickname: true,
         user: { select: SELECAO_DE_USUARIO },
       },
     });
@@ -323,6 +324,7 @@ export class DadosDeCompatService {
       cargoSnowflakes: semOEveryone(atribuicoes),
       joinedAt: membro.joinedAt,
       timeoutUntil: membro.timeoutUntil,
+      nickname: membro.nickname,
     };
   }
 
@@ -333,7 +335,13 @@ export class DadosDeCompatService {
     const [membros, atribuicoes] = await Promise.all([
       this.prisma.guildMember.findMany({
         where: { guildId },
-        select: { userId: true, joinedAt: true, timeoutUntil: true, user: { select: SELECAO_DE_USUARIO } },
+        select: {
+          userId: true,
+          joinedAt: true,
+          timeoutUntil: true,
+          nickname: true,
+          user: { select: SELECAO_DE_USUARIO },
+        },
         orderBy: { joinedAt: "asc" },
       }),
       this.prisma.guildMemberRole.findMany({
@@ -354,6 +362,7 @@ export class DadosDeCompatService {
       cargoSnowflakes: semOEveryone(porUsuario.get(m.userId) ?? []),
       joinedAt: m.joinedAt,
       timeoutUntil: m.timeoutUntil,
+      nickname: m.nickname,
     }));
   }
 

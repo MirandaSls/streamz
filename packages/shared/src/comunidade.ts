@@ -223,6 +223,11 @@ export interface GuildMembership {
   mustAcceptRules: boolean;
   /** nunca vi a tela de boas-vindas deste servidor (e há o que mostrar). */
   showWelcome: boolean;
+  // ── menus de contexto ── (a API sempre preenche; opcionais por payload antigo)
+  /** meu apelido neste servidor; null = sem apelido. */
+  nickname?: string | null;
+  /** "Permitir mensagens diretas de membros do servidor" (padrão `true`). */
+  permitirDmsDoServidor?: boolean;
 }
 
 /**

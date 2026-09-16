@@ -149,6 +149,15 @@ export interface InteracoesDeBotState {
    * pendurar um "Esta interação falhou".
    */
   usarComando: (channelId: string, commandId: string, options: OpcaoDeInteracao[]) => Promise<InteracaoCriada>;
+  /**
+   * Comando de contexto (tipo 2 "usuário" ou 3 "mensagem"), disparado pelo
+   * submenu "Apps >" do menu de clique direito (`docs/CONTRATO-MENUS.md` §7).
+   * Mesmo fluxo pendente do comando de barra acima — reaproveitado porque o
+   * "<bot> está pensando…" e o relógio de segurança já existiam e são
+   * exatamente o que aqui também precisa: `targetId` é o único que muda no
+   * corpo (a mensagem ou o usuário alvo, em vez de `options`).
+   */
+  usarComandoDeContexto: (channelId: string, commandId: string, targetId: string) => Promise<InteracaoCriada>;
   /** Tira o "Esta interação falhou" de uma mensagem. */
   dispensarFalha: (messageId: string) => void;
 
@@ -390,6 +399,17 @@ export const useInteracoesDeBot = create<InteracoesDeBotState>((set, get) => {
       comecar({ nonce, tipo: "comando", channelId, messageId: null, customId: null, desde: Date.now() });
       try {
         return await api.criarInteracao(channelId, { commandId, options, nonce });
+      } catch (e) {
+        resolver(nonce);
+        throw e;
+      }
+    },
+
+    usarComandoDeContexto: async (channelId, commandId, targetId) => {
+      const nonce = novoNonce();
+      comecar({ nonce, tipo: "comando", channelId, messageId: null, customId: null, desde: Date.now() });
+      try {
+        return await api.usarComandoDeContexto(channelId, { commandId, targetId, nonce });
       } catch (e) {
         resolver(nonce);
         throw e;

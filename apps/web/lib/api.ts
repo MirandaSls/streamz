@@ -1,4 +1,10 @@
 import type {
+  ApelidoDeAmigoEvent,
+  ConversaFixadaEvent,
+  MinhaAssociacaoEditarInput,
+  NotaDeUsuario,
+  NotasDeUsuario,
+  UsuarioIgnoradoEvent,
   AdminCall,
   AdminChannelsPage,
   AdminGuildView,
@@ -186,6 +192,8 @@ async function comoApiError(res: Response): Promise<ApiError> {
 
 const json = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
 const patch = (body: unknown): RequestInit => ({ method: "PATCH", body: JSON.stringify(body) });
+const put = (body?: unknown): RequestInit =>
+  body === undefined ? { method: "PUT" } : { method: "PUT", body: JSON.stringify(body) };
 const del = (body?: unknown): RequestInit =>
   body === undefined ? { method: "DELETE" } : { method: "DELETE", body: JSON.stringify(body) };
 
@@ -851,6 +859,63 @@ export const api = {
   /** A única escrita do painel: abre a conversa 1-a-1 se não existir e manda. */
   adminEnviarMensagem: (userId: string, content: string) =>
     request<AdminMensagemEnviada>(`/admin/users/${userId}/message`, json({ content })),
+
+  // ── menus de contexto ── (docs/CONTRATO-MENUS.md)
+  //
+  // Escrito pelo cartão CONTRATO, antes dos cartões de API e web. Todas as
+  // mudanças também chegam às outras abas pelo socket (`dm.pinUpdated`,
+  // `user.noteUpdated`, `friend.nicknameUpdated`, `user.ignored`,
+  // `member.updated`, `guild.settingsUpdated`).
+
+  /** Fixar a conversa no topo da lista de Mensagens diretas (idempotente). */
+  fixarDM: (channelId: string) =>
+    request<ConversaFixadaEvent>(`/dms/${channelId}/pin`, put()),
+  /** Desafixar (idempotente; responde `fixadaEm: null`). */
+  desafixarDM: (channelId: string) =>
+    request<ConversaFixadaEvent>(`/dms/${channelId}/pin`, del()),
+
+  /** Todas as minhas notas (carregar uma vez no boot, junto de `friends`). */
+  minhasNotas: () => request<NotasDeUsuario>("/users/me/notes"),
+  /** A minha nota sobre uma pessoa (`nota: null` = sem nota). */
+  notaDeUsuario: (userId: string) => request<NotaDeUsuario>(`/users/${userId}/note`),
+  /** Grava a nota; texto vazio apaga. */
+  salvarNotaDeUsuario: (userId: string, nota: string) =>
+    request<NotaDeUsuario>(`/users/${userId}/note`, put({ nota })),
+
+  /** Apelido de amigo (só eu vejo). 400 se não for amigo. */
+  definirApelidoDeAmigo: (userId: string, apelido: string) =>
+    request<ApelidoDeAmigoEvent>(`/friends/${userId}/nickname`, put({ apelido })),
+  removerApelidoDeAmigo: (userId: string) =>
+    request<ApelidoDeAmigoEvent>(`/friends/${userId}/nickname`, del()),
+
+  /** Ignorar (distinto de bloquear; a pessoa não fica sabendo). */
+  ignorarUsuario: (userId: string) =>
+    request<UsuarioIgnoradoEvent>("/friends/ignores", json({ userId })),
+  deixarDeIgnorarUsuario: (userId: string) =>
+    request<UsuarioIgnoradoEvent>(`/friends/ignores/${userId}`, del()),
+
+  /** Meu apelido e minha privacidade neste servidor. Só o que vier é escrito. */
+  editarMinhaAssociacao: (guildId: string, body: MinhaAssociacaoEditarInput) =>
+    request<GuildMembership>(`/guilds/${guildId}/membership`, patch(body)),
+
+  /**
+   * Comandos de contexto (tipos 2 e 3) dos apps do servidor — o submenu
+   * "Apps >". `comandosDeApp` continua devolvendo só os de barra.
+   */
+  comandosDeContexto: (guildId: string) =>
+    request<ComandoDeApp[]>(`/guilds/${guildId}/comandos-de-app?tipos=2,3`),
+  /**
+   * Usa um comando de contexto: `targetId` é o cuid da mensagem (tipo 3) ou do
+   * usuário (tipo 2). Mesma rota e mesma resposta do comando de barra.
+   */
+  usarComandoDeContexto: (
+    channelId: string,
+    body: { commandId: string; targetId: string; nonce?: string },
+  ) =>
+    request<InteracaoCriada>(
+      `/channels/${channelId}/interactions`,
+      json({ ...body, options: [] } satisfies InteracaoCriarInput),
+    ),
 };
 
 async function enviarComProgresso(

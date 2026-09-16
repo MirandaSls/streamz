@@ -34,7 +34,7 @@ function pedido(id: string, de: string): FriendRequest {
 }
 
 beforeEach(() => {
-  useFriends.setState({ friends: [], incoming: [], outgoing: [], blocked: [] });
+  useFriends.setState({ friends: [], incoming: [], outgoing: [], blocked: [], apelidos: {}, ignored: [] });
 });
 
 describe("handleRequest", () => {
@@ -93,6 +93,48 @@ describe("handleBlocked", () => {
     useFriends.getState().handleBlocked(pessoa("bia"), false);
     useFriends.getState().handleBlocked(pessoa("bia"), false);
     expect(useFriends.getState().blocked).toEqual([]);
+  });
+});
+
+describe("handleNicknameUpdated", () => {
+  it("grava o apelido novo", () => {
+    useFriends.getState().handleNicknameUpdated({ userId: "bia", apelido: "Bibi" });
+    expect(useFriends.getState().apelidos).toEqual({ bia: "Bibi" });
+  });
+
+  it("apelido: null remove a chave (amizade acabou, ou apelido apagado)", () => {
+    useFriends.setState({ apelidos: { bia: "Bibi", caio: "Cai" } });
+    useFriends.getState().handleNicknameUpdated({ userId: "bia", apelido: null });
+    expect(useFriends.getState().apelidos).toEqual({ caio: "Cai" });
+  });
+
+  it("aplicar duas vezes não muda o resultado", () => {
+    useFriends.getState().handleNicknameUpdated({ userId: "bia", apelido: "Bibi" });
+    useFriends.getState().handleNicknameUpdated({ userId: "bia", apelido: "Bibi" });
+    expect(useFriends.getState().apelidos).toEqual({ bia: "Bibi" });
+  });
+});
+
+describe("handleIgnored", () => {
+  it("ignorar põe no topo da lista, uma vez só", () => {
+    useFriends.getState().handleIgnored({ userId: "bia", ignorado: true, user: pessoa("bia") });
+    useFriends.getState().handleIgnored({ userId: "bia", ignorado: true, user: pessoa("bia") });
+    expect(useFriends.getState().ignored?.map((u) => u.id)).toEqual(["bia"]);
+  });
+
+  it("deixar de ignorar tira da lista, e de novo não faz nada", () => {
+    useFriends.setState({ ignored: [pessoa("bia")] });
+    useFriends.getState().handleIgnored({ userId: "bia", ignorado: false, user: pessoa("bia") });
+    useFriends.getState().handleIgnored({ userId: "bia", ignorado: false, user: pessoa("bia") });
+    expect(useFriends.getState().ignored).toEqual([]);
+  });
+});
+
+describe("estaIgnorado", () => {
+  it("true só para quem está na lista", () => {
+    useFriends.setState({ ignored: [pessoa("bia")] });
+    expect(useFriends.getState().estaIgnorado("bia")).toBe(true);
+    expect(useFriends.getState().estaIgnorado("caio")).toBe(false);
   });
 });
 

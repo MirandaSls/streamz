@@ -155,6 +155,15 @@ model User {
   efemerasEscritas EphemeralMessage[] @relation("EfemeraAutor")
   /// as respostas efêmeras que **só esta pessoa** pode ver
   efemerasParaMim  EphemeralMessage[] @relation("EfemeraPara")
+
+  // ── menus de contexto ── (docs/CONTRATO-MENUS.md)
+  dmsFixadas        DMPin[]
+  notasEscritas     UserNote[]       @relation("NotaDono")
+  notasSobreMim     UserNote[]       @relation("NotaAlvo")
+  apelidosDados     FriendNickname[] @relation("ApelidoDono")
+  apelidosRecebidos FriendNickname[] @relation("ApelidoAlvo")
+  ignorados         UserIgnore[]     @relation("Ignorador")
+  ignoradoPor       UserIgnore[]     @relation("Ignorado")
 }
 
 // Até onde cada usuário leu cada canal. É o que decide "não lido" e o badge
@@ -312,6 +321,14 @@ model GuildMember {
   // Quando viu a tela de boas-vindas; null = mostrar ao abrir o servidor.
   welcomeSeenAt   DateTime?
 
+  // ── menus de contexto ──
+  // Apelido neste servidor (até 32), editado pelo próprio membro. null = sem
+  // apelido, a tela mostra o nome de exibição. É o `nick` do Discord.
+  nickname              String?
+  // "Permitir mensagens diretas de membros do servidor" (Config. de
+  // privacidade do servidor). Só pesa quando quem abre a DM não é amigo.
+  permitirDmsDoServidor Boolean   @default(true)
+
   @@unique([userId, guildId])
   @@index([guildId])
 }
@@ -370,6 +387,8 @@ model Channel {
   notificationSettings NotificationSetting[]
   // ── d-social ──
   hiddenBy   DMHidden[]
+  // ── menus de contexto ── quem fixou esta conversa no topo da própria lista
+  fixadaPor  DMPin[]
 
   // ── h-moderacao ──
   channelInvites Invite[] @relation("InviteChannel")
@@ -795,6 +814,72 @@ model DMHidden {
   @@index([channelId])
 }
 
+// ── menus de contexto ─────────────────────────────────────────
+// Tudo abaixo é **por usuário e privado**: ninguém além do dono lê estas
+// linhas, e nenhum evento delas sai para outra sala que não `user:<dono>`.
+// Contrato em docs/CONTRATO-MENUS.md.
+
+// Conversa fixada no topo da lista de Mensagens diretas de um usuário. As
+// fixadas vêm primeiro, na ordem em que foram fixadas (`pinnedAt` crescente).
+model DMPin {
+  userId    String
+  channelId String
+  pinnedAt  DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@id([userId, channelId])
+  @@index([channelId])
+}
+
+// Nota privada sobre outro usuário ("Visível apenas para você"), até 256.
+// Nota vazia não é gravada: apagar o texto apaga a linha.
+model UserNote {
+  ownerId   String
+  targetId  String
+  text      String
+  updatedAt DateTime @updatedAt
+
+  owner  User @relation("NotaDono", fields: [ownerId], references: [id], onDelete: Cascade)
+  target User @relation("NotaAlvo", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@id([ownerId, targetId])
+  @@index([targetId])
+}
+
+// Apelido de amigo: nome que só o dono vê no lugar do nome do amigo (até 32).
+// Tabela à parte, e não coluna na `Friendship`, porque a amizade é uma linha
+// só para os dois lados e cada lado tem o seu apelido. Some quando a amizade
+// acaba (desfazer, bloquear) — quem apaga é o FriendsService.
+model FriendNickname {
+  ownerId   String
+  targetId  String
+  nickname  String
+  updatedAt DateTime @updatedAt
+
+  owner  User @relation("ApelidoDono", fields: [ownerId], references: [id], onDelete: Cascade)
+  target User @relation("ApelidoAlvo", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@id([ownerId, targetId])
+  @@index([targetId])
+}
+
+// Ignorar: distinto de bloquear. O ignorado não fica sabendo e nada muda
+// para ele; do lado de quem ignora, a web esconde as mensagens atrás de
+// "Mensagem ignorada" e não notifica. Direcional, como `Block`.
+model UserIgnore {
+  ignorerId String
+  ignoredId String
+  createdAt DateTime @default(now())
+
+  ignorer User @relation("Ignorador", fields: [ignorerId], references: [id], onDelete: Cascade)
+  ignored User @relation("Ignorado", fields: [ignoredId], references: [id], onDelete: Cascade)
+
+  @@id([ignorerId, ignoredId])
+  @@index([ignoredId])
+}
+
 // ── g-emojis-midia ──────────────────────────────────────────
 // Emoji personalizado de um servidor. O arquivo vive no storage (chave `key`);
 // a leitura é pela rota `GET /emojis/:id/image`, que serve os bytes — emoji
@@ -1185,7 +1270,8 @@ model ApplicationCommand {
   guildId       String?
   name          String
   description   String
-  /// 1 CHAT_INPUT (só este na F3), 2 USER, 3 MESSAGE
+  /// 1 CHAT_INPUT, 2 USER, 3 MESSAGE (os dois últimos são os menus de
+  /// contexto "Apps >", desde a entrega dos menus — docs/CONTRATO-MENUS.md)
   type          Int      @default(1)
   /// array de opções no formato do Discord, como veio no PUT
   options       Json     @default("[]")
@@ -1201,7 +1287,9 @@ model ApplicationCommand {
   /// comandos **globais** de mesmo nome passariam por aqui. Quem garante a
   /// unicidade do global é o `PUT` (sobrescrita em bloco, numa transação); o
   /// índice fica como o §10 o desenha, e a redundância não faz mal.
-  @@unique([applicationId, guildId, name])
+  /// ── menus de contexto ── `type` entrou na chave: o Discord deixa um app ter
+  /// o comando de barra `info` e o de contexto `info` ao mesmo tempo.
+  @@unique([applicationId, guildId, type, name])
   @@index([guildId])
 }
 
@@ -1236,6 +1324,11 @@ model Interaction {
   /// normal ou a efêmera. SetNull: apagar a mensagem não apaga o registro.
   messageId          String?
   ephemeralMessageId String?
+  /// ── menus de contexto ── o alvo de um comando de contexto: cuid da
+  /// `Message` (comando tipo 3) ou do `User` (tipo 2). Null no comando de
+  /// barra. Sem FK de propósito: aponta para uma de duas tabelas, e apagar o
+  /// alvo não deve apagar o registro da interação.
+  targetId      String?
   /// ── onda 3 ── o `nonce` que o navegador mandou; volta em todo evento
   /// `interaction.*`. Mora no banco porque o callback pode cair em outra
   /// instância da API que não a que recebeu o clique.

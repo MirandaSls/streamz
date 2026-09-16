@@ -106,6 +106,13 @@ function servico(
         return [];
       },
     },
+    // nenhum teste deste arquivo fixa conversa — sempre "não fixada"
+    dMPin: {
+      findMany: async () => {
+        chamadas.push("dMPin.findMany");
+        return [];
+      },
+    },
     attachment: {
       findMany: async () => {
         chamadas.push("attachment.findMany");

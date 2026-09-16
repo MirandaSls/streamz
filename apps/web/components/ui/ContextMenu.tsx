@@ -70,6 +70,8 @@ export const MENU_WIDTH = 220;
 export const MENU_WIDTH_WIDE = MENU_WIDTH;
 
 const EDGE = 8;
+/** teto do crescimento da caixa quando um rótulo não cabe em `largura`. */
+const LARGURA_MAXIMA = 320;
 /**
  * O submenu abre depois de uma pausa: passar o mouse por cima a caminho de
  * outro item não dispara. Exportado porque os menus de áudio do rodapé
@@ -240,7 +242,11 @@ function Painel({
   useLayoutEffect(() => {
     nascidaEm.current = Date.now();
     const h = ref.current?.offsetHeight ?? 0;
-    setPos(colocar(x, y, largura, h, alternativoX));
+    // a caixa cresce além de `largura` quando um rótulo não cabe (ver o
+    // `style` abaixo): a colocação usa a largura real, senão o menu largo
+    // passaria da borda da janela
+    const w = Math.max(largura, ref.current?.offsetWidth ?? 0);
+    setPos(colocar(x, y, w, h, alternativoX));
   }, [x, y, largura, alternativoX, items]);
 
   useEffect(() => {
@@ -327,7 +333,16 @@ function Painel({
             : {
                 left: pos?.x ?? x,
                 top: pos?.y ?? y,
-                width: largura,
+                /*
+                  220 é a medida do Discord (ver `MENU_WIDTH`), mas lá a fonte
+                  é a gg sans; a Noto Sans daqui sai ~12% mais larga e cortava
+                  "Copiar link da mensagem", "Convidar para o servidor" e
+                  "Ocultar canais silenciados" (bancada de 2026-09-16). O menu
+                  nasce com 220 e só cresce o que o rótulo pedir, até 320.
+                */
+                minWidth: largura,
+                width: "max-content",
+                maxWidth: Math.max(largura, LARGURA_MAXIMA),
                 transformOrigin: pos?.origem ?? "left top",
               }
         }
@@ -427,7 +442,10 @@ function Painel({
           const filho = isSubmenu(item);
           const marcado = !filho && item.checked === true;
           const controle = !filho ? item.control : undefined;
-          const descricao = !filho ? item.description : undefined;
+          // item-pai de submenu também tem `description` (segunda linha, ex.:
+          // "Config. de notificação" > "Nada" no print p5) — só `control`
+          // (rádio/checkbox) e `checked` são exclusivos do item-folha.
+          const descricao = item.description;
           const forte = !filho && item.forte === true;
           /*
             `.colorDefault_c1e9c4`/`.colorDanger_c1e9c4` (css-bruto/858942…): o
@@ -465,7 +483,7 @@ function Painel({
               }}
               type="button"
               role={
-                controle === "radio"
+                controle === "radio" || controle === "selo"
                   ? "menuitemradio"
                   : controle === "checkbox"
                     ? "menuitemcheckbox"
@@ -565,15 +583,36 @@ function Painel({
                 />
               )}
               <span className="min-w-0 flex-1">
-                <span className={`block ${forte ? "font-semibold" : "font-medium"}`}>
-                  {item.label}
+                <span
+                  className={`flex items-center gap-2 ${forte ? "font-semibold" : "font-medium"}`}
+                >
+                  <span className="truncate">{item.label}</span>
+                  {controle === "selo" && marcado && (
+                    <span
+                      aria-hidden="true"
+                      className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-text-brand"
+                    >
+                      <svg viewBox="0 0 12 12" className="h-3 w-3 text-white">
+                        <path
+                          d="M2.5 6.2 4.8 8.5 9.5 3.8"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </span>
+                  )}
                 </span>
                 {descricao && (
                   // `.subtext_c1e9c4`: `margin-top:2px`, cor `--text-muted`
                   // fixa (não opacidade sobre a cor do item — herdaria o
                   // `text-strong` do rótulo). `whitespace-normal` porque a
                   // descrição do "Não perturbar" ocupa duas linhas.
-                  <span className="mt-0.5 block whitespace-normal text-xs font-normal leading-4 text-text-muted">
+                  // `contain: inline-size`: a descrição quebra na largura que o
+                  // rótulo definir e não empurra a caixa (que é `max-content`)
+                  <span className="mt-0.5 block whitespace-normal text-xs font-normal leading-4 text-text-muted [contain:inline-size]">
                     {descricao}
                   </span>
                 )}

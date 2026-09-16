@@ -144,6 +144,12 @@ export interface GuildMemberView {
    * membros e o critério de ordenação padrão dela.
    */
   joinedAt: string;
+  /**
+   * ── menus de contexto ── apelido neste servidor (`nick` do Discord), até
+   * `MAX_APELIDO_NO_SERVIDOR`. `null` = sem apelido. A API sempre preenche;
+   * opcional só por payload antigo em cache. Nome na tela: `nomeParaMim`.
+   */
+  nickname?: string | null;
 }
 
 export interface InviteInfo {
@@ -188,6 +194,15 @@ export interface DMChannelView extends Channel {
    * dizer "não sei", não "não tem".
    */
   ultimaMensagem?: PreviaDeMensagem | null;
+  /**
+   * ── menus de contexto ── quando **eu** fixei esta conversa no topo da lista
+   * (ISO); `null` = não fixada. Por espectador. Ordem da lista:
+   * `compararConversas` (menus.ts).
+   *
+   * Opcional pelo mesmo motivo de `ultimaMensagem`; a API sempre preenche, e
+   * `undefined` se lê como `null`.
+   */
+  fixadaEm?: string | null;
 }
 
 /** true para conversa de grupo (3+); false para DM 1-a-1. */

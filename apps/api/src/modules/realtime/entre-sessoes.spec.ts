@@ -184,6 +184,12 @@ function servicoDeConversas(canal: Record<string, unknown>) {
         return {};
       },
     },
+    // fechar e sair também desafixam a conversa (menus de contexto)
+    dMPin: {
+      async deleteMany() {
+        return { count: 0 };
+      },
+    },
     message: {
       async create() {
         return { id: "m1" };
@@ -307,6 +313,15 @@ describe("amizade", () => {
       dMHidden: {
         async upsert() {
           return {};
+        },
+      },
+      // bloquear apaga os apelidos de amigo nos dois sentidos
+      friendNickname: {
+        async findMany() {
+          return [];
+        },
+        async deleteMany() {
+          return { count: 0 };
         },
       },
       async $transaction() {

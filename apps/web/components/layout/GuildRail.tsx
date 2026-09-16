@@ -1,36 +1,41 @@
 "use client";
 
 import {
-  CheckCheck,
-  LogOut,
   Plus,
   MessageSquare,
-  Settings,
-  UserPlus,
   Users,
   Volume2,
 } from "@/components/ui/icones";
 import {
+  ALL_PERMISSIONS,
+  computePermissions,
   displayNameOf,
   guildNotificationScope,
   isGroupChannel,
   type DMChannelView,
   type Guild,
+  type PermissionMember,
 } from "@streamz/shared";
 import { corDoAvatar } from "@/components/ui/avatar-cores";
 import Marca from "@/components/ui/Marca";
 import Tooltip from "@/components/ui/Tooltip";
 import { Badge } from "@/components/ui/primitivos";
 import { MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
+import {
+  ABAS_DO_SERVIDOR,
+  abaDoServidorVisivel,
+} from "@/components/modals/ServerSettingsModal";
 import { useT } from "@/lib/i18n";
 import { submenuNotificacoes, submenuSilenciar } from "@/lib/notification-menu";
 import { useAplicativos } from "@/stores/aplicativos";
 import { useAuth } from "@/stores/auth";
+import { useCanaisOcultos } from "@/stores/canais-ocultos";
 import { useChannels } from "@/stores/channels";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
 import { useNotifications } from "@/stores/notifications";
+import { usePermissions } from "@/stores/permissions";
 import { useSettings } from "@/stores/settings";
 import { useVoice } from "@/stores/voice";
 import { ui, useUI, type MenuItem } from "@/stores/ui";
@@ -44,6 +49,29 @@ function acronym(name: string): string {
     .join("")
     .slice(0, 4)
     .toUpperCase();
+}
+
+/**
+ * Bits de permissão de `guild` para o submenu "Config. do servidor" do menu
+ * do ícone — sem `useCan`/`useMyPermissions` (stores/permissions.ts), que só
+ * conhecem cargos e regras do servidor **ativo**: aqui o clique direito pode
+ * ser em qualquer ícone da rail, não só no que está na tela.
+ *
+ * Mesmo critério conservador de `useMyPermissions`: o dono sempre vale tudo
+ * (`computePermissions` ignora os cargos para ele); sem os cargos carregados
+ * — o ícone não é do servidor ativo, e só o dele tem `roles`/`overrides` no
+ * `usePermissions` — o conservador é 0 (não sabemos, então escondemos o que
+ * pede permissão, como o "não sei" que os outros hooks também tratam como
+ * "não posso" para esconder controle).
+ */
+function permissoesDoServidor(guild: Guild, meuId: string | undefined): number {
+  if (!meuId) return 0;
+  if (guild.ownerId === meuId) return ALL_PERMISSIONS;
+  const perm = usePermissions.getState();
+  if (perm.guildId !== guild.id) return 0;
+  const roleIds = useGuilds.getState().members.find((m) => m.user.id === meuId)?.roleIds ?? [];
+  const member: PermissionMember = { isOwner: false, roleIds };
+  return computePermissions(member, perm.roles, []);
 }
 
 /**
@@ -340,41 +368,77 @@ export default function GuildRail({ compacto = false }: { compacto?: boolean } =
    * Botão direito no ícone do servidor. Este menu simplesmente não existia — e
    * é onde o Discord põe "Marcar como lido", que antes estava no dropdown do
    * cabeçalho da barra de canais.
+   *
+   * ESPEC §D (print p5): **sem ícone em item nenhum**, inclusive nos
+   * submenus — por isso `submenuSilenciar`/`submenuNotificacoes` entram com
+   * `semIcones: true` (o cabeçalho da coluna, `CabecalhoDoServidor.tsx`,
+   * continua com ícone: é outro menu, com outra referência visual).
    */
   function openGuildIconMenu(e: React.MouseEvent, guild: Guild) {
     e.preventDefault();
     const escopo = porEscopo[guildNotificationScope(guild.id)];
     const souDono = guild.ownerId === meuId;
+    const bits = permissoesDoServidor(guild, meuId);
+    const abasVisiveis = ABAS_DO_SERVIDOR.filter((a) => abaDoServidorVisivel(a, bits, souDono));
     const items: MenuItem[] = [
       {
-        label: "Marcar como lido",
-        icon: <CheckCheck size={18} />,
+        label: "Marcar como lida",
         disabled: !guild.unread,
         onSelect: () => void markGuildRead(guild.id),
       },
       { separator: true },
       {
-        label: "Convidar pessoas",
-        icon: <UserPlus size={18} />,
+        label: "Convidar para o servidor",
+        // mesmo convite que o botão de convidar já abre hoje: entra no
+        // servidor (para o modal carregar os canais e as regras certas) e
+        // abre o modal de convite em seguida
         onSelect: () => {
           select(guild);
           void createInvite();
         },
       },
-      submenuSilenciar("Silenciar servidor", { tipo: "servidor", guildId: guild.id }, escopo, t),
-      submenuNotificacoes({ tipo: "servidor", guildId: guild.id }, escopo, t),
       { separator: true },
+      submenuSilenciar(
+        "Silenciar servidor",
+        { tipo: "servidor", guildId: guild.id },
+        escopo,
+        t,
+        true,
+      ),
+      submenuNotificacoes({ tipo: "servidor", guildId: guild.id }, escopo, t, "Config. de notificação", true),
       {
-        label: "Configurações do servidor",
-        icon: <Settings size={18} />,
-        onSelect: () => ui.openModal({ kind: "serverSettings", guildId: guild.id }),
+        label: "Ocultar canais silenciados",
+        control: "checkbox",
+        checked: useCanaisOcultos.getState().ocultarSilenciados(guild.id),
+        onSelect: () => useCanaisOcultos.getState().alternar(guild.id),
       },
+      { separator: true },
     ];
+    // sem aba nenhuma visível (ninguém, nem o dono, vê "Configurações do
+    // servidor" vazia): o item some, como o Discord nunca mostra item morto
+    if (abasVisiveis.length > 0) {
+      items.push({
+        label: "Config. do servidor",
+        submenu: abasVisiveis.map((a) => ({
+          label: a.label,
+          onSelect: () => ui.openModal({ kind: "serverSettings", guildId: guild.id, tab: a.id }),
+        })),
+      });
+    }
+    items.push(
+      {
+        label: "Config. de privacidade",
+        onSelect: () => ui.openModal({ kind: "privacidadeDoServidor", guildId: guild.id }),
+      },
+      {
+        label: "Editar perfil por servidor",
+        onSelect: () => ui.openModal({ kind: "perfilPorServidor", guildId: guild.id }),
+      },
+    );
     if (!souDono) {
       items.push({ separator: true });
       items.push({
         label: "Sair do servidor",
-        icon: <LogOut size={18} />,
         danger: true,
         onSelect: () => void leaveGuild(guild.id),
       });

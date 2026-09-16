@@ -21,6 +21,8 @@ import {
   type Channel,
   type ChannelDeletedEvent,
   type ChannelOverridesEvent,
+  type ApelidoDeAmigoEvent,
+  type ConversaFixadaEvent,
   type EmojiUpdatedEvent,
   type FriendAcceptedEvent,
   type FriendRemovedEvent,
@@ -36,6 +38,7 @@ import {
   type MessageDeletedEvent,
   type MessagePinnedEvent,
   type MessageUnpinnedEvent,
+  type NotaDeUsuario,
   type PresenceUpdatePayload,
   type PublicUser,
   type Role,
@@ -46,6 +49,7 @@ import {
   type StickerUpdatedEvent,
   type ThreadUpdatedEvent,
   type UserBlockedEvent,
+  type UsuarioIgnoradoEvent,
   type VoiceEvictedEvent,
   type VoiceMovedEvent,
   type VoiceStateEvent,
@@ -87,6 +91,7 @@ import { useComandosDeApp } from "@/stores/comandos-de-app";
 import { useInteracoesDeBot } from "@/stores/interacoes-de-bot";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
+import { useNotas } from "@/stores/notas";
 import { useEmojis } from "@/stores/emojis";
 import { useSoundboard } from "@/stores/soundboard";
 import { useGuilds } from "@/stores/guilds";
@@ -129,6 +134,9 @@ export function useRealtime(currentUserId?: string): void {
     // sessão. Fora do escopo do agente E, mas é o que faz o deep link funcionar.
     if (useGuilds.getState().guilds.length === 0) void useGuilds.getState().load();
     if (useDMs.getState().channels.length === 0) void useDMs.getState().refreshList();
+    // ── menus de contexto ── minhas notas, junto do resto do boot
+    // (`load` é idempotente: não repete se algo já chamou antes)
+    void useNotas.getState().load();
     // desktop: permissão e clique da notificação resolvidos antes da primeira
     void prepararNotificacoes();
     // voltar ao app lê o canal que está na tela (o que chegou sem foco contou
@@ -231,11 +239,18 @@ export function useRealtime(currentUserId?: string): void {
 
       on<MemberUpdatedEvent>(
         WS_EVENTS.MEMBER_UPDATED,
-        ({ guildId, userId, role, roleIds, timeoutUntil }) => {
-          useGuilds.getState().handleMemberUpdated(guildId, userId, role, roleIds, timeoutUntil);
+        ({ guildId, userId, role, roleIds, timeoutUntil, nickname }) => {
+          useGuilds
+            .getState()
+            .handleMemberUpdated(guildId, userId, role, roleIds, timeoutUntil, nickname);
           // h-moderacao: o castigo chega por aqui — é o que troca o composer pelo aviso
           if (userId === currentUserId && timeoutUntil !== undefined) {
             useModeration.getState().applyTimeout(guildId, userId, timeoutUntil);
+          }
+          // ── menus de contexto ── meu apelido neste servidor mudou por outra
+          // aba/dispositivo (ou é o eco da minha própria edição)
+          if (userId === currentUserId && nickname !== undefined) {
+            useModeration.getState().applyNickname(guildId, nickname);
           }
           // evento de castigo não fala de papel nem de cargo: nada a recarregar
           if (userId === currentUserId && timeoutUntil === undefined) {
@@ -366,6 +381,22 @@ export function useRealtime(currentUserId?: string): void {
         useFriends.getState().handleBlocked(user, blocked);
       }),
 
+      // ── menus de contexto ── (`docs/CONTRATO-MENUS.md`) nota, apelido de
+      // amigo e ignorar são privados: o evento só chega para `user:<eu>`,
+      // nunca para o outro lado
+      on<NotaDeUsuario>(WS_EVENTS.USER_NOTE_UPDATED, (evento) => {
+        useNotas.getState().handleUpdated(evento);
+      }),
+      on<ApelidoDeAmigoEvent>(WS_EVENTS.FRIEND_NICKNAME_UPDATED, (evento) => {
+        useFriends.getState().handleNicknameUpdated(evento);
+      }),
+      on<UsuarioIgnoradoEvent>(WS_EVENTS.USER_IGNORED, (evento) => {
+        useFriends.getState().handleIgnored(evento);
+      }),
+      on<ConversaFixadaEvent>(WS_EVENTS.DM_PIN_UPDATED, (evento) => {
+        useDMs.getState().handleDmPinUpdated(evento);
+      }),
+
       // ── g-emojis-midia ──
       on<EmojiUpdatedEvent>(WS_EVENTS.EMOJI_UPDATED, ({ guildId, emojis }) => {
         useEmojis.getState().applyEmojis(guildId, emojis);
@@ -484,6 +515,9 @@ export function useRealtime(currentUserId?: string): void {
         if (guildDeCategorias) void useCategories.getState().loadForGuild(guildDeCategorias);
         // amigos, pedidos e bloqueios podem ter mudado durante a queda
         void useFriends.getState().load(true);
+        // ── menus de contexto ── notas idem — outra conexão pode ter
+        // salvo/apagado alguma enquanto esta esteve fora
+        void useNotas.getState().load(true);
         // emoji/figurinha podem ter mudado enquanto a conexão esteve fora
         void useEmojis.getState().load();
         // e os sons do painel, que mudam pelo mesmo tipo de evento
@@ -580,7 +614,11 @@ function onMessageArrived(message: Message, currentUserId?: string) {
   // "@ ligado" — a regra é a do contrato, a mesma que a API conta
   const meusCargos =
     useGuilds.getState().members.find((m) => m.user.id === me?.id)?.roleIds ?? [];
-  const mention = !mine && !!me && mentionsMe(message, { ...me, roleIds: meusCargos });
+  // usuário ignorado: a mensagem entra na conversa (recolhida), mas não conta
+  // como menção nem notifica — é o que "Ignorar" promete no Discord
+  const ignorado = !mine && useFriends.getState().estaIgnorado(message.author.id);
+  const mention =
+    !mine && !ignorado && !!me && mentionsMe(message, { ...me, roleIds: meusCargos });
   // "na tela" = a interface está **mostrando** este canal (modo de visão,
   // página Amigos, conversa/canal selecionado — ver `lib/na-tela.ts`) numa
   // janela visível **e com foco**: atrás de outro app, ou com a conversa
@@ -614,7 +652,7 @@ function onMessageArrived(message: Message, currentUserId?: string) {
     }
   }
 
-  if (!mine && !naTela) notifyIfAway(message, mention);
+  if (!mine && !ignorado && !naTela) notifyIfAway(message, mention);
   // ── e-configuracoes ── contador de menções no ícone do app
   atualizarContadorNoIcone();
 }

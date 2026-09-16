@@ -10,6 +10,7 @@ import Tooltip from "@/components/ui/Tooltip";
 import { api } from "@/lib/api";
 import { useAuth } from "@/stores/auth";
 import { useFriends, useRelationship } from "@/stores/friends";
+import { useNotas } from "@/stores/notas";
 import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
 import { anchorOf, ui, type MenuItem } from "@/stores/ui";
 
@@ -100,6 +101,7 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
   const outgoing = useFriends((s) => s.outgoing);
   const accept = useFriends((s) => s.accept);
   const dismiss = useFriends((s) => s.dismiss);
+  const nota = useNotas((s) => s.nota(raw.id));
   useEffect(() => {
     void loadFriends();
   }, [loadFriends]);
@@ -177,6 +179,13 @@ export default function DMProfilePanel({ user: raw }: { user: PublicUser }) {
     if (relacao === "outgoing" && meuPedido) {
       itens.push({ label: "Cancelar pedido", danger: true, onSelect: () => void dismiss(meuPedido.id) });
     }
+    // nota privada (`docs/CONTRATO-MENUS.md` §2) — não depende da relação:
+    // dá para anotar sobre qualquer usuário, amigo ou não
+    itens.push({
+      label: nota ? "Editar nota" : "Adicionar nota",
+      description: "Visível apenas para você",
+      onSelect: () => ui.openModal({ kind: "notaDeUsuario", userId: user.id }),
+    });
     itens.push(
       relacao === "blocked"
         ? { label: "Desbloquear", onSelect: () => void unblock(user.id) }

@@ -36,6 +36,7 @@ import {
 } from "@/components/layout/sidebar/CategoriaEItemDeCanal";
 import { CanalDeVoz } from "@/components/layout/sidebar/CanalDeVoz";
 import { urlPublica } from "@/lib/links-do-app";
+import { useCanaisOcultos } from "@/stores/canais-ocultos";
 import { canalVisivel } from "@/stores/categoria-colapso";
 import { useCategories } from "@/stores/categories";
 import { groupByCategory, type CategoryGroup } from "@/stores/channel-order";
@@ -121,6 +122,15 @@ export default function ChannelSidebar() {
   const podeGerenciarCanais = useCan(Permission.MANAGE_CHANNELS);
   /** Arrastar alguém de um canal de voz para outro (bit novo, ver ADR-0002). */
   const podeMoverMembros = useCan(Permission.MOVE_MEMBERS);
+  /**
+   * "Ocultar canais silenciados" (print p5 e o cabeçalho do servidor) — por
+   * servidor, lida de `stores/canais-ocultos.ts`. Quem liga/desliga é o
+   * checkbox dos dois menus (`GuildRail.tsx`, `CabecalhoDoServidor.tsx`); aqui
+   * só se lê, para decidir o que a coluna mostra.
+   */
+  const ocultarSilenciados = useCanaisOcultos((s) =>
+    guild ? s.ocultarSilenciados(guild.id) : false,
+  );
 
   const channels = useChannels((s) => s.channels);
   const loading = useChannels((s) => s.loading);
@@ -395,6 +405,19 @@ export default function ChannelSidebar() {
     );
   }
 
+  /**
+   * Com "Ocultar canais silenciados" ligado, some da coluna quem está mudo —
+   * exceto o canal aberto agora (ele não pode desaparecer debaixo de quem
+   * está nele) e quem tem menção não lida (a pílula vermelha precisa
+   * continuar visível, ou a citação passaria despercebida).
+   */
+  function ocultoPorSilencio(channel: Channel): boolean {
+    if (!ocultarSilenciados) return false;
+    if (channel.id === activeChannelId || channel.id === voiceChannelId) return false;
+    if (channel.mentionCount > 0) return false;
+    return estaSilenciado(channel);
+  }
+
   function renderChannel(channel: Channel, grupo: CategoryGroup, index: number) {
     // um só destaque para os dois tipos: canal de voz agora também é canal
     // aberto (ele tem chat de texto), e continua marcado depois de desligar
@@ -481,18 +504,23 @@ export default function ChannelSidebar() {
       as menções: o canal silenciado já desenha a pílula vermelha quando alguém
       me cita, e escondê-lo aqui apagaria da tela a citação que a pílula mostra.
     */
-    const visiveis = lista.filter((c) =>
-      canalVisivel({
-        recolhida: fechada,
-        ativo: c.id === activeChannelId || c.id === voiceChannelId,
-        naoLido: !estaSilenciado(c) && isUnread(c),
-        mencoes: c.mentionCount,
-      }),
+    const visiveis = lista.filter(
+      (c) =>
+        canalVisivel({
+          recolhida: fechada,
+          ativo: c.id === activeChannelId || c.id === voiceChannelId,
+          naoLido: !estaSilenciado(c) && isUnread(c),
+          mencoes: c.mentionCount,
+        }) && !ocultoPorSilencio(c),
     );
 
     // categoria vazia continua desenhada (é onde se solta o primeiro canal);
     // o bloco sem título, não — senão sobraria um respiro no topo da coluna
     if (!colapsavel && grupo.channels.length === 0) return null;
+    // diferente da vazia de verdade (acima): esta tinha canal, mas o filtro
+    // de "ocultar silenciados" escondeu todos — a categoria some inteira, e
+    // não vira um bloco de alvo de solta vazio (ESPEC §D, item 5)
+    if (ocultarSilenciados && lista.length > 0 && visiveis.length === 0) return null;
 
     return (
       <div key={chave} className={colapsavel ? "mt-4" : "mt-1"}>

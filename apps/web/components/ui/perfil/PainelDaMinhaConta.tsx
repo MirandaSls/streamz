@@ -53,8 +53,10 @@ export interface PainelDaMinhaContaProps {
   aoEditarPerfil: () => void;
   aoAbrirStatus: (linha: HTMLElement) => void;
   aoPassarNoStatus: (linha: HTMLElement) => void;
-  aoSairDoStatus: () => void;
-  aoMudarDeConta: () => void;
+  aoAbrirConta: (linha: HTMLElement) => void;
+  aoPassarNaConta: (linha: HTMLElement) => void;
+  /** comum aos dois submenus: só cancela o hover pendente (ver `ProfilePopover`). */
+  aoSairDoSubmenu: () => void;
 }
 
 export function PainelDaMinhaConta({
@@ -62,8 +64,9 @@ export function PainelDaMinhaConta({
   aoEditarPerfil,
   aoAbrirStatus,
   aoPassarNoStatus,
-  aoSairDoStatus,
-  aoMudarDeConta,
+  aoAbrirConta,
+  aoPassarNaConta,
+  aoSairDoSubmenu,
 }: PainelDaMinhaContaProps) {
   return (
     <>
@@ -81,7 +84,7 @@ export function PainelDaMinhaConta({
           aria-haspopup="menu"
           onClick={(e) => aoAbrirStatus(e.currentTarget)}
           onPointerEnter={(e) => aoPassarNoStatus(e.currentTarget)}
-          onPointerLeave={aoSairDoStatus}
+          onPointerLeave={aoSairDoSubmenu}
           className={`${LINHA} font-semibold`}
         >
           <Icone>
@@ -93,11 +96,21 @@ export function PainelDaMinhaConta({
       </div>
       <div className="flex flex-col rounded-lg bg-background-surface-highest p-2">
         {/*
-          "Mudar de conta" é a palavra do print `2026-09-03 202926`. No Discord a
-          seta abre um submenu de contas; aqui abre "Gerenciar contas", com as
-          contas do aparelho (`lib/contas.ts`).
+          "Mudar de conta" é a palavra do print `2026-09-03 202926`. Como no
+          seletor de status acima, a seta abre um submenu ao lado — uma linha
+          por conta salva neste aparelho (`lib/contas.ts`) mais "Gerenciar
+          contas" — em vez de ir direto para o modal `GerenciarContasModal` no
+          clique; ele continua existindo, só que agora um passo adiante, como
+          o "Ausente >"/"Não perturbar >" do seletor de status.
         */}
-        <button type="button" onClick={aoMudarDeConta} className={`${LINHA} font-medium`}>
+        <button
+          type="button"
+          aria-haspopup="menu"
+          onClick={(e) => aoAbrirConta(e.currentTarget)}
+          onPointerEnter={(e) => aoPassarNaConta(e.currentTarget)}
+          onPointerLeave={aoSairDoSubmenu}
+          className={`${LINHA} font-medium`}
+        >
           <Icone>
             <UserCircle size={16} aria-hidden="true" />
           </Icone>

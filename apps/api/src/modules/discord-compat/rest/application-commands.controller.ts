@@ -324,7 +324,10 @@ export class ApplicationCommandsCompatController {
           // para apagar todos seria um defeito silencioso
           comandos.length === 0
             ? doEscopo
-            : { ...doEscopo, name: { notIn: comandos.map((c) => c.name) } },
+            : // ── menus de contexto ── o que fica é o par `(type, name)`: o
+              // `info` de barra e o `info` de usuário são dois comandos. `NOT`
+              // com lista é "não casa nenhum deles"
+              { ...doEscopo, NOT: comandos.map((c) => ({ type: c.type, name: c.name })) },
       });
       for (const comando of comandos) {
         await this.gravar(repositorio, doEscopo, comando);
@@ -337,7 +340,7 @@ export class ApplicationCommandsCompatController {
   }
 
   /**
-   * O `POST`: cria o comando, ou atualiza o de mesmo nome.
+   * O `POST`: cria o comando, ou atualiza o de mesmo nome (e mesmo `type`).
    *
    * É o que o Discord faz — `ApplicationCommandManager.create()` com um nome que
    * já existe devolve o comando atualizado, e não um 400.
@@ -350,7 +353,9 @@ export class ApplicationCommandsCompatController {
     const doEscopo = { applicationId: bot.applicationId, guildId: escopo.guildId };
     await this.gravar(this.comandos(), doEscopo, comando);
 
-    const linha = await this.comandos().findFirst({ where: { ...doEscopo, name: comando.name } });
+    const linha = await this.comandos().findFirst({
+      where: { ...doEscopo, type: comando.type, name: comando.name },
+    });
     // acabou de ser gravado na linha de cima; se sumiu, alguém apagou no meio
     if (!linha) throw comandoDesconhecido();
     return this.paraDiscord(bot, escopo, linha);
@@ -363,7 +368,7 @@ export class ApplicationCommandsCompatController {
 
   // ── internos ───────────────────────────────────────────────
 
-  /** Grava um comando: atualiza o de mesmo nome, ou cria. */
+  /** Grava um comando: atualiza o de mesmo `(type, name)`, ou cria. */
   private async gravar(
     repositorio: PrismaService["applicationCommand"],
     doEscopo: { applicationId: string; guildId: string | null },
@@ -381,8 +386,10 @@ export class ApplicationCommandsCompatController {
       defaultMemberPermissions: comando.defaultMemberPermissions,
     };
 
+    // ── menus de contexto ── "o de mesmo nome" é o de mesmo `(type, name)`, a
+    // chave única da tabela
     const alterados = await repositorio.updateMany({
-      where: { ...doEscopo, name: comando.name },
+      where: { ...doEscopo, type: comando.type, name: comando.name },
       data: dados,
     });
     if (alterados.count === 0) {

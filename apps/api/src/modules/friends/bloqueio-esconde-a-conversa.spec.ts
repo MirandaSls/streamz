@@ -26,6 +26,10 @@ function montar(temDM: boolean) {
     user: { findUnique: vi.fn().mockResolvedValue({ id: BIA, username: BIA }) },
     channel: { findUnique: vi.fn().mockResolvedValue(temDM ? { id: CANAL } : null) },
     friendship: { deleteMany: vi.fn().mockReturnValue({ op: "friendship.deleteMany" }) },
+    friendNickname: {
+      findMany: vi.fn().mockResolvedValue([]),
+      deleteMany: vi.fn().mockReturnValue({ op: "friendNickname.deleteMany" }),
+    },
     block: { upsert: vi.fn().mockReturnValue({ op: "block.upsert" }) },
     dMHidden: { upsert: vi.fn().mockReturnValue({ op: "dMHidden.upsert" }) },
     $transaction: vi.fn().mockResolvedValue([]),

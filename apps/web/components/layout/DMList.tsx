@@ -8,13 +8,15 @@ import {
   LogOut,
   MessageSquarePlus,
   Phone,
+  Pin,
+  PinOff,
   Plus,
   Search,
-  Settings,
   UserPlus,
   X,
 } from "@/components/ui/icones";
 import {
+  WS_EVENTS,
   channelNotificationScope,
   displayNameOf,
   isGroupChannel,
@@ -32,14 +34,19 @@ import { api } from "@/lib/api";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { EVENTO_CAIXA_DE_ENTRADA } from "@/lib/caixa-de-entrada";
 import { useT } from "@/lib/i18n";
+import { urlDeConvite } from "@/lib/links-de-convite";
+import { useNomeParaMim } from "@/lib/nome-para-mim";
 import { submenuSilenciar } from "@/lib/notification-menu";
 import { useAplicativos } from "@/stores/aplicativos";
 import { autorDaPrevia, dmTitle, useDMs } from "@/stores/dms";
 import { useAuth } from "@/stores/auth";
 import { useFriends, usePendingCount } from "@/stores/friends";
+import { useGuilds } from "@/stores/guilds";
+import { useNotas } from "@/stores/notas";
 import { useNotifications } from "@/stores/notifications";
 import { resolveStatus, usePresence } from "@/stores/presence";
 import { useSettings } from "@/stores/settings";
+import { emit, errorMessage } from "@/stores/socket-adapter";
 import { anchorOf, ui, useUI, type MenuItem } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
 
@@ -47,13 +54,8 @@ import { useVoice } from "@/stores/voice";
 export default function DMList() {
   const channels = useDMs((s) => s.channels);
   const loading = useDMs((s) => s.loadingList);
-  const activeId = useDMs((s) => s.activeId);
-  const select = useDMs((s) => s.select);
   const openWith = useDMs((s) => s.openWith);
-  const leaveGroup = useDMs((s) => s.leaveGroup);
-  const markRead = useDMs((s) => s.markRead);
   // ── d-social ── a página Amigos é a home do modo DM
-  const hide = useDMs((s) => s.hide);
   const friendsOpen = useFriends((s) => s.open);
   const setFriendsOpen = useFriends((s) => s.setOpen);
   const pendentes = usePendingCount();
@@ -78,13 +80,6 @@ export default function DMList() {
   const [buscaAberta, setBuscaAberta] = useState(false);
   const celular = useEhMobile();
   const [found, setFound] = useState<PublicUser[]>([]);
-  // f-voz: conversas com chamada rolando ganham o ícone verde de telefone
-  const emChamada = useVoice((s) => s.states);
-  const startCall = useVoice((s) => s.startCall);
-  const porEscopo = useNotifications((s) => s.porEscopo);
-  const developerMode = useSettings((s) => s.developerMode);
-  const meuId = useAuth((s) => s.user?.id);
-  const t = useT();
 
   const q = query.trim().toLowerCase();
   const visible = q ? channels.filter((dm) => dmTitle(dm).toLowerCase().includes(q)) : channels;
@@ -111,67 +106,6 @@ export default function DMList() {
   // quem já tem conversa não repete nos resultados da busca
   const knownIds = new Set(channels.flatMap((d) => d.others.map((u) => u.id)));
   const novos = found.filter((u) => !knownIds.has(u.id));
-
-  function openMenu(e: MouseEvent, dm: DMChannelView, linha?: HTMLElement | null) {
-    e.preventDefault();
-    const group = isGroupChannel(dm);
-    const outro = dm.others[0];
-    const escopo = { tipo: "canal" as const, channelId: dm.id };
-    const setting = porEscopo[channelNotificationScope(dm.id)];
-    const items: MenuItem[] = [
-      { label: "Marcar como lida", onSelect: () => void markRead(dm.id) },
-    ];
-    if (!group && outro) {
-      items.push({ separator: true });
-      items.push({
-        label: "Perfil",
-        onSelect: () =>
-          ui.openProfile(
-            outro,
-            linha ? anchorOf(linha) : { x: e.clientX, y: e.clientY, width: 0, height: 0 },
-          ),
-      });
-      items.push({
-        label: "Chamada",
-        icon: <Phone size={18} />,
-        onSelect: () => void startCall(dm.id, false),
-      });
-    }
-    if (group) {
-      items.push({ separator: true });
-      items.push({
-        label: "Convidar para o grupo",
-        icon: <UserPlus size={18} />,
-        onSelect: () => ui.openModal({ kind: "addGroupMembers", channelId: dm.id }),
-      });
-      items.push({
-        label: "Alterar ícone",
-        icon: <Settings size={18} />,
-        onSelect: () => ui.openModal({ kind: "groupSettings", channelId: dm.id }),
-      });
-    }
-    items.push({ separator: true });
-    items.push(submenuSilenciar("Silenciar conversa", escopo, setting, t));
-    items.push({ separator: true });
-    // fechar não apaga nada: a conversa volta sozinha com mensagem nova
-    items.push({ label: "Fechar conversa", icon: <X size={18} />, onSelect: () => void hide(dm.id) });
-    if (group) {
-      items.push({
-        label: "Sair do grupo",
-        icon: <LogOut size={18} />,
-        danger: true,
-        onSelect: () => void leaveGroup(dm.id),
-      });
-    }
-    if (developerMode) {
-      items.push({ separator: true });
-      items.push({
-        label: "Copiar ID do canal",
-        onSelect: () => void navigator.clipboard?.writeText(dm.id),
-      });
-    }
-    ui.openContextMenu(e.clientX, e.clientY, items, MENU_WIDTH);
-  }
 
   /**
    * A lista em si — a mesma nos dois leiautes. Só a moldura muda: no desktop a
@@ -334,118 +268,9 @@ export default function DMList() {
           Nenhuma conversa. Busque alguém acima para começar.
         </p>
       )}
-      {visible.map((dm) => {
-        const title = dmTitle(dm);
-        const active = activeId === dm.id && !friendsOpen && !appsAbertos;
-        const group = isGroupChannel(dm);
-        const other = !group ? dm.others[0] : undefined;
-        const unread = !active && isUnread(dm);
-        /*
-          ── prévia da última mensagem ── "autor: texto" embaixo do nome, na cor
-          da linha, medido em `docs/Reference/mobile/discord-mobile-dms-2024.png`.
-
-          **Só no celular**, e isso é paridade, não economia: no Discord do
-          desktop a coluna de conversas tem o nome e nada mais — medido no print
-          `docs/Reference/Captura de tela 2026-09-04 102757.png`, onde as treze
-          conversas mostram só o nome e o grupo mostra "2 membros". A prévia é
-          um traço do aplicativo de celular. `DMChannelView.ultimaMensagem` chega
-          nas duas telas e a store a mantém em dia nas duas; se um dia o desktop
-          quiser a linha, é este `celular &&` que sai.
-
-          A calha é a mesma que o "N membros" do grupo já ocupava, então a linha
-          continua com 48px nos dois leiautes.
-        */
-        const previa = celular
-          ? linhaDaPrevia(dm.ultimaMensagem, {
-              autor: autorDaPrevia(dm, meuId),
-              emChamada: (emChamada[dm.id]?.length ?? 0) > 0,
-            })
-          : "";
-        return (
-          <div
-            key={dm.id}
-            role="listitem"
-            onContextMenu={(e) => openMenu(e, dm, e.currentTarget)}
-            // pl-2: `.link__972a0{padding-inline:8px 0}` (CSS bruto); `relative`
-            // é o âncora da pílula de não lida logo abaixo
-            className={`group relative mx-2 mb-0.5 flex h-12 items-center rounded-lg pl-2 pr-2 ${
-              active
-                ? "bg-interactive-background-selected text-text-strong"
-                : unread
-                  ? "text-text-strong hover:bg-interactive-background-hover"
-                  : "text-channels-default hover:bg-interactive-background-hover hover:text-text-default"
-            }`}
-          >
-            {unread && (
-              /* `.unreadPill__972a0`: barra de 4×8 encostada FORA da linha,
-                 8px para fora da borda esquerda (`inset-inline-start:-8px`)
-                 — cai exatamente na margem de 8 (`mx-2`) que separa a linha
-                 do bordo da coluna. `.muted__972a0{opacity:.3}` quando a
-                 conversa está silenciada. */
-              <span
-                aria-hidden="true"
-                className={`absolute -left-2 top-1/2 h-2 w-1 -translate-y-1/2 rounded-r bg-interactive-text-active ${
-                  isMuted(porEscopo[channelNotificationScope(dm.id)]) ? "opacity-30" : ""
-                }`}
-              />
-            )}
-            <button
-              type="button"
-              data-dm-button
-              onClick={() => select(dm)}
-              aria-current={active ? "true" : undefined}
-              aria-label={unread ? `${title} (não lida)` : title}
-              // gap-2: `.link__972a0{gap:8px}` (CSS bruto, não 12)
-              className="flex h-full min-w-0 flex-1 items-center gap-2 text-left"
-            >
-              {other ? (
-                <Avatar user={other} size="md" status={resolveStatus(statuses, other)} surface={active ? "border-interactive-background-selected" : "border-background-base-lowest"} />
-              ) : (
-                <GroupAvatar iconUrl={dm.iconUrl} size="md" />
-              )}
-              <span className="min-w-0">
-                <span className={`block truncate ${unread ? "font-semibold" : "font-medium"}`}>{title}</span>
-                {previa ? (
-                  <span className={`block truncate text-xs ${unread ? "font-medium" : ""}`}>
-                    {previa}
-                  </span>
-                ) : group ? (
-                  <span className="block truncate text-xs text-text-muted">
-                    {dm.others.length + 1} membros
-                  </span>
-                ) : null}
-              </span>
-            </button>
-            {(emChamada[dm.id]?.length ?? 0) > 0 && (
-              <Tooltip label="Chamada em andamento">
-                <span
-                  data-dm-call={dm.id}
-                  aria-label={`Chamada em andamento em ${title}`}
-                  className="grid h-6 w-6 place-items-center text-status-positive"
-                >
-                  <Phone size={16} />
-                </span>
-              </Tooltip>
-            )}
-            {/* Encaixe de 24px na borda direita, só para o X do hover/foco.
-                Rodada de correção: o número de não lidas SAIU daqui —
-                Discord 130840.png mostra a DM "paulin" não lida (y=424) sem
-                nenhum badge na linha, marcada só pelo nome em negrito e pela
-                pílula branca (`.unreadPill__972a0` acima); o número continua
-                só no avatar da rail (`GuildRail`), e repeti-lo aqui era
-                invenção nossa. */}
-            <span className="relative grid h-6 w-6 shrink-0 place-items-center">
-              <BotaoDeIcone
-                rotulo={group ? `Sair do grupo ${title}` : `Fechar conversa com ${title}`}
-                icone={group ? <LogOut size={16} /> : <X size={16} />}
-                tamanho="sm"
-                onClick={() => (group ? void leaveGroup(dm.id) : void hide(dm.id))}
-                className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-              />
-            </span>
-          </div>
-        );
-      })}
+      {visible.map((dm) => (
+        <LinhaDeConversa key={dm.id} dm={dm} amigosOuAppsAbertos={friendsOpen || appsAbertos} />
+      ))}
     </div>
   );
 
@@ -623,3 +448,330 @@ export default function DMList() {
     </aside>
   );
 }
+
+/**
+ * Uma linha da lista de conversas — componente próprio (não um trecho do
+ * `.map()` de `DMList`) para poder chamar `useNomeParaMim` (apelido de amigo,
+ * `docs/CONTRATO-MENUS.md` §3) por conversa: um hook não pode variar de
+ * chamada em chamada dentro do mesmo componente, e cada linha tem um `other`
+ * diferente — só dá para respeitar a regra dos hooks com uma instância de
+ * componente por linha.
+ *
+ * `amigosOuAppsAbertos` vem do pai: é o único pedaço de estado que decide se
+ * a linha "ativa" (`activeId === dm.id`) conta como selecionada de verdade —
+ * a página Amigos e o diretório de apps cobrem a coluna 3 sem mudar
+ * `activeId` (ver `DMList`), e replicar essa conta aqui bateria com a mesma
+ * pergunta feita duas vezes por duas fontes.
+ */
+function LinhaDeConversa({
+  dm,
+  amigosOuAppsAbertos,
+}: {
+  dm: DMChannelView;
+  amigosOuAppsAbertos: boolean;
+}) {
+  const activeId = useDMs((s) => s.activeId);
+  const select = useDMs((s) => s.select);
+  const leaveGroup = useDMs((s) => s.leaveGroup);
+  const markRead = useDMs((s) => s.markRead);
+  const hide = useDMs((s) => s.hide);
+  const fixar = useDMs((s) => s.fixar);
+  const desafixar = useDMs((s) => s.desafixar);
+  const statuses = usePresence((s) => s.statuses);
+  const emChamada = useVoice((s) => s.states[dm.id]?.length ?? 0);
+  const startCall = useVoice((s) => s.startCall);
+  const porEscopo = useNotifications((s) => s.porEscopo);
+  const developerMode = useSettings((s) => s.developerMode);
+  const meuId = useAuth((s) => s.user?.id);
+  const celular = useEhMobile();
+  const t = useT();
+
+  // ── menus de contexto ── (docs/CONTRATO-MENUS.md §2, §3, §4 e §1)
+  const friendsList = useFriends((s) => s.friends);
+  const blockedList = useFriends((s) => s.blocked);
+  const apelidos = useFriends((s) => s.apelidos);
+  const ignoredList = useFriends((s) => s.ignored);
+  const removeFriend = useFriends((s) => s.remove);
+  const blockFriend = useFriends((s) => s.block);
+  const unblockFriend = useFriends((s) => s.unblock);
+  const ignorarUsuario = useFriends((s) => s.ignorar);
+  const deixarDeIgnorarUsuario = useFriends((s) => s.deixarDeIgnorar);
+  const minhasNotas = useNotas((s) => s.minhasNotas);
+  const meusServidores = useGuilds((s) => s.guilds);
+
+  const group = isGroupChannel(dm);
+  const other = !group ? dm.others[0] : undefined;
+  // `useNomeParaMim` exige um usuário: em grupo (sem `other`) o valor não é
+  // usado, mas o hook precisa continuar sendo chamado sempre da mesma forma
+  const nomeDoOutro = useNomeParaMim(other ?? SEM_OUTRO);
+  const title = group ? dmTitle(dm) : nomeDoOutro;
+
+  const active = activeId === dm.id && !amigosOuAppsAbertos;
+  const unread = !active && isUnread(dm);
+  /*
+    ── prévia da última mensagem ── "autor: texto" embaixo do nome, na cor da
+    linha, medido em `docs/Reference/mobile/discord-mobile-dms-2024.png`.
+
+    **Só no celular**, e isso é paridade, não economia: no Discord do desktop
+    a coluna de conversas tem o nome e nada mais — medido no print
+    `docs/Reference/Captura de tela 2026-09-04 102757.png`, onde as treze
+    conversas mostram só o nome e o grupo mostra "2 membros". A prévia é um
+    traço do aplicativo de celular. `DMChannelView.ultimaMensagem` chega nas
+    duas telas e a store a mantém em dia nas duas; se um dia o desktop quiser
+    a linha, é este `celular &&` que sai.
+
+    A calha é a mesma que o "N membros" do grupo já ocupava, então a linha
+    continua com 48px nos dois leiautes.
+  */
+  const previa = celular
+    ? linhaDaPrevia(dm.ultimaMensagem, { autor: autorDaPrevia(dm, meuId), emChamada: emChamada > 0 })
+    : "";
+
+  /**
+   * Manda o convite deste servidor pela própria conversa: cria o link (a
+   * mesma `api.createInvite` do `InviteModal`) e o envia como mensagem, em vez
+   * de abrir outra DM — a pessoa já está na tela certa
+   * (`docs/CONTRATO-MENUS.md`, item 9 da tabela, cartão web-dm).
+   */
+  async function enviarConviteNaConversa(guildId: string) {
+    try {
+      const invite = await api.createInvite(guildId);
+      emit(WS_EVENTS.MESSAGE_CREATE, { channelId: dm.id, content: urlDeConvite(invite.code) });
+      ui.toast("Convite enviado");
+    } catch (e) {
+      ui.toast(errorMessage(e, "Não foi possível enviar o convite"), "error");
+    }
+  }
+
+  /** "Apps >": a API não tem comandos de app em DM ainda — item único e mudo. */
+  function submenuApps(): MenuItem {
+    return {
+      label: "Apps",
+      submenu: [{ label: "Nenhum app disponível", disabled: true, onSelect: () => {} }],
+    };
+  }
+
+  function submenuConvidarParaOServidor(): MenuItem {
+    if (meusServidores.length === 0) {
+      return {
+        label: "Convidar para o servidor",
+        disabled: true,
+        submenu: [{ label: "Nenhum servidor disponível", disabled: true, onSelect: () => {} }],
+      };
+    }
+    return {
+      label: "Convidar para o servidor",
+      submenu: meusServidores.map((g) => ({
+        label: g.name,
+        onSelect: () => void enviarConviteNaConversa(g.id),
+      })),
+    };
+  }
+
+  function abrirMenu(e: MouseEvent, linha?: HTMLElement | null) {
+    e.preventDefault();
+    const escopo = { tipo: "canal" as const, channelId: dm.id };
+    const setting = porEscopo[channelNotificationScope(dm.id)];
+    // Marcar como lida / sep / Fixar ou Desafixar: comum às duas telas (C e a
+    // versão de grupo do mesmo cartão)
+    const items: MenuItem[] = [
+      { label: "Marcar como lida", disabled: !isUnread(dm), onSelect: () => void markRead(dm.id) },
+      { separator: true },
+      {
+        label: dm.fixadaEm ? "Desafixar" : "Fixar",
+        icon: dm.fixadaEm ? <PinOff size={18} /> : <Pin size={18} />,
+        onSelect: () => void (dm.fixadaEm ? desafixar(dm.id) : fixar(dm.id)),
+      },
+    ];
+
+    if (!group && other) {
+      const notaExistente = minhasNotas[other.id];
+      const souAmigo = friendsList.some((f) => f.id === other.id);
+      const bloqueado = blockedList.some((b) => b.id === other.id);
+      const ignorado = ignoredList?.some((u) => u.id === other.id) ?? false;
+      const apelidoExistente = apelidos?.[other.id];
+
+      items.push({ separator: true });
+      items.push({
+        label: "Perfil",
+        onSelect: () =>
+          ui.openProfile(
+            other,
+            linha ? anchorOf(linha) : { x: e.clientX, y: e.clientY, width: 0, height: 0 },
+          ),
+      });
+      items.push({ label: "Iniciar chamada", onSelect: () => void startCall(dm.id, false) });
+      items.push({
+        label: notaExistente ? "Editar nota" : "Adicionar nota",
+        description: "Visível apenas para você",
+        onSelect: () => ui.openModal({ kind: "notaDeUsuario", userId: other.id }),
+      });
+      if (souAmigo) {
+        items.push({
+          label: apelidoExistente ? "Editar apelido de amigo" : "Adicionar apelido de amigo",
+          onSelect: () => ui.openModal({ kind: "apelidoDeAmigo", userId: other.id }),
+        });
+      }
+      items.push({ label: "Fechar mensagem direta", onSelect: () => void hide(dm.id) });
+      items.push({ separator: true });
+      items.push(submenuApps());
+      items.push(submenuConvidarParaOServidor());
+      if (souAmigo) {
+        items.push({
+          // branco no Discord (p2): só "Bloquear" é vermelho
+          label: "Desfazer amizade",
+          onSelect: () => void removeFriend(other),
+        });
+      }
+      items.push({
+        label: ignorado ? "Deixar de ignorar" : "Ignorar",
+        onSelect: () => void (ignorado ? deixarDeIgnorarUsuario(other.id) : ignorarUsuario(other.id)),
+      });
+      items.push({
+        label: bloqueado ? "Desbloquear" : "Bloquear",
+        danger: !bloqueado,
+        onSelect: () => void (bloqueado ? unblockFriend(other.id) : blockFriend(other)),
+      });
+      items.push({ separator: true });
+      items.push(submenuSilenciar(`Silenciar @${nomeDoOutro}`, escopo, setting, t, true));
+      if (developerMode) {
+        items.push({ separator: true });
+        items.push({
+          label: "Copiar ID do usuário",
+          onSelect: () => void navigator.clipboard?.writeText(other.id),
+        });
+        items.push({
+          label: "Copiar ID do canal",
+          onSelect: () => void navigator.clipboard?.writeText(dm.id),
+        });
+      }
+    }
+
+    if (group) {
+      items.push({ separator: true });
+      items.push({
+        label: "Convidar para o grupo",
+        onSelect: () => ui.openModal({ kind: "addGroupMembers", channelId: dm.id }),
+      });
+      items.push({
+        label: "Alterar ícone",
+        onSelect: () => ui.openModal({ kind: "groupSettings", channelId: dm.id }),
+      });
+      items.push({ label: "Fechar mensagem direta", onSelect: () => void hide(dm.id) });
+      items.push({ separator: true });
+      items.push(submenuApps());
+      items.push({ separator: true });
+      items.push(submenuSilenciar("Silenciar grupo", escopo, setting, t, true));
+      items.push({ separator: true });
+      items.push({ label: "Sair do grupo", danger: true, onSelect: () => void leaveGroup(dm.id) });
+      if (developerMode) {
+        items.push({ separator: true });
+        items.push({
+          label: "Copiar ID do canal",
+          onSelect: () => void navigator.clipboard?.writeText(dm.id),
+        });
+      }
+    }
+
+    ui.openContextMenu(e.clientX, e.clientY, items, MENU_WIDTH);
+  }
+
+  return (
+    <div
+      role="listitem"
+      onContextMenu={(e) => abrirMenu(e, e.currentTarget)}
+      // pl-2: `.link__972a0{padding-inline:8px 0}` (CSS bruto); `relative`
+      // é o âncora da pílula de não lida logo abaixo
+      className={`group relative mx-2 mb-0.5 flex h-12 items-center rounded-lg pl-2 pr-2 ${
+        active
+          ? "bg-interactive-background-selected text-text-strong"
+          : unread
+            ? "text-text-strong hover:bg-interactive-background-hover"
+            : "text-channels-default hover:bg-interactive-background-hover hover:text-text-default"
+      }`}
+    >
+      {unread && (
+        /* `.unreadPill__972a0`: barra de 4×8 encostada FORA da linha, 8px
+           para fora da borda esquerda (`inset-inline-start:-8px`) — cai
+           exatamente na margem de 8 (`mx-2`) que separa a linha do bordo da
+           coluna. `.muted__972a0{opacity:.3}` quando a conversa está
+           silenciada. */
+        <span
+          aria-hidden="true"
+          className={`absolute -left-2 top-1/2 h-2 w-1 -translate-y-1/2 rounded-r bg-interactive-text-active ${
+            isMuted(porEscopo[channelNotificationScope(dm.id)]) ? "opacity-30" : ""
+          }`}
+        />
+      )}
+      <button
+        type="button"
+        data-dm-button
+        onClick={() => select(dm)}
+        aria-current={active ? "true" : undefined}
+        aria-label={unread ? `${title} (não lida)` : title}
+        // gap-2: `.link__972a0{gap:8px}` (CSS bruto, não 12)
+        className="flex h-full min-w-0 flex-1 items-center gap-2 text-left"
+      >
+        {other ? (
+          <Avatar
+            user={other}
+            size="md"
+            status={resolveStatus(statuses, other)}
+            surface={active ? "border-interactive-background-selected" : "border-background-base-lowest"}
+          />
+        ) : (
+          <GroupAvatar iconUrl={dm.iconUrl} size="md" />
+        )}
+        <span className="min-w-0">
+          <span className={`block truncate ${unread ? "font-semibold" : "font-medium"}`}>{title}</span>
+          {previa ? (
+            <span className={`block truncate text-xs ${unread ? "font-medium" : ""}`}>{previa}</span>
+          ) : group ? (
+            <span className="block truncate text-xs text-text-muted">{dm.others.length + 1} membros</span>
+          ) : null}
+        </span>
+      </button>
+      {emChamada > 0 && (
+        <Tooltip label="Chamada em andamento">
+          <span
+            data-dm-call={dm.id}
+            aria-label={`Chamada em andamento em ${title}`}
+            className="grid h-6 w-6 place-items-center text-status-positive"
+          >
+            <Phone size={16} />
+          </span>
+        </Tooltip>
+      )}
+      {/* Encaixe de 24px na borda direita: o alfinete cinza da conversa
+          fixada (`docs/CONTRATO-MENUS.md` §1, prints p1/p2) em repouso, e o X
+          de fechar no hover/foco — os dois ocupam o mesmo lugar porque nunca
+          aparecem ao mesmo tempo (o alfinete cede o posto assim que o mouse
+          chega, o X de sempre). O `X`/`LogOut` fica em fluxo normal (o
+          `place-items-center` do pai o centra); o alfinete é posicionado por
+          cima dele porque só existe quando a conversa está fixada. */}
+      <span className="relative grid h-6 w-6 shrink-0 place-items-center">
+        {dm.fixadaEm && (
+          <Pin
+            aria-hidden="true"
+            size={16}
+            className="pointer-events-none absolute inset-0 m-auto text-text-muted transition-opacity group-hover:opacity-0"
+          />
+        )}
+        <BotaoDeIcone
+          rotulo={group ? `Sair do grupo ${title}` : `Fechar conversa com ${title}`}
+          icone={group ? <LogOut size={16} /> : <X size={16} />}
+          tamanho="sm"
+          onClick={() => (group ? void leaveGroup(dm.id) : void hide(dm.id))}
+          className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+        />
+      </span>
+    </div>
+  );
+}
+
+/** Preenchimento para `useNomeParaMim` na linha de grupo, que não tem `other`. */
+const SEM_OUTRO: Pick<PublicUser, "id" | "username" | "displayName"> = {
+  id: "",
+  username: "",
+  displayName: null,
+};

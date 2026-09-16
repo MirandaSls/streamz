@@ -131,6 +131,14 @@ describe("comandos de barra", () => {
     expect(interpretarComando("/giphy gato")).toEqual({ tipo: "gif", termo: "gato" });
   });
 
+  it("/nick muda ou remove o apelido no servidor", () => {
+    expect(interpretarComando("/nick João")).toEqual({
+      tipo: "apelido",
+      apelido: "João",
+    });
+    expect(interpretarComando("/nick")).toEqual({ tipo: "apelido", apelido: "" });
+  });
+
   it("texto comum não é comando", () => {
     expect(interpretarComando("bom dia")).toEqual({ tipo: "nenhum" });
     expect(interpretarComando("2/3 do total")).toEqual({ tipo: "nenhum" });
