@@ -21,6 +21,7 @@ import {
   type Channel,
   type ChannelDeletedEvent,
   type ChannelOverridesEvent,
+  type ApelidoDeAmigoEvent,
   type EmojiUpdatedEvent,
   type FriendAcceptedEvent,
   type FriendRemovedEvent,
@@ -36,6 +37,7 @@ import {
   type MessageDeletedEvent,
   type MessagePinnedEvent,
   type MessageUnpinnedEvent,
+  type NotaDeUsuario,
   type PresenceUpdatePayload,
   type PublicUser,
   type Role,
@@ -46,6 +48,7 @@ import {
   type StickerUpdatedEvent,
   type ThreadUpdatedEvent,
   type UserBlockedEvent,
+  type UsuarioIgnoradoEvent,
   type VoiceEvictedEvent,
   type VoiceMovedEvent,
   type VoiceStateEvent,
@@ -87,6 +90,7 @@ import { useComandosDeApp } from "@/stores/comandos-de-app";
 import { useInteracoesDeBot } from "@/stores/interacoes-de-bot";
 import { dmTitle, useDMs } from "@/stores/dms";
 import { useFriends } from "@/stores/friends";
+import { useNotas } from "@/stores/notas";
 import { useEmojis } from "@/stores/emojis";
 import { useSoundboard } from "@/stores/soundboard";
 import { useGuilds } from "@/stores/guilds";
@@ -129,6 +133,9 @@ export function useRealtime(currentUserId?: string): void {
     // sessão. Fora do escopo do agente E, mas é o que faz o deep link funcionar.
     if (useGuilds.getState().guilds.length === 0) void useGuilds.getState().load();
     if (useDMs.getState().channels.length === 0) void useDMs.getState().refreshList();
+    // ── menus de contexto ── minhas notas, junto do resto do boot
+    // (`load` é idempotente: não repete se algo já chamou antes)
+    void useNotas.getState().load();
     // desktop: permissão e clique da notificação resolvidos antes da primeira
     void prepararNotificacoes();
     // voltar ao app lê o canal que está na tela (o que chegou sem foco contou
@@ -366,6 +373,19 @@ export function useRealtime(currentUserId?: string): void {
         useFriends.getState().handleBlocked(user, blocked);
       }),
 
+      // ── menus de contexto ── (`docs/CONTRATO-MENUS.md`) nota, apelido de
+      // amigo e ignorar são privados: o evento só chega para `user:<eu>`,
+      // nunca para o outro lado
+      on<NotaDeUsuario>(WS_EVENTS.USER_NOTE_UPDATED, (evento) => {
+        useNotas.getState().handleUpdated(evento);
+      }),
+      on<ApelidoDeAmigoEvent>(WS_EVENTS.FRIEND_NICKNAME_UPDATED, (evento) => {
+        useFriends.getState().handleNicknameUpdated(evento);
+      }),
+      on<UsuarioIgnoradoEvent>(WS_EVENTS.USER_IGNORED, (evento) => {
+        useFriends.getState().handleIgnored(evento);
+      }),
+
       // ── g-emojis-midia ──
       on<EmojiUpdatedEvent>(WS_EVENTS.EMOJI_UPDATED, ({ guildId, emojis }) => {
         useEmojis.getState().applyEmojis(guildId, emojis);
@@ -484,6 +504,9 @@ export function useRealtime(currentUserId?: string): void {
         if (guildDeCategorias) void useCategories.getState().loadForGuild(guildDeCategorias);
         // amigos, pedidos e bloqueios podem ter mudado durante a queda
         void useFriends.getState().load(true);
+        // ── menus de contexto ── notas idem — outra conexão pode ter
+        // salvo/apagado alguma enquanto esta esteve fora
+        void useNotas.getState().load(true);
         // emoji/figurinha podem ter mudado enquanto a conexão esteve fora
         void useEmojis.getState().load();
         // e os sons do painel, que mudam pelo mesmo tipo de evento

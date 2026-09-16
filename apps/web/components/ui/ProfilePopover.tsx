@@ -36,6 +36,7 @@ import { useDMs } from "@/stores/dms";
 import { useFriends, useRelationship } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
 import { useMessages } from "@/stores/messages";
+import { useNotas } from "@/stores/notas";
 import { useCan, usePermissions } from "@/stores/permissions";
 import { resolveStatus, resolveUser, usePresence } from "@/stores/presence";
 import { useSettings } from "@/stores/settings";
@@ -224,6 +225,7 @@ export default function ProfilePopoverHost() {
   const block = useFriends((s) => s.block);
   const unblock = useFriends((s) => s.unblock);
   const incoming = useFriends((s) => s.incoming);
+  const notas = useNotas((s) => s.minhasNotas);
   const relacao = useRelationship(popover?.user.id, me?.id);
   /** O miolo do cartão: a borda direita dele é onde o submenu de status encosta. */
   const ref = useRef<HTMLDivElement>(null);
@@ -435,11 +437,20 @@ export default function ProfilePopoverHost() {
   /** O kebab só existe no cartão dos outros (ver `CabecalhoDoPerfil`). */
   function abrirKebab(botao: HTMLElement) {
     const r = botao.getBoundingClientRect();
+    const notaExistente = notas[user.id];
     const itens: MenuItem[] = [
       { label: "Perfil", onSelect: abrirPerfilCompleto },
       { label: "Mencionar", onSelect: mencionar },
-      // a nota sobre a pessoa é do Discord e não existe no app (§6.6)
-      { label: "Adicionar nota (em breve)", disabled: true, onSelect: () => {} },
+      // nota privada sobre a pessoa (`docs/CONTRATO-MENUS.md` §2) — o rótulo
+      // muda para "Editar nota" quando já existe uma, como no modal
+      {
+        label: notaExistente ? "Editar nota" : "Adicionar nota",
+        description: "Visível apenas para você",
+        onSelect: () => {
+          close();
+          openModal({ kind: "notaDeUsuario", userId: user.id });
+        },
+      },
       { separator: true },
     ];
     if (relacao === "none") {
@@ -702,8 +713,9 @@ export default function ProfilePopoverHost() {
             (a captura rola tudo numa coluna só) e de "Invite to Servers" (o
             app não tem essa ação — §6.6/§8 do processo: botão inerte só
             existe quando o Discord o tem E nós temos o que ele faz). "NOTE"
-            também fica de fora: já não existe no app (ver `abrirKebab` acima,
-            "Adicionar nota (em breve)").
+            também fica de fora daqui: no app ele é o item "Adicionar
+            nota"/"Editar nota" do kebab (ver `abrirKebab` acima), não uma
+            seção solta do cartão — inclusive no celular.
           */}
           {ehMobile && !isMe && perfil && (
             <div className="flex flex-col gap-0.5">

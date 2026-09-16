@@ -1,9 +1,12 @@
 import { create } from "zustand";
-import type {
-  FriendLists,
-  FriendRequest,
-  PublicUser,
-  RelationshipKind,
+import {
+  displayNameOf,
+  type ApelidoDeAmigoEvent,
+  type FriendLists,
+  type FriendRequest,
+  type PublicUser,
+  type RelationshipKind,
+  type UsuarioIgnoradoEvent,
 } from "@streamz/shared";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/stores/socket-adapter";
@@ -12,10 +15,16 @@ import { ui } from "@/stores/ui";
 /**
  * Amigos, pedidos e bloqueados — e qual aba da página Amigos está aberta.
  *
- * As quatro listas vêm de uma chamada só (`GET /friends`) e são mantidas ao
- * vivo pelos eventos `friend.*`. A store guarda o *conjunto* de relações porque
- * meia dúzia de telas (popover, perfil, lista de membros, timeline) precisam
- * responder "qual é a minha relação com este id?" sem ir ao servidor.
+ * As listas vêm de uma chamada só (`GET /friends`) e são mantidas ao vivo
+ * pelos eventos `friend.*`/`user.*`. A store guarda o *conjunto* de relações
+ * porque meia dúzia de telas (popover, perfil, lista de membros, timeline)
+ * precisam responder "qual é a minha relação com este id?" sem ir ao
+ * servidor.
+ *
+ * ── menus de contexto ── `apelidos` (por id do amigo) e `ignored` são os
+ * outros dois campos do mesmo `GET /friends` (`docs/CONTRATO-MENUS.md` §3 e
+ * §4); `friend.nicknameUpdated` e `user.ignored` os mantêm ao vivo do mesmo
+ * jeito que `friend.*` já mantinha o resto.
  *
  * `open` mora aqui, e não em `ui.ts`, para que a página Amigos seja uma decisão
  * do modo DM: a coluna 3 mostra a página quando ela está ligada e a conversa
@@ -49,6 +58,14 @@ interface FriendsState extends FriendLists {
   block: (user: PublicUser) => Promise<void>;
   unblock: (userId: string) => Promise<void>;
 
+  // ── menus de contexto ── (docs/CONTRATO-MENUS.md §3 e §4)
+  /** Apelido de amigo (só eu vejo). 400 da API se `userId` não for amigo. */
+  definirApelido: (userId: string, apelido: string) => Promise<void>;
+  removerApelido: (userId: string) => Promise<void>;
+  ignorar: (userId: string) => Promise<void>;
+  deixarDeIgnorar: (userId: string) => Promise<void>;
+  estaIgnorado: (userId: string) => boolean;
+
   // ── eventos do gateway ──
   /**
    * `friend.request`: um pedido nasceu. `direcao` diz de que lado eu estou —
@@ -64,10 +81,21 @@ interface FriendsState extends FriendLists {
    * tira de amigos e pedidos e põe em "Bloqueados"; desbloquear só tira de lá.
    */
   handleBlocked: (user: PublicUser, blocked: boolean) => void;
+  /** `friend.nicknameUpdated`: apelido novo, removido, ou a amizade acabou (`apelido: null`). */
+  handleNicknameUpdated: (evento: ApelidoDeAmigoEvent) => void;
+  /** `user.ignored`: eu ignorei/deixei de ignorar (em qualquer conexão da conta). */
+  handleIgnored: (evento: UsuarioIgnoradoEvent) => void;
   clear: () => void;
 }
 
-const VAZIO: FriendLists = { friends: [], incoming: [], outgoing: [], blocked: [] };
+const VAZIO: FriendLists = {
+  friends: [],
+  incoming: [],
+  outgoing: [],
+  blocked: [],
+  apelidos: {},
+  ignored: [],
+};
 
 /** Guarda de corrida do carregamento das listas. */
 let seq = 0;
@@ -213,6 +241,49 @@ export const useFriends = create<FriendsState>((set, get) => {
       }
     },
 
+    definirApelido: async (userId, apelido) => {
+      try {
+        const evento = await api.definirApelidoDeAmigo(userId, apelido);
+        get().handleNicknameUpdated(evento);
+      } catch (e) {
+        ui.toast(errorMessage(e, "Não foi possível salvar o apelido"), "error");
+      }
+    },
+
+    removerApelido: async (userId) => {
+      try {
+        const evento = await api.removerApelidoDeAmigo(userId);
+        get().handleNicknameUpdated(evento);
+      } catch (e) {
+        ui.toast(errorMessage(e, "Não foi possível remover o apelido"), "error");
+      }
+    },
+
+    // sem `ui.confirm`: diferente de bloquear, ignorar não tem efeito
+    // colateral destrutivo (a amizade continua, o outro lado nem fica
+    // sabendo) — o toast é o único retorno de que a ação aconteceu
+    ignorar: async (userId) => {
+      try {
+        const evento = await api.ignorarUsuario(userId);
+        get().handleIgnored(evento);
+        ui.toast(`Você ignorou ${displayNameOf(evento.user)}.`);
+      } catch (e) {
+        ui.toast(errorMessage(e, "Não foi possível ignorar"), "error");
+      }
+    },
+
+    deixarDeIgnorar: async (userId) => {
+      try {
+        const evento = await api.deixarDeIgnorarUsuario(userId);
+        get().handleIgnored(evento);
+        ui.toast(`Você deixou de ignorar ${displayNameOf(evento.user)}.`);
+      } catch (e) {
+        ui.toast(errorMessage(e, "Não foi possível deixar de ignorar"), "error");
+      }
+    },
+
+    estaIgnorado: (userId) => get().ignored?.some((u) => u.id === userId) ?? false,
+
     handleRequest: (request, direcao) =>
       set((s) => {
         const lista = direcao === "incoming" ? s.incoming : s.outgoing;
@@ -246,6 +317,21 @@ export const useFriends = create<FriendsState>((set, get) => {
             : [...s.blocked, user]
           : s.blocked.filter((b) => b.id !== user.id),
       })),
+
+    handleNicknameUpdated: ({ userId, apelido }) =>
+      set((s) => {
+        const apelidos = { ...(s.apelidos ?? {}) };
+        if (apelido) apelidos[userId] = apelido;
+        else delete apelidos[userId];
+        return { apelidos };
+      }),
+
+    handleIgnored: ({ userId, ignorado, user }) =>
+      set((s) => {
+        const ignored = s.ignored ?? [];
+        if (!ignorado) return { ignored: ignored.filter((u) => u.id !== userId) };
+        return { ignored: ignored.some((u) => u.id === userId) ? ignored : [user, ...ignored] };
+      }),
 
     clear: () => {
       ++seq;
