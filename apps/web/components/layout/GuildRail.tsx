@@ -9,7 +9,6 @@ import {
 import {
   ALL_PERMISSIONS,
   computePermissions,
-  displayNameOf,
   guildNotificationScope,
   isGroupChannel,
   type DMChannelView,
@@ -92,18 +91,19 @@ function ImagemDaConversa({ dm }: { dm: DMChannelView }) {
   if (isGroupChannel(dm) || !outro) {
     return <Users size={20} aria-hidden="true" />;
   }
-  // as mesmas iniciais sobre a mesma cor do `Avatar`: sem o fundo próprio, a
-  // letra herdava a cor do botão e a pessoa mudava de cara entre as colunas
+  // o mesmo fallback do `Avatar`: o símbolo do Streamz (~60% da casa de 40)
+  // sobre a cor da pessoa — sem o fundo próprio, o glifo herdava a cor do
+  // botão e a pessoa mudava de cara entre as colunas
   return (
     <span
       aria-hidden="true"
       style={{ backgroundColor: corDoAvatar(outro.id) }}
       // fundo é uma cor arbitrária do hash — nunca sabemos se é clara ou
-      // escura — então o texto usa o token de overlay (branco garantido), não
+      // escura — então o glifo usa o token de overlay (branco garantido), não
       // `text-white` cru: mesmo padrão do `Avatar.tsx`/`CardDeApp.tsx`.
-      className="grid h-full w-full place-items-center font-semibold text-text-overlay-light"
+      className="grid h-full w-full place-items-center text-text-overlay-light"
     >
-      {displayNameOf(outro).slice(0, 2).toUpperCase()}
+      <Marca size={24} className="shrink-0" />
     </span>
   );
 }

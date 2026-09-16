@@ -3,6 +3,7 @@
 import { HeadphoneOff, MicOff, Users } from "@/components/ui/icones";
 import IconeDeStatus from "@/components/ui/IconeDeStatus";
 import type { UserStatus } from "@streamz/shared";
+import Marca from "@/components/ui/Marca";
 import { corDoAvatar } from "@/components/ui/avatar-cores";
 import { usePresence } from "@/stores/presence";
 
@@ -71,13 +72,17 @@ const FUNDO_DO_SELO: Record<string, string> = {
  * `dot` é a caixa inteira (disco + anel), e o `border-N` come o anel; o
  * deslocamento negativo é o quanto a caixa passa da borda do avatar, arredondado
  * ao pixel (erro máximo de meio pixel contra o centro alvo).
+ *
+ * `glifo` é o lado do símbolo da marca (`Marca`, ver abaixo) desenhado sobre a
+ * cor de hash quando não há foto — 60% do diâmetro do avatar, como o Discord
+ * faz com o logo dele sobre a cor do usuário (arredondado ao pixel).
  */
 const SIZE = {
   /** 16px: reply preview, listas compactas, participantes de thread. */
-  xs: { box: "h-4 w-4 text-[8px]", dot: "h-2.5 w-2.5 -bottom-[2px] -right-[2px] border-2", icone: 6 },
-  sm: { box: "h-6 w-6 text-[10px]", dot: "h-3 w-3 -bottom-[2px] -right-[2px] border-2", icone: 8 },
-  md: { box: "h-8 w-8 text-xs", dot: "h-4 w-4 -bottom-[3px] -right-[3px] border-[3px]", icone: 9 },
-  lg: { box: "h-10 w-10 text-sm", dot: "h-[18px] w-[18px] -bottom-[3px] -right-[3px] border-[3px]", icone: 10 },
+  xs: { box: "h-4 w-4 text-[8px]", dot: "h-2.5 w-2.5 -bottom-[2px] -right-[2px] border-2", icone: 6, glifo: 10 },
+  sm: { box: "h-6 w-6 text-[10px]", dot: "h-3 w-3 -bottom-[2px] -right-[2px] border-2", icone: 8, glifo: 14 },
+  md: { box: "h-8 w-8 text-xs", dot: "h-4 w-4 -bottom-[3px] -right-[3px] border-[3px]", icone: 9, glifo: 19 },
+  lg: { box: "h-10 w-10 text-sm", dot: "h-[18px] w-[18px] -bottom-[3px] -right-[3px] border-[3px]", icone: 10, glifo: 24 },
   /**
    * 48px: degrau que faltava entre `lg` (40) e `xl` (80) — cartão de
    * configurações (`SettingsModal`, outro cartão). **Não medido**: não há
@@ -86,20 +91,28 @@ const SIZE = {
    * 20 e anel de 3, o deslocamento que fecha essa conta é 10 − (48 − 40,5) =
    * 2,5, arredondado para 3px).
    */
-  lg48: { box: "h-12 w-12 text-base", dot: "h-[20px] w-[20px] -bottom-[3px] -right-[3px] border-[3px]", icone: 11 },
-  xl: { box: "h-20 w-20 text-2xl", dot: "h-7 w-7 -bottom-[2px] -right-[2px] border-[6px]", icone: 14 },
+  lg48: { box: "h-12 w-12 text-base", dot: "h-[20px] w-[20px] -bottom-[3px] -right-[3px] border-[3px]", icone: 11, glifo: 29 },
+  xl: { box: "h-20 w-20 text-2xl", dot: "h-7 w-7 -bottom-[2px] -right-[2px] border-[6px]", icone: 14, glifo: 48 },
   /** 120px: cartão de perfil completo e tela de chamada. */
-  xxl: { box: "h-[120px] w-[120px] text-4xl", dot: "h-10 w-10 -bottom-px -right-px border-[8px]", icone: 20 },
+  xxl: { box: "h-[120px] w-[120px] text-4xl", dot: "h-10 w-10 -bottom-px -right-px border-[8px]", icone: 20, glifo: 72 },
 } as const;
 
 /** Estado de voz que o avatar mostra no lugar da bolinha de status. */
 export type VozNoAvatar = "mudo" | "surdo";
 
 /**
- * Avatar circular com a foto do usuário — ou as iniciais sobre uma cor, quando
- * não há foto — e, opcionalmente, a bolinha de status com a borda na cor da
+ * Avatar circular com a foto do usuário — ou, quando não há foto, o símbolo do
+ * Streamz branco sobre a mesma cor de hash que antes ficava atrás das
+ * iniciais — e, opcionalmente, a bolinha de status com a borda na cor da
  * superfície de fundo: é a borda que faz a bolinha parecer "recortada" do
  * avatar, como no Discord.
+ *
+ * O símbolo (não as iniciais) é o que o Discord faz com o próprio logo sobre a
+ * cor do usuário sem foto: aqui é o mesmo `Marca` do rail/home, branco,
+ * ocupando ~60% do diâmetro (`SIZE[x].glifo`) — nunca as iniciais, que ficaram
+ * só para ícone de SERVIDOR sem imagem (`WelcomeModal`, `InviteEmbed`,
+ * mini-avatares de "servidores em comum" etc.), que continua igual ao
+ * Discord.
  *
  * **A foto é resolvida aqui pelo overlay ao vivo de `usePresence`**, e não pelo
  * `user` que o chamador passou. Quase todo `user` na tela é um retrato: o autor
@@ -110,7 +123,6 @@ export type VozNoAvatar = "mudo" | "surdo";
  *
  * Fazer a resolução no componente, e não em cada chamador, é o que garante que
  * nenhuma tela fique de fora: são mais de trinta pontos que desenham avatar.
- * O `username` acompanha pelo mesmo motivo — são as iniciais do fallback.
  */
 export default function Avatar({
   user,
@@ -147,7 +159,7 @@ export default function Avatar({
   // o perfil ao vivo substitui o retrato INTEIRO, não campo a campo: quem
   // removeu a foto tem `avatarUrl: null`, e um `??` aqui leria isso como
   // "não sei" e restauraria a foto que acabou de ser apagada
-  const { avatarUrl, username } = vivo ?? user;
+  const { avatarUrl } = vivo ?? user;
 
   return (
     <span className={`relative inline-block shrink-0 ${className}`}>
@@ -163,12 +175,13 @@ export default function Avatar({
           aria-hidden="true"
           style={{ backgroundColor: hashColor(user.id) }}
           // fundo é uma cor arbitrária do hash (nunca sabemos se é clara ou
-          // escura) — mesmo caso do texto sobre imagem/vídeo, por isso o token
-          // de overlay (branco garantido), não `text-white` cru; ver
-          // `CardDeApp.tsx`, que já usa o mesmo padrão para as iniciais de app.
-          className={`${s.box} grid place-items-center rounded-full font-semibold text-text-overlay-light`}
+          // escura); o glifo é sempre branco por cima — mesmo caso do texto
+          // sobre imagem/vídeo, por isso o token de overlay (branco
+          // garantido), não `text-white` cru; ver `CardDeApp.tsx`, que usa o
+          // mesmo padrão (lá com as iniciais do app, não deste componente).
+          className={`${s.box} grid place-items-center rounded-full text-text-overlay-light`}
         >
-          {username.slice(0, 2).toUpperCase()}
+          <Marca size={s.glifo} className="shrink-0" />
         </span>
       )}
       {voz ? (
