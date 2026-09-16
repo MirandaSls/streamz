@@ -1,17 +1,36 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MonitorUp, MonitorX, Radio } from "@/components/ui/icones";
 import Tooltip from "@/components/ui/Tooltip";
 import ScreenSharePicker from "@/components/voice/ScreenSharePicker";
 import { BotaoDeChamada } from "@/components/voice/controles-de-chamada";
 import { ALVO_MINIMO } from "@/components/voice/palco-mobile";
 import { useEhMobile } from "@/hooks/useEhMobile";
-import { SEM_CAPTURA_DE_TELA, capturarTelaNoNavegador } from "@/lib/captura-de-tela";
-import { isTauri } from "@/lib/desktop";
+import {
+  SEM_CAPTURA_DE_TELA,
+  capturarTelaNoNavegador,
+  suportaCapturaDeTela,
+} from "@/lib/captura-de-tela";
+import { capacidadesDeTela, isTauri } from "@/lib/desktop";
 import { ehCancelamento, mensagemDeErro } from "@/lib/seletor-de-tela";
 import { ui } from "@/stores/ui";
+import { acaoDoBotaoDeTela } from "@/stores/parar-transmissao";
 import { useVoice } from "@/stores/voice";
+
+/**
+ * A captura nativa existe? Perguntado ao Rust uma vez por sessão e guardado,
+ * porque o clique precisa da resposta **na hora**: `getDisplayMedia` só vale
+ * dentro do gesto, e um `await` antes dele o perderia. `null` = ainda não
+ * respondeu (o clique abre o seletor, que espera a resposta sozinho).
+ */
+let nativoConhecido: boolean | null = null;
+function conhecerCapacidades() {
+  if (nativoConhecido !== null || !isTauri()) return;
+  void capacidadesDeTela().then((c) => {
+    nativoConhecido = c.nativo;
+  });
+}
 
 /**
  * Compartilhar tela — dois caminhos, um botão.
@@ -73,11 +92,21 @@ export default function ScreenShareButton({
     }
   }
 
+  useEffect(conhecerCapacidades, []);
+
   const acionar = () => {
-    if (screenOn) return void pararTela();
     // `isTauri()` no clique, não na renderização: o valor não muda em runtime e
-    // ler no evento evita divergir do HTML servido antes da hidratação
-    if (isTauri()) return setSeletor(true);
+    // ler no evento evita divergir do HTML servido antes da hidratação.
+    // Sem captura nativa (app do Mac/Linux) o seletor só dizia "não
+    // disponível": ali vale o `getDisplayMedia` do webview, quando existe.
+    const acao = acaoDoBotaoDeTela({
+      noAr: useVoice.getState().screenOn,
+      tauri: isTauri(),
+      nativo: nativoConhecido,
+      navegadorCaptura: suportaCapturaDeTela(),
+    });
+    if (acao === "parar") return void pararTela();
+    if (acao === "seletor-nativo") return setSeletor(true);
     void capturarNoNavegador();
   };
 

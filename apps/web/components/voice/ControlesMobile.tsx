@@ -197,11 +197,13 @@ function BotaoDeTelaMobile() {
   }, []);
 
   async function acionar() {
+    // parar antes de perguntar se o aparelho captura: no ar, o toque sempre
+    // encerra, venha a transmissão de onde vier (`acaoDoBotaoDeTela`)
+    if (useVoice.getState().screenOn) return void pararTela();
     if (!suporta) {
       ui.toast(SEM_CAPTURA_DE_TELA, "error");
       return;
     }
-    if (screenOn) return void pararTela();
     if (pedindo.current) return;
     pedindo.current = true;
     const { screenQuality, screenAudio, publicarTela } = useVoice.getState();
@@ -219,10 +221,10 @@ function BotaoDeTelaMobile() {
     }
   }
 
-  const label = !suporta
-    ? "Compartilhar tela (indisponível neste navegador)"
-    : screenOn
-      ? "Parar transmissão"
+  const label = screenOn
+    ? "Parar transmissão"
+    : !suporta
+      ? "Compartilhar tela (indisponível neste navegador)"
       : "Compartilhar tela";
 
   return (
@@ -231,7 +233,7 @@ function BotaoDeTelaMobile() {
       onClick={() => void acionar()}
       tom={screenOn ? "aoVivo" : "neutro"}
       pressionado={screenOn}
-      apagado={!suporta}
+      apagado={!suporta && !screenOn}
     >
       {screenOn ? <MonitorX size={22} /> : <MonitorUp size={22} />}
     </BotaoDaBarra>

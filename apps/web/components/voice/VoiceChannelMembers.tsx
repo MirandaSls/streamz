@@ -7,11 +7,13 @@ import Avatar from "@/components/ui/Avatar";
 import TagDeBot from "@/components/ui/TagDeBot";
 import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
 import { abrirMenuDeParticipante } from "@/components/voice/participant-menu";
+import { podePararDeAssistir } from "@/components/voice/parar-de-assistir";
 import PreviaDeTela, { type AlvoDaPrevia } from "@/components/voice/PreviaDeTela";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
 import { anchorOf, ui } from "@/stores/ui";
 import { useVoice } from "@/stores/voice";
+import { useNomesOcultos } from "@/stores/nomes-ocultos";
 
 /**
  * Quem está num canal de voz, listado sob ele na barra lateral.
@@ -63,8 +65,11 @@ export default function VoiceChannelMembers({
   const estouAqui = useVoice((s) => s.channelId === channelId);
   const meId = useAuth((s) => s.user?.id);
   const assistir = useVoice((s) => s.assistir);
+  const assistindo = useVoice((s) => s.assistindo);
+  const pararDeAssistir = useVoice((s) => s.pararDeAssistir);
   const canal = useChannels((s) => s.channels.find((c) => c.id === channelId) ?? null);
   const select = useChannels((s) => s.select);
+  const nomesOcultos = useNomesOcultos((s) => s.ocultos(channelId));
   const [previa, setPrevia] = useState<AlvoDaPrevia | null>(null);
   // fechar com um respiro: entre a linha e o cartão há 8px de vão, e sem a
   // carência o pop-up piscaria toda vez que o cursor os atravessa
@@ -119,9 +124,16 @@ export default function VoiceChannelMembers({
                 onClick={(ev) => ui.openProfile(e.user, anchorOf(ev.currentTarget))}
                 onContextMenu={(ev) => {
                   ev.preventDefault();
+                  const sou = e.user.id === meId;
+                  const podeParar = podePararDeAssistir({
+                    tela: e.screen,
+                    assistindo: assistindo.has(e.user.id),
+                    sou,
+                  });
                   abrirMenuDeParticipante(ev.clientX, ev.clientY, e.user, {
-                    sou: e.user.id === meId,
+                    sou,
                     channelId,
+                    tela: podeParar ? { onPararDeAssistir: () => pararDeAssistir(e.user.id) } : undefined,
                   });
                 }}
                 /*
@@ -151,7 +163,13 @@ export default function VoiceChannelMembers({
                 </span>
                 {/* menor que o nome do canal, como no Discord: nosso texto era maior que o
                     do canal acima, o que invertia a hierarquia */}
-                <span className="min-w-0 flex-1 truncate text-[14px]">{nome}</span>
+                <span
+                  className="min-w-0 flex-1 truncate text-[14px]"
+                  title={nomesOcultos ? nome : undefined}
+                  aria-label={nomesOcultos ? nome : undefined}
+                >
+                  {!nomesOcultos && nome}
+                </span>
                 {/* ── j-bots ── a **sétima** superfície. O §11 do documento lista
                     seis, e o lote C achou esta ao fotografar o tile de voz: um
                     bot de música na sala aparece aqui, na coluna de canais, e

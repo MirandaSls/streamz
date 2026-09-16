@@ -38,7 +38,8 @@ interface GuildsState {
   recarregarMembros: (guildId: string) => Promise<void>;
   /** Resgata um convite pelo código e abre o servidor (cartão de convite e menu). */
   entrarPorConvite: (code: string) => Promise<void>;
-  createInvite: () => Promise<void>;
+  /** `channelId` pré-seleciona o destino (menu de contexto de um canal, F/G). */
+  createInvite: (channelId?: string) => Promise<void>;
   leave: (guildId: string) => Promise<void>;
   remove: (guildId: string) => Promise<void>;
   setRole: (userId: string, role: "ADMIN" | "MEMBER") => Promise<void>;
@@ -176,10 +177,10 @@ export const useGuilds = create<GuildsState>((set, get) => {
     },
 
     // h-moderacao: o modal "Convidar amigos" cria o convite e mostra as opções
-    createInvite: async () => {
+    createInvite: async (channelId) => {
       const guildId = get().activeGuildId;
       if (!guildId) return;
-      ui.openModal({ kind: "invite", guildId });
+      ui.openModal({ kind: "invite", guildId, channelId });
     },
 
     leave: async (guildId) => {

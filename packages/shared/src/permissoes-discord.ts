@@ -93,7 +93,7 @@ export const SEMPRE_LIGADAS: readonly (keyof typeof PERMISSAO_DO_DISCORD)[] = [
 ];
 
 /**
- * Os pares — as 21 permissões do Streamz e o bit do Discord de cada uma.
+ * Os pares — as 22 permissões do Streamz e o bit do Discord de cada uma.
  *
  * A lista é a tabela do §6 do documento, com as duas linhas que faltavam lá
  * (`MOVE_MEMBERS` e `STREAM`, acrescentadas ao Streamz depois). É exaustiva de
@@ -124,6 +124,7 @@ export const PAR_NO_DISCORD: Record<PermissionName, PermissaoDoDiscord> = {
   ADMINISTRATOR: "ADMINISTRATOR",
   MOVE_MEMBERS: "MOVE_MEMBERS",
   STREAM: "STREAM",
+  MANAGE_NICKNAMES: "MANAGE_NICKNAMES",
 };
 
 const PARES = Object.entries(PAR_NO_DISCORD) as [PermissionName, PermissaoDoDiscord][];

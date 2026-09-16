@@ -21,7 +21,7 @@ import { isReacoes, isSlider, isSubmenu, useUI, type MenuItem } from "@/stores/u
  * movimento tornaria impossível ouvir o resultado enquanto se regula.
  */
 function ItemDeslizante({ item }: { item: Extract<MenuItem, { slider: object }> }) {
-  const { min, max, step, onChange, format } = item.slider;
+  const { min, max, step, onChange, format, semValor } = item.slider;
   // estado local: os itens do menu são montados uma vez, então o `value` da
   // definição está congelado no momento em que o menu abriu — sem isso a barra
   // não andaria enquanto o mouse arrasta
@@ -37,9 +37,11 @@ function ItemDeslizante({ item }: { item: Extract<MenuItem, { slider: object }> 
           {item.icon ? <span className="shrink-0 opacity-80">{item.icon as ReactNode}</span> : null}
           {item.label}
         </span>
-        <span className="tabular-nums text-text-muted">
-          {format ? format(value) : String(value)}
-        </span>
+        {!semValor && (
+          <span className="tabular-nums text-text-muted">
+            {format ? format(value) : String(value)}
+          </span>
+        )}
       </div>
       <input
         type="range"
@@ -123,6 +125,39 @@ export function colocar(
     y: Math.max(EDGE, py),
     origem: `${espelhaX ? "right" : "left"} ${espelhaY ? "bottom" : "top"}`,
   };
+}
+
+/**
+ * `true` quando um `scroll` recente o bastante para valer como "a pessoa
+ * rolou" — a distinção que fecha o `ContextMenuHost` numa rolagem de
+ * verdade e não num ajuste de `scrollTop` que o próprio navegador faz.
+ *
+ * **O bug que esta função fecha.** Achado na bancada de 2026-09-16 com 6
+ * contas conectando ao mesmo tempo: o clique direito num canal de TEXTO
+ * abria o menu e ele fechava sozinho, quase na hora — sem a enxurrada de
+ * presença/voz, o mesmo menu ficava estável. Causa: canal de texto e canal
+ * de voz moram na mesma lista rolável (`<div role="list">` em
+ * `ChannelSidebar.tsx`), e cada participante que entra/sai de uma chamada
+ * muda a altura da lista **inteira** — inclusive quando a lista está
+ * rolada e o encolhimento força o navegador a recortar (clampar) o
+ * `scrollTop` para o novo máximo, ou a reancorar a rolagem para não pular
+ * visualmente. As duas coisas dispara um `scroll` de verdade (`isTrusted`),
+ * só que ninguém tocou na roda do mouse — e o ouvinte de captura do host
+ * fechava o menu de qualquer jeito, porque não distinguia rolagem do
+ * usuário de rolagem que o próprio DOM se impôs.
+ *
+ * A distinção: toda rolagem que a pessoa realmente faz vem precedida de um
+ * gesto — roda do mouse ou arrasto de dedo (arrastar a barra de rolagem já
+ * fecha o menu antes, pelo `mousedown` fora dele, que dispara antes de
+ * qualquer `scroll`). Sem gesto recente, o `scroll` é tratado como eco de
+ * outra coisa mudando de tamanho, e o menu continua na tela.
+ */
+export function gestoDeRolagemRecente(
+  marcadoEm: number | null,
+  agora: number,
+  janelaMs = 150,
+): boolean {
+  return marcadoEm !== null && agora - marcadoEm <= janelaMs;
 }
 
 /** Índice do próximo item selecionável na direção dada (dá a volta). */
@@ -724,8 +759,9 @@ function Painel({
  * Medidas de layout gerais (largura 220, caixa de marcar de 20 à direita)
  * confirmadas também nos prints `124207` e `124022`.
  *
- * Fecha com Esc, clique fora, rolagem ou redimensionamento — qualquer coisa que
- * deixaria o menu solto longe do que o abriu.
+ * Fecha com Esc, clique fora, rolagem (de verdade — ver `gestoDeRolagemRecente`)
+ * ou redimensionamento — qualquer coisa que deixaria o menu solto longe do que
+ * o abriu.
  */
 export default function ContextMenuHost() {
   const menu = useUI((s) => s.contextMenu);
@@ -756,14 +792,32 @@ export default function ContextMenuHost() {
     // solto longe do que o abriu. A folha não tem âncora: fechá-la na rolagem
     // significaria que rolar a **própria folha** a fecha, e o teclado do
     // celular, que dispara `resize`, também.
+    //
+    // `scroll` só fecha quando um gesto de rolagem (roda do mouse, arrasto de
+    // dedo) acabou de acontecer — ver `gestoDeRolagemRecente`. Sem isso, o
+    // `scroll` que o navegador dispara sozinho ao reancorar ou recortar o
+    // `scrollTop` de uma lista que mudou de tamanho por outro motivo (ex.: a
+    // lista de canais, quando alguém entra/sai de uma chamada) fechava o menu
+    // sem a pessoa ter tocado em nada.
+    let gestoEm: number | null = null;
+    const marcarGesto = () => {
+      gestoEm = Date.now();
+    };
+    const aoRolar = () => {
+      if (gestoDeRolagemRecente(gestoEm, Date.now())) close();
+    };
     if (!ehMobile) {
-      window.addEventListener("scroll", close, true);
+      window.addEventListener("wheel", marcarGesto, { capture: true, passive: true });
+      window.addEventListener("touchmove", marcarGesto, { capture: true, passive: true });
+      window.addEventListener("scroll", aoRolar, true);
       window.addEventListener("resize", close);
     }
     return () => {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("mousedown", onDown);
-      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("wheel", marcarGesto, true);
+      window.removeEventListener("touchmove", marcarGesto, true);
+      window.removeEventListener("scroll", aoRolar, true);
       window.removeEventListener("resize", close);
     };
   }, [menu, close, ehMobile]);

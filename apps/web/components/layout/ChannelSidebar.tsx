@@ -7,15 +7,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
-import {
-  CheckCheck,
-  Link2,
-  Pencil,
-  Plus,
-  Settings,
-  Trash2,
-  UserPlus,
-} from "@/components/ui/icones";
+import { CheckCheck, Pencil, Plus, Trash2 } from "@/components/ui/icones";
 import {
   Permission,
   channelLinkPath,
@@ -36,7 +28,9 @@ import {
 } from "@/components/layout/sidebar/CategoriaEItemDeCanal";
 import { CanalDeVoz } from "@/components/layout/sidebar/CanalDeVoz";
 import { urlPublica } from "@/lib/links-do-app";
+import { ordenarComFixados, useCanaisFixados } from "@/stores/canais-fixados";
 import { useCanaisOcultos } from "@/stores/canais-ocultos";
+import { useNomesOcultos } from "@/stores/nomes-ocultos";
 import { canalVisivel } from "@/stores/categoria-colapso";
 import { useCategories } from "@/stores/categories";
 import { groupByCategory, type CategoryGroup } from "@/stores/channel-order";
@@ -70,6 +64,9 @@ type Alvo =
   | { tipo: "categoria"; index: number }
   | { tipo: "membro-voz"; channelId: string }
   | null;
+
+/** Referência estável para "nenhum canal fixado" — evita recriar array a cada render. */
+const SEM_FIXADOS: string[] = [];
 
 /** Linha de 2px que marca onde o item vai cair. */
 function LinhaDeSolta({ ativa }: { ativa: boolean }) {
@@ -165,10 +162,50 @@ export default function ChannelSidebar() {
     servidor (e criadas para os antigos pelo passo de boot da API), então
     aparecem, se renomeiam e se apagam como qualquer outra.
   */
-  const grupos = groupByCategory(channels, categories);
+  const idsFixados = useCanaisFixados((s) => (guild ? s.fixados(guild.id) : SEM_FIXADOS));
+  /*
+    Canais fixados (ESPEC2, item 2 do cartão): saem da categoria deles e vão
+    para um bloco no TOPO da coluna, acima de tudo e sem cabeçalho — por isso
+    `ordenarComFixados` primeiro tira os fixados da lista (`resto`) e só o
+    resto vira `grupos`/categoria. Arrastar para reordenar não está
+    implementado para eles (ver `renderChannel`, que desliga o arrasto quando
+    `grupo` é `null`).
+  */
+  const { fixados: canaisFixados, resto: canaisNaoFixados } = ordenarComFixados(channels, idsFixados);
+  const grupos = groupByCategory(canaisNaoFixados, categories);
 
   /**
-   * Botão direito num canal.
+   * "Entrar sem som de entrada" (menu de contexto do canal de VOZ, item G).
+   *
+   * O clique normal é `select(canal, "clique")`: ele marca como lido, abre a
+   * coluna **e** entra na chamada tocando o som (`voice-entrada.ts`). Aqui a
+   * abertura é `"navegacao"` — mesma marcação de lido e mesma troca de coluna,
+   * mas ela **não** entra sozinha (só `"clique"` entra) — e quem entra é o
+   * `connect` direto, com `som: false`. As guardas de entrada (já conectado
+   * aqui, WebRTC indisponível) são as do próprio `connect`; não há checagem
+   * duplicada aqui, é o mesmo caminho do clique menos o aviso sonoro.
+   */
+  function entrarSemSomDeEntrada(channel: Channel) {
+    select(channel, "navegacao");
+    void useVoice.getState().connect(channel, { som: false });
+  }
+
+  /** "Duplicar canal" (F/G): cria uma cópia do canal na mesma categoria. */
+  async function duplicarCanal(channel: Channel) {
+    const guildId = channel.guildId ?? guild?.id;
+    if (!guildId) return;
+    try {
+      const novo = await api.duplicarCanal(guildId, channel.id);
+      useChannels.getState().handleCreated(novo);
+    } catch (e) {
+      ui.toast(errorMessage(e, "Não foi possível duplicar o canal"), "error");
+    }
+  }
+
+  /**
+   * Botão direito num canal — dois menus por `channel.type` (ESPEC2 F/texto,
+   * G/voz), sem ícone em item nenhum (ESPEC2: "TODOS os menus abaixo são SEM
+   * ícones").
    *
    * "Renomear canal" e "Gerenciar acesso" saíram: no Discord existe só "Editar
    * canal", e renomear e permissões são abas de dentro dele. "Seguir canal (em
@@ -179,17 +216,27 @@ export default function ChannelSidebar() {
     e.preventDefault();
     const setting = porEscopo[channelNotificationScope(channel.id)];
     const escopo = { tipo: "canal" as const, channelId: channel.id };
+    const guildId = channel.guildId ?? guild?.id ?? "";
+    const ehVoz = channel.type === "VOICE";
+    const fixado = useCanaisFixados.getState().estaFixado(guildId, channel.id);
+
     const items: MenuItem[] = [
       {
-        label: "Marcar como lido",
-        icon: <CheckCheck size={18} />,
+        label: "Marcar como lida",
+        disabled: !isUnread(channel),
         onSelect: () => void useChannels.getState().markRead(channel.id),
       },
       { separator: true },
-      { label: "Convidar pessoas", icon: <UserPlus size={18} />, onSelect: () => void createInvite() },
       {
-        label: "Copiar link do canal",
-        icon: <Link2 size={18} />,
+        label: ehVoz ? "Convidar para voz" : "Convite para o canal",
+        onSelect: () => void createInvite(channel.id),
+      },
+      {
+        label: fixado ? "Desafixar canal do topo" : "Fixe o Canal no Topo",
+        onSelect: () => useCanaisFixados.getState().alternar(guildId, channel.id),
+      },
+      {
+        label: "Copiar link",
         // origem pública e caminho do contrato: montar a URL à mão com
         // `window.location.origin` copiava `http://tauri.localhost/...` no desktop
         onSelect: () =>
@@ -198,19 +245,56 @@ export default function ChannelSidebar() {
           ),
       },
       { separator: true },
-      submenuSilenciar("Silenciar canal", escopo, setting, t),
-      submenuNotificacoes(escopo, setting, t),
     ];
+
+    if (ehVoz) {
+      items.push(
+        { label: "Entrar sem som de entrada", onSelect: () => entrarSemSomDeEntrada(channel) },
+        {
+          label: "Abrir chat",
+          onSelect: () => {
+            select(channel, "balao");
+            abrirVoiceChat(channel.id);
+          },
+        },
+        {
+          label: "Ocultar nomes",
+          control: "checkbox",
+          checked: useNomesOcultos.getState().ocultos(channel.id),
+          onSelect: () => useNomesOcultos.getState().alternar(channel.id),
+        },
+        { separator: true },
+        // voz só tem "Silenciar canal ›" — sem "Config. de notificação" (ESPEC2 G)
+        submenuSilenciar("Silenciar canal", escopo, setting, t, true),
+      );
+    } else {
+      items.push(
+        submenuSilenciar("Silenciar canal", escopo, setting, t, true),
+        submenuNotificacoes(escopo, setting, t, "Config. de notificação", true),
+      );
+    }
+
     if (podeGerenciarCanais) {
       items.push({ separator: true });
       items.push({
         label: "Editar canal",
-        icon: <Settings size={18} />,
         onSelect: () => openModal({ kind: "channelSettings", channelId: channel.id }),
       });
+      items.push({ label: "Duplicar canal", onSelect: () => void duplicarCanal(channel) });
       items.push({
-        label: "Apagar canal",
-        icon: <Trash2 size={18} />,
+        label: ehVoz ? "Criar canal de voz" : "Criar canal de texto",
+        onSelect: () =>
+          openModal({
+            kind: "createChannel",
+            categoryId: channel.categoryId,
+            tipo: ehVoz ? "VOICE" : "TEXT",
+          }),
+      });
+      items.push({
+        // renomeado de "Apagar canal" (ESPEC2 F/G). A confirmação
+        // (`stores/channels.ts` `remove()`) continua com o texto antigo — fora
+        // do escopo deste cartão, ver relatório final.
+        label: "Excluir canal",
         danger: true,
         onSelect: () => void removeChannel(channel),
       });
@@ -418,7 +502,13 @@ export default function ChannelSidebar() {
     return estaSilenciado(channel);
   }
 
-  function renderChannel(channel: Channel, grupo: CategoryGroup, index: number) {
+  /**
+   * `grupo` nulo é o canal FIXADO no topo (item 2, ESPEC2): sem categoria e
+   * fora de `channel-order`, então sem arrasto (o card não pede reordenar
+   * fixados) e sem linha de solta — as duas coisas dependem de uma posição
+   * dentro de um grupo que o fixado não tem.
+   */
+  function renderChannel(channel: Channel, grupo: CategoryGroup | null, index: number) {
     // um só destaque para os dois tipos: canal de voz agora também é canal
     // aberto (ele tem chat de texto), e continua marcado depois de desligar
     const active = activeChannelId === channel.id;
@@ -426,14 +516,16 @@ export default function ChannelSidebar() {
     // canal de voz entra na conta do não lido como qualquer outro: o chat de
     // texto dele é real, e mensagem lá não pode passar despercebida
     const unread = !active && !silenciado && isUnread(channel);
-    const arrastando = arrasto?.tipo === "canal" && arrasto.id === channel.id;
-    const dragProps: PropsDeArrasto = {
-      draggable: podeGerenciarCanais,
-      onDragStart: (e: DragEvent) => inicioArrasto(e, "canal", channel.id),
-      onDragEnd: fimArrasto,
-      onDragOver: (e: DragEvent) => sobreCanal(e, grupo, index, channel),
-      onDrop: soltar,
-    };
+    const arrastando = grupo !== null && arrasto?.tipo === "canal" && arrasto.id === channel.id;
+    const dragProps: PropsDeArrasto = grupo
+      ? {
+          draggable: podeGerenciarCanais,
+          onDragStart: (e: DragEvent) => inicioArrasto(e, "canal", channel.id),
+          onDragEnd: fimArrasto,
+          onDragOver: (e: DragEvent) => sobreCanal(e, grupo, index, channel),
+          onDrop: soltar,
+        }
+      : { draggable: false, onDragStart: () => {}, onDragEnd: () => {}, onDragOver: () => {}, onDrop: () => {} };
     /** O que as duas linhas (texto e voz) têm em comum. */
     const comuns = {
       channel,
@@ -444,12 +536,12 @@ export default function ChannelSidebar() {
       podeGerenciarCanais,
       arrasto: dragProps,
       aoAbrirMenu: (e: MouseEvent) => openChannelMenu(e, channel),
-      aoConvidar: () => void createInvite(),
+      aoConvidar: () => void createInvite(channel.id),
       aoEditar: () => openModal({ kind: "channelSettings", channelId: channel.id }),
     };
     return (
       <div key={channel.id}>
-        <LinhaDeSolta ativa={alvoDeCanal(grupo.category?.id ?? null, index)} />
+        {grupo && <LinhaDeSolta ativa={alvoDeCanal(grupo.category?.id ?? null, index)} />}
         {channel.type === "VOICE" ? (
           <CanalDeVoz
             {...comuns}
@@ -614,6 +706,9 @@ export default function ChannelSidebar() {
           </p>
         )}
 
+        {/* Canais fixados (ESPEC2 item 2): topo da lista, fora de categoria,
+            sem cabeçalho — igual ao bloco solto, mas antes dele. */}
+        {canaisFixados.map((c) => renderChannel(c, null, 0))}
         {grupos.map((grupo, i) => renderGrupo(grupo, i - 1))}
       </div>
 

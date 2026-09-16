@@ -166,6 +166,8 @@ vi.mock("@/lib/desktop", () => ({
   iniciarTelaNativa: vi.fn(async () => {}),
   pararTelaNativa: vi.fn(async () => {}),
   ouvirTelaEncerrada: () => () => {},
+  suspenderAtenuacaoDoWindows: vi.fn(async () => {}),
+  restaurarAtenuacaoDoWindows: vi.fn(async () => {}),
 }));
 // o Node não tem `RTCPeerConnection`: quem decide aqui é o teste
 vi.mock("@/lib/suporte-a-chamadas", async (original) => ({
@@ -413,6 +415,120 @@ describe("tela compartilhada", () => {
     ];
     expect(opcoes.screenShareEncoding).toEqual({ maxBitrate: 9_000_000, maxFramerate: 60 });
     expect(opcoes.videoEncoding).toBeUndefined();
+  });
+});
+
+describe("parar a própria transmissão", () => {
+  /** Faixa com `ended` de verdade: o "Parar compartilhamento" do navegador. */
+  function faixaViva(kind: string) {
+    const ouvintes: (() => void)[] = [];
+    const f = {
+      kind,
+      contentHint: "",
+      readyState: "live",
+      stop: vi.fn(() => {
+        f.readyState = "ended";
+      }),
+      addEventListener: (_e: string, fn: () => void) => ouvintes.push(fn),
+      /** o navegador encerra a captura: `ended` dispara, `stop` não é chamado */
+      encerrarPeloNavegador: () => {
+        f.readyState = "ended";
+        for (const fn of ouvintes) fn();
+      },
+    };
+    return f;
+  }
+
+  function captura(comSom: boolean) {
+    const video = faixaViva("video");
+    const som = faixaViva("audio");
+    const faixas = comSom ? [video, som] : [video];
+    const stream = {
+      getVideoTracks: () => [video],
+      getAudioTracks: () => (comSom ? [som] : []),
+      getTracks: () => faixas,
+    } as unknown as MediaStream;
+    return { stream, video, som };
+  }
+
+  /** O participante falso passa a guardar as publicações, como o SDK. */
+  function registrarPublicacoes(sala: InstanceType<typeof SalaFalsa>) {
+    const lp = sala.localParticipant;
+    lp.publishTrack.mockImplementation(async (t: unknown, o: { source: string }) => {
+      const track = { stop: vi.fn(), faixa: (t as { faixa: unknown }).faixa };
+      lp.trackPublications.set(o.source, { source: o.source, track });
+      sala.publicadas.push(o.source);
+    });
+    lp.unpublishTrack.mockImplementation(async (t?: unknown) => {
+      for (const [k, pub] of lp.trackPublications) {
+        if ((pub as { track: unknown }).track === t) lp.trackPublications.delete(k);
+      }
+    });
+  }
+
+  it("o botão despublica vídeo e som e para toda a captura", async () => {
+    useVoice.getState().setScreenAudio(true);
+    await useVoice.getState().startCall("dm1", false);
+    const sala = SalaFalsa.criadas[0];
+    registrarPublicacoes(sala);
+    const { stream, video, som } = captura(true);
+    await useVoice.getState().publicarTela(stream);
+    expect(useVoice.getState().screenOn).toBe(true);
+    expect(sala.localParticipant.trackPublications.size).toBe(2);
+
+    await useVoice.getState().pararTela();
+
+    expect(useVoice.getState().screenOn).toBe(false);
+    expect(sala.localParticipant.unpublishTrack).toHaveBeenCalledTimes(2);
+    expect(sala.localParticipant.trackPublications.size).toBe(0);
+    expect(video.stop).toHaveBeenCalled();
+    expect(som.stop).toHaveBeenCalled();
+  });
+
+  it("o som capturado mas não publicado (opção desligada) não fica vivo", async () => {
+    useVoice.getState().setScreenAudio(false);
+    await useVoice.getState().startCall("dm1", false);
+    registrarPublicacoes(SalaFalsa.criadas[0]);
+    const { stream, som } = captura(true);
+    await useVoice.getState().publicarTela(stream);
+    expect(som.stop).toHaveBeenCalled();
+    expect(SalaFalsa.criadas[0].publicadas).not.toContain("screen_share_audio");
+    useVoice.getState().setScreenAudio(true);
+  });
+
+  it("o 'Parar compartilhamento' do navegador encerra pela store", async () => {
+    await useVoice.getState().startCall("dm1", false);
+    const sala = SalaFalsa.criadas[0];
+    registrarPublicacoes(sala);
+    const { stream, video } = captura(false);
+    await useVoice.getState().publicarTela(stream);
+    expect(useVoice.getState().screenOn).toBe(true);
+
+    video.encerrarPeloNavegador();
+    await vi.waitFor(() => expect(sala.localParticipant.trackPublications.size).toBe(0));
+    expect(useVoice.getState().screenOn).toBe(false);
+  });
+
+  it("sair da chamada enquanto a tela sobe não a deixa ir ao ar", async () => {
+    await useVoice.getState().startCall("dm1", false);
+    const sala = SalaFalsa.criadas[0];
+    registrarPublicacoes(sala);
+    let liberar: () => void = () => {};
+    const impl = sala.localParticipant.publishTrack.getMockImplementation()!;
+    sala.localParticipant.publishTrack.mockImplementationOnce(async (t, o) => {
+      await new Promise<void>((r) => (liberar = r));
+      await impl(t, o);
+    });
+    const { stream, video } = captura(false);
+    const subindo = useVoice.getState().publicarTela(stream);
+
+    await useVoice.getState().disconnect();
+    liberar();
+    await subindo;
+
+    expect(useVoice.getState().screenOn).toBe(false);
+    expect(video.stop).toHaveBeenCalled();
+    expect(sala.localParticipant.trackPublications.size).toBe(0);
   });
 });
 

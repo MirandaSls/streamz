@@ -224,9 +224,10 @@ export const useChannels = create<ChannelsState>((set, get) => {
       const guildId = get().guildId;
       if (!guildId) return;
       const ok = await ui.confirm({
-        title: `Apagar #${channel.name ?? "canal"}`,
-        message: "Todas as mensagens do canal somem. Não dá para desfazer.",
-        confirmLabel: "Apagar canal",
+        // textos do Discord: "Excluir canal" no menu e na caixa
+        title: "Excluir canal",
+        message: `Tem certeza que deseja excluir #${channel.name ?? "canal"}? Essa ação não pode ser desfeita.`,
+        confirmLabel: "Excluir canal",
         danger: true,
       });
       if (!ok) return;

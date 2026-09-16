@@ -37,6 +37,12 @@ mod atualizador;
 #[cfg(windows)]
 mod permissoes;
 
+// A "atenuação de comunicações" do Windows, suspensa enquanto há call: o
+// microfone do WebView2 abre como stream de comunicações e o Windows abaixava
+// o volume dos outros apps. Ver o porquê (e o que não funciona) no arquivo.
+#[cfg(windows)]
+mod atenuacao;
+
 // O par Linux: o WebKitGTK não pergunta, **nega** microfone e câmera quando
 // ninguém responde ao `permission-request`, e o wry não responde. Ver
 // `src/permissoes_linux.rs`.
@@ -138,6 +144,8 @@ pub fn run() {
             tela::descartar_tela,
             tela::iniciar_tela,
             tela::parar_tela,
+            suspender_atenuacao_do_windows,
+            restaurar_atenuacao_do_windows,
         ])
         .setup(|app| {
             // --- Permissão de mídia ------------------------------------------
@@ -147,6 +155,10 @@ pub fn run() {
             // não pode impedir o app de subir — no pior caso volta o pop-up.
             #[cfg(windows)]
             {
+                // uma call interrompida por queda deixou a preferência trocada
+                if let Some(amb) = ambiente_de_atenuacao(app.handle()) {
+                    app.state::<atenuacao::Atenuacao>().recuperar(&amb);
+                }
                 if let Some(janela) = app.get_webview_window("main") {
                     let _ = janela.with_webview(|webview| {
                         permissoes::liberar_camera_e_microfone(&webview.controller());
@@ -236,6 +248,9 @@ pub fn run() {
     // consulta a mesma rota `/api/updates` e manda o usuário para
     // `streamz.chat` (a raiz virou a página de download). Registrar o plugin
     // aqui no Android não daria erro visível, daria uma promessa falsa.
+    #[cfg(windows)]
+    let builder = builder.manage(atenuacao::Atenuacao::default());
+
     #[cfg(desktop)]
     let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -313,7 +328,12 @@ pub fn run() {
         // sala antes de o processo morrer, em vez de deixar o LiveKit
         // descobrir pelo timeout e a tela "congelar" para os outros.
         .run(|app, event| match event {
-            RunEvent::Exit => app.state::<tela::Transmissao>().encerrar(),
+            RunEvent::Exit => {
+                app.state::<tela::Transmissao>().encerrar();
+                // sair pela bandeja no meio da call devolve o ducking do Windows
+                #[cfg(windows)]
+                restaurar_atenuacao_do_windows(app.clone());
+            }
             // **macOS: clicar no ícone do Dock traz a janela de volta.** O
             // "fechar esconde" lá em cima é a promessa da bandeja no Windows,
             // mas no Mac o gesto de reabrir um app que continua rodando é o
@@ -348,6 +368,40 @@ pub fn run() {
             }
             _ => {}
         });
+}
+
+/// Começo de uma call: o Windows para de abaixar os outros apps (ver
+/// `atenuacao.rs`). A web chama antes de abrir o microfone. Fora do Windows
+/// não faz nada.
+#[tauri::command]
+fn suspender_atenuacao_do_windows(app: tauri::AppHandle) {
+    #[cfg(windows)]
+    if let Some(amb) = ambiente_de_atenuacao(&app) {
+        app.state::<atenuacao::Atenuacao>().suspender(&amb);
+    }
+    #[cfg(not(windows))]
+    let _ = app;
+}
+
+/// Fim da call: a preferência de comunicações volta ao que era.
+#[tauri::command]
+fn restaurar_atenuacao_do_windows(app: tauri::AppHandle) {
+    #[cfg(windows)]
+    if let Some(amb) = ambiente_de_atenuacao(&app) {
+        app.state::<atenuacao::Atenuacao>().restaurar(&amb);
+    }
+    #[cfg(not(windows))]
+    let _ = app;
+}
+
+/// O registro do usuário e a marca de "valor original" na pasta local do app.
+/// Sem pasta não há marca, e sem marca não se mexe no registro.
+#[cfg(windows)]
+fn ambiente_de_atenuacao(app: &tauri::AppHandle) -> Option<atenuacao::Real> {
+    let pasta = app.path().app_local_data_dir().ok()?;
+    Some(atenuacao::Real {
+        marca: pasta.join("atenuacao-do-windows.txt"),
+    })
 }
 
 /// Mostra e foca a janela principal (usada pelo menu e pelo clique no ícone).

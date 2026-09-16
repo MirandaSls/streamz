@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
   Clock,
   MessageSquare,
   Pencil,
   PhoneCall,
-  SendHorizonal,
+  ScrollText,
+  Smile,
   UserCheck,
   UserPlus,
 } from "@/components/ui/icones";
@@ -17,23 +18,31 @@ import {
   displayNameOf,
   highestPosition,
   rolesOf,
+  type ComandoDeApp,
+  type MemberRole,
+  type RelationshipKind,
   type UserProfile,
   type UserStatus,
 } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import IconeDeStatus from "@/components/ui/IconeDeStatus";
 import TagDeBot from "@/components/ui/TagDeBot";
-import { MENU_WIDTH, MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
+import { MENU_WIDTH_WIDE } from "@/components/ui/ContextMenu";
 import { CabecalhoDoPerfil } from "@/components/ui/perfil/CabecalhoDoPerfil";
 import { PainelDaMinhaConta } from "@/components/ui/perfil/PainelDaMinhaConta";
 import { PilulasDeCargo } from "@/components/ui/perfil/PilulasDeCargo";
+import { SeletorDeCargo } from "@/components/ui/perfil/SeletorDeCargo";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { api } from "@/lib/api";
 import { contaDe, lerCofreDoDisco } from "@/lib/contas";
+import EmojiPicker from "@/components/ui/EmojiPicker";
+import { EVENTO_MENCAO, type DetalheMencao } from "@/lib/mencoes";
 import { lerRascunho, salvarRascunho } from "@/lib/rascunhos";
 import { trocarDeConta } from "@/lib/troca-de-contas";
+import { useAplicativos } from "@/stores/aplicativos";
 import { useAuth } from "@/stores/auth";
 import { useChannels } from "@/stores/channels";
+import { useComandosDeApp } from "@/stores/comandos-de-app";
 import { useDMs } from "@/stores/dms";
 import { useFriends, useRelationship } from "@/stores/friends";
 import { useGuilds } from "@/stores/guilds";
@@ -205,6 +214,55 @@ function abrirMenuDoCartao(x: number, y: number, itens: MenuItem[], largura: num
 
 type EstadoDoPerfil = "carregando" | "pronto" | "erro";
 
+/**
+ * Botão redondo de visão de moderador (s7/s9, canto do banner): mesma regra
+ * de `MemberList.podeAgirSobre` (nunca em mim mesmo, nunca no dono do
+ * servidor) somada a "alguma permissão de moderação". Função pura para o
+ * teste não precisar montar o cartão inteiro (`Popout` não renderiza sem
+ * `document`, ver `ProfilePopover.helpers.test.ts`).
+ */
+export function calcularPodeAbrirVisaoDeModerador(params: {
+  isMe: boolean;
+  guildAtiva: string | null;
+  roleDoAlvo: MemberRole | undefined;
+  podeExpulsar: boolean;
+  podeBanir: boolean;
+  podeCastigar: boolean;
+}): boolean {
+  return (
+    Boolean(params.guildAtiva) &&
+    !params.isMe &&
+    params.roleDoAlvo !== "OWNER" &&
+    (params.podeExpulsar || params.podeBanir || params.podeCastigar)
+  );
+}
+
+/**
+ * Rótulo do botão redondo de amizade (canto do banner): "adicionar amigo"
+ * até "já amigos", passando pelas intermediárias (pedido enviado/recebido).
+ */
+export function rotuloDoBotaoDeAmizade(relacao: RelationshipKind): string {
+  switch (relacao) {
+    case "friend":
+      return "Amigos";
+    case "incoming":
+      return "Pedido de amizade recebido";
+    case "outgoing":
+      return "Pedido de amizade enviado";
+    default:
+      return "Adicionar amigo";
+  }
+}
+
+/**
+ * "Comandos" do cartão de bot (K2): só os de barra deste bot — `tipo`
+ * ausente (payload antigo) ou 1; comando de usuário/mensagem (2/3, "Apps >")
+ * não é cápsula do composer. Mesma regra de `lib/comandos-barra.ts`.
+ */
+export function comandosDeBarraDoBot(comandos: ComandoDeApp[], botUserId: string): ComandoDeApp[] {
+  return comandos.filter((c) => c.botUser.id === botUserId && (c.tipo === undefined || c.tipo === 1));
+}
+
 export default function ProfilePopoverHost() {
   const popover = useUI((s) => s.popover);
   const close = useUI((s) => s.closePopover);
@@ -219,6 +277,18 @@ export default function ProfilePopoverHost() {
   const guildAtiva = useGuilds((s) => s.activeGuildId);
   const toggleRole = useGuilds((s) => s.toggleRole);
   const podeCargos = useCan(Permission.MANAGE_ROLES);
+  // ── leva 2 · botão de visão de moderador (s7/s9) ── mesma conta de
+  // `MemberList.podeAgirSobre` + `podeExpulsar || podeBanir || podeCastigar`
+  const podeExpulsar = useCan(Permission.KICK_MEMBERS);
+  const podeBanir = useCan(Permission.BAN_MEMBERS);
+  const podeCastigar = useCan(Permission.MODERATE_MEMBERS);
+  // ── leva 2 · "+ Adicionar app" do cartão de bot (K2) — mesma permissão que
+  // a instalação em si exige (`carregarServidores`, `stores/aplicativos.ts`)
+  const podeAdicionarApp = useCan(Permission.MANAGE_GUILD);
+  // ── leva 2 · comandos de barra do bot (K2) — a mesma lista que o composer usa
+  const comandosDeApp = useComandosDeApp((s) => s.comandos);
+  const abrirDiretorioDeApps = useAplicativos((s) => s.abrir);
+  const abrirInstalacaoDeApp = useAplicativos((s) => s.abrirInstalacao);
   // ── d-social ── as ações do cartão dependem da relação com quem ele mostra
   const send = useFriends((s) => s.send);
   const accept = useFriends((s) => s.accept);
@@ -245,12 +315,22 @@ export default function ProfilePopoverHost() {
   /** Soma um a cada "Tentar de novo": é a dependência que refaz o pedido. */
   const [tentativa, setTentativa] = useState(0);
   const [rascunho, setRascunho] = useState("");
+  /** Emoji picker aberto no composer do cartão de outra pessoa. */
+  const [pickerAberto, setPickerAberto] = useState(false);
+  /**
+   * Retângulo do "+" de cargo no instante do clique — `null` quando o
+   * popover próprio (`SeletorDeCargo`, seção L) está fechado. Snapshot, não
+   * `ref` do botão: o mesmo padrão de `abrirKebab`/`abrirSubmenuDeStatus`
+   * acima, que também capturam `getBoundingClientRect()` na hora do clique.
+   */
+  const [ancoraDoSeletorDeCargo, setAncoraDoSeletorDeCargo] = useState<DOMRect | null>(null);
 
   const userId = popover?.user.id;
 
   // o rascunho é da pessoa, não do pedido: "Tentar de novo" não o apaga
   useEffect(() => {
     setRascunho("");
+    setAncoraDoSeletorDeCargo(null);
   }, [userId]);
 
   // o perfil rico (bio, banner, pronomes) não cabe no PublicUser
@@ -321,6 +401,20 @@ export default function ProfilePopoverHost() {
   /** Aberto pelo painel do usuário: o meu cartão ganha os painéis do print `180020`. */
   const peloRodape = Boolean(popover.acima);
   const atividade = atividadeDe(user);
+  const notaExistente = notas[user.id];
+  // botão de visão de moderador (s7/s9) — a conta pura está em
+  // `calcularPodeAbrirVisaoDeModerador`, acima
+  const alvoMembro = membros.find((m) => m.user.id === user.id);
+  const podeAbrirVisaoDeModerador = calcularPodeAbrirVisaoDeModerador({
+    isMe,
+    guildAtiva,
+    roleDoAlvo: alvoMembro?.role,
+    podeExpulsar,
+    podeBanir,
+    podeCastigar,
+  });
+  // "Comandos" do cartão de bot (K2) — filtro puro em `comandosDeBarraDoBot`
+  const comandosDesteBot = user.bot ? comandosDeBarraDoBot(comandosDeApp, user.id) : [];
 
   /** Envia a mensagem sem sair da popout — o rodapé do cartão do Discord. */
   async function enviar() {
@@ -385,6 +479,12 @@ export default function ProfilePopoverHost() {
     salvarRascunho(channelId, `${prefixo}@${user.username} `);
     ui.toast(`@${user.username} foi para a caixa de mensagem`);
     close();
+  }
+
+  /** Insere emoji no campo de mensagem do cartão. */
+  function inserirEmoji(texto: string) {
+    setRascunho((prev) => prev + texto);
+    setPickerAberto(false);
   }
 
   function abrirPerfilCompleto() {
@@ -534,25 +634,13 @@ export default function ProfilePopoverHost() {
     }
   }
 
-  /** O kebab só existe no cartão dos outros (ver `CabecalhoDoPerfil`). */
-  function abrirKebab(botao: HTMLElement) {
-    const r = botao.getBoundingClientRect();
-    const notaExistente = notas[user.id];
-    const itens: MenuItem[] = [
-      { label: "Perfil", onSelect: abrirPerfilCompleto },
-      { label: "Mencionar", onSelect: mencionar },
-      // nota privada sobre a pessoa (`docs/CONTRATO-MENUS.md` §2) — o rótulo
-      // muda para "Editar nota" quando já existe uma, como no modal
-      {
-        label: notaExistente ? "Editar nota" : "Adicionar nota",
-        description: "Visível apenas para você",
-        onSelect: () => {
-          close();
-          openModal({ kind: "notaDeUsuario", userId: user.id });
-        },
-      },
-      { separator: true },
-    ];
+  /**
+   * Itens de amizade — o miolo comum ao kebab e ao botão redondo de amizade
+   * (canto do banner, s7/s9): "mesmo menu de amizade que existe", só que
+   * agora dois botões abrem o mesmo conteúdo.
+   */
+  function montarItensDeAmizade(): MenuItem[] {
+    const itens: MenuItem[] = [];
     if (relacao === "none") {
       itens.push({ label: "Adicionar amigo", onSelect: () => void send(user.username) });
     }
@@ -583,6 +671,28 @@ export default function ProfilePopoverHost() {
         },
       });
     }
+    return itens;
+  }
+
+  /** O kebab só existe no cartão dos outros (ver `CabecalhoDoPerfil`). */
+  function abrirKebab(botao: HTMLElement) {
+    const r = botao.getBoundingClientRect();
+    const itens: MenuItem[] = [
+      { label: "Perfil", onSelect: abrirPerfilCompleto },
+      { label: "Mencionar", onSelect: mencionar },
+      // nota privada sobre a pessoa (`docs/CONTRATO-MENUS.md` §2) — o rótulo
+      // muda para "Editar nota" quando já existe uma, como no modal
+      {
+        label: notaExistente ? "Editar nota" : "Adicionar nota",
+        description: "Visível apenas para você",
+        onSelect: () => {
+          close();
+          openModal({ kind: "notaDeUsuario", userId: user.id });
+        },
+      },
+      { separator: true },
+      ...montarItensDeAmizade(),
+    ];
     itens.push(
       relacao === "blocked"
         ? { label: "Desbloquear", onSelect: () => void unblock(user.id) }
@@ -605,19 +715,81 @@ export default function ProfilePopoverHost() {
     abrirMenuDoCartao(r.right - MENU_WIDTH_WIDE, r.bottom + 4, itens, MENU_WIDTH_WIDE, !ehMobile);
   }
 
-  function abrirMenuDeCargos(botao: HTMLElement) {
+  /**
+   * Botão redondo de amizade (canto do banner, s7/s9 · 1b da entrega):
+   * "mesmo menu de amizade que existe" — o mesmo conteúdo de `abrirKebab`,
+   * sem as ações que não são de amizade (perfil, nota, bloquear).
+   */
+  function abrirMenuDeAmizade(botao: HTMLElement) {
     const r = botao.getBoundingClientRect();
-    abrirMenuDoCartao(
-      r.left,
-      r.bottom + 4,
-      atribuiveis.map((cargo) => ({
-        label: cargo.name,
-        dot: cargo.color ?? undefined,
-        onSelect: () => void toggleRole(user.id, cargo.id, true),
-      })),
-      MENU_WIDTH,
-      !ehMobile,
-    );
+    abrirMenuDoCartao(r.right - MENU_WIDTH_WIDE, r.bottom + 4, montarItensDeAmizade(), MENU_WIDTH_WIDE, !ehMobile);
+  }
+
+  /**
+   * Botão redondo de visão de moderador (canto do banner, s7/s9 · 1a da
+   * entrega): abre direto, sem menu — o "kind" ainda não existe no `Modal` de
+   * `stores/ui.ts` no momento em que este cartão foi escrito (outro agente
+   * cuida dele em paralelo nesta leva); se ainda faltar quando isto for lido,
+   * é a pendência a relatar, não a inventar aqui.
+   */
+  function abrirVisaoDeModerador() {
+    if (!guildAtiva) return;
+    close();
+    openModal({ kind: "visaoDeModerador", guildId: guildAtiva, userId: user.id });
+  }
+
+  /**
+   * "+ Adicionar app" do cartão de bot (K2): abre o mesmo fluxo do diretório
+   * (`abrir` + `abrirInstalacao`), para a aplicação deste bot. Só sei o
+   * `applicationId` de um app **instalado** neste servidor (o bot é membro
+   * dele, então está instalado); por isso pede `GET /guilds/:id/aplicativos`
+   * em vez de reaproveitar `comandosDesteBot` — um bot sem comando de barra
+   * nenhum ainda tem `applicationId` por este caminho. A rota exige
+   * `MANAGE_GUILD` (mesma permissão que a tela de instalar já pede), e o botão
+   * só aparece para quem a tem — a UI não chama o que a API recusaria.
+   */
+  async function adicionarApp() {
+    if (!guildAtiva) return;
+    try {
+      const instalados = await api.appsDoServidor(guildAtiva);
+      const instalacao = instalados.find((a) => a.app.botUser.id === user.id);
+      if (!instalacao) {
+        ui.toast("Não foi possível encontrar este aplicativo.", "error");
+        return;
+      }
+      close();
+      abrirDiretorioDeApps();
+      abrirInstalacaoDeApp(instalacao.app);
+    } catch (e) {
+      ui.toast(errorMessage(e, "Não foi possível abrir a instalação do app"), "error");
+    }
+  }
+
+  /**
+   * Cápsula de comando do bot (K2): fecha o cartão e põe `/nome ` no composer
+   * do canal aberto — o mesmo `CustomEvent` de `lib/mencoes.ts` que
+   * "Mencionar" já usa, porque é o único jeito de achar o composer montado
+   * sem saber se é o do canal, o de uma thread ou o de uma DM. Sem composer
+   * ouvindo, o evento cai no vazio e a cápsula só fechou o cartão — "senão só
+   * mostra", como o cartão pede.
+   */
+  function inserirComandoNoComposer(nomeDoComando: string) {
+    close();
+    const detalhe: DetalheMencao = { texto: `/${nomeDoComando} ` };
+    window.dispatchEvent(new CustomEvent<DetalheMencao>(EVENTO_MENCAO, { detail: detalhe, cancelable: true }));
+  }
+
+  /**
+   * O "+" das pílulas de cargo (seção L, print `s10`): antes abria o
+   * `ContextMenu` genérico (`abrirMenuDoCartao`, como o kebab e o submenu de
+   * status); o Discord tem um popover próprio, com campo de busca — sem lugar
+   * num `MenuItem` — então este botão monta o `SeletorDeCargo` em vez de
+   * empilhar mais uma entrada ali. `manter`/`abrirMenuDoCartao` não entram: o
+   * `SeletorDeCargo` é um `Popout` (não um `ContextMenu`), e a pilha do
+   * `Popout` já garante que ele nasce por cima do cartão sem fechá-lo.
+   */
+  function abrirMenuDeCargos(botao: HTMLElement) {
+    setAncoraDoSeletorDeCargo(botao.getBoundingClientRect());
   }
 
   // O próprio dono também "veste" cargo em si mesmo (print `101804`); a API
@@ -625,6 +797,22 @@ export default function ProfilePopoverHost() {
   // + `assertPodeMexerNoCargo`, sem o `assertCanActOn` que bloqueia castigo/
   // expulsão/banimento contra si mesmo) — por isso sem `&& !isMe`.
   const podeMexerNosCargos = podeCargos;
+
+  // Botão redondo de amizade (1b da entrega): ícone e rótulo mudam com a
+  // relação — "adicionar amigo" vira "já amigos" (e as intermediárias, pedido
+  // enviado/recebido). Nunca aparece na pessoa bloqueada nem no meu cartão: o
+  // "desbloquear" já mora no kebab, e não faz sentido "adicionar amigo" a mim
+  // mesmo.
+  const mostrarBotaoDeAmizade = !isMe && relacao !== "blocked";
+  const iconeDeAmizade =
+    relacao === "friend" || relacao === "incoming" ? (
+      <UserCheck size={16} aria-hidden="true" />
+    ) : relacao === "outgoing" ? (
+      <Clock size={16} aria-hidden="true" />
+    ) : (
+      <UserPlus size={16} aria-hidden="true" />
+    );
+  const rotuloDeAmizade = rotuloDoBotaoDeAmizade(relacao);
 
   return (
     <Popout
@@ -671,6 +859,10 @@ export default function ProfilePopoverHost() {
           }
           aoAbrirPerfil={abrirPerfilCompleto}
           aoAbrirKebab={isMe ? undefined : abrirKebab}
+          aoAbrirVisaoDeModerador={podeAbrirVisaoDeModerador ? abrirVisaoDeModerador : undefined}
+          aoAbrirAmizade={mostrarBotaoDeAmizade ? abrirMenuDeAmizade : undefined}
+          iconeDeAmizade={iconeDeAmizade}
+          rotuloDeAmizade={rotuloDeAmizade}
           ehMobile={ehMobile}
         />
 
@@ -683,6 +875,21 @@ export default function ProfilePopoverHost() {
             <div className="flex min-w-0 items-center gap-2">
               <h2 className="min-w-0 truncate text-heading-lg font-bold text-text-default">{nome}</h2>
               {user.bot && <TagDeBot />}
+              {/* nota privada sobre a pessoa (`stores/notas.ts`) — o ícone só
+                  aparece quando existe uma, e o clique abre o mesmo modal do
+                  kebab ("Editar nota"), não um novo fluxo */}
+              {!isMe && notaExistente && (
+                <Tooltip rotulo={notaExistente}>
+                  <button
+                    type="button"
+                    onClick={() => openModal({ kind: "notaDeUsuario", userId: user.id })}
+                    aria-label="Ver nota sobre este usuário"
+                    className="shrink-0 text-icon-subtle transition-colors hover:text-text-default"
+                  >
+                    <ScrollText size={14} aria-hidden="true" />
+                  </button>
+                </Tooltip>
+              )}
             </div>
             <div className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-text-sm text-text-default">
               <span className="min-w-0 truncate">{user.username}</span>
@@ -706,6 +913,78 @@ export default function ProfilePopoverHost() {
               ))}
             </div>
           </div>
+
+          {/*
+            "N amigos mútuos • N servidores mútuos" com mini-avatares (s7/s9,
+            3 da entrega): dados que o próprio cartão já buscou (`perfil`,
+            `GET /users/:id/profile`) — nada de rede nova. Antes só existia no
+            celular (o bloco `ehMobile` mais abaixo, com a lista cheia); aqui é
+            a linha compacta do desktop, clicável para o perfil completo. Bot
+            não tem amigo (K2): só a parte de servidores entra.
+          */}
+          {!isMe &&
+            perfil &&
+            ((!user.bot && perfil.mutualFriends.length > 0) || perfil.mutualGuilds.length > 0) && (
+              <button
+                type="button"
+                onClick={abrirPerfilCompleto}
+                className="flex min-w-0 items-center gap-2 self-start text-left text-text-sm text-text-muted transition-colors hover:text-text-default hover:underline"
+              >
+                {!user.bot && perfil.mutualFriends.length > 0 ? (
+                  <span className="flex shrink-0 -space-x-1.5">
+                    {perfil.mutualFriends.slice(0, 3).map((f) => (
+                      <Avatar key={f.id} user={f} size="xs" surface="border-background-surface-high" />
+                    ))}
+                  </span>
+                ) : (
+                  perfil.mutualGuilds.length > 0 && (
+                    <span className="flex shrink-0 -space-x-1.5">
+                      {perfil.mutualGuilds.slice(0, 3).map((g) =>
+                        g.iconUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            key={g.id}
+                            src={g.iconUrl}
+                            alt=""
+                            className="h-4 w-4 rounded-full border-2 border-background-surface-high object-cover"
+                          />
+                        ) : (
+                          <span
+                            key={g.id}
+                            className="grid h-4 w-4 place-items-center rounded-full border-2 border-background-surface-high bg-input-background-default text-[7px] font-semibold text-text-strong"
+                          >
+                            {g.name.slice(0, 2).toUpperCase()}
+                          </span>
+                        ),
+                      )}
+                    </span>
+                  )
+                )}
+                <span className="min-w-0 truncate">
+                  {!user.bot && perfil.mutualFriends.length > 0 && (
+                    <>{perfil.mutualFriends.length === 1 ? "1 amigo mútuo" : `${perfil.mutualFriends.length} amigos mútuos`}</>
+                  )}
+                  {!user.bot && perfil.mutualFriends.length > 0 && perfil.mutualGuilds.length > 0 && " • "}
+                  {perfil.mutualGuilds.length > 0 && (
+                    <>{perfil.mutualGuilds.length === 1 ? "1 servidor mútuo" : `${perfil.mutualGuilds.length} servidores mútuos`}</>
+                  )}
+                </span>
+              </button>
+            )}
+
+          {/*
+            "+ Adicionar app" do cartão de bot (K2, s8): mesmo fluxo do
+            diretório de apps, para a aplicação deste bot — `adicionarApp`
+            acima. Só quem tem `MANAGE_GUILD` no servidor aberto (a mesma
+            permissão que a instalação em si exige).
+          */}
+          {user.bot && guildAtiva && podeAdicionarApp && (
+            <div className="flex">
+              <Button variante="secundario" tamanho="sm" larguraTotal onClick={() => void adicionarApp()}>
+                + Adicionar app
+              </Button>
+            </div>
+          )}
 
           {/*
             Fileira de ações do celular — `discord-mobile-perfil.png` (escala
@@ -767,8 +1046,39 @@ export default function ProfilePopoverHost() {
           {ehMobile && perfil?.aboutMe && (
             <p className="text-text-xs font-bold uppercase tracking-[0.02em] text-text-muted">Sobre mim</p>
           )}
-          {perfil?.aboutMe && (
-            <p className="whitespace-pre-wrap break-words text-text-sm text-text-default">{perfil.aboutMe}</p>
+          {perfil?.aboutMe &&
+            (ehMobile ? (
+              // celular: folha inteira, sem "Ver Biografia Completa" para
+              // linkar (não há perfil completo separado, ver cabeçalho do
+              // arquivo) — o texto sempre inteiro, como já era
+              <p className="whitespace-pre-wrap break-words text-text-sm text-text-default">{perfil.aboutMe}</p>
+            ) : (
+              <BiografiaDoCartao texto={perfil.aboutMe} aoVerCompleta={abrirPerfilCompleto} />
+            ))}
+
+          {/*
+            "Comandos" do cartão de bot (K2, s8): cápsulas `/nome` dos comandos
+            de barra deste bot. Clicar fecha o cartão e põe `/nome ` no
+            composer aberto (`inserirComandoNoComposer`); sem composer
+            montado, só fecha — não há como "mostrar de outro jeito" um
+            comando fora do composer.
+          */}
+          {user.bot && comandosDesteBot.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <p className="text-text-xs font-bold uppercase tracking-[0.02em] text-text-muted">Comandos</p>
+              <div className="flex flex-wrap gap-1">
+                {comandosDesteBot.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => inserirComandoNoComposer(c.name)}
+                    className="rounded-lg border border-border-subtle px-2 py-1 text-text-xs font-medium text-text-default transition-colors hover:bg-interactive-background-hover"
+                  >
+                    /{c.name}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
 
           {estado === "erro" && (
@@ -798,6 +1108,15 @@ export default function ProfilePopoverHost() {
             aoRemover={(cargoId) => void toggleRole(user.id, cargoId, false)}
             aoAdicionar={abrirMenuDeCargos}
           />
+          {ancoraDoSeletorDeCargo && (
+            <SeletorDeCargo
+              aberto
+              ancora={ancoraDoSeletorDeCargo}
+              cargos={atribuiveis}
+              onEscolher={(cargo) => void toggleRole(user.id, cargo.id, true)}
+              onFechar={() => setAncoraDoSeletorDeCargo(null)}
+            />
+          )}
 
           {/*
             "DISCORD MEMBER SINCE" / "Mutual Servers" / "Mutual Friends" —
@@ -925,37 +1244,44 @@ export default function ProfilePopoverHost() {
             quem procurar por que "não disparam".
           */}
           {!ehMobile && !isMe && relacao !== "blocked" && (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                void enviar();
-              }}
-              /*
-                Não há print 1:1 do cartão de outra pessoa: altura (40), raio (8)
-                e fundo (`--chat-background-default`) são os da implementação
-                anterior, não medidos.
-              */
-              className="flex items-center gap-1 rounded-lg bg-chat-background-default px-2"
-            >
-              {/* peça interna do controle composto (o fundo e o raio são do
-                  `<form>`, que divide a moldura com o botão de enviar), não um
-                  `TextInput` com moldura própria */}
-              <input
-                value={rascunho}
-                onChange={(e) => setRascunho(e.target.value)}
-                aria-label={`Mensagem para @${user.username}`}
-                placeholder={`Mensagem @${user.username}`}
-                className="h-10 min-w-0 flex-1 bg-transparent text-text-sm text-text-default outline-none placeholder:text-text-muted celular:h-[44px]"
-              />
-              <BotaoDeIcone
-                type="submit"
-                rotulo="Enviar mensagem"
-                icone={<SendHorizonal size={16} />}
-                tamanho="sm"
-                disabled={!rascunho.trim()}
-                className="celular:h-[44px] celular:w-[44px]"
-              />
-            </form>
+            <>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void enviar();
+                }}
+                /*
+                  Não há print 1:1 do cartão de outra pessoa: altura (40), raio (8)
+                  e fundo (`--chat-background-default`) são os da implementação
+                  anterior, não medidos.
+                */
+                className="flex items-center gap-1 rounded-lg bg-chat-background-default px-2"
+              >
+                {/* peça interna do controle composto (o fundo e o raio são do
+                    `<form>`, que divide a moldura com o botão de emoji), não um
+                    `TextInput` com moldura própria */}
+                <input
+                  value={rascunho}
+                  onChange={(e) => setRascunho(e.target.value)}
+                  aria-label={`Mensagem para @${user.username}`}
+                  placeholder={`Conversar com @${nome}`}
+                  className="h-10 min-w-0 flex-1 bg-transparent text-text-sm text-text-default outline-none placeholder:text-text-muted celular:h-[44px]"
+                />
+                <BotaoDeIcone
+                  type="button"
+                  rotulo="Emoji"
+                  icone={<Smile size={16} />}
+                  tamanho="sm"
+                  onClick={() => setPickerAberto(!pickerAberto)}
+                  className="celular:h-[44px] celular:w-[44px]"
+                />
+              </form>
+              {pickerAberto && (
+                <div className="mt-1 rounded-lg border border-border-subtle bg-background-surface-high p-2">
+                  <EmojiPicker onPick={inserirEmoji} onClose={() => setPickerAberto(false)} embutido placeholder="Escolha um emoji" />
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -996,6 +1322,44 @@ function BotaoDeAcaoDoPerfil({
       </span>
       <span className="truncate text-text-xs font-medium">{rotulo}</span>
     </button>
+  );
+}
+
+/**
+ * Bio do cartão de outra pessoa (desktop): até ~3 linhas (`line-clamp-3`), com
+ * "Ver Biografia Completa" abaixo quando o texto passa disso — o link que
+ * abre o `UserProfileModal` (4 da entrega).
+ *
+ * O corte é medido no DOM, não em caracteres: `scrollHeight > clientHeight`
+ * depois do `line-clamp` aplicado é o que sabe se a *bio deste usuário, neste
+ * cartão de 300px,* de fato transbordou — um número de caracteres fixo erraria
+ * para qualquer fonte que não seja monoespaçada.
+ */
+function BiografiaDoCartao({ texto, aoVerCompleta }: { texto: string; aoVerCompleta: () => void }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const [transbordou, setTransbordou] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    setTransbordou(el.scrollHeight > el.clientHeight + 1);
+  }, [texto]);
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      <p ref={ref} className="line-clamp-3 whitespace-pre-wrap break-words text-text-sm text-text-default">
+        {texto}
+      </p>
+      {transbordou && (
+        <button
+          type="button"
+          onClick={aoVerCompleta}
+          className="w-fit text-text-sm font-medium text-text-link hover:underline"
+        >
+          Ver Biografia Completa
+        </button>
+      )}
+    </div>
   );
 }
 

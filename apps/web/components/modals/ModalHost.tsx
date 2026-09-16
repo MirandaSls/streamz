@@ -30,6 +30,7 @@ import KickModal from "@/components/modals/KickModal";
 import PollVotersModal from "@/components/modals/PollVotersModal";
 import ReportModal from "@/components/modals/ReportModal";
 import TimeoutModal from "@/components/modals/TimeoutModal";
+import VisaoDeModeradorModal from "@/components/modals/VisaoDeModeradorModal";
 import WelcomeModal from "@/components/modals/WelcomeModal";
 // ── multiconta ──
 import AdicionarContaModal from "@/components/modals/AdicionarContaModal";
@@ -76,7 +77,7 @@ function renderModal(modal: Modal) {
     case "channelAccess":
       return <ChannelAccessModal channelId={modal.channelId} />;
     case "invite":
-      return <InviteModal guildId={modal.guildId} code={modal.code} />;
+      return <InviteModal guildId={modal.guildId} code={modal.code} channelId={modal.channelId} />;
     case "createGroupDM":
       return <CreateGroupDMModal />;
     case "criarServidor":
@@ -154,5 +155,7 @@ function renderModal(modal: Modal) {
       return <PrivacidadeDoServidorModal guildId={modal.guildId} />;
     case "perfilPorServidor":
       return <PerfilPorServidorModal guildId={modal.guildId} />;
+    case "visaoDeModerador":
+      return <VisaoDeModeradorModal guildId={modal.guildId} userId={modal.userId} />;
   }
 }

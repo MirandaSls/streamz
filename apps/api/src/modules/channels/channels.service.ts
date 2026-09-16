@@ -130,6 +130,78 @@ export class ChannelsService {
     return dto;
   }
 
+  /**
+   * Duplica o canal: mesma categoria, tipo, tópico, limites, slowmode, nsfw e
+   * os MESMOS `ChannelOverride` do original — não reherda da categoria, para
+   * não perder regra própria que o original tivesse desligado da sincronia.
+   * Nome igual ao original (o usuário edita depois, como no Discord); entra
+   * logo abaixo dele no mesmo bloco da barra lateral.
+   */
+  async duplicate(actorId: string, guildId: string, channelId: string): Promise<Channel> {
+    // mesma permissão de criar canal no servidor
+    await this.guilds.assertCanModerate(actorId, guildId, Permission.MANAGE_CHANNELS);
+    const original = await this.prisma.channel.findUnique({ where: { id: channelId } });
+    // canal de outro servidor não existe **para este guildId** — 404 nos dois
+    // casos, para não vazar se o id pertence a outro servidor
+    if (!original || original.guildId !== guildId) {
+      throw new NotFoundException("Canal não encontrado");
+    }
+
+    // abre espaço logo abaixo do original: só quem vinha depois dele (no mesmo
+    // bloco da barra lateral) sobe uma posição
+    await this.prisma.channel.updateMany({
+      where: { guildId, categoryId: original.categoryId, position: { gt: original.position } },
+      data: { position: { increment: 1 } },
+    });
+
+    const channel = await this.prisma.channel.create({
+      data: {
+        guildId,
+        name: original.name,
+        type: original.type,
+        position: original.position + 1,
+        private: original.private,
+        readOnly: original.readOnly,
+        categoryId: original.categoryId,
+        syncedWithCategory: original.syncedWithCategory,
+        topic: original.topic,
+        slowmodeSeconds: original.slowmodeSeconds,
+        nsfw: original.nsfw,
+      },
+    });
+
+    const overrides = await this.prisma.channelOverride.findMany({ where: { channelId: original.id } });
+    if (overrides.length > 0) {
+      await this.prisma.channelOverride.createMany({
+        data: overrides.map((o) => ({
+          channelId: channel.id,
+          roleId: o.roleId,
+          userId: o.userId,
+          allow: o.allow,
+          deny: o.deny,
+        })),
+      });
+    }
+
+    await this.audit.log({
+      guildId,
+      actorId,
+      action: "CHANNEL_CREATE",
+      targetId: channel.id,
+      targetType: "CHANNEL",
+      targetName: channel.name,
+      changes: [{ field: "duplicatedFrom", before: null, after: original.id }],
+    });
+
+    const dto = toChannelDTO(channel);
+    // mesmo evento que a criação normal — quem enxerga o canal entra na sala e
+    // vê o canal aparecer na lista
+    const viewers = await this.guilds.viewersOfChannel(channel);
+    this.realtime.joinChannelRooms(viewers, channel.id);
+    this.realtime.emitToUsers(viewers, WS_EVENTS.CHANNEL_CREATED, dto);
+    return dto;
+  }
+
   async listForGuild(userId: string, guildId: string): Promise<Channel[]> {
     await this.guilds.assertMember(userId, guildId);
     const channels = await this.prisma.channel.findMany({

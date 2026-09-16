@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { MARCA_DA_MIGRACAO, migrarRuido, RUIDO_PADRAO } from "@/lib/ruido-padrao";
 import {
   type CallEndedEvent,
   type CallRingEvent,
@@ -45,6 +46,8 @@ import {
   pararServicoDeChamada,
   pararTelaNativa,
   prepararTelaNativa as pontePrepararTela,
+  restaurarAtenuacaoDoWindows,
+  suspenderAtenuacaoDoWindows,
 } from "@/lib/desktop";
 import { tocarSom, tocarSomDeMovido } from "@/lib/ringtone";
 import { cronometroDeVoz, type CronometroDeVoz } from "@/lib/tempos-de-voz";
@@ -112,6 +115,7 @@ import { useChannels } from "@/stores/channels";
 import { useDMs } from "@/stores/dms";
 import { useVoiceDevicesStore } from "@/stores/voiceDevices";
 import { useVoicePrefs } from "@/stores/voicePrefs";
+import { encerrarFaixas, ehFonteDeTela, inicioAindaVale } from "@/stores/parar-transmissao";
 
 /**
  * Voz: quem está em cada sala, a minha conexão e a chamada em DM.
@@ -159,6 +163,40 @@ let telaPreparada: { url: string; token: string; channelId: string } | null = nu
  * número mudado desfaz o que acabou de abrir.
  */
 let geracaoDeTela = 0;
+/**
+ * A captura do navegador que está no ar (`getDisplayMedia`), **inteira**: o
+ * vídeo publicado e o som, publicado ou não. Parar encerra tudo dela — o som
+ * não publicado ficava vivo e o navegador seguia "compartilhando".
+ */
+let capturaDaTela: MediaStream | null = null;
+/**
+ * Geração da **transmissão** (não da pré-conexão): parar e sair da sala
+ * incrementam. Quem estava subindo uma tela e vê o número mudado desfaz o que
+ * subiu, em vez de ir ao ar depois de a pessoa ter pedido para parar.
+ */
+let geracaoDaTransmissao = 0;
+
+/**
+ * Tira do ar o vídeo **e** o som da tela desta conexão, em paralelo, parando
+ * as faixas (`stopOnUnpublish`). Nunca lança.
+ */
+async function despublicarTela(lp: LocalParticipant): Promise<void> {
+  const fontes = { tela: Track.Source.ScreenShare, somDaTela: Track.Source.ScreenShareAudio };
+  const faixas = Array.from(lp.trackPublications.values())
+    .filter((pub) => ehFonteDeTela(pub.source, fontes))
+    .flatMap((pub) => (pub.track ? [pub.track] : []));
+  // `stop()` antes de despublicar: a captura se solta na hora, mesmo que a
+  // renegociação da despublicação demore
+  for (const t of faixas) t.stop();
+  await Promise.allSettled(faixas.map((t) => lp.unpublishTrack(t, true)));
+}
+
+/** Encerra a captura do navegador guardada, se houver. */
+function encerrarCapturaDaTela() {
+  const captura = capturaDaTela;
+  capturaDaTela = null;
+  if (captura) encerrarFaixas(captura.getTracks());
+}
 /**
  * O navegador avisou (`LocalTrackCpuConstrained`) que a CPU não está dando
  * conta de codificar a câmera. Vale o mesmo alívio da tela compartilhada até a
@@ -427,8 +465,8 @@ export interface AudioPrefs {
  * - `padrao`: a do navegador (`noiseSuppression` do getUserMedia). Subtração
  *   espectral: come chiado e ventilador, não come teclado nem cachorro.
  * - `avancada`: RNNoise em WebAssembly antes de publicar (ver
- *   `lib/supressor-ruido.ts`). Bem melhor, ao custo de CPU no cliente — por
- *   isso é escolha, e não o padrão.
+ *   `lib/supressor-ruido.ts`). Bem melhor, ao custo de CPU no cliente. É o
+ *   padrão desde 2026-09-16 (ver `lib/ruido-padrao.ts`).
  */
 export type NivelDeRuido = "off" | "padrao" | "avancada";
 
@@ -437,7 +475,7 @@ const AUDIO_PADRAO: AudioPrefs = {
   saida: 1,
   sensibilidade: 0.35,
   pttAtrasoMs: PTT_RELEASE_MS,
-  processamento: { eco: true, ruido: "padrao", ganho: true },
+  processamento: { eco: true, ruido: RUIDO_PADRAO, ganho: true },
 };
 
 const AUDIO_KEY = "voiceAudioPrefs";
@@ -469,6 +507,13 @@ function carregarAudio(): AudioPrefs {
     // preferência salva não pode cair no padrão por causa da mudança de tipo
     const bruto = (lido.processamento as { ruido?: unknown } | undefined)?.ruido;
     if (typeof bruto === "boolean") processamento.ruido = bruto ? "padrao" : "off";
+    // supressão avançada por padrão: migra uma vez quem estava no padrão antigo
+    const migracao = migrarRuido(processamento.ruido, lerDoStorage(MARCA_DA_MIGRACAO) === "1");
+    if (migracao.mudou) {
+      processamento.ruido = migracao.nivel;
+      gravarNoStorage(AUDIO_KEY, JSON.stringify({ ...AUDIO_PADRAO, ...lido, processamento }));
+    }
+    gravarNoStorage(MARCA_DA_MIGRACAO, "1");
     return { ...AUDIO_PADRAO, ...lido, processamento };
   } catch {
     return AUDIO_PADRAO;
@@ -527,10 +572,14 @@ function instantaneo(s: VoiceStoreState): ConexaoDeChamada {
 function desmontarSala() {
   // a transmissão nativa é uma segunda conexão: sair da sala tem que
   // derrubá-la também, senão o `#tela` fica na sala sem dono
+  geracaoDaTransmissao += 1;
   if (telaNativa) {
     telaNativa = false;
     void pararTelaNativa();
   }
+  // a captura do navegador não é da `Room`: o `disconnect` só para o que foi
+  // publicado, e o som não publicado ficaria com o navegador "compartilhando"
+  encerrarCapturaDaTela();
   // idem para a sala que o seletor deixou pré-conectada sem publicar nada
   geracaoDeTela += 1;
   if (telaPreparada) {
@@ -538,6 +587,10 @@ function desmontarSala() {
     void ponteDescartarTela();
   }
   cameraSobCpu = false;
+  // fim da call: o Windows volta a abaixar os outros apps como a pessoa
+  // escolheu (ver `suspenderAtenuacaoDoWindows`). Antes do `return`: a sala
+  // que caiu sozinha já zerou `sala`, e a preferência continua trocada até aqui
+  void restaurarAtenuacaoDoWindows();
   if (!sala) return;
   pararMedicaoDePing();
   // o microfone tem dono e é ele quem desmonta a cadeia: a `Room` fecha a
@@ -1079,12 +1132,34 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
     publicarTela: async (stream) => {
       const lp = sala?.localParticipant;
       if (!lp) {
-        stream.getTracks().forEach((t) => t.stop());
+        encerrarFaixas(stream.getTracks());
         ui.toast(SEM_SALA, "error");
         return;
       }
       const [video] = stream.getVideoTracks();
-      if (!video) return;
+      if (!video) {
+        encerrarFaixas(stream.getTracks());
+        return;
+      }
+      // uma captura por vez: a anterior (se sobrou alguma) sai inteira
+      if (capturaDaTela && capturaDaTela !== stream) encerrarCapturaDaTela();
+      const salaNoInicio = sala;
+      const inicio = { geracao: ++geracaoDaTransmissao, canal: get().channelId };
+      capturaDaTela = stream;
+      const [audio] = stream.getAudioTracks();
+      const comSom = !!audio && get().screenAudio;
+      // o som que não vai ao ar sai agora: vivo e sem dono, ele mantinha o
+      // aviso "compartilhando" do navegador depois de a pessoa parar
+      if (audio && !comSom) encerrarFaixas([audio]);
+      // "Parar compartilhamento" do navegador/sistema encerra as faixas com
+      // `ended` — em qualquer uma delas (o Chrome pode encerrar só o som da
+      // aba). Registrado **antes** de publicar: parar pela barra do navegador
+      // enquanto a publicação sobe também tem de valer. `stop()` nosso não
+      // dispara `ended` (especificação), então não há laço.
+      const aoEncerrar = () => {
+        if (capturaDaTela === stream) void get().pararTela();
+      };
+      for (const t of stream.getTracks()) t.addEventListener("ended", aoEncerrar, { once: true });
       const preset = SCREEN_QUALITY[get().screenQuality];
       // `contentHint` avisa o encoder de que o conteúdo é texto/detalhe: ele
       // passa a preservar nitidez em vez de suavizar o quadro (o que faria com
@@ -1106,8 +1181,7 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
           // derrubar resolução o transformaria em borrão
           degradationPreference: "maintain-resolution",
         });
-        const [audio] = stream.getAudioTracks();
-        if (audio && get().screenAudio) {
+        if (comSom && audio.readyState !== "ended") {
           await lp.publishTrack(new LocalAudioTrack(audio), {
             source: Track.Source.ScreenShareAudio,
             // áudio de tela é música/jogo/vídeo, não voz: estéreo, bitrate alto
@@ -1118,13 +1192,30 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
             red: false,
           });
         }
-        // parar pelo botão do próprio navegador precisa refletir aqui, senão a
-        // UI continuaria anunciando uma transmissão que já morreu
-        video.addEventListener("ended", () => void get().pararTela(), { once: true });
-        set({ screenOn: true });
-        tocarSom("transmissao-iniciada");
+        const valeAinda =
+          sala === salaNoInicio &&
+          capturaDaTela === stream &&
+          video.readyState !== "ended" &&
+          inicioAindaVale({
+            ...inicio,
+            geracaoAgora: geracaoDaTransmissao,
+            canalAgora: get().channelId,
+          });
+        if (!valeAinda) {
+          // parou (botão, barra do navegador) ou saiu da sala enquanto subia:
+          // desfazer o que subiu, sem som de início nem "ao vivo"
+          if (capturaDaTela === stream) capturaDaTela = null;
+          encerrarFaixas(stream.getTracks());
+          await despublicarTela(lp);
+        } else {
+          set({ screenOn: true });
+          tocarSom("transmissao-iniciada");
+        }
       } catch (e) {
-        stream.getTracks().forEach((t) => t.stop());
+        if (capturaDaTela === stream) capturaDaTela = null;
+        encerrarFaixas(stream.getTracks());
+        // o vídeo pode ter subido e o som falhado: nada da tela fica no ar
+        await despublicarTela(lp);
         set({ screenOn: false });
         ui.toast(errorMessage(e, "Não foi possível compartilhar a tela"), "error");
       }
@@ -1186,6 +1277,8 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       // a pré-conexão desta rodada acaba aqui: ou vira transmissão, ou o Rust
       // a descarta por não servir. Uma que ainda estivesse subindo se desfaz.
       geracaoDeTela += 1;
+      const salaNoInicio = sala;
+      const inicio = { geracao: ++geracaoDaTransmissao, canal: channelId };
       try {
         // A credencial da pré-conexão, quando é deste canal: o Rust reconhece
         // o mesmo par url+token e reaproveita a sala já conectada.
@@ -1196,6 +1289,20 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
         );
         // a sala pré-conectada foi consumida (ou descartada) pelo Rust
         telaPreparada = null;
+        const valeAinda =
+          sala === salaNoInicio &&
+          inicioAindaVale({
+            ...inicio,
+            geracaoAgora: geracaoDaTransmissao,
+            canalAgora: get().channelId,
+          });
+        if (!valeAinda) {
+          // saiu da chamada (ou parou) enquanto o Rust subia a captura: o
+          // `#tela` já está na sala e ninguém mais teria botão para tirá-lo.
+          // Não é erro de quem clicou — só não vai ao ar.
+          await pararTelaNativa();
+          return;
+        }
         telaNativa = true;
         set({ screenOn: true });
         tocarSom("transmissao-iniciada");
@@ -1215,27 +1322,30 @@ export const useVoice = create<VoiceStoreState>((set, get) => {
       rerender();
     },
 
+    /**
+     * Parar é igual para toda origem (botão, selo "ao vivo", barra do
+     * navegador, fim nativo) e nunca espera a rede antes de soltar a captura:
+     * primeiro `stop()` em tudo o que foi capturado, depois o Rust, e só então
+     * a despublicação — as duas faixas **em paralelo**. Em série, cada
+     * `unpublishTrack` esperava a renegociação da anterior (até 15 s com a
+     * rede ruim), e o som da tela seguia no ar enquanto isso.
+     */
     pararTela: async () => {
       const lp = sala?.localParticipant;
       // só avisa quem estava mesmo no ar: `pararTela` também chega pelo botão
       // do navegador e por um segundo clique, e som de fim sem começo confunde
       const estava = get().screenOn;
+      // uma tela que ainda estava subindo desiste ao terminar (`inicioAindaVale`)
+      geracaoDaTransmissao += 1;
       set({ screenOn: false });
       if (estava) tocarSom("transmissao-encerrada");
-      if (telaNativa) {
-        telaNativa = false;
-        await pararTelaNativa();
-      }
-      if (lp) {
-        for (const pub of Array.from(lp.trackPublications.values())) {
-          if (
-            pub.source === Track.Source.ScreenShare ||
-            pub.source === Track.Source.ScreenShareAudio
-          ) {
-            if (pub.track) await lp.unpublishTrack(pub.track, true).catch(() => {});
-          }
-        }
-      }
+      encerrarCapturaDaTela();
+      const nativa = telaNativa;
+      telaNativa = false;
+      await Promise.allSettled([
+        nativa ? pararTelaNativa() : Promise.resolve(),
+        lp ? despublicarTela(lp) : Promise.resolve(),
+      ]);
       get().syncFlags();
       rerender();
     },
@@ -1870,6 +1980,9 @@ async function aplicarSaidaEscolhida(room: Room) {
  *    veria o botão mudo e a sala a ouviria.
  */
 async function publicarMicrofone(room: Room, set: AjustarVoz, crono: CronometroDeVoz) {
+  // antes do `getUserMedia`: o microfone do WebView2 é um stream de
+  // comunicações, e sem isto o Windows abaixa o volume do Discord e da música
+  await suspenderAtenuacaoDoWindows();
   try {
     await abrirMicrofone(
       salaDoMicrofone(room),

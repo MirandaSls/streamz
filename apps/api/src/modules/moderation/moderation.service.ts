@@ -4,8 +4,19 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Permission, WS_EVENTS, MAX_BULK_DELETE, MAX_MODERATION_REASON } from "@streamz/shared";
-import type { MessagesBulkDeletedEvent, ReportReason, ReportView } from "@streamz/shared";
+import {
+  Permission,
+  WS_EVENTS,
+  MAX_BULK_DELETE,
+  MAX_MODERATION_REASON,
+  normalizarApelido,
+} from "@streamz/shared";
+import type {
+  MemberUpdatedEvent,
+  MessagesBulkDeletedEvent,
+  ReportReason,
+  ReportView,
+} from "@streamz/shared";
 import { toPublicUser, type PublicUserRow } from "../../common/dto";
 import { isUniqueViolation } from "../../common/prisma-errors";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -149,6 +160,70 @@ export class ModerationService {
     const result = await this.guilds.ban(actorId, guildId, targetUserId, opts.reason);
     await this.avisarNaDM(actorId, targetUserId, guild?.name ?? "um servidor", "banido", opts.reason);
     return result;
+  }
+
+  // ── apelido de outro membro ────────────────────────────────
+
+  /**
+   * `PATCH /guilds/:guildId/members/:userId/nickname` — apelido de **outro**
+   * membro, como no Discord. Para si mesmo (`actorId === targetUserId`),
+   * delega para a regra já existente de `PATCH /guilds/:guildId/membership`:
+   * qualquer membro pode, sem `MANAGE_NICKNAMES` nem hierarquia.
+   */
+  async alterarApelidoDeMembro(
+    actorId: string,
+    guildId: string,
+    targetUserId: string,
+    apelido: string | null,
+  ): Promise<MemberUpdatedEvent> {
+    const target =
+      actorId === targetUserId
+        ? await this.assertAutoEdicao(actorId, guildId)
+        : await this.assertPodeAlterarApelidoDeOutro(actorId, guildId, targetUserId);
+
+    const novoNickname = normalizarApelido(apelido);
+    if (novoNickname === target.nickname) {
+      return { guildId, userId: targetUserId, role: target.role, nickname: novoNickname };
+    }
+
+    await this.prisma.guildMember.update({
+      where: { userId_guildId: { userId: targetUserId, guildId } },
+      data: { nickname: novoNickname },
+    });
+    const payload: MemberUpdatedEvent = {
+      guildId,
+      userId: targetUserId,
+      role: target.role,
+      nickname: novoNickname,
+    };
+    this.realtime.emitToGuild(guildId, WS_EVENTS.MEMBER_UPDATED, payload);
+    return payload;
+  }
+
+  /** Regra existente do próprio apelido (item 5 do contrato): qualquer membro pode o seu. */
+  private async assertAutoEdicao(userId: string, guildId: string) {
+    return this.guilds.assertMember(userId, guildId);
+  }
+
+  /**
+   * `MANAGE_NICKNAMES` + hierarquia (mesma regra do kick): o ator só altera o
+   * apelido de quem está estritamente abaixo dele — o dono nunca fica exposto,
+   * porque a posição dele é sempre a mais alta (`highestPosition`).
+   */
+  private async assertPodeAlterarApelidoDeOutro(
+    actorId: string,
+    guildId: string,
+    targetUserId: string,
+  ) {
+    await this.guilds.assertCanModerate(actorId, guildId, Permission.MANAGE_NICKNAMES);
+    const target = await this.prisma.guildMember.findUnique({
+      where: { userId_guildId: { userId: targetUserId, guildId } },
+    });
+    if (!target) throw new NotFoundException("Membro não encontrado");
+    if ((await this.guilds.rank(guildId, actorId)) <= (await this.guilds.rank(guildId, targetUserId))) {
+      throw new ForbiddenException("Você não pode alterar o apelido de alguém de cargo igual ou superior");
+    }
+    return target;
   }
 
   // ── remoção de mensagens em lote ───────────────────────────

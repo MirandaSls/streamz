@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, Hash, Search } from "@/components/ui/icones";
+import { Check, Hash, Search, Volume2 } from "@/components/ui/icones";
 import {
   INVITE_EXPIRY_OPTIONS,
   INVITE_USES_OPTIONS,
@@ -92,9 +92,12 @@ function faltamAte(iso: string, agora = Date.now()): string {
 export default function InviteModal({
   guildId,
   code: initialCode,
+  channelId: initialChannelId,
 }: {
   guildId: string;
   code?: string;
+  /** canal pré-selecionado (menu de contexto de um canal de texto ou de voz). */
+  channelId?: string;
 }) {
   const closeModal = useUI((s) => s.closeModal);
   const guild = useGuilds((s) => s.guilds.find((g) => g.id === guildId) ?? null);
@@ -116,10 +119,12 @@ export default function InviteModal({
   const [expiresInMinutes, setExpiresInMinutes] = useState(INVITE_EXPIRY_OPTIONS[5].minutes);
   const [maxUses, setMaxUses] = useState(0);
   const [temporary, setTemporary] = useState(false);
-  const [channelId, setChannelId] = useState("");
+  const [channelId, setChannelId] = useState(initialChannelId ?? "");
 
-  const textos = channels.filter((c) => c.type === "TEXT");
-  const destino = textos.find((c) => c.id === channelId) ?? textos[0] ?? null;
+  // canal de destino do convite: texto **e** voz (o link também abre um canal
+  // de voz direto, "Convidar para voz" do menu de contexto — item G)
+  const destinos = channels.filter((c) => c.type === "TEXT" || c.type === "VOICE");
+  const destino = destinos.find((c) => c.id === channelId) ?? destinos[0] ?? null;
 
   // "Criar convite" (`permissoes.ts`) — concedida ao @everyone por padrão,
   // revogável por cargo ou canal. `guildId` explícito, e não `useCan` (que
@@ -145,7 +150,10 @@ export default function InviteModal({
     if (initialCode || semPermissao) return;
     let ativo = true;
     void api
-      .createInvite(guildId, { expiresInMinutes: INVITE_EXPIRY_OPTIONS[5].minutes })
+      .createInvite(guildId, {
+        expiresInMinutes: INVITE_EXPIRY_OPTIONS[5].minutes,
+        channelId: initialChannelId,
+      })
       .then((i) => {
         if (!ativo) return;
         setInvite(i);
@@ -234,7 +242,11 @@ export default function InviteModal({
         {destino && (
           <p className="flex items-center gap-1 px-6 text-base leading-5 text-text-muted">
             <span className="shrink-0">Os destinatários chegarão em</span>
-            <Hash size={16} aria-hidden="true" className="shrink-0" />
+            {destino.type === "VOICE" ? (
+              <Volume2 size={16} aria-hidden="true" className="shrink-0" />
+            ) : (
+              <Hash size={16} aria-hidden="true" className="shrink-0" />
+            )}
             <span className="truncate">{destino.name}</span>
           </p>
         )}
@@ -401,13 +413,16 @@ export default function InviteModal({
             />
           </div>
 
-          {textos.length > 0 && (
+          {destinos.length > 0 && (
             <div className="mt-4">
               <Select
                 semDivisoria
                 label="Canal de destino"
                 value={channelId}
-                options={textos.map((c) => ({ value: c.id, label: `#${c.name}` }))}
+                options={destinos.map((c) => ({
+                  value: c.id,
+                  label: c.type === "VOICE" ? (c.name ?? "") : `#${c.name}`,
+                }))}
                 onChange={setChannelId}
                 emptyLabel="Padrão do servidor"
               />

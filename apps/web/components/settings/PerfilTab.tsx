@@ -365,7 +365,7 @@ export default function PerfilTab() {
           )}
         </div>
         <p className="mt-2 text-xs text-text-muted">
-          Sem foto, o perfil usa as iniciais do seu nome.
+          Sem foto, o perfil usa o símbolo do Streamz sobre uma cor do seu perfil.
         </p>
 
         {erroPerfil ? (

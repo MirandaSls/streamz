@@ -100,6 +100,8 @@ vi.mock("@/lib/desktop", () => ({
   iniciarTelaNativa: vi.fn(async () => {}),
   pararTelaNativa: vi.fn(async () => {}),
   ouvirTelaEncerrada: () => () => {},
+  suspenderAtenuacaoDoWindows: vi.fn(async () => {}),
+  restaurarAtenuacaoDoWindows: vi.fn(async () => {}),
 }));
 // o Node não tem `RTCPeerConnection`: sem isto toda entrada pararia no aviso
 // de "este ambiente não faz chamada", que não é o que este arquivo testa

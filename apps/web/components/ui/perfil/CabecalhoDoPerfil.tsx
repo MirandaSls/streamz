@@ -1,9 +1,10 @@
 "use client";
 
+import type { ReactNode } from "react";
 import type { UserStatus } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import { corDoAvatar } from "@/components/ui/avatar-cores";
-import { MoreVertical } from "@/components/ui/icones";
+import { MoreHorizontal, Shield } from "@/components/ui/icones";
 import { BalaoDeStatus } from "./BalaoDeStatus";
 
 /**
@@ -46,6 +47,16 @@ import { BalaoDeStatus } from "./BalaoDeStatus";
  *   foi medido. Nos três prints do meu próprio cartão (`101804`, `113533`,
  *   `180020`) o banner não tem botão nenhum, e por isso ele só aparece no
  *   cartão dos outros.
+ *
+ * ## Fileira de botões redondos (s7, s9 — leva 2)
+ *
+ * No cartão de OUTRA pessoa, o canto do banner ganha até três botões, nesta
+ * ordem da esquerda para a direita: **visão de moderador** (escudo, só para
+ * quem tem permissão de moderar — `Kick/Ban/Timeout`), **ação rápida de
+ * amizade** (ícone pessoa, muda com a relação) e o "…" (kebab, que já
+ * existia). Os três dividem o mesmo estilo redondo do kebab; nenhum é
+ * obrigatório — o cartão de mim mesmo não passa nenhum dos três `ao*` e a
+ * fileira inteira some.
  */
 
 export interface CabecalhoDoPerfilProps {
@@ -62,6 +73,14 @@ export interface CabecalhoDoPerfilProps {
   aoAbrirPerfil: () => void;
   /** Sem ele, o banner não tem botão (o meu próprio cartão). */
   aoAbrirKebab?: (botao: HTMLElement) => void;
+  /** Sem ele, sem botão de moderador (só quem pode moderar este membro). */
+  aoAbrirVisaoDeModerador?: () => void;
+  /** Sem ele, sem botão de amizade (o meu próprio cartão, ou pessoa bloqueada). */
+  aoAbrirAmizade?: (botao: HTMLElement) => void;
+  /** Ícone do botão de amizade (muda com a relação: pedir/pendente/já amigos). */
+  iconeDeAmizade?: ReactNode;
+  /** `aria-label` do botão de amizade, coerente com o ícone de cima. */
+  rotuloDeAmizade?: string;
   ehMobile: boolean;
 }
 
@@ -76,6 +95,10 @@ export function CabecalhoDoPerfil({
   aoEditarStatus,
   aoAbrirPerfil,
   aoAbrirKebab,
+  aoAbrirVisaoDeModerador,
+  aoAbrirAmizade,
+  iconeDeAmizade,
+  rotuloDeAmizade,
   ehMobile,
 }: CabecalhoDoPerfilProps) {
   const temBalao = Boolean(statusPersonalizado) || Boolean(aoEditarStatus);
@@ -125,21 +148,68 @@ export function CabecalhoDoPerfil({
         />
       </button>
 
-      {aoAbrirKebab && (
-        <div className="absolute right-3 top-2 z-[3]">
-          <button
-            type="button"
-            onClick={(e) => aoAbrirKebab(e.currentTarget)}
-            aria-label="Mais opções"
-            aria-haspopup="menu"
-            className={`grid place-items-center rounded-full border border-opacity-white-8 bg-control-overlay-secondary-background-default text-icon-overlay-light transition-colors duration-[50ms] ease-in hover:bg-control-overlay-secondary-background-active hover:duration-150 hover:ease-out active:bg-control-overlay-secondary-background-active ${
-              ehMobile ? "h-[44px] w-[44px]" : "h-8 w-8"
-            }`}
-          >
-            <MoreVertical size={16} aria-hidden="true" />
-          </button>
+      {(aoAbrirKebab || aoAbrirVisaoDeModerador || aoAbrirAmizade) && (
+        <div className="absolute right-3 top-2 z-[3] flex items-center gap-2">
+          {aoAbrirVisaoDeModerador && (
+            <BotaoRedondoDoBanner
+              rotulo="Abrir na visualização de moderador"
+              ehMobile={ehMobile}
+              onClick={() => aoAbrirVisaoDeModerador()}
+            >
+              <Shield size={16} aria-hidden="true" />
+            </BotaoRedondoDoBanner>
+          )}
+          {aoAbrirAmizade && (
+            <BotaoRedondoDoBanner
+              rotulo={rotuloDeAmizade ?? "Amizade"}
+              ehMobile={ehMobile}
+              haspopup
+              onClick={aoAbrirAmizade}
+            >
+              {iconeDeAmizade}
+            </BotaoRedondoDoBanner>
+          )}
+          {aoAbrirKebab && (
+            <BotaoRedondoDoBanner rotulo="Mais opções" ehMobile={ehMobile} haspopup onClick={aoAbrirKebab}>
+              <MoreHorizontal size={16} aria-hidden="true" />
+            </BotaoRedondoDoBanner>
+          )}
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Um dos botões redondos do canto do banner (moderador/amizade/kebab) — mesmo
+ * desenho de sempre (`--control-overlay-secondary-background-default`, anel
+ * `--opacity-white-8`), agora reaproveitado três vezes em vez de desenhado só
+ * para o kebab.
+ */
+function BotaoRedondoDoBanner({
+  rotulo,
+  ehMobile,
+  haspopup,
+  onClick,
+  children,
+}: {
+  rotulo: string;
+  ehMobile: boolean;
+  haspopup?: boolean;
+  onClick: (botao: HTMLButtonElement) => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => onClick(e.currentTarget)}
+      aria-label={rotulo}
+      aria-haspopup={haspopup ? "menu" : undefined}
+      className={`grid place-items-center rounded-full border border-opacity-white-8 bg-control-overlay-secondary-background-default text-icon-overlay-light transition-colors duration-[50ms] ease-in hover:bg-control-overlay-secondary-background-active hover:duration-150 hover:ease-out active:bg-control-overlay-secondary-background-active ${
+        ehMobile ? "h-[44px] w-[44px]" : "h-8 w-8"
+      }`}
+    >
+      {children}
+    </button>
   );
 }

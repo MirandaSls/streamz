@@ -26,7 +26,9 @@ import Tooltip from "@/components/ui/Tooltip";
 import { Button } from "@/components/ui/primitivos";
 import { corDoAvatar } from "@/components/ui/avatar-cores";
 import { alternarTelaCheiaDe } from "@/components/voice/fullscreen";
+import { ALVO_MINIMO } from "@/components/voice/palco-mobile";
 import { abrirMenuDeParticipante, abrirVolumeDe } from "@/components/voice/participant-menu";
+import { podePararDeAssistir } from "@/components/voice/parar-de-assistir";
 import { AnelDeFala, ENCOLHE_AO_FALAR } from "@/components/voice/pecas-de-voz";
 import { useCorDominante } from "@/lib/cor-dominante";
 import { usePresence } from "@/stores/presence";
@@ -254,6 +256,7 @@ export function VoiceTile({
   const caixa = useRef<HTMLDivElement>(null);
   const silenciado = useVoice((s) => !!s.silenciados[state.user.id]);
   const toggleSilenciado = useVoice((s) => s.toggleSilenciado);
+  const pararTela = useVoice((s) => s.pararTela);
   // quem está mudo nunca "fala": o anel verde tem de contar a mesma história.
   // A conta é só esta — `participant.isSpeaking` saiu de cena: era uma segunda
   // fonte, lida no render em vez de reagir a evento, e é dela que vinham as
@@ -276,6 +279,7 @@ export function VoiceTile({
    *  há vídeo de verdade atrás dela; sem vídeo o tile fica no neutro do
    *  palco, senão ele se camufla com a cor da `Avatar` sem foto. */
   const usaFundoDaFoto = Boolean(video);
+  const podeParar = podePararDeAssistir({ tela, assistindo, sou, minhaTelaNativa: tile.minhaTelaNativa });
 
   return (
     <div
@@ -288,7 +292,11 @@ export function VoiceTile({
       onClick={() => onFocar(tile.key)}
       onContextMenu={(e) => {
         e.preventDefault();
-        abrirMenuDeParticipante(e.clientX, e.clientY, state.user, { sou, channelId });
+        abrirMenuDeParticipante(e.clientX, e.clientY, state.user, {
+          sou,
+          channelId,
+          tela: podeParar ? { onPararDeAssistir: () => onPararDeAssistir(state.user.id) } : undefined,
+        });
       }}
       aria-label={`${nome}${tela ? " — tela compartilhada" : ""}`}
       // O tile **emerge** do palco na cor da pessoa só quando há vídeo (ver o
@@ -463,6 +471,31 @@ export function VoiceTile({
         </span>
       )}
 
+      {/* Celular: não há hover (a fileira de ações logo abaixo nunca desenha
+          lá — `semAcoes`), e o toque longo abre o menu de participante, que
+          agora também lista "Parar de assistir" mas é um caminho escondido
+          demais para a única saída de uma tela que ocupa a tela inteira. Sem
+          este botão, quem tocasse "Assistir transmissão" no destaque ficava
+          preso nela até trocar de foco ou sair da chamada — não há print do
+          Discord com este botão no celular (a bancada não tem essa captura),
+          então a posição (abaixo do selo "Ao vivo", mesma borda direita) é
+          nossa, não medição. Só no tile grande: a miniatura da faixa se
+          resolve levando-a ao destaque primeiro (toque na faixa). */}
+      {semAcoes && grande && podeParar && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onPararDeAssistir(state.user.id);
+          }}
+          aria-label={`Parar de assistir a ${nome}`}
+          style={{ height: ALVO_MINIMO, width: ALVO_MINIMO, top: 36 }}
+          className="absolute right-2 grid place-items-center rounded-full bg-control-overlay-secondary-background-default text-control-overlay-secondary-icon-default backdrop-blur transition hover:bg-control-overlay-secondary-background-hover active:bg-control-overlay-secondary-background-active"
+        >
+          <MonitorX size={20} />
+        </button>
+      )}
+
       {/* O rótulo de nome — que é também onde o mudo mora.
           O Discord não desenha selo circular de microfone no avatar do tile: o
           próprio rótulo vira o aviso, com o glifo cortado ANTES do nome.
@@ -545,6 +578,13 @@ export function VoiceTile({
           pequeno, ao lado do "…" que a print mostra no tile da faixa. */}
       {!semAcoes && (
         <div className="absolute right-1 top-1 flex items-center gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
+          {/* A minha própria tela: o "X" de parar a transmissão no hover do
+              tile, como no Discord ("Parar transmissão" sobre a prévia). */}
+          {tela && sou && (
+            <AcaoDoTile label="Parar transmissão" onClick={() => void pararTela()}>
+              <MonitorX size={14} />
+            </AcaoDoTile>
+          )}
           {tela
             ? tile.minhaTelaNativa
               ? assistindo && (
@@ -598,7 +638,11 @@ export function VoiceTile({
             label={`Mais opções de ${nome}`}
             onClick={(e) => {
               const r = e.currentTarget.getBoundingClientRect();
-              abrirMenuDeParticipante(r.left, r.bottom + 4, state.user, { sou, channelId });
+              abrirMenuDeParticipante(r.left, r.bottom + 4, state.user, {
+                sou,
+                channelId,
+                tela: podeParar ? { onPararDeAssistir: () => onPararDeAssistir(state.user.id) } : undefined,
+              });
             }}
           >
             <MoreHorizontal size={14} />
