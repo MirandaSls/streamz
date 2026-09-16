@@ -41,6 +41,8 @@ export const Permission = {
   MOVE_MEMBERS: 1 << 19,
   /** ligar a câmera e compartilhar a tela num canal de voz (o "Vídeo" do Discord). */
   STREAM: 1 << 20,
+  /** alterar o apelido de **outro** membro (o próprio sempre pode o seu). */
+  MANAGE_NICKNAMES: 1 << 21,
 } as const;
 
 export type PermissionName = keyof typeof Permission;
@@ -140,6 +142,11 @@ export const PERMISSION_INFO: Record<
     description: "Permite deixar um membro de castigo (sem falar) por um tempo.",
     group: "membros",
   },
+  MANAGE_NICKNAMES: {
+    label: "Gerenciar apelidos",
+    description: "Permite que membros alterem os apelidos de outros membros.",
+    group: "membros",
+  },
   MANAGE_EMOJIS: {
     label: "Gerenciar emojis",
     description: "Permite adicionar e remover emojis personalizados.",
@@ -176,6 +183,7 @@ export const PERMISSION_ORDER: readonly PermissionName[] = [
   "KICK_MEMBERS",
   "BAN_MEMBERS",
   "MODERATE_MEMBERS",
+  "MANAGE_NICKNAMES",
   "CONNECT",
   "SPEAK",
   "STREAM",

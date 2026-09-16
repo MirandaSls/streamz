@@ -24,6 +24,7 @@ import {
 } from "class-validator";
 import {
   AUDIT_ACTIONS,
+  MAX_APELIDO_NO_SERVIDOR,
   MAX_BULK_DELETE,
   MAX_MODERATION_REASON,
   MAX_REPORT_DETAILS,
@@ -93,6 +94,14 @@ class ReportDto {
 class ResolveDto {
   @IsBoolean()
   resolved!: boolean;
+}
+
+export class NicknameDto {
+  /** `null` (ou ausente) apaga o apelido; `normalizarApelido` ainda apara espaço. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_APELIDO_NO_SERVIDOR)
+  apelido?: string | null;
 }
 
 /**
@@ -172,6 +181,20 @@ export class ModerationController {
     @Body() dto: BanDto,
   ) {
     return this.moderation.ban(user.sub, guildId, userId, dto);
+  }
+
+  /**
+   * Apelido de **outro** membro (como no Discord). Para o próprio, a regra
+   * continua sendo `PATCH /guilds/:guildId/membership` (qualquer membro pode).
+   */
+  @Patch("guilds/:guildId/members/:userId/nickname")
+  setNickname(
+    @CurrentUser() user: JwtPayload,
+    @Param("guildId") guildId: string,
+    @Param("userId") userId: string,
+    @Body() dto: NicknameDto,
+  ) {
+    return this.moderation.alterarApelidoDeMembro(user.sub, guildId, userId, dto.apelido ?? null);
   }
 
   // ── mensagens em lote ──────────────────────────────────────

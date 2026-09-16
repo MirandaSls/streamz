@@ -42,15 +42,16 @@ function amostraDeBitfields(quantos: number): number[] {
 }
 
 describe("permissoes-discord", () => {
-  it("são 21 permissões, não as 19 do documento", () => {
-    // O §6 foi escrito antes de `MOVE_MEMBERS` (1<<19) e `STREAM` (1<<20)
-    // existirem. Este teste é o que denuncia o documento se ele voltar a mentir.
-    expect(PERMISSION_ORDER).toHaveLength(21);
-    expect(Object.keys(Permission)).toHaveLength(21);
-    expect(Object.keys(PAR_NO_DISCORD)).toHaveLength(21);
+  it("são 22 permissões, não as 19 do documento", () => {
+    // O §6 foi escrito antes de `MOVE_MEMBERS` (1<<19), `STREAM` (1<<20) e
+    // `MANAGE_NICKNAMES` (1<<21) existirem. Este teste é o que denuncia o
+    // documento se ele voltar a mentir.
+    expect(PERMISSION_ORDER).toHaveLength(22);
+    expect(Object.keys(Permission)).toHaveLength(22);
+    expect(Object.keys(PAR_NO_DISCORD)).toHaveLength(22);
   });
 
-  it("cada uma das 21 tem par e volta como ela mesma", () => {
+  it("cada uma das 22 tem par e volta como ela mesma", () => {
     for (const nome of PERMISSION_ORDER) {
       const nosso = Permission[nome];
       const deles = paraBitfieldDoDiscord(nosso);
@@ -86,6 +87,8 @@ describe("permissoes-discord", () => {
       // as duas que o §6 dava como "sempre apagadas"
       MOVE_MEMBERS: 1n << 24n,
       STREAM: 1n << 9n,
+      // acrescentada depois do documento (item 1 do api-apelido-de-membro)
+      MANAGE_NICKNAMES: 1n << 27n,
     };
     for (const nome of PERMISSION_ORDER) {
       expect(PERMISSAO_DO_DISCORD[PAR_NO_DISCORD[nome]], nome).toBe(esperado[nome]);

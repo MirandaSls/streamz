@@ -76,6 +76,7 @@ import type {
   InviteOptions,
   LinkEmbed,
   MemberPermissions,
+  MemberUpdatedEvent,
   ReorderPayload,
   ResumoDeCanal,
   MemberRole,
@@ -447,6 +448,9 @@ export const api = {
     request<Channel>(`/guilds/${guildId}/channels/${channelId}/sync-category`, {
       method: "POST",
     }),
+  /** Duplica o canal: mesma configuração e overwrites, logo abaixo do original. */
+  duplicarCanal: (guildId: string, channelId: string) =>
+    request<Channel>(`/guilds/${guildId}/channels/${channelId}/duplicate`, { method: "POST" }),
   channelMembers: (guildId: string, channelId: string) =>
     request<{ user: PublicUser }[]>(`/guilds/${guildId}/channels/${channelId}/members`),
   addChannelMember: (guildId: string, channelId: string, userId: string) =>
@@ -709,6 +713,13 @@ export const api = {
     request<{ kicked: string }>(`/guilds/${guildId}/members/${userId}/kick`, json({ reason })),
   banWithReason: (guildId: string, userId: string, body: { reason?: string; deleteMessageHours?: number }) =>
     request<{ banned: string }>(`/guilds/${guildId}/members/${userId}/ban`, json(body)),
+
+  /** Apelido de **outro** membro (MANAGE_NICKNAMES + hierarquia); vazio/null apaga. */
+  alterarApelidoDeMembro: (guildId: string, userId: string, apelido: string | null) =>
+    request<MemberUpdatedEvent>(
+      `/guilds/${guildId}/members/${userId}/nickname`,
+      patch({ apelido }),
+    ),
 
   // remoção de mensagens em lote
   bulkDeleteMessages: (channelId: string, ids: string[]) =>
