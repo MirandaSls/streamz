@@ -459,11 +459,9 @@ export default function ProfilePopoverHost() {
     const itens: MenuItem[] = cofre.contas.map((conta): MenuItem => ({
       label: conta.user.username,
       icon: <Avatar user={conta.user} size="sm" />,
-      // o selo de conta ativa: o `control="checkbox"` do menu genérico
-      // desenha um quadrado azul-marca com ✓ (não o círculo do print `p7`,
-      // ver o comentário de `trocarParaConta` sobre por que fica assim)
+      // o selo de conta ativa: círculo cheio com ✓ logo depois do nome (p7)
       checked: conta.user.id === cofre.ativa,
-      control: "checkbox",
+      control: "selo",
       onSelect: () => void trocarParaConta(conta.user.id),
     }));
     itens.push(

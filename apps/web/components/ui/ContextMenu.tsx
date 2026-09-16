@@ -468,7 +468,7 @@ function Painel({
               }}
               type="button"
               role={
-                controle === "radio"
+                controle === "radio" || controle === "selo"
                   ? "menuitemradio"
                   : controle === "checkbox"
                     ? "menuitemcheckbox"
@@ -568,8 +568,27 @@ function Painel({
                 />
               )}
               <span className="min-w-0 flex-1">
-                <span className={`block ${forte ? "font-semibold" : "font-medium"}`}>
-                  {item.label}
+                <span
+                  className={`flex items-center gap-2 ${forte ? "font-semibold" : "font-medium"}`}
+                >
+                  <span className="truncate">{item.label}</span>
+                  {controle === "selo" && marcado && (
+                    <span
+                      aria-hidden="true"
+                      className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-text-brand"
+                    >
+                      <svg viewBox="0 0 12 12" className="h-3 w-3 text-white">
+                        <path
+                          d="M2.5 6.2 4.8 8.5 9.5 3.8"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </span>
+                  )}
                 </span>
                 {descricao && (
                   // `.subtext_c1e9c4`: `margin-top:2px`, cor `--text-muted`

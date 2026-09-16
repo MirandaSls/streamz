@@ -179,8 +179,12 @@ export type MenuItem =
       danger?: boolean;
       disabled?: boolean;
       checked?: boolean;
-      /** `radio` desenha bolinha; `checkbox`, quadrado. */
-      control?: "radio" | "checkbox";
+      /**
+       * `radio` desenha bolinha; `checkbox`, quadrado; `selo`, o círculo cheio
+       * com ✓ colado ao rótulo, só quando marcado — a conta ativa do submenu
+       * "Mudar de conta" (print `p7` de 2026-09-16).
+       */
+      control?: "radio" | "checkbox" | "selo";
       /** ponto colorido antes do rótulo (cor do cargo). */
       dot?: string;
       /** nome do ícone lucide já resolvido pelo chamador (ReactNode evita
