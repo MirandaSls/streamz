@@ -21,6 +21,8 @@ import {
 import type {
   CustomStatusUpdate,
   MemberRole,
+  NotaDeUsuario,
+  NotasDeUsuario,
   ProfileUpdate,
   PublicUser,
   UserProfile,
@@ -310,12 +312,34 @@ export class UsersService {
     const alvo = await this.prisma.user.findUnique({ where: { id: targetId } });
     if (!alvo) throw new NotFoundException("Usuário não encontrado");
 
-    const [relationship, meusAmigos, amigosDele, guildRole] = await Promise.all([
-      this.friends.relationship(meId, targetId),
-      this.friends.friendIds(meId),
-      this.friends.friendIds(targetId),
-      this.papelNoServidor(targetId, guildId),
-    ]);
+    const souEu = meId === targetId;
+    const [relationship, meusAmigos, amigosDele, guildRole, nicknameNoServidorRow, notaRow, apelidoRow, ignoradoRow] =
+      await Promise.all([
+        this.friends.relationship(meId, targetId),
+        this.friends.friendIds(meId),
+        this.friends.friendIds(targetId),
+        this.papelNoServidor(targetId, guildId),
+        this.apelidoNoServidor(targetId, guildId),
+        // ── menus de contexto ── nada disto existe sobre mim mesmo
+        souEu
+          ? Promise.resolve(null)
+          : this.prisma.userNote.findUnique({
+              where: { ownerId_targetId: { ownerId: meId, targetId } },
+              select: { text: true },
+            }),
+        souEu
+          ? Promise.resolve(null)
+          : this.prisma.friendNickname.findUnique({
+              where: { ownerId_targetId: { ownerId: meId, targetId } },
+              select: { nickname: true },
+            }),
+        souEu
+          ? Promise.resolve(null)
+          : this.prisma.userIgnore.findUnique({
+              where: { ignorerId_ignoredId: { ignorerId: meId, ignoredId: targetId } },
+              select: { ignorerId: true },
+            }),
+      ]);
 
     const emComum = meusAmigos.filter((id) => amigosDele.includes(id) && id !== targetId);
     const [mutualFriends, mutualGuilds] = await Promise.all([
@@ -340,6 +364,11 @@ export class UsersService {
       mutualFriends,
       mutualGuilds,
       guildRole,
+      // ── menus de contexto ── só o espectador vê isto; api-servidor preenche nicknameNoServidor (via apellidoNoServidor quando guildId é passado)
+      nicknameNoServidor: nicknameNoServidorRow ?? null,
+      nota: notaRow?.text ?? null,
+      apelidoDeAmigo: apelidoRow?.nickname ?? null,
+      ignorado: ignoradoRow != null,
     };
   }
 
@@ -351,6 +380,16 @@ export class UsersService {
       select: { role: true },
     });
     return m?.role ?? null;
+  }
+
+  /** Apelido do usuário no servidor de onde o cartão foi aberto (null fora dele ou sem apelido). */
+  private async apelidoNoServidor(userId: string, guildId?: string): Promise<string | null> {
+    if (!guildId) return null;
+    const m = await this.prisma.guildMember.findUnique({
+      where: { userId_guildId: { userId, guildId } },
+      select: { nickname: true },
+    });
+    return m?.nickname ?? null;
   }
 
   /** Servidores em que os dois estão — só os que *eu* também vejo. */
@@ -370,5 +409,59 @@ export class UsersService {
     const api = (process.env.API_PUBLIC_URL ?? "http://localhost:3333").replace(/\/+$/, "");
     const v = key.split("/").pop() ?? "";
     return `${api}/api/users/${userId}/banner?v=${v}`;
+  }
+
+  // ── menus de contexto: nota de usuário ───────────────────────
+
+  /** Minhas notas privadas sobre outras pessoas, por id do alvo. Só as que existem. */
+  async minhasNotas(meId: string): Promise<NotasDeUsuario> {
+    const rows = await this.prisma.userNote.findMany({
+      where: { ownerId: meId },
+      select: { targetId: true, text: true },
+    });
+    const out: NotasDeUsuario = {};
+    for (const r of rows) out[r.targetId] = r.text;
+    return out;
+  }
+
+  /** Minha nota sobre um usuário (`null` = sem nota). */
+  async notaDeUsuario(meId: string, targetId: string): Promise<NotaDeUsuario> {
+    await this.assertUsuarioExiste(targetId);
+    const row = await this.prisma.userNote.findUnique({
+      where: { ownerId_targetId: { ownerId: meId, targetId } },
+      select: { text: true },
+    });
+    return { userId: targetId, nota: row?.text ?? null };
+  }
+
+  /**
+   * Grava (ou apaga, se vazia) minha nota sobre um usuário. O texto já chega
+   * aparado e dentro do teto — validado pelo `notaDeUsuarioSchema` do
+   * contrato. Não é preciso ser amigo nem ter servidor em comum.
+   */
+  async salvarNota(meId: string, targetId: string, nota: string): Promise<NotaDeUsuario> {
+    if (meId === targetId) {
+      throw new BadRequestException("Não é possível anotar sobre si mesmo");
+    }
+    await this.assertUsuarioExiste(targetId);
+
+    if (nota.length === 0) {
+      await this.prisma.userNote.deleteMany({ where: { ownerId: meId, targetId } });
+    } else {
+      await this.prisma.userNote.upsert({
+        where: { ownerId_targetId: { ownerId: meId, targetId } },
+        create: { ownerId: meId, targetId, text: nota },
+        update: { text: nota },
+      });
+    }
+    const dto: NotaDeUsuario = { userId: targetId, nota: nota.length > 0 ? nota : null };
+    this.realtime.emitToUser(meId, WS_EVENTS.USER_NOTE_UPDATED, dto);
+    return dto;
+  }
+
+  /** 404 padrão do contrato quando o alvo não existe. */
+  private async assertUsuarioExiste(id: string): Promise<void> {
+    const existe = await this.prisma.user.findUnique({ where: { id }, select: { id: true } });
+    if (!existe) throw new NotFoundException("Usuário não encontrado");
   }
 }

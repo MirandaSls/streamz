@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Res,
   UploadedFile,
@@ -24,13 +25,15 @@ import {
   MAX_CUSTOM_STATUS,
   MAX_DISPLAY_NAME,
   MAX_PRONOUNS,
+  notaDeUsuarioSchema,
 } from "@streamz/shared";
-import type { CustomStatusDuration, UserStatus } from "@streamz/shared";
+import type { CustomStatusDuration, NotaDeUsuarioInput, UserStatus } from "@streamz/shared";
 import { UsersService } from "./users.service";
 import { cabecalhosDeImagemPublica } from "./imagem-de-perfil";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { CurrentUser } from "../../common/current-user.decorator";
 import { UPLOAD_THROTTLE } from "../../common/throttle";
+import { zodBody } from "../../common/zod.pipe";
 
 class ProfileDto {
   @IsOptional()
@@ -138,6 +141,15 @@ export class UsersController {
     return this.users.removeBanner(user.sub);
   }
 
+  // ── menus de contexto: nota de usuário ──
+
+  /** Minhas notas privadas sobre outras pessoas, por id do alvo. Só as não vazias. */
+  @UseGuards(JwtGuard)
+  @Get("me/notes")
+  minhasNotas(@CurrentUser() user: JwtPayload) {
+    return this.users.minhasNotas(user.sub);
+  }
+
   /**
    * Perfil completo de alguém, na minha visão (amigos e servidores em comum,
    * relação). `guildId` diz de qual servidor o cartão foi aberto.
@@ -150,6 +162,24 @@ export class UsersController {
     @Query("guildId") guildId?: string,
   ) {
     return this.users.profile(user.sub, id, guildId || undefined);
+  }
+
+  /** Minha nota sobre um usuário ("Visível apenas para você"). */
+  @UseGuards(JwtGuard)
+  @Get(":id/note")
+  notaDeUsuario(@CurrentUser() user: JwtPayload, @Param("id") id: string) {
+    return this.users.notaDeUsuario(user.sub, id);
+  }
+
+  /** Texto vazio (depois do trim) apaga a nota. */
+  @UseGuards(JwtGuard)
+  @Put(":id/note")
+  salvarNotaDeUsuario(
+    @CurrentUser() user: JwtPayload,
+    @Param("id") id: string,
+    @Body(zodBody(notaDeUsuarioSchema)) dto: NotaDeUsuarioInput,
+  ) {
+    return this.users.salvarNota(user.sub, id, dto.nota);
   }
 
   /** Banner é público como o avatar: `<img src>` não manda token. */
