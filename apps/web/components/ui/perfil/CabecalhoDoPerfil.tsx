@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import type { UserStatus } from "@streamz/shared";
 import Avatar from "@/components/ui/Avatar";
 import { corDoAvatar } from "@/components/ui/avatar-cores";
-import { MoreVertical, Shield } from "@/components/ui/icones";
+import { MoreHorizontal, Shield } from "@/components/ui/icones";
 import { BalaoDeStatus } from "./BalaoDeStatus";
 
 /**
@@ -171,7 +171,7 @@ export function CabecalhoDoPerfil({
           )}
           {aoAbrirKebab && (
             <BotaoRedondoDoBanner rotulo="Mais opções" ehMobile={ehMobile} haspopup onClick={aoAbrirKebab}>
-              <MoreVertical size={16} aria-hidden="true" />
+              <MoreHorizontal size={16} aria-hidden="true" />
             </BotaoRedondoDoBanner>
           )}
         </div>

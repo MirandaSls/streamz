@@ -7,7 +7,7 @@ import {
   Pencil,
   PhoneCall,
   ScrollText,
-  SendHorizonal,
+  Smile,
   UserCheck,
   UserPlus,
 } from "@/components/ui/icones";
@@ -35,6 +35,7 @@ import { SeletorDeCargo } from "@/components/ui/perfil/SeletorDeCargo";
 import { useEhMobile } from "@/hooks/useEhMobile";
 import { api } from "@/lib/api";
 import { contaDe, lerCofreDoDisco } from "@/lib/contas";
+import EmojiPicker from "@/components/ui/EmojiPicker";
 import { EVENTO_MENCAO, type DetalheMencao } from "@/lib/mencoes";
 import { lerRascunho, salvarRascunho } from "@/lib/rascunhos";
 import { trocarDeConta } from "@/lib/troca-de-contas";
@@ -314,6 +315,8 @@ export default function ProfilePopoverHost() {
   /** Soma um a cada "Tentar de novo": é a dependência que refaz o pedido. */
   const [tentativa, setTentativa] = useState(0);
   const [rascunho, setRascunho] = useState("");
+  /** Emoji picker aberto no composer do cartão de outra pessoa. */
+  const [pickerAberto, setPickerAberto] = useState(false);
   /**
    * Retângulo do "+" de cargo no instante do clique — `null` quando o
    * popover próprio (`SeletorDeCargo`, seção L) está fechado. Snapshot, não
@@ -476,6 +479,12 @@ export default function ProfilePopoverHost() {
     salvarRascunho(channelId, `${prefixo}@${user.username} `);
     ui.toast(`@${user.username} foi para a caixa de mensagem`);
     close();
+  }
+
+  /** Insere emoji no campo de mensagem do cartão. */
+  function inserirEmoji(texto: string) {
+    setRascunho((prev) => prev + texto);
+    setPickerAberto(false);
   }
 
   function abrirPerfilCompleto() {
@@ -1235,37 +1244,44 @@ export default function ProfilePopoverHost() {
             quem procurar por que "não disparam".
           */}
           {!ehMobile && !isMe && relacao !== "blocked" && (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                void enviar();
-              }}
-              /*
-                Não há print 1:1 do cartão de outra pessoa: altura (40), raio (8)
-                e fundo (`--chat-background-default`) são os da implementação
-                anterior, não medidos.
-              */
-              className="flex items-center gap-1 rounded-lg bg-chat-background-default px-2"
-            >
-              {/* peça interna do controle composto (o fundo e o raio são do
-                  `<form>`, que divide a moldura com o botão de enviar), não um
-                  `TextInput` com moldura própria */}
-              <input
-                value={rascunho}
-                onChange={(e) => setRascunho(e.target.value)}
-                aria-label={`Mensagem para @${user.username}`}
-                placeholder={`Mensagem @${user.username}`}
-                className="h-10 min-w-0 flex-1 bg-transparent text-text-sm text-text-default outline-none placeholder:text-text-muted celular:h-[44px]"
-              />
-              <BotaoDeIcone
-                type="submit"
-                rotulo="Enviar mensagem"
-                icone={<SendHorizonal size={16} />}
-                tamanho="sm"
-                disabled={!rascunho.trim()}
-                className="celular:h-[44px] celular:w-[44px]"
-              />
-            </form>
+            <>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void enviar();
+                }}
+                /*
+                  Não há print 1:1 do cartão de outra pessoa: altura (40), raio (8)
+                  e fundo (`--chat-background-default`) são os da implementação
+                  anterior, não medidos.
+                */
+                className="flex items-center gap-1 rounded-lg bg-chat-background-default px-2"
+              >
+                {/* peça interna do controle composto (o fundo e o raio são do
+                    `<form>`, que divide a moldura com o botão de emoji), não um
+                    `TextInput` com moldura própria */}
+                <input
+                  value={rascunho}
+                  onChange={(e) => setRascunho(e.target.value)}
+                  aria-label={`Mensagem para @${user.username}`}
+                  placeholder={`Conversar com @${nome}`}
+                  className="h-10 min-w-0 flex-1 bg-transparent text-text-sm text-text-default outline-none placeholder:text-text-muted celular:h-[44px]"
+                />
+                <BotaoDeIcone
+                  type="button"
+                  rotulo="Emoji"
+                  icone={<Smile size={16} />}
+                  tamanho="sm"
+                  onClick={() => setPickerAberto(!pickerAberto)}
+                  className="celular:h-[44px] celular:w-[44px]"
+                />
+              </form>
+              {pickerAberto && (
+                <div className="mt-1 rounded-lg border border-border-subtle bg-background-surface-high p-2">
+                  <EmojiPicker onPick={inserirEmoji} onClose={() => setPickerAberto(false)} embutido placeholder="Escolha um emoji" />
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
