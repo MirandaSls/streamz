@@ -199,6 +199,16 @@ export class ChannelsController {
     return this.channels.remove(user.sub, guildId, channelId);
   }
 
+  /** Duplica o canal: mesma configuração e overwrites, logo abaixo do original. */
+  @Post(":channelId/duplicate")
+  duplicate(
+    @CurrentUser() user: JwtPayload,
+    @Param("guildId") guildId: string,
+    @Param("channelId") channelId: string,
+  ) {
+    return this.channels.duplicate(user.sub, guildId, channelId);
+  }
+
   /** Devolve o canal à herança da categoria (c-cargos). */
   @Post(":channelId/sync-category")
   syncCategory(
