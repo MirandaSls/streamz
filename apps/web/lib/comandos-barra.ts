@@ -26,7 +26,7 @@ export type ResultadoComando =
   | { tipo: "enviar"; content: string }
   /** abre o seletor de GIF já com o termo. */
   | { tipo: "gif"; termo: string }
-  /** muda o apelido no servidor (depende do agente de cargos). */
+  /** muda o apelido no servidor via `editarAssociacao`. */
   | { tipo: "apelido"; apelido: string }
   // ── j-bots ──
   /** é comando de um bot: vira `POST /channels/:id/interactions`. */
@@ -493,13 +493,14 @@ export const GRUPO_NATIVOS = "nativos";
 
 /**
  * O argumento do nativo como opção de chip. `/me` e `/spoiler` sem texto não
- * enviam nada (`interpretarComando` devolve `nenhum`), e `/nick` sem apelido
- * não tem o que mudar: esses três têm o argumento obrigatório. `/shrug` e os
- * outros sufixos funcionam sozinhos, e `/giphy` abre o seletor vazio.
+ * enviam nada (`interpretarComando` devolve `nenhum`). Esses dois têm o
+ * argumento obrigatório. `/nick` sem apelido apaga o apelido, então o
+ * argumento é opcional. `/shrug` e os outros sufixos funcionam sozinhos, e
+ * `/giphy` abre o seletor vazio.
  */
 function opcoesDoNativo(c: ComandoBarra): OpcaoDeComando[] {
   if (!c.argumento) return [];
-  const obrigatorio = c.tipo === "acao" || c.tipo === "spoiler" || c.tipo === "apelido";
+  const obrigatorio = c.tipo === "acao" || c.tipo === "spoiler";
   return [{ name: c.argumento, description: c.descricao, type: 3, required: obrigatorio }];
 }
 

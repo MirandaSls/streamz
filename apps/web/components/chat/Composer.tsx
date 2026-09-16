@@ -83,6 +83,7 @@ import { aplicarEmojisPersonalizados, todosOsEmojis, useEmojis } from "@/stores/
 import { useGuilds } from "@/stores/guilds";
 import { useInteracoesDeBot } from "@/stores/interacoes-de-bot";
 import { useMessages } from "@/stores/messages";
+import { useModeration } from "@/stores/moderation";
 import { useCan, usePermissions } from "@/stores/permissions";
 import { useSettings } from "@/stores/settings";
 import { errorMessage } from "@/stores/socket-adapter";
@@ -561,9 +562,22 @@ export default function Composer({
       return;
     }
     if (comando.tipo === "apelido") {
-      // apelido por servidor exige uma coluna em GuildMember que ninguém criou
-      // ainda; ver "Apelido por servidor" em PENDENCIAS.md
-      ui.toast("Apelido por servidor ainda não está disponível.", "error");
+      if (!guildId) {
+        ui.toast("Apelido não funciona em conversas diretas.", "error");
+        return;
+      }
+      setEnviando(true);
+      try {
+        const nickname = comando.apelido.trim() || null;
+        await useModeration.getState().editarAssociacao(guildId, { nickname });
+        ui.toast(nickname ? "Apelido alterado" : "Apelido removido");
+        setDraft("");
+        if (chaveRascunho) limparRascunho(chaveRascunho);
+      } catch (e) {
+        ui.toast(errorMessage(e, "Não foi possível atualizar o apelido"), "error");
+      } finally {
+        setEnviando(false);
+      }
       return;
     }
 
