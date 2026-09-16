@@ -1,4 +1,11 @@
-import { MAX_MESSAGE_LENGTH, TIPOS_DE_OPCAO_ACEITOS, type OpcaoDeComando } from "@streamz/shared";
+import {
+  MAX_MESSAGE_LENGTH,
+  NOME_DE_COMANDO_DE_CONTEXTO,
+  TIPO_DE_COMANDO_DE_APP,
+  TIPOS_DE_OPCAO_ACEITOS,
+  type OpcaoDeComando,
+  type TipoDeComandoDeApp,
+} from "@streamz/shared";
 import { z } from "zod";
 import { naoImplementado } from "../erros";
 import {
@@ -56,11 +63,13 @@ export const MAX_COMANDOS = 100;
 /**
  * `type` do comando: 1 CHAT_INPUT, 2 USER, 3 MESSAGE.
  *
- * A F3 só tem o 1 — os outros dois são os menus de contexto (clicar com o botão
- * direito numa mensagem ou numa pessoa), que não têm nem onde aparecer no
- * Streamz. Ver a recusa em `comandoParaRegistrarSchema`.
+ * ── menus de contexto ── 2 e 3 passaram a existir: são os "Apps >" do clique
+ * direito numa pessoa ou numa mensagem (`docs/CONTRATO-MENUS.md` §7).
  */
-export const TIPO_CHAT_INPUT = 1;
+export const TIPO_CHAT_INPUT = TIPO_DE_COMANDO_DE_APP.CHAT_INPUT;
+
+/** Os `type` de comando que o registro aceita. */
+const TIPOS_DE_COMANDO: readonly number[] = Object.values(TIPO_DE_COMANDO_DE_APP);
 
 // ── o registro de comandos ───────────────────────────────────
 
@@ -149,8 +158,11 @@ export interface ComandoNormalizado {
  */
 export const comandoParaRegistrarSchema = z
   .object({
-    name: nomeSchema,
-    description: descricaoSchema,
+    // ── menus de contexto ── o nome e a descrição são conferidos no
+    // `superRefine`, porque a regra depende do `type`: o comando de contexto
+    // aceita espaço e maiúscula ("Traduzir mensagem") e não tem descrição
+    name: z.string(),
+    description: z.string().optional(),
     type: z.number().int().optional(),
     options: z.array(opcaoSchema).max(MAX_OPCOES).optional(),
     // string ("0", "8", …) ou null. O Discord manda os dois; a F3 guarda o valor
@@ -160,14 +172,36 @@ export const comandoParaRegistrarSchema = z
   .passthrough()
   .superRefine((comando, ctx) => {
     const tipo = comando.type ?? TIPO_CHAT_INPUT;
-    if (tipo === TIPO_CHAT_INPUT) return;
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["type"],
-      // 2 (USER) e 3 (MESSAGE) são os menus de contexto: eles não aparecem no
-      // composer, e aceitá-los seria gravar uma linha que ninguém nunca vê
-      message: `só comandos de barra (type 1) são suportados; recebido ${tipo}`,
-    });
+    const problema = (path: string, message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message });
+
+    if (!TIPOS_DE_COMANDO.includes(tipo)) {
+      problema("type", `tipo de comando não suportado: ${tipo}`);
+      return;
+    }
+
+    if (tipo === TIPO_CHAT_INPUT) {
+      const nome = nomeSchema.safeParse(comando.name);
+      if (!nome.success) problema("name", nome.error.issues[0]?.message ?? "inválido");
+      const descricao = descricaoSchema.safeParse(comando.description ?? "");
+      if (!descricao.success) {
+        problema("description", descricao.error.issues[0]?.message ?? "inválido");
+      }
+      return;
+    }
+
+    // 2 (USER) e 3 (MESSAGE): o `ContextMenuCommandBuilder.toJSON()` do
+    // discord.js não manda `description` nem `options`, e o Discord recusa os
+    // dois preenchidos
+    if (!NOME_DE_COMANDO_DE_CONTEXTO.test(comando.name)) {
+      problema("name", `de 1 a ${MAX_NOME} caracteres, sem quebra de linha`);
+    }
+    if (comando.description !== undefined && comando.description !== "") {
+      problema("description", "comando de contexto não tem descrição");
+    }
+    if (comando.options !== undefined && comando.options.length > 0) {
+      problema("options", "comando de contexto não tem opções");
+    }
   });
 
 /** O comando como chegou, já validado. */
@@ -186,8 +220,10 @@ export type ComandoParaRegistrar = z.infer<typeof comandoParaRegistrarSchema>;
 export function normalizarComando(comando: ComandoParaRegistrar): ComandoNormalizado {
   return {
     name: comando.name,
-    description: comando.description,
-    type: TIPO_CHAT_INPUT,
+    // o de contexto grava "" (o `superRefine` só deixou passar "" ou ausente)
+    description: comando.description ?? "",
+    // ── menus de contexto ── o `type` que veio, e não mais 1 fixo
+    type: (comando.type ?? TIPO_CHAT_INPUT) as TipoDeComandoDeApp,
     options: (comando.options ?? []).map((opcao) => ({
       name: opcao.name,
       description: opcao.description,
@@ -210,8 +246,11 @@ export function normalizarComando(comando: ComandoParaRegistrar): ComandoNormali
  * O corpo do `PUT` — a lista inteira, que **sobrescreve em bloco**.
  *
  * Nome repetido é recusado aqui e não no banco: o `@@unique([applicationId,
- * guildId, name])` também recusaria, mas como erro do Prisma no meio de uma
- * transação — 500 no bot, em vez do 50035 que ele sabe ler.
+ * guildId, type, name])` também recusaria, mas como erro do Prisma no meio de
+ * uma transação — 500 no bot, em vez do 50035 que ele sabe ler.
+ *
+ * ── menus de contexto ── "repetido" é o par `(type, name)`: o Discord deixa o
+ * comando de barra `info` e o de usuário `info` conviverem.
  */
 export const comandosParaRegistrarSchema = z
   .array(comandoParaRegistrarSchema)
@@ -219,14 +258,15 @@ export const comandosParaRegistrarSchema = z
   .superRefine((comandos, ctx) => {
     const vistos = new Set<string>();
     for (const comando of comandos) {
-      if (vistos.has(comando.name)) {
+      const chave = `${comando.type ?? TIPO_CHAT_INPUT}:${comando.name}`;
+      if (vistos.has(chave)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: `comando repetido: ${comando.name}`,
         });
         return;
       }
-      vistos.add(comando.name);
+      vistos.add(chave);
     }
   });
 

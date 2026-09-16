@@ -68,6 +68,7 @@ const COMANDO = {
   id: "cmd_1",
   snowflake: 999n,
   name: "play",
+  type: 1,
   options: [{ name: "url", description: "o link", type: 3, required: true }],
   guildId: "g_1",
   applicationId: "app_1",
@@ -881,6 +882,7 @@ describe("comandosDoServidor", () => {
         snowflake: 999n,
         name: "play",
         description: "toca",
+        type: 1,
         options: [{ name: "url", description: "o link", type: 3, required: true }],
         application: { id: "app_1", name: "MusicBot", botUser: { ...BOT, avatarUrl: null, status: "ONLINE" } },
       },
@@ -893,6 +895,8 @@ describe("comandosDoServidor", () => {
     // global **ou** deste servidor, e só de bot presente
     expect(where.OR).toEqual([{ guildId: null }, { guildId: "g_1" }]);
     expect(where.application).toEqual({ botUserId: { in: [BOT.id] } });
+    // ── menus de contexto ── sem `tipos`, só o comando de barra
+    expect(where.type).toEqual({ in: [1] });
 
     expect(saida).toEqual([
       {
@@ -902,10 +906,50 @@ describe("comandosDoServidor", () => {
         name: "play",
         description: "toca",
         options: [{ name: "url", description: "o link", type: 3, required: true }],
+        tipo: 1,
         applicationId: "app_1",
         applicationName: "MusicBot",
         botUser: expect.objectContaining({ id: "u_bot", bot: true }),
       },
+    ]);
+  });
+
+  it("── menus de contexto ── com `tipos` filtra por eles e devolve o `tipo`", async () => {
+    const { service, prisma } = montar();
+    const botUser = { ...BOT, avatarUrl: null, status: "ONLINE" };
+    prisma.applicationCommand.findMany.mockResolvedValue([
+      {
+        id: "cmd_2",
+        snowflake: 1001n,
+        name: "Traduzir mensagem",
+        description: "",
+        type: 3,
+        options: [],
+        application: { id: "app_1", name: "MusicBot", botUser },
+      },
+      {
+        id: "cmd_3",
+        snowflake: 1002n,
+        name: "Ver avatar",
+        // linha antiga com lixo: o contexto sai sem descrição nem opções mesmo assim
+        description: "x",
+        type: 2,
+        options: [{ name: "y", description: "y", type: 3 }],
+        application: { id: "app_1", name: "MusicBot", botUser },
+      },
+    ] as never);
+
+    const saida = await service.comandosDoServidor("g_1", USUARIO.id, [2, 3]);
+
+    const argumentos = prisma.applicationCommand.findMany.mock.calls[0]?.[0] as {
+      where: Record<string, unknown>;
+      orderBy: unknown;
+    };
+    expect(argumentos.where.type).toEqual({ in: [2, 3] });
+    expect(argumentos.orderBy).toEqual({ name: "asc" });
+    expect(saida.map((c) => [c.name, c.tipo, c.description, c.options])).toEqual([
+      ["Traduzir mensagem", 3, "", []],
+      ["Ver avatar", 2, "", []],
     ]);
   });
 
@@ -1895,5 +1939,159 @@ describe("api-interacoes — retomada dos prazos na subida", () => {
     prisma.interaction.findMany.mockRejectedValue(new Error("banco fora"));
 
     await expect(service.retomarPrazos(agora)).resolves.toBeUndefined();
+  });
+});
+
+// ── menus de contexto: comandos de usuário (2) e de mensagem (3) ──
+
+describe("menus de contexto — criarInteracao com `targetId`", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const DE_MENSAGEM = { ...COMANDO, id: "cmd_msg", snowflake: 1001n, name: "Traduzir mensagem", type: 3, options: [] };
+  const DE_USUARIO = { ...COMANDO, id: "cmd_usr", snowflake: 1002n, name: "Ver avatar", type: 2, options: [] };
+  const ALVO = { id: "u_alvo", snowflake: 4242n, username: "alvo", displayName: "Alvo", isBot: false };
+
+  const entrada = (commandId: string, targetId?: string) => ({
+    canalId: CANAL.id,
+    usuarioId: USUARIO.id,
+    commandId,
+    opcoes: [],
+    targetId,
+  });
+
+  it("comando de barra com alvo é 400", async () => {
+    const { service, prisma } = montar();
+    await expect(service.criarInteracao({ ...ENTRADA, targetId: "m_1" })).rejects.toThrow(
+      new BadRequestException("Comando de barra não tem alvo"),
+    );
+    expect(prisma.interaction.create).not.toHaveBeenCalled();
+  });
+
+  it("comando de contexto sem alvo é 400", async () => {
+    const { service, prisma } = montar({ comando: DE_MENSAGEM });
+    await expect(service.criarInteracao(entrada(DE_MENSAGEM.id))).rejects.toThrow(
+      new BadRequestException("Comando de contexto sem alvo"),
+    );
+    expect(prisma.interaction.create).not.toHaveBeenCalled();
+  });
+
+  it("comando de contexto com opções é 400", async () => {
+    const { service } = montar({ comando: DE_USUARIO });
+    await expect(
+      service.criarInteracao({ ...entrada(DE_USUARIO.id, ALVO.id), opcoes: [{ nome: "x", tipo: 3, valor: "y" }] }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("tipo 3: mensagem de outro canal (ou inexistente/efêmera) é 404", async () => {
+    const { service, prisma } = montar({ comando: DE_MENSAGEM });
+    prisma.message.findUnique.mockResolvedValueOnce({ id: "m_bot", channelId: "c_outro" });
+    await expect(service.criarInteracao(entrada(DE_MENSAGEM.id, "m_bot"))).rejects.toThrow(
+      new NotFoundException("Mensagem não encontrada"),
+    );
+
+    // a efêmera não está na `Message`: o `findUnique` devolve null
+    prisma.message.findUnique.mockResolvedValueOnce(null);
+    await expect(service.criarInteracao(entrada(DE_MENSAGEM.id, "e_1"))).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(prisma.interaction.create).not.toHaveBeenCalled();
+  });
+
+  it("tipo 3: grava o alvo e entrega data.type, target_id e resolved.messages", async () => {
+    const { service, prisma, sessao, dados } = montar({ comando: DE_MENSAGEM });
+    prisma.message.findUnique.mockResolvedValue({ id: "m_bot", channelId: CANAL.id });
+
+    const emVoo = await service.criarInteracao({ ...entrada(DE_MENSAGEM.id, "m_bot"), nonce: "n_1" });
+    expect(emVoo.nome).toBe("Traduzir mensagem");
+
+    const gravado = (prisma.interaction.create.mock.calls[0]?.[0] as unknown as { data: Record<string, unknown> })
+      .data;
+    expect(gravado.targetId).toBe("m_bot");
+    expect(gravado.commandName).toBe("Traduzir mensagem");
+    // a interação continua APPLICATION_COMMAND (o default da coluna)
+    expect(gravado.type ?? 2).toBe(2);
+    expect(dados.mensagemPorCuid).toHaveBeenCalledWith("m_bot", BOT.id);
+
+    const payload = sessao.despachar.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(payload.type).toBe(2);
+    const data = payload.data as Record<string, unknown>;
+    expect(data).toMatchObject({
+      id: "1001",
+      name: "Traduzir mensagem",
+      type: 3,
+      guild_id: "333",
+      target_id: "901",
+    });
+    expect(data).not.toHaveProperty("options");
+    const resolved = data.resolved as Record<string, Record<string, Record<string, unknown>>>;
+    expect(resolved.messages["901"]).toMatchObject({
+      id: "901",
+      channel_id: "555",
+      content: "Escolha",
+      author: expect.objectContaining({ id: "222" }),
+    });
+    // o que foi despachado é o que ficou gravado
+    expect(gravado.data).toEqual(data);
+    expect(() => JSON.stringify(payload)).not.toThrow();
+  });
+
+  it("tipo 2: usuário fora do servidor (ou inexistente) é 404", async () => {
+    const { service, dados, prisma } = montar({ comando: DE_USUARIO });
+    dados.membroDoServidor.mockImplementation((async (_g: string, userId: string) =>
+      userId === USUARIO.id ? MEMBRO : null) as never);
+    await expect(service.criarInteracao(entrada(DE_USUARIO.id, ALVO.id))).rejects.toThrow(
+      new NotFoundException("Usuário não encontrado"),
+    );
+
+    dados.usuarioPorCuid.mockResolvedValueOnce(null as never);
+    dados.membroDoServidor.mockResolvedValue(MEMBRO);
+    await expect(service.criarInteracao(entrada(DE_USUARIO.id, "u_nao_existe"))).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(prisma.interaction.create).not.toHaveBeenCalled();
+  });
+
+  it("tipo 2: entrega target_id e resolved.users/members (membro sem `user`)", async () => {
+    const { service, prisma, sessao, dados } = montar({ comando: { ...DE_USUARIO, guildId: null } });
+    dados.usuarioPorCuid.mockImplementation((async (id: string) => (id === ALVO.id ? ALVO : USUARIO)) as never);
+    dados.membroDoServidor.mockImplementation((async (_g: string, id: string) =>
+      id === ALVO.id ? { ...MEMBRO, user: ALVO } : MEMBRO) as never);
+
+    await service.criarInteracao(entrada(DE_USUARIO.id, ALVO.id));
+
+    const gravado = (prisma.interaction.create.mock.calls[0]?.[0] as unknown as { data: Record<string, unknown> })
+      .data;
+    expect(gravado.targetId).toBe(ALVO.id);
+
+    const data = (sessao.despachar.mock.calls[0]?.[1] as Record<string, unknown>).data as Record<string, unknown>;
+    expect(data).toMatchObject({ id: "1002", name: "Ver avatar", type: 2, target_id: "4242" });
+    // comando global: sem `guild_id` no `data`, como no de barra
+    expect(data).not.toHaveProperty("guild_id");
+    expect(data).not.toHaveProperty("options");
+    const resolved = data.resolved as Record<string, Record<string, Record<string, unknown>>>;
+    expect(resolved.users["4242"]).toMatchObject({ id: "4242", username: "alvo" });
+    expect(resolved.members["4242"]).toBeDefined();
+    expect(resolved.members["4242"]).not.toHaveProperty("user");
+    expect(resolved).not.toHaveProperty("messages");
+  });
+
+  it("em DM continua 404, como o comando de barra", async () => {
+    const { service } = montar({ comando: DE_MENSAGEM, canal: { id: "dm_1", guildId: null } });
+    await expect(service.criarInteracao(entrada(DE_MENSAGEM.id, "m_1"))).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it("autocomplete de comando de contexto é 404", async () => {
+    const { service } = montar({ comando: DE_MENSAGEM });
+    await expect(
+      service.pedirAutocomplete({
+        canalId: CANAL.id,
+        usuarioId: USUARIO.id,
+        commandId: DE_MENSAGEM.id,
+        options: [],
+        nonce: "n_2",
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

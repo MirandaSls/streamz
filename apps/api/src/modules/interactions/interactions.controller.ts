@@ -1,4 +1,14 @@
-import { Body, Controller, Get, HttpCode, Param, Post, UseGuards } from "@nestjs/common";
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
 import {
   cliqueEmComponenteSchema,
   envioDeModalSchema,
@@ -16,6 +26,7 @@ import { CurrentUser } from "../../common/current-user.decorator";
 import { AUTOCOMPLETE_THROTTLE } from "../../common/throttle";
 import { JwtGuard, type JwtPayload } from "../../common/jwt.guard";
 import { zodBody } from "../../common/zod.pipe";
+import { lerTiposDeComando } from "./contexto";
 import { InteractionsService } from "./interactions.service";
 
 /**
@@ -30,7 +41,8 @@ import { InteractionsService } from "./interactions.service";
  * | Método | Rota | O quê |
  * |---|---|---|
  * | POST | `/api/channels/:id/interactions` | dispara `/play` |
- * | GET | `/api/guilds/:id/comandos-de-app` | o que o composer sugere |
+ * | GET | `/api/guilds/:id/comandos-de-app` | o que o composer sugere (só tipo 1) |
+ * | GET | `/api/guilds/:id/comandos-de-app?tipos=2,3` | ── menus de contexto ── o "Apps >" |
  * | POST | `/api/channels/:id/interactions/componente` | ── onda 3 ── clique em botão/select (interação 3) |
  * | POST | `/api/channels/:id/interactions/modal` | ── onda 3 ── envio do modal que o bot abriu (interação 5) |
  * | POST | `/api/channels/:id/interactions/autocomplete` | ── onda 3 ── sugestões da opção em foco (interação 4) |
@@ -67,6 +79,8 @@ export class InteractionsController {
       opcoes: corpo.options.map((o) => ({ nome: o.name, tipo: o.type, valor: o.value })),
       // o `showModal()` respondido ao comando volta casado por ele
       nonce: corpo.nonce,
+      // ── menus de contexto ── a mensagem (tipo 3) ou o usuário (tipo 2)
+      targetId: corpo.targetId,
     });
 
     return {
@@ -142,7 +156,11 @@ export class InteractionsController {
   comandos(
     @CurrentUser() usuario: JwtPayload,
     @Param("id") guildId: string,
+    // ── menus de contexto ── "2,3"; ausente = só o 1 (o composer antigo)
+    @Query("tipos") tiposBrutos?: unknown,
   ): Promise<ComandoDeApp[]> {
-    return this.interacoes.comandosDoServidor(guildId, usuario.sub);
+    const tipos = lerTiposDeComando(tiposBrutos);
+    if (!tipos) throw new BadRequestException("Tipos de comando inválidos");
+    return this.interacoes.comandosDoServidor(guildId, usuario.sub, tipos);
   }
 }

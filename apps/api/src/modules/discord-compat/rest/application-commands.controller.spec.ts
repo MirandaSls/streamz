@@ -66,7 +66,10 @@ type Onde = {
   applicationId?: string;
   guildId?: string | null;
   snowflake?: bigint;
+  type?: number;
   name?: string | { notIn: string[] };
+  /** ── menus de contexto ── "não casa nenhum destes" (o `PUT` por `(type, name)`). */
+  NOT?: Onde[];
 };
 
 function casa(linha: LinhaFalsa, onde: Onde = {}): boolean {
@@ -74,6 +77,8 @@ function casa(linha: LinhaFalsa, onde: Onde = {}): boolean {
   if (onde.applicationId !== undefined && linha.applicationId !== onde.applicationId) return false;
   if (onde.guildId !== undefined && linha.guildId !== onde.guildId) return false;
   if (onde.snowflake !== undefined && linha.snowflake !== onde.snowflake) return false;
+  if (onde.type !== undefined && linha.type !== onde.type) return false;
+  if (onde.NOT && onde.NOT.some((n) => casa(linha, n))) return false;
   if (typeof onde.name === "string" && linha.name !== onde.name) return false;
   if (onde.name && typeof onde.name === "object" && onde.name.notIn.includes(linha.name)) {
     return false;
@@ -343,6 +348,70 @@ describe("/api/v10/applications/:app/commands", () => {
     const resposta = await fetch(`${url}/api/v10/applications/42/commands`);
     expect(resposta.status).toBe(401);
     expect(await resposta.json()).toMatchObject({ code: 0, message: "401: Unauthorized" });
+  });
+
+  // ── menus de contexto ─────────────────────────────────────
+
+  /** `new ContextMenuCommandBuilder().setName(…).setType(…).toJSON()`: sem descrição nem opções. */
+  const DE_CONTEXTO = [
+    { name: "Traduzir mensagem", type: 3, contexts: undefined, integration_types: undefined },
+    { name: "Ver avatar", type: 2, default_member_permissions: undefined },
+  ];
+
+  it("PUT aceita comando de usuário (2) e de mensagem (3), e devolve o `type` guardado", async () => {
+    const resposta = await chamar("/42/commands", {
+      method: "PUT",
+      body: JSON.stringify([...DEPLOY, ...DE_CONTEXTO]),
+    });
+
+    expect(resposta.status).toBe(200);
+    const corpo = (await resposta.json()) as Record<string, unknown>[];
+    const traduzir = corpo.find((c) => c.name === "Traduzir mensagem");
+    expect(traduzir).toMatchObject({ type: 3, description: "", options: [] });
+    expect(corpo.find((c) => c.name === "Ver avatar")).toMatchObject({ type: 2, description: "" });
+    expect(tabela.find((l) => l.name === "Ver avatar")?.type).toBe(2);
+
+    const listados = (await (await chamar("/42/commands")).json()) as Record<string, unknown>[];
+    expect(listados.find((c) => c.name === "Traduzir mensagem")?.type).toBe(3);
+  });
+
+  it("o mesmo nome em tipos diferentes são dois comandos, e o PUT os preserva", async () => {
+    const lista = [
+      { name: "info", description: "barra" },
+      { name: "info", type: 2 },
+    ];
+    await chamar("/42/commands", { method: "PUT", body: JSON.stringify(lista) });
+    const ids = tabela.map((l) => l.id).sort();
+    expect(tabela.map((l) => l.type).sort()).toEqual([1, 2]);
+
+    // de novo, com o de usuário removido: só o de barra fica, e com o mesmo id
+    await chamar("/42/commands", { method: "PUT", body: JSON.stringify([lista[0]]) });
+    expect(tabela).toHaveLength(1);
+    expect(tabela[0]).toMatchObject({ name: "info", type: 1 });
+    expect(ids).toContain(tabela[0]?.id);
+  });
+
+  it("POST de contexto com o nome de um de barra cria outro, não sobrescreve", async () => {
+    await chamar("/42/commands", { method: "POST", body: JSON.stringify({ name: "info", description: "barra" }) });
+    const criado = await chamar("/42/commands", { method: "POST", body: JSON.stringify({ name: "info", type: 3 }) });
+
+    expect(criado.status).toBe(201);
+    expect(await criado.json()).toMatchObject({ name: "info", type: 3, description: "" });
+    expect(tabela).toHaveLength(2);
+    expect(tabela.find((l) => l.type === 1)?.description).toBe("barra");
+  });
+
+  it("comando de contexto com descrição ou opções é 50035", async () => {
+    for (const corpo of [
+      { name: "Traduzir", type: 3, description: "traduz" },
+      { name: "Traduzir", type: 3, options: [{ name: "x", description: "x", type: 3 }] },
+      { name: "Traduzir", type: 4 },
+    ]) {
+      const resposta = await chamar("/42/commands", { method: "POST", body: JSON.stringify(corpo) });
+      expect(resposta.status, JSON.stringify(corpo)).toBe(400);
+      expect(await resposta.json()).toMatchObject({ code: 50035 });
+    }
+    expect(tabela).toHaveLength(0);
   });
 
   it("subcomando é recusado com 50035, e não aceito em silêncio", async () => {

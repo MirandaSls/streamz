@@ -143,17 +143,58 @@ describe("comandoParaRegistrarSchema", () => {
     ).toBe(false);
   });
 
-  it("recusa menu de contexto (type 2 e 3): ele não teria onde aparecer", () => {
+  // ── menus de contexto ──
+  it("aceita comando de usuário (2) e de mensagem (3) sem descrição nem opções", () => {
     for (const tipo of [2, 3]) {
-      // descrição preenchida de propósito: o que tem que reprovar é o `type`, e
-      // não a descrição vazia que o Discord exige nos menus de contexto
-      const resultado = comandoParaRegistrarSchema.safeParse({
-        name: "traduzir",
-        description: "traduz a mensagem",
+      // o `ContextMenuCommandBuilder.toJSON()` não manda `description`
+      const resultado = comandoParaRegistrarSchema.safeParse({ name: "Traduzir mensagem", type: tipo });
+      expect(resultado.success, JSON.stringify(resultado.error?.issues)).toBe(true);
+      expect(normalizarComando(comandoParaRegistrarSchema.parse({ name: "Traduzir mensagem", type: tipo }))).toEqual({
+        name: "Traduzir mensagem",
+        description: "",
         type: tipo,
+        options: [],
+        defaultMemberPermissions: null,
       });
+    }
+    // `description: ""` e `options: []` explícitos também valem
+    expect(
+      comandoParaRegistrarSchema.safeParse({ name: "Ver avatar", type: 2, description: "", options: [] }).success,
+    ).toBe(true);
+  });
+
+  it("recusa comando de contexto com descrição ou opções", () => {
+    const comDescricao = comandoParaRegistrarSchema.safeParse({ name: "Traduzir", type: 3, description: "traduz" });
+    expect(comDescricao.success).toBe(false);
+    expect(comDescricao.error?.issues[0]?.path).toEqual(["description"]);
+
+    const comOpcoes = comandoParaRegistrarSchema.safeParse({
+      name: "Traduzir",
+      type: 3,
+      options: [{ name: "idioma", description: "qual", type: 3 }],
+    });
+    expect(comOpcoes.success).toBe(false);
+    expect(comOpcoes.error?.issues[0]?.path).toEqual(["options"]);
+  });
+
+  it("nome de contexto: espaço e maiúscula valem; vazio, > 32 e quebra de linha não", () => {
+    const valida = (name: string) => comandoParaRegistrarSchema.safeParse({ name, type: 2 }).success;
+    expect(valida("Ver Avatar")).toBe(true);
+    expect(valida("")).toBe(false);
+    expect(valida("a".repeat(33))).toBe(false);
+    expect(valida("linha\nquebrada")).toBe(false);
+  });
+
+  it("recusa `type` que não é 1, 2 nem 3", () => {
+    for (const tipo of [0, 4, 5]) {
+      const resultado = comandoParaRegistrarSchema.safeParse({ name: "x", description: "x", type: tipo });
       expect(resultado.success, `type ${tipo} devia ser recusado`).toBe(false);
     }
+  });
+
+  it("o comando de barra continua exigindo descrição", () => {
+    expect(comandoParaRegistrarSchema.safeParse({ name: "ping" }).success).toBe(false);
+    expect(comandoParaRegistrarSchema.safeParse({ name: "ping", type: 1 }).success).toBe(false);
   });
 
   it("recusa nome com espaço: `/play url` é comando + opção, não um nome", () => {
@@ -184,6 +225,22 @@ describe("comandosParaRegistrarSchema — o corpo do PUT", () => {
 
     expect(resultado.success).toBe(false);
     expect(resultado.error?.issues[0]?.message).toContain("play");
+  });
+
+  it("── menus de contexto ── repetido é o par (type, name)", () => {
+    expect(
+      comandosParaRegistrarSchema.safeParse([
+        { name: "info", description: "barra" },
+        { name: "info", type: 2 },
+        { name: "info", type: 3 },
+      ]).success,
+    ).toBe(true);
+    expect(
+      comandosParaRegistrarSchema.safeParse([
+        { name: "Ver avatar", type: 2 },
+        { name: "Ver avatar", type: 2 },
+      ]).success,
+    ).toBe(false);
   });
 
   it("recusa mais de 100 comandos", () => {
