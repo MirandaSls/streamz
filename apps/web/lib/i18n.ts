@@ -155,7 +155,7 @@ const PT_BR = {
   "notif.por60": "Por 1 hora",
   "notif.por480": "Por 8 horas",
   "notif.por1440": "Por 24 horas",
-  "notif.ateReativar": "Até eu reativar",
+  "notif.ateReativar": "Até eu ligá-las de novo",
   "notif.silenciadoAte": "Silenciado até",
   "notif.tocarSom": "Tocar som",
   "notif.esteDispositivo": "Neste dispositivo",
